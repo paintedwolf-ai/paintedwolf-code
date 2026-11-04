@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -155,6 +156,123 @@ func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
 	}
 }
 
+// A person's edit to a file a window claimed earlier is theirs: it stays out of
+// the bulk commit and uncommitted_paths reports it.
+func TestBulkCommitLeavesAPersonsEditToAFileAWindowClaimed(t *testing.T) {
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+	f := programtest.New(t, programtest.Options{})
+	ledger := f.AttachLedger(t)
+	manager := git.NewManager()
+	ledger.Git.SetGitReader(walkGitReader{manager})
+	seedRepository(t, f.Dir)
+	_, err := f.Call(t, t.Context(), `external -- /bin/sh -c 'echo generated > gen.txt; echo generated > kept.txt'`)
+	testutil.FailErr(t, "run generator", err)
+
+	testutil.FailErr(t, "outside edit", os.WriteFile(filepath.Join(f.Dir, "gen.txt"), []byte("a person's edit\n"), 0o644))
+	testutil.FailErr(t, "pass after the edit", ledger.Inventory.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
+		ProjectID: testdbseed.DefaultProjectID, Roots: []sourceledger.RootSpec{{ID: "r1", Path: f.Dir}}, Force: true, Wait: true,
+	}))
+
+	raw, err := commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Generate"}, commitContext(f, ledger, f.Session))
+	testutil.FailErr(t, "commit session work", err)
+	committed := strings.Fields(gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD"))
+	if !slices.Contains(committed, "kept.txt") || slices.Contains(committed, "gen.txt") {
+		t.Fatalf("committed paths = %v, want kept.txt without gen.txt", committed)
+	}
+	var receipt struct {
+		UncommittedPaths []string `json:"uncommitted_paths"`
+	}
+	testutil.FailErr(t, "decode receipt", json.Unmarshal([]byte(raw), &receipt))
+	if !slices.Contains(receipt.UncommittedPaths, "gen.txt") {
+		t.Fatalf("uncommitted paths = %v, want gen.txt", receipt.UncommittedPaths)
+	}
+}
+
+// windowsThenGate lists the session's windows and ends their settle period only
+// once a caller has asked, so what the caller read next depends on its waiting.
+type windowsThenGate struct {
+	tools.SourceWindowReader
+	gate chan time.Time
+	once sync.Once
+}
+
+func (w *windowsThenGate) OpenSessionWindows(projectID, sessionID string) []sourceledger.SessionWindow {
+	listed := w.SourceWindowReader.OpenSessionWindows(projectID, sessionID)
+	w.once.Do(func() { close(w.gate) })
+	return listed
+}
+
+// runTrustedGenerator runs a generator on trusted coverage, whose result returns
+// before the window settles, and delivers the watcher's event for it.
+func runTrustedGenerator(t *testing.T, f *programtest.Fixture, name string) {
+	t.Helper()
+	_, err := f.Call(t, t.Context(), `external -- /bin/sh -c 'echo generated > `+name+`'`)
+	testutil.FailErr(t, "run generator", err)
+	repochange.Notify(t.Context(), repochange.Event{ProjectDir: f.Dir, Kind: repochange.WorktreeChanged, Paths: []string{name}, Source: repochange.SourceWatcher})
+}
+
+// A commit in the next call includes the build's output though the window is
+// still settling.
+func TestBulkCommitWaitsForItsSessionsClosingWindow(t *testing.T) {
+	f := programtest.New(t, programtest.Options{})
+	ledger := f.AttachLedger(t)
+	manager := git.NewManager()
+	ledger.Git.SetGitReader(walkGitReader{manager})
+	seedRepository(t, f.Dir)
+	repochange.MarkCoverageCompleteForTest(f.Dir)
+	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
+	gate := make(chan time.Time)
+	ledger.Commands.SetWindowSettleGateForTest(gate)
+	runTrustedGenerator(t, f, "gen.txt")
+
+	tc := commitContext(f, ledger, f.Session)
+	tc.Source.History.Windows = &windowsThenGate{SourceWindowReader: ledger.Commands, gate: gate}
+	_, err := commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Generate"}, tc)
+	testutil.FailErr(t, "commit session work", err)
+	if committed := strings.Fields(gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD")); !slices.Contains(committed, "gen.txt") {
+		t.Fatalf("committed paths = %v, want gen.txt", committed)
+	}
+}
+
+// What a window has not settled when the wait runs out is reported, not lost.
+func TestBulkCommitReportsWhatAWindowStillSettlingLeftOut(t *testing.T) {
+	f := programtest.New(t, programtest.Options{})
+	ledger := f.AttachLedger(t)
+	manager := git.NewManager()
+	ledger.Git.SetGitReader(walkGitReader{manager})
+	seedRepository(t, f.Dir)
+	repochange.MarkCoverageCompleteForTest(f.Dir)
+	t.Cleanup(func() { repochange.CloseRoot(f.Dir) })
+
+	first := make(chan time.Time)
+	ledger.Commands.SetWindowSettleGateForTest(first)
+	runTrustedGenerator(t, f, "first.txt")
+	settling := ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
+	close(first)
+	for _, window := range settling {
+		testutil.AwaitClosed(t, "the first window settles", window.Settled)
+	}
+
+	held := make(chan time.Time)
+	t.Cleanup(func() { close(held) })
+	ledger.Commands.SetWindowSettleGateForTest(held)
+	runTrustedGenerator(t, f, "gen.txt")
+	raw, err := commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Generate"}, commitContext(f, ledger, f.Session))
+	testutil.FailErr(t, "commit session work", err)
+	committed := strings.Fields(gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD"))
+	if !slices.Contains(committed, "first.txt") || slices.Contains(committed, "gen.txt") {
+		t.Fatalf("committed paths = %v, want first.txt without gen.txt", committed)
+	}
+	var receipt struct {
+		UncommittedPaths []string `json:"uncommitted_paths"`
+	}
+	testutil.FailErr(t, "decode receipt", json.Unmarshal([]byte(raw), &receipt))
+	if !slices.Contains(receipt.UncommittedPaths, "gen.txt") {
+		t.Fatalf("uncommitted paths = %v, want gen.txt", receipt.UncommittedPaths)
+	}
+}
+
 func seedRepository(t *testing.T, dir string) {
 	t.Helper()
 	gittest.Init(t, dir)
@@ -172,7 +290,7 @@ func commitContext(f *programtest.Fixture, ledger *sourceledger.Store, session s
 	tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = testdbseed.DefaultProjectID, session, "commit-call"
 	tc.Invocation.ToolName = "git_commit"
 	tc.Source.SourceLedger = ledger
-	tc.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}
+	tc.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk, Windows: ledger.Commands}
 	tc.Source.Commands, tc.Source.Observations, tc.Source.GitMutations = ledger.Commands, ledger.Inventory, ledger.Git
 	return tc
 }

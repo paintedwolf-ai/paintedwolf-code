@@ -138,13 +138,16 @@ func (w *programWindow) settle(ctx context.Context) {
 	w.window.closeNow(ctx)
 }
 
-// fact states the window on the program's result. An open still in flight has
-// nothing to state yet, unless a launch has already gone ahead without it.
+// fact states the window on the program's result. An open still in flight or one
+// that failed has nothing to state, unless a launch went ahead without it: a launch
+// stopped during the open started no process.
 func (w *programWindow) fact() *hostcmd.SourceWindow {
 	var fact *hostcmd.SourceWindow
 	select {
 	case <-w.ready:
-		fact = w.window.fact()
+		if w.window.open != nil {
+			fact = w.window.fact()
+		}
 	default:
 	}
 	w.mu.Lock()

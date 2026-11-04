@@ -133,7 +133,7 @@ func TestHoldsCountConcurrentProcesses(t *testing.T) {
 // A new process during the grace keeps the window active with no re-anchor.
 func TestHoldDuringTheGraceKeepsTheWindowActive(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
-	store.Commands.windowSettle = time.Hour
+	endSettle := holdSettlePeriods(store)
 	window, first := programWindow(t, store, ctx, root)
 	first()
 	second, err := window.Hold(ctx)
@@ -145,7 +145,7 @@ func TestHoldDuringTheGraceKeepsTheWindowActive(t *testing.T) {
 		t.Fatalf("drift after a hold during the grace = %+v, want the window", effect)
 	}
 	second()
-	store.Commands.windowSettle = 0
+	endSettle()
 	closeAndSettle(t, ctx, window)
 }
 
@@ -585,7 +585,7 @@ func TestFailedWindowRecoveryReportsAndRetriesBeforeAnyWindowOpens(t *testing.T)
 	forceTestPass(t, store, ctx, root)
 
 	fresh := New(ledger.sqlDB, ledger.contentDir)
-	fresh.Commands.windowSettle = 0
+	fresh.Commands.SetWindowSettleForTest(0)
 	canceled, cancel := context.WithCancel(ctx)
 	cancel()
 	if err := fresh.Commands.RecoverInterruptedWindows(canceled); !errors.Is(err, context.Canceled) {

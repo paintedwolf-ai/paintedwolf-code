@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -22,7 +23,7 @@ type SourceHistory struct {
 	Comparison SourceComparison
 	Git        SourceGitHistory
 	Authorship sourceledger.AuthorshipReader
-	// Windows is optional; without it the overview states no window facts.
+	// Windows is optional; without it nothing waits for a window to settle.
 	Windows SourceWindowReader
 	// Tree is optional; without it a worker's overview says it could not compare
 	// the branch with its baseline.
@@ -44,6 +45,27 @@ type SourceTreeReader interface {
 // SourceWindowReader lists a session's command windows that have not settled.
 type SourceWindowReader interface {
 	OpenSessionWindows(projectID, sessionID string) []sourceledger.SessionWindow
+}
+
+// WindowSettleBudget bounds how long a read of the session's work waits for its
+// closing windows; what is still settling after that is reported, not awaited.
+const WindowSettleBudget = 3 * time.Second
+
+// AwaitClosingWindows waits for windows whose process has ended, never for a
+// running one, until they settle or the budget passes.
+func AwaitClosingWindows(ctx context.Context, windows []sourceledger.SessionWindow, budget time.Duration) {
+	ctx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	for _, window := range windows {
+		if !window.Closing {
+			continue
+		}
+		select {
+		case <-window.Settled:
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 type SourceFileHistory interface {
