@@ -19,8 +19,9 @@ live = importlib.util.module_from_spec(spec); spec.loader.exec_module(live)
 
 MODELS = {
     'glm': dict(provider='fireworks-1', kind='fireworks', model='accounts/fireworks/models/glm-5p3-flash', timeout=420),
-    'e4b': dict(provider='ollama-1', kind='ollama', model='gemma4:e4b-paintedwolf', timeout=1500),
-    'e2b': dict(provider='ollama-1', kind='ollama', model='gemma4:e2b', timeout=1500),
+    # Local runs stop once the file is exactly right: closing turns take most of the wall time and cannot affect edit measures.
+    'e4b': dict(provider='ollama-1', kind='ollama', model='gemma4:e4b-paintedwolf', timeout=900, stop_on_correct=True),
+    'e2b': dict(provider='ollama-1', kind='ollama', model='gemma4:e2b', timeout=900, stop_on_correct=True),
 }
 
 def make_repo(root):
@@ -66,7 +67,19 @@ def one(model, arm, task, i, out, config_roots, secret):
         t0 = time.time()
         e.req('POST', f'/v1/sessions/{sid}/prompts', {'operation_id': str(uuid.uuid4()), 'text': t['prompt']})
         time.sleep(10)
-        end = live.wait_idle(e, sid, time.time()+m['timeout'], calm_needed=4)
+        early = False
+        if m.get('stop_on_correct') and t['kind'] == 'edit':
+            want = t['expected'](FX.files()[t['path']]); deadline = time.time()+m['timeout']; calm = 0; end = None
+            while time.time() < deadline:
+                if (repo/t['path']).read_text() == want:
+                    time.sleep(5); early = True; end = e.req('GET', f'/v1/sessions/{sid}'); break
+                s = e.req('GET', f'/v1/sessions/{sid}')
+                calm = calm+1 if s.get('status') in ('idle', 'error') else 0
+                if calm >= 4:
+                    end = s; break
+                time.sleep(5)
+        else:
+            end = live.wait_idle(e, sid, time.time()+m['timeout'], calm_needed=4)
         secs = int(time.time()-t0)
         live.save(e, sid, dest, secret or '\0never\0')
         final = dest/'final'; final.mkdir(exist_ok=True)
@@ -79,7 +92,7 @@ def one(model, arm, task, i, out, config_roots, secret):
         log = subprocess.run(['git', 'log', '--format=%B'], cwd=repo, capture_output=True, text=True).stdout
         diff = subprocess.run(['git', 'diff'], cwd=repo, capture_output=True, text=True).stdout
         (dest/'git-status.txt').write_text(st); (dest/'git-log.txt').write_text(log); (dest/'git.diff').write_text(diff)
-        (dest/'run.json').write_text(json.dumps({'model': m['model'], 'arm': arm, 'task': task, 'run': i, 'settled': end is not None, 'seconds': secs, 'session_id': sid,
+        (dest/'run.json').write_text(json.dumps({'model': m['model'], 'arm': arm, 'task': task, 'run': i, 'settled': end is not None, 'stopped_on_correct': early, 'seconds': secs, 'session_id': sid,
             'head': subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=W, capture_output=True, text=True).stdout.strip(), 'prompt': t['prompt']}, indent=1))
         print(f'{model}/{arm}/{task}-{i}: settled={end is not None} seconds={secs}', flush=True)
     finally:
