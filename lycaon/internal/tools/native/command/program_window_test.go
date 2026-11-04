@@ -460,8 +460,7 @@ func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
 	f.wantWindowEffect(t, "gen.txt", outcome.SourceWindow.ID)
 }
 
-// Waiting on the program's held window keeps real cancellation distinct: a stop
-// during the wait reports the interruption, not an unobserved launch.
+// A launch that ran with no window watching it says so.
 func TestProgramResultStatesWhenObservationNeverStarted(t *testing.T) {
 	f := newWindowFixture(t)
 	f.opener.before = func(context.Context) error { return sourceledger.ErrWindowStartPending }
@@ -529,7 +528,8 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 }
 
 // A stop during the open reaches the waiting stage, and settlement abandons
-// the open rather than waiting out its budget.
+// the open rather than waiting out its budget. No process ran, so the result
+// claims no unobserved one.
 func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
 	f := newWindowFixture(t)
 	entered := make(chan struct{})
@@ -538,14 +538,21 @@ func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	}
-	done := make(chan error, 1)
+	done := make(chan callResult, 1)
 	go func() {
-		_, err := f.Call(t, t.Context(), writeGen)
-		done <- err
+		content, err := f.Call(t, t.Context(), writeGen)
+		done <- callResult{content, err}
 	}()
 	testutil.AwaitClosed(t, "the open began", entered)
 	f.Runtime.Supervisor.Stop(f.Session)
-	testutil.AwaitValue(t, "the stopped program returns", done)
+	result := testutil.AwaitValue(t, "the stopped program returns", done)
+	var stopped struct {
+		SourceWindow map[string]any `json:"source_window"`
+	}
+	testutil.FailErr(t, "decode stopped result", json.Unmarshal([]byte(result.content), &stopped))
+	if len(stopped.SourceWindow) != 0 {
+		t.Fatalf("source_window = %v for a launch that never ran", stopped.SourceWindow)
+	}
 	if programs := f.Programs(t); len(programs) != 1 || programs[0] != "interrupted" {
 		t.Fatalf("program state %v", programs)
 	}

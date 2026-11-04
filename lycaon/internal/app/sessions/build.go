@@ -106,7 +106,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		}
 	}
 	mgr.SetSourceLedger(ledger, tools.SourceHistory{
-		Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk,
+		Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk, Windows: ledger.Commands,
 	}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	mgr.Profiles.SetAgentRegistry(deps.Agents.Registry)
 	mgr.Profiles.SetHostResources(deps.Settings.HostResources)

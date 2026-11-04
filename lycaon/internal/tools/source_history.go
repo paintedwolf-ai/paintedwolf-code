@@ -12,6 +12,13 @@ type SourceHistory struct {
 	Comparison SourceComparison
 	Git        SourceGitHistory
 	Authorship sourceledger.AuthorshipReader
+	// Windows is optional; without it nothing waits for a window to settle.
+	Windows SourceWindowReader
+}
+
+// SourceWindowReader lists a session's command windows that have not settled.
+type SourceWindowReader interface {
+	OpenSessionWindows(projectID, sessionID string) []sourceledger.SessionWindow
 }
 
 type SourceFileHistory interface {

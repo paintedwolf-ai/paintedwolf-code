@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // holdSettlePeriods keeps every settle period running until the returned func ends them.
@@ -83,5 +85,146 @@ func TestPassOnAnotherBranchDoesNotEndTheWindowsWait(t *testing.T) {
 	testutil.AwaitClosed(t, "the window settles", window.Settled())
 	if effect := newestEffects(t, store, ctx)["gen.txt"]; effect.CommandWindowID != window.ID {
 		t.Fatalf("output = %+v, want the window", effect)
+	}
+}
+
+func sessionAuthored(t *testing.T, store *Store, ctx context.Context, session string) []string {
+	t.Helper()
+	authored, err := store.Walk.SessionAuthoredPaths(ctx, "p1", session, "r1")
+	testutil.FailErr(t, "session authored paths", err)
+	return authored
+}
+
+// A window's claim on a file lasts until the file's next change by anyone else;
+// what the agent itself wrote stays the session's.
+func TestSomeoneElsesEditEndsAWindowsClaimOnTheFile(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	writeRootFile(t, root, "seed.txt", "seed\n")
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "written.txt"}, ProjectID: "p1",
+		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, SessionID: "s1", Turn: 1, After: []byte("agent\n"),
+	})
+	writeRootFile(t, root, "written.txt", "agent\n")
+	idled := idleObserver(store)
+	window, release := programWindow(t, store, ctx, root)
+	writeRootFile(t, root, "gen.txt", "generated\n")
+	writeRootFile(t, root, "kept.txt", "generated\n")
+	deliverWrites(ctx, root, "gen.txt", "kept.txt")
+	release()
+	testutil.Receive(t, "the window goes idle", idled)
+	if authored := sessionAuthored(t, store, ctx, "s1"); !slices.Contains(authored, "gen.txt") || !slices.Contains(authored, "kept.txt") {
+		t.Fatalf("authored before the edit = %v", authored)
+	}
+
+	writeRootFile(t, root, "gen.txt", "a person's edit\n")
+	writeRootFile(t, root, "written.txt", "a person's edit\n")
+	deliverWrites(ctx, root, "gen.txt", "written.txt")
+	forceTestPass(t, store, ctx, root)
+	effects := newestEffects(t, store, ctx)
+	wantOutsideEffect(t, effects, "gen.txt")
+	wantOutsideEffect(t, effects, "written.txt")
+	authored := sessionAuthored(t, store, ctx, "s1")
+	slices.Sort(authored)
+	if !slices.Equal(authored, []string{"kept.txt", "written.txt"}) {
+		t.Fatalf("authored after the edit = %v, want the window's other file and the agent's write", authored)
+	}
+	closeAndSettle(t, ctx, window)
+}
+
+// A launch after a gap pays its own anchor even where a slow pass just finished,
+// because that pass predates the gap.
+func TestReanchorDoesNotReuseASlowPassOverTheGap(t *testing.T) {
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+	store, ctx, root := openLedgerOnDisk(t)
+	clock := manualLedgerClock(store)
+	writeRootFile(t, root, "seed.txt", "seed\n")
+	idled := idleObserver(store)
+	window, first := programWindow(t, store, ctx, root)
+
+	real := store.Commands.inventory
+	released := make(chan struct{})
+	close(released)
+	store.Commands.inventory = &gatedInventory{commandsInventoryPort: real, release: released, during: func() {
+		clock.advance(store.Commands.observationBudget + time.Second)
+	}}
+	first()
+	testutil.Receive(t, "the slow grace pass ends", idled)
+	store.Commands.inventory = real
+
+	writeRootFile(t, root, "notes.md", "a person's save\n")
+	second, err := window.Hold(ctx)
+	testutil.FailErr(t, "hold after the gap", err)
+	writeRootFile(t, root, "second.txt", "second\n")
+	second()
+	testutil.Receive(t, "the window goes idle again", idled)
+	effects := newestEffects(t, store, ctx)
+	wantOutsideEffect(t, effects, "notes.md")
+	if effects["second.txt"].CommandWindowID != window.ID {
+		t.Fatalf("second process's output = %+v, want the window", effects["second.txt"])
+	}
+	closeAndSettle(t, ctx, window)
+}
+
+// An event still on its way when a window opens belongs to before the window.
+func TestOpenWaitsForAWatcherEventStillInFlight(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	repochange.MarkCoverageCompleteForTest(root)
+	t.Cleanup(func() { repochange.CloseRoot(root) })
+	writeRootFile(t, root, "seed.txt", "seed\n")
+	forceTestPass(t, store, ctx, root)
+
+	writeRootFile(t, root, "notes.md", "a person's save\n")
+	repochange.NotifyWorktreeDebounced(ctx, root, []string{"notes.md"}, repochange.SourceWatcher)
+	window := openTestWindow(t, store, ctx, root, "make")
+	repochange.WaitQuiet(ctx, root, 150*time.Millisecond, 750*time.Millisecond)
+	closeAndSettle(t, ctx, window)
+	if authored := sessionAuthored(t, store, ctx, "s1"); len(authored) != 0 {
+		t.Fatalf("authored = %v, want the save before the window left out", authored)
+	}
+}
+
+// deadlineRecorder reports whether a settling pass runs under a deadline.
+type deadlineRecorder struct {
+	commandsInventoryPort
+	bounded chan bool
+}
+
+func (d deadlineRecorder) EnsureInventory(ctx context.Context, req InventoryRequest) error {
+	_, bounded := ctx.Deadline()
+	d.bounded <- bounded
+	return d.commandsInventoryPort.EnsureInventory(ctx, req)
+}
+
+// A pass that hangs must not leave a closed window claiming drift forever.
+func TestTrustedCloseSettlesUnderADeadline(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	repochange.MarkCoverageCompleteForTest(root)
+	t.Cleanup(func() { repochange.CloseRoot(root) })
+	window := openTestWindow(t, store, ctx, root, "make")
+	recorder := deadlineRecorder{store.Commands.inventory, make(chan bool, 1)}
+	store.Commands.inventory = recorder
+	closeAndSettle(t, ctx, window)
+	if !testutil.Receive(t, "the settling pass", recorder.bounded) {
+		t.Fatal("the settling pass has no deadline")
+	}
+}
+
+// A failure after the row is written leaves no running row for a window that
+// never opened.
+func TestRetentionFailureEndsTheRow(t *testing.T) {
+	ledger := openDiskLedger(t)
+	store, ctx, root := ledger.store, context.Background(), ledger.root
+	writeRootFile(t, root, "a.txt", "a\n")
+	_, err := ledger.sqlDB.ExecContext(ctx, `CREATE TRIGGER refuse_pins BEFORE INSERT ON source_command_window_objects BEGIN SELECT RAISE(ABORT, 'pins refused'); END`)
+	testutil.FailErr(t, "create trigger", err)
+	window, err := store.Commands.OpenCommandWindow(ctx, CommandWindowInput{ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s1", ToolName: "command"})
+	if err == nil {
+		t.Fatalf("window %s opened with its retention refused", window.ID)
+	}
+	var running int
+	testutil.FailErr(t, "count running rows", ledger.sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_command_windows WHERE state = 'running'`).Scan(&running))
+	if running != 0 {
+		t.Fatalf("running rows after the failed open = %d", running)
 	}
 }
