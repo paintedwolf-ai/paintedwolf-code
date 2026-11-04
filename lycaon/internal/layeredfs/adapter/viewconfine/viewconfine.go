@@ -183,7 +183,7 @@ func Launch(ctx context.Context, box *confine.Confinement, dir string, steps []d
 		return nil, err
 	}
 	stdout, stderr, _, err := execpkg.RunSeparate(ctx, self, []string{denialprobe.Flag, plan}, execpkg.ExecOpts{
-		Launch: execpkg.AgentLaunch(execpkg.LaunchAgentCommand, "view_confinement_probe", box), Dir: dir,
+		Launch: execpkg.AgentLaunch(execpkg.LaunchAgentCommand, "view_confinement_probe", box).WithPathAuthority(confine.NativeLaunchPaths(dir)), Dir: dir,
 		Timeout: probeBound, MaxOutputBytes: maxProbeOutput,
 	})
 	if err != nil {
