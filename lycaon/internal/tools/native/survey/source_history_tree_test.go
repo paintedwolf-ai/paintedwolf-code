@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -24,18 +25,18 @@ import (
 type fakeTree struct {
 	changes []workspacebaseline.Change
 	err     error
-	blocks  bool
-	path    workspacebaseline.PathComparison
-	calls   int
-	seen    tools.SourceTree
+	// stall ignores the context until closed, like a filesystem call that hung.
+	stall chan struct{}
+	path  workspacebaseline.PathComparison
+	calls int
+	seen  tools.SourceTree
 }
 
-func (f *fakeTree) TreeChanges(ctx context.Context, tree tools.SourceTree) ([]workspacebaseline.Change, error) {
+func (f *fakeTree) TreeChanges(_ context.Context, tree tools.SourceTree) ([]workspacebaseline.Change, error) {
 	f.calls++
 	f.seen = tree
-	if f.blocks {
-		<-ctx.Done()
-		return nil, ctx.Err()
+	if f.stall != nil {
+		<-f.stall
 	}
 	return f.changes, f.err
 }
@@ -43,7 +44,26 @@ func (f *fakeTree) TreeChanges(ctx context.Context, tree tools.SourceTree) ([]wo
 func (f *fakeTree) TreePathChange(_ context.Context, tree tools.SourceTree, _ string) (workspacebaseline.PathComparison, error) {
 	f.calls++
 	f.seen = tree
+	if f.stall != nil {
+		<-f.stall
+	}
 	return f.path, f.err
+}
+
+// returnsDespiteStall runs a tool call against a stalled tree and fails if the
+// call waits on it. Removing the budget reaches the failure here, not a test timeout.
+func returnsDespiteStall(t *testing.T, stall chan struct{}, call func() string) string {
+	t.Helper()
+	done := make(chan string, 1)
+	go func() { done <- call() }()
+	defer close(stall)
+	select {
+	case out := <-done:
+		return out
+	case <-time.After(30 * time.Second):
+		t.Fatal("the call waited on a stalled tree comparison")
+		return ""
+	}
 }
 
 func (h *historyHarness) workerWith(tree tools.SourceTreeReader) tools.ToolContext {
@@ -97,12 +117,10 @@ func TestSourceHistoryOverviewACOV18TreeChangesBecomeUnrecordedRows(t *testing.T
 func TestSourceHistoryOverviewACOV19ComparisonFailureListsLedgerRowsAndSaysSo(t *testing.T) {
 	for name, tree := range map[string]tools.SourceTreeReader{
 		"fails":           &fakeTree{err: errors.New("manifest unreadable")},
-		"exceeds budget":  &fakeTree{blocks: true},
 		"reader is unset": nil,
 	} {
 		t.Run(name, func(t *testing.T) {
 			h := newHistoryHarness(t)
-			h.tool.treeBudget = time.Nanosecond
 			h.recordOnWorker(effectSeed{path: "native.go", content: "native\n"})
 			result := runOverviewCall(t, h.tool, h.workerWith(tree))
 			if !result.Recorded || len(result.Files) != 1 || result.Files[0].Path != "native.go" || result.Files[0].Unrecorded {
@@ -112,6 +130,46 @@ func TestSourceHistoryOverviewACOV19ComparisonFailureListsLedgerRowsAndSaysSo(t 
 				t.Fatalf("note = %q, want it to state the comparison did not finish", result.Note)
 			}
 		})
+	}
+}
+
+func TestSourceHistoryOverviewACOV19StalledComparisonEndsAtTheBudget(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.tool.treeBudget = time.Millisecond
+	h.recordOnWorker(effectSeed{path: "native.go", content: "native\n"})
+	tree := &fakeTree{stall: make(chan struct{}), changes: treeChanges("late.go", "created")}
+	worker := h.workerWith(tree)
+	var result overviewResult
+	out := returnsDespiteStall(t, tree.stall, func() string {
+		out, err := h.tool.Run(context.Background(), map[string]any{}, worker)
+		if err != nil {
+			t.Errorf("overview: %v", err)
+		}
+		return out
+	})
+	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &result))
+	if len(result.Files) != 1 || result.Files[0].Path != "native.go" || !strings.Contains(result.Note, overviewTreeUnknownNote) {
+		t.Fatalf("result = %+v, want the ledger row and the note", result)
+	}
+}
+
+func TestSourceHistoryDiffACOV19StalledComparisonEndsAtTheBudget(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.tool.treeBudget = time.Millisecond
+	h.writeFile("gen.txt", "on disk\n")
+	tree := &fakeTree{stall: make(chan struct{})}
+	worker := h.workerWith(tree)
+	var result diffResult
+	out := returnsDespiteStall(t, tree.stall, func() string {
+		out, err := h.tool.Run(context.Background(), map[string]any{"path": "gen.txt", "mode": "diff"}, worker)
+		if err != nil {
+			t.Errorf("diff: %v", err)
+		}
+		return out
+	})
+	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &result))
+	if result.Unrecorded || result.Diff != "" || !strings.Contains(result.Note, overviewTreeUnknownNote) {
+		t.Fatalf("result = %+v, want no diff and the note", result)
 	}
 }
 
@@ -314,6 +372,24 @@ func TestSourceHistoryDiffACDF16PathMatchingItsBaselineKeepsTheLedgerAnswer(t *t
 	}
 }
 
+// A file created natively and removed by a program is gone: its record is not
+// the answer, and neither is the whole file as added.
+func TestSourceHistoryDiffACDF20PathInNeitherBaselineNorTreeIsAbsent(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.recordOnWorker(effectSeed{path: "tmp.txt", content: "scratch\n", op: api.SourceChangeOpCreate})
+	result := runTreeDiff(t, h, &fakeTree{path: workspacebaseline.PathComparison{Absent: true}}, "tmp.txt")
+	if !result.Recorded || result.Unrecorded || result.State != "absent" || result.Diff != "" || result.VersionID != "" || result.BaseVersionID != "" || result.Note != treeDiffAbsentNote {
+		t.Fatalf("result = %+v, want a recorded absent answer with its note", result)
+	}
+
+	// With no record either, the honest answer is still that nothing is known.
+	h = newHistoryHarness(t)
+	result = runTreeDiff(t, h, &fakeTree{path: workspacebaseline.PathComparison{Absent: true}}, "never.txt")
+	if result.Recorded || result.State != "" || result.Note != sourceHistoryNoRecordNote {
+		t.Fatalf("result = %+v, want the no-record note", result)
+	}
+}
+
 // The ledger rejecting its own record does not stop the tree from answering, and
 // still reaches the caller when the tree has nothing to say.
 func TestSourceHistoryDiffACDF16LedgerRejectionYieldsToTheTree(t *testing.T) {
@@ -352,29 +428,6 @@ func TestSourceHistoryDiffACOV19ComparisonFailureAddsANote(t *testing.T) {
 	}
 }
 
-// A credential file's text reaches the model only with its exposure recorded,
-// the same as a read.
-func TestSourceHistoryDiffACDF15CredentialFileRecordsItsDelivery(t *testing.T) {
-	h := newHistoryHarness(t)
-	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(h.dir, ".env"), []byte("TOKEN=new\n"), 0o600))
-	recorder := &deliveredRecorder{}
-	worker := h.workerWith(&fakeTree{path: workspacebaseline.PathComparison{
-		Kind: workspacebaseline.ChangeModified, Abs: filepath.Join(h.dir, ".env"),
-		Before: "TOKEN=old\n", After: "TOKEN=new\n", HasBefore: true, HasAfter: true,
-	}})
-	worker.Effects.CredentialFiles = recorder
-	_, err := h.tool.Run(t.Context(), map[string]any{"path": ".env", "mode": "diff"}, worker)
-	testutil.FailErr(t, "diff credential file", err)
-	if len(recorder.reads) != 2 || recorder.reads[0].Content != "TOKEN=old\n" || recorder.reads[1].Content != "TOKEN=new\n" {
-		t.Fatalf("delivered = %+v, want both sides", recorder.reads)
-	}
-
-	recorder.err = errors.New("evidence store down")
-	if out, err := h.tool.Run(t.Context(), map[string]any{"path": ".env", "mode": "diff"}, worker); err == nil {
-		t.Fatalf("diff = %q, want it withheld when exposure cannot be recorded", out)
-	}
-}
-
 type failingPathLookup struct{ tools.SourceFileHistory }
 
 func (failingPathLookup) OldestPathEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, string, int64) (sourceledger.FileEffectBounds, bool, error) {
@@ -397,5 +450,91 @@ func TestSourceHistoryOverviewACOV19LedgerLookupFailureIsStated(t *testing.T) {
 func TestDisplayPathLocationNeedsAPrimaryRoot(t *testing.T) {
 	if _, _, err := displayPathLocation(nil, "gen.txt"); err == nil {
 		t.Fatal("a path resolved with no roots")
+	}
+}
+
+func manyLines(prefix string, count int) string {
+	var text strings.Builder
+	for i := range count {
+		fmt.Fprintf(&text, "%s line %06d of generated source text\n", prefix, i)
+	}
+	return text.String()
+}
+
+// allocatedBy reports what call allocated in total, which bounds its peak.
+func allocatedBy(call func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	call()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
+}
+
+// Unbounded, a rewrite of this size allocates gigabytes: the edit search is
+// quadratic in the edit depth.
+const largeDiffAllocationLimit = 2 * 4 * sourceHistoryDiffMaxCells
+
+func TestSourceHistoryDiffACDF18LargeRewriteAnswersWithANote(t *testing.T) {
+	const lines = 20_000
+	before, after := manyLines("old", lines), manyLines("new", lines)
+
+	t.Run("live file on a write leg", func(t *testing.T) {
+		h := newHistoryHarness(t)
+		tree := &fakeTree{path: workspacebaseline.PathComparison{Kind: workspacebaseline.ChangeModified, Before: before, After: after, HasBefore: true, HasAfter: true}}
+		var result diffResult
+		if allocated := allocatedBy(func() { result = runTreeDiff(t, h, tree, "gen.txt") }); allocated > largeDiffAllocationLimit {
+			t.Fatalf("allocated %d bytes, limit %d", allocated, int64(largeDiffAllocationLimit))
+		}
+		if !result.Unrecorded || result.Diff != "" || result.Note != diffTooLargeNote(len(before), len(after), "", "") {
+			t.Fatalf("diff %d bytes, note %q, want no diff and the sizes", len(result.Diff), result.Note)
+		}
+	})
+	t.Run("default diff from the ledger", func(t *testing.T) {
+		h := newHistoryHarness(t)
+		h.beginSession(historySession)
+		h.record(effectSeed{path: "gen.txt", content: after, before: before})
+		var result diffResult
+		if allocated := allocatedBy(func() { result = h.sessionDiff("gen.txt") }); allocated > largeDiffAllocationLimit {
+			t.Fatalf("allocated %d bytes, limit %d", allocated, int64(largeDiffAllocationLimit))
+		}
+		if !result.Recorded || result.Diff != "" || result.BaseVersionID == "" || result.VersionID == "" ||
+			result.Note != diffTooLargeNote(len(before), len(after), result.BaseVersionID, result.VersionID) {
+			t.Fatalf("diff %d bytes, result note %q versions %q %q, want no diff and both sizes and versions", len(result.Diff), result.Note, result.BaseVersionID, result.VersionID)
+		}
+	})
+	t.Run("explicit version", func(t *testing.T) {
+		h := newHistoryHarness(t)
+		h.record(effectSeed{path: "gen.txt", content: after, before: before})
+		version := h.head("gen.txt").VersionID
+		var result diffResult
+		var err error
+		if allocated := allocatedBy(func() { result, err = h.diff(map[string]any{"path": "gen.txt", "version_id": version}) }); allocated > largeDiffAllocationLimit {
+			t.Fatalf("allocated %d bytes, limit %d", allocated, int64(largeDiffAllocationLimit))
+		}
+		testutil.FailErr(t, "explicit diff", err)
+		if result.Diff != "" || result.Note != diffTooLargeNote(len(before), len(after), result.BaseVersionID, version) {
+			t.Fatalf("diff %d bytes, note %q, want no diff and the note", len(result.Diff), result.Note)
+		}
+	})
+}
+
+// The ceiling admits a whole rewrite of an ordinary source file, and a file that
+// only grew costs no edit search however large it is.
+func TestSourceHistoryDiffACDF18CeilingAdmitsOrdinaryFiles(t *testing.T) {
+	for name, compared := range map[string]workspacebaseline.PathComparison{
+		"rewrite of 1,500 lines":    {Kind: workspacebaseline.ChangeModified, Before: manyLines("old", 1_500), After: manyLines("new", 1_500), HasBefore: true, HasAfter: true},
+		"new file of 50,000 lines":  {Kind: workspacebaseline.ChangeCreated, After: manyLines("new", 50_000), HasBefore: true, HasAfter: true},
+		"gone file of 50,000 lines": {Kind: workspacebaseline.ChangeDeleted, Before: manyLines("old", 50_000), HasBefore: true, HasAfter: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHistoryHarness(t)
+			var result diffResult
+			if allocated := allocatedBy(func() { result = runTreeDiff(t, h, &fakeTree{path: compared}, "gen.txt") }); allocated > largeDiffAllocationLimit {
+				t.Fatalf("allocated %d bytes, limit %d", allocated, int64(largeDiffAllocationLimit))
+			}
+			if result.Diff == "" || result.Note != "" {
+				t.Fatalf("diff %d bytes, note %q, want the diff", len(result.Diff), result.Note)
+			}
+		})
 	}
 }

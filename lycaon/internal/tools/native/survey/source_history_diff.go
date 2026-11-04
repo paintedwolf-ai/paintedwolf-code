@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -15,6 +16,10 @@ import (
 )
 
 const (
+	// sourceHistoryDiffMaxCells bounds a diff to about 64 MiB. It admits a whole
+	// rewrite of a 2,000-line file.
+	sourceHistoryDiffMaxCells = 16 << 20
+
 	sourceHistoryNoSessionEffectNote      = "no effect recorded on this path since the session began; head is the baseline state"
 	sourceHistoryDeletedBeforeSessionNote = "this file was already deleted when the session began"
 )
@@ -97,7 +102,12 @@ func (t *SourceHistoryTool) runDiff(
 		fromLabel = fmt.Sprintf("%s (%s)", display, comp.Before.VersionID)
 	}
 	resp := sourceHistoryResponse{Mode: "diff", Path: display, Recorded: true, VersionID: versionID, BaseVersionID: comp.Before.VersionID}
-	resp.Diff = comparisonDiff(comp, fromLabel, fmt.Sprintf("%s (%s)", display, versionID))
+	resp.Diff, resp.Note = comparisonDiff(comp, fromLabel, fmt.Sprintf("%s (%s)", display, versionID))
+	if resp.Diff != "" {
+		if err := deliverComparison(ctx, tctx, comp); err != nil {
+			return "", err
+		}
+	}
 	return marshalSourceHistory(display, resp)
 }
 
@@ -122,15 +132,47 @@ func (t *SourceHistoryTool) runSessionDiff(
 	if recordedErr != nil {
 		return "", recordedErr
 	}
-	return marshalSourceHistory(display, recorded.resp)
+	return recorded.answer(ctx, tctx, display, "")
 }
 
 // ledgerDiff is the ledger's answer and the facts a tree comparison checks it
 // against. hasEffect means an effect in the window; comp is set once compared.
 type ledgerDiff struct {
-	resp      sourceHistoryResponse
-	hasEffect bool
-	comp      *sourceledger.Comparison
+	resp               sourceHistoryResponse
+	hasEffect          bool
+	comp               *sourceledger.Comparison
+	fromLabel, toLabel string
+}
+
+// answer renders the ledger's diff and records its delivery. The tree's answer can
+// replace it on a write leg, so nothing is rendered or recorded before this.
+func (d ledgerDiff) answer(ctx context.Context, tctx tools.ToolContext, display, note string) (string, error) {
+	resp := d.resp
+	if d.comp != nil {
+		resp.Diff, resp.Note = comparisonDiff(*d.comp, d.fromLabel, d.toLabel)
+		if resp.Diff != "" {
+			if err := deliverComparison(ctx, tctx, *d.comp); err != nil {
+				return "", err
+			}
+		}
+	}
+	resp.Note = joinNotes(resp.Note, note)
+	return marshalSourceHistory(display, resp)
+}
+
+// deliverComparison records each side where its text came from, since a file moved
+// in the window may have held its text under a credential name.
+func deliverComparison(ctx context.Context, tctx tools.ToolContext, comp sourceledger.Comparison) error {
+	for _, side := range []sourceledger.ComparisonSide{comp.Before, comp.After} {
+		if side.Content == "" {
+			continue
+		}
+		path := projectroot.DisplayPath(tctx.Source.Roots, side.RootID, side.Path)
+		if err := tctx.ObserveCredentialDelivery(ctx, path, path, side.Content); err != nil {
+			return fmt.Errorf("record credential file read: %w", err)
+		}
+	}
+	return nil
 }
 
 // ledgerSessionDiff compares the file now, or its absence once deleted, with what
@@ -200,15 +242,14 @@ func ledgerSessionDiff(
 		return out, err
 	}
 	resp.BaseVersionID = comp.Before.VersionID
-	fromLabel := fmt.Sprintf("%s (absent)", display)
+	out.fromLabel = fmt.Sprintf("%s (absent)", display)
 	if comp.Before.VersionID != "" {
-		fromLabel = fmt.Sprintf("%s (%s, session baseline)", display, comp.Before.VersionID)
+		out.fromLabel = fmt.Sprintf("%s (%s, session baseline)", display, comp.Before.VersionID)
 	}
-	toLabel := fmt.Sprintf("%s (absent)", display)
+	out.toLabel = fmt.Sprintf("%s (absent)", display)
 	if current.versionID != "" {
-		toLabel = fmt.Sprintf("%s (%s)", display, current.versionID)
+		out.toLabel = fmt.Sprintf("%s (%s)", display, current.versionID)
 	}
-	resp.Diff = comparisonDiff(comp, fromLabel, toLabel)
 	return out, nil
 }
 
@@ -254,8 +295,25 @@ func comparisonError(err error, versionID string) error {
 	return fmt.Errorf("compare source versions: %w", err)
 }
 
-func comparisonDiff(comp sourceledger.Comparison, fromLabel, toLabel string) string {
-	return sourceview.UnifiedDiff(fromLabel, toLabel, sourceview.SplitLines(comp.Before.Content), sourceview.SplitLines(comp.After.Content), 3)
+// comparisonDiff answers with a note instead of a diff when the sides differ past
+// the ceiling, since the edit search costs the square of the distance between them.
+func comparisonDiff(comp sourceledger.Comparison, fromLabel, toLabel string) (diff, note string) {
+	diff, err := sourceview.UnifiedDiffWithin(fromLabel, toLabel, comp.Before.Content, comp.After.Content, 3, sourceHistoryDiffMaxCells)
+	if err != nil {
+		return "", diffTooLargeNote(len(comp.Before.Content), len(comp.After.Content), comp.Before.VersionID, comp.After.VersionID)
+	}
+	return diff, ""
+}
+
+func diffTooLargeNote(beforeBytes, afterBytes int, beforeVersion, afterVersion string) string {
+	return fmt.Sprintf("this file's sides differ too much to diff: before is %s, after is %s", sizedSide(beforeBytes, beforeVersion), sizedSide(afterBytes, afterVersion))
+}
+
+func sizedSide(size int, versionID string) string {
+	if versionID == "" {
+		return fmt.Sprintf("%d bytes", size)
+	}
+	return fmt.Sprintf("%d bytes at %s", size, versionID)
 }
 
 // rejectUndiffableSides refuses a side with no text to compare, which would

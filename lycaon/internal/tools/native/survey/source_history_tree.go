@@ -16,10 +16,11 @@ import (
 )
 
 const (
-	overviewTreeBudget      = tools.WindowSettleBudget
+	sourceTreeBudget        = tools.WindowSettleBudget
 	overviewTreeUnknownNote = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
 	treeDiffNoTextNote      = "this file changed, but its baseline or live side has no text to compare"
 	treeDiffTouchedNote     = "this file's timestamp changed; its text did not"
+	treeDiffAbsentNote      = "neither your tree nor its baseline holds this file, so it has no change to show; source_history(path) has its record"
 	treeDiffPastRecordNote  = "this file changed after its last recorded version, so the live side names no version"
 )
 
@@ -40,13 +41,11 @@ func (t *SourceHistoryTool) addTreeChanges(
 	if ledger.Tree == nil {
 		return false
 	}
-	budget := t.treeBudget
-	if budget == 0 {
-		budget = overviewTreeBudget
-	}
-	compare, cancel := context.WithTimeout(ctx, budget)
+	compare, cancel := t.treeContext(ctx)
 	defer cancel()
-	changes, err := ledger.Tree.TreeChanges(compare, sourceTreeOf(tctx))
+	changes, err := awaitTree(compare, func(ctx context.Context) ([]workspacebaseline.Change, error) {
+		return ledger.Tree.TreeChanges(ctx, sourceTreeOf(tctx))
+	})
 	if err != nil {
 		return false
 	}
@@ -83,6 +82,35 @@ func (t *SourceHistoryTool) addTreeChanges(
 		resp.Files = append(resp.Files, sourceHistoryOverviewFile{Path: change.Path, Op: string(changeOp(change.Kind)), Unrecorded: true})
 	}
 	return true
+}
+
+func (t *SourceHistoryTool) treeContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	budget := t.treeBudget
+	if budget == 0 {
+		budget = sourceTreeBudget
+	}
+	return context.WithTimeout(ctx, budget)
+}
+
+// awaitTree stops waiting when ctx ends. A filesystem call that stalled cannot be
+// interrupted, so it finishes on its own and its result is dropped.
+func awaitTree[T any](ctx context.Context, compare func(context.Context) (T, error)) (T, error) {
+	type result struct {
+		value T
+		err   error
+	}
+	done := make(chan result, 1)
+	go func() {
+		value, err := compare(ctx)
+		done <- result{value, err}
+	}()
+	select {
+	case got := <-done:
+		return got.value, got.err
+	case <-ctx.Done():
+		var zero T
+		return zero, ctx.Err()
+	}
 }
 
 func changeOp(kind workspacebaseline.ChangeKind) api.SourceChangeOp {
@@ -141,15 +169,23 @@ func (t *SourceHistoryTool) workerSessionDiff(
 		if recordedErr != nil {
 			return "", recordedErr
 		}
-		recorded.resp.Note = joinNotes(recorded.resp.Note, note)
-		return marshalSourceHistory(display, recorded.resp)
+		return recorded.answer(ctx, tctx, display, note)
 	}
 	if ledger.Tree == nil {
 		return ledgerAnswer(overviewTreeUnknownNote)
 	}
-	compared, err := ledger.Tree.TreePathChange(ctx, sourceTreeOf(tctx), projectroot.DisplayPath(tctx.Source.Roots, rootID, rel))
+	compare, cancel := t.treeContext(ctx)
+	defer cancel()
+	compared, err := awaitTree(compare, func(ctx context.Context) (workspacebaseline.PathComparison, error) {
+		return ledger.Tree.TreePathChange(ctx, sourceTreeOf(tctx), projectroot.DisplayPath(tctx.Source.Roots, rootID, rel))
+	})
 	if err != nil {
 		return ledgerAnswer(overviewTreeUnknownNote)
+	}
+	if compared.Absent && recorded.hasEffect {
+		return marshalSourceHistory(display, sourceHistoryResponse{
+			Mode: "diff", Path: display, Recorded: true, Since: &sourceHistorySince{}, State: "absent", Note: treeDiffAbsentNote,
+		})
 	}
 	if compared.Kind == "" {
 		return ledgerAnswer("")
@@ -162,12 +198,6 @@ func (t *SourceHistoryTool) workerSessionDiff(
 		out.Note = treeDiffNoTextNote
 		return marshalSourceHistory(display, out)
 	}
-	// Text from a credential file reaches no one until its exposure is recorded.
-	for _, text := range []string{compared.Before, compared.After} {
-		if err := tctx.ObserveCredentialDelivery(ctx, compared.Abs, display, text); err != nil {
-			return "", fmt.Errorf("record credential file read: %w", err)
-		}
-	}
 	// A version is named only when its bytes are the side being shown.
 	if comp := recorded.comp; comp != nil && sideHolds(comp.Before, compared.Before) {
 		out.BaseVersionID = comp.Before.VersionID
@@ -179,14 +209,26 @@ func (t *SourceHistoryTool) workerSessionDiff(
 			out.Note = treeDiffPastRecordNote
 		}
 	}
-	out.Diff = comparisonDiff(sourceledger.Comparison{
-		Before: sourceledger.ComparisonSide{Content: compared.Before},
-		After:  sourceledger.ComparisonSide{Content: compared.After},
+	diff, tooLarge := comparisonDiff(sourceledger.Comparison{
+		Before: sourceledger.ComparisonSide{VersionID: out.BaseVersionID, Content: compared.Before},
+		After:  sourceledger.ComparisonSide{VersionID: out.VersionID, Content: compared.After},
 	},
 		treeDiffLabel(display, treeSideName("session baseline", out.BaseVersionID), compared.Kind == workspacebaseline.ChangeCreated),
 		treeDiffLabel(display, treeSideName("live", out.VersionID), compared.Kind == workspacebaseline.ChangeDeleted),
 	)
-	if out.Diff == "" {
+	out.Diff = diff
+	// Text from a credential file reaches no one until its exposure is recorded.
+	if diff != "" {
+		for _, text := range []string{compared.Before, compared.After} {
+			if err := tctx.ObserveCredentialDelivery(ctx, compared.Abs, display, text); err != nil {
+				return "", fmt.Errorf("record credential file read: %w", err)
+			}
+		}
+	}
+	switch {
+	case tooLarge != "":
+		out.Note = joinNotes(out.Note, tooLarge)
+	case diff == "":
 		out.Note = treeDiffTouchedNote
 	}
 	return marshalSourceHistory(display, out)

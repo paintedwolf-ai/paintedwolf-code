@@ -97,21 +97,22 @@ func TestComparePathReadsBothSides(t *testing.T) {
 		kind                workspacebaseline.ChangeKind
 		before, after       string
 		hasBefore, hasAfter bool
+		absent              bool
 	}{
-		{"edit.txt", workspacebaseline.ChangeModified, "old\n", "new\n", true, true},
-		{"gone.txt", workspacebaseline.ChangeDeleted, "gone\n", "", true, true},
-		{"made.txt", workspacebaseline.ChangeCreated, "", "made\n", true, true},
-		{"keep.txt", "", "", "", false, false},
-		{"never.txt", "", "", "", false, false},
-		{"emptydir", "", "", "", false, false},
-		{"big.bin", workspacebaseline.ChangeModified, "", "small now\n", false, true},
-		{"bin.dat", workspacebaseline.ChangeModified, "", "text now\n", false, true},
-		{"shrunk.txt", workspacebaseline.ChangeModified, "was small\n", "", true, false},
+		{"edit.txt", workspacebaseline.ChangeModified, "old\n", "new\n", true, true, false},
+		{"gone.txt", workspacebaseline.ChangeDeleted, "gone\n", "", true, true, false},
+		{"made.txt", workspacebaseline.ChangeCreated, "", "made\n", true, true, false},
+		{"keep.txt", "", "", "", false, false, false},
+		{"never.txt", "", "", "", false, false, true},
+		{"emptydir", "", "", "", false, false, false},
+		{"big.bin", workspacebaseline.ChangeModified, "", "small now\n", false, true, false},
+		{"bin.dat", workspacebaseline.ChangeModified, "", "text now\n", false, true, false},
+		{"shrunk.txt", workspacebaseline.ChangeModified, "was small\n", "", true, false, false},
 	} {
 		t.Run(c.path, func(t *testing.T) {
 			got, err := reader.ComparePath(t.Context(), nil, branch, c.path)
 			testutil.FailErr(t, "compare", err)
-			if got.Kind != c.kind || got.Before != c.before || got.After != c.after || got.HasBefore != c.hasBefore || got.HasAfter != c.hasAfter {
+			if got.Kind != c.kind || got.Before != c.before || got.After != c.after || got.HasBefore != c.hasBefore || got.HasAfter != c.hasAfter || got.Absent != c.absent {
 				t.Fatalf("got %+v, want %+v", got, c)
 			}
 			if got.Abs != filepath.Join(branch, c.path) {

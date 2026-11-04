@@ -89,3 +89,63 @@ func TestDiffScriptScatteredChangesInFiftyThousandLinesStayBounded(t *testing.T)
 		t.Fatalf("hunks=%d", len(hunks))
 	}
 }
+
+func TestUnifiedDiffWithinRendersWhatUnifiedDiffRenders(t *testing.T) {
+	for _, c := range [][2]string{
+		{"", ""},
+		{"", "a\nb\n"},
+		{"a\nb\n", ""},
+		{"a\nb\n", "a\nb\n"},
+		{"a\nc\n", "a\nb\nc\n"},
+		{"a\nb\nc\n", "a\nc\n"},
+		{"a\nb\nc\n", "x\nb\ny\n"},
+		{"1\n2\n3\n4\n5\n6\n7\n8\n9\n", "1\nx\n3\n4\n5\n6\n7\ny\n9\n"},
+		{"same\n", "same\n\n"},
+	} {
+		want := UnifiedDiff("from", "to", SplitLines(c[0]), SplitLines(c[1]), 3)
+		got, err := UnifiedDiffWithin("from", "to", c[0], c[1], 3, 1<<20)
+		testutil.FailErr(t, "bounded diff", err)
+		if got != want {
+			t.Fatalf("%q to %q = %q, want %q", c[0], c[1], got, want)
+		}
+	}
+}
+
+func TestUnifiedDiffWithinStopsAtItsCeiling(t *testing.T) {
+	if _, err := UnifiedDiffWithin("from", "to", "1\n2\n3\n", "4\n5\n6\n", 3, 100); !errors.Is(err, ErrDiffTooLarge) {
+		t.Fatalf("err = %v, want the edit search over its ceiling", err)
+	}
+	// Splitting these into lines would itself exceed the ceiling.
+	newlines := strings.Repeat("\n", 2<<20)
+	other := "x" + newlines
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	_, err := UnifiedDiffWithin("from", "to", newlines, other, 3, 1<<20)
+	runtime.ReadMemStats(&after)
+	if !errors.Is(err, ErrDiffTooLarge) {
+		t.Fatalf("err = %v, want the line tables over the ceiling", err)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 1<<20 {
+		t.Fatalf("refusal allocated %d bytes", allocated)
+	}
+}
+
+func TestUnifiedDiffWithinNeedsNoSearchWhenOneSideOnlyGrew(t *testing.T) {
+	var grown strings.Builder
+	grown.WriteString("head\n")
+	for i := range 20_000 {
+		fmt.Fprintf(&grown, "added %d\n", i)
+	}
+	grown.WriteString("tail\n")
+	cells := int64(20_006 * 10)
+	got, err := UnifiedDiffWithin("from", "to", "head\ntail\n", grown.String(), 3, cells)
+	testutil.FailErr(t, "growth", err)
+	if strings.Count(got, "\n+ ") != 20_000 || strings.Contains(got, "\n- ") {
+		t.Fatalf("diff has %d added lines", strings.Count(got, "\n+ "))
+	}
+	shrunk, err := UnifiedDiffWithin("from", "to", grown.String(), "head\ntail\n", 3, cells)
+	testutil.FailErr(t, "shrinkage", err)
+	if strings.Count(shrunk, "\n- ") != 20_000 || strings.Contains(shrunk, "\n+ ") {
+		t.Fatalf("diff has %d removed lines", strings.Count(shrunk, "\n- "))
+	}
+}
