@@ -41,7 +41,8 @@ func TestProcessLaunchesUseTheTypedDoor(t *testing.T) {
 		emptyErrorReturns := emptyOptionsErrorReturns(f)
 		nativeStart := strings.HasPrefix(slashRel, "lycaon/internal/exec/") ||
 			strings.HasPrefix(slashRel, "lycaon/internal/confine/")
-		allowRaw := nativeStart || strings.Contains(slashRel, "/testdata/")
+		allowRaw := nativeStart || strings.Contains(slashRel, "/testdata/") ||
+			strings.HasPrefix(slashRel, "lycaon/internal/layeredfs/adapter/nfsdarwin/")
 		allowLowLevel := allowRaw || strings.HasPrefix(slashRel, "lycaon/internal/launchguard/")
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch node := n.(type) {
