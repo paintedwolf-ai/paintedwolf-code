@@ -166,7 +166,8 @@ func parseStructure(source string) structure {
 }
 
 // wrapperBody finds the body of a Markdown fence that is the entire source. Only
-// whitespace may surround it, and its lines must be contiguous source bytes.
+// whitespace may surround it. An indented fence does not qualify: stripping its
+// indent would leave a body that is no single span of the source.
 func wrapperBody(doc ast.Node, data []byte) *Span {
 	fence, ok := doc.FirstChild().(*ast.FencedCodeBlock)
 	if !ok || fence.NextSibling() != nil || fence.Info == nil {
@@ -178,16 +179,10 @@ func wrapperBody(doc ast.Node, data []byte) *Span {
 		return nil
 	}
 	span := fenceSpan(fence, data)
-	if len(bytes.TrimSpace(data[:span.Start])) > 0 || len(bytes.TrimSpace(data[span.End:])) > 0 {
+	if isSpaceByte(data[span.Start]) || len(bytes.TrimSpace(data[:span.Start])) > 0 || len(bytes.TrimSpace(data[span.End:])) > 0 {
 		return nil
 	}
-	body := Span{lines.At(0).Start, lines.At(lines.Len() - 1).Stop}
-	for i := 1; i < lines.Len(); i++ {
-		if lines.At(i).Start != lines.At(i-1).Stop {
-			return nil
-		}
-	}
-	return &body
+	return &Span{lines.At(0).Start, lines.At(lines.Len() - 1).Stop}
 }
 
 func (s *structure) visit(n ast.Node, data []byte, log *parseLog) ast.WalkStatus {
