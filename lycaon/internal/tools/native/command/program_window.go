@@ -15,6 +15,8 @@ import (
 // concurrent pipeline stages, nested commands and & jobs. It claims drift only
 // while one of those launches holds it.
 type programWindow struct {
+	// due is false where commands are not observed, so launches never wait.
+	due    bool
 	open   func(context.Context) commandWindow
 	clock  commandprogram.Clock
 	once   sync.Once
@@ -34,6 +36,7 @@ type programWindow struct {
 
 func newProgramWindow(tc tools.ToolContext, commandLine string, clock commandprogram.Clock) *programWindow {
 	return &programWindow{
+		due:   commandWindowDue(tc),
 		open:  func(ctx context.Context) commandWindow { return openCommandWindow(ctx, tc, "command", commandLine) },
 		clock: clock,
 		ready: make(chan struct{}),
@@ -47,7 +50,7 @@ func newProgramWindow(tc tools.ToolContext, commandLine string, clock commandpro
 // so a stage's bound does not cost later launches their window, and a job may
 // launch after the call's context ended.
 func (w *programWindow) enter(ctx context.Context) (func(), error) {
-	if w == nil {
+	if w == nil || !w.due {
 		return func() {}, nil
 	}
 	w.mu.Lock()

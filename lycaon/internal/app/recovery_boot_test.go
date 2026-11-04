@@ -403,8 +403,8 @@ func TestBootSettlesCommandWindowsAnEarlierProcessLeftRunning(t *testing.T) {
 	seed, err := db.Open(cfg.DBPath)
 	testutil.FailErr(t, "open store", err)
 	testdbseed.InsertProject(t, seed, testdbseed.DefaultProjectID)
-	_, err = seed.ExecContext(t.Context(), `INSERT INTO source_command_windows (id, project_id, session_id, tool_name, command_line, ordinal, started_ts)
-		VALUES ('left-running', ?, 's1', 'command', 'npm run dev', 1, '2026-01-01T00:00:00Z')`, testdbseed.DefaultProjectID)
+	_, err = seed.ExecContext(t.Context(), `INSERT INTO source_command_windows (id, project_id, session_id, tool_name, command_line, state, ordinal, started_ts)
+		VALUES ('left-running', ?, 's1', 'command', 'npm run dev', 'running', 1, '2026-01-01T00:00:00Z')`, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "seed running window", err)
 	testutil.FailErr(t, "close store", seed.Close())
 
