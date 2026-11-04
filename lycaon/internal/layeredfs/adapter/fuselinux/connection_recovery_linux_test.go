@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,8 +55,13 @@ func TestProvenDeadServerWedgedOnItsOwnMountAbortsOnlyItsConnection(t *testing.T
 		t.Fatalf("engine did not report its mount: %v", err)
 	}
 	go func() { waited <- engine.Wait() }()
+	var connection string
 	t.Cleanup(func() {
 		_ = engine.Process.Kill()
+		// A failed test still ends its own wedged connection, or the zombie outlives the run.
+		if connection != "" {
+			_ = os.WriteFile(filepath.Join("/sys/fs/fuse/connections", connection, "abort"), []byte("1"), 0o200)
+		}
 		_ = exec.Command("fusermount3", "-u", "-z", "--", mountPath).Run()
 	})
 
@@ -63,6 +69,7 @@ func TestProvenDeadServerWedgedOnItsOwnMountAbortsOnlyItsConnection(t *testing.T
 	if err != nil || len(recorded) != 1 || recorded[0].DevMajorMinor == "" {
 		t.Fatalf("recorded connections: %+v err=%v", recorded, err)
 	}
+	_, connection, _ = strings.Cut(recorded[0].DevMajorMinor, ":")
 	waitFor(t, "two parked requests", func() bool { return waitingRequests(recorded[0].DevMajorMinor) >= 2 })
 
 	adp := fuselinux.New(fuselinux.Config{})
@@ -97,10 +104,14 @@ func TestProvenDeadServerWedgedOnItsOwnMountAbortsOnlyItsConnection(t *testing.T
 // uninterruptibly, behind it.
 func runWedgedEngine(t *testing.T) {
 	tmp := os.Getenv(wedgedEngineHelperEnv)
-	hold := make(chan struct{})
+	hold, parked := make(chan struct{}), make(chan struct{})
+	var parkOnce sync.Once
 	adp := fuselinux.New(fuselinux.Config{
 		MaxConcurrentRequests: 1,
-		OnMutationHook:        func(uint32, string) { <-hold },
+		OnMutationHook: func(uint32, string) {
+			parkOnce.Do(func() { close(parked) })
+			<-hold
+		},
 	})
 	view, err := adp.Prepare(context.Background(), adapter.PrepareRequest{
 		ViewID: "view-wedged", BackingDir: filepath.Join(tmp, "backing"), RuntimeDir: filepath.Join(tmp, "runtime"),
@@ -111,6 +122,8 @@ func runWedgedEngine(t *testing.T) {
 	testutil.FailErr(t, "open", err)
 	fmt.Println(view.PrimaryWorkPath)
 	go func() { _ = os.WriteFile(filepath.Join(view.PrimaryWorkPath, "other"), []byte("x"), 0o644) }()
+	// The write must hold the only worker first, or the fsync is simply answered.
+	<-parked
 	go func() { _ = file.Sync() }()
 	// A test that dies first must not strand a wedged process: unblocking lets this one exit.
 	_, _ = io.Copy(io.Discard, os.Stdin)
