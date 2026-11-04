@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -102,6 +103,11 @@ func (t *SourceHistoryTool) runDiff(
 	}
 	resp := sourceHistoryResponse{Mode: "diff", Path: display, Recorded: true, VersionID: versionID, BaseVersionID: comp.Before.VersionID}
 	resp.Diff, resp.Note = comparisonDiff(comp, fromLabel, fmt.Sprintf("%s (%s)", display, versionID))
+	if resp.Diff != "" {
+		if err := deliverComparison(ctx, tctx, comp); err != nil {
+			return "", err
+		}
+	}
 	return marshalSourceHistory(display, resp)
 }
 
@@ -126,15 +132,47 @@ func (t *SourceHistoryTool) runSessionDiff(
 	if recordedErr != nil {
 		return "", recordedErr
 	}
-	return marshalSourceHistory(display, recorded.resp)
+	return recorded.answer(ctx, tctx, display, "")
 }
 
 // ledgerDiff is the ledger's answer and the facts a tree comparison checks it
 // against. hasEffect means an effect in the window; comp is set once compared.
 type ledgerDiff struct {
-	resp      sourceHistoryResponse
-	hasEffect bool
-	comp      *sourceledger.Comparison
+	resp               sourceHistoryResponse
+	hasEffect          bool
+	comp               *sourceledger.Comparison
+	fromLabel, toLabel string
+}
+
+// answer renders the ledger's diff and records its delivery. The tree's answer can
+// replace it on a write leg, so nothing is rendered or recorded before this.
+func (d ledgerDiff) answer(ctx context.Context, tctx tools.ToolContext, display, note string) (string, error) {
+	resp := d.resp
+	if d.comp != nil {
+		resp.Diff, resp.Note = comparisonDiff(*d.comp, d.fromLabel, d.toLabel)
+		if resp.Diff != "" {
+			if err := deliverComparison(ctx, tctx, *d.comp); err != nil {
+				return "", err
+			}
+		}
+	}
+	resp.Note = joinNotes(resp.Note, note)
+	return marshalSourceHistory(display, resp)
+}
+
+// deliverComparison records each side where its text came from, since a file moved
+// in the window may have held its text under a credential name.
+func deliverComparison(ctx context.Context, tctx tools.ToolContext, comp sourceledger.Comparison) error {
+	for _, side := range []sourceledger.ComparisonSide{comp.Before, comp.After} {
+		if side.Content == "" {
+			continue
+		}
+		path := projectroot.DisplayPath(tctx.Source.Roots, side.RootID, side.Path)
+		if err := tctx.ObserveCredentialDelivery(ctx, path, path, side.Content); err != nil {
+			return fmt.Errorf("record credential file read: %w", err)
+		}
+	}
+	return nil
 }
 
 // ledgerSessionDiff compares the file now, or its absence once deleted, with what
@@ -204,15 +242,14 @@ func ledgerSessionDiff(
 		return out, err
 	}
 	resp.BaseVersionID = comp.Before.VersionID
-	fromLabel := fmt.Sprintf("%s (absent)", display)
+	out.fromLabel = fmt.Sprintf("%s (absent)", display)
 	if comp.Before.VersionID != "" {
-		fromLabel = fmt.Sprintf("%s (%s, session baseline)", display, comp.Before.VersionID)
+		out.fromLabel = fmt.Sprintf("%s (%s, session baseline)", display, comp.Before.VersionID)
 	}
-	toLabel := fmt.Sprintf("%s (absent)", display)
+	out.toLabel = fmt.Sprintf("%s (absent)", display)
 	if current.versionID != "" {
-		toLabel = fmt.Sprintf("%s (%s)", display, current.versionID)
+		out.toLabel = fmt.Sprintf("%s (%s)", display, current.versionID)
 	}
-	resp.Diff, resp.Note = comparisonDiff(comp, fromLabel, toLabel)
 	return out, nil
 }
 

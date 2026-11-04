@@ -443,6 +443,10 @@ func (t *SourceHistoryTool) runVersion(
 		}
 	}
 
+	// A credential file's text reaches no one until its exposure is recorded.
+	if err := tctx.ObserveCredentialDelivery(ctx, display, display, text); err != nil {
+		return "", fmt.Errorf("record credential file read: %w", err)
+	}
 	offset := toolkit.BoundedIntArg(args, "offset", 1, 1, 1<<30).Effective
 	limit := toolkit.BoundedIntArg(args, "limit", 200, 1, 2000).Effective
 

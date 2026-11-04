@@ -168,8 +168,7 @@ func (t *SourceHistoryTool) workerSessionDiff(
 		if recordedErr != nil {
 			return "", recordedErr
 		}
-		recorded.resp.Note = joinNotes(recorded.resp.Note, note)
-		return marshalSourceHistory(display, recorded.resp)
+		return recorded.answer(ctx, tctx, display, note)
 	}
 	if ledger.Tree == nil {
 		return ledgerAnswer(overviewTreeUnknownNote)
@@ -193,12 +192,6 @@ func (t *SourceHistoryTool) workerSessionDiff(
 		out.Note = treeDiffNoTextNote
 		return marshalSourceHistory(display, out)
 	}
-	// Text from a credential file reaches no one until its exposure is recorded.
-	for _, text := range []string{compared.Before, compared.After} {
-		if err := tctx.ObserveCredentialDelivery(ctx, compared.Abs, display, text); err != nil {
-			return "", fmt.Errorf("record credential file read: %w", err)
-		}
-	}
 	// A version is named only when its bytes are the side being shown.
 	if comp := recorded.comp; comp != nil && sideHolds(comp.Before, compared.Before) {
 		out.BaseVersionID = comp.Before.VersionID
@@ -218,6 +211,14 @@ func (t *SourceHistoryTool) workerSessionDiff(
 		treeDiffLabel(display, treeSideName("live", out.VersionID), compared.Kind == workspacebaseline.ChangeDeleted),
 	)
 	out.Diff = diff
+	// Text from a credential file reaches no one until its exposure is recorded.
+	if diff != "" {
+		for _, text := range []string{compared.Before, compared.After} {
+			if err := tctx.ObserveCredentialDelivery(ctx, compared.Abs, display, text); err != nil {
+				return "", fmt.Errorf("record credential file read: %w", err)
+			}
+		}
+	}
 	switch {
 	case tooLarge != "":
 		out.Note = joinNotes(out.Note, tooLarge)

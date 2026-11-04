@@ -109,6 +109,12 @@ func commandCall(id, source string) api.ToolCall {
 // fixture step creates its session, its checkpoint or its branch.
 func runWorkerScript(t *testing.T, agentType string, scope *api.TaskScope, script ...api.ToolCall) (string, map[string]string) {
 	t.Helper()
+	jobID, results, _ := runWorkerScriptOnHarness(t, agentType, scope, script...)
+	return jobID, results
+}
+
+func runWorkerScriptOnHarness(t *testing.T, agentType string, scope *api.TaskScope, script ...api.ToolCall) (string, map[string]string, *Harness) {
+	t.Helper()
 	mock := &workerScriptMock{script: script, results: map[string]string{}}
 	h := BuildForTest(t, WithLLMClient(mock))
 	ctx := context.Background()
@@ -143,7 +149,7 @@ func runWorkerScript(t *testing.T, agentType string, scope *api.TaskScope, scrip
 	}
 	mock.mu.Lock()
 	defer mock.mu.Unlock()
-	return jobID, mock.results
+	return jobID, mock.results, h
 }
 
 func writeScope() *api.TaskScope {
@@ -340,5 +346,28 @@ func TestSourceHistoryACDF17SpecialFileAnswersWithANote(t *testing.T) {
 	diff := decodeWorkerHistory(t, results, "diff")
 	if !diff.Unrecorded || diff.Diff != "" || diff.Note == "" {
 		t.Fatalf("diff = %+v, want an unrecorded answer with a note and no text", diff)
+	}
+}
+
+// Through the real branch mapping and evidence store, a credential file's diff
+// marks the worker's session as exposed.
+func TestSourceHistoryACDF19CredentialDiffMarksTheWorkersSession(t *testing.T) {
+	jobID, results, h := runWorkerScriptOnHarness(t, orchestration.ProfileImplementer, writeScope(),
+		api.ToolCall{ID: "load", Name: "request_tools", Args: map[string]any{"need": "source_history"}},
+		commandCall("generate", `external -- /bin/sh -c 'printf "TOKEN=generated-value\n" > .env'`),
+		historyCall("diff", map[string]any{"path": ".env", "mode": "diff"}),
+	)
+	diff := decodeWorkerHistory(t, results, "diff")
+	if !strings.Contains(diff.Diff, "TOKEN") {
+		t.Fatalf("diff = %+v, want the file's text", diff)
+	}
+	job, ok := h.Delegations.Queue.Get(jobID)
+	if !ok || job.ChildSessionID == "" {
+		t.Fatalf("job = %+v, want its child session", job)
+	}
+	exposed, err := h.Store.SessionSecretExposure(context.Background(), job.ChildSessionID)
+	testutil.FailErr(t, "secret exposure", err)
+	if !exposed {
+		t.Fatal("the worker's session is not marked as exposed")
 	}
 }

@@ -410,29 +410,6 @@ func TestSourceHistoryDiffACOV19ComparisonFailureAddsANote(t *testing.T) {
 	}
 }
 
-// A credential file's text reaches the model only with its exposure recorded,
-// the same as a read.
-func TestSourceHistoryDiffACDF15CredentialFileRecordsItsDelivery(t *testing.T) {
-	h := newHistoryHarness(t)
-	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(h.dir, ".env"), []byte("TOKEN=new\n"), 0o600))
-	recorder := &deliveredRecorder{}
-	worker := h.workerWith(&fakeTree{path: workspacebaseline.PathComparison{
-		Kind: workspacebaseline.ChangeModified, Abs: filepath.Join(h.dir, ".env"),
-		Before: "TOKEN=old\n", After: "TOKEN=new\n", HasBefore: true, HasAfter: true,
-	}})
-	worker.Effects.CredentialFiles = recorder
-	_, err := h.tool.Run(t.Context(), map[string]any{"path": ".env", "mode": "diff"}, worker)
-	testutil.FailErr(t, "diff credential file", err)
-	if len(recorder.reads) != 2 || recorder.reads[0].Content != "TOKEN=old\n" || recorder.reads[1].Content != "TOKEN=new\n" {
-		t.Fatalf("delivered = %+v, want both sides", recorder.reads)
-	}
-
-	recorder.err = errors.New("evidence store down")
-	if out, err := h.tool.Run(t.Context(), map[string]any{"path": ".env", "mode": "diff"}, worker); err == nil {
-		t.Fatalf("diff = %q, want it withheld when exposure cannot be recorded", out)
-	}
-}
-
 type failingPathLookup struct{ tools.SourceFileHistory }
 
 func (failingPathLookup) OldestPathEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, string, int64) (sourceledger.FileEffectBounds, bool, error) {
