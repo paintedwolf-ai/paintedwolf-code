@@ -127,7 +127,8 @@ func TestRowBoundHoldsAcrossALongActiveTurn_AC_KV_03(t *testing.T) {
 		testutil.FailErr(t, "load", err)
 		starts[firstRetainedOrd(loaded)] = true
 	}
-	if len(starts) > 8 {
-		t.Fatalf("history start moved to %d positions over 200 exchanges", len(starts))
+	// One move per 32-row cycle over 400 rows.
+	if len(starts) > 400/PrefixGridRowStep+1 {
+		t.Fatalf("history start moved to %d positions over 400 rows", len(starts))
 	}
 }
