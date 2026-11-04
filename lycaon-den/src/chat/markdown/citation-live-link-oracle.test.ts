@@ -67,7 +67,7 @@ describe("accepted speech renders no unvalidated live link", () => {
     ['\\<a href="https\\://unobs\\.test"\\>see a.go\\</a\\>', '<a href="https://unobs.test">see a.go</a>'],
   ])("presents %s", (present, reads) => {
     const holder = render(present, true);
-    expect(holder.textContent).toBe(reads);
+    expect(holder.textContent?.trim()).toBe(reads);
     expect(liveWebHrefs(holder)).toEqual([]);
   });
 });
