@@ -80,7 +80,7 @@ class HostedPlanTests(unittest.TestCase):
             "missing": lambda d: d["ci"].pop("frontend"),
             "fast-outside": lambda d: d["ci"]["ready"]["targets"].append("test:full"),
             "fast-twice": lambda d: d["ci"]["ready"]["targets"].append("budgets"),
-            "fast-missing": lambda d: d["ci"].pop("ready-lint"),
+            "fast-missing": lambda d: d["ci"].pop("ready-tests"),
             "duplicate": lambda d: d["ci"].update(duplicate=d["ci"]["frontend"]),
             "unknown": lambda d: d["ci"]["frontend"].update(targets=["not:a:task"]),
             "unbounded": lambda d: d["ci"]["frontend"].update(minutes=360),
