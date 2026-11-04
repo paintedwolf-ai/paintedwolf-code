@@ -12,7 +12,7 @@ message: >-
   worker's isolated workspace. No worker changes were applied to the project.
   {%- endif %}
 suggested_action: >-
-  Free space or clear reusable workspace caches in Settings, then retry the worker.
+  Free space or select a smaller workspace, then retry the worker.
 scenarios:
   - id: generic
     vars: {}

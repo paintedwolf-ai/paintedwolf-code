@@ -116,7 +116,6 @@ type StorageDependencies struct {
 	DataDir            string
 	StorePath          string
 	WorkerBranchRoot   string
-	WorkerSeedRoot     string
 	ModuleRoot         string
 	StoreRevision      uint64
 	PreviousAppVersion string

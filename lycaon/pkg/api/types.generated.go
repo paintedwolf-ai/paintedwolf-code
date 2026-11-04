@@ -3871,14 +3871,12 @@ type LocalDataBucketStatus struct {
 
 // LocalDataClearRequest
 type LocalDataClearRequest struct {
-	Buckets           []LocalDataBucketId `json:"buckets,omitempty"`
-	WorkspaceCacheIDs []string            `json:"workspace_cache_ids,omitempty"`
+	Buckets []LocalDataBucketId `json:"buckets,omitempty"`
 }
 
 // LocalDataClearResponse
 type LocalDataClearResponse struct {
-	Results               []LocalDataClearResult      `json:"results"`
-	WorkspaceCacheResults []WorkspaceCacheClearResult `json:"workspace_cache_results"`
+	Results []LocalDataClearResult `json:"results"`
 }
 
 // LocalDataClearResult
@@ -3892,8 +3890,7 @@ type LocalDataClearResult struct {
 
 // LocalDataStatus
 type LocalDataStatus struct {
-	Buckets         []LocalDataBucketStatus `json:"buckets"`
-	WorkspaceCaches []WorkspaceCacheStatus  `json:"workspace_caches"`
+	Buckets []LocalDataBucketStatus `json:"buckets"`
 }
 
 // LockVaultRequest
@@ -9155,25 +9152,6 @@ type WorkflowTopologyLeg struct {
 	Status LegStatus `json:"status"`
 	// Ids of legs whose output this leg takes as input.
 	WaitsFor []string `json:"waits_for,omitempty"`
-}
-
-// WorkspaceCacheClearResult
-type WorkspaceCacheClearResult struct {
-	ID   string       `json:"id"`
-	OK   bool         `json:"ok"`
-	Code ApiErrorCode `json:"code,omitempty"`
-	// Host copy when ok is false; branch on code.
-	Message string `json:"message,omitempty"`
-}
-
-// WorkspaceCacheStatus
-type WorkspaceCacheStatus struct {
-	ID           string `json:"id"`
-	SourceRoot   string `json:"source_root"`
-	LogicalBytes int64  `json:"logical_bytes"`
-	// Best-effort allocated bytes retained by the immutable bridge cache
-	AllocatedBytes int64     `json:"allocated_bytes"`
-	LastUsedAt     time.Time `json:"last_used_at"`
 }
 
 // WorkspacePreparation

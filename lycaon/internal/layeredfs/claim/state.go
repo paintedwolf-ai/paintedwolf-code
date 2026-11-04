@@ -122,7 +122,7 @@ func buildFailedPreparationSnapshot(
 		vis = adapter.VisibilityFixed
 	}
 	sev := SeverityError
-	if reason == adapter.ReasonPreparationLimit || reason == adapter.ReasonContextCanceled {
+	if reason == adapter.ReasonWorkspaceDoesNotFit || reason == adapter.ReasonContextCanceled {
 		sev = SeverityWarning
 	}
 	snap := WorkspaceStateSnapshot{
@@ -158,7 +158,7 @@ func deriveSupportedActions(snap WorkspaceStateSnapshot) []RecoveryAction {
 	case StatePreparing:
 		actions = append(actions, ActionCancelClaim)
 	case StateFailedPreparation:
-		if snap.Notice.ReasonCode == adapter.ReasonPreparationLimit {
+		if snap.Notice.ReasonCode == adapter.ReasonWorkspaceDoesNotFit {
 			actions = append(actions, ActionSelectSmallerWorkspace)
 		}
 		actions = append(actions, ActionRetryClaim, ActionCancelClaim)

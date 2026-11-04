@@ -114,7 +114,7 @@ var configRootRegistry = []ConfigRootEntry{
 	{Name: enginepaths.SourceObservationsDBName + "-journal", IsDir: false, Class: ClassStoreCoupled, StoreCoupled: true, Bucket: BucketSourceObservations, Reason: "SQLite rollback journal for source-observations.db"},
 	{Name: enginepaths.WorkerBranchesDirName, IsDir: true, Class: ClassStoreCoupled, StoreCoupled: true, IncludeInBackup: true, Bucket: BucketWorkerBranches, Reason: "write-worker branch worktrees; backed up per-file"},
 	{Name: enginepaths.WorkerRecoveryDirName, IsDir: true, Class: ClassStoreCoupled, StoreCoupled: true, Reason: "worker lifecycle journals, retained checkpoints and quarantined interrupted work; never cleared as a cache"},
-	{Name: enginepaths.WorkerSeedsDirName, IsDir: true, Class: ClassStoreCoupled, StoreCoupled: true, Reason: "rebuildable bridge generation cache for copy-on-write worker branches"},
+	{Name: retiredWorkerSeedsDirName, IsDir: true, Class: ClassStoreCoupled, StoreCoupled: true, Reason: "an ephemeral cache this engine no longer writes, cleared at startup"},
 	{Name: enginepaths.SessionWorktreesDirName, IsDir: true, Class: ClassStoreCoupled, StoreCoupled: true, Reason: "session worktrees outside project roots"},
 	{Name: enginepaths.ScratchDirName, IsDir: true, Class: ClassStoreCoupled, StoreCoupled: true, Bucket: BucketSessionScratch, Reason: "per-session scratch folders keyed by session id; clearable chat working data that nothing rebuilds"},
 

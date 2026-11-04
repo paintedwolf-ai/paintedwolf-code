@@ -398,7 +398,6 @@ components:
       type: string
       enum:
       - direct_cow
-      - bridge_cow
       - direct_copy
     WorkspacePreparation:
       x-go-generate: true
@@ -410,7 +409,7 @@ components:
           $ref: worker.yaml#/components/schemas/WorkspaceProvisionStrategy
         stage:
           type: string
-          enum: [probing, surveying_source, materializing_seed, snapshotting_branch]
+          enum: [probing, surveying_source, snapshotting_branch]
         files:
           type: integer
           format: int64

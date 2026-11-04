@@ -17,42 +17,30 @@ import (
 
 var sharedBranchViews sync.Map // map[string]branchViewState
 
-// ErrWorkspaceStorageExhausted identifies a branch or seed write that failed
-// because the central application-data volume cannot accept more data.
+// ErrWorkspaceStorageExhausted identifies a branch write that failed because
+// the central application-data volume cannot accept more data.
 var ErrWorkspaceStorageExhausted = errors.New("worker workspace storage exhausted")
 
 var queryAvailableStorageBytes = availableStorageBytes
 
 func classifyProvisionError(err error) error {
-	var capacityErr *CapacityError
+	var capacityErr *adapter.WorkspaceCapacityError
 	if err != nil && (isStorageExhausted(err) || errors.As(err, &capacityErr)) {
 		return errors.Join(ErrWorkspaceStorageExhausted, err)
 	}
 	return err
 }
 
-// CapacityError reports insufficient bridge-cache capacity.
-type CapacityError struct {
-	Path      string
-	Required  uint64
-	Available uint64
-}
-
-func (e *CapacityError) Error() string {
-	return fmt.Sprintf("worker seed needs %d bytes but only %d bytes are available on %s", e.Required, e.Available, e.Path)
-}
-
-// ProvisionStrategy is the storage path selected from successful clone probes.
+// ProvisionStrategy is the storage path a materialized worker takes, from its clone probe.
 type ProvisionStrategy string
 
 const (
 	ProvisionDirectCoW  ProvisionStrategy = "direct_cow"
-	ProvisionBridgeCoW  ProvisionStrategy = "bridge_cow"
 	ProvisionDirectCopy ProvisionStrategy = "direct_copy"
 )
 
-// PreparationProgress is ephemeral worker-claim progress. TotalBytes is known
-// only after a bridge source survey has completed.
+// PreparationProgress is ephemeral worker-claim progress. TotalBytes is the copy declared up front,
+// known once the source has been counted.
 type PreparationProgress struct {
 	Strategy   ProvisionStrategy
 	Stage      string
@@ -64,17 +52,11 @@ type PreparationProgress struct {
 type (
 	preparationReporterKey struct{}
 	workspaceSelectionKey  struct{}
-	workspaceLimitsKey     struct{}
 )
 
 type workspaceSelectionContext struct {
 	selection     adapter.WorkspaceSelection
 	taskPathHints []string
-}
-
-type workspaceLimitsContext struct {
-	maxEntries int64
-	maxBytes   int64
 }
 
 const preparationReportInterval = 250 * time.Millisecond
@@ -124,14 +106,6 @@ func workspaceProjectFromContext(ctx context.Context, fallback string) string {
 	return fallback
 }
 
-// WithWorkspaceLimits overrides the maximum entries and bytes permitted for a workspace preparation call (#1658).
-func WithWorkspaceLimits(ctx context.Context, maxEntries, maxBytes int64) context.Context {
-	return context.WithValue(ctx, workspaceLimitsKey{}, workspaceLimitsContext{
-		maxEntries: maxEntries,
-		maxBytes:   maxBytes,
-	})
-}
-
 func workspaceSelectionFromContext(ctx context.Context) (adapter.WorkspaceSelection, []string, bool) {
 	val, ok := ctx.Value(workspaceSelectionKey{}).(workspaceSelectionContext)
 	if !ok {
@@ -146,7 +120,7 @@ func reportPreparation(ctx context.Context, progress PreparationProgress) {
 	}
 }
 
-// Binding is one isolated worker sandbox — a copy of the project tree living
+// Binding is one isolated worker sandbox: a view of the project tree living
 // outside the repo. There is no git interaction and no linked worktree.
 type Binding struct {
 	ID        string
@@ -163,33 +137,27 @@ type branchViewState struct {
 	writers *recovery.Coordinator
 }
 
-// Manager creates and destroys per-job worker sandboxes, retaining a central
-// bridge only when it enables copy-on-write branches.
+// Manager creates and destroys per-job worker sandboxes.
 type Manager struct {
 	branchRoot string
-	seedRoot   string
-	locks      seedLockSet
-	maxEntries int64
-	maxBytes   int64
-	selector   *adapter.Selector
-	recovery   *recovery.Coordinator
-	viewsMu    sync.Mutex
-	views      map[string]branchViewState
-	privateGit *privategit.Manager
+	// cloneAvailable answers selection's clone question for a branch. Placement supplies it.
+	cloneAvailable func(branchRoot string) adapter.CloneAvailability
+	cloneFile      adapter.FileCloner
+	selector       *adapter.Selector
+	recovery       *recovery.Coordinator
+	viewsMu        sync.Mutex
+	views          map[string]branchViewState
+	privateGit     *privategit.Manager
 
 	layeredOnce sync.Once
 	services    *layeredServices
 	servicesErr error
 }
 
-// NewManager returns a workspace manager rooted at out-of-repo branch and seed bases.
-func NewManager(branchRoot, seedRoot string) *Manager {
+// NewManager returns a workspace manager rooted at an out-of-repo branch base.
+func NewManager(branchRoot string) *Manager {
 	return &Manager{
 		branchRoot: strings.TrimSpace(branchRoot),
-		seedRoot:   strings.TrimSpace(seedRoot),
-		locks:      newSeedLockSet(),
-		maxEntries: adapter.DefaultMaxEntries,
-		maxBytes:   adapter.DefaultMaxBytes,
 		views:      make(map[string]branchViewState),
 	}
 }
@@ -332,40 +300,6 @@ func LookupBranchPreparedView(branchRoot string) (*adapter.PreparedView, adapter
 		viewID = jobIDForBranch(clean)
 	}
 	return nil, *meta.AdapterFacts, viewID, true
-}
-
-// WithPreparationLimits configures bounded workspace preparation entry and byte limits on the Manager (#1658).
-func (m *Manager) WithPreparationLimits(maxEntries, maxBytes int64) *Manager {
-	if maxEntries > 0 {
-		m.maxEntries = maxEntries
-	}
-	if maxBytes > 0 {
-		m.maxBytes = maxBytes
-	}
-	return m
-}
-
-func effectiveLimits(ctx context.Context, m *Manager) (int64, int64) {
-	var maxEntries, maxBytes int64
-	if m != nil {
-		maxEntries = m.maxEntries
-		maxBytes = m.maxBytes
-	}
-	if maxEntries <= 0 {
-		maxEntries = adapter.DefaultMaxEntries
-	}
-	if maxBytes <= 0 {
-		maxBytes = adapter.DefaultMaxBytes
-	}
-	if override, ok := ctx.Value(workspaceLimitsKey{}).(workspaceLimitsContext); ok {
-		if override.maxEntries > 0 {
-			maxEntries = override.maxEntries
-		}
-		if override.maxBytes > 0 {
-			maxBytes = override.maxBytes
-		}
-	}
-	return maxEntries, maxBytes
 }
 
 func absDir(dir string) (string, error) {

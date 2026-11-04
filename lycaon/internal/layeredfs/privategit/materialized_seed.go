@@ -81,7 +81,7 @@ func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewB
 		b.RootID = "primary"
 	}
 	view := &managedView{
-		viewID: b.ViewID, workerID: b.WorkerID, rootID: b.RootID,
+		viewID: b.ViewID, workerID: b.WorkerID, rootID: b.RootID, coreViewID: b.CoreViewID,
 		trunkDir: absTrunk, worktreeDir: absWorktree, materialized: true, core: b.Core,
 		accessOrigin: OriginFilesystem, repos: make(map[string]*initializedRepo, len(b.Repos)),
 	}
@@ -116,8 +116,38 @@ func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewB
 			initialHeadOID: initialHead, initialRefs: initialRefs, metrics: metrics,
 		}
 	}
+	for _, at := range b.Installed {
+		repoRel := cleanSlashRel(at.RepoRel)
+		target := absWorktree
+		if repoRel != "." {
+			target = filepath.Join(absWorktree, filepath.FromSlash(repoRel))
+		}
+		view.repos[repoRel] = &initializedRepo{
+			repoRel: repoRel, worktreeDir: target, privateGitDir: filepath.Join(target, ".git"),
+			initialHeadOID: at.InitialHead, initialRefs: at.InitialRefs, metrics: at.Metrics,
+		}
+	}
 	registerManagedView(m, view)
 	return nil
+}
+
+// MaterializedReposOf reports the repositories of a materialized view in a form a later process can
+// adopt again without losing what they started from.
+func (m *Manager) MaterializedReposOf(viewID string) []MaterializedRepoAt {
+	view, err := getManagedView(m, viewID)
+	if err != nil {
+		return nil
+	}
+	view.mu.Lock()
+	defer view.mu.Unlock()
+	out := make([]MaterializedRepoAt, 0, len(view.repos))
+	for repoRel, repo := range view.repos {
+		out = append(out, MaterializedRepoAt{
+			RepoRel: repoRel, InitialHead: repo.initialHeadOID, InitialRefs: repo.initialRefs, Metrics: repo.metrics,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].RepoRel < out[j].RepoRel })
+	return out
 }
 
 // InitializeMaterializedSeed discovers repositories during materialized fallback seed

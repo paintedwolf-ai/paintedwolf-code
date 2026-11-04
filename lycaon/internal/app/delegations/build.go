@@ -2,6 +2,7 @@ package delegations
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/execution"
@@ -15,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/localdata"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -55,13 +57,15 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.Executor.SetPromptInjects(r.InjectRenderer)
 	r.Executor.SetPhaseTouchPaths(deps.Workflows.Manager.Ambient)
 	r.BranchRoot = enginepaths.WorkerBranchesRootUnder(deps.Storage.Directory)
-	r.SeedRoot = enginepaths.WorkerSeedsRootUnder(deps.Storage.Directory)
+	if err := localdata.ClearRetiredWorkerSeeds(deps.Storage.Directory); err != nil {
+		slog.Warn("clear retired worker seeds", "err", err)
+	}
 	coordinator, err := newWorkerRecovery(deps.Storage.Directory, deps.Execution.PrivateGit)
 	if err != nil {
 		return err
 	}
 	r.Recovery = coordinator
-	r.Workspace = workspace.NewManager(r.BranchRoot, r.SeedRoot).WithPrivateGit(deps.Execution.PrivateGit).WithRecovery(coordinator)
+	r.Workspace = workspace.NewManager(r.BranchRoot).WithPrivateGit(deps.Execution.PrivateGit).WithRecovery(coordinator)
 	r.Queue.SetWorkerWorkspaceManager(r.Workspace)
 	r.Queue.SetBaselineStore(deps.Storage.SourceLedger.Baselines)
 	r.Queue.SetProjectStore(deps.Storage.Projects)

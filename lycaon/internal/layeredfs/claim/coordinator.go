@@ -79,17 +79,21 @@ func (c *Coordinator) ClaimWorkerView(
 		snap := c.recordFailedClaim(req, adapter.AdapterEagerCopy, classifyClaimReason(err), err.Error(), 0, 0)
 		return nil, snap, err
 	}
-	if _, err := adapter.ValidateWorkspaceSelection(req.Grants, req.Selection); err != nil {
+	grants, err := adapter.ValidateWorkspaceSelection(req.Grants, req.Selection)
+	if err != nil {
 		snap := c.recordFailedClaim(req, adapter.AdapterEagerCopy, classifyClaimReason(err), err.Error(), 0, 0)
 		return nil, snap, err
 	}
-
-	adp, probeRes, err := c.selector.Select(ctx, adapter.ProbeConfig{RuntimeDir: req.Storage.RuntimeDir})
+	choice, err := c.selector.Choose(ctx, adapter.ChooseRequest{
+		Probe: adapter.ProbeConfig{RuntimeDir: req.Storage.RuntimeDir}, Grants: grants,
+		CloneAvailable: adapter.ProbeCloneAt(req.Storage.RuntimeDir), Disk: req.Materialization.Disk,
+	})
 	if err != nil {
-		snap := c.recordFailedClaim(req, probeRes.AdapterID, classifyClaimReason(err), err.Error(), 0, 0)
+		snap := c.recordFailedClaim(req, choice.Probe.AdapterID, classifyClaimReason(err), err.Error(), 0, 0)
 		return nil, snap, err
 	}
-	return c.ClaimSelectedView(ctx, req, adp, probeRes)
+	req.SelectionFacts, req.Materialization.CopyBudget = choice.Facts, choice.CopyBudget
+	return c.ClaimSelectedView(ctx, req, choice.Adapter, choice.Probe)
 }
 
 // ClaimSelectedView claims a view on an adapter its caller already selected and probed.
@@ -104,7 +108,7 @@ func (c *Coordinator) ClaimSelectedView(
 		return nil, snap, err
 	}
 
-	prepReq := buildPrepareRequest(req)
+	prepReq := buildPrepareRequest(req, adp.Facts().PreparationKind)
 	prepared, err := adp.Prepare(ctx, prepReq)
 	if err != nil {
 		reason, diag, entries, bytes := classifyPrepareError(err, probeRes.ReasonCode)
@@ -252,23 +256,29 @@ func (c *Coordinator) settleView(ctx context.Context, identity ClaimIdentity, vi
 	return fmt.Errorf("%w: view %q: %w", ErrSettlementUnresolved, identity.ViewID, err)
 }
 
-func buildPrepareRequest(req ClaimRequest) adapter.PrepareRequest {
+func buildPrepareRequest(req ClaimRequest, kind adapter.PreparationKind) adapter.PrepareRequest {
 	prepReq := adapter.PrepareRequest{
-		ViewID:          req.Identity.ViewID,
-		RuntimeDir:      req.Storage.RuntimeDir,
-		BackingDir:      req.Storage.BackingDir,
-		TargetRootDirs:  req.Storage.TargetRootDirs,
-		Grants:          req.Grants,
-		Selection:       req.Selection,
-		TaskPathHints:   append([]string(nil), req.FocusPathHints...),
-		ParentLayers:    req.ParentLayers,
-		ObservationSink: req.Hooks.Observations,
-		QuiesceHook:     req.Hooks.Quiesce,
-		FlushClientHook: req.Hooks.FlushClient,
-		MaxEntries:      req.Limits.MaxEntries,
-		MaxBytes:        req.Limits.MaxBytes,
+		ViewID:           req.Identity.ViewID,
+		RuntimeDir:       req.Storage.RuntimeDir,
+		BackingDir:       req.Storage.BackingDir,
+		TargetRootDirs:   req.Storage.TargetRootDirs,
+		Grants:           req.Grants,
+		Selection:        req.Selection,
+		TaskPathHints:    append([]string(nil), req.FocusPathHints...),
+		ParentLayers:     req.ParentLayers,
+		ObservationSink:  req.Hooks.Observations,
+		QuiesceHook:      req.Hooks.Quiesce,
+		FlushClientHook:  req.Hooks.FlushClient,
+		SelectionFacts:   req.SelectionFacts,
+		PristineDir:      req.Materialization.PristineDir,
+		StatManifestPath: req.Materialization.StatManifestPath,
+		CopyBudget:       req.Materialization.CopyBudget,
+		GitObjectStore:   req.Materialization.GitObjectStore,
+		ProgressFn:       req.Materialization.Progress,
+		CloneFile:        req.Materialization.CloneFile,
 	}
-	if req.Hooks.PrivateGit != nil {
+	// A materialized seed answers .git lookups from what it built; a mount asks the manager lazily.
+	if req.Hooks.PrivateGit != nil && kind == adapter.PreparationMounted {
 		prepReq.GitInterceptor = req.Hooks.PrivateGit
 	}
 	return prepReq
@@ -362,8 +372,10 @@ func buildCommittedMetadataV2(
 			PreparationKind:  facts.PreparationKind,
 			SourceVisibility: facts.UntouchedSourceVisibility,
 			FallbackReason:   fbReason,
-			CopiedEntries:    prepared.ObservedEntries,
-			CopiedBytes:      prepared.ObservedBytes,
+			CopiedEntries:    prepared.Materialize.Entries,
+			CopiedBytes:      prepared.Materialize.CopiedBytes,
+			SelectionReason:  req.SelectionFacts.Reason,
+			DeclaredCost:     req.SelectionFacts.DeclaredCost,
 			PendingGitInit:   facts.PreparationKind == adapter.PreparationMounted,
 			SeededGitRepos:   seededRepos,
 		},

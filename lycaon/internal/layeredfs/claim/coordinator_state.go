@@ -302,17 +302,17 @@ func classifyClaimReason(err error) adapter.ReasonCode {
 	if errors.As(err, &aErr) && aErr.ReasonCode != adapter.ReasonNone {
 		return aErr.ReasonCode
 	}
-	var limErr *adapter.PreparationLimitError
-	if errors.As(err, &limErr) {
-		return adapter.ReasonPreparationLimit
+	var capErr *adapter.WorkspaceCapacityError
+	if errors.As(err, &capErr) {
+		return adapter.ReasonWorkspaceDoesNotFit
 	}
 	return adapter.ReasonMountDenied
 }
 
 func classifyPrepareError(err error, fallbackReason adapter.ReasonCode) (adapter.ReasonCode, string, int64, int64) {
-	var limErr *adapter.PreparationLimitError
-	if errors.As(err, &limErr) {
-		return adapter.ReasonPreparationLimit, limErr.Diagnostic, limErr.ObservedEntries, limErr.ObservedBytes
+	var overrun *adapter.BudgetOverrunError
+	if errors.As(err, &overrun) {
+		return adapter.ReasonCopyPassedBudget, overrun.Error(), overrun.Entries, overrun.CopiedBytes
 	}
 	reason := classifyClaimReason(err)
 	if reason == adapter.ReasonNone {

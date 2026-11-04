@@ -43,7 +43,7 @@ func (m *Manager) EvictWorkerBranch(ctx context.Context, branchRoot string) erro
 		}
 		return err
 	}
-	return nil
+	return m.settleEvictedMaterializedView(ctx, branchRoot)
 }
 
 // EvictVerifiedCheckpointBranch evicts a worker branch tree and disposable working material only

@@ -21,7 +21,7 @@ type fixtureTree struct {
 
 func plantTrees(t *testing.T, branchRoot, project string, trees []fixtureTree) map[string]string {
 	t.Helper()
-	mgr := workspace.NewManager(branchRoot, t.TempDir())
+	mgr := workspace.NewManager(branchRoot)
 	roots := []projectroot.RootRef{{ID: "primary", Path: project, IsPrimary: true}}
 	paths := map[string]string{}
 	for _, tree := range trees {

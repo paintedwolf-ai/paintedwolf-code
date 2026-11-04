@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
-	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -92,9 +91,6 @@ func (s *Roots) HandleDetachProjectRoot(w http.ResponseWriter, r *http.Request) 
 			slog.InfoContext(r.Context(), "reconciled stale worker sandboxes on root detach", "project_id", id, "workspace_path", detachedPath, "removed", removed)
 		}
 		s.Settings.Verify.ClearProposal(detachedPath)
-		if err := workspace.RemoveSeed(r.Context(), s.WorkerSeedRoot, detachedPath); err != nil {
-			slog.WarnContext(r.Context(), "remove worker seed on root detach", "path", detachedPath, "err", err)
-		}
 		// Checkpoints are keyed by source root, and a detached root is one no
 		// session can rewind into any more.
 		if err := s.removeRootCheckpoints(r.Context(), id, detachedPath); err != nil {

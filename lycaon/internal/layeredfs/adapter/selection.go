@@ -142,13 +142,17 @@ type ConfinementEnforcer interface {
 	VerifyView(ctx context.Context, view *PreparedView) error
 }
 
-// Selector chooses one workspace adapter from structured probe capabilities and manages fallback.
+// Selector chooses one workspace provider per worker from typed facts: the cost of materializing
+// its roots, the recorded budget for that cost, and whether a mount can actually serve it.
 type Selector struct {
 	TargetOS        string
 	LinuxAdapter    Adapter
 	DarwinAdapter   Adapter
 	FallbackAdapter Adapter
 	Registry        *ActiveViewRegistry
+	// BudgetFor reads the recorded budgets. Fixtures replace it to force a side of the rule; no
+	// setting or request reaches it.
+	BudgetFor func(BudgetClass) BudgetFact
 	// RequireConfinement refuses a mounted adapter unless Confinement is present and available.
 	RequireConfinement bool
 	Confinement        ConfinementEnforcer
@@ -168,72 +172,169 @@ func NewSelector(targetOS string, linuxAdp, darwinAdp, fallbackAdp Adapter) *Sel
 		DarwinAdapter:   darwinAdp,
 		FallbackAdapter: fallbackAdp,
 		Registry:        NewActiveViewRegistry(),
+		BudgetFor:       RecordedBudget,
 	}
 }
 
-// Select probes the platform primary adapter (retrying transient failure once) or selects fallback.
-func (s *Selector) Select(ctx context.Context, probeCfg ProbeConfig) (Adapter, ProbeResult, error) {
-	primary := s.primaryForOS()
-	if primary == nil {
-		fb := s.withFallbackReason(ReasonUnsupportedPlatform)
-		return fb, ProbeResult{
-			AdapterID:  fb.ID(),
-			Supported:  false,
-			ReasonCode: ReasonUnsupportedPlatform,
-			Diagnostic: fmt.Sprintf("no mounted adapter for OS %q; using %s", s.TargetOS, fb.ID()),
-		}, nil
+// ChooseRequest carries the facts one worker's selection reads.
+type ChooseRequest struct {
+	Probe  ProbeConfig
+	Grants []RootGrant
+	// CloneAvailable answers for each root; every root counts as copy-only without it.
+	CloneAvailable CloneAvailability
+	// Disk reads free space on the volume that would hold materialized trees.
+	Disk func() (DiskSpace, error)
+	// Overrun is the copy that just passed its budget, which moves selection past materializing.
+	Overrun *BudgetOverrunError
+}
+
+// Choice is one worker's provider and the facts that chose it.
+type Choice struct {
+	Adapter Adapter
+	Probe   ProbeResult
+	Facts   SelectionFacts
+	// CopyBudget bounds a materialization; nil is the declared cannot-mount case and every mount.
+	CopyBudget *CopyBudget
+}
+
+// Choose applies the selection rule. Under the budget it materializes. Over it, a mount serves when
+// its probe succeeds. A lasting reason a mount is unavailable materializes with the cost counted in
+// full first, and a transient one never starts a large copy. Only a disk that cannot hold the result
+// refuses.
+func (s *Selector) Choose(ctx context.Context, req ChooseRequest) (Choice, error) {
+	roots, anyCopyOnly, err := classifyRootClones(ctx, req)
+	if err != nil {
+		return Choice{}, err
+	}
+	fact := s.budgetFact(anyCopyOnly)
+	facts := SelectionFacts{CloneAvailable: !anyCopyOnly, Budget: fact, CopyPassedBudget: req.Overrun != nil}
+
+	var cost MaterializeCost
+	if req.Overrun != nil {
+		// What the estimate said is what the copy just disproved.
+		cost = overrunCost(req.Overrun, MaterializeCost{Partial: true})
+		for i := range roots {
+			roots[i].grant.Estimate = nil
+		}
+	} else if cost, err = countMaterializeCost(ctx, roots, fact, true); err != nil {
+		return Choice{}, err
+	}
+	facts.DeclaredCost = cost
+
+	if req.Overrun == nil && !cost.Partial && cost.Total(fact) <= fact.Limit {
+		facts.Reason = SelectionUnderBudget
+		return s.chooseMaterialized(ctx, req, facts, ReasonNone, ProbeResult{}, &CopyBudget{Limit: fact.Limit, EntryCost: fact.EntryCost})
 	}
 
+	primary := s.primaryForOS()
+	mountReason, probe, err := s.probeMount(ctx, primary, req.Probe)
+	if err != nil {
+		return Choice{Probe: probe}, err
+	}
+	if mountReason == ReasonNone {
+		facts.Provider, facts.Reason = primary.ID(), SelectionOverBudgetMounted
+		return Choice{Adapter: primary, Probe: probe, Facts: facts}, nil
+	}
+
+	if cost.Partial || req.Overrun != nil {
+		cost, err = countMaterializeCost(ctx, roots, fact, false)
+		if err != nil {
+			return Choice{Probe: probe}, err
+		}
+		if req.Overrun != nil {
+			cost = overrunCost(req.Overrun, cost)
+		}
+		facts.DeclaredCost = cost
+	}
+	facts.Reason, facts.MountUnavailable = SelectionOverBudgetMaterial, mountReason
+	return s.chooseMaterialized(ctx, req, facts, mountReason, probe, nil)
+}
+
+func (s *Selector) chooseMaterialized(ctx context.Context, req ChooseRequest, facts SelectionFacts, fallback ReasonCode, probe ProbeResult, budget *CopyBudget) (Choice, error) {
+	if err := ctx.Err(); err != nil {
+		return Choice{Probe: probe}, err
+	}
+	if err := checkCapacity(req, facts); err != nil {
+		return Choice{Probe: probe}, err
+	}
+	adp := s.withFallbackReason(fallback)
+	facts.Provider = adp.ID()
+	return Choice{Adapter: adp, Probe: probe, Facts: facts, CopyBudget: budget}, nil
+}
+
+func checkCapacity(req ChooseRequest, facts SelectionFacts) error {
+	if req.Disk == nil {
+		return nil
+	}
+	space, err := req.Disk()
+	if err != nil {
+		return err
+	}
+	required := uint64(max(facts.DeclaredCost.Total(facts.Budget), 0))
+	if !space.Known || space.Available >= required {
+		return nil
+	}
+	return &WorkspaceCapacityError{
+		Path: space.Path, Required: required, Available: space.Available,
+		SelectedRoots: collectGrantIDs(req.Grants), SuggestedSubroots: suggestSubroots(req.Grants),
+	}
+}
+
+func (s *Selector) budgetFact(anyCopyOnly bool) BudgetFact {
+	class := BudgetClass{Platform: s.TargetOS, Filesystem: FilesystemClonable}
+	if anyCopyOnly {
+		class.Filesystem = FilesystemCopyOnly
+	}
+	if s.BudgetFor == nil {
+		return RecordedBudget(class)
+	}
+	return s.BudgetFor(class)
+}
+
+// probeMount reports ReasonNone for a usable mount or a lasting reason for an unusable one. A
+// transient failure retries once, and what remains comes back as an error rather than a reason.
+func (s *Selector) probeMount(ctx context.Context, primary Adapter, cfg ProbeConfig) (ReasonCode, ProbeResult, error) {
+	if primary == nil {
+		return ReasonUnsupportedPlatform, ProbeResult{
+			AdapterID: AdapterEagerCopy, ReasonCode: ReasonUnsupportedPlatform,
+			Diagnostic: fmt.Sprintf("no mounted adapter for OS %q", s.TargetOS),
+		}, nil
+	}
 	if s.RequireConfinement {
-		if diag := s.confinementGap(ctx, probeCfg); diag != "" {
-			return s.withFallbackReason(ReasonConfinementUnavailable), ProbeResult{
-				AdapterID:  primary.ID(),
-				ReasonCode: ReasonConfinementUnavailable,
-				Diagnostic: diag,
+		if diag := s.confinementGap(ctx, cfg); diag != "" {
+			return ReasonConfinementUnavailable, ProbeResult{
+				AdapterID: primary.ID(), ReasonCode: ReasonConfinementUnavailable, Diagnostic: diag,
 			}, nil
 		}
 	}
-
-	res, err := primary.Probe(ctx, probeCfg)
+	res, err := primary.Probe(ctx, cfg)
 	attempts := 1
 	if (!res.Supported || err != nil) && shouldRetryTransient(res, err) {
-		res, err = primary.Probe(ctx, probeCfg)
+		res, err = primary.Probe(ctx, cfg)
 		attempts = 2
 	}
 	res.Attempts = attempts
 	if err == nil && res.Supported {
-		return primary, res, nil
+		return ReasonNone, res, nil
 	}
-
+	if cause := ctx.Err(); cause != nil {
+		return ReasonContextCanceled, res, cause
+	}
 	reason := res.ReasonCode
 	if reason == ReasonNone {
 		var aErr *AdapterError
-		if errors.As(err, &aErr) && aErr.ReasonCode != ReasonNone {
+		if errors.As(err, &aErr) {
 			reason = aErr.ReasonCode
-		} else {
-			reason = ReasonUnsupportedKernel
 		}
 	}
-	res.ReasonCode = reason
-	res.Supported = false
-	return s.withFallbackReason(reason), res, nil
-}
-
-// SelectAndPrepare selects an adapter (or reuses the fixed adapter for an existing active view) and prepares it.
-func (s *Selector) SelectAndPrepare(ctx context.Context, probeCfg ProbeConfig, req PrepareRequest) (Adapter, *PreparedView, ProbeResult, error) {
-	if existingAdp, existingView, ok := s.Registry.AdapterForView(req.ViewID); ok {
-		return existingAdp, existingView, ProbeResult{AdapterID: existingAdp.ID(), Supported: true}, nil
+	res.ReasonCode, res.Supported = reason, false
+	if IsLastingMountReason(reason) {
+		return reason, res, nil
 	}
-	adp, probeRes, err := s.Select(ctx, probeCfg)
-	if err != nil {
-		return nil, nil, probeRes, err
+	return reason, res, &AdapterError{
+		AdapterID: primary.ID(), Op: "probe", ReasonCode: ReasonTransientStartupFailure, Cause: err,
+		Diagnostic: fmt.Sprintf("mount probe failed without a lasting reason (%s), so no large copy starts: %s", reason, res.Diagnostic),
 	}
-	view, err := adp.Prepare(ctx, req)
-	if err != nil {
-		return adp, nil, probeRes, err
-	}
-	s.Registry.Register(view, adp)
-	return adp, view, probeRes, nil
 }
 
 func (s *Selector) confinementGap(ctx context.Context, probeCfg ProbeConfig) string {

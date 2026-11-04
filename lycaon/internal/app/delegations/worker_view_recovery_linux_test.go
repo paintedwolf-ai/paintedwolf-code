@@ -106,7 +106,7 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	testutil.FailErr(t, "production coordinator", err)
 	next := f.boot()
 	next.Recovery = coordinator
-	next.Workspace = workspace.NewManager(next.BranchRoot, next.SeedRoot).WithRecovery(coordinator)
+	next.Workspace = workspace.NewManager(next.BranchRoot).WithRecovery(coordinator)
 	next.Queue.SetWorkerWorkspaceManager(next.Workspace)
 	testutil.FailErr(t, "startup recovery", next.RecoverWorkerViews(t.Context()))
 

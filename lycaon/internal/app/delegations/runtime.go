@@ -35,7 +35,6 @@ type Runtime struct {
 	PlaybookMatcher *prompts.PlaybookMatcher
 	ContextLoader   *delegation.WorkerContextLoader
 	BranchRoot      string
-	SeedRoot        string
 	deps            Dependencies
 }
 
@@ -111,7 +110,7 @@ func (r *Runtime) RecoverWorkerViews(ctx context.Context) error {
 
 // reportLocalDataInventory states what startup found in each local-data bucket.
 func (r *Runtime) reportLocalDataInventory(ctx context.Context) {
-	inventory, err := workspace.BuildLocalDataInventory(ctx, r.BranchRoot, r.SeedRoot, r.Recovery)
+	inventory, err := workspace.BuildLocalDataInventory(ctx, r.BranchRoot, r.Recovery)
 	if err != nil {
 		slog.WarnContext(ctx, "build worker local data inventory", "err", err)
 		return
@@ -143,7 +142,7 @@ func (r *Runtime) ReconcileWorkerSandboxes(ctx context.Context, roots []string) 
 		return retained, nil
 	}
 	settle := r.SandboxSettler()
-	removed, err := workspace.ReconcileSandboxRoots(ctx, r.BranchRoot, r.SeedRoot, roots, settle, loadRetainedJobs)
+	removed, err := workspace.ReconcileSandboxRoots(ctx, r.BranchRoot, roots, settle, loadRetainedJobs)
 	var errs []error
 	if err != nil {
 		errs = append(errs, err)

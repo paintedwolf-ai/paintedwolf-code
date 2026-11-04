@@ -30,6 +30,8 @@ type AdapterMetadataFacts struct {
 	PreparationKind      adapter.PreparationKind  `json:"preparation_kind"`
 	SourceVisibility     adapter.SourceVisibility `json:"source_visibility"`
 	FallbackReason       adapter.ReasonCode       `json:"fallback_reason,omitempty"`
+	SelectionReason      adapter.SelectionReason  `json:"selection_reason,omitempty"`
+	DeclaredCost         adapter.MaterializeCost  `json:"declared_cost,omitzero"`
 	CopiedEntries        int64                    `json:"copied_entries"`
 	CopiedBytes          int64                    `json:"copied_bytes"`
 	PendingGitInit       bool                     `json:"pending_git_init"`

@@ -10981,11 +10981,11 @@ export interface components {
             compaction_threshold?: number;
         };
         /** @enum {string} */
-        WorkspaceProvisionStrategy: "direct_cow" | "bridge_cow" | "direct_copy";
+        WorkspaceProvisionStrategy: "direct_cow" | "direct_copy";
         WorkspacePreparation: {
             strategy?: components["schemas"]["WorkspaceProvisionStrategy"];
             /** @enum {string} */
-            stage: "probing" | "surveying_source" | "materializing_seed" | "snapshotting_branch";
+            stage: "probing" | "surveying_source" | "snapshotting_branch";
             /** Format: int64 */
             files: number;
             /** Format: int64 */
@@ -14914,22 +14914,8 @@ export interface components {
              */
             bytes?: number;
         };
-        WorkspaceCacheStatus: {
-            id: string;
-            source_root: string;
-            /** Format: int64 */
-            logical_bytes: number;
-            /**
-             * Format: int64
-             * @description Best-effort allocated bytes retained by the immutable bridge cache
-             */
-            allocated_bytes: number;
-            /** Format: date-time */
-            last_used_at: string;
-        };
         LocalDataStatus: {
             buckets: components["schemas"]["LocalDataBucketStatus"][];
-            workspace_caches: components["schemas"]["WorkspaceCacheStatus"][];
         };
         HistoryRetentionRule: {
             /** @enum {string} */
@@ -15027,7 +15013,6 @@ export interface components {
         };
         LocalDataClearRequest: {
             buckets?: components["schemas"]["LocalDataBucketId"][];
-            workspace_cache_ids?: string[];
         };
         LocalDataClearResult: {
             id: components["schemas"]["LocalDataBucketId"];
@@ -15036,16 +15021,8 @@ export interface components {
             /** @description Host copy when ok is false; branch on code. */
             message?: string;
         };
-        WorkspaceCacheClearResult: {
-            id: string;
-            ok: boolean;
-            code?: components["schemas"]["ApiErrorCode"];
-            /** @description Host copy when ok is false; branch on code. */
-            message?: string;
-        };
         LocalDataClearResponse: {
             results: components["schemas"]["LocalDataClearResult"][];
-            workspace_cache_results: components["schemas"]["WorkspaceCacheClearResult"][];
         };
         BackupCapabilities: {
             format_version: number;
@@ -30461,7 +30438,6 @@ export type DismissVerifySettingsRequest = components["schemas"]["DismissVerifyS
 export type SourceVerify = components["schemas"]["SourceVerify"];
 export type LocalDataBucketId = components["schemas"]["LocalDataBucketId"];
 export type LocalDataBucketStatus = components["schemas"]["LocalDataBucketStatus"];
-export type WorkspaceCacheStatus = components["schemas"]["WorkspaceCacheStatus"];
 export type LocalDataStatus = components["schemas"]["LocalDataStatus"];
 export type HistoryRetentionRule = components["schemas"]["HistoryRetentionRule"];
 export type HistoryRetentionPolicy = components["schemas"]["HistoryRetentionPolicy"];
@@ -30475,7 +30451,6 @@ export type HistoryRetentionPreview = components["schemas"]["HistoryRetentionPre
 export type HistoryPruneResult = components["schemas"]["HistoryPruneResult"];
 export type LocalDataClearRequest = components["schemas"]["LocalDataClearRequest"];
 export type LocalDataClearResult = components["schemas"]["LocalDataClearResult"];
-export type WorkspaceCacheClearResult = components["schemas"]["WorkspaceCacheClearResult"];
 export type LocalDataClearResponse = components["schemas"]["LocalDataClearResponse"];
 export type BackupCapabilities = components["schemas"]["BackupCapabilities"];
 export type BackupRestoreResult = components["schemas"]["BackupRestoreResult"];

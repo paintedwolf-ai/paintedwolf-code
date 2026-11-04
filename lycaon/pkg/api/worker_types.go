@@ -285,7 +285,6 @@ type WorkspaceProvisionStrategy string
 
 const (
 	WorkspaceProvisionDirectCoW  WorkspaceProvisionStrategy = "direct_cow"
-	WorkspaceProvisionBridgeCoW  WorkspaceProvisionStrategy = "bridge_cow"
 	WorkspaceProvisionDirectCopy WorkspaceProvisionStrategy = "direct_copy"
 )
 

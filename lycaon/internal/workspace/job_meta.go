@@ -29,6 +29,8 @@ type JobMetaPreparation struct {
 	FallbackReason  adapter.ReasonCode       `json:"fallback_reason,omitempty"`
 	CopiedEntries   int64                    `json:"copied_entries,omitempty"`
 	CopiedBytes     int64                    `json:"copied_bytes,omitempty"`
+	SelectionReason adapter.SelectionReason  `json:"selection_reason,omitempty"`
+	DeclaredCost    adapter.MaterializeCost  `json:"declared_cost,omitzero"`
 	PendingGitInit  bool                     `json:"pending_git_init,omitempty"`
 	AdapterFacts    *adapter.AdapterFacts    `json:"adapter_facts,omitempty"`
 }

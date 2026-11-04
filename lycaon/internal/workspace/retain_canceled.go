@@ -50,7 +50,7 @@ func (m *Manager) RetainCanceledWork(ctx context.Context, jobID, root, baselineP
 	if m.recovery == nil {
 		return unresolvedRetention(jobID, viewID, root, errNoRecoveryCoordinator)
 	}
-	changed, err := changedWorkingFiles(ctx, root, baselinePath, roots)
+	changed, err := m.changedWorkingFilesOf(ctx, root, baselinePath, roots)
 	switch {
 	case err == nil:
 		_, err = m.recovery.PreserveChangedWorkingFiles(jobID, viewID, "changed paths of a canceled worker", changed)
@@ -68,6 +68,15 @@ func (m *Manager) RetainCanceledWork(ctx context.Context, jobID, root, baselineP
 // ReleaseSpaceReserve frees the room set aside for finishing a cancel on a full volume.
 func (m *Manager) ReleaseSpaceReserve() bool {
 	return m.recovery != nil && m.recovery.ReleaseSpaceReserve()
+}
+
+// changedWorkingFilesOf uses the stat manifest of a branch that has one; an earlier format's branch
+// still carries the baseline that lists its changes.
+func (m *Manager) changedWorkingFilesOf(ctx context.Context, root, baselinePath string, roots []projectroot.RootRef) ([]recovery.ChangedWorkingFile, error) {
+	if adapter.HasStatManifest(enginepaths.StatManifestForBranchRoot(root)) {
+		return materializedChangedWorkingFiles(ctx, root)
+	}
+	return changedWorkingFiles(ctx, root, baselinePath, roots)
 }
 
 func changedWorkingFiles(ctx context.Context, root, baselinePath string, roots []projectroot.RootRef) ([]recovery.ChangedWorkingFile, error) {

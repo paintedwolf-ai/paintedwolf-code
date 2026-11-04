@@ -103,7 +103,6 @@ func (f *engineFixture) boot() *Runtime {
 	f.t.Helper()
 	engine := New(f.database, nil, worker.WorkersConfig{})
 	engine.BranchRoot = enginepaths.WorkerBranchesRootUnder(f.dataRoot)
-	engine.SeedRoot = enginepaths.WorkerSeedsRootUnder(f.stateRoot)
 	root := enginepaths.WorkerRecoveryRootUnder(f.stateRoot)
 	store, err := checkpoint.NewStore(filepath.Join(root, "checkpoints"))
 	testutil.FailErr(f.t, "open checkpoint store", err)
@@ -116,7 +115,7 @@ func (f *engineFixture) boot() *Runtime {
 	})
 	testutil.FailErr(f.t, "open coordinator", err)
 	engine.Recovery = coordinator
-	engine.Workspace = workspace.NewManager(engine.BranchRoot, engine.SeedRoot).WithRecovery(coordinator)
+	engine.Workspace = workspace.NewManager(engine.BranchRoot).WithRecovery(coordinator)
 	engine.Queue.SetWorkerWorkspaceManager(engine.Workspace)
 	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content")).Baselines)
 	f.engine = engine
@@ -133,6 +132,7 @@ func mountedSelector() *adapter.Selector {
 		MountViewFn: func(context.Context, string, []adapter.PreparedRoot) error { return nil },
 	})
 	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector.BudgetFor = adapter.ZeroBudget
 	selector.Confinement = fixtureConfinement{}
 	return selector
 }

@@ -51,7 +51,6 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 			dataDir:          strings.TrimSpace(deps.Storage.DataDir),
 			storePath:        strings.TrimSpace(deps.Storage.StorePath),
 			workerBranchRoot: strings.TrimSpace(deps.Storage.WorkerBranchRoot),
-			workerSeedRoot:   strings.TrimSpace(deps.Storage.WorkerSeedRoot),
 		},
 		health: health{
 			storeRevision:      deps.Storage.StoreRevision,
@@ -112,7 +111,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		Extensions: &s.Admin.Extensions, Board: deps.Workflow.Board, Database: deps.Core.Database, DataDir: s.dataDir, Events: deps.Host.Events, LLMService: deps.Providers.LLM,
 		SecretIgnores: deps.Approvals.SecretIgnores, ManagedSecrets: deps.Approvals.ManagedSecrets, MutationGate: deps.Core.MutationGate, Registry: deps.Core.Projects,
 		ProjectRules: deps.Source.ProjectRules, ScanCadence: deps.Scans.ScanCadence, Store: deps.Core.Store, Sessions: deps.Core.Sessions,
-		Settings: deps.Core.Settings, WorkerSeedRoot: s.workerSeedRoot, WorkerBranchRoot: s.workerBranchRoot,
+		Settings: deps.Core.Settings, WorkerBranchRoot: s.workerBranchRoot,
 		Workers: deps.Workflow.Workers, Sources: &s.Sources, Git: &s.Admin.Git,
 	})
 	attachmentStore = s.Admin.Prompt.Attachments.AttachmentStore

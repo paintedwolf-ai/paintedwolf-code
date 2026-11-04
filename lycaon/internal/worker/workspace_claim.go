@@ -145,8 +145,9 @@ func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTas
 	if binding == nil || strings.TrimSpace(binding.Root) == "" {
 		return ErrWorkerBranchClaimFailed
 	}
+	// A view captured by checkpoint keeps nothing here: hashing the tree is what claiming must not do.
 	walk := workspacebaseline.Branch(layout.Roots, binding.Root)
-	if binding.Selection.Facts.PreparationKind == adapter.PreparationMounted {
+	if workspace.BranchUsesCheckpoints(binding.Root) {
 		walk = func(context.Context, func(workspacebaseline.CaptureFile) error) error { return nil }
 	}
 	baselinePath, err := baselines.Capture(ctx, task.ID, walk)

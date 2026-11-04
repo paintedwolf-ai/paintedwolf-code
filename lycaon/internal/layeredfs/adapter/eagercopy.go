@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
@@ -16,8 +17,7 @@ var sharedEagerViews sync.Map // map[string]*eagerViewState
 
 type eagerViewState struct {
 	view            *PreparedView
-	seedRecords     map[layeredfs.QualifiedPath]layeredfs.BaseCapture
-	syncedRecords   map[layeredfs.QualifiedPath]layeredfs.BaseCapture
+	capture         *statCapture
 	syncMu          sync.Mutex
 	denySourcePaths []string
 	gitStore        *privategit.RetainedObjectStore
@@ -27,7 +27,7 @@ type eagerViewState struct {
 	accessCount     atomic.Int64
 }
 
-// EagerCopyAdapter implements the bounded materialized fallback workspace adapter (#1658).
+// EagerCopyAdapter materializes a working tree and a pristine tree as its exact base (#1658).
 type EagerCopyAdapter struct {
 	facts     AdapterFacts
 	mu        sync.RWMutex
@@ -35,7 +35,8 @@ type EagerCopyAdapter struct {
 	gitStores *gitStoreRegistry
 }
 
-// NewEagerCopyAdapter constructs a materialized EagerCopyAdapter with an optional FallbackReason.
+// NewEagerCopyAdapter constructs a materialized EagerCopyAdapter. FallbackReason names the lasting
+// reason a mount could not serve an over-budget worker, when that is why this adapter was chosen.
 func NewEagerCopyAdapter(fallbackReason ReasonCode) *EagerCopyAdapter {
 	return &EagerCopyAdapter{
 		facts: AdapterFacts{
@@ -128,39 +129,36 @@ func (a *EagerCopyAdapter) Probe(ctx context.Context, probeCfg ProbeConfig) (Pro
 	return res, nil
 }
 
-// Prepare materializes selected roots into private storage within configured limits and registers seed bases.
+// Prepare builds both trees for the selected roots and writes the stat manifest. Nothing is hashed.
+// Every failure, including a budget overrun, removes only what this preparation made.
 func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*PreparedView, error) {
 	narrowed, err := ValidateWorkspaceSelection(req.Grants, req.Selection)
 	if err != nil {
 		return nil, err
 	}
-	maxEntries, maxBytes := resolvePrepareLimits(req.MaxEntries, req.MaxBytes)
-	selectedIDs := collectGrantIDs(narrowed)
-
-	if err := checkSourceIndexEstimates(req.ViewID, narrowed, selectedIDs, maxEntries, maxBytes); err != nil {
-		return nil, err
-	}
-
 	runtimeViewDir, backingDir, err := initViewDirs(req.ViewID, req.RuntimeDir, req.BackingDir)
 	if err != nil {
 		return nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "prepare", ReasonCode: ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
 	}
+	pristineDir := strings.TrimSpace(req.PristineDir)
+	if pristineDir == "" {
+		pristineDir = filepath.Join(backingDir, "pristine")
+	}
+	manifestPath := strings.TrimSpace(req.StatManifestPath)
+	if manifestPath == "" {
+		manifestPath = filepath.Join(backingDir, "stat-manifest")
+	}
 
-	outcome, err := seedSelectedRoots(ctx, req, runtimeViewDir, narrowed, selectedIDs, maxEntries, maxBytes, a.gitStores)
+	outcome, err := seedSelectedRoots(ctx, req, runtimeViewDir, pristineDir, narrowed, a.gitStores)
 	if err != nil {
-		cleanupFailedPrepare(req, runtimeViewDir, outcome, nil)
-		if limErr, ok := err.(*PreparationLimitError); ok {
-			limErr.CleanedIncompleteSeed = true
-		}
+		cleanupFailedPrepare(req, runtimeViewDir, pristineDir, manifestPath, outcome, nil)
 		return nil, err
 	}
-	gitStore := outcome.gitStore
 
 	gitInterceptor := req.GitInterceptor
 	if gitInterceptor == nil && len(outcome.gitInterceptMap) > 0 {
 		gitInterceptor = &seededGitInterceptor{redirects: outcome.gitInterceptMap}
 	}
-
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID:          req.ViewID,
 		BackingDir:      backingDir,
@@ -171,24 +169,21 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		ObservationSink: req.ObservationSink,
 	})
 	if err != nil {
-		cleanupFailedPrepare(req, runtimeViewDir, outcome, nil)
+		cleanupFailedPrepare(req, runtimeViewDir, pristineDir, manifestPath, outcome, nil)
 		return nil, &AdapterError{AdapterID: AdapterEagerCopy, Op: "prepare", ReasonCode: ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
 	}
-
-	if err := registerSeededLowerProviders(core, backingDir, outcome.preparedRoots, outcome.bases, outcome.filePaths); err != nil {
-		cleanupFailedPrepare(req, runtimeViewDir, outcome, core)
-		return nil, err
+	for _, r := range outcome.preparedRoots {
+		if err := core.RegisterLowerProvider(r.RootID, newPristineLowerProvider(r.RootID, r.PristinePath, outcome.records)); err != nil {
+			cleanupFailedPrepare(req, runtimeViewDir, pristineDir, manifestPath, outcome, core)
+			return nil, err
+		}
 	}
 
-	seedMap := make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture, len(outcome.bases))
-	syncedMap := make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture, len(outcome.bases))
-	for _, b := range outcome.bases {
-		if rErr := core.RegisterSeedBase(b); rErr != nil {
-			cleanupFailedPrepare(req, runtimeViewDir, outcome, core)
-			return nil, rErr
-		}
-		seedMap[b.Path] = b
-		syncedMap[b.Path] = cloneBaseCaptureRecord(b)
+	takenNS := time.Now().UnixNano()
+	header := statManifestHeader{Format: StatManifestFormat, ViewID: req.ViewID, TakenNS: takenNS, Roots: manifestRootsOf(outcome.preparedRoots)}
+	if err := writeStatManifest(manifestPath, header, outcome.records); err != nil {
+		cleanupFailedPrepare(req, runtimeViewDir, pristineDir, manifestPath, outcome, core)
+		return nil, err
 	}
 
 	view := &PreparedView{
@@ -202,26 +197,130 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		RuntimeViewDir:  runtimeViewDir,
 		TaskPathHints:   append([]string(nil), req.TaskPathHints...),
 		SeededGitRepos:  outcome.seededRepos,
-		ObservedEntries: outcome.observedEntries,
-		ObservedBytes:   outcome.observedBytes,
+		ObservedEntries: outcome.stats.Entries,
+		ObservedBytes:   outcome.logicalBytes,
+		Selection:       req.SelectionFacts,
+		Materialize:     outcome.stats,
 		Core:            core,
 	}
-
-	st := &eagerViewState{
+	a.adopt(view, &eagerViewState{
 		view:            view,
-		seedRecords:     seedMap,
-		syncedRecords:   syncedMap,
+		capture:         newStatCapture(takenNS, outcome.records, outcome.preparedRoots, req.ParentLayers, backingDir),
 		denySourcePaths: outcome.denyPaths,
-		gitStore:        gitStore,
+		gitStore:        outcome.gitStore,
 		gitLeases:       outcome.gitLeases,
 		quiesceHook:     req.QuiesceHook,
 		flushHook:       req.FlushClientHook,
-	}
-	a.mu.Lock()
-	a.views[req.ViewID] = st
-	a.mu.Unlock()
-	sharedEagerViews.Store(req.ViewID, st)
+	})
 	return view, nil
+}
+
+func (a *EagerCopyAdapter) adopt(view *PreparedView, st *eagerViewState) {
+	a.mu.Lock()
+	a.views[view.ViewID] = st
+	a.mu.Unlock()
+	sharedEagerViews.Store(view.ViewID, st)
+}
+
+func manifestRootsOf(roots []PreparedRoot) []manifestRoot {
+	out := make([]manifestRoot, 0, len(roots))
+	for _, r := range roots {
+		out = append(out, manifestRoot{
+			RootID: r.RootID, Label: r.Label, SourcePath: r.SourcePath, Subroot: r.Subroot,
+			WorkspacePath: r.WorkspacePath, PristinePath: r.PristinePath, IsPrimary: r.IsPrimary,
+		})
+	}
+	return out
+}
+
+// ReopenRequest names a materialized view an earlier engine process prepared.
+type ReopenRequest struct {
+	ViewID           string
+	RuntimeDir       string
+	BackingDir       string
+	StatManifestPath string
+	ObservationSink  layeredfs.ObservationSink
+}
+
+// Reopen rebuilds a materialized view's Core from its stat manifest and pristine tree. The next
+// capture re-derives the worker's changes the same way any capture does, so nothing else is needed.
+func (a *EagerCopyAdapter) Reopen(ctx context.Context, req ReopenRequest) (*PreparedView, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	header, records, err := loadStatManifest(req.StatManifestPath)
+	if err != nil {
+		return nil, err
+	}
+	runtimeViewDir, backingDir, err := initViewDirs(req.ViewID, req.RuntimeDir, req.BackingDir)
+	if err != nil {
+		return nil, err
+	}
+	roots := make([]PreparedRoot, 0, len(header.Roots))
+	specs := make([]layeredfs.RootSpec, 0, len(header.Roots)+1)
+	primaryID, primaryPath := "", ""
+	var deny []string
+	for _, r := range header.Roots {
+		roots = append(roots, PreparedRoot{
+			RootID: r.RootID, Label: r.Label, SourcePath: r.SourcePath, Subroot: r.Subroot,
+			WorkspacePath: r.WorkspacePath, PristinePath: r.PristinePath, IsPrimary: r.IsPrimary,
+		})
+		specs = append(specs, layeredfs.RootSpec{ID: r.RootID, Label: r.Label, TrunkPath: r.WorkspacePath, Subroot: r.Subroot, IsPrimary: r.IsPrimary})
+		deny = append(deny, r.SourcePath)
+		if r.IsPrimary {
+			primaryID, primaryPath = r.RootID, r.WorkspacePath
+		}
+	}
+	core, err := layeredfs.New(layeredfs.Config{
+		ViewID: req.ViewID, BackingDir: backingDir, Roots: specs, ActiveRootID: primaryID, ObservationSink: req.ObservationSink,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range roots {
+		if err := core.RegisterLowerProvider(r.RootID, newPristineLowerProvider(r.RootID, r.PristinePath, records)); err != nil {
+			_ = core.ReleaseView()
+			return nil, err
+		}
+	}
+	view := &PreparedView{
+		ViewID: req.ViewID, AdapterID: AdapterEagerCopy, Facts: a.facts, Roots: roots, PrimaryRootID: primaryID,
+		PrimaryWorkPath: primaryPath, BackingDir: backingDir, RuntimeViewDir: runtimeViewDir, Core: core,
+	}
+	a.adopt(view, &eagerViewState{view: view, capture: newStatCapture(header.TakenNS, records, roots, nil, backingDir), denySourcePaths: deny})
+	return view, nil
+}
+
+// LoadedView returns a view this process already holds.
+func (a *EagerCopyAdapter) LoadedView(viewID string) (*PreparedView, bool) {
+	st, ok := a.lookupViewState(viewID)
+	if !ok {
+		return nil, false
+	}
+	return st.view, true
+}
+
+// ChangedPaths lists what differs from the exact base now, reading only files whose stat differs.
+func (a *EagerCopyAdapter) ChangedPaths(ctx context.Context, viewID string) ([]layeredfs.QualifiedPath, CaptureStats, error) {
+	st, ok := a.lookupViewState(viewID)
+	if !ok {
+		return nil, CaptureStats{}, &AdapterError{AdapterID: AdapterEagerCopy, Op: "changed_paths", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
+	}
+	st.syncMu.Lock()
+	defer st.syncMu.Unlock()
+	paths, err := st.capture.changedPaths(ctx, st.view.Roots)
+	return paths, st.capture.stats, err
+}
+
+// LastCaptureStats reports what the view's most recent capture or change listing did.
+func (a *EagerCopyAdapter) LastCaptureStats(viewID string) (CaptureStats, bool) {
+	st, ok := a.lookupViewState(viewID)
+	if !ok {
+		return CaptureStats{}, false
+	}
+	st.syncMu.Lock()
+	defer st.syncMu.Unlock()
+	return st.capture.stats, true
 }
 
 func (a *EagerCopyAdapter) lookupViewState(viewID string) (*eagerViewState, bool) {
@@ -261,7 +360,7 @@ func (a *EagerCopyAdapter) CommandAccess(viewID string) (CommandAccessSpec, erro
 	}, nil
 }
 
-// CheckpointBarrier quiesces writers, reconciles direct materialized edits, and acquires the Core barrier.
+// CheckpointBarrier quiesces writers, captures the tree by stat, and acquires the Core barrier.
 func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string) (BarrierReceipt, func() error, error) {
 	st, ok := a.lookupViewState(viewID)
 	if !ok {
@@ -275,7 +374,7 @@ func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string)
 		}
 		st.syncMu.Lock()
 		defer st.syncMu.Unlock()
-		return syncMaterializedTreeToCore(st.view, st.seedRecords, st.syncedRecords)
+		return st.capture.capture(cCtx, st.view)
 	}
 	return executeCheckpointBarrier(ctx, AdapterEagerCopy, st.view.Core, quiesceAndSync, st.flushHook)
 }

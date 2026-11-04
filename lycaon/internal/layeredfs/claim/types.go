@@ -138,10 +138,16 @@ type ClaimStorage struct {
 	TargetRootDirs map[string]string `json:"target_root_dirs,omitempty"`
 }
 
-// ClaimLimits bounds materialized fallback preparation during claim.
-type ClaimLimits struct {
-	MaxEntries int64 `json:"max_entries"`
-	MaxBytes   int64 `json:"max_bytes"`
+// ClaimMaterialization carries what preparing a materialized view needs beyond its storage.
+type ClaimMaterialization struct {
+	PristineDir      string
+	StatManifestPath string
+	CopyBudget       *adapter.CopyBudget
+	GitObjectStore   *privategit.RetainedObjectStore
+	CloneFile        adapter.FileCloner
+	// Disk reads free space when this claim selects its own provider.
+	Disk     func() (adapter.DiskSpace, error)
+	Progress func(adapter.MaterializeProgress)
 }
 
 // ClaimHooks groups the retention, confinement, private-git, barrier and fault-injection services.
@@ -165,7 +171,8 @@ type ClaimRequest struct {
 	FocusPathHints      []string
 	ParentLayers        []layeredfs.ParentLayer
 	ParentCheckpointIDs []string
-	Limits              ClaimLimits
+	SelectionFacts      adapter.SelectionFacts
+	Materialization     ClaimMaterialization
 	Hooks               ClaimHooks
 }
 

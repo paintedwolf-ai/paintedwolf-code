@@ -10,10 +10,6 @@ import (
 // WorkerBranchesDirName holds worker branch copies outside project roots.
 const WorkerBranchesDirName = "worker-branches"
 
-// WorkerSeedsDirName holds rebuildable bridge generations only when central
-// storage enables copy-on-write worker branches.
-const WorkerSeedsDirName = "worker-seeds"
-
 // WorkerRecoveryDirName holds worker lifecycle journals, retained checkpoints and
 // quarantined interrupted work outside any tree a worker can reach.
 const WorkerRecoveryDirName = "worker-recovery"
@@ -30,16 +26,6 @@ func WorkerBranchesRootUnder(stateRoot string) string {
 // WorkerRecoveryRootUnder returns the worker recovery base under an engine state root.
 func WorkerRecoveryRootUnder(stateRoot string) string {
 	return filepath.Join(strings.TrimSpace(stateRoot), WorkerRecoveryDirName)
-}
-
-// WorkerSeedsRootUnder returns the central worker-seed base under an engine state root.
-func WorkerSeedsRootUnder(stateRoot string) string {
-	return filepath.Join(strings.TrimSpace(stateRoot), WorkerSeedsDirName)
-}
-
-// ProjectSeedDir returns the central seed directory for one source root.
-func ProjectSeedDir(seedRoot, projectDir string) string {
-	return filepath.Join(strings.TrimSpace(seedRoot), ProjectKey(projectDir))
 }
 
 // ProjectBranchDir returns the branch parent keyed by one source root.
@@ -83,6 +69,17 @@ func NormalizeRepoRel(path string) string {
 		path = strings.TrimPrefix(path, "./")
 	}
 	return strings.TrimPrefix(path, "/")
+}
+
+// PristineTreeForBranchRoot is a materialized workspace's exact base. It sits beside the working tree
+// rather than in it, and a worker reads it and never writes it.
+func PristineTreeForBranchRoot(branchTreeRoot string) string {
+	return filepath.Join(MetaDirForBranchRoot(branchTreeRoot), "pristine")
+}
+
+// StatManifestForBranchRoot is the stat manifest of a materialized workspace's working tree.
+func StatManifestForBranchRoot(branchTreeRoot string) string {
+	return filepath.Join(MetaDirForBranchRoot(branchTreeRoot), "stat-manifest")
 }
 
 // IsWorkerBranchPath reports a path under an engine worker-branch copy.

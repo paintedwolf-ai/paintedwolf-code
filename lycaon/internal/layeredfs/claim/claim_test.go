@@ -107,7 +107,9 @@ func newMockMountedSelector(targetOS string) *adapter.Selector {
 			return nil
 		},
 	})
-	return adapter.NewSelector(targetOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector(targetOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector.BudgetFor = adapter.ZeroBudget
+	return selector
 }
 
 func TestThreeRootMountedClaimOperationCountIdentical1kVs2MAndZeroLowerReadDir(t *testing.T) {
@@ -198,6 +200,7 @@ func TestRealNFSDarwinMountedClaimZeroLowerDirReads(t *testing.T) {
 		ConfinementCheckFn: func(context.Context, adapter.ProbeConfig) error { return nil },
 	})
 	sel := adapter.NewSelector("darwin", nil, nfsAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	sel.BudgetFor = adapter.ZeroBudget
 	coord := NewCoordinator(sel)
 	ret := newTestRetentionRegistrar()
 
@@ -328,6 +331,7 @@ func TestFailedSettlementKeepsCustodyUntilARetrySettles(t *testing.T) {
 		},
 	})
 	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector.BudgetFor = adapter.ZeroBudget
 	coord := NewCoordinator(selector)
 	retention := newTestRetentionRegistrar()
 	metaPath := filepath.Join(tmp, "view-meta.json")

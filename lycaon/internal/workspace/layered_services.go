@@ -148,22 +148,7 @@ func bindViewConsumer(
 		return nil, err
 	}
 	consumer.RegisterBranchEngine(branchRoot, engine)
-	publisher, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
-		Core: prepared.Core, Store: store, WorkerID: cv.Identity.WorkerID, TaskID: cv.Identity.WorkerID,
-		ProjectID: cv.Identity.ProjectID, SourceGeneration: fmt.Sprint(cv.Identity.SourceGeneration), SelectedRoots: roots,
-		Callbacks: checkpoint.BarrierCallbacks{
-			AcquireAdapterBarrier: func(ctx context.Context) (layeredfs.BarrierToken, func() error, error) {
-				receipt, release, err := cv.Adapter.CheckpointBarrier(ctx, prepared.ViewID)
-				if err != nil {
-					return layeredfs.BarrierToken{}, nil, err
-				}
-				return receipt.Token, release, nil
-			},
-			CommitRetention: func(ctx context.Context, checkpointID string, blobs, gitObjects []string) error {
-				return services.recovery.CommitCheckpointRetention(ctx, cv.Identity.WorkerID, checkpointID, blobs, gitObjects, cv.Metadata.Checkpoints.ParentCheckpointIDs)
-			},
-		},
-	})
+	publisher, err := newViewPublisher(cv, store, services, roots)
 	if err != nil {
 		consumer.UnregisterEngine(engine)
 		return nil, err
@@ -195,6 +180,9 @@ func adoptClaimedView(cv *claim.ClaimedView, projectID string, coordinator *reco
 // settleBranchLayeredView releases a mounted branch. Its Engine is withdrawn first so nothing new
 // starts on the view, and restored if settlement fails, because the view is then still live.
 func settleBranchLayeredView(ctx context.Context, branchRoot string, view *branchLayeredView) error {
+	if view.engine == nil {
+		return settleMaterializedBranchView(ctx, view)
+	}
 	consumer.UnregisterEngine(view.engine)
 	err := view.services.recovery.SettleRecordedWriters(ctx, view.workerID, view.viewID)
 	if err == nil {
@@ -234,16 +222,29 @@ func BranchProcessRecorder(branchRoot string) func(pid int) error {
 	}
 }
 
-// PublishBranchCheckpoint publishes the mounted branch's private changes under the adapter's barrier.
-// handled is false for a branch with no mounted view, whose changes a baseline captures instead.
+// PublishBranchCheckpoint publishes a branch's private changes under the adapter's barrier. It runs at
+// worker completion, the boundary every view shares; only a mounted view has any other. handled is
+// false for a branch of an earlier format, whose changes its baseline captures instead.
 func PublishBranchCheckpoint(ctx context.Context, branchRoot string) (handled bool, err error) {
 	branchClaimsMu.RLock()
 	rec, ok := branchClaimStates[filepath.Clean(branchRoot)]
 	branchClaimsMu.RUnlock()
-	if !ok || rec.layered == nil {
-		return false, nil
+	if ok && rec.layered == nil && rec.reopen != nil {
+		layered, err := rec.reopen(ctx)
+		if err != nil {
+			return true, fmt.Errorf("reopen materialized view: %w", err)
+		}
+		rec.layered = layered
+		ok = true
 	}
-	return true, publishLayeredCheckpoint(ctx, branchRoot, rec.layered)
+	if ok && rec.layered != nil {
+		return true, publishLayeredCheckpoint(ctx, branchRoot, rec.layered)
+	}
+	if materializedBranchLostItsView(branchRoot) {
+		// An empty baseline would seal the whole tree as this worker's change.
+		return true, fmt.Errorf("worker branch %s has no view to capture through", branchRoot)
+	}
+	return false, nil
 }
 
 // publishLayeredCheckpoint journals the publication around the transaction: a crash between the two
@@ -285,7 +286,7 @@ func publishWithPrivateGit(ctx context.Context, view *branchLayeredView, checkpo
 		return checkpoint.PublishResult{}, err
 	}
 	return view.publisher.Publish(ctx, checkpoint.PublishRequest{
-		CheckpointID: checkpointID, Trigger: checkpoint.TriggerExplicitCapture, PrivateGit: git,
+		CheckpointID: checkpointID, Trigger: checkpoint.TriggerWorkerCompletion, PrivateGit: git,
 	})
 }
 

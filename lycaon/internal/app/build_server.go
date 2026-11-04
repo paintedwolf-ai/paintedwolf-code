@@ -79,7 +79,7 @@ func (b *serveBuilder) wireServer() error {
 		Events: b.events.Hub, EventPublisher: b.events.Publisher, Presence: b.events.Presence, HostIdentity: b.identity.Host,
 		HostResources: b.settings.HostResources, HostPower: b.settings.Power, Pricing: b.providers.Pricing, Preview: b.interactions.Preview,
 		PreflightEnv: readiness.New(b.providers.Service, b.decisions.Decider, b.processes.Path).Environment()}, Storage: api.StorageDependencies{
-		DataDir: b.storage.Directory, StorePath: b.storage.Path, WorkerBranchRoot: b.delegations.BranchRoot, WorkerSeedRoot: b.delegations.SeedRoot,
+		DataDir: b.storage.Directory, StorePath: b.storage.Path, WorkerBranchRoot: b.delegations.BranchRoot,
 		ModuleRoot: b.catalog.ModuleRoot, StoreRevision: b.storage.Revision, MinDenVersion: os.Getenv("LYCAON_MIN_DEN_VERSION")}, Approvals: api.ApprovalsDependencies{
 		SecretIgnores: b.security.Ignores, ManagedSecrets: b.security.Capabilities, SecretSpans: b.security.Spans,
 		Checkpoints: b.sessions.Checkpoints, ApprovalGate: b.execution.Host.Authority.ApprovalGate(),

@@ -20,7 +20,7 @@ func TestBranchWorkspaceRejectsMissingMeta(t *testing.T) {
 	testutil.FailErr(t, "mkdir project", os.MkdirAll(dir, 0o755))
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "only.txt"), []byte("x"), 0o644))
 	roots := []projectroot.RootRef{{ID: "p", Label: "root", Path: dir, IsPrimary: true}}
-	mgr := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds"))
+	mgr := workspace.NewManager(filepath.Join(base, "branches"))
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "p", "job-meta")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	testutil.FailErr(t, "remove meta", os.RemoveAll(enginepaths.MetaDirForBranchRoot(binding.Root)))
@@ -42,7 +42,7 @@ func TestBranchWorkspaceRejectsInvalidMultiRootPath(t *testing.T) {
 		{ID: "primary", Label: "app", Path: primary, IsPrimary: true},
 		{ID: "secondary", Label: "docs", Path: secondary},
 	}
-	mgr := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds"))
+	mgr := workspace.NewManager(filepath.Join(base, "branches"))
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "primary", "job-roots")
 	testutil.FailErr(t, "create branch", err)
 	branch, err := newBranchWorkspace(binding.Root)
@@ -62,7 +62,7 @@ func TestEnsureWorkerBranchRestoresPrimaryReadDeniesFromMetadata(t *testing.T) {
 	testutil.FailErr(t, "mkdir primary", os.MkdirAll(primary, 0o755))
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(primary, "module.py"), []byte("value = 1\n"), 0o644))
 	roots := []projectroot.RootRef{{ID: "primary", Label: "app", Path: primary, IsPrimary: true}}
-	workspaceManager := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds"))
+	workspaceManager := workspace.NewManager(filepath.Join(base, "branches"))
 	binding, _, err := workspaceManager.CreateWorkerWorkspaceFromSources(
 		context.Background(), roots, roots, "primary", "job-read-deny",
 	)
