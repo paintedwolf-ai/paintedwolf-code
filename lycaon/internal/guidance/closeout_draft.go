@@ -95,13 +95,11 @@ func sourceRootPrefix(roots evidence.CitationRoots) func(string) (string, bool) 
 			return "", true
 		}
 		for _, root := range roots.Roots {
-			if root.ID != rootID {
-				continue
+			// A label on the primary root too: a bare path may land on any root,
+			// and this link names one.
+			if root.ID == rootID {
+				return "@" + root.Label + "/", true
 			}
-			if root.IsPrimary {
-				return "", true
-			}
-			return "@" + root.Label + "/", true
 		}
 		return "", false
 	}

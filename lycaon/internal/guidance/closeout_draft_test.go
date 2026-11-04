@@ -416,6 +416,7 @@ func TestDraftSourceLinks(t *testing.T) {
 	roots := multiRootFixture(t)
 	ev := evidence.AssembleLedger([]evidence.Record{
 		{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "@shared/lib/sec.go", LineRanges: []evidence.LineRange{{Start: 1, End: 20}}},
+		{Handle: "read#2", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "top.go", LineRanges: []evidence.LineRange{{Start: 1, End: 20}}},
 	})
 	cases := []struct {
 		name, source string
@@ -425,6 +426,7 @@ func TestDraftSourceLinks(t *testing.T) {
 	}{
 		{"secondary root", "[sec](source://s/lib/sec.go#L12-L14)", guidance.CitationGrounded, "@shared/lib/sec.go", 12, 14},
 		{"range past the observation", "[sec](source://s/lib/sec.go#L12-L40)", guidance.CitationUnverifiable, "@shared/lib/sec.go", 12, 40},
+		{"primary root", "[top](source://p/top.go#L3)", guidance.CitationGrounded, "top.go", 3, 0},
 		{"wrong root", "[sec](source://p/lib/sec.go#L12)", guidance.CitationNotObserved, "", 12, 0},
 		{"unknown root", "[sec](source://nope/lib/sec.go#L12)", guidance.CitationNotObserved, "", 12, 0},
 	}

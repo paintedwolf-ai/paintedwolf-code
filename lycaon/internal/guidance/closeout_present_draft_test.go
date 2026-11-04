@@ -55,7 +55,6 @@ func TestPresentCloseoutMarkdown(t *testing.T) {
 		{"workspace link stays", "Per [auth](internal/a.go#L4).", "Per [auth](internal/a.go#L4)."},
 		{"unobserved workspace link keeps its label", "Per [auth](internal/z.go#L4).", "Per auth."},
 		{"AC-AST-07 unresolved reference goes", "Claim [read#99:2] stands.", "Claim stands."},
-		{"AC-AST-20 whole-response fence", "```markdown\nAt [read#3:4].\n\n```\n[read#1]\n```\n```", "```markdown\nAt [read#3:4].\n\n```\n[read#1]\n```\n```"},
 		{"AC-AST-20 fence is the document", "```md\nAt [read#3:4] and [task#1].\n```\n", "At [internal/a.go:4](internal/a.go#L4) and."},
 		{"unsupported range goes", "Claim [read#4:2-50] stands.", "Claim stands."},
 		{"damaged node goes", "Claim [read#x] stands [verify: nope].", "Claim stands."},

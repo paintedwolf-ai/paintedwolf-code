@@ -28,7 +28,7 @@ type Options struct {
 	// observed in the current window. Nil means none matches.
 	KnownPath func(name string) bool
 	// SourceRoot maps a source:// root id to the prefix its workspace paths
-	// carry: empty for the primary root, `@label/` for another. Nil means one
+	// carry, such as `@label/`. Nil means one
 	// root. An unknown id keeps the id as a label, which no observation matches.
 	SourceRoot func(rootID string) (prefix string, ok bool)
 	// MaxSourceBytes and MaxOccurrences override the declared budgets.
