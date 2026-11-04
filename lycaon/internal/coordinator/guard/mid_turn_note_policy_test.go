@@ -20,7 +20,7 @@ func TestMidTurnNotePoliciesWarnOnce(t *testing.T) {
 	}
 	for _, code := range []string{
 		guidance.MidTurnNoteUngroundedCode, guidance.MidTurnNoteHandleUngroundCode, guidance.MidTurnNoteURLOnlyCode,
-		guidance.MidTurnNoteArtifactCode, guidance.MidTurnNoteSyntaxCode, guidance.MidTurnNoteEmbedCode, guidance.MidTurnNoteWaitFallbackCode, guidance.MidTurnNoteEvidenceUnreadable,
+		guidance.MidTurnNoteArtifactCode, guidance.MidTurnNoteSyntaxCode, guidance.MidTurnNoteEmbedCode, guidance.MidTurnNoteWaitFallbackCode, guidance.MidTurnNoteEvidenceUnreadable, guidance.MidTurnNoteImageCode,
 	} {
 		t.Run(code, func(t *testing.T) {
 			gc := oar.NewGuardContext()

@@ -1623,7 +1623,7 @@
       "branch_instruction": "Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; use an observed artifact id or omit the directive",
       "category": "recoverable",
       "emit": "guard:mid_turn_note",
-      "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} artifact directive(s) name an artifact not presentable in this request: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} artifact directive(s) name an artifact this session has not seen: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
     "MID_TURN_NOTE_EVIDENCE_UNREADABLE": {
       "branch_instruction": "Branch on Code MID_TURN_NOTE_EVIDENCE_UNREADABLE; do not rewrite citations to clear it",
@@ -1636,6 +1636,12 @@
       "category": "recoverable",
       "emit": "guard:mid_turn_note",
       "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} citation(s) did not resolve: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_IMAGE_UNOBSERVED": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_IMAGE_UNOBSERVED; drop the image or use the artifact directive",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] The update embedded {{ paintedwolf.offender_count }} image(s) from a source this chat never observed: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
     "MID_TURN_NOTE_INVALID_SYNTAX": {
       "branch_instruction": "Branch on Code MID_TURN_NOTE_INVALID_SYNTAX; correct the node",
@@ -1892,11 +1898,17 @@
       "emit": "guard:policy_write_request",
       "summary": "A persistent terminal cannot carry instruction-file write approval."
     },
+    "PRESENT_IMAGE_UNOBSERVED": {
+      "branch_instruction": "Present captures with `[artifact:\u003cid\u003e]`; embed only an image URL that was fetched in this chat",
+      "category": "recoverable",
+      "emit": "guard:coordinator_synthesis",
+      "summary": "The answer embedded {{ paintedwolf.offender_count }} image(s) from a source this chat never observed. The client shows no image for it, so the reply presents a capture that does not exist."
+    },
     "PRESENT_MARKDOWN_EMBED": {
       "branch_instruction": "Use `[artifact:\u003cid\u003e]` for observed artifacts; do not use a bare artifact UUID as an image URL",
       "category": "recoverable",
       "emit": "guard:coordinator_synthesis",
-      "summary": "Synthesis used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image."
+      "summary": "The answer used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image."
     },
     "PROCESS_NOT_OWNED": {
       "branch_instruction": "Branch on Code; do not retry with another reference, PID, name, or command for the same process. Ask the user to stop it themselves.",
@@ -3211,7 +3223,7 @@
       "category": "informational",
       "emit": "banner",
       "severity": "info",
-      "summary": "The host saved the first {{ paintedwolf.spill_bytes }} of {{ paintedwolf.original_bytes }} output bytes to {{ paintedwolf.spill_path }} at the {{ paintedwolf.cap }}-byte spill cap."
+      "summary": "The host saved the first {{ paintedwolf.spill_bytes }} of {{ paintedwolf.original_bytes }} output bytes to {{ paintedwolf.spill_path }} at the {{ paintedwolf.cap }}-byte spill cap. In `command`, native utilities read that host path directly; an installed program cannot open it, so pipe `cat {{ paintedwolf.spill_path }} | program` or redirect `cat` into `@scratch`."
     },
     "TOOL_OUTPUT_SPILL_CAP_EXCEEDED": {
       "branch_instruction": "Preserve completed work; recover only the observations still needed",
@@ -3230,7 +3242,7 @@
       "category": "informational",
       "emit": "banner",
       "severity": "info",
-      "summary": "Tool output was shortened for the inline budget.{% if paintedwolf.spill_path %} Retained output is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes).{% else %} No spill file is available for the omitted output.{% endif %}"
+      "summary": "Tool output was shortened for the inline budget.{% if paintedwolf.spill_path %} Retained output is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes). In `command`, native utilities read that host path directly; an installed program cannot open it, so pipe `cat {{ paintedwolf.spill_path }} | program` or redirect `cat` into `@scratch`.{% else %} No spill file is available for the omitted output.{% endif %}"
     },
     "TOOL_OWNER_FAILED": {
       "branch_instruction": "Branch on Code; a missing field is TOOL_ARGS_INVALID, not this code",

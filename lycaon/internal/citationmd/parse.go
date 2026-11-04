@@ -42,6 +42,7 @@ func Parse(source string, opts Options) Document {
 		return doc
 	}
 	doc.Body = shape.body
+	doc.Images = shape.images
 	builder := &documentBuilder{doc: &doc, budget: opts.occurrenceBudget(), opts: opts}
 	machine := newNodeMachine(source, opts, builder)
 	machine.skipTo(doc.Body.Start)

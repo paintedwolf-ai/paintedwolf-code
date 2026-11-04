@@ -95,7 +95,6 @@ func TestPrependTransitionInjectExplicitCause(t *testing.T) {
 		ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
 			return surface.ImplementSessionState{WorkersInFlight: 1, PendingOverlayIDs: []string{}}
 		},
-		LoadExecutionModeState: func(context.Context, string) surface.ExecutionModeState { return surface.ExecutionModeState{} },
 	}
 	eng := &AssemblyEngine{}
 	eng.SetDeps(deps)

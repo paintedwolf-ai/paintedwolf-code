@@ -13,10 +13,10 @@ requires:
 when: paintedwolf.reject_observation == "present_markdown_embed"
 effect: block
 copy:
-  what: Synthesis used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image.
+  what: The answer used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image.
   cause: Images are presented with an `[artifact:<id>]` directive, not ![…](uuid) inside prose
   why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  fix: Remove bare artifact UUIDs from markdown image URLs and HTML image sources. Write `[artifact:<id>]` for IDs this session has seen, from any turn or an attachment, so the client can present those images. Preserve the answer and its valid formatting; omit an image whose artifact ID was never observed.
+  fix: Send the whole answer again without the image syntax; it replaces the retained answer. Write `[artifact:<id>]` for IDs this session has seen, from any turn or an attachment, and describe in prose what each shows. Preserve the answer and its valid formatting; omit an image whose artifact ID was never observed.
   instead: Use `[artifact:<id>]` for observed artifacts; do not use a bare artifact UUID as an image URL
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_synthesis

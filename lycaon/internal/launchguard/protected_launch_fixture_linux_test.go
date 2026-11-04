@@ -360,7 +360,7 @@ func installLaunchFixture(t *testing.T, modes ...launchFixtureBuild) launchFixtu
 	entryFlags := ""
 	if measured {
 		overlay, linked := launchCoverageOverlay(t, build, dir)
-		options = []string{"-cover", "-covermode=atomic", "-coverpkg=" + module + ",github.com/lycaon/lycaon/cmd/pw-launch,github.com/lycaon/lycaon/cmd/pw-launch-entry", "-overlay=" + overlay, launchCoverageTool(t, overlay)}
+		options = []string{"-cover", "-covermode=" + nativeCoverageMode(), "-coverpkg=" + module + ",github.com/lycaon/lycaon/cmd/pw-launch,github.com/lycaon/lycaon/cmd/pw-launch-entry", "-overlay=" + overlay, launchCoverageTool(t, overlay)}
 		layout += " " + linked
 		entryFlags = linked
 	}

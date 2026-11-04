@@ -28,6 +28,9 @@ type RetainedCloseout struct {
 	RepairIDs map[string]int
 	// ForcedBy are the cycle's refusal codes, in first-seen order.
 	ForcedBy []string
+	// BodyRepair is set while the latest refusal asks for the body itself
+	// back, so the next draft's body replaces the pinned one.
+	BodyRepair bool
 	// Unread are the members of the latest refused draft the report did not take.
 	Unread []jsonshape.Issue
 }
@@ -45,6 +48,19 @@ func (r *RetainedCloseout) Retain(draft CloseoutDraft) {
 		if occurrence.RepairID != "" {
 			r.RepairIDs[occurrence.RepairID] = r.Revision
 		}
+	}
+}
+
+// PresentationObservation names each presentation code's reject observation. A
+// presentation refusal asks for the body back, not a citation.
+func PresentationObservation(code string) string {
+	switch code {
+	case PresentMarkdownEmbedCode:
+		return "present_markdown_embed"
+	case PresentImageUnobservedCode:
+		return "present_image_unobserved"
+	default:
+		return ""
 	}
 }
 

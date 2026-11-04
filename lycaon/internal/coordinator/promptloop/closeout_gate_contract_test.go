@@ -172,6 +172,8 @@ func TestMarkdownCloseoutRulesFireOnTheirTriggers(t *testing.T) {
 		{name: "line past the observation", code: guidance.InvestCitationUnverifiableCode, surface: "implement_investigate", content: "Done [read#1:99]."},
 		{name: "image embed", code: guidance.PresentMarkdownEmbedCode, surface: "implement_synthesis", content: "Done [read#1:2].\n\n![image](" + contractArtifact + ")"},
 		{name: "HTML image embed", code: guidance.PresentMarkdownEmbedCode, surface: "implement_investigate", content: `Done [read#1:2]. <img src="` + contractArtifact + `">`},
+		{name: "unobserved image", code: guidance.PresentImageUnobservedCode, surface: "implement_synthesis", content: "Done [read#1:2].\n\n![capture](https://placeholder.example/648x440?text=Capture)"},
+		{name: "unobserved HTML image", code: guidance.PresentImageUnobservedCode, surface: "implement_investigate", content: `Done [read#1:2]. <img src="data:image/png;base64,AAAA">`},
 		{name: "repair with nothing to repair", code: guidance.CitationRepairInvalidCode, surface: "implement_synthesis", content: "Done [read#1:2].\n[cite: c1 => read#1:3]"},
 		{name: "malformed node", code: guidance.CitationSyntaxInvalidCode, surface: "implement_investigate", content: "Done [read#1:2\nmore [read#1:3]."},
 		{name: "invalid verification", code: guidance.CitationSyntaxInvalidCode, surface: "implement_synthesis", content: "Done [read#1:2].\n[verify: thoroughly - Looked]"},
@@ -574,7 +576,7 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 	pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
 	cfg := loadCoordinatorTestHintConfig(t)
-	for _, code := range []string{guidance.PresentMarkdownEmbedCode, guidance.InvestNoNewEvidenceCode, guidance.SynthNoNewEvidenceCode} {
+	for _, code := range []string{guidance.PresentMarkdownEmbedCode, guidance.PresentImageUnobservedCode, guidance.InvestNoNewEvidenceCode, guidance.SynthNoNewEvidenceCode} {
 		rule, _ := rules.Get(code)
 		rule.OnFire = []oar.OnFireAction{oar.OnFireIncrementCounter}
 	}
@@ -583,6 +585,7 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 		duplicate                           bool
 	}{
 		{"format precedes citation repair", "implement_investigate", "missing#1", "![image](90dcba36-946a-46c6-933d-e94207b897ab)", guidance.PresentMarkdownEmbedCode, false},
+		{"unobserved image precedes citation repair", "implement_investigate", "missing#1", "![capture](https://placeholder.example/648x440?text=Capture)", guidance.PresentImageUnobservedCode, false},
 		{"investigate duplicate", "implement_investigate", "command#1", "Earlier result.", guidance.InvestNoNewEvidenceCode, true},
 		{"synthesis duplicate", "implement_synthesis", "command#1", "Earlier result.", guidance.SynthNoNewEvidenceCode, true},
 		{"new observation", "implement_investigate", "command#2", "New result.", "", false},

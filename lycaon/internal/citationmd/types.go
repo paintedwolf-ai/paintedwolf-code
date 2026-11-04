@@ -181,6 +181,12 @@ type Zone struct {
 	Span Span
 }
 
+// Image is one image node the document renders.
+type Image struct {
+	Span        Span
+	Destination string
+}
+
 // Document is one parsed source. Spans index Source. Body is the document's
 // extent: all of Source, or the inside of a whole-response Markdown fence.
 type Document struct {
@@ -190,7 +196,10 @@ type Document struct {
 	Issues      []Issue
 	// Zones are the literal zones the parse honoured, in source order.
 	Zones []Zone
-	parts []part
+	// Images are the image nodes the document renders, wherever they nest. A
+	// reference image's destination is its definition's.
+	Images []Image
+	parts  []part
 	// overBudget means the source displays as one escaped literal block.
 	overBudget bool
 }

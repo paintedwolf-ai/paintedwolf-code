@@ -18,6 +18,7 @@ const (
 	MidTurnNoteArtifactCode       = "MID_TURN_NOTE_ARTIFACT_UNKNOWN"
 	MidTurnNoteSyntaxCode         = "MID_TURN_NOTE_INVALID_SYNTAX"
 	MidTurnNoteEmbedCode          = "MID_TURN_NOTE_MARKDOWN_EMBED"
+	MidTurnNoteImageCode          = "MID_TURN_NOTE_IMAGE_UNOBSERVED"
 	MidTurnNoteWaitFallbackCode   = "MID_TURN_NOTE_WAIT_FALLBACK"
 	MidTurnNoteEvidenceUnreadable = "MID_TURN_NOTE_EVIDENCE_UNREADABLE"
 )
@@ -90,6 +91,9 @@ func AuditMidTurnNote(in MidTurnNoteInput) MidTurnNoteAudit {
 	}
 	if embeds := CloseoutMarkdownArtifactEmbedIDs(draft.Parsed); len(embeds) > 0 {
 		return audit.withhold(MidTurnNoteEmbedCode, OffenderHintData(embeds))
+	}
+	if sources := CloseoutUnobservedImageSources(draft.Parsed, in.Evidence.Ledger.URLSeen); len(sources) > 0 {
+		return audit.withhold(MidTurnNoteImageCode, OffenderHintData(sources))
 	}
 	resolved := ResolveDraftCitations(in.Roots, in.SurfaceID, draft, in.Evidence, in.Presentable)
 	var unknownArtifacts, unresolved []string

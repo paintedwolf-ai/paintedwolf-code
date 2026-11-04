@@ -31,7 +31,7 @@ func allocatedBytes(source string) (Document, uint64) {
 
 // C1, H9, AC-AST-12: the review's shapes report a structured issue before the
 // structural parse, and allocate in proportion to their size, at the full budget.
-func TestStructureBudgetShapes(t *testing.T) { //nolint:paralleltest // Reads the process-wide allocation counter.
+func TestStructureBudgetShapes(t *testing.T) {
 	const size = MaxSourceBytes
 	shapes := map[string]string{
 		"C1 table":          tableShape(2730),
@@ -66,7 +66,7 @@ func TestStructureBudgetShapes(t *testing.T) { //nolint:paralleltest // Reads th
 }
 
 // H9: shapes under the budgets are parsed, and stay proportional in allocation.
-func TestParsedShapesAllocateInProportion(t *testing.T) { //nolint:paralleltest // Reads the process-wide allocation counter.
+func TestParsedShapesAllocateInProportion(t *testing.T) {
 	const size = 1 << 20
 	shapes := map[string]string{
 		"plain":      strings.Repeat("word word word\n", size/15),

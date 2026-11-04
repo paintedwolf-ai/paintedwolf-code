@@ -39,6 +39,8 @@ func (c *Service) noteGroundingReject(rootID, code, offenderKey string, draft gu
 	if draft.Synthesis != "" {
 		entry.Retain(draft)
 	}
+	// The next draft answers this refusal, so only a presentation refusal unpins.
+	entry.BodyRepair = guidance.PresentationObservation(code) != ""
 	entry.Unread = slices.Clone(unread)
 	c.cycles.Store(rootID, cycle)
 	return entry.Attempt + entry.DocumentAttempt, prevKey

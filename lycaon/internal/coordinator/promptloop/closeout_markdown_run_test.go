@@ -79,6 +79,9 @@ func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdow
 	}})}
 	deps.Closeout.CitationRoots = func(context.Context, *api.Session) evidence.CitationRoots { return evidence.CitationRoots{} }
 	deps.Closeout.EvaluateCloseoutBlock = func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
+		if gc.Rejection.RejectObservation == guidance.PresentationObservation(guidance.PresentImageUnobservedCode) {
+			return &oar.Decision{Code: guidance.PresentImageUnobservedCode, Effect: oar.EffectBlock, Data: gc.RejectData[guidance.PresentImageUnobservedCode]}, nil
+		}
 		if len(gc.Grounding.UnobservedCitedHandles) == 0 {
 			return nil, nil
 		}
@@ -92,6 +95,7 @@ func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdow
 		r.retained.ForcedBy = append(r.retained.ForcedBy, code)
 		r.retained.Unread = unread
 		r.retained.Retain(draft)
+		r.retained.BodyRepair = guidance.PresentationObservation(code) != ""
 		return r.retained.Attempt, ""
 	}
 	deps.Closeout.ClearCloseoutStall = func(context.Context, string) { r.retained = guidance.RetainedCloseout{} }
@@ -262,5 +266,21 @@ func TestReplayCacheHoldsNoRawCitationNodes(t *testing.T) {
 	}
 	if strings.Contains(message.Content, "[read#1") {
 		t.Fatalf("accepted row = %q", message.Content)
+	}
+}
+
+// An unobserved image is refused and its retry replaces the body. The delivered
+// answer is the retry's, with nothing left of the fake capture.
+func TestMarkdownRunRepairsAnUnobservedImageByReplacingTheBody(t *testing.T) {
+	r := newMarkdownRun(t,
+		&modelcall.Completion{Content: "The cause is here [read#1:2].\n\n![capture](https://placeholder.example/648x440?text=Capture)"},
+		&modelcall.Completion{Content: "The cause is on the second line [read#1:2]."},
+	)
+	_, message := r.run(t, citedHistory())
+	if message.Content != "The cause is on the second line [a.go:2](a.go#L2)." {
+		t.Fatalf("display = %q", message.Content)
+	}
+	if message.Grounding == nil || !message.Grounding.Traced || message.Grounding.HostAssembled {
+		t.Fatalf("grounding = %+v", message.Grounding)
 	}
 }

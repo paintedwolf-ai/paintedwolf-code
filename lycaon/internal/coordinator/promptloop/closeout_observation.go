@@ -5,6 +5,7 @@ import (
 	"maps"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -29,8 +30,17 @@ func (l *turnCloseout) observeCloseoutReport(ctx context.Context, sess *api.Sess
 		return observation, nil
 	}
 	if embeds := guidance.CloseoutMarkdownArtifactEmbedIDs(draft.Parsed); len(embeds) > 0 {
-		gc.Rejection.RejectObservation = "present_markdown_embed"
+		gc.Rejection.RejectObservation = guidance.PresentationObservation(guidance.PresentMarkdownEmbedCode)
 		gc.PutRejectData(guidance.PresentMarkdownEmbedCode, guidance.OffenderHintData(embeds))
+		return observation, nil
+	}
+	unobserved, err := l.unobservedImageSources(ctx, sess, history, draft.Parsed)
+	if err != nil {
+		return observation, err
+	}
+	if len(unobserved) > 0 {
+		gc.Rejection.RejectObservation = guidance.PresentationObservation(guidance.PresentImageUnobservedCode)
+		gc.PutRejectData(guidance.PresentImageUnobservedCode, guidance.OffenderHintData(unobserved))
 		return observation, nil
 	}
 	if deliversRunReport && l.Deps.CheckRunReportDocument != nil {
@@ -74,6 +84,29 @@ func putCitationDefect(gc *oar.GuardContext, rejectObservation, code string, hin
 	maps.Copy(data, hints)
 	maps.Copy(data, refusal)
 	gc.PutRejectData(code, data)
+}
+
+// observedURLs is the evidence union's URL check, read only when the body embeds a
+// source the union would have to vouch for. Nil vouches for nothing.
+func (l *turnCloseout) observedURLs(ctx context.Context, sess *api.Session, history []api.Message, doc citationmd.Document) (func(string) bool, error) {
+	if l.Deps.EvidenceLedger == nil || len(guidance.CloseoutUnobservedImageSources(doc, nil)) == 0 {
+		return nil, nil
+	}
+	ev, err := guidance.UnionCloseoutEvidence(ctx, l.Deps.EvidenceLedger, sess.ID, history)
+	if err != nil {
+		return nil, err
+	}
+	return ev.Ledger.URLSeen, nil
+}
+
+// unobservedImageSources lists the image sources the body embeds that no artifact
+// and no observed URL vouch for.
+func (l *turnCloseout) unobservedImageSources(ctx context.Context, sess *api.Session, history []api.Message, doc citationmd.Document) ([]string, error) {
+	observed, err := l.observedURLs(ctx, sess, history, doc)
+	if err != nil {
+		return nil, err
+	}
+	return guidance.CloseoutUnobservedImageSources(doc, observed), nil
 }
 
 // The first defect selects policy; every defect accompanies the repair.

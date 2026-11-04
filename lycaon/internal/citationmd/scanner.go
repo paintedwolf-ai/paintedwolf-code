@@ -71,7 +71,7 @@ type nodeScanner struct {
 // end and the node cap.
 func (s *nodeScanner) begin(window string, indexed bool, opts Options) {
 	*s = nodeScanner{opts: opts, window: window, buf: append(s.buf[:0], '['), indexed: indexed, memberStart: 1}
-	if match := namespacedHandleHead.FindStringSubmatch(window); match != nil && opts.knownKind(match[1]) {
+	if match := namespacedHandleHead.FindStringSubmatch(window); len(match) > 1 && opts.knownKind(match[1]) {
 		return
 	}
 	if match := reservedHead.FindStringSubmatch(window); match != nil {

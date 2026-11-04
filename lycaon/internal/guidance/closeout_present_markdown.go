@@ -2,6 +2,7 @@ package guidance
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/citationmd"
@@ -10,84 +11,106 @@ import (
 // PresentMarkdownEmbedCode marks visual IDs embedded directly in markdown.
 const PresentMarkdownEmbedCode = "PRESENT_MARKDOWN_EMBED"
 
+// PresentImageUnobservedCode marks an image whose source is neither a visual
+// artifact nor a URL the evidence observed: a remote or data URL the body
+// presents as if it were a capture.
+const PresentImageUnobservedCode = "PRESENT_IMAGE_UNOBSERVED"
+
 // closeoutArtifactUUID matches an artifact store id.
 var closeoutArtifactUUID = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
-// Inline markdown image whose href is only a UUID (optional title).
-var closeoutMarkdownArtifactImage = regexp.MustCompile(
-	`!\[[^\]]*\]\(\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\s*(?:["'][^"']*["'])?\s*\)`,
-)
+// HTML img with its source.
+var closeoutHTMLImage = regexp.MustCompile(`(?i)<img\b[^>]*\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>`)
 
-// HTML img whose src is only a UUID.
-var closeoutHTMLArtifactImage = regexp.MustCompile(
-	`(?i)<img\b[^>]*\bsrc\s*=\s*["']?\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*["']?[^>]*>`,
-)
-
-// artifactEmbed is one image node whose source is an artifact UUID.
-type artifactEmbed struct {
-	span citationmd.Span
-	id   string
+// closeoutImageEmbed is one image the document renders: its syntax and source.
+type closeoutImageEmbed struct {
+	span   citationmd.Span
+	source string
 }
 
-// closeoutArtifactEmbeds reads image nodes from the parse, so a literal example in
-// code is no embed.
-func closeoutArtifactEmbeds(doc citationmd.Document) []artifactEmbed {
-	var embeds []artifactEmbed
+// closeoutImageEmbeds reads image nodes and raw HTML from the parse, so a literal
+// example in code is no embed.
+func closeoutImageEmbeds(doc citationmd.Document) []closeoutImageEmbed {
+	out := make([]closeoutImageEmbed, 0, len(doc.Images))
+	for _, image := range doc.Images {
+		out = append(out, closeoutImageEmbed{span: image.Span, source: strings.TrimSpace(image.Destination)})
+	}
 	for _, zone := range doc.Zones {
-		var pattern *regexp.Regexp
-		switch zone.Kind {
-		case citationmd.ZoneImage:
-			pattern = closeoutMarkdownArtifactImage
-		case citationmd.ZoneRawHTML, citationmd.ZoneHTMLBlock:
-			pattern = closeoutHTMLArtifactImage
-		case citationmd.ZoneFence, citationmd.ZoneIndented, citationmd.ZoneDefinition, citationmd.ZoneCodeSpan, citationmd.ZoneLink, citationmd.ZoneAutolink:
+		if zone.Kind != citationmd.ZoneRawHTML && zone.Kind != citationmd.ZoneHTMLBlock {
 			continue
 		}
 		text := doc.ZoneText(zone)
-		for _, match := range pattern.FindAllStringSubmatchIndex(text, -1) {
-			id := text[match[2]:match[3]]
-			if closeoutArtifactUUID.MatchString(id) {
-				embeds = append(embeds, artifactEmbed{
-					span: citationmd.Span{Start: zone.Span.Start + match[0], End: zone.Span.Start + match[1]},
-					id:   id,
-				})
+		for _, m := range closeoutHTMLImage.FindAllStringSubmatchIndex(text, -1) {
+			source := ""
+			for group := 2; group < len(m) && source == ""; group += 2 {
+				if m[group] >= 0 {
+					source = text[m[group]:m[group+1]]
+				}
 			}
+			out = append(out, closeoutImageEmbed{
+				span:   citationmd.Span{Start: zone.Span.Start + m[0], End: zone.Span.Start + m[1]},
+				source: strings.TrimSpace(source),
+			})
 		}
 	}
-	return embeds
+	slices.SortFunc(out, func(a, b closeoutImageEmbed) int { return a.span.Start - b.span.Start })
+	return out
+}
+
+// distinctSources lists the embeds' sources once each, in order.
+func distinctSources(embeds []closeoutImageEmbed, keep func(string) bool) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, embed := range embeds {
+		if embed.source == "" || !keep(embed.source) {
+			continue
+		}
+		key := strings.ToLower(embed.source)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, embed.source)
+	}
+	return out
 }
 
 // CloseoutMarkdownArtifactEmbedIDs returns visual artifact UUIDs embedded as image
 // sources, each once. Empty when the present path is clean.
 func CloseoutMarkdownArtifactEmbedIDs(doc citationmd.Document) []string {
-	seen := map[string]struct{}{}
-	var ids []string
-	for _, embed := range closeoutArtifactEmbeds(doc) {
-		key := strings.ToLower(embed.id)
-		if _, dup := seen[key]; !dup {
-			seen[key] = struct{}{}
-			ids = append(ids, embed.id)
-		}
-	}
-	return ids
+	return distinctSources(closeoutImageEmbeds(doc), closeoutArtifactUUID.MatchString)
+}
+
+// CloseoutUnobservedImageSources returns the image sources that are neither
+// artifact ids nor URLs observed reports true for.
+func CloseoutUnobservedImageSources(doc citationmd.Document, observed func(string) bool) []string {
+	return distinctSources(closeoutImageEmbeds(doc), func(source string) bool {
+		return !closeoutArtifactUUID.MatchString(source) && (observed == nil || !observed(source))
+	})
 }
 
 // Collapse leftover blank lines from removed image-only paragraphs.
 var closeoutEmbedBlankLines = regexp.MustCompile(`\n{3,}`)
 
-// StripCloseoutMarkdownArtifactEmbeds removes bare-UUID image embeds from host text
-// and returns the ids found, for host-assemble present binding.
-func StripCloseoutMarkdownArtifactEmbeds(synthesis string) (string, []string) {
+// StripCloseoutImageEmbeds removes the image embeds the host cannot present from
+// host text: bare artifact ids, whose ids are returned for binding, and sources
+// observed does not vouch for. Observed images and literal examples stay.
+func StripCloseoutImageEmbeds(synthesis string, observed func(string) bool) (string, []string) {
 	doc := citationmd.Parse(synthesis, citationmd.Options{})
-	embeds := closeoutArtifactEmbeds(doc)
-	if len(embeds) == 0 {
+	embeds := closeoutImageEmbeds(doc)
+	out := synthesis
+	stripped := false
+	for i := len(embeds) - 1; i >= 0; i-- {
+		embed := embeds[i]
+		if observed != nil && observed(embed.source) && !closeoutArtifactUUID.MatchString(embed.source) {
+			continue
+		}
+		out = out[:embed.span.Start] + out[embed.span.End:]
+		stripped = true
+	}
+	if !stripped {
 		return synthesis, nil
 	}
-	ids := CloseoutMarkdownArtifactEmbedIDs(doc)
-	out := synthesis
-	for i := len(embeds) - 1; i >= 0; i-- {
-		out = out[:embeds[i].span.Start] + out[embeds[i].span.End:]
-	}
 	out = closeoutEmbedBlankLines.ReplaceAllString(out, "\n\n")
-	return strings.TrimSpace(out), ids
+	return strings.TrimSpace(out), CloseoutMarkdownArtifactEmbedIDs(doc)
 }

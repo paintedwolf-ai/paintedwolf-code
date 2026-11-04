@@ -103,3 +103,28 @@ func TestCloseoutStallKeepsDocumentRepairApart(t *testing.T) {
 		t.Fatalf("state = %+v, want the second document refusal and its unread member", got)
 	}
 }
+
+// A presentation refusal asks for the body back: only the draft answering it may
+// replace the pinned narrative, and any later refusal pins again.
+func TestCloseoutStallReplacesBodyAfterPresentationRepair(t *testing.T) {
+	mgr, sess := newSynthesisDelayManager(t)
+	ctx := context.Background()
+	opts := citationmd.Options{}
+	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.PresentImageUnobservedCode, "k1", guidance.ParseCloseoutDraft("![x](https://placeholder.example/1.png)\n\nBody.", opts), nil)
+	retained := mgr.CloseoutStallState(ctx, sess.ID)
+	if !retained.BodyRepair || retained.Attempt != 1 {
+		t.Fatalf("state after a presentation refusal = %+v, want a body repair on the citation budget", retained)
+	}
+	repaired := guidance.ReadCloseoutReport("Body, described.", retained, false, opts)
+	if len(repaired.RepairDefects) != 0 || repaired.Draft.Synthesis != "Body, described." {
+		t.Fatalf("the retry must replace the body: %+v", repaired)
+	}
+	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.InvestHandleNotObservedCode, "k2", repaired.Draft, nil)
+	retained = mgr.CloseoutStallState(ctx, sess.ID)
+	if retained.BodyRepair || retained.Draft.Synthesis != "Body, described." {
+		t.Fatalf("state after the repaired body = %+v, want it pinned for citation repair", retained)
+	}
+	if again := guidance.ReadCloseoutReport("Rewritten again.", retained, false, opts); len(again.RepairDefects) == 0 || again.Draft.Synthesis != "Body, described." {
+		t.Fatalf("a citation retry must not rewrite the body: %+v", again)
+	}
+}

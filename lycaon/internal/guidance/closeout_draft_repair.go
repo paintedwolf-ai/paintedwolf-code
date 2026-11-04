@@ -65,6 +65,13 @@ func applyRetainedRepair(next CloseoutDraft, document *WorkflowRunReportDocument
 	repairs := draftRepairs(next)
 	corrected := false
 	switch {
+	case retained.BodyRepair && narrative != "":
+		// The refusal asked for the answer back, so the pin does not apply.
+		if defects := inactiveRepairDefects(next); len(defects) > 0 {
+			return refused(defects...)
+		}
+		base = withRepairedBody(next, base, opts)
+		corrected = true
 	case len(repairs) > 0:
 		patched, defects := applyCitationRepairs(base, repairs, retained, opts)
 		if len(defects) > 0 {
@@ -188,6 +195,19 @@ func repairText(doc citationmd.Document, occurrence DraftOccurrence, repair cita
 	case citationmd.KindArtifact, citationmd.KindVerify, citationmd.KindRepair:
 	}
 	return "", false
+}
+
+// withRepairedBody takes the retry's answer and the artifacts it presents. An
+// assessment it leaves out stays, and the document stays under its own repair.
+func withRepairedBody(next, retained CloseoutDraft, opts citationmd.Options) CloseoutDraft {
+	keep := retained
+	keep.ArtifactIDs = nil
+	if next.Verification != nil {
+		keep.Verification = nil
+	}
+	out := withDirectives(next, keep, opts)
+	out.Document = retained.Document
+	return out
 }
 
 // withRetainedDirectives keeps directives a full corrected Markdown left out.

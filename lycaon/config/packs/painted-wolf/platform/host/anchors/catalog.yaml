@@ -307,6 +307,15 @@ anchors:
     envelope:
       vars: {}
 
+  - id: coordinator.presentation.repair
+    title: Coordinator presentation repair
+    description: Closeout body rejected for image syntax the host cannot present (a bare artifact id or an unobserved source); the retry replaces the body.
+    trigger_class: tool_rejection
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
   - id: project.roots.changed
     title: Project roots changed
     description: A project root was added, removed, moved, renamed or made primary.

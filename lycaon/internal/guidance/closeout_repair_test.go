@@ -89,6 +89,55 @@ func TestRepairsReportDocumentFollowsTheCycleCodes(t *testing.T) {
 	if !RepairsReportDocument([]string{"SYNTH_HANDLE_NOT_IN_LEGS", ReportInventoryUnaccountedCode}) || RepairsReportDocument([]string{"SYNTH_HANDLE_NOT_IN_LEGS"}) {
 		t.Fatal("document repair must follow the rejection codes on the cycle")
 	}
+	if PresentationObservation(PresentMarkdownEmbedCode) == "" || PresentationObservation(PresentImageUnobservedCode) == "" || PresentationObservation("SYNTH_HANDLE_NOT_IN_LEGS") != "" {
+		t.Fatal("presentation codes are the two image refusals")
+	}
+}
+
+// A presentation refusal asks for the answer back, so its retry replaces the pinned
+// narrative, which any other refusal keeps. Citations in it are read fresh.
+func TestPresentationRepairReplacesThePinnedBody(t *testing.T) {
+	const artifact = "33333333-3333-3333-3333-333333333333"
+	ev := CloseoutEvidence{Ledger: evidence.AssembleLedger([]evidence.Record{{Handle: "command#1", Kind: "command", Shape: evidence.ShapeCommand}})}
+	opts := DraftParseOptions(evidence.CitationRoots{}, ev.Ledger)
+	first, _ := repairDraft(t, "![x](https://placeholder.example/1.png)\n\nOriginal [command#1].\n[verify: inspection - Read it]\n[artifact:"+artifact+"]", ev)
+	first.Document = &WorkflowRunReportDocument{Headline: "Original headline"}
+	for _, tc := range []struct {
+		name, reply string
+		bodyRepair  bool
+		want        string
+		reason      RepairDefectReason
+		verify      bool
+		artifacts   int
+	}{
+		{name: "the retry replaces the body", reply: "Described instead [command#1].\n[verify: targeted - Ran it]", bodyRepair: true, want: "Described instead [command#1]", verify: true},
+		{name: "the assessment survives when left out", reply: "Described instead.", bodyRepair: true, want: "Described instead.", verify: true},
+		{name: "artifacts are the retry's own", reply: "Described.\n[artifact:" + artifact + "]", bodyRepair: true, want: "Described.", verify: true, artifacts: 1},
+		{name: "a stray repair directive is refused", reply: "Described.\n[cite: c1 => command#1]", bodyRepair: true, want: "Original [command#1]", reason: RepairOutsideCycle, verify: true, artifacts: 1},
+		{name: "nothing to read keeps the refused body", reply: "[verify: targeted - Ran it]", bodyRepair: true, want: "Original [command#1]", verify: true, artifacts: 1},
+		{name: "narrative_changed still holds on any other refusal", reply: "Described instead.", want: "Original [command#1]", reason: RepairNarrativeChange, verify: true, artifacts: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			retained := RetainedCloseout{Active: true, BodyRepair: tc.bodyRepair}
+			retained.Retain(first)
+			read := ReadCloseoutReport(tc.reply, retained, false, opts)
+			if !strings.Contains(read.Draft.Synthesis, tc.want) {
+				t.Fatalf("draft = %q, want %q", read.Draft.Synthesis, tc.want)
+			}
+			if tc.reason == "" && len(read.RepairDefects) != 0 {
+				t.Fatalf("defects = %+v", read.RepairDefects)
+			}
+			if tc.reason != "" && (len(read.RepairDefects) == 0 || read.RepairDefects[0].Reason != tc.reason) {
+				t.Fatalf("defects = %+v, want %s", read.RepairDefects, tc.reason)
+			}
+			if (read.Draft.Verification != nil) != tc.verify || len(read.Draft.ArtifactIDs) != tc.artifacts {
+				t.Fatalf("verification = %+v, artifacts = %v", read.Draft.Verification, read.Draft.ArtifactIDs)
+			}
+			if read.Draft.Document == nil || read.Draft.Document.Headline != "Original headline" {
+				t.Fatalf("a body repair must keep the document: %+v", read.Draft.Document)
+			}
+		})
+	}
 }
 
 func TestURLRepairKeepsObservedURLsWithoutMarkingMissingURLsMatched(t *testing.T) {
