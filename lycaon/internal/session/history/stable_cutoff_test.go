@@ -440,7 +440,7 @@ func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 		t.Helper()
 		history, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
-		start := svc.holdWorkingSet(svc.cutoffKey(t.Context(), sess, svc.compactionConfig(t.Context(), sess), 0), sess.ID, history, activeTurnAllocation(svc.compactionConfig(t.Context(), sess)))
+		start := svc.cutoffs.holdWorkingSet(svc.cutoffKey(t.Context(), sess, svc.compactionConfig(t.Context(), sess), nil), sess.ID, history, activeTurnAllocation(svc.compactionConfig(t.Context(), sess)))
 		return start, svc.cutoffs.takeFacts(sess.ID)
 	}
 	t.Run("cache loss is one explained reset then stable appends", func(t *testing.T) {
@@ -461,30 +461,30 @@ func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 	})
 	t.Run("a rewound or replaced row is another lineage", func(t *testing.T) {
 		svc, _, sess := setup(t)
-		key := svc.cutoffKey(t.Context(), sess, cfg, 0)
+		key := svc.cutoffKey(t.Context(), sess, cfg, nil)
 		rows := ordExchange(40, "x")
 		svc.cutoffs.update(sess.ID, key, rows, func(st *cutoffState) { st.fit = markRow(rows[0]) })
 		_ = svc.cutoffs.takeFacts(sess.ID)
 		replaced := []api.Message{{ID: "other", Ord: 40, Role: api.MessageRoleAssistant}, {ID: "next", Ord: 41, Role: api.MessageRoleAssistant}}
-		if held, _ := svc.heldFit(key, sess.ID, replaced); held != 0 {
+		if held, _ := svc.cutoffs.heldFit(key, sess.ID, replaced); held != 0 {
 			t.Fatalf("held %d across a replaced row", held)
 		}
 		if facts := svc.cutoffs.takeFacts(sess.ID); facts.Change != cutoffLineageChanged {
 			t.Fatalf("change = %q", facts.Change)
 		}
 		svc.cutoffs.update(sess.ID, key, rows, func(st *cutoffState) { st.fit = markRow(rows[0]) })
-		if held, _ := svc.heldFit(key, sess.ID, []api.Message{{ID: "early", Ord: 39, Role: api.MessageRoleAssistant}}); held != 0 {
+		if held, _ := svc.cutoffs.heldFit(key, sess.ID, []api.Message{{ID: "early", Ord: 39, Role: api.MessageRoleAssistant}}); held != 0 {
 			t.Fatalf("held %d past a rewound tail", held)
 		}
 	})
 	t.Run("window change and published view reset the key", func(t *testing.T) {
 		svc, _, sess := setup(t)
-		key := svc.cutoffKey(t.Context(), sess, cfg, 0)
+		key := svc.cutoffKey(t.Context(), sess, cfg, nil)
 		rows := ordExchange(40, "x")
 		svc.cutoffs.update(sess.ID, key, rows, func(st *cutoffState) { st.fit = markRow(rows[0]) })
 		wider := key
 		wider.window *= 2
-		if held, _ := svc.heldFit(wider, sess.ID, rows); held != 0 {
+		if held, _ := svc.cutoffs.heldFit(wider, sess.ID, rows); held != 0 {
 			t.Fatalf("held %d across a window change", held)
 		}
 		if facts := svc.cutoffs.takeFacts(sess.ID); facts.Change != cutoffConfigChanged {

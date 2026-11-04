@@ -1,4 +1,4 @@
-package llm
+package openaicompat
 
 import (
 	"bufio"
@@ -9,12 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/debugpaths"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
-	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
+	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -23,7 +24,6 @@ import (
 
 // Complete requests go through a real adapter; the measurement reads what it serialized.
 func TestPrefixReuseAttributesFirstDifferencesAC_KV_07(t *testing.T) {
-	withThinkingRules(t, bundledThinkingRules(t))
 	dir := t.TempDir()
 	t.Setenv("LYCAON_LLM_DEBUG", "1")
 	t.Setenv("LYCAON_LLM_DEBUG_FILE", filepath.Join(dir, "requests.jsonl"))
@@ -31,11 +31,13 @@ func TestPrefixReuseAttributesFirstDifferencesAC_KV_07(t *testing.T) {
 	t.Cleanup(observability.CloseLLMDebug)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5000,"completion_tokens":1,"prompt_tokens_details":{"cached_tokens":1234}}}`))
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}]}`))
 	}))
 	defer server.Close()
 	const model = "fixture-model"
-	provider := wrapProviderIfDebug(openaicompat.New("fixture", server.URL, "fixture", []modelinfo.Entry{{ID: model}}).WithProfile(providerprofile.Together()))
+	profile := providerprofile.Together()
+	provider := New("fixture", server.URL, "fixture", []modelinfo.Entry{{ID: model}}).WithProfile(profile)
+	usage := modelcall.TokenUsage{Present: true, PromptTokens: 5000, CacheReadInputTokens: 1234}
 
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, Content: strings.Repeat("standing ", 200), PromptCacheBreakpoint: api.PromptCacheTierStanding}
 	opener := api.Message{ID: "opener", Role: api.MessageRoleUser, Content: "Finish the migration"}
@@ -72,8 +74,11 @@ func TestPrefixReuseAttributesFirstDifferencesAC_KV_07(t *testing.T) {
 		{"published summary", "summary_published", build("write", reminder, published, row("summary"), d), false},
 	}
 	for _, step := range steps {
+		step.req.ControlCapture = &modelcall.RequestControlCapture{}
+		started := time.Now().UTC()
 		_, err := provider.Complete(t.Context(), step.req)
 		testutil.FailErr(t, step.name, err)
+		providerwire.NotePromptCacheUsage("fixture", step.req, profile, usage, started, false)
 	}
 	observations := readPromptCacheObservations(t, filepath.Join(dir, debugpaths.Name(debugpaths.KindPromptCache)))
 	if len(observations) != len(steps) {

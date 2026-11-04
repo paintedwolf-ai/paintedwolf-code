@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/scopedstore"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -185,7 +186,11 @@ func (t *cutoffTracker) takeFacts(sessionID string) modelcall.HistoryCutFacts {
 	return facts
 }
 
-func (m *Service) cutoffKey(ctx context.Context, sess *api.Session, cfg compaction.CompactionConfig, generation int) cutoffKey {
+func (m *Service) cutoffKey(ctx context.Context, sess *api.Session, cfg compaction.CompactionConfig, view *store.CompactionView) cutoffKey {
+	generation := 0
+	if view != nil {
+		generation = view.Generation
+	}
 	provider, model := m.Model(ctx, sess)
 	return cutoffKey{generation: generation, provider: provider, model: model,
 		window: cfg.ModelContextWindow, hard: cfg.HardCeilingTokens, target: cfg.TargetTokens}
@@ -193,13 +198,13 @@ func (m *Service) cutoffKey(ctx context.Context, sess *api.Session, cfg compacti
 
 // holdCanonicalTail keeps the bounded tail's first row across appends. A read
 // that hard bounds cut below the held row forces one anchored advance.
-func (m *Service) holdCanonicalTail(key cutoffKey, sessionID string, rows []api.Message, truncated bool, bounds tailWindowBounds) ([]api.Message, bool) {
+func (t *cutoffTracker) holdTail(key cutoffKey, sessionID string, rows []api.Message, truncated bool, bounds tailWindowBounds) ([]api.Message, bool) {
 	if len(rows) == 0 {
 		return rows, truncated
 	}
 	alloc := workingSetAllocation{rows: bounds.maxRows, tokens: bounds.maxTokens, bytes: bounds.maxBytes}
 	out, cut := rows, truncated
-	m.cutoffs.update(sessionID, key, rows, func(st *cutoffState) {
+	t.update(sessionID, key, rows, func(st *cutoffState) {
 		if truncated && st.tail.ord < rows[0].Ord {
 			st.tail = markRow(rows[advanceCutoff(rows, alloc, 0)])
 			st.note(cutoffTailAdvanced)
@@ -214,13 +219,13 @@ func (m *Service) holdCanonicalTail(key cutoffKey, sessionID string, rows []api.
 }
 
 // holdWorkingSet returns the first ordinal of the canonical recent suffix.
-func (m *Service) holdWorkingSet(key cutoffKey, sessionID string, rows []api.Message, alloc workingSetAllocation) int64 {
+func (t *cutoffTracker) holdWorkingSet(key cutoffKey, sessionID string, rows []api.Message, alloc workingSetAllocation) int64 {
 	idx := api.UserIntentBoundary(rows) - 1
 	if idx < 0 || rows[idx].Ord <= 0 {
 		return 0
 	}
 	start := rows[idx].Ord + 1
-	m.cutoffs.update(sessionID, key, rows, func(st *cutoffState) {
+	t.update(sessionID, key, rows, func(st *cutoffState) {
 		boundary := selectWorkingSetBoundary(rows[idx+1:], alloc, st.work.ord)
 		if boundary.startOrd == 0 {
 			return
@@ -238,14 +243,14 @@ func (m *Service) holdWorkingSet(key cutoffKey, sessionID string, rows []api.Mes
 
 // noteFitCut feeds a tighter final fit back into later projection: the working
 // set follows it, so summary publication can still cover what the fit omitted.
-func (m *Service) noteFitCut(key cutoffKey, sessionID string, rows, fitted []api.Message) {
+func (t *cutoffTracker) noteFit(key cutoffKey, sessionID string, rows, fitted []api.Message) {
 	_, through := omittedOrdinals(rows, compaction.ContextMessagesFromAPI(fitted))
 	bodies := lastProjectedBody(rows, fitted)
 	if through == 0 && bodies == 0 {
 		return
 	}
 	at := slices.IndexFunc(fitted, func(row api.Message) bool { return row.Ord > through && !row.ContextPinned })
-	m.cutoffs.update(sessionID, key, rows, func(st *cutoffState) {
+	t.update(sessionID, key, rows, func(st *cutoffState) {
 		if bodies > st.bodies {
 			st.bodies = bodies
 			st.note(cutoffFitAdvanced)
@@ -280,10 +285,10 @@ func lastProjectedBody(rows, fitted []api.Message) int64 {
 
 // heldFit returns the held fit and body-projection ordinals. It creates no
 // record, so a request that never fitted leaves no state behind.
-func (m *Service) heldFit(key cutoffKey, sessionID string, rows []api.Message) (held, bodies int64) {
-	if _, found := m.cutoffs.sessions.Load(sessionID); !found {
+func (t *cutoffTracker) heldFit(key cutoffKey, sessionID string, rows []api.Message) (held, bodies int64) {
+	if _, found := t.sessions.Load(sessionID); !found {
 		return 0, 0
 	}
-	m.cutoffs.update(sessionID, key, rows, func(st *cutoffState) { held, bodies = st.fit.ord, st.bodies })
+	t.update(sessionID, key, rows, func(st *cutoffState) { held, bodies = st.fit.ord, st.bodies })
 	return held, bodies
 }

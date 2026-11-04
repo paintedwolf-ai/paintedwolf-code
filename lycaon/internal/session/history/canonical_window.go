@@ -187,7 +187,7 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 	budget := max(1, cfg.TargetTokens-reserve)
 	// The restored tail holds its start across appends like any other cutoff.
 	alloc := workingSetAllocation{rows: len(tail) + 1, tokens: budget, bytes: math.MaxInt / 2}
-	m.cutoffs.update(sess.ID, m.cutoffKey(ctx, sess, cfg, view.Generation), tail, func(st *cutoffState) {
+	m.cutoffs.update(sess.ID, m.cutoffKey(ctx, sess, cfg, view), tail, func(st *cutoffState) {
 		at, advanced := selectCutoff(tail, alloc, st.tail.ord)
 		tail = tail[at:]
 		if advanced {

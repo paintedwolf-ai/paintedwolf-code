@@ -54,7 +54,7 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 	if err != nil {
 		return nil, err
 	}
-	tail, truncated = m.holdCanonicalTail(m.cutoffKey(ctx, sess, cfg, view.Generation), sess.ID, tail, truncated, bounds)
+	tail, truncated = m.cutoffs.holdTail(m.cutoffKey(ctx, sess, cfg, view), sess.ID, tail, truncated, bounds)
 	oldest := int64(0)
 	if len(tail) > 0 {
 		oldest = tail[0].Ord
@@ -64,7 +64,7 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 			return nil, err
 		}
 	}
-	splice := planViewSplice(tail, view, m.holdWorkingSet(m.cutoffKey(ctx, sess, cfg, view.Generation), sess.ID, tail, activeTurnAllocation(cfg)))
+	splice := planViewSplice(tail, view, m.cutoffs.holdWorkingSet(m.cutoffKey(ctx, sess, cfg, view), sess.ID, tail, activeTurnAllocation(cfg)))
 	var out []api.Message
 	for _, row := range view.Messages {
 		if row.Ord <= 0 || row.Role != api.MessageRoleAssistant || row.CompactedChunk != nil || row.Ord > splice.replacedThrough {
@@ -96,7 +96,7 @@ func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *a
 	if err != nil {
 		return nil, err
 	}
-	history, _ = m.holdCanonicalTail(m.cutoffKey(ctx, sess, cfg, 0), sess.ID, history, truncated, bounds)
+	history, _ = m.cutoffs.holdTail(m.cutoffKey(ctx, sess, cfg, nil), sess.ID, history, truncated, bounds)
 	if len(history) == 0 || history[0].Ord <= 1 {
 		return history, nil
 	}
@@ -195,7 +195,7 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 			viewByID[msg.ID] = msg
 		}
 	}
-	splice := planViewSplice(history, view, m.holdWorkingSet(m.cutoffKey(ctx, sess, cfg, view.Generation), sess.ID, history, activeTurnAllocation(cfg)))
+	splice := planViewSplice(history, view, m.cutoffs.holdWorkingSet(m.cutoffKey(ctx, sess, cfg, view), sess.ID, history, activeTurnAllocation(cfg)))
 	var head, older, within []api.Message
 	for _, msg := range view.Messages {
 		if msg.Ord > splice.replacedThrough || splice.intentIdx >= 0 && msg.Ord == splice.intentOrd {
