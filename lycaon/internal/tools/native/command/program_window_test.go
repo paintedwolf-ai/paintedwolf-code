@@ -241,8 +241,8 @@ func TestProgramWindowACCW09PipelineAndLoopShareOne(t *testing.T) {
 
 func TestProgramWindowIsNotOpenedForAProgramNotFound(t *testing.T) {
 	f := newWindowFixture(t)
-	outcome := f.run(t, `external -- paintedwolf-absent-generator; echo after`)
-	if opens := f.opener.opens.Load(); opens != 0 || outcome.SourceWindow != nil {
+	outcome := f.run(t, `external -- paintedwolf-absent-generator`)
+	if opens := f.opener.opens.Load(); opens != 0 || outcome.Status != 127 || outcome.SourceWindow != nil {
 		t.Fatalf("window opens = %d, outcome = %+v", opens, outcome)
 	}
 }
@@ -362,6 +362,36 @@ func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(f.Dir, "gen.txt")); !os.IsNotExist(err) {
 		t.Fatalf("stopped stage started: %v", err)
+	}
+}
+
+// A result that returns while a job's open is in flight cannot state the window
+// yet; the job's changes are still attributed to it.
+func TestProgramWindowOpenInFlightAtTheResultStillObservesTheJob(t *testing.T) {
+	f := newWindowFixture(t)
+	release := make(chan struct{})
+	f.opener.before = func(ctx context.Context) error {
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	outcome := f.run(t, writeGen+` &`)
+	if outcome.SourceWindow != nil {
+		t.Fatalf("outcome = %+v, want no window before the open finished", outcome)
+	}
+	close(release)
+	for {
+		if _, err := os.Stat(filepath.Join(f.Dir, "gen.txt")); err == nil && f.opener.opens.Load() == 1 && len(f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)) == 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	effect, ok := f.effects(t)["gen.txt"]
+	if !ok || effect.CommandWindowID == "" || effect.SessionID != f.Session {
+		t.Fatalf("job effect = %+v", effect)
 	}
 }
 

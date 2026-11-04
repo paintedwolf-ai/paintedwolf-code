@@ -54,9 +54,6 @@ func (w *programWindow) ensure(ctx context.Context) error {
 // settle ends the window once the program and its jobs have ended. An open
 // still in flight has no launch left to serve, so it is abandoned.
 func (w *programWindow) settle(ctx context.Context) {
-	if w == nil {
-		return
-	}
 	w.once.Do(func() { close(w.ready) })
 	if w.cancel != nil {
 		w.cancel()
@@ -68,9 +65,6 @@ func (w *programWindow) settle(ctx context.Context) {
 // fact states the window on the program's result; an open still in flight has
 // nothing to state yet.
 func (w *programWindow) fact() *hostcmd.SourceWindow {
-	if w == nil {
-		return nil
-	}
 	select {
 	case <-w.ready:
 		return w.window.fact()
