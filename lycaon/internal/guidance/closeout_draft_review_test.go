@@ -143,11 +143,11 @@ func TestDraftWWWMatchesEitherScheme(t *testing.T) {
 		{Handle: "web#2", Kind: "web", Shape: evidence.ShapeURL, URL: "http://www.b.test/p"},
 	})
 	for source, want := range map[string]guidance.CitationOutcome{
-		"www.a.test/p":                         guidance.CitationGrounded,
-		"www.b.test/p":                         guidance.CitationGrounded,
-		"[www.a.test/p]":                       guidance.CitationGrounded,
-		"www.c.test/p":                         guidance.CitationNotObserved,
-		"[x](http://www.a.test/p)":             guidance.CitationNotObserved,
+		"www.a.test/p":             guidance.CitationGrounded,
+		"www.b.test/p":             guidance.CitationGrounded,
+		"[www.a.test/p]":           guidance.CitationGrounded,
+		"www.c.test/p":             guidance.CitationNotObserved,
+		"[x](http://www.a.test/p)": guidance.CitationNotObserved,
 	} {
 		if got := onlyOutcome(t, source, evidence.CitationRoots{}, ev); got.Outcome != want {
 			t.Errorf("%s = %+v", source, got)
