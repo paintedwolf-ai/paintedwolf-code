@@ -58,7 +58,7 @@ func TestAuditMidTurnNote(t *testing.T) {
 		{name: "embedded artifact image withholds", text: "Look [read#3:42] ![shot](" + midTurnArtifact + ").", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteEmbedCode},
 		{name: "literal embed example stays allowed", text: "Syntax is `![shot](" + midTurnArtifact + ")` [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "![shot]", traced: true},
 		{name: "literal citation example is not a citation", text: "The form is `[read#99]`.", ev: empty, want: guidance.MidTurnPublish, contains: "[read#99]", optional: true},
-		{name: "citation-only text says nothing", text: "[read#3]", ev: midTurnLedger(), required: true, want: guidance.MidTurnSilent},
+		{name: "pathless citation alone says nothing", text: "[task#1]", ev: midTurnLedger(), required: true, want: guidance.MidTurnSilent},
 		{name: "prose brackets are not attempts", text: "Use [and/or] as needed [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "[and/or]", traced: true},
 		{name: "unobserved URL before evidence", text: "See [RFC](https://example.test/spec).", ev: empty, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteURLOnlyCode, friction: true},
 	} {
