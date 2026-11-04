@@ -23,7 +23,6 @@ type Kind string
 const (
 	Stat       Kind = "stat"
 	ReadFile   Kind = "read_file"
-	ListDir    Kind = "list_dir"
 	CreateFile Kind = "create_file"
 	Connect    Kind = "connect"
 	Unmount    Kind = "unmount"
@@ -103,9 +102,6 @@ func attempt(step Step) error {
 		if errors.Is(err, io.EOF) {
 			return nil
 		}
-		return err
-	case ListDir:
-		_, err := os.ReadDir(step.Path)
 		return err
 	case CreateFile:
 		return createAndRemove(step.Path)

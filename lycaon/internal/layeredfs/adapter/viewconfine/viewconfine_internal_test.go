@@ -20,7 +20,7 @@ func reasonOf(t *testing.T, err error) adapter.ReasonCode {
 
 func TestJudgeSeparatesAnUnusableBoundaryFromAnUnenforcedOne(t *testing.T) {
 	worked := denialprobe.Result{Step: denialprobe.Step{Kind: denialprobe.Stat, Path: "/a"}}
-	refused := denialprobe.Result{Step: denialprobe.Step{Kind: denialprobe.ListDir, Path: "/b"}, Errno: int(syscall.EPERM)}
+	refused := denialprobe.Result{Step: denialprobe.Step{Kind: denialprobe.ReadFile, Path: "/b"}, Errno: int(syscall.EPERM)}
 	if err := judge([]denialprobe.Result{worked, refused}, 1); err != nil {
 		t.Fatalf("worked and refused: %v", err)
 	}

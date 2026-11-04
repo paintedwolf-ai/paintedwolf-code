@@ -82,13 +82,17 @@ func proveInScratch(ctx context.Context, runtimeDir string) error {
 			return unavailable(err)
 		}
 	}
+	canary := filepath.Join(denied, "canary")
+	if err := os.WriteFile(canary, []byte{0}, 0o600); err != nil {
+		return unavailable(err)
+	}
 	box, err := workerBox([]string{reach}, confine.ViewBoundary{DeniedPaths: []string{denied}})
 	if err != nil {
 		return err
 	}
 	results, err := Launch(ctx, box, reach, []denialprobe.Step{
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(reach, probeName)},
-		{Kind: denialprobe.ListDir, Path: denied},
+		{Kind: denialprobe.ReadFile, Path: canary},
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(denied, probeName)},
 		{Kind: denialprobe.Mount, Path: reach},
 	})
@@ -131,9 +135,10 @@ func verify(ctx context.Context, view *adapter.PreparedView, boundary confine.Vi
 	}
 	allowed := len(steps)
 	for _, path := range boundary.DeniedPaths {
-		steps = append(steps,
-			denialprobe.Step{Kind: denialprobe.ListDir, Path: path},
-			denialprobe.Step{Kind: denialprobe.CreateFile, Path: filepath.Join(path, probeName)})
+		if entry := FirstEntry(path); entry != "" {
+			steps = append(steps, denialprobe.Step{Kind: denialprobe.Stat, Path: entry})
+		}
+		steps = append(steps, denialprobe.Step{Kind: denialprobe.CreateFile, Path: filepath.Join(path, probeName)})
 	}
 	for _, port := range view.ListenerPorts {
 		steps = append(steps, denialprobe.Step{Kind: denialprobe.Connect, Port: port})
@@ -153,6 +158,21 @@ func verify(ctx context.Context, view *adapter.PreparedView, boundary confine.Vi
 		}
 	}
 	return nil
+}
+
+// FirstEntry names something that exists inside dir, or nothing when it is empty. A masked directory
+// lists as empty rather than failing, so only an entry known to exist can show that it is hidden.
+func FirstEntry(dir string) string {
+	file, err := os.Open(dir)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = file.Close() }()
+	names, err := file.Readdirnames(1)
+	if err != nil || len(names) == 0 {
+		return ""
+	}
+	return filepath.Join(dir, names[0])
 }
 
 // probeName is what the probe tries to create, and removes when it can.

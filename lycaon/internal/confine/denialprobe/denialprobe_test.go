@@ -43,11 +43,10 @@ func TestServeReportsTheKernelsAnswerForEachStep(t *testing.T) {
 	results := serve(t,
 		denialprobe.Step{Kind: denialprobe.Stat, Path: file},
 		denialprobe.Step{Kind: denialprobe.ReadFile, Path: file},
-		denialprobe.Step{Kind: denialprobe.ListDir, Path: dir},
 		denialprobe.Step{Kind: denialprobe.CreateFile, Path: created},
 		denialprobe.Step{Kind: denialprobe.Connect, Port: port},
 	)
-	if len(results) != 5 {
+	if len(results) != 4 {
 		t.Fatalf("results = %+v", results)
 	}
 	for _, result := range results {

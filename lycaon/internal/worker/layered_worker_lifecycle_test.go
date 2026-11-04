@@ -335,8 +335,12 @@ func assertWorkerProcessIsDenied(t *testing.T, root, source string, view *adapte
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(root, "worker-probe")},
 		{Kind: denialprobe.Connect, Port: uint16(listener.Addr().(*net.TCPAddr).Port)}, //nolint:gosec // a listener's own port.
 	}
+	backingEntry := viewconfine.FirstEntry(view.BackingDir)
+	if backingEntry == "" {
+		t.Fatal("a claimed view's backing store is empty, so nothing shows it is hidden")
+	}
 	denied := []denialprobe.Step{
-		{Kind: denialprobe.ListDir, Path: view.BackingDir},
+		{Kind: denialprobe.Stat, Path: backingEntry},
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(view.BackingDir, "worker-probe")},
 		{Kind: denialprobe.ReadFile, Path: filepath.Join(source, "main.go")},
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(source, "worker-probe")},
