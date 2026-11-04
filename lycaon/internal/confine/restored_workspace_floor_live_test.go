@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -138,6 +139,32 @@ func TestKernelHoldsEveryWriteFloorInARestoredWorkspace(t *testing.T) {
 	}
 }
 
+// A repository's loader files all join the boundary's plan, so a large one must
+// not lose the plan or the floors in it: writes beside them keep working, and
+// every one stays protected.
+func TestKernelHoldsFloorsInARepositoryOfManyLoaderFiles(t *testing.T) {
+	helper := requireLiveBoundary(t)
+	workspace, c := restoredWorkspaceFixture(t, restoredWorkspaces()[0])
+	var loaders []string
+	for i := range 400 {
+		loader := filepath.Join(workspace, "pkg", "module-"+strconv.Itoa(i), protectedpath.AgentsMDFileName)
+		writeFixtureFile(t, loader)
+		loaders = append(loaders, loader)
+	}
+	for _, line := range kernelMoves(t, helper, c, loaders) {
+		if line.allowed {
+			t.Errorf("kernel let the command change %s", line.path)
+		}
+	}
+	absent := filepath.Join(workspace, "pkg", "new-module", protectedpath.AgentsMDFileName)
+	ordinary := filepath.Join(workspace, "pkg", "new-module", "ordinary.txt")
+	for _, line := range kernelWrites(t, helper, c, []string{absent, ordinary}) {
+		if want := line.path == ordinary; line.allowed != want {
+			t.Errorf("create %s: kernel allowed=%v, want %v", line.path, line.allowed, want)
+		}
+	}
+}
+
 // restoredWorkspaceFixture places home and the control plane under a temporary
 // tree so kernel probes cannot touch the real ones.
 func restoredWorkspaceFixture(t *testing.T, layout restoredWorkspace) (string, confine.Confinement) {
@@ -148,7 +175,9 @@ func restoredWorkspaceFixture(t *testing.T, layout restoredWorkspace) (string, c
 	t.Setenv("LYCAON_CONFIG_DIR", control)
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")
 	workspace, c := layout.build(control)
-	testutil.FailErr(t, "create workspace", os.MkdirAll(workspace, 0o700))
+	for _, root := range append([]string{workspace}, c.Roots...) {
+		testutil.FailErr(t, "create project root", os.MkdirAll(root, 0o700))
+	}
 	return workspace, c
 }
 

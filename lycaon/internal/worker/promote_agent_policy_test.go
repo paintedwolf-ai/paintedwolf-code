@@ -34,7 +34,7 @@ func TestPromoteOverlayNeverLandsTheProjectOverlay(t *testing.T) {
 	if len(overlayFiles) == 0 {
 		t.Fatal("no project overlay locations to promote")
 	}
-	for _, rel := range append([]string{"src/landed.go"}, overlayFiles...) {
+	for _, rel := range append([]string{"src/landed.txt"}, overlayFiles...) {
 		full := filepath.Join(overlay, filepath.FromSlash(rel))
 		testutil.FailErr(t, "MkdirAll", os.MkdirAll(filepath.Dir(full), 0o755))
 		testutil.FailErr(t, "WriteFile", os.WriteFile(full, []byte("changed by the worker\n"), 0o644))
@@ -51,18 +51,15 @@ func TestPromoteOverlayNeverLandsTheProjectOverlay(t *testing.T) {
 	for _, rel := range overlayFiles {
 		named = append(named, api.WorkerPromoteResolution{Path: rel, Action: api.WorkerPromoteResolutionActionKeepTheirs})
 	}
-	if _, err := svc.PromoteOverlay(ctx, "parent-1", task.ID, api.PromoteOverlayInput{Resolutions: named}); err == nil {
-		t.Log("resolutions naming overlay paths were accepted; the files must still not land")
-	}
-	if _, err := svc.PromoteOverlay(ctx, "parent-1", task.ID, api.PromoteOverlayInput{}); err != nil {
-		t.Logf("promote: %v", err)
-	}
+	// Naming the paths may be refused or ignored; either way they stay out.
+	_, _ = svc.PromoteOverlay(ctx, "parent-1", task.ID, api.PromoteOverlayInput{Resolutions: named})
+	_, _ = svc.PromoteOverlay(ctx, "parent-1", task.ID, api.PromoteOverlayInput{})
 	for _, rel := range overlayFiles {
 		if _, err := os.Lstat(filepath.Join(primary, filepath.FromSlash(rel))); err == nil {
 			t.Errorf("%s landed on the primary", rel)
 		}
 	}
-	if _, err := os.Lstat(filepath.Join(primary, "src", "landed.go")); err != nil {
+	if _, err := os.Lstat(filepath.Join(primary, "src", "landed.txt")); err != nil {
 		t.Errorf("ordinary file did not land: %v", err)
 	}
 }
