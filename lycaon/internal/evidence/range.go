@@ -55,3 +55,30 @@ func ExcerptAnchors(rec Record, path, excerpt string) []int {
 	sort.Ints(out)
 	return out
 }
+
+// CoordinateFact is how a record stands behind a coordinate.
+type CoordinateFact int
+
+const (
+	// CoordinateUnsupported means the record has no line facts for the location.
+	CoordinateUnsupported CoordinateFact = iota
+	// CoordinateObserved means the record observed every line.
+	CoordinateObserved
+	// CoordinateOnMutatedPath means the record changed the path without reporting
+	// lines. A mutation supports any coordinate on its own path, traced to it.
+	CoordinateOnMutatedPath
+)
+
+// CoordinateSupport decides a coordinate against one record. A mutation that reports
+// its lines is held to them.
+func CoordinateSupport(rec Record, path string, start, end int) CoordinateFact {
+	if RangeObserved(rec, path, start, end) {
+		return CoordinateObserved
+	}
+	claim := effectiveClaimPath(rec, path)
+	if start > 0 && end >= start && claim != "" && pathObservedInRecord(rec, claim) &&
+		ActiveBinding().IsMutationKind(rec.Kind) && len(rec.LineRanges) == 0 && len(rec.Body) == 0 {
+		return CoordinateOnMutatedPath
+	}
+	return CoordinateUnsupported
+}

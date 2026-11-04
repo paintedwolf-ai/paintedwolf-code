@@ -109,20 +109,21 @@ func sourceRootPrefix(roots evidence.CitationRoots) func(string) (string, bool) 
 	}
 }
 
-// KnownEvidenceKind holds for a kind the catalog registers or a record in the
-// ledger carries.
+// KnownEvidenceKind holds for a kind the catalog registers or a record in the ledger
+// carries. The ledger's kinds are read once, here.
 func KnownEvidenceKind(ev evidence.Ledger) func(string) bool {
 	binding := evidence.ActiveBinding()
+	held := make(map[string]struct{}, len(ev.Handles))
+	for handle, rec := range ev.Handles {
+		held[rec.Kind] = struct{}{}
+		kind, _, _ := strings.Cut(handle, "#")
+		held[kind[strings.LastIndexByte(kind, ':')+1:]] = struct{}{}
+	}
 	return func(kind string) bool {
-		if binding.KindShape(kind) != "" {
+		if _, ok := held[kind]; ok {
 			return true
 		}
-		for handle, rec := range ev.Handles {
-			if rec.Kind == kind || strings.HasSuffix(strings.SplitN(handle, "#", 2)[0], ":"+kind) || strings.SplitN(handle, "#", 2)[0] == kind {
-				return true
-			}
-		}
-		return false
+		return binding.KindShape(kind) != ""
 	}
 }
 

@@ -14,185 +14,259 @@ type Rendition struct {
 	Text string
 }
 
-// Render presents a document by span: literal zones byte for byte, text as
-// written, each protocol node as decide says, and damaged nodes never. Removal
-// never creates Markdown: see removeNode.
+// Render presents a document by span in one linear pass: code byte for byte, text
+// as written, each protocol node as decide says, damaged nodes never. It never
+// re-emits a removed node's bytes, and raw HTML anchors come out escaped, so the only
+// live links in the result are link forms decide kept. A document past a budget
+// displays as one literal block.
 func Render(doc Document, decide func(Occurrence) Rendition) string {
-	var out shaper
-	at := doc.Body.Start
+	text, _ := renderCounted(doc, decide)
+	return text
+}
+
+// partPlan is one part's decided presentation.
+type partPlan struct {
+	removed bool
+	text    string
+	keep    bool
+}
+
+func planParts(doc Document, decide func(Occurrence) Rendition) []partPlan {
+	plans := make([]partPlan, len(doc.parts))
+	kept := map[string]bool{}
 	for i, p := range doc.parts {
-		out.text([]byte(doc.Source[at:p.span.Start]))
-		at = p.span.End
 		switch p.kind {
-		case partLiteral:
-			out.literal([]byte(doc.Source[p.span.Start:p.span.End]))
 		case partDamaged:
-			removeNode(&out, doc, i, decide)
-		case partLink:
-			renderLink(&out, doc, i, decide)
+			plans[i].removed = true
 		case partNode:
-			if !renderMembers(&out, doc.Occurrences[p.first:p.first+p.count], decide) {
-				removeNode(&out, doc, i, decide)
+			var kept []string
+			for _, member := range doc.Occurrences[p.first : p.first+p.count] {
+				if text := decide(member).Text; text != "" {
+					kept = append(kept, text)
+				}
 			}
+			plans[i].text = strings.Join(kept, ", ")
+			plans[i].removed = len(kept) == 0
+		case partLink:
+			switch {
+			case p.broken:
+				plans[i].text = PlainLabel(*p.link)
+			case p.count == 0:
+				plans[i].keep = true
+			default:
+				rendition := decide(doc.Occurrences[p.first])
+				plans[i].keep, plans[i].text = rendition.Keep, rendition.Text
+				kept[p.link.Destination] = kept[p.link.Destination] || rendition.Keep
+			}
+			plans[i].removed = !plans[i].keep && plans[i].text == ""
+		case partLiteral, partRawHTML:
 		}
 	}
-	out.text([]byte(doc.Source[at:doc.Body.End]))
-	out.close()
-	return out.String()
-}
-
-func renderLink(out *shaper, doc Document, i int, decide func(Occurrence) Rendition) {
-	p := doc.parts[i]
-	source := []byte(doc.Source[p.span.Start:p.span.End])
-	if p.count == 0 {
-		out.literal(source)
-		return
-	}
-	o := doc.Occurrences[p.first]
-	switch rendition := decide(o); {
-	case rendition.Keep:
-		if isBracketedBareLink(doc, p, o) {
-			source = []byte("<" + o.Link.Destination + ">")
-		}
-		out.literal(source)
-	case rendition.Text != "":
-		out.text([]byte(rendition.Text))
-	case o.Link.Form == LinkRawHTML:
-		out.remove(false)
-	default:
-		removeNode(out, doc, i, decide)
-	}
-}
-
-// isBracketedBareLink finds `[https://x]`, which would otherwise render with the
-// closing bracket inside its link.
-func isBracketedBareLink(doc Document, p part, o Occurrence) bool {
-	return o.Link.Form == LinkAutolink && p.span.Start > 0 && p.span.End < len(doc.Source) &&
-		doc.Source[p.span.Start-1] == '[' && doc.Source[p.span.End] == ']' && doc.Source[p.span.Start] != '<'
-}
-
-// renderMembers joins a group's surviving members and reports whether any did.
-func renderMembers(out *shaper, members []Occurrence, decide func(Occurrence) Rendition) bool {
-	var kept []string
-	for _, member := range members {
-		if text := decide(member).Text; text != "" {
-			kept = append(kept, text)
+	// A definition renders nothing and can make a later `[label]` live, so a web
+	// destination that no kept link vouches for does not stay.
+	for i, p := range doc.parts {
+		if isWebDestination(p.definition) && !kept[p.definition] {
+			plans[i].removed = true
 		}
 	}
-	if len(kept) == 0 {
-		return false
+	return plans
+}
+
+// runEnds gives, for each removed part, the offset after it and any removed parts
+// that follow with only spaces between. Walking backward keeps this linear.
+func runEnds(doc Document, plans []partPlan) []int {
+	ends := make([]int, len(doc.parts))
+	for i := len(doc.parts) - 1; i >= 0; i-- {
+		ends[i] = doc.parts[i].span.End
+		if i+1 < len(doc.parts) && plans[i].removed && plans[i+1].removed && isSpaces(doc.Source[doc.parts[i].span.End:doc.parts[i+1].span.Start]) {
+			ends[i] = ends[i+1]
+		}
 	}
-	out.text([]byte(strings.Join(kept, ", ")))
+	return ends
+}
+
+func isSpaces(text string) bool {
+	for i := 0; i < len(text); i++ {
+		if !isSpaceByte(text[i]) {
+			return false
+		}
+	}
 	return true
 }
 
+// renderWalk tracks line facts as the pass moves forward, so that no part rescans
+// its line. work counts the bytes those lookups touch.
+type renderWalk struct {
+	doc      Document
+	out      *shaper
+	lineHead int
+	lineTail int
+	runStart int
+	inRun    bool
+	work     int
+}
+
+func renderCounted(doc Document, decide func(Occurrence) Rendition) (string, int) {
+	if doc.overBudget {
+		return escapedDocument(doc.Source), len(doc.Source)
+	}
+	plans := planParts(doc, decide)
+	ends := runEnds(doc, plans)
+	var out shaper
+	walk := renderWalk{doc: doc, out: &out, lineHead: lineStartIn(doc.Source, doc.Body.Start)}
+	at := doc.Body.Start
+	for i, p := range doc.parts {
+		gap := doc.Source[at:p.span.Start]
+		out.text([]byte(gap))
+		walk.moved(at, p.span.Start)
+		if !plans[i].removed || !isSpaces(gap) {
+			walk.inRun = false
+		}
+		switch {
+		case plans[i].removed:
+			walk.removeNode(p, ends[i])
+		case p.kind == partLiteral:
+			out.protect([]byte(doc.Source[p.span.Start:p.span.End]))
+		case p.kind == partRawHTML:
+			out.literal([]byte(doc.Source[p.span.Start:p.span.End]))
+		case plans[i].keep:
+			writeKeptLink(&out, doc, p)
+		default:
+			separateFromEscape(&out, plans[i].text)
+			out.text([]byte(plans[i].text))
+		}
+		walk.moved(p.span.Start, p.span.End)
+		at = p.span.End
+	}
+	out.text([]byte(doc.Source[at:doc.Body.End]))
+	out.close()
+	return neutralizeAnchors(out.out, out.protected), walk.work
+}
+
+// moved notes the source just passed, for the line it ended on.
+func (w *renderWalk) moved(from, to int) {
+	if newline := strings.LastIndexByte(w.doc.Source[from:to], '\n'); newline >= 0 {
+		w.lineHead = from + newline + 1
+		w.inRun = false
+	}
+}
+
+// writeKeptLink keeps a link's label open to neutralizing and its destination not.
+// `[https://x]` is rewritten, or the closing bracket would render inside its link.
+func writeKeptLink(out *shaper, doc Document, p part) {
+	source := doc.Source[p.span.Start:p.span.End]
+	if p.link == nil {
+		out.protect([]byte(source))
+		return
+	}
+	if p.link.Form == LinkAutolink && source[0] != '<' && p.span.End < len(doc.Source) && doc.Source[p.span.End] == ']' {
+		rewritten := "<" + p.link.Destination + ">"
+		separateFromEscape(out, rewritten)
+		out.protect([]byte(rewritten))
+		return
+	}
+	label := p.link.LabelSpan
+	if p.link.Form == LinkAutolink {
+		out.protect([]byte(source))
+		return
+	}
+	out.literal([]byte(doc.Source[p.span.Start:label.End]))
+	out.protect([]byte(doc.Source[label.End:p.span.End]))
+}
+
+// separateFromEscape keeps a preceding backslash from escaping a rewritten autolink.
+func separateFromEscape(out *shaper, text string) {
+	if strings.HasPrefix(text, "<") && !out.pendingSpace() && out.lastByte() == '\\' {
+		out.separate()
+	}
+}
+
 var (
-	// emptiedLinePrefix is what is left of a line that only held container markup
-	// around a removed node.
-	emptiedLinePrefix = regexp.MustCompile(`^[ \t>]*(?:(?:[-+*]|[0-9]{1,9}[.)])[ \t]+)*(?:#{1,6}[ \t]*)?$`)
-	// blockStarter is text that would open a block at the start of a line.
-	blockStarter = regexp.MustCompile(`^[ \t]*(?:[-+*][ \t]|#{1,6}(?:[ \t]|$)|>|=+[ \t\r]*$|` + "```" + `|~~~|[0-9]{1,9}[.)][ \t]|<[a-zA-Z!?/])`)
+	// emptiedLinePrefix is what is left of a line that only held markup around a
+	// removed node.
+	emptiedLinePrefix = regexp.MustCompile(`^[ \t>]*(?:(?:[-+*=_#~` + "`" + `]+|[0-9]{1,9}[.)])[ \t]*)*$`)
+	// blockStarter is text that would open a block at the start of a line, or make
+	// the line a definition.
+	blockStarter = regexp.MustCompile(`^[ \t]*(?:[-+*][ \t\r\n]|[-_*=]{2,}[ \t\r\n]*$|[-=*_+]\r?\n?$|#{1,6}(?:[ \t\r\n]|$)|>|` + "```" + `|~~~|[0-9]{1,9}[.)](?:[ \t\r\n]|$)|<[!?]|</?[a-zA-Z][a-zA-Z0-9-]*(?:[ \t\r\n/>]|$)|\[[^\]\n]*\]:)`)
 )
 
-// removeNode takes a node out without creating Markdown from what surrounds it. A
-// line left with only container markup goes whole. Where the joined text would
-// form new syntax, such as `****`, a new link or a block marker, the node's plain
-// text stays instead.
-func removeNode(out *shaper, doc Document, i int, decide func(Occurrence) Rendition) {
-	p := doc.parts[i]
-	next := nextVisibleOffset(doc, i, decide)
-	lineHead := lineStartIn(doc.Source, p.span.Start)
-	rest := doc.Source[next:lineEnd(doc.Source, next)]
-	if out.visible && isBlankLine(rest) && out.onlyTextOnLine() && emptiedLinePrefix.MatchString(doc.Source[lineHead:firstRemovedOnLine(doc, i, lineHead, decide)]) {
-		out.retractLine()
-		return
+// removeNode takes a node out without creating syntax from what surrounds it. A line
+// left with only markup goes, leaving a blank line. Text that would open a block
+// takes an escape. Neighbours that would otherwise join get one space between them.
+func (w *renderWalk) removeNode(p part, runEnd int) {
+	out := w.out
+	source := w.doc.Source
+	first := !w.inRun
+	if first {
+		w.runStart, w.inRun = p.span.Start, true
 	}
+	if runEnd >= w.lineTail {
+		w.lineTail = lineEnd(source, runEnd)
+		w.work += w.lineTail - runEnd
+	}
+	rest := source[runEnd:max(min(w.lineTail, w.doc.Body.End), runEnd)]
+	blank := isBlankHead(rest, &w.work)
 	right := byte('\n')
-	if next < doc.Body.End {
-		right = doc.Source[next]
+	if rest != "" {
+		right = rest[0]
 	}
-	unsafe := false
-	if out.visible {
-		unsafe = !out.pendingSpace() && !safeJunction(out.lastByte(), right)
-	} else {
-		unsafe = blockStarter.MatchString(rest)
+	switch {
+	case !out.visible:
+		out.remove(true)
+		if first && !blank && blockStarter.MatchString(rest) {
+			out.escapeNext = true
+		}
+	case blank && out.onlyTextOnLine() && w.prefixEmptied():
+		out.retractLine()
+	case out.pendingSpace():
+		out.remove(closesSentence(right, rest))
+	case isSpaceOrNewline(right) || (closesSentence(right, rest) && joinsAfter(out.lastByte())):
+		out.remove(false)
+	default:
+		out.remove(false)
+		out.separate()
 	}
-	if unsafe && p.span.End-p.span.Start > 2 {
-		out.text([]byte(doc.Source[p.span.Start+1 : p.span.End-1]))
-		return
-	}
-	out.remove(closesSentence(right))
 }
 
-// nextVisibleOffset is the source offset after this node and any removed nodes
-// directly following it.
-func nextVisibleOffset(doc Document, i int, decide func(Occurrence) Rendition) int {
-	end := doc.parts[i].span.End
-	for j := i + 1; j < len(doc.parts); j++ {
-		q := doc.parts[j]
-		between := doc.Source[end:q.span.Start]
-		if strings.TrimLeft(between, " \t") != "" || !partRemoved(doc, q, decide) {
-			break
-		}
-		end = q.span.End
-	}
-	return end
+func (w *renderWalk) prefixEmptied() bool {
+	prefix := w.doc.Source[w.lineHead:w.runStart]
+	w.work += len(prefix)
+	return emptiedLinePrefix.MatchString(prefix)
 }
 
-// firstRemovedOnLine is where the run of removed nodes ending at part i starts.
-func firstRemovedOnLine(doc Document, i, lineHead int, decide func(Occurrence) Rendition) int {
-	start := doc.parts[i].span.Start
-	for j := i - 1; j >= 0; j-- {
-		q := doc.parts[j]
-		if q.span.End < lineHead || strings.TrimLeft(doc.Source[q.span.End:start], " \t") != "" || !partRemoved(doc, q, decide) {
-			break
+// isBlankHead reports whether a line's remainder is only whitespace, stopping at the
+// first byte that is not.
+func isBlankHead(rest string, work *int) bool {
+	for i := 0; i < len(rest); i++ {
+		*work++
+		if !isSpaceOrNewline(rest[i]) {
+			return false
 		}
-		start = q.span.Start
 	}
-	return start
-}
-
-func partRemoved(doc Document, p part, decide func(Occurrence) Rendition) bool {
-	switch p.kind {
-	case partDamaged:
-		return true
-	case partNode:
-		for _, member := range doc.Occurrences[p.first : p.first+p.count] {
-			if decide(member).Text != "" {
-				return false
-			}
-		}
-		return true
-	case partLiteral, partLink:
-	}
-	return false
+	return true
 }
 
 func lineStartIn(text string, at int) int {
 	return strings.LastIndexByte(text[:at], '\n') + 1
 }
 
-// safeJunction reports whether text may close up around a removed node.
-func safeJunction(left, right byte) bool {
-	switch {
-	case isSpaceOrNewline(right), closesSentence(right):
-		return left != '<' && left != '['
-	case left == '(' || left == '\'' || left == '"':
-		return isWordByte(right)
-	default:
+// closesSentence reports a right neighbour that may close up against the word
+// before: whitespace, or sentence punctuation that itself ends there.
+func closesSentence(right byte, rest string) bool {
+	if isSpaceOrNewline(right) {
+		return true
+	}
+	if strings.IndexByte(`.,;:!?)'"`, right) < 0 {
 		return false
 	}
+	return len(rest) < 2 || isSpaceOrNewline(rest[1]) || strings.IndexByte(`.,;:!?)'"`, rest[1]) >= 0
 }
 
-func closesSentence(b byte) bool {
-	return isSpaceOrNewline(b) || strings.IndexByte(`.,;:!?)'"`, b) >= 0
-}
+// joinsAfter rejects a left neighbour that could read a following colon or bracket as
+// new syntax, such as `[a]:`.
+func joinsAfter(left byte) bool { return left != ']' && left != '<' && left != '[' }
 
 func isSpaceOrNewline(b byte) bool { return b == ' ' || b == '\t' || b == '\n' || b == '\r' }
-
-func isWordByte(b byte) bool {
-	return b >= 0x80 || (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
-}
 
 // Project is the structural presentation that needs no evidence: explicit paths
 // become file links, standard links stay, and the rest of the protocol is
@@ -255,8 +329,8 @@ func unescapePath(dest string) string {
 	return dest
 }
 
-// PlainLabel is an unvalidated link's text with no link semantics, with any
-// protocol node in it removed. A label that would autolink again is held in code.
+// PlainLabel is an unvalidated link's text with no link semantics: any protocol node
+// in it is removed, and a URL in it stays readable but cannot link.
 func PlainLabel(link Link) string {
 	label := strings.TrimSpace(Render(Parse(link.Label, Options{}), func(o Occurrence) Rendition {
 		if o.Link != nil {
@@ -264,11 +338,5 @@ func PlainLabel(link Link) string {
 		}
 		return Rendition{}
 	}))
-	if label == "" {
-		return ""
-	}
-	if strings.Contains(label, "://") || strings.HasPrefix(strings.ToLower(label), "www.") {
-		return "`" + strings.Trim(label, "`") + "`"
-	}
-	return label
+	return neutralizeURLs(label)
 }

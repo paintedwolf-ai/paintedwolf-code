@@ -94,11 +94,20 @@ func TestCitationAttempts(t *testing.T) {
 		{"H5 query", "[x](a/b.go?x=1#L3)", []string{"[x](a/b.go?x=1#L3)"}, nil},
 		{"low malformed source", "[x](source:///a.go#L1)", nil, []IssueCode{IssueMalformedCitation}},
 		{"low source query", "[x](source://r/a.go?unknown=x#L1)", nil, []IssueCode{IssueMalformedCitation}},
-		{"M3 raw anchor", `a <a href="https://x.test">b</a>`, []string{`<a href="https://x.test">`}, nil},
-		{"M3 raw anchor in a block", "<div>\n<a class=\"c\" href='http://x.test/p'>b</a>\n</div>", []string{`<a class="c" href='http://x.test/p'>`}, nil},
-		{"raw anchor elsewhere", `a <a href="/x">b</a>`, nil, nil},
-		{"raw anchor in a comment", `<!-- <a href="https://x.test">b</a> -->`, nil, nil},
-		{"raw tag with a data href", `a <b data-href="https://x.test">c</b>`, nil, nil},
+		{"raw anchors claim nothing", `a <a href="https://x.test">b</a>`, nil, nil},
+		{"N2 digits and dots stay prose", "[1.5:10:30]", nil, nil},
+		{"N2 host and port is an attempt", "[example.com:8080]", []string{"example.com:8080"}, nil},
+		{"N3 numeric fragment is no coordinate", "[v](v2#3)", nil, nil},
+		{"N3 line fragment needs its L", "[a](a.go#42)", nil, nil},
+		{"web scheme with no slashes", "[x](https:unobs.test)", []string{"[x](https:unobs.test)"}, nil},
+		{"B3 escaped-looking URL", `\https://unobs.test/a`, []string{"https://unobs.test/a"}, nil},
+		{"B3 escaped-looking www", `\www.unobs.test`, []string{"www.unobs.test"}, nil},
+		{"N1 URL closing a worded bracket", "[see https://seen.test/a]", []string{"https://seen.test/a"}, nil},
+		{"N1 URL closing a labelled bracket", "[docs: https://seen.test/a]", []string{"https://seen.test/a"}, nil},
+		{"closed bracket earlier leaves it in the URL", "[a] https://seen.test/a]", []string{"https://seen.test/a]"}, nil},
+		{"N1 ideographic space ends a URL", "https://seen.test/a　次", []string{"https://seen.test/a"}, nil},
+		{"N1 no-break space ends a URL", "https://seen.test/a\u00a0x", []string{"https://seen.test/a"}, nil},
+		{"N1 em space ends a URL", "https://seen.test/a\u2003x", []string{"https://seen.test/a"}, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -172,29 +181,50 @@ func TestIssueBudget(t *testing.T) {
 func TestRenderCreatesNoStructure(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ name, source, want string }{
-		{"emphasis", "**[read#9]**", "**read#9**"},
-		{"glued word", "h[read#9]ttp", "hread#9ttp"},
-		{"new autolink", "<[read#9]https://x.test>", "<read#9https://x.test>"},
+		{"emphasis", "**[read#9]**", "** **"},
+		{"glued word", "foo[task#1]bar", "foo bar"},
+		{"split URL", "h[read#9]ttps://unobs.test/j", "h ttps://unobs.test/j"},
+		{"split www", "www[read#9].unobs.test/k", "www .unobs.test/k"},
+		{"new autolink", "<[read#9]https://x.test>", "< https://x.test>"},
 		{"standard link stays", "[[read#9]](x)", "[[read#9]](x)"},
+		{"B1 URL in a directive", "_[verify: targeted - see https://unobs.test/v]_", "_ _"},
+		{"B1 URL in an excerpt", `**[task#1 "https://unobs.test/e"]**`, "** **"},
+		{"B1 directive body", "x[verify: targeted - checked it]y", "x y"},
+		{"B1 damaged directive", "**[read#9 \"[x](https://unobs.test)\"]**", "** **"},
+		{"N4 new definition", "[a][read#9]: other.md", "[a] : other.md"},
+		{"N4 line-start definition", "[read#9][a]: other.md", "\\[a]: other.md"},
+		{"N4 thematic break", "[read#9]---", "\\---"},
+		{"N4 setext underline", "para\n[read#9]---\nb", "para\n\\---\nb"},
+		{"N4 stars", "[read#9]***", "\\***"},
+		{"N4 paragraphs do not merge", "a\n[read#9]\n\nb", "a\n\nb"},
+		{"N4 item does not take the next paragraph", "- a\n- [read#9]\n\nb", "- a\n\nb"},
+		{"N4 quote does not take the next paragraph", "> a\n> [read#9]\n\nb", "> a\n\nb"},
+		{"N4 continuation stays in its item", "- a\n\n  [read#9]\n      foo", "- a\n\n  foo"},
+		{"N4 double bracket", "[[read#9]]", "[ ]"},
 		{"list item", "- [read#9]", ""},
-		{"list item among others", "- a\n- [read#9]\n- b", "- a\n- b"},
+		{"list item among others", "- a\n- [read#9]\n- b", "- a\n\n- b"},
 		{"ordered item", "1. [read#9]", ""},
 		{"heading", "# [read#9]", ""},
 		{"quote", "> [read#9]", ""},
-		{"quote among others", "> a\n> [read#9]\n> b", "> a\n> b"},
+		{"quote among others", "> a\n> [read#9]\n> b", "> a\n\n> b"},
 		{"nested", "> - # [read#9] [task#1]", ""},
+		{"markup only", "---[read#9]", ""},
 		{"indented continuation", "para\n\n[read#9]\n    foo", "para\n\nfoo"},
-		{"marker after", "[read#9] - x", "read#9 - x"},
-		{"heading after", "[read#9] # x", "read#9 # x"},
-		{"fence after", "[read#9] ``` x", "read#9 ``` x"},
+		{"paragraph line after", "a\n[read#9]\nb", "a\n\nb"},
+		{"marker after", "[read#9] - x", "\\- x"},
+		{"heading after", "[read#9] # x", "\\# x"},
+		{"fence after", "[read#9] ``` x", "\\``` x"},
+		{"ordered marker after", "[read#9] 1. x", "&#49;. x"},
+		{"html after", "[read#9]<div>", "\\<div>"},
 		{"words stay apart", "a [read#9]b", "a b"},
 		{"before punctuation", "a [read#9].", "a."},
 		{"between words", "a [read#9] b", "a b"},
 		{"glued before punctuation", "a[read#9].", "a."},
+		{"glued before more text", "a[read#9].b", "a .b"},
 		{"literal on the line stays", "- `x` [read#9]", "- `x`"},
 		{"damaged node", "- [read#x]", ""},
 		{"crlf line", "[read#9]\r\n\r\nNext\r\n", "Next"},
-		{"crlf between", "a\r\n[read#9]\r\nb", "a\r\nb"},
+		{"crlf between", "a\r\n[read#9]\r\nb", "a\r\n\nb"},
 		{"crlf fence document", "```md\r\n[read#9]\r\n```\r\n", ""},
 		{"crlf unterminated", "[verify: x\r\nnext", "next"},
 	}
@@ -230,10 +260,13 @@ func TestBracketedBareLinkPresentation(t *testing.T) {
 	if got := Project(Parse("[https://x.test/a]", Options{})); got != "[<https://x.test/a>]" {
 		t.Fatalf("got %q", got)
 	}
-	if got := Project(Parse("[www.x.test/a]", Options{})); got != "[<http://www.x.test/a>]" {
+	if got := Project(Parse("[see https://x.test/a]", Options{})); got != "[see <https://x.test/a>]" {
 		t.Fatalf("got %q", got)
 	}
 	if got := PlainLabel(Link{Label: "see [read#3] now"}); got != "see now" {
+		t.Fatalf("label = %q", got)
+	}
+	if got := PlainLabel(Link{Label: "a https://x.test/p and WWW.y.test"}); got != "a https&#58;//x.test/p and WWW&#46;y.test" {
 		t.Fatalf("label = %q", got)
 	}
 }
@@ -275,6 +308,78 @@ func TestBackpedalURL(t *testing.T) {
 	for _, tc := range cases {
 		if got := backpedalURL(tc.in); got != tc.want {
 			t.Errorf("backpedalURL(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// B3: raw anchors are escaped outright, in every form, and their text stays. Code is
+// not touched.
+func TestRawAnchorsAreEscaped(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ name, source, want string }{
+		{"plain", `a <a href="https://x.test">b</a> c`, `a &lt;a href="https&#58;//x&#46;test"&gt;b&lt;/a&gt; c`},
+		{"quoted bracket", `<a title=">" href="https://x.test">b</a>`, `&lt;a title="&gt;" href="https&#58;//x&#46;test"&gt;b&lt;/a&gt;`},
+		{"entity scheme", `x <a href="https&#58;//x.test">b</a>`, `x &lt;a href="https&#58;//x&#46;test"&gt;b&lt;/a&gt;`},
+		{"slash attribute in a block", `<div><a/href="https://x.test">b</a></div>`, `<div>&lt;a/href="https&#58;//x&#46;test"&gt;b&lt;/a&gt;</div>`},
+		{"upper case", `x <A HREF="https://x.test">b</A>`, `x &lt;A HREF="https&#58;//x&#46;test"&gt;b&lt;/A&gt;`},
+		{"area", `<area href="https://x.test">`, `&lt;area href="https&#58;//x&#46;test"&gt;`},
+		{"multi-line", "x <a\nhref=\"https://x.test\">b</a>", "x &lt;a\nhref=\"https&#58;//x&#46;test\"&gt;b&lt;/a&gt;"},
+		{"other tags stay", `x <abbr title="y">z</abbr> <a-b>`, `x <abbr title="y">z</abbr> <a-b>`},
+		{"prose comparison", `a <b and c>d`, `a <b and c>d`},
+		{"code span stays", "`<a href=\"https://x.test\">`", "`<a href=\"https://x.test\">`"},
+		{"fence stays", "```\n<a href=\"https://x.test\">\n```", "```\n<a href=\"https://x.test\">\n```"},
+		{"host link stays", "[a/b c.go:1]", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := Parse(tc.source, Options{})
+			got := Project(doc)
+			want := tc.want
+			if want == "" {
+				want = tc.source
+			}
+			if tc.name != "host link stays" && got != want {
+				t.Fatalf("got %q, want %q", got, want)
+			}
+		})
+	}
+	if got := Project(Parse(`["a/b c.go":1]`, Options{})); got != "[a/b c.go:1](<a/b c.go#L1>)" {
+		t.Fatalf("host-written link = %q", got)
+	}
+	if got := Project(Parse("[<a href=\"https://x.test\">y</a>](<a/c d.go#L1>)", Options{})); !strings.Contains(got, "&lt;a href") || !strings.Contains(got, "(<a/c d.go#L1>)") {
+		t.Fatalf("label and destination = %q", got)
+	}
+}
+
+// B3: a URL past the node cap is one rejected unit; no prefix stands in for it.
+func TestOverlongBareURL(t *testing.T) {
+	t.Parallel()
+	long := "https://pre.test/" + strings.Repeat("b", MaxInlineProtocolNodeBytes-len("https://pre.test/"))
+	exact := Parse(long, Options{})
+	if len(exact.Occurrences) != 1 || exact.Occurrences[0].Link.Destination != long {
+		t.Fatalf("at the cap: %+v", exact.Occurrences)
+	}
+	source := "see " + long + "EVIL tail"
+	doc := Parse(source, Options{})
+	if len(doc.Occurrences) != 0 || len(doc.Issues) != 1 || doc.Issues[0].Code != IssueNodeTooLong || doc.Issues[0].Kind != KindWebLink {
+		t.Fatalf("occurrences = %d, issues = %+v", len(doc.Occurrences), doc.Issues)
+	}
+	if got := Project(doc); got != "see tail" {
+		t.Fatalf("presented %q", got)
+	}
+}
+
+// A malformed link keeps only its label; no link survives it.
+func TestBrokenLinkPresentsItsLabel(t *testing.T) {
+	t.Parallel()
+	for _, source := range []string{"[a](source:///a.go#L1)", "[a](source:x)", "[a](source://r/a.go?unknown=x)", "[a](y.go#L0)", "[a](y.go#L5-L2)"} {
+		doc := Parse(source, Options{})
+		if len(doc.Issues) != 1 {
+			t.Errorf("%s: issues = %+v", source, doc.Issues)
+		}
+		if got := Project(doc); got != "a" {
+			t.Errorf("%s: presented %q", source, got)
 		}
 	}
 }

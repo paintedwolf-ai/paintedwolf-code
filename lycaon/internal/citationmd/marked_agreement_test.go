@@ -41,7 +41,8 @@ func TestMarkedAgreement(t *testing.T) {
 			// validates the URL meant and rewrites the display to match.
 			want := []string{}
 			for _, link := range fixture.Links {
-				if strings.Contains(fixture.Source, "["+link) || strings.Contains(fixture.Source, "["+strings.TrimPrefix(link, "http://")) {
+				// Any open bracket on the line before the URL counts.
+				if strings.Contains(fixture.Source, "[") && strings.HasSuffix(link, "]") && !strings.Contains(link, "[") {
 					link = strings.TrimSuffix(link, "]")
 				}
 				want = append(want, link)

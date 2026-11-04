@@ -298,6 +298,16 @@ func TestDraftValidatesEveryOccurrence(t *testing.T) {
 		if occurrence.OccurrenceIndex != i {
 			t.Fatalf("occurrence %d has index %d", i, occurrence.OccurrenceIndex)
 		}
+		want := guidance.CitationGrounded
+		if i == 30 {
+			want = guidance.CitationUnverifiable
+		}
+		if occurrence.Outcome != want {
+			t.Fatalf("occurrence %d (%s) = %s, want %s", i, draft.Occurrences[i].Token, occurrence.Outcome, want)
+		}
+	}
+	if rejected := got.Rejected(); len(rejected) != 1 || rejected[0].OccurrenceIndex != 30 || rejected[0].Offender != "a.go:99" {
+		t.Fatalf("rejected = %+v", rejected)
 	}
 	if draft.Occurrences[32].RepairID != "c33" || draft.Occurrences[32].Owner != guidance.DraftFieldSynthesis {
 		t.Fatalf("identity = %+v", draft.Occurrences[32])

@@ -1,6 +1,9 @@
 package citationmd
 
-import "regexp"
+import (
+	"regexp"
+	"strings"
+)
 
 const (
 	// maxStructureWork bounds the bytes the structural parser may rescan for the
@@ -22,12 +25,13 @@ const (
 // rawOpeners are the inline raw HTML forms the parser rescans to the end of the
 // block when they never close.
 var rawOpeners = []struct{ opener, closer string }{
-	{"<?", "?>"}, {"<!--", "-->"}, {"<![CDATA[", "]]>"},
+	{"<?", "?>"}, {"<!--", "-->"}, {"<![CDATA[", "]]>"}, {"<!", ">"},
 }
 
 var (
 	tableDelimiterRow = regexp.MustCompile(`^[ \t>]*\|?[ \t]*:?-+:?[ \t]*(?:\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*\r?\n?$`)
-	definitionLine    = regexp.MustCompile(`^[ \t>]*\[[^\]\n]*\]:`)
+	// bracketLead is a line the parser tries as the start of a link definition.
+	bracketLead = regexp.MustCompile(`^[ \t>]*\[`)
 )
 
 // structureBudget tallies one pass over a source, block by block. Its counters
@@ -42,7 +46,7 @@ type structureBudget struct {
 	deepLine   bool
 	blockBytes int
 	defs       int
-	unclosed   [3]int
+	unclosed   [4]int
 }
 
 // structureExceeded reports whether parsing source would exceed a declared
@@ -77,7 +81,9 @@ func (b *structureBudget) line(line string) {
 	if indent, ok := itemMarkerIndent(line); ok && indent >= deepItemIndent {
 		b.itemIndent += indent
 	}
-	if definitionLine.MatchString(line) {
+	// A label may span lines or hold an escaped bracket, so anything that could
+	// be part of a definition counts.
+	if bracketLead.MatchString(line) || strings.Contains(line, "]:") {
 		b.defs++
 	}
 	if tableDelimiterRow.MatchString(line) {
@@ -104,7 +110,7 @@ func (b *structureBudget) scanInline(line string) {
 				b.depth--
 			}
 			b.scanRawForm(line[i:])
-		case '<', '-', '?':
+		case '<', '-', '?', '>':
 			b.scanRawForm(line[i:])
 		}
 	}
@@ -126,7 +132,7 @@ func (b *structureBudget) endBlock() {
 		b.work += count * b.blockBytes
 	}
 	b.defs, b.blockBytes, b.columns, b.depth = 0, 0, 0, 0
-	b.unclosed = [3]int{}
+	b.unclosed = [4]int{}
 }
 
 func hasPrefix(text, prefix string) bool {
@@ -232,76 +238,3 @@ func containerMarkerWidth(rest string) int {
 }
 
 func isSpaceByte(b byte) bool { return b == ' ' || b == '\t' }
-
-// coarseLiteralZones finds fences and same-line code spans without a structural
-// parse, for a source past the budgets. It errs toward literal, so a fallback
-// removes nothing from a fence-like region.
-func coarseLiteralZones(source string) []Zone {
-	var zones []Zone
-	var fence byte
-	run, open := 0, 0
-	for at := 0; at < len(source); {
-		end := lineEnd(source, at)
-		char, length, rest := fenceRun(source[at:end])
-		switch {
-		case fence == 0 && length >= 3:
-			fence, run, open = char, length, at
-		case fence != 0 && char == fence && length >= run && isBlankLine(rest):
-			zones = append(zones, Zone{Kind: ZoneFence, Span: Span{open, end}})
-			fence = 0
-		case fence == 0:
-			zones = append(zones, coarseCodeSpans(source, at, end)...)
-		}
-		at = end
-	}
-	if fence != 0 {
-		zones = append(zones, Zone{Kind: ZoneFence, Span: Span{open, len(source)}})
-	}
-	return zones
-}
-
-// fenceRun skips container markup and reads a fence run at the start of a line.
-func fenceRun(line string) (char byte, length int, rest string) {
-	at := 0
-	for at < len(line) && (isSpaceByte(line[at]) || line[at] == '>') {
-		at++
-	}
-	if at == len(line) || (line[at] != '`' && line[at] != '~') {
-		return 0, 0, line
-	}
-	char = line[at]
-	end := at
-	for end < len(line) && line[end] == char {
-		end++
-	}
-	return char, end - at, line[end:]
-}
-
-func coarseCodeSpans(source string, at, end int) []Zone {
-	var zones []Zone
-	for i := at; i < end; i++ {
-		if source[i] != '`' {
-			continue
-		}
-		open := i
-		for i < end && source[i] == '`' {
-			i++
-		}
-		length := i - open
-		for j := i; j < end; j++ {
-			if source[j] != '`' {
-				continue
-			}
-			close := j
-			for j < end && source[j] == '`' {
-				j++
-			}
-			if j-close == length {
-				zones = append(zones, Zone{Kind: ZoneCodeSpan, Span: Span{open, j}})
-				i = j - 1
-				break
-			}
-		}
-	}
-	return zones
-}

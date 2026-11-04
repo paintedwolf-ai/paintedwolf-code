@@ -178,7 +178,7 @@ func (r *memberReader) member() (*Citation, IssueCode) {
 			return r.afterHandle(c)
 		}
 		if strings.Contains(lexeme, "#") {
-			if r.gate != nil && !malformedCoordinate.MatchString(lexeme) && !r.gate.opts.knownKind(terminalKind(lexeme[:strings.IndexByte(lexeme, '#')])) {
+			if r.gate != nil && !isMalformedCoordinate(lexeme) && !r.gate.opts.knownKind(terminalKind(lexeme[:strings.IndexByte(lexeme, '#')])) {
 				return nil, ""
 			}
 			return nil, IssueMalformedCitation
