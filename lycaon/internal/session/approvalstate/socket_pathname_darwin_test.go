@@ -12,6 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// Only Seatbelt enforces a socket grant by pathname. Linux retains the object,
+// so a restart there needs fresh approval.
 func TestKernelPathnameIntentSurvivesServiceAbsenceAndRestart(t *testing.T) {
 	path, _ := ownedSocketFixture(t)
 	grant, err := confine.ResolveSocketRequest(path)
