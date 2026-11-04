@@ -1,6 +1,7 @@
 package inject
 
 import (
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"strings"
 	"testing"
 
@@ -37,14 +38,14 @@ func TestReportDocumentPromptShowsTheShapeTheHostReads(t *testing.T) {
 	}
 	fence := section[open : open+len("```json\n")+end+len("\n```")]
 
-	read, ok := guidance.ReadCloseoutReport("The answer.\n\n"+fence, "")
-	if !ok {
+	read := guidance.ReadCloseoutReport("The answer.\n\n"+fence, guidance.RetainedCloseout{}, true, citationmd.Options{})
+	if read.Draft.Document == nil {
 		t.Fatalf("the prompt's fence is not a report:\n%s", fence)
 	}
 	if len(read.Unread) > 0 {
 		t.Fatalf("the prompt's fence has members the host does not read: %+v", read.Unread)
 	}
-	report := read.Report
+	report := read.Draft.Report()
 	if len(report.Findings) != 1 || report.Findings[0].Answers["reachable"] == "" || report.Findings[0].Answers["outcome"] == "" {
 		t.Fatalf("findings = %+v, want the declared answers inside the finding", report.Findings)
 	}

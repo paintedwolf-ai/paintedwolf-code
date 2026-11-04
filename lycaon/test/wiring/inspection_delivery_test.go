@@ -30,7 +30,7 @@ func TestInspectionDeliveryDoesNotRequireSelectedCheck(t *testing.T) {
 			case 4:
 				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "deliver", Name: "update_progress", Args: map[string]any{"content": "## Progress\n- [x] wiring test plan\n"}}}}
 			default:
-				return modelcall.Completion{Content: `{"synthesis":"Updated the guide and read back the result. No executable checks were needed.","cited_evidence":[{"path":"docs/guide.md","line":1,"excerpt":"Updated operating instructions."}],"cited_urls":[]}`}
+				return modelcall.Completion{Content: `Updated the guide and read back the result [docs/guide.md:1 "Updated operating instructions."]. No executable checks were needed.`}
 			}
 		},
 	})

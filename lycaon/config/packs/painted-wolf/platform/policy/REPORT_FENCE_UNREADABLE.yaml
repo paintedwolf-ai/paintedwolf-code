@@ -12,9 +12,9 @@ when: paintedwolf.reject_observation == "report_fence_unreadable"
 effect: block
 copy:
   what: 'The report fence has {{ paintedwolf.offender_count }} member(s) the host did not read: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}.'
-  cause: The host reads the fence against the report's declared fields; a member it does not declare, or one of the wrong type, carries nothing into the report.
+  cause: The host reads the fence against the report document's declared fields; a member it does not declare, or one of the wrong type, carries nothing into the report. The answer, citations, verification and artifacts belong in the Markdown above the fence.
   why: A report built without those members states less than the closeout wrote, so the host asks for them in the declared shape.
-  fix: Return the fence with each listed member removed or moved to where the report declares it. A top-level report field such as `ask` or `set_asides` appears once at the top of the fence, never inside a finding.
+  fix: 'Return the fence with each listed member removed or moved to where the report declares it. Write citations, `[verify: …]` and `[artifact:…]` inline above the fence. A top-level report field such as `ask` or `set_asides` appears once at the top of the fence, never inside a finding.'
   instead: Keep the Markdown answer and every member the host already read; change only the listed ones.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator

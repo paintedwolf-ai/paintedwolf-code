@@ -1,0 +1,35 @@
+oar: '1.0'
+id: CITATION_SYNTAX_INVALID
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.reject_observation
+when: paintedwolf.reject_observation == "citation_syntax_invalid"
+effect: block
+copy:
+  what: 'The report has {{ paintedwolf.offender_count }} malformed citation or directive(s): {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}.'
+  cause: These look like citations or directives but do not follow the syntax, so the host cannot check them.
+  why: A malformed reference must not pass as prose or disappear unnoticed.
+  fix: 'Return the same answer with each one corrected: `[read#3:42]`, `[read#3:42-48]`, `[internal/a.go:42]`, `[verify: targeted - reason]`, or `[artifact:<id>]`. A `[verify: …]` or `[artifact:…]` directive alone also replaces its own kind. To show the syntax literally, put it in `inline code`.'
+  instead: Keep the retained text as it is; change only the listed nodes.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_synthesis
+x-paintedwolf-evidence:
+  ui_label: Citation syntax
+  ui_check_id: citation_syntax
+  in_session_retry: true
+x-paintedwolf-message: The report has a malformed citation or directive
+x-paintedwolf-scenarios:
+  - id: unterminated
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: '[read#3:42 unterminated_node'
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: CITATION_SYNTAX_INVALID'
+      - unterminated_node

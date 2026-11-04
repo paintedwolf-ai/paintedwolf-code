@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/citationmd"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"testing"
 	"time"
 
@@ -34,7 +36,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	m.SetProgressStore(progressStore)
 	m.Coordinator.ProgressClosure.Arm(t.Context(), sid, "job-closure")
 	m.Runner.Closeouts.RecordGroundingFriction(t.Context(), sid)
-	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", "draft", nil)
+	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", guidance.ParseCloseoutDraft("draft", citationmd.Options{}), nil)
 	m.Coordinator.Batch.AcceptSynthesis(t.Context(), sid)
 	checkpoints := sessioncheckpoint.New(t.TempDir(), t.TempDir(), sessionstore.NewMemory())
 	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))

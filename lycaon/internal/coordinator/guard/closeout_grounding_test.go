@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -48,14 +49,9 @@ func TestEvaluateCoordinatorCloseoutGrounding_blocksUnobservedPath(t *testing.T)
 		return nil
 	}
 	ledger := ledgertest.CloseoutReader(root, []guidance.EvidenceLeg{{ChildSessionID: "child-1"}}, lookup)
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "phantom path",
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{{
-			Path: "phantom.go", Line: 1, Excerpt: "package phantom",
-		}},
-	}
+	report := markdownDraft(`A phantom path [phantom.go:1 "package phantom"].`)
 	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
-		context.Background(), ledger, sess, history, "implement_synthesis", report, []string{"task"}, evidence.CitationRoots{ProjectDir: root},
+		context.Background(), ledger, sess, history, "implement_synthesis", report, evidence.CitationRoots{ProjectDir: root},
 	)
 	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
 	if verdict.Code != guidance.SynthHandleNotInLegsCode {
@@ -94,15 +90,9 @@ func TestEvaluateCoordinatorCloseoutGroundingURLMismatchRequiresRepair(t *testin
 		return nil
 	}
 	ledger := ledgertest.CloseoutReader(root, []guidance.EvidenceLeg{{ChildSessionID: "child-1"}}, lookup)
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "retention surveyed",
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{{
-			Path: "internal/retention.go", Line: 1, Excerpt: "package retention",
-		}},
-		CitedURLs: []string{"https://unobserved.example/doc"},
-	}
+	report := markdownDraft(`Retention surveyed [internal/retention.go:1 "package retention"], per [the doc](https://unobserved.example/doc).`)
 	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
-		context.Background(), ledger, sess, history, "implement_synthesis", report, []string{"task"}, evidence.CitationRoots{ProjectDir: root},
+		context.Background(), ledger, sess, history, "implement_synthesis", report, evidence.CitationRoots{ProjectDir: root},
 	)
 	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
 	if verdict.Code != guidance.SynthURLNotObservedCode || len(verdict.UnobservedURLs) != 1 {
@@ -141,14 +131,9 @@ func TestEvaluateCoordinatorCloseoutGrounding_passesGroundedPath(t *testing.T) {
 		return nil
 	}
 	ledger := ledgertest.CloseoutReader(root, []guidance.EvidenceLeg{{ChildSessionID: "child-1"}}, lookup)
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "retention surveyed",
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{{
-			Path: "internal/retention.go", Line: 1, Excerpt: "package retention",
-		}},
-	}
+	report := markdownDraft(`Retention surveyed [internal/retention.go:1 "package retention"].`)
 	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
-		context.Background(), ledger, sess, history, "implement_synthesis", report, []string{"task"}, evidence.CitationRoots{ProjectDir: root},
+		context.Background(), ledger, sess, history, "implement_synthesis", report, evidence.CitationRoots{ProjectDir: root},
 	)
 	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
 	if strings.TrimSpace(verdict.Code) != "" {
@@ -172,14 +157,9 @@ func TestEvaluateCoordinatorCloseoutGrounding_investigateSurface(t *testing.T) {
 		{Role: api.MessageRoleTool, Content: readJSON, ToolResult: &api.ToolResult{Content: readJSON, Outcome: api.ToolResultOutcomeCompleted}},
 	}
 	ledger := investigateLedgerReader{root: root, sessionID: sess.ID, msgs: history[1:]}
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "missing",
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{{
-			Path: "internal/missing.go", Line: 1, Excerpt: "x",
-		}},
-	}
+	report := markdownDraft(`Missing [internal/missing.go:1 "x"].`)
 	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
-		context.Background(), ledger, sess, history, toolcontract.SurfaceImplementInvestigate, report, []string{"read"}, evidence.CitationRoots{ProjectDir: root},
+		context.Background(), ledger, sess, history, toolcontract.SurfaceImplementInvestigate, report, evidence.CitationRoots{ProjectDir: root},
 	)
 	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
 	if verdict.Code != guidance.InvestHandleNotObservedCode {
@@ -200,14 +180,9 @@ func TestEvaluateCoordinatorCloseoutGrounding_investigateCoordinatorEvidence(t *
 		{Role: api.MessageRoleTool, Content: readJSON, ToolResult: &api.ToolResult{Content: readJSON, Outcome: api.ToolResultOutcomeCompleted}},
 	}
 	ledger := investigateLedgerReader{root: root, sessionID: sess.ID, msgs: history[1:]}
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "found foo",
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{{
-			Path: "internal/foo.go", Line: 1, Excerpt: "package foo",
-		}},
-	}
+	report := markdownDraft(`Found foo [internal/foo.go:1 "package foo"].`)
 	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
-		context.Background(), ledger, sess, history, toolcontract.SurfaceImplementInvestigate, report, []string{"read"}, evidence.CitationRoots{ProjectDir: root},
+		context.Background(), ledger, sess, history, toolcontract.SurfaceImplementInvestigate, report, evidence.CitationRoots{ProjectDir: root},
 	)
 	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
 	if strings.TrimSpace(verdict.Code) != "" {
@@ -242,7 +217,7 @@ func TestFormatCloseoutGroundingReject_rendersFullCitationKick(t *testing.T) {
 			"offender_count":          1,
 			"observed_handles_sample": "leg-a:list#1, leg-b:read#2",
 			"observed_paths_sample":   "src/coropa, src/coropa/main.go",
-			"retained_citations":      `{"cited_evidence":[{"evidence":"command#37"}]}`,
+			"repair_targets":          []map[string]any{{"id": "c2", "token": "missing.go:1", "defect": "not_observed", "link": false}},
 			"repair_observations":     `[{"evidence":"git_receipt#1","tool":"git_commit"}]`,
 		}},
 		draft,
@@ -250,15 +225,16 @@ func TestFormatCloseoutGroundingReject_rendersFullCitationKick(t *testing.T) {
 	testutil.FailErr(t, "guard.FormatCloseoutGroundingReject failed", err)
 	for _, want := range []string{
 		"[host:coordinator-citation-grounding]",
-		"emit only the citations fence",
+		"valid citations stay",
+		"[cite: c1 => read#5:42]",
+		"- c2: `missing.go:1` (not_observed)",
 		"Repair citations using existing observations.",
 		"Attempt 1/3",
 		draft,
-		"Pinned body:",
+		"Retained answer:",
 		"missing.go:1",
 		"leg-a:list#1",
 		"src/coropa/main.go",
-		`{"cited_evidence":[{"evidence":"command#37"}]}`,
 		`[{"evidence":"git_receipt#1","tool":"git_commit"}]`,
 		"Code: INVEST_HANDLE_NOT_OBSERVED",
 	} {
@@ -269,9 +245,19 @@ func TestFormatCloseoutGroundingReject_rendersFullCitationKick(t *testing.T) {
 	if strings.Contains(nudge, "re-emit this text verbatim") {
 		t.Fatalf("kick must not instruct verbatim re-emit, got:\n%s", nudge)
 	}
+	// D8: the kick has no JSON fallback left to teach.
+	for _, retired := range []string{"citations fence", "cited_evidence", "cited_urls", "artifact_ids"} {
+		if strings.Contains(nudge, retired) {
+			t.Errorf("nudge teaches retired %q:\n%s", retired, nudge)
+		}
+	}
 	if strings.Count(nudge, "[host:coordinator-citation-grounding]") != 1 {
 		t.Fatalf("expected single host marker, got %q", nudge)
 	}
+}
+
+func markdownDraft(markdown string) guidance.CloseoutDraft {
+	return guidance.ParseCloseoutDraft(markdown, citationmd.Options{})
 }
 
 type investigateLedgerReader struct {

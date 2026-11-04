@@ -24,7 +24,7 @@ func TestCompletionBarrierRejectsOrdinaryAndAssembledProse(t *testing.T) {
 			loop := NewPromptLoopForTest(PromptLoopDeps{
 				Closeout: CloseoutDeps{
 					AssertCompletion: func(context.Context, *api.Session) error { return refusal },
-					AssembleLedgerCloseout: func(context.Context, string, string, []string, string, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+					AssembleLedgerCloseout: func(context.Context, string, string, []string, guidance.CloseoutDraft, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 						return guidance.CoordinatorCompletionReport{Synthesis: "The host will advance."}, &api.CitationGrounding{HostAssembled: true}
 					},
 				},
@@ -33,7 +33,7 @@ func TestCompletionBarrierRejectsOrdinaryAndAssembledProse(t *testing.T) {
 			var err error
 			if assembled {
 				st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true}
-				_, err = loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", draft.Content, nil, st, store.All())
+				_, err = loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", markdownRead(draft.Content, false).Draft, nil, st, store.All())
 			} else {
 				_, err = loop.Projection.commitGuardedAssistantTurn(t.Context(), &api.Session{ID: "session"}, "session", store.All(), "", "", draft)
 			}

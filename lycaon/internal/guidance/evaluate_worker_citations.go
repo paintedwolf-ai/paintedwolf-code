@@ -600,6 +600,7 @@ type ResolvedFinding struct {
 	Handle  string
 	Path    string
 	Line    int
+	EndLine int
 	Excerpt string
 	Verdict evidence.Verdict
 	Note    string
@@ -636,6 +637,7 @@ func ResolveFindingsForWire(
 			Handle:  res.Handle,
 			Path:    res.Path,
 			Line:    res.Line,
+			EndLine: res.EndLine,
 			Excerpt: res.Excerpt,
 			Verdict: res.Verdict,
 			Note:    note,

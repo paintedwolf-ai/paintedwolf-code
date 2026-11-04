@@ -8,10 +8,10 @@ tier: builtin
 invariants:
   trigger_class: tool_rejection
   fires_in:
-  - closeout citations rejected for untraced cited_evidence or cited_urls (handle/unverifiable
-    in-session retry; citations-required host-assembles)
+  - closeout citations rejected as unobserved or unverifiable, or a refused repair or
+    malformed citation (in-session retry; citations-required host-assembles)
   required:
-  - citations fence
-  - cited_evidence
+  - '[cite: c1 =>'
+  - retained
   forbidden:
   - workflow_advance

@@ -2,12 +2,11 @@ package promptloop
 
 import (
 	"context"
-	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,50 +16,64 @@ type closeoutReportObservation struct {
 	citations guard.CloseoutGroundingVerdict
 }
 
-// Document defects precede citation repair, which retains the document fields.
-func (l *turnCloseout) observeCloseoutReport(ctx context.Context, sess *api.Session, history []api.Message, surfaceID string, report guidance.CoordinatorCompletionReport, unread []jsonshape.Issue, turnTools []string, deliversRunReport bool) (closeoutReportObservation, error) {
+// Order: document fields, image embeds, the run's document checks, then references:
+// a refused repair, damaged syntax, every supplied reference, the citation-required
+// decision, and last a repeat of the previous closeout.
+func (l *turnCloseout) observeCloseoutReport(ctx context.Context, sess *api.Session, history []api.Message, surfaceID string, read guidance.CloseoutRead, deliversRunReport bool) (closeoutReportObservation, error) {
 	observation := closeoutReportObservation{facts: oar.NewGuardContext()}
 	gc := observation.facts
 	gc.Session.Surface = strings.TrimSpace(surfaceID)
-	var issues []guidance.ReportDocumentIssue
-	if issue, ok := guidance.ReportFenceUnreadable(unread); ok {
+	draft := read.Draft
+	if issue, ok := guidance.ReportFenceUnreadable(read.Unread); ok {
 		putReportFieldRefusals(gc, []guidance.ReportDocumentIssue{issue})
 		return observation, nil
 	}
-	if embeds := guidance.CloseoutMarkdownArtifactEmbedIDs(report.Synthesis); len(embeds) > 0 {
+	if embeds := guidance.CloseoutMarkdownArtifactEmbedIDs(draft.Parsed); len(embeds) > 0 {
 		gc.Rejection.RejectObservation = "present_markdown_embed"
 		gc.PutRejectData(guidance.PresentMarkdownEmbedCode, guidance.OffenderHintData(embeds))
 		return observation, nil
 	}
 	if deliversRunReport && l.Deps.CheckRunReportDocument != nil {
-		checked, err := l.Deps.CheckRunReportDocument(ctx, sess.ID, report)
+		issues, err := l.Deps.CheckRunReportDocument(ctx, sess.ID, draft.Report())
 		if err != nil {
 			return observation, err
 		}
-		issues = append(issues, checked...)
-	}
-	if len(issues) > 0 {
-		putReportFieldRefusals(gc, issues)
-		return observation, nil
-	}
-	if !guard.CoordinatorEvidenceOptional(history, turnTools) {
-		if l.Deps.EvidenceLedger == nil {
-			return observation, fmt.Errorf("closeout grounding not configured")
-		}
-		verdict, err := guard.ObserveCoordinatorCloseoutGrounding(ctx, l.Deps.EvidenceLedger, sess, history, surfaceID, report, turnTools, l.Context.citationRoots(ctx, sess), gc)
-		if err != nil {
-			return observation, err
-		}
-		observation.citations = verdict
-		if closeoutHasCitationIssues(gc) {
+		if len(issues) > 0 {
+			putReportFieldRefusals(gc, issues)
 			return observation, nil
 		}
 	}
-	if hit, offenders := guidance.CloseoutCitationsSubsetOfPrior(history, report); hit {
+	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(ctx, l.Deps.EvidenceLedger, sess, history, surfaceID, draft, l.Context.citationRoots(ctx, sess))
+	if err != nil {
+		return observation, err
+	}
+	observation.citations = verdict
+	if len(read.RepairDefects) > 0 {
+		putCitationDefect(gc, "citation_repair_invalid", guidance.CitationRepairInvalidCode, verdict.HintData, guidance.CitationRepairRefusalData(read.RepairDefects))
+		return observation, nil
+	}
+	if len(draft.Issues) > 0 {
+		putCitationDefect(gc, "citation_syntax_invalid", guidance.CitationSyntaxInvalidCode, verdict.HintData, guidance.CitationSyntaxRefusalData(draft.Issues))
+		return observation, nil
+	}
+	guard.PublishCloseoutGrounding(gc, surfaceID, draft, verdict)
+	if closeoutHasCitationIssues(gc) {
+		return observation, nil
+	}
+	if hit, offenders := guidance.CloseoutCitationsSubsetOfPrior(history, verdict.Grounding); hit {
 		gc.Rejection.RejectObservation = "closeout_no_new_evidence"
 		gc.PutRejectData(guidance.CloseoutNoNewEvidenceCode(surfaceID), guidance.OffenderHintData(offenders))
 	}
 	return observation, nil
+}
+
+// putCitationDefect refuses on its own code, with the repair kick's choices.
+func putCitationDefect(gc *oar.GuardContext, rejectObservation, code string, hints, refusal map[string]any) {
+	gc.Rejection.RejectObservation = rejectObservation
+	data := make(map[string]any, len(hints)+len(refusal))
+	maps.Copy(data, hints)
+	maps.Copy(data, refusal)
+	gc.PutRejectData(code, data)
 }
 
 // The first defect selects policy; every defect accompanies the repair.
@@ -74,6 +87,10 @@ func putReportFieldRefusals(gc *oar.GuardContext, issues []guidance.ReportDocume
 		data["offenders_omitted"] = data["offenders_omitted"].(int) + extra
 	}
 	data["rejection_reason"] = issue.Reason
-	data["document_issues"] = issues
+	listed := make([]map[string]any, 0, len(issues))
+	for _, each := range issues {
+		listed = append(listed, map[string]any{"reason": each.Reason, "offenders": each.Offenders})
+	}
+	data["document_issues"] = listed
 	gc.PutRejectData(issue.Code, data)
 }

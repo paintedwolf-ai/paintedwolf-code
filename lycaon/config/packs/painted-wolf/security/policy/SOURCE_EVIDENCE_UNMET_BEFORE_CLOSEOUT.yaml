@@ -19,8 +19,8 @@ copy:
     produce evidence; a different command cannot substitute for a selected verify.test check.
     Inspect the actual terminal outcome, not declared_command_match or a running handle.
   instead: >-
-    If no justified recovery remains, report the limitation now with verification.method
-    blocked and a reason in the trailing closeout JSON. This ends the turn without
+    If no justified recovery remains, report the limitation now and include
+    `[verify: blocked - reason]` in your answer. This ends the turn without
     passing or advancing the workflow gate. {{ paintedwolf.cap }} settled attempts is a
     recovery ceiling, not a quota. Do not repeat unchanged failures.
 x-paintedwolf-category: recoverable

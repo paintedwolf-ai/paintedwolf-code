@@ -55,7 +55,7 @@ type ProgressFacts struct {
 	ProgressMissing              bool
 	ProgressClosedBeyondBaseline bool
 	ProgressReconciledSinceArm   bool
-	HasCompletionReport          bool
+	CloseoutHasAnswer            bool
 	TaskEnvelopeEcho             bool
 	VerifyRequired               bool
 	VerifierPass                 bool

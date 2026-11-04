@@ -2,6 +2,7 @@ package closeouts
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"strings"
 
@@ -10,16 +11,16 @@ import (
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 )
 
-// NoteCloseoutGroundingReject records a refused closeout draft and the
+// NoteCloseoutGroundingReject records a refused closeout's typed draft and the
 // members of it the report did not take.
-func (m *Service) NoteCloseoutGroundingReject(ctx context.Context, sessionID, code, offenderKey, draftedContent string, unread []jsonshape.Issue) (attempt int, prevKey string) {
+func (m *Service) NoteCloseoutGroundingReject(ctx context.Context, sessionID, code, offenderKey string, draft guidance.CloseoutDraft, unread []jsonshape.Issue) (attempt int, prevKey string) {
 	if m == nil {
 		return 0, ""
 	}
-	return m.noteGroundingReject(sessiontree.RootID(ctx, m.store, sessionID), code, offenderKey, draftedContent, unread)
+	return m.noteGroundingReject(sessiontree.RootID(ctx, m.store, sessionID), code, offenderKey, draft, unread)
 }
 
-func (c *Service) noteGroundingReject(rootID, code, offenderKey, draftedContent string, unread []jsonshape.Issue) (attempt int, prevKey string) {
+func (c *Service) noteGroundingReject(rootID, code, offenderKey string, draft guidance.CloseoutDraft, unread []jsonshape.Issue) (attempt int, prevKey string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cycle, _ := c.cycles.Load(rootID)
@@ -35,8 +36,8 @@ func (c *Service) noteGroundingReject(rootID, code, offenderKey, draftedContent 
 	if code = strings.TrimSpace(code); code != "" {
 		entry.ForcedBy = appendDistinctCode(entry.ForcedBy, code)
 	}
-	if s := strings.TrimSpace(draftedContent); s != "" {
-		entry.Drafted = guidance.RetainCloseoutDraft(entry.Drafted, s, guidance.RepairsReportDocument(entry.ForcedBy))
+	if draft.Synthesis != "" {
+		entry.Retain(draft)
 	}
 	entry.Unread = slices.Clone(unread)
 	c.cycles.Store(rootID, cycle)
@@ -80,6 +81,7 @@ func (c *Service) stallState(rootID string) guidance.RetainedCloseout {
 	cycle, _ := c.cycles.Load(rootID)
 	state := cycle.stall
 	state.ForcedBy = slices.Clone(state.ForcedBy)
+	state.RepairIDs = maps.Clone(state.RepairIDs)
 	state.Unread = slices.Clone(state.Unread)
 	return state
 }

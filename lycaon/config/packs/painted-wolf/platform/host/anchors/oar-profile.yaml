@@ -423,7 +423,7 @@ host_facts:
    type: int
  - name: paintedwolf.progress_has_open_steps
    type: bool
- - name: paintedwolf.has_completion_report
+ - name: paintedwolf.closeout_has_answer
    type: bool
  - name: paintedwolf.task_envelope_echo
    type: bool

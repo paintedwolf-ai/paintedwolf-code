@@ -239,11 +239,11 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
 	}
-	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		return guidance.NewRefusal("PROGRESS_OPEN_BEFORE_CLOSEOUT", "Rejected: held\n\nCode: PROGRESS_OPEN_BEFORE_CLOSEOUT\n"), true
 	}
-	deps.Closeout.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-		return guidance.CoordinatorCompletionReport{Synthesis: drafted},
+	deps.Closeout.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted guidance.CloseoutDraft, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+		return guidance.CoordinatorCompletionReport{Synthesis: drafted.Synthesis},
 			&api.CitationGrounding{HostAssembled: true, Traced: false}
 	}
 	deps.Context.PromptTurnSurface = func(string) string { return "implement_investigate" }

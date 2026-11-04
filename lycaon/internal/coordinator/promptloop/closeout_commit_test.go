@@ -5,8 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/jsonshape"
+	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -45,13 +48,13 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 						ByPath:       map[string][]string{"src/a.go": {"read#1"}},
 						PathFidelity: map[string]string{"src/a.go": "structured"},
 					}},
-					AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+					AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted guidance.CloseoutDraft, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 						if len(forcedBy) != 1 || forcedBy[0] != tc.code {
 							t.Fatalf("forcedBy = %v want [%s]", forcedBy, tc.code)
 						}
-						parsed, ok := guidance.ParseCoordinatorCompletionReport(drafted)
-						if !ok || parsed.Synthesis != "no citations here" || parsed.Headline != "Overview" || len(parsed.Limits) != 1 {
-							t.Fatalf("drafted = %q", drafted)
+						parsed := drafted.Report()
+						if parsed.Synthesis != "no citations here" || parsed.Headline != "Overview" || len(parsed.Limits) != 1 {
+							t.Fatalf("drafted = %+v", parsed)
 						}
 						if retryCount != 0 {
 							t.Fatalf("retryCount = %d want 0 (no model bounce)", retryCount)
@@ -83,14 +86,15 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 
 			history := []api.Message{
 				{ID: "u1", Role: api.MessageRoleUser, Content: "research"},
+				{ID: "t1", Role: api.MessageRoleTool, EvidenceHandles: []string{"read#1"}},
 				{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here", Visibility: api.MessageVisibilityInternal},
 			}
-			report := guidance.CoordinatorCompletionReport{Synthesis: "no citations here", Headline: "Overview", Limits: []string{"Inspection only."}}
+			read := markdownRead("no citations here\n\n```json\n{\"headline\":\"Overview\",\"limits\":[\"Inspection only.\"]}\n```", true)
 			out, err := loop.Closeout.handleAcceptedCloseoutReport(
 				context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
 				"s1", "", tc.surface, st, history,
 				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "no citations here"},
-				guidance.CloseoutRead{Report: report},
+				read,
 			)
 			testutil.FailErr(t, "handleAcceptedCloseoutReport", err)
 			if !out.committed {
@@ -119,7 +123,7 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 				committed.CompletionReport.Scope != api.CompletionReportScopeRun {
 				t.Fatalf("completion report meta = %+v want run scope", committed.CompletionReport)
 			}
-			if committed.CompletionReport.Headline != report.Headline || len(committed.CompletionReport.Limits) != 1 {
+			if committed.CompletionReport.Headline != "Overview" || len(committed.CompletionReport.Limits) != 1 {
 				t.Fatalf("host attachment lost report metadata: %+v", committed.CompletionReport)
 			}
 			if st.draftSlotID != "" {
@@ -129,13 +133,19 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 	}
 }
 
+// A retry that rewrites the retained answer is refused on the citation budget, and
+// what stays retained is the first answer.
 func TestCloseoutCitationRetryKeepsPinnedSynthesis(t *testing.T) {
 	const pinned = "Honest report: tea install failed."
-	var assembled string
-	st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"read"}}
+	retained := activeRetained(pinned, 1, false, guidance.InvestHandleNotObservedCode)
+	var noted guidance.CloseoutDraft
+	var decisionCode string
+	hints := loadCoordinatorTestHintConfig(t)
+	st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"read"}, closeoutRetry: closeoutRetryState{attempt: 1}}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
-			HintConfig: loadCoordinatorTestHintConfig(t),
+			HintConfig: hints,
+			RejectFmt:  guidance.NewStaticRejectFormatter(hints),
 			EvidenceLedger: closeoutLedgerReader{ledger: evidence.Ledger{
 				Handles: map[string]evidence.Record{
 					"read#1": {Handle: "read#1", Kind: "read", Path: "src/a.go", Body: []string{"package main"}},
@@ -143,35 +153,45 @@ func TestCloseoutCitationRetryKeepsPinnedSynthesis(t *testing.T) {
 				ByPath:       map[string][]string{"src/a.go": {"read#1"}},
 				PathFidelity: map[string]string{"src/a.go": "structured"},
 			}},
-			CloseoutStallState: func(_ context.Context, _ string) guidance.RetainedCloseout {
-				return guidance.RetainedCloseout{Active: true, Attempt: 1, PrevKey: "k", Drafted: pinned}
+			CloseoutStallState: func(_ context.Context, _ string) guidance.RetainedCloseout { return retained },
+			EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
+				if gc.Rejection.RejectObservation != "citation_repair_invalid" {
+					t.Fatalf("observation = %q", gc.Rejection.RejectObservation)
+				}
+				decisionCode = guidance.CitationRepairInvalidCode
+				return &oar.Decision{Code: decisionCode, Data: gc.RejectData[decisionCode]}, nil
 			},
-			AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-				assembled = drafted
-				return guidance.CoordinatorCompletionReport{Synthesis: drafted},
-					&api.CitationGrounding{HostAssembled: true, HintCode: guidance.InvestCitationsRequiredCode}
+			NoteCloseoutGroundingReject: func(_ context.Context, _, _, _ string, draft guidance.CloseoutDraft, _ []jsonshape.Issue) (int, string) {
+				noted = draft
+				return 2, ""
 			},
 		},
 		Projection: ProjectionDeps{
-			UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error { return nil },
+			AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },
+			AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
+			UpdateMessage:      func(_ context.Context, _, _ string, _ api.Message) error { return nil },
 		},
 	})
+	const rewrite = "Invented REST CLI success story"
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "research"},
-		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "Invented REST CLI success story", Visibility: api.MessageVisibilityInternal},
+		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: rewrite, Visibility: api.MessageVisibilityInternal},
 	}
 	out, err := loop.Closeout.handleAcceptedCloseoutReport(
 		context.Background(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()},
 		"s1", "", "implement_investigate", st, history,
-		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "Invented REST CLI success story"},
-		guidance.CloseoutRead{Report: guidance.CoordinatorCompletionReport{Synthesis: "Invented REST CLI success story"}},
+		api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: rewrite},
+		guidance.ReadCloseoutReport(rewrite, retained, false, citationmd.Options{}),
 	)
 	testutil.FailErr(t, "handleAcceptedCloseoutReport", err)
-	if !out.committed {
-		t.Fatal("expected host assemble of the pinned body")
+	if out.committed || !out.retry || decisionCode == "" {
+		t.Fatalf("outcome = %+v", out)
 	}
-	if guidance.UsableCloseoutSynthesis(assembled) != pinned {
-		t.Fatalf("assembled drafted = %q want pinned %q", assembled, pinned)
+	if noted.Synthesis != pinned || out.drafted.Synthesis != pinned {
+		t.Fatalf("retained = %q / %q want pinned %q", noted.Synthesis, out.drafted.Synthesis, pinned)
+	}
+	if st.closeoutRetry.attempt != 2 || st.closeoutRetry.documentAttempt != 0 {
+		t.Fatalf("a refused repair spends the citation budget: %+v", st.closeoutRetry)
 	}
 }
 
@@ -182,12 +202,7 @@ func TestCloseoutCitationRepairPreservesReportOnCommit(t *testing.T) {
 			name = "references removed"
 		}
 		t.Run(name, func(t *testing.T) {
-			original := guidance.CoordinatorCompletionReport{
-				Synthesis: "The merge failed.", Headline: "Conflicts remain", Summary: "Repair is needed.",
-				Limits: []string{"No commit created."}, CitedEvidence: []guidance.CoordinatorCitedEvidence{{Evidence: "missing#1"}},
-			}
-			draft, err := guidance.MarshalCoordinatorCompletionReport(original)
-			testutil.FailErr(t, "marshal retained report", err)
+			retained := activeRetained("The merge failed [missing#1].\n\n```json\n"+`{"headline":"Conflicts remain","summary":"Repair is needed.","limits":["No commit created."]}`+"\n```", 1, true, guidance.InvestHandleNotObservedCode)
 			ledger := evidence.AssembleLedger([]evidence.Record{{Handle: "command#1", Kind: "command", Shape: evidence.ShapeCommand, Body: []string{"merge conflict"}}})
 			var committed api.Message
 			var assembled bool
@@ -195,26 +210,14 @@ func TestCloseoutCitationRepairPreservesReportOnCommit(t *testing.T) {
 				Closeout: CloseoutDeps{
 					HintConfig:     loadCoordinatorTestHintConfig(t),
 					EvidenceLedger: closeoutLedgerReader{ledger: ledger},
-					ProseCitationGrounding: func(_ context.Context, _ *api.Session, _ []api.Message, _, raw, surface string) *api.CitationGrounding {
-						report, ok := guidance.ParseCoordinatorCompletionReport(raw)
-						if !ok {
-							t.Fatalf("commit lost the report envelope: %q", raw)
-						}
-						ev := guidance.CloseoutEvidence{Ledger: ledger}
-						eval := guidance.EvaluateCloseoutCitations(evidence.CitationRoots{}, surface, report, ev)
-						return guidance.BuildCloseoutCitationGrounding(evidence.CitationRoots{}, surface, report, ev, eval)
-					},
 					CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
-						return guidance.RetainedCloseout{Active: true, Attempt: 1, PrevKey: guidance.InvestHandleNotObservedCode, Drafted: draft}
+						return retained
 					},
-					AssembleLedgerCloseout: func(_ context.Context, _, surface string, codes []string, raw string, retries int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+					AssembleLedgerCloseout: func(_ context.Context, _, surface string, codes []string, draft guidance.CloseoutDraft, retries int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 						assembled = true
-						report, ok := guidance.ParseCoordinatorCompletionReport(raw)
-						if !ok {
-							t.Fatalf("fallback lost the retained report: %q", raw)
-						}
-						return guidance.AssembleRetainedCloseout(evidence.CitationRoots{}, surface, guidance.CloseoutEvidence{Ledger: ledger}, report, codes[0], retries)
+						return guidance.AssembleRetainedCloseout(evidence.CitationRoots{}, surface, guidance.CloseoutEvidence{Ledger: ledger}, draft, nil, codes[0], retries)
 					},
+					EvaluateCloseoutBlock: func(context.Context, *api.Session, *oar.GuardContext) (*oar.Decision, error) { return nil, nil },
 				},
 				Projection: ProjectionDeps{
 					UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
@@ -225,14 +228,14 @@ func TestCloseoutCitationRepairPreservesReportOnCommit(t *testing.T) {
 			})
 			cleared := 0
 			loop.Closeout.Deps.ClearCloseoutStall = func(context.Context, string) { cleared++ }
-			repaired := guidance.CoordinatorCompletionReport{Synthesis: "The merge succeeded.", Headline: "All done"}
-			if !removeAll {
-				repaired.CitedEvidence = []guidance.CoordinatorCitedEvidence{{Evidence: "command#1"}}
+			raw := "[cite: c1 => command#1]"
+			if removeAll {
+				raw = "The merge failed."
 			}
 			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"command"}, closeoutRetry: closeoutRetryState{attempt: 1}}
 			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", st,
-				[]api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "merge"}, {ID: "slot-1", Role: api.MessageRoleAssistant}},
-				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant}, guidance.CloseoutRead{Report: repaired})
+				[]api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "merge"}, {ID: "t1", Role: api.MessageRoleTool, EvidenceHandles: []string{"command#1"}}, {ID: "slot-1", Role: api.MessageRoleAssistant}},
+				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant}, guidance.ReadCloseoutReport(raw, retained, true, citationmd.Options{}))
 			testutil.FailErr(t, "commit citation repair", err)
 			if !out.committed || assembled != removeAll {
 				t.Fatalf("commit=%v assembled=%v", out.committed, assembled)
@@ -240,7 +243,7 @@ func TestCloseoutCitationRepairPreservesReportOnCommit(t *testing.T) {
 			if cleared != 1 || st.closeoutRetry.attempt != 0 || st.closeoutRetry.prevKey != "" || len(st.closeoutRetry.codes) != 0 {
 				t.Fatalf("accepted report retained retry state: clears=%d state=%+v", cleared, st.closeoutRetry)
 			}
-			if committed.Content != original.Synthesis || committed.CompletionReport == nil || committed.CompletionReport.Headline != original.Headline || committed.CompletionReport.Summary != original.Summary || len(committed.CompletionReport.Limits) != 1 {
+			if committed.Content != "The merge failed." || committed.CompletionReport == nil || committed.CompletionReport.Headline != "Conflicts remain" || committed.CompletionReport.Summary != "Repair is needed." || len(committed.CompletionReport.Limits) != 1 {
 				t.Fatalf("report changed during citation repair: %+v", committed)
 			}
 			if committed.Grounding == nil || committed.Grounding.Traced == removeAll {

@@ -1151,7 +1151,9 @@ type ChoiceTransitionUi struct {
 
 // CitationGrounding
 type CitationGrounding struct {
-	Traced                bool                              `json:"traced"`
+	Traced bool `json:"traced"`
+	// No citations were required and none were supplied, because this user turn has no citable observations. Traced is true because nothing failed to trace; no observed source stands behind this message.
+	EvidenceOptional      bool                              `json:"evidence_optional,omitempty"`
 	HostAssembled         bool                              `json:"host_assembled,omitempty"`
 	HintCode              string                            `json:"hint_code,omitempty"`
 	RetryCount            int                               `json:"retry_count,omitempty"`
@@ -1190,9 +1192,11 @@ type CitationGroundingCheck struct {
 // CitationGroundingCitedEvidence
 type CitationGroundingCitedEvidence struct {
 	// Host-minted evidence handle resolved from the session ledger.
-	Handle  string          `json:"handle,omitempty"`
-	Path    string          `json:"path,omitempty"`
-	Line    int             `json:"line,omitempty"`
+	Handle string `json:"handle,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Line   int    `json:"line,omitempty"`
+	// Last line of an inclusive range starting at line. Absent for a single line.
+	EndLine int             `json:"end_line,omitempty"`
 	Excerpt string          `json:"excerpt,omitempty"`
 	Verdict CitationVerdict `json:"verdict,omitempty"`
 	// True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false.
@@ -1558,6 +1562,8 @@ type CompletionReportFindingLocation struct {
 	Handle string `json:"handle,omitempty"`
 	Path   string `json:"path,omitempty"`
 	Line   int    `json:"line,omitempty"`
+	// Last line of an inclusive range starting at line. Absent for a single line.
+	EndLine int `json:"end_line,omitempty"`
 }
 
 // CompletionReportMeta Identity of a grounded completion report. Present on every message of kind completion_report. Only a run-scoped completion from a workflow with enabled reports can produce a PDF; session and phase completions are ordinary replies without document downloads.

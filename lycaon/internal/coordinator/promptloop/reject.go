@@ -16,32 +16,9 @@ import (
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
-	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// maybeCoerceCloseoutContent stores a report surface's draft as its envelope
-// and returns the members of it the report did not take.
-func (l *toolInvocations) maybeCoerceCloseoutContent(
-	ctx context.Context,
-	history []api.Message,
-	sessionID, surfaceID, content, assistantMessageID string,
-) (string, []jsonshape.Issue) {
-	pinned := l.Closeout.pinnedCloseoutSynthesis(ctx, sessionID)
-	prepared, read, ok := guard.PrepareCoordinatorCloseoutContent(surfaceID, content, pinned)
-	if !ok {
-		return content, nil
-	}
-	assistantMessageID = strings.TrimSpace(assistantMessageID)
-	for i := range history {
-		if history[i].ID == assistantMessageID {
-			history[i].Content = prepared
-			break
-		}
-	}
-	return prepared, read.Unread
-}
 
 func (l *toolInvocations) tryRejectNoToolTurn(
 	ctx context.Context,
@@ -49,6 +26,7 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 	history []api.Message,
 	userPrompt string,
 	lastAssistantContent string,
+	draft guidance.CloseoutDraft,
 	surfaceID string,
 	turnTools []string,
 	sessionID string,
@@ -71,7 +49,7 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 
 	block := reject != nil
 	if !block && l.Closeout.Deps.BeforeFinishNoToolTurn != nil {
-		reject, block = l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, surfaceID, workersIdle, turnTools, invokeAllowed)
+		reject, block = l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, draft, surfaceID, workersIdle, turnTools, invokeAllowed)
 	}
 	if !block {
 		return history, nil, false, nil

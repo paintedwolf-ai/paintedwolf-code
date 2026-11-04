@@ -1,0 +1,38 @@
+oar: '1.0'
+id: COORDINATOR_CLOSEOUT_NO_ANSWER
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.batch_closed
+    - paintedwolf.batch_phase
+    - paintedwolf.closeout_surface
+    - paintedwolf.closeout_has_answer
+    - paintedwolf.is_host_cycle_turn
+    - paintedwolf.last_assistant
+    - paintedwolf.pending_overlay_promote
+    - paintedwolf.progress_has_open_steps
+    - paintedwolf.surface_may_finish
+    - paintedwolf.turn_tools
+    - paintedwolf.workers_idle
+# closeout_surface gates the whole rule: the host reads a closeout only on a
+# surface whose declared exit is `report`. Elsewhere closeout_has_answer is false
+# by construction, so the rule would demand a report that can never be built.
+when: '!paintedwolf.batch_closed && paintedwolf.workers_idle && paintedwolf.last_assistant != "" && !paintedwolf.closeout_has_answer && paintedwolf.closeout_surface && ((paintedwolf.batch_phase == "synthesize") || paintedwolf.surface_may_finish) && !(paintedwolf.is_host_cycle_turn && size(paintedwolf.turn_tools) == 0 && ((paintedwolf.workers_idle && paintedwolf.progress_has_open_steps) || !(paintedwolf.workers_idle && !paintedwolf.pending_overlay_promote && paintedwolf.surface_may_finish)))'
+effect: block
+copy:
+  what: Final report has no answer
+  cause: Once its citations and directives are set aside, the closeout says nothing.
+  why: The host delivers the Markdown you write as the report, so a closeout of only directives, citations or a fence leaves the user with nothing to read.
+  fix: Write the answer as Markdown, with its citations inline where each claim is made.
+  instead: Do not rerun checks or reread evidence to repair this; answer from what you already found.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Final report has no answer
+x-paintedwolf-scenarios:
+  - id: default
+    expect_contains:
+      - 'Rejected:'
+      - 'Code: COORDINATOR_CLOSEOUT_NO_ANSWER'
+      - Markdown
+      - answer

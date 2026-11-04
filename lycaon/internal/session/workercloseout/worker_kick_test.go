@@ -156,10 +156,10 @@ func TestWorkerKickRenderedCoordinatorCitationGrounding(t *testing.T) {
 	}
 	for _, want := range []string{
 		"[host:coordinator-citation-grounding]",
-		"To repair citations, emit only the citations fence",
+		"Your answer is retained",
 		"Attempt 2/3",
 		draft,
-		"Pinned body:",
+		"Retained answer:",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)

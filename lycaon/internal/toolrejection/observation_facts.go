@@ -292,6 +292,8 @@ var rejectCodeObservation = map[string]string{
 	"SURVEY_BUNDLE_UNKNOWN":                     "unknown_target",
 	"SURVEY_PATH_ESCAPE":                        "path_escape",
 	"PRESENT_MARKDOWN_EMBED":                    "present_markdown_embed",
+	"CITATION_REPAIR_INVALID":                   "citation_repair_invalid",
+	"CITATION_SYNTAX_INVALID":                   "citation_syntax_invalid",
 	"SYNTH_CITATIONS_REQUIRED":                  "citations_required",
 	"TASK_DECISION_PENDING":                     "decision_pending",
 	"TASK_MAX_TOOL_LOOPS_INVALID":               "max_tool_loops_invalid",

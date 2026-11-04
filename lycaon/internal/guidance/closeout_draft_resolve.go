@@ -97,11 +97,11 @@ func ResolveDraftCitations(
 				result.Outcome, result.Code, result.Offender = CitationNotObserved, urlCode, occurrence.Link.Destination
 			}
 		case citationmd.KindArtifact:
-			result.Outcome = ArtifactNotPresentable
+			result.Outcome, result.Code = ArtifactNotPresentable, handleCode
 			result.Offender = occurrence.Artifact
 			for _, id := range presentable {
 				if strings.EqualFold(strings.TrimSpace(id), occurrence.Artifact) {
-					result.Outcome, result.Offender = ArtifactPresentable, ""
+					result.Outcome, result.Code, result.Offender = ArtifactPresentable, "", ""
 					break
 				}
 			}

@@ -1,7 +1,8 @@
 package guidance
 
 import (
-	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -19,6 +20,8 @@ const (
 	InvestCitationsRequiredCode    = "INVEST_CITATIONS_REQUIRED"
 	InvestCitationUnverifiableCode = "INVEST_CITATION_UNVERIFIABLE"
 	InvestNoNewEvidenceCode        = "INVEST_NO_NEW_EVIDENCE"
+	CitationRepairInvalidCode      = "CITATION_REPAIR_INVALID"
+	CitationSyntaxInvalidCode      = "CITATION_SYNTAX_INVALID"
 )
 
 // CloseoutLedgerHasCitableEvidence excludes gate records.
@@ -71,14 +74,16 @@ func CloseoutNoNewEvidenceCode(surfaceID string) string {
 	return SynthNoNewEvidenceCode
 }
 
-// CloseoutCitationsSubsetOfPrior checks typed citations against the prior closeout.
-func CloseoutCitationsSubsetOfPrior(history []api.Message, report CoordinatorCompletionReport) (bool, []string) {
+// CloseoutCitationsSubsetOfPrior compares resolved citations with the prior
+// closeout's, both in the form stored on grounding, so a handle and the path it
+// resolved to are one citation.
+func CloseoutCitationsSubsetOfPrior(history []api.Message, current *api.CitationGrounding) (bool, []string) {
 	prior := lastCommittedCloseoutGrounding(history)
 	if prior == nil {
 		return false, nil
 	}
-	current := citationTokenSetFromReport(report)
-	if len(current) == 0 {
+	tokens := citationTokenSetFromGrounding(current)
+	if len(tokens) == 0 {
 		return false, nil
 	}
 	priorSet := citationTokenSetFromGrounding(prior)
@@ -86,12 +91,13 @@ func CloseoutCitationsSubsetOfPrior(history []api.Message, report CoordinatorCom
 		return false, nil
 	}
 	var offenders []string
-	for tok := range current {
+	for tok := range tokens {
 		if _, ok := priorSet[tok]; !ok {
 			return false, nil
 		}
 		offenders = append(offenders, tok)
 	}
+	slices.Sort(offenders)
 	return true, offenders
 }
 
@@ -124,7 +130,7 @@ func citationTokenSetFromGrounding(g *api.CitationGrounding) map[string]struct{}
 		return out
 	}
 	for _, c := range g.CitedEvidence {
-		if tok := citationToken(c.Handle, c.Path, c.Line); tok != "" {
+		if tok := citationToken(c.Handle, c.Path, c.Line, c.EndLine); tok != "" {
 			out[tok] = struct{}{}
 		}
 	}
@@ -136,35 +142,22 @@ func citationTokenSetFromGrounding(g *api.CitationGrounding) map[string]struct{}
 	return out
 }
 
-func citationTokenSetFromReport(report CoordinatorCompletionReport) map[string]struct{} {
-	out := map[string]struct{}{}
-	for _, c := range report.CitedEvidence {
-		if tok := citationToken(c.Evidence, c.Path, c.Line); tok != "" {
-			out[tok] = struct{}{}
-		}
-	}
-	for _, u := range report.CitedURLs {
-		if u = strings.TrimSpace(u); u != "" {
-			out["url:"+u] = struct{}{}
-		}
-	}
-	return out
-}
-
-func citationToken(handle, path string, line int) string {
+func citationToken(handle, path string, line, endLine int) string {
+	var name string
 	if p := strings.TrimSpace(path); p != "" {
-		if line > 0 {
-			return fmt.Sprintf("path:%s:%d", p, line)
-		}
-		return "path:" + p
+		name = "path:" + p
+	} else if h := strings.TrimSpace(handle); h != "" {
+		name = "handle:" + h
+	} else {
+		return ""
 	}
-	if h := strings.TrimSpace(handle); h != "" {
-		if line > 0 {
-			return fmt.Sprintf("handle:%s:%d", h, line)
-		}
-		return "handle:" + h
+	if line > 0 {
+		name += ":" + strconv.Itoa(line)
 	}
-	return ""
+	if endLine > line {
+		name += "-" + strconv.Itoa(endLine)
+	}
+	return name
 }
 
 // CloseoutGroundingEval is the typed closeout citation result.
@@ -174,10 +167,6 @@ type CloseoutGroundingEval struct {
 	UnobservedHandles    []string
 	UnobservedURLs       []string
 	CitationUnverifiable bool
-	ProseDuplicateTokens []string
-	ProseDuplicateCount  int
-	ProseAdvisoryTokens  []string
-	ProseAdvisoryCount   int
 	BindAdvisoryTokens   []string
 	BindAdvisoryCount    int
 	SurveyAdvisoryTokens []string
@@ -225,24 +214,13 @@ func EvaluateCloseoutCitations(roots evidence.CitationRoots, surfaceID string, r
 			UnobservedURLs: append([]string(nil), missing...),
 		}
 	}
-	typed := buildCloseoutTypedChannel(roots, ev, report.CitedEvidence, report.CitedURLs)
-	proseEval := EvaluateWorkerProseLeaks(WorkerNarrativeInput{Brief: report.Synthesis}, ev.Ledger, typed)
 	bound := BindAdvisoryTokens(resolved)
 	return CloseoutGroundingEval{
-		ProseDuplicateTokens: proseEval.DuplicateTokens,
-		ProseDuplicateCount:  len(proseEval.DuplicateTokens),
-		ProseAdvisoryTokens:  proseEval.AdvisoryLeakTokens,
-		ProseAdvisoryCount:   len(proseEval.AdvisoryLeakTokens),
 		BindAdvisoryTokens:   bound,
 		BindAdvisoryCount:    len(bound),
 		SurveyAdvisoryTokens: survey,
 		SurveyAdvisoryCount:  len(survey),
 	}
-}
-
-func buildCloseoutTypedChannel(roots evidence.CitationRoots, ev CloseoutEvidence, citedEvidence []CoordinatorCitedEvidence, citedURLs []string) TypedChannel {
-	inputs := coordinatorCitedEvidenceInputs(citedEvidence)
-	return BuildWorkerTypedChannel(roots, ev.Ledger, inputs, citedURLs)
 }
 
 func coordinatorCitedEvidenceInputs(cited []CoordinatorCitedEvidence) []WorkerFindingInput {
@@ -265,7 +243,17 @@ func coordinatorFindingFromCitedEvidence(item CoordinatorCitedEvidence) WorkerFi
 
 // ResolveCitedEvidenceForWire maps typed citations to host provenance.
 func ResolveCitedEvidenceForWire(roots evidence.CitationRoots, ev evidence.Ledger, cited []CoordinatorCitedEvidence) []api.CitationGroundingCitedEvidence {
-	resolved := ResolveFindingsForWire(roots, ev, coordinatorCitedEvidenceInputs(cited), nil)
+	inputs := coordinatorCitedEvidenceInputs(cited)
+	resolved := ResolveFindingsForWire(roots, ev, inputs, nil)
+	// A bare path cites a file and has no line to verify.
+	for _, input := range inputs {
+		if input.Evidence != "" || input.Path == "" || input.Line > 0 || input.Excerpt != "" {
+			continue
+		}
+		if outcome := classifyDraftFinding(roots, input, ev); outcome.class == closeoutCitationGrounded {
+			resolved = append(resolved, ResolvedFinding{Handle: outcome.resolution.Handle, Path: outcome.resolution.Path, Verdict: outcome.resolution.Verdict})
+		}
+	}
 	if len(resolved) == 0 {
 		return nil
 	}
@@ -275,6 +263,7 @@ func ResolveCitedEvidenceForWire(roots evidence.CitationRoots, ev evidence.Ledge
 			Handle:   item.Handle,
 			Path:     item.Path,
 			Line:     item.Line,
+			EndLine:  item.EndLine,
 			Excerpt:  item.Excerpt,
 			Verdict:  WireCitationVerdict(item.Verdict),
 			Openable: evidence.IsOpenablePath(roots, item.Path),

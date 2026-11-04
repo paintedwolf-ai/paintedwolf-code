@@ -91,8 +91,7 @@ type CloseoutDeps struct {
 	EvaluateCloseoutBlock               func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error)
 	TurnCloseoutNudge                   TurnCloseoutNudge
 	IterationRunwayNudge                IterationRunwayNudge
-	BeforeFinishNoToolTurn              func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, lastAssistant, surfaceID string, workersIdle bool, turnTools []string, invokeAllowed bool) (reject *guidance.Refusal, block bool)
-	ProseCitationGrounding              func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, prose, surfaceID string) *api.CitationGrounding
+	BeforeFinishNoToolTurn              func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, lastAssistant string, draft guidance.CloseoutDraft, surfaceID string, workersIdle bool, turnTools []string, invokeAllowed bool) (reject *guidance.Refusal, block bool)
 	CitationRoots                       func(ctx context.Context, sess *api.Session) evidence.CitationRoots
 	OnGroundedSynthesisAccepted         func(ctx context.Context, sess *api.Session, sessionID string)
 	EvidenceLedger                      guidance.CloseoutEvidenceReader
@@ -100,11 +99,11 @@ type CloseoutDeps struct {
 	RenderHostKick                      func(ctx context.Context, kickID string, data map[string]any) (string, error)
 	BeginCloseoutIntent                 func(ctx context.Context, sessionID string)
 	RecordGroundingFriction             func(ctx context.Context, sessionID string) guidance.GroundingFriction
-	NoteCloseoutGroundingReject         func(ctx context.Context, sessionID, code, offenderKey, draftedContent string, unread []jsonshape.Issue) (attempt int, prevKey string)
+	NoteCloseoutGroundingReject         func(ctx context.Context, sessionID, code, offenderKey string, draft guidance.CloseoutDraft, unread []jsonshape.Issue) (attempt int, prevKey string)
 	ResumeCloseoutWork                  func(ctx context.Context, sessionID string)
 	CloseoutStallState                  func(ctx context.Context, sessionID string) guidance.RetainedCloseout
 	ClearCloseoutStall                  func(ctx context.Context, sessionID string)
-	AssembleLedgerCloseout              func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draftedContent string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)
+	AssembleLedgerCloseout              func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draft guidance.CloseoutDraft, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)
 	CheckRunReportDocument              func(ctx context.Context, sessionID string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error)
 }
 

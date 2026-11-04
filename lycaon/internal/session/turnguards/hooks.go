@@ -75,6 +75,7 @@ func (m *Service) BeforeFinish(
 	history []api.Message,
 	_ string,
 	lastAssistant string,
+	draft guidance.CloseoutDraft,
 	surfaceID string,
 	workersIdle bool,
 	turnTools []string,
@@ -107,7 +108,7 @@ func (m *Service) BeforeFinish(
 	batchTurn := m.Batch.TurnGuard(sess.ID)
 	if reject, block := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 		guard.ObserveCoordinatorHostNoToolTurn(
-			sess, history, lastAssistant, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
+			sess, history, lastAssistant, draft, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
 		)
 		return nil
 	}); block {
@@ -116,10 +117,10 @@ func (m *Service) BeforeFinish(
 	if reject, block := m.MissingVerdict(ctx, sess, workersIdle, invokeAllowed); block {
 		return reject, true
 	}
-	if reject, block := m.BeforeReportPhase(ctx, sess, lastAssistant, surfaceID, invokeAllowed); block {
+	if reject, block := m.BeforeReportPhase(ctx, sess, draft, surfaceID, invokeAllowed); block {
 		return reject, true
 	}
-	if reject, block := m.SourceEvidence(ctx, sess, history, surfaceID, invokeAllowed); block {
+	if reject, block := m.SourceEvidence(ctx, sess, history, draft.Verification, surfaceID, invokeAllowed); block {
 		return reject, true
 	}
 	if reject, block := m.OpenGates(ctx, sess, workersIdle, invokeAllowed); block {

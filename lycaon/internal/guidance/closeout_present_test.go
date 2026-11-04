@@ -87,15 +87,3 @@ func TestBindCloseoutPresentArtifactsPrefersReportThenHistory(t *testing.T) {
 		t.Fatalf("fallback = %#v", fallback.ArtifactIDs)
 	}
 }
-
-func TestParseCoordinatorCompletionReportArtifactIDs(t *testing.T) {
-	t.Parallel()
-	envelope := `{"synthesis":"Report.","cited_evidence":[],"artifact_ids":["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"]}`
-	report, ok := ParseCoordinatorCompletionReport(envelope)
-	if !ok {
-		t.Fatal("expected parse")
-	}
-	if len(report.ArtifactIDs) != 1 || report.ArtifactIDs[0] != "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" {
-		t.Fatalf("artifact_ids = %#v", report.ArtifactIDs)
-	}
-}

@@ -390,7 +390,8 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"drafted_synthesis":        true,
 	// JSON projections of typed citation evaluation in guidance.CloseoutRepairHintData.
 	"repair_observations":          true,
-	"retained_citations":           true,
+	"repair_targets":               true, // citation repair: rejected occurrences by repair ID
+	"document_citation_targets":    true, // citation repair: rejected finding where entries
 	"resume_work_allowed":          true,
 	"can_recall":                   true, // recall in the closed turn's offered tools (promptloop rejectCloseoutGrounding)
 	"offenders_sample":             true, // report-document repair: guidance.OffenderHintData

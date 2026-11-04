@@ -291,7 +291,7 @@ anchors:
 
   - id: coordinator.citation.grounding
     title: Coordinator citation grounding
-    description: Closeout JSON rejected for untraced cited_evidence or cited_urls.
+    description: Closeout rejected for citations that did not trace to observed evidence.
     trigger_class: tool_rejection
     surface: coordinator
     planes: [inform]

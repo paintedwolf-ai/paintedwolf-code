@@ -41,6 +41,7 @@ func observedCitedEvidenceForWire(roots evidence.CitationRoots, ev evidence.Ledg
 			Handle:   handle,
 			Path:     path,
 			Line:     c.Line,
+			EndLine:  c.EndLine,
 			Excerpt:  strings.TrimSpace(c.Excerpt),
 			Verdict:  api.CitationVerdictMatched,
 			Openable: evidence.IsOpenablePath(roots, path),
