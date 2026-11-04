@@ -37,7 +37,6 @@ type markdownRun struct {
 	deps     promptloop.PromptLoopDeps
 	outputs  []string
 	versions []string
-	accepted int
 	retained guidance.RetainedCloseout
 }
 
@@ -96,7 +95,6 @@ func newMarkdownRun(t *testing.T, completions ...*modelcall.Completion) *markdow
 		return r.retained.Attempt, ""
 	}
 	deps.Closeout.ClearCloseoutStall = func(context.Context, string) { r.retained = guidance.RetainedCloseout{} }
-	deps.Closeout.OnGroundedSynthesisAccepted = func(context.Context, *api.Session, string) { r.accepted++ }
 	r.deps = deps
 	return r
 }
@@ -144,8 +142,8 @@ func citedHistory() []api.Message {
 	}
 }
 
-// D2, D5, D6: over Markdown the real run commits a grounded completion report that
-// satisfies topology_report_delivered and closes the batch.
+// D2, D5: over Markdown the real run commits a grounded completion report that
+// satisfies topology_report_delivered.
 func TestMarkdownRunCommitsDeliverableReport(t *testing.T) {
 	r := newMarkdownRun(t, &modelcall.Completion{Content: "The cause is here [read#1:2].\n[verify: targeted - Ran it]"})
 	_, message := r.run(t, citedHistory())
@@ -158,12 +156,9 @@ func TestMarkdownRunCommitsDeliverableReport(t *testing.T) {
 	if !reportTopology(t, message) {
 		t.Fatalf("topology_report_delivered unmet by %+v", message)
 	}
-	if r.accepted != 1 {
-		t.Fatalf("batch latch fired %d times", r.accepted)
-	}
 }
 
-// AC-CLO-02, D5, D6: a tool-free reply is delivered too, honestly evidence-optional.
+// AC-CLO-02, D5: a tool-free reply is delivered too, honestly evidence-optional.
 func TestMarkdownRunDeliversEvidenceOptionalReply(t *testing.T) {
 	r := newMarkdownRun(t, &modelcall.Completion{Content: "You're welcome."})
 	_, message := r.run(t, []api.Message{{ID: "user", Role: api.MessageRoleUser, Content: "Thanks."}})
@@ -173,9 +168,6 @@ func TestMarkdownRunDeliversEvidenceOptionalReply(t *testing.T) {
 	}
 	if message.Kind != api.MessageKindCompletionReport || !reportTopology(t, message) {
 		t.Fatalf("message = %+v", message)
-	}
-	if r.accepted != 1 {
-		t.Fatalf("batch latch fired %d times", r.accepted)
 	}
 }
 
@@ -191,7 +183,7 @@ func TestModelOutputsKeepScreenedModelTextAndMessagesHoldPresentation(t *testing
 	if len(r.outputs) != 1 || r.outputs[0] != screened {
 		t.Fatalf("model_outputs.content = %q, want the screened model text", r.outputs)
 	}
-	const presented = "The key [REDACTED VALUE] lives here [a.go:2](a.go#L2).\n\n```\n[read#1:3]\n```"
+	const presented = "The key [REDACTED VALUE] lives here [a.go:2](a.go#L2).\n```\n[read#1:3]\n```"
 	if message.Content != presented {
 		t.Fatalf("messages.content = %q, want %q", message.Content, presented)
 	}

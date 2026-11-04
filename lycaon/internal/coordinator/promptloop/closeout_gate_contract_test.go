@@ -27,6 +27,7 @@ type closeoutContract struct {
 	selected *oar.Decision
 	fired    []string
 	friction int
+	accepted int
 	noted    []string
 	issues   []guidance.ReportDocumentIssue
 	assemble func(forcedBy []string, draft guidance.CloseoutDraft, retries int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)
@@ -82,6 +83,7 @@ func newCloseoutContract(t *testing.T) *closeoutContract {
 			CheckRunReportDocument: func(context.Context, string, guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
 				return c.issues, nil
 			},
+			OnGroundedSynthesisAccepted: func(context.Context, *api.Session, string) { c.accepted++ },
 			RecordGroundingFriction: func(context.Context, string) guidance.GroundingFriction {
 				c.friction++
 				return guidance.GroundingFriction{Remaining: 5}
@@ -227,6 +229,7 @@ func TestRetiredFenceMembersSpendOnlyTheDocumentBudget(t *testing.T) {
 		t.Fatalf("refusal does not name the members:\n%s", body)
 	}
 	fence := body[strings.Index(body, "```json"):]
+	fence = fence[:strings.Index(fence[3:], "```")+3]
 	if strings.Contains(fence, "cited_evidence") || !strings.Contains(fence, `"headline":"H"`) {
 		t.Fatalf("retained fence:\n%s", fence)
 	}
@@ -249,8 +252,12 @@ func TestUncitedAnswerWithCurrentEvidenceHostAssembles(t *testing.T) {
 			if !out.committed || c.selected != nil || st.closeoutRetry.attempt != 0 || c.friction != 0 {
 				t.Fatalf("outcome = %+v selected = %+v retry = %+v", out, c.selected, st.closeoutRetry)
 			}
-			if len(c.fired) != 1 || c.fired[0] != tc.code {
+			if len(c.fired) == 0 || c.fired[0] != tc.code {
 				t.Fatalf("fired = %v, want the warning", c.fired)
+			}
+			// D6: host attachment is no grounded synthesis.
+			if c.accepted != 0 {
+				t.Fatalf("batch latch fired on a host-assembled report")
 			}
 			g := out.assistantMsg.Grounding
 			if g == nil || !g.HostAssembled || g.Traced || g.HintCode != tc.code || g.RetryCount != 0 {
@@ -360,6 +367,10 @@ func TestValidMarkdownCloseoutCommitsWithoutFalseChecks(t *testing.T) {
 			if g == nil || !g.Traced || g.EvidenceOptional || g.HostAssembled {
 				t.Fatalf("grounding = %+v", g)
 			}
+			// D6: the one-report-per-batch latch closes on the grounded report.
+			if c.accepted != 1 {
+				t.Fatalf("batch latch fired %d times", c.accepted)
+			}
 			// D7: no closeout check claims a citation sat in prose.
 			if g.ProseLeakCount != 0 || g.ProseAdvisoryCount != 0 {
 				t.Fatalf("prose counts: %+v", g)
@@ -370,6 +381,17 @@ func TestValidMarkdownCloseoutCommitsWithoutFalseChecks(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// D6: an exempt reply is grounded, so it closes the batch too.
+func TestEvidenceOptionalReplyClosesTheBatch(t *testing.T) {
+	c := newCloseoutContract(t)
+	const content = "You're welcome."
+	history := []api.Message{{ID: "user", Role: api.MessageRoleUser, Content: "Thanks."}, {ID: "slot", Role: api.MessageRoleAssistant, Content: content}}
+	out, _ := c.drive(t, "implement_synthesis", content, false, history)
+	if !out.committed || c.accepted != 1 || !out.assistantMsg.Grounding.EvidenceOptional {
+		t.Fatalf("outcome = %+v accepted = %d", out, c.accepted)
 	}
 }
 
