@@ -27,10 +27,14 @@ func (s *History) SessionActivityFloor(ctx context.Context, projectID, sessionID
 	return row.CreatedOrdinal, true, nil
 }
 
-// Page newest effects in (afterOrdinal, throughOrdinal]; a zero upper bound is open.
-func (s *History) EffectsBetween(
+// EffectsForBriefClass pages the newest of one brief class in
+// (afterOrdinal, throughOrdinal]: the viewer's own command windows when
+// duringCommand is set, otherwise every other actor. Worker branches and the
+// viewer's own writes are in neither, so no class can fill another's page.
+func (s *History) EffectsForBriefClass(
 	ctx context.Context,
-	projectID string,
+	projectID, viewerSessionID string,
+	duringCommand bool,
 	afterOrdinal, throughOrdinal int64,
 	limit int,
 ) ([]Effect, error) {
@@ -40,15 +44,22 @@ func (s *History) EffectsBetween(
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	beforeOrdinal := int64(0)
-	if throughOrdinal > 0 {
-		beforeOrdinal = throughOrdinal + 1
+	class := int64(0)
+	if duringCommand {
+		class = 1
 	}
-	rows, err := s.queries.ListSourceEffectsAfterOrdinal(ctx, db.ListSourceEffectsAfterOrdinalParams{
-		ProjectID: projectID, Ordinal: afterOrdinal,
-		BeforeOrdinal: beforeOrdinal, PageLimit: int64(limit),
+	rows, err := s.queries.ListSourceEffectsForBriefClass(ctx, db.ListSourceEffectsForBriefClassParams{
+		ProjectID: projectID, Ordinal: afterOrdinal, ThroughOrdinal: throughOrdinal,
+		ViewerSessionID: viewerSessionID, DuringCommand: class, PageLimit: int64(limit),
 	})
-	return effectsFromAfterOrdinal(rows), err
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Effect, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, effectFromFields(effectFieldsOf(r.EffectID, r.ProjectID, r.OperationID, r.FileID, r.BeforeVersionID, r.AfterVersionID, r.RootID, r.Path, r.FromRootID, r.FromPath, r.Op, r.EntryKind, r.Ordinal, r.CreatedTs, r.BranchID, r.Origin, r.Cause, r.ActorLabel, r.SessionID, r.JobID, r.Turn, r.ToolCallID, r.ToolName, r.BatchID, r.CaptureQuality, r.GitTransitionID, r.CommandWindowID)))
+	}
+	return out, nil
 }
 
 // EffectsBetweenOnBranch pages newest effects in (afterOrdinal, throughOrdinal]

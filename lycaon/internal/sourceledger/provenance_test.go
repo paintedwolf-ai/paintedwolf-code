@@ -1,8 +1,10 @@
 package sourceledger
 
 import (
+	"context"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -126,14 +128,14 @@ func TestTurnCheckpointIsAnImmutableIdempotentBoundary(t *testing.T) {
 	if !found || resolved.ID != first.ID || resolved.CreatedOrdinal != first.CreatedOrdinal {
 		t.Fatalf("resolved checkpoint = (%v, %+v), want original boundary %+v", found, resolved, first)
 	}
-	effects, err := store.History.EffectsBetween(ctx, "p1", resolved.CreatedOrdinal, 0, 10)
+	effects, err := recentEffects(ctx, store, resolved.CreatedOrdinal, 0, 10)
 	testutil.FailErr(t, "list effects after immutable checkpoint", err)
 	if len(effects) != 1 || effects[0].Path != "a.txt" || effects[0].Turn != 1 {
 		t.Fatalf("effects after checkpoint = %+v, want the turn's recorded write", effects)
 	}
 }
 
-func TestEffectsBetweenBoundsAreExclusiveInclusive(t *testing.T) {
+func TestEffectsForBriefClassBoundsAreExclusiveInclusive(t *testing.T) {
 	store, ctx := openLedger(t)
 	for _, step := range []struct{ op, path, content string }{
 		{"op-1", "a.txt", "one\n"},
@@ -146,13 +148,13 @@ func TestEffectsBetweenBoundsAreExclusiveInclusive(t *testing.T) {
 			Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
 			OperationID: step.op, After: []byte(step.content)})
 	}
-	all, err := store.History.EffectsBetween(ctx, "p1", 0, 0, 10)
+	all, err := recentEffects(ctx, store, 0, 0, 10)
 	testutil.FailErr(t, "list all effects", err)
 	if len(all) != 3 {
 		t.Fatalf("effects = %d, want 3", len(all))
 	}
 	// all is newest first: all[2] is the oldest effect.
-	window, err := store.History.EffectsBetween(ctx, "p1", all[2].Ordinal, all[1].Ordinal, 10)
+	window, err := store.History.EffectsForBriefClass(ctx, "p1", "s1", false, all[2].Ordinal, all[1].Ordinal, 10)
 	testutil.FailErr(t, "list window", err)
 	if len(window) != 1 || window[0].Ordinal != all[1].Ordinal {
 		t.Fatalf("window = %d effects, want exactly the middle effect", len(window))
@@ -224,7 +226,7 @@ func TestOldestPathEffectAfterOnBranchReadsTheLocation(t *testing.T) {
 	record(RecordInput{RecordLocation: RecordLocation{Path: "held.go"}, Op: api.SourceChangeOpCreate, OperationID: "create-held", After: []byte("held\n")})
 	_, held := mustResolve(t, store, ctx, "held.go")
 	record(RecordInput{RecordLocation: RecordLocation{Path: "elsewhere.go"}, Op: api.SourceChangeOpCreate, OperationID: "create-elsewhere", After: []byte("visitor\n")})
-	newest, err := store.History.EffectsBetween(ctx, "p1", 0, 0, 1)
+	newest, err := recentEffects(ctx, store, 0, 0, 1)
 	testutil.FailErr(t, "read the newest effect", err)
 	floor := newest[0].Ordinal
 
@@ -263,7 +265,7 @@ func TestOldestFileEffectAfterOnBranchIgnoresOtherBranches(t *testing.T) {
 	}
 	record("op-1", "base\n", sourcebranch.Trunk)
 	fileID, baseVersion := mustResolve(t, store, ctx, "a.txt")
-	before, err := store.History.EffectsBetween(ctx, "p1", 0, 0, 1)
+	before, err := recentEffects(ctx, store, 0, 0, 1)
 	testutil.FailErr(t, "read the newest effect", err)
 	floor := before[0].Ordinal
 	record("op-2", "worker\n", "job-1")
@@ -367,4 +369,17 @@ func TestMixedPublicationClassifiesContributorsRatherThanPublisher(t *testing.T)
 	if effect.ActorClassFor("mine") != ActorYou || effect.AuthoredTurn() != 9 {
 		t.Fatal("human publication reassigned agent authorship")
 	}
+}
+
+// recentEffects lists newest effects across every branch in (after, through];
+// a zero upper bound is open.
+func recentEffects(ctx context.Context, store *Store, after, through int64, limit int) ([]Effect, error) {
+	before := int64(0)
+	if through > 0 {
+		before = through + 1
+	}
+	rows, err := store.History.queries.ListSourceEffectsAfterOrdinal(ctx, db.ListSourceEffectsAfterOrdinalParams{
+		ProjectID: "p1", Ordinal: after, BeforeOrdinal: before, PageLimit: int64(limit),
+	})
+	return effectsFromAfterOrdinal(rows), err
 }

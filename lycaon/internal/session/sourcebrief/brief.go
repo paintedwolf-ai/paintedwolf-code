@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -41,8 +42,8 @@ func (m *Service) SetSources(history tools.SourceHistory, checkpoints Checkpoint
 }
 
 const (
-	// sourceChangeBriefEffectCap bounds the effects pulled for one window. An
-	// overflowing window renders as truncated, never as a complete count.
+	// sourceChangeBriefEffectCap bounds the effects read per class for one
+	// window. An overflowing class renders as truncated, never as a complete count.
 	sourceChangeBriefEffectCap = 400
 	// sourceChangeBriefFileCap bounds the itemized rows across both classes.
 	sourceChangeBriefFileCap = 20
@@ -116,9 +117,22 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 	if err != nil || !foundPrevious {
 		return inject.SourceChangeBrief{}
 	}
-	effects, err := reader.Files.EffectsBetween(
-		ctx, sess.ProjectID, previous.CreatedOrdinal, current.CreatedOrdinal, sourceChangeBriefEffectCap+1,
-	)
+	// Each class has its own cap, so a build's output cannot fill the page a
+	// person's edit is on.
+	readClass := func(duringCommand bool) ([]sourceledger.Effect, bool, error) {
+		effects, err := reader.Files.EffectsForBriefClass(
+			ctx, sess.ProjectID, sess.ID, duringCommand, previous.CreatedOrdinal, current.CreatedOrdinal, sourceChangeBriefEffectCap+1,
+		)
+		if len(effects) > sourceChangeBriefEffectCap {
+			return effects[:sourceChangeBriefEffectCap], true, err
+		}
+		return effects, false, err
+	}
+	foreign, foreignOverflow, err := readClass(false)
+	if err != nil {
+		return inject.SourceChangeBrief{}
+	}
+	own, ownOverflow, err := readClass(true)
 	if err != nil {
 		return inject.SourceChangeBrief{}
 	}
@@ -130,7 +144,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 	if err != nil {
 		transitions = nil
 	}
-	if len(effects) == 0 && len(transitions) == 0 {
+	if len(foreign) == 0 && len(own) == 0 && len(transitions) == 0 {
 		return inject.SourceChangeBrief{}
 	}
 	roots, err := m.roots.Roots(ctx, sess)
@@ -138,22 +152,24 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 		return inject.SourceChangeBrief{}
 	}
 	return assembleSourceChangeBrief(sourceChangeBriefInputs{
-		Effects:     effects,
-		Transitions: transitions,
-		Truncated:   len(effects) > sourceChangeBriefEffectCap,
-		SessionID:   sess.ID,
-		Roots:       roots,
-		Touched:     m.sessionTouchedPaths(ctx, sess, reader, roots),
+		Effects:      slices.Concat(foreign, own),
+		Transitions:  transitions,
+		Truncated:    foreignOverflow,
+		OwnTruncated: ownOverflow,
+		SessionID:    sess.ID,
+		Roots:        roots,
+		Touched:      m.sessionTouchedPaths(ctx, sess, reader, roots),
 	})
 }
 
 type sourceChangeBriefInputs struct {
-	Effects     []sourceledger.Effect
-	Transitions []sourceledger.GitTransition
-	Truncated   bool
-	SessionID   string
-	Roots       []projectroot.RootRef
-	Touched     map[string]bool
+	Effects      []sourceledger.Effect
+	Transitions  []sourceledger.GitTransition
+	Truncated    bool
+	OwnTruncated bool
+	SessionID    string
+	Roots        []projectroot.RootRef
+	Touched      map[string]bool
 }
 
 // fileGroups collects one class of effects per file. Effects arrive newest
@@ -186,16 +202,12 @@ func (g *fileGroups) add(effect sourceledger.Effect) {
 // windows touched, so a build's output cannot displace a person's edit. Files
 // that did not fit are counted. Observed ref movements precede their file effects.
 func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBrief {
-	brief := inject.SourceChangeBrief{Truncated: in.Truncated}
+	brief := inject.SourceChangeBrief{Truncated: in.Truncated, OwnTruncated: in.OwnTruncated}
 	for i := len(in.Transitions) - 1; i >= 0; i-- {
 		brief.Git = append(brief.Git, sourceGitLine(in.Roots, in.Transitions[i]))
 	}
-	effects := in.Effects
-	if in.Truncated {
-		effects = effects[:sourceChangeBriefEffectCap]
-	}
 	foreign, own := newFileGroups(), newFileGroups()
-	for _, effect := range effects {
+	for _, effect := range in.Effects {
 		if effect.BranchID.IsWorker() {
 			continue
 		}

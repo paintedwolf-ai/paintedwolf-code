@@ -78,7 +78,7 @@ type SourceFileHistory interface {
 	QueryFileVersions(context.Context, string, string, int, int64) (sourceledger.FileVersionsResult, error)
 	ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error)
 	ResolveDeletedPath(context.Context, string, sourcebranch.ID, string, string) (sourceledger.DeletedPath, error)
-	EffectsBetween(context.Context, string, int64, int64, int) ([]sourceledger.Effect, error)
+	EffectsForBriefClass(ctx context.Context, projectID, viewerSessionID string, duringCommand bool, afterOrdinal, throughOrdinal int64, limit int) ([]sourceledger.Effect, error)
 	EffectsBetweenOnBranch(context.Context, string, map[string]sourcebranch.ID, int64, int64, int) ([]sourceledger.Effect, error)
 	OldestFileEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, int64) (sourceledger.FileEffectBounds, bool, error)
 	OldestPathEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, string, int64) (sourceledger.FileEffectBounds, bool, error)

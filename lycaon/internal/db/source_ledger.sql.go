@@ -2419,6 +2419,125 @@ func (q *Queries) ListSourceEffectsAfterOrdinalOnBranch(ctx context.Context, arg
 	return items, nil
 }
 
+const listSourceEffectsForBriefClass = `-- name: ListSourceEffectsForBriefClass :many
+SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
+       COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.root_id, e.path, e.from_root_id, e.from_path,
+       e.op, e.entry_kind, e.ordinal, e.created_ts,
+       o.branch_id, o.origin, o.cause, o.actor_label,
+       o.session_id, o.job_id, o.turn, o.tool_call_id, o.tool_name, o.batch_id, o.capture_quality,
+       COALESCE(o.git_transition_id, '') AS git_transition_id,
+       COALESCE(o.command_window_id, '') AS command_window_id
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = ?1 AND e.ordinal > ?2
+  AND e.walk_visible = 1
+  AND e.ordinal <= ?3
+  AND (o.branch_id = '' OR substr(o.branch_id, 1, 9) = 'worktree:')
+  AND NOT (o.origin = 'agent' AND o.session_id = sqlc.arg(viewer_session_id))
+  AND (COALESCE(o.command_window_id, '') != '' AND o.session_id = ?4) = CAST(?5 AS INTEGER)
+ORDER BY e.ordinal DESC LIMIT ?6
+`
+
+type ListSourceEffectsForBriefClassParams struct {
+	ProjectID       string `json:"project_id"`
+	Ordinal         int64  `json:"ordinal"`
+	ThroughOrdinal  int64  `json:"through_ordinal"`
+	ViewerSessionID string `json:"viewer_session_id"`
+	DuringCommand   int64  `json:"during_command"`
+	PageLimit       int64  `json:"page_limit"`
+}
+
+type ListSourceEffectsForBriefClassRow struct {
+	EffectID        string `json:"effect_id"`
+	ProjectID       string `json:"project_id"`
+	OperationID     string `json:"operation_id"`
+	FileID          string `json:"file_id"`
+	BeforeVersionID string `json:"before_version_id"`
+	AfterVersionID  string `json:"after_version_id"`
+	RootID          string `json:"root_id"`
+	Path            string `json:"path"`
+	FromRootID      string `json:"from_root_id"`
+	FromPath        string `json:"from_path"`
+	Op              string `json:"op"`
+	EntryKind       string `json:"entry_kind"`
+	Ordinal         int64  `json:"ordinal"`
+	CreatedTs       string `json:"created_ts"`
+	BranchID        string `json:"branch_id"`
+	Origin          string `json:"origin"`
+	Cause           string `json:"cause"`
+	ActorLabel      string `json:"actor_label"`
+	SessionID       string `json:"session_id"`
+	JobID           string `json:"job_id"`
+	Turn            int64  `json:"turn"`
+	ToolCallID      string `json:"tool_call_id"`
+	ToolName        string `json:"tool_name"`
+	BatchID         string `json:"batch_id"`
+	CaptureQuality  string `json:"capture_quality"`
+	GitTransitionID string `json:"git_transition_id"`
+	CommandWindowID string `json:"command_window_id"`
+}
+
+// One class of what a session's turn brief reads, so one class cannot fill the
+// other's page: the viewer's own command windows, or every other actor. Worker
+// branches and the viewer's own writes are in neither.
+func (q *Queries) ListSourceEffectsForBriefClass(ctx context.Context, arg ListSourceEffectsForBriefClassParams) ([]ListSourceEffectsForBriefClassRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceEffectsForBriefClass,
+		arg.ProjectID,
+		arg.Ordinal,
+		arg.ThroughOrdinal,
+		arg.ViewerSessionID,
+		arg.DuringCommand,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceEffectsForBriefClassRow
+	for rows.Next() {
+		var i ListSourceEffectsForBriefClassRow
+		if err := rows.Scan(
+			&i.EffectID,
+			&i.ProjectID,
+			&i.OperationID,
+			&i.FileID,
+			&i.BeforeVersionID,
+			&i.AfterVersionID,
+			&i.RootID,
+			&i.Path,
+			&i.FromRootID,
+			&i.FromPath,
+			&i.Op,
+			&i.EntryKind,
+			&i.Ordinal,
+			&i.CreatedTs,
+			&i.BranchID,
+			&i.Origin,
+			&i.Cause,
+			&i.ActorLabel,
+			&i.SessionID,
+			&i.JobID,
+			&i.Turn,
+			&i.ToolCallID,
+			&i.ToolName,
+			&i.BatchID,
+			&i.CaptureQuality,
+			&i.GitTransitionID,
+			&i.CommandWindowID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSourceEffectsForFilePage = `-- name: ListSourceEffectsForFilePage :many
 SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(e.before_version_id, '') AS before_version_id,

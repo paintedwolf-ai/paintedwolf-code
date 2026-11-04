@@ -220,7 +220,7 @@ func (r briefRootList) Roots(context.Context, *api.Session) ([]projectroot.RootR
 
 // The project-wide window spans branches; the per-file branch predicate must not narrow it.
 func TestBuildWindowKeepsProjectWideEffects(t *testing.T) {
-	t.Run("AC-BR-04 EffectsBetween and Build are unchanged by per-file scoping", func(t *testing.T) {
+	t.Run("AC-BR-04 Build is unchanged by per-file scoping", func(t *testing.T) {
 		sqlDB := testdbfixture.Open(t, "store.db")
 		testdbseed.InsertProject(t, sqlDB, "p1")
 		_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO project_roots
@@ -250,12 +250,6 @@ func TestBuildWindowKeepsProjectWideEffects(t *testing.T) {
 		record(sourcebranch.Trunk, api.SourceChangeOriginUser, "", "base\n", "user\n")
 		record(sourcebranch.ID("job-1"), api.SourceChangeOriginAgent, "job-1", "base\n", "worker\n")
 		checkpoint(2)
-
-		all, err := ledger.History.EffectsBetween(t.Context(), "p1", 0, 0, 10)
-		testutil.FailErr(t, "list effects", err)
-		if len(all) != 3 || all[0].BranchID != "job-1" || all[1].BranchID != sourcebranch.Trunk {
-			t.Fatalf("effects = %+v, want all three across both branches", all)
-		}
 
 		service := New(briefWindowStore{turn: 2}, briefRootList(briefRoots()))
 		service.SetSources(tools.SourceHistory{Files: ledger.History, Git: ledger.Git, Authorship: ledger.Walk}, ledger.Checkpoints)

@@ -428,6 +428,27 @@ WHERE e.project_id = sqlc.arg(project_id) AND e.ordinal > sqlc.arg(ordinal)
   AND EXISTS (SELECT 1 FROM scoped_roots r WHERE r.root_id = e.root_id AND r.branch_id = o.branch_id)
 ORDER BY e.ordinal DESC LIMIT sqlc.arg(page_limit);
 
+-- One class of what a session's turn brief reads, so one class cannot fill the
+-- other's page: the viewer's own command windows, or every other actor. Worker
+-- branches and the viewer's own writes are in neither.
+-- name: ListSourceEffectsForBriefClass :many
+SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
+       COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.root_id, e.path, e.from_root_id, e.from_path,
+       e.op, e.entry_kind, e.ordinal, e.created_ts,
+       o.branch_id, o.origin, o.cause, o.actor_label,
+       o.session_id, o.job_id, o.turn, o.tool_call_id, o.tool_name, o.batch_id, o.capture_quality,
+       COALESCE(o.git_transition_id, '') AS git_transition_id,
+       COALESCE(o.command_window_id, '') AS command_window_id
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = sqlc.arg(project_id) AND e.ordinal > sqlc.arg(ordinal)
+  AND e.walk_visible = 1
+  AND e.ordinal <= sqlc.arg(through_ordinal)
+  AND (o.branch_id = '' OR substr(o.branch_id, 1, 9) = 'worktree:')
+  AND NOT (o.origin = 'agent' AND o.session_id = sqlc.arg(viewer_session_id))
+  AND (COALESCE(o.command_window_id, '') != '' AND o.session_id = sqlc.arg(viewer_session_id)) = CAST(sqlc.arg(during_command) AS INTEGER)
+ORDER BY e.ordinal DESC LIMIT sqlc.arg(page_limit);
+
 -- name: ListSourceEffectsForPresentation :many
 WITH scope_input AS (SELECT CAST(sqlc.arg(root_branches) AS TEXT) AS roots), scoped_roots AS (
  SELECT CAST(r.key AS TEXT) AS root_id, CAST(r.value AS TEXT) AS branch_id FROM scope_input, json_each(CASE WHEN roots='' THEN '{}' ELSE roots END) r

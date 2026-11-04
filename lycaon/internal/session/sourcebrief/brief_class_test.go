@@ -2,11 +2,13 @@ package sourcebrief
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -88,8 +90,90 @@ func TestACOC01OwnEffectsPastTheCapCannotDisplaceAPersonsEdit(t *testing.T) {
 	if len(brief.Files) != sourceChangeBriefFileCap || brief.Files[0].Path != "a.go" || brief.Files[0].DuringYourCommand {
 		t.Fatalf("rows = %+v, want the person's edit first", brief.Files)
 	}
-	if brief.Truncated {
-		t.Fatalf("brief = %+v, want no claim that another actor's row is missing", brief)
+	if brief.Truncated || !brief.OwnTruncated {
+		t.Fatalf("brief = %+v, want only the own class reported as overflowing", brief)
 	}
 }
 
+func TestBriefOverflowIsReportedPerClass(t *testing.T) {
+	limit := sourceChangeBriefEffectCap
+	for _, tc := range []struct {
+		name                 string
+		person, own          int
+		wantForeign, wantOwn bool
+	}{
+		{"person past the cap", limit + 1, 1, true, false},
+		{"own at the cap", 1, limit, false, false},
+		{"both past the cap", limit + 1, limit + 1, true, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l := newBriefLedger(t)
+			l.checkpoint(1)
+			for i := range tc.person {
+				l.person(fmt.Sprintf("edit/%03d.go", i))
+			}
+			for i := range tc.own {
+				l.ownCommand(fmt.Sprintf("gen/%03d.go", i))
+			}
+			l.checkpoint(2)
+			brief := l.build()
+			if brief.Truncated != tc.wantForeign || brief.OwnTruncated != tc.wantOwn {
+				t.Fatalf("truncated = %v, own = %v, want %v, %v", brief.Truncated, brief.OwnTruncated, tc.wantForeign, tc.wantOwn)
+			}
+		})
+	}
+}
+
+// The SQL classes and Effect's own predicates must place every shape alike.
+func TestBriefClassQueryAgreesWithTheEffectPredicates(t *testing.T) {
+	l := newBriefLedger(t)
+	l.checkpoint(1)
+	type class int
+	const (
+		neither class = iota
+		foreign
+		own
+	)
+	shapes := []struct {
+		path string
+		in   sourceledger.RecordInput
+		want class
+	}{
+		{"person.go", sourceledger.RecordInput{Origin: api.SourceChangeOriginUser}, foreign},
+		{"own-write.go", sourceledger.RecordInput{Origin: api.SourceChangeOriginAgent, SessionID: "s1"}, neither},
+		{"own-write-in-window.go", sourceledger.RecordInput{Origin: api.SourceChangeOriginAgent, SessionID: "s1", CommandWindowID: "w1"}, neither},
+		{"own-window.go", sourceledger.RecordInput{Origin: api.SourceChangeOriginExternal, SessionID: "s1", CommandWindowID: "w1"}, own},
+		{"other-window.go", sourceledger.RecordInput{Origin: api.SourceChangeOriginExternal, SessionID: "s2", CommandWindowID: "w2"}, foreign},
+		{"other-agent.go", sourceledger.RecordInput{Origin: api.SourceChangeOriginAgent, SessionID: "s2"}, foreign},
+		{"drift.go", sourceledger.RecordInput{Origin: api.SourceChangeOriginExternal}, foreign},
+		{"own-session-no-window.go", sourceledger.RecordInput{Origin: api.SourceChangeOriginExternal, SessionID: "s1"}, foreign},
+		{"worker.go", sourceledger.RecordInput{Origin: api.SourceChangeOriginAgent, BranchID: sourcebranch.ID("job-1"), JobID: "job-1"}, neither},
+		{"worktree.go", sourceledger.RecordInput{Origin: api.SourceChangeOriginUser, BranchID: sourcebranch.ForWorktree("w1")}, foreign},
+	}
+	for _, shape := range shapes {
+		l.record(shape.path, shape.in)
+	}
+	read := func(duringCommand bool) map[string]sourceledger.Effect {
+		effects, err := l.ledger.History.EffectsForBriefClass(t.Context(), "p1", "s1", duringCommand, 0, math.MaxInt64, 100)
+		testutil.FailErr(t, "read class", err)
+		byPath := make(map[string]sourceledger.Effect, len(effects))
+		for _, effect := range effects {
+			byPath[effect.Path] = effect
+		}
+		return byPath
+	}
+	foreignRows, ownRows := read(false), read(true)
+	for _, shape := range shapes {
+		foreignRow, inForeign := foreignRows[shape.path]
+		ownRow, inOwn := ownRows[shape.path]
+		if inForeign != (shape.want == foreign) || inOwn != (shape.want == own) {
+			t.Errorf("%s: in foreign %v, in own %v, want class %d", shape.path, inForeign, inOwn, shape.want)
+		}
+		if inOwn && (!ownRow.DuringCommandOf("s1") || ownRow.ActorClassFor("s1") == sourceledger.ActorYou || ownRow.BranchID.IsWorker()) {
+			t.Errorf("%s: own class row %+v disagrees with the effect's predicates", shape.path, ownRow)
+		}
+		if inForeign && (foreignRow.DuringCommandOf("s1") || foreignRow.ActorClassFor("s1") == sourceledger.ActorYou || foreignRow.BranchID.IsWorker()) {
+			t.Errorf("%s: foreign class row %+v disagrees with the effect's predicates", shape.path, foreignRow)
+		}
+	}
+}

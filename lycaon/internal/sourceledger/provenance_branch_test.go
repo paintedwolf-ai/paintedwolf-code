@@ -78,7 +78,7 @@ func TestLatestFileEffectStaysOnBranch(t *testing.T) {
 	trunk, worker := sourcebranch.Trunk, branchTestWorker
 	fileID := recordBranchEffects(t, store, ctx, trunk, worker)
 
-	all, err := store.History.EffectsBetween(ctx, "p1", 0, 0, 10)
+	all, err := recentEffects(ctx, store, 0, 0, 10)
 	testutil.FailErr(t, "list effects", err)
 	if len(all) != 2 || all[0].BranchID != worker || all[1].BranchID != trunk {
 		t.Fatalf("effects = %+v, want the worker's newest over trunk's", all)

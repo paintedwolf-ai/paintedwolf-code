@@ -166,3 +166,33 @@ func TestCompleteBriefRendersTheSameOnEverySurface(t *testing.T) {
 		t.Fatalf("a brief with no truncated line changed with the surface:\n%s\n%s", offered, withheld)
 	}
 }
+
+// A stored brief says only truncated; the own class says no other actor's change
+// is missing, which is a different line from the foreign class's.
+func TestTruncatedLineStatesEachClass(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	render := func(stored string, offered bool) string {
+		var brief inject.SourceChangeBrief
+		if err := json.Unmarshal([]byte(stored), &brief); err != nil {
+			t.Fatalf("unmarshal stored brief: %v", err)
+		}
+		return inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", brief, offered)
+	}
+	const row = `"files":[{"path":"a.go","actor":"user","op":"write","at":"14:02 UTC","effects":1}]`
+	complete := render(`{`+row+`}`, true)
+	foreign := render(`{`+row+`,"truncated":true}`, true)
+	ownOnly := render(`{`+row+`,"own_truncated":true}`, true)
+	both := render(`{`+row+`,"truncated":true,"own_truncated":true}`, true)
+	if foreign == complete || ownOnly == complete || ownOnly == foreign {
+		t.Fatalf("classes rendered alike:\ncomplete: %s\nforeign: %s\nown: %s", complete, foreign, ownOnly)
+	}
+	if both != foreign {
+		t.Fatalf("a foreign overflow must decide the line:\n%s\n%s", both, foreign)
+	}
+	if stored := render(`{"truncated":true}`, true); stored == "" {
+		t.Fatal("a stored brief with only truncated stopped rendering")
+	}
+	if withheld := render(`{`+row+`,"own_truncated":true}`, false); len(withheld) >= len(ownOnly) || withheld == complete {
+		t.Fatalf("own line without the tool:\n%s", withheld)
+	}
+}

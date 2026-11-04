@@ -379,7 +379,7 @@ func (f *fakeSourceLedger) ResolveHeadByFile(context.Context, string, sourcebran
 func (f *fakeSourceLedger) TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error) {
 	return sourceledger.Checkpoint{}, false, nil
 }
-func (f *fakeSourceLedger) EffectsBetween(context.Context, string, int64, int64, int) ([]sourceledger.Effect, error) {
+func (f *fakeSourceLedger) EffectsForBriefClass(context.Context, string, string, bool, int64, int64, int) ([]sourceledger.Effect, error) {
 	return nil, nil
 }
 func (f *fakeSourceLedger) EffectsBetweenOnBranch(context.Context, string, map[string]sourcebranch.ID, int64, int64, int) ([]sourceledger.Effect, error) {

@@ -68,9 +68,13 @@ type SourceChangeBrief struct {
 	OtherEffects int `json:"other_effects,omitempty"`
 	// OtherWorkingSet reports that a counted file is in the working set.
 	OtherWorkingSet bool `json:"other_working_set,omitempty"`
-	// Truncated reports that the window overflowed the effect cap, so the
-	// counts above are a floor, not a total.
+	// Truncated reports that other actors' effects overflowed their cap, so a
+	// row may be missing and the counts above are a floor. Briefs stored before
+	// the classes were read apart set it for any overflow.
 	Truncated bool `json:"truncated,omitempty"`
+	// OwnTruncated reports that the session's own command effects overflowed
+	// their cap. Every other actor's change was still read.
+	OwnTruncated bool `json:"own_truncated,omitempty"`
 }
 
 // Empty reports whether the brief carries nothing worth injecting.
@@ -124,7 +128,7 @@ func RenderSourceChangesBlock(
 		ctx, anchor.InjectSourceChanges, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID},
 		renderer, map[string]any{
 			"files": files, "git": git, "other_files": brief.OtherFiles,
-			"other_effects": brief.OtherEffects, "truncated": brief.Truncated,
+			"other_effects": brief.OtherEffects, "truncated": brief.Truncated, "own_truncated": brief.OwnTruncated,
 			"other_may_include_working_set": brief.OtherMayIncludeWorkingSet(),
 			"source_history_offered":        sourceHistoryOffered,
 		},
