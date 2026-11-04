@@ -28253,6 +28253,8 @@ components:
         - volume_root_inside_attached_root
         - volume_root_unwritable
         - volume_not_identified
+        - placement_folder_not_private
+        - volume_ignores_ownership
     WorkspacePreparation:
       x-go-generate: true
       type: object
@@ -28272,6 +28274,7 @@ components:
             - cost_declared
             - materializing_seed
             - snapshotting_branch
+            - branch_prepared
         files:
           type: integer
           format: int64
@@ -28290,6 +28293,11 @@ components:
           format: int64
           minimum: 0
           description: Files, directories and links when a source survey has completed
+        unreadable_entries:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Source entries this user could not read, left out of the branch
         not_clonable_reason:
           $ref: '#/components/schemas/WorkspaceNotClonableReason'
     TaskScopeMode:

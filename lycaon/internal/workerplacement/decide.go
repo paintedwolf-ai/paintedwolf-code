@@ -22,7 +22,17 @@ const (
 	ReasonVolumeRootInRoot    NotClonableReason = "volume_root_inside_attached_root"
 	ReasonVolumeRootReadOnly  NotClonableReason = "volume_root_unwritable"
 	ReasonVolumeNotIdentified NotClonableReason = "volume_not_identified"
+	// ReasonFolderNotPrivate is a directory at the folder's predictable name that
+	// is a link, not this user's, or open to others.
+	ReasonFolderNotPrivate       NotClonableReason = "placement_folder_not_private"
+	ReasonVolumeIgnoresOwnership NotClonableReason = "volume_ignores_ownership"
 )
+
+// ErrFolderNotPrivate refuses a placement folder another user could read or replace.
+var ErrFolderNotPrivate = errors.New("worker placement folder is not private to this user")
+
+// ErrVolumeIgnoresOwnership refuses a volume that cannot keep a folder private.
+var ErrVolumeIgnoresOwnership = errors.New("volume ignores file ownership")
 
 // ErrNoLocationOutsideRoots means the attached roots cover every location the
 // engine could use, such as a root attached at /.
@@ -112,10 +122,14 @@ func atVolumeRoot(ctx context.Context, req Request, stateBase string, volume Vol
 		return notClonable(ctx, req, stateBase, ReasonVolumeRootInRoot)
 	}
 	folder, created, err := reserve(ctx, req.StateRoot, path, volume.Root, KindVolumeRoot)
-	if err != nil {
-		if unwritable(err) {
-			return notClonable(ctx, req, stateBase, ReasonVolumeRootReadOnly)
-		}
+	switch {
+	case errors.Is(err, ErrVolumeIgnoresOwnership):
+		return notClonable(ctx, req, stateBase, ReasonVolumeIgnoresOwnership)
+	case errors.Is(err, ErrFolderNotPrivate):
+		return notClonable(ctx, req, stateBase, ReasonFolderNotPrivate)
+	case err != nil && unwritable(err):
+		return notClonable(ctx, req, stateBase, ReasonVolumeRootReadOnly)
+	case err != nil:
 		return Decision{}, err
 	}
 	if err := os.MkdirAll(folder.BranchesRoot(), 0o700); err != nil {
@@ -146,8 +160,9 @@ func unwritable(err error) bool {
 }
 
 // notClonable keeps today's strategies. The tree still stays out of every root,
-// so the state folder is used unless a root holds it. Sibling folders of a
-// project are never candidates, because they can land in a synced tree.
+// so the state folder is used unless a root holds it, then /var/tmp. A cleaner may
+// remove a long-paused unsealed tree there. Sibling folders of a project are never
+// candidates, because they can land in a synced tree.
 func notClonable(ctx context.Context, req Request, stateBase string, reason NotClonableReason) (Decision, error) {
 	if !insideAny(stateBase, req.AttachedRoots) {
 		return Decision{Base: stateBase, Reason: reason}, nil
@@ -155,12 +170,12 @@ func notClonable(ctx context.Context, req Request, stateBase string, reason NotC
 	name := enginepaths.WorkerPlacementDirName(os.Getuid(), req.StateRoot)
 	for _, parent := range fallbackParents() {
 		path := filepath.Join(parent, name)
-		if insideAny(path, req.AttachedRoots) || isSiblingOfRoot(path, req.AttachedRoots) {
+		if insideAny(path, req.AttachedRoots) || isSiblingOfRoot(path, req.AttachedRoots) || filesystemIsVolatile(parent) {
 			continue
 		}
 		folder, _, err := reserve(ctx, req.StateRoot, path, parent, KindOutsideRoots)
 		if err != nil {
-			if unwritable(err) || errors.Is(err, fs.ErrNotExist) {
+			if unwritable(err) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrFolderNotPrivate) || errors.Is(err, ErrVolumeIgnoresOwnership) {
 				continue
 			}
 			return Decision{}, err

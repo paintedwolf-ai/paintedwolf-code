@@ -160,6 +160,7 @@ func (q *SQLQueue) withWorkspacePreparation(ctx context.Context, task *api.Worke
 			Bytes:             progress.Bytes,
 			TotalBytes:        progress.TotalBytes,
 			TotalEntries:      progress.TotalEntries,
+			UnreadableEntries: progress.UnreadableEntries,
 			NotClonableReason: api.WorkspaceNotClonableReason(progress.NotClonableReason),
 		}
 		now := time.Now()

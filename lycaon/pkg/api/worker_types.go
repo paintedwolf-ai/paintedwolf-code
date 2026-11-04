@@ -284,11 +284,13 @@ type OverlayRejectOutcome struct {
 type WorkspaceNotClonableReason string
 
 const (
-	WorkspaceRootsSpanVolumes         WorkspaceNotClonableReason = "roots_span_volumes"
-	WorkspaceVolumeCannotClone        WorkspaceNotClonableReason = "volume_cannot_clone"
-	WorkspaceVolumeRootInsideAttached WorkspaceNotClonableReason = "volume_root_inside_attached_root"
-	WorkspaceVolumeRootUnwritable     WorkspaceNotClonableReason = "volume_root_unwritable"
-	WorkspaceVolumeNotIdentified      WorkspaceNotClonableReason = "volume_not_identified"
+	WorkspaceRootsSpanVolumes          WorkspaceNotClonableReason = "roots_span_volumes"
+	WorkspaceVolumeCannotClone         WorkspaceNotClonableReason = "volume_cannot_clone"
+	WorkspaceVolumeRootInsideAttached  WorkspaceNotClonableReason = "volume_root_inside_attached_root"
+	WorkspaceVolumeRootUnwritable      WorkspaceNotClonableReason = "volume_root_unwritable"
+	WorkspaceVolumeNotIdentified       WorkspaceNotClonableReason = "volume_not_identified"
+	WorkspacePlacementFolderNotPrivate WorkspaceNotClonableReason = "placement_folder_not_private"
+	WorkspaceVolumeIgnoresOwnership    WorkspaceNotClonableReason = "volume_ignores_ownership"
 )
 
 // WorkspaceProvisionStrategy is selected from successful clone operations.

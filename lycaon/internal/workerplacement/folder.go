@@ -26,7 +26,7 @@ type marker struct {
 }
 
 func readMarker(folder string) (marker, error) {
-	raw, err := os.ReadFile(filepath.Join(folder, markerFileName))
+	raw, err := readPrivateFile(folder, markerFileName)
 	if err != nil {
 		return marker{}, err
 	}
@@ -60,10 +60,18 @@ func writeFolderFile(path string, raw []byte) error {
 
 // reserve registers the folder before its first byte so a crash cannot leave one
 // the registry does not name. It creates one directory and nothing above it, so
-// a read-only or foreign volume root simply fails. A folder found here with this
-// installation's marker was the same one before its volume moved mount points.
+// a read-only or foreign volume root simply fails. The name is predictable and the
+// parent may be shared, so a folder is trusted only once it proves private to this
+// user; anything else is refused with nothing written. A folder found here with
+// this installation's marker was the same one before its volume moved mount points.
 func reserve(ctx context.Context, stateRoot, path, volumeRoot string, kind Kind) (folder Folder, created bool, err error) {
+	if volumeIgnoresOwnership(filepath.Dir(path)) {
+		return Folder{}, false, ErrVolumeIgnoresOwnership
+	}
 	existing, readErr := readMarker(path)
+	if errors.Is(readErr, ErrFolderNotPrivate) {
+		return Folder{}, false, readErr
+	}
 	if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {
 		return Folder{}, false, fmt.Errorf("placement marker is unreadable: %w: %w", fs.ErrPermission, readErr)
 	}
@@ -96,8 +104,16 @@ func reserve(ctx context.Context, stateRoot, path, volumeRoot string, kind Kind)
 	if err := os.Mkdir(path, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
 		return undo(err)
 	}
+	// Someone else may have made it first, or swapped it after this check; reading
+	// the marker back proves the private folder holds what this call wrote.
+	if err := verifyPrivateFolder(path); err != nil {
+		return undo(err)
+	}
 	if err := writeMarker(path, folder.ID, stateRoot); err != nil {
 		return undo(err)
+	}
+	if written, err := readMarker(path); err != nil || written.ID != folder.ID {
+		return undo(errors.Join(ErrFolderNotPrivate, err))
 	}
 	if err := excludeFromBackupsAndIndexing(path); err != nil {
 		slog.WarnContext(ctx, "exclude worker placement folder from backups and indexing", "path", path, "err", err)

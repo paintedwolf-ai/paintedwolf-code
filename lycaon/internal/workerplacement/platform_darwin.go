@@ -5,7 +5,6 @@ package workerplacement
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"golang.org/x/sys/unix"
@@ -31,9 +30,19 @@ func readOnlyFilesystem(err error) bool {
 	return errors.Is(err, unix.EROFS)
 }
 
-// /var/tmp survives a restart; the per-user temporary folder may not.
 func fallbackParents() []string {
-	return []string{"/private/var/tmp", os.TempDir()}
+	return []string{"/private/var/tmp"}
+}
+
+func filesystemIsVolatile(string) bool { return false }
+
+// External volumes commonly mount this way, and every user then owns every file.
+func volumeIgnoresOwnership(path string) bool {
+	var mount unix.Statfs_t
+	if err := unix.Statfs(existingAncestor(path), &mount); err != nil {
+		return false
+	}
+	return mount.Flags&unix.MNT_IGNORE_OWNERSHIP != 0
 }
 
 // Binary property list of the string "com.apple.backupd", the value Time Machine

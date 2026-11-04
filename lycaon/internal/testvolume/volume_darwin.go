@@ -60,6 +60,15 @@ func New(t *testing.T, kind Kind) (*Volume, bool) {
 	return v, false
 }
 
+// RemountIgnoringOwnership mounts the volume the way external disks commonly are.
+func (v *Volume) RemountIgnoringOwnership(t *testing.T) {
+	t.Helper()
+	image := filepath.Join(filepath.Dir(v.Root), "volume.dmg")
+	v.Eject(t)
+	hdiutil(t, "attach", image, "-nobrowse", "-owners", "off", "-mountpoint", v.Root, "-quiet")
+	t.Cleanup(func() { _, _ = runHdiutil("detach", v.Root, "-force", "-quiet") })
+}
+
 // MakeReadOnly remounts the volume read-only.
 func (v *Volume) MakeReadOnly(t *testing.T) {
 	t.Helper()

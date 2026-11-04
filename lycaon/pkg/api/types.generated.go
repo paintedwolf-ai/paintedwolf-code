@@ -9187,6 +9187,8 @@ type WorkspacePreparation struct {
 	// Logical regular-file bytes when a source survey has completed
 	TotalBytes int64 `json:"total_bytes,omitempty"`
 	// Files, directories and links when a source survey has completed
-	TotalEntries      int64                      `json:"total_entries,omitempty"`
+	TotalEntries int64 `json:"total_entries,omitempty"`
+	// Source entries this user could not read, left out of the branch
+	UnreadableEntries int64                      `json:"unreadable_entries,omitempty"`
 	NotClonableReason WorkspaceNotClonableReason `json:"not_clonable_reason,omitempty"`
 }

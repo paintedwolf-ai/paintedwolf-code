@@ -254,8 +254,9 @@ func sourceUnreadable(path string) bool {
 
 // sourceCost is what a copy of one source costs in entries and bytes.
 type sourceCost struct {
-	entries int64
-	bytes   int64
+	entries    int64
+	bytes      int64
+	unreadable int64
 }
 
 // declareCopyCost surveys by stat, reports the cost before the first byte moves,

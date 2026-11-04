@@ -50,6 +50,9 @@ const (
 // TotalEntries and TotalBytes.
 const StageCostDeclared = "cost_declared"
 
+// StageBranchPrepared closes one root's preparation with what it left out.
+const StageBranchPrepared = "branch_prepared"
+
 // PreparationProgress is ephemeral worker-claim progress. The totals are known
 // only after a source survey has completed.
 type PreparationProgress struct {
@@ -59,6 +62,7 @@ type PreparationProgress struct {
 	Bytes             int64
 	TotalBytes        int64
 	TotalEntries      int64
+	UnreadableEntries int64
 	NotClonableReason workerplacement.NotClonableReason
 }
 

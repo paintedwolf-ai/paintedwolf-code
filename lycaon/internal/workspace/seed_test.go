@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -303,5 +304,114 @@ func assertFileBody(t *testing.T, path, want string) {
 	testutil.FailErr(t, "read "+path, err)
 	if string(raw) != want {
 		t.Fatalf("%s = %q, want %q", path, raw, want)
+	}
+}
+
+func TestSeedRefreshDeclaresItsCostBeforeCopying(t *testing.T) {
+	primary := t.TempDir()
+	writePrimaryFile(t, primary, "a.txt", "aaaa")
+	writePrimaryFile(t, primary, "pkg/b.txt", "bb")
+	if os.Getuid() != 0 {
+		writePrimaryFile(t, primary, "locked.txt", "l")
+		testutil.FailErr(t, "lock file", os.Chmod(filepath.Join(primary, "locked.txt"), 0))
+	}
+	mgr, _, seeds := newTestManager(t)
+	forceBridgeClone(t, seeds)
+	var declared, prepared PreparationProgress
+	seedAtDeclaration := true
+	ctx := WithPreparationReporter(t.Context(), func(progress PreparationProgress) {
+		switch progress.Stage {
+		case StageCostDeclared:
+			declared = progress
+			_, err := os.Stat(filepath.Join(enginepaths.ProjectSeedDir(seeds, primary), seedCurrentFile))
+			seedAtDeclaration = err == nil
+		case StageBranchPrepared:
+			prepared = progress
+		}
+	})
+	binding, err := mgr.CreateWorkerWorkspace(ctx, primary, "job")
+	testutil.FailErr(t, "create", err)
+	if binding.Preparation.Roots[0].Strategy != ProvisionBridgeCoW {
+		t.Fatalf("strategy = %+v", binding.Preparation.Roots[0])
+	}
+	wantEntries, wantBytes, wantUnreadable := int64(3), int64(6), int64(0)
+	if os.Getuid() != 0 {
+		wantEntries, wantBytes, wantUnreadable = 4, 7, 1
+	}
+	if declared.TotalEntries != wantEntries || declared.TotalBytes != wantBytes {
+		t.Fatalf("declared = %+v", declared)
+	}
+	if seedAtDeclaration {
+		t.Fatal("a seed was published before its cost was declared")
+	}
+	if prepared.UnreadableEntries != wantUnreadable || binding.Preparation.Roots[0].UnreadableEntries != wantUnreadable {
+		t.Fatalf("prepared = %+v, binding = %+v", prepared, binding.Preparation.Roots[0])
+	}
+}
+
+func TestCancellingASeedRefreshReleasesOnlyItsOwnPreparation(t *testing.T) {
+	other := t.TempDir()
+	writePrimaryFile(t, other, "other.txt", "other")
+	primary := t.TempDir()
+	writePrimaryFile(t, primary, "a.txt", "aaaa")
+	mgr, _, seeds := newTestManager(t)
+	forceBridgeClone(t, seeds)
+	kept, err := mgr.CreateWorkerWorkspace(t.Context(), other, "kept")
+	testutil.FailErr(t, "create kept", err)
+	keptSeed := currentSeedGeneration(t, seeds, other)
+	keptSibling, err := mgr.CreateWorkerWorkspace(t.Context(), primary, "sibling")
+	testutil.FailErr(t, "create sibling", err)
+	seedDir := enginepaths.ProjectSeedDir(seeds, primary)
+	publishedSeed := currentSeedGeneration(t, seeds, primary)
+	writePrimaryFile(t, primary, "b.txt", "changed so the seed must refresh")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	stagingSeen := false
+	bridge := cloneWorkspaceFile
+	cloneWorkspaceFile = func(src, dst string) (bool, error) {
+		if strings.Contains(dst, ".staging-") {
+			stagingSeen = true
+			cancel()
+		}
+		return bridge(src, dst)
+	}
+	t.Cleanup(func() { cloneWorkspaceFile = bridge })
+	_, err = mgr.CreateWorkerWorkspace(ctx, primary, "canceled")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v", err)
+	}
+	if !stagingSeen {
+		t.Fatal("the seed refresh never started copying")
+	}
+	generations, err := os.ReadDir(filepath.Join(seedDir, seedGenerations))
+	testutil.FailErr(t, "list generations", err)
+	for _, entry := range generations {
+		if strings.HasPrefix(entry.Name(), ".staging-") {
+			t.Fatalf("cancelled refresh left %s", entry.Name())
+		}
+	}
+	canceled := mgr.jobRoot(primary, "canceled")
+	for _, path := range []string{canceled, enginepaths.MetaDirForBranchRoot(canceled)} {
+		if _, statErr := os.Lstat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("cancelled preparation left %s: %v", path, statErr)
+		}
+	}
+	if got := currentSeedGeneration(t, seeds, primary); got != publishedSeed {
+		t.Fatalf("published seed changed: %s, want %s", got, publishedSeed)
+	}
+	if got := currentSeedGeneration(t, seeds, other); got != keptSeed {
+		t.Fatalf("another project's seed changed: %s", got)
+	}
+	for _, binding := range []*Binding{kept, keptSibling} {
+		if _, err := LoadBranchLayout(binding.Root); err != nil {
+			t.Fatalf("another worker lost its branch: %v", err)
+		}
+	}
+	cloneWorkspaceFile = bridge
+	retried, err := mgr.CreateWorkerWorkspace(t.Context(), primary, "canceled")
+	testutil.FailErr(t, "the lock and seed are free after cancelling", err)
+	if _, err := os.Lstat(filepath.Join(retried.Root, "b.txt")); err != nil {
+		t.Fatalf("retry missed the change: %v", err)
 	}
 }

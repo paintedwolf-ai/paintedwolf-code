@@ -54,8 +54,20 @@ func readOnlyFilesystem(err error) bool {
 }
 
 func fallbackParents() []string {
-	return []string{"/var/tmp", os.TempDir()}
+	return []string{"/var/tmp"}
 }
+
+// A branch can hold unsealed work, which tmpfs loses at a restart.
+func filesystemIsVolatile(path string) bool {
+	var mount unix.Statfs_t
+	if err := unix.Statfs(path, &mount); err != nil {
+		return false
+	}
+	return mount.Type == unix.TMPFS_MAGIC
+}
+
+// No Linux mount option maps this; a filesystem without owners fails the mode check.
+func volumeIgnoresOwnership(string) bool { return false }
 
 const cacheDirTag = "Signature: 8a477f597d28d172789f06886806bc55\n# Painted Wolf Code worker branches. Rebuilt on demand.\n"
 

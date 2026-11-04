@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -117,6 +118,7 @@ func (m *Manager) provisionRoot(ctx context.Context, sourceRoot, branchRoot stri
 			return RootPreparation{}, err
 		}
 		logProvisionResult(ctx, sourceRoot, strategy, false, result)
+		reportBranchPrepared(ctx, base, result, result.UnreadableEntries)
 		if err := RemoveSeed(ctx, m.seedRoot, sourceRoot); err != nil {
 			slog.WarnContext(ctx, "remove worker cache no longer useful", "source", sourceRoot, "err", err)
 		}
@@ -158,7 +160,16 @@ func (m *Manager) provisionRoot(ctx context.Context, sourceRoot, branchRoot stri
 	}
 	touchSeedLastUsed(seedDir)
 	logProvisionResult(ctx, sourceRoot, strategy, refreshed, result)
+	// A seed already lacks what it could not read, so the source survey has the count.
+	result.UnreadableEntries = cost.unreadable
+	reportBranchPrepared(ctx, base, result, cost.unreadable)
 	return rootPreparation(strategy, result, cost), nil
+}
+
+func reportBranchPrepared(ctx context.Context, progress PreparationProgress, result mirrorResult, unreadable int64) {
+	progress.Stage = StageBranchPrepared
+	progress.Files, progress.Bytes, progress.UnreadableEntries = result.Files, result.Bytes, unreadable
+	reportPreparation(ctx, progress)
 }
 
 func rootPreparation(strategy ProvisionStrategy, result mirrorResult, cost sourceCost) RootPreparation {
@@ -242,11 +253,12 @@ func (m *Manager) refreshSeed(ctx context.Context, sourceRoot string, progress P
 	}
 
 	admit := m.sourceAdmit(sourceRoot)
-	manifest, err := scanSeedSource(ctx, sourceRoot, admit)
+	var unreadable atomic.Int64
+	manifest, err := scanSeedSource(ctx, sourceRoot, admit, &unreadable)
 	if err != nil {
 		return false, sourceCost{}, err
 	}
-	cost := sourceCost{entries: int64(len(manifest.Entries)), bytes: regularBytes(manifest)}
+	cost := sourceCost{entries: int64(len(manifest.Entries)), bytes: regularBytes(manifest), unreadable: unreadable.Load()}
 	progress.Stage = StageCostDeclared
 	progress.TotalBytes, progress.TotalEntries = cost.bytes, cost.entries
 	reportPreparation(ctx, progress)
@@ -324,12 +336,12 @@ func (m *Manager) refreshSeed(ctx context.Context, sourceRoot string, progress P
 	return true, cost, nil
 }
 
-func scanSeedSource(ctx context.Context, sourceRoot string, admit sourceAdmit) (seedManifest, error) {
+func scanSeedSource(ctx context.Context, sourceRoot string, admit sourceAdmit, unreadable *atomic.Int64) (seedManifest, error) {
 	manifest := seedManifest{
 		Format: seedFormatVersion, SourceRoot: filepath.Clean(sourceRoot), Entries: make(map[string]seedEntry),
 	}
 	var files, bytes int64
-	err := sandbox.SurveyWalk(ctx, sourceRoot, sandbox.SurveyOptions{IncludeHidden: true, Admit: admit, OnReadError: skipUnreadable(nil)},
+	err := sandbox.SurveyWalk(ctx, sourceRoot, sandbox.SurveyOptions{IncludeHidden: true, Admit: admit, OnReadError: skipUnreadable(unreadable)},
 		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
 			info, err := entry.DirEntry.Info()
 			if err != nil {
@@ -357,6 +369,9 @@ func scanSeedSource(ctx context.Context, sourceRoot string, admit sourceAdmit) (
 				fingerprint.LinkTarget = target
 			case info.Mode().IsRegular():
 				fingerprint.Kind = "regular"
+				if info.Mode().Perm()&0o400 == 0 {
+					unreadable.Add(1)
+				}
 				files++
 				bytes += max(info.Size(), 0)
 			default:

@@ -10983,11 +10983,11 @@ export interface components {
         /** @enum {string} */
         WorkspaceProvisionStrategy: "direct_cow" | "bridge_cow" | "direct_copy";
         /** @enum {string} */
-        WorkspaceNotClonableReason: "roots_span_volumes" | "volume_cannot_clone" | "volume_root_inside_attached_root" | "volume_root_unwritable" | "volume_not_identified";
+        WorkspaceNotClonableReason: "roots_span_volumes" | "volume_cannot_clone" | "volume_root_inside_attached_root" | "volume_root_unwritable" | "volume_not_identified" | "placement_folder_not_private" | "volume_ignores_ownership";
         WorkspacePreparation: {
             strategy?: components["schemas"]["WorkspaceProvisionStrategy"];
             /** @enum {string} */
-            stage: "probing" | "surveying_source" | "cost_declared" | "materializing_seed" | "snapshotting_branch";
+            stage: "probing" | "surveying_source" | "cost_declared" | "materializing_seed" | "snapshotting_branch" | "branch_prepared";
             /** Format: int64 */
             files: number;
             /** Format: int64 */
@@ -11002,6 +11002,11 @@ export interface components {
              * @description Files, directories and links when a source survey has completed
              */
             total_entries?: number;
+            /**
+             * Format: int64
+             * @description Source entries this user could not read, left out of the branch
+             */
+            unreadable_entries?: number;
             not_clonable_reason?: components["schemas"]["WorkspaceNotClonableReason"];
         };
         /** @enum {string} */
