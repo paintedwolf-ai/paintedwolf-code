@@ -23,10 +23,10 @@ func TestCitationRepairNamesRejectedOccurrencesAndOffersExactToolReceipts(t *tes
 		{Handle: "git_receipt#1", Kind: "git_receipt", Shape: evidence.ShapeCommand, SourceTool: "git_commit", Path: "data/cards.yaml"},
 		{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "unrelated.go"},
 	})}
-	draft, resolved := repairDraft(t, "The merge is committed [command#37] [git_commit#7].", ev)
-	data := CloseoutRepairHintData(evidence.CitationRoots{}, draft, resolved, ev, []string{"git_commit#7"})
+	draft, resolved := repairDraft(t, "The merge is committed [command#37] [git_receipt#7].", ev)
+	data := CloseoutRepairHintData(evidence.CitationRoots{}, draft, resolved, ev, []string{"git_receipt#7"})
 	targets := data["repair_targets"].([]map[string]any)
-	if len(targets) != 1 || targets[0]["id"] != "c2" || targets[0]["token"] != "git_commit#7" {
+	if len(targets) != 1 || targets[0]["id"] != "c2" || targets[0]["token"] != "git_receipt#7" {
 		t.Fatalf("targets = %+v, want only the rejected occurrence", targets)
 	}
 	var choices []citationRepairObservation
@@ -70,7 +70,7 @@ func TestRetainedFallbackKeepsResolvableCitationsAndNeverAddsUnrelatedOnes(t *te
 		{Handle: "command#1", Kind: "command", Shape: evidence.ShapeCommand},
 		{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "unrelated.go"},
 	})}
-	draft, _ := repairDraft(t, "Original report [command#1] [missing#2].", ev)
+	draft, _ := repairDraft(t, "Original report [command#1] [read#9].", ev)
 	result, grounding := AssembleRetainedCloseout(evidence.CitationRoots{}, "implement_investigate", ev, draft, nil, InvestHandleNotObservedCode, 3)
 	if result.Synthesis != "Original report." || len(result.CitedEvidence) != 1 || result.CitedEvidence[0].Evidence != "command#1" {
 		t.Fatalf("fallback = %+v", result)
