@@ -66,9 +66,12 @@ def tooling(path):
 def module_tree(path):
     """A file inside the Go module's package trees: source, embedded data, or test fixtures.
 
-    Nested modules, such as the harness projects, are read by other lanes rather than compiled here.
+    Nested modules, such as the harness projects, are read by other lanes rather than compiled here;
+    native trees declare their own dependencies.
     """
-    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/")):
+    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/")) or "/native/" in path:
+        return False
+    if Path(path).name in {"go.mod", "go.sum"}:
         return False
     directories = Path(path).parent.relative_to("lycaon").parts
     return not any((ROOT / "lycaon" / Path(*directories[:depth]) / "go.mod").exists()
