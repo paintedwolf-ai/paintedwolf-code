@@ -60,12 +60,18 @@ func executionStateVars(window []api.Message, declared string) map[string]any {
 func executionRowVars(rows []executionStateRow) []map[string]any {
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, map[string]any{
+		vars := map[string]any{
 			"tool": row.Tool, "call_id": row.CallID, "status": row.Status, "invoked": row.Invoked, "code": row.Code,
 			"path": row.Path, "command": row.Command, "cwd": row.Cwd, "resolvable": row.Resolvable,
 			"source_verdict": row.SourceVerdict, "source_revision": row.SourceRevision, "source_root_digest": row.SourceRootDigest,
-			"checklist_after": row.ChecklistAfter, "tool_request_after": row.ToolRequestAfter,
-		})
+		}
+		if row.ChecklistAfter {
+			vars["checklist_after"] = true
+		}
+		if row.ToolRequestAfter {
+			vars["tool_request_after"] = true
+		}
+		out = append(out, vars)
 	}
 	return out
 }

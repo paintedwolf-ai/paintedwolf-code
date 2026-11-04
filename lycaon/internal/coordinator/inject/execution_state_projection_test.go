@@ -164,11 +164,11 @@ func TestBatchCountsOnceAndPollsDoNotAge_ACEXEC03(t *testing.T) {
 func TestRepeatedRejectionRefreshesItsOwnReminder_ACEXEC03(t *testing.T) {
 	first := receiptMessage(receiptSpec{batch: "one", call: "first", tool: "write", digest: "same", code: "MUTATION_BROKE_PARSE", args: map[string]any{"path": "a.go"}})
 	repeat := receiptMessage(receiptSpec{batch: "four", call: "repeat", tool: "write", digest: "same", code: "MUTATION_BROKE_PARSE", args: map[string]any{"path": "a.go"}})
-	older := rejectedWrite("older", "b.go")
+	older := receiptMessage(receiptSpec{batch: "one", call: "older", tool: "write", digest: "other", code: "MUTATION_BROKE_PARSE", args: map[string]any{"path": "b.go"}})
 	history := append([]api.Message{older, first}, settledBatches("mid", 2)...)
 	history = append(history, repeat)
 	got := projectExecutionState(history, "")
-	if !sameCalls(got.Operations, "older", "repeat") || got.Operations[1].Age != 0 || got.Operations[0].Age != 4-1 {
+	if !sameCalls(got.Operations, "older", "repeat") || got.Operations[1].Age != 0 || got.Operations[0].Age != 3 {
 		t.Fatalf("repeat did not refresh only its own row: %+v", got.Operations)
 	}
 	if first.ToolResult.Invocation.Status != api.InvocationStatusRejected {
