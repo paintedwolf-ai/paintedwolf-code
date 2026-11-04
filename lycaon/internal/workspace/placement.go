@@ -53,6 +53,7 @@ func (m *Manager) decidePlacement(ctx context.Context, roots, sources []projectr
 	}
 	return workerplacement.Decide(ctx, workerplacement.Request{
 		StateRoot:     m.stateRoot,
+		StateBranches: m.branchRoot,
 		AttachedRoots: placementRoots(roots, sources),
 		SourceRoots:   sourcePaths,
 		Probe: func(ctx context.Context, dir string) (bool, error) {

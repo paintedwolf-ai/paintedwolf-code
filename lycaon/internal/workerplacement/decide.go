@@ -34,6 +34,8 @@ var ErrInsideAttachedRoot = errors.New("worker branch placement is inside an att
 // Request carries the facts of one worker's placement.
 type Request struct {
 	StateRoot string
+	// StateBranches is the branch base in the state folder.
+	StateBranches string
 	// AttachedRoots are every project and source root of the worker.
 	AttachedRoots []string
 	// SourceRoots are the trees preparation reads.
@@ -82,7 +84,7 @@ func atOrUnder(path, root string) bool {
 // Decide places one worker: the state folder when it qualifies, otherwise a
 // folder at the root of the sources' volume, otherwise the not-clonable path.
 func Decide(ctx context.Context, req Request) (Decision, error) {
-	stateBase := enginepaths.WorkerBranchesRootUnder(req.StateRoot)
+	stateBase := req.StateBranches
 	volume, reason := sourcesVolume(req.SourceRoots)
 	if reason != "" {
 		return notClonable(ctx, req, stateBase, reason)

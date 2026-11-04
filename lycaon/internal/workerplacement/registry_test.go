@@ -168,6 +168,7 @@ func TestNoLocationOutsideRootsIsTyped(t *testing.T) {
 	state := t.TempDir()
 	_, err := Decide(context.Background(), Request{
 		StateRoot:     state,
+		StateBranches: filepath.Join(state, "worker-branches"),
 		AttachedRoots: []string{string(filepath.Separator)},
 		SourceRoots:   []string{string(filepath.Separator)},
 		Probe:         func(context.Context, string) (bool, error) { return false, nil },

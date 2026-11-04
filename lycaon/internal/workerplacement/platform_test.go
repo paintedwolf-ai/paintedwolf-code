@@ -15,8 +15,12 @@ func TestVolumeOfReportsAMountedAncestor(t *testing.T) {
 	testutil.FailErr(t, "resolve", err)
 	volume, err := volumeOf(dir)
 	testutil.FailErr(t, "volumeOf", err)
-	if volume.Root == "" || !atOrUnder(dir, volume.Root) {
-		t.Fatalf("root = %q for %s", volume.Root, dir)
+	// A macOS firmlink can put the path outside its mount point's name, so the
+	// mount point's own identity is the check.
+	root, err := volumeOf(volume.Root)
+	testutil.FailErr(t, "volumeOf root", err)
+	if root.ID != volume.ID || root.Root != volume.Root {
+		t.Fatalf("root = %+v for %+v", root, volume)
 	}
 }
 
