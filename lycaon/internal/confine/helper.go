@@ -21,7 +21,7 @@ import (
 
 func runHelperIfInvoked() {
 	if denialprobe.Invoked(os.Args) {
-		if err := denialprobe.Serve(os.Args[2], os.Stdout); err != nil {
+		if err := denialprobe.Serve(os.Args[2], os.Stderr); err != nil {
 			fmt.Fprint(os.Stderr, HelperStderrPrefix+err.Error()+"\n")
 			exitHelper(HelperFailureExit)
 		}

@@ -209,24 +209,25 @@ func Launch(ctx context.Context, box *confine.Confinement, dir string, steps []d
 	if err != nil {
 		return nil, err
 	}
-	stdout, stderr, _, err := execpkg.RunSeparate(ctx, self, []string{denialprobe.Flag, plan}, execpkg.ExecOpts{
+	// The probe answers on stderr: an engine binary keeps stdout for its startup protocol.
+	_, answers, _, err := execpkg.RunSeparate(ctx, self, []string{denialprobe.Flag, plan}, execpkg.ExecOpts{
 		Launch: execpkg.AgentLaunch(execpkg.LaunchAgentCommand, "view_confinement_probe", box).WithPathAuthority(confine.NativeLaunchPaths(dir)), Dir: dir,
 		Timeout: probeBound, MaxOutputBytes: maxProbeOutput,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("launch confinement probe: %w (%s)", err, bytes.TrimSpace(stderr))
+		return nil, fmt.Errorf("launch confinement probe: %w (%s)", err, bytes.TrimSpace(answers))
 	}
 	results := make([]denialprobe.Result, 0, len(steps))
-	lines := bufio.NewScanner(bytes.NewReader(stdout))
+	lines := bufio.NewScanner(bytes.NewReader(answers))
 	for lines.Scan() {
 		var result denialprobe.Result
 		if err := json.Unmarshal(lines.Bytes(), &result); err != nil {
-			return nil, fmt.Errorf("read confinement probe: %w", err)
+			return nil, fmt.Errorf("read confinement probe: %w (%s)", err, lines.Text())
 		}
 		results = append(results, result)
 	}
 	if len(results) < len(steps) && (len(results) != len(steps)-1 || !endsProcess(steps[len(results)].Kind)) {
-		return nil, fmt.Errorf("confinement probe answered %d of %d steps (%s)", len(results), len(steps), bytes.TrimSpace(stderr))
+		return nil, fmt.Errorf("confinement probe answered %d of %d steps (%s)", len(results), len(steps), bytes.TrimSpace(answers))
 	}
 	return results, nil
 }

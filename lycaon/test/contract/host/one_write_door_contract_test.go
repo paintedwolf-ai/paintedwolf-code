@@ -59,8 +59,10 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/workspace/overlay_survey.go":         "O_EXCL destination while materializing a fresh overlay tree",
 
 	// Probes write only inside a private temporary directory they remove before return.
-	"lycaon/internal/layeredfs/adapter/fuselinux/fuselinux.go": "capability probe confined to a private temporary view",
-	"lycaon/internal/layeredfs/adapter/lifecycle.go":           "capability probe confined to a private temporary view",
+	"lycaon/internal/confine/denialprobe/denialprobe.go":           "the attempt is the measurement: the kernel's answer is the result, and it removes what it creates",
+	"lycaon/internal/layeredfs/adapter/viewconfine/viewconfine.go": "canary in a private proof directory removed with it",
+	"lycaon/internal/layeredfs/adapter/fuselinux/fuselinux.go":     "capability probe confined to a private temporary view",
+	"lycaon/internal/layeredfs/adapter/lifecycle.go":               "capability probe confined to a private temporary view",
 
 	// A worker's private repository is its own: nothing reads it as durable state until initialization
 	// reports it ready, and a retained object's destination is its digest.
