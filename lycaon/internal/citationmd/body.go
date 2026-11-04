@@ -62,7 +62,7 @@ func parseCitationGroup(body string, confirmed bool, opts Options) parsedNode {
 	r := memberReader{body: body}
 	for {
 		start := r.skipSpace()
-		citation, code := r.member(opts.known)
+		citation, code := r.member(&opts)
 		if code == "" {
 			node.members = append(node.members, parsedMember{kind: KindCitation, start: start + 1, end: r.at + 1, citation: citation})
 			r.skipSpace()
@@ -138,8 +138,8 @@ func (r *memberReader) quoted() (string, bool) {
 func (r *memberReader) atQuote() bool { return !r.done() && r.body[r.at] == '"' }
 
 // member parses `handle[:lines] [path[:lines]] ["excerpt"]` or
-// `path[:lines] ["excerpt"]`. known gates a bare single-segment path.
-func (r *memberReader) member(known func(string) bool) (*Citation, IssueCode) {
+// `path[:lines] ["excerpt"]`. opts gates a bare path; nil means it is explicit.
+func (r *memberReader) member(opts *Options) (*Citation, IssueCode) {
 	c := &Citation{}
 	if !r.atQuote() {
 		saved := r.at
@@ -156,7 +156,7 @@ func (r *memberReader) member(known func(string) bool) (*Citation, IssueCode) {
 		}
 		r.at = saved
 	}
-	if code := r.pathRef(c, known); code != "" {
+	if code := r.pathRef(c, opts); code != "" {
 		return nil, code
 	}
 	return r.excerpt(c)
@@ -184,9 +184,9 @@ func (r *memberReader) afterHandle(c *Citation) (*Citation, IssueCode) {
 	return r.excerpt(c)
 }
 
-// pathRef reads a quoted or bare path with an optional coordinate. A nil known
-// means the path is explicit, so a single segment needs no ledger match.
-func (r *memberReader) pathRef(c *Citation, known func(string) bool) IssueCode {
+// pathRef reads a quoted or bare path with an optional coordinate. Nil opts means
+// the context already makes the path explicit, so it needs no ledger match.
+func (r *memberReader) pathRef(c *Citation, opts *Options) IssueCode {
 	var path, start, end string
 	if r.atQuote() {
 		text, ok := r.quoted()
@@ -208,7 +208,7 @@ func (r *memberReader) pathRef(c *Citation, known func(string) bool) IssueCode {
 		if !ok || !validBarePath(path) {
 			return IssueMalformedCitation
 		}
-		if known != nil && !isMultiSegment(path) && !known(path) {
+		if opts != nil && !isCitationAttempt(path, start, *opts) {
 			return IssueMalformedCitation
 		}
 	}
@@ -268,8 +268,6 @@ func splitCoordinate(lexeme string) (path, start, end string, ok bool) {
 	return path, start, end, path != "" && !strings.Contains(path, ":")
 }
 
-func isMultiSegment(path string) bool { return strings.ContainsAny(path, "/@") }
-
 // validBarePath checks the workspace-path grammar by rune. It carries no
 // extension or vocabulary rule.
 func validBarePath(path string) bool {
@@ -290,13 +288,14 @@ func validBarePath(path string) bool {
 // indices and footnote markers. The scanner rejects `[ ` and `[^` by their first
 // byte, so only these bodies arrive complete.
 func isStructuralBracket(body string) bool {
-	if body == "x" || body == "X" {
-		return true
-	}
-	for _, c := range body {
+	return body == "x" || body == "X" || isAllDigits(body)
+}
+
+func isAllDigits(text string) bool {
+	for _, c := range text {
 		if c < '0' || c > '9' {
 			return false
 		}
 	}
-	return body != ""
+	return text != ""
 }

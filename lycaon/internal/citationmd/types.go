@@ -24,9 +24,13 @@ const (
 
 // Options configures one parse or projection.
 type Options struct {
-	// KnownPath reports whether a single-segment name matches a path observed
-	// in the current window. Nil means no name matches.
+	// KnownPath reports whether a bare path with no coordinate matches a path
+	// observed in the current window. Nil means none matches.
 	KnownPath func(name string) bool
+	// SourceRoot maps a source:// root id to the prefix its workspace paths
+	// carry: empty for the primary root, `@label/` for another. Nil means one
+	// root. An unknown id keeps the id as a label, which no observation matches.
+	SourceRoot func(rootID string) (prefix string, ok bool)
 	// MaxSourceBytes and MaxOccurrences override the declared budgets.
 	MaxSourceBytes int
 	MaxOccurrences int
@@ -165,16 +169,16 @@ type Zone struct {
 	Span Span
 }
 
-// Document is one parsed source. Spans index Source.
+// Document is one parsed source. Spans index Source. Body is the document's
+// extent: all of Source, or the inside of a whole-response Markdown fence.
 type Document struct {
 	Source      string
+	Body        Span
 	Occurrences []Occurrence
 	Issues      []Issue
 	// Zones are the literal zones the parse honoured, in source order.
 	Zones []Zone
 	parts []part
-	// overBudget means the source was refused whole and has no safe display.
-	overBudget bool
 }
 
 // partKind is how a non-text region of the source presents.

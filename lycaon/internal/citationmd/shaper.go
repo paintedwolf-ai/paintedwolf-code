@@ -1,9 +1,8 @@
 package citationmd
 
 // shaper writes presented bytes and owns the whitespace a removed node leaves.
-// Parsed presentation and streaming both write through it, which is what makes
-// their results byte-identical. Text whitespace waits in pending until a
-// visible byte decides whether it survives.
+// Text whitespace waits in pending until a visible byte decides whether it
+// survives.
 type shaper struct {
 	out     []byte
 	pending []byte
@@ -79,9 +78,4 @@ func (s *shaper) flush() {
 // close discards trailing whitespace outside literal zones.
 func (s *shaper) close() { s.pending = s.pending[:0] }
 
-// drain returns the bytes written since the last drain.
-func (s *shaper) drain() string {
-	out := string(s.out)
-	s.out = s.out[:0]
-	return out
-}
+func (s *shaper) String() string { return string(s.out) }

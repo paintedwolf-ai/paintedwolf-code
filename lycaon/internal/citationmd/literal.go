@@ -1,7 +1,9 @@
 package citationmd
 
 import (
+	"bytes"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/yuin/goldmark"
@@ -88,30 +90,60 @@ var markdownParser = sync.OnceValue(func() parser.Parser {
 
 // structure is one Markdown parse: its literal zones and the links among them.
 // exhausted means the parse spent its budget and its zones must not be trusted.
+// wrapper is the body of a fence that is the entire source, when there is one.
 type structure struct {
 	zones     []Zone
 	links     map[int]*Link
 	exhausted bool
+	wrapper   *Span
+	body      Span
 }
 
 // LiteralZones returns the source's literal zones from one structural parse.
 func LiteralZones(source string) []Zone {
-	return parseStructure(source).zones
+	return documentStructure(source).zones
+}
+
+// documentStructure parses source and, once, the body of a whole-response
+// Markdown fence, with spans mapped back to the source.
+func documentStructure(source string) structure {
+	outer := parseStructure(source)
+	if outer.exhausted || outer.wrapper == nil {
+		return outer
+	}
+	body := *outer.wrapper
+	inner := parseStructure(source[body.Start:body.End])
+	inner.shift(body)
+	return inner
+}
+
+func (s *structure) shift(body Span) {
+	s.body = body
+	moved := make(map[int]*Link, len(s.links))
+	for start, link := range s.links {
+		link.LabelSpan = Span{link.LabelSpan.Start + body.Start, link.LabelSpan.End + body.Start}
+		moved[start+body.Start] = link
+	}
+	s.links = moved
+	for i := range s.zones {
+		s.zones[i].Span = Span{s.zones[i].Span.Start + body.Start, s.zones[i].Span.End + body.Start}
+	}
 }
 
 // TextRanges returns the complement of LiteralZones: the only ranges in which
 // custom nodes may begin.
 func TextRanges(source string) []Span {
+	shape := documentStructure(source)
 	var out []Span
-	at := 0
-	for _, zone := range LiteralZones(source) {
+	at := shape.body.Start
+	for _, zone := range shape.zones {
 		if zone.Span.Start > at {
 			out = append(out, Span{at, zone.Span.Start})
 		}
 		at = max(at, zone.Span.End)
 	}
-	if at < len(source) {
-		out = append(out, Span{at, len(source)})
+	if at < shape.body.End {
+		out = append(out, Span{at, shape.body.End})
 	}
 	return out
 }
@@ -122,7 +154,7 @@ func parseStructure(source string) structure {
 	pc := parser.NewContext()
 	pc.Set(parseLogKey, log)
 	doc := markdownParser().Parse(text.NewReader(data), parser.WithContext(pc))
-	out := structure{links: map[int]*Link{}, exhausted: log.linkWork > maxLinkWork}
+	out := structure{links: map[int]*Link{}, exhausted: log.linkWork > maxLinkWork, body: Span{0, len(data)}, wrapper: wrapperBody(doc, data)}
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -131,6 +163,31 @@ func parseStructure(source string) structure {
 	})
 	sort.SliceStable(out.zones, func(i, j int) bool { return out.zones[i].Span.Start < out.zones[j].Span.Start })
 	return out
+}
+
+// wrapperBody finds the body of a Markdown fence that is the entire source. Only
+// whitespace may surround it, and its lines must be contiguous source bytes.
+func wrapperBody(doc ast.Node, data []byte) *Span {
+	fence, ok := doc.FirstChild().(*ast.FencedCodeBlock)
+	if !ok || fence.NextSibling() != nil || fence.Info == nil {
+		return nil
+	}
+	info := strings.ToLower(strings.TrimSpace(string(fence.Info.Value(data))))
+	lines := fence.Lines()
+	if (info != "markdown" && info != "md") || lines.Len() == 0 {
+		return nil
+	}
+	span := fenceSpan(fence, data)
+	if len(bytes.TrimSpace(data[:span.Start])) > 0 || len(bytes.TrimSpace(data[span.End:])) > 0 {
+		return nil
+	}
+	body := Span{lines.At(0).Start, lines.At(lines.Len() - 1).Stop}
+	for i := 1; i < lines.Len(); i++ {
+		if lines.At(i).Start != lines.At(i-1).Stop {
+			return nil
+		}
+	}
+	return &body
 }
 
 func (s *structure) visit(n ast.Node, data []byte, log *parseLog) ast.WalkStatus {
@@ -264,6 +321,8 @@ func containerMarkerWidth(rest string) int {
 	}
 	return 0
 }
+
+func isSpaceByte(b byte) bool { return b == ' ' || b == '\t' }
 
 func cleanDestination(raw []byte) string {
 	return string(util.ResolveNumericReferences(util.ResolveEntityNames(util.UnescapePunctuations(raw))))

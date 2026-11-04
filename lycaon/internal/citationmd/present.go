@@ -16,11 +16,8 @@ type Rendition struct {
 // Render presents a document by span: literal zones byte for byte, text as
 // written, each protocol node as decide says, and damaged nodes never.
 func Render(doc Document, decide func(Occurrence) Rendition) string {
-	if doc.overBudget {
-		return ""
-	}
 	var out shaper
-	at := 0
+	at := doc.Body.Start
 	for _, p := range doc.parts {
 		out.text([]byte(doc.Source[at:p.span.Start]))
 		at = p.span.End
@@ -35,9 +32,9 @@ func Render(doc Document, decide func(Occurrence) Rendition) string {
 			renderMembers(&out, doc.Occurrences[p.first:p.first+p.count], decide)
 		}
 	}
-	out.text([]byte(doc.Source[at:]))
+	out.text([]byte(doc.Source[at:doc.Body.End]))
 	out.close()
-	return out.drain()
+	return out.String()
 }
 
 func renderLink(out *shaper, doc Document, p part, decide func(Occurrence) Rendition) {
@@ -73,7 +70,7 @@ func renderMembers(out *shaper, members []Occurrence, decide func(Occurrence) Re
 
 // Project is the structural presentation that needs no evidence: explicit paths
 // become file links, standard links stay, and the rest of the protocol is
-// removed. The streaming projector converges on exactly this.
+// removed.
 func Project(doc Document) string { return Render(doc, projectOccurrence) }
 
 func projectOccurrence(o Occurrence) Rendition {

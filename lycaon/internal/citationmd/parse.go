@@ -1,6 +1,7 @@
 package citationmd
 
 import (
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,25 +16,32 @@ var (
 func isWebDestination(dest string) bool { return webScheme.MatchString(dest) }
 
 // Parse reads source into ordered occurrences, literal zones and explicit
-// issues. Work is linear in source size, which is itself bounded.
+// issues. Work is linear in source size except inside the structural parse, whose
+// costly shapes are bounded. A source past those bounds keeps a structured issue
+// and is scanned with no literal zones, so its display keeps the prose and loses
+// only protocol nodes.
 func Parse(source string, opts Options) Document {
-	doc := Document{Source: source}
-	if len(source) > opts.sourceBudget() {
-		doc.overBudget = true
+	doc := Document{Source: source, Body: Span{0, len(source)}}
+	shape := structure{body: doc.Body}
+	switch {
+	case len(source) > opts.sourceBudget():
 		doc.Issues = append(doc.Issues, Issue{Code: IssueSourceBudget, Token: boundedToken(source)})
-		return doc
+	case containerDepthExceeded(source):
+		doc.Issues = append(doc.Issues, Issue{Code: IssueStructureBudget, Token: boundedToken(source)})
+	default:
+		parsed := documentStructure(source)
+		if parsed.exhausted {
+			doc.Issues = append(doc.Issues, Issue{Code: IssueStructureBudget, Token: boundedToken(source)})
+		} else {
+			shape = parsed
+		}
 	}
-	if containerDepthExceeded(source) {
-		return refuseStructure(doc)
-	}
-	shape := parseStructure(source)
-	if shape.exhausted {
-		return refuseStructure(doc)
-	}
-	builder := &documentBuilder{doc: &doc, budget: opts.occurrenceBudget()}
+	doc.Body = shape.body
+	builder := &documentBuilder{doc: &doc, budget: opts.occurrenceBudget(), opts: opts}
 	machine := newNodeMachine(opts, builder)
+	machine.skipTo(doc.Body.Start)
 	zones := shape.zones
-	for at := 0; at < len(source); {
+	for at := doc.Body.Start; at < doc.Body.End; {
 		for len(zones) > 0 && zones[0].Span.End <= at {
 			zones = zones[1:]
 		}
@@ -58,23 +66,14 @@ func Parse(source string, opts Options) Document {
 	return doc
 }
 
-func refuseStructure(doc Document) Document {
-	doc.overBudget = true
-	doc.Issues = append(doc.Issues, Issue{Code: IssueStructureBudget, Token: boundedToken(doc.Source)})
-	return doc
-}
-
 // documentBuilder assembles a Document from zones and machine events.
 type documentBuilder struct {
 	doc     *Document
+	opts    Options
 	budget  int
 	dropped int
 	verify  *Occurrence
 }
-
-func (b *documentBuilder) released([]byte) {}
-
-func (b *documentBuilder) overflowed() {}
 
 func (b *documentBuilder) damaged(issue Issue) {
 	b.doc.Issues = append(b.doc.Issues, issue)
@@ -140,6 +139,13 @@ func (b *documentBuilder) linkOccurrence(zone Zone, link *Link) (Occurrence, boo
 	switch {
 	case isWebDestination(dest):
 		occurrence.Kind = KindWebLink
+	case isSourceDestination(dest):
+		citation, ok := sourceCitation(dest, b.opts)
+		if !ok {
+			return Occurrence{}, false
+		}
+		occurrence.Kind = KindWorkspaceLink
+		occurrence.Citation = citation
 	case dest == "", strings.HasPrefix(dest, "#"), anyScheme.MatchString(dest):
 		return Occurrence{}, false
 	default:
@@ -171,6 +177,34 @@ func workspaceCitation(dest string) *Citation {
 	}
 	c.Path = unescapePath(dest)
 	return c
+}
+
+func isSourceDestination(dest string) bool {
+	return len(dest) >= len("source:") && strings.EqualFold(dest[:len("source:")], "source:")
+}
+
+// sourceCitation reads `source://root-id/path#Lstart-Lend` into workspace form.
+func sourceCitation(dest string, opts Options) (*Citation, bool) {
+	parsed, err := url.Parse(dest)
+	if err != nil || parsed.Host == "" || parsed.User != nil {
+		return nil, false
+	}
+	rel := strings.TrimPrefix(parsed.EscapedPath(), "/")
+	if rel == "" {
+		return nil, false
+	}
+	if parsed.Fragment != "" {
+		rel += "#" + parsed.Fragment
+	}
+	citation := workspaceCitation(rel)
+	prefix := "@" + parsed.Host + "/"
+	if opts.SourceRoot == nil {
+		prefix = ""
+	} else if mapped, ok := opts.SourceRoot(parsed.Host); ok {
+		prefix = mapped
+	}
+	citation.Path = prefix + citation.Path
+	return citation, true
 }
 
 func (b *documentBuilder) finishBudget() {

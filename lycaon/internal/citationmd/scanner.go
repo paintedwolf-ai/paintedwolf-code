@@ -38,19 +38,14 @@ const (
 	modeRepair
 )
 
-// nodeScanner recognizes one custom node from its '[', one byte at a time. The
-// parser and the streaming projector both drive it, so node limits, malformed
-// spans and recovery boundaries cannot differ between them.
+// nodeScanner recognizes one custom node from its '[', one byte at a time.
 type nodeScanner struct {
 	opts Options
 	buf  []byte
 	mode bodyMode
-	// confirmed means this cannot be ordinary prose any longer. A bare path
-	// stays unconfirmed until it closes, so that prose releases promptly.
+	// confirmed means this cannot be ordinary prose any longer. A lone bare
+	// member stays unconfirmed until it ends, so that prose releases at once.
 	confirmed bool
-	// multiSegment records a '/' or '@' path shape, which overflows as a node.
-	multiSegment bool
-	lexemeStart  int
 	// afterLexeme means whitespace followed a bare member.
 	afterLexeme bool
 	inQuote     bool
@@ -62,9 +57,9 @@ type nodeScanner struct {
 func (s *nodeScanner) reset() {
 	s.buf = s.buf[:0]
 	s.mode = modeLexeme
-	s.confirmed, s.multiSegment, s.afterLexeme = false, false, false
+	s.confirmed, s.afterLexeme = false, false
 	s.inQuote, s.escaped, s.inAngle = false, false, false
-	s.lexemeStart, s.depth = 1, 0
+	s.depth = 0
 }
 
 // feed advances the scanner by one byte. The caller seeds buf with the '['.
@@ -76,7 +71,7 @@ func (s *nodeScanner) feed(b byte) scanResult {
 		return scanRelease
 	}
 	if len(s.buf) >= MaxInlineProtocolNodeBytes {
-		if s.confirmed || s.multiSegment {
+		if s.confirmed {
 			return scanOverflow
 		}
 		return scanRelease
@@ -87,24 +82,25 @@ func (s *nodeScanner) feed(b byte) scanResult {
 	return s.feedConfirmed(b)
 }
 
-// feedLexeme handles an unconfirmed node, where each byte may disqualify it.
+// feedLexeme handles the first member of an unconfirmed node, where each byte
+// may disqualify it.
 func (s *nodeScanner) feedLexeme(b byte) scanResult {
 	if s.afterLexeme {
 		return s.feedAfterLexeme(b)
 	}
 	switch b {
 	case '"':
-		if len(s.buf) != s.lexemeStart {
+		if len(s.buf) != 1 {
 			return scanRelease
 		}
 		return s.confirm(modeCitation, b)
 	case '#':
-		if !handlePrefix.Match(s.buf[s.lexemeStart:]) {
+		if !handlePrefix.Match(s.buf[1:]) {
 			return scanRelease
 		}
 		return s.confirm(modeCitation, b)
 	case ':':
-		if s.lexemeStart == 1 && isReservedName(string(s.buf[1:])) {
+		if isReservedName(string(s.buf[1:])) {
 			return s.confirm(reservedMode(string(s.buf[1:])), b)
 		}
 	case ']':
@@ -117,23 +113,14 @@ func (s *nodeScanner) feedLexeme(b byte) scanResult {
 		if !s.lexemeAcceptable() {
 			return scanRelease
 		}
-		s.buf = append(s.buf, b)
-		s.lexemeStart = len(s.buf)
-		return scanPending
+		return s.confirm(modeCitation, b)
 	case ' ', '\t':
-		if len(s.buf) == s.lexemeStart && len(s.buf) > 1 {
-			s.buf = append(s.buf, b)
-			s.lexemeStart = len(s.buf)
-			return scanPending
-		}
 		if !s.lexemeAcceptable() {
 			return scanRelease
 		}
 		s.buf = append(s.buf, b)
 		s.afterLexeme = true
 		return scanPending
-	case '/', '@':
-		s.multiSegment = true
 	}
 	if !isPathByte(b) {
 		return scanRelease
@@ -149,42 +136,40 @@ func (s *nodeScanner) feedAfterLexeme(b byte) scanResult {
 	case ' ', '\t':
 		s.buf = append(s.buf, b)
 		return scanPending
-	case '"':
-		s.afterLexeme = false
+	case '"', ',':
 		return s.confirm(modeCitation, b)
 	case ']':
 		s.buf = append(s.buf, b)
 		return scanClosed
-	case ',':
-		s.afterLexeme = false
-		s.buf = append(s.buf, b)
-		s.lexemeStart = len(s.buf)
-		return scanPending
 	default:
 		return scanRelease
 	}
 }
 
-// lexemeAcceptable decides a bare member at its terminator. Single-segment
-// names need a ledger match; structural Markdown forms never qualify.
+// lexemeAcceptable decides a bare first member at its terminator.
 func (s *nodeScanner) lexemeAcceptable() bool {
-	lexeme := string(s.buf[s.lexemeStart:])
+	lexeme := string(s.buf[1:])
 	if lexeme == "" || isStructuralBracket(lexeme) {
 		return false
 	}
-	path, _, _, ok := splitCoordinate(lexeme)
-	if !ok || !validBarePath(path) {
-		return false
+	path, start, _, ok := splitCoordinate(lexeme)
+	return ok && validBarePath(path) && isCitationAttempt(path, start, s.opts)
+}
+
+// isCitationAttempt decides a bare path by structure. A coordinate makes it an
+// attempt unless the path part is all digits, as in a time or a ratio. Without
+// one, only an observed path is a citation, whatever its segment count.
+func isCitationAttempt(path, start string, opts Options) bool {
+	if start != "" {
+		return !isAllDigits(path)
 	}
-	return isMultiSegment(path) || s.opts.known(path)
+	return opts.known(path)
 }
 
 func (s *nodeScanner) confirm(mode bodyMode, b byte) scanResult {
 	s.mode = mode
 	s.confirmed = true
-	if mode == modeCitation && b == '"' {
-		s.inQuote = true
-	}
+	s.inQuote = mode == modeCitation && b == '"'
 	s.buf = append(s.buf, b)
 	return scanPending
 }
