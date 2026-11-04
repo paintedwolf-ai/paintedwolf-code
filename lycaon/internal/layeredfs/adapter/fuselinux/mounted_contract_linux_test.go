@@ -438,24 +438,29 @@ func TestMultiRootViewServesEachRootPrivatelyAndSettles(t *testing.T) {
 	}
 }
 
-// TestKernelEvictionEmptiesTheNodeTable makes the real kernel drop entries with unprivileged
-// invalidation: fuse inodes are evicted on last reference, which sends the real FORGET. The table is
-// asserted by count; identities are asserted to behave across it.
-func TestKernelEvictionEmptiesTheNodeTable(t *testing.T) {
-	const files = 2000
-	v := prepareMountedView(t, fuselinux.Config{}, "view-eviction", nil)
-	sub := filepath.Join(v.trunk, "tree")
-	if err := os.Mkdir(sub, 0o755); err != nil {
+func seedEvictionTree(t *testing.T, trunk string, files int) []string {
+	t.Helper()
+	if err := os.Mkdir(filepath.Join(trunk, "tree"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	names := make([]string, 0, files)
 	for i := range files {
 		name := fmt.Sprintf("tree/f-%04d", i)
 		names = append(names, name)
-		if err := os.WriteFile(filepath.Join(v.trunk, name), []byte("x"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(trunk, name), []byte("x"), 0o644); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
+	return names
+}
+
+// TestKernelEvictionEmptiesTheNodeTable makes the real kernel drop entries with unprivileged
+// invalidation: fuse inodes are evicted on last reference, which sends the real FORGET. The table is
+// asserted by count; identities are asserted to behave across it.
+func TestKernelEvictionEmptiesTheNodeTable(t *testing.T) {
+	const files = 2000
+	v := prepareMountedView(t, fuselinux.Config{}, "view-eviction", nil)
+	names := seedEvictionTree(t, v.trunk, files)
 	srv := v.adp.ServerForView(v.viewID)
 	baseNodes, baseRel, _ := srv.NodeTableCountsForTest()
 
