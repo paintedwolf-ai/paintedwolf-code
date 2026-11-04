@@ -33,13 +33,13 @@ class GoSourceImpactTests(unittest.TestCase):
                 self.assertEqual(impact.broad_scope([path]), (True, [path]))
 
     def test_ci_tooling_adds_only_its_own_lane(self):
-        baseline = {"limits", "contracts", "integration-build", "behavior"}
+        lanes = hosted_plan.lanes()
+        baseline = impact.selected_lanes(dict(full=False, paths=["docs/git.md"]), lanes)
         for path in ["scripts/verification_tests/ci/test_plan.py", "scripts/ci_policy/health.py",
                      ".github/workflows/nightly.yml"]:
             with self.subTest(path=path):
                 self.assertEqual(impact.broad_scope([path]), (False, []))
-                lanes = impact.selected_lanes(dict(full=False, paths=[path]), hosted_plan.lanes())
-                self.assertEqual(lanes & (baseline | {"runner", "lint", "frontend", "native"}), baseline & set(hosted_plan.lanes()) | {"runner"})
+                self.assertEqual(impact.selected_lanes(dict(full=False, paths=[path]), lanes), baseline | {"runner"})
 
     def test_files_that_run_every_lane_widen(self):
         for path in [".github/workflows/ci.yml", ".github/workflows/verification.yml",
