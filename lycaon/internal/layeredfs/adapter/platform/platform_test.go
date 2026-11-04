@@ -179,7 +179,7 @@ func TestAdapterFIFOFactMatchesTheKernel(t *testing.T) {
 	t.Cleanup(func() { _ = mgr.Store().Close() })
 	view, chosen := mountedHostView(t, trunk, mgr)
 	fifo := filepath.Join(view.PrimaryWorkPath, "pipe")
-	if err := syscall.Mkfifo(fifo, 0o644); errors.Is(err, syscall.EIO) {
+	if err := syscall.Mkfifo(fifo, 0o644); errors.Is(err, syscall.EIO) || errors.Is(err, syscall.EPERM) {
 		t.Skipf("Core has no special nodes in this tree: %v", err)
 	} else {
 		testutil.FailErr(t, "mkfifo", err)
