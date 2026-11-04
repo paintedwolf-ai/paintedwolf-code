@@ -17,6 +17,8 @@ func peerPID(netip.AddrPort, netip.AddrPort) (int, bool) { return 0, false }
 
 func listeners(ListenerQuery) ([]Listener, error) { return nil, ErrUnsupported }
 
+func listenerViewComplete(ListenerQuery) (bool, error) { return false, ErrUnsupported }
+
 func livePIDs() ([]int, error) { return nil, ErrUnsupported }
 
 const supported = false

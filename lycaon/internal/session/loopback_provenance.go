@@ -246,9 +246,10 @@ func onPort(listeners []socketListener, port uint16) []socketListener {
 	return out
 }
 
-// hostListeners reads the kernel's listening TCP sockets.
+// hostListeners reads the kernel's listening TCP sockets. Callers treat a port
+// with no row as unheld, so a narrowed table is a failure rather than a result.
 func hostListeners(context.Context) ([]socketListener, error) {
-	table, err := lineage.Listeners(lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}})
+	table, err := lineage.CompleteListeners(lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}})
 	if err != nil {
 		return nil, err
 	}

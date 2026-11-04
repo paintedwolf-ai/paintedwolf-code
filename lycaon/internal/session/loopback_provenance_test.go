@@ -240,9 +240,10 @@ func TestHostListenersSeesALiveListener(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	all, err := hostListeners(ctx)
-	if err != nil {
-		t.Skipf("host socket table unavailable: %v", err)
+	if errors.Is(err, lineage.ErrObservationIncomplete) {
+		return
 	}
+	testutil.FailErr(t, "host listeners", err)
 	held := onPort(all, port)
 	if len(held) != 1 || held[0].PID != os.Getpid() || held[0].Addr != netip.MustParseAddr("127.0.0.1") {
 		t.Fatalf("listener on %d from the host table = %+v, want this process on 127.0.0.1", port, held)
@@ -288,9 +289,24 @@ func TestLoopbackOwnershipFollowsARealLaunch(t *testing.T) {
 		t.Fatalf("helper never reported its port: %v", lines.Err())
 	}
 
+	if session, ok := lineageSessionOf(cmd.Process.Pid); !ok || session != "chat-live" {
+		t.Fatalf("launched server's lineage = %q, %v", session, ok)
+	}
 	p := newLoopbackProvenance(t.Context(), hostListeners, lineageSessionOf, nil, lineage.ObserveSessionListener)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	// A host table narrowed for this test process cannot exclude a foreign holder,
+	// so attribution stays unverified and the port counts as held.
+	if _, err := hostListeners(ctx); errors.Is(err, lineage.ErrObservationIncomplete) {
+		owned, evidence := p.IsSessionOwned(ctx, "chat-live", "", uint16(port))
+		if owned || evidence.Method != ProvenanceUnverified {
+			t.Fatalf("narrowed table attributed the port: %+v", evidence)
+		}
+		if !p.HeldByOther(ctx, "chat-live", "", uint16(port)) {
+			t.Fatal("narrowed table reported the port free")
+		}
+		return
+	}
 	if owned, evidence := p.IsSessionOwned(ctx, "chat-live", "", uint16(port)); !owned {
 		t.Fatalf("server launched by the session was not attributed to it: %+v", evidence)
 	}

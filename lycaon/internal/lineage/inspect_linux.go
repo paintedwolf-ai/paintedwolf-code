@@ -113,6 +113,9 @@ func peerPID(local, remote netip.AddrPort) (int, bool) {
 
 func listeners(query ListenerQuery) ([]Listener, error) { return hostProc.listeners(query) }
 
+// listenerViewComplete: the proc socket tables are not narrowed per caller.
+func listenerViewComplete(ListenerQuery) (bool, error) { return true, nil }
+
 func livePIDs() ([]int, error) { return hostProc.livePIDs() }
 
 // fdWritable reports whether a descriptor was opened for writing.

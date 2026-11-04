@@ -240,3 +240,71 @@ func TestProcSocketsOfObservesOneIncarnation(t *testing.T) {
 		t.Fatalf("an exited process = %v, want ESRCH", err)
 	}
 }
+
+// A table with fewer rows than its header counts is whole only with a row that
+// is provably another's; the observed narrowed shape holds the caller's rows alone.
+func TestTableViewCompleteRequiresAnotherHoldersRow(t *testing.T) {
+	const me, other = uint32(501), uint32(0)
+	row := func(handle uint64, uid uint32) tableRow {
+		return tableRow{kernelListener: kernelListener{Handle: handle, UID: uid}}
+	}
+	for _, tc := range []struct {
+		name     string
+		reported uint64
+		rows     []tableRow
+		held     bool
+		want     bool
+	}{
+		{name: "every reported socket returned", reported: 2, rows: []tableRow{row(1, me), row(2, me)}, want: true},
+		{name: "no sockets on the host", reported: 0, want: true},
+		{name: "racing close with another user's row", reported: 46, rows: []tableRow{row(1, me), row(2, other)}, want: true},
+		{name: "same user rows held by another process", reported: 46, rows: []tableRow{row(1, me)}, held: true, want: true},
+		{name: "narrowed to nothing", reported: 46},
+		{name: "narrowed to the caller's own socket", reported: 46, rows: []tableRow{row(1, me)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tableViewComplete(tc.reported, tc.rows, me, func(handles map[uint64]bool) bool {
+				if len(handles) == 0 {
+					t.Fatal("asked about no handles")
+				}
+				return tc.held
+			})
+			if got != tc.want {
+				t.Fatalf("tableViewComplete = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// Whether the session may treat an endpoint as its own turns on every socket the
+// table shows there, including one whose process the host cannot read.
+func TestExclusiveHoldersRequiresEveryAnsweringSocket(t *testing.T) {
+	endpoint := netip.MustParseAddrPort("127.0.0.1:8123")
+	member := ProcessIdentity{PID: 10, Started: 1}
+	stranger := ProcessIdentity{PID: 11, Started: 1}
+	owned := map[ownedHolder]string{newOwnedHolder(member, endpoint): "member"}
+	on := func(addr string, holders ...ProcessIdentity) Listener {
+		return Listener{Protocol: ProtocolTCP, Addr: netip.MustParseAddrPort(addr), Holders: holders}
+	}
+	for _, tc := range []struct {
+		name  string
+		table []Listener
+		want  bool
+	}{
+		{name: "session member alone", table: []Listener{on("127.0.0.1:8123", member)}, want: true},
+		{name: "other address on the port does not answer here", table: []Listener{on("127.0.0.1:8123", member), on("127.0.0.2:8123", stranger)}, want: true},
+		{name: "nothing listening", table: []Listener{on("127.0.0.2:8123", stranger)}},
+		{name: "readable stranger shares the socket", table: []Listener{on("127.0.0.1:8123", member, stranger)}},
+		{name: "unreadable foreign socket on the endpoint", table: []Listener{on("127.0.0.1:8123", member), on("127.0.0.1:8123")}},
+		{name: "unreadable foreign wildcard", table: []Listener{on("127.0.0.1:8123", member), on("0.0.0.0:8123")}},
+		{name: "session wildcard is exposed", table: []Listener{on("[::]:8123", member)}},
+		{name: "member holds another address only", table: []Listener{on("127.0.0.1:8123", stranger)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			holders, got := exclusiveHolders(tc.table, endpoint, owned)
+			if got != tc.want || got != (len(holders) > 0) {
+				t.Fatalf("exclusiveHolders = %+v, %v, want %v", holders, got, tc.want)
+			}
+		})
+	}
+}

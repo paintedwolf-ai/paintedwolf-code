@@ -97,8 +97,13 @@ func TestOwnedSocketsRequiresCurrentListenerNotRequestedOrClosedPort(t *testing.
 		t.Fatal("actual inherited listener was not observed")
 	}
 	identity, paired, err := lineage.ObserveSessionListener(t.Context(), "synthetic-session", endpoint)
-	if errors.Is(err, lineage.ErrObservationIncomplete) {
-		t.Log("native all-holder proof unavailable; partial holder facts do not authorize paired access")
+	// Only a table the kernel narrowed for this process may withhold the proof.
+	// Processes this user cannot inspect, which every host has, must not.
+	_, viewErr := lineage.CompleteListeners(lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}})
+	if errors.Is(viewErr, lineage.ErrObservationIncomplete) {
+		if paired || identity != "" || !errors.Is(err, lineage.ErrObservationIncomplete) {
+			t.Fatalf("narrowed table produced proof: id=%q paired=%v err=%v", identity, paired, err)
+		}
 	} else if err != nil || !paired || identity == "" {
 		t.Fatalf("complete native all-holder observation did not identify owned listener: paired=%v, err=%v", paired, err)
 	}

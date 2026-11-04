@@ -21,17 +21,20 @@ struct pw_listen_row {
  unsigned char local[16];
  uint32_t uid;
  uint16_t port;
- unsigned char ipv4;
+ unsigned char ipv4, listening;
 };
 
 // pw_listen_rows reads the host-wide PCB table, which needs no access to the
 // holding process, so a socket whose holder cannot be inspected still appears.
 // TCP rows listen in TCPS_LISTEN; UDP rows listen while bound and unconnected.
 // xso_so is the handle the shared descriptor walk reports as soi_so.
-static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count) {
+// Every record is returned because a table's completeness is judged from all of
+// them; reported is the socket count the kernel states in the table header.
+static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count, uint64_t *reported) {
  const char *name = udp ? "net.inet.udp.pcblist64" : "net.inet.tcp.pcblist64";
  *rows = NULL;
  *count = 0;
+ *reported = 0;
  char *buf = NULL;
  size_t len = 0;
  for (int attempt = 0; attempt < 4; attempt++) {
@@ -53,6 +56,7 @@ static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count) {
  if (out == NULL) { free(buf); return ENOMEM; }
  char *end = buf + len;
  struct xinpgen *gen = (struct xinpgen *)buf;
+ *reported = gen->xig_count;
  for (char *at = buf + gen->xig_len; at + sizeof(struct xinpgen) <= end; ) {
   struct xinpgen *record = (struct xinpgen *)at;
   if (record->xig_len <= sizeof(struct xinpgen) || at + record->xig_len > end) break;
@@ -69,8 +73,9 @@ static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count) {
    inp = &tcp->xt_inpcb;
    listening = tcp->t_state == TCPS_LISTEN;
   }
-  if (!listening || *count >= (int)capacity) continue;
+  if (*count >= (int)capacity) continue;
   struct pw_listen_row *row = &out[(*count)++];
+  row->listening = listening != 0;
   row->handle = inp->xi_socket.xso_so;
   row->uid = inp->xi_socket.so_uid;
   row->port = ntohs(inp->inp_lport);
@@ -91,6 +96,7 @@ import "C"
 
 import (
 	"net/netip"
+	"os"
 	"syscall"
 	"unsafe"
 )
@@ -98,13 +104,13 @@ import (
 func listeners(query ListenerQuery) ([]Listener, error) {
 	var rows []kernelListener
 	for _, protocol := range query.protocols() {
-		table, err := pcbListeners(protocol)
+		table, _, err := pcbTable(protocol)
 		if err != nil {
 			return nil, err
 		}
 		for _, row := range table {
-			if query.wants(row.Protocol, row.Local) {
-				rows = append(rows, row)
+			if row.Listening && query.wants(row.Protocol, row.Local) {
+				rows = append(rows, row.kernelListener)
 			}
 		}
 	}
@@ -118,18 +124,63 @@ func listeners(query ListenerQuery) ([]Listener, error) {
 	return resolveListeners(rows, pids, observeSockets), nil
 }
 
-func pcbListeners(protocol Protocol) ([]kernelListener, error) {
+func listenerViewComplete(query ListenerQuery) (bool, error) {
+	for _, protocol := range query.protocols() {
+		rows, reported, err := pcbTable(protocol)
+		if err != nil {
+			return false, err
+		}
+		if !tableViewComplete(reported, rows, uint32(os.Getuid()), heldByAnotherProcess) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// heldByAnotherProcess reports whether a process other than this one holds any
+// of the handles while this one does not.
+func heldByAnotherProcess(handles map[uint64]bool) bool {
+	pids, err := livePIDs()
+	if err != nil {
+		return false
+	}
+	self := os.Getpid()
+	mine := map[uint64]bool{}
+	if sockets, err := observeSockets(self); err == nil {
+		for _, socket := range sockets {
+			mine[socket.handle] = true
+		}
+	}
+	for _, pid := range pids {
+		if pid <= 0 || pid == self {
+			continue
+		}
+		sockets, err := observeSockets(pid)
+		if err != nil {
+			continue
+		}
+		for _, socket := range sockets {
+			if handles[socket.handle] && !mine[socket.handle] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func pcbTable(protocol Protocol) ([]tableRow, uint64, error) {
 	udp := C.int(0)
 	if protocol == ProtocolUDP {
 		udp = 1
 	}
 	var rows *C.struct_pw_listen_row
 	var count C.int
-	if code := C.pw_listen_rows(udp, &rows, &count); code != 0 {
-		return nil, syscall.Errno(code)
+	var reported C.uint64_t
+	if code := C.pw_listen_rows(udp, &rows, &count, &reported); code != 0 {
+		return nil, 0, syscall.Errno(code)
 	}
 	defer C.free(unsafe.Pointer(rows))
-	out := make([]kernelListener, 0, int(count))
+	out := make([]tableRow, 0, int(count))
 	for _, row := range unsafe.Slice(rows, int(count)) {
 		raw := unsafe.Slice((*byte)(unsafe.Pointer(&row.local[0])), 16)
 		var addr netip.Addr
@@ -138,7 +189,10 @@ func pcbListeners(protocol Protocol) ([]kernelListener, error) {
 		} else {
 			addr = netip.AddrFrom16([16]byte(raw))
 		}
-		out = append(out, kernelListener{Protocol: protocol, Local: netip.AddrPortFrom(addr, uint16(row.port)), UID: uint32(row.uid), Handle: uint64(row.handle)})
+		out = append(out, tableRow{
+			kernelListener: kernelListener{Protocol: protocol, Local: netip.AddrPortFrom(addr, uint16(row.port)), UID: uint32(row.uid), Handle: uint64(row.handle)},
+			Listening:      row.listening != 0,
+		})
 	}
-	return out, nil
+	return out, uint64(reported), nil
 }

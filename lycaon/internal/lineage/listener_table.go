@@ -1,6 +1,7 @@
 package lineage
 
 import (
+	"fmt"
 	"net/netip"
 	"slices"
 )
@@ -47,6 +48,20 @@ type Listener struct {
 // without a native socket table return ErrUnsupported.
 func Listeners(query ListenerQuery) ([]Listener, error) { return listeners(query) }
 
+// CompleteListeners is Listeners for a caller that reasons from what the table
+// omits. A view the kernel narrowed returns ErrObservationIncomplete, because an
+// absent row there says nothing about whether another process holds the port.
+func CompleteListeners(query ListenerQuery) ([]Listener, error) {
+	complete, err := listenerViewComplete(query)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrObservationIncomplete, err)
+	}
+	if !complete {
+		return nil, fmt.Errorf("%w: the kernel socket table is narrowed for this process", ErrObservationIncomplete)
+	}
+	return listeners(query)
+}
+
 // kernelListener is one listening socket from a host-wide kernel table, keyed
 // by the handle the per-process observation reports for the same socket.
 type kernelListener struct {
@@ -54,6 +69,30 @@ type kernelListener struct {
 	Local    netip.AddrPort
 	UID      uint32
 	Handle   uint64
+}
+
+// tableRow is any socket from a host-wide table, listening or not.
+type tableRow struct {
+	kernelListener
+	Listening bool
+}
+
+// tableViewComplete decides whether a table shows the whole host. The kernel can
+// return only the caller's own sockets with success while its header still counts
+// every socket, so fewer rows than reported are complete only with a row that is
+// provably someone else's: another user's, or held by another process.
+func tableViewComplete(reported uint64, rows []tableRow, uid uint32, heldElsewhere func(map[uint64]bool) bool) bool {
+	if reported <= uint64(len(rows)) {
+		return true
+	}
+	handles := make(map[uint64]bool, len(rows))
+	for _, row := range rows {
+		if row.UID != uid {
+			return true
+		}
+		handles[row.Handle] = true
+	}
+	return len(handles) > 0 && heldElsewhere(handles)
 }
 
 // resolveListeners attaches to each row every process incarnation whose
