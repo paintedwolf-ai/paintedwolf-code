@@ -38,6 +38,11 @@ var retiredProtocol = []string{
 // boundary leaves proof_json.visual_artifact_ids alone.
 var typedCitationFields = regexp.MustCompile(`\b(cited_evidence|cited_urls|artifact_ids)\b|typed fields`)
 
+// bareCoordinateForm is a placeholder coordinate in inline code, such as `path:line`.
+// Inline code is never a citation, so teaching it yields citations that do not count.
+// The bracket form starts with a bracket, and concrete code spans name no placeholder.
+var bareCoordinateForm = regexp.MustCompile("`[\\w./@-]*(?:path|file)[\\w./@-]*(?::|#L)(?:line|N|\\d+)[^`]*`")
+
 // AC-COMPAT-06: every rendered output teaches only the Markdown protocol. Exceptions
 // are by audience, or a line naming the typed tool whose argument it describes.
 func TestModelFacingOutputsTeachNoRetiredProtocol(t *testing.T) {
@@ -60,6 +65,9 @@ func TestModelFacingOutputsTeachNoRetiredProtocol(t *testing.T) {
 		for line := range strings.SplitSeq(output.text, "\n") {
 			if field := typedCitationFields.FindString(line); field != "" && !namesTypedCitationTool(line) {
 				t.Errorf("%s teaches %q to a coordinator outside a typed tool: %s", output.name, field, line)
+			}
+			if form := bareCoordinateForm.FindString(line); form != "" && !output.workflowVersioned && !namesTypedCitationTool(line) {
+				t.Errorf("%s teaches %s, which is inline code and never a citation: %s", output.name, form, line)
 			}
 		}
 	}

@@ -11,4 +11,3 @@ Write the answer in user-facing Markdown, without tools, using the citation form
 - Only an enabled workflow report phase can request a report document. In every other phase, give an ordinary completion reply, and do not offer or generate a report document. The host controls download availability.
 
 Use the user's terms. Unless asked, keep host mechanics, recovered denials, and test-tooling details out of progress updates and the completion reply. Name the observed product behavior, secondary untested paths, and any unresolved resource or required action.
-`Code: COORDINATOR_CLOSEOUT_NO_ANSWER`

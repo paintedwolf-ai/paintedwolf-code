@@ -31,4 +31,4 @@ hosts: [coordinator, worker]
 - **One named symbol or line range for an exact fact, quote, or edit** → a bounded `grep -n` or `sed -n 'A,Bp'` in `command`. If existing evidence already answers the request, stop.
 {% endif %}
 
-Cite {% if profile_has_summarize %}`summarize` source windows or anchors (`summarize#N`), or {% endif %}drill-tool output; digest orients only.
+Cite {% if profile_has_summarize %}`summarize` source windows or anchors by handle, or {% endif %}drill-tool output; digest orients only.
