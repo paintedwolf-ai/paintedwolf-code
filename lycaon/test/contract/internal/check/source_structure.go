@@ -1,4 +1,4 @@
-package contractcheck
+package check
 
 import (
 	"go/ast"
