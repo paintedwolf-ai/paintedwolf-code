@@ -38,6 +38,11 @@ func effectiveCloseoutPolicy(t *testing.T) closeoutPolicy {
 	t.Helper()
 	catalog, err := extpacks.CatalogForConsumers()
 	testutil.FailErr(t, "resolve closeout catalog", err)
+	return closeoutPolicyFor(t, catalog)
+}
+
+func closeoutPolicyFor(t *testing.T, catalog *extpacks.EffectiveCatalog) closeoutPolicy {
+	t.Helper()
 	key := hintregistry.EffectivePolicyKey(catalog)
 	closeoutMu.Lock()
 	defer closeoutMu.Unlock()
@@ -58,7 +63,19 @@ func effectiveCloseoutPolicy(t *testing.T) closeoutPolicy {
 // InstallCloseoutPolicy connects effective closeout rules to prompt fixtures.
 func InstallCloseoutPolicy(t *testing.T, manager closeoutHost) {
 	t.Helper()
-	policy := effectiveCloseoutPolicy(t)
+	installCloseoutPolicy(manager, effectiveCloseoutPolicy(t))
+}
+
+// InstallStockCloseoutPolicy is for hosts built around tests of device
+// configuration, whose fixture files are not valid policy input.
+func InstallStockCloseoutPolicy(t *testing.T, manager closeoutHost) {
+	t.Helper()
+	catalog, err := extpacks.ResolveStockCatalog(t.Context(), nil)
+	testutil.FailErr(t, "resolve stock closeout catalog", err)
+	installCloseoutPolicy(manager, closeoutPolicyFor(t, catalog))
+}
+
+func installCloseoutPolicy(manager closeoutHost, policy closeoutPolicy) {
 	hints := policy.hints.Clone()
 	formatter := guidance.NewStaticRejectFormatter(hints)
 	pipeline := oar.NewGuardPipeline(policy.rules, policy.loader, oar.NewCounterStore())

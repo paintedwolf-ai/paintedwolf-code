@@ -343,7 +343,7 @@ func fillSessions(t *testing.T, d *Deps) {
 	// host without policy could not finish a turn.
 	defer func() {
 		if d.Sessions.ToolPolicy.Pipeline == nil {
-			oartest.InstallCloseoutPolicy(t, d.Sessions)
+			oartest.InstallStockCloseoutPolicy(t, d.Sessions)
 		}
 	}()
 	if d.Sessions != nil {
