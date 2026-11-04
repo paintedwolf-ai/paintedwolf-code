@@ -135,7 +135,11 @@ func resolveDraftCitation(roots evidence.CitationRoots, occurrence DraftOccurren
 	c := occurrence.Citation
 	finding := WorkerFindingInput{Evidence: c.Handle, Path: c.Path, Line: c.Line, EndLine: c.EndLine, Excerpt: c.Excerpt}
 	result := OccurrenceResolution{OccurrenceIndex: occurrence.Index, Kind: occurrence.Kind}
-	outcome := classifyDraftFinding(roots, finding, ev)
+	classify := classifyDraftFinding
+	if occurrence.Kind == citationmd.KindWorkspaceLink {
+		classify = classifyDraftExactPath
+	}
+	outcome := classify(roots, finding, ev)
 	result.Resolution, result.Offender = outcome.resolution, outcome.offender
 	switch outcome.class {
 	case closeoutCitationSurvey:
@@ -177,6 +181,12 @@ func classifyDraftFinding(roots evidence.CitationRoots, finding WorkerFindingInp
 		}
 		finding.Path = resolved
 	}
+	return classifyDraftExactPath(roots, finding, ev)
+}
+
+// classifyDraftExactPath takes the path as written. A link stays what it says, since
+// a kept link presents its own destination.
+func classifyDraftExactPath(roots evidence.CitationRoots, finding WorkerFindingInput, ev evidence.Ledger) closeoutFindingOutcome {
 	if finding.Line > 0 {
 		return classifyDraftCoordinate(roots, finding, ev)
 	}
