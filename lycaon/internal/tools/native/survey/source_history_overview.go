@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -17,7 +16,6 @@ import (
 
 const (
 	overviewEffectCap       = 400
-	overviewSettleBudget    = 3 * time.Second
 	overviewTruncatedNote   = "the window overflowed the effect cap, so this list is a floor; source_history(path) has one file's full record"
 	overviewOpenWindowsNote = "commands in open_windows have not settled, so this list may be incomplete"
 	overviewNoRowsNote      = "the ledger recorded nothing on your branch this session; a file it never tracked may still have changed"
@@ -77,7 +75,11 @@ func (t *SourceHistoryTool) runOverview(ctx context.Context, tctx tools.ToolCont
 		}
 		return ledger.Windows.OpenSessionWindows(tctx.Identity.ProjectID, tctx.Identity.SessionID)
 	}
-	t.awaitClosingWindows(ctx, listWindows())
+	settleBudget := t.settleBudget
+	if settleBudget == 0 {
+		settleBudget = tools.WindowSettleBudget
+	}
+	tools.AwaitClosingWindows(ctx, listWindows(), settleBudget)
 	beforeRead := listWindows()
 	effects, err := ledger.Files.EffectsBetweenOnBranch(ctx, tctx.Identity.ProjectID, rootBranches, floor, 0, overviewEffectCap+1)
 	if err != nil {
@@ -144,34 +146,6 @@ func sharedBranch(rootBranches map[string]sourcebranch.ID) (sourcebranch.ID, boo
 		shared, first = branch, false
 	}
 	return shared, true
-}
-
-// awaitClosingWindows waits for windows whose process has ended, never for a
-// running one, until they settle or the budget passes.
-func (t *SourceHistoryTool) awaitClosingWindows(ctx context.Context, windows []sourceledger.SessionWindow) {
-	var expired <-chan time.Time
-	for _, window := range windows {
-		if !window.Closing {
-			continue
-		}
-		if expired == nil {
-			expired = t.startSettleBudget()
-		}
-		select {
-		case <-window.Settled:
-		case <-expired:
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func (t *SourceHistoryTool) startSettleBudget() <-chan time.Time {
-	if t.settleExpiry != nil {
-		return t.settleExpiry()
-	}
-	return time.After(overviewSettleBudget)
 }
 
 // mergeOpenWindows keeps every window seen open around the read. A later listing

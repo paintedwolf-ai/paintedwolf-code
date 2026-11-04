@@ -550,15 +550,12 @@ func TestSourceHistoryOverviewACOV11WaitsForAClosingWindow(t *testing.T) {
 		{{ID: "w1", Closing: true, Settled: settled}},
 		nil,
 	}}
-	waited := false
-	tool := &SourceHistoryTool{settleExpiry: func() <-chan time.Time {
-		waited = true
-		close(settled)
-		return nil
-	}}
+	settling := time.AfterFunc(20*time.Millisecond, func() { close(settled) })
+	t.Cleanup(func() { settling.Stop() })
+	tool := &SourceHistoryTool{settleBudget: time.Hour}
 	result := runOverviewCall(t, tool, windowContext(t, files, listing))
-	if !waited || !readSawSettled {
-		t.Fatalf("waited=%v readSawSettled=%v, want effects read after settlement", waited, readSawSettled)
+	if !readSawSettled {
+		t.Fatal("effects were read before the closing window settled")
 	}
 	if len(result.OpenWindows) != 0 || result.Note != "" {
 		t.Fatalf("settled overview = %+v, want no open window and no floor note", result)
@@ -572,10 +569,7 @@ func TestSourceHistoryOverviewACOV12DoesNotWaitOnWhatCannotSettle(t *testing.T) 
 	never := make(chan struct{})
 	t.Run("running job", func(t *testing.T) {
 		listing := &windowListing{listings: [][]sourceledger.SessionWindow{{{ID: "job", Settled: never}}}}
-		tool := &SourceHistoryTool{settleExpiry: func() <-chan time.Time {
-			t.Error("started the settle budget for a running window")
-			return nil
-		}}
+		tool := &SourceHistoryTool{settleBudget: time.Hour}
 		result := runOverviewCall(t, tool, windowContext(t, &windowLedger{}, listing))
 		if len(result.OpenWindows) != 1 || result.OpenWindows[0].ID != "job" || !result.OpenWindows[0].Running || result.Note == "" {
 			t.Fatalf("overview = %+v, want the running window listed with a floor note", result)
@@ -583,19 +577,11 @@ func TestSourceHistoryOverviewACOV12DoesNotWaitOnWhatCannotSettle(t *testing.T) 
 	})
 	t.Run("closing past the budget", func(t *testing.T) {
 		listing := &windowListing{listings: [][]sourceledger.SessionWindow{{{ID: "slow", Closing: true, Settled: never}}}}
-		expired := make(chan time.Time)
-		close(expired)
-		tool := &SourceHistoryTool{settleExpiry: func() <-chan time.Time { return expired }}
+		tool := &SourceHistoryTool{settleBudget: time.Nanosecond}
 		result := runOverviewCall(t, tool, windowContext(t, &windowLedger{}, listing))
 		if len(result.OpenWindows) != 1 || result.OpenWindows[0].ID != "slow" || result.OpenWindows[0].Running || result.Note == "" {
 			t.Fatalf("overview = %+v, want the closing window listed with a floor note", result)
 		}
-	})
-	t.Run("canceled call", func(t *testing.T) {
-		tool := &SourceHistoryTool{settleExpiry: func() <-chan time.Time { return nil }}
-		ctx, cancel := context.WithCancel(t.Context())
-		cancel()
-		tool.awaitClosingWindows(ctx, []sourceledger.SessionWindow{{ID: "slow", Closing: true, Settled: never}})
 	})
 }
 

@@ -304,3 +304,26 @@ func TestSourceHistoryACDF15DefaultDiffOnAnUnrecordedFile(t *testing.T) {
 		}
 	}
 }
+
+func TestSourceHistoryACDF16DiffShowsTheGeneratorsRewriteOfARecordedFile(t *testing.T) {
+	_, results := runWorkerScript(t, orchestration.ProfileImplementer, writeScope(),
+		api.ToolCall{ID: "load", Name: "request_tools", Args: map[string]any{"need": "source_history"}},
+		commandCall("write", `printf 'package main\n// edited\n' > main.go`),
+		generatorCall("generate"),
+		historyCall("overview", map[string]any{}),
+		historyCall("diff", map[string]any{"path": "main.go", "mode": "diff"}),
+	)
+	diff := decodeWorkerHistory(t, results, "diff")
+	if !diff.Recorded || diff.Unrecorded || diff.BaseVersionID == "" || diff.VersionID != "" || diff.Note == "" {
+		t.Fatalf("diff = %+v, want the recorded baseline, no live version and a note", diff)
+	}
+	if !strings.Contains(diff.Diff, "// generated") || strings.Contains(diff.Diff, "// edited") {
+		t.Fatalf("diff = %q, want the generator's line and not the replaced native one", diff.Diff)
+	}
+	overview := decodeWorkerHistory(t, results, "overview")
+	for _, row := range overview.Files {
+		if row.Path == "main.go" && (row.Unrecorded || row.Actor != "you" || row.VersionID == "") {
+			t.Fatalf("main.go row = %+v, want its ledger facts", row)
+		}
+	}
+}
