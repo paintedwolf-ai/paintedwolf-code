@@ -29,7 +29,7 @@ func TestTurnSourceBriefsSitBeforeTheirOpeningPrompt(t *testing.T) {
 	eng.SetDeps(deps)
 	sess := &api.Session{ID: "source-window", AgentType: orchestration.ProfileCoordinator, WorkspacePath: t.TempDir()}
 	ctx := context.Background()
-	block := inject.RenderSourceChangesBlock(ctx, deps.Injects, sess.ID, brief)
+	block := inject.RenderSourceChangesBlock(ctx, deps.Injects, sess.ID, brief, false)
 	if block == "" {
 		t.Fatal("source change fixture did not render")
 	}

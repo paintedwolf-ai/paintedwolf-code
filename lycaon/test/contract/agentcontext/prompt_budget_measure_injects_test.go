@@ -128,7 +128,7 @@ func measureCoordinatorInjectBlock(
 				At:     "14:02 UTC",
 			})
 		}
-		return inject.RenderSourceChangesBlock(ctx, renderer, "sess-inject-test", brief)
+		return inject.RenderSourceChangesBlock(ctx, renderer, "sess-inject-test", brief, true)
 	case "implement_spawn":
 		block, err := inject.RenderImplementSpawnInject(
 			ctx, renderer, "sess-inject-test", spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, spawn.SurfaceImplementSynthesis, 1, false, true,

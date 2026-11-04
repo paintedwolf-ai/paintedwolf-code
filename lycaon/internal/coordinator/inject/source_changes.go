@@ -92,11 +92,14 @@ func (b SourceChangeBrief) OtherMayIncludeWorkingSet() bool {
 
 // RenderSourceChangesBlock renders guidance/source-changes.md via Binding stem.
 // When renderer is nil, returns empty (fail closed — no Go prose builder).
+// sourceHistoryOffered is the current surface's: the record is fixed at turn
+// open, but it restates on later surfaces that may not have the tool.
 func RenderSourceChangesBlock(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
 	sessionID string,
 	brief SourceChangeBrief,
+	sourceHistoryOffered bool,
 ) string {
 	if renderer == nil || brief.Empty() {
 		return ""
@@ -123,6 +126,7 @@ func RenderSourceChangesBlock(
 			"files": files, "git": git, "other_files": brief.OtherFiles,
 			"other_effects": brief.OtherEffects, "truncated": brief.Truncated,
 			"other_may_include_working_set": brief.OtherMayIncludeWorkingSet(),
+			"source_history_offered":        sourceHistoryOffered,
 		},
 	)
 	if err != nil {

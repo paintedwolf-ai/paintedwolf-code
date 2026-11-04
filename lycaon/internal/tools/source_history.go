@@ -5,16 +5,16 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 )
 
-// OffersSourceHistory reports whether the calling profile holds source_history,
-// so rejection copy names it only to an agent that can call it.
-func OffersSourceHistory(ctx context.Context, boundary *sandbox.Boundary, tc ToolContext) bool {
-	return boundary != nil && boundary.AssertToolAllowed(ctx, tc.ProfileID(), "source_history", tc.Turn.ToolAccess) == nil
+// OffersSourceHistory reports whether this turn's plan can resolve source_history,
+// so rejection copy names it only to an agent that can call it. A profile can
+// hold a tool the turn's surface leaves out.
+func OffersSourceHistory(tc ToolContext) bool {
+	return tc.Turn.TurnToolPlan.Addressable("source_history")
 }
 
 // SourceHistory supplies independent read services to a tool invocation.

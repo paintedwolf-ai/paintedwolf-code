@@ -88,8 +88,8 @@ func (t *RestoreVersionTool) Run(ctx context.Context, args map[string]any, tctx 
 		ctx, ledger, tctx.Identity.ProjectID, branch, rootID, rel, path, versionID, baseVersionID,
 	)
 	if err != nil {
-		if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "SOURCE_VERSION_NO_PREDECESSOR" {
-			reject.Data["source_history_offered"] = tools.OffersSourceHistory(ctx, t.Boundary, tctx)
+		if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {
+			reject.Data["source_history_offered"] = tools.OffersSourceHistory(tctx)
 		}
 		return "", err
 	}

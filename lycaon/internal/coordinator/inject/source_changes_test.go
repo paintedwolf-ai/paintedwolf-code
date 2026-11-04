@@ -23,7 +23,7 @@ func TestRenderSourceChangesBlockParity(t *testing.T) {
 		OtherFiles:   2,
 		OtherEffects: 5,
 	}
-	got := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", brief)
+	got := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", brief, true)
 	for _, want := range []string{
 		"## Source changes since your last turn",
 		"- git checkout main → feature/x (abc123def456 → fedcba654321) at 14:01 UTC",
@@ -49,7 +49,7 @@ func TestACBRF01RowsWithNothingCountedOmitElsewhere(t *testing.T) {
 			{Path: "a.go", Actor: "user", Op: "edit", At: "14:02 UTC", Effects: 1},
 			{Path: "b.go", Actor: "user", Op: "edit", At: "14:03 UTC", Effects: 1},
 		},
-	})
+	}, true)
 	for _, want := range []string{"- a.go — user edit at 14:02 UTC", "- b.go — user edit at 14:03 UTC"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("rendered brief missing %q:\n%s", want, got)
@@ -72,7 +72,7 @@ func TestACBRF03CountedWorkingSetFilesChangeTheElsewhereClaim(t *testing.T) {
 			},
 			OtherFiles:   5,
 			OtherEffects: 7,
-		})
+		}, true)
 	}
 	outside, overflow := render(false), render(true)
 	for _, block := range []string{outside, overflow} {
@@ -90,7 +90,7 @@ func TestACOC01OwnCommandRowsRenderDifferently(t *testing.T) {
 	render := func(own bool) string {
 		return inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", inject.SourceChangeBrief{
 			Files: []inject.SourceChangeFile{{Path: "gen.go", Actor: "external", Op: "create", At: "14:02 UTC", Effects: 1, DuringYourCommand: own}},
-		})
+		}, true)
 	}
 	if flagged, plain := render(true), render(false); flagged == plain || plain == "" {
 		t.Fatalf("own command row renders like a foreign row:\n%s", flagged)
@@ -131,7 +131,7 @@ func TestACBRF06StoredRowsRenderLikeUnflaggedRows(t *testing.T) {
 		t.Fatalf("stored rows = %+v, want one unflagged row", brief.Files)
 	}
 	renderer := promptstest.InjectRenderer(t)
-	got := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", brief)
+	got := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", brief, true)
 	for _, want := range []string{"- a.go — user write at 14:02 UTC", "Elsewhere in the project: 3 change(s) across 2 file(s)"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("rendered stored brief missing %q:\n%s", want, got)
@@ -141,17 +141,28 @@ func TestACBRF06StoredRowsRenderLikeUnflaggedRows(t *testing.T) {
 
 func TestRenderSourceChangesBlockEmptyBriefRendersNothing(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
-	if got := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", inject.SourceChangeBrief{}); got != "" {
+	if got := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", inject.SourceChangeBrief{}, true); got != "" {
 		t.Fatalf("empty brief rendered %q, want nothing", got)
 	}
 }
 
-func TestRenderSourceChangesBlockTruncationIsStated(t *testing.T) {
+// A surface without source_history is not told to call it.
+func TestTruncatedLineNamesSourceHistoryOnlyWhenOffered(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
-	got := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", inject.SourceChangeBrief{
-		Truncated: true,
-	})
-	if !strings.Contains(got, "counts are a floor") || !strings.Contains(got, "source_history") {
-		t.Fatalf("truncated brief must state the floor and the full-record tool:\n%s", got)
+	render := func(offered bool) string {
+		return inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", inject.SourceChangeBrief{Truncated: true}, offered)
+	}
+	offered, withheld := render(true), render(false)
+	if withheld == "" || len(offered) <= len(withheld) {
+		t.Fatalf("offered must render the longer line:\noffered: %s\nwithheld: %s", offered, withheld)
+	}
+}
+
+func TestCompleteBriefRendersTheSameOnEverySurface(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	brief := inject.SourceChangeBrief{Files: []inject.SourceChangeFile{{Path: "a.go", Actor: "user", Op: "write", At: "14:02 UTC", Effects: 1}}}
+	offered := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", brief, true)
+	if withheld := inject.RenderSourceChangesBlock(context.Background(), renderer, "sess-brief-test", brief, false); offered == "" || offered != withheld {
+		t.Fatalf("a brief with no truncated line changed with the surface:\n%s\n%s", offered, withheld)
 	}
 }
