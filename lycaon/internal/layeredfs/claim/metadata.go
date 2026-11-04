@@ -26,15 +26,15 @@ type RootMappingRecord struct {
 
 // AdapterMetadataFacts persists the adapter identity, preparation kind, fallback reason, and seed cost.
 type AdapterMetadataFacts struct {
-	AdapterID            adapter.AdapterID            `json:"adapter_id"`
-	PreparationKind      adapter.PreparationKind      `json:"preparation_kind"`
-	SourceVisibility     adapter.SourceVisibility     `json:"source_visibility"`
-	FallbackReason       adapter.ReasonCode           `json:"fallback_reason,omitempty"`
-	CopiedEntries        int64                        `json:"copied_entries"`
-	CopiedBytes          int64                        `json:"copied_bytes"`
-	PendingGitInit       bool                         `json:"pending_git_init"`
-	SeededGitRepos       []string                     `json:"seeded_git_repos,omitempty"`
-	IsLegacyMaterialized bool                         `json:"is_legacy_materialized,omitempty"`
+	AdapterID            adapter.AdapterID        `json:"adapter_id"`
+	PreparationKind      adapter.PreparationKind  `json:"preparation_kind"`
+	SourceVisibility     adapter.SourceVisibility `json:"source_visibility"`
+	FallbackReason       adapter.ReasonCode       `json:"fallback_reason,omitempty"`
+	CopiedEntries        int64                    `json:"copied_entries"`
+	CopiedBytes          int64                    `json:"copied_bytes"`
+	PendingGitInit       bool                     `json:"pending_git_init"`
+	SeededGitRepos       []string                 `json:"seeded_git_repos,omitempty"`
+	IsLegacyMaterialized bool                     `json:"is_legacy_materialized,omitempty"`
 }
 
 // CheckpointMetadataRefs persists parent, latest published, and pending/failed checkpoint references.
@@ -48,15 +48,15 @@ type CheckpointMetadataRefs struct {
 // ViewMetadataV2 is the Format-v2 persisted branch/view metadata record (#1662).
 // It records durable identity and reconstructible state, never claiming a live mount survived restart.
 type ViewMetadataV2 struct {
-	FormatVersion       int                        `json:"format_version"`
-	Identity            ClaimIdentity              `json:"identity"`
-	SelectedRoots       []RootMappingRecord        `json:"selected_roots"`
-	FocusPathHints      []string                   `json:"focus_path_hints,omitempty"`
-	Adapter             AdapterMetadataFacts       `json:"adapter"`
-	JournalPath         string                     `json:"journal_path"`
-	Checkpoints         CheckpointMetadataRefs     `json:"checkpoints"`
-	LegacyCapturedBases []layeredfs.BaseCapture    `json:"legacy_captured_bases,omitempty"`
-	CommittedAt         time.Time                  `json:"committed_at"`
+	FormatVersion       int                     `json:"format_version"`
+	Identity            ClaimIdentity           `json:"identity"`
+	SelectedRoots       []RootMappingRecord     `json:"selected_roots"`
+	FocusPathHints      []string                `json:"focus_path_hints,omitempty"`
+	Adapter             AdapterMetadataFacts    `json:"adapter"`
+	JournalPath         string                  `json:"journal_path"`
+	Checkpoints         CheckpointMetadataRefs  `json:"checkpoints"`
+	LegacyCapturedBases []layeredfs.BaseCapture `json:"legacy_captured_bases,omitempty"`
+	CommittedAt         time.Time               `json:"committed_at"`
 }
 
 // LegacyBranchMetadataV1 represents Format-v1 retained materialized branch metadata (#1662).
