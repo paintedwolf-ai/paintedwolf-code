@@ -101,7 +101,7 @@ func (r *Runtime) RecoverWorkerViews(ctx context.Context) error {
 	if r.Recovery == nil || r.Queue == nil {
 		return nil
 	}
-	err := worker.RecoverWorkerViewsAtStartup(ctx, r.Queue, r.Workspace)
+	err := worker.SettleWorkerViewsAtStartup(ctx, r.Queue, r.Workspace)
 	if _, gcErr := r.Recovery.CollectGarbage(ctx); gcErr != nil {
 		slog.WarnContext(ctx, "collect retained worker checkpoints", "err", gcErr)
 	}

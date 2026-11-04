@@ -83,9 +83,9 @@ func (e *ViewRecoveryError) Error() string {
 
 func (e *ViewRecoveryError) Unwrap() error { return e.Cause }
 
-// RecoverWorkerViewsAtStartup settles every recorded view, then resumes or fails each active
+// SettleWorkerViewsAtStartup settles every recorded view, then resumes or fails each active
 // worker that lost one. Runs before the poller can claim, so no live worker is in scope.
-func RecoverWorkerViewsAtStartup(ctx context.Context, queue WorkerQueue, views WorkerViewRecovery) error {
+func SettleWorkerViewsAtStartup(ctx context.Context, queue WorkerQueue, views WorkerViewRecovery) error {
 	if views == nil {
 		return nil
 	}
