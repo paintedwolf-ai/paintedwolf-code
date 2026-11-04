@@ -60,9 +60,14 @@ func runInNamespace(t *testing.T) {
 	}
 	name, _, _ := strings.Cut(t.Name(), "/")
 	args := []string{"--user", "--map-root-user", "--mount", os.Args[0], "-test.run", "^" + name + "$", "-test.v", "-test.count=1"}
+	env := append(os.Environ(), namespaceChildEnv+"=1")
+	// go test never merges its own directory, so a coverage run names another.
+	if dir := os.Getenv("PW_GO_CHILD_COVERDIR"); dir != "" {
+		env = append(env, "GOCOVERDIR="+dir)
+	}
 	output, code, err := lexec.Run(t.Context(), unsharePath, args, lexec.ExecOpts{
 		Launch:  lexec.HostLaunch("test volume namespace"),
-		Env:     append(os.Environ(), namespaceChildEnv+"=1"),
+		Env:     env,
 		Timeout: 5 * time.Minute,
 	})
 	text := string(output)
