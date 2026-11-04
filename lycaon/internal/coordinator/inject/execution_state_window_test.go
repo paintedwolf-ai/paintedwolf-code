@@ -137,7 +137,7 @@ func TestAgesSurviveCompactionAndRestartInTheStore_ACEXEC04(t *testing.T) {
 		last := rows[len(rows)-1]
 		// Every pass publishes a view covering all rows, then reopens the store.
 		testutil.FailErr(t, "publish view", st.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
-			Generation: int64(age), CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: last.Seq,
+			Generation: age, CoveredThroughOrd: last.Ord, CoveredThroughID: last.ID, SourceSeq: last.Seq,
 			Messages: []api.Message{{ID: "summary", Role: api.MessageRoleAssistant, ContentParts: []api.MessageContentPart{{Source: "compaction_summary"}}}},
 		}))
 		st = store.NewSQL(database)
