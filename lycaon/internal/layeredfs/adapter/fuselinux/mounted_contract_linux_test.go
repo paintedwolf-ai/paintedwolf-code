@@ -1,3 +1,5 @@
+//go:build linux
+
 package fuselinux_test
 
 import (
@@ -13,6 +15,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
@@ -547,6 +550,7 @@ func runOneProcWorkflow(t *testing.T) {
 	if got := runtime.GOMAXPROCS(0); got != 1 {
 		t.Fatalf("helper GOMAXPROCS = %d, want 1", got)
 	}
+	defer collectContinuously()()
 	v := prepareMountedView(t, fuselinux.Config{ConfinementCheckFn: confinementVerified}, "view-one-proc", map[string]string{"f": "seed\n"})
 	if got := runtime.GOMAXPROCS(0); got != 1 {
 		t.Fatalf("New or Prepare changed GOMAXPROCS to %d", got)
@@ -559,6 +563,13 @@ func runOneProcWorkflow(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(v.mnt, "sub", "deep", "g"), []byte("native\n"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
+	}
+	flushed, err := os.Open(filepath.Join(v.mnt, "sub", "deep", "g"))
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if err := errors.Join(fssync.Always(flushed), flushed.Close()); err != nil {
+		t.Fatalf("flush: %v", err)
 	}
 	cmd := exec.CommandContext(t.Context(), "/bin/sh", "-c", "cat g && printf 'shell\\n' > h")
 	cmd.Dir = filepath.Join(v.mnt, "sub", "deep")
@@ -579,6 +590,28 @@ func runOneProcWorkflow(t *testing.T) {
 	}
 	if got := runtime.GOMAXPROCS(0); got != 1 {
 		t.Fatalf("GOMAXPROCS changed to %d", got)
+	}
+}
+
+// collectContinuously keeps stop-the-world pauses arriving while a mounted workflow runs, each of which
+// needs every scheduler slot, including one a flush on this process's own mount might hold.
+func collectContinuously() (stop func()) {
+	done := make(chan struct{})
+	var collector sync.WaitGroup
+	collector.Go(func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				runtime.GC()
+				runtime.Gosched()
+			}
+		}
+	})
+	return func() {
+		close(done)
+		collector.Wait()
 	}
 }
 

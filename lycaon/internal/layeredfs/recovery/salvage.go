@@ -255,9 +255,5 @@ func copyWorkingFile(src, dst string) (written int64, err error) {
 		return 0, err
 	}
 	written, copyErr := io.Copy(out, in)
-	syncErr := error(nil)
-	if !fssync.Relaxed() {
-		syncErr = out.Sync()
-	}
-	return written, errors.Join(copyErr, syncErr, out.Close())
+	return written, errors.Join(copyErr, fssync.File(out), out.Close())
 }

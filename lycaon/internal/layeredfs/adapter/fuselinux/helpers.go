@@ -1,3 +1,5 @@
+//go:build linux
+
 package fuselinux
 
 import (
@@ -12,6 +14,7 @@ import (
 	"time"
 
 	execpkg "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
@@ -139,7 +142,7 @@ func (a *Adapter) syncClientPath(ctx context.Context, mountRoot, targetPath stri
 		}
 		return mode.IsDir(), false, err
 	}
-	syncErr := f.Sync()
+	syncErr := fssync.Always(f)
 	closeErr := f.Close()
 	if syncErr != nil {
 		return mode.IsDir(), false, syncErr
