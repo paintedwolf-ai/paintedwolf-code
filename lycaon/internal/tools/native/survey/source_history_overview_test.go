@@ -429,6 +429,10 @@ func (l *windowLedger) SessionActivityFloor(context.Context, string, string) (in
 	return 1, true, nil
 }
 
+func (l *windowLedger) ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error) {
+	return sourceledger.BranchHead{}, sourceledger.ErrHistoryNotFound
+}
+
 func (l *windowLedger) EffectsBetweenOnBranch(context.Context, string, map[string]sourcebranch.ID, int64, int64, int) ([]sourceledger.Effect, error) {
 	if l.onRead != nil {
 		l.onRead()
