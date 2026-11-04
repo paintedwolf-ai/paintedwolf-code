@@ -68,6 +68,29 @@ func TestCancelFinishesOnAFullVolume(t *testing.T) {
 		}
 		assertCanceledAndRetained(t, f, task)
 	})
+	t.Run("database_on_the_volume_with_no_reserve_left", func(t *testing.T) {
+		volume := filepath.Join(t.TempDir(), "volume")
+		testutil.FailErr(t, "mount point", os.Mkdir(volume, 0o755))
+		mountSmallVolume(t, volume)
+		f := newEngineFixtureOn(t, testdbfixture.OpenPath(t, filepath.Join(volume, "store.db")))
+		task := claimAndFill(t, f, volume)
+		_, err := f.database.ExecContext(t.Context(), "PRAGMA wal_checkpoint(TRUNCATE)")
+		testutil.FailErr(t, "truncate write-ahead log", err)
+		if !f.engine.Workspace.ReleaseSpaceReserve() {
+			t.Fatal("the coordinator set no reserve aside")
+		}
+		fillVolume(t, filepath.Join(task.WorkspaceRoot, "filled"), "reserve-gone")
+
+		if err := f.engine.Queue.Cancel(t.Context(), task.ID, nil); !db.IsDiskFull(err) {
+			t.Fatalf("cancel with nothing left to free: %v", err)
+		}
+		if got, _ := f.engine.Queue.Get(task.ID); got.Status.IsTerminal() {
+			t.Fatalf("cancel committed: %+v", got)
+		}
+		if got := f.readBranch(task.WorkspaceRoot, "app.txt"); got != "unpromoted edit\n" {
+			t.Fatalf("tree lost work: %q", got)
+		}
+	})
 }
 
 func claimAndFill(t *testing.T, f *engineFixture, volume string) *api.WorkerTask {
