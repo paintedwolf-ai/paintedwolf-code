@@ -96,9 +96,9 @@ type ToolUse uint8
 const (
 	// ToolUseAllowed lets the model call any offered tool.
 	ToolUseAllowed ToolUse = iota
-	// ToolUseForbidden asks for a prose answer. Tool definitions stay in the
-	// request, since transports validate tool history against them; each
-	// adapter maps the restriction onto its own no-call control.
+	// ToolUseForbidden asks for a prose answer. Each adapter drops the tool
+	// definitions where its API allows that, and otherwise keeps them with its
+	// no-call control, because that API validates tool history against them.
 	ToolUseForbidden
 )
 

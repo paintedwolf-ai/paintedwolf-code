@@ -44,11 +44,17 @@ func CloseoutRepairHintData(roots evidence.CitationRoots, draft CloseoutDraft, r
 		}
 		switch {
 		case occurrence.RepairID != "":
-			targets = append(targets, map[string]any{
+			target := map[string]any{
 				"id": occurrence.RepairID, "token": occurrence.Token,
 				"defect": string(outcome.Outcome), "web_link": occurrence.Kind == citationmd.KindWebLink,
 				"unnumbered": outcome.Resolution.UnnumberedOutput,
-			})
+			}
+			if occurrence.Citation != nil {
+				for key, value := range citationRepairOffer(roots, ev.Ledger, *occurrence.Citation) {
+					target[key] = value
+				}
+			}
+			targets = append(targets, target)
 		case occurrence.Owner != DraftFieldSynthesis:
 			document = append(document, occurrence.Owner+": "+occurrence.Token)
 		}
@@ -60,6 +66,42 @@ func CloseoutRepairHintData(roots evidence.CitationRoots, draft CloseoutDraft, r
 		data["repair_observations"] = string(raw)
 	}
 	return data
+}
+
+// citationRepairOffer names a replacement the model can actually send for a refused
+// coordinate: the path form when the path's numbered records cover the lines, and
+// otherwise the bare handle of its newest record. A coordinate on a worker's record may
+// have no other repair, since nothing lets the coordinator re-read for that worker.
+func citationRepairOffer(roots evidence.CitationRoots, ev evidence.Ledger, citation citationmd.Citation) map[string]any {
+	if citation.Line <= 0 {
+		return nil
+	}
+	path := evidence.LedgerPathKey(roots, citation.Path, ev.ByPath)
+	cited, known := evidence.ResolveHandle(ev, citation.Handle)
+	if path == "" && known {
+		path = cited.Path
+	}
+	end := max(citation.EndLine, citation.Line)
+	var active []evidence.Record
+	newest := ""
+	handles := ev.ByPath[path]
+	for i := len(handles) - 1; i >= 0; i-- {
+		rec, ok := evidence.ResolveHandle(ev, handles[i])
+		if !ok || rec.SupersededBy != "" || rec.IsGate() {
+			continue
+		}
+		active = append(active, rec)
+		if newest == "" && !rec.Survey {
+			newest = handles[i]
+		}
+	}
+	if evidence.UnionObserved(active, path, citation.Line, end) {
+		return map[string]any{"use": citationmd.Citation{Path: path, Line: citation.Line, EndLine: citation.EndLine}.Token()}
+	}
+	if newest == "" {
+		return nil
+	}
+	return map[string]any{"use": newest, "worker_output": strings.Contains(newest, ":")}
 }
 
 // CitationRepairRefusalData reports a refused repair. Offenders name the target for

@@ -262,3 +262,79 @@ func TestCoordinateLabelDoesNotOutliveItsCoordinate(t *testing.T) {
 		t.Fatalf("rejected link presented %q", got)
 	}
 }
+
+// A verified excerpt is stronger evidence than a printed number, in both paths.
+func TestVerifiedExcerptSupportsACoordinateOnUnnumberedOutput(t *testing.T) {
+	t.Parallel()
+	const path = "a.go"
+	ev := evidence.AssembleLedger([]evidence.Record{catPlain("read#1", path, 5)})
+	for _, tc := range []struct {
+		name, source string
+		want         CitationOutcome
+	}{
+		{"matching text at the line", `[a.go:3 "line 3 of the file"]`, CitationGrounded},
+		{"matching text in the range", `[a.go:2-4 "line 3 of the file"]`, CitationGrounded},
+		{"a handle", `[read#1:3 "line 3 of the file"]`, CitationGrounded},
+		{"text from another line", `[a.go:3 "line 4 of the file"]`, CitationUnverifiable},
+		{"text observed nowhere", `[a.go:3 "something else entirely"]`, CitationUnverifiable},
+		{"no excerpt", `[a.go:3]`, CitationUnverifiable},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := lineNumberOutcome(t, tc.source, ev); got.Outcome != tc.want {
+				t.Fatalf("outcome = %+v, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// A refused coordinate on a worker's record offers a repair that can actually be sent.
+func TestRepairOffersWhatTheCoordinatorCanSend(t *testing.T) {
+	t.Parallel()
+	const path = "cmd/gateway/main.go"
+	worker := evidence.NamespaceLedger(evidence.AssembleLedger(append(catNumbered(1, path, 13), catPlain("read#2", path, 31))), "leg-a")
+	numbered := evidence.NamespaceLedger(evidence.AssembleLedger(catNumbered(1, path, 13, 14, 15)), "leg-a")
+	own := evidence.AssembleLedger([]evidence.Record{catPlain("read#1", path, 31)})
+	for _, tc := range []struct {
+		name, source string
+		ev           evidence.Ledger
+		use          string
+		worker       bool
+	}{
+		{"live shape: a line no numbered record of the worker's shows", "[leg-a:read#1:14]", worker, "leg-a:read#2", true},
+		{"a range the worker's numbered records cover by path", "[leg-a:read#1:14-15]", numbered, path + ":14-15", false},
+		{"the coordinator's own read", "[cmd/gateway/main.go:14]", own, "read#1", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ev := CloseoutEvidence{Ledger: tc.ev}
+			draft, resolved := repairDraft(t, "It holds "+tc.source+".", ev)
+			targets, _ := CloseoutRepairHintData(evidence.CitationRoots{}, draft, resolved, ev, nil)["repair_targets"].([]map[string]any)
+			if len(targets) != 1 || targets[0]["use"] != tc.use || (targets[0]["worker_output"] == true) != tc.worker {
+				t.Fatalf("targets = %+v", targets)
+			}
+			retained := RetainedCloseout{Active: true}
+			retained.Retain(draft)
+			opts := DraftParseOptions(evidence.CitationRoots{}, tc.ev)
+			read := ReadCloseoutReport("[cite: c1 => "+tc.use+"]", retained, false, opts)
+			after := ResolveDraftCitations(evidence.CitationRoots{}, "implement_investigate", read.Draft, ev, nil)
+			if len(read.RepairDefects) != 0 || len(after.Rejected()) != 0 {
+				t.Fatalf("the offered repair failed: %+v %+v", read.RepairDefects, after.Rejected())
+			}
+		})
+	}
+}
+
+func TestHostClosingStatesStateAndClaimsNothing(t *testing.T) {
+	t.Parallel()
+	ev := evidence.AssembleLedger(catNumbered(1, "a.go", 1))
+	got := HostClosingMarkdown("the limit was reached", ev, "- [ ] audit a.go")
+	for _, want := range []string{"ended without a final answer", "the limit was reached", "Nothing below is a finding", "a.go", "- [ ] audit a.go"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("closing lacks %q: %s", want, got)
+		}
+	}
+	if none := HostClosingMarkdown("x", evidence.InitLedger(), ""); !strings.Contains(none, "No file was read") || strings.Contains(none, "Checklist") {
+		t.Fatalf("empty closing = %q", none)
+	}
+}

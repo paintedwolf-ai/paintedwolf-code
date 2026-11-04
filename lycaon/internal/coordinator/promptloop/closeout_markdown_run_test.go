@@ -2,16 +2,19 @@ package promptloop_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -330,5 +333,87 @@ func TestRefusalWithATurnLeftStillRepairs(t *testing.T) {
 	result, message := r.run(t, []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Does it hold?"}})
 	if message.Grounding == nil || message.Grounding.HostAssembled || !strings.Contains(result.LastAssistantContent, "a.go:2") {
 		t.Fatalf("repair turn did not land: %q grounding=%+v", result.LastAssistantContent, message.Grounding)
+	}
+}
+
+// withAssembler wires the assembler a live session has.
+func (r *markdownRun) withAssembler() {
+	ledger := r.deps.Closeout.EvidenceLedger.(markdownRunLedger).ledger
+	r.deps.Closeout.AssembleLedgerCloseout = func(_ context.Context, _, surface string, codes []string, draft guidance.CloseoutDraft, retries int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+		return guidance.AssembleRetainedCloseout(evidence.CitationRoots{}, surface, guidance.CloseoutEvidence{Ledger: ledger}, draft, nil, codes[len(codes)-1], retries)
+	}
+}
+
+// A final turn the model spends on a tool call has no answer to assemble, which is how
+// 2 of 4 capped live runs ended. The user gets the retained draft or an honest closing.
+func TestFinalTurnWithNoAnswerStillEndsWithSomething(t *testing.T) {
+	toolOnly := &modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "c1", Name: "read", Args: map[string]any{"path": "a.go"}}}}
+	for _, tc := range []struct {
+		name        string
+		completions []*modelcall.Completion
+		limit       int
+		want        string
+	}{
+		{"a tool call and nothing else", []*modelcall.Completion{toolOnly}, 1, "ended without a final answer"},
+		{"an empty reply", []*modelcall.Completion{{}}, 1, "ended without a final answer"},
+		{"a refused answer, then a tool call", []*modelcall.Completion{{Content: "The limiter races [read#99:2]."}, toolOnly}, 2, "The limiter races"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newMarkdownRun(t, tc.completions...)
+			r.withAssembler()
+			r.deps.Context.Limits = loopTestLimits(tc.limit)
+			result, message := r.run(t, []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Is it safe?"}})
+			if !strings.Contains(result.LastAssistantContent, tc.want) {
+				t.Fatalf("delivered %q, want %q", result.LastAssistantContent, tc.want)
+			}
+			if message.Grounding == nil || !message.Grounding.HostAssembled || message.Grounding.Traced {
+				t.Fatalf("not marked host assembled: %+v", message.Grounding)
+			}
+		})
+	}
+}
+
+// The workflow live shape, through the loop and the real kick: a coordinate on a worker's
+// record that no numbered record shows. The feedback names the repair and that repair lands.
+func TestWorkerCoordinateRepairsToTheOfferedBareHandle(t *testing.T) {
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	reg, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load anchor registry", err)
+	defer anchor.SetAnchorsFor(func(context.Context, string) *anchor.Registry { return reg })()
+	body := make([]string, 0, 31)
+	for line := 1; line <= 31; line++ {
+		body = append(body, fmt.Sprintf("line %d of the file", line))
+	}
+	worker := evidence.NamespaceLedger(evidence.AssembleLedger([]evidence.Record{
+		{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, SourceTool: "command", Path: "main.go", Body: []string{"line 13 of the file"}, LineRanges: []evidence.LineRange{{Start: 13, End: 13}},
+			SourceDelivery: &evidence.SourceDelivery{ResponseID: "r", DeliveryID: "d1", StartLine: 13, EndLine: 13, LineNumbered: true}},
+		{Handle: "read#2", Kind: "read", Shape: evidence.ShapeFileRegion, SourceTool: "command", Path: "main.go", Body: body, LineRanges: []evidence.LineRange{{Start: 1, End: 31}},
+			SourceDelivery: &evidence.SourceDelivery{ResponseID: "r", DeliveryID: "d2", StartLine: 1, EndLine: 31}},
+	}), "leg-a")
+	r := newMarkdownRun(t, &modelcall.Completion{Content: "The handler is wrong [leg-a:read#1:14]."}, &modelcall.Completion{Content: "[cite: c1 => leg-a:read#2]"})
+	r.deps.Closeout.EvidenceLedger = markdownRunLedger{ledger: worker}
+	r.deps.Context.Limits = loopTestLimits(4)
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	var kick string
+	r.deps.Closeout.RenderHostKick = func(ctx context.Context, id string, data map[string]any) (string, error) {
+		rendered, err := engine.RenderKick(ctx, id, data)
+		kick = rendered
+		return rendered, err
+	}
+	evaluate := r.deps.Closeout.EvaluateCloseoutBlock
+	r.deps.Closeout.EvaluateCloseoutBlock = func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
+		if gc.Grounding.CitationUnverifiable {
+			return &oar.Decision{Code: guidance.SynthCitationUnverifiableCode, Effect: oar.EffectBlock, Data: gc.RejectData[guidance.SynthCitationUnverifiableCode]}, nil
+		}
+		return evaluate(ctx, sess, gc)
+	}
+	result, message := r.run(t, []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Inspect it."}})
+	for _, want := range []string{"[cite: c1 => leg-a:read#2]", "cannot re-read"} {
+		if !strings.Contains(kick, want) {
+			t.Fatalf("kick lacks %q:\n%s", want, kick)
+		}
+	}
+	if message.Grounding == nil || message.Grounding.HostAssembled || !strings.Contains(result.LastAssistantContent, "main.go") {
+		t.Fatalf("repair did not land: %q grounding=%+v", result.LastAssistantContent, message.Grounding)
 	}
 }

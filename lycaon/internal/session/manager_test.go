@@ -171,28 +171,16 @@ func TestMaxIterationCap(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "infinite loop")
-	// The fixture spends its final, tool-less turn on another call; that is
-	// the model's miss, not an empty provider completion.
-	var miss *promptloop.ProseTurnToolCallError
-	if !errors.As(err, &miss) {
-		t.Fatalf("tool-only closeout error = %v, want ProseTurnToolCallError", err)
-	}
-	if _, empty := failure.AsProviderEmptyCompletion(err); empty {
-		t.Fatalf("model's miss attributed to the provider: %v", err)
-	}
+	testutil.FailErr(t, "a final turn spent on a call still ends", err)
 
 	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
-	// The repeating fixture refuses the final prose request; no blank answer commits.
-	want := 7
-	if len(msgs) != want {
-		t.Fatalf("messages = %d, want %d", len(msgs), want)
+	last := msgs[len(msgs)-1]
+	if last.Kind != api.MessageKindCompletionReport || last.Grounding == nil || !last.Grounding.HostAssembled || last.Grounding.Traced {
+		t.Fatalf("closing = %+v, want a host assembled report", last)
 	}
-	if msgs[5].Role != api.MessageRoleUser || msgs[5].Visibility != api.MessageVisibilityInternal {
-		t.Fatalf("msg[5] = %+v, want internal closeout nudge", msgs[5])
-	}
-	if msgs[6].Kind != api.MessageKindDraft || msgs[6].DraftStatus != api.DraftStatusWithdrawn {
-		t.Fatalf("failed final draft = %+v, want withdrawn draft", msgs[6])
+	if !strings.Contains(last.Content, "ended without a final answer") {
+		t.Fatalf("closing does not say the answer is missing: %q", last.Content)
 	}
 	settled, err := store.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read failed closeout session", err)

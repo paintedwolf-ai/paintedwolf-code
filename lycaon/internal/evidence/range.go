@@ -1,6 +1,9 @@
 package evidence
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // RangeObserved reports whether the observation covers every line of the
 // inclusive range for path. Recorded intervals may abut, but a gap between them
@@ -33,6 +36,21 @@ func linesCoverRange(lines map[int]string, start, end int) bool {
 		}
 	}
 	return true
+}
+
+// ExcerptVerifiesRange reports that program output shows excerpt on a line inside the
+// range. The host compared the text itself, so its reader did not have to count.
+func ExcerptVerifiesRange(rec Record, path, excerpt string, start, end int) bool {
+	fact := rec.SourceDelivery
+	if fact == nil || !ExcerptMeaningful(excerpt) || !RangeObserved(rec, path, start, end) {
+		return false
+	}
+	for line := max(start, fact.StartLine); line <= min(end, fact.EndLine); line++ {
+		if index := line - fact.StartLine; index < len(rec.Body) && strings.Contains(rec.Body[index], excerpt) {
+			return true
+		}
+	}
+	return false
 }
 
 // UnionObserved reports whether the records together cover every line of the range
