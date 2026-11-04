@@ -20,6 +20,8 @@ const commandWindowCloseBudget = 45 * time.Second
 // every method a no-op.
 type commandWindow struct {
 	open *sourceledger.OpenCommandWindow
+	// unobserved means a window was due and could not open.
+	unobserved bool
 }
 
 // openCommandWindow opens the window for a primary-tree command. Worker
@@ -37,7 +39,7 @@ func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, co
 	for _, root := range tctx.Source.Roots {
 		branch, err := tctx.SourceBranch(root.ID)
 		if err != nil {
-			return commandWindow{}
+			return commandWindow{unobserved: true}
 		}
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, BranchID: branch, Path: root.Path})
 	}
@@ -48,7 +50,7 @@ func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, co
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "command window open", "tool", toolName, "session_id", tctx.Identity.SessionID, "err", err)
-		return commandWindow{}
+		return commandWindow{unobserved: true}
 	}
 	return commandWindow{open: open}
 }
@@ -66,9 +68,12 @@ func (w commandWindow) closeNow(ctx context.Context) {
 	}
 }
 
-// fact states the window on a command result; nil when none opened.
+// fact states the window on a command result; nil when none was due.
 func (w commandWindow) fact() *hostcmd.SourceWindow {
 	if w.open == nil {
+		if w.unobserved {
+			return &hostcmd.SourceWindow{Unobserved: true}
+		}
 		return nil
 	}
 	return &hostcmd.SourceWindow{ID: w.open.ID, Settled: w.open.IsSettled()}

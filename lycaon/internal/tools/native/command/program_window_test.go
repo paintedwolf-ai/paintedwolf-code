@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -130,7 +131,7 @@ func TestProgramWindowACCW02TrustedTokenSettlesAfterTheResult(t *testing.T) {
 		t.Fatalf("open windows = %+v, want the program's closing window", listed)
 	}
 	f.forcePass(t, "gen.txt")
-	<-listed[0].Settled
+	testutil.AwaitClosed(t, "window settles", listed[0].Settled)
 	if listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session); len(listed) != 0 {
 		t.Fatalf("settled window still listed: %+v", listed)
 	}
@@ -150,7 +151,7 @@ until [ -e job.txt ]; do sleep 0.01; done`)
 		t.Fatalf("open windows = %+v, want the job's running window", listed)
 	}
 	testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-	<-listed[0].Settled
+	testutil.AwaitClosed(t, "window settles", listed[0].Settled)
 	f.wantWindowEffect(t, "job.txt", outcome.SourceWindow.ID)
 	f.wantWindowEffect(t, "after.txt", outcome.SourceWindow.ID)
 	if opens := f.opener.opens.Load(); opens != 1 {
@@ -195,8 +196,8 @@ func TestProgramWindowACCW05OpenFailureRunsUnobservedOnce(t *testing.T) {
 	f := newWindowFixture(t)
 	f.opener.before = func(context.Context) error { return errors.New("reconcile unavailable") }
 	outcome := f.run(t, writeGen+`; external -- /bin/sh -c 'echo second > second.txt'`)
-	if outcome.Status != 0 || outcome.SourceWindow != nil {
-		t.Fatalf("outcome = %+v, want the program run with no window", outcome)
+	if outcome.Status != 0 || outcome.SourceWindow == nil || outcome.SourceWindow.ID != "" || !outcome.SourceWindow.Unobserved {
+		t.Fatalf("outcome = %+v, want the program run with an unobserved fact and no window", outcome)
 	}
 	for _, name := range []string{"gen.txt", "second.txt"} {
 		if _, err := os.Stat(filepath.Join(f.Dir, name)); err != nil {
@@ -260,15 +261,24 @@ func TestProgramWindowCoversNestedCommands(t *testing.T) {
 	f.wantWindowEffect(t, "nohup.txt", outcome.SourceWindow.ID)
 }
 
-// Every concurrent stage waits for the one open, so no process starts before
-// the window's start inventory.
-func TestProgramWindowOpensOnceBeforeAnyStageStarts(t *testing.T) {
+// A stage that skipped the wait would create its output while the open is held
+// here. A slow host can only miss the mistake, never fail on correct code.
+func TestProgramWindowEveryStageWaitsForTheOpen(t *testing.T) {
 	f := newWindowFixture(t)
 	var startedEarly atomic.Bool
 	f.opener.before = func(context.Context) error {
-		entries, err := os.ReadDir(f.Dir)
-		startedEarly.Store(err != nil || len(entries) != 0)
-		return err
+		for range 30 {
+			entries, err := os.ReadDir(f.Dir)
+			if err != nil {
+				return err
+			}
+			if len(entries) != 0 {
+				startedEarly.Store(true)
+				return nil
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		return nil
 	}
 	outcome := f.run(t, `external -- /bin/sh -c 'echo x; echo a > a.txt' | external -- /bin/sh -c 'cat > b.txt' | external -- /bin/sh -c 'cat > c.txt'`)
 	if outcome.Status != 0 || outcome.SourceWindow == nil || startedEarly.Load() {
@@ -277,66 +287,169 @@ func TestProgramWindowOpensOnceBeforeAnyStageStarts(t *testing.T) {
 	if opens := f.opener.opens.Load(); opens != 1 {
 		t.Fatalf("window opens = %d, want 1", opens)
 	}
+	for _, path := range []string{"a.txt", "b.txt", "c.txt"} {
+		f.wantWindowEffect(t, path, outcome.SourceWindow.ID)
+	}
 }
 
-// Drift from before the launch stays out of the program's window.
-func TestProgramWindowDoesNotClaimEarlierDrift(t *testing.T) {
+// Drift to a file with a ledger head before the launch stays out of its window.
+func TestProgramWindowDoesNotClaimEarlierDriftToATrackedFile(t *testing.T) {
 	f := newWindowFixture(t)
-	testutil.FailErr(t, "write tracked file", os.WriteFile(filepath.Join(f.Dir, "peer.txt"), []byte("one"), 0o600))
-	seed := f.run(t, `external -- /bin/sh -c 'true'`)
+	seed := f.run(t, `external -- /bin/sh -c 'echo one > peer.txt'`)
 	if seed.SourceWindow == nil {
 		t.Fatalf("seed outcome = %+v", seed)
 	}
+	f.wantWindowEffect(t, "peer.txt", seed.SourceWindow.ID)
 	testutil.FailErr(t, "drift before the program", os.WriteFile(filepath.Join(f.Dir, "peer.txt"), []byte("changed"), 0o600))
 	outcome := f.run(t, writeGen)
 	if outcome.SourceWindow == nil {
 		t.Fatalf("outcome = %+v", outcome)
 	}
-	if peer := f.effects(t)["peer.txt"]; peer.CommandWindowID != "" || peer.SessionID != "" {
-		t.Fatalf("earlier drift attributed to the program: %+v", peer)
+	peer, ok := f.newestEffect(t, "peer.txt")
+	if !ok || peer.CommandWindowID != "" || peer.SessionID != "" || peer.Cause != sourceledger.CauseFilesystemReconcile {
+		t.Fatalf("earlier drift = %+v, want a plain outside change", peer)
 	}
 	f.wantWindowEffect(t, "gen.txt", outcome.SourceWindow.ID)
 }
 
-// A stage that gives up while the open is in flight does not cost the
-// program's later launches their window.
-func TestProgramWindowOpenOutlivesTheLaunchThatBeganIt(t *testing.T) {
-	f := newWindowFixture(t)
-	entered, release := make(chan struct{}), make(chan struct{})
-	var once atomic.Bool
-	f.opener.before = func(ctx context.Context) error {
-		if once.CompareAndSwap(false, true) {
-			close(entered)
+// newestEffect reads a path's latest effect across every actor.
+func (f *windowFixture) newestEffect(t *testing.T, path string) (sourceledger.Effect, bool) {
+	t.Helper()
+	walk, err := f.ledger.Walk.QueryWalk(t.Context(), testdbseed.DefaultProjectID, sourceledger.Baseline{}, 200, 0, sourceledger.CommitLens{})
+	testutil.FailErr(t, "query walk", err)
+	var newest sourceledger.Effect
+	found := false
+	for _, file := range walk.Files {
+		for _, effect := range file.Effects {
+			if effect.Path == path && (!found || effect.Ordinal > newest.Ordinal) {
+				newest, found = effect, true
+			}
 		}
+	}
+	return newest, found
+}
+
+// durationClock reports every timer a program asks for.
+type durationClock struct {
+	*programtest.ManualClock
+	requested chan time.Duration
+}
+
+func (c durationClock) AfterFunc(d time.Duration, fire func()) func() bool {
+	c.requested <- d
+	return c.ManualClock.AfterFunc(d, fire)
+}
+
+// A launch under timeout waits for the open at most half its time and then runs,
+// so a slow open cannot report 124 for a process that never started. The open
+// carries on for later launches, and the result says what went unobserved.
+func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
+	f := newWindowFixture(t)
+	clock := durationClock{ManualClock: programtest.NewManualClock(), requested: make(chan time.Duration, 16)}
+	f.Runtime.Clock, f.Runtime.ParkThreshold = clock, time.Hour
+	release := make(chan struct{})
+	f.opener.before = func(ctx context.Context) error {
 		select {
 		case <-release:
-			return ctx.Err()
+			return nil
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
 	done := make(chan callResult, 1)
 	go func() {
-		content, err := f.Call(t, t.Context(), `timeout 0.01 /bin/sh -c 'echo a > canceled.txt'; echo "status=$?"; `+writeGen)
+		content, err := f.Call(t, t.Context(), `timeout 10 /bin/sh -c 'echo a > ran.txt'; echo "status=$?"; `+writeGen)
 		done <- callResult{content, err}
 	}()
-	<-entered
-	// The first launch gave up; the second now waits on the same open.
-	(&programFixture{f.Fixture}).awaitExecution(t, "timeout", "completed")
+	for testutil.AwaitValue(t, "the launch's wait timer", clock.requested) != 5*time.Second {
+	}
+	clock.Advance(5 * time.Second)
+	testutil.AwaitCondition(t, "the delayed launch ran", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "ran.txt"))
+		return err == nil
+	})
 	close(release)
-	result := <-done
+	result := testutil.AwaitValue(t, "program result", done)
 	testutil.FailErr(t, "run program", result.err)
 	outcome := decodeOutcome(t, result.content)
-	if outcome.SourceWindow == nil || !strings.Contains(outcome.Stdout, "status=124") {
-		t.Fatalf("outcome = %+v, want a window and the first stage's timeout", outcome)
+	if !strings.Contains(outcome.Stdout, "status=0") {
+		t.Fatalf("stdout = %q, want the launch's own status", outcome.Stdout)
 	}
-	if _, err := os.Stat(filepath.Join(f.Dir, "canceled.txt")); !os.IsNotExist(err) {
-		t.Fatalf("canceled stage started: %v", err)
+	if outcome.SourceWindow == nil || outcome.SourceWindow.ID == "" || !outcome.SourceWindow.Unobserved {
+		t.Fatalf("source window = %+v, want the later window and the unobserved launch", outcome.SourceWindow)
 	}
 	if opens := f.opener.opens.Load(); opens != 1 {
 		t.Fatalf("window opens = %d, want 1", opens)
 	}
 	f.wantWindowEffect(t, "gen.txt", outcome.SourceWindow.ID)
+}
+
+// Waiting on the program's held window keeps real cancellation distinct: a stop
+// during the wait reports the interruption, not an unobserved launch.
+func TestProgramResultStatesWhenObservationNeverStarted(t *testing.T) {
+	f := newWindowFixture(t)
+	f.opener.before = func(context.Context) error { return sourceledger.ErrWindowStartPending }
+	raw, err := f.Call(t, t.Context(), writeGen)
+	testutil.FailErr(t, "run program", err)
+	var result struct {
+		SourceWindow map[string]any `json:"source_window"`
+	}
+	testutil.FailErr(t, "decode result", json.Unmarshal([]byte(raw), &result))
+	if len(result.SourceWindow) != 1 || result.SourceWindow["unobserved"] != true {
+		t.Fatalf("source_window = %v, want only unobserved", result.SourceWindow)
+	}
+}
+
+const waitForRelease = `touch started; until test -e release; do sleep 0.01; done`
+
+// Every way a program can keep an external process live holds the window: drift
+// while it runs is the program's, and drift after it ends is not.
+func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
+	for name, source := range map[string]string{
+		"job":        `external -- /bin/sh -c '` + waitForRelease + `' & external -- /bin/sh -c 'true'; wait`,
+		"pipeline":   `external -- /bin/sh -c '` + waitForRelease + `' | external -- /bin/sh -c 'cat >/dev/null'`,
+		"xargs":      `echo go | xargs -n1 /bin/sh -c '` + waitForRelease + `'`,
+		"env":        `env MARK=1 /bin/sh -c '` + waitForRelease + `'`,
+		"timeout":    `timeout 60 /bin/sh -c '` + waitForRelease + `'`,
+		"nohup":      `nohup /bin/sh -c '` + waitForRelease + `'`,
+		"substitute": `echo "$(/bin/sh -c '` + waitForRelease + `')"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newWindowFixture(t)
+			f.Runtime.ParkThreshold = time.Hour
+			idled := make(chan string, 4)
+			f.ledger.Commands.SetWindowSettleForTest(0)
+			f.ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
+			done := make(chan callResult, 1)
+			go func() {
+				content, err := f.Call(t, t.Context(), source+`; touch finished; until [ -e end ]; do sleep 0.01; done`)
+				done <- callResult{content, err}
+			}()
+			testutil.AwaitCondition(t, "the live launch started", func() bool {
+				_, err := os.Stat(filepath.Join(f.Dir, "started"))
+				return err == nil
+			})
+			testutil.FailErr(t, "drift during the launch", os.WriteFile(filepath.Join(f.Dir, "during.txt"), []byte("live"), 0o600))
+			f.forcePass(t, "during.txt")
+			listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
+			if len(listed) != 1 {
+				t.Fatalf("open windows = %+v", listed)
+			}
+			f.wantWindowEffect(t, "during.txt", listed[0].ID)
+
+			testutil.FailErr(t, "end the launch", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
+			testutil.AwaitValue(t, "the window goes idle", idled)
+			testutil.FailErr(t, "drift after the launch", os.WriteFile(filepath.Join(f.Dir, "after.txt"), []byte("gap"), 0o600))
+			f.forcePass(t, "after.txt")
+			after, ok := f.newestEffect(t, "after.txt")
+			if !ok || after.CommandWindowID != "" || after.SessionID != "" {
+				t.Fatalf("drift after the last launch = %+v, want a plain outside change", after)
+			}
+			testutil.FailErr(t, "end the program", os.WriteFile(filepath.Join(f.Dir, "end"), nil, 0o600))
+			result := testutil.AwaitValue(t, "program result", done)
+			testutil.FailErr(t, "run program", result.err)
+		})
+	}
 }
 
 // A stop during the open reaches the waiting stage, and settlement abandons
@@ -354,9 +467,9 @@ func TestProgramWindowStopDuringOpenAbandonsIt(t *testing.T) {
 		_, err := f.Call(t, t.Context(), writeGen)
 		done <- err
 	}()
-	<-entered
+	testutil.AwaitClosed(t, "the open began", entered)
 	f.Runtime.Supervisor.Stop(f.Session)
-	<-done
+	testutil.AwaitValue(t, "the stopped program returns", done)
 	if programs := f.Programs(t); len(programs) != 1 || programs[0] != "interrupted" {
 		t.Fatalf("program state %v", programs)
 	}
@@ -384,12 +497,10 @@ func TestProgramWindowOpenInFlightAtTheResultStillObservesTheJob(t *testing.T) {
 		t.Fatalf("outcome = %+v, want no window before the open finished", outcome)
 	}
 	close(release)
-	for {
-		if _, err := os.Stat(filepath.Join(f.Dir, "gen.txt")); err == nil && f.opener.opens.Load() == 1 && len(f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)) == 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.AwaitCondition(t, "the job ran and its window settled", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
+		return err == nil && f.opener.opens.Load() == 1 && len(f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)) == 0
+	})
 	effect, ok := f.effects(t)["gen.txt"]
 	if !ok || effect.CommandWindowID == "" || effect.SessionID != f.Session {
 		t.Fatalf("job effect = %+v", effect)
@@ -407,22 +518,87 @@ func TestProgramWindowSpansAPark(t *testing.T) {
 	if !strings.Contains(raw, `"state":"parked"`) {
 		t.Fatalf("parked result %s", raw)
 	}
-	parked := <-parking.parked
-	for {
-		if _, err := os.Stat(filepath.Join(f.Dir, "gen.txt")); err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	parked := testutil.AwaitValue(t, "the program parks", parking.parked)
+	testutil.AwaitCondition(t, "the generator ran", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
+		return err == nil
+	})
 	listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
 	if len(listed) != 1 || listed[0].Closing {
 		t.Fatalf("open windows while parked = %+v", listed)
 	}
 	final := parked.park.Interrupt(t.Context())
-	testutil.FailErr(t, "settle parked program", (<-parked.settled).err)
+	testutil.FailErr(t, "settle parked program", testutil.AwaitValue(t, "parked program settles", parked.settled).err)
 	outcome := decodeOutcome(t, final)
 	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != listed[0].ID || !outcome.SourceWindow.Settled {
 		t.Fatalf("final outcome %s", final)
 	}
 	f.wantWindowEffect(t, "gen.txt", listed[0].ID)
+}
+
+// A person's edit while a program is parked after its last external process is
+// no part of that program's window, whether the file had a ledger head or not.
+func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
+	f := newWindowFixture(t)
+	f.ledger.Commands.SetWindowSettleForTest(0)
+	idled := make(chan string, 2)
+	f.ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
+	parking := newRecordingParking()
+	f.Runtime.Parking, f.Runtime.ParkThreshold = parking, time.Nanosecond
+	raw, err := f.Call(t, t.Context(), writeGen+`; sleep 60`)
+	testutil.FailErr(t, "park program", err)
+	if !strings.Contains(raw, `"state":"parked"`) {
+		t.Fatalf("parked result %s", raw)
+	}
+	parked := testutil.AwaitValue(t, "the program parks", parking.parked)
+	windowID := testutil.AwaitValue(t, "the window goes idle after the generator", idled)
+	f.wantWindowEffect(t, "gen.txt", windowID)
+
+	for path, content := range map[string]string{"notes.md": "a person's note\n", "gen.txt": "a person's edit\n"} {
+		testutil.FailErr(t, "outside edit", os.WriteFile(filepath.Join(f.Dir, path), []byte(content), 0o600))
+	}
+	f.forcePass(t, "notes.md", "gen.txt")
+
+	final := parked.park.Interrupt(t.Context())
+	testutil.FailErr(t, "settle parked program", testutil.AwaitValue(t, "parked program settles", parked.settled).err)
+	outcome := decodeOutcome(t, final)
+	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != windowID || !outcome.SourceWindow.Settled {
+		t.Fatalf("final outcome %s", final)
+	}
+	for _, path := range []string{"notes.md", "gen.txt"} {
+		effect, ok := f.newestEffect(t, path)
+		if !ok || effect.CommandWindowID != "" || effect.SessionID != "" || effect.Origin != api.SourceChangeOriginExternal {
+			t.Fatalf("%s effect = %+v, want a plain outside change", path, effect)
+		}
+	}
+}
+
+// A process that starts after a gap brings the window back without taking the gap.
+func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
+	f := newWindowFixture(t)
+	f.Runtime.ParkThreshold = time.Hour
+	f.ledger.Commands.SetWindowSettleForTest(0)
+	idled := make(chan string, 2)
+	f.ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
+	done := make(chan callResult, 1)
+	go func() {
+		content, err := f.Call(t, t.Context(), writeGen+`; until [ -e go ]; do sleep 0.01; done; external -- /bin/sh -c 'echo second > second.txt'`)
+		done <- callResult{content, err}
+	}()
+	windowID := testutil.AwaitValue(t, "the window goes idle", idled)
+	testutil.FailErr(t, "write during the gap", os.WriteFile(filepath.Join(f.Dir, "gap.txt"), []byte("gap"), 0o600))
+	testutil.FailErr(t, "continue the program", os.WriteFile(filepath.Join(f.Dir, "go"), nil, 0o600))
+	result := testutil.AwaitValue(t, "program result", done)
+	testutil.FailErr(t, "run program", result.err)
+	outcome := decodeOutcome(t, result.content)
+	if outcome.SourceWindow == nil || outcome.SourceWindow.ID != windowID || outcome.SourceWindow.Unobserved {
+		t.Fatalf("outcome = %+v", outcome)
+	}
+	f.wantWindowEffect(t, "second.txt", windowID)
+	if gap, ok := f.newestEffect(t, "gap.txt"); !ok || gap.CommandWindowID != "" || gap.SessionID != "" {
+		t.Fatalf("gap effect = %+v, want a plain outside change", gap)
+	}
+	if opens := f.opener.opens.Load(); opens != 1 {
+		t.Fatalf("window opens = %d, want the one window re-anchored", opens)
+	}
 }
