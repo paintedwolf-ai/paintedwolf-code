@@ -135,6 +135,8 @@ Every provider call has a hard ceiling. The synchronous path fits or exposes an 
 - refit after system templates are added;
 - fail visibly if the irreducible prompt itself exceeds the provider limit.
 
+The ceiling derives from one live budget, read from session limits at each use by the compactor, the projection, and the request fitter: `min(true_window × live_budget_pct, max_live_budget_tokens)`. A percentage of a very large window is not a budget for a paid provider, so a larger window never raises the cap, while a smaller one lowers it. Each continuation record keeps the window it was built under. A protected turn above the ceiling reaches the bounded tool-output representation, then the structured capacity outcome. A standing frame that alone approaches the ceiling, as on a small local model, keeps a quarter of the ceiling for history within the provider window, because refusing every turn would make that model unusable.
+
 The same facts, frame, limits, and compaction revision produce the same fit. Latency never depends on an emergency summarizer call.
 
 The final request fitter preserves frame order and cache tiers, and reduces only the history projection. Continuation detail scales down to recovery references when necessary. Automatic output allocation may shrink to fit the model window; explicit output caps and fixed thinking budgets remain caller requirements. Requests that already fit retain their original messages and output controls. If the required instructions, current request, recovery references, and requested output cannot fit, the host reports the irreducible context limit.
@@ -166,6 +168,8 @@ flowchart LR
 ```
 
 The soft watermark creates runway; the hard ceiling still uses deterministic fit. A per-session writer serializes background and manual compaction of `compaction_views`, binding each view to a constant-size `covered_through_ord`, boundary-message identity, and source mutation sequence. It folds canonical ordinal pages into the prior bounded view instead of loading an old session at once. The next turn validates that the boundary is live and no covered row changed, then seeks only the appended ordinal suffix. It never materializes a growing covered-id set.
+
+A long autonomous turn is not pinned from its opener. The active turn stays canonical while it fits the working-set allocation: 128 rows, `max(16384, target_tokens/2)` tokens capped by the history share, and the matching bytes. Beyond that, a complete-exchange boundary starts the recent suffix, and summary pages stop before it. A valid view replaces only `intent < ord <= min(covered_through_ord, working_set_start - 1)`. Rows between coverage and the suffix stay canonical while hard limits allow; otherwise a reference-only notice names the omitted interval, which neither establishes summary coverage nor advances it. A summary range that crosses the boundary is never clipped: the suffix begins after it, so summarized exchanges are not presented as independent evidence. When a summary reaches into the turn, the opener precedes it.
 
 The host publishes a deterministic, recoverable baseline independently of summary availability. Only complete JSON records satisfying the continuation parser become prose enrichment. Timeout, malformed output, and provider failure preserve the baseline; a bounded synthesis pass may retain previously accepted source pages while leaving the remainder referenced. Publication validates source identity and fences competing generations.
 

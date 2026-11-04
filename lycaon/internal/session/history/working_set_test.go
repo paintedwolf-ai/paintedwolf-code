@@ -189,7 +189,8 @@ func TestLongTurnReplacesOnlyValidatedOlderRangeAC_KV_01(t *testing.T) {
 
 	t.Run("summary spanning the boundary is not clipped", func(t *testing.T) {
 		svc, mem, sess, canonical := seeded(t)
-		summarized := start + 20
+		// Published summaries end on a complete exchange; start is an assistant row.
+		summarized := start + 21
 		publishCoverage(t, mem, sess.ID, canonical, start+40, summarized, cfg.ModelContextWindow)
 		projected := loadProjected(t, svc, sess)
 		if opener, summary := indexOfID(projected, "opener"), indexOfID(projected, "summary"); opener < 0 || opener > summary {
