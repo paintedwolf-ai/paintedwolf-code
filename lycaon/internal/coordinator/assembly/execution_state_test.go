@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -77,6 +80,42 @@ func TestExecutionStateReadsCanonicalRowsNotRetainedHistory_ACEXEC04(t *testing.
 		if live := age < inject.MaxRejectedOperationStepAge; (len(blocks) == 1) != live {
 			t.Fatalf("age %d: blocks=%d", age, len(blocks))
 		}
+	}
+}
+
+// An expired reminder leaves the pending-work lifecycle alone.
+func TestPendingJobOutlivesAnExpiredReminder_ACEXEC04(t *testing.T) {
+	canonical := []api.Message{
+		{ID: "user", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "go"},
+		toolRow(2, "batch-failed", "failed", "write", api.InvocationStatusRejected, "MUTATION_BROKE_PARSE"),
+	}
+	for age := 1; age <= inject.MaxRejectedOperationStepAge; age++ {
+		id := fmt.Sprintf("later-%d", age)
+		canonical = append(canonical, toolRow(int64(len(canonical)+1), id, id, "read", api.InvocationStatusCompleted, ""))
+	}
+	_, assembler := newAssemblyDomains(AssemblyDeps{
+		Injects: promptstest.InjectRenderer(t),
+		ReadMessageWindow: func(_ context.Context, _ string, window messageview.MessageWindow) ([]api.Message, error) {
+			end := len(canonical)
+			if window.BeforeOrd > 0 {
+				end = int(window.BeforeOrd) - 1
+			}
+			return canonical[max(0, end-window.Limit):end], nil
+		},
+		CommandJobs: func(string) []bgprocess.JobSnapshot {
+			return []bgprocess.JobSnapshot{{Handle: "pending-check", Mode: bgprocess.JobModeAwaited, OriginTool: "command", StartedAt: time.Now()}}
+		},
+	}, nil)
+	sess := &api.Session{ID: "sess-inject-test", AgentType: "coordinator"}
+	if blocks := assembler.appendExecutionState(t.Context(), sess, true, inject.CoordinatorTurnFrame{}, canonical, &TurnAssemblyScratch{}, nil); len(blocks) != 0 {
+		t.Fatalf("reminder survived its expiry: %+v", blocks)
+	}
+	tail, err := assembler.buildTailSystemInjects(t.Context(), sess, false, inject.CoordinatorTurnFrame{}, nil, canonical, &TurnAssemblyScratch{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(tail, func(m api.Message) bool { return strings.Contains(m.Content, "pending-check") }) {
+		t.Fatalf("pending job left the request: %+v", tail)
 	}
 }
 
