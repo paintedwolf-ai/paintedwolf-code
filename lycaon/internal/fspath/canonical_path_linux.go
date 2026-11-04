@@ -2,6 +2,7 @@ package fspath
 
 import (
 	"path/filepath"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -15,20 +16,32 @@ func canonicalizeExisting(path string) (string, bool) {
 }
 
 // linkFreePath reports whether a clean absolute path already names itself: every
-// component exists and none is a link. Most checks take this route, and resolving
-// through the general walk costs several allocations per component.
+// component exists and none is a link. Most checks take this route, and the general
+// walk costs several allocations per component, so this one allocates nothing.
 func linkFreePath(path string) bool {
-	var st unix.Stat_t
+	var name [unix.PathMax]byte
+	if len(path) >= len(name) {
+		return false
+	}
+	copy(name[:], path)
+	workingDirectory := unix.AT_FDCWD
+	var st unix.Statx_t
 	for end := 1; end <= len(path); end++ {
 		if end < len(path) && path[end] != filepath.Separator {
 			continue
 		}
-		if unix.Lstat(path[:end], &st) != nil {
+		name[end] = 0
+		_, _, errno := unix.Syscall6(unix.SYS_STATX, uintptr(workingDirectory), uintptr(unsafe.Pointer(&name[0])),
+			unix.AT_SYMLINK_NOFOLLOW, unix.STATX_TYPE, uintptr(unsafe.Pointer(&st)), 0)
+		if errno != 0 {
 			return false
 		}
-		kind := st.Mode & unix.S_IFMT
+		kind := uint32(st.Mode) & unix.S_IFMT
 		if kind == unix.S_IFLNK || (end < len(path) && kind != unix.S_IFDIR) {
 			return false
+		}
+		if end < len(path) {
+			name[end] = filepath.Separator
 		}
 	}
 	return true

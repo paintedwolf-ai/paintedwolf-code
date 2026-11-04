@@ -42,7 +42,7 @@ func TestCanonicalizeExistingMatchesTheGeneralResolver(t *testing.T) {
 	}
 }
 
-func TestLinkFreePathCostsAtMostOneAllocationPerComponent(t *testing.T) {
+func TestLinkFreePathAllocatesNothing(t *testing.T) {
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -51,18 +51,12 @@ func TestLinkFreePathCostsAtMostOneAllocationPerComponent(t *testing.T) {
 	if err := os.MkdirAll(deep, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	components := 0
-	for _, c := range deep {
-		if c == filepath.Separator {
-			components++
-		}
-	}
 	allocations := testing.AllocsPerRun(50, func() {
 		if !linkFreePath(deep) {
 			t.Fatal("expected a link-free path")
 		}
 	})
-	if allocations > float64(components) {
-		t.Fatalf("allocations = %v for %d components", allocations, components)
+	if allocations != 0 {
+		t.Fatalf("allocations = %v", allocations)
 	}
 }
