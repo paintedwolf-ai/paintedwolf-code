@@ -47,7 +47,13 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 		return inv.out.text(line, "\n")
 	}
 	lastSelectedEnd := 0
+	// A NUL ends a record here as it does for rg's other forms, so selection
+	// and counts agree across them and an LF-free binary cannot become one
+	// huge message. binary_offset is what reports the file as binary.
 	binaryOffset := bytes.IndexByte(content, 0)
+	if binaryOffset >= 0 {
+		nulsToNewlines(content)
+	}
 	n, err := textsearch.ScanReader(inv.ctx, bytes.NewReader(content), 0, nil, r.matcher, r.scan, func(line textsearch.Line) error {
 		if !begun {
 			begun = true
@@ -97,11 +103,6 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 	file.searched = int64(len(content))
 	if r.scan.MaxSelected > 0 && n >= r.scan.MaxSelected {
 		file.searched = int64(lastSelectedEnd)
-	}
-	if binaryOffset >= 0 {
-		// JSON preserves complete records, including NUL bytes. ripgrep's
-		// searched-byte statistic ends at the first detected binary byte.
-		file.searched = min(file.searched, int64(binaryOffset))
 	}
 	if n > 0 {
 		r.selected = true

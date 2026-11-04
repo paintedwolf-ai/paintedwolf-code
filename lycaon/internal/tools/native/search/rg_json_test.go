@@ -16,6 +16,7 @@ var jsonTree = map[string]string{
 	"esc":       "a\tb \"q\" \\ alpha\x01\n",
 	"inv":       "caf\xc3\xa9 \xff alpha\n",
 	"bin":       "a\x00alpha\n",
+	"nul":       "beta alpha\x00gamma alpha\nmore\x00\nlast alpha\n",
 }
 
 func TestRgJSONMessages(t *testing.T) {
@@ -34,12 +35,27 @@ func TestRgJSONMessages(t *testing.T) {
 {"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":32,"bytes_printed":453,"matched_lines":2,"matches":3}}}
 {"data":{"elapsed_total":{},"stats":{"bytes_printed":453,"bytes_searched":32,"elapsed":{},"matched_lines":2,"matches":3,"searches":1,"searches_with_match":1}},"type":"summary"}
 `, 0},
-		{"binary bytes stay in their record", []string{"rg", "--json", "alpha", "bin"}, "",
+		{"a NUL ends its record", []string{"rg", "--json", "alpha", "bin"}, "",
 			`{"type":"begin","data":{"path":{"text":"bin"}}}
-{"type":"match","data":{"path":{"text":"bin"},"lines":{"text":"a\u0000alpha\n"},"line_number":1,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":2,"end":7}]}}
-{"type":"end","data":{"path":{"text":"bin"},"binary_offset":1,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":1,"bytes_printed":226,"matched_lines":1,"matches":1}}}
-{"data":{"elapsed_total":{},"stats":{"bytes_printed":226,"bytes_searched":1,"elapsed":{},"matched_lines":1,"matches":1,"searches":1,"searches_with_match":1}},"type":"summary"}
+{"type":"match","data":{"path":{"text":"bin"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":2,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"bin"},"binary_offset":1,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":8,"bytes_printed":219,"matched_lines":1,"matches":1}}}
+{"data":{"elapsed_total":{},"stats":{"bytes_printed":219,"bytes_searched":8,"elapsed":{},"matched_lines":1,"matches":1,"searches":1,"searches_with_match":1}},"type":"summary"}
 `, 0},
+		{"several NULs number their records", []string{"rg", "--json", "alpha", "nul"}, "",
+			`{"type":"begin","data":{"path":{"text":"nul"}}}
+{"type":"match","data":{"path":{"text":"nul"},"lines":{"text":"beta alpha\n"},"line_number":1,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":5,"end":10}]}}
+{"type":"match","data":{"path":{"text":"nul"},"lines":{"text":"gamma alpha\n"},"line_number":2,"absolute_offset":11,"submatches":[{"match":{"text":"alpha"},"start":6,"end":11}]}}
+{"type":"match","data":{"path":{"text":"nul"},"lines":{"text":"last alpha\n"},"line_number":5,"absolute_offset":29,"submatches":[{"match":{"text":"alpha"},"start":5,"end":10}]}}
+{"type":"end","data":{"path":{"text":"nul"},"binary_offset":10,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":40,"bytes_printed":582,"matched_lines":3,"matches":3}}}
+{"data":{"elapsed_total":{},"stats":{"bytes_printed":582,"bytes_searched":40,"elapsed":{},"matched_lines":3,"matches":3,"searches":1,"searches_with_match":1}},"type":"summary"}
+`, 0},
+		{"an anchor matches after a NUL", []string{"rg", "--json", "^gamma", "nul"}, "",
+			`{"type":"begin","data":{"path":{"text":"nul"}}}
+{"type":"match","data":{"path":{"text":"nul"},"lines":{"text":"gamma alpha\n"},"line_number":2,"absolute_offset":11,"submatches":[{"match":{"text":"gamma"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"nul"},"binary_offset":10,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":40,"bytes_printed":226,"matched_lines":1,"matches":1}}}
+{"data":{"elapsed_total":{},"stats":{"bytes_printed":226,"bytes_searched":40,"elapsed":{},"matched_lines":1,"matches":1,"searches":1,"searches_with_match":1}},"type":"summary"}
+`, 0},
+		{"count agrees with matched_lines across a NUL", []string{"rg", "--json", "-c", "alpha", "nul"}, "", "3\n", 0},
 		{"context", []string{"rg", "--json", "-C1", "two", "a.txt"}, "",
 			`{"type":"begin","data":{"path":{"text":"a.txt"}}}
 {"type":"context","data":{"path":{"text":"a.txt"},"lines":{"text":"one\n"},"line_number":1,"absolute_offset":0,"submatches":[]}}

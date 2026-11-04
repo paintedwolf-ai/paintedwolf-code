@@ -30,12 +30,16 @@ type binaryRecordReader struct{ r io.Reader }
 
 func (b binaryRecordReader) Read(p []byte) (int, error) {
 	n, err := b.r.Read(p)
-	for i := range p[:n] {
+	nulsToNewlines(p[:n])
+	return n, err
+}
+
+func nulsToNewlines(p []byte) {
+	for i := range p {
 		if p[i] == 0 {
 			p[i] = '\n'
 		}
 	}
-	return n, err
 }
 
 func (n *nullTrackingReader) Read(p []byte) (int, error) {
