@@ -65,6 +65,38 @@ func TestMergeVisualShowVarsAskForLoadablePageCapture(t *testing.T) {
 	}
 }
 
+func TestMergeVisualShowVarsAskForLoadableHeldTerminal(t *testing.T) {
+	beside := map[string]any{}
+	prompts.MergeVisualShowVars([]string{"command", "write", "request_tools"}, []string{"terminal_open", "terminal_send", "terminal_read", "terminal_snapshot"}, beside)
+	if beside["visual_show_terminal"] != true || beside["visual_show_terminal_needs_request"] != true {
+		t.Fatalf("one-shot capture beside a loadable held terminal must offer to load it: %#v", beside)
+	}
+
+	alone := map[string]any{}
+	prompts.MergeVisualShowVars([]string{"read", "request_tools"}, []string{"terminal_open", "terminal_snapshot", "write"}, alone)
+	if alone["visual_show_terminal_needs_request"] != true || alone["visual_show_available"] != true || alone["visual_show_terminal"] != false {
+		t.Fatalf("a loadable held terminal must ask for the tools without teaching them: %#v", alone)
+	}
+
+	readOnly := map[string]any{}
+	prompts.MergeVisualShowVars([]string{"read", "request_tools"}, []string{"terminal_open", "terminal_snapshot"}, readOnly)
+	if readOnly["visual_show_terminal_needs_request"] != false || readOnly["visual_show_available"] != false {
+		t.Fatalf("an agent that cannot change files builds nothing to drive: %#v", readOnly)
+	}
+
+	partial := map[string]any{}
+	prompts.MergeVisualShowVars([]string{"write", "request_tools"}, []string{"terminal_open"}, partial)
+	if partial["visual_show_terminal_needs_request"] != false {
+		t.Fatalf("a terminal without snapshot cannot capture: %#v", partial)
+	}
+
+	loaded := map[string]any{}
+	prompts.MergeVisualShowVars([]string{"terminal_open", "terminal_snapshot", "write", "request_tools"}, nil, loaded)
+	if loaded["visual_show_terminal_needs_request"] != false || loaded["visual_show_terminal"] != true {
+		t.Fatalf("a loaded held terminal needs no request: %#v", loaded)
+	}
+}
+
 func TestMergeCoordinatorPromptVarsInvestigateFloorAsksForCapture(t *testing.T) {
 	into := map[string]any{}
 	err := prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{
