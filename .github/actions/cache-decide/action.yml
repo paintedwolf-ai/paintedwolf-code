@@ -45,3 +45,7 @@ runs:
           !${{ steps.paths.outputs.target }}/**/incremental
           ${{ steps.paths.outputs.metal }}
         key: ${{ steps.paths.outputs.prefix }}${{ hashFiles('rust-toolchain.toml', 'lycaon/internal/decide/native/**/Cargo.toml', 'lycaon/internal/decide/native/Cargo.lock', 'lycaon/internal/decide/native/**/build.rs', 'lycaon/internal/decide/native/vendor/**', 'lycaon/internal/decide/native/.cargo/config.toml', 'lycaon/internal/platformfloor/macos_floor.txt', 'scripts/decide-features.sh', 'scripts/build-decide.sh', 'scripts/toolchain/decide-test.sh', 'scripts/toolchain/decide-environment.sh', 'scripts/toolchain/rust-path-remap.sh', 'scripts/ci_policy/cache_payload.py', 'scripts/warm-workspace-build.sh') }}
+    - if: ${{ steps.save.outcome == 'success' }}
+      uses: ./.github/actions/cache-prune
+      with:
+        family: decide-v5-${{ runner.os }}-${{ runner.arch }}-

@@ -3,7 +3,7 @@ from collections import Counter
 from pathlib import Path
 import re
 
-from ci_policy.hosted_schedule import order, validate_sources, PRIORITIES
+from ci_policy.hosted_schedule import order, PRIORITIES
 from ci_policy.timings import row_key
 from ci_policy.native_admission import targets as native_targets
 from verification_plan import catalog, expand
@@ -47,7 +47,7 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "priority",
-                        "platform", "arguments", "preflight", "timing_source", "early_targets", "contract_first", "compile_targets", "admission_checks", "runtime_engines"}:
+                        "platform", "arguments", "early_targets", "contract_first", "compile_targets", "admission_checks", "runtime_engines"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
@@ -104,41 +104,22 @@ def lanes():
                                    or lane.get("runner", "ubuntu-24.04") not in PLATFORMS[lane["platform"]]
                                    or set(lane["profiles"]) & {"fast", GATE}):
             raise ValueError(f"CI lane {name} is a platform lane on its platform's runners, outside the fast and {GATE} tiers")
-    validate_sources(values)
     expected = Counter(stage["name"] for stage in expand([GATE]))
     actual = Counter(stage["name"] for lane in values.values() if GATE in lane["profiles"]
                      for stage in expand(lane["targets"]))
     if actual != expected:
         raise ValueError(f"CI {GATE} profile differs from the {GATE} gate: "
                          f"missing={expected - actual}, extra={actual - expected}")
-    for name, lane in values.items():
-        if name == 'ready-lint':
-            if (lane['profiles'] != ['fast'] or lane['targets'] != ['lint:full']
-                    or lane['setup'] != 'analysis' or 'preflight' in lane):
-                raise ValueError('ready-lint must run complete analysis beside the admission contracts')
-            continue
-        if "fast" in lane["profiles"] or "preflight" in lane:
-            command = lane.get("preflight", [])
-            if (lane["profiles"] != ["fast"] or lane.get("shards", 1) != 1
-                    or not isinstance(command, list) or len(command) < 3
-                    or command[:2] != ["test:contract", "--"]
-                    or (command != ["test:contract", "--", "./test/contract/..."]
-                        and any(not isinstance(package, str)
-                                or not re.fullmatch(r"\./test/contract/[a-z][a-z0-9_]*", package)
-                                or not (ROOT / "lycaon" / package).is_dir() for package in command[2:]))
-                    or len(set(command[2:])) != len(command[2:])):
-                raise ValueError(f"CI lane {name} requires scoped admission contracts")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
                    for stage in expand(lane["targets"]))
-    expected_fast = Counter(stage['name'] for stage in expand([FAST_GATE])
-                            if stage['name'] not in {'test:contract', 'licenses:notices'})
+    expected_fast = Counter(stage['name'] for stage in expand([FAST_GATE]) if stage['name'] != 'licenses:notices')
     if fast != expected_fast:
         raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
-    expected = Counter(stage["name"] for stage in expand([GATE]) if stage["name"] != "build:cross")
+    expected = Counter(stage["name"] for stage in expand([GATE]))
     actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and not supplemental(lane)
                      for stage in expand(lane["targets"]))
     if actual != expected:
-        raise ValueError(f"integration partition differs from check minus cross compilation: {expected - actual}, {actual - expected}")
+        raise ValueError(f"integration partition differs from check: {expected - actual}, {actual - expected}")
     platform = {stage["name"] for lane in values.values() if "platform" in lane for stage in expand(lane["targets"])}
     repeated = platform & {stage["name"] for stage in expand([GATE])}
     if repeated:
@@ -211,10 +192,10 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
         count = lane.get("shards", 1)
         for index in range(1, count + 1):
             result.append({"lane": name,
-                           "timing_row": row_key(lane.get("timing_source", name), f"{index}/{count}" if count > 1 else ""),
+                           "timing_row": row_key(name, f"{index}/{count}" if count > 1 else ""),
                            "shard": f"{index}/{count}" if count > 1 else "",
                            "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
-                           "setup": "shell" if profile == "fast" and "den:test:rust" in native_targets(scope) else lane["setup"],
+                           "setup": "shell" if name == "ready" and "den:test:rust" in native_targets(scope) else lane["setup"],
                            "runtime_engines": lane.get("runtime_engines", True),
                            "notices": "licenses:notices" in lane["targets"],
                            "containers": CONTAINER_TARGET in lane["targets"],
@@ -230,7 +211,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "runner": lane.get("runner", "ubuntu-24.04")})
     if not result:
         raise ValueError("CI selection contains no verification")
-    return {"include": order(result, values, timings, max_parallel(profile))}
+    return {"include": order(result, values, timings)}
 
 
 def invocation(targets):

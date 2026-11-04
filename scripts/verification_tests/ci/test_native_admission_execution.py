@@ -14,7 +14,7 @@ class NativeAdmissionTests(unittest.TestCase):
             self.assertEqual(native_admission.commands(scope), expected)
             rows = hosted_plan.matrix('fast', scope=scope)['include']
             self.assertEqual({row['lane']: row['setup'] for row in rows},
-                             {'ready': 'verification', 'ready-lint': 'analysis'})
+                             {'ready': 'verification', 'ready-tests': 'verification'})
         lanes = hosted_plan.lanes()
         self.assertEqual(lanes['native']['targets'], ['den:test:rust', 'decide:test'])
         self.assertIn('integration', lanes['native']['profiles'])

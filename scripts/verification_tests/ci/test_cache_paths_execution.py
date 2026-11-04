@@ -51,7 +51,7 @@ class GoCachePathTests(unittest.TestCase):
             cache = scratch / "Library/Caches/go-build"
             lines = output.read_text().splitlines()
             self.assertIn(f"gocache={cache}", lines)
-            self.assertTrue(any(line.startswith("key_prefix=go-v4-macOS-ARM64-macos15-go")
+            self.assertTrue(any(line.startswith("key_prefix=go-v5-macOS-ARM64-macos15-go")
                                 for line in lines))
             self.assertEqual(exported.read_text(), f"GOCACHE={cache}\n")
             self.assertFalse(cache.exists(), "identity lookup must not provision a payload")
