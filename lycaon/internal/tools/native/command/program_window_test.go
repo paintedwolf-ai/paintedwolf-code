@@ -493,7 +493,8 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 			f := newWindowFixture(t)
 			f.Runtime.ParkThreshold = time.Hour
 			idled := make(chan string, 4)
-			f.ledger.Commands.SetWindowSettleForTest(0)
+			gate := make(chan time.Time)
+			f.ledger.Commands.SetWindowSettleGateForTest(gate)
 			f.ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
 			done := make(chan callResult, 1)
 			go func() {
@@ -504,6 +505,7 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 				_, err := os.Stat(filepath.Join(f.Dir, "started"))
 				return err == nil
 			})
+			close(gate)
 			testutil.FailErr(t, "drift during the launch", os.WriteFile(filepath.Join(f.Dir, "during.txt"), []byte("live"), 0o600))
 			f.forcePass(t, "during.txt")
 			listed := f.ledger.Commands.OpenSessionWindows(testdbseed.DefaultProjectID, f.Session)
@@ -641,7 +643,8 @@ func TestProgramWindowSpansAPark(t *testing.T) {
 // no part of that program's window, whether the file had a ledger head or not.
 func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
 	f := newWindowFixture(t)
-	f.ledger.Commands.SetWindowSettleForTest(0)
+	gate := make(chan time.Time)
+	f.ledger.Commands.SetWindowSettleGateForTest(gate)
 	idled := make(chan string, 2)
 	f.ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
 	parking := newRecordingParking()
@@ -652,6 +655,7 @@ func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
 		t.Fatalf("parked result %s", raw)
 	}
 	parked := testutil.AwaitValue(t, "the program parks", parking.parked)
+	close(gate)
 	windowID := testutil.AwaitValue(t, "the window goes idle after the generator", idled)
 	f.wantWindowEffect(t, "gen.txt", windowID)
 
@@ -678,7 +682,8 @@ func TestOutsideEditDuringAParkIsNotAttributedToTheProgram(t *testing.T) {
 func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 	f := newWindowFixture(t)
 	f.Runtime.ParkThreshold = time.Hour
-	f.ledger.Commands.SetWindowSettleForTest(0)
+	gate := make(chan time.Time)
+	f.ledger.Commands.SetWindowSettleGateForTest(gate)
 	idled := make(chan string, 2)
 	f.ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
 	done := make(chan callResult, 1)
@@ -686,6 +691,11 @@ func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 		content, err := f.Call(t, t.Context(), writeGen+`; until [ -e go ]; do sleep 0.01; done; external -- /bin/sh -c 'echo second > second.txt'`)
 		done <- callResult{content, err}
 	}()
+	testutil.AwaitCondition(t, "the generator ran", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
+		return err == nil
+	})
+	close(gate)
 	windowID := testutil.AwaitValue(t, "the window goes idle", idled)
 	testutil.FailErr(t, "write during the gap", os.WriteFile(filepath.Join(f.Dir, "gap.txt"), []byte("gap"), 0o600))
 	testutil.FailErr(t, "continue the program", os.WriteFile(filepath.Join(f.Dir, "go"), nil, 0o600))

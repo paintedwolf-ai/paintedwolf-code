@@ -86,7 +86,8 @@ func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.
 	f := programtest.New(t, programtest.Options{})
 	f.Runtime.ParkThreshold = time.Hour
 	ledger := f.AttachLedger(t)
-	ledger.Commands.SetWindowSettleForTest(0)
+	gate := make(chan time.Time)
+	ledger.Commands.SetWindowSettleGateForTest(gate)
 	idled := make(chan string, 2)
 	ledger.Commands.SetWindowIdledForTest(func(id string) { idled <- id })
 	manager := git.NewManager()
@@ -98,6 +99,11 @@ func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.
 		_, err := f.Call(t, t.Context(), `external -- /bin/sh -c 'echo generated > gen.txt'; until [ -e done.flag ]; do sleep 0.01; done`)
 		done <- err
 	}()
+	testutil.AwaitCondition(t, "the generator ran", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
+		return err == nil
+	})
+	close(gate)
 	testutil.AwaitValue(t, "the window goes idle", idled)
 	testutil.FailErr(t, "outside edit", os.WriteFile(filepath.Join(f.Dir, "notes.md"), []byte("a person's note\n"), 0o644))
 	testutil.FailErr(t, "pass during the gap", ledger.Inventory.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
