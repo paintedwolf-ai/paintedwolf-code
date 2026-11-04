@@ -133,7 +133,7 @@ type FileEffectBounds struct {
 	Ordinal                         int64
 }
 
-// FileEffectsResult is one newest-first page of a file's recorded effects.
+// FileEffectsResult is one newest-first page of a file's effects on one branch.
 type FileEffectsResult struct {
 	Effects           []Effect
 	NextBeforeOrdinal int64
@@ -143,7 +143,7 @@ type FileEffectsResult struct {
 // beforeOrdinal resumes an older page; zero starts at the newest effects.
 func (s *History) QueryFileEffects(
 	ctx context.Context,
-	projectID, fileID string,
+	projectID string, branch sourcebranch.ID, fileID string,
 	afterOrdinal, beforeOrdinal int64,
 	limit int,
 ) (FileEffectsResult, error) {
@@ -154,7 +154,7 @@ func (s *History) QueryFileEffects(
 		limit = 100
 	}
 	rows, err := s.queries.ListSourceEffectsForFilePage(ctx, db.ListSourceEffectsForFilePageParams{
-		ProjectID: projectID, FileID: fileID,
+		ProjectID: projectID, FileID: fileID, BranchID: branch.String(),
 		AfterOrdinal: afterOrdinal, BeforeOrdinal: beforeOrdinal, PageLimit: int64(limit + 1),
 	})
 	if err != nil {
@@ -179,9 +179,9 @@ func (s *History) QueryFileEffects(
 	return out, nil
 }
 
-// LatestFileEffect returns the newest effect; found=false means provenance is unknown.
-func (s *History) LatestFileEffect(ctx context.Context, projectID, fileID string) (Effect, bool, error) {
-	res, err := s.QueryFileEffects(ctx, projectID, fileID, 0, 0, 1)
+// LatestFileEffect returns the branch's newest effect; found=false means provenance is unknown.
+func (s *History) LatestFileEffect(ctx context.Context, projectID string, branch sourcebranch.ID, fileID string) (Effect, bool, error) {
+	res, err := s.QueryFileEffects(ctx, projectID, branch, fileID, 0, 0, 1)
 	if err != nil || len(res.Effects) == 0 {
 		return Effect{}, false, err
 	}

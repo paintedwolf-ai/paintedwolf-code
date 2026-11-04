@@ -316,15 +316,23 @@ func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	if got.Status != 0 || len(lines) != 2 || lines[0] != lines[1] {
 		t.Fatalf("ulimit -n differs from the child's own: %+v", got)
 	}
-	raw, err = f.Call(t, t.Context(), "ulimit -n 256; "+probe)
+	raw, err = f.Call(t, t.Context(), probe)
+	testutil.FailErr(t, "fresh child limit", err)
+	fresh := decodeProgramOutcome(t, raw).Stdout
+	// A host may already default to 256, which would hide a persisted limit.
+	lowered := "256"
+	if fresh == lowered+"\n" {
+		lowered = "128"
+	}
+	raw, err = f.Call(t, t.Context(), "ulimit -n "+lowered+"; "+probe)
 	testutil.FailErr(t, "lower the child limit", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout != "256\n" {
+	if got := decodeProgramOutcome(t, raw); got.Stdout != lowered+"\n" {
 		t.Fatalf("lowered limit outcome: %+v", got)
 	}
 	raw, err = f.Call(t, t.Context(), probe)
 	testutil.FailErr(t, "next call", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout == "256\n" {
-		t.Fatalf("the limit persisted into the next call: %+v", got)
+	if got := decodeProgramOutcome(t, raw); got.Stdout != fresh {
+		t.Fatalf("the limit persisted into the next call: %+v, want %q", got, fresh)
 	}
 }
 

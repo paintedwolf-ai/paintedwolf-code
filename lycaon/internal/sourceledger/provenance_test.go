@@ -261,12 +261,12 @@ func TestQueryFileEffectsPagesNewestFirst(t *testing.T) {
 		OperationID: "op-other", After: []byte("noise\n")})
 	fileID, _ := mustResolve(t, store, ctx, "a.txt")
 
-	page, err := store.History.QueryFileEffects(ctx, "p1", fileID, 0, 0, 2)
+	page, err := store.History.QueryFileEffects(ctx, "p1", sourcebranch.Trunk, fileID, 0, 0, 2)
 	testutil.FailErr(t, "first page", err)
 	if len(page.Effects) != 2 || page.NextBeforeOrdinal == 0 {
 		t.Fatalf("first page = %d effects cursor %d, want 2 with cursor", len(page.Effects), page.NextBeforeOrdinal)
 	}
-	rest, err := store.History.QueryFileEffects(ctx, "p1", fileID, 0, page.NextBeforeOrdinal, 2)
+	rest, err := store.History.QueryFileEffects(ctx, "p1", sourcebranch.Trunk, fileID, 0, page.NextBeforeOrdinal, 2)
 	testutil.FailErr(t, "second page", err)
 	if len(rest.Effects) != 1 || rest.NextBeforeOrdinal != 0 {
 		t.Fatalf("second page = %d effects cursor %d, want final single effect", len(rest.Effects), rest.NextBeforeOrdinal)
@@ -275,12 +275,12 @@ func TestQueryFileEffectsPagesNewestFirst(t *testing.T) {
 		t.Fatal("file effects are not newest first across pages")
 	}
 
-	latest, found, err := store.History.LatestFileEffect(ctx, "p1", fileID)
+	latest, found, err := store.History.LatestFileEffect(ctx, "p1", sourcebranch.Trunk, fileID)
 	testutil.FailErr(t, "latest effect", err)
 	if !found || latest.Ordinal != page.Effects[0].Ordinal {
 		t.Fatalf("latest = (%v, %d), want newest ordinal %d", found, latest.Ordinal, page.Effects[0].Ordinal)
 	}
-	if _, found, err := store.History.LatestFileEffect(ctx, "p1", "no-such-file"); err != nil || found {
+	if _, found, err := store.History.LatestFileEffect(ctx, "p1", sourcebranch.Trunk, "no-such-file"); err != nil || found {
 		t.Fatalf("unknown file latest = (%v, %v), want absent without error", found, err)
 	}
 }
