@@ -181,7 +181,7 @@ func TestCommandWindowRetainsGitOnlyHistoryAfterSettlementAndRecovery(t *testing
 	// No file changed and no watcher pass ran: settlement must observe HEAD.
 	err := store.Commands.settleCommandWindow(ctx, window.window, time.Now(), false)
 	testutil.FailErr(t, "settle command ref movement", err)
-	store.Commands.recoverInterruptedWindows(ctx)
+	store.Commands.RecoverInterruptedWindows(ctx)
 	page, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "s1"}, 10, 0, CommitLens{})
 	testutil.FailErr(t, "read command-only Git walk", err)
 	if len(page.GitChanges) != 1 || page.GitChanges[0].CommandWindowID != window.ID || page.GitChanges[0].Turn != 3 || len(page.Commands) != 0 {
