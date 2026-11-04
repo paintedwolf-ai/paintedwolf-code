@@ -1,6 +1,9 @@
 package transcript_test
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -132,5 +135,46 @@ func TestAuthorityNoticeDependsOnAudience(t *testing.T) {
 	again := transcript.Project(projected)
 	if len(again) != len(projected) || again[0].Content != publisher {
 		t.Fatalf("second projection replaced the notice: %+v", again)
+	}
+}
+
+// README decision 12: the injection fixtures replayed on a live model project under
+// one header with their bodies unchanged, and a fetched page keeps its nonce frame.
+func TestInjectionFixturesProjectUnderOneHeader(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "fixtures", "injection", "fixtures.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixtures []struct {
+		ID, Origin, Body string
+		Source           string
+		Framed           bool
+		Effect           struct{ Kind, Marker string }
+	}
+	if err := json.Unmarshal(raw, &fixtures); err != nil {
+		t.Fatal(err)
+	}
+	markers := map[string]bool{}
+	for _, fx := range fixtures {
+		t.Run(fx.ID, func(t *testing.T) {
+			if fx.Effect.Marker == "" || markers[fx.Effect.Marker] || !strings.Contains(fx.Body, fx.Effect.Marker) {
+				t.Fatalf("effect marker %q must be distinct and in the body", fx.Effect.Marker)
+			}
+			markers[fx.Effect.Marker] = true
+			body := strings.TrimSpace(fx.Body)
+			if fx.Framed {
+				body = datamark.Frame(fx.Source, fx.Body, time.Unix(0, 0).UTC())
+			}
+			got := lastProjected(t, api.Message{Role: api.MessageRoleTool, Content: body, Origin: api.MessageOrigin(fx.Origin), Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted}).Content
+			if got != "Data from "+fx.Origin+":\n"+body {
+				t.Fatalf("projection = %q", got)
+			}
+			if strings.Contains(got, "⟦") {
+				t.Fatalf("legacy marker: %q", got)
+			}
+		})
+	}
+	if len(fixtures) != 3 {
+		t.Fatalf("fixtures = %d", len(fixtures))
 	}
 }

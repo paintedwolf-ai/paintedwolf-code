@@ -3,6 +3,8 @@ package promptloop
 import (
 	"context"
 	"errors"
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -128,5 +130,101 @@ func TestForcedCloseoutRepairPreservesPersistedIterationIdentity(t *testing.T) {
 	testutil.FailErr(t, "iterate", rows.Err())
 	if !reflect.DeepEqual(iterations, []int{1, 2, 3}) || gateOpen {
 		t.Fatalf("iterations=%v gateOpen=%t", iterations, gateOpen)
+	}
+}
+
+// AC-MID-10, MC-INV-16: through the real store, text with no note row is debt after
+// a restart, and a retry after the note committed reuses it. A storage failure
+// leaves no row and no claim of publication.
+func TestMidTurnNoteAcrossARestartOnTheRealStore(t *testing.T) {
+	ctx := t.Context()
+	db := testdbfixture.OpenPath(t, filepath.Join(t.TempDir(), "store.db"))
+	testdbseed.InsertProjectRoot(t, db, testdbseed.DefaultProjectID, t.TempDir())
+	messages := store.NewSQL(db)
+	sess, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	carrier := api.Message{ID: uuid.NewString(), Role: api.MessageRoleAssistant, Origin: api.MessageOriginModel, Content: "Starting now.",
+		ToolCalls: []api.ToolCall{{ID: "call-1", Name: "recall", Args: map[string]any{"path": "a.go"}}}}
+	testutil.FailErr(t, "append prompt and carrier", messages.AppendMessages(ctx, sess.ID, midTurnUser(), carrier))
+
+	// Each incarnation holds nothing but what it reads back.
+	restart := func() (*midTurnHarness, []api.Message) {
+		h := newMidTurnHarness(t, publishingSurface)
+		h.sess = sess
+		h.loop.Projection.Deps.AppendMessages = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
+			for _, msg := range msgs {
+				if h.appendFn != nil {
+					if err := h.appendFn(msg); err != nil {
+						return err
+					}
+				}
+				if api.IsAgentNoteMessage(msg) {
+					h.order = append(h.order, "note")
+				}
+			}
+			return messages.AppendMessages(ctx, sessionID, msgs...)
+		}
+		history, err := messages.GetMessages(ctx, sess.ID)
+		testutil.FailErr(t, "reload", err)
+		return h, history
+	}
+	noteRows := func(history []api.Message) int {
+		n := 0
+		for _, msg := range history {
+			if msg.ID == api.MidTurnNoteID(carrier.ID) {
+				n++
+			}
+		}
+		return n
+	}
+	run := func(h *midTurnHarness, history []api.Message) ([]api.Message, error) {
+		out, _, _, _, _, _, err := h.loop.Batch.executeToolCallsInTurn(ctx, sess, sess.ID, carrier.ToolCalls,
+			tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID, Agent: "coordinator"}}, history, "go", carrier.ID, publishingSurface, midTurnState(t, publishingSurface))
+		return out, err
+	}
+
+	// A commit failure ends the batch before any tool runs and leaves the text owed.
+	h, history := restart()
+	h.appendFn = func(msg api.Message) error {
+		if api.IsAgentNoteMessage(msg) {
+			return errors.New("disk full")
+		}
+		return nil
+	}
+	if _, err := run(h, history); err == nil {
+		t.Fatal("a failed note commit must end the batch")
+	}
+	if len(h.order) != 0 {
+		t.Fatalf("ran after the failed commit: %v", h.order)
+	}
+	_, history = restart()
+	if noteRows(history) != 0 || !guard.DeriveWaitVisibility(history).Pending() {
+		t.Fatalf("a crash before the commit left notes = %d, debt = %v", noteRows(history), guard.DeriveWaitVisibility(history).Pending())
+	}
+
+	// The first attempt commits the note and runs the tool once.
+	h, history = restart()
+	if _, err := run(h, history); err != nil {
+		t.Fatalf("first attempt: %v", err)
+	}
+	if len(h.order) != 2 || h.order[0] != "note" || h.order[1] != "recall" {
+		t.Fatalf("order = %v", h.order)
+	}
+	_, history = restart()
+	if noteRows(history) != 1 || guard.DeriveWaitVisibility(history).Pending() {
+		t.Fatalf("after commit: notes = %d, debt = %v", noteRows(history), guard.DeriveWaitVisibility(history).Pending())
+	}
+
+	// A retry of the same carrier after a restart adds no second note.
+	h, history = restart()
+	if _, err := run(h, history); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if len(h.order) > 0 && h.order[0] == "note" {
+		t.Fatalf("retry published again: %v", h.order)
+	}
+	_, history = restart()
+	if noteRows(history) != 1 {
+		t.Fatalf("notes after retry = %d", noteRows(history))
 	}
 }
