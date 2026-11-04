@@ -59,6 +59,12 @@ func TestAuditMidTurnNote(t *testing.T) {
 		{name: "literal embed example stays allowed", text: "Syntax is `![shot](" + midTurnArtifact + ")` [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "![shot]", traced: true},
 		{name: "literal citation example is not a citation", text: "The form is `[read#99]`.", ev: empty, want: guidance.MidTurnPublish, contains: "[read#99]", optional: true},
 		{name: "pathless citation alone says nothing", text: "[task#1]", ev: midTurnLedger(), required: true, want: guidance.MidTurnSilent},
+		{name: "a dispatch receipt has no line to cite", text: "Started [task#1:1].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteHandleUngroundCode, friction: true},
+		{name: "a command receipt has no line to cite", text: "Ran [command#4:2].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteHandleUngroundCode, friction: true},
+		{name: "a survey record has no line to cite", text: "Exists [list#2:3].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteHandleUngroundCode, friction: true},
+		{name: "a line the read did not cover", text: "See [read#3:999].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteHandleUngroundCode, friction: true},
+		{name: "an unregistered kind is prose, not an invalid citation", text: "Linked to [pr#123] [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "[pr#123]", traced: true},
+		{name: "an unregistered kind alone is uncited, not invalid", text: "Linked to [pr#123].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteUngroundedCode},
 		{name: "prose brackets are not attempts", text: "Use [and/or] as needed [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "[and/or]", traced: true},
 		{name: "unobserved URL before evidence", text: "See [RFC](https://example.test/spec).", ev: empty, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteURLOnlyCode, friction: true},
 	} {

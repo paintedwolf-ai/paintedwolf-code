@@ -176,15 +176,21 @@ func midTurnEmbedIDs(doc citationmd.Document) []string {
 	return ids
 }
 
+// midTurnStructuralOptions parse text with no ledger at hand: registered handle
+// kinds are attempts, as in the audit, and bare paths stay prose.
+func midTurnStructuralOptions() citationmd.Options {
+	return citationmd.Options{KnownHandleKind: KnownEvidenceKind(evidence.Ledger{})}
+}
+
 // MidTurnTextHasSpeech reports whether text says anything once markers and
 // protocol nodes are gone. Marker-only and citation-only text creates no debt.
 func MidTurnTextHasSpeech(text string) bool {
-	return strings.TrimSpace(citationmd.Project(citationmd.Parse(text, citationmd.Options{}))) != ""
+	return strings.TrimSpace(citationmd.Project(citationmd.Parse(text, midTurnStructuralOptions()))) != ""
 }
 
 // MidTurnTextAttemptsCitation reports a reference or damaged node in text.
 func MidTurnTextAttemptsCitation(text string) bool {
-	doc := citationmd.Parse(text, citationmd.Options{})
+	doc := citationmd.Parse(text, midTurnStructuralOptions())
 	return midTurnCitationCount(doc) > 0 || len(doc.Issues) > 0
 }
 
