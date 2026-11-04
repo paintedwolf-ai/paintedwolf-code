@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/socketref"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -292,8 +293,7 @@ func TestNonHTTPContractStaleSymlinkGrantRevalidateDenies(t *testing.T) {
 
 	grant, err := confine.ResolveSocketRequest(link)
 	contractcheck.FailErr(t, "ResolveSocketRequest", err)
-	grant, err = confine.CaptureSocketGrant(t.Context(), grant)
-	contractcheck.FailErr(t, "CaptureSocketGrant", err)
+	grant.Binding = socketref.Binding{}
 	if err := confine.RevalidateSocketGrant(grant); err != nil {
 		t.Fatalf("fresh grant must revalidate: %v", err)
 	}

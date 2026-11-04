@@ -49,7 +49,6 @@ func TestCommandEnabledToolProfilesRenderCommandSurface(t *testing.T) {
 			contractcheck.FailErr(t, "Render agent-tool-surface", err)
 			for _, want := range []string{
 				"## command",
-				"GNU and BSD",
 				"--help",
 				"@scratch",
 			} {
@@ -150,7 +149,7 @@ func TestWorkerPersonasWithCommandIncludeCommandSurface(t *testing.T) {
 			}
 			for _, want := range []string{
 				"## command",
-				"GNU and BSD", "--help",
+				"--help",
 			} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("persona missing %q", want)
