@@ -34,11 +34,11 @@ func TestRgJSONMessages(t *testing.T) {
 {"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":32,"bytes_printed":453,"matched_lines":2,"matches":3}}}
 {"data":{"elapsed_total":{},"stats":{"bytes_printed":453,"bytes_searched":32,"elapsed":{},"matched_lines":2,"matches":3,"searches":1,"searches_with_match":1}},"type":"summary"}
 `, 0},
-		{"binary bytes stay in their record", []string{"rg", "--json", "alpha", "bin"}, "",
+		{"a named binary file breaks records at each NUL", []string{"rg", "--json", "alpha", "bin"}, "",
 			`{"type":"begin","data":{"path":{"text":"bin"}}}
-{"type":"match","data":{"path":{"text":"bin"},"lines":{"text":"a\u0000alpha\n"},"line_number":1,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":2,"end":7}]}}
-{"type":"end","data":{"path":{"text":"bin"},"binary_offset":1,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":1,"bytes_printed":226,"matched_lines":1,"matches":1}}}
-{"data":{"elapsed_total":{},"stats":{"bytes_printed":226,"bytes_searched":1,"elapsed":{},"matched_lines":1,"matches":1,"searches":1,"searches_with_match":1}},"type":"summary"}
+{"type":"match","data":{"path":{"text":"bin"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":2,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"bin"},"binary_offset":1,"stats":{"elapsed":{},"searches":1,"searches_with_match":1,"bytes_searched":8,"bytes_printed":219,"matched_lines":1,"matches":1}}}
+{"data":{"elapsed_total":{},"stats":{"bytes_printed":219,"bytes_searched":8,"elapsed":{},"matched_lines":1,"matches":1,"searches":1,"searches_with_match":1}},"type":"summary"}
 `, 0},
 		{"context", []string{"rg", "--json", "-C1", "two", "a.txt"}, "",
 			`{"type":"begin","data":{"path":{"text":"a.txt"}}}

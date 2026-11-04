@@ -215,6 +215,8 @@ var grepDifferential = []differentialCase{
 	{argv: []string{"rg", "--json", "-v", "alpha", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "--json", "-w", "alpha", "sub/c.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "--json", "alpha", "bin.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "binary", "bin.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "-v", "alpha", "bin.dat"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "--json", "zz", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},
 	{argv: []string{"rg", "--hidden", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},

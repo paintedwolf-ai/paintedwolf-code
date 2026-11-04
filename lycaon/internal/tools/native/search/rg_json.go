@@ -48,6 +48,11 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 	}
 	lastSelectedEnd := 0
 	binaryOffset := bytes.IndexByte(content, 0)
+	if binaryOffset >= 0 {
+		// ripgrep searches a named binary file with each NUL converted to a line terminator, so
+		// records, numbers and offsets all follow the converted bytes; a walked one never gets here.
+		content = bytes.ReplaceAll(content, []byte{0}, []byte{'\n'})
+	}
 	n, err := textsearch.ScanReader(inv.ctx, bytes.NewReader(content), 0, nil, r.matcher, r.scan, func(line textsearch.Line) error {
 		if !begun {
 			begun = true
@@ -97,11 +102,6 @@ func (r *grepRun) jsonContent(label string, content []byte) error {
 	file.searched = int64(len(content))
 	if r.scan.MaxSelected > 0 && n >= r.scan.MaxSelected {
 		file.searched = int64(lastSelectedEnd)
-	}
-	if binaryOffset >= 0 {
-		// JSON preserves complete records, including NUL bytes. ripgrep's
-		// searched-byte statistic ends at the first detected binary byte.
-		file.searched = min(file.searched, int64(binaryOffset))
 	}
 	if n > 0 {
 		r.selected = true
