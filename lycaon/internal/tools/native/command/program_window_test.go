@@ -166,8 +166,8 @@ func TestProgramWindowACCW04WorkerBranchOpensNone(t *testing.T) {
 		tc.Source.SourceWorkspaceKind, tc.Identity.WorkerJobID = api.SourceWorkspaceKindWorker, "job-1"
 		tc.Source.WorkerBranchRoot, tc.Source.BranchWorkspace = f.Dir, validBranchWorkspace{}
 	}
-	outcome := f.run(t, writeGen)
-	if outcome.Status != 0 || outcome.SourceWindow != nil {
+	outcome := f.run(t, `external -- /bin/sh -c 'echo ran'`)
+	if outcome.Status != 0 || outcome.SourceWindow != nil || outcome.Stdout != "ran\n" {
 		t.Fatalf("worker outcome = %+v", outcome)
 	}
 	if opens := f.opener.opens.Load(); opens != 0 {
@@ -241,7 +241,7 @@ func TestProgramWindowACCW09PipelineAndLoopShareOne(t *testing.T) {
 
 func TestProgramWindowIsNotOpenedForAProgramNotFound(t *testing.T) {
 	f := newWindowFixture(t)
-	outcome := f.run(t, `external -- /nonexistent/generator; echo after`)
+	outcome := f.run(t, `external -- paintedwolf-absent-generator; echo after`)
 	if opens := f.opener.opens.Load(); opens != 0 || outcome.SourceWindow != nil {
 		t.Fatalf("window opens = %d, outcome = %+v", opens, outcome)
 	}
