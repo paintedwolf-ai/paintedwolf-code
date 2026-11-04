@@ -94,7 +94,7 @@ func RenderSourceChangesBlock(
 	for _, f := range brief.Files {
 		files = append(files, map[string]any{
 			"path": f.Path, "actor": f.Actor, "detail": f.Detail,
-			"op": f.Op, "at": f.At, "effects": f.Effects,
+			"op": f.Op, "at": f.At, "effects": f.Effects, "working_set": f.WorkingSet,
 		})
 	}
 	git := make([]map[string]any, 0, len(brief.Git))
@@ -110,6 +110,7 @@ func RenderSourceChangesBlock(
 		renderer, map[string]any{
 			"files": files, "git": git, "other_files": brief.OtherFiles,
 			"other_effects": brief.OtherEffects, "truncated": brief.Truncated,
+			"other_may_include_working_set": brief.OtherMayIncludeWorkingSet(),
 		},
 	)
 	if err != nil {
