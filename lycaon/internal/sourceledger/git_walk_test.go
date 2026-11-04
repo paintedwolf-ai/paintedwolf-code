@@ -254,7 +254,7 @@ func TestCommandSettlementCannotDropAnActiveObservationWindow(t *testing.T) {
 	defer release()
 	settling, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
 	defer cancel()
-	err = store.Commands.settleCommandWindow(settling, window.window, time.Now(), false)
+	err = store.Commands.settleCommandWindow(settling, window.window, time.Now())
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("settlement overtook observation: %v", err)
 	}
