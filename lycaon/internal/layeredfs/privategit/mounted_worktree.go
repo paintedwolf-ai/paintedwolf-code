@@ -4,10 +4,51 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
+
+// SecondaryViewID names the managed view of a non-primary root of a mounted view. It has its own
+// private repositories and worktree on the same Core as the primary root.
+func SecondaryViewID(viewID, rootID string) string { return viewID + "-" + rootID }
+
+// BindSecondaryRoot claims one non-primary root of a mounted view, which binding describes under the
+// primary view's identity.
+func (m *Manager) BindSecondaryRoot(binding MountedViewBinding, authorizedGitDirs ...string) error {
+	binding.CoreViewID = binding.ViewID
+	binding.ViewID = SecondaryViewID(binding.ViewID, binding.RootID)
+	binding.WorkerID = binding.ViewID
+	if err := m.ReleaseView(binding.ViewID); err != nil {
+		return err
+	}
+	if err := m.MountedClaimWithBinding(binding, authorizedGitDirs...); err != nil {
+		return err
+	}
+	view, err := getManagedView(m, binding.ViewID)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	view.coreViewID = binding.CoreViewID
+	m.mu.Unlock()
+	return nil
+}
+
+// SecondaryViews names the managed views of a mounted view's non-primary roots.
+func (m *Manager) SecondaryViews(viewID string) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var ids []string
+	for id, view := range m.views {
+		if view.coreViewID == viewID {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
 
 func mountBindingKey(viewID, rootID string) string {
 	return strings.TrimSpace(viewID) + "\x00" + strings.TrimSpace(rootID)
@@ -71,6 +112,7 @@ func (m *Manager) RevokeMountedViewBinding(viewID, rootID string) {
 	}
 	m.mu.Lock()
 	delete(m.mountBindings, mountBindingKey(viewID, rootID))
+	delete(m.mountBindings, mountBindingKey(SecondaryViewID(viewID, rootID), rootID))
 	m.mu.Unlock()
 }
 
@@ -258,7 +300,11 @@ func validateMountedViewBinding(
 	if expectedWorkerID != "" && strings.TrimSpace(b.WorkerID) != "" && b.WorkerID != expectedWorkerID {
 		return "", fmt.Errorf("%w: binding WorkerID %q does not match worker %q", ErrMountedWorktreeUnavailable, b.WorkerID, expectedWorkerID)
 	}
-	if b.Core == nil || expectedCore == nil || b.Core != expectedCore || b.Core.ViewID() != expectedViewID {
+	coreViewID := b.CoreViewID
+	if coreViewID == "" {
+		coreViewID = expectedViewID
+	}
+	if b.Core == nil || expectedCore == nil || b.Core != expectedCore || b.Core.ViewID() != coreViewID {
 		return "", fmt.Errorf("%w: binding Core instance does not match view %q", ErrMountedWorktreeUnavailable, expectedViewID)
 	}
 	if !isValidMountedAdapterID(b.AdapterID) || !hasMountIdentityFact(b) || !isBindingLive(b) {

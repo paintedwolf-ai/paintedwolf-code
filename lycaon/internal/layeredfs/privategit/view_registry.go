@@ -90,6 +90,9 @@ func lookupActiveView(rootOrBranchDir, workerID string) (*Manager, *managedView,
 		entry, ok = activeViewsByWorker[cleanWorker]
 	}
 	if ok {
+		if root, isRoot := activeViewsByWorktree[cleanDir]; isRoot && root.view.coreViewID == entry.view.viewID {
+			return root.mgr, root.view, true, nil
+		}
 		if !viewMatchesBoundary(entry.view, cleanDir) {
 			return nil, nil, false, fmt.Errorf("%w: worker %q is not bound to %q", ErrIdentityMismatch, cleanWorker, rootOrBranchDir)
 		}
@@ -128,6 +131,9 @@ func lookupManagerView(mgr *Manager, rootOrBranchDir, workerID string) (*managed
 		v, ok = mgr.viewsByWorker[cleanWorker]
 	}
 	if ok {
+		if root, isRoot := mgr.viewsByWorktree[cleanDir]; isRoot && root.coreViewID == v.viewID {
+			return root, true, nil
+		}
 		if !viewMatchesBoundary(v, cleanDir) {
 			return nil, false, fmt.Errorf("%w: worker %q is not bound to %q", ErrIdentityMismatch, cleanWorker, rootOrBranchDir)
 		}
@@ -198,7 +204,7 @@ func prepareManagedViewOperation(
 			return "", noop, true, err
 		}
 	}
-	if _, err := mgr.InterceptGitAccess(view.viewID, layeredfs.QualifiedPath{
+	if _, err := interceptViewAccess(mgr, view, layeredfs.QualifiedPath{
 		RootID: view.rootID,
 		Rel:    ".git",
 	}, true); err != nil {

@@ -68,19 +68,35 @@ func (a *Adapter) BindPrivateGit(
 	if pm == nil {
 		return &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "bind_privategit", ReasonCode: adapter.ReasonMountDenied, Diagnostic: "missing primary mount"}
 	}
-	binding := privategit.MountedViewBinding{
-		ViewID: viewID, WorkerID: workerID, RootID: st.primaryRoot,
-		TrunkDir: pm.grant.SourcePath, MountPath: pm.mountPath,
-		AdapterID: string(adapter.AdapterNFSDarwin), Core: st.core,
-		MountID: pm.facts.MountID, ConnectionID: pm.facts.ConnectionID,
-		Active:   a.IsViewActive(viewID),
-		IsActive: func() bool { return a.IsViewActive(viewID) },
+	bindingFor := func(rootID string, mount *rootMount) privategit.MountedViewBinding {
+		return privategit.MountedViewBinding{
+			ViewID: viewID, WorkerID: workerID, RootID: rootID,
+			TrunkDir: mount.grant.SourcePath, MountPath: mount.mountPath,
+			AdapterID: string(adapter.AdapterNFSDarwin), Core: st.core,
+			MountID: mount.facts.MountID, ConnectionID: mount.facts.ConnectionID,
+			Active:   a.IsViewActive(viewID),
+			IsActive: func() bool { return a.IsViewActive(viewID) },
+		}
 	}
-	_ = mgr.ReleaseView(viewID)
+	binding := bindingFor(st.primaryRoot, pm)
+	if err := mgr.ReleaseView(viewID); err != nil {
+		return err
+	}
 	if err := mgr.RegisterMountedViewBinding(binding); err != nil {
 		return err
 	}
-	return mgr.MountedClaimWithBinding(binding, authorizedGitDirs...)
+	if err := mgr.MountedClaimWithBinding(binding, authorizedGitDirs...); err != nil {
+		return err
+	}
+	for rootID, mount := range st.mounts {
+		if rootID == st.primaryRoot {
+			continue
+		}
+		if err := mgr.BindSecondaryRoot(bindingFor(rootID, mount), authorizedGitDirs...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // IsViewActive reports whether viewID is currently mounted, not releasing, and its loopback NFS server is healthy.

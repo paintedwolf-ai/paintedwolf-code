@@ -2,7 +2,9 @@ package privategit
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,7 +30,9 @@ type managedView struct {
 	trunkDir    string
 	worktreeDir string
 	// branchDir is the worker branch holding this root's worktree when the two differ.
-	branchDir         string
+	branchDir string
+	// coreViewID is set on a non-primary root of a mounted view, whose Core that view holds.
+	coreViewID        string
 	materialized      bool
 	kernelMounted     bool
 	core              *layeredfs.Core
@@ -141,10 +145,30 @@ func (m *Manager) InterceptGitAccess(
 	qpath layeredfs.QualifiedPath,
 	writeIntent bool,
 ) (layeredfs.GitInterceptOutcome, error) {
-	view, err := getManagedView(m, viewID)
+	view, err := viewServingRoot(m, viewID, qpath.RootID)
 	if err != nil {
 		return layeredfs.GitInterceptOutcome{}, layeredfs.ErrGitPending
 	}
+	outcome, err := interceptViewAccess(m, view, qpath, writeIntent)
+	if writeIntent && errors.Is(err, fs.ErrNotExist) {
+		// No source repository lives here, so what the worker creates is its own: private nodes in
+		// Core, which reach neither the source nor a checkpoint's promotable changes.
+		return layeredfs.GitInterceptOutcome{Intercepted: true}, nil
+	}
+	return outcome, err
+}
+
+// viewServingRoot finds the managed view for one root of a Core. A root with no managed view has
+// no private repository, so its source metadata stays unreachable.
+func viewServingRoot(m *Manager, viewID, rootID string) (*managedView, error) {
+	view, err := getManagedView(m, viewID)
+	if err != nil || rootID == "" || view.rootID == rootID {
+		return view, err
+	}
+	return getManagedView(m, SecondaryViewID(viewID, rootID))
+}
+
+func interceptViewAccess(m *Manager, view *managedView, qpath layeredfs.QualifiedPath, writeIntent bool) (layeredfs.GitInterceptOutcome, error) {
 	repoRel, _, isGit := splitGitRelPath(qpath.Rel)
 	if !isGit {
 		return layeredfs.GitInterceptOutcome{}, nil
@@ -219,7 +243,18 @@ func (m *Manager) ReleaseView(viewID string) error {
 		}
 		delete(m.mountBindings, mountBindingKey(view.viewID, view.rootID))
 	}
+	var secondaries []string
+	for id, candidate := range m.views {
+		if candidate.coreViewID == viewID {
+			secondaries = append(secondaries, id)
+		}
+	}
 	m.mu.Unlock()
+	for _, id := range secondaries {
+		if err := m.ReleaseView(id); err != nil {
+			return err
+		}
+	}
 	if !ok {
 		return nil
 	}

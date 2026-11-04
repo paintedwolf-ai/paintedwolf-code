@@ -96,11 +96,28 @@ func (a *Adapter) BindPrivateGit(
 	if err != nil {
 		return err
 	}
-	_ = mgr.ReleaseView(viewID)
+	if err := mgr.ReleaseView(viewID); err != nil {
+		return err
+	}
 	if err := mgr.RegisterMountedViewBinding(binding); err != nil {
 		return err
 	}
-	return mgr.MountedClaimWithBinding(binding, authorizedGitDirs...)
+	if err := mgr.MountedClaimWithBinding(binding, authorizedGitDirs...); err != nil {
+		return err
+	}
+	for rootID := range st.mounts {
+		if rootID == st.primaryRoot {
+			continue
+		}
+		secondary, err := a.MountedViewBindingForRoot(viewID, workerID, rootID)
+		if err != nil {
+			return err
+		}
+		if err := mgr.BindSecondaryRoot(secondary, authorizedGitDirs...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // IsViewActive reports whether viewID is currently mounted, not releasing, and its FUSE server is healthy.

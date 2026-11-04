@@ -3,10 +3,13 @@ package platform_test
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	lexec "github.com/lycaon/lycaon/internal/exec"
@@ -164,4 +167,117 @@ func exitOK(out []byte, code int, err error) error {
 		return errors.New(string(out))
 	}
 	return nil
+}
+
+// The fact stands for a kernel client's behavior, so it is checked against a real open.
+func TestAdapterFIFOFactMatchesTheKernel(t *testing.T) {
+	trunk, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve trunk", err)
+	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
+	testutil.FailErr(t, "privategit.NewManager", err)
+	t.Cleanup(func() { _ = mgr.Store().Close() })
+	view, chosen := mountedHostView(t, trunk, mgr)
+	fifo := filepath.Join(view.PrimaryWorkPath, "pipe")
+	if err := syscall.Mkfifo(fifo, 0o644); errors.Is(err, syscall.EIO) {
+		t.Skipf("Core has no special nodes in this tree: %v", err)
+	} else {
+		testutil.FailErr(t, "mkfifo", err)
+	}
+	file, err := os.OpenFile(fifo, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err == nil {
+		_ = file.Close()
+	}
+	opened := err == nil
+	if want := chosen.Facts().MetadataCapabilities.SupportsFIFOOpen; opened != want {
+		t.Fatalf("SupportsFIFOOpen = %v, kernel open: %v", want, err)
+	}
+	if !opened && !errors.Is(err, syscall.EACCES) {
+		t.Fatalf("FIFO open failed differently from the declared limit: %v", err)
+	}
+}
+
+// git init of a repository the source does not have is the worker's own and stays in the view.
+func TestGitInitOfANewNestedRepositoryStaysPrivate(t *testing.T) {
+	trunk, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve trunk", err)
+	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(trunk, "README.md"), []byte("hello\n"), 0o644))
+	gittest.InitCommit(t, trunk, "initial")
+	before := gittest.Run(t, trunk, "status", "--porcelain")
+	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
+	testutil.FailErr(t, "privategit.NewManager", err)
+	t.Cleanup(func() { _ = mgr.Store().Close() })
+	view, _ := mountedHostView(t, trunk, mgr)
+	nested := filepath.Join(view.PrimaryWorkPath, "vendor", "new")
+	testutil.FailErr(t, "mkdir nested", os.MkdirAll(nested, 0o755))
+
+	testutil.FailErr(t, "git init", exitOK(gitexec.Run(t.Context(), nested, []string{"init", "-q"}, gitexec.Opts{})))
+	testutil.FailErr(t, "nested status", exitOK(gitexec.Run(t.Context(), nested, []string{"status", "--porcelain"}, gitexec.Opts{})))
+	if info, err := os.Stat(filepath.Join(nested, ".git", "HEAD")); err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("nested HEAD: %+v err=%v", info, err)
+	}
+	if _, err := os.Lstat(filepath.Join(trunk, "vendor")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("nested repository reached the source: %v", err)
+	}
+	if after := gittest.Run(t, trunk, "status", "--porcelain"); after != before {
+		t.Fatalf("source repository changed: %q", after)
+	}
+}
+
+// Each root of a mounted view has its own private repository, and source metadata stays out of reach.
+func TestEverySelectedRootHasItsOwnPrivateRepository(t *testing.T) {
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve base", err)
+	grants := make([]adapter.RootGrant, 0, 2)
+	targets := map[string]string{}
+	for _, id := range []string{"p", "s"} {
+		source := filepath.Join(base, "source-"+id)
+		testutil.FailErr(t, "mkdir source", os.MkdirAll(source, 0o755))
+		testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(source, "file.txt"), []byte(id+"\n"), 0o644))
+		gittest.InitCommit(t, source, "initial "+id)
+		grants = append(grants, adapter.RootGrant{RootID: id, Label: id, SourcePath: source, IsPrimary: id == "p"})
+		targets[id] = filepath.Join(base, "branch", id)
+	}
+	sourceHead := gittest.Run(t, grants[1].SourcePath, "rev-parse", "HEAD")
+	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
+	testutil.FailErr(t, "privategit.NewManager", err)
+	t.Cleanup(func() { _ = mgr.Store().Close() })
+	selector := platform.NewSelector(platform.Config{Confinement: availableConfinement{}})
+	chosen, probe, err := selector.Select(t.Context(), adapter.ProbeConfig{RuntimeDir: filepath.Join(base, "probe")})
+	testutil.FailErr(t, "Select", err)
+	if chosen.Facts().PreparationKind != adapter.PreparationMounted {
+		t.Skipf("this host cannot mount a view: %s %s", probe.ReasonCode, probe.Diagnostic)
+	}
+	view, err := chosen.Prepare(t.Context(), adapter.PrepareRequest{
+		ViewID: "view-roots", BackingDir: filepath.Join(base, "backing"), RuntimeDir: filepath.Join(base, "runtime"),
+		GitInterceptor: mgr, TargetRootDirs: targets, Grants: grants,
+		QuiesceHook: func(context.Context, string) error { return nil }, FlushClientHook: func(context.Context, string) error { return nil },
+	})
+	testutil.FailErr(t, "Prepare", err)
+	t.Cleanup(func() { _, _ = chosen.Release(context.Background(), view.ViewID) })
+	testutil.FailErr(t, "BindPrivateGit", chosen.(adapter.MountSupervisor).BindPrivateGit(view.ViewID, "job-roots", mgr))
+
+	secondary, finish, managed, err := privategit.PrepareManagerViewOperation(t.Context(), mgr, targets["s"], "job-roots")
+	testutil.FailErr(t, "prepare the secondary root", err)
+	if !managed || secondary != targets["s"] {
+		t.Fatalf("secondary root is not its own managed view: managed=%v worktree=%s", managed, secondary)
+	}
+	testutil.FailErr(t, "finish", finish())
+	out, code, err := gitexec.Run(t.Context(), targets["s"], []string{"log", "--format=%s"}, gitexec.Opts{})
+	if err != nil || code != 0 || !strings.Contains(string(out), "initial s") {
+		t.Fatalf("secondary history: code=%d err=%v out=%q", code, err, out)
+	}
+	testutil.FailErr(t, "branch in the view", exitOK(gitexec.Run(t.Context(), targets["s"], []string{"branch", "private-work"}, gitexec.Opts{})))
+	if refs := gittest.Run(t, grants[1].SourcePath, "branch", "--list", "private-work"); refs != "" {
+		t.Fatalf("a private branch reached the source: %q", refs)
+	}
+	if after := gittest.Run(t, grants[1].SourcePath, "rev-parse", "HEAD"); after != sourceHead {
+		t.Fatalf("source HEAD moved: %q", after)
+	}
+	if ids := mgr.SecondaryViews(view.ViewID); len(ids) != 1 {
+		t.Fatalf("secondary views = %v", ids)
+	}
+	testutil.FailErr(t, "release view", mgr.ReleaseView(view.ViewID))
+	if ids := mgr.SecondaryViews(view.ViewID); len(ids) != 0 {
+		t.Fatalf("release left secondary views: %v", ids)
+	}
 }

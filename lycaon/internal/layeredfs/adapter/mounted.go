@@ -76,6 +76,7 @@ func NewMountedAdapter(cfg MountedAdapterConfig) *MountedAdapter {
 				SupportsTimestamps: true,
 				SupportsPOSIXLocks: true,
 				SupportsFlock:      true,
+				SupportsFIFOOpen:   true,
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,
@@ -343,18 +344,31 @@ func (a *MountedAdapter) BindPrivateGit(viewID, workerID string, mgr *privategit
 	if !ok {
 		return &AdapterError{AdapterID: a.cfg.AdapterID, Op: "bind_privategit", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
 	}
-	var primaryTrunk string
-	for _, r := range st.view.Roots {
-		if r.RootID == st.view.PrimaryRootID {
-			primaryTrunk = r.SourcePath
+	bindingFor := func(r PreparedRoot) privategit.MountedViewBinding {
+		return privategit.MountedViewBinding{
+			ViewID: viewID, WorkerID: workerID, RootID: r.RootID,
+			TrunkDir: r.SourcePath, MountPath: r.WorkspacePath, AdapterID: string(a.cfg.AdapterID),
+			Core: st.view.Core, MountID: "fixture:" + viewID, Active: true,
+			IsActive: func() bool { return a.IsViewActive(viewID) },
 		}
 	}
-	return mgr.MountedClaimWithBinding(privategit.MountedViewBinding{
-		ViewID: viewID, WorkerID: workerID, RootID: st.view.PrimaryRootID,
-		TrunkDir: primaryTrunk, MountPath: st.view.PrimaryWorkPath, AdapterID: string(a.cfg.AdapterID),
-		Core: st.view.Core, MountID: "fixture:" + viewID, Active: true,
-		IsActive: func() bool { return a.IsViewActive(viewID) },
-	}, authorizedGitDirs...)
+	for _, r := range st.view.Roots {
+		if r.RootID != st.view.PrimaryRootID {
+			continue
+		}
+		if err := mgr.MountedClaimWithBinding(bindingFor(r), authorizedGitDirs...); err != nil {
+			return err
+		}
+	}
+	for _, r := range st.view.Roots {
+		if r.RootID == st.view.PrimaryRootID {
+			continue
+		}
+		if err := mgr.BindSecondaryRoot(bindingFor(r), authorizedGitDirs...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Release retires handles, settles the filesystem connection, and cleans up runtime directories.

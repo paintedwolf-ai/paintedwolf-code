@@ -105,7 +105,9 @@ type RemotePolicy struct {
 // MountedViewBinding records the adapter/supervisor-owned mount identity and lifecycle
 // facts that bind a worker view, root, and layeredfs.Core to a mounted workspace path (#1671).
 type MountedViewBinding struct {
-	ViewID       string
+	ViewID string
+	// CoreViewID names the view whose Core serves a non-primary root; empty means ViewID.
+	CoreViewID   string
 	WorkerID     string
 	RootID       string
 	TrunkDir     string

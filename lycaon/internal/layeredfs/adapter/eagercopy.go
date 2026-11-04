@@ -57,6 +57,7 @@ func NewEagerCopyAdapter(fallbackReason ReasonCode) *EagerCopyAdapter {
 				SupportsTimestamps: true,
 				SupportsPOSIXLocks: true,
 				SupportsFlock:      true,
+				SupportsFIFOOpen:   true,
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,

@@ -91,6 +91,9 @@ type MetadataCapabilities struct {
 	SupportsTimestamps bool `json:"supports_timestamps"`
 	SupportsPOSIXLocks bool `json:"supports_posix_locks"`
 	SupportsFlock      bool `json:"supports_flock"`
+	// SupportsFIFOOpen reports that a FIFO in the view can be opened. mkfifo, listing and removal work
+	// on every adapter; the macOS NFS client alone refuses open(2) on a FIFO, whatever the server says.
+	SupportsFIFOOpen bool `json:"supports_fifo_open"`
 }
 
 // AdapterFacts reports the typed capabilities and preparation properties of an adapter.

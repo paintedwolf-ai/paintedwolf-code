@@ -144,6 +144,7 @@ func New(cfg Config) *Adapter {
 			MetadataCapabilities: adapter.MetadataCapabilities{
 				SupportsSymlinks: true, SupportsHardLinks: true, SupportsXattrs: true,
 				SupportsChmod: true, SupportsTimestamps: true, SupportsPOSIXLocks: true, SupportsFlock: true,
+				SupportsFIFOOpen: true,
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,

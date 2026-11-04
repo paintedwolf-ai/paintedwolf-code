@@ -16,9 +16,16 @@ func (p *Publisher) captureAndStageManifest(
 	batch []*pendingPublish,
 	inject func(FaultStage) error,
 ) (Manifest, []string, error) {
-	changes, err := p.cfg.Core.EnumerateChanges(true)
+	enumerated, err := p.cfg.Core.EnumerateChanges(true)
 	if err != nil {
 		return Manifest{}, nil, err
+	}
+	// A repository a worker created in its view is private nodes in Core. .git is never promoted as files.
+	changes := make([]layeredfs.ChangeEntry, 0, len(enumerated))
+	for _, ce := range enumerated {
+		if !layeredfs.IsGitMetadataPath(ce.Path.Rel) {
+			changes = append(changes, ce)
+		}
 	}
 	if p.cfg.MaxCheckpointFiles > 0 && len(changes) > p.cfg.MaxCheckpointFiles {
 		return Manifest{}, nil, fmt.Errorf("%w: got %d files, limit %d", ErrOverlayFileLimitExceeded, len(changes), p.cfg.MaxCheckpointFiles)

@@ -118,6 +118,9 @@ func (c *Core) QualifyDisplay(qpath QualifiedPath) string {
 	return "@" + label + "/" + rel
 }
 
+// IsGitMetadataPath reports a path inside a repository's .git, which only private Git manages.
+func IsGitMetadataPath(rel string) bool { return isGitComponentPath(rel) }
+
 func isGitComponentPath(rel string) bool {
 	rel = cleanRelPath(rel)
 	if rel == ".git" || strings.HasPrefix(rel, ".git/") || strings.HasSuffix(rel, "/.git") {
