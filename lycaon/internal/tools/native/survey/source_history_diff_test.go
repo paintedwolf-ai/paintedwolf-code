@@ -59,9 +59,9 @@ func diffChanges(diff string) (removed, added []string) {
 		switch {
 		case strings.HasPrefix(line, "---"), strings.HasPrefix(line, "+++"):
 		case strings.HasPrefix(line, "-"):
-			removed = append(removed, line[1:])
+			removed = append(removed, strings.TrimPrefix(line, "- "))
 		case strings.HasPrefix(line, "+"):
-			added = append(added, line[1:])
+			added = append(added, strings.TrimPrefix(line, "+ "))
 		}
 	}
 	return removed, added
@@ -300,7 +300,8 @@ func TestSourceHistoryDiffFollowsAMoveInTheWindow(t *testing.T) {
 	h.record(effectSeed{path: "old.go", content: "body\n", session: "s0", op: api.SourceChangeOpCreate})
 	baseline := h.head("old.go").VersionID
 	h.beginSession(historySession)
-	h.record(effectSeed{path: "new.go", fromPath: "old.go", content: "body changed\n", op: api.SourceChangeOpRename})
+	h.record(effectSeed{path: "new.go", fromPath: "old.go", op: api.SourceChangeOpRename})
+	h.record(effectSeed{path: "new.go", content: "body changed\n"})
 
 	result := h.sessionDiff("new.go")
 	if result.BaseVersionID != baseline {

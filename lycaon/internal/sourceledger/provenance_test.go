@@ -163,17 +163,22 @@ func TestEffectsBetweenOnBranchIsStrictPerRootAndBounded(t *testing.T) {
 		return effects
 	}
 	trunk := read(sourcebranch.Trunk, 0, 0)
-	if len(trunk) != 3 || trunk[0].OperationID != "op-5" || trunk[2].OperationID != "op-1" {
+	if len(trunk) != 3 || trunk[0].Ordinal <= trunk[1].Ordinal || trunk[1].Ordinal <= trunk[2].Ordinal {
 		t.Fatalf("trunk effects = %+v, want the three trunk operations newest first", trunk)
 	}
-	if got := read("job-1", 0, 0); len(got) != 1 || got[0].OperationID != "op-2" {
+	for _, effect := range trunk {
+		if effect.Path != "trunk.txt" || effect.BranchID != sourcebranch.Trunk {
+			t.Fatalf("trunk read returned %+v", effect)
+		}
+	}
+	if got := read("job-1", 0, 0); len(got) != 1 || got[0].Path != "worker.txt" {
 		t.Fatalf("worker effects = %+v", got)
 	}
-	if got := read(worktree, 0, 0); len(got) != 1 || got[0].OperationID != "op-4" {
+	if got := read(worktree, 0, 0); len(got) != 1 || got[0].Path != "worktree.txt" {
 		t.Fatalf("worktree effects = %+v", got)
 	}
 	// The lower bound excludes, the upper bound includes.
-	if got := read(sourcebranch.Trunk, trunk[2].Ordinal, trunk[1].Ordinal); len(got) != 1 || got[0].OperationID != "op-3" {
+	if got := read(sourcebranch.Trunk, trunk[2].Ordinal, trunk[1].Ordinal); len(got) != 1 || got[0].Ordinal != trunk[1].Ordinal {
 		t.Fatalf("bounded effects = %+v, want only the middle trunk effect", got)
 	}
 	if got, err := store.History.EffectsBetweenOnBranch(ctx, "p1", nil, 0, 0, 0); err != nil || got != nil {

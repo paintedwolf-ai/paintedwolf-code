@@ -91,12 +91,16 @@ func (h *historyHarness) record(seed effectSeed) {
 	if seed.op == "" {
 		seed.op = api.SourceChangeOpWrite
 	}
-	testutil.FailErr(h.t, "record effect", h.store.Record(h.t.Context(), sourceledger.RecordInput{
+	input := sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: seed.root, Path: seed.path, FromPath: seed.fromPath},
 		ProjectID:      historyProject, BranchID: seed.branch, Op: seed.op, Origin: seed.origin,
 		SessionID: seed.session, JobID: seed.job, Turn: 1,
-		OperationID: fmt.Sprintf("op-%d", h.nextOp), After: []byte(seed.content),
-	}))
+		OperationID: fmt.Sprintf("op-%d", h.nextOp),
+	}
+	if seed.content != "" {
+		input.After = []byte(seed.content)
+	}
+	testutil.FailErr(h.t, "record effect", h.store.Record(h.t.Context(), input))
 }
 
 func (h *historyHarness) head(path string) sourceledger.BranchHead {
