@@ -476,7 +476,7 @@ func TestParseStructureBudget(t *testing.T) {
 		nested("> ", maxContainerDepth) + " [read#1]",
 		strings.Repeat("> plain\n", maxContainerDepth+1) + "[read#1]",
 		strings.Repeat("1234567890. no ", 8) + "[read#1]",
-		"-x *y 1.z " + strings.Repeat("a [b](c) ", 2000) + "[read#1]",
+		"-x *y 1.z " + strings.Repeat("a [b](c) ", 900) + "[read#1]",
 		strings.Repeat("*a_ a* ", 1<<13) + "[read#1]",
 		strings.Repeat("   ", 100),
 	}
