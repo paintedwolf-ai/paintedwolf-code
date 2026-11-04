@@ -92,6 +92,11 @@ type WorkerRuntimeSettler interface {
 	SettleBranchRuntime(ctx context.Context, jobID, root string) error
 }
 
+// CanceledWorkRetainer keeps a canceled worker's unpromoted bytes before its tree is deleted.
+type CanceledWorkRetainer interface {
+	RetainCanceledWork(ctx context.Context, jobID, root, baselinePath string) error
+}
+
 // settleCanceledRuntime runs on every cancellation path because each one finishes here. On
 // failure the job stays cancel-requested, so maintenance retries it and its data stays put.
 func (q *SQLQueue) settleCanceledRuntime(ctx context.Context, jobID string) error {
@@ -107,7 +112,13 @@ func (q *SQLQueue) settleCanceledRuntime(ctx context.Context, jobID string) erro
 			return err
 		}
 	}
-	return workspace.RefuseMountedBranch(task.WorkspaceRoot)
+	if err := workspace.RefuseMountedBranch(task.WorkspaceRoot); err != nil {
+		return err
+	}
+	if retainer, ok := ws.(CanceledWorkRetainer); ok {
+		return retainer.RetainCanceledWork(ctx, jobID, task.WorkspaceRoot, task.WorkspaceBaselinePath)
+	}
+	return nil
 }
 
 // FinishCanceled records cancellation after execution exits and its runtime settled.
