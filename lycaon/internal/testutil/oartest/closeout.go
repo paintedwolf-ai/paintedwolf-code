@@ -63,6 +63,7 @@ func InstallCloseoutPolicy(t *testing.T, manager closeoutHost) {
 	formatter := guidance.NewStaticRejectFormatter(hints)
 	pipeline := oar.NewGuardPipeline(policy.rules, policy.loader, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
+	pipeline.EnableAnchor(oar.AnchorCoordinatorMidTurnNote)
 	manager.SetWorkflowHints(hints, nil)
 	manager.SetRejectFormatter(formatter)
 	manager.SetOARPipeline(pipeline, oar.NewRenderer(formatter, nil))

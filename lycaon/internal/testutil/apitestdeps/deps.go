@@ -55,6 +55,7 @@ import (
 	repoinfotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testtool"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -338,6 +339,13 @@ func storeDatabase(store session.Store) db.Handle {
 
 func fillSessions(t *testing.T, d *Deps) {
 	t.Helper()
+	// Every coordinator reply on a report surface passes the closeout check, so a
+	// host without policy could not finish a turn.
+	defer func() {
+		if d.Sessions.ToolPolicy.Pipeline == nil {
+			oartest.InstallCloseoutPolicy(t, d.Sessions)
+		}
+	}()
 	if d.Sessions != nil {
 		return
 	}
