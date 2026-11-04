@@ -42,12 +42,12 @@ type WorkerContextLoader struct {
 	Repo          repoinfo.Provider
 }
 
-func (l *WorkerContextLoader) BuildWorkerPromptContext(childID string, sess *api.Session) (inject.WorkerLegContext, error) {
+func (l *WorkerContextLoader) BuildWorkerPromptContext(ctx context.Context, childID string, sess *api.Session) (inject.WorkerLegContext, error) {
 	out := inject.WorkerLegContext{}
 	if l == nil || sess == nil || strings.TrimSpace(sess.ParentSessionID) == "" {
 		return out, fmt.Errorf("not a worker child session")
 	}
-	delegation, leg, err := l.workerLeg(childID, sess)
+	delegation, leg, err := l.workerLeg(ctx, childID, sess)
 	if err != nil {
 		return out, err
 	}
@@ -70,7 +70,7 @@ func (l *WorkerContextLoader) BuildWorkerPromptContext(childID string, sess *api
 		out.TopologyPattern = "pipeline"
 	}
 	if l.Runs != nil && strings.TrimSpace(delegation.WorkflowRunID) != "" {
-		if phase, err := l.Runs.PhaseForRun(context.Background(), delegation.WorkflowRunID); err == nil {
+		if phase, err := l.Runs.PhaseForRun(ctx, delegation.WorkflowRunID); err == nil {
 			out.PhaseID = strings.TrimSpace(phase)
 		}
 	}
@@ -82,7 +82,7 @@ func (l *WorkerContextLoader) BuildWorkerPromptContext(childID string, sess *api
 	if l.MatcherFor != nil {
 		matcher = l.MatcherFor(sess)
 	}
-	out.LegTools = resolveLegTools(context.Background(), l.Tools, agents, sess, agentType)
+	out.LegTools = resolveLegTools(ctx, l.Tools, agents, sess, agentType)
 	if matcher != nil && agentType != "" {
 		checklist, err := matcher.MatchForAgent(agentType, out.TopologyPattern, out.PhaseID)
 		if err != nil {
@@ -90,12 +90,12 @@ func (l *WorkerContextLoader) BuildWorkerPromptContext(childID string, sess *api
 		}
 		out.Checklist = checklist
 	}
-	out, err = attachWorkerScanDigest(out, sess.WorkspacePath, delegation.WorkflowRunID, l.Scans)
+	out, err = attachWorkerScanDigest(ctx, out, sess.WorkspacePath, delegation.WorkflowRunID, l.Scans)
 	if err != nil {
 		return out, err
 	}
-	out.LayoutTopLevel = layoutTopLevelForWorker(context.Background(), l.Repo, sess.WorkspacePath)
-	if block, err := l.attachAgentsMDChain(context.Background(), sess, leg.Files); err != nil {
+	out.LayoutTopLevel = layoutTopLevelForWorker(ctx, l.Repo, sess.WorkspacePath)
+	if block, err := l.attachAgentsMDChain(ctx, sess, leg.Files); err != nil {
 		return out, err
 	} else if strings.TrimSpace(block.Content) != "" {
 		out.AgentsMDMessage = block
@@ -103,14 +103,14 @@ func (l *WorkerContextLoader) BuildWorkerPromptContext(childID string, sess *api
 	return inject.BuildWorkerPromptContext(out), nil
 }
 
-func (l *WorkerContextLoader) workerLeg(childID string, sess *api.Session) (*api.Delegation, *api.Leg, error) {
+func (l *WorkerContextLoader) workerLeg(ctx context.Context, childID string, sess *api.Session) (*api.Delegation, *api.Leg, error) {
 	if l.Store == nil {
 		return nil, nil, fmt.Errorf("delegation store not configured")
 	}
 	if l.Tasks == nil {
 		return nil, nil, fmt.Errorf("worker task lookup not configured")
 	}
-	task, ok := l.Tasks.GetLatestByChildSessionID(context.Background(), childID)
+	task, ok := l.Tasks.GetLatestByChildSessionID(ctx, childID)
 	if !ok || task == nil {
 		return nil, nil, fmt.Errorf("worker task not found for child %q", childID)
 	}
@@ -123,7 +123,7 @@ func (l *WorkerContextLoader) workerLeg(childID string, sess *api.Session) (*api
 	if task.DelegationID == "" || task.LegID == "" {
 		return nil, nil, fmt.Errorf("worker task %q has an incomplete delegation binding", task.ID)
 	}
-	delegation, err := l.Store.Get(context.Background(), task.DelegationID)
+	delegation, err := l.Store.Get(ctx, task.DelegationID)
 	if err != nil {
 		return nil, nil, err
 	}

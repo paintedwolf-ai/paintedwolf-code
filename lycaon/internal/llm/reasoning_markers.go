@@ -9,29 +9,31 @@ import (
 )
 
 // reasoningMarkerProvider separates reasoning a serving stack left in the
-// content channel from visible text, using the markers the model family's
-// thinking rule declares. It sits inside the lifecycle so every transport's
-// output is read the same way and first-output timing sees the separated
-// text.
+// content channel from visible text, for every model. It sits directly over
+// the transport, inside response retry, so a turn that spent its whole output
+// on reasoning is an empty completion the retry recovers, and the lifecycle's
+// first-output timing sees visible text only.
 type reasoningMarkerProvider struct{ modelcall.Provider }
 
-func (p *reasoningMarkerProvider) markers(req modelcall.CompletionRequest) *modelinfo.ReasoningMarkers {
+func (p *reasoningMarkerProvider) markers(req modelcall.CompletionRequest) modelinfo.ReasoningMarkers {
 	model := req.Model
 	if model == "" && len(p.Models()) > 0 {
 		model = p.Models()[0].ID
 	}
-	rule, ok := modelinfo.MatchThinkingRule(model)
-	if !ok {
-		return nil
+	return modelinfo.ReasoningMarkersFor(model)
+}
+
+// RequestBudget forwards the transport's estimate to the decorators above.
+func (p *reasoningMarkerProvider) RequestBudget(ctx context.Context, req modelcall.CompletionRequest) modelcall.RequestBudget {
+	if reporter, ok := p.Provider.(modelcall.RequestBudgetReporter); ok {
+		return reporter.RequestBudget(ctx, req)
 	}
-	return rule.ReasoningMarkers
+	return modelcall.RequestBudget{}
 }
 
 func (p *reasoningMarkerProvider) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
 	out, err := p.Provider.Complete(ctx, req)
-	if markers := p.markers(req); markers != nil {
-		separateCompletionReasoning(out, *markers)
-	}
+	separateCompletionReasoning(out, p.markers(req))
 	return out, err
 }
 
@@ -41,13 +43,10 @@ func (p *reasoningMarkerProvider) Stream(ctx context.Context, req modelcall.Comp
 		return ch, err
 	}
 	markers := p.markers(req)
-	if markers == nil {
-		return ch, nil
-	}
 	out := make(chan modelcall.StreamChunk, 64)
 	go func() {
 		defer close(out)
-		reader := newReasoningMarkerReader(*markers)
+		reader := newReasoningMarkerReader(markers)
 		for chunk := range ch {
 			mapped, keep := reader.chunk(chunk)
 			if !keep {

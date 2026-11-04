@@ -110,7 +110,7 @@ func (m *Service) injectWorkerKickOnSpawn(ctx context.Context, child *api.Sessio
 		"phase_id":   "",
 	}
 	if m.workerContext != nil {
-		if legCtx, err := m.workerContext.BuildWorkerPromptContext(child.ID, child); err == nil {
+		if legCtx, err := m.workerContext.BuildWorkerPromptContext(ctx, child.ID, child); err == nil {
 			data["agent_type"] = strings.TrimSpace(legCtx.AgentType)
 			data["leg_id"] = strings.TrimSpace(legCtx.LegID)
 			data["phase_id"] = strings.TrimSpace(legCtx.PhaseID)

@@ -56,6 +56,8 @@ func TestSourceFUSEReplyPreservesInterruptedAndUnmountedRequests(t *testing.T) {
 		{name: "ordinary", replies: 2},
 		{name: "interrupted", failure: unix.ENOENT, replies: 2},
 		{name: "unmounted", failure: unix.ENODEV, replies: 1},
+		{name: "aborted during reply", failure: unix.ECONNABORTED, replies: 1},
+		{name: "aborted during read", readErr: unix.ECONNABORTED},
 		{name: "device failure", failure: unix.EIO, want: unix.EIO, replies: 1},
 		{name: "short write", short: true, want: io.ErrShortWrite, replies: 1},
 		{name: "interrupted read", readErr: unix.EINTR, replies: 2},

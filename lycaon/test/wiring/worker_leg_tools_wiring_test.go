@@ -41,7 +41,7 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 			prof, err := h.AgentRegistry.Get(agentType)
 			testutil.FailErr(t, "agents.Get", err)
 			schema := sortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, prof.ToolProfile))
-			leg, err := builder.BuildWorkerPromptContext(child.ID, child)
+			leg, err := builder.BuildWorkerPromptContext(t.Context(), child.ID, child)
 			testutil.FailErr(t, "BuildWorkerPromptContext", err)
 			got := append([]string(nil), leg.LegTools...)
 			sort.Strings(got)
@@ -94,7 +94,7 @@ func TestImplementerLegToolsMatchImplementProfile(t *testing.T) {
 		t.Fatalf("schema %v != fixture want %v", schema, want)
 	}
 	builder := compositeWorkerWithPolicy(h.AgentRegistry, policy)
-	leg, err := builder.BuildWorkerPromptContext(child.ID, child)
+	leg, err := builder.BuildWorkerPromptContext(t.Context(), child.ID, child)
 	testutil.FailErr(t, "BuildWorkerPromptContext", err)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	renderer := prompts.NewInjectRenderer(engine)

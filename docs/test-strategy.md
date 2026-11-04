@@ -855,8 +855,14 @@ A ready pull request runs the `fast` profile; the merge queue runs the
 `check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier runs two jobs
 within its declared two-runner budget. `ready-lint` runs complete `lint:full`
 analysis while `ready` first runs the complete repository contract tree, then compiles
-the host and runs size budgets, affected short Go tests, comment checks,
+the host and runs size budgets, changed Go statement coverage, affected short Go tests, comment checks,
 test failure-message checks, documentation links, Den typecheck, Den lint, and frontend seam canaries.
+Budgets and changed Go coverage run before bulk work; a validated prior failure
+runs first, with an identified failed Go package ahead of the remaining short tests.
+Coverage executes eligible changed packages' own short tests, so admission omits
+those packages from its later identical short recipe. Test-only, generated,
+exempt, and untested packages keep their affected short selection. Unknown recipes
+keep their full selection. History changes ordering only and never proves a pass.
 The required aggregate waits for both jobs. Full lint has its own analysis setup;
 it does not repeat admission contracts. Catalog validation requires each fast
 assertion stage exactly once across the jobs.
@@ -1212,8 +1218,8 @@ retry policy.
 ##### Admission and scale execution
 
 Ready admission runs focused Go tests and frontend seam canaries after repository
-contracts. Broad changed-statement coverage and native compilation execute at the
-exact landing source. Frontend and script coverage stages supply the complete
+contracts. Changed Go coverage also runs early in admission; all changed-statement
+coverage and native compilation execute at the exact landing source. Frontend and script coverage stages supply the complete
 assertion suites, avoiding a second uncovered execution in the same qualification.
 The failed/unverified/previously-passed frontier changes order, never the complete
 successful-path inventory. Unknown source scope still selects the complete recipe.

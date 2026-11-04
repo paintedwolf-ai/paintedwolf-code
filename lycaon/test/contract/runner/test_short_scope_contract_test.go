@@ -163,7 +163,7 @@ func TestCheckFastGateMembership(t *testing.T) {
 		t.Fatal("check-fast:workspace must reject an unpinned source tree")
 	}
 	plan := verificationCatalog(t)
-	want := []string{"build", "lint:full", "budgets", "den:typecheck", "den:lint", "den:test:fast",
+	want := []string{"build", "lint:full", "budgets", "coverage:changes", "den:typecheck", "den:lint", "den:test:fast",
 		"test:short", "test:contract", "licenses:notices", "comments:check",
 		"test:fail-messages:check", "docs:links"}
 	if !slices.Equal(plan.Groups["check-fast"], want) {
@@ -199,7 +199,10 @@ func TestCheckFastGateMembership(t *testing.T) {
 			t.Fatalf("check:tests must include %s", required)
 		}
 	}
-	for _, coverage := range []string{"coverage:changes", "den:coverage:changes", "scripts:coverage:changes"} {
+	if !slices.Contains(plan.Groups["check-fast"], "coverage:changes") || !slices.Contains(plan.Groups["check"], "coverage:changes") {
+		t.Error("coverage:changes must run in both check-fast readiness and the full landing gate")
+	}
+	for _, coverage := range []string{"den:coverage:changes", "scripts:coverage:changes"} {
 		if slices.Contains(plan.Groups["check-fast"], coverage) || !slices.Contains(plan.Groups["check"], coverage) {
 			t.Errorf("%s must qualify the full landing gate rather than readiness", coverage)
 		}

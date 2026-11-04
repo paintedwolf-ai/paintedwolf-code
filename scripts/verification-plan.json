@@ -7,6 +7,7 @@
       "build",
       "lint:full",
       "budgets",
+      "coverage:changes",
       "den:typecheck",
       "den:lint",
       "den:test:fast",
@@ -998,6 +999,7 @@
       "targets": [
         "build",
         "budgets",
+        "coverage:changes",
         "den:typecheck",
         "den:lint",
         "test:short",
@@ -1023,6 +1025,10 @@
           "--",
           "supervisor"
         ]
+      ],
+      "early_targets": [
+        "budgets",
+        "coverage:changes"
       ]
     },
     "ready-lint": {
