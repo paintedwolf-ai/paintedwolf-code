@@ -32,7 +32,9 @@ const (
 // available and the session's first turn boundary already recorded.
 type historyHarness struct {
 	t      *testing.T
+	db     *db.Store
 	store  *sourceledger.Store
+	blobs  string
 	dir    string
 	tool   *SourceHistoryTool
 	tctx   tools.ToolContext
@@ -51,12 +53,13 @@ func newHistoryHarness(t *testing.T) *historyHarness {
 		VALUES ('r1', 'p1', ?, 'root', 1, ?, 'attached'), ('r2', 'p1', ?, 'docs', 0, ?, 'attached')
 	`, dir, now, second, now)
 	testutil.FailErr(t, "insert roots", err)
-	store := sourceledger.New(sqlDB, t.TempDir())
+	blobs := t.TempDir()
+	store := sourceledger.New(sqlDB, blobs)
 	tctx := nativefixture.Context(dir)
 	tctx.Identity.ProjectID, tctx.Identity.SessionID = historyProject, historySession
 	tctx.Source.Roots = append(tctx.Source.Roots, projectroot.RootRef{ID: "r2", Label: "docs", Path: second})
 	tctx.Source.History = tools.SourceHistory{Files: store.History, Comparison: store.Comparisons, Git: store.Git, Authorship: store.Walk}
-	return &historyHarness{t: t, store: store, dir: dir, tool: &SourceHistoryTool{Boundary: nativefixture.Boundary(t)}, tctx: tctx}
+	return &historyHarness{t: t, db: sqlDB, store: store, blobs: blobs, dir: dir, tool: &SourceHistoryTool{Boundary: nativefixture.Boundary(t)}, tctx: tctx}
 }
 
 func (h *historyHarness) beginSession(sessionID string) {
@@ -69,6 +72,7 @@ func (h *historyHarness) beginSession(sessionID string) {
 
 type effectSeed struct {
 	root, path, fromPath string
+	kind                 string
 	branch               sourcebranch.ID
 	session, job         string
 	origin               api.SourceChangeOrigin
@@ -92,7 +96,7 @@ func (h *historyHarness) record(seed effectSeed) {
 		seed.op = api.SourceChangeOpWrite
 	}
 	input := sourceledger.RecordInput{
-		RecordLocation: sourceledger.RecordLocation{RootID: seed.root, Path: seed.path, FromPath: seed.fromPath},
+		RecordLocation: sourceledger.RecordLocation{RootID: seed.root, Path: seed.path, FromPath: seed.fromPath, EntryKind: seed.kind},
 		ProjectID:      historyProject, BranchID: seed.branch, Op: seed.op, Origin: seed.origin,
 		SessionID: seed.session, JobID: seed.job, Turn: 1,
 		OperationID: fmt.Sprintf("op-%d", h.nextOp),
@@ -101,6 +105,16 @@ func (h *historyHarness) record(seed effectSeed) {
 		input.After = []byte(seed.content)
 	}
 	testutil.FailErr(h.t, "record effect", h.store.Record(h.t.Context(), input))
+}
+
+func (h *historyHarness) remove(path string, branch sourcebranch.ID) {
+	h.t.Helper()
+	h.nextOp++
+	testutil.FailErr(h.t, "record deletion", h.store.Record(h.t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: "r1", Path: path},
+		ProjectID:      historyProject, BranchID: branch, Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent,
+		SessionID: historySession, Turn: 1, OperationID: fmt.Sprintf("op-%d", h.nextOp),
+	}))
 }
 
 func (h *historyHarness) head(path string) sourceledger.BranchHead {
@@ -222,7 +236,6 @@ func TestSourceHistoryOverviewACOV03OverflowIsAFloor(t *testing.T) {
 func TestSourceHistoryOverviewACOV04WorkerSeesItsBranchOnly(t *testing.T) {
 	h := newHistoryHarness(t)
 	h.beginSession(historySession)
-	h.beginSession("child")
 	h.record(effectSeed{path: "trunk.go", content: "trunk\n"})
 	h.record(effectSeed{path: "mine.go", content: "worker\n", branch: "job-1", session: "child", job: "job-1"})
 	h.record(effectSeed{path: "other.go", content: "peer\n", branch: "job-2", session: "peer", job: "job-2"})
@@ -242,6 +255,47 @@ func TestSourceHistoryOverviewACOV04WorkerSeesItsBranchOnly(t *testing.T) {
 	if len(coordinator.Files) != 1 || coordinator.Files[0].Path != "trunk.go" {
 		t.Fatalf("trunk rows = %+v, want trunk only", coordinator.Files)
 	}
+}
+
+func TestSourceHistoryOverviewACOV16EmptyListSaysWhatItCannotKnow(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.record(effectSeed{path: "earlier.go", content: "x\n", session: "s0"})
+	h.beginSession(historySession)
+	result := runOverviewCall(t, h.tool, h.tctx)
+	if !result.Recorded || len(result.Files) != 0 || result.Note == "" {
+		t.Fatalf("empty overview = %+v, want recorded with a note", result)
+	}
+	h.record(effectSeed{path: "edited.go", content: "y\n"})
+	if listed := runOverviewCall(t, h.tool, h.tctx); len(listed.Files) != 1 || listed.Note != "" {
+		t.Fatalf("listed overview = %+v, want no note", listed)
+	}
+}
+
+func TestSourceHistoryOverviewACOV17RowFollowsADirectoryMove(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.record(effectSeed{path: "a", kind: sourceledger.EntryKindDirectory, session: "s0", op: api.SourceChangeOpCreate})
+	h.record(effectSeed{path: "a/x.go", content: "before\n", session: "s0", op: api.SourceChangeOpCreate})
+	baseline := h.head("a/x.go").VersionID
+	h.record(effectSeed{path: "a/gone.go", content: "soon\n", session: "s0", op: api.SourceChangeOpCreate})
+	h.beginSession(historySession)
+	h.record(effectSeed{path: "a/x.go", content: "after\n"})
+	h.record(effectSeed{path: "a/gone.go", content: "edited\n"})
+	h.remove("a/gone.go", sourcebranch.Trunk)
+	h.record(effectSeed{path: "b", fromPath: "a", kind: sourceledger.EntryKindDirectory, op: api.SourceChangeOpRename})
+
+	paths := map[string]bool{}
+	for _, file := range runOverviewCall(t, h.tool, h.tctx).Files {
+		paths[file.Path] = true
+	}
+	if !paths["b/x.go"] || paths["a/x.go"] || !paths["a/gone.go"] {
+		t.Fatalf("rows = %v, want the moved file's current path and the deleted file's last path", paths)
+	}
+	testutil.FailErr(t, "create moved directory", os.Mkdir(filepath.Join(h.dir, "b"), 0o755))
+	result := h.sessionDiff("b/x.go")
+	if result.BaseVersionID != baseline {
+		t.Fatalf("diff at the row's path = %+v, want base %s", result, baseline)
+	}
+	expectSingleChange(t, result.Diff, "before", "after")
 }
 
 func TestSourceHistoryOverviewACOV05SecondaryRootIsQualified(t *testing.T) {
