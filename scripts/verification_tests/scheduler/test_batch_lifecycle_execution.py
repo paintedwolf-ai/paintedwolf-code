@@ -401,6 +401,8 @@ print('fixture '+name, flush=True)'''))
     def test_a_complete_digest_reports_every_failed_package_in_one_receipt(self):
         self.catalog["go"]["test:digest"]["complete_failures"] = True
         self.save_catalog()
+        (self.repo / "lycaon" / "also" / "bad").mkdir(parents=True)
+        (self.repo / "lycaon" / "also" / "bad" / "fixture_test.go").write_text("package fixture\n")
         self.hold.touch()
         run = self.start("test:digest", "--", "./bad", "./also/bad", "./good", env={**self.env, "FIXTURE_EARLY": "1"})
         self.queued(1)

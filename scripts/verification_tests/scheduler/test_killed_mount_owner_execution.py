@@ -197,8 +197,8 @@ class StrandedConnectionFactTests(unittest.TestCase):
     def test_a_thread_without_a_pending_kill_is_not_dying(self):
         self.assertFalse(run_lease.thread_group_dying(os.getpid()))
 
-    def test_a_process_with_no_record_is_gone(self):
-        self.assertFalse(run_lease.thread_group_dying(2 ** 22 + 1))
+    def test_a_process_with_no_record_has_no_claim(self):
+        self.assertTrue(run_lease.thread_group_dying(2 ** 22 + 1))
 
     def test_collection_failure_is_reported_not_raised(self):
         with mock.patch.object(run_lease, "prune", side_effect=OSError("unreadable")):
