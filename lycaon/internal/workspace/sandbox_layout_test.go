@@ -142,7 +142,6 @@ func TestCreateWorkerWorkspaceFromSourcesMountedClaimZeroLowerWalksAndFormatV2Me
 	binding, _, err := mgr.CreateWorkerWorkspaceSelected(
 		t.Context(),
 		roots,
-		roots,
 		adapter.WorkspaceSelection{RootIDs: []string{"p", "s"}},
 		[]string{"pkg/code.go"},
 		"p",
