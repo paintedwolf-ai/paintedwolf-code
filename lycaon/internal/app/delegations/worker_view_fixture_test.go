@@ -70,6 +70,7 @@ type engineFixture struct {
 	t         *testing.T
 	database  *db.Store
 	stateRoot string
+	dataRoot  string
 	project   string
 	script    *connectionScript
 	writeHook func(dir, name string, raw []byte) error
@@ -87,6 +88,7 @@ func newEngineFixture(t *testing.T) *engineFixture {
 	f := &engineFixture{
 		t: t, database: database, project: project,
 		stateRoot: testbaseline.DataDir(t, database),
+		dataRoot:  testbaseline.DataDir(t, database),
 		script:    &connectionScript{disposition: adapter.ConnectionAbsent},
 	}
 	f.boot()
@@ -112,7 +114,7 @@ func (f *engineFixture) boot() *Runtime {
 	engine.Recovery = coordinator
 	engine.Workspace = workspace.NewManager(engine.BranchRoot, engine.SeedRoot).WithRecovery(coordinator)
 	engine.Queue.SetWorkerWorkspaceManager(engine.Workspace)
-	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.stateRoot, "source-content")).Baselines)
+	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content")).Baselines)
 	f.engine = engine
 	return engine
 }

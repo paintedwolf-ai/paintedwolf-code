@@ -251,6 +251,7 @@ func TestCancelWithNoUsableBaselineRetainsTheWholeTreeWithUnknownScope(t *testin
 			testutil.FailErr(t, "remove baseline", os.Remove(path))
 		},
 		"unreadable": func(t *testing.T, path string) {
+			testutil.FailErr(t, "remove baseline", os.Remove(path))
 			testutil.FailErr(t, "corrupt baseline", os.WriteFile(path, []byte("not a manifest"), 0o600))
 		},
 	} {
