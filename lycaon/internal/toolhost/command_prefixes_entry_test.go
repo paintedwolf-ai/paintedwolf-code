@@ -317,8 +317,12 @@ func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	if got.Status != 0 || len(lines) != 2 || lines[0] != lines[1] {
 		t.Fatalf("ulimit -n differs from the child's own: %+v", got)
 	}
-	// Below the inherited limit, which on some hosts is already the customary 256.
-	inherited, err := strconv.Atoi(lines[0])
+	// A call with no ulimit of its own starts children at the inherited limit, which
+	// can differ from what ulimit reports and is already 256 on some hosts.
+	raw, err = f.Call(t, t.Context(), probe)
+	testutil.FailErr(t, "read the inherited limit", err)
+	baseline := decodeProgramOutcome(t, raw).Stdout
+	inherited, err := strconv.Atoi(strings.TrimSpace(baseline))
 	testutil.FailErr(t, "parse the inherited limit", err)
 	lowered := strconv.Itoa(inherited / 2)
 	raw, err = f.Call(t, t.Context(), "ulimit -n "+lowered+"; "+probe)
@@ -328,7 +332,7 @@ func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	}
 	raw, err = f.Call(t, t.Context(), probe)
 	testutil.FailErr(t, "next call", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout != lines[0]+"\n" {
+	if got := decodeProgramOutcome(t, raw); got.Stdout != baseline {
 		t.Fatalf("the limit persisted into the next call: %+v", got)
 	}
 }
