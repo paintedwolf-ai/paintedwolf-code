@@ -2,6 +2,8 @@ package wiring
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -237,11 +239,19 @@ func (h *Harness) SeedProgress(t *testing.T, ctx context.Context, sessionID stri
 	if h == nil || h.ToolRegistry == nil {
 		t.Fatal("harness tool registry missing")
 	}
-	if _, err := h.ToolRegistry.Run(ctx, "update_progress", map[string]any{
-		"content": "## Progress\n- [ ] wiring test plan\n",
-	}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: sessionID},
-	}); err != nil {
+	args := map[string]any{"content": "## Progress\n- [ ] wiring test plan\n"}
+	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID}}
+	_, err := h.ToolRegistry.Run(ctx, "update_progress", args, tc)
+	if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "PROGRESS_REVISION_REQUIRED" {
+		// Workflow setup may already hold a checklist; replace it at its revision.
+		current, ok := reject.Data["snapshot"].(progress.Snapshot)
+		if !ok {
+			t.Fatalf("SeedProgress: rejection carries no snapshot: %v", err)
+		}
+		args["expected_revision"], args["item_ids"] = current.Revision, []any{nil}
+		_, err = h.ToolRegistry.Run(ctx, "update_progress", args, tc)
+	}
+	if err != nil {
 		t.Fatalf("SeedProgress: %v", err)
 	}
 }

@@ -22,7 +22,7 @@ func (d *ProgramDispatcher) checkPreparedPolicy(ctx context.Context, tc tools.To
 			return err
 		}
 		mutation := slices.Contains(effects.Classes(), toolcontract.CommandMutation) || slices.Contains(effects.Classes(), toolcontract.CommandExternalExec)
-		rootID := cwd.Root.ID
+		rootID := d.reachedRootID(cwd)
 		if cwd.External {
 			rootID = ""
 		}
@@ -39,12 +39,24 @@ func (d *ProgramDispatcher) bindReachedDirectory(request commandprogram.Operatio
 	cwd := d.paths.Cwd()
 	request.Invocation.Scope.Directory = cwd.Abs
 	if request.Invocation.Scope.Kind == toolcontract.ProjectOperationScope && !cwd.External && cwd.Root.ID != "" {
-		branch, err := d.run.tc.SourceBranch(cwd.Root.ID)
+		rootID := d.reachedRootID(cwd)
+		branch, err := d.run.tc.SourceBranch(rootID)
 		if err != nil {
 			return request, err
 		}
-		request.Invocation.Scope.RootID = cwd.Root.ID
+		request.Invocation.Scope.RootID = rootID
 		request.Invocation.Scope.BranchID = branch.String()
 	}
 	return request, nil
+}
+
+// reachedRootID names the project root a directory belongs to. A worker branch
+// resolves under a synthetic root, so it maps back to the root it mirrors.
+func (d *ProgramDispatcher) reachedRootID(cwd projectpaths.Resolved) string {
+	if d.run.tc.Source.WorkerBranchRoot != "" {
+		if root, _, ok := d.run.tc.SourceLocation(cwd.Abs); ok && root.ID != "" {
+			return root.ID
+		}
+	}
+	return cwd.Root.ID
 }
