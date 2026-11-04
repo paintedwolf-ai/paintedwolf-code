@@ -42,7 +42,7 @@ func linesCoverRange(lines map[int]string, start, end int) bool {
 // range. The host compared the text itself, so its reader did not have to count.
 func ExcerptVerifiesRange(rec Record, path, excerpt string, start, end int) bool {
 	fact := rec.SourceDelivery
-	if fact == nil || !ExcerptMeaningful(excerpt) || !RangeObserved(rec, path, start, end) {
+	if fact == nil || excerpt == "" || !ExcerptMeaningful(excerpt) || !RangeObserved(rec, path, start, end) {
 		return false
 	}
 	for line := max(start, fact.StartLine); line <= min(end, fact.EndLine); line++ {
