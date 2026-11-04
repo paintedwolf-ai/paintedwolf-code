@@ -26,7 +26,7 @@ tools:
   handoff_release: true
   handoff_release_all: true
   jq_edit: true
-  source_history: true
+  source_history: sticky
   process_list: true
   process_signal: true
   command: sticky

@@ -188,7 +188,7 @@ func TestWorkerProfilesKeepCoreEagerAndOptionalCapabilitiesReachable(t *testing.
 		effects                 []toolcontract.CommandEffectClass
 	}{
 		"implement": {
-			eager:    []string{"edit", "replace_lines", "code_rewrite", "summarize", "survey_repo", "command", "command_output", "command_stop", "verify", "complete_leg", "request_tools", "skills_read", "terminal_open", "terminal_close"},
+			eager:    []string{"edit", "replace_lines", "code_rewrite", "summarize", "survey_repo", "command", "command_output", "command_stop", "verify", "complete_leg", "request_tools", "skills_read", "terminal_open", "terminal_close", "source_history"},
 			deferred: []string{"jq_edit", "page_open", "page_act", "page_close", "capture_page", "scan_pack", "secret_generate", "secret_list", "secret_revoke", "handoff_reserve"},
 			denied:   []string{"delegate_start", "state_set", "write", "read", "grep", "find", "list_dir", "jq", "http_request"},
 			effects:  []toolcontract.CommandEffectClass{toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec, toolcontract.CommandNetworkEgress},
