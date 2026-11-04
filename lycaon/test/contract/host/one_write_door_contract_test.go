@@ -32,7 +32,7 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/project/promotion_engine.go":        "reservation-based promotion: renames are the transaction, not a write",
 	"lycaon/internal/workspace/seed.go":                  "directory promotion of a fully materialized seed tree",
 	"lycaon/internal/layeredfs/adapter/eagercopy_git.go": "builds a private Git directory in staging and promotes it whole",
-	"lycaon/internal/layeredfs/recovery/inventory.go":    "directory promotion of a completely salvaged quarantine tree",
+	"lycaon/internal/layeredfs/recovery/salvage.go":      "directory promotion of a completely salvaged quarantine tree",
 
 	// An external writer creates this staging file.
 	"lycaon/internal/db/store_schema.go": "SQLite VACUUM INTO writes the staged snapshot; the door uses its staging file",

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -54,8 +55,13 @@ func TestProvenDeadServerWedgedOnItsOwnMountAbortsOnlyItsConnection(t *testing.T
 		t.Fatalf("engine did not report its mount: %v", err)
 	}
 	go func() { waited <- engine.Wait() }()
+	var connection string
 	t.Cleanup(func() {
 		_ = engine.Process.Kill()
+		// A failed test still ends its own wedged connection, or the zombie outlives the run.
+		if connection != "" {
+			_ = os.WriteFile(filepath.Join("/sys/fs/fuse/connections", connection, "abort"), []byte("1"), 0o200)
+		}
 		_ = exec.Command("fusermount3", "-u", "-z", "--", mountPath).Run()
 	})
 
@@ -63,13 +69,15 @@ func TestProvenDeadServerWedgedOnItsOwnMountAbortsOnlyItsConnection(t *testing.T
 	if err != nil || len(recorded) != 1 || recorded[0].DevMajorMinor == "" {
 		t.Fatalf("recorded connections: %+v err=%v", recorded, err)
 	}
+	_, connection, _ = strings.Cut(recorded[0].DevMajorMinor, ":")
 	waitFor(t, "two parked requests", func() bool { return waitingRequests(recorded[0].DevMajorMinor) >= 2 })
 
 	adp := fuselinux.New(fuselinux.Config{})
 	testutil.FailErr(t, "kill engine", engine.Process.Kill())
-	waitFor(t, "zombie leader", func() bool { return processState(engine.Process.Pid) == "Z" })
-	if !recorded[0].Server.Ended() && !fuselinux.ThreadGroupDyingForTest(filepath.Join("/proc", strconv.Itoa(engine.Process.Pid))) {
-		t.Fatal("wedged zombie was not proven dead")
+	procDir := filepath.Join("/proc", strconv.Itoa(engine.Process.Pid))
+	waitFor(t, "the killed engine to be dying", func() bool { return fuselinux.ThreadGroupDyingForTest(procDir) })
+	if mounted, err := adapter.MountBoundaryPresent(mountPath); err != nil || !mounted {
+		t.Fatalf("a wedged mount must read as present without hanging: mounted=%t err=%v", mounted, err)
 	}
 	settled, err := adp.SettleRecordedConnection(t.Context(), recorded[0])
 	if err != nil || settled.Disposition != adapter.ConnectionDetached || !settled.ConnectionAborted {
@@ -94,10 +102,14 @@ func TestProvenDeadServerWedgedOnItsOwnMountAbortsOnlyItsConnection(t *testing.T
 // uninterruptibly, behind it.
 func runWedgedEngine(t *testing.T) {
 	tmp := os.Getenv(wedgedEngineHelperEnv)
-	hold := make(chan struct{})
+	hold, parked := make(chan struct{}), make(chan struct{})
+	var parkOnce sync.Once
 	adp := fuselinux.New(fuselinux.Config{
 		MaxConcurrentRequests: 1,
-		OnMutationHook:        func(uint32, string) { <-hold },
+		OnMutationHook: func(uint32, string) {
+			parkOnce.Do(func() { close(parked) })
+			<-hold
+		},
 	})
 	view, err := adp.Prepare(context.Background(), adapter.PrepareRequest{
 		ViewID: "view-wedged", BackingDir: filepath.Join(tmp, "backing"), RuntimeDir: filepath.Join(tmp, "runtime"),
@@ -108,6 +120,8 @@ func runWedgedEngine(t *testing.T) {
 	testutil.FailErr(t, "open", err)
 	fmt.Println(view.PrimaryWorkPath)
 	go func() { _ = os.WriteFile(filepath.Join(view.PrimaryWorkPath, "other"), []byte("x"), 0o644) }()
+	// The write must hold the only worker first, or the fsync is simply answered.
+	<-parked
 	go func() { _ = file.Sync() }()
 	// A test that dies first must not strand a wedged process: unblocking lets this one exit.
 	_, _ = io.Copy(io.Discard, os.Stdin)
@@ -123,18 +137,6 @@ func waitingRequests(dev string) int {
 	}
 	n, _ := strconv.Atoi(strings.TrimSpace(string(raw)))
 	return n
-}
-
-func processState(pid int) string {
-	raw, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
-	if err != nil {
-		return ""
-	}
-	fields := strings.Fields(string(raw)[strings.LastIndexByte(string(raw), ')')+1:])
-	if len(fields) == 0 {
-		return ""
-	}
-	return fields[0]
 }
 
 func waitFor(t *testing.T, what string, done func() bool) {
@@ -157,10 +159,12 @@ func TestThreadGroupDyingRequiresEveryThreadUnderSIGKILL(t *testing.T) {
 		tasks  map[string][2]string
 		want   bool
 	}{
-		{"running leader", "R", map[string][2]string{"1": {stat("R"), status("0000000000000100")}}, false},
-		{"zombie, stuck thread under SIGKILL", "Z", map[string][2]string{"1": {stat("Z"), status("0")}, "2": {stat("D"), status("0000000000000100")}}, true},
+		{"running, nothing pending", "R", map[string][2]string{"1": {stat("R"), status("0")}}, false},
+		{"zombie leader, stuck thread under SIGKILL", "Z", map[string][2]string{"1": {stat("Z"), status("0")}, "2": {stat("D"), status("0000000000000100")}}, true},
+		{"stuck leader under SIGKILL", "D", map[string][2]string{"1": {stat("D"), status("0000000000000100")}, "2": {stat("D"), status("0000000000000100")}}, true},
 		{"leader exited, another thread still running", "Z", map[string][2]string{"1": {stat("Z"), status("0")}, "2": {stat("S"), status("0")}}, false},
 		{"unreadable pending mask", "Z", map[string][2]string{"1": {stat("Z"), status("0")}, "2": {stat("D"), ""}}, false},
+		{"no threads readable", "Z", nil, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
