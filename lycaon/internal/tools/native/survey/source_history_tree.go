@@ -20,6 +20,7 @@ const (
 	overviewTreeUnknownNote = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
 	treeDiffNoTextNote      = "this file changed, but its baseline or live side has no text to compare"
 	treeDiffTouchedNote     = "this file's timestamp changed; its text did not"
+	treeDiffMovedNote       = "this file moved and its text did not change"
 	treeDiffAbsentNote      = "neither your tree nor its baseline holds this file, so it has no change to show; source_history(path) has its record"
 	treeDiffPastRecordNote  = "this file changed after its last recorded version, so the live side names no version"
 )
@@ -61,8 +62,12 @@ func (t *SourceHistoryTool) addTreeChanges(
 			recorded[projectroot.DisplayPath(roots, effect.FromRootID, effect.FromPath)] = true
 		}
 	}
+	covered, err := coveredByMoves(compare, ledger, sourceTreeOf(tctx), recordedMoves(roots, effects), changes, recorded)
+	if err != nil {
+		return false
+	}
 	for _, change := range changes {
-		if recorded[change.Path] {
+		if recorded[change.Path] || covered[change.Path] {
 			continue
 		}
 		if len(resp.Files) >= overviewEffectCap {
@@ -190,7 +195,29 @@ func (t *SourceHistoryTool) workerSessionDiff(
 	if compared.Kind == "" {
 		return ledgerAnswer("")
 	}
-	out := sourceHistoryResponse{Mode: "diff", Path: display, Recorded: recorded.hasEffect, Unrecorded: !recorded.hasEffect, Since: &sourceHistorySince{}}
+	branch, err := tctx.SourceBranch(rootID)
+	if err != nil {
+		return "", fmt.Errorf("source history branch: %w", err)
+	}
+	here := ledgerLocation{rootID: rootID, rel: rel}
+	var beforeAt string
+	movedHere, movedAway := false, false
+	switch compared.Kind {
+	case workspacebaseline.ChangeCreated:
+		beforeAt, movedHere, err = movedBase(compare, tctx, ledger, branch, here, recorded, &compared, func(path string) (workspacebaseline.PathComparison, error) {
+			return awaitTree(compare, func(ctx context.Context) (workspacebaseline.PathComparison, error) {
+				return ledger.Tree.TreePathChange(ctx, sourceTreeOf(tctx), path)
+			})
+		})
+	case workspacebaseline.ChangeDeleted:
+		movedAway, err = recordedMoveAway(compare, tctx, ledger.Files, branch, here)
+	case workspacebaseline.ChangeModified:
+	}
+	if err != nil {
+		return ledgerAnswer(overviewTreeUnknownNote)
+	}
+	holdsRecord := recorded.hasEffect || movedHere || movedAway
+	out := sourceHistoryResponse{Mode: "diff", Path: display, Recorded: holdsRecord, Unrecorded: !holdsRecord, Since: &sourceHistorySince{}}
 	if compared.Kind == workspacebaseline.ChangeDeleted {
 		out.State = "absent"
 	}
@@ -213,25 +240,41 @@ func (t *SourceHistoryTool) workerSessionDiff(
 		Before: sourceledger.ComparisonSide{VersionID: out.BaseVersionID, Content: compared.Before},
 		After:  sourceledger.ComparisonSide{VersionID: out.VersionID, Content: compared.After},
 	},
-		treeDiffLabel(display, treeSideName("session baseline", out.BaseVersionID), compared.Kind == workspacebaseline.ChangeCreated),
+		treeDiffLabel(display, treeSideName("session baseline", out.BaseVersionID), compared.Kind == workspacebaseline.ChangeCreated && beforeAt == ""),
 		treeDiffLabel(display, treeSideName("live", out.VersionID), compared.Kind == workspacebaseline.ChangeDeleted),
 	)
 	out.Diff = diff
 	// Text from a credential file reaches no one until its exposure is recorded.
 	if diff != "" {
-		for _, text := range []string{compared.Before, compared.After} {
-			if err := tctx.ObserveCredentialDelivery(ctx, compared.Abs, display, text); err != nil {
-				return "", fmt.Errorf("record credential file read: %w", err)
-			}
+		if err := deliverTreeSides(ctx, tctx, compared, beforeAt, display); err != nil {
+			return "", err
 		}
 	}
 	switch {
 	case tooLarge != "":
 		out.Note = joinNotes(out.Note, tooLarge)
+	case diff == "" && beforeAt != "":
+		out.Note = treeDiffMovedNote
 	case diff == "":
 		out.Note = treeDiffTouchedNote
 	}
 	return marshalSourceHistory(display, out)
+}
+
+// deliverTreeSides records each side where its text came from: a moved file's base
+// may have held its text under a credential name.
+func deliverTreeSides(ctx context.Context, tctx tools.ToolContext, compared workspacebaseline.PathComparison, beforeAt, display string) error {
+	beforeAbs, beforeDisplay := compared.Abs, display
+	if beforeAt != "" {
+		beforeAbs, beforeDisplay = beforeAt, beforeAt
+	}
+	if err := tctx.ObserveCredentialDelivery(ctx, beforeAbs, beforeDisplay, compared.Before); err != nil {
+		return fmt.Errorf("record credential file read: %w", err)
+	}
+	if err := tctx.ObserveCredentialDelivery(ctx, compared.Abs, display, compared.After); err != nil {
+		return fmt.Errorf("record credential file read: %w", err)
+	}
+	return nil
 }
 
 func sideHolds(side sourceledger.ComparisonSide, text string) bool {

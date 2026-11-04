@@ -122,6 +122,35 @@ func TestComparePathReadsBothSides(t *testing.T) {
 	}
 }
 
+func TestMoveUnchangedComparesBaselineContentWithTheLiveFile(t *testing.T) {
+	large := bytes.Repeat([]byte("L"), workspacebaseline.MaxContentBytes+1)
+	branch, reader := sealedBranch(t, map[string][]byte{"a/same.go": []byte("same\n"), "a/edit.go": []byte("edit\n"), "a/big.bin": large})
+	testutil.FailErr(t, "move directory", os.Rename(filepath.Join(branch, "a"), filepath.Join(branch, "b")))
+	rewrite(t, filepath.Join(branch, "b", "edit.go"), "abcd\n")
+	writeFile(t, filepath.Join(branch, "b", "new.go"), []byte("new\n"), 0o644)
+
+	for _, c := range []struct {
+		from, to string
+		want     bool
+	}{
+		{"a/same.go", "b/same.go", true},
+		{"a/edit.go", "b/edit.go", false},
+		{"a/big.bin", "b/big.bin", false},
+		{"a/never.go", "b/new.go", false},
+		{"a/same.go", "b/gone.go", false},
+		{"a/same.go", "b/new.go", false},
+	} {
+		got, err := reader.MoveUnchanged(t.Context(), nil, branch, workspacebaseline.PathMove{From: c.from, To: c.to})
+		testutil.FailErr(t, "move unchanged", err)
+		if got != c.want {
+			t.Fatalf("%s to %s = %v, want %v", c.from, c.to, got, c.want)
+		}
+	}
+	if _, err := reader.MoveUnchanged(t.Context(), nil, branch, workspacebaseline.PathMove{From: "a/same.go", To: "../out"}); err == nil {
+		t.Fatal("a path that climbs out of the branch was compared")
+	}
+}
+
 func TestComparePathRefusesWhatLeavesTheBranch(t *testing.T) {
 	branch, reader := sealedBranch(t, map[string][]byte{"keep.txt": []byte("keep\n")})
 	outside := t.TempDir()

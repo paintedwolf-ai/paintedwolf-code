@@ -153,7 +153,10 @@ func (s *History) OldestPathEffectAfterOnBranch(
 		// A move into the location says nothing about what it held before.
 		before = ""
 	}
-	return FileEffectBounds{BeforeVersionID: before, AfterVersionID: row.AfterVersionID, Ordinal: row.Ordinal}, true, nil
+	return FileEffectBounds{
+		BeforeVersionID: before, AfterVersionID: row.AfterVersionID, Ordinal: row.Ordinal,
+		FromRootID: row.FromRootID, FromPath: row.FromPath,
+	}, true, nil
 }
 
 // FileEffectBounds is the version movement of one effect. BeforeVersionID is
@@ -161,6 +164,8 @@ func (s *History) OldestPathEffectAfterOnBranch(
 type FileEffectBounds struct {
 	BeforeVersionID, AfterVersionID string
 	Ordinal                         int64
+	// FromRootID and FromPath name a move's source. Only a lookup by path sets them.
+	FromRootID, FromPath string
 }
 
 // FileEffectsResult is one newest-first page of a file's recorded effects.

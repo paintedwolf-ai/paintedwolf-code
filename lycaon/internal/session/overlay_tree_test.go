@@ -45,6 +45,31 @@ func TestOverlayTreeReadsThePathsPromotionConsiders(t *testing.T) {
 	}
 }
 
+func TestOverlayTreeNamesMovesWithUnchangedContent(t *testing.T) {
+	data := t.TempDir()
+	branch := filepath.Join(data, "branch")
+	testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Join(branch, "a"), 0o755))
+	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(branch, "a", "x.go"), []byte("x\n"), 0o644))
+	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(branch, "a", "y.go"), []byte("y\n"), 0o644))
+	blobs := sourceblob.New(filepath.Join(data, "source-content"))
+	store := workspacebaseline.New(nil, blobs, filepath.Join(data, "manifests"))
+	manifest, err := store.Capture(context.Background(), "job", workspacebaseline.Branch(nil, branch))
+	testutil.FailErr(t, "capture", err)
+	testutil.FailErr(t, "move", os.Rename(filepath.Join(branch, "a"), filepath.Join(branch, "b")))
+	testutil.FailErr(t, "edit", os.WriteFile(filepath.Join(branch, "b", "y.go"), []byte("z\n"), 0o644))
+	same := workspacebaseline.PathMove{From: "a/x.go", To: "b/x.go"}
+	edited := workspacebaseline.PathMove{From: "a/y.go", To: "b/y.go"}
+	tree := tools.SourceTree{BaselinePath: manifest, BranchRoot: branch, Roots: []projectroot.RootRef{{ID: "root", Path: "/project", IsPrimary: true}}}
+	unchanged, err := OverlayTree{}.TreeMovesUnchanged(t.Context(), tree, []workspacebaseline.PathMove{same, edited})
+	testutil.FailErr(t, "moves", err)
+	if len(unchanged) != 1 || !unchanged[same] {
+		t.Fatalf("unchanged = %+v, want only the file that kept its bytes", unchanged)
+	}
+	if _, err := (OverlayTree{}).TreeMovesUnchanged(t.Context(), tools.SourceTree{BranchRoot: branch}, []workspacebaseline.PathMove{same}); err == nil {
+		t.Fatal("moves with no baseline succeeded")
+	}
+}
+
 func TestOverlayTreeReportsAMissingBranch(t *testing.T) {
 	data := t.TempDir()
 	branch := filepath.Join(data, "branch")

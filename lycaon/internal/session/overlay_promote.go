@@ -82,6 +82,26 @@ func (OverlayTree) TreePathChange(ctx context.Context, tree tools.SourceTree, pa
 	return baseline.ComparePath(ctx, tree.Roots, tree.BranchRoot, path)
 }
 
+// TreeMovesUnchanged compares content hashes, so one baseline stays open for all of them.
+func (OverlayTree) TreeMovesUnchanged(ctx context.Context, tree tools.SourceTree, moves []workspacebaseline.PathMove) (map[workspacebaseline.PathMove]bool, error) {
+	baseline, err := workspacebaseline.Open(ctx, tree.BaselinePath, workspacebaseline.ContentStore(tree.BaselinePath))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = baseline.Close() }()
+	unchanged := make(map[workspacebaseline.PathMove]bool, len(moves))
+	for _, move := range moves {
+		same, err := baseline.MoveUnchanged(ctx, tree.Roots, tree.BranchRoot, move)
+		if err != nil {
+			return nil, err
+		}
+		if same {
+			unchanged[move] = true
+		}
+	}
+	return unchanged, nil
+}
+
 func overlayTreeAdmits(roots []projectroot.RootRef, path string) bool {
 	return len(FilterOverlayPromoteCandidatePathsForRoots(roots, []string{path})) == 1
 }

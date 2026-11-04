@@ -2,6 +2,8 @@ package workspacebaseline
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -197,6 +199,39 @@ func liveText(base, rel string, kind ChangeKind) (string, bool) {
 		return "", false
 	}
 	return doc.Text(), true
+}
+
+// PathMove is one manifest path and the path its content may have moved to.
+type PathMove struct{ From, To string }
+
+// MoveUnchanged reports whether the file now at To has the bytes the baseline holds
+// at From. A body the baseline did not pin, or a file it cannot read, is no match.
+func (r *Reader) MoveUnchanged(ctx context.Context, roots []projectroot.RootRef, branch string, move PathMove) (bool, error) {
+	before, inBaseline, err := r.Lookup(ctx, move.From)
+	if err != nil {
+		return false, err
+	}
+	if !inBaseline || before.Deleted || before.Opaque || before.SHA256 == "" {
+		return false, nil
+	}
+	base, rel, err := branchLocation(roots, branch, move.To)
+	if err != nil {
+		return false, err
+	}
+	file, err := fseffect.OpenRead(fseffect.Location{Root: base, Rel: rel})
+	if err != nil {
+		return false, nil
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() != before.Size {
+		return false, nil
+	}
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return false, nil
+	}
+	return hex.EncodeToString(hash.Sum(nil)) == before.SHA256, nil
 }
 
 func branchPath(roots []projectroot.RootRef, branch, path string) (string, error) {
