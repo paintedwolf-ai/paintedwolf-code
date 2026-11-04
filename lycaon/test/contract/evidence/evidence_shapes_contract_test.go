@@ -90,8 +90,8 @@ func TestUndeclaredMCPDefaultsToOpaqueShape(t *testing.T) {
 
 func TestEvidenceKindShapeMapComplete(t *testing.T) {
 	t.Parallel()
-	if len(expectedEvidenceKindShapes) != 32 {
-		t.Fatalf("expectedEvidenceKindShapes has %d kinds want 32", len(expectedEvidenceKindShapes))
+	if len(expectedEvidenceKindShapes) != 33 {
+		t.Fatalf("expectedEvidenceKindShapes has %d kinds want 33", len(expectedEvidenceKindShapes))
 	}
 	binding, err := evidence.LoadBinding()
 	testutil.FailErr(t, "LoadBinding", err)
