@@ -8096,6 +8096,8 @@ export interface components {
         };
         CitationGrounding: {
             traced: boolean;
+            /** @description No citations were required and none were supplied, because this user turn has no citable observations. Traced is true because nothing failed to trace; no observed source stands behind this message. */
+            evidence_optional?: boolean;
             host_assembled?: boolean;
             hint_code?: string;
             retry_count?: number;
@@ -10398,6 +10400,8 @@ export interface components {
             handle?: string;
             path?: string;
             line?: number;
+            /** @description Last line of an inclusive range starting at line. Absent for a single line. */
+            end_line?: number;
         };
         /**
          * @description What a finding asks for. `act` needs work; `accept` is a risk kept on purpose; `held` is a surface examined and found sound; `unresolved` is an unanswered review question.
@@ -10823,6 +10827,8 @@ export interface components {
             handle?: string;
             path?: string;
             line?: number;
+            /** @description Last line of an inclusive range starting at line. Absent for a single line. */
+            end_line?: number;
             excerpt?: string;
             verdict?: components["schemas"]["CitationVerdict"];
             /** @description True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false. */

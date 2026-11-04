@@ -20,7 +20,8 @@ const (
 func (m *Service) BeforeReportPhase(
 	ctx context.Context,
 	sess *api.Session,
-	lastAssistant, surfaceID string,
+	draft guidance.CloseoutDraft,
+	surfaceID string,
 	invokeAllowed bool,
 ) (*guidance.Refusal, bool) {
 	if m == nil || sess == nil || m.workflows == nil || !invokeAllowed {
@@ -29,8 +30,7 @@ func (m *Service) BeforeReportPhase(
 	if !guard.SurfaceFinishesWithUserProse(strings.TrimSpace(surfaceID)) {
 		return nil, false
 	}
-	report, ok := guidance.ParseCoordinatorCompletionReport(lastAssistant)
-	if !ok || report.Verification.Valid() && report.Verification.Method == verification.Blocked {
+	if !draft.HasAnswer() || draft.Verification.Valid() && draft.Verification.Method == verification.Blocked {
 		return nil, false
 	}
 	state := m.workflows.Policy.ActivePhaseGuardState(ctx, sess.ID)
@@ -39,7 +39,7 @@ func (m *Service) BeforeReportPhase(
 	}
 	return m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 		gc.Session.Phase = state.Phase
-		gc.Progress.HasCompletionReport = true
+		gc.Progress.CloseoutHasAnswer = true
 		gc.Workflow.WorkflowReportPhasePending = true
 		gc.PutRejectData(workflowReportPhaseRequiredCode, map[string]any{"phase": state.Phase})
 		return nil

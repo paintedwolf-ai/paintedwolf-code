@@ -24,8 +24,7 @@ type CompletionReportBinding struct {
 
 // completionReportMeta states what a report covers: the session outside a run,
 // the run in its declared report phase, and otherwise just that phase. What the
-// report concluded travels on the same record, since the message body may be
-// prose or an envelope but the record's shape never varies.
+// report concluded travels on the same record.
 func completionReportMeta(
 	surfaceID string, binding CompletionReportBinding, report guidance.CoordinatorCompletionReport,
 ) *api.CompletionReportMeta {
@@ -81,9 +80,10 @@ func reportFindingsMeta(findings []guidance.CoordinatorFinding) []api.Completion
 		}
 		for _, w := range f.Where {
 			row.Where = append(row.Where, api.CompletionReportFindingLocation{
-				Handle: w.Evidence,
-				Path:   w.Path,
-				Line:   w.Line,
+				Handle:  w.Evidence,
+				Path:    w.Path,
+				Line:    w.Line,
+				EndLine: w.EndLine,
 			})
 		}
 		out = append(out, row)

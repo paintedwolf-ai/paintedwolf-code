@@ -115,7 +115,6 @@ func (l *modelTurn) runAssistantStreamTurn(
 		}
 		return nil
 	}
-	wireContent := closeoutWireContent(l.Context.promptTurnSurface(sessionID))
 	completion, tokens, err := l.completeStream(ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, func(partial *modelcall.Completion) {
 		if partial == nil {
 			return
@@ -135,7 +134,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 	}
 	clearStream()
 	promptAssistant, err := l.Projection.settleAssistantStreamTurn(
-		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, iterIndex, wireContent,
+		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, iterIndex,
 	)
 	if err != nil {
 		return api.Message{}, nil, nil, withdrawFailedDraft(err)
@@ -156,7 +155,6 @@ func (l *turnProjection) settleAssistantStreamTurn(
 	tokens []string,
 	outputID string,
 	iterIndex int,
-	wireContent func(string) string,
 ) (api.Message, error) {
 	assistantMsg.Content = completion.Content
 	assistantMsg.SourceContext = sourceref.Mentioned(completion.SourceContext, completion.Content)
@@ -168,7 +166,6 @@ func (l *turnProjection) settleAssistantStreamTurn(
 	completion.ToolCalls = assistantMsg.ToolCalls
 	storedAssistant, transientAssistant := l.storageSafeMessage(ctx, assistantMsg)
 	wireAssistant := storedAssistant
-	wireAssistant.Content = wireContent(storedAssistant.Content)
 	canonicalOutputID := ""
 	if st != nil && st.attemptID != "" && l.Deps.SettleModelOutput != nil {
 		callsJSON, marshalErr := json.Marshal(wireAssistant.ToolCalls)

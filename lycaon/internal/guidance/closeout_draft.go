@@ -1,6 +1,7 @@
 package guidance
 
 import (
+	"fmt"
 	"strconv"
 
 	"github.com/lycaon/lycaon/internal/citationmd"
@@ -45,6 +46,75 @@ type CloseoutDraft struct {
 	Document      *WorkflowRunReportDocument
 	Issues        []citationmd.Issue
 	Parsed        citationmd.Document
+}
+
+// HasAnswer reports whether the draft states anything once protocol nodes go.
+func (d CloseoutDraft) HasAnswer() bool { return citationmd.Narrative(d.Parsed) != "" }
+
+// CitationCount counts model-supplied source references, document ones included.
+func (d CloseoutDraft) CitationCount() int {
+	count := 0
+	for _, occurrence := range d.Occurrences {
+		switch occurrence.Kind {
+		case citationmd.KindCitation, citationmd.KindWorkspaceLink, citationmd.KindWebLink:
+			count++
+		case citationmd.KindArtifact, citationmd.KindVerify, citationmd.KindRepair:
+		}
+	}
+	return count
+}
+
+// Report is the draft's flat typed view. Synthesis keeps its citation nodes.
+func (d CloseoutDraft) Report() CoordinatorCompletionReport {
+	report := CoordinatorCompletionReport{
+		Verification:  d.Verification,
+		Synthesis:     d.Synthesis,
+		CitedEvidence: d.CitedEvidence,
+		CitedURLs:     d.CitedURLs,
+		ArtifactIDs:   d.ArtifactIDs,
+	}
+	if doc := d.Document; doc != nil {
+		report.Headline, report.Summary, report.Rating = doc.Headline, doc.Summary, doc.Rating
+		report.Findings, report.Limits, report.Ask, report.SetAsides = doc.Findings, doc.Limits, doc.Ask, doc.SetAsides
+	}
+	report.Normalize()
+	return report
+}
+
+// setDocument attaches a document and adds its typed source references to
+// validation. They keep their field path; repairing one returns the fence.
+func (d *CloseoutDraft) setDocument(document *WorkflowRunReportDocument) {
+	kept := d.Occurrences[:0:0]
+	for _, occurrence := range d.Occurrences {
+		if occurrence.Owner == DraftFieldSynthesis {
+			kept = append(kept, occurrence)
+		}
+	}
+	d.Occurrences, d.Document = kept, document
+	if document == nil {
+		return
+	}
+	index := len(d.Parsed.Occurrences)
+	for i, finding := range document.Findings {
+		for j, where := range finding.Where {
+			citation := citationmd.Citation{Handle: where.Evidence, Path: where.Path, Line: where.Line, EndLine: where.EndLine, Excerpt: where.Excerpt}
+			d.Occurrences = append(d.Occurrences, DraftOccurrence{
+				Occurrence: citationmd.Occurrence{Index: index, Kind: citationmd.KindCitation, Token: citation.Token(), Citation: &citation},
+				Owner:      fmt.Sprintf("findings[%d].where[%d]", i, j),
+			})
+			index++
+		}
+	}
+}
+
+func (d *WorkflowRunReportDocument) normalize() {
+	report := CoordinatorCompletionReport{
+		Headline: d.Headline, Summary: d.Summary, Rating: d.Rating, Findings: d.Findings,
+		Limits: d.Limits, Ask: d.Ask, SetAsides: d.SetAsides,
+	}
+	report.Normalize()
+	d.Headline, d.Summary, d.Findings = report.Headline, report.Summary, report.Findings
+	d.Limits, d.Ask, d.SetAsides = report.Limits, report.Ask, report.SetAsides
 }
 
 // ParseCloseoutDraft parses Markdown into a typed draft. See DraftParseOptions.

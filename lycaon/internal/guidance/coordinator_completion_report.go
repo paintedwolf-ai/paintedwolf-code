@@ -1,7 +1,6 @@
 package guidance
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -21,7 +20,8 @@ type CoordinatorCitedEvidence struct {
 	Excerpt string `json:"excerpt,omitempty"`
 }
 
-// CoordinatorCompletionReport is typed coordinator closeout metadata.
+// CoordinatorCompletionReport is a closeout's flat typed view: its answer, bounded
+// citation metadata, and document fields. It never travels as JSON.
 type CoordinatorCompletionReport struct {
 	Verification  *verification.Assessment   `json:"verification,omitempty"`
 	Synthesis     string                     `json:"synthesis"`
@@ -85,18 +85,6 @@ type CoordinatorSetAside struct {
 	Scanner      string   `json:"scanner,omitempty"`
 	Paths        []string `json:"paths,omitempty"`
 	Reason       string   `json:"reason"`
-}
-
-// CoordinatorCloseoutTranscriptNarrative extracts displayable report prose.
-func CoordinatorCloseoutTranscriptNarrative(content string) (string, bool) {
-	report, ok := ParseCoordinatorCompletionReport(content)
-	if !ok {
-		return "", false
-	}
-	if CloseoutBodyIsEnvelopeShaped(report.Synthesis) {
-		return "", false
-	}
-	return report.Synthesis, true
 }
 
 // Normalize trims and caps closeout report fields.
@@ -203,16 +191,6 @@ func normalizeReportAnswers(in map[string]string) map[string]string {
 		return nil
 	}
 	return out
-}
-
-// MarshalCoordinatorCompletionReport JSON-encodes a closeout report for transcript commit.
-func MarshalCoordinatorCompletionReport(report CoordinatorCompletionReport) (string, error) {
-	report.Normalize()
-	raw, err := json.Marshal(report)
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
 }
 
 func normalizeCoordinatorCitedEvidence(in []CoordinatorCitedEvidence, max int) []CoordinatorCitedEvidence {

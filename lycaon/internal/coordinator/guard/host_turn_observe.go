@@ -9,11 +9,13 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ObserveCoordinatorHostNoToolTurn publishes post-turn host-shape facts.
+// ObserveCoordinatorHostNoToolTurn publishes post-turn host-shape facts. draft is
+// the turn's typed read on a report surface and zero elsewhere.
 func ObserveCoordinatorHostNoToolTurn(
 	sess *api.Session,
 	history []api.Message,
 	lastAssistant string,
+	draft guidance.CloseoutDraft,
 	turnTools []string,
 	surfaceID string,
 	workersIdle bool,
@@ -38,8 +40,7 @@ func ObserveCoordinatorHostNoToolTurn(
 	gc.Session.SurfaceMayFinish = SurfaceFinishesWithUserProse(surfaceID)
 	gc.Session.CloseoutSurface = surface.SurfaceDeliversReport(surfaceID)
 	if lastAssistant != "" {
-		_, ok := guidance.ParseCoordinatorCompletionReport(lastAssistant)
-		gc.Progress.HasCompletionReport = ok
+		gc.Progress.CloseoutHasAnswer = draft.HasAnswer()
 		gc.Progress.TaskEnvelopeEcho = assistantEchoesTaskEnvelope(lastAssistant)
 	}
 }

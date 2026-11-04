@@ -20,14 +20,16 @@ type closeoutRetryBudget struct {
 	limit   int
 	// friction is set for a citation refusal: the shared budget left after it.
 	friction *guidance.GroundingFriction
-	// document is the draft's current document fields, the fence a repair returns.
-	document string
+	// documentKick marks a report-document refusal. document is the draft's current
+	// document, the fence a repair returns; empty when the host read none.
+	documentKick bool
+	document     string
 	// runReport marks a draft that delivers its run's report, which ends the
 	// run as not accepted when document repair runs out.
 	runReport bool
 }
 
-func (l *turnCloseout) closeoutRetryBudget(ctx context.Context, sessionID string, st *promptLoopTurnState, code, draftedContent string) closeoutRetryBudget {
+func (l *turnCloseout) closeoutRetryBudget(ctx context.Context, sessionID string, st *promptLoopTurnState, code string, draft guidance.CloseoutDraft) closeoutRetryBudget {
 	binding := completionReportBinding(st)
 	if guidance.ReportDocumentObservation(code) != "" {
 		st.closeoutRetry.documentAttempt++
@@ -36,11 +38,12 @@ func (l *turnCloseout) closeoutRetryBudget(ctx context.Context, sessionID string
 			limit = binding.CloseoutRetries
 		}
 		return closeoutRetryBudget{
-			kick:      anchor.CoordinatorReportDocument,
-			attempt:   st.closeoutRetry.documentAttempt,
-			limit:     limit,
-			document:  guidance.ReportDocumentFence(draftedContent),
-			runReport: binding.PhaseDeliversRunReport,
+			kick:         anchor.CoordinatorReportDocument,
+			attempt:      st.closeoutRetry.documentAttempt,
+			limit:        limit,
+			documentKick: true,
+			document:     guidance.ReportDocumentFence(draft),
+			runReport:    binding.PhaseDeliversRunReport,
 		}
 	}
 	st.closeoutRetry.attempt++
@@ -77,7 +80,7 @@ func (b closeoutRetryBudget) displayMax() int {
 
 // hintData adds what the repair kick renders beyond the refusal's own facts.
 func (b closeoutRetryBudget) hintData(data map[string]any, unread ...[]jsonshape.Issue) map[string]any {
-	if b.document == "" {
+	if !b.documentKick {
 		return data
 	}
 	out := make(map[string]any, len(data)+4)

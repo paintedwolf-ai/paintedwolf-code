@@ -85,7 +85,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"batch_closed":                    gc.Workflow.BatchClosed,
 		"progress_open_items":             gc.Progress.ProgressOpenItems,
 		"progress_has_open_steps":         gc.Progress.ProgressHasOpenSteps,
-		"has_completion_report":           gc.Progress.HasCompletionReport,
+		"closeout_has_answer":             gc.Progress.CloseoutHasAnswer,
 		"task_envelope_echo":              gc.Progress.TaskEnvelopeEcho,
 		"closeout_surface":                gc.Session.CloseoutSurface,
 		"progress_reconcile_needed":       gc.Progress.ProgressReconcileNeeded,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"strings"
 	"time"
 
@@ -318,33 +319,33 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		assistantMsg.ToolCalls = answeredToolCalls(history, assistantMsg.ID, completion.ToolCalls)
 		history = patchAssistantToolCalls(history, assistantMsg.ID, assistantMsg.ToolCalls)
 		if l.Projection.Deps.UpdateMessage != nil {
-			wire := assistantMsg
-			wire.Content = closeoutWireContent(surfaceID)(assistantMsg.Content)
-			_ = l.Projection.Deps.UpdateMessage(ctx, sessionID, assistantMsg.ID, wire)
+			_ = l.Projection.Deps.UpdateMessage(ctx, sessionID, assistantMsg.ID, assistantMsg)
 		}
 	}
 
-	coercedContent, unread := l.Tools.maybeCoerceCloseoutContent(ctx, history, sessionID, surfaceID, assistantMsg.Content, assistantMsg.ID)
-	assistantMsg.Content = coercedContent
+	read, err := l.readCloseoutDraft(ctx, sess, surfaceID, st, history, assistantMsg)
+	if err != nil {
+		return history, "", "", err
+	}
 	history, reject, blocked, err := l.Tools.tryRejectNoToolTurn(
-		ctx, sess, history, userPrompt, coercedContent, surfaceID, turnTools, sessionID, assistantMsg.ID, st, false, nil,
+		ctx, sess, history, userPrompt, assistantMsg.Content, read.Draft, surfaceID, turnTools, sessionID, assistantMsg.ID, st, false, nil,
 	)
 	if err != nil {
 		return history, "", "", err
 	}
 	if blocked {
 		return l.emitEarlyCloseoutAfterFinishBlock(
-			ctx, sess, sessionID, userPrompt, surfaceID, coercedContent, reject, st, history,
+			ctx, sess, sessionID, userPrompt, surfaceID, assistantMsg.Content, read.Draft, reject, st, history,
 		)
 	}
 
-	if report, ok := guidance.ParseCoordinatorCompletionReport(assistantMsg.Content); ok && surface.SurfaceDeliversReport(surfaceID) {
+	if read.Draft.HasAnswer() {
 		closeoutState := st
 		if closeoutState == nil {
 			closeoutState = &promptLoopTurnState{}
 		}
 		commitOut, cerr := l.handleAcceptedCloseoutReport(
-			ctx, sess, sessionID, userPrompt, surfaceID, closeoutState, history, assistantMsg, guidance.CloseoutRead{Report: report, Unread: unread},
+			ctx, sess, sessionID, userPrompt, surfaceID, closeoutState, history, assistantMsg, read,
 		)
 		if cerr != nil {
 			return history, "", "", cerr
@@ -358,7 +359,7 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		}
 		// Forced finish has no further iteration; assemble from the draft.
 		return l.returnAssembledEarlyCloseout(
-			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.draftedContent, closeoutState.closeoutRetry.codes, closeoutState, history,
+			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.drafted, closeoutState.closeoutRetry.codes, closeoutState, history,
 		)
 	}
 
@@ -390,7 +391,8 @@ func workerCompletionAccepted(history []api.Message, assistantMessageID string) 
 func (l *turnCloseout) emitEarlyCloseoutAfterFinishBlock(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID, coercedContent string,
+	sessionID, userPrompt, surfaceID, content string,
+	draft guidance.CloseoutDraft,
 	reject *guidance.Refusal,
 	st *promptLoopTurnState,
 	history []api.Message,
@@ -399,26 +401,30 @@ func (l *turnCloseout) emitEarlyCloseoutAfterFinishBlock(
 	if closeoutState == nil {
 		closeoutState = &promptLoopTurnState{}
 	}
-	drafted := strings.TrimSpace(coercedContent)
+	// A surface without a typed read still keeps its text for assembly.
+	if !draft.HasAnswer() {
+		draft = guidance.ParseCloseoutDraft(content, citationmd.Options{})
+	}
 	forcedBy := closeoutState.closeoutRetry.codes
 	if code := reject.Code(); code != "" {
 		forcedBy = append(append([]string(nil), forcedBy...), code)
 	}
 	return l.returnAssembledEarlyCloseout(
-		ctx, sess, sessionID, userPrompt, surfaceID, drafted, forcedBy, closeoutState, history,
+		ctx, sess, sessionID, userPrompt, surfaceID, draft, forcedBy, closeoutState, history,
 	)
 }
 
 func (l *turnCloseout) returnAssembledEarlyCloseout(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID, draftedContent string,
+	sessionID, userPrompt, surfaceID string,
+	draft guidance.CloseoutDraft,
 	forcedBy []string,
 	st *promptLoopTurnState,
 	history []api.Message,
 ) ([]api.Message, string, string, error) {
 	emitOut, err := l.emitAssembledCloseout(
-		ctx, sess, sessionID, userPrompt, surfaceID, draftedContent, forcedBy, st, history,
+		ctx, sess, sessionID, userPrompt, surfaceID, draft, forcedBy, st, history,
 	)
 	if err != nil {
 		return history, "", "", err

@@ -83,7 +83,7 @@ var factDecls = []factDecl{
 	{"batch_closed", oarcore.TypeBool, FactTierHost, ""},
 	{"progress_open_items", oarcore.TypeInt, FactTierHost, ""},
 	{"progress_has_open_steps", oarcore.TypeBool, FactTierHost, ""},
-	{"has_completion_report", oarcore.TypeBool, FactTierHost, ""},
+	{"closeout_has_answer", oarcore.TypeBool, FactTierHost, ""},
 	{"task_envelope_echo", oarcore.TypeBool, FactTierHost, ""},
 	{"closeout_surface", oarcore.TypeBool, FactTierHost, ""},
 	{"progress_reconcile_needed", oarcore.TypeBool, FactTierHost, ""},

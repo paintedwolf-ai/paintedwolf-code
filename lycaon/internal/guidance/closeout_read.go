@@ -7,165 +7,106 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/jsonfence"
 	"github.com/lycaon/lycaon/internal/jsonshape"
 )
 
-// A closeout arrives as a JSON envelope, as Markdown ending in one report
-// fence of report fields, or, during a repair, as that fence alone for the
-// pinned body. Every form is read against the same report type: members it
-// declares are kept, and every other member is named as unread so a refusal
-// can say which one, and so a report the host stores anyway never silently
-// loses what the coordinator wrote.
+// A closeout is Markdown. On a workflow report phase the final top-level json
+// fence is the report document; everywhere else a fence is a literal example.
 
 // AnswerInFence marks a fence that carries the answer itself as `synthesis`;
 // the answer is the Markdown above the fence.
 const AnswerInFence jsonshape.Kind = "answer_in_fence"
 
-// CloseoutRead is a closeout draft read as a report.
+// RetiredFenceMember marks a top-level member that now has inline syntax.
+const RetiredFenceMember jsonshape.Kind = "retired_fence_member"
+
+// reportFenceInvalid marks a fence whose body is not one JSON object.
+const reportFenceInvalid jsonshape.Kind = "not_json_object"
+
+// CloseoutRead is one model response read as a closeout, applied to the retained
+// draft when a repair cycle is active.
 type CloseoutRead struct {
-	Report CoordinatorCompletionReport
-	// Unread are the draft's JSON members the report did not take.
+	Draft CloseoutDraft
+	// Unread are the document members the report did not take.
 	Unread []jsonshape.Issue
+	// RepairDefects refuse this response's repair. Draft is then the retained
+	// draft, untouched.
+	RepairDefects []RepairDefect
 }
 
-// ReadCloseoutReport reads a closeout draft in any form a coordinator sends
-// it. Plain Markdown is a report without fields. pinnedSynthesis is the body a
-// fence-only repair belongs to. ok is false for a draft with no answer.
-func ReadCloseoutReport(content, pinnedSynthesis string) (CloseoutRead, bool) {
-	content = unwrapOuterMarkdownFence(strings.TrimSpace(content))
-	if content == "" {
-		return CloseoutRead{}, false
-	}
-	if read, ok := jsonfence.ParseStrict(content, decodeCloseoutEnvelope); ok {
-		return read, true
-	}
-	if body, fence, ok := splitReportFence(content); ok {
-		read := readReportFence(fence)
-		switch {
-		case body != "" && !CloseoutBodyIsEnvelopeShaped(body):
-			read.Report.Synthesis = body
-		case body == "" && strings.TrimSpace(pinnedSynthesis) != "":
-			read.Report.Synthesis = pinnedSynthesis
-		default:
-			return CloseoutRead{}, false
-		}
-		read.Report.Normalize()
-		return read, true
-	}
-	if read, ok := salvageCloseoutEnvelope(content); ok {
-		return read, true
-	}
-	if CloseoutBodyIsEnvelopeShaped(content) {
-		return CloseoutRead{}, false
-	}
-	return CloseoutRead{Report: CoordinatorCompletionReport{Synthesis: content}}, true
-}
-
-// ParseCoordinatorCompletionReport reads a stored closeout envelope: JSON
-// with the answer as synthesis and no member the report does not declare.
-func ParseCoordinatorCompletionReport(content string) (CoordinatorCompletionReport, bool) {
-	read, ok := jsonfence.ParseStrict(content, decodeCloseoutEnvelope)
-	if !ok || len(read.Unread) > 0 {
-		return CoordinatorCompletionReport{}, false
-	}
-	return read.Report, true
-}
-
-// UsableCloseoutSynthesis is the answer a closeout draft carries, whatever
-// its fields; empty when it carries none.
-func UsableCloseoutSynthesis(drafted string) string {
-	read, ok := ReadCloseoutReport(drafted, "")
-	if !ok || CloseoutBodyIsEnvelopeShaped(read.Report.Synthesis) {
-		return ""
-	}
-	return read.Report.Synthesis
-}
-
-// CloseoutBodyIsEnvelopeShaped recognizes structural JSON prefixes.
-func CloseoutBodyIsEnvelopeShaped(content string) bool {
-	trimmed := strings.TrimSpace(content)
-	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "```")
-}
-
-// salvageCloseoutEnvelope reads the first JSON value in malformed content
-// that holds an answer, such as an envelope closed early with its fields
-// trailing after it. A trailing report fence under Markdown is read first,
-// so its members never stand in for the Markdown answer.
-func salvageCloseoutEnvelope(content string) (CloseoutRead, bool) {
-	for _, candidate := range jsonfence.Candidates(content) {
-		if read, ok := decodeCloseoutEnvelope(candidate); ok {
-			return read, true
+// ReadCloseoutReport reads a model response's screened Markdown. expectsRunReport
+// is set only on the phase that delivers a workflow's report.
+func ReadCloseoutReport(raw string, retained RetainedCloseout, expectsRunReport bool, opts citationmd.Options) CloseoutRead {
+	narrative, document, unread := raw, (*WorkflowRunReportDocument)(nil), []jsonshape.Issue(nil)
+	if expectsRunReport {
+		if before, fence, ok := splitReportFence(raw, opts); ok {
+			narrative = before
+			document, unread = readReportFence(fence)
 		}
 	}
-	return CloseoutRead{}, false
+	next := ParseCloseoutDraft(narrative, opts)
+	if retained.Active {
+		read := applyRetainedRepair(next, document, retained, opts)
+		read.Unread = unread
+		return read
+	}
+	next.setDocument(document)
+	return CloseoutRead{Draft: next, Unread: unread, RepairDefects: inactiveRepairDefects(next)}
 }
 
-func decodeCloseoutEnvelope(candidate string) (CloseoutRead, bool) {
-	var read CloseoutRead
-	unread, err := jsonshape.Decode([]byte(candidate), &read.Report)
+// splitReportFence separates a closed top-level json fence that ends the
+// document. A fence inside a container or with another info string stays literal.
+func splitReportFence(raw string, opts citationmd.Options) (before, fence string, ok bool) {
+	parsed := citationmd.Parse(raw, opts)
+	if len(parsed.Zones) == 0 {
+		return "", "", false
+	}
+	last := parsed.Zones[len(parsed.Zones)-1]
+	body := raw[parsed.Body.Start:parsed.Body.End]
+	markdown, block, closed := jsonfence.Trailing(body)
+	if !closed || !strings.EqualFold(block.Language, "json") {
+		return "", "", false
+	}
+	if last.Kind != citationmd.ZoneFence || !atLineStart(raw, last.Span.Start) {
+		return "", "", false
+	}
+	return strings.TrimSpace(markdown), block.Payload, true
+}
+
+// atLineStart reports whether only a fence's permitted indent precedes it.
+func atLineStart(source string, at int) bool {
+	lineStart := strings.LastIndexByte(source[:at], '\n') + 1
+	prefix := source[lineStart:at]
+	return len(prefix) <= 3 && strings.TrimSpace(prefix) == ""
+}
+
+// readReportFence decodes the document strictly. Every member the document does
+// not declare is unread, which refuses the report on the document's own budget.
+func readReportFence(fence string) (*WorkflowRunReportDocument, []jsonshape.Issue) {
+	var document WorkflowRunReportDocument
+	unread, err := jsonshape.Decode([]byte(fence), &document)
 	if err != nil {
-		return CloseoutRead{}, false
+		return nil, []jsonshape.Issue{{Path: "report fence", Pattern: "report fence", Name: "report fence", Kind: reportFenceInvalid, Want: "one JSON object"}}
 	}
-	read.Report.Normalize()
-	if read.Report.Synthesis == "" || CloseoutBodyIsEnvelopeShaped(read.Report.Synthesis) {
-		return CloseoutRead{}, false
+	for i := range unread {
+		if unread[i].Parent == "" && slices.Contains(retiredFenceMembers, unread[i].Name) {
+			unread[i].Kind = RetiredFenceMember
+			if unread[i].Name == DraftFieldSynthesis {
+				unread[i].Kind = AnswerInFence
+			}
+		}
 	}
-	read.Unread = unread
-	return read, true
+	document.normalize()
+	return &document, unread
 }
 
-// readReportFence reads a trailing fence's report fields. The answer is the
-// Markdown above it, so a synthesis inside it is unread.
-func readReportFence(fence string) CloseoutRead {
-	var read CloseoutRead
-	read.Unread, _ = jsonshape.Decode([]byte(fence), &read.Report)
-	if strings.TrimSpace(read.Report.Synthesis) != "" {
-		read.Unread = append(read.Unread, jsonshape.Issue{Path: "synthesis", Pattern: "synthesis", Name: "synthesis", Kind: AnswerInFence})
-	}
-	read.Report.Synthesis = ""
-	return read
-}
+// retiredFenceMembers now live in the Markdown above the fence.
+var retiredFenceMembers = []string{DraftFieldSynthesis, "cited_evidence", "cited_urls", "artifact_ids", "verification"}
 
 // reportFenceMembers are the members a report fence may carry.
-var reportFenceMembers = jsonshape.Fields(reflect.TypeFor[CoordinatorCompletionReport]())
-
-// splitReportFence recognizes metadata only at the terminal block boundary.
-// Earlier JSON blocks remain answer content even when their keys overlap.
-func splitReportFence(content string) (body, fence string, ok bool) {
-	if before, block, ok := jsonfence.Trailing(content); ok && isReportFenceBlock(block) {
-		return strings.TrimSpace(before), block.Payload, true
-	}
-	return "", "", false
-}
-
-func isReportFenceBlock(block jsonfence.Block) bool {
-	if block.Language != "" && !strings.EqualFold(block.Language, "json") {
-		return false
-	}
-	var members map[string]json.RawMessage
-	if json.Unmarshal([]byte(block.Payload), &members) != nil {
-		return false
-	}
-	for name := range members {
-		if slices.Contains(reportFenceMembers, name) {
-			return true
-		}
-	}
-	return false
-}
-
-func unwrapOuterMarkdownFence(content string) string {
-	lines, blocks := jsonfence.Blocks(content)
-	if len(blocks) == 1 && blocks[0].StartLine == 0 && blocks[0].EndLine == len(lines)-1 && isMarkdownFenceLang(blocks[0].Language) {
-		return strings.TrimSpace(blocks[0].Payload)
-	}
-	return content
-}
-
-func isMarkdownFenceLang(lang string) bool {
-	return strings.EqualFold(lang, "markdown") || strings.EqualFold(lang, "md")
-}
+var reportFenceMembers = jsonshape.Fields(reflect.TypeFor[WorkflowRunReportDocument]())
 
 // UnreadReportFields sample the unread members for a refusal, one entry per
 // member pattern with how often it occurred, and the total number of entries.
@@ -201,11 +142,26 @@ func unreadField(issue jsonshape.Issue, count int) string {
 	switch {
 	case issue.Kind == AnswerInFence:
 		return name + ": the answer is the Markdown above the fence"
-	case issue.Kind == jsonshape.Mismatch:
+	case issue.Kind == RetiredFenceMember:
+		return name + ": written inline in the Markdown above the fence"
+	case issue.Kind == reportFenceInvalid, issue.Kind == jsonshape.Mismatch:
 		return name + ": want " + issue.Want
 	case issue.Parent != "" && slices.Contains(reportFenceMembers, issue.Name):
 		return name + ": `" + issue.Name + "` is a top-level report field"
 	default:
 		return name + ": not a report field"
 	}
+}
+
+// ReportDocumentFence renders the document a repair returns whole, holding only
+// document members. Empty when the host read no document.
+func ReportDocumentFence(draft CloseoutDraft) string {
+	if draft.Document == nil {
+		return ""
+	}
+	raw, err := json.Marshal(draft.Document)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
 }

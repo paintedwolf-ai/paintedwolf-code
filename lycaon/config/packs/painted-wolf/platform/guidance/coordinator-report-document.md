@@ -1,6 +1,6 @@
 [host:coordinator-report-document]
 
-Report fields need repair. To repair them, emit only the report fence; the host keeps the pinned body. Attempt {{ attempt }}/{{ max_attempts }}; after the last, {% if run_report %}the run ends with this report stored as not accepted{% else %}the host keeps only the fields it read{% endif %}.
+Report fields need repair. To repair them, emit only the report fence; the host keeps your Markdown answer and its citations. Attempt {{ attempt }}/{{ max_attempts }}; after the last, {% if run_report %}the run ends with this report stored as not accepted{% else %}the host keeps only the fields it read{% endif %}.
 {% if resume_work_allowed %}If the work is not finished, use an offered tool instead, then write a fresh report reflecting its results. This retires the pinned body.
 {% endif %}
 {% if offending_keys %}Remove these unrecognized keys:
@@ -10,12 +10,17 @@ Report fields need repair. To repair them, emit only the report fence; the host 
 Do not add any other keys. Omit optional fields with null or empty values.
 {% endif %}
 {% if document_issues %}Repair every listed defect together:
-{% for issue in document_issues %}- {{ issue.Reason }}{% for offender in issue.Offenders %}
+{% for issue in document_issues %}- {{ issue.reason }}{% for offender in issue.offenders %}
   - {{ offender }}{% endfor %}
 {% endfor %}{% else %}Refused: {{ rejection_reason }}{% if offenders_sample %}: {{ offenders_sample }}{% if offenders_omitted %} +{{ offenders_omitted }} more{% endif %}{% endif %}{% endif %}
 
-The host has pinned your markdown report body{% if pinned_body_chars %} ({{ pinned_body_chars }} characters){% endif %}. Do not repeat the report narrative. Return only the ```json ... ``` fence below with these defects fixed. It holds every field the host read, and a field you leave out is cleared, so keep its `cited_evidence`, `findings`, and `set_asides` except the defective fields. Each finding keeps a one-line `title`; never report an open claim as resolved:
+The host has kept your Markdown answer{% if pinned_body_chars %} ({{ pinned_body_chars }} characters){% endif %}. Do not repeat it. Return only a `json` report fence with these defects fixed. Each finding keeps a one-line `title`, and `where` entries stay typed `{evidence, path, line, end_line, excerpt}`; never report an open claim as resolved.
+{% if retained_document %}
+This fence holds every field the host read, and a field you leave out is cleared, so keep its `findings` and `set_asides` except the defective fields:
 
 ```json
-{% if retained_document %}{{ retained_document }}{% else %}{}{% endif %}
+{{ retained_document }}
 ```
+{% else %}
+The host read no report fields yet, so write the fence with the fields listed above.
+{% endif %}

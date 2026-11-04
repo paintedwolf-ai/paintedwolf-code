@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -251,14 +250,15 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 	}
 
 	if completion == nil || len(completion.ToolCalls) == 0 {
-		var unread []jsonshape.Issue
-		st.lastAssistantContent, unread = l.Tools.maybeCoerceCloseoutContent(ctx, st.history, sessionID, surfaceID, st.lastAssistantContent, st.lastAssistantID)
+		read, err := l.Closeout.readCloseoutDraft(ctx, sess, surfaceID, st, st.history, assistantMsg)
+		if err != nil {
+			return out, err
+		}
 		invokeAllowed := !st.proseTurn(sess, step, maxIter)
 		var blocked bool
 		var refusal *guidance.Refusal
-		var err error
 		st.history, refusal, blocked, err = l.Tools.tryRejectNoToolTurn(
-			ctx, sess, st.history, userPrompt, st.lastAssistantContent, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed, st.output.rejection,
+			ctx, sess, st.history, userPrompt, st.lastAssistantContent, read.Draft, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed, st.output.rejection,
 		)
 		if err != nil {
 			return out, err
@@ -272,8 +272,8 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			out.continueLoop = true
 			return out, nil
 		}
-		if report, ok := guidance.ParseCoordinatorCompletionReport(st.lastAssistantContent); ok && surface.SurfaceDeliversReport(surfaceID) {
-			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, guidance.CloseoutRead{Report: report, Unread: unread})
+		if read.Draft.HasAnswer() {
+			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, read)
 		}
 	} else {
 		l.Closeout.resumeWork(ctx, sessionID, st)
@@ -380,7 +380,7 @@ func (l *turnCloseout) applyAcceptedCloseoutReport(
 	if commitOut.exhausted {
 		// Exhaustion preserves the pinned report and latest proposed citations.
 		emitOut, eerr := l.emitAssembledCloseout(
-			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.draftedContent, st.closeoutRetry.codes, st, st.history,
+			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.drafted, st.closeoutRetry.codes, st, st.history,
 		)
 		if eerr != nil {
 			return out, eerr

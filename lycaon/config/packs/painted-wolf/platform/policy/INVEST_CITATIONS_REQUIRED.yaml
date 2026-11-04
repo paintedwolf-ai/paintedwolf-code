@@ -14,8 +14,8 @@ requires:
 when: paintedwolf.surface == "implement_investigate" && paintedwolf.reject_observation == "citations_required"
 effect: warn
 copy:
-  what: The report has no cited_evidence or cited_urls although recorded tool observations are available.
-  cause: The report omitted typed references to observed tool evidence.
+  what: The report has no citations although recorded tool observations are available.
+  cause: The report cited none of the tool evidence observed this turn.
   why: 'Observed sample: {{ paintedwolf.observed_paths_sample }}{% if paintedwolf.observed_paths_omitted %} +{{ paintedwolf.observed_paths_omitted }} more path(s){% endif %}{% if paintedwolf.observed_urls_sample %}; URLs: {{ paintedwolf.observed_urls_sample }}{% endif %}'
   fix: The host preserves the report and attaches a bounded sample of observed paths or URLs when available, without requesting another model turn.
   instead: The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.
