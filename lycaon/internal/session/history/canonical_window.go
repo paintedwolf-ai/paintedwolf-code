@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -190,7 +191,7 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 		at, advanced := selectCutoff(tail, alloc, st.tail.ord)
 		tail = tail[at:]
 		if advanced {
-			st.change = cutoffTailAdvanced
+			st.note(cutoffTailAdvanced)
 		}
 		st.tail = markRow(tail[0])
 	})
@@ -249,13 +250,22 @@ func estimateSingleMessageTokens(msg api.Message) int {
 	return compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{msg}))
 }
 
+// estimateSingleMessageBytes counts the text a request carries once: content,
+// its tool-result copy, and its parts are one body. Call arguments add to it.
 func estimateSingleMessageBytes(msg api.Message) int {
 	size := len(msg.Content)
 	if msg.ToolResult != nil {
-		size += len(msg.ToolResult.Content)
+		size = max(size, len(msg.ToolResult.Content))
 	}
+	parts := 0
 	for _, part := range msg.ContentParts {
-		size += len(part.Content)
+		parts += len(part.Content)
+	}
+	size = max(size, parts)
+	if len(msg.ToolCalls) > 0 {
+		if raw, err := json.Marshal(msg.ToolCalls); err == nil {
+			size += len(raw)
+		}
 	}
 	return max(1, size)
 }

@@ -101,13 +101,13 @@ func TestUniformExchangesHoldAnchorsAC_KV_03(t *testing.T) {
 	t.Run("one change in every sixteen transitions", func(t *testing.T) {
 		// A settled start on the grid, then one full cycle of sixteen exchanges.
 		rows := []api.Message{}
-		for ord := int64(33); ord < 33+129; ord += 2 {
+		for ord := int64(33); ord < 33+ActiveTurnWorkingSetRows; ord += 2 {
 			rows = append(rows, ordExchange(ord, "x")...)
 		}
 		held := int64(33)
 		stable, changed := 0, 0
 		for i := range 16 {
-			rows = append(rows, ordExchange(33+129+int64(2*i)+1, "x")...)
+			rows = append(rows, ordExchange(33+ActiveTurnWorkingSetRows+int64(2*i), "x")...)
 			boundary := selectWorkingSetBoundary(rows, ample, held)
 			if boundary.startOrd == held {
 				stable++
@@ -192,8 +192,10 @@ func tailStarts(t *testing.T, svc *Service, mem *store.Memory, sess *api.Session
 		rows, err := svc.Load(t.Context(), sess)
 		testutil.FailErr(t, "load", err)
 		assertPairedExchanges(t, rows)
-		at := slices.IndexFunc(rows, func(row api.Message) bool { return row.Ord > 2 })
-		starts = append(starts, rows[at].Ord)
+		// Rows ahead of a notice are the retained view and opener, not the tail.
+		from := max(0, indexOfID(rows, historyCoverageNoticeID))
+		at := slices.IndexFunc(rows[from:], func(row api.Message) bool { return row.Ord > 2 })
+		starts = append(starts, rows[from+at].Ord)
 	}
 	return starts
 }
@@ -208,11 +210,22 @@ func burstConfig() compaction.CompactionConfig {
 	return cfg
 }
 
-// seedEditBurst fills the tail near its byte bound, then appends one batch of
-// eight ~35 KB tool results that crosses it.
-func seedEditBurst(t *testing.T, mem *store.Memory, sessionID string) {
+// stableTurnSession publishes nothing in the background, so a cutoff sequence
+// depends only on the appends a test makes.
+func stableTurnSession(t *testing.T, cfg compaction.CompactionConfig) (*Service, *store.Memory, *api.Session) {
 	t.Helper()
-	seedTurn(t, mem, sessionID, 90, strings.Repeat("o", 1000))
+	svc, mem, sess := newTurnSession(t, cfg)
+	svc.Runner = nil
+	return svc, mem, sess
+}
+
+// appendEditBurst fills the tail near its byte bound, then appends one batch of
+// eight ~35 KB tool results that crosses it.
+func appendEditBurst(t *testing.T, mem *store.Memory, sessionID string) {
+	t.Helper()
+	for i := range 120 {
+		testutil.FailErr(t, "append exchange", mem.AppendMessages(t.Context(), sessionID, turnExchange(100+i, strings.Repeat("o", 1000))...))
+	}
 	call := []api.ToolCall{}
 	for i := range 8 {
 		call = append(call, api.ToolCall{ID: fmt.Sprintf("edit-%d", i), Name: "edit"})
@@ -228,8 +241,9 @@ func seedEditBurst(t *testing.T, mem *store.Memory, sessionID string) {
 
 func TestEightEditBurstDoesNotSlideTheTailAC_KV_06(t *testing.T) {
 	t.Run("without a view", func(t *testing.T) {
-		svc, mem, sess := newTurnSession(t, burstConfig())
-		seedEditBurst(t, mem, sess.ID)
+		svc, mem, sess := stableTurnSession(t, burstConfig())
+		seedTurn(t, mem, sess.ID, 0, "")
+		appendEditBurst(t, mem, sess.ID)
 		starts := tailStarts(t, svc, mem, sess, 60, 1000, strings.Repeat("o", 1000))
 		moves := distinctInOrder(starts)
 		t.Logf("tail starts: %v", moves)
@@ -238,11 +252,10 @@ func TestEightEditBurstDoesNotSlideTheTailAC_KV_06(t *testing.T) {
 		}
 	})
 	t.Run("behind a published view", func(t *testing.T) {
-		svc, mem, sess := newTurnSession(t, burstConfig())
+		svc, mem, sess := stableTurnSession(t, burstConfig())
 		canonical := seedTurn(t, mem, sess.ID, 4, "short")
 		publishCoverage(t, mem, sess.ID, canonical, canonical[len(canonical)-1].Ord, 1, 196608)
-		seedEditBurst(t, mem, sess.ID)
-		// The first read settles any published view above; later appends must hold.
+		appendEditBurst(t, mem, sess.ID)
 		starts := tailStarts(t, svc, mem, sess, 60, 2000, strings.Repeat("o", 1000))
 		moves := distinctInOrder(starts)
 		t.Logf("tail starts: %v", moves)
@@ -257,9 +270,10 @@ func TestEightEditBurstDoesNotSlideTheTailAC_KV_06(t *testing.T) {
 func TestOversizedBodiesHoldTheirProjectionAC_KV_06(t *testing.T) {
 	cfg := burstConfig()
 	cfg.HardCeilingTokens, cfg.TargetTokens = 40000, 20000
-	svc, mem, sess := newTurnSession(t, cfg)
+	svc, mem, sess := stableTurnSession(t, cfg)
 	svc.recallAvailable = func(context.Context, *api.Session) bool { return true }
-	seedEditBurst(t, mem, sess.ID)
+	seedTurn(t, mem, sess.ID, 0, "")
+	appendEditBurst(t, mem, sess.ID)
 	budgets := fixedBudgets{window: cfg.ModelContextWindow}
 	frame := strings.Repeat("Standing instructions. ", 400)
 	var previous []api.Message
@@ -321,7 +335,7 @@ func commonRows(a, b []api.Message) int {
 func TestTighterFitFeedsLaterProjectionAC_KV_04(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.ModelContextWindow, cfg.HardCeilingTokens, cfg.TargetTokens = 65536, 40000, 20000
-	svc, mem, sess := newTurnSession(t, cfg)
+	svc, mem, sess := stableTurnSession(t, cfg)
 	body := strings.Repeat("recorded observation ", 12)
 	seedTurn(t, mem, sess.ID, 40, body)
 	// A frame far above the cold-start estimate makes the final fit the tight bound.
@@ -379,7 +393,7 @@ func TestSecondCollapseSignatureHoldsBehindAViewAC_KV_07(t *testing.T) {
 	// Fixture shape only: a stable prefix of view rows, then a long active turn.
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.ModelContextWindow, cfg.HardCeilingTokens, cfg.TargetTokens = 196608, 40000, 20000
-	svc, mem, sess := newTurnSession(t, cfg)
+	svc, mem, sess := stableTurnSession(t, cfg)
 	body := strings.Repeat("recorded observation ", 40)
 	canonical := seedTurn(t, mem, sess.ID, 80, body)
 	publishCoverage(t, mem, sess.ID, canonical, canonical[20].Ord, 1, cfg.ModelContextWindow)
@@ -415,7 +429,7 @@ func TestCutoffStateInvalidatesAndRebuildsAC_KV_08(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
 	setup := func(t *testing.T) (*Service, *store.Memory, *api.Session) {
 		t.Helper()
-		svc, mem, sess := newTurnSession(t, cfg)
+		svc, mem, sess := stableTurnSession(t, cfg)
 		seedTurn(t, mem, sess.ID, 100, "recorded observation")
 		return svc, mem, sess
 	}

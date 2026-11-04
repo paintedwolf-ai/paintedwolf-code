@@ -117,6 +117,13 @@ type cutoffState struct {
 	change string
 }
 
+// note records why a cutoff moved without hiding a pending reset reason.
+func (st *cutoffState) note(reason string) {
+	if st.change == "" {
+		st.change = reason
+	}
+}
+
 func (st cutoffState) lineageHolds(rows []api.Message) bool {
 	last := int64(0)
 	for _, row := range rows {
@@ -195,7 +202,7 @@ func (m *Service) holdCanonicalTail(key cutoffKey, sessionID string, rows []api.
 	m.cutoffs.update(sessionID, key, rows, func(st *cutoffState) {
 		if truncated && st.tail.ord < rows[0].Ord {
 			st.tail = markRow(rows[advanceCutoff(rows, alloc, 0)])
-			st.change = cutoffTailAdvanced
+			st.note(cutoffTailAdvanced)
 		}
 		if st.tail.ord > rows[0].Ord {
 			if at := firstAtOrAfter(rows, st.tail.ord); at < len(rows) {
@@ -220,7 +227,7 @@ func (m *Service) holdWorkingSet(key cutoffKey, sessionID string, rows []api.Mes
 		}
 		start = boundary.startOrd
 		if boundary.advanced {
-			st.change = cutoffWorkAdvanced
+			st.note(cutoffWorkAdvanced)
 		}
 		if start > st.work.ord {
 			st.work = markRow(rows[idx+1:][firstAtOrAfter(rows[idx+1:], start)])
@@ -240,12 +247,14 @@ func (m *Service) noteFitCut(key cutoffKey, sessionID string, rows, fitted []api
 	at := slices.IndexFunc(fitted, func(row api.Message) bool { return row.Ord > through && !row.ContextPinned })
 	m.cutoffs.update(sessionID, key, rows, func(st *cutoffState) {
 		if bodies > st.bodies {
-			st.bodies, st.change = bodies, cutoffFitAdvanced
+			st.bodies = bodies
+			st.note(cutoffFitAdvanced)
 		}
 		if through == 0 || at < 0 || fitted[at].Ord <= st.fit.ord {
 			return
 		}
-		st.fit, st.change = markRow(fitted[at]), cutoffFitAdvanced
+		st.fit = markRow(fitted[at])
+		st.note(cutoffFitAdvanced)
 		if st.fit.ord > st.work.ord {
 			st.work = st.fit
 		}

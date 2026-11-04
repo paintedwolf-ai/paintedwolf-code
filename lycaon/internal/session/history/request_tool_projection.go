@@ -44,11 +44,14 @@ func projectToolBodiesThrough(ctx context.Context, rows []api.Message, through i
 	return out
 }
 
-// extendBodyProjection carries a body projection forward to the next anchor, so
-// each append does not rewrite one more retained row. The latest exchange stays whole.
+// extendBodyProjection carries a projection that reached the active turn forward
+// to the next anchor, so each append does not rewrite one more retained row. The
+// latest exchange stays whole, and a projection that stopped short of the turn
+// leaves the turn's bodies alone.
 func extendBodyProjection(ctx context.Context, before, projected []api.Message) []api.Message {
 	last := lastProjectedBody(before, projected)
-	if last == 0 {
+	opener := api.UserIntentBoundary(projected) - 1
+	if last == 0 || opener < 0 || last < projected[opener].Ord {
 		return projected
 	}
 	through := (last/PrefixGridRowStep+1)*PrefixGridRowStep - 1
