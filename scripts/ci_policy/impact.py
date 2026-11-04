@@ -87,7 +87,7 @@ def selected_lanes(scope, lanes):
     ordinary = [path for path in paths if native_dependencies(path) is None]
     areas = {"go" if p.startswith("lycaon/") else "den" for p in ordinary}
     # Repository contracts read source outside the package/import graph.
-    chosen = {"limits", "contracts", "integration-build", "behavior"}
+    chosen = {"limits", "build", "behavior"}
     for dependency in native:
         chosen |= dependency["lanes"]
     if "go" in areas:

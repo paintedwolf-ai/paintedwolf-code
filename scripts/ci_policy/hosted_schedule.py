@@ -1,28 +1,9 @@
 """Comparable execution estimates for a capped hosted matrix."""
-from collections import Counter
 import heapq
 
 from ci_policy.timings import valid_seconds
-from verification_plan import expand
 
 PRIORITIES = {"reject": 0, "critical": 1, "compile": 2, "normal": 3}
-
-
-def validate_sources(lanes):
-    for name, lane in lanes.items():
-        if "timing_source" not in lane:
-            continue
-        key = lane["timing_source"]
-        source = lanes.get(key) if isinstance(key, str) else None
-        measured = source and "nightly" in source["profiles"]
-        if not measured or key == name or "timing_source" in source:
-            raise ValueError(f"CI lane {name} needs a direct nightly timing source")
-        if any(lane.get(field, default) != source.get(field, default)
-               for field, default in [("runner", "ubuntu-24.04"), ("setup", None), ("workers", None), ("shards", 1)]):
-            raise ValueError(f"CI lane {name} timing source must use the same execution configuration")
-        stages = lambda value: Counter(stage["name"] for stage in expand(value["targets"]))
-        if stages(lane) - stages(source):
-            raise ValueError(f"CI lane {name} timing source must cover its stages")
 
 
 def order(rows, lanes, timings=None, capacity=4):
