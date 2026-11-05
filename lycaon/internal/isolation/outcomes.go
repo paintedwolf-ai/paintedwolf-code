@@ -33,7 +33,6 @@ const (
 	CodeBoundaryRefused                    = "SANDBOX_BOUNDARY_REFUSED"
 	CodeCapabilityRequestInvalid           = "SANDBOX_CAPABILITY_REQUEST_INVALID"
 	CodeTerminalPathRefused                = "SANDBOX_TERMINAL_PATH_REFUSED"
-	CodeRefusalReportSilent                = "SANDBOX_REFUSAL_REPORT_SILENT"
 	CodeControlPlaneDenied                 = "SANDBOX_CONTROL_PLANE_DENIED"
 	CodeDirectIPDenied                     = "SANDBOX_DIRECT_IP_DENIED"
 	CodeDirectIPAuthorizationChanged       = "SANDBOX_DIRECT_IP_AUTHORIZATION_CHANGED"

@@ -128,3 +128,7 @@ retired:
     kind: hint_code
     summary: Refused a closeout envelope with no synthesis. Successor COORDINATOR_CLOSEOUT_NO_ANSWER fires when the narrative is empty after parsing.
     date: 2026-11-03
+  - id: SANDBOX_REFUSAL_REPORT_SILENT
+    kind: hint_code
+    summary: Sandbox guidance reports only observed refusal facts; silent refusal-report warning is retired.
+    date: 2026-10-30

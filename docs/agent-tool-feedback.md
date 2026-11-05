@@ -258,7 +258,7 @@ generic guidance. Recovery retains its existing two-attempt allowance.
 An unsuccessful process exit without a typed refusal produces no sandbox
 warning. Its exit status, output, deadline or stop facts remain in the receipt;
 actual boundary refusals keep their specific recovery. The retired
-`SANDBOX_REFUSAL_REPORT_SILENT` code remains reserved for historical outcomes.
+`SANDBOX_REFUSAL_REPORT_SILENT` is retired.
 
 ## Reachable-remedy rule
 
