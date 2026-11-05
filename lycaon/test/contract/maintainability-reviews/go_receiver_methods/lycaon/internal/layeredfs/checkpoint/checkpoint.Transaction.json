@@ -6,7 +6,7 @@
   "disposition": "retain",
   "reason": "Retain Transaction as the one promotion transaction across target preimage capture, retained-inode hard-link staging, two-phase rollback, O(1) postimage xattr folding, readonly directory recovery ordering, per-root Git ref CAS undo and joined durable records. It absorbed the roll-forward apply, the host undo and the worker's byte journal, so splitting undo from apply would recreate the failure-rule split this replaced. Recorded inode groups and root identities compare across a restart without the device number.",
   "reviewed_commit": "993e0d03c92f08f921f1367754e04fb2fc779e19",
-  "ceiling": 30,
+  "ceiling": 46,
   "boundaries": {
     "lycaon/internal/layeredfs/checkpoint/transaction_test.go": "b2946bc6bb6c47146852559cc7836d821d8d473f184affd4fe34ab96166b8e9f",
     "lycaon/internal/layeredfs/checkpoint/transaction_refs_test.go": "5ce962c05c4bcb639218085bdbc68360534153785491e4f7491265ac7dbdd913",
@@ -14,5 +14,5 @@
     "lycaon/internal/layeredfs/checkpoint/transaction_volume_test.go": "4295e6416194b11224c2de4e1710b22b7501442fe52031624f7f48c924fe6521",
     "lycaon/internal/layeredfs/checkpoint/promoter_apply_scaling_test.go": "0b0c49f49caf56e337587ede62df93a2e3f7116868f59de26e0c701a15e3c2a7"
   },
-  "reviewed_shape": "0f341c4276276ed395dc663ed732eb14dc76568ce841655e3d199946e199be06"
+  "reviewed_shape": "df20a9b32bfdb2003ae7302359f296be07411ad429d77075e0da4f13da245db9"
 }

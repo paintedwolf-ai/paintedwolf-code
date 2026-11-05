@@ -6,11 +6,11 @@
   "disposition": "retain",
   "reason": "Retain the immutable checkpoint promotion owner for exact-base preview evaluation and target revalidation. Target I/O lives on promotionTargets and every effect lives on Transaction; keeping evaluation and revalidation on Promoter preserves manifest and preview identity.",
   "reviewed_commit": "993e0d03c92f08f921f1367754e04fb2fc779e19",
-  "ceiling": 545,
+  "ceiling": 439,
   "boundaries": {
     "lycaon/internal/layeredfs/checkpoint/promotion_test.go": "fdbc41dd5be0317de59474eb274b9d559df71eef9f00a3a14467af56eff4812f",
     "lycaon/internal/layeredfs/checkpoint/git_import_test.go": "a6040bfacebbe2cdf55f32faeb1798b74c0a15b49458aa307a252478325d15ab",
     "lycaon/internal/layeredfs/checkpoint/promoter_apply_scaling_test.go": "0b0c49f49caf56e337587ede62df93a2e3f7116868f59de26e0c701a15e3c2a7"
   },
-  "reviewed_shape": "291ee652c5d78f25eb582dd08b1e05a77dfd718f26a91087c427bfee0a74c594"
+  "reviewed_shape": "a4952f9c9b4ca25946db5eaa3c21b0ef33b5eea64f23cb12f9e6b30a5e5b9f82"
 }

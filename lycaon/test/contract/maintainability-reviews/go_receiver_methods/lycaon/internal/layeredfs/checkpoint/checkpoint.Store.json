@@ -4,12 +4,12 @@
   "kind": "runtime_service",
   "workstream": "immutable-worker-checkpoints",
   "disposition": "retain",
-  "reason": "Retain the 18-method immutable store as the content-addressed blob, manifest, host-recovery and journal persistence boundary. Manifest validation, host recovery slots and roll-forward recovery share storage paths; publication and promotion remain separate owners. Reviewed unchanged after store_read.go gained the applied-path marker helpers; only its import set moved.",
+  "reason": "Retain the 19-method immutable store as the content-addressed blob, manifest, host-recovery and journal persistence boundary. Manifest validation, host recovery slots and roll-forward recovery share storage paths; publication and promotion remain separate owners. Reviewed unchanged after store_read.go gained the applied-path marker helpers; only its import set moved. A composed manifest publishes through the same stage, retention and commit order as a live view.",
   "reviewed_commit": "993e0d03c92f08f921f1367754e04fb2fc779e19",
-  "ceiling": 18,
+  "ceiling": 19,
   "boundaries": {
     "lycaon/internal/layeredfs/checkpoint/checkpoint_test.go": "05c5d651fffc5236e5e757f3c1b670ac96924301e947d1cfbadcbed24713f88f",
-    "lycaon/internal/layeredfs/checkpoint/promotion_test.go": "15b3f49a90d062f63ff21f95208d2eb408caf442a2defc0a98f9baaa140bcaf2"
+    "lycaon/internal/layeredfs/checkpoint/promotion_test.go": "fdbc41dd5be0317de59474eb274b9d559df71eef9f00a3a14467af56eff4812f"
   },
-  "reviewed_shape": "e807e0e1cc133117955fa8ba20e21a5762ba57c3ee793ba7b458c7e55721d09e"
+  "reviewed_shape": "24311ece3d6e579687a38363e828da1a6533cc0e5b95fa3e120de18a85c8cc4f"
 }
