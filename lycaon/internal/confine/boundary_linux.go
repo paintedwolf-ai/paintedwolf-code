@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -181,6 +182,15 @@ func renderProfile(c Confinement) (string, error) {
 	return string(raw), nil
 }
 
+// hostResolvers lists the resolvers a direct IP sandbox relays names to.
+var hostResolvers = func() []string {
+	conf, err := os.ReadFile("/etc/resolv.conf")
+	if err != nil {
+		return nil
+	}
+	return linuxsandbox.HostResolvers(string(conf))
+}
+
 // networkPlan carries the network axis with the same derivations BoundaryOf
 // reports, so what the helper refuses is what the host would have claimed.
 func networkPlan(c Confinement) linuxsandbox.Network {
@@ -199,9 +209,7 @@ func networkPlan(c Confinement) linuxsandbox.Network {
 	}
 	n.SocketGrants = socketPlan(c.SocketGrants)
 	if c.Network == NetworkDirectIP {
-		if conf, err := os.ReadFile("/etc/resolv.conf"); err == nil {
-			n.Resolvers = linuxsandbox.HostResolvers(string(conf))
-		}
+		n.Resolvers = hostResolvers()
 	}
 	return n
 }
@@ -317,6 +325,12 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 		}
 	}
 	for p := range pc.readOnly {
+		// A read restoration beneath a placeholder has nothing to cover until it
+		// is mounted, and the helper seals it unless a write grant reaches it.
+		if pc.restored[p] && coveredBy(pc.hidden, p) {
+			pc.fs.WriteRoots = slices.DeleteFunc(pc.fs.WriteRoots, func(root string) bool { return root == p })
+			continue
+		}
 		pc.fs.ReadOnly = append(pc.fs.ReadOnly, p)
 	}
 	for p := range pc.hidden {
@@ -347,13 +361,13 @@ func (pc *planCompiler) readRule(rule fsRule) {
 		if path == "" {
 			continue
 		}
-		switch {
-		case !rule.allow:
+		if !rule.allow {
 			pc.hidden[path] = true
 			delete(pc.restored, path)
-		case pc.hidden[path]:
-			delete(pc.hidden, path)
-		case coveredBy(pc.hidden, path):
+			continue
+		}
+		lift(pc.hidden, path, m.subpath != "")
+		if coveredBy(pc.hidden, path) {
 			pc.restored[path] = true
 		}
 	}
@@ -375,27 +389,39 @@ func (pc *planCompiler) writeRule(rule fsRule) error {
 		}
 		for _, path := range paths {
 			if rule.allow {
-				pc.allowWrite(path)
+				pc.allowWrite(path, m.subpath != "")
 			} else {
-				pc.denyWrite(path, m.except)
+				pc.denyWrite(path, m.except, m.subpath != "")
 			}
 		}
 	}
 	return nil
 }
 
+// lift removes the denial a later allow overrides: the rules are last-match, so
+// a subtree allow also overrides every denial beneath it.
+func lift(denied map[string]bool, path string, subtree bool) {
+	delete(denied, path)
+	if !subtree {
+		return
+	}
+	for p := range denied {
+		if PathAtOrUnder(p, path) {
+			delete(denied, p)
+		}
+	}
+}
+
 // allowWrite grants the path to Landlock and restores it beneath any mask.
-func (pc *planCompiler) allowWrite(path string) {
+func (pc *planCompiler) allowWrite(path string, subtree bool) {
 	if st, err := os.Stat(path); err == nil && !st.IsDir() {
 		pc.fs.WriteFiles = append(pc.fs.WriteFiles, path)
 	} else {
 		pc.fs.WriteRoots = append(pc.fs.WriteRoots, path)
 	}
 	pc.grants = append(pc.grants, path)
-	switch {
-	case pc.readOnly[path]:
-		delete(pc.readOnly, path)
-	case coveredBy(pc.readOnly, path), coveredBy(pc.hidden, path):
+	lift(pc.readOnly, path, subtree)
+	if coveredBy(pc.readOnly, path) || coveredBy(pc.hidden, path) {
 		pc.restored[path] = true
 	}
 }
@@ -403,7 +429,17 @@ func (pc *planCompiler) allowWrite(path string) {
 // denyWrite masks a path read-only when a grant would otherwise reach it; its
 // exceptions are restored. Only a path still behind its placeholder needs no
 // mask: one a restoration brought back is as reachable as any other.
-func (pc *planCompiler) denyWrite(path string, except []string) {
+//
+// A subtree denial also overrides the earlier grants beneath it, and those stay
+// masked even when no grant reaches the denied path itself.
+func (pc *planCompiler) denyWrite(path string, except []string, subtree bool) {
+	if subtree {
+		for _, grant := range pc.grants {
+			if grant != path && PathAtOrUnder(grant, path) && !coveredByList(except, grant) {
+				pc.readOnly[grant] = true
+			}
+		}
+	}
 	if pc.concealed(path) || !coveredByList(pc.grants, path) {
 		return
 	}

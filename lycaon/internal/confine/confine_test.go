@@ -11,11 +11,9 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -42,25 +40,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func requireSeatbelt(t *testing.T) string {
-	t.Helper()
-	if runtime.GOOS != "darwin" || testing.Short() || !confine.Available() {
-		t.Skip("darwin + seatbelt sandbox required")
-	}
-	warmPythonShim.Do(func() {
-		// /usr/bin/python3 is an xcrun shim that caches under the Darwin user temp
-		// directory, outside the isolated TMPDIR that confined children may write.
-		if out, err := exec.Command("/usr/bin/python3", "-c", "pass").CombinedOutput(); err != nil {
-			t.Logf("warm python3 shim: %v: %s", err, out)
-		}
-	})
-	self, err := os.Executable()
-	testutil.FailErr(t, "os.Executable failed", err)
-	return self
-}
-
-var warmPythonShim sync.Once
-
 func outsideTemporaryWriteRoots(t *testing.T) string {
 	t.Helper()
 	account, err := user.LookupId(strconv.Itoa(os.Getuid()))
@@ -86,6 +65,7 @@ func confinedRun(t *testing.T, self string, c confine.Confinement, name string, 
 		return 126, err.Error()
 	}
 	defer release()
+	c.Roots = liveBoundaryRoots(c.Roots...)
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
@@ -102,6 +82,7 @@ func confinedStdout(t *testing.T, self string, c confine.Confinement, name strin
 		return 126, "", err.Error()
 	}
 	defer release()
+	c.Roots = liveBoundaryRoots(c.Roots...)
 	cmd, cleanup, err := confine.Command(context.Background(), self, name, args, c)
 	testutil.FailErr(t, "confine.Command failed", err)
 	defer cleanup()
@@ -577,8 +558,8 @@ func TestProtectedPathCannotBeGrantedAsWriteRoot(t *testing.T) {
 	}
 }
 
-func TestSeatbeltDraftWorkspaceVenvInterpreterExecutes(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryDraftWorkspaceVenvInterpreterExecutes(t *testing.T) {
+	self := requireLiveBoundary(t)
 	python, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skip("python3 required for venv confinement probe")
@@ -620,8 +601,8 @@ func TestBuildProfileIncludesStandardCacheRoots(t *testing.T) {
 }
 
 // Applied profiles enforce filesystem and network rules.
-func TestSeatbeltEnforces(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryEnforces(t *testing.T) {
+	self := requireLiveBoundary(t)
 	proj := t.TempDir()
 	c := confine.Confinement{Roots: []string{proj}}
 
@@ -678,8 +659,8 @@ func TestSeatbeltEnforces(t *testing.T) {
 }
 
 // Process signals remain within the applied profile.
-func TestSeatbeltSignalSameSandboxOnly(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundarySignalSameSandboxOnly(t *testing.T) {
+	self := requireLiveBoundary(t)
 	proj := t.TempDir()
 	c := confine.Confinement{Roots: []string{proj}}
 
@@ -732,13 +713,13 @@ func TestSeatbeltSignalSameSandboxOnly(t *testing.T) {
 }
 
 // Managed browsing preserves filesystem and network boundaries.
-func TestSeatbeltBrowserProfileEnforces(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryBrowserProfileEnforces(t *testing.T) {
+	self := requireLiveBoundary(t)
 	proj := t.TempDir()
 	confine.TestingSetAutoConfine(t)
 	built, ok := confine.BrowserConfinement(confine.Request{Roots: []string{proj}})
 	if !ok || built == nil {
-		t.Fatal("expected BrowserConfinement on darwin")
+		t.Fatal("expected BrowserConfinement where confinement is available")
 	}
 	c := *built
 
@@ -766,9 +747,9 @@ func TestSeatbeltBrowserProfileEnforces(t *testing.T) {
 	}
 }
 
-// Development build roots under ~/.config/paintedwolf-dev must compile cleanly without Seatbelt errors.
-func TestSeatbeltBrowserProfileUnderDevelopmentBuild(t *testing.T) {
-	self := requireSeatbelt(t)
+// Development build roots under ~/.config/paintedwolf-dev must apply cleanly.
+func TestBoundaryBrowserProfileUnderDevelopmentBuild(t *testing.T) {
+	self := requireLiveBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "user home dir", err)
@@ -787,7 +768,7 @@ func TestSeatbeltBrowserProfileUnderDevelopmentBuild(t *testing.T) {
 		Roots: []string{browserCache, profileDir, draftDir},
 	})
 	if !ok || built == nil {
-		t.Fatal("expected BrowserConfinement on darwin")
+		t.Fatal("expected BrowserConfinement where confinement is available")
 	}
 
 	code, out := confinedRun(t, self, *built, "/usr/bin/true")
@@ -797,8 +778,8 @@ func TestSeatbeltBrowserProfileUnderDevelopmentBuild(t *testing.T) {
 }
 
 // Configured secret roots remain unreadable.
-func TestSeatbeltDeniesSecretReads(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryDeniesSecretReads(t *testing.T) {
+	self := requireLiveBoundary(t)
 	proj := t.TempDir()
 	secretDir := t.TempDir()
 	secret := filepath.Join(secretDir, "key")
@@ -821,8 +802,8 @@ func TestSeatbeltDeniesSecretReads(t *testing.T) {
 }
 
 // Nested executables retain the write boundary.
-func TestSeatbeltFSBlastBoundary(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryFSBlastBoundary(t *testing.T) {
+	self := requireLiveBoundary(t)
 	proj := t.TempDir()
 	c := confine.Confinement{Roots: []string{proj}}
 
@@ -834,7 +815,7 @@ func TestSeatbeltFSBlastBoundary(t *testing.T) {
 	_ = os.Remove(escape)
 	if code := confinedExit(t, self, c, "/bin/sh", "-c", "echo x > "+escape); code == 0 {
 		_ = os.Remove(escape)
-		t.Fatal("write outside root must be denied by Seatbelt")
+		t.Fatal("write outside root must be denied by the boundary")
 	}
 	_ = os.Remove(escape)
 
@@ -868,7 +849,7 @@ func TestSeatbeltFSBlastBoundary(t *testing.T) {
 		testutil.FailErr(t, "create directory", err)
 	}
 	if code := confinedExit(t, self, c, "/bin/rm", "-rf", build); code != 0 {
-		t.Fatalf("in-project rm -rf ./build must succeed under Seatbelt, exit=%d", code)
+		t.Fatalf("in-project rm -rf ./build must succeed under the boundary, exit=%d", code)
 	}
 	if _, err := os.Stat(build); !os.IsNotExist(err) {
 		t.Fatalf("in-project build dir should be gone, stat err=%v", err)
@@ -876,8 +857,8 @@ func TestSeatbeltFSBlastBoundary(t *testing.T) {
 }
 
 // Mediated and direct sockets retain separate boundaries.
-func TestSeatbeltEgressBoundary(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryEgress(t *testing.T) {
+	self := requireLiveBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
@@ -889,7 +870,7 @@ func TestSeatbeltEgressBoundary(t *testing.T) {
 		t.Fatalf("DefaultConfinement must be proxy-only: on=%v c=%+v", on, c)
 	}
 	defer confine.SetBrokerForTest(nil, egressproxy.Addrs{HTTP: "127.0.0.1:8080", SOCKS: "127.0.0.1:1080"})()
-	lease, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "seatbelt-boundary"})
+	lease, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "egress-boundary"})
 	testutil.FailErr(t, "bind egress", err)
 	defer lease.Close(t.Context())
 
@@ -953,7 +934,7 @@ func TestSeatbeltEgressBoundary(t *testing.T) {
 
 // TestProxyOnlyRoutesThroughInAppProxy checks the confined proxy path.
 func TestProxyOnlyRoutesThroughInAppProxy(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	dir := t.TempDir()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("reached"))
@@ -993,8 +974,8 @@ func TestProxyOnlyRoutesThroughInAppProxy(t *testing.T) {
 }
 
 // Proxy-only egress limits the child to its action endpoint.
-func TestSeatbeltProxyOnlyEgress(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryProxyOnlyEgress(t *testing.T) {
+	self := requireLiveBoundary(t)
 	proj := t.TempDir()
 
 	// The local server represents the action proxy.
@@ -1006,9 +987,6 @@ func TestSeatbeltProxyOnlyEgress(t *testing.T) {
 	c := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkProxyOnly, ProxyAddr: proxyAddr}
 
 	code, out := confinedRun(t, self, c, "/usr/bin/curl", "-s", "--max-time", "3", ts.URL)
-	if strings.Contains(out, "seatbelt:") {
-		t.Fatalf("proxy-only SBPL profile failed to compile: %s", out)
-	}
 	// The action proxy address is reachable.
 	if code != 0 {
 		t.Fatalf("curl to the proxy address should succeed under proxy-only egress, exit=%d out=%s", code, out)
@@ -1102,8 +1080,8 @@ func TestDefaultConfinementEnabledForDraftScratchRoot(t *testing.T) {
 }
 
 // Declared agent workspaces remain readable and writable in the sandbox.
-func TestSeatbeltAgentWorkspacesAreReachable(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryAgentWorkspacesAreReachable(t *testing.T) {
+	self := requireLiveBoundary(t)
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	secret := filepath.Join(cfg, "credential-vault.age")
@@ -1157,7 +1135,7 @@ func TestSeatbeltAgentWorkspacesAreReachable(t *testing.T) {
 
 // Profiles stay in memory to prevent cross-command replacement.
 func TestProfileIsNotStagedInAFile(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	root := t.TempDir()
 	c := confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny}
 

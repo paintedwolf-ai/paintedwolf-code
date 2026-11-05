@@ -13,12 +13,35 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// resolvableNameAddr is TEST-NET-1, so an answer cannot come from a local interface.
+const resolvableNameAddr = "192.0.2.7"
+
+var resolveProbe = []string{"python3", "-c", "import socket,sys; print(socket.gethostbyname(sys.argv[1]))"}
+
+// confinedResolve resolves name under c and returns the exit code and address.
+func confinedResolve(t *testing.T, self string, c confine.Confinement, name string) (int, string) {
+	t.Helper()
+	python := requirePython(t)
+	code, out, _ := confinedStdout(t, self, c, python, append(resolveProbe[1:], name)...)
+	return code, strings.TrimSpace(out)
+}
+
+// captureSocketGrant realizes an approved socket the way this host enforces it:
+// a pathname on macOS, a reference retained from approval on Linux.
+func captureSocketGrant(t *testing.T, approved, resolved string) (confine.SocketGrant, error) {
+	t.Helper()
+	ctx, scope := socketref.WithScope(t.Context())
+	t.Cleanup(func() { scope.Close() })
+	return confine.CaptureSocketGrant(ctx, confine.SocketGrant{ApprovedPath: approved, ResolvedPath: resolved})
+}
+
 // Local socket grants use exact literals.
-func TestSeatbeltSocketGrantMatrix(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundarySocketGrantMatrix(t *testing.T) {
+	self := requireLiveBoundary(t)
 	dir := shortTempDir(t)
 	aPath := filepath.Join(dir, "a.sock")
 	bPath := filepath.Join(dir, "b.sock")
@@ -42,12 +65,12 @@ func TestSeatbeltSocketGrantMatrix(t *testing.T) {
 
 	resolvedAPath, err := filepath.EvalSymlinks(aPath)
 	testutil.FailErr(t, "eval a", err)
+	liveA, err := captureSocketGrant(t, aPath, resolvedAPath)
+	testutil.FailErr(t, "capture a", err)
 	grantA := confine.Confinement{
-		Roots:   []string{proj},
-		Network: confine.NetworkDeny,
-		SocketGrants: []confine.SocketGrant{
-			{ApprovedPath: aPath, ResolvedPath: resolvedAPath},
-		},
+		Roots:        []string{proj},
+		Network:      confine.NetworkDeny,
+		SocketGrants: []confine.SocketGrant{liveA},
 	}
 	if code := unixConnectExit(t, self, grantA, aPath); code != 0 {
 		t.Fatalf("literal A must connect: exit=%d", code)
@@ -56,12 +79,12 @@ func TestSeatbeltSocketGrantMatrix(t *testing.T) {
 		t.Fatal("sibling B must stay denied")
 	}
 
+	liveLink, err := captureSocketGrant(t, link, resolvedA)
+	testutil.FailErr(t, "capture link", err)
 	grantLink := confine.Confinement{
-		Roots:   []string{proj},
-		Network: confine.NetworkDeny,
-		SocketGrants: []confine.SocketGrant{
-			{ApprovedPath: link, ResolvedPath: resolvedA},
-		},
+		Roots:        []string{proj},
+		Network:      confine.NetworkDeny,
+		SocketGrants: []confine.SocketGrant{liveLink},
 	}
 	if code := unixConnectExit(t, self, grantLink, aPath); code != 0 {
 		t.Fatalf("approved symlink resolving to A must connect canonical target: exit=%d", code)
@@ -70,18 +93,20 @@ func TestSeatbeltSocketGrantMatrix(t *testing.T) {
 	// Repointed grants fail closed.
 	testutil.FailErr(t, "remove link", os.Remove(link))
 	testutil.FailErr(t, "repoint to B", os.Symlink(bPath, link))
-	repointed := confine.Confinement{
-		Roots:   []string{proj},
-		Network: confine.NetworkDeny,
-		SocketGrants: []confine.SocketGrant{
-			{ApprovedPath: link, ResolvedPath: resolvedA},
-		},
-	}
-	if code := unixConnectExit(t, self, repointed, aPath); code == 0 {
-		t.Fatal("repointed grant must not keep A")
-	}
-	if code := unixConnectExit(t, self, repointed, bPath); code == 0 {
-		t.Fatal("repointed grant must not redirect to B")
+	// A host that retains the object refuses to capture the changed name; a
+	// pathname host carries the grant and refuses the launch's connect.
+	if liveRepointed, err := captureSocketGrant(t, link, resolvedA); err == nil {
+		repointed := confine.Confinement{
+			Roots:        []string{proj},
+			Network:      confine.NetworkDeny,
+			SocketGrants: []confine.SocketGrant{liveRepointed},
+		}
+		if code := unixConnectExit(t, self, repointed, aPath); code == 0 {
+			t.Fatal("repointed grant must not keep A")
+		}
+		if code := unixConnectExit(t, self, repointed, bPath); code == 0 {
+			t.Fatal("repointed grant must not redirect to B")
+		}
 	}
 
 	// A socket grant does not expose sibling files.
@@ -95,12 +120,12 @@ func TestSeatbeltSocketGrantMatrix(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", deniedParent)
 	secretResolved, err := filepath.EvalSymlinks(secretSock)
 	testutil.FailErr(t, "eval secret sock", err)
+	liveSecret, err := captureSocketGrant(t, secretSock, secretResolved)
+	testutil.FailErr(t, "capture secret socket", err)
 	secretGrant := confine.Confinement{
-		Roots:   []string{proj},
-		Network: confine.NetworkDeny,
-		SocketGrants: []confine.SocketGrant{
-			{ApprovedPath: secretSock, ResolvedPath: secretResolved},
-		},
+		Roots:        []string{proj},
+		Network:      confine.NetworkDeny,
+		SocketGrants: []confine.SocketGrant{liveSecret},
 	}
 	if code := unixConnectExit(t, self, secretGrant, secretSock); code != 0 {
 		t.Fatalf("exact socket under read-denied parent must connect: exit=%d", code)
@@ -111,8 +136,8 @@ func TestSeatbeltSocketGrantMatrix(t *testing.T) {
 }
 
 // Remote IP access remains separate from local socket grants.
-func TestSeatbeltDirectIPSeparationMatrix(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryDirectIPSeparationMatrix(t *testing.T) {
+	self := requireLiveBoundary(t)
 	dir := shortTempDir(t)
 	aPath := filepath.Join(dir, "a.sock")
 	bPath := filepath.Join(dir, "b.sock")
@@ -138,21 +163,18 @@ func TestSeatbeltDirectIPSeparationMatrix(t *testing.T) {
 	}
 
 	direct := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkDirectIP}
-	profile, err := confine.BuildSeatbeltProfile(direct)
-	testutil.FailErr(t, "BuildProfile direct", err)
-	assertDirectProfileHonest(t, profile)
 
 	if remoteURL != "" {
 		if code := confinedExit(t, self, direct, "/usr/bin/curl", "-s", "--max-time", "2", remoteURL); code != 0 {
 			// Transport failures are distinct from boundary denials.
 			if code, out := confinedRun(t, self, direct, "/usr/bin/curl", "-s", "--max-time", "2", remoteURL); strings.Contains(strings.ToLower(out), "operation not permitted") || strings.Contains(out, "EPERM") {
-				t.Fatalf("direct IP must not be Seatbelt-denied: exit=%d out=%s", code, out)
+				t.Fatalf("direct IP must not be boundary-denied: exit=%d out=%s", code, out)
 			}
 		}
-	} else if code, out := confinedRun(t, self, direct, "/usr/bin/python3", "-c",
+	} else if code, out := confinedRun(t, self, direct, requirePython(t), "-c",
 		"import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.settimeout(1); s.connect(('192.0.2.1', 9)); print('ok')"); code != 0 &&
 		(strings.Contains(strings.ToLower(out), "operation not permitted") || strings.Contains(out, "EPERM")) {
-		t.Fatalf("direct IP UDP TEST-NET must not be Seatbelt-denied: exit=%d out=%s", code, out)
+		t.Fatalf("direct IP UDP TEST-NET must not be boundary-denied: exit=%d out=%s", code, out)
 	}
 
 	if code := unixConnectExit(t, self, direct, aPath); code == 0 {
@@ -164,12 +186,12 @@ func TestSeatbeltDirectIPSeparationMatrix(t *testing.T) {
 
 	resolvedAPath, err := filepath.EvalSymlinks(aPath)
 	testutil.FailErr(t, "eval a", err)
+	liveA, err := captureSocketGrant(t, aPath, resolvedAPath)
+	testutil.FailErr(t, "capture a", err)
 	directPlusA := confine.Confinement{
-		Roots:   []string{proj},
-		Network: confine.NetworkDirectIP,
-		SocketGrants: []confine.SocketGrant{
-			{ApprovedPath: aPath, ResolvedPath: resolvedAPath},
-		},
+		Roots:        []string{proj},
+		Network:      confine.NetworkDirectIP,
+		SocketGrants: []confine.SocketGrant{liveA},
 	}
 	if code := unixConnectExit(t, self, directPlusA, aPath); code != 0 {
 		t.Fatalf("direct IP + socket A must connect A: exit=%d", code)
@@ -179,8 +201,8 @@ func TestSeatbeltDirectIPSeparationMatrix(t *testing.T) {
 	}
 }
 
-func TestSeatbeltFailClosedStartupMatrix(t *testing.T) {
-	requireSeatbelt(t)
+func TestBoundaryFailClosedStartupMatrix(t *testing.T) {
+	requireLiveBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
@@ -219,8 +241,10 @@ func unixConnectExit(t *testing.T, self string, c confine.Confinement, sockPath 
 	return code
 }
 
-func assertDirectProfileHonest(t *testing.T, profile string) {
-	t.Helper()
+// The rendered Seatbelt rules stay honest; the kernel's answer is above.
+func TestDirectIPProfileRules(t *testing.T) {
+	profile, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}, Network: confine.NetworkDirectIP})
+	testutil.FailErr(t, "BuildProfile direct", err)
 	if strings.Contains(profile, "(allow network*)") {
 		t.Fatalf("direct profile must not contain network*:\n%s", profile)
 	}
@@ -232,6 +256,19 @@ func assertDirectProfileHonest(t *testing.T, profile string) {
 	}
 	if !strings.Contains(profile, `(allow network-outbound (remote ip "*:*"))`) {
 		t.Fatalf("direct profile missing remote IP rule:\n%s", profile)
+	}
+
+	// Direct IP rules cannot narrow the peer host.
+	narrowed, err := confine.BuildSeatbeltProfile(confine.Confinement{
+		Roots: []string{"/proj"}, Network: confine.NetworkDirectIP,
+		DirectIPPermits: []confine.DirectIPPermit{{Protocol: "udp", Port: 123}},
+	})
+	testutil.FailErr(t, "BuildProfile narrowed", err)
+	if !strings.Contains(narrowed, `(remote udp "*:123")`) {
+		t.Fatalf("narrowed profile must emit the declared transport: %s", narrowed)
+	}
+	if strings.Contains(narrowed, `(remote ip "*:*")`) {
+		t.Fatalf("narrowed profile must not keep the wide-open allowance: %s", narrowed)
 	}
 }
 
@@ -277,15 +314,15 @@ func nonLoopbackProbe(t *testing.T) (url string, cleanup func()) {
 }
 
 // System resolution is available only with direct IP access.
-func TestSeatbeltSystemResolverIsDirectIPOnly(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundarySystemResolverIsDirectIPOnly(t *testing.T) {
+	self := requireLiveBoundary(t)
 	dir := shortTempDir(t)
 	proj := filepath.Join(dir, "proj")
 	testutil.FailErr(t, "mkdir", os.Mkdir(proj, 0o755))
 
-	name := registerMDNSName(t)
+	name := registerResolvableName(t)
 	direct := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkDirectIP}
-	if code, addr := confinedResolve(t, self, direct, name); code != 0 || addr != mdnsProbeAddr {
+	if code, addr := confinedResolve(t, self, direct, name); code != 0 || addr != resolvableNameAddr {
 		t.Fatalf("direct IP must resolve %s, else it is a literal-IP-only capability: exit=%d addr=%q", name, code, addr)
 	}
 
@@ -307,8 +344,8 @@ func TestSeatbeltSystemResolverIsDirectIPOnly(t *testing.T) {
 }
 
 // Declared transports narrow direct IP by protocol and port.
-func TestSeatbeltDirectIPNarrowing(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryDirectIPNarrowing(t *testing.T) {
+	self := requireLiveBoundary(t)
 	dir := shortTempDir(t)
 	proj := filepath.Join(dir, "proj")
 	testutil.FailErr(t, "mkdir", os.Mkdir(proj, 0o755))
@@ -330,25 +367,15 @@ func TestSeatbeltDirectIPNarrowing(t *testing.T) {
 		"udp/53 allowed\ntcp/443 allowed\n"; got != want {
 		t.Fatalf("unnarrowed direct IP must admit every transport:\ngot:\n%swant:\n%s", got, want)
 	}
-
-	// Direct IP rules cannot narrow the peer host.
-	profile, err := confine.BuildSeatbeltProfile(narrowed)
-	testutil.FailErr(t, "BuildProfile narrowed", err)
-	if !strings.Contains(profile, `(remote udp "*:123")`) {
-		t.Fatalf("narrowed profile must emit the declared transport: %s", profile)
-	}
-	if strings.Contains(profile, `(remote ip "*:*")`) {
-		t.Fatalf("narrowed profile must not keep the wide-open allowance: %s", profile)
-	}
 }
 
 // directIPVerdicts reports the sandbox verdict for each "proto/port" toward
-// TEST-NET-1. Seatbelt's localhost covers every local interface address, so
-// only a non-local peer reaches the direct-IP rules; TEST-NET-1 never answers,
-// so the verdict is the connect or send errno, not a reply.
+// TEST-NET-1. A local interface address counts as localhost, so only a
+// non-local peer reaches the direct-IP rules; TEST-NET-1 never answers, so the
+// verdict is the connect or send errno, not a reply.
 func directIPVerdicts(t *testing.T, self string, c confine.Confinement, transports ...string) string {
 	t.Helper()
-	probe := []string{"/usr/bin/python3", "-c", `import socket,sys
+	probe := []string{requirePython(t), "-c", `import socket,sys
 for spec in sys.argv[1:]:
     proto, port = spec.split("/")
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM if proto == "udp" else socket.SOCK_STREAM)
@@ -405,7 +432,7 @@ func TestDirectIPPermitsNarrowOnly(t *testing.T) {
 
 // Direct-IP declarations flow through profile construction and execution.
 func TestDirectIPNarrowingEndToEnd(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
@@ -429,12 +456,12 @@ func TestDirectIPNarrowingEndToEnd(t *testing.T) {
 	}
 
 	// The narrowed profile keeps the system resolver, which deny withholds.
-	name := registerMDNSName(t)
+	name := registerResolvableName(t)
 	deny := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkDeny}
 	if code, addr := confinedResolve(t, self, deny, name); code == 0 {
 		t.Fatalf("%s must need the system resolver, which deny withholds: addr=%q", name, addr)
 	}
-	if code, addr := confinedResolve(t, self, *c, name); code != 0 || addr != mdnsProbeAddr {
+	if code, addr := confinedResolve(t, self, *c, name); code != 0 || addr != resolvableNameAddr {
 		t.Fatalf("narrowed direct IP must resolve %s: exit=%d addr=%q", name, code, addr)
 	}
 

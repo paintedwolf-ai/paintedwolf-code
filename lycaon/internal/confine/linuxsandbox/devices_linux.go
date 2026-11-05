@@ -12,9 +12,14 @@ import (
 var devNodes = []string{"null", "zero", "full", "random", "urandom", "tty"}
 
 // mountDev replaces /dev with a curated set: the standard character devices,
-// the host's pseudo-terminals so inherited terminals keep their names, a fresh
-// shared-memory tmpfs, and the descriptor links. Raw disks and other devices
-// are absent rather than denied.
+// pseudo-terminals, a fresh shared-memory tmpfs, and the descriptor links. Raw
+// disks and other devices are absent rather than denied.
+//
+// A command gets its own devpts instance, because the kernel refuses a ptmx
+// bound alone: it finds the instance through the pts directory beside the node,
+// which only a whole devtmpfs mount would provide. A command whose standard
+// streams are a host terminal keeps the host's instance instead, so that
+// terminal keeps its name; it cannot allocate another.
 func mountDev() error {
 	clones := map[string]int{}
 	defer func() {
@@ -29,13 +34,22 @@ func mountDev() error {
 		}
 		clones[name] = fd
 	}
-	if fd, err := cloneTree("/dev/pts"); err == nil {
-		clones["pts"] = fd
+	ptmxLink := ""
+	if !hostTerminalOnStandardStreams() {
+		if fd, err := newDevpts(); err == nil {
+			clones["pts"] = fd
+			ptmxLink = "pts/ptmx"
+		}
 	}
-	ptmxLink, _ := os.Readlink("/dev/ptmx")
 	if ptmxLink == "" {
-		if fd, err := unix.OpenTree(unix.AT_FDCWD, "/dev/ptmx", unix.OPEN_TREE_CLONE|unix.O_CLOEXEC); err == nil {
-			clones["ptmx"] = fd
+		if fd, err := cloneTree("/dev/pts"); err == nil {
+			clones["pts"] = fd
+		}
+		ptmxLink, _ = os.Readlink("/dev/ptmx")
+		if ptmxLink == "" {
+			if fd, err := unix.OpenTree(unix.AT_FDCWD, "/dev/ptmx", unix.OPEN_TREE_CLONE|unix.O_CLOEXEC); err == nil {
+				clones["ptmx"] = fd
+			}
 		}
 	}
 	dev, err := newTmpfs("0755", maskTmpfsSize)
@@ -86,4 +100,43 @@ func mountDev() error {
 		return mountFailure("/dev", err)
 	}
 	return nil
+}
+
+// unixPtySlaveMajors are the device majors of pseudo-terminal slaves.
+const (
+	unixPtySlaveMajorFirst = 136
+	unixPtySlaveMajorLast  = 143
+)
+
+// hostTerminalOnStandardStreams reports a pseudo-terminal slave on a standard
+// stream, which can only have come from outside this mount namespace.
+func hostTerminalOnStandardStreams() bool {
+	for fd := range 3 {
+		var st unix.Stat_t
+		if unix.Fstat(fd, &st) != nil || st.Mode&unix.S_IFMT != unix.S_IFCHR {
+			continue
+		}
+		if major := unix.Major(uint64(st.Rdev)); major >= unixPtySlaveMajorFirst && major <= unixPtySlaveMajorLast {
+			return true
+		}
+	}
+	return false
+}
+
+// newDevpts creates a devpts instance only this sandbox can reach.
+func newDevpts() (int, error) {
+	fs, err := unix.Fsopen("devpts", unix.FSOPEN_CLOEXEC)
+	if err != nil {
+		return -1, err
+	}
+	defer func() { _ = unix.Close(fs) }()
+	for key, value := range map[string]string{"ptmxmode": "0666", "mode": "0600"} {
+		if err := unix.FsconfigSetString(fs, key, value); err != nil {
+			return -1, err
+		}
+	}
+	if err := unix.FsconfigCreate(fs); err != nil {
+		return -1, err
+	}
+	return unix.Fsmount(fs, unix.FSMOUNT_CLOEXEC, unix.MOUNT_ATTR_NOSUID|unix.MOUNT_ATTR_NOEXEC)
 }

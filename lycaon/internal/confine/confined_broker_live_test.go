@@ -15,11 +15,11 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// The whole chain, as a real command runs it: the applied Seatbelt profile, the
+// The whole chain, as a real command runs it: the applied boundary, the
 // environment the boundary hands the process, the descendant marker it carries,
 // and the broker resolving that marker back to the action.
 func TestConfinedCommandReachesTheBrokerByLineage(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	if _, err := exec.LookPath("curl"); err != nil {
 		t.Skip("curl is required to drive a confined process through the broker")
 	}
