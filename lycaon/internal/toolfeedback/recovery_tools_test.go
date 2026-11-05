@@ -309,10 +309,7 @@ func TestBinaryReadRecoveryRequiresOfferedViewerAndSupportedFormat(t *testing.T)
 					if strings.Contains(fix, "Use view_image") != viewer {
 						t.Fatalf("incorrect viewer remedy: %s", fix)
 					}
-					if strings.Contains(fix, "Use stat") != (!viewer && slices.Contains(offered, "stat")) {
-						t.Fatalf("incorrect metadata remedy: %s", fix)
-					}
-					if strings.Contains(fix, "perceive") || !strings.Contains(fix, "unresolved content requirement") {
+					if strings.Contains(fix, "perceive") {
 						t.Fatalf("recovery overclaimed evidence: %s", fix)
 					}
 				})

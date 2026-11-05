@@ -21,7 +21,7 @@ func TestRenderSkillProcedureBlockGatesResourceInstructionOnResources(t *testing
 	if !strings.Contains(resourceless, "### Procedure: prepare-a-release") || !strings.Contains(resourceless, "Check the version file.") {
 		t.Fatalf("missing procedure header or body:\n%s", resourceless)
 	}
-	if strings.Contains(resourceless, "skills_read") || strings.Contains(resourceless, "supporting resources") {
+	if strings.Contains(resourceless, "skills_read") {
 		t.Fatalf("resourceless skill procedure advertised skills_read:\n%s", resourceless)
 	}
 

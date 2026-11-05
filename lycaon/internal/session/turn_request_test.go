@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -234,9 +235,7 @@ func TestSourceRunEvidenceIsScreenedBeforeItIsPersisted(t *testing.T) {
 	recordVerify(t, mgr, sess, "deploy --token "+evidenceBoundarySecret, 0)
 
 	rows := evidenceFileBytes(t, mgr, sess)
-	if strings.Contains(string(rows), evidenceBoundarySecret) {
-		t.Fatalf("raw credential reached the evidence file: %s", rows)
-	}
+	exposure.Absent(t, string(rows), evidenceBoundarySecret)
 	if !strings.Contains(string(rows), "{{paintedwolf-secret:ci_token}}") {
 		t.Fatalf("evidence row did not keep the reference-bearing command: %s", rows)
 	}

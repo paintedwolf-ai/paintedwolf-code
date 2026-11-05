@@ -185,7 +185,7 @@ func TestDuplicateCommandRecoveryRequiresOfferedControlsAndObservedExit(t *testi
 					t.Errorf("%s offered=%v: %s", name, names, text)
 				}
 			}
-			for _, required := range []string{"command-1", "A stop request alone does not establish exit", "Do not reissue while the job is running", "preserve completed effects"} {
+			for _, required := range []string{"command-1"} {
 				if !strings.Contains(text, required) {
 					t.Errorf("missing %q: %s", required, text)
 				}

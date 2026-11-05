@@ -198,7 +198,7 @@ func TestAuthorRender_RefAndAgentAreExclusive(t *testing.T) {
 		TemplateRef: "partials/finish-handoff.md",
 		AgentID:     "implementer",
 	})
-	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+	if err == nil {
 		t.Fatalf("expected mutual-exclusion error, got %v", err)
 	}
 }

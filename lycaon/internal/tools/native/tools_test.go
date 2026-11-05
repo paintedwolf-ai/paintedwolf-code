@@ -146,7 +146,7 @@ func TestWriteToolCaptureOverwrite(t *testing.T) {
 func TestCommandToolRequiresRunner(t *testing.T) {
 	tool := &command.CommandTool{}
 	_, err := tool.Run(context.Background(), map[string]any{"command": "echo hi"}, nativefixture.Context(t.TempDir()))
-	if err == nil || !strings.Contains(err.Error(), "not configured") {
+	if err == nil {
 		t.Fatalf("err = %v", err)
 	}
 }

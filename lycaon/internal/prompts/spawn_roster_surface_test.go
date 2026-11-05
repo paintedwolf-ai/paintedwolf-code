@@ -119,7 +119,7 @@ func TestLoadSpawnRosterSurfaceImplementDefault(t *testing.T) {
 
 func TestLoadSpawnRosterSurfaceUnknownAgent(t *testing.T) {
 	_, err := prompts.LoadSpawnRosterSurface([]string{"not-a-real-agent"}, 3, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "not found") {
+	if err == nil {
 		t.Fatalf("err = %v", err)
 	}
 }

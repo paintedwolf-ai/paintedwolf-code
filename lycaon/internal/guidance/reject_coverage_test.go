@@ -3,6 +3,7 @@ package guidance_test
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"sort"
@@ -54,9 +55,7 @@ func TestEveryRejectCodeHasScenario(t *testing.T) {
 				testutil.FailErr(t, "Format "+code, err)
 				// Rendered guidance must not leak template syntax or escaped HTML.
 				for _, leak := range []string{"{%", "{{", "&quot;", "&amp;", "&#39;", "&gt;", "&lt;"} {
-					if strings.Contains(raw, leak) {
-						t.Fatalf("hint %q scenario %q leaks %q in:\n%s", code, sc.ID, leak, raw)
-					}
+					exposure.Absent(t, raw, leak)
 				}
 			})
 		}

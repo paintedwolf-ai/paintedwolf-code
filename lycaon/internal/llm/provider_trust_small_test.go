@@ -9,8 +9,8 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -292,9 +292,7 @@ func TestSummarizeDoesNotTruncateAroundAScreenFault(t *testing.T) {
 	if !errors.Is(err, ErrModelRequestSecretScreenFailed) {
 		t.Fatalf("err = %v, want the screen fault", err)
 	}
-	if strings.Contains(got, modelScreenGitHubToken) {
-		t.Fatal("truncate fallback handed back the prompt the screen could not clear")
-	}
+	exposure.Absent(t, got, modelScreenGitHubToken)
 }
 
 // requestRecorder keeps the last request a provider was handed.

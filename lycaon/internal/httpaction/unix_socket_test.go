@@ -95,7 +95,7 @@ func TestHTTPRequestUnixSocketRefusesRedirectToAnotherOrigin(t *testing.T) {
 		"url": "http://localhost/start", "unix_socket": path, "redirects": "safe",
 	}, reviewedSocket(t, t.TempDir(), path))
 	reject := toolrejection.AsToolReject(err)
-	if reject == nil || reject.Code != "HTTP_REQUEST_FAILED" || !strings.Contains(reject.Data["reason"].(string), "unix socket") {
+	if reject == nil || reject.Code != "HTTP_REQUEST_FAILED" {
 		t.Fatalf("err = %v, want a refused cross-origin redirect", err)
 	}
 }

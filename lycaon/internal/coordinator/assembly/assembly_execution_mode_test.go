@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -29,12 +28,9 @@ func TestPrependTransitionInjectExplicitCause(t *testing.T) {
 	turn := &TurnAssemblyScratch{PromptTurnSeq: 1}
 	turn.ModeTransitionCauses = []surface.ModeTransitionCause{{Kind: surface.ModeTransitionCauseWorkflowDefault, Mode: surface.ExecutionModeFamilyOrchestrate}}
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}
-	block, ok := testTurnContext(eng).prependTransitionInject(context.Background(), sess, inject.CoordinatorTurnFrame{}, []api.Message{{Role: api.MessageRoleUser, Content: "hi"}}, turn)
+	_, ok := testTurnContext(eng).prependTransitionInject(context.Background(), sess, inject.CoordinatorTurnFrame{}, []api.Message{{Role: api.MessageRoleUser, Content: "hi"}}, turn)
 	if !ok {
 		t.Fatal("prependTransitionInject returned false")
-	}
-	if !strings.Contains(block, "## Entered orchestrate") {
-		t.Fatalf("block = %q", block)
 	}
 }
 

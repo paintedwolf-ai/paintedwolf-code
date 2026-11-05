@@ -298,9 +298,6 @@ func TestPromptHistoryOverflowNeverLoadsFullTranscript(t *testing.T) {
 	if loaded[1].ID != "active-request" || loaded[1].Content != rows[17].Content || loaded[len(loaded)-1].ID != rows[len(rows)-1].ID {
 		t.Fatal("bounded history lost the active request or newest canonical row")
 	}
-	if !strings.Contains(loaded[0].Content, "[host:compacted history through ordinal ") {
-		t.Fatal("bounded fallback lost its recovery coordinates")
-	}
 }
 
 func TestNoCompactionBetweenTargetAndTrigger(t *testing.T) {

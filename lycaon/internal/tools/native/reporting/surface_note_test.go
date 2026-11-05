@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"strings"
@@ -349,9 +350,7 @@ func TestSurfaceNoteHandleUngroundRendersOffender(t *testing.T) {
 		}
 	}
 	for _, leak := range []string{"{{", "{%"} {
-		if strings.Contains(rendered, leak) {
-			t.Fatalf("rendered reject leaks %q:\n%s", leak, rendered)
-		}
+		exposure.Absent(t, rendered, leak)
 	}
 }
 

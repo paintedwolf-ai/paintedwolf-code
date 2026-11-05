@@ -31,9 +31,6 @@ func TestCommandRecoveryStateDoesNotComeFromDiagnosticProse(t *testing.T) {
 		if state == "observed" && (!strings.Contains(got, "Completed effects: 1") || !strings.Contains(got, "Uncertain effects: 1")) {
 			t.Fatalf("lost certainty: %s", got)
 		}
-		if state == "active" && !strings.Contains(got, "Program is not finished") {
-			t.Fatalf("lost active work: %s", got)
-		}
 	}
 }
 

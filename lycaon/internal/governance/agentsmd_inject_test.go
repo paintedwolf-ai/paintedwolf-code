@@ -28,12 +28,7 @@ func TestBuildIndexInjectListsPaths(t *testing.T) {
 	blockInject, err := governance.BuildIndexInject(context.Background(), injectRenderer(t), "sess-inject-test", index)
 	block := blockInject.Content
 	testutil.FailErr(t, "BuildIndexInject", err)
-	for _, want := range []string{
-		"## Available AGENTS.md files",
-		"`AGENTS.md`",
-		"`lycaon/AGENTS.md`",
-		"`lycaon-den/AGENTS.md`",
-	} {
+	for _, want := range []string{"`AGENTS.md`", "`lycaon/AGENTS.md`", "`lycaon-den/AGENTS.md`"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}

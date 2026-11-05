@@ -2,6 +2,7 @@ package external_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -59,9 +60,7 @@ func TestSecretScannerFailureNeverCarriesTheCredentialIntoTheError(t *testing.T)
 				t.Fatalf("exit 7 accepted as a clean scan: %d findings", res.FindingsCount)
 			}
 			message := runErr.Error()
-			if strings.Contains(message, leakedCredential) {
-				t.Fatalf("scan error disclosed the reported credential: %s", message)
-			}
+			exposure.Absent(t, message, leakedCredential)
 			// Preserve the scanner identity and exit status.
 			if !strings.Contains(message, "exit 7") {
 				t.Fatalf("scan error dropped the exit code: %s", message)

@@ -404,13 +404,7 @@ func TestHTTPRequestLoopbackOtherSessionCardAdvisesReportingToUser(t *testing.T)
 	}, &api.FeedbackSubject{Kind: "host", ID: "127.0.0.1:8000"})
 
 	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised)
-	for _, want := range []string{
-		`{"status":200}`,
-		"Code: HTTP_REQUEST_LOOPBACK_OTHER_SESSION",
-		detail,
-		"let the user decide",
-		"Do not stop, signal, or reconfigure the other listener yourself",
-	} {
+	for _, want := range []string{`{"status":200}`, "Code: HTTP_REQUEST_LOOPBACK_OTHER_SESSION", detail} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
 		}

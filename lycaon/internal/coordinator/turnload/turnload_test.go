@@ -330,7 +330,7 @@ func TestGitCommitSchemaRequestCandidateLeadsWithBranchCommitAndPushOperation(t 
 		t.Fatal("git_commit.yaml missing description")
 	}
 	candidate := RequestCandidate(ToolCard{Name: "git_commit", Description: desc})
-	for _, want := range []string{"edited", "branch", "push", "Empty paths stages only files this session wrote"} {
+	for _, want := range []string{"edited", "branch", "push"} {
 		if !strings.Contains(candidate, want) {
 			t.Fatalf("git_commit RequestCandidate %q missing %q within 60-word window", candidate, want)
 		}

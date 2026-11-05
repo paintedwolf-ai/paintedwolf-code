@@ -3,6 +3,7 @@ package bgprocess_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"runtime"
 	"strconv"
 	"strings"
@@ -175,9 +176,7 @@ func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testi
 		if sawExit {
 			select {
 			case event := <-events:
-				if strings.Contains(event.Text, backgroundCaptureSecret) {
-					t.Fatalf("live event exposed secret: %+v", event)
-				}
+				exposure.Absent(t, event.Text, backgroundCaptureSecret)
 				if event.Reset {
 					live = event.Text
 				} else {
@@ -190,9 +189,7 @@ func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testi
 		}
 		select {
 		case event := <-events:
-			if strings.Contains(event.Text, backgroundCaptureSecret) {
-				t.Fatalf("live event exposed secret: %+v", event)
-			}
+			exposure.Absent(t, event.Text, backgroundCaptureSecret)
 			if event.Reset {
 				live = event.Text
 			} else {

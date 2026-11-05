@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -144,8 +145,6 @@ func TestTutorialPackGuidanceTemplateRenders(t *testing.T) {
 		t.Fatal("tutorial inject template rendered empty")
 	}
 	for _, leak := range []string{"{%", "{{"} {
-		if strings.Contains(out, leak) {
-			t.Fatalf("tutorial inject template leaks unrendered %q:\n%s", leak, out)
-		}
+		exposure.Absent(t, out, leak)
 	}
 }

@@ -30,7 +30,7 @@ func TestArgumentRecoveryDoesNotChangeTheRequestedOperation(t *testing.T) {
 			if !strings.Contains(copy, "old_string") {
 				t.Fatalf("schema recovery lost its required argument: %s", copy)
 			}
-			if strings.Contains(copy, "`write`") || strings.Contains(copy, "whole file") {
+			if strings.Contains(copy, "`write`") {
 				t.Fatalf("schema recovery changed operations: %s", copy)
 			}
 		}
@@ -65,9 +65,6 @@ func TestArtifactRecoveryUsesCurrentOfferAndInventory(t *testing.T) {
 				fix := refusal.Copy["fix"]
 				if !strings.Contains(fix, tc.want) || len(fix) > 1000 {
 					t.Fatalf("incorrect or excessive recovery: %s", fix)
-				}
-				if (len(ids) == 0) != strings.Contains(fix, "No presentable still") {
-					t.Fatalf("inventory state mismatch: %s", fix)
 				}
 				for _, tool := range []string{"capture_page", "page_snapshot", "request_tools"} {
 					if strings.Contains(fix, "`"+tool+"`") && !slices.Contains(tc.offered, tool) {

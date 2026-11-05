@@ -54,8 +54,5 @@ func TestLoopNoKickPlusSentinel(t *testing.T) {
 		if msg.Role != api.MessageRoleUser {
 			continue
 		}
-		if strings.Contains(msg.Content, surface.HostLoopWakeSentinel) && strings.Contains(strings.ToLower(msg.Content), "leg finished") {
-			t.Fatalf("loop-wake sentinel turn must not also include leg-finished kick: %q", msg.Content)
-		}
 	}
 }

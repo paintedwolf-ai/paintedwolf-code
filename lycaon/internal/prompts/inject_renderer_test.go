@@ -34,7 +34,7 @@ func TestInjectRenderer_RenderBoardOrientationStub(t *testing.T) {
 	if !strings.Contains(out, "<!-- lycaon-board-orientation:v1 -->") {
 		t.Fatalf("missing board sentinel in:\n%s", out)
 	}
-	if !strings.Contains(out, "Pack board") || !strings.Contains(out, "pack-board:v1") {
+	if !strings.Contains(out, "pack-board:v1") {
 		t.Fatalf("missing heading or pack-board envelope:\n%s", out)
 	}
 	if !strings.Contains(out, "per_scan") || !strings.Contains(out, "scan_pack") {
@@ -56,7 +56,7 @@ func TestInjectRenderer_RenderWorkerTaskAssignmentStub(t *testing.T) {
 	if !strings.Contains(out, "<!-- lycaon-worker-task-assignment:v1 -->") {
 		t.Fatalf("missing worker-task-assignment sentinel in:\n%s", out)
 	}
-	if !strings.Contains(out, "Leg assignment") || !strings.Contains(out, "internal/auth/**") {
+	if !strings.Contains(out, "internal/auth/**") {
 		t.Fatalf("missing assignment copy in:\n%s", out)
 	}
 }

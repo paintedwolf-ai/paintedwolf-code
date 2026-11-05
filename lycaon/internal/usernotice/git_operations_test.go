@@ -1,6 +1,7 @@
 package usernotice
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,9 +28,7 @@ func TestGitFailuresRetainOperationContext(t *testing.T) {
 			if copy.Title == "" || copy.Message == "" || copy.SuggestedAction == "" || copy.Message == cfg.Defaults.Message {
 				t.Fatalf("Git failure lost operation and recovery context: %+v", copy)
 			}
-			if strings.Contains(copy.Message+copy.SuggestedAction, privateDiagnostic) {
-				t.Fatal("untrusted Git diagnostic leaked into the notice")
-			}
+			exposure.Absent(t, copy.Message+copy.SuggestedAction, privateDiagnostic)
 			if catalog.Retryable(code) {
 				t.Fatal("Git mutations require an explicit reviewed retry")
 			}

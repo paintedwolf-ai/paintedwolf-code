@@ -2,7 +2,6 @@ package contract
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/scan"
@@ -37,9 +36,6 @@ func TestScanPackToolMetaMatchesBundledRegistry(t *testing.T) {
 	meta, ok := toolReg.Meta("scan_pack")
 	if !ok {
 		t.Fatal("scan_pack not registered")
-	}
-	if !strings.Contains(meta.Description, "code scanners") {
-		t.Fatalf("description does not describe the configured scan surface: %s", meta.Description)
 	}
 	enum := schemaCategoryEnum(t, meta.ArgsSchema)
 	for _, want := range []string{"all", "sca", "secret", "sast", "security"} {

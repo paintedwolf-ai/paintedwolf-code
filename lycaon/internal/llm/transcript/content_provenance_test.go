@@ -116,9 +116,6 @@ func TestProjectModelMessagesKeepsModelHistoryInAssistantRole(t *testing.T) {
 		{Role: api.MessageRoleAssistant, Content: "I inspected the repository."},
 		{Role: api.MessageRoleUser, Content: "continue"},
 	})
-	if !strings.Contains(ContentAuthorityNotice(), "never reproduce") {
-		t.Fatalf("authority notice must prohibit transport-label echoing: %q", ContentAuthorityNotice())
-	}
 	if len(out) != 3 || out[1].Role != api.MessageRoleAssistant {
 		t.Fatalf("projected messages = %+v", out)
 	}

@@ -2,7 +2,7 @@ package contract
 
 import (
 	"bytes"
-	"strings"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -38,12 +38,10 @@ func TestPathScopesHaveNoUnexpandedOverlayToken(t *testing.T) {
 	if len(scopes) == 0 {
 		t.Fatal("no path scopes loaded; this test would pass vacuously")
 	}
-	for id, scope := range scopes {
+	for _, scope := range scopes {
 		for _, group := range [][]string{scope.Read, scope.Write, scope.Deny} {
 			for _, glob := range group {
-				if strings.Contains(glob, config.OverlayDirToken) {
-					t.Errorf("path scope %q glob %q still holds the placeholder", id, glob)
-				}
+				exposure.Absent(t, glob, config.OverlayDirToken)
 			}
 		}
 	}
