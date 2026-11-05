@@ -70,7 +70,7 @@ func projectSourceHistoryVersion(message api.Message, part api.MessageContentPar
 	if !ok || mode != "version" {
 		return parts
 	}
-	text, ok := readSourceBlock(metadata)
+	text, ok := numberedSourceBlock(metadata, "content")
 	if !ok {
 		return parts
 	}

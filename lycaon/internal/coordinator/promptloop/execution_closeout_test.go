@@ -13,15 +13,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -472,7 +467,7 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 			{completion: textReply("Draft blocked at final round.")},
 			{completion: textReply("Iteration cap closeout summary.")},
 		})
-		h.deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+		h.deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 			if client.index == 2 {
 				return guidance.NewRefusal("INCOMPLETE_SUMMARY", "Provide a complete summary"), true
 			}
@@ -494,7 +489,7 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 			readCount++
 			return "evidence", nil
 		}))
-		h.deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+		h.deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 			if readCount >= 2 {
 				return nil, false
 			}

@@ -160,11 +160,10 @@ func TestCloseoutCitationRetryKeepsPinnedSynthesis(t *testing.T) {
 				}
 				decisionCode = guidance.CitationRepairInvalidCode
 				return &oar.Decision{Code: decisionCode, Data: gc.RejectData[decisionCode]}, nil
-			},
-			NoteCloseoutGroundingReject: func(_ context.Context, _, _, _ string, draft guidance.CloseoutDraft, _ []jsonshape.Issue) (int, string) {
+			}, CloseoutTrackingDeps: CloseoutTrackingDeps{NoteCloseoutGroundingReject: func(_ context.Context, _, _, _ string, draft guidance.CloseoutDraft, _ []jsonshape.Issue) (int, string) {
 				noted = draft
 				return 2, ""
-			},
+			}},
 		},
 		Projection: ProjectionDeps{
 			AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },

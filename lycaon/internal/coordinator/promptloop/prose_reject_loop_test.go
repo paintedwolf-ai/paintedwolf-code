@@ -212,7 +212,7 @@ func TestGatedCloseoutPathsSettleAsCloseoutBlocked(t *testing.T) {
 					return stoppedRefusal(rejections == 1)
 				}
 			} else {
-				deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
+				deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
 					rejections++
 					if invoke && rejections <= 2 {
 						return guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow gate remains open").

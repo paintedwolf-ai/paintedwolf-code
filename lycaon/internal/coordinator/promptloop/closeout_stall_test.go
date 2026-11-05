@@ -277,7 +277,7 @@ func TestRetainedAnswerSurvivesObservingToolsOnly(t *testing.T) {
 			retained := guidance.RetainedCloseout{Active: true}
 			loop := NewPromptLoopForTest(PromptLoopDeps{
 				Context:  ContextDeps{Tools: reg},
-				Closeout: CloseoutDeps{ResumeCloseoutWork: func(context.Context, string) { retained.Active = false }},
+				Closeout: CloseoutDeps{CloseoutTrackingDeps: CloseoutTrackingDeps{ResumeCloseoutWork: func(context.Context, string) { retained.Active = false }}},
 			})
 			var calls []api.ToolCall
 			var history []api.Message

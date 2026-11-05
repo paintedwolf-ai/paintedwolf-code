@@ -87,21 +87,21 @@ func newCloseoutContract(t *testing.T) *closeoutContract {
 			CheckRunReportDocument: func(context.Context, string, guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
 				return c.issues, nil
 			},
-			OnGroundedSynthesisAccepted: func(context.Context, *api.Session, string) { c.accepted++ },
-			RecordGroundingFriction: func(context.Context, string) guidance.GroundingFriction {
-				c.friction++
-				return guidance.GroundingFriction{Remaining: 5}
-			},
-			NoteCloseoutGroundingReject: func(_ context.Context, _, code, _ string, _ guidance.CloseoutDraft, _ []jsonshape.Issue) (int, string) {
-				c.noted = append(c.noted, code)
-				return 1, ""
-			},
-			RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
-				return engine.RenderKick(ctx, id, data)
-			},
+
 			AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, draft guidance.CloseoutDraft, retries int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 				return c.assemble(forcedBy, draft, retries)
-			},
+			}, CloseoutTrackingDeps: CloseoutTrackingDeps{OnGroundedSynthesisAccepted: func(context.Context, *api.Session, string) { c.accepted++ },
+				RecordGroundingFriction: func(context.Context, string) guidance.GroundingFriction {
+					c.friction++
+					return guidance.GroundingFriction{Remaining: 5}
+				},
+				NoteCloseoutGroundingReject: func(_ context.Context, _, code, _ string, _ guidance.CloseoutDraft, _ []jsonshape.Issue) (int, string) {
+					c.noted = append(c.noted, code)
+					return 1, ""
+				},
+				RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
+					return engine.RenderKick(ctx, id, data)
+				}},
 		},
 		Projection: ProjectionDeps{
 			AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
@@ -144,7 +144,7 @@ func (c *closeoutContract) drive(t *testing.T, surface, content string, reportPh
 	t.Helper()
 	frame := testReportFrame()
 	frame.Runtime.ReportDocumentEnabled = reportPhase
-	st := &promptLoopTurnState{coordinatorFrame: frame, draftSlotID: "slot", draftSlotAppended: true, offeredToolNames: []string{"read"}, turnTools: []string{"read"}}
+	st := &promptLoopTurnState{coordinatorFrame: frame, draftSlotID: "slot", draftSlotAppended: true, turnStreamState: turnStreamState{offeredToolNames: []string{"read"}}, turnBatchState: turnBatchState{turnTools: []string{"read"}}}
 	sess := &api.Session{ID: "contract-" + t.Name(), WorkspacePath: t.TempDir()}
 	assistant := api.Message{ID: "slot", Role: api.MessageRoleAssistant, Content: content}
 	read, err := c.loop.Closeout.readCloseoutDraft(t.Context(), sess, surface, st, history, assistant)
@@ -406,7 +406,7 @@ func TestRepeatedOffenderExhausts(t *testing.T) {
 	const content = "Done [read#9:1]."
 	frame := testReportFrame()
 	frame.Runtime.ReportDocumentEnabled = false
-	st := &promptLoopTurnState{coordinatorFrame: frame, draftSlotID: "slot", draftSlotAppended: true, offeredToolNames: []string{"read"}, turnTools: []string{"read"}}
+	st := &promptLoopTurnState{coordinatorFrame: frame, draftSlotID: "slot", draftSlotAppended: true, turnStreamState: turnStreamState{offeredToolNames: []string{"read"}}, turnBatchState: turnBatchState{turnTools: []string{"read"}}}
 	sess := &api.Session{ID: "contract-repeat", WorkspacePath: t.TempDir()}
 	assistant := api.Message{ID: "slot", Role: api.MessageRoleAssistant, Content: content}
 	read, err := c.loop.Closeout.readCloseoutDraft(t.Context(), sess, "implement_synthesis", st, contractHistory(content), assistant)
@@ -505,8 +505,7 @@ func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	hints := loadCoordinatorTestHintConfig(t)
 	st := &promptLoopTurnState{
-		coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true,
-		turnTools: []string{"read"},
+		coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"read"}},
 	}
 	ledger := evidence.Ledger{
 		Handles: map[string]evidence.Record{
@@ -538,10 +537,9 @@ func TestCloseoutDocumentDefectRefusedBeforeCitations(t *testing.T) {
 			AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, _ guidance.CloseoutDraft, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 				assembled = true
 				return guidance.CoordinatorCompletionReport{Synthesis: "assembled"}, nil
-			},
-			NoteCloseoutGroundingReject: func(_ context.Context, _, code, _ string, _ guidance.CloseoutDraft, _ []jsonshape.Issue) (int, string) {
+			}, CloseoutTrackingDeps: CloseoutTrackingDeps{NoteCloseoutGroundingReject: func(_ context.Context, _, code, _ string, _ guidance.CloseoutDraft, _ []jsonshape.Issue) (int, string) {
 				return 1, ""
-			},
+			}},
 		},
 		Projection: ProjectionDeps{
 			AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },
@@ -626,7 +624,7 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 					AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
 				},
 			})
-			st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true, turnTools: []string{"command"}}
+			st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"command"}}}
 			read := markdownRead(tc.body+" ["+tc.evidence+"]", false)
 			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), sess, sess.ID, "", tc.surface, st, history, history[2], read)
 			testutil.FailErr(t, "check report", err)

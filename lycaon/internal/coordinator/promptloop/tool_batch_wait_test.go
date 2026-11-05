@@ -191,26 +191,27 @@ func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 		}},
 		Closeout: CloseoutDeps{
 			EvidenceLedger: h.ledger,
-			RecordGroundingFriction: func(context.Context, string) guidance.GroundingFriction {
+
+			EvaluateMidTurnNote: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) error {
+				h.notices = append(h.notices, gc.Rejection.RejectObservation)
+				return nil
+			}, CloseoutTrackingDeps: CloseoutTrackingDeps{RecordGroundingFriction: func(context.Context, string) guidance.GroundingFriction {
 				h.friction++
 				if h.budget != nil {
 					return h.budget.RecordGroundingFriction(context.Background(), h.sess.ID)
 				}
 				return guidance.GroundingFriction{Remaining: 3}
 			},
-			EvaluateMidTurnNote: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) error {
-				h.notices = append(h.notices, gc.Rejection.RejectObservation)
-				return nil
-			},
-			RenderHostKick: func(_ context.Context, id string, data map[string]any) (string, error) {
-				h.kick = id
-				workers, _ := data["workers"].([]guidance.MidTurnWorkerFact)
-				parts := []string{"Worker status from the host:"}
-				for _, worker := range workers {
-					parts = append(parts, worker.AgentType+": "+worker.Status)
-				}
-				return strings.Join(parts, "\n"), nil
-			},
+
+				RenderHostKick: func(_ context.Context, id string, data map[string]any) (string, error) {
+					h.kick = id
+					workers, _ := data["workers"].([]guidance.MidTurnWorkerFact)
+					parts := []string{"Worker status from the host:"}
+					for _, worker := range workers {
+						parts = append(parts, worker.AgentType+": "+worker.Status)
+					}
+					return strings.Join(parts, "\n"), nil
+				}},
 		},
 		Tools: ToolsDeps{
 			BeforeToolRun: func(_ context.Context, sess *api.Session, history []api.Message, _, tool string, _ map[string]any) (string, bool, error) {
@@ -243,10 +244,10 @@ func (h *midTurnHarness) respond(t *testing.T, history []api.Message, surfaceID,
 		toolCalls = append(toolCalls, api.ToolCall{ID: id + "-" + string(rune('a'+i)), Name: name, Args: map[string]any{"timeout_ms": 60000, "path": "a.go"}})
 	}
 	history = append(history, api.Message{ID: id, Role: api.MessageRoleAssistant, Content: text, ToolCalls: toolCalls})
-	out, _, _, _, _, parked, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, toolCalls,
+	batch, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, toolCalls,
 		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID, Agent: "coordinator"}}, history, "go", id, surfaceID, midTurnState(t, surfaceID))
 	testutil.FailErr(t, "execute batch", err)
-	return out, parked
+	return batch.history, batch.breakToolLoop
 }
 
 // midTurnState carries the tool plan a coordinator turn compiles for its surface.
@@ -491,12 +492,12 @@ func TestNoteStorageOutcomes(t *testing.T) {
 			return nil
 		}
 		history := []api.Message{midTurnUser(), {ID: "c1", Role: api.MessageRoleAssistant, Content: "Starting.", ToolCalls: []api.ToolCall{{ID: "e", Name: "recall"}}}}
-		out, _, _, _, _, _, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, history[1].ToolCalls,
+		out, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, history[1].ToolCalls,
 			tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID}}, history, "go", "c1", publishingSurface, midTurnState(t, publishingSurface))
 		if !errors.Is(err, boom) || len(h.order) != 0 {
 			t.Fatalf("err=%v order=%v", err, h.order)
 		}
-		if _, ok := noteFor(out, "c1"); ok || !guard.DeriveWaitVisibility(out).Unpublished {
+		if _, ok := noteFor(out.history, "c1"); ok || !guard.DeriveWaitVisibility(out.history).Unpublished {
 			t.Fatal("a failed commit must stay unpublished")
 		}
 	})

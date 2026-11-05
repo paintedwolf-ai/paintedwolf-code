@@ -3,8 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/citationmd"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"

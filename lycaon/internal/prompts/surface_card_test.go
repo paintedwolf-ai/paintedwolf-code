@@ -91,7 +91,7 @@ func TestSurfaceCardFallsBackToFamily(t *testing.T) {
 
 	// The investigate family states what happens to text only where it is published.
 	for _, publishes := range []bool{true, false} {
-		vars := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{PublishesText: publishes}, []string{"recall"}, nil).TemplateVars()
+		vars := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{PublishesText: publishes}, []string{"recall"}, nil, true).TemplateVars()
 		vars["execution_mode"] = "investigate"
 		out, err := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}).Render(context.Background(), "partials/coordinator-surface-card.md", vars)
 		testutil.FailErr(t, "render investigate family", err)
@@ -108,11 +108,11 @@ func TestSurfaceCardFallsBackToFamily(t *testing.T) {
 
 func TestSurfaceCardCommandEffects(t *testing.T) {
 	for _, mutates := range []bool{false, true} {
-		immediate := prompts.CoordinatorSurfaceCardVars("", "", []string{"command"}, nil, mutates)
+		immediate := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{}, []string{"command"}, nil, mutates)
 		if immediate.MayEdit != mutates || immediate.MayRun != mutates || immediate.EditDeferred {
 			t.Fatalf("immediate command mutation=%t: %+v", mutates, immediate)
 		}
-		deferred := prompts.CoordinatorSurfaceCardVars("", "", nil, []string{"command"}, mutates)
+		deferred := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{}, nil, []string{"command"}, mutates)
 		if deferred.MayEdit || deferred.MayRun || deferred.EditDeferred != mutates {
 			t.Fatalf("deferred command mutation=%t: %+v", mutates, deferred)
 		}
