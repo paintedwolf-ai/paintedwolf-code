@@ -257,7 +257,7 @@ func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
 		t.Fatalf("outcomes = %d, want %d", len(outcomes), len(commands))
 	}
 	for i, outcome := range outcomes {
-		if outcome.stopCode != "TOOL_ARGS_INVALID" {
+		if outcome.stopCode != "SECRET_REFERENCE_OUTSIDE_SINK" {
 			t.Errorf("%q = %+v", commands[i], outcome)
 		}
 	}
@@ -314,7 +314,7 @@ func TestCommandJqEditArgCarriesAValueLineSinksRefuse(t *testing.T) {
 	_, err = run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
 	testutil.FailErr(t, "prompt", err)
 	outcomes := run.outcomes(t)
-	want := []string{"SECRET_REFERENCE_VALUE_UNSAFE", "", "", "TOOL_ARGS_INVALID", "TOOL_ARGS_INVALID"}
+	want := []string{"SECRET_REFERENCE_VALUE_UNSAFE", "", "", "SECRET_REFERENCE_OUTSIDE_SINK", "SECRET_REFERENCE_OUTSIDE_SINK"}
 	if len(outcomes) != len(want) {
 		t.Fatalf("outcomes = %+v", outcomes)
 	}

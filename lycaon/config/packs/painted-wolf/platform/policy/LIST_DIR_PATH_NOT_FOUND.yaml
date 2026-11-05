@@ -19,8 +19,8 @@ copy:
   what: list_dir path {{ paintedwolf.path }} does not exist.
   cause: The path argument must name an existing directory under the attached project roots.
   why: Structured rejects let agents branch without parsing free-form stat errors.
-  fix: Inspect the nearest existing parent, then retry list_dir with a directory shown there.
-  instead: Branch on Code; choose an existing directory before retrying list_dir
+  fix: Inspect the nearest existing parent, then list a directory shown there.
+  instead: Branch on Code; choose an existing directory before listing again
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:list_dir
 x-paintedwolf-message: list_dir path does not exist

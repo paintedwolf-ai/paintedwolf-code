@@ -12,7 +12,7 @@ when: paintedwolf.profile == "worker" && paintedwolf.agent_is_implementer && !pa
   && paintedwolf.worker_summary_present
 effect: block
 copy:
-  what: Worker finished without disk proof of implementation (no successful write, edit, replace_lines, restore_version,
+  what: Worker finished without disk proof of implementation (no successful file change, restore_version,
     or workspace change)
   cause: The completion report has no observed artifact evidence; its prose alone does not establish an applied implementation.
   why: An implementation claim must be supported by the worker's recorded changes or inspected workspace, not inferred from the report's wording.
