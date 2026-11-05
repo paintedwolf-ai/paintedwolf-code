@@ -76,7 +76,7 @@ func TestToolStepHistoryHasOneHostInstruction(t *testing.T) {
 	if len(out) != len(messages) {
 		t.Fatalf("projection changed message count: %d", len(out))
 	}
-	if strings.Count(out[0].Content, transcript.ContentAuthorityNotice()) != 1 || out[0].Role != api.MessageRoleSystem {
+	if strings.Count(out[0].Content, transcript.ContentAuthorityNotice(transcript.AudienceUtility)) != 1 || out[0].Role != api.MessageRoleSystem {
 		t.Fatal("host instruction must appear once in the system message")
 	}
 	for _, i := range []int{1, 3} {

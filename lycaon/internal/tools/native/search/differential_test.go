@@ -134,7 +134,7 @@ var differentialCorpus = map[string]string{
 	"sub/deep/d.md": "alpha deep\n",
 	"bin.dat":       "alpha\x00binary\n",
 	"nul.dat":       "beta alpha\x00gamma alpha\nmore\x00\nlast alpha\n",
-	"tree/a.go":    "package a\n",
+	"tree/a.go":     "package a\n",
 	"tree/b.txt":    "x",
 	"tree/s/c.go":   "package c\n",
 	"tree/s/e.txt":  "",

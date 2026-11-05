@@ -3,13 +3,12 @@ package native
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -36,10 +35,7 @@ func TestACOC02EditMissOnOwnCommandEffectsIsAnOrdinaryMiss(t *testing.T) {
 				heads:   map[string]sourceledger.BranchHead{"r1/main.go": {FileID: "f1", VersionID: "v2", SHA256: sha, State: "content"}},
 				effects: map[string][]sourceledger.Effect{"f1": tc.effects},
 			}
-			edit := &EditTool{Boundary: nativefixture.Boundary(t)}
-			_, err := edit.Run(context.Background(), map[string]any{
-				"path": "main.go", "old_string": "package moved", "new_string": "package main",
-			}, provenanceCtx(dir, ledger))
+			err := EditMiss(context.Background(), provenanceCtx(dir, ledger), "main.go", filepath.Join(dir, "main.go"), "package main\n", "package moved", "package main")
 			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != tc.wantCode {
 				t.Fatalf("edit miss = %v, want %s", err, tc.wantCode)
@@ -54,9 +50,6 @@ func TestACOC02EditMissOnOwnCommandEffectsIsAnOrdinaryMiss(t *testing.T) {
 // Offered means this turn's plan: a profile can hold a tool the turn's surface
 // does not offer, and a deferred tool is still reachable.
 func TestEditMissStatesWhetherThePlanOffersSourceHistory(t *testing.T) {
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{
-		{ID: "holds", Tools: map[string]bool{"edit": true, "source_history": true}},
-	})
 	plans := []struct {
 		name string
 		plan toolsurface.Plan
@@ -86,9 +79,7 @@ func TestEditMissStatesWhetherThePlanOffersSourceHistory(t *testing.T) {
 				tctx := provenanceCtx(dir, ledger)
 				tctx.Identity.Agent = "holds"
 				tctx.Turn.TurnToolPlan = plan.plan
-				_, err := (&EditTool{Boundary: boundary}).Run(context.Background(), map[string]any{
-					"path": "main.go", "old_string": "package moved", "new_string": "package main",
-				}, tctx)
+				err := EditMiss(context.Background(), tctx, "main.go", filepath.Join(dir, "main.go"), "package main\n", "package moved", "package main")
 				var reject *toolrejection.ToolReject
 				if !errors.As(err, &reject) || reject.Code != miss.code || reject.Data["source_history_offered"] != plan.want {
 					t.Fatalf("edit miss = %v, want %s with source_history_offered %v", err, miss.code, plan.want)

@@ -51,7 +51,7 @@ func runEdit(inv *invocation) error {
 	}
 	occurrences := strings.Count(source.Content, oldString)
 	if occurrences == 0 {
-		return &toolrejection.ToolReject{Code: "EDIT_OLD_STRING_NOT_FOUND", Data: map[string]any{"path": bound.Resolved.DisplayPath}}
+		return native.EditMiss(inv.ctx, inv.tc, bound.Resolved.DisplayPath, bound.Resolved.Abs, source.Content, oldString, newString)
 	}
 	replaceAll := inv.flag("--replace-all")
 	if occurrences > 1 && !replaceAll {

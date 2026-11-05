@@ -190,10 +190,7 @@ func TestSourceHistoryBranchScope(t *testing.T) {
 		testutil.FailErr(t, "create session floor", err)
 		f.record(sourcebranch.Trunk, 2)
 		f.record(branchScopeWorker, 60)
-		edit := &EditTool{Boundary: nativefixture.Boundary(t)}
-		_, err = edit.Run(t.Context(), map[string]any{
-			"path": "main.go", "old_string": "package moved", "new_string": "package main",
-		}, f.tc)
+		err = EditMiss(t.Context(), f.tc, "main.go", filepath.Join(f.dir, "main.go"), "package main\n", "package moved", "package main")
 		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "EDIT_TARGET_CHANGED_BY_OTHERS" {
 			t.Fatalf("edit miss = %v, want EDIT_TARGET_CHANGED_BY_OTHERS", err)
