@@ -161,7 +161,7 @@ func (e *Executor) validateInvocation(
 	if reject := toolcommand.ArgvShapeReject(qualifiedName, args); reject != nil {
 		return reject
 	}
-	if qualifiedName == "command" || qualifiedName == "verify" {
+	if qualifiedName == "command" {
 		_, parseErr := commandsurface.ParsePlan(args)
 		if reject := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, commandsurface.PrimaryCommandLine(args, nil), args, toolschema.ArgFieldPaths(e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName)), parseErr); reject != nil {
 			return reject
