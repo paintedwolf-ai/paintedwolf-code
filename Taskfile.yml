@@ -104,6 +104,7 @@ tasks:
     desc: Build the decision engine sidecar (bialy) into the build directory
     sources:
       - 'lycaon/internal/decide/native/src/**/*.rs'
+      - 'lycaon/internal/decide/native/vendor/**/*'
       - lycaon/internal/decide/native/Cargo.toml
       - lycaon/internal/decide/native/Cargo.lock
       - scripts/build-decide.sh
@@ -690,6 +691,7 @@ tasks:
     dir: lycaon/internal/decide/native
     sources:
       - 'src/**/*.rs'
+      - 'vendor/**/*'
       - Cargo.toml
       - Cargo.lock
     env:

@@ -14,6 +14,8 @@ use crate::error::{Error, Result};
 mod layers;
 mod model;
 mod modernbert;
+#[cfg(test)]
+mod numerical_tests;
 
 pub(crate) use model::{Head, Model};
 
