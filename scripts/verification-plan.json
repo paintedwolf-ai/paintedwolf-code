@@ -1389,7 +1389,7 @@
   },
   "capacity": {
     "max_parallel": {
-      "fast": 3,
+      "fast": 4,
       "integration": 6,
       "check": 3,
       "nightly": 2,
