@@ -106,7 +106,8 @@ func measureCoordinatorInjectBlock(
 		}
 		return inject.RenderCommandJobsBlock(ctx, renderer, "sess-inject-test", jobs, nil, now, surface)
 	case "source_changes":
-		brief := inject.SourceChangeBrief{Truncated: true, OtherFiles: 240, OtherEffects: 999}
+		// OwnTruncated selects the longer of the two overflow lines.
+		brief := inject.SourceChangeBrief{OwnTruncated: true, OtherFiles: 240, OtherEffects: 999}
 		for i := 0; i < 20; i++ {
 			brief.Files = append(brief.Files, inject.SourceChangeFile{
 				Path:    fmt.Sprintf("@secondary/src/components/project/%02d/ReviewDiffViewLongName.tsx", i),
@@ -115,6 +116,8 @@ func measureCoordinatorInjectBlock(
 				Op:      "rename",
 				At:      "14:02 UTC",
 				Effects: 12,
+				// A non-working-set last row selects the longer elsewhere sentence.
+				WorkingSet: i < 15,
 			})
 		}
 		for i := 0; i < 10; i++ {
@@ -126,7 +129,7 @@ func measureCoordinatorInjectBlock(
 				At:     "14:02 UTC",
 			})
 		}
-		return inject.RenderSourceChangesBlock(ctx, renderer, "sess-inject-test", brief)
+		return inject.RenderSourceChangesBlock(ctx, renderer, "sess-inject-test", brief, true)
 	case "implement_spawn":
 		block, err := inject.RenderImplementSpawnInject(
 			ctx, renderer, "sess-inject-test", spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, spawn.SurfaceImplementSynthesis, 1, false, true,

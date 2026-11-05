@@ -7,7 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -46,6 +45,11 @@ func (m *Service) runBackgroundCompaction(ctx context.Context, sessionID string)
 }
 
 func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID string, sc *compaction.SimpleCompactor) (bool, bool) {
+	attempts := m.attemptControl()
+	attempt, admitted := attempts.admit(ctx, sessionID, sc)
+	if !admitted {
+		return false, false
+	}
 	sess, err := m.store.Get(ctx, sessionID)
 	if err != nil {
 		return false, false
@@ -71,7 +75,9 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 	bounds := m.canonicalTailBounds(cfg)
 	budgetEst := m.BudgetTokens(ctx, sess, compaction.EstimateMessagesTokens(working))
 	rowPressure := hasMore || len(working) > bounds.maxRows
-	if compaction.ShouldCompactSession(budgetEst, cfg.ModelContextWindow, cfg) || rowPressure {
+	needed := compaction.ShouldCompactSession(budgetEst, cfg.ModelContextWindow, cfg) || rowPressure
+	var compactErr error
+	if needed {
 		maxTokens := cfg.TargetTokens
 		if rowPressure && compaction.EstimateMessagesTokens(working) <= maxTokens {
 			maxTokens = compaction.EstimateMessagesTokens(working) - 1
@@ -79,20 +85,29 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 				maxTokens = 1
 			}
 		}
-		summarized, sessionReport, cerr := baseline.Compact(ctx, info, working, maxTokens)
+		baselineInfo := info
+		baselineInfo.Attempts = nil
+		summarized, sessionReport, cerr := baseline.Compact(ctx, baselineInfo, working, maxTokens)
+		report.Reason = sessionReport.Reason
+		report.TargetTokens = sessionReport.TargetTokens
 		if cerr != nil {
 			slog.WarnContext(ctx, "background session compaction failed",
 				"session_id", sessionID, "error", cerr)
+			compactErr = cerr
 		}
 		if cerr == nil && (sessionReport.SessionCompacted || sessionReport.ChunksCompacted > 0) {
 			working = summarized
 			report.Continuation = sessionReport.Continuation
+			report.SynthesisSources = sessionReport.SynthesisSources
 			report.SessionCompacted = sessionReport.SessionCompacted
 			report.ChunksCompacted += sessionReport.ChunksCompacted
 			changed = true
 		}
 	}
 	if !changed {
+		m.scheduleProjectionSynthesis(ctx, sc, info, originals, working, report, store.CompactionView{Generation: sess.CompactionGeneration,
+			CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq}, attempt)
+		attempts.settlePage(ctx, sc, info, attempt, needed, report, compactErr, coveredThroughOrd)
 		return hasMore, false
 	}
 	if ctx.Err() != nil {
@@ -102,8 +117,8 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 	if err := m.writeCompactionView(ctx, sess, originals, working, report, coveredThroughOrd, coveredThroughID, sourceSeq); err != nil {
 		return false, false
 	}
-	m.scheduleSynthesis(ctx, sc, info, originals, store.CompactionView{Generation: sess.CompactionGeneration + 1, Continuation: report.Continuation,
-		CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq})
+	m.scheduleProjectionSynthesis(ctx, sc, info, originals, working, report, store.CompactionView{Generation: sess.CompactionGeneration + 1, Continuation: report.Continuation,
+		CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq}, attempt)
 	return hasMore || (report.SessionCompacted && report.TokensAfter > cfg.TargetTokens), true
 }
 
@@ -199,72 +214,6 @@ func (m *Service) Wait() {
 	}
 }
 
-// ForceCompact compacts session history to target tokens regardless of trigger
-// threshold and stores the result as the session's compacted view.
-func (m *Service) ForceCompact(ctx context.Context, sessionID string) (report compaction.CompactionReport, err error) {
-	turn, err := m.Gate.Capture(ctx, sessionID)
-	if err != nil {
-		return report, err
-	}
-	err = m.Runner.Execute(ctx, sessionID, func(runCtx context.Context) error {
-		// Register cancelable work before releasing stop admission; the admission
-		// gate is not held across a provider call or a wait for another compaction.
-		if err := m.Gate.WithSessionTreeAdmission(runCtx, sessionID, func() error {
-			if !m.Gate.MayDrain(turn) {
-				return lifecycle.ErrStopping
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-		var compactErr error
-		report, compactErr = m.forceCompact(runCtx, sessionID)
-		return compactErr
-	})
-	return report, err
-}
-
-func (m *Service) forceCompact(ctx context.Context, sessionID string) (compaction.CompactionReport, error) {
-	sess, err := m.store.Get(ctx, sessionID)
-	if err != nil {
-		return compaction.CompactionReport{}, err
-	}
-	originals, coveredThroughOrd, coveredThroughID, sourceSeq, _, err := m.loadCompactionPage(ctx, sess)
-	if err != nil {
-		return compaction.CompactionReport{}, err
-	}
-	if m.Compactor == nil {
-		return compaction.CompactionReport{TokensBefore: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(originals))}, fmt.Errorf("compactor not configured")
-	}
-	cfg := m.compactionConfig(ctx, sess)
-	base := api.FilterPromptHistory(promptassembly.MarkContextPins(sess, m.ApplyView(ctx, sess, originals), min(8192, max(256, cfg.HardCeilingTokens/5))))
-	ctxMsgs := compaction.ContextMessagesFromAPI(base)
-	info := m.sessionInfo(ctx, sess, originals)
-	compactor := m.Compactor
-	var synth *compaction.SimpleCompactor
-	if sc, ok := compactor.(*compaction.SimpleCompactor); ok {
-		synth = sc.WithConfig(cfg)
-		compactor = synth.Baseline()
-	}
-	compact, report, err := compactor.Compact(ctx, info, ctxMsgs, cfg.TargetTokens)
-	report.CompactionGeneration = sess.CompactionGeneration
-	if err != nil {
-		return report, err
-	}
-	if !report.SessionCompacted && report.ChunksCompacted == 0 {
-		return report, nil
-	}
-	if err := m.writeCompactionView(ctx, sess, originals, compact, report, coveredThroughOrd, coveredThroughID, sourceSeq); err != nil {
-		return report, err
-	}
-	report.CompactionGeneration = sess.CompactionGeneration + 1
-	if synth != nil {
-		m.scheduleSynthesis(ctx, synth, info, originals, store.CompactionView{Generation: report.CompactionGeneration, Continuation: report.Continuation,
-			CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq})
-	}
-	return report, nil
-}
-
 func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals []api.Message) compaction.SessionInfo {
 	projectDir, _ := m.Workspace.ActivePath(ctx, sess)
 	info := compaction.SessionInfo{
@@ -282,6 +231,7 @@ func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals 
 		Attempts:             m.store,
 		Model:                sess.Model,
 		ProviderID:           sess.ProviderID,
+		WorkingSetStartOrd:   activeWorkingSetStart(originals, activeTurnAllocation(m.compactionConfig(ctx, sess)), m.cutoffs.heldWorkingSet(sess.ID)),
 	}
 	info.ProviderID, info.Model = m.Model(ctx, sess)
 	if prior, ok, err := m.store.GetCompactionView(ctx, sess.ID); err == nil && ok {
@@ -329,13 +279,10 @@ func (m *Service) SessionContext(ctx context.Context, sessionID string) (api.Ses
 	}
 	_, report := m.Assemble(ctx, sess, history, "")
 	est := m.BudgetTokens(ctx, sess, report.TokensAfter)
+	cfg := m.compactionConfig(ctx, sess)
 	remaining := 0
 	if m.Compactor != nil {
-		remaining, _ = m.Compactor.BudgetRemaining(ctx, sessionID, est)
-	}
-	cfg := compaction.DefaultCompactionConfig()
-	if m.Compactor != nil {
-		cfg = m.Compactor.Config()
+		remaining = compaction.BudgetRemaining(cfg.TargetTokens, est)
 	}
 	return api.SessionContextResponse{
 		EstimatedTokens:      est,

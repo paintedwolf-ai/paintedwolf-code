@@ -57,8 +57,6 @@ func (denialInvariantProvenance) IsSessionOwned(context.Context, string, string,
 func (denialInvariantProvenance) HeldByOther(context.Context, string, string, uint16) bool {
 	return false
 }
-func (denialInvariantProvenance) RecordSessionContainer(string, string, string) {}
-func (denialInvariantProvenance) ForgetSession(string)                          {}
 
 // denialInvariantStores holds every capability store a sandbox broker writes.
 type denialInvariantStores struct {

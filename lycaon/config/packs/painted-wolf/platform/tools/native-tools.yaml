@@ -43,7 +43,6 @@ native:
     - survey_repo
     - summarize
     - skills_read
-    - surface_note
     - complete_leg
     - recall
     - source_history
@@ -152,7 +151,6 @@ multi_root:
     - skills_read
     - workflow_transition
     - record_finding
-    - surface_note
     - update_progress
     - request_decision
     - request_budget
@@ -369,6 +367,7 @@ execution_capabilities:
   git_merge: [file_change]
   git_stash: [file_change]
   http_request:
+    - direct_ip
     - loopback_connect
   wait:
     - loopback_connect
@@ -385,6 +384,7 @@ execution_capabilities:
     - socket
     - direct_ip
     - process_control
+    - credential_store
     - host_execution
     - local_listen
     - loopback_connect
@@ -397,6 +397,7 @@ execution_capabilities:
     - socket
     - direct_ip
     - process_control
+    - credential_store
     - host_execution
     - local_listen
     - loopback_connect
@@ -475,7 +476,6 @@ grant_identity_neutral_args:
     - terminal_capture
   verify:
     - timeout_ms
-    - wait_ms
   grep:
     - max_matches
     - offset
@@ -597,12 +597,17 @@ session_scope:
   complete_leg: worker_child
   request_decision: worker_child
   request_budget: worker_child
-  surface_note: addressed_session
 
 # Connected servers register these prefixes after boot.
 # Other profile patterns resolve against the registered tool set.
 runtime_registered_prefixes:
   - mcp_
+
+# Retired tools whose replacement is content, not a call. Models keep calling
+# them from habit and old history, so the refusal says to write the text.
+# schemas/agent-public-retirements.json records the same names.
+retired_to_content_contract:
+  surface_note: paintedwolf.markdown_note
 
 # Rule-selectable host identities have no model-facing tool schema.
 host_produced_tools:
@@ -706,7 +711,6 @@ approval_reversibility:
   survey_repo: reversible
   skills_read: reversible
   source_history: reversible
-  surface_note: reversible
   task: recoverable
   terminal_close: recoverable
   terminal_open: recoverable
@@ -827,7 +831,6 @@ owner:
   stat: filesystem
   submit_verdict: workflow_verdicts
   summarize: summarization
-  surface_note: sessions
   survey_repo: survey
   task: workers
   terminal_close: terminals
@@ -950,7 +953,6 @@ batch_policy:
   survey_repo: shared
   skills_read: shared
   source_history: shared
-  surface_note: serial
   task: serial
   terminal_close: serial
   terminal_open: serial
@@ -1095,7 +1097,6 @@ lifecycle:
   survey_repo: read_only
   skills_read: read_only
   source_history: read_only
-  surface_note: db_transaction
   task: durable_job
   terminal_close: ephemeral_control
   terminal_open: effect_attempt

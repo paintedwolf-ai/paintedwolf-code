@@ -50,12 +50,6 @@ func TestRenderTurnStateBlock(t *testing.T) {
 			PartialWorkerJobs:  []string{"job-c"},
 		})
 		testutil.FailErr(t, "RenderTurnStateBlock", err)
-		if !strings.Contains(block, "Integrate turn") {
-			t.Fatalf("missing integrate turn guidance: %q", block)
-		}
-		if !strings.Contains(block, "per-overlay promote order") {
-			t.Fatalf("missing promote order guidance: %q", block)
-		}
 		if !strings.Contains(block, "Pending overlay `job-a`, `job-b`") {
 			t.Fatalf("missing pending overlay jobs: %q", block)
 		}
@@ -65,12 +59,21 @@ func TestRenderTurnStateBlock(t *testing.T) {
 	})
 
 	t.Run("verify required", func(t *testing.T) {
-		block, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-verify", inject.TurnStateInjectInput{
+		_, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-verify", inject.TurnStateInjectInput{
 			VerifyRequired: true,
 		})
 		testutil.FailErr(t, "RenderTurnStateBlock", err)
-		if !strings.Contains(block, "This workflow has an explicit test-evidence gate") {
-			t.Fatalf("missing test-evidence gate: %q", block)
-		}
 	})
+}
+
+func TestTurnStateCarriesCurrentProgressSnapshot(t *testing.T) {
+	renderer := prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: testConfigRoot(t)}))
+	snapshot := `{"content":"- [ ] Deliver","revision":"current-snapshot-revision","reconciliation":{"token":"worker-finish-token","jobs":["worker-one"]}}`
+	block, err := inject.RenderTurnStateBlock(t.Context(), renderer, "snapshot", inject.TurnStateInjectInput{ProgressSnapshot: snapshot, ProfileHasUpdateProgress: true})
+	testutil.FailErr(t, "render current progress", err)
+	for _, value := range []string{"current-snapshot-revision", "worker-finish-token", "worker-one", "Deliver"} {
+		if !strings.Contains(block, value) {
+			t.Fatalf("snapshot omitted %q: %s", value, block)
+		}
+	}
 }

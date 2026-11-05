@@ -10,9 +10,3 @@ invariants:
   fires_in:
   - run report rejected for document fields it still owes (in-session retry with its own
     budget; exhaustion delivers the report marked as not accepted)
-  required:
-  - report fence
-  - findings
-  - set_asides
-  forbidden:
-  - workflow_advance

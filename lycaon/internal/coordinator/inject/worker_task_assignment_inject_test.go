@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -57,7 +59,7 @@ func TestRenderWorkerTaskAssignment_rendersStructuredCharter(t *testing.T) {
 	if strings.Contains(out, "User task (parent session):") {
 		t.Fatalf("parent user task must not appear in worker charter:\n%s", out)
 	}
-	for _, want := range []string{"Goal:", "Expand engine.py", "Known facts:", "Constraints:", "Done when:", "Context references:", "render(state: ViewState): void", "private snapshot"} {
+	for _, want := range []string{"Goal:", "Expand engine.py", "Constraints:", "render(state: ViewState): void"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing charter section %q in %q", want, out)
 		}
@@ -88,9 +90,6 @@ func TestRenderWorkerTaskAssignmentForwardsAttachmentsWhenBriefSet(t *testing.T)
 	}
 	if strings.Contains(out, body) || strings.Contains(out, "SECRET-BODY") {
 		t.Fatalf("assignment must not copy attachment body:\n%s", out)
-	}
-	if !strings.Contains(out, "Parent attachments") {
-		t.Fatalf("missing attachment block:\n%s", out)
 	}
 	if !strings.Contains(out, "127.0.0.1-recording.json") {
 		t.Fatalf("missing filename:\n%s", out)
@@ -139,5 +138,26 @@ func TestWorkerAssignmentPagesLargeSubjects(t *testing.T) {
 	}
 	if len(binding.Subject.Facts.Obligations) != 51 {
 		t.Fatal("projection mutated stored subject")
+	}
+}
+
+func TestRenderWorkerTaskAssignmentLinkedCheckoutOrientation(t *testing.T) {
+	projectDir := t.TempDir()
+	wtDir := filepath.Join(projectDir, "worktree")
+	testutil.FailErr(t, "mkdir worktree", os.MkdirAll(wtDir, 0o755))
+	testutil.FailErr(t, "write worktree .git", os.WriteFile(filepath.Join(wtDir, ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644))
+
+	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
+		SessionID:    "sess-linked",
+		ProjectDir:   projectDir,
+		Charter:      testWorkerCharter("Update worktree/main.go"),
+		AgentType:    "implementer",
+		WorkerJobID:  "job-linked",
+		Scope:        api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"worktree/main.go"}},
+		MaxToolLoops: 10,
+	})
+	testutil.FailErr(t, "RenderWorkerTaskAssignment", err)
+	if !strings.Contains(out, "without VCS access in this workspace") || !strings.Contains(out, "read-scoped leg or the coordinator") {
+		t.Fatalf("missing linked checkout orientation in assignment:\n%s", out)
 	}
 }

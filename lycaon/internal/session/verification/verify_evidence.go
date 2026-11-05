@@ -2,7 +2,6 @@ package verification
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"strings"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/inspector"
 	"github.com/lycaon/lycaon/internal/project"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
@@ -40,43 +38,6 @@ func (m *Service) SetVerifyConfig(r VerifyConfigResolver) {
 	if m != nil {
 		m.verifyConfig = r
 	}
-}
-
-// ConfirmVerifyResult compares a result with the declared command.
-func (m *Service) ConfirmVerifyResult(sess *api.Session, content string) string {
-	if m == nil || m.verifyConfig == nil || sess == nil {
-		return content
-	}
-	var obj map[string]any
-	if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &obj); err != nil {
-		return content
-	}
-	cmd := verifyCommandFromResult(obj)
-	declaredRaw := strings.TrimSpace(m.verifyConfig.VerifyTestCommand(m.workspace.SettingsPath(context.Background(), sess)))
-	obj["declared_command_match"] = declaredRaw != "" && commandsurface.SameCommandLine(cmd, declaredRaw)
-	if declaredRaw != "" {
-		obj["declared_command"] = declaredRaw
-	}
-	out, err := json.Marshal(obj)
-	if err != nil {
-		return content
-	}
-	return string(out)
-}
-
-func verifyCommandFromResult(obj map[string]any) string {
-	if cmd, _ := obj["command"].(string); strings.TrimSpace(cmd) != "" {
-		return strings.TrimSpace(cmd)
-	}
-	raw, err := json.Marshal(obj["stages"])
-	if err != nil {
-		return ""
-	}
-	var stages []hostcmd.StageResult
-	if err := json.Unmarshal(raw, &stages); err != nil {
-		return ""
-	}
-	return hostcmd.CommandLine(stages)
 }
 
 func (m *Service) RecordSourceRunEvidence(
@@ -197,7 +158,7 @@ func BackgroundOutcome(completion bgprocess.Completion) string {
 	if completion.BoundaryRefusal != "" {
 		return api.SourceVerdictUnverifiable
 	}
-	if completion.TerminationReason == bgprocess.TerminationStopped || completion.TerminationReason == bgprocess.TerminationTimedOut {
+	if completion.TerminationReason.IsStopped() || completion.TerminationReason == bgprocess.TerminationTimedOut {
 		return api.SourceVerdictFailed
 	}
 	if completion.ExitCode == 0 && completion.Failure == nil {

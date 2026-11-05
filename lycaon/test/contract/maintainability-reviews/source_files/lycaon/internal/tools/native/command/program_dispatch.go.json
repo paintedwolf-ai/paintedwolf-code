@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/command/program_dispatch.go",
+  "kind": "runtime_service",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain reached-child preparation, review, execution and failure translation in the dispatcher. The added wiring passes reviewed value sinks into typed external request reconstruction while preserving captured cwd and stage attribution. The reconstruction helper owns value validation, not operation authority. Exact argument/process boundaries and changed-shape refusal contracts support this boundary.",
+  "reviewed_commit": "1da0705c31dcb167e8a38f16761ff8a4b8e1f033",
+  "ceiling": 727,
+  "boundaries": {
+    "lycaon/internal/tools/native/command/program_external_values_test.go": "7e8b072a74b2682508fa3d6fb39825a924a24f78e9ffd10478c22ee7e058cf8c"
+  }
+}

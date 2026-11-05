@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/coordinator/promptloop/batch_commit.go",
+  "kind": "runtime_service",
+  "workstream": "program-observation-evidence",
+  "disposition": "retain",
+  "reason": "Keep ordered message persistence, evidence attachment and compaction in the batch commit owner. Program observation projection is a focused helper; storage-safe text and confirmed source handles still enter through this single settlement seam. The file shrinks to 351 measured lines.",
+  "reviewed_commit": "62c955c3704aaefe1d48fc485b09e6201a4244cd",
+  "ceiling": 351,
+  "boundaries": {
+    "lycaon/internal/coordinator/promptloop/program_observation_test.go": "40935de64422248c362110a4153dc2c9ca3c49b423b190a71d547111513a4975",
+    "lycaon/internal/coordinator/promptloop/tool_result_message_test.go": "14dc00b0679071fe9b220204f8b3a77db27879271a285e39294b6f5ebe37dd8e"
+  }
+}

@@ -465,7 +465,7 @@ The measured transcript origin maps row coordinates into the padded scrollport. 
 
 Presence is a host/presentation contract. A durable row is never withheld because its optional workflow or tool chrome is not hydrated. Live assistant content is a replacement snapshot until settlement. Tool rows use typed invocation, process, visibility, and presentation fields. Worker cards use worker/job identity. Grounding, checkpoints, and workflow boundaries remain distinct items even when visually adjacent.
 
-Citation presentation distinguishes agent citations from **Host-added (observed)** references. When the coordinator omits citation metadata, the host can attach recorded sources to the unchanged answer without another model turn; Den discloses that attachment and keeps the sources inspectable. Grounding describes reference traceability and provenance, not a verified answer. See [Grounding](grounding.md#evidence-grounded-prose).
+Citation presentation distinguishes agent citations from **Host-added (observed)** references. When the coordinator omits citations, the host can attach recorded sources to the unchanged answer without another model turn; Den discloses that attachment and keeps the sources inspectable. Speech that needed no citations and supplied none (`evidence_optional`) carries no evidence state; it is never shown as a checked source. A cited range opens as a range. Provisional text, in the drafts rail and rejected versions, stays plain text with its raw citation syntax and nothing navigable. Grounding describes reference traceability and provenance, not a verified answer. See [Grounding](grounding.md#evidence-grounded-prose).
 
 ### Transcript viewport coordination
 

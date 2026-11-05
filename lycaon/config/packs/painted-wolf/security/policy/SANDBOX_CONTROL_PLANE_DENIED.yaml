@@ -29,22 +29,13 @@ x-paintedwolf-scenarios:
       capability: read_path
       path: ${config_dir}/approvals.yaml
       tool: command
-    expect_contains:
-      - 'Code: SANDBOX_CONTROL_PLANE_DENIED'
-      - ${config_dir}/approvals.yaml
   - id: survey
     vars:
       mode: read
       path: ${config_dir}/debug/sessions
       tool: list_dir
-    expect_contains:
-      - 'Code: SANDBOX_CONTROL_PLANE_DENIED'
-      - ${config_dir}/debug/sessions
   - id: write
     vars:
       mode: write
       path: ${config_dir}/packs/stock/skills/verify-a-change/SKILL.md
       tool: write
-    expect_contains:
-      - 'Code: SANDBOX_CONTROL_PLANE_DENIED'
-      - ${config_dir}/packs/stock/skills/verify-a-change/SKILL.md

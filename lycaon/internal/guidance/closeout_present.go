@@ -26,7 +26,7 @@ func LatestVisualArtifactIDsSinceUserIntent(history []api.Message, max int) []st
 }
 
 // PresentableVisualArtifactIDs returns every presentable still since the last
-// user intent, oldest first — the set a turn may present.
+// user intent, oldest first: what a closeout presents when it names none.
 func PresentableVisualArtifactIDs(history []api.Message) []string {
 	start := api.UserIntentBoundary(history)
 	if start < 0 {
@@ -58,6 +58,39 @@ func PresentableVisualArtifactIDs(history []api.Message) []string {
 		}
 		for _, id := range visualArtifactIDsFromWorkerProof(msg.Content) {
 			appendID(id)
+		}
+	}
+	return ids
+}
+
+// SessionPresentableArtifactIDs is what a directive may present: every presentable
+// still, worker proof, attachment, and earlier presentation in this session, oldest
+// first. An id the session has never seen is absent.
+func SessionPresentableArtifactIDs(history []api.Message) []string {
+	var ids []string
+	seen := map[string]struct{}{}
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if _, dup := seen[id]; id != "" && !dup {
+			seen[id] = struct{}{}
+			ids = append(ids, id)
+		}
+	}
+	for _, msg := range history {
+		for _, id := range msg.ArtifactIDs {
+			add(id)
+		}
+		for _, part := range msg.ContentParts {
+			add(part.ArtifactID)
+		}
+		if msg.Role != api.MessageRoleTool {
+			continue
+		}
+		if msg.ToolResult != nil && msg.ToolResult.Visual != nil && msg.ToolResult.Visual.PresentableStill() {
+			add(msg.ToolResult.Visual.ID)
+		}
+		for _, id := range visualArtifactIDsFromWorkerProof(msg.Content) {
+			add(id)
 		}
 	}
 	return ids

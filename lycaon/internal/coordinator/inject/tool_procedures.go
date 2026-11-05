@@ -24,6 +24,7 @@ func RenderToolProceduresBlock(
 	if !prompts.ScopeAllowsCommandMutation(profileID) {
 		prompts.ApplyReadOnlyCommandEffects(names, nil, vars)
 	}
+	prompts.MergeProfileRequestableVars(profileID, names, vars)
 	mergeRunnerCapabilityVars(names, vars)
 	prompts.MergeHTTPActionVars(names, vars)
 	surface := "worker"

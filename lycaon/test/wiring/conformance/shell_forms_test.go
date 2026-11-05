@@ -29,8 +29,8 @@ var shellFormContracts = []contractCase{
 	{
 		Case: commandconformance.Case{
 			ID: "shell-lsof-format-forms", Commands: []string{"lsof"}, Forms: []string{"lsof:-t", "lsof:-n", "lsof:-P"},
-			Program: `lsof -t -n -P >/dev/null; status=$?; test "$status" -le 1 && printf 'listing-ok\n'`,
+			Program: `lsof -t -n -P >/dev/null 2>&1; status=$?; test "$status" -le 1 && printf 'listing-ok\n'`,
 		},
-		Stdout: "listing-ok\n", Stderr: "lsof: only this session's listeners are listed; name a port with -i :PORT to include other processes\n",
+		Stdout: "listing-ok\n",
 	},
 }

@@ -36,3 +36,13 @@ func Receive[T any](t testing.TB, step string, ch <-chan T) T {
 		return zero
 	}
 }
+
+// AwaitClosed returns once ch closes, within the test timeout.
+func AwaitClosed[T any](t testing.TB, step string, ch <-chan T) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-t.Context().Done():
+		t.Fatalf("%s: timed out waiting for channel to close", step)
+	}
+}

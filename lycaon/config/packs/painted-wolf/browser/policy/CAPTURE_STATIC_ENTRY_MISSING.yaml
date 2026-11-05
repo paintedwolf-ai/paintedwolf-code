@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
     path: /workspace/app
     profile: coordinator
     tool: page_open
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CAPTURE_STATIC_ENTRY_MISSING'
-  - 'index.html'

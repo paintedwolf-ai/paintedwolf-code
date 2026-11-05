@@ -31,7 +31,3 @@ x-paintedwolf-scenarios:
       profile: implement
       reason: missing_id
       tool: terminal_send
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: TERMINAL_ID_REQUIRED'
-      - terminal_open

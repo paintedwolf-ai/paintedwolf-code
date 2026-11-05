@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -21,6 +22,13 @@ type SourceDelivery struct {
 	SourceEndByte   int64                  `json:"source_end_byte"`
 	StartLine       int                    `json:"start_line"`
 	EndLine         int                    `json:"end_line"`
+	// LineNumbered means the output printed each line's own source number, the only
+	// way a reader can state a coordinate from program output without counting.
+	LineNumbered bool `json:"line_numbered,omitempty"`
+	// PrintedOtherNumbers means the output numbered these lines, but not with their own
+	// numbers, as `cat -n` does for every file after the first. Counting from those
+	// numbers lands on another line, so only a verified excerpt supports a coordinate.
+	PrintedOtherNumbers bool `json:"printed_other_numbers,omitempty"`
 }
 
 // DeliveredSourceObservation is constructed only after comparing actual emitted
@@ -63,7 +71,79 @@ func ConfirmDeliveredSource(path string, pin toolcontract.SourcePin, captured, d
 	}
 	first := 1 + bytes.Count(captured[:start], []byte{'\n'})
 	last := first + len(lines) - 1
-	fact := SourceDelivery{ResponseID: responseID, DeliveryID: deliveryID, Source: pin, SourceStartByte: start, SourceEndByte: end, StartLine: first, EndLine: last}
+	fact := SourceDelivery{ResponseID: responseID, DeliveryID: deliveryID, Source: pin, SourceStartByte: start, SourceEndByte: end, StartLine: first, EndLine: last,
+		LineNumbered: first == last && mapping.PrintedLine == int64(first)}
+	out.record = Record{Kind: "read", Shape: ShapeFileRegion, Fidelity: FidelityStructured, SourceTool: "command", Path: path, LineRanges: []LineRange{{Start: first, End: last}}, Body: lines, SourceDelivery: &fact}
+	return out, nil
+}
+
+// DeliveredLine is one line program output printed beside its own source number.
+type DeliveredLine struct {
+	Mapping toolcontract.StreamSourceMapping
+	Bytes   []byte
+}
+
+// ConfirmDeliveredLines confirms consecutive numbered lines of one capture as one
+// observation, so numbered output makes one record however it was printed.
+func ConfirmDeliveredLines(path string, pin toolcontract.SourcePin, captured []byte, lines []DeliveredLine, responseID, deliveryID string) (DeliveredSourceObservation, error) {
+	var out DeliveredSourceObservation
+	if len(lines) == 0 {
+		return out, fmt.Errorf("numbered delivery has no lines")
+	}
+	var delivered []byte
+	merged := lines[0].Mapping
+	merged.OutputStartByte = 0
+	for i, line := range lines {
+		if bytes.Count(bytes.TrimSuffix(line.Bytes, []byte{'\n'}), []byte{'\n'}) != 0 || line.Mapping.PrintedLine != lines[0].Mapping.PrintedLine+int64(i) {
+			return out, fmt.Errorf("numbered delivery is not one printed line at a time")
+		}
+		if i > 0 && line.Mapping.SourceStartByte != merged.SourceEndByte {
+			return out, fmt.Errorf("numbered delivery is not contiguous source")
+		}
+		delivered = append(delivered, line.Bytes...)
+		merged.SourceEndByte = line.Mapping.SourceEndByte
+	}
+	merged.OutputEndByte = int64(len(delivered))
+	out, err := ConfirmDeliveredSource(path, pin, captured, delivered, merged, responseID, deliveryID)
+	if err != nil {
+		return DeliveredSourceObservation{}, err
+	}
+	fact := out.record.SourceDelivery
+	fact.LineNumbered = int64(fact.StartLine) == lines[0].Mapping.PrintedLine && fact.EndLine-fact.StartLine+1 == len(lines)
+	fact.PrintedOtherNumbers = !fact.LineNumbered
+	return out, nil
+}
+
+// ConfirmNumberedWindow records a source window a host operation returned as its own
+// numbered rows, from that operation's result. The caller confirms the rows reached the
+// delivered output unchanged. A row out of sequence confirms nothing.
+func ConfirmNumberedWindow(path, numbered, responseID, deliveryID string) (DeliveredSourceObservation, error) {
+	var out DeliveredSourceObservation
+	if path == "" || responseID == "" || deliveryID == "" {
+		return out, fmt.Errorf("numbered window requires a path and its delivery identity")
+	}
+	rows := strings.Split(numbered, "\n")
+	lines := make([]string, 0, len(rows))
+	first := 0
+	for i, row := range rows {
+		number, text, ok := hostmarker.ParseNumberedLine(row)
+		if !ok || (i > 0 && number != first+i) {
+			return out, fmt.Errorf("numbered window has an unnumbered or out of sequence row")
+		}
+		if i == 0 {
+			first = number
+		}
+		lines = append(lines, text)
+	}
+	if first < 1 {
+		return out, fmt.Errorf("numbered window starts before the first line")
+	}
+	text := strings.Join(lines, "\n")
+	digest := sha256.Sum256([]byte(text))
+	size := int64(len(text))
+	pin := toolcontract.SourcePin{SourceID: "window:" + path, Revision: hex.EncodeToString(digest[:]), SHA256: hex.EncodeToString(digest[:]), Representation: toolcontract.LogicalUTF8LF, EndByte: size}
+	last := first + len(lines) - 1
+	fact := SourceDelivery{ResponseID: responseID, DeliveryID: deliveryID, Source: pin, SourceEndByte: size, StartLine: first, EndLine: last, LineNumbered: true}
 	out.record = Record{Kind: "read", Shape: ShapeFileRegion, Fidelity: FidelityStructured, SourceTool: "command", Path: path, LineRanges: []LineRange{{Start: first, End: last}}, Body: lines, SourceDelivery: &fact}
 	return out, nil
 }

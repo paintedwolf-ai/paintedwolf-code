@@ -2,6 +2,9 @@ package toolfixture
 
 import (
 	"context"
+	"path/filepath"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -59,8 +62,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
-	"path/filepath"
-	"testing"
 )
 
 func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
@@ -94,7 +95,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	if err := native.RegisterUpdateProgressTool(reg, progress.NewMemoryStore(), func(_ context.Context, id string) string {
 		return id
-	}); err != nil {
+	}, nil); err != nil {
 		contractcheck.FailErr(t, "native.RegisterUpdateProgressTool failed", err)
 	}
 	if err := native.RegisterCompleteLegTool(reg, workercompletion.CompleteLegDecoder); err != nil {
@@ -250,14 +251,6 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	}
 	memStore := store.NewMemory()
 	wireContractProgramServices(t, rt, sqlDB, memStore)
-	if err := native.RegisterSurfaceNoteTool(rt.Registry, reporttools.SurfaceNoteDeps{
-		Ledger: session.NewHost(memStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry()).Verification.Evidence,
-		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
-			return memStore.GetMessages(ctx, sessionID)
-		},
-	}); err != nil {
-		contractcheck.FailErr(t, "native.RegisterSurfaceNoteTool failed", err)
-	}
 	if err := native.RegisterRecallTool(rt.Registry, recall.NewService(sqlDB, t.TempDir())); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRecallTool failed", err)
 	}

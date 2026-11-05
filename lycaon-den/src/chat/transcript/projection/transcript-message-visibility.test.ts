@@ -283,7 +283,7 @@ describe("transcript-items", () => {
     ).toEqual(["find"]);
   });
 
-  it("hides surface_note transport but keeps its visible note", () => {
+  it("keeps a stored surface_note call beside its note in an old session", () => {
     const messages: Message[] = [
       {
         id: "a1",
@@ -319,5 +319,57 @@ describe("transcript-items", () => {
     const verbose = createTranscriptDisplayProjector()(messages, undefined, { verboseMode: true })[0]!;
     expect(quiet.some((item) => item.kind === "assistant" && item.key === "note-1")).toBe(true);
     expect(verbose.some((item) => item.kind === "activity_span")).toBe(true);
+  });
+
+  describe("a note committed before its batch's tools settle", () => {
+    const carrier: Message = {
+      id: "carrier",
+      role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
+      content: "",
+      tool_calls: [{ id: "tc-read", name: "read", args: { path: "a.go" } }],
+      created_at: "t", ord: 1,
+    };
+    const note: Message = {
+      id: "note-1",
+      role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
+      kind: "agent_note",
+      content: "Checking the auth path.",
+      grounding: { traced: true, evidence_optional: true },
+      created_at: "t", ord: 2,
+    };
+    const result: Message = {
+      id: "t1",
+      role: "tool", origin: "tool" as const, authority: "none" as const, trust_tier: "untrusted" as const,
+      content: "package a",
+      tool_result: {
+        tool: "read",
+        tool_call_id: "tc-read",
+        assistant_message_id: "carrier",
+        content: "package a",
+        outcome: "completed",
+      },
+      created_at: "t", ord: 3,
+    };
+
+    it.each([
+      ["while its tool runs", [carrier, note]],
+      ["after its tool settles", [carrier, note, result]],
+    ])("stays above the tool card %s", (_when, messages) => {
+      const items = createTranscriptDisplayProjector()(messages, undefined, { verboseMode: true })[0]!;
+      const noteAt = items.findIndex((item) => item.kind === "assistant" && item.key === "note-1");
+      const spanAt = items.findIndex((item) => item.kind === "activity_span");
+      expect(items.filter((item) => item.kind === "assistant").map((item) => item.key)).toEqual(["note-1"]);
+      expect(noteAt).toBeGreaterThanOrEqual(0);
+      expect(spanAt).toBeGreaterThan(noteAt);
+    });
+
+    it("leaves a stored surface_note row after the call it followed", () => {
+      const stored: Message = { ...note, ord: 4 };
+      const items = createTranscriptDisplayProjector()([carrier, result, stored], undefined, { verboseMode: true })[0]!;
+      const noteAt = items.findIndex((item) => item.kind === "assistant" && item.key === "note-1");
+      const spanAt = items.findIndex((item) => item.kind === "activity_span");
+      expect(spanAt).toBeGreaterThanOrEqual(0);
+      expect(spanAt).toBeLessThan(noteAt);
+    });
   });
 });

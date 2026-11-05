@@ -22,16 +22,22 @@ struct pw_listen_row {
  uint32_t uid;
  uint16_t port;
  unsigned char ipv4;
+ unsigned char ipv6_only;
+ unsigned char listening;
 };
 
 // pw_listen_rows reads the host-wide PCB table, which needs no access to the
-// holding process, so a socket whose holder cannot be inspected still appears.
+// holding process, so a socket whose holder cannot be inspected still appears
+// where the kernel delivers it. Every delivered record is returned, with the
+// count the kernel declares: a host can succeed while delivering only the
+// caller's own rows, and the caller needs both to recognize that.
 // TCP rows listen in TCPS_LISTEN; UDP rows listen while bound and unconnected.
 // xso_so is the handle the shared descriptor walk reports as soi_so.
-static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count) {
+static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count, uint32_t *declared) {
  const char *name = udp ? "net.inet.udp.pcblist64" : "net.inet.tcp.pcblist64";
  *rows = NULL;
  *count = 0;
+ *declared = 0;
  char *buf = NULL;
  size_t len = 0;
  for (int attempt = 0; attempt < 4; attempt++) {
@@ -53,6 +59,7 @@ static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count) {
  if (out == NULL) { free(buf); return ENOMEM; }
  char *end = buf + len;
  struct xinpgen *gen = (struct xinpgen *)buf;
+ *declared = gen->xig_count;
  for (char *at = buf + gen->xig_len; at + sizeof(struct xinpgen) <= end; ) {
   struct xinpgen *record = (struct xinpgen *)at;
   if (record->xig_len <= sizeof(struct xinpgen) || at + record->xig_len > end) break;
@@ -69,12 +76,14 @@ static int pw_listen_rows(int udp, struct pw_listen_row **rows, int *count) {
    inp = &tcp->xt_inpcb;
    listening = tcp->t_state == TCPS_LISTEN;
   }
-  if (!listening || *count >= (int)capacity) continue;
+  if (*count >= (int)capacity) continue;
   struct pw_listen_row *row = &out[(*count)++];
+  row->listening = listening != 0;
   row->handle = inp->xi_socket.xso_so;
   row->uid = inp->xi_socket.so_uid;
   row->port = ntohs(inp->inp_lport);
   row->ipv4 = (inp->inp_vflag & INP_IPV6) == 0;
+  row->ipv6_only = !row->ipv4 && (inp->inp_flags & IN6P_IPV6_V6ONLY) != 0;
   if (row->ipv4) {
    memcpy(row->local, &inp->inp_dependladdr.inp46_local.ia46_addr4, 4);
   } else {
@@ -91,46 +100,45 @@ import "C"
 
 import (
 	"net/netip"
+	"os"
 	"syscall"
 	"unsafe"
 )
 
-func listeners(query ListenerQuery) ([]Listener, error) {
-	var rows []kernelListener
+func listeners(query ListenerQuery) (ListenerTable, error) {
+	var reads []socketTableRead
 	for _, protocol := range query.protocols() {
-		table, err := pcbListeners(protocol)
+		read, err := pcbTable(protocol)
 		if err != nil {
-			return nil, err
+			return ListenerTable{}, err
 		}
-		for _, row := range table {
-			if query.wants(row.Protocol, row.Local) {
-				rows = append(rows, row)
-			}
-		}
-	}
-	if len(rows) == 0 {
-		return nil, nil
+		reads = append(reads, read)
 	}
 	pids, err := livePIDs()
 	if err != nil {
-		return nil, err
+		return ListenerTable{}, err
 	}
-	return resolveListeners(rows, pids, observeSockets), nil
+	return reconcileListeners(reads, query, os.Getpid(), pids, observeSockets), nil
 }
 
-func pcbListeners(protocol Protocol) ([]kernelListener, error) {
+func pcbTable(protocol Protocol) (socketTableRead, error) {
 	udp := C.int(0)
 	if protocol == ProtocolUDP {
 		udp = 1
 	}
 	var rows *C.struct_pw_listen_row
 	var count C.int
-	if code := C.pw_listen_rows(udp, &rows, &count); code != 0 {
-		return nil, syscall.Errno(code)
+	var declared C.uint32_t
+	if code := C.pw_listen_rows(udp, &rows, &count, &declared); code != 0 {
+		return socketTableRead{}, syscall.Errno(code)
 	}
 	defer C.free(unsafe.Pointer(rows))
-	out := make([]kernelListener, 0, int(count))
+	read := socketTableRead{Protocol: protocol, Records: make(map[uint64]bool, int(count)), Declared: int(declared)}
 	for _, row := range unsafe.Slice(rows, int(count)) {
+		read.Records[uint64(row.handle)] = true
+		if row.listening == 0 {
+			continue
+		}
 		raw := unsafe.Slice((*byte)(unsafe.Pointer(&row.local[0])), 16)
 		var addr netip.Addr
 		if row.ipv4 != 0 {
@@ -138,7 +146,13 @@ func pcbListeners(protocol Protocol) ([]kernelListener, error) {
 		} else {
 			addr = netip.AddrFrom16([16]byte(raw))
 		}
-		out = append(out, kernelListener{Protocol: protocol, Local: netip.AddrPortFrom(addr, uint16(row.port)), UID: uint32(row.uid), Handle: uint64(row.handle)})
+		read.Listening = append(read.Listening, kernelListener{
+			Protocol: protocol,
+			Local:    netip.AddrPortFrom(addr, uint16(row.port)),
+			UID:      uint32(row.uid),
+			IPv6Only: row.ipv6_only != 0,
+			Handle:   uint64(row.handle),
+		})
 	}
-	return out, nil
+	return read, nil
 }

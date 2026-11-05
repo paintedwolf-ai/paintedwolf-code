@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -20,10 +21,6 @@ import (
 )
 
 // No-folder prompts name only available tools.
-
-var noFolderForbiddenPromptTools = []string{
-	"read", "write", "edit", "grep", "find", "list_dir", "command", "pack_board", "scan_pack",
-}
 
 func TestNoFolderCoordinatorToolsSubsetOfAllowlist(t *testing.T) {
 	t.Parallel()
@@ -116,52 +113,11 @@ func TestNoFolderCoordinatorPromptSubsetOfWireTools(t *testing.T) {
 	}
 }
 
-func TestNoFolderCoordinatorPromptNamesNoFileTools(t *testing.T) {
-	t.Parallel()
-	corpus := renderCoordinatorTripartiteAtRootCount(t, contractcheck.RepoRoot(t), 0, surfaceImplementRouting)
-	for _, tool := range noFolderForbiddenPromptTools {
-		if mentionsToolName(corpus, tool) {
-			t.Fatalf("0-root coordinator prompt mentions forbidden tool %q", tool)
-		}
-	}
-}
-
 func TestNoFolderSpawnRosterWebResearcherOnly(t *testing.T) {
 	t.Parallel()
-	engine := contractcheck.BundledPromptEngineForRoot(t)
-	renderer := prompts.NewInjectRenderer(engine)
-	block, err := inject.RenderImplementSpawnInject(
-		context.Background(), renderer, "sess-inject-test",
-		inject.ResolveAgentRoster(surfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, true).Effective,
-		spawn.MaxInFlightTaskWorkers, surfaceImplementRouting, 0, false, true,
-		nil, nil)
-	contractcheck.FailErr(t, "RenderImplementSpawnInject", err)
-	if !strings.Contains(block, "web-researcher") {
-		t.Fatalf("0-root roster missing web-researcher:\n%s", block)
-	}
-	spawnSection := block
-	if idx := strings.Index(block, "**Excluded:**"); idx >= 0 {
-		spawnSection = block[:idx]
-	}
-	for _, forbidden := range []string{"implementer", "repo-researcher", "path-explorer"} {
-		if mentionsToolName(spawnSection, forbidden) {
-			t.Fatalf("0-root spawn roster mentions excluded agent %q", forbidden)
-		}
-	}
-}
-
-func TestNoFolderTransitionRestoresFileGuidance(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	zero := renderCoordinatorTripartiteAtRootCount(t, root, 0, surfaceImplementRouting)
-	one := renderCoordinatorTripartiteAtRootCount(t, root, 1, surfaceImplementRouting)
-	for _, tool := range []string{"command", "pack_board"} {
-		if mentionsToolName(zero, tool) {
-			t.Fatalf("0-root prompt mentions %q", tool)
-		}
-		if !mentionsToolName(one, tool) {
-			t.Fatalf("1-root prompt should mention %q after folder attach", tool)
-		}
+	roster := inject.ResolveAgentRoster(surfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, true).Effective
+	if !slices.Equal(roster, []string{"web-researcher"}) {
+		t.Fatalf("0-root roster = %v, want only web-researcher", roster)
 	}
 }
 

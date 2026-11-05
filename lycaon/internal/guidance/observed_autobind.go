@@ -38,11 +38,13 @@ func observedCitedEvidenceForWire(roots evidence.CitationRoots, ev evidence.Ledg
 			continue
 		}
 		out = append(out, api.CitationGroundingCitedEvidence{
-			Handle:   handle,
-			Path:     path,
-			Line:     c.Line,
-			Excerpt:  strings.TrimSpace(c.Excerpt),
-			Verdict:  api.CitationVerdictMatched,
+			Handle:  handle,
+			Path:    path,
+			Line:    c.Line,
+			EndLine: c.EndLine,
+			Excerpt: strings.TrimSpace(c.Excerpt),
+			// The host chose this source: fallback provenance, not a claim match.
+			Verdict:  api.CitationVerdictTraced,
 			Openable: evidence.IsOpenablePath(roots, path),
 		})
 	}

@@ -43,6 +43,8 @@ func (p seriesPlanner) settleTerminal(ctx context.Context, scan api.CodeScan) er
 	row.UpdatedAt = now
 
 	if scan.Status == api.CodeScanStatusComplete {
+		row.ConsecutiveFailures = 0
+		row.ClearUnavailable()
 		// The next delta starts at this generation regardless of scan coverage.
 		row.LastCoveredSnapshotID = scan.SourceSnapshotID
 		row.LastCoveredExecutionFingerprint = scan.ExecutionFingerprint

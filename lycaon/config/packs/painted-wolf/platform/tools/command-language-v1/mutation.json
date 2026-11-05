@@ -1391,9 +1391,9 @@
       },
       "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/edit_apply.go",
+        "implementation": "lycaon/internal/tools/native/mutation/source_edits.go",
         "tests": [
-          "lycaon/internal/tools/native/edit_test.go"
+          "lycaon/internal/tools/native/edit_health_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -1675,7 +1675,7 @@
       "reuse": {
         "implementation": "lycaon/internal/tools/native/code_rewrite.go",
         "tests": [
-          "lycaon/internal/tools/native/code_rewrite_transaction_test.go"
+          "lycaon/internal/tools/native/code_rewrite_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -1956,7 +1956,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "jq-edit --path PATH --query QUERY [--format FORMAT]",
+      "argv": "jq-edit --path PATH --query QUERY [--format FORMAT] [--arg NAME VALUE ...]",
       "forms": [
         {
           "spellings": [
@@ -1992,6 +1992,19 @@
           "consumption": "fixed",
           "sample_values": [
             "json"
+          ]
+        },
+        {
+          "spellings": [
+            "--arg"
+          ],
+          "arity": 2,
+          "value_role": "name-value-pair",
+          "fixture_id": "jq-edit-option-arg",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "value"
           ]
         }
       ],
@@ -2049,9 +2062,9 @@
       },
       "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/jq_edit.go",
+        "implementation": "lycaon/internal/tools/native/jq/edit.go",
         "tests": [
-          "lycaon/internal/tools/native/jq_edit_test.go"
+          "lycaon/internal/tools/native/jq/edit_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -2069,7 +2082,8 @@
         "jq-edit-rejection",
         "jq-edit-option-path",
         "jq-edit-option-query",
-        "jq-edit-option-format"
+        "jq-edit-option-format",
+        "jq-edit-option-arg"
       ]
     }
   ]

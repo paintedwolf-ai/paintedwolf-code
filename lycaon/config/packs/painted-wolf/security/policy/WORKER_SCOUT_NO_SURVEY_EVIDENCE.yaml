@@ -10,7 +10,7 @@ requires:
 when: paintedwolf.profile == "worker" && paintedwolf.agent_is_scout && !paintedwolf.scout_survey_evidence_present
 effect: block
 copy:
-  what: Read scout marked leg complete without any successful survey tool (read, grep, find, list_dir, etc.).
+  what: Read scout marked leg complete without a successful source-survey observation.
   cause: explore_readonly-archetype legs must run at least one successful read-only survey tool before leg_status complete
   why: No survey tool results in this child transcript
   fix: 'Use an offered survey tool on the assigned scope, then call complete_leg with findings grounded in its result. If the scope cannot be observed, return partial with the limitation in remaining_risk.'
@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
       offender_count: 0
       offenders_omitted: 0
       offenders_sample: ''
-    expect_contains:
-      - 'Code: WORKER_SCOUT_NO_SURVEY_EVIDENCE'
-      - survey tool

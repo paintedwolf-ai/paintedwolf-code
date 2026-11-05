@@ -15,6 +15,9 @@ import (
 func invocationContext(ctx context.Context, tc tools.ToolContext) context.Context {
 	ctx = people.WithoutCaller(ctx)
 	ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
+	if tc.Invocation.ToolName != "" && tc.Invocation.Contract.Owner != "" {
+		ctx = tools.WithRecoveryContract(ctx, tc.Invocation.ToolName, tc.Invocation.Contract)
+	}
 	ctx = tools.SandboxScopeContext(ctx, tc)
 	ctx = authzledger.WithInvocation(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID, tc.Identity.ToolCallID)
 	sessionFacts := curationctx.SessionFrom(ctx)

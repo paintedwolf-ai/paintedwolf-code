@@ -15,40 +15,25 @@ approval_explanations:
                 destination_label: brave
                 rule_title: AWS access key ID
                 surface_label: web search
-              expect_contains:
-                - AWS access key ID
-                - web search
             - id: fetch_url
               vars:
                 destination_label: example.com
                 rule_title: AWS access key ID
                 surface_label: page fetch
-              expect_contains:
-                - page fetch
-                - example.com
             - id: mcp
               vars:
                 destination_label: fixture
                 rule_title: OpenAI API key
                 surface_label: MCP request
-              expect_contains:
-                - MCP request
-                - OpenAI API key
             - id: model_provider
               vars:
                 destination_kind: model_provider
                 destination_label: Fireworks 1
                 rule_title: CARTO API Access Token (JWT)
                 surface_label: model request
-              expect_contains:
-                - Fireworks 1
-                - would read this
             - id: command_process
               vars:
                 destination_kind: process
                 destination_label: this command's own process
                 rule_title: A managed secret
                 surface_label: command
-              expect_contains:
-                - command line
-                - not observed

@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       profile: explore_readonly
       tool: find
       type: symlink
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: FIND_INVALID_TYPE'

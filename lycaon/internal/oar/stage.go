@@ -21,7 +21,7 @@ func StageFromAnchor(anchor string) Stage {
 		return StageToolHandler
 	case AnchorToolPost:
 		return StagePostTool
-	case AnchorCoordinatorPostTurn, AnchorCoordinatorCloseoutCheck, CoreAnchorAgentPostTurn:
+	case AnchorCoordinatorPostTurn, AnchorCoordinatorCloseoutCheck, AnchorCoordinatorMidTurnNote, CoreAnchorAgentPostTurn:
 		return StagePostTurn
 	case AnchorWorkerFinalize, AnchorWorkerReportCheck, CoreAnchorAgentFinalize:
 		return StageFinalize

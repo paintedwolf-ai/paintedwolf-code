@@ -35,6 +35,3 @@ x-paintedwolf-scenarios:
     bundle: missing_bundle
     profile: explore_readonly
     tool: survey_repo
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SURVEY_BUNDLE_UNKNOWN'

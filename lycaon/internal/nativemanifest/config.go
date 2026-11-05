@@ -92,6 +92,8 @@ type Config struct {
 	SecretReferenceArgs map[string][]string `yaml:"secret_reference_args"`
 	// BoundedInProcess names tools whose execution runs synchronously in-process.
 	BoundedInProcess []string `yaml:"bounded_in_process"`
+	// RetiredToContentContract maps a retired tool to the content contract replacing it.
+	RetiredToContentContract map[string]string `yaml:"retired_to_content_contract"`
 	// HostProducedTools lists rule-plane tools without model schemas.
 	HostProducedTools []string `yaml:"host_produced_tools"`
 	// RuntimeRegisteredPrefixes identify tools registered after boot.
@@ -401,7 +403,7 @@ func (c Config) ValidateFamilies() error {
 
 func validExecutionCapability(value string) bool {
 	switch value {
-	case "host_resource", "socket", "process_control", "host_execution", "direct_ip", "local_listen", "loopback_connect", "terminal_capture", "write_root", "read_path",
+	case "host_resource", "socket", "process_control", "credential_store", "host_execution", "direct_ip", "local_listen", "loopback_connect", "terminal_capture", "write_root", "read_path",
 		"package_execution", "held_terminal_input", "file_change":
 		return true
 	default:

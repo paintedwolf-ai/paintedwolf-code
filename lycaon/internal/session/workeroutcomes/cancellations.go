@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
@@ -59,7 +60,8 @@ func (m *Cancellations) StopRuntime(ctx context.Context, childID string) error {
 		return fmt.Errorf("worker child session required")
 	}
 	m.execution.Cancel(child.ID)
-	member := store.SessionTreeMember{ID: child.ID, ProjectID: child.ProjectID}
+	ctx = bgprocess.WithTerminationReason(ctx, bgprocess.TerminationWorkerCancelled)
+	member := store.SessionTreeMember{ID: child.ID, ParentSessionID: child.ParentSessionID, ProjectID: child.ProjectID}
 	if err := m.stops.StopRuntime(ctx, member, ""); err != nil {
 		return err
 	}
@@ -119,7 +121,7 @@ func (m *Cancellations) Append(ctx context.Context, parentID string, in Cancella
 		if feedback.Code != in.Result.HintCode {
 			return fmt.Errorf("canceled worker feedback code does not match hint_code")
 		}
-		rendered, err := guidance.RenderPolicyCopy(ctx, feedback.Code, feedback.Effect, feedback.Copy)
+		rendered, err := guidance.RenderPolicyCopy(ctx, feedback.Code, feedback.Effect, feedback.Copy, feedback.Details)
 		if err != nil {
 			return fmt.Errorf("render canceled worker feedback: %w", err)
 		}

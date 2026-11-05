@@ -204,6 +204,7 @@ const (
 	CapabilityHeldTerminalInput
 	CapabilityFileChange
 	CapabilityProcessControl
+	CapabilityCredentialStore
 	CapabilityHostExecution
 )
 
@@ -216,6 +217,8 @@ func NamedCapability(name string) (Capability, bool) {
 		return CapabilitySocket, true
 	case "process_control":
 		return CapabilityProcessControl, true
+	case "credential_store":
+		return CapabilityCredentialStore, true
 	case "host_execution":
 		return CapabilityHostExecution, true
 	case "direct_ip":
@@ -243,7 +246,7 @@ func NamedCapability(name string) (Capability, bool) {
 
 // capabilityRequestFields is the closed capability_request object key set.
 var capabilityRequestFields = []string{
-	"host_resources", "socket_paths", "process_control", "host_execution", "direct_ip", "local_listen", "loopback_connect", "write_root", "read_path",
+	"host_resources", "socket_paths", "process_control", "credential_store", "host_execution", "direct_ip", "local_listen", "loopback_connect", "write_root", "read_path",
 }
 
 // CapabilityRequestFields returns the structured capability_request keys.
@@ -340,6 +343,7 @@ func (c Contract) CapabilityRequestFields() []string {
 		{"socket_paths", CapabilitySocket},
 		{"direct_ip", CapabilityDirectIP},
 		{"process_control", CapabilityProcessControl},
+		{"credential_store", CapabilityCredentialStore},
 		{"host_execution", CapabilityHostExecution},
 		{"local_listen", CapabilityLocalListen},
 		{"loopback_connect", CapabilityLoopbackConnect},

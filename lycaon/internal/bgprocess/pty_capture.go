@@ -39,7 +39,7 @@ func (r *Terminal) RunPTYCapture(
 	finished, err := r.Lifecycle.Await(ctx, sessionID, handle, timeout)
 	if err != nil {
 		if proc, lookupErr := r.jobs.lookup(sessionID, handle); lookupErr == nil {
-			r.Lifecycle.killProcess(proc)
+			r.Lifecycle.killProcess(proc, TerminationReasonFromContext(ctx, TerminationStoppedByAgent))
 		}
 		return PTYCaptureResult{}, err
 	}
@@ -56,7 +56,7 @@ func (r *Terminal) RunPTYCapture(
 			return PTYCaptureResult{}, snapshotErr
 		}
 		timedOutScreen = &preStop.Screen
-		r.Lifecycle.killProcess(proc)
+		r.Lifecycle.killProcess(proc, TerminationTimedOut)
 		select {
 		case <-proc.done:
 		case <-time.After(2 * time.Second):

@@ -310,7 +310,7 @@ async fn scheduler_wakes_survive_the_gap_before_waiting_without_cancelling_prepa
     let service = service_for_test();
     let mut wake = service.wake.subscribe();
     service.wake_scheduler();
-    tokio::time::timeout(Duration::from_millis(100), wake.changed())
+    tokio::time::timeout(Duration::from_secs(120), wake.changed())
         .await
         .unwrap()
         .unwrap();

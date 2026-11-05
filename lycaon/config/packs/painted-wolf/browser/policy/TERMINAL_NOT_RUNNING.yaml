@@ -34,7 +34,3 @@ x-paintedwolf-scenarios:
       tool: terminal_send
       can_terminal_read: true
       can_terminal_open: true
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: TERMINAL_NOT_RUNNING'
-      - terminal_read

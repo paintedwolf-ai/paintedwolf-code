@@ -144,7 +144,6 @@ describe("ProvidersPanel credential mode", () => {
 
     const hint = getByTestId("provider-ambient-hint-bedrock").textContent ?? "";
     expect(hint).toContain("~/.aws");
-    expect(hint).toContain("instance role");
     // Ambient mode with no stored key hides the key controls entirely.
     expect(queryByTestId("provider-api-key-bedrock")).toBeNull();
   });

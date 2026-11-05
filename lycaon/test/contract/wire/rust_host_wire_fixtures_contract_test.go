@@ -42,6 +42,7 @@ func TestRustHostWireFixturesMatchGoTypes(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	fixtures := map[string]rustHostWireFixture{
 		"power_settings_response":        goTypeFixture(t, "pkg/api.PowerSettingsResponse", wire.PowerSettingsResponse{}),
+		"project_background_process":     goTypeFixture(t, "pkg/api.ProjectBackgroundProcess", wire.ProjectBackgroundProcess{}),
 		"error_response":                 goTypeFixture(t, "pkg/api.ErrorResponse", wire.ErrorResponse{}),
 		"attachment_upload_response":     goTypeFixture(t, "pkg/api.AttachmentUploadResponse", wire.AttachmentUploadResponse{}),
 		"attachment_video_facts":         goTypeFixture(t, "pkg/api.AttachmentVideoFacts", wire.AttachmentVideoFacts{}),

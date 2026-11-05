@@ -14,6 +14,7 @@ import (
 	attachmentformat "github.com/lycaon/lycaon/internal/promptattach/format"
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/timelinearchive"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -103,36 +104,58 @@ func handleViewImageByHandle(ctx context.Context, deps ViewImageDeps, tctx tools
 	}
 	meta := res.Meta()
 	raw := res.Bytes()
-	if !visual.IsRasterMime(meta.Mime) {
+	mime := meta.Mime
+	switch {
+	case strings.EqualFold(strings.TrimSpace(mime), browser.FilmstripMime):
+		poster, err := browser.FilmstripPoster(raw)
+		if err != nil {
+			return "", &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: map[string]any{"path": in.Handle, "handle": in.Handle, "format": "png", "rejection_reason": err.Error()}}
+		}
+		raw = poster
+		mime = "image/png"
+	case strings.EqualFold(strings.TrimSpace(mime), timelinearchive.Mime):
+		poster, err := timelinearchive.Poster(raw)
+		if err != nil {
+			return "", &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: map[string]any{"path": in.Handle, "handle": in.Handle, "format": "png", "rejection_reason": err.Error()}}
+		}
+		raw = poster
+		mime = "image/png"
+	case !visual.IsRasterMime(mime):
 		return "", &toolrejection.ToolReject{Code: "IMAGE_FORMAT_UNSUPPORTED", Data: map[string]any{
-			"path": in.Handle, "handle": in.Handle, "extension": meta.Mime, "supported_formats": strings.Join(attachmentformat.WorkspaceImageExtensions(), ", "),
+			"path": in.Handle, "handle": in.Handle, "extension": mime, "supported_formats": strings.Join(attachmentformat.WorkspaceImageExtensions(), ", "),
 		}}
 	}
-	view := screened{bytes: raw, mime: meta.Mime, perception: visualscreen.PerceptionOriginal}
+	view := screened{bytes: raw, mime: mime, perception: visualscreen.PerceptionOriginal}
 	if !meta.Perceive {
 		var err error
-		view, err = screenVisual(ctx, deps.Screen, ViewImageToolName, tctx, visualscreen.VisualScreenInput{Mime: meta.Mime, RawBytes: raw},
-			map[string]any{"path": in.Handle, "handle": in.Handle, "format": strings.TrimPrefix(meta.Mime, "image/")})
+		view, err = screenVisual(ctx, deps.Screen, ViewImageToolName, tctx, visualscreen.VisualScreenInput{Mime: mime, RawBytes: raw},
+			map[string]any{"path": in.Handle, "handle": in.Handle, "format": strings.TrimPrefix(mime, "image/")})
 		if err != nil {
 			return "", err
 		}
 	}
-	kind, err := visualscreen.Classify(meta.Mime, raw)
+	kind, err := visualscreen.Classify(mime, raw)
 	if err != nil {
-		return "", imageRejectFor(err, map[string]any{"path": in.Handle, "handle": in.Handle, "format": strings.TrimPrefix(meta.Mime, "image/")})
+		return "", imageRejectFor(err, map[string]any{"path": in.Handle, "handle": in.Handle, "format": strings.TrimPrefix(mime, "image/")})
 	}
 	if kind == visualscreen.KindSVG {
 		return renderSVGView(ctx, deps.Raster, tctx, raw, meta.Caption, in, view)
 	}
-	if _, err := visualscreen.CheckRasterBounds(raw); err != nil {
-		return "", imageRejectFor(err, map[string]any{"path": in.Handle, "handle": in.Handle, "format": strings.TrimPrefix(meta.Mime, "image/")})
+	cfg, err := visualscreen.CheckRasterBounds(raw)
+	if err != nil {
+		return "", imageRejectFor(err, map[string]any{"path": in.Handle, "handle": in.Handle, "format": strings.TrimPrefix(mime, "image/")})
+	}
+	width, height := meta.Width, meta.Height
+	if !strings.EqualFold(strings.TrimSpace(meta.Mime), mime) || width <= 0 || height <= 0 {
+		width, height = cfg.Width, cfg.Height
 	}
 	// A perceived artifact viewed as stored is shown again by reference.
 	storedID := ""
 	if meta.Perceive && view.perception == visualscreen.PerceptionOriginal {
 		storedID = meta.ID
+		view.mime = meta.Mime
 	}
-	return emitHandleView(tctx, "", storedID, raw, meta.Mime, meta.Source, meta.Caption, meta.Width, meta.Height, 0, view)
+	return emitHandleView(tctx, "", storedID, raw, mime, meta.Source, meta.Caption, width, height, 0, view)
 }
 
 func renderHandleNotFound(handle string) error {

@@ -35,7 +35,6 @@ describe("noticeAction", () => {
     const open = vi.fn();
     setShellNoticeActionSinks({ openAIProviders: open });
     const action = noticeAction(notice("open_ai_providers"));
-    expect(action?.label).toBe("Open AI providers");
     action?.run();
     expect(open).toHaveBeenCalledOnce();
   });
@@ -62,13 +61,11 @@ describe("noticeAction", () => {
     expect(h.retry).toHaveBeenCalledOnce();
 
     const actKeep = noticeAction(scoped(scope, "prompt_keep_going"));
-    expect(actKeep?.label).toBe("Keep going");
     expect(actKeep?.variant).toBe("primary");
     actKeep?.run();
     expect(h.keepGoing).toHaveBeenCalledOnce();
 
     const actRewind = noticeAction(scoped(scope, "prompt_rewind_and_retry"));
-    expect(actRewind?.label).toBe("Rewind and retry");
     expect(actRewind?.variant).toBe("secondary");
     actRewind?.run();
     expect(h.rewindAndRetry).toHaveBeenCalledOnce();

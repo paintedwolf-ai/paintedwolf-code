@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"image"
 	"image/color"
 	"image/draw"
@@ -334,9 +335,7 @@ func TestGridKeepsRowBoundedMatchingWhenRowsAreFull(t *testing.T) {
 	lines := []string{testSecret + "!", "unrelated line here!!"}
 	safe, _, err := p.Grid(t.Context(), Scope{}, "capture.terminal", lines)
 	testutil.FailErr(t, "project row-bounded grid", err)
-	if strings.Contains(safe[0], testSecret) {
-		t.Fatalf("row-local value survived: %q", safe[0])
-	}
+	exposure.Absent(t, safe[0], testSecret)
 	if safe[1] != lines[1] {
 		t.Fatalf("unrelated row changed: %q", safe[1])
 	}
@@ -373,9 +372,7 @@ func TestTextSpansReportTheInputRangesItMasked(t *testing.T) {
 	value := "prefix " + testSecret + " suffix"
 	projected, spans, err := p.TextSpans(t.Context(), Scope{}, "capture.process", value)
 	testutil.FailErr(t, "project text spans", err)
-	if strings.Contains(projected.Value, testSecret) {
-		t.Fatalf("projection = %q", projected.Value)
-	}
+	exposure.Absent(t, projected.Value, testSecret)
 	if len(spans) != 1 {
 		t.Fatalf("spans = %+v, want one", spans)
 	}

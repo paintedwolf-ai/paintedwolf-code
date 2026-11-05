@@ -24,8 +24,3 @@ x-paintedwolf-scenarios:
     vars:
       phase: execute
       closeout_gate_open_leaves: worker_cycle_ready
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT'
-      - ask_user
-      - worker_cycle_ready

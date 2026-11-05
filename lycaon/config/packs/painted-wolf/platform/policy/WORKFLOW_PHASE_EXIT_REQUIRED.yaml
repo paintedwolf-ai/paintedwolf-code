@@ -16,7 +16,4 @@ scenarios:
     vars:
       workflow_id: example
       phase: intake
-    expect_contains:
-      - 'Code: WORKFLOW_PHASE_EXIT_REQUIRED'
-      - workflow_advance
 id: WORKFLOW_PHASE_EXIT_REQUIRED

@@ -71,6 +71,11 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 	if err != nil {
 		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": err.Error()})
 	}
+	if _, registered := t.reg.Definition(need); !registered {
+		if reject := CommandOperationReject(need); reject != nil {
+			return "", reject
+		}
+	}
 	browsing := cursor != ""
 	started := time.Now()
 	profileID := strings.TrimSpace(tctx.Identity.Agent)

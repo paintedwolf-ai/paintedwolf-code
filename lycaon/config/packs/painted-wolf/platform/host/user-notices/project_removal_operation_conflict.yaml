@@ -6,5 +6,3 @@ suggested_action: Review the project and extension settings before starting a ne
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Removal request changed

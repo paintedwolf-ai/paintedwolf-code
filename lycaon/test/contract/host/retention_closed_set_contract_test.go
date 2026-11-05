@@ -37,7 +37,6 @@ var retentionAnswers = map[string]retentionAnswer{
 	"lycaon/internal/tools/native/command/program_supervision.go#sessions": retentionReleased,
 	// Each held job releases once; idle programs leave the supervisor index.
 	"lycaon/internal/tools/native/command/program_supervision.go#jobs":         retentionReleased,
-	"lycaon/internal/session/loopback_provenance.go#sessionContainers":         retentionReleased,
 	"lycaon/internal/session/stream/hub.go#subs":                               retentionReleased,
 	"lycaon/internal/session/stream/hub.go#sessionMsg":                         retentionReleased,
 	"lycaon/internal/session/stream/hub.go#pending":                            retentionReleased,

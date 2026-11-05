@@ -165,7 +165,7 @@ func failedExecution(result *api.ToolResult) bool {
 func notePrerequisite(operations []executionStateRow, tool string) {
 	for i := range operations {
 		switch {
-		case tool == "update_progress" && (operations[i].Code == "PROGRESS_MISSING" || operations[i].Code == "PROGRESS_ITEM_NOT_CLOSED"):
+		case tool == "update_progress" && (operations[i].Code == "PROGRESS_MISSING" || operations[i].Code == "PROGRESS_ITEM_NOT_CLOSED" || operations[i].Code == "PROGRESS_RECONCILIATION_REQUIRED"):
 			operations[i].ChecklistAfter = true
 		case tool == "request_tools" && operations[i].Code == "TOOL_NOT_OFFERED":
 			operations[i].ToolRequestAfter = true

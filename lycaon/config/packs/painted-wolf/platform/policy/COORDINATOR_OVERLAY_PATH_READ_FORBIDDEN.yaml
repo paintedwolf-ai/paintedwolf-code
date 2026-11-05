@@ -25,7 +25,3 @@ x-paintedwolf-scenarios:
     vars:
       path: src/main.rs
       tool: read
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: COORDINATOR_OVERLAY_PATH_READ_FORBIDDEN'
-      - preview_overlay

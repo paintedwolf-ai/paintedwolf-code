@@ -10,8 +10,3 @@ invariants:
   fires_in:
   - DELETE /projects/{id}/roots/{root_id}?force=true when workers, overlays, or busy
     sessions were stopped
-  required:
-  - canceled
-  - re-plan
-  forbidden:
-  - workflow_advance

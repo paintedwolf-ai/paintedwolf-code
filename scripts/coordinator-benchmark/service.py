@@ -182,7 +182,7 @@ def main():
             with tempfile.TemporaryDirectory(dir=out.parent, prefix='.benchmark-service-admission-') as temporary:
                 staged = pathlib.Path(temporary) / 'service'
                 staged.mkdir(mode=0o700)
-                for name in ('service.py', 'progress.py', 'provider_backoff.py'):
+                for name in ('service.py', 'progress.py'):
                     shutil.copy2(pathlib.Path(__file__).with_name(name), staged / name)
                 save(staged / 'job.json', job)
                 staged.rename(directory)

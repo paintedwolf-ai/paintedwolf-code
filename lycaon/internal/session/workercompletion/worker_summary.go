@@ -184,6 +184,11 @@ func decideWorkerSummary(
 ) (WorkerSummaryEvalResult, error) {
 	data := guidance.OffenderHintData(obs.Offenders)
 	if audit != nil {
+		roots := evidence.CitationRoots{ProjectDir: in.ProjectDir, Roots: in.ProjectRoots, ActiveRootID: in.ActiveRootID}
+		report.Findings = append([]WorkerFinding(nil), report.Findings...)
+		for i, finding := range report.Findings {
+			report.Findings[i].Cite = guidance.FindingCitation(roots, audit.ev, finding.Path, finding.Line, finding.Excerpt)
+		}
 		data = guidance.GroundingHintData(obs.Offenders, audit.ev)
 	}
 	observedValid := !obs.MissingReport && !obs.NoProse && !obs.NoSurveyEvidence && !obs.SurfaceClaimUngrounded && !obs.PageMeasureUngrounded && !obs.NoArtifact && len(obs.Offenders) == 0 && obs.MaxChars == 0
@@ -334,7 +339,7 @@ func toolMessageFailed(msg api.Message) bool {
 // FormatFeedback preserves the occurrence's frozen copy through retry and delivery.
 func (r WorkerSummaryEvalResult) FormatFeedback(ctx context.Context, hints *guidance.HintConfig) (string, error) {
 	if r.HintCopy != nil {
-		return guidance.RenderPolicyCopy(ctx, r.HintCode, string(r.HintEffect), r.HintCopy)
+		return guidance.RenderPolicyCopy(ctx, r.HintCode, string(r.HintEffect), r.HintCopy, nil)
 	}
 	return guidance.FormatWorkerSummaryFeedback(hints, r.HintCode, r.HintData)
 }

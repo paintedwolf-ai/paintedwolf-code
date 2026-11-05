@@ -29,9 +29,10 @@ func (e *turnContextAssembler) appendPreHistorySystemInjects(
 
 // interleaveSourceBriefs places each turn's source-change brief directly
 // before the prompt that opened the turn, where its window ends. Briefs are
-// fixed at turn open, so history stays append-only.
-func (e *turnContextAssembler) interleaveSourceBriefs(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch, messages []api.Message) []api.Message {
-	blocks := e.sourceBriefBlocks(ctx, sess, turn)
+// fixed at turn open, so history stays append-only until the surface's tools
+// change, when the provider's cached prefix has already moved.
+func (e *turnContextAssembler) interleaveSourceBriefs(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch, messages []api.Message) []api.Message {
+	blocks := e.sourceBriefBlocks(ctx, sess, e.surface.sourceHistoryOffered(ctx, sess, frame, history, turn), turn)
 	if len(blocks) == 0 {
 		return messages
 	}
@@ -49,16 +50,17 @@ func (e *turnContextAssembler) interleaveSourceBriefs(ctx context.Context, sess 
 	return out
 }
 
-// sourceBriefBlocks renders the session's turn briefs once per prompt run.
-func (e *turnContextAssembler) sourceBriefBlocks(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) map[string]string {
-	if turn != nil && turn.SourceBriefsLoaded {
+// sourceBriefBlocks renders the session's turn briefs once per prompt run, and
+// again if the surface's answer on source_history changes within it.
+func (e *turnContextAssembler) sourceBriefBlocks(ctx context.Context, sess *api.Session, sourceHistoryOffered bool, turn *TurnAssemblyScratch) map[string]string {
+	if turn != nil && turn.SourceBriefsLoaded && turn.SourceBriefsOffered == sourceHistoryOffered {
 		return turn.SourceBriefBlocks
 	}
 	deps := e.deps
 	var blocks map[string]string
 	if deps.TurnSourceBriefs != nil {
 		for openingID, brief := range deps.TurnSourceBriefs(ctx, sess) {
-			if block := inject.RenderSourceChangesBlock(ctx, deps.Injects, sess.ID, brief); block != "" {
+			if block := inject.RenderSourceChangesBlock(ctx, deps.Injects, sess.ID, brief, sourceHistoryOffered); block != "" {
 				if blocks == nil {
 					blocks = map[string]string{}
 				}
@@ -67,7 +69,7 @@ func (e *turnContextAssembler) sourceBriefBlocks(ctx context.Context, sess *api.
 		}
 	}
 	if turn != nil {
-		turn.SourceBriefBlocks, turn.SourceBriefsLoaded = blocks, true
+		turn.SourceBriefBlocks, turn.SourceBriefsLoaded, turn.SourceBriefsOffered = blocks, true, sourceHistoryOffered
 	}
 	return blocks
 }
@@ -84,7 +86,11 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 ) ([]api.Message, error) {
 	var tail []api.Message
 
-	tail = append(tail, e.agentsMDChainInject(ctx, sess, history, turn)...)
+	policies, err := e.agentsMDChainInject(ctx, sess, history, turn)
+	if err != nil {
+		return nil, err
+	}
+	tail = append(tail, policies...)
 	if block, ok := e.skillProcedureInject(ctx, sess, frame.Machine.ProfileID); ok {
 		tail = append(tail, block)
 	} else if block, ok := e.skillPointerInject(ctx, sess, frame.Machine.ProfileID); ok {
@@ -249,6 +255,7 @@ func (e *turnContextAssembler) turnStateInject(
 	}
 
 	in := inject.TurnStateInjectInput{
+		ProgressSnapshot:         implState.ProgressSnapshot,
 		ProgressMissing:          implState.ProgressMissing,
 		ProfileHasUpdateProgress: profileHasUpdateProgress,
 		VerifyRequired:           frame.RequiresEvidence("verify"),

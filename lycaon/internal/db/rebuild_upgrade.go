@@ -31,7 +31,7 @@ func beginRebuild(path string) (rebuildJournal, error) {
 	if err != nil {
 		return record, errors.Join(err, os.Remove(work)) // #nosec G703
 	}
-	record = rebuildJournal{Version: 2, Database: filepath.Base(path), Directory: filepath.Base(work), DirectoryIdentity: identity, State: "building"}
+	record = rebuildJournal{Version: 1, Database: filepath.Base(path), Directory: filepath.Base(work), DirectoryIdentity: identity, State: "building"}
 	if err := writeRebuildJournal(path, record); err != nil {
 		return record, errors.Join(err, discardRebuild(path, record))
 	}

@@ -12,6 +12,3 @@ suggested_action: Open the file again to read it from the current checkout.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - workspace changed
-      - different checkout

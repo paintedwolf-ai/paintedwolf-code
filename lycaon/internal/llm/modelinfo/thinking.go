@@ -114,6 +114,22 @@ const (
 	ThinkStyleReasoningToggle ThinkStyle = "reasoning_toggle"
 )
 
+// ContinuationPolicy selects how prior assistant reasoning replays on the wire.
+type ContinuationPolicy string
+
+const (
+	// ContinuationPolicyDefault inherits the transport's replay scope.
+	ContinuationPolicyDefault ContinuationPolicy = ""
+	// ContinuationPolicyRetainBlocks replays prior reasoning blocks unchanged.
+	ContinuationPolicyRetainBlocks ContinuationPolicy = "retain_blocks"
+	// ContinuationPolicyRequireFields keeps required fields on replayed thinking blocks.
+	ContinuationPolicyRequireFields ContinuationPolicy = "require_fields"
+	// ContinuationPolicyStripReasoning omits prior reasoning from outbound requests.
+	ContinuationPolicyStripReasoning ContinuationPolicy = "strip_reasoning"
+	// ContinuationPolicyToolLoopOnly limits reasoning replay to the active tool loop.
+	ContinuationPolicyToolLoopOnly ContinuationPolicy = "tool_loop_only"
+)
+
 // ThinkingRule maps model-id substrings to a thinking wire style. First
 // matching rule wins, so specific rules (a model that can't disable thinking)
 // precede their family catch-all.
@@ -124,6 +140,8 @@ type ThinkingRule struct {
 	Match []string `yaml:"match"`
 	// Style names a ThinkStyle constant value.
 	Style string `yaml:"style"`
+	// ContinuationPolicy names a ContinuationPolicy constant value.
+	ContinuationPolicy string `yaml:"continuation_policy,omitempty"`
 	// AlwaysOn marks families that reject disabling reasoning; drivers omit
 	// the control instead of sending a disable.
 	AlwaysOn bool `yaml:"always_on,omitempty"`
@@ -220,6 +238,9 @@ func ValidateThinkingRules(rules []ThinkingRule) error {
 		if rule.DefaultOn && style != ThinkStyleAdaptive {
 			return fmt.Errorf("model_thinking[%d]: default_on requires adaptive style", i)
 		}
+		if _, ok := ParseContinuationPolicy(rule.ContinuationPolicy); !ok {
+			return fmt.Errorf("model_thinking[%d]: unknown continuation_policy %q", i, rule.ContinuationPolicy)
+		}
 		if err := rule.EffortLevels.Validate(); err != nil {
 			return fmt.Errorf("model_thinking[%d]: %w", i, err)
 		}
@@ -228,6 +249,32 @@ func ValidateThinkingRules(rules []ThinkingRule) error {
 		}
 	}
 	return nil
+}
+
+func ParseContinuationPolicy(s string) (ContinuationPolicy, bool) {
+	switch ContinuationPolicy(strings.ToLower(strings.TrimSpace(s))) {
+	case ContinuationPolicyDefault:
+		return ContinuationPolicyDefault, true
+	case ContinuationPolicyRetainBlocks:
+		return ContinuationPolicyRetainBlocks, true
+	case ContinuationPolicyRequireFields:
+		return ContinuationPolicyRequireFields, true
+	case ContinuationPolicyStripReasoning:
+		return ContinuationPolicyStripReasoning, true
+	case ContinuationPolicyToolLoopOnly:
+		return ContinuationPolicyToolLoopOnly, true
+	default:
+		return "", false
+	}
+}
+
+func ResolveContinuationPolicy(model string) ContinuationPolicy {
+	if rule, ok := MatchThinkingRule(model); ok {
+		if policy, ok := ParseContinuationPolicy(rule.ContinuationPolicy); ok {
+			return policy
+		}
+	}
+	return ContinuationPolicyDefault
 }
 
 func ParseThinkStyle(s string) (ThinkStyle, bool) {

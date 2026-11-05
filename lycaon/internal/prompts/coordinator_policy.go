@@ -79,8 +79,12 @@ func CoordinatorPolicyTemplateVars(offered, requestable []string) map[string]any
 	// Coordinator surfaces render for root sessions, which may widen recall;
 	// set after the spawn merge so the worker default does not win.
 	out["recall_may_widen"] = true
+	// The partial vars above default this for a worker profile.
+	out["is_coordinator"] = true
 	out["more_tools_loadable"] = len(requestable) > 0
 	out["profile_can_request"] = requestableToolSet(offered, requestable)
+	available := append(append([]string(nil), offered...), requestable...)
+	out["profile_mutation_capable"] = ToolNamesMutationCapable(available)
 	MergeHTTPActionVars(offered, out)
 	return out
 }

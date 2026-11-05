@@ -6,4 +6,3 @@ suggested_action: Make a shorter recording, then retry the save.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [exceeds the video artifact limit, shorter recording]

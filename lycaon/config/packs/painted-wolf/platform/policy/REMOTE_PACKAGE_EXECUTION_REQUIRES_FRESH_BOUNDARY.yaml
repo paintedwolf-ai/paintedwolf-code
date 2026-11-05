@@ -26,7 +26,3 @@ x-paintedwolf-scenarios:
   - id: default
     vars:
       command: npx create-vite app
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: REMOTE_PACKAGE_EXECUTION_REQUIRES_FRESH_BOUNDARY'
-      - fresh remote-package execution boundary

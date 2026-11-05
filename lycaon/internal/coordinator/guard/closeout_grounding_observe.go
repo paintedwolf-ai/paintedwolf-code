@@ -17,28 +17,32 @@ func ObserveCoordinatorCloseoutGrounding(
 	sess *api.Session,
 	history []api.Message,
 	surfaceID string,
-	report guidance.CoordinatorCompletionReport,
-	turnTools []string,
+	draft guidance.CloseoutDraft,
 	roots evidence.CitationRoots,
 	gc *oar.GuardContext,
 ) (CloseoutGroundingVerdict, error) {
-	verdict, err := EvaluateCoordinatorCloseoutGrounding(ctx, ledger, sess, history, surfaceID, report, turnTools, roots)
+	verdict, err := EvaluateCoordinatorCloseoutGrounding(ctx, ledger, sess, history, surfaceID, draft, roots)
 	if err != nil {
 		return verdict, err
 	}
+	PublishCloseoutGrounding(gc, surfaceID, draft, verdict)
+	return verdict, nil
+}
+
+// PublishCloseoutGrounding publishes a verdict's facts for OAR.
+func PublishCloseoutGrounding(gc *oar.GuardContext, surfaceID string, draft guidance.CloseoutDraft, verdict CloseoutGroundingVerdict) {
 	if gc == nil {
-		return verdict, nil
+		return
 	}
 	gc.Session.Surface = strings.TrimSpace(surfaceID)
-	gc.Grounding.CitationFieldsPresent = len(report.CitedEvidence) > 0 || len(report.CitedURLs) > 0
+	gc.Grounding.CitationFieldsPresent = draft.CitationCount() > 0
 	if verdict.CitationsRequired {
 		gc.Rejection.RejectObservation = "citations_required"
 		putCloseoutRejectData(gc, verdict.HintData,
 			guidance.SynthCitationsRequiredCode, guidance.InvestCitationsRequiredCode)
-		return verdict, nil
+		return
 	}
 	publishCloseoutCitationFacts(gc, verdict)
-	return verdict, nil
 }
 
 // publishCloseoutCitationFacts publishes citation observations.

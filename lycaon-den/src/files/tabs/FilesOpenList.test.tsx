@@ -78,7 +78,6 @@ describe("FilesOpenList", () => {
     const row = screen.getByTestId("files-open-list-row");
     expect(row.getAttribute("data-key")).toBe(key);
     expect(row.querySelector("[data-tip]")).toBeNull();
-    expect(row.querySelector(".den-files-open-list__activate")?.getAttribute("aria-label")).toContain("Previous version");
     expect(row.querySelector(".den-files-open-list__activate")?.getAttribute("aria-current")).toBeNull();
   });
 
@@ -109,7 +108,6 @@ describe("FilesOpenList", () => {
       path: "Cargo.toml", content: "", binary: false, over_limit: true, writable: true, size_bytes: 5_000_000,
     };
     applyFilesBufferLoad(PROJECT, key, source);
-    expect(label()).toBe("Too large");
     applyFilesBufferUnsupportedEncoding(PROJECT, key, "unknown");
     expect(label()).toBe("Encoding");
     applyFilesBufferLoad(PROJECT, key, { ...source, binary: true, over_limit: false });

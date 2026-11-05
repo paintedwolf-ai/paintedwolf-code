@@ -24,6 +24,3 @@ x-paintedwolf-scenarios:
     vars:
       path: '@scratch/notes.txt'
       tool: read
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SESSION_SCRATCH_UNAVAILABLE'

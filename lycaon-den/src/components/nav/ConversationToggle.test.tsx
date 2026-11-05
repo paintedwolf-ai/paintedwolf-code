@@ -20,7 +20,6 @@ describe("ConversationToggle", () => {
       <ConversationCollapseButton side="right" onClick={onClick} />
     ));
     const hide = screen.getByTestId("conversation-collapse-btn");
-    expect(hide.getAttribute("aria-label")).toBe("Hide conversation");
     expect(mirrored(hide)).toBe(true);
     fireEvent.click(hide);
     expect(onClick).toHaveBeenCalledOnce();

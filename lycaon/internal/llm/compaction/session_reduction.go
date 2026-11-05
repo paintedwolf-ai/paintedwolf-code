@@ -8,63 +8,96 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// sessionReduction is one evaluated page. summaryFailure names a provider failure
+// behind a rejected page; it stays retryable and leaves the memo untouched.
+type sessionReduction struct {
+	messages       []ContextMessage
+	continuation   *messageview.Continuation
+	reason         string
+	cacheHit       bool
+	summaryFailure error
+}
+
 // compactSession replaces a bounded oldest prefix and retains its unprocessed suffix.
-func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, messages []ContextMessage, target int) ([]ContextMessage, *messageview.Continuation, string, bool, error) {
+func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, messages []ContextMessage, target int) (sessionReduction, error) {
 	retained := retainedCompactionMessages(messages, recentCompactionCount(c.cfg, messages, target))
-	removed := removedCompactionMessages(messages, retained)
+	removed := beforeWorkingSet(removedCompactionMessages(messages, retained), info.WorkingSetStartOrd)
 	if len(removed) == 0 {
-		return nil, nil, "protected_history", false, nil
+		return sessionReduction{reason: "protected_history"}, nil
 	}
-	possible, err := c.usefulCompaction(info, messages, compactionReplacement(info, messages, retained, compactionSummary{}, ""), c.cfg.SessionMinSavingsTokens)
-	if err != nil || !possible {
-		return nil, nil, "insufficient_reclaimable_space", false, err
-	}
-	revision, err := c.sessionRevision(ctx, info, messages, target)
+	page, err := c.reductionPage(ctx, info, messages, removed)
 	if err != nil {
-		return nil, nil, "failed", false, err
+		return sessionReduction{reason: "failed"}, err
+	}
+	if len(page.source) == 0 {
+		return sessionReduction{reason: "page_budget"}, nil
+	}
+	possible, err := c.usefulCompaction(info, page.source, compactionReplacement(info, page.source, nil, compactionSummary{}, ""), c.cfg.SessionMinSavingsTokens)
+	if err != nil || !possible {
+		return sessionReduction{reason: "insufficient_reclaimable_space"}, err
+	}
+	revision, err := c.sessionRevision(ctx, info, page.source)
+	if err != nil {
+		return sessionReduction{reason: "failed"}, err
 	}
 	if info.Attempts != nil {
 		prior, found, err := info.Attempts.GetCompactionAttempt(ctx, info.ID)
 		if err != nil {
-			return nil, nil, "failed", false, err
+			return sessionReduction{reason: "failed"}, err
 		}
 		if found && prior.Revision == revision {
-			return nil, nil, prior.Reason, true, nil
+			return sessionReduction{reason: prior.Reason, cacheHit: true}, nil
 		}
 	}
-	prefix := oldestCompactionPrefix(removed, c.cfg.MessageSlice)
-	keptIDs := retainedMessageIDs(prefix)
-	// Restore canonical ordering when pins precede the unprocessed suffix.
-	retained = remainingCompactionRows(messages, keptIDs)
-	summary, sources, summaryErr := c.summarizePrefix(ctx, info, prefix)
+	summary, sources, summaryErr := c.summarizePrefix(ctx, info, page.source)
 	if ctx.Err() != nil {
-		return nil, nil, "failed", false, ctx.Err()
+		return sessionReduction{reason: "failed"}, ctx.Err()
 	}
-	record := continuationFor(info, prefix, summary, sources, summaryErr)
+	record := continuationFor(info, page.source, summary, sources, summaryErr)
 	record.Window = c.cfg.ModelContextWindow
 	c.rankContinuation(ctx, info, record)
 	text, err := RenderContinuation(ctx, record, info.RecallAvailable, 0)
 	if err != nil {
-		return nil, nil, "failed", false, err
+		return sessionReduction{reason: "failed"}, err
 	}
-	candidate := compactionReplacement(info, messages, retained, summary, text)
-	useful, err := c.usefulCompaction(info, messages, candidate, c.cfg.SessionMinSavingsTokens)
+	page.replacement = compactionReplacement(info, page.source, nil, summary, text)
+	candidate := append(append([]ContextMessage(nil), page.replacement...), page.retained...)
+	useful, err := c.usefulReduction(info, page, messages, candidate)
+	reportReductionPage(ctx, info, page, useful && err == nil)
 	if err != nil {
-		return nil, nil, "failed", false, err
+		return sessionReduction{reason: "failed"}, err
 	}
 	if !useful {
-		if info.Attempts != nil {
+		if info.Attempts != nil && (summaryErr == nil || c.summary == nil) {
 			if err := info.Attempts.PutCompactionAttempt(ctx, info.ID, messageview.CompactionAttempt{Revision: revision, Reason: "insufficient_savings"}); err != nil {
-				return nil, nil, "failed", false, err
+				return sessionReduction{reason: "failed"}, err
 			}
 		}
-		return nil, nil, "insufficient_savings", false, nil
+		rejected := sessionReduction{reason: "insufficient_savings"}
+		if c.summary != nil {
+			rejected.summaryFailure = summaryErr
+		}
+		return rejected, nil
 	}
 	reason := "partial_reduction"
 	if EstimateMessagesTokens(candidate) <= target {
 		reason = "target_reached"
 	}
-	return candidate, record, reason, false, nil
+	return sessionReduction{messages: candidate, continuation: record, reason: reason}, nil
+}
+
+// beforeWorkingSet limits summary eligibility; published coverage never reaches the recent suffix.
+func beforeWorkingSet(rows []ContextMessage, startOrd int64) []ContextMessage {
+	if startOrd <= 0 {
+		return rows
+	}
+	out := make([]ContextMessage, 0, len(rows))
+	for _, row := range rows {
+		if row.Ord < startOrd {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 func oldestCompactionPrefix(rows []ContextMessage, limit int) []ContextMessage {

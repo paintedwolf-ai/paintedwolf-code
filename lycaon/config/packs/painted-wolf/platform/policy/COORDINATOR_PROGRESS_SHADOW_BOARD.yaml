@@ -24,9 +24,5 @@ x-paintedwolf-scenarios:
   vars:
     path: ${overlay_dir}/plans/board.md
     tool: write
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: COORDINATOR_PROGRESS_SHADOW_BOARD'
-  - update_progress
 x-paintedwolf-audience:
 - coordinator

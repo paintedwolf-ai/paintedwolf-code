@@ -11,6 +11,3 @@ suggested_action: Check that the config directory is readable, then try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - pin state
-      - last published

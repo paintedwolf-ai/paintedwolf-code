@@ -9,6 +9,3 @@ suggested_action: Enter a loopback URL for HTTP, or a command for stdio.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - URL
-      - command

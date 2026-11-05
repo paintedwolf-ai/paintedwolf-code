@@ -2,6 +2,7 @@ package hostcmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -87,6 +88,26 @@ func StagePlaceholders(stages []exec.Stage) []StageResult {
 	return out
 }
 
+// SourceWindow is the command's source observation window. Until Settled, the
+// window may not have recorded all of the command's changes. Unobserved means a
+// process ran with no window watching it; with no ID, none ever opened.
+type SourceWindow struct {
+	ID         string `json:"id,omitempty"`
+	Settled    bool   `json:"settled"`
+	Unobserved bool   `json:"unobserved,omitempty"`
+}
+
+// MarshalJSON states settlement only for a window that exists.
+func (w SourceWindow) MarshalJSON() ([]byte, error) {
+	if w.ID == "" {
+		return json.Marshal(struct {
+			Unobserved bool `json:"unobserved"`
+		}{w.Unobserved})
+	}
+	type plain SourceWindow
+	return json.Marshal(plain(w))
+}
+
 // Result is stdout/stderr summary from a host command pipeline run.
 type Result struct {
 	TerminationReason string        `json:"termination_reason,omitempty"`
@@ -115,13 +136,15 @@ type Result struct {
 	Cwd string `json:"cwd,omitempty"`
 	// LeftRunning counts processes remaining after command termination.
 	LeftRunning int `json:"left_running,omitempty"`
+	// SourceWindow is present when a window observed the command.
+	SourceWindow *SourceWindow `json:"source_window,omitempty"`
 	// GuidanceCodes classify a confinement refusal.
 	GuidanceCodes []string `json:"-"`
 	// Observation records the confinement boundary.
 	Observation confine.Observation `json:"-"`
 }
 
-// BackgroundStartResult is returned when command/verify run with background:true.
+// BackgroundStartResult describes a process started under supervision.
 type BackgroundStartResult struct {
 	Background bool          `json:"background"`
 	Handle     string        `json:"handle"`
@@ -133,6 +156,8 @@ type BackgroundStartResult struct {
 	// Network is the destinations observed during the grace window, each with its
 	// allow/deny verdict. Empty when the launch settled without dialing.
 	Network []confine.EgressHost `json:"network,omitempty"`
+	// SourceWindow is present when a window observes the command.
+	SourceWindow *SourceWindow `json:"source_window,omitempty"`
 	// Report is the confinement summary every process-spawning tool states.
 	confine.Report
 }
@@ -146,6 +171,8 @@ type CommandRunningResult struct {
 	WaitedMs int           `json:"waited_ms"`
 	// Network contains destinations observed during process execution.
 	Network []confine.EgressHost `json:"network,omitempty"`
+	// SourceWindow is present when a window observes the command.
+	SourceWindow *SourceWindow `json:"source_window,omitempty"`
 	// Report is the confinement summary every process-spawning tool states.
 	confine.Report
 }

@@ -1,6 +1,7 @@
 package command
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,10 +14,12 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
 func (r *ProgramRuntime) resolveOutputMappings(ctx context.Context, run *programRun, mappings []toolcontract.StreamSourceMapping, streamLen int64) *sourceMappingBuffer {
@@ -55,6 +58,9 @@ func (r *ProgramRuntime) resolveOutputMappings(ctx context.Context, run *program
 					for _, pm := range proj.Mappings {
 						pm.OutputStartByte += m.OutputStartByte
 						pm.OutputEndByte += m.OutputStartByte
+						if m.PrintedLine != 0 {
+							pm.PrintedLine = m.PrintedLine
+						}
 						appendCoalesced(pm)
 					}
 					_ = proj.Close()
@@ -127,44 +133,145 @@ func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *
 		if err != nil || proj == nil {
 			continue
 		}
-		for _, m := range proj.Mappings {
-			streamStart := winStart + m.OutputStartByte
-			streamEnd := winStart + m.OutputEndByte
-			if streamStart < winStart || streamEnd <= streamStart || streamEnd-winStart > int64(len(screenedBytes)) {
+		for _, group := range groupNumberedDeliveries(proj.Mappings) {
+			var lines []evidence.DeliveredLine
+			for _, m := range group {
+				streamStart, streamEnd := winStart+m.OutputStartByte, winStart+m.OutputEndByte
+				if streamStart < winStart || streamEnd <= streamStart || streamEnd-winStart > int64(len(screenedBytes)) {
+					lines = nil
+					break
+				}
+				delivered := screenedBytes[streamStart-winStart : streamEnd-winStart]
+				tools.RememberCommandSourceDelivery(ctx, run.tc, run.memory, m, delivered)
+				local := m
+				local.OutputStartByte, local.OutputEndByte = streamStart, streamEnd
+				lines = append(lines, evidence.DeliveredLine{Mapping: local, Bytes: delivered})
+			}
+			if len(lines) == 0 || observer == nil || r.Recorder == nil {
 				continue
 			}
-			deliveredSlice := screenedBytes[streamStart-winStart : streamEnd-winStart]
-			tools.RememberCommandSourceDelivery(ctx, run.tc, run.memory, m, deliveredSlice)
-			if observer == nil || r.Recorder == nil {
-				continue
-			}
-			relPath, capturedBytes, release, ok := r.loadCapturedSourceForPin(ctx, run, m.Source, len(deliveredSlice))
-			if !ok {
-				continue
-			}
-			local := m
-			local.OutputStartByte = 0
-			local.OutputEndByte = int64(len(deliveredSlice))
-			deliveryID := fmt.Sprintf("%s:%d:%d", ref, streamStart, streamEnd)
-			obs, err := evidence.ConfirmDeliveredSource(relPath, m.Source, capturedBytes, deliveredSlice, local, responseID, deliveryID)
-			if err != nil {
-				release()
-				continue
-			}
-			tools.RememberCommandSourceDelivery(ctx, run.tc, run.memory, local, deliveredSlice)
-			_, _ = r.Recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{
-				SessionID:       run.tc.Identity.SessionID,
-				ProgramID:       programID,
-				OutputReference: ref,
-				OutputStartByte: streamStart,
-				OutputEndByte:   streamEnd,
-				Observation:     obs,
-			}, observer, r.sessionResources(run.tc.Identity.SessionID))
-			release()
+			r.commitSourceDelivery(ctx, run, observer, programID, ref, responseID, lines)
 		}
 		_ = proj.Close()
 	}
 }
+
+// groupNumberedDeliveries joins consecutive numbered lines of one source. Every other
+// mapping stands alone.
+func groupNumberedDeliveries(mappings []toolcontract.StreamSourceMapping) [][]toolcontract.StreamSourceMapping {
+	var groups [][]toolcontract.StreamSourceMapping
+	for _, m := range mappings {
+		if n := len(groups); n > 0 {
+			last := groups[n-1][len(groups[n-1])-1]
+			if m.PrintedLine != 0 && last.PrintedLine+1 == m.PrintedLine && last.Source == m.Source && last.SourceEndByte == m.SourceStartByte {
+				groups[n-1] = append(groups[n-1], m)
+				continue
+			}
+		}
+		groups = append(groups, []toolcontract.StreamSourceMapping{m})
+	}
+	return groups
+}
+
+// commitSourceDelivery records one delivered window as one observation.
+func (r *ProgramRuntime) commitSourceDelivery(ctx context.Context, run *programRun, observer invocation.ProgramSourceObserver, programID, ref, responseID string, lines []evidence.DeliveredLine) {
+	first, last := lines[0].Mapping, lines[len(lines)-1].Mapping
+	var deliveredBytes int
+	for _, line := range lines {
+		deliveredBytes += len(line.Bytes)
+	}
+	relPath, captured, release, ok := r.loadCapturedSourceForPin(ctx, run, first.Source, deliveredBytes)
+	if !ok {
+		return
+	}
+	defer release()
+	deliveryID := fmt.Sprintf("%s:%d:%d", ref, first.OutputStartByte, last.OutputEndByte)
+	var obs evidence.DeliveredSourceObservation
+	var err error
+	if first.PrintedLine != 0 {
+		obs, err = evidence.ConfirmDeliveredLines(relPath, first.Source, captured, lines, responseID, deliveryID)
+	} else {
+		local := first
+		local.OutputStartByte, local.OutputEndByte = 0, int64(deliveredBytes)
+		obs, err = evidence.ConfirmDeliveredSource(relPath, first.Source, captured, lines[0].Bytes, local, responseID, deliveryID)
+	}
+	if err != nil {
+		return
+	}
+	delivery := invocation.ProgramSourceDelivery{SessionID: run.tc.Identity.SessionID, ProgramID: programID, OutputReference: ref, Observation: obs,
+		OutputStartByte: first.OutputStartByte, OutputEndByte: last.OutputEndByte}
+	if first.PrintedLine != 0 {
+		for _, line := range lines {
+			delivery.NumberedLines = append(delivery.NumberedLines, line.Mapping)
+		}
+	}
+	settlement, commitErr := r.Recorder.CommitProgramSourceDelivery(ctx, delivery, observer, r.sessionResources(run.tc.Identity.SessionID))
+	if commitErr == nil {
+		tagDelivery(run, settlement.SourceOwnerReference, relPath, obs)
+	}
+}
+
+// tagDelivery prints a delivery's handle and coverage on the call's result.
+func tagDelivery(run *programRun, reference, path string, obs evidence.DeliveredSourceObservation) {
+	handle := strings.TrimSpace(reference)
+	if handle == "" || run.tc.Effects.Out == nil {
+		return
+	}
+	for _, seen := range run.tc.Effects.Out.SourceDeliveries {
+		if seen.Handle == handle {
+			return
+		}
+	}
+	if len(run.tc.Effects.Out.SourceDeliveries) < maxPrintedDeliveryTags {
+		rec := obs.Record()
+		fact := rec.SourceDelivery
+		run.tc.Effects.Out.SourceDeliveries = append(run.tc.Effects.Out.SourceDeliveries, tools.SourceDeliveryTag{
+			Handle: handle, Coverage: hostmarker.FormatEvidenceCoverage(path, fact.StartLine, fact.EndLine),
+		})
+	}
+}
+
+// commitProgramWindows records the windows operations returned, from their own results.
+// A window counts only when its rows reached the delivered output as encoded: one
+// screened or cut from the preview was not delivered and stays uncited.
+func (r *ProgramRuntime) commitProgramWindows(ctx context.Context, run *programRun, programID, ref string, parts []deliveredOutputPart) {
+	observer := r.sourceObserver()
+	windows := run.windows.Take()
+	if observer == nil || len(windows) == 0 {
+		return
+	}
+	responseID := run.parentReceipt
+	if responseID == "" {
+		responseID = programID
+	}
+	for i, window := range windows {
+		encoded, err := surveyjson.Marshal(window.Body)
+		if err != nil || !outputRangesContain(parts, encoded) {
+			continue
+		}
+		obs, err := evidence.ConfirmNumberedWindow(window.Path, window.Body, responseID, fmt.Sprintf("%s:window:%d", ref, i))
+		if err != nil {
+			continue
+		}
+		reference, err := observer.CommitDeliveredSource(ctx, run.tc.Identity.SessionID, obs)
+		if err == nil {
+			tagDelivery(run, reference, window.Path, obs)
+		}
+	}
+}
+
+func outputRangesContain(parts []deliveredOutputPart, encoded []byte) bool {
+	for _, part := range parts {
+		if bytes.Contains(part.data, encoded) {
+			return true
+		}
+	}
+	return false
+}
+
+// maxPrintedDeliveryTags bounds a result's tags. A wide search would otherwise print
+// one for every match; its records stay citable by path.
+const maxPrintedDeliveryTags = 16
 
 // Capturing source for optional read credit never makes a successful output fail.
 // Admission covers the raw buffer, decoder expansion/copies, and delivered lines.

@@ -199,7 +199,7 @@ describe("ProjectFilesView buffer loader workspace transitions", () => {
       const buf = key ? projectFilesState(PROJECT).byKey[key] : undefined;
       expect(buf?.loading).toBe(false);
       expect(buf?.loadError).toBe(null);
-    }, { timeout: 3000 });
+    });
     expect(openEditorDocument).toHaveBeenCalledTimes(2);
   });
 

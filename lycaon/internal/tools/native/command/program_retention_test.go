@@ -21,7 +21,7 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 	supervisor := &ProgramSupervisor{Background: registry}
 	jobs := supervisor.Jobs("owned", "project")
 	sibling := supervisor.Jobs("sibling", "project")
-	admitted, err := jobs.BeginProgram(ctx)
+	admitted, err := jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: jobs.SessionID})
 	testutil.FailErr(t, "admit actual session owner", err)
 	root := toolcontract.OperationInvocation{SessionID: "owned", Identity: toolcontract.ExecutionIdentity{ProgramID: "program", ExecutionID: "root"}}
 	var retained context.Context
@@ -46,7 +46,7 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 	jobs.signals = map[string]int{"old": 143, handle: 130}
 	jobs.order = append([]string{"old"}, jobs.order...)
 	jobs.mu.Unlock()
-	_, err = jobs.BeginProgram(ctx)
+	_, err = jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: jobs.SessionID})
 	testutil.FailErr(t, "prune prior program outcomes", err)
 	if len(jobs.results) != 1 || len(jobs.signals) != 1 || len(jobs.order) != 1 || jobs.order[0] != handle {
 		t.Fatalf("pruning discarded active job or retained old payloads: %+v", jobs)
@@ -63,7 +63,7 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 	}); !errors.Is(err, ErrProgramStopped) {
 		t.Fatalf("late child admission = %v", err)
 	}
-	if _, err := jobs.BeginProgram(ctx); !errors.Is(err, ErrProgramStopped) {
+	if _, err := jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: jobs.SessionID}); !errors.Is(err, ErrProgramStopped) {
 		t.Fatalf("retained session owner reopened: %v", err)
 	}
 	root.Identity.ProgramID = "late-program"
@@ -76,7 +76,7 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 	if len(supervisor.sessions) != 1 || supervisor.sessions["sibling"] != sibling || len(supervisor.programs) != 0 {
 		t.Fatal("disposal retained owned state or disturbed sibling state")
 	}
-	if _, err := sibling.BeginProgram(ctx); err != nil {
+	if _, err := sibling.BeginProgram(ctx, ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: sibling.SessionID}); err != nil {
 		t.Fatalf("sibling admission was closed: %v", err)
 	}
 }
@@ -90,7 +90,7 @@ func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
 	jobs := supervisor.Jobs("session", "project")
 	start := func(id string, status int) string {
 		t.Helper()
-		admitted, err := jobs.BeginProgram(ctx)
+		admitted, err := jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: jobs.SessionID})
 		testutil.FailErr(t, "begin next program", err)
 		root := toolcontract.OperationInvocation{SessionID: "session", Identity: toolcontract.ExecutionIdentity{ProgramID: id, ExecutionID: id}}
 		var handle string
@@ -111,7 +111,7 @@ func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
 		return handle
 	}
 	first := start("first", 23)
-	_, err := jobs.BeginProgram(ctx)
+	_, err := jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: jobs.SessionID})
 	testutil.FailErr(t, "begin foreground after job exit", err)
 	result, err := jobs.Wait(ctx, first, nil, "wait")
 	testutil.FailErr(t, "wait completed raw handle across programs", err)
@@ -119,7 +119,7 @@ func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
 		t.Fatalf("raw-handle result=%+v live order=%v", result, jobs.order)
 	}
 	second := start("second", 42)
-	_, err = jobs.BeginProgram(ctx)
+	_, err = jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: jobs.SessionID})
 	testutil.FailErr(t, "prune actual evicted history", err)
 	if _, err := jobs.Resolve(first); err == nil {
 		t.Fatal("evicted registry handle retained outcome authority")
@@ -146,7 +146,7 @@ func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
 	supervisor := &ProgramSupervisor{Background: registry}
 	jobs := supervisor.Jobs("owned", "project")
 	sibling := supervisor.Jobs("sibling", "project")
-	admitted, err := jobs.BeginProgram(t.Context())
+	admitted, err := jobs.BeginProgram(t.Context(), ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: jobs.SessionID})
 	testutil.FailErr(t, "admit original session owner", err)
 	started, canceled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var once sync.Once
@@ -174,10 +174,10 @@ func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
 		t.Fatalf("initial program disposal = %v", err)
 	}
 	awaitProgramDrainSignal(t, "held job cancellation", canceled)
-	if _, err := jobs.BeginProgram(t.Context()); !errors.Is(err, ErrProgramStopped) {
+	if _, err := jobs.BeginProgram(t.Context(), ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: jobs.SessionID}); !errors.Is(err, ErrProgramStopped) {
 		t.Fatalf("timed-out disposal reopened retained owner: %v", err)
 	}
-	if _, err := sibling.BeginProgram(t.Context()); err != nil {
+	if _, err := sibling.BeginProgram(t.Context(), ProgramJobOrigin{Tool: "command", ToolCallID: "call", RootSessionID: sibling.SessionID}); err != nil {
 		t.Fatalf("owned disposal closed sibling admission: %v", err)
 	}
 	long, stop := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
@@ -201,5 +201,35 @@ func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
 	}
 	if supervisor.sessions["owned"] != nil || supervisor.sessions["sibling"] != sibling {
 		t.Fatal("retry retained the disposed owner or disturbed sibling state")
+	}
+}
+
+func TestProgramJobsKeepOriginAcrossLaterAdmission(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	completed := make(chan bgprocess.Completion, 1)
+	registry := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{Complete: func(_ context.Context, result bgprocess.Completion) { completed <- result }})
+	t.Cleanup(func() { _ = registry.Lifecycle.Close(context.Background()) })
+	supervisor := &ProgramSupervisor{Background: registry}
+	jobs := supervisor.Jobs("child", "project")
+	first, err := jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: "verify", ToolCallID: "first-call", RootSessionID: "root"})
+	testutil.FailErr(t, "bind first program", err)
+	_, err = jobs.BeginProgram(ctx, ProgramJobOrigin{Tool: "command", ToolCallID: "second-call", RootSessionID: "other-root"})
+	testutil.FailErr(t, "bind later program", err)
+	root := toolcontract.OperationInvocation{SessionID: "child", Identity: toolcontract.ExecutionIdentity{ProgramID: "first-program", ExecutionID: "root"}}
+	_, err = supervisor.RunProgram(first, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
+		_, startErr := supervisor.StartJob(runCtx, root, func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, nil
+		})
+		return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, startErr
+	})
+	testutil.FailErr(t, "start first program job", err)
+	select {
+	case result := <-completed:
+		if result.OriginTool != "verify" || result.ToolCallID != "first-call" {
+			t.Fatalf("origin replaced by later admission: %+v", result)
+		}
+	case <-ctx.Done():
+		t.Fatal("job did not complete")
 	}
 }

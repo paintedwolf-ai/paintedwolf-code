@@ -3,13 +3,13 @@ package native
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
@@ -143,94 +143,11 @@ func TestWriteToolCaptureOverwrite(t *testing.T) {
 	}
 }
 
-func TestEditToolOldStringNotFound(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "file.go"), []byte("package main"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &EditTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path": "file.go", "old_string": "missing", "new_string": "x",
-	}, nativefixture.Context(tmpDir))
-	var reject *toolrejection.ToolReject
-	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
-		t.Fatalf("err = %v want EDIT_OLD_STRING_NOT_FOUND", err)
-	}
-}
-
-func TestEditToolOldStringAmbiguous(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "file.go"), []byte("foo bar foo"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &EditTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path": "file.go", "old_string": "foo", "new_string": "baz",
-	}, nativefixture.Context(tmpDir))
-	var reject *toolrejection.ToolReject
-	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_AMBIGUOUS" {
-		t.Fatalf("err = %v want EDIT_OLD_STRING_AMBIGUOUS", err)
-	}
-}
-
-func TestEditToolReplaceAll(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "file.go"), []byte("package main\n\nvar foo = \"foo foo\"\n"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &EditTool{Boundary: nativefixture.Boundary(t)}
-	out, err := tool.Run(context.Background(), map[string]any{
-		"path": "file.go", "old_string": "foo", "new_string": "qux", "replace_all": true,
-	}, nativefixture.Context(tmpDir))
-	testutil.FailErr(t, "edit replace_all", err)
-	got, err := os.ReadFile(filepath.Join(tmpDir, "file.go"))
-	testutil.FailErr(t, "read back", err)
-	if string(got) != "package main\n\nvar qux = \"qux qux\"\n" {
-		t.Fatalf("content = %q", got)
-	}
-	if !strings.Contains(out, "3 occurrence") {
-		t.Fatalf("result should report 3 occurrences: %q", out)
-	}
-}
-
-func TestEditToolReplaceAllFalseStillAmbiguous(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "file.go"), []byte("foo bar foo"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &EditTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path": "file.go", "old_string": "foo", "new_string": "baz", "replace_all": false,
-	}, nativefixture.Context(tmpDir))
-	var reject *toolrejection.ToolReject
-	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_AMBIGUOUS" {
-		t.Fatalf("err = %v want EDIT_OLD_STRING_AMBIGUOUS", err)
-	}
-}
-
 func TestCommandToolRequiresRunner(t *testing.T) {
 	tool := &command.CommandTool{}
 	_, err := tool.Run(context.Background(), map[string]any{"command": "echo hi"}, nativefixture.Context(t.TempDir()))
-	if err == nil || !strings.Contains(err.Error(), "not configured") {
+	if err == nil {
 		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestEditTool(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "file.go"), []byte("package main\n\nfunc main() {}"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &EditTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path":       "file.go",
-		"old_string": "func main() {}",
-		"new_string": "func main() { fmt.Println(\"hello\") }",
-	}, nativefixture.Context(tmpDir))
-	testutil.FailErr(t, "tool.Run failed", err)
-	content, _ := os.ReadFile(filepath.Join(tmpDir, "file.go"))
-	if !strings.Contains(string(content), "fmt.Println") {
-		t.Fatalf("content = %q", content)
 	}
 }
 

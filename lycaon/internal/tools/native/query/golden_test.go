@@ -110,7 +110,7 @@ func hostJqBinary() string {
 // TestDifferentialAgainstHostJq runs every jqCase that jq 1.7 and 1.8 agree
 // on through an installed jq as well, so the recorded goldens are checked
 // against the real binary wherever one is available. Diagnostic wording
-// changed between releases, so stderr is compared only against jq 1.8.
+// changes between releases; exact stderr targets jq 1.8.1.
 func TestDifferentialAgainstHostJq(t *testing.T) {
 	binary := hostJqBinary()
 	if binary == "" {
@@ -119,7 +119,7 @@ func TestDifferentialAgainstHostJq(t *testing.T) {
 	}
 	version, err := exec.Command(binary, "--version").Output()
 	testutil.FailErr(t, "host jq version", err)
-	sameRelease := strings.HasPrefix(string(version), "jq-1.8")
+	sameRelease := strings.TrimSpace(string(version)) == "jq-1.8.1"
 	h := newHarness(t, queryFiles)
 	compared := 0
 	for _, c := range jqCases {

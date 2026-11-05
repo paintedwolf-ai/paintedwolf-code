@@ -3,6 +3,7 @@ package bgprocess
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"sync"
 	"testing"
@@ -48,7 +49,9 @@ func newProjectionHarness(t *testing.T, ringBytes int) *projectionHarness {
 	h.reg.Output.SetCaptureProjector(projectionProjector())
 	h.proc = &Process{
 		Handle: "h1", SessionID: "s1", ProjectID: "p1", RootSessionID: "s1",
-		buffer: NewRingBuffer(ringBytes), running: true, done: make(chan struct{}),
+		running:             true,
+		processRuntimeState: processRuntimeState{done: make(chan struct{})},
+		processIOState:      processIOState{buffer: NewRingBuffer(ringBytes)},
 	}
 	h.reg.jobs.mu.Lock()
 	h.reg.jobs.sessions["s1"] = map[string]*Process{"h1": h.proc}
@@ -128,26 +131,20 @@ func TestConcurrentStreamWritersNeverRegressTheProjection(t *testing.T) {
 
 	var live string
 	for _, ev := range h.published() {
-		if strings.Contains(ev.Text, projectionSecret) {
-			t.Fatalf("concurrent publication exposed the value: %q", ev.Text)
-		}
+		exposure.Absent(t, ev.Text, projectionSecret)
 		if ev.Reset {
 			live = ev.Text
 		} else {
 			live += ev.Text
 		}
 	}
-	if strings.Contains(live, projectionSecret) {
-		t.Fatalf("assembled live stream exposed the value: %q", live)
-	}
+	exposure.Absent(t, live, projectionSecret)
 	final, err := h.reg.Output.ReadOutput(context.Background(), "s1", "h1")
 	if err != nil {
 		t.Fatalf("read projected output: %v", err)
 	}
 	for _, chunk := range final.Chunks {
-		if strings.Contains(chunk.Text, projectionSecret) {
-			t.Fatalf("final projection exposed the value: %q", chunk.Text)
-		}
+		exposure.Absent(t, chunk.Text, projectionSecret)
 	}
 }
 
@@ -202,8 +199,9 @@ func TestForegroundSnapshotTailIsScreenedBeforeItIsCut(t *testing.T) {
 	}
 }
 
-// TestUnwiredProjectorIsAWiringStateNotAFailedScreen covers absent projection.
-func TestUnwiredProjectorIsAWiringStateNotAFailedScreen(t *testing.T) {
+// TestUnwiredProjectorWithholdsTheTail keeps unscreened bytes out when nothing can
+// screen them.
+func TestUnwiredProjectorWithholdsTheTail(t *testing.T) {
 	h := newProjectionHarness(t, DefaultRingBufferBytes)
 	h.reg.Output.SetCaptureProjector(nil)
 	h.write("stdout", "plain output")
@@ -212,8 +210,8 @@ func TestUnwiredProjectorIsAWiringStateNotAFailedScreen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("snapshot: %v", err)
 	}
-	if !strings.Contains(snap.Tail, "plain output") {
-		t.Fatalf("unwired host lost its tail: %q", snap.Tail)
+	if snap.Tail != captureUnavailableText {
+		t.Fatalf("unwired host published an unscreened tail: %q", snap.Tail)
 	}
 }
 

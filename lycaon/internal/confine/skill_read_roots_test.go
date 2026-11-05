@@ -32,8 +32,8 @@ func TestBuildProfileReadRootsAllowBackNotWritable(t *testing.T) {
 	}
 }
 
-func TestSeatbeltSkillReadRoots(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundarySkillReadRoots(t *testing.T) {
+	self := requireLiveBoundary(t)
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	secret := filepath.Join(cfg, "credential-vault.age")

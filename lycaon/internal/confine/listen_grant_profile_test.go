@@ -62,8 +62,8 @@ func TestListenGrantProfileRules(t *testing.T) {
 }
 
 // A granted profile lets a confined command actually bind (syscall probe).
-func TestSeatbeltListenGrantAllowsBind(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryListenGrantAllowsBind(t *testing.T) {
+	self := requireLiveBoundary(t)
 	python := requirePython(t)
 	c := confine.Confinement{
 		Roots: []string{t.TempDir()}, Network: confine.NetworkDeny,

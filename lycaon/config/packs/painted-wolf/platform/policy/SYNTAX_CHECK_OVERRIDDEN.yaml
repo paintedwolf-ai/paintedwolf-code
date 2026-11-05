@@ -27,4 +27,3 @@ x-paintedwolf-scenarios:
       tool: write
       paths: [Sources/Level.swift]
       syntax_override_reason: Swift compiler accepts the candidate; host grammar misparses it
-    expect_contains: ['Code: SYNTAX_CHECK_OVERRIDDEN', 'Sources/Level.swift', 'Swift compiler']

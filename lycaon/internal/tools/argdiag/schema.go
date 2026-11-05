@@ -2,7 +2,6 @@ package argdiag
 
 import (
 	"sort"
-	"strings"
 )
 
 // declaredProperties merges an object schema's properties with those of its
@@ -103,89 +102,4 @@ func schemaExpectsStructuredJSON(propSchema map[string]any) (bool, string) {
 		}
 	}
 	return false, ""
-}
-
-func levenshtein(a, b string) int {
-	ra := []rune(a)
-	rb := []rune(b)
-	la := len(ra)
-	lb := len(rb)
-	if la == 0 {
-		return lb
-	}
-	if lb == 0 {
-		return la
-	}
-	prev := make([]int, lb+1)
-	curr := make([]int, lb+1)
-	for j := 0; j <= lb; j++ {
-		prev[j] = j
-	}
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		for j := 1; j <= lb; j++ {
-			cost := 0
-			if ra[i-1] != rb[j-1] {
-				cost = 1
-			}
-			del := prev[j] + 1
-			ins := curr[j-1] + 1
-			sub := prev[j-1] + cost
-			min := del
-			if ins < min {
-				min = ins
-			}
-			if sub < min {
-				min = sub
-			}
-			curr[j] = min
-		}
-		copy(prev, curr)
-	}
-	return prev[lb]
-}
-
-func findClosestPropertyMatch(unknownTopKeys, topPropKeys []string) (string, string) {
-	bestMatch := ""
-	bestUnk := ""
-	bestSim := 0.0
-	minDist := 999
-	for _, unk := range unknownTopKeys {
-		unkLower := strings.ToLower(unk)
-		for _, declared := range topPropKeys {
-			declLower := strings.ToLower(declared)
-			if unkLower == declLower {
-				continue
-			}
-			d := levenshtein(unkLower, declLower)
-			maxLen := len(unkLower)
-			if len(declLower) > maxLen {
-				maxLen = len(declLower)
-			}
-			minLen := len(unkLower)
-			if len(declLower) < minLen {
-				minLen = len(declLower)
-			}
-			if maxLen == 0 {
-				continue
-			}
-			sim := 1.0 - (float64(d) / float64(maxLen))
-			isMatch := false
-			if sim >= 0.70 {
-				isMatch = true
-			} else if d <= 2 && minLen >= 4 {
-				isMatch = true
-			} else if (strings.HasPrefix(declLower, unkLower) || strings.HasPrefix(unkLower, declLower)) && minLen >= 3 && sim >= 0.65 {
-				isMatch = true
-			}
-
-			if isMatch && (sim > bestSim || (sim == bestSim && d < minDist)) {
-				bestSim = sim
-				minDist = d
-				bestMatch = declared
-				bestUnk = unk
-			}
-		}
-	}
-	return bestMatch, bestUnk
 }

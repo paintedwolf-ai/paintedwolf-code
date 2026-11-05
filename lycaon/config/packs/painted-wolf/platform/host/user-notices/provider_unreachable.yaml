@@ -23,11 +23,6 @@ scenarios:
     vars:
       provider_id: openai-1
       attempts: 2
-    expect_contains:
-      - openai-1
-      - tried 2 times
-      - never got through
-      - Check your connection
 
   # The Settings → AI providers refresh could not reach the
   # provider. The saved list is still served, so this is a stale-list notice

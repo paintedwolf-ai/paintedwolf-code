@@ -8,6 +8,26 @@ Tools are structured capabilities published with argument schema, execution poli
 
 ---
 
+## Command operations and structured tools
+
+`command` is the single model entry point for filesystem work, source inspection,
+search, structural edits, repository surveys, summarization, Git operations, and
+process inspection or signals. Its native forms use the existing operation
+implementations, admission, source observations, mutation receipts, and recovery.
+An operation identity in a receipt is not a callable tool name.
+
+Structured tools manage capabilities with a distinct host lifecycle: worker and
+workflow coordination, overlays, source history and restoration, user decisions,
+managed secrets, browser and terminal sessions, retained command results, and
+verification of the selected project check. They remain discoverable on the
+surfaces that permit them. `verify` retains its selected-command enforcement and
+terminal verdict; ordinary scoped checks use `command(verification=true)`.
+
+Tool catalogs, exact-name discovery, standing surfaces, and training exports use
+the same callable roster. Native operation schemas describe execution contracts;
+they do not introduce additional tool choices. Retired public tool names name
+`command` as their successor and retain their recorded historical meanings.
+
 ## Portable command language version 1
 
 The versioned catalog defines the program language and native utility contracts.
@@ -76,6 +96,12 @@ command directory. `git describe`, `git reflog`, `git shortlog`, `git ls-tree`,
 owner's read door with their catalogued options; `git shortlog` without a
 revision summarizes `HEAD`. Batch object reads, reflog maintenance and
 signature format atoms are refused.
+
+A worker branch is a copy without Git metadata. A read there reports Git's fatal
+and status 128 as on any tree, so shell probes work, and the `command` call then
+carries the `GIT_NO_REPOSITORY_ON_WRITE_LEG` warning, whose copy names the
+overview and session diff of `source_history` to a profile that holds it.
+`external -- git …` is unaffected.
 
 `git bisect` runs natively on the Git owner. Sessions live in the repository's
 `BISECT_*` files and `refs/bisect` refs exactly as Git keeps them, so a user's
@@ -171,6 +197,44 @@ progress update to this unit without treating an inspection copy or a caller's
 boolean as validation proof; the identity check itself applies no progress.
 Local parser tests do not qualify the later command dispatch, native utilities,
 publication or installed-platform wiring.
+
+### Command review storage
+
+Native operation review retains exact, domain-tagged canonical inputs. Encoding
+writes that representation incrementally; decoding builds admitted result
+containers directly, without a second representation tree. The durable format,
+raw-byte string identity, sorted keys and numeric spellings remain unchanged.
+Transient codec frames follow nesting depth. Retained containers, payloads and
+screened projections follow their actual capacities and lifetimes. Secret
+screening and execution keep separate values; inspection never becomes execution
+authority. Retained input bodies have the invocation store's 8 MiB bound, and
+native review node admission covers each option's structured fields and derives
+from the catalog's expanded-field ceiling.
+
+### Large JSON query inputs
+
+JSON query input is a pull parser. Streaming mode retains only open container
+keys, the current scalar and one delivered event. Ordinary mode admits one
+complete value before evaluation; its lease lasts until the next input unless
+an aggregate explicitly retains it. Slurp holds those input leases through the
+aggregate evaluation and admits its own result container. Scalar size, nesting,
+working memory, total throughput and aggregate value size have separate bounds.
+Input positions come from the parser cursor rather than a growing copy or index
+of the consumed stream. Raw lines retain their record bounds; YAML and explicit
+whole-input operations retain their materialization contracts. Query event
+parsing preserves object order, numeric spelling, empty containers and closure
+events while cancellation and reader failures remain terminal host facts.
+
+### Batched command resources
+
+Batch-producing commands plan child argument bytes and fields against the
+remaining program resources and declared parallelism. Explicit item, line and
+exact-size constraints retain their command semantics. A resource refusal stops
+admission before effects; it never triggers replay of an attempted child.
+Input revision membership uses independently admitted fixed-capacity pages so a
+large file set does not require a second complete membership table during growth.
+Search releases completed pin pages after durable recording. Parallel pin events
+retain their leases until ordered reduction or cancellation discards them.
 
 ### Complete byte streams
 
@@ -332,6 +396,9 @@ on the bounded backtracking engine; it is never RE2. A construct outside a
 dialect refuses with `GREP_REGEX_UNSUPPORTED`, never a reinterpretation. rg's
 default dialect is RE2. Each record search is metered against the catalog
 regex ceilings, and an overrun refuses with `GREP_MATCH_BUDGET`.
+Native rg JSON uses stream-backed ripgrep 15 record semantics. Reference checks
+use `--no-mmap` because file mapping changes binary records and searched-byte
+statistics on some platforms. Input pins and offsets retain the original bytes.
 
 Traversal walks the invocation's held roots in unsigned byte order. Every
 listed name counts against `traversal_visits`, and every file read is pinned
@@ -618,7 +685,7 @@ One assistant response may carry multiple tool calls. Every tool declares one `b
 | Class | Sibling rule |
 |-------|--------------|
 | `serial` | Never concurrent: the posture for anything that mutates, spawns, or holds a resource |
-| `shared` | Two **different** `shared` tools may run in one concurrent group: the bounded read and query surface (`read`, `grep`, `find`, `stat`, `git_log`, `recall`, `survey_repo`, and their peers) |
+| `shared` | Two **different** `shared` tools may run in one concurrent group: the bounded read and query surface (`read`, `grep`, `find`, `stat`, `recall`, `survey_repo`, and their peers) |
 | `same_tool` | Concurrent only with further calls to the same name |
 
 On top of the class a tool may declare a boolean opt-in argument, a per-tool ceiling under the global host cap, and an argument whose presence re-serializes the call even after an opt-in. `web_search` and `fetch_url` are `same_tool` behind an explicit `parallel: true`, capped at four; omitting the argument keeps them serial, and `fetch_url` re-serializes whenever `dest` is present, because a landed file is an effect. `summarize` is `same_tool` with no opt-in argument, so its siblings run concurrently by default (capped at four), the only tool that does.
@@ -808,30 +875,54 @@ The source ledger records every project mutation with its actor, and agents read
 
 | Surface | What it states |
 |---------|----------------|
-| Turn-start change brief | Files other actors changed between the previous turn boundary and this one, injected into coordinator assembly; working-set paths itemized, the rest counted (`inject.source_changes`) |
+| Turn-start change brief | Files other actors changed between the previous turn boundary and this one, injected into coordinator assembly; itemized up to the row cap, working set first, then files only this session's commands touched, marked `during_your_command` and read "(during your command)", the rest counted (`inject.source_changes`) |
+| `command` and `verify` results | `source_window`: `id` and `settled` for the observation window that watched the call's external processes, `unobserved: true` when a process ran with none watching it, and nothing when no external process had launched ([files-live.md](files-live.md#step-through-the-run)) |
 | Read receipts | The ledger identity of the bytes a read served (recorded version id when the tracked head matches, an explicit note when not) plus the file's newest recorded change. `source.editor` states that the person's open document served the text, with its revision and whether it holds unsaved edits |
-| Edit rejects | `EDIT_TARGET_CHANGED_BY_OTHERS` when an edit misses **and** the ledger recorded foreign changes to the file during this session, with actor-classified provenance rows |
-| `source_history` | On-demand queries: a file's change record (`effects`), per-line authorship over uncommitted state (`lines`), the session's own footprint (`mine`), historical version content (`version`), and version diffs (`diff`) |
+| Edit rejects | `EDIT_TARGET_CHANGED_BY_OTHERS` when an edit misses **and** the ledger recorded foreign changes to the file during this session, with actor-classified provenance rows. Effects inside the session's own command windows do not count |
+| `source_history` | On-demand queries: with no arguments or `overview`, what the ledger recorded on the caller's branch this session, every actor, plus on a worker branch what its tree changed beyond that record; a file's change record (`effects`), per-line authorship over uncommitted state (`lines`), the session's own footprint (`mine`), historical version content (`version`), and version diffs (`diff`) |
 
-`source_history` with `mode: version` returns exact bytes for any retained ledger version in the same line coordinates as `read`; `mode: diff` compares a version with its predecessor, two retained versions, or current head. `restore_version` reverts a file to any retained version, or to its immediate predecessor, as a forward ledger write.
+`source_history` with `mode: version` returns exact bytes for any retained ledger version in the same line coordinates as `read`; `mode: diff` compares a version with its predecessor, two retained versions, or current head, or, with no version, the file's change since the session began, including its deletion. The session window starts at the session's first turn boundary; on a worker branch, which is private to its job, it is the whole branch, and a read-scoped worker on the trunk has no boundary and says so. A path recreated this session diffs from what the path held at the baseline, not from absence, except when only its parent directory was deleted or moved: descendants have no effects of their own. The overview groups the window's effects per file under each file's current path, waits briefly for the session's finished commands to settle, and lists any window still open or incomplete as `open_windows`, in which case the list is a floor. On a worker branch, external programs leave no ledger row until promotion, so the overview also compares the tree with the leg's baseline manifest, by the size and modification time promotion compares, over the paths promotion considers. A path it finds with no ledger row becomes a row with `unrecorded: true`, its path and operation, and no actor, version or time; a timestamp change with the same text reads as a `write`. A recorded move covers its unedited descendants: a delete and create pair whose paths map through the move and whose bytes match the baseline lists no row, and anything else keeps its row. Those rows share the row cap, and when the comparison fails or passes its budget the result lists ledger rows and says so in `note`. On a worker branch the default diff compares the baseline's bytes with the live file for every path, says so in `note` when a side has no text, and names a version only when its bytes are the side shown, so a program's rewrite of a recorded file appears. A moved file's base is the baseline at the move's source, so a program's edit before the move shows and a generated file shows as created; where the baseline holds no text there, the ledger's predecessor answers. The old name reads as absent and recorded. A path in neither the baseline nor the tree reads as absent. A diff whose sides differ past its work ceiling, on any path, answers with a note giving both sizes, and a change only to a final newline says so. Overview rows keep their ledger facts. Tracking is sparse, so an empty overview says a file the ledger never tracked may still have changed, and the first effect's pre-image is the baseline even when a person's unobserved save preceded it. `restore_version` reverts a file to any retained version, or to its immediate predecessor, as a forward ledger write.
+
+The `implement`, `worker_readonly` and `plan_review_readonly` profiles hold `source_history` on their first turn. `explore_readonly` and the coordinator's implement and observe investigation surfaces load it through `request_tools`.
 
 Two invariants hold everywhere. **Absence is unknown, never safe:** a failed lookup, a missing turn boundary, or an untracked path is stated as no record, never as “unchanged” or “yours”. **Facts, not policy:** the host states who changed what and when; what an agent does with that belongs to the project's own agent instructions.
 
 A turn boundary is minted only for a real user-intent message. Host kicks, wakes, and other internal rows continue the current turn; repeating admission for the same user turn returns the original checkpoint, so every turn-relative source query resolves against one immutable lower bound.
 
-Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-hints.md)). History begins when the ledger first observes a file; git history remains the authority for the committed layer (`git_log` / `git_blame`).
+Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-hints.md)). History begins when the ledger first observes a file; git history remains the authority for the committed layer (`git log` and `git blame` in `command`).
 
 ---
 
 ## Host process tools
 
-`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_list` with `listening_port` (and optionally `protocol`) answers which process holds a port: each matching process carries its listeners, and `unattributed_listeners` lists held sockets whose process could not be read. Native `lsof -i :PORT`, `-iTCP:PORT -sTCP:LISTEN` and `-iUDP:PORT` read the same kernel listener tables through the same owner. They always list the session's own listeners with their job identity; for a named port they list other holders only after the same inspection approval, and otherwise say those holders were not inspected. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
+`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_list` with `listening_port` (and optionally `protocol`) answers which process holds a port: each matching process carries its listeners, and `unattributed_listeners` lists held sockets whose process could not be read. A host can withhold other processes' rows from the kernel table without an error, as macOS 27 does for some processes. The listener view then reports what this user's processes show directly, sets `snapshot_complete` to false, and leaves a port with no entry unknown rather than free; native `lsof` says the same on standard error. Native `lsof -i :PORT`, `-iTCP:PORT -sTCP:LISTEN` and `-iUDP:PORT` read the same kernel listener tables through the same owner. They always list the session's own listeners with their job identity; for a named port they list other holders only after the same inspection approval, and otherwise say those holders were not inspected. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
 
-For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
+For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, `capability_request.credential_store` to read from the host OS credential store inside the sandbox, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
 
 ## Safe-command envelope
 
 The safe-command envelope is the common contract for bounded capabilities that do not need live host coupling: structured argument and project-path validation; filesystem roots and, for spawned MCP servers, process and network confinement; time, byte, item, traversal, and process bounds; stable structured reject codes; and evidence with bounded output projection.
+
+For a launched program that needs an exact Unix service, declare
+`capability_request.socket_paths` and pass a whole
+`{{paintedwolf-socket:/absolute/path}}` reference as the socket argument or an
+environment value. For example, `export SERVICE_SOCKET='{{paintedwolf-socket:/tmp/service.sock}}';
+external -- client --socket "$SERVICE_SOCKET"` supplies a bound endpoint without
+changing the meaning of ordinary path operands. Percent-encode reserved URI-path
+characters in a reference. Code and configuration can read the declared variable;
+do not embed the reference inside source text. A terminal receives such variables
+when it is opened. On macOS, a Unix datagram client uses
+`{{paintedwolf-socket:unixgram:/absolute/path}}`; datagram boundaries and replies
+are preserved within the same reviewed socket authority. Linux confinement refuses
+Unix datagram sockets. Native operations such as `http_request` keep their ordinary
+`unix_socket` argument; the host handles their connection. See
+[local sockets and daemon authority](security.md#local-sockets-and-daemon-authority).
+
+Clients expecting a Unix socket URL use the whole
+`{{paintedwolf-socket:unix-url:/absolute/path}}` reference. For example,
+`export DOCKER_HOST='{{paintedwolf-socket:unix-url:/tmp/docker.sock}}'; external -- docker version`
+supplies Docker's ordinary `unix://` configuration value for the bound endpoint.
+The service path must also be declared in `capability_request.socket_paths`.
 
 A native Go handler suits a first-party operation. Confined MCP suits an external server whose invocation, transport, and result handling the host can still bound. A bespoke native subsystem owner is for operations that need host database state, journals, project identity, approval-plan construction, or another coupled lifecycle; do not hide those dependencies behind a generic command. Authoring details: [Adding a tool](adding-tools.md).
 
@@ -964,7 +1055,9 @@ For a known command, `wait(until_complete=true, conditions=[{"kind":"process_don
 
 A wait lease is durable: it persists the addressed session, optional worker job, active profile, optional deadline, conditions, and exact loopback ports, and restart reconstructs subscriptions and probes. The first condition or deadline settles it. Worker waits return through the durable worker queue, coordinator waits keep coordinator workflow gating, and direct agent modes re-enter the same session. Delivery uses the lease id as an idempotent receipt; live delivery retries with bounded backoff, and restart recovery can replay a settled wake without duplicating an admitted one.
 
-A `command` call whose program is only waiting parks on the same lease. The evaluator reports a typed wait state when every live statement and job is blocked: the waiting statement, the earliest timer wake, and exact job handles. A call whose next wake falls more than ten seconds after it started, or whose program still waits only on jobs at that point, settles as `parked` with the waiting statement as its reason. Its turn ends and releases the worker slot, while the program keeps running under supervision; the lease subscribes to `program_done`, which only the host arms, and the program's end resumes the turn with exactly the result an unparked call returns. Shorter waits stay inline. The call's `timeout_ms`, or the catalog's `program_lifetime_ms` when the call names none, remains the program's outer bound: a single wait that cannot end within it refuses with `COMMAND_LIMIT_EXCEEDED` before the program parks. Anything else that ends the wait interrupts the program at its waiting statement while its `&` jobs keep running: user input or a stop opens the next turn with the interrupted result, and a replacement wait does the same. A restart cannot resume a program, so recovery resolves its lease with the program's receipts, interrupted, and the turn resumes with them; nothing is replayed.
+A foreground `command` program that has not settled or parked after 30 seconds returns `state: running`, its `program_id`, and a session-scoped `handle`. The original program continues in order: later statements do not start early and nothing is replayed. Load `command_output` to inspect retained output by cursor and `command_stop` to interrupt that program. Its final bounded program result is appended to the output, including refusal details and retained-output references. This handle uses the existing background-job capacity, output retention and stop lifecycle; if registration fails, the host interrupts the original program. The execution deadline still applies. Running is not a successful check or evidence of service readiness. Prefer an explicit `&` job for a persistent service and terminal tools for interactive input.
+
+A `command` call whose program is only waiting parks on the same lease. The evaluator reports a typed wait state when every live statement and job is blocked: the waiting statement, the earliest timer wake, and exact job handles. A known wait whose next wake falls more than ten seconds after that wait starts settles as `parked` with the waiting statement as its reason. Job-only waits park once the call's initial ten-second budget expires. Short polling intervals remain inline even when the program spans several intervals. Its turn ends and releases the worker slot, while the program keeps running under supervision; the lease subscribes to `program_done`, which only the host arms, and the program's end resumes the turn with exactly the result an unparked call returns. Shorter waits stay inline. The call's `timeout_ms`, or the catalog's `program_lifetime_ms` when the call names none, remains the program's outer bound: a single wait that cannot end within it refuses with `COMMAND_LIMIT_EXCEEDED` before the program parks. Anything else that ends the wait interrupts the program at its waiting statement while its `&` jobs keep running: user input or a stop opens the next turn with the interrupted result, and a replacement wait does the same. A restart cannot resume a program, so recovery resolves its lease with the program's receipts, interrupted, and the turn resumes with them; nothing is replayed.
 
 Coordinator wakes retain their event identity, target, batch, and workflow revision while queued. One consumer drains a session's queue; each successful model request acknowledges the facts captured for it, and failed requests do not consume wakes. A matching event settles the lease and delivers its result even when optional workflow gates would suppress an ambient turn; a fresh permitted workflow interruption ends the lease before model execution starts; unrelated process events leave the selected handle's wait armed.
 
@@ -980,7 +1073,7 @@ A selected project command is a default. Bare `verify()` runs it, while `command
 
 ## Capability request
 
-Some command and terminal actions need authority that cannot be inferred from argv alone: an external write root, protected read, local listener, loopback connection, direct IP route, mediated destination, named host resource, process control, or host execution. Terminals take neither direct IP nor the execution capabilities, because a held session outlives the invocation they would bind to. The model declares that need in structured `capability_request` fields before spawn. The host validates whether the current surface can provide it, builds an approval plan where appropriate, and compiles the resulting authority into the execution boundary.
+Some command and terminal actions need authority that cannot be inferred from argv alone: an external write root, protected read, local listener, loopback connection, direct IP route, mediated destination, named host resource, process control, OS credential store access, or host execution. Terminals take neither direct IP nor the execution capabilities (`process_control`, `credential_store`, `host_execution`), because a held session outlives the invocation they would bind to. The model declares that need in structured `capability_request` fields before spawn. The host validates whether the current surface can provide it, builds an approval plan where appropriate, and compiles the resulting authority into the execution boundary.
 
 Declaring a capability is not receiving it. Unsupported, unavailable, or denied requests fail before the effect starts. A reusable grant matches typed facts and current confinement, not similar prose or program names.
 
@@ -1068,7 +1161,7 @@ OAR policies select the actual operation and typed rejection facts. A host refus
 
 ## Portable command cutover inventory
 
-[`tool-audit.csv`](../tool-audit.csv) enumerates the 119 tool declarations in the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json). Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 79 retained domain tools, 15 structured tools also available as command forms, and 24 command-only operation contracts. Host process controls, Git mutations and conversational document edits retain useful structured surfaces beside command forms.
+[`tool-audit.csv`](../tool-audit.csv) enumerates the 118 tool declarations in the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json). Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 78 retained domain tools, 15 structured tools also available as command forms, and 24 command-only operation contracts. Host process controls, Git mutations and conversational document edits retain useful structured surfaces beside command forms.
 
 The current command entry parses and admits ordinary bash programs, dispatches cataloged utilities natively, and launches other programs through confinement. It returns child output and status, effects, a program receipt, and typed host refusals. Utility errors retain the utility's stderr and exit status. OAR renders host decisions from typed facts; it does not classify a command by reading its output. The stopped statement's shell-voice stderr accompanies the structured refusal, and earlier child results remain available. The [feedback contract](agent-tool-feedback.md) and [command language](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/) define those surfaces.
 
@@ -1090,3 +1183,21 @@ A ready index accelerates the parts of a query it can prove current. The native 
 The stock profiles and coordinator surfaces use the command environment for routine work. Its disable control refuses new program dispatch and settles its live work; it never sends a program to a shell as a fallback. Named operation contracts retain their authority, approval and history meanings after their standalone schemas leave the offered roster.
 
 Focused tests establish the changed registry, catalog and runtime contracts on their recorded source. GitHub CI checks each PR; a local composition supports direct human command testing and application validation with the shipped prompts. Historical run-3 results remain diagnostic evidence. A local development build does not establish installed macOS/Linux qualification, and Windows-host qualification remains pending. No release is part of this cutover.
+
+### Selected verification programs
+
+`verify` retains the selected-project-check contract and runs the same Bash
+program language as `command`. An omitted command resolves the selected check;
+a different command is refused while a selection exists. Targeted checks use
+`command` with `verification: true`. Native operations and external launches
+keep their own effect admission, while the initiating receipt remains `verify`.
+Background jobs retain that initiating tool, call ID and root session through
+completion and output publication.
+
+Verification program results use `result_version: 2`, the command program
+status/output fields, and an `outcome` only after settlement. The outcome remains
+`passed`, `failed`, or `unverifiable`, bound to the source captured before the
+check starts. Running jobs provide no premature verdict. Historical argv-runner
+results remain unchanged in stored receipts; their stage/tail fields are not
+reinterpreted. Shell source carries environment assignments, redirections,
+pipes and background jobs instead of separate argv-runner options.

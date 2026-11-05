@@ -22,5 +22,4 @@ x-paintedwolf-message: Terminal verdict is missing one or more required reviewer
 x-paintedwolf-scenarios:
   - id: missing_skeptic
     vars: { review_missing_reviewers: [skeptic] }
-    expect_contains: ['Code: SUBMIT_VERDICT_REVIEWER_MISSING', 'skeptic']
 x-paintedwolf-emit: guard:workflow

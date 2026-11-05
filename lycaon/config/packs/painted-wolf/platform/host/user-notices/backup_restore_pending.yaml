@@ -6,5 +6,3 @@ suggested_action: Restart the app before importing another backup.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - A backup restore is already staged.

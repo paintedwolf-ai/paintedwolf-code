@@ -15,7 +15,7 @@ import (
 // addControlPlaneReadFloor keeps directory read grants from exposing control
 // data nested within the approved path. The invocation's own session scratch
 // stays readable; other sessions' scratch remains behind the floor.
-func addControlPlaneReadFloor(rules *FilesystemRules, readRoots []string, sessionScratch string) {
+func addControlPlaneReadFloor(rules *FilesystemRules, c Confinement) {
 	if secretReadDenyDisabled() {
 		return
 	}
@@ -24,15 +24,120 @@ func addControlPlaneReadFloor(rules *FilesystemRules, readRoots []string, sessio
 		return
 	}
 	rules.add(fsRule{op: opRead, matches: subpathMatches(denied, FloorReadControlPlane)})
-	allowed := append(SecretReadAllowBackRoots(), resolveEach(readRoots)...)
-	if sessionScratch != "" {
-		allowed = append(allowed, fspath.CanonicalPath(sessionScratch))
+	allowed := append(workspaceReadAllowBacks(c), resolveEach(c.ReadRoots)...)
+	if c.SessionScratchRoot != "" {
+		allowed = append(allowed, fspath.CanonicalPath(c.SessionScratchRoot))
 	}
-	if len(allowed) == 0 {
+	addManagedReadRoots(rules, append(subpathMatches(denied, FloorReadControlPlane), readDenyMatches(c)...), allowed)
+	var matches []fsMatch
+	reachable := append([]string(nil), allowed...)
+	for _, g := range excludedWorkspaceGrants(c) {
+		reachable = append(reachable, g.ResolvedPath)
+		if g.Subtree {
+			matches = append(matches, fsMatch{subpath: g.ResolvedPath})
+		} else {
+			matches = append(matches, fsMatch{literal: g.ResolvedPath})
+		}
+	}
+	rules.add(fsRule{op: opRead, allow: true, matches: matches})
+	if len(reachable) == 0 {
 		return
 	}
-	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(allowed, "")})
-	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(traversalAncestors(denied, allowed), "")})
+	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(traversalAncestors(denied, reachable), "")})
+}
+
+// addManagedReadRoots reopens managed read roots beneath a read denial. They
+// override denied ancestors only: a denial below a managed root still holds,
+// and only an approved read grant lifts that.
+func addManagedReadRoots(rules *FilesystemRules, denied []fsMatch, managed []string) {
+	deniedPaths := make([]string, 0, len(denied))
+	for _, m := range denied {
+		if path := matchPath(m); path != "" {
+			deniedPaths = append(deniedPaths, path)
+		}
+	}
+	var reopened []string
+	for _, root := range managed {
+		if underAny(root, deniedPaths) {
+			reopened = append(reopened, root)
+		}
+	}
+	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(reopened, "")})
+	var below []fsMatch
+	var belowPaths []string
+	for _, m := range denied {
+		if path := matchPath(m); path != "" && strictlyUnderAny(path, reopened) {
+			below = append(below, m)
+			belowPaths = append(belowPaths, path)
+		}
+	}
+	rules.add(fsRule{op: opRead, matches: below})
+	var inner []string
+	for _, root := range reopened {
+		if strictlyUnderAny(root, belowPaths) {
+			inner = append(inner, root)
+		}
+	}
+	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(inner, "")})
+}
+
+func matchPath(m fsMatch) string {
+	if m.literal != "" {
+		return m.literal
+	}
+	return m.subpath
+}
+
+func strictlyUnderAny(path string, ancestors []string) bool {
+	for _, ancestor := range ancestors {
+		if path != ancestor && PathAtOrUnder(path, ancestor) {
+			return true
+		}
+	}
+	return false
+}
+
+// workspaceReadAllowBacks lists the managed workspaces an invocation may read.
+// A root the invocation excludes loses its carve-out, so its own read roots
+// are all that remains readable inside.
+func workspaceReadAllowBacks(c Confinement) []string {
+	excluded := resolveEach(c.ReadDenyPaths)
+	var out []string
+	for _, root := range SecretReadAllowBackRoots() {
+		if !underAny(root, excluded) {
+			out = append(out, root)
+		}
+	}
+	return out
+}
+
+// excludedWorkspaceGrants lists approved reads inside an excluded workspace. The
+// control-plane floor would otherwise take them back; everywhere else inside the
+// state tree it still wins over a grant.
+func excludedWorkspaceGrants(c Confinement) []ProtectedPathGrant {
+	excluded := resolveEach(c.ReadDenyPaths)
+	var out []ProtectedPathGrant
+	for _, g := range c.ProtectedReadGrants {
+		if underSecretReadAllowBack(g.ResolvedPath) && underAny(g.ResolvedPath, excluded) {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// WorkerReadDenyRoots lists the managed workspaces a worker never reads: every
+// worker branch, its own restored by name, and for a write leg the session
+// worktrees and drafts its sources live in, since it works from its private copy.
+func WorkerReadDenyRoots(writeLeg bool) []string {
+	dir, err := configdir.Root()
+	if err != nil || strings.TrimSpace(dir) == "" {
+		return nil
+	}
+	out := []string{enginepaths.WorkerBranchesRootUnder(dir)}
+	if writeLeg {
+		out = append(out, enginepaths.SessionWorktreesRootUnder(dir), enginepaths.DraftsRootUnder(dir))
+	}
+	return out
 }
 
 // secretReadDenyDisabled reports an explicit read-floor opt-out.
@@ -120,7 +225,7 @@ func traversalAncestors(deny, allow []string) []string {
 
 // SecretReadAllowBackRoots returns readable workspace carve-outs.
 func SecretReadAllowBackRoots() []string {
-	if SecretReadDenyRoots() == nil {
+	if secretReadDenyDisabled() {
 		return nil
 	}
 	return resolveEach(agentWorkspaceRootsUnderControlPlane())

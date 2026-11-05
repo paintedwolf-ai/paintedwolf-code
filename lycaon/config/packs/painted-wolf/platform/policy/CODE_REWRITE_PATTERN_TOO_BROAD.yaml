@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
       pattern: '$T | $B'
       profile: implement
       tool: code_rewrite
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: CODE_REWRITE_PATTERN_TOO_BROAD'

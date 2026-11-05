@@ -117,16 +117,15 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 	if rateDirectory != "" && (!configdir.IsHarnessChannel() || !filepath.IsAbs(rateDirectory)) {
 		return nil, fmt.Errorf("shared provider rate state requires an absolute directory in the isolated harness")
 	}
-	r := &Registry{
-		rateGate:        providerretry.NewProviderRateGate(rateDirectory),
-		catalog:         catalog,
-		credentials:     credentials,
-		discovery:       discovery.NewCache(nil),
-		cloudflareUsage: openaicompat.NewCloudflareUsageCache(),
-		discoveryClient: providerhttp.DiscoveryClient(discoverModelsTimeout),
-		roleExclusions:  roleExclusions,
-		listCache:       catalogruntime.NewSnapshotCache(providerListCacheTTL, cloneProviderMetaList),
-	}
+	r := &Registry{}
+	r.rateGate = providerretry.NewProviderRateGate(rateDirectory)
+	r.catalog = catalog
+	r.credentials = credentials
+	r.discovery = discovery.NewCache(nil)
+	r.cloudflareUsage = openaicompat.NewCloudflareUsageCache()
+	r.discoveryClient = providerhttp.DiscoveryClient(discoverModelsTimeout)
+	r.roleExclusions = roleExclusions
+	r.listCache = catalogruntime.NewSnapshotCache(providerListCacheTTL, cloneProviderMetaList)
 	// Initial discovery belongs to the allocating startup.
 	if err := r.rebuild(ctx); err != nil {
 		return nil, errors.Join(err, r.discovery.Close(context.WithoutCancel(ctx)))
@@ -138,7 +137,7 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 }
 
 // SetModelFeed sets the shared model feed.
-func (r *Registry) SetModelFeed(ctx context.Context, feed *modelfeed.Feed) {
+func (r *registryDiscovery) SetModelFeed(ctx context.Context, feed *modelfeed.Feed) {
 	r.modelFeed.Store(feed)
 	r.InvalidateListCache()
 	if feed == nil {

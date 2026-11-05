@@ -1,6 +1,9 @@
 package confine
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // SandboxRefusal is one operation the kernel refused a process of an action.
 // Repeats of one operation on one target fold into Count.
@@ -24,11 +27,12 @@ type SandboxRefusal struct {
 type RefusalRecovery string
 
 const (
-	RecoverWriteRoot      RefusalRecovery = "write_root"
-	RecoverReadPath       RefusalRecovery = "read_path"
-	RecoverSocketPath     RefusalRecovery = "socket_paths"
-	RecoverLocalListen    RefusalRecovery = "local_listen"
-	RecoverProcessControl RefusalRecovery = "process_control"
+	RecoverWriteRoot       RefusalRecovery = "write_root"
+	RecoverReadPath        RefusalRecovery = "read_path"
+	RecoverCredentialStore RefusalRecovery = "credential_store"
+	RecoverSocketPath      RefusalRecovery = "socket_paths"
+	RecoverLocalListen     RefusalRecovery = "local_listen"
+	RecoverProcessControl  RefusalRecovery = "process_control"
 	// RecoverOutboundPort covers a connection the kernel names only by port:
 	// loopback_connect opens it on this machine, direct_ip elsewhere.
 	RecoverOutboundPort RefusalRecovery = "loopback_connect_or_direct_ip"
@@ -58,17 +62,84 @@ type SandboxRefusals struct {
 	Omitted int
 }
 
+// Merge folds another stage's refusal reports into s within the retained cap.
+func (s SandboxRefusals) Merge(other SandboxRefusals) SandboxRefusals {
+	if other.Witness == "" && len(other.Refusals) == 0 && other.Omitted == 0 {
+		return s
+	}
+	if s.Witness == "" && len(s.Refusals) == 0 && s.Omitted == 0 {
+		return SandboxRefusals{
+			Witness:  other.Witness,
+			Refusals: append([]SandboxRefusal(nil), other.Refusals...),
+			Omitted:  other.Omitted,
+		}
+	}
+	out := SandboxRefusals{
+		Witness:  mergeWitness(s.Witness, other.Witness),
+		Refusals: append([]SandboxRefusal(nil), s.Refusals...),
+		Omitted:  s.Omitted + other.Omitted,
+	}
+	keys := make(map[string]int, len(out.Refusals))
+	for i, r := range out.Refusals {
+		keys[refusalKey(r.Operation, r.Target)] = i
+	}
+	for _, r := range other.Refusals {
+		key := refusalKey(r.Operation, r.Target)
+		if i, seen := keys[key]; seen {
+			if i >= 0 {
+				out.Refusals[i].Count += r.Count
+			}
+			continue
+		}
+		if len(out.Refusals) >= maxActionRefusals {
+			if len(keys) < maxActionRefusals+maxOmittedRefusalKeys {
+				keys[key] = -1
+				out.Omitted++
+			}
+			continue
+		}
+		keys[key] = len(out.Refusals)
+		out.Refusals = append(out.Refusals, r)
+	}
+	return out
+}
+
+func mergeWitness(a, b RefusalWitness) RefusalWitness {
+	switch {
+	case a == WitnessUnavailable || b == WitnessUnavailable:
+		return WitnessUnavailable
+	case a == WitnessIncomplete || b == WitnessIncomplete:
+		return WitnessIncomplete
+	case a == WitnessKernel || b == WitnessKernel:
+		return WitnessKernel
+	default:
+		return ""
+	}
+}
+
 // Paths returns the refused filesystem paths for access, with the grant their
 // layer's recovery names.
 func (s SandboxRefusals) Paths(access FilesystemAccess) []BoundaryPath {
 	var out []BoundaryPath
-	seen := map[string]bool{}
+	seen := map[string]int{}
 	for _, r := range s.Refusals {
-		if operationAccess(r.Operation) != access || r.Layer == "" || seen[r.Target] {
+		if operationAccess(r.Operation) != access || r.Layer == "" {
 			continue
 		}
-		seen[r.Target] = true
-		out = append(out, BoundaryPath{Path: r.Target, Access: access, Layer: r.Layer, Grant: r.Grant})
+		if idx, ok := seen[r.Target]; ok {
+			if !slices.Contains(out[idx].Operations, r.Operation) {
+				out[idx].Operations = append(out[idx].Operations, r.Operation)
+			}
+			continue
+		}
+		seen[r.Target] = len(out)
+		out = append(out, BoundaryPath{
+			Path:       r.Target,
+			Access:     access,
+			Layer:      r.Layer,
+			Grant:      r.Grant,
+			Operations: []string{r.Operation},
+		})
 	}
 	return out
 }
@@ -83,6 +154,28 @@ func (s SandboxRefusals) With(recoveries ...RefusalRecovery) []SandboxRefusal {
 				break
 			}
 		}
+	}
+	return out
+}
+
+// CredentialStorePaths returns the unique refused targets whose recovery is
+// credential_store.
+func (s SandboxRefusals) CredentialStorePaths() []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, r := range s.Refusals {
+		if r.Recovery != RecoverCredentialStore && r.Layer != FloorReadCredentialStore {
+			continue
+		}
+		target := r.Target
+		if target == "" {
+			target = r.Grant
+		}
+		if target == "" || seen[target] {
+			continue
+		}
+		seen[target] = true
+		out = append(out, target)
 	}
 	return out
 }
@@ -123,7 +216,8 @@ type BoundaryPath struct {
 	Access FilesystemAccess
 	Layer  FloorLayer
 	// Grant is the path the layer's recovery asks for; empty when terminal.
-	Grant string
+	Grant      string
+	Operations []string
 }
 
 // routeRefusal derives recovery from applied rules; truncated targets get no path grant.
@@ -132,7 +226,7 @@ func routeRefusal(rules FilesystemRules, operation, target string, truncated boo
 	if truncated {
 		r.Target += truncatedReportSuffix
 		switch r.Recovery {
-		case RecoverWriteRoot, RecoverReadPath, RecoverSocketPath:
+		case RecoverWriteRoot, RecoverReadPath, RecoverCredentialStore, RecoverSocketPath:
 			r.Recovery, r.Grant, r.Layer = RecoverNone, "", ""
 		case RecoverLocalListen, RecoverProcessControl, RecoverOutboundPort, RecoverHostExecution, RecoverNone:
 			// These recoveries do not grant a path from the truncated target.
@@ -147,6 +241,10 @@ func routeOperation(rules FilesystemRules, operation, target string) SandboxRefu
 		return routeFilesystemRefusal(rules, r, access)
 	}
 	switch {
+	case operation == "network-outbound" && strings.HasPrefix(target, "/") && isSessionDBusSocketTarget(target):
+		r.Recovery, r.Grant = RecoverCredentialStore, target
+	case operation == "network-outbound" && isBenignSocketProbe(target):
+		r.Recovery = RecoverNone
 	case operation == "network-outbound" && strings.HasPrefix(target, "/"):
 		r.Recovery, r.Grant = RecoverSocketPath, target
 	case operation == "network-outbound":
@@ -179,6 +277,15 @@ func routeFilesystemRefusal(rules FilesystemRules, r SandboxRefusal, access File
 	r.Recovery = RefusalRecovery(recovery.Capability)
 	r.Grant = recovery.GrantPath(r.Target, rules.roots...)
 	return r
+}
+
+// isBenignSocketProbe identifies local sockets that confined processes probe
+// opportunistically (system DNS resolver and Git's fsmonitor daemon) and that
+// cannot be opened via socket_paths.
+func isBenignSocketProbe(target string) bool {
+	return slices.Contains(systemResolverSocketPaths, target) ||
+		target == "fsmonitor--daemon.ipc" ||
+		strings.HasSuffix(target, "/fsmonitor--daemon.ipc")
 }
 
 // operationAccess classifies the kernel's filesystem operations; empty for

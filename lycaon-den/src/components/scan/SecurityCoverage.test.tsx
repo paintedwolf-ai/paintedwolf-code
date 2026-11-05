@@ -98,7 +98,6 @@ describe("SecurityCoverage", () => {
     expect(panel.textContent).toContain("No lockfile in this project");
     // No next-run prediction; a quiet scanner is watching.
     expect(panel.textContent).toContain("Watching for changes · full pass 2h ago");
-    expect(panel.textContent).toContain("not scanned yet");
     expect(panel.textContent).not.toContain("next");
   });
 

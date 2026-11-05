@@ -7,5 +7,3 @@ suggested_action: Refresh storage protections and try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - does not exist

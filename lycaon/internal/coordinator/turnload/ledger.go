@@ -119,8 +119,8 @@ func (l *Ledger) Active(sessionID string) map[string]bool {
 	return out
 }
 
-// Activate records tools request_tools loaded for need; they stand until the
-// next cold boundary.
+// Activate records tools request_tools loaded for need; they stand while the
+// surface can load them.
 func (l *Ledger) Activate(sessionID string, names []string, need string) {
 	if l == nil || strings.TrimSpace(sessionID) == "" || len(names) == 0 {
 		return
@@ -132,7 +132,7 @@ func (l *Ledger) Activate(sessionID string, names []string, need string) {
 	for _, name := range names {
 		if name = strings.TrimSpace(name); name != "" {
 			s.requested[name] = need
-			if _, standing := s.standing[name]; !standing {
+			if cur, standing := s.standing[name]; !standing || cur.Source != SourceRequested {
 				s.standing[name] = Load{Tool: name, Source: SourceRequested, Need: need, Turn: s.openingMessageID}
 			}
 		}
@@ -201,11 +201,11 @@ func (s *sessionLoads) open(opening TurnOpening) {
 	s.toolEvent = ""
 }
 
-// BeginTurn applies a turn decision to the standing surface. Cold, the
-// decision replaces the standing tools and omissions. Warm, its predictions
-// join the standing tools and an omission holds only while every turn since
-// the last cold boundary agreed with it. Abstained, the tools stay and every
-// unit renders.
+// BeginTurn applies a turn decision to the standing surface. Tools the chat
+// requested stay while the turn can load them. Cold, the decision replaces
+// predicted tools and omissions. Warm, its predictions join the standing tools
+// and an omission holds only while every turn since the last cold boundary
+// agreed with it. Abstained, the tools stay and every unit renders.
 func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decision) {
 	if l == nil || strings.TrimSpace(sessionID) == "" {
 		return
@@ -216,11 +216,9 @@ func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decis
 	s.open(opening)
 	cold := opening.Boundary.Cold()
 	standing := make(map[string]Load, len(s.standing)+len(decision.Tools))
-	if !cold || decision.Abstained {
-		for name, load := range s.standing {
-			if s.loadable[name] {
-				standing[name] = load
-			}
+	for name, load := range s.standing {
+		if s.loadable[name] && (load.Source == SourceRequested || !cold || decision.Abstained) {
+			standing[name] = load
 		}
 	}
 	for tool, p := range decision.Tools {

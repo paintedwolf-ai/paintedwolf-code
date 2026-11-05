@@ -146,8 +146,13 @@ schema:
       description: Project path streaming body verbatim up to 256 MiB; returns receipt, not body.
     capability_request:
       type: object
-      description: Exact loopback client authority.
+      additionalProperties: false
+      minProperties: 1
+      description: Extra network access this call needs.
       properties:
+        direct_ip:
+          description: Direct IP for non-public or literal IP destinations.
+          oneOf: [{type: boolean}, {type: array, maxItems: 16, items: {type: string, maxLength: 256}}, {type: object, additionalProperties: false, properties: {declared_destinations: {type: array, maxItems: 16, items: {type: string, maxLength: 256}}}}]
         loopback_connect:
           type: object
           description: Loopback authority for exact ports.
@@ -161,8 +166,6 @@ schema:
               items: {type: integer, minimum: 1, maximum: 65535}
           required: [ports]
           additionalProperties: false
-      required: [loopback_connect]
-      additionalProperties: false
     unredact:
       type: string
       maxLength: 64

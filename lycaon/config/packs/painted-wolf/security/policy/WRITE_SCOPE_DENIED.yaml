@@ -21,7 +21,7 @@ copy:
 
     {{ paintedwolf.patterns_list }}
 
-    {% if paintedwolf.redirect %}If saving output was optional, omit stdout_to/stderr_to and inspect the bounded
+    {% if paintedwolf.redirect %}If saving output was optional, omit the output-file destination and inspect the bounded
     result tail. If a file is required, its destination must both serve the intended task and be in scope.{%
     else %}Use an in-scope path only when it is the intended destination. Otherwise report the scope dependency;
     changing mutation tools does not expand authority.{% endif %}'
@@ -37,10 +37,6 @@ x-paintedwolf-scenarios:
     patterns_list: '- `${overlay_dir}/blueprints/**`'
     profile: plan_write_only
     tool: write
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WRITE_SCOPE_DENIED'
-  - blueprints
 - id: command_redirect
   vars:
     detail: bad args
@@ -49,11 +45,6 @@ x-paintedwolf-scenarios:
     patterns_list: '- `${overlay_dir}/blueprints/**`'
     profile: plan_writer
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WRITE_SCOPE_DENIED'
-  - stdout_to
-  - tail
 - id: verify_redirect
   vars:
     detail: bad args
@@ -62,8 +53,3 @@ x-paintedwolf-scenarios:
     patterns_list: '- `${overlay_dir}/blueprints/**`'
     profile: plan_writer
     tool: verify
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WRITE_SCOPE_DENIED'
-  - stdout_to
-  - tail

@@ -27,6 +27,7 @@ type procSocket struct {
 	Local     netip.AddrPort
 	Remote    netip.AddrPort
 	Listening bool
+	IPv6Only  bool
 	UID       uint32
 	Inode     uint64
 }
@@ -37,6 +38,8 @@ type procFS struct {
 	root string
 	// identity reads a process incarnation; nil reads the host kernel's.
 	identity func(pid int) (ProcessIdentity, bool)
+	// ipv6Only reads per-socket IPV6_V6ONLY by inode when available.
+	ipv6Only func(protocol Protocol) map[uint64]bool
 }
 
 func (p procFS) processIdentity(pid int) (ProcessIdentity, bool) {
@@ -46,22 +49,46 @@ func (p procFS) processIdentity(pid int) (ProcessIdentity, bool) {
 	return processIdentity(pid)
 }
 
+func (p procFS) bindv6onlyDefault() bool {
+	data, err := os.ReadFile(filepath.Join(p.root, "sys", "net", "ipv6", "bindv6only"))
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(data)) == "1"
+}
+
 // procTables names each protocol's tables. A host without IPv6 has no *6 table.
 var procTables = map[Protocol][]string{ProtocolTCP: {"tcp", "tcp6"}, ProtocolUDP: {"udp", "udp6"}}
 
 // sockets reads the tables of each wanted protocol.
 func (p procFS) sockets(protocols []Protocol) ([]procSocket, error) {
 	var out []procSocket
+	defaultV6Only := p.bindv6onlyDefault()
 	for _, protocol := range protocols {
+		var perInode map[uint64]bool
+		if p.ipv6Only != nil {
+			perInode = p.ipv6Only(protocol)
+		}
 		for _, name := range procTables[protocol] {
+			isV6 := strings.HasSuffix(name, "6")
 			data, err := os.ReadFile(filepath.Join(p.root, "net", name))
 			if err != nil {
-				if strings.HasSuffix(name, "6") && errors.Is(err, fs.ErrNotExist) {
+				if isV6 && errors.Is(err, fs.ErrNotExist) {
 					continue
 				}
 				return nil, err
 			}
-			out = append(out, parseProcNet(data, protocol)...)
+			rows := parseProcNet(data, protocol)
+			if isV6 {
+				for i := range rows {
+					v6Only := defaultV6Only
+					if v, ok := perInode[rows[i].Inode]; ok {
+						v6Only = v
+					}
+					rows[i].IPv6Only = v6Only
+				}
+			}
+			out = append(out, rows...)
 		}
 	}
 	return out, nil
@@ -86,7 +113,7 @@ func (p procFS) socketsOf(pid int, table []procSocket) ([]SocketObservation, err
 	for _, socket := range table {
 		if inodes[socket.Inode] {
 			result = append(result, SocketObservation{Protocol: socket.Protocol, Local: socket.Local, Remote: socket.Remote,
-				ResourceID: fmt.Sprintf("linux-%s:%d", socket.Protocol, socket.Inode), Listening: socket.Listening, Holder: holder, handle: socket.Inode})
+				ResourceID: fmt.Sprintf("linux-%s:%d", socket.Protocol, socket.Inode), Listening: socket.Listening, IPv6Only: socket.IPv6Only, Holder: holder, handle: socket.Inode})
 		}
 	}
 	return result, nil
@@ -102,7 +129,7 @@ func (p procFS) listeners(query ListenerQuery) ([]Listener, error) {
 	var rows []kernelListener
 	for _, s := range sockets {
 		if s.Listening && query.wants(s.Protocol, s.Local) {
-			rows = append(rows, kernelListener{Protocol: s.Protocol, Local: s.Local, UID: s.UID, Handle: s.Inode})
+			rows = append(rows, kernelListener{Protocol: s.Protocol, Local: s.Local, UID: s.UID, IPv6Only: s.IPv6Only, Handle: s.Inode})
 		}
 	}
 	if len(rows) == 0 {

@@ -94,7 +94,7 @@ func TestRuntimeBuildCompletionMessagesPassthrough(t *testing.T) {
 	if len(msgs) != 2 {
 		t.Fatalf("msgs = %+v", msgs)
 	}
-	if msgs[0].Role != api.MessageRoleSystem || msgs[0].Content != transcript.ContentAuthorityNotice() {
+	if msgs[0].Role != api.MessageRoleSystem || msgs[0].Content != transcript.ContentAuthorityNotice(transcript.AudiencePrivate) {
 		t.Fatalf("first message is not the content-authority notice: %+v", msgs[0])
 	}
 	if msgs[1].Role != api.MessageRoleUser || msgs[1].Content != "hi" {

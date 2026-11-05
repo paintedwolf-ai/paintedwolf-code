@@ -42,8 +42,8 @@ func (m *Service) Calibration(ctx context.Context, sess *api.Session) compaction
 
 func (m *Service) BudgetTokens(ctx context.Context, sess *api.Session, transcriptEstimate int) int {
 	cold := compaction.ResolveColdStartOverhead("")
-	if m != nil && m.Compactor != nil {
-		cold = m.Compactor.Config().ColdStartOverhead(cold)
+	if m != nil {
+		cold = m.compactionConfig(ctx, sess).ColdStartOverhead(cold)
 	}
 	return m.Calibration(ctx, sess).ProjectBilled(transcriptEstimate, cold)
 }

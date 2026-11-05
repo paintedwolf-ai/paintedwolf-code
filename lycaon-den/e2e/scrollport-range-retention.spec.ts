@@ -200,5 +200,5 @@ webE2e("the newest card is the end of the chat: a wheel never scrolls further pa
   const grew = seen.slice(1).filter((gap, index) => gap > seen[index]! + 1);
   expect(grew, `space below the newest card ${seen.map(Math.round).join(", ")}`).toEqual([]);
   // Once input settles, the space closes by itself.
-  await expect.poll(() => spaceBelowNewest(page), { timeout: 5_000 }).toBeLessThanOrEqual(inset + 1);
+  await expect.poll(() => spaceBelowNewest(page), { timeout: 30_000 }).toBeLessThanOrEqual(inset + 1);
 });

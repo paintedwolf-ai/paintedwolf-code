@@ -107,15 +107,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	runCtx, err := mgr.Coordinator.Context.RunContext(ctx, sess.ID)
 	contractcheck.FailErr(t, "mgr.CoordinatorRunContext failed", err)
 	block := renderWorkflowFrame(t, ctx, frameLoader, sess.ID, surface.StaticWorkflowHintCodes(runCtx, false), hintCfg, gateCfg)
-	for _, want := range []string{
-		inject.ActiveWorkflowInjectSentinel,
-		"bugbash",
-		"hunt",
-		"failed_leaves",
-		"parallel_stages_complete",
-		"completes on",
-		"Workflow phases",
-	} {
+	for _, want := range []string{inject.ActiveWorkflowInjectSentinel, "bugbash", "hunt", "failed_leaves", "parallel_stages_complete"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}

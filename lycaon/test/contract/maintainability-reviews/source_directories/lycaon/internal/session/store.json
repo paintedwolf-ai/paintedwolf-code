@@ -1,0 +1,14 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/session/store",
+  "kind": "module",
+  "workstream": "program-observation-evidence",
+  "disposition": "retain",
+  "reason": "Session persistence retains its existing transaction and publication owners. The program observation writer uses the existing evidence schema and blob owner; splitting persistence into another package would obscure that transaction. Retain the measured immediate membership; further membership changes require review.",
+  "reviewed_commit": "62c955c3704aaefe1d48fc485b09e6201a4244cd",
+  "ceiling": 66,
+  "boundaries": {
+    "lycaon/internal/session/store/program_observation_test.go": "2fba82dd0e9440c1ec09271f5e164309e03ec58db2b6a93390d030fa9488e1c9"
+  },
+  "reviewed_shape": "967e0413635674e212b11ff16fca93a33781fcf80787ddac77be93139ece0257"
+}

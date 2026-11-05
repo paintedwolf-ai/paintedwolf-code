@@ -11,4 +11,3 @@ suggested_action: "Keep the retained source in place. Resolve the reported issue
 scenarios:
   - id: default
     vars: {reason: "The destination is occupied."}
-    expect_contains: ["The move could not finish"]

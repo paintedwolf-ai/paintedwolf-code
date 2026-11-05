@@ -3,10 +3,12 @@ package tools
 
 import (
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"sync/atomic"
 
 	"context"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"net/netip"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -60,16 +62,6 @@ type SourceRunCapture struct {
 	Cwd              string
 }
 
-// AgentNoteCapture is a grounded note produced by one invocation.
-type AgentNoteCapture struct {
-	SourceContext *api.SourceContext
-	MessageID     string
-	Content       string
-	Grounding     *api.CitationGrounding
-	// ArtifactIDs lists stills shown with the note.
-	ArtifactIDs []string
-}
-
 // ToolInvocationOut collects host-side invocation outputs.
 type ToolInvocationOut struct {
 	// DisplaySubject names the resolved target before durable secret screening.
@@ -89,7 +81,6 @@ type ToolInvocationOut struct {
 	OverlayPromotion *api.OverlayPromotion
 	FileEdit         *FileEditCapture
 	Visual           *VisualCapture
-	AgentNote        *AgentNoteCapture
 	// ExternalAccess is Den UI metadata for exceptional external-access on this result.
 	ExternalAccess *api.ExternalAccess
 	// Skill is Den UI metadata for the skill a skills_read activation resolved to.
@@ -100,6 +91,10 @@ type ToolInvocationOut struct {
 	Verdict *api.VerdictOutcome
 	// CommandProgram is the settled command program receipt for a portable command call.
 	CommandProgram *api.CommandProgramReceipt
+	// SourceDeliveries lists the source deliveries confirmed during the call.
+	SourceDeliveries []SourceDeliveryTag
+	// Listener is Den UI and wire metadata for loopback listener attribution on http_request.
+	Listener *api.LoopbackListenerFact
 	// SourceRun is nil until a command or verify run exits.
 	SourceRun *SourceRunCapture
 	// RetrievedFrom is the final retrieval host after redirects.
@@ -122,9 +117,9 @@ type PrimaryMutationRecorder interface {
 	RecordPrimaryMutation(ctx context.Context, sessionID, relPath string)
 }
 
-// ContainerRecorder records invocation-launched container IDs for session provenance.
-type ContainerRecorder interface {
-	RecordSessionContainer(chatSessionID, containerID, socketPath string)
+// LoopbackEndpointObserver attributes a loopback destination to its active listener(s).
+type LoopbackEndpointObserver interface {
+	ObserveLoopbackEndpoint(ctx context.Context, sessionID, workspaceDir string, peer netip.AddrPort) *api.LoopbackListenerFact
 }
 
 // ToolContext is per-invocation context for a tool handler.
@@ -159,6 +154,11 @@ type InvocationIdentity struct {
 	HandoffAgentID   string
 }
 
+// SourceDeliveryTag is a delivery's handle and the coverage its tag states.
+type SourceDeliveryTag struct {
+	Handle, Coverage string
+}
+
 // InvocationSource carries the source workspace and mutation services.
 type InvocationSource struct {
 	ProjectSourceBranch sourcebranch.ID
@@ -175,6 +175,8 @@ type InvocationSource struct {
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
+	// WorkerBaselinePath is the manifest sealed when the branch was prepared.
+	WorkerBaselinePath string
 	// WorkerSourceRoots are primary roots captured into the private branch.
 	WorkerSourceRoots []string
 	// BranchWorkspace validates and prepares the branch.
@@ -310,6 +312,7 @@ type InvocationExecution struct {
 	VerificationCheck bool
 	ProcessReview     ProcessReviewer
 	ProcessControl    bool
+	CredentialStore   bool
 	HostExecution     bool
 	executionPermit   *executionPermit
 }
@@ -318,8 +321,8 @@ type InvocationExecution struct {
 type InvocationLocal struct {
 	// OwnedLoopbackPorts requires fresh exact listener proof at every mediated write.
 	OwnedLoopbackPorts []uint16
-	// ContainerRecorder records container launches for session loopback provenance.
-	ContainerRecorder ContainerRecorder
+	// LoopbackObserver reads current host-observed listener facts.
+	LoopbackObserver LoopbackEndpointObserver
 	// SocksProxyEnv is true when the invocation asked for ALL_PROXY (mediated SOCKS).
 	SocksProxyEnv bool
 	// LocalListenGranted covers this invocation's local listener.
@@ -354,6 +357,10 @@ type InvocationEffects struct {
 	// CredentialFiles receives credential-file reads and model-authored writes.
 	CredentialFiles CredentialFiles
 	Out             *ToolInvocationOut
+	// GitNoRepository records that a native Git read on this program's worker
+	// branch found no repository. Program children have no Out and may run
+	// concurrently, so they share this.
+	GitNoRepository *atomic.Bool
 	// Presence receives what this call does to project files as the handler
 	// resolves it: targets, resolved mutations, approval holds, and landings.
 	Presence PresenceReporter

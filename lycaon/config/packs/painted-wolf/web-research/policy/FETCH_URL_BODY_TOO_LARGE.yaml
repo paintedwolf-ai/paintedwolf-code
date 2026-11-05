@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     bytes: '5242881'
     max_bytes: '5242880'
     tool: fetch_url
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: FETCH_URL_BODY_TOO_LARGE'

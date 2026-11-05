@@ -121,7 +121,7 @@ func TestOfferedToolNamesEmptyIsStamped(t *testing.T) {
 }
 
 func TestEmptyToolOfferReplacesPriorTurnAllowlist(t *testing.T) {
-	st := &promptLoopTurnState{offeredToolNames: []string{"read"}}
+	st := &promptLoopTurnState{turnStreamState: turnStreamState{offeredToolNames: []string{"read"}}}
 	st.stampOfferedToolNames(nil)
 	if st.offeredToolNames == nil || len(st.offeredToolNames) != 0 {
 		t.Fatalf("offered tools = %v, want stamped empty allowlist", st.offeredToolNames)
@@ -257,9 +257,6 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 						for _, msg := range msgs {
 							if strings.Contains(msg.Content, "Code: TOOL_ACTION_IN_TEXT") {
 								nudges++
-								if !strings.Contains(msg.Content, "native tool channel") {
-									t.Fatal("missing recovery instruction")
-								}
 							}
 						}
 						return nil

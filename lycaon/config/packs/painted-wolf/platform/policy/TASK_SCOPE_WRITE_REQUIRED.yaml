@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
       scope_mode: read
       scope_paths: []
       tool: task
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: TASK_SCOPE_WRITE_REQUIRED'

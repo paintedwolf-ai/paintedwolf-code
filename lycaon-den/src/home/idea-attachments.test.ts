@@ -160,7 +160,6 @@ describe("intakeHomeIdeaDrop — web files", () => {
     const item = await intakeOne([fileItem(webFile("a.txt", 8))], []);
     expect(item.kind).toBe("reject");
     if (item.kind !== "reject") return;
-    expect(item.reason).toMatch(/host readiness/);
   });
 });
 

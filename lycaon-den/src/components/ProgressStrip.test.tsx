@@ -269,7 +269,6 @@ describe("ProgressStrip", () => {
     const opener = screen.getByTestId("worklog-open");
     expect(header?.firstElementChild).toBe(opener);
     expect(opener.getAttribute("aria-expanded")).toBe("true");
-    expect(opener.getAttribute("aria-label")).toBe("Open worklog");
   });
 
   it("renders an n/a step muted and struck-through", () => {

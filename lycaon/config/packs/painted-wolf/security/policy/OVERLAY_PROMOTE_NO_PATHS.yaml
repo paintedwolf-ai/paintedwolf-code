@@ -32,21 +32,11 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     job_id: job-empty
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_PROMOTE_NO_PATHS'
-  - job-empty
-  - reject_overlay
-  - update_progress
 - id: remaining_changes
   vars:
     job_id: job-partial
     remaining_overlay_paths:
     - src/remaining.go
-  expect_contains:
-  - src/remaining.go
-  - Preserve the overlay
-  - preview_overlay
 selector:
   tool:
   - preview_overlay

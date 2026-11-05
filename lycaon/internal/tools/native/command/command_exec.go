@@ -55,6 +55,8 @@ type RunOutcome struct {
 	// IndexWatch is the Git index captured at spawn; the result's facts own it.
 	IndexWatch      indexwatch.Snapshot
 	SnapshotCapture *SnapshotCaptureResult
+	// SourceWindow is the window ConfinedForeground observed this dispatch with.
+	SourceWindow *hostcmd.SourceWindow
 }
 
 // CanonicalToolArgs returns reference-bearing arguments when available.
@@ -262,7 +264,8 @@ func runCommandForeground(
 	}
 	registry.Lifecycle.WatchIndex(tctx.Identity.SessionID, handle, index)
 	networkLife := newCommandNetworkLifecycle(tctx, toolName, bound.lease, directIPApplied)
-	registry.Lifecycle.OnExit(tctx.Identity.SessionID, handle, func() { networkLife.complete(ctx) })
+	exitCtx := context.WithoutCancel(ctx)
+	registry.Lifecycle.OnExit(tctx.Identity.SessionID, handle, func() { networkLife.complete(exitCtx) })
 
 	finished, awaitErr := registry.Lifecycle.Await(ctx, tctx.Identity.SessionID, handle, budget)
 	if awaitErr != nil {
@@ -294,7 +297,6 @@ func runCommandForeground(
 		ft.record(failureAttempt, out.Snapshot.ExitCode == 0)
 		out.IndexWatch = registry.Lifecycle.TakeIndexWatch(tctx.Identity.SessionID, handle)
 		registry.Lifecycle.Discard(tctx.Identity.SessionID, handle)
-		recordContainerLaunch(tctx, snap)
 	} else {
 		// The running result shows these; only later refusals send a notice.
 		out.Refusals = bound.lease.Refusals()
@@ -306,53 +308,6 @@ func runCommandForeground(
 	}
 	tools.CaptureExternalAccess(tctx, out.Network, directIPApplied)
 	return out, nil
-}
-
-func recordContainerLaunch(tctx tools.ToolContext, snap bgprocess.Snapshot) {
-	if tctx.Local.ContainerRecorder == nil || len(tctx.Socket.SocketGrants) == 0 {
-		return
-	}
-	engineSocket := ""
-	for _, g := range tctx.Socket.SocketGrants {
-		p := g.ResolvedPath
-		if p == "" {
-			p = g.ApprovedPath
-		}
-		if p != "" {
-			engineSocket = p
-			break
-		}
-	}
-	if engineSocket == "" {
-		return
-	}
-	outStr := strings.TrimSpace(string(snap.Tail))
-	if len(outStr) != 64 {
-		outStr = strings.TrimSpace(string(snap.Output))
-	}
-	if len(outStr) == 64 && isHex64(outStr) {
-		rootSession := tctx.Identity.RootSessionID
-		if rootSession == "" {
-			rootSession = tctx.Identity.ParentSessionID
-		}
-		if rootSession == "" {
-			rootSession = tctx.Identity.SessionID
-		}
-		tctx.Local.ContainerRecorder.RecordSessionContainer(rootSession, outStr, engineSocket)
-	}
-}
-
-func isHex64(s string) bool {
-	if len(s) != 64 {
-		return false
-	}
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return false
-		}
-	}
-	return true
 }
 
 // spillCommandOutput persists the whole screened output when the tail dropped
@@ -372,7 +327,12 @@ func stopAwaitedCommand(ctx context.Context, registry *bgprocess.Registry, sessi
 	if registry == nil {
 		return nil
 	}
-	_, stopErr := registry.Lifecycle.Stop(sessionID, handle)
+	fallback := bgprocess.TerminationStoppedByAgent
+	if ctx != nil && ctx.Err() != nil {
+		fallback = bgprocess.TerminationStoppedByUser
+	}
+	reason := bgprocess.TerminationReasonFromContext(ctx, fallback)
+	_, stopErr := registry.Lifecycle.Stop(sessionID, handle, reason)
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), commandCancelCleanupTimeout)
 	defer cancel()
 	finished, waitErr := registry.Lifecycle.Await(cleanupCtx, sessionID, handle, 0)

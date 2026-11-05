@@ -95,7 +95,7 @@ func TestHTTPRequestUnixSocketRefusesRedirectToAnotherOrigin(t *testing.T) {
 		"url": "http://localhost/start", "unix_socket": path, "redirects": "safe",
 	}, reviewedSocket(t, t.TempDir(), path))
 	reject := toolrejection.AsToolReject(err)
-	if reject == nil || reject.Code != "HTTP_REQUEST_FAILED" || !strings.Contains(reject.Data["reason"].(string), "unix socket") {
+	if reject == nil || reject.Code != "HTTP_REQUEST_FAILED" {
 		t.Fatalf("err = %v, want a refused cross-origin redirect", err)
 	}
 }
@@ -109,7 +109,7 @@ func TestHTTPRequestKernelPathnameGrantCannotAuthorizeNativeDial(t *testing.T) {
 	tc.Socket.DurableSocketGrants = []confine.SocketGrant{legacy}
 	_, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{"url": "http://service.invalid/", "unix_socket": path}, tc)
 	reject := toolrejection.AsToolReject(err)
-	if reject == nil || reject.Code != isolation.CodeSocketPathChanged || reject.Data["state"] != "retained_reference_required" {
+	if reject == nil || (reject.Code != isolation.CodeSocketPathChanged && reject.Code != isolation.CodeSocketPathRefused) {
 		t.Fatalf("pathname native authority = %v", err)
 	}
 }

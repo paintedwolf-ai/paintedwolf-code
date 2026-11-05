@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -436,9 +437,101 @@ func TestDecodeOllamaStreamRejectsMissingDone(t *testing.T) {
 	ch := decodeOllamaStream(t.Context(), strings.NewReader(
 		`{"message":{"content":"partial"},"done":false}`+"\n",
 	), "desktop", "model", 8192, nil, nil)
-	if _, _, err := modelcall.CollectStream(ch); err == nil || !strings.Contains(err.Error(), "before done") {
-		t.Fatalf("error = %v, want missing done", err)
+	_, _, err := modelcall.CollectStream(ch)
+	interrupted, ok := failure.AsProviderResponseInterrupted(err)
+	if !ok || !errors.Is(err, io.ErrUnexpectedEOF) || interrupted.ProviderID != "desktop" || interrupted.Model != "model" {
+		t.Fatalf("error = %v, want ProviderResponseInterruptedError wrapping unexpected EOF", err)
 	}
+}
+
+func abortOllamaResponseMidBody(t *testing.T, w http.ResponseWriter, contentType, partial string) {
+	t.Helper()
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", "4096")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(partial))
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	if hijacker, ok := w.(http.Hijacker); ok {
+		if conn, _, err := hijacker.Hijack(); err == nil {
+			if tcp, ok := conn.(*net.TCPConn); ok {
+				_ = tcp.SetLinger(0)
+			}
+			_ = conn.Close()
+		}
+	}
+}
+
+func TestOllamaHTTPServerInterruptedAndEmptyResponses(t *testing.T) {
+	req := modelcall.CompletionRequest{
+		Model:    "ministral-3:3b",
+		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hello"}},
+	}
+
+	t.Run("mid-stream connection reset", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			abortOllamaResponseMidBody(t, w, "application/x-ndjson", `{"message":{"content":"half"},"done":false}`+"\n")
+		}))
+		defer srv.Close()
+
+		p := New("ollama", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || interrupted.ProviderID != "ollama" || interrupted.Model != "ministral-3:3b" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError", err)
+		}
+	})
+
+	t.Run("stream closes after output without terminal event", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/x-ndjson")
+			_, _ = w.Write([]byte(`{"message":{"content":"half"},"done":false}` + "\n"))
+		}))
+		defer srv.Close()
+
+		p := New("ollama", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || !errors.Is(err, io.ErrUnexpectedEOF) || interrupted.ProviderID != "ollama" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError wrapping unexpected EOF", err)
+		}
+	})
+
+	t.Run("stream closes before any output", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/x-ndjson")
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		p := New("ollama", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		empty, ok := failure.AsProviderEmptyCompletion(err)
+		if !ok || !empty.Retryable || empty.ProviderID != "ollama" {
+			t.Fatalf("err = %v, want retryable ProviderEmptyCompletionError", err)
+		}
+	})
+
+	t.Run("non-streaming complete body breaks after headers", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			abortOllamaResponseMidBody(t, w, "application/json", `{"message":{"content":"half`)
+		}))
+		defer srv.Close()
+
+		p := New("ollama", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}})
+		_, err := p.Complete(t.Context(), req)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || interrupted.ProviderID != "ollama" || interrupted.Model != "ministral-3:3b" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError", err)
+		}
+	})
 }
 
 func TestOllamaErrorsDoNotManufactureToolCalls(t *testing.T) {
@@ -458,7 +551,7 @@ func TestOllamaErrorsDoNotManufactureToolCalls(t *testing.T) {
 		{name: "write first", tools: []tools.ToolMeta{write, ask}},
 	}
 	for _, tc := range cases {
-		for _, providerError := range []string{"tool 'write' not found", "unexpected end of JSON input", "invalid character in string escape code", "model not found"} {
+		for _, providerError := range []string{"tool 'write' not found", "invalid character in string escape code", "model not found"} {
 			t.Run(tc.name+"/"+providerError, func(t *testing.T) {
 				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					var payload Request

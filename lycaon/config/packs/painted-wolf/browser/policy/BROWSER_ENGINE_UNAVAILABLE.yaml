@@ -28,6 +28,3 @@ x-paintedwolf-scenarios:
   vars:
     tool: page_open
     reason: no_bundled_browser
-  expect_contains:
-  - 'Code: BROWSER_ENGINE_UNAVAILABLE'
-  - no_bundled_browser

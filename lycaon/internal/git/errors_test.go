@@ -9,6 +9,7 @@ import (
 )
 
 func TestErrNotRepositoryDoesNotMatchProse(t *testing.T) {
+	t.Parallel()
 	if errors.Is(errors.New("git status failed: fatal: not a git repository"), git.ErrNotRepository) {
 		t.Fatal("unexpected not-a-repo for other errors")
 	}
@@ -18,6 +19,7 @@ func TestErrNotRepositoryDoesNotMatchProse(t *testing.T) {
 }
 
 func TestRepositoryOperationsReturnTypedNotRepository(t *testing.T) {
+	t.Parallel()
 	mgr := git.NewManager()
 	dir := t.TempDir()
 	checks := []struct {
@@ -30,6 +32,7 @@ func TestRepositoryOperationsReturnTypedNotRepository(t *testing.T) {
 	}
 	for _, check := range checks {
 		t.Run(check.name, func(t *testing.T) {
+			t.Parallel()
 			if err := check.run(); !errors.Is(err, git.ErrNotRepository) {
 				t.Fatalf("error = %v, want typed not-repository", err)
 			}

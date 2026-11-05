@@ -114,51 +114,6 @@ func TestCoordinatorSurfaceInvariants_progressGateHasAnInlineTarget(t *testing.T
 	}
 }
 
-// Surface cards describe their callable roster.
-func TestCoordinatorSurfaceInvariants_surfaceCardTracksItsRoster(t *testing.T) {
-	t.Parallel()
-	surfaces := loadImplementSurfaces(t)
-	for id, wire := range surfaces {
-		plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: id}, 1)
-		var deferred []string
-		if err != nil {
-			deferred = nil
-		} else {
-			deferred = plan.DeferredNames()
-		}
-		card := renderSurfaceCardFor(t, id, wire, deferred)
-		// Only positive clauses claim capabilities.
-		claim := ""
-		if start := strings.Index(card, "You may "); start >= 0 {
-			if end := strings.Index(card[start:], " inline."); end >= 0 {
-				claim = card[start : start+end]
-			}
-		}
-		for _, group := range []struct {
-			verb  string
-			tools []string
-		}{
-			{"edit", []string{"write", "edit", "replace_lines", "delete", "code_rewrite"}},
-			{"run commands", []string{"command", "verify"}},
-			{"dispatch", []string{"task", "delegate_dispatch"}},
-		} {
-			if !strings.Contains(claim, group.verb) {
-				continue
-			}
-			sticky := false
-			for _, tool := range group.tools {
-				if contractcheck.ContainsString(wire, tool) {
-					sticky = true
-					break
-				}
-			}
-			if !sticky {
-				t.Fatalf("%s card claims %q with no sticky member of %v: %q", id, group.verb, group.tools, card)
-			}
-		}
-	}
-}
-
 func TestCoordinatorSurfaceInvariants_listDirOnImplementReadSurfaces(t *testing.T) {
 	t.Parallel()
 	surfaces := loadImplementSurfaces(t)

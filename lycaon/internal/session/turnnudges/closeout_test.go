@@ -2,6 +2,7 @@ package turnnudges
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -9,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
 	setupanchor "github.com/lycaon/lycaon/internal/testsetup/anchor"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -46,5 +48,33 @@ func TestCloseoutPreservesCancellationAndIterationContext(t *testing.T) {
 	}
 	if n = s.BudgetAnswer(anchor.WorkerBudgetRaised)(t.Context(), &api.Session{ID: "parent"}, 4, 9); n.Content != "" {
 		t.Fatalf("worker budget leaked to coordinator: %+v", n)
+	}
+}
+
+// AC-COMPAT-08: both forced final turns read exactly what Closeout sends.
+func TestForcedFinalTurnKicksReadWhatCloseoutSends(t *testing.T) {
+	setupanchor.Install()
+	r := &recordedKick{}
+	s := New(turnload.NewLedger(), nil, nil)
+	s.SetPrompts(r)
+	s.Closeout(t.Context(), &api.Session{ID: "parent"}, "coordinator", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
+	reference := regexp.MustCompile(`(?:\{\{\s*|\{%\s*if\s+)(\w+)`)
+	for _, stem := range []string{"coordinator-closeout", "coordinator-turn-closeout"} {
+		raw, _, err := prompts.DefaultBundledLayout().ReadBundled("guidance/" + stem + ".md")
+		testutil.FailErr(t, "prompts.DefaultBundledLayout failed", err)
+		reads := map[string]bool{}
+		for _, match := range reference.FindAllStringSubmatch(string(raw), -1) {
+			reads[match[1]] = true
+		}
+		for name := range reads {
+			if _, sent := r.data[name]; !sent {
+				t.Errorf("%s reads %q, which Closeout does not send", stem, name)
+			}
+		}
+		for name := range r.data {
+			if !reads[name] {
+				t.Errorf("%s is sent %q and does not read it", stem, name)
+			}
+		}
 	}
 }

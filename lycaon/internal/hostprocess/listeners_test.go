@@ -57,8 +57,9 @@ func TestPortHoldersNamesRealHolders(t *testing.T) {
 		child *exec.Cmd
 		owned bool
 	}{{ownedPort, owned, true}, {foreignPort, foreign, false}} {
-		holders, err := service.PortHolders(t.Context(), "task", lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}, Port: uint16(tc.port)})
+		table, err := service.PortHolders(t.Context(), "task", lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}, Port: uint16(tc.port)})
 		testutil.FailErr(t, "port holders", err)
+		holders := table.Holders
 		if len(holders) != 1 || holders[0].Process == nil {
 			t.Fatalf("holders of %d = %+v", tc.port, holders)
 		}
@@ -99,8 +100,9 @@ func TestPortHoldersReportsTheObservedHolder(t *testing.T) {
 	}
 	service, err := New()
 	testutil.FailErr(t, "create service", err)
-	holders, err := service.PortHolders(t.Context(), "task", lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}, Port: endpoint.Port()})
+	table, err := service.PortHolders(t.Context(), "task", lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}, Port: endpoint.Port()})
 	testutil.FailErr(t, "port holders", err)
+	holders := table.Holders
 	if len(holders) != 1 || holders[0].Process == nil || holders[0].Process.PID != observed.PID || holders[0].Process.StartOrder != uint64(observed.Started) {
 		t.Fatalf("port holders of %s = %+v, want the observed holder %+v", endpoint, holders, observed)
 	}
@@ -120,14 +122,14 @@ func fixtureService(t *testing.T, table []lineage.Listener, members map[int]stru
 	service, err := New()
 	testutil.FailErr(t, "create service", err)
 	service.members = func(string) (map[int]struct{}, error) { return members, nil }
-	service.listeners = func(query lineage.ListenerQuery) ([]lineage.Listener, error) {
+	service.listeners = func(query lineage.ListenerQuery) (lineage.ListenerTable, error) {
 		var out []lineage.Listener
 		for _, l := range table {
 			if (query.Port == 0 || l.Addr.Port() == query.Port) && (len(query.Protocols) == 0 || slices.Contains(query.Protocols, l.Protocol)) {
 				out = append(out, l)
 			}
 		}
-		return out, nil
+		return lineage.ListenerTable{Listeners: out, Complete: true}, nil
 	}
 	return service
 }
@@ -149,10 +151,10 @@ func TestPortHoldersKeepsUnreadableHoldersAsUnknown(t *testing.T) {
 		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("0.0.0.0:3000"), UID: 501, Holders: []lineage.ProcessIdentity{current}},
 		{Protocol: lineage.ProtocolTCP, Addr: netip.MustParseAddrPort("127.0.0.1:6000"), UID: 501, Holders: []lineage.ProcessIdentity{reused}},
 	}, map[int]struct{}{self: {}})
-	holders, err := service.PortHolders(t.Context(), "task", lineage.ListenerQuery{})
+	table, err := service.PortHolders(t.Context(), "task", lineage.ListenerQuery{})
 	testutil.FailErr(t, "port holders", err)
 	var got []string
-	for _, h := range holders {
+	for _, h := range table.Holders {
 		pid := 0
 		if h.Process != nil {
 			pid = h.Process.PID
@@ -165,6 +167,25 @@ func TestPortHoldersKeepsUnreadableHoldersAsUnknown(t *testing.T) {
 	want := []string{"tcp 0.0.0.0:3000 " + strconv.Itoa(self), "udp [::]:5353 " + strconv.Itoa(self), "tcp 0.0.0.0:5432 0", "tcp 127.0.0.1:5432 0", "tcp 127.0.0.1:6000 0"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("holders = %q, want %q", got, want)
+	}
+}
+
+// A withheld table reaches both views as a fact, including when it is empty.
+func TestWithheldListenerTableReachesHoldersAndListening(t *testing.T) {
+	service, err := New()
+	testutil.FailErr(t, "create service", err)
+	service.members = func(string) (map[int]struct{}, error) { return nil, nil }
+	for _, complete := range []bool{true, false} {
+		service.listeners = func(lineage.ListenerQuery) (lineage.ListenerTable, error) {
+			return lineage.ListenerTable{Complete: complete}, nil
+		}
+		table, err := service.PortHolders(t.Context(), "task", lineage.ListenerQuery{Port: 8080})
+		testutil.FailErr(t, "port holders", err)
+		page, err := service.Listening(t.Context(), "task", lineage.ListenerQuery{Port: 8080}, 0, 0, 10)
+		testutil.FailErr(t, "listening", err)
+		if len(table.Holders) != 0 || table.Complete != complete || page.TableComplete != complete {
+			t.Fatalf("complete=%v: table = %+v, page = %+v", complete, table, page)
+		}
 	}
 }
 

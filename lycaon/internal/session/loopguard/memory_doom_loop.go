@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -24,8 +25,11 @@ type doomLoopState struct {
 	responseID     string
 	beforeResponse responseCounts
 	// seenEffectSeq is the session effect sequence at this bucket's last attempt.
-	seenEffectSeq  int64
-	readDocumentID string
+	seenEffectSeq    int64
+	readDocumentID   string
+	pendingProgress  bool
+	seenProgressSeq  int64
+	progressRecovery progressRecovery
 }
 
 // sessionEffects tracks consecutive effectful calls. Read-only calls preserve the count.
@@ -33,13 +37,15 @@ type sessionEffects struct {
 	// seq counts effectful invocations in this session.
 	seq int64
 	// key is the doom-loop key of the most recent effectful invocation.
-	key string
+	key         string
+	progressSeq int64
 }
 
 // MemoryDoomLoopGuard keeps bounded per-session counters in memory.
 type MemoryDoomLoopGuard struct {
 	mu              sync.RWMutex
 	reviewIntent    func(context.Context, string) (string, error)
+	progressState   func(context.Context, string) (progress.PrerequisiteState, error)
 	intents         scopedstore.LRU[string]
 	responseIntents scopedstore.LRU[string]
 	// pageTarget groups live handles by target; unresolved handles retain their ids.
@@ -123,6 +129,10 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 	if err != nil {
 		return false, 0, "", err
 	}
+	resolvedProgressCode, err := g.resolvedProgressPrerequisite(ctx, sessionID, key)
+	if err != nil {
+		return false, 0, "", err
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if intent, known := g.intents.Load(sessionID); known {
@@ -131,7 +141,9 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 	sess, _ := g.states.Load(sessionID)
 	st := sess[key]
 	if st != nil {
-		resolved := st.lastCode == "TOOL_NOT_OFFERED" && offered
+		resolved := st.lastCode == "TOOL_NOT_OFFERED" && offered ||
+			strings.EqualFold(strings.TrimSpace(tool), "update_progress") && st.progressRecovery.matches(args) ||
+			resolvedProgressCode != "" && st.lastCode == resolvedProgressCode
 		if st.lastCode == "EDITOR_DOCUMENT_READ_REQUIRED" && st.readDocumentID != "" {
 			basis, known := reads.Basis(st.readDocumentID)
 			resolved = known && basis.Revision > 0 && (basis.Whole || len(basis.Spans) > 0)
@@ -157,13 +169,16 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 	return counts.count < DoomLoopMaxAttempts, counts.count, "", nil
 }
 
-// Another mutation invalidates this invocation's repetition count.
+// Pending progress retains its no-op history across unrelated mutations.
 func (g *MemoryDoomLoopGuard) supersededLocked(sessionID, key string, st *doomLoopState) bool {
 	effects, _ := g.effects.Load(sessionID)
+	if st.pendingProgress {
+		return effects.progressSeq > st.seenProgressSeq && effects.key != key
+	}
 	return effects.seq > st.seenEffectSeq && effects.key != key
 }
 
-// RecordAttempt updates invocation and rejection counts; mutated marks a committed effect.
+// RecordAttempt tracks responses; mutated marks an effect that renews repetition context.
 func (g *MemoryDoomLoopGuard) RecordAttempt(
 	ctx context.Context,
 	sessionID, responseID, tool string,
@@ -206,18 +221,24 @@ func (g *MemoryDoomLoopGuard) RecordAttempt(
 	}
 	st := sess[key]
 	if st == nil {
-		st = &doomLoopState{}
+		content, _ := args["content"].(string)
+		st = &doomLoopState{pendingProgress: strings.EqualFold(strings.TrimSpace(tool), "update_progress") && !progress.AllTerminal(content)}
 		sess[key] = st
 	}
 	g.states.Store(sessionID, sess)
 	g.recordCodeRejectLocked(sessionID, responseID, tool, rejectCode)
 	if g.supersededLocked(sessionID, key, st) {
-		*st = doomLoopState{}
+		*st = doomLoopState{pendingProgress: st.pendingProgress}
 	}
 	effects, _ := g.effects.Load(sessionID)
 	st.seenEffectSeq = effects.seq
+	st.seenProgressSeq = effects.progressSeq
 	if mutated {
 		effects.seq++
+		if strings.EqualFold(strings.TrimSpace(tool), "update_progress") {
+			effects.progressSeq++
+			st.seenProgressSeq = effects.progressSeq
+		}
 		effects.key = key
 		st.seenEffectSeq = effects.seq
 		g.effects.Store(sessionID, effects)
@@ -226,6 +247,10 @@ func (g *MemoryDoomLoopGuard) RecordAttempt(
 	st.recordResponse(responseID, rejectCode)
 	if ignoredSuccess {
 		return nil
+	}
+	st.progressRecovery = progressRecovery{}
+	if strings.EqualFold(strings.TrimSpace(tool), "update_progress") {
+		st.progressRecovery = progressRecoveryFromFailure(failure)
 	}
 	st.readDocumentID = ""
 	if rejectCode == "EDITOR_DOCUMENT_READ_REQUIRED" && failure != nil {

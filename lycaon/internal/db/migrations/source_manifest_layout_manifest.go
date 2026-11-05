@@ -1,7 +1,9 @@
 package migrations
 
 import (
+	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"math"
 )
@@ -11,14 +13,52 @@ var manifestLayoutSource = Baseline{Revision: 4, Shape: "c0280798481d97c01e3ddf3
 
 // SourceManifestLayout moves retained source snapshots onto per-root,
 // content-defined manifests and drops the unreferenced bucket chunks.
-func SourceManifestLayout(target Baseline) Step {
-	return Step{
-		ID: "source-manifest-layout", Source: append(append([]byte{}, manifestLayoutImplementation...), manifestLayoutSchema...),
-		Checksum: "3af0f1899c7ec5e85633c260f16d75af8ed506f0cd888e60fd096dcfc54e91d3",
-		From:     manifestLayoutSource, To: target, Apply: migrateManifestLayout, Validate: validateManifestLayout,
+func SourceManifestLayout() Part {
+	return Part{
+		Source: bytes.Join([][]byte{manifestLayoutImplementation, manifestLayoutSchema, manifestLayoutConverterImplementation, manifestLayoutMemoImplementation}, nil),
+		Apply:  migrateManifestLayout, Validate: validateManifestLayout,
 		Writes:       manifestLayoutWrites,
 		RetainedCopy: retainedManifestCopy(),
 	}
+}
+
+func retainedManifestCopy() *RetainedCopy {
+	return &RetainedCopy{
+		SourceShapes: []string{SourceNamespace().From.Shape, sourceNamespaceTarget.Shape, manifestLayoutSource.Shape},
+		// Independent cardinalities: source chunk metadata states how many entries
+		// must survive, rather than trusting the copying predicate to validate itself.
+		ExpectedRows: map[string]string{
+			"source_manifest_chunks":  `SELECT COUNT(DISTINCT chunk_id) FROM original.source_snapshot_chunks NOT INDEXED`,
+			"source_manifest_entries": `SELECT COALESCE(SUM(entry_count),0) FROM original.source_manifest_chunks NOT INDEXED WHERE id IN (SELECT chunk_id FROM original.source_snapshot_chunks NOT INDEXED)`,
+			"source_manifest_staging": `SELECT 0`,
+		},
+		Sources: map[string]string{
+			"source_manifest_chunks": `FROM (SELECT DISTINCT chunk_id FROM original.source_snapshot_chunks NOT INDEXED) c
+CROSS JOIN original.source_manifest_chunks e ON e.id = c.chunk_id`,
+			"source_manifest_entries": `FROM (SELECT DISTINCT chunk_id FROM original.source_snapshot_chunks NOT INDEXED) c
+CROSS JOIN original.source_manifest_entries e ON e.chunk_id = c.chunk_id`,
+			"source_manifest_staging": `FROM original.source_manifest_staging e WHERE 0`,
+		},
+		// Reclamation checks surviving references independently. Reading every
+		// discarded entry just to discover candidates would defeat the rebuild.
+		After: []string{`INSERT OR IGNORE INTO source_blob_reclaim_queue SELECT sha256 FROM source_blob_objects`},
+	}
+}
+
+// validateManifestLayout requires every retained snapshot to list exactly
+// the files it counted, through one manifest per root.
+func validateManifestLayout(ctx context.Context, tx *sql.Tx) error {
+	var mismatched int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM source_snapshots s
+WHERE s.file_count != COALESCE((
+    SELECT SUM(m.entry_count) FROM source_snapshot_roots r JOIN source_manifests m ON m.id = r.manifest_id
+    WHERE r.snapshot_id = s.id), 0)`).Scan(&mismatched); err != nil {
+		return err
+	}
+	if mismatched != 0 {
+		return fmt.Errorf("%d retained snapshots lost entries in the manifest layout", mismatched)
+	}
+	return nil
 }
 
 // Budget retained rows, their indexes and sort copies using their actual

@@ -66,7 +66,9 @@ func TestProcessSignalReferencesStayWithTheOwningSessionAndStopAtReview(t *testi
 	disownLine, err := lineage.Open("command:call_2", "worker")
 	testutil.FailErr(t, "open disown lineage", err)
 	t.Cleanup(func() { _ = disownLine.Close() })
-	disowned := exec.Command("/bin/sh", "-c", "read _; exec 3>&-; echo dropped; read _")
+	// The shell announces itself before it is listed: where /bin/sh re-executes
+	// the selected shell, a reference minted earlier names the replaced image.
+	disowned := exec.Command("/bin/sh", "-c", "echo ready; read _; exec 3>&-; echo dropped; read _")
 	disowned.ExtraFiles = []*os.File{disownLine.ChildFile()}
 	disownIn, err := disowned.StdinPipe()
 	testutil.FailErr(t, "disowned stdin", err)
@@ -75,6 +77,12 @@ func TestProcessSignalReferencesStayWithTheOwningSessionAndStopAtReview(t *testi
 	testutil.FailErr(t, "start disowned child", disowned.Start())
 	disownLine.Started()
 	t.Cleanup(func() { _ = disownIn.Close(); _ = disowned.Process.Kill(); _ = disowned.Wait() })
+	disownLines := bufio.NewReader(disownOut)
+	readyText, err := disownLines.ReadString('\n')
+	testutil.FailErr(t, "await shell start", err)
+	if readyText != "ready\n" {
+		t.Fatalf("unexpected child output %q", readyText)
+	}
 
 	denied := errors.New("review denied")
 	allow := false
@@ -134,7 +142,7 @@ func TestProcessSignalReferencesStayWithTheOwningSessionAndStopAtReview(t *testi
 	tc.Identity.SessionID = "worker"
 	_, err = disownIn.Write([]byte("\n"))
 	testutil.FailErr(t, "release lineage fd in child", err)
-	lineText, err := bufio.NewReader(disownOut).ReadString('\n')
+	lineText, err := disownLines.ReadString('\n')
 	testutil.FailErr(t, "await fd release", err)
 	if lineText != "dropped\n" {
 		t.Fatalf("unexpected child output %q", lineText)
@@ -219,8 +227,14 @@ func TestProcessListFindsTheHolderOfAListeningPort(t *testing.T) {
 		testutil.FailErr(t, "list listening port", err)
 		var listed listenerListing
 		testutil.FailErr(t, "decode listing", json.Unmarshal([]byte(raw), &listed))
-		if len(listed.Processes) != 1 || listed.UnattributedListeners == nil || len(listed.UnattributedListeners) != 0 || !listed.SnapshotComplete {
+		if len(listed.Processes) != 1 || listed.UnattributedListeners == nil || len(listed.UnattributedListeners) != 0 {
 			t.Fatalf("listing for %d: %s", c.port, raw)
+		}
+		// Whether this host withholds sockets decides the listing's completeness.
+		table, err := lineage.Listeners(lineage.ListenerQuery{Protocols: []lineage.Protocol{lineage.ProtocolTCP}, Port: uint16(c.port)})
+		testutil.FailErr(t, "read listener table", err)
+		if listed.SnapshotComplete != table.Complete {
+			t.Fatalf("listing for %d: snapshot_complete=%v, table complete=%v", c.port, listed.SnapshotComplete, table.Complete)
 		}
 		row := listed.Processes[0]
 		want := []hostprocess.ListeningSocket{{Protocol: lineage.ProtocolTCP, Address: netip.MustParseAddr("127.0.0.1"), Port: c.port, UID: uint32(os.Getuid())}}

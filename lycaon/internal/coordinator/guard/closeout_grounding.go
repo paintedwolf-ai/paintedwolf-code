@@ -23,61 +23,51 @@ type CloseoutGroundingVerdict struct {
 	Offenders            []string
 	HintData             map[string]any
 	Grounding            *api.CitationGrounding
+	Resolved             guidance.DraftCitationResolution
 }
 
-// EvaluateCoordinatorCloseoutGrounding validates typed closeout citations before commit.
+// EvaluateCoordinatorCloseoutGrounding validates every supplied reference, then
+// decides whether citations were required. A ledger failure is an error, never an
+// empty ledger. Grounding is non-nil for any draft with an answer.
 func EvaluateCoordinatorCloseoutGrounding(
 	ctx context.Context,
 	ledger guidance.CloseoutEvidenceReader,
 	sess *api.Session,
 	history []api.Message,
 	surfaceID string,
-	report guidance.CoordinatorCompletionReport,
-	turnTools []string,
+	draft guidance.CloseoutDraft,
 	roots evidence.CitationRoots,
 ) (CloseoutGroundingVerdict, error) {
-	if sess == nil || sess.IsWorkerChild() {
+	if sess == nil || sess.IsWorkerChild() || !surface.SurfaceDeliversReport(surfaceID) || !draft.HasAnswer() {
 		return CloseoutGroundingVerdict{}, nil
 	}
-	if !surface.SurfaceDeliversReport(surfaceID) {
-		return CloseoutGroundingVerdict{}, nil
-	}
-	if strings.TrimSpace(roots.ProjectDir) == "" && len(roots.Roots) == 0 {
-		return CloseoutGroundingVerdict{}, nil
-	}
-	report.Normalize()
-	if strings.TrimSpace(report.Synthesis) == "" {
-		return CloseoutGroundingVerdict{}, nil
-	}
-	if CoordinatorEvidenceOptional(history, turnTools) {
-		return CloseoutGroundingVerdict{
-			Grounding: &api.CitationGrounding{Traced: true},
-		}, nil
-	}
-	if ledger == nil {
-		return CloseoutGroundingVerdict{}, nil
-	}
-
 	ev, err := guidance.UnionCloseoutEvidence(ctx, ledger, sess.ID, history)
 	if err != nil {
 		return CloseoutGroundingVerdict{}, err
 	}
-	if guidance.TypedCitationChannelsEmpty(len(report.CitedEvidence), len(report.CitedURLs)) &&
-		guidance.CloseoutLedgerHasCitableEvidence(ev) {
-		// Recorded sources permit host attachment when citations are omitted.
-		code := guidance.CloseoutCitationsRequiredCode(surfaceID)
+	resolved := guidance.ResolveDraftCitations(roots, surfaceID, draft, ev, guidance.SessionPresentableArtifactIDs(history))
+	eval := guidance.EvaluateDraftCitations(draft, resolved)
+	report := draft.Report()
+	if eval.Code == "" && draft.CitationCount() == 0 {
+		if !CoordinatorEvidenceOptional(history, ev) && guidance.CloseoutLedgerHasCitableEvidence(ev) {
+			// Recorded sources permit host attachment when citations are omitted.
+			return CloseoutGroundingVerdict{
+				Code:              guidance.CloseoutCitationsRequiredCode(surfaceID),
+				CitationsRequired: true,
+				HintData:          guidance.CloseoutRepairHintData(roots, draft, resolved, ev, nil),
+				Resolved:          resolved,
+			}, nil
+		}
 		return CloseoutGroundingVerdict{
-			Code:              code,
-			CitationsRequired: true,
-			HintData:          guidance.CloseoutRepairHintData(roots, surfaceID, report, ev, nil),
+			Grounding: guidance.EvidenceOptionalGrounding(report),
+			HintData:  guidance.CloseoutRepairHintData(roots, draft, resolved, ev, nil),
+			Resolved:  resolved,
 		}, nil
 	}
-	eval := guidance.EvaluateCloseoutCitations(roots, surfaceID, report, ev)
 	grounding := guidance.BuildCloseoutCitationGrounding(roots, surfaceID, report, ev, eval)
 	verdict := closeoutVerdictFromEval(eval, ev.Ledger, grounding)
-	if verdict.Code != "" {
-		verdict.HintData = guidance.CloseoutRepairHintData(roots, surfaceID, report, ev, verdict.Offenders)
-	}
+	verdict.Resolved = resolved
+	verdict.HintData = guidance.CloseoutRepairHintData(roots, draft, resolved, ev, verdict.Offenders)
 	return verdict, nil
 }
 
@@ -123,7 +113,7 @@ func FormatCloseoutGroundingReject(
 	var reject string
 	var err error
 	if decision.Copy != nil {
-		reject, err = guidance.RenderPolicyCopy(ctx, decision.Code, string(oar.EffectBlock), decision.Copy)
+		reject, err = guidance.RenderPolicyCopy(ctx, decision.Code, string(oar.EffectBlock), decision.Copy, decision.Data)
 	} else {
 		if rejectFmt == nil {
 			return "", fmt.Errorf("reject formatter required")

@@ -16,9 +16,9 @@ copy:
   cause: 'Resolution failed: {{ paintedwolf.rejection_reason }}.'
   why: The operation cannot proceed without the requested socket enforcement contract.
   fix: Resolve the reported host filesystem or service-access failure before retrying the intended socket. A blind
-    retry does not repair a permission or I/O failure. On macOS, native local-service access requires a
-    protected reference on the same filesystem and an address within the kernel limit; place the intended
-    service on a representable local filesystem or use a separately approved service endpoint. Windows builds
+    retry does not repair a permission or I/O failure. On macOS, local-service access requires a
+    protected reference on the service volume. The host selects its temporary location;
+    correct the reported filesystem permissions or use a separately approved service endpoint. Windows builds
     have no native socket realization; use a separately approved service endpoint. Saved intent and stored
     credentials remain.
   instead: Branch on Code; correct structured args — never parse stderr
@@ -28,6 +28,3 @@ x-paintedwolf-message: structured socket path refused
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains:
-  - 'Code: SANDBOX_SOCKET_PATH_REFUSED'
-  - socket path

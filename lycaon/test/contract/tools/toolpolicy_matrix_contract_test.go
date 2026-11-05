@@ -50,7 +50,7 @@ var frozenPostureToolMatrix = []postureToolExpectation{
 	// Profile grant; the turn surface gates invoke.
 	{
 		posture: api.SessionPostureSpec,
-		include: []string{"edit", "workflow_compose", "command"},
+		include: []string{"restore_version", "workflow_compose", "command"},
 		exclude: []string{"delegate_dispatch", "read", "write", "grep", "git_diff"},
 	},
 	{
@@ -60,7 +60,7 @@ var frozenPostureToolMatrix = []postureToolExpectation{
 	{
 		posture: api.SessionPostureBuild,
 		withRun: true,
-		include: []string{"edit", "task", "state_start", "workflow_advance", "workflow_transition", "command"},
+		include: []string{"restore_version", "task", "state_start", "workflow_advance", "workflow_transition", "command"},
 	},
 }
 

@@ -3,6 +3,7 @@ package bgprocess_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"runtime"
 	"strconv"
 	"strings"
@@ -95,7 +96,7 @@ func TestBackgroundCommandLineUsesRecordedStages(t *testing.T) {
 	if command != "printf hello | cat" {
 		t.Fatalf("command = %q want %q", command, "printf hello | cat")
 	}
-	stopped, err := reg.Lifecycle.Stop("sess-1", handle)
+	stopped, err := reg.Lifecycle.Stop("sess-1", handle, bgprocess.TerminationStoppedByAgent)
 	testutil.FailErr(t, "stop background", err)
 	if !stopped.StopRequested || (stopped.Running && stopped.ExitCode != nil) {
 		t.Fatalf("stop request misstates terminal state: %+v", stopped)
@@ -175,9 +176,7 @@ func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testi
 		if sawExit {
 			select {
 			case event := <-events:
-				if strings.Contains(event.Text, backgroundCaptureSecret) {
-					t.Fatalf("live event exposed secret: %+v", event)
-				}
+				exposure.Absent(t, event.Text, backgroundCaptureSecret)
 				if event.Reset {
 					live = event.Text
 				} else {
@@ -190,9 +189,7 @@ func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testi
 		}
 		select {
 		case event := <-events:
-			if strings.Contains(event.Text, backgroundCaptureSecret) {
-				t.Fatalf("live event exposed secret: %+v", event)
-			}
+			exposure.Absent(t, event.Text, backgroundCaptureSecret)
 			if event.Reset {
 				live = event.Text
 			} else {
@@ -252,12 +249,15 @@ func TestBackgroundStopKillsProcess(t *testing.T) {
 		Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
 	}, runner)
 	testutil.FailErr(t, "start background", err)
-	_, err = reg.Lifecycle.Stop("sess-1", handle)
+	_, err = reg.Lifecycle.Stop("sess-1", handle, bgprocess.TerminationStoppedByAgent)
 	testutil.FailErr(t, "stop background", err)
 	for t.Context().Err() == nil {
 		out, err := reg.Output.ReadOutput(context.Background(), "sess-1", handle)
 		testutil.FailErr(t, "output after stop", err)
 		if !out.Running {
+			if out.TerminationReason != api.BackgroundProcessTerminationReason(bgprocess.TerminationStoppedByAgent) {
+				t.Fatalf("output termination reason = %q, want %q", out.TerminationReason, bgprocess.TerminationStoppedByAgent)
+			}
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -276,7 +276,7 @@ func TestBackgroundSessionEndKillsAll(t *testing.T) {
 		Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
 	}, runner)
 	testutil.FailErr(t, "start background", err)
-	testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1"))
+	testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1", bgprocess.TerminationChatDeleted))
 	list := reg.Output.List(context.Background(), "sess-1")
 	if len(list) != 0 {
 		t.Fatal("expected session end to remove background processes")
@@ -412,7 +412,7 @@ func TestCommandAdmissionRejectsLiveDuplicateBeforeConcurrency(t *testing.T) {
 	}
 	reg := newTestRegistry(t, bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1"))
+		testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1", bgprocess.TerminationChatDeleted))
 	})
 	runner := hostcmd.NewRunner()
 	req := hostcmd.Request{Launch: exec.HostLaunch("bgprocess test"),
@@ -438,7 +438,7 @@ func TestCommandAdmissionRequiresExplicitAwaitedConcurrency(t *testing.T) {
 	}
 	reg := newTestRegistry(t, bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1"))
+		testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1", bgprocess.TerminationChatDeleted))
 	})
 	runner := hostcmd.NewRunner()
 	start := func(seconds string, allow bool) (string, error) {
@@ -467,7 +467,7 @@ func TestAwaitedConcurrencyHasIndependentHardCap(t *testing.T) {
 	}
 	reg := newTestRegistry(t, bgprocess.Config{MaxAwaited: 2}, bgprocess.Hooks{})
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1"))
+		testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1", bgprocess.TerminationChatDeleted))
 	})
 	runner := hostcmd.NewRunner()
 	projectDir := t.TempDir()

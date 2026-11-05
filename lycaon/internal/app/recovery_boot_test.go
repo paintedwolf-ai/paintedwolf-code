@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testbackup"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -390,4 +391,29 @@ func TestRecoverySnapshotOnHealthyServerUsesConfiguredStorePath(t *testing.T) {
 		t.Fatalf("restore wrote the wrong store filename: %v", err)
 	}
 
+}
+
+// Boot runs the registered entry, so a running row from an earlier process does
+// not wait for the next external command to settle.
+func TestBootSettlesCommandWindowsAnEarlierProcessLeftRunning(t *testing.T) {
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	t.Setenv("LYCAON_API_TOKEN", "test-token")
+	t.Setenv("LYCAON_TEST", "1")
+	cfg := testBuildConfig(t, configlayout.FindModuleRoot())
+	seed, err := db.Open(cfg.DBPath)
+	testutil.FailErr(t, "open store", err)
+	testdbseed.InsertProject(t, seed, testdbseed.DefaultProjectID)
+	_, err = seed.ExecContext(t.Context(), `INSERT INTO source_command_windows (id, project_id, session_id, tool_name, command_line, state, ordinal, started_ts)
+		VALUES ('left-running', ?, 's1', 'command', 'npm run dev', 'running', 1, '2026-01-01T00:00:00Z')`, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "seed running window", err)
+	testutil.FailErr(t, "close store", seed.Close())
+
+	app, err := Build(t.Context(), cfg)
+	testutil.FailErr(t, "Build failed", err)
+	t.Cleanup(func() { _ = app.Close() })
+	var running int
+	testutil.FailErr(t, "count running windows", app.DB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM source_command_windows WHERE state = 'running'`).Scan(&running))
+	if running != 0 {
+		t.Fatalf("running windows after boot = %d, want 0", running)
+	}
 }

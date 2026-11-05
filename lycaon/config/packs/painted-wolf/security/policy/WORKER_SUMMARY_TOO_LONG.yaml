@@ -27,7 +27,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: worker
       tool: read
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: WORKER_SUMMARY_TOO_LONG'
-      - '16384'

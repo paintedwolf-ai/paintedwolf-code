@@ -30,12 +30,16 @@ type binaryRecordReader struct{ r io.Reader }
 
 func (b binaryRecordReader) Read(p []byte) (int, error) {
 	n, err := b.r.Read(p)
-	for i := range p[:n] {
+	nulsToNewlines(p[:n])
+	return n, err
+}
+
+func nulsToNewlines(p []byte) {
+	for i := range p {
 		if p[i] == 0 {
 			p[i] = '\n'
 		}
 	}
-	return n, err
 }
 
 func (n *nullTrackingReader) Read(p []byte) (int, error) {
@@ -79,6 +83,14 @@ func (r *grepRun) searchNoMatch(label string, names bool) error {
 // A selected line with invalid UTF-8 is binary from that
 // line on, as GNU grep does in a UTF-8 locale.
 func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
+	err := r.selectRecords(label, reader, maxBytes, totalBytes, firstNull, pin, names)
+	if drained := r.inv.out.drain(); err == nil {
+		err = drained
+	}
+	return err
+}
+
+func (r *grepRun) selectRecords(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
 	inv := r.inv
 	if r.json != nil {
 		content, err := inv.readAll(reader)
@@ -226,6 +238,10 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 		}
 		return b.String()
 	}
+	printed := int64(0)
+	if r.numbers {
+		printed = int64(line.Number)
+	}
 	if !r.only {
 		if r.replace != nil && line.Kind == textsearch.SelectedLine && !r.scan.Invert {
 			replaced, err := r.replaceAll(record)
@@ -233,9 +249,9 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 				return false, err
 			}
 			defer replaced.close()
-			return true, r.writeRecord(prefix(line.Start), replaced.bytes, nil, 0)
+			return true, r.writeRecord(prefix(line.Start), replaced.bytes, nil, 0, 0)
 		}
-		return true, r.writeRecord(prefix(line.Start), record, pin, line.Start)
+		return true, r.writeRecord(prefix(line.Start), record, pin, line.Start, printed)
 	}
 	if r.scan.Invert {
 		return false, nil
@@ -249,19 +265,20 @@ func (r *grepRun) printLine(label string, names bool, line textsearch.Line, reco
 			if err := replacement.replacement(*r.replace, record, groups); err != nil {
 				return err
 			}
-			return r.writeRecord(prefix(line.Start+groups[0]), replacement.bytes, nil, 0)
+			return r.writeRecord(prefix(line.Start+groups[0]), replacement.bytes, nil, 0, 0)
 		}
-		return r.writeRecord(prefix(line.Start+groups[0]), record[groups[0]:groups[1]], pin, line.Start+groups[0])
+		return r.writeRecord(prefix(line.Start+groups[0]), record[groups[0]:groups[1]], pin, line.Start+groups[0], printed)
 	})
 	return wrote, err
 }
 
 // writeRecord prints one output record; text copied from a pinned capture
-// at offset is mapped back to it.
-func (r *grepRun) writeRecord(prefix string, text []byte, pin *toolcontract.SourcePin, offset int) error {
+// at offset is mapped back to it, with the line number printed beside it.
+func (r *grepRun) writeRecord(prefix string, text []byte, pin *toolcontract.SourcePin, offset int, printed int64) error {
 	if err := r.inv.out.text(prefix); err != nil {
 		return err
 	}
+	r.inv.out.printedLine = printed
 	if err := r.inv.out.literal(pin, text, int64(offset)); err != nil {
 		return err
 	}

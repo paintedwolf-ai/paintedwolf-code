@@ -16,6 +16,7 @@ const (
 	AnchorToolRejected             = "tool.rejected"
 	AnchorCoordinatorPostTurn      = "coordinator.post_turn"
 	AnchorCoordinatorCloseoutCheck = "coordinator.closeout_check"
+	AnchorCoordinatorMidTurnNote   = "coordinator.mid_turn_note"
 	AnchorWorkerFinalize           = "worker.finalize"
 	AnchorWorkerReportCheck        = "worker.report_check"
 	AnchorToolPost                 = "tool.post_invoke"

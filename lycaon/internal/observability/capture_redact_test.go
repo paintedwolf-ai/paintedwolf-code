@@ -2,6 +2,7 @@ package observability
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,9 +42,7 @@ func TestRedactMessagesForCaptureStripsEnvAssignments(t *testing.T) {
 	out := RedactMessagesForCapture(msgs)
 
 	for _, secret := range secretValues {
-		if strings.Contains(out[0].Content, secret) {
-			t.Fatalf("capture kept a credential value: %q still present", secret)
-		}
+		exposure.Absent(t, out[0].Content, secret)
 	}
 	// Redaction preserves surrounding diagnostic context.
 	if !strings.Contains(out[0].Content, "MARGINALIA_API_KEY") {
@@ -59,9 +58,7 @@ func TestCatalogCaptureRedactorDoesNotBypassFieldFloor(t *testing.T) {
 	got := redactCaptureText(`{"secret_value":"`+credential+`","name":"useful context"}`, func(s string) string {
 		return s
 	})
-	if strings.Contains(got, credential) {
-		t.Fatalf("catalog redactor bypassed the field floor: %s", got)
-	}
+	exposure.Absent(t, got, credential)
 	if !strings.Contains(got, "useful context") {
 		t.Fatalf("field floor removed non-secret context: %s", got)
 	}
@@ -125,12 +122,8 @@ func TestRedactMessagesForCaptureScrubsNestedFields(t *testing.T) {
 
 	out := RedactMessagesForCapture(msgs)
 
-	if strings.Contains(out[0].ContentParts[0].Content, secretValues[0]) {
-		t.Fatal("content parts were not scrubbed")
-	}
-	if strings.Contains(out[0].ToolResult.Content, secretValues[0]) {
-		t.Fatal("tool result was not scrubbed")
-	}
+	exposure.Absent(t, out[0].ContentParts[0].Content, secretValues[0])
+	exposure.Absent(t, out[0].ToolResult.Content, secretValues[0])
 	args := out[0].ToolCalls[0].Args
 	if args["api_key"] == secretValues[0] {
 		t.Fatal("tool-call args were not scrubbed")
@@ -147,9 +140,7 @@ func TestRedactMessagesForCaptureScrubsNestedFields(t *testing.T) {
 	}
 	raw, err := json.Marshal(out[0])
 	testutil.FailErr(t, "marshal capture projection", err)
-	if strings.Contains(string(raw), secretValues[0]) {
-		t.Fatalf("structured capture retained a credential: %s", raw)
-	}
+	exposure.Absent(t, string(raw), secretValues[0])
 }
 
 // TestLogLLMRequestWritesNoCredentials covers the capture-file boundary.
@@ -171,9 +162,7 @@ func TestLogLLMRequestWritesNoCredentials(t *testing.T) {
 	testutil.FailErr(t, "read capture", err)
 
 	for _, secret := range secretValues {
-		if strings.Contains(string(data), secret) {
-			t.Fatalf("capture file contains credential %q", secret)
-		}
+		exposure.Absent(t, string(data), secret)
 	}
 
 	var entry llmCaptureEntry
@@ -219,9 +208,7 @@ func TestLogLLMRequestRedactsToolDefinitions(t *testing.T) {
 	data, err := os.ReadFile(logPath)
 	testutil.FailErr(t, "read capture", err)
 	for _, secret := range []string{describedToken, schemaToken} {
-		if strings.Contains(string(data), secret) {
-			t.Fatalf("capture file contains tool-definition credential %q: %s", secret, data)
-		}
+		exposure.Absent(t, string(data), secret)
 	}
 
 	var entry llmCaptureEntry
@@ -258,9 +245,7 @@ func TestSessionManifestWritesNoCredentials(t *testing.T) {
 
 	data, err := os.ReadFile(filepath.Join(dir, debugpaths.Name(debugpaths.KindSessions)))
 	testutil.FailErr(t, "read manifest", err)
-	if strings.Contains(string(data), secretValues[0]) {
-		t.Fatalf("session manifest contains a credential: %s", data)
-	}
+	exposure.Absent(t, string(data), secretValues[0])
 }
 
 // Name-anchored redaction leaves unshaped values in prose unchanged.

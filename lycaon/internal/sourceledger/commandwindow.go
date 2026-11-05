@@ -2,7 +2,6 @@ package sourceledger
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,14 +11,19 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/sourceblob"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// commandWindowSettle allows trailing watcher events.
-const commandWindowSettle = 2 * time.Second
+const (
+	// commandWindowSettle allows trailing watcher events.
+	commandWindowSettle = 2 * time.Second
+	// A window's start waits this long for events already on their way.
+	windowStartQuietGrace = 150 * time.Millisecond
+	windowStartQuietWait  = 750 * time.Millisecond
+)
 
 // CommandWindowInput opens one host-run command's observation window.
 type CommandWindowInput struct {
@@ -57,6 +61,7 @@ type OpenCommandWindow struct {
 	store  *Commands
 	window *openCommandWindow
 	closed sync.Once
+	opener sync.Once
 }
 
 type openCommandWindow struct {
@@ -67,19 +72,34 @@ type openCommandWindow struct {
 	turn       int
 	toolCallID string
 	toolName   string
-	startEpoch string
-	// startSnapshotID anchors subsequent changes.
+	// startSnapshotID anchors subsequent changes. It moves when the window
+	// re-anchors and when a pass settles drift the window did not claim.
 	startSnapshotID string
-	// settled closes once the row is final.
+	// settled closes once settlement has finished, successfully or not.
 	settled chan struct{}
 
 	mu            sync.Mutex
 	startChecked  bool
 	startMissing  bool
 	admissionMode string
+
+	// The fields below are guarded by Commands.windowsMu.
+
 	// Exited windows attribute trailing changes but yield to running commands.
-	closing       bool
-	passesAtClose uint64
+	closing bool
+	// active is whether the window may claim drift: a hold is live, or the last
+	// one ended and its settle grace has not finished.
+	active bool
+	holds  int
+	// anchoring is non-nil while the window re-anchors.
+	anchoring *windowAnchor
+	// quiet is non-nil during a settle grace, and closes when a hold or the
+	// close ends that grace early.
+	quiet chan struct{}
+	// incomplete means a final pass failed. The window claims nothing, and the
+	// next completed pass records the same drift as outside changes.
+	incomplete bool
+	finalized  bool
 }
 
 // entryKey addresses one file across snapshot entries and branch heads.
@@ -94,6 +114,7 @@ func (w *openCommandWindow) startSnapshot(ctx context.Context, snapshots *source
 	defer w.mu.Unlock()
 	if !w.startChecked {
 		w.startChecked = true
+		w.startMissing = false
 		if _, err := snapshots.Get(ctx, w.startSnapshotID); err != nil {
 			w.startMissing = true
 			slog.WarnContext(ctx, "command window start snapshot unavailable; untracked files stay out of history",
@@ -103,8 +124,24 @@ func (w *openCommandWindow) startSnapshot(ctx context.Context, snapshots *source
 	return w.startSnapshotID, !w.startMissing
 }
 
+// moveStart re-bases the window, so later admissions begin at snapshotID.
+func (w *openCommandWindow) moveStart(snapshotID string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.startSnapshotID != snapshotID {
+		w.startSnapshotID, w.startChecked = snapshotID, false
+	}
+}
+
+func (w *openCommandWindow) currentStart() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.startSnapshotID
+}
+
 // OpenCommandWindow reconciles the tree, remembers that inventory as the
-// window's start, and records the window on the project's source clock.
+// window's start, and records the window on the project's source clock. It
+// opens active, held by its opener until ReleaseOpener or Close.
 func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput) (*OpenCommandWindow, error) {
 	if s == nil || s.sqlDB == nil {
 		return nil, fmt.Errorf("ledger not configured")
@@ -116,19 +153,12 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.observationBudget)
 	defer cancel()
-	s.recoverInterruptedWindows(ctx)
-	req, err := s.windowInventoryRequest(ctx, in.ProjectID, in.Roots)
-	if err != nil {
+	// Recovery interrupts every running row, so no row may be written before it
+	// has succeeded: a later retry would end a live window.
+	if err := s.RecoverInterruptedWindows(ctx); err != nil {
 		return nil, err
 	}
-	// Reconcile first so drift from before the command is not attributed to
-	// it; incomplete coverage cannot prove the tree unchanged, so it pays a pass.
-	req.Force = !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(in.Roots))
-	req.Wait = true
-	if err := s.inventory.EnsureInventory(ctx, req); err != nil {
-		return nil, err
-	}
-	state, err := s.inventory.InventoryState(ctx, in.ProjectID, inventoryBranch(req.Roots), req.RootsGeneration)
+	snapshotID, err := s.anchorStart(ctx, in.ProjectID, in.Roots, true)
 	if err != nil {
 		return nil, err
 	}
@@ -136,20 +166,48 @@ func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput)
 		id: newID(), projectID: in.ProjectID,
 		roots: append([]RootSpec(nil), in.Roots...), sessionID: strings.TrimSpace(in.SessionID),
 		turn: in.Turn, toolCallID: strings.TrimSpace(in.ToolCallID), toolName: in.ToolName,
-		startEpoch:      sourcesnapshot.ChangeToken(snapshotRoots(in.Roots)),
-		startSnapshotID: state.SnapshotID,
+		startSnapshotID: snapshotID,
 		settled:         make(chan struct{}),
+		active:          true,
+		holds:           1,
 	}
 	if err := s.insertWindow(ctx, window, in.CommandLine); err != nil {
 		return nil, err
 	}
-	if err := s.retainWindowStart(ctx, window); err != nil {
-		return nil, err
+	if err := s.retention.Retain(ctx, window.id, snapshotID); err != nil {
+		// No window opens, so nothing else would end the row.
+		return nil, errors.Join(err, s.finishWindow(context.WithoutCancel(ctx), window.id, "", time.Now().UTC()))
 	}
 	s.windowsMu.Lock()
 	s.openWindows[in.ProjectID] = append(s.openWindows[in.ProjectID], window)
 	s.windowsMu.Unlock()
 	return &OpenCommandWindow{ID: window.id, store: s, window: window}, nil
+}
+
+// anchorStart reconciles the tree so drift from before this point is not
+// attributed, and names the inventory that results; incomplete coverage cannot
+// prove the tree unchanged, so it pays a pass. reuseSlow lets a first open take a
+// slow pass that just finished; a re-anchor may not, because that pass predates
+// the gap the re-anchor exists to leave out.
+func (s *Commands) anchorStart(ctx context.Context, projectID string, roots []RootSpec, reuseSlow bool) (string, error) {
+	req, err := s.windowInventoryRequest(ctx, projectID, roots)
+	if err != nil {
+		return "", err
+	}
+	// A save that just landed moves the change token only once its event arrives.
+	for _, root := range roots {
+		repochange.WaitQuiet(ctx, root.Path, windowStartQuietGrace, windowStartQuietWait)
+	}
+	req.Force = !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(roots))
+	req.Wait = true
+	if err := s.awaitStartInventory(ctx, req, reuseSlow); err != nil {
+		return "", err
+	}
+	state, err := s.inventory.InventoryState(ctx, projectID, inventoryBranch(req.Roots), req.RootsGeneration)
+	if err != nil {
+		return "", err
+	}
+	return state.SnapshotID, nil
 }
 
 func (s *Commands) insertWindow(ctx context.Context, w *openCommandWindow, commandLine string) error {
@@ -176,81 +234,74 @@ func (s *Commands) insertWindow(ctx context.Context, w *openCommandWindow, comma
 	return tx.Commit()
 }
 
-// Retain before-images unavailable from repository objects or history until the window settles.
-const (
-	windowRetainFiles = 8192
-	windowRetainBytes = 256 << 20
-)
+// ErrWindowStartPending refuses a window while a pass that outlasted an earlier
+// open is still running: its start inventory is unknown, and waiting again would
+// charge another launch the whole budget.
+var ErrWindowStartPending = errors.New("command window start inventory is still running")
 
-// retainWindowStart keeps the before-images the window's admissions may
-// need, bounded by windowRetainFiles and windowRetainBytes.
-func (s *Commands) retainWindowStart(ctx context.Context, w *openCommandWindow) error {
-	if w.startSnapshotID == "" || s.snapshots == nil {
+// ErrWindowClosed refuses a hold on a window whose program has settled.
+var ErrWindowClosed = errors.New("command window is closed")
+
+// slowPassReuseFloor keeps a slow pass usable across a model turn; bounding reuse
+// by the pass alone would leave a pass just over budget unused at agent pace.
+const slowPassReuseFloor = 30 * time.Second
+
+// slowPass is the last pass of a scope that outlasted the observation budget.
+type slowPass struct {
+	generation int
+	finished   time.Time
+	took       time.Duration
+}
+
+// noteSlowPass remembers a completed pass that took longer than an open can wait.
+// Caller holds windowsMu.
+func (s *Commands) noteSlowPass(req InventoryRequest, started time.Time) {
+	finished := s.now()
+	s.slowPasses[req.scopeKey()] = slowPass{generation: req.RootsGeneration, finished: finished, took: finished.Sub(started)}
+}
+
+// awaitStartInventory waits for the window's start inventory within ctx. The pass
+// is detached, so one that outlasts the budget finishes and a later open finds it
+// done; thrown away, a pass longer than the budget would never converge. Forcing
+// another after it would not converge either, so a first open reuses a slow pass
+// that just finished: drift since then may reach the window, bounded by the longer
+// of the pass and slowPassReuseFloor.
+func (s *Commands) awaitStartInventory(ctx context.Context, req InventoryRequest, reuseSlow bool) error {
+	key := req.scopeKey()
+	s.windowsMu.Lock()
+	overdue := s.overduePasses[key] > 0
+	slow, finishedSlow := s.slowPasses[key]
+	s.windowsMu.Unlock()
+	if overdue {
+		return ErrWindowStartPending
+	}
+	started := s.now()
+	if reuseSlow && req.Force && finishedSlow && slow.generation == req.RootsGeneration &&
+		started.Sub(slow.finished) <= max(slow.took, slowPassReuseFloor) {
 		return nil
 	}
-	entries, err := s.snapshots.HashedEntries(ctx, w.startSnapshotID, MaxRevisionContentBytes, windowRetainFiles+1)
-	if err != nil {
+	finished := make(chan error, 1)
+	go func() { finished <- s.inventory.EnsureInventory(context.WithoutCancel(ctx), req) }()
+	select {
+	case err := <-finished:
 		return err
+	case <-ctx.Done():
 	}
-	if len(entries) > windowRetainFiles {
-		slog.InfoContext(ctx, "command window start retention bounded",
-			"window_id", w.id, "unretained", len(entries)-windowRetainFiles, "limit", windowRetainFiles)
-		entries = entries[:windowRetainFiles]
-	}
-	release := s.objects.AcquireReferenceLease()
-	defer release()
-	var retained int64
-	pins := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if retained+entry.Size > windowRetainBytes {
-			slog.InfoContext(ctx, "command window start retention bounded by size",
-				"window_id", w.id, "retained_bytes", retained, "limit", windowRetainBytes)
-			break
+	s.windowsMu.Lock()
+	s.overduePasses[key]++
+	s.windowsMu.Unlock()
+	go func() {
+		err := <-finished
+		s.windowsMu.Lock()
+		defer s.windowsMu.Unlock()
+		if s.overduePasses[key]--; s.overduePasses[key] == 0 {
+			delete(s.overduePasses, key)
 		}
-		if _, err := s.queries.GetSourceBlobObject(ctx, entry.SHA256); err == nil {
-			pins = append(pins, entry.SHA256)
-			continue
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return err
+		if err == nil {
+			s.noteSlowPass(req, started)
 		}
-		raw, err := s.snapshots.Bytes(ctx, entry)
-		if errors.Is(err, sourcesnapshot.ErrContentUnavailable) {
-			// Already moved on; the pass that admits it records what it can.
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		rel, stored, oids, err := s.objects.Put(ctx, entry.SHA256, raw)
-		if err != nil {
-			return err
-		}
-		if err := s.queries.UpsertSourceBlobObject(ctx, db.UpsertSourceBlobObjectParams{
-			Sha256: entry.SHA256, Size: int64(len(raw)), StoredSize: stored, StorageRelpath: rel,
-			GitOidSha1: oids.SHA1, GitOidSha256: oids.SHA256,
-		}); err != nil {
-			return err
-		}
-		retained += int64(len(raw))
-		pins = append(pins, entry.SHA256)
-	}
-	if len(pins) == 0 {
-		return nil
-	}
-	s.recordMu.Lock()
-	defer s.recordMu.Unlock()
-	tx, err := s.sqlDB.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	q := s.queries.WithTx(tx)
-	for _, sha := range pins {
-		if err := q.InsertSourceCommandWindowObject(ctx, db.InsertSourceCommandWindowObjectParams{WindowID: w.id, Sha256: sha}); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
+	}()
+	return ctx.Err()
 }
 
 // windowInventoryRequest reads the project's current root generation so the
@@ -277,7 +328,7 @@ func (o *OpenCommandWindow) Close(ctx context.Context) error {
 	return err
 }
 
-// Settled closes once the window's row is ended or removed.
+// Settled closes once settlement has finished, whether or not it succeeded.
 func (o *OpenCommandWindow) Settled() <-chan struct{} {
 	if o == nil || o.window == nil {
 		closed := make(chan struct{})
@@ -287,75 +338,166 @@ func (o *OpenCommandWindow) Settled() <-chan struct{} {
 	return o.window.settled
 }
 
+// IsSettled reports, without waiting, whether settlement succeeded, so the
+// window's record is complete.
+func (o *OpenCommandWindow) IsSettled() bool {
+	select {
+	case <-o.Settled():
+	default:
+		return false
+	}
+	if o == nil || o.window == nil {
+		return true
+	}
+	o.store.windowsMu.Lock()
+	defer o.store.windowsMu.Unlock()
+	return !o.window.incomplete
+}
+
+// SessionWindow is one of a session's windows that has not settled.
+type SessionWindow struct {
+	ID string
+	// Closing means its process ended and only settlement remains.
+	Closing bool
+	Settled <-chan struct{}
+	// Incomplete means its final pass failed, so what is recorded is a floor.
+	// It stays listed until the next completed inventory pass.
+	Incomplete bool
+}
+
+// OpenSessionWindows lists the session's unsettled and incomplete windows. Memory is the only
+// record of an open window; rows from an earlier process were interrupted.
+func (s *Commands) OpenSessionWindows(projectID, sessionID string) []SessionWindow {
+	if s == nil {
+		return nil
+	}
+	projectID, sessionID = strings.TrimSpace(projectID), strings.TrimSpace(sessionID)
+	s.windowsMu.Lock()
+	defer s.windowsMu.Unlock()
+	var out []SessionWindow
+	for _, window := range s.openWindows[projectID] {
+		if window.sessionID == sessionID {
+			out = append(out, SessionWindow{ID: window.id, Closing: window.closing, Settled: window.settled, Incomplete: window.incomplete})
+		}
+	}
+	return out
+}
+
 func (s *Commands) closeCommandWindow(ctx context.Context, w *openCommandWindow) error {
 	ended := time.Now().UTC()
 	s.windowsMu.Lock()
 	w.closing = true
-	w.passesAtClose = s.inventoryPasses[w.projectID]
+	endGrace(w)
+	idle := !w.active
+	anchoring := w.anchoring
 	s.windowsMu.Unlock()
+	if anchoring != nil {
+		select {
+		case <-anchoring.done:
+		case <-ctx.Done():
+		}
+	}
 	if !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(w.roots)) {
-		return s.settleCommandWindow(ctx, w, ended, true)
+		return s.settleCommandWindow(ctx, w, ended)
 	}
 	background := context.WithoutCancel(ctx)
 	go func() {
-		s.awaitWindowPass(background, w)
-		if err := s.settleCommandWindow(background, w, ended, false); err != nil {
+		if !idle {
+			s.awaitSettlePeriod(background, nil)
+		}
+		// A pass that hangs must not leave a closed window claiming drift forever.
+		settling, cancel := context.WithTimeout(background, windowSettlePassBudget)
+		defer cancel()
+		if err := s.settleCommandWindow(settling, w, ended); err != nil {
 			slog.WarnContext(background, "command window settle", "window_id", w.id, "err", err)
 		}
 	}()
 	return nil
 }
 
-// awaitWindowPass returns once an inventory pass has completed since the
-// window closed, or the settle period elapsed.
-func (s *Commands) awaitWindowPass(ctx context.Context, w *openCommandWindow) {
-	deadline := time.NewTimer(s.windowSettle)
-	defer deadline.Stop()
-	for {
-		s.windowsMu.Lock()
-		passed := s.inventoryPasses[w.projectID] > w.passesAtClose
-		wake := s.passWake
-		s.windowsMu.Unlock()
-		if passed {
-			return
-		}
-		select {
-		case <-wake:
-		case <-deadline.C:
-			return
-		case <-ctx.Done():
-			return
-		}
+// awaitSettlePeriod returns once trailing watcher events have had time to arrive,
+// or stop closed.
+func (s *Commands) awaitSettlePeriod(ctx context.Context, stop <-chan struct{}) {
+	s.windowsMu.Lock()
+	elapsed := s.windowSettle()
+	s.windowsMu.Unlock()
+	select {
+	case <-elapsed:
+	case <-stop:
+	case <-ctx.Done():
 	}
 }
 
-// settleCommandWindow runs the last pass when one is still owed, stops
-// attributing, and makes the row final.
-func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow, ended time.Time, force bool) error {
-	defer close(w.settled)
-	roots := snapshotRoots(w.roots)
+// settleWindowObservations lands what a window that may still claim has not yet
+// recorded, then observes Git. An idle window owes no pass. On trusted coverage
+// the request joins any pass in flight, reruns if the change token has moved since
+// that pass read it, and does nothing if it has not; a failed pass owes a forced
+// one. Pending observers commit their references before the caller collects the
+// window, so it holds the returned release through that.
+func (s *Commands) settleWindowObservations(ctx context.Context, w *openCommandWindow) (release func(), passErr, lockErr error) {
 	s.windowsMu.Lock()
-	passed := s.inventoryPasses[w.projectID] > w.passesAtClose
+	owed, incomplete := w.active || w.incomplete, w.incomplete
 	s.windowsMu.Unlock()
-	var passErr error
-	if force || (!passed && sourcesnapshot.ChangeToken(roots) != w.startEpoch) {
+	if owed {
 		req, err := s.windowInventoryRequest(ctx, w.projectID, w.roots)
 		if err != nil {
 			passErr = err
 		} else {
-			req.Force, req.Wait = true, true
+			req.Force, req.Wait = incomplete || !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(w.roots)), true
+			started := s.now()
 			passErr = s.inventory.EnsureInventory(ctx, req)
+			if passErr == nil && s.now().Sub(started) > s.observationBudget {
+				s.windowsMu.Lock()
+				s.noteSlowPass(req, started)
+				s.windowsMu.Unlock()
+			}
 		}
 	}
-	// Pending observers commit their references before window collection.
-	release, err := s.git.lockObservations(ctx, w.projectID, w.roots)
+	release, lockErr = s.git.lockObservations(ctx, w.projectID, w.roots)
 	if release != nil {
-		defer release()
 		// HEAD may move without invalidating any working-file snapshots.
 		_, gitErr := s.git.observeGitState(ctx, w.projectID, w.roots)
 		passErr = errors.Join(passErr, gitErr)
 	}
+	return release, passErr, lockErr
+}
+
+// settleCommandWindow runs the last pass when one is still owed, stops
+// attributing, and makes the row final. A failure anywhere leaves the window
+// listed as incomplete until the next completed pass.
+func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow, ended time.Time) error {
+	defer close(w.settled)
+	release, passErr, lockErr := s.settleWindowObservations(ctx, w)
+	if release != nil {
+		defer release()
+	}
 	s.windowsMu.Lock()
+	w.active = false
+	s.windowsMu.Unlock()
+	var finishErr error
+	if lockErr == nil {
+		w.mu.Lock()
+		admission := w.admissionMode
+		w.mu.Unlock()
+		finishErr = s.finishWindow(ctx, w.id, admission, ended)
+	}
+	s.windowsMu.Lock()
+	defer s.windowsMu.Unlock()
+	w.finalized = true
+	// Without its lock or its final write the row stays for in-flight observers,
+	// and the next boot's recovery ends it.
+	err := errors.Join(passErr, lockErr, finishErr)
+	if err != nil {
+		w.incomplete = true
+	}
+	if !w.incomplete {
+		s.forgetWindow(w)
+	}
+	return err
+}
+
+// forgetWindow removes a settled window. Caller holds windowsMu.
+func (s *Commands) forgetWindow(w *openCommandWindow) {
 	held := s.openWindows[w.projectID]
 	for i, candidate := range held {
 		if candidate == w {
@@ -366,28 +508,22 @@ func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow
 	if len(s.openWindows[w.projectID]) == 0 {
 		delete(s.openWindows, w.projectID)
 	}
-	s.windowsMu.Unlock()
-	if err != nil {
-		// Stop future attribution, preserving the row for in-flight observers
-		// and interrupted-window recovery.
-		return errors.Join(passErr, err)
-	}
-	w.mu.Lock()
-	admission := w.admissionMode
-	w.mu.Unlock()
-	if err := s.finishWindow(ctx, w.id, admission, ended); err != nil {
-		return err
-	}
-	return passErr
 }
 
-// notePassCompleted counts the pass and wakes windows waiting on one.
-func (s *Commands) notePassCompleted(projectID string) {
+// notePassCompleted clears windows left incomplete on this branch: the pass
+// recorded their drift as outside changes, so nothing further is owed.
+func (s *Commands) notePassCompleted(projectID string, roots []RootSpec) {
 	s.windowsMu.Lock()
-	s.inventoryPasses[projectID]++
-	close(s.passWake)
-	s.passWake = make(chan struct{})
-	s.windowsMu.Unlock()
+	defer s.windowsMu.Unlock()
+	for _, window := range append([]*openCommandWindow(nil), s.openWindows[projectID]...) {
+		if !window.incomplete || inventoryBranch(window.roots) != inventoryBranch(roots) {
+			continue
+		}
+		window.incomplete = false
+		if window.finalized {
+			s.forgetWindow(window)
+		}
+	}
 }
 
 // finishWindow ends the row and keeps it while file or Git history names it.
@@ -414,34 +550,52 @@ func (s *Commands) finishWindow(ctx context.Context, id, admissionMode string, e
 	return tx.Commit()
 }
 
-// recoverInterruptedWindows settles rows an earlier process left running:
+// RecoverInterruptedWindows settles rows an earlier process left running:
 // memory is the only record of an open window, so all of them are interrupted.
-func (s *Commands) recoverInterruptedWindows(ctx context.Context) {
-	s.windowRecovery.Do(func() {
-		s.recordMu.Lock()
-		defer s.recordMu.Unlock()
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		if err := s.queries.InterruptRunningSourceCommandWindows(ctx, now); err != nil {
-			slog.WarnContext(ctx, "command window recovery", "err", err)
-			return
-		}
-		if _, err := s.queries.DeleteSettledSourceCommandWindowObjects(ctx); err != nil {
-			slog.WarnContext(ctx, "command window recovery", "err", err)
-		}
-		if _, err := s.queries.DeleteUnreferencedEndedSourceCommandWindows(ctx); err != nil {
-			slog.WarnContext(ctx, "command window recovery", "err", err)
-		}
-	})
+// A failure leaves it to be retried; no window opens until it has succeeded.
+func (s *Commands) RecoverInterruptedWindows(ctx context.Context) error {
+	s.windowRecoveryMu.Lock()
+	defer s.windowRecoveryMu.Unlock()
+	if s.windowsRecovered {
+		return nil
+	}
+	s.recordMu.Lock()
+	defer s.recordMu.Unlock()
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := s.queries.InterruptRunningSourceCommandWindows(ctx, now); err != nil {
+		return err
+	}
+	if _, err := s.queries.DeleteSettledSourceCommandWindowObjects(ctx); err != nil {
+		return err
+	}
+	if _, err := s.queries.DeleteUnreferencedEndedSourceCommandWindows(ctx); err != nil {
+		return err
+	}
+	s.windowsRecovered = true
+	return nil
 }
 
-// Prefer the newest running window, then the newest settling window,
-// to minimize attribution of preceding changes.
+// attributionWindow names the window that may claim drift on these roots: one
+// with a live process or still in its settle grace. Active windows of more than
+// one session attribute to nobody, because nothing says whose the drift is; a
+// file missing from a bulk commit is visible, and another's work staged is not.
+// Within one session the newest running window wins, then the newest settling.
+// An incomplete window claims nothing but still counts as a session in doubt.
 func (s *Commands) attributionWindow(projectID string, roots []RootSpec) *openCommandWindow {
 	s.windowsMu.Lock()
 	defer s.windowsMu.Unlock()
+	branch := inventoryBranch(roots)
 	held := make([]*openCommandWindow, 0)
+	session, seen := "", false
 	for _, window := range s.openWindows[projectID] {
-		if inventoryBranch(window.roots) == inventoryBranch(roots) {
+		if inventoryBranch(window.roots) != branch || (!window.active && !window.incomplete) {
+			continue
+		}
+		if seen && window.sessionID != session {
+			return nil
+		}
+		session, seen = window.sessionID, true
+		if window.active {
 			held = append(held, window)
 		}
 	}
@@ -454,6 +608,21 @@ func (s *Commands) attributionWindow(projectID string, roots []RootSpec) *openCo
 		return nil
 	}
 	return held[len(held)-1]
+}
+
+// unclaimedWindows lists every registered window on these roots, for a pass that
+// has no window to attribute to.
+func (s *Commands) unclaimedWindows(projectID string, roots []RootSpec) []*openCommandWindow {
+	s.windowsMu.Lock()
+	defer s.windowsMu.Unlock()
+	branch := inventoryBranch(roots)
+	var out []*openCommandWindow
+	for _, window := range s.openWindows[projectID] {
+		if inventoryBranch(window.roots) == branch {
+			out = append(out, window)
+		}
+	}
+	return out
 }
 
 func commandWindowFromRow(row db.SourceCommandWindows) CommandWindow {
@@ -500,22 +669,50 @@ func (s *Commands) commandWindowsFor(ctx context.Context, ids []string) (map[str
 	return out, nil
 }
 
+// SetWindowSettleForTest replaces the settle period.
+func (s *Commands) SetWindowSettleForTest(period time.Duration) {
+	s.windowsMu.Lock()
+	defer s.windowsMu.Unlock()
+	s.windowSettle = func() <-chan time.Time { return time.After(period) }
+}
+
+// SetWindowSettleGateForTest makes every settle period last until gate delivers
+// or closes, so a test decides when a window's grace or close moves on.
+func (s *Commands) SetWindowSettleGateForTest(gate <-chan time.Time) {
+	s.windowsMu.Lock()
+	defer s.windowsMu.Unlock()
+	s.windowSettle = func() <-chan time.Time { return gate }
+}
+
+// SetWindowIdledForTest observes each window whose settle grace has ended.
+func (s *Commands) SetWindowIdledForTest(observe func(id string)) {
+	s.windowsMu.Lock()
+	defer s.windowsMu.Unlock()
+	s.windowIdled = observe
+}
+
 // Commands attributes source observations to host command windows.
 type Commands struct {
-	inventoryPasses   map[string]uint64
-	objects           *sourceblob.Store
+	now               func() time.Time
 	observationBudget time.Duration
 	openWindows       map[string][]*openCommandWindow
-	passWake          chan struct{}
-	queries           *db.Queries
-	recordMu          *sync.Mutex
-	snapshots         *sourcesnapshot.Store
-	sqlDB             db.Handle
-	windowRecovery    sync.Once
-	windowSettle      time.Duration
-	windowsMu         sync.Mutex
-	git               commandsGitPort
-	inventory         commandsInventoryPort
+	// overduePasses counts passes still running after an open stopped waiting.
+	overduePasses map[string]int
+	queries       *db.Queries
+	recordMu      *sync.Mutex
+	retention     *startRetention
+	// slowPasses remembers, per scope, the last pass that outlasted the budget.
+	slowPasses       map[string]slowPass
+	sqlDB            db.Handle
+	windowRecoveryMu sync.Mutex
+	windowsRecovered bool
+	// windowSettle starts one settle period. Guarded by windowsMu.
+	windowSettle func() <-chan time.Time
+	windowsMu    sync.Mutex
+	git          commandsGitPort
+	inventory    commandsInventoryPort
+	// windowIdled, when set, observes each window whose grace ended.
+	windowIdled func(id string)
 }
 
 type commandsInventoryPort interface {

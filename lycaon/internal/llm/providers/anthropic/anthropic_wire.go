@@ -60,28 +60,34 @@ type ContentBlock struct {
 	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 }
 
-// MarshalJSON writes input on every tool_use block, empty or not: the API
-// rejects a tool_use without it, and omitempty drops an empty map.
+// MarshalJSON writes required empty fields on tool_use and thinking blocks.
 func (b ContentBlock) MarshalJSON() ([]byte, error) {
 	type plain ContentBlock
-	if b.Type == "tool_result" && len(b.ResultBlocks) > 0 {
-		b.ResultText = ""
+	switch b.Type {
+	case "tool_result":
+		if len(b.ResultBlocks) > 0 {
+			b.ResultText = ""
+			return marshalUnescaped(struct {
+				plain
+				Content []ContentBlock `json:"content"`
+			}{plain(b), b.ResultBlocks})
+		}
+	case "thinking":
 		return marshalUnescaped(struct {
 			plain
-			Content []ContentBlock `json:"content"`
-		}{plain(b), b.ResultBlocks})
+			Thinking string `json:"thinking"`
+		}{plain(b), b.Thinking})
+	case "tool_use":
+		input := b.Input
+		if input == nil {
+			input = map[string]any{}
+		}
+		return marshalUnescaped(struct {
+			plain
+			Input map[string]any `json:"input"`
+		}{plain(b), input})
 	}
-	if b.Type != "tool_use" {
-		return marshalUnescaped(plain(b))
-	}
-	input := b.Input
-	if input == nil {
-		input = map[string]any{}
-	}
-	return marshalUnescaped(struct {
-		plain
-		Input map[string]any `json:"input"`
-	}{plain(b), input})
+	return marshalUnescaped(plain(b))
 }
 
 // marshalUnescaped matches the request encoder, which leaves HTML characters as written.
@@ -199,7 +205,7 @@ func ProjectMessages(msgs []api.Message, breakpoints []providerwire.PromptCacheB
 			if reasoning := m.ModelReasoning; reasoning != nil {
 				for _, raw := range reasoning.Details {
 					var block ContentBlock
-					if json.Unmarshal(raw, &block) != nil || block.Type != "thinking" && block.Type != "redacted_thinking" {
+					if json.Unmarshal(raw, &block) != nil || (block.Type != "thinking" || block.Signature == "") && (block.Type != "redacted_thinking" || block.Data == "") {
 						continue
 					}
 					add("assistant", block)
@@ -289,19 +295,12 @@ func anthropicUserContentBlocks(text string, artifactIDs []string, vision bool, 
 			continue
 		}
 		out = append(out, ContentBlock{
-			Type: "image",
-			Source: &ImageSource{
-				Type:      "base64",
-				MediaType: mime,
-				Data:      data,
-			},
+			Type:   "image",
+			Source: &ImageSource{Type: "base64", MediaType: mime, Data: data},
 		})
 	}
 	if len(out) == 0 {
-		if text == "" {
-			return nil
-		}
-		return []ContentBlock{{Type: "text", Text: text}}
+		return nil
 	}
 	return out
 }

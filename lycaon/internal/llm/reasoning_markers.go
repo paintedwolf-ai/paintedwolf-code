@@ -61,15 +61,13 @@ func (p *reasoningMarkerProvider) Stream(ctx context.Context, req modelcall.Comp
 	return out, nil
 }
 
-// separateCompletionReasoning applies the markers to a complete response. A
-// separately reported reasoning field means the family's open tag stood alone
-// in the content and the text after it is the visible answer.
+// Separate reasoning fields identify a standalone opening tag in content.
 func separateCompletionReasoning(c *modelcall.Completion, markers modelinfo.ReasoningMarkers) {
 	if c == nil || c.Content == "" {
 		return
 	}
 	reader := newReasoningMarkerReader(markers)
-	reader.sideChannel = c.Reasoning != ""
+	reader.sideChannel = c.Reasoning != "" || len(c.ReasoningDetails) > 0
 	fed := reader.feed(c.Content)
 	rest := reader.flush()
 	c.Content = fed.visible + rest.visible
@@ -120,11 +118,11 @@ func newReasoningMarkerReader(markers modelinfo.ReasoningMarkers) *reasoningMark
 // chunk applies the reader to one stream chunk. It reports false when the
 // chunk carried only content that the reader is still holding.
 func (r *reasoningMarkerReader) chunk(c modelcall.StreamChunk) (modelcall.StreamChunk, bool) {
-	if c.ResetReasoning {
+	if c.ResetAttempt() {
 		r.state, r.pending, r.sideChannel, r.inlineFresh = markerLead, "", false, false
 	}
 	var inline string
-	if c.Reasoning != "" {
+	if c.Reasoning != "" || c.ReasoningPresent || len(c.ReasoningDetails) > 0 {
 		inline += r.reasoningArrived()
 	}
 	hadContent := c.Content != ""
@@ -148,8 +146,8 @@ func (r *reasoningMarkerReader) chunk(c modelcall.StreamChunk) (modelcall.Stream
 }
 
 func streamChunkCarriesOnlyContent(c modelcall.StreamChunk) bool {
-	return !c.Done && c.Err == nil && len(c.ToolCalls) == 0 && len(c.ReasoningDetails) == 0 &&
-		!c.Usage.Reported() && c.ProviderID == "" && !c.Fallback && !c.Scripted && !c.ResetReasoning
+	return !c.Done && c.Err == nil && !c.ReasoningPresent && len(c.ToolCalls) == 0 && len(c.ReasoningDetails) == 0 &&
+		!c.Usage.Reported() && c.ProviderID == "" && !c.Fallback && !c.Scripted && !c.ResetAttempt()
 }
 
 // feed classifies text in content order.
