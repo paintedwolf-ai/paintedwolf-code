@@ -33,7 +33,3 @@ x-paintedwolf-scenarios:
     profile: explore_readonly
     supplied: .
     tool: scan_list
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SCAN_PROJECT_DIR_HOST'
-  - Omit

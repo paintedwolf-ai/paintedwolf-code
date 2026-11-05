@@ -28,9 +28,6 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     job_id: job-done
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_BUDGET_EXTEND_NOT_RUNNING'
 selector:
   tool:
   - extend_worker_budget

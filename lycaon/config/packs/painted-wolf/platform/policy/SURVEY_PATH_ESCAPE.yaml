@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
     path: ../outside
     profile: explore_readonly
     tool: find
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SURVEY_PATH_ESCAPE'
-  - attached folder

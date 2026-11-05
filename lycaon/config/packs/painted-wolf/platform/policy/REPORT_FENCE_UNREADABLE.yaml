@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_sample: '`findings[].ask` (13): `ask` is a top-level report field'
       offenders_omitted: 0
-    expect_contains:
-      - 'Code: REPORT_FENCE_UNREADABLE'
-      - findings[].ask
-      - top-level

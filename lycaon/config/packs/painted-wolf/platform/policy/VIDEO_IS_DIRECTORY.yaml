@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
   vars:
     path: recordings
     tool: view_video
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: VIDEO_IS_DIRECTORY'

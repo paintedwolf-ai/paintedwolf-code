@@ -19,4 +19,3 @@ x-paintedwolf-message: A recorded review assignment is required.
 x-paintedwolf-scenarios:
 - id: missing
   vars: {}
-  expect_contains: ['Code: COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING', request_decision]

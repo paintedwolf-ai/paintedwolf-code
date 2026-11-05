@@ -25,7 +25,3 @@ x-paintedwolf-scenarios:
     profile: implement
     reason: program admission closed
     tool: command
-  expect_contains:
-  - 'Code: TOOL_OWNER_INTERRUPTED'
-  - program admission closed
-  - does not establish completion

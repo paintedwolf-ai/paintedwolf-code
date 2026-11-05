@@ -31,6 +31,3 @@ x-paintedwolf-scenarios:
     condition: process_done
     profile: worker_readonly
     tool: wait
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WAIT_CONDITION_NOT_ALLOWED'

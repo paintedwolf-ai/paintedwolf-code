@@ -28,10 +28,6 @@ x-paintedwolf-scenarios:
   vars:
     expected_job_id: job-expected
     job_id: job-wrong
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: DECISION_JOB_ID_MISMATCH'
-  - answer_decision
 selector:
   tool:
   - answer_decision

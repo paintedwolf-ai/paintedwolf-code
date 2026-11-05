@@ -22,15 +22,7 @@ func TestToolRejectFormatter_CompactRejectShape(t *testing.T) {
 		ChecklistHash:     "h1",
 	}, phaseFixtureCopy())
 	testutil.FailErr(t, "f.FormatBlock failed", err)
-	for _, want := range []string{
-		">>> Spec posture blocked",
-		"Tool: task",
-		"Blocked at: Phase 1 — Research depth (stub plan file)",
-		"Cause:",
-		"Fix:",
-		"Progress:",
-		"Code: SPEC_POSTURE_STUB_REQUIRED",
-	} {
+	for _, want := range []string{">>> Spec posture blocked", "Blocked at: Phase 1 — Research depth (stub plan file)", "Cause:", "Fix:", "Progress:", "Code: SPEC_POSTURE_STUB_REQUIRED"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}

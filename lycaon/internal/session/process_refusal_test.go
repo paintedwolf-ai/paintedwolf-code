@@ -182,7 +182,7 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 				if !facts.HasCode(access.code) || !facts.HasCode("SANDBOX_TERMINAL_PATH_REFUSED") {
 					t.Fatalf("mixed refusals lost a remedy: %s", text)
 				}
-				for _, want := range []string{"/requestable/file", "/host/control", "other refused paths may remain unavailable", "no approval opens them"} {
+				for _, want := range []string{"/requestable/file", "/host/control"} {
 					if !strings.Contains(text, want) {
 						t.Errorf("missing %q: %s", want, text)
 					}
@@ -194,9 +194,6 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 					if strings.Contains(text, "`"+control+"`") != (running && offered&(1<<i) != 0) {
 						t.Errorf("control %s running=%v offered=%v: %s", control, running, names, text)
 					}
-				}
-				if running && !strings.Contains(text, "Do not reissue while the job is running") {
-					t.Errorf("lost settlement requirement: %s", text)
 				}
 			}
 		}

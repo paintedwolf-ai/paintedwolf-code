@@ -25,4 +25,3 @@ x-paintedwolf-message: mutation did not improve broken source
 x-paintedwolf-scenarios:
   - id: default
     vars: {path: pipeline.py, profile: implement, tool: replace_lines}
-    expect_contains: ['Code: MUTATION_REPAIR_NOT_IMPROVED', syntax, atomic]

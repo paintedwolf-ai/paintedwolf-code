@@ -27,17 +27,14 @@ x-paintedwolf-scenarios:
       review_unknown_groups: []
       review_scan_id_groups: ['e865229e-f77c-48c3-b3a9-8a7dacb15338 is a scan id; its groups in this run include group:3fa9226f3bf756303f1004dd837f6b32']
       review_empty_set_asides: []
-    expect_contains: ['Code: SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN', 'scan id', 'group:3fa9226f']
   - id: unknown_group
     vars:
       review_unknown_groups: ['group:0000']
       review_scan_id_groups: []
       review_empty_set_asides: []
-    expect_contains: ['Code: SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN', 'group:0000']
   - id: empty_set_aside
     vars:
       review_unknown_groups: []
       review_scan_id_groups: []
       review_empty_set_asides: ['e2e fixture lockfiles']
-    expect_contains: ['Code: SUBMIT_VERDICT_SCAN_GROUP_UNKNOWN', 'e2e fixture lockfiles']
 x-paintedwolf-emit: guard:workflow

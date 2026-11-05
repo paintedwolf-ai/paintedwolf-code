@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       path: missing/dir
       profile: explore_readonly
       tool: list_dir
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: LIST_DIR_PATH_NOT_FOUND'

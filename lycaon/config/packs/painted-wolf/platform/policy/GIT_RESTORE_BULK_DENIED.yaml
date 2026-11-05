@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: git_restore
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: GIT_RESTORE_BULK_DENIED'

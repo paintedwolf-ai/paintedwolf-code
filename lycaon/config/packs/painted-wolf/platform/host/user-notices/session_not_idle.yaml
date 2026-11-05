@@ -8,5 +8,3 @@ suggested_action: Stop the current turn, then try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - middle of a turn

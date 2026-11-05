@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
@@ -349,15 +350,11 @@ func TestInvariant2_SymmetricValueFreeWireDiffAndSpanTableRestoration(t *testing
 	maskedBefore := res.ReferenceEchoes(beforeRaw)
 	maskedAfter := res.ReferenceEchoes(afterRaw)
 
-	if strings.Contains(maskedBefore, oldSecretVal) {
-		t.Fatal("maskedBefore still contains raw old secret")
-	}
+	exposure.Absent(t, maskedBefore, oldSecretVal)
 	if !strings.Contains(maskedBefore, oldSecretRef) {
 		t.Fatal("maskedBefore does not contain old secret reference token")
 	}
-	if strings.Contains(maskedAfter, newSecretVal) {
-		t.Fatal("maskedAfter still contains raw new secret")
-	}
+	exposure.Absent(t, maskedAfter, newSecretVal)
 	if !strings.Contains(maskedAfter, newSecretRef) {
 		t.Fatal("maskedAfter does not contain new secret reference token")
 	}

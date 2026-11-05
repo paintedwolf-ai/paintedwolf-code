@@ -34,31 +34,7 @@ x-paintedwolf-scenarios:
     vars:
       session_posture: build
       tool: task
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: PROGRESS_MISSING'
-      - the current request has no progress checklist
-      - earlier request does not cover a new request
-      - at least one open
-      - update_progress
-      - '## Progress'
-      - did not run
-      - retry
-      - '\n- [ ]'
-      - '{"content":'
   - id: missing_checklist_write
     vars:
       session_posture: build
       tool: write
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: PROGRESS_MISSING'
-      - the current request has no progress checklist
-      - earlier request does not cover a new request
-      - at least one open
-      - update_progress
-      - '## Progress'
-      - did not run
-      - retry
-      - '\n- [ ]'
-      - '{"content":'

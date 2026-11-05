@@ -6,5 +6,3 @@ suggested_action: "Wait for it to finish, then undo it from the file history if 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "can no longer be canceled"

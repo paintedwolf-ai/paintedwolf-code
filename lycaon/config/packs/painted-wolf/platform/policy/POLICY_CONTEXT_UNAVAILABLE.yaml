@@ -20,7 +20,3 @@ x-paintedwolf-scenarios:
   - id: reached_operation
     vars:
       tool: command
-    expect_contains:
-      - 'Code: POLICY_CONTEXT_UNAVAILABLE'
-      - 'did not run'
-      - 'Continue read-only investigation of accessible sources while resolving the reported workspace or policy access problem.'

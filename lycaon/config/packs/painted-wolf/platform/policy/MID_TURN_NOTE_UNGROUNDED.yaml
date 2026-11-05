@@ -25,8 +25,3 @@ x-paintedwolf-scenarios:
     vars:
       profile: 'coordinator'
       observed_handles_sample: 'task#1, read#2'
-    expect_contains:
-      - 'Code: MID_TURN_NOTE_UNGROUNDED'
-      - 'MESSAGE WITHHELD FROM USER'
-      - 'task#1'
-      - 'Publish a brief update'

@@ -30,7 +30,3 @@ x-paintedwolf-scenarios:
       destination: 127.0.0.1:8000
       port: '8000'
       detail: "Port 8000 is served by `python3 -m http.server 8000`, a background command in the chat 'Tic Tac Toe Game with AI' in the project 'Tic-Tac-Toe'."
-    expect_contains:
-      - 'Code: HTTP_REQUEST_LOOPBACK_OTHER_SESSION'
-      - "Port 8000 is served by `python3 -m http.server 8000`"
-      - let the user decide

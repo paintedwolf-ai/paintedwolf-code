@@ -6,7 +6,7 @@ import { buildStructuredToolPresentation } from "./tool-part-structured.ts";
 function verification(body: Record<string, unknown>) {
   const message: Message = {
     id: "verify-result", role: "tool", origin: "tool", authority: "none",
-    trust_tier: "untrusted", created_at: "t",
+    trust_tier: "untrusted", created_at: "t", content: "",
     tool_result: { content: JSON.stringify(body), outcome: "completed" },
   };
   return toolPartFromCall({ id: "verify-call", name: "verify", args: {} }, message, "assistant");

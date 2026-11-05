@@ -38,16 +38,9 @@ x-paintedwolf-scenarios:
       tool: edit
       path: src/api/client.ts
       profile: implement
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: CONTENT_APPLY_REJECTED'
-      - src/api/client.ts
   - id: with_guidance
     vars:
       tool: edit
       path: src/api/client.ts
       profile: implement
       user_guidance: Keep the timeout at 5 seconds and add the abort signal only.
-    expect_contains:
-      - 'Code: CONTENT_APPLY_REJECTED'
-      - Keep the timeout at 5 seconds

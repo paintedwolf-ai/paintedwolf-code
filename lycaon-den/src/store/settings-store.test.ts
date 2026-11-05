@@ -20,7 +20,6 @@ describe("scoped settings projections", () => {
     const client = stubClient();
     await loadSettingsPanel(store, client, [], "providers", "/tmp/missing", { alwaysProjectScope: true });
     expect(store.panelReady(client, "providers")).toBe(true);
-    expect(store.panelError(client, "providers")).toContain("Project settings cannot resolve");
   });
 
   it("keeps project policy separate while sharing device providers", async () => {

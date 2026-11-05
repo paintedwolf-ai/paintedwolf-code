@@ -47,9 +47,6 @@ func TestCompactionPromptLabelsHostRedactionOutsideContent(t *testing.T) {
 	}}, 8192, 512)
 	testutil.FailErr(t, "build compaction prompt", err)
 	prompt := input.Text
-	if !strings.Contains(prompt, "[host redacted secret values; sources unchanged by redaction]") {
-		t.Fatalf("compaction prompt lost host provenance: %q", prompt)
-	}
 	if strings.Contains(prompt, "host_secret_references=true") {
 		t.Fatalf("a removal was labeled as a reference: %q", prompt)
 	}

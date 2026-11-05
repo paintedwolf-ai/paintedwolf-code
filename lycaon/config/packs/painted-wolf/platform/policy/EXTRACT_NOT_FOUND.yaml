@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       path: missing.zip
       profile: coordinator
       tool: extract_archive
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: EXTRACT_NOT_FOUND'

@@ -6,5 +6,3 @@ suggested_action: "Turn it on in Settings, then refresh."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "turned off"

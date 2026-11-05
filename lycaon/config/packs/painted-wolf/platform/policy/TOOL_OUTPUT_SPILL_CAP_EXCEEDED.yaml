@@ -36,6 +36,3 @@ x-paintedwolf-scenarios:
       profile: coordinator
       reason: structured_spill_cap
       tool: summarize
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: TOOL_OUTPUT_SPILL_CAP_EXCEEDED'

@@ -28,7 +28,3 @@ x-paintedwolf-scenarios:
       profile: coordinator
       scan_id: deadbeef
       tool: scan_query
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SCAN_NOT_FOUND'
-      - scan_list

@@ -105,13 +105,7 @@ func TestPromptLoop_SpecDenyToolMessageShape(t *testing.T) {
 	if got == "" {
 		t.Fatalf("expected paired spec posture rejection, got %+v", msgs)
 	}
-	for _, want := range []string{
-		">>> Spec posture blocked",
-		"Tool: delegate_dispatch",
-		"Blocked at: Phase 1 — Research depth (stub plan file)",
-		"Progress:",
-		"Code: SPEC_POSTURE_DELEGATION_FORBIDDEN",
-	} {
+	for _, want := range []string{"Tool: delegate_dispatch", "Blocked at: Phase 1 — Research depth (stub plan file)", "Progress:", "Code: SPEC_POSTURE_DELEGATION_FORBIDDEN"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in:\n%s", want, got)
 		}

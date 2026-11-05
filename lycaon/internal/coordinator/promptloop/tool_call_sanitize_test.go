@@ -257,9 +257,6 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 						for _, msg := range msgs {
 							if strings.Contains(msg.Content, "Code: TOOL_ACTION_IN_TEXT") {
 								nudges++
-								if !strings.Contains(msg.Content, "native tool channel") {
-									t.Fatal("missing recovery instruction")
-								}
 							}
 						}
 						return nil

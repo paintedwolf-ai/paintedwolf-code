@@ -3,6 +3,7 @@ package bgprocess
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"sync"
 	"testing"
@@ -130,26 +131,20 @@ func TestConcurrentStreamWritersNeverRegressTheProjection(t *testing.T) {
 
 	var live string
 	for _, ev := range h.published() {
-		if strings.Contains(ev.Text, projectionSecret) {
-			t.Fatalf("concurrent publication exposed the value: %q", ev.Text)
-		}
+		exposure.Absent(t, ev.Text, projectionSecret)
 		if ev.Reset {
 			live = ev.Text
 		} else {
 			live += ev.Text
 		}
 	}
-	if strings.Contains(live, projectionSecret) {
-		t.Fatalf("assembled live stream exposed the value: %q", live)
-	}
+	exposure.Absent(t, live, projectionSecret)
 	final, err := h.reg.Output.ReadOutput(context.Background(), "s1", "h1")
 	if err != nil {
 		t.Fatalf("read projected output: %v", err)
 	}
 	for _, chunk := range final.Chunks {
-		if strings.Contains(chunk.Text, projectionSecret) {
-			t.Fatalf("final projection exposed the value: %q", chunk.Text)
-		}
+		exposure.Absent(t, chunk.Text, projectionSecret)
 	}
 }
 

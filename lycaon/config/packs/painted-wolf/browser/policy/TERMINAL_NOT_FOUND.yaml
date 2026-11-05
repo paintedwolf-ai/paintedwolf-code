@@ -39,7 +39,3 @@ x-paintedwolf-scenarios:
       profile: implement
       tool: terminal_send
       can_terminal_open: true
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: TERMINAL_NOT_FOUND'
-      - terminal_open

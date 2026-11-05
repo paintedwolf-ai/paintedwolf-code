@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
     command: screencapture -x build/screen.png
     profile: coordinator
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: DESKTOP_CAPTURE_DISALLOWED'

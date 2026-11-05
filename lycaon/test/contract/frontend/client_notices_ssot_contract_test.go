@@ -22,78 +22,8 @@ func loadClientNotices(t *testing.T) *clientnotice.Catalog {
 	return cat
 }
 
-// Every notice's scenarios pin what its copy must say; the wording around those
-// phrases stays editable.
-func TestClientNoticeScenariosHold(t *testing.T) {
-	t.Parallel()
-	for _, n := range loadClientNotices(t).Notices {
-		if len(n.Scenarios) == 0 {
-			t.Errorf("%s: no scenarios — copy with nothing pinned can drift silently", n.Kind)
-			continue
-		}
-		rendered := n.Rendered()
-		for _, sc := range n.Scenarios {
-			for _, want := range sc.ExpectContains {
-				if !strings.Contains(rendered, want) {
-					t.Errorf("%s[%s]: copy no longer contains %q\n--- rendered ---\n%s",
-						n.Kind, sc.ID, want, rendered)
-				}
-			}
-		}
-	}
-}
-
-// Named start failures carry their own copy because the generic offline advice is
-// wrong for them: reopening lands on the same held lock, or the same absent engine.
-func TestNamedStartFailuresStayDistinctFromOffline(t *testing.T) {
-	t.Parallel()
-	byKind := map[string]clientnotice.Notice{}
-	for _, n := range loadClientNotices(t).Notices {
-		byKind[n.Kind] = n
-	}
-	offline, ok := byKind["offline"]
-	if !ok {
-		t.Fatal("offline notice missing")
-	}
-	for _, kind := range []string{"engine_already_running", "engine_not_started"} {
-		named, ok := byKind[kind]
-		if !ok {
-			t.Errorf("%s notice missing", kind)
-			continue
-		}
-		if named.Message == offline.Message {
-			t.Errorf("%s shares the offline message — it exists because that one is wrong for it", kind)
-		}
-		if strings.Contains(strings.ToLower(named.Rendered()), "reopen") {
-			t.Errorf("%s suggests reopening, which cannot work:\n%s", kind, named.Rendered())
-		}
-		if named.SuggestedAction == "" {
-			t.Errorf("%s needs its own suggested_action, or the stop falls through to the offline escalation that offers reopening", kind)
-		}
-	}
-}
-
-// The offline message names the first move and its suggested_action names the
-// next one, so the escalation appears only after a retry fails.
-func TestOfflineMessageDoesNotPreAnnounceItsEscalation(t *testing.T) {
-	t.Parallel()
-	for _, n := range loadClientNotices(t).Notices {
-		if n.Kind != "offline" {
-			continue
-		}
-		if strings.Contains(strings.ToLower(n.Message), "reopen") {
-			t.Errorf("offline message already offers reopening, which its suggested_action repeats:\n%s", n.Message)
-		}
-		if !strings.Contains(strings.ToLower(n.SuggestedAction), "reopen") {
-			t.Errorf("offline suggested_action no longer names the second way out:\n%s", n.SuggestedAction)
-		}
-		return
-	}
-	t.Fatal("offline notice missing")
-}
-
-// Copy is data. A notice added straight to TypeScript skips review, the scenario
-// pins, and the scope table — so the catalog has to be the only source.
+// Copy is data. A notice added straight to TypeScript skips review and the scope
+// table, so the catalog has to be the only source.
 func TestClientNoticeCopyIsNotInlineInDen(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)

@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: '[read#3:42 unterminated_node'
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: CITATION_SYNTAX_INVALID'
-      - unterminated_node

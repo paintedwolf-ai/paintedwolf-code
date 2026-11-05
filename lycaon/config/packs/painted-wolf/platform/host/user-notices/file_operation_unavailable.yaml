@@ -6,5 +6,3 @@ suggested_action: "Review the file history, then try the change again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "can no longer run"

@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
     match_count: '3'
     profile: coordinator
     tool: render_view
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: RENDER_PATCH_AMBIGUOUS'

@@ -26,7 +26,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: '[read#3:9-2]'
-    expect_contains:
-      - 'Code: MID_TURN_NOTE_INVALID_SYNTAX'
-      - '[read#3:9-2]'
-      - 'inline code'

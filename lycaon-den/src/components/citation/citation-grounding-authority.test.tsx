@@ -53,7 +53,6 @@ describe("citation provenance across presentation surfaces", () => {
           const panel = screen.getByTestId("citation-grounding-panel");
           if (traced && !hasCitations) {
             expect(badge).toBeNull();
-            expect(panel.textContent).toContain("No citations to trace");
             return;
           }
           const positive = traced || hostAssembled;

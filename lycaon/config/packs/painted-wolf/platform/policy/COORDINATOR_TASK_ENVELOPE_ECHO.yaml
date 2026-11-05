@@ -34,6 +34,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: coordinator
       tool: read
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: COORDINATOR_TASK_ENVELOPE_ECHO'

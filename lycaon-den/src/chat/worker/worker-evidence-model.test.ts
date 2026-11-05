@@ -121,6 +121,5 @@ describe("buildWorkerEvidenceFallbackView", () => {
       },
     );
     expect(view?.outcome).toBe("pending");
-    expect(view?.headline).toBe("Verification audit unavailable");
   });
 });

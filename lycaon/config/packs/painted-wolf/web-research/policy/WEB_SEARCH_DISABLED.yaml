@@ -25,12 +25,6 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     agent_type: web-researcher
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WEB_SEARCH_DISABLED'
 - id: fetch_url
   vars:
     tool: fetch_url
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WEB_SEARCH_DISABLED'

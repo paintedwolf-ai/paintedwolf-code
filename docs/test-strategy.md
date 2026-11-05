@@ -109,6 +109,7 @@ Use the narrow fixture at the boundary being exercised:
 | Need | Fixture |
 |------|---------|
 | Disposable prepared SQLite store | `internal/testdbfixture` |
+| Whether values a test supplied reach an output | `internal/testutil/exposure`; tests assert on supplied values and typed results, never on product wording |
 | Temporary Git repository and commits | `internal/testutil/gittest` |
 | Go module or checkout root | `configlayout.FindModuleRoot` or `testutil.CheckoutRoot` |
 | Process-wide Anchor, guidance, Git, or browser setup | the corresponding `internal/testsetup/*` package, called explicitly from `TestMain` |

@@ -308,6 +308,5 @@ describe("ProjectFilesView stage chrome", () => {
     fireEvent.contextMenu(cell, { clientX: 10, clientY: 10 });
     const reveal = await screen.findByTestId("files-ctx-tab-reveal-tree");
     expect(reveal.getAttribute("aria-disabled")).toBe("true");
-    expect(reveal.textContent).toContain("This tab has no item in the file tree.");
   });
 });

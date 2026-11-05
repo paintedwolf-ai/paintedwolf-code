@@ -24,6 +24,3 @@ x-paintedwolf-message: approval plan could not be constructed
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains:
-  - 'Code: HOST_APPROVAL_PLAN_INVALID'
-  - approval

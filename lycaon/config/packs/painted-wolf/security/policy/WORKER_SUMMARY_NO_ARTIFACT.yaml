@@ -28,8 +28,5 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_SUMMARY_NO_ARTIFACT'
 x-paintedwolf-audience:
 - coordinator

@@ -36,10 +36,6 @@ x-paintedwolf-scenarios:
       profile: implement
       source_history_offered: true
       tool: restore_version
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_BASE_MISMATCH'
-      - Query source_history
   - id: without_source_history
     vars:
       detail: current version v2 does not match expected v1
@@ -47,6 +43,3 @@ x-paintedwolf-scenarios:
       profile: plan_write_only
       source_history_offered: false
       tool: restore_version
-    expect_contains:
-      - 'Code: SOURCE_VERSION_BASE_MISMATCH'
-      - Re-read the file

@@ -3,6 +3,7 @@ package promptloop
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,9 +104,7 @@ func TestToolResultSpillUsesStorageProjection(t *testing.T) {
 	)
 	// A capped result is cut from the storage projection, so the inline copy the
 	// model and the transcript receive can only carry screened bytes.
-	if strings.Contains(preview.content, storageBoundarySecret) {
-		t.Fatalf("capped preview kept the raw credential: %q", preview.content)
-	}
+	exposure.Absent(t, preview.content, storageBoundarySecret)
 	if !strings.Contains(preview.content, "[REDACTED]") {
 		t.Fatalf("capped preview is not the storage projection: %q", preview.content)
 	}

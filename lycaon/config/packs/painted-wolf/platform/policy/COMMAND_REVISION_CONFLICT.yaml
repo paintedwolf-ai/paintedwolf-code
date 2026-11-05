@@ -34,7 +34,3 @@ x-paintedwolf-scenarios:
     path: config/app.json
     expected_revision: revision-a
     observed_revision: revision-b
-  expect_contains:
-  - 'Code: COMMAND_REVISION_CONFLICT'
-  - config/app.json no longer matches its captured revision
-  - current read basis

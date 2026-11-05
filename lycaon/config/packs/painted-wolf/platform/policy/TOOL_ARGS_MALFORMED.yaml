@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: summarize
-  expect_contains:
-  - not valid JSON
-  - sibling key

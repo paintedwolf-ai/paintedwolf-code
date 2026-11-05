@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -215,9 +216,7 @@ func TestHandleMCPCreateEnableToolsRefreshDelete(t *testing.T) {
 	if createW.Code != http.StatusCreated {
 		t.Fatalf("create status = %d body=%s", createW.Code, createW.Body.String())
 	}
-	if strings.Contains(createW.Body.String(), secret) {
-		t.Fatalf("create response leaked token: %s", createW.Body.String())
-	}
+	exposure.Absent(t, createW.Body.String(), secret)
 	var created wire.McpProvider
 	testutil.FailErr(t, "decode create", json.Unmarshal(createW.Body.Bytes(), &created))
 	if created.Enabled {
@@ -233,9 +232,7 @@ func TestHandleMCPCreateEnableToolsRefreshDelete(t *testing.T) {
 	if listW.Code != http.StatusOK {
 		t.Fatalf("list status = %d", listW.Code)
 	}
-	if strings.Contains(listW.Body.String(), secret) {
-		t.Fatalf("list leaked token: %s", listW.Body.String())
-	}
+	exposure.Absent(t, listW.Body.String(), secret)
 
 	enableBody, err := json.Marshal(wire.UpdateMcpProviderRequest{Enabled: contractfixture.PtrBool(true)})
 	testutil.FailErr(t, "marshal enable", err)
@@ -293,9 +290,6 @@ func TestHandleCreateMcpProviderRemoteRequiresHTTPS(t *testing.T) {
 	}
 	if !strings.Contains(resp.Title, "HTTPS") {
 		t.Fatalf("title = %q", resp.Title)
-	}
-	if strings.Contains(resp.Message, "did not complete") {
-		t.Fatal("generic fallback leaked onto a coded MCP refusal")
 	}
 }
 

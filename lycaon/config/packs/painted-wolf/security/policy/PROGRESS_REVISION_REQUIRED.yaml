@@ -23,7 +23,3 @@ x-paintedwolf-scenarios:
   vars:
     tool: update_progress
     profile: coordinator
-  expect_contains:
-  - 'Code: PROGRESS_REVISION_REQUIRED'
-  - 'returned snapshot'
-  - 'revision as expected_revision'

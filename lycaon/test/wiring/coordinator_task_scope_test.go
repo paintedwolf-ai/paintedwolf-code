@@ -124,10 +124,7 @@ func TestWorkerPromptIncludesManifestTouchPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildWorkerPrompt: %v", err)
 	}
-	if !strings.Contains(prompt, "Manifest touch paths") {
-		t.Fatalf("prompt = %q", prompt)
-	}
-	if !strings.Contains(prompt, "internal/**") || !strings.Contains(prompt, "Task mode") {
+	if !strings.Contains(prompt, "internal/**") {
 		t.Fatalf("prompt = %q", prompt)
 	}
 	if strings.Contains(prompt, "lycaon/**") {

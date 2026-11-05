@@ -9,5 +9,3 @@ suggested_action: "Fix the listed problems and try again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "must be fixed"

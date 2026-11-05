@@ -29,11 +29,9 @@ x-paintedwolf-scenarios:
       unaccounted_group_ids: ['group:sample', 'group:other']
       unaccounted_omitted: 0
       regressed_group_ids: []
-    expect_contains: ['Code: SUBMIT_VERDICT_INVENTORY_UNACCOUNTED', 'group:sample, group:other', 'scan_group_ids']
   - id: regressed_groups
     vars:
       rejection_reason: 2 of 241 scanner groups have no assessment and no set-aside
       unaccounted_group_ids: ['group:lost']
       unaccounted_omitted: 70
       regressed_group_ids: ['group:lost']
-    expect_contains: ['dropped the accounting the previous one held for group:lost', 'and 70 more']

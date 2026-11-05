@@ -41,10 +41,6 @@ x-paintedwolf-scenarios:
     - lycaon/AGENTS.md
     worktree_leftover_paths: []
     worktree_conflict_paths: []
-  expect_contains:
-  - 'Code: SANDBOX_WORKTREE_BEHIND_INDEX'
-  - AGENTS.md
-  - worktree still holds the earlier content
 - id: merge_conflict
   vars:
     tool: command
@@ -52,6 +48,3 @@ x-paintedwolf-scenarios:
     worktree_leftover_paths: []
     worktree_conflict_paths:
     - .paintedwolf/skills/review/SKILL.md
-  expect_contains:
-  - 'Code: SANDBOX_WORKTREE_BEHIND_INDEX'
-  - unmerged

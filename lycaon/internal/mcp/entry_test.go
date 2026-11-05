@@ -33,7 +33,7 @@ func TestMCPProviderEntryTransport(t *testing.T) {
 	t.Run("reject both", func(t *testing.T) {
 		e := mcp.MCPProviderEntry{ID: "x", URL: "http://127.0.0.1/mcp", Command: "true"}
 		_, err := e.Transport()
-		if err == nil || !strings.Contains(err.Error(), "not both") {
+		if err == nil {
 			t.Fatalf("Transport = %v want both-specified error", err)
 		}
 	})

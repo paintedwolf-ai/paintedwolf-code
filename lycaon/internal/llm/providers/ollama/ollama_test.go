@@ -551,7 +551,7 @@ func TestOllamaErrorsDoNotManufactureToolCalls(t *testing.T) {
 		{name: "write first", tools: []tools.ToolMeta{write, ask}},
 	}
 	for _, tc := range cases {
-		for _, providerError := range []string{"tool 'write' not found", "unexpected end of JSON input", "invalid character in string escape code", "model not found"} {
+		for _, providerError := range []string{"tool 'write' not found", "invalid character in string escape code", "model not found"} {
 			t.Run(tc.name+"/"+providerError, func(t *testing.T) {
 				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					var payload Request

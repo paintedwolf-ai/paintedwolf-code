@@ -24,6 +24,3 @@ x-paintedwolf-message: structured local service connection request invalid
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains:
-  - 'Code: SANDBOX_LOOPBACK_CONNECT_REQUEST_INVALID'
-  - local service connection

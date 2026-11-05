@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
@@ -149,35 +148,6 @@ func modeTemplateRefs(profile surface.TurnProfile) []string {
 		out = append(out, surface.ModeTemplateRef(ref))
 	}
 	return out
-}
-
-func renderImplementSpawnInjectForContract(t *testing.T, root string) string {
-	t.Helper()
-	engine := contractcheck.BundledPromptEngineForRoot(t)
-	renderer := prompts.NewInjectRenderer(engine)
-	block, err := inject.RenderImplementSpawnInject(
-		context.Background(), renderer, "sess-inject-test", spawn.AmbientAllowedAgents(), 3, spawn.SurfaceImplementSynthesis, 1, false, true,
-		nil, nil)
-	if err != nil {
-		t.Fatalf("RenderImplementSpawnInject: %v", err)
-	}
-	return block
-}
-
-func assertCoordinatorInvestigateBehavioral(t *testing.T, corpus string) {
-	t.Helper()
-	norm := strings.ReplaceAll(corpus, "**", "")
-	for _, phrase := range []string{
-		"grep",
-		"command",
-		"coordinator_product_write",
-		`task(`,
-		"project tree",
-	} {
-		if !strings.Contains(norm, phrase) {
-			t.Fatalf("investigate surface invariants missing %q", phrase)
-		}
-	}
 }
 
 // mergeWidestUnitBlocks renders the unit slots for the widest turn a surface

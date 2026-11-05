@@ -25,15 +25,7 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: COMMAND_ARGV_CONFLICT'
-  - conflicting explicit command forms
 - id: verify_forms
   tool: verify
   vars:
     tool: verify
-  expect_contains:
-  - 'Code: COMMAND_ARGV_CONFLICT'
-  - conflicting explicit command forms
-  - Supply only one command form

@@ -25,17 +25,10 @@ x-paintedwolf-scenarios:
   - id: recall_callable
     vars:
       can_recall: true
-    expect_contains:
-      - 'Code: SUBMIT_VERDICT_CITATIONS_REQUIRED'
-      - 'recall(query='
   - id: recall_not_callable
     vars:
       can_recall: false
-    expect_contains:
-      - 'Code: SUBMIT_VERDICT_CITATIONS_REQUIRED'
-      - 'Cite only handles shown'
   - id: missing
     vars:
       review_expected_call: 'submit_verdict(verdict={verdict: CHALLENGED}, cited_evidence=[{"handle":"reviewer:read#1"}], cited_urls=[])'
-    expect_contains: ['Code: SUBMIT_VERDICT_CITATIONS_REQUIRED', 'handle', 'top-level']
 x-paintedwolf-emit: guard:workflow

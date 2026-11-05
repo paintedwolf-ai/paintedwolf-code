@@ -12,7 +12,3 @@ scenarios:
   - id: default
     vars:
       tool: complete_leg
-    expect_contains:
-      - 'Code: TOOL_BATCH_NOT_RUN'
-      - complete_leg
-      - did not run

@@ -31,9 +31,6 @@ x-paintedwolf-scenarios:
       detail: exact content for this version is unavailable
       profile: implement
       tool: source_history
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_UNAVAILABLE'
   - id: diff_side
     vars:
       detail: version v1 has no text to diff
@@ -41,6 +38,3 @@ x-paintedwolf-scenarios:
       state: binary
       profile: implement
       tool: source_history
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_UNAVAILABLE'

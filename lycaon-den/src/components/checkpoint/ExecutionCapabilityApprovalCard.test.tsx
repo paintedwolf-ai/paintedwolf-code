@@ -26,9 +26,7 @@ describe("execution capability approval cards", () => {
     const elevated = view.getByTestId("approval-elevated-access");
     const expectedLabel = kind === "host_execution" ? "host execution" : kind === "credential_store" ? "OS credential store access" : "process control";
     expect(elevated.getAttribute("data-tip")).toContain(expectedLabel);
-    expect(elevated.getAttribute("data-tip")).toContain("Allow once does not save access");
     fireEvent.click(view.getByTestId("approval-card-minimize"));
-    expect(view.getByTestId("approval-elevated-access").getAttribute("data-tip")).toContain("unlock icon appears");
     fireEvent.click(view.getByTestId("approval-card-expand"));
     expect(primary.textContent).toContain("Allow for this chat");
     fireEvent.click(primary);

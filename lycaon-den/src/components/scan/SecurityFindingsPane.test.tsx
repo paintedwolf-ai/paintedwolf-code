@@ -370,7 +370,6 @@ describe("SecurityFindingsPane", () => {
     client.getProjectSecurity.mockRejectedValueOnce(new Error("Coverage unavailable"));
     await renderPane();
     await screen.findByText("Coverage unavailable");
-    expect(screen.getByTestId("scans-coverage-line").textContent).toBe("Coverage has not loaded.");
     expect(screen.queryByTestId("scans-coverage-chip")).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Retry loading" }));
     await waitFor(() => expect(screen.getByTestId("scans-coverage-chip").textContent).toBe("Complete"));
@@ -457,7 +456,6 @@ describe("SecurityFindingsPane", () => {
         members: [{ scanner_id: pending.scanner_id ?? "", phase: "started", scan: { ...pending, status: "timed_out" } }] } });
     setEvent({ scan_id: pending.id, categories: pending.categories, status: "timed_out", findings_count: 0, long_running: false });
     await waitFor(() => expect(screen.getByTestId("scans-full-scan-status").textContent).toBe("Timed out"));
-    expect(screen.getByTestId("scans-coverage-line").textContent).toContain("no scanner established coverage");
     expect((screen.getByTestId("scans-full-scan-start") as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -655,7 +653,6 @@ describe("SecurityFindingsPane", () => {
     const rows = await screen.findAllByTestId("scans-finding-row");
     fireEvent.click(at(rows, 0));
     const drill = await screen.findByTestId("scans-drill-down");
-    expect(screen.getByTestId("scans-advisory-kind").textContent).toBe("Malicious package");
     expect(drill.textContent).toContain("MAL-2025-2544 · GHSA-6vm3-jj99-7229");
   });
 

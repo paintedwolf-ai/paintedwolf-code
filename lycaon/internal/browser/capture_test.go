@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
@@ -134,9 +135,7 @@ func TestCaptureProjectsSecretFromPixelsSemanticEvidenceLogsAndCaption(t *testin
 	evidence, err := json.Marshal(out.PageEvidence)
 	testutil.FailErr(t, "encode page evidence", err)
 	visible := string(out.State) + string(out.Snapshot) + string(evidence) + out.Caption
-	if strings.Contains(visible, secret) {
-		t.Fatalf("capture projection retained secret: %s", visible)
-	}
+	exposure.Absent(t, visible, secret)
 	if !strings.Contains(visible, "[REDACTED]") {
 		t.Fatalf("capture projection omitted redaction marker: %s", visible)
 	}
@@ -193,9 +192,7 @@ func TestCapturePreservesCanvasAfterTextGeometryIsInvalidated(t *testing.T) {
 		t.Fatalf("invalidated canvas coverage regions=%+v capture=%+v", regions, out.Coverage)
 	}
 	for _, region := range regions.Regions {
-		if strings.Contains(region.Text, secret) {
-			t.Fatalf("invalidated canvas text remained maskable: %+v", region)
-		}
+		exposure.Absent(t, region.Text, secret)
 	}
 	img, err := png.Decode(bytes.NewReader(out.Bytes))
 	testutil.FailErr(t, "decode invalidated canvas capture", err)
@@ -607,9 +604,7 @@ func TestConsoleLineIsScreenedBeforeTheLineCapClipsIt(t *testing.T) {
 	if len(lines) != 1 {
 		t.Fatalf("retained lines = %d, want 1", len(lines))
 	}
-	if strings.Contains(lines[0], secret[:10]) {
-		t.Fatalf("clipped console line kept the head of a protected value: %q", lines[0][len(lines[0])-40:])
-	}
+	exposure.Absent(t, lines[0], secret[:10])
 	if !strings.Contains(lines[0], "[REDACTED]") {
 		t.Fatalf("console line was not screened: %q", lines[0][len(lines[0])-40:])
 	}

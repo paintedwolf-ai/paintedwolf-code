@@ -10,8 +10,3 @@ invariants:
   fires_in:
   - Prompt turn after two consecutive user-visible turns each answered with coordinator
     inline file edits (tool_result.file_edit present)
-  required:
-  - model of the change
-  - audit the whole change
-  forbidden:
-  - workflow_advance

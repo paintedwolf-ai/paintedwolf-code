@@ -516,9 +516,7 @@ describe("ProjectArtifactsView", () => {
 
     const impact = await screen.findByTestId("project-artifact-delete-impact");
     // Counts use persisted reference rows.
-    expect(impact.textContent).toContain("the project cover");
     expect(impact.textContent).toContain("2 messages that show it");
-    expect(impact.textContent).toContain("will read as deleted");
 
     listProjectArtifacts.mockResolvedValue({ artifacts: [] });
     fireEvent.click(

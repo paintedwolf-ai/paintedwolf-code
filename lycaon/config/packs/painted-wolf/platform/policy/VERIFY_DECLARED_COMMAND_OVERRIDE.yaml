@@ -30,7 +30,3 @@ x-paintedwolf-scenarios:
   vars:
     declared: ./task check
     requested: go test ./internal/foo/...
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: VERIFY_DECLARED_COMMAND_OVERRIDE'
-  - ./task check

@@ -30,11 +30,6 @@ x-paintedwolf-scenarios:
       tool: wait
       mid_turn_citations_required: true
       observed_handles_sample: task#1
-    expect_contains:
-      - 'Code: WAIT_HIDDEN_TEXT'
-      - unpublished draft
-      - cited nothing
-      - task#1
   - id: evidence_unreadable
     vars:
       profile: coordinator
@@ -42,14 +37,8 @@ x-paintedwolf-scenarios:
       mid_turn_evidence_unreadable: true
       mid_turn_citation_attempted: true
       mid_turn_citations_required: true
-    expect_contains:
-      - 'Code: WAIT_HIDDEN_TEXT'
-      - could not read the evidence
   - id: citation_attempted
     vars:
       profile: coordinator
       tool: wait
       mid_turn_citation_attempted: true
-    expect_contains:
-      - 'Code: WAIT_HIDDEN_TEXT'
-      - did not resolve

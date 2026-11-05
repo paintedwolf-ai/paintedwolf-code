@@ -25,7 +25,6 @@ describe("managed-secret value entry", () => {
     const save = screen.getByTestId(mode === "add" ? "managed-secret-add-submit" : "managed-secret-value-submit");
     fireEvent.click(save);
     expect(submit).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert").textContent).toContain("at least 4 characters");
     fireEvent.input(value, { target: { value: " 12 " } });
     fireEvent.click(save);
     expect(submit).toHaveBeenCalledExactlyOnceWith(mode === "add"

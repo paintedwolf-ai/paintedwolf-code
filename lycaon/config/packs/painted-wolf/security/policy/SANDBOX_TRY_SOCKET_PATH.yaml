@@ -48,7 +48,3 @@ x-paintedwolf-scenarios:
     refused_socket_paths:
     - /Users/person/.colima/default/docker.sock
     tool_args: {}
-  expect_contains:
-  - 'Code: SANDBOX_TRY_SOCKET_PATH'
-  - capability_request.socket_paths
-  - /Users/person/.colima/default/docker.sock

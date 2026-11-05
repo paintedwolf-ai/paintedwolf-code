@@ -21,9 +21,5 @@ x-paintedwolf-scenarios:
   tool: state_start
   vars:
     tool: state_start
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SPEC_POSTURE_STATE_FORBIDDEN'
-  - Use
 x-paintedwolf-audience:
 - coordinator

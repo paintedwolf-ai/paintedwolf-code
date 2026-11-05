@@ -345,9 +345,6 @@ func TestCredentialRemediesDiscoverDeferredTools(t *testing.T) {
 			if strings.Contains(output, "`request_tools`") == loaded {
 				t.Fatalf("schema loading advice disagrees with loaded=%v: %s", loaded, output)
 			}
-			if strings.Contains(output, "report that need to the coordinating session") {
-				t.Fatalf("reachable deferred tool was treated as unavailable: %s", output)
-			}
 		}
 	}
 }

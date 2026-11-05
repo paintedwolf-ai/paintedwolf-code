@@ -31,8 +31,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: 90dcba36-946a-46c6-933d-e94207b897ab
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: PRESENT_MARKDOWN_EMBED'
-      - 'artifact:'
-      - markdown

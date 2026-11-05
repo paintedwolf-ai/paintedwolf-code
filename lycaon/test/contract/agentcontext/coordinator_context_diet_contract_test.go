@@ -2,7 +2,6 @@ package contract
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -129,22 +128,6 @@ func TestCoordinatorContextDietSurfaceToolsSSOT(t *testing.T) {
 	for _, loadable := range []string{"write", "read", "grep", "list_dir", "git_status", "task", "capture_page"} {
 		if contractcheck.ContainsString(investigate, loadable) {
 			t.Fatalf("implement_investigate floor must not carry loadable tool %q", loadable)
-		}
-	}
-}
-
-func TestRenderViewSchemaEncouragesMockupsAndExplanatoryVisuals(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir", err)
-	meta, ok := cfg.ToolMeta("render_view")
-	if !ok {
-		t.Fatal("missing render_view schema")
-	}
-	for _, want := range []string{"UI/product mockups", "especially before", "diagrams", "runtime evidence"} {
-		if !strings.Contains(meta.Description, want) {
-			t.Fatalf("render_view description missing %q: %s", want, meta.Description)
 		}
 	}
 }

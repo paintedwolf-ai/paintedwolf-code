@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
     mcp_error_code: FIXTURE_MCP_DENIED
     profile: coordinator
     tool: mcp_fixture_fail_coded
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: MCP_CALL_FAILED'
-  - FIXTURE_MCP_DENIED

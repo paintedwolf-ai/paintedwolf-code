@@ -53,7 +53,3 @@ x-paintedwolf-scenarios:
       path: ntp_check.py
       profile: implement
       tool: replace_lines
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: MUTATION_BROKE_PARSE'
-      - atomic

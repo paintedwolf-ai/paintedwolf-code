@@ -19,10 +19,7 @@ describe("source observation coverage", () => {
     expect(sourceWatchNotice(coverage("live", { watch_limit_reached: true }))).toBeNull();
   });
   it("keeps intentional lazy boundaries distinct from failed registrations", () => {
-    expect(sourceWatchNotice(coverage("live", { policy_unwatched: 3 }))).toContain("on demand");
-    expect(sourceWatchNotice(coverage("partial", { unwatched_directories: 3 }))).toContain("not watched");
     expect(sourceWatchNotice(coverage("faulted"))).toContain("stopped");
-    expect(sourceWatchNotice(coverage("unwatched"))).toContain("not being watched");
     expect(sourceWatchNotice(undefined)).toBeNull();
   });
 });

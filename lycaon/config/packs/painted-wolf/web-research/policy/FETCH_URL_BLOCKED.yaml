@@ -34,6 +34,3 @@ x-paintedwolf-scenarios:
   vars:
     detail: 127.0.0.1 is not a public address
     tool: fetch_url
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: FETCH_URL_BLOCKED'

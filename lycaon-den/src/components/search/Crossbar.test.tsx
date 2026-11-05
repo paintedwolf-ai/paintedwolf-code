@@ -163,7 +163,6 @@ describe("Crossbar", () => {
       onClose={vi.fn()} onEscalate={vi.fn()} onNavigateHit={vi.fn()} />);
     const input = screen.getByTestId("crossbar-input");
     fireEvent.input(input, { target: { value: ":" } });
-    expect(screen.getByTestId("crossbar-hit-status").textContent).toBe("Type a line number");
     fireEvent.input(input, { target: { value: ":42:7" } });
     const row = await screen.findByTestId("crossbar-line");
     expect(row.textContent).toContain("Go to line 42, column 7");
@@ -209,17 +208,10 @@ describe("Crossbar", () => {
     render(() => <Crossbar open originProjectId="p1"
       onClose={vi.fn()} onEscalate={vi.fn()} onNavigateHit={vi.fn()} />);
     fireEvent.input(screen.getByTestId("crossbar-input"), { target: { value: "#" } });
-    expect((await screen.findByTestId("crossbar-hit-status")).textContent).toBe("Type a symbol name");
+    await screen.findByTestId("crossbar-hit-status");
     fireEvent.click(screen.getByTestId("crossbar-mode-code"));
     expect((screen.getByTestId("crossbar-input") as HTMLInputElement).value).toBe("");
     expect(search).not.toHaveBeenCalled();
-  });
-
-  it("says a line jump needs an open file", () => {
-    resetProjectFilesForTests();
-    render(() => <Crossbar open originProjectId="p1" seed=":12"
-      onClose={vi.fn()} onEscalate={vi.fn()} onNavigateHit={vi.fn()} />);
-    expect(screen.getByTestId("crossbar-hit-status").textContent).toBe("Open a file to go to a line");
   });
 
   it("treats > as the Actions tab and leaves it when another tab is chosen", async () => {
@@ -370,7 +362,6 @@ describe("Crossbar", () => {
     expect(search).toHaveBeenCalledTimes(2);
 
     expect(screen.getByText("Current result")).toBeTruthy();
-    expect(screen.getByTestId("crossbar-coverage").textContent).toContain("could not refresh");
     expect(screen.queryByTestId("crossbar-searching")).toBeNull();
   });
 

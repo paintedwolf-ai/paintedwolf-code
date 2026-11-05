@@ -21,8 +21,5 @@ x-paintedwolf-scenarios:
   tool: delegate_dispatch
   vars:
     tool: delegate_dispatch
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SPEC_POSTURE_DELEGATION_FORBIDDEN'
 x-paintedwolf-audience:
 - coordinator

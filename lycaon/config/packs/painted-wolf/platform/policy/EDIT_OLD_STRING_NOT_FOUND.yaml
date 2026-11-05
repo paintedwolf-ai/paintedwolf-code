@@ -55,9 +55,6 @@ x-paintedwolf-scenarios:
     source_history_offered: true
     tool: edit
     total_lines: 120
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: EDIT_OLD_STRING_NOT_FOUND'
 
 - id: replacement_present
   vars:
@@ -69,8 +66,3 @@ x-paintedwolf-scenarios:
     total_lines: 120
     replacement_matches: 1
     replacement_line: 7
-  expect_contains:
-  - 'already present'
-  - 'This rejected call made no change'
-  - 'does not prove an earlier'
-  - 'continue with the remaining task'

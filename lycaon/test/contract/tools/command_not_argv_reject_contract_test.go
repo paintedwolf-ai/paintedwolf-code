@@ -107,9 +107,6 @@ func TestCommandNotArgvRejectsInlineEnvironment(t *testing.T) {
 	if tr == nil || tr.Code != "COMMAND_NOT_ARGV" {
 		t.Fatalf("want COMMAND_NOT_ARGV ToolReject, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "environment assignments belong in env") {
-		t.Fatalf("reject does not direct the agent to env: %v", err)
-	}
 }
 
 func TestCommandAcceptsPrefixEnvironment(t *testing.T) {

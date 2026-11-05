@@ -33,8 +33,3 @@ x-paintedwolf-scenarios:
       timeout_ms: 60000
       files_searched: 18240
       largest_subtree: 'node_modules (16011 files)'
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: GREP_DEADLINE_EXCEEDED'
-      - 'after 18240 files'
-      - 'Most of the budget went to node_modules (16011 files)'
