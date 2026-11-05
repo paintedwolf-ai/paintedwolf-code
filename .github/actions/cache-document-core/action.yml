@@ -42,4 +42,4 @@ runs:
     - if: ${{ steps.save.outcome == 'success' }}
       uses: ./.github/actions/cache-prune
       with:
-        family: document-core-v2-${{ runner.os }}-${{ runner.arch }}-
+        family: ${{ steps.paths.outputs.prefix }}

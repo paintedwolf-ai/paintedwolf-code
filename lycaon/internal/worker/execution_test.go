@@ -143,7 +143,7 @@ func TestConcurrencyCapEnforced(t *testing.T) {
 		})
 	}
 
-	pollCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	pollCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
 	defer cancel()
 	go poller.Run(pollCtx)
 

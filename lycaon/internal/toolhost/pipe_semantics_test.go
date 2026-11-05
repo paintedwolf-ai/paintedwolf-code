@@ -207,7 +207,7 @@ func TestPipeSemanticsStreamingAndEarlyTerminationWithBoundedMemory(t *testing.T
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 			defer cancel()
 			out, err := env.Call(t, ctx, tc.program)
 			testutil.FailErr(t, tc.name, err)

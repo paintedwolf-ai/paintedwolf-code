@@ -46,7 +46,7 @@ digest_try_reclaim_stale() {
 
 digest_acquire_lock() {
   local lockdir="$1"
-  local timeout="${2:-${DIGEST_LOCK_TIMEOUT:-60}}"
+  local timeout="${2:-${DIGEST_LOCK_TIMEOUT:-600}}"
   local waited=0
   while ! mkdir "${lockdir}" 2>/dev/null; do
     digest_try_reclaim_stale "${lockdir}" || true

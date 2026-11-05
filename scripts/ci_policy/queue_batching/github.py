@@ -48,6 +48,10 @@ def restore(repository, row):
         if source(repository, row['number'])['mergeQueueEntry'] is not None:
             return
         mutation('enablePullRequestAutoMerge', {'pullRequestId': current['node_id'], 'mergeMethod': 'SQUASH'})
+    elif current['state'] == 'open':
+        api(f'repos/{repository}/issues/{row["number"]}/comments', 'POST', {'body': (
+            'Automatic queue batching withdrew this PR and did not re-arm auto-merge, because its head '
+            'or draft state has changed. Enable auto-merge again when it is ready.')})
 
 
 def checks(repository, sha):

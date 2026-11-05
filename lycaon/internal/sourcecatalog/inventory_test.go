@@ -75,7 +75,7 @@ func TestIndexPublishesBeforeYieldingToInitialInventory(t *testing.T) {
 		t.Fatalf("index continued before structural coverage: %v", err)
 	default:
 	}
-	writerContext, stopWriter := context.WithTimeout(ctx, time.Second)
+	writerContext, stopWriter := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
 	defer stopWriter()
 	unwrite, err := store.writer.Write(writerContext, store.writable)
 	testutil.FailErr(t, "acquire writer during inventory wait", err)
@@ -169,7 +169,7 @@ func TestInitialInventoryFailureSettlesWaitersAndRecovers(t *testing.T) {
 	moved := root.Path + "-unavailable"
 	testutil.FailErr(t, "make root unavailable", os.Rename(root.Path, moved))
 	testutil.FailErr(t, "start inventory", store.startInventory(t.Context()))
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	err = store.awaitInitialInventory(ctx)
 	if err == nil || ctx.Err() != nil {

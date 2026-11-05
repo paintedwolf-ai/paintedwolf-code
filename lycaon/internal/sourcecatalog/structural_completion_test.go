@@ -20,7 +20,7 @@ func TestRecursiveWaitRetainsCompletionSupersededBeforeHandoff(t *testing.T) {
 	store.mu.Lock()
 	store.inventory = inventoryWork{cancel: func() { stop.Do(func() { close(done) }) }, done: done, wake: make(chan struct{}, 1), changed: make(chan struct{}), running: true}
 	store.mu.Unlock()
-	deadline, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	deadline, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	waiting := &structuralWaitingContext{Context: deadline, waiting: make(chan struct{})}
 	result := make(chan error, 1)

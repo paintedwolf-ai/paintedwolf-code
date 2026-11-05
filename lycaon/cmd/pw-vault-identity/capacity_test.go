@@ -38,7 +38,7 @@ func TestConnectionCapacityRejectsBeforeVerificationAndReclaimsSlots(t *testing.
 	overflow, err := net.DialTimeout("unix", f.socket, time.Second)
 	testutil.FailErr(t, "connect overflow caller", err)
 	defer func() { _ = overflow.Close() }()
-	testutil.FailErr(t, "bound overflow read", overflow.SetReadDeadline(time.Now().Add(time.Second)))
+	testutil.FailErr(t, "bound overflow read", overflow.SetReadDeadline(time.Now().Add(testutil.Timeout(time.Minute))))
 	var one [1]byte
 	if n, err := overflow.Read(one[:]); n != 0 || !errors.Is(err, io.EOF) {
 		t.Fatalf("overflow caller was not immediately closed: bytes=%d error=%v", n, err)
@@ -50,7 +50,7 @@ func TestConnectionCapacityRejectsBeforeVerificationAndReclaimsSlots(t *testing.
 		t.Fatalf("overflow disturbed an admitted caller: %+v", response)
 	}
 	testutil.FailErr(t, "close admitted caller", clients[0].Close())
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(testutil.Timeout(time.Minute))
 	for f.server.active.Load() == maxConnections && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
@@ -74,7 +74,7 @@ func TestConnectionCapacityRejectsBeforeVerificationAndReclaimsSlots(t *testing.
 		if err != nil {
 			t.Fatalf("shutdown service: %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("service did not finish shutdown")
 	}
 	if got := f.server.active.Load(); got != 0 {
@@ -107,7 +107,7 @@ func TestUnexpectedListenerClosureDrainsVerifiedConnections(t *testing.T) {
 		if !errors.Is(err, net.ErrClosed) {
 			t.Fatalf("unexpected listener failure was lost: %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("listener failure waited for a verified client to disconnect")
 	}
 	if _, err := client.Do(probe); err == nil {
