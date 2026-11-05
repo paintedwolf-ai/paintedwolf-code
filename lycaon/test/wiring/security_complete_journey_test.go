@@ -43,8 +43,14 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		mu.Unlock()
 		if jobID == "" {
 			if turn == 1 {
-				content := progress.NewSQLStore(h.DB).Get(ctx, parentID)
-				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "update_progress", Args: map[string]any{"content": strings.ReplaceAll(content, "[ ]", "[x]")}}}}
+				current, err := progress.NewSQLStore(h.DB).Snapshot(ctx, parentID)
+				if err != nil {
+					t.Errorf("read progress: %v", err)
+					return modelcall.Completion{}
+				}
+				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "update_progress", Args: map[string]any{
+					"content": strings.ReplaceAll(current.Content, "[ ]", "[x]"), "expected_revision": current.Revision, "item_ids": current.ItemIDs,
+				}}}}
 			}
 			return modelcall.Completion{Content: body}
 		}

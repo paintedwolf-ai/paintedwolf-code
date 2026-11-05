@@ -76,9 +76,18 @@ func TestProgramKillBeforeTheProcessStartsReportsItsSignal(t *testing.T) {
 		done <- callResult{content, err}
 	}()
 	testutil.AwaitClosed(t, "the launch reaches its hold", held)
-	// The program is blocked starting this job, so the signal goes to the jobs table.
+	content, err := f.Call(t, t.Context(), `kill %1`)
+	testutil.FailErr(t, "kill the held job", err)
+	if got := decodeOutcome(t, content); got.Status != 0 {
+		t.Fatalf("kill outcome: %+v", got)
+	}
 	jobs := f.Runtime.Supervisor.Jobs(f.Session, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "signal the held job", jobs.Signal(t.Context(), "%1", "TERM"))
+	testutil.WaitFor(t, func() bool {
+		live, err := jobs.List(t.Context())
+		return err == nil && len(live) == 0
+	})
+	// The rest of the program may launch through the same window.
+	open()
 	result := <-done
 	testutil.FailErr(t, "run the held program", result.err)
 	if got := decodeOutcome(t, result.content); got.Stdout != "job:143\nstarted:1\n" {
