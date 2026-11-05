@@ -66,14 +66,13 @@ func startProcess(ctx context.Context, spec processSpec, lease *modelstore.Lease
 	output, err := cmd.StdoutPipe()
 	if err != nil {
 		cleanup()
-		input.Close()
+		err = errors.Join(err, input.Close())
 		lease.Release()
 		return nil, err
 	}
 	if err = execpkg.StartPrepared(ctx, cmd); err != nil {
 		cleanup()
-		input.Close()
-		output.Close()
+		err = errors.Join(err, input.Close(), output.Close())
 		lease.Release()
 		return nil, err
 	}

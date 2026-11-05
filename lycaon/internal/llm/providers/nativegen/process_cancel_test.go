@@ -62,7 +62,7 @@ func TestCanceledStepSettlesProgressBeforeRequestCleanup(t *testing.T) {
 	if cursor.generated != 1 || cursor.processed != 3 {
 		t.Fatal("canceled step lost acknowledged progress")
 	}
-	runtime.finishRequest(cursor)
+	runtime.finishRequest(ctx, cursor)
 	if _, err := provider.Complete(t.Context(), req); err != nil {
 		t.Fatalf("generate after canceled request: %v", err)
 	}

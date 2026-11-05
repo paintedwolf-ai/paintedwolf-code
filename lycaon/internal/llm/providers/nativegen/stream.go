@@ -78,7 +78,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 	go func() {
 		defer close(out)
 		defer release()
-		defer p.runtime.finishRequest(cursor)
+		defer p.runtime.finishRequest(ctx, cursor)
 		p.generate(ctx, req, model, cursor, out)
 	}()
 	return out, nil
@@ -116,11 +116,11 @@ func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json
 	return &progressCursor{requestID: request.RequestID, prompt: len(rendered.PromptTokens), processed: begun.ReusedPrefixTokens, reused: begun.ReusedPrefixTokens, maximum: maximum, chunk: p.config.PrefillChunk, schema: len(schema) > 0}, nil
 }
 
-func (p *Runtime) finishRequest(cursor *progressCursor) {
+func (p *Runtime) finishRequest(ctx context.Context, cursor *progressCursor) {
 	if cursor.terminal {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	cursor.cancel = true
 	result := progressResult{expected: cursor}

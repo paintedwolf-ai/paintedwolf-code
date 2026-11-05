@@ -36,7 +36,7 @@ func DecodeInventory(raw []byte) (Inventory, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&inventory); err != nil {
-		return Inventory{}, fmt.Errorf("%w: %v", ErrInventory, err)
+		return Inventory{}, fmt.Errorf("%w: %w", ErrInventory, err)
 	}
 	if decoder.Decode(new(any)) != io.EOF || inventory.Protocol != 1 || inventory.Devices == nil || len(inventory.Devices) > 32 {
 		return Inventory{}, ErrInventory

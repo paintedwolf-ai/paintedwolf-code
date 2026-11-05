@@ -73,12 +73,12 @@ func sign(ctx context.Context, args []string, output, diagnostics io.Writer) err
 	return json.NewEncoder(output).Encode(signed)
 }
 
-func readInput(path string, limit int64) ([]byte, error) {
-	file, err := os.Open(path)
+func readInput(path string, limit int64) (raw []byte, err error) {
+	file, err := os.Open(path) // #nosec G304 -- The operator selects the release input path.
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { err = errors.Join(err, file.Close()) }()
 	info, err := file.Stat()
 	if err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func readInput(path string, limit int64) ([]byte, error) {
 	if !info.Mode().IsRegular() || info.Size() > limit {
 		return nil, errors.New("release input must be a bounded regular file")
 	}
-	raw, err := io.ReadAll(io.LimitReader(file, limit+1))
+	raw, err = io.ReadAll(io.LimitReader(file, limit+1))
 	if err != nil {
 		return nil, err
 	}

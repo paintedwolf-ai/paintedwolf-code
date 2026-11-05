@@ -40,9 +40,9 @@ func TestLoadAuditsContentBeforeStartingProcess(t *testing.T) {
 
 func TestLoadRespectsTheRuntimeHostReservation(t *testing.T) {
 	for _, small := range []bool{false, true} {
-		name, capacity := "full", uint64(768 << 20)
+		name, capacity := "full", uint64(768<<20)
 		if small {
-			name, capacity = "compact", 512 << 20
+			name, capacity = "compact", 512<<20
 		}
 		t.Run(name, func(t *testing.T) {
 			_, runtime := fixtureProvider(t)

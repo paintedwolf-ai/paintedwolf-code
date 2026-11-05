@@ -57,8 +57,9 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-	if err := run(ctx, os.Args[1:], os.Stdout, os.Stderr); err != nil {
+	err := run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	cancel()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "model-bundle:", err)
 		os.Exit(1)
 	}

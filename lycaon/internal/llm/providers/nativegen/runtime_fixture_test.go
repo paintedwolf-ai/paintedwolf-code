@@ -33,7 +33,7 @@ func runtimeFixture() {
 		if json.Unmarshal(payload, &request) != nil || request.Version != protocolVersion {
 			os.Exit(2)
 		}
-		result := map[string]any{}
+		var result map[string]any
 		switch request.Command.Method {
 		case "hello":
 			result = map[string]any{"kind": "hello", "protocol": protocolVersion, "artifact_id": artifact, "backend": "vulkan", "physical_device": map[string]string{"kind": "pci", "address": "0000:03:00.0"}}
@@ -111,57 +111,12 @@ func runtimeFixture() {
 			generated = 0
 			result = map[string]any{"kind": "begun", "request_id": active.RequestID, "reused_prefix_tokens": reused}
 		case "advance", "cancel":
-			fault := os.Getenv("PW_NATIVEGEN_RESPONSE_FAULT")
-			if request.Command.Method == "advance" && (fault == "before_output" || fault == "after_output" && generated > 0) {
-				_, _ = os.Stdout.Write([]byte{0, 0})
+			var ok bool
+			result, generated, ok = runtimeFixtureProgress(active, request.Command.Method, generated, reused)
+			if !ok {
 				return
 			}
-			text := ""
-			var token *uint32
-			var stop *string
-			if request.Command.Method == "cancel" {
-				value := "canceled"
-				stop = &value
-			} else {
-				generated++
-				if generated == 1 && fault != "empty_eos" {
-					value := uint32(236812)
-					token, text = &value, "4"
-					switch fault {
-					case "orphan_channel":
-						value, text = 101, "<channel|>"
-					case "capped_channel":
-						value, text = 100, "<|channel>"
-					case "capped_tool":
-						value, text = 48, "<|tool_call>"
-					}
-					if active.MaxNewTokens == 1 {
-						value := "max_tokens"
-						stop = &value
-					}
-				} else {
-					value := "eos"
-					stop = &value
-				}
-			}
-			if request.Command.Method == "advance" && (fault == "buffered_then_orphan" || fault == "buffered_then_cap") {
-				ids := []uint32{48, 500, 49, 101}
-				texts := []string{"<|tool_call>", "call:read{}", "<tool_call|>", "<channel|>"}
-				if fault == "buffered_then_cap" {
-					ids[3], texts[3] = 100, "<|channel>"
-				}
-				value := ids[generated-1]
-				token, text, stop = &value, texts[generated-1], nil
-				if generated == active.MaxNewTokens {
-					value := "max_tokens"
-					stop = &value
-				}
-			}
-			processed := reused
-			if generated > 0 {
-				processed = len(active.PromptTokens)
-			}
-			result = map[string]any{"kind": "progress", "text": text, "progress": map[string]any{"request_id": active.RequestID, "processed_prompt_tokens": processed, "generated_tokens": generated, "reused_prefix_tokens": reused, "token": token, "stop_reason": stop}}
+
 		default:
 			os.Exit(4)
 		}
@@ -170,4 +125,58 @@ func runtimeFixture() {
 			return
 		}
 	}
+}
+
+func runtimeFixtureProgress(active beginRequest, method string, generated, reused int) (map[string]any, int, bool) {
+	fault := os.Getenv("PW_NATIVEGEN_RESPONSE_FAULT")
+	if method == "advance" && (fault == "before_output" || fault == "after_output" && generated > 0) {
+		_, _ = os.Stdout.Write([]byte{0, 0})
+		return nil, generated, false
+	}
+	text := ""
+	var token *uint32
+	var stop *string
+	if method == "cancel" {
+		value := "canceled"
+		stop = &value
+	} else {
+		generated++
+		if generated == 1 && fault != "empty_eos" {
+			value := uint32(236812)
+			token, text = &value, "4"
+			switch fault {
+			case "orphan_channel":
+				value, text = 101, "<channel|>"
+			case "capped_channel":
+				value, text = 100, "<|channel>"
+			case "capped_tool":
+				value, text = 48, "<|tool_call>"
+			}
+			if active.MaxNewTokens == 1 {
+				value := "max_tokens"
+				stop = &value
+			}
+		} else {
+			value := "eos"
+			stop = &value
+		}
+	}
+	if method == "advance" && (fault == "buffered_then_orphan" || fault == "buffered_then_cap") {
+		ids := []uint32{48, 500, 49, 101}
+		texts := []string{"<|tool_call>", "call:read{}", "<tool_call|>", "<channel|>"}
+		if fault == "buffered_then_cap" {
+			ids[3], texts[3] = 100, "<|channel>"
+		}
+		value := ids[generated-1]
+		token, text, stop = &value, texts[generated-1], nil
+		if generated == active.MaxNewTokens {
+			value := "max_tokens"
+			stop = &value
+		}
+	}
+	processed := reused
+	if generated > 0 {
+		processed = len(active.PromptTokens)
+	}
+	return map[string]any{"kind": "progress", "text": text, "progress": map[string]any{"request_id": active.RequestID, "processed_prompt_tokens": processed, "generated_tokens": generated, "reused_prefix_tokens": reused, "token": token, "stop_reason": stop}}, generated, true
 }

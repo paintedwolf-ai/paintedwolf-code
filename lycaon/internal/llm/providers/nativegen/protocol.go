@@ -99,11 +99,12 @@ func readProtocolFrame(reader io.Reader) ([]byte, error) {
 }
 
 func writeProtocolFrame(writer io.Writer, payload []byte) error {
-	if len(payload) == 0 || len(payload) > maxFrameBytes {
+	size := len(payload)
+	if size <= 0 || size > maxFrameBytes {
 		return errors.New("native generation: frame exceeds bounds")
 	}
 	var header [4]byte
-	binary.LittleEndian.PutUint32(header[:], uint32(len(payload)))
+	binary.LittleEndian.PutUint32(header[:], uint32(size))
 	for _, part := range [][]byte{header[:], payload} {
 		for len(part) > 0 {
 			n, err := writer.Write(part)

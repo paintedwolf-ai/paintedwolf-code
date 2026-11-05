@@ -100,7 +100,7 @@ func (p *Runtime) prefill(ctx context.Context, tokens []uint32, checkpoint int) 
 		if done {
 			return
 		}
-		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		var result preparationResult
 		if err := child.call(cleanup, command{Method: "cancel_preparation", RequestID: id}, "preparation_progress", inference.Foreground, true, &result); err != nil {
