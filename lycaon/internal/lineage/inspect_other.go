@@ -19,4 +19,10 @@ func listeners(ListenerQuery) (ListenerTable, error) { return ListenerTable{}, E
 
 func livePIDs() ([]int, error) { return nil, ErrUnsupported }
 
+func socketWalker() func(int) ([]SocketObservation, error) { return SocketsOf }
+
+func unreadableByThisUser(int, error) bool { return false }
+
+func unreadHoldersExcluded(netip.AddrPort, endpointHolders) bool { return false }
+
 const supported = false

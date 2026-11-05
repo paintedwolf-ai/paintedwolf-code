@@ -1,6 +1,7 @@
 #include <libproc.h>
 #include <sys/proc_info.h>
 #include <netinet/in_pcb.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
@@ -10,6 +11,7 @@
 
 struct pw_socket_row {
  uint64_t socket_handle, pcb_handle, generation;
+ unsigned char shared_bind;
  unsigned char local[16], remote[16];
  uint32_t uid;
  uint16_t local_port, remote_port;
@@ -78,6 +80,7 @@ static int pw_socket_rows(int pid, struct pw_socket_row **rows, int *count) {
   }
   if (info.psi.soi_family != AF_INET && info.psi.soi_family != AF_INET6) continue;
   struct pw_socket_row *row = &out[(*count)++];
+  row->shared_bind = (info.psi.soi_options & SO_REUSEPORT) != 0;
   row->udp = udp;
   row->uid = holder.pbsi_uid;
   row->socket_handle = info.psi.soi_so;
