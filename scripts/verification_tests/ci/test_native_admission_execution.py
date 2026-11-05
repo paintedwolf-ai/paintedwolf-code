@@ -11,6 +11,8 @@ class NativeAdmissionTests(unittest.TestCase):
                       {'full': False, 'paths': ['lycaon/internal/decide/native/src/main.rs']}):
             self.assertEqual(native_admission.targets(scope), [])
             expected = [['./task', 'test:confine:linux', '--', 'supervisor']] if scope is None or scope['full'] else []
+            if scope and scope['full']:
+                expected = [*expected, ['./task', 'scripts:coverage:changes']]
             self.assertEqual(native_admission.commands(scope), expected)
             rows = hosted_plan.matrix('fast', scope=scope)['include']
             self.assertEqual({row['lane']: row['setup'] for row in rows},
