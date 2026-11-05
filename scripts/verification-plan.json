@@ -995,6 +995,17 @@
     ]
   },
   "ci": {
+    "ready-lint": {
+      "targets": [
+        "lint:full"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "fast"
+      ],
+      "suite": "all",
+      "setup": "analysis"
+    },
     "ready": {
       "compile_targets": {},
       "targets": [
@@ -1003,8 +1014,7 @@
         "coverage:changes",
         "den:typecheck",
         "den:lint",
-        "den:test:fast",
-        "lint:full"
+        "den:test:fast"
       ],
       "minutes": 120,
       "profiles": [

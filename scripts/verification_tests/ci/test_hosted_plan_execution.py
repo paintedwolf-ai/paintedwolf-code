@@ -38,7 +38,7 @@ class HostedPlanTests(unittest.TestCase):
 
     def test_fast_tier_runs_each_handoff_stage_once(self):
         rows = ci.matrix("fast")["include"]
-        self.assertEqual({row["lane"] for row in rows}, {"ready", "ready-tests"})
+        self.assertEqual({row["lane"] for row in rows}, {"ready", "ready-lint", "ready-tests"})
         stages = [stage["name"] for name in {row["lane"] for row in rows}
                   for stage in planning.expand(ci.lanes()[name]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))

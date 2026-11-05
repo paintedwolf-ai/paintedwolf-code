@@ -49,7 +49,7 @@ jobs:
           go-version-file: lycaon/go.mod
           cache: false
       - name: Check static source rules
-        run: bash scripts/static-checks.sh
+        run: bash scripts/ci_policy/static-checks.sh
 
   fast:
     if: ${{ github.event_name == 'pull_request' && (!github.event.pull_request.draft || github.event.action == 'ready_for_review') || inputs.profile == 'fast' }}
@@ -94,7 +94,7 @@ jobs:
   check:
     name: ${{ inputs.lane != '' && 'diagnostic-summary' || (github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check') }}
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
-    if: ${{ !cancelled() && inputs.lane == '' && !(github.event_name == 'pull_request' && github.event.pull_request.draft && github.event.action != 'ready_for_review') }}
+    if: ${{ !cancelled() && inputs.lane == '' && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}
     needs: [static, fast, integration, platform, platform-lanes]
     runs-on: ubuntu-latest
     timeout-minutes: 5

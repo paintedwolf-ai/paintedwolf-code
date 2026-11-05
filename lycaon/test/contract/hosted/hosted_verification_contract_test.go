@@ -21,7 +21,6 @@ type hostedStep struct {
 	With     map[string]string
 }
 
-const mergeGroupFailFast = "${{ github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/') }}"
 
 type hostedJob struct {
 	Name        string
@@ -129,9 +128,9 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 	if !slices.Equal(hostedNeeds(t, verify), []string{"plan"}) {
 		t.Fatal("matrix execution must depend on successful planning")
 	}
-	// A merge group stops at its first failure to free its runners; other runs keep every lane's evidence.
-	if verify.Strategy.FailFast != mergeGroupFailFast {
-		t.Fatalf("only a merge group may stop its other lanes at the first failure, got fail-fast %q", verify.Strategy.FailFast)
+	// One failed run reports every failing lane, so repairs need not rediscover them a cycle at a time.
+	if verify.Strategy.FailFast != "false" {
+		t.Fatalf("no run may stop its other lanes at the first failure, got fail-fast %q", verify.Strategy.FailFast)
 	}
 	for _, step := range verify.Steps {
 		if strings.HasPrefix(step.Run, "python3 scripts/ci_verification.py run") && step.Continue {

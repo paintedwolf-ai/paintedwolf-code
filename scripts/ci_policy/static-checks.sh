@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Source rules that need no build. Every rule runs so one pass reports them all.
 set -uo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 status=0
 

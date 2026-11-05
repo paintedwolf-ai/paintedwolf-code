@@ -861,11 +861,12 @@ A ready pull request runs the `fast` profile; the merge queue runs the
 the newest suite on the head, so the job deletes skipped CI runs a draft push left
 there; a failed deletion warns without failing `check`. A `static` job reports
 formatting, comment, failure-message and documentation-link errors within a minute
-while the rest keep running. The fast tier runs three more jobs side by side.
+while the rest keep running. The fast tier runs its other jobs side by side.
+`ready-lint` runs complete `lint:full` analysis on its own runner, whose compile output would otherwise share one disk with the rest.
 `ready-tests` splits repository contracts and affected short Go tests across two
 shards, balanced by measured package durations. `ready` runs size budgets and
 changed Go coverage first, plus script coverage when scripts or workflows changed, then compiles the host and runs Den typecheck,
-Den lint, frontend seam canaries, and complete `lint:full` analysis.
+Den lint, and frontend seam canaries.
 Coverage executes eligible changed packages' own short tests, so `ready-tests`
 omits those packages from its identical short recipe. Test-only, generated,
 exempt, and untested packages keep their affected short selection. Unknown recipes
