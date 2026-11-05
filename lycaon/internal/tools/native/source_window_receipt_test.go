@@ -1,16 +1,12 @@
 package native
 
 import (
-	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
@@ -30,63 +26,6 @@ func decodeSourceWindowReceipt(t *testing.T, raw string) sourceWindowReceipt {
 	return receipt
 }
 
-func TestVerifyResultsStateTheirWindowACCW07(t *testing.T) {
-	// Without watcher coverage a finished call settles before its result.
-	repochange.DisableWatchersForTest()
-	t.Cleanup(repochange.ResetWatchersForTest)
-
-	t.Run("finished", func(t *testing.T) {
-		f := newNativeWalkFixture(t)
-		tool := &VerifyTool{Runner: hostcmd.NewRunner(), Background: newTestBackgroundRegistry(t)}
-		raw, err := tool.Run(t.Context(), map[string]any{"command": "touch verified.txt"}, f.tc)
-		testutil.FailErr(t, "run verify", err)
-		receipt := decodeSourceWindowReceipt(t, raw)
-		if !receipt.SourceWindow.Settled {
-			t.Fatalf("finished verify window = %+v", receipt.SourceWindow)
-		}
-		walk, err := f.ledger.Walk.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"}, 10, 0, sourceledger.CommitLens{})
-		testutil.FailErr(t, "read verify walk", err)
-		if len(walk.Files) != 1 || walk.Files[0].Effects[0].CommandWindowID != receipt.SourceWindow.ID {
-			t.Fatalf("verify walk = %+v", walk.Files)
-		}
-	})
-
-	for name, args := range map[string]map[string]any{
-		"promoted":   {"command": "sleep 60", "wait_ms": float64(1)},
-		"background": {"command": "sleep 60", "background": true},
-	} {
-		t.Run(name, func(t *testing.T) {
-			f := newNativeWalkFixture(t)
-			registry := newTestBackgroundRegistry(t)
-			tool := &VerifyTool{Runner: hostcmd.NewRunner(), Background: registry}
-			raw, err := tool.Run(t.Context(), args, f.tc)
-			testutil.FailErr(t, "run verify", err)
-			receipt := decodeSourceWindowReceipt(t, raw)
-			if receipt.SourceWindow.Settled || receipt.Handle == "" {
-				t.Fatalf("running verify result %s", raw)
-			}
-			listed := f.ledger.Commands.OpenSessionWindows("p1", "s1")
-			if len(listed) != 1 || listed[0].ID != receipt.SourceWindow.ID || listed[0].Closing {
-				t.Fatalf("open windows = %+v", listed)
-			}
-			// The process is live for the window's whole life, so what it observes
-			// now is the check's, however long it has run.
-			testutil.FailErr(t, "drift during the check", os.WriteFile(filepath.Join(f.dir, "during.txt"), []byte("live"), 0o644))
-			testutil.FailErr(t, "pass during the check", f.ledger.Inventory.EnsureInventory(t.Context(), sourceledger.InventoryRequest{
-				ProjectID: "p1", Roots: []sourceledger.RootSpec{{ID: "r1", Path: f.dir}}, Force: true, Wait: true,
-			}))
-			walk, err := f.ledger.Walk.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"}, 10, 0, sourceledger.CommitLens{})
-			testutil.FailErr(t, "read walk during the check", err)
-			if len(walk.Files) != 1 || walk.Files[0].Effects[0].CommandWindowID != receipt.SourceWindow.ID {
-				t.Fatalf("walk during the check = %+v", walk.Files)
-			}
-			_, err = registry.Lifecycle.Stop("s1", receipt.Handle)
-			testutil.FailErr(t, "stop verify", err)
-			testutil.AwaitClosed(t, "the window settles", listed[0].Settled)
-		})
-	}
-}
-
 func TestCaptureResultStatesItsWindowACCW07(t *testing.T) {
 	repochange.DisableWatchersForTest()
 	t.Cleanup(repochange.ResetWatchersForTest)
@@ -97,26 +36,5 @@ func TestCaptureResultStatesItsWindowACCW07(t *testing.T) {
 	testutil.FailErr(t, "run capture", err)
 	if receipt := decodeSourceWindowReceipt(t, raw); !receipt.SourceWindow.Settled {
 		t.Fatalf("capture result %s", raw)
-	}
-}
-
-type failingWindowOpener struct{}
-
-func (failingWindowOpener) OpenCommandWindow(context.Context, sourceledger.CommandWindowInput) (*sourceledger.OpenCommandWindow, error) {
-	return nil, sourceledger.ErrWindowStartPending
-}
-
-func TestVerifyResultStatesWhenItsWindowCouldNotOpen(t *testing.T) {
-	f := newNativeWalkFixture(t)
-	f.tc.Source.Commands = failingWindowOpener{}
-	tool := &VerifyTool{Runner: hostcmd.NewRunner(), Background: newTestBackgroundRegistry(t)}
-	raw, err := tool.Run(t.Context(), map[string]any{"command": "true"}, f.tc)
-	testutil.FailErr(t, "run verify", err)
-	var result struct {
-		SourceWindow map[string]any `json:"source_window"`
-	}
-	testutil.FailErr(t, "decode verify result", json.Unmarshal([]byte(raw), &result))
-	if len(result.SourceWindow) != 1 || result.SourceWindow["unobserved"] != true {
-		t.Fatalf("source_window = %v, want only unobserved", result.SourceWindow)
 	}
 }

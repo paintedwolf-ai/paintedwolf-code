@@ -27,6 +27,8 @@ type fakeSourceLedger struct {
 	effects      map[string][]sourceledger.Effect
 	attribution  map[string]sourceledger.AttributionResult
 	authored     map[string][]string
+	floor        int64
+	floorFound   bool
 	versions     map[string]sourceledger.RestorableVersion
 	fileVersions map[string][]sourceledger.Version
 	comparisons  map[string]sourceledger.Comparison
@@ -103,7 +105,7 @@ func (f *fakeSourceLedger) LatestFileEffect(ctx context.Context, projectID strin
 }
 
 func (f *fakeSourceLedger) SessionActivityFloor(context.Context, string, string) (int64, bool, error) {
-	return 0, false, nil
+	return f.floor, f.floorFound, nil
 }
 
 func (f *fakeSourceLedger) GitTransitionsByIDs(context.Context, []string) (map[string]sourceledger.GitTransition, error) {
