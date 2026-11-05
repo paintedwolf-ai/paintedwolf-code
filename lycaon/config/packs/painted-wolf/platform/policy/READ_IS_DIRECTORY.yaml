@@ -22,7 +22,7 @@ copy:
     use `.` for the repo root.{% endif %}{% if paintedwolf.can_find %} Use `find` in `command` with `-type d` for
     a directory tree or a name filter to locate candidate files.{% endif %}{% if paintedwolf.can_grep
     %} To locate a symbol across files, use `grep -rn` in `command` under {{ paintedwolf.path }}.{% endif %}{% if paintedwolf.can_read %} Read a resulting concrete file with
-    `cat -n FILE`, or `sed -n 'A,Bp' FILE` for a bounded line range.{% endif %} If the needed discovery tool
+    `cat -n FILE`, or `sed -n ''A,Bp'' FILE` for a bounded line range.{% endif %} If the needed discovery tool
     is absent, use an already observed file path or report the missing path information to the caller.'
   instead: Choose the actual file needed for the operation; do not repeat the directory request or assume
     a missing tool can be called.
