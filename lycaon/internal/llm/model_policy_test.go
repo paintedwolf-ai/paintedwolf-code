@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"os"
@@ -567,7 +568,7 @@ func TestLocalDefaultRoleResolution(t *testing.T) {
 
 	// StaticModelRouter.WithLocalDefault routes unset slots to the bundled local model.
 	store := NewInMemoryPolicyStore(hybridPolicy)
-	router := NewStaticModelRouter(store).WithLocalDefault(func() bool { return true })
+	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) bool { return true })
 	coordSel, err := router.Coordinator(t.Context())
 	testutil.FailErr(t, "router coordinator", err)
 	if coordSel.ProviderID != remoteCoord.ProviderID || coordSel.Model != remoteCoord.Model {
@@ -600,7 +601,7 @@ func TestIncludedProviderCannotBeRemoved(t *testing.T) {
 	}
 
 	removed, err := cat.Remove(IncludedProviderID)
-	if err != ErrCannotRemoveIncludedProvider || removed {
+	if !errors.Is(err, ErrCannotRemoveIncludedProvider) || removed {
 		t.Fatalf("Remove(%q) = (%v, %v), want (false, %v)", IncludedProviderID, removed, err, ErrCannotRemoveIncludedProvider)
 	}
 }
@@ -617,7 +618,7 @@ func TestServiceStartupRequiresAdmittedIncludedModel(t *testing.T) {
 	if _, ok := svc.Catalog.Get(IncludedProviderID); !ok {
 		t.Fatal("bundled provider missing from supported host catalog")
 	}
-	if svc.Registry.IncludedModelAvailable() {
+	if svc.Registry.IncludedModelAvailable(t.Context()) {
 		t.Fatal("environment path substituted for an admitted runtime")
 	}
 	selection, err := svc.Router.Coordinator(t.Context())

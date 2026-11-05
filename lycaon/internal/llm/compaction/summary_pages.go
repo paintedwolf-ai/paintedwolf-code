@@ -15,12 +15,14 @@ import (
 // SummaryBudget resolves the utility model independently of the receiver.
 type SummaryBudget struct{ Input, Output int }
 
-type summaryBudgetSource interface{ SummaryBudget() SummaryBudget }
+type summaryBudgetSource interface {
+	SummaryBudget(context.Context) SummaryBudget
+}
 
-func (c *SimpleCompactor) summaryBudget() SummaryBudget {
+func (c *SimpleCompactor) summaryBudget(ctx context.Context) SummaryBudget {
 	budget := SummaryBudget{Input: c.cfg.SummaryInputTokens, Output: c.cfg.SummaryOutputTokens}
 	if source, ok := c.summary.(summaryBudgetSource); ok {
-		resolved := source.SummaryBudget()
+		resolved := source.SummaryBudget(ctx)
 		if resolved.Input > 0 {
 			budget.Input = min(budget.Input, resolved.Input)
 		}
@@ -45,7 +47,7 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 	if err != nil {
 		return summary, sources, err
 	}
-	budget := c.summaryBudget()
+	budget := c.summaryBudget(ctx)
 	calls, position := 0, 0
 	remaining := map[string]int{}
 	for _, segment := range segments {

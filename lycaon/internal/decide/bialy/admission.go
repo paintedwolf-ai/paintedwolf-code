@@ -13,7 +13,7 @@ func (p *process) acquireDevice(ctx context.Context) (*inference.Permit, error) 
 	}
 	waiting, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stop := context.AfterFunc(p.lifetime, cancel)
+	stop := context.AfterFunc(p.lifetime, cancel) //nolint:contextcheck // Either caller cancellation or process exit ends admission.
 	defer stop()
 	started := time.Now()
 	permit, err := p.device.Acquire(waiting, inference.Work{

@@ -12,7 +12,7 @@ func (s *Service) Observe(topic api.EventTopic, key events.PublishKey, data any)
 	if s == nil {
 		return
 	}
-	switch topic {
+	switch topic { //nolint:exhaustive // Only prompt-changing topics invalidate preparation.
 	case api.EventTopicMessage, api.EventTopicWorkflow, api.EventTopicSourceChanged,
 		api.EventTopicSettings, api.EventTopicProviders, api.EventTopicModelPolicy:
 		s.Changed(key.Session, key.Project)

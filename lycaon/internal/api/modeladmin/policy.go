@@ -28,7 +28,7 @@ func (s *Handler) GetPolicy(w http.ResponseWriter, r *http.Request) {
 	var p llm.ModelPolicy
 	if effective {
 		p, err = s.service.Policy.Get(scope, projectDir)
-		p = llm.ResolveModelPolicy(p, s.service.Registry.IncludedModelAvailable())
+		p = llm.ResolveModelPolicy(p, s.service.Registry.IncludedModelAvailable(r.Context()))
 	} else {
 		p, err = s.service.Policy.Overlay(scope, projectDir)
 	}

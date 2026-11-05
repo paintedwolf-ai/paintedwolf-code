@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 func TestRuntimePolicyDefaultsReachWorkersWithoutPersistence(t *testing.T) {
 	store := NewInMemoryPolicyStore(ModelPolicy{})
 	available := true
-	router := NewStaticModelRouter(store).WithLocalDefault(func() bool { return available })
+	router := NewStaticModelRouter(store).WithLocalDefault(func(context.Context) bool { return available })
 	for _, view := range []*StaticModelRouter{router, router.WithScope(SettingsScopeProject, t.TempDir())} {
 		for _, ready := range []bool{true, false, true} {
 			available = ready
