@@ -32,6 +32,7 @@ func deliveryTagSession(t *testing.T, script *citableScriptLLM) (*Harness, strin
 	dir := t.TempDir()
 	testutil.FailErr(t, "seed notes", os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
 	testutil.FailErr(t, "seed lines", os.WriteFile(filepath.Join(dir, "lines.txt"), []byte("alpha\nbravo\ncharlie\ndelta\n"), 0o644))
+	testutil.FailErr(t, "seed body", os.WriteFile(filepath.Join(dir, "body.txt"), []byte("first row of the body\nsecond row of the body\nthird row of the body\nfourth row of the body\n"), 0o644))
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
@@ -110,23 +111,23 @@ func TestDeliveryTagsStateCoverageThroughTheRealPath(t *testing.T) {
 func TestNumberedReadOfSeveralFilesKeepsLaterFilesUnnumbered(t *testing.T) {
 	var printed string
 	script := &citableScriptLLM{steps: []citableStep{
-		{command: "cat -n notes.txt lines.txt"},
+		{command: "cat -n notes.txt body.txt"},
 		{text: func(req modelcall.CompletionRequest) string {
 			printed = newestToolContent(req)
-			return "The section opens with the third printed row [lines.txt:3]."
+			return "The section opens with the third printed row [body.txt:3]."
 		}},
 		{text: func(modelcall.CompletionRequest) string {
-			return `The section holds bravo [lines.txt:2 "bravo"], and the note is second [notes.txt:2].`
+			return `The body continues [body.txt:2 "second row of the body"], and the note is second [notes.txt:2].`
 		}},
 	}}
 	h, session := deliveryTagSession(t, script)
 	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "read the files")
 	testutil.FailErr(t, "prompt", err)
 	tags := deliveryTagRE.FindAllStringSubmatch(printed, -1)
-	if len(tags) != 2 || tags[0][2] != "notes.txt:1-2" || tags[1][2] != "lines.txt:1-4" {
+	if len(tags) != 2 || tags[0][2] != "notes.txt:1-2" || tags[1][2] != "body.txt:1-4" {
 		t.Fatalf("tags = %q in %s", tags, printed)
 	}
-	if !strings.Contains(printed, "3\talpha") {
+	if !strings.Contains(printed, "3\tfirst row of the body") {
 		t.Fatalf("stdout changed: %s", printed)
 	}
 	if script.next != len(script.steps) {
@@ -140,7 +141,7 @@ func TestNumberedReadOfSeveralFilesKeepsLaterFilesUnnumbered(t *testing.T) {
 	for _, cited := range g.CitedEvidence {
 		verdicts[fmt.Sprintf("%s:%d", cited.Path, cited.Line)] = string(cited.Verdict)
 	}
-	if verdicts["lines.txt:2"] != "matched" || verdicts["notes.txt:2"] != "traced" {
+	if verdicts["body.txt:2"] != "matched" || verdicts["notes.txt:2"] != "traced" {
 		t.Fatalf("verdicts = %v", verdicts)
 	}
 }
