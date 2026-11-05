@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 
 from ci_policy.batch_prs import command, source
+from ci_policy.dependent_update import update_dependents
 from ci_policy.github import api, pages
 from . import github
 from .selection import MARKER, identity, manifest, select, unchanged
@@ -50,6 +51,8 @@ def reconcile(repository, pull, record):
             current = api(f'repos/{repository}/pulls/{row["number"]}')
             if current['state'] == 'open' and not current['draft'] and current['head']['sha'] == row['headRefOid']:
                 api(f'repos/{repository}/pulls/{row["number"]}', 'PATCH', {'state': 'closed'})
+                # A child based on this source would otherwise never learn that its work landed.
+                update_dependents(repository, {'pull_request': {**current, 'merged': True}})
         settle(repository, pull, record, 'merged')
         return False
     if pull['state'] != 'open':

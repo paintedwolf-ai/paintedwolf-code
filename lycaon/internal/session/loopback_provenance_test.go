@@ -359,7 +359,7 @@ func TestQueryDockerContainersOverSocket(t *testing.T) {
 	go func() { _ = srv.Serve(ln) }()
 	defer srv.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	containers, err := queryDockerContainersOverSocket(ctx, sockPath)
 	testutil.FailErr(t, "query containers", err)

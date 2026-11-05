@@ -104,16 +104,22 @@ class MergePreflightTests(unittest.TestCase):
             verdict = hosted_execution.run_lane("behavior", "1/2", merge_group=True)
             return verdict, run, json.loads((Path(directory) / "ci/run.json").read_text())
 
-    def test_failed_contract_phase_prevents_behavior_and_preserves_failure_evidence(self):
-        for code in (1, 2, -15):
+    def test_failed_contract_phase_still_reports_behavior(self):
+        for code in (1, 2):
             with self.subTest(code=code):
                 verdict, run, record = self.execute_behavior_preflight([["contract"], ["behavior"]], code)
                 self.assertEqual(verdict, code)
-                run.assert_called_once()
-                self.assertEqual(run.call_args.args[0], ["./task", "test:full", "--", "contract"])
-                self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], "1/2")
+                self.assertEqual(run.call_count, 2)
                 self.assertEqual(record["phases"][0]["exit_code"], code)
-                self.assertEqual(len(record["phases"]), 1)
+                self.assertEqual(len(record["phases"]), 2)
+
+    def test_interrupted_contract_phase_stops_the_lane(self):
+        verdict, run, record = self.execute_behavior_preflight([["contract"], ["behavior"]], -15)
+        self.assertEqual(verdict, -15)
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0], ["./task", "test:full", "--", "contract"])
+        self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], "1/2")
+        self.assertEqual(len(record["phases"]), 1)
 
     def test_failed_package_planning_finalizes_unverified_lane_evidence(self):
         errors = (subprocess.CalledProcessError(1, ["go", "list"], stderr="dependency unavailable"),

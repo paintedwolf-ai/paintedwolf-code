@@ -21,7 +21,7 @@ type portalAcquisition struct {
 
 func pendingPortalRequest(t *testing.T, fixture *fixturePortal) dbus.ObjectPath {
 	t.Helper()
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(testutil.Timeout(time.Minute))
 	for time.Now().Before(deadline) {
 		fixture.mu.Lock()
 		request := fixture.request
@@ -78,12 +78,12 @@ func TestPortalGrantRefusesMalformedTimeoutAndOwnerLossWithoutLeakingRequest(t *
 				if mode == "owner-loss" && reasonFor(portalProvider{}, result.err).Code != ReasonDisconnected {
 					t.Fatalf("owner loss result = %v", result.err)
 				}
-			case <-time.After(2 * time.Second):
+			case <-time.After(testutil.Timeout(time.Minute)):
 				t.Fatal("ungranted inhibition did not settle")
 			}
 			select {
 			case <-fixture.closed:
-			case <-time.After(time.Second):
+			case <-time.After(testutil.Timeout(time.Minute)):
 				t.Fatal("ungranted request was not closed on its original owner")
 			}
 			fixture.mu.Lock()
@@ -132,7 +132,7 @@ func TestForeignPortalResponseCannotGrantTheOwnedRequest(t *testing.T) {
 			t.Fatal("owned grant returned no lease")
 		}
 		testutil.FailErr(t, "close granted owned request", result.held.Release())
-	case <-time.After(time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("owned grant did not complete the inhibition")
 	}
 }

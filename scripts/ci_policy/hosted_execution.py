@@ -90,8 +90,9 @@ def run_lane(name, shard="", merge_group=False):
         record['job_started_at'] = None
     record["oom_before"] = oom_events()
     path.write_text(json.dumps(record, indent=2) + "\n")
-    # The hosted lane budget bounds Go runs.
-    environment = {"PW_GO_TEST_TIMEOUT_SECONDS": str(lane["minutes"] * 60), **os.environ}
+    # The hosted lane budget bounds Go and frontend runs.
+    budget = str(lane["minutes"] * 60)
+    environment = {"PW_GO_TEST_TIMEOUT_SECONDS": budget, "PW_VITEST_TIMEOUT_SECONDS": budget, **os.environ}
     if scope and scope["base"]:
         environment["PW_CHANGE_BASE"] = scope["base"]
     # Memory-heavy lanes cap process parallelism.
@@ -123,8 +124,8 @@ def run_lane(name, shard="", merge_group=False):
             if packages:
                 command += ["--", *packages]
                 record["packages"] = packages
-        # The fast tier reports every failure, so repairs need not rediscover them one run at a time.
-        complete = name in {"ready", "ready-tests"}
+        # Admission reports every failure, so repairs need not rediscover them one run at a time.
+        complete = merge_group or name in {"ready", "ready-tests"}
         commands = [command]
         if complete:
             environment["PW_TEST_KEEP_GOING"] = "1"

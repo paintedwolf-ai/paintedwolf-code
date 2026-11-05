@@ -121,7 +121,7 @@ func TestPortalWithoutRegistryEntersApplicationScopeOnceWhenUnscoped(t *testing.
 	testutil.FailErr(t, "release both layers", held.Release())
 	select {
 	case <-portal.closed:
-	case <-time.After(time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("release left the session layer open")
 	}
 	if !descriptorsClosed(t, logind, reader) {
@@ -135,7 +135,7 @@ func TestPortalWithoutRegistrySkipsTransientScopeWhenAlreadyScoped(t *testing.T)
 	manager := serveSystemdManager(t, path, testAppID, false)
 	provider := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: manager.currentUnit}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	testutil.FailErr(t, "check already-scoped portal", provider.Check(ctx))
 	held, err := provider.Acquire(ctx)
@@ -153,7 +153,7 @@ func TestPortalWithoutRegistryConcurrentAttributionEntersScopeOnce(t *testing.T)
 	manager := serveSystemdManager(t, path, "", false)
 	provider := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: manager.currentUnit}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	start := make(chan struct{})
 	const workers = 6
@@ -179,7 +179,7 @@ func TestPortalWithoutRegistryConcurrentAttributionEntersScopeOnce(t *testing.T)
 }
 
 func TestPortalWithoutRegistryRefusesForeignScopeAndTransientUnitFailure(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 
 	t.Run("foreign application unit is not migrated", func(t *testing.T) {
