@@ -1,9 +1,9 @@
 package session_test
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"reflect"
 	"strings"
 	"testing"

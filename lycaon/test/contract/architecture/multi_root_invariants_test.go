@@ -1,10 +1,10 @@
 package contract
 
 import (
-	"slices"
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 

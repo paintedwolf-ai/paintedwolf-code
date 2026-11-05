@@ -1,9 +1,9 @@
 package session
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"os"
 	"path/filepath"
 	"strings"

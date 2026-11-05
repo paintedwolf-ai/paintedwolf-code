@@ -2,9 +2,9 @@
 package workercloseout
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"unicode/utf8"
 

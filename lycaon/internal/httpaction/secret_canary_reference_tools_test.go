@@ -204,40 +204,12 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	}
 
 	terminal := ""
-	harnesses := map[string][]canaryCall{
-		"command": {
-			{scheme: "argument", args: map[string]any{"command": "sh echo.sh " + meta.Reference, "terminal_capture": map[string]any{}}, received: seen("seen.txt")},
-		},
-		"verify": {
-			{scheme: "environment", args: map[string]any{"command": "TOKEN=" + meta.Reference + " SEEN=seen-verify.txt sh echo.sh"}, received: seen("seen-verify.txt")},
-			{scheme: "argument", args: map[string]any{"command": "SEEN=seen-verify-argument.txt sh echo.sh " + meta.Reference}, received: seen("seen-verify-argument.txt")},
-			{scheme: "pipeline", args: map[string]any{"command": `sh -c 'printf %s "$1"' canary ` + meta.Reference + ` | sh -c 'v=$(cat); printf %s "$v" > seen-pipeline.txt; printf %s "$v"'`}, received: seen("seen-pipeline.txt")},
-			{scheme: "poll", args: map[string]any{"command": "SEEN=seen-verify-poll.txt sh echo.sh " + meta.Reference + " &"}, received: seen("seen-verify-poll.txt")},
-		},
-		"terminal_open": {
-			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": meta.Reference, "SEEN": "seen-terminal-open.txt"}}, received: seen("seen-terminal-open.txt")},
-		},
-		"terminal_send": {
-			{scheme: "input", args: map[string]any{"input": "SEEN=seen-terminal-send.txt sh echo.sh '" + meta.Reference + "'{Enter}"}, received: seen("seen-terminal-send.txt")},
-		},
-		"http_request": {
-			{scheme: "bearer", args: map[string]any{
-				"url": server.URL + "/echo", "auth": map[string]any{"scheme": "bearer", "token": meta.Reference},
-				"capability_request": loopbackCapability(t, server.URL),
-			}, received: func() string {
-				if len(wire) == 0 {
-					return ""
-				}
-				return wire[len(wire)-1]
-			}},
-		},
-		mcp.QualifiedToolName("canary", "echo"): {
-			{scheme: "result", args: map[string]any{"token": meta.Reference}, received: mcpReceived},
-		},
-		mcp.QualifiedToolName("canary", "reject"): {
-			{scheme: "error result", args: map[string]any{"token": meta.Reference}, received: mcpReceived},
-		},
-	}
+	harnesses := buildCanaryHarnesses(t, meta.Reference, server.URL, seen, func() string {
+		if len(wire) == 0 {
+			return ""
+		}
+		return wire[len(wire)-1]
+	}, mcpReceived)
 
 	declared := toolcontract.SecretReferenceTools()
 	for _, name := range []string{mcp.QualifiedToolName("canary", "echo"), mcp.QualifiedToolName("canary", "reject")} {
@@ -258,67 +230,124 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 		}
 		for i, call := range calls {
 			t.Run(tool+"/"+call.scheme, func(t *testing.T) {
-				tctx := sessionContext(root, strings.ReplaceAll(tool+"-"+call.scheme, " ", "-"))
-				tctx.Identity.ToolCallID += "-" + string(rune('a'+i))
-				if tool == "terminal_send" {
-					terminal = openCanaryShell(t, executor, root)
-					call.args["id"] = terminal
-				}
-				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-				defer cancel()
-				var originCallID string
-				var out string
-				var err error
-				if tool == "verify" {
-					out, err = program.Invoke(t, ctx, tool, call.args, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-						originCallID = tc.Identity.ToolCallID
-						return verifyExecutor.Invoke(ctx, tool, args, tc)
-					})
-				} else {
-					out, err = executor.Invoke(ctx, tool, call.args, tctx)
-				}
-				if tool == "verify" && call.scheme == "poll" && err == nil {
-					jobs := program.Background.Output.List(ctx, program.Session)
-					if len(jobs) != 1 {
-						t.Fatalf("background jobs=%+v", jobs)
-					}
-					_, _, waitErr := program.Background.Lifecycle.Wait(ctx, program.Session, jobs[0].ProcessID)
-					testutil.FailErr(t, "wait for verification job", waitErr)
-					select {
-					case completion := <-completions:
-						if completion.OriginTool != "verify" || completion.ToolCallID != originCallID {
-							t.Fatalf("completion origin=%+v", completion)
-						}
-					case <-ctx.Done():
-						t.Fatal("verification completion not published")
-					}
-					out, err = program.Invoke(t, ctx, "command_output", map[string]any{"handle": jobs[0].ProcessID, "cursor": float64(0)}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-						return executor.Invoke(ctx, "command_output", args, tc)
-					})
-				}
-				if err != nil && toolrejection.AsToolReject(err) == nil && !strings.HasPrefix(tool, "mcp_") {
-					t.Fatalf("%s (%s): %v", tool, call.scheme, err)
-				}
-				if got := waitReceived(ctx, call.received); got != canaryValue {
-					t.Fatalf("%s (%s): the consumer did not receive the resolved canary: %q (result %s, err %v)", tool, call.scheme, got, out, err)
-				}
-				assertNoCanary(t, tool, call.scheme, out)
-				echoed := out
-				if err != nil {
-					assertNoCanary(t, tool, call.scheme+" error", err.Error())
-					echoed += err.Error()
-				}
-				if reject := toolrejection.AsToolReject(err); reject != nil {
-					data, marshalErr := json.Marshal(reject.Data)
-					testutil.FailErr(t, "encode reject data", marshalErr)
-					assertNoCanary(t, tool, call.scheme+" reject data", string(data))
-					echoed += string(data)
-				}
-				if !strings.Contains(echoed, meta.Reference) {
-					t.Errorf("%s (%s): the echo was dropped rather than written as its reference: %s", tool, call.scheme, echoed)
-				}
+				runCanaryHarnessCall(t, tool, i, call, root, meta.Reference, program, completions, executor, verifyExecutor, &terminal)
 			})
 		}
+	}
+}
+
+func buildCanaryHarnesses(
+	t *testing.T,
+	reference string,
+	serverURL string,
+	seen func(string) func() string,
+	httpReceived func() string,
+	mcpReceived func() string,
+) map[string][]canaryCall {
+	t.Helper()
+	return map[string][]canaryCall{
+		"command": {
+			{scheme: "argument", args: map[string]any{"command": "sh echo.sh " + reference, "terminal_capture": map[string]any{}}, received: seen("seen.txt")},
+		},
+		"verify": {
+			{scheme: "environment", args: map[string]any{"command": "TOKEN=" + reference + " SEEN=seen-verify.txt sh echo.sh"}, received: seen("seen-verify.txt")},
+			{scheme: "argument", args: map[string]any{"command": "SEEN=seen-verify-argument.txt sh echo.sh " + reference}, received: seen("seen-verify-argument.txt")},
+			{scheme: "pipeline", args: map[string]any{"command": `sh -c 'printf %s "$1"' canary ` + reference + ` | sh -c 'v=$(cat); printf %s "$v" > seen-pipeline.txt; printf %s "$v"'`}, received: seen("seen-pipeline.txt")},
+			{scheme: "poll", args: map[string]any{"command": "SEEN=seen-verify-poll.txt sh echo.sh " + reference + " &"}, received: seen("seen-verify-poll.txt")},
+		},
+		"terminal_open": {
+			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": reference, "SEEN": "seen-terminal-open.txt"}}, received: seen("seen-terminal-open.txt")},
+		},
+		"terminal_send": {
+			{scheme: "input", args: map[string]any{"input": "SEEN=seen-terminal-send.txt sh echo.sh '" + reference + "'{Enter}"}, received: seen("seen-terminal-send.txt")},
+		},
+		"http_request": {
+			{scheme: "bearer", args: map[string]any{
+				"url": serverURL + "/echo", "auth": map[string]any{"scheme": "bearer", "token": reference},
+				"capability_request": loopbackCapability(t, serverURL),
+			}, received: httpReceived},
+		},
+		mcp.QualifiedToolName("canary", "echo"): {
+			{scheme: "result", args: map[string]any{"token": reference}, received: mcpReceived},
+		},
+		mcp.QualifiedToolName("canary", "reject"): {
+			{scheme: "error result", args: map[string]any{"token": reference}, received: mcpReceived},
+		},
+	}
+}
+
+func runCanaryHarnessCall(
+	t *testing.T,
+	tool string,
+	index int,
+	call canaryCall,
+	root string,
+	reference string,
+	program *programtest.Fixture,
+	completions <-chan bgprocess.Completion,
+	executor *toolexecution.Executor,
+	verifyExecutor *toolexecution.Executor,
+	terminal *string,
+) {
+	t.Helper()
+	tctx := sessionContext(root, strings.ReplaceAll(tool+"-"+call.scheme, " ", "-"))
+	tctx.Identity.ToolCallID += "-" + string(rune('a'+index))
+	if tool == "terminal_send" {
+		*terminal = openCanaryShell(t, executor, root)
+		call.args["id"] = *terminal
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	var originCallID string
+	var out string
+	var err error
+	if tool == "verify" {
+		out, err = program.Invoke(t, ctx, tool, call.args, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+			originCallID = tc.Identity.ToolCallID
+			return verifyExecutor.Invoke(ctx, tool, args, tc)
+		})
+	} else {
+		out, err = executor.Invoke(ctx, tool, call.args, tctx)
+	}
+	if tool == "verify" && call.scheme == "poll" && err == nil {
+		jobs := program.Background.Output.List(ctx, program.Session)
+		if len(jobs) != 1 {
+			t.Fatalf("background jobs=%+v", jobs)
+		}
+		_, _, waitErr := program.Background.Lifecycle.Wait(ctx, program.Session, jobs[0].ProcessID)
+		testutil.FailErr(t, "wait for verification job", waitErr)
+		select {
+		case completion := <-completions:
+			if completion.OriginTool != "verify" || completion.ToolCallID != originCallID {
+				t.Fatalf("completion origin=%+v", completion)
+			}
+		case <-ctx.Done():
+			t.Fatal("verification completion not published")
+		}
+		out, err = program.Invoke(t, ctx, "command_output", map[string]any{"handle": jobs[0].ProcessID, "cursor": float64(0)}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+			return executor.Invoke(ctx, "command_output", args, tc)
+		})
+	}
+	if err != nil && toolrejection.AsToolReject(err) == nil && !strings.HasPrefix(tool, "mcp_") {
+		t.Fatalf("%s (%s): %v", tool, call.scheme, err)
+	}
+	if got := waitReceived(ctx, call.received); got != canaryValue {
+		t.Fatalf("%s (%s): the consumer did not receive the resolved canary: %q (result %s, err %v)", tool, call.scheme, got, out, err)
+	}
+	assertNoCanary(t, tool, call.scheme, out)
+	echoed := out
+	if err != nil {
+		assertNoCanary(t, tool, call.scheme+" error", err.Error())
+		echoed += err.Error()
+	}
+	if reject := toolrejection.AsToolReject(err); reject != nil {
+		data, marshalErr := json.Marshal(reject.Data)
+		testutil.FailErr(t, "encode reject data", marshalErr)
+		assertNoCanary(t, tool, call.scheme+" reject data", string(data))
+		echoed += string(data)
+	}
+	if !strings.Contains(echoed, reference) {
+		t.Errorf("%s (%s): the echo was dropped rather than written as its reference: %s", tool, call.scheme, echoed)
 	}
 }
 

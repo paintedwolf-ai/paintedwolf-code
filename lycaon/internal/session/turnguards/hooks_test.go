@@ -1,9 +1,9 @@
 package turnguards
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"path/filepath"
 	"testing"
 

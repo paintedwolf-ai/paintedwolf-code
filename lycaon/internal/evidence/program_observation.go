@@ -1,8 +1,8 @@
 package evidence
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 
 	"github.com/lycaon/lycaon/pkg/api"

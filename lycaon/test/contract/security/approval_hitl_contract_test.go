@@ -1,10 +1,10 @@
 package contract
 
 import (
-	"slices"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 

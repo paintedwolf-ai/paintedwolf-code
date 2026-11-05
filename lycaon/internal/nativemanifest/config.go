@@ -69,7 +69,7 @@ type Config struct {
 	SpawnsProcess         []string            `yaml:"spawns_process"`
 	ExecutionCapabilities map[string][]string `yaml:"execution_capabilities"`
 	Families              map[string][]string `yaml:"families"`
-	ResourceImplied map[string][]string `yaml:"resource_implied"`
+	ResourceImplied       map[string][]string `yaml:"resource_implied"`
 	// GrantIdentityNeutralArgs names arguments a grant identity ignores.
 	GrantIdentityNeutralArgs map[string][]string `yaml:"grant_identity_neutral_args"`
 	// ChunkablePayload names tools whose arguments can be split across calls.

@@ -1,8 +1,8 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/oar"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"go/ast"
 	"go/token"

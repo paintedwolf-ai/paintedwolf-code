@@ -1,8 +1,8 @@
 package session
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"path/filepath"
 	"slices"
 	"strings"

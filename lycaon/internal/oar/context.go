@@ -74,8 +74,8 @@ type GuardContext struct {
 	ObservationData    map[string]any
 	ObservedRejectCode string
 	// Reach is the frozen model request this occurrence's reader acts on.
-	Reach toolreach.Request
-	Published          map[string]any
+	Reach     toolreach.Request
+	Published map[string]any
 }
 
 // ClearMCPObservation zeros all MCP structural facts and clears MCPFields.

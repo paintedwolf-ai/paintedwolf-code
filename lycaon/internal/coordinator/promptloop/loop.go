@@ -1,9 +1,9 @@
 package promptloop
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"

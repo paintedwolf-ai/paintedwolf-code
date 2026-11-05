@@ -1,9 +1,9 @@
 package workercompletion
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"maps"
 	"strings"
 	"unicode/utf8"

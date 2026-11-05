@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-
 )
 
 // ValidateToolContracts checks the closed invocation-contract maps.

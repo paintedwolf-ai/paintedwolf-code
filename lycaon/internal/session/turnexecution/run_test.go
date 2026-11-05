@@ -1,8 +1,8 @@
 package turnexecution
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"

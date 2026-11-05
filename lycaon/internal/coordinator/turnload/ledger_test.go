@@ -252,4 +252,3 @@ func TestLedgerNeverPromotesPredictionOutsideLoadableSurface(t *testing.T) {
 		t.Fatalf("off-surface prediction loaded: %s", got)
 	}
 }
-

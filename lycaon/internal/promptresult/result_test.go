@@ -1,8 +1,8 @@
 package promptresult
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"slices"
 	"testing"
 

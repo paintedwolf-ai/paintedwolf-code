@@ -1,8 +1,8 @@
 package settings
 
 import (
-	"slices"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fspath"
