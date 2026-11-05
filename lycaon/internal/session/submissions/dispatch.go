@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/submissionstate"
@@ -244,8 +245,10 @@ func (m *Service) runQueuedTurn(ctx context.Context, id string, claimedRows []st
 	for _, row := range claimed {
 		if finishErr := m.finishSubmission(ctx, row, resp, err); finishErr != nil {
 			closeErr = errors.Join(closeErr, finishErr)
-			slog.ErrorContext(ctx, "queued prompt receipt close failed",
-				"session_id", id, "submission_id", row.ID, "err", finishErr)
+			if !errors.Is(finishErr, lifecycle.ErrStopping) {
+				slog.ErrorContext(ctx, "queued prompt receipt close failed",
+					"session_id", id, "submission_id", row.ID, "err", finishErr)
+			}
 		}
 	}
 	if !dispatch.Began() {

@@ -29,6 +29,9 @@ func (m *Service) runTurnAndDrain(ctx context.Context, id string, in promptinput
 		defer lock.Unlock()
 		return m.Runner.Run(ctx, id, in)
 	}()
+	if !m.Gate.MayDrain(turn) && onlyCanceled(err) {
+		err = lifecycle.ErrStopping
+	}
 	LogTurnFailure(ctx, id, err)
 	err = m.Turns.ReportFailure(ctx, id, err)
 	if m.Gate.MayDrain(turn) {
@@ -44,6 +47,22 @@ func (m *Service) runTurnAndDrain(ctx context.Context, id string, in promptinput
 		}
 	}
 	return resp, err
+}
+
+func onlyCanceled(err error) bool {
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		causes := joined.Unwrap()
+		for _, cause := range causes {
+			if !onlyCanceled(cause) {
+				return false
+			}
+		}
+		return len(causes) != 0
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return onlyCanceled(wrapped.Unwrap())
+	}
+	return errors.Is(err, context.Canceled)
 }
 
 func LogTurnFailure(ctx context.Context, sessionID string, err error) {
