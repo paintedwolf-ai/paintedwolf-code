@@ -2,12 +2,9 @@ oar: '1.0'
 id: SYNTAX_CHECK_OVERRIDDEN
 kind: policy
 anchor: tool.post_invoke
-selector:
-  paintedwolf.operation: [write, edit, replace_lines, restore_version, code_rewrite, promote_overlay]
 requires:
   profiles: [tool]
   facts:
-    - paintedwolf.operation
     - paintedwolf.syntax_check_overridden
     - paintedwolf.syntax_override_reason
     - paintedwolf.paths

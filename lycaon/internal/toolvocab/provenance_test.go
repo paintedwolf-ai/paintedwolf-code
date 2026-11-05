@@ -144,17 +144,21 @@ func TestBundledCopyNamesAToolOnlyAsSubjectMentionOrCheckedStep(t *testing.T) {
 	}}, readOnlyProfiles(), toolvocab.Provenance{})
 	testutil.FailErr(t, "create catalog", err)
 	check := func(rule *oar.Rule) error {
-		rule.ID, rule.Anchor, rule.Audience = "R", oar.AnchorToolRejected, []string{"explore_readonly"}
+		rule.ID, rule.Audience = "R", []string{"explore_readonly"}
+		if rule.Anchor == "" {
+			rule.Anchor = oar.AnchorToolRejected
+		}
 		_, err := toolvocab.CheckRules(catalog, surfaces(), oar.NewRuleSet([]*oar.Rule{rule}))
 		return err
 	}
 	for name, rule := range map[string]*oar.Rule{
-		"guarded remedy":      {Copy: oar.Copy{Fix: "{% if paintedwolf.x %}Call `recall`.{% endif %}"}},
-		"bare remedy":         {Copy: oar.Copy{Why: "Use source_history first."}},
-		"retired name":        {Copy: oar.Copy{Fix: "Call `list_dir`."}},
-		"retired next step":   {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "list_dir", Say: "{{ call }}"}}}},
-		"undeclared argument": {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Args: map[string]any{"q": "x"}, Say: "{{ call }}"}}}},
-		"incomplete call":     {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Say: "{{ call }}"}}}},
+		"guarded remedy":        {Copy: oar.Copy{Fix: "{% if paintedwolf.x %}Call `recall`.{% endif %}"}},
+		"bare remedy":           {Copy: oar.Copy{Why: "Use source_history first."}},
+		"retired name":          {Copy: oar.Copy{Fix: "Call `list_dir`."}},
+		"post-invoke operation": {Anchor: oar.AnchorToolPost, Selector: oar.Selector{"paintedwolf.operation": {"list_dir"}}},
+		"retired next step":     {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "list_dir", Say: "{{ call }}"}}}},
+		"undeclared argument":   {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Args: map[string]any{"q": "x"}, Say: "{{ call }}"}}}},
+		"incomplete call":       {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Say: "{{ call }}"}}}},
 	} {
 		if err := check(rule); err == nil {
 			t.Errorf("%s: accepted", name)

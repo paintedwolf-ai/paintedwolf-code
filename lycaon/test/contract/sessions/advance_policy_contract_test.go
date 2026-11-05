@@ -107,7 +107,7 @@ func TestGateFeedbackSatisfySplitByAdvancePolicy(t *testing.T) {
 	}, nil)
 	out, err := catalog.RenderGateFeedback(t.Context(), "research_satisfied", coordCtx)
 	contractcheck.FailErr(t, "RenderGateFeedback coordinator", err)
-	if !strings.Contains(out, "repo-researcher") {
+	if !strings.Contains(out, "repo researcher") {
 		t.Fatalf("coordinator satisfy missing research dispatch:\n%s", out)
 	}
 	if strings.Contains(out, "Call workflow_advance") || strings.Contains(out, "workflow_advance") {

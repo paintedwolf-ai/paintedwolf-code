@@ -2,11 +2,9 @@ oar: '1.0'
 id: HTTP_REQUEST_WEB_PAGE
 kind: policy
 anchor: tool.post_invoke
-selector:
-  paintedwolf.operation: [http_request]
 requires:
   profiles: [tool]
-  facts: [paintedwolf.operation, paintedwolf.http_request_web_page, paintedwolf.host, paintedwolf.bytes, paintedwolf.content_type, paintedwolf.next_steps]
+  facts: [paintedwolf.http_request_web_page, paintedwolf.host, paintedwolf.bytes, paintedwolf.content_type, paintedwolf.next_steps]
 when: paintedwolf.http_request_web_page
 effect: warn
 copy:

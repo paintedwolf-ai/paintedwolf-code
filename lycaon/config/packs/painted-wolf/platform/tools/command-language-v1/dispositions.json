@@ -678,7 +678,7 @@
       "tool": "git_compare",
       "owner": "git",
       "disposition": "replace-routine-schema",
-      "command": "",
+      "command": "git rev-list/git merge-base",
       "lifecycle": "read_only",
       "reuse": "Existing native registration and complete typed operation; preserve owner guidance and history. Test reference is stock catalog-closure evidence only; utility records carry operation/adjacent-test references. No unchanged domain algorithm qualification is claimed.",
       "source": "lycaon/config/packs/painted-wolf/platform/tools/operation-schemas/git_compare.yaml",
@@ -693,7 +693,7 @@
         "P33"
       ],
       "existing_rejection_code": "",
-      "command_forms": []
+      "command_forms": ["git rev-list", "git merge-base"]
     },
     {
       "tool": "git_diff",

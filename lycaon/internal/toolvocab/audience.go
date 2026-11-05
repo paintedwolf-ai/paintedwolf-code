@@ -171,6 +171,16 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 					rule.ID, operation))
 			}
 		}
+		// A program's post-invoke observation reports command, not what it reached.
+		if rule.Anchor == oar.AnchorToolPost {
+			for _, operation := range rule.Selector["paintedwolf.operation"] {
+				if c.operations[operation] {
+					problems = append(problems, fmt.Sprintf(
+						"rule %q: selector paintedwolf.operation names %q at tool.post_invoke, which reports the operation as command; match the fact its producer raises",
+						rule.ID, operation))
+				}
+			}
+		}
 		for _, sc := range rule.Scenarios {
 			tool, _ := sc.Vars["tool"].(string)
 			if tool = strings.TrimSpace(tool); tool != "" && !c.KnownName(tool) && !c.operations[tool] {

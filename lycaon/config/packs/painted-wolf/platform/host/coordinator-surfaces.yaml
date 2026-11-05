@@ -97,6 +97,7 @@ implement_investigate:
   floor:
     - recall
     - command
+    - summarize
     - source_history
     - skills_read
     - update_progress
@@ -104,7 +105,9 @@ implement_investigate:
     - request_tools
   loadable:
     # project utilities
+    - survey_repo
     # edit
+    - code_rewrite
     - restore_version
     # process and terminal
     - command_output
@@ -280,6 +283,8 @@ observe_investigate:
   prose_finish: true
   publishes_mid_turn_text: true
   floor:
+    - summarize
+    - survey_repo
     - recall
     - command
     - command_output

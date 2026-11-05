@@ -3,8 +3,8 @@ id: painted-wolf/security
 name: Security
 version: 1.2.0
 compatibility:
-  extension_api: "^1.2.0"
+  extension_api: "^1.5.0"
 dependencies:
   painted-wolf/platform:
-    version: "^1.2.0"
+    version: "^1.5.0"
 feature: security

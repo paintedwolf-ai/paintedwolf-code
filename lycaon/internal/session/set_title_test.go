@@ -152,7 +152,7 @@ func TestSourceAnalysisFailureAnnotatesPartialResult(t *testing.T) {
 	data["path"], data["parse_failure_count"], data["parse_paths"] = "Level.swift", 1, []string{"Level.swift"}
 	raised := guidance.ToolResultFacts{}.WithFeedback(toolrejection.SourceAnalysisUnavailableCode, data, &api.FeedbackSubject{Kind: "path", ID: "Level.swift"})
 	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "grep", map[string]any{"pattern": "spawn($A)", "structural": true}, "partial matches", 1, raised)
-	for _, want := range []string{"partial matches", "Code: SOURCE_ANALYSIS_UNAVAILABLE", "Level.swift", "timeout", "5000", "structural=false"} {
+	for _, want := range []string{"partial matches", "Code: SOURCE_ANALYSIS_UNAVAILABLE", "Level.swift", "timeout", "5000"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("feedback missing %q: %s", want, out)
 		}

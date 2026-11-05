@@ -53,20 +53,9 @@ schema:
           maxItems: 8
           items:
             type: string
-          description: >-
-            Exact AF_UNIX service paths. For an external program, use a whole
-            `{{paintedwolf-socket:/absolute/path}}` reference as an argv or
-            environment value. Clients needing a Unix URL use
-            `{{paintedwolf-socket:unix-url:/absolute/path}}`.
-            Inside code or configuration, read that environment
-            variable. macOS datagrams use
-            `{{paintedwolf-socket:unixgram:/absolute/path}}`; Linux confinement
-            refuses Unix datagrams. Native socket arguments take the ordinary path.
+          description: "Exact AF_UNIX service paths, as a whole `{{paintedwolf-socket:/absolute/path}}` reference for an external program."
         process_control:
-          description: >-
-            `true` requests, for this invocation,signaling outside the command sandbox.
-            Filesystem and network confinement stay applied. Actual signal
-            targets will be unobserved. Prefer process_signal for exact targets.
+          description: "`true` requests signaling outside the command sandbox; actual signal targets are unobserved."
           oneOf:
             - type: boolean
               enum: [true]
@@ -75,27 +64,16 @@ schema:
         credential_store:
           type: boolean
           enum: [true]
-          description: >-
-            `true` requests read-only access to the host OS credential store
-            while keeping filesystem, write, and network confinement applied.
+          description: "`true` requests read-only access to the host OS credential store."
         host_execution:
-          description: >-
-            `true` requests execution outside the command sandbox, including
-            setuid programs and passwordless sudo (`sudo -n`). Filesystem,
-            network, and process effects are unobserved. Cannot combine with
-            other capability_request fields or socks_proxy.
+          description: "`true` requests execution outside the command sandbox, with effects unobserved. Cannot combine with other capability_request fields or socks_proxy."
           oneOf:
             - type: boolean
               enum: [true]
             - type: object
               additionalProperties: false
         direct_ip:
-          description: >-
-            `true` requests direct outbound IP when HTTP mediation or SOCKS is
-            incompatible — UDP (NTP, QUIC), a portless bind, or a client that
-            ignores proxy variables. A destination list or
-            {"declared_destinations": ["udp://time.nist.gov:123"]} narrows
-            protocol and port. Actual destinations will be unobserved.
+          description: "`true` or a destination list requests direct outbound IP; actual destinations are unobserved."
           oneOf:
             - type: boolean
             - type: array
@@ -108,22 +86,14 @@ schema:
               properties:
                 declared_destinations:
                   type: array
-                  description: >-
-                    Destinations this check reaches, as host:port with optional
-                    tcp:// or udp:// scheme (e.g. udp://time.nist.gov:123).
-                    Declaring narrows protocol and port; every entry must include
-                    an explicit port.
+                  description: "Destinations as host:port with an explicit port and optional tcp:// or udp:// scheme."
                   maxItems: 16
                   items:
                     type: string
                     maxLength: 256
         local_listen:
           type: object
-          description: >-
-            Local listener authority (bind + accept) for a test server or
-            harness without widening outbound egress. Declare ports to narrow
-            the profile; {} requests any local port. Listen and loopback-connect
-            are separate fields.
+          description: "Local listener authority. Declare ports to narrow it; {} requests any local port."
           properties:
             ports:
               type: array
@@ -137,11 +107,7 @@ schema:
           additionalProperties: false
         loopback_connect:
           type: object
-          description: >-
-            Authority to connect to TCP or UDP services on this machine without
-            widening external egress. Use with local_listen when a check starts
-            and exercises a local server. Declare ports when known; {} requests
-            any local port.
+          description: "Authority to connect to services on this machine. Declare ports when known; {} requests any local port."
           properties:
             ports:
               type: array
@@ -156,19 +122,11 @@ schema:
         write_root:
           type: string
           maxLength: 1024
-          description: >-
-            One absolute path this check must write outside its project and
-            default cache roots, a credential store, or an instruction/settings
-            file. Reviewed before spawn; recognized credential-store paths grant
-            only that exact file.
+          description: "One absolute path this check must write outside its project and default cache roots. Reviewed before spawn."
         read_path:
           type: string
           maxLength: 1024
-          description: >-
-            One absolute protected path this invocation must read — key
-            material such as an SSH or signing key. It is reviewed before
-            spawn; command output can never grant it. The grant covers exactly
-            the declared file.
+          description: "One absolute protected path this invocation must read. Reviewed before spawn."
       additionalProperties: false
       minProperties: 1
   additionalProperties: false

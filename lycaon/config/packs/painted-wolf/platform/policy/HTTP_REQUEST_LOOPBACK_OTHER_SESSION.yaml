@@ -2,12 +2,9 @@ oar: '1.0'
 id: HTTP_REQUEST_LOOPBACK_OTHER_SESSION
 kind: policy
 anchor: tool.post_invoke
-selector:
-  paintedwolf.operation: [http_request]
 requires:
   profiles: [tool]
   facts:
-    - paintedwolf.operation
     - paintedwolf.http_request_loopback_other_session
     - paintedwolf.destination
     - paintedwolf.port
@@ -15,7 +12,7 @@ requires:
 when: paintedwolf.http_request_loopback_other_session
 effect: warn
 copy:
-  what: 'http_request connected to {{ paintedwolf.destination }} on port {{ paintedwolf.port }}, where another listener is active.'
+  what: 'The request connected to {{ paintedwolf.destination }} on port {{ paintedwolf.port }}, where another listener is active.'
   cause: '{{ paintedwolf.detail }}'
   why: 'The response came from or competed with a listener outside this chat, so its output may belong to another project or session.'
   fix: >-

@@ -1209,9 +1209,9 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "chown [--] UID[:GID] PATH ...",
+      "argv": "chown [--] OWNER[:GROUP] PATH ...",
       "forms": [],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. chown [--] UID[:GID] PATH ...",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. chown [--] OWNER[:GROUP] PATH ...",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
