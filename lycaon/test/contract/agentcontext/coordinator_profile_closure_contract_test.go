@@ -22,6 +22,9 @@ var coordinatorPromptCorpusGlobs = []string{
 // outside tripartite coordinator prose.
 var coordinatorPromptlessAllowlist = map[string]string{
 	"survey_repo":         "taught by the survey-first-pass unit",
+	"ask_user":            "taught by its schema; prompts say to ask the user",
+	"promote_overlay":     "taught by the overlay-promote partial on its surface",
+	"reject_overlay":      "taught by the overlay-promote partial on its surface",
 	"restore_version":     "worker mutations via task(); coordinator plan surfaces only",
 	"source_history":      "universal repo inspection",
 	"delegate_dispatch":   "delegation primitive; calling convention covered by topology docs",
@@ -186,12 +189,6 @@ func mentionsToolName(corpus, tool string) bool {
 		return false
 	}
 	return containsWord(corpus, tool)
-}
-
-// namesToolCall reports a backticked tool name, how copy tells a reader to call
-// something, as opposed to a word that collides with a tool name.
-func namesToolCall(corpus, tool string) bool {
-	return strings.Contains(corpus, "`"+tool+"`") || strings.Contains(corpus, "`"+tool+"(")
 }
 
 func containsWord(haystack, needle string) bool {

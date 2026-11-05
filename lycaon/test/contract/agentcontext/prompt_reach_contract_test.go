@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -66,17 +68,76 @@ func linesNaming(corpus string, names []string) string {
 func TestRenderedCoordinatorPromptsNameOnlyReachableTools(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	catalog, _ := promptNameCatalog(t)
+	states := map[string]surface.ImplementSessionState{
+		"idle":              {},
+		"workers in flight": {WorkersInFlight: 2},
+		"pending overlays":  {PendingOverlayIDs: []string{"job-overlay-1"}, WorkersInFlight: 1},
+	}
+	for _, rootCount := range []int{0, 1, 2} {
+		plans, err := surface.CompileToolPlans(rootCount)
+		contractcheck.FailErr(t, "compile tool plans", err)
+		for id, plan := range plans {
+			check := func(t *testing.T, corpus string) {
+				t.Helper()
+				if names := unreachableNames(t, catalog, corpus, plan.AddressableNames()); len(names) > 0 {
+					t.Errorf("names %s, which this surface cannot reach:\n%s", strings.Join(names, ", "), linesNaming(corpus, names))
+				}
+			}
+			// With no folder attached, only the surfaces that reach no worktree open.
+			if rootCount > 0 || slices.Contains(noFolderSurfaces, id) {
+				t.Run(fmt.Sprintf("%s/%d-roots", id, rootCount), func(t *testing.T) {
+					check(t, renderCoordinatorTripartiteAtRootCount(t, root, rootCount, id))
+				})
+			}
+			if rootCount != 1 {
+				continue
+			}
+			for name, state := range states {
+				t.Run(id+"/"+name, func(t *testing.T) {
+					check(t, renderCoordinatorTripartiteForRunContext(t, root, api.CoordinatorRunContext{},
+						&api.Session{Posture: api.SessionPostureBuild}, surface.HostLoopWakeSentinel,
+						WorkerCompletionHistory("implementer"), id, state))
+				})
+			}
+		}
+	}
+}
+
+var noFolderSurfaces = []string{surfaceImplementRouting, "implement_investigate", surfaceImplementSynthesis}
+
+// phaseKicks render only on their workflow phase, whose surface the phase declares.
+var phaseKickPrefixes = []string{
+	"coordinator-debate-", "coordinator-fanout-", "coordinator-phase-exit", "coordinator-plan-", "coordinator-recon-",
+	"coordinator-review-loop-", "coordinator-security-",
+}
+
+// A wake can reach any surface, so it names only what that surface's plan reaches.
+func TestRenderedCoordinatorKicksNameOnlyReachableTools(t *testing.T) {
+	catalog, _ := promptNameCatalog(t)
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	plans, err := surface.CompileToolPlans(1)
 	contractcheck.FailErr(t, "compile tool plans", err)
-	for id, plan := range plans {
-		t.Run(id, func(t *testing.T) {
-			corpus := renderCoordinatorTripartiteForRunContext(t, root, api.CoordinatorRunContext{},
-				&api.Session{Posture: api.SessionPostureBuild}, surface.HostLoopWakeSentinel,
-				WorkerCompletionHistory("implementer"), id)
-			if names := unreachableNames(t, catalog, corpus, plan.AddressableNames()); len(names) > 0 {
-				t.Errorf("names %s, which this surface cannot reach:\n%s", strings.Join(names, ", "), linesNaming(corpus, names))
-			}
-		})
+	for _, binding := range catalogfixture.LoadInformBindings(t).AllInform() {
+		if binding == nil || !binding.IsInform() {
+			continue
+		}
+		kickID := binding.Render
+		if !strings.HasPrefix(kickID, "coordinator-") || slices.ContainsFunc(phaseKickPrefixes, func(p string) bool { return strings.HasPrefix(kickID, p) }) {
+			continue
+		}
+		for id, plan := range plans {
+			t.Run(kickID+"/"+id, func(t *testing.T) {
+				reachable := plan.AddressableNames()
+				data := kickRenderFixture()
+				delete(data, "tools")
+				contractcheck.FailErr(t, "merge kick vars", prompts.MergeCoordinatorKickVarsForTools(data, reachable))
+				corpus, err := engine.RenderKick(context.Background(), kickID, data)
+				contractcheck.FailErr(t, "render kick", err)
+				if names := unreachableNames(t, catalog, corpus, reachable); len(names) > 0 {
+					t.Errorf("names %s, which this surface cannot reach:\n%s", strings.Join(names, ", "), linesNaming(corpus, names))
+				}
+			})
+		}
 	}
 }
 

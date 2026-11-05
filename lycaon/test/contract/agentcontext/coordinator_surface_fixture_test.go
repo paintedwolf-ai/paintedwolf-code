@@ -33,30 +33,6 @@ var orchestrationPinnedSurfaces = []string{
 	surfaceImplementPark,
 }
 
-// implementPromptToolsNotOnWire explains prompt-only tool references.
-var implementPromptToolsNotOnWire = map[string]string{
-	"code_rewrite":                   "the dispatch template gates this on profile_has_code_rewrite; the corpus holds its raw source",
-	"restore_version":                "product mutations via task() — not coordinator wire",
-	"command":                        "investigate/overlay_promote compile the family",
-	"command_output":                 "family compile; live jobs imply it elsewhere",
-	"command_stop":                   "family compile; live jobs imply it elsewhere",
-	"held_result":                    "resource-implied control; a held call makes it callable on every surface",
-	"held_stop":                      "resource-implied control; a held call makes it callable on every surface",
-	"verify":                         "host-side test runner — surface override at invoke on investigate/overlay_promote",
-	"preview_overlay":                "landing is the overlay-promote surface's; other surfaces name it describing where a write leg ends up",
-	"reject_overlay":                 "landing is the overlay-promote surface's; other surfaces name it describing where a write leg ends up",
-	"source_history":                 "orchestrate surfaces delegate via task()",
-	"delegate_dispatch":              "workflow delegation legs only (plan_execute) — ambient implement dispatch is task()",
-	"workflow_advance":               "workflow runtime visibility",
-	"workflow_transition":            "workflow runtime visibility",
-	"fanout_plan":                    "orchestrate_plan surface only — coordinator-planned fanout stamp",
-	"workflow_catalog_summaries":     "compose/catalog axis only",
-	"workflow_compose":               "compose axis only",
-	"workflow_compose_from_template": "compose axis only",
-	"workflow_persist":               "compose axis only",
-	"workflow_user_feedback":         "workflow runtime visibility",
-}
-
 // specialistSpawnAgents are task targets, not wire tools.
 var specialistSpawnAgents = []string{
 	"security-reviewer",
@@ -72,40 +48,6 @@ func loadImplementSurfaces(t *testing.T) map[string][]string {
 		surfaces[id] = plan.ImmediateNames()
 	}
 	return surfaces
-}
-
-// routingPromptToolsAllowedOffWire documents shared prompt references.
-var routingPromptToolsAllowedOffWire = map[string]string{
-	"scan_pack":       "core scan policy; routing uses native scan_* drill-down",
-	"reject_overlay":  "overlay-promote / synthesis surfaces own reject; routing prompts describe the model but routing itself dispatches via promote_overlay or task()",
-	"preview_overlay": "overlay-promote / synthesis surfaces own preview; routing prompts describe the model but routing itself doesn't pre-flight overlays",
-	"answer_decision": "routing dispatches; needs_decision resolution on pinned surfaces while workers run",
-}
-
-// orchestrateSharedPromptToolsAllowedOffWire documents shared prompt references.
-var orchestrateSharedPromptToolsAllowedOffWire = map[string]string{
-	"fetch_url":  "coordinator-core external-facts invariant; Lane S surfaces own fetch",
-	"scan_pack":  "core scan policy; orchestrate surfaces use native scan_* drill-down",
-	"web_search": "coordinator-core external-facts invariant; Lane S surfaces own search",
-}
-
-// orchestratePromptToolsAllowedOffWire documents surface-specific omissions.
-var orchestratePromptToolsAllowedOffWire = map[string]string{
-	"pack_board":      "dispatch/park mode copy — pack_board on routing/overlay-promote only",
-	"preview_overlay": "worker-chain baseline describes integration; overlay-promote surface provides preview",
-	"promote_overlay": "worker-chain baseline describes integration; overlay-promote surface provides promote",
-	"reject_overlay":  "routing/dispatch describe integration; overlay-promote provides reject",
-	"task":            "park is host-cycle subscribe only — task() resumes after siblings idle",
-}
-
-func mergeToolAllowlists(maps ...map[string]string) map[string]string {
-	out := make(map[string]string)
-	for _, m := range maps {
-		for k, v := range m {
-			out[k] = v
-		}
-	}
-	return out
 }
 
 // fileText reads an embedded or linked pack file.
