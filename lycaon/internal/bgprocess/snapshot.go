@@ -335,7 +335,7 @@ func (r *Registry) ActiveJobs(sessionID string) []JobSnapshot {
 			continue
 		}
 		out = append(out, JobSnapshot{
-			Handle: proc.Handle, Mode: proc.mode, OriginTool: proc.originTool, Program: proc.kind == processKindProgram,
+			Handle: proc.Handle, Mode: proc.mode, OriginTool: proc.originTool,
 			StartedAt: proc.startedAt, Timeout: proc.timeout,
 			Stages: append([]hostcmd.StageResult(nil), proc.Stages...),
 		})
