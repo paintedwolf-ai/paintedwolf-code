@@ -650,7 +650,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:digest -- {{.CLI_ARGS}}
 
   den:test:transcript-scale:
-    desc: 'Transcript hydration performance at 5000 and 10000 messages'
+    desc: 'Transcript hydration at 5000 and 10000 messages'
     preconditions:
       - sh: command -v bun
         msg: bun required — install from https://bun.sh

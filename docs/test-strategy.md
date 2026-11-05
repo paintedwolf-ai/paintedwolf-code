@@ -779,10 +779,9 @@ serial and allows 90 minutes per package before host-load scaling. The nightly
 workflow includes this tier. Active fuzz exploration runs through
 `./task test:fuzz` in nightly verification, separately from
 `check`; ordinary Go tests still execute saved fuzz seed cases. Transcript
-performance tests use the `.perf.test.ts` suffix and run through
-`./task den:test:transcript-scale` in nightly verification; normal
-Den suites exclude elapsed-time assertions while retaining memory and DOM bounds
-as ordinary correctness tests. SQL query and OpenAPI bundle generation drift are
+scale tests use the `.perf.test.ts` suffix and run through
+`./task den:test:transcript-scale` in nightly verification. Den suites assert
+memory, DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
 checked once through `db:sqlc:check` and `openapi:bundle:check` in
 `check:drift`; Go contracts inspect the generated surfaces without launching the
 generators again.
