@@ -42,7 +42,7 @@ func newSecretSinkRun(t *testing.T) (*secretSinkRun, *wire.Session) {
 // suppliedReference stores the sentinel the way a person enters it in settings.
 func (r *secretSinkRun) suppliedReference(t *testing.T, sess *wire.Session) string {
 	t.Helper()
-	body, err := json.Marshal(wire.CreateManagedSecretRequest{OperationID: uuid.NewString(), Name: "sink token", SecretValue: sinkSentinel})
+	body, err := json.Marshal(wire.CreateManagedSecretRequest{OperationID: uuid.NewString(), Name: "sink token", Purpose: "file sink test", SecretValue: sinkSentinel})
 	testutil.FailErr(t, "encode secret", err)
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects/"+sess.ProjectID+"/secrets", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
@@ -86,25 +86,30 @@ func (r *secretSinkRun) file(t *testing.T, path string) string {
 	return string(body)
 }
 
-// toolResults decodes the host's typed result for every tool message and fails if
+type programOutcome struct{ state, stopCode string }
+
+// outcomes reads each command's typed receipt in execution order and fails if
 // the supplied value reached the transcript in any form.
-func (r *secretSinkRun) toolResults(t *testing.T) []map[string]any {
+func (r *secretSinkRun) outcomes(t *testing.T) []programOutcome {
 	t.Helper()
 	messages, err := r.h.Store.GetMessages(t.Context(), r.session)
 	testutil.FailErr(t, "messages", err)
-	var results []map[string]any
 	for _, message := range messages {
 		if strings.Contains(message.Content, sinkSentinel) {
 			t.Fatalf("supplied value reached the %s transcript", message.Role)
 		}
-		if message.Role != wire.MessageRoleTool {
-			continue
-		}
-		var result map[string]any
-		testutil.FailErr(t, "decode tool result", json.Unmarshal([]byte(message.Content), &result))
-		results = append(results, result)
 	}
-	return results
+	rows, err := r.h.DB.QueryContext(t.Context(), `SELECT p.state, p.stop_code FROM invocation_programs p JOIN invocation_receipts r ON r.id = p.parent_receipt_id WHERE r.session_id = ? ORDER BY p.rowid`, r.session)
+	testutil.FailErr(t, "query programs", err)
+	defer rows.Close()
+	var outcomes []programOutcome
+	for rows.Next() {
+		var outcome programOutcome
+		testutil.FailErr(t, "scan program", rows.Scan(&outcome.state, &outcome.stopCode))
+		outcomes = append(outcomes, outcome)
+	}
+	testutil.FailErr(t, "read programs", rows.Err())
+	return outcomes
 }
 
 // A host-generated chat value reaches a local file without a card, through both
@@ -121,9 +126,9 @@ func TestCommandFileSinksResolveAChatGeneratedReference(t *testing.T) {
 	}
 	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
 	testutil.FailErr(t, "prompt", err)
-	for i, result := range run.toolResults(t) {
-		if result["state"] != "completed" {
-			t.Fatalf("tool %d = %v", i, result)
+	for i, outcome := range run.outcomes(t) {
+		if outcome.state != "completed" {
+			t.Fatalf("command %d = %+v", i, outcome)
 		}
 	}
 	got := run.file(t, lines)
@@ -186,7 +191,7 @@ func TestCommandFileSinkAsksBeforeWritingASuppliedSecret(t *testing.T) {
 			if got := run.file(t, target); got != want {
 				t.Fatalf("file = %q, want %q", got, want)
 			}
-			run.toolResults(t)
+			run.outcomes(t)
 		})
 	}
 }
@@ -208,13 +213,13 @@ func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
 	}
 	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
 	testutil.FailErr(t, "prompt", err)
-	results := run.toolResults(t)
-	if len(results) != len(commands) {
-		t.Fatalf("results = %d, want %d", len(results), len(commands))
+	outcomes := run.outcomes(t)
+	if len(outcomes) != len(commands) {
+		t.Fatalf("outcomes = %d, want %d", len(outcomes), len(commands))
 	}
-	for i, result := range results {
-		if result["stop_code"] != "TOOL_ARGS_INVALID" {
-			t.Errorf("%q = %v", commands[i], result)
+	for i, outcome := range outcomes {
+		if outcome.stopCode != "TOOL_ARGS_INVALID" {
+			t.Errorf("%q = %+v", commands[i], outcome)
 		}
 	}
 	for _, name := range []string{"redirect.env", "piped.env", "heredoc.env"} {
