@@ -104,8 +104,8 @@ func TestStopWorkerRuntimePreservesParentAndSibling(t *testing.T) {
 
 func TestWorkflowDeliveryRequiresAcceptedCurrentPhaseCloseout(t *testing.T) {
 	for _, tc := range []struct {
-		name, run, phase                                         string
-		internal, assembled, draft, sessionScope, toolCall, want bool
+		name, run, phase                                                           string
+		internal, assembled, draft, sessionScope, toolCall, evidenceOptional, want bool
 	}{
 		{name: "current", run: "run", phase: "work", want: true},
 		{name: "other run", run: "old-run", phase: "work"},
@@ -114,6 +114,7 @@ func TestWorkflowDeliveryRequiresAcceptedCurrentPhaseCloseout(t *testing.T) {
 		{name: "host grounded closeout", run: "run", phase: "work", assembled: true, want: true},
 		{name: "host grounded draft", run: "run", phase: "work", assembled: true, draft: true},
 		{name: "session report", run: "run", phase: "work", sessionScope: true},
+		{name: "reply with nothing to cite", run: "run", phase: "work", evidenceOptional: true},
 		{name: "tool step", run: "run", phase: "work", toolCall: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -132,6 +133,9 @@ func TestWorkflowDeliveryRequiresAcceptedCurrentPhaseCloseout(t *testing.T) {
 			}
 			if tc.assembled {
 				msg.Grounding = &api.CitationGrounding{HostAssembled: true}
+			}
+			if tc.evidenceOptional {
+				msg.Grounding = &api.CitationGrounding{Traced: true, EvidenceOptional: true}
 			}
 			if tc.draft {
 				msg.Kind = api.MessageKindDraft
