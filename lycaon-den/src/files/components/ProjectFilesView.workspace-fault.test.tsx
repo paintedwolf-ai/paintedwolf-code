@@ -167,10 +167,9 @@ describe("ProjectFilesView workspace lookup faults", () => {
       () => {
         expect(boundary.getAttribute("data-ready")).toBe("true");
       },
-      { timeout: 8_000 },
     );
     expect(calls).toBe(3);
     expect(!preparation.ready()).toBe(false);
     expect(preparation.notice()).toBeNull();
-  }, 10_000);
+  });
 });

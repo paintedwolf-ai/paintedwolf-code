@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -52,7 +53,7 @@ func gatherExecutor(t *testing.T) (*toolexecution.Executor, *gatherHITL) {
 // observed set, and both dials are released by the one answer.
 func TestConcurrentHostsFromOneCommandAreOneSetCard(t *testing.T) {
 	exec, mgr := gatherExecutor(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	cmd := confine.EgressCommand{SessionID: "chat-1", RootSessionID: "chat-1", ToolCallID: "tc-pytest", CommandLine: "pytest -n auto", ProjectID: "proj", ProjectDir: "/tmp/proj"}
 

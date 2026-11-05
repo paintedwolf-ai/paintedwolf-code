@@ -2,8 +2,6 @@ package wiring
 
 import (
 	"context"
-	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -21,29 +19,12 @@ func TestProgressCompletionAppendsTranscriptMessage(t *testing.T) {
 	testutil.FailErr(t, "Create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
-	revision, itemIDs := "", []any(nil)
 	runUpdate := func(content string) {
-		args := map[string]any{"content": content}
-		if revision != "" {
-			// One identity per row; a row the host has not seen yet is null.
-			ids := append([]any(nil), itemIDs...)
-			for strings.Count(content, "\n- [") > len(ids) {
-				ids = append(ids, nil)
-			}
-			args["expected_revision"], args["item_ids"] = revision, ids
-		}
-		out, err := h.ToolRegistry.Run(ctx, "update_progress", args, tools.ToolContext{
+		if _, err := h.ToolRegistry.Run(ctx, "update_progress", h.ProgressUpdateArgs(t, ctx, sess.ID, content), tools.ToolContext{
 			Identity: tools.InvocationIdentity{SessionID: sess.ID},
-		})
-		testutil.FailErr(t, "update_progress", err)
-		var result struct {
-			Snapshot struct {
-				Revision string `json:"revision"`
-				ItemIDs  []any  `json:"item_ids"`
-			} `json:"snapshot"`
+		}); err != nil {
+			testutil.FailErr(t, "update_progress", err)
 		}
-		testutil.FailErr(t, "decode update_progress", json.Unmarshal([]byte(out), &result))
-		revision, itemIDs = result.Snapshot.Revision, result.Snapshot.ItemIDs
 	}
 
 	completions := func() []wire.Message {

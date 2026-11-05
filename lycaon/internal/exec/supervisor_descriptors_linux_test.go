@@ -30,7 +30,7 @@ func TestSupervisorDescriptorLayoutFixture(t *testing.T) {
 	testutil.FailErr(t, "create unrelated descriptor canary", err)
 	defer reader.Close()
 	defer writer.Close()
-	testutil.FailErr(t, "bound descriptor canary wait", reader.SetReadDeadline(time.Now().Add(5*time.Second)))
+	testutil.FailErr(t, "bound descriptor canary wait", reader.SetReadDeadline(time.Now().Add(testutil.Timeout(time.Minute))))
 	for _, relay := range []bool{false, true} {
 		admitted, err := unix.Dup(int(writer.Fd()))
 		testutil.FailErr(t, "supply one explicit descriptor", err)

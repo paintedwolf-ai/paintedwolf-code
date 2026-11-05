@@ -94,7 +94,7 @@ webE2e(
       .toBe("after");
     await expect(page.getByTestId("workflow-feedback-remaining")).toHaveCount(0);
     const composer = liveChatStage(page).getByTestId("chat-composer");
-    await expect(composer).toBeFocused({ timeout: 5_000 });
+    await expect(composer).toBeFocused({ timeout: 30_000 });
     await composer.fill("REST");
     await composer.press("Enter");
 

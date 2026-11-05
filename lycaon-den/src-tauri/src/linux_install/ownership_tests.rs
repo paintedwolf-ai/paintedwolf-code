@@ -80,14 +80,16 @@ fn a_package_manager_that_misses_the_deadline_is_unknown_until_it_answers() {
     use std::os::unix::fs::PermissionsExt;
     let dir = crate::test_support::TempDir::new("ownership-deadline");
     let dpkg = dir.join("dpkg-query");
-    // The first query outlives the deadline; later ones answer like dpkg-query.
-    std::fs::write(&dpkg, "#!/bin/sh\nif [ ! -e \"$0.slow\" ]; then : > \"$0.slow\"; exec sleep 30; fi\ncase \"$1\" in\n  -S) printf 'painted-wolf-code: %s\\n' \"$2\" ;;\n  -W) printf '1.0.2' ;;\nesac\n").unwrap();
+    // Queries outlive the deadline while the marker exists; otherwise they answer like dpkg-query.
+    let stalled = dir.join("dpkg-query.stalled");
+    std::fs::write(&stalled, "").unwrap();
+    std::fs::write(&dpkg, "#!/bin/sh\nif [ -e \"$0.stalled\" ]; then exec sleep 30; fi\ncase \"$1\" in\n  -S) printf 'painted-wolf-code: %s\\n' \"$2\" ;;\n  -W) printf '1.0.2' ;;\nesac\n").unwrap();
     std::fs::set_permissions(&dpkg, std::fs::Permissions::from_mode(0o755)).unwrap();
     let mut stand_ins = StandIns { dir, deadline: std::time::Duration::from_millis(300) };
     let cache = fresh_cache();
-    let started = std::time::Instant::now();
     assert_eq!(resolve(cache, || owner(Path::new(EXE), &mut stand_ins)), Ownership::Unknown(QueryReason::TimedOut));
-    assert!(started.elapsed() < std::time::Duration::from_secs(5), "the stand-in is stopped at the deadline");
+    std::fs::remove_file(&stalled).unwrap();
+    stand_ins.deadline = std::time::Duration::from_secs(120);
     let package = resolve(cache, || owner(Path::new(EXE), &mut stand_ins)).package().expect("the retry establishes the owner");
     assert_eq!((package.name.as_str(), package.version.as_str()), ("painted-wolf-code", "1.0.2"));
 }

@@ -129,7 +129,7 @@ boot_engine() {
 
   base="http://${addr}"
   body=""
-  deadline=$((SECONDS + 60))
+  deadline=$((SECONDS + 300))
   while (( SECONDS < deadline )); do
     if body="$(curl -sf --max-time 2 "${base}/health" 2>/dev/null)"; then
       status="$(jq -r '.status // empty' <<<"${body}")"

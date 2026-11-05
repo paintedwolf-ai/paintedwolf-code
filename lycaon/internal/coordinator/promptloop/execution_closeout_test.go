@@ -465,7 +465,6 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 		h, client := newAttemptHarness(t, false, 2, []scriptedModelStep{
 			{completion: readCall("cap-read-1")},
 			{completion: textReply("Draft blocked at final round.")},
-			{completion: textReply("Iteration cap closeout summary.")},
 		})
 		h.deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 			if client.index == 2 {
@@ -473,8 +472,11 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 			}
 			return nil, false
 		}
+		h.deps.Closeout.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted guidance.CloseoutDraft, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+			return guidance.CoordinatorCompletionReport{Synthesis: drafted.Synthesis}, &api.CitationGrounding{HostAssembled: true}
+		}
 		testutil.FailErr(t, "run iteration cap closeout", h.runAttempt(t, "Read files until cap.", "coordinator", ""))
-		h.assertStrictlyIncreasingIterations(t, 3)
+		h.assertStrictlyIncreasingIterations(t, 2)
 	})
 
 	t.Run("closeout_gate_repair", func(t *testing.T) {

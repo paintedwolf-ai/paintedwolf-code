@@ -748,7 +748,7 @@ Locks and worker reservations are inherited by child processes and remain held
 after a parent crash until its surviving children exit. Pause stops new batch
 and invocation admission; already admitted batches finish their stages.
 
-Scheduler-dependent waits, watchdogs, and lint timeouts scale 1×–4× with host
+Scheduler-dependent waits and watchdogs scale 1×–4× with host
 load. `PW_TEST_TIMEOUT_SCALE` selects an explicit scale; production deadlines
 and polling intervals remain unchanged.
 
@@ -784,10 +784,9 @@ serial and allows 90 minutes per package before host-load scaling. The nightly
 workflow includes this tier. Active fuzz exploration runs through
 `./task test:fuzz` in nightly verification, separately from
 `check`; ordinary Go tests still execute saved fuzz seed cases. Transcript
-performance tests use the `.perf.test.ts` suffix and run through
-`./task den:test:transcript-scale` in nightly verification; normal
-Den suites exclude elapsed-time assertions while retaining memory and DOM bounds
-as ordinary correctness tests. SQL query and OpenAPI bundle generation drift are
+scale tests use the `.perf.test.ts` suffix and run through
+`./task den:test:transcript-scale` in nightly verification. Den suites assert
+memory, DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
 checked once through `db:sqlc:check` and `openapi:bundle:check` in
 `check:drift`; Go contracts inspect the generated surfaces without launching the
 generators again.
@@ -863,12 +862,16 @@ clients that require manual installation.
 
 A ready pull request runs the `fast` profile; the merge queue runs the
 `integration` profile on the exact commit that lands. Both report the required
-`check` from [`ci.yml`](../.github/workflows/ci.yml). The fast tier runs three
-jobs side by side. `ready-tests` splits repository contracts and affected short Go
-tests across two shards, balanced by measured package durations. `ready` runs size
-budgets and changed Go statement coverage first, then compiles the host and runs
-comment checks, test failure-message checks, documentation links, Den typecheck,
-Den lint, frontend seam canaries, and complete `lint:full` analysis.
+`check` from [`ci.yml`](../.github/workflows/ci.yml). GitHub reads that check from
+the newest suite on the head, so the job deletes skipped CI runs a draft push left
+there; a failed deletion warns without failing `check`. A `static` job reports
+formatting, comment, failure-message and documentation-link errors within a minute
+while the rest keep running. The fast tier runs its other jobs side by side.
+`ready-lint` runs complete `lint:full` analysis on its own runner, whose compile output would otherwise share one disk with the rest.
+`ready-tests` splits repository contracts and affected short Go tests across two
+shards, balanced by measured package durations. `ready` runs size budgets and
+changed Go coverage first, plus script coverage when scripts or workflows changed, then compiles the host and runs Den typecheck,
+Den lint, and frontend seam canaries.
 Coverage executes eligible changed packages' own short tests, so `ready-tests`
 omits those packages from its identical short recipe. Test-only, generated,
 exempt, and untested packages keep their affected short selection. Unknown recipes
@@ -897,7 +900,7 @@ selection remains available for focused local diagnosis.
 The merge queue measures changed coverage on its exact source and executes the
 complete affected integration selection. Frontend and scripts assertions execute
 once through their coverage stages; distinct short-covered and integration-tagged
-Go recipes retain their separate modes. The group stops at its first failure.
+Go recipes retain their separate modes. Every lane runs to the end, so one failed group reports all its failures.
 The limits lane keeps its existing two-hour completion allowance, independent of
 the under-hour performance objective.
 

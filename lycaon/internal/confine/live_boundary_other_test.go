@@ -37,6 +37,9 @@ var warmPythonShim sync.Once
 // The unified log carries every refusal the kernel makes.
 const liveRefusalWitness = confine.WitnessKernel
 
+// Seatbelt refuses a denied directory's stat and listing outright.
+const deniedDirectoryIsMasked = false
+
 // Seatbelt's process control widens signals to any process the account owns.
 const processControlSignalsOutside = true
 

@@ -1,4 +1,0 @@
-steps:
-  - program: ["ps"]
-    complete: true
-    say: "Find this session's references with {{ call }}."

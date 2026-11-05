@@ -242,7 +242,6 @@ describe("SettingsView and the settings registry", () => {
           );
           expect(expected.filter((id) => !rendered.has(id))).toEqual([]);
         },
-        { timeout: 5000 },
       );
 
       const anchors = presentedAnchors(container);
@@ -297,7 +296,6 @@ describe("SettingsView setting reveal", () => {
         expect(
           anchor(container, "editor-font-size")?.classList.contains(REVEAL_FLASH_CLASS),
         ).toBe(true),
-      { timeout: 5000 },
     );
     expect(screen.getByTestId("general-tab-editor").getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(screen.getByTestId("editor-font-size-dec"));
@@ -314,7 +312,6 @@ describe("SettingsView setting reveal", () => {
         expect(anchor(container, "never-ask")?.classList.contains(REVEAL_FLASH_CLASS)).toBe(
           true,
         ),
-      { timeout: 5000 },
     );
     expect(screen.getByTestId("advanced-tab-approvals").getAttribute("aria-selected")).toBe(
       "true",

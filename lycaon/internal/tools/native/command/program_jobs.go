@@ -483,6 +483,14 @@ func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error 
 func (j *SessionJobs) List(context.Context) ([]jobStatus, error) {
 	var out []jobStatus
 	for _, job := range j.Registry.ActiveJobs(j.SessionID) {
+		// A foreground program past its budget is a live handle but no job: it never joins
+		// this table, so a bare wait must not reach it, its own included.
+		j.mu.Lock()
+		started := slices.Contains(j.order, job.Handle)
+		j.mu.Unlock()
+		if !started {
+			continue
+		}
 		line := ""
 		if len(job.Stages) > 0 {
 			line = job.Stages[0].Command

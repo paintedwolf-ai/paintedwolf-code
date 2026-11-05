@@ -3,6 +3,7 @@ package confine_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -48,12 +49,20 @@ func TestBoundaryProtectedReadApprovalScope(t *testing.T) {
 				{"/bin/cat", certificate, tc.certificateAllowed},
 				{"/bin/cat", credential, tc.credentialAllowed},
 				{"/bin/cat", control, false},
-				{"/usr/bin/stat", data, tc.dirStatAllowed},
-				{"/bin/ls", data, tc.dirListAllowed},
+				{"/usr/bin/stat", data, tc.dirStatAllowed || deniedDirectoryIsMasked},
+				{"/bin/ls", data, tc.dirListAllowed || deniedDirectoryIsMasked},
 			} {
 				code, output := confinedRun(t, self, boundary, probe.prog, probe.path)
 				if (code == 0) != probe.allowed {
 					t.Fatalf("%s %s exit=%d allowed=%v output=%s", probe.prog, probe.path, code, probe.allowed, output)
+				}
+				// A masked directory exists, and lists only what a grant opened.
+				if probe.prog == "/bin/ls" && code == 0 {
+					for name, visible := range map[string]bool{filepath.Base(certificate): tc.certificateAllowed, filepath.Base(credential): tc.credentialAllowed} {
+						if strings.Contains(output, name) != visible {
+							t.Fatalf("ls %s = %q, want %s visible=%v", probe.path, output, name, visible)
+						}
+					}
 				}
 			}
 		})

@@ -1,6 +1,7 @@
 package wiring
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,6 +32,7 @@ func deliveryTagSession(t *testing.T, script *citableScriptLLM) (*Harness, strin
 	dir := t.TempDir()
 	testutil.FailErr(t, "seed notes", os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("first note\nsecond note\n"), 0o644))
 	testutil.FailErr(t, "seed lines", os.WriteFile(filepath.Join(dir, "lines.txt"), []byte("alpha\nbravo\ncharlie\ndelta\n"), 0o644))
+	testutil.FailErr(t, "seed body", os.WriteFile(filepath.Join(dir, "body.txt"), []byte("first row of the body\nsecond row of the body\nthird row of the body\nfourth row of the body\n"), 0o644))
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
@@ -101,6 +103,95 @@ func TestDeliveryTagsStateCoverageThroughTheRealPath(t *testing.T) {
 	if strings.Contains(last.Content, copied) {
 		t.Fatalf("the copied tag was not presented as a citation: %q", last.Content)
 	}
+}
+
+// `cat -n` keeps counting across files, so a later file's printed numbers are not its
+// lines. Its tag states the real range, and a coordinate inside that range is refused
+// until an excerpt verifies it. The script's second answer is reached only by that refusal.
+func TestNumberedReadOfSeveralFilesKeepsLaterFilesUnnumbered(t *testing.T) {
+	var printed string
+	script := &citableScriptLLM{steps: []citableStep{
+		{command: "cat -n notes.txt body.txt"},
+		{text: func(req modelcall.CompletionRequest) string {
+			printed = newestToolContent(req)
+			return "The note is second [notes.txt:2], and the body opens with the third printed row [body.txt:3]."
+		}},
+		{text: func(modelcall.CompletionRequest) string {
+			return `[cite: c2 => body.txt:2 "second row of the body"]`
+		}},
+	}}
+	h, session := deliveryTagSession(t, script)
+	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "read the files")
+	testutil.FailErr(t, "prompt", err)
+	tags := deliveryTagRE.FindAllStringSubmatch(printed, -1)
+	if len(tags) != 2 || tags[0][2] != "notes.txt:1-2" || tags[1][2] != "body.txt:1-4" {
+		t.Fatalf("tags = %q in %s", tags, printed)
+	}
+	if !strings.Contains(printed, "3\tfirst row of the body") {
+		t.Fatalf("stdout changed: %s", printed)
+	}
+	if script.next != len(script.steps) {
+		t.Fatalf("a printed number from a later file was accepted after %d of %d steps", script.next, len(script.steps))
+	}
+	g := lastAnswerGrounding(t, h, session)
+	if g == nil || !g.Traced || g.HostAssembled {
+		t.Fatalf("grounding = %+v", g)
+	}
+	verdicts := map[string]string{}
+	for _, cited := range g.CitedEvidence {
+		verdicts[fmt.Sprintf("%s:%d", cited.Path, cited.Line)] = string(cited.Verdict)
+	}
+	if verdicts["body.txt:2"] != "matched" || verdicts["notes.txt:2"] != "traced" {
+		t.Fatalf("verdicts = %v", verdicts)
+	}
+}
+
+// The same delivery still supports what needs no count: a verified excerpt and the handle.
+func TestLaterFileOfNumberedReadCitesByExcerptAndHandle(t *testing.T) {
+	script := &citableScriptLLM{steps: []citableStep{
+		{command: "cat -n notes.txt body.txt"},
+		{text: func(req modelcall.CompletionRequest) string {
+			tags := deliveryTagRE.FindAllStringSubmatch(newestToolContent(req), -1)
+			return `The body continues [body.txt:2 "second row of the body"], as read [` + tags[1][1] + `].`
+		}},
+	}}
+	h, session := deliveryTagSession(t, script)
+	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "read the files")
+	testutil.FailErr(t, "prompt", err)
+	g := lastAnswerGrounding(t, h, session)
+	if script.next != len(script.steps) || g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 2 {
+		t.Fatalf("steps %d, grounding %+v", script.next, g)
+	}
+}
+
+// `grep -n` prints each line's own number beside its path, however many files it reads.
+func TestNumberedSearchOfSeveralFilesKeepsItsLines(t *testing.T) {
+	script := &citableScriptLLM{steps: []citableStep{
+		{command: "grep -n -e second -e bravo notes.txt lines.txt"},
+		{text: func(modelcall.CompletionRequest) string {
+			return "The note is second [notes.txt:2], and the section holds bravo [lines.txt:2]."
+		}},
+	}}
+	h, session := deliveryTagSession(t, script)
+	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "search the files")
+	testutil.FailErr(t, "prompt", err)
+	g := lastAnswerGrounding(t, h, session)
+	if script.next != len(script.steps) || g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 2 {
+		t.Fatalf("grep coordinates: steps %d, grounding %+v", script.next, g)
+	}
+}
+
+func lastAnswerGrounding(t *testing.T, h *Harness, session string) *wire.CitationGrounding {
+	t.Helper()
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(t.Context(), session)
+	testutil.FailErr(t, "read messages", err)
+	var last wire.Message
+	for _, msg := range msgs {
+		if msg.Role == wire.MessageRoleAssistant && len(msg.ToolCalls) == 0 && !wire.IsAgentNoteMessage(msg) {
+			last = msg
+		}
+	}
+	return last.Grounding
 }
 
 // A coordinate on what only a pipeline printed is refused, and an excerpt on the

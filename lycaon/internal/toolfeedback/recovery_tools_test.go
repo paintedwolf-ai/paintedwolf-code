@@ -26,7 +26,6 @@ func TestRecoveryCopyUsesFrozenOfferedTools(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		offered []string
-		listing bool
 	}{
 		{"native programs offered", []string{"command"}, true},
 		{"command missing", []string{"recall"}, false},

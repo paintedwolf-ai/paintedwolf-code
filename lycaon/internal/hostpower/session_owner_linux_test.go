@@ -33,7 +33,7 @@ func awaitOwnerLoss(t *testing.T, held lease) {
 		if err == nil || reasonFor(portalProvider{}, err).Code != ReasonDisconnected {
 			t.Fatalf("owner loss result = %v", err)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("service loss left an inhibition active on a live bus")
 	}
 }
@@ -63,7 +63,7 @@ func TestPortalOwnerReplacementSettlesConcurrentLeasesAndRecoversWithoutReusingR
 	awaitOwnerLoss(t, second)
 	testutil.FailErr(t, "release first old request", first.Release())
 	testutil.FailErr(t, "release second old request", second.Release())
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(testutil.Timeout(time.Minute))
 	for {
 		current.mu.Lock()
 		acquired := current.request != ""

@@ -130,7 +130,7 @@ const (
 // its lines is held to them. A deletion leaves no line to cite.
 func CoordinateSupport(rec Record, path string, start, end int) CoordinateFact {
 	if !rec.ShowedLineNumbers() {
-		if RangeObserved(rec, path, start, end) {
+		if !rec.SourceDelivery.PrintedOtherNumbers && RangeObserved(rec, path, start, end) {
 			return CoordinateDelivered
 		}
 		return CoordinateUnsupported

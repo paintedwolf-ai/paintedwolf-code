@@ -199,8 +199,9 @@ func TestForegroundSnapshotTailIsScreenedBeforeItIsCut(t *testing.T) {
 	}
 }
 
-// TestUnwiredProjectorIsAWiringStateNotAFailedScreen covers absent projection.
-func TestUnwiredProjectorIsAWiringStateNotAFailedScreen(t *testing.T) {
+// TestUnwiredProjectorWithholdsTheTail keeps unscreened bytes out when nothing can
+// screen them.
+func TestUnwiredProjectorWithholdsTheTail(t *testing.T) {
 	h := newProjectionHarness(t, DefaultRingBufferBytes)
 	h.reg.Output.SetCaptureProjector(nil)
 	h.write("stdout", "plain output")
@@ -209,8 +210,8 @@ func TestUnwiredProjectorIsAWiringStateNotAFailedScreen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("snapshot: %v", err)
 	}
-	if !strings.Contains(snap.Tail, "plain output") {
-		t.Fatalf("unwired host lost its tail: %q", snap.Tail)
+	if snap.Tail != captureUnavailableText {
+		t.Fatalf("unwired host published an unscreened tail: %q", snap.Tail)
 	}
 }
 

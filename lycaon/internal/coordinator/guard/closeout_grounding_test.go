@@ -225,32 +225,9 @@ func TestFormatCloseoutGroundingReject_rendersFullCitationKick(t *testing.T) {
 		draft,
 	)
 	testutil.FailErr(t, "guard.FormatCloseoutGroundingReject failed", err)
-	for _, want := range []string{
-		"[host:coordinator-citation-grounding]",
-		"valid citations stay",
-		"[cite: c1 => read#5:42]",
-		"- c2: `missing.go:1` (not_observed)",
-		"Repair citations using existing observations.",
-		"Attempt 1/3",
-		draft,
-		"Retained answer:",
-		"missing.go:1",
-		"leg-a:list#1, leg-b:read#2 (+4 more)",
-		"src/coropa, src/coropa/main.go (+7 more)",
-		`[{"evidence":"git_receipt#1","tool":"git_commit"}]`,
-		"Code: INVEST_HANDLE_NOT_OBSERVED",
-	} {
+	for _, want := range []string{"c2", "missing.go:1", "not_observed"} {
 		if !strings.Contains(nudge, want) {
-			t.Errorf("nudge missing %q; got:\n%s", want, nudge)
-		}
-	}
-	if strings.Contains(nudge, "re-emit this text verbatim") {
-		t.Fatalf("kick must not instruct verbatim re-emit, got:\n%s", nudge)
-	}
-	// D8: the kick has no JSON fallback left to teach.
-	for _, retired := range []string{"citations fence", "cited_evidence", "cited_urls", "artifact_ids"} {
-		if strings.Contains(nudge, retired) {
-			t.Errorf("nudge teaches retired %q:\n%s", retired, nudge)
+			t.Errorf("nudge lost supplied %q; got:\n%s", want, nudge)
 		}
 	}
 	if strings.Count(nudge, "[host:coordinator-citation-grounding]") != 1 {

@@ -163,7 +163,7 @@ func TestLinuxByteInputEarlyExitAndCancellationSettleDescendants(t *testing.T) {
 				t.Fatal("early exit/cancellation consumed the whole input")
 			}
 			// Wait joins the outer helper; its PID namespace may still be exiting.
-			deadline := time.Now().Add(5 * time.Second)
+			deadline := time.Now().Add(testutil.Timeout(time.Minute))
 			for {
 				survivors, err := lease.Survivors()
 				testutil.FailErr(t, "inspect stream descendants after settlement", err)

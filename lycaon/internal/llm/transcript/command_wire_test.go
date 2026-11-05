@@ -34,7 +34,7 @@ func TestCommandRecoverySurvivesCompactionRoundTrips(t *testing.T) {
 			round := compaction.ContextMessagesToAPI(compaction.ContextMessagesFromAPI(messages), original)
 			projected := transcript.Project(round)
 			got := projected[len(projected)-1].Content
-			if !strings.Contains(got, "Command refusal:") || !strings.Contains(got, "\n⟦D⟧Fix: close the string") || strings.Contains(got, `"feedback"`) {
+			if !strings.Contains(got, "Command refusal:") || !strings.Contains(got, "\nFix: close the string") || strings.Contains(got, `"feedback"`) {
 				t.Fatalf("recovery became escaped or lost: projectFirst=%t, %s", projectFirst, got)
 			}
 		}
@@ -71,7 +71,7 @@ func TestCommandRecoveryHasReadableProviderWire(t *testing.T) {
 func wireContainsReadableRecovery(value any) bool {
 	switch v := value.(type) {
 	case string:
-		return strings.Contains(v, "Command refusal:") && strings.Contains(v, "\n⟦D⟧Fix: close the string")
+		return strings.Contains(v, "Command refusal:") && strings.Contains(v, "\nFix: close the string")
 	case []any:
 		for _, child := range v {
 			if wireContainsReadableRecovery(child) {

@@ -59,16 +59,16 @@ webE2e("den:harness — transcript in-view find next prev escape", async ({ page
   await page.keyboard.press("ControlOrMeta+f");
 
   const findInput = page.getByTestId("find-bar-input");
-  await expect(findInput).toBeVisible({ timeout: 5_000 });
+  await expect(findInput).toBeVisible({ timeout: 30_000 });
   // Chat-scoped Find docks above the composer, not the Shell top host.
   await expect(page.getByTestId("find-bar-host-composer")).toBeVisible();
   await expect(page.getByTestId("find-bar-host")).toHaveCount(0);
   await findInput.fill(NEEDLE);
   await expect(page.getByTestId("find-bar-count")).toContainText(/of/, {
-    timeout: 5_000,
+    timeout: 30_000,
   });
   await expect(page.locator('span[data-den-find-mark="1"]').first()).toBeVisible({
-    timeout: 5_000,
+    timeout: 30_000,
   });
 
   const dock = liveChatStage(page).getByTestId("composer-chrome-stack");

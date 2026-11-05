@@ -57,7 +57,7 @@ func TestAllCoversEveryMarkerConstant(t *testing.T) {
 			t.Errorf("All()[%s] = %s, want %s", name, strconv.Quote(got), strconv.Quote(want))
 		}
 	}
-	if len(declared) != 9 {
+	if len(declared) != 10 {
 		t.Errorf("All() holds %d markers; update this test when the set changes", len(declared))
 	}
 }

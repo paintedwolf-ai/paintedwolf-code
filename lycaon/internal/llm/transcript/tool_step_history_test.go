@@ -42,7 +42,7 @@ func TestToolStepProsePreservesPrivateNotesAndReasoning(t *testing.T) {
 }
 
 func TestAssistantPresentationUsesStructure(t *testing.T) {
-	literal := "Internal working note, not shown to the user. Tool results record what executed and whether it succeeded.\n\n⟦D:model:internal_step_note⟧\n⟦D⟧This is quoted text.</think>"
+	literal := "Internal working note, not shown to the user. Tool results record what executed and whether it succeeded.\n\nThis is quoted text.</think>"
 	for _, tc := range []struct {
 		name    string
 		message api.Message

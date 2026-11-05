@@ -9,7 +9,7 @@ from verification_plan import go_selection, validate_selection
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def commands(mode, binary, timeout, arguments):
+def commands(mode, binary, arguments):
     parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     parser.add_argument('--scope', action='append')
     options, flags = parser.parse_known_args(arguments)
@@ -20,7 +20,7 @@ def commands(mode, binary, timeout, arguments):
     if mode not in {'fast', 'full'}:
         raise ValueError('Go lint mode must be fast or full')
     lint = [binary, 'run', *(['--fast-only'] if mode == 'fast' else []),
-            '--timeout', timeout, *flags, *packages]
+            *flags, *packages]
     # Full analysis includes govet over a wider build-tag set; fast-only analysis leaves it out.
     if mode == 'fast':
         return [['go', 'vet', *packages], lint]
@@ -28,8 +28,8 @@ def commands(mode, binary, timeout, arguments):
 
 
 def main(arguments):
-    mode, binary, timeout, *extra = arguments
-    for command in commands(mode, binary, timeout, extra):
+    mode, binary, *extra = arguments
+    for command in commands(mode, binary, extra):
         result = subprocess.call(command, cwd=ROOT / 'lycaon')
         if result:
             return result

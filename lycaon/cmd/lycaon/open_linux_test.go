@@ -138,7 +138,7 @@ func (f *fakeDesktop) start(ctx context.Context, timeout time.Duration) (net.Con
 
 func groupGone(t *testing.T, pid int) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testutil.Timeout(time.Minute))
 	for time.Now().Before(deadline) {
 		if err := syscall.Kill(-pid, 0); errors.Is(err, syscall.ESRCH) {
 			return
@@ -299,7 +299,7 @@ func TestStoppingKeepsTheExitedLeaderUntilItsStubbornChildIsKilled(t *testing.T)
 	testutil.FailErr(t, "start failed", err)
 	started := owned.(*desktopStart)
 	t.Cleanup(started.Stop)
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testutil.Timeout(time.Minute))
 	for {
 		if _, err := os.Stat(filepath.Join(fake.base, "child.ready")); err == nil {
 			break

@@ -5,13 +5,15 @@ import re
 
 from ci_policy.hosted_schedule import order, PRIORITIES
 from ci_policy.timings import row_key
-from ci_policy.native_admission import targets as native_targets
+from ci_policy.native_admission import runs_script_coverage, targets as native_targets
 from verification_plan import catalog, expand
 
 ROOT = Path(__file__).resolve().parents[2]
 PROFILES = {"fast", "check", "nightly", "release", "integration"}
 GATE = "check"
 FAST_GATE = "check-fast"
+# The static job runs these before any lane, so the fast tier omits them.
+STATIC_STAGES = {"comments:check", "test:fail-messages:check", "docs:links"}
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
 SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
@@ -112,7 +114,8 @@ def lanes():
                          f"missing={expected - actual}, extra={actual - expected}")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
                    for stage in expand(lane["targets"]))
-    expected_fast = Counter(stage['name'] for stage in expand([FAST_GATE]) if stage['name'] != 'licenses:notices')
+    expected_fast = Counter(stage['name'] for stage in expand([FAST_GATE])
+                            if stage['name'] != 'licenses:notices' and stage['name'] not in STATIC_STAGES)
     if fast != expected_fast:
         raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
     expected = Counter(stage["name"] for stage in expand([GATE]))
@@ -204,7 +207,8 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "userlands": USERLANDS_TARGET in lane["targets"],
                            "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
                            "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
-                           or "scripts:coverage:changes" in lane["targets"],
+                           or "scripts:coverage:changes" in lane["targets"]
+                           or (name == "ready" and runs_script_coverage(scope)),
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),

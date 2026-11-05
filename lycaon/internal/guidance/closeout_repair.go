@@ -115,14 +115,14 @@ func citationRepairOffer(roots evidence.CitationRoots, ev evidence.Ledger, citat
 }
 
 // FindingCitation is a bracket citation for a worker's finding that resolves in the
-// union of legs: the coordinate when the record stands behind it, with the excerpt only
-// when that is what stands behind it, and otherwise the path.
+// union of legs: the coordinate with its excerpt when the record holds that text, the
+// coordinate when the record covers the line, and otherwise the path.
 func FindingCitation(roots evidence.CitationRoots, ev evidence.Ledger, path string, line int, excerpt string) string {
 	path, candidates := resolveWrittenPath(roots, ev, path)
 	if path == "" || len(candidates) > 0 {
 		return ""
 	}
-	for _, finding := range []WorkerFindingInput{{Path: path, Line: line}, {Path: path, Line: line, Excerpt: excerpt}, {Path: path}} {
+	for _, finding := range []WorkerFindingInput{{Path: path, Line: line, Excerpt: excerpt}, {Path: path, Line: line}, {Path: path}} {
 		if (finding.Line <= 0 && line > 0 && finding.Excerpt != "") || (finding.Line > 0 && line <= 0) {
 			continue
 		}

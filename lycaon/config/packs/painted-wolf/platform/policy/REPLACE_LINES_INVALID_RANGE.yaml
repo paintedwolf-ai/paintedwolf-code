@@ -24,7 +24,7 @@ copy:
   why: Line-range edits need a valid window before splicing file content.
   fix: Re-read with offset at the first intended line and limit covering the range; its source block starts
     at offset. Pass start_line and end_line from that block's line range.
-  instead: Branch on Code; fix the line range and retry replace_lines
+  instead: Branch on Code; fix the line range and retry `replace-lines`
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:replace_lines
 x-paintedwolf-message: replace_lines line range is invalid

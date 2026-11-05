@@ -38,12 +38,12 @@ class HostedPlanTests(unittest.TestCase):
 
     def test_fast_tier_runs_each_handoff_stage_once(self):
         rows = ci.matrix("fast")["include"]
-        self.assertEqual({row["lane"] for row in rows}, {"ready", "ready-tests"})
+        self.assertEqual({row["lane"] for row in rows}, {"ready", "ready-lint", "ready-tests"})
         stages = [stage["name"] for name in {row["lane"] for row in rows}
                   for stage in planning.expand(ci.lanes()[name]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
-        self.assertEqual(set(stages), handoff - {"licenses:notices"})
+        self.assertEqual(set(stages), handoff - {"licenses:notices"} - ci.STATIC_STAGES)
 
     def test_script_coverage_keeps_repository_tools_without_host_runtime_engines(self):
         for profile in ('check', 'integration', 'nightly'):
@@ -258,7 +258,7 @@ class HostedPlanTests(unittest.TestCase):
 
         scope = {"base": "base", "head": "head", "paths": ["scripts/ci_policy/hosted_plan.py"], "full": False}
         self.assertEqual([row["lane"] for row in ci.matrix("fast", scope=scope)["include"]
-                          if row["repository_tools"]], [])
+                          if row["repository_tools"]], ["ready"])
         scope["paths"] = ["lycaon/internal/settings/settings.go"]
         self.assertFalse(any(row["repository_tools"] for row in ci.matrix("fast", scope=scope)["include"]))
         # A broad scope runs every scripts suite, and may carry no paths at all.
@@ -268,7 +268,8 @@ class HostedPlanTests(unittest.TestCase):
                     self.assertEqual(
                         sorted(row["lane"] for row in ci.matrix(profile, scope=broad)["include"] if row["repository_tools"]),
                         sorted(row["lane"] for row in ci.matrix(profile, scope=broad)["include"]
-                               if {"test:runner", "scripts:coverage:changes"} & set(ci.lanes()[row["lane"]]["targets"])))
+                               if row["lane"] == "ready" and profile == "fast"
+                               or {"test:runner", "scripts:coverage:changes"} & set(ci.lanes()[row["lane"]]["targets"])))
 
     def test_nix_lane_is_nightly_only_and_provisions_nix_before_running_offline(self):
         # Nix verification informs; it never gates a merge or a release.

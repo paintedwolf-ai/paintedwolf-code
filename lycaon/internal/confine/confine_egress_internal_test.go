@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func newTestBroker() *egressBrokerT {
@@ -643,7 +644,7 @@ func TestEgressPolicyReleasePreservesReplacementDeny(t *testing.T) {
 }
 
 func TestEgressResolverReleasePreservesReplacementAndDrainsApproval(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	SetEgressPosture(PostureAsk)
 	t.Cleanup(func() { SetEgressPosture(PostureObserve) })

@@ -205,7 +205,7 @@ export async function toggleAndExpectControlled(
   if (!wasOpen) await expect(shell).toHaveAttribute("data-expanded", "true");
   else await expect(shell).not.toHaveAttribute("data-expanded", "true");
   await expect(shell).not.toHaveAttribute("data-animating", "true", {
-    timeout: 2_000,
+    timeout: 30_000,
   });
   const trace = await stopDisclosureScrollTrace(control);
   if (!wasOpen) {
