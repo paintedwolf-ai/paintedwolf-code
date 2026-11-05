@@ -96,6 +96,8 @@ func (f *waitStateFixture) start(t *testing.T, source string) <-chan string {
 	}()
 	return done
 }
+// waitTimers counts the program's inline-wait timer too, which is pending from
+// the start of the call.
 func (f *waitStateFixture) waitTimers(count int) {
 	for f.clock.Pending() < count {
 		runtime.Gosched()
@@ -372,7 +374,7 @@ func TestCommandEntryCompletedOrEmptyWaitStaysInlinePastTheThreshold(t *testing.
 		t.Run(source, func(t *testing.T) {
 			f := newWaitStateFixture(t)
 			done := f.start(t, source)
-			f.waitTimers(1)
+			f.waitTimers(2)
 			for len(f.Background.ActiveJobs(f.Session)) > 0 {
 				runtime.Gosched()
 			}
@@ -439,7 +441,7 @@ func TestCommandEntryExactExternalJobWaitParksAndResumes(t *testing.T) {
 	f := newWaitStateFixture(t)
 	done := f.start(t, f.externalHelper()+" & wait $!")
 	f.awaitExternal()
-	f.waitTimers(1)
+	f.waitTimers(2)
 	f.clock.Advance(10 * time.Second)
 	pending := <-f.parked
 	if got := <-done; !strings.Contains(got, "parked") {
@@ -477,7 +479,7 @@ func TestCommandEntryAwaitedBackgroundFramesKeepTheExactJobIdentity(t *testing.T
 			body := strings.ReplaceAll(tc.body, "HELPER", f.externalHelper())
 			done := f.start(t, "{ "+body+"; } & wait $!")
 			f.awaitExternal()
-			f.waitTimers(1)
+			f.waitTimers(2)
 			f.clock.Advance(10 * time.Second)
 			pending := <-f.parked
 			<-done
