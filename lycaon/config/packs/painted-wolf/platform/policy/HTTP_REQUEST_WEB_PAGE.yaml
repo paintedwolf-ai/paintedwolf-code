@@ -3,10 +3,11 @@ id: HTTP_REQUEST_WEB_PAGE
 kind: policy
 anchor: tool.post_invoke
 selector:
-  tool: [http_request]
+  paintedwolf.operation: [http_request]
 requires:
   profiles: [tool]
   facts:
+    - paintedwolf.operation
     - paintedwolf.http_request_web_page
     - paintedwolf.host
     - paintedwolf.bytes

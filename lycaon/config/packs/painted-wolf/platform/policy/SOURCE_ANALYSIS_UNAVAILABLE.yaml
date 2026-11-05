@@ -3,10 +3,11 @@ id: SOURCE_ANALYSIS_UNAVAILABLE
 kind: policy
 anchor: tool.post_invoke
 selector:
-  tool: [read, grep]
+  paintedwolf.operation: [read, grep]
 requires:
   profiles: [tool]
   facts:
+    - paintedwolf.operation
     - paintedwolf.source_analysis_unavailable
     - paintedwolf.path
     - paintedwolf.parse_failure_count

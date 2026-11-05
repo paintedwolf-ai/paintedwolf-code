@@ -55,11 +55,7 @@ func TestNativeChmodBundledPoliciesKeepActualToolAttribution(t *testing.T) {
 }
 
 func TestNativeChownBundledPoliciesKeepNumericIdentityContract(t *testing.T) {
-	testNativeMetadataPolicies(t, "chown", []string{"CHOWN_BULK_DENIED", "CHOWN_NOT_FOUND", "CHOWN_PATH_DENIED", "CHOWN_ROOT_DENIED", "CHOWN_SYMLINK_ESCAPE", "CHOWN_TARGET_DENIED", "CHOWN_UNSUPPORTED"}, true)
-}
-
-func TestChownNameLookupPoliciesRemainStructuredOnly(t *testing.T) {
-	testNativeMetadataPolicies(t, "chown", []string{"CHOWN_GROUP_UNKNOWN", "CHOWN_USER_UNKNOWN", "CHOWN_RECURSIVE_DENIED"}, false)
+	testNativeMetadataPolicies(t, "chown", []string{"CHOWN_GROUP_UNKNOWN", "CHOWN_USER_UNKNOWN", "CHOWN_RECURSIVE_DENIED", "CHOWN_BULK_DENIED", "CHOWN_NOT_FOUND", "CHOWN_PATH_DENIED", "CHOWN_ROOT_DENIED", "CHOWN_SYMLINK_ESCAPE", "CHOWN_TARGET_DENIED", "CHOWN_UNSUPPORTED"}, true)
 }
 
 func testNativeMetadataPolicies(t *testing.T, operationName string, codes []string, nativeEligible bool) {

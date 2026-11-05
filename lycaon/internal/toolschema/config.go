@@ -55,6 +55,23 @@ func ParseEntry(data []byte) (Entry, error) {
 	return entry, nil
 }
 
+// Merge combines schema sets; one name has one schema.
+func Merge(sets ...*Config) (*Config, error) {
+	out := map[string]Entry{}
+	for _, set := range sets {
+		if set == nil {
+			continue
+		}
+		for name, entry := range set.Tools {
+			if _, taken := out[name]; taken {
+				return nil, fmt.Errorf("schema %q declared twice", name)
+			}
+			out[name] = entry
+		}
+	}
+	return ConfigFromEntries(out), nil
+}
+
 // ConfigFromEntries builds Config from name → Entry (names already validated).
 func ConfigFromEntries(entries map[string]Entry) *Config {
 	out := make(map[string]Entry, len(entries))

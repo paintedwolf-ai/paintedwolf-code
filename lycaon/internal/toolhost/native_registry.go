@@ -48,7 +48,7 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 	boundary := deps.boundary
 
 	register := func(name string, handler tools.ToolHandler) error {
-		if !deps.nativeConfig.HasTool(name) && !deps.nativeConfig.HasOperation(name) {
+		if !deps.nativeConfig.HasTool(name) {
 			return nil
 		}
 		return reg.Register(name, handler)

@@ -23,6 +23,9 @@ type Catalog struct {
 	profiles        map[string]sandbox.ToolProfile
 	profileIDs      []string
 	provenance      Provenance
+	// operations are native operations command reaches. A profile deny governs them,
+	// but no remedy or selector may name one as a tool.
+	operations map[string]bool
 }
 
 // NewCatalog builds the declared tool vocabulary.
@@ -51,6 +54,10 @@ func NewCatalog(
 		runtimePrefixes: cfg.RuntimeRegisteredPrefixes,
 		profiles:        make(map[string]sandbox.ToolProfile, len(profiles)),
 		provenance:      prov,
+		operations:      map[string]bool{},
+	}
+	for _, name := range cfg.AllOperations() {
+		c.operations[strings.TrimSpace(name)] = true
 	}
 	for _, list := range [][]string{cfg.AllTools(), cfg.HostProducedTools} {
 		for _, name := range list {
@@ -168,14 +175,29 @@ func ValidateProfiles(c *Catalog, profiles []sandbox.ToolProfile) error {
 			}
 		}
 		for _, pattern := range p.DenyTools {
-			if !c.KnownPattern(pattern) {
+			if !c.KnownPattern(pattern) && !c.knownOperationPattern(pattern) {
 				problems = append(problems, fmt.Sprintf(
-					"profile %q denies %q, which matches no registered tool — a deny that matches nothing grants",
+					"profile %q denies %q, which matches no registered tool or operation — a deny that matches nothing grants",
 					p.ID, pattern))
 			}
 		}
 	}
 	return joinProblems(problems)
+}
+
+// knownOperationPattern reports whether a deny entry governs a native operation.
+func (c *Catalog) knownOperationPattern(pattern string) bool {
+	pattern = strings.TrimSpace(pattern)
+	prefix, wildcard := strings.CutSuffix(pattern, "*")
+	if !wildcard {
+		return c.operations[pattern]
+	}
+	for name := range c.operations {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func sortedKeys(m map[string]bool) []string {

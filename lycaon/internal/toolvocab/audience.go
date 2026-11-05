@@ -150,18 +150,25 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 	}
 	var problems []string
 	for _, rule := range rules.All() {
-		for _, tool := range append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...) {
+		for _, tool := range rule.Selector["tool"] {
 			if !c.KnownPattern(tool) {
 				problems = append(problems, fmt.Sprintf(
 					"rule %q: selector.tool names %q, which resolves to no registered tool — the clause can never match",
 					rule.ID, tool))
 			}
 		}
+		for _, operation := range rule.Selector["paintedwolf.operation"] {
+			if !c.KnownPattern(operation) && !c.knownOperationPattern(operation) {
+				problems = append(problems, fmt.Sprintf(
+					"rule %q: selector paintedwolf.operation names %q, which resolves to no tool or operation — the clause can never match",
+					rule.ID, operation))
+			}
+		}
 		for _, sc := range rule.Scenarios {
 			tool, _ := sc.Vars["tool"].(string)
-			if tool = strings.TrimSpace(tool); tool != "" && !c.KnownName(tool) {
+			if tool = strings.TrimSpace(tool); tool != "" && !c.KnownName(tool) && !c.operations[tool] {
 				problems = append(problems, fmt.Sprintf(
-					"rule %q scenario %q: vars.tool is %q, which is not a registered tool — the fixture would certify a name the host cannot produce",
+					"rule %q scenario %q: vars.tool is %q, which is not a registered tool or operation — the fixture would certify a name the host cannot produce",
 					rule.ID, sc.ID, tool))
 			}
 		}

@@ -261,8 +261,8 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 // shipped metadata, as the serving registry does.
 func RegisterCatalogToolsForContract(t *testing.T) *tools.DefaultRegistry {
 	t.Helper()
-	schemas, _, err := extpacks.LoadEffectiveToolSchemas(contractcheck.StockCatalog(t))
-	contractcheck.FailErr(t, "LoadEffectiveToolSchemas", err)
+	schemas, err := extpacks.LoadEffectiveRegistrySchemas(contractcheck.StockCatalog(t))
+	contractcheck.FailErr(t, "LoadEffectiveRegistrySchemas", err)
 	reg, err := tools.NewCatalogRegistry(schemas)
 	contractcheck.FailErr(t, "NewCatalogRegistry", err)
 	registerCatalogToolsOnto(t, reg)

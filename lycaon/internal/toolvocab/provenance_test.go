@@ -135,3 +135,22 @@ func TestRejectionAnchorRecomputesRecoveryAudience(t *testing.T) {
 	_, err = toolvocab.CheckRules(catalog, surfaces(), oar.NewRuleSet([]*oar.Rule{rule}))
 	testutil.FailErr(t, "explicit producer audience", err)
 }
+
+// A deny that names a native operation stays live: command programs consult it.
+func TestProfileDenyMayNameANativeOperation(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := []sandbox.ToolProfile{{ID: "reader", DenyTools: []string{"write", "git_*"}}}
+	if err := toolvocab.ValidateProfiles(catalog, valid); err != nil {
+		t.Fatalf("operation deny refused: %v", err)
+	}
+	unknown := []sandbox.ToolProfile{{ID: "reader", DenyTools: []string{"no_such_operation"}}}
+	if err := toolvocab.ValidateProfiles(catalog, unknown); err == nil {
+		t.Fatal("a deny that matches nothing was accepted")
+	}
+	if catalog.KnownName("write") {
+		t.Fatal("a native operation resolved as a tool")
+	}
+}

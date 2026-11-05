@@ -6,10 +6,11 @@ id: EDITORCONFIG_MISMATCH
 kind: policy
 anchor: tool.post_invoke
 selector:
-  tool: [write, edit, replace_lines, restore_version, code_rewrite, jq_edit]
+  paintedwolf.operation: [write, edit, replace_lines, restore_version, code_rewrite, jq_edit]
 requires:
   profiles: [tool]
   facts:
+    - paintedwolf.operation
     - paintedwolf.editorconfig_mismatch
     - paintedwolf.path
     - paintedwolf.editorconfig_rules
