@@ -530,6 +530,28 @@ func TestCommandEntryAwaitedBackgroundFramesKeepTheExactJobIdentity(t *testing.T
 	}
 }
 
+// A program that outlives its foreground budget becomes a supervised handle. Its own
+// later bare wait has no job to wait for, and must not trip over that handle.
+func TestCommandEntryBareWaitIgnoresItsOwnContinuation(t *testing.T) {
+	f := newWaitStateFixture(t)
+	done := f.start(t, f.externalHelper()+"; wait; echo after")
+	f.awaitExternal(t)
+	f.awaitTimers(t, command.DefaultProgramInlineWait)
+	f.clock.Advance(command.DefaultProgramInlineWait)
+	var running command.RunningProgramResult
+	testutil.FailErr(t, "decode running program", json.Unmarshal([]byte(receive(t, f, done, "the call's result")), &running))
+	if running.State != "running" || running.Handle == "" {
+		t.Fatalf("result %+v", running)
+	}
+	testutil.FailErr(t, "complete external fixture", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
+	status, _, err := f.Background.Lifecycle.Wait(t.Context(), f.Session, running.Handle)
+	testutil.FailErr(t, "join continuation", err)
+	if status != 0 {
+		snapshot, snapErr := f.Background.Snapshot(t.Context(), f.Session, running.Handle, 4096)
+		t.Fatalf("status %d; output %q (%v)", status, snapshot.Output, snapErr)
+	}
+}
+
 func TestCommandEntryBoundRefusalKeepsDetachedJobsAlive(t *testing.T) {
 	f := newWaitStateFixture(t)
 	outcome := decodeWaitOutcome(t, f.call(t, "sleep 7200 & wait $!"))

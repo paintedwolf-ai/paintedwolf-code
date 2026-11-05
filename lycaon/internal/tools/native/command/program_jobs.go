@@ -483,6 +483,10 @@ func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error 
 func (j *SessionJobs) List(context.Context) ([]jobStatus, error) {
 	var out []jobStatus
 	for _, job := range j.Registry.ActiveJobs(j.SessionID) {
+		// A foreground program past its budget is not a job of any program, itself included.
+		if job.Program {
+			continue
+		}
 		line := ""
 		if len(job.Stages) > 0 {
 			line = job.Stages[0].Command

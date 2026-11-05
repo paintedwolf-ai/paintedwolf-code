@@ -127,6 +127,8 @@ type PipelineSpec struct {
 
 // JobSnapshot is the bounded command ledger exposed to coordinator assembly.
 type JobSnapshot struct {
+	// Program is a foreground program past its budget, not a job a program started.
+	Program    bool
 	Handle     string
 	Mode       JobMode
 	OriginTool string
