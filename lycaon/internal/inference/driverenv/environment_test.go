@@ -58,7 +58,7 @@ func TestVendorEnvironmentHasPrivateICDAndExplicitLifetime(t *testing.T) {
 	values, cleanup, err := environment(config, libraries, "1.4.312")
 	testutil.FailErr(t, "prepare vendor environment", err)
 	defer cleanup()
-	if len(values) != 2 || values[1] != "LD_PRELOAD="+strings.Join(libraries, ":") {
+	if len(values) != 2 || values[1] != "LD_PRELOAD="+libraries[0] {
 		t.Fatalf("environment = %v", values)
 	}
 	prefix := "VK_DRIVER_FILES=/nix/mesa.json:"
