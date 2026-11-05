@@ -437,7 +437,7 @@ func (f *frame) call(ctx context.Context, s commandsurface.Statement, fn declare
 	}
 	child.settle(ctx, result, err)
 	if err == nil {
-		f.setPipeStatus(result.Status)
+		f.state.setPipeStatus(result.Status)
 	}
 	return err
 }

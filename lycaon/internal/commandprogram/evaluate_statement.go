@@ -126,7 +126,7 @@ func (f *frame) command(ctx context.Context, s commandsurface.Statement) (signal
 		return f.caseStatement(ctx, s, c)
 	case commandsurface.FunctionDeclaration:
 		f.state.functions[c.Name] = declaredFunction{decl: c, unit: f.unit, sourceUnit: f.parent.SourceUnitID}
-		return signal{}, f.compoundStatus(s.SyntaxLocation, "function", 0)
+		return signal{}, f.state.compoundStatus(s.SyntaxLocation, "function", 0)
 	case commandsurface.TestExpression:
 		return (&evaluatorOperation{frame: f, statement: s, fields: Fields{{Value: "[[", Span: s.Span}}, body: func(ctx context.Context, g *frame) (signal, error) { return signal{}, g.testExpression(ctx, s, c) }}).invoke(ctx)
 	case commandsurface.ArithmeticCommand:
@@ -193,7 +193,7 @@ func (f *frame) conditional(ctx context.Context, s commandsurface.Statement, c c
 			return f.statements(ctx, branch.Then)
 		}
 	}
-	return signal{}, f.compoundStatus(s.SyntaxLocation, "if", 0)
+	return signal{}, f.state.compoundStatus(s.SyntaxLocation, "if", 0)
 }
 
 // loopBody runs one iteration and resolves break/continue addressed to it.
@@ -294,7 +294,7 @@ func (f *frame) loopStatus(s commandsurface.Statement, status int) error {
 	if f.state.control.Exited() {
 		return nil
 	}
-	return f.compoundStatus(s.SyntaxLocation, "loop", status)
+	return f.state.compoundStatus(s.SyntaxLocation, "loop", status)
 }
 
 // isolated runs ( ... ): variables, functions and directory are copied and its
@@ -329,31 +329,31 @@ func (f *frame) settleFrame(ctx context.Context, run *childRun, g *frame, err er
 	if err != nil {
 		return err
 	}
-	f.setPipeStatus(result.Status)
+	f.state.setPipeStatus(result.Status)
 	return f.state.control.Record(run.inv.Identity.ExecutionID, result, true, false)
 }
 
 // setPipeStatus makes one command's status the frame's PIPESTATUS.
-func (f *frame) setPipeStatus(status int) {
-	if len(f.state.pipeStatus) == 1 {
-		f.state.pipeStatus[0] = status
+func (s *frameState) setPipeStatus(status int) {
+	if len(s.pipeStatus) == 1 {
+		s.pipeStatus[0] = status
 	} else {
-		f.state.pipeStatus = []int{status}
+		s.pipeStatus = []int{status}
 	}
-	f.state.vars.SetPipeStatus(f.state.pipeStatus)
+	s.vars.SetPipeStatus(s.pipeStatus)
 }
 
 // builtinStatus records the ordinary status of evaluator bookkeeping that
 // invokes no operation (assignments, builtin usage errors). It is not a child
 // execution and adds no trace event.
 func (f *frame) builtinStatus(loc commandsurface.SyntaxLocation, command string, status int) error {
-	f.setPipeStatus(status)
-	return f.compoundStatus(loc, command, status)
+	f.state.setPipeStatus(status)
+	return f.state.compoundStatus(loc, command, status)
 }
 
 // compoundStatus records a branch, loop or declaration result. PIPESTATUS keeps
 // the last command that ran inside it.
-func (f *frame) compoundStatus(loc commandsurface.SyntaxLocation, command string, status int) error {
+func (s *frameState) compoundStatus(loc commandsurface.SyntaxLocation, command string, status int) error {
 	id := string(loc.ID)
 	if id == "" {
 		id = command
@@ -361,7 +361,7 @@ func (f *frame) compoundStatus(loc commandsurface.SyntaxLocation, command string
 	if id == "" || status < 0 || status > 255 {
 		id = uuid.NewString()
 	}
-	return f.state.control.Record(id, ordinaryResult(status), true, false)
+	return s.control.Record(id, ordinaryResult(status), true, false)
 }
 
 // stateRefusal turns an expansion, variable or memory admission refusal into a
@@ -432,11 +432,11 @@ func (f *frame) caseStatement(ctx context.Context, s commandsurface.Statement, c
 			}
 			if matched {
 				if len(item.Body) == 0 {
-					return signal{}, f.compoundStatus(s.SyntaxLocation, "case", 0)
+					return signal{}, f.state.compoundStatus(s.SyntaxLocation, "case", 0)
 				}
 				return f.statements(ctx, item.Body)
 			}
 		}
 	}
-	return signal{}, f.compoundStatus(s.SyntaxLocation, "case", 0)
+	return signal{}, f.state.compoundStatus(s.SyntaxLocation, "case", 0)
 }
