@@ -243,6 +243,11 @@ func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID strin
 			tc.Invocation.Contract = def.Contract
 		}
 	}
+	var err error
+	tc, err = e.prepareWorkerBranch(ctx, tool, profileID, args, tc)
+	if err != nil {
+		return "", err
+	}
 	tc.Files.FileChangeReview = e.Boundary.fileChangeReviewer(tool, args, tc)
 	out, err := e.Metadata.registry.Run(ctx, tool, args, tc)
 	if tr := toolrejection.AsToolReject(err); tr != nil {

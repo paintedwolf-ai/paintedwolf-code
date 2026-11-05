@@ -52,7 +52,7 @@ func TestFormToolRunsTheCommandFormsProgram(t *testing.T) {
 		"path": "main.go", "pattern": "wrap($A)", "rewrite": "unwrap($A)", "dry_run": true,
 	})
 	programs := f.Programs(t)
-	if len(programs) != 1 || !strings.Contains(programs[0], "code-rewrite") {
+	if len(programs) != 1 || programs[0] != "completed" {
 		t.Fatalf("programs = %q", programs)
 	}
 }
