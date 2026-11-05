@@ -107,7 +107,7 @@ func (d *driver) run(shell string, c Case) (Result, error) {
 	}
 	waitErr := cmd.Wait()
 	// Whatever the program left running in its process group ends with it.
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) //nolint:forbidigo // The leader is reaped, so no incarnation names this group.
 	status, err := exitStatus(cmd.ProcessState, waitErr)
 	if err != nil {
 		return Result{}, err

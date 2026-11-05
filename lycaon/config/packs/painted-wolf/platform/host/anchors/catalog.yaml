@@ -595,6 +595,7 @@ anchors:
         skill_name: { type: "string", required: true }
         skill_body: { type: "string", required: true }
         trigger_tool: { type: "string", required: false }
+        skill_resources: { type: "string[]", required: false }
 
   - id: inject.skill_pointer
     title: Skill pointer
@@ -640,6 +641,7 @@ anchors:
     planes: [inform]
     envelope:
       vars:
+        progress_snapshot: { type: string }
         progress_missing: { type: bool }
         profile_has_update_progress: { type: bool }
         verify_required: { type: bool }

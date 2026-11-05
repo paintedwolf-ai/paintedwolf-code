@@ -2,6 +2,8 @@ package wiring
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -237,13 +239,41 @@ func (h *Harness) SeedProgress(t *testing.T, ctx context.Context, sessionID stri
 	if h == nil || h.ToolRegistry == nil {
 		t.Fatal("harness tool registry missing")
 	}
-	if _, err := h.ToolRegistry.Run(ctx, "update_progress", map[string]any{
-		"content": "## Progress\n- [ ] wiring test plan\n",
-	}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: sessionID},
-	}); err != nil {
+	args := map[string]any{"content": "## Progress\n- [ ] wiring test plan\n"}
+	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID}}
+	_, err := h.ToolRegistry.Run(ctx, "update_progress", args, tc)
+	if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "PROGRESS_REVISION_REQUIRED" {
+		// Workflow setup may already hold a checklist; replace it at its revision.
+		current, ok := reject.Data["snapshot"].(progress.Snapshot)
+		if !ok {
+			t.Fatalf("SeedProgress: rejection carries no snapshot: %v", err)
+		}
+		args["expected_revision"], args["item_ids"] = current.Revision, []any{nil}
+		_, err = h.ToolRegistry.Run(ctx, "update_progress", args, tc)
+	}
+	if err != nil {
 		t.Fatalf("SeedProgress: %v", err)
 	}
+}
+
+// ProgressUpdateArgs builds update_progress arguments at the session's current revision,
+// keeping each existing row's identity and leaving added rows to the host.
+func (h *Harness) ProgressUpdateArgs(t *testing.T, ctx context.Context, sessionID, content string) map[string]any {
+	t.Helper()
+	current, err := progress.NewSQLStore(h.DB).Snapshot(ctx, sessionID)
+	testutil.FailErr(t, "read progress snapshot", err)
+	args := map[string]any{"content": content}
+	if current.Content == "" {
+		return args
+	}
+	ids := make([]any, len(progress.ChecklistItems(content)))
+	for i := range ids {
+		if i < len(current.ItemIDs) {
+			ids[i] = current.ItemIDs[i]
+		}
+	}
+	args["expected_revision"], args["item_ids"] = current.Revision, ids
+	return args
 }
 
 // StartBackgroundWorkers runs worker and scan pollers until cancellation.

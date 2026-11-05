@@ -73,3 +73,26 @@ func TestCoordinatorInlineDefaultsPreserveRequestedDelegation(t *testing.T) {
 		})
 	}
 }
+
+func TestCoordinatorDispatchDocumentsWorkerWorkspaceAndPublicationBoundary(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	vars := prompts.CoordinatorPolicyTemplateVars([]string{"read", "edit", "task", "request_tools"}, nil)
+	vars["has_file_tools"] = true
+	got, err := engine.Render(t.Context(), "agents/coordinator-mode-implement-dispatch.md", vars)
+	testutil.FailErr(t, "render dispatch prompt", err)
+	if strings.Contains(got, "external-state shell") {
+		t.Fatalf("dispatch prompt still invites external-state shell work in worker briefs: %s", got)
+	}
+	for _, want := range []string{
+		"private snapshot overlay with no version-control metadata (`.git` is excluded)",
+		"no remote or publish capability",
+		"Do not assign `git commit`, `git push`, branch/tag operations, release publication, or external publishing",
+		"`git_status`",
+		"`git_diff`",
+		"`git_commit`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("dispatch prompt missing %q:\n%s", want, got)
+		}
+	}
+}

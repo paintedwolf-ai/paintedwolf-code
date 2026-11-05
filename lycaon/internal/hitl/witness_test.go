@@ -21,6 +21,7 @@ func TestBoundaryWitnessIgnoresCapabilityOverlays(t *testing.T) {
 	}
 
 	overlay := base
+	overlay.CredentialStore = true
 	overlay.SocketPathsDigest = "sock"
 	overlay.SocketCount = 2
 	overlay.DirectIP = true

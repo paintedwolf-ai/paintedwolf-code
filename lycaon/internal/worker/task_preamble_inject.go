@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
@@ -15,10 +16,11 @@ import (
 )
 
 type WorkerTaskPreambleData struct {
-	TouchPaths  []string
-	ScopeMode   string
-	ScopePaths  []string
-	ScopeAbsent bool
+	TouchPaths     []string
+	ScopeMode      string
+	ScopePaths     []string
+	ScopeAbsent    bool
+	LinkedCheckout bool
 }
 
 func BuildWorkerTaskPreambleData(projectDir string, touchPaths []string, scope *api.TaskScope) WorkerTaskPreambleData {
@@ -35,6 +37,7 @@ func BuildWorkerTaskPreambleData(projectDir string, touchPaths []string, scope *
 	data.ScopePaths = append([]string(nil), norm.Paths...)
 	if norm.Mode == api.TaskScopeModeWrite {
 		data.ScopeAbsent = scopeAbsentOnDisk(projectDir, norm.Paths)
+		data.LinkedCheckout = gitrepo.ScopeIncludesLinkedCheckout(projectDir, norm.Paths)
 	}
 	return data
 }
@@ -77,10 +80,11 @@ func (d WorkerTaskPreambleData) empty() bool {
 
 func WorkerTaskPreambleToMap(data WorkerTaskPreambleData) map[string]any {
 	return map[string]any{
-		"touch_paths":  data.TouchPaths,
-		"scope_mode":   data.ScopeMode,
-		"scope_paths":  data.ScopePaths,
-		"scope_absent": data.ScopeAbsent,
+		"touch_paths":     data.TouchPaths,
+		"scope_mode":      data.ScopeMode,
+		"scope_paths":     data.ScopePaths,
+		"scope_absent":    data.ScopeAbsent,
+		"linked_checkout": data.LinkedCheckout,
 	}
 }
 

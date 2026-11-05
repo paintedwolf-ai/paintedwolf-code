@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -190,6 +189,7 @@ func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model s
 		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 		var rawToolCalls []ollamaToolCall
 		var usage modelcall.TokenUsage
+		sawOutput := false
 		for scanner.Scan() {
 			select {
 			case <-ctx.Done():
@@ -220,6 +220,7 @@ func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model s
 				return
 			}
 			if resp.Message.Content != "" {
+				sawOutput = true
 				if !modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Content: resp.Message.Content}) {
 					return
 				}
@@ -231,6 +232,7 @@ func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model s
 				}
 			}
 			if len(resp.Message.ToolCalls) > 0 {
+				sawOutput = true
 				rawToolCalls = append(rawToolCalls, resp.Message.ToolCalls...)
 			}
 			if resp.Done {
@@ -249,12 +251,9 @@ func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model s
 				return
 			}
 		}
-		if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
-			// Partial output does not make a failed stream complete.
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Done: true})
-			return
+		if err := failure.ClassifyStreamEnd(ctx, providerID, model, scanner.Err(), false, sawOutput || len(rawToolCalls) > 0, "stream ended before done", true); err != nil {
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Usage: usage, Done: true})
 		}
-		modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: fmt.Errorf("ollama: stream ended before done"), Done: true})
 	}()
 	return ch
 }

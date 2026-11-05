@@ -1,14 +1,19 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
+	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/verification"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -129,5 +134,111 @@ func TestTurnLoadWireProjectsRequestAndLookupMatches(t *testing.T) {
 	})
 	if got.Match == nil || got.Match.By != api.TurnLoadMatchByNone || got.Match.Names == nil {
 		t.Fatalf("empty request must still carry a match with an empty list: %+v", got.Match)
+	}
+}
+
+func TestTurnLoadWireProjectsAToolEvent(t *testing.T) {
+	engine := decide.Engine{Name: "Painted Wolf Decide", Model: "mmbert-base", Head: "unit-rank"}
+	read := turnload.SkillRank{Name: "verify-visual-change", Score: 3.6}
+	outcome := turnload.ToolEventOutcome{
+		Tool: "capture_page", Need: "Build me a chess game\n\nFirst tool called: capture_page",
+		Ranking: turnload.Ranking{Ranks: []turnload.SkillRank{read, {Name: "work-with-containers", Score: 1.2}}, Engine: engine},
+		Read:    &read, Engine: engine,
+	}
+	receipt := store.TurnLoadReceipt{
+		ID: 9, SessionID: "s1", Trigger: store.TurnLoadTriggerToolEvent, OpeningMessageID: "user-1", ToolCallID: "call-4",
+		Engine:    "Painted Wolf Decide/mmbert-base#unit-rank",
+		Decisions: decisionsJSON(t, map[string]any{"tool_event": outcome, "preloaded_skill": &read}),
+		ElapsedMs: 640,
+	}
+	got := transcript.TurnLoadWire(receipt)
+	if got.Trigger != api.TurnLoadTriggerToolEvent || got.ToolCallID != "call-4" || got.Abstained {
+		t.Fatalf("identity = %+v", got)
+	}
+	if got.Match == nil || got.Match.Need != "capture_page" || got.Match.By != api.TurnLoadMatchByEngine || len(got.Match.Names) != 1 || got.Match.Names[0] != "verify-visual-change" {
+		t.Fatalf("match = %+v", got.Match)
+	}
+	if got.PreloadedSkill == nil || got.PreloadedSkill.Name != "verify-visual-change" || got.PreloadedSkill.Score != 3.6 {
+		t.Fatalf("preloaded skill = %+v", got.PreloadedSkill)
+	}
+	if got.Engine == nil || got.Engine.Head != "unit-rank" {
+		t.Fatalf("engine = %+v", got.Engine)
+	}
+
+	// A pointer names the skill without a read; an empty ranking matches nothing.
+	pointer := turnload.SkillRank{Name: "commit-in-logical-groups", Score: 3.0}
+	receipt.Decisions = decisionsJSON(t, map[string]any{"tool_event": turnload.ToolEventOutcome{Tool: "git_commit", Pointer: &pointer, Engine: engine}})
+	got = transcript.TurnLoadWire(receipt)
+	if got.PreloadedSkill != nil || got.Match == nil || got.Match.Names[0] != "commit-in-logical-groups" || got.Match.By != api.TurnLoadMatchByEngine {
+		t.Fatalf("pointer projection = %+v", got)
+	}
+	receipt.Decisions = decisionsJSON(t, map[string]any{"tool_event": turnload.ToolEventOutcome{Tool: "git_commit", Engine: engine}})
+	got = transcript.TurnLoadWire(receipt)
+	if got.Match == nil || got.Match.By != api.TurnLoadMatchByNone || len(got.Match.Names) != 0 {
+		t.Fatalf("no-match projection = %+v", got.Match)
+	}
+}
+
+func assessedCloseout(t *testing.T, history []api.Message, method string) []api.Message {
+	t.Helper()
+	body, err := guidance.MarshalCoordinatorCompletionReport(guidance.CoordinatorCompletionReport{
+		Synthesis:    "Updated the requested material.",
+		Verification: &verification.Assessment{Method: method, Reason: "Validation scoped to the requested change."},
+	})
+	testutil.FailErr(t, "marshal assessed closeout", err)
+	return append(history, api.Message{Role: api.MessageRoleAssistant, Content: body})
+}
+
+func TestInspectionDoesNotRunSelectedProjectCheck(t *testing.T) {
+	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
+	mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: "project-check"})
+	history = assessedCloseout(t, history, verification.Inspection)
+	if reject, blocked := mgr.Coordinator.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); blocked {
+		t.Fatalf("inspection incorrectly required a project check: %v", reject)
+	}
+	if passed, _, _ := mgr.Verification.GateState(t.Context(), sess, history); passed {
+		t.Fatal("inspection fabricated a passing test")
+	}
+}
+
+func TestInspectionCannotSatisfyExplicitWorkflowTestGate(t *testing.T) {
+	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
+	workflowFixture1 := verifyWorkflowStub{required: true}
+	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
+	history = assessedCloseout(t, history, verification.Inspection)
+	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); !blocked {
+		t.Fatal("inspection waived an explicit workflow test gate")
+	}
+	history = assessedCloseout(t, history, verification.Blocked)
+	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); blocked {
+		t.Fatal("reporting a validation blocker requires no failed-run quota")
+	}
+	if passed, _, _ := mgr.Verification.GateState(t.Context(), sess, history); passed {
+		t.Fatal("blocked handoff fabricated a pass")
+	}
+}
+
+func TestTargetedCheckDoesNotSatisfyDifferentProjectCheck(t *testing.T) {
+	mgr, sess, history := sourceEvidenceCloseoutHarness(t)
+	mgr.Verification.SetVerifyConfig(stubVerifyConfig{cmd: "project-check"})
+	recordCommand(t, mgr, sess, "targeted-check", 0)
+	history = assessedCloseout(t, history, verification.Targeted)
+	if _, blocked := mgr.Coordinator.Guards.SourceEvidence(t.Context(), sess, history, "implement_investigate", true); blocked {
+		t.Fatal("targeted passing check was ignored")
+	}
+	if passed, _, _ := mgr.Verification.GateState(t.Context(), sess, history); passed {
+		t.Fatal("targeted check substituted for the selected project check")
+	}
+}
+
+func TestVerificationAttemptBudgetSurvivesConcurrentEdits(t *testing.T) {
+	mgr, sess, history := verifyGateHarness(t, "project-check")
+	for range sessionverification.MaxAttemptsPerRun {
+		recordCommand(t, mgr, sess, "project-check", 1)
+		repochange.Advance(sess.WorkspacePath)
+	}
+	passed, repair, exhausted := mgr.Verification.GateState(context.Background(), sess, history)
+	if passed || repair || !exhausted {
+		t.Fatalf("concurrent edits reset recovery: pass=%v repair=%v exhausted=%v", passed, repair, exhausted)
 	}
 }

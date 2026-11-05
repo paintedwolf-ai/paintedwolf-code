@@ -18,8 +18,11 @@ import {
   nextNumberedProviderLabel,
   modelAssignmentOptionGroups,
   modelAssignmentOptionGroupsForPicker,
+  providerEndpointIsLoopback,
   providerPickerGroup,
+  providerPickerGroupForKind,
   providerKindIsCustom,
+  providerKindIsLocal,
   providerKindTemplateGroups,
   providerPlatformsSupported,
   providerDisplayName,
@@ -28,6 +31,7 @@ import {
   providerDiscoveryFailure,
   providerStatusLabel,
   providerToolCallSupport,
+  providerContextWindowState,
   formatModelAssignmentLabel,
   modelTokenRatesLabel,
   shortModelId,
@@ -439,6 +443,84 @@ describe("models-editor-model", () => {
       models: [],
     };
     expect(providerPickerGroup(lanOllama)).toBe("local");
+    expect(providerKindIsLocal("litellm-proxy")).toBe(true);
+    expect(providerKindIsLocal("ollama")).toBe(true);
+    expect(providerKindIsLocal("lmstudio")).toBe(true);
+    expect(providerKindIsLocal("omlx")).toBe(true);
+    expect(providerKindIsLocal("openai")).toBe(false);
+    expect(providerKindIsLocal("openai-compatible")).toBe(false);
+    for (const baseUrl of [
+      "http://localhost:4000/v1",
+      "http://[::1]:4000/v1",
+      "http://192.168.1.50:4000/v1",
+      "https://litellm.example.com/v1",
+    ]) {
+      for (const requiresApiKey of [true, false]) {
+        expect(
+          providerPickerGroupForKind("litellm-proxy", requiresApiKey, baseUrl),
+        ).toBe("local");
+      }
+    }
+  });
+
+  it("keeps self-hosted LiteLLM local in model pickers without conflating pricing, inference location, or endpoint trust", () => {
+    const remoteLiteLLM: ProviderMeta = {
+      id: "litellm-remote",
+      kind: "litellm-proxy",
+      label: "LiteLLM (gateway)",
+      base_url: "https://litellm.example.com/v1",
+      configured: true,
+      ready_to_assign: true,
+      credential_present: true,
+      requires_api_key: true,
+      features: { tool_calls: true, thinking: true, prompt_cache: "automatic_prefix" },
+      models: [
+        providerModel("gpt-4o", {
+          input_per_1k_nano_usd: 2_500_000,
+          output_per_1k_nano_usd: 10_000_000,
+        }),
+        providerModel("qwen3-coder"),
+      ],
+    };
+    expect(providerPickerGroup(remoteLiteLLM)).toBe("local");
+    expect(providerShowsApiKeyControls(remoteLiteLLM)).toBe(true);
+    expect(providerEndpointIsLoopback(remoteLiteLLM.base_url)).toBe(false);
+    expect(providerEndpointIsLoopback("http://localhost:4000/v1")).toBe(true);
+    expect(remoteLiteLLM.secret_screen_trusted).toBeUndefined();
+
+    const groups = modelAssignmentOptionGroups([remoteLiteLLM]);
+    expect(groups).toEqual([
+      {
+        group: "local",
+        label: "Run locally",
+        options: [
+          {
+            provider_id: "litellm-remote",
+            model: "gpt-4o",
+            title: "LiteLLM (gateway) — gpt-4o",
+            rates: "($2.50/$10 per 1M)",
+            disabled: false,
+            reason: undefined,
+            unverified: false,
+          },
+          {
+            provider_id: "litellm-remote",
+            model: "qwen3-coder",
+            title: "LiteLLM (gateway) — qwen3-coder",
+            rates: undefined,
+            disabled: false,
+            reason: undefined,
+            unverified: false,
+          },
+        ],
+      },
+    ]);
+
+    const orphan = modelAssignmentOptionGroupsForPicker([], {
+      provider_id: "litellm-proxy",
+      model: "claude-sonnet-4-5",
+    });
+    expect(orphan.map((g) => g.group)).toEqual(["local"]);
   });
 
   it("modelAssignmentOptionGroups splits options into local, cloud, and custom", () => {
@@ -617,6 +699,12 @@ describe("models-editor-model", () => {
   it("providerKindTemplateGroups splits add-provider kinds into local, cloud, and custom", () => {
     const kinds = [
       {
+        kind: "litellm-proxy",
+        label: "LiteLLM",
+        base_url: "https://litellm.example.com/v1",
+        requires_api_key: true,
+      },
+      {
         kind: "ollama",
         label: "Ollama",
         base_url: "http://localhost:11434/v1",
@@ -652,7 +740,7 @@ describe("models-editor-model", () => {
     // oMLX is macos-gated; when Den platform is unknown (Vite tests) it stays
     // visible and groups under Run locally with other localhost keyless kinds.
     expect(groups.map((g) => [g.label, g.templates.map((t) => t.kind)])).toEqual([
-      ["Run locally", ["ollama", "omlx"]],
+      ["Run locally", ["litellm-proxy", "ollama", "omlx"]],
       ["Cloud / hosted", ["fireworks", "openai"]],
       ["Custom", ["openai-compatible"]],
     ]);
@@ -869,6 +957,22 @@ describe("providerToolCallSupport", () => {
         ],
       }),
     ).toBe("unknown");
+  });
+
+  it("reports whether listed models declare a context window", () => {
+    expect(providerContextWindowState({ ...base, models: [] })).toBe("unknown");
+    expect(
+      providerContextWindowState({
+        ...base,
+        models: [providerModel("local-model")],
+      }),
+    ).toBe("unknown");
+    expect(
+      providerContextWindowState({
+        ...base,
+        models: [providerModel("local-model", { context_length: 32768 })],
+      }),
+    ).toBe("known");
   });
 });
 

@@ -136,37 +136,20 @@ func TestPublicLoopbackResolverUsesNativeObservationWithListenerTable(t *testing
 	}
 }
 
-func TestDefaultListenerObservationPreservesRecordedContainerChecks(t *testing.T) {
+func TestContainerMetadataCannotReplaceNativeSessionAuthority(t *testing.T) {
 	endpoint := netip.MustParseAddrPort("127.0.0.1:8123")
-	containerID := strings.Repeat("a", 64)
-	calls := 0
-	fixture := &provenanceFixture{
-		containers: []dockerContainerInfo{{ID: containerID, Name: "registered", Ports: []containerPortMapping{{PublicPort: 8123, LoopbackOnly: true}}}},
-		nativeObserver: func(context.Context, string, netip.AddrPort) (string, bool, error) {
-			calls++
-			return "", false, lineage.ErrObservationIncomplete
-		},
-	}
-	resolver := fixture.resolver(t.Context())
-	resolver.RecordSessionContainer("session", containerID, "")
-	if id, owned, err := resolver.ObserveSessionListener(t.Context(), "session", endpoint); err != nil || !owned || id == "" {
-		t.Fatalf("recorded container lost current evidence: %q %v %v", id, owned, err)
-	}
-	fixture.containers[0].Ports[0].LoopbackOnly = false
-	if _, owned, _ := resolver.ObserveSessionListener(t.Context(), "session", endpoint); owned {
-		t.Fatal("exposed container granted access")
-	}
-	fixture.containers[0].Ports[0].LoopbackOnly = true
-	fixture.containers[0].ID = strings.Repeat("b", 64)
-	if _, owned, _ := resolver.ObserveSessionListener(t.Context(), "session", endpoint); owned {
-		t.Fatal("unrecorded replacement container granted access")
-	}
-	fixture.containers[0].ID = containerID
-	fixture.now = []socketListener{listenerAt(0, endpoint.String())}
-	if _, owned, err := resolver.ObserveSessionListener(t.Context(), "session", endpoint); owned || err == nil {
-		t.Fatalf("incomplete holder became container proof: %v %v", owned, err)
-	}
-	if calls != 0 {
-		t.Fatalf("container evidence impersonated native lineage: calls=%d", calls)
+	for _, containerID := range []string{"", strings.Repeat("a", 64), strings.Repeat("b", 64)} {
+		for _, name := range []string{"registered", "session", "other session"} {
+			fixture := &provenanceFixture{
+				now:          []socketListener{listenerAt(4242, endpoint.String())},
+				processNames: map[int]string{4242: "docker-proxy"},
+				containers: []dockerContainerInfo{{ID: containerID, Name: name, WorkingDir: "/workspace",
+					Ports: []containerPortMapping{{IP: "127.0.0.1", PublicPort: 8123, LoopbackOnly: true}}}},
+			}
+			resolver := fixture.resolver(t.Context())
+			if id, owned, err := resolver.ObserveSessionListener(t.Context(), "session", endpoint); owned || err != nil {
+				t.Fatalf("container metadata replaced native proof: id=%q owned=%t err=%v", id, owned, err)
+			}
+		}
 	}
 }

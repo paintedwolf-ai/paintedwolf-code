@@ -17,7 +17,13 @@ import type { FileBuffer } from "../documents/files-buffer-state.ts";
 import { filesBufferText } from "../documents/project-files-buffers.ts";
 import { filesEditorFindMenuItems, filesEditorGotoMenuItems, type FilesEditorToolbarMenuKind } from "./files-editor-toolbar-menus.ts";
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
-import type { resolveEditorIdentity } from "../documents/editor-identity.ts";
+import type { editorStateAction, resolveEditorIdentity } from "../documents/editor-identity.ts";
+import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
+import { BrowseSegmented } from "../../components/browse/BrowseSegmented.tsx";
+import { DenButton } from "../../components/primitives/DenButton.tsx";
+import { CheckIcon, CopyIcon, FindIcon, GotoLineIcon } from "../../components/source/viewer-icons.tsx";
+import { formatSentenceCase } from "../../format/format-sentence-case.ts";
+import { FilesPathCrumbs } from "./FilesPathCrumbs.tsx";
 
 export function FilesEditorToolbar(props: { children: JSX.Element; actions: JSX.Element }) {
   return <div class="den-files-toolbar">
@@ -182,4 +188,237 @@ export function createEditorToolbarMenus(options: {
   };
 
   return { copiedPath, onCopy, findMenuBind, gotoMenuBind, copyMenuBind, toolbarMenuItems, findBarDisclosure, gotoLineBarDisclosure };
+}
+
+export function FilesEditorHeaderChrome(props: {
+  buffer: FileBuffer;
+  versionAvailability: string | undefined;
+  versionPicker: JSX.Element;
+  stateAction: ReturnType<typeof editorStateAction>;
+  stateActionBusy: boolean | undefined;
+  stateActionDisabledReason: string | null;
+  onRunStateAction: () => void;
+  savedNotice: (checkIcon: JSX.Element) => JSX.Element;
+  editable: boolean;
+  saving: boolean;
+  conflict: boolean;
+  onDiscard: () => void;
+  onSave: () => void;
+  isMarkdown: boolean;
+  historicalActive: boolean;
+  mdView: "code" | "preview";
+  onChangeMdView: (next: "code" | "preview") => void;
+  previewActive: boolean;
+  activeEditorView: () => EditorView | undefined;
+  activeReaderHandle: () => SourceReaderHandle | undefined;
+  toolbarMenus: ReturnType<typeof createEditorToolbarMenus>;
+  onRevealSegment: (rootId: string, path: string, isDir: boolean) => void;
+  symbolMenuOpen: boolean;
+  onToggleSymbolMenu: (trigger: HTMLElement) => void;
+  enclosingCrumbSymbol: {
+    name: string;
+    kind: string;
+    startLine: number;
+    endLine: number;
+  } | null;
+  onRenameSymbol: ((name: string) => void) | undefined;
+}) {
+  return (
+    <FilesEditorToolbar
+      actions={
+        <>
+          {props.versionPicker}
+          <Show when={props.stateAction} keyed>
+            {(action) => (
+              <DenButton
+                variant={
+                  action.id === "restore-version" && props.versionAvailability === "absent"
+                    ? "danger"
+                    : "primary"
+                }
+                compact
+                class="den-files-editor__state-action"
+                data-testid={`files-editor-${action.id}`}
+                data-state-action={action.id}
+                disabled={props.stateActionDisabledReason != null}
+                aria-label={
+                  props.stateActionBusy ? `${action.label} in progress` : action.label
+                }
+                data-tip={props.stateActionDisabledReason ?? action.tip}
+                data-tip-pos="below"
+                onClick={props.onRunStateAction}
+              >
+                <ThemeIcon slot={action.icon} size={14} />
+              </DenButton>
+            )}
+          </Show>
+          {props.savedNotice(<CheckIcon size={13} />)}
+          <Show when={props.editable && props.buffer.dirty}>
+            <DenButton
+              variant="ghost"
+              compact
+              data-testid="files-editor-discard"
+              disabled={props.saving}
+              onClick={() => props.onDiscard()}
+            >
+              Discard
+            </DenButton>
+            <DenButton
+              variant="primary"
+              compact
+              data-testid="files-editor-save"
+              data-tip={`Save (${bindingForHandler("files.save")})`}
+              data-tip-pos="below"
+              disabled={props.saving || props.conflict}
+              onClick={() => props.onSave()}
+            >
+              {props.saving ? "Saving…" : "Save"}
+            </DenButton>
+          </Show>
+          <Show when={props.isMarkdown && !props.historicalActive}>
+            <BrowseSegmented
+              class="den-files-editor__seg"
+              testId="files-editor-md-toggle"
+              ariaLabel="Markdown view"
+              value={props.mdView}
+              onChange={(id) => {
+                if (id === "preview" || id === "code") {
+                  props.onChangeMdView(id);
+                }
+              }}
+              options={[
+                { id: "code", label: "Code", testId: "files-editor-md-code" },
+                {
+                  id: "preview",
+                  label: "Preview",
+                  testId: "files-editor-md-preview",
+                },
+              ]}
+            />
+          </Show>
+          <button
+            type="button"
+            class="den-files-editor__tool den-inset-icon-btn"
+            data-testid="files-editor-find"
+            data-tip={`Find (${bindingForHandler("find.inView")})`}
+            data-tip-pos="below"
+            aria-label="Find in file"
+            aria-expanded={props.toolbarMenus.findBarDisclosure().expanded}
+            aria-controls={props.toolbarMenus.findBarDisclosure().controls}
+            disabled={
+              props.buffer.loading ||
+              props.previewActive ||
+              (!props.activeEditorView() && !props.activeReaderHandle())
+            }
+            onClick={() => {
+              const active = props.activeEditorView();
+              if (active) openEditorFind(active);
+              else {
+                props.activeReaderHandle()?.focus();
+                openFind();
+              }
+            }}
+            onContextMenu={props.toolbarMenus.findMenuBind.onContextMenu}
+            onKeyDown={props.toolbarMenus.findMenuBind.onKeyDown}
+          >
+            <FindIcon />
+          </button>
+          <button
+            type="button"
+            class="den-files-editor__tool den-inset-icon-btn"
+            data-testid="files-editor-goto"
+            data-tip={`Go to line (${bindingForHandler("editor.goToLine")})`}
+            data-tip-pos="below"
+            aria-label="Go to line"
+            aria-expanded={props.toolbarMenus.gotoLineBarDisclosure().expanded}
+            aria-controls={props.toolbarMenus.gotoLineBarDisclosure().controls}
+            disabled={
+              props.buffer.loading ||
+              props.previewActive ||
+              (!props.activeEditorView() && !props.activeReaderHandle())
+            }
+            onClick={() => {
+              const active = props.activeEditorView();
+              if (active) openEditorGotoLine(active);
+              else void props.activeReaderHandle()?.gotoLine();
+            }}
+            onContextMenu={props.toolbarMenus.gotoMenuBind.onContextMenu}
+            onKeyDown={props.toolbarMenus.gotoMenuBind.onKeyDown}
+          >
+            <GotoLineIcon />
+          </button>
+          <button
+            type="button"
+            class="den-files-editor__tool den-inset-icon-btn"
+            classList={{ "den-files-editor__tool--ok": props.toolbarMenus.copiedPath() }}
+            data-testid="files-editor-copy"
+            data-tip="Copy path"
+            data-tip-pos="below"
+            aria-label="Copy path"
+            onClick={props.toolbarMenus.onCopy}
+            onContextMenu={props.toolbarMenus.copyMenuBind.onContextMenu}
+            onKeyDown={props.toolbarMenus.copyMenuBind.onKeyDown}
+          >
+            <Show when={props.toolbarMenus.copiedPath()} fallback={<CopyIcon />}>
+              <CheckIcon />
+            </Show>
+          </button>
+        </>
+      }
+    >
+      <FilesPathCrumbs
+        rootId={props.buffer.rootId}
+        rootLabel={props.buffer.rootLabel}
+        path={props.buffer.path}
+        testId="files-editor-crumb"
+        onRevealSegment={props.onRevealSegment}
+        fileSegment={(seg) => (
+          <button
+            type="button"
+            class="den-files-editor__crumb-seg den-files-editor__crumb-file"
+            data-files-ctx="breadcrumb"
+            data-root={props.buffer.rootId}
+            data-path={seg.path}
+            data-isdir="false"
+            aria-expanded={props.symbolMenuOpen}
+            aria-haspopup="listbox"
+            onClick={(e) => props.onToggleSymbolMenu(e.currentTarget)}
+          >
+            {seg.name}
+          </button>
+        )}
+      >
+        <Show when={props.enclosingCrumbSymbol}>
+          {(sym) => (
+            <>
+              <span class="den-files-editor__crumb-sep" aria-hidden="true">
+                ›
+              </span>
+              <button
+                type="button"
+                class="den-files-editor__crumb-seg den-files-editor__crumb-symbol"
+                data-testid="files-crumb-symbol-seg"
+                data-tip={`${sym().kind ? `${formatSentenceCase(sym().kind)} ` : ""}${sym().name} — lines ${sym().startLine}–${sym().endLine}. Click for symbols; right-click to rename.`}
+                aria-expanded={props.symbolMenuOpen}
+                aria-haspopup="listbox"
+                onClick={(e) => props.onToggleSymbolMenu(e.currentTarget)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  props.onRenameSymbol?.(sym().name);
+                }}
+              >
+                <Show when={sym().kind}>
+                  <span class="den-files-editor__crumb-symbol-kind">
+                    {formatSentenceCase(sym().kind)}
+                  </span>
+                </Show>
+                {sym().name}
+              </button>
+            </>
+          )}
+        </Show>
+      </FilesPathCrumbs>
+    </FilesEditorToolbar>
+  );
 }

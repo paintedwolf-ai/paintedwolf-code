@@ -41,6 +41,8 @@ func CatalogProgramMemoryLimits() (ProgramMemoryLimits, error) {
 type ProgramMemoryLimitError struct {
 	Account           string
 	Maximum, Observed int64
+	Held, Requested   int64
+	Phase             MemoryPhase
 }
 
 func (e *ProgramMemoryLimitError) Error() string {
@@ -144,7 +146,7 @@ func (m *ProgramMemory) reserve(ctx context.Context, n int64, state bool) (func(
 		used, maximum, account = &m.state, m.limits.State, "state"
 	}
 	if n > maximum-*used {
-		return nil, &ProgramMemoryLimitError{Account: account, Maximum: maximum, Observed: *used + n}
+		return nil, &ProgramMemoryLimitError{Account: account, Maximum: maximum, Observed: *used + n, Held: *used, Requested: n, Phase: memoryPhase(ctx)}
 	}
 	*used += n
 	m.reservations++
@@ -157,4 +159,36 @@ func (m *ProgramMemory) reserve(ctx context.Context, n int64, state bool) (func(
 			m.mu.Unlock()
 		})
 	}, nil
+}
+
+// ProgramStateCapacity is an admission snapshot; reservations remain authoritative.
+type ProgramStateCapacity struct{ Maximum, Held, Available int64 }
+
+func (m *ProgramMemory) BatchStateCapacity() ProgramStateCapacity {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return ProgramStateCapacity{Maximum: m.limits.State, Held: m.state, Available: max(0, m.limits.State-m.state)}
+}
+
+type MemoryPhase string
+
+const (
+	ReviewEncoding   MemoryPhase = "review_encoding"
+	ReviewDecoding   MemoryPhase = "review_decoding"
+	InputScreening   MemoryPhase = "input_screening"
+	ArgumentSnapshot MemoryPhase = "argument_snapshot"
+	InputProvenance  MemoryPhase = "input_provenance"
+	QueryDecoding    MemoryPhase = "query_decoding"
+)
+
+type memoryPhaseKey struct{}
+
+// WithMemoryPhase identifies the host stage responsible for a reservation.
+func WithMemoryPhase(ctx context.Context, phase MemoryPhase) context.Context {
+	return context.WithValue(ctx, memoryPhaseKey{}, phase)
+}
+
+func memoryPhase(ctx context.Context) MemoryPhase {
+	phase, _ := ctx.Value(memoryPhaseKey{}).(MemoryPhase)
+	return phase
 }

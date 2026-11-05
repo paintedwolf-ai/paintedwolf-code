@@ -94,6 +94,12 @@ func TestRetainedRouteAcceptsOnlyTheReviewedBoundedWriter(t *testing.T) {
 	if !plan.reviewedRetainedRoute() {
 		t.Fatal("reviewed streaming writer lost resource proof")
 	}
+	// This revision bulk-built indexes over amplified target tables and cannot
+	// inherit a reservation derived only from source rows.
+	plan.steps[0].Checksum = "0813eedef7e1f3baccf602df155e94338fa9e4c209dc60b7f0b1b9829f13b76f"
+	if plan.reviewedRetainedRoute() {
+		t.Fatal("amplified target sort inherited source-sized allocation proof")
+	}
 	plan.steps[0].Checksum = "unreviewed-writer"
 	if plan.reviewedRetainedRoute() {
 		t.Fatal("unreviewed writer inherited allocation proof")

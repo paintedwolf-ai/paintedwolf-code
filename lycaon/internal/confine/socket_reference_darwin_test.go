@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -86,6 +88,46 @@ func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
 	}
 }
 
+func TestShortSocketNamespaceIsProtectedWithoutAnySocketGrant(t *testing.T) {
+	self := requireSeatbelt(t)
+	root := shortTempDir(t)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(root, "state"))
+	path := filepath.Join(root, "service")
+	listener, err := net.Listen("unix", path)
+	testutil.FailErr(t, "listen for protected address fixture", err)
+	defer listener.Close()
+	owner, err := socketref.Capture(path)
+	testutil.FailErr(t, "capture protected address fixture", err)
+	defer owner.Close()
+	endpoint, err := owner.Endpoint("unix")
+	testutil.FailErr(t, "create protected short address", err)
+	shortRoot := filepath.Dir(filepath.Dir(endpoint))
+	workspace := filepath.Join(root, "workspace")
+	testutil.FailErr(t, "create namespace probe workspace", os.Mkdir(workspace, 0700))
+	future := shortRoot + "-future"
+	c := confine.Confinement{Roots: []string{workspace}, GrantedWriteRoots: []string{shortRoot, future}, Network: confine.NetworkDeny}
+	for _, target := range []string{endpoint, filepath.Join(shortRoot, "d"), shortRoot} {
+		before, err := os.Lstat(target)
+		testutil.FailErr(t, "inspect protected namespace before mutation", err)
+		_, output := confinedRun(t, self, c, "/bin/rm", "-rf", target)
+		after, err := os.Lstat(target)
+		if err != nil || before.Sys().(*syscall.Stat_t).Ino != after.Sys().(*syscall.Stat_t).Ino {
+			t.Fatalf("unreviewed command changed service namespace %q: error=%v, output=%s", target, err, output)
+		}
+	}
+	// Namespace protection exists before a particular reference is created.
+	code, output := confinedRun(t, self, c, "/bin/mkdir", future)
+	if _, err := os.Lstat(future); !os.IsNotExist(err) {
+		_ = os.Remove(future)
+		t.Fatalf("unreviewed command precreated service namespace: code=%d, error=%v, output=%s", code, err, output)
+	}
+	profile, err := confine.BuildSeatbeltProfile(c)
+	testutil.FailErr(t, "render protected namespace floor", err)
+	if !strings.Contains(profile, "paintedwolf-socket-") {
+		t.Fatal("short namespace has no compiled control-plane floor")
+	}
+}
+
 func TestRetainedNativeGrantCannotBecomeSeatbeltPathnameAuthority(t *testing.T) {
 	root := shortTempDir(t)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(root, "state"))
@@ -116,7 +158,7 @@ func TestRetainedNativeGrantCannotBecomeSeatbeltPathnameAuthority(t *testing.T) 
 	command, cleanup, err := confine.Command(t.Context(), self, "/usr/bin/true", nil, c)
 	defer cleanup()
 	var refused *confine.SocketResolveError
-	if command != nil || !errors.As(err, &refused) || refused.Code != confine.SocketResolveRefused {
+	if command != nil || !errors.As(err, &refused) || refused.Code != confine.SocketResolveChanged {
 		t.Fatalf("native grant became pathname command: command=%v, err=%v", command, err)
 	}
 }

@@ -184,9 +184,13 @@ func TestSQLLifecycleMutationsProtectDirtyEditorDocuments(t *testing.T) {
 	document := &editordoc.Document{
 		ID: "document-1", ProjectID: p.ID, FileID: fileID,
 		RootID: root.ID, Path: "notes.txt",
-		Draft: "unsaved", BaseContent: "saved", BaseSHA256: "base", Encoding: "utf-8",
-		SizeBytes: 5, EOL: "lf", BaseEOL: "lf", Revision: 1, Dirty: true,
-		CreatedAt: now, UpdatedAt: now,
+		Draft: "unsaved", Revision: 1, Dirty: true,
+		DocumentBase: editordoc.DocumentBase{
+			BaseContent: "saved", BaseSHA256: "base", Encoding: "utf-8",
+			SizeBytes: 5, EOL: "lf", BaseEOL: "lf",
+			CreatedAt:     now,
+			DocumentState: editordoc.DocumentState{UpdatedAt: now},
+		},
 	}
 	testutil.FailErr(t, "insert dirty document", editordoc.NewStore(sqlDB).Insert(ctx, document))
 

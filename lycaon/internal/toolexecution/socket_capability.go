@@ -321,14 +321,6 @@ func (e *Capabilities) authorizeMissingSocketGrants(
 			}
 		}
 	}
-	if direct == nil {
-		if covered, extras := e.permitCoveredHostResourceSockets(ctx, action, actionDigest, missing, tc); covered {
-			if len(extras) == 0 {
-				return authzledger.AuthorizationSourceLease, nil
-			}
-			missing = extras
-		}
-	}
 	if err := e.awaitSocketCapabilities(ctx, action, actionDigest, missing, chatByPair, tc, approval, direct); err != nil {
 		if hitl.IsPreparedApproval(err) {
 			return "", err

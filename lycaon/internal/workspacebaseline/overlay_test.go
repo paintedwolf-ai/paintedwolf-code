@@ -273,3 +273,29 @@ func TestOverlayCaptureParallelCorrectness(t *testing.T) {
 		t.Fatalf("pkg/new-0.txt = %q exists=%v", newContent, exists)
 	}
 }
+
+func TestBranchBaselineSkipsGitlinkFiles(t *testing.T) {
+	root := t.TempDir()
+	blobs := sourceblob.New(filepath.Join(root, "source-content"))
+	store := workspacebaseline.New(nil, blobs, filepath.Join(root, "manifests"))
+	branch := t.TempDir()
+	writeFile(t, filepath.Join(branch, "worktree", "main.go"), []byte("package main\n"), 0o644)
+	writeFile(t, filepath.Join(branch, "worktree", ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644)
+	writeFile(t, filepath.Join(branch, "submodule", ".git"), []byte("gitdir: ../.git/modules/submodule\n"), 0o644)
+
+	baseline, err := store.Capture(t.Context(), "gitlink-job", workspacebaseline.Branch(nil, branch))
+	testutil.FailErr(t, "capture baseline", err)
+
+	reader, err := workspacebaseline.Open(t.Context(), baseline, blobs)
+	testutil.FailErr(t, "open baseline", err)
+	defer func() { _ = reader.Close() }()
+
+	if _, exists, err := reader.Lookup(t.Context(), "worktree/main.go"); err != nil || !exists {
+		t.Fatalf("expected worktree/main.go in baseline, exists=%v err=%v", exists, err)
+	}
+	for _, gitlink := range []string{"worktree/.git", "submodule/.git"} {
+		if _, exists, err := reader.Lookup(t.Context(), gitlink); err != nil || exists {
+			t.Fatalf("baseline must exclude %s, exists=%v err=%v", gitlink, exists, err)
+		}
+	}
+}

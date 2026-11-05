@@ -2,8 +2,10 @@ import type { Message, MessageEvent } from "../../../api/types.ts";
 import type { AppStore } from "../../../store/app-state-model.ts";
 import { reconcilePendingOnUserRow } from "../../send/pending-sends.ts";
 import { llmTurnFor } from "../../session/session-activity.ts";
+import { rememberSessionChatFromStore } from "../../session/session-chat-cache.ts";
 import { syncWorkerFromTaskToolMessage } from "../../worker/workers-model.ts";
 import { queueWorkerTranscriptPatch } from "../../worker/worker-transcript-coalesce.ts";
+import { isCommittedAssistantReply } from "../presentation/transcript-live-announcement.ts";
 import {
   bufferChildMessageEvent,
   takeBufferedMessageEvents,
@@ -28,6 +30,9 @@ export function applyMessageEvent(appStore: AppStore, event: MessageEvent): bool
     if (applied) {
       clearStaleLlmTurnActivity(appStore, sessionId, row);
       syncWorkerFromTaskToolMessage(appStore, sessionId, row);
+      if (isCommittedAssistantReply(row)) {
+        rememberSessionChatFromStore(appStore);
+      }
     }
     return applied;
   }

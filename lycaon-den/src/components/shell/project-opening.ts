@@ -8,7 +8,11 @@ import { hasInstallableExtensionSuggestions } from "../../settings/extensions/ex
 import type { createProjectsStore } from "../../store/projects-store.ts";
 import type { createShellStore } from "../../store/shell-store.ts";
 import type { CloneRepoSubmit } from "../home/CloneRepoDialog.tsx";
-import type { OpenFolderChoice } from "../home/OpenFolderConfirm.tsx";
+import {
+  defaultOpenFolderProjectId,
+  detectedFolderProjects,
+  type OpenFolderChoice,
+} from "../home/OpenFolderConfirm.tsx";
 
 import type { createSessionCreation } from "./session-creation.ts";
 
@@ -28,6 +32,7 @@ export function createProjectOpening(options: {
   let disposed = false;
   let folderRequest = 0;
   let pickingFolder = false;
+  let pendingClonedProjectId: string | null = null;
   onCleanup(() => { disposed = true; folderRequest += 1; });
   const [cloneOpen, setCloneOpen] = createSignal(false);
   const [cloneBusy, setCloneBusy] = createSignal(false);
@@ -57,17 +62,24 @@ export function createProjectOpening(options: {
     const request = folderRequest;
     const client = getLycaonClient();
     if (!client) return;
-    // Reuse the project containing this root.
-    const knownId = openFolderDetect()?.project_id;
+    const selectedId =
+      choice === null
+        ? null
+        : choice.projectId !== undefined
+          ? choice.projectId
+          : defaultOpenFolderProjectId(openFolderDetect());
+    const matchedName = selectedId
+      ? options.projects.summary(selectedId)?.displayName ??
+        detectedFolderProjects(openFolderDetect()).find((p) => p.id === selectedId)?.name
+      : undefined;
     // Cover the outgoing workspace before the project-created event arrives.
     const token = options.beginWorkspaceOpening(
-      (knownId && options.projects.summary(knownId)?.displayName) ||
-      folderWorkspaceLabel(path),
+      matchedName || folderWorkspaceLabel(path),
     );
     const current = () => !disposed && request === folderRequest && options.shell.state.opening?.token === token;
     try {
-      let project = knownId
-        ? await client.getProject(knownId)
+      let project = selectedId
+        ? await client.getProject(selectedId)
         : await client.createProject({ roots: [{ path }] });
       if (!current()) return;
       options.projects.upsert(project);
@@ -114,8 +126,12 @@ export function createProjectOpening(options: {
     await proposeFolderAsProject(path);
   };
 
-  const proposeFolderAsProject = async (path: string) => {
+  const proposeFolderAsProject = async (
+    path: string,
+    proposeOptions?: { forceNew?: boolean },
+  ) => {
     if (disposed) return;
+    const forceNew = proposeOptions?.forceNew === true;
     const request = ++folderRequest;
     const isCurrent = () => !disposed && request === folderRequest;
     const client = getLycaonClient();
@@ -126,6 +142,7 @@ export function createProjectOpening(options: {
       return;
     }
     // A newer folder pick supersedes this request.
+    pendingClonedProjectId = null;
     setOpenFolderPath(null);
     setOpenFolderDetect(null);
 
@@ -142,8 +159,19 @@ export function createProjectOpening(options: {
       return;
     }
     if (!isCurrent()) return;
-    setOpenFolderDetect(detect);
-    if (hasInstallableExtensionSuggestions(detect.extension_suggestions)) {
+    const effectiveDetect: FolderDetect = forceNew
+      ? {
+          path: detect.path,
+          ...(detect.extension_suggestions
+            ? { extension_suggestions: detect.extension_suggestions }
+            : {}),
+        }
+      : detect;
+    setOpenFolderDetect(effectiveDetect);
+    if (
+      detectedFolderProjects(effectiveDetect).length > 0 ||
+      hasInstallableExtensionSuggestions(effectiveDetect.extension_suggestions)
+    ) {
       setOpenFolderPath(path);
       return;
     }
@@ -159,9 +187,15 @@ export function createProjectOpening(options: {
   const confirmOpenFolder = async (choice: OpenFolderChoice) => {
     const path = openFolderDetect()?.path ?? openFolderPath();
     if (!path || openFolderDetect() == null) return;
+    const clonedId = pendingClonedProjectId;
+    const effectiveChoice: OpenFolderChoice =
+      clonedId != null
+        ? { ...choice, projectId: clonedId }
+        : choice;
     setOpenFolderBusy(true);
     try {
-      await openFolderAsProject(path, choice, () => {
+      await openFolderAsProject(path, effectiveChoice, () => {
+        pendingClonedProjectId = null;
         setOpenFolderPath(null);
         setOpenFolderDetect(null);
       });
@@ -175,19 +209,19 @@ export function createProjectOpening(options: {
   const closeOpenFolder = () => {
     if (openFolderBusy()) return;
     folderRequest += 1;
-    const existingId = openFolderDetect()?.project_id;
+    const clonedId = pendingClonedProjectId;
+    pendingClonedProjectId = null;
     setOpenFolderPath(null);
     setOpenFolderDetect(null);
     // Closing skips installs for an already cloned project.
-    if (existingId && options.projects.byId(existingId)) {
+    if (clonedId && options.projects.byId(clonedId)) {
       options.showProjects();
       void options.startSession(
-        { kind: "new-session", projectId: existingId },
+        { kind: "new-session", projectId: clonedId },
         { switchKind: "cross-project" },
       );
       return;
     }
-    // Dismissing setup still opens the cloned project.
     const opening = options.shell.state.opening;
     if (opening) options.abandonWorkspaceOpening(opening.token);
   };
@@ -224,7 +258,13 @@ export function createProjectOpening(options: {
           if (!current()) return;
           if (hasInstallableExtensionSuggestions(detect.extension_suggestions)) {
             // The setup sheet completes this project open.
-            setOpenFolderDetect(detect);
+            pendingClonedProjectId = project.id;
+            setOpenFolderDetect({
+              path: detect.path,
+              ...(detect.extension_suggestions
+                ? { extension_suggestions: detect.extension_suggestions }
+                : {}),
+            });
             setOpenFolderPath(root);
             return;
           }
@@ -232,6 +272,7 @@ export function createProjectOpening(options: {
           // Identity failed; open the cloned project without offering installs.
         }
         if (!current()) return;
+        pendingClonedProjectId = null;
         setOpenFolderPath(null);
         setOpenFolderDetect(null);
       }

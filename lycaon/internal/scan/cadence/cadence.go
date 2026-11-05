@@ -81,7 +81,7 @@ func (c *Service) BaselineRoot(ctx context.Context, projectDir string) error {
 		return err
 	}
 	for i := range series {
-		if series[i].LastCoveredSnapshotID != "" || series[i].DispatchToken != "" {
+		if series[i].LastCoveredSnapshotID != "" || series[i].DispatchToken != "" || series[i].Unavailable() {
 			continue
 		}
 		if err := planner.requestRefreshLocked(ctx, &series[i], 0); err != nil {
@@ -91,8 +91,14 @@ func (c *Service) BaselineRoot(ctx context.Context, projectDir string) error {
 	}
 	c.mu.Unlock()
 	_, failures := (rootDispatcher{c: c}).dispatchRoot(ctx, canonical)
-	if len(failures) > 0 {
-		return formatDispatchFailures(failures)
+	var transient []dispatchFailure
+	for _, failure := range failures {
+		if !failure.ConfigFault {
+			transient = append(transient, failure)
+		}
+	}
+	if len(transient) > 0 {
+		return formatDispatchFailures(transient)
 	}
 	return nil
 }

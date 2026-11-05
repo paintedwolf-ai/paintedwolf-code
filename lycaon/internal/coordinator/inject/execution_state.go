@@ -106,7 +106,7 @@ func rejectedChange(result *api.ToolResult) bool {
 	if receipt.Status != api.InvocationStatusRejected || receipt.Failure == nil {
 		return false
 	}
-	if receipt.Failure.Code == "PROGRESS_MISSING" || receipt.Failure.Code == "PROGRESS_ITEM_NOT_CLOSED" {
+	if receipt.Failure.Code == "PROGRESS_MISSING" || receipt.Failure.Code == "PROGRESS_ITEM_NOT_CLOSED" || receipt.Failure.Code == "PROGRESS_RECONCILIATION_REQUIRED" {
 		return true
 	}
 	switch result.Tool {

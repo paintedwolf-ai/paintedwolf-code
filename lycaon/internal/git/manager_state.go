@@ -22,7 +22,7 @@ type GitRefLogEntry struct {
 const DefaultRefLogLimit = 64
 
 // RefLogHead returns newest entries first; missing reflogs return an error.
-func (m *Manager) RefLogHead(ctx context.Context, projectDir string, limit int) ([]GitRefLogEntry, error) {
+func (m *gitCommitManager) RefLogHead(ctx context.Context, projectDir string, limit int) ([]GitRefLogEntry, error) {
 	dir, err := absProjectDir(projectDir)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (m *Manager) RefLogHead(ctx context.Context, projectDir string, limit int) 
 }
 
 // TreeOIDs uses projectDir-relative paths and omits missing or non-blob entries.
-func (m *Manager) TreeOIDs(ctx context.Context, projectDir, ref string, paths []string) (map[string]string, error) {
+func (m *gitCommitManager) TreeOIDs(ctx context.Context, projectDir, ref string, paths []string) (map[string]string, error) {
 	dir, err := absProjectDir(projectDir)
 	if err != nil {
 		return nil, err

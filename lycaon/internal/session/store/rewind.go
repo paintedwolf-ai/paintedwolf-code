@@ -64,8 +64,8 @@ func decodeCheckpointAnchorIDs(raw string) ([]string, error) {
 	return ids, nil
 }
 
-func (s *SQL) PrepareRewind(ctx context.Context, op RewindOperation) error {
-	if s == nil || s.db == nil {
+func (r *sqlRewind) PrepareRewind(ctx context.Context, op RewindOperation) error {
+	if r == nil || r.core == nil || r.core.db == nil {
 		return fmt.Errorf("rewind store not configured")
 	}
 	anchorIDsJSON, err := encodeCheckpointAnchorIDs(op.CheckpointAnchorIDs)
@@ -73,7 +73,7 @@ func (s *SQL) PrepareRewind(ctx context.Context, op RewindOperation) error {
 		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	rows, err := s.queries.PrepareRewindOperation(ctx, db.PrepareRewindOperationParams{
+	rows, err := r.core.queries.PrepareRewindOperation(ctx, db.PrepareRewindOperationParams{
 		ID: op.ID, SessionID: op.SessionID, AnchorMessageID: op.AnchorMessageID,
 		InputDigest: op.InputDigest, ProjectDir: op.ProjectDir,
 		CheckpointAnchorIdsJson: anchorIDsJSON,
@@ -88,11 +88,11 @@ func (s *SQL) PrepareRewind(ctx context.Context, op RewindOperation) error {
 	return nil
 }
 
-func (s *SQL) GetRewindOperation(ctx context.Context, id string) (*RewindOperation, error) {
-	if s == nil || s.db == nil {
+func (r *sqlRewind) GetRewindOperation(ctx context.Context, id string) (*RewindOperation, error) {
+	if r == nil || r.core == nil || r.core.db == nil {
 		return nil, fmt.Errorf("rewind store not configured")
 	}
-	row, err := s.queries.GetRewindOperation(ctx, id)
+	row, err := r.core.queries.GetRewindOperation(ctx, id)
 	if db.IsNoRows(err) {
 		return nil, nil
 	}
@@ -111,8 +111,8 @@ func (s *SQL) GetRewindOperation(ctx context.Context, id string) (*RewindOperati
 	}, nil
 }
 
-func (s *SQL) SetRewindPhase(ctx context.Context, id, status, detail string) error {
-	if s == nil || s.db == nil {
+func (r *sqlRewind) SetRewindPhase(ctx context.Context, id, status, detail string) error {
+	if r == nil || r.core == nil || r.core.db == nil {
 		return fmt.Errorf("rewind store not configured")
 	}
 	switch status {
@@ -120,7 +120,7 @@ func (s *SQL) SetRewindPhase(ctx context.Context, id, status, detail string) err
 	default:
 		return fmt.Errorf("invalid rewind phase %q", status)
 	}
-	rows, err := s.queries.SetRewindOperationPhase(ctx, db.SetRewindOperationPhaseParams{
+	rows, err := r.core.queries.SetRewindOperationPhase(ctx, db.SetRewindOperationPhaseParams{
 		Status: status, Error: strings.TrimSpace(detail),
 		UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano), ID: id,
 	})
@@ -133,7 +133,14 @@ func (s *SQL) SetRewindPhase(ctx context.Context, id, status, detail string) err
 	return nil
 }
 
-func (s *SQL) CommitRewind(ctx context.Context, id, sessionID, anchorMessageID string, response api.RewindSessionResponse) (int, error) {
+func (r *sqlRewind) CommitRewind(ctx context.Context, id, sessionID, anchorMessageID string, response api.RewindSessionResponse) (int, error) {
+	if r == nil {
+		return 0, fmt.Errorf("rewind store not configured")
+	}
+	return commitRewindSQL(ctx, r.core, id, sessionID, anchorMessageID, response)
+}
+
+func commitRewindSQL(ctx context.Context, s *sqlCore, id, sessionID, anchorMessageID string, response api.RewindSessionResponse) (int, error) {
 	if s == nil || s.db == nil {
 		return 0, fmt.Errorf("rewind store not configured")
 	}
@@ -157,7 +164,7 @@ func (s *SQL) CommitRewind(ctx context.Context, id, sessionID, anchorMessageID s
 	if status != "files_applied" {
 		return 0, fmt.Errorf("rewind operation %s is %s", id, status)
 	}
-	removed, sess, spillRefs, err := s.truncateMessagesTx(ctx, tx, sessionID, anchorMessageID)
+	removed, sess, spillRefs, err := truncateMessagesTx(ctx, s, tx, sessionID, anchorMessageID)
 	if err != nil {
 		return 0, err
 	}
@@ -174,7 +181,7 @@ func (s *SQL) CommitRewind(ctx context.Context, id, sessionID, anchorMessageID s
 	}); err != nil {
 		return 0, err
 	}
-	if err := s.enqueueSessionEvent(ctx, tx, sess, api.SessionEventActionUpdated); err != nil {
+	if err := enqueueSessionEvent(ctx, s, tx, sess, api.SessionEventActionUpdated); err != nil {
 		return 0, err
 	}
 	response.TruncatedMessageCount = int(removed)
@@ -195,13 +202,13 @@ func (s *SQL) CommitRewind(ctx context.Context, id, sessionID, anchorMessageID s
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
-	s.reclaimUnreferencedSpills(ctx, spillRefs)
+	reclaimUnreferencedSpills(ctx, s, spillRefs)
 	s.outbox.Notify()
 	return int(removed), nil
 }
 
-func (s *SQL) RewindOperationsForRecovery(ctx context.Context) ([]RewindOperation, error) {
-	rows, err := s.queries.ListRewindOperationsForRecovery(ctx)
+func (r *sqlRewind) RewindOperationsForRecovery(ctx context.Context) ([]RewindOperation, error) {
+	rows, err := r.core.queries.ListRewindOperationsForRecovery(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -223,8 +230,8 @@ func (s *SQL) RewindOperationsForRecovery(ctx context.Context) ([]RewindOperatio
 
 // RewindOperationsForRecoverySession scopes RewindOperationsForRecovery to
 // one session, for on-demand repair after a panic caught mid-rewind.
-func (s *SQL) RewindOperationsForRecoverySession(ctx context.Context, sessionID string) ([]RewindOperation, error) {
-	rows, err := s.queries.ListRewindOperationsForRecoverySession(ctx, sessionID)
+func (r *sqlRewind) RewindOperationsForRecoverySession(ctx context.Context, sessionID string) ([]RewindOperation, error) {
+	rows, err := r.core.queries.ListRewindOperationsForRecoverySession(ctx, sessionID)
 	if err != nil {
 		return nil, err
 	}
@@ -246,8 +253,8 @@ func (s *SQL) RewindOperationsForRecoverySession(ctx context.Context, sessionID 
 
 // CommittedRewindOperationsForSweep lists committed rewinds awaiting the
 // boot-only disk GC pass (see Manager.sweepCommittedRewinds).
-func (s *SQL) CommittedRewindOperationsForSweep(ctx context.Context) ([]RewindOperationSweepItem, error) {
-	rows, err := s.queries.ListCommittedRewindOperationsForSweep(ctx)
+func (r *sqlRewind) CommittedRewindOperationsForSweep(ctx context.Context) ([]RewindOperationSweepItem, error) {
+	rows, err := r.core.queries.ListCommittedRewindOperationsForSweep(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -273,11 +280,11 @@ func (s *SQL) CommittedRewindOperationsForSweep(ctx context.Context) ([]RewindOp
 // DeleteRewindOperation removes one committed rewind row once its retention
 // window (olderThan) has passed. A no-op (not an error) if the row already
 // moved past 'committed', or hasn't aged out yet.
-func (s *SQL) DeleteRewindOperation(ctx context.Context, id string, olderThan time.Time) error {
-	if s == nil || s.db == nil {
+func (r *sqlRewind) DeleteRewindOperation(ctx context.Context, id string, olderThan time.Time) error {
+	if r == nil || r.core == nil || r.core.db == nil {
 		return fmt.Errorf("rewind store not configured")
 	}
-	_, err := s.queries.DeleteRewindOperation(ctx, db.DeleteRewindOperationParams{
+	_, err := r.core.queries.DeleteRewindOperation(ctx, db.DeleteRewindOperationParams{
 		ID: id, CreatedAt: olderThan.UTC().Format(time.RFC3339Nano),
 	})
 	return err

@@ -11,6 +11,7 @@ type SocketObservation struct {
 	Remote     netip.AddrPort
 	ResourceID string
 	Listening  bool
+	IPv6Only   bool
 	Holder     ProcessIdentity
 	// handle is the raw kernel handle the host-wide socket table also reports.
 	// It stays unexported so kernel addresses never reach logs or receipts.

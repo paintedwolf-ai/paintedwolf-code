@@ -194,6 +194,29 @@ func TestProgramParkKeepsAShortWaitInline(t *testing.T) {
 	}
 }
 
+func TestProgramParkKeepsThresholdWaitInlineAfterStartupOverhead(t *testing.T) {
+	clock := programtest.NewManualClock()
+	program := programtest.NewWaitingProgram(clock, func(now time.Time) commandprogram.WaitState {
+		clock.Advance(25 * time.Millisecond)
+		return commandprogram.WaitState{
+			Statement: "timeout 10 cmd",
+			Until:     clock.Now().Add(command.DefaultParkThreshold),
+		}
+	})
+	f := newParkFixture(t, program)
+	done := f.start(t, map[string]any{"command": "timeout 10 cmd"})
+	<-program.Blocked
+	program.EndWait()
+	result := <-done
+	testutil.FailErr(t, "run threshold wait", result.err)
+	if outcome := decodeOutcome(t, result.content); outcome.State != "completed" || outcome.Stdout != "start\ndone\n" || outcome.Status != 0 {
+		t.Fatalf("threshold wait outcome %s", result.content)
+	}
+	if f.parking.count() != 0 {
+		t.Fatalf("threshold wait parked %d times, want 0", f.parking.count())
+	}
+}
+
 // A parked call resumes with exactly the result the same program returns inline.
 func TestProgramParkSettlesWithTheCompleteResult(t *testing.T) {
 	inline := programtest.NewWaitingProgram(programtest.NewManualClock(), programtest.SleepState(time.Second))

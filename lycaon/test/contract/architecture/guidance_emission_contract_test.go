@@ -8,6 +8,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hintregistry"
+	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/tsparse"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -117,36 +119,45 @@ func TestRecoverableHintCodesRenderFullRejectBlock(t *testing.T) {
 		if entry.Severity == "info" && !strings.HasPrefix(entry.Emit, "guard:") && !strings.HasPrefix(entry.Emit, "rule:") {
 			continue
 		}
-		raw, err := f.Format(code, map[string]any{
-			"tool":    renderToolFor(entry, "read"),
-			"path":    "src/main.go",
-			"profile": "coordinator", "leg_id": "leg-1", "count": 3,
-		})
-		if err != nil {
-			t.Fatalf("hint %q Format: %v", code, err)
+		if strings.TrimSpace(entry.What) == "" && strings.TrimSpace(entry.Message) == "" {
+			t.Fatalf("hint %q missing what or message", code)
+		}
+		// Scenarios supply template inputs and expected rendered output.
+		if len(entry.Scenarios) == 0 {
+			t.Fatalf("hint %q missing scenarios", code)
 		}
 		// Advisory effects never claim the attempted action was rejected.
 		lead := "Rejected:"
 		if strings.TrimSpace(entry.Effect) == "warn" || strings.TrimSpace(entry.Effect) == "nudge" {
 			lead = ">>>"
 		}
-		for _, want := range []string{lead, "Fix:", "Code: " + code} {
-			if !strings.Contains(raw, want) {
-				t.Fatalf("hint %q reject block missing %q:\n%s", code, want, raw)
+		assertBlock := func(label string, vars map[string]any, expectContains []string) {
+			raw, err := f.Format(code, vars)
+			if err != nil {
+				t.Fatalf("hint %q (%s) Format: %v", code, label, err)
+			}
+			for _, want := range append([]string{lead, "Code: " + code}, expectContains...) {
+				if !strings.Contains(raw, want) {
+					t.Fatalf("hint %q (%s) reject block missing %q:\n%s", code, label, want, raw)
+				}
+			}
+			facts := oarcopy.FactsFromData(vars)
+			fix := strings.TrimSpace(oarcore.RenderCopy(entry.Fix, facts))
+			if strings.Contains(raw, "Fix:") != (fix != "") {
+				t.Fatalf("hint %q (%s) Fix line mismatch for fix=%q:\n%s", code, label, fix, raw)
+			}
+			instead := strings.TrimSpace(oarcore.RenderCopy(entry.Instead, facts))
+			if strings.Contains(raw, "Next:") != (instead != "" && instead != fix) {
+				t.Fatalf("hint %q (%s) Next line mismatch for instead=%q fix=%q:\n%s", code, label, instead, fix, raw)
 			}
 		}
-		if strings.TrimSpace(entry.Instead) == "" {
-			t.Fatalf("hint %q missing instead (branch instruction)", code)
-		}
-		if strings.TrimSpace(entry.What) == "" && strings.TrimSpace(entry.Message) == "" {
-			t.Fatalf("hint %q missing what or message", code)
-		}
-		if strings.TrimSpace(entry.Fix) == "" {
-			t.Fatalf("hint %q missing fix", code)
-		}
-		// Scenarios supply template inputs and expected rendered output.
-		if len(entry.Scenarios) == 0 {
-			t.Fatalf("hint %q missing scenarios", code)
+		assertBlock("default", map[string]any{
+			"tool":    renderToolFor(entry, "read"),
+			"path":    "src/main.go",
+			"profile": "coordinator", "leg_id": "leg-1", "count": 3,
+		}, nil)
+		for _, sc := range entry.Scenarios {
+			assertBlock(sc.ID, guidance.ScenarioVars(entry, sc), sc.ExpectContains)
 		}
 	}
 }
