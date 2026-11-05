@@ -84,6 +84,7 @@ func TestLicensesNoticesFailClosedOnUnknown(t *testing.T) {
 		"--crates-json", crates,
 		"--document-crates-json", crates,
 		"--decide-crates-json", crates,
+		"--generation-crates-json", crates,
 		"--opengrep-artifact", filepath.Join(tmp, "unused artifact"),
 		"--out", out,
 	)
@@ -130,6 +131,7 @@ func TestLicensesNoticesReadSelectedArtifact(t *testing.T) {
 				"--npm-md", filepath.Join(tmp, "npm.md"), "--crates-json", filepath.Join(tmp, "crates.json"),
 				"--document-crates-json", filepath.Join(tmp, "crates.json"),
 				"--decide-crates-json", filepath.Join(tmp, "crates.json"),
+				"--generation-crates-json", filepath.Join(tmp, "crates.json"),
 				"--opengrep-artifact", artifact, "--out", outputPath)
 			output, err := cmd.CombinedOutput()
 			if test.wantError != "" {

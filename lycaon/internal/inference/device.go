@@ -96,12 +96,12 @@ func (d *Device) enqueue(ctx context.Context, work Work) (*ticket, error) {
 	}
 	t := &ticket{work: work, ctx: ctx, ready: make(chan struct{})}
 	d.waiters = append(d.waiters, t)
-	t.stop = context.AfterFunc(ctx, func() { d.cancel(t) })
+	t.stop = context.AfterFunc(ctx, func() { d.abandonWaiter(t) })
 	d.dispatch()
 	return t, nil
 }
 
-func (d *Device) cancel(t *ticket) {
+func (d *Device) abandonWaiter(t *ticket) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	for i, waiting := range d.waiters {
