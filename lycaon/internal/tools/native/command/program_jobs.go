@@ -386,9 +386,7 @@ func (j *SessionJobs) Number(handle string) int {
 func (j *SessionJobs) reap(handle string) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	isHandle := func(current string) bool { return current == handle }
-	j.order = slices.DeleteFunc(j.order, isHandle)
-	j.programOrder = slices.DeleteFunc(j.programOrder, isHandle)
+	j.order = slices.DeleteFunc(j.order, func(current string) bool { return current == handle })
 	delete(j.numbers, handle)
 }
 
