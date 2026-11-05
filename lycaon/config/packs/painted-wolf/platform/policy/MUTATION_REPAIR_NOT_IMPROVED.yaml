@@ -17,7 +17,7 @@ copy:
     {% else %}The completed parser found a syntax regression.{% endif %}
     {% if paintedwolf.python_indent_lines %}Indentation near the edit: {{ paintedwolf.python_indent_lines }}.{% endif %}
   why: 'Unrelated edits and lateral syntax changes hide the repair target and can turn a recoverable file into an unbounded patch loop.'
-  fix: 'Read the reported lines and surrounding code and make one atomic repair. Use one `edit` or `replace-lines` whose span covers them when several coupled ranges or an indentation shift must land together.'
+  fix: 'Read the reported lines and surrounding code and make one atomic repair. Use one `edit --path` or `replace-lines` whose span covers them when several coupled ranges or an indentation shift must land together.'
   instead: 'Branch on Code; reduce syntax burden with one atomic repair'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit
