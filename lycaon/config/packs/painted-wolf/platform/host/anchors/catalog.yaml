@@ -668,7 +668,8 @@ anchors:
       boundary and this one, actor-classified; itemized up to the row cap,
       working set first, then files only this session's commands touched,
       the rest counted. Each class reads under its own effect cap. Observed git ref movements (checkout, commit, pull …)
-      lead the block so file rows read against their cause.
+      lead the block so file rows read against their cause. Each row carries a
+      source_change handle citing that the change was recorded.
     trigger_class: assembly_inject
     surface: coordinator
     planes: [inform]
@@ -685,6 +686,7 @@ anchors:
         truncated: { type: "bool", required: true }
         own_truncated: { type: "bool", required: false }
         source_history_offered: { type: "bool", required: false }
+        citable: { type: "bool", required: false }
 
   - id: inject.synthesis_evidence
     title: Synthesis evidence inject

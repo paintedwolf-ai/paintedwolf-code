@@ -5,6 +5,7 @@ import "github.com/lycaon/lycaon/internal/evidence"
 // expectedEvidenceKindShapes mirrors the bundled evidence catalog.
 var expectedEvidenceKindShapes = map[string]string{
 	"task":             evidence.ShapeStructuredEvent,
+	"source_change":    evidence.ShapeStructuredEvent,
 	"read":             evidence.ShapeFileRegion,
 	"grep":             evidence.ShapeFileRegion,
 	"find":             evidence.ShapeFileRegion,
