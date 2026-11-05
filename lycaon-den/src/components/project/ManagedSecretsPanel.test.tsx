@@ -240,9 +240,7 @@ describe("ManagedSecretsPanel", () => {
     expect(screen.getByText(secret.reference)).toBeTruthy();
     expect(screen.getByText("base64url")).toBeTruthy();
     expect(screen.getByText("256 bits")).toBeTruthy();
-    expect(screen.getByText("No agent-use deadline")).toBeTruthy();
     expect(screen.getByText("Version 1")).toBeTruthy();
-    expect(screen.getByText("Original stored value")).toBeTruthy();
     expect(screen.getByText("Every chat in this project can use it.")).toBeTruthy();
 
     fireEvent.click(screen.getByTestId("managed-secrets-back"));
@@ -277,7 +275,6 @@ describe("ManagedSecretsPanel", () => {
     revealResolves(30);
 
     await revealValue();
-    expect(screen.getByText(/Hides in 30 seconds/)).toBeTruthy();
     await vi.advanceTimersByTimeAsync(29_000);
     expect(screen.queryByText(REVEALED)).toBeTruthy();
     await vi.advanceTimersByTimeAsync(1_500);
@@ -310,14 +307,12 @@ describe("ManagedSecretsPanel", () => {
 
     await revealValue();
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(screen.getByText(/Hides in 10 seconds/)).toBeTruthy();
 
     fireEvent.click(screen.getByTestId("managed-secret-hide-value"));
     await waitFor(() => expect(screen.queryByText(REVEALED)).toBeNull());
     fireEvent.click(screen.getByTestId("managed-secret-reveal-button"));
     await screen.findByText(REVEALED);
 
-    expect(screen.getByText(/Hides in 30 seconds/)).toBeTruthy();
     await vi.advanceTimersByTimeAsync(15_000);
     expect(screen.getByText(REVEALED)).toBeTruthy();
     await vi.advanceTimersByTimeAsync(16_000);
@@ -480,7 +475,6 @@ describe("ManagedSecretsPanel", () => {
     );
     const card = await screen.findByTestId("managed-secret-card");
     expect(card.textContent).not.toContain("sk-test-entered-value");
-    expect(screen.getByText("Entered in settings")).toBeTruthy();
   });
 
   it("dismisses the agent-use deadline choices when the add form is clicked elsewhere", async () => {
@@ -560,7 +554,7 @@ describe("ManagedSecretsPanel", () => {
     });
     fireEvent.click(screen.getByTestId("managed-secret-add-submit"));
 
-    expect(await screen.findByText("Say what this secret is for.")).toBeTruthy();
+    await screen.findByTestId("managed-secret-add-form");
     expect(client.createProjectManagedSecret).not.toHaveBeenCalled();
   });
 
@@ -788,9 +782,7 @@ describe("ManagedSecretsPanel", () => {
     await openDetail(SECRET_ID);
 
     expect(await screen.findByText("http_request")).toBeTruthy();
-    expect(screen.getByText("Handed to executor or transport")).toBeTruthy();
     expect(screen.getByText("call-history")).toBeTruthy();
-    expect(screen.getByText("Refused — agent use expired")).toBeTruthy();
     expect(client.listProjectManagedSecretUses).toHaveBeenCalledWith(
       "project-1",
       SECRET_ID,

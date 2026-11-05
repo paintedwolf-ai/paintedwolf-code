@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../../test/controls.ts";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { McpSettingsPanel } from "./McpSettingsPanel.tsx";
@@ -878,7 +879,7 @@ describe("McpSettingsPanel", () => {
     fireEvent.click(await screen.findByTestId("mcp-provider-remote"));
     fireEvent.click(await screen.findByTestId("mcp-oauth-signin-remote"));
     const backdrop = await screen.findByTestId("mcp-oauth-complete-dialog");
-    if (dismiss === "button") fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    if (dismiss === "button") fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));
     if (dismiss === "escape") fireEvent.keyDown(screen.getByRole("dialog", { name: "Complete sign-in" }), { key: "Escape" });
     if (dismiss === "backdrop") fireEvent.click(backdrop);
     await waitFor(() => expect(cancelMcpOAuth).toHaveBeenCalledWith("remote", { state: "attempt-1" }));
@@ -899,10 +900,10 @@ describe("McpSettingsPanel", () => {
     fireEvent.click(await screen.findByTestId("mcp-provider-remote"));
     fireEvent.click(await screen.findByTestId("mcp-oauth-signin-remote"));
     await screen.findByTestId("mcp-oauth-complete-dialog");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));
     await waitFor(() => expect(screen.getByTestId("mcp-oauth-error").textContent).toContain("Could not complete request"));
     expect(screen.getByTestId("mcp-oauth-complete-dialog")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));
     await waitFor(() => expect(screen.queryByTestId("mcp-oauth-complete-dialog")).toBeNull());
     expect(cancelMcpOAuth.mock.calls).toEqual([
       ["remote", { state: "attempt-retry" }], ["remote", { state: "attempt-retry" }],

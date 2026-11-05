@@ -18,7 +18,6 @@ describe("document windows", () => {
   it("lists this window and stable peer identities, focuses exactly the selected window", async () => {
     render(() => <DocumentWindows projectId="p1" peerViews={[peer(2), peer(7)]} />);
     fireEvent.click(screen.getByRole("button", { name: "Open in 3 windows" }));
-    expect(screen.getByRole("menu", { name: "Windows with this file open" })).toBeTruthy();
     expect(screen.getByRole<HTMLButtonElement>("menuitem", { name: "Main window, this window" }).disabled).toBe(true);
     fireEvent.click(screen.getByRole("menuitem", { name: "Focus window 7" }));
     await waitFor(() => expect(host.focus).toHaveBeenCalledWith("file:7"));

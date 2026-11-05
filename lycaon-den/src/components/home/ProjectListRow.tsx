@@ -134,7 +134,7 @@ export function ProjectListRow(props: Props) {
                   Save as a project
                 </button>
               </Show>
-              <button type="button" role="menuitem" onClick={startRename}>
+              <button data-testid="rename" type="button" role="menuitem" onClick={startRename}>
                 Rename
               </button>
               <button

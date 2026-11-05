@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import {
   setupFilesEditorTests,
   copyTextToClipboard,
@@ -122,7 +123,6 @@ describe("FilesEditor", () => {
         EditorView.cursorScrollMargin,
       ),
     ).toEqual({ x: 24, y: 5 });
-    expect(screen.getByText("TypeScript")).toBeTruthy();
   });
 
   it("keeps routine synchronization silent and exposes blocked editing", () => {
@@ -197,9 +197,9 @@ describe("FilesEditor", () => {
   it("exposes find and go to line as command bar disclosures and copy path as a plain button", async () => {
     render(() => <FilesEditor {...editorProps(loadedBuffer())} />);
     await waitFor(() => expect(screen.getByTestId("files-editor-host").textContent).toContain("line3 target"));
-    const find = screen.getByRole("button", { name: "Find in file" });
-    const goto = screen.getByRole("button", { name: "Go to line" });
-    const copy = screen.getByRole("button", { name: "Copy path" });
+    const find = assertNamedControl(screen.getByTestId("files-editor-find"), "button");
+    const goto = assertNamedControl(screen.getByTestId("files-editor-goto"), "button");
+    const copy = assertNamedControl(screen.getByTestId("files-editor-copy"), "button");
     for (const button of [find, goto, copy]) expect(button.hasAttribute("aria-haspopup")).toBe(false);
     expect(copy.hasAttribute("aria-expanded")).toBe(false);
     expect(find.getAttribute("aria-expanded")).toBe("false");

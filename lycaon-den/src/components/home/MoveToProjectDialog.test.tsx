@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { describe, expect, it, vi } from "vitest";
 import { render, fireEvent, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -70,7 +71,7 @@ describe("MoveToProjectDialog", () => {
     try {
       await waitFor(() => expect(view.getByTestId("move-project-dialog").contains(document.activeElement)).toBe(true));
       opener.remove();
-      fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+      fireEvent.click(assertNamedControl(view.getByTestId("cancel"), "button"));
       expect(document.activeElement).toBe(composer);
     } finally {
       view.unmount();

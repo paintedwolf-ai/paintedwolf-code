@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../../test/controls.ts";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { applyWebEngineFact } from "../../../platform/desktop/webkit-atspi-workaround.ts";
 import { fireEvent, render } from "@solidjs/testing-library";
@@ -125,11 +126,11 @@ describe("transcript disclosure leases", () => {
       </TranscriptViewportProvider>
     ));
 
-    fireEvent.click(view.getByText("Details"));
+    fireEvent.click(view.getByTestId("details"));
 
     expect(controller.following()).toBe(following);
     expect(controller.disclosures.isOpen(ROW)).toBe(true);
-    fireEvent.click(view.getByText("Details"));
+    fireEvent.click(view.getByTestId("details"));
     expect(controller.following()).toBe(following);
     expect(controller.disclosures.isOpen(ROW)).toBe(false);
   });
@@ -140,7 +141,7 @@ describe("transcript disclosure leases", () => {
         <Disclosure />
       </TranscriptViewportProvider>
     ));
-    fireEvent.click(first.getByText("Details"));
+    fireEvent.click(first.getByTestId("details"));
     expect(controller.disclosures.isOpen(ROW)).toBe(true);
     first.unmount();
 
@@ -161,7 +162,7 @@ describe("transcript disclosure leases", () => {
         <Disclosure />
       </TranscriptViewportProvider>
     ));
-    const toggle = view.getByRole("button", { name: "Details" });
+    const toggle = assertNamedControl(view.getByTestId("details"), "button");
     expect(view.queryByText("Body")).toBeNull();
     expect(toggle.hasAttribute("aria-controls")).toBe(false);
     fireEvent.click(toggle);
@@ -177,7 +178,7 @@ describe("transcript disclosure leases", () => {
         <Disclosure />
       </TranscriptViewportProvider>
     ));
-    const toggle = view.getByRole("button", { name: "Details" });
+    const toggle = assertNamedControl(view.getByTestId("details"), "button");
     const panel = view.getByText("Body");
     expect(toggle.getAttribute("type")).toBe("button");
     expect(toggle.getAttribute("aria-expanded")).toBe("false");

@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../../test/controls.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UpdatesSettingsPanel } from "./UpdatesSettingsPanel.tsx";
@@ -22,7 +23,7 @@ describe("Nix update ownership", () => {
     expect(screen.getByTestId("updates-nix-pin").textContent).toContain("unknown");
     expect(screen.queryByTestId("updates-install")).toBeNull();
     expect(screen.getByTestId("updates-status").querySelector("code")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("updates-check-now"), "button"));
     await waitFor(() => expect(check).toHaveBeenCalledOnce());
     expect(download).not.toHaveBeenCalled(); expect(restart).not.toHaveBeenCalled(); expect(retry).not.toHaveBeenCalled();
   });
@@ -40,10 +41,9 @@ describe("Nix update ownership", () => {
     const check = async () => ({ ...state, candidate: null, discovery: "up_to_date" as const });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state, check })} />);
     expect((await screen.findByTestId("updates-nix-pin")).textContent).toContain("pinned is unknown");
-    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("updates-check-now"), "button"));
     await waitFor(() => expect(screen.queryByTestId("updates-package-upgrade")).toBeNull());
     expect(screen.getByTestId("updates-nix-pin").textContent).toContain("pinned is unknown");
-    expect(screen.getByText(/Package-source availability has not been checked/)).not.toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });
 

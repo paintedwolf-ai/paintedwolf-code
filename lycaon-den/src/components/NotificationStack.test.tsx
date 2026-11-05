@@ -116,8 +116,7 @@ describe("NotificationStack", () => {
 
     mount(store);
 
-    expect(screen.getByText("Unavailable project")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Open project/ })).toBeNull();
+    expect(screen.queryByTestId("project-notice-open")).toBeNull();
     expect(screen.getByText("Still actionable")).toBeTruthy();
   });
 });

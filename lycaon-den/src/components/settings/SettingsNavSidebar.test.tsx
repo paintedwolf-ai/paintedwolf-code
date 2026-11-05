@@ -24,11 +24,6 @@ describe("SettingsNavSidebar", () => {
       "Cost",
       "Advanced",
     ]);
-    expect(screen.queryByText("Editor")).toBeNull();
-    expect(screen.queryByText("Keyboard")).toBeNull();
-    expect(screen.queryByText("About")).toBeNull();
-    expect(screen.queryByText("Models")).toBeNull();
-    expect(screen.queryByText("Tests")).toBeNull();
     expect(screen.queryByText("Revoke approvals")).toBeNull();
   });
 

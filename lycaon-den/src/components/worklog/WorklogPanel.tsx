@@ -75,7 +75,7 @@ export function WorklogPanel(props: WorklogPanelProps) {
           paneEl = el;
         }}
       >
-        <WorkerTranscriptSection
+        <WorkerTranscriptSection data-testid="progress"
           title="Progress"
           sectionKey="progress"
           onSelect={() => selectSection("progress")}
@@ -192,7 +192,7 @@ export function WorklogPanel(props: WorklogPanelProps) {
                         <p class="worklog-panel__finding-summary">{finding.summary}</p>
                         <Show when={finding.body}>
                           <details>
-                            <summary><span class="den-disclosure-caret" aria-hidden="true" />Details</summary>
+                            <summary><span data-testid="details" class="den-disclosure-caret" aria-hidden="true" />Details</summary>
                             <p class="worklog-panel__finding-summary worklog-panel__finding-detail">{finding.body}</p>
                           </details>
                         </Show>

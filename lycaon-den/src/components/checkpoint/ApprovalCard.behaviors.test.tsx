@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
@@ -304,7 +305,7 @@ it("writes a reviewed project ignore without resolving the held approval", async
     createProjectSecretIgnore: add,
   });
   render(() => <ApprovalCard client={client} projectId="project" checkpoint={checkpoint} onToolApproval={approve} onContentApply={noopContent} />);
-  fireEvent.click(screen.getByRole("button", { name: "Ignore this value in this project…" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("ignore-this-value-in-this-project"), "button"));
   const reason = await screen.findByLabelText("Reason");
   fireEvent.input(reason, { target: { value: "Published example" } });
   fireEvent.click(screen.getByRole("button", { name: "Save project ignore" }));

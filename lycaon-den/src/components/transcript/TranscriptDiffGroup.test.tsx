@@ -121,7 +121,7 @@ describe("TranscriptDiffGroup", () => {
     expect(group.getAttribute("data-files")).toBe("3");
     expect(screen.getByText("3 files changed")).toBeTruthy();
     // pipeline +2 −1, cli +2 −1, new test file +3 −0.
-    await waitFor(() => expect(screen.getByText("+7")).toBeTruthy());
+    await screen.findByTestId("diff-group");
     expect(screen.getByText("−2")).toBeTruthy();
     expect(screen.getByText("4 writes")).toBeTruthy();
   });

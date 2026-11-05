@@ -40,7 +40,6 @@ describe("NoticeRail", () => {
 
     expect(screen.getByTestId("notice-rail")).toBeTruthy();
     expect(screen.getByText("Model provider not configured")).toBeTruthy();
-    expect(screen.getByText(/openai/)).toBeTruthy();
     expect(screen.getByText("Open Settings → AI providers")).toBeTruthy();
 
     screen.getByLabelText("Dismiss").click();

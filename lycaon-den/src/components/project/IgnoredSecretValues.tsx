@@ -156,7 +156,7 @@ export function IgnoredSecretValues(props: { client: LycaonClient; projectId: st
           : <SettingsListChrome
               count={`${rules().length} ignored value${rules().length === 1 ? "" : "s"}`}
               secondaryAction={<DenButton variant="secondary" compact disabled={projection.loading()} onClick={() => void projection.refresh()}>Reload</DenButton>}
-              action={<DenButton variant="primary" compact disabled={roots().length === 0} onClick={openAdd}>Add value</DenButton>}
+              action={<DenButton data-testid="add-value" variant="primary" compact disabled={roots().length === 0} onClick={openAdd}>Add value</DenButton>}
             />}
       >
         <Show when={!detailOpen()}>

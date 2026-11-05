@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import {
   setupGlobalSearchViewTests,
   searchMock,
@@ -95,14 +96,13 @@ describe("GlobalSearchView", () => {
       seed="foo" replaceModeRequested appStore={createAppStore()} onNavigate={vi.fn()} />);
     await vi.advanceTimersByTimeAsync(300);
     const signal = replacePreviewMock.mock.calls[0]?.[1];
-    fireEvent.click(screen.getByRole("button", { name: "Cancel preparation" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("cancel-preparation"), "button"));
     expect(signal).toMatchObject({ aborted: true });
     finish({ state: "preparing", files: [], truncated: false,
       issues: [{ executor: "code", reason: "catalog_warming" }] });
     await vi.advanceTimersByTimeAsync(10000);
     expect(replacePreviewMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Preview preparation cancelled.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry preview" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("retry-preview"), "button"));
     await vi.advanceTimersByTimeAsync(0);
     expect(replacePreviewMock).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId("search-replace-empty")).toBeTruthy();

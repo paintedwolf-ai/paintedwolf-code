@@ -170,7 +170,7 @@ export function HistoryStorageSettingsPanel(props: { client: LycaonClient | null
       <DenCheckbox checked={archived()} disabled={!!busy()} onChange={(event) => { setArchived(event.currentTarget.checked); setProtectionTask(""); void loadTasks(protectionProject(), event.currentTarget.checked); }}>Show archived tasks</DenCheckbox>
       <DenSelect aria-label="Task to protect" options={[{ value: "", label: "Entire project" }, ...tasks().map((task) => ({ value: task.id, label: task.title || "Untitled task" }))]} value={protectionTask()} disabled={!!busy()} onValueChange={setProtectionTask} />
       <Show when={taskCursor()}><DenButton variant="secondary" disabled={!!busy()} onClick={() => void loadTasks(protectionProject(), archived(), true)}>Load more tasks</DenButton></Show>
-      <DenButton variant="secondary" disabled={!!busy()} onClick={() => void protect({ scope_type: protectionTask() ? "session" : "project", scope_id: protectionTask() || protectionProject(), protected: true })}>Protect history</DenButton>
+      <DenButton data-testid="protect-history" variant="secondary" disabled={!!busy()} onClick={() => void protect({ scope_type: protectionTask() ? "session" : "project", scope_id: protectionTask() || protectionProject(), protected: true })}>Protect history</DenButton>
     </Show>
     <For each={query.value()?.protections}>{(protection) => <div class="den-settings-pref-row"><span>{protectionLabel(protection)}</span><DenButton variant="secondary" disabled={!!busy()} onClick={() => void protect({ ...protection, protected: false })}>Remove protection</DenButton></div>}</For>
     <Show when={message()}><p role="status">{message()}</p></Show>

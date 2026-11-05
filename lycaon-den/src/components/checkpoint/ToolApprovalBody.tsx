@@ -475,7 +475,7 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
       <Show when={ignoreSaved()}><p class="den-settings-hint" role="status">Project ignore saved. The held request still needs your decision.</p></Show>
       <Show when={ignoreReview()} keyed>{(review) => (
         <Show when={!ignoreSaved()}>
-          <DenButton variant="link" disabled={props.resolving} onClick={() => setIgnoreOpen(true)}>Ignore this value in this project…</DenButton>
+          <DenButton data-testid="ignore-this-value-in-this-project" variant="link" disabled={props.resolving} onClick={() => setIgnoreOpen(true)}>Ignore this value in this project…</DenButton>
           <Show when={ignoreOpen()}>
             <IgnoreSecretDialog
               client={review.client}

@@ -99,10 +99,10 @@ export function FileOperationStatus(props: Props) {
               <span>{fileOperationDetail(entry)}</span>
             </div>
             <Show when={entry.cancelable && !entry.complete}>
-              <DenButton compact variant="ghost" disabled={cancelling().has(entry.operation_id)} onClick={() => void act(entry, true)}>Cancel</DenButton>
+              <DenButton data-testid="cancel" compact variant="ghost" disabled={cancelling().has(entry.operation_id)} onClick={() => void act(entry, true)}>Cancel</DenButton>
             </Show>
             <Show when={fileOperationRetryable(entry)}>
-              <DenButton compact variant="ghost" disabled={retrying().has(entry.operation_id) || cancelling().has(entry.operation_id)} onClick={() => void act(entry, false)}>Retry</DenButton>
+              <DenButton data-testid="retry" compact variant="ghost" disabled={retrying().has(entry.operation_id) || cancelling().has(entry.operation_id)} onClick={() => void act(entry, false)}>Retry</DenButton>
             </Show>
             <Show when={entry.complete}>
               <DenButton compact variant="ghost" aria-label={`Dismiss ${fileOperationLabel(entry).toLowerCase()}`} onClick={() => setDismissed((held) => new Set([...held, entry.operation_id]))}>Dismiss</DenButton>

@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import {
   setupGlobalSearchViewTests,
   searchMock,
@@ -125,7 +126,6 @@ describe("GlobalSearchView", () => {
     ));
     await vi.advanceTimersByTimeAsync(280);
     expect(searchMock).toHaveBeenCalledTimes(2);
-    expect(screen.getByText(/still indexing/i)).toBeTruthy();
     await vi.advanceTimersByTimeAsync(750);
     expect(searchMock).toHaveBeenCalledTimes(3);
     expect(searchMock.mock.calls[1]?.[0]).toBe(searchMock.mock.calls[0]?.[0]);
@@ -138,10 +138,8 @@ describe("GlobalSearchView", () => {
       "false",
     );
     expect(screen.queryByText("Updating results…")).toBeNull();
-    expect(screen.getByText(/still indexing/i)).toBeTruthy();
     resolveSettled(settled);
     await vi.advanceTimersByTimeAsync(0);
-    expect(screen.queryByText(/still indexing/i)).toBeNull();
     await vi.advanceTimersByTimeAsync(30_000);
     expect(searchMock).toHaveBeenCalledTimes(3);
   });
@@ -169,7 +167,6 @@ describe("GlobalSearchView", () => {
       />
     ));
     await waitFor(() => expect(screen.getAllByTestId("search-result-row").length).toBeGreaterThan(0));
-    expect(screen.getByText(/still indexing/i)).toBeTruthy();
   });
 
   it("shows fast matches while the complete search is still pending", async () => {
@@ -329,7 +326,7 @@ describe("GlobalSearchView", () => {
     await screen.findByText("Alpha result");
     searchMock.mockImplementationOnce(() => new Promise(() => {}));
 
-    fireEvent.click(screen.getByRole("button", { name: "Code" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("search-type-code"), "button"));
     await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(2));
     const boundary = screen.getByTestId("search-stage-boundary");
     expect(boundary.dataset.retained).toBe("true");

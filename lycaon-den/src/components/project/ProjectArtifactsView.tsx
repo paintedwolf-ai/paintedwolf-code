@@ -508,7 +508,7 @@ export function ProjectArtifactsView(props: Props) {
               testId="project-artifacts-source-filter"
             />
             <label class="den-artifacts-chat-filter">
-              <span class="den-artifacts-chat-filter__label">Chats</span>
+              <span data-testid="chats" class="den-artifacts-chat-filter__label">Chats</span>
               <DenSelect
                 aria-label="Filter artifacts by chat"
                 data-testid="project-artifacts-chat-filter"

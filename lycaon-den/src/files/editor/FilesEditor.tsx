@@ -274,7 +274,7 @@ export function FilesEditor(props: FilesEditorProps) {
           <div class="den-files-editor__host" data-testid="files-editor-host" tabIndex={-1} ref={cm.setHostElement} />
           <Show when={history.condensedContext()}>
             <div class="den-document-actions">
-              <button type="button" class="den-document-action" onClick={history.expandCondensedContext}>Full file</button>
+              <button data-testid="full-file" type="button" class="den-document-action" onClick={history.expandCondensedContext}>Full file</button>
             </div>
           </Show>
           <FilesEditorDefinitionPicker

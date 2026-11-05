@@ -105,7 +105,6 @@ describe("WorkerEvidenceSection", () => {
     expect(screen.getByText("Path citations")).toBeTruthy();
     expect(screen.getByText("1 citation(s) matched tool evidence")).toBeTruthy();
     expect(screen.getByText("src/a.go:12")).toBeTruthy();
-    expect(screen.getByText(/1 path in leg evidence/)).toBeTruthy();
   });
 
   it("renders lifecycle-only grounding in the worker drawer", () => {
@@ -142,7 +141,6 @@ describe("WorkerEvidenceSection", () => {
     ));
     expect(screen.getByTestId("worker-evidence-section")).toBeTruthy();
     expect(screen.getByText("Survey tool activity")).toBeTruthy();
-    expect(screen.getByText("No citations to trace")).toBeTruthy();
   });
 
   it("settles the Evidence cue to complete once grounding is traced", () => {

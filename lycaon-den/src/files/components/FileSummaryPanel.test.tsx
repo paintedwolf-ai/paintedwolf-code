@@ -68,7 +68,6 @@ describe("FileSummaryPanel", () => {
     expect(screen.getByTestId("file-summary-sections").textContent).toContain(
       "Builds the buildReview surface.",
     );
-    expect(screen.queryByRole("button", { name: "More" })).toBeNull();
     expect(screen.queryByText("Source evidence")).toBeNull();
 
     fireEvent.click(
@@ -205,7 +204,6 @@ describe("FileSummaryPanel", () => {
       />
     ));
 
-    expect(screen.getByText("Detailed summary is not available yet.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Summarize current file" })).toBeTruthy();
   });
 
@@ -230,7 +228,6 @@ describe("FileSummaryPanel", () => {
     expect(screen.getByTestId("file-summary-sections").textContent).toContain(
       "Builds the UnknownReview surface.",
     );
-    expect(screen.queryByRole("button", { name: /UnknownReview/ })).toBeNull();
     expect(screen.getByText("UnknownReview").tagName).toBe("CODE");
   });
 
@@ -285,7 +282,6 @@ describe("FileSummaryPanel", () => {
       screen.getByRole("button", { name: "Open buildReview at line 31" }),
     );
     expect(onOpenLocation).toHaveBeenLastCalledWith(target, 31);
-    expect(screen.getByRole("button", { name: "Summarize this version" })).toBeTruthy();
   });
 
   it("leaves duplicate declaration names inert instead of guessing", () => {

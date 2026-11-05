@@ -157,7 +157,7 @@ export function ProjectCard(props: Props) {
                   Save as a project
                 </button>
               </Show>
-              <button type="button" role="menuitem" onClick={startRename}>Rename</button>
+              <button data-testid="rename" type="button" role="menuitem" onClick={startRename}>Rename</button>
               <button
                 type="button"
                 role="menuitem"

@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../test/controls.ts";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it } from "vitest";
 import { requestHostFolder } from "../platform/files/host-folder-dialog.ts";
@@ -9,8 +10,8 @@ describe("host folder entry", () => {
   it("requires a path and preserves spaces and Unicode inside it", async () => {
     render(() => <HostFolderDialog />);
     const pending = requestHostFolder();
-    const dialog = await screen.findByRole("dialog", { name: "Choose a folder" });
-    const submit = screen.getByRole("button", { name: "Choose folder" });
+    const dialog = assertNamedControl(await screen.findByTestId("host-folder-dialog"), "dialog");
+    const submit = assertNamedControl(screen.getByTestId("choose-folder"), "button");
     expect(submit.hasAttribute("disabled")).toBe(true);
     fireEvent.input(screen.getByLabelText("Folder path"), { target: { value: "  /host/café notes  " } });
     expect(submit.hasAttribute("disabled")).toBe(false);
@@ -22,8 +23,8 @@ describe("host folder entry", () => {
   it.each(["button", "escape", "backdrop"])("cancels through %s without returning a path", async (action) => {
     render(() => <HostFolderDialog />);
     const pending = requestHostFolder();
-    const dialog = await screen.findByRole("dialog", { name: "Choose a folder" });
-    if (action === "button") fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const dialog = assertNamedControl(await screen.findByTestId("host-folder-dialog"), "dialog");
+    if (action === "button") fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));
     else if (action === "escape") fireEvent.keyDown(dialog, { key: "Escape" });
     else {
       const backdrop = dialog.parentElement;
@@ -43,7 +44,7 @@ describe("host folder entry", () => {
     fireEvent.submit(dialog);
     await expect(first).resolves.toBe("/first");
     expect((screen.getByLabelText("Folder path") as HTMLInputElement).value).toBe("");
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));
     await expect(second).resolves.toBeNull();
     fireEvent.input(screen.getByLabelText("Folder path"), { target: { value: "/third" } });
     fireEvent.submit(dialog);

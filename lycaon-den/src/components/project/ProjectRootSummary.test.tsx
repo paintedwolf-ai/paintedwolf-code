@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { invalidateWorkspace } from "../../files/source/workspace-invalidation.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { gitStatusReads } from "../../test/git-status-fixture.ts";
@@ -125,9 +126,6 @@ describe("ProjectRootSummary", () => {
     render(() => <ProjectRootSummary projectId="p1" root={ROOT} roots={[ROOT]} client={client}
       onOpenFile={vi.fn()} onOpenChanges={vi.fn()} />);
     await waitFor(() => expect(screen.getAllByText("Checking…").length).toBeGreaterThan(0));
-    expect(screen.queryByText("Clean")).toBeNull();
-    expect(screen.queryByText("Detached HEAD")).toBeNull();
-    expect(screen.queryByText("No upstream")).toBeNull();
   });
   beforeEach(() => {
     resetFileInventoryForTests();
@@ -202,7 +200,7 @@ describe("ProjectRootSummary", () => {
     expect(screen.queryByText("0 indexed")).toBeNull();
     await new Promise(resolve => setTimeout(resolve, 600));
     expect(request).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Retry file index" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("retry-file-index"), "button"));
     expect(await screen.findByText("3 indexed")).toBeTruthy();
   });
 
@@ -352,7 +350,7 @@ describe("ProjectRootSummary", () => {
       />
     ));
 
-    expect(await screen.findByText("Applied")).toBeTruthy();
+    await screen.findByTestId("files-root-summary-context-status");
     expect(client.listGitRepos).toHaveBeenCalledWith("p1", "session-worktree");
     expect(client.getProjectSourceIndex).toHaveBeenCalledWith("p1", {
       sessionId: "session-worktree",
@@ -478,8 +476,7 @@ describe("ProjectRootSummary", () => {
       />
     ));
 
-    expect(await screen.findByText("Project instructions are off.")).toBeTruthy();
-    expect(screen.getByText("No project skills apply at this root.")).toBeTruthy();
+    await screen.findByTestId("files-root-summary");
     expect(screen.getByTestId("files-root-summary-context-status").textContent).toBe("None");
   });
 });

@@ -397,8 +397,8 @@ export function SourceReader(props: {
     <div class={props.current ? "den-source-reader__actions" : "den-document-actions"}>
       {props.leadingActions}
       <Show when={!props.current && change() === "changed"}>
-        <Show when={mode() === "changes"} fallback={<button type="button" class="den-document-action" onClick={() => setMode("changes")}>Changes</button>}>
-          <button type="button" class="den-document-action" onClick={() => setMode("full")}>Full file</button>
+        <Show when={mode() === "changes"} fallback={<button data-testid="changes" type="button" class="den-document-action" onClick={() => setMode("changes")}>Changes</button>}>
+          <button data-testid="full-file" type="button" class="den-document-action" onClick={() => setMode("full")}>Full file</button>
         </Show>
       </Show>
       {props.trailingActions}

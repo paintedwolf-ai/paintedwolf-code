@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import {
@@ -90,7 +91,7 @@ describe("WhatsNewNotice", () => {
       /Review the latest changes/,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Read more" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("notice-action"), "button"));
     expect(screen.getByTestId("whats-new-dialog-notes").textContent).toMatch(
       /Cool feature/,
     );
@@ -134,7 +135,7 @@ describe("WhatsNewNotice", () => {
     await waitFor(() => {
       expect(screen.getByTestId("notice-rail")).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Read more" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("notice-action"), "button"));
     fireEvent.click(screen.getByTestId("whats-new-dialog-close"));
 
     expect(screen.getByTestId("notice-rail")).toBeTruthy();

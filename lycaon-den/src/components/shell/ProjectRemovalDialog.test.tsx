@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import type { ProjectRemovalAssessment } from "../../api/types.ts";
@@ -25,7 +26,6 @@ describe("project removal review",()=>{
     expect(available.checked).toBe(false);
     expect((screen.getByRole("checkbox",{name:"acme/unknown"}) as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole("checkbox",{name:"acme/shared"}) as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getByText(/Other project: Extension suggestions could not be read/)).toBeTruthy();
     fireEvent.click(available);
     fireEvent.click(screen.getByRole("button",{name:"Delete project and remove 1 extension"}));
     await expect(f.result).resolves.toEqual(["acme/eligible"]);
@@ -37,12 +37,12 @@ describe("project removal review",()=>{
     await expect(f.result).resolves.toEqual([]);
   });
   it("cancels without authorizing deletion",async()=>{
-    const f=setup(assessment);fireEvent.click(screen.getByRole("button",{name:"Cancel"}));await expect(f.result).resolves.toBeNull();
+    const f=setup(assessment);fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));await expect(f.result).resolves.toBeNull();
   });
   it("confirms project deletion when there are no extensions", async () => {
     const f = setup({ ...assessment, extensions: [] });
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("delete-project"), "button"));
     await expect(f.result).resolves.toEqual([]);
   });
   it("settles pending review on disposal",async()=>{

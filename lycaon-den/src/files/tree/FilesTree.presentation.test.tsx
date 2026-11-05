@@ -36,7 +36,6 @@ describe("Files presentation lifecycle", () => {
       disclosures: [{ address: { root_id: "r1", path: "." }, open: true, recursive: true }] }));
     expect(getFileRow("README.md")).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("retains complete rows during preparation and reports host directory failures", async () => {

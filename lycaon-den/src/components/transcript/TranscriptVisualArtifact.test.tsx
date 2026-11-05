@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { ErrorBoundary, Show, createSignal } from "solid-js";
@@ -77,7 +78,7 @@ describe("TranscriptVisualArtifact", () => {
     fireEvent.click(thumb);
     expect(screen.getByTestId("transcript-visual-lightbox")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Close enlarged visual" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("close-enlarged-visual"), "button"));
     expect(screen.queryByTestId("transcript-visual-lightbox")).toBeNull();
   });
 

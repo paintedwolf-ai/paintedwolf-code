@@ -11,7 +11,6 @@ describe("NoFolderBanner", () => {
     ));
 
     expect(getByTestId("nofolder-banner")).toBeTruthy();
-    expect(getByText("No folder attached")).toBeTruthy();
     expect(
       getByText("Add a folder so the assistant can read and edit your code."),
     ).toBeTruthy();

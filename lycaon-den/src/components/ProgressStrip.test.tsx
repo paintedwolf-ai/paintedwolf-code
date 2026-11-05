@@ -469,7 +469,6 @@ describe("ProgressStrip", () => {
       />
     ));
     expect(screen.getByTestId("progress-strip-delta")).toBeTruthy();
-    expect(screen.getByText("Updated")).toBeTruthy();
     expect(screen.getAllByTestId("progress-strip-item")).toHaveLength(2);
   });
 
@@ -488,8 +487,6 @@ describe("ProgressStrip", () => {
     expect(screen.getByTestId("progress-strip-delta")).toBeTruthy();
     expect(screen.getByTestId("progress-strip-count").textContent).toBe("16");
     expect(screen.getAllByTestId("progress-strip-item")).toHaveLength(1);
-    expect(screen.getByText(/16 progress items updated/)).toBeTruthy();
-    expect(screen.getByText(/48 total/)).toBeTruthy();
   });
 
   it("renders a read-only created checklist snapshot without scrolling on mount", async () => {

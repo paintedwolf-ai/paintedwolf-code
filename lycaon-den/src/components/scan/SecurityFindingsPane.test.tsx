@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { resetSecurityFoldersForTests } from "../../platform/files/security-folder-selection.ts";
 import { createSignal } from "solid-js";
 import { at } from "../../test/at.ts";
@@ -361,7 +362,7 @@ describe("SecurityFindingsPane", () => {
     expect(screen.getByTestId("scans-run-picker").textContent).toContain("Completed");
     expect(screen.queryByTestId("scans-counts")).toBeNull();
     expect(screen.queryByTestId("scans-empty")).toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "Retry loading" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("retry-loading"), "button"));
     await screen.findAllByTestId("scans-finding-row");
     expect(screen.queryByTestId("scans-error")).toBeNull();
   });
@@ -371,7 +372,7 @@ describe("SecurityFindingsPane", () => {
     await renderPane();
     await screen.findByText("Coverage unavailable");
     expect(screen.queryByTestId("scans-coverage-chip")).toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "Retry loading" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("retry-loading"), "button"));
     await waitFor(() => expect(screen.getByTestId("scans-coverage-chip").textContent).toBe("Complete"));
     expect(screen.queryByTestId("scans-error")).toBeNull();
   });
@@ -531,7 +532,7 @@ describe("SecurityFindingsPane", () => {
     await waitFor(() => expect(screen.getByTestId("scans-error").textContent).toContain("Findings unavailable"));
     expect(screen.getAllByTestId("scans-finding-row")[0]).toBe(rows[0]);
     expect(screen.queryByText("No findings in this run.")).toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "Retry loading" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("retry-loading"), "button"));
     await waitFor(() => expect(screen.queryByTestId("scans-error")).toBeNull());
   });
 

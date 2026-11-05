@@ -1,6 +1,7 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render } from "@solidjs/testing-library";
+import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { GenericToolCard } from "./GenericToolCard.tsx";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 
@@ -186,7 +187,7 @@ describe("GenericToolCard", () => {
       }),
     }));
     expect(openInSearch).not.toHaveBeenCalled();
-    fireEvent.click(getByRole("button", { name: "Find related tool calls" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("tool-related-search-link"), "button"));
     expect(openInSearch).toHaveBeenCalledWith("proj-1", "session:sess-1 tool:find kind:tool NOT ref:r1");
   });
 
