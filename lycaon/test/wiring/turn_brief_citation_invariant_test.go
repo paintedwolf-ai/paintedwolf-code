@@ -98,10 +98,6 @@ func postTurnFeedback(t *testing.T, msgs []wire.Message) []int {
 	return out
 }
 
-func isUserTurn(msg wire.Message) bool {
-	return msg.Role == wire.MessageRoleUser && msg.Origin == wire.MessageOriginUser
-}
-
 func lastCompletion(t *testing.T, msgs []wire.Message) wire.Message {
 	t.Helper()
 	for i := len(msgs) - 1; i >= 0; i-- {
@@ -168,8 +164,8 @@ func TestTurnBriefRowsGroundAnAnswerOnTheRealStack(t *testing.T) {
 	_, err = manager.Submissions.Prompt(ctx, sess.ID, "read the notes")
 	testutil.FailErr(t, "first turn", err)
 	first := stackMessages(t, h, sess.ID)
-	if audit := lastCompletion(t, first).Grounding; audit == nil || audit.Traced {
-		t.Fatalf("the first answer must leave an evidence gap for this case: %+v", audit)
+	if audit := lastCompletion(t, first).Grounding; audit == nil || audit.Traced || !audit.HostAssembled {
+		t.Fatalf("the first answer must leave an evidence gap the host settled for this case: %+v", audit)
 	}
 
 	outsideEdit(before, "changed once\n")
@@ -200,19 +196,10 @@ func TestTurnBriefRowsGroundAnAnswerOnTheRealStack(t *testing.T) {
 		t.Fatalf("a brief must create no citation duty: %+v", audit)
 	}
 
-	t.Run("post-turn feedback stays with the turn it concerns", func(t *testing.T) {
-		positions := postTurnFeedback(t, third)
-		if len(positions) == 0 {
-			t.Fatal("the first turn's gap produced no post-turn feedback")
-		}
-		for _, at := range positions {
-			// Feedback under a user message, ahead of that turn's reply, reads as a
-			// condition on the new question.
-			for i := at - 1; i >= 0 && third[i].Role != wire.MessageRoleAssistant; i-- {
-				if isUserTurn(third[i]) {
-					t.Fatalf("post-turn feedback at %d lands under the user message at %d", at, i)
-				}
-			}
+	t.Run("a gap the host settled leaves no post-turn feedback", func(t *testing.T) {
+		// The host settled the first turn's gap, so nothing remains to ask of later turns.
+		if positions := postTurnFeedback(t, third); len(positions) != 0 {
+			t.Fatalf("a settled gap produced post-turn feedback at %v", positions)
 		}
 	})
 
