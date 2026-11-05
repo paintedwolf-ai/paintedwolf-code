@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -58,30 +57,16 @@ func (r *secretSinkRun) suppliedReference(t *testing.T, sess *wire.Session) stri
 	return created.Reference
 }
 
-// detectedReference stores the sentinel as a tracked chat value no person holds.
-func (r *secretSinkRun) detectedReference(t *testing.T, sess *wire.Session) string {
+// generatedReference stores the sentinel as host-generated material in a scope.
+func (r *secretSinkRun) generatedReference(t *testing.T, sess *wire.Session, scope string) string {
 	t.Helper()
 	put, err := r.h.Server.Admin.Capabilities.CheckpointActions.ManagedSecrets.Put(t.Context(), secretcap.PutRequest{
 		ProjectID: sess.ProjectID, ChatSessionID: r.session, SessionID: r.session, OperationID: uuid.NewString(),
-		Name: "sink token", Scope: secretcap.ScopeChat, Origin: secretcap.OriginDetected, Value: sinkSentinel,
+		Name: "sink token", Purpose: "file sink test", Scope: scope, Origin: secretcap.OriginGenerated, Value: sinkSentinel,
+		Format: secretcap.FormatAlphanumeric, EntropyBits: 128,
 	})
 	testutil.FailErr(t, "put secret", err)
 	return put.Metadata.Reference
-}
-
-// generatedReference asks the host for chat-scoped random material.
-func (r *secretSinkRun) generatedReference(t *testing.T, sess *wire.Session) string {
-	t.Helper()
-	out, err := r.h.ToolRegistry.Run(t.Context(), "secret_generate", map[string]any{"name": "sink token", "scope": "chat"}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{ProjectID: sess.ProjectID, SessionID: r.session, ParentSessionID: r.session, ToolCallID: "generate-sink-token"}})
-	testutil.FailErr(t, "generate secret", err)
-	var created struct {
-		Secret struct {
-			Reference string `json:"reference"`
-		} `json:"secret"`
-	}
-	testutil.FailErr(t, "decode generated secret", json.Unmarshal([]byte(out), &created))
-	return created.Secret.Reference
 }
 
 func (r *secretSinkRun) seed(t *testing.T, name, content string) string {
@@ -136,10 +121,10 @@ func (r *secretSinkRun) outcomes(t *testing.T) []programOutcome {
 }
 
 // A host-generated chat value reaches a local file without a card, through both
-// the edit and replace-lines sinks.
+// the edit and replace-lines sinks, and never reaches the transcript.
 func TestCommandFileSinksResolveAChatGeneratedReference(t *testing.T) {
 	run, sess := newSecretSinkRun(t)
-	reference := run.generatedReference(t, sess)
+	reference := run.generatedReference(t, sess, secretcap.ScopeChat)
 	edited := run.seed(t, "edit.env", "TOKEN=old\nkeep\n")
 	lines := run.seed(t, "lines.env", "first\nkeep\n")
 	run.script.steps = []citableStep{
@@ -155,10 +140,8 @@ func TestCommandFileSinksResolveAChatGeneratedReference(t *testing.T) {
 			t.Fatalf("command %d = %+v", i, outcome)
 		}
 	}
-	got := run.file(t, lines)
-	value, ok := strings.CutPrefix(got, "TOKEN=")
-	if !ok || !strings.HasSuffix(value, "\nkeep\n") || strings.Contains(got, reference) || len(value) <= len("\nkeep\n") {
-		t.Fatalf("replace-lines did not write the resolved value: file holds %d bytes", len(got))
+	if got := run.file(t, lines); got != "TOKEN="+sinkSentinel+"\nkeep\n" {
+		t.Fatalf("replace-lines left %d bytes, want the resolved line", len(got))
 	}
 	// The old-string sink resolved too: the third call matched the written value.
 	if got := run.file(t, edited); got != "TOKEN=rotated\nkeep\n" {
@@ -195,7 +178,7 @@ func TestCommandFileSinkAsksBeforeWritingATrackedSecret(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			run, sess := newSecretSinkRun(t)
-			reference := run.detectedReference(t, sess)
+			reference := run.generatedReference(t, sess, secretcap.ScopeProject)
 			target := run.seed(t, "config.env", "TOKEN=old\n")
 			run.script.steps = []citableStep{{command: "edit --path config.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"}}
 			done := make(chan error, 1)
@@ -246,8 +229,8 @@ func TestCommandFileSinkAsksBeforeWritingATrackedSecret(t *testing.T) {
 	}
 }
 
-// A builtin's byte stream and a path operand are not declared sinks: each form
-// refuses before anything is written, whatever would have consumed the bytes.
+// A builtin's argv and a path operand are not declared sinks: each form refuses
+// before anything is written. Heredoc text is stdin, which never resolves.
 func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
 	run, sess := newSecretSinkRun(t)
 	reference := run.suppliedReference(t, sess)
@@ -255,7 +238,6 @@ func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
 	commands := []string{
 		"printf 'TOKEN=" + reference + "\\n' > redirect.env",
 		"printf 'TOKEN=" + reference + "\\n' | tee piped.env",
-		"cat > heredoc.env <<'EOF'\nTOKEN=" + reference + "\nEOF",
 		"edit --path '" + reference + "' --old-string keep --new-string changed",
 	}
 	for _, command := range commands {
@@ -272,15 +254,24 @@ func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
 			t.Errorf("%q = %+v", commands[i], outcome)
 		}
 	}
-	for _, name := range []string{"redirect.env", "piped.env", "heredoc.env"} {
-		if _, err := os.Stat(filepath.Join(run.dir, name)); err == nil {
-			body, _ := os.ReadFile(filepath.Join(run.dir, name))
-			if strings.Contains(string(body), sinkSentinel) {
-				t.Errorf("%s holds the value", name)
-			}
+	for _, name := range []string{"redirect.env", "piped.env"} {
+		if body, err := os.ReadFile(filepath.Join(run.dir, name)); err == nil && strings.Contains(string(body), sinkSentinel) {
+			t.Errorf("%s holds the value", name)
 		}
 	}
 	if got := run.file(t, existing); got != "keep\n" {
 		t.Fatalf("existing file = %q", got)
+	}
+}
+
+func TestCommandHeredocKeepsAReferenceLiteral(t *testing.T) {
+	run, sess := newSecretSinkRun(t)
+	reference := run.generatedReference(t, sess, secretcap.ScopeChat)
+	run.script.steps = []citableStep{{command: "cat > heredoc.env <<'EOF'\nTOKEN=" + reference + "\nEOF"}}
+	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
+	testutil.FailErr(t, "prompt", err)
+	run.outcomes(t)
+	if got := run.file(t, filepath.Join(run.dir, "heredoc.env")); got != "TOKEN="+reference+"\n" {
+		t.Fatalf("heredoc left %d bytes, want the literal reference", len(got))
 	}
 }
