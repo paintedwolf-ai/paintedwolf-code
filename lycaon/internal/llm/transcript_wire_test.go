@@ -216,11 +216,8 @@ func TestInvocationFactsSurviveContextAndProviderWire(t *testing.T) {
 }
 
 func TestFileContentLabelsSurviveProviderProjection(t *testing.T) {
-	for _, tool := range []string{"read", "summarize"} {
-		body := `{"path":"input.json","mode":"content","offset":1,"end_line":1,"content":"     1: {\"receipt\":\"payload\"}","receipt":{"tool":"read"}}`
-		if tool == "summarize" {
-			body = `{"pack":{"substance":[{"path":"input.json","start_line":1,"end_line":1,"handle":"summarize#1","body":"     1: {\"receipt\":\"payload\"}"}]}}`
-		}
+	for _, tool := range []string{"source_history"} {
+		body := `{"path":"input.json","mode":"version","offset":1,"end_line":1,"content":"     1: {\"receipt\":\"payload\"}","receipt":{"tool":"source_history"}}`
 		original := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: body, PromptCacheBreakpoint: api.PromptCacheTierHistory, ToolResult: &api.ToolResult{Tool: tool, ToolCallID: "source-call", Outcome: api.ToolResultOutcomeCompleted, Content: body}}
 		messages := transcript.Project([]api.Message{
 			{Role: api.MessageRoleSystem, Content: "Standing guidance", PromptCacheBreakpoint: api.PromptCacheTierStanding},
