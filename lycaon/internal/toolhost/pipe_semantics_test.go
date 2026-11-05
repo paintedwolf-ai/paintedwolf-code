@@ -64,6 +64,7 @@ func newPipeSemanticsEnv(t *testing.T) *pipeSemanticsEnv {
 	// Pipe semantics tests stream inputs of many MiB and assert completed
 	// outcomes; a slow runner must not park them.
 	f.Runtime.ParkThreshold = time.Hour
+	f.Runtime.InlineWait = time.Hour
 	scratchDir := t.TempDir()
 	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.SessionScratchDir = scratchDir

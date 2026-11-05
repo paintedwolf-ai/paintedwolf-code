@@ -81,7 +81,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	e.release = lifetime.settled
 	defer lifetime.callerDone()
 	expired := make(chan struct{})
-	stop := r.clock().AfterFunc(DefaultProgramInlineWait, func() { close(expired) })
+	stop := r.clock().AfterFunc(r.inlineWait(), func() { close(expired) })
 	defer stop()
 	//nolint:contextcheck // Detached evaluation outlives a parked call.
 	go func() {

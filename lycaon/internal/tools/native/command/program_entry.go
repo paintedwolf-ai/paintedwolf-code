@@ -65,6 +65,9 @@ type ProgramRuntime struct {
 	// ParkThreshold is how long a call holds its turn while its program waits;
 	// zero means DefaultParkThreshold.
 	ParkThreshold time.Duration
+	// InlineWait is how long an unparked program holds the call before it is
+	// exposed as a running handle; zero means DefaultProgramInlineWait.
+	InlineWait time.Duration
 	// Clock times program waits; nil is the system clock.
 	Clock commandprogram.Clock
 	// SourceRuns records a parked program's run evidence.
@@ -94,6 +97,13 @@ func (r *ProgramRuntime) clock() commandprogram.Clock {
 		return commandprogram.SystemClock()
 	}
 	return r.Clock
+}
+
+func (r *ProgramRuntime) inlineWait() time.Duration {
+	if r.InlineWait <= 0 {
+		return DefaultProgramInlineWait
+	}
+	return r.InlineWait
 }
 
 func (r *ProgramRuntime) parkThreshold() time.Duration {
