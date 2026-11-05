@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import errno
-import errno
 import fcntl
 import hashlib
 import os

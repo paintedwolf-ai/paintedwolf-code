@@ -292,8 +292,7 @@ func resolveSocketPath(path string, target *targetProcess) (string, bool) {
 	}
 	// A name that does not exist yet is still a name the plan can decide: a
 	// bind creates one, and a connect to it refuses like any ungranted path.
-	resolved := fspath.CanonicalPath(path)
-	return resolved, resolved != ""
+	return fspath.CanonicalPathOrMissing(path)
 }
 
 // hostSocketCall runs an admitted call on a fresh socket in the host's

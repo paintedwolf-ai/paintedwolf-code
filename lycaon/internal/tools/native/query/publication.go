@@ -46,6 +46,15 @@ func (inv *invocation) publishBytes(source *source, destination toolcontract.Exe
 	return inv.publishText(source, destination, string(data), work)
 }
 
+// publishedOperation names jq-edit's own identity; yq -i publishes as a plain
+// write because its operation is a query, not a content mutation.
+func (inv *invocation) publishedOperation() string {
+	if inv.name() == "jq-edit" {
+		return inv.owners.ops[inv.name()]
+	}
+	return ""
+}
+
 // publishText preserves an accepted document's authority or a disk file's
 // captured encoding. Disk bytes use the reviewed, recoverable write door;
 // the whole-file bound does not change editor mutation limits.
@@ -57,7 +66,7 @@ func (inv *invocation) publishText(source *source, destination toolcontract.Exec
 	if err := work.resize(int64(len(text))); err != nil {
 		return err
 	}
-	input := native.WriteInput{Path: source.abs, Content: text, Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.revision}, Memory: inv.owners.Revisions.Memory}
+	input := native.WriteInput{Operation: inv.publishedOperation(), Path: source.abs, Content: text, Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.revision}, Memory: inv.owners.Revisions.Memory}
 	sourceBytes, err := textfile.EncodedSize(source.text, source.encoding)
 	if err != nil {
 		return err

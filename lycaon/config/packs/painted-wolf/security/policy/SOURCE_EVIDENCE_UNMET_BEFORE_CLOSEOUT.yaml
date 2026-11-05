@@ -17,7 +17,7 @@ copy:
   fix: >-
     Run the required check when useful recovery is possible. Both verify and command
     produce evidence; a different command cannot substitute for a selected verify.test check.
-    Inspect the actual terminal outcome, not declared_command_match or a running handle.
+    Inspect the actual terminal outcome, not a running handle.
   instead: >-
     If no justified recovery remains, report the limitation now and include
     `[verify: blocked - reason]` in your answer. This ends the turn without

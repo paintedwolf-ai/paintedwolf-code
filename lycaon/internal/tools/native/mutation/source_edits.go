@@ -61,7 +61,7 @@ func runEdit(inv *invocation) error {
 	if replaceAll {
 		edited = strings.ReplaceAll(source.Content, oldString, newString)
 	}
-	result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Path: bound.Resolved.Abs, Content: edited, Memory: inv.owners.Revisions.Memory,
+	result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Operation: inv.owners.ops[inv.name()], Path: bound.Resolved.Abs, Content: edited, Memory: inv.owners.Revisions.Memory,
 		Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
 	if err != nil {
 		return err
@@ -125,7 +125,7 @@ func runReplaceLines(inv *invocation) error {
 	if edited == source.Content {
 		return nil
 	}
-	result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Path: bound.Resolved.Abs, Content: edited, Memory: inv.owners.Revisions.Memory,
+	result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Operation: inv.owners.ops[inv.name()], Path: bound.Resolved.Abs, Content: edited, Memory: inv.owners.Revisions.Memory,
 		Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
 	if err != nil {
 		return err
@@ -201,7 +201,7 @@ func runCodeRewrite(inv *invocation) error {
 		if err := inv.recordPin(destination); err != nil {
 			return err
 		}
-		result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Path: abs, Content: rewritten, Memory: inv.owners.Revisions.Memory,
+		result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Operation: inv.owners.ops[inv.name()], Path: abs, Content: rewritten, Memory: inv.owners.Revisions.Memory,
 			Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
 		if err != nil {
 			return err
