@@ -53,7 +53,7 @@ func TestSettlementPreservesReasoningAndPresentationBoundaries(t *testing.T) {
 				ReasoningDetails: []json.RawMessage{json.RawMessage(`{"type":"reasoning.encrypted","data":"opaque"}`)}, ToolCalls: tc.calls,
 			}
 			state := &promptLoopTurnState{attemptID: execution.Attempt.ID}
-			_, err = loop.Projection.settleAssistantStreamTurn(ctx, sess.ID, state, message, completion, nil, uuid.NewString(), nextModelIteration(state), func(text string) string { return text })
+			_, err = loop.Projection.settleAssistantStreamTurn(ctx, sess.ID, state, message, completion, nil, uuid.NewString(), nextModelIteration(state), false)
 			testutil.FailErr(t, "settle output", err)
 			pending, err := store.NewSQL(db).ListPendingModelOutputProjections(ctx)
 			testutil.FailErr(t, "reload canonical output", err)
