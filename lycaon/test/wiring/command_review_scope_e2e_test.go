@@ -48,7 +48,7 @@ func TestReviewRuleScopedToAToolHoldsItsCommandForm(t *testing.T) {
 			if got := run.read(t); got != form.seed {
 				t.Fatalf("file changed before the decision: %q", got)
 			}
-			_, err := run.h.Sessions.Checkpoints.ResolveCheckpoint(run.h.OwnerCtx(t, t.Context()), run.session, card, kind, nil, &hitl.ContentApplyResolution{
+			_, err := run.h.Sessions.Checkpoints.ResolveCheckpoint(run.h.OwnerCtx(t, t.Context()), run.session, card, kind, nil, &hitl.ContentApplyResolve{
 				Decision: wire.ContentApplyReject,
 			})
 			testutil.FailErr(t, "reject the change", err)
@@ -93,7 +93,7 @@ func TestReviewRuleWithoutAToolHoldsAQueryPublication(t *testing.T) {
 		card = pending[0].ID
 		return true
 	})
-	_, err := run.h.Sessions.Checkpoints.ResolveCheckpoint(run.h.OwnerCtx(t, t.Context()), run.session, card, kind, nil, &hitl.ContentApplyResolution{
+	_, err := run.h.Sessions.Checkpoints.ResolveCheckpoint(run.h.OwnerCtx(t, t.Context()), run.session, card, kind, nil, &hitl.ContentApplyResolve{
 		Decision: wire.ContentApplyReject,
 	})
 	testutil.FailErr(t, "reject the change", err)
