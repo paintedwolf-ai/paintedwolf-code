@@ -3,6 +3,7 @@
 package linuxsandbox
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -141,7 +142,7 @@ func startPerformer(fs Filesystem) error {
 	if err != nil {
 		return fmt.Errorf("start performer: %w", err)
 	}
-	if err := unix.Sendmsg(pair[0], floors, nil, nil, 0); err != nil {
+	if err := sendFloors(pair[0], floors); err != nil {
 		return fmt.Errorf("performer floors: %w", err)
 	}
 	if err := sendHandoff(handoff{Kind: handoffPerformer}, pair[0]); err != nil {
@@ -170,16 +171,53 @@ func ServePerformer() error {
 	return servePathCalls(performerFD)
 }
 
+// sendFloors sends the plan's total size, then the plan in packets a path call's
+// buffer holds: a packet longer than the reader's buffer is silently cut, and a
+// repository's loader files alone can make the plan arbitrarily long.
+func sendFloors(fd int, floors []byte) error {
+	size := binary.LittleEndian.AppendUint64(nil, uint64(len(floors)))
+	if err := unix.Sendmsg(fd, size, nil, nil, 0); err != nil {
+		return err
+	}
+	for len(floors) > 0 {
+		packet := floors[:min(len(floors), maxPathMessage)]
+		if err := unix.Sendmsg(fd, packet, nil, nil, 0); err != nil {
+			return err
+		}
+		floors = floors[len(packet):]
+	}
+	return nil
+}
+
+// receiveFloors reads what sendFloors sent, using buf for each packet.
+func receiveFloors(fd int, buf []byte) ([]byte, error) {
+	n, _, ok := recvPathCall(fd, buf, nil)
+	if !ok || n != 8 {
+		return nil, errors.New("no plan size")
+	}
+	remaining := binary.LittleEndian.Uint64(buf[:n])
+	var raw []byte
+	for remaining > 0 {
+		n, _, ok := recvPathCall(fd, buf, nil)
+		if !ok || n == 0 || uint64(n) > remaining {
+			return nil, errors.New("plan ended early")
+		}
+		raw = append(raw, buf[:n]...)
+		remaining -= uint64(n)
+	}
+	return raw, nil
+}
+
 // servePathCalls reads the floors, then answers calls on fd until the
 // supervisor closes it.
 func servePathCalls(fd int) error {
 	buf := make([]byte, maxPathMessage)
-	n, _, _, _, err := unix.Recvmsg(fd, buf, nil, 0)
+	raw, err := receiveFloors(fd, buf)
 	if err != nil {
 		return fmt.Errorf("performer floors: %w", err)
 	}
 	var fs Filesystem
-	if err := json.Unmarshal(buf[:n], &fs); err != nil {
+	if err := json.Unmarshal(raw, &fs); err != nil {
 		return fmt.Errorf("performer floors: %w", err)
 	}
 	floors := newCreationFloors(fs)

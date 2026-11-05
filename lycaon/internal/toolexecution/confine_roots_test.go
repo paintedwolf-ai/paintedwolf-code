@@ -52,18 +52,52 @@ func TestConfineRootsWorkerBranchIsExclusive(t *testing.T) {
 	}
 }
 
+// A read-scoped worker stays on the project tree but no worker's branch is its
+// to read; an ordinary session excludes nothing.
+// Several roots each own a directory in the branch, and each carries policy the
+// floor and the native write review must recognize.
+func TestConfineRootsNameEveryRootInAMultiRootBranch(t *testing.T) {
+	tctx := rootsCtx("/proj/a", "/proj/b")
+	tctx.Source.WorkerBranchRoot = "/branches/job1"
+	got := tools.ConfineRootsForAction(tctx)
+	if len(got) != 3 || got[0] != "/branches/job1" {
+		t.Fatalf("roots = %v, want the branch and one directory per root", got)
+	}
+	for _, root := range got[1:] {
+		if _, ok := confine.AgentPolicyPath(root+"/.paintedwolf/approvals.yaml", got...); !ok {
+			t.Errorf("%s: project approvals not classified as agent policy", root)
+		}
+		if _, ok := confine.AgentPolicyPath(root+"/.agents/skills/x/SKILL.md", got...); !ok {
+			t.Errorf("%s: project skill not classified as agent policy", root)
+		}
+	}
+}
+
+func TestReadWorkerConfineDeniesWorkerBranches(t *testing.T) {
+	tctx := rootsCtx("/proj/a")
+	if got := tools.ActionConfineInputsForContext(tctx, nil).ReadDenyPaths; len(got) != 0 {
+		t.Fatalf("session read deny paths = %v, want none", got)
+	}
+	tctx.Identity.WorkerJobID = "job1"
+	want := confine.WorkerReadDenyRoots(false)
+	if got := tools.ActionConfineInputsForContext(tctx, nil).ReadDenyPaths; !slices.Equal(got, want) {
+		t.Fatalf("read worker deny paths = %v, want %v", got, want)
+	}
+}
+
 func TestWorkerConfineDeniesPrimarySourceReads(t *testing.T) {
 	tctx := rootsCtx("/proj/a", "/proj/b")
 	tctx.Source.WorkerBranchRoot = "/proj/a/.paintedwolf/overlays/job1"
 	tctx.Source.WorkerSourceRoots = []string{"/proj/a", "/proj/b"}
 	tctx.Files.ReadRoots = []string{"/managed/skill"}
 	inputs := tools.ActionConfineInputsForContext(tctx, nil)
-	if !slices.Equal(inputs.ReadDenyPaths, tctx.Source.WorkerSourceRoots) {
-		t.Fatalf("read deny paths = %v, want source roots %v", inputs.ReadDenyPaths, tctx.Source.WorkerSourceRoots)
+	wantDeny := append(confine.WorkerReadDenyRoots(true), tctx.Source.WorkerSourceRoots...)
+	if !slices.Equal(inputs.ReadDenyPaths, wantDeny) {
+		t.Fatalf("read deny paths = %v, want %v", inputs.ReadDenyPaths, wantDeny)
 	}
 	request := hitl.ActionConfineRequest(inputs)
-	if !slices.Equal(request.ReadDenyPaths, tctx.Source.WorkerSourceRoots) {
-		t.Fatalf("request read deny paths = %v, want source roots %v", request.ReadDenyPaths, tctx.Source.WorkerSourceRoots)
+	if !slices.Equal(request.ReadDenyPaths, wantDeny) {
+		t.Fatalf("request read deny paths = %v, want %v", request.ReadDenyPaths, wantDeny)
 	}
 	wantReadRoots := []string{"/managed/skill", tctx.Source.WorkerBranchRoot}
 	if !slices.Equal(inputs.ReadRoots, wantReadRoots) || !slices.Equal(request.ReadRoots, wantReadRoots) {

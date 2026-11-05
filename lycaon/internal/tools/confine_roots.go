@@ -1,12 +1,13 @@
 package tools
 
 import (
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // HostWriteRoot prefers a worker's isolated branch.
@@ -20,7 +21,7 @@ func HostWriteRoot(tctx ToolContext) string {
 // ConfineRootsForAction shares write authority between policy and confinement.
 func ConfineRootsForAction(tctx ToolContext) []string {
 	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
-		return []string{branch}
+		return workerBranchRoots(branch, tctx.Source.Roots)
 	}
 	out := make([]string, 0, len(tctx.Source.Roots)+1)
 	if s := HostWriteRoot(tctx); s != "" {
@@ -29,6 +30,21 @@ func ConfineRootsForAction(tctx ToolContext) []string {
 	for _, r := range tctx.Source.Roots {
 		if s := strings.TrimSpace(r.Path); s != "" {
 			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// workerBranchRoots lists the project roots inside a branch. One root fills the
+// branch; several each own a directory, and every one carries its own policy.
+func workerBranchRoots(branch string, sources []projectroot.RootRef) []string {
+	out := []string{branch}
+	if len(sources) <= 1 {
+		return out
+	}
+	for _, source := range sources {
+		if dir, err := projectroot.BranchDirForID(source.ID); err == nil {
+			out = append(out, filepath.Join(branch, dir))
 		}
 	}
 	return out

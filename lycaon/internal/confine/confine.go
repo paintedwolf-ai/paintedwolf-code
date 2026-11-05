@@ -410,7 +410,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		// kernel refusal report when stat succeeds on an unreadable file.
 		rules.add(fsRule{op: opRead, matches: deny})
 		// Managed read roots and approved read grants override denied ancestors.
-		allow := SecretReadAllowBackRoots()
+		allow := workspaceReadAllowBacks(c)
 		allow = append(allow, resolveEach(c.ReadRoots)...)
 		if c.SessionScratchRoot != "" {
 			allow = append(allow, fspath.CanonicalPath(c.SessionScratchRoot))
@@ -437,7 +437,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 			rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(ancestors, "")})
 		}
 	}
-	addControlPlaneReadFloor(&rules, c.ReadRoots, c.SessionScratchRoot)
+	addControlPlaneReadFloor(&rules, c)
 	// Writes confined to the project plus temp and the standard device sinks.
 	sinks := subpathMatches(writeRoots, "")
 	sinks = append(sinks,
