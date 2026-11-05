@@ -126,7 +126,10 @@ func (p *grepFiles) next() (finalErr error) {
 				p.run.selected = p.run.selected || job.result.selected
 				p.run.inv.status = max(p.run.inv.status, job.result.status)
 				p.addStats(job.result)
-				return job.result.err
+				if job.result.err != nil {
+					return job.result.err
+				}
+				return p.run.inv.out.drain()
 			}
 			err := p.apply(event, base)
 			p.buffers.put(event.bytes)

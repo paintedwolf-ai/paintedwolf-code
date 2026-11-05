@@ -79,6 +79,14 @@ func (r *grepRun) searchNoMatch(label string, names bool) error {
 // A selected line with invalid UTF-8 is binary from that
 // line on, as GNU grep does in a UTF-8 locale.
 func (r *grepRun) searchStream(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
+	err := r.selectRecords(label, reader, maxBytes, totalBytes, firstNull, pin, names)
+	if drained := r.inv.out.drain(); err == nil {
+		err = drained
+	}
+	return err
+}
+
+func (r *grepRun) selectRecords(label string, reader io.Reader, maxBytes int64, totalBytes int, firstNull int, pin *toolcontract.SourcePin, names bool) error {
 	inv := r.inv
 	if r.json != nil {
 		content, err := inv.readAll(reader)
