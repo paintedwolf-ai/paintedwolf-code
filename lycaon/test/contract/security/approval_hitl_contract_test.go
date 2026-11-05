@@ -221,18 +221,20 @@ func TestRetiredToolsHoldNoToolTier(t *testing.T) {
 	contractcheck.FailErr(t, "read retirements", err)
 	var doc struct {
 		Vocabularies struct {
-			Tools map[string][]string `json:"tools"`
+			Tools map[string]json.RawMessage `json:"tools"`
 		} `json:"vocabularies"`
 	}
 	contractcheck.FailErr(t, "decode retirements", json.Unmarshal(raw, &doc))
 	if len(doc.Vocabularies.Tools) == 0 {
 		t.Fatal("no retired tools read")
 	}
-	for tool, successors := range doc.Vocabularies.Tools {
+	for tool, entry := range doc.Vocabularies.Tools {
 		if settings.ToolTierDeclared(tool) {
 			t.Errorf("retired tool %s holds a tool tier", tool)
 		}
-		if slices.Equal(successors, []string{"command"}) && !settings.OperationTierDeclared(tool) {
+		// A successor list names tools; a content contract replaces a tool with no operation.
+		var successors []string
+		if json.Unmarshal(entry, &successors) == nil && slices.Equal(successors, []string{"command"}) && !settings.OperationTierDeclared(tool) {
 			t.Errorf("retired tool %s lost the operation tier command reaches", tool)
 		}
 	}
