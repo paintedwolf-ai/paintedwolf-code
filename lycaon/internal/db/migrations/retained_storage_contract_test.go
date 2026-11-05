@@ -32,7 +32,6 @@ func TestRetainedStorageFallsBackForChangedRoute(t *testing.T) {
 	changes := map[string]func(*Plan){
 		"future step":      func(p *Plan) { p.steps = append(p.steps, Step{ID: "future-migration"}) },
 		"missing step":     func(p *Plan) { p.steps = p.steps[:len(p.steps)-1] },
-		"reordered steps":  func(p *Plan) { p.steps[1], p.steps[2] = p.steps[2], p.steps[1] },
 		"different source": func(p *Plan) { p.Source.Shape = strings.Repeat("0", 64) },
 		"future revision":  func(p *Plan) { p.Target.Revision++ },
 		"different target": func(p *Plan) { p.Target.Shape = strings.Repeat("0", 64) },
@@ -79,16 +78,9 @@ func assertRetainedStorageFallback(t *testing.T, plan Plan) {
 }
 
 func retainedStorageContractPlan() Plan {
-	target := Baseline{Revision: 12, Shape: "71741e5f8d9a6ead298d061e3726d0b045b32ca62570409144eb52a2740151f5"}
-	progress := SessionProgressIdentity(target)
-	links := SourceLinkKind(progress.From)
-	inline := ProgramInlineInputs(links.From)
-	native := ProgramNativeGap(inline.From)
-	programs := ProgramReceipts(native.From)
-	identity := EffectPermitIdentity(programs.From)
-	away := VaultUnlockAway(identity.From)
-	manifest := SourceManifestLayout(away.From)
-	return Plan{Source: manifest.From, Target: target, steps: []Step{manifest, away, identity, programs, native, inline, links, progress}}
+	target := Baseline{Revision: 5, Shape: "71741e5f8d9a6ead298d061e3726d0b045b32ca62570409144eb52a2740151f5"}
+	step := Revision5(target)
+	return Plan{Source: step.From, Target: target, steps: []Step{step}}
 }
 
 func TestRetainedSorterBudgetCoversMergeFanoutBoundaries(t *testing.T) {
