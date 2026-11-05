@@ -1,3 +1,4 @@
+import { localGenerationView } from "./local-generation-model.ts";
 import type {
   ModelPolicy,
   ModelPolicyPatch,
@@ -134,6 +135,7 @@ export function providerEndpointIsLoopback(url: string | undefined): boolean {
 
 /** Describe setup and assignment from the host's status axes. */
 export function providerStatusLabel(provider: ProviderMeta): string {
+  if (isIncludedProvider(provider)) return localGenerationView(provider).label;
   if (providerIsReady(provider)) return MODELS_SETTINGS_COPY.statusReady;
   if (providerNeedsApiKey(provider)) {
     return MODELS_SETTINGS_COPY.statusNeedsApiKey;
@@ -193,7 +195,18 @@ export type ProviderPickerGroup = (typeof PROVIDER_PICKER_GROUP_ORDER)[number];
 
 const CUSTOM_PROVIDER_KINDS = new Set(["openai-compatible"]);
 
+export const INCLUDED_PROVIDER_ID = "nativegen";
+
+export function isIncludedProvider(
+  provider: Pick<ProviderMeta, "id" | "kind">,
+): boolean {
+  const id = provider.id?.trim() ?? "";
+  const kind = provider.kind?.trim() || id;
+  return id === INCLUDED_PROVIDER_ID || kind === INCLUDED_PROVIDER_ID;
+}
+
 const LOCAL_PROVIDER_KINDS = new Set([
+  INCLUDED_PROVIDER_ID,
   "ollama",
   "lmstudio",
   "omlx",
@@ -223,6 +236,9 @@ export function providerPickerGroupForKind(
   requiresApiKey: boolean,
   baseUrl: string,
 ): ProviderPickerGroup {
+  if (kind.trim() === INCLUDED_PROVIDER_ID) {
+    return "local";
+  }
   if (providerKindIsCustom(kind)) {
     return "custom";
   }
@@ -659,7 +675,12 @@ export function groupProvidersByKind(
       return providerDisplayName(a).localeCompare(providerDisplayName(b));
     });
   }
-  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label));
+  return [...groups.values()].sort((a, b) => {
+    const aIncluded = a.kind === INCLUDED_PROVIDER_ID ? 0 : 1;
+    const bIncluded = b.kind === INCLUDED_PROVIDER_ID ? 0 : 1;
+    if (aIncluded !== bIncluded) return aIncluded - bIncluded;
+    return a.label.localeCompare(b.label);
+  });
 }
 
 export function slugifyProviderId(raw: string): string {

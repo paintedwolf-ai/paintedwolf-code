@@ -23,6 +23,7 @@ import type {
   ProviderMeta,
   ProviderListResponse,
   ProviderProbeResult,
+  LocalGenerationRepairResult,
   WebResearchIndexStatus,
   WebResearchProvidersResponse,
   WebResearchSettings,
@@ -62,6 +63,7 @@ export interface SettingsClient {
   deleteProviderCredential(id: string): Promise<void>;
   testProvider(id: string, signal?: AbortSignal): Promise<ProviderProbeResult>;
   refreshProviderModels(id: string): Promise<ProviderMeta>;
+  repairLocalGeneration(id: string): Promise<LocalGenerationRepairResult>;
   /** Settings reads and writes name a project for its overlay and omit it for the global layer. */
   getModelPolicySettings(projectId?: string, effective?: boolean): Promise<ModelPolicy>;
   updateModelPolicySettings(policy: ModelPolicyPatch, projectId?: string): Promise<ModelPolicy>;
@@ -122,6 +124,8 @@ export function createSettingsClient(j: JsonRequester): SettingsClient {
       j(`/v1/providers/${encodeURIComponent(id)}/test`, { method: "POST", signal }),
     refreshProviderModels: (id) =>
       j(`/v1/providers/${encodeURIComponent(id)}/refresh`, { method: "POST" }),
+    repairLocalGeneration: (id) =>
+      j(`/v1/providers/${encodeURIComponent(id)}/repair`, { method: "POST" }),
     getModelPolicySettings: (projectId, effective) =>
       j(
         `/v1/settings/model-policy${formatQuery({

@@ -69,10 +69,17 @@ export const MODELS_SETTINGS_COPY = {
   secretScreenTrustLabel: "Trust this provider with secrets",
   secretScreenTrustHint:
     "Nothing will ask before a detected secret is sent to this endpoint. Meant for a model running on this machine. Transcripts are still redacted, and changing the endpoint turns this off.",
+  secretScreenTrustIncludedHint:
+    "Detected secrets can be sent to this local model without asking. Transcripts remain redacted.",
   secretScreenTrustLoopbackNote:
     "This endpoint is on this machine, though a local proxy can still forward requests elsewhere.",
   secretScreenTrustRemoteNote: "This endpoint is not on this machine.",
   removeProvider: "Remove AI provider",
+  includedProviderBadge: "Included",
+  includedProviderModelSummary:
+    "Gemma 4 E4B",
+  includedProviderHint:
+    "Runs on this device. No per-token charges.",
   instanceCount: (n: number) => `${n} instance${n === 1 ? "" : "s"}`,
   usageQuota: (used: number, limit: number, unit: string) =>
     `Daily ${unit}: ${formatQuotaNumber(used)} / ${formatQuotaNumber(limit)} free`,
