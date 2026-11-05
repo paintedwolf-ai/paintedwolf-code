@@ -19,6 +19,4 @@ func listeners(ListenerQuery) ([]Listener, error) { return nil, ErrUnsupported }
 
 func listenerViewComplete(ListenerQuery) (bool, error) { return false, ErrUnsupported }
 
-func livePIDs() ([]int, error) { return nil, ErrUnsupported }
-
 const supported = false

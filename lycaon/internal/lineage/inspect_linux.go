@@ -116,8 +116,6 @@ func listeners(query ListenerQuery) ([]Listener, error) { return hostProc.listen
 // listenerViewComplete: the proc socket tables are not narrowed per caller.
 func listenerViewComplete(ListenerQuery) (bool, error) { return true, nil }
 
-func livePIDs() ([]int, error) { return hostProc.livePIDs() }
-
 // fdWritable reports whether a descriptor was opened for writing.
 func fdWritable(pid int, fd string) bool {
 	data, err := os.ReadFile(filepath.Join(hostProc.root, strconv.Itoa(pid), "fdinfo", fd))
