@@ -23,6 +23,8 @@ type Catalog struct {
 	profiles        map[string]sandbox.ToolProfile
 	profileIDs      []string
 	provenance      Provenance
+	// argFields holds each schema's accepted argument paths.
+	argFields map[string]map[string]bool
 }
 
 // NewCatalog builds the declared tool vocabulary.
@@ -51,6 +53,18 @@ func NewCatalog(
 		runtimePrefixes: cfg.RuntimeRegisteredPrefixes,
 		profiles:        make(map[string]sandbox.ToolProfile, len(profiles)),
 		provenance:      prov,
+		argFields:       map[string]map[string]bool{},
+	}
+	for name := range schemas.Tools {
+		meta, ok := schemas.ToolMeta(name)
+		if !ok {
+			continue
+		}
+		fields := map[string]bool{}
+		for _, path := range toolschema.ArgFieldPaths(meta.ArgsSchema) {
+			fields[path] = true
+		}
+		c.argFields[strings.TrimSpace(name)] = fields
 	}
 	for _, list := range [][]string{cfg.AllTools(), cfg.HostProducedTools} {
 		for _, name := range list {

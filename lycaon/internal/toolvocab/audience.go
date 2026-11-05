@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // audienceClass says which profiles can receive a rule fired at an anchor.
@@ -117,17 +118,26 @@ func holdsAny(c *Catalog, id string, tools []string) bool {
 // something, as opposed to a word that collides with a tool name.
 var namedTool = regexp.MustCompile("`([a-z][a-z0-9_]*)(?:`|[ \t]*\\()")
 
-// guardedRegion strips {% if %} blocks: a tool named inside one is already
-// gated on a declared fact, and that fact is the audience filter.
-var guardedRegion = regexp.MustCompile(`(?s)\{%\s*if\b.*?\{%\s*endif\s*%\}`)
-
-// NamedTools returns the tools that copy unconditionally tells its reader to
-// call, in source order and deduplicated.
+// NamedTools returns the tools copy unconditionally tells its reader to call,
+// in source order and deduplicated. A tool named inside a conditional is gated
+// on a declared fact, and that fact is the audience filter.
 func NamedTools(c *Catalog, copyText string) []string {
-	unguarded := guardedRegion.ReplaceAllString(copyText, " ")
+	unguarded, err := oarcore.UnconditionalCopyText(copyText)
+	if err != nil {
+		unguarded = copyText
+	}
+	return namedToolsIn(c, unguarded)
+}
+
+// AnyNamedTools returns every tool copy names on any branch.
+func AnyNamedTools(c *Catalog, copyText string) []string {
+	return namedToolsIn(c, copyText)
+}
+
+func namedToolsIn(c *Catalog, text string) []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, m := range namedTool.FindAllStringSubmatch(unguarded, -1) {
+	for _, m := range namedTool.FindAllStringSubmatch(text, -1) {
 		name := m[1]
 		if seen[name] || !c.KnownName(name) {
 			continue
@@ -169,6 +179,7 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 			problems = append(problems, err.Error())
 			continue
 		}
+		problems = append(problems, invalidRemedies(c, rule)...)
 		own, other := unreachableRemedies(c, rule, audience)
 		problems = append(problems, own...)
 		notes = append(notes, other...)

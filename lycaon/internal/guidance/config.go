@@ -107,6 +107,10 @@ type HintEntry struct {
 	XMessage       string          `yaml:"x-paintedwolf-message,omitempty"`
 	XScenarios     []ScenarioEntry `yaml:"x-paintedwolf-scenarios,omitempty"`
 	XEvidence      *EvidenceMeta   `yaml:"x-paintedwolf-evidence,omitempty"`
+	// XRemedies declares the calls fix and instead ask for.
+	XRemedies []RemedyEntry `yaml:"x-paintedwolf-remedies,omitempty"`
+	// XMentions lists tools the copy names without asking for a call.
+	XMentions []string `yaml:"x-paintedwolf-mentions,omitempty"`
 	XContextSchema map[string]any  `yaml:"x-paintedwolf-context-schema,omitempty"`
 }
 
@@ -201,6 +205,26 @@ type ScenarioEntry struct {
 	ExpectContains []string       `yaml:"expect_contains,omitempty"`
 	Request        map[string]any `yaml:"request,omitempty"`
 }
+
+// RemedyEntry is one call a rule's copy asks its reader to make.
+type RemedyEntry struct {
+	// When limits the remedy to occurrences where this condition holds.
+	When string `yaml:"when,omitempty"`
+	// Tool names the call. Empty reissues the refused call.
+	Tool string `yaml:"tool,omitempty"`
+	// Args maps dotted argument paths to copy templates.
+	Args map[string]string `yaml:"args,omitempty"`
+	// Pick maps dotted argument paths to list facts the reader chooses one entry from.
+	Pick map[string]string `yaml:"pick,omitempty"`
+	// Outcome is RemedyClears unless the call only observes state.
+	Outcome string `yaml:"outcome,omitempty"`
+}
+
+// Remedy outcomes.
+const (
+	RemedyClears   = "clears"
+	RemedyObserves = "observes"
+)
 
 // RejectBlock is a parsed reject block.
 type RejectBlock struct {

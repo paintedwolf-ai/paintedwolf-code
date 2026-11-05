@@ -325,6 +325,9 @@ func (l *Loader) parseRuleDecoded(code string, raw map[string]any, node *yaml.No
 	if rule.Detector != nil && (l.detectors == nil || l.detectors.Lookup(rule.Detector.Ref) == nil) {
 		return nil, false, fmt.Errorf("[OAR-OPS-12] rule %s references unregistered detector %s", rule.Qualified(), rule.Detector.Ref)
 	}
+	if err := l.validateRemedies(rule); err != nil {
+		return nil, false, err
+	}
 	if l.schema != nil {
 		if err := l.validateSchema(rule.ID, raw); err != nil {
 			return nil, false, err
@@ -351,6 +354,8 @@ func materialize(code string, entry guidance.HintEntry, oar oarFields) *Rule {
 		Overrides:    append([]string(nil), oar.Overrides...),
 		Emit:         entry.Emit,
 		Audience:     append([]string(nil), entry.XAudience...),
+		Remedies:     append([]guidance.RemedyEntry(nil), entry.XRemedies...),
+		Mentions:     append([]string(nil), entry.XMentions...),
 		Scenarios:    append([]guidance.ScenarioEntry(nil), entry.Scenarios...),
 		References:   oar.References,
 		Detector:     oar.Detector,

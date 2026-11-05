@@ -151,6 +151,10 @@ type Rule struct {
 	// anchor and selector are broader than its `when` condition. Empty means
 	// the anchor and selector decide.
 	Audience []string
+	// Remedies are the calls this rule's copy asks for. They never reach a decision.
+	Remedies []guidance.RemedyEntry
+	// Mentions are tools the copy names without asking for a call.
+	Mentions []string
 	// Scenarios are the authored conformance fixtures for this rule.
 	Scenarios []guidance.ScenarioEntry
 
