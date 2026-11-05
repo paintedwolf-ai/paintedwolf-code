@@ -14,7 +14,7 @@ copy:
   what: 'The host applied none of this citation repair: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}.'
   cause: 'A repair changes all its citations or none. `unknown_target` names no citation; `stale_target` names one from an earlier version; `duplicate_target` repeats one; `wrong_kind` replaces a web link with a citation or a citation with a web link; `outside_repair` was sent with no repair open; `citations_without_targets` lists citations with no `c1 =>` target; `narrative_changed` altered the retained text.'
   why: The retained answer is unchanged, and the host cannot guess which citation you meant.
-  fix: 'Send one `[cite: c1 => read#5:42]` per rejected citation, using the IDs in the repair message, or `[cite: c2 => <https://example.test/observed-page>]` for a web link. Or return the same answer with only its citations changed.'
+  fix: 'Send one `[cite: c1 => path/to/file:42]` per rejected citation, using the IDs in the repair message, or `[cite: c2 => <https://example.test/observed-page>]` for a web link. Or return the same answer with only its citations changed.'
   instead: Keep the retained text as it is. A tool that only reads keeps it; to change your conclusions, use a tool with effects, then write a fresh report.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_synthesis

@@ -14,7 +14,7 @@ copy:
   what: 'The report has {{ paintedwolf.offender_count }} malformed citation or directive(s): {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}.'
   cause: These look like citations or directives but do not follow the syntax, so the host cannot check them.
   why: A malformed reference must not pass as prose or disappear unnoticed.
-  fix: 'Return the same answer with each one corrected: `[read#3:42]`, `[read#3:42-48]`, `[internal/a.go:42]`, `[verify: targeted - reason]`, or `[artifact:<id>]`. A `[verify: …]` or `[artifact:…]` directive alone also replaces its own kind. To show the syntax literally, put it in `inline code`.'
+  fix: 'Return the same answer with each one corrected: `[internal/a.go:42]`, `[internal/a.go:42-48]`, `[command#4]`, `[verify: targeted - reason]`, or `[artifact:<id>]`. A `[verify: …]` or `[artifact:…]` directive alone also replaces its own kind. To show the syntax literally, put it in `inline code`.'
   instead: Keep the retained text as it is; change only the listed nodes.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_synthesis

@@ -4,7 +4,7 @@ Preserve:
 - errors, exit codes, and command failures
 - repo-relative file paths
 - line numbers and symbols only when they appear in the excerpt
-- inline citations and directives exactly as written, such as `[read#3:42]` and `[verify: targeted - reason]`
+- inline citations and directives exactly as written, such as `[internal/a.go:42]`, `[command#4]` and `[verify: targeted - reason]`
 
 Do not:
 - invent pagination metadata (total_lines, next_offset) unless explicitly in the excerpt

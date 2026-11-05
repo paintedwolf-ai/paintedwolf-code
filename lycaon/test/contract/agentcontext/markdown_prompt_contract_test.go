@@ -47,6 +47,10 @@ var typedCitationFields = regexp.MustCompile(`\b(cited_evidence|cited_urls|artif
 // The bracket form starts with a bracket, and concrete code spans name no placeholder.
 var bareCoordinateForm = regexp.MustCompile("`[\\w./@-]*(?:path|file)[\\w./@-]*(?::|#L)(?:line|N|\\d+)[^`]*`")
 
+// retiredCallable teaches a command-only operation as its own tool. `read#3` handles
+// and `grep` the shell command stay legitimate.
+var retiredCallable = regexp.MustCompile("\\b(?:read|grep|find|summarize|edit|write|list_dir)\\((?:[a-z_]+=|\"|\\{)|`(?:read|edit|write|list_dir|replace_lines)`")
+
 // AC-COMPAT-06: every rendered output teaches only the Markdown protocol. Exceptions
 // are by audience, or a line naming the typed tool whose argument it describes.
 func TestModelFacingOutputsTeachNoRetiredProtocol(t *testing.T) {
@@ -74,6 +78,9 @@ func TestModelFacingOutputsTeachNoRetiredProtocol(t *testing.T) {
 		for line := range strings.SplitSeq(output.text, "\n") {
 			if field := typedCitationFields.FindString(line); field != "" && !namesTypedCitationTool(line) {
 				t.Errorf("%s teaches %q to a coordinator outside a typed tool: %s", output.name, field, line)
+			}
+			if call := retiredCallable.FindString(line); call != "" {
+				t.Errorf("%s teaches retired callable %s: %s", output.name, call, line)
 			}
 			if form := bareCoordinateForm.FindString(line); form != "" && !output.workflowVersioned && !namesTypedCitationTool(line) {
 				t.Errorf("%s teaches %s; prompts teach only the bracket form: %s", output.name, form, line)

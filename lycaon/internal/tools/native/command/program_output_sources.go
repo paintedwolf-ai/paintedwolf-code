@@ -165,7 +165,7 @@ func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *
 				Observation:     obs,
 			}, observer, r.sessionResources(run.tc.Identity.SessionID))
 			if commitErr == nil && run.tc.Effects.Out != nil {
-				if handle := strings.TrimSpace(settlement.SourceOwnerReference); handle != "" && !slices.Contains(run.tc.Effects.Out.SourceDeliveryHandles, handle) {
+				if handle := strings.TrimSpace(settlement.SourceOwnerReference); handle != "" && printsDeliveryHandle(run.tc.Identity, m) && !slices.Contains(run.tc.Effects.Out.SourceDeliveryHandles, handle) {
 					run.tc.Effects.Out.SourceDeliveryHandles = append(run.tc.Effects.Out.SourceDeliveryHandles, handle)
 				}
 			}
@@ -173,6 +173,13 @@ func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *
 		}
 		_ = proj.Close()
 	}
+}
+
+// printsDeliveryHandle keeps a handle out of a coordinator's result when output
+// numbered its lines: that is one record per line, cited by path. A worker names the
+// record in a finding's evidence, so it sees each one.
+func printsDeliveryHandle(identity tools.InvocationIdentity, m toolcontract.StreamSourceMapping) bool {
+	return m.PrintedLine == 0 || identity.WorkerJobID != ""
 }
 
 // Capturing source for optional read credit never makes a successful output fail.
