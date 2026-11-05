@@ -73,7 +73,7 @@ func (inv *invocation) secretSink(key string) (string, bool) {
 		return "", false
 	}
 	if resolution := inv.tc.Effects.Secrets; resolution != nil {
-		if resolved, ok := resolution.Arguments[SecretSinkOptions[inv.name()][key]].(string); ok {
+		if resolved, ok := resolution.Arguments[secretSinkOptions[inv.name()][key]].(string); ok {
 			return resolved, true
 		}
 	}
