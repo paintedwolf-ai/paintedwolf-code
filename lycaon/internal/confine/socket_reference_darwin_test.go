@@ -91,7 +91,7 @@ func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
 }
 
 func TestShortSocketNamespaceIsProtectedWithoutAnySocketGrant(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	root := shortTempDir(t)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(root, "state"))
 	path := filepath.Join(root, "service")

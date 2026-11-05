@@ -83,7 +83,7 @@ func TestCredentialStoreSeatbeltProfileAndVerdicts(t *testing.T) {
 }
 
 func TestCredentialStoreSeatbeltLiveLoginKeychainReadOnly(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	home := fspath.CanonicalPath(t.TempDir())
 	t.Setenv("HOME", home)
 	keychainsDir := filepath.Join(home, "Library", "Keychains")
@@ -138,7 +138,7 @@ func sbplQuote(s string) string {
 // Creating a login-named keychain can change the account's search list, so the
 // fixture is created under a private name and moved only after population.
 func TestCredentialStoreSeatbeltKeychainAPIReadDoesNotPermitMutation(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	home := fspath.CanonicalPath(t.TempDir())
 	t.Setenv("HOME", home)
 	directory := filepath.Join(home, "Library", "Keychains")

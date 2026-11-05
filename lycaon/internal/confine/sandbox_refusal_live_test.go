@@ -113,7 +113,7 @@ func TestKernelRefusalOfAUnixListenerNeedsHostExecution(t *testing.T) {
 }
 
 func TestDiskSpaceQueriesAreNotRefused(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	requireRefusalWatch(t)
 	project, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve project", err)
