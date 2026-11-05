@@ -25,6 +25,10 @@ type SourceDelivery struct {
 	// LineNumbered means the output printed each line's own source number, the only
 	// way a reader can state a coordinate from program output without counting.
 	LineNumbered bool `json:"line_numbered,omitempty"`
+	// PrintedOtherNumbers means the output numbered these lines, but not with their own
+	// numbers, as `cat -n` does for every file after the first. Counting from those
+	// numbers lands on another line, so only a verified excerpt supports a coordinate.
+	PrintedOtherNumbers bool `json:"printed_other_numbers,omitempty"`
 }
 
 // DeliveredSourceObservation is constructed only after comparing actual emitted
@@ -104,10 +108,9 @@ func ConfirmDeliveredLines(path string, pin toolcontract.SourcePin, captured []b
 	if err != nil {
 		return DeliveredSourceObservation{}, err
 	}
-	// `cat -n` keeps counting across files, so a later file's numbers are not its lines.
-	// The lines were still delivered; they just are not numbered observations.
 	fact := out.record.SourceDelivery
 	fact.LineNumbered = int64(fact.StartLine) == lines[0].Mapping.PrintedLine && fact.EndLine-fact.StartLine+1 == len(lines)
+	fact.PrintedOtherNumbers = !fact.LineNumbered
 	return out, nil
 }
 

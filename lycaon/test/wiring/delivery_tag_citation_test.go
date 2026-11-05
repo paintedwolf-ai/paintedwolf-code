@@ -1,6 +1,7 @@
 package wiring
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -103,15 +104,19 @@ func TestDeliveryTagsStateCoverageThroughTheRealPath(t *testing.T) {
 	}
 }
 
-// `cat -n` keeps counting across files, so a later file is observed by its real lines:
-// its tag states them and a coordinate inside them is traced.
-func TestNumberedReadOfSeveralFilesObservesEachFile(t *testing.T) {
+// `cat -n` keeps counting across files, so a later file's printed numbers are not its
+// lines. Its tag states the real range, and a coordinate inside that range is refused
+// until an excerpt verifies it. The script's second answer is reached only by that refusal.
+func TestNumberedReadOfSeveralFilesKeepsLaterFilesUnnumbered(t *testing.T) {
 	var printed string
 	script := &citableScriptLLM{steps: []citableStep{
 		{command: "cat -n notes.txt lines.txt"},
 		{text: func(req modelcall.CompletionRequest) string {
 			printed = newestToolContent(req)
-			return "The note is second [notes.txt:2], and the section holds bravo [lines.txt:2]."
+			return "The section opens with the third printed row [lines.txt:3]."
+		}},
+		{text: func(modelcall.CompletionRequest) string {
+			return `The section holds bravo [lines.txt:2 "bravo"], and the note is second [notes.txt:2].`
 		}},
 	}}
 	h, session := deliveryTagSession(t, script)
@@ -121,9 +126,44 @@ func TestNumberedReadOfSeveralFilesObservesEachFile(t *testing.T) {
 	if len(tags) != 2 || tags[0][2] != "notes.txt:1-2" || tags[1][2] != "lines.txt:1-4" {
 		t.Fatalf("tags = %q in %s", tags, printed)
 	}
-	if !strings.Contains(printed, "4\tbravo") {
+	if !strings.Contains(printed, "3\talpha") {
 		t.Fatalf("stdout changed: %s", printed)
 	}
+	if script.next != len(script.steps) {
+		t.Fatalf("a printed number from a later file was accepted after %d of %d steps", script.next, len(script.steps))
+	}
+	g := lastAnswerGrounding(t, h, session)
+	if g == nil || !g.Traced || g.HostAssembled {
+		t.Fatalf("grounding = %+v", g)
+	}
+	verdicts := map[string]string{}
+	for _, cited := range g.CitedEvidence {
+		verdicts[fmt.Sprintf("%s:%d", cited.Path, cited.Line)] = string(cited.Verdict)
+	}
+	if verdicts["lines.txt:2"] != "matched" || verdicts["notes.txt:2"] != "traced" {
+		t.Fatalf("verdicts = %v", verdicts)
+	}
+}
+
+// `grep -n` prints each line's own number beside its path, however many files it reads.
+func TestNumberedSearchOfSeveralFilesKeepsItsLines(t *testing.T) {
+	script := &citableScriptLLM{steps: []citableStep{
+		{command: "grep -n -e second -e bravo notes.txt lines.txt"},
+		{text: func(modelcall.CompletionRequest) string {
+			return "The note is second [notes.txt:2], and the section holds bravo [lines.txt:2]."
+		}},
+	}}
+	h, session := deliveryTagSession(t, script)
+	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "search the files")
+	testutil.FailErr(t, "prompt", err)
+	g := lastAnswerGrounding(t, h, session)
+	if script.next != len(script.steps) || g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 2 {
+		t.Fatalf("grep coordinates: steps %d, grounding %+v", script.next, g)
+	}
+}
+
+func lastAnswerGrounding(t *testing.T, h *Harness, session string) *wire.CitationGrounding {
+	t.Helper()
 	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(t.Context(), session)
 	testutil.FailErr(t, "read messages", err)
 	var last wire.Message
@@ -132,9 +172,7 @@ func TestNumberedReadOfSeveralFilesObservesEachFile(t *testing.T) {
 			last = msg
 		}
 	}
-	if g := last.Grounding; g == nil || !g.Traced || g.HostAssembled {
-		t.Fatalf("closeout %q grounding = %+v", last.Content, g)
-	}
+	return last.Grounding
 }
 
 // A coordinate on what only a pipeline printed is refused, and an excerpt on the
