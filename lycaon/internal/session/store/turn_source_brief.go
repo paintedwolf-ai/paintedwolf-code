@@ -104,7 +104,7 @@ func (t *memoryTurnTelemetry) PutTurnSourceBrief(ctx context.Context, sessionID,
 	if _, set := s.turnSourceBriefs[sessionID][openingMessageID]; set || s.userTurns[sessionID][openingMessageID] == 0 {
 		return nil
 	}
-	briefJSON, records, err := mint(s.nextEvidenceOrdinalLocked(sessionID, evidence.KindSourceChange))
+	briefJSON, records, err := mint(nextEvidenceOrdinalLocked(s, sessionID, evidence.KindSourceChange))
 	if err != nil || strings.TrimSpace(briefJSON) == "" {
 		return err
 	}
@@ -113,7 +113,7 @@ func (t *memoryTurnTelemetry) PutTurnSourceBrief(ctx context.Context, sessionID,
 	}
 	s.turnSourceBriefs[sessionID][openingMessageID] = briefJSON
 	for _, rec := range records {
-		s.ensureEvidenceSession(sessionID)[rec.Handle] = memoryEvidenceRow{rec: rec}
+		ensureEvidenceSession(s, sessionID)[rec.Handle] = memoryEvidenceRow{rec: rec}
 	}
 	return nil
 }
