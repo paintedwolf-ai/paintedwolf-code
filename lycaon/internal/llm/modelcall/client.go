@@ -32,6 +32,16 @@ type RequestDebug struct {
 	Purpose string
 	// CommandGuidance records rendered command-guidance templates and facts.
 	CommandGuidance *CommandGuidanceDebug
+	// HistoryCut records where fitted history starts for prefix-reuse attribution.
+	HistoryCut HistoryCutFacts
+}
+
+// HistoryCutFacts are the host's history cutoffs for one request. Change names
+// why a cutoff moved since the previous request, empty when none did.
+type HistoryCutFacts struct {
+	Generation                                int
+	TailOrd, WorkingSetOrd, FitOrd, BodiesOrd int64
+	Change                                    string
 }
 
 // CommandGuidanceDebug records the command guidance templates/partials/units

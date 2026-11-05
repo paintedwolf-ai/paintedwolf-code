@@ -80,13 +80,16 @@ func ResolveTrueWindow(policy ModelPolicy, lookup ContextLengthLookup, windows m
 }
 
 // ApplyLiveBudget sets CompactionConfig.ModelContextWindow to the live budget
-// (true_window × live_budget_pct, or the explicit window), re-derives token
+// (min(true_window × live_budget_pct, max_live_budget_tokens), or the explicit window), re-derives token
 // ceilings, and stamps MaxWorkerSummaryChars from ScaleLimitsFromTrueWindow
 // unless an overlay already set a positive value.
 func ApplyLiveBudget(cfg compaction.CompactionConfig, policy ModelPolicy, lookup ContextLengthLookup, windows modelinfo.ModelContextWindows) (compaction.CompactionConfig, SessionLimitFields, error) {
 	trueWindow, _ := ResolveTrueWindow(policy, lookup, windows, cfg)
 
 	overlayWorkerSummary := cfg.MaxWorkerSummaryChars
+	// Limits that size prompt content follow the capped budget; a larger window
+	// must not let one tool result or summary grow past what the budget assumes.
+	sizingWindow := trueWindow
 
 	src := strings.TrimSpace(cfg.WindowSource)
 	if src == "" {
@@ -99,7 +102,12 @@ func ApplyLiveBudget(cfg compaction.CompactionConfig, policy ModelPolicy, lookup
 		if pct <= 0 {
 			pct = compaction.DefaultLiveBudgetPct
 		}
-		cfg.ModelContextWindow = trueWindow * pct / 100
+		maxLive := cfg.MaxLiveBudgetTokens
+		if maxLive <= 0 {
+			maxLive = compaction.DefaultMaxLiveBudgetTokens
+		}
+		cfg.ModelContextWindow = min(trueWindow*pct/100, maxLive)
+		sizingWindow = min(trueWindow, maxLive*100/pct)
 	}
 	cfg.HardCeilingTokens = 0
 	cfg.TargetTokens = 0
@@ -107,7 +115,8 @@ func ApplyLiveBudget(cfg compaction.CompactionConfig, policy ModelPolicy, lookup
 	if err != nil {
 		return compaction.CompactionConfig{}, SessionLimitFields{}, err
 	}
-	limits := ScaleLimitsFromTrueWindow(trueWindow)
+	limits := ScaleLimitsFromTrueWindow(sizingWindow)
+	limits.MaxCoordinatorLoopCycles = ScaleLimitsFromTrueWindow(trueWindow).MaxCoordinatorLoopCycles
 	if overlayWorkerSummary > 0 {
 		normalized.MaxWorkerSummaryChars = overlayWorkerSummary
 	} else {

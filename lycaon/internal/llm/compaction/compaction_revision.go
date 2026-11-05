@@ -36,6 +36,7 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 	}
 	info.Attempts, info.ChunkProjections = nil, nil
 	info.CompactionGeneration = 0
+	info.WorkingSetStartOrd = 0
 	return RevisionDigest(struct {
 		Version                                                        int
 		Messages                                                       []ContextMessage
@@ -44,6 +45,25 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 		Synthesis                                                      bool
 		Prompt, Record, SummaryModel, Input, Encoding, AuthorityNotice string
 	}{compactionRevision, messages, c.cfg, info, c.summary != nil, prompt, record, model, "covered_prefix", modelinfo.DefaultModelContextWindows().TextEncoding(info.Model), transcript.ContentAuthorityNotice(transcript.AudienceUtility)})
+}
+
+// AttemptRevision identifies the policy and summarizer that decide an automatic
+// attempt's outcome, without any source rows.
+func AttemptRevision(ctx context.Context, c *SimpleCompactor) (string, error) {
+	prompt, err := guidance.RenderCompactionSystemPrompt(ctx, guidance.CompactionSessionSummarySystemRef)
+	if err != nil {
+		return "", err
+	}
+	model, err := c.summaryRevision()
+	if err != nil {
+		return "", err
+	}
+	return RevisionDigest(struct {
+		Version              int
+		Policy               CompactionConfig
+		Synthesis            bool
+		Prompt, SummaryModel string
+	}{compactionRevision, c.cfg, c.summary != nil, prompt, model})
 }
 
 // RevisionDigest hashes the JSON form of a revision identity.

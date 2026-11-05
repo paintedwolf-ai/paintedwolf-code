@@ -16,6 +16,7 @@ type Runner struct {
 	active    map[string]*compactionRun
 	work      workscope.Group
 	Synthesis *SynthesisRunner
+	attempts  *attemptLedger
 }
 
 type compactionRun struct {
@@ -28,6 +29,7 @@ type compactionRun struct {
 func NewRunner() *Runner {
 	return &Runner{
 		Synthesis: NewSynthesisRunner(),
+		attempts:  newAttemptLedger(),
 		running:   make(map[string]*compactionRun),
 		pending:   make(map[string]bool),
 		active:    make(map[string]*compactionRun),
@@ -105,6 +107,8 @@ func (r *Runner) CancelSession(sessionID string) {
 	if active != nil {
 		<-active.done
 	}
+	// Joined first: a settling pass may still arm a retry before it finishes.
+	r.attempts.forget(sessionID)
 }
 
 // Wait blocks until all in-flight compaction passes finish.
@@ -165,6 +169,7 @@ func (r *Runner) admit(ctx context.Context, sessionID string) (*compactionRun, c
 // Stop seals admission and cancels all scheduled and manual passes.
 func (r *Runner) Stop() {
 	if r != nil {
+		r.attempts.stop()
 		r.Synthesis.Stop()
 		r.work.Stop()
 	}

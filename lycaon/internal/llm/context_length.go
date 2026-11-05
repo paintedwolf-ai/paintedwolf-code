@@ -6,7 +6,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
-	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 )
 
 // ContextEntry returns the model entry with its resolved ContextLength and
@@ -38,18 +37,14 @@ func ContextEntry(r *Registry, provider, model string) (modelinfo.Entry, bool) {
 			if out.ContextLengthSource == "" {
 				out.ContextLengthSource = "config"
 			}
-			if oa, ok := providerAdapter(p).(*openaicompat.Provider); ok {
-				if runtimeEntry, hasRuntime := oa.ModelEntry(model); hasRuntime && runtimeEntry.ContextLength > 0 && runtimeEntry.ContextLength < out.ContextLength {
-					return runtimeEntry, true
-				}
+			if published, ok := publishedEntry(p, model); ok && published.ContextLength < out.ContextLength {
+				return published, true
 			}
 			return out, true
 		}
 	}
-	if oa, ok := providerAdapter(p).(*openaicompat.Provider); ok {
-		if runtimeEntry, hasRuntime := oa.ModelEntry(model); hasRuntime && runtimeEntry.ContextLength > 0 {
-			return runtimeEntry, true
-		}
+	if published, ok := publishedEntry(p, model); ok {
+		return published, true
 	}
 	profile := providerprofile.Default()
 	if p != nil {
@@ -71,14 +66,26 @@ func ContextEntry(r *Registry, provider, model string) (modelinfo.Entry, bool) {
 	return modelinfo.Entry{}, false
 }
 
-// ContextLength returns the usable context window for provider/model from
-// ModelEntry data (catalog YAML, discovery cache, or observed serving window).
-// A declared context_length on the catalog entry wins over discovery.
+// ContextLength returns the usable context window for provider/model: the row
+// the provider's published catalog holds, which RequestBudget reads too, under
+// any configured limit. It reads published state only, so it makes no HTTP call.
 func (r *Registry) ContextLength(provider, model string) int {
 	if entry, ok := ContextEntry(r, provider, model); ok && entry.ContextLength > 0 {
 		return entry.ContextLength
 	}
 	return 0
+}
+
+// publishedEntry reads the row hydration installed in a provider.
+func publishedEntry(p modelcall.Provider, model string) (modelinfo.Entry, bool) {
+	catalog, ok := providerAdapter(p).(interface {
+		ModelEntry(string) (modelinfo.Entry, bool)
+	})
+	if !ok {
+		return modelinfo.Entry{}, false
+	}
+	entry, ok := catalog.ModelEntry(model)
+	return entry, ok && entry.ContextLength > 0
 }
 
 func isLocalRegistryProvider(r *Registry, provider string) bool {

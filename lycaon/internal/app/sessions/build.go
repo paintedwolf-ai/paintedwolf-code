@@ -156,7 +156,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		return nil, err
 	}
 	mgr.Runner.Authorization.SetSealer(deps.Security.Authority.Sealer)
-	if compactor, err := loadCompactor(deps.Providers.Service, deps.Catalog.ModuleRoot, deps.Providers.Costs); err == nil && compactor != nil {
+	if compactor, err := loadCompactor(deps.Providers.Service, deps.Providers.Costs); err == nil && compactor != nil {
 		mgr.Runner.History.SetCompactor(compactor)
 	}
 

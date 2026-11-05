@@ -7,6 +7,10 @@ window_source: auto
 live_budget_pct: 75
 model_context_window: 131072
 
+# Absolute live budget ceiling. A smaller model window lowers the budget; a
+# larger one never raises it.
+max_live_budget_tokens: 196608
+
 # Protected tail length.
 prune_protect_tail_messages: 8
 

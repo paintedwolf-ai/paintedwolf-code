@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -316,14 +317,22 @@ func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	if got.Status != 0 || len(lines) != 2 || lines[0] != lines[1] {
 		t.Fatalf("ulimit -n differs from the child's own: %+v", got)
 	}
-	raw, err = f.Call(t, t.Context(), "ulimit -n 256; "+probe)
+	// A call with no ulimit of its own starts children at the inherited limit, which
+	// can differ from what ulimit reports and is already 256 on some hosts.
+	raw, err = f.Call(t, t.Context(), probe)
+	testutil.FailErr(t, "read the inherited limit", err)
+	baseline := decodeProgramOutcome(t, raw).Stdout
+	inherited, err := strconv.Atoi(strings.TrimSpace(baseline))
+	testutil.FailErr(t, "parse the inherited limit", err)
+	lowered := strconv.Itoa(inherited / 2)
+	raw, err = f.Call(t, t.Context(), "ulimit -n "+lowered+"; "+probe)
 	testutil.FailErr(t, "lower the child limit", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout != "256\n" {
+	if got := decodeProgramOutcome(t, raw); got.Stdout != lowered+"\n" {
 		t.Fatalf("lowered limit outcome: %+v", got)
 	}
 	raw, err = f.Call(t, t.Context(), probe)
 	testutil.FailErr(t, "next call", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout == "256\n" {
+	if got := decodeProgramOutcome(t, raw); got.Stdout != baseline {
 		t.Fatalf("the limit persisted into the next call: %+v", got)
 	}
 }
