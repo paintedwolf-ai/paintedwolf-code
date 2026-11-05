@@ -196,9 +196,6 @@ fi
 
 if [[ "${HOST_KIND}" == "darwin" || "${HOST_KIND}" == "linux" ]]; then
   GENERATION_ARGS=(--output "${BINARIES_DIR}/nativegen-${TARGET}" --resources "${ENGINE_ROOT}/generation")
-  if [[ "${RELEASE_BUILD}" == "1" ]]; then
-    GENERATION_ARGS+=(--release)
-  fi
   bash "${ROOT}/scripts/generation/run.sh" stage "${GENERATION_ARGS[@]}"
 fi
 

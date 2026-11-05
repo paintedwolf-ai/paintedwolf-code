@@ -30,10 +30,9 @@ func nvidiaAPIVersion(root string, uid uint32) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			raw, readErr := io.ReadAll(io.LimitReader(file, 65537))
-			file.Close()
-			if readErr != nil {
-				return "", readErr
+			raw, err := readLimitedAndClose(file, 65537)
+			if err != nil {
+				return "", err
 			}
 			return manifestAPIVersion(raw)
 		}

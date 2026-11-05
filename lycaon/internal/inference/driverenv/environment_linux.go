@@ -4,6 +4,7 @@ package driverenv
 
 import (
 	"debug/elf"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -41,10 +42,9 @@ func Prepare(root string) ([]string, func(), error) {
 	if err != nil {
 		return nil, noop, err
 	}
-	raw, readErr := io.ReadAll(io.LimitReader(file, 128))
-	file.Close()
-	if readErr != nil {
-		return nil, noop, readErr
+	raw, err := readLimitedAndClose(file, 128)
+	if err != nil {
+		return nil, noop, err
 	}
 	version, err := loadedVersion(raw)
 	if err != nil {
@@ -115,7 +115,7 @@ func nvidiaLibraries(version, root string, uid uint32) ([]string, error) {
 	return paths, nil
 }
 
-func trustedLibrary(path, root string, uid uint32) error {
+func trustedLibrary(path, root string, uid uint32) (result error) {
 	if strings.ContainsAny(path, ": \t\n\r") {
 		return fmt.Errorf("NVIDIA library path cannot be represented in the loader environment")
 	}
@@ -126,7 +126,7 @@ func trustedLibrary(path, root string, uid uint32) error {
 	if err != nil {
 		return err
 	}
-	defer library.Close()
+	defer func() { result = errors.Join(result, library.Close()) }()
 	machine := elf.EM_X86_64
 	if runtime.GOARCH == "arm64" {
 		machine = elf.EM_AARCH64
@@ -135,6 +135,15 @@ func trustedLibrary(path, root string, uid uint32) error {
 		return fmt.Errorf("NVIDIA library has an incompatible ELF architecture")
 	}
 	return nil
+}
+
+func readLimitedAndClose(file io.ReadCloser, limit int64) ([]byte, error) {
+	raw, readErr := io.ReadAll(io.LimitReader(file, limit))
+	closeErr := file.Close()
+	if readErr != nil || closeErr != nil {
+		return nil, errors.Join(readErr, closeErr)
+	}
+	return raw, nil
 }
 
 func systemOwnedFile(path, root string, uid uint32) error {

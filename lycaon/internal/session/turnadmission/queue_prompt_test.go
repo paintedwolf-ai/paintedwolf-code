@@ -58,7 +58,7 @@ func TestRunLockedClassifiesCancellationBeforeReporting(t *testing.T) {
 				if !errors.Is(got, lifecycle.ErrStopping) || !errors.Is(turns.reported, lifecycle.ErrStopping) {
 					t.Fatalf("stop classification: returned %v, reported %v", got, turns.reported)
 				}
-			} else if got != tc.runErr || turns.reported != tc.runErr {
+			} else if !errors.Is(got, tc.runErr) || !errors.Is(turns.reported, tc.runErr) {
 				t.Fatalf("failure changed: returned %v, reported %v, want %v", got, turns.reported, tc.runErr)
 			}
 			wantDrain := tc.stop == "" || tc.stop == "other"

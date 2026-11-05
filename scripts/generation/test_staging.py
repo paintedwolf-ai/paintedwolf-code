@@ -78,16 +78,27 @@ class StagingTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 staging.publish_file(link, destination)
 
-    def test_release_requires_explicit_trust_inputs_before_building(self):
+    def test_seed_is_optional_but_requires_complete_trust_inputs(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location("stage_generation", Path(__file__).with_name("stage.py"))
         command = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(command)
-        with patch.object(command.runtime, "build") as build:
-            for environment in ({}, {"BIALY_GENERATION_BUNDLE": "/seed"}, {"BIALY_GENERATION_AUTHORITY": "/keys"}):
+        with patch.object(command.runtime, "build") as build, \
+                patch.object(command.runtime, "paths", return_value=(Path("source"), Path("build"))), \
+                patch.object(command.runtime, "native_environment", return_value=({}, "vulkan")), \
+                patch.object(command, "stage_runtime") as stage_runtime:
+            with patch.dict(command.os.environ, {}, clear=True):
+                command.stage(Path("nativegen"), Path("generation"))
+            build.assert_called_once()
+            stage_runtime.assert_called_once_with(
+                Path("build"), Path("build/release/nativegen"), Path("nativegen"),
+                Path("generation"), "vulkan")
+            build.reset_mock()
+            for environment in ({"BIALY_GENERATION_BUNDLE": "/seed"},
+                                {"BIALY_GENERATION_AUTHORITY": "/keys"}):
                 with patch.dict(command.os.environ, environment, clear=True):
                     with self.assertRaisesRegex(ValueError, "requires"):
-                        command.stage(Path("nativegen"), Path("generation"), True)
+                        command.stage(Path("nativegen"), Path("generation"))
             build.assert_not_called()
 
     def test_vulkan_library_is_staged_for_build_and_installed_layouts(self):

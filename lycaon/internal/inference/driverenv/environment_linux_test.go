@@ -3,7 +3,10 @@
 package driverenv
 
 import (
+	"bytes"
 	"encoding/binary"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -26,6 +29,45 @@ func TestLoadedVersionIsExactAndSupported(t *testing.T) {
 		}
 	}
 }
+
+func TestReadLimitedAndCloseReportsReadAndCloseFailures(t *testing.T) {
+	closeErr := errors.New("close failed")
+	readErr := errors.New("read failed")
+	for _, test := range []struct {
+		name       string
+		file       io.ReadCloser
+		want       error
+		wantOutput string
+	}{
+		{name: "success", file: readCloser{Reader: bytes.NewBufferString("value")}, wantOutput: "value"},
+		{name: "close", file: readCloser{Reader: bytes.NewBufferString("value"), err: closeErr}, want: closeErr},
+		{name: "read and close", file: readCloser{Reader: errorReader{readErr}, err: closeErr}, want: readErr},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			raw, err := readLimitedAndClose(test.file, 10)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("read error = %v, want %v", err, test.want)
+			}
+			if string(raw) != test.wantOutput {
+				t.Fatalf("read output = %q, want %q", raw, test.wantOutput)
+			}
+			if test.name == "read and close" && !errors.Is(err, closeErr) {
+				t.Fatalf("joined error = %v, missing close error", err)
+			}
+		})
+	}
+}
+
+type readCloser struct {
+	io.Reader
+	err error
+}
+
+func (r readCloser) Close() error { return r.err }
+
+type errorReader struct{ err error }
+
+func (r errorReader) Read([]byte) (int, error) { return 0, r.err }
 
 func TestExplicitDriverSelectionDoesNotCreateVendorEnvironment(t *testing.T) {
 	root := configFixture(t, `{"format_version":1,"mesa_icds":["/nix/mesa.json"]}`)

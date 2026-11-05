@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the local generation runtime and stage its authenticated model seed."""
+"""Build the local generation runtime and optionally stage its authenticated model seed."""
 
 import argparse
 import os
@@ -11,10 +11,10 @@ import runtime
 from staging import stage_runtime, stage_seed
 
 
-def stage(output, resources, release):
+def stage(output, resources):
     bundle = os.environ.get("BIALY_GENERATION_BUNDLE")
     authority = os.environ.get("BIALY_GENERATION_AUTHORITY")
-    if bool(bundle) != bool(authority) or (release and not bundle):
+    if bool(bundle) != bool(authority):
         raise ValueError("generation packaging requires BIALY_GENERATION_BUNDLE and BIALY_GENERATION_AUTHORITY together")
     _, build = runtime.paths("native")
     _, backend = runtime.native_environment(build)
@@ -31,9 +31,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resources", type=Path, required=True)
-    parser.add_argument("--release", action="store_true")
     args = parser.parse_args()
-    stage(args.output, args.resources, args.release)
+    stage(args.output, args.resources)
 
 
 if __name__ == "__main__":
