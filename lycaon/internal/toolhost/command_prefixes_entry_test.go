@@ -309,19 +309,19 @@ func TestCommandEntryNohupRefusesNohupOutAndMissingCommand(t *testing.T) {
 func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	f := newPathsFixture(t)
 	probe := `external -- /bin/sh -c 'ulimit -n'`
-	raw, err := f.Call(t, t.Context(), "ulimit -n; "+probe)
+	raw, err := f.Call(t, t.Context(), probe)
+	testutil.FailErr(t, "measure a child with no ulimit", err)
+	fresh := decodeProgramOutcome(t, raw).Stdout
+	raw, err = f.Call(t, t.Context(), "ulimit -n; "+probe)
 	testutil.FailErr(t, "report the child limit", err)
 	got := decodeProgramOutcome(t, raw)
 	lines := strings.Split(strings.TrimSuffix(got.Stdout, "\n"), "\n")
 	if got.Status != 0 || len(lines) != 2 || lines[0] != lines[1] {
 		t.Fatalf("ulimit -n differs from the child's own: %+v", got)
 	}
-	// A call with no ulimit of its own starts children at the inherited limit, which
-	// can differ from what ulimit reports and is already 256 on some hosts.
-	raw, err = f.Call(t, t.Context(), probe)
-	testutil.FailErr(t, "read the inherited limit", err)
-	baseline := decodeProgramOutcome(t, raw).Stdout
-	inherited, err := strconv.Atoi(strings.TrimSpace(baseline))
+	// Halve the limit a child receives with no ulimit, so the change is visible
+	// whatever the host's inherited limit is.
+	inherited, err := strconv.Atoi(strings.TrimSpace(fresh))
 	testutil.FailErr(t, "parse the inherited limit", err)
 	lowered := strconv.Itoa(inherited / 2)
 	raw, err = f.Call(t, t.Context(), "ulimit -n "+lowered+"; "+probe)
@@ -331,8 +331,8 @@ func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	}
 	raw, err = f.Call(t, t.Context(), probe)
 	testutil.FailErr(t, "next call", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout != baseline {
-		t.Fatalf("the limit persisted into the next call: %+v", got)
+	if got := decodeProgramOutcome(t, raw); got.Stdout != fresh {
+		t.Fatalf("the next call did not start with the limit %q: %+v", fresh, got)
 	}
 }
 

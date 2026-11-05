@@ -11,50 +11,14 @@ func (p Plan) BoundedRetainedStorage() bool {
 
 func (p Plan) reviewedRetainedRoute() bool {
 	const sourceID = "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
-	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 12, Shape: "71741e5f8d9a6ead298d061e3726d0b045b32ca62570409144eb52a2740151f5"}) {
+	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "71741e5f8d9a6ead298d061e3726d0b045b32ca62570409144eb52a2740151f5"}) {
 		return false
 	}
-	if p.Source != manifestLayoutSource || p.CopyPlan() == nil {
+	if p.Source != manifestLayoutSource || p.CopyPlan() == nil || len(p.steps) != 1 {
 		return false
 	}
-	// The current manifest writer bounds its re-derivable memos and maintains
-	// target indexes during insertion, preserving the source-sized sorter proof.
-	reviewed := [][2]string{
-		{"source-manifest-layout", "ae4d80d6bcf5cb51657e0b8d31648093917e22116b9e4e64b6c707643f1b42d1"},
-		{"vault-unlock-away", "13094df267f14b2a7cda143ef5ac6466bc242fb65f5f5452c6e3554e285d2676"},
-		{"native-child-once-authority", "417303ae6c704fdd6909312f57a37c41428182ced025d74d2c0cd4123fc89f95"},
-		{"portable-program-receipts", "bde8b3115696ead32e21b55f520fff50c94e04da79604a0a71a6e7889370ef40"},
-		{"portable-program-native-gap", "f19c6276d3a1d4e7693db5fcb5d4261d46c3033b2878117c06e0f04b55998540"},
-		{"portable-program-inline-inputs", "25c49ce1ad22f336ff4f77dac47f314e36bd733c1594712aa10c949bcef38dba"},
-		{"portable-source-link-kind", "280d02156ff51fb374e9babb5429f5e2075a70fe9f58faaa244f83609667cb41"},
-		{"session-progress-item-identity", "3649f6409cb2306aad84ea5d8264bdc67107470da28b9487263a74e4d7fd69d7"},
-	}
-	if len(p.steps) != len(reviewed) {
-		return false
-	}
-	for i, step := range p.steps {
-		if step.ID != reviewed[i][0] {
-			return false
-		}
-		if step.Checksum != reviewed[i][1] {
-			switch step.ID {
-			case "native-child-once-authority":
-				// Decoder dispatch changes no SQL, indexes or allocation work.
-				if step.Checksum != "13848cc7b59739e3971bd0a793d996372bde110f0b6b4e9bb14a9925697557a5" &&
-					step.Checksum != "417303ae6c704fdd6909312f57a37c41428182ced025d74d2c0cd4123fc89f95" {
-					return false
-				}
-			case "source-manifest-layout":
-				// The reviewed 64-row VALUES input streams through the unchanged
-				// fixed CHECK set; reads, sorts, rows and identities are unchanged.
-				if step.Checksum != "046635199cf698cecc77b7f59fe03b92a9874b1b1789025472f44e0af6b8931e" &&
-					step.Checksum != "3af0f1899c7ec5e85633c260f16d75af8ed506f0cd888e60fd096dcfc54e91d3" {
-					return false
-				}
-			default:
-				return false
-			}
-		}
-	}
-	return true
+	// The manifest writer bounds its re-derivable memos and maintains target
+	// indexes during insertion, preserving the source-sized sorter proof.
+	return p.steps[0].ID == "source-manifests-and-command-records" &&
+		p.steps[0].Checksum == "cb788e40a6e86625f2e9ec812cbcc54943c19e085791cdd05c285cb4eed4b30d"
 }

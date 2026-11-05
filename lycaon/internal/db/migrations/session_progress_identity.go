@@ -16,15 +16,8 @@ var sessionProgressIdentitySQL []byte
 
 // SessionProgressIdentity adds durable checklist row identities and a monotonic
 // document version to session_progress, backfilling existing rows with stable IDs.
-func SessionProgressIdentity(target Baseline) Step {
-	return Step{
-		ID:       "session-progress-item-identity",
-		Source:   sessionProgressIdentitySQL,
-		Checksum: "3649f6409cb2306aad84ea5d8264bdc67107470da28b9487263a74e4d7fd69d7",
-		From:     Baseline{Revision: 11, Shape: "3a065b2adccf2628ce0e203a4e04962c974b462a7cae85e8996ba4e7696fe9e6"},
-		To:       target,
-		Apply:    migrateSessionProgressIdentity,
-	}
+func SessionProgressIdentity() Part {
+	return Part{Source: sessionProgressIdentitySQL, Apply: migrateSessionProgressIdentity}
 }
 
 type progressIdentityUpdate struct {
@@ -66,7 +59,7 @@ func readProgressIdentityBatch(ctx context.Context, tx *sql.Tx, after string) (b
 			return nil, "", err
 		}
 		last = sessionID
-		count := countRevision11ChecklistItems(content)
+		count := countShippedChecklistItems(content)
 		if count == 0 {
 			continue
 		}
@@ -83,8 +76,8 @@ func readProgressIdentityBatch(ctx context.Context, tx *sql.Tx, after string) (b
 	return batch, last, rows.Err()
 }
 
-// countRevision11ChecklistItems freezes revision 11's checklist row grammar.
-func countRevision11ChecklistItems(content string) int {
+// countShippedChecklistItems freezes the shipped checklist row grammar.
+func countShippedChecklistItems(content string) int {
 	var count int
 	for _, raw := range strings.Split(content, "\n") {
 		line := strings.TrimSpace(raw)
@@ -93,11 +86,11 @@ func countRevision11ChecklistItems(content string) int {
 		}
 		search := 0
 		for {
-			idx, ok := findRevision11ChecklistMarker(line, search)
+			idx, ok := findShippedChecklistMarker(line, search)
 			if !ok {
 				break
 			}
-			end, ok := parseRevision11ChecklistItemAt(line, idx)
+			end, ok := parseShippedChecklistItemAt(line, idx)
 			if !ok {
 				search = idx + 1
 				continue
@@ -113,7 +106,7 @@ func countRevision11ChecklistItems(content string) int {
 	return count
 }
 
-func findRevision11ChecklistMarker(line string, start int) (int, bool) {
+func findShippedChecklistMarker(line string, start int) (int, bool) {
 	for i := start; i < len(line); i++ {
 		if line[i] != '-' && line[i] != '*' {
 			continue
@@ -126,7 +119,7 @@ func findRevision11ChecklistMarker(line string, start int) (int, bool) {
 	return 0, false
 }
 
-func parseRevision11ChecklistItemAt(line string, start int) (int, bool) {
+func parseShippedChecklistItemAt(line string, start int) (int, bool) {
 	if start >= len(line) || (line[start] != '-' && line[start] != '*') {
 		return start, false
 	}
@@ -147,7 +140,7 @@ func parseRevision11ChecklistItemAt(line string, start int) (int, bool) {
 		j++
 	}
 	labelEnd := len(line)
-	if next, found := findRevision11ChecklistMarker(line, j); found {
+	if next, found := findShippedChecklistMarker(line, j); found {
 		labelEnd = next
 	}
 	if strings.TrimSpace(line[j:labelEnd]) == "" {
