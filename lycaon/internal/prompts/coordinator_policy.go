@@ -56,14 +56,11 @@ func IsImplementDeferUntilUserReplyTool(toolName string) bool {
 // CoordinatorPolicyTemplateVars builds shared coordinator template data from
 // the tools offered on this call and the loadable tools request_tools can add.
 func CoordinatorPolicyTemplateVars(offered, requestable []string) map[string]any {
-	deferTools := append([]string(nil), implementDeferUntilUserReplyTools...)
-	sort.Strings(deferTools)
 	laneS := LaneSyncTools(offered)
 	out := map[string]any{
-		"coordinator_read_line_limit":  readcaps.LineLimit,
-		"defer_until_user_reply_tools": deferTools,
-		"lane_s_sync_tools":            laneS,
-		"visual_review_cadence":        "on_request",
+		"coordinator_read_line_limit": readcaps.LineLimit,
+		"lane_s_sync_tools":           laneS,
+		"visual_review_cadence":       "on_request",
 	}
 	for k, v := range spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget()) {
 		out[k] = v

@@ -11,7 +11,7 @@ If the assignment or board already names the needed files, **skip repeated enume
 ## Tool budget (unknown layout only)
 
 - Aim for **≤ {{ max_tool_loops }}** tool calls. Follow the survey playbook in your persona when layout is unknown.{% if not profile_has_command %} **Never `command`** for survey.{% endif %} If blocked, stop and list **Unknowns**.
-- **Broad orientation** — survey-ladder first move. Named area + how/what → **`summarize`** with `path` (add `task` to focus). Then follow **`next_actions`** or drill for verbatim **`findings[]`** excerpts.
+- **Broad orientation** — survey-ladder first move. Named area + how/what → **`summarize`** with `path` (add the task argument to focus). Then follow **`next_actions`** or drill for verbatim **`findings[]`** excerpts.
 
 ## File content discipline
 

@@ -11,7 +11,7 @@ hosts: [coordinator, worker]
 **Choose the next read from the question and existing evidence.**
 
 {% if profile_has_summarize %}
-- **Explain a named file or area** → `summarize` with `path` and `task`.
+- **Explain a named file or area** → `summarize` with `path` and the task argument.
 - **Explain an area found through search** → summarize its containing path.
 {% endif %}
 {% if profile_has_command %}

@@ -10,26 +10,26 @@ Before the first draft:
 
 Then draft once.
 
-**Coverage line — always.** Close your report with one line naming what you verified and what you did not — even when the answer is clean: which execution checks ran, what rests on reading vs. execution, what you did not check. "Verified end-to-end via tests" is a valid coverage line; a silent omission is not. Risks, gaps, and follow-ups go here too — state them briefly. Do not promise fixes or new `task()` dispatch on this read-only surface.
+**Coverage line — always.** Close your report with one line naming what you verified and what you did not — even when the answer is clean: which execution checks ran, what rests on reading vs. execution, what you did not check. "Verified end-to-end via tests" is a valid coverage line; a silent omission is not. Risks, gaps, and follow-ups go here too — state them briefly. Do not promise fixes or new worker dispatch on this read-only surface.
 
 **Claim only what tools showed.** Worker completions are inputs — cite their facts or omit them. A passing command proves only its exact invocation and state. Clean rebuild or download claims require receipts for the correct `cwd`-resolved cleanup and the observed run. A workaround proves only itself.
 
 **Keep host machinery private.** Do not expose or explain enforcement, tool fields, routing, internal feedback, or why a call was initially refused. A recovered denial is not a final-report limitation; omit it when the intended operation later succeeds. If user action is still required, name only the resource and concrete action in ordinary terms.
 
-### Forbidden on this surface
+### Not on this surface
 
-| Tool | Why |
+| Work | Why |
 |------|-----|
-| command mutations and `restore_version` | Product mutations — done on investigate/dispatch via workers |
-| Execution checks through `command` or `verify` | Execution checks — done before wrapup |
-| `task`, `worker_cancel`, `wait` | Delegation and orchestration — workers are idle |
+| Product mutations | Done on investigate or dispatch through workers |
+| Execution checks | Done before wrapup |
+| Delegation and orchestration | Workers are idle |
 | `update_progress` (new `- [ ]`) | Reconcile only here — close rows in place |
-| `promote_overlay`, `reject_overlay`, `preview_overlay`, `pack_board` | Overlay/integration — not on this report turn |
-| `answer_decision`, `extend_worker_budget`, `decline_worker_budget` | Worker lifecycle — workers are idle |
+| Overlay integration | Not on this report turn |
+| Worker lifecycle | Workers are idle |
 
-**Do not narrate fixes.** Do not say "I'll edit…", "I'll run `task()`…", or loop searches hoping to fix code — those tools are absent. If tests or code are still broken, stop; the host mis-routed you.
+**Do not narrate fixes.** Do not say "I'll edit…", "I'll dispatch…", or loop searches hoping to fix code — those tools are absent. If tests or code are still broken, stop; the host mis-routed you.
 
-**Survey tools** (`command`, `scan_pack`{% if web_search_enabled %}, `web_search`, `fetch_url`{% endif %}) may orient the narrative, and what they return can be cited.
+**Survey tools** offered on this request may orient the narrative, and what they return can be cited.
 {% if profile_has_recall %}
 **Need a detail a leg's report did not carry?** `recall` it now — a finished leg's observations are still reachable, and the handle it prints is citable here. The closing turn has no tools, so get it on this turn or write the report without it.
 {% endif %}

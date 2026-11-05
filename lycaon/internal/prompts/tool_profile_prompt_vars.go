@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"runtime"
 	"sort"
 	"strings"
@@ -233,40 +234,14 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"profile_has_write_tools":         len(writeTools) > 0 || commandMutates,
 		"profile_has_read_tools":          len(readTools) > 0,
 		"profile_mutation_capable":        mutationCapable,
-		"profile_has_command":             enabled["command"],
 		"profile_command_mutation":        commandMutates,
 		"command_output_files":            enabled["command"],
-		"profile_has_task":                enabled["task"],
-		"profile_has_wait":                enabled["wait"],
-		"profile_has_verify":              enabled["verify"],
 		"profile_can_request":             requestableToolSet(toolViewNames(data.Tools), requestableToolNames(data.Requestable)),
 		"has_find_tool":                   enabled["find"],
-		"profile_has_git_commit":          enabled["git_commit"],
-		"profile_has_grep":                enabled["grep"],
-		"profile_has_code_rewrite":        commandMutates,
 		"native_edit_limit_mib":           readcaps.MaxMutationBytes >> 20,
-		"profile_has_list_dir":            enabled["list_dir"],
-		"profile_has_read":                enabled["read"],
-		"profile_has_jq":                  enabled["jq"],
 		"profile_has_jq_edit":             commandMutates,
-		"profile_has_survey_repo":         enabled["survey_repo"],
-		"profile_has_summarize":           enabled["summarize"],
-		"profile_has_view_image":          enabled["view_image"],
-		"profile_has_view_video":          enabled["view_video"],
 		"profile_has_retrieval":           profileHasRetrievalTool(enabled),
-		"profile_has_skills_read":         enabled["skills_read"],
-		"profile_has_ask_user":            enabled["ask_user"],
-		"profile_has_recall":              enabled["recall"],
-		"profile_has_source_history":      enabled["source_history"],
-		"profile_has_terminal_open":       enabled["terminal_open"],
-		"profile_has_terminal_read":       enabled["terminal_read"],
-		"profile_has_terminal_send":       enabled["terminal_send"],
-		"profile_has_terminal_snapshot":   enabled["terminal_snapshot"],
 		"profile_has_terminal_capture":    commandMutates,
-		"profile_has_process_list":        enabled["process_list"],
-		"profile_has_process_signal":      enabled["process_signal"],
-		"profile_has_command_output":      enabled["command_output"],
-		"profile_has_command_stop":        enabled["command_stop"],
 		"command_on_floor":                enabled["command"] && !data.CommandDeferred,
 		"is_coordinator":                  data.ToolProfile == CoordinatorProfileID,
 		"platform_os":                     runtime.GOOS,
@@ -283,6 +258,10 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"prefer_native_file_tools":        preferNative,
 		"host_runner_tools":               hostRunner,
 	}
+	// Every current tool answers, so a template cannot mistake a typo for false.
+	for _, name := range currentToolNames() {
+		out["profile_has_"+name] = enabled[name]
+	}
 	offeredNames := toolViewNames(data.Tools)
 	MergeRunnerCapabilityVars(offeredNames, out)
 	MergeHTTPActionVars(offeredNames, out)
@@ -290,6 +269,24 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	out["more_tools_loadable"] = len(data.Requestable) > 0
 	return out
 }
+
+// currentToolNames lists every tool a stock profile or the manifest declares.
+var currentToolNames = sync.OnceValue(func() []string {
+	var names []string
+	if cfg, err := nativemanifest.Load(); err == nil {
+		names = append(cfg.AllTools(), cfg.HostProducedTools...)
+	}
+	if profiles, err := sandbox.LoadToolProfiles(); err == nil {
+		for _, profile := range profiles {
+			for name := range profile.Tools {
+				if toolschema.ValidToolName(name) {
+					names = append(names, name)
+				}
+			}
+		}
+	}
+	return names
+})
 
 // MergeRunnerCapabilityVars populates runner_<capability>_tools for offered tools,
 // excluding command when command mutation is not allowed on the surface.

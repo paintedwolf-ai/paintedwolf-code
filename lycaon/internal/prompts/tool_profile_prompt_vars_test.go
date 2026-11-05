@@ -277,8 +277,8 @@ func TestToolProfileCapabilityVarsImplementVerify(t *testing.T) {
 
 func TestToolProfileCapabilityVarsWebResearch(t *testing.T) {
 	vars := loadProfileCapabilityVars(t, "web_research")
-	if vars["profile_has_grep"] != false {
-		t.Fatalf("web_research must not have grep")
+	if vars["profile_has_command"] != false {
+		t.Fatalf("web_research must not have command")
 	}
 	if vars["profile_has_read_tools"] != false {
 		t.Fatalf("web_research must not advertise read tools")

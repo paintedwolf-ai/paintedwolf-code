@@ -19,4 +19,4 @@ Board reports **`Repo: empty · no files yet · skip read scouts`** — project-
 
 **Excluded:** {% for a in excluded_disclosures %}`{{ a.id }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
 
-**Pool:** **{{ max_in_flight }}** in-flight; excess tasks reject with `COORDINATOR_WORKER_IN_FLIGHT`. **Budget:** omit `max_tool_loops` for the **{{ worker_tool_budget_default }}**-round default. A leg that needs more asks with `request_budget`; grant with `extend_worker_budget`, or let it return a partial you can resume.{% if profile_has_verify %} **Verify:** `verify()`.{% endif %}
+**Pool:** **{{ max_in_flight }}** in-flight; excess tasks reject with `COORDINATOR_WORKER_IN_FLIGHT`. **Budget:** omit `max_tool_loops` for the **{{ worker_tool_budget_default }}**-round default. A leg that needs more asks for it; {% if profile_has_extend_worker_budget %}grant with `extend_worker_budget`, or {% endif %}let it return a partial you can resume.{% if profile_has_verify %} **Verify:** `verify()`.{% endif %}

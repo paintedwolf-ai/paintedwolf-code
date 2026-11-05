@@ -111,7 +111,6 @@ func TestCoordinatorPolicyTemplateVarsKeys(t *testing.T) {
 	vars := prompts.CoordinatorPolicyTemplateVars([]string{"read", "grep", "find", "task"}, nil)
 	for _, key := range []string{
 		"coordinator_read_line_limit",
-		"defer_until_user_reply_tools",
 		"is_coordinator",
 		"lane_s_sync_tools",
 		"max_in_flight",

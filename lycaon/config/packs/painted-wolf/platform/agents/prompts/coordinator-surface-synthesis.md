@@ -1,7 +1,7 @@
 {% if has_file_tools %}
 ## Path scopes (report turn)
 
-Read-only survey on the project tree — no product writes, no `task()` dispatch.
+Read-only survey on the project tree — no product writes, no worker dispatch.
 
 - **Read:** {% for g in read_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
 

@@ -4,7 +4,7 @@
 
 | Trigger | Fires when |
 |---------|------------|
-| `next_worker_done` | One `task()` job finishes |
+| `next_worker_done` | One worker job finishes |
 | `all_workers_idle` | Every in-flight job terminal |
 | `overlay_promote_pending` | Write overlay awaits promote/reject |
 | `scan_done` | Host security scan terminal |
