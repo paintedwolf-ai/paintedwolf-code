@@ -4,7 +4,8 @@
 version: "2"
 
 run:
-  timeout: 20m
+  # The CI job limit bounds a hang; a clean run must not fail on elapsed time.
+  timeout: 0
   tests: true
   # Analyze integration- and budget-tagged files.
   build-tags:
@@ -287,3 +288,8 @@ linters:
           - noctx
           - errchkjson
           - nilerr
+
+issues:
+  # Report every finding so one repair does not reveal a hidden next batch.
+  max-issues-per-linter: 0
+  max-same-issues: 0

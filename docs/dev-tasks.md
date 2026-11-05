@@ -862,8 +862,9 @@ those tools apply. Arguments that passthrough targets and non-catalog targets
 forward are still parsed by their own scripts when the run starts.
 
 Go lint accepts repeatable `--scope <package-pattern>` arguments, for example
-`./task lint:full -- --scope ./internal/launchguard`. Both Go vet and golangci-lint
-receive that scope; full mode retains its whole-program deadcode check. Without
+`./task lint:full -- --scope ./internal/launchguard`. Golangci-lint, which covers
+vet in full mode, and fast mode's Go vet receive that scope; full mode retains its
+whole-program deadcode check. Without
 `--scope`, analysis still covers `./...`. Other golangci-lint flags remain forwarded.
 
 ### Health and queue advisories
@@ -962,6 +963,19 @@ the newest batch and active readers remain protected. Canceling one request
 leaves shared work running for other subscribers; canceling the last interested
 request stops that operation. `PW_TEST_WORKERS=2 ./task test:digest --
 ./internal/foo/...` requests a smaller CPU budget without bypassing admission.
+
+A request that does not pass ends its stdout with a `=== Failure digest ===` block,
+built from its receipt: request status and exit code, the failed or unverified
+targets with representative diagnostics, stages left unverified, how many targets
+did not fit, and the receipt and full-log paths. The block holds at most 40 lines
+and whichever is smallest of 4096 bytes, the 3072-byte stream tail of the smallest
+command output budget, and the space the process-finished kick leaves after the
+status line that may land after it. A passing request prints none. `./task --wait`
+keeps its JSON on stdout and repeats the job's block on stderr. Invocations outside
+a shared batch have no receipt, so their block carries status and exit code only.
+Patterns only choose which log lines to show; status comes from runner results.
+Stage logs and `batch.log` stay exact; the command's own output drops exact
+standalone `ld: warning: ignoring duplicate libraries: '-lobjc'` lines.
 
 For agents that need to release their initial command call, the wrapper accepts
 `./task --background <target> ...`. It returns JSON containing a job ID and the

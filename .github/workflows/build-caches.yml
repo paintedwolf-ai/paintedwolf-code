@@ -32,14 +32,14 @@ jobs:
   verification:
     strategy:
       fail-fast: false
-      # Each platform prepares and publishes its compiler inputs on one runner.
-      max-parallel: 1
       matrix:
         runner: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     permissions:
       contents: read
+      # Publication replaces each cache family's previous generation.
+      actions: write
     env:
       PW_TEST_HOST: dedicated
     defaults:
@@ -112,6 +112,20 @@ jobs:
         if: steps.state.outputs.prepare == 'true' && (steps.setup.outputs.go-cache-hit != 'true')
         run: ./task build
 
+      # Analysis compiles every test variant without linking, in the source slot lanes verify in. Findings on
+      # main do not stop warming; nightly reports them.
+      - name: Compile test variants and record lint diagnostics
+        id: diagnostics
+        if: steps.state.outputs.prepare == 'true' && (runner.os == 'Linux' && (steps.state.outputs.maintenance == 'true' || steps.setup.outputs.go-cache-hit != 'true'))
+        continue-on-error: true
+        run: ./task lint:fast lint:full
+
+      - name: Publish lint diagnostics
+        if: steps.state.outputs.prepare == 'true' && (steps.diagnostics.conclusion == 'success' && github.ref == 'refs/heads/main')
+        uses: ./.github/actions/cache-lint-diagnostics
+        with:
+          save: 'true'
+
       # The macOS platform jobs build the development sidecar, which also
       # builds the decision engine whenever its cache key changes.
       - name: Build the development sidecar
@@ -152,7 +166,6 @@ jobs:
         with:
           save: 'true'
 
-      # Publish completed compiler caches before diagnostic work.
       - name: Publish prepared Go caches
         if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main' && steps.setup.outputs.go-cache-hit != 'true')
         uses: ./.github/actions/cache-go
@@ -189,18 +202,6 @@ jobs:
       - name: Publish reference userland images
         if: steps.state.outputs.prepare == 'true' && (runner.os == 'Linux' && github.ref == 'refs/heads/main')
         uses: ./.github/actions/setup-reference-userlands
-        with:
-          save: 'true'
-
-      # Lint lanes run on Linux. Findings on main do not stop warming; nightly reports them.
-      - name: Record lint diagnostics
-        if: steps.state.outputs.prepare == 'true' && steps.state.outputs.maintenance == 'true' && (runner.os == 'Linux')
-        continue-on-error: true
-        run: ./task lint:full
-
-      - name: Publish lint diagnostics
-        if: steps.state.outputs.prepare == 'true' && steps.state.outputs.maintenance == 'true' && (runner.os == 'Linux' && github.ref == 'refs/heads/main')
-        uses: ./.github/actions/cache-lint-diagnostics
         with:
           save: 'true'
 

@@ -304,6 +304,7 @@ func queryDockerContainers(ctx context.Context, sockets []string) []dockerContai
 
 func queryDockerContainersOverSocket(ctx context.Context, socketPath string) ([]dockerContainerInfo, error) {
 	tr := &http.Transport{
+		DisableKeepAlives: true,
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
 		},

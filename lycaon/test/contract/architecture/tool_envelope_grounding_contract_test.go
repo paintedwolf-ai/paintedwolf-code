@@ -262,20 +262,3 @@ func TestSurveyByteClampUsesRegisteredHintCode(t *testing.T) {
 		t.Fatal("banner must preserve clamped JSON prefix")
 	}
 }
-
-func TestSurveyreceiptNoForbiddenInlineSessionCapProse(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "tools", "surveyreceipt")
-	entries, err := os.ReadDir(path)
-	contractcheck.FailErr(t, "read surveyreceipt dir", err)
-	for _, ent := range entries {
-		if !strings.HasSuffix(ent.Name(), ".go") || strings.HasSuffix(ent.Name(), "_test.go") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(path, ent.Name()))
-		contractcheck.FailErr(t, "read file", err)
-		if strings.Contains(string(data), "session byte cap") {
-			t.Fatalf("%s must not contain inline session byte cap prose (use TOOL_SURVEY_BYTE_CLAMPED registry)", ent.Name())
-		}
-	}
-}

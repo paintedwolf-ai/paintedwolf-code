@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/heldcall"
@@ -39,6 +38,7 @@ type AssemblyWorkflow struct {
 
 type Assembly struct {
 	Workflow      AssemblyWorkflow
+	Messages      inject.MessageWindowReader
 	Briefs        *sourcebrief.Service
 	Catalog       *sessioncatalog.Service
 	Closeout      *closeoutassembly.Service
@@ -79,15 +79,10 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		SiblingNoteDelivery:   m.Notes,
 		PeerReservations:      m.Workspaces,
 		ImplementSessionState: m.State.ForSession,
-		LoadExecutionModeState: func(_ context.Context, sessionID string) surface.ExecutionModeState {
-			return rt.ExecutionModeStore().Load(sessionID)
-		},
-		SaveExecutionModeState: func(_ context.Context, sessionID, family string) {
-			rt.ExecutionModeStore().Save(sessionID, family)
-		},
-		WorkflowHints: m.Hints,
-		GateFeedback:  m.Feedback,
-		ScanGuidance:  m.Scan,
+		ExecutionModes:        rt.ExecutionModeStore(),
+		WorkflowHints:         m.Hints,
+		GateFeedback:          m.Feedback,
+		ScanGuidance:          m.Scan,
 		RepoKnownEmpty: func(ctx context.Context, workspacePath string) bool {
 			return repoinfo.MeasuredEmpty(ctx, m.Repository, workspacePath)
 		},
@@ -99,6 +94,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 			}
 			return toolpresentation.EnrichHistory(sessionID, history, m.Stash)
 		},
+		ReadMessageWindow:       m.Messages,
 		PromptToolLister:        m.PromptTools,
 		LoadedTools:             m.Loading.LoadedTools,
 		OmittedUnits:            m.Loading.OmittedUnits,
@@ -146,11 +142,7 @@ func (m *Assembly) PromptTools(ctx context.Context, sess *api.Session, profileID
 	if m == nil || sess == nil {
 		return nil, nil
 	}
-	policy := m.Guards.Policy()
-	if policy == nil {
-		return nil, nil
-	}
-	metas := policy.ListForPrompt(ctx, sess, profileID)
+	metas := m.Guards.Policy().ListForPrompt(ctx, sess, profileID)
 	machine := m.Profiles.CompileMachine(ctx, sess, profileID)
 	return tools.HideSkillsReadWhenEmpty(metas, machine.SkillCount), nil
 }

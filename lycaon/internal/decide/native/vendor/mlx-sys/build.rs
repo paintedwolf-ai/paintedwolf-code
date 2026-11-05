@@ -16,16 +16,6 @@ mod bindgen_config;
 
 /// Find the clang runtime library path dynamically using xcrun
 fn find_clang_rt_path() -> Option<String> {
-    // Use xcrun to find the active toolchain path
-    let output = Command::new("xcrun")
-        .args(["--show-sdk-platform-path"])
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
     // Get the developer directory which contains the toolchain
     let output = Command::new("xcode-select")
         .args(["--print-path"])

@@ -265,7 +265,7 @@ describe("opening loaded files into collaborative documents", () => {
     const f = setup({ syncEditorDocument: sync });
     f.load();
     await waitFor(() => expect(f.buffer().editorOpening?.status).toBe("reconnecting"));
-    await waitFor(() => expect(f.buffer().documentId).toBe(f.host.wire.id), { timeout: 5000 });
+    await waitFor(() => expect(f.buffer().documentId).toBe(f.host.wire.id));
     expect(sync).toHaveBeenCalledTimes(2);
     expect(sync.mock.calls[1]![2].incarnation).toBe(sync.mock.calls[0]![2].incarnation);
     expect(participants[1]).toBe(participants[0]);

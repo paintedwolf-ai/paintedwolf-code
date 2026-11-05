@@ -233,6 +233,8 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 	if snapshot != nil {
 		entry, hasEntry = snapshot.entries[p.ID()]
 	}
+	// Reasoning leaves the content channel before anything judges the payload.
+	p = &reasoningMarkerProvider{Provider: p}
 	if hasEntry {
 		if len(entry.RejectionReasons) > 0 {
 			p = &rejectionReasonProvider{inner: p, rules: entry.RejectionReasons}
@@ -256,7 +258,7 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 		}
 	}
 	p = &secretScreenedProvider{inner: p, destination: destination, screen: screen}
-	return &lifecycleProvider{Provider: &reasoningMarkerProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}}}
+	return &lifecycleProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}}
 }
 
 // Catalog exposes the underlying catalog.

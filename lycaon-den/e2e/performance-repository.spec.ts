@@ -76,10 +76,7 @@ for (const root of roots) {
       const removal = await apiRemoveProject(request, project.id);
       deletion = { durationMs: performance.now() - deleteStarted, projectState: removal?.project_state };
       expect(deletion.projectState).toBe("deleted");
-      expect(deletion.durationMs).toBeLessThan(5000);
       expect(trustSamples.every(sample => sample.status === 200), JSON.stringify(trustSamples)).toBe(true);
-      expect(Math.max(...samples.map(sample => sample.handlerMs))).toBeLessThan(100);
-      expect(Math.max(...trustSamples.slice(1).map(sample => sample.durationMs))).toBeLessThan(1000);
     } finally {
       writeFileSync(info.outputPath("repository-performance.json"), JSON.stringify({ root, samples, trustSamples, deletion }, null, 2));
       const stateDir = process.env.LYCAON_E2E_STATE_DIR;

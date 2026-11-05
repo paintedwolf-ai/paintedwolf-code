@@ -237,17 +237,52 @@ func TestAnEngineWithNoGPUIsReportedAndNotRelaunched(t *testing.T) {
 	}
 }
 
-func TestAnEngineThatFailsForAnotherReasonIsUnusable(t *testing.T) {
+// A handshake fault the hardware does not explain carries the engine's exit
+// status and last diagnostics, and holds the engine from relaunching for a
+// while that doubles with each fault in a row.
+func TestAHandshakeFaultIsReportedAndHeld(t *testing.T) {
 	t.Parallel()
 	cfg := fakeConfig(t)
-	instrument(t, cfg, "exit 1\n")
+	launches := instrument(t, cfg, "echo 'kernel library not found' >&2\nexit 1\n")
 	client := bialy.New(cfg)
 	t.Cleanup(func() { _ = client.Close() })
-	if err := client.Warm(context.Background()); err == nil || errors.Is(err, bialy.ErrNoCapableDevice) {
-		t.Fatalf("warm error = %v, want a handshake failure", err)
+	now := time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC)
+	var clockMu sync.Mutex
+	client.SetClockForTest(func() time.Time { clockMu.Lock(); defer clockMu.Unlock(); return now })
+	advance := func(d time.Duration) { clockMu.Lock(); now = now.Add(d); clockMu.Unlock() }
+
+	err := client.Warm(context.Background())
+	var exit *bialy.EngineExitError
+	if !errors.As(err, &exit) || exit.Status != 1 || len(exit.Stderr) != 1 || exit.Stderr[0] != "kernel library not found" {
+		t.Fatalf("warm error = %v, want the exit status and stderr line", err)
+	}
+	if !strings.Contains(err.Error(), "status 1: kernel library not found") {
+		t.Fatalf("error text = %q, want the status and last line", err)
 	}
 	if got := client.Status(); got != bialy.ReasonUnusable {
 		t.Fatalf("status = %q, want %q", got, bialy.ReasonUnusable)
+	}
+	if _, _, err := client.Rank(context.Background(), decide.HeadCodeRank, "t", []string{"a"}); !errors.As(err, &exit) {
+		t.Fatalf("rank error during the hold = %v, want the remembered fault", err)
+	}
+	if n := launches(); n != 1 {
+		t.Fatalf("engine launched %d times during the hold, want once", n)
+	}
+
+	advance(30 * time.Second)
+	_, _, _ = client.Rank(context.Background(), decide.HeadCodeRank, "t", []string{"a"})
+	if n := launches(); n != 2 {
+		t.Fatalf("engine launched %d times after the first hold, want twice", n)
+	}
+	advance(30 * time.Second)
+	_, _, _ = client.Rank(context.Background(), decide.HeadCodeRank, "t", []string{"a"})
+	if n := launches(); n != 2 {
+		t.Fatalf("engine launched %d times inside the doubled hold, want twice", n)
+	}
+	advance(30 * time.Second)
+	_, _, _ = client.Rank(context.Background(), decide.HeadCodeRank, "t", []string{"a"})
+	if n := launches(); n != 3 {
+		t.Fatalf("engine launched %d times after the doubled hold, want three", n)
 	}
 }
 
@@ -320,7 +355,7 @@ func TestClientAdmissionRetainsTimedOutNativeWork(t *testing.T) {
 		if err == nil {
 			t.Fatal("unsupported state encoded successfully")
 		}
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 		defer cancel()
 		_, _, err = client.Rank(ctx, decide.HeadCodeRank, "after encoding error", []string{"a", "b"})
 		testutil.FailErr(t, "admit request after encoding failure", err)
@@ -350,17 +385,19 @@ while IFS=`, 1)
 			client := bialy.New(cfg)
 			t.Cleanup(func() { _ = client.Close() })
 			testutil.FailErr(t, "warm native engine", client.Warm(t.Context()))
-			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			parent, cancel := context.WithCancel(t.Context())
 			defer cancel()
+			ctx := parent
+			if terminal == "exit" {
+				ctx = expiringContext{parent}
+			}
 			first := make(chan error, 1)
 			go func() {
 				_, _, err := client.Rank(ctx, decide.HeadCodeRank, "blocked", []string{"a", "b"})
 				first <- err
 			}()
 			waitForEngineMarker(t, filepath.Join(dir, "blocked"))
-			if terminal != "exit" {
-				cancel()
-			}
+			cancel()
 			err := <-first
 			if terminal != "exit" && !errors.Is(err, context.Canceled) {
 				t.Fatalf("in-flight cancellation = %v", err)
@@ -441,6 +478,17 @@ func waitForEngineMarker(t *testing.T, path string) {
 }
 
 // Done is first read by process admission after Client resolves its process.
+// expiringContext reports its parent's cancellation as an expired deadline, so a test
+// chooses the moment a deadline passes.
+type expiringContext struct{ context.Context }
+
+func (c expiringContext) Err() error {
+	if c.Context.Err() != nil {
+		return context.DeadlineExceeded
+	}
+	return nil
+}
+
 type admissionContext struct {
 	context.Context
 	observed chan struct{}

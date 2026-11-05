@@ -292,6 +292,15 @@ absent from the baseline release must advance at least a minor version and raise
 `extension_api` and `painted-wolf/platform` floors above the baseline. These checks validate structured contracts; they do
 not infer behavioral equivalence from display copy.
 
+A retirement's successor is either a list of names that exist in the same vocabulary, or
+an object such as `{"content_contract": "paintedwolf.markdown_note", "version": 1}` when
+the meaning moves out of the vocabulary into a non-callable content contract. The object
+must match an entry in the catalog's `content_contracts` map at its declared version.
+Contract identifiers are dotted namespaces that never name a tool, and a released
+contract stays declared at its version or later. Both forms belong to catalog format 1:
+released catalogs parse unchanged, and the gate that reads a candidate's catalog runs
+from `main`.
+
 ### Release coverage
 
 Product versions identify publications. Other identities advance only when their

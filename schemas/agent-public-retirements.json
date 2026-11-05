@@ -1,5 +1,11 @@
 {
   "format_version": 1,
+  "content_contracts": {
+    "paintedwolf.markdown_note": {
+      "version": 1,
+      "summary": "Non-callable publication of user-facing assistant updates as Markdown text."
+    }
+  },
   "vocabularies": {
     "host_facts": {
       "paintedwolf.high_risk_tool": [

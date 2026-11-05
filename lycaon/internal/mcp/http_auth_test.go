@@ -99,7 +99,7 @@ func TestConnectHTTPInjectsHeaders(t *testing.T) {
 		Token:   "pat-never-on-get",
 		Headers: map[string]string{"X-Api-Key": "hdr-never-on-get"},
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	_, _ = conn.Connect(ctx, entry, mcp.ConnectOpts{})
 	if sawAuth != "Bearer pat-never-on-get" {

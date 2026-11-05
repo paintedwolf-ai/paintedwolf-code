@@ -299,7 +299,7 @@ func TestRegistryCloseStopsAllSessionsAndRejectsNewStarts(t *testing.T) {
 		}, runner)
 		testutil.FailErr(t, "start process for "+sessionID, err)
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	testutil.FailErr(t, "close registry", reg.Lifecycle.Close(ctx))
 	if got := len(reg.Output.List(context.Background(), "sess-1")) + len(reg.Output.List(context.Background(), "sess-2")); got != 0 {

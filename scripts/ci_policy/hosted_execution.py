@@ -10,7 +10,7 @@ import time
 
 from artifact_paths import artifact_root
 from ci_policy.evidence import oom_events, classify
-from ci_policy import hosted_plan, timings, verification_report
+from ci_policy import hosted_plan, ready_scope, timings, verification_report
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -62,23 +62,9 @@ def sample_resources(stop, interval=60):
         print(resource_line(), flush=True)
 
 
-HISTORY_KEYS = ("failed_targets", "passed_targets", "native_failed", "native_passed", "contract_failures")
-
-
-def parse_early_history(raw, targets):
-    """Parse PW_CI_EARLY_TARGET as a validated JSON history dict or a single target name."""
-    if not raw:
-        return {}
-    if raw.startswith("{"):
-        try:
-            data = json.loads(raw)
-        except ValueError:
-            return {}
-        if not isinstance(data, dict):
-            return {}
-        return {key: [item for item in value if isinstance(item, str)]
-                for key, value in data.items() if key in HISTORY_KEYS and isinstance(value, list)}
-    return {"failed_targets": [raw]} if raw in targets else {}
+def combined_exit(current, result):
+    """A failed check stays failed when a later phase is merely unverified."""
+    return 1 if 1 in (current, result) else current or result
 
 
 def run_lane(name, shard="", merge_group=False):
@@ -104,8 +90,9 @@ def run_lane(name, shard="", merge_group=False):
         record['job_started_at'] = None
     record["oom_before"] = oom_events()
     path.write_text(json.dumps(record, indent=2) + "\n")
-    # The hosted lane budget bounds Go runs.
-    environment = {"PW_GO_TEST_TIMEOUT_SECONDS": str(lane["minutes"] * 60), **os.environ}
+    # The hosted lane budget bounds Go and frontend runs.
+    budget = str(lane["minutes"] * 60)
+    environment = {"PW_GO_TEST_TIMEOUT_SECONDS": budget, "PW_VITEST_TIMEOUT_SECONDS": budget, **os.environ}
     if scope and scope["base"]:
         environment["PW_CHANGE_BASE"] = scope["base"]
     # Memory-heavy lanes cap process parallelism.
@@ -137,47 +124,32 @@ def run_lane(name, shard="", merge_group=False):
             if packages:
                 command += ["--", *packages]
                 record["packages"] = packages
-        early_raw = environment.pop('PW_CI_EARLY_TARGET', '')
-        history = parse_early_history(early_raw, targets) if (name == 'ready' and os.environ.get('GITHUB_ACTIONS') == 'true') else {}
-        if lane.get("preflight"):
-            from ci_policy.merge_preflight import preflight_commands
-            preflights = preflight_commands(lane["preflight"], history)
-            record["preflight"] = {"command": preflights[0], "started_at": time.time()}
-            if len(preflights) > 1:
-                record["preflight"]["phases"] = []
-            path.write_text(json.dumps(record, indent=2) + "\n")
-            for preflight_cmd in preflights:
-                if code != 0:
-                    break
-                record["preflight"]["command"] = preflight_cmd
-                phase = {"command": preflight_cmd, "started_at": time.time()}
-                if "phases" in record["preflight"]:
-                    record["preflight"]["phases"].append(phase)
-                path.write_text(json.dumps(record, indent=2) + "\n")
-                code = subprocess.call(preflight_cmd, cwd=ROOT, env=environment)
-                phase.update(exit_code=code, finished_at=time.time())
-            record["preflight"].update(exit_code=code, finished_at=time.time())
+        # Admission reports every failure, so repairs need not rediscover them one run at a time.
+        complete = merge_group or name in {"ready", "ready-tests"}
         commands = [command]
-        if name == 'ready':
-            from ci_policy.native_admission import commands as native_commands
-            from ci_policy.merge_preflight import ready_commands
-            commands = ready_commands(targets, native_commands(scope), history)
-            from ci_policy.ready_scope import commands as scoped_commands
-            if code == 0:
-                commands, record['packages'] = scoped_commands(commands, scope)
-        if code == 0 and merge_group:
+        if complete:
+            environment["PW_TEST_KEEP_GOING"] = "1"
+        if name == "ready":
+            commands = ready_scope.check_phases(hosted_plan.invocation(targets), scope, lane.get("early_targets", []))
+        elif name == "ready-tests":
+            commands, record["packages"] = ready_scope.test_phases(scope)
+        if merge_group:
             from ci_policy.merge_preflight import commands as ordered_commands
             commands = ordered_commands(lane, hosted_plan.invocation(targets), packages)
         for command in commands:
-            if code != 0:
+            # A signal is the job being torn down, not a check's result, so nothing further can report.
+            if code < 0 or (code != 0 and not complete):
                 break
             phase = {"command": command, "started_at": time.time()}
             record["phases"].append(phase)
             path.write_text(json.dumps(record, indent=2) + "\n")
-            code = subprocess.call(command, cwd=ROOT, env=environment)
-            phase.update(exit_code=code, finished_at=time.time())
+            result = subprocess.call(command, cwd=ROOT, env=environment)
+            phase.update(exit_code=result, finished_at=time.time())
+            code = combined_exit(code, result)
+            if result < 0:
+                break
     except (subprocess.SubprocessError, OSError, ValueError) as error:
-        code = 2
+        code = combined_exit(code, 2)
         record["execution_error"] = {"type": type(error).__name__, "message": str(error)}
         if isinstance(error, subprocess.CalledProcessError):
             record["execution_error"].update(command=error.cmd, exit_code=error.returncode, stderr=error.stderr)

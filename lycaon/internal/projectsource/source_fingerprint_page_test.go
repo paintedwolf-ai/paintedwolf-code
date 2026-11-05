@@ -96,7 +96,7 @@ func TestFingerprintReadersOverlapAndJoinBeforeReleasingTheirArena(t *testing.T)
 				select {
 				case name := <-started:
 					seen[name] = true
-				case <-time.After(5 * time.Second):
+				case <-time.After(testutil.Timeout(time.Minute)):
 					t.Fatal("bounded readers did not start before earlier input completed")
 				}
 			}

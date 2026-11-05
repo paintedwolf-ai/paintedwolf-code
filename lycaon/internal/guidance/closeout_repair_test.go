@@ -70,7 +70,7 @@ func TestRetainedFallbackPinsNarrativeAndNeverAddsUnrelatedCitations(t *testing.
 	testutil.FailErr(t, "marshal original", err)
 	next, err := MarshalCoordinatorCompletionReport(CoordinatorCompletionReport{Synthesis: "Rewritten report.", CitedEvidence: []CoordinatorCitedEvidence{{Evidence: "command#1"}, {Evidence: "missing#2"}}})
 	testutil.FailErr(t, "marshal retry", err)
-	pinned, ok := ParseCoordinatorCompletionReport(RetainCloseoutDraft(first, next, false))
+	pinned, ok := ParseCoordinatorCompletionReport(RetainCloseoutDraft(first, next, CloseoutRepair{}))
 	if !ok || pinned.Synthesis != original.Synthesis || pinned.Headline != original.Headline {
 		t.Fatalf("pinned = %+v", pinned)
 	}
@@ -89,28 +89,65 @@ func TestRetainedFallbackPinsNarrativeAndNeverAddsUnrelatedCitations(t *testing.
 }
 
 // A citation retry cannot rewrite the report; a retry after a document field
-// was rejected replaces the document fields and keeps the first narrative.
+// was rejected replaces the document fields and keeps the first narrative; a
+// retry after the body's presentation was rejected replaces the body and the
+// artifacts it presents.
 func TestPinCloseoutReportRepairsOnlyWhatWasRejected(t *testing.T) {
 	original := CoordinatorCompletionReport{
 		Synthesis: "Original.", Headline: "Original headline",
-		Findings: []CoordinatorFinding{{Title: "Original finding"}},
+		Findings:    []CoordinatorFinding{{Title: "Original finding"}},
+		ArtifactIDs: []string{"11111111-1111-1111-1111-111111111111"},
 	}
 	repaired := CoordinatorCompletionReport{
 		Synthesis: "Rewritten.", Headline: "Rewritten headline",
 		Findings:      []CoordinatorFinding{{Title: "Original finding", Disposition: "act"}},
 		Ask:           &CoordinatorAsk{Do: "Approve.", Effort: "small"},
 		CitedEvidence: []CoordinatorCitedEvidence{{Evidence: "read#1"}},
+		ArtifactIDs:   []string{"22222222-2222-2222-2222-222222222222"},
 	}
-	citation := PinCloseoutReport(original, repaired, false)
-	if citation.Headline != "Original headline" || citation.Ask != nil || citation.Findings[0].Disposition != "" || len(citation.CitedEvidence) != 1 {
+	citation := PinCloseoutReport(original, repaired, CloseoutRepair{})
+	if citation.Synthesis != "Original." || citation.Headline != "Original headline" || citation.Ask != nil || citation.Findings[0].Disposition != "" || len(citation.CitedEvidence) != 1 || citation.ArtifactIDs[0] != original.ArtifactIDs[0] {
 		t.Fatalf("citation repair = %+v, want only the citations replaced", citation)
 	}
-	document := PinCloseoutReport(original, repaired, true)
+	document := PinCloseoutReport(original, repaired, CloseoutRepair{Document: true})
 	if document.Synthesis != "Original." || document.Headline != "Rewritten headline" || document.Ask == nil || document.Findings[0].Disposition != "act" {
 		t.Fatalf("document repair = %+v, want the document fields replaced under the first narrative", document)
 	}
+	body := PinCloseoutReport(original, repaired, CloseoutRepair{Body: true})
+	if body.Synthesis != "Rewritten." || body.ArtifactIDs[0] != repaired.ArtifactIDs[0] || body.Headline != "Original headline" {
+		t.Fatalf("body repair = %+v, want the body and artifacts replaced under the first document", body)
+	}
 	if !RepairsReportDocument([]string{"SYNTH_HANDLE_NOT_IN_LEGS", ReportInventoryUnaccountedCode}) || RepairsReportDocument([]string{"SYNTH_HANDLE_NOT_IN_LEGS"}) {
 		t.Fatal("document repair must follow the rejection codes on the cycle")
+	}
+	retained := RetainedCloseout{ForcedBy: []string{PresentImageUnobservedCode, ReportInventoryUnaccountedCode}, BodyRepair: true}
+	if repair := retained.Repair(); !repair.Body || !repair.Document {
+		t.Fatalf("repair = %+v, want the body while the latest refusal asks for it and the document for the cycle", repair)
+	}
+	if PresentationObservation(PresentMarkdownEmbedCode) == "" || PresentationObservation(PresentImageUnobservedCode) == "" || PresentationObservation("SYNTH_HANDLE_NOT_IN_LEGS") != "" {
+		t.Fatal("presentation codes are the two image refusals")
+	}
+}
+
+// A body repair's draft replaces the pinned body even when the pinned draft
+// was plain Markdown rather than an envelope.
+func TestRetainCloseoutDraftReplacesBodyOnPresentationRepair(t *testing.T) {
+	first, err := MarshalCoordinatorCompletionReport(CoordinatorCompletionReport{Synthesis: "![x](https://placeholder.example/1.png)\n\nOriginal."})
+	testutil.FailErr(t, "marshal first", err)
+	next, err := MarshalCoordinatorCompletionReport(CoordinatorCompletionReport{Synthesis: "Original, described.", ArtifactIDs: []string{"33333333-3333-3333-3333-333333333333"}})
+	testutil.FailErr(t, "marshal next", err)
+	kept, ok := ParseCoordinatorCompletionReport(RetainCloseoutDraft(first, next, CloseoutRepair{}))
+	if !ok || kept.Synthesis != "![x](https://placeholder.example/1.png)\n\nOriginal." {
+		t.Fatalf("citation repair kept = %+v, want the first body", kept)
+	}
+	replaced, ok := ParseCoordinatorCompletionReport(RetainCloseoutDraft(first, next, CloseoutRepair{Body: true}))
+	if !ok || replaced.Synthesis != "Original, described." || len(replaced.ArtifactIDs) != 1 {
+		t.Fatalf("body repair kept = %+v, want the retry's body and artifacts", replaced)
+	}
+	plain := "Plain first body."
+	fromPlain, ok := ParseCoordinatorCompletionReport(RetainCloseoutDraft(plain, next, CloseoutRepair{Body: true}))
+	if !ok || fromPlain.Synthesis != "Original, described." {
+		t.Fatalf("body repair over plain draft = %+v, want the retry's body", fromPlain)
 	}
 }
 

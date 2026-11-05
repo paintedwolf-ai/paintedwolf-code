@@ -304,7 +304,7 @@ Host-managed bytes must sometimes remain readable to tools without entering the 
 | `promote-spills/…` | Bounded promotion previews and conflict material |
 | `prompt-attachments/…` | Materialized user attachments and extracted bodies |
 
-These three prefixes (`internal/tooloutput`) are the complete agent-visible set. `read` and `grep` resolve them through the project host-data provider and cannot escape to arbitrary configuration files, credentials, or another project id. Durable transcript references use the host-data-relative form so moving the config root or restoring a backup does not bake in an absolute machine path.
+These three prefixes (`internal/tooloutput`) are the complete agent-visible set. `read` and `grep` resolve them through the project host-data provider and cannot escape to arbitrary configuration files, credentials, or another project id. Command programs read the same relative references through native utilities unless the current directory holds an entry of that name, and `native_path -- PATH` converts one to its host path. Conversion grants nothing and a confined child still cannot open the file; child processes consume it through a native reader pipeline. Converting a `tool-output/` body restarts its reclamation grace so a following read cannot lose it to a reclaim of a body with no durable reference. Durable transcript references use the host-data-relative form so moving the config root or restoring a backup does not bake in an absolute machine path.
 
 ### Agent-visible worker-branch paths
 

@@ -59,8 +59,43 @@ type Client struct {
 	generation int
 	incapable  bool
 	noGPU      bool
-	// warmErr is the last handshake failure; cleared once an engine answers.
-	warmErr error
+	// fault is the last handshake failure the hardware does not explain, and
+	// faultHold is when the engine may launch again; faults in a row lengthen
+	// the hold. Both clear once an engine answers.
+	fault     error
+	faultHold time.Time
+	faults    int
+	now       func() time.Time
+}
+
+const (
+	// faultHoldFirst is the hold after one handshake fault.
+	faultHoldFirst = 30 * time.Second
+	// faultHoldMax caps the hold however many faults follow.
+	faultHoldMax = 10 * time.Minute
+)
+
+// faultHoldFor doubles the hold with each fault in a row, up to the cap.
+func faultHoldFor(faults int) time.Duration {
+	hold := faultHoldFirst
+	for i := 1; i < faults && hold < faultHoldMax; i++ {
+		hold *= 2
+	}
+	return min(hold, faultHoldMax)
+}
+
+func (c *Client) clock() time.Time {
+	if c.now != nil {
+		return c.now()
+	}
+	return time.Now()
+}
+
+// SetClockForTest replaces the clock the relaunch hold is measured on.
+func (c *Client) SetClockForTest(now func() time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = now
 }
 
 // Reason says why the engine cannot answer; empty when it can.
@@ -94,7 +129,7 @@ func (c *Client) Status() Reason {
 	if c.incapable {
 		return ReasonNoCapableDevice
 	}
-	if c.warmErr != nil && !c.started {
+	if c.fault != nil && !c.started {
 		return ReasonUnusable
 	}
 	return ""
@@ -145,9 +180,6 @@ func (c *Client) Loaded(head decide.Head) bool {
 // does not pay for weight loading.
 func (c *Client) Warm(ctx context.Context) error {
 	_, err := c.ensure(ctx)
-	c.mu.Lock()
-	c.warmErr = err
-	c.mu.Unlock()
 	return err
 }
 
@@ -255,6 +287,11 @@ func (c *Client) ensure(ctx context.Context) (*process, error) {
 		c.mu.Unlock()
 		return nil, ErrNoCapableDevice
 	}
+	if c.starting == nil && c.fault != nil && c.clock().Before(c.faultHold) {
+		err := c.fault
+		c.mu.Unlock()
+		return nil, err
+	}
 	if c.starting == nil {
 		bin := c.cfg.Resolve()
 		if bin == "" {
@@ -314,8 +351,19 @@ func (c *Client) start(ctx context.Context, bin string, done chan struct{}, gene
 		return
 	}
 	if err != nil {
+		c.faults++
+		c.fault = err
+		hold := faultHoldFor(c.faults)
+		c.faultHold = c.clock().Add(hold)
+		var exit *EngineExitError
+		if errors.As(err, &exit) {
+			log.Warn("decision engine exited during handshake; decisions fall back", "status", exit.Status, "stderr", exit.Stderr, "faults", c.faults, "hold", hold)
+		} else {
+			log.Warn("decision engine handshake failed; decisions fall back", "error", err, "faults", c.faults, "hold", hold)
+		}
 		return
 	}
+	c.fault, c.faults = nil, 0
 	c.engine = engine
 	c.proc = proc
 	c.started = true

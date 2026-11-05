@@ -338,18 +338,20 @@ The bundled GLM-5.3-Flash rule uses low/high/max because [Z.ai documents that ev
 
 #### Reasoning markers
 
-Some families' chat templates wrap reasoning in literal tags inside the
-content channel, and serving stacks differ in what they do with them: one
-reports the reasoning in its own field yet still streams the open tag as
-content, another leaves the whole block in the content. A rule declares the
-family's tags with `reasoning_markers`, and the host reads every transport's
-output the same way:
+Many chat templates wrap reasoning in literal tags inside the content
+channel, and serving stacks differ in what they do with them: one reports the
+reasoning in its own field yet still streams the open tag as content, another
+leaves the whole block in the content. The host reads every model's output
+for `<think>` and `</think>`, whether or not a rule names the model, so a
+model the catalog has never heard of still keeps its reasoning out of the
+transcript. A family whose template uses other tags declares them with
+`reasoning_markers`, which replace the default for that family:
 
 ```yaml
 model_thinking:
-  - match: [qwen3]
-    style: boolean_think
-    reasoning_markers: {open: "<think>", close: "</think>"}
+  - match: [example-family]
+    style: none
+    reasoning_markers: {open: "<reasoning>", close: "</reasoning>"}
 ```
 
 Content between the tags is reasoning. Reasoning that arrives in its own
@@ -357,9 +359,15 @@ field settles the block: the open tag stood alone, whitespace after it is
 dropped, and the text that follows is the visible answer, as is anything after
 the close tag. Bytes that could still begin a tag wait for the next delta, so
 a tag split across deltas is still read as one. A tag that never completes is
-visible text, and an open block that never closes is reasoning. Each tag is a
-literal of at most 32 bytes, and the two must differ. A family with no rule,
-or a rule without markers, passes content through untouched.
+visible text, and an open block that never closes is reasoning, including one
+cut off by a tool call or the output cap. Each tag is a literal of at most 32
+bytes, and the two must differ. Content that does not open with the tag passes
+through untouched.
+
+Separation runs directly over the transport, before response retry judges the
+payload. A turn that spent its whole output cap on reasoning is therefore an
+empty completion to the retry layer, which recovers it by lowering reasoning
+and asking again, rather than a raw block or a blank turn in the transcript.
 
 #### Model cutoff
 

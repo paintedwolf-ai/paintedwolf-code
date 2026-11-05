@@ -62,8 +62,13 @@ func (l *turnCloseout) emitAssembledCloseout(
 	if strings.TrimSpace(report.Synthesis) == "" {
 		return out, nil
 	}
-	// Invalid artifact embeds become attachment references.
-	if clean, embedIDs := guidance.StripCloseoutMarkdownArtifactEmbeds(report.Synthesis); len(embedIDs) > 0 {
+	// Embeds the host cannot present leave the body: artifact ids become
+	// attachment references, unobserved sources are dropped.
+	observed, err := l.observedURLs(ctx, sess, history, report.Synthesis)
+	if err != nil {
+		return out, err
+	}
+	if clean, embedIDs := guidance.StripCloseoutImageEmbeds(report.Synthesis, observed); clean != report.Synthesis {
 		report.Synthesis = clean
 		if len(report.ArtifactIDs) == 0 {
 			report.ArtifactIDs = embedIDs

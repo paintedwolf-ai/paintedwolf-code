@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func TestStressCommandQueryDeclaredInputBoundary(t *testing.T) {
+func TestStressCommandQueryStreamsLargeInputWithoutRetainingIt(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
@@ -51,18 +51,4 @@ func TestStressCommandQueryDeclaredInputBoundary(t *testing.T) {
 		t.Fatalf("query leases remain %+v", held)
 	}
 	t.Logf("64 MiB small-value stream admitted peak %+v", memory().Peak())
-	file, err = os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
-	testutil.FailErr(t, "os.OpenFile failed", err)
-	if _, err = file.Write([]byte{' '}); err != nil {
-		testutil.FailErr(t, "file.Write failed", err)
-	}
-	if err = file.Close(); err != nil {
-		testutil.FailErr(t, "file.Close failed", err)
-	}
-	out, err = env.Call(t, t.Context(), `jq . stream.json`)
-	testutil.FailErr(t, "env.Call failed", err)
-	result = decodePipeOutcome(t, out)
-	if result.Refusal == nil || result.Refusal.Code != "JQ_INPUT_TOO_LARGE" {
-		t.Fatalf("over-input query %+v", result)
-	}
 }

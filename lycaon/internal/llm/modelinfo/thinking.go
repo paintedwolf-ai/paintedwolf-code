@@ -163,6 +163,20 @@ type ReasoningMarkers struct {
 	Close string `yaml:"close"`
 }
 
+// DefaultReasoningMarkers are read for every model without markers of its
+// own: the common chat-template tags, so an unlisted model's reasoning never
+// reaches the transcript.
+var DefaultReasoningMarkers = ReasoningMarkers{Open: "<think>", Close: "</think>"}
+
+// ReasoningMarkersFor returns the tags to read from model's content channel:
+// the matching rule's own when it declares some, otherwise the default.
+func ReasoningMarkersFor(model string) ReasoningMarkers {
+	if rule, ok := MatchThinkingRule(model); ok && rule.ReasoningMarkers != nil {
+		return *rule.ReasoningMarkers
+	}
+	return DefaultReasoningMarkers
+}
+
 // maxReasoningMarkerLen bounds a marker to a short literal tag.
 const maxReasoningMarkerLen = 32
 

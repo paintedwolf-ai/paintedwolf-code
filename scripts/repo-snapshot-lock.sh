@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=snapshot-publish.sh
 source "$SCRIPT_DIR/snapshot-publish.sh"
 
-WRITER_TIMEOUT="${PW_SNAPSHOT_WRITER_TIMEOUT:-900}"
+WRITER_TIMEOUT="${PW_SNAPSHOT_WRITER_TIMEOUT:-3600}"
 READ_ATTEMPTS="${PW_SNAPSHOT_READ_ATTEMPTS:-3}"
 
 usage() {

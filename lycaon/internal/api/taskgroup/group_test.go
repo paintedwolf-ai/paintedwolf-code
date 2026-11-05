@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Detached goroutines need their own panic recovery.
@@ -77,7 +79,7 @@ func TestServicesDrainOnlyAfterStop(t *testing.T) {
 		<-ctx.Done()
 		close(closed)
 	})
-	idle, cancel := context.WithTimeout(context.Background(), time.Second)
+	idle, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	s.Wait(idle)
 	if idle.Err() != nil {

@@ -2,6 +2,9 @@ tags: [process, terminal]
 description: >-
   Runs a noninteractive Bash program (`$(...)`, pipes, redirects, `&` jobs;
   `CMD --help` prints native help). Stdin is empty unless the program supplies it.
+  Native utilities read host output paths like `tool-output/...` directly; installed
+  programs cannot open them, so pipe `cat PATH | program`. `"$(native_path -- PATH)"`
+  prints a host path and grants nothing.
 schema:
   type: object
   properties:

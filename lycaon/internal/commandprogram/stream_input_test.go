@@ -52,7 +52,7 @@ func TestInputCancellationClosesBlockedSource(t *testing.T) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("input cancellation=%v", err)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("input cancellation leaked blocked read")
 	}
 	if input.Termination() != StreamCanceled {

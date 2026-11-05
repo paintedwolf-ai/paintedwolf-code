@@ -14,7 +14,7 @@ class NativeImpactTests(unittest.TestCase):
             "integration", scope=dict(full=full, paths=list(paths), reasons=reasons))["include"]}
 
     def test_native_source_selects_its_dependencies_and_the_repository_baseline(self):
-        baseline = {"limits", "contracts", "integration-build", "behavior"}
+        baseline = {"limits", "build", "behavior"}
         cases = {
             "lycaon-den/src-tauri/src/lib.rs": {"native", "frontend", "webkit-gtk"},
             "lycaon/internal/decide/native/src/main.rs": {"native"},

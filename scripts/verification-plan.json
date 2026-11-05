@@ -7,6 +7,7 @@
       "build",
       "lint:full",
       "budgets",
+      "coverage:changes",
       "den:typecheck",
       "den:lint",
       "den:test:fast",
@@ -104,7 +105,8 @@
       "packages": [
         "./..."
       ],
-      "exclude": "/test/(contract|integration|security|smoke|wiring)(/|$)"
+      "exclude": "/test/(contract|integration|security|smoke|wiring)(/|$)",
+      "report_all_failures": true
     },
     "test:wiring": {
       "options": [],
@@ -166,11 +168,12 @@
     "test:contract": {
       "options": [
         "--timeout",
-        "15m"
+        "30m"
       ],
       "packages": [
         "./test/contract/..."
-      ]
+      ],
+      "report_all_failures": true
     },
     "test:security": {
       "options": [
@@ -993,48 +996,57 @@
     ]
   },
   "ci": {
+    "ready-lint": {
+      "targets": [
+        "lint:full"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "fast"
+      ],
+      "suite": "all",
+      "setup": "analysis"
+    },
     "ready": {
       "compile_targets": {},
       "targets": [
         "build",
         "budgets",
+        "coverage:changes",
         "den:typecheck",
         "den:lint",
-        "test:short",
-        "comments:check",
-        "test:fail-messages:check",
-        "docs:links",
         "den:test:fast"
       ],
-      "minutes": 180,
+      "minutes": 120,
       "profiles": [
         "fast"
       ],
       "suite": "all",
       "setup": "verification",
-      "preflight": [
-        "test:contract",
-        "--",
-        "./test/contract/..."
-      ],
       "admission_checks": [
         [
           "test:confine:linux",
           "--",
           "supervisor"
         ]
+      ],
+      "early_targets": [
+        "budgets",
+        "coverage:changes"
       ]
     },
-    "ready-lint": {
+    "ready-tests": {
       "targets": [
-        "lint:full"
+        "test:contract",
+        "test:short"
       ],
-      "minutes": 180,
+      "minutes": 120,
       "profiles": [
         "fast"
       ],
       "suite": "all",
-      "setup": "analysis"
+      "setup": "verification",
+      "shards": 2
     },
     "limits": {
       "targets": [
@@ -1055,19 +1067,7 @@
       "targets": [
         "build",
         "build:cross",
-        "licenses:notices"
-      ],
-      "minutes": 120,
-      "profiles": [
-        "check",
-        "release",
-        "nightly"
-      ],
-      "suite": "all",
-      "setup": "verification"
-    },
-    "contracts": {
-      "targets": [
+        "licenses:notices",
         "check:drift",
         "openapi:lint",
         "validate:workflows",
@@ -1180,8 +1180,7 @@
       ],
       "suite": "all",
       "setup": "shell",
-      "runtime_engines": false,
-      "priority": "compile"
+      "runtime_engines": false
     },
     "webkit": {
       "targets": [
@@ -1371,19 +1370,6 @@
       "suite": "performance",
       "setup": "verification"
     },
-    "integration-build": {
-      "targets": [
-        "build",
-        "licenses:notices"
-      ],
-      "timing_source": "build",
-      "minutes": 120,
-      "profiles": [
-        "integration"
-      ],
-      "suite": "all",
-      "setup": "verification"
-    },
     "command-scale": {
       "targets": [
         "test:stress"
@@ -1404,39 +1390,12 @@
     }
   },
   "capacity": {
-    "runners": 20,
-    "macos_runners": 5,
     "max_parallel": {
-      "fast": 2,
-      "integration": 4,
+      "fast": 4,
+      "integration": 6,
       "check": 3,
       "nightly": 2,
       "release": 1
-    },
-    "footprints": {
-      "ci.yml": 2,
-      "qualification.yml": 3,
-      "build-caches.yml": 1,
-      "nightly.yml": 2,
-      "release.yml": 2,
-      "linux-candidate-requests.yml": 1,
-      "linux-desktop-environment-rehearsal.yml": 1,
-      "linux-installed-desktop-rehearsal.yml": 1,
-      "release-halt.yml": 1,
-      "release-secrets-check.yml": 1,
-      "release-staple-probe.yml": 1,
-      "release-feed-signature-backfill.yml": 1,
-      "dependency-inventory.yml": 1,
-      "release-system-live-test.yml": 1,
-      "queue-health.yml": 1,
-      "queue-batching.yml": 1,
-      "issue-stale.yml": 1,
-      "issue-sweep.yml": 1,
-      "issue-intake.yml": 1,
-      "maintainability-issues.yml": 1,
-      "verification-recovery.yml": 1,
-      "dco.yml": 1,
-      "dependent-update.yml": 1
     }
   }
 }

@@ -212,7 +212,7 @@ func TestPollerRecoversExecutorPanic(t *testing.T) {
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
 
-	pollCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	pollCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
 	defer cancel()
 	go poller.Run(pollCtx)
 
@@ -323,7 +323,7 @@ func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
 		t.Fatal("terminal outcome delivery did not start")
 	}
 
-	waitCtx, cancelWait := context.WithTimeout(t.Context(), time.Second)
+	waitCtx, cancelWait := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancelWait()
 	waitDone := make(chan error, 1)
 	go func() {

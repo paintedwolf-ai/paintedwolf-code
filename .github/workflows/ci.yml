@@ -33,6 +33,24 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' && inputs.lane != '' }}
 
 jobs:
+  static:
+    # Source errors a person can fix in seconds report within a minute, while the slower jobs run.
+    if: ${{ github.event_name == 'pull_request' && (!github.event.pull_request.draft || github.event.action == 'ready_for_review') || inputs.profile == 'fast' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@90ad2b35f69faf97585ad74d28fa006d2739b7af # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - name: Check static source rules
+        run: bash scripts/ci_policy/static-checks.sh
+
   fast:
     if: ${{ github.event_name == 'pull_request' && (!github.event.pull_request.draft || github.event.action == 'ready_for_review') || inputs.profile == 'fast' }}
     permissions:
@@ -77,17 +95,32 @@ jobs:
     name: ${{ inputs.lane != '' && 'diagnostic-summary' || (github.event.pull_request.draft == true && github.event.action != 'ready_for_review' && 'draft-check' || 'check') }}
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() && inputs.lane == '' && !(github.event_name == 'pull_request' && github.event.pull_request.draft) }}
-    needs: [fast, integration, platform, platform-lanes]
+    needs: [static, fast, integration, platform, platform-lanes]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Require this tier's verification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform,platform-lanes', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'fast' || 'integration') }}
+          SKIPPED: ${{ inputs.profile == 'check' && 'static,fast' || format('{0},platform,platform-lanes', (github.event_name == 'merge_group' || inputs.profile == 'integration') && 'static,fast' || 'integration') }}
           DRAFT: ${{ github.event.pull_request.draft == true && github.event.action != 'ready_for_review' }}
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED" --draft "$DRAFT"
+      - name: Delete skipped runs that would hide this check
+        # GitHub reads a required check from the newest suite on the head; a
+        # skipped draft run registered after this run would block the merge queue.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/ci_verification.py delete-skipped-runs "$HEAD_SHA"
 
   dispatched-check:
     # A pull request's checks leave out dispatch runs; report the required

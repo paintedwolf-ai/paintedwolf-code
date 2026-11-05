@@ -239,6 +239,17 @@ host reports `no_capable_device` through the `decision_engine` preflight probe,
 and every decision falls back without waiting, as it does for `no_gpu`. `LYCAON_DECIDE_DEVICE` pins a device for
 development, whatever its speed.
 
+Any other exit during the handshake is a fault the hardware does not explain:
+a stale development build, a missing library, a checkpoint the engine cannot
+read. The host keeps the engine's exit status and its last stderr lines on the
+error, so the host log and the turn-load receipt say why the engine died
+without the engine's own log. The host then holds the engine from launching
+again for thirty seconds, doubling with each fault in a row up to ten minutes;
+during the hold every decision abstains at once with the remembered fault
+instead of paying for a launch that will fail the same way, and the
+`decision_engine` preflight probe reports `unusable`. A handshake that
+succeeds clears the hold.
+
 Bialy retains the `pw-decide-row/1`, `pw-decide-head/1`, and
 `pw-decide-anchor/1` artifact identifiers so existing training data, trained
 heads, and release checksums remain valid. These identify saved formats, not

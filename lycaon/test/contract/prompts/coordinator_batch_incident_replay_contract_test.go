@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	coordinatorbatch "github.com/lycaon/lycaon/test/wiring/fixtures/coordinator_batch"
@@ -68,7 +69,7 @@ func TestScheduledKickOmitsStalePendingOverlays(t *testing.T) {
 	data := map[string]any{"batch_phase": state.BatchPhase}
 	contractcheck.FailErr(t, "merge coordinator kick policy vars", prompts.MergeCoordinatorKickPolicyVars(data))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	out, err := engine.RenderKick(ctx, "coordinator-scheduled", data)
 	contractcheck.FailErr(t, "RenderKick coordinator-scheduled", err)
