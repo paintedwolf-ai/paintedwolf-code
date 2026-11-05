@@ -2,8 +2,8 @@ tags: [process, terminal]
 description: >-
   Run noninteractive Bash programs: file inspection and creation, search, Git,
   HTTP and installed programs. Supports substitutions, pipes, redirects and jobs; `CMD --help` lists native forms. Stdin is empty unless the program supplies it.
-  Native utilities read host output paths like `tool-output/...` directly; installed
-  programs cannot open them, so pipe `cat PATH | program`. `"$(native_path -- PATH)"`
+  Installed programs cannot open host output paths like `tool-output/...`; pipe
+  `cat PATH | program`. `"$(native_path -- PATH)"`
   prints a host path and grants nothing.
 schema:
   type: object
