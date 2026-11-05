@@ -2,10 +2,12 @@ package nativegen
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,7 +24,7 @@ func TestPrepareRenderPreservesStructuredArgumentsAndToolIdentity(t *testing.T) 
 	}
 	wire, err := prepareRender(req)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "prepare tool history", err)
 	}
 	if len(wire.Messages) != 4 || len(wire.Tools) != 1 {
 		t.Fatalf("lost conversation structure: %+v", wire)
@@ -39,6 +41,21 @@ func TestPrepareRenderPreservesStructuredArgumentsAndToolIdentity(t *testing.T) 
 	if err != nil || len(wire.Tools) != 0 || len(wire.Messages[2].ToolCalls) != 1 {
 		t.Fatalf("no-call projection damaged history: %+v, %v", wire, err)
 	}
+	wantMessages := wire.Messages
+	req.ToolUse = modelcall.ToolUseAllowed
+	for _, format := range []*modelcall.ResponseFormat{
+		{Type: modelcall.ResponseFormatJSONObject},
+		modelcall.JSONSchemaFormat("answer", json.RawMessage(`{"type":"object"}`)),
+	} {
+		req.ResponseFormat = format
+		wire, err = prepareRender(req)
+		if err != nil || len(wire.Tools) != 0 || !reflect.DeepEqual(wire.Messages, wantMessages) {
+			t.Fatalf("structured-output projection changed history or offered tools: %+v, %v", wire, err)
+		}
+		if len(req.Tools) != 1 || req.Tools[0].Name != "read_file" {
+			t.Fatal("projection mutated request tools")
+		}
+	}
 }
 
 func TestPrepareRenderKeepsHostEventsInConversationOrder(t *testing.T) {
@@ -50,7 +67,7 @@ func TestPrepareRenderKeepsHostEventsInConversationOrder(t *testing.T) {
 	}}
 	wire, err := prepareRender(req)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "prepare host event", err)
 	}
 	if len(wire.Messages) != 3 || wire.Messages[0].Content != "First\n\nSecond" || wire.Messages[2].Role != "user" || wire.Messages[2].Content != "Current host event" {
 		t.Fatalf("moved host event into standing prefix: %+v", wire.Messages)
@@ -129,5 +146,29 @@ func TestPrepareRenderUsesAssemblyBoundaryAfterProjection(t *testing.T) {
 	rendered, err = prepareRender(req)
 	if err != nil || rendered.CheckpointMessages != 0 || rendered.KnownPrefixMessages != 0 {
 		t.Fatalf("invented unmarked boundary: %+v, %v", rendered, err)
+	}
+}
+
+func TestNativeProjectionOmitsCapturedThoughtWithoutMutatingHistory(t *testing.T) {
+	for _, toolLoop := range []bool{false, true} {
+		reasoning := &api.ModelReasoning{ProviderID: "nativegen", Model: DefaultModelID, Text: "captured-thought"}
+		assistant := api.Message{Role: api.MessageRoleAssistant, Content: "Answer", ModelReasoning: reasoning}
+		next := api.Message{Role: api.MessageRoleUser, Content: "Next question"}
+		if toolLoop {
+			assistant.ToolCalls = []api.ToolCall{{ID: "call_1", Name: "read_file", Args: map[string]any{"path": "source.go"}}}
+			next = api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "read_file", ToolCallID: "call_1", Content: "result"}}
+		}
+		req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Question"}, assistant, next}, Tools: []tools.ToolMeta{{Name: "read_file"}}}
+		wire, err := prepareRender(req)
+		if err != nil {
+			t.Fatalf("project native history: %v", err)
+		}
+		raw, err := json.Marshal(wire)
+		if err != nil || strings.Contains(string(raw), "captured-thought") {
+			t.Fatalf("native wire replayed captured thought: %s, %v", raw, err)
+		}
+		if req.Messages[1].ModelReasoning != reasoning || reasoning.Text != "captured-thought" {
+			t.Fatal("projection mutated captured reasoning")
+		}
 	}
 }

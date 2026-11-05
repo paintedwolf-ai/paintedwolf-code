@@ -26,16 +26,20 @@ func runtimeFixture() {
 			return
 		}
 		var request struct {
+			Version uint32  `json:"version"`
 			ID      uint64  `json:"id"`
 			Command command `json:"command"`
 		}
-		if json.Unmarshal(payload, &request) != nil {
+		if json.Unmarshal(payload, &request) != nil || request.Version != protocolVersion {
 			os.Exit(2)
 		}
 		result := map[string]any{}
 		switch request.Command.Method {
 		case "hello":
-			result = map[string]any{"kind": "hello", "protocol": 1, "artifact_id": artifact, "backend": "vulkan", "physical_device": map[string]string{"kind": "pci", "address": "0000:03:00.0"}}
+			result = map[string]any{"kind": "hello", "protocol": protocolVersion, "artifact_id": artifact, "backend": "vulkan", "physical_device": map[string]string{"kind": "pci", "address": "0000:03:00.0"}}
+			if os.Getenv("PW_NATIVEGEN_OLD_PROTOCOL") == "1" {
+				result["protocol"] = 1
+			}
 		case "inspect":
 			plan := resourcePlan{ResidentWeightsBytes: 128 << 20, MappedPLEBytes: 2 << 30, KVCapacityBytes: 64 << 20, WorkspaceBytes: 64 << 20, DeviceReservationBytes: 256 << 20, HostReservationBytes: 768 << 20}
 			if os.Getenv("PW_NATIVEGEN_SMALL_HOST_PLAN") == "1" {
@@ -94,7 +98,7 @@ func runtimeFixture() {
 			}}
 		case "begin":
 			raw, err := json.Marshal(request.Command.Request)
-			if err != nil || json.Unmarshal(raw, &active) != nil {
+			if err != nil || json.Unmarshal(raw, &active) != nil || active.OutputContract.AllowedTools == nil {
 				os.Exit(3)
 			}
 			if os.Getenv("PW_NATIVEGEN_CONVERSATION_CACHE") == "1" {
@@ -123,12 +127,33 @@ func runtimeFixture() {
 				if generated == 1 && fault != "empty_eos" {
 					value := uint32(236812)
 					token, text = &value, "4"
+					switch fault {
+					case "orphan_channel":
+						value, text = 101, "<channel|>"
+					case "capped_channel":
+						value, text = 100, "<|channel>"
+					case "capped_tool":
+						value, text = 48, "<|tool_call>"
+					}
 					if active.MaxNewTokens == 1 {
 						value := "max_tokens"
 						stop = &value
 					}
 				} else {
 					value := "eos"
+					stop = &value
+				}
+			}
+			if request.Command.Method == "advance" && (fault == "buffered_then_orphan" || fault == "buffered_then_cap") {
+				ids := []uint32{48, 500, 49, 101}
+				texts := []string{"<|tool_call>", "call:read{}", "<tool_call|>", "<channel|>"}
+				if fault == "buffered_then_cap" {
+					ids[3], texts[3] = 100, "<|channel>"
+				}
+				value := ids[generated-1]
+				token, text, stop = &value, texts[generated-1], nil
+				if generated == active.MaxNewTokens {
+					value := "max_tokens"
 					stop = &value
 				}
 			}

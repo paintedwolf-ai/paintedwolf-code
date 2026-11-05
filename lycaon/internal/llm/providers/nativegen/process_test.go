@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/inference"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -69,7 +70,7 @@ func fixtureProcess(t *testing.T) (*rpcProcess, *inference.Device, *inference.Me
 	t.Setenv("PW_NATIVEGEN_PROCESS_FIXTURE", "1")
 	binary, err := os.Executable()
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "locate fixture executable", err)
 	}
 	device, _ := inference.NewDevice(4)
 	budget, _ := inference.NewMemoryBudget(100)
@@ -77,11 +78,11 @@ func fixtureProcess(t *testing.T) (*rpcProcess, *inference.Device, *inference.Me
 	child, err := startProcess(t.Context(), processSpec{binary: binary, directory: t.TempDir(), artifact: "fixture"}, nil, device, "fixture", 1)
 	if err != nil {
 		reservation.Release()
-		t.Fatal(err)
+		testutil.FailErr(t, "start fixture process", err)
 	}
 	t.Cleanup(child.close)
 	if err := child.retain(reservation); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "retain memory reservation", err)
 	}
 	return child, device, budget
 }
@@ -97,7 +98,7 @@ func TestProcessRetainsMemoryAcrossRecoverableErrors(t *testing.T) {
 		t.Fatal("recoverable failure released memory or retained a completed step")
 	}
 	if err := child.call(context.Background(), command{Method: "clear_prefix"}, "cleared", inference.Foreground, true, nil); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "clear prefix", err)
 	}
 	child.close()
 	if budget.Snapshot().ReservedBytes != 0 {
