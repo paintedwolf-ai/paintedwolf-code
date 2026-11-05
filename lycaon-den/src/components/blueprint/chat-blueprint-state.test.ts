@@ -142,6 +142,11 @@ describe("createChatBlueprintState", () => {
     } finally { dispose(); }
   });
 
+    it("rejects by ending the run and closing the workspace", () => {
+    const reasons: (string | undefined)[] = [];
+    const { state, dispose } = createBlueprintState({
+      exitWorkflow: (reason) => reasons.push(reason),
+    });
     state.openReview();
     state.reject();
     expect(state.reviewOpen()).toBe(false);
