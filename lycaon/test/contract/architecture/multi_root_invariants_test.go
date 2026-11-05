@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"slices"
 	"context"
 	"os"
 	"path/filepath"
@@ -71,7 +72,7 @@ func TestMultiRootPathDiscoveryToolsRejectUnknownLabel(t *testing.T) {
 	probe := "@missing/secondary-sentinel.txt"
 	registered := toolfixture.BootRegisteredToolSet(t, reg)
 	program := toolfixture.NewProgramFixture(t)
-	for name := range registered {
+	for _, name := range multiRootProbeNames(t, registered) {
 		cap := multiRootCapabilityOf(name)
 		if cap != toolcontract.MultiRootPathConsume && cap != toolcontract.MultiRootDiscovery {
 			continue
@@ -86,7 +87,7 @@ func TestMultiRootPathDiscoveryToolsRejectUnknownLabel(t *testing.T) {
 			continue
 		}
 		t.Run(name, func(t *testing.T) {
-			if toolcontract.IsCommandOperation(name) {
+			if toolcontract.IsCommandOperation(name) || toolcontract.CommandFormTool(name) {
 				source, ok := multiRootCommandProbe(name, probe)
 				if !ok {
 					t.Fatalf("missing native root probe for operation %s", name)
@@ -134,7 +135,7 @@ func TestMultiRootZeroRootsStructuredReject(t *testing.T) {
 	}
 	registered := toolfixture.BootRegisteredToolSet(t, reg)
 	program := toolfixture.NewProgramFixture(t)
-	for name := range registered {
+	for _, name := range multiRootProbeNames(t, registered) {
 		cap := multiRootCapabilityOf(name)
 		if cap != toolcontract.MultiRootPathConsume && cap != toolcontract.MultiRootDiscovery {
 			continue
@@ -149,7 +150,7 @@ func TestMultiRootZeroRootsStructuredReject(t *testing.T) {
 			continue
 		}
 		t.Run(name, func(t *testing.T) {
-			if toolcontract.IsCommandOperation(name) {
+			if toolcontract.IsCommandOperation(name) || toolcontract.CommandFormTool(name) {
 				source, ok := multiRootCommandProbe(name, ".")
 				if !ok {
 					t.Fatalf("missing native root probe for operation %s", name)
@@ -334,4 +335,25 @@ func TestMultiRootUnattachedAtWordRemainsLiteral(t *testing.T) {
 	if out != "literal-only" {
 		t.Fatalf("unknown word became root authority: %q", out)
 	}
+}
+
+// multiRootProbeNames covers callable tools and the native operations command
+// reaches, because operations resolve roots through the same shared paths.
+func multiRootProbeNames(t *testing.T, registered map[string]bool) []string {
+	t.Helper()
+	operations, err := toolcontract.CommandOperations()
+	contractcheck.FailErr(t, "command operations", err)
+	names := map[string]bool{}
+	for name := range registered {
+		names[name] = true
+	}
+	for _, name := range operations {
+		names[name] = true
+	}
+	out := make([]string, 0, len(names))
+	for name := range names {
+		out = append(out, name)
+	}
+	slices.Sort(out)
+	return out
 }
