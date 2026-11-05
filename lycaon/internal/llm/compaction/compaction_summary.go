@@ -15,6 +15,7 @@ import (
 )
 
 type compactionSummaryFormatKey struct{}
+type compactionSharedPrefixKey struct{}
 
 func WithSummaryFormat(ctx context.Context) context.Context {
 	return context.WithValue(ctx, compactionSummaryFormatKey{}, true)
@@ -23,6 +24,19 @@ func WithSummaryFormat(ctx context.Context) context.Context {
 func SummaryFormatRequested(ctx context.Context) bool {
 	v, _ := ctx.Value(compactionSummaryFormatKey{}).(bool)
 	return v
+}
+
+// WithSharedPrefixMessages attaches the conversation prefix so local summarizers
+// reuse the resident KV cache before the trailing summary instruction turn.
+func WithSharedPrefixMessages(ctx context.Context, messages []api.Message) context.Context {
+	cloned := append([]api.Message(nil), messages...)
+	return context.WithValue(ctx, compactionSharedPrefixKey{}, cloned)
+}
+
+// SharedPrefixMessages returns the conversation prefix attached for KV cache reuse.
+func SharedPrefixMessages(ctx context.Context) []api.Message {
+	msgs, _ := ctx.Value(compactionSharedPrefixKey{}).([]api.Message)
+	return append([]api.Message(nil), msgs...)
 }
 
 type compactionSummary struct {

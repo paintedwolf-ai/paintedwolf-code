@@ -16,6 +16,10 @@ func (m *Service) SessionFromPrompt(ctx context.Context, sess *wire.Session, pro
 	if text == "" || sess.IsWorkerChild() {
 		return
 	}
+	current, err := m.store.Get(ctx, sess.ID)
+	if err != nil || current == nil || strings.TrimSpace(current.Title) != "" {
+		return
+	}
 	projectDir := m.roots.SettingsPath(ctx, sess)
 	title := NameSession(ctx, m.namer(sess, "session_title", projectDir), text)
 	if title == "" {

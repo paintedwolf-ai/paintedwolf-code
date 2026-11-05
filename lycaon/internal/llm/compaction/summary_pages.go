@@ -62,7 +62,11 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 				break
 			}
 			calls++
-			raw, callErr := c.summary.Summarize(WithSummaryFormat(ctx), system, input.Text, budget.Output)
+			callCtx := WithSummaryFormat(ctx)
+			if len(SharedPrefixMessages(callCtx)) == 0 {
+				callCtx = WithSharedPrefixMessages(callCtx, sharedPrefixFromSegments(segments[position:position+input.Consumed]))
+			}
+			raw, callErr := c.summary.Summarize(callCtx, system, input.Text, budget.Output)
 			if ctx.Err() != nil {
 				return summary, sources, ctx.Err()
 			}
@@ -147,4 +151,23 @@ func priorSummary(record *messageview.Continuation) compactionSummary {
 func summaryRecord(summary compactionSummary) messageview.ContinuationSummary {
 	return messageview.ContinuationSummary{Facts: summary.Facts, Completed: summary.Completed,
 		Pending: summary.Pending, Reacquire: summary.Reacquire, Constraints: summary.Constraints}
+}
+
+func sharedPrefixFromSegments(sliced []ContextMessage) []api.Message {
+	if len(sliced) == 0 {
+		return nil
+	}
+	out := make([]api.Message, 0, len(sliced))
+	for _, seg := range sliced {
+		msg := ContextMessageToAPI(seg)
+		if len(out) > 0 && seg.ID != "" && out[len(out)-1].ID == seg.ID {
+			out[len(out)-1].Content += seg.Content
+			if out[len(out)-1].ToolResult != nil {
+				out[len(out)-1].ToolResult.Content = out[len(out)-1].Content
+			}
+			continue
+		}
+		out = append(out, msg)
+	}
+	return out
 }

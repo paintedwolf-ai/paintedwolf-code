@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -256,6 +257,18 @@ func TestSmallToLargeReceiverRestoresCanonicalHistory(t *testing.T) {
 	smallView := appliedView(t, svc, mem, sess.ID)
 	if len(smallView) >= len(seed) {
 		t.Fatalf("expected small receiver view to be compacted, got %d rows", len(smallView))
+	}
+	loaded, err := svc.Load(t.Context(), sess)
+	testutil.FailErr(t, "load foreground history", err)
+	foreground := svc.ApplyView(t.Context(), sess, loaded)
+	generation := sess.CompactionGeneration
+	prepared, err := svc.Project(t.Context(), sess)
+	testutil.FailErr(t, "project prepared history", err)
+	if !reflect.DeepEqual(prepared, foreground) {
+		t.Fatal("prepared history differs from the foreground compaction projection")
+	}
+	if sess.CompactionGeneration != generation {
+		t.Fatal("preparation changed the supplied session generation")
 	}
 
 	// Switch to a medium receiver whose TargetTokens fits a larger suffix (partial restoration).
