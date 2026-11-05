@@ -185,13 +185,9 @@ impl Layer {
             &self.attention_norm,
         )?)?;
         let h = norm(&x, &self.feedforward_norm)?;
-        let h = activation
-            .apply(&self.gate.forward(&h)?)?
-            .multiply(self.up.forward(&h)?)?;
+        let h = activation.product(&self.gate.forward(&h)?, &self.up.forward(&h)?)?;
         let x = x.add(norm(&self.down.forward(&h)?, &self.output_norm)?)?;
-        let h = activation
-            .apply(&self.ple_gate.forward(&x)?)?
-            .multiply(ple)?;
+        let h = activation.product(&self.ple_gate.forward(&x)?, ple)?;
         Ok(
             x.add(norm(&self.ple_projection.forward(&h)?, &self.ple_norm)?)?
                 .multiply(&self.scalar)?,
@@ -228,7 +224,7 @@ impl Model {
                 .map(|i| Layer::load(&mut weights, i))
                 .collect::<Result<_>>()?,
             final_norm: weights.take("model.norm.weight")?,
-            activation: Activation::new(),
+            activation: Activation::new()?,
         })
     }
 
