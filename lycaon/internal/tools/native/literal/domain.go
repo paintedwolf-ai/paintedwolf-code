@@ -1,8 +1,8 @@
 package literal
 
 import (
-	"github.com/lycaon/lycaon/internal/tools"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/fileoutline"

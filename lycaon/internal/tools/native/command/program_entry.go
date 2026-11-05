@@ -111,9 +111,9 @@ type SessionOwners interface {
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
-	tool            string
+	tool string
 	// windows holds source windows its operations returned, until output delivery.
-	windows *tools.ProgramWindows
+	windows         *tools.ProgramWindows
 	control         programControlDefinition
 	publicationOnce sync.Once
 	publicationErr  error
