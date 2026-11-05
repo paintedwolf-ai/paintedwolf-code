@@ -31,7 +31,7 @@ func loadNativeToolFamilies() {
 		if err != nil {
 			return
 		}
-		nativeFilesystemTools = append([]string(nil), cfg.Group("filesystem")...)
+		nativeFilesystemTools = append(append([]string(nil), cfg.Group("filesystem")...), cfg.OperationGroup("filesystem")...)
 		nativeTerminalTools = append([]string(nil), cfg.Group("terminal")...)
 		// Worker-branch tools define mutation capability.
 		nativeMutationTools = cfg.WorkerBranchTools()
@@ -249,8 +249,8 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"profile_has_read":                enabled["read"],
 		"profile_has_jq":                  enabled["jq"],
 		"profile_has_jq_edit":             commandMutates,
-		"profile_has_survey_repo":         enabled["command"],
-		"profile_has_summarize":           enabled["command"],
+		"profile_has_survey_repo":         enabled["survey_repo"],
+		"profile_has_summarize":           enabled["summarize"],
 		"profile_has_view_image":          enabled["view_image"],
 		"profile_has_view_video":          enabled["view_video"],
 		"profile_has_retrieval":           profileHasRetrievalTool(enabled),

@@ -35,6 +35,7 @@ var orchestrationPinnedSurfaces = []string{
 
 // implementPromptToolsNotOnWire explains prompt-only tool references.
 var implementPromptToolsNotOnWire = map[string]string{
+	"code_rewrite":                   "the dispatch template gates this on profile_has_code_rewrite; the corpus holds its raw source",
 	"restore_version":                "product mutations via task() — not coordinator wire",
 	"command":                        "investigate/overlay_promote compile the family",
 	"command_output":                 "family compile; live jobs imply it elsewhere",

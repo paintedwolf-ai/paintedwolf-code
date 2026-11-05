@@ -55,7 +55,7 @@ func TestValidateToolArgsAcceptsValid(t *testing.T) {
 }
 
 func TestValidateToolArgsSummarizeSchema(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestValidateToolArgsSummarizeSchema(t *testing.T) {
 }
 
 func TestValidateToolArgsCommandAcceptsDirectIPTrue(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestValidateToolArgsCommandAcceptsDirectIPTrue(t *testing.T) {
 }
 
 func TestValidateToolArgsHTTPRequestRequiresStructuredJSON(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestValidateToolArgsHTTPRequestRequiresStructuredJSON(t *testing.T) {
 }
 
 func TestValidateToolArgsCommandOutputRequiresCursor(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestInvalidHostSchemaDoesNotBlameArguments(t *testing.T) {
 }
 
 func TestValidateCallArgumentsIntrospectionMisnestedField(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -378,7 +378,7 @@ func TestValidateCallArgumentsIntrospectionMisnestedField(t *testing.T) {
 }
 
 func TestValidateCallArgumentsIntrospectionStringifiedJSON(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -415,7 +415,7 @@ func TestValidateCallArgumentsIntrospectionStringifiedJSON(t *testing.T) {
 }
 
 func TestArgumentValidationDoesNotGuessTimeoutUnits(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -438,7 +438,7 @@ func TestArgumentValidationDoesNotGuessTimeoutUnits(t *testing.T) {
 }
 
 func TestValidateCallArgumentsIntrospectionConflictKeys(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -467,7 +467,7 @@ func TestValidateCallArgumentsIntrospectionConflictKeys(t *testing.T) {
 }
 
 func TestValidateCallArgumentsIntrospectionMultipleMisnestedFields(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -510,7 +510,7 @@ func TestValidateCallArgumentsIntrospectionMultipleMisnestedFields(t *testing.T)
 }
 
 func TestValidateCallArgumentsIntrospectionShortTypoNoFalsePositive(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -534,7 +534,7 @@ func TestValidateCallArgumentsIntrospectionShortTypoNoFalsePositive(t *testing.T
 }
 
 func TestValidateCallArgumentsIntrospectionUnknownJSONNotUnparsed(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}
@@ -558,7 +558,7 @@ func TestValidateCallArgumentsIntrospectionUnknownJSONNotUnparsed(t *testing.T) 
 }
 
 func TestValidateCallArgumentsIntrospectionNestedStringifiedJSON(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)
 	}

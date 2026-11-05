@@ -20,6 +20,7 @@ import (
 var multiRootProbeExempt = map[string]string{
 	"summarize":   "runs through its command form; literal owners test the label refusal",
 	"survey_repo": "runs through its command form; literal owners test the label refusal",
+	"code_rewrite": "runs through its command form; mutation owners test the label refusal",
 	"git_compare":    "revision identities on the active root; no path argument",
 	"git_checkout":   "branch identity on the active root; no path argument",
 	"git_stash_list": "reflog pagination on the active root; no path argument",

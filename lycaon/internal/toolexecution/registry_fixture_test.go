@@ -21,7 +21,7 @@ func registerTestDefinition(t *testing.T, reg *tools.DefaultRegistry, name strin
 // catalogRegistry publishes native tools with shipped metadata, as host boot does.
 func catalogRegistry(t *testing.T) *tools.DefaultRegistry {
 	t.Helper()
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "LoadSchemaDir", err)
 	reg, err := tools.NewCatalogRegistry(cfg)
 	testutil.FailErr(t, "NewCatalogRegistry", err)

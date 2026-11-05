@@ -21,6 +21,7 @@ var coordinatorPromptCorpusGlobs = []string{
 // coordinatorPromptlessAllowlist lists coordinator profile tools documented
 // outside tripartite coordinator prose.
 var coordinatorPromptlessAllowlist = map[string]string{
+	"survey_repo":         "taught by the survey-first-pass unit",
 	"restore_version":     "worker mutations via task(); coordinator plan surfaces only",
 	"source_history":      "universal repo inspection",
 	"delegate_dispatch":   "delegation primitive; calling convention covered by topology docs",

@@ -153,7 +153,7 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 		for _, tool := range rule.Selector["tool"] {
 			if c.operations[strings.TrimSpace(tool)] {
 				notes = append(notes, fmt.Sprintf(
-					"rule %q: selector.tool names %q, which no longer exists as a tool, so the clause never matches; select paintedwolf.operation instead",
+					"rule %q: selector.tool names %q, which no longer exists as a tool, so the clause never matches; use the paintedwolf.operation selector",
 					rule.ID, tool))
 				continue
 			}
