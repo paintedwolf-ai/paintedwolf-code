@@ -1,9 +1,10 @@
 package session
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"strings"
 	"testing"
 
@@ -331,7 +332,8 @@ func TestCredentialRemediesDiscoverDeferredTools(t *testing.T) {
 			if loaded {
 				names = append(names, "secret_generate", "ask_user")
 			}
-			ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
+			plan := toolsurface.Compile(names, []string{"secret_generate", "ask_user"})
+			ctx := tools.WithCallReach(t.Context(), toolreach.Freeze(names, plan))
 			output, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: "deferred-remedies"}, "write",
 				map[string]any{"content": "password=" + value}, "written", 1, guidance.ToolResultFacts{})
 			if !facts.HasCode("WEAK_CREDENTIAL_LITERAL") && !facts.HasCode("CREDENTIAL_LITERAL") {
@@ -342,7 +344,7 @@ func TestCredentialRemediesDiscoverDeferredTools(t *testing.T) {
 					t.Fatalf("recoverable credential tool %s missing: %s", tool, output)
 				}
 			}
-			if strings.Contains(output, "`request_tools`") == loaded {
+			if strings.Contains(output, "`request_tools(") == loaded {
 				t.Fatalf("schema loading advice disagrees with loaded=%v: %s", loaded, output)
 			}
 		}

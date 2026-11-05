@@ -1,6 +1,7 @@
 package native
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"reflect"
 	"testing"
 )
@@ -33,8 +34,8 @@ func TestFormArgvMapsEveryShippedArgument(t *testing.T) {
 
 // Host quoting must keep expansions and apostrophes from reaching the parser as syntax.
 func TestQuoteProgramKeepsValuesLiteral(t *testing.T) {
-	got := quoteProgram([]string{"code-rewrite", "--pattern", "f($A, 'x')"})
-	want := `'code-rewrite' '--pattern' 'f($A, '\''x'\'')'`
+	got := toolreach.QuoteProgram([]string{"code-rewrite", "--pattern", "f($A, 'x')"})
+	want := `code-rewrite --pattern 'f($A, '\''x'\'')'`
 	if got != want {
 		t.Fatalf("program = %s", got)
 	}

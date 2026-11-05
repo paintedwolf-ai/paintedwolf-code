@@ -26,6 +26,7 @@ type Catalog struct {
 	// operations are native operations command reaches. A profile deny governs them,
 	// but no remedy or selector may name one as a tool.
 	operations map[string]bool
+	schemas    *toolschema.Config
 }
 
 // NewCatalog builds the declared tool vocabulary.
@@ -55,6 +56,7 @@ func NewCatalog(
 		profiles:        make(map[string]sandbox.ToolProfile, len(profiles)),
 		provenance:      prov,
 		operations:      map[string]bool{},
+		schemas:         schemas,
 	}
 	for _, name := range cfg.AllOperations() {
 		c.operations[strings.TrimSpace(name)] = true

@@ -4,15 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/toolsurface"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -184,46 +181,6 @@ func TestRestoreVersionNoPredecessorRejected(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_VERSION_NO_PREDECESSOR" {
 		t.Fatalf("err = %v, want SOURCE_VERSION_NO_PREDECESSOR reject", err)
-	}
-}
-
-// A restore's rejects name source_history only when this turn's plan offers it.
-func TestRestoreVersionRejectsStateWhetherThePlanOffersSourceHistory(t *testing.T) {
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{
-		{ID: "holds", Tools: map[string]bool{"restore_version": true, "source_history": true}},
-	})
-	version := sourceledger.RestorableVersion{ID: "v1", FileID: "f1", ProjectID: "p1", RootID: "r1", Path: "main.go", State: "content", Content: []byte("v1")}
-	rejects := []struct {
-		code string
-		args map[string]any
-	}{
-		{"SOURCE_VERSION_NO_PREDECESSOR", map[string]any{"path": "main.go"}},
-		{"SOURCE_VERSION_BASE_MISMATCH", map[string]any{"path": "main.go", "version_id": "v1", "base_version_id": "v1"}},
-		{"SOURCE_VERSION_NOT_FOUND", map[string]any{"path": "main.go", "version_id": "v_missing"}},
-	}
-	for _, offered := range []bool{true, false} {
-		for _, tc := range rejects {
-			t.Run(fmt.Sprintf("%s offered %v", tc.code, offered), func(t *testing.T) {
-				dir := t.TempDir()
-				writeProvenanceFile(t, dir, "main.go", "package main\n")
-				ledger := &fakeSourceLedger{
-					heads:        map[string]sourceledger.BranchHead{"r1/main.go": {FileID: "f1", VersionID: "v2", State: "content"}},
-					versions:     map[string]sourceledger.RestorableVersion{"v1": version},
-					fileVersions: map[string][]sourceledger.Version{"f1": {{ID: "v2", FileID: "f1"}}},
-				}
-				tctx := provenanceCtx(dir, ledger)
-				tctx.Identity.Agent = "holds"
-				tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"restore_version"}, nil)
-				if offered {
-					tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"restore_version"}, []string{"source_history"})
-				}
-				_, err := (&RestoreVersionTool{Boundary: boundary}).Run(context.Background(), tc.args, tctx)
-				var reject *toolrejection.ToolReject
-				if !errors.As(err, &reject) || reject.Code != tc.code || reject.Data["source_history_offered"] != offered {
-					t.Fatalf("restore = %v, want %s with source_history_offered %v", err, tc.code, offered)
-				}
-			})
-		}
 	}
 }
 

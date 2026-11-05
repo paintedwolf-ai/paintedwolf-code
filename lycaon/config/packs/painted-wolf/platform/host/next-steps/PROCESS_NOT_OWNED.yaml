@@ -1,4 +1,4 @@
 steps:
-  - tool: "process_list"
+  - program: ["ps"]
     complete: true
     say: "Find this session's references with {{ call }}."

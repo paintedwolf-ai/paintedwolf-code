@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/oar"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"go/ast"
@@ -190,6 +191,8 @@ func TestRejectTemplateVarsAreSupplied(t *testing.T) {
 		for _, m := range templateVarRe.FindAllStringSubmatch(string(raw), -1) {
 			required[m[1]] = true
 		}
+		// The engine computes this one from the frozen request.
+		delete(required, oar.NextStepsFact)
 		if len(required) == 0 {
 			continue
 		}

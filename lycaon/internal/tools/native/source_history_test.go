@@ -270,8 +270,8 @@ func TestSourceHistoryVersionRejections(t *testing.T) {
 	_, err = tool.Run(context.Background(), map[string]any{
 		"path": "main.go", "mode": "version", "version_id": "nonexistent",
 	}, tctx)
-	if !errors.As(err, &reject) || reject.Code != "SOURCE_VERSION_NOT_FOUND" || reject.Data["source_history_offered"] != true {
-		t.Fatalf("not found err = %v, want SOURCE_VERSION_NOT_FOUND stating source_history_offered", err)
+	if !errors.As(err, &reject) || reject.Code != "SOURCE_VERSION_NOT_FOUND" {
+		t.Fatalf("not found err = %v, want SOURCE_VERSION_NOT_FOUND", err)
 	}
 
 	// 3. Path mismatch

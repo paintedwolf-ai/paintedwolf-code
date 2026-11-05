@@ -1,3 +1,4 @@
+mentions: ["terminal_snapshot"]
 steps:
   - tool: "recall"
     args:

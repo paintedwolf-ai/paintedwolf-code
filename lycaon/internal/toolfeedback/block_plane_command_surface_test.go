@@ -1,8 +1,8 @@
 package toolfeedback
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"testing"
 
@@ -182,7 +182,7 @@ func TestDuplicateCommandRecoveryRequiresOfferedControlsAndObservedExit(t *testi
 			}
 			text := err.Error()
 			for i, name := range []string{"command_output", "command_stop"} {
-				if strings.Contains(text, "`"+name+"`") != (offered&(1<<i) != 0) {
+				if strings.Contains(text, "`"+name+"(") != (offered&(1<<i) != 0) {
 					t.Errorf("%s offered=%v: %s", name, names, text)
 				}
 			}

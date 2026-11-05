@@ -1,9 +1,9 @@
 package session
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"testing"
 	"time"
@@ -191,7 +191,7 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 					t.Errorf("terminal path repeated in recovery copy: %s", text)
 				}
 				for i, control := range []string{"command_output", "command_stop"} {
-					if strings.Contains(text, "`"+control+"`") != (running && offered&(1<<i) != 0) {
+					if strings.Contains(text, "`"+control+"(") != (running && offered&(1<<i) != 0) {
 						t.Errorf("control %s running=%v offered=%v: %s", control, running, names, text)
 					}
 				}

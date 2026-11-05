@@ -1,8 +1,8 @@
 package toolfeedback
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -18,26 +18,25 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRecoveryCopyUsesFrozenOfferedTools(t *testing.T) {
 	bp := stockBlockPlane(t)
-	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"read": true, "list_dir": true, "grep": true}}}, toolvocab.Provenance{})
-	testutil.FailErr(t, "load recovery vocabulary", err)
 	for _, tc := range []struct {
 		name    string
 		offered []string
 		listing bool
 	}{
-		{"listing offered", []string{"read", "grep", "list_dir"}, true},
-		{"narrow profile", []string{"read", "grep"}, false},
+		{"native programs offered", []string{"command"}, true},
+		{"command missing", []string{"recall"}, false},
 		{"no tools offered", []string{}, false},
 		{"non-model caller", nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			if tc.offered != nil {
-				ctx = tools.WithCallReach(ctx, toolreach.Offered(tc.offered))
+				ctx = tools.WithCallReach(ctx, toolreach.Offered(tc.offered).WithPrograms(func(string) bool { return true }))
 			}
 			// Producer metadata cannot invent an offered recovery tool.
 			err := bp.RejectObservation(ctx, "read", "plan_write_only", nil, &toolrejection.ToolReject{
@@ -50,13 +49,13 @@ func TestRecoveryCopyUsesFrozenOfferedTools(t *testing.T) {
 			if !ok || refusal.Copy == nil {
 				t.Fatalf("missing evaluated recovery: %v", err)
 			}
-			calls := toolvocab.NamedTools(catalog, refusal.Copy["fix"])
-			if got := slices.Contains(calls, "list_dir"); got != tc.listing {
+			calls, _ := refusal.Facts.FeedbackFor("READ_IS_DIRECTORY").Details[api.ToolFeedbackNextCalls].([]toolreach.Call)
+			if got := len(calls) > 0; got != tc.listing {
 				t.Fatalf("listing recommendation = %v, want %v: %v", got, tc.listing, calls)
 			}
 			for _, call := range calls {
-				if !slices.Contains(tc.offered, call) {
-					t.Errorf("recovery names unoffered tool %q", call)
+				if !slices.Contains(tc.offered, call.Tool) {
+					t.Errorf("recovery offers unoffered call %+v", call)
 				}
 			}
 		})
@@ -291,12 +290,12 @@ func recoveryHostFacts(t *testing.T) []oar.HostFactDecl {
 func TestBinaryReadRecoveryRequiresOfferedViewerAndSupportedFormat(t *testing.T) {
 	bp := stockBlockPlane(t)
 	for _, supported := range []bool{false, true} {
-		for _, offered := range [][]string{nil, {}, {"view_image"}, {"stat"}, {"view_image", "stat"}} {
+		for _, offered := range [][]string{nil, {}, {"view_image"}, {"command"}, {"view_image", "command"}} {
 			for _, image := range []bool{false, true} {
 				t.Run(fmt.Sprintf("supported=%v/offered=%v/image=%v", supported, offered, image), func(t *testing.T) {
 					ctx := t.Context()
 					if offered != nil {
-						ctx = tools.WithCallReach(ctx, toolreach.Offered(offered))
+						ctx = tools.WithCallReach(ctx, toolreach.Offered(offered).WithPrograms(func(string) bool { return true }))
 					}
 					err := bp.RejectObservation(ctx, "read", "fixture", nil, &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: map[string]any{
 						"path": "asset", "bytes": 4, "reason": "binary", "is_image": image, "workspace_image_supported": supported,
@@ -308,7 +307,7 @@ func TestBinaryReadRecoveryRequiresOfferedViewerAndSupportedFormat(t *testing.T)
 					}
 					fix := refusal.Copy["fix"]
 					viewer := supported && slices.Contains(offered, "view_image")
-					if strings.Contains(fix, "Use view_image") != viewer {
+					if strings.Contains(fix, "`view_image(") != viewer {
 						t.Fatalf("incorrect viewer remedy: %s", fix)
 					}
 					if strings.Contains(fix, "perceive") {

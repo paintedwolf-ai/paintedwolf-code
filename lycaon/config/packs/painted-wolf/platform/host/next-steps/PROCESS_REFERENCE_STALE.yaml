@@ -1,4 +1,4 @@
 steps:
-  - tool: "process_list"
+  - program: ["ps"]
     complete: true
-    say: "Call {{ call }} again and review the new exact target."
+    say: "Run {{ call }} again and review the new exact target."

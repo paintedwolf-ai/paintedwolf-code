@@ -9,7 +9,7 @@ requires:
 when: paintedwolf.rejection_code == "READ_BINARY_DENIED"
 effect: block
 copy:
-  what: '{{ tool }} could not decode {{ paintedwolf.path }} ({{ paintedwolf.bytes }} input bytes) as supported bounded
+  what: '{{ tool }} could not decode {{ paintedwolf.path }}{% if paintedwolf.bytes %} ({{ paintedwolf.bytes }} input bytes){% endif %} as supported bounded
     text.'
   cause: 'The text reader reported: {{ paintedwolf.rejection_reason }}.'
   why: Binary content, unsupported encoding, or a decoding bound cannot be treated as readable source text.

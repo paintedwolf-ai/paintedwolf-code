@@ -23,11 +23,12 @@ func readOnlyProfiles() []sandbox.ToolProfile {
 func readRuleNamingGrep(t *testing.T) *oar.RuleSet {
 	t.Helper()
 	return oar.NewRuleSet([]*oar.Rule{{
-		ID:       "READ_TOO_BIG",
-		Anchor:   oar.AnchorToolHandler,
-		Selector: oar.Selector{"tool": {"recall"}},
-		Fix:      "Use `source_history` to find the region first.",
-		Copy:     oar.Copy{Fix: "Use `source_history` to find the region first."},
+		ID:        "READ_TOO_BIG",
+		Anchor:    oar.AnchorToolHandler,
+		Selector:  oar.Selector{"tool": {"recall"}},
+		Fix:       "Use `source_history` to find the region first.",
+		Copy:      oar.Copy{Fix: "Use `source_history` to find the region first."},
+		NextSteps: &oar.NextSteps{Mentions: []string{"source_history"}},
 	}})
 }
 
@@ -124,7 +125,8 @@ func TestRejectionAnchorRecomputesRecoveryAudience(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
 	testutil.FailErr(t, "create catalog", err)
 	rule := &oar.Rule{ID: "RECOVERY", Anchor: oar.AnchorCoordinatorPreInvoke,
-		Fix: "Use `source_history`.", Copy: oar.Copy{Fix: "Use `source_history`."}}
+		Fix: "Use `source_history`.", Copy: oar.Copy{Fix: "Use `source_history`."},
+		NextSteps: &oar.NextSteps{Mentions: []string{"source_history"}}}
 	_, err = toolvocab.CheckRules(catalog, surfaces(), oar.NewRuleSet([]*oar.Rule{rule}))
 	testutil.FailErr(t, "coordinator recovery", err)
 	rule.Anchor = oar.AnchorToolRejected
@@ -134,6 +136,40 @@ func TestRejectionAnchorRecomputesRecoveryAudience(t *testing.T) {
 	rule.Audience = []string{"explore_readonly"}
 	_, err = toolvocab.CheckRules(catalog, surfaces(), oar.NewRuleSet([]*oar.Rule{rule}))
 	testutil.FailErr(t, "explicit producer audience", err)
+}
+
+func TestBundledCopyNamesAToolOnlyAsSubjectMentionOrCheckedStep(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{Tools: map[string]toolschema.Entry{
+		"recall": {Schema: map[string]any{"type": "object", "required": []any{"query"}, "properties": map[string]any{"query": map[string]any{"type": "string"}}}},
+	}}, readOnlyProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "create catalog", err)
+	check := func(rule *oar.Rule) error {
+		rule.ID, rule.Anchor, rule.Audience = "R", oar.AnchorToolRejected, []string{"explore_readonly"}
+		_, err := toolvocab.CheckRules(catalog, surfaces(), oar.NewRuleSet([]*oar.Rule{rule}))
+		return err
+	}
+	for name, rule := range map[string]*oar.Rule{
+		"guarded remedy":      {Copy: oar.Copy{Fix: "{% if paintedwolf.x %}Call `recall`.{% endif %}"}},
+		"bare remedy":         {Copy: oar.Copy{Why: "Use source_history first."}},
+		"retired name":        {Copy: oar.Copy{Fix: "Call `list_dir`."}},
+		"retired next step":   {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "list_dir", Say: "{{ call }}"}}}},
+		"undeclared argument": {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Args: map[string]any{"q": "x"}, Say: "{{ call }}"}}}},
+		"incomplete call":     {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Say: "{{ call }}"}}}},
+	} {
+		if err := check(rule); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	for name, rule := range map[string]*oar.Rule{
+		"subject":   {Selector: oar.Selector{"tool": {"recall"}}, Copy: oar.Copy{What: "`recall` failed."}},
+		"mention":   {NextSteps: &oar.NextSteps{Mentions: []string{"recall"}}, Copy: oar.Copy{Why: "Results from `recall` are retained."}},
+		"fact name": {Copy: oar.Copy{Fix: "See {{ paintedwolf.source_history }}."}},
+		"next step": {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Args: map[string]any{"query": "x"}, Say: "{{ call }}"}}}},
+	} {
+		if err := check(rule); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
 }
 
 // A deny that names a native operation stays live: command programs consult it.

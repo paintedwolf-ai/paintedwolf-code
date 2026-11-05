@@ -95,7 +95,7 @@ func TestUnknownToolRecoveryPagesAndLoadsThroughProductionLoader(t *testing.T) {
 	if !strings.Contains(content, `"status":"catalog"`) || strings.Contains(content, "details_omitted") || strings.Contains(content, "privateprivate") {
 		t.Fatalf("provider lost safe catalog: %s", content)
 	}
-	if page.Instruction != "" || !strings.Contains(rejected.Copy["fix"], "`request_tools`") {
+	if page.Instruction != "" || !strings.Contains(rejected.Copy["fix"], "`request_tools(") {
 		t.Fatal("catalog must defer recovery instructions to rendered OAR")
 	}
 	pageBytes, err := json.Marshal(page)

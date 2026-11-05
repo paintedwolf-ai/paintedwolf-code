@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 // audienceClass says which profiles can receive a rule fired at an anchor.
@@ -186,9 +187,125 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 		own, other := unreachableRemedies(c, rule, audience)
 		problems = append(problems, own...)
 		notes = append(notes, other...)
+		unchecked := uncheckedCalls(c, rule)
+		if c.provenance.rulePack(rule.ID) == "" {
+			problems = append(problems, unchecked...)
+		} else {
+			notes = append(notes, unchecked...)
+		}
 	}
 	sort.Strings(notes)
 	return notes, joinProblems(problems)
+}
+
+// ToolsIn lists the current and retired tools rendered text names as calls, sorted.
+func ToolsIn(c *Catalog, text string) []string {
+	seen := map[string]bool{}
+	for _, m := range namedTool.FindAllStringSubmatch(text, -1) {
+		if c.registered[m[1]] || c.operations[m[1]] {
+			seen[m[1]] = true
+		}
+	}
+	return sortedKeys(seen)
+}
+
+// copiedName matches a name copy can state outside backticks: one with an
+// underscore cannot be an ordinary word.
+var copiedName = regexp.MustCompile(`\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b`)
+
+// uncheckedCalls lists what a rule tells its reader about tools without the host
+// having checked it: a tool in copy that is neither the rule's subject nor a
+// declared mention, and a next step that could not be submitted as written.
+func uncheckedCalls(c *Catalog, rule *oar.Rule) []string {
+	declared := map[string]bool{}
+	for _, tool := range append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...) {
+		declared[tool] = true
+	}
+	var steps []oar.NextStep
+	if rule.NextSteps != nil {
+		for _, tool := range rule.NextSteps.Mentions {
+			declared[tool] = true
+		}
+		steps = rule.NextSteps.Steps
+	}
+	var out []string
+	members := []struct{ name, text string }{{"what", rule.Copy.What}, {"cause", rule.Copy.Cause}, {"why", rule.Copy.Why}, {"fix", rule.Copy.Fix}, {"instead", rule.Copy.Instead}}
+	for _, member := range members {
+		// Fact bindings are data names, not claims about tools.
+		text := copyBinding.ReplaceAllString(member.text, " ")
+		seen := map[string]bool{}
+		names := copiedName.FindAllString(text, -1)
+		for _, m := range namedTool.FindAllStringSubmatch(text, -1) {
+			names = append(names, m[1])
+		}
+		for _, name := range names {
+			if seen[name] || declared[name] || !(c.registered[name] || c.operations[name]) {
+				continue
+			}
+			seen[name] = true
+			out = append(out, fmt.Sprintf(
+				"rule %q: copy.%s names %q; offer it as a next step the host checks, or declare it a mention in host/next-steps",
+				rule.ID, member.name, name))
+		}
+	}
+	for _, step := range steps {
+		out = append(out, c.uncheckedStep(rule.ID, step)...)
+	}
+	return out
+}
+
+var copyBinding = regexp.MustCompile(`\{[{%].*?[%}]\}`)
+
+func (c *Catalog) uncheckedStep(ruleID string, step oar.NextStep) []string {
+	var out []string
+	if tool := strings.TrimSpace(step.Tool); tool != "" {
+		switch meta, described := c.schemas.ToolMeta(tool); {
+		case !c.KnownName(tool):
+			out = append(out, fmt.Sprintf("rule %q: next step calls %q, which is not a current tool", ruleID, tool))
+		case described:
+			out = append(out, stepArgProblems(ruleID, step, meta.ArgsSchema)...)
+		}
+	}
+	for _, alternative := range step.Or {
+		out = append(out, c.uncheckedStep(ruleID, alternative)...)
+	}
+	return out
+}
+
+func stepArgProblems(ruleID string, step oar.NextStep, schema map[string]any) []string {
+	known := map[string]bool{}
+	for _, path := range toolschema.ArgFieldPaths(schema) {
+		known[path] = true
+	}
+	var out []string
+	given := map[string]bool{}
+	note := func(path string) {
+		given[strings.SplitN(path, ".", 2)[0]] = true
+		if !known[path] {
+			out = append(out, fmt.Sprintf("rule %q: next step calling %q sets %q, which its schema does not declare", ruleID, step.Tool, path))
+		}
+	}
+	for path, value := range step.Args {
+		if nested, ok := value.(map[string]any); ok {
+			for key := range nested {
+				note(path + "." + key)
+			}
+			continue
+		}
+		note(path)
+	}
+	for path := range step.Pick {
+		note(path)
+	}
+	if step.Complete {
+		required, _ := toolschema.ArgFieldSummary(schema)
+		for _, name := range required {
+			if !given[strings.TrimSuffix(name, "?")] {
+				out = append(out, fmt.Sprintf("rule %q: next step marks its %q call complete without required %q", ruleID, step.Tool, name))
+			}
+		}
+	}
+	return out
 }
 
 // unreachableRemedies splits by authority: own holds profiles the rule's author

@@ -1,4 +1,6 @@
 steps:
-  - tool: "process_list"
+  - program: ["ps"]
     complete: true
-    say: "Use {{ call }} for native process operations."
+    say: "Inspect processes with {{ call }}."
+  - program: ["kill", "REFERENCE"]
+    say: "Signal one with {{ call }}."
