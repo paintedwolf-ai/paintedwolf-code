@@ -94,10 +94,17 @@ func (r *StaticModelRouter) scopedPool(policy ModelPolicy) *PoolSelector {
 }
 
 func (r *StaticModelRouter) effectivePolicy() (ModelPolicy, error) {
+	var policy ModelPolicy
+	var err error
 	if len(r.projectDirs) > 0 {
-		return r.policy.GetForProjectRoots(r.projectDirs)
+		policy, err = r.policy.GetForProjectRoots(r.projectDirs)
+	} else {
+		policy, err = r.policy.Get(r.scope, r.projectDir)
 	}
-	return r.policy.Get(r.scope, r.projectDir)
+	if err != nil {
+		return ModelPolicy{}, err
+	}
+	return ResolveModelPolicy(policy, r.localDefault != nil && r.localDefault()), nil
 }
 
 // Coordinator returns the coordinator model selection.
@@ -109,7 +116,7 @@ func (r *StaticModelRouter) Coordinator(ctx context.Context) (*ModelSelection, e
 	if err != nil {
 		return nil, err
 	}
-	ref := CoordinatorRefWithLocalDefault(p, r.localDefault != nil && r.localDefault())
+	ref := p.Coordinator
 	return selectionFromRef(ref, ModelRoleCoordinator, false), nil
 }
 
@@ -122,7 +129,7 @@ func (r *StaticModelRouter) Lite(ctx context.Context) (*ModelSelection, error) {
 	if err != nil {
 		return nil, err
 	}
-	ref := SummarizerRefWithLocalDefault(p, r.localDefault != nil && r.localDefault())
+	ref := p.Lite
 	return selectionFromRef(ref, ModelRoleLite, false), nil
 }
 
