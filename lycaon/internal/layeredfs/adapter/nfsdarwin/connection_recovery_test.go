@@ -179,3 +179,32 @@ func mountedAt(t *testing.T, path string) bool {
 	testutil.FailErr(t, "read mount table", err)
 	return strings.Contains(string(out), " on "+path+" (")
 }
+
+// TestMountHelperThatAttachedAndThenFailedLeavesNoMount: a helper can fail or be killed after the kernel
+// attached the mount, and the server closes on that failure, so what it left would be a dead mount.
+func TestMountHelperThatAttachedAndThenFailedLeavesNoMount(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("nfsdarwin requires darwin")
+	}
+	tmp := t.TempDir()
+	trunk, helper := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "attach-then-fail")
+	testutil.FailErr(t, "create trunk", os.MkdirAll(trunk, 0o755))
+	script := "#!/bin/sh\n" + nfsdarwin.DefaultMountNFSBin + " \"$@\"\nexit 1\n"
+	testutil.FailErr(t, "write helper", os.WriteFile(helper, []byte(script), 0o755))
+	runtimeDir := filepath.Join(tmp, "runtime")
+	mountPath := filepath.Join(runtimeDir, "view-attached", "mounts", "primary")
+	t.Cleanup(func() { _ = exec.Command(nfsdarwin.DefaultUmountBin, "-f", mountPath).Run() })
+
+	_, err := nfsdarwin.New(nfsdarwin.Config{MountNFSBin: helper}).Prepare(t.Context(), adapter.PrepareRequest{
+		ViewID: "view-attached", BackingDir: filepath.Join(tmp, "backing"), RuntimeDir: runtimeDir,
+		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunk, IsPrimary: true}},
+	})
+	if err == nil {
+		t.Fatal("expected Prepare to report the failed helper")
+	}
+	// Rollback keeps the records while anything is still mounted below the view.
+	recorded, err := adapter.LoadRecordedConnections(filepath.Join(runtimeDir, "view-attached"))
+	if err != nil || len(recorded) != 0 {
+		t.Fatalf("records after failed prepare: %+v err=%v", recorded, err)
+	}
+}

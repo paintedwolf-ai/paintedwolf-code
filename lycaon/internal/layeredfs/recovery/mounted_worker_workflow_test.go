@@ -1,3 +1,5 @@
+//go:build darwin || linux
+
 package recovery_test
 
 import (
@@ -5,28 +7,25 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/nfsdarwin"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
-func TestMountedMacOSWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("real /sbin/mount_nfs loopback workflow test requires darwin")
-	}
-	baseDir, err := os.MkdirTemp("/tmp", "lycaon-rec-nfs-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(baseDir) })
+// TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion runs on the host's real mounted
+// adapter. Its views live under the test temp directory, so a killed run leaves them where the test
+// runner reclaims them.
+func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *testing.T) {
+	baseDir := t.TempDir()
+	host := newMountedWorkflowHost()
+	adp := host.adapter
 
 	trunkDir := filepath.Join(baseDir, "trunk")
 	if err := os.MkdirAll(filepath.Join(trunkDir, "src"), 0o755); err != nil {
@@ -49,7 +48,7 @@ func TestMountedMacOSWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t 
 	}
 	t.Cleanup(func() { _ = gitMgr.Store().Close() })
 
-	adp := nfsdarwin.New(nfsdarwin.Config{})
+	views := watchMountedViews(t, adp)
 	coord, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
 		RootDir:         filepath.Join(baseDir, "recovery"),
 		CheckpointStore: cpStore,
@@ -64,17 +63,17 @@ func TestMountedMacOSWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t 
 
 	const parentWorkerID = "worker-nfs-parent"
 	const parentViewID = "view-nfs-parent-1"
-	prepParent, err := adp.Prepare(t.Context(), nfsPrepareReq(baseDir, trunkDir, parentViewID, gitMgr))
+	prepParent, err := adp.Prepare(t.Context(), host.prepareRequest(baseDir, trunkDir, parentViewID, gitMgr))
 	if err != nil {
 		t.Fatalf("adp.Prepare parent: %v", err)
 	}
-	t.Cleanup(func() { _, _ = adp.Release(context.Background(), parentViewID) })
+	parentConnections := views.track(t, prepParent)
 
 	if err := adp.BindPrivateGit(parentViewID, parentWorkerID, gitMgr); err != nil {
 		t.Fatalf("BindPrivateGit: %v", err)
 	}
 
-	// 1. Mutate files and commit over the live /sbin/mount_nfs mount, then publish Checkpoint A.
+	// 1. Mutate files and commit over the live mount, then publish Checkpoint A.
 	mountPath := prepParent.PrimaryWorkPath
 	writeFile(t, filepath.Join(mountPath, "README.md"), "updated over nfs in cp-A\n")
 	writeFile(t, filepath.Join(mountPath, "parent_feature.txt"), "parent-feature-v1\n")
@@ -89,7 +88,7 @@ func TestMountedMacOSWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t 
 	if _, err := gitExec.Run(t.Context(), ".", "add", "README.md", "parent_feature.txt"); err != nil {
 		t.Fatalf("git add: %v", err)
 	}
-	if _, err := gitExec.Commit(t.Context(), "parent commit A over nfs"); err != nil {
+	if _, err := gitExec.Commit(t.Context(), "parent commit A over the mount"); err != nil {
 		t.Fatalf("git commit: %v", err)
 	}
 	headOIDA, err := gitExec.Run(t.Context(), ".", "rev-parse", "HEAD")
@@ -130,7 +129,7 @@ func TestMountedMacOSWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t 
 	}); err != nil {
 		t.Fatalf("Publish cp-nfs-A: %v", err)
 	}
-	_ = coord.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
+	testutil.FailErr(t, "save parent journal", coord.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
 		FormatVersion:             recovery.FormatVersion,
 		WorkerID:                  parentWorkerID,
 		ViewID:                    parentViewID,
@@ -138,31 +137,36 @@ func TestMountedMacOSWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t 
 		ProjectID:                 "proj-nfs",
 		AdapterID:                 adp.ID(),
 		LastPublishedCheckpointID: "cp-nfs-A",
-	})
+	}))
 
-	// 2. Overwrite and delete cp-nfs-A files over NFS, then crash before Checkpoint B seals.
+	// 2. Overwrite and delete cp-nfs-A files over the mount, then crash before Checkpoint B seals.
 	writeFile(t, filepath.Join(mountPath, "README.md"), "corrupted unsealed edit after A\n")
-	_ = os.Remove(filepath.Join(mountPath, "parent_feature.txt"))
-	_ = adp.FlushClientData(t.Context(), parentViewID)
-	_, _ = adp.Release(t.Context(), parentViewID)
+	testutil.FailErr(t, "remove parent feature", os.Remove(filepath.Join(mountPath, "parent_feature.txt")))
+	testutil.FailErr(t, "flush parent", adp.FlushClientData(t.Context(), parentViewID))
+	if receipt, err := adp.Release(t.Context(), parentViewID); err != nil || !receipt.Settled {
+		t.Fatalf("release parent: %+v err=%v", receipt, err)
+	}
+	views.requireAbsent(t, parentConnections)
 
-	// 3. RecoverWorkerView onto a fresh /sbin/mount_nfs mount and verify cp-nfs-A is reconstructed.
+	// 3. RecoverWorkerView onto a fresh mount and verify cp-nfs-A is reconstructed.
 	recRes, err := coord.RecoverWorkerView(t.Context(), recovery.RecoverRequest{
 		WorkerID:           parentWorkerID,
 		ExpectedTaskID:     "task-nfs",
 		ExpectedProjectID:  "proj-nfs",
 		NewViewID:          "view-nfs-parent-rec",
 		Adapter:            adp,
-		PrepareReq:         nfsPrepareReq(baseDir, trunkDir, "view-nfs-parent-rec", gitMgr),
+		PrepareReq:         host.prepareRequest(baseDir, trunkDir, "view-nfs-parent-rec", gitMgr),
 		PreviousViewID:     parentViewID,
 		PreviousBackingDir: prepParent.BackingDir,
 	})
 	if err != nil {
-		t.Fatalf("RecoverWorkerView over nfsdarwin: %v", err)
+		t.Fatalf("RecoverWorkerView over the mounted adapter: %v", err)
 	}
-	t.Cleanup(func() { _, _ = adp.Release(context.Background(), recRes.ViewID) })
+	recConnections := views.track(t, recRes.PreparedView)
 
-	verifyRecoveredMountAndStackedChild(t, baseDir, trunkDir, cpStore, gitMgr, adp, coord, recRes, headOIDA)
+	childConnections := verifyRecoveredMountAndStackedChild(t, baseDir, trunkDir, cpStore, gitMgr, host, views, coord, recRes, headOIDA)
+	views.requireAbsent(t, childConnections)
+	views.requireAbsent(t, recConnections)
 }
 
 func verifyRecoveredMountAndStackedChild(
@@ -170,12 +174,14 @@ func verifyRecoveredMountAndStackedChild(
 	baseDir, trunkDir string,
 	cpStore *checkpoint.Store,
 	gitMgr *privategit.Manager,
-	adp *nfsdarwin.Adapter,
+	host mountedWorkflowHost,
+	views *mountedViews,
 	coord *recovery.Coordinator,
 	recRes *recovery.RecoveryResult,
 	headOIDA string,
-) {
+) []adapter.RecordedConnection {
 	t.Helper()
+	adp := host.adapter
 	recMount := recRes.PreparedView.PrimaryWorkPath
 	gotReadme, err := os.ReadFile(filepath.Join(recMount, "README.md"))
 	if err != nil || string(gotReadme) != "updated over nfs in cp-A\n" {
@@ -191,7 +197,7 @@ func verifyRecoveredMountAndStackedChild(
 		t.Fatalf("expected recovered HEAD %s, got %q err=%v", headOIDA, strings.TrimSpace(gotHead), err)
 	}
 
-	// 4. Prepare a stacked child worker over cp-nfs-A on a real /sbin/mount_nfs mount.
+	// 4. Prepare a stacked child worker over cp-nfs-A on a real mount.
 	stacked, err := coord.PrepareStackedWorkerView(t.Context(), recovery.StackedViewRequest{
 		ChildWorkerID:      "worker-nfs-child",
 		ChildViewID:        "view-nfs-child",
@@ -199,12 +205,12 @@ func verifyRecoveredMountAndStackedChild(
 		ProjectID:          "proj-nfs",
 		ParentCheckpointID: "cp-nfs-A",
 		Adapter:            adp,
-		PrepareReq:         nfsPrepareReq(baseDir, trunkDir, "view-nfs-child", gitMgr),
+		PrepareReq:         host.prepareRequest(baseDir, trunkDir, "view-nfs-child", gitMgr),
 	})
 	if err != nil {
-		t.Fatalf("PrepareStackedWorkerView over nfsdarwin: %v", err)
+		t.Fatalf("PrepareStackedWorkerView over the mounted adapter: %v", err)
 	}
-	t.Cleanup(func() { _, _ = adp.Release(context.Background(), stacked.ChildViewID) })
+	childConnections := views.track(t, stacked.PreparedView)
 
 	childMount := stacked.PreparedView.PrimaryWorkPath
 	if got, rErr := os.ReadFile(filepath.Join(childMount, "parent_feature.txt")); rErr != nil || string(got) != "parent-feature-v1\n" {
@@ -212,7 +218,7 @@ func verifyRecoveredMountAndStackedChild(
 	}
 	writeFile(t, filepath.Join(childMount, "child_nfs.txt"), "child-over-nfs\n")
 	writeFile(t, filepath.Join(childMount, "README.md"), "updated by stacked child over nfs\n")
-	_ = adp.FlushClientData(t.Context(), stacked.ChildViewID)
+	testutil.FailErr(t, "flush child", adp.FlushClientData(t.Context(), stacked.ChildViewID))
 
 	childPub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		Core:              stacked.PreparedView.Core,
@@ -256,7 +262,7 @@ func verifyRecoveredMountAndStackedChild(
 		t.Fatalf("expected child_nfs.txt promoted to trunk, got %q err=%v", string(got), rErr)
 	}
 
-	// Release both mounted views and verify 0 active mounts remain.
+	// Release both mounted views; the caller verifies no connection remains.
 	if _, err := coord.CancelAndRelease(t.Context(), recovery.CancelReleaseRequest{
 		WorkerID: "worker-nfs-child",
 		ViewID:   stacked.ChildViewID,
@@ -274,23 +280,86 @@ func verifyRecoveredMountAndStackedChild(
 		t.Fatalf("CancelAndRelease parent: %v", err)
 	}
 	if adp.IsViewActive(stacked.ChildViewID) || adp.IsViewActive(recRes.ViewID) {
-		t.Fatalf("expected 0 active nfsdarwin views after CancelAndRelease")
+		t.Fatalf("expected 0 active views after CancelAndRelease")
 	}
 	if _, err := os.Stat(filepath.Join(trunkDir, ".git")); err != nil && !errors.Is(err, os.ErrNotExist) {
 		t.Fatal(err)
 	}
+	return childConnections
 }
 
-func nfsPrepareReq(baseDir, trunkDir, viewID string, gitMgr *privategit.Manager) adapter.PrepareRequest {
+// mountedWorkflowAdapter is what the workflow needs from a host's real mounted adapter.
+type mountedWorkflowAdapter interface {
+	adapter.Adapter
+	adapter.ConnectionRecovery
+	BindPrivateGit(viewID, workerID string, mgr *privategit.Manager, authorizedGitDirs ...string) error
+	FlushClientData(ctx context.Context, viewID string) error
+	IsViewActive(viewID string) bool
+}
+
+type mountedWorkflowHost struct {
+	adapter      mountedWorkflowAdapter
+	quiesce      func(context.Context, string) error
+	flushClients func(context.Context, string) error
+}
+
+func (h mountedWorkflowHost) prepareRequest(baseDir, trunkDir, viewID string, gitMgr *privategit.Manager) adapter.PrepareRequest {
 	return adapter.PrepareRequest{
 		ViewID:          viewID,
 		BackingDir:      filepath.Join(baseDir, "backing-"+viewID),
 		RuntimeDir:      filepath.Join(baseDir, "runtime"),
 		GitInterceptor:  gitMgr,
-		QuiesceHook:     nfsdarwin.NoopQuiesceHook,
-		FlushClientHook: nfsdarwin.NoWritableMappingsFlushHook,
+		QuiesceHook:     h.quiesce,
+		FlushClientHook: h.flushClients,
 		Grants: []adapter.RootGrant{
 			{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true},
 		},
+	}
+}
+
+// mountedViews remembers each view's recorded connections, because a settled release deletes the
+// records. On every exit from the test it releases what remains and requires the kernel to hold none.
+type mountedViews struct {
+	adapter     mountedWorkflowAdapter
+	viewIDs     []string
+	connections []adapter.RecordedConnection
+}
+
+func watchMountedViews(t *testing.T, adp mountedWorkflowAdapter) *mountedViews {
+	t.Helper()
+	views := &mountedViews{adapter: adp}
+	t.Cleanup(func() {
+		for _, viewID := range views.viewIDs {
+			receipt, err := adp.Release(context.Background(), viewID)
+			if err != nil && receipt.ReasonCode != adapter.ReasonViewNotFound {
+				t.Errorf("release %s: %+v err=%v", viewID, receipt, err)
+			}
+		}
+		views.requireAbsent(t, views.connections)
+	})
+	return views
+}
+
+func (v *mountedViews) track(t *testing.T, view *adapter.PreparedView) []adapter.RecordedConnection {
+	t.Helper()
+	connections, err := adapter.LoadRecordedConnections(view.RuntimeViewDir)
+	testutil.FailErr(t, "load recorded connections", err)
+	if len(connections) == 0 {
+		t.Fatalf("view %s recorded no connection", view.ViewID)
+	}
+	v.viewIDs = append(v.viewIDs, view.ViewID)
+	v.connections = append(v.connections, connections...)
+	return connections
+}
+
+// requireAbsent reads the kernel mount table through the adapter. This process serves these mounts,
+// so settling one that remains reports it and never removes it.
+func (v *mountedViews) requireAbsent(t *testing.T, connections []adapter.RecordedConnection) {
+	t.Helper()
+	for _, connection := range connections {
+		settlement, err := v.adapter.SettleRecordedConnection(context.Background(), connection)
+		if err != nil || settlement.Disposition != adapter.ConnectionAbsent {
+			t.Errorf("connection at %s: %+v err=%v", connection.MountPath, settlement, err)
+		}
 	}
 }
