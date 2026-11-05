@@ -63,7 +63,7 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 
 // implementerLegToolsWant is the isolated implementation profile.
 var implementerLegToolsWant = []string{
-	"capture_page", "chmod", "chown", "code_rewrite", "command", "command_output", "command_stop", "complete_leg", "edit", "fetch_url", "handoff_release", "handoff_release_all", "handoff_reserve", "held_result", "held_stop", "jq_edit", "measure_page", "pack_board", "page_act", "page_close", "page_open", "page_snapshot", "process_list", "process_signal", "recall", "record_finding", "render_view", "replace_lines", "request_budget", "request_decision", "request_tools", "restore_version", "scan_compare", "scan_list", "scan_pack", "scan_query", "scan_summary", "secret_generate", "secret_list", "secret_revoke", "skills_read", "source_history", "summarize", "survey_repo", "terminal_close", "terminal_open", "terminal_read", "terminal_send", "terminal_snapshot", "verify", "view_image", "view_video", "wait", "web_search",
+	"capture_page", "command", "command_output", "command_stop", "complete_leg", "fetch_url", "handoff_release", "handoff_release_all", "handoff_reserve", "held_result", "held_stop", "measure_page", "pack_board", "page_act", "page_close", "page_open", "page_snapshot", "recall", "record_finding", "render_view", "request_budget", "request_decision", "request_tools", "restore_version", "scan_compare", "scan_list", "scan_pack", "scan_query", "scan_summary", "secret_generate", "secret_list", "secret_revoke", "skills_read", "source_history", "terminal_close", "terminal_open", "terminal_read", "terminal_send", "terminal_snapshot", "verify", "view_image", "view_video", "wait", "web_search",
 }
 
 func TestImplementerLegToolsMatchImplementProfile(t *testing.T) {

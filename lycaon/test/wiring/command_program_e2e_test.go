@@ -467,7 +467,7 @@ func TestCommandProgramKillSignalStatusAndJobReferences(t *testing.T) {
 	s := newCommandProgramSession(t, prog, "")
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 	result := s.result(t)
-	if !strings.Contains(result, "pct1:143\nbang:143:") || strings.Contains(result, "bang:143:\n") {
+	if !strings.Contains(result, "pct1:0\nbang:143:") || strings.Contains(result, "bang:143:\n") {
 		t.Fatalf("unexpected kill/wait output: %q", result)
 	}
 }

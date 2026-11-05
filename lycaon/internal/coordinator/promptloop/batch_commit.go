@@ -32,6 +32,7 @@ func (l *toolBatch) persistClassifiedToolOutcome(
 	if err != nil {
 		return history, err
 	}
+	st.noteDeliveryCoverage(out.deliveries)
 	return l.enrichCommittedToolRow(ctx, sessionID, sess, history, out.toolName, out.toolArgs, stored.ID, out.handleEligible, st)
 }
 
@@ -244,6 +245,7 @@ func (l *toolBatch) finishParallelToolOutcomes(
 			}
 		}
 		commit.history = foldStorageSafeMessages(commit.history, out.persistedStored, out.persistedTransient, commit.st)
+		commit.st.noteDeliveryCoverage(out.deliveries)
 		var err error
 		commit.history, err = l.enrichCommittedToolRow(
 			ctx, commit.sessionID, commit.sess, commit.history, out.toolName, out.toolArgs, out.storedID, out.handleEligible, commit.st,
