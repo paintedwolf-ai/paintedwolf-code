@@ -23,6 +23,8 @@ mod mlx;
 mod model;
 mod modernbert;
 mod runtime;
+#[cfg(all(test, feature = "mlx"))]
+mod runtime_startup_tests;
 mod select;
 mod sequence;
 #[cfg(test)]
