@@ -104,11 +104,10 @@ func ConfirmDeliveredLines(path string, pin toolcontract.SourcePin, captured []b
 	if err != nil {
 		return DeliveredSourceObservation{}, err
 	}
+	// `cat -n` keeps counting across files, so a later file's numbers are not its lines.
+	// The lines were still delivered; they just are not numbered observations.
 	fact := out.record.SourceDelivery
-	if int64(fact.StartLine) != lines[0].Mapping.PrintedLine || fact.EndLine-fact.StartLine+1 != len(lines) {
-		return DeliveredSourceObservation{}, fmt.Errorf("printed numbers are not these source lines")
-	}
-	fact.LineNumbered = true
+	fact.LineNumbered = int64(fact.StartLine) == lines[0].Mapping.PrintedLine && fact.EndLine-fact.StartLine+1 == len(lines)
 	return out, nil
 }
 

@@ -200,7 +200,7 @@ func (r *ProgramRuntime) commitSourceDelivery(ctx context.Context, run *programR
 	}
 	delivery := invocation.ProgramSourceDelivery{SessionID: run.tc.Identity.SessionID, ProgramID: programID, OutputReference: ref, Observation: obs,
 		OutputStartByte: first.OutputStartByte, OutputEndByte: last.OutputEndByte}
-	if first.PrintedLine != 0 {
+	if obs.Record().SourceDelivery.LineNumbered {
 		for _, line := range lines {
 			delivery.NumberedLines = append(delivery.NumberedLines, line.Mapping)
 		}

@@ -103,6 +103,40 @@ func TestDeliveryTagsStateCoverageThroughTheRealPath(t *testing.T) {
 	}
 }
 
+// `cat -n` keeps counting across files, so a later file is observed by its real lines:
+// its tag states them and a coordinate inside them is traced.
+func TestNumberedReadOfSeveralFilesObservesEachFile(t *testing.T) {
+	var printed string
+	script := &citableScriptLLM{steps: []citableStep{
+		{command: "cat -n notes.txt lines.txt"},
+		{text: func(req modelcall.CompletionRequest) string {
+			printed = newestToolContent(req)
+			return "The note is second [notes.txt:2], and the section holds bravo [lines.txt:2]."
+		}},
+	}}
+	h, session := deliveryTagSession(t, script)
+	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "read the files")
+	testutil.FailErr(t, "prompt", err)
+	tags := deliveryTagRE.FindAllStringSubmatch(printed, -1)
+	if len(tags) != 2 || tags[0][2] != "notes.txt:1-2" || tags[1][2] != "lines.txt:1-4" {
+		t.Fatalf("tags = %q in %s", tags, printed)
+	}
+	if !strings.Contains(printed, "4\tbravo") {
+		t.Fatalf("stdout changed: %s", printed)
+	}
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(t.Context(), session)
+	testutil.FailErr(t, "read messages", err)
+	var last wire.Message
+	for _, msg := range msgs {
+		if msg.Role == wire.MessageRoleAssistant && len(msg.ToolCalls) == 0 && !wire.IsAgentNoteMessage(msg) {
+			last = msg
+		}
+	}
+	if g := last.Grounding; g == nil || !g.Traced || g.HostAssembled {
+		t.Fatalf("closeout %q grounding = %+v", last.Content, g)
+	}
+}
+
 // A coordinate on what only a pipeline printed is refused, and an excerpt on the
 // command then grounds the repaired answer.
 func TestPipelineCoordinateRepairsThroughACommandExcerpt(t *testing.T) {
