@@ -19,6 +19,7 @@ func grepWorkerCount() int { return min(max(runtime.GOMAXPROCS(0), 1), grepWorke
 type grepFileJob struct {
 	entry         entry
 	names, walked bool
+	pruneChecked  bool
 	events        chan grepFileEvent
 	result        grepFileResult
 }
@@ -82,11 +83,11 @@ func newGrepFiles(r *grepRun, workers int) (*grepFiles, error) {
 	return p, nil
 }
 
-func (p *grepFiles) submit(e entry, names, walked bool) error {
+func (p *grepFiles) submit(e entry, names, walked, pruneChecked bool) error {
 	if err := p.ctx.Err(); err != nil {
 		return err
 	}
-	job := &grepFileJob{entry: e, names: names, walked: walked, events: make(chan grepFileEvent, grepEventWindow)}
+	job := &grepFileJob{entry: e, names: names, walked: walked, pruneChecked: pruneChecked, events: make(chan grepFileEvent, grepEventWindow)}
 	select {
 	case <-p.ctx.Done():
 		return p.ctx.Err()
@@ -216,6 +217,7 @@ func (p *grepFiles) worker() {
 	inv.ctx = p.ctx
 	walker := newWalker(&inv)
 	defer walker.close()
+	frame := new(grepWorkerFrame)
 	for {
 		if p.ctx.Err() != nil {
 			return
@@ -227,14 +229,22 @@ func (p *grepFiles) worker() {
 			if !ok {
 				return
 			}
-			p.search(job, walker)
+			p.search(job, walker, frame)
 		}
 	}
 }
 
-func (p *grepFiles) search(job *grepFileJob, walker *walker) {
+// grepWorkerFrame is one worker's search state, rewritten for each file so a
+// wide tree does not allocate an invocation and a run per file.
+type grepWorkerFrame struct {
+	inv   invocation
+	local grepRun
+}
+
+func (p *grepFiles) search(job *grepFileJob, walker *walker, frame *grepWorkerFrame) {
 	defer close(job.events)
-	inv := p.invocation
+	frame.inv = p.invocation
+	inv := &frame.inv
 	inv.ctx, inv.pins, inv.flushedPins, inv.releases = p.ctx, nil, 0, nil
 	inv.pinReleases = nil
 	defer inv.closePins()
@@ -263,15 +273,21 @@ func (p *grepFiles) search(job *grepFileJob, walker *walker) {
 		}
 		return nil
 	}
-	local := p.template
-	local.inv, local.walker, local.files = &inv, walker, nil
-	local.selection.inv = &inv
+	frame.local = p.template
+	local := &frame.local
+	local.inv, local.walker, local.files = inv, walker, nil
+	local.selection.inv = inv
 	local.selected, local.stopped = false, false
 	local.index.stats = contentSearchStats{}
 	if local.json != nil {
 		local.json = &rgJSON{started: local.json.started}
 	}
-	err := local.searchFileLive(job.entry, job.names, job.walked)
+	var err error
+	if job.pruneChecked {
+		err = local.searchUnpruned(job.entry, job.names, job.walked)
+	} else {
+		err = local.searchFileLive(job.entry, job.names, job.walked)
+	}
 	if flushErr := inv.out.flush(); err == nil {
 		err = flushErr
 	}
