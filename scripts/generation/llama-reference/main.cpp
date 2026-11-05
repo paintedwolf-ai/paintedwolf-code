@@ -99,6 +99,10 @@ int main(int argc, char ** argv) {
         const int generated = spec.at("generation_tokens");
         const int trials = spec.at("trials");
         const int chunk_size = spec.at("prefill_chunk");
+        const std::string model_size = spec.value("reference_model_size", "e4b");
+        if (model_size != "e4b" && model_size != "e2b") {
+            throw std::runtime_error("unsupported reference model size");
+        }
         if (chunk_size < 1 || chunk_size > 256 || prompt.empty() || prompt.size() + generated > 65536 || generated < 1 || generated > 4096 || trials < 1 || trials > 20) {
             throw std::runtime_error("benchmark dimensions exceed their bounds");
         }
@@ -116,8 +120,10 @@ int main(int argc, char ** argv) {
         mp.lazy_mode = spec.at("ple") == "mapped" ? LLAMA_LAZY_MODE_ON : LLAMA_LAZY_MODE_OFF;
         auto model = std::unique_ptr<llama_model, decltype(&llama_model_free)>(
             llama_model_load_from_file(argv[1], mp), llama_model_free);
-        if (!model || llama_model_n_layer(model.get()) != 42 || llama_model_n_embd(model.get()) != 2560) {
-            throw std::runtime_error("the reference benchmark only accepts E4B");
+        const int layers = model_size == "e2b" ? 35 : 42;
+        const int width = model_size == "e2b" ? 1536 : 2560;
+        if (!model || llama_model_n_layer(model.get()) != layers || llama_model_n_embd(model.get()) != width) {
+            throw std::runtime_error("artifact does not match the selected reference model size");
         }
         const int vocabulary = llama_vocab_n_tokens(llama_model_get_vocab(model.get()));
         for (const auto token : prompt) {
@@ -144,6 +150,7 @@ int main(int argc, char ** argv) {
         if (!ctx) { throw std::runtime_error("context allocation failed"); }
         for (int trial = 0; trial <= trials; ++trial) {
             auto result = measure(ctx.get(), prompt, generated, chunk_size);
+            result["reference_model_size"] = model_size;
             result["trial"] = trial;
             result["warmup"] = trial == 0;
             result["ple"] = spec.at("ple");
