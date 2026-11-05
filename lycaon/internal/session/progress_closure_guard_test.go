@@ -42,7 +42,7 @@ func testCoordinatorPreInvokePipeline(t *testing.T) *oar.GuardPipeline {
 	return pipeline
 }
 
-// closureGuardPreInvoke checks progress and clears a satisfied latch.
+// closureGuardPreInvoke evaluates current reconciliation state.
 func closureGuardPreInvoke(t *testing.T, mgr *Host, sess *api.Session, rootID, tool string) (bool, error) {
 	t.Helper()
 	content := mgr.RewindRuntime.Progress.Get(t.Context(), rootID)
@@ -59,9 +59,6 @@ func closureGuardPreInvoke(t *testing.T, mgr *Host, sess *api.Session, rootID, t
 			return false, reject
 		}
 		return true, nil
-	}
-	if armed {
-		mgr.Coordinator.ProgressClosure.ClearSatisfied(rootID, content, baseline)
 	}
 	return false, nil
 }
@@ -83,10 +80,10 @@ func TestProgressClosureRejectWhenArmedAndNothingClosed(t *testing.T) {
 	if !ok {
 		t.Fatalf("err = %T want a refusal", err)
 	}
-	if refusal.Code() != "PROGRESS_ITEM_NOT_CLOSED" {
+	if refusal.Code() != "PROGRESS_RECONCILIATION_REQUIRED" {
 		t.Fatalf("refusal code = %q", refusal.Code())
 	}
-	if !strings.Contains(refusal.Body, "PROGRESS_ITEM_NOT_CLOSED") {
+	if !strings.Contains(refusal.Body, "PROGRESS_RECONCILIATION_REQUIRED") {
 		t.Fatalf("body = %q", refusal.Body)
 	}
 	if !strings.Contains(refusal.Body, "job-1") {
@@ -94,7 +91,7 @@ func TestProgressClosureRejectWhenArmedAndNothingClosed(t *testing.T) {
 	}
 }
 
-// Every completion since the latch armed is named until the checklist changes.
+// Every finish remains named until its exact set is acknowledged.
 func TestProgressClosureAccumulatesCompletedWork(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b")
@@ -135,52 +132,64 @@ func TestProgressClosureRejectAllowsReadWhenArmed(t *testing.T) {
 	}
 }
 
-func TestProgressClosureRejectClearsAfterClose(t *testing.T) {
+func TestProgressClosureAllowsDispatchAfterAcknowledgement(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [x] step b\n- [ ] step c")
+	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
+	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+		t.Fatal("current finishes were not acknowledged")
+	}
+
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "task")
 	if err != nil || block {
-		t.Fatalf("after close must allow; block=%v err=%v", block, err)
+		t.Fatalf("after acknowledgement must allow; block=%v err=%v", block, err)
 	}
 	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
-		t.Fatal("latch should clear after closed count advances")
+		t.Fatal("latch should clear after explicit acknowledgement")
 	}
 }
 
-func TestProgressClosureRejectClearsAfterRevision(t *testing.T) {
-	// No open step can honestly close; a content revision is the reachable exit.
+func TestProgressClosureAcknowledgesAlreadyRepresentedFinish(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [x] survey\n- [ ] challenge claims\n- [ ] report")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
-	store.Set("root-1", "## Progress\n- [x] survey — re-run after provider failure\n- [ ] challenge claims\n- [ ] report")
+	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
+	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+		t.Fatal("current worker finish was not acknowledged")
+	}
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "task")
 	if err != nil || block {
-		t.Fatalf("revision must allow; block=%v err=%v", block, err)
+		t.Fatalf("acknowledgement must allow; block=%v err=%v", block, err)
 	}
 	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
-		t.Fatal("latch should clear after a checklist revision")
+		t.Fatal("latch should clear after explicit acknowledgement")
 	}
 }
 
-func TestProgressClosureRejectClearsWhenPendingZero(t *testing.T) {
+func TestProgressClosureAcknowledgesFinishAfterDocumentCloses(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [ ] step a")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [>] note")
+	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
+	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+		t.Fatal("current finishes were not acknowledged")
+	}
+
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "task")
 	if err != nil || block {
-		t.Fatalf("pending=0 must allow; block=%v err=%v", block, err)
+		t.Fatalf("acknowledged finish must allow; block=%v err=%v", block, err)
 	}
 	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
-		t.Fatal("latch should clear when pending is zero")
+		t.Fatal("latch should clear after explicit acknowledgement")
 	}
 }
 
@@ -217,19 +226,24 @@ func TestProgressClosureRejectSkipsWorkerChild(t *testing.T) {
 	}
 }
 
-func TestProgressClosureNAAdvancesClosedCount(t *testing.T) {
+func TestProgressClosureAcknowledgesFinishAfterDescope(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b\n- [ ] step c")
 	mgr := newClosureGuardManager(t, store)
 	sess := &api.Session{ID: "root-1"}
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [~] step a\n- [ ] step b\n- [ ] step c")
+	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
+	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+		t.Fatal("current finishes were not acknowledged")
+	}
+
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "write")
 	if err != nil || block {
-		t.Fatalf("descope must advance closed count; block=%v err=%v", block, err)
+		t.Fatalf("acknowledged descope must allow; block=%v err=%v", block, err)
 	}
 	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
-		t.Fatal("latch should clear after [~] advances closed count")
+		t.Fatal("latch should clear after explicit acknowledgement")
 	}
 }
 
@@ -240,38 +254,41 @@ func TestProgressClosureReArmKeepsOriginalBaseline(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b\n- [ ] step c")
-	// Sibling finish must not replace the baseline and erase credit for the close.
+	// Repeated finishes retain the original acknowledgement set.
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
+	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
+	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+		t.Fatal("current finishes were not acknowledged")
+	}
+
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "write")
 	if err != nil || block {
 		t.Fatalf("re-arm must keep original baseline; block=%v err=%v", block, err)
 	}
 	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
-		t.Fatal("latch should clear when closed count exceeds the original baseline")
+		t.Fatal("latch should clear after explicit acknowledgement")
 	}
 }
 
-func TestProgressClosureClearsOnUpdateProgressWrite(t *testing.T) {
+func TestProgressClosureTerminalWriteDoesNotAcknowledgeFinish(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b")
-	mgr.Coordinator.ProgressClosure.AfterWrite(t.Context(), "root-1")
-	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
-		t.Fatal("update_progress advance must disarm the latch without waiting for a gated tool")
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); !armed {
+		t.Fatal("document transition consumed a worker finish")
 	}
 }
 
-func TestProgressClosureRevisionWriteClears(t *testing.T) {
+func TestProgressClosureLabelWriteDoesNotClear(t *testing.T) {
 	store := progress.NewMemoryStore()
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [ ] step b — waiting on rerun")
-	mgr.Coordinator.ProgressClosure.AfterWrite(t.Context(), "root-1")
-	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); armed {
-		t.Fatal("a content revision must disarm the latch")
+	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); !armed {
+		t.Fatal("a label revision acknowledged a worker result")
 	}
 }
 
@@ -280,8 +297,7 @@ func TestProgressClosureUnchangedDoesNotClear(t *testing.T) {
 	store.Set("root-1", "## Progress\n- [ ] step a\n- [ ] step b")
 	mgr := newClosureGuardManager(t, store)
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
-	// Same content — nothing reconciled.
-	mgr.Coordinator.ProgressClosure.AfterWrite(t.Context(), "root-1")
+	// No acknowledgement was submitted.
 	if _, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1"); !armed {
 		t.Fatal("unchanged checklist must leave the latch armed")
 	}

@@ -23,6 +23,7 @@ type ListenCheckpointBroker struct {
 	Checkpoints hitl.CheckpointManager
 	Store       Store
 	Runtime     *approvalstate.SandboxPortGrantRuntime
+	Provenance  LoopbackProvenanceResolver
 	Authority   hitl.ApprovalGate
 	// ApprovalsDisabled authorizes the request without a prompt.
 	ApprovalsDisabled func(projectDir string) bool
@@ -131,7 +132,9 @@ func (b *ListenCheckpointBroker) raiseListenCard(
 		InvokingSessionID: invokingSessionID, Key: in.SecretPermission.Key(listenAxisKey), ToolCallID: in.ToolCallID,
 		ProjectID: in.ProjectID, Tool: "local_listen",
 		AskFamily: authzledger.AskFamilyLocalListen, CheckpointLabel: "local-listen",
-		BuildCard: func() (sandboxAskCard, error) { return b.buildListenCard(in, invokingSessionID, rootSessionID, ports) },
+		BuildCard: func() (sandboxAskCard, error) {
+			return b.buildListenCard(ctx, in, invokingSessionID, rootSessionID, ports)
+		},
 	})
 	if err != nil || !resolved.Answered {
 		return tools.LocalListenResult{}, err
@@ -144,6 +147,7 @@ func (b *ListenCheckpointBroker) raiseListenCard(
 }
 
 func (b *ListenCheckpointBroker) buildListenCard(
+	ctx context.Context,
 	in tools.LocalListenAsk,
 	invokingSessionID, rootSessionID string,
 	ports []uint16,
@@ -189,11 +193,13 @@ func (b *ListenCheckpointBroker) buildListenCard(
 	target := hitl.ApprovalTarget{Kind: "local_listen", Label: label, Details: map[string]any{
 		"listen_ports": listenPortInts(ports),
 	}}
+	lead := applyPortHolderDetails(ctx, b.Provenance, invokingSessionID, in.ProjectDir, ports, target.Details)
 	primary, cited, reasons := hitl.PresentDecision(decision)
 	plan, err := hitl.NewApprovalPlan(grantAction, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectLocalListen, Title: title, Targets: []hitl.ApprovalTarget{target},
 	}, hitl.ApprovalPresentation{
 		Action: "Local server", Tool: strings.TrimSpace(in.ToolName), Command: summary,
+		Lead:            lead,
 		Impact:          hitl.LocalListenWhat,
 		Who:             hitl.WhoAgentCommand,
 		IfWrong:         hitl.LocalListenIfWrong,

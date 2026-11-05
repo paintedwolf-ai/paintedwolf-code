@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -169,13 +170,13 @@ func TestLegFinishKicksLeadWithReconcileWhenLatched(t *testing.T) {
 				t.Errorf("%s names a dispatch move with the checklist latched but never names "+
 					"update_progress:\n--- rendered ---\n%s", kickID, latched)
 			}
-			if !strings.Contains(latched, "PROGRESS_ITEM_NOT_CLOSED") {
+			if !strings.Contains(latched, guard.ProgressReconciliationRequiredCode) {
 				t.Errorf("%s does not name the Code the coordinator is about to hit:"+
 					"\n--- rendered ---\n%s", kickID, latched)
 			}
 
 			clear := render(t, kickID, false)
-			if strings.Contains(clear, "PROGRESS_ITEM_NOT_CLOSED") {
+			if strings.Contains(clear, guard.ProgressReconciliationRequiredCode) {
 				t.Errorf("%s warns about the closure latch when it is not armed:"+
 					"\n--- rendered ---\n%s", kickID, clear)
 			}

@@ -12,10 +12,12 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -75,7 +77,8 @@ type result struct {
 	ReceiptToken string         `json:"redaction_receipt,omitempty"`
 	// UnixSocket is the reviewed socket the request reached; the URL host
 	// then names no network destination.
-	UnixSocket string `json:"unix_socket,omitempty"`
+	UnixSocket string                    `json:"unix_socket,omitempty"`
+	Listener   *api.LoopbackListenerFact `json:"listener,omitempty"`
 }
 
 type requestSpec struct {
@@ -119,7 +122,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			DurationMS:  resp.DurationMS, TimingMS: resp.Timing, TLS: resp.TLS,
 			Bytes: resp.Bytes, SHA256: resp.SHA256, ContentType: resp.ContentType,
 			Redacted: ex.outbound.redacted, ReceiptToken: ex.outbound.receipt, UnixSocket: ex.spec.socket,
-			Tokens: ex.tokens, BodyRedacted: ex.bodyRedacted,
+			Tokens: ex.tokens, BodyRedacted: ex.bodyRedacted, Listener: ex.listener,
 		}
 		placement := placeResponseBody(ctx, resp, tctx, ex.landed != nil, ex.spec.disposition.discard)
 		out.Body, out.BodyEncoding = placement.inline, placement.encoding
@@ -130,6 +133,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		}
 		out.Cookies = ex.cookies
 		reportWebPage(tctx, ex.spec, resp, placement, ex.finalURL)
+		reportLoopbackListener(tctx, ex.listener)
 		if tctx.Effects.Out != nil {
 			tctx.Effects.Out.RetrievedFrom = retrievedFrom(ex.spec, resp.FinalURL)
 		}
@@ -217,6 +221,7 @@ type exchanged struct {
 	tokens       *tokenReceipt
 	cookies      *cookieReceipt
 	bodyRedacted bool
+	listener     *api.LoopbackListenerFact
 }
 
 type responseUse uint8
@@ -263,6 +268,13 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		spec.socket = grant.ResolvedPath
 		spec.socketBinding = grant.Binding
 	}
+	if tctx.Direct.DirectIPRequested {
+		if reject := tools.FinalizeDirectIPForSpawn(tctx); reject != nil {
+			return exchanged{}, reject
+		}
+		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
+		defer tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
+	}
 	ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
 		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
 		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID,
@@ -306,7 +318,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		ActionID: tctx.EffectActionID(),
 	})
 	defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.EffectActionID())
-	resp, landed, bufferedBody, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]), opts)
+	resp, landed, bufferedBody, listenerFact, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]), opts)
 	if err != nil {
 		if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {
 			return exchanged{}, capabilityrequest.SocketResolveReject(&confine.SocketResolveError{Code: confine.SocketResolveChanged, Path: spec.unixSocket, Err: err})
@@ -336,7 +348,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	}
 	return exchanged{spec: spec, outbound: outbound, resp: resp, landed: landed, finalURL: finalURL, redirects: redirects,
 		sentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)), tokens: tokenRec,
-		cookies: saveCookieJar(ctx, deps, jarReq, jar), bodyRedacted: bodyRedacted}, nil
+		cookies: saveCookieJar(ctx, deps, jarReq, jar), bodyRedacted: bodyRedacted, listener: listenerFact}, nil
 }
 
 // parseRequestSpec validates declared fields before screening or transport.
@@ -421,15 +433,18 @@ func send(
 	ctx context.Context, deps Deps, tctx tools.ToolContext, spec requestSpec, outbound outboundRequest,
 	jar *secretcap.CookieJar, tokenJar *secretcap.TokenJar, tokenJarReq secretcap.TokenJarRequest,
 	allowAddress func(netip.Addr, uint16) bool, timeout time.Duration, opts ExchangeOptions,
-) (outboundhttp.Response, *inboundwrite.Receipt, []byte, error) {
+) (outboundhttp.Response, *inboundwrite.Receipt, []byte, *api.LoopbackListenerFact, error) {
+	var loopbackObs loopbackHopObservation
+	firstHopSeen := false
 	req := outboundhttp.Request{
 		Class:  egressclass.AgentHTTPRequest,
 		Method: spec.method, URL: outbound.url, OriginHeaders: outbound.headers, Body: outbound.body, Timeout: timeout,
 		Redirects: outboundhttp.RedirectMode(spec.redirects), DiscardBody: spec.disposition.discard, AllowAddress: allowAddress,
-		UnixSocket:    spec.socket,
-		SocketBinding: spec.socketBinding,
-		HostHeader:    outbound.hostHeader,
-		Resolve:       spec.resolve,
+		UnixSocket:     spec.socket,
+		SocketBinding:  spec.socketBinding,
+		HostHeader:     outbound.hostHeader,
+		Resolve:        spec.resolve,
+		OnFirstHopConn: func(local, remote netip.AddrPort) { loopbackObs.onFirstHopConn(ctx, tctx, local, remote) },
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
 	// no network destination for the egress gate to judge.
@@ -441,6 +456,10 @@ func send(
 			if err := egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method); err != nil {
 				return err
 			}
+		}
+		if !firstHopSeen {
+			firstHopSeen = true
+			loopbackObs.beforeFirstHop(hopCtx, tctx, spec)
 		}
 		if outbound.beforeCookieHop != nil {
 			return outbound.beforeCookieHop(hopCtx, hopURL)
@@ -487,10 +506,13 @@ func send(
 		}
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, spec.outgoing); err != nil {
-		return outboundhttp.Response{}, nil, nil, toolrejection.HeldHandOffReject("http_request", err)
+		return outboundhttp.Response{}, nil, nil, nil, toolrejection.HeldHandOffReject("http_request", err)
 	}
 	resp, err := outboundhttp.Do(ctx, req)
-	return resp, landed, bufferedResponsePathBytes, err
+	if err != nil {
+		return resp, landed, bufferedResponsePathBytes, nil, err
+	}
+	return resp, landed, bufferedResponsePathBytes, loopbackObs.settle(ctx, tctx, spec, resp), nil
 }
 
 // sendReject maps a typed transport failure after received cookies are saved.
@@ -660,17 +682,107 @@ func loopbackPolicy(request *capabilityrequest.CapabilityRequest, tctx tools.Too
 			ports[port] = true
 		}
 	}
-	if allLoopback {
-		return func(addr netip.Addr, port uint16) bool {
-			return addr.IsLoopback()
-		}, nil
+	if tctx.Local.SocksProxyEnv && (tctx.Direct.DirectIPRequested || (request != nil && request.DirectIP != nil)) {
+		return nil, &toolrejection.ToolReject{
+			Code: isolation.CodeSocksProxyInvalid,
+			Data: map[string]any{"reason": "socks_proxy is incompatible with capability_request.direct_ip"},
+		}
 	}
-	if len(ports) == 0 {
-		return nil, nil
+	var allowLoopback func(netip.Addr, uint16) bool
+	if allLoopback {
+		allowLoopback = func(addr netip.Addr, _ uint16) bool {
+			return addr.IsLoopback()
+		}
+	} else if len(ports) > 0 {
+		allowLoopback = func(addr netip.Addr, port uint16) bool {
+			return addr.IsLoopback() && ports[port]
+		}
+	}
+	directGranted := tctx.Direct.DirectIPAuthorized
+	if !directGranted {
+		return allowLoopback, nil
+	}
+	declared := tctx.Direct.DirectIPDeclared
+	if len(declared) == 0 && request != nil && request.DirectIP != nil {
+		declared = request.DirectIP.DeclaredDestinations
 	}
 	return func(addr netip.Addr, port uint16) bool {
-		return addr.IsLoopback() && ports[port]
+		if allowLoopback != nil && allowLoopback(addr, port) {
+			return true
+		}
+		return directIPAddressAllowed(declared, addr, port)
 	}, nil
+}
+
+// directIPAddressAllowed checks whether a non-public unicast destination is
+// covered by a granted direct_ip capability and its optional destination list.
+func directIPAddressAllowed(declared []string, addr netip.Addr, port uint16) bool {
+	addr = addr.Unmap()
+	if !egress.IPDirectAllowed(addr) {
+		return false
+	}
+	if permits, narrowed := confine.ParseDirectIPPermits(declared); narrowed {
+		portAllowed := false
+		for _, p := range permits {
+			if p.Protocol == "tcp" && p.Port == port {
+				portAllowed = true
+				break
+			}
+		}
+		if !portAllowed {
+			return false
+		}
+	}
+	if len(declared) == 0 {
+		return true
+	}
+	allConstrained := true
+	matched := false
+	for _, raw := range declared {
+		m, constrained := declaredDirectIPMatch(raw, addr, port)
+		if !constrained {
+			allConstrained = false
+			continue
+		}
+		if m {
+			matched = true
+		}
+	}
+	return !allConstrained || matched
+}
+
+func declaredDirectIPMatch(raw string, addr netip.Addr, port uint16) (matched bool, constrained bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return false, false
+	}
+	if scheme, rest, found := strings.Cut(s, "://"); found {
+		switch strings.ToLower(strings.TrimSpace(scheme)) {
+		case "tcp", "http", "https":
+			s = rest
+		case "udp":
+			return false, true
+		default:
+			return false, false
+		}
+	}
+	hostPort, _, _ := strings.Cut(s, "/")
+	if host, portText, err := net.SplitHostPort(hostPort); err == nil {
+		parsedPort, pErr := strconv.ParseUint(strings.TrimSpace(portText), 10, 16)
+		if pErr != nil || parsedPort == 0 {
+			return false, true
+		}
+		portMatches := parsedPort == uint64(port)
+		if declaredAddr, aErr := netip.ParseAddr(strings.TrimSuffix(strings.TrimSpace(host), ".")); aErr == nil {
+			return portMatches && declaredAddr.Unmap() == addr, true
+		}
+		return portMatches, true
+	}
+	trimmed := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(hostPort), "["), "]")
+	if declaredAddr, err := netip.ParseAddr(strings.TrimSuffix(trimmed, ".")); err == nil {
+		return declaredAddr.Unmap() == addr, true
+	}
+	return false, false
 }
 
 func invalid(err error) *toolrejection.ToolReject {

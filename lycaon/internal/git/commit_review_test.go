@@ -10,6 +10,7 @@ import (
 )
 
 func TestCommitReviewPreservesMissingShallowParent(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	path := filepath.Join(dir, "file.txt")
 	testutil.FailErr(t, "write original", os.WriteFile(path, []byte("original\n"), 0o644))
@@ -35,6 +36,7 @@ func TestCommitReviewPreservesMissingShallowParent(t *testing.T) {
 }
 
 func TestCommitReviewIgnoresReplacementObjects(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	path := filepath.Join(dir, "file.txt")
 	testutil.FailErr(t, "write original", os.WriteFile(path, []byte("original\n"), 0o644))
@@ -68,6 +70,7 @@ func TestCommitReviewIgnoresReplacementObjects(t *testing.T) {
 }
 
 func TestCommitReviewImmutablePagedFiles(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	write := func(path string, content []byte) {
 		t.Helper()
@@ -127,6 +130,7 @@ func TestCommitReviewImmutablePagedFiles(t *testing.T) {
 }
 
 func TestCommitReviewInitialEmptyAndNestedRoots(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	testutil.FailErr(t, "create nested root", os.Mkdir(filepath.Join(dir, "nested"), 0o755))
 	testutil.FailErr(t, "write nested", os.WriteFile(filepath.Join(dir, "nested", "one.txt"), []byte("one\n"), 0o644))
@@ -158,6 +162,7 @@ func TestCommitReviewInitialEmptyAndNestedRoots(t *testing.T) {
 }
 
 func TestCommitReviewCrossRootRenameDoesNotExposeSibling(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	testutil.FailErr(t, "create nested root", os.Mkdir(filepath.Join(dir, "nested"), 0o755))
 	testutil.FailErr(t, "write outside", os.WriteFile(filepath.Join(dir, "outside.txt"), []byte("same\n"), 0o644))
@@ -174,6 +179,7 @@ func TestCommitReviewCrossRootRenameDoesNotExposeSibling(t *testing.T) {
 }
 
 func TestCommitReviewUsesCommittedAttributes(t *testing.T) {
+	t.Parallel()
 	dir, run := fileHistoryRepo(t)
 	testutil.FailErr(t, "write attributes", os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("*.txt diff\n"), 0o644))
 	testutil.FailErr(t, "write before", os.WriteFile(filepath.Join(dir, "file.txt"), []byte("one\n"), 0o644))

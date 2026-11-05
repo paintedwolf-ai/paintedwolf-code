@@ -76,8 +76,8 @@ type SessionView func(ctx context.Context, sess *api.Session) *catalogview.View
 // AgentsMDIndexInjector renders the cached session AGENTS.md index for each request.
 type AgentsMDIndexInjector func(ctx context.Context, sess *api.Session) (block api.Message, ok bool)
 
-// AgentsMDChainInjector renders path-scoped AGENTS.md chain content for a turn.
-type AgentsMDChainInjector func(ctx context.Context, sess *api.Session, relPath string) (block api.Message, err error)
+// AgentsMDPoliciesInjector renders current guidance for resolved working scopes.
+type AgentsMDPoliciesInjector func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error)
 
 // AssemblyDeps wires prompt message assembly for coordinator and worker turns.
 type AssemblyDeps struct {
@@ -87,7 +87,7 @@ type AssemblyDeps struct {
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
 	SessionView             SessionView
 	AgentsMDIndex           AgentsMDIndexInjector
-	AgentsMDChain           AgentsMDChainInjector
+	AgentsMDPolicies        AgentsMDPoliciesInjector
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
 	Agents                  AgentProfileResolver
 	Workflows               WorkflowManifestSource

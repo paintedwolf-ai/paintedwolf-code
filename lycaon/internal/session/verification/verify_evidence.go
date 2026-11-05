@@ -197,7 +197,7 @@ func BackgroundOutcome(completion bgprocess.Completion) string {
 	if completion.BoundaryRefusal != "" {
 		return api.SourceVerdictUnverifiable
 	}
-	if completion.TerminationReason == bgprocess.TerminationStopped || completion.TerminationReason == bgprocess.TerminationTimedOut {
+	if completion.TerminationReason.IsStopped() || completion.TerminationReason == bgprocess.TerminationTimedOut {
 		return api.SourceVerdictFailed
 	}
 	if completion.ExitCode == 0 && completion.Failure == nil {

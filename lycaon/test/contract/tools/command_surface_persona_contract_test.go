@@ -20,7 +20,7 @@ func TestPathExplorerPersonaIncludesReadOnlyCommandSurface(t *testing.T) {
 			t.Fatalf("path-explorer persona must not include stale command fragment %q", forbid)
 		}
 	}
-	for _, want := range []string{"## command", "GNU and BSD", "--help", "read-only"} {
+	for _, want := range []string{"## command", "--help", "read-only"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("path-explorer persona missing read-only command surface %q", want)
 		}

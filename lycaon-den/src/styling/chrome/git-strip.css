@@ -2,6 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  min-width: 0;
   padding: 0.45rem 0.75rem;
   font-size: var(--text-den-compact);
 }
@@ -9,6 +10,7 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  min-width: 0;
   min-height: 2rem;
 }
 .git-strip__row--nav {
@@ -23,6 +25,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  min-width: 0;
   padding: 0.4rem 0.45rem;
   border: 1px solid var(--den-control-line);
   border-radius: var(--den-radius);
@@ -42,6 +45,7 @@
   /* In column layout, the textarea content determines its height. */
   flex: 0 0 auto;
   width: 100%;
+  min-width: 0;
   padding: 0.15rem 0.2rem;
   border: 0;
   background: transparent;
@@ -63,9 +67,11 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.3rem;
+  min-width: 0;
 }
 .git-strip__compose-foot .git-strip__commit {
   margin-inline-start: auto;
+  max-width: 100%;
 }
 .git-strip--empty {
   flex-direction: row;
@@ -89,6 +95,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
+  min-width: 0;
+  max-width: 100%;
   color: var(--den-text);
   white-space: nowrap;
   border: 1px solid var(--den-border);
@@ -99,6 +107,7 @@
 }
 .git-strip__scope-label {
   font-weight: 600;
+  min-width: 0;
   max-width: 14rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -146,6 +155,7 @@
 }
 .git-strip__repo-card-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
@@ -226,8 +236,11 @@
 }
 .git-strip__sync {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.3rem;
+  min-width: 0;
+  max-width: 100%;
 }
 .git-strip__track {
   display: inline-flex;
@@ -280,9 +293,12 @@
 }
 .git-strip__ai-group {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
 }
 .git-strip__files {
   border: 1px solid var(--den-border);
@@ -317,9 +333,11 @@
 }
 .git-strip__branch-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
   width: 100%;
+  min-width: 0;
   text-align: left;
   font-size: var(--text-den-caption);
   padding: 0.2rem 0.4rem;
@@ -340,6 +358,7 @@
   display: flex;
   align-items: baseline;
   gap: 0.45rem;
+  min-width: 0;
   padding: 0.15rem 0.3rem;
   font-size: var(--text-den-overline);
 }
@@ -351,7 +370,7 @@
 }
 .git-strip__message {
   flex: 1 1 10rem;
-  min-width: 6rem;
+  min-width: 0;
   font-size: var(--text-den-caption);
   font-family: inherit;
   line-height: 1.35;
@@ -367,7 +386,8 @@ textarea.git-strip__message {
   overflow-y: hidden;
 }
 .git-strip__ai {
-  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
   font-size: var(--text-den-micro);
   padding: 0.25rem 0.5rem;
   border-radius: var(--den-radius);
@@ -378,17 +398,24 @@ textarea.git-strip__message {
 }
 .git-strip__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .git-strip__row--compose .git-strip__ai,
 .git-strip__row--compose .git-strip__commit,
 .git-strip__row--compose .git-strip__stash,
 .git-strip__row--compose .git-strip__discard {
+  min-width: 0;
+  max-width: 100%;
   min-height: max(1.7143rem, calc(var(--text-den-label) * 1.4 + 0.5em));
   padding: 0 0.5rem;
   font-size: var(--text-den-label);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: start;
   transition:
     background var(--den-duration) var(--den-ease),
     border-color var(--den-duration) var(--den-ease),

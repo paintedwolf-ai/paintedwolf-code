@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   SIDEBAR_CHATS_FETCH_LIMIT,
   createProjectSessionsStore,
 } from "./project-sessions-store.ts";
-import type { SessionListPage, SessionSummary } from "../api/types.ts";
+import type { ProjectBackgroundEvent, SessionListPage, SessionSummary } from "../api/types.ts";
 
 type ListOpts = { pinned?: boolean; sort?: string; limit?: number };
 
@@ -122,6 +122,72 @@ describe("pin edits", () => {
     fail(new Error("offline"));
     await expect(moving).rejects.toThrow("offline");
     expect(store.pinnedIds()).toEqual(["a1", "a2", "a3"]);
+  });
+});
+
+describe("background work counts", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function backgroundStore(rows: () => SessionSummary[]) {
+    const client = hostClient(rows);
+    let emit!: (ev: ProjectBackgroundEvent) => void;
+    const store = createProjectSessionsStore(() => client as never, {
+      onSessionEvent: () => () => {},
+      onProjectBackgroundEvent: (cb) => {
+        emit = cb;
+        return () => {};
+      },
+    });
+    store.setProject("a");
+    await vi.waitFor(() => expect(store.state.loaded).toBe(true));
+    // Debounced reloads wait for runAllTimers, so counts read here are the event's own.
+    vi.useFakeTimers();
+    const event = (action: ProjectBackgroundEvent["action"], session_id: string, project_id = "a") =>
+      emit({ action, session_id, project_id } as ProjectBackgroundEvent);
+    const running = () => store.state.rows.find((r) => r.id === "chat")?.background_running;
+    return { client, store, event, running };
+  }
+
+  it("counts started and ended work on the chat's row without going below zero", async () => {
+    const { event, running } = await backgroundStore(() => [row("chat")]);
+    event("started", "chat");
+    event("started", "chat");
+    expect(running()).toBe(2);
+    event("ended", "chat");
+    expect(running()).toBe(1);
+    event("ended", "chat");
+    event("ended", "chat");
+    expect(running()).toBe(0);
+  });
+
+  it("leaves counts alone for other actions, unlisted chats and other projects", async () => {
+    const { client, event, running } = await backgroundStore(() => [row("chat")]);
+    const calls = client.listProjectSessions.mock.calls.length;
+    event("started", "chat", "another-project");
+    await vi.runAllTimersAsync();
+    expect(running()).toBeUndefined();
+    expect(client.listProjectSessions.mock.calls.length).toBe(calls);
+
+    event("ports_changed", "chat");
+    event("started", "unlisted");
+    event("started", "   ");
+    expect(running()).toBeUndefined();
+  });
+
+  it("settles on the host's count at the reload the event schedules", async () => {
+    let hostCount = 0;
+    const { store, event, running } = await backgroundStore(() => [
+      { ...row("chat"), background_running: hostCount },
+    ]);
+    event("started", "chat");
+    expect(running()).toBe(1);
+    hostCount = 4;
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+    await vi.waitFor(() => expect(running()).toBe(4));
+    expect(store.state.rows.map((r) => r.id)).toEqual(["chat"]);
   });
 });
 

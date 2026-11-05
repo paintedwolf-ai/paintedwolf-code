@@ -12,6 +12,33 @@ import { FIND_BAR_ID } from "../../find/command-bar-disclosure.ts";
 afterEach(resetFindControllerForTests);
 
 describe("chat content Files pane", () => {
+  it("loads complete execution records in Files without paging controls", async () => {
+    const get = vi.fn().mockResolvedValueOnce({program:{id:"program"},executions:[{id:"first-record"}],executions_omitted:1,next_cursor:"next"})
+      .mockResolvedValueOnce({program:{id:"program"},executions:[{id:"last-record"}],executions_omitted:0});
+    const view = render(() => <ChatContentPage projectId="project" client={stubClient({getCommandProgramReceipt:get})} document={{
+      kind:"tool",sessionId:"session",messageId:"message",toolCallId:"call",pane:"receipts",title:"Execution records",
+      content:{kind:"command_receipts",programs:[{id:"program",activityId:"activity"}],context:'{"facts":[]}'},
+    }} />);
+    await waitFor(() => expect(view.container.querySelector(".cm-content")?.textContent).toContain("last-record"));
+    expect(view.container.querySelector(".cm-content")?.textContent).toContain("first-record");
+    expect(view.queryByRole("button",{name:/Previous records|Next records/})).toBeNull();
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps an unavailable execution document out of Copy contents", async () => {
+    const notices = createNoticeStore(); registerNoticePublisher(notices);
+    try {
+      const view = render(() => <ChatContentPage projectId="project" client={null} document={{
+        kind:"tool",sessionId:"session",messageId:"message",toolCallId:"call",pane:"receipts",title:"Execution records",
+        content:{kind:"command_receipts",programs:[{id:"program"}],context:"{}"},
+      }} />);
+      await waitFor(() => expect(view.container.querySelector(".cm-content")?.textContent).toContain("Execution records are unavailable"));
+      fireEvent.click(view.getByRole("button", {name:"Copy contents"}));
+      const rows = selectProjectNoticeGroups(notices.index()).find(group => group.projectId === "project")?.notices ?? [];
+      expect(rows.some(row => row.code === "chat_content_copy_failed")).toBe(true);
+    } finally { registerNoticePublisher(null); }
+  });
+
   it("opens prepared large output in a read-only CodeMirror with the Files editor controls", async () => {
     const getRows=vi.fn();
     const view=render(()=><ChatContentPage projectId="project" client={stubClient({getChatContent:getRows})} document={{

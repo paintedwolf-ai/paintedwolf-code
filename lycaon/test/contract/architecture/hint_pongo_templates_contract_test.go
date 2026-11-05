@@ -7,6 +7,8 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hintregistry"
+	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/prompts"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -25,18 +27,32 @@ func TestRejectHintCodesRenderUnifiedBlock(t *testing.T) {
 		if entry.Severity == "info" && !strings.HasPrefix(emit, "rule:") && !strings.HasPrefix(emit, "guard:") {
 			continue
 		}
-		raw, err := f.Format(code, map[string]any{
+		lead := "Rejected:"
+		if strings.TrimSpace(entry.Effect) == "warn" || strings.TrimSpace(entry.Effect) == "nudge" {
+			lead = ">>>"
+		}
+		assertRender := func(label string, vars map[string]any) {
+			raw, err := f.Format(code, vars)
+			if err != nil {
+				t.Fatalf("hint %q (%s) Format: %v", code, label, err)
+			}
+			for _, want := range []string{lead, "Code: " + code} {
+				if !strings.Contains(raw, want) {
+					t.Fatalf("hint %q (%s) reject block missing %q:\n%s", code, label, want, raw)
+				}
+			}
+			fix := strings.TrimSpace(oarcore.RenderCopy(entry.Fix, oarcopy.FactsFromData(vars)))
+			if strings.Contains(raw, "Fix:") != (fix != "") {
+				t.Fatalf("hint %q (%s) Fix line mismatch for fix=%q:\n%s", code, label, fix, raw)
+			}
+		}
+		assertRender("default", map[string]any{
 			"tool":    renderToolFor(entry, "read"),
 			"path":    "src/main.go",
 			"profile": "coordinator", "detail": "bad args",
 		})
-		if err != nil {
-			t.Fatalf("hint %q Format: %v", code, err)
-		}
-		for _, want := range []string{"Code: " + code, "Fix:"} {
-			if !strings.Contains(raw, want) {
-				t.Fatalf("hint %q reject block missing %q:\n%s", code, want, raw)
-			}
+		for _, sc := range entry.Scenarios {
+			assertRender(sc.ID, guidance.ScenarioVars(entry, sc))
 		}
 	}
 }

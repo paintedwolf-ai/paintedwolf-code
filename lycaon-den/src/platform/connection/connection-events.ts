@@ -1,5 +1,10 @@
 import { resyncSourceViews } from "../../ui/paged-view/source-view-session.ts";
 import { resyncAgentPresence, retainAgentPresenceProject } from "../../files/components/agent-presence-store.ts";
+import {
+  applyProjectBackgroundSessionEvent,
+  resyncProjectBackground,
+  retainProjectBackgroundProject,
+} from "../../project/project-background-store.ts";
 import { setWalkLoadSubscription } from "../../files/walk/walk-loader.ts";
 import { requestWalkRefresh } from "../../files/walk/walk-store.ts";
 import { watchWindowExit } from "../windows/watch-window-exit.ts";
@@ -139,9 +144,13 @@ export function createConnectionEvents(ports: EventPorts) {
     ports.invalidation.bind(appStore);
 
     retainAgentPresenceProject(projectId);
+    retainProjectBackgroundProject(projectId);
     const resyncPresence = () => {
       const client = ports.host.client;
-      if (client) void resyncAgentPresence(client, projectId).catch(() => undefined);
+      if (client) {
+        void resyncAgentPresence(client, projectId).catch(() => undefined);
+        void resyncProjectBackground(client, projectId).catch(() => undefined);
+      }
     };
 
     let sourceResyncedBeforeOpen = false;
@@ -196,6 +205,7 @@ export function createConnectionEvents(ports: EventPorts) {
       session: (ev) => {
         requestWalkRefresh(ev.project_id);
         refreshWalkPreviews(ev.project_id, ev.id);
+        applyProjectBackgroundSessionEvent(ev, ports.host.client);
         for (const listener of sessionEventListeners) {
           listener(ev);
         }

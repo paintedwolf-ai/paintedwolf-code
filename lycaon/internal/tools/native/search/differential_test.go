@@ -80,6 +80,10 @@ func references(t *testing.T) []reference {
 }
 
 func runReference(t *testing.T, ref reference, dir string, argv []string) (string, int) {
+	if ref.kind == "rg" {
+		// The native search reads captured streams; mapping changes binary JSON records.
+		argv = append([]string{"--no-mmap"}, argv...)
+	}
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()

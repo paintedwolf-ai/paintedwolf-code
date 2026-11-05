@@ -35,8 +35,15 @@ func SplitToolJSONBody(content string) (prefix, jsonBody, suffix string, ok bool
 }
 
 func toolBodyAfterPrefix(content string) string {
-	_, body := SplitEvidenceHandleTag(content)
-	body = strings.TrimSpace(body)
+	body := strings.TrimSpace(content)
+	// A program that read several files carries one handle per read.
+	for {
+		tag, rest := SplitEvidenceHandleTag(body)
+		if tag == "" {
+			break
+		}
+		body = strings.TrimSpace(rest)
+	}
 	for _, marker := range []string{OverlayPromoteEventPrefix, OverlayRejectEventPrefix} {
 		if strings.HasPrefix(body, marker) {
 			return strings.TrimSpace(strings.TrimPrefix(body, marker))

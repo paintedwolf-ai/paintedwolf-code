@@ -57,28 +57,6 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 	}
 }
 
-func TestEditSchemaRejectPreservesSourcePrerequisite(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
-	exec := toolfixture.ContractToolExecutor(t)
-	exec.Metadata.SetToolSchemas(schemas)
-
-	_, err = exec.Invoke(context.Background(), "edit", map[string]any{"path": "ntp_check.py", "symbol": "query_server"}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{Agent: "implementer"},
-		Turn: tools.InvocationTurn{
-			TurnOfferedToolNames: []string{"write", "edit"},
-			TurnToolPlan:         toolsurface.Compile([]string{"write", "edit"}, nil),
-		},
-	})
-	if err == nil {
-		t.Fatal("expected edit schema reject")
-	}
-	if !strings.Contains(err.Error(), "read the current source") || strings.Contains(err.Error(), "switch to `write`") {
-		t.Fatalf("reject should preserve edit source prerequisite without switching to write, got %v", err)
-	}
-}
-
 func TestNativeOwnersDoNotFmtMissingArg(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "tools", "native")

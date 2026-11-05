@@ -53,8 +53,89 @@ describe("background process outcomes", () => {
     expect(screen.queryByText("Exit code")).toBeNull();
     expect(screen.getByText("Checking…")).toBeTruthy();
     applyBackgroundProcessOutputs("second", []);
-    expect(screen.getByText("Unavailable")).toBeTruthy();
+    expect(screen.getByText("No longer available")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Background commands end when stopped or when Painted Wolf Code quits.",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText("Exited")).toBeNull();
     expect(screen.queryByText("Exit code")).toBeNull();
+  });
+
+  it("renders the recorded termination reason for ended commands", () => {
+    render(() => (
+      <BackgroundProcessPanel
+        sessionId="session"
+        processId="process"
+        initialRunning
+      />
+    ));
+    applyBackgroundProcessEvent({
+      session_id: "session",
+      process_id: "process",
+      running: false,
+      stream: "exit",
+      end_offset: 0,
+      exit_code: -1,
+      termination_reason: "stopped_by_user",
+    });
+    expect(screen.getByText("Stopped by you")).toBeTruthy();
+  });
+
+  it("shows 'Ended when Painted Wolf Code quit' for a historical card with a recorded app_quit reason", () => {
+    applyBackgroundProcessOutputs("session", []);
+    render(() => (
+      <BackgroundProcessPanel
+        sessionId="session"
+        processId="process-quit"
+        terminationReason="app_quit"
+      />
+    ));
+    expect(
+      screen.getByTestId("background-process-historical-reason").textContent,
+    ).toBe("Ended when Painted Wolf Code quit");
+    expect(screen.queryByText("No longer available")).toBeNull();
+  });
+
+  it("uses neutral unavailable copy after same-run pruning or unexpected engine restart without relabeling as app_quit", async () => {
+    render(() => (
+      <BackgroundProcessPanel
+        sessionId="session"
+        processId="process-pruned"
+        initialRunning
+      />
+    ));
+    applyBackgroundProcessEvent({
+      session_id: "session",
+      process_id: "process-pruned",
+      running: true,
+      stream: "stdout",
+      end_offset: 3,
+      text: "ok\n",
+    });
+    expect(screen.getByText("Running")).toBeTruthy();
+
+    // Simulate unexpected engine restart or same-run pruning where hydrated session snapshot no longer has the handle.
+    await refreshBackgroundProcessSnapshots(
+      {
+        listSessionBackgroundProcesses: async () => [],
+        getSessionBackgroundProcessOutput: async () => ({
+          process_id: "process-pruned",
+          running: false,
+          chunks: [],
+        }),
+      },
+      "session",
+    );
+    expect(screen.getByText("No longer available")).toBeTruthy();
+    expect(
+      screen.getByTestId("background-process-unavailable-guidance").textContent,
+    ).toBe(
+      "Background commands end when stopped or when Painted Wolf Code quits.",
+    );
+    expect(
+      screen.queryByText("Ended when Painted Wolf Code quit"),
+    ).toBeNull();
   });
 });

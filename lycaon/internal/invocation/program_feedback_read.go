@@ -51,6 +51,15 @@ func (l *ProgramFeedbackLease) Close() {
 // concurrent settlement cannot enlarge the selected rows after admission. No
 // retained body, definition JSON or reviewed-argument body is loaded here.
 func (r *SQLRecorder) ReadProgramFeedback(ctx context.Context, session, program, execution string, maximum int, admission ProgramFeedbackAdmission) (*ProgramFeedbackLease, error) {
+	return r.readProgramFeedback(ctx, session, program, execution, maximum, admission, false)
+}
+
+// ReadProgramOutcomeFeedback observes aggregate effects, including live jobs.
+func (r *SQLRecorder) ReadProgramOutcomeFeedback(ctx context.Context, session, program string, maximum int, admission ProgramFeedbackAdmission) (*ProgramFeedbackLease, error) {
+	return r.readProgramFeedback(ctx, session, program, "", maximum, admission, true)
+}
+
+func (r *SQLRecorder) readProgramFeedback(ctx context.Context, session, program, execution string, maximum int, admission ProgramFeedbackAdmission, aggregate bool) (*ProgramFeedbackLease, error) {
 	if r == nil || r.database == nil || admission == nil || ctx == nil || maximum < 1 || maximum > 16 {
 		return nil, fmt.Errorf("feedback requires bounded snapshot and state admission")
 	}
@@ -115,7 +124,7 @@ func (r *SQLRecorder) ReadProgramFeedback(ctx context.Context, session, program,
 	if err != nil {
 		return nil, err
 	}
-	if execution == "" && (out.Projection.Program.State != "rejected" || out.Projection.Program.ProgressState != "rejected" || out.Projection.Program.StopCode == "") {
+	if !aggregate && execution == "" && (out.Projection.Program.State != "rejected" || out.Projection.Program.ProgressState != "rejected" || out.Projection.Program.StopCode == "") {
 		return nil, fmt.Errorf("program feedback without execution requires rejected progress envelope")
 	}
 	if err := ctx.Err(); err != nil {

@@ -349,7 +349,7 @@ func (s *ProgramSupervisor) DisposeSession(ctx context.Context, sessionID string
 	}
 	s.Stop(sessionID)
 	if s.Background != nil {
-		if err := s.Background.Lifecycle.DisposeSession(ctx, sessionID); err != nil {
+		if err := s.Background.Lifecycle.DisposeSession(ctx, sessionID, bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationChatDeleted)); err != nil {
 			return err
 		}
 	}

@@ -79,15 +79,16 @@ func assertRetainedStorageFallback(t *testing.T, plan Plan) {
 }
 
 func retainedStorageContractPlan() Plan {
-	target := Baseline{Revision: 11, Shape: "3a065b2adccf2628ce0e203a4e04962c974b462a7cae85e8996ba4e7696fe9e6"}
-	links := SourceLinkKind(target)
+	target := Baseline{Revision: 12, Shape: "71741e5f8d9a6ead298d061e3726d0b045b32ca62570409144eb52a2740151f5"}
+	progress := SessionProgressIdentity(target)
+	links := SourceLinkKind(progress.From)
 	inline := ProgramInlineInputs(links.From)
 	native := ProgramNativeGap(inline.From)
 	programs := ProgramReceipts(native.From)
 	identity := EffectPermitIdentity(programs.From)
 	away := VaultUnlockAway(identity.From)
 	manifest := SourceManifestLayout(away.From)
-	return Plan{Source: manifest.From, Target: target, steps: []Step{manifest, away, identity, programs, native, inline, links}}
+	return Plan{Source: manifest.From, Target: target, steps: []Step{manifest, away, identity, programs, native, inline, links, progress}}
 }
 
 func TestRetainedSorterBudgetCoversMergeFanoutBoundaries(t *testing.T) {

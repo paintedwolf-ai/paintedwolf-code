@@ -23,7 +23,6 @@ func (in *inputs) rawLine() (string, error) {
 	read := false
 	for {
 		chunk, failure := in.rawReader.ReadSlice('\n')
-		in.rawOffset += int64(len(chunk))
 		read = read || len(chunk) > 0
 		if failure == nil {
 			chunk = chunk[:len(chunk)-1]
@@ -46,6 +45,7 @@ func (in *inputs) rawLine() (string, error) {
 		if err := in.rawWork.resize(int64(len(buffer.Bytes))); err != nil {
 			return "", err
 		}
+		in.rawLines++
 		return string(buffer.Bytes), nil
 	}
 }

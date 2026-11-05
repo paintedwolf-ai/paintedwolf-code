@@ -42,7 +42,7 @@ func TestOnExitFiresAfterProcessExits(t *testing.T) {
 		t.Fatal("released before the process exited")
 	default:
 	}
-	if _, err := reg.Lifecycle.Stop("sess-1", handle); err != nil {
+	if _, err := reg.Lifecycle.Stop("sess-1", handle, bgprocess.TerminationStoppedByAgent); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	select {

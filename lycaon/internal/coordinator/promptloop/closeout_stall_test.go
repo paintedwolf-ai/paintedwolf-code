@@ -91,8 +91,10 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 			})
 			loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{Tools: reg}, Closeout: CloseoutDeps{
 				CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout { return retained },
-				ResumeCloseoutWork: func(context.Context, string) {
-					retained = guidance.RetainedCloseout{Attempt: retained.Attempt, DocumentAttempt: retained.DocumentAttempt}
+				CloseoutTrackingDeps: CloseoutTrackingDeps{
+					ResumeCloseoutWork: func(context.Context, string) {
+						retained = guidance.RetainedCloseout{Attempt: retained.Attempt, DocumentAttempt: retained.DocumentAttempt}
+					},
 				},
 				AssembleLedgerCloseout: func(context.Context, string, string, []string, string, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 					t.Fatal("tool recovery assembled an old conclusion")
@@ -115,7 +117,13 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 				}
 				return nil
 			}}})
-			st := &promptLoopTurnState{turnToolPlan: toolsurface.Compile([]string{"read"}, nil), offeredToolNames: []string{"read"}, turnID: "turn", attemptID: "attempt", closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old", codes: []string{"citation"}}}
+			st := &promptLoopTurnState{
+				turnBatchState:    turnBatchState{turnToolPlan: toolsurface.Compile([]string{"read"}, nil)},
+				turnStreamState:   turnStreamState{offeredToolNames: []string{"read"}},
+				turnID:            "turn",
+				attemptID:         "attempt",
+				turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old", codes: []string{"citation"}}},
+			}
 			sess := &api.Session{ID: "session"}
 			for i := 0; i < 7; i++ {
 				call := api.ToolCall{ID: fmt.Sprint(i), Name: "read", Args: map[string]any{"path": "missing"}}
@@ -195,13 +203,15 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 						}
 						return guidance.RetainedCloseout{}
 					},
-					RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
-						var err error
-						rendered, err = engine.RenderKick(ctx, id, data)
-						return rendered, err
+					CloseoutTrackingDeps: CloseoutTrackingDeps{
+						RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
+							var err error
+							rendered, err = engine.RenderKick(ctx, id, data)
+							return rendered, err
+						},
 					},
 				}})
-				st := &promptLoopTurnState{proseFinish: tc.prose, offeredToolNames: tc.offered}
+				st := &promptLoopTurnState{proseFinish: tc.prose, turnStreamState: turnStreamState{offeredToolNames: tc.offered}}
 				_, err := loop.Closeout.rejectCloseoutGrounding(t.Context(), "session", st, nil, "", &oar.Decision{Code: repair.code, Copy: map[string]string{"what": "Closeout refused"}}, "Pinned report", nil)
 				testutil.FailErr(t, "render closeout rejection", err)
 				if got := strings.Contains(rendered, "use an offered tool"); got != tc.want {
@@ -218,7 +228,7 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 func TestCloseoutAsyncRetirementClearsLocalOffenderBeforeFreshReport(t *testing.T) {
 	const fresh = "Fresh report after worker failed."
 	stopped := errors.New("inspection boundary")
-	st := &promptLoopTurnState{closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old offender", codes: []string{"old refusal"}}}
+	st := &promptLoopTurnState{turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old offender", codes: []string{"old refusal"}}}}
 	loop := NewPromptLoopForTest(PromptLoopDeps{Closeout: CloseoutDeps{
 		CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
 			return guidance.RetainedCloseout{Attempt: 2, DocumentAttempt: 1}
@@ -233,5 +243,56 @@ func TestCloseoutAsyncRetirementClearsLocalOffenderBeforeFreshReport(t *testing.
 	_, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", st, nil, api.Message{}, guidance.CloseoutRead{Report: guidance.CoordinatorCompletionReport{Synthesis: fresh}})
 	if !errors.Is(err, stopped) {
 		t.Fatalf("fresh report didn't reach observation boundary: %v", err)
+	}
+}
+
+func TestCloseoutRecallPreservesPinnedReportForSubsequentFenceOnlyRepair(t *testing.T) {
+	const pinned = "## Recon report\n\nVerified handler behavior in `src/app.go`."
+	retained := guidance.RetainedCloseout{
+		Active:   true,
+		Attempt:  1,
+		PrevKey:  guidance.InvestHandleNotObservedCode,
+		Drafted:  pinned,
+		ForcedBy: []string{guidance.InvestHandleNotObservedCode},
+	}
+	reg := tools.NewStubRegistry()
+	_ = reg.Register("recall", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return `{"matches":[{"handle":"read#1","path":"src/app.go"}]}`, nil
+	})
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{Tools: reg},
+		Closeout: CloseoutDeps{
+			CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout { return retained },
+			CloseoutTrackingDeps: CloseoutTrackingDeps{
+				ResumeCloseoutWork: func(context.Context, string) {
+					retained = guidance.RetainedCloseout{Attempt: retained.Attempt, DocumentAttempt: retained.DocumentAttempt}
+				},
+			},
+		},
+		Projection: ProjectionDeps{
+			AppendMessages: func(context.Context, string, ...api.Message) error { return nil },
+		},
+	})
+	st := &promptLoopTurnState{
+		turnID: "turn", attemptID: "attempt",
+		turnBatchState:    turnBatchState{turnToolPlan: toolsurface.Compile([]string{"recall"}, nil)},
+		turnStreamState:   turnStreamState{offeredToolNames: []string{"recall"}},
+		turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 1, prevKey: guidance.InvestHandleNotObservedCode, codes: []string{guidance.InvestHandleNotObservedCode}}},
+	}
+	sess := &api.Session{ID: "session-recall"}
+	call := api.ToolCall{ID: "recall-1", Name: "recall", Args: map[string]any{"query": "handle:read#1"}}
+	msg := api.Message{ID: "assistant-recall", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{call}}
+	st.history = append(st.history, msg)
+	_, err := loop.processPromptLoopAssistantTurn(t.Context(), sess, sess.ID, PromptRunInput{}, 0, 10, "implement_investigate", "inspect", st, msg, &modelcall.Completion{ToolCalls: msg.ToolCalls})
+	testutil.FailErr(t, "process recall turn", err)
+	if !retained.Active || retained.Drafted != pinned {
+		t.Fatalf("recall turn cleared pinned closeout state: %+v", retained)
+	}
+	const trailer = "```json\n{\"cited_evidence\":[{\"evidence\":\"read#1\",\"path\":\"src/app.go\",\"line\":\"1-5\",\"excerpt\":\"package app\"}],\"cited_urls\":[],\"artifact_ids\":[]}\n```"
+	history := []api.Message{{ID: "draft-2", Role: api.MessageRoleAssistant, Content: trailer}}
+	prepared, _ := loop.Tools.maybeCoerceCloseoutContent(t.Context(), history, sess.ID, "implement_investigate", trailer, "draft-2")
+	report, ok := guidance.ParseCoordinatorCompletionReport(prepared)
+	if !ok || report.Synthesis != pinned || len(report.CitedEvidence) != 1 || report.CitedEvidence[0].Evidence != "read#1" {
+		t.Fatalf("stitched report after recall = %+v (ok=%v)", report, ok)
 	}
 }

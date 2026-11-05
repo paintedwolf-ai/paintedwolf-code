@@ -120,3 +120,21 @@ func TestBuildWorkerPromptJoinsAssignment(t *testing.T) {
 		t.Fatalf("prompt = %q", prompt)
 	}
 }
+
+func TestRenderWorkerTaskPreambleLinkedCheckoutWriteMode(t *testing.T) {
+	ctx := context.Background()
+	renderer := testInjectRenderer(t)
+	projectDir := t.TempDir()
+	wtDir := filepath.Join(projectDir, "worktree")
+	testutil.FailErr(t, "mkdir worktree", os.MkdirAll(wtDir, 0o755))
+	testutil.FailErr(t, "write .git pointer", os.WriteFile(filepath.Join(wtDir, ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644))
+
+	block, err := RenderWorkerTaskPreamble(ctx, renderer, "sess-inject-test", projectDir,
+		nil,
+		&api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"worktree/main.go"}},
+	)
+	testutil.FailErr(t, "RenderWorkerTaskPreamble", err)
+	if !strings.Contains(block, "without VCS access in this workspace") || !strings.Contains(block, "read-scoped leg or the coordinator") {
+		t.Fatalf("missing linked checkout orientation in preamble:\n%s", block)
+	}
+}

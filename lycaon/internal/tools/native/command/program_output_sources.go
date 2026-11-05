@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -152,7 +153,7 @@ func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *
 				continue
 			}
 			tools.RememberCommandSourceDelivery(ctx, run.tc, run.memory, local, deliveredSlice)
-			_, _ = r.Recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{
+			settlement, commitErr := r.Recorder.CommitProgramSourceDelivery(ctx, invocation.ProgramSourceDelivery{
 				SessionID:       run.tc.Identity.SessionID,
 				ProgramID:       programID,
 				OutputReference: ref,
@@ -160,6 +161,11 @@ func (r *ProgramRuntime) commitStreamSourceDeliveries(ctx context.Context, run *
 				OutputEndByte:   streamEnd,
 				Observation:     obs,
 			}, observer, r.sessionResources(run.tc.Identity.SessionID))
+			if commitErr == nil && run.tc.Effects.Out != nil {
+				if handle := strings.TrimSpace(settlement.SourceOwnerReference); handle != "" && !slices.Contains(run.tc.Effects.Out.SourceDeliveryHandles, handle) {
+					run.tc.Effects.Out.SourceDeliveryHandles = append(run.tc.Effects.Out.SourceDeliveryHandles, handle)
+				}
+			}
 			release()
 		}
 		_ = proj.Close()

@@ -1,0 +1,17 @@
+{
+  "category": "ts_local_dependencies",
+  "artifact": "lycaon-den/src/components/checkpoint/CheckpointCards.tsx",
+  "kind": "module",
+  "workstream": "approval-decision-feedback",
+  "disposition": "retain",
+  "reason": "The dock composes pending host state, project identity, requested selection, focus return, queue presentation and the decision owner. Its 18 explicit dependencies preserve these interactions without adding another state owner. Retain this composition with per-card failure, original-context and retirement contracts.",
+  "reviewed_commit": "9048ab1b26588517749373aaf600c07d757725c4",
+  "ceiling": 18,
+  "boundaries": {
+    "lycaon-den/src/components/checkpoint/CheckpointCards.exit.test.tsx": "1cd3055ff9ba99ec1398041897b83361c42a3cec3dc06785ce87fca0256a75e9",
+    "lycaon-den/src/components/checkpoint/CheckpointCards.worker.test.tsx": "80fc1d1b53fb4d2d99c35e3384967bac69ea8fe82f0ba10f7cd77a052e38ceff",
+    "lycaon-den/src/components/checkpoint/CheckpointCards.failure.test.tsx": "c20dc018211ac3288dea25e7abffe45353bee0992f4da49c77953b56f393de97",
+    "lycaon-den/src/components/checkpoint/checkpoint-decisions.test.ts": "2f13c51dd2e4406d62f7f904a66179366e9ca627bf27aea032e008787037b802"
+  },
+  "reviewed_shape": "91867d292d9f6a92af34e863032bc4a214014b56088d6381f46ebcc7b4788400"
+}
