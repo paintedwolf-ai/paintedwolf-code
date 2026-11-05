@@ -21,7 +21,6 @@ type hostedStep struct {
 	With     map[string]string
 }
 
-
 type hostedJob struct {
 	Name        string
 	Uses        string
