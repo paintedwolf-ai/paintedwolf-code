@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { transferNativeBackup, backupProgressMessage, type BackupTransferProgress } from "./backup-transfer.ts";
+import { transferNativeBackup, type BackupTransferProgress } from "./backup-transfer.ts";
 
 const { invoke, listen, unlisten } = vi.hoisted(() => ({ invoke: vi.fn(), listen: vi.fn(), unlisten: vi.fn() }));
 vi.mock("../runtime.ts", () => ({ isTauriRuntime: () => true }));

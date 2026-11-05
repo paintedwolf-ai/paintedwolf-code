@@ -25,7 +25,6 @@ import {
   groupHitsForEverything,
   matchGotoTargets,
   crossbarHitStatus,
-  crossbarNoMatchLabel,
   crossbarServerQuery,
   shouldRunCrossbarServerSearch,
   queryLooksLikeDsl,

@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AttentionRow } from "../api/types.ts";
 import {
-  ATTENTION_CLASS_LABEL,
   attentionAgeLabel,
   attentionFor,
   attentionRank,
-  attentionReasonLabel,
   blockingRows,
   compareAttention,
   indexAttention,

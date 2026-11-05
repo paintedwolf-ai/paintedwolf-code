@@ -176,15 +176,6 @@ describe("web-research-providers-model", () => {
     };
     expect(providerStatusLabel(ready)).toBe("Ready");
 
-    const needsKey: WebResearchProviderMeta = {
-      id: "serper",
-      kind: "keyed",
-      label: "Serper",
-      roles: ["results"],
-      configured: false,
-      credential_present: false,
-    };
-
     const keyless: WebResearchProviderMeta = {
       id: "hn",
       kind: "keyless",

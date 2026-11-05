@@ -10,7 +10,6 @@ import {
   buildReviewFileRows,
   buildReviewRows,
   encodeEyeChoice,
-  lensEmptyCopy,
   lensPickerLabel,
   lensScopeHeader,
   liveRowsInScope,

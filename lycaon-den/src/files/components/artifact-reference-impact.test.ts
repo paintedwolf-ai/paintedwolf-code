@@ -55,8 +55,6 @@ describe("artifact reference impact", () => {
 
   it("always warns that the reference survives the delete", () => {
     // Deleting removes bytes, never the id.
-    for (const target of [item(), item([{ kind: "project_cover", count: 1 }])]) {
-    }
     expect(deleteConfirmBody(item([{ kind: "project_cover", count: 1 }]))).toContain(
       "the project cover",
     );

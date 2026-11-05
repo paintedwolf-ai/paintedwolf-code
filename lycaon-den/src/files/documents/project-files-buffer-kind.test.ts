@@ -4,7 +4,6 @@ import {
   bufferKindFromSourceRead,
   encodingChipLabel,
   infoCardExplanation,
-  infoCardTitle,
   infoCardVariant,
   isLockedImageMime,
 } from "./project-files-buffer-kind.ts";
@@ -81,7 +80,6 @@ describe("bufferKindFromSourceRead", () => {
 
 describe("info card copy", () => {
   it("uses distinct explanations for over-limit vs binary", () => {
-    const overLimit = infoCardExplanation(infoCardVariant({ overLimit: true }));
     const binary = infoCardExplanation(infoCardVariant({ overLimit: false }));
     expect(binary).toBe(
       "This is a binary file. If you know it is BOM-less UTF-16 text, choose its byte order below.",

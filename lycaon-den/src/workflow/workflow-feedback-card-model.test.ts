@@ -3,8 +3,6 @@ import { LycaonApiError } from "../api/http.ts";
 import {
   composeFeedbackSubmitAnswer,
   isFeedbackNoLongerPendingError,
-  workflowFeedbackCardHint,
-  workflowFeedbackCardLabel,
   workflowFeedbackChickletDetail,
   workflowFeedbackCardView,
 } from "./workflow-feedback-card-model.ts";

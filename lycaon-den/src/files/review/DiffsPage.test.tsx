@@ -367,7 +367,7 @@ describe("the diffs page", () => {
 
     render(() => <DiffsPage projectId="p1" client={client} address={LENS} />);
 
-    const empty = await screen.findByTestId("diffs-page-empty");
+    await screen.findByTestId("diffs-page-empty");
   });
 
   it("claims nothing before the comparison settles", () => {

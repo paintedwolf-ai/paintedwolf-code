@@ -2,7 +2,6 @@ import { APP_SCOPE } from "./notice-scope.ts";
 import { describe, expect, it } from "vitest";
 import { LycaonApiError } from "../api/http.ts";
 import { PresenceError } from "../platform/presence.ts";
-import { clientNoticeError } from "./client-notices.ts";
 import { BackendTransportError } from "../platform/connection/request-connectivity.ts";
 import {
   noticeFromCaught,

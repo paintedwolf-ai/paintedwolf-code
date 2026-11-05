@@ -600,7 +600,7 @@ describe("application testing and title stability", () => {
     ]);
     expect(local.label).toBe("testing endpoints");
 
-    const remote = spanOf([
+    spanOf([
       tool(part("h2", "http_request", "https://api.github.com/repos", {
         args: { url: "https://api.github.com/repos" },
       })),

@@ -91,7 +91,7 @@ describe("GeneralSettingsPanel notifications tab", () => {
     ensurePermission.mockResolvedValue("granted");
     sendTest.mockResolvedValueOnce("inhibited");
     fireEvent.click(button);
-    const hint = await screen.findByTestId("notifications-inhibited");
+    await screen.findByTestId("notifications-inhibited");
     sendTest.mockResolvedValueOnce("delivered");
     fireEvent.click(button);
     await waitFor(() => expect(screen.queryByTestId("notifications-inhibited")).toBeNull());

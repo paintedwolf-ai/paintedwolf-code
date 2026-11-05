@@ -14,7 +14,6 @@ import {
   isAllowedImageMime,
   isSendablePendingAttachment,
   mediaMimeFromPath,
-  rejectMessageForCode,
   textToComposerAttachment,
   wouldExceedTurnBytes,
   type ComposerPendingAttachment,
@@ -259,7 +258,7 @@ describe("composer-attachments", () => {
   });
 
   it("counts a video against the image slots its frame sheet takes, and bounds its bytes", () => {
-    const images = Array.from({ length: 4 }, (_, i): ComposerPendingAttachment => ({
+    Array.from({ length: 4 }, (_, i): ComposerPendingAttachment => ({
       id: String(i), kind: i === 0 ? "video" : "image", name: "x", mime: "image/png", blobId: "b", byteLength: 1,
     }));
     expect(byteAttachmentIntakeReject([], 1024, "video/webm")).toBeNull();

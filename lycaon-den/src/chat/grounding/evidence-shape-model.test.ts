@@ -3,7 +3,6 @@ import {
   evidenceRecordDetailLines,
   evidenceShapeLabel,
   renderEvidenceRecordSummary,
-  fidelityLabel,
 } from "./evidence-shape-model.ts";
 
 describe("evidence-shape-model", () => {

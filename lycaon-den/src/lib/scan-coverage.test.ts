@@ -67,7 +67,7 @@ describe("coverageSentence", () => {
       NOW,
     );
     expect(bounded).toMatch(/^Bounded as of Tue/);
-    const partial = coverageSentence(
+    coverageSentence(
       { ...baseOverview, last_full: { assessment_id: "a1", requested_at: "t", members: [], started_at: "2026-09-08T13:00:00Z", completed_at: "2026-09-08T14:02:00Z", coverage_status: "partial" } },
       NOW,
     );

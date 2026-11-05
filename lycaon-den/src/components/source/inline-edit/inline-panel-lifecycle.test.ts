@@ -3,7 +3,7 @@ import type { EditorView } from "@codemirror/view";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stubClient } from "../../../test/client-fixture.ts";
 import { submitInlineEditPanel, type EditorActionContext } from "./run-editor-action.ts";
-import { inlineEditError, inlineEditOpen, inlineEditRunning, openInlineEdit, resetInlineEditForTests } from "./inline-edit-controller.ts";
+import { inlineEditOpen, inlineEditRunning, openInlineEdit, resetInlineEditForTests } from "./inline-edit-controller.ts";
 
 vi.mock("./editor-action-client.ts", () => ({
   editorActionOutput: () => "edits",

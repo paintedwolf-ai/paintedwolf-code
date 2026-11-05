@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  formatLogFormatLabel,
   formatTimeSpan,
   readLogDigestFromOutput,
 } from "./read-tool-output.ts";

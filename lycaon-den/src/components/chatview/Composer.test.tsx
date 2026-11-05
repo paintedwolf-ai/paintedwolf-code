@@ -120,7 +120,7 @@ describe("Composer", () => {
     fireEvent.input(getByTestId("chat-composer"), {
       target: { value: "use bun install instead" },
     });
-    const hint = getByTestId("composer-approval-redirect");
+    getByTestId("composer-approval-redirect");
   });
 
   it("submit calls onSend with trimmed text via composer.send", async () => {

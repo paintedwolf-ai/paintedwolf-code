@@ -11,7 +11,6 @@ import {
   kpiEntries,
   levelLabel,
   scanFindingsCounts,
-  scanEmptyState,
   applyLiveScanPatch,
   liveScanWantsListRefresh,
   pickDefaultScanId,

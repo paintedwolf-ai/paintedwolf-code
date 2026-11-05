@@ -242,7 +242,7 @@ describe("ProjectRootSummary", () => {
       onOpenFile={vi.fn()} onOpenChanges={vi.fn()} />);
     expect(await screen.findByText("3 indexed")).toBeTruthy();
     expect(screen.getByText("README")).toBeTruthy();
-    const note = screen.getByTestId("files-root-summary-coverage").textContent;
+    screen.getByTestId("files-root-summary-coverage");
     await new Promise(resolve => setTimeout(resolve, 600));
     expect(client.getProjectSourceIndex).toHaveBeenCalledTimes(1);
   });

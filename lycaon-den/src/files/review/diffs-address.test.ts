@@ -36,7 +36,6 @@ describe("what a diffs page is reading", () => {
 
   it("names a turn page apart from the eye's turn scope, because the ranges differ", () => {
     const turn = diffsPageCopy(TURN, lens({ kind: "turn" }));
-    const eye = diffsPageCopy(LENS, lens({ kind: "turn" }));
     expect(turn.tab).toBe("All diffs · turn 12");
   });
 
