@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	nativegenprovider "github.com/lycaon/lycaon/internal/llm/providers/nativegen"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 )
@@ -13,9 +14,7 @@ import (
 func TestNativegenFactoryRequiresHostRuntimeForExecution(t *testing.T) {
 	entry := CatalogEntry{ID: "nativegen", Kind: "nativegen", Models: []modelinfo.Entry{nativegenprovider.DefaultModelEntry()}}
 	provider, err := driverFactories.Build(context.Background(), entry.Kind, providerBuild{entry: entry})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "driverFactories.Build failed", err)
 	local, ok := provider.(*nativegenprovider.Provider)
 	if !ok {
 		t.Fatalf("provider = %T", provider)
