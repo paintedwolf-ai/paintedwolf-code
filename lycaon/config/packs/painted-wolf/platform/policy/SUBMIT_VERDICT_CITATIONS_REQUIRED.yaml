@@ -5,18 +5,14 @@ anchor: tool.rejected
 requires:
   profiles:
     - tool
-  facts:
-    - paintedwolf.rejection_code
-    - paintedwolf.review_expected_call
-    - paintedwolf.review_observed_handles
-    - paintedwolf.can_recall
+  facts: [paintedwolf.rejection_code, paintedwolf.review_expected_call, paintedwolf.review_observed_handles, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_CITATIONS_REQUIRED"
 effect: block
 copy:
   what: "The terminal verdict carried no usable top-level citations."
   cause: "cited_evidence and cited_urls were empty or absent."
   why: "Terminal adjudication must trace to observed evidence and every owed reviewer."
-  fix: "Use the current call shape: {{ paintedwolf.review_expected_call }}. Evidence-handle objects use handle. Available observed sample: {{ paintedwolf.review_observed_handles }}.{% if paintedwolf.can_recall %} Recover a retained observation with `recall(query=\"handle:read#3\")`, passing its exact handle, before citing it.{% else %} Cite only handles shown in this chat or the observed sample.{% endif %}"
+  fix: 'Use the current call shape: {{ paintedwolf.review_expected_call }}. Evidence-handle objects use handle. Available observed sample: {{ paintedwolf.review_observed_handles }}. {{ paintedwolf.next_steps }}'
   instead: "Add citations from retained review evidence and resubmit; do not invent tokens or repeat completed reviews merely to cite them."
 x-paintedwolf-category: recoverable
 x-paintedwolf-severity: error

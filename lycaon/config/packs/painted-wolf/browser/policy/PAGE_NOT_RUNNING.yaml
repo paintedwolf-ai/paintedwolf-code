@@ -5,18 +5,14 @@ anchor: tool.rejected
 requires:
   profiles:
   - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.id
-  - paintedwolf.not_running
+  facts: [paintedwolf.rejection_code, paintedwolf.id, paintedwolf.not_running, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "PAGE_NOT_RUNNING"
 effect: block
 copy:
   what: Page {{ paintedwolf.id }} was closed or the browser target ended.
   cause: The registry entry no longer has a usable browser page.
   why: Act/snapshot need a live CDP target.
-  fix: If an offered page_open can establish the intended target, continue on its returned ID after recreating
-    required state. Opening a replacement does not restore the prior DOM, cookies, or completed interactions.
+  fix: '{{ paintedwolf.next_steps }} Opening a replacement does not restore the prior DOM, cookies, or completed interactions.'
   instead: Recover the intended page explicitly and preserve state uncertainty
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:visual_page_session

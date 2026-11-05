@@ -18,7 +18,7 @@ copy:
   what: Handle {{ paintedwolf.handle }} is not a held call in this session.
   cause: The handle was never issued to a call, was evicted after later calls settled, or the host restarted, which ends held calls.
   why: A held call lives in memory only. A missing handle does not say what the call would have returned.
-  fix: Use a handle from a result that returned one. Command handles belong to command_output and command_stop. To recover the answer, repeat the original call.
+  fix: 'Use a handle from a result that returned one. A command job''s handle does not address a held call. To recover the answer, repeat the original call.'
   instead: Repeat the original call; do not poll a handle that no longer exists
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool

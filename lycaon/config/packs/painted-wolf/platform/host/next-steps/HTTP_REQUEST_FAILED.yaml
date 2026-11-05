@@ -1,0 +1,5 @@
+steps:
+  - tool: "command"
+    args:
+      command: "curl"
+    say: "When retrying, keep the method, headers, body, and destination explicit in {{ call }}."

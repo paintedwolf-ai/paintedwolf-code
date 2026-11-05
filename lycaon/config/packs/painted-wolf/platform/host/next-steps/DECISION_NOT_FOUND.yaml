@@ -1,0 +1,6 @@
+steps:
+  - tool: "answer_decision"
+    say: "Answer with {{ call }}, using the job_id from the needs_decision envelope."
+  - tool: "pack_board"
+    complete: true
+    say: "Use {{ call }} to find workers that are waiting on a decision."

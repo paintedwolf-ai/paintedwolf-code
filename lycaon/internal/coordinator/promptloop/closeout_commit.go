@@ -1,9 +1,9 @@
 package promptloop
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"maps"
 	"strings"
 
@@ -73,7 +73,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	if l.Deps.EvaluateCloseoutBlock == nil {
 		return out, fmt.Errorf("closeout OAR not configured")
 	}
-	decision, err := l.Deps.EvaluateCloseoutBlock(tools.WithCallReach(ctx, toolreach.Freeze(st.offeredToolNames, st.turnToolPlan)), sess, observation.facts)
+	decision, err := l.Deps.EvaluateCloseoutBlock(tools.WithCallReach(ctx, st.requestReach()), sess, observation.facts)
 	if err != nil {
 		return out, err
 	}
@@ -184,7 +184,7 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 	// The repair turn offers the closed turn's tools unless that was the final
 	// turn, so repair copy may name them.
 	renderDecision.Data["resume_work_allowed"] = !st.proseFinish && len(st.offeredToolNames) > 0
-	renderDecision.Data["can_recall"] = toolreach.Freeze(st.offeredToolNames, st.turnToolPlan).Status("recall") == toolreach.Callable
+	renderDecision.Data["can_recall"] = st.requestReach().Status("recall") == toolreach.Callable
 	decision = &renderDecision
 	nudge, err := guard.FormatCloseoutGroundingReject(
 		ctx,

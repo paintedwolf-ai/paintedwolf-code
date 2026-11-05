@@ -11,7 +11,7 @@ copy:
   cause: agent_type is not in the workflow allowed_agents allowlist
   why: Pick an allowed agent id from the active workflow manifest
   fix: '{% if paintedwolf.workflow_allowed_agents %}Choose an agent from the current dispatch roster: {{ paintedwolf.workflow_allowed_agents }}.{% else %}The current workflow does not offer the requested agent. Inspect the current roster and workflow phase before dispatching; do not substitute an unoffered worker.{% endif %}'
-  instead: Use `task(agent_type=...)` only with workflow-allowed functional agent ids
+  instead: 'Use only workflow-allowed functional agent ids.'
   what: Agent_type is not in the workflow allowed_agents allowlist
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: rule:spec

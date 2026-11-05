@@ -1,0 +1,5 @@
+steps:
+  - tool: "held_result"
+    say: "Wait on the handle or read it with {{ call }}."
+  - tool: "held_stop"
+    say: "Cancel it with {{ call }}."

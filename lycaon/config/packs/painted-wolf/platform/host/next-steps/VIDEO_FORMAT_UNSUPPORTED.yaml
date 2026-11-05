@@ -1,0 +1,9 @@
+steps:
+  - tool: "view_image"
+    args:
+      path: "{{ paintedwolf.path }}"
+    complete: true
+    say: "For a still image or an animated GIF, use {{ call }}."
+  - program: ["cat", "{{ paintedwolf.path }}"]
+    complete: true
+    say: "For text, use {{ call }}."

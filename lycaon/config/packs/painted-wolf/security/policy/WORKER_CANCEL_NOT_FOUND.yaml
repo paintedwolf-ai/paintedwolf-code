@@ -14,8 +14,8 @@ copy:
   what: worker_cancel job_id must match a job spawned from this session
   cause: The job id is missing or stale
   why: The job id is missing or stale
-  fix: Use job_id from `task()` enqueue JSON or the pulse roster for an in-flight job
-  instead: Pass a valid job_id from `task()` enqueue or pulse roster
+  fix: 'Use job_id from a worker enqueue result or the pulse roster for an in-flight job.'
+  instead: 'Pass a valid job_id from an enqueue result or the pulse roster.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: No worker job {{ paintedwolf.job_id }} exists for worker_cancel

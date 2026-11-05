@@ -1,0 +1,3 @@
+steps:
+  - tool: "update_progress"
+    say: "Author the `## Progress` checklist with {{ call }}."

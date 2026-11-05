@@ -1,0 +1,5 @@
+steps:
+  - tool: "task"
+    args:
+      agent_type: "repo-researcher"
+    say: "Use {{ call }} for repo-wide survey when sync tools are insufficient."

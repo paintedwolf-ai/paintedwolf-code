@@ -1,7 +1,6 @@
 package promptloop
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"errors"
 	"fmt"
@@ -126,7 +125,7 @@ func (l *turnCloseout) settleCloseoutBlocked(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: blocked.Notice,
 		TurnTools:            st.turnTools,
-		Reach:                toolreach.Freeze(st.offeredToolNames, st.turnToolPlan),
+		Reach:                st.requestReach(),
 		TasksDispatchedCount: st.tasksDispatchedCount,
 		Outcome:              promptresult.OutcomeCloseoutBlocked,
 		CloseoutBlocked:      blocked,

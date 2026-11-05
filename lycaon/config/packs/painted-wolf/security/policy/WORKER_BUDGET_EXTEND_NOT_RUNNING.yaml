@@ -3,10 +3,7 @@ id: WORKER_BUDGET_EXTEND_NOT_RUNNING
 kind: schema
 anchor: tool.rejected
 requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.job_id
-  - paintedwolf.not_running
+  facts: [paintedwolf.rejection_code, paintedwolf.job_id, paintedwolf.not_running, paintedwolf.child_session_id, paintedwolf.next_steps]
   profiles:
   - tool
 when: paintedwolf.rejection_code == "WORKER_BUDGET_EXTEND_NOT_RUNNING"
@@ -15,10 +12,8 @@ copy:
   what: '`extend_worker_budget(job_id, max_tool_loops)` only applies while a worker job is pending or
     running'
   cause: Job {{ paintedwolf.job_id }} is terminal, unknown, or has no child session yet
-  why: Raising max_tool_loops mid-flight hot-reloads the child session; finished jobs need `task(child_session_id=…)`
-    resume instead
-  fix: Use job_id from pack_board or `task()` enqueue for an in-flight job, or resume with `task(child_session_id=…,
-    max_tool_loops=…, brief={…})`
+  why: 'Raising max_tool_loops mid-flight hot-reloads the child session; finished jobs need a resume instead'
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Branch on Code; extend only running/pending jobs or resume on child_session_id
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:extend_worker_budget

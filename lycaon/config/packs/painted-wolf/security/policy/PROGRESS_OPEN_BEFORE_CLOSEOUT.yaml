@@ -3,18 +3,14 @@ id: PROGRESS_OPEN_BEFORE_CLOSEOUT
 kind: invariant
 anchor: coordinator.closeout_check
 requires:
-  facts:
-    - paintedwolf.batch_ready_ignoring_progress
-    - paintedwolf.progress_open_items
-    - paintedwolf.synthesis_delay_count
-    - paintedwolf.workers_idle
+  facts: [paintedwolf.batch_ready_ignoring_progress, paintedwolf.progress_open_items, paintedwolf.synthesis_delay_count, paintedwolf.workers_idle, paintedwolf.next_steps]
 when: paintedwolf.workers_idle && paintedwolf.progress_open_items > 0 && paintedwolf.batch_ready_ignoring_progress && paintedwolf.synthesis_delay_count < 2
 effect: block
 copy:
   what: "This tool-free response would end the turn with {{ paintedwolf.progress_open_items }} progress steps still pending."
   cause: Work remains unfinished, or completed work has not been recorded.
   why: The final response and checklist must agree with observed results.
-  fix: 'If work remains, continue with tools and keep its rows pending. If work is complete, call `update_progress` first. After its result, send the final answer in a separate response with no tool calls. Assistant text beside a tool call reaches the user when its citations are valid.'
+  fix: 'If work remains, continue with tools and keep its rows pending. {{ paintedwolf.next_steps }} After its result, send the final answer in a separate response with no tool calls. Assistant text beside a tool call reaches the user when its citations are valid.'
   instead: 'Repeating the same pending checklist does not resolve this rejection. Do not close unfinished rows to clear it. For a concrete blocker or authorized scope change, mark only the work you will not pursue `- [~]` and report the limitation.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator

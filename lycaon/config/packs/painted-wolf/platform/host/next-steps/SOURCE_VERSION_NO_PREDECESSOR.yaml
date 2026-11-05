@@ -1,0 +1,7 @@
+steps:
+  - tool: "source_history"
+    args:
+      mode: "effects"
+      path: "{{ paintedwolf.path }}"
+    complete: true
+    say: "Query {{ call }} to check recorded history."

@@ -128,9 +128,7 @@ func stateGitNoRepository(e *programEvaluation) {
 	if out == nil || missed == nil || !missed.Load() {
 		return
 	}
-	out.Facts = out.Facts.WithFeedback(toolrejection.GitNoRepositoryOnWriteLegCode, map[string]any{
-		"source_history_offered": tools.OffersSourceHistory(e.callTC),
-	}, nil)
+	out.Facts = out.Facts.WithFeedback(toolrejection.GitNoRepositoryOnWriteLegCode, nil, nil)
 }
 
 // parkProgram ends the call's turn on the session's wait lease. The program

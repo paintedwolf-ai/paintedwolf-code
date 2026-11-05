@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -179,20 +178,10 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 		}
 		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
 		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0
-		if loadable {
-			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": tc.Name}}}
-		}
 	}
 	if code == "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
-		loadable := !tools.ToolOffered(ctx, "task") && toolCtx.Turn.TurnToolPlan.Deferred("task") && tools.ToolOffered(ctx, "request_tools")
-		if agents, constrained := toolpolicy.TaskSpawnAllowlistFromContext(ctx); constrained && len(agents) == 0 {
-			loadable = false
-		}
-		data["task_loadable"] = loadable
-		delete(data, "replacement_calls")
-		if loadable {
-			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "task"}}}
-		}
+		agents, constrained := toolpolicy.TaskSpawnAllowlistFromContext(ctx)
+		data["task_dispatchable"] = !constrained || len(agents) > 0
 	}
 	tr := &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
 	if code == "TOOL_NOT_OFFERED" && data["tool_loadable"] == false && data["tool_discovery_available"] == true && data["tool_retired_to_content"] == false {

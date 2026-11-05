@@ -36,7 +36,7 @@ func ToolOffered(ctx context.Context, name string) bool {
 
 // TurnReach freezes the request a tool context is executing under.
 func TurnReach(tc ToolContext) toolreach.Request {
-	return toolreach.Freeze(tc.Turn.TurnOfferedToolNames, tc.Turn.TurnToolPlan)
+	return toolreach.Freeze(tc.Turn.TurnOfferedToolNames, tc.Turn.TurnToolPlan).WithPrograms(tc.Turn.TurnPrograms)
 }
 
 // RegisterRecoveryFacts publishes the frozen request and its tool facts lazily.

@@ -1,9 +1,9 @@
 package promptloop
 
 import (
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
@@ -74,6 +74,7 @@ type turnBatchState struct {
 	statusCursorPaths      []string
 	statusCursorGroupDepth int
 	turnToolPlan           toolsurface.Plan
+	turnPrograms           toolreach.Programs
 	deliveryCoverage       map[string]string
 }
 
@@ -519,7 +520,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		}
 		return &PromptRunResult{
 			TurnTools:            st.turnTools,
-			Reach:                toolreach.Freeze(st.offeredToolNames, st.turnToolPlan),
+			Reach:                st.requestReach(),
 			TasksDispatchedCount: st.tasksDispatchedCount,
 			Outcome:              outcome,
 			OutputTruncated:      st.output.truncatedOutcome,
@@ -530,7 +531,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: st.lastAssistantContent,
 		TurnTools:            st.turnTools,
-		Reach:                toolreach.Freeze(st.offeredToolNames, st.turnToolPlan),
+		Reach:                st.requestReach(),
 		TasksDispatchedCount: st.tasksDispatchedCount,
 		Outcome:              outcome,
 		OutputTruncated:      st.output.truncatedOutcome,

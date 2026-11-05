@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -69,6 +70,8 @@ type ModelDeps struct {
 }
 
 type ToolsDeps struct {
+	// ProgramReach freezes which native programs a model turn can run.
+	ProgramReach                func(ctx context.Context, profileID, surfaceID string) toolreach.Programs
 	Invocations                 invocation.Recorder
 	VisualStore                 visual.Store
 	AgentPresence               *agentpresence.Tracker

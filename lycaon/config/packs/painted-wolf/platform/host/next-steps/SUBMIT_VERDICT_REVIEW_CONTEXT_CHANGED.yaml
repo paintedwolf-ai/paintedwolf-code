@@ -1,0 +1,6 @@
+steps:
+  - tool: "pack_board"
+    args:
+      review_view: "summary"
+    complete: true
+    say: "Read {{ call }} and reconcile the changed inputs before using its revision."

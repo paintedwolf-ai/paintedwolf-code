@@ -1,0 +1,5 @@
+steps:
+  - tool: "complete_leg"
+    args:
+      leg_status: "partial"
+    say: "If it cannot be completed, use {{ call }} to report the concrete blocker and remaining risk."

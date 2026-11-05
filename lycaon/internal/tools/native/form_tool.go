@@ -2,8 +2,8 @@ package native
 
 import (
 	"context"
-	"strings"
 
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
@@ -21,15 +21,7 @@ func (t *FormTool) Run(ctx context.Context, args map[string]any, tc tools.ToolCo
 	if tc.Effects.RequestedArgs == nil {
 		tc.Effects.RequestedArgs = command.CanonicalToolArgs(tc, args)
 	}
-	return t.Programs.Run(ctx, "command", map[string]any{"command": quoteProgram(t.Argv(args))}, tc)
-}
-
-func quoteProgram(words []string) string {
-	quoted := make([]string, len(words))
-	for i, word := range words {
-		quoted[i] = "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
-	}
-	return strings.Join(quoted, " ")
+	return t.Programs.Run(ctx, "command", map[string]any{"command": toolreach.QuoteProgram(t.Argv(args))}, tc)
 }
 
 func stringArg(args map[string]any, key string) string {
@@ -83,4 +75,3 @@ func CodeRewriteArgv(args map[string]any) []string {
 	words = appendValue(words, "--lang", stringArg(args, "lang"))
 	return appendValue(words, "--syntax-override-reason", stringArg(args, "syntax_override_reason"))
 }
-

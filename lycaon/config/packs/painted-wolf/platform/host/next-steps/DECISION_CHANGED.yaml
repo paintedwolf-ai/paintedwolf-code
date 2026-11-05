@@ -1,0 +1,4 @@
+steps:
+  - tool: "pack_board"
+    complete: true
+    say: "Read the current decision with {{ call }}, then answer its current option."

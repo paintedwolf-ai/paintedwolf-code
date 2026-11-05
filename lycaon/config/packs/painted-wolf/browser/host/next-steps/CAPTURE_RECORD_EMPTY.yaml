@@ -1,0 +1,3 @@
+steps:
+  - tool: "page_snapshot"
+    say: "Check that the page is loaded and visible with {{ call }}."

@@ -3,9 +3,7 @@ id: CAPTURE_RECORD_EMPTY
 kind: schema
 anchor: tool.rejected
 requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.rejection_reason
+  facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.next_steps]
   profiles:
   - tool
 when: paintedwolf.rejection_code == "CAPTURE_RECORD_EMPTY"
@@ -16,7 +14,7 @@ copy:
   cause: The browser painted nothing the recorder could keep, or the page's text could not be sampled for screening,
     so no frame could leave the host.
   why: Every recorded frame is screened for secrets before it is kept; a frame that cannot be screened is not shown.
-  fix: Check that the page is loaded and visible with page_snapshot, then record the drive again.
+  fix: '{{ paintedwolf.next_steps }} Then record the drive again.'
   instead: Branch on Code CAPTURE_RECORD_EMPTY; confirm the page renders, then retry the recording
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:visual_capture

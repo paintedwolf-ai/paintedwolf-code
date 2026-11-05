@@ -24,10 +24,9 @@ func EditArgsConflict(detail string) error {
 // miss itself may still be a misquote.
 func EditMiss(ctx context.Context, tc tools.ToolContext, path, abs, content, oldString, newString string) error {
 	data := map[string]any{
-		"path":                   path,
-		"old_string_chars":       utf8.RuneCountInString(oldString),
-		"total_lines":            toolkit.CountLines(content),
-		"source_history_offered": tools.OffersSourceHistory(tc),
+		"path":             path,
+		"old_string_chars": utf8.RuneCountInString(oldString),
+		"total_lines":      toolkit.CountLines(content),
 	}
 	if newString != "" {
 		data["replacement_matches"] = strings.Count(content, newString)

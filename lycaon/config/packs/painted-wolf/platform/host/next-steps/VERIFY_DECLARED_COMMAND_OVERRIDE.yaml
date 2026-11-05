@@ -1,0 +1,3 @@
+steps:
+  - tool: "command"
+    say: "Use {{ call }} for a narrower check; its result does not replace the declared check."

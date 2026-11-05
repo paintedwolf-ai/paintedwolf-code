@@ -5,19 +5,15 @@ anchor: tool.rejected
 requires:
   profiles:
   - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.path
+  facts: [paintedwolf.rejection_code, paintedwolf.path, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "COORDINATOR_READ_OUTSIDE_SCOPE"
 effect: block
 copy:
   what: Coordinator {{ tool }} on {{ paintedwolf.path }} is outside allowed read scope
   cause: Narrow the path to your read_globs — coordinator may sync-read product paths within scope
   why: Narrow the path to your read_globs — coordinator may sync-read product paths within scope
-  fix: Use `task(agent_type="repo-researcher"|"path-explorer", …)` for repo-wide survey when sync tools
-    are insufficient; never tell the user source is unreadable
-  instead: Use paths within read_globs; inline sync survey (find-first order) — `task()` for repo-wide
-    discovery
+  fix: '{{ paintedwolf.next_steps }} Never tell the user source is unreadable.'
+  instead: 'Use paths within read_globs and survey inline first; delegate repo-wide discovery.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: Coordinator read outside allowed read scope

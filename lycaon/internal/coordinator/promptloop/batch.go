@@ -135,6 +135,7 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 	}
 	refreshed.Turn.TurnSurfaceID = base.Turn.TurnSurfaceID
 	refreshed.Turn.TurnToolPlan = base.Turn.TurnToolPlan
+	refreshed.Turn.TurnPrograms = base.Turn.TurnPrograms
 	refreshed.Turn.TurnOfferedToolNames = slices.Clone(base.Turn.TurnOfferedToolNames)
 	refreshed.Turn.TurnOfferedToolSchemas = base.Turn.TurnOfferedToolSchemas
 	refreshed.Source.ModelSourceContext = base.Source.ModelSourceContext
@@ -198,6 +199,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 	}
 	if st != nil {
 		baseToolCtx.Turn.TurnToolPlan = st.turnToolPlan
+		baseToolCtx.Turn.TurnPrograms = st.turnPrograms
 		baseToolCtx.Turn.TurnOfferedToolNames = slices.Clone(st.offeredToolNames)
 		baseToolCtx.Turn.TurnOfferedToolSchemas = st.offeredToolSchemas
 		baseToolCtx.Source.ModelSourceContext = st.output.sourceContext

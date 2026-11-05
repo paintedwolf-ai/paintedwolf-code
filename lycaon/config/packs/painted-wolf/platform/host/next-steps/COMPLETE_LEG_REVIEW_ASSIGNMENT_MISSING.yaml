@@ -1,0 +1,4 @@
+steps:
+  - tool: "request_decision"
+    say: "Use {{ call }} to ask the coordinator to dispatch the supplied work_id as a new review assignment."
+    otherwise: "Report that the supplied work_id needs a new review assignment."

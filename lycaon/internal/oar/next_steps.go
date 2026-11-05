@@ -7,7 +7,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/oarcore"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
 )
 
@@ -17,7 +19,7 @@ import (
 const NextStepsFact = "paintedwolf.next_steps"
 
 // NextCallsDataKey holds the calls behind the rendered steps in decision data.
-const NextCallsDataKey = "next_calls"
+const NextCallsDataKey = api.ToolFeedbackNextCalls
 
 const stepCallBinding = "call"
 
@@ -37,6 +39,9 @@ type NextStep struct {
 	Tool string `yaml:"tool,omitempty"`
 	// Args maps dotted argument paths to values. Strings are copy templates.
 	Args map[string]any `yaml:"args,omitempty"`
+	// Program is a native program as words, each a copy template. The host quotes
+	// it and checks the program as well as the command tool.
+	Program []string `yaml:"program,omitempty"`
 	// Pick maps dotted argument paths to list facts; the reader needs one entry.
 	Pick map[string]string `yaml:"pick,omitempty"`
 	// Complete says Args is the whole call rather than a shape to finish.
@@ -45,6 +50,8 @@ type NextStep struct {
 	Say string `yaml:"say,omitempty"`
 	// Otherwise is the sentence shown when When holds and the call is unreachable.
 	Otherwise string `yaml:"otherwise,omitempty"`
+	// Or lists steps to try in order when this step's call is unreachable.
+	Or []NextStep `yaml:"or,omitempty"`
 }
 
 // DecodeNextSteps strictly decodes one catalog entry.
@@ -87,33 +94,65 @@ func (l *Loader) validateNextSteps(r *Rule) error {
 	}
 	known := ruleFactRefs(r)
 	for i, step := range r.NextSteps.Steps {
-		where := fmt.Sprintf("rule %s next-steps[%d]", r.ID, i)
-		if strings.TrimSpace(step.Say) == "" {
-			return fmt.Errorf("%s: say is required", where)
-		}
-		if !strings.Contains(step.Say, "{{ "+stepCallBinding+" }}") {
-			return fmt.Errorf("%s: say must show {{ %s }}, the call the host checked", where, stepCallBinding)
-		}
-		if err := l.checkWhen(step.When); err != nil {
-			return fmt.Errorf("%s: when: %w", where, err)
-		}
-		names, err := nextStepRefs(step)
-		if err != nil {
-			return fmt.Errorf("%s: %w", where, err)
-		}
-		for _, name := range names {
-			// A fact the rule does not reference is never assembled for it ([OAR-FACT-11]).
-			if !known[name] {
-				return fmt.Errorf("%s: names %s, which the rule does not reference", where, name)
-			}
-		}
-		for path := range step.Pick {
-			if _, dup := step.Args[path]; dup {
-				return fmt.Errorf("%s: %s is set by both args and pick", where, path)
-			}
+		if err := l.validateNextStep(step, known, fmt.Sprintf("rule %s next-steps[%d]", r.ID, i)); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func (l *Loader) validateNextStep(step NextStep, known map[string]bool, where string) error {
+	if strings.TrimSpace(step.Say) == "" {
+		return fmt.Errorf("%s: say is required", where)
+	}
+	if !strings.Contains(step.Say, "{{ "+stepCallBinding+" }}") {
+		return fmt.Errorf("%s: say must show {{ %s }}, the call the host checked", where, stepCallBinding)
+	}
+	if len(step.Program) > 0 {
+		if step.Tool != "" || len(step.Args) > 0 || len(step.Pick) > 0 {
+			return fmt.Errorf("%s: program stands alone; it cannot combine with tool, args or pick", where)
+		}
+		if !nativeProgramKnown(step.Program[0]) {
+			return fmt.Errorf("%s: %q is not a native program", where, step.Program[0])
+		}
+	}
+	if err := l.checkWhen(step.When); err != nil {
+		return fmt.Errorf("%s: when: %w", where, err)
+	}
+	names, err := nextStepRefs(step)
+	if err != nil {
+		return fmt.Errorf("%s: %w", where, err)
+	}
+	for _, name := range names {
+		// A fact the rule does not reference is never assembled for it ([OAR-FACT-11]).
+		if !known[name] {
+			return fmt.Errorf("%s: names %s, which the rule does not reference", where, name)
+		}
+	}
+	for path := range step.Pick {
+		if _, dup := step.Args[path]; dup {
+			return fmt.Errorf("%s: %s is set by both args and pick", where, path)
+		}
+	}
+	for i, alternative := range step.Or {
+		if err := l.validateNextStep(alternative, known, fmt.Sprintf("%s.or[%d]", where, i)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func nativeProgramKnown(name string) bool {
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return false
+	}
+	for _, spec := range catalog.Commands {
+		if spec.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func nextStepRefs(step NextStep) ([]string, error) {
@@ -129,7 +168,7 @@ func nextStepRefs(step NextStep) ([]string, error) {
 			}
 		}
 	}
-	templates := []string{step.Say, step.Otherwise}
+	templates := append([]string{step.Say, step.Otherwise}, step.Program...)
 	for _, value := range step.Args {
 		if source, ok := value.(string); ok {
 			templates = append(templates, source)
@@ -185,28 +224,37 @@ func ResolveNextSteps(r *Rule, gc *GuardContext) ResolvedSteps {
 	facts := activation(gc)
 	var sentences []string
 	for _, step := range r.NextSteps.Steps {
-		applies, err := EvaluateCondition(step.When, gc)
-		if err != nil || !applies {
-			continue
+		text, calls := resolveStep(step, gc, facts)
+		if strings.TrimSpace(text) != "" {
+			sentences = append(sentences, text)
 		}
-		call := stepCall(step, gc, facts)
-		sequence, reachable := gc.Reach.Sequence(call)
-		if !reachable {
-			if text := oarcore.RenderCopy(step.Otherwise, facts); strings.TrimSpace(text) != "" {
-				sentences = append(sentences, text)
-			}
-			continue
-		}
-		out.Calls = append(out.Calls, sequence...)
-		bound := make(map[string]any, len(facts)+1)
-		for name, value := range facts {
-			bound[name] = value
-		}
-		bound[stepCallBinding] = sequenceText(sequence)
-		sentences = append(sentences, oarcore.RenderCopy(step.Say, bound))
+		out.Calls = append(out.Calls, calls...)
 	}
 	out.Text = strings.Join(sentences, " ")
 	return out
+}
+
+func resolveStep(step NextStep, gc *GuardContext, facts map[string]any) (string, []toolreach.Call) {
+	applies, err := EvaluateCondition(step.When, gc)
+	if err != nil || !applies {
+		return "", nil
+	}
+	if call, built := stepCall(step, gc, facts); built {
+		if sequence, reachable := gc.Reach.Sequence(call); reachable {
+			bound := make(map[string]any, len(facts)+1)
+			for name, value := range facts {
+				bound[name] = value
+			}
+			bound[stepCallBinding] = sequenceText(sequence)
+			return oarcore.RenderCopy(step.Say, bound), sequence
+		}
+	}
+	for _, alternative := range step.Or {
+		if text, calls := resolveStep(alternative, gc, facts); strings.TrimSpace(text) != "" {
+			return text, calls
+		}
+	}
+	return oarcore.RenderCopy(step.Otherwise, facts), nil
 }
 
 func sequenceText(sequence []toolreach.Call) string {
@@ -216,21 +264,48 @@ func sequenceText(sequence []toolreach.Call) string {
 	return sequence[1].Text() + " after loading it with " + sequence[0].Text()
 }
 
-func stepCall(step NextStep, gc *GuardContext, facts map[string]any) toolreach.Call {
+// stepCall builds the step's call. It reports false for a complete call or a
+// program missing a value, which the reader could not submit as written.
+func stepCall(step NextStep, gc *GuardContext, facts map[string]any) (toolreach.Call, bool) {
+	if len(step.Program) > 0 {
+		words := make([]string, len(step.Program))
+		for i, source := range step.Program {
+			words[i] = oarcore.RenderCopy(source, facts)
+			if words[i] == "" {
+				return toolreach.Call{}, false
+			}
+		}
+		call := toolreach.ProgramCall(words...)
+		call.Partial = !step.Complete
+		return call, true
+	}
 	call := toolreach.Call{Tool: step.Tool, Partial: !step.Complete}
 	if call.Tool == "" {
 		// A reissue keeps the reader's other arguments, which the host does not repeat.
 		call.Tool, call.Partial = gc.Invocation.Tool, true
 	}
+	missing := false
 	for _, path := range sortedStepPaths(step.Args) {
-		setStepArg(&call, path, resolveStepArg(step.Args[path], facts))
+		if value := resolveStepArg(step.Args[path], facts); value != "" {
+			setStepArg(&call, path, value)
+		} else {
+			missing = true
+		}
 	}
 	for _, path := range sortedStepPaths(step.Pick) {
 		if value, ok := firstListValue(facts[step.Pick[path]]); ok {
 			setStepArg(&call, path, value)
+		} else {
+			missing = true
 		}
 	}
-	return call
+	if missing {
+		if step.Complete {
+			return toolreach.Call{}, false
+		}
+		call.Partial = true
+	}
+	return call, true
 }
 
 // resolveStepArg keeps a whole-value binding's type, so a list fact stays a list.
@@ -277,6 +352,20 @@ func firstListValue(v any) (any, bool) {
 		}
 	}
 	return nil, false
+}
+
+// NextCallsDetails adds a decision's next calls to the details a refusal reports.
+func NextCallsDetails(details, decisionData map[string]any) map[string]any {
+	calls, present := decisionData[NextCallsDataKey]
+	if !present {
+		return details
+	}
+	merged := make(map[string]any, len(details)+1)
+	for key, value := range details {
+		merged[key] = value
+	}
+	merged[NextCallsDataKey] = calls
+	return merged
 }
 
 // CanCallFacts lists the declared can_<tool> facts, which the frozen request answers.

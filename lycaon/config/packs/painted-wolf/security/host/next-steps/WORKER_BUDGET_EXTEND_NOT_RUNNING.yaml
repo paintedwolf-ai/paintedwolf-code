@@ -1,0 +1,8 @@
+steps:
+  - tool: "pack_board"
+    complete: true
+    say: "Use job_id from {{ call }} for an in-flight job."
+  - tool: "task"
+    args:
+      child_session_id: "{{ paintedwolf.child_session_id }}"
+    say: "Or resume a finished worker with {{ call }}."
