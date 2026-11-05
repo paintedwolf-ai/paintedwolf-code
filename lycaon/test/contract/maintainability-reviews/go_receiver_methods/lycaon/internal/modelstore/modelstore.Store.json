@@ -1,0 +1,18 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/modelstore/modelstore.Store",
+  "kind": "runtime_service",
+  "workstream": "local-model-store",
+  "disposition": "retain",
+  "reason": "Retain the store transaction boundary at 773 receiver lines and 33 methods. Artifact verification, revision publication, journal activation and reader leases must remain coordinated. Publication uses the existing filesystem effect owner and flushes directory ancestry before success, including retries; the focused helper adds no separate lifecycle owner. All 94 store results pass, covering flush-boundary failures, interrupted payloads, repair, leases and journal recovery.",
+  "reviewed_commit": "16fb1a1dfe3321094b4770445bc7d128443107dc",
+  "reviewed_shape": "5d9bd81775990cd3a868c28f1fad4cb8df783efa4ba7055b9aa6aff04c373a81",
+  "ceiling": 33,
+  "boundaries": {
+    "lycaon/internal/modelstore/lifetime_test.go": "17084815f37662d3f1b72f2ecb0620d7e1a98fc56602eea9b769d259a33d61c7",
+    "lycaon/internal/modelstore/repair_test.go": "a1765b6567d7b1522132291452e760685947ea0e1a0c94947e4dbcc9079e097a",
+    "lycaon/internal/modelstore/import_test.go": "485852352df3921e70ace2e435dcd0d1d4e08534ed28ad75f6fc2625cbafddbd",
+    "lycaon/internal/modelstore/store_test.go": "45027be3e76ea0bda1466d2191394a4e90d76eb133fa4565626f45a6c0375745",
+    "lycaon/internal/modelstore/publication_test.go": "7a240ce5188603feb69834c1244e53677e9e627b179953d230fa891a08f57e12"
+  }
+}
