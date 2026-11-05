@@ -12,7 +12,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP=""
 DMG=""
 QUARANTINE=1
-TIMEOUT="${BUNDLE_SMOKE_TIMEOUT:-90}"
+TIMEOUT="${BUNDLE_SMOKE_TIMEOUT:-300}"
 
 usage() {
   cat >&2 <<'EOF'

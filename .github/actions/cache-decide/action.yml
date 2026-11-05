@@ -48,4 +48,4 @@ runs:
     - if: ${{ steps.save.outcome == 'success' }}
       uses: ./.github/actions/cache-prune
       with:
-        family: decide-v5-${{ runner.os }}-${{ runner.arch }}-
+        family: ${{ steps.paths.outputs.prefix }}

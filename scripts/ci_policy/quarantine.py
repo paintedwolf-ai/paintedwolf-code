@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 POLICY = Path(__file__).with_name('quarantine.json')
 
@@ -23,8 +24,10 @@ def entries(today=None):
                 or not re.fullmatch(r'https://github.com/paintedwolf-ai/paintedwolf-code/issues/[1-9][0-9]*', row['issue'])
                 or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]*', row['owner'])):
             raise ValueError('quarantine must name an exact package/test, tracking issue, and GitHub owner')
+        # An expired entry stops excusing its test; it must not fail every unrelated run.
         if date.fromisoformat(row['expires']) < today:
-            raise ValueError(f"expired quarantine for {row['package']}/{row['test']}: {row['issue']}")
+            print(f"expired quarantine for {row['package']}/{row['test']}: {row['issue']}", file=sys.stderr)
+            continue
         key = (row['package'], row['test'])
         if key in seen:
             raise ValueError('duplicate quarantine entry')

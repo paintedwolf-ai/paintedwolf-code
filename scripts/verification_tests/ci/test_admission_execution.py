@@ -197,8 +197,7 @@ class AdmissionTests(unittest.TestCase):
                 self.assertEqual(quarantine.arguments(row['package'], []), ['-test.skip=^(TestFlake)$'])
                 self.assertEqual(quarantine.arguments('unrelated', []), [])
                 self.assertEqual(quarantine.arguments(row['package'], [], observe=True), [])
-                with self.assertRaises(ValueError):
-                    quarantine.entries(date(2099, 1, 2))
+                self.assertEqual(quarantine.entries(date(2099, 1, 2)), [])
                 policy.write_text(json.dumps([{**row, 'test': 'Test.*'}]))
                 with self.assertRaises(ValueError):
                     quarantine.entries()

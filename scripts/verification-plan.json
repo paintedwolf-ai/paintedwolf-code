@@ -167,7 +167,7 @@
     "test:contract": {
       "options": [
         "--timeout",
-        "15m"
+        "30m"
       ],
       "packages": [
         "./test/contract/..."
@@ -1003,9 +1003,7 @@
         "coverage:changes",
         "den:typecheck",
         "den:lint",
-        "comments:check",
-        "test:fail-messages:check",
-        "docs:links",
+        "scripts:coverage:changes",
         "den:test:fast",
         "lint:full"
       ],

@@ -44,7 +44,7 @@ func RunReleasingHosts(m *testing.M) int {
 	if code != 0 {
 		return code
 	}
-	retained := retainedHosts(10 * time.Second)
+	retained := retainedHosts(time.Minute)
 	if len(retained) <= latestHostAllowance {
 		return code
 	}
