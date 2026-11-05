@@ -471,6 +471,9 @@
     ],
     "test:conformance:live": [
       "test:conformance:live"
+    ],
+    "decide:prepare": [
+      "decide:prepare"
     ]
   },
   "private": [
@@ -520,7 +523,8 @@
     "release:rehearse:rpm-metadata": "passthrough",
     "release:rehearse:pacman-construction": "passthrough",
     "userlands:build": "passthrough",
-    "test:conformance:live": "passthrough"
+    "test:conformance:live": "passthrough",
+    "decide:prepare": "passthrough"
   },
   "resources": {
     "generation:prepare": {
@@ -798,21 +802,27 @@
     "build:lycaon-dev": {
       "locks": [
         "dev-engine",
-        "scanners"
+        "scanners",
+        "generation-runtime",
+        "rust"
       ],
       "workers": "shared"
     },
     "upgrade:corpus:seed": {
       "locks": [
         "dev-engine",
-        "scanners"
+        "scanners",
+        "generation-runtime",
+        "rust"
       ],
       "workers": "shared"
     },
     "upgrade:corpus:boot": {
       "locks": [
         "dev-engine",
-        "scanners"
+        "scanners",
+        "generation-runtime",
+        "rust"
       ],
       "workers": "shared"
     },
@@ -984,6 +994,12 @@
       "shared_locks": [
         "go"
       ]
+    },
+    "decide:prepare": {
+      "locks": [
+        "rust"
+      ],
+      "workers": 1
     }
   },
   "environment": {
@@ -1014,7 +1030,9 @@
       "SSL_CERT_DIR",
       "DOCKER_HOST",
       "DOCKER_CONTEXT",
-      "DOCKER_CONFIG"
+      "DOCKER_CONFIG",
+      "BIALY_GENERATION_BUNDLE",
+      "BIALY_GENERATION_AUTHORITY"
     ],
     "prefixes": [
       "LC_",

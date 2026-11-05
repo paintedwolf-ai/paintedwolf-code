@@ -11,12 +11,14 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
 	bedrockprovider "github.com/lycaon/lycaon/internal/llm/providers/bedrock"
+	nativegenprovider "github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
 )
 
 type providerBuild struct {
+	localRuntime    *nativegenprovider.Runtime
 	cloudflareUsage *openaicompat.CloudflareUsageCache
 	discoveryClient *http.Client
 	entry           CatalogEntry
@@ -27,6 +29,12 @@ type providerBuild struct {
 // driverFactories selects a constructor by provider kind.
 var driverFactories = catalogruntime.NewFactorySet(
 	map[string]catalogruntime.Factory[providerBuild, modelcall.Provider]{
+		"nativegen": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+			return nativegenprovider.New(build.entry.ID, nativegenprovider.Options{
+				Runtime: build.localRuntime,
+				Models:  build.entry.Models,
+			}), nil
+		},
 		"ollama": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
 			return ollamaprovider.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil
 		},
@@ -114,9 +122,9 @@ var driverFactories = catalogruntime.NewFactorySet(
 	},
 )
 
-func newProviderForEntry(ctx context.Context, entry CatalogEntry, apiKey string, retry providerretry.ProviderHTTPRetry, usage *openaicompat.CloudflareUsageCache, discoveryClient *http.Client) (modelcall.Provider, error) {
+func newProviderForEntry(ctx context.Context, entry CatalogEntry, apiKey string, retry providerretry.ProviderHTTPRetry, usage *openaicompat.CloudflareUsageCache, discoveryClient *http.Client, localRuntime *nativegenprovider.Runtime) (modelcall.Provider, error) {
 	resolved := ResolveProvider(entry, apiKey)
-	p, err := driverFactories.Build(ctx, entry.Kind, providerBuild{cloudflareUsage: usage, discoveryClient: discoveryClient, entry: entry, apiKey: apiKey, resolved: resolved})
+	p, err := driverFactories.Build(ctx, entry.Kind, providerBuild{localRuntime: localRuntime, cloudflareUsage: usage, discoveryClient: discoveryClient, entry: entry, apiKey: apiKey, resolved: resolved})
 	if err != nil {
 		return nil, err
 	}

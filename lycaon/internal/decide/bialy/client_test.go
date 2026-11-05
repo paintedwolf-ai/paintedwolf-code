@@ -311,20 +311,21 @@ func TestACallerDeadlineDoesNotAbandonASlowStart(t *testing.T) {
 func TestClosingDuringStartStopsTheStartingEngine(t *testing.T) {
 	t.Parallel()
 	cfg := fakeConfig(t)
-	instrument(t, cfg, "sleep 1\n")
+	launches := instrument(t, cfg, "sleep 1\n")
 	client := bialy.New(cfg)
+	t.Cleanup(func() { _ = client.Close() })
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	_, _, _ = client.Rank(ctx, decide.HeadCodeRank, "t", []string{"a"})
+	testutil.WaitFor(t, func() bool { return launches() == 1 })
 	testutil.FailErr(t, "close", client.Close())
-	// Warm joins the start already in flight, which the close abandoned.
-	if err := client.Warm(t.Context()); !errors.Is(err, decide.ErrUnavailable) {
-		t.Fatalf("warm joining the abandoned start = %v, want ErrUnavailable", err)
-	}
 	if name := client.Engine().Name; name != "" {
 		t.Fatalf("an engine started before close was installed: %q", name)
 	}
 	testutil.FailErr(t, "a fresh start", client.Warm(t.Context()))
+	if got := launches(); got != 2 {
+		t.Fatalf("engine launches = %d, want a new process after close", got)
+	}
 	testutil.FailErr(t, "close again", client.Close())
 }
 

@@ -131,7 +131,7 @@ func TestNewProviderForEntryAttachesItsPromptCachePolicy(t *testing.T) {
 			}
 			reg, err := NewRegistry(t.Context(),
 				mustTestProviderCatalog(t, entry),
-				providercredentials.NewAt(t.TempDir()+"/credential-vault.age"),
+				providercredentials.NewAt(t.TempDir()+"/credential-vault.age"), nil,
 			)
 			if err == nil {
 				reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
@@ -139,7 +139,7 @@ func TestNewProviderForEntryAttachesItsPromptCachePolicy(t *testing.T) {
 			if err != nil {
 				testutil.FailErr(t, "new registry", err)
 			}
-			p, err := newProviderForEntry(context.Background(), entry, "key", reg.providerRetryPolicy(entry), reg.cloudflareUsage, reg.discoveryClient)
+			p, err := newProviderForEntry(context.Background(), entry, "key", reg.providerRetryPolicy(entry), reg.cloudflareUsage, reg.discoveryClient, nil)
 			if err != nil {
 				testutil.FailErr(t, "new provider for entry", err)
 			}

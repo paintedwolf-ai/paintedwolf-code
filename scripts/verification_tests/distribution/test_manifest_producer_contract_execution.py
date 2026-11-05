@@ -7,6 +7,7 @@ import unittest
 
 from verification_tests.distribution.manifest_fixture import ARCHITECTURES, FIXTURE, ROOT, PRODUCER, generate, relocate
 from verification_tests.distribution.test_nixos_apparmor_execution import APPARMOR
+from artifact_paths import artifact_root
 
 
 class ProducerReaderContractTests(unittest.TestCase):
@@ -21,7 +22,11 @@ class ProducerReaderContractTests(unittest.TestCase):
                 self.assertEqual(document['format_version'], schema['properties']['format_version']['const'])
                 path = FIXTURE / (architecture + '.json')
                 self.assertTrue(path.is_file(), 'Producer fixture to retain: ' + architecture + ':' + base64.b64encode(actual).decode())
-                self.assertEqual(path.read_bytes(), actual, 'Regenerate the shared corpus after producer or format changes')
+                if path.read_bytes() != actual:
+                    generated = artifact_root(ROOT) / 'manifest-fixtures' / path.name
+                    generated.parent.mkdir(parents=True, exist_ok=True)
+                    generated.write_bytes(actual)
+                    self.fail('Regenerated shared corpus: ' + str(generated))
 
     def test_apparmor_admits_the_producer_seal_and_refuses_changed_identity(self):
         for architecture in ARCHITECTURES:

@@ -1,0 +1,18 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/llm/providers/nativegen/nativegen.Runtime",
+  "kind": "runtime_service",
+  "workstream": "local-inference",
+  "disposition": "retain",
+  "reason": "Retain the measured 458-line, 21-method runtime. Preparation admission, foreground preemption, leases and repair fence one resident model process. Known history stays on the foreground chunk grid; preparation stops at standing boundaries and yields through shared device admission. IPC, permits and reap cleanup remain on the process. The lifecycle suite and focused preparation fixtures cover memory bounds, cancellation, repair, oversized-history fallback and generation without reload.",
+  "reviewed_commit": "4d028fd99597fbac0c55a3be8416ebe5752d7561",
+  "reviewed_shape": "3902317fd188339e58586ad31462f9c7c02a63c92bf112bb12e640a7a67a125b",
+  "ceiling": 458,
+  "boundaries": {
+    "lycaon/internal/llm/providers/nativegen/context_test.go": "591864c0aa8faf0602fccb6b064b2481c25644747b9cb96896ebcfb525d441db",
+    "lycaon/internal/llm/providers/nativegen/repair_test.go": "3c7d86fa86c3c0ae5213ed18ada7aa0d9158ebff9431ac9a47e5141f2017be33",
+    "lycaon/internal/llm/providers/nativegen/process_cancel_test.go": "b30d5f01bdc202aa053d1d6258025db6f6af41d047157b882527fc5a6eb0b3c2",
+    "lycaon/internal/llm/providers/nativegen/admission_test.go": "46a8471bd6ff1013b2958d82047697431ee06473ff13c3365fa98b600210011f",
+    "lycaon/internal/llm/providers/nativegen/preparation_test.go": "6d7687e3d67e75b449b402c8ff617acb3d9f68afbf58fe83e08cb27c84ab45b6"
+  }
+}

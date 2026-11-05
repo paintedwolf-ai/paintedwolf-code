@@ -25,7 +25,7 @@ func (w *warmFixture) Warm(ctx context.Context) error { w.calls++; w.seen = ctx;
 func TestDecisionRuntimeWarmsConfiguredEngineWithoutChangingAbstentionPolicy(t *testing.T) {
 	engine := &warmFixture{failure: errors.New("handshake unavailable")}
 	var runtime Runtime
-	testutil.FailErr(t, "load configured decision engine", runtime.Load(engine))
+	testutil.FailErr(t, "load configured decision engine", runtime.Load(engine, bialy.Config{}))
 	if runtime.Decider != engine || runtime.Rerank.Decider != engine {
 		t.Fatal("ranking and decisions selected different engines")
 	}
@@ -48,7 +48,7 @@ func TestDecisionRuntimeWarmsConfiguredEngineWithoutChangingAbstentionPolicy(t *
 func TestDecisionRuntimeDisabledEngineNeverStartsDuringWarm(t *testing.T) {
 	t.Setenv(bialy.EnvDisabled, "1")
 	var runtime Runtime
-	testutil.FailErr(t, "load disabled decision engine", runtime.Load(nil))
+	testutil.FailErr(t, "load disabled decision engine", runtime.Load(nil, bialy.ConfigFromEnvironment()))
 	testutil.FailErr(t, "warm disabled decision engine", runtime.Warm(t.Context()))
 	if _, ok := runtime.Warmer(); ok {
 		t.Fatal("disabled engine was eligible to start")

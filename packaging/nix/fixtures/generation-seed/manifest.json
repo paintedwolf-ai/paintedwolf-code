@@ -1,0 +1,15 @@
+{
+  "manifest": {
+    "model": "gemma4-e4b-paintedwolf",
+    "revision": "packaging-fixture-v1",
+    "artifact": {
+      "name": "weights.fixture",
+      "digest": "99f2cb3fc27b833016a4346150e787677b9766c9111a59968c932b750bc4e98d",
+      "format": "gguf",
+      "bytes": 53
+    },
+    "device": "vulkan"
+  },
+  "signature": "srJ2W+f6QepJsN3Ure9DhMtWoqMk2bPkwNk2EpulvYhBtOLikuFRgRfMYb+gjW5ZsaqApKQC7slsRa7Y4zPTAg==",
+  "key_id": "packaging-fixture"
+}

@@ -2,14 +2,17 @@
   "category": "go_receiver_methods",
   "artifact": "lycaon/internal/app/app.serveBuilder",
   "kind": "construction",
-  "workstream": "unix-socket-grants",
+  "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "The builder explicitly wires existing runtime owners and resource phases. Configuration now registers socket-store cleanup at construction; session composition drains checkpoint callbacks before closing socket stores. Retain explicit composition rather than hide shutdown dependencies in a forwarding owner. Freeze this reviewed shape at 30 methods; further growth requires renewed architectural review.",
-  "reviewed_commit": "df84f982a200c4a6b1dd80a55ef119b0465a2e55",
+  "reason": "Retain explicit application composition at 1035 receiver lines, 30 methods and 22 domain fields. Local model installation and resource partitioning live in localmodels; the builder only injects those resources and orders native process shutdown before admission closes. Existing session, socket and authorization owners retain their lifetimes. Splitting this wiring into forwarders would conceal cross-domain construction and cleanup order. Focused installation, capacity, decision-process lifetime and application build/close tests support this boundary.",
+  "reviewed_commit": "34044ff4470ce9cdc100f087ca154fea2e9a9c6a",
   "ceiling": 30,
   "boundaries": {
-    "lycaon/internal/app/configuration/socket_lifetime_test.go": "6e5c6341dd41536cac08103ca93bd7212534f2067cf8175bac53677a3792ba37",
-    "lycaon/internal/app/security/exceptional_test.go": "2c6dde913657a90a8dae3b9b0807d77941b1f704f0e1829ded1001d3efbc47d8"
+    "lycaon/internal/app/localmodels/resources_test.go": "bc5e1c364bd42d47ba6342d57258b44c2ee3f2288f78018721d9bcfd1c25cdc3",
+    "lycaon/internal/app/localmodels/runtime_test.go": "1598e0e93acf0930d86319b24a42a3179b8c1c916d771e244fb0a33e716f271a",
+    "lycaon/internal/app/decisions/runtime_test.go": "07744c85e5da36a02f1884052852d99fe111c9b8e0f0b4d2a3945db4e1f598a6",
+    "lycaon/internal/app/build_test.go": "db9df12fbd7759dd33499ab018fce3f90adb06fc22d1f27359aab0e6fa7a2722",
+    "lycaon/internal/app/domain_invariants_test.go": "6cf77cdb0a5e7a27620276f6d3d9d6c90d4a4a0e7c0dc7f14b97167f034a94e4"
   },
-  "reviewed_shape": "54a4dab92411f696d476e758751da212816a34004c09a69e9168960b134ece7f"
+  "reviewed_shape": "33172c24185025962cdbf9cef6ff9720579cbe37f6e8e729bcc8a4478f39ac5f"
 }

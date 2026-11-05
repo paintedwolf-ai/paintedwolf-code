@@ -94,33 +94,9 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- go build -tags=paintedwolf_release ./...
 
   build:lycaon-dev:
-    desc: Build lycaon-dev + sibling pw-logs, bialy, and pw-document-core — local den:sidecar + stable @self MCP (not go run)
+    desc: Build the development host and its document, decision, and generation runtimes
     dir: '{{.GO_DIR}}'
-    sources:
-      - '**/*.go'
-      - 'internal/harnessfixture/contract.json'
-      - 'internal/documentcore/native/src/**/*.rs'
-      - internal/documentcore/native/Cargo.toml
-      - internal/documentcore/native/Cargo.lock
-      - '../scripts/build-document-core.sh'
-      - 'internal/db/*.sql'
-      - 'internal/db/released-baselines.json'
-      - 'internal/backup/archive-limits.json'
-      - 'config/**/*'
-      - go.mod
-      - go.sum
-      - '../VERSION'
-      - '../scripts/sign-dev-binary.sh'
-      - '../scripts/dev-signing-config.sh'
-      - '../scripts/build-dev-engine.sh'
-      - '../scripts/resolve-opengrep.sh'
-      - '../scripts/stage-bundled-opengrep.sh'
-    generates:
-      - '{{.BUILD_DIR}}/lycaon-dev'
-      - '{{.BUILD_DIR}}/pw-logs'
-      - '{{.BUILD_DIR}}/pw-document-core'
-    status:
-      - env -u LYCAON_OPENGREP_CANDIDATE '{{.BUILD_DIR}}/lycaon-dev' scan engines verify-bundled --root {{.ROOT_DIR}}/lycaon-den/src-tauri/engine-root >/dev/null
+    # Seed paths and signing inputs are selected outside the source tree.
     cmds:
       - bash {{.SCRIPTS_DIR}}/build-dev-engine.sh
 
@@ -687,22 +663,27 @@ tasks:
   generation:prepare:
     desc: Prepare pinned generation runtime dependencies or prototype artifacts
     cmds:
-      - python3 {{.SCRIPTS_DIR}}/generation/runtime.py prepare {{.CLI_ARGS}}
+      - bash {{.SCRIPTS_DIR}}/generation/run.sh prepare {{.CLI_ARGS}}
 
   generation:build:
     desc: Build a native generation runtime candidate
     cmds:
-      - python3 {{.SCRIPTS_DIR}}/generation/runtime.py build {{.CLI_ARGS}}
+      - bash {{.SCRIPTS_DIR}}/generation/run.sh build {{.CLI_ARGS}}
 
   generation:test:
     desc: Run fixture-only generation runtime tests
     cmds:
-      - python3 {{.SCRIPTS_DIR}}/generation/runtime.py test {{.CLI_ARGS}}
+      - bash {{.SCRIPTS_DIR}}/generation/run.sh test {{.CLI_ARGS}}
 
   generation:bench:
     desc: Measure an explicitly selected local prototype model
     cmds:
-      - python3 {{.SCRIPTS_DIR}}/generation/runtime.py bench {{.CLI_ARGS}}
+      - bash {{.SCRIPTS_DIR}}/generation/run.sh bench {{.CLI_ARGS}}
+
+  decide:prepare:
+    desc: Fetch pinned Bialy dependencies or refresh its workspace lockfile
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/toolchain/decide_prepare.py {{.CLI_ARGS}}
 
   decide:test:
     desc: Decision engine (bialy) Rust tests

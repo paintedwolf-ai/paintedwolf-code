@@ -124,7 +124,7 @@ func (r *registryCatalog) List(ctx context.Context) []api.ProviderMeta {
 		}
 		r.publishHydratedProviders(snapshot, hydrated)
 	}
-	return out
+	return r.projectLocalRuntime(out)
 }
 
 func (r *registryCatalog) listMetaForEntry(
@@ -221,11 +221,11 @@ func cloneProviderMetaList(in []api.ProviderMeta) []api.ProviderMeta {
 func (r *registryCatalog) ListCached(ctx context.Context) []api.ProviderMeta {
 	out, has, fresh, generation := r.listCache.Read()
 	if fresh {
-		return out
+		return r.projectLocalRuntime(out)
 	}
 	if has {
 		r.scheduleListCacheRefresh(ctx, generation)
-		return out
+		return r.projectLocalRuntime(out)
 	}
 	data := r.List(ctx)
 	r.listCache.Store(data, generation)

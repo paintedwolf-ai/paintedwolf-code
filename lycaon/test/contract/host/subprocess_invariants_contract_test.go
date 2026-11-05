@@ -15,6 +15,7 @@ import (
 
 // approvedHostLaunches is the closed inventory of host subprocess subjects and why each exists.
 var approvedHostLaunches = map[string]string{
+	"generation_engine":                "resident local E4B generation runtime with host-admitted device work",
 	"bundle_verification":              "inspects Apple code signatures and notarization tickets on packaged app bundles",
 	"git_version_probe":                "verifies host git binary meets minimum engine version requirement",
 	"decide_engine":                    "resident local decision engine (bialy) that ranks candidates and answers turn decisions",

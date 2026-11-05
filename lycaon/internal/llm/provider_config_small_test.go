@@ -61,7 +61,7 @@ agent_pool:
 	testutil.FailErr(t, "open catalog", err)
 	_, err = NewPolicyStore()
 	testutil.FailErr(t, "open policy", err)
-	_, err = NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(configDir, "credential-vault.age")))
+	_, err = NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(configDir, "credential-vault.age")), nil)
 	testutil.FailErr(t, "open registry", err)
 
 	afterLocal, err := os.ReadFile(localPath)
@@ -115,7 +115,7 @@ func TestCloudflarePlaceholderWithSavedKeyIsNotAssignable(t *testing.T) {
 `+MinimalShipHTTPRetryYAML)
 	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "save credential", creds.Set("cloudflare-workers-ai-1", "test-token"))
-	registry, err := NewRegistry(t.Context(), catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -238,7 +238,7 @@ func TestOllamaKindAttachesShippedToolCallRejections(t *testing.T) {
 	}
 	entry, err := resolveLocalEntry(ProviderEntry{ID: "desktop", Kind: "ollama", BaseURL: "http://localhost:11434/v1"}, map[string]ProviderEntry{"ollama": *ollama})
 	testutil.FailErr(t, "resolve local ollama", err)
-	p, err := newProviderForEntry(context.Background(), entry, "", entry.HTTPRetry, nil, nil)
+	p, err := newProviderForEntry(context.Background(), entry, "", entry.HTTPRetry, nil, nil, nil)
 	testutil.FailErr(t, "build ollama driver", err)
 	cause := failure.ErrProviderToolCallUnparsed
 	if typed := p.Profile().ToolCallRejections.Classify("desktop", "m", "unexpected end of JSON input", true, cause); typed == cause { //nolint:errorlint // identity: an unclassified cause is returned itself
