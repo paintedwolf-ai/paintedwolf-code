@@ -53,7 +53,7 @@ type WorkflowRuntimeSnapshot struct {
 	// PhaseOwesReport marks a phase gated on topology_report_delivered, with or
 	// without a report document.
 	PhaseOwesReport bool
-	CloseoutRetries       int
+	CloseoutRetries int
 	// ReportRating is the rating a report document answers, when the workflow
 	// declares one.
 	CoverageReview    string
