@@ -86,6 +86,17 @@ func (r *secretSinkRun) file(t *testing.T, path string) string {
 	return string(body)
 }
 
+func (r *secretSinkRun) logResults(t *testing.T) {
+	t.Helper()
+	messages, err := r.h.Store.GetMessages(t.Context(), r.session)
+	testutil.FailErr(t, "messages", err)
+	for _, message := range messages {
+		if message.Role == wire.MessageRoleTool {
+			t.Log(message.Content)
+		}
+	}
+}
+
 type programOutcome struct{ state, stopCode string }
 
 // outcomes reads each command's typed receipt in execution order and fails if
@@ -128,12 +139,7 @@ func TestCommandFileSinksResolveAChatGeneratedReference(t *testing.T) {
 	testutil.FailErr(t, "prompt", err)
 	for i, outcome := range run.outcomes(t) {
 		if outcome.state != "completed" {
-			messages, _ := run.h.Store.GetMessages(t.Context(), run.session)
-			for _, message := range messages {
-				if message.Role == wire.MessageRoleTool {
-					t.Log(message.Content)
-				}
-			}
+			run.logResults(t)
 			t.Fatalf("command %d = %+v", i, outcome)
 		}
 	}
@@ -169,6 +175,13 @@ func TestCommandFileSinkAsksBeforeWritingASuppliedSecret(t *testing.T) {
 			kind := wire.CheckpointKindToolApproval
 			var card wire.CheckpointEvent
 			testutil.WaitFor(t, func() bool {
+				select {
+				case err := <-done:
+					testutil.FailErr(t, "prompt", err)
+					run.logResults(t)
+					t.Fatal("the turn ended without a card")
+				default:
+				}
 				pending, err := run.h.Sessions.Checkpoints.ListPending(t.Context(), run.session, &kind)
 				if err != nil || len(pending) == 0 {
 					return false
