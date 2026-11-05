@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type writeCounter struct {
@@ -32,7 +33,7 @@ func TestSortOutputGroupsRecordsInBoundedWrites(t *testing.T) {
 	var stdout writeCounter
 	streams := commandprogram.Streams{Input: io.NopCloser(strings.NewReader(input.String())), Output: &stdout, Error: io.Discard}
 	if _, err := h.owners.Builtins(h.ports())["sort"].Invoke(t.Context(), request, streams); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "h.owners.Builtins failed", err)
 	}
 	if stdout.String() != input.String() {
 		t.Fatalf("sorted output differs: %d bytes, want %d", stdout.Len(), input.Len())

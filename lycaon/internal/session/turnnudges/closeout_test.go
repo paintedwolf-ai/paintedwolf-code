@@ -9,8 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
-	setupanchor "github.com/lycaon/lycaon/internal/testsetup/anchor"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	setupanchor "github.com/lycaon/lycaon/internal/testsetup/anchor"
 )
 
 type recordedKick struct {
@@ -60,9 +61,7 @@ func TestForcedFinalTurnKicksReadWhatCloseoutSends(t *testing.T) {
 	reference := regexp.MustCompile(`(?:\{\{\s*|\{%\s*if\s+)(\w+)`)
 	for _, stem := range []string{"coordinator-closeout", "coordinator-turn-closeout"} {
 		raw, _, err := prompts.DefaultBundledLayout().ReadBundled("guidance/" + stem + ".md")
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "prompts.DefaultBundledLayout failed", err)
 		reads := map[string]bool{}
 		for _, match := range reference.FindAllStringSubmatch(string(raw), -1) {
 			reads[match[1]] = true

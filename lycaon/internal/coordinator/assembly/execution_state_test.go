@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -111,9 +112,7 @@ func TestPendingJobOutlivesAnExpiredReminder_ACEXEC04(t *testing.T) {
 		t.Fatalf("reminder survived its expiry: %+v", blocks)
 	}
 	tail, err := assembler.buildTailSystemInjects(t.Context(), sess, false, inject.CoordinatorTurnFrame{}, nil, canonical, &TurnAssemblyScratch{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "assembler.buildTailSystemInjects failed", err)
 	if !slices.ContainsFunc(tail, func(m api.Message) bool { return strings.Contains(m.Content, "pending-check") }) {
 		t.Fatalf("pending job left the request: %+v", tail)
 	}

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,7 +28,7 @@ func TestProgramObservationTagsOutcomeAlongsideDeliveredSource(t *testing.T) {
 		}})
 		msg := api.Message{Content: content, EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{Content: content, CommandProgram: &api.CommandProgramReceipt{ID: "program", ParentReceiptID: "parent"}}}
 		if err := loop.Batch.tagToolHandleOnCommit(t.Context(), "session", &api.Session{ID: "session"}, "command", nil, &msg, false); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "loop.Batch.tagToolHandleOnCommit failed", err)
 		}
 		if calls != 1 || len(msg.EvidenceHandles) != 2 || !strings.Contains(msg.Content, "command#1") || !strings.Contains(msg.Content, "read#1") || msg.ToolResult.Content != msg.Content {
 			t.Fatalf("lost observed handles: %+v", msg)
