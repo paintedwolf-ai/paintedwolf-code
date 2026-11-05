@@ -43,6 +43,7 @@ func (tc ToolContext) CheckPolicyTargets(ctx context.Context, targets []agentpol
 		if !filepath.IsAbs(target.Path) {
 			return fmt.Errorf("policy admission requires a resolved absolute path")
 		}
+		target = tc.branchPolicyTarget(target)
 		if target.RootID != "" {
 			root, ok := projectroot.RootRefByID(tc.Source.Roots, target.RootID)
 			if !ok {
@@ -71,6 +72,19 @@ func (tc ToolContext) CheckPolicyTargets(ctx context.Context, targets []agentpol
 		return nil
 	}
 	return check(ctx, bound)
+}
+
+// branchPolicyTarget reviews a worker branch path as the root location it mirrors.
+func (tc ToolContext) branchPolicyTarget(target agentpolicy.Target) agentpolicy.Target {
+	if strings.TrimSpace(tc.Source.WorkerBranchRoot) == "" {
+		return target
+	}
+	root, rel, ok := tc.SourceLocation(target.Path)
+	if !ok || root.ID == "" {
+		return target
+	}
+	target.RootID, target.Path = root.ID, filepath.Join(root.Path, filepath.FromSlash(rel))
+	return target
 }
 
 func policyPathWithinRoot(root, path string) bool {
