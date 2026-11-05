@@ -152,7 +152,7 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		// Skill paths are relative to the skill directory.
 		rec.Fidelity = FidelityStructured
 		captureRecordBody(&rec, content)
-	case "task", "delegate_dispatch", "render_view", "verify", "preview_overlay", "promote_overlay", "reject_overlay", "secret_generate", "secret_list", "secret_revoke":
+	case "command_output", "command_stop", "task", "delegate_dispatch", "render_view", "verify", "preview_overlay", "promote_overlay", "reject_overlay", "secret_generate", "secret_list", "secret_revoke":
 		// Result receipts do not establish observations of referenced file contents.
 		rec.Fidelity = FidelityStructured
 		captureRecordBody(&rec, content)
