@@ -7,6 +7,7 @@ requires:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.next_steps
 when: paintedwolf.rejection_code == "DECISION_JOB_ID_MISMATCH"
 effect: block
 copy:
@@ -14,10 +15,9 @@ copy:
     worker
   cause: The coordinator picked a sibling job id or a stale resume id instead of the job_id from the needs_decision
     envelope
-  why: Call `answer_decision(job_id=<exact job_id from the envelope>, option=...)` the host resumes the
+  why: A decision answer must target the exact job_id from the needs_decision envelope; the host resumes the
     worker automatically
-  fix: Call `answer_decision(job_id=<exact job_id from the envelope>, option=...)` the host resumes the
-    worker automatically
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Use the envelope job_id, the host resumes the worker automatically — do not dispatch new work
     until the worker is terminal
 x-paintedwolf-category: recoverable

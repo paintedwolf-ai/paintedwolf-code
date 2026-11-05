@@ -2,9 +2,12 @@ package toolfeedback
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"maps"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -316,5 +319,70 @@ func TestBinaryReadRecoveryRequiresOfferedViewerAndSupportedFormat(t *testing.T)
 				})
 			}
 		}
+	}
+}
+
+func TestNextStepsRulesRenderNonEmptyRemediesWithoutReach(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..", "..")
+	loader, err := oar.NewLoader(filepath.Join(repoRoot, "schemas"))
+	testutil.FailErr(t, "oar.NewLoader", err)
+	rs, err := loader.LoadEffectivePolicy()
+	testutil.FailErr(t, "LoadEffectivePolicy", err)
+
+	cfg, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load recovery catalogue", err)
+	checked := 0
+	for _, code := range slices.Sorted(maps.Keys(cfg.HintCodes)) {
+		entry := cfg.HintCodes[code]
+		rule, ok := rs.Get(code)
+		if !ok || rule == nil || rule.NextSteps == nil {
+			continue
+		}
+		checked++
+		for _, scenario := range entry.Scenarios {
+			t.Run(code+"/"+scenario.ID, func(t *testing.T) {
+				vars := guidance.ScenarioVars(entry, scenario)
+				gc := oar.NewGuardContext()
+				gc.ObservationData = maps.Clone(vars)
+				tool, _ := vars["tool"].(string)
+				if tool == "" && len(entry.Tools) > 0 {
+					tool = entry.Tools[0]
+				}
+				gc.ObserveToolCall(tool, nil)
+				steps := oar.ResolveNextSteps(rule, gc)
+				facts := oarcopy.FactsFromData(vars)
+				withPlaceholder := maps.Clone(facts)
+				withPlaceholder[oar.NextStepsFact] = "NEXT_STEP_PLACEHOLDER"
+				facts[oar.NextStepsFact] = steps.Text
+				for _, field := range []struct {
+					name string
+					raw  string
+				}{
+					{"fix", rule.Copy.Fix},
+					{"instead", rule.Copy.Instead},
+				} {
+					if strings.TrimSpace(field.raw) == "" {
+						continue
+					}
+					if !strings.Contains(oarcore.RenderCopy(field.raw, withPlaceholder), "NEXT_STEP_PLACEHOLDER") {
+						continue
+					}
+					got := strings.TrimSpace(oarcore.RenderCopy(field.raw, facts))
+					if got == "" {
+						t.Fatalf("%s/%s: %s rendered empty when reach is empty", code, scenario.ID, field.name)
+					}
+					if strings.HasPrefix(got, "Then ") || strings.HasPrefix(got, "Otherwise ") {
+						t.Fatalf("%s/%s: %s starts with dangling connector when reach is empty: %q", code, scenario.ID, field.name, got)
+					}
+				}
+			})
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no next-steps rule was checked")
 	}
 }

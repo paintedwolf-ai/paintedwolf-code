@@ -15,7 +15,7 @@ copy:
   cause: Awaited commands use one default lane so a slow command remains controllable instead of being obscured by overlapping work.
   why: Launching another awaited command would create implicit concurrency and resource contention.
   fix: '{{ paintedwolf.next_steps }}'
-  instead: ''
+  instead: Inspect or stop the live awaited command before launching another
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_job
 x-paintedwolf-message: awaited command job already in flight

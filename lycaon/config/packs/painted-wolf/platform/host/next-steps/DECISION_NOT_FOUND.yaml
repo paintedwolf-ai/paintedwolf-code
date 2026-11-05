@@ -1,6 +1,7 @@
 steps:
   - tool: "answer_decision"
     say: "Answer with {{ call }}, using the job_id from the needs_decision envelope."
+    otherwise: "Use the job_id from a worker's needs_decision envelope when answering a pending decision."
   - tool: "pack_board"
     complete: true
     say: "Use {{ call }} to find workers that are waiting on a decision."

@@ -3,3 +3,4 @@ steps:
     args:
       command: "curl"
     say: "When retrying, keep the method, headers, body, and destination explicit in {{ call }}."
+    otherwise: "Inspect the recorded response and server state before deciding whether to retry."

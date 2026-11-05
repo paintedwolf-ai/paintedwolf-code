@@ -5,6 +5,7 @@ package nextstepreport
 import (
 	"encoding/json"
 	"sort"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -55,7 +56,7 @@ func (r *Report) Add(messages []api.Message) {
 func (r *Report) answer(offeredBy string, call toolreach.Call, later []api.Message) {
 	for _, message := range later {
 		result := message.ToolResult
-		if result.Tool != call.Tool {
+		if !matchesOfferedCall(call, result) {
 			continue
 		}
 		r.Followed++
@@ -68,6 +69,21 @@ func (r *Report) answer(offeredBy string, call toolreach.Call, later []api.Messa
 		}
 		return
 	}
+}
+
+func matchesOfferedCall(call toolreach.Call, result *api.ToolResult) bool {
+	if result == nil || result.Tool != call.Tool {
+		return false
+	}
+	if call.Program == "" {
+		return true
+	}
+	raw, ok := result.ToolArgs["command"].(string)
+	if !ok {
+		return true
+	}
+	fields := strings.Fields(raw)
+	return len(fields) > 0 && fields[0] == call.Program
 }
 
 func offeredCalls(feedback api.ToolFeedback) []toolreach.Call {

@@ -121,6 +121,9 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 			break
 		}
 	}
+	if st != nil && !tools.CallReach(ctx).Known() {
+		ctx = tools.WithCallReach(ctx, st.requestReach())
+	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, assistantMsg)
 	if err != nil {
 		return out, err

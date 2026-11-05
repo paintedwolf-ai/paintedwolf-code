@@ -56,3 +56,23 @@ func TestReportDoesNotCountACallOutsideTheWindow(t *testing.T) {
 		t.Fatalf("report = %+v", report)
 	}
 }
+
+func TestReportMatchesOfferedProgramInsteadOfUnrelatedCommand(t *testing.T) {
+	var report Report
+	offeredLs := api.ToolFeedback{
+		Code:    "READ_IS_DIRECTORY",
+		Details: map[string]any{api.ToolFeedbackNextCalls: []toolreach.Call{toolreach.ProgramCall("ls", "src")}},
+	}
+	unrelated := toolResult("m2", "command", api.ToolResultOutcomeRejected, api.ToolFeedback{Code: "PATH_DENIED"})
+	unrelated.ToolResult.ToolArgs = map[string]any{"command": "cat secret.txt"}
+	followed := toolResult("m3", "command", api.ToolResultOutcomeCompleted)
+	followed.ToolResult.ToolArgs = map[string]any{"command": "ls src"}
+	report.Add([]api.Message{
+		toolResult("m1", "read", api.ToolResultOutcomeRejected, offeredLs),
+		unrelated,
+		followed,
+	})
+	if report.Followed != 1 || len(report.Refused) != 0 {
+		t.Fatalf("report = %+v", report)
+	}
+}

@@ -126,3 +126,27 @@ func TestNextCallsDetailsLeavesOtherDetailsAlone(t *testing.T) {
 		t.Fatalf("no calls = %v", got)
 	}
 }
+
+func TestValidateNextStepsRejectsDecisionReadsAcrossAllConditionSurfaces(t *testing.T) {
+	loader, err := NewLoader("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		rule *Rule
+	}{
+		{"rule when", &Rule{ID: "R", When: `paintedwolf.next_steps != ""`}},
+		{"rule flow", &Rule{ID: "R", Flow: []string{`paintedwolf.next_steps != ""`}}},
+		{"counter_scope", &Rule{ID: "R", CounterScope: NextStepsFact}},
+		{"step when", &Rule{ID: "R", Requires: Requires{Facts: []string{NextStepsFact}}, NextSteps: &NextSteps{
+			Steps: []NextStep{{When: `paintedwolf.next_steps != ""`, Tool: "recall", Say: "Use {{ call }}."}},
+		}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := loader.validateNextSteps(tc.rule); err == nil {
+				t.Fatalf("accepted %s reading %s", tc.name, NextStepsFact)
+			}
+		})
+	}
+}

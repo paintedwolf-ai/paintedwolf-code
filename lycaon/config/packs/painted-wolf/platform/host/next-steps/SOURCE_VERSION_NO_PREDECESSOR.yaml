@@ -5,3 +5,4 @@ steps:
       path: "{{ paintedwolf.path }}"
     complete: true
     say: "Query {{ call }} to check recorded history."
+    otherwise: "Inspect the recorded source history for this file."

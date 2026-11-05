@@ -1,5 +1,6 @@
 steps:
   - tool: "held_result"
     say: "Wait on the handle or read it with {{ call }}."
+    otherwise: "Wait for the running held call to finish before starting a duplicate."
   - tool: "held_stop"
     say: "Cancel it with {{ call }}."

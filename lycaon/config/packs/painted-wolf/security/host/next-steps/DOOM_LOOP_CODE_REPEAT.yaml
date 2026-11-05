@@ -7,6 +7,7 @@ steps:
     args:
       leg_status: "blocked"
     say: "Otherwise use {{ call }} with the observed constraint and the remaining risk."
+    otherwise: "Report the observed constraint and remaining risk rather than repeating the rejected call."
   - when: "!paintedwolf.worker_leg"
     tool: "ask_user"
     say: "Use {{ call }} when human input or authority is required."
