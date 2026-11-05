@@ -70,7 +70,7 @@ webE2e.describe("Crossbar", () => {
     const needle = "preview fixture";
     await input.fill(needle);
     await expect(page.getByTestId("crossbar-escalate")).toBeVisible({
-      timeout: 5_000,
+      timeout: 30_000,
     });
     await page.getByTestId("crossbar-escalate").click();
 

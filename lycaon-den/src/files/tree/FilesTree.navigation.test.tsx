@@ -67,7 +67,7 @@ async function recordReveal(view: Awaited<ReturnType<typeof mount>>, mode: Mode,
   sample();
   try {
     view.navigate(mode, target);
-    await waitFor(() => expect(paintedRows(view.scroll).some(row => row.index === target)).toBe(true), { timeout: 5000 });
+    await waitFor(() => expect(paintedRows(view.scroll).some(row => row.index === target)).toBe(true));
     // Observe completion, including any delayed scroll or anchor restoration.
     await new Promise(resolve => setTimeout(resolve, 100));
   } finally { cancelAnimationFrame(frame); }
@@ -184,7 +184,7 @@ it("keeps keyboard navigation when an earlier editor target arrives late", async
   first.focus();
   expect(document.activeElement).toBe(first);
   fireEvent.keyDown(first, { key: "End" });
-  await waitFor(() => expect(document.activeElement?.getAttribute("data-path")).toBe("file-200000.ts"), { timeout: 5000 });
+  await waitFor(() => expect(document.activeElement?.getAttribute("data-path")).toBe("file-200000.ts"));
   view.setActive({ rootId: "r1", path: "file-1.ts", revision: 1 });
   await new Promise(resolve => setTimeout(resolve, 400));
   expect(paintedRows(view.scroll).some(row => row.index === 200000)).toBe(true);
@@ -268,8 +268,8 @@ it("animates scroll to center a newly revealed file when disclosing a closed fol
   sample();
   try {
     reveal("r1", "folder/target.ts", false);
-    await waitFor(() => expect(scroll.querySelector('[data-path="folder/target.ts"]')).not.toBeNull(), { timeout: 5000 });
-    await waitFor(() => expect(scroll.scrollTop).toBeGreaterThan(0), { timeout: 5000 });
+    await waitFor(() => expect(scroll.querySelector('[data-path="folder/target.ts"]')).not.toBeNull());
+    await waitFor(() => expect(scroll.scrollTop).toBeGreaterThan(0));
     await new Promise(resolve => setTimeout(resolve, 150));
   } finally { cancelAnimationFrame(frame); }
   expect(samples.filter(s => s > 0).length).toBeGreaterThan(3);
