@@ -32,7 +32,7 @@ func main() {
 		fatal(err)
 	}
 
-	schemas, err := toolschema.LoadSchemaDir(schemaDirPath(absRoot))
+	schemas, err := presentedSchemas(absRoot)
 	if err != nil {
 		fatal(err)
 	}
@@ -304,4 +304,18 @@ func writeGenerated(path string, body []byte) {
 func fatal(err error) {
 	fmt.Fprintln(os.Stderr, "error:", err)
 	os.Exit(1)
+}
+
+// presentedSchemas covers tools and native operations: stored transcripts and
+// reached operations both need their labels.
+func presentedSchemas(root string) (*toolschema.Config, error) {
+	callable, err := toolschema.LoadSchemaDir(schemaDirPath(root))
+	if err != nil {
+		return nil, err
+	}
+	operations, err := toolschema.LoadSchemaDir(filepath.Join(filepath.Dir(schemaDirPath(root)), "operation-schemas"))
+	if err != nil {
+		return nil, err
+	}
+	return toolschema.Merge(callable, operations)
 }

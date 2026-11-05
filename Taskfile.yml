@@ -1144,6 +1144,7 @@ tasks:
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
+      - config/packs/painted-wolf/platform/tools/operation-schemas/**/*
     generates:
       - internal/toolcontract/language_catalog.generated.go
     cmds:
@@ -1160,6 +1161,7 @@ tasks:
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
+      - config/packs/painted-wolf/platform/tools/operation-schemas/**/*
       - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check
@@ -1329,6 +1331,7 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
       - config/packs/painted-wolf/platform/tools/schemas/*.yaml
+      - config/packs/painted-wolf/platform/tools/operation-schemas/*.yaml
       - cmd/codegen-tool-presentation/**/*
     generates:
       - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
@@ -1345,6 +1348,7 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
       - config/packs/painted-wolf/platform/tools/schemas/*.yaml
+      - config/packs/painted-wolf/platform/tools/operation-schemas/*.yaml
       - cmd/codegen-tool-presentation/**/*
       - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
       - internal/toolpresentation/visibility.generated.go
