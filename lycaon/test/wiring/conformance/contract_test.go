@@ -87,7 +87,7 @@ var baseContractCases = []contractCase{
 			ID:          "inspect-domain-builtins",
 			Description: "The outline, repo-map, survey-repo and summarize built-ins return typed results.",
 			Commands:    []string{"outline", "repo-map", "survey-repo", "summarize"},
-			Forms:       []string{"outline:--path", "repo-map:--path", "repo-map:--depth", "summarize:--path", "summarize:--focus"},
+			Forms:       []string{"outline:--path", "repo-map:--path", "repo-map:--depth", "summarize:--path", "summarize:--focus", "summarize:--cursor"},
 			Program:     `outline --path code.go; repo-map --path . --depth 2; survey-repo --path . --depth 1; summarize --path code.go --focus Alpha`,
 		},
 		Validate: verifyInspectDomainOutputs,

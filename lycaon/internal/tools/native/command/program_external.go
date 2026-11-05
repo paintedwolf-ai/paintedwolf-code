@@ -50,7 +50,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	if cwd == "" {
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a bound directory frame")
 	}
-	rootID := l.Cwd.Root.ID
+	rootID := reachedRootID(tctx, l.Cwd)
 	if l.Cwd.External {
 		rootID = ""
 	}
