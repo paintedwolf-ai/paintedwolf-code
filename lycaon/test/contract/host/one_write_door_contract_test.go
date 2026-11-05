@@ -28,7 +28,6 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/extpacks/package_transaction.go":    "directory promotion of a staged package tree",
 	"lycaon/internal/packagegeneration/materialize.go":   "directory promotion of a verified package generation tree",
 	"lycaon/internal/project/promotion_engine.go":        "reservation-based promotion: renames are the transaction, not a write",
-	"lycaon/internal/workspace/seed.go":                  "directory promotion of a fully materialized seed tree",
 	"lycaon/internal/layeredfs/adapter/eagercopy_git.go": "builds a private Git directory in staging and promotes it whole",
 	"lycaon/internal/layeredfs/recovery/salvage.go":      "directory promotion of a completely salvaged quarantine tree",
 
@@ -56,7 +55,6 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/promptattach/docext/worker.go":       "O_EXCL request file handed to a one-shot extraction worker",
 	"lycaon/internal/scan/drivers/bundled/opengrep_io.go": "O_EXCL report path inside a scan run directory removed on cleanup",
 	"lycaon/internal/sourcesnapshot/materialize_entry.go": "O_EXCL files in a private disposable scan tree; no replacement or durable publication",
-	"lycaon/internal/workspace/overlay_survey.go":         "O_EXCL destination while materializing a fresh overlay tree",
 
 	// Probes write only inside a private temporary directory they remove before return.
 	"lycaon/internal/layeredfs/adapter/fuselinux/fuselinux.go": "capability probe confined to a private temporary view",
@@ -76,11 +74,9 @@ var doorExemptions = map[string]string{
 
 	// Worker branches are unpublished until snapshot completion names them complete.
 	"lycaon/internal/layeredfs/adapter/eagercopy_git_helpers.go": "fills a private Git staging directory its caller promotes whole",
-	"lycaon/internal/layeredfs/adapter/eagercopy_lower.go":       "seeds an unpublished worker branch; SnapshotComplete publishes the assembled tree",
-	"lycaon/internal/layeredfs/adapter/eagercopy_seed.go":        "O_EXCL file in an unpublished worker branch; SnapshotComplete publishes the assembled tree",
+	"lycaon/internal/layeredfs/adapter/eagercopy_content.go":     "O_EXCL file in an unpublished worker tree; SnapshotComplete publishes the assembled tree",
 	"lycaon/internal/layeredfs/recovery/reconstruct.go":          "reconstructs an unpublished branch under its provision lock; SnapshotComplete publishes it",
 	"lycaon/internal/layeredfs/recovery/stacked.go":              "reconstructs an unpublished branch under its provision lock; SnapshotComplete publishes it",
-	"lycaon/internal/workspace/evict.go":                         "O_EXCL manifest in an unpublished seed generation and an empty last-used marker whose content is never read",
 
 	// Copies into a staging tree the caller promotes or discards whole.
 	"lycaon/internal/backup/stage.go":                  "streams into an exclusive staging tree the caller promotes",

@@ -74,7 +74,8 @@ func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask, 
 	}
 	// A worker has one durable promotion completion. Refresh review before applying
 	// a superseded checkpoint rather than marking newer, unreviewed work merged.
-	latest, err := store.LatestCheckpointID()
+	// The recovery store is shared, so only the branch's own record can name its newest checkpoint.
+	latest, err := taskLatestCheckpointID(task, store)
 	if err != nil {
 		return err
 	}
@@ -85,6 +86,13 @@ func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask, 
 		return err
 	}
 	return promoter.RevalidatePreviewTargets(bound, nil)
+}
+
+func taskLatestCheckpointID(task *api.WorkerTask, store *checkpoint.Store) (string, error) {
+	if _, published, ok := taskBranchCheckpoint(task); ok {
+		return published, nil
+	}
+	return store.LatestCheckpointID()
 }
 
 // TargetRootsForTaskCheckpoint resolves the target root map for a task's checkpoint manifest and rejects unmapped RootIDs.
