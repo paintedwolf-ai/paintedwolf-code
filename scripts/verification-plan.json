@@ -8,7 +8,6 @@
       "lint:full",
       "budgets",
       "coverage:changes",
-      "scripts:coverage:changes",
       "den:typecheck",
       "den:lint",
       "den:test:fast",
@@ -1004,7 +1003,6 @@
         "coverage:changes",
         "den:typecheck",
         "den:lint",
-        "scripts:coverage:changes",
         "den:test:fast",
         "lint:full"
       ],

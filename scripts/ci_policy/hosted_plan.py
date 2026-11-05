@@ -5,7 +5,7 @@ import re
 
 from ci_policy.hosted_schedule import order, PRIORITIES
 from ci_policy.timings import row_key
-from ci_policy.native_admission import targets as native_targets
+from ci_policy.native_admission import runs_script_coverage, targets as native_targets
 from verification_plan import catalog, expand
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -207,7 +207,8 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "userlands": USERLANDS_TARGET in lane["targets"],
                            "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
                            "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
-                           or "scripts:coverage:changes" in lane["targets"],
+                           or "scripts:coverage:changes" in lane["targets"]
+                           or (name == "ready" and runs_script_coverage(scope)),
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),

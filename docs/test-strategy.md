@@ -865,7 +865,7 @@ formatting, comment, failure-message and documentation-link errors within a minu
 while the rest keep running. The fast tier runs three more jobs side by side.
 `ready-tests` splits repository contracts and affected short Go tests across two
 shards, balanced by measured package durations. `ready` runs size budgets and
-changed Go and script coverage first, then compiles the host and runs Den typecheck,
+changed Go coverage first, plus script coverage when scripts or workflows changed, then compiles the host and runs Den typecheck,
 Den lint, frontend seam canaries, and complete `lint:full` analysis.
 Coverage executes eligible changed packages' own short tests, so `ready-tests`
 omits those packages from its identical short recipe. Test-only, generated,
