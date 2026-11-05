@@ -208,6 +208,7 @@ describe("Crossbar", () => {
     render(() => <Crossbar open originProjectId="p1"
       onClose={vi.fn()} onEscalate={vi.fn()} onNavigateHit={vi.fn()} />);
     fireEvent.input(screen.getByTestId("crossbar-input"), { target: { value: "#" } });
+    await screen.findByTestId("crossbar-hit-status");
     fireEvent.click(screen.getByTestId("crossbar-mode-code"));
     expect((screen.getByTestId("crossbar-input") as HTMLInputElement).value).toBe("");
     expect(search).not.toHaveBeenCalled();

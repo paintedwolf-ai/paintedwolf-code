@@ -9,6 +9,7 @@ describe("update settings", () => {
   it("explains development availability and disables update controls", async () => {
     const capabilities = { can_check: false, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "development_build" };
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => updateFixture({ candidate: null, automatic_updates_enabled: false, capabilities }) })} />);
+    await screen.findByTestId("updates-development-build");
     expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true);
     expect(screen.getByRole("checkbox", { name: "Automatic updates" })).toHaveProperty("disabled", true);
     expect(screen.getByTestId("updates-channel")).toHaveProperty("disabled", true);
@@ -16,6 +17,7 @@ describe("update settings", () => {
   });
   it("shows the rejected feed cause without claiming an installation failure", async () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => updateFixture({ last_error: { code: "feed_rejected", detail: "latest.json.sig returned HTTP 404" } }) })} />);
+    await screen.findByRole("alert");
     expect(screen.getByText("latest.json.sig returned HTTP 404")).toBeTruthy();
   });
   it("does not invoke native updates in a web app", () => {
@@ -81,6 +83,7 @@ describe("update settings", () => {
     const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "unpackaged_installation" };
     const state = updateFixture({ install_source: "unpackaged", candidate: null, discovery: "idle", capabilities, last_error: { code: "unpackaged_installation" } });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    await screen.findByTestId("updates-unpackaged");
     expect(screen.queryByTestId("updates-package-identity")).toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });
@@ -88,6 +91,7 @@ describe("update settings", () => {
     const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "package_ownership_unknown" };
     const state = updateFixture({ install_source: "package_ownership_unknown", candidate: null, discovery: "idle", capabilities });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    await screen.findByTestId("updates-ownership-unknown");
     expect(screen.queryByTestId("updates-unpackaged")).toBeNull();
     expect(screen.queryByTestId("updates-package-identity")).toBeNull();
     expect(screen.queryByTestId("updates-package-upgrade")).toBeNull();
@@ -103,6 +107,7 @@ describe("update settings", () => {
   it("keeps a committed recovery failure distinct from an installed update", async () => {
     const state = updateFixture({ installation: "recovery_required", last_error: { code: "recovery_required" }, capabilities: { can_check: false, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "recovery_required" } });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    await screen.findByRole("alert");
     expect(screen.queryByText(/The update is installed/)).toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
     expect(screen.getByRole("checkbox", { name: "Automatic updates" })).toHaveProperty("disabled", true);
@@ -112,6 +117,7 @@ describe("update settings", () => {
     const restart = vi.fn(async () => {}); setConfirmDestructivePresenter(async () => true);
     const state = stagedFixture(); state.installation = "committed"; state.capabilities = { ...state.capabilities, can_check: false };
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ restart, getState: async () => state })} />);
+    await screen.findByTestId("updates-installation-status");
     expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true);
     fireEvent.click(screen.getByRole("button", { name: "Restart to update" }));
     await waitFor(() => expect(restart).toHaveBeenCalledWith("release-1"));
@@ -121,9 +127,11 @@ describe("update settings", () => {
     const check = vi.fn(async () => confirmed);
     const rejected = stagedFixture({ offer_confirmed_at: null, last_error: { code: "feed_rejected" }, capabilities: { ...confirmed.capabilities, can_install_automatically: false } });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ check, getState: async () => rejected })} />);
+    await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("button", { name: "Check now" }));
     await waitFor(() => expect(check).toHaveBeenCalledOnce());
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    await screen.findByTestId("updates-installation-status");
   });
   it("holds every control while the restart confirmation is open", async () => {
     let decide!: (value: boolean) => void; const restart = vi.fn(async () => {});

@@ -26,27 +26,33 @@ describe("package-source observations", () => {
   });
   it("reports held packages without suggesting that a cached candidate is installable", async () => {
     renderSource({ availability: "blocked", reason: "held", held: true });
+    await screen.findByTestId("updates-source-reason");
     expect(screen.queryByText("You’re using the latest version.")).toBeNull();
   });
   it("keeps DNF transaction policy unknown even when its query returns a candidate", async () => {
     renderSource({ availability: "unknown", reason: "policy_unobserved", candidate: { version: "1.2.0-1", architecture: "x86_64", newer_than_installed: true, repositories: [{ id: "chosen-repo", suite: null, trusted: null }] } });
+    await screen.findByTestId("updates-source-reason");
     expect(screen.getByTestId("updates-source-candidate")).toBeTruthy();
   });
   it("reports a failed fresh source check without a stale candidate", async () => {
     renderSource({ availability: "failed", reason: "query_failed" });
+    await screen.findByTestId("updates-source-reason");
     expect(screen.queryByTestId("updates-source-candidate")).toBeNull();
   });
   it("does not turn a current cached policy candidate into a latest-release claim", async () => {
     renderSource({ availability: "no_newer_candidate", candidate: { version: "1.1.0-1", architecture: "amd64", newer_than_installed: false,
       repositories: [{ id: "Painted Wolf Code", suite: "stable", trusted: true }] } });
+    await screen.findByTestId("updates-source-candidate");
     expect(screen.queryByText("You’re using the latest version.")).toBeNull();
   });
   it("reports an unknown owner without claiming that repository metadata was read", async () => {
     renderSource({ availability: "unknown", reason: "unsupported_owner", cached_only: false, database_owner: null, database_version: null, architecture: null });
+    await screen.findByTestId("updates-source-reason");
     expect(screen.queryByTestId("updates-database-version")).toBeNull();
   });
   it("reports a changed database owner without claiming an update for the old running package", async () => {
     renderSource({ availability: "blocked", reason: "owner_changed", cached_only: false, database_owner: "replacement-package", database_version: null, architecture: null });
+    await screen.findByTestId("updates-source-reason");
     expect(screen.getByTestId("updates-database-owner").textContent).toContain("replacement-package");
     expect(screen.getByTestId("updates-package-identity").textContent).toContain("painted-wolf-code 1.0.2");
     expect(screen.queryByTestId("updates-source-candidate")).toBeNull();

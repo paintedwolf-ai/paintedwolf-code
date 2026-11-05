@@ -879,6 +879,7 @@ describe("ReviewLens names and lists the answer on screen", () => {
     render(() => (
       <ReviewLens projectId="p1" appStore={store} client={mockClient({ listProjectSourceWalk })} onOpenFile={vi.fn()} />
     ));
+    await screen.findByTestId("review-lens-empty");
     expect(listProjectSourceWalk).not.toHaveBeenCalled();
   });
 
