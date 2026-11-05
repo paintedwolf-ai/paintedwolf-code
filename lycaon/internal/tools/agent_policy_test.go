@@ -100,3 +100,31 @@ func TestPolicyTargetsShareOneCheckAndPreserveAccessDirections(t *testing.T) {
 		t.Fatalf("one operation requested %d checks", checks)
 	}
 }
+
+// A worker branch mirrors its root, so its paths answer to that root's policy.
+func TestPolicyAdmissionReviewsAWorkerBranchPathAsItsRoot(t *testing.T) {
+	root, branch := t.TempDir(), t.TempDir()
+	tc := ToolContext{Source: InvocationSource{WorkerBranchRoot: branch, Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}}}}
+	var addressed []agentpolicy.Target
+	ctx := WithAgentPolicy(t.Context(), func(_ context.Context, targets []agentpolicy.Target) error {
+		addressed = append(addressed, targets...)
+		return nil
+	})
+	for _, tc2 := range []struct {
+		name   string
+		rootID string
+	}{{"named root", "primary"}, {"synthetic root", "worker-branch"}, {"no root", ""}} {
+		t.Run(tc2.name, func(t *testing.T) {
+			addressed = nil
+			testutil.FailErr(t, "branch path", tc.CheckPolicyTargets(ctx, []agentpolicy.Target{{RootID: tc2.rootID, Path: filepath.Join(branch, "pkg", "a.go"), Mutation: true}}))
+			if len(addressed) != 1 || addressed[0].RootID != "primary" || addressed[0].Path != filepath.Join(root, "pkg", "a.go") {
+				t.Fatalf("policy addresses = %+v", addressed)
+			}
+		})
+	}
+	addressed = nil
+	testutil.FailErr(t, "outside the branch", tc.CheckPolicyTargets(ctx, []agentpolicy.Target{{Path: filepath.Join(t.TempDir(), "scratch"), Mutation: true}}))
+	if len(addressed) != 0 {
+		t.Fatalf("a path outside the branch was reviewed: %+v", addressed)
+	}
+}

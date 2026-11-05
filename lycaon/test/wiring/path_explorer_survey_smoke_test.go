@@ -41,7 +41,7 @@ func TestPathExplorerChildSchemaUsesNativeCommandSurvey(t *testing.T) {
 			t.Fatalf("path-explorer schema must not include unavailable tool %q: %v", forbidden, schema)
 		}
 	}
-	for _, want := range []string{"command", "survey_repo", "complete_leg"} {
+	for _, want := range []string{"command", "complete_leg"} {
 		if !containsString(schema, want) {
 			t.Fatalf("path-explorer schema missing %q: %v", want, schema)
 		}

@@ -79,7 +79,7 @@ func TestMidTurnRequirementFollowsWhatTheModelCanCite(t *testing.T) {
 					observed = match[1]
 				}
 			}
-			return "Cited by the handle the notice named [" + observed + ":1], and by path [notes.txt:2]."
+			return "Cited by the handle the notice named [" + observed + "], and by path [notes.txt:2]."
 		}, command: "echo two"},
 		{text: func(modelcall.CompletionRequest) string { return "The notes hold two lines [notes.txt:1]." }},
 		{text: func(modelcall.CompletionRequest) string { return "Nothing here to cite yet." }},

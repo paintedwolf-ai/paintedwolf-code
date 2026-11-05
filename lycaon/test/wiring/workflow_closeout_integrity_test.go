@@ -32,7 +32,7 @@ func TestWorkflowCloseoutCannotPromiseUncommittedAdvancement(t *testing.T) {
 			ctx := h.OwnerCtx(t, t.Context())
 			sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, h.ProjectDir(t, "incomplete-survey"))
 			testutil.FailErr(t, "create session", err)
-			run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0", Request: "Review the application's security boundaries."})
+			run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.1", Request: "Review the application's security boundaries."})
 			testutil.FailErr(t, "start survey", err)
 			settleScanObligationAndAdvance(t, h, ctx, run.ID, "plan")
 			eventsCh, unsubscribe, err := h.Events.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})

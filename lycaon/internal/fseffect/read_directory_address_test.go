@@ -6,17 +6,17 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func openNamedDirectory(t *testing.T, path string) *os.File {
 	t.Helper()
 	if err := os.Mkdir(path, 0o700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Mkdir failed", err)
 	}
 	dir, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "os.Open failed", err)
 	t.Cleanup(func() { _ = dir.Close() })
 	return dir
 }
@@ -38,7 +38,7 @@ func TestDirectoryAddressRereadsWithoutAllocatingUntilItMoves(t *testing.T) {
 		t.Fatalf("allocations = %v", allocations)
 	}
 	if err := os.Rename(first, filepath.Join(base, "moved")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Rename failed", err)
 	}
 	current, err := readDirectoryPath(dir, known)
 	if err != nil || filepath.Base(current) != "moved" {
@@ -48,13 +48,9 @@ func TestDirectoryAddressRereadsWithoutAllocatingUntilItMoves(t *testing.T) {
 
 func TestDirectoryPathReportsAMoveAfterAnEarlierRead(t *testing.T) {
 	base, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "filepath.EvalSymlinks failed", err)
 	root, err := OpenReadRoot(base)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "OpenReadRoot failed", err)
 	t.Cleanup(func() { _ = root.Close() })
 	first := filepath.Join(base, "first")
 	dir := openNamedDirectory(t, first)
@@ -63,7 +59,7 @@ func TestDirectoryPathReportsAMoveAfterAnEarlierRead(t *testing.T) {
 	}
 	moved := filepath.Join(base, "moved")
 	if err := os.Rename(first, moved); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Rename failed", err)
 	}
 	if path, err := root.DirectoryPath(dir); err != nil || path != moved {
 		t.Fatalf("path = %q, err = %v", path, err)

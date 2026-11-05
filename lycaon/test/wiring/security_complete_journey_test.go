@@ -43,8 +43,14 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		mu.Unlock()
 		if jobID == "" {
 			if turn == 1 {
-				content := progress.NewSQLStore(h.DB).Get(ctx, parentID)
-				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "update_progress", Args: map[string]any{"content": strings.ReplaceAll(content, "[ ]", "[x]")}}}}
+				current, err := progress.NewSQLStore(h.DB).Snapshot(ctx, parentID)
+				if err != nil {
+					t.Errorf("read progress: %v", err)
+					return modelcall.Completion{}
+				}
+				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "update_progress", Args: map[string]any{
+					"content": strings.ReplaceAll(current.Content, "[ ]", "[x]"), "expected_revision": current.Revision, "item_ids": current.ItemIDs,
+				}}}}
 			}
 			return modelcall.Completion{Content: body}
 		}
@@ -74,7 +80,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 	testutil.FailErr(t, "create survey", err)
 	parentID = sess.ID
-	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0", Request: "Review each trust boundary."})
+	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.1", Request: "Review each trust boundary."})
 	testutil.FailErr(t, "start survey", err)
 	scans := scan.NewSQLStore(h.DB)
 	inventory, err := scans.ListByWorkflowRunID(ctx, run.ID)

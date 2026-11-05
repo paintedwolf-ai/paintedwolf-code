@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -143,9 +144,7 @@ func TestAuthorityNoticeDependsOnAudience(t *testing.T) {
 // one header with their bodies unchanged, and a fetched page keeps its nonce frame.
 func TestInjectionFixturesProjectUnderOneHeader(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "fixtures", "injection", "fixtures.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "read file", err)
 	var fixtures []struct {
 		ID, Origin, Body string
 		Source           string
@@ -153,7 +152,7 @@ func TestInjectionFixturesProjectUnderOneHeader(t *testing.T) {
 		Effect           struct{ Kind, Marker string }
 	}
 	if err := json.Unmarshal(raw, &fixtures); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
 	markers := map[string]bool{}
 	for _, fx := range fixtures {

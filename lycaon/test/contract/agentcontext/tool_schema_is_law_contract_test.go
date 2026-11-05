@@ -57,6 +57,26 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 	}
 }
 
+func TestRetiredEditSchemaRejectCarriesCommandOperationCode(t *testing.T) {
+	root := contractcheck.RepoRoot(t)
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
+	exec := toolfixture.ContractToolExecutor(t)
+	exec.Metadata.SetToolSchemas(schemas)
+
+	_, err = exec.Invoke(context.Background(), "edit", map[string]any{"path": "ntp_check.py", "symbol": "query_server"}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: "implementer"},
+		Turn: tools.InvocationTurn{
+			TurnOfferedToolNames: []string{"command"},
+			TurnToolPlan:         toolsurface.Compile([]string{"command"}, nil),
+		},
+	})
+	if err == nil {
+		t.Fatal("expected edit schema reject")
+	}
+	assertStructuredRejectCode(t, err, "TOOL_COMMAND_OPERATION")
+}
+
 func TestNativeOwnersDoNotFmtMissingArg(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "tools", "native")

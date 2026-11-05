@@ -149,7 +149,9 @@ func runWorkerScriptOnHarness(t *testing.T, agentType string, scope *api.TaskSco
 	})
 	testutil.FailErr(t, "claim worker", err)
 	if _, err := wiringWorkerExecutor(h).Execute(ctx, *claimed, worker.RunContextForTask(*claimed, dir)); err != nil {
-		testutil.FailErr(t, "worker Execute", err)
+		if err != nil {
+			t.Fatalf("worker Execute: %v; results so far: %v", err, mock.results)
+		}
 	}
 	mock.mu.Lock()
 	defer mock.mu.Unlock()

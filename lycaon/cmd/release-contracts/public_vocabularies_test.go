@@ -8,9 +8,9 @@ import (
 
 func publicVocabularyFixture() treeRelease {
 	return treeRelease{
-		packsRoot + "/painted-wolf/platform/tools/native-tools.yaml":         []byte("native:\n  files: [read, copy]\nhost_produced_tools: [observe]\nruntime_registered_prefixes: [mcp_]\n"),
-		dispositionsPath:                                                     []byte(`{"tools":[{"tool":"copy","disposition":"replace-routine-schema"},{"tool":"read","disposition":"retain-domain-structured"}]}`),
-		"schemas/workflow_vocabulary.json":                                   []byte(`{"entries":[{"id":"complete","layer":"core","domain":"workflow","parameterized":false}]}`),
+		packsRoot + "/painted-wolf/platform/tools/native-tools.yaml": []byte("native:\n  files: [read, copy]\nhost_produced_tools: [observe]\nruntime_registered_prefixes: [mcp_]\n"),
+		dispositionsPath:                   []byte(`{"tools":[{"tool":"copy","disposition":"replace-routine-schema"},{"tool":"read","disposition":"retain-domain-structured"}]}`),
+		"schemas/workflow_vocabulary.json": []byte(`{"entries":[{"id":"complete","layer":"core","domain":"workflow","parameterized":false}]}`),
 		packsRoot + "/painted-wolf/platform/host/anchors/catalog.yaml":       []byte("schema_version: '2.0'\nanchors:\n  - id: gate.blocked\n"),
 		packsRoot + "/painted-wolf/themes/contributions/themes/example.yaml": []byte("id: painted-wolf/themes:example\n"),
 		packsRoot + "/painted-wolf/platform/tools/schemas/extra.yaml":        []byte("schema: {}\n"),

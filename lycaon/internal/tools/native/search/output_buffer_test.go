@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // countingOutput is a sink without source mappings, as a pipe producer is.
@@ -45,7 +46,7 @@ func TestPipeOutputGroupsRecordsInBoundedWrites(t *testing.T) {
 	var stdout countingOutput
 	reader := strings.NewReader(want.String())
 	if err := h.grepInput(readyInput{reader}, &stdout, io.Discard, "grep", "match"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "h.grepInput failed", err)
 	}
 	if stdout.String() != want.String() {
 		t.Fatalf("output differs: %d bytes, want %d", stdout.Len(), want.Len())
@@ -70,7 +71,7 @@ func TestPipeOutputReachesConsumerBeforeAWaitingRead(t *testing.T) {
 	var stdout countingOutput
 	input := &awaitedInput{stdout: &stdout, parts: []string{"match one\n", "match two\n"}}
 	if err := h.grepInput(input, &stdout, io.Discard, "grep", "match"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "h.grepInput failed", err)
 	}
 	if input.seen != "match one\n" {
 		t.Fatalf("before the second read the consumer had %q", input.seen)
@@ -107,7 +108,7 @@ func TestPipeOutputPrecedesLaterDiagnostics(t *testing.T) {
 	h := newHarness(t, grepTree)
 	var shared bytes.Buffer
 	if err := h.grepInput(io.NopCloser(strings.NewReader("")), &shared, &shared, "grep", "-h", "alpha", "a.txt", "missing.txt"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "h.grepInput failed", err)
 	}
 	found, diagnostic := strings.Index(shared.String(), "alpha"), strings.Index(shared.String(), "missing.txt")
 	if found < 0 || diagnostic < 0 || found > diagnostic {

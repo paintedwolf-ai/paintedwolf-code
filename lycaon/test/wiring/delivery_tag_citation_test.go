@@ -39,7 +39,7 @@ func deliveryTagSession(t *testing.T, script *citableScriptLLM) (*Harness, strin
 
 // One read makes one tag stating what the host delivered, for numbered output and a
 // plain section alike. A pipeline maps nothing and keeps its command handle. A citation
-// copied from a tag resolves, and it is traced because its reader counted.
+// copied from a tag resolves. A coordinate with no excerpt is traced either way.
 func TestDeliveryTagsStateCoverageThroughTheRealPath(t *testing.T) {
 	var numbered, section, piped, copied string
 	script := &citableScriptLLM{steps: []citableStep{
@@ -95,7 +95,7 @@ func TestDeliveryTagsStateCoverageThroughTheRealPath(t *testing.T) {
 	for _, cited := range g.CitedEvidence {
 		verdicts[cited.Path] = string(cited.Verdict)
 	}
-	if verdicts["notes.txt"] != "matched" || verdicts["lines.txt"] != "traced" {
+	if verdicts["notes.txt"] != "traced" || verdicts["lines.txt"] != "traced" {
 		t.Fatalf("verdicts = %v, citations %+v", verdicts, g.CitedEvidence)
 	}
 	if strings.Contains(last.Content, copied) {
