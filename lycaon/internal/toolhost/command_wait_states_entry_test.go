@@ -184,7 +184,7 @@ func TestCommandEntryRealTimeoutParksAndSettlesItsChild(t *testing.T) {
 func TestCommandEntryTimedReadDoesNotWakeSleepEarly(t *testing.T) {
 	f := newWaitStateFixture(t)
 	done := f.start(t, "sleep 120 | read -t 5 value")
-	f.waitTimers(2)
+	f.waitTimers(3)
 	f.clock.Advance(5 * time.Second)
 	pending := <-f.parked
 	if result := <-done; !strings.Contains(result, "parked") {
@@ -245,7 +245,7 @@ func TestCommandEntryTimedReadPreservesPartialInputAndInheritedDescriptor(t *tes
 	for state.Statement != "read -t 5 first" {
 		state = <-f.states
 	}
-	f.waitTimers(2)
+	f.waitTimers(3)
 	f.clock.Advance(5 * time.Second)
 	pending := <-f.parked
 	<-done
