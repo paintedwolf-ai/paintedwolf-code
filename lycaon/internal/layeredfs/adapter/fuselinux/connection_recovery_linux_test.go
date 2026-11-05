@@ -217,9 +217,11 @@ sys.exit(1)
 	}
 	_, err = os.Stat(attached)
 	testutil.FailErr(t, "helper attached the mount", err)
-	// Rollback keeps the records while anything is still mounted below the view.
-	recorded, err := adapter.LoadRecordedConnections(filepath.Join(runtimeDir, "view-attached"))
-	if err != nil || len(recorded) != 0 {
-		t.Fatalf("records after failed prepare: %+v err=%v", recorded, err)
+	table, err := os.ReadFile("/proc/self/mountinfo")
+	testutil.FailErr(t, "read mount table", err)
+	for line := range strings.Lines(string(table)) {
+		if strings.Fields(line)[4] == mountPath {
+			t.Fatalf("mount remains after failed prepare: %s", line)
+		}
 	}
 }
