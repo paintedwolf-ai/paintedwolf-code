@@ -1,3 +1,5 @@
+mod attention_probe;
+
 use mlx_rs::{memory, ops::indexing::*};
 use nativegen::mlx_engine::{Cache, Logits, Model, Result};
 use serde::Deserialize;
@@ -192,11 +194,14 @@ fn measure(model: &Model, spec: &Specification) -> Result<serde_json::Value> {
 
 fn run() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
-    if args.len() != 3 {
-        return Err("Expected model and benchmark input paths".into());
-    }
     if let Ok(path) = std::env::var("PW_REFERENCE_METALLIB") {
         mlx_rs::metal::set_metallib_path(path)?;
+    }
+    if args.get(1).map(String::as_str) == Some("--attention-probe") {
+        return attention_probe::run();
+    }
+    if args.len() != 3 {
+        return Err("Expected model and benchmark input paths".into());
     }
     let spec: Specification = serde_json::from_slice(&std::fs::read(&args[2])?)?;
     if spec.prompt_tokens.is_empty()
