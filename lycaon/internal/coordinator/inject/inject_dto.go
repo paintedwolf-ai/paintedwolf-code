@@ -50,6 +50,9 @@ type PhaseExitChoiceArm struct {
 // WorkflowRuntimeSnapshot is workflow-generic runtime metadata for inject.
 type WorkflowRuntimeSnapshot struct {
 	ReportDocumentEnabled bool
+	// PhaseOwesReport marks a phase gated on topology_report_delivered, with or
+	// without a report document.
+	PhaseOwesReport bool
 	CloseoutRetries       int
 	// ReportRating is the rating a report document answers, when the workflow
 	// declares one.

@@ -125,7 +125,8 @@ func (m *Snapshots) Project(
 		snap.Phases = append(snap.Phases, row)
 	}
 	if def, ok := manifest.PhaseForRun(active, active.CurrentPhase); ok {
-		snap.ReportDocumentEnabled = manifest.ReportEnabled() && workflowdef.PhaseHasGate(def, "topology_report_delivered")
+		snap.PhaseOwesReport = workflowdef.PhaseHasGate(def, "topology_report_delivered")
+		snap.ReportDocumentEnabled = manifest.ReportEnabled() && snap.PhaseOwesReport
 		snap.CloseoutRetries = def.CloseoutRetries
 		if brief := manifest.ReportBrief(); snap.ReportDocumentEnabled && brief != nil {
 			snap.ReportRating = &inject.ReportRatingView{Question: brief.Question, Levels: strings.Join(brief.LevelLabels(), ", "), Dimensions: brief.DimensionIDs(), Questions: brief.PromptText()}

@@ -17,6 +17,9 @@ type CompletionReportBinding struct {
 	// PhaseDeliversRunReport marks the phase the manifest gates on
 	// topology_report_delivered — the one declared to produce the run's report.
 	PhaseDeliversRunReport bool
+	// PhaseOwesReport marks a phase whose gate only a report can satisfy, so a reply
+	// with nothing to cite cannot end its turn there.
+	PhaseOwesReport bool
 	// CloseoutRetries is the workflow-configured retry limit for this phase,
 	// or 0 to use system defaults.
 	CloseoutRetries int
@@ -138,6 +141,7 @@ func completionReportBinding(st *promptLoopTurnState) CompletionReportBinding {
 		RunID:                  frame.RunContext.RunID,
 		Phase:                  frame.RunContext.CurrentPhase,
 		PhaseDeliversRunReport: frame.Runtime.ReportDocumentEnabled,
+		PhaseOwesReport:        frame.Runtime.PhaseOwesReport,
 		CloseoutRetries:        frame.Runtime.CloseoutRetries,
 	}
 }
