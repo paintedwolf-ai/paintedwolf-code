@@ -2,6 +2,9 @@ id: implement
 description: Implementer — product edits and command execution via command
 command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
+  code_rewrite: sticky
+  survey_repo: sticky
+  summarize: sticky
   recall: sticky
   restore_version: sticky
   scan_pack: true

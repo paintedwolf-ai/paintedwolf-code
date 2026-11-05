@@ -11,14 +11,14 @@ hosts: [coordinator, worker]
 **Choose the next read from the question and existing evidence.**
 
 {% if profile_has_summarize %}
-- **Explain a named file or area** → `summarize --path PATH --focus QUESTION` in `command`.
+- **Explain a named file or area** → `summarize` with `path` and `task`.
 - **Explain an area found through search** → summarize its containing path.
 {% endif %}
 {% if profile_has_command %}
 - **Locate an unfamiliar area** → `ls` or `find . -maxdepth 2 -type d` in `command`, then scope the next read.
 {% endif %}
 {% if profile_has_survey_repo %}
-- **Cannot name a destination** → `repo-map --path DIR` in `command`, then inspect the relevant destination. Use scoped search for routes or repeated configuration.
+- **Cannot name a destination** → `survey_repo`, then inspect the relevant destination. Use scoped search for routes or repeated configuration.
 {% endif %}
 {% if profile_has_command %}
 - **Path in hand is JSON or YAML and you need fields** → `jq '.field' file` or `yq` in `command`; print raw lines only for a verbatim anchor.

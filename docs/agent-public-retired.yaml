@@ -140,10 +140,6 @@ retired:
     kind: tool_name
     summary: Retired as a callable tool; the work runs through native forms in command.
     date: 2026-11-04
-  - id: code_rewrite
-    kind: tool_name
-    summary: Retired as a callable tool; the work runs through native forms in command.
-    date: 2026-11-04
   - id: copy
     kind: tool_name
     summary: Retired as a callable tool; the work runs through native forms in command.
@@ -269,14 +265,6 @@ retired:
     summary: Retired as a callable tool; the work runs through native forms in command.
     date: 2026-11-04
   - id: stat
-    kind: tool_name
-    summary: Retired as a callable tool; the work runs through native forms in command.
-    date: 2026-11-04
-  - id: summarize
-    kind: tool_name
-    summary: Retired as a callable tool; the work runs through native forms in command.
-    date: 2026-11-04
-  - id: survey_repo
     kind: tool_name
     summary: Retired as a callable tool; the work runs through native forms in command.
     date: 2026-11-04

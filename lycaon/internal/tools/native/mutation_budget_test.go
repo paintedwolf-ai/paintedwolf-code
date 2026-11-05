@@ -126,7 +126,7 @@ func TestGuardMutationContent(t *testing.T) {
 
 func TestSourceTransformsRejectGrowthPastTheBudget(t *testing.T) {
 	draft := padTo("package p\nfunc f() { fmt.Println(1) }\n", "// ", readcaps.MaxMutationBytes-8)
-	_, _, err := RewriteSource(t.Context(), "a.go", `fmt.Println($A)`, `log.Info($A, $A, $A, $A, $A, $A)`, draft)
+	_, _, err := RewriteSource(t.Context(), "a.go", "", `fmt.Println($A)`, `log.Info($A, $A, $A, $A, $A, $A)`, draft)
 	requireSizeReject(t, err, readcaps.MaxMutationBytes+1)
 	_, err = ReplaceLineRange("a.txt", "small\n", 1, 1, strings.Repeat("x", readcaps.MaxMutationBytes+1))
 	requireSizeReject(t, err, readcaps.MaxMutationBytes+1)

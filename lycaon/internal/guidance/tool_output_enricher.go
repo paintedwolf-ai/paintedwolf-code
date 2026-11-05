@@ -1,6 +1,7 @@
 package guidance
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -144,9 +145,7 @@ func (e *ToolOutputEnricher) appendFindOverflowNarrowIfNeeded(in EnrichInput, ac
 }
 
 func (e *ToolOutputEnricher) appendTUINotDrivenIfNeeded(in EnrichInput, acc *enrichAccumulator) bool {
-	switch strings.TrimSpace(in.Tool) {
-	case "command", "verify":
-	default:
+	if !toolcontract.ProgramResultTool(strings.TrimSpace(in.Tool)) {
 		return false
 	}
 	if acc.raised("TUI_NOT_DRIVEN") {

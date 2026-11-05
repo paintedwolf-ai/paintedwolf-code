@@ -14,6 +14,16 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/hostenv"
 )
 
+// formTools are callable tools that run through their native command form.
+var formTools = []struct {
+	name string
+	argv func(map[string]any) []string
+}{
+	{"summarize", native.SummarizeArgv},
+	{"survey_repo", native.SurveyRepoArgv},
+	{"code_rewrite", native.CodeRewriteArgv},
+}
+
 func registerCommandTools(
 	reg *tools.DefaultRegistry,
 	runner *hostcmd.Runner,

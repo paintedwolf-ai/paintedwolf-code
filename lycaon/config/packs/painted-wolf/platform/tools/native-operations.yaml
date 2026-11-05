@@ -6,7 +6,6 @@ operations:
     - write
     - edit
     - replace_lines
-    - code_rewrite
     - grep
     - find
     - jq
@@ -37,9 +36,6 @@ operations:
     - git_merge
     - git_stash
     - git_stash_list
-  meta:
-    - survey_repo
-    - summarize
   processes:
     - process_list
     - process_signal
@@ -50,7 +46,6 @@ grant_target_scope:
   write: path
   edit: path
   replace_lines: path
-  code_rewrite: path
   jq_edit: path
 
 multi_root:
@@ -59,7 +54,6 @@ multi_root:
     - write
     - edit
     - replace_lines
-    - code_rewrite
     - stat
     - wc
     - delete
@@ -90,8 +84,6 @@ multi_root:
     - find
     - grep
     - list_dir
-    - survey_repo
-    - summarize
   none:
     - process_list
     - process_signal
@@ -101,7 +93,6 @@ requires_worker_branch:
   - write
   - edit
   - replace_lines
-  - code_rewrite
   - jq_edit
   - delete
   - mkdir
@@ -120,14 +111,12 @@ mutates_content:
   - write
   - edit
   - replace_lines
-  - code_rewrite
   - jq_edit
 
 mutates_path:
   - write
   - edit
   - replace_lines
-  - code_rewrite
   - jq_edit
   - delete
   - copy
@@ -169,7 +158,6 @@ execution_capabilities:
   write: [file_change]
   edit: [file_change]
   replace_lines: [file_change]
-  code_rewrite: [file_change]
   jq_edit: [file_change]
   copy: [file_change]
   move: [file_change]
@@ -206,14 +194,12 @@ grant_identity_neutral_args:
 chunkable_payload:
   - write
   - replace_lines
-  - code_rewrite
 
 bounded_in_process:
   - read
   - write
   - edit
   - replace_lines
-  - code_rewrite
   - grep
   - find
   - jq
@@ -249,8 +235,6 @@ detach_after_budget:
   - grep
   - wc
   - list_dir
-  - summarize
-  - survey_repo
   - diff
   - git_status
   - git_diff
@@ -272,7 +256,6 @@ approval_reversibility:
   process_signal: recoverable
   chmod: recoverable
   chown: recoverable
-  code_rewrite: reversible
   copy: recoverable
   delete: recoverable
   diff: reversible
@@ -303,8 +286,6 @@ approval_reversibility:
   read: reversible
   replace_lines: reversible
   stat: reversible
-  summarize: reversible
-  survey_repo: reversible
   wc: reversible
   write: reversible
 
@@ -313,7 +294,6 @@ owner:
   process_signal: processes
   chmod: filesystem
   chown: filesystem
-  code_rewrite: filesystem
   copy: filesystem
   delete: filesystem
   diff: filesystem
@@ -344,8 +324,6 @@ owner:
   read: filesystem
   replace_lines: filesystem
   stat: filesystem
-  summarize: summarization
-  survey_repo: survey
   wc: filesystem
   write: filesystem
 
@@ -354,7 +332,6 @@ batch_policy:
   process_signal: serial
   chmod: serial
   chown: serial
-  code_rewrite: serial
   copy: serial
   delete: serial
   diff: shared
@@ -385,23 +362,14 @@ batch_policy:
   read: shared
   replace_lines: serial
   stat: shared
-  summarize: same_tool
-  survey_repo: shared
   wc: shared
   write: serial
-
-batch_concurrency_limit:
-  summarize: 4
-
-turn_order:
-  summarize: late
 
 lifecycle:
   process_list: read_only
   process_signal: effect_attempt
   chmod: effect_attempt
   chown: effect_attempt
-  code_rewrite: effect_attempt
   copy: effect_attempt
   delete: effect_attempt
   diff: read_only
@@ -432,7 +400,5 @@ lifecycle:
   read: read_only
   replace_lines: effect_attempt
   stat: read_only
-  summarize: read_only
-  survey_repo: read_only
   wc: read_only
   write: effect_attempt

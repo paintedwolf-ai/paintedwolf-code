@@ -125,9 +125,6 @@
       "chown": [
         "command"
       ],
-      "code_rewrite": [
-        "command"
-      ],
       "copy": [
         "command"
       ],
@@ -224,16 +221,10 @@
       "stat": [
         "command"
       ],
-      "summarize": [
-        "command"
-      ],
       "surface_note": {
         "content_contract": "paintedwolf.markdown_note",
         "version": 1
       },
-      "survey_repo": [
-        "command"
-      ],
       "wc": [
         "command"
       ],

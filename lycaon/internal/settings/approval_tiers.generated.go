@@ -7,6 +7,7 @@ var (
 	reversibleTools = []string{
 		"answer_decision",
 		"ask_user",
+		"code_rewrite",
 		"command_output",
 		"complete_leg",
 		"decline_worker_budget",
@@ -53,6 +54,8 @@ var (
 		"state_start",
 		"state_update",
 		"submit_verdict",
+		"summarize",
+		"survey_repo",
 		"update_progress",
 		"verify",
 		"view_image",
@@ -92,7 +95,6 @@ var (
 
 	// Native operations reached through command.
 	reversibleOperations = []string{
-		"code_rewrite",
 		"diff",
 		"edit",
 		"find",
@@ -113,8 +115,6 @@ var (
 		"read",
 		"replace_lines",
 		"stat",
-		"summarize",
-		"survey_repo",
 		"wc",
 		"write",
 	}

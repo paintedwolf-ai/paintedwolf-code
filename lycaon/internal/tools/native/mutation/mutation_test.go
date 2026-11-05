@@ -410,3 +410,21 @@ func TestEditReplaceLinesCodeRewriteAndSourceCapture(t *testing.T) {
 		t.Fatalf("captured source = %+v", captured)
 	}
 }
+
+// The form carries every argument the tool ships with.
+func TestCodeRewriteFormCarriesShippedArguments(t *testing.T) {
+	h := newHarness(t, map[string]string{"a.txt": "package main\nvar x = 1 + 2\n", "b.txt": "package main\nvar y = 1 + 2\n"})
+	r := h.run("", "code-rewrite", "--path", "a.txt", "--path", "b.txt", "--lang", "go", "--pattern", "1 + 2", "--rewrite", "3",
+		"--syntax-override-reason", "intentional")
+	if r.err != nil || r.result.Status != 0 {
+		t.Fatalf("code-rewrite = %+v %v", r.result, r.err)
+	}
+	for _, path := range []string{"a.txt", "b.txt"} {
+		if !strings.Contains(h.read(path), "= 3") {
+			t.Fatalf("%s = %q", path, h.read(path))
+		}
+	}
+	if r := h.run("", "code-rewrite", "--path", "a.txt", "--lang", "not-a-language", "--pattern", "3", "--rewrite", "4"); r.err == nil && r.result.Status == 0 {
+		t.Fatal("an unknown language was accepted")
+	}
+}

@@ -1,8 +1,11 @@
 # Native tool manifest.
 native:
   filesystem:
+    - code_rewrite
     - restore_version
   meta:
+    - summarize
+    - survey_repo
     - request_tools
     - verify
     - skills_read
@@ -36,11 +39,13 @@ grant_target_scope:
   verify: command
   terminal_open: command
   restore_version: path
+  code_rewrite: path
 
 # Multi-root modes declare labeled paths, union discovery, command cwd, or no path.
 # Codegen: ./task codegen:native-tool-contracts
 multi_root:
   path:
+    - code_rewrite
     - restore_version
     - scan_pack
     - pack_board
@@ -123,6 +128,9 @@ multi_root:
     - terminal_read
     - terminal_snapshot
     - terminal_close
+  discovery:
+    - summarize
+    - survey_repo
 
 # These write tools require the worker's private branch before execution.
 # Codegen: ./task codegen:worker-branch-tools
@@ -131,6 +139,7 @@ requires_worker_branch:
   - command
   - verify
   - terminal_open
+  - code_rewrite
 
 # Tools whose arguments carry file content the model authored. Read by human
 # content review, the coordinator write-surface rejects, and worker completion
@@ -143,6 +152,7 @@ requires_worker_branch:
 # Codegen: ./task codegen:native-tool-contracts
 mutates_content:
   - content_apply
+  - code_rewrite
 
 # Tools that mutate a path named in their own structured arguments. The approval
 # gate reads this to classify a declared file target as a write crossing (so a
@@ -162,6 +172,7 @@ mutates_path:
   # remote-origin classification applies.
   # render_view writes only when the model supplies `dest`.
   - render_view
+  - code_rewrite
 
 # Tools whose arguments resolve managed-secret references, and the outbound
 # screen that reviews the resolved execution copy. command and terminal screens
@@ -243,6 +254,7 @@ execution_capabilities:
     - package_execution
   terminal_send:
     - held_terminal_input
+  code_rewrite: [file_change]
 
 # Listing one family member on a surface grants the rest. resource_implied
 # names the control tools made available by a live resource; command's job
@@ -322,6 +334,7 @@ survey_neutral:
 # Codegen: ./task codegen:native-tool-contracts
 bounded_in_process:
   - restore_version
+  - code_rewrite
 
 # Session shape a tool belongs to. A profile grants capability and cannot say
 # which shape is running: explore_readonly serves scout legs and editor inspect
@@ -430,6 +443,9 @@ approval_reversibility:
   workflow_persist: reversible
   workflow_transition: reversible
   workflow_user_feedback: reversible
+  code_rewrite: reversible
+  summarize: reversible
+  survey_repo: reversible
 
 # Subsystem owner for commit and recovery.
 owner:
@@ -512,6 +528,9 @@ owner:
   workflow_persist: workflows
   workflow_transition: workflows
   workflow_user_feedback: workflows
+  code_rewrite: filesystem
+  summarize: summarization
+  survey_repo: survey
 
 # Sibling execution policy for each tool.
 batch_policy:
@@ -594,6 +613,9 @@ batch_policy:
   workflow_persist: serial
   workflow_transition: serial
   workflow_user_feedback: serial
+  code_rewrite: serial
+  summarize: same_tool
+  survey_repo: shared
 
 # Boolean schema arguments that explicitly enable otherwise serial same-tool
 # calls in one assistant response. Omission preserves serial execution.
@@ -605,6 +627,7 @@ batch_opt_in_arg:
 batch_concurrency_limit:
   fetch_url: 4
   web_search: 4
+  summarize: 4
 
 # Presence of the named argument keeps that call serial even when opted in.
 batch_serial_when_arg:
@@ -615,6 +638,7 @@ turn_order:
   complete_leg: terminal
   request_decision: terminal
   wait: terminal
+  summarize: late
 
 # Durability shape for each tool operation.
 lifecycle:
@@ -697,3 +721,13 @@ lifecycle:
   workflow_persist: effect_attempt
   workflow_transition: db_transaction
   workflow_user_feedback: read_only
+  code_rewrite: effect_attempt
+  summarize: read_only
+  survey_repo: read_only
+
+chunkable_payload:
+  - code_rewrite
+
+detach_after_budget:
+  - summarize
+  - survey_repo

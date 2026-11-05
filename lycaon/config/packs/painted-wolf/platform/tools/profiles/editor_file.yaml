@@ -5,6 +5,8 @@ description: >
   or spawn/delegate. Used by inline edit and the seven selection verbs.
 command_effects: [read_only, mutation]
 tools:
+  code_rewrite: sticky
+  summarize: sticky
   command: sticky
   command_output: sticky
   command_stop: sticky

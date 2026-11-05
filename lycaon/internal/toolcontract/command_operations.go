@@ -45,3 +45,28 @@ func CommandOperations() ([]string, error) {
 	slices.Sort(out)
 	return out, nil
 }
+
+// CommandFormTool reports whether a callable tool runs through its command form.
+func CommandFormTool(name string) bool {
+	tools, err := commandFormTools()
+	return err == nil && tools[name]
+}
+
+var commandFormTools = sync.OnceValues(func() (map[string]bool, error) {
+	catalog, err := ReadOnlyLanguageV1()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, disposition := range catalog.Tools {
+		if disposition.Disposition == DispositionToolAndCommandForm {
+			out[disposition.Tool] = true
+		}
+	}
+	return out, nil
+})
+
+// ProgramResultTool reports whether a tool's result is a command program outcome.
+func ProgramResultTool(name string) bool {
+	return name == "command" || name == "verify" || CommandFormTool(name)
+}

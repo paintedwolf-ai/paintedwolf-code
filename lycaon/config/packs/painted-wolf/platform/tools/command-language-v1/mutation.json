@@ -1554,7 +1554,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "code-rewrite --pattern PATTERN --rewrite TEXT --path PATH [--recursive] [--dry-run]",
+      "argv": "code-rewrite --pattern PATTERN --rewrite TEXT --path PATH ... [--recursive] [--dry-run] [--lang NAME] [--syntax-override-reason TEXT]",
       "forms": [
         {
           "spellings": [
@@ -1611,9 +1611,33 @@
           "fixture_id": "code-rewrite-option-dryrun",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "--lang"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "code-rewrite-option-lang",
+          "consumption": "fixed",
+          "sample_values": [
+            "go"
+          ]
+        },
+        {
+          "spellings": [
+            "--syntax-override-reason"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "code-rewrite-option-syntax-override-reason",
+          "consumption": "fixed",
+          "sample_values": [
+            "intentional intermediate state"
+          ]
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. code-rewrite --pattern PATTERN --rewrite TEXT --path PATH [--recursive] [--dry-run]",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. code-rewrite --pattern PATTERN --rewrite TEXT --path PATH ... [--recursive] [--dry-run] [--lang NAME] [--syntax-override-reason TEXT]",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -1671,7 +1695,7 @@
           }
         }
       },
-      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring. Repeat --path for several targets. --lang overrides the grammar chosen from the file name.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/code_rewrite.go",
         "tests": [

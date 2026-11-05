@@ -1487,7 +1487,7 @@
       ],
       "family": "inspect",
       "owner": "survey",
-      "argv": "repo-map [--path PATH] [--depth N]",
+      "argv": "repo-map [--path PATH] [--depth N] [--bundle NAME]",
       "forms": [
         {
           "spellings": [
@@ -1512,9 +1512,21 @@
           "sample_values": [
             "1"
           ]
+        },
+        {
+          "spellings": [
+            "--bundle"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "repo-map-option-bundle",
+          "consumption": "fixed",
+          "sample_values": [
+            "layout_overview"
+          ]
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. repo-map [--path PATH] [--depth N]",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. repo-map [--path PATH] [--depth N] [--bundle NAME]",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -1562,7 +1574,7 @@
           }
         }
       },
-      "notes": "Report root metadata at --depth 0. Positive depth limits observed descendants relative to --path; omitted depth keeps full subtree rollups. A warming inventory can return immediate children with its state shown.",
+      "notes": "Report root metadata at --depth 0. Positive depth limits observed descendants relative to --path; omitted depth keeps full subtree rollups. A warming inventory can return immediate children with its state shown. --bundle selects the catalog map: layout_overview by default, ssot_drift or api_routes.",
       "reuse": {
         "implementation": "lycaon/internal/survey/repo_tool.go",
         "tests": [
@@ -1591,7 +1603,7 @@
       "aliases": [],
       "family": "inspect",
       "owner": "summarization",
-      "argv": "summarize --path PATH [--focus TEXT] [--cursor TOKEN]",
+      "argv": "summarize [--path PATH ...] [--content TEXT] [--focus TEXT] [--pattern RE2] [--cursor TOKEN]",
       "forms": [
         {
           "spellings": [
@@ -1628,9 +1640,33 @@
           "sample_values": [
             "continuation-token"
           ]
+        },
+        {
+          "spellings": [
+            "--content"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "summarize-option-content",
+          "consumption": "fixed",
+          "sample_values": [
+            "alpha"
+          ]
+        },
+        {
+          "spellings": [
+            "--pattern"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "summarize-option-pattern",
+          "consumption": "fixed",
+          "sample_values": [
+            "alpha"
+          ]
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. summarize --path PATH [--focus TEXT]",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. summarize [--path PATH ...] [--content TEXT] [--focus TEXT] [--pattern RE2] [--cursor TOKEN]",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -1678,7 +1714,7 @@
           }
         }
       },
-      "notes": "Prints a structured summary of pinned source. Follow-up actions name command and carry literal native programs; --cursor continues the same path and focus. Digest text orients; source windows carry evidence.",
+      "notes": "Prints a structured summary of pinned source, or of inline --content when no path is given. Repeat --path for up to 16 files or directories; --pattern is an RE2 content pattern within them. Follow-up actions name command and carry literal native programs; --cursor continues the same path and focus. Digest text orients; source windows carry evidence.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/survey/summarize.go",
         "tests": [

@@ -9,7 +9,7 @@ import (
 // ObserveNativeOperation supplements an actual program call with its reached
 // operation. Tool and tool_args retain the submitted model-call meaning.
 func (gc *GuardContext) ObserveNativeOperation(operation toolcontract.BoundOperation) error {
-	if gc == nil || (gc.Invocation.Tool != "command" && gc.Invocation.Tool != "verify") {
+	if gc == nil || !toolcontract.ProgramResultTool(gc.Invocation.Tool) {
 		return fmt.Errorf("native observation requires actual program tool identity")
 	}
 	if err := operation.Invocation().Validate(); err != nil {
