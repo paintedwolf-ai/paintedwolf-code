@@ -33,9 +33,6 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 		want string
 	}{
 		{tool: "task", args: map[string]any{}, want: "TOOL_ARGS_INVALID"},
-		{tool: "read", args: map[string]any{"filepath": "x.go"}, want: "received keys: filepath"},
-		{tool: "edit", args: map[string]any{"path": "ntp_check.py", "symbol": "query_server"}, want: "TOOL_ARGS_INVALID"},
-		{tool: "code_rewrite", args: map[string]any{"pattern": "a", "rewrite": "b"}, want: "TOOL_ARGS_INVALID"},
 		{tool: "delegate_init", args: map[string]any{"blueprint_path": "p1"}, want: "TOOL_ARGS_INVALID"},
 	}
 	for _, tc := range cases {

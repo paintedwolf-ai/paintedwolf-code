@@ -200,3 +200,23 @@ func TestLastAssistantAuditSkipsAgentNotes(t *testing.T) {
 		t.Fatalf("a note alone produced audit %+v", got)
 	}
 }
+
+func TestAmbientGateLeavesAHostAssembledTurnSettled(t *testing.T) {
+	gate := NewSimpleAmbientGroundingGate(DefaultGroundingConfig())
+	for _, tc := range []struct {
+		name string
+		in   AmbientGroundingInput
+		want bool
+	}{
+		{"ungrounded", AmbientGroundingInput{LastAuditUngrounded: true}, false},
+		{"host assembled", AmbientGroundingInput{LastAuditUngrounded: true, LastAuditHostAssembled: true}, true},
+		{"host assembled with an unsummarized worker", AmbientGroundingInput{LastAuditHostAssembled: true, Jobs: []api.WorkerTask{{ID: "j1", Status: api.WorkerStatusComplete}}}, true},
+		{"unsummarized worker", AmbientGroundingInput{Jobs: []api.WorkerTask{{ID: "j1", Status: api.WorkerStatusComplete}}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := gate.CheckTurn(context.Background(), tc.in); got.OK != tc.want {
+				t.Fatalf("verdict = %+v, want OK %v", got, tc.want)
+			}
+		})
+	}
+}

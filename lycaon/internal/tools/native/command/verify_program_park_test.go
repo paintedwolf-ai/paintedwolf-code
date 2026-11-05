@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,7 +27,10 @@ func TestVerifyProgramParkRetainsIdentityAndSettledCheck(t *testing.T) {
 	f := newParkFixture(t, program)
 	runs := &verifyRunRecorder{}
 	f.Runtime.SourceRuns = runs
-	raw, err := f.Invoke(t, t.Context(), "verify", map[string]any{"command": "sleep 120"}, (&native.VerifyTool{Programs: f.Runtime}).Run)
+	raw, err := f.Invoke(t, t.Context(), "verify", map[string]any{"command": "sleep 120"}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+		tc.Execution.VerificationCheck = true
+		return f.Runtime.Run(ctx, "verify", args, tc)
+	})
 	testutil.FailErr(t, "park verification", err)
 	var parked command.ParkedProgramResult
 	testutil.FailErr(t, "decode parked verification", json.Unmarshal([]byte(raw), &parked))

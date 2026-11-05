@@ -167,15 +167,15 @@ func TestMarkdownRunCommitsDeliverableReport(t *testing.T) {
 	}
 }
 
-// AC-CLO-02, D5: a tool-free reply is delivered too, honestly evidence-optional.
-func TestMarkdownRunDeliversEvidenceOptionalReply(t *testing.T) {
+// AC-CLO-02: a tool-free reply is published, honestly evidence-optional, and delivers no report.
+func TestMarkdownRunPublishesEvidenceOptionalReplyWithoutReporting(t *testing.T) {
 	r := newMarkdownRun(t, &modelcall.Completion{Content: "You're welcome."})
 	_, message := r.run(t, []api.Message{{ID: "user", Role: api.MessageRoleUser, Content: "Thanks."}})
 	g := message.Grounding
 	if g == nil || !g.EvidenceOptional || !g.Traced || g.HostAssembled {
 		t.Fatalf("grounding = %+v", g)
 	}
-	if message.Kind != api.MessageKindCompletionReport || !reportTopology(t, message) {
+	if message.Kind != api.MessageKindCompletionReport || reportTopology(t, message) {
 		t.Fatalf("message = %+v", message)
 	}
 }

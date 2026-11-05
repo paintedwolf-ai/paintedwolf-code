@@ -106,11 +106,13 @@ func reportNotAcceptedFailure(defects []api.CompletionReportDefect, phase string
 	}
 }
 
-// ReportPhaseCompletion binds delivery to a committed completion of this phase.
+// ReportPhaseCompletion binds delivery to a committed completion of this phase. A
+// reply that had nothing to cite is published but delivers no phase's report.
 // Workflows without document output still require their ordinary grounded reply.
+// A reply that had nothing to cite is published but delivers no report.
 func ReportPhaseCompletion(message api.Message, run *api.WorkflowRun, manifest workflowdef.Manifest) bool {
 	if message.Role != api.MessageRoleAssistant || message.Kind != api.MessageKindCompletionReport ||
-		message.Grounding == nil || message.WorkflowRunID != run.ID || len(message.ToolCalls) != 0 ||
+		message.Grounding == nil || message.Grounding.EvidenceOptional || message.WorkflowRunID != run.ID || len(message.ToolCalls) != 0 ||
 		(message.DraftStatus != "" && message.DraftStatus != api.DraftStatusCommitted) ||
 		(message.Visibility != "" && message.Visibility != api.MessageVisibilityTranscript) {
 		return false

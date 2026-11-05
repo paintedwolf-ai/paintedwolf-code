@@ -18,12 +18,11 @@ copy:
   what: '{{ tool }} needs a file path; {{ paintedwolf.path }} is a directory.'
   cause: This operation consumes file contents. A symbol lookup also requires a concrete file path.
   why: Separating file read from directory listing keeps survey JSON structured and capped.
-  fix: '{% if paintedwolf.can_list_dir %}Call `list_dir(path="{{ paintedwolf.path }}")` for one level;
-    use path "." for the repo root.{% endif %}{% if paintedwolf.can_find %} Use `find` with type dir for
-    a directory tree or a file filter to locate candidate files.{% endif %}{% if paintedwolf.can_grep
-    %} To locate a symbol across files, use `grep` with path="{{ paintedwolf.path }}" and structural true,
-    or text grep to narrow.{% endif %}{% if paintedwolf.can_read %} Read a resulting concrete file with
-    `read(path=<file>, symbol=<name>)` or a bounded line range.{% endif %} If the needed discovery tool
+  fix: '{% if paintedwolf.can_list_dir %}List one level with `ls {{ paintedwolf.path }}` in `command`;
+    use `.` for the repo root.{% endif %}{% if paintedwolf.can_find %} Use `find` in `command` with `-type d` for
+    a directory tree or a name filter to locate candidate files.{% endif %}{% if paintedwolf.can_grep
+    %} To locate a symbol across files, use `grep -rn` in `command` under {{ paintedwolf.path }}.{% endif %}{% if paintedwolf.can_read %} Read a resulting concrete file with
+    `cat -n FILE`, or `sed -n ''A,Bp'' FILE` for a bounded line range.{% endif %} If the needed discovery tool
     is absent, use an already observed file path or report the missing path information to the caller.'
   instead: Choose the actual file needed for the operation; do not repeat the directory request or assume
     a missing tool can be called.

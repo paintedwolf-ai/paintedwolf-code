@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
@@ -28,6 +30,8 @@ func newCommandTool(t *testing.T) (*command.CommandTool, *bgprocess.Registry) {
 		{ID: "implement", Tools: map[string]bool{"command": true}},
 	})
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
+	// Command output reads are screened, so a registry without a projector withholds them.
+	reg.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 	return &command.CommandTool{
 		Runner:     hostcmd.NewRunner(),
 		Boundary:   boundary,

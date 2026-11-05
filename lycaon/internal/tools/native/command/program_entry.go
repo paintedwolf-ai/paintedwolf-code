@@ -111,7 +111,9 @@ type SessionOwners interface {
 
 // programRun is one invocation's frozen frame, surface and ledger bindings.
 type programRun struct {
-	tool            string
+	tool string
+	// windows holds source windows its operations returned, until output delivery.
+	windows         *tools.ProgramWindows
 	control         programControlDefinition
 	publicationOnce sync.Once
 	publicationErr  error
@@ -253,6 +255,8 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	releaseDocuments := release
 	release = func() { documents.close(); releaseDocuments() }
 	ctx = context.WithValue(ctx, programDocumentsKey{}, documents)
+	run.windows = &tools.ProgramWindows{}
+	ctx = tools.WithProgramWindows(ctx, run.windows)
 	ctx = tools.WithCommandReadObserver(ctx, documents.read)
 	failureAttempt, verification, err := beginProgramAttempt(ctx, r.FailureTracker, tc, args, paths.Cwd().Abs)
 	if err != nil {

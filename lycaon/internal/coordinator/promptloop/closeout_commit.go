@@ -92,7 +92,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	}
 
 	// Missing references are attached from host evidence without another model turn.
-	if observation.citations.CitationsRequired {
+	if observation.citations.CitationsRequired || owesReportWithoutEvidence(st, observation.citations.Grounding) {
 		code := strings.TrimSpace(observation.citations.Code)
 		if code == "" {
 			code = guidance.CloseoutCitationsRequiredCode(surfaceID)
@@ -142,6 +142,13 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	out.history = history
 	out.assistantMsg = committed
 	return out, nil
+}
+
+// owesReportWithoutEvidence is a reply that had nothing to cite, in a phase only a
+// report can complete. It would otherwise end the turn with the gate open and nothing
+// left to wake the coordinator.
+func owesReportWithoutEvidence(st *promptLoopTurnState, grounding *api.CitationGrounding) bool {
+	return grounding != nil && grounding.EvidenceOptional && completionReportBinding(st).PhaseOwesReport
 }
 
 func (l *turnCloseout) rejectCloseoutGrounding(

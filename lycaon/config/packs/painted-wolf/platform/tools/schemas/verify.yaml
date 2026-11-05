@@ -28,7 +28,7 @@ schema:
             type: string
             maxLength: 1024
           description: Exact HTTP origins (scheme, host, port), without paths, query parameters, or credentials.
-    command: {type: string, description: "Bash check source; omitted runs the selected project check."}
+    command: {type: string, description: "Bash source. Leave empty for the default."}
     cwd: {type: string, description: "Folder path, `@label/...`, or `@scratch/...`."}
     timeout_ms: {type: integer, minimum: 1000, maximum: 7200000, description: Deadline ms.}
     socks_proxy: {type: boolean, default: false, description: SOCKS5h proxy.}

@@ -2,6 +2,7 @@ package literal
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools"
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/fileoutline"
@@ -113,7 +114,7 @@ func runSummarize(inv *invocation) error {
 	}
 	diskCtx := inv.tc
 	diskCtx.Source.EditorDocuments = nil
-	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, request, diskCtx)
+	resp, windows, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, request, diskCtx)
 	if err != nil {
 		return err
 	}
@@ -122,6 +123,11 @@ func runSummarize(inv *invocation) error {
 		resp.NextActions[i], err = action.CommandFollowup()
 		if err != nil {
 			return fmt.Errorf("summarize follow-up: %w", err)
+		}
+	}
+	for _, window := range windows {
+		if window.Path != "inline" {
+			tools.RecordProgramWindow(inv.ctx, tools.ProgramWindow{Path: window.Path, Body: window.Body})
 		}
 	}
 	return inv.structured(resp)

@@ -126,3 +126,71 @@ func TestPipelineCoordinateRepairsThroughACommandExcerpt(t *testing.T) {
 		t.Fatalf("the excerpt on the command did not ground: %q %+v", last.Content, last.Grounding)
 	}
 }
+
+// A host operation that returns source windows records them from its own result, so a
+// window cites by its handle and by path. Operations that return no source text keep
+// only their command handle.
+func TestProgramOperationWindowsAreCitableThroughTheRealPath(t *testing.T) {
+	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
+	const source = "package audit\n\n// Alpha adds one.\nfunc Alpha(n int) int {\n\treturn n + 1\n}\n"
+	var windowResult, outlineResult, repoResult, surveyResult string
+	var handle, path, lines string
+	script := &citableScriptLLM{steps: []citableStep{
+		{command: "summarize --path audit.go --focus Alpha"},
+		{text: func(req modelcall.CompletionRequest) string {
+			windowResult = newestToolContent(req)
+			return ""
+		}, command: "outline --path audit.go"},
+		{text: func(req modelcall.CompletionRequest) string {
+			outlineResult = newestToolContent(req)
+			return ""
+		}, command: "repo-map --path . --depth 1"},
+		{text: func(req modelcall.CompletionRequest) string {
+			repoResult = newestToolContent(req)
+			return ""
+		}, command: "survey-repo --path . --depth 1"},
+		{text: func(req modelcall.CompletionRequest) string {
+			surveyResult = newestToolContent(req)
+			if match := deliveryTagRE.FindStringSubmatch(windowResult); match != nil {
+				handle = match[1]
+				path, lines, _ = strings.Cut(match[2], ":")
+			}
+			first, _, _ := strings.Cut(lines, "-")
+			return "Alpha is in the window [" + handle + ":" + first + "], which also cites by path [" + path + ":" + first + "]."
+		}},
+	}}
+	h := BuildForTest(t, WithLLMClient(script))
+	dir := t.TempDir()
+	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(dir, "audit.go"), []byte(source), 0o644))
+	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
+	testutil.FailErr(t, "create session", err)
+	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
+	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "read the file")
+	testutil.FailErr(t, "prompt", err)
+
+	if handle == "" || path != "audit.go" {
+		t.Fatalf("summarize gave no window tag: %s", windowResult)
+	}
+	for name, result := range map[string]string{"outline": outlineResult, "repo-map": repoResult, "survey-repo": surveyResult} {
+		if deliveryTagRE.MatchString(result) || !strings.Contains(result, "command#") {
+			t.Fatalf("%s should hold only its command handle: %.300s", name, result)
+		}
+	}
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read messages", err)
+	var last wire.Message
+	for _, msg := range msgs {
+		if msg.Role == wire.MessageRoleAssistant && len(msg.ToolCalls) == 0 && !wire.IsAgentNoteMessage(msg) {
+			last = msg
+		}
+	}
+	g := last.Grounding
+	if g == nil || !g.Traced || g.HostAssembled || g.HintCode != "" || len(g.CitedEvidence) == 0 {
+		t.Fatalf("closeout %q grounding = %+v", last.Content, g)
+	}
+	for _, cited := range g.CitedEvidence {
+		if cited.Path != path || cited.Handle != handle {
+			t.Fatalf("citation %+v, want %s on %s", cited, handle, path)
+		}
+	}
+}
