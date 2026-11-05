@@ -243,7 +243,7 @@ func (r ArgvReview) Arguments() map[string]any {
 				continue
 			}
 		}
-		options = slices.Insert(options, 0, reviewedOptionArgument(option))
+		options = slices.Insert(options, 0, any(reviewedOptionArgument(option)))
 	}
 	operands := make([]any, len(r.Operands))
 	for i, operand := range r.Operands {

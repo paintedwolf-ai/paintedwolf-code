@@ -49,8 +49,8 @@ type NativePrepared struct {
 	DeferredSource   bool
 	RecordSourceRead func(context.Context) error
 	Review           commandprogram.ArgvReview
-	LoopbackPorts   []uint16
-	Invoke          func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+	LoopbackPorts    []uint16
+	Invoke           func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
 	// Command is the catalog command the bound form resolved to (git status
 	// for git -C DIR status); empty keeps the dispatched command.
 	Command string
