@@ -40,4 +40,4 @@ LINT_TIMEOUT="$(test_scale_go_duration "${LINT_BASE_TIMEOUT:?missing lint timeou
 printf 'lint: host load %s on %s CPUs; timeout=%s\n' "${LINT_LOAD}" "${LINT_CPUS}" "${LINT_TIMEOUT}" >&2
 
 PYTHONPATH="${ROOT}/scripts${PYTHONPATH:+:${PYTHONPATH}}" \
-  python3 -m ci_policy.lint_scope "${mode}" "${GOLANGCI}" "${LINT_TIMEOUT}" "$@"
+  python3 -m ci_policy.lint_scope "${mode}" "${GOLANGCI}" "$@"
