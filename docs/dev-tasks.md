@@ -862,8 +862,9 @@ those tools apply. Arguments that passthrough targets and non-catalog targets
 forward are still parsed by their own scripts when the run starts.
 
 Go lint accepts repeatable `--scope <package-pattern>` arguments, for example
-`./task lint:full -- --scope ./internal/launchguard`. Both Go vet and golangci-lint
-receive that scope; full mode retains its whole-program deadcode check. Without
+`./task lint:full -- --scope ./internal/launchguard`. Golangci-lint, which covers
+vet in full mode, and fast mode's Go vet receive that scope; full mode retains its
+whole-program deadcode check. Without
 `--scope`, analysis still covers `./...`. Other golangci-lint flags remain forwarded.
 
 ### Health and queue advisories

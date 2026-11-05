@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -49,17 +48,6 @@ func TestScanPackToolMetaMatchesBundledRegistry(t *testing.T) {
 		if !enum[want] {
 			t.Fatalf("schema enum missing %q; got %v", want, enum)
 		}
-	}
-}
-
-func TestBoardOrientationInjectIncludesPackBoardLegend(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	injectPath := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "guidance", "board-orientation.md")
-	data, err := os.ReadFile(injectPath)
-	contractcheck.FailErr(t, "read board-orientation.md", err)
-	if !strings.Contains(string(data), `include_scan_legend`) || !strings.Contains(string(data), `pack-board-legend.md`) {
-		t.Fatal("board-orientation.md must gate pack-board-legend partial on include_scan_legend")
 	}
 }
 

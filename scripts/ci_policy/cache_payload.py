@@ -3,7 +3,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 
 
@@ -34,19 +33,6 @@ def report_status():
                 summary.write(f"| {name} | {reason}; not probed |\n")
 
 
-def trim_go(path, limit=1024**3):
-    entries = sorted((p for p in path.rglob("*") if p.is_file() and not p.is_symlink()),
-                     key=lambda p: (p.stat().st_mtime_ns, str(p)))
-    total = sum(p.stat().st_size for p in entries)
-    for entry in entries:
-        if total <= limit:
-            break
-        if re.fullmatch(r"[0-9a-f]{64}-[ad]", entry.name):
-            total -= entry.stat().st_size
-            entry.unlink()
-    return total
-
-
 def prune_workspace(manifest, target=None):
     metadata = subprocess.run(["cargo", "metadata", "--manifest-path", str(manifest), "--no-deps", "--locked",
                                "--offline", "--format-version", "1"], capture_output=True, text=True, check=True)
@@ -65,7 +51,7 @@ def prune_workspace(manifest, target=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["status", "go", "workspace"])
+    parser.add_argument("command", choices=["status", "workspace"])
     parser.add_argument("path", type=Path, nargs="?")
     parser.add_argument("--target")
     args = parser.parse_args()
@@ -73,8 +59,6 @@ def main():
         report_status()
     elif args.path is None:
         parser.error("compiler preparation requires a path")
-    elif args.command == "go":
-        trim_go(args.path)
     else:
         prune_workspace(args.path, args.target)
 
