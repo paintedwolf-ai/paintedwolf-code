@@ -205,6 +205,9 @@ func (s *descriptorScope) prepare(ctx context.Context, f *frame, statement comma
 			prevented, err := f.expanding(r.SyntaxLocation, func(scope *frame) error {
 				var err error
 				plan.body, err = f.e.expander.ExpandDocument(ctx, scope, r)
+				if err == nil {
+					err = refuseDocumentSecretReference(plan.body, r.Span)
+				}
 				return err
 			})
 			if prevented || err != nil {

@@ -206,6 +206,9 @@ type ArgvReview struct {
 	// ValueSinks maps an option to the named argument that carries its last value,
 	// where the host screens and resolves managed-secret references.
 	ValueSinks map[string]string `json:"-"`
+	// PairSinks maps a name-value option to the named object that carries its
+	// pairs; the first definition of a name wins.
+	PairSinks map[string]string `json:"-"`
 }
 
 // PathTarget is a bound native file operand and its exact access direction.
@@ -237,6 +240,15 @@ func (r ArgvReview) Arguments() map[string]any {
 	sunk := make(map[string]any, len(r.ValueSinks))
 	for i := len(r.Options) - 1; i >= 0; i-- {
 		option := r.Options[i]
+		if slot, ok := r.PairSinks[option.Option]; ok && len(option.Values) == 2 {
+			pairs, _ := sunk[slot].(map[string]any)
+			if pairs == nil {
+				pairs = map[string]any{}
+				sunk[slot] = pairs
+			}
+			pairs[option.Values[0]] = option.Values[1]
+			continue
+		}
 		if slot, ok := r.ValueSinks[option.Option]; ok && len(option.Values) == 1 {
 			if _, taken := sunk[slot]; !taken {
 				sunk[slot] = option.Values[0]

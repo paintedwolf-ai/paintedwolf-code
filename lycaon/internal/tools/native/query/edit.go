@@ -7,6 +7,28 @@ import (
 )
 
 // runJqEdit preserves document formatting and publishes at the captured revision.
+// editVarsSlot is the contract's secret_reference_args entry for --arg values.
+const editVarsSlot = "vars"
+
+// editVars are the admitted --arg values: the host's resolved copy when it ran,
+// otherwise the bound words. The first definition of a name wins, as in jq.
+func (inv *invocation) editVars() map[string]any {
+	if resolution := inv.tc.Effects.Secrets; resolution != nil {
+		if resolved, ok := resolution.Arguments[editVarsSlot].(map[string]any); ok {
+			return resolved
+		}
+	}
+	vars := map[string]any{}
+	for _, item := range inv.argv.Items {
+		if option := item.Option; option != nil && option.Key == "--arg" && len(option.Values) == 2 {
+			if _, taken := vars[option.Values[0].Value]; !taken {
+				vars[option.Values[0].Value] = option.Values[1].Value
+			}
+		}
+	}
+	return vars
+}
+
 func runJqEdit(inv *invocation) error {
 	if operands := inv.argv.Operands().Values(); len(operands) > 0 {
 		return inv.usage(operands[0], "no operands")
@@ -52,7 +74,7 @@ func runJqEdit(inv *invocation) error {
 	if err := work.resize(2*parseBytes + (64 << 10)); err != nil {
 		return err
 	}
-	edited, err := nativejq.Edit(inv.ctx, nativejq.EditRequest{Path: bound.Resolved.DisplayPath, Format: format, Query: query, Text: source.text})
+	edited, err := nativejq.Edit(inv.ctx, nativejq.EditRequest{Path: bound.Resolved.DisplayPath, Format: format, Query: query, Text: source.text, Vars: inv.editVars()})
 	if err != nil {
 		return err
 	}

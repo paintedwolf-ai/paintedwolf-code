@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -12,6 +13,7 @@ const (
 	codeLimitExceeded     = "COMMAND_LIMIT_EXCEEDED"
 	codeOperandInvalid    = "COMMAND_OPERAND_INVALID"
 	codeSyntaxUnsupported = "COMMAND_SYNTAX_UNSUPPORTED"
+	codeToolArgsInvalid   = "TOOL_ARGS_INVALID"
 )
 
 // ExpansionError is a typed refusal of expansion or invocation-variable state,
@@ -111,6 +113,16 @@ func catalogExpansionLimits() (expansionLimits, error) {
 		globMatches: m["glob_matches"], visits: m["traversal_visits"], substitutionBytes: m["substitution_bytes"],
 		substitutionDepth: m["substitution_depth"], valueBytes: m["variable_value_bytes"],
 		documentBytes: m["here_document_bytes"], memory: m["expansion_memory_bytes"]}, nil
+}
+
+// refuseDocumentSecretReference keeps a reference out of a descriptor's document
+// body. Those bytes are stdin, which no consumer resolves, so writing them would
+// leave a file that looks configured and holds only the reference.
+func refuseDocumentSecretReference(body string, span toolcontract.SourceSpan) error {
+	if !secretmatch.ContainsReferenceToken(body) && !secretmatch.ContainsMalformedReferenceToken(body) {
+		return nil
+	}
+	return &ExpansionError{Code: codeToolArgsInvalid, Span: span, Expected: "a document without a managed secret reference"}
 }
 
 func invalidValue(span toolcontract.SourceSpan, expected string) *ExpansionError {

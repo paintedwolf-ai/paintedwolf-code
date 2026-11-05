@@ -234,8 +234,8 @@ func TestCommandFileSinkAsksBeforeWritingATrackedSecret(t *testing.T) {
 	}
 }
 
-// A builtin's argv and a path operand are not declared sinks: each form refuses
-// before anything is written. Heredoc text is stdin, which never resolves.
+// A builtin's argv, a path operand and a document body are not declared sinks:
+// each form refuses before anything is written.
 func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
 	run, sess := newSecretSinkRun(t)
 	reference := run.suppliedReference(t, sess)
@@ -243,6 +243,8 @@ func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
 	commands := []string{
 		"printf 'TOKEN=" + reference + "\\n' > redirect.env",
 		"printf 'TOKEN=" + reference + "\\n' | tee piped.env",
+		"cat > heredoc.env <<'EOF'\nTOKEN=" + reference + "\nEOF",
+		"cat > herestring.env <<< 'TOKEN=" + reference + "'",
 		"edit --path '" + reference + "' --old-string keep --new-string changed",
 	}
 	for _, command := range commands {
@@ -259,9 +261,9 @@ func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
 			t.Errorf("%q = %+v", commands[i], outcome)
 		}
 	}
-	for _, name := range []string{"redirect.env", "piped.env"} {
-		if body, err := os.ReadFile(filepath.Join(run.dir, name)); err == nil && strings.Contains(string(body), sinkSentinel) {
-			t.Errorf("%s holds the value", name)
+	for _, name := range []string{"redirect.env", "piped.env", "heredoc.env", "herestring.env"} {
+		if body, err := os.ReadFile(filepath.Join(run.dir, name)); err == nil && len(body) > 0 {
+			t.Errorf("%s holds %d bytes", name, len(body))
 		}
 	}
 	if got := run.file(t, existing); got != "keep\n" {
@@ -269,14 +271,64 @@ func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
 	}
 }
 
-func TestCommandHeredocKeepsAReferenceLiteral(t *testing.T) {
+// Resolution belongs to one invocation: a later edit in the same program gets its
+// own plain value, not the earlier operation's resolved copy.
+func TestCommandSecretResolutionStaysWithItsOperation(t *testing.T) {
 	run, sess := newSecretSinkRun(t)
 	reference := run.generatedReference(t, sess, secretcap.ScopeChat)
-	run.script.steps = []citableStep{{command: "cat > heredoc.env <<'EOF'\nTOKEN=" + reference + "\nEOF"}}
-	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
+	first := run.seed(t, "first.env", "TOKEN=old\n")
+	second := run.seed(t, "second.env", "TOKEN=old\n")
+	run.script.steps = []citableStep{{command: "edit --path first.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "' && edit --path second.env --old-string TOKEN=old --new-string TOKEN=plain"}}
+	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write both")
 	testutil.FailErr(t, "prompt", err)
 	run.outcomes(t)
-	if got := run.file(t, filepath.Join(run.dir, "heredoc.env")); got != "TOKEN="+reference+"\n" {
-		t.Fatalf("heredoc left %d bytes, want the literal reference", len(got))
+	if got := run.file(t, first); got != "TOKEN="+sinkSentinel+"\n" {
+		t.Fatalf("first file left %d bytes, want the resolved line", len(got))
+	}
+	if got := run.file(t, second); got != "TOKEN=plain\n" {
+		t.Fatalf("second file left %d bytes, want the plain line", len(got))
+	}
+}
+
+// A value line-oriented sinks must refuse reaches a document through jq-edit, which
+// encodes it for the document's format.
+func TestCommandJqEditArgCarriesAValueLineSinksRefuse(t *testing.T) {
+	const multiline = sinkSentinel + "\nsecond line"
+	run, sess := newSecretSinkRun(t)
+	put, err := run.h.Server.Admin.Capabilities.CheckpointActions.ManagedSecrets.Put(t.Context(), secretcap.PutRequest{
+		ProjectID: sess.ProjectID, ChatSessionID: run.session, SessionID: run.session, OperationID: uuid.NewString(),
+		Name: "multiline token", Scope: secretcap.ScopeChat, Origin: secretcap.OriginGenerated, Value: multiline,
+		Format: secretcap.FormatAlphanumeric, EntropyBits: 128,
+	})
+	testutil.FailErr(t, "put secret", err)
+	reference := put.Metadata.Reference
+	lines := run.seed(t, "lines.env", "TOKEN=old\n")
+	document := run.seed(t, "settings.json", "{\"name\":\"svc\"}\n")
+	run.script.steps = []citableStep{
+		{command: "edit --path lines.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"},
+		{command: "jq-edit --path settings.json --query '.token = $token' --arg token '" + reference + "'"},
+		{command: "jq-edit --path settings.json --query '.name = $name' --arg name renamed"},
+		{command: "jq-edit --path '" + reference + "' --query . --arg token value"},
+		{command: "jq-edit --path settings.json --query '.x = \"" + reference + "\"'"},
+	}
+	_, err = run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
+	testutil.FailErr(t, "prompt", err)
+	outcomes := run.outcomes(t)
+	want := []string{"SECRET_REFERENCE_VALUE_UNSAFE", "", "", "TOOL_ARGS_INVALID", "TOOL_ARGS_INVALID"}
+	if len(outcomes) != len(want) {
+		t.Fatalf("outcomes = %+v", outcomes)
+	}
+	for i, code := range want {
+		if outcomes[i].stopCode != code {
+			t.Errorf("command %d = %+v, want %q", i, outcomes[i], code)
+		}
+	}
+	if got := run.file(t, lines); got != "TOKEN=old\n" {
+		t.Fatalf("line sink left %d bytes", len(got))
+	}
+	var written map[string]string
+	testutil.FailErr(t, "decode document", json.Unmarshal([]byte(run.file(t, document)), &written))
+	if written["token"] != multiline || written["name"] != "renamed" || len(written) != 2 {
+		t.Fatalf("document has %d keys; token match %t", len(written), written["token"] == multiline)
 	}
 }
