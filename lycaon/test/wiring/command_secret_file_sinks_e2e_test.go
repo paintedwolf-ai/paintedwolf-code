@@ -214,7 +214,12 @@ func TestCommandFileSinkAsksBeforeWritingATrackedSecret(t *testing.T) {
 			if !strings.Contains(string(encoded), target) && !strings.Contains(string(encoded), "config.env") {
 				t.Fatalf("card does not name the write target: %s", encoded)
 			}
-			_, err = run.h.Sessions.Checkpoints.ResolveCheckpoint(run.h.OwnerCtx(t, t.Context()), run.session, card.ID, kind, &hitl.DecisionResult{Approved: approved}, nil)
+			owner := run.h.OwnerCtx(t, t.Context())
+			if approved {
+				_, err = run.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(owner, run.session, card.ID, card.ToolApproval.Plan.RecommendedOptionID)
+			} else {
+				_, err = run.h.Sessions.Checkpoints.ResolveCheckpoint(owner, run.session, card.ID, kind, &hitl.DecisionResult{Approved: false}, nil)
+			}
 			testutil.FailErr(t, "resolve card", err)
 			testutil.FailErr(t, "prompt", <-done)
 			want := "TOKEN=old\n"
