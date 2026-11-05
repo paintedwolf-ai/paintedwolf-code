@@ -1,0 +1,231 @@
+package wiring
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	wire "github.com/lycaon/lycaon/pkg/api"
+)
+
+const sinkSentinel = "sink-sentinel-Vq7rT2mZ9xK4pL8w"
+
+type secretSinkRun struct {
+	h       *Harness
+	session string
+	dir     string
+	script  *citableScriptLLM
+}
+
+func newSecretSinkRun(t *testing.T) (*secretSinkRun, *wire.Session) {
+	t.Helper()
+	dir := t.TempDir()
+	script := &citableScriptLLM{}
+	h := BuildForTest(t, WithLLMClient(script))
+	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
+	testutil.FailErr(t, "create session", err)
+	AttachDefaultAmbient(t, h, t.Context(), sess.ID)
+	h.SeedProgress(t, t.Context(), sess.ID)
+	return &secretSinkRun{h: h, session: sess.ID, dir: dir, script: script}, sess
+}
+
+// suppliedReference stores the sentinel the way a person enters it in settings.
+func (r *secretSinkRun) suppliedReference(t *testing.T, sess *wire.Session) string {
+	t.Helper()
+	body, err := json.Marshal(wire.CreateManagedSecretRequest{OperationID: uuid.NewString(), Name: "sink token", SecretValue: sinkSentinel})
+	testutil.FailErr(t, "encode secret", err)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects/"+sess.ProjectID+"/secrets", bytes.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+api.TestAPIToken)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	r.h.Server.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("create secret = %d %s", response.Code, response.Body)
+	}
+	var created wire.ManagedSecret
+	testutil.FailErr(t, "decode secret", json.Unmarshal(response.Body.Bytes(), &created))
+	return created.Reference
+}
+
+// generatedReference asks the host for chat-scoped random material.
+func (r *secretSinkRun) generatedReference(t *testing.T, sess *wire.Session) string {
+	t.Helper()
+	out, err := r.h.ToolRegistry.Run(t.Context(), "secret_generate", map[string]any{"name": "sink token", "scope": "chat"}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: sess.ProjectID, SessionID: r.session, ParentSessionID: r.session, ToolCallID: "generate-sink-token"}})
+	testutil.FailErr(t, "generate secret", err)
+	var created struct {
+		Secret struct {
+			Reference string `json:"reference"`
+		} `json:"secret"`
+	}
+	testutil.FailErr(t, "decode generated secret", json.Unmarshal([]byte(out), &created))
+	return created.Secret.Reference
+}
+
+func (r *secretSinkRun) seed(t *testing.T, name, content string) string {
+	t.Helper()
+	path := filepath.Join(r.dir, name)
+	testutil.FailErr(t, "seed "+name, os.WriteFile(path, []byte(content), 0o644))
+	return path
+}
+
+func (r *secretSinkRun) file(t *testing.T, path string) string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	testutil.FailErr(t, "read "+path, err)
+	return string(body)
+}
+
+// toolResults decodes the host's typed result for every tool message and fails if
+// the supplied value reached the transcript in any form.
+func (r *secretSinkRun) toolResults(t *testing.T) []map[string]any {
+	t.Helper()
+	messages, err := r.h.Store.GetMessages(t.Context(), r.session)
+	testutil.FailErr(t, "messages", err)
+	var results []map[string]any
+	for _, message := range messages {
+		if strings.Contains(message.Content, sinkSentinel) {
+			t.Fatalf("supplied value reached the %s transcript", message.Role)
+		}
+		if message.Role != wire.MessageRoleTool {
+			continue
+		}
+		var result map[string]any
+		testutil.FailErr(t, "decode tool result", json.Unmarshal([]byte(message.Content), &result))
+		results = append(results, result)
+	}
+	return results
+}
+
+// A host-generated chat value reaches a local file without a card, through both
+// the edit and replace-lines sinks.
+func TestCommandFileSinksResolveAChatGeneratedReference(t *testing.T) {
+	run, sess := newSecretSinkRun(t)
+	reference := run.generatedReference(t, sess)
+	edited := run.seed(t, "edit.env", "TOKEN=old\nkeep\n")
+	lines := run.seed(t, "lines.env", "first\nkeep\n")
+	run.script.steps = []citableStep{
+		{command: "edit --path edit.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"},
+		{command: "replace-lines --path lines.env --start 1 --end 1 --content 'TOKEN=" + reference + "'"},
+		{command: "edit --path edit.env --old-string 'TOKEN=" + reference + "' --new-string TOKEN=rotated"},
+	}
+	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
+	testutil.FailErr(t, "prompt", err)
+	for i, result := range run.toolResults(t) {
+		if result["state"] != "completed" {
+			t.Fatalf("tool %d = %v", i, result)
+		}
+	}
+	got := run.file(t, lines)
+	value, ok := strings.CutPrefix(got, "TOKEN=")
+	if !ok || !strings.HasSuffix(value, "\nkeep\n") || strings.Contains(got, reference) || len(value) <= len("\nkeep\n") {
+		t.Fatalf("replace-lines did not write the resolved value: file holds %d bytes", len(got))
+	}
+	// The old-string sink resolved too: the third call matched the written value.
+	if got := run.file(t, edited); got != "TOKEN=rotated\nkeep\n" {
+		t.Fatalf("edit left %d bytes, want the rotated line", len(got))
+	}
+}
+
+// A value a person supplied is not released by policy: the file screen raises a
+// card naming the reached write target, and only approval lets bytes land.
+func TestCommandFileSinkAsksBeforeWritingASuppliedSecret(t *testing.T) {
+	for _, approved := range []bool{false, true} {
+		name := "declined"
+		if approved {
+			name = "approved"
+		}
+		t.Run(name, func(t *testing.T) {
+			run, sess := newSecretSinkRun(t)
+			reference := run.suppliedReference(t, sess)
+			target := run.seed(t, "config.env", "TOKEN=old\n")
+			run.script.steps = []citableStep{{command: "edit --path config.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"}}
+			done := make(chan error, 1)
+			go func() {
+				_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
+				done <- err
+			}()
+			kind := wire.CheckpointKindToolApproval
+			var card wire.CheckpointEvent
+			testutil.WaitFor(t, func() bool {
+				pending, err := run.h.Sessions.Checkpoints.ListPending(t.Context(), run.session, &kind)
+				if err != nil || len(pending) == 0 {
+					return false
+				}
+				card = pending[0]
+				return true
+			})
+			if run.file(t, target) != "TOKEN=old\n" {
+				t.Fatal("bytes landed before the decision")
+			}
+			encoded, err := json.Marshal(card)
+			testutil.FailErr(t, "encode card", err)
+			if strings.Contains(string(encoded), sinkSentinel) {
+				t.Fatal("card carries the value")
+			}
+			if !strings.Contains(string(encoded), target) && !strings.Contains(string(encoded), "config.env") {
+				t.Fatalf("card does not name the write target: %s", encoded)
+			}
+			_, err = run.h.Sessions.Checkpoints.ResolveCheckpoint(run.h.OwnerCtx(t, t.Context()), run.session, card.ID, kind, &hitl.DecisionResult{Approved: approved}, nil)
+			testutil.FailErr(t, "resolve card", err)
+			testutil.FailErr(t, "prompt", <-done)
+			want := "TOKEN=old\n"
+			if approved {
+				want = "TOKEN=" + sinkSentinel + "\n"
+			}
+			if got := run.file(t, target); got != want {
+				t.Fatalf("file = %q, want %q", got, want)
+			}
+			run.toolResults(t)
+		})
+	}
+}
+
+// A builtin's byte stream and a path operand are not declared sinks: each form
+// refuses before anything is written, whatever would have consumed the bytes.
+func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
+	run, sess := newSecretSinkRun(t)
+	reference := run.suppliedReference(t, sess)
+	existing := run.seed(t, "existing.env", "keep\n")
+	commands := []string{
+		"printf 'TOKEN=" + reference + "\\n' > redirect.env",
+		"printf 'TOKEN=" + reference + "\\n' | tee piped.env",
+		"cat > heredoc.env <<'EOF'\nTOKEN=" + reference + "\nEOF",
+		"edit --path '" + reference + "' --old-string keep --new-string changed",
+	}
+	for _, command := range commands {
+		run.script.steps = append(run.script.steps, citableStep{command: command})
+	}
+	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
+	testutil.FailErr(t, "prompt", err)
+	results := run.toolResults(t)
+	if len(results) != len(commands) {
+		t.Fatalf("results = %d, want %d", len(results), len(commands))
+	}
+	for i, result := range results {
+		if result["stop_code"] != "TOOL_ARGS_INVALID" {
+			t.Errorf("%q = %v", commands[i], result)
+		}
+	}
+	for _, name := range []string{"redirect.env", "piped.env", "heredoc.env"} {
+		if _, err := os.Stat(filepath.Join(run.dir, name)); err == nil {
+			body, _ := os.ReadFile(filepath.Join(run.dir, name))
+			if strings.Contains(string(body), sinkSentinel) {
+				t.Errorf("%s holds the value", name)
+			}
+		}
+	}
+	if got := run.file(t, existing); got != "keep\n" {
+		t.Fatalf("existing file = %q", got)
+	}
+}

@@ -204,7 +204,7 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 				if err != nil {
 					return command.NativePrepared{}, err
 				}
-				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+				return command.NativePrepared{Mode: prepared.Mode, Review: prepared.Review, ReviewArguments: mutation.ReviewedArguments, Invoke: prepared.InvokeOwner}, nil
 			}}
 		}
 		for _, name := range queryOwners.Commands() {

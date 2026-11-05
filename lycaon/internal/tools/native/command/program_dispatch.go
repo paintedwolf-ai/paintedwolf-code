@@ -49,8 +49,11 @@ type NativePrepared struct {
 	DeferredSource   bool
 	RecordSourceRead func(context.Context) error
 	Review           commandprogram.ArgvReview
-	LoopbackPorts    []uint16
-	Invoke           func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
+	// ReviewArguments shapes the reviewed inputs when the form declares named
+	// value sinks; nil keeps the review's own arguments.
+	ReviewArguments func(commandprogram.ArgvReview) map[string]any
+	LoopbackPorts   []uint16
+	Invoke          func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)
 	// Command is the catalog command the bound form resolved to (git status
 	// for git -C DIR status); empty keeps the dispatched command.
 	Command string
@@ -438,7 +441,11 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	runStreams := streams
 	runStreams.Error = tracker
 	autoLoopback := prepared.LoopbackPorts
-	inputs := d.run.nativeArguments(review.Arguments(), operationDef.Facts().Contract, autoLoopback)
+	reviewed := review.Arguments()
+	if prepared.ReviewArguments != nil {
+		reviewed = prepared.ReviewArguments(review)
+	}
+	inputs := d.run.nativeArguments(reviewed, operationDef.Facts().Contract, autoLoopback)
 	expectedMode := prepared.Mode
 	var disclosed *NativePrepared
 	defer func() {

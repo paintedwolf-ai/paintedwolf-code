@@ -19,11 +19,11 @@ func runEdit(inv *invocation) error {
 	if !ok || path == "" {
 		return inv.usage(inv.name(), "--path PATH")
 	}
-	oldString, ok := inv.value("--old-string")
+	oldString, ok := inv.secretSink("--old-string")
 	if !ok || oldString == "" {
 		return inv.usage(inv.name(), "--old-string TEXT")
 	}
-	newString, ok := inv.value("--new-string")
+	newString, ok := inv.secretSink("--new-string")
 	if !ok {
 		return inv.usage(inv.name(), "--new-string TEXT")
 	}
@@ -88,7 +88,7 @@ func runReplaceLines(inv *invocation) error {
 	if !ok {
 		return inv.usage(inv.name(), "--end LINE")
 	}
-	content, ok := inv.value("--content")
+	content, ok := inv.secretSink("--content")
 	if !ok {
 		return inv.usage(inv.name(), "--content TEXT")
 	}
