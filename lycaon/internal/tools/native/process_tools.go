@@ -42,7 +42,7 @@ func (t *ProcessTools) List(ctx context.Context, args map[string]any, tc tools.T
 		if unattributed == nil {
 			unattributed = []hostprocess.ListeningSocket{}
 		}
-		raw, err := surveyjson.Marshal(map[string]any{"processes": snapshot.Processes, "unattributed_listeners": unattributed, "next_after_pid": snapshot.NextAfterPID, "snapshot_complete": snapshot.NextAfterPID == 0})
+		raw, err := surveyjson.Marshal(map[string]any{"processes": snapshot.Processes, "unattributed_listeners": unattributed, "next_after_pid": snapshot.NextAfterPID, "snapshot_complete": snapshot.NextAfterPID == 0 && snapshot.TableComplete})
 		return string(raw), err
 	}
 	snapshot, err := t.Service.List(ctx, processSession(tc), pid, after, limit)

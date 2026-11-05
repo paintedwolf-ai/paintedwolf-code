@@ -430,9 +430,10 @@ Loopback connection authority is separate from listening. It covers the approved
 In Balanced posture, a connection is silent only when the chat owns every port it names. Ownership is one of two structured facts, never timing and never workspace text:
 
 - **Launch lineage**: every process holding the listening socket descends from an action of this chat, through the same inherited descriptor the egress broker attributes dials by. A server a command left running stays its session's. Where the platform cannot observe lineage, ownership is unverified and the connection asks.
-- **Workspace container**: the container engine reports the port published by a running container whose compose working directory is this workspace, and the port was not listening when the engine started. If that start snapshot failed, absence from it proves nothing and the container is not attributed.
+- **Workspace container**: the container engine reports the port published by a running container whose compose working directory is this workspace, and the port was not listening when the engine started. If that start snapshot failed, or the host withheld sockets from it, absence from it proves nothing and the container is not attributed.
 - **Loopback only**: an owned listener or publication that is also reachable beyond loopback (a wildcard `0.0.0.0` or `::`, or another interface address) is not silenced.
 - **Everything else** is foreign: a service already listening at start, one the person starts later, another session's server, or a port whose holders the host cannot inspect. Connecting to it asks, which guards local databases and management APIs against SSRF.
+- **Withheld tables**: a host can hide other processes' rows from the kernel's listener table without an error, as macOS 27 does for some processes. A process walk still shows every listener of this user, so lineage ownership keeps working; a port with no row is then unknown rather than free.
 
 Ownership informs the verdict; it never records a lease by itself. Strict posture asks for every listener and connection regardless of ownership, and a denied answer is not bypassed by retrying. Light posture lets loopback connections proceed silently.
 

@@ -35,7 +35,7 @@ func (p *DefaultLoopbackProvenance) ObserveSessionListener(ctx context.Context, 
 	port := endpoint.Port()
 	targetAddr := endpoint.Addr().Unmap()
 	canonicalEndpoint := netip.AddrPortFrom(targetAddr, port)
-	held := onPort(current, port)
+	held := onPort(current.listeners, port)
 	var endpointPIDs []int
 	for _, l := range held {
 		if l.PID <= 0 || !l.Addr.IsValid() {
