@@ -35,6 +35,9 @@ type AmbientGroundingInput struct {
 	// citation-grounding audit whose typed citations did not trace to the evidence
 	// ledger. The no-worker coordinator is grounded on this flag, never on re-scanned prose.
 	LastAuditUngrounded bool
+	// LastAuditHostAssembled means the host settled the turn's outcome itself, so
+	// nothing remains for feedback to ask of the next turn.
+	LastAuditHostAssembled bool
 	LastAuditCode       string
 	UngroundedState     grounding.UngroundedCounter
 }
@@ -63,7 +66,7 @@ func NewSimpleAmbientGroundingGate(cfg GroundingConfig) *SimpleAmbientGroundingG
 // advisory counter that flags after a threshold (see AfterPrompt).
 func (g *SimpleAmbientGroundingGate) CheckTurn(_ context.Context, in AmbientGroundingInput) GroundingVerdict {
 	mode := g.cfg.AmbientPostTurnMode()
-	if mode == "off" {
+	if mode == "off" || in.LastAuditHostAssembled {
 		return GroundingVerdict{OK: true}
 	}
 	if len(in.Jobs) == 0 {
@@ -286,9 +289,12 @@ func (g *AmbientGroundingCoordinator) buildInput(ctx context.Context, sessionID 
 	}
 	msgs, _ := g.Sessions.Runner.Transcript.GetMessages(ctx, sessionID)
 	in.SummaryTags = summaryTagsFromMessages(msgs)
-	if audit := lastAssistantAudit(msgs); audit != nil && !audit.Traced {
-		in.LastAuditUngrounded = true
-		in.LastAuditCode = strings.TrimSpace(audit.HintCode)
+	if audit := lastAssistantAudit(msgs); audit != nil {
+		in.LastAuditHostAssembled = audit.HostAssembled
+		if !audit.Traced {
+			in.LastAuditUngrounded = true
+			in.LastAuditCode = strings.TrimSpace(audit.HintCode)
+		}
 	}
 	in.UngroundedState = g.State.Get(ambientStateKey(sessionID))
 	return in, nil
