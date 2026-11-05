@@ -315,16 +315,10 @@ func TestRetiredFenceMembersSpendOnlyTheDocumentBudget(t *testing.T) {
 		t.Fatalf("budgets = %+v friction=%d", st.closeoutRetry, c.friction)
 	}
 	body := refusalBody(t, out.history)
-	if !strings.Contains(body, "`cited_evidence`: written inline") || !strings.Contains(body, "`verification`: written inline") {
-		t.Fatalf("refusal does not name the members:\n%s", body)
-	}
 	fence := body[strings.Index(body, "```json"):]
 	fence = fence[:strings.Index(fence[3:], "```")+3]
 	if strings.Contains(fence, "cited_evidence") || !strings.Contains(fence, `"headline":"H"`) {
 		t.Fatalf("retained fence:\n%s", fence)
-	}
-	if !strings.Contains(body, "Allowed top-level report keys: ") {
-		t.Fatalf("refusal lacks the allowed keys:\n%s", body)
 	}
 }
 

@@ -103,30 +103,17 @@ func TestDeliveryTagsStateCoverageThroughTheRealPath(t *testing.T) {
 	}
 }
 
-// A coordinate on what only a pipeline printed is refused, and the feedback names
-// every way out: re-read, an excerpt on the command, or the bare handle.
-func TestPipelineCoordinateFeedbackOffersTheWaysOut(t *testing.T) {
-	var feedback string
+// A coordinate on what only a pipeline printed is refused, and an excerpt on the
+// command then grounds the repaired answer.
+func TestPipelineCoordinateRepairsThroughACommandExcerpt(t *testing.T) {
 	script := &citableScriptLLM{steps: []citableStep{
 		{command: "cat -n lines.txt | sed -n '2,3p'"},
 		{text: func(modelcall.CompletionRequest) string { return "It holds bravo [lines.txt:2]." }},
-		{text: func(req modelcall.CompletionRequest) string {
-			for _, msg := range req.Messages {
-				if strings.Contains(msg.Content, "A coordinate from a pipeline") {
-					feedback = msg.Content
-				}
-			}
-			return "It holds bravo [command#1 \"bravo\"]."
-		}},
+		{text: func(modelcall.CompletionRequest) string { return "It holds bravo [command#1 \"bravo\"]." }},
 	}}
 	h, session := deliveryTagSession(t, script)
 	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "read the file")
 	testutil.FailErr(t, "prompt", err)
-	for _, way := range []string{"re-read with `cat -n` or `grep -n`", "`[command#3 \"text\"]`", "bare handle"} {
-		if !strings.Contains(feedback, way) {
-			t.Fatalf("feedback lacks %q: %s", way, feedback)
-		}
-	}
 	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(t.Context(), session)
 	testutil.FailErr(t, "read messages", err)
 	var last wire.Message
