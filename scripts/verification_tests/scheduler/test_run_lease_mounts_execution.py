@@ -36,6 +36,27 @@ class LeaseCollectionWithMounts(unittest.TestCase):
         unmount.assert_called_once_with(self.mount)
         self.assertFalse(self.run_dir.exists())
 
+    def test_removal_waits_for_a_dying_holder_of_the_lease(self):
+        holder = (self.run_dir / ".lease").open("r+")
+        self.addCleanup(holder.close)
+        self.lease.fcntl.flock(holder, self.lease.fcntl.LOCK_EX)
+        table = [[self.mount], []]
+        with mock.patch.object(self.lease.time, "sleep", side_effect=lambda _: self.lease.fcntl.flock(holder, self.lease.fcntl.LOCK_UN)), mock.patch.object(
+            self.lease, "mount_points", side_effect=table
+        ), mock.patch.object(self.lease, "force_unmount") as unmount:
+            self.lease.remove(self.root, self.run_dir)
+        unmount.assert_called_once_with(self.mount)
+        self.assertFalse(self.run_dir.exists())
+
+    def test_removal_leaves_a_run_whose_lease_stays_held(self):
+        holder = (self.run_dir / ".lease").open("r+")
+        self.addCleanup(holder.close)
+        self.lease.fcntl.flock(holder, self.lease.fcntl.LOCK_EX)
+        with mock.patch.object(self.lease, "HOLDERS_EXIT_SECONDS", 0), mock.patch.object(self.lease, "force_unmount") as unmount:
+            self.lease.remove(self.root, self.run_dir)
+        unmount.assert_not_called()
+        self.assertTrue(self.run_dir.exists())
+
     def test_directory_stays_when_the_mount_cannot_be_removed(self):
         with mock.patch.object(self.lease, "mount_points", return_value=[self.mount]), mock.patch.object(
             self.lease, "force_unmount"

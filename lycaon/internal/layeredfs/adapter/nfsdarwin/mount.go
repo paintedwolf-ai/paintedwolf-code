@@ -225,6 +225,7 @@ func (a *Adapter) mountSingleRoot(
 	defer cancel()
 	out, mErr := runBoundedHelper(mCtx, "nfs_mount", a.cfg.MountNFSBin, "-o", mountOpts, exportSource, mountDir)
 	if mErr != nil {
+		mErr = errors.Join(mErr, a.detachUnserved(canonMount, exportSource))
 		srv.ReleaseExport(viewID)
 		_ = srv.Close()
 		reason := adapter.ReasonMountDenied
@@ -242,9 +243,7 @@ func (a *Adapter) mountSingleRoot(
 
 	mountedDev, dErr := statDeviceID(mountDir)
 	if dErr != nil || mountedDev == 0 || mountedDev == parentDev {
-		fCtx, fCancel := context.WithTimeout(context.Background(), unmountWaitBound)
-		_, _ = runBoundedHelper(fCtx, "nfs_unmount", a.cfg.UmountBin, "-f", mountDir)
-		fCancel()
+		_ = a.detachUnserved(canonMount, exportSource)
 		srv.ReleaseExport(viewID)
 		_ = srv.Close()
 		return nil, &adapter.AdapterError{
@@ -281,9 +280,7 @@ func (a *Adapter) mountSingleRoot(
 	}
 	record.MountID, record.ConnectionID, record.DevMajorMinor = facts.MountID, facts.ConnectionID, formatDevice(mountedDev)
 	if err := adapter.WriteRecordedConnection(runtimeViewDir, record); err != nil {
-		fCtx, fCancel := context.WithTimeout(context.Background(), unmountWaitBound)
-		_, _ = runBoundedHelper(fCtx, "nfs_unmount", a.cfg.UmountBin, "-f", mountDir)
-		fCancel()
+		_ = a.detachUnserved(canonMount, exportSource)
 		srv.ReleaseExport(viewID)
 		_ = srv.Close()
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "prepare", ReasonCode: adapter.ReasonMountDenied, Diagnostic: err.Error(), Cause: err}

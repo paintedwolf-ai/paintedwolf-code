@@ -51,6 +51,12 @@ func runBoundedHelper(ctx context.Context, subject, bin string, args ...string) 
 	}
 }
 
+// detachUnserved removes a mount a failing Prepare will not serve. A helper can fail or be killed after
+// the kernel attached it. The export source is unique to this attempt, so no other mount can match.
+func (a *Adapter) detachUnserved(mountPath, exportSource string) error {
+	return a.unmountOwnedRoot(context.Background(), &rootMount{mountPath: mountPath, facts: MountFacts{ExportSource: exportSource}}, false)
+}
+
 func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAlive bool) error {
 	if m == nil || m.mountPath == "" || !isMountOwnedAndActive(m, serverAlive) {
 		return nil

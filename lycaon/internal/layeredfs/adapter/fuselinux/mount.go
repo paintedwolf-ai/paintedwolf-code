@@ -136,7 +136,8 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 			}
 		}
 		_ = core.ReleaseView()
-		_ = os.RemoveAll(runtimeViewDir)
+		// A mount that could not be detached keeps its record, so startup recovery can still settle it.
+		_ = a.removeRuntimeDir(runtimeViewDir)
 	}
 
 	for _, g := range narrowed {
@@ -258,7 +259,7 @@ func (a *Adapter) mountSingleRoot(
 		OnLockWait:            a.cfg.OnLockWait,
 	}, core)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(err, a.detachUnserved(canonMount, fsName))
 	}
 
 	mountedDev, dErr := statDeviceID(canonMount)

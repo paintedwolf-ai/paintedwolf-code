@@ -283,6 +283,12 @@ func runFusermountUnmount(ctx context.Context, fusermountBin, mountPath string, 
 	return nil
 }
 
+// detachUnserved removes a mount a failing Prepare will not serve. A helper can fail or be killed after
+// the kernel attached it, and no server ever takes that connection.
+func (a *Adapter) detachUnserved(mountPath, fsName string) error {
+	return a.unmountOwnedRoot(context.Background(), &rootMount{mountPath: mountPath, facts: MountFacts{FSName: fsName}}, false)
+}
+
 func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAlive bool) error {
 	if m == nil || m.mountPath == "" || !isMountOwnedAndActive(m, serverAlive) {
 		return nil
