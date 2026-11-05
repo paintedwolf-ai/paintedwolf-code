@@ -1,6 +1,7 @@
 package wiring
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +15,7 @@ import (
 const formToolSource = "package audit\n\n// Alpha adds one.\nfunc Alpha(n int) int {\n\treturn n + 1\n}\n\n// Beta is unrelated.\nfunc Beta() {}\n\n// Gamma calls Alpha.\nfunc Gamma() int {\n\treturn Alpha(1)\n}\n"
 
 // runFormToolCitation calls one step, then cites the window it delivered.
-func runFormToolCitation(t *testing.T, step citableStep) (result string, tags [][]string, closeout wire.Message) {
+func runFormToolCitation(t *testing.T, step citableStep) (result string, tags [][]string, closeout wire.Message, ledgerKinds map[string]int) {
 	t.Helper()
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
 	script := &citableScriptLLM{steps: []citableStep{step, {text: func(req modelcall.CompletionRequest) string {
@@ -42,14 +43,20 @@ func runFormToolCitation(t *testing.T, step citableStep) (result string, tags []
 			closeout = msg
 		}
 	}
-	return result, tags, closeout
+	ledger, err := h.Store.LoadLedger(t.Context(), sess.ID)
+	testutil.FailErr(t, "load ledger", err)
+	ledgerKinds = map[string]int{}
+	for _, record := range ledger.Handles {
+		ledgerKinds[string(record.Kind)]++
+	}
+	return result, tags, closeout, ledgerKinds
 }
 
 // One call through the tool records what the same call through command records,
 // once, and a coordinate from it is traced without an excerpt.
 func TestSummarizeToolRecordsOneCitableSetOfWindows(t *testing.T) {
-	_, viaCommand, _ := runFormToolCitation(t, citableStep{command: "summarize --path audit.go --focus Alpha"})
-	result, viaTool, closeout := runFormToolCitation(t, citableStep{tool: "summarize", args: map[string]any{"path": "audit.go", "task": "Alpha"}})
+	_, viaCommand, _, commandKinds := runFormToolCitation(t, citableStep{command: "summarize --path audit.go --focus Alpha"})
+	result, viaTool, closeout, toolKinds := runFormToolCitation(t, citableStep{tool: "summarize", args: map[string]any{"path": "audit.go", "task": "Alpha"}})
 	if len(viaTool) == 0 {
 		t.Fatalf("the tool delivered no window: %.600s", result)
 	}
@@ -60,6 +67,9 @@ func TestSummarizeToolRecordsOneCitableSetOfWindows(t *testing.T) {
 		if viaTool[i][2] != viaCommand[i][2] {
 			t.Fatalf("window %d = %s, command %s", i, viaTool[i][2], viaCommand[i][2])
 		}
+	}
+	if !maps.Equal(toolKinds, commandKinds) {
+		t.Fatalf("tool ledger %v, command ledger %v", toolKinds, commandKinds)
 	}
 	grounding := closeout.Grounding
 	if grounding == nil || !grounding.Traced || grounding.HostAssembled || len(grounding.CitedEvidence) == 0 {
@@ -74,7 +84,7 @@ func TestSummarizeToolRecordsOneCitableSetOfWindows(t *testing.T) {
 
 // Separate pattern hits must not lose their citation for being apart.
 func TestSummarizePatternHitsStayCitable(t *testing.T) {
-	result, tags, closeout := runFormToolCitation(t, citableStep{tool: "summarize", args: map[string]any{"path": "audit.go", "pattern": "Alpha", "task": "Alpha"}})
+	result, tags, closeout, _ := runFormToolCitation(t, citableStep{tool: "summarize", args: map[string]any{"path": "audit.go", "pattern": "Alpha", "task": "Alpha"}})
 	if len(tags) == 0 {
 		t.Fatalf("pattern hits delivered no citable window: %.900s", result)
 	}
