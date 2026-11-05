@@ -286,9 +286,10 @@ func runCommandBackground(
 	})
 	window.closeOnExit(ctx, registry, tctx.Identity.SessionID, handle)
 	result := hostcmd.BackgroundStartResult{
-		Background: true,
-		Handle:     handle,
-		Stages:     hostcmd.StagePlaceholders(stages),
+		Background:   true,
+		Handle:       handle,
+		Stages:       hostcmd.StagePlaceholders(stages),
+		SourceWindow: window.fact(),
 	}
 	var observedNetwork []confine.EgressHost
 	var boundaryRefusal confine.FailureAttribution

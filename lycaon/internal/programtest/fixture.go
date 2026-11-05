@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -24,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -173,6 +175,25 @@ func New(t testing.TB, options Options) *Fixture {
 	}
 	f.Runtime, f.Context = runtime, options.Context
 	return f
+}
+
+// AttachLedger binds the fixture's root to a real source ledger, so programs
+// run against the host's actual observation windows.
+func (f *Fixture) AttachLedger(t testing.TB) *sourceledger.Store {
+	t.Helper()
+	_, err := f.Database.ExecContext(context.Background(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
+		VALUES ('r1', ?, ?, 'root', 1, ?, 'attached')`, testdbseed.DefaultProjectID, f.Dir, db.FormatTime(time.Now().UTC()))
+	testutil.FailErr(t, "insert fixture root", err)
+	ledger := sourceledger.New(f.Database, t.TempDir())
+	configure := f.Configure
+	f.Configure = func(tc *tools.ToolContext) {
+		tc.Source.Commands = ledger.Commands
+		tc.Source.Observations = ledger.Inventory
+		if configure != nil {
+			configure(tc)
+		}
+	}
+	return ledger
 }
 
 // SetProgress changes the session checklist observed by reached command writes.

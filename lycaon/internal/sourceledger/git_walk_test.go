@@ -179,9 +179,9 @@ func TestCommandWindowRetainsGitOnlyHistoryAfterSettlementAndRecovery(t *testing
 	window := openTestWindow(t, store, ctx, root, "git reset --soft HEAD^")
 	reader.states[root] = gitstate.State{Repo: gitstate.RepoPresent, HeadCommit: "after"}
 	// No file changed and no watcher pass ran: settlement must observe HEAD.
-	err := store.Commands.settleCommandWindow(ctx, window.window, time.Now(), false)
+	err := store.Commands.settleCommandWindow(ctx, window.window, time.Now())
 	testutil.FailErr(t, "settle command ref movement", err)
-	store.Commands.recoverInterruptedWindows(ctx)
+	testutil.FailErr(t, "recover interrupted windows", store.Commands.RecoverInterruptedWindows(ctx))
 	page, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "s1"}, 10, 0, CommitLens{})
 	testutil.FailErr(t, "read command-only Git walk", err)
 	if len(page.GitChanges) != 1 || page.GitChanges[0].CommandWindowID != window.ID || page.GitChanges[0].Turn != 3 || len(page.Commands) != 0 {
@@ -254,7 +254,7 @@ func TestCommandSettlementCannotDropAnActiveObservationWindow(t *testing.T) {
 	defer release()
 	settling, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
 	defer cancel()
-	err = store.Commands.settleCommandWindow(settling, window.window, time.Now(), false)
+	err = store.Commands.settleCommandWindow(settling, window.window, time.Now())
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("settlement overtook observation: %v", err)
 	}
@@ -263,10 +263,10 @@ func TestCommandSettlementCannotDropAnActiveObservationWindow(t *testing.T) {
 	if row.State != "running" {
 		t.Fatalf("observation window was finalized: %+v", row)
 	}
-	store.Commands.windowsMu.Lock()
-	remaining := len(store.Commands.openWindows["p1"])
-	store.Commands.windowsMu.Unlock()
-	if remaining != 0 {
-		t.Fatalf("failed settlement left %d windows attributing future changes", remaining)
+	if claimant := store.Commands.attributionWindow("p1", onDiskRoots(root)); claimant != nil {
+		t.Fatalf("failed settlement left window %s attributing future changes", claimant.id)
+	}
+	if listed := store.Commands.OpenSessionWindows("p1", "s1"); len(listed) != 1 || !listed[0].Incomplete {
+		t.Fatalf("open windows after failed settlement = %+v, want it incomplete", listed)
 	}
 }

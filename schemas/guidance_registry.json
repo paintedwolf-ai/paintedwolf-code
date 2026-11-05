@@ -996,13 +996,13 @@
       "summary": "edit on {{ paintedwolf.path }} found {{ paintedwolf.occurrences }} matches for old_string — a single-occurrence edit needs a unique target."
     },
     "EDIT_OLD_STRING_NOT_FOUND": {
-      "branch_instruction": "Inspect source_history only when attribution is needed. Do not replace the whole file to bypass a missing match.",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Only when attribution is needed, inspect `source_history(path)`, or `source_history()` for everything changed this session. {% endif %}Do not replace the whole file to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
       "summary": "{% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}. The requested new_string is already present {{ paintedwolf.replacement_matches }} time(s), first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}: old_string ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis ({{ paintedwolf.total_lines }} lines).{% endif %}"
     },
     "EDIT_TARGET_CHANGED_BY_OTHERS": {
-      "branch_instruction": "Inspect source_history when attribution is needed. Do not repeat the same edit or replace the whole file merely to bypass a missing match.",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}When attribution is needed, inspect `source_history(path)`, or `source_history()` for everything changed this session. {% endif %}Do not repeat the same edit or replace the whole file merely to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
       "summary": "edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars), and the ledger recorded {{ paintedwolf.change_count }} change(s) to this file by other actors during this session."
@@ -1186,6 +1186,12 @@
       "category": "recoverable",
       "emit": "guard:git_internals_write",
       "summary": "Cannot write {{ paintedwolf.path }} — repository git internals ({{ paintedwolf.class }}) are not writable via native tools."
+    },
+    "GIT_NO_REPOSITORY_ON_WRITE_LEG": {
+      "branch_instruction": "Committed history belongs to a read-scoped leg or the coordinator on the primary tree.",
+      "category": "informational",
+      "emit": "guard:git_no_repository_on_write_leg",
+      "summary": "A Git read in this command found no repository on this write leg."
     },
     "GIT_OPERATION_FAILED": {
       "branch_instruction": "Report any unresolved state; do not claim the repository was left unchanged or that the operation completed.",
@@ -2753,7 +2759,7 @@
       "summary": "An explicit workflow check is unresolved for revision {{ paintedwolf.source_revision }}."
     },
     "SOURCE_HISTORY_MODE_INVALID": {
-      "branch_instruction": "Branch on Code; pick one of the five modes",
+      "branch_instruction": "Branch on Code; pick one of the six modes",
       "category": "recoverable",
       "emit": "guard:source_history",
       "summary": "source_history does not know mode {{ paintedwolf.mode }}."
@@ -2783,19 +2789,19 @@
       "summary": "Deleting {{ paintedwolf.path }} without recovery needs approval."
     },
     "SOURCE_VERSION_BASE_MISMATCH": {
-      "branch_instruction": "Branch on Code; re-read current version from source_history",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Branch on Code; re-read current version from source_history {% else %}Branch on Code{% endif %}",
       "category": "recoverable",
       "emit": "guard:restore_version",
       "summary": "Base version mismatch for {{ paintedwolf.path }} — {{ paintedwolf.detail }}."
     },
     "SOURCE_VERSION_NOT_FOUND": {
-      "branch_instruction": "Branch on Code; verify version_id from effects",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Branch on Code; verify version_id from effects {% else %}Branch on Code{% endif %}",
       "category": "recoverable",
       "emit": "guard:source_history",
       "summary": "Source version not found — {{ paintedwolf.detail }}."
     },
     "SOURCE_VERSION_NO_PREDECESSOR": {
-      "branch_instruction": "Branch on Code; verify history via source_history",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Branch on Code; verify history via source_history {% else %}Branch on Code{% endif %}",
       "category": "recoverable",
       "emit": "guard:restore_version",
       "summary": "No predecessor version for {{ paintedwolf.path }} — {{ paintedwolf.detail }}."
@@ -2810,13 +2816,13 @@
       "branch_instruction": "Branch on Code; pass version_id",
       "category": "recoverable",
       "emit": "guard:source_history",
-      "summary": "source_history mode {{ paintedwolf.mode }} requires version_id."
+      "summary": "source_history mode {{ paintedwolf.mode }} needs version_id here."
     },
     "SOURCE_VERSION_UNAVAILABLE": {
       "branch_instruction": "Branch on Code; query metadata instead of content",
       "category": "recoverable",
       "emit": "guard:source_history",
-      "summary": "Content for source version is unavailable — {{ paintedwolf.detail }}."
+      "summary": "Content for source version is unavailable{% if paintedwolf.side %} on the {{ paintedwolf.side }} side ({{ paintedwolf.state }}){% endif %} — {{ paintedwolf.detail }}."
     },
     "SPEC_POSTURE_BREAKING_REQUIRED": {
       "branch_instruction": "Capture breaking policy in Phase 0",

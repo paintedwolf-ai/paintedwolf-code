@@ -328,7 +328,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 			}
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: d.recordExternalStage}.Launch(ctx, execution, streams)
+					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: d.recordExternalStage, window: d.run.window}.Launch(ctx, execution, streams)
 				})
 			}}, nil
 		},

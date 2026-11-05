@@ -155,6 +155,7 @@ func CommandResultFromOutcome(
 		EnvKeys:           outcome.IO.EnvKeys,
 		Cwd:               outcome.Cwd,
 		LeftRunning:       outcome.LeftRunning,
+		SourceWindow:      outcome.SourceWindow,
 	}
 	res.Tail = enginepaths.RewriteWorkerBranchPaths(res.Tail) // compilers print the absolute cwd
 	if snap := outcome.Snapshot; len(snap.Output) > len(snap.Tail) || snap.OutputEvicted {
@@ -207,13 +208,14 @@ func EncodeCommandRunning(tctx tools.ToolContext, outcome RunOutcome, budget tim
 		}
 	}
 	out, err := surveyjson.Marshal(hostcmd.CommandRunningResult{
-		Running:  true,
-		Handle:   outcome.Handle,
-		Stages:   outcome.Snapshot.Stages,
-		Tail:     outcome.Snapshot.Tail,
-		WaitedMs: int(budget.Milliseconds()),
-		Network:  outcome.Network,
-		Report:   report.WithSandboxRefusals(outcome.Refusals),
+		Running:      true,
+		Handle:       outcome.Handle,
+		Stages:       outcome.Snapshot.Stages,
+		Tail:         outcome.Snapshot.Tail,
+		WaitedMs:     int(budget.Milliseconds()),
+		Network:      outcome.Network,
+		Report:       report.WithSandboxRefusals(outcome.Refusals),
+		SourceWindow: outcome.SourceWindow,
 	})
 	if err != nil {
 		return "", fmt.Errorf("command running encode: %w", err)

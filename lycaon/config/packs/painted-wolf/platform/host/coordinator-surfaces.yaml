@@ -97,6 +97,7 @@ implement_investigate:
   floor:
     - recall
     - command
+    - source_history
     - skills_read
     - update_progress
     - ask_user
@@ -105,7 +106,6 @@ implement_investigate:
     # project utilities
     # edit
     - restore_version
-    - source_history
     # process and terminal
     - command_output
     - command_stop
@@ -284,12 +284,12 @@ observe_investigate:
     - command
     - command_output
     - command_stop
+    - source_history
     - skills_read
     - update_progress
     - ask_user
     - request_tools
   loadable:
-    - source_history
     - scan_pack
     - scan_query
     - scan_summary

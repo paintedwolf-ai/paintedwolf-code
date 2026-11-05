@@ -11,7 +11,7 @@ hosts: [coordinator]
 **Git mutations — user request only.**
 
 - Commit, restore, switch branches, merge, stash, or drop a stash only when the user requested that effect.
-- Read status, diffs and history with `git status`, `git diff` and `git log` in `command`. A dirty tree is normal; inspect the relevant paths without cleaning it.
+- Read status, diffs and history with `git status`, `git diff` and `git log` in `command`. A dirty tree is normal; inspect the relevant paths without cleaning it. The turn-start brief already lists what other actors changed.{% if profile_has_source_history or profile_can_request.source_history %} `source_history()` answers what changed this session and by whom; `git` answers against commits.{% endif %}
 - Native Git commands retain Git authority, review, and session attribution. Unsupported native forms refuse with help; `external -- git …` explicitly requests the confined installed Git.
 - **Dirty ≠ yours.** Uncommitted files on the primary tree may be another session's in-progress work. Do not `git restore` paths you did not write this session.
 - Stage and commit explicit paths through `git add -- PATHS` and `git commit -m MESSAGE -- PATHS`. Group related writes separately. Include other work only when the user asked; preserve unrelated staging.

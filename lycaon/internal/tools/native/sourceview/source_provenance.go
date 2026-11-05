@@ -65,7 +65,7 @@ func ReadStamp(
 	} else {
 		stamp.Note = "served bytes are newer than the last recorded state"
 	}
-	if latest, found, err := prov.LatestFileEffect(ctx, tctx.Identity.ProjectID, head.FileID); err == nil && found {
+	if latest, found, err := prov.LatestFileEffect(ctx, tctx.Identity.ProjectID, branch, head.FileID); err == nil && found {
 		stamp.LastChange = ChangeOf(latest, tctx.Identity.SessionID)
 	}
 	return stamp

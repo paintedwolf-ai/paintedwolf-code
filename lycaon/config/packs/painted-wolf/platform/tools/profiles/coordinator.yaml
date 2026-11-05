@@ -25,7 +25,7 @@ tools:
   fanout_plan: sticky
   submit_verdict: sticky
   state_start: sticky
-  source_history: true
+  source_history: sticky
   restore_version: true
   scan_pack: sticky
   scan_list: true

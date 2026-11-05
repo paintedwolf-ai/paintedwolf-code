@@ -97,8 +97,16 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 
 	ledger := deps.Storage.SourceLedger
+	if deps.RegisterRecovery != nil {
+		if err := deps.RegisterRecovery(bootrecovery.Entry{
+			Name: "source-command-windows", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
+			Run: ledger.Commands.RecoverInterruptedWindows,
+		}); err != nil {
+			return nil, err
+		}
+	}
 	mgr.SetSourceLedger(ledger, tools.SourceHistory{
-		Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk,
+		Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk, Windows: ledger.Commands, Tree: session.OverlayTree{},
 	}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	mgr.Profiles.SetAgentRegistry(deps.Agents.Registry)
 	mgr.Profiles.SetHostResources(deps.Settings.HostResources)

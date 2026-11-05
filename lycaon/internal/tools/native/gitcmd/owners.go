@@ -210,7 +210,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.command.spec.Name == "git grep" {
 		run = p.grep
 	}
-	status, err := run(ctx, streams)
+	status, err := run(ctx, tc, streams)
 	if err == nil {
 		err = ctx.Err()
 	}

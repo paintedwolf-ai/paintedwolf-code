@@ -665,19 +665,26 @@ anchors:
     title: Source change brief inject
     description: >-
       Ledger-recorded files other actors changed between the previous turn
-      boundary and this one, actor-classified; working-set paths itemized,
-      the rest counted. Observed git ref movements (checkout, commit, pull …)
+      boundary and this one, actor-classified; itemized up to the row cap,
+      working set first, then files only this session's commands touched,
+      the rest counted. Each class reads under its own effect cap. Observed git ref movements (checkout, commit, pull …)
       lead the block so file rows read against their cause.
     trigger_class: assembly_inject
     surface: coordinator
     planes: [inform]
     envelope:
       vars:
-        files: { type: "object[]", required: true }
+        files:
+          type: "object[]"
+          required: true
+          description: "Rows with path, actor, detail, op, at, effects, working_set (bool) and during_your_command (bool)."
         git: { type: "object[]", required: true }
         other_files: { type: "int", required: true }
         other_effects: { type: "int", required: true }
+        other_may_include_working_set: { type: "bool", required: false }
         truncated: { type: "bool", required: true }
+        own_truncated: { type: "bool", required: false }
+        source_history_offered: { type: "bool", required: false }
 
   - id: inject.synthesis_evidence
     title: Synthesis evidence inject

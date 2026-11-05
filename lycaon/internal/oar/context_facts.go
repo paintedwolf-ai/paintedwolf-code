@@ -179,6 +179,7 @@ type SourceFacts struct {
 	WorktreeLeftoverPaths     []string
 	WorktreeConflictPaths     []string
 	EditorConfigMismatch      bool
+	GitNoRepositoryOnWriteLeg bool
 	SourceAnalysisUnavailable bool
 	SyntaxCheckOverridden     bool
 	SourceIncludes            map[string]bool

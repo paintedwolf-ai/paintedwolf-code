@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -41,10 +42,10 @@ func (m *Service) SetSources(history tools.SourceHistory, checkpoints Checkpoint
 }
 
 const (
-	// sourceChangeBriefEffectCap bounds the effects pulled for one window. An
-	// overflowing window renders as truncated, never as a complete count.
+	// sourceChangeBriefEffectCap bounds the effects read per class for one
+	// window. An overflowing class renders as truncated, never as a complete count.
 	sourceChangeBriefEffectCap = 400
-	// sourceChangeBriefFileCap bounds the itemized working-set rows.
+	// sourceChangeBriefFileCap bounds the itemized rows across both classes.
 	sourceChangeBriefFileCap = 20
 	// sourceChangeBriefGitCap bounds itemized ref movements per window.
 	sourceChangeBriefGitCap = 10
@@ -116,9 +117,22 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 	if err != nil || !foundPrevious {
 		return inject.SourceChangeBrief{}
 	}
-	effects, err := reader.Files.EffectsBetween(
-		ctx, sess.ProjectID, previous.CreatedOrdinal, current.CreatedOrdinal, sourceChangeBriefEffectCap+1,
-	)
+	// Each class has its own cap, so a build's output cannot fill the page a
+	// person's edit is on.
+	readClass := func(duringCommand bool) ([]sourceledger.Effect, bool, error) {
+		effects, err := reader.Files.EffectsForBriefClass(
+			ctx, sess.ProjectID, sess.ID, duringCommand, previous.CreatedOrdinal, current.CreatedOrdinal, sourceChangeBriefEffectCap+1,
+		)
+		if len(effects) > sourceChangeBriefEffectCap {
+			return effects[:sourceChangeBriefEffectCap], true, err
+		}
+		return effects, false, err
+	}
+	foreign, foreignOverflow, err := readClass(false)
+	if err != nil {
+		return inject.SourceChangeBrief{}
+	}
+	own, ownOverflow, err := readClass(true)
 	if err != nil {
 		return inject.SourceChangeBrief{}
 	}
@@ -130,7 +144,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 	if err != nil {
 		transitions = nil
 	}
-	if len(effects) == 0 && len(transitions) == 0 {
+	if len(foreign) == 0 && len(own) == 0 && len(transitions) == 0 {
 		return inject.SourceChangeBrief{}
 	}
 	roots, err := m.roots.Roots(ctx, sess)
@@ -138,75 +152,107 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 		return inject.SourceChangeBrief{}
 	}
 	return assembleSourceChangeBrief(sourceChangeBriefInputs{
-		Effects:     effects,
-		Transitions: transitions,
-		Truncated:   len(effects) > sourceChangeBriefEffectCap,
-		SessionID:   sess.ID,
-		Roots:       roots,
-		Touched:     m.sessionTouchedPaths(ctx, sess, reader, roots),
+		Effects:      slices.Concat(foreign, own),
+		Transitions:  transitions,
+		Truncated:    foreignOverflow,
+		OwnTruncated: ownOverflow,
+		SessionID:    sess.ID,
+		Roots:        roots,
+		Touched:      m.sessionTouchedPaths(ctx, sess, reader, roots),
 	})
 }
 
 type sourceChangeBriefInputs struct {
-	Effects     []sourceledger.Effect
-	Transitions []sourceledger.GitTransition
-	Truncated   bool
-	SessionID   string
-	Roots       []projectroot.RootRef
-	Touched     map[string]bool
+	Effects      []sourceledger.Effect
+	Transitions  []sourceledger.GitTransition
+	Truncated    bool
+	OwnTruncated bool
+	SessionID    string
+	Roots        []projectroot.RootRef
+	Touched      map[string]bool
 }
 
-// assembleSourceChangeBrief itemizes working-set files and counts other changes.
-// Observed ref movements precede their file effects.
+// fileGroups collects one class of effects per file. Effects arrive newest
+// first, so a group's first effect is its newest and order is newest-file first.
+type fileGroups struct {
+	byFile map[string]*fileGroup
+	order  []string
+}
+
+type fileGroup struct {
+	newest  sourceledger.Effect
+	effects int
+}
+
+func newFileGroups() *fileGroups {
+	return &fileGroups{byFile: make(map[string]*fileGroup)}
+}
+
+func (g *fileGroups) add(effect sourceledger.Effect) {
+	if group, seen := g.byFile[effect.FileID]; seen {
+		group.effects++
+		return
+	}
+	g.byFile[effect.FileID] = &fileGroup{newest: effect, effects: 1}
+	g.order = append(g.order, effect.FileID)
+}
+
+// assembleSourceChangeBrief itemizes changed files up to the row cap: foreign
+// changes first, working set leading, then files only the session's own command
+// windows touched, so a build's output cannot displace a person's edit. Files
+// that did not fit are counted. Observed ref movements precede their file effects.
 func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBrief {
-	brief := inject.SourceChangeBrief{Truncated: in.Truncated}
+	brief := inject.SourceChangeBrief{Truncated: in.Truncated, OwnTruncated: in.OwnTruncated}
 	for i := len(in.Transitions) - 1; i >= 0; i-- {
 		brief.Git = append(brief.Git, sourceGitLine(in.Roots, in.Transitions[i]))
 	}
-	effects := in.Effects
-	if in.Truncated {
-		effects = effects[:sourceChangeBriefEffectCap]
-	}
-	type fileGroup struct {
-		newest  sourceledger.Effect
-		effects int
-	}
-	groups := make(map[string]*fileGroup)
-	order := make([]string, 0, len(effects))
-	for _, effect := range effects {
+	foreign, own := newFileGroups(), newFileGroups()
+	for _, effect := range in.Effects {
 		if effect.BranchID.IsWorker() {
 			continue
 		}
 		if effect.ActorClassFor(in.SessionID) == sourceledger.ActorYou {
 			continue
 		}
-		group, seen := groups[effect.FileID]
-		if !seen {
-			// Effects arrive newest first, so the first effect per file is its
-			// newest and first-seen order is newest-file first.
-			groups[effect.FileID] = &fileGroup{newest: effect, effects: 1}
-			order = append(order, effect.FileID)
+		if effect.DuringCommandOf(in.SessionID) {
+			own.add(effect)
 			continue
 		}
-		group.effects++
+		foreign.add(effect)
 	}
-	for _, fileID := range order {
-		group := groups[fileID]
-		display := displaySourcePath(in.Roots, group.newest.RootID, group.newest.Path)
-		if (!in.Touched[group.newest.Path] && !in.Touched[display]) || len(brief.Files) >= sourceChangeBriefFileCap {
-			brief.OtherFiles++
-			brief.OtherEffects += group.effects
-			continue
+	itemize := func(groups *fileGroups, workingSet, duringCommand bool) {
+		for _, fileID := range groups.order {
+			group := groups.byFile[fileID]
+			// A file another actor also changed is that actor's row.
+			if _, shared := foreign.byFile[fileID]; duringCommand && shared {
+				continue
+			}
+			display := projectroot.DisplayPath(in.Roots, group.newest.RootID, group.newest.Path)
+			if (in.Touched[group.newest.Path] || in.Touched[display]) != workingSet {
+				continue
+			}
+			if len(brief.Files) >= sourceChangeBriefFileCap {
+				brief.OtherFiles++
+				brief.OtherEffects += group.effects
+				brief.OtherWorkingSet = brief.OtherWorkingSet || workingSet
+				continue
+			}
+			brief.Files = append(brief.Files, inject.SourceChangeFile{
+				Path:              display,
+				Actor:             string(group.newest.ActorClassFor(in.SessionID)),
+				Detail:            group.newest.ActorDisplay(in.SessionID),
+				Op:                string(group.newest.Op),
+				At:                group.newest.TS.UTC().Format("15:04") + " UTC",
+				Effects:           group.effects,
+				WorkingSet:        workingSet,
+				DuringYourCommand: duringCommand,
+			})
 		}
-		brief.Files = append(brief.Files, inject.SourceChangeFile{
-			Path:    display,
-			Actor:   string(group.newest.ActorClassFor(in.SessionID)),
-			Detail:  group.newest.ActorDisplay(in.SessionID),
-			Op:      string(group.newest.Op),
-			At:      group.newest.TS.UTC().Format("15:04") + " UTC",
-			Effects: group.effects,
-		})
 	}
+	itemize(foreign, true, false)
+	itemize(foreign, false, false)
+	itemize(own, true, true)
+	itemize(own, false, true)
 	return brief
 }
 
@@ -233,7 +279,7 @@ func (m *Service) sessionTouchedPaths(
 		for _, path := range authored {
 			if path = strings.TrimSpace(path); path != "" {
 				touched[path] = true
-				touched[displaySourcePath(roots, root.ID, path)] = true
+				touched[projectroot.DisplayPath(roots, root.ID, path)] = true
 			}
 		}
 	}
@@ -263,20 +309,4 @@ func shortCommit(commit string) string {
 		return commit[:8]
 	}
 	return commit
-}
-
-// displaySourcePath renders a ledger (root, relative path) pair in the
-// canonical display spelling: bare off the primary root, @label-qualified off
-// any other, and unqualified when the root is unknown.
-func displaySourcePath(roots []projectroot.RootRef, rootID, rel string) string {
-	for _, root := range roots {
-		if root.ID != rootID {
-			continue
-		}
-		if root.IsPrimary || root.Label == "" {
-			return rel
-		}
-		return "@" + root.Label + "/" + rel
-	}
-	return rel
 }

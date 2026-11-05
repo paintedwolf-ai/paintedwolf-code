@@ -297,7 +297,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		messages = deps.EnrichHistory(sess.ID, messages)
 	}
 	if coordinator && !sess.IsWorkerChild() {
-		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, turn, messages)
+		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
 	}
 	if deps.ScanGuidance != nil {
 		out = append(out, deps.ScanGuidance.PrependGuidance(ctx, sess.ID, messages)...)

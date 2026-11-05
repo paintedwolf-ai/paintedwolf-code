@@ -207,6 +207,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"source_analysis_unavailable":         gc.Source.SourceAnalysisUnavailable,
 		"http_request_web_page":               gc.Invocation.HTTPRequestWebPage,
 		"http_request_loopback_other_session": gc.Invocation.HTTPRequestLoopbackOtherSession,
+		"git_no_repository_on_write_leg":      gc.Source.GitNoRepositoryOnWriteLeg,
 	}
 	maps.Copy(out, rejectObservationActivation(gc))
 	maps.Copy(out, standardActivation(gc))

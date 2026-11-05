@@ -31,6 +31,7 @@ type fakeSourceLedger struct {
 	fileVersions map[string][]sourceledger.Version
 	comparisons  map[string]sourceledger.Comparison
 	deleted      map[string]sourceledger.DeletedPath
+	effectsErr   error
 }
 
 func (f *fakeSourceLedger) Record(context.Context, sourceledger.RecordInput) error { return nil }
@@ -93,12 +94,12 @@ func (f *fakeSourceLedger) ResolveHead(_ context.Context, _ string, _ sourcebran
 	return head, nil
 }
 
-func (f *fakeSourceLedger) LatestFileEffect(_ context.Context, _, fileID string) (sourceledger.Effect, bool, error) {
-	effects := f.effects[fileID]
-	if len(effects) == 0 {
-		return sourceledger.Effect{}, false, nil
+func (f *fakeSourceLedger) LatestFileEffect(ctx context.Context, projectID string, branch sourcebranch.ID, fileID string) (sourceledger.Effect, bool, error) {
+	page, err := f.QueryFileEffects(ctx, projectID, branch, fileID, 0, 0, 1)
+	if err != nil || len(page.Effects) == 0 {
+		return sourceledger.Effect{}, false, err
 	}
-	return effects[0], true, nil
+	return page.Effects[0], true, nil
 }
 
 func (f *fakeSourceLedger) SessionActivityFloor(context.Context, string, string) (int64, bool, error) {
@@ -109,11 +110,18 @@ func (f *fakeSourceLedger) GitTransitionsByIDs(context.Context, []string) (map[s
 	return nil, nil
 }
 
-func (f *fakeSourceLedger) QueryFileEffects(_ context.Context, _, fileID string, afterOrdinal, _ int64, limit int) (sourceledger.FileEffectsResult, error) {
+func (f *fakeSourceLedger) QueryFileEffects(_ context.Context, _ string, branch sourcebranch.ID, fileID string, afterOrdinal, beforeOrdinal int64, limit int) (sourceledger.FileEffectsResult, error) {
 	out := sourceledger.FileEffectsResult{}
+	if f.effectsErr != nil {
+		return out, f.effectsErr
+	}
 	for _, effect := range f.effects[fileID] {
-		if effect.Ordinal <= afterOrdinal || len(out.Effects) >= limit {
+		if effect.BranchID != branch || effect.Ordinal <= afterOrdinal || (beforeOrdinal != 0 && effect.Ordinal >= beforeOrdinal) {
 			continue
+		}
+		if len(out.Effects) == limit {
+			out.NextBeforeOrdinal = out.Effects[limit-1].Ordinal
+			break
 		}
 		out.Effects = append(out.Effects, effect)
 	}
@@ -286,8 +294,18 @@ func (f *fakeSourceLedger) ResolveHeadByFile(context.Context, string, sourcebran
 func (f *fakeSourceLedger) TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error) {
 	return sourceledger.Checkpoint{}, false, nil
 }
-func (f *fakeSourceLedger) EffectsBetween(context.Context, string, int64, int64, int) ([]sourceledger.Effect, error) {
+func (f *fakeSourceLedger) EffectsForBriefClass(context.Context, string, string, bool, int64, int64, int) ([]sourceledger.Effect, error) {
 	return nil, nil
+}
+func (f *fakeSourceLedger) EffectsBetweenOnBranch(context.Context, string, map[string]sourcebranch.ID, int64, int64, int) ([]sourceledger.Effect, error) {
+	return nil, nil
+}
+func (f *fakeSourceLedger) OldestPathEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, string, int64) (sourceledger.FileEffectBounds, bool, error) {
+	return sourceledger.FileEffectBounds{}, false, nil
+}
+
+func (f *fakeSourceLedger) OldestFileEffectAfterOnBranch(context.Context, string, sourcebranch.ID, string, int64) (sourceledger.FileEffectBounds, bool, error) {
+	return sourceledger.FileEffectBounds{}, false, nil
 }
 func (f *fakeSourceLedger) GitTransitionsBetween(context.Context, string, int64, int64, int) ([]sourceledger.GitTransition, error) {
 	return nil, nil

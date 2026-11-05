@@ -186,6 +186,7 @@ tools:
     activity: {headline: "investigating", salience: supporting, role: investigation}
   source_history:
     title_keys: [path]
+    title_fallback: "Session changes"
     running_label: "Loading file history…"
     activity: {headline: "investigating", salience: supporting, role: investigation}
   git_branches:

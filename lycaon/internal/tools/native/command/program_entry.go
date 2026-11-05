@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -140,6 +141,7 @@ type programRun struct {
 
 	// envelope carries the call's launch capability requests to each launch.
 	envelope map[string]any
+	window   *programWindow
 }
 
 // ProgramOutcome is the command tool's result for a settled program.
@@ -167,6 +169,9 @@ type ProgramOutcome struct {
 	// Refusal is the host decision that stopped the program; the output and
 	// status of every child that ran before it stay in this outcome.
 	Refusal *ProgramRefusal `json:"refusal,omitempty"`
+	// SourceWindow is the observation window of a program that launched an
+	// external process.
+	SourceWindow *hostcmd.SourceWindow `json:"source_window,omitempty"`
 }
 
 // ProgramRefusal is a typed host refusal at the program's stop point with its
@@ -231,7 +236,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		}
 	}()
 
-	run := &programRun{tool: tool, catalog: catalog, commands: commands, envelope: launchEnvelope(args), tc: tc, memory: memory, source: source, parentReceipt: tc.Invocation.ID}
+	run := &programRun{tool: tool, catalog: catalog, commands: commands, envelope: launchEnvelope(args), tc: tc, memory: memory, source: source, parentReceipt: tc.Invocation.ID, window: newProgramWindow(tc, CanonicalCommandKey(tc, args), r.clock())}
 	paths, err := r.bindProgramFrame(ctx, run, args, snapshot.Plan.CatalogDigest)
 	if err != nil {
 		return "", err
@@ -313,6 +318,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	// to the call; a parked program's later effects never reach the call.
 	callTC := tc
 	run.tc.Effects.Out = &tools.ToolInvocationOut{}
+	run.tc.Effects.GitNoRepository = &atomic.Bool{}
 	park := newProgramPark(r.clock(), call, r.parkThreshold())
 	ports.Waits = park
 	handedOff = true

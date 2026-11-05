@@ -117,7 +117,20 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		}
 		out.SourceDeliveries = append([]tools.SourceDeliveryTag(nil), e.run.tc.Effects.Out.SourceDeliveries...)
 	}
+	stateGitNoRepository(e)
 	return ending.result, ending.err
+}
+
+// stateGitNoRepository puts the program's write-leg Git miss on the call's
+// result, for its post-invoke warning.
+func stateGitNoRepository(e *programEvaluation) {
+	out, missed := e.callTC.Effects.Out, e.run.tc.Effects.GitNoRepository
+	if out == nil || missed == nil || !missed.Load() {
+		return
+	}
+	out.Facts = out.Facts.WithFeedback(toolrejection.GitNoRepositoryOnWriteLegCode, map[string]any{
+		"source_history_offered": tools.OffersSourceHistory(e.callTC),
+	}, nil)
 }
 
 // parkProgram ends the call's turn on the session's wait lease. The program
@@ -160,6 +173,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 			out.CommandProgram = &receipt
 		}
 	}
+	stateGitNoRepository(e)
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
 	if run.tool == "verify" {
 		result.ResultVersion = 2
@@ -251,6 +265,9 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 		return evaluatedResult(evaluated), err
 	})
 	e.park.settle()
+	// Attribution ends with evaluation: a detached job must not hold other
+	// sessions' attribution or claim a person's edits for its whole life.
+	run.window.settle(ctx)
 	settled := make(chan error, 1)
 	lifetime := &programLifetime{release: e.release}
 	defer lifetime.callerDone()
@@ -285,6 +302,7 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	outcome.Stderr = e.documents.appendNotes(outcome.Stderr)
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
+	outcome.SourceWindow = run.window.fact()
 	if settledNow {
 		recordProgramAttempt(r.FailureTracker, e.failureAttempt, ctx, outcome)
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)

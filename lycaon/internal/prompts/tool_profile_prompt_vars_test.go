@@ -163,6 +163,9 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 	if vars["profile_has_read_tools"] != true {
 		t.Fatalf("implement must advertise read tools")
 	}
+	if vars["profile_has_source_history"] != true {
+		t.Fatalf("implement holds source_history sticky: %#v", vars["profile_has_source_history"])
+	}
 	// Isolated branches omit VCS metadata and commit tools.
 	if vars["profile_has_git_commit"] == true {
 		t.Fatalf("implement is isolated and must not have git_commit")
@@ -220,6 +223,9 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	}
 	if vars["profile_has_read_tools"] != true {
 		t.Fatalf("explore_readonly must advertise read tools")
+	}
+	if vars["profile_has_source_history"] != false {
+		t.Fatalf("a deferred source_history stays untaught until it loads: %#v", vars["profile_has_source_history"])
 	}
 	if vars["profile_mutation_capable"] != false {
 		t.Fatalf("explore_readonly must not be mutation-capable")

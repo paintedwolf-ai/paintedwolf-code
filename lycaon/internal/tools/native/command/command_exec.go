@@ -55,6 +55,8 @@ type RunOutcome struct {
 	// IndexWatch is the Git index captured at spawn; the result's facts own it.
 	IndexWatch      indexwatch.Snapshot
 	SnapshotCapture *SnapshotCaptureResult
+	// SourceWindow is the window ConfinedForeground observed this dispatch with.
+	SourceWindow *hostcmd.SourceWindow
 }
 
 // CanonicalToolArgs returns reference-bearing arguments when available.

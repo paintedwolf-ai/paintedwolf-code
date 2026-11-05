@@ -18,7 +18,7 @@ tools:
   handoff_reserve: true
   handoff_release: true
   handoff_release_all: true
-  source_history: true
+  source_history: sticky
   command: sticky
   verify: sticky
   complete_leg: sticky
