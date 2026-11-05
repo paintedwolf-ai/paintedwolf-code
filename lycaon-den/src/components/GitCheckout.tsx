@@ -487,7 +487,7 @@ export function GitCheckout(props: Props) {
             <Show when={branchesError()}>
               <div class="git-checkout__error" role="alert">
                 <p>{branchesError()}</p>
-                <DenButton
+                <DenButton data-testid="retry-branches"
                   variant="link"
                   disabled={branchesLoading()}
                   onClick={() => void loadBranches()}

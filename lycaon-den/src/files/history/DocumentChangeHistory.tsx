@@ -88,7 +88,7 @@ export function DocumentChangeHistory(props: { client: LycaonClient; projectId: 
       <DenButton variant="ghost" compact disabled={busy() || !!change.reverted_by || change.epoch !== editorReplica(props.documentId)?.accepted.epoch}
         onClick={() => void revert(change)}>{change.reverted_by ? "Undone" : "Undo"}</DenButton>
     </div>}</For>
-    <Show when={!!cursor()}><DenButton variant="ghost" compact disabled={busy()} onClick={() => void loadEarlier()}>Earlier edits</DenButton></Show>
+    <Show when={!!cursor()}><DenButton data-testid="earlier-edits" variant="ghost" compact disabled={busy()} onClick={() => void loadEarlier()}>Earlier edits</DenButton></Show>
     <Show when={waiting()}>
       <span class="flex items-center justify-center gap-2 text-den-text-muted" role="status">
         <span class="den-file-version__spinner" aria-hidden="true" />

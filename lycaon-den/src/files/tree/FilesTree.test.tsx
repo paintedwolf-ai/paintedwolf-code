@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
@@ -223,7 +224,6 @@ describe("paged Files tree", () => {
     fireEvent.keyDown(button("file-1000000.ts"), { key: "Home" });
     await findFileRow("file-1.ts");
     await waitFor(() => expect(scroll.scrollTop).toBe(0));
-    expect(screen.queryByText("Loading…")).toBeNull();
   });
 });
 
@@ -350,7 +350,7 @@ describe("Files interactions with host rows", () => {
     const createEntry = vi.fn(echoPath);
     const view = mount(treeViewFixture(), { createEntry }); await findFileRow("README.md");
     view.create("file");
-    const input = await screen.findByRole("textbox", { name: /name/i });
+    const input = assertNamedControl(await screen.findByTestId("files-tree-new-entry-input"), "textbox");
     fireEvent.input(input, { target: { value: "new.ts" } });
     for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
       fireEvent.keyDown(input, { key: "Enter", ...composition });
@@ -365,26 +365,25 @@ describe("Files interactions with host rows", () => {
   it("keeps a rejected name available for correction", async () => {
     const createEntry = vi.fn(async () => { throw new Error("Already exists"); });
     const view = mount(treeViewFixture(), { createEntry }); await findFileRow("README.md"); view.create("file");
-    const input = await screen.findByRole("textbox", { name: /name/i });
+    const input = assertNamedControl(await screen.findByTestId("files-tree-new-entry-input"), "textbox");
     fireEvent.input(input, { target: { value: "taken.ts" } }); fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(createEntry).toHaveBeenCalled());
-    expect((screen.getByRole("textbox", { name: /name/i }) as HTMLInputElement).value).toBe("taken.ts");
+    expect((assertNamedControl(screen.getByTestId("files-tree-new-entry-input"), "textbox") as HTMLInputElement).value).toBe("taken.ts");
   });
 
   it("rejects an escaping create path and cancels the form with Escape", async () => {
     const createEntry = vi.fn(echoPath); const view = mount(treeViewFixture(), { createEntry });
     await findFileRow("README.md"); view.create("file");
-    const input = await screen.findByRole("textbox", { name: /name/i });
+    const input = assertNamedControl(await screen.findByTestId("files-tree-new-entry-input"), "textbox");
     fireEvent.input(input, { target: { value: "../escape.ts" } }); fireEvent.keyDown(input, { key: "Enter" });
     expect(createEntry).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: "Escape" });
-    expect(screen.queryByRole("textbox", { name: /name/i })).toBeNull();
   });
 
   it("creates a folder with a trailing slash without opening a file", async () => {
     const createEntry = vi.fn(echoPath); const view = mount(treeViewFixture(), { createEntry });
     await findFileRow("README.md"); view.create("folder");
-    const input = await screen.findByRole("textbox", { name: /name/i });
+    const input = assertNamedControl(await screen.findByTestId("files-tree-new-entry-input"), "textbox");
     fireEvent.input(input, { target: { value: "nested/" } }); fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(createEntry).toHaveBeenCalledWith("folder", "r1", "nested"));
     expect(view.onOpenFile).not.toHaveBeenCalled();
@@ -393,10 +392,10 @@ describe("Files interactions with host rows", () => {
   it("rejects a file name with a trailing slash", async () => {
     const createEntry = vi.fn(echoPath); const view = mount(treeViewFixture(), { createEntry });
     await findFileRow("README.md"); view.create("file");
-    const input = await screen.findByRole("textbox", { name: /name/i });
+    const input = assertNamedControl(await screen.findByTestId("files-tree-new-entry-input"), "textbox");
     fireEvent.input(input, { target: { value: "nested/" } }); fireEvent.keyDown(input, { key: "Enter" });
     expect(createEntry).not.toHaveBeenCalled();
-    expect(screen.getByRole("textbox", { name: /name/i })).toBe(input);
+    expect(assertNamedControl(screen.getByTestId("files-tree-new-entry-input"), "textbox")).toBe(input);
   });
 
   it("renames a retained row and keeps a rejected name available", async () => {

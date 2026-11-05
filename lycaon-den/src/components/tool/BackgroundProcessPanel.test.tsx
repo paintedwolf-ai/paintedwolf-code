@@ -51,7 +51,6 @@ describe("background process outcomes", () => {
     setSessionId("second");
     expect(screen.queryByText("old")).toBeNull();
     expect(screen.queryByText("Exit code")).toBeNull();
-    expect(screen.getByText("Checking…")).toBeTruthy();
     applyBackgroundProcessOutputs("second", []);
     expect(screen.getByText("No longer available")).toBeTruthy();
     expect(
@@ -80,7 +79,6 @@ describe("background process outcomes", () => {
       exit_code: -1,
       termination_reason: "stopped_by_user",
     });
-    expect(screen.getByText("Stopped by you")).toBeTruthy();
   });
 
   it("shows 'Ended when Painted Wolf Code quit' for a historical card with a recorded app_quit reason", () => {

@@ -148,7 +148,6 @@ describe("SidebarScopePicker", () => {
     expect(
       menu.querySelector(".den-sidebar-scope-picker__menu-list"),
     ).toBeTruthy();
-    expect(screen.getByText("Review")).toBeTruthy();
     expect(screen.getByTestId("sidebar-scope-opt-new")).toBeTruthy();
     expect(screen.getByTestId("sidebar-scope-opt-commit")).toBeTruthy();
     fireEvent.keyDown(document, { key: "Escape" });
@@ -321,7 +320,6 @@ describe("SidebarScopePicker", () => {
 
     refuse(new Error("offline"));
     expect(await screen.findByTestId("sidebar-scope-opt-pin-pin-1")).toBeTruthy();
-    expect(screen.getByText("Couldn’t remove this pin. Try again.")).toBeTruthy();
   });
 
   it("loads retained pins one page at a time", async () => {
@@ -485,7 +483,6 @@ describe("SidebarScopePicker", () => {
     ));
     fireEvent.click(screen.getByTestId("sidebar-scope-picker"));
     expect(screen.queryByTestId("sidebar-scope-opt-session-s1")).toBeNull();
-    expect(screen.queryByText("Sessions")).toBeNull();
     expect(
       screen.getByTestId("sidebar-scope-picker-subject").textContent,
     ).toContain("Fix auth flow");

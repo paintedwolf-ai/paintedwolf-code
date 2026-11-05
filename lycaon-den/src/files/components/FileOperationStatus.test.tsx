@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, expect, it, vi } from "vitest";
 import { stubClient } from "../../test/client-fixture.ts";
@@ -16,7 +17,7 @@ it("discovers pending work and cancels by its durable identity", async () => {
   const client = stubClient({ listSourceOperations: vi.fn(async () => ({ operations: [pending] })), cancelSourceOperation: cancel });
   render(() => <FileOperationStatus projectId="project" client={client} onRetry={async () => {}} onComplete={() => {}} />);
   await screen.findByText(/14,000 entries · 190.7 MiB processed/);
-  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));
   await waitFor(() => expect(cancel).toHaveBeenCalledWith("project", "operation"));
 });
 
@@ -58,7 +59,7 @@ it("shows terminal failure without a spinner and offers an explicit retry", asyn
   render(() => <FileOperationStatus projectId="project" client={client} onRetry={retry} onComplete={() => {}} />);
   await screen.findByText("Disk is full");
   expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("retry"), "button"));
   await waitFor(() => expect(retry).toHaveBeenCalledWith(failed));
   fireEvent.click(screen.getByRole("button", { name: /Dismiss/ }));
   expect(screen.queryByTestId("file-operations")).toBeNull();
@@ -70,7 +71,7 @@ it("keeps canceled operations available for retry until dismissed", async () => 
   const client = stubClient({ listSourceOperations: vi.fn(async () => ({ operations: [canceled] })) });
   render(() => <FileOperationStatus projectId="project" client={client} onRetry={retry} onComplete={() => {}} />);
   await screen.findByText("Canceled");
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("retry"), "button"));
   await waitFor(() => expect(retry).toHaveBeenCalledWith(canceled));
 });
 
@@ -102,8 +103,8 @@ it("allows cancellation while a retried operation is still running", async () =>
     cancelSourceOperation,
   });
   render(() => <FileOperationStatus projectId="project" client={client} onRetry={retry} onComplete={() => {}} />);
-  fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+  fireEvent.click(assertNamedControl(await screen.findByTestId("retry"), "button"));
   await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" }).hasAttribute("disabled")).toBe(false));
-  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));
   await waitFor(() => expect(cancelSourceOperation).toHaveBeenCalledWith("project", "operation"));
 });

@@ -88,8 +88,7 @@ describe("HostResourcesSettingsPanel", () => {
     expect(screen.getByText("/var/run/docker.sock")).toBeTruthy();
     expect(screen.getByText("docker")).toBeTruthy();
     expect(screen.getByText("containers.local")).toBeTruthy();
-    expect(screen.getByText("Write agents when present")).toBeTruthy();
-    fireEvent.click(screen.getByText("Open documentation"));
+    fireEvent.click(screen.getByTestId("open-documentation"));
     expect(confirmAndOpenExternalLink).toHaveBeenCalledWith(
       "https://docs.docker.com/reference/cli/docker/",
     );

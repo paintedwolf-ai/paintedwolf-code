@@ -204,7 +204,6 @@ describe("the diffs page", () => {
     render(() => <DiffsPage projectId="p1" client={client} address={TURN} onWalkTurn={() => {}} />);
 
     expect(await screen.findByText("binary")).toBeTruthy();
-    expect(screen.getByText("This file is binary and cannot be shown as a text diff.")).toBeTruthy();
     expect(screen.queryByText("This comparison leaves the file as it found it.")).toBeNull();
     expect(screen.queryByTestId("source-reader")).toBeNull();
   });

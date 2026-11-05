@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 // @vitest-environment jsdom
 import "../../test/document-outbox-fixture.ts";
 import { sourceEffectFixture } from "../source/source-effect-fixture.ts";
@@ -197,12 +198,12 @@ describe("ProjectFilesView aim liveness matrix", () => {
     setFilesActiveBuffer(PROJECT, readKey("a.ts"));
     setFilesActiveBuffer(PROJECT, provisional);
     expect(projectFilesState(PROJECT).pendingKey).toBe(provisional);
-    await waitFor(() => expect(screen.getByRole("tab", { name: "b.ts" }).getAttribute("aria-busy")).toBe("true"));
+    await waitFor(() => expect(assertNamedControl(screen.getByTestId("files-tab"), "tab").getAttribute("aria-busy")).toBe("true"));
     expect(screen.getByTestId("files-pane-presentation").querySelector('[role="status"]')).toBeNull();
 
     gate.get("b.ts")!.resolve(sourceRead("b.ts"));
     await expectPresented(readKey("b.ts"));
-    expect(screen.getByRole("tab", { name: "b.ts" }).getAttribute("aria-busy")).toBe("false");
+    expect(assertNamedControl(screen.getByTestId("files-tab"), "tab").getAttribute("aria-busy")).toBe("false");
   });
 
   it("a hot-exit restore presents the restored active tab", async () => {

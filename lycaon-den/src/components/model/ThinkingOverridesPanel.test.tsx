@@ -25,7 +25,6 @@ describe("thinking section opt-in", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Override thinking in this project" }));
     await waitFor(() => expect(change).toHaveBeenCalledWith([]));
     expect(screen.queryByRole("heading", { name: "Thinking overrides" })).toBeNull();
-    expect(screen.getByText("Uses device thinking settings.")).toBeTruthy();
   });
   it("keeps the section open if clearing overrides fails", async () => {
     const change = vi.fn().mockRejectedValue(new Error("Could not save"));

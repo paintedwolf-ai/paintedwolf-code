@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -56,7 +57,7 @@ describe("TooltipHost", () => {
       </>
     ));
 
-    const button = screen.getByRole("button", { name: "Files" });
+    const button = assertNamedControl(screen.getByTestId("files"), "button");
     fireEvent.focusIn(button);
     await vi.advanceTimersByTimeAsync(350);
     expect(screen.getByRole("tooltip").dataset.side).toBe("bottom");
@@ -79,7 +80,7 @@ describe("TooltipHost", () => {
       </>
     ));
 
-    const button = screen.getByRole("button", { name: "Progress" });
+    const button = assertNamedControl(screen.getByTestId("progress"), "button");
     const label = button.querySelector<HTMLElement>(".label")!;
     fireEvent.mouseOver(button);
     await vi.advanceTimersByTimeAsync(350);
@@ -137,7 +138,7 @@ describe("TooltipHost", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(screen.queryByRole("tooltip")).toBeNull();
 
-    fireEvent.mouseOver(screen.getByRole("button", { name: "Copy" }));
+    fireEvent.mouseOver(assertNamedControl(screen.getByTestId("copy"), "button"));
     await vi.advanceTimersByTimeAsync(350);
     expect(screen.getByRole("tooltip").textContent).toBe("Copy path");
   });

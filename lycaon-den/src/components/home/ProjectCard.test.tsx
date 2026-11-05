@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { ErrorBoundary } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -91,7 +92,7 @@ describe("ProjectCard rename (shared InlineRenameInput)", () => {
       />
     ));
     fireEvent.click(getByTestId("project-card-menu-r1"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("rename"), "menuitem"));
     const input = getByTestId("project-card-rename-r1") as HTMLInputElement;
     fireEvent.input(input, { target: { value: "New name" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -113,7 +114,7 @@ describe("ProjectCard rename (shared InlineRenameInput)", () => {
       />
     ));
     fireEvent.click(getByTestId("project-card-menu-r2"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("rename"), "menuitem"));
     fireEvent.keyDown(getByTestId("project-card-rename-r2"), { key: "Escape" });
     expect(queryByTestId("project-card-rename-r2")).toBeNull();
     expect(onRename).not.toHaveBeenCalled();

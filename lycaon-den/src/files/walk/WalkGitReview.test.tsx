@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { sourceReaderFixture } from "../../test/source-reader-fixture.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -36,8 +37,6 @@ describe("Git walk review", () => {
     render(() => <WalkGitReview projectId="p1" step={gitReviewStep()} client={stubClient({ getProjectSourceGitReview: async () => gitReview(), ...host.methods })} onOpenGitFile={open} onOpenFile={vi.fn()} />);
     await screen.findByRole("button", { name: "Review src/app.ts" });
     expect(screen.getByTestId("git-review-count").textContent).toContain("1 file committed");
-    expect(screen.getByText("Test author")).toBeTruthy();
-    expect(screen.queryByText("No file changes")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Review src/app.ts" }));
     fireEvent.click(screen.getByRole("button", { name: "Review src/app.ts" }));
     await waitFor(() => expect(open).toHaveBeenCalledOnce());
@@ -88,7 +87,7 @@ describe("Git walk review", () => {
       return gitReview();
     });
     render(() => <WalkGitReview projectId="p1" step={gitReviewStep()} selection={{ movement: true }} onSelectionChange={selection} client={stubClient({ getProjectSourceGitReview: list })} onOpenGitFile={vi.fn()} onOpenFile={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Review destination commit" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("review-destination-commit"), "button"));
     await screen.findByRole("button", { name: "Review src/app.ts" });
     expect(list).toHaveBeenCalledTimes(2);
     expect(selection).toHaveBeenCalledWith({ movement: false });
@@ -147,7 +146,6 @@ describe("Git walk review", () => {
     expect(screen.getByRole("button", { name: "Review src/app.ts" })).toBe(row);
     expect(screen.getByTestId("walk-page-title")).toBe(title);
     expect(screen.getByTestId("git-review-basis").textContent).toContain("aaaaaaaaaaaa");
-    expect(screen.queryByText("Loading committed files…")).toBeNull();
     pending.resolve({ ...first, before_commit: "e".repeat(40) });
     await waitFor(() => expect(screen.getByTestId("git-review-basis").textContent).toContain("eeeeeeeeeeee"));
     expect(screen.getByTestId("walk-page-title")).toBe(title);

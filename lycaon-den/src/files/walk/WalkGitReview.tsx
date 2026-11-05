@@ -213,7 +213,7 @@ export function WalkGitReview(props: Props) {
       <Show when={query.showLoading()}><p role="status">Loading committed files…</p></Show>
       <Show when={canReviewDestination()}>
         <div class="den-git-review__controls">
-          <button type="button" class="den-git-review__button" onClick={() => selectComparison({ movement: false })}>Review destination commit</button>
+          <button data-testid="review-destination-commit" type="button" class="den-git-review__button" onClick={() => selectComparison({ movement: false })}>Review destination commit</button>
         </div>
       </Show>
       <span class="sr-only" role="status">{copyStatus()}</span>

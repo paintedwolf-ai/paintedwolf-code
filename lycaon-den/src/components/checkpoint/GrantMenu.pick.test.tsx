@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { createSignal } from "solid-js";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
@@ -19,7 +20,7 @@ describe("GrantMenu pick", () => {
         onPick={onPick}
       />
     ));
-    fireEvent.click(view.getByRole("button", { name: "Other choices" }));
+    fireEvent.click(assertNamedControl(view.getByTestId("approval-grant-face"), "button"));
     const item = screen.getByTestId("approval-grant-menu").querySelector<HTMLButtonElement>("[role=menuitem]")!;
     item.focus();
     fireEvent.click(item);

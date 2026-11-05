@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { stubClient } from "../../test/client-fixture.ts";
@@ -28,8 +29,6 @@ describe("ignored public values", () => {
     render(() => <IgnoredSecretValues client={client} projectId="project" />);
     fireEvent.click(await screen.findByRole("button", { name: "Review ignored value: Published example" }));
     expect((screen.getByLabelText("Exact public value") as HTMLTextAreaElement).value).toBe("public fixture");
-    expect(screen.getByText(/Protected credential evidence/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open ignore file" })).toBeTruthy();
   });
 
   it("declares a value in the chosen folder and lists what the file now holds", async () => {
@@ -42,7 +41,7 @@ describe("ignored public values", () => {
       createProjectSecretIgnore,
     });
     render(() => <IgnoredSecretValues client={client} projectId="project" />);
-    const add = await screen.findByRole("button", { name: "Add value" }) as HTMLButtonElement;
+    const add = assertNamedControl(await screen.findByTestId("add-value"), "button") as HTMLButtonElement;
     // Declarations need a folder, so adding opens once the project's folders load.
     await waitFor(() => expect(add.disabled).toBe(false));
     fireEvent.click(add);

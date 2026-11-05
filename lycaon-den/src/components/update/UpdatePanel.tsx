@@ -68,7 +68,7 @@ export function UpdatePanel(props: UpdatePanelProps) {
     <Show when={state()}>{(current) => <div class="den-settings-hint" data-testid="updates-status">
       <p data-testid="updates-current-version">Version {current().running_version}</p>
       <Show when={current().capabilities.blocked_reason === "development_build"}><p data-testid="updates-development-build">Updates are unavailable in development builds. Install a packaged release to use automatic updates.</p></Show>
-      <Show when={current().discovery === "up_to_date"}><p>{current().install_source === "system_package" ? `The selected upstream release channel has no newer version.${current().package?.source.availability === "not_checked" ? " Package-source availability has not been checked." : ""}` : "You’re using the latest version."}</p></Show>
+      <Show when={current().discovery === "up_to_date"}><p data-testid="updates-up-to-date">{current().install_source === "system_package" ? `The selected upstream release channel has no newer version.${current().package?.source.availability === "not_checked" ? " Package-source availability has not been checked." : ""}` : "You’re using the latest version."}</p></Show>
       <Show when={current().discovery === "held_back"}><p data-testid="updates-rollout-eligibility">A newer release is rolling out gradually. Check now to get it sooner.</p></Show>
       <Show when={current().install_source !== "system_package" && candidate()}>{(release) => <p>Version {release().version} is available.</p>}</Show>
       <Show when={installationStatus(current())}>{(status) => <p role="status" aria-live="polite" aria-atomic="true" data-testid="updates-installation-status">{status()}{current().installation === "downloading" ? progress() : ""}</p>}</Show>

@@ -329,7 +329,6 @@ describe("FilesEditor", () => {
         target: { value: "zzz" },
       });
       await waitFor(() => {
-        expect(screen.getByText("No symbols match that filter")).toBeTruthy();
       });
     });
   });

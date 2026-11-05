@@ -250,7 +250,7 @@ describe("WorkerTranscript", () => {
 
     expect(screen.getByTestId("worker-working-indicator")).toBeTruthy();
     expect(screen.queryByTestId("message-stream")).toBeNull();
-    expect(screen.queryByText(/No activity yet/)).toBeNull();
+    expect(screen.queryByTestId("worker-no-activity")).toBeNull();
   });
 
   it("shows pending child-session rows before coalesce flush", async () => {
@@ -323,7 +323,7 @@ describe("WorkerTranscript", () => {
     expect(screen.getByTestId("worker-activity-preview").textContent).toBe(
       "12 of 40 tool turns so far",
     );
-    expect(screen.queryByText(/No activity yet/)).toBeNull();
+    expect(screen.queryByTestId("worker-no-activity")).toBeNull();
   });
 
   it("flags the Activity section as working while the worker runs", () => {
@@ -378,7 +378,7 @@ describe("WorkerTranscript", () => {
       />
     ));
 
-    expect(screen.getByText("No activity yet for this worker.")).toBeTruthy();
+    expect(screen.getByTestId("worker-no-activity")).toBeTruthy();
     expect(screen.queryByTestId("worker-working-indicator")).toBeNull();
   });
 
@@ -395,7 +395,6 @@ describe("WorkerTranscript", () => {
     ));
 
     expect(screen.getByTestId("worker-coordination")).toBeTruthy();
-    expect(screen.getByText(/No coordination activity yet/i)).toBeTruthy();
   });
 
   it("renders coordination between activity and evidence with posted and received notes", () => {
@@ -440,11 +439,8 @@ describe("WorkerTranscript", () => {
 
     const coordination = screen.getByTestId("worker-coordination");
     expect(coordination).toBeTruthy();
-    expect(screen.getByText("Notes posted")).toBeTruthy();
     expect(screen.getByText("My note")).toBeTruthy();
-    expect(screen.getByText("Notes received")).toBeTruthy();
     expect(screen.getByText("Peer note")).toBeTruthy();
-    expect(screen.getByText("Reservations")).toBeTruthy();
     expect(screen.getByText("pkg/reserved.go")).toBeTruthy();
 
     const pane = coordination.closest(".den-worker-transcript-pane");

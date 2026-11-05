@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -131,7 +132,7 @@ describe("ContributionCommandFlow", () => {
     const output = await screen.findByTestId("contribution-command-output");
     expect(output.textContent).toContain("<img src=x");
     expect(output.querySelector("img")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("copy"), "button"));
     expect(clipboard.copy).toHaveBeenCalledWith(`<img src=x onerror="alert(1)">`);
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(onBack).toHaveBeenCalledOnce();

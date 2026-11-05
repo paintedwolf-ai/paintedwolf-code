@@ -420,7 +420,7 @@ export function ProjectCostView(props: Props) {
                       <span>Turn it on to record new project usage. Existing estimates remain visible.</span>
                     </div>
                     <Show when={props.onOpenCostSettings}>
-                      <DenButton variant="primary" compact onClick={() => props.onOpenCostSettings?.()}>
+                      <DenButton data-testid="open-settings-cost" variant="primary" compact onClick={() => props.onOpenCostSettings?.()}>
                         Open Settings → Cost
                       </DenButton>
                     </Show>

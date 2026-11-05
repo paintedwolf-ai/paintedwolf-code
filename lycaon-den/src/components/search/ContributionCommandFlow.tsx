@@ -219,7 +219,7 @@ export function ContributionCommandFlow(props: Props) {
           <pre data-testid="contribution-command-output" tabindex="-1" aria-label="Command output">{output()}</pre>
           <div class="den-command-flow__actions">
             <button type="button" onClick={props.onBack}>Back</button>
-            <button type="button" onClick={() => void copyTextToClipboard(output() ?? "")}>Copy</button>
+            <button data-testid="copy" type="button" onClick={() => void copyTextToClipboard(output() ?? "")}>Copy</button>
             <button type="button" class="den-command-flow__primary" onClick={props.onClose}>Close</button>
           </div>
         </Scrollport>

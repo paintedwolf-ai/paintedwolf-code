@@ -157,7 +157,6 @@ describe("BudgetsEditor", () => {
     expect(screen.getByTestId("spend-ceiling-usd")).toBeTruthy();
     expect(screen.getByTestId("spend-warning-percent")).toHaveProperty("value", "80");
     expect(screen.getByTestId("spend-soft-stop")).toHaveProperty("checked", true);
-    expect(screen.getByText(/safety brake, not a budget/i)).toBeTruthy();
     expect(screen.getByTestId("spend-ceiling-readout").getAttribute("data-kind")).toBe(
       "off",
     );

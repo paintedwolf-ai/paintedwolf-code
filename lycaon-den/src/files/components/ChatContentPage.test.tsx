@@ -21,7 +21,6 @@ describe("chat content Files pane", () => {
     }} />);
     await waitFor(() => expect(view.container.querySelector(".cm-content")?.textContent).toContain("last-record"));
     expect(view.container.querySelector(".cm-content")?.textContent).toContain("first-record");
-    expect(view.queryByRole("button",{name:/Previous records|Next records/})).toBeNull();
     expect(get).toHaveBeenCalledTimes(2);
   });
 

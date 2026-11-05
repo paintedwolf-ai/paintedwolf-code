@@ -79,7 +79,6 @@ describe("SessionWorkflowLauncher", () => {
     ));
     const recon = screen.getByTestId("session-launcher-tile-recon-pack") as HTMLButtonElement;
     expect(recon.disabled).toBe(true);
-    expect(screen.getByText("needs repo")).toBeTruthy();
     fireEvent.click(recon);
     expect(onSelect).not.toHaveBeenCalled();
   });

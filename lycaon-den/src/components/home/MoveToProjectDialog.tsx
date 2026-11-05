@@ -93,7 +93,7 @@ export function MoveToProjectDialog(props: Props) {
           </Show>
 
           <footer class="den-dialog__footer">
-            <DenButton variant="ghost" onClick={() => props.onClose()} disabled={props.busy}>
+            <DenButton data-testid="cancel" variant="ghost" onClick={() => props.onClose()} disabled={props.busy}>
               Cancel
             </DenButton>
             <DenButton

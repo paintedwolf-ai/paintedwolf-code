@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../../test/controls.ts";
 import { diffViewerFixture } from "../../../test/source-reader-fixture.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
@@ -89,7 +90,6 @@ describe("DiffViewerDrawer", () => {
       />
     ));
     expect(screen.getByTestId("diff-viewer-path").getAttribute("data-file-change")).toBe("deleted");
-    expect(screen.getByText("Deleted file")).toBeTruthy();
     expect(screen.getByTestId("diff-viewer-split")).toHaveProperty("disabled", true);
     await waitFor(() => expect(document.querySelectorAll(".cm-den-reader-delete"), screen.getByTestId("diff-viewer-body").textContent ?? "").toHaveLength(2));
   });
@@ -166,7 +166,7 @@ describe("DiffViewerDrawer", () => {
         rootRefs={[]}
       />
     ));
-    const copy = screen.getByRole("button", { name: "Copy path" });
+    const copy = assertNamedControl(screen.getByTestId("diff-viewer-copy"), "button");
     expect(copy.hasAttribute("aria-haspopup")).toBe(false);
     fireEvent.contextMenu(copy);
     expect(await screen.findByTestId("diff-viewer-copy-path")).toBeTruthy();

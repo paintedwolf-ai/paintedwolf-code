@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../test/controls.ts";
 import { createSignal } from "solid-js";
 import { ResidentPresenceProvider } from "../ui/resident-presence-context.tsx";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
@@ -55,7 +56,7 @@ describe("ContextMenu", () => {
       />
     ));
     await Promise.resolve();
-    const item = screen.getByRole("menuitem", { name: "Add to chat" });
+    const item = assertNamedControl(screen.getByTestId("ledger-selection-add-to-chat"), "menuitem");
     expect(item.querySelector(".den-context-menu__label")?.textContent).toBe("Add to chat");
     expect(item.querySelector(".den-context-menu__shortcut")?.textContent).toBe("⌘L");
     fireEvent.keyDown(item, { key: "Enter" });

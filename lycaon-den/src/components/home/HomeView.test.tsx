@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { afterEach, describe, expect, it, vi, onTestFinished } from "vitest";
 import { applyWebEngineFact } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import { loadFailed, loaded } from "../../store/load-state.ts";
@@ -320,8 +321,8 @@ describe("HomeView project identity", () => {
     const [summaries, setSummaries] = createSignal([stubSummary(1), stubSummary(2)]);
     render(() => <HomeView summaries={summaries()} section={section} registry={loaded(null)} {...homeHandlers} />);
     fireEvent.click(screen.getAllByRole("button", { name: "Project actions" })[0]!);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
-    fireEvent.input(screen.getByRole("textbox", { name: "Rename" }), { target: { value: "Unsubmitted name" } });
+    fireEvent.click(assertNamedControl(screen.getByTestId("rename"), "menuitem"));
+    fireEvent.input(assertNamedControl(screen.getByTestId("rename"), "textbox"), { target: { value: "Unsubmitted name" } });
     setSummaries([stubSummary(2)]);
     expect(screen.queryByRole("textbox", { name: "Rename" })).toBeNull();
     expect(screen.queryByText("Project 1")).toBeNull();
@@ -335,8 +336,8 @@ describe("HomeView project identity", () => {
     const onRename = vi.fn();
     render(() => <HomeView summaries={summaries()} section={section} registry={loaded(null)} {...homeHandlers} onRename={onRename} />);
     fireEvent.click(screen.getAllByRole("button", { name: "Project actions" })[0]!);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
-    const input = screen.getByRole("textbox", { name: "Rename" }) as HTMLInputElement;
+    fireEvent.click(assertNamedControl(screen.getByTestId("rename"), "menuitem"));
+    const input = assertNamedControl(screen.getByTestId("rename"), "textbox") as HTMLInputElement;
     fireEvent.input(input, { target: { value: "Unsaved café rename" } });
     setSummaries([{ ...stubSummary(2), lastActivityAtMs: 999 }, { ...stubSummary(1), displayName: "Host updated name" }]);
     expect(screen.getByRole("textbox", { name: "Rename" })).toBe(input);

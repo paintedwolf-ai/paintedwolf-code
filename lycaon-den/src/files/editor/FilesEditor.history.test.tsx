@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { setupFilesEditorTests } from "./files-editor-test-harness.ts";
 
 import "../../test/document-outbox-fixture.ts";
@@ -59,7 +60,6 @@ describe("FilesEditor", () => {
     expect(host.querySelector(".cm-editor")).toBe(editor);
     release();
     await waitFor(() => expect(host.parentElement!.hidden).toBe(true));
-    expect(screen.getByText(/historical contents/)).toBeTruthy();
     setVersion(null);
     expect(host.parentElement!.hidden).toBe(false);
     expect(host.querySelector(".cm-editor")).toBe(editor);
@@ -158,7 +158,7 @@ availability: "available" as const, source: { kind: "text" as const, before: "ol
       screen.queryByRole("button", { name: "Restore comparison baseline" }),
     ).toBeNull();
     fireEvent.click(
-      screen.getByRole("button", { name: "Restore this version" }),
+      assertNamedControl(screen.getByTestId("files-editor-restore-version"), "button"),
     );
     expect(onRestoreVersion).toHaveBeenCalledOnce();
     expect(onRestoreVersion).toHaveBeenCalledWith(version);

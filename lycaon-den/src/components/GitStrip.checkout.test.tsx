@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../test/controls.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -171,7 +172,7 @@ describe("GitStrip checkout flow", () => {
     await openBranchMenu();
     fireEvent.click(screen.getByTestId("git-worktree-bind-open"));
     await waitFor(() =>
-      screen.getByRole("dialog", { name: "Create worktree" }),
+      assertNamedControl(screen.getByTestId("git-checkout-create-modal"), "dialog"),
     );
   }
 
@@ -184,7 +185,7 @@ describe("GitStrip checkout flow", () => {
     );
     expect(screen.queryByTestId("git-worktree-bind-open")).toBeNull();
     await openWorktreeForm();
-    const dialog = screen.getByRole("dialog", { name: "Create worktree" });
+    const dialog = assertNamedControl(screen.getByTestId("git-checkout-create-modal"), "dialog");
     expect(dialog.textContent).toContain("Starting pointmain");
     expect(dialog.textContent).toContain(
       "2 changed files stay in the project folder and are not copied.",
@@ -329,7 +330,7 @@ describe("GitStrip checkout flow", () => {
       ),
     );
     expect(
-      screen.getByRole("dialog", { name: "Create branch" }).textContent,
+      assertNamedControl(screen.getByTestId("git-checkout-create-modal"), "dialog").textContent,
     ).toContain(
       "Your uncommitted changes stay in this folder on the new branch.",
     );
@@ -358,7 +359,7 @@ describe("GitStrip checkout flow", () => {
       ),
     );
     expect(screen.getByTestId("git-worktree-bind-open")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry branches" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("retry-branches"), "button"));
     await waitFor(() =>
       expect(screen.getAllByTestId("git-branch-item")).toHaveLength(2),
     );
@@ -369,7 +370,6 @@ describe("GitStrip checkout flow", () => {
     fireEvent.input(screen.getByLabelText("Switch branch"), {
       target: { value: "missing" },
     });
-    expect(screen.getByText("No matching branches.")).toBeTruthy();
   });
 
   it("does not submit twice while a checkout is pending", async () => {

@@ -289,7 +289,7 @@ function TranscriptVisualRaster(props: Props) {
                   <span class="den-overlay__title">
                     {caption() || "Visual artifact"}
                   </span>
-                  <ChromeCloseButton
+                  <ChromeCloseButton data-testid="close-enlarged-visual"
                     class="den-overlay__close den-inset-icon-btn"
                     label="Close enlarged visual"
                     onClick={() => setLightbox(false)}

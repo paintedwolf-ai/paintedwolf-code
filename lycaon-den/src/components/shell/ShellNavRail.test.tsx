@@ -18,7 +18,7 @@ describe("ShellNavRail", () => {
     ));
     const nav = screen.getByRole("navigation", { name: "Main" });
     const frame = nav.parentElement;
-    const content = screen.getByText("Chats").parentElement;
+    const content = screen.getByTestId("chats").parentElement;
 
     expect(frame?.classList.contains("den-shell-nav-frame")).toBe(true);
     expect(content?.parentElement).toBe(nav);
