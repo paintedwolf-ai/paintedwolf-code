@@ -19,7 +19,9 @@ func TestNothingCitedReplyInAReportPhaseStillEndsInAReport(t *testing.T) {
 		name     string
 		reply    string
 		controls workflowdef.ManifestControls
-		// maxCalls bounds model turns: none beyond the reply unless a document is owed.
+		// maxCalls bounds model turns for the report: none beyond the reply unless a
+		// document is owed. Starting the run wakes the coordinator, so the prompt
+		// may take one more turn after the run has ended.
 		maxCalls  int
 		assembled bool
 		verified  string
@@ -68,12 +70,12 @@ func TestNothingCitedReplyInAReportPhaseStillEndsInAReport(t *testing.T) {
 			script.mu.Lock()
 			calls := script.next
 			script.mu.Unlock()
-			if !runstate.IsTerminal(current.Status) || calls > tc.maxCalls {
+			if !runstate.IsTerminal(current.Status) || calls > tc.maxCalls+1 {
 				rows := make([]string, 0, len(msgs))
 				for _, msg := range msgs {
 					rows = append(rows, string(msg.Role)+"/"+string(msg.Kind)+": "+msg.Content)
 				}
-				t.Fatalf("status=%s phase=%s after %d model calls, want a terminal run within %d; rows %q", current.Status, current.CurrentPhase, calls, tc.maxCalls, rows)
+				t.Fatalf("status=%s phase=%s after %d model calls, want a terminal run within %d; rows %q", current.Status, current.CurrentPhase, calls, tc.maxCalls+1, rows)
 			}
 			if !tc.assembled {
 				return
