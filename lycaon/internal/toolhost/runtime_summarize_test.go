@@ -15,7 +15,7 @@ import (
 
 func TestBuildNativeRegistryConstructsSummarizeWithoutProviderServices(t *testing.T) {
 	configtest.Overlay(t, map[config.Rel]string{
-		config.NativeTools: "native:\n  filesystem:\n    - summarize\n",
+		config.NativeTools: "native:\n  meta:\n    - source_history\n",
 	})
 	nativeConfig, err := nativemanifest.Load()
 	testutil.FailErr(t, "load native config", err)
