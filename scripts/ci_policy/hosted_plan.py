@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PROFILES = {"fast", "check", "nightly", "release", "integration"}
 GATE = "check"
 FAST_GATE = "check-fast"
+# The static job runs these before any lane, so the fast tier omits them.
+STATIC_STAGES = {"comments:check", "test:fail-messages:check", "docs:links"}
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
 SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
@@ -112,7 +114,8 @@ def lanes():
                          f"missing={expected - actual}, extra={actual - expected}")
     fast = Counter(stage["name"] for lane in values.values() if "fast" in lane["profiles"]
                    for stage in expand(lane["targets"]))
-    expected_fast = Counter(stage['name'] for stage in expand([FAST_GATE]) if stage['name'] != 'licenses:notices')
+    expected_fast = Counter(stage['name'] for stage in expand([FAST_GATE])
+                            if stage['name'] != 'licenses:notices' and stage['name'] not in STATIC_STAGES)
     if fast != expected_fast:
         raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: {dict(fast)}")
     expected = Counter(stage["name"] for stage in expand([GATE]))

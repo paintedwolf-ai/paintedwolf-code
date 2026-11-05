@@ -16,6 +16,7 @@ def entries(today=None):
     if not isinstance(values, list):
         raise ValueError('quarantine must be a list')
     seen = set()
+    active = []
     for row in values:
         if set(row) != {'package', 'test', 'issue', 'owner', 'expires'}:
             raise ValueError('quarantine entries require package, test, issue, owner, and expires')
@@ -32,7 +33,8 @@ def entries(today=None):
         if key in seen:
             raise ValueError('duplicate quarantine entry')
         seen.add(key)
-    return values
+        active.append(row)
+    return active
 
 
 def arguments(package, original, observe=False):
