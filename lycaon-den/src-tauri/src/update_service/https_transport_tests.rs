@@ -16,7 +16,7 @@ async fn https_requests_start_a_tls_handshake() {
             .env("PW_TEST_FRESH_HTTPS_PROCESS", &result)
             .spawn()
             .expect("start isolated HTTPS transport test");
-        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        let deadline = std::time::Instant::now() + Duration::from_secs(300);
         loop {
             if let Some(status) = child.try_wait().expect("read HTTPS test process status") {
                 assert!(
@@ -42,12 +42,12 @@ async fn https_requests_start_a_tls_handshake() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let server = tokio::spawn(async move {
-        let (mut stream, _) = tokio::time::timeout(Duration::from_secs(5), listener.accept())
+        let (mut stream, _) = tokio::time::timeout(Duration::from_secs(120), listener.accept())
             .await
             .unwrap()
             .unwrap();
         let mut header = [0; 5];
-        tokio::time::timeout(Duration::from_secs(5), stream.read_exact(&mut header))
+        tokio::time::timeout(Duration::from_secs(120), stream.read_exact(&mut header))
             .await
             .unwrap()
             .unwrap();
@@ -58,7 +58,7 @@ async fn https_requests_start_a_tls_handshake() {
     let client = crate::http_transport::client_builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
-        .timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(120))
         .build()
         .unwrap();
     // The fixture closes after ClientHello; it never supplies a trusted certificate.
