@@ -223,9 +223,10 @@ func (l *toolBatch) executeToolCallsInTurn(
 		return result, err
 	}
 	// Publication precedes every tool, and the wait guard reads its result.
-	history, err := l.publishMidTurnText(ctx, sess, sessionID, history, assistantMessageID, turnSurfaceID, toolCalls, &lastToolTS, st)
+	published, err := l.publishMidTurnText(ctx, sess, sessionID, result.history, assistantMessageID, turnSurfaceID, toolCalls, &lastToolTS, st)
+	result.history = published
 	if err != nil {
-		return history, nil, false, 0, "", false, err
+		return result, err
 	}
 	// Batch closure survives request cancellation.
 	l.Nudges.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().BeginBatch(len(toolCalls)), false)

@@ -98,6 +98,8 @@ type CloseoutDeps struct {
 	EvaluateMidTurnNote    func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) error
 	AssembleLedgerCloseout func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draft guidance.CloseoutDraft, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)
 	CheckRunReportDocument func(ctx context.Context, sessionID string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error)
+	EvidenceLedger         guidance.CloseoutEvidenceReader
+	CloseoutStallState     func(ctx context.Context, sessionID string) guidance.RetainedCloseout
 	CloseoutTrackingDeps
 }
 
