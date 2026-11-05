@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -75,10 +76,9 @@ func TestProgramKillBeforeTheProcessStartsReportsItsSignal(t *testing.T) {
 		done <- callResult{content, err}
 	}()
 	testutil.AwaitClosed(t, "the launch reaches its hold", held)
-	testutil.WaitFor(t, func() bool {
-		content, err := f.Call(t, t.Context(), `kill %1`)
-		return err == nil && decodeOutcome(t, content).Status == 0
-	})
+	// The program is blocked starting this job, so the signal goes to the jobs table.
+	jobs := f.Runtime.Supervisor.Jobs(f.Session, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "signal the held job", jobs.Signal(t.Context(), "%1", "TERM"))
 	result := <-done
 	testutil.FailErr(t, "run the held program", result.err)
 	if got := decodeOutcome(t, result.content); got.Stdout != "job:143\nstarted:1\n" {
