@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import errno
+import errno
 import fcntl
 import hashlib
 import os
@@ -73,11 +74,44 @@ def detach_mounts_within(candidate: Path) -> None:
             raise OSError(errno.EBUSY, "mount could not be removed", point)
 
 
+def remove_tree(candidate: Path) -> None:
+    detach_mounts_within(candidate)
+    device = os.lstat(candidate).st_dev
+    # Test fixtures can leave read-only directories behind.
+    os.chmod(candidate, os.stat(candidate).st_mode | stat.S_IRWXU)
+    for directory, children, _ in os.walk(candidate):
+        for name in children:
+            path = Path(directory) / name
+            status = os.lstat(path)
+            if not stat.S_ISDIR(status.st_mode):
+                continue
+            # A mount that would not detach may have a dead server, or a live one whose
+            # exported tree removal would delete through.
+            if status.st_dev != device:
+                raise OSError(errno.EBUSY, "mounted filesystem in test run", str(path))
+            os.chmod(path, status.st_mode | stat.S_IRWXU)
+    # The lease goes last: a partial removal is retried under its lease.
+    for child in candidate.iterdir():
+        if child.name == ".lease":
+            continue
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+    (candidate / ".lease").unlink(missing_ok=True)
+    candidate.rmdir()
+
+
 def remove_unleased(candidate: Path) -> None:
     if candidate.is_symlink() or not candidate.is_dir():
         return
     try:
         descriptor = os.open(candidate / ".lease", os.O_RDWR | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        # Creation leases under the collection lock held here, so no run owns this
+        # directory: its creation stopped partway.
+        remove_tree(candidate)
+        return
     except OSError:
         return
     with os.fdopen(descriptor, "r+") as lease:
@@ -85,26 +119,7 @@ def remove_unleased(candidate: Path) -> None:
             fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        detach_mounts_within(candidate)
-        # Test fixtures can leave read-only directories behind.
-        os.chmod(candidate, os.stat(candidate).st_mode | stat.S_IRWXU)
-        for directory, children, _ in os.walk(candidate):
-            for name in children:
-                path = Path(directory) / name
-                mode = path.lstat().st_mode
-                if stat.S_ISDIR(mode):
-                    os.chmod(path, mode | stat.S_IRWXU)
-        # The lease goes last: a run without one is never collected, so a partial removal could
-        # not be retried.
-        for child in candidate.iterdir():
-            if child.name == ".lease":
-                continue
-            if child.is_dir() and not child.is_symlink():
-                shutil.rmtree(child)
-            else:
-                child.unlink()
-        (candidate / ".lease").unlink()
-        candidate.rmdir()
+        remove_tree(candidate)
 
 
 def prune(root: Path, candidate: Path | None = None) -> None:
