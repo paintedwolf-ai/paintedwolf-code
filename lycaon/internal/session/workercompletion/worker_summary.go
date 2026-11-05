@@ -339,7 +339,7 @@ func toolMessageFailed(msg api.Message) bool {
 // FormatFeedback preserves the occurrence's frozen copy through retry and delivery.
 func (r WorkerSummaryEvalResult) FormatFeedback(ctx context.Context, hints *guidance.HintConfig) (string, error) {
 	if r.HintCopy != nil {
-		return guidance.RenderPolicyCopy(ctx, r.HintCode, string(r.HintEffect), r.HintCopy)
+		return guidance.RenderPolicyCopy(ctx, r.HintCode, string(r.HintEffect), r.HintCopy, nil)
 	}
 	return guidance.FormatWorkerSummaryFeedback(hints, r.HintCode, r.HintData)
 }

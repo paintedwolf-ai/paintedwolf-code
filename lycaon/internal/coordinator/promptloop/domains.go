@@ -2,7 +2,6 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -21,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -29,28 +29,33 @@ import (
 )
 
 type ContextDeps struct {
+	Limits                func(context.Context, *api.Session) settings.SessionLimits
+	Tools                 tools.ToolRegistry
+	RootSessionID         func(ctx context.Context, sessionID string) string
+	Policy                toolpolicy.Engine
+	BuildMessages         func(ctx context.Context, sess *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error)
+	ImplementSessionState func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
+	RefreshToolContext    func(ctx context.Context, sess *api.Session, machine inject.Machine) (tools.ToolContext, error)
+	LoadedTools           func(sessionID string) map[string]bool
+	LiveResources         func(sessionID string) toolcontract.ResourcePresence
+	ProjectRootCount      func(ctx context.Context, sess *api.Session) int
+	ContextSurfaceDeps
+}
+
+type ContextSurfaceDeps struct {
 	ObservePrompt                   func(sessionID string) func(inject.CoordinatorTurnFrame)
-	Limits                          func(context.Context, *api.Session) settings.SessionLimits
-	Tools                           tools.ToolRegistry
-	RootSessionID                   func(ctx context.Context, sessionID string) string
-	Policy                          toolpolicy.Engine
 	CommitWorkerContext             func(context.Context, string, string) error
-	BuildMessages                   func(ctx context.Context, sess *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error)
+	PrepareAgentPolicy              func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
 	ToolProcedures                  func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
 	CoordinatorSurfaceActivityLabel func(surfaceID string) string
 	WebSearchEnabled                func() bool
 	CoordinatorFrame                inject.CoordinatorTurnFrameSource
 	CoordinatorPostureRules         func(ctx context.Context, sess *api.Session) ([]string, error)
 	OverlayRootPaths                func(ctx context.Context, sess *api.Session) []string
-	ImplementSessionState           func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
-	RefreshToolContext              func(ctx context.Context, sess *api.Session, machine inject.Machine) (tools.ToolContext, error)
 	MCPAlwaysLoad                   func(context.Context, *api.Session) map[string]bool
 	SetPromptTurnSurface            func(sessionID, surfaceID string)
 	PromptTurnSurface               func(sessionID string) string
-	LoadedTools                     func(sessionID string) map[string]bool
 	ToolObserved                    func(ctx context.Context, sess *api.Session, toolCtx tools.ToolContext, tool string)
-	LiveResources                   func(sessionID string) toolcontract.ResourcePresence
-	ProjectRootCount                func(ctx context.Context, sess *api.Session) int
 }
 
 type ModelDeps struct {
@@ -60,6 +65,7 @@ type ModelDeps struct {
 	Cost                             cost.CostTracker
 	CompactionConfig                 func(ctx context.Context, sess *api.Session) compaction.CompactionConfig
 	RecordCompactionTokenObservation func(sessionID, providerID, model string, reportedPromptTokens, transcriptEstimate int)
+	CompactAfterContextOverflow      func(ctx context.Context, sess *api.Session, history []api.Message, reportedWindow int) ([]api.Message, error)
 }
 
 type ToolsDeps struct {
@@ -78,50 +84,53 @@ type ToolsDeps struct {
 	CompactToolWire             func(ctx context.Context, sess *api.Session, toolName, content string, opts compaction.CompactToolWireOpts) (string, *api.CompactedChunkMeta)
 	HeldCalls                   HeldCallRunner
 	HeldCallBudget              time.Duration
+	CommitProgramObservation    func(ctx context.Context, sessionID, tool string, receipt *api.CommandProgramReceipt, content string) (string, error)
 	CommitEvidenceToolResult    func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (handle string, patchedContent string, err error)
 	RecordSourceRunEvidence     func(ctx context.Context, sessionID string, sess *api.Session, toolName string, run tools.SourceRunCapture)
-	ConfirmVerifyResult         func(sess *api.Session, content string) string
 }
 
 type CloseoutDeps struct {
-	AssertCompletion                    func(context.Context, *api.Session) error
-	RejectFmt                           *guidance.StaticRejectFormatter
-	HintConfig                          *guidance.HintConfig
-	EvaluateContentAnchor               func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (reject *guidance.Refusal, blocked bool, content string, transformed bool)
-	EvaluateCloseoutBlock               func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error)
-	EvaluateMidTurnNote                 func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) error
+	AssertCompletion       func(context.Context, *api.Session) error
+	RejectFmt              *guidance.StaticRejectFormatter
+	HintConfig             *guidance.HintConfig
+	EvaluateContentAnchor  func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (reject *guidance.Refusal, blocked bool, content string, transformed bool)
+	EvaluateCloseoutBlock  func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error)
+	EvaluateMidTurnNote    func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) error
+	AssembleLedgerCloseout func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draft guidance.CloseoutDraft, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)
+	CheckRunReportDocument func(ctx context.Context, sessionID string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error)
+	CloseoutTrackingDeps
+}
+
+type CloseoutTrackingDeps struct {
 	TurnCloseoutNudge                   TurnCloseoutNudge
 	IterationRunwayNudge                IterationRunwayNudge
 	BeforeFinishNoToolTurn              func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, lastAssistant string, draft guidance.CloseoutDraft, surfaceID string, workersIdle bool, turnTools []string, invokeAllowed bool) (reject *guidance.Refusal, block bool)
 	CitationRoots                       func(ctx context.Context, sess *api.Session) evidence.CitationRoots
 	OnGroundedSynthesisAccepted         func(ctx context.Context, sess *api.Session, sessionID string)
-	EvidenceLedger                      guidance.CloseoutEvidenceReader
 	MaxCloseoutCitationGroundingRetries int
 	RenderHostKick                      func(ctx context.Context, kickID string, data map[string]any) (string, error)
 	BeginCloseoutIntent                 func(ctx context.Context, sessionID string)
 	RecordGroundingFriction             func(ctx context.Context, sessionID string) guidance.GroundingFriction
 	NoteCloseoutGroundingReject         func(ctx context.Context, sessionID, code, offenderKey string, draft guidance.CloseoutDraft, unread []jsonshape.Issue) (attempt int, prevKey string)
 	ResumeCloseoutWork                  func(ctx context.Context, sessionID string)
-	CloseoutStallState                  func(ctx context.Context, sessionID string) guidance.RetainedCloseout
 	ClearCloseoutStall                  func(ctx context.Context, sessionID string)
-	AssembleLedgerCloseout              func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draft guidance.CloseoutDraft, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)
-	CheckRunReportDocument              func(ctx context.Context, sessionID string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error)
 }
 
 type ProjectionDeps struct {
-	Events                   *events.Publisher
-	RedactMessageForStorage  func(ctx context.Context, msg api.Message) (api.Message, bool)
-	AppendMessages           func(ctx context.Context, sessionID string, msgs ...api.Message) error
-	Streams                  MessageStreams
-	OnToolReject             func(ctx context.Context, sessionID, toolCallID, code, content string, facts guidance.ToolResultFacts)
-	AnnouncePendingToolAsk   func(ctx context.Context, sessionID string)
-	UpdateMessage            func(ctx context.Context, sessionID, messageID string, msg api.Message) error
-	AdmitModelResponse       func(ctx context.Context, sessionID, attemptID string) error
-	SettleModelOutput        func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
-	MarkModelOutputProjected func(ctx context.Context, outputID string) error
-	CheckpointTurn           func(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
-	AppendDraftVersion       func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
-	CountDraftVersions       func(ctx context.Context, sessionID, slotID string) (int, error)
+	Events                      *events.Publisher
+	RedactMessageForStorage     func(ctx context.Context, msg api.Message) (api.Message, bool)
+	AppendMessages              func(ctx context.Context, sessionID string, msgs ...api.Message) error
+	Streams                     MessageStreams
+	OnToolReject                func(ctx context.Context, sessionID, toolCallID, code, content string, facts guidance.ToolResultFacts)
+	AnnouncePendingToolAsk      func(ctx context.Context, sessionID string)
+	UpdateMessage               func(ctx context.Context, sessionID, messageID string, msg api.Message) error
+	AdmitModelResponse          func(ctx context.Context, sessionID, attemptID string) error
+	SettledModelOutputIteration func(ctx context.Context, attemptID string) (int, error)
+	SettleModelOutput           func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
+	MarkModelOutputProjected    func(ctx context.Context, outputID string) error
+	CheckpointTurn              func(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
+	AppendDraftVersion          func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
+	CountDraftVersions          func(ctx context.Context, sessionID, slotID string) (int, error)
 }
 
 type NudgesDeps struct {

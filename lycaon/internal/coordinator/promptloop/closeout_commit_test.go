@@ -32,7 +32,7 @@ func TestCloseoutCitationsRequiredHostAssemblesImmediately(t *testing.T) {
 		t.Run(tc.surface, func(t *testing.T) {
 			var committed api.Message
 			var kickAppends int
-			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"read"}}
+			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"read"}}}
 			loop := NewPromptLoopForTest(PromptLoopDeps{
 				Closeout: CloseoutDeps{
 					HintConfig: loadCoordinatorTestHintConfig(t),
@@ -141,7 +141,7 @@ func TestCloseoutCitationRetryKeepsPinnedSynthesis(t *testing.T) {
 	var noted guidance.CloseoutDraft
 	var decisionCode string
 	hints := loadCoordinatorTestHintConfig(t)
-	st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"read"}, closeoutRetry: closeoutRetryState{attempt: 1}}
+	st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"read"}}, turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 1}}}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			HintConfig: hints,
@@ -232,7 +232,7 @@ func TestCloseoutCitationRepairPreservesReportOnCommit(t *testing.T) {
 			if removeAll {
 				raw = "The merge failed."
 			}
-			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnTools: []string{"command"}, closeoutRetry: closeoutRetryState{attempt: 1}}
+			st := &promptLoopTurnState{coordinatorFrame: testReportFrame(), draftSlotID: "slot-1", draftSlotAppended: true, turnBatchState: turnBatchState{turnTools: []string{"command"}}, turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 1}}}
 			out, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", st,
 				[]api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "merge"}, {ID: "t1", Role: api.MessageRoleTool, EvidenceHandles: []string{"command#1"}}, {ID: "slot-1", Role: api.MessageRoleAssistant}},
 				api.Message{ID: "slot-1", Role: api.MessageRoleAssistant}, guidance.ReadCloseoutReport(raw, retained, true, citationmd.Options{}))

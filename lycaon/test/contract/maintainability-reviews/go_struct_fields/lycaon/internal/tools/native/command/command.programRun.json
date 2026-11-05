@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/tools/native/command/command.programRun",
+  "kind": "data_record",
+  "workstream": "shared-verification-runtime",
+  "disposition": "retain",
+  "reason": "Retain one ephemeral program lifetime record. Immutable initiating tool identity accompanies the existing execution frame and source binding; it does not create a separate verification runtime or authority owner. Selected-check receipts and parked-settlement contracts cover those links.",
+  "reviewed_commit": "1da0705c31dcb167e8a38f16761ff8a4b8e1f033",
+  "ceiling": 26,
+  "boundaries": {
+    "lycaon/internal/tools/native/verify_test.go": "30d258e73e5f1fa299b24fe66452ed1a6c2bde65971e3e9da629986d39eb4cad",
+    "lycaon/internal/tools/native/command/verify_program_park_test.go": "7bc32bb756c8e0fec108fb29eff2011839eb2a48eaad0f046ce6c11f1da17338"
+  },
+  "reviewed_shape": "1fa7b554c6572434f6f03d4edaf98200797ce8d249bf95deb0a9c5463cd06b1a"
+}

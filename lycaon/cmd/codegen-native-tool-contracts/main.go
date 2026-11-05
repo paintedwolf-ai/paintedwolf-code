@@ -384,6 +384,8 @@ func capabilityIdent(value string) (string, bool) {
 		return "CapabilitySocket", true
 	case "process_control":
 		return "CapabilityProcessControl", true
+	case "credential_store":
+		return "CapabilityCredentialStore", true
 	case "host_execution":
 		return "CapabilityHostExecution", true
 	case "direct_ip":

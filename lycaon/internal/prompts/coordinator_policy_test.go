@@ -179,7 +179,7 @@ func TestRequestableToolsTeachesOperationFirstWithoutHardcodedNames(t *testing.T
 	for _, want := range []string{
 		"### More tools",
 		"file and git changes",
-		"call `request_tools` with `need` describing one concrete operation and target",
+		"call `request_tools` with `need` describing one missing operation and target",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("requestable-tools.md missing %q: %s", want, out)
@@ -205,11 +205,11 @@ func TestImplementationRoleFollowsWriteAvailability(t *testing.T) {
 		offered, deferred                []string
 		writeOffered, wantRole, wantLoad bool
 	}{
-		{"loadable", []string{"request_tools"}, []string{"write"}, false, true, true},
-		{"loaded", []string{"request_tools", "write"}, nil, true, true, false},
-		{"loader unavailable", []string{"read"}, []string{"write"}, false, false, false},
+		{"loadable", []string{"request_tools"}, []string{"command"}, false, true, true},
+		{"loaded", []string{"request_tools", "command"}, nil, true, true, false},
+		{"loader unavailable", []string{"read"}, []string{"command"}, false, false, false},
 		{"write unavailable", []string{"request_tools"}, nil, false, false, false},
-		{"loadable again", []string{"request_tools"}, []string{"write"}, false, true, true},
+		{"loadable again", []string{"request_tools"}, []string{"command"}, false, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			vars := prompts.CoordinatorPolicyTemplateVars(tc.offered, tc.deferred)

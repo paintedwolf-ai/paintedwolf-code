@@ -89,8 +89,10 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 			})
 			loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{Tools: reg}, Closeout: CloseoutDeps{
 				CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout { return retained },
-				ResumeCloseoutWork: func(context.Context, string) {
-					retained = guidance.RetainedCloseout{Attempt: retained.Attempt, DocumentAttempt: retained.DocumentAttempt}
+				CloseoutTrackingDeps: CloseoutTrackingDeps{
+					ResumeCloseoutWork: func(context.Context, string) {
+						retained = guidance.RetainedCloseout{Attempt: retained.Attempt, DocumentAttempt: retained.DocumentAttempt}
+					},
 				},
 				AssembleLedgerCloseout: func(context.Context, string, string, []string, guidance.CloseoutDraft, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 					t.Fatal("tool recovery assembled an old conclusion")
@@ -113,7 +115,13 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 				}
 				return nil
 			}}})
-			st := &promptLoopTurnState{turnToolPlan: toolsurface.Compile([]string{"write"}, nil), offeredToolNames: []string{"write"}, turnID: "turn", attemptID: "attempt", closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old", codes: []string{"citation"}}}
+			st := &promptLoopTurnState{
+				turnBatchState:    turnBatchState{turnToolPlan: toolsurface.Compile([]string{"write"}, nil)},
+				turnStreamState:   turnStreamState{offeredToolNames: []string{"write"}},
+				turnID:            "turn",
+				attemptID:         "attempt",
+				turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old", codes: []string{"citation"}}},
+			}
 			sess := &api.Session{ID: "session"}
 			for i := 0; i < 7; i++ {
 				call := api.ToolCall{ID: fmt.Sprint(i), Name: "write", Args: map[string]any{"path": "missing"}}
@@ -193,13 +201,15 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 						}
 						return guidance.RetainedCloseout{}
 					},
-					RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
-						var err error
-						rendered, err = engine.RenderKick(ctx, id, data)
-						return rendered, err
+					CloseoutTrackingDeps: CloseoutTrackingDeps{
+						RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
+							var err error
+							rendered, err = engine.RenderKick(ctx, id, data)
+							return rendered, err
+						},
 					},
 				}})
-				st := &promptLoopTurnState{proseFinish: tc.prose, offeredToolNames: tc.offered}
+				st := &promptLoopTurnState{proseFinish: tc.prose, turnStreamState: turnStreamState{offeredToolNames: tc.offered}}
 				_, err := loop.Closeout.rejectCloseoutGrounding(t.Context(), "session", st, nil, "", &oar.Decision{Code: repair.code, Copy: map[string]string{"what": "Closeout refused"}}, markdownRead("Pinned report", false).Draft, nil)
 				testutil.FailErr(t, "render closeout rejection", err)
 				if got := strings.Contains(rendered, repair.offer); got != tc.want {
@@ -216,7 +226,7 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 func TestCloseoutAsyncRetirementClearsLocalOffenderBeforeFreshReport(t *testing.T) {
 	const fresh = "Fresh report after worker failed."
 	stopped := errors.New("inspection boundary")
-	st := &promptLoopTurnState{closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old offender", codes: []string{"old refusal"}}}
+	st := &promptLoopTurnState{turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old offender", codes: []string{"old refusal"}}}}
 	loop := NewPromptLoopForTest(PromptLoopDeps{Closeout: CloseoutDeps{
 		CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
 			return guidance.RetainedCloseout{Attempt: 2, DocumentAttempt: 1}

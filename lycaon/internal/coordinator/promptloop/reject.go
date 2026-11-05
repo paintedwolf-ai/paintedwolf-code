@@ -65,10 +65,10 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 		return nil, reject, false, err
 	}
 	if errors.Is(reject, guidance.ErrCloseoutStopped) {
+		if st != nil {
+			st.history = history
+		}
 		if errors.Is(reject, guidance.ErrCloseoutNeedsRepairTurn) {
-			if st != nil {
-				st.history = history
-			}
 			return history, reject, true, &closeoutRepairNeeded{refusal: reject, messageID: assistantMessageID}
 		}
 		return history, reject, true, reject
@@ -94,7 +94,7 @@ func (l *toolInvocations) rejectBlockedAssistantTurn(
 	return l.Nudges.appendHostNudge(ctx, sessionID, history, HostNudge{
 		DraftID:  draftSlotID,
 		Content:  reject.Body,
-		Feedback: &api.ToolFeedback{Code: reject.Code(), Details: reject.Facts.FeedbackFor(reject.Code()).Details},
+		Feedback: &api.ToolFeedback{Code: reject.Code(), Details: refusalDetails(reject)},
 	}, api.MessageKindCoordinatorGuidance, st)
 }
 

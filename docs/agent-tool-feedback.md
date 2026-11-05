@@ -28,6 +28,42 @@ On the wire, a tool result carries ordered `feedback` entries (`code`, typed `de
 Redirected output such as `printf ... > file` is an ordinary native write in
 the program; the host does not redirect it to a structured tool.
 
+## Command recovery design
+
+Command feedback starts with the observed failure and execution state. It offers
+a next step only when the host can establish that it is applicable. Parser diagnostics retain their own explanation and source
+coordinates. Typed categories identify incomplete constructs, invalid encoding,
+unsupported forms and resource limits; diagnostic prose never selects recovery.
+A parser rejection applies to one complete source unit. It does not establish
+that a parent program has performed no operations.
+
+Recovery keeps the submitted operation intact. Source diagnostics offer no guessed
+repairs or option-prefix substitutions. Validated structural argument repairs
+retain their existing schema checks and require explicit submission. Examples are labeled examples,
+not executable replacement calls. Unknown causes, missing bytes and uncertain
+effects remain unknown. Permission failures name the approval boundary; runtime
+failures preserve native status and stderr. A corrected invocation still crosses
+normal admission and authorization.
+
+Recovery copy states only what its occurrence proves. A missing fact is not a
+negative observation, a successful status does not disprove a refused effect,
+and an errno does not identify a repair. Unknown remedies omit Fix and Next.
+Concrete suggestions require the producer's typed cause and the recipient's
+current schema or offered-tool facts. Earlier effects never become a replay recipe.
+The executor freezes the actual invocation capability contract, including narrowed
+definitions. Child contracts stay attached to their own identities. A typed
+contract snapshot can supply local rendering facts without entering canonical
+rejection data or persisted JSON.
+
+## Command result presentation
+
+Model delivery separates a command refusal's explanation and native stream text
+from its JSON metadata. Projection requires matching host invocation and program
+receipts; a JSON object printed by a program supplies no host identity. Every
+projected part remains non-authoritative data. The retained result, receipts,
+source identities and output references remain unchanged. Unsupported shapes
+retain their original presentation. Repeated projection is idempotent.
+
 ## Native command failure attribution
 
 A reached native operation retains the actual `command` model call and its
@@ -235,6 +271,11 @@ does not supply the dropped arguments, so this feedback cannot identify a field,
 byte offset, container stack, or repaired call. Unknown parser errors retain
 generic guidance. Recovery retains its existing two-attempt allowance.
 
+An unsuccessful process exit without a typed refusal produces no sandbox
+warning. Its exit status, output, deadline or stop facts remain in the receipt;
+actual boundary refusals keep their specific recovery. The retired
+`SANDBOX_REFUSAL_REPORT_SILENT` code remains reserved for historical outcomes.
+
 ## Reachable-remedy rule
 
 Feedback must not tell an agent to call a tool it does not have, approve its own request, write outside its scope, or bypass a workflow gate. Remedy rendering receives the current tool/worker surface and selects only reachable paths. If no direct remedy exists, the feedback names which party must act (coordinator, user, or a device setting) and the agent returns that dependency rather than looping.
@@ -377,22 +418,53 @@ Matched results explain how to recover their public records when no body is pres
 
 ### Progress reconciliation
 
-`update_progress` reports `status: updated` or `status: unchanged`; this is a
-checklist write result, not gate admission. An identical write adds no revision
-or progress event and does not reset tool-repetition tracking. Rewording an
-all-terminal checklist retains the same repetition identity until intervening
-work changes the state. Pending rows permit implementation. Each user request
-starts its own checklist; a completed checklist from an earlier request remains in
-the transcript as `progress_complete` and does not cover the follow-up request.
-When the stored document has no checklist rows for the current request,
-`update_progress` requires at least one open `- [ ]` deliverable row before
-progress-gated tools may run. If no work remains for the follow-up turn, the
-coordinator continues without establishing a checklist. A successful worker
-finish can latch reconciliation before further dispatch or editing; an unchanged
-checklist does not clear that latch. Closeout recovery keeps unfinished rows
-pending and directs the coordinator to continue with tools. Completed work is
-recorded in a tool response before a separate, tool-free final response. A tool-free response ends the turn, so
-continuing progress updates are text alongside the next tool call.
+`update_progress` returns the current bounded document snapshot, an opaque revision,
+`document_changed`, `state_changed`, `deliverable_closed`, and `reconciliation_status`.
+The revision includes the bound workflow run and persisted last-write identity;
+copy it into `expected_revision` when replacing the document. First creation
+may omit it; replacements without a revision return `PROGRESS_REVISION_REQUIRED`
+and the current snapshot without writing. A stale replacement
+returns `PROGRESS_REVISION_CHANGED` with the current state and writes nothing.
+Document replacement is atomic with its revision check. These are additive
+`agent-public` tool arguments and results; the stored Markdown and database shape
+are unchanged.
+
+Establish a checklist once before the first governed mutation. Pending rows permit
+continued implementation without another progress call. Identical submissions
+create no document revision or progress event and do not count as workflow
+advancement. The progress handler supplies typed advancement facts directly to
+invocation and batch settlement; transcript text does not determine them.
+Rewording labels is a document change, not a deliverable transition.
+Unrelated mutations do not erase the repetition history of a pending-checklist
+no-op. Material progress or a new user-request boundary renews that context.
+All-terminal checklists share a rewording-resistant bucket; an intervening world
+effect permits recording newly completed work without an invented pending update.
+Explicit finish tokens retain distinct operation identities. A typed revision or
+reconciliation rejection records its host-issued remedy, so a corrected retry
+reaches the progress handler even after repeated stale attempts. Diagnostic rejection totals
+remain intact; the handler revalidates the supplied basis before any write.
+Current root-session checklist, workflow and finish facts also release prior
+prerequisite refusals after resolution, without counting checklist establishment
+as deliverable advancement.
+
+`PROGRESS_RECONCILIATION_REQUIRED` names the explicit finish-acknowledgement
+prerequisite. `PROGRESS_ITEM_NOT_CLOSED` remains deprecated with its original
+checklist-change predicate and names the successor. The new rule overrides the
+legacy rule for matching occurrences; stored historical codes are unchanged.
+
+Successful worker finishes publish a reconciliation token and exact job IDs in
+the current snapshot. Submit `reconciliation_token` with `expected_revision`
+to acknowledge those finishes without closing unfinished rows or rewriting labels.
+Document transitions never consume worker-finish obligations; only the exact
+current token does. A stale token returns `PROGRESS_RECONCILIATION_CHANGED` and the current snapshot before a write.
+If finishes change during the document write, the result preserves the document's
+outcome and returns the new pending reconciliation state. Acknowledgement never
+creates a document revision by itself.
+
+Each request has its own checklist. Completed progress remains in the transcript as
+`progress_complete` and does not cover a follow-up request. Establishing a new
+checklist requires at least one pending deliverable. A tool-free response ends
+the turn, so continuing progress updates are text alongside the next tool call.
 
 ### Rejected source candidates
 

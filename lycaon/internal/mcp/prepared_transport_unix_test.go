@@ -12,10 +12,9 @@ import (
 
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func TestTrackedTransportReturnsBeforeServerInitialization(t *testing.T) {
+func TestPreparedStdioTransportReturnsBeforeServerInitialization(t *testing.T) {
 	root := t.TempDir()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -25,7 +24,7 @@ func TestTrackedTransportReturnsBeforeServerInitialization(t *testing.T) {
 	testutil.FailErr(t, "prepare actual native SDK transport", err)
 	defer cleanup()
 	hardenSpawn(cmd)
-	transport := &trackedTransport{CommandTransport: &sdkmcp.CommandTransport{Command: cmd}, cleanup: cleanup}
+	transport := &stdioTransport{cmd: cmd, cleanup: cleanup}
 	connection, err := transport.Connect(ctx)
 	testutil.FailErr(t, "start SDK pipes without handshake", err)
 	if connection == nil || cmd.Process == nil || cmd.ProcessState != nil {
@@ -41,7 +40,7 @@ func TestTrackedTransportReturnsBeforeServerInitialization(t *testing.T) {
 	}
 }
 
-func TestTrackedTransportSettlesActualPostStartAuthorityRefusal(t *testing.T) {
+func TestPreparedStdioTransportSettlesActualPostStartAuthorityRefusal(t *testing.T) {
 	root := t.TempDir()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -59,7 +58,7 @@ func TestTrackedTransportSettlesActualPostStartAuthorityRefusal(t *testing.T) {
 	testutil.FailErr(t, "prepare SDK refused handoff", err)
 	defer cleanup()
 	hardenSpawn(cmd)
-	transport := &trackedTransport{CommandTransport: &sdkmcp.CommandTransport{Command: cmd}, cleanup: cleanup}
+	transport := &stdioTransport{cmd: cmd, cleanup: cleanup}
 	connection, err := transport.Connect(ctx)
 	if !errors.Is(err, fault) || connection != nil || cmd.ProcessState == nil {
 		t.Fatalf("actual SDK post-start failure not settled: %v", err)

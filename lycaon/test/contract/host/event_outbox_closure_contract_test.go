@@ -35,9 +35,11 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/sourceledger/commandwindow.go:insertWindow":    "opens a command window; its projects write only allocates the window's source-history ordinal, which is off the project wire",
 
 	// The session plan is published through progress write observers.
-	"lycaon/internal/progress/sql.go:Set":       "writes the session plan; progress write observers publish it through events.Publisher.PublishProgress",
-	"lycaon/internal/progress/sql.go:EnsureRun": "reseeds the session plan for a new workflow run; session.Manager.maybeBootstrapProgress notifies the progress write observers that publish it",
-	"lycaon/internal/progress/sql.go:BindRun":   "binds the session plan to its workflow run; the plan wire carries only the content, which the binding leaves unchanged",
+
+	"lycaon/internal/progress/snapshot_store.go:Update": "commits one revision-aware progress update; ApplyAuthorUpdate notifies the registered progress write observers after the transaction",
+	"lycaon/internal/progress/sql.go:Set":               "writes the session plan; progress write observers publish it through events.Publisher.PublishProgress",
+	"lycaon/internal/progress/sql.go:EnsureRun":         "reseeds the session plan for a new workflow run; session.Manager.maybeBootstrapProgress notifies the progress write observers that publish it",
+	"lycaon/internal/progress/sql.go:BindRun":           "binds the session plan to its workflow run; the plan wire carries only the content, which the binding leaves unchanged",
 
 	// Security scan bookkeeping; the scans announce through emitScanTx.
 	"lycaon/internal/scan/authority_store.go:EnsureAssessment":            "records the assessment a scan joins; the scans that join it announce through emitScanTx, which refreshes the assessment rollup",
@@ -49,21 +51,21 @@ var outboxSilentMutators = map[string]string{
 
 	// Prompt submission receipts reach clients only as the reply to a prompt
 	// admission or its replay; the queue draft and the run announce the rest.
-	"lycaon/internal/session/store/sql_prompt_submission.go:PutPromptSubmission":                        "admits a queue receipt; session.Manager publishes the queue snapshot through events.Publisher.PublishQueue",
-	"lycaon/internal/session/store/sql_prompt_submission.go:ClaimPromptSubmission":                      "claims one admitted receipt for execution; the run announces through its session and message events",
-	"lycaon/internal/session/store/sql_prompt_submission.go:ClaimPromptSubmissions":                     "claims queued receipts for one dispatch; the queue snapshot is published through PublishQueue",
+	"lycaon/internal/session/store/sql_prompt_submission.go:putPromptSubmissionSQL":                     "admits a queue receipt; session.Manager publishes the queue snapshot through events.Publisher.PublishQueue",
+	"lycaon/internal/session/store/sql_prompt_submission.go:claimPromptSubmissionSQL":                   "claims one admitted receipt for execution; the run announces through its session and message events",
+	"lycaon/internal/session/store/sql_prompt_submission.go:claimPromptSubmissionsSQL":                  "claims queued receipts for one dispatch; the queue snapshot is published through PublishQueue",
 	"lycaon/internal/session/store/sql_prompt_submission.go:FinishPromptSubmission":                     "finishes a claimed submission",
 	"lycaon/internal/session/store/sql_prompt_submission.go:CancelQueuedPromptSubmissions":              "cancels queued receipts; the queue snapshot is published through PublishQueue",
 	"lycaon/internal/session/store/sql_prompt_submission.go:UpdateQueuedPromptSubmissionInputs":         "edits queued receipt inputs; the queue snapshot is published through PublishQueue",
-	"lycaon/internal/session/store/sql_prompt_submission.go:InterruptPromptSubmissionsBySession":        "interrupts a stopped session's receipts; the stop path publishes the queue snapshot",
-	"lycaon/internal/session/store/sql_prompt_submission.go:InterruptRunningPromptSubmissionsBySession": "interrupts a stopped session's running receipt; the stop path publishes the queue snapshot",
-	"lycaon/internal/session/store/sql_prompt_submission.go:RecoverPromptSubmissions":                   "requeues interrupted receipts at boot, before any subscriber; recovered submissions announce as they dispatch",
-	"lycaon/internal/session/store/turn_sql.go:RecoverTurns":                                            "completes running receipts whose turns finished before host exit, at boot before any subscriber; the idle transitions after it announce the sessions",
-	"lycaon/internal/session/store/turn_sql.go:RecoverTurnsForSession":                                  "completes a panicked session's running receipts whose turns finished; the session's idle transition after it announces the recovery",
+	"lycaon/internal/session/store/sql_prompt_attachment.go:InterruptPromptSubmissionsBySession":        "interrupts a stopped session's receipts; the stop path publishes the queue snapshot",
+	"lycaon/internal/session/store/sql_prompt_attachment.go:InterruptRunningPromptSubmissionsBySession": "interrupts a stopped session's running receipt; the stop path publishes the queue snapshot",
+	"lycaon/internal/session/store/sql_prompt_attachment.go:recoverPromptSubmissionsSQL":                "requeues interrupted receipts at boot, before any subscriber; recovered submissions announce as they dispatch",
+	"lycaon/internal/session/store/turn_sql_recovery.go:recoverTurnsSQL":                                "completes running receipts whose turns finished before host exit, at boot before any subscriber; the idle transitions after it announce the sessions",
+	"lycaon/internal/session/store/turn_sql_recovery.go:recoverTurnsForSessionSQL":                      "completes a panicked session's running receipts whose turns finished; the session's idle transition after it announces the recovery",
 
 	// Session and transcript rows written beside an announced transition.
 	"lycaon/internal/session/store/secret_screen_generation.go:StampMessageScreenGeneration": "stamps the evidence revision a row was screened at; the content rewrite beside it goes through UpdateMessage, which announces",
-	"lycaon/internal/session/store/sql_transcript_write.go:PatchLiveProjection":              "patches the streaming draft behind stream.State.persistLiveProjection; the stream hub delivers the live projection",
+	"lycaon/internal/session/store/append.go:PatchLiveProjection":                            "patches the streaming draft behind stream.State.persistLiveProjection; the stream hub delivers the live projection",
 	"lycaon/internal/session/store/workspace_root_reassign.go:ReassignSessionsWorkspaceRoot": "repoints sessions at a new workspace root",
 	"lycaon/internal/session/store/rewind.go:PrepareRewind":                                  "opens a rewind operation row",
 	"lycaon/internal/session/store/rewind.go:SetRewindPhase":                                 "advances a rewind operation's phase",
@@ -75,7 +77,7 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/worker/lease.go:RenewClaim":                                       "extends a worker job's lease deadline",
 	"lycaon/internal/worker/sql_merge_lease.go:RenewMergeApply":                        "extends a worker job's merge-apply lease deadline",
 	"lycaon/internal/worker/sql_query.go:MarkOutcomeDelivered":                         "records that a worker outcome reached its parent; the parent's transcript append announces the delivery",
-	"lycaon/internal/worker/sql_queue_cancellation.go:RequestCancellation":             "fences a job's claims and outcomes before its runtime stops; the job announces when cancellation settles",
+	"lycaon/internal/worker/sql_queue_enqueue.go:RequestCancellation":                  "fences a job's claims and outcomes before its runtime stops; the job announces when cancellation settles",
 	"lycaon/internal/workflow/persistence/verdicts.go:PrepareVerdictOperation":         "prepares an internal replay/recovery receipt; the workflow transition announces atomically when the verdict commits",
 	"lycaon/internal/workflow/persistence/verdicts.go:MarkVerdictEvidencePublished":    "marks the internal accepted receipt's evidence delivery; the verdict commit already announced the run projection",
 	"lycaon/internal/workflow/persistence/verdicts.go:ResolveVerdictOperationDiverged": "terminally resolves an internal recovery receipt without changing the run; diagnostic recovery state is not a workflow wire transition",

@@ -42,7 +42,7 @@ type scanPageRow struct {
 }
 
 // ListPageByCanonicalPaths reads at most one page per root, without finding bodies.
-func (s *SQLStore) ListPageByCanonicalPaths(ctx context.Context, paths []string, query PageQuery) (api.CodeScanPage, error) {
+func (s *sqlFindingStore) ListPageByCanonicalPaths(ctx context.Context, paths []string, query PageQuery) (api.CodeScanPage, error) {
 	paths = uniqueNonEmpty(paths)
 	sort.Strings(paths)
 	if query.Sort == "" {
@@ -115,7 +115,7 @@ func (s *SQLStore) ListPageByCanonicalPaths(ctx context.Context, paths []string,
 	return page, err
 }
 
-func (s *SQLStore) scanRootPage(ctx context.Context, path, expression, order string, cursor scanPageCursor, limit int) ([]scanPageRow, error) {
+func (s *sqlFindingStore) scanRootPage(ctx context.Context, path, expression, order string, cursor scanPageCursor, limit int) ([]scanPageRow, error) {
 	direction, comparison := "DESC", "<"
 	if order == "asc" {
 		direction, comparison = "ASC", ">"

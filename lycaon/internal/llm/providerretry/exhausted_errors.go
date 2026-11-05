@@ -44,6 +44,14 @@ func ExhaustedHTTPError(providerID, model string, status, attempts int, formatte
 	if formatted == nil {
 		formatted = fmt.Errorf("provider %s: HTTP %d", providerID, status)
 	}
+	if tooSmall, ok := failure.AsProviderContextTooSmall(formatted); ok && tooSmall != nil {
+		if tooSmall.ProviderID == "" {
+			tooSmall.ProviderID = providerID
+		}
+		if tooSmall.Model == "" {
+			tooSmall.Model = model
+		}
+	}
 	switch status {
 	case 429:
 		return &failure.ProviderRateLimitedError{
@@ -107,6 +115,9 @@ func (e *ProviderRequestRejectedError) Error() string {
 func (e *ProviderRequestRejectedError) Unwrap() error { return e.Cause }
 
 func (e *ProviderRequestRejectedError) NoticeCode() wire.NoticeCode {
+	if _, ok := failure.AsProviderContextTooSmall(e); ok {
+		return wire.NoticeCodeProviderContextTooSmall
+	}
 	return wire.NoticeCodeProviderRequestRejected
 }
 

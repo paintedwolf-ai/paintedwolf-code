@@ -64,9 +64,9 @@ export function createShellAttention(props: Dependencies) {
   onCleanup(
     createSeenMarker({
       readable: readableSession,
-      // Status and transcript changes refresh the visible chat's seen stamp.
+      // Status and live transcript watermark changes refresh the visible chat's seen stamp.
       revision: () =>
-        `${props.appStore.state.currentSession?.status ?? ""}:${props.appStore.state.messages.length}`,
+        `${props.appStore.state.currentSession?.status ?? ""}:${props.appStore.state.transcriptWatermark}`,
       mark: clearNotificationsOnRead(async (sessionId) => {
         const session = await getLycaonClient()?.markSessionSeen(sessionId);
         if (session) props.appStore.actions.noteSessionSeen(session);

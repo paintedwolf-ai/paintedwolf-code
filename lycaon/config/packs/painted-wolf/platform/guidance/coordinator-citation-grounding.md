@@ -16,9 +16,9 @@ Return the report fence with those `where` entries corrected.
 {{ retained_document }}
 ```
 {% endif %}{% endif %}
-Observed handles: {{ observed_handles_sample }}
-Observed paths: {{ observed_paths_sample }}
-Observed URLs: {{ observed_urls_sample }}
+Observed handles: {{ observed_handles_sample }}{% if observed_handles_omitted %} (+{{ observed_handles_omitted }} more){% endif %}
+Observed paths: {{ observed_paths_sample }}{% if observed_paths_omitted %} (+{{ observed_paths_omitted }} more){% endif %}
+Observed URLs: {{ observed_urls_sample }}{% if observed_urls_omitted %} (+{{ observed_urls_omitted }} more){% endif %}
 URLs printed by commands are output, not observed web pages. Cite the command handle for its recorded outcome; do not link output URLs as sources.
 
 Copy exact handles; do not construct a handle from a tool name or call count. An explicit handle cites the captured observation, even when `superseded_by` names newer file evidence. Use the newer observation for current file contents. Git and command receipts remain evidence of their recorded outcomes after files change.

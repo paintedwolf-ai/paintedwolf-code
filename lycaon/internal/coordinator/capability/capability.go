@@ -101,7 +101,7 @@ func MergeForTurn(
 	if err != nil {
 		return err
 	}
-	for k, v := range prompts.CoordinatorSurfaceCardVars(card, surf.ResolvedTools, surf.DeferredTools).TemplateVars() {
+	for k, v := range prompts.CoordinatorSurfaceCardVars(card, surf.ResolvedTools, surf.DeferredTools, prompts.CoordinatorSurfaceAllowsCommandMutation(surf.SurfaceID)).TemplateVars() {
 		into[k] = v
 	}
 	prompts.MergeVisualShowVars(surf.ResolvedTools, surf.DeferredTools, into)

@@ -367,6 +367,7 @@ execution_capabilities:
   git_merge: [file_change]
   git_stash: [file_change]
   http_request:
+    - direct_ip
     - loopback_connect
   wait:
     - loopback_connect
@@ -383,6 +384,7 @@ execution_capabilities:
     - socket
     - direct_ip
     - process_control
+    - credential_store
     - host_execution
     - local_listen
     - loopback_connect
@@ -395,6 +397,7 @@ execution_capabilities:
     - socket
     - direct_ip
     - process_control
+    - credential_store
     - host_execution
     - local_listen
     - loopback_connect
@@ -473,7 +476,6 @@ grant_identity_neutral_args:
     - terminal_capture
   verify:
     - timeout_ms
-    - wait_ms
   grep:
     - max_matches
     - offset

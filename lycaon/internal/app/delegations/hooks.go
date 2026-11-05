@@ -24,8 +24,12 @@ func (r *Runtime) OnWorkflowPhaseEnter(ctx context.Context, rc *workflowphases.R
 	r.deps.Sessions.Manager.Runner.Closeouts.BeginWorkflowPhase(ctx, rc.SessionID)
 	// Bind progress before checklist writes on this phase.
 	if r.deps.Progress != nil {
-		if pStore := r.deps.Progress(); pStore != nil && progress.AdoptActiveRun(ctx, pStore, rc.SessionID, rc.RunID, "") {
-			progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: rc.SessionID})
+		if pStore := r.deps.Progress(); pStore != nil {
+			before, _ := pStore.Snapshot(ctx, rc.SessionID)
+			if progress.AdoptActiveRun(ctx, pStore, rc.SessionID, rc.RunID, "") {
+				after, _ := pStore.Snapshot(ctx, rc.SessionID)
+				progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: rc.SessionID, Before: before, After: after})
+			}
 		}
 	}
 	// Evaluate topology gates against the entering phase.

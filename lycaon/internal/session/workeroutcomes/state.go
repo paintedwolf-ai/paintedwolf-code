@@ -2,6 +2,7 @@ package workeroutcomes
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"strings"
 
@@ -30,8 +31,12 @@ type WorkflowVars interface {
 	ScaffoldVarsForSession(context.Context, string) (map[string]any, error)
 }
 type ProgressReader interface {
-	Get(context.Context, string) string
+	Snapshot(context.Context, string) (progress.Snapshot, error)
 }
+type ProgressReconciliationReader interface {
+	Reconciliation(string) *progress.Reconciliation
+}
+
 type VerificationFacts interface {
 	WorkflowGateState(context.Context, *api.Session, []api.Message) (bool, bool, bool, bool)
 	SourceVerifyCommand(context.Context, string) string
@@ -45,6 +50,7 @@ type State struct {
 	sessions       SessionMessages
 	workflows      WorkflowVars
 	progress       ProgressReader
+	reconciliation ProgressReconciliationReader
 	verification   VerificationFacts
 	workspace      WorkspacePath
 	overlayChanges func(context.Context, *api.WorkerTask, []projectroot.RootRef) []string
@@ -66,6 +72,9 @@ func NewState(ports StatePorts) *State {
 func (m *State) SetWorkers(workers CycleLedger)      { m.workers = workers }
 func (m *State) SetWorkflows(workflows WorkflowVars) { m.workflows = workflows }
 func (m *State) SetProgress(progress ProgressReader) { m.progress = progress }
+func (m *State) SetProgressReconciliation(reader ProgressReconciliationReader) {
+	m.reconciliation = reader
+}
 
 var workerCycleLog = observability.LazyComponent("worker_cycle")
 
@@ -265,13 +274,23 @@ func (m *State) ForSession(ctx context.Context, sess *api.Session) surface.Imple
 			state.PendingUserInput = scaffoldvars.HasPendingUserInput(vars)
 		}
 	}
+	progressContent := ""
+	if m.progress != nil {
+		rootID := sessiontree.RootID(ctx, m.sessions, sess.ID)
+		if snapshot, err := m.progress.Snapshot(ctx, rootID); err == nil {
+			if m.reconciliation != nil {
+				snapshot.Reconciliation = m.reconciliation.Reconciliation(rootID)
+			}
+			progressContent = snapshot.Content
+			encoded, _ := json.Marshal(snapshot)
+			state.ProgressSnapshot = string(encoded)
+		}
+	}
+	state.ProgressOpenCount = progress.OpenStepCount(progressContent)
+	state.ProgressMissing = progress.ProgressMissing(progressContent)
 	if m.sessions != nil {
 		msgs, err := m.sessions.GetMessages(ctx, sess.ID)
 		if err == nil {
-			progressContent := ""
-			if m.progress != nil {
-				progressContent = m.progress.Get(ctx, sessiontree.RootID(ctx, m.sessions, sess.ID))
-			}
 			verifyRequired, verifyPassed, verifyRepair, verifyUnverified := false, false, false, false
 			if m.verification != nil {
 				verifyRequired, verifyPassed, verifyRepair, verifyUnverified = m.verification.WorkflowGateState(ctx, sess, msgs)
@@ -283,8 +302,6 @@ func (m *State) ForSession(ctx context.Context, sess *api.Session) surface.Imple
 			}
 			state.BatchReadyForSynthesis = BatchReadyForSynthesis(state, msgs, progressContent, verifyRequired, verifyPassed || verifyUnverified)
 			state.OpenRepairSinceUserIntent = OpenRepairSinceUserIntent(msgs, verifyRepair)
-			state.ProgressOpenCount = progress.OpenStepCount(progressContent)
-			state.ProgressMissing = progress.ProgressMissing(progressContent)
 			since := api.UserIntentBoundary(msgs)
 			state.ProgressGatedToolAttemptedSinceIntent = progress.ProgressGatedToolAttemptedSinceBoundary(msgs, since)
 		}

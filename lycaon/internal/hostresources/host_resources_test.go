@@ -600,3 +600,48 @@ resources:
 		})
 	}
 }
+
+func TestCredentialStoreConnectionModeDoesNotExpandActionConnections(t *testing.T) {
+	service, err := NewService(t.TempDir())
+	testutil.FailErr(t, "load bundled catalog", err)
+	modes := service.ConnectionModes([]string{"gh-cli"})
+	if !reflect.DeepEqual(modes, []ConnectionMode{ConnectionProxy, ConnectionCredentialStore}) {
+		t.Fatalf("gh-cli connection modes = %v, want [proxy credential_store]", modes)
+	}
+
+	now := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	probeService := &Service{
+		defs: []Definition{{
+			ID: "gh-cli", Family: "developer-services", Label: "GitHub CLI",
+			Category: "Developer services", Description: "GitHub CLI.",
+			Surfaces: []ExecutionSurface{SurfaceProcessExec},
+			Realizations: []Realization{{
+				Discover: Expression{Executable: &ExecutableProbe{Names: []string{"gh"}}},
+				Connections: []ConnectionTemplate{
+					{Mode: ConnectionProxy},
+					{Mode: ConnectionCredentialStore},
+				},
+			}},
+			origin: "test",
+		}},
+		env: discoveryEnvironment{
+			platform: "macos",
+			lookPath: func(string) (string, error) { return "/usr/local/bin/gh", nil },
+		},
+		ttl:               time.Minute,
+		now:               func() time.Time { return now },
+		connectionSupport: defaultConnectionSupport,
+	}
+	resolution, unmet := probeService.ResolveAction(
+		context.Background(),
+		[]string{"gh-cli"},
+		ProjectContext{},
+		[]ExecutionSurface{SurfaceProcessExec},
+	)
+	if len(unmet) != 0 {
+		t.Fatalf("unmet = %v, want none", unmet)
+	}
+	if len(resolution.Connections.LocalServices) != 0 || len(resolution.Connections.DirectDestinations) != 0 {
+		t.Fatalf("connections = %+v, want empty ConnectionRequest", resolution.Connections)
+	}
+}

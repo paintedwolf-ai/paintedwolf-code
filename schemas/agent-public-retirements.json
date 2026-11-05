@@ -119,10 +119,127 @@
       ]
     },
     "tools": {
+      "chmod": [
+        "command"
+      ],
+      "chown": [
+        "command"
+      ],
+      "code_rewrite": [
+        "command"
+      ],
+      "copy": [
+        "command"
+      ],
+      "delete": [
+        "command"
+      ],
+      "diff": [
+        "command"
+      ],
+      "edit": [
+        "command"
+      ],
+      "extract_archive": [
+        "command"
+      ],
+      "find": [
+        "command"
+      ],
+      "git_blame": [
+        "command"
+      ],
+      "git_branches": [
+        "command"
+      ],
+      "git_checkout": [
+        "command"
+      ],
+      "git_commit": [
+        "command"
+      ],
+      "git_compare": [
+        "command"
+      ],
+      "git_diff": [
+        "command"
+      ],
+      "git_log": [
+        "command"
+      ],
+      "git_merge": [
+        "command"
+      ],
+      "git_ref": [
+        "command"
+      ],
+      "git_restore": [
+        "command"
+      ],
+      "git_show": [
+        "command"
+      ],
+      "git_stash": [
+        "command"
+      ],
+      "git_stash_list": [
+        "command"
+      ],
+      "git_status": [
+        "command"
+      ],
+      "grep": [
+        "command"
+      ],
+      "http_request": [
+        "command"
+      ],
+      "jq": [
+        "command"
+      ],
+      "jq_edit": [
+        "command"
+      ],
+      "list_dir": [
+        "command"
+      ],
+      "mkdir": [
+        "command"
+      ],
+      "move": [
+        "command"
+      ],
+      "process_list": [
+        "command"
+      ],
+      "process_signal": [
+        "command"
+      ],
+      "read": [
+        "command"
+      ],
+      "replace_lines": [
+        "command"
+      ],
+      "stat": [
+        "command"
+      ],
+      "summarize": [
+        "command"
+      ],
       "surface_note": {
         "content_contract": "paintedwolf.markdown_note",
         "version": 1
-      }
+      },
+      "survey_repo": [
+        "command"
+      ],
+      "wc": [
+        "command"
+      ],
+      "write": [
+        "command"
+      ]
     },
     "workflow_terms": {},
     "anchors": {},

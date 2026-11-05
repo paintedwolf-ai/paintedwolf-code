@@ -48,7 +48,7 @@ func TestRenderInvestigateSurfaceRoutesSummarizeFirst(t *testing.T) {
 		t.Fatalf("Render coordinator-surface-investigate: %v", err)
 	}
 	for _, want := range []string{
-		"summarize(", "find . -maxdepth 2 -type d", "source windows or anchors by handle",
+		"summarize --path", "find . -maxdepth 2 -type d", "summarize#N",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("investigate surface missing floor survey route %q:\n%s", want, rendered)
@@ -76,7 +76,7 @@ func TestMergeCoordinatorSurfacePathVarsHasListDirOnInvestigate(t *testing.T) {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
 	if !vars["profile_has_jq_edit"].(bool) {
-		t.Fatalf("profile_has_jq_edit = %v want true when jq_edit is loaded", vars["profile_has_jq_edit"])
+		t.Fatalf("profile_has_jq_edit = %v want true for mutating command even without a standalone schema", vars["profile_has_jq_edit"])
 	}
 }
 

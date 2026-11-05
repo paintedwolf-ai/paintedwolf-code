@@ -211,6 +211,17 @@ func TestClaimEvidenceSelfReviewGatesOnCapsVision(t *testing.T) {
 	}
 }
 
+func TestPageProcedureIncludesLayoutFacts(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	page, err := engine.Render(context.Background(), "units/page-operating-procedure.md", allVisualCapabilityVars(false))
+	testutil.FailErr(t, "render page procedure", err)
+	for _, fact := range []string{"`rect`", "`viewport` overflow"} {
+		if !strings.Contains(page, fact) {
+			t.Fatalf("page procedure omits available layout fact %q", fact)
+		}
+	}
+}
+
 func TestInvestigateShellRendersLoadedVisualProcedure(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	ctx := context.Background()

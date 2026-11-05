@@ -276,8 +276,7 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 	}
 	closeoutState.proseFinish = true
 	closeoutState.closeoutCauseText = cause.Text()
-	iterIndex := closeoutState.turnsRanThisRun
-	assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, iterIndex, maxIter, in.HostTurn)
+	assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, 0, maxIter, in.HostTurn)
 	if err != nil {
 		if finalTurnGaveNoAnswer(ctx, err, closeoutState) && l.canCloseWithoutAnswer(sess) {
 			closeoutState.history = history
@@ -302,15 +301,15 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 
 	if completion != nil && len(completion.ToolCalls) > 0 && sess.IsWorkerChild() {
 		calls := retainOfferedToolCalls(history, assistantMsg.ID, completion.ToolCalls, workerProseOfferedTools(sess))
-		var batchTools []string
-		history, batchTools, _, _, _, _, err = l.Batch.executeToolCallsInTurn(
+		batchResult, err := l.Batch.executeToolCallsInTurn(
 			ctx, sess, sessionID, calls, in.ToolCtx, history, userPrompt, assistantMsg.ID, surfaceID, closeoutState,
 		)
+		history = batchResult.history
 		if err != nil {
 			return history, "", "", err
 		}
 		if st != nil {
-			st.turnTools = append(st.turnTools, batchTools...)
+			st.turnTools = append(st.turnTools, batchResult.turnTools...)
 		}
 		assistantMsg.ToolCalls = answeredToolCalls(history, assistantMsg.ID, calls)
 		history = patchAssistantToolCalls(history, assistantMsg.ID, assistantMsg.ToolCalls)

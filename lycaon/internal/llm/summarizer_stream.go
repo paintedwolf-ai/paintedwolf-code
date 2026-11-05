@@ -108,6 +108,9 @@ func (r *RegistrySummarizer) streamLite(ctx context.Context, p modelcall.Provide
 	var content []byte
 	var streamErr error
 	for chunk := range chunks {
+		if chunk.ResetAttempt() {
+			content = nil
+		}
 		if chunk.Usage.PromptTokens > 0 || chunk.Usage.CompletionTokens > 0 {
 			collected.Usage = chunk.Usage
 		}

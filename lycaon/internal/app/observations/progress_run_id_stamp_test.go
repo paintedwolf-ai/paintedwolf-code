@@ -62,8 +62,8 @@ func TestProgressUpdateStampedWithActiveRun(t *testing.T) {
 	flush := newProgressChangeEmitter(st, &events.Publisher{}, fixedActiveRun(runID), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
-		Baseline:  "",
-		Latest:    "- [ ] a\n- [ ] b\n",
+		Baseline:  progress.Snapshot{},
+		Latest:    progress.Snapshot{Content: "- [ ] a\n- [ ] b\n", ItemIDs: []string{"item-a", "item-b"}},
 		Seq:       1,
 		ChangedAt: time.Now().UTC(),
 	})
@@ -109,8 +109,8 @@ func TestProgressStampIgnoresStaleBoundRunID(t *testing.T) {
 	flush := newProgressChangeEmitter(st, &events.Publisher{}, fixedActiveRun(childRun), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
-		Baseline:  "",
-		Latest:    "- [ ] a\n",
+		Baseline:  progress.Snapshot{},
+		Latest:    progress.Snapshot{Content: "- [ ] a\n", ItemIDs: []string{"item-a"}},
 		Seq:       1,
 		ChangedAt: time.Now().UTC(),
 	})
@@ -132,8 +132,8 @@ func TestProgressRowsSkippedWhenNoActiveRun(t *testing.T) {
 	flush := newProgressChangeEmitter(st, &events.Publisher{}, fixedActiveRun(""), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
-		Baseline:  "",
-		Latest:    "- [ ] a\n",
+		Baseline:  progress.Snapshot{},
+		Latest:    progress.Snapshot{Content: "- [ ] a\n", ItemIDs: []string{"item-a"}},
 		Seq:       1,
 		ChangedAt: time.Now().UTC(),
 	})

@@ -35,3 +35,33 @@ func TestToolUseBlockAlwaysCarriesInput(t *testing.T) {
 		t.Fatalf("text block = %s; only tool_use carries input", raw)
 	}
 }
+
+func TestThinkingBlockAlwaysCarriesThinkingField(t *testing.T) {
+	for _, block := range []ContentBlock{
+		{Type: "thinking", Thinking: "", Signature: "sig-empty"},
+		{Type: "thinking", Thinking: "summary", Signature: "sig-text"},
+	} {
+		raw, err := surveyjson.Marshal(block)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", block.Signature, err)
+		}
+		if !strings.Contains(string(raw), `"thinking":`) {
+			t.Fatalf("thinking %s = %s; the API requires thinking", block.Signature, raw)
+		}
+	}
+	for _, block := range []ContentBlock{
+		{Type: "text", Text: "hi"},
+		{Type: "tool_use", ID: "t1", Name: "git_status"},
+		{Type: "tool_result", ToolUseID: "t1", ResultText: "ok"},
+		{Type: "redacted_thinking", Data: "secret"},
+		{Type: "image", Source: &ImageSource{Type: "base64", MediaType: "image/png", Data: "YWJj"}},
+	} {
+		raw, err := surveyjson.Marshal(block)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", block.Type, err)
+		}
+		if strings.Contains(string(raw), `"thinking"`) {
+			t.Fatalf("%s block = %s; only thinking carries thinking", block.Type, raw)
+		}
+	}
+}

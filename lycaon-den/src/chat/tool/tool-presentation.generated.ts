@@ -152,7 +152,7 @@ export const TOOL_CHICKLET_TITLE_KEYS: Readonly<
   terminal_send: [],
   terminal_snapshot: ["caption"],
   update_progress: ["content"],
-  verify: ["command", "pipeline"],
+  verify: ["command"],
   view_image: ["path"],
   view_video: ["path"],
   wait: ["reason"],

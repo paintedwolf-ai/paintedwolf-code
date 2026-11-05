@@ -59,8 +59,8 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 	})
 	testutil.FailErr(t, "render survey-first-pass", err)
 	for _, want := range []string{
-		"summarize(", "source windows or anchors by handle", "find . -maxdepth 2",
-		"layout_overview|ssot_drift|api_routes", "jq '.field'", "scan_summary", "scan_query", "grep -n", "sed -n",
+		"summarize --path", "summarize#N", "find . -maxdepth 2",
+		"repo-map --path DIR", "jq '.field'", "scan_summary", "scan_query", "grep -n", "sed -n",
 	} {
 		if !strings.Contains(survey, want) {
 			t.Fatalf("survey-first-pass missing first-move row %q:\n%s", want, survey)
@@ -203,7 +203,7 @@ func TestProportionalTrustBundleSingleHome(t *testing.T) {
 	})
 	testutil.FailErr(t, "render verify-before-close", err)
 	for _, want := range []string{
-		"Checklist rows describe delivered work",
+		"Record required validation and UI capture as explicit checklist work",
 		"selected test command is a default check",
 		"Listening and connecting require separate grants",
 		"declared_command_match",

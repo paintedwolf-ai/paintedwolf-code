@@ -4,11 +4,11 @@
   "kind": "test_suite",
   "workstream": "project-reasoning-retention",
   "disposition": "retain",
-  "reason": "The suite covers native request preparation, transcript projection, and stream handling at the provider boundary. Keep its transport fixtures together; continuation and context admission have separate focused suites.",
-  "reviewed_commit": "f3941b0da321257f3a73bef42b041f61f30feaac",
-  "ceiling": 439,
+  "reason": "The 578-line native provider suite keeps transport, request controls and context-override fixtures at the actual adapter boundary. Context calibration, cancellation and reasoning reservation remain in focused companion suites. Retain this cohesive suite within 580 measured lines, supported by the native package run and those contracts.",
+  "reviewed_commit": "83c65582f1c141fbc05ab908c7fd4a2709a39efc",
+  "ceiling": 580,
   "boundaries": {
-    "lycaon/internal/llm/providers/ollama/reasoning_recovery_test.go": "c18d5c4e7f7fef019d9407a286b9d47fcb909fc5c7eb9d7eff52081f203d83b7",
-    "lycaon/internal/llm/providers/ollama/context_cap_test.go": "761f807bacd5b77441f933cb84a612a37cd0bed9a62c477a9d7afe42fcacaa72"
+    "lycaon/internal/llm/providers/ollama/reasoning_recovery_test.go": "d6075ba7b3e5da1d48baad965bc3f023bddb007af8c173fa7f2e8e5bb82420af",
+    "lycaon/internal/llm/providers/ollama/context_cap_test.go": "7a81258764c7375f65dfbba7012355e6ec488a9d4429a15b3611c97177c586dc"
   }
 }

@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from scripts.linux_release import repository_withdrawal
-from scripts.linux_release.candidate_repositories import retain
+from scripts.linux_release.candidate_inventory import retain
 from scripts.linux_release.native_repositories import assemble, release_date, resign, same_restore
 from scripts.linux_release.repository_objects import encoded
 from scripts.linux_release.repository_r2 import publish_r2

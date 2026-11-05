@@ -17,7 +17,7 @@ from progress import save
 from snapshot import file_hash, identity
 from source_layout import freeze_sources
 from test_snapshot import repository, commit
-from operation_selection import selected_operations
+from target_selection import selected_operations
 
 
 def binaries(source):

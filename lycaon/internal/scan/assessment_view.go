@@ -31,7 +31,7 @@ type assessmentRow struct {
 }
 
 // AssessmentView returns assessment aggregates newest first across paths.
-func (s *SQLStore) AssessmentView(ctx context.Context, canonicalPaths []string) (AssessmentView, error) {
+func (s *sqlFindingStore) AssessmentView(ctx context.Context, canonicalPaths []string) (AssessmentView, error) {
 	paths := uniqueNonEmpty(canonicalPaths)
 	if len(paths) == 0 {
 		return AssessmentView{}, nil

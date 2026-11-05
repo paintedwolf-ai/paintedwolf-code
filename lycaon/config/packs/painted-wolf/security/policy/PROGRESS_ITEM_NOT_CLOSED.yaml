@@ -1,5 +1,7 @@
 oar: '1.0'
 id: PROGRESS_ITEM_NOT_CLOSED
+status: deprecated
+x-paintedwolf-successor: PROGRESS_RECONCILIATION_REQUIRED
 kind: policy
 anchor: coordinator.pre_invoke
 requires:

@@ -4,8 +4,7 @@ import "strings"
 
 // Sticky members enable inline capabilities; deferred members require activation.
 var (
-	surfaceCardEditTools     = []string{"write", "edit", "replace_lines", "delete", "code_rewrite", "jq_edit"}
-	surfaceCardRunTools      = []string{"command", "verify"}
+	surfaceCardEditTools     = []string{"restore_version"}
 	surfaceCardDispatchTools = []string{"task", "delegate_dispatch"}
 )
 
@@ -35,17 +34,18 @@ type SurfaceCardVars struct {
 }
 
 // An empty catalog label selects the execution-mode family during rendering.
-func CoordinatorSurfaceCardVars(card SurfaceCard, sticky, deferred []string) SurfaceCardVars {
+func CoordinatorSurfaceCardVars(card SurfaceCard, sticky, deferred []string, commandMutates bool) SurfaceCardVars {
 	out := SurfaceCardVars{
 		Label:         strings.TrimSpace(card.Label),
 		Rule:          strings.TrimSpace(card.Rule),
 		PublishesText: card.PublishesText,
 	}
 	stickySet := toolNameSet(sticky)
-	out.MayEdit = anyPresent(surfaceCardEditTools, stickySet)
-	out.MayRun = anyPresent(surfaceCardRunTools, stickySet)
+	out.MayEdit = anyPresent(surfaceCardEditTools, stickySet) || (stickySet["command"] && commandMutates)
+	out.MayRun = stickySet["verify"] || (stickySet["command"] && commandMutates)
 	out.MayDispatch = anyPresent(surfaceCardDispatchTools, stickySet)
-	out.EditDeferred = anyPresent(surfaceCardEditTools, toolNameSet(deferred))
+	deferredSet := toolNameSet(deferred)
+	out.EditDeferred = anyPresent(surfaceCardEditTools, deferredSet) || (deferredSet["command"] && commandMutates)
 
 	if !out.MayEdit && !out.MayRun && !out.MayDispatch && out.Rule == "" {
 		if names := presentNames(sticky, stickySet); len(names) > 0 && len(names) <= surfaceCardMaxEnumerated {

@@ -166,6 +166,7 @@ func ProjectFor(audience ContentAudience, messages []api.Message) []api.Message 
 			parts = api.MessageTextParts(msg)
 		}
 		parts = projectSourceText(msg, parts)
+		parts = projectCommandResult(msg, parts)
 		if decision := checkpointDecisionParts(msg); len(decision) > 0 {
 			parts = append(append([]api.MessageContentPart(nil), parts...), decision...)
 		}

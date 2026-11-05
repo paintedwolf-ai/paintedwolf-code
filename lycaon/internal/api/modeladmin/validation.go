@@ -132,6 +132,7 @@ func providerModelUpdate(update wire.ProviderModelConfig, capabilities modelinfo
 			model.Thinking = prior.Thinking
 			model.ReasoningEffortLevels = prior.ReasoningEffortLevels
 			model.MaxTokens = prior.MaxTokens
+			model.ProviderMaxTokens = prior.ProviderMaxTokens
 			model.Temperature = prior.Temperature
 			break
 		}

@@ -273,7 +273,7 @@ var titleKeys = map[string][]string{
 	"terminal_send":                  {},
 	"terminal_snapshot":              {"caption"},
 	"update_progress":                {"content"},
-	"verify":                         {"command", "pipeline"},
+	"verify":                         {"command"},
 	"view_image":                     {"path"},
 	"view_video":                     {"path"},
 	"wait":                           {"reason"},

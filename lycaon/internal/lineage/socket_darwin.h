@@ -1,5 +1,6 @@
 #include <libproc.h>
 #include <sys/proc_info.h>
+#include <netinet/in_pcb.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
@@ -11,7 +12,7 @@ struct pw_socket_row {
  uint64_t socket_handle, pcb_handle, generation;
  unsigned char local[16], remote[16];
  uint16_t local_port, remote_port;
- unsigned char ipv4, listening, udp;
+ unsigned char ipv4, ipv6_only, listening, udp;
 };
 
 // One native descriptor walk serves listener, port-holder and exact
@@ -81,6 +82,7 @@ static int pw_socket_rows(int pid, struct pw_socket_row **rows, int *count) {
   row->remote_port = ntohs((uint16_t)in->insi_fport);
   row->listening = udp ? row->local_port != 0 && row->remote_port == 0 : info.psi.soi_proto.pri_tcp.tcpsi_state == TSI_S_LISTEN;
   row->ipv4 = info.psi.soi_family == AF_INET;
+  row->ipv6_only = !row->ipv4 && (in->insi_flags & IN6P_IPV6_V6ONLY) != 0;
   if (row->ipv4) {
    memcpy(row->local, &in->insi_laddr.ina_46.i46a_addr4, 4);
    memcpy(row->remote, &in->insi_faddr.ina_46.i46a_addr4, 4);

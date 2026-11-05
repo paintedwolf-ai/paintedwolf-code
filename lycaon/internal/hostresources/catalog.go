@@ -445,7 +445,7 @@ func validateConnections(id string, connections []ConnectionTemplate, discover E
 	for _, connection := range connections {
 		switch connection.Mode {
 		case ConnectionNone, ConnectionProxy, ConnectionSOCKS, ConnectionBaselineLoopback,
-			ConnectionLocalService, ConnectionDirectIP, ConnectionDynamic:
+			ConnectionLocalService, ConnectionDirectIP, ConnectionDynamic, ConnectionCredentialStore:
 		default:
 			return fmt.Errorf("host resources catalog: %q has invalid connection mode %q", id, connection.Mode)
 		}

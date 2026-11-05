@@ -32,10 +32,7 @@ func TestBuildNativeRegistryConstructsSummarizeWithoutProviderServices(t *testin
 	if mutationTools.Survey.summarizeTool == nil {
 		t.Fatal("native summarize tool was not constructed")
 	}
-	for _, metadata := range registry.List() {
-		if metadata.Name == "summarize" {
-			return
-		}
+	if _, ok := registry.Operation("summarize"); !ok {
+		t.Fatal("native summarize operation was not registered")
 	}
-	t.Fatal("native summarize tool was not registered")
 }

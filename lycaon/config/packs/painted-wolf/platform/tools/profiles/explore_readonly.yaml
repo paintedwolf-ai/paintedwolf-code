@@ -3,14 +3,14 @@ description: Read-only exploration — command in read-only mode and metadata to
 command_effects: [read_only]
 tools:
   command: sticky
+  command_output: sticky
+  command_stop: sticky
   recall: sticky
   record_finding: sticky
   pack_board: sticky
   request_decision: sticky
   request_budget: sticky
   complete_leg: sticky
-  summarize: sticky
-  survey_repo: sticky
   source_history: true
   scan_list: true
   scan_summary: true

@@ -52,7 +52,7 @@ func MergeCoordinatorPromptVars(
 	if !CoordinatorSurfaceAllowsCommandMutation(surfaceID) {
 		runOffered = filterToolName(offered, "command")
 	}
-	for k, v := range CoordinatorSurfaceCardVars(card, runOffered, requestable).TemplateVars() {
+	for k, v := range CoordinatorSurfaceCardVars(card, offered, requestable, CoordinatorSurfaceAllowsCommandMutation(surfaceID)).TemplateVars() {
 		into[k] = v
 	}
 	MergeVisualShowVars(runOffered, requestable, into)

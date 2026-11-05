@@ -113,7 +113,7 @@ func FormatCloseoutGroundingReject(
 	var reject string
 	var err error
 	if decision.Copy != nil {
-		reject, err = guidance.RenderPolicyCopy(ctx, decision.Code, string(oar.EffectBlock), decision.Copy)
+		reject, err = guidance.RenderPolicyCopy(ctx, decision.Code, string(oar.EffectBlock), decision.Copy, decision.Data)
 	} else {
 		if rejectFmt == nil {
 			return "", fmt.Errorf("reject formatter required")

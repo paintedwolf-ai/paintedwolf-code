@@ -3,7 +3,6 @@ package promptloop
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"strings"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -38,20 +38,22 @@ func warnLedgerUnwired() {
 
 // toolCaptures holds per-invocation UI metadata.
 type toolCaptures struct {
-	sourceContext    *api.SourceContext
-	overlayPromotion *api.OverlayPromotion
-	ownerRef         string
-	fileEdit         *tools.FileEditCapture
-	visual           *tools.VisualCapture
-	externalAccess   *api.ExternalAccess
-	displaySubject   string
-	skill            *api.SkillActivation
-	process          *api.ToolProcessHandle
-	verdict          *api.VerdictOutcome
-	commandProgram   *api.CommandProgramReceipt
-	sourceRun        *tools.SourceRunCapture
-	dispatch         *api.WorkerDispatch
-	completion       *api.ToolCompletion
+	sourceContext         *api.SourceContext
+	overlayPromotion      *api.OverlayPromotion
+	ownerRef              string
+	fileEdit              *tools.FileEditCapture
+	visual                *tools.VisualCapture
+	externalAccess        *api.ExternalAccess
+	displaySubject        string
+	skill                 *api.SkillActivation
+	process               *api.ToolProcessHandle
+	verdict               *api.VerdictOutcome
+	commandProgram        *api.CommandProgramReceipt
+	sourceDeliveryHandles []string
+	sourceRun             *tools.SourceRunCapture
+	listener              *api.LoopbackListenerFact
+	dispatch              *api.WorkerDispatch
+	completion            *api.ToolCompletion
 	// retrievedFrom is the handler-observed retrieval host.
 	retrievedFrom string
 	// sourceReads is the project text the handler returned.
@@ -351,7 +353,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 				result.replaceContent(result.content)
 			}
 			if run.runErr == nil && result.facts.Succeeded() {
-				_ = l.Nudges.recordDoomLoopAttempt(ctx, run.sessionID, run.responseID, run.call.Name, run.call.Args, nil, run.committedEffect())
+				_ = l.Nudges.recordDoomLoopAttempt(ctx, run.sessionID, run.responseID, run.call.Name, run.call.Args, nil, run.advancesRepetitionContext())
 			}
 		}
 		observability.LogToolInvocation(observability.ToolInvocationCapture{
@@ -422,8 +424,10 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		ownerRef:         out.OwnerRef, fileEdit: out.FileEdit, visual: out.Visual,
 		externalAccess: out.ExternalAccess,
 		skill:          out.Skill, process: out.Process, verdict: out.Verdict,
-		commandProgram: out.CommandProgram,
-		sourceRun:      out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
+		commandProgram:        out.CommandProgram,
+		sourceDeliveryHandles: append([]string(nil), out.SourceDeliveryHandles...),
+		sourceRun:             out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
+		listener:      out.Listener,
 		retrievedFrom: out.RetrievedFrom,
 		sourceReads:   out.SourceReads,
 	}
@@ -544,6 +548,9 @@ func applyToolResultSidecars(
 	}
 	if captures.commandProgram != nil {
 		tr.CommandProgram = captures.commandProgram
+	}
+	if captures.listener != nil {
+		tr.Listener = captures.listener
 	}
 	if visualCap := captures.visual; visualCap != nil && store != nil && strings.TrimSpace(rootSessionID) != "" {
 		stamped, err := visual.AttachToolResult(ctx, store, rootSessionID, producerSessionID, tr.ToolCallID, tr, visualCap, toolContent)

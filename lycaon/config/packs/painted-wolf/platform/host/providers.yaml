@@ -23,29 +23,36 @@ model_thinking:
     controls: {state: supported, efforts: [low, medium, high], default_effort: medium}
   - match: ["claude-mythos-preview"]
     style: adaptive
+    continuation_policy: require_fields
     always_on: true
     default_on: true
     controls: {state: supported, efforts: [low, medium, high, max], default_effort: high}
   - match: ["claude-fable", "claude-mythos"]
     style: adaptive
+    continuation_policy: require_fields
     always_on: true
     default_on: true
     controls: {state: supported, efforts: [low, medium, high, xhigh, max], default_effort: high}
   - match: ["claude-sonnet-5"]
     style: adaptive
+    continuation_policy: require_fields
     default_on: true
     controls: {state: supported, efforts: [low, medium, high, xhigh, max], can_disable: true, default_effort: high}
   - match: ["claude-opus-4-7", "claude-opus-4.7", "claude-opus-4-8", "claude-opus-4.8", "claude-opus-5"]
     style: adaptive
+    continuation_policy: require_fields
     controls: {state: supported, efforts: [low, medium, high, xhigh, max], can_disable: true, default_effort: high}
   - match: ["claude-opus-4-6", "claude-opus-4.6", "claude-sonnet-4-6", "claude-sonnet-4.6"]
     style: adaptive
+    continuation_policy: require_fields
     controls: {state: supported, efforts: [low, medium, high, max], can_disable: true, default_effort: high}
   - match: ["claude-sonnet-4", "claude-opus-4", "claude-haiku-4-5", "claude-haiku-4.5", "claude-3-7"]
     style: budget_tokens
+    continuation_policy: require_fields
     controls: {state: supported, can_disable: true, budget: {min: 1024}}
   - match: ["claude"]
     style: budget_tokens
+    continuation_policy: require_fields
   # Every model's content channel is read for <think> tags; a rule declares
   # reasoning_markers only for a family whose template uses other tags.
   - match: ["deepseek-r1", "deepseek-reasoner"]
@@ -185,7 +192,7 @@ prompt_cache_profiles:
   litellm:
     mode: automatic_prefix
     marker: catalog
-  # Gemini 2.5 and later, Together, and Vertex cache prefixes on their own and
+  # Gemini 2.5 and later, Together, Vertex, and Cerebras cache prefixes on their own and
   # take no request control or documented lifetime.
   implicit:
     mode: automatic_prefix
@@ -407,7 +414,7 @@ http_retry_profiles:
         max_retries: 1
         max_wait_ms: 5000
         backoff_ms: [500]
-        faults: [unreachable, empty_completion]
+        faults: [unreachable, empty_completion, interrupted]
   sdk-managed:
     service_class: sdk_managed
     http_retry:
@@ -529,6 +536,16 @@ providers:
     http_retry_profile: hosted-patient
     prompt_cache_profile: fireworks
 
+  - id: deepinfra
+    reasoning_wire: reasoning_content
+    kind: deepinfra
+    label: DeepInfra
+    base_url: https://api.deepinfra.com/v1/openai
+    api_key_env: DEEPINFRA_API_KEY
+    models: []
+    http_retry_profile: hosted-standard
+    prompt_cache_profile: implicit
+
   - id: bedrock
     kind: bedrock
     label: Amazon Bedrock
@@ -584,3 +601,30 @@ providers:
     models: []
     http_retry_profile: hosted-standard
     prompt_cache_profile: cloudflare
+
+  - id: scaleway
+    reasoning_wire: reasoning_content
+    kind: scaleway
+    label: Scaleway
+    base_url: https://api.scaleway.ai/v1
+    api_key_env: SCW_SECRET_KEY
+    models: []
+    http_retry_profile: hosted-standard
+    prompt_cache_profile: implicit
+  - id: mistral
+    kind: mistral
+    label: Mistral
+    base_url: https://api.mistral.ai/v1
+    api_key_env: MISTRAL_API_KEY
+    models: []
+    http_retry_profile: hosted-standard
+    prompt_cache_profile: none
+  - id: cerebras
+    reasoning_wire: reasoning_content
+    kind: cerebras
+    label: Cerebras
+    base_url: https://api.cerebras.ai/v1
+    api_key_env: CEREBRAS_API_KEY
+    models: []
+    http_retry_profile: hosted-standard
+    prompt_cache_profile: implicit

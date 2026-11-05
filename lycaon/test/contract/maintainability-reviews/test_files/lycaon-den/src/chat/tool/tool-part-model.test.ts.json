@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon-den/src/chat/tool/tool-part-model.test.ts",
+  "kind": "test_suite",
+  "workstream": "command-activities",
+  "disposition": "retain",
+  "reason": "Retain the measured 515-line view-model contract suite within 550 lines. Host identity, visibility, empty result bodies and process status belong to the same conversion contract.",
+  "reviewed_commit": "e200fa8a75b25f9a4fbc0ff4d992b7c3126aaede",
+  "ceiling": 550,
+  "boundaries": {
+    "lycaon-den/src/chat/tool/tool-part-model.ts": "57f05d54a068285efe7d155e78db4959992d4574fe960aed078aaf5d6270f701"
+  }
+}

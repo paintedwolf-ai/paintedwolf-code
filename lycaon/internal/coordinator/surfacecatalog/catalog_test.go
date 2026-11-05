@@ -33,7 +33,7 @@ func TestBundledInvestigateLoadsEveryCapabilityItNames(t *testing.T) {
 	testutil.FailErr(t, "load coordinator surfaces", err)
 	row, err := catalog.Surface("implement_investigate")
 	testutil.FailErr(t, "implement_investigate", err)
-	for _, want := range []string{"edit", "replace_lines", "code_rewrite", "jq_edit", "survey_repo", "git_commit", "task", "capture_page", "web_search", "secret_generate"} {
+	for _, want := range []string{"restore_version", "source_history", "task", "capture_page", "web_search", "secret_generate"} {
 		if !contains(row.LoadableTools(), want) {
 			t.Fatalf("implement_investigate loadable tools lack %s", want)
 		}
@@ -154,6 +154,23 @@ func TestPublishingSurfaces(t *testing.T) {
 	for _, id := range []string{"implement_synthesis", "observe_synthesis"} {
 		if row, err := catalog.Surface(id); err != nil || row.PublishesMidTurnText {
 			t.Errorf("%s must keep tool-step text private: %+v, %v", id, row, err)
+		}
+	}
+}
+
+func TestCommandSurfacesCanInspectAndStopContinuations(t *testing.T) {
+	catalog, err := Load()
+	testutil.FailErr(t, "load command surfaces", err)
+	for _, id := range catalog.SurfaceIDs() {
+		row, err := catalog.Surface(id)
+		testutil.FailErr(t, "read command surface", err)
+		if !contains(row.FloorTools(), "command") && !contains(row.LoadableTools(), "command") {
+			continue
+		}
+		for _, name := range []string{"command_output", "command_stop"} {
+			if !contains(row.FloorTools(), name) && !contains(row.LoadableTools(), name) {
+				t.Errorf("%s cannot access %s for a running program", id, name)
+			}
 		}
 	}
 }

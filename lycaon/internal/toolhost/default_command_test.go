@@ -28,7 +28,7 @@ func TestDefaultRegistryKeepsOperationsOutsideTheToolRoster(t *testing.T) {
 			t.Errorf("command-only operation %s has no binding", name)
 		}
 	}
-	for _, name := range []string{"survey_repo", "summarize", "edit", "replace_lines", "code_rewrite", "jq_edit", "restore_version", "git_commit", "git_restore"} {
+	for _, name := range []string{"restore_version", "skills_read", "source_history"} {
 		if definition, found := registry.Definition(name); !found || definition.Handler == nil {
 			t.Errorf("domain tool %s is unavailable", name)
 		}

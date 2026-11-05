@@ -213,6 +213,7 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"offenders_sample": true, "observed_handles_sample": true, "observed_paths_sample": true, "observed_urls_sample": true,
 		// The host progress note ranges over structured worker facts.
 		"worker": true,
+		"observed_handles_omitted": true, "observed_paths_omitted": true, "observed_urls_omitted": true,
 		// Report-document repair supplies the refusal's reason, the current document fence,
 		// and whether the draft delivers its run's report.
 		"rejection_reason": true, "offenders_omitted": true, "retained_document": true, "run_report": true, "document_issues": true,

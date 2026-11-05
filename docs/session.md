@@ -235,6 +235,23 @@ The rendered system instructions, latest visible user request, and worker task c
 
 A compaction view carries a constant-size ordinal, boundary-message identity, and mutation-sequence watermark. A normal prompt reads the view plus only messages appended after that ordinal. If a covered row was edited or the boundary was removed by rewind, the checks reject the view and rebuild it from paged facts; the boundary message is a foreign key, so a stale background writer cannot republish against a deleted boundary. If the uncovered suffix exceeds the bounded assembly guard, the host schedules compaction and fails visibly rather than silently skipping a gap.
 
+Session reduction accepts savings against the complete page it replaces, including
+the prior continuation, checkpoint, provenance, and recovery references. An
+untouched suffix does not change whether that page is useful. Each accepted page
+must also shrink the complete history in both the shared budgeting proxy and the
+declared text measurement. Unknown tokenizers retain a conservative margin on
+the replaced page. The session target controls when more work is needed; it is
+not the minimum saving required from each page.
+
+Page selection expands small prefixes within row, token, and byte budgets and
+never separates producing calls from their tool results. An unsuccessful
+candidate is memoized by its selected sources, continuation, current request,
+model, and policy. Appending untouched history does not repeat synthesis for that
+candidate. Deterministic reductions publish without waiting for a provider;
+optional synthesis may also prepare an unaccepted page and publishes only after
+source, lifecycle, model, and projection-generation validation. Failed synthesis
+leaves canonical history and the last accepted continuation available for recall.
+
 Prompt-cache identity follows stable machine inputs rather than incidental labels: a change to workflow revision, tool surface, or material context invalidates the relevant prefix; a cosmetic transcript change does not. Details: [Prompt assembly](prompt-assembly.md).
 
 ---

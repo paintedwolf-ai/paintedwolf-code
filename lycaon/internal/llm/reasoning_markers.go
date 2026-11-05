@@ -120,7 +120,7 @@ func newReasoningMarkerReader(markers modelinfo.ReasoningMarkers) *reasoningMark
 // chunk applies the reader to one stream chunk. It reports false when the
 // chunk carried only content that the reader is still holding.
 func (r *reasoningMarkerReader) chunk(c modelcall.StreamChunk) (modelcall.StreamChunk, bool) {
-	if c.ResetReasoning {
+	if c.ResetAttempt() {
 		r.state, r.pending, r.sideChannel, r.inlineFresh = markerLead, "", false, false
 	}
 	var inline string
@@ -149,7 +149,7 @@ func (r *reasoningMarkerReader) chunk(c modelcall.StreamChunk) (modelcall.Stream
 
 func streamChunkCarriesOnlyContent(c modelcall.StreamChunk) bool {
 	return !c.Done && c.Err == nil && len(c.ToolCalls) == 0 && len(c.ReasoningDetails) == 0 &&
-		!c.Usage.Reported() && c.ProviderID == "" && !c.Fallback && !c.Scripted && !c.ResetReasoning
+		!c.Usage.Reported() && c.ProviderID == "" && !c.Fallback && !c.Scripted && !c.ResetAttempt()
 }
 
 // feed classifies text in content order.

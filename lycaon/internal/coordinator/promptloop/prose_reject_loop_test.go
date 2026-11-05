@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -92,13 +96,21 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 				deps.Context.Policy = &recordingToolPolicy{}
 				deps.Context.Limits = loopTestLimits(1)
 				deps.Context.CoordinatorFrame = investigateCoordinatorContext()
-				refusal := func() *guidance.Refusal {
-					return guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow evidence remains open").WithCause(errors.Join(guidance.ErrCloseoutStopped, guidance.ErrCloseoutNeedsRepairTurn))
+				refusal := func(needsRepair bool) *guidance.Refusal {
+					cause := guidance.ErrCloseoutStopped
+					if needsRepair {
+						cause = errors.Join(cause, guidance.ErrCloseoutNeedsRepairTurn)
+					}
+					return guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow evidence remains open").
+						WithDetails(map[string]any{"phase": "implement", "closeout_gate_open_leaves": "test, build"}, nil).
+						WithCause(cause)
 				}
+				rejections := 0
 				if barrier {
 					deps.Closeout.AssertCompletion = func(context.Context, *api.Session) error {
 						if gateOpen {
-							return refusal()
+							rejections++
+							return refusal(rejections == 1)
 						}
 						return nil
 					}
@@ -107,28 +119,131 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 						if !gateOpen {
 							return nil, false
 						}
+						rejections++
 						if invoke {
-							return guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow evidence remains open"), true
+							return guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow evidence remains open").
+								WithDetails(map[string]any{"phase": "implement", "closeout_gate_open_leaves": "test, build"}, nil), true
 						}
-						return refusal(), true
+						return refusal(rejections == 1), true
 					}
 				}
 				result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
 					SessionID: sess.ID, Session: sess, History: userHistory("Complete the workflow"), ProfileID: "coordinator",
 					ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
 				})
+				testutil.FailErr(t, "run gated closeout", err)
 				if repaired {
-					testutil.FailErr(t, "repair closeout", err)
-					if result == nil || calls != 1 {
+					if result == nil || result.IsCloseoutBlocked() || calls != 1 {
 						t.Fatalf("result=%+v calls=%d", result, calls)
 					}
-				} else if err == nil || !errors.Is(err, guidance.ErrCloseoutStopped) || result != nil || calls != 0 {
-					t.Fatalf("unresolved closeout result=%+v error=%v calls=%d", result, err, calls)
+				} else {
+					if result == nil || !result.IsCloseoutBlocked() || result.Outcome != promptresult.OutcomeCloseoutBlocked || calls != 0 {
+						t.Fatalf("unresolved closeout result=%+v calls=%d", result, calls)
+					}
+					if result.CloseoutBlocked == nil ||
+						result.CloseoutBlocked.Code != "WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT" ||
+						result.CloseoutBlocked.Phase != "implement" ||
+						!slices.Equal(result.CloseoutBlocked.OpenGateLeaves, []string{"test", "build"}) ||
+						!strings.Contains(result.CloseoutBlocked.Notice, "Workflow phase implement is waiting on open gate(s): test, build (WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT)") {
+						t.Fatalf("closeout_blocked=%+v", result.CloseoutBlocked)
+					}
+					stored, err := messages.GetMessages(t.Context(), sess.ID)
+					testutil.FailErr(t, "read transcript messages", err)
+					var foundNotice bool
+					for _, msg := range stored {
+						if msg.Kind == api.MessageKindHostNudge && msg.Visibility == api.MessageVisibilityTranscript && msg.HostSignalID == "WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT" && msg.Content == result.CloseoutBlocked.Notice {
+							foundNotice = true
+						}
+					}
+					if !foundNotice {
+						t.Fatalf("expected transcript-visible closeout_blocked host notice in %+v", stored)
+					}
 				}
 				if client.idx < 2 || client.idx > 3 || client.requests[0].ToolUse != modelcall.ToolUseForbidden || client.requests[1].ToolUse != modelcall.ToolUseAllowed || client.toolsPerRequest[1] == 0 {
 					t.Fatalf("repair request tools=%v calls=%d", client.toolsPerRequest, client.idx)
 				}
 			})
 		}
+	}
+}
+
+func TestGatedCloseoutPathsSettleAsCloseoutBlocked(t *testing.T) {
+	for _, path := range []string{"normal", "prose_finish", "completion_barrier"} {
+		t.Run(path, func(t *testing.T) {
+			messages := store.NewMemory()
+			sess, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "")
+			testutil.FailErr(t, "create session", err)
+			registry := tools.NewStubRegistry()
+			testutil.FailErr(t, "register read", registry.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				return "partial evidence", nil
+			}))
+			client := &repeatedProseClient{}
+			deps := promptloop.StoreDeps(messages)
+			deps.Projection.Events = &events.Publisher{Hub: events.NewMemoryHub()}
+			deps.Model.LLM = client
+			deps.Context.Tools = registry
+			deps.Context.Policy = &recordingToolPolicy{}
+			maxIter := 4
+			proseFinish := false
+			if path == "prose_finish" {
+				maxIter = 1
+				proseFinish = true
+			}
+			deps.Context.Limits = loopTestLimits(maxIter)
+			deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+			stoppedRefusal := func(needsRepair bool) *guidance.Refusal {
+				cause := guidance.ErrCloseoutStopped
+				if needsRepair {
+					cause = errors.Join(cause, guidance.ErrCloseoutNeedsRepairTurn)
+				}
+				ref := guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow gate remains open").WithCause(cause)
+				if path != "completion_barrier" || needsRepair {
+					ref = ref.WithDetails(map[string]any{"phase": "verify", "closeout_gate_open_leaves": "lint"}, nil)
+				}
+				return ref
+			}
+			rejections := 0
+			if path == "completion_barrier" {
+				deps.Closeout.AssertCompletion = func(context.Context, *api.Session) error {
+					rejections++
+					if rejections == 3 {
+						return guidance.NewRefusal("", "unreadable gate state").WithCause(guidance.ErrCloseoutStopped)
+					}
+					return stoppedRefusal(rejections == 1)
+				}
+			} else {
+				deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
+					rejections++
+					if invoke && rejections <= 2 {
+						return guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow gate remains open").
+							WithDetails(map[string]any{"phase": "verify", "closeout_gate_open_leaves": "lint"}, nil), true
+					}
+					return stoppedRefusal(!invoke && rejections == 1), true
+				}
+			}
+			result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
+				SessionID: sess.ID, Session: sess, History: userHistory("Finish verify phase"), ProfileID: "coordinator",
+				ProseFinish: proseFinish,
+				ToolCtx:     tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
+			})
+			testutil.FailErr(t, "run closeout path "+path, err)
+			if result == nil || !result.IsCloseoutBlocked() || result.CloseoutBlocked == nil {
+				t.Fatalf("path=%s result=%+v", path, result)
+			}
+			if result.CloseoutBlocked.Code != "WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT" {
+				t.Fatalf("path=%s closeout_blocked=%+v", path, result.CloseoutBlocked)
+			}
+			if path != "completion_barrier" && (result.CloseoutBlocked.Phase != "verify" || !slices.Equal(result.CloseoutBlocked.OpenGateLeaves, []string{"lint"})) {
+				t.Fatalf("path=%s closeout_blocked=%+v", path, result.CloseoutBlocked)
+			}
+			if path == "completion_barrier" {
+				if _, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
+					SessionID: sess.ID, Session: sess, History: userHistory("Unreadable gate state"), ProfileID: "coordinator",
+					ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
+				}); err == nil {
+					t.Fatal("expected unreadable gate state without code to fail closed")
+				}
+			}
+		})
 	}
 }

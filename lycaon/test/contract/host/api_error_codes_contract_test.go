@@ -39,7 +39,7 @@ func TestAPIErrorCodesClosure(t *testing.T) {
 	for code := range scanAPIHostErrorCodes(t, apiDir) {
 		emitted[code] = true
 	}
-	for code := range scanWorkerExecuteFailureCodes(t, filepath.Join(internalDir, "worker", "failure.go")) {
+	for code := range scanWorkerExecuteFailureCodes(t, filepath.Join(internalDir, "worker")) {
 		emitted[code] = true
 	}
 	for code := range scanTypedAPIErrorCodes(t, internalDir) {

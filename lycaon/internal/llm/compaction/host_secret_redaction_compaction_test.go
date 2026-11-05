@@ -19,8 +19,10 @@ func TestSessionCompactionCarriesHostRedactionOntoCheckpoint(t *testing.T) {
 	msgs := []ContextMessage{
 		{
 			ID: "redacted", Role: string(api.MessageRoleTool),
-			Content:             strings.Repeat("exposed credential [REDACTED]\n", 200),
-			HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{{Field: "content", Start: 0, Length: 10, Kind: api.RedactionKindSecret}}),
+			Content: strings.Repeat("exposed credential [REDACTED]\n", 200),
+			ContextMessageProvenance: ContextMessageProvenance{
+				HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{{Field: "content", Start: 0, Length: 10, Kind: api.RedactionKindSecret}}),
+			},
 		},
 		{ID: "tail", Role: string(api.MessageRoleAssistant), Content: strings.Repeat("continue\n", 200)},
 	}
@@ -39,7 +41,9 @@ func TestCompactionPromptLabelsHostRedactionOutsideContent(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	input, err := BuildCompactionInput(context.Background(), SessionInfo{ID: "s1"}, []ContextMessage{{
 		Role: string(api.MessageRoleTool), Content: "token=[REDACTED]",
-		HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{{Field: "content", Start: 0, Length: 10, Kind: api.RedactionKindSecret}}),
+		ContextMessageProvenance: ContextMessageProvenance{
+			HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{{Field: "content", Start: 0, Length: 10, Kind: api.RedactionKindSecret}}),
+		},
 	}}, 8192, 512)
 	testutil.FailErr(t, "build compaction prompt", err)
 	prompt := input.Text
@@ -55,9 +59,11 @@ func TestCompactionPromptLabelsHostReferencesApartFromRedaction(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	input, err := BuildCompactionInput(context.Background(), SessionInfo{ID: "s1"}, []ContextMessage{{
 		Role: string(api.MessageRoleTool), Content: "token={{paintedwolf-secret:018ff2db-85f7-7f31-8da2-b9e81cd1a150}}",
-		HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{{
-			Field: "content", Start: 6, Length: 59, Kind: api.RedactionKindManagedReference,
-		}}),
+		ContextMessageProvenance: ContextMessageProvenance{
+			HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{{
+				Field: "content", Start: 6, Length: 59, Kind: api.RedactionKindManagedReference,
+			}}),
+		},
 	}}, 8192, 512)
 	testutil.FailErr(t, "build compaction prompt", err)
 	if !strings.Contains(input.Text, "host_secret_references=true") || strings.Contains(input.Text, "host_secret_redaction=true") {

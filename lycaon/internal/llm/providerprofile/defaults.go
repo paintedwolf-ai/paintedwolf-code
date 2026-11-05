@@ -50,6 +50,12 @@ func OpenAIVendor() Profile {
 	return profile
 }
 
+func Cerebras() Profile {
+	profile := OpenAIVendor()
+	profile.DiscoveryProfile = discovery.CerebrasProfile()
+	return profile
+}
+
 func Ollama() Profile {
 	return LocalInference(Profile{
 		ToolCalls:            ToolCallsNative,
@@ -67,6 +73,14 @@ func Fireworks() Profile {
 	profile.Discovery = DiscoveryFireworks
 	// Fireworks tool messages accept image parts.
 	profile.ToolResultImages = ToolResultImagesInline
+	profile.OmitToolsWhenNotCallable = true
+	return profile
+}
+
+func DeepInfra() Profile {
+	profile := OpenAI()
+	profile.ReasoningEffortOff = OpenAIReasoningEffortOff
+	profile.ReasoningWire = ReasoningWireContent
 	return profile
 }
 
@@ -92,6 +106,20 @@ func Gemini() Profile {
 func CloudflareWorkersAI() Profile {
 	profile := OpenAI()
 	profile.Discovery = DiscoveryCloudflareWorkersAI
+	return profile
+}
+
+func Scaleway() Profile {
+	profile := OpenAI()
+	profile.ReasoningEffortOff = OpenAIReasoningEffortOff
+	profile.ReasoningWire = ReasoningWireContent
+	return profile
+}
+
+func Mistral() Profile {
+	profile := OpenAI()
+	profile.DiscoveryProfile = discovery.MistralProfile()
+	profile.ToolCallID = ToolCallIDAlphanumeric9
 	return profile
 }
 
@@ -154,6 +182,10 @@ func Litellm() Profile {
 func LocalInference(profile Profile) Profile {
 	if profile.ReasoningWire == "" {
 		profile.ReasoningWire = ReasoningWireContent
+	}
+	profile.Local = true
+	if profile.Discovery == DiscoveryConfigured {
+		profile.DiscoveryProfile.ProbeProps = true
 	}
 	profile.SystemPreambleOnly = true
 	profile.StreamResponseHeaderTimeout = LocalInferenceStreamResponseHeaderTimeout

@@ -66,6 +66,8 @@ tools:
       variants:
         - when_arg_present: terminal_capture
           kind: tui
+  command_output: { produces_evidence: { kind: command } }
+  command_stop:   { produces_evidence: { kind: command } }
   verify:        { produces_evidence: { kind: command } }
   preview_overlay: { produces_evidence: { kind: overlay_receipt } }
   promote_overlay: { produces_evidence: { kind: overlay_receipt } }

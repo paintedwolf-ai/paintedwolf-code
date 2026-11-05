@@ -191,7 +191,7 @@ func RegisterRecordFindingTool(reg *tools.DefaultRegistry, gates reporttools.Rec
 	return reg.Register("record_finding", reporttools.FindingsHandler(gates, store, scopeKey))
 }
 
-func RegisterUpdateProgressTool(reg *tools.DefaultRegistry, store progress.Store, scopeKey reporttools.ProgressScopeKey) error {
+func RegisterUpdateProgressTool(reg *tools.DefaultRegistry, store progress.Store, scopeKey reporttools.ProgressScopeKey, reconciliation progress.Reconciler) error {
 	if reg == nil {
 		return fmt.Errorf("registry required")
 	}
@@ -201,7 +201,7 @@ func RegisterUpdateProgressTool(reg *tools.DefaultRegistry, store progress.Store
 	if scopeKey == nil {
 		return fmt.Errorf("progress scope key required")
 	}
-	return reg.Register("update_progress", reporttools.ProgressHandler(store, scopeKey))
+	return reg.Register("update_progress", reporttools.ProgressHandler(store, scopeKey, reconciliation))
 }
 
 func RegisterCompleteLegTool(reg *tools.DefaultRegistry, decode workertools.CompleteLegDecoder) error {

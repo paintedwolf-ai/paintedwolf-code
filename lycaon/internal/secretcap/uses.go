@@ -42,7 +42,7 @@ type UseHistory struct {
 }
 
 // Uses returns a capability's recent substitution attempts, newest first.
-func (s *Service) Uses(ctx context.Context, projectID, reference string, limit int) (UseHistory, error) {
+func (s *serviceCore) Uses(ctx context.Context, projectID, reference string, limit int) (UseHistory, error) {
 	row, err := s.projectRow(ctx, projectID, reference)
 	if err != nil {
 		return UseHistory{}, err
@@ -79,7 +79,7 @@ func (s *Service) Uses(ctx context.Context, projectID, reference string, limit i
 
 // recordUse stores one attempt and returns its id. A failed write is logged
 // and leaves the resolution result unchanged.
-func (s *Service) recordUse(ctx context.Context, secretID string, version int64, outcome string, access ResolveContext) string {
+func (s *serviceCore) recordUse(ctx context.Context, secretID string, version int64, outcome string, access ResolveContext) string {
 	if s == nil || strings.TrimSpace(secretID) == "" {
 		return ""
 	}

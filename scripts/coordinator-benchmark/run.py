@@ -25,11 +25,10 @@ from episode import episode, reattachment_order
 from episode_runtime import assert_execution_quiescence
 from progress import Progress, save
 from provider_preflight import Admission as ProviderAdmission
-from provider_policy import configure_availability
+from release_policy import configure_availability
 from preparation import inputs, validate_bank
 from prepare import prepare_target, verify_prepared
-from target_selection import add_arguments, select
-from operation_selection import selected_operations
+from target_selection import add_arguments, select, selected_operations
 from recovery import GradingExhausted, grading, MAX_INFRASTRUCTURE_ATTEMPTS
 from scheduler import dispatch, execution_policy, positive
 from release_policy import decision as release_decision

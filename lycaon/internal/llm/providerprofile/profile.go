@@ -67,6 +67,9 @@ type Profile struct {
 	// inject tool instructions whenever tools are present. Off only where the
 	// route may reach an API that requires definitions beside tool history.
 	OmitToolsWhenNotCallable bool
+	// Local marks local inference endpoints (such as llama.cpp, vLLM, Ollama,
+	// LM Studio, oMLX, and LiteLLM proxy).
+	Local bool
 }
 
 // ToolResultImagePlacement selects where a tool-result image rides.
@@ -146,6 +149,8 @@ const (
 	ToolCallIDHost ToolCallIDStyle = ""
 	// ToolCallIDWireRoundTrip replays the emitted wire identity.
 	ToolCallIDWireRoundTrip ToolCallIDStyle = "wire_round_trip"
+	// ToolCallIDAlphanumeric9 normalizes wire tool-call identities to 9 ASCII alphanumeric characters.
+	ToolCallIDAlphanumeric9 ToolCallIDStyle = "alphanumeric_9"
 )
 
 // RoundTripsToolCallID reports whether wire identities are replayed.

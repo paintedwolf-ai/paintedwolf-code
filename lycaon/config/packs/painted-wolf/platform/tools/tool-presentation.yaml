@@ -449,7 +449,7 @@ tools:
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   verify:
     kind: command
-    title_keys: [command, pipeline]
+    title_keys: [command]
     running_label: "Running tests…"
     visibility: long_running
     activity: {headline: "checking work", salience: defining, role: automated_test}

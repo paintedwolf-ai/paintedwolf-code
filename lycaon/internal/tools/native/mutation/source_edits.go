@@ -185,7 +185,13 @@ func runCodeRewrite(inv *invocation) error {
 		if err != nil {
 			return err
 		}
-		if !changed || dryRun {
+		if !changed {
+			continue
+		}
+		if dryRun {
+			if err := inv.previewRewrite(source.Path, source.Content, rewritten); err != nil {
+				return err
+			}
 			continue
 		}
 		destination, err := inv.owners.Revisions.CaptureDestination(inv.ctx, inv.tc, abs)
