@@ -61,6 +61,9 @@ func newPipeSemanticsEnv(t *testing.T) *pipeSemanticsEnv {
 	}).compose(f.Recorder)
 	testutil.FailErr(t, "compose program owners", err)
 	f.Runtime.Owners = owners
+	// Pipe semantics tests stream inputs of many MiB and assert completed
+	// outcomes; a slow runner must not park them.
+	f.Runtime.ParkThreshold = time.Hour
 	scratchDir := t.TempDir()
 	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.SessionScratchDir = scratchDir

@@ -40,7 +40,7 @@ func TestConfinedCommandReachesTheBrokerByLineage(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 	root := t.TempDir()
 	c, ok := confine.DefaultConfinement(confine.Request{
-		Roots: []string{root}, ProjectID: "live-probe", LoopbackConnect: true,
+		Roots: liveBoundaryRoots(root), ProjectID: "live-probe", LoopbackConnect: true,
 	})
 	if !ok || c == nil || c.Network != confine.NetworkProxyOnly {
 		t.Fatalf("expected a proxy-only boundary: ok=%v c=%+v", ok, c)

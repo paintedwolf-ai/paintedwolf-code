@@ -31,6 +31,7 @@ func linkFreePath(path string) bool {
 			continue
 		}
 		name[end] = 0
+		// #nosec G103 -- statx reads the NUL-terminated prefix and writes into the caller-owned Statx_t.
 		_, _, errno := unix.Syscall6(unix.SYS_STATX, uintptr(workingDirectory), uintptr(unsafe.Pointer(&name[0])),
 			unix.AT_SYMLINK_NOFOLLOW, unix.STATX_TYPE, uintptr(unsafe.Pointer(&st)), 0)
 		if errno != 0 {

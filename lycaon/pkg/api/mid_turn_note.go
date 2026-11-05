@@ -1,7 +1,7 @@
 package api
 
 import (
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // RFC 9562 version 5 names an identity; it protects nothing.
 	"fmt"
 	"strings"
 )

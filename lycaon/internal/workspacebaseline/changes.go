@@ -101,10 +101,13 @@ func (r *Reader) ChangeSet(ctx context.Context, roots []projectroot.RootRef, bra
 // statChange compares one baseline entry with the tree by metadata alone.
 func statChange(abs string, before File) (ChangeKind, error) {
 	after, err := os.Lstat(abs)
-	if err != nil && !pathGone(err) {
+	if pathGone(err) {
+		return ChangeDeleted, nil
+	}
+	if err != nil {
 		return "", err
 	}
-	if err != nil || after.IsDir() {
+	if after.IsDir() {
 		return ChangeDeleted, nil
 	}
 	if after.Size() != before.Size || after.ModTime().UnixNano() != before.MtimeNano {

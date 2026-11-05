@@ -19,6 +19,7 @@ func readDirectoryPath(file *os.File, known string) (string, error) {
 	var path [unix.PathMax]byte
 	workingDirectory := unix.AT_FDCWD
 	for {
+		// #nosec G103 -- readlinkat reads the NUL-terminated link and writes into the caller-owned buffer.
 		n, _, errno := unix.Syscall6(unix.SYS_READLINKAT, uintptr(workingDirectory), uintptr(unsafe.Pointer(&link[0])),
 			uintptr(unsafe.Pointer(&path[0])), uintptr(len(path)), 0, 0)
 		switch {

@@ -128,7 +128,7 @@ func recordDeliveryReceipt(ctx context.Context, tx *sql.Tx, programID, outputID,
 		return err
 	}
 	if written > 0 {
-		if err = chargeProgramTrace(ctx, tx, programID, 1, int64(len(fact.ResponseID)+len(deliveryID)+len(reference)+len(encoded)), traceChargeNonTerminal); err != nil {
+		if err := chargeProgramTrace(ctx, tx, programID, 1, int64(len(fact.ResponseID)+len(deliveryID)+len(reference)+len(encoded)), traceChargeNonTerminal); err != nil {
 			return err
 		}
 	}

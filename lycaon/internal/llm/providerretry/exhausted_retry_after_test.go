@@ -18,7 +18,10 @@ func TestExhaustedStatusFailureCarriesDeclaredRetryAfter(t *testing.T) {
 		attempt := ProviderAttempt{ProviderID: "fixture", Model: "m", Policy: policy, Send: func(context.Context) (*http.Response, error) {
 			return &http.Response{StatusCode: status, Header: http.Header{"Retry-After": {"300"}}, Body: io.NopCloser(strings.NewReader(""))}, nil
 		}}
-		_, err := RunProviderAttempts(t.Context(), attempt)
+		response, err := RunProviderAttempts(t.Context(), attempt)
+		if response != nil {
+			_ = response.Body.Close()
+		}
 		if err == nil {
 			t.Fatalf("status %d produced no failure", status)
 		}

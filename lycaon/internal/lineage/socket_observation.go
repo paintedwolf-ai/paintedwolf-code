@@ -15,7 +15,7 @@ type SocketObservation struct {
 	Holder     ProcessIdentity
 	// sharedBind is whether the socket admits a second bind of its exact address,
 	// where the platform reports it.
-	sharedBind bool
+	sharedBind bool //nolint:unused,nolintlint // Only the darwin socket walk reports and reads it.
 	// handle is the raw kernel handle the host-wide socket table also reports.
 	// It stays unexported so kernel addresses never reach logs or receipts.
 	handle uint64

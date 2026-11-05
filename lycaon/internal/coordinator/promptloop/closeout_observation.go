@@ -96,7 +96,7 @@ func (l *turnCloseout) observedURLs(ctx context.Context, sess *api.Session, hist
 	if err != nil {
 		return nil, err
 	}
-	return ev.Ledger.URLSeen, nil
+	return ev.URLSeen, nil
 }
 
 // unobservedImageSources lists the image sources the body embeds that no artifact

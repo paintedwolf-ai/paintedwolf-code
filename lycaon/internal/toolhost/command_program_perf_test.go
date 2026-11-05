@@ -132,6 +132,9 @@ func newPerfFixture(tb testing.TB, catalog *sourcecatalog.Catalog) *perfFixture 
 			testutil.FailErr(tb, "compose program owners", err)
 			return owners
 		}})
+	// These programs measure scale and resource ceilings, not the park window:
+	// a slow runner must not turn a long completion into a parked handle.
+	f.Runtime.ParkThreshold = time.Hour
 	return f
 }
 
