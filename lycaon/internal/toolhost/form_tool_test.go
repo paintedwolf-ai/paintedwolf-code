@@ -55,4 +55,7 @@ func TestFormToolRunsTheCommandFormsProgram(t *testing.T) {
 	if len(programs) != 1 || programs[0] != "completed" {
 		t.Fatalf("programs = %q", programs)
 	}
+	if got := f.Executions(t)["code_rewrite"]; got != "completed;" {
+		t.Fatalf("executions = %v", f.Executions(t))
+	}
 }
