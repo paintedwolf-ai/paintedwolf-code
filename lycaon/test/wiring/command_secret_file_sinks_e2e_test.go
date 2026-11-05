@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -55,6 +56,17 @@ func (r *secretSinkRun) suppliedReference(t *testing.T, sess *wire.Session) stri
 	var created wire.ManagedSecret
 	testutil.FailErr(t, "decode secret", json.Unmarshal(response.Body.Bytes(), &created))
 	return created.Reference
+}
+
+// detectedReference stores the sentinel as a tracked chat value no person holds.
+func (r *secretSinkRun) detectedReference(t *testing.T, sess *wire.Session) string {
+	t.Helper()
+	put, err := r.h.Server.Admin.Capabilities.CheckpointActions.ManagedSecrets.Put(t.Context(), secretcap.PutRequest{
+		ProjectID: sess.ProjectID, ChatSessionID: r.session, SessionID: r.session, OperationID: uuid.NewString(),
+		Name: "sink token", Scope: secretcap.ScopeChat, Origin: secretcap.OriginDetected, Value: sinkSentinel,
+	})
+	testutil.FailErr(t, "put secret", err)
+	return put.Metadata.Reference
 }
 
 // generatedReference asks the host for chat-scoped random material.
@@ -154,9 +166,28 @@ func TestCommandFileSinksResolveAChatGeneratedReference(t *testing.T) {
 	}
 }
 
-// A value a person supplied is not released by policy: the file screen raises a
-// card naming the reached write target, and only approval lets bytes land.
-func TestCommandFileSinkAsksBeforeWritingASuppliedSecret(t *testing.T) {
+// A value a person holds leaves only while their chat is unlocked, so a host that
+// cannot verify presence stops at the file screen with the file untouched.
+func TestCommandFileSinkKeepsAHeldValueWithoutPresence(t *testing.T) {
+	run, sess := newSecretSinkRun(t)
+	reference := run.suppliedReference(t, sess)
+	target := run.seed(t, "config.env", "TOKEN=old\n")
+	run.script.steps = []citableStep{{command: "edit --path config.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"}}
+	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
+	testutil.FailErr(t, "prompt", err)
+	outcomes := run.outcomes(t)
+	if len(outcomes) != 1 || outcomes[0].stopCode != "OUTBOUND_SECRET_SCREEN_FAILED" {
+		t.Fatalf("outcomes = %+v", outcomes)
+	}
+	if got := run.file(t, target); got != "TOKEN=old\n" {
+		t.Fatalf("file = %q", got)
+	}
+}
+
+// A value the host did not generate for this chat is not released by policy: the
+// file screen raises a card naming the reached write target, and only approval
+// lets bytes land.
+func TestCommandFileSinkAsksBeforeWritingATrackedSecret(t *testing.T) {
 	for _, approved := range []bool{false, true} {
 		name := "declined"
 		if approved {
@@ -164,7 +195,7 @@ func TestCommandFileSinkAsksBeforeWritingASuppliedSecret(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			run, sess := newSecretSinkRun(t)
-			reference := run.suppliedReference(t, sess)
+			reference := run.detectedReference(t, sess)
 			target := run.seed(t, "config.env", "TOKEN=old\n")
 			run.script.steps = []citableStep{{command: "edit --path config.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"}}
 			done := make(chan error, 1)
