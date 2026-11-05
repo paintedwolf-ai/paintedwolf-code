@@ -85,7 +85,17 @@ func (f *waitStateFixture) start(t *testing.T, source string) <-chan string {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan string, 1)
-	t.Cleanup(func() { cancel(); <-done })
+	t.Cleanup(func() {
+		cancel()
+		f.until(t, "the program to stop after its context ended", func() bool {
+			select {
+			case <-done:
+				return true
+			default:
+				return false
+			}
+		})
+	})
 	go func() {
 		defer close(done)
 		content, err := f.Call(t, ctx, source)
