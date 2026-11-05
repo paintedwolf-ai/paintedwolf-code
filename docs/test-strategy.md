@@ -743,7 +743,7 @@ Locks and worker reservations are inherited by child processes and remain held
 after a parent crash until its surviving children exit. Pause stops new batch
 and invocation admission; already admitted batches finish their stages.
 
-Scheduler-dependent waits, watchdogs, and lint timeouts scale 1×–4× with host
+Scheduler-dependent waits and watchdogs scale 1×–4× with host
 load. `PW_TEST_TIMEOUT_SCALE` selects an explicit scale; production deadlines
 and polling intervals remain unchanged.
 
