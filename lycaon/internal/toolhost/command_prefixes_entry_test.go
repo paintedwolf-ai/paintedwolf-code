@@ -309,7 +309,10 @@ func TestCommandEntryNohupRefusesNohupOutAndMissingCommand(t *testing.T) {
 func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	f := newPathsFixture(t)
 	probe := `external -- /bin/sh -c 'ulimit -n'`
-	raw, err := f.Call(t, t.Context(), "ulimit -n; "+probe)
+	raw, err := f.Call(t, t.Context(), probe)
+	testutil.FailErr(t, "measure a child with no ulimit", err)
+	fresh := decodeProgramOutcome(t, raw).Stdout
+	raw, err = f.Call(t, t.Context(), "ulimit -n; "+probe)
 	testutil.FailErr(t, "report the child limit", err)
 	got := decodeProgramOutcome(t, raw)
 	lines := strings.Split(strings.TrimSuffix(got.Stdout, "\n"), "\n")
@@ -324,8 +327,8 @@ func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	}
 	raw, err = f.Call(t, t.Context(), probe)
 	testutil.FailErr(t, "next call", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout != lines[1]+"\n" {
-		t.Fatalf("the next call did not start with the original limit %s: %+v", lines[1], got)
+	if got := decodeProgramOutcome(t, raw); got.Stdout != fresh {
+		t.Fatalf("the next call did not start with the limit %q: %+v", fresh, got)
 	}
 }
 
