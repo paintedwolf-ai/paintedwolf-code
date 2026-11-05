@@ -4,7 +4,6 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"strings"
-
 )
 
 // uuidNamespaceOID is the RFC 9562 OID namespace. Deriving here keeps this wire package
