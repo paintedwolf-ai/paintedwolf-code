@@ -62,19 +62,19 @@ func TestRangeAcrossRecordsAndNumberedOutput(t *testing.T) {
 		want         CitationOutcome
 		verdict      evidence.Verdict
 	}{
-		{"path range spans numbered records", "[cmd/gateway/main.go:24-27]", numbered, CitationGrounded, evidence.VerdictMatched},
-		{"one numbered line", "[cmd/gateway/main.go:27]", numbered, CitationGrounded, evidence.VerdictMatched},
+		{"path range spans numbered records", "[cmd/gateway/main.go:24-27]", numbered, CitationGrounded, evidence.VerdictTraced},
+		{"one numbered line", "[cmd/gateway/main.go:27]", numbered, CitationGrounded, evidence.VerdictTraced},
 		{"gap between records is rejected", "[cmd/gateway/main.go:26-30]", numbered, CitationUnverifiable, evidence.VerdictUnverifiable},
 		{"range past the observation is rejected", "[cmd/gateway/main.go:27-28]", numbered, CitationUnverifiable, evidence.VerdictUnverifiable},
 		{"a handle keeps to its own coverage", "[read#1:24-27]", numbered, CitationUnverifiable, evidence.VerdictUnverifiable},
-		{"a handle covers its own line", "[read#1:24]", numbered, CitationGrounded, evidence.VerdictMatched},
+		{"a handle covers its own line", "[read#1:24]", numbered, CitationGrounded, evidence.VerdictTraced},
 		{"a superseded record is no support", "[cmd/gateway/main.go:24-25]", stale, CitationUnverifiable, evidence.VerdictUnverifiable},
 		{"a counted line inside the delivery is traced", "[cmd/gateway/main.go:10]", plain, CitationGrounded, evidence.VerdictTraced},
 		{"a counted range inside the delivery is traced", "[cmd/gateway/main.go:10-12]", plain, CitationGrounded, evidence.VerdictTraced},
 		{"a counted handle coordinate is traced", "[read#1:10]", plain, CitationGrounded, evidence.VerdictTraced},
 		{"unnumbered output supports the bare path", `["cmd/gateway/main.go"]`, plain, CitationGrounded, ""},
 		{"unnumbered output supports the bare handle", "[read#1]", plain, CitationGrounded, ""},
-		{"numbered output beside it decides", "[cmd/gateway/main.go:24-27]", both, CitationGrounded, evidence.VerdictMatched},
+		{"numbered output beside it decides", "[cmd/gateway/main.go:24-27]", both, CitationGrounded, evidence.VerdictTraced},
 		{"unnumbered lines do not fill a numbered gap", "[cmd/gateway/main.go:27-28]", both, CitationGrounded, evidence.VerdictTraced},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -123,8 +123,8 @@ func TestUndeliveredCoordinateRepairsToItsPath(t *testing.T) {
 	}
 }
 
-// A worker's typed finding is held to the same rule unless an excerpt checks the line.
-func TestWorkerCoordinateNeedsNumbersOrAnExcerpt(t *testing.T) {
+// A worker's typed finding is held to what was delivered.
+func TestWorkerCoordinateRestsOnWhatWasDelivered(t *testing.T) {
 	t.Parallel()
 	const path = "a.go"
 	plain := evidence.AssembleLedger([]evidence.Record{catPlain("read#1", path, 5)})
@@ -135,8 +135,10 @@ func TestWorkerCoordinateNeedsNumbersOrAnExcerpt(t *testing.T) {
 		ev      evidence.Ledger
 		want    bool
 	}{
-		{"path and line on unnumbered output", WorkerFindingInput{Path: path, Line: 3}, plain, false},
-		{"handle and line on unnumbered output", WorkerFindingInput{Evidence: "read#1", Line: 3}, plain, false},
+		{"path and line inside the delivery", WorkerFindingInput{Path: path, Line: 3}, plain, true},
+		{"handle and line inside the delivery", WorkerFindingInput{Evidence: "read#1", Line: 3}, plain, true},
+		{"path and line past the delivery", WorkerFindingInput{Path: path, Line: 9}, plain, false},
+		{"handle and line past the delivery", WorkerFindingInput{Evidence: "read#1", Line: 9}, plain, false},
 		{"an excerpt checks the line", WorkerFindingInput{Path: path, Line: 3, Excerpt: "line 3 of the file"}, plain, true},
 		{"a numbered record covers the line", WorkerFindingInput{Path: path, Line: 3}, mixed, true},
 	} {
@@ -161,7 +163,8 @@ func TestInlineCodeCitationResolvesOrStaysCode(t *testing.T) {
 		{"live investigate shape", "The handler sets 30s at `cmd/gateway/main.go:21` today.", "The handler sets 30s at [cmd/gateway/main.go:21](cmd/gateway/main.go#L21) today.", 1},
 		{"a range across records", "See `cmd/gateway/main.go:21-22`.", "See [cmd/gateway/main.go:21-22](cmd/gateway/main.go#L21-L22).", 1},
 		{"unsupported line stays code", "See `cmd/gateway/main.go:99`.", "See `cmd/gateway/main.go:99`.", 0},
-		{"unnumbered read stays code", "See `internal/limit/limit.go:4`.", "See `internal/limit/limit.go:4`.", 0},
+		{"a counted line links", "See `internal/limit/limit.go:4`.", "See [internal/limit/limit.go:4](internal/limit/limit.go#L4).", 1},
+		{"a line past the delivery stays code", "See `internal/limit/limit.go:40`.", "See `internal/limit/limit.go:40`.", 0},
 		{"unobserved path stays code", "See `nowhere/at.go:4`.", "See `nowhere/at.go:4`.", 0},
 		{"host and port stays code", "Listens on `example.test:8080`.", "Listens on `example.test:8080`.", 0},
 		{"non-standalone stays code", "See x`cmd/gateway/main.go:21`.", "See x`cmd/gateway/main.go:21`.", 0},
@@ -242,7 +245,7 @@ func TestWorkspaceLinkRepairTakesHandleOrPath(t *testing.T) {
 func TestCoordinateLabelDoesNotOutliveItsCoordinate(t *testing.T) {
 	t.Parallel()
 	const path = "cmd/gateway/main.go"
-	ev := CloseoutEvidence{Ledger: evidence.AssembleLedger([]evidence.Record{catPlain("read#3", path, 31)})}
+	ev := CloseoutEvidence{Ledger: evidence.AssembleLedger([]evidence.Record{catPlain("read#3", path, 10)})}
 	opts := DraftParseOptions(evidence.CitationRoots{}, ev.Ledger)
 	draft := ParseCloseoutDraft("The handler [cmd/gateway/main.go:19-23](cmd/gateway/main.go#L19-L23) builds it.", opts)
 	retained := RetainedCloseout{Active: true}
@@ -279,7 +282,8 @@ func TestVerifiedExcerptSupportsACoordinateOnUnnumberedOutput(t *testing.T) {
 		{"a handle", `[read#1:3 "line 3 of the file"]`, CitationGrounded},
 		{"text from another line", `[a.go:3 "line 4 of the file"]`, CitationUnverifiable},
 		{"text observed nowhere", `[a.go:3 "something else entirely"]`, CitationUnverifiable},
-		{"no excerpt", `[a.go:3]`, CitationUnverifiable},
+		{"no excerpt inside the delivery", `[a.go:3]`, CitationGrounded},
+		{"no excerpt past the delivery", `[a.go:9]`, CitationUnverifiable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -296,7 +300,7 @@ func TestRepairOffersWhatTheCoordinatorCanSend(t *testing.T) {
 	const path = "cmd/gateway/main.go"
 	worker := evidence.NamespaceLedger(evidence.AssembleLedger(append(catNumbered(1, path, 13), catPlain("read#2", path, 31))), "leg-a")
 	numbered := evidence.NamespaceLedger(evidence.AssembleLedger(catNumbered(1, path, 13, 14, 15)), "leg-a")
-	own := evidence.AssembleLedger([]evidence.Record{catPlain("read#1", path, 31)})
+	own := evidence.AssembleLedger([]evidence.Record{catPlain("read#1", path, 10)})
 	for _, tc := range []struct {
 		name, source string
 		ev           evidence.Ledger
@@ -362,7 +366,7 @@ func TestUniqueFinalSegmentsBindAndTwoNeverDo(t *testing.T) {
 		{"a bare basename", "[main.go]", "[" + full + "](" + full + ")", plain, CitationGrounded},
 		{"inline code", "`main.go:30`", "[" + full + ":30](" + full + "#L30)", numbered, CitationGrounded},
 		{"a superseded record is no candidate", "[main.go:30]", "[" + full + ":30](" + full + "#L30)", oneActive, CitationGrounded},
-		{"the coordinate rule still applies", "[main.go:30]", "", plain, CitationUnverifiable},
+		{"the coordinate rule still applies", "[main.go:900]", "", plain, CitationUnverifiable},
 		{"a gap is still refused", "[main.go:26-30]", "", numbered, CitationUnverifiable},
 		{"AC two candidates never bind", "[main.go:30]", "", two, CitationUnverifiable},
 		{"two candidates, no line", "[main.go]", "", two, CitationUnverifiable},
@@ -438,7 +442,8 @@ func TestFindingCitationResolvesInTheUnionOfLegs(t *testing.T) {
 		{"a numbered line", numbered, path, 14, "", "[" + path + ":14]"},
 		{"a basename", numbered, "main.go", 14, "", "[" + path + ":14]"},
 		{"past the end of what was read falls back to the path", numbered, path, 77, "", `["` + path + `"]`},
-		{"unnumbered output, no excerpt", plain, path, 14, "", `["` + path + `"]`},
+		{"inside the delivery, no excerpt", plain, path, 14, "", "[" + path + ":14]"},
+		{"past the delivery falls back to the path", plain, path, 77, "", `["` + path + `"]`},
 		{"unnumbered output with a matching excerpt", plain, path, 14, "line 14 of the file", "[" + path + `:14 "line 14 of the file"]`},
 		{"no line", plain, path, 0, "", `["` + path + `"]`},
 		{"unobserved", plain, "other.go", 3, "", ""},

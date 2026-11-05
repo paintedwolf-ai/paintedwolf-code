@@ -36,7 +36,8 @@ func applyCitationRange(roots evidence.CitationRoots, finding WorkerFindingInput
 		if support != evidence.CoordinateObserved && evidence.ExcerptVerifiesRange(rec, res.Path, excerpt, start, end) {
 			support = evidence.CoordinateObserved
 		}
-		if support == evidence.CoordinateUnsupported {
+		// Delivered lines carry a counted coordinate, never a quote they do not hold.
+		if support == evidence.CoordinateUnsupported || (support == evidence.CoordinateDelivered && excerpt != "") {
 			continue
 		}
 		bound := res
