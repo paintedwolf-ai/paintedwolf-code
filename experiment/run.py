@@ -138,6 +138,8 @@ def one(model, arm, task, i, out, config_roots, secret):
         for n in ('credential-vault.age', '.credential-vault-development-identity', 'api.token'):
             (e.cfg/n).unlink(missing_ok=True)
         shutil.rmtree(scratch/'repo', ignore_errors=True)
+        shutil.rmtree(e.cfg/'decide-models', ignore_errors=True)
+        shutil.rmtree(e.cfg/'cache', ignore_errors=True)
         for n in ('store.db', 'store.db-wal', 'store.db-shm'):
             (scratch/n).unlink(missing_ok=True)
 
