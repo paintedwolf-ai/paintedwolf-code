@@ -531,22 +531,7 @@ func TestLoopbackOwnershipFollowsARealLaunch(t *testing.T) {
 		t.Fatalf("helper never reported its port: %v", lines.Err())
 	}
 
-	// Read the helper's descriptors directly: attribution is the subject, and a host
-	// may withhold other processes' sockets from the kernel table.
-	listeners := func(context.Context) ([]socketListener, error) {
-		sockets, err := lineage.SocketsOf(cmd.Process.Pid)
-		if err != nil {
-			return nil, err
-		}
-		var out []socketListener
-		for _, socket := range sockets {
-			if socket.Listening {
-				out = append(out, socketListener{PID: cmd.Process.Pid, Port: socket.Local.Port(), Addr: socket.Local.Addr()})
-			}
-		}
-		return out, nil
-	}
-	p := newLoopbackProvenance(t.Context(), listeners, lineageSessionOf, nil, lineage.ObserveSessionListener)
+	p := newLoopbackProvenance(t.Context(), hostListeners, lineageSessionOf, nil, lineage.ObserveSessionListener)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if owned, evidence := p.IsSessionOwned(ctx, "chat-live", "", uint16(port)); !owned {
