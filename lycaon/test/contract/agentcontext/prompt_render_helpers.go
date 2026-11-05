@@ -15,18 +15,6 @@ func bundledPromptEngine() *prompts.FileTemplateEngine {
 	return prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 }
 
-// renderSurfaceCardFor renders the turn banner for one coordinator surface.
-func renderSurfaceCardFor(t *testing.T, surfaceID string, sticky, deferred []string) string {
-	t.Helper()
-	card, err := prompts.LoadCoordinatorSurfaceCard(surfaceID)
-	contractcheck.FailErr(t, "load surface card for "+surfaceID, err)
-	vars := prompts.CoordinatorSurfaceCardVars(card, sticky, deferred, prompts.CoordinatorSurfaceAllowsCommandMutation(surfaceID)).TemplateVars()
-	out, err := bundledPromptEngine().Render(context.Background(),
-		"partials/coordinator-surface-card.md", vars)
-	contractcheck.FailErr(t, "render surface card for "+surfaceID, err)
-	return out
-}
-
 // renderPhaseExitBlock renders one projected phase exit.
 func renderPhaseExitBlock(t *testing.T, view workflowpresentation.PhaseExitView) string {
 	t.Helper()

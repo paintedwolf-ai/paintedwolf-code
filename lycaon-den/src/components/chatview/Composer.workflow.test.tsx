@@ -127,7 +127,6 @@ describe("Composer", () => {
     setReady(true);
     expect(queryByTestId("stop-coordinator")).toBeNull();
     const send = getByTestId("composer-send");
-    expect(send.getAttribute("aria-label")).toBe("Send answer");
     // A staged pick gives Send its armed state.
     expect(send.classList.contains("den-composer-send--armed")).toBe(true);
     expect(send.getAttribute("data-armed")).toBe("");

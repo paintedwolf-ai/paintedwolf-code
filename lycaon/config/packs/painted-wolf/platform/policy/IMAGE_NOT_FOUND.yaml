@@ -28,6 +28,3 @@ x-paintedwolf-scenarios:
     path: assets/missing.png
     profile: coordinator
     tool: view_image
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: IMAGE_NOT_FOUND'

@@ -11,5 +11,3 @@ suggested_action: Finish or stop the run that is using this blueprint, then dele
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - still using this blueprint

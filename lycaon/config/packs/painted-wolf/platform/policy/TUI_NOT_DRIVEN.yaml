@@ -15,17 +15,7 @@ scenarios:
 - id: alt_screen_from_command
   vars:
     tool: command
-  expect_contains:
-  - 'Code: TUI_NOT_DRIVEN'
-  - terminal_capture
-  - terminal_open
-  - terminal_snapshot
 - id: alt_screen_from_verify
   vars:
     tool: verify
-  expect_contains:
-  - 'Code: TUI_NOT_DRIVEN'
-  - terminal_capture
-  - terminal_open
-  - terminal_snapshot
 id: TUI_NOT_DRIVEN

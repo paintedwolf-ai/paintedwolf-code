@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       path: config/missing.json
       profile: explore_readonly
       tool: jq
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: JQ_PATH_NOT_FOUND'

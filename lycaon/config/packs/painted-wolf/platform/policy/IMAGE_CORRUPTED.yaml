@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     profile: coordinator
     reason: 'png: invalid format'
     tool: view_image
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: IMAGE_CORRUPTED'

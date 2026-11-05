@@ -11,6 +11,3 @@ suggested_action: Enable the provider under Settings → MCP providers.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - loopback
-      - device

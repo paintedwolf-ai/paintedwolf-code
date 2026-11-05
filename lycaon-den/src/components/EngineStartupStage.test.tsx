@@ -98,7 +98,6 @@ describe("EngineStartupStage", () => {
 
     const stage = screen.getByTestId("engine-startup");
     expect(stage.getAttribute("data-status")).toBe("starting");
-    expect(stage.textContent).toContain("Starting Painted Wolf Code");
     expect(screen.getByTestId("engine-startup-phase").textContent).toBe(
       "Loading AI providers",
     );

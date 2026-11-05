@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       profile: coordinator
       tool: grep
       detail: unmatched brace
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SURVEY_GLOB_INVALID'

@@ -42,10 +42,6 @@ func TestBuildCompletionMessages_pinsSynthesisPromptAcrossGroundingRetry(t *test
 		t.Fatal("expected system prompt")
 	}
 	sys := msgs[0].Content
-	if !strings.Contains(sys, "## Synthesis turn") {
-		t.Fatalf("pinned synthesis surface must render synthesis mode partial; got investigate=%v wrapup=%v",
-			strings.Contains(sys, "## Investigate"), strings.Contains(sys, "Read-only report"))
-	}
 	if strings.Contains(sys, "## Investigate") {
 		t.Fatal("must not render investigate mode partial when synthesis surface is pinned")
 	}

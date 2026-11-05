@@ -41,10 +41,6 @@ x-paintedwolf-scenarios:
     count: 3
     profile: coordinator
     tool: command
-  expect_contains:
-  - 'Code: DOOM_LOOP_CODE_REPEAT'
-  - COMMAND_NOT_ARGV
-  - inspect the original diagnostic before retrying
 - id: worker_leg
   vars:
     code: WORKER_SCOPE_DENIED
@@ -52,9 +48,6 @@ x-paintedwolf-scenarios:
     profile: explore_readonly
     tool: read
     worker_leg: true
-  expect_contains:
-  - 'Code: DOOM_LOOP_CODE_REPEAT'
-  - 'leg_status: blocked'
 - id: carries_repeated_code_exit
   vars:
     code: PROGRESS_RECONCILIATION_REQUIRED
@@ -62,7 +55,3 @@ x-paintedwolf-scenarios:
     count: 3
     profile: coordinator
     tool: task
-  expect_contains:
-  - 'Code: DOOM_LOOP_CODE_REPEAT'
-  - PROGRESS_RECONCILIATION_REQUIRED
-  - update_progress

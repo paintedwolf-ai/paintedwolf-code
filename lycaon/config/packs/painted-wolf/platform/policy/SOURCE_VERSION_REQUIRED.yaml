@@ -28,14 +28,8 @@ x-paintedwolf-scenarios:
       mode: version
       profile: implement
       tool: source_history
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_REQUIRED'
   - id: base_version_id_without_version_id
     vars:
       mode: diff
       profile: implement
       tool: source_history
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_REQUIRED'

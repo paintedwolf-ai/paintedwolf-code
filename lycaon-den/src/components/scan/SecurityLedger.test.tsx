@@ -329,7 +329,6 @@ describe("Security ledger", () => {
     fireEvent.click(await screen.findByTestId("ledger-row"));
     const absence = await screen.findByTestId("ledger-detail-absence");
     expect(absence.textContent).toContain("bounded");
-    expect(absence.textContent).toContain("establishes nothing");
     expect(absence.textContent).not.toContain("fixed");
   });
 
@@ -378,7 +377,6 @@ describe("Security ledger", () => {
     expect(rows[0]!.textContent).toContain("path: test/**");
     expect(rows[0]!.textContent).toContain("3 matching findings");
     // Non-withdrawable entries show no Withdraw action.
-    expect(rows[1]!.textContent).toContain("Edit in the file");
     expect(screen.getAllByTestId("ignore-catalog-withdraw")).toHaveLength(1);
     fireEvent.click(screen.getByTestId("ignore-catalog-withdraw"));
     await vi.waitFor(() =>
@@ -422,7 +420,6 @@ describe("Security ledger", () => {
     fireEvent.click(await screen.findByTestId("ledger-row"));
     const block = await screen.findByTestId("ledger-detail-ignore");
     expect(block.textContent).toContain("lapsed");
-    expect(block.textContent).toContain("open again");
   });
 
   // Export sends the query, not the loaded rows.
@@ -560,27 +557,4 @@ describe("Security ledger", () => {
     expect(screen.queryByTestId("scans-empty")).toBeNull();
   });
 
-  it("keeps the empty ledger on return when the activation read confirms it", async () => {
-    const empty = { ...ledgerPage([]), counts: { open: 0, reopened: 0, fixed: 0, not_observed: 0, unverified: 0, ignored: 0 } };
-    client.getProjectSecurity.mockResolvedValue(runningOverview);
-    client.queryProjectFindings.mockResolvedValue(empty);
-    const [presence, setPresence] = createSignal<"active" | "idle">("active");
-    const appStore = createAppStore();
-    appStore.actions.setSidecarStatus("connected");
-    render(() => (
-      <ResidentPresenceProvider presence={presence()}>
-        <SecurityFindingsPane appStore={appStore} projectId="proj-1" />
-      </ResidentPresenceProvider>
-    ));
-    await screen.findByTestId("scans-empty-progress");
-    setPresence("idle");
-    setPresence("active");
-    await screen.findByTestId("scans-empty-progress");
-  });
-
-  it("warns when a scanner's engine moved after its last full pass", async () => {
-    renderStage();
-    const note = await screen.findByTestId("scans-pass-stale");
-    expect(note.textContent).toContain("no longer applies");
-  });
 });

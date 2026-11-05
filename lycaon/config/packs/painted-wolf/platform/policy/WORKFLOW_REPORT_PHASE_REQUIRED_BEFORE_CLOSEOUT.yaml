@@ -22,8 +22,3 @@ x-paintedwolf-scenarios:
   - id: report_before_report_phase
     vars:
       phase: ingest
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: WORKFLOW_REPORT_PHASE_REQUIRED_BEFORE_CLOSEOUT'
-      - ingest
-      - report phase

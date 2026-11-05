@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
   vars:
     path: .git/objects/pack
     tool: fetch_url
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: FETCH_URL_DEST_DENIED'

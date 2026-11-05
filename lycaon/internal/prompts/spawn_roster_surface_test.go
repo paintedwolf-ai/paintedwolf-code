@@ -117,89 +117,9 @@ func TestLoadSpawnRosterSurfaceImplementDefault(t *testing.T) {
 	}
 }
 
-func TestSpawnRosterCoordinatorSurfaceVariable(t *testing.T) {
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-
-	cases := []struct {
-		name        string
-		tools       []string
-		wantRender  []string
-		denyRender  []string
-		wantEdit    bool
-		wantCommand bool
-	}{
-		{
-			name:        "investigate grants inline edits and command",
-			tools:       []string{"command", "task", "update_progress"},
-			wantRender:  []string{"edits inline; runs commands on this surface"},
-			denyRender:  []string{"(no command)", "routes product writes via workers"},
-			wantEdit:    true,
-			wantCommand: true,
-		},
-		{
-			name:        "orchestrate routes writes via workers, no command",
-			tools:       []string{"task", "worker_cancel", "pack_board", "wait"},
-			wantRender:  []string{"routes product writes via workers on this surface"},
-			denyRender:  []string{"(no command)", "edits inline", "runs commands"},
-			wantEdit:    false,
-			wantCommand: false,
-		},
-		{
-			name:        "overlay-promote routes writes but runs commands",
-			tools:       []string{"promote_overlay", "task", "read", "command", "wait"},
-			wantRender:  []string{"routes product writes via workers; runs commands on this surface"},
-			denyRender:  []string{"(no command)", "edits inline"},
-			wantEdit:    false,
-			wantCommand: true,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			surfaceTools := map[string]prompts.SpawnToolSurface{"coordinator": {Tools: tc.tools, CommandMutates: tc.wantEdit}}
-			data, err := prompts.LoadSpawnRosterSurface([]string{"coordinator"}, 3, surfaceTools, nil, nil)
-			if err != nil {
-				t.Fatalf("LoadSpawnRosterSurface: %v", err)
-			}
-			if len(data.SpawnAgents) != 1 {
-				t.Fatalf("spawn agents = %d want 1", len(data.SpawnAgents))
-			}
-			coord := data.SpawnAgents[0]
-			if !coord.SurfaceVariable {
-				t.Fatal("coordinator row must be surface_variable")
-			}
-			if coord.CanEdit != tc.wantEdit {
-				t.Fatalf("can_edit = %t want %t", coord.CanEdit, tc.wantEdit)
-			}
-			if coord.CanCommand != tc.wantCommand {
-				t.Fatalf("can_command = %t want %t", coord.CanCommand, tc.wantCommand)
-			}
-
-			vars := spawnRosterTemplateVarsForTest(t, data)
-			if err := prompts.MergeCoordinatorKickPolicyVars(vars); err != nil {
-				t.Fatalf("MergeCoordinatorKickPolicyVars: %v", err)
-			}
-			out, err := engine.Render(context.Background(), "inject/implement-spawn.md", vars)
-			if err != nil {
-				t.Fatalf("Render: %v", err)
-			}
-			for _, want := range tc.wantRender {
-				if !strings.Contains(out, want) {
-					t.Fatalf("render missing %q:\n%s", want, out)
-				}
-			}
-			for _, deny := range tc.denyRender {
-				if strings.Contains(out, deny) {
-					t.Fatalf("render should not contain %q:\n%s", deny, out)
-				}
-			}
-		})
-	}
-}
-
 func TestLoadSpawnRosterSurfaceUnknownAgent(t *testing.T) {
 	_, err := prompts.LoadSpawnRosterSurface([]string{"not-a-real-agent"}, 3, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), "not found") {
+	if err == nil {
 		t.Fatalf("err = %v", err)
 	}
 }

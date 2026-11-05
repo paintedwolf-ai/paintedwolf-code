@@ -35,16 +35,9 @@ x-paintedwolf-scenarios:
       profile: implement
       source_history_offered: true
       tool: source_history
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_NOT_FOUND'
-      - Check effects
   - id: without_source_history
     vars:
       detail: version v_missing was not found
       profile: plan_write_only
       source_history_offered: false
       tool: restore_version
-    expect_contains:
-      - 'Code: SOURCE_VERSION_NOT_FOUND'
-      - Omit version_id

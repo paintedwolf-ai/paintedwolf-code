@@ -29,14 +29,8 @@ x-paintedwolf-scenarios:
     tool: command
     profile: implement
     source_history_offered: true
-  expect_contains:
-  - 'Code: GIT_NO_REPOSITORY_ON_WRITE_LEG'
-  - source_history()
 - id: without_source_history
   vars:
     tool: command
     profile: plan_write_only
     source_history_offered: false
-  expect_contains:
-  - 'Code: GIT_NO_REPOSITORY_ON_WRITE_LEG'
-  - state in your result

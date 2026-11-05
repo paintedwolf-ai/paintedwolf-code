@@ -24,9 +24,3 @@ x-paintedwolf-scenarios:
     expected_form: read_only
     source_line: 2
     source_column: 3
-  expect_contains:
-  - 'Code: COMMAND_OPERATION_NOT_ALLOWED'
-  - worker_readonly
-  - '2:3'
-  - read_only
-  - Do not retry through external

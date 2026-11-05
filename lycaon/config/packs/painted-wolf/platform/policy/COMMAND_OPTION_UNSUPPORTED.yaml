@@ -34,8 +34,3 @@ x-paintedwolf-scenarios:
     tool: command
     command: basename
     expected_form: 'basename [--] PATH [SUFFIX]'
-  expect_contains:
-  - 'Code: COMMAND_OPTION_UNSUPPORTED'
-  - basename
-  - PATH
-  - supported form

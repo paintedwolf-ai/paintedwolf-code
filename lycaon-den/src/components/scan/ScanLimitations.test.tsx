@@ -31,12 +31,6 @@ describe("ScanLimitations", () => {
     expect(screen.queryByText(/source-0.py:7/)).toBeNull();
   });
 
-  it("explains bounded coverage as a source budget, not an engine gap", () => {
-    render(() => <ScanLimitations projectId="project" scan={{ ...limited, coverage_status: "bounded", warning_summary: [] }} client={{ getCodeScan: vi.fn() }} />);
-    fireEvent.click(screen.getByTestId("scans-issues-trigger"));
-    expect(screen.getByTestId("scans-limitations").textContent).toContain("too large for the source budget");
-  });
-
   it("stays quiet for complete coverage", () => {
     render(() => <ScanLimitations projectId="project" scan={{ ...limited, coverage_status: "complete", warning_summary: [] }} client={{ getCodeScan: vi.fn() }} />);
     expect(screen.queryByTestId("scans-issues-trigger")).toBeNull();

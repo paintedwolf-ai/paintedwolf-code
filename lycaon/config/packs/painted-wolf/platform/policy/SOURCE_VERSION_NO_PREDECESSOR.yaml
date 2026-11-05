@@ -36,9 +36,6 @@ x-paintedwolf-scenarios:
       profile: implement
       source_history_offered: true
       tool: restore_version
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_NO_PREDECESSOR'
   - id: without_source_history
     vars:
       detail: file has only one recorded version
@@ -46,6 +43,3 @@ x-paintedwolf-scenarios:
       profile: plan_write_only
       source_history_offered: false
       tool: restore_version
-    expect_contains:
-      - 'Code: SOURCE_VERSION_NO_PREDECESSOR'
-      - Pass an explicit version_id

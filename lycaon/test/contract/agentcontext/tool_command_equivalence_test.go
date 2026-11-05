@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/gate"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
@@ -23,15 +22,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-// retiredRedirectCodes told a model to leave command for a structured schema.
-// Their meanings are retired, never reused.
-var retiredRedirectCodes = []string{
-	"USE_CHMOD_NATIVE", "USE_CHOWN_NATIVE", "USE_COPY_NATIVE", "USE_DELETE_NATIVE", "USE_FIND_NOT_COMMAND",
-	"USE_GIT_DIFF_NATIVE", "USE_GIT_STATUS_NATIVE", "USE_GREP_REGEX", "USE_HTTP_REQUEST_NATIVE", "USE_JQ_NATIVE",
-	"USE_LIST_DIR_NATIVE", "USE_MKDIR_NATIVE", "USE_MOVE_NATIVE", "USE_NATIVE_TOOL", "USE_READ_NATIVE",
-	"USE_STAT_NATIVE", "USE_WC_NATIVE", "USE_WRITE_NATIVE",
-}
 
 func TestRoutineFloorsOfferCommandInPlaceOfRetiredSchemas(t *testing.T) {
 	t.Parallel()
@@ -78,23 +68,6 @@ func TestToolProfilesOmitCommandOperationsAndOfferReadOnlyCommand(t *testing.T) 
 	for _, id := range []string{"worker_readonly", "explore_readonly", "plan_review_readonly"} {
 		if classes := loadToolProfileByID(t, id).CommandEffects.Classes(); !slices.Equal(classes, []toolcontract.CommandEffectClass{toolcontract.CommandReadOnly}) {
 			t.Errorf("%s command is not read-only", id)
-		}
-	}
-}
-
-func TestRetiredCommandRedirectsAreGone(t *testing.T) {
-	t.Parallel()
-	entries, err := hintregistry.ListEffective()
-	contractcheck.FailErr(t, "list effective policy", err)
-	for _, entry := range entries {
-		if slices.Contains(retiredRedirectCodes, entry.Code) {
-			t.Errorf("retired command redirect %s is still a policy unit", entry.Code)
-		}
-	}
-	root := contractcheck.RepoRoot(t)
-	for _, unit := range []string{"native-read-tool", "native-grep-tool", "native-find-tool", "native-list-dir-tool", "native-jq-tool"} {
-		if _, err := os.Stat(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "shared", "units", unit+".md")); !os.IsNotExist(err) {
-			t.Errorf("retired routine tutorial %s remains", unit)
 		}
 	}
 }

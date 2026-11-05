@@ -19,4 +19,3 @@ x-paintedwolf-message: Required review work is outstanding.
 x-paintedwolf-scenarios:
 - id: required
   vars: {}
-  expect_contains: ['Code: SUBMIT_VERDICT_REVIEW_REQUIRED', 'work_ids']

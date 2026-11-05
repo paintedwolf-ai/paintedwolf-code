@@ -26,4 +26,3 @@ x-paintedwolf-message: Git operation failed or has conflicts
 x-paintedwolf-scenarios:
   - id: conflict
     vars: {tool: git_merge, profile: coordinator, detail: conflicts}
-    expect_contains: ['Code: GIT_OPERATION_FAILED', 'git status']

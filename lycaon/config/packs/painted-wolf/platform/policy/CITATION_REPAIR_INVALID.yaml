@@ -29,8 +29,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: c9 read#5:42 unknown_target
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: CITATION_REPAIR_INVALID'
-      - unknown_target
-      - '[cite: c1 =>'

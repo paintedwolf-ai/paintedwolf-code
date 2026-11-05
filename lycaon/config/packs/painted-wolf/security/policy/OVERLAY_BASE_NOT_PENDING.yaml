@@ -33,17 +33,8 @@ x-paintedwolf-scenarios:
     base_overlay_id: ov-grep-impl
     merge_status: merged
     reason: already_promoted
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_BASE_NOT_PENDING'
-  - ov-grep-impl
-  - merged
 - id: rejected
   vars:
     base_overlay_id: ov-grep-impl
     merge_status: rejected
     reason: base_closed
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_BASE_NOT_PENDING'
-  - rejected

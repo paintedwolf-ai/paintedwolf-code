@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -22,9 +21,8 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-var laneSSurveyCopyRelPaths = []string{
-	"lycaon/config/packs/painted-wolf/platform/shared/partials/pack-board-legend.md",
-	"lycaon/config/packs/painted-wolf/platform/policy",
+var surveyArchetypeRelPaths = []string{
+	"lycaon/config/packs/painted-wolf/platform/shared/archetypes/explore_readonly.md",
 }
 
 func TestCompactionWorkerSummaryBudgetMatchesLimitsDefault(t *testing.T) {
@@ -115,93 +113,38 @@ func TestWorkerKickGoSourceHasNoTemplateProseFallback(t *testing.T) {
 	contractcheck.FailViolations(t, "worker_kick.go duplicates kick template prose in Go fallback", violations)
 }
 
-func TestLaneSSurveyCopyNoStaleOrdering(t *testing.T) {
+func TestSurveyArchetypesIncludeFirstPassLadder(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	var violations []string
-	for _, rel := range laneSSurveyCopyRelPaths {
-		path := filepath.Join(root, rel)
-		info, err := os.Stat(path)
-		contractcheck.FailErr(t, "stat "+rel, err)
-		if info.IsDir() {
-			entries, err := os.ReadDir(path)
-			contractcheck.FailErr(t, "read dir "+rel, err)
-			for _, ent := range entries {
-				if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".yaml") {
-					continue
-				}
-				sub := filepath.Join(path, ent.Name())
-				data, err := os.ReadFile(sub)
-				contractcheck.FailErr(t, "read "+sub, err)
-				violations = append(violations, contractcheck.CheckPatterns(sub, string(data), contractcheck.LaneSSurveyStaleCopyPatterns, nil)...)
-			}
-			continue
-		}
-		data, err := os.ReadFile(path)
+	for _, rel := range surveyArchetypeRelPaths {
+		data, err := os.ReadFile(filepath.Join(root, rel))
 		contractcheck.FailErr(t, "read "+rel, err)
-		violations = append(violations, contractcheck.CheckPatterns(path, string(data), contractcheck.LaneSSurveyStaleCopyPatterns, nil)...)
-	}
-	contractcheck.FailViolations(t, "Lane S survey copy uses stale read/grep ordering (want find-first)", violations)
-}
-
-func TestLaneSSurveyCoordinatorHintsMentionFindFirst(t *testing.T) {
-	t.Parallel()
-	cfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load hint registry", err)
-	for _, code := range []string{"COORDINATOR_READ_OUTSIDE_SCOPE"} {
-		entry, ok := cfg.HintCodes[code]
-		if !ok {
-			t.Fatalf("missing hint %q", code)
+		text := string(data)
+		// The survey ladder is an orientation unit; archetypes render the slot.
+		if !strings.Contains(text, `{{ units.orientation }}`) {
+			t.Fatalf("%s must render the orientation units", rel)
 		}
-		prose := strings.Join([]string{entry.Message, entry.Fix, entry.Instead}, "\n")
-		if !strings.Contains(prose, "find") {
-			t.Fatalf("hint %q prose must mention find for find-first Lane S copy:\n%s", code, prose)
-		}
-		if stale := firstStaleLaneSPattern(prose); stale != "" {
-			t.Fatalf("hint %q contains stale Lane S ordering %q", code, stale)
+		if strings.Contains(text, `partials/survey-find-first`) {
+			t.Fatalf("%s must not include find-first teaching", rel)
 		}
 	}
 }
 
-func TestFinishHandoffPartialRendersCompactionBudget(t *testing.T) {
+func TestOARSpecVersionFrozenAt10(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	budget := loadCompactionWorkerSummaryBudget(t, root)
-	vars := map[string]any{}
-	contractcheck.FailErr(t, "MergeCoordinatorKickPolicyVars", prompts.MergeCoordinatorKickPolicyVars(vars))
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: lycaonRoot})
-	out, err := engine.Render(context.Background(), "partials/finish-handoff.md", vars)
-	contractcheck.FailErr(t, "render finish-handoff", err)
-	if !strings.Contains(out, strconv.Itoa(budget)) {
-		t.Fatalf("finish-handoff missing budget %d:\n%s", budget, out)
+	schemaPath := filepath.Join(root, "schemas", "oar", "oar.schema.json")
+	raw, err := os.ReadFile(schemaPath)
+	contractcheck.FailErr(t, "read vendored oar.schema.json", err)
+	if !strings.Contains(string(raw), `"oar"`) {
+		t.Fatal("vendored oar.schema.json missing the oar format marker")
 	}
-	if !strings.Contains(out, "WORKER_SUMMARY_TOO_LONG") {
-		t.Fatal("finish-handoff must document WORKER_SUMMARY_TOO_LONG reject path")
+	if strings.Contains(string(raw), `"spec_version"`) {
+		t.Fatal("vendored oar.schema.json contains spec_version — refresh from the standard")
 	}
-	if !strings.Contains(out, "Remaining tool runway is contingency, not scope") {
-		t.Fatal("finish-handoff must stop workers from treating unused runway as scope")
+	sample, err := os.ReadFile(filepath.Join(root, "schemas", "fixtures", "oar-sample-rule.json"))
+	contractcheck.FailErr(t, "read oar-sample-rule.json", err)
+	if !strings.Contains(string(sample), `"oar": "1.0"`) && !strings.Contains(string(sample), `"oar":"1.0"`) {
+		t.Fatal("schemas/fixtures/oar-sample-rule.json must declare oar 1.0")
 	}
-}
-
-func loadCompactionWorkerSummaryBudget(t *testing.T, root string) int {
-	t.Helper()
-	cfg := compaction.DefaultCompactionConfig()
-	windows, err := modelinfo.LoadModelContextWindows()
-	contractcheck.FailErr(t, "LoadModelContextWindows", err)
-	live, _, err := llm.ApplyLiveBudget(cfg, llm.ModelPolicy{}, nil, windows)
-	contractcheck.FailErr(t, "ApplyLiveBudget", err)
-	if live.MaxWorkerSummaryChars <= 0 {
-		t.Fatal("compaction MaxWorkerSummaryChars must be positive after ApplyLiveBudget")
-	}
-	return live.MaxWorkerSummaryChars
-}
-
-func firstStaleLaneSPattern(text string) string {
-	for _, re := range contractcheck.LaneSSurveyStaleCopyPatterns {
-		if re.MatchString(text) {
-			return re.String()
-		}
-	}
-	return ""
 }

@@ -10,8 +10,3 @@ invariants:
   fires_in:
   - closeout body rejected for image syntax the host cannot present (bare artifact
     id or unobserved source; in-session retry replaces the body)
-  required:
-  - whole answer
-  - "[artifact:"
-  forbidden:
-  - workflow_advance

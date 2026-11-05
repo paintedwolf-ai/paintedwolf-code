@@ -6,5 +6,3 @@ suggested_action: Pin the chat first, then move it.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - pinned chats

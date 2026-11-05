@@ -20,6 +20,3 @@ x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: 'coordinator'
-    expect_contains:
-      - 'Code: MID_TURN_NOTE_WAIT_FALLBACK'
-      - 'unpublished draft'

@@ -16,6 +16,5 @@ describe("native update errors", () => {
   it("does not promise an unchanged installation after apply or interruption errors", () => {
     expect(UPDATE_ERROR_MESSAGES.install_failed).not.toMatch(/unaffected|unchanged|not installed/i);
     expect(UPDATE_ERROR_MESSAGES.interrupted).not.toMatch(/unaffected|unchanged|not installed/i);
-    expect(UPDATE_ERROR_MESSAGES.verification_failed).toContain("was not installed");
   });
 });

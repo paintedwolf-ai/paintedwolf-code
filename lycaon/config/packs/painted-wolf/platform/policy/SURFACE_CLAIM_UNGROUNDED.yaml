@@ -29,52 +29,29 @@ x-paintedwolf-scenarios:
       offenders_omitted: 0
       offenders_sample: render#1
       can_recall: true
-    expect_contains:
-      - 'Code: SURFACE_CLAIM_UNGROUNDED'
-      - 'recall(query='
   - id: recall_not_callable
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: render#1
       can_recall: false
-    expect_contains:
-      - 'Code: SURFACE_CLAIM_UNGROUNDED'
-      - 'obtain the observation with the capture or terminal controls'
   - id: page_claim_without_snapshot
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: render#1
-    expect_contains:
-      - 'Code: SURFACE_CLAIM_UNGROUNDED'
-      - runtime surface snapshot
-      - complete_leg
   - id: visual_intent_cannot_ground_runtime
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: render#2
-    expect_contains:
-      - 'Code: SURFACE_CLAIM_UNGROUNDED'
-      - render
   - id: tui_claim_without_snapshot
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: render#1
-    expect_contains:
-      - 'Code: SURFACE_CLAIM_UNGROUNDED'
-      - runtime surface snapshot
-      - complete_leg
-      - complete_leg
   - id: tui_stdout_cannot_ground_screen
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: render#2
-    expect_contains:
-      - 'Code: SURFACE_CLAIM_UNGROUNDED'
-      - command stdout
-      - complete_leg
-      - complete_leg

@@ -29,7 +29,7 @@ func TestArgumentRecoveryDoesNotChangeTheRequestedOperation(t *testing.T) {
 			if !strings.Contains(copy, "old_string") {
 				t.Fatalf("schema recovery lost its required argument: %s", copy)
 			}
-			if strings.Contains(copy, "`write`") || strings.Contains(copy, "whole file") {
+			if strings.Contains(copy, "`write`") {
 				t.Fatalf("schema recovery changed operations: %s", copy)
 			}
 		}

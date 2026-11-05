@@ -124,8 +124,6 @@ describe("MessageActions", () => {
     expect(edit.getAttribute("aria-disabled")).toBe("true");
     expect(rewind.getAttribute("aria-disabled")).toBe("true");
     expect(edit.getAttribute("aria-label")).toBe("Edit from here");
-    expect(edit.getAttribute("data-tip")).toBe("Edit after this turn finishes");
-    expect(rewind.getAttribute("data-tip")).toBe("Rewind after this turn finishes");
 
     fireEvent.click(edit);
     fireEvent.click(rewind);

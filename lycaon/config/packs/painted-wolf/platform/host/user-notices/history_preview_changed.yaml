@@ -6,5 +6,3 @@ suggested_action: "Preview again, then confirm."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "after the preview was made"

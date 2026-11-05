@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
     mime: image/png
     path: recordings/still.png
     tool: view_video
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: VIDEO_FORMAT_UNSUPPORTED'

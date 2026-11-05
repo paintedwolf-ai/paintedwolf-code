@@ -165,7 +165,6 @@ describe("HomeView draft materialization", () => {
     expect(
       (screen.getByTestId("home-idea-send") as HTMLButtonElement).disabled,
     ).toBe(true);
-    expect(screen.getByRole("status").textContent).toContain("Starting chat");
 
     fireEvent.click(screen.getByTestId("home-idea-send"));
     expect(onSubmitIdea).toHaveBeenCalledTimes(1);

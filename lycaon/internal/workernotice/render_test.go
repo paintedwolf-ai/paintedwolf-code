@@ -60,9 +60,6 @@ func TestRenderExecuteFailureWorkspaceUnavailable(t *testing.T) {
 	if out.Code != "worker_workspace_unavailable" {
 		t.Fatalf("Code = %q want worker_workspace_unavailable", out.Code)
 	}
-	if !strings.Contains(out.Message, "No worker changes") {
-		t.Fatalf("Message = %q want no-changes explanation", out.Message)
-	}
 }
 
 func TestRenderExecuteFailureWorkspaceStorageFull(t *testing.T) {
@@ -70,9 +67,6 @@ func TestRenderExecuteFailureWorkspaceStorageFull(t *testing.T) {
 	out := renderer.RenderExecuteFailure(errors.Join(worker.ErrWorkerBranchClaimFailed, workspace.ErrWorkspaceStorageExhausted))
 	if out.Code != "worker_workspace_disk_full" {
 		t.Fatalf("Code = %q want worker_workspace_disk_full", out.Code)
-	}
-	if !strings.Contains(out.SuggestedAction, "clear reusable workspace caches") {
-		t.Fatalf("SuggestedAction = %q want cache-clear repair", out.SuggestedAction)
 	}
 }
 

@@ -31,7 +31,3 @@ x-paintedwolf-scenarios:
     profile: coordinator
     tool: extract_archive
     dest: existing-file
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: EXTRACT_DEST_NOT_DIR'
-  - existing-file

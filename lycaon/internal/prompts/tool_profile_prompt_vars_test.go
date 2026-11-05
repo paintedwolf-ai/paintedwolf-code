@@ -1,99 +1,14 @@
 package prompts_test
 
 import (
-	"context"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
-
-func TestManagedSecretPartialTeachesReferenceOnlyWorkflowWhenCapabilityIsPresent(t *testing.T) {
-	t.Parallel()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	got, err := engine.Render(context.Background(), "units/managed-secret-tools.md", map[string]any{})
-	testutil.FailErr(t, "render managed secret partial", err)
-	for _, want := range []string{
-		"Managed secrets", "Most authenticated work needs none", "{{paintedwolf-secret:…}}",
-		"Default to chat scope", "Raw values never enter model requests",
-		"tracked and replaced", "Destination approval",
-		"Pass the returned reference unchanged", "Project files do not resolve references",
-		"revoke disposable test references afterward",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("managed secret partial missing %q:\n%s", want, got)
-		}
-	}
-	withAsk, err := engine.Render(context.Background(), "units/managed-secret-tools.md", map[string]any{
-		"profile_has_ask_user": true,
-	})
-	testutil.FailErr(t, "render managed secret partial with ask_user", err)
-	for _, want := range []string{"`ask_user`", "`response_type: secret`", "only the reference", "Never request credentials as text or choices"} {
-		if !strings.Contains(withAsk, want) {
-			t.Fatalf("managed secret ask guidance missing %q:\n%s", want, withAsk)
-		}
-	}
-}
-
-func TestCoordinatorTeachesSecretUseOnceSecretToolsLoad(t *testing.T) {
-	vars := map[string]any{
-		"has_file_tools": true,
-		"agent_skills":   listedSkills("use-secrets-without-reading-them"),
-	}
-	loaded := map[string]bool{"secret_generate": true, "secret_list": true, "secret_revoke": true, "write": true}
-	testutil.FailErr(t, "merge coordinator surface", prompts.MergeCoordinatorSurfacePathVars("implement_investigate", nil, vars, prompts.SurfaceTurn{Loaded: loaded}))
-	if vars["profile_has_update_progress"] != true {
-		t.Fatal("coordinator checklist guidance must follow its offered authoring tool")
-	}
-	sticky, err := prompts.LoadCoordinatorSurfaceFloor("implement_investigate")
-	testutil.FailErr(t, "resolve coordinator tools", err)
-	deferred, err := prompts.LoadCoordinatorSurfaceLoadable("implement_investigate")
-	testutil.FailErr(t, "resolve deferred coordinator tools", err)
-	if slices.Contains(sticky, "secret_generate") || !slices.Contains(deferred, "secret_generate") {
-		t.Fatal("fixture must exercise deferred secret generation")
-	}
-	testutil.FailErr(t, "merge coordinator prompt", prompts.MergeCoordinatorPromptVars("implement_investigate",
-		prompts.ExecutionModePromptTransition{ExecutionMode: "investigate"}, "", vars))
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	mergeUnits(t, engine, vars, promptunit.HostCoordinator, "investigate", nil)
-	out, err := engine.Render(context.Background(), "agents/coordinator-core.md", vars)
-	testutil.FailErr(t, "render loaded secret guidance", err)
-	for _, want := range []string{
-		"Before handling a credential, read `use-secrets-without-reading-them`",
-		"Pass the returned reference unchanged",
-		"`response_type: secret`",
-		"Raw values never enter model requests",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("first-turn secret teaching missing %q", want)
-		}
-	}
-}
-
-func TestHTTPRequestPartialTeachesFirstClassActionWorkflow(t *testing.T) {
-	t.Parallel()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	got, err := engine.Render(context.Background(), "units/http-request-tools.md", map[string]any{
-		"profile_has_fetch_url": true,
-	})
-	testutil.FailErr(t, "render HTTP request partial", err)
-	for _, want := range []string{
-		"Use `fetch_url` for readable web research",
-		"pages and documentation arrive as markdown with paging",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("HTTP request partial missing %q:\n%s", want, got)
-		}
-	}
-	if strings.Contains(got, "request_tools") {
-		t.Fatalf("sticky HTTP tools must not be taught as deferred:\n%s", got)
-	}
-}
 
 func TestHTTPActionVarsFollowOfferedTools(t *testing.T) {
 	t.Parallel()

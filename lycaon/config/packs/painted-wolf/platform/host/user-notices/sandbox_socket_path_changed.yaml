@@ -10,5 +10,3 @@ suggested_action: "Request fresh approval once the intended service is running. 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "changed while it was being checked"

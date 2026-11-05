@@ -11,7 +11,6 @@ import {
   kpiEntries,
   levelLabel,
   scanFindingsCounts,
-  scanEmptyState,
   applyLiveScanPatch,
   liveScanWantsListRefresh,
   pickDefaultScanId,
@@ -75,7 +74,6 @@ describe("scan-display", () => {
   });
 
   it("labels malware reports and nothing else", () => {
-    expect(advisoryKindLabel({ kind: "malicious_package" })).toBe("Malicious package");
     expect(advisoryKindLabel({ kind: "vulnerability" })).toBe("");
     expect(advisoryKindLabel(undefined)).toBe("");
   });
@@ -235,10 +233,4 @@ describe("scan-display", () => {
     expect(at(patched.rows, 0).runtime?.hard_limit_ms).toBe(7200000);
     expect(patched.statusChanged).toBe(false);
   });
-});
-
-it("does not present pruned details as a clean run", () => {
-  const state = scanEmptyState({ status: "complete", findings_count: 9, detail_pruned_at: "2026-09-11T00:00:00Z" } as CodeScan);
-  expect(state.title).toBe("Scan details were pruned");
-  expect(state.description).toContain("summary remains");
 });

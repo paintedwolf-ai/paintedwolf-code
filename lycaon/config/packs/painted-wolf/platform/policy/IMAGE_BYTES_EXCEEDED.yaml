@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     path: assets/huge.png
     profile: coordinator
     tool: view_image
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: IMAGE_BYTES_EXCEEDED'

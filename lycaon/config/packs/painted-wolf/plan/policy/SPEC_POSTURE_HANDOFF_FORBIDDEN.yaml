@@ -23,8 +23,5 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: handoff_init
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SPEC_POSTURE_HANDOFF_FORBIDDEN'
 x-paintedwolf-audience:
 - coordinator

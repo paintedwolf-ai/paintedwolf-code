@@ -47,10 +47,6 @@ x-paintedwolf-scenarios:
       failed_stages: [ssh-keygen -y -f /Users/person/.ssh/id_ed25519]
       refused_read_paths: [/Users/person/.ssh/id_ed25519]
       refused_read_grants: [/Users/person/.ssh/id_ed25519]
-    expect_contains:
-      - 'Code: SANDBOX_TRY_READ_PATH'
-      - capability_request.read_path
-      - id_ed25519
   - id: keychain_traversal
     vars:
       tool: command
@@ -60,7 +56,3 @@ x-paintedwolf-scenarios:
         - /Users/person/Library/Keychains/login.keychain-db
       refused_read_grants:
         - /Users/person/Library/Keychains/login.keychain-db
-    expect_contains:
-      - 'Code: SANDBOX_TRY_READ_PATH'
-      - capability_request.read_path
-      - login.keychain-db

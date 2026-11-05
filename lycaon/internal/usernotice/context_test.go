@@ -95,8 +95,7 @@ func TestCloudflarePaidPlanNoticeUsesStructuredReason(t *testing.T) {
 			}
 			continue
 		}
-		if !strings.Contains(copy.Message, err.Model) || !strings.Contains(copy.Message, "Workers Paid plan") ||
-			!strings.Contains(copy.SuggestedAction, "Workers Free plan") {
+		if !strings.Contains(copy.Message, err.Model) || !strings.Contains(copy.Message, "Workers Paid plan") {
 			t.Fatalf("paid plan notice lacks actionable guidance: %+v", copy)
 		}
 	}

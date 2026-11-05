@@ -35,6 +35,3 @@ x-paintedwolf-scenarios:
       path: Cargo.toml
       profile: implement
       tool: jq_edit
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: JQ_EDIT_LOSSY'

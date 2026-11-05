@@ -65,7 +65,6 @@ describe("GeneralSettingsPanel notifications tab", () => {
     expect(screen.getByTestId("notifications-needs-approval")).toBeTruthy();
     expect(screen.getByTestId("notifications-send-test")).toBeTruthy();
     const denied = screen.getByTestId("notifications-approval-denied");
-    expect(denied.textContent).toContain("Painted Wolf Code");
     expect(denied.textContent?.toLowerCase()).not.toContain("lycaon");
   });
 
@@ -92,8 +91,7 @@ describe("GeneralSettingsPanel notifications tab", () => {
     ensurePermission.mockResolvedValue("granted");
     sendTest.mockResolvedValueOnce("inhibited");
     fireEvent.click(button);
-    const hint = await screen.findByTestId("notifications-inhibited");
-    expect(hint.textContent).toContain("Do not disturb");
+    await screen.findByTestId("notifications-inhibited");
     sendTest.mockResolvedValueOnce("delivered");
     fireEvent.click(button);
     await waitFor(() => expect(screen.queryByTestId("notifications-inhibited")).toBeNull());

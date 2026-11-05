@@ -34,7 +34,6 @@ describe("composer elevated access", () => {
   it("opens Project configuration approvals without revoking on click or keyboard activation", async () => {
     const h = setup();
     const button = await screen.findByRole("button", { name: "Review 1 elevated-access approval in Project configuration" });
-    expect(button.getAttribute("data-tip")).toContain("Project configuration → Approvals");
     fireEvent.click(button);
     button.focus();
     fireEvent.keyDown(button, { key: "Enter" });

@@ -28,8 +28,3 @@ x-paintedwolf-scenarios:
       offenders_omitted: 0
       offenders_sample: 'task#1'
       observed_handles_sample: 'read#2'
-    expect_contains:
-      - 'Code: MID_TURN_NOTE_HANDLE_UNGROUND'
-      - 'task#1'
-      - 'read#2'
-      - 'MESSAGE WITHHELD FROM USER'

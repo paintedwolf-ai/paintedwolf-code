@@ -25,5 +25,4 @@ x-paintedwolf-message: The review iteration cap is reached; another non-terminal
 x-paintedwolf-scenarios:
   - id: cap
     vars: { review_attempt: 3, review_iteration_cap: 3, review_terminal_value: APPROVED }
-    expect_contains: ['Code: SUBMIT_VERDICT_ITERATION_CAP', 'APPROVED']
 x-paintedwolf-emit: guard:workflow

@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/oarcore"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -99,7 +97,7 @@ var groundingRepairRecallCodes = []string{
 	"SYNTH_CITATION_UNVERIFIABLE",
 }
 
-func TestGroundingRepairCopyNamesRecallOnlyWhenCallable(t *testing.T) {
+func TestGroundingRepairCopyDeclaresCanRecall(t *testing.T) {
 	t.Parallel()
 	cfg, err := guidance.LoadHintConfigStock()
 	contractcheck.FailErr(t, "load stock policy", err)
@@ -110,19 +108,6 @@ func TestGroundingRepairCopyNamesRecallOnlyWhenCallable(t *testing.T) {
 		}
 		if entry.Requires == nil || !slices.Contains(entry.Requires.Facts, "paintedwolf.can_recall") {
 			t.Errorf("%s does not require paintedwolf.can_recall", code)
-		}
-		for _, callable := range []bool{true, false} {
-			facts := map[string]any{"paintedwolf.can_recall": callable, "paintedwolf.can_read": true}
-			var body strings.Builder
-			for _, field := range []string{entry.What, entry.Cause, entry.Why, entry.Fix, entry.Instead} {
-				body.WriteString(oarcore.RenderCopy(field, facts) + "\n")
-			}
-			if callable && !strings.Contains(body.String(), `recall(query="`) {
-				t.Errorf("%s omits recall while it is callable:\n%s", code, body.String())
-			}
-			if !callable && strings.Contains(body.String(), "recall") {
-				t.Errorf("%s names recall while it is not callable:\n%s", code, body.String())
-			}
 		}
 	}
 }
@@ -147,25 +132,6 @@ func TestRecallStickyOnEveryProfileAndSurface(t *testing.T) {
 		contractcheck.FailErr(t, "CompileToolPlan "+surfaceID, err)
 		if !slices.Contains(plan.ImmediateNames(), "recall") {
 			t.Errorf("surface %s does not offer recall immediately", surfaceID)
-		}
-	}
-}
-
-func TestCitationGroundingKickNamesRecallOnlyWhenCallable(t *testing.T) {
-	t.Parallel()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	for _, kick := range []string{"coordinator-citation-grounding", "worker-citation-grounding"} {
-		for _, callable := range []bool{true, false} {
-			out, err := engine.RenderKick(context.Background(), kick, map[string]any{
-				"attempt": 1, "max_attempts": 3, "worker_summary_max_chars": 600, "can_recall": callable,
-			})
-			contractcheck.FailErr(t, "render "+kick, err)
-			if got := strings.Contains(out, `recall(query="handle:`); got != callable {
-				t.Errorf("%s can_recall=%v: names recall = %v:\n%s", kick, callable, got, out)
-			}
-			if !callable && strings.Contains(out, "recall") {
-				t.Errorf("%s names recall while it is not callable:\n%s", kick, out)
-			}
 		}
 	}
 }

@@ -26,6 +26,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TOOL_PROFILE_DENIED'

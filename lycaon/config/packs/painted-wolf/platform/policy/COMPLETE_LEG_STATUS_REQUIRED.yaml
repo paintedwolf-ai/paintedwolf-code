@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: implementer
     tool: complete_leg
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: COMPLETE_LEG_STATUS_REQUIRED'

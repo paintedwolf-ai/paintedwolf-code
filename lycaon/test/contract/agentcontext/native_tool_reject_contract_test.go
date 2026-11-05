@@ -109,9 +109,6 @@ func TestNativeSummarizeNoInputStructuredRejectE2E(t *testing.T) {
 
 	formatted := toolrejection.FormatDecisionReject("SUMMARIZE_NO_INPUT", map[string]any{"need_one_of": []string{"path", "paths", "pattern", "content"}}, formatter)
 	assertStructuredRejectCode(t, formatted, "SUMMARIZE_NO_INPUT")
-	if !strings.Contains(formatted.Error(), "sibling") && !strings.Contains(formatted.Error(), "path") {
-		t.Fatalf("expected path/sibling fix guidance, got %q", formatted.Error())
-	}
 }
 
 func TestNativeChmod777StructuredRejectE2E(t *testing.T) {

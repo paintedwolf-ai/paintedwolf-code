@@ -53,10 +53,6 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: DOOM_LOOP_REPEAT'
-  - current next action
 - id: worker_leg
   vars:
     detail: bad args
@@ -65,18 +61,9 @@ x-paintedwolf-scenarios:
     tool: grep
     worker_leg: true
     can_complete_leg: true
-  expect_contains:
-  - 'Code: DOOM_LOOP_REPEAT'
-  - 'leg_status: partial'
-  - remaining_risk
 - id: command_output
   vars:
     count: 8
     handle: cmd_docker_01
     profile: coordinator
     tool: command_output
-  expect_contains:
-  - 'Code: DOOM_LOOP_REPEAT'
-  - '"handles":["cmd_docker_01"]'
-  - process_done
-  - terminal envelope

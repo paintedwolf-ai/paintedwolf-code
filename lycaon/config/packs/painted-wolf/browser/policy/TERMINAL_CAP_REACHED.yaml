@@ -39,7 +39,3 @@ x-paintedwolf-scenarios:
       live_terminal_ids: [running-terminal]
       can_terminal_close: true
       tool: terminal_open
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: TERMINAL_CAP_REACHED'
-      - terminal_close

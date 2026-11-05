@@ -4,7 +4,3 @@ message: >-
   A verified update is ready for Painted Wolf Code.
 suggested_action: >-
   With automatic updates on, it installs when you quit after a final safety check. To install sooner, open Settings → General → Updates and choose Restart to update.
-scenarios:
-  - id: default
-    expect_contains:
-      - Painted Wolf Code

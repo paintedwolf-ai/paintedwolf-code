@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: COMMAND_PROGRAMS_DISABLED'

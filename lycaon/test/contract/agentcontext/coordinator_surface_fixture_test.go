@@ -27,13 +27,6 @@ var orchestrationLifecycleTools = []string{
 	"wait",
 }
 
-// orchestrationLifecyclePromptTools appear in pinned-surface prompts.
-var orchestrationLifecyclePromptTools = []string{
-	"answer_decision",
-	"extend_worker_budget",
-	"update_progress",
-}
-
 // orchestrationPinnedSurfaces remain active while parallel work is open.
 var orchestrationPinnedSurfaces = []string{
 	surfaceImplementOverlayPromote,

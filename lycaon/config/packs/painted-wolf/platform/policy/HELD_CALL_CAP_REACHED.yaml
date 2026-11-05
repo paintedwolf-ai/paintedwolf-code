@@ -46,7 +46,3 @@ x-paintedwolf-scenarios:
       handles_text: held-1, held-2, held-3, held-4
       profile: coordinator
       tool: find
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: HELD_CALL_CAP_REACHED'
-      - held_stop

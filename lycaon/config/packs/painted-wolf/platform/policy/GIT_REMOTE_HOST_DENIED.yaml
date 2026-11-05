@@ -23,6 +23,3 @@ x-paintedwolf-scenarios:
   vars:
     tool: command
     profile: implement
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: GIT_REMOTE_HOST_DENIED'

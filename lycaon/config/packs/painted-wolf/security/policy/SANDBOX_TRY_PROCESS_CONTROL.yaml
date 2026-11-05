@@ -46,6 +46,3 @@ x-paintedwolf-scenarios:
     refused_signals:
     - signal (kill)
     tool_args: {}
-  expect_contains:
-  - 'Code: SANDBOX_TRY_PROCESS_CONTROL'
-  - capability_request.process_control

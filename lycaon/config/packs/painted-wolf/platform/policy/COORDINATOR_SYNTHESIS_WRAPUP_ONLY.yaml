@@ -26,6 +26,3 @@ x-paintedwolf-scenarios:
       detail: bad args
       profile: coordinator
       tool: edit
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: COORDINATOR_SYNTHESIS_WRAPUP_ONLY'

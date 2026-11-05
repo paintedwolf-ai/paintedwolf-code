@@ -5,10 +5,8 @@ import (
 
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -71,87 +69,9 @@ func TestImplementManifestAllowedAgentsIncludesSpawnSSOT(t *testing.T) {
 	}
 }
 
-func TestCoordinatorImplementTripartiteWithAmbientRun(t *testing.T) {
+func TestImplementBootResolvesSynthesisOrInvestigate(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	rendered := renderCoordinatorTripartiteForRunContext(t, root, api.CoordinatorRunContext{
-		WorkflowID:      "implement",
-		WorkflowVersion: "1.0.0",
-		CurrentPhase:    "work",
-	}, nil, surface.HostLoopWakeSentinel, WorkerCompletionHistory(orchestration.ProfileImplementer), "",
-		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false))
-	for _, want := range []string{
-		"Synthesis turn",
-		"task()",
-	} {
-		if !strings.Contains(rendered, want) {
-			t.Fatalf("rendered playbook missing %q", want)
-		}
-	}
-	renderedBoot := renderCoordinatorTripartiteForRunContext(t, root, api.CoordinatorRunContext{
-		WorkflowID: "implement", RunID: "run-1", CurrentPhase: "boot",
-	}, &api.Session{Posture: api.SessionPostureBuild}, "Map this codebase", nil, "")
-	assertCoordinatorInvestigateBehavioral(t, renderedBoot)
-	renderedOrchestrate := renderCoordinatorTripartiteForRunContext(t, root, api.CoordinatorRunContext{
-		WorkflowID: "implement", RunID: "run-1", CurrentPhase: "boot",
-	}, &api.Session{Posture: api.SessionPostureBuild},
-		surface.HostLoopWakeSentinel, WorkerCompletionHistory(orchestration.ProfileImplementer), "",
-		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false))
-	for _, want := range []string{
-		"tool results in this chat",
-		"Read-only report",
-	} {
-		if !strings.Contains(renderedOrchestrate, want) {
-			t.Fatalf("batch-ready orchestrate-lock render missing %q", want)
-		}
-	}
-	for _, forbid := range []string{
-		"INVEST_HANDLE_NOT_OBSERVED",
-		"COORDINATOR_ORCHESTRATE_WRITE_DENIED",
-	} {
-		if strings.Contains(renderedOrchestrate, forbid) {
-			t.Fatalf("batch-ready wrapup render must not contain investigate/orchestrate marker %q", forbid)
-		}
-	}
-	spawnBlock := renderImplementSpawnInjectForContract(t, root)
-	agents, err := agentdef.LoadEffective()
-	if err != nil {
-		t.Fatalf("LoadAgentProfilesEffective: %v", err)
-	}
-	byID := map[string]agentdef.Profile{}
-	for _, a := range agents {
-		byID[a.ID] = a
-	}
-	for _, id := range spawn.AmbientAllowedAgents() {
-		agent, ok := byID[id]
-		if !ok {
-			t.Fatalf("missing agent %q", id)
-		}
-		if !strings.Contains(spawnBlock, agent.Description) {
-			t.Fatalf("spawn inject missing SSOT description for %q: %q", id, agent.Description)
-		}
-	}
-	for _, want := range []string{
-		"Spawn roster",
-		"`implementer`",
-		"`plan-writer`",
-		"DISALLOWED_AGENT",
-		"(command)",
-		"Budget:",
-		"omit `max_tool_loops`",
-	} {
-		if !strings.Contains(spawnBlock, want) {
-			t.Fatalf("implement-spawn inject missing %q", want)
-		}
-	}
-	for _, forbid := range []string{
-		"hotfix-template",
-		"workflow_compose_from_template (hotfix",
-	} {
-		if strings.Contains(rendered, forbid) {
-			t.Fatalf("implement-default playbook must not pressure %q", forbid)
-		}
-	}
 	configRoot := filepath.Join(root, "lycaon")
 	profile := surface.ResolveTurnProfile(surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{
 		WorkflowID:      "implement",

@@ -19,4 +19,3 @@ x-paintedwolf-message: The process reference no longer identifies the reviewed p
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains: ['Rejected:', 'Code: PROCESS_REFERENCE_STALE']

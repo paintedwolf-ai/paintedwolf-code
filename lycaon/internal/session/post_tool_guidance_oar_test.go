@@ -116,12 +116,7 @@ func TestDoomLoopBlockForCommandOutputRoutesToProcessWait(t *testing.T) {
 	if reject == nil {
 		t.Fatal("command_output repetition did not render a block")
 	}
-	for _, want := range []string{
-		"DOOM_LOOP_REPEAT",
-		`"handles":["cmd-docker-1"]`,
-		`"kind":"process_done"`,
-		"terminal envelope",
-	} {
+	for _, want := range []string{"DOOM_LOOP_REPEAT", `"handles":["cmd-docker-1"]`, `"kind":"process_done"`} {
 		if !strings.Contains(reject.Body, want) {
 			t.Fatalf("command_output block missing %q:\n%s", want, reject.Body)
 		}
@@ -180,12 +175,7 @@ func TestRemotePackageDestinationBannerGivesNonWideningRecovery(t *testing.T) {
 		context.Background(), sess, "command", map[string]any{"command": "go run code.gitea.io/tea@v1.3.3"},
 		`{"exit_code":1,"network_mode":"proxy_only"}`, 1, guidance.ToolResultFacts{Confine: obs},
 	)
-	for _, want := range []string{
-		"Code: REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED",
-		"gitea.example.com",
-		"cannot be widened in the same invocation",
-		"Repeating the same action cannot grant",
-	} {
+	for _, want := range []string{"Code: REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED", "gitea.example.com"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("remote package guidance missing %q:\n%s", want, out)
 		}

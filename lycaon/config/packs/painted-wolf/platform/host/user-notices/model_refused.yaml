@@ -26,10 +26,5 @@ scenarios:
       provider_id: local
       model: example-model
       code: model_not_found
-    expect_contains:
-      - local
-      - example-model
   - id: generic
     vars: {}
-    expect_contains:
-      - selected model

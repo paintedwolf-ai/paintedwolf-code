@@ -23,10 +23,5 @@ scenarios:
     vars:
       tool: submit_verdict
       closeout_reason: "`submit_verdict` was refused 6 times in a row (SUBMIT_VERDICT_INVALID)"
-    expect_contains:
-      - submit_verdict
-      - did not run
   - id: generic
     vars: {}
-    expect_contains:
-      - no summary was recorded

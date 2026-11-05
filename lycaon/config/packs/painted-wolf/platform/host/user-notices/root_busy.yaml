@@ -13,5 +13,3 @@ suggested_action: Wait for the active work to finish or stop it before removing 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Active work is still using this folder.

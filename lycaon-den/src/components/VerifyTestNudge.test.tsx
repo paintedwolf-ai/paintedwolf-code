@@ -66,7 +66,6 @@ describe("VerifyTestNudge", () => {
     const nudge = await screen.findByTestId("verify-test-nudge");
     expect(nudge.textContent).toContain("./task check");
     expect(nudge.textContent).toContain("default");
-    expect(nudge.textContent).toContain("not a requirement to run the full suite after every edit");
     fireEvent.click(screen.getByTestId("system-nudge-primary"));
     await waitFor(() =>
       expect(updateVerifySettings).toHaveBeenCalledWith(

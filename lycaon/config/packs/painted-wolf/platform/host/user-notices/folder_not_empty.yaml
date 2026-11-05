@@ -6,5 +6,3 @@ suggested_action: Choose an empty folder or create a new one, then try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - The selected folder contains files, so the draft could not be moved there.

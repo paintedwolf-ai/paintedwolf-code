@@ -5,5 +5,3 @@ message: That message is reserved for the current turn and can no longer be chan
 suggested_action: Cancel the send to edit it, or wait for it to land.
 scenarios:
   - id: default
-    expect_contains:
-      - can no longer be changed

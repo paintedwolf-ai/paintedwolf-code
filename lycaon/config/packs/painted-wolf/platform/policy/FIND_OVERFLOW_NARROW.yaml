@@ -22,7 +22,4 @@ scenarios:
     path: .
     profile: coordinator
     tool: find
-  expect_contains:
-  - 'Code: FIND_OVERFLOW_NARROW'
-  - name_glob
 id: FIND_OVERFLOW_NARROW

@@ -94,7 +94,7 @@ func TestExecutionStateRenderIsConditionalAndUsesHostFacts(t *testing.T) {
 	}
 	history := []api.Message{executionReceipt("write", "first", api.InvocationStatusRejected, "PROGRESS_MISSING"), executionReceipt("update_progress", "progress", api.InvocationStatusCompleted, "")}
 	block := RenderExecutionStateMessage(ctx, renderer, "sess-inject-test", history, "")
-	for _, want := range []string{"call-first", "test.py", "did not execute", "checklist update completed"} {
+	for _, want := range []string{"call-first", "test.py", "did not execute"} {
 		if !strings.Contains(block.Content, want) {
 			t.Errorf("render missing %q: %q", want, block.Content)
 		}

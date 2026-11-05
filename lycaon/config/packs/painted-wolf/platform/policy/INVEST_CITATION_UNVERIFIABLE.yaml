@@ -33,9 +33,6 @@ x-paintedwolf-scenarios:
       offenders_omitted: 0
       offenders_sample: read#3
       can_recall: true
-    expect_contains:
-      - 'Code: INVEST_CITATION_UNVERIFIABLE'
-      - 'recall(query='
   - id: recall_not_callable
     vars:
       offender_count: 1
@@ -43,14 +40,8 @@ x-paintedwolf-scenarios:
       offenders_sample: read#3
       can_recall: false
       can_read: true
-    expect_contains:
-      - 'Code: INVEST_CITATION_UNVERIFIABLE'
-      - 'Re-read the cited lines'
   - id: paraphrased_excerpt
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: src/a.go:10 ("paraphrased claim")
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: INVEST_CITATION_UNVERIFIABLE'

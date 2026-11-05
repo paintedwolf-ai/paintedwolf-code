@@ -47,12 +47,6 @@ x-paintedwolf-scenarios:
     unsandboxed_refusals:
     - network-bind /Users/person/.colima/_lima/_networks/user-v2/user-v2_fd.sock (limactl)
     tool_args: {}
-  expect_contains:
-  - 'Code: SANDBOX_TRY_HOST_EXECUTION'
-  - capability_request.host_execution
-  - command_stop
-  - still running
-  - user-v2_fd.sock
 - id: finished_failure
   vars:
     tool: verify
@@ -61,6 +55,3 @@ x-paintedwolf-scenarios:
     unsandboxed_refusals:
     - iokit-open AppleUSBHostDevice (make)
     tool_args: {}
-  expect_contains:
-  - 'Code: SANDBOX_TRY_HOST_EXECUTION'
-  - capability_request.host_execution

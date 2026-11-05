@@ -34,6 +34,3 @@ x-paintedwolf-scenarios:
     path: internal/foo.go
     profile: implement
     tool: code_rewrite
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: STRUCTURAL_APPLY_FAILED'

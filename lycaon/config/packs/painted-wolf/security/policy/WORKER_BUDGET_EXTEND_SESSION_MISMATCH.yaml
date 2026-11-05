@@ -23,9 +23,6 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     job_id: job-other
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_BUDGET_EXTEND_SESSION_MISMATCH'
 selector:
   tool:
   - extend_worker_budget

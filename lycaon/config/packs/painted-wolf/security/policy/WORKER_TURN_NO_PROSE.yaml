@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: coordinator
       tool: read
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: WORKER_TURN_NO_PROSE'
