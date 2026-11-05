@@ -387,7 +387,7 @@ while IFS=`, 1)
 			testutil.FailErr(t, "warm native engine", client.Warm(t.Context()))
 			parent, cancel := context.WithCancel(t.Context())
 			defer cancel()
-			var ctx context.Context = parent
+			ctx := parent
 			if terminal == "exit" {
 				ctx = expiringContext{parent}
 			}
