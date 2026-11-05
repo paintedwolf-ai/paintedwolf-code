@@ -11,6 +11,8 @@ use std::{
     time::Duration,
 };
 
+const HANG_BOUND: Duration = Duration::from_secs(120);
+
 const INTERFACE: &str = r#"<node><interface name="org.freedesktop.Notifications">
 <method name="GetCapabilities"><arg type="as" direction="out"/></method>
 <method name="Notify"><arg type="s" direction="in"/><arg type="u" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="as" direction="in"/><arg type="a{sv}" direction="in"/><arg type="i" direction="in"/><arg type="u" direction="out"/></method>
