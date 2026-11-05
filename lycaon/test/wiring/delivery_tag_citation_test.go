@@ -114,10 +114,10 @@ func TestNumberedReadOfSeveralFilesKeepsLaterFilesUnnumbered(t *testing.T) {
 		{command: "cat -n notes.txt body.txt"},
 		{text: func(req modelcall.CompletionRequest) string {
 			printed = newestToolContent(req)
-			return "The section opens with the third printed row [body.txt:3]."
+			return "The note is second [notes.txt:2], and the body opens with the third printed row [body.txt:3]."
 		}},
 		{text: func(modelcall.CompletionRequest) string {
-			return `The body continues [body.txt:2 "second row of the body"], and the note is second [notes.txt:2].`
+			return `[cite: c2 => body.txt:2 "second row of the body"]`
 		}},
 	}}
 	h, session := deliveryTagSession(t, script)
@@ -143,6 +143,24 @@ func TestNumberedReadOfSeveralFilesKeepsLaterFilesUnnumbered(t *testing.T) {
 	}
 	if verdicts["body.txt:2"] != "matched" || verdicts["notes.txt:2"] != "traced" {
 		t.Fatalf("verdicts = %v", verdicts)
+	}
+}
+
+// The same delivery still supports what needs no count: a verified excerpt and the handle.
+func TestLaterFileOfNumberedReadCitesByExcerptAndHandle(t *testing.T) {
+	script := &citableScriptLLM{steps: []citableStep{
+		{command: "cat -n notes.txt body.txt"},
+		{text: func(req modelcall.CompletionRequest) string {
+			tags := deliveryTagRE.FindAllStringSubmatch(newestToolContent(req), -1)
+			return `The body continues [body.txt:2 "second row of the body"], as read [` + tags[1][1] + `].`
+		}},
+	}}
+	h, session := deliveryTagSession(t, script)
+	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "read the files")
+	testutil.FailErr(t, "prompt", err)
+	g := lastAnswerGrounding(t, h, session)
+	if script.next != len(script.steps) || g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 2 {
+		t.Fatalf("steps %d, grounding %+v", script.next, g)
 	}
 }
 
