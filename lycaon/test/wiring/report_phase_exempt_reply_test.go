@@ -32,7 +32,7 @@ func TestNothingCitedReplyInAReportPhaseStillEndsInAReport(t *testing.T) {
 	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Deliver it.")
 	testutil.FailErr(t, "prompt", err)
 
-	current, err := h.Workflows.Manager.Runs.Get(ctx, run.ID)
+	current, err := h.Workflows.Manager.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "read run", err)
 	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
