@@ -193,11 +193,14 @@ func TestMountHelperThatAttachedAndThenFailedLeavesNoMount(t *testing.T) {
 	testutil.FailErr(t, "find python3", err)
 	fusermount, err := exec.LookPath("fusermount3")
 	testutil.FailErr(t, "find fusermount3", err)
+	attached := filepath.Join(tmp, "attached")
 	script := "#!" + python + `
 import os, socket, subprocess, sys
 keep, send = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
 os.set_inheritable(send.fileno(), True)
 subprocess.run(["` + fusermount + `", *sys.argv[1:]], env=dict(os.environ, _FUSE_COMMFD=str(send.fileno())), close_fds=False)
+if any(line.split()[4] == sys.argv[-1] for line in open("/proc/self/mountinfo")):
+    open("` + attached + `", "w").close()
 sys.exit(1)
 `
 	testutil.FailErr(t, "write helper", os.WriteFile(helper, []byte(script), 0o755))
@@ -212,6 +215,8 @@ sys.exit(1)
 	if err == nil {
 		t.Fatal("expected Prepare to report the failed helper")
 	}
+	_, err = os.Stat(attached)
+	testutil.FailErr(t, "helper attached the mount", err)
 	// Rollback keeps the records while anything is still mounted below the view.
 	recorded, err := adapter.LoadRecordedConnections(filepath.Join(runtimeDir, "view-attached"))
 	if err != nil || len(recorded) != 0 {

@@ -5,6 +5,7 @@ package delegations
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
