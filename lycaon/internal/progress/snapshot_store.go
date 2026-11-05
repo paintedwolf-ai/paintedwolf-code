@@ -65,7 +65,7 @@ func querySnapshot(ctx context.Context, queries *db.Queries, key string) (Snapsh
 	if row.ItemIdsJson != "" {
 		_ = json.Unmarshal([]byte(row.ItemIdsJson), &itemIDs)
 	}
-	return snapshotVersion(row.WorkflowRunID, row.Content, itemIDs, row.UpdatedAt, uint64(row.DocumentVersion)), nil
+	return snapshotVersion(row.WorkflowRunID, row.Content, itemIDs, row.UpdatedAt, uint64(row.DocumentVersion)), nil //nolint:gosec // G115 — document versions start at zero and only increase.
 }
 
 func (s *SQLStore) Snapshot(ctx context.Context, sessionID string) (Snapshot, error) {

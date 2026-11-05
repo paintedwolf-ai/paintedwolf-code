@@ -2,6 +2,7 @@ package jq
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 
@@ -114,7 +115,7 @@ func (s *EventStream) Decode() (value any, failure error) {
 	for {
 		b, err := s.space()
 		if err != nil {
-			if err == io.EOF && len(s.frames) > 0 {
+			if errors.Is(err, io.EOF) && len(s.frames) > 0 {
 				return nil, unexpectedJSONEnd(err)
 			}
 			return nil, err
@@ -224,7 +225,7 @@ func (s *EventStream) finish() (any, error) {
 }
 
 func unexpectedJSONEnd(err error) error {
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return io.ErrUnexpectedEOF
 	}
 	return err

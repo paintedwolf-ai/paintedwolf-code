@@ -284,7 +284,8 @@ func (r *processTable) pruneCompletedLocked(sessionID string) {
 	}
 }
 
-// ProcessesUnderRoot returns live background jobs in projectID or sessionIDs whose canonical working directory is within rootPath.
+// ProcessesUnderRoot returns live background jobs in projectID or sessionIDs
+// whose canonical working directory is within rootPath.
 func (r *Registry) ProcessesUnderRoot(projectID string, sessionIDs map[string]struct{}, rootPath string) []RootProcess {
 	if r == nil || r.jobs == nil {
 		return nil

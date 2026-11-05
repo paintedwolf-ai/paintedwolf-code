@@ -72,7 +72,7 @@ func (s *BoundedValueStream) value(depth int) (any, error) {
 	defer frame()
 	b, err := p.space()
 	if err != nil {
-		if err == io.EOF && depth > 0 {
+		if errors.Is(err, io.EOF) && depth > 0 {
 			err = io.ErrUnexpectedEOF
 		}
 		return nil, err
@@ -98,7 +98,7 @@ func (s *BoundedValueStream) value(depth int) (any, error) {
 func (s *BoundedValueStream) separator(end byte, first bool) (bool, error) {
 	b, err := s.parser.space()
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = io.ErrUnexpectedEOF
 		}
 		return false, err

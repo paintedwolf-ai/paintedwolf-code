@@ -22,6 +22,8 @@ type providerFaultCase struct {
 	fault  error
 	// classified reports whether err is the specific failure this case injected.
 	classified func(error) bool
+	// recovers marks a fault the turn absorbs instead of reporting.
+	recovers bool
 }
 
 func providerFaultCases() []providerFaultCase {
@@ -54,6 +56,7 @@ func providerFaultCases() []providerFaultCase {
 			fault: &failure.ProviderContextTooSmallError{
 				ProviderID: "mock", Model: "mock-1", PromptTokens: 200_000, MaxContext: 8_192,
 			},
+			recovers: true,
 			classified: func(err error) bool {
 				_, ok := failure.AsProviderContextTooSmall(err)
 				return ok
@@ -108,11 +111,15 @@ func TestProviderFailureMidRunIsRecoverable(t *testing.T) {
 
 			_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID,
 				"[[scn:"+tc.marker+"]] do some work then hit the fault")
-			if err == nil {
-				t.Fatal("prompt succeeded despite an injected provider failure")
-			}
-			if !tc.classified(err) {
-				t.Fatalf("provider failure lost its classification: %v (%T)", err, err)
+			if tc.recovers {
+				testutil.FailErr(t, "context overflow recovers within the turn", err)
+			} else {
+				if err == nil {
+					t.Fatal("prompt succeeded despite an injected provider failure")
+				}
+				if !tc.classified(err) {
+					t.Fatalf("provider failure lost its classification: %v (%T)", err, err)
+				}
 			}
 
 			assertProgressToolRoundSurvived(t, h, sess.ID)

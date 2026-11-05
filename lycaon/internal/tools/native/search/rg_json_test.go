@@ -2,6 +2,7 @@ package search
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"regexp"
 	"strings"
@@ -98,7 +99,7 @@ func TestRgJSONBinaryRecordsKeepOriginalOffsetsAndInput(t *testing.T) {
 			}
 		}
 		if err := json.Unmarshal([]byte(lines[i+1]), &event); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "unmarshal JSON document", err)
 		}
 		if event.Data.Lines.Text != "alpha\n" || event.Data.LineNumber != i+2 || event.Data.Offset != 2+i*6 || len(event.Data.Matches) != 1 || event.Data.Matches[0].Start != 0 || event.Data.Matches[0].End != 5 {
 			t.Fatalf("event %s", lines[i+1])
@@ -113,7 +114,7 @@ func TestRgJSONBinaryRecordsKeepOriginalOffsetsAndInput(t *testing.T) {
 		}
 	}
 	if err := json.Unmarshal([]byte(lines[3]), &end); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
 	if end.Data.Binary != 1 || end.Data.Stats.Searched != len(content) {
 		t.Fatalf("end event %s", lines[3])

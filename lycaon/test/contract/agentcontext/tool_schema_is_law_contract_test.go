@@ -33,15 +33,17 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 		want string
 	}{
 		{tool: "task", args: map[string]any{}, want: "TOOL_ARGS_INVALID"},
-		{tool: "restore_version", args: map[string]any{"filepath": "x.go"}, want: "received keys: filepath"},
+		{tool: "read", args: map[string]any{"filepath": "x.go"}, want: "received keys: filepath"},
+		{tool: "edit", args: map[string]any{"path": "ntp_check.py", "symbol": "query_server"}, want: "TOOL_ARGS_INVALID"},
+		{tool: "code_rewrite", args: map[string]any{"pattern": "a", "rewrite": "b"}, want: "TOOL_ARGS_INVALID"},
 		{tool: "delegate_init", args: map[string]any{"blueprint_path": "p1"}, want: "TOOL_ARGS_INVALID"},
 	}
 	for _, tc := range cases {
 		_, err := exec.Invoke(context.Background(), tc.tool, tc.args, tools.ToolContext{
 			Identity: tools.InvocationIdentity{Agent: "coordinator"},
 			Turn: tools.InvocationTurn{
-				TurnOfferedToolNames: []string{"command", "restore_version", "task", "delegate_init"},
-				TurnToolPlan:         toolsurface.Compile([]string{"command", "restore_version", "task", "delegate_init"}, nil),
+				TurnOfferedToolNames: []string{"write", "edit", "code_rewrite"},
+				TurnToolPlan:         toolsurface.Compile([]string{"write", "edit", "code_rewrite"}, nil),
 			},
 		})
 		if err == nil {
@@ -52,29 +54,6 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 		if !strings.Contains(msg, tc.want) {
 			t.Fatalf("%s: error = %q want %q", tc.tool, msg, tc.want)
 		}
-	}
-}
-
-func TestRetiredEditSchemaRejectNamesCommandSuccessor(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
-	exec := toolfixture.ContractToolExecutor(t)
-	exec.Metadata.SetToolSchemas(schemas)
-
-	_, err = exec.Invoke(context.Background(), "edit", map[string]any{"path": "ntp_check.py", "symbol": "query_server"}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{Agent: "implementer"},
-		Turn: tools.InvocationTurn{
-			TurnOfferedToolNames: []string{"command"},
-			TurnToolPlan:         toolsurface.Compile([]string{"command"}, nil),
-		},
-	})
-	if err == nil {
-		t.Fatal("expected edit schema reject")
-	}
-	assertStructuredRejectCode(t, err, "TOOL_COMMAND_OPERATION")
-	if !strings.Contains(err.Error(), "command") || strings.Contains(err.Error(), "switch to `write`") {
-		t.Fatalf("retired edit should name command successor: %v", err)
 	}
 }
 

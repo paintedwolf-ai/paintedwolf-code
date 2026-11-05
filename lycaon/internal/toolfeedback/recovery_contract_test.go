@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -38,9 +39,7 @@ func TestRecoveryContractSurvivesChildContextsAndMetadata(t *testing.T) {
 func TestTypedCapabilitySnapshotIsLocalToPresentation(t *testing.T) {
 	stockBlockPlane(t)
 	catalog, err := guidance.LoadHintConfigStock()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "guidance.LoadHintConfigStock failed", err)
 	formatter := guidance.NewStaticRejectFormatter(catalog)
 	for _, tool := range []string{"command", "read"} {
 		reject := capabilityrequest.ValidateCapabilityContract(tool, toolcontract.Contract{}, map[string]any{
@@ -51,9 +50,7 @@ func TestTypedCapabilitySnapshotIsLocalToPresentation(t *testing.T) {
 		}
 		reject.Data["tool"] = "command"
 		before, err := json.Marshal(reject)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "json.Marshal failed", err)
 		rendered := toolrejection.RenderReject(reject, formatter)
 		after, err := json.Marshal(reject)
 		if err != nil || string(before) != string(after) || strings.Contains(string(after), "CapabilityContract") || strings.Contains(string(after), "_host_capability_snapshot") {

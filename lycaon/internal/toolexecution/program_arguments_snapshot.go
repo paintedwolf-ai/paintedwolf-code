@@ -75,7 +75,7 @@ func (s *nativeArguments) clone(ctx context.Context, memory *toolcontract.Progra
 		return json.Number(strings.Clone(string(value))), nil
 	case map[string]any:
 		if value == nil {
-			return value, nil
+			return map[string]any(nil), nil
 		}
 		result := make(map[string]any, len(value))
 		for key, child := range value {
@@ -92,7 +92,7 @@ func (s *nativeArguments) clone(ctx context.Context, memory *toolcontract.Progra
 		return result, nil
 	case []any:
 		if value == nil {
-			return value, nil
+			return []any(nil), nil
 		}
 		result := make([]any, len(value))
 		for i, child := range value {

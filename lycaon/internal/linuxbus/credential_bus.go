@@ -151,7 +151,7 @@ func (p *credentialProxy) forwardSignal(signal *dbus.Signal) error {
 	}
 	service, owner, err := p.resolveService(signal.Sender, false)
 	if err != nil || !service.includesPath(signal.Path) {
-		return nil
+		return nil //nolint:nilerr // A signal from an unknown sender or path is dropped, not a connection failure.
 	}
 	admitted := false
 	for _, name := range service.Interfaces[iface].Signals {

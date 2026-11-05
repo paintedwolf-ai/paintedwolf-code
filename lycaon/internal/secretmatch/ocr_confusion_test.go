@@ -275,6 +275,7 @@ func TestOCRKeywordWorkBoundCannotHideConfusedSecrets(t *testing.T) {
 		}
 		for _, glyph := range []string{"1", "l", "I"} {
 			secret := strings.Repeat(glyph, length) + "-ABCDEFGH"
+			//nolint:staticcheck // The detector does not expose a replacement fragment.
 			hits := detector.DetectContext(t.Context(), detect.Fragment{Raw: secret})
 			if len(hits) != 1 || hits[0].Secret != secret {
 				t.Fatalf("work bound hid an OCR-equivalent secret: length=%d glyph=%s hits=%+v", length, glyph, hits)

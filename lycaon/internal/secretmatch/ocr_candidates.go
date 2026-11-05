@@ -9,7 +9,7 @@ func (c ocrConfusionCatalog) boundaryGlyph(value byte) (byte, bool) {
 		return 0, false
 	}
 	canonical, ok := c.canonical[rune(value)]
-	return byte(canonical), ok && canonical < 128 && isASCIIAlnum(byte(canonical))
+	return byte(canonical), ok && canonical < 128 && isASCIIAlnum(byte(canonical)) //nolint:gosec // G115 — the byte counts only when canonical < 128.
 }
 
 // OCRDoubletCandidates repairs over-segmented glyphs using the same reviewed

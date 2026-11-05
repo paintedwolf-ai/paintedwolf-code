@@ -57,6 +57,7 @@ func TestOperationReviewRefusalAndStaleChanges(t *testing.T) {
 	t.Parallel()
 	for _, mutate := range []bool{false, true} {
 		t.Run(map[bool]string{false: "refusal", true: "stale"}[mutate], func(t *testing.T) {
+			t.Parallel()
 			dir := operationFixture(t)
 			gittest.Run(t, dir, "checkout", "-b", "feature")
 			operationWrite(t, dir, "shared.txt", "feature\n")
@@ -186,6 +187,7 @@ func TestOperationMergeConflictsContinueAndAbort(t *testing.T) {
 	t.Parallel()
 	for _, action := range []string{"continue", "abort"} {
 		t.Run(action, func(t *testing.T) {
+			t.Parallel()
 			dir := operationFixture(t)
 			gittest.Run(t, dir, "checkout", "-b", "feature")
 			operationWrite(t, dir, "shared.txt", "feature\n")

@@ -31,7 +31,7 @@ func ProgramSyntaxObservation(tool string, err error) *toolrejection.ToolReject 
 			Observed: diagnostic.Observed, Parser: diagnostic.Parser,
 		}).Feedback()
 		if projectionErr != nil {
-			return nil
+			return nil //nolint:nilerr // A diagnostic without a projection adds no feedback to the original refusal.
 		}
 		if diagnostic.Sourced && diagnostic.SourceName == "" {
 			delete(facts, "source_unit_id")

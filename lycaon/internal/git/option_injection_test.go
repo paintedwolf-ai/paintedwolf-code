@@ -51,6 +51,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 	}
 
 	t.Run("show ref", func(t *testing.T) {
+		t.Parallel()
 		_, err := mgr.Show(t.Context(), dir, GitShowOpts{Ref: payload})
 		if err == nil {
 			t.Fatal("Show accepted an option-shaped ref")
@@ -59,6 +60,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 	})
 
 	t.Run("show blob ref", func(t *testing.T) {
+		t.Parallel()
 		_, err := mgr.Show(t.Context(), dir, GitShowOpts{Ref: payload, Path: "tracked.txt"})
 		if err == nil {
 			t.Fatal("Show accepted an option-shaped ref for a blob")
@@ -67,6 +69,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 	})
 
 	t.Run("rev-parse ref", func(t *testing.T) {
+		t.Parallel()
 		_, err := mgr.RevParse(t.Context(), dir, []string{payload})
 		if err == nil {
 			t.Fatal("RevParse accepted an option-shaped ref")
@@ -75,6 +78,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 	})
 
 	t.Run("checkout branch", func(t *testing.T) {
+		t.Parallel()
 		err := mgr.Checkout(t.Context(), dir, payload)
 		if err == nil {
 			t.Fatal("Checkout accepted an option-shaped branch")
@@ -83,6 +87,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 	})
 
 	t.Run("diff base ref", func(t *testing.T) {
+		t.Parallel()
 		_, err := mgr.DiffFromRef(t.Context(), dir, payload, "tracked.txt")
 		if err == nil {
 			t.Fatal("DiffFromRef accepted an option-shaped base ref")

@@ -2,6 +2,7 @@ package jq
 
 import (
 	"bytes"
+	"errors"
 	"io"
 )
 
@@ -42,10 +43,10 @@ func (s *jsonCursor) scalar(maximum int64) (value any, release func(), failure e
 	for {
 		b, err := s.peek()
 		if err != nil {
-			if err == io.EOF && !quoted && len(raw) > 0 {
+			if errors.Is(err, io.EOF) && !quoted && len(raw) > 0 {
 				break
 			}
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				err = io.ErrUnexpectedEOF
 			}
 			return nil, nil, err
@@ -84,7 +85,7 @@ func (s *jsonCursor) scalar(maximum int64) (value any, release func(), failure e
 	value, err = decoder.Decode()
 	if err == nil {
 		_, err = decoder.Decode()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			err = nil
 		} else {
 			err = s.syntax()

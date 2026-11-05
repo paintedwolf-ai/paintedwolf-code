@@ -32,6 +32,7 @@ func TestRepositoryOperationsReturnTypedNotRepository(t *testing.T) {
 	}
 	for _, check := range checks {
 		t.Run(check.name, func(t *testing.T) {
+			t.Parallel()
 			if err := check.run(); !errors.Is(err, git.ErrNotRepository) {
 				t.Fatalf("error = %v, want typed not-repository", err)
 			}

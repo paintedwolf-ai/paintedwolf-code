@@ -66,7 +66,7 @@ func (r *Output) Promote(ctx context.Context, sessionID, handle string) error {
 		publishProject(ctx, startEv)
 	}
 	if running {
-		r.sweeper.onJobStarted()
+		r.sweeper.onJobStarted() //nolint:contextcheck // The sweeper loop outlives this call and holds its own context.
 	}
 	if r.publish != nil {
 		proc.publishMu.Lock()

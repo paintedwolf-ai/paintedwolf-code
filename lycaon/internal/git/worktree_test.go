@@ -137,8 +137,14 @@ func TestRepoConfigFingerprintUnchangedAcrossVerbs(t *testing.T) {
 		}
 	}
 
-	t.Run("primary", func(t *testing.T) { runFrom(t, false) })
-	t.Run("linked", func(t *testing.T) { runFrom(t, true) })
+	t.Run("primary", func(t *testing.T) {
+		t.Parallel()
+		runFrom(t, false)
+	})
+	t.Run("linked", func(t *testing.T) {
+		t.Parallel()
+		runFrom(t, true)
+	})
 }
 
 func TestAddWorktree_noForbiddenConfigKeys(t *testing.T) {

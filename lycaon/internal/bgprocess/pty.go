@@ -208,7 +208,7 @@ func (r *Terminal) startPTY(
 		r.Output.publishProject(context.WithoutCancel(ctx), startEvent)
 	}
 	if !silent && !stopped {
-		r.sweeper.onJobStarted()
+		r.sweeper.onJobStarted() //nolint:contextcheck // The sweeper loop outlives this call and holds its own context.
 	}
 	// Forward terminal replies so interactive commands do not stall.
 	if proc.screen != nil {

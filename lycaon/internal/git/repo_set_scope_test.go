@@ -29,6 +29,7 @@ func TestRepoSetCacheSeparatesRootIdentities(t *testing.T) {
 		{ID: "root", Path: "/project", Label: "Project", IsPrimary: false},
 	} {
 		t.Run(changed.ID+changed.Path+changed.Label, func(t *testing.T) {
+			t.Parallel()
 			var probes atomic.Int32
 			cache := git.NewRepoSetCache(time.Hour, git.WithRepoSetDiscover(func(_ context.Context, roots []projectroot.RootRef) []git.RepoRef {
 				probes.Add(1)

@@ -8,7 +8,7 @@ func (q *Queries) ScanChatGrants(ctx context.Context, visit func(ListChatGrantsR
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var row ListChatGrantsRow
 		if err := rows.Scan(&row.ChatSessionID, &row.ID, &row.CheckpointID, &row.DeltaJson, &row.ExpiresAt, &row.AuthorityFormat); err != nil {
@@ -27,7 +27,7 @@ func (q *Queries) ScanPreparedApprovalOperations(ctx context.Context, visit func
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var row ListPreparedApprovalOperationsRow
 		if err := rows.Scan(&row.CheckpointID, &row.SessionID, &row.OptionJson, &row.AuthorityFormat); err != nil {

@@ -86,7 +86,7 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 	if publish && r.Output.publishProject != nil {
 		r.Output.publishProject(context.WithoutCancel(ctx), event)
 	}
-	r.sweeper.onJobStarted()
+	r.sweeper.onJobStarted() //nolint:contextcheck // The sweeper loop outlives this call and holds its own context.
 	stdout := streamWriter{proc: proc, stream: "stdout", publish: r.Output.publishStream}
 	stderr := streamWriter{proc: proc, stream: "stderr", publish: r.Output.publishStream}
 	go func() {

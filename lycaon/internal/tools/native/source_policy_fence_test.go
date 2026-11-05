@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/agentpolicy"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
@@ -48,19 +49,18 @@ func TestStreamPolicyFreshnessIsIndependentOfJournalPreparation(t *testing.T) {
 					stage, _, err := stageAgentStream(ctx, tc, agentStreamRequest{
 						Target: testMutationTarget(path), Source: strings.NewReader("reviewed bytes"), KnownAbsent: true,
 					})
-					if err != nil {
-						t.Fatal(err)
-					}
-					defer stage.Close()
+					testutil.FailErr(t, "stageAgentStream failed", err)
+					t.Cleanup(stage.Close)
 					stages = append(stages, stage)
 				}
-				if mode == "batch" {
+				switch mode {
+				case "batch":
 					_, pending, publishErr := publishAgentStreams(ctx, tc, nil, stages)
 					err = publishErr
 					if pending != nil {
 						pending.Close()
 					}
-				} else if mode == "stream" {
+				case "stream":
 					_, err = stages[0].Commit(ctx, tc)
 				}
 				if !errors.Is(err, stale) {
@@ -97,7 +97,7 @@ func TestRecoveryRemovalRechecksPolicyAfterEveryReview(t *testing.T) {
 			path := filepath.Join(tc.Source.Roots[0].Path, "file.txt")
 			before := []byte("preserved bytes")
 			if err := os.WriteFile(path, before, 0o644); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "write file", err)
 			}
 			journal := &policyFenceJournal{unavailable: retry}
 			tc.Source.SourceMutations = journal
@@ -135,7 +135,7 @@ func policyFenceFixture(t *testing.T) (context.Context, tools.ToolContext, func(
 	write := func(body string) {
 		t.Helper()
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write file", err)
 		}
 	}
 	write("delivered policy")

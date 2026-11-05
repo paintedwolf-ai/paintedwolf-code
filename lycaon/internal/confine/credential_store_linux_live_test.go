@@ -53,40 +53,44 @@ func TestLinuxCredentialServiceProbeProcess(t *testing.T) {
 	if os.Getenv(credentialProbeEnv) == "" {
 		return
 	}
+	os.Exit(credentialServiceProbe())
+}
+
+func credentialServiceProbe() int {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	bus, err := linuxbus.ConnectSession(ctx)
 	if err != nil {
 		fmt.Println("connect:", err)
-		os.Exit(1)
+		return 1
 	}
 	defer bus.Close()
 	var output dbus.Variant
 	var session dbus.ObjectPath
 	if err := bus.Object("org.freedesktop.secrets", credentialRoot).CallWithContext(ctx, "org.freedesktop.Secret.Service.OpenSession", 0, "plain", dbus.MakeVariant("")).Store(&output, &session); err != nil {
 		fmt.Println("session:", err)
-		os.Exit(2)
+		return 2
 	}
 	item := bus.Object("org.freedesktop.secrets", credentialItem)
 	var secret sandboxCredentialSecret
 	if err := item.CallWithContext(ctx, "org.freedesktop.Secret.Item.GetSecret", 0, session).Store(&secret); err != nil || string(secret.Value) != "fixture-credential" {
 		fmt.Println("read:", err)
-		os.Exit(3)
+		return 3
 	}
 	if err := item.CallWithContext(ctx, "org.freedesktop.Secret.Item.SetSecret", 0, secret).Err; err == nil {
 		fmt.Println("mutation admitted")
-		os.Exit(4)
+		return 4
 	}
 	if err := bus.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.RequestName", 0, "dev.paintedwolf.Unconfined", uint32(0)).Err; err == nil {
 		fmt.Println("bus administration admitted")
-		os.Exit(5)
+		return 5
 	}
 	if err := bus.Object("org.freedesktop.secrets", session).CallWithContext(ctx, "org.freedesktop.Secret.Session.Close", 0).Err; err != nil {
 		fmt.Println("close:", err)
-		os.Exit(6)
+		return 6
 	}
 	fmt.Println("credential read confined; mutations and bus administration denied")
-	os.Exit(0)
+	return 0
 }
 
 func TestLinuxCredentialReadMediationWorksThroughTheAppliedSandbox(t *testing.T) {

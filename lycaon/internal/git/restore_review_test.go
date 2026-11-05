@@ -89,6 +89,7 @@ func TestRestoreReviewRejectsAndPreservesConcurrentEdits(t *testing.T) {
 	t.Parallel()
 	for _, race := range []bool{false, true} {
 		t.Run(map[bool]string{false: "rejected", true: "concurrent edit"}[race], func(t *testing.T) {
+			t.Parallel()
 			dir := t.TempDir()
 			gittest.Init(t, dir)
 			path := filepath.Join(dir, "AGENTS.md")
