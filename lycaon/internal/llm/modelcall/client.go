@@ -67,7 +67,7 @@ type CompletionRequest struct {
 	// EmptyResponseRecovery renders host policy only for an admitted terminal-empty retry.
 	EmptyResponseRecovery func(context.Context) (string, error) `json:"-" yaml:"-"`
 	ToolProtocol          ToolCallProtocol                      `json:"-" yaml:"-"`
-	StrictBudget          bool                                  `json:"-" yaml:"-"`
+	ReasoningRecovery     bool                                  `json:"-" yaml:"-"`
 	AttemptBudget         *CompletionBudget                     `json:"-" yaml:"-"`
 	ThinkingOverride      *ThinkingOverride                     `json:"-" yaml:"-"`
 	ThinkingOverrideStyle modelinfo.ThinkStyle                  `json:"-" yaml:"-"`
@@ -136,6 +136,8 @@ type StreamChunk struct {
 	Fallback   bool
 	// Reasoning is a separate provider reasoning delta.
 	Reasoning string
+	// ReasoningPresent identifies a separate reasoning block without requiring text.
+	ReasoningPresent bool `json:"-" yaml:"-"`
 	// ReasoningDetails carries terminal structured reasoning blocks.
 	ReasoningDetails []json.RawMessage
 	ToolCalls        []api.ToolCall

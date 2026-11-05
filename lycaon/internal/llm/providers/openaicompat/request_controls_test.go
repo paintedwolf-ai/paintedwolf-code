@@ -31,7 +31,7 @@ func TestResolveControlsOrchestrationTurn(t *testing.T) {
 
 func TestResolveControlsStrictSessionBudget(t *testing.T) {
 	t.Cleanup(modelcall.ResetTurnBudgetForTest)
-	modelcall.MarkSessionStrictBudget("strict-session")
+	modelcall.MarkSessionReasoningRecovery("strict-session")
 
 	provider := New("fireworks", "http://localhost", "key", []modelinfo.Entry{
 		{ID: "m", MaxTokens: 16384, ReasoningEffort: "medium"},
@@ -42,8 +42,8 @@ func TestResolveControlsStrictSessionBudget(t *testing.T) {
 		Debug: modelcall.RequestDebug{Surface: "implement_synthesis", SessionID: "strict-session"},
 	}
 	built := provider.resolveRequestControls(req, req.Model, controlOpts{})
-	if built.MaxTokens != modelcall.StrictMaxTokens {
-		t.Fatalf("max_tokens = %d want strict cap %d", built.MaxTokens, modelcall.StrictMaxTokens)
+	if built.MaxTokens != 16384 {
+		t.Fatalf("max_tokens = %d want answer cap %d", built.MaxTokens, 16384)
 	}
 	if built.ReasoningEffort != modelcall.MinimumReasoningEffort {
 		t.Fatalf("reasoning_effort = %q", built.ReasoningEffort)
@@ -52,14 +52,7 @@ func TestResolveControlsStrictSessionBudget(t *testing.T) {
 
 func TestResolveControlsOrchestrationGivesThinkingRoom(t *testing.T) {
 	t.Cleanup(modelcall.ResetTurnBudgetForTest)
-	// A configured budget between the strict and orchestration ceilings must
-	// survive a normal orchestration turn (room for thinking models) but be
-	// clamped on a strict turn (runaway protection).
 	const configured = 12288
-	if configured <= modelcall.StrictMaxTokens || configured >= modelcall.OrchestrationMaxTokens {
-		t.Fatalf("test assumes strictMaxTokens(%d) < configured(%d) < orchestrationMaxTokens(%d)",
-			modelcall.StrictMaxTokens, configured, modelcall.OrchestrationMaxTokens)
-	}
 	provider := New("p", "http://localhost", "key", []modelinfo.Entry{
 		{ID: "m", MaxTokens: configured},
 	})
@@ -72,9 +65,9 @@ func TestResolveControlsOrchestrationGivesThinkingRoom(t *testing.T) {
 		t.Fatalf("orchestration max_tokens = %d, want configured %d (room preserved)", built.MaxTokens, configured)
 	}
 
-	modelcall.MarkSessionStrictBudget("room")
-	if built := provider.resolveRequestControls(req, req.Model, controlOpts{}); built.MaxTokens != modelcall.StrictMaxTokens {
-		t.Fatalf("strict max_tokens = %d, want strict clamp %d", built.MaxTokens, modelcall.StrictMaxTokens)
+	modelcall.MarkSessionReasoningRecovery("room")
+	if built := provider.resolveRequestControls(req, req.Model, controlOpts{}); built.MaxTokens != configured {
+		t.Fatalf("strict max_tokens = %d, want configured cap %d", built.MaxTokens, configured)
 	}
 }
 
