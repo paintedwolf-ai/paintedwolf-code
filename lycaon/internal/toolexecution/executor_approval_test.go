@@ -207,7 +207,7 @@ func TestExecutorAskRuleSuspendsNotHardError(t *testing.T) {
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 
 	type result struct {

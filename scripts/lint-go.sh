@@ -30,14 +30,5 @@ if [[ $# -gt 0 ]]; then
   shift
 fi
 
-# shellcheck source=test-host-capacity.sh
-source "${ROOT}/scripts/test-host-capacity.sh"
-LINT_CPUS="$(test_host_cpu_count)"
-LINT_LOAD="$(test_host_load_one)"
-LINT_TIMEOUT_SCALE="$(test_host_timeout_scale "${LINT_CPUS}" "${LINT_LOAD}")"
-LINT_BASE_TIMEOUT="$(awk '$1 == "timeout:" { print $2; exit }' .golangci.yml)"
-LINT_TIMEOUT="$(test_scale_go_duration "${LINT_BASE_TIMEOUT:?missing lint timeout}" "${LINT_TIMEOUT_SCALE}")"
-printf 'lint: host load %s on %s CPUs; timeout=%s\n' "${LINT_LOAD}" "${LINT_CPUS}" "${LINT_TIMEOUT}" >&2
-
 PYTHONPATH="${ROOT}/scripts${PYTHONPATH:+:${PYTHONPATH}}" \
-  python3 -m ci_policy.lint_scope "${mode}" "${GOLANGCI}" "${LINT_TIMEOUT}" "$@"
+  python3 -m ci_policy.lint_scope "${mode}" "${GOLANGCI}" "$@"

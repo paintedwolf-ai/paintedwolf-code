@@ -51,4 +51,4 @@ runs:
     - if: ${{ steps.save.outcome == 'success' }}
       uses: ./.github/actions/cache-prune
       with:
-        family: go-v5-${{ runner.os }}-${{ runner.arch }}-
+        family: ${{ steps.paths.outputs.key_prefix }}

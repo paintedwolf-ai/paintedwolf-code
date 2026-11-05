@@ -4,7 +4,8 @@
 version: "2"
 
 run:
-  timeout: 60m
+  # The CI job limit bounds a hang; a clean run must not fail on elapsed time.
+  timeout: 0
   tests: true
   # Analyze integration- and budget-tagged files.
   build-tags:

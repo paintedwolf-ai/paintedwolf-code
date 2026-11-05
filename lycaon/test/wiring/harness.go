@@ -256,6 +256,26 @@ func (h *Harness) SeedProgress(t *testing.T, ctx context.Context, sessionID stri
 	}
 }
 
+// ProgressUpdateArgs builds update_progress arguments at the session's current revision,
+// keeping each existing row's identity and leaving added rows to the host.
+func (h *Harness) ProgressUpdateArgs(t *testing.T, ctx context.Context, sessionID, content string) map[string]any {
+	t.Helper()
+	current, err := progress.NewSQLStore(h.DB).Snapshot(ctx, sessionID)
+	testutil.FailErr(t, "read progress snapshot", err)
+	args := map[string]any{"content": content}
+	if current.Content == "" {
+		return args
+	}
+	ids := make([]any, len(progress.ChecklistItems(content)))
+	for i := range ids {
+		if i < len(current.ItemIDs) {
+			ids[i] = current.ItemIDs[i]
+		}
+	}
+	args["expected_revision"], args["item_ids"] = current.Revision, ids
+	return args
+}
+
 // StartBackgroundWorkers runs worker and scan pollers until cancellation.
 func (h *Harness) StartBackgroundWorkers(t *testing.T, ctx context.Context) context.CancelFunc {
 	t.Helper()

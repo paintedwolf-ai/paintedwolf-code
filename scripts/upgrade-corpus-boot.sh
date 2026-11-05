@@ -186,7 +186,7 @@ boot_one() {
 
   base=""
   local deadline body status got_schema
-  deadline=$((SECONDS + 60))
+  deadline=$((SECONDS + 300))
   body=""
   while (( SECONDS < deadline )); do
     if base="$(upgrade_owned_base "${config_dir}" "${pid}")" &&

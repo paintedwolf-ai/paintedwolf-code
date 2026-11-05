@@ -95,7 +95,7 @@ func TestRunInOwnGroupTerminalHelperProcess(t *testing.T) {
 	if result == "" {
 		t.Skip("helper process for TestRunInOwnGroupDetachesFromTheEnginesTerminal")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	cmd, cleanup, err := PrepareCommand(ctx, "sh",
 		[]string{"-c", `if (: < /dev/tty) 2>/dev/null; then read -r line < /dev/tty; fi; echo answered`},

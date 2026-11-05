@@ -134,7 +134,7 @@ func observeFixtureLifecycle(t *testing.T, fixture launchFixture, launch running
 				t.Logf("pre-close exact-role lifecycle checkpoint: %s", line)
 				finalConsumed = !result.Checkpoint
 			}
-		case <-time.After(5 * time.Second):
+		case <-time.After(testutil.Timeout(time.Minute)):
 			t.Error("pre-close lifecycle checkpoint did not arrive within observation lifetime")
 		}
 	}

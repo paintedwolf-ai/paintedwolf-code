@@ -32,8 +32,6 @@ jobs:
   verification:
     strategy:
       fail-fast: false
-      # Each platform prepares and publishes its compiler inputs on one runner.
-      max-parallel: 1
       matrix:
         runner: [ubuntu-24.04, macos-15]
     runs-on: ${{ matrix.runner }}

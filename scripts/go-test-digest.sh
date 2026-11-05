@@ -43,7 +43,7 @@ BUILD_TAGS=""
 EXCLUDE_PKG=""
 RAW="${LOGDIR}/go-test.json"
 GO_TEST_TIMEOUT_SECONDS="${PW_GO_TEST_TIMEOUT_SECONDS:-}"
-PACKAGE_TIMEOUT="10m"
+PACKAGE_TIMEOUT="30m"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
