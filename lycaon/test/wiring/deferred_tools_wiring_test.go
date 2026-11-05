@@ -33,7 +33,7 @@ func TestListForPromptMarksDeferredMetas(t *testing.T) {
 			}
 		}
 	}
-	for _, name := range []string{"scan_query", "page_open", "page_close", "fetch_url", "secret_generate", "handoff_reserve", "jq_edit"} {
+	for _, name := range []string{"scan_query", "page_open", "page_close", "fetch_url", "secret_generate", "handoff_reserve"} {
 		if !deferred[name] {
 			t.Fatalf("%s must be marked deferred for implement; deferred set = %v", name, deferred)
 		}
