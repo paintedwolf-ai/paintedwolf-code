@@ -194,36 +194,12 @@ func MidTurnTextAttemptsCitation(text string) bool {
 	return midTurnCitationCount(doc) > 0 || len(doc.Issues) > 0
 }
 
-// IntentWindowHasCitableObservations reports whether the model holds something it
-// can cite from tool rows since the current user intent: a printed handle, or a
-// command output the ledger confirmed as delivered source, cited by its path. A
-// command with no such output leaves nothing to cite, so it requires nothing.
-func IntentWindowHasCitableObservations(history []api.Message, ledger evidence.Ledger) bool {
+// IntentWindowHasCitableObservations reports whether a tool row since the current
+// user intent printed a handle the model can cite. Every command prints one.
+func IntentWindowHasCitableObservations(history []api.Message) bool {
 	for _, msg := range intentWindow(history) {
-		if msg.Role != api.MessageRoleTool {
-			continue
-		}
-		if len(msg.EvidenceHandles) > 0 {
+		if msg.Role == api.MessageRoleTool && len(msg.EvidenceHandles) > 0 {
 			return true
-		}
-		if msg.ToolResult != nil && programDeliveredSource(msg.ToolResult.CommandProgram, ledger) {
-			return true
-		}
-	}
-	return false
-}
-
-// programDeliveredSource finds a delivered source record for one of the program's
-// retained outputs. A delivery's identity starts with its output's reference.
-func programDeliveredSource(program *api.CommandProgramReceipt, ledger evidence.Ledger) bool {
-	if program == nil {
-		return false
-	}
-	for _, output := range program.Outputs {
-		for _, rec := range ledger.Handles {
-			if rec.SourceDelivery != nil && output.Ref != "" && strings.HasPrefix(rec.SourceDelivery.DeliveryID, output.Ref+":") {
-				return true
-			}
 		}
 	}
 	return false

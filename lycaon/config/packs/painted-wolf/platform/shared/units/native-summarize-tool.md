@@ -8,4 +8,4 @@ attaches: [command]
 hosts: [coordinator, worker]
 ---
 - Use `summarize --path PATH --focus 'question'` in `command` for a bounded source briefing; omit `--focus` for an overview. Use `repo-map --path DIR` for layout and `outline --path FILE` for file structure. Native `--help` lists supported forms.
-- Inspect exact source windows with `sed -n` or `cat` when a briefing is insufficient for a quote or edit. Cite the returned source evidence; a summary is not a complete source read. Follow up only where the evidence leaves the task unresolved.
+- A briefing orients and its `command#` handle proves only that it ran. Read with `cat -n` or `grep -n` to quote, edit, or cite lines. Follow up only where the evidence leaves the task unresolved.

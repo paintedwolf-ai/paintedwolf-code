@@ -47,7 +47,6 @@ func CloseoutRepairHintData(roots evidence.CitationRoots, draft CloseoutDraft, r
 			target := map[string]any{
 				"id": occurrence.RepairID, "token": occurrence.Token,
 				"defect": string(outcome.Outcome), "web_link": occurrence.Kind == citationmd.KindWebLink,
-				"unnumbered": outcome.Resolution.UnnumberedOutput,
 			}
 			if occurrence.Citation != nil {
 				for key, value := range citationRepairOffer(roots, ev.Ledger, *occurrence.Citation) {

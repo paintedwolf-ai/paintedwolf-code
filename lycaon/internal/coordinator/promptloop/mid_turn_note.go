@@ -104,7 +104,7 @@ func (l *toolBatch) auditCarrier(ctx context.Context, sess *api.Session, session
 		SurfaceID:         surfaceID,
 		Evidence:          ev,
 		Presentable:       guidance.SessionPresentableArtifactIDs(history),
-		CitationsRequired: (legsCite || guidance.IntentWindowHasCitableObservations(history, ev.Ledger)) && guidance.CloseoutLedgerHasCitableEvidence(ev),
+		CitationsRequired: (legsCite || guidance.IntentWindowHasCitableObservations(history)) && guidance.CloseoutLedgerHasCitableEvidence(ev),
 		RecentHandles:     guidance.IntentWindowHandles(history, midTurnHandleSample),
 	})
 }

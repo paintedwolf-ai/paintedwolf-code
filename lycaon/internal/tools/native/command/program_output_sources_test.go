@@ -40,24 +40,3 @@ func TestOptionalSourceCaptureAdmitsAndReleasesMemory(t *testing.T) {
 		}
 	}
 }
-
-func TestDeliveryHandlesPrintedOncePerWindowForCoordinators(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		worker string
-		line   int64
-		want   bool
-	}{
-		{name: "coordinator plain window", want: true},
-		{name: "coordinator numbered line", line: 14, want: false},
-		{name: "worker plain window", worker: "job", want: true},
-		{name: "worker numbered line", worker: "job", line: 14, want: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			identity := tools.InvocationIdentity{WorkerJobID: tc.worker}
-			if got := printsDeliveryHandle(identity, toolcontract.StreamSourceMapping{PrintedLine: tc.line}); got != tc.want {
-				t.Fatalf("prints = %v, want %v", got, tc.want)
-			}
-		})
-	}
-}

@@ -66,6 +66,7 @@ func (l *toolBatch) enrichCommittedToolRow(
 	if err := l.tagToolHandleOnCommit(ctx, sessionID, sess, toolName, toolArgsForEnrich(stored, args), &stored, handleEligible); err != nil {
 		return history, err
 	}
+	st.stateDeliveryCoverage(&stored)
 	l.compactToolWireOnCommit(ctx, sess, toolName, &stored)
 	if !toolRowNeedsEnrichmentPatch(before, beforeHandles, stored) {
 		return history, nil

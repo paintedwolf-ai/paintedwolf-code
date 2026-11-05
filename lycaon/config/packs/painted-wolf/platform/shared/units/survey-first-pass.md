@@ -30,4 +30,4 @@ hosts: [coordinator, worker]
 - **One named symbol or line range for an exact fact, quote, or edit** → a bounded `grep -n`, `cat -n FILE`, or `sed -n 'A,Bp'` in `command`; `sed` prints no numbers to cite. If existing evidence already answers the request, stop.
 {% endif %}
 
-Cite {% if profile_has_summarize %}`summarize` source windows or anchors by handle, or {% endif %}drill-tool output; digest orients only.
+Cite what a numbered read or drill tool returned; a summary or digest orients only.

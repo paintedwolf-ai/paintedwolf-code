@@ -64,9 +64,9 @@ func (m *citableScriptLLM) Stream(ctx context.Context, req modelcall.CompletionR
 
 var observedHandlesRE = regexp.MustCompile(`Observed handles: ([^\s,.]+)`)
 
-// A command with no file output leaves nothing to cite, so the note after it
-// publishes, even when an earlier turn left evidence in the ledger. A command that
-// delivered a file requires a citation, and what the notice names resolves.
+// Every command prints a handle, so text after one needs a citation, and what the
+// notice names resolves. A new request starts with nothing to cite again, even when an
+// earlier turn left evidence in the ledger.
 func TestMidTurnRequirementFollowsWhatTheModelCanCite(t *testing.T) {
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
 	var observed string
@@ -82,9 +82,7 @@ func TestMidTurnRequirementFollowsWhatTheModelCanCite(t *testing.T) {
 			return "Cited by the handle the notice named [" + observed + ":1], and by path [notes.txt:2]."
 		}, command: "echo two"},
 		{text: func(modelcall.CompletionRequest) string { return "The notes hold two lines [notes.txt:1]." }},
-		{command: "echo three"},
-		{text: func(modelcall.CompletionRequest) string { return "Nothing here to cite yet." }, command: "echo four"},
-		{text: func(modelcall.CompletionRequest) string { return "It printed text." }},
+		{text: func(modelcall.CompletionRequest) string { return "Nothing here to cite yet." }},
 	}}
 	h := BuildForTest(t, WithLLMClient(script))
 	dir := t.TempDir()
@@ -113,16 +111,13 @@ func TestMidTurnRequirementFollowsWhatTheModelCanCite(t *testing.T) {
 	if observed == "" {
 		t.Fatalf("the withheld notice named no handle; notes = %q", notes)
 	}
-	if len(notes) != 2 {
-		t.Fatalf("notes = %q, want the cited note and the note with nothing to cite", notes)
+	if len(notes) != 1 {
+		t.Fatalf("notes = %q, want the cited note", notes)
 	}
 	if strings.Contains(notes[0], "Uncited") || !strings.Contains(notes[0], "notes.txt#L2") {
 		t.Fatalf("cited note = %q", notes[0])
 	}
-	if !strings.Contains(notes[1], "Nothing here to cite yet.") {
-		t.Fatalf("note with nothing to cite = %q", notes[1])
-	}
-	if last.Content != "It printed text." || last.Grounding == nil || !last.Grounding.EvidenceOptional || last.Grounding.HostAssembled {
+	if last.Content != "Nothing here to cite yet." || last.Grounding == nil || !last.Grounding.EvidenceOptional || last.Grounding.HostAssembled {
 		t.Fatalf("closeout with nothing to cite = %q grounding %+v", last.Content, last.Grounding)
 	}
 }

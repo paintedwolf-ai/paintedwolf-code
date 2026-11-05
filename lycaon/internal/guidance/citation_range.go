@@ -33,11 +33,10 @@ func applyCitationRange(roots evidence.CitationRoots, finding WorkerFindingInput
 		}
 		start, end := finding.Line+shift, finding.EndLine+shift
 		support := evidence.CoordinateSupport(rec, res.Path, start, end)
-		if support == evidence.CoordinateUnsupported && evidence.ExcerptVerifiesRange(rec, res.Path, excerpt, start, end) {
+		if support != evidence.CoordinateObserved && evidence.ExcerptVerifiesRange(rec, res.Path, excerpt, start, end) {
 			support = evidence.CoordinateObserved
 		}
 		if support == evidence.CoordinateUnsupported {
-			refused.UnnumberedOutput = refused.UnnumberedOutput || (!rec.ShowedLineNumbers() && evidence.RangeObserved(rec, res.Path, start, end))
 			continue
 		}
 		bound := res
@@ -91,26 +90,29 @@ func rangeAcrossRecords(finding WorkerFindingInput, ev evidence.Ledger, res evid
 	return first, first != "" && anchored && evidence.UnionObserved(records, res.Path, finding.Line, finding.EndLine)
 }
 
-// unnumberedCoordinate reports a single line with no excerpt to check it, resting
-// only on output that showed no numbers while no numbered record covers it.
-func unnumberedCoordinate(finding WorkerFindingInput, ev evidence.Ledger, res evidence.Resolution) bool {
+// countedCoordinate settles a single line with no excerpt that rests only on output
+// showing no numbers: inside what was delivered it is traced, and outside it unverifiable.
+func countedCoordinate(finding WorkerFindingInput, ev evidence.Ledger, res evidence.Resolution) evidence.Resolution {
 	if finding.Line <= 0 || finding.EndLine > 0 || strings.TrimSpace(finding.Excerpt) != "" || !res.Verdict.Grounded() {
-		return false
+		return res
 	}
 	rec, ok := evidence.ResolveHandle(ev, res.Handle)
 	if !ok || rec.ShowedLineNumbers() {
-		return false
+		return res
 	}
-	if _, known := evidence.ResolveHandle(ev, finding.Evidence); known {
-		return true
-	}
-	for _, handle := range ev.ByPath[filepath.ToSlash(res.Path)] {
-		if other, ok := evidence.ResolveHandle(ev, handle); ok && other.SupersededBy == "" && !other.IsGate() &&
-			evidence.CoordinateSupport(other, res.Path, finding.Line, finding.Line) == evidence.CoordinateObserved {
-			return false
+	if _, known := evidence.ResolveHandle(ev, finding.Evidence); !known {
+		for _, handle := range ev.ByPath[filepath.ToSlash(res.Path)] {
+			if other, ok := evidence.ResolveHandle(ev, handle); ok && other.SupersededBy == "" && !other.IsGate() &&
+				evidence.CoordinateSupport(other, res.Path, finding.Line, finding.Line) == evidence.CoordinateObserved {
+				return res
+			}
 		}
 	}
-	return true
+	res.Verdict = evidence.VerdictUnverifiable
+	if evidence.CoordinateSupport(rec, res.Path, finding.Line, finding.Line) == evidence.CoordinateDelivered {
+		res.Verdict = evidence.VerdictTraced
+	}
+	return res
 }
 
 // rangeCandidates lists the records that could support the range. An explicit

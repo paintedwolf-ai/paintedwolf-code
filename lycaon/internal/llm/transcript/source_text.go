@@ -3,6 +3,7 @@ package transcript
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
@@ -29,17 +30,17 @@ func projectSourceText(message api.Message, parts []api.MessageContentPart) []ap
 	return parts
 }
 
-// resultHandles splits leading evidence handles from a result body.
+// resultHandles splits the leading tags of the result's own handles from its body.
 func resultHandles(message api.Message, body string) ([]string, string) {
-	var handles []string
-	for _, handle := range message.EvidenceHandles {
-		prefix := "[" + handle + "]\n"
-		if strings.HasPrefix(body, prefix) {
-			handles = append(handles, "["+handle+"]")
-			body = strings.TrimPrefix(body, prefix)
+	var tags []string
+	for {
+		tag, rest := hostmarker.SplitEvidenceHandleTag(body)
+		if tag == "" || !slices.Contains(message.EvidenceHandles, hostmarker.EvidenceTagHandle(tag)) {
+			return tags, body
 		}
+		tags = append(tags, strings.TrimSpace(tag))
+		body = rest
 	}
-	return handles, body
 }
 
 func receiptMetadata(message api.Message, part api.MessageContentPart, tool string) (handles []string, metadata map[string]json.RawMessage, mode, suffix string, ok bool) {

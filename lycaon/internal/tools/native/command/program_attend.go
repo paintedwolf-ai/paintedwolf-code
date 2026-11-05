@@ -115,7 +115,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		if e.run.tc.Effects.Out.ExternalAccess != nil {
 			out.ExternalAccess = e.run.tc.Effects.Out.ExternalAccess
 		}
-		out.SourceDeliveryHandles = append([]string(nil), e.run.tc.Effects.Out.SourceDeliveryHandles...)
+		out.SourceDeliveries = append([]tools.SourceDeliveryTag(nil), e.run.tc.Effects.Out.SourceDeliveries...)
 	}
 	return ending.result, ending.err
 }

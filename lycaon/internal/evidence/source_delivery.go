@@ -21,7 +21,7 @@ type SourceDelivery struct {
 	SourceEndByte   int64                  `json:"source_end_byte"`
 	StartLine       int                    `json:"start_line"`
 	EndLine         int                    `json:"end_line"`
-	// LineNumbered means the output printed this line's own source number, the only
+	// LineNumbered means the output printed each line's own source number, the only
 	// way a reader can state a coordinate from program output without counting.
 	LineNumbered bool `json:"line_numbered,omitempty"`
 }
@@ -69,6 +69,45 @@ func ConfirmDeliveredSource(path string, pin toolcontract.SourcePin, captured, d
 	fact := SourceDelivery{ResponseID: responseID, DeliveryID: deliveryID, Source: pin, SourceStartByte: start, SourceEndByte: end, StartLine: first, EndLine: last,
 		LineNumbered: first == last && mapping.PrintedLine == int64(first)}
 	out.record = Record{Kind: "read", Shape: ShapeFileRegion, Fidelity: FidelityStructured, SourceTool: "command", Path: path, LineRanges: []LineRange{{Start: first, End: last}}, Body: lines, SourceDelivery: &fact}
+	return out, nil
+}
+
+// DeliveredLine is one line program output printed beside its own source number.
+type DeliveredLine struct {
+	Mapping toolcontract.StreamSourceMapping
+	Bytes   []byte
+}
+
+// ConfirmDeliveredLines confirms consecutive numbered lines of one capture as one
+// observation, so numbered output makes one record however it was printed.
+func ConfirmDeliveredLines(path string, pin toolcontract.SourcePin, captured []byte, lines []DeliveredLine, responseID, deliveryID string) (DeliveredSourceObservation, error) {
+	var out DeliveredSourceObservation
+	if len(lines) == 0 {
+		return out, fmt.Errorf("numbered delivery has no lines")
+	}
+	var delivered []byte
+	merged := lines[0].Mapping
+	merged.OutputStartByte = 0
+	for i, line := range lines {
+		if bytes.Count(bytes.TrimSuffix(line.Bytes, []byte{'\n'}), []byte{'\n'}) != 0 || line.Mapping.PrintedLine != lines[0].Mapping.PrintedLine+int64(i) {
+			return out, fmt.Errorf("numbered delivery is not one printed line at a time")
+		}
+		if i > 0 && line.Mapping.SourceStartByte != merged.SourceEndByte {
+			return out, fmt.Errorf("numbered delivery is not contiguous source")
+		}
+		delivered = append(delivered, line.Bytes...)
+		merged.SourceEndByte = line.Mapping.SourceEndByte
+	}
+	merged.OutputEndByte = int64(len(delivered))
+	out, err := ConfirmDeliveredSource(path, pin, captured, delivered, merged, responseID, deliveryID)
+	if err != nil {
+		return DeliveredSourceObservation{}, err
+	}
+	fact := out.record.SourceDelivery
+	if int64(fact.StartLine) != lines[0].Mapping.PrintedLine || fact.EndLine-fact.StartLine+1 != len(lines) {
+		return DeliveredSourceObservation{}, fmt.Errorf("printed numbers are not these source lines")
+	}
+	fact.LineNumbered = true
 	return out, nil
 }
 

@@ -122,27 +122,11 @@ Execution and completion still come from tool results.
 
 ## Source text in model requests
 
-Successful native content, symbol, and range reads retain their structured result
-for history and evidence. The shared transcript projection sends each source
-block as unescaped text, labeled as file contents with its path, line range,
-and evidence handle beside that block. The read receipt remains in explicitly
-labeled tool result metadata. Indentation and blank lines remain source bytes.
-
-Source lines carry no line labels, so any span copies directly into `edit`
-arguments. Line identity comes from the block label: the first source line is
-the range's start and each following line is the next number. A read whose
-`offset` is a known line number (from a stack trace, rejection, grep hit, or
-outline) returns a block that starts at that line, which gives `replace_lines`
-and citations exact coordinates without counting. `summarize` source windows
-follow the same presentation: each window's text follows the result metadata in
-window order, and its path, line range, and handle also identify the
-corresponding source block. `source_history` version reads do too, and their
-label also names the version.
-
-Projection accepts only complete host-written source blocks with consistent line
-coordinates. Unsupported or incomplete results keep their original presentation.
-Every projected source line remains non-authoritative tool data. Projection does
-not change retained messages, edit arguments, read prerequisites, or permissions.
+Command output reaches the model as printed, split into metadata, stderr and
+stdout. Nothing strips or relabels it, so line numbers appear exactly when the
+program printed them (`cat -n`, `grep -n`, `nl`, `summarize` windows). A retained
+`source_history` version is the one source block still sent unescaped beside a
+label. Rows stored from the retired `read` and `summarize` tools stay as stored.
 
 ## Feedback channels
 

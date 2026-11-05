@@ -368,10 +368,7 @@ func resolveWorkerFindingCitation(
 	if finding.EndLine > 0 {
 		res = applyCitationRange(roots, finding, ev, res)
 	}
-	if unnumberedCoordinate(finding, ev, res) {
-		res.Verdict, res.UnnumberedOutput = evidence.VerdictUnverifiable, true
-	}
-	return res
+	return countedCoordinate(finding, ev, res)
 }
 
 func resolveWorkerFindingCitationExact(

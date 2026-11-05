@@ -121,13 +121,18 @@ const (
 	// CoordinateOnMutatedPath means the record changed the path without reporting
 	// lines. A mutation supports any coordinate on its own path, traced to it.
 	CoordinateOnMutatedPath
+	// CoordinateDelivered means output delivered these lines without their numbers.
+	// The reader counted, so the coordinate is traced and never exact.
+	CoordinateDelivered
 )
 
 // CoordinateSupport decides a coordinate against one record. A mutation that reports
-// its lines is held to them. A deletion leaves no line to cite. Program output that
-// showed no line numbers supports the path alone: its reader had to count.
+// its lines is held to them. A deletion leaves no line to cite.
 func CoordinateSupport(rec Record, path string, start, end int) CoordinateFact {
 	if !rec.ShowedLineNumbers() {
+		if RangeObserved(rec, path, start, end) {
+			return CoordinateDelivered
+		}
 		return CoordinateUnsupported
 	}
 	if RangeObserved(rec, path, start, end) {

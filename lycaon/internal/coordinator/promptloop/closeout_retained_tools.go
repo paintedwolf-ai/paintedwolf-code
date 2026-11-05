@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -50,7 +51,8 @@ func commandsHadEffects(history []api.Message, assistantMessageID string, comman
 			CompletedEffects *int   `json:"completed_effects"`
 			UncertainEffects *int   `json:"uncertain_effects"`
 		}
-		if json.Unmarshal([]byte(result.Content), &outcome) != nil || outcome.State != "completed" ||
+		_, body, _, parsed := hostmarker.SplitToolJSONBody(result.Content)
+		if !parsed || json.Unmarshal([]byte(body), &outcome) != nil || outcome.State != "completed" ||
 			outcome.CompletedEffects == nil || outcome.UncertainEffects == nil || *outcome.CompletedEffects != 0 || *outcome.UncertainEffects != 0 {
 			return true
 		}

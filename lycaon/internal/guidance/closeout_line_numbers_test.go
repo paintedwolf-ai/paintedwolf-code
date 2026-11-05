@@ -60,44 +60,45 @@ func TestRangeAcrossRecordsAndNumberedOutput(t *testing.T) {
 		name, source string
 		ev           evidence.Ledger
 		want         CitationOutcome
-		unnumbered   bool
+		verdict      evidence.Verdict
 	}{
-		{"path range spans numbered records", "[cmd/gateway/main.go:24-27]", numbered, CitationGrounded, false},
-		{"one numbered line", "[cmd/gateway/main.go:27]", numbered, CitationGrounded, false},
-		{"gap between records is rejected", "[cmd/gateway/main.go:26-30]", numbered, CitationUnverifiable, false},
-		{"range past the observation is rejected", "[cmd/gateway/main.go:27-28]", numbered, CitationUnverifiable, false},
-		{"a handle keeps to its own coverage", "[read#1:24-27]", numbered, CitationUnverifiable, false},
-		{"a handle covers its own line", "[read#1:24]", numbered, CitationGrounded, false},
-		{"a superseded record is no support", "[cmd/gateway/main.go:24-25]", stale, CitationUnverifiable, false},
-		{"unnumbered output refuses a line", "[cmd/gateway/main.go:10]", plain, CitationUnverifiable, true},
-		{"unnumbered output refuses a range", "[cmd/gateway/main.go:10-12]", plain, CitationUnverifiable, true},
-		{"unnumbered output refuses a handle coordinate", "[read#1:10]", plain, CitationUnverifiable, true},
-		{"unnumbered output supports the bare path", `["cmd/gateway/main.go"]`, plain, CitationGrounded, false},
-		{"unnumbered output supports the bare handle", "[read#1]", plain, CitationGrounded, false},
-		{"numbered output beside it decides", "[cmd/gateway/main.go:24-27]", both, CitationGrounded, false},
-		{"unnumbered lines do not fill a numbered gap", "[cmd/gateway/main.go:27-28]", both, CitationUnverifiable, true},
+		{"path range spans numbered records", "[cmd/gateway/main.go:24-27]", numbered, CitationGrounded, evidence.VerdictMatched},
+		{"one numbered line", "[cmd/gateway/main.go:27]", numbered, CitationGrounded, evidence.VerdictMatched},
+		{"gap between records is rejected", "[cmd/gateway/main.go:26-30]", numbered, CitationUnverifiable, evidence.VerdictUnverifiable},
+		{"range past the observation is rejected", "[cmd/gateway/main.go:27-28]", numbered, CitationUnverifiable, evidence.VerdictUnverifiable},
+		{"a handle keeps to its own coverage", "[read#1:24-27]", numbered, CitationUnverifiable, evidence.VerdictUnverifiable},
+		{"a handle covers its own line", "[read#1:24]", numbered, CitationGrounded, evidence.VerdictMatched},
+		{"a superseded record is no support", "[cmd/gateway/main.go:24-25]", stale, CitationUnverifiable, evidence.VerdictUnverifiable},
+		{"a counted line inside the delivery is traced", "[cmd/gateway/main.go:10]", plain, CitationGrounded, evidence.VerdictTraced},
+		{"a counted range inside the delivery is traced", "[cmd/gateway/main.go:10-12]", plain, CitationGrounded, evidence.VerdictTraced},
+		{"a counted handle coordinate is traced", "[read#1:10]", plain, CitationGrounded, evidence.VerdictTraced},
+		{"unnumbered output supports the bare path", `["cmd/gateway/main.go"]`, plain, CitationGrounded, ""},
+		{"unnumbered output supports the bare handle", "[read#1]", plain, CitationGrounded, ""},
+		{"numbered output beside it decides", "[cmd/gateway/main.go:24-27]", both, CitationGrounded, evidence.VerdictMatched},
+		{"unnumbered lines do not fill a numbered gap", "[cmd/gateway/main.go:27-28]", both, CitationGrounded, evidence.VerdictTraced},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			got := lineNumberOutcome(t, tc.source, tc.ev)
-			if got.Outcome != tc.want || got.Resolution.UnnumberedOutput != tc.unnumbered {
-				t.Fatalf("outcome = %+v, want %s unnumbered=%t", got, tc.want, tc.unnumbered)
+			if got.Outcome != tc.want || (tc.verdict != "" && got.Resolution.Verdict != tc.verdict) {
+				t.Fatalf("outcome = %+v, want %s %s", got, tc.want, tc.verdict)
 			}
 		})
 	}
 }
 
-// The repair the refusal offers has to work: the coordinate goes and the path stays.
-func TestUnnumberedCoordinateRepairsToItsPath(t *testing.T) {
+// A line past what was delivered is refused, and the repair it offers works: the
+// coordinate goes and the path stays.
+func TestUndeliveredCoordinateRepairsToItsPath(t *testing.T) {
 	t.Parallel()
 	const path = "internal/client/client.go"
-	ev := CloseoutEvidence{Ledger: evidence.AssembleLedger([]evidence.Record{catPlain("read#7", path, 36)})}
+	ev := CloseoutEvidence{Ledger: evidence.AssembleLedger([]evidence.Record{catPlain("read#7", path, 5)})}
 	opts := DraftParseOptions(evidence.CitationRoots{}, ev.Ledger)
 	draft := ParseCloseoutDraft("The constant [internal/client/client.go:9] caps it.", opts)
 	resolved := ResolveDraftCitations(evidence.CitationRoots{}, "implement_investigate", draft, ev, nil)
 	data := CloseoutRepairHintData(evidence.CitationRoots{}, draft, resolved, ev, []string{path + ":9"})
 	targets := data["repair_targets"].([]map[string]any)
-	if len(targets) != 1 || targets[0]["unnumbered"] != true || targets[0]["web_link"] != false {
+	if len(targets) != 1 || targets[0]["web_link"] != false {
 		t.Fatalf("targets = %+v", targets)
 	}
 	var choices []citationRepairObservation
@@ -396,29 +397,23 @@ func TestUniqueFinalSegmentsBindAndTwoNeverDo(t *testing.T) {
 	}
 }
 
-// The live forced-4 read was `sed -n '1,40p' file | cat -n`, which left no record: sed
-// maps no source and cat on a pipe has no pin. The exemption read the ledger correctly.
-func TestCitableEvidenceIsWhatTheLedgerHolds(t *testing.T) {
+// A command row's printed handle is what makes it citable; the ledger's records of
+// that command add nothing, and a row with no handle has nothing to cite.
+func TestCitableEvidenceIsWhatWasPrinted(t *testing.T) {
 	t.Parallel()
-	const ref = "output:program:p1:stdout"
-	program := &api.CommandProgramReceipt{Outputs: []api.CommandProgramOutputWindow{{Stream: "stdout", Ref: ref}}}
-	row := []api.Message{{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{CommandProgram: program}}}
-	delivered := catPlain("read#1", "a.go", 2)
-	delivered.SourceDelivery.DeliveryID = ref + ":0:10"
 	for _, tc := range []struct {
-		name string
-		ev   evidence.Ledger
-		want bool
+		name    string
+		handles []string
+		want    bool
 	}{
-		{"sed through a pipe, echo or git status: no delivered source", evidence.InitLedger(), false},
-		{"a window that delivered source", evidence.AssembleLedger([]evidence.Record{delivered}), true},
+		{"a command that printed its handle", []string{"command#1"}, true},
+		{"a read through a pipe, with only the command handle", []string{"command#2"}, true},
+		{"a tool row with no handle", nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := CloseoutLedgerHasCitableEvidence(CloseoutEvidence{Ledger: tc.ev}); got != tc.want {
-				t.Fatalf("ledger citable = %t", got)
-			}
-			if got := IntentWindowHasCitableObservations(row, tc.ev); got != tc.want {
+			row := []api.Message{{Role: api.MessageRoleTool, EvidenceHandles: tc.handles, ToolResult: &api.ToolResult{Tool: "command"}}}
+			if got := IntentWindowHasCitableObservations(row); got != tc.want {
 				t.Fatalf("window citable = %t", got)
 			}
 		})

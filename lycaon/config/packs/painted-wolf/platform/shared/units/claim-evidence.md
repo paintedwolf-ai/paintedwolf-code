@@ -15,7 +15,7 @@ hosts: [coordinator, worker]
 
 | Claim | Required receipt{% if has_claim_evidence_skill %} | Available skill{% endif %} |
 |---|---{% if has_claim_evidence_skill %}|---{% endif %}|
-{% if has_file_tools %}| How code behaves | Implementing source at a file and line, from output that printed line numbers such as `grep -n` or `cat -n`{% if profile_has_summarize %} or delivered `summarize --path PATH` source windows{% endif %}. Names or printed paths do not prove source access{% if has_claim_evidence_skill %} | —{% endif %} |
+{% if has_file_tools %}| How code behaves | Implementing source at a file and line, from output that printed line numbers such as `grep -n` or `cat -n`. Names or printed paths do not prove source access{% if has_claim_evidence_skill %} | —{% endif %} |
 | Components connect or feed | Cite connecting call site or data transfer, not separate definitions. Say unestablished if unobserved in source{% if has_claim_evidence_skill %} | —{% endif %} |
 {% endif %}
 {% if profile_has_command %}| Execution outcome | Observed `command#` result; stdout does not prove source access or application correctness{% if has_claim_evidence_skill %} | —{% endif %} |

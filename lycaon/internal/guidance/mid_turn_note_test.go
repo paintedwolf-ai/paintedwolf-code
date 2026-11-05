@@ -134,27 +134,21 @@ func TestIntentWindowObservations(t *testing.T) {
 	user := api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "go"}
 	read := api.Message{Role: api.MessageRoleTool, EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{Tool: "read"}}
 	dispatch := api.Message{Role: api.MessageRoleTool, EvidenceHandles: []string{"task#1"}, ToolResult: &api.ToolResult{Tool: "task", Dispatch: &api.WorkerDispatch{WorkerID: "w1"}}}
-	output := []api.CommandProgramOutputWindow{{Stream: "stdout", Ref: "out-1"}}
-	command := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "command", CommandProgram: &api.CommandProgramReceipt{Outputs: output}}}
-	delivered := evidence.AssembleLedger([]evidence.Record{{Handle: "read#7", Kind: "read", Path: "a.go", SourceDelivery: &evidence.SourceDelivery{DeliveryID: "out-1:0:9"}}})
-	otherOutput := evidence.AssembleLedger([]evidence.Record{{Handle: "read#7", Kind: "read", Path: "a.go", SourceDelivery: &evidence.SourceDelivery{DeliveryID: "out-2:0:9"}}})
+	command := api.Message{Role: api.MessageRoleTool, EvidenceHandles: []string{"command#1"}, ToolResult: &api.ToolResult{Tool: "command"}}
 	control := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "update_progress"}}
 	for _, tc := range []struct {
 		name    string
 		history []api.Message
-		ledger  evidence.Ledger
 		want    bool
 	}{
-		{"no tools", []api.Message{user}, evidence.Ledger{}, false},
-		{"control tool only", []api.Message{user, control}, evidence.Ledger{}, false},
-		{"earlier window does not count", []api.Message{read, user}, evidence.Ledger{}, false},
-		{"handle", []api.Message{user, read}, evidence.Ledger{}, true},
-		{"dispatch with its printed handle", []api.Message{user, dispatch}, evidence.Ledger{}, true},
-		{"command with no file output leaves nothing to cite", []api.Message{user, command}, evidence.Ledger{}, false},
-		{"another command's delivery does not count", []api.Message{user, command}, otherOutput, false},
-		{"command that delivered source is citable by path", []api.Message{user, command}, delivered, true},
+		{"no tools", []api.Message{user}, false},
+		{"control tool only", []api.Message{user, control}, false},
+		{"earlier window does not count", []api.Message{read, user}, false},
+		{"handle", []api.Message{user, read}, true},
+		{"dispatch with its printed handle", []api.Message{user, dispatch}, true},
+		{"a command prints its handle", []api.Message{user, command}, true},
 	} {
-		if got := guidance.IntentWindowHasCitableObservations(tc.history, tc.ledger); got != tc.want {
+		if got := guidance.IntentWindowHasCitableObservations(tc.history); got != tc.want {
 			t.Errorf("%s: got %v", tc.name, got)
 		}
 	}

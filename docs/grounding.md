@@ -36,7 +36,7 @@ File supersession never invalidates a command, Git receipt, artifact, or other e
 
 Portable program results receive `command#` observation handles alongside any
 confirmed source-delivery handles. These observations retain the screened output
-seen by the model, including incomplete and failed execution outcomes. Their
+seen by the model, including incomplete and failed execution outcomes. Numbered output makes one record per file and consecutive run of lines, for coordinators and workers alike. A result prints at most 16 delivery tags. Their
 opaque command shape does not index printed paths, create source read authority,
 prove visual observations, or supply workflow verification verdicts. Source and
 verification evidence continue through their respective typed owners. The records
@@ -122,7 +122,7 @@ Resolution produces one of five verdicts (`internal/evidence/resolve.go`):
 - **ambiguous**: more than one ledger record satisfies the claim;
 - **unverifiable**: the host cannot connect the claim to admitted evidence.
 
-Every file-reading tool retains its lines in the host's numbered-line grammar (`internal/hostmarker`), and the verifiers read that same grammar back from retained bodies. Model requests present those lines as unlabeled source blocks headed by their line range ([source text in model requests](agent-tool-feedback.md#source-text-in-model-requests)), so a worker cites a line by its position from the block's first line and copies the excerpt as source text. The meaningful-span floor applies to the excerpt as the worker cited it. A path citation whose line is wrong but whose excerpt matches exactly one live line of the cited path is re-anchored to that line and the correction is written back onto the citation and counted in the grounding audit; an excerpt that matches several lines, or none, is not corrected.
+Every file-reading tool retains its lines in the host's numbered-line grammar (`internal/hostmarker`), and the verifiers read that same grammar back from retained bodies. Command output reaches the model as printed. Each source delivery's tag states what it delivered, such as `[read#7 a.go:10-20]`, from host facts; copied, it is a citation. Output that printed a line's own number, such as `cat -n` or `grep -n`, or an excerpt the host verified, supports a coordinate exactly. A coordinate inside a delivered range with neither is `traced`, never exact, because its reader counted. Line filters in a pipeline map no source, so such a read holds only its `command#` handle. The meaningful-span floor applies to the excerpt as the worker cited it. A path citation whose line is wrong but whose excerpt matches exactly one live line of the cited path is re-anchored to that line and the correction is written back onto the citation and counted in the grounding audit; an excerpt that matches several lines, or none, is not corrected.
 
 Matched, traced, and bound are grounded; ambiguous and unverifiable block the strict completion paths. Binding exists because a citation can be correct and still fail an exact match (a differently normalized path, a stale ordinal), and refusing it would spend repair budget on a claim the evidence already supports. Where several records fit, the host has no basis for choosing one, and picking would manufacture a provenance the worker never established; that is why `ambiguous` is a separate verdict rather than a tie broken quietly.
 

@@ -90,8 +90,8 @@ type ToolInvocationOut struct {
 	Verdict *api.VerdictOutcome
 	// CommandProgram is the settled command program receipt for a portable command call.
 	CommandProgram *api.CommandProgramReceipt
-	// SourceDeliveryHandles lists confirmed source-delivery handles minted during the call.
-	SourceDeliveryHandles []string
+	// SourceDeliveries lists the source deliveries confirmed during the call.
+	SourceDeliveries []SourceDeliveryTag
 	// Listener is Den UI and wire metadata for loopback listener attribution on http_request.
 	Listener *api.LoopbackListenerFact
 	// SourceRun is nil until a command or verify run exits.
@@ -151,6 +151,11 @@ type InvocationIdentity struct {
 	RootSessionID    string
 	HandoffSessionID string
 	HandoffAgentID   string
+}
+
+// SourceDeliveryTag is a delivery's handle and the coverage its tag states.
+type SourceDeliveryTag struct {
+	Handle, Coverage string
 }
 
 // InvocationSource carries the source workspace and mutation services.
