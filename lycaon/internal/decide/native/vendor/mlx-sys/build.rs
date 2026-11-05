@@ -14,35 +14,15 @@ use std::fs;
 #[path = "src/bindgen_config.rs"]
 mod bindgen_config;
 
-/// Find the clang runtime library path dynamically using xcrun
-fn find_clang_rt_path() -> Option<String> {
-    // Get the developer directory which contains the toolchain
-    let output = Command::new("xcode-select")
-        .args(["--print-path"])
+fn find_clang_rt_path() -> PathBuf {
+    let output = Command::new("xcrun")
+        .args(["clang", "--print-file-name=libclang_rt.osx.a"])
         .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
-
-    let developer_dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let toolchain_base = format!(
-        "{}/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang",
-        developer_dir
-    );
-
-    // Find the clang version directory (it varies by Xcode version)
-    let clang_dir = std::fs::read_dir(&toolchain_base).ok()?;
-    for entry in clang_dir.flatten() {
-        let darwin_path = entry.path().join("lib/darwin");
-        let clang_rt_lib = darwin_path.join("libclang_rt.osx.a");
-        if clang_rt_lib.exists() {
-            return Some(darwin_path.to_string_lossy().to_string());
-        }
-    }
-
-    None
+        .expect("locate Apple Clang runtime");
+    assert!(output.status.success(), "Apple Clang runtime discovery failed");
+    let path = PathBuf::from(String::from_utf8(output.stdout).expect("Clang runtime path is UTF-8").trim());
+    assert!(path.is_absolute() && path.is_file(), "Apple Clang runtime archive is missing");
+    path.parent().expect("Clang runtime directory").to_owned()
 }
 
 #[cfg(feature = "metal")]
@@ -169,13 +149,10 @@ fn build_and_link_mlx_c() {
         println!("cargo:rustc-link-lib=framework=Accelerate");
     }
 
-    // Link against Xcode's clang runtime for ___isPlatformVersionAtLeast symbol
-    // This is needed on macOS 26+ where the bundled LLVM runtime may be outdated
-    // See: https://github.com/conda-forge/llvmdev-feedstock/issues/244
-    if let Some(clang_rt_path) = find_clang_rt_path() {
-        println!("cargo:rustc-link-search={}", clang_rt_path);
-        println!("cargo:rustc-link-lib=static=clang_rt.osx");
-    }
+    // Metal availability checks use the selected Apple Clang runtime.
+    let clang_rt_path = find_clang_rt_path();
+    println!("cargo:rustc-link-search={}", clang_rt_path.display());
+    println!("cargo:rustc-link-lib=static=clang_rt.osx");
 }
 
 fn main() {
