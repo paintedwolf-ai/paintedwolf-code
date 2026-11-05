@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -138,6 +139,8 @@ func TestToolRegistryTriStateSchemasMatchNativeManifest(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	schemas := loadToolSchemaNames(t, root)
 	native := loadNativeManifestNames(t, root)
+	cfg, err := nativemanifest.Load()
+	contractcheck.FailErr(t, "load native manifest", err)
 
 	var missingSchema []string
 	for name := range native {
@@ -155,9 +158,12 @@ func TestToolRegistryTriStateSchemasMatchNativeManifest(t *testing.T) {
 		if _, exempt := toolsNativeSchemaOnly[name]; exempt {
 			continue
 		}
+		if cfg.HasOperation(name) {
+			continue
+		}
 		orphanSchema = append(orphanSchema, name)
 	}
-	contractcheck.FailViolations(t, "tools/schemas entries missing from native-tools.yaml (not exempt)", orphanSchema)
+	contractcheck.FailViolations(t, "tools/schemas entries missing from the native manifests (not exempt)", orphanSchema)
 }
 
 func TestToolRegistryTriStateHandlersMatchSchemas(t *testing.T) {
