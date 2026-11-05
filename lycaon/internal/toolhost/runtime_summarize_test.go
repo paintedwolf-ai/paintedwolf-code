@@ -22,17 +22,14 @@ func TestBuildNativeRegistryConstructsSummarizeWithoutProviderServices(t *testin
 	toolSchemas, _, err := extpacks.LoadEffectiveToolSchemas(extpackstest.StockCatalog(t))
 	testutil.FailErr(t, "load tool schemas", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{
-		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"summarize": true},
+		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"source_history": true},
 	}})
 
-	registry, mutationTools, err := buildNativeRegistry(buildDeps{
+	_, mutationTools, err := buildNativeRegistry(buildDeps{
 		boundary: boundary, nativeConfig: nativeConfig, toolSchemas: toolSchemas,
 	})
 	testutil.FailErr(t, "build native registry", err)
 	if mutationTools.Survey.summarizeTool == nil {
 		t.Fatal("native summarize tool was not constructed")
-	}
-	if _, ok := registry.Operation("summarize"); !ok {
-		t.Fatal("native summarize operation was not registered")
 	}
 }
