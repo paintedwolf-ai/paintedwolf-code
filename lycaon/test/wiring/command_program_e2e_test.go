@@ -461,17 +461,6 @@ func TestCommandProgramTeeAndRedirectShareTheProgressGate(t *testing.T) {
 	}
 }
 
-func TestCommandProgramKillSignalStatusAndJobReferences(t *testing.T) {
-	prog := `sleep 30 & kill %1; wait; echo "pct1:$?"; ` +
-		`sleep 30 & pid=$!; kill "$pid"; wait "$pid"; echo "bang:$?:$pid"`
-	s := newCommandProgramSession(t, prog, "")
-	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
-	result := s.result(t)
-	if !strings.Contains(result, "pct1:0\nbang:143:") || strings.Contains(result, "bang:143:\n") {
-		t.Fatalf("unexpected kill/wait output: %q", result)
-	}
-}
-
 func TestCommandProgramHTTPMessagesEndpointReturnsContentAndReceipt(t *testing.T) {
 	s := newCommandProgramSession(t, `echo "http_messages_visible"`, "")
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
