@@ -11,7 +11,7 @@ import (
 )
 
 // PrepareBundle measures explicitly named exports without changing their bytes.
-func PrepareBundle(ctx context.Context, directory string, recipe Manifest) (Manifest, error) {
+func PrepareBundle(ctx context.Context, directory string, recipe Manifest) (result Manifest, resultErr error) {
 	var empty Manifest
 	if err := ctx.Err(); err != nil {
 		return empty, err
@@ -37,7 +37,7 @@ func PrepareBundle(ctx context.Context, directory string, recipe Manifest) (Mani
 	if err != nil {
 		return empty, err
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	for i, payload := range payloads {
 		measured, err := measurePayload(ctx, root, payload)
 		if err != nil {
@@ -57,12 +57,12 @@ func PrepareBundle(ctx context.Context, directory string, recipe Manifest) (Mani
 	return manifest, nil
 }
 
-func measurePayload(ctx context.Context, root *os.Root, payload Artifact) (Artifact, error) {
+func measurePayload(ctx context.Context, root *os.Root, payload Artifact) (result Artifact, resultErr error) {
 	file, err := openBundleFile(root, payload.Name, MaxArtifactBytes)
 	if err != nil {
 		return Artifact{}, err
 	}
-	defer file.Close()
+	defer func() { resultErr = errors.Join(resultErr, file.Close()) }()
 	before, err := file.Stat()
 	if err != nil {
 		return Artifact{}, err

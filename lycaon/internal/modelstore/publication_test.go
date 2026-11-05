@@ -19,7 +19,7 @@ func TestPublicationFlushesCompleteDirectoryAncestry(t *testing.T) {
 	testutil.FailErr(t, "create revision directories", os.MkdirAll(target, 0o700))
 	root, err := os.OpenRoot(filepath.Join(base, "models"))
 	testutil.FailErr(t, "open store", err)
-	defer root.Close()
+	defer func() { testutil.FailErr(t, "close publication root", root.Close()) }()
 	physical, err := filepath.EvalSymlinks(target)
 	testutil.FailErr(t, "resolve revision directory", err)
 	var want []string

@@ -1,6 +1,7 @@
 package modelstore
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,11 +34,10 @@ func (s *Store) AcquireLease(model, device, owner string, generation uint64) (*L
 	}
 	held, err := filelock.TryShared(f)
 	if err != nil || !held {
-		f.Close()
-		if err != nil {
-			return nil, fmt.Errorf("modelstore: cannot lease revision: %w", err)
+		if err == nil {
+			err = ErrRevisionInUse
 		}
-		return nil, ErrRevisionInUse
+		return nil, fmt.Errorf("modelstore: cannot lease revision: %w", errors.Join(err, f.Close()))
 	}
 	return &Lease{lock: f, Manifest: m, Owner: owner, Generation: generation, Dir: dir}, nil
 }

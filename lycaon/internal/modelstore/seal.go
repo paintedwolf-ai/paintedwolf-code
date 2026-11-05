@@ -10,7 +10,7 @@ import (
 )
 
 // SealBundle authenticates an export only after its declared payloads pass audit.
-func SealBundle(ctx context.Context, directory string, manifest Manifest, authority *Authority, keyID string, private ed25519.PrivateKey) (SignedManifest, error) {
+func SealBundle(ctx context.Context, directory string, manifest Manifest, authority *Authority, keyID string, private ed25519.PrivateKey) (result SignedManifest, resultErr error) {
 	var empty SignedManifest
 	if err := ctx.Err(); err != nil {
 		return empty, err
@@ -31,7 +31,7 @@ func SealBundle(ctx context.Context, directory string, manifest Manifest, author
 	if err != nil {
 		return empty, err
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	for name, artifact := range manifestFiles(manifest) {
 		if artifact.Name == "" || name == "manifest.json" {
 			return empty, errors.New("modelstore: sealed payloads require explicit, non-reserved names")

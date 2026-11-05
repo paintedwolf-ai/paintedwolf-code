@@ -11,7 +11,7 @@ import (
 )
 
 // Audit hashes the pinned revision. The caller must retain its lease until completion.
-func (l *Lease) Audit(ctx context.Context) error {
+func (l *Lease) Audit(ctx context.Context) (resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func (l *Lease) Audit(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	for name, artifact := range manifestFiles(l.Manifest) {
 		if err := auditFile(ctx, root, name, artifact); err != nil {
 			return fmt.Errorf("modelstore: audit %s: %w", name, err)
@@ -34,7 +34,7 @@ func (l *Lease) Audit(ctx context.Context) error {
 	return nil
 }
 
-func auditFile(ctx context.Context, root *os.Root, name string, artifact Artifact) error {
+func auditFile(ctx context.Context, root *os.Root, name string, artifact Artifact) (resultErr error) {
 	info, err := root.Lstat(name)
 	if err != nil {
 		return err
@@ -46,7 +46,7 @@ func auditFile(ctx context.Context, root *os.Root, name string, artifact Artifac
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { resultErr = errors.Join(resultErr, f.Close()) }()
 	hash := sha256.New()
 	n, err := io.Copy(hash, contextReader{ctx: ctx, reader: io.LimitReader(f, artifact.Bytes+1)})
 	if err != nil {

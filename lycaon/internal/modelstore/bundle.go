@@ -26,7 +26,7 @@ func (s *Store) RepairBundle(ctx context.Context, directory string, target Slot)
 	return s.importBundle(ctx, directory, target, true)
 }
 
-func (s *Store) importBundle(ctx context.Context, directory string, target Slot, repair bool) error {
+func (s *Store) importBundle(ctx context.Context, directory string, target Slot, repair bool) (resultErr error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -34,7 +34,7 @@ func (s *Store) importBundle(ctx context.Context, directory string, target Slot,
 	if err != nil {
 		return fmt.Errorf("modelstore: open bundle: %w", err)
 	}
-	defer root.Close()
+	defer func() { resultErr = errors.Join(resultErr, root.Close()) }()
 	signed, err := readBundleManifest(root)
 	if err != nil {
 		return err
@@ -47,13 +47,12 @@ func (s *Store) importBundle(ctx context.Context, directory string, target Slot,
 	}, repair)
 }
 
-func readBundleManifest(root *os.Root) (SignedManifest, error) {
-	var signed SignedManifest
+func readBundleManifest(root *os.Root) (signed SignedManifest, resultErr error) {
 	f, err := openBundleFile(root, "manifest.json", maxBundleManifestBytes)
 	if err != nil {
 		return signed, err
 	}
-	defer f.Close()
+	defer func() { resultErr = errors.Join(resultErr, f.Close()) }()
 	decoder := json.NewDecoder(io.LimitReader(f, maxBundleManifestBytes+1))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&signed); err != nil {
@@ -87,8 +86,7 @@ func openBundleFile(root *os.Root, name string, maxBytes int64) (*os.File, error
 	}
 	opened, err := f.Stat()
 	if err != nil || !os.SameFile(info, opened) {
-		f.Close()
-		return nil, fmt.Errorf("modelstore: bundle file changed while opening %s", name)
+		return nil, errors.Join(fmt.Errorf("modelstore: bundle file changed while opening %s", name), err, f.Close())
 	}
 	return f, nil
 }
