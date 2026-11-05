@@ -1,6 +1,7 @@
 package promptloop
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"fmt"
 	"strings"
@@ -63,8 +64,8 @@ type PromptRunResult struct {
 	LastOutputID         string
 	LastAssistantContent string
 	TurnTools            []string
-	// OfferedTools are the tools the final model request could call.
-	OfferedTools         []string
+	// Reach is what the final model request could call.
+	Reach                toolreach.Request
 	TasksDispatchedCount int
 	Outcome              promptresult.Outcome
 	OutputTruncated      *promptresult.OutputTruncatedOutcome

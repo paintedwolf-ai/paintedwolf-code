@@ -483,7 +483,7 @@ func (l *toolBatch) executeOneToolCall(
 	runCtx api.CoordinatorRunContext,
 	proseTurn bool,
 ) singleToolOutcome {
-	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
+	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
 	if proseTurn && !workerProseAllowsTool(sess, tc.Name) {
 		return l.refuseToolCall(tc, assistantMessageID, l.Tools.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
 	}

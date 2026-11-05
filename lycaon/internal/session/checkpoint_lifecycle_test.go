@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"errors"
 	"strings"
@@ -299,7 +300,7 @@ func TestCredentialRemediesUseOfferedToolSnapshot(t *testing.T) {
 		if offered {
 			names = []string{"secret_generate", "ask_user"}
 		}
-		ctx := tools.WithRecoveryTools(t.Context(), names)
+		ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 		output, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: "remedies"}, "command",
 			map[string]any{"command": "example --password=password"}, "completed", 1, guidance.ToolResultFacts{})
 		if !facts.HasCode("WEAK_CREDENTIAL_LITERAL") {
@@ -330,7 +331,7 @@ func TestCredentialRemediesDiscoverDeferredTools(t *testing.T) {
 			if loaded {
 				names = append(names, "secret_generate", "ask_user")
 			}
-			ctx := tools.WithRecoveryTools(t.Context(), names)
+			ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 			output, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: "deferred-remedies"}, "write",
 				map[string]any{"content": "password=" + value}, "written", 1, guidance.ToolResultFacts{})
 			if !facts.HasCode("WEAK_CREDENTIAL_LITERAL") && !facts.HasCode("CREDENTIAL_LITERAL") {

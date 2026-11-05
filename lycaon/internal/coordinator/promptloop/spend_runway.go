@@ -1,6 +1,7 @@
 package promptloop
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"log/slog"
 	"strings"
@@ -79,7 +80,7 @@ func (l *turnNudges) applySpendCeiling(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: content,
 		TurnTools:            st.turnTools,
-		OfferedTools:         st.offeredToolNames,
+		Reach:                toolreach.Freeze(st.offeredToolNames, st.turnToolPlan),
 		TasksDispatchedCount: st.tasksDispatchedCount,
 	}
 	return out, nil

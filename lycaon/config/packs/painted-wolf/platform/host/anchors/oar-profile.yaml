@@ -946,6 +946,8 @@ host_facts:
    type: bool
  - name: paintedwolf.offered_tools
    type: list<string>
+ - name: paintedwolf.next_steps
+   type: string
  - name: paintedwolf.can_task
    type: bool
  - name: paintedwolf.can_complete_leg

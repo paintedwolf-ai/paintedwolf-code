@@ -72,6 +72,8 @@ type GuardContext struct {
 	RejectData         map[string]map[string]any
 	ObservationData    map[string]any
 	ObservedRejectCode string
+	// Reach is the frozen model request this occurrence's reader acts on.
+	Reach toolreach.Request
 	Published          map[string]any
 }
 

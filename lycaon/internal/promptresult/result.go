@@ -1,6 +1,8 @@
 // Package promptresult names the outcome of running one prompt turn.
 package promptresult
 
+import "github.com/lycaon/lycaon/internal/toolreach"
+
 // Outcome classifies how a prompt turn finished.
 type Outcome string
 
@@ -46,17 +48,17 @@ type Result struct {
 	// OutcomeOutputTruncated.
 	OutputTruncated *OutputTruncatedOutcome `json:"output_truncated,omitempty"`
 	CloseoutBlocked *CloseoutBlocked        `json:"closeout_blocked,omitempty"`
-	// OfferedTools are the tools the final model request could call. They are
+	// Reach is what the final model request could call. It is
 	// not persisted: a replayed or recovered result carries none.
-	OfferedTools []string `json:"-"`
+	Reach toolreach.Request `json:"-"`
 }
 
-// OfferedToolNames is nil-safe: a missing result offers no tools.
-func (r *Result) OfferedToolNames() []string {
+// RequestReach is nil-safe: a missing result reaches nothing.
+func (r *Result) RequestReach() toolreach.Request {
 	if r == nil {
-		return nil
+		return toolreach.Request{}
 	}
-	return r.OfferedTools
+	return r.Reach
 }
 
 // IsCloseoutBlocked reports whether the turn settled as closeout_blocked.

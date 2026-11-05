@@ -1,6 +1,7 @@
 package toolfeedback
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"strings"
 	"testing"
@@ -74,7 +75,7 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.reject.Code, func(t *testing.T) {
-			ctx := tools.WithRecoveryTools(t.Context(), []string{tc.tool, "command_output", "command_stop"})
+			ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{tc.tool, "command_output", "command_stop"}))
 			err := bp.RejectObservation(ctx, tc.tool, "implement", map[string]any{}, tc.reject)
 			if err == nil {
 				t.Fatalf("%s produced no Decision — the agent would receive the bare code", tc.reject.Code)
@@ -172,7 +173,7 @@ func TestDuplicateCommandRecoveryRequiresOfferedControlsAndObservedExit(t *testi
 			if offered&2 != 0 {
 				names = append(names, "command_stop")
 			}
-			ctx := tools.WithRecoveryTools(t.Context(), names)
+			ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 			err := bp.RejectObservation(ctx, tool, "implement", nil, &toolrejection.ToolReject{
 				Code: "COMMAND_DUPLICATE_RUNNING", Data: map[string]any{"handles_text": "command-1", "can_command_output": true, "can_command_stop": true},
 			})

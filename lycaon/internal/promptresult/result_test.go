@@ -1,6 +1,7 @@
 package promptresult
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"encoding/json"
 	"slices"
 	"testing"
@@ -10,7 +11,7 @@ import (
 
 // A durable result replayed after a restart carries no offered tools.
 func TestOfferedToolsAreNotPersisted(t *testing.T) {
-	live := &Result{MessageID: "m1", OfferedTools: []string{"read", "recall"}}
+	live := &Result{MessageID: "m1", Reach: toolreach.Offered([]string{"read", "recall"})}
 	if !slices.Equal(live.OfferedToolNames(), []string{"read", "recall"}) {
 		t.Fatalf("live offered tools = %v", live.OfferedToolNames())
 	}

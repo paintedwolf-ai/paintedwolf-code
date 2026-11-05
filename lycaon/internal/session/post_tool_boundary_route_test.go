@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"errors"
 	"os"
@@ -81,7 +82,7 @@ func TestUnsandboxedRefusalRoutesToHostExecution(t *testing.T) {
 		}}},
 	}).Observation
 	mgr := newPostToolGuidanceManager(t)
-	out, facts := mgr.ToolPolicy.AfterTool(tools.WithRecoveryTools(t.Context(), []string{"command", "command_stop"}), &api.Session{ID: "sess-host"}, "command",
+	out, facts := mgr.ToolPolicy.AfterTool(tools.WithCallReach(t.Context(), toolreach.Offered([]string{"command", "command_stop"})), &api.Session{ID: "sess-host"}, "command",
 		map[string]any{"command": "colima start"}, `{"running":true}`, 1, guidance.ToolResultFacts{Confine: obs})
 	for _, want := range []string{"Code: " + isolation.CodeTryHostExecution, socket, "command_stop", "capability_request.host_execution"} {
 		if !strings.Contains(out, want) {

@@ -1,6 +1,7 @@
 package policyfacts
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"slices"
 	"testing"
 
@@ -19,7 +20,7 @@ func TestSessionOccurrencesPreserveOfferedRecoverySnapshot(t *testing.T) {
 			if offered {
 				names = append(names, name)
 			}
-			ctx := tools.WithRecoveryTools(t.Context(), names)
+			ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 			gc := oar.NewGuardContext()
 			manager.FillSessionFacts(ctx, gc, &api.Session{ID: "fixture"}, "read", nil)
 			if len(gc.ObservationData) != 0 {

@@ -242,7 +242,7 @@ func (m *Service) executePromptRun(
 			return execution, err
 		}
 	}
-	if err := m.PostTurn.After(tools.WithRecoveryTools(ctx, result.OfferedTools), sessionID, assembly.ProfileID, result.TurnTools); err != nil {
+	if err := m.PostTurn.After(tools.WithCallReach(ctx, result.Reach), sessionID, assembly.ProfileID, result.TurnTools); err != nil {
 		return execution, err
 	}
 	checkpointJSON, err := sessionexecution.FinalizingCheckpoint(sessionID, result.LastAssistantID, result.LastOutputID)
@@ -263,7 +263,7 @@ func (m *Service) executePromptRun(
 			execution.Response = &promptresult.Result{
 				Outcome:         result.Outcome,
 				OutputTruncated: result.OutputTruncated,
-				OfferedTools:    result.OfferedTools,
+				Reach:           result.Reach,
 			}
 		}
 		return execution, nil
@@ -284,7 +284,7 @@ func (m *Service) recordPromptOutcome(ctx context.Context, sessionID string, res
 	}
 	return &promptresult.Result{
 		MessageID:       result.LastAssistantID,
-		OfferedTools:    result.OfferedTools,
+		Reach:           result.Reach,
 		Outcome:         result.Outcome,
 		CloseoutBlocked: result.CloseoutBlocked,
 		OutputTruncated: result.OutputTruncated,

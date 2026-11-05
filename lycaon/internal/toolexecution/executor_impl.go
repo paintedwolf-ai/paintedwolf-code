@@ -66,7 +66,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		return e.invokeProgramEntry(ctx, qualifiedName, profileID, args, tc)
 	}
 	if reject := e.validateInvocation(ctx, qualifiedName, profileID, args, &tc); reject != nil {
-		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
+		ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
 	if reject := admitCredentialFiles(ctx, qualifiedName, tc); reject != nil {
@@ -232,7 +232,7 @@ func (e *Executor) ensureWorkerBranchIfNeeded(ctx context.Context, tool string, 
 // child then passes the full per-operation boundary through InvokeNative.
 func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID string, args map[string]any, tc tools.ToolContext) (string, error) {
 	if reject := tools.ValidateCallArguments(tool, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, tool), tc); reject != nil {
-		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
+		ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
 		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 	}
 	if reject := admitCredentialFiles(ctx, tool, tc); reject != nil {

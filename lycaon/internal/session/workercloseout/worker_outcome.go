@@ -2,6 +2,7 @@
 package workercloseout
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"fmt"
 	"strings"
@@ -38,9 +39,9 @@ type WorkerSummaryFinalizeOpts struct {
 	// Pipeline is required for blocking worker.report_check Decisions.
 	Pipeline        *oar.GuardPipeline
 	DecisionPending func(ctx context.Context, childSessionID string) bool
-	// OfferedTools are the tools the worker's latest turn could call; none
+	// Reach is what the worker's latest turn could call; none
 	// after a restart, when no live turn result exists.
-	OfferedTools []string
+	Reach toolreach.Request
 }
 
 func (o WorkerSummaryFinalizeOpts) decisionPending(ctx context.Context, childSessionID string) bool {
@@ -110,7 +111,7 @@ func FinalizeWorkerSummaryForChild(
 		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), nil)
 		if closeout != "" {
 			if result, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
-				opts.OfferedTools = result.OfferedToolNames()
+				opts.Reach = result.RequestReach()
 				if opts.decisionPending(ctx, childSessionID) {
 					return WorkerSummaryOutcome{Status: string(api.WorkerSummaryStatusNeedsDecision), Provenance: "decision_pending"}, nil
 				}
@@ -158,7 +159,7 @@ func FinalizeWorkerSummaryForCanceled(
 		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCancelCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
 		if closeout != "" {
 			if result, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
-				opts.OfferedTools = result.OfferedToolNames()
+				opts.Reach = result.RequestReach()
 				if report, ok, err := extractCompleteLegReport(ctx, resolver, childSessionID); err != nil {
 					return WorkerSummaryOutcome{}, err
 				} else if ok {

@@ -1,6 +1,7 @@
 package toolfeedback
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"fmt"
 	"maps"
 	"path/filepath"
@@ -36,7 +37,7 @@ func TestRecoveryCopyUsesFrozenOfferedTools(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			if tc.offered != nil {
-				ctx = tools.WithRecoveryTools(ctx, tc.offered)
+				ctx = tools.WithCallReach(ctx, toolreach.Offered(tc.offered))
 			}
 			// Producer metadata cannot invent an offered recovery tool.
 			err := bp.RejectObservation(ctx, "read", "plan_write_only", nil, &toolrejection.ToolReject{
@@ -64,7 +65,7 @@ func TestRecoveryCopyUsesFrozenOfferedTools(t *testing.T) {
 
 func TestRecoveryFactsAreLazyAndKeepTheirRequestSnapshot(t *testing.T) {
 	names := []string{"read", "list_dir"}
-	ctx := tools.WithRecoveryTools(t.Context(), names)
+	ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 	names[1] = "task"
 	gc := oar.NewGuardContext()
 	tools.RegisterRecoveryFacts(ctx, gc)
@@ -89,7 +90,7 @@ func TestLocalFetchRecoveryOnlyOffersCurrentCaptureTools(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"capture_page": true, "measure_page": true}}}, toolvocab.Provenance{})
 	testutil.FailErr(t, "load browser recovery vocabulary", err)
 	for _, offered := range [][]string{nil, {"capture_page"}, {"measure_page"}, {"capture_page", "measure_page"}} {
-		ctx := tools.WithRecoveryTools(t.Context(), offered)
+		ctx := tools.WithCallReach(t.Context(), toolreach.Offered(offered))
 		err := bp.RejectObservation(ctx, "fetch_url", "fixture", nil, &toolrejection.ToolReject{Code: "FETCH_URL_BLOCKED", Data: map[string]any{"detail": "private address", "can_capture_page": true, "can_measure_page": true}})
 		refusal, ok := guidance.RefusalFromError(err)
 		if !ok || refusal.Copy == nil {
@@ -116,7 +117,7 @@ func TestUnmatchedToolDiscoveryUsesCurrentPageFacts(t *testing.T) {
 		{"legacy", "", false}, {"last page", "no_match", false}, {"more pages", "no_match", true},
 	} {
 		t.Run(state.name, func(t *testing.T) {
-			ctx := tools.WithRecoveryTools(t.Context(), []string{"request_tools"})
+			ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"request_tools"}))
 			err := bp.RejectObservation(ctx, "request_tools", "fixture", nil, &toolrejection.ToolReject{
 				Code: "TOOL_REQUEST_UNMATCHED", Data: map[string]any{"need": "dispatch a worker", "available": []string{"task"}, "tool_discovery_status": state.status, "tool_discovery_has_more": state.more},
 			})
@@ -199,7 +200,7 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 					}
 					ctx := t.Context()
 					if mask >= 0 {
-						ctx = tools.WithRecoveryTools(ctx, offered)
+						ctx = tools.WithCallReach(ctx, toolreach.Offered(offered))
 					}
 					var first map[string]string
 					for _, spoof := range []bool{false, true} {
@@ -259,7 +260,7 @@ func TestRecoveryAvailabilityFactsMatchFrozenSchemas(t *testing.T) {
 				if offered {
 					names[0] = name
 				}
-				ctx := tools.WithRecoveryTools(t.Context(), names)
+				ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 				names[0] = "later_tool"
 				gc := oar.NewGuardContext()
 				gc.ObservationData = map[string]any{key: !offered}
@@ -294,7 +295,7 @@ func TestBinaryReadRecoveryRequiresOfferedViewerAndSupportedFormat(t *testing.T)
 				t.Run(fmt.Sprintf("supported=%v/offered=%v/image=%v", supported, offered, image), func(t *testing.T) {
 					ctx := t.Context()
 					if offered != nil {
-						ctx = tools.WithRecoveryTools(ctx, offered)
+						ctx = tools.WithCallReach(ctx, toolreach.Offered(offered))
 					}
 					err := bp.RejectObservation(ctx, "read", "fixture", nil, &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: map[string]any{
 						"path": "asset", "bytes": 4, "reason": "binary", "is_image": image, "workspace_image_supported": supported,

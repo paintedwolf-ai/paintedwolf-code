@@ -1,6 +1,7 @@
 package toolfeedback
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 
 func TestArgumentRecoveryDoesNotChangeTheRequestedOperation(t *testing.T) {
 	bp := stockBlockPlane(t)
-	ctx := tools.WithRecoveryTools(t.Context(), []string{"read", "edit", "write"})
+	ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"read", "edit", "write"}))
 	for _, rejected := range []*toolrejection.ToolReject{
 		{Code: "EDIT_OLD_STRING_NOT_FOUND", Data: map[string]any{"path": "app.py", "old_len": 40, "basis_lines": 12}},
 		{Code: "TOOL_ARGS_INVALID", Data: map[string]any{

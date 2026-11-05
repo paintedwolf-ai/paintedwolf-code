@@ -1,6 +1,7 @@
 package turnexecution
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"context"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestRecordPromptOutcomeNotesCloseoutBlockedAndEmitsGateBlocked(t *testing.T
 	}
 	res := svc.recordPromptOutcome(t.Context(), "sess-1", &promptloop.PromptRunResult{
 		LastAssistantID: "notice-1",
-		OfferedTools:    []string{"read"},
+		Reach:           toolreach.Offered([]string{"read"}),
 		Outcome:         promptresult.OutcomeCloseoutBlocked,
 		CloseoutBlocked: blocked,
 	})

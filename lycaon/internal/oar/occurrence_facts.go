@@ -240,6 +240,7 @@ var occurrenceFactDecls = []factDecl{
 	{"replacement_calls_available", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_discovery_available", oarcore.TypeBool, FactTierHost, ""},
 	{"offered_tools", oarcore.TypeListString, FactTierHost, ""},
+	{"next_steps", oarcore.TypeString, FactTierHost, ""},
 	{"can_task", oarcore.TypeBool, FactTierHost, ""},
 	{"can_complete_leg", oarcore.TypeBool, FactTierHost, ""},
 	{"turn_surface", oarcore.TypeString, FactTierHost, ""},

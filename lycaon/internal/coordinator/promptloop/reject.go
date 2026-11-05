@@ -163,7 +163,7 @@ func (l *toolInvocations) retractRejectedAssistantTurn(
 
 // Intrinsic refusals retain occurrence identity and the offered recovery surface.
 func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Session, tc api.ToolCall, toolCtx tools.ToolContext, code string, data map[string]any) *guidance.Refusal {
-	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
+	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
 	ctx = curationctx.WithSession(ctx, curationctx.Session{SessionID: sess.ID, ProjectID: sess.ProjectID, OwnerPersonID: sess.OwnerPersonID, Posture: string(sess.Posture), Agent: toolCtx.Identity.Agent})
 	data = maps.Clone(data)
 	if data == nil {
