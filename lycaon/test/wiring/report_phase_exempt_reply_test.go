@@ -65,7 +65,8 @@ func TestNothingCitedReplyInAReportPhaseStillEndsInAReport(t *testing.T) {
 			testutil.FailErr(t, "read messages", err)
 			var last *wire.Message
 			for i := range msgs {
-				if msgs[i].Kind == wire.MessageKindCompletionReport {
+				// Once the start wake has ended the run, the prompt's reply belongs to no run.
+				if msgs[i].Kind == wire.MessageKindCompletionReport && msgs[i].WorkflowRunID == run.ID {
 					last = &msgs[i]
 				}
 			}
