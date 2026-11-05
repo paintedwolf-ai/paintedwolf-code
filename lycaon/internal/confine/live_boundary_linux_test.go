@@ -13,6 +13,9 @@ import (
 // can read, so the record is never complete.
 const liveRefusalWitness = confine.WitnessIncomplete
 
+// A denied directory is hidden by a mount: it stats and lists as an empty one.
+const deniedDirectoryIsMasked = true
+
 // The PID namespace bounds a confined process's signals with or without
 // process control; the native process_signal tool reaches outside it.
 const processControlSignalsOutside = false

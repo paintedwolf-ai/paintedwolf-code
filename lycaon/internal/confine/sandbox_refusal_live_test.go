@@ -118,7 +118,7 @@ func TestDiskSpaceQueriesAreNotRefused(t *testing.T) {
 	project, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve project", err)
 	refusals, out := refusalsOf(t, self, []string{project}, "/bin/df", "-k", "/")
-	if refusals.Witness != confine.WitnessKernel || len(refusals.Refusals) > 0 {
+	if refusals.Witness != liveRefusalWitness || len(refusals.Refusals) > 0 {
 		t.Fatalf("df witness = %s, refusals = %+v\noutput: %s", refusals.Witness, refusals.Refusals, out)
 	}
 }
