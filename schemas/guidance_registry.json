@@ -1539,7 +1539,7 @@
       "branch_instruction": "Remove cursor and retry the same scope once",
       "category": "recoverable",
       "emit": "guard:list_dir",
-      "summary": "`list_dir` received a cursor that is not valid for this scope and source generation."
+      "summary": "A directory listing received a cursor that is not valid for this scope and source generation."
     },
     "LIST_DIR_NOT_DIRECTORY": {
       "branch_instruction": "Choose a directory to list, or use an offered file reader",
@@ -1548,7 +1548,7 @@
       "summary": "list_dir path {{ paintedwolf.path }} is not a directory."
     },
     "LIST_DIR_PATH_NOT_FOUND": {
-      "branch_instruction": "Branch on Code; choose an existing directory before retrying list_dir",
+      "branch_instruction": "Branch on Code; choose an existing directory before listing again",
       "category": "recoverable",
       "emit": "guard:list_dir",
       "summary": "list_dir path {{ paintedwolf.path }} does not exist."
@@ -1917,7 +1917,7 @@
       "summary": "The target process was not started by this session."
     },
     "PROCESS_REFERENCE_STALE": {
-      "branch_instruction": "Branch on Code; call process_list again and review the new exact target. Do not replace the reference with a PID or name.",
+      "branch_instruction": "Branch on Code; list processes again with `ps` and review the new exact target. Do not replace the reference with a PID or name.",
       "category": "recoverable",
       "emit": "guard:host_process",
       "summary": "The process reference no longer identifies the reviewed process."
@@ -2204,7 +2204,7 @@
       "summary": "replace_lines did not change {{ paintedwolf.path }} because line {{ paintedwolf.line }} does not begin with the exact dedent prefix."
     },
     "REPLACE_LINES_INVALID_RANGE": {
-      "branch_instruction": "Branch on Code; fix the line range and retry replace_lines",
+      "branch_instruction": "Branch on Code; fix the line range and retry `replace-lines`",
       "category": "recoverable",
       "emit": "guard:replace_lines",
       "summary": "replace_lines on {{ paintedwolf.path }} rejected range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line }} — {{ paintedwolf.rejection_reason }}."
@@ -2657,6 +2657,12 @@
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "The managed secret reference was not found."
+    },
+    "SECRET_REFERENCE_OUTSIDE_SINK": {
+      "branch_instruction": "Do not put a reference in a here-document, `printf`, or a path",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "A managed secret reference reached an argument that does not resolve it."
     },
     "SECRET_REFERENCE_OUT_OF_SCOPE": {
       "branch_instruction": "Do not copy identifiers across chat or project boundaries",
@@ -3562,7 +3568,7 @@
       "branch_instruction": "Treat the implementation claim as unverified until the actual artifact evidence or no-change justification is established",
       "category": "recoverable",
       "emit": "guard:worker_summary",
-      "summary": "Worker finished without disk proof of implementation (no successful write, edit, replace_lines, restore_version, or workspace change)"
+      "summary": "Worker finished without disk proof of implementation (no successful file change, restore_version, or workspace change)"
     },
     "WORKER_SUMMARY_TOO_LONG": {
       "branch_instruction": "This trim turn accepts complete_leg only. Keep the brief within {{ paintedwolf.max_chars }} characters; do not resume acquisition or mutation.",
