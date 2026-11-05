@@ -3,6 +3,8 @@ package contract
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -18,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
 
 func promptNameCatalog(t *testing.T) (*toolvocab.Catalog, []sandbox.ToolProfile) {
@@ -135,6 +138,94 @@ func TestRenderedCoordinatorKicksNameOnlyReachableTools(t *testing.T) {
 				contractcheck.FailErr(t, "render kick", err)
 				if names := unreachableNames(t, catalog, corpus, reachable); len(names) > 0 {
 					t.Errorf("names %s, which this surface cannot reach:\n%s", strings.Join(names, ", "), linesNaming(corpus, names))
+				}
+			})
+		}
+	}
+}
+
+type workflowPhaseBindings struct {
+	Injects []struct {
+		On       string `yaml:"on"`
+		Render   string `yaml:"render"`
+		Selector struct {
+			Phase string `yaml:"phase"`
+		} `yaml:"selector"`
+	} `yaml:"injects"`
+	Phases []struct {
+		ID      string `yaml:"id"`
+		Surface string `yaml:"coordinator_surface"`
+	} `yaml:"phases"`
+}
+
+// Phase guidance opens on the surface its workflow declares for that phase.
+func TestRenderedPhaseKicksNameOnlyTheirSurfacesTools(t *testing.T) {
+	catalog, _ := promptNameCatalog(t)
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	plans, err := surface.CompileToolPlans(1)
+	contractcheck.FailErr(t, "compile tool plans", err)
+	root := contractcheck.RepoRoot(t)
+	files, err := filepath.Glob(filepath.Join(root, "lycaon/config/packs/painted-wolf/*/workflows/*/workflow.yaml"))
+	contractcheck.FailErr(t, "list workflows", err)
+	if len(files) == 0 {
+		t.Fatal("no stock workflows")
+	}
+	for _, file := range files {
+		raw, err := os.ReadFile(file)
+		contractcheck.FailErr(t, "read workflow", err)
+		var workflow workflowPhaseBindings
+		contractcheck.FailErr(t, "decode workflow", yaml.Unmarshal(raw, &workflow))
+		surfaces := map[string]string{}
+		for _, phase := range workflow.Phases {
+			surfaces[phase.ID] = phase.Surface
+		}
+		for _, inject := range workflow.Injects {
+			id := surfaces[inject.Selector.Phase]
+			plan, known := plans[id]
+			if inject.On != "phase.entered" || !known {
+				continue
+			}
+			t.Run(filepath.Base(filepath.Dir(file))+"/"+inject.Selector.Phase, func(t *testing.T) {
+				reachable := plan.AddressableNames()
+				data := kickRenderFixture()
+				contractcheck.FailErr(t, "merge kick vars", prompts.MergeCoordinatorKickVarsForTools(data, reachable))
+				corpus, err := engine.RenderKick(context.Background(), inject.Render, data)
+				contractcheck.FailErr(t, "render kick", err)
+				if names := unreachableNames(t, catalog, corpus, reachable); len(names) > 0 {
+					t.Errorf("%s on %s names %s:\n%s", inject.Render, id, strings.Join(names, ", "), linesNaming(corpus, names))
+				}
+			})
+		}
+	}
+}
+
+// A worker kick reaches every worker profile, so it names only what they hold.
+func TestRenderedWorkerKicksNameOnlyWorkerTools(t *testing.T) {
+	catalog, profiles := promptNameCatalog(t)
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	for _, binding := range catalogfixture.LoadInformBindings(t).AllInform() {
+		if binding == nil || !binding.IsInform() || !strings.HasPrefix(binding.Render, "worker-") {
+			continue
+		}
+		for _, profile := range profiles {
+			if !profile.Tools["complete_leg"] {
+				continue
+			}
+			t.Run(binding.Render+"/"+profile.ID, func(t *testing.T) {
+				var reachable []string
+				for name, enabled := range profile.Tools {
+					if enabled {
+						reachable = append(reachable, name)
+					}
+				}
+				data := kickRenderFixture()
+				for key, value := range prompts.VisibleToolsNativePartialVars(reachable) {
+					data[key] = value
+				}
+				corpus, err := engine.RenderKick(context.Background(), binding.Render, data)
+				contractcheck.FailErr(t, "render kick", err)
+				if names := unreachableNames(t, catalog, corpus, reachable); len(names) > 0 {
+					t.Errorf("names %s:\n%s", strings.Join(names, ", "), linesNaming(corpus, names))
 				}
 			})
 		}
