@@ -1,5 +1,5 @@
 use super::*;
-use crate::execution::Sampling;
+use crate::sampler::Sampling;
 use serde_json::{Value, json};
 use std::io::Cursor;
 
@@ -50,9 +50,9 @@ fn hello_and_shutdown_do_not_load_or_probe_the_model() {
     )
     .unwrap();
     let input = frames(&[
-        json!({"version":1,"id":1,"command":{"method":"hello"}}),
-        json!({"version":1,"id":2,"command":{"method":"advance","request_id":1}}),
-        json!({"version":1,"id":3,"command":{"method":"shutdown"}}),
+        json!({"version":2,"id":1,"command":{"method":"hello"}}),
+        json!({"version":2,"id":2,"command":{"method":"advance","request_id":1}}),
+        json!({"version":2,"id":3,"command":{"method":"shutdown"}}),
     ]);
     let mut output = Vec::new();
     runner.serve(Cursor::new(input), &mut output).unwrap();
@@ -73,10 +73,10 @@ fn hello_and_shutdown_do_not_load_or_probe_the_model() {
 #[test]
 fn malformed_version_sequence_and_fields_close_the_connection() {
     for envelope in [
-        json!({"version":2,"id":1,"command":{"method":"hello"}}),
-        json!({"version":1,"id":0,"command":{"method":"hello"}}),
-        json!({"version":1,"id":1,"command":{"method":"hello","extra":true}}),
-        json!({"version":1,"id":1,"command":{"method":"hello"},"extra":true}),
+        json!({"version":1,"id":1,"command":{"method":"hello"}}),
+        json!({"version":2,"id":0,"command":{"method":"hello"}}),
+        json!({"version":2,"id":1,"command":{"method":"hello","extra":true}}),
+        json!({"version":2,"id":1,"command":{"method":"hello"},"extra":true}),
     ] {
         let mut runner =
             Runner::new(PathBuf::new(), identity(), |_: &Path, _, _, _| Ok(NoDevice)).unwrap();
@@ -86,7 +86,7 @@ fn malformed_version_sequence_and_fields_close_the_connection() {
                 .is_err()
         );
     }
-    let duplicate = json!({"version":1,"id":1,"command":{"method":"hello"}});
+    let duplicate = json!({"version":2,"id":1,"command":{"method":"hello"}});
     let mut runner =
         Runner::new(PathBuf::new(), identity(), |_: &Path, _, _, _| Ok(NoDevice)).unwrap();
     assert!(
@@ -109,8 +109,8 @@ fn resource_inspection_and_rejection_precede_model_loading() {
     .unwrap();
     let mut output = Vec::new();
     runner.serve(Cursor::new(frames(&[
-        json!({"version":1,"id":1,"command":{"method":"inspect","context_tokens":4096,"prefill_chunk":128}}),
-        json!({"version":1,"id":2,"command":{"method":"load","context_tokens":4096,"prefill_chunk":128,"device_budget_bytes":1,"host_budget_bytes":1}}),
+        json!({"version":2,"id":1,"command":{"method":"inspect","context_tokens":4096,"prefill_chunk":128}}),
+        json!({"version":2,"id":2,"command":{"method":"load","context_tokens":4096,"prefill_chunk":128,"device_budget_bytes":1,"host_budget_bytes":1}}),
     ])), &mut output).unwrap();
     let mut output = Cursor::new(output);
     let plan: Value =
@@ -139,4 +139,12 @@ fn preparation_wire_is_bounded_to_tokens_and_explicit_lifecycle() {
         assert!(serde_json::from_value::<Command>(json!({"method":method,"request_id":1})).is_ok());
         assert!(serde_json::from_value::<Command>(json!({"method":method})).is_err());
     }
+}
+
+#[test]
+fn begin_requires_explicit_output_contract() {
+    let mut command = json!({"method":"begin","request":{"request_id":1,"prompt_tokens":[2,200],"max_new_tokens":4,"temperature":0,"top_p":1,"top_k":0,"seed":0,"checkpoint_tokens":0}});
+    assert!(serde_json::from_value::<Command>(command.clone()).is_err());
+    command["request"]["output_contract"] = json!({"allowed_tools":[]});
+    assert!(serde_json::from_value::<Command>(command).is_ok());
 }

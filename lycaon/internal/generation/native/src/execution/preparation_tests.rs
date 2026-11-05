@@ -1,5 +1,6 @@
 use super::super::preparation::Prepare;
 use super::{executor, request};
+use crate::output_contract::Envelope;
 
 #[test]
 fn preparation_is_chunked_without_sampling_and_reusable_by_generation() {
@@ -15,7 +16,7 @@ fn preparation_is_chunked_without_sampling_and_reusable_by_generation() {
             .unwrap(),
         0
     );
-    assert!(runner.begin(request(2), None).is_err());
+    assert!(runner.begin(request(2), None, Envelope::fixture()).is_err());
     assert!(runner.clear_prefix().is_err());
     let first = runner.advance_preparation(1).unwrap();
     assert_eq!(first.processed_prompt_tokens, 2);
@@ -28,7 +29,10 @@ fn preparation_is_chunked_without_sampling_and_reusable_by_generation() {
     assert_eq!(runner.backend.sampling_calls, 0);
     assert!(runner.advance_preparation(1).is_err());
     // Generation's checkpoint hint does not limit exact prepared-state reuse.
-    assert_eq!(runner.begin(request(2), None).unwrap(), 4);
+    assert_eq!(
+        runner.begin(request(2), None, Envelope::fixture()).unwrap(),
+        4
+    );
     let generated = runner.advance(2).unwrap();
     assert_eq!(generated.generated_tokens, 1);
     assert_eq!(runner.backend.sampling_calls, 1);
@@ -37,7 +41,7 @@ fn preparation_is_chunked_without_sampling_and_reusable_by_generation() {
 #[test]
 fn cancellation_preserves_the_previous_completed_checkpoint() {
     let mut runner = executor();
-    runner.begin(request(1), None).unwrap();
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
     runner.advance(1).unwrap();
     runner.advance(1).unwrap();
     runner.cancel(1).unwrap();
@@ -55,7 +59,10 @@ fn cancellation_preserves_the_previous_completed_checkpoint() {
     assert_eq!(canceled.processed_prompt_tokens, 2);
     assert_eq!(runner.evaluated, [2, 30]);
     assert_eq!(runner.backend.prefix, [2, 5, 6]);
-    assert_eq!(runner.begin(request(3), None).unwrap(), 3);
+    assert_eq!(
+        runner.begin(request(3), None, Envelope::fixture()).unwrap(),
+        3
+    );
 }
 
 #[test]
@@ -125,7 +132,7 @@ fn preparation_rejects_invalid_and_overlapping_requests_without_effects() {
             })
             .is_err()
     );
-    runner.begin(request(2), None).unwrap();
+    runner.begin(request(2), None, Envelope::fixture()).unwrap();
     assert!(
         runner
             .prepare(Prepare {
@@ -154,7 +161,10 @@ fn failed_preparation_discards_partial_device_state() {
     assert!(runner.prefix.is_empty());
     assert!(runner.backend.tokens.is_empty());
     runner.backend.fail = false;
-    assert_eq!(runner.begin(request(2), None).unwrap(), 0);
+    assert_eq!(
+        runner.begin(request(2), None, Envelope::fixture()).unwrap(),
+        0
+    );
 }
 
 #[test]
@@ -172,11 +182,11 @@ fn unrelated_work_restores_only_an_available_matching_checkpoint() {
         let mut unrelated = request(2);
         unrelated.prompt_tokens = vec![2, 30, 31];
         unrelated.checkpoint_tokens = 0;
-        runner.begin(unrelated, None).unwrap();
+        runner.begin(unrelated, None, Envelope::fixture()).unwrap();
         while runner.advance(2).unwrap().stop_reason.is_none() {}
         runner.backend.missing_prefix = missing;
         assert_eq!(
-            runner.begin(request(3), None).unwrap(),
+            runner.begin(request(3), None, Envelope::fixture()).unwrap(),
             if missing { 0 } else { 4 }
         );
     }
@@ -185,7 +195,7 @@ fn unrelated_work_restores_only_an_available_matching_checkpoint() {
 #[test]
 fn prepared_history_keeps_the_standing_checkpoint_for_changed_history() {
     let mut runner = executor();
-    runner.begin(request(1), None).unwrap();
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
     runner.advance(1).unwrap();
     runner.advance(1).unwrap();
     runner.cancel(1).unwrap();
@@ -205,14 +215,14 @@ fn prepared_history_keeps_the_standing_checkpoint_for_changed_history() {
     assert_eq!(runner.evaluated, [2, 5, 6, 7, 8]);
     let mut changed = request(3);
     changed.prompt_tokens[3] = 30;
-    assert_eq!(runner.begin(changed, None).unwrap(), 3);
+    assert_eq!(runner.begin(changed, None, Envelope::fixture()).unwrap(), 3);
     assert_eq!(runner.backend.tokens, [2, 5, 6]);
 }
 
 #[test]
 fn prepared_history_reuses_the_longer_active_state() {
     let mut runner = executor();
-    runner.begin(request(1), None).unwrap();
+    runner.begin(request(1), None, Envelope::fixture()).unwrap();
     runner.advance(1).unwrap();
     runner.advance(1).unwrap();
     runner.cancel(1).unwrap();
@@ -224,7 +234,10 @@ fn prepared_history_reuses_the_longer_active_state() {
         })
         .unwrap();
     assert!(runner.advance_preparation(2).unwrap().complete);
-    assert_eq!(runner.begin(request(3), None).unwrap(), 5);
+    assert_eq!(
+        runner.begin(request(3), None, Envelope::fixture()).unwrap(),
+        5
+    );
     assert_eq!(runner.backend.prefix, [2, 5, 6]);
 }
 
@@ -251,7 +264,7 @@ fn cold_preparation_captures_the_declared_standing_boundary() {
     assert_eq!(runner.backend.prefix, [2, 5, 6]);
     let mut changed = request(2);
     changed.prompt_tokens[3] = 30;
-    assert_eq!(runner.begin(changed, None).unwrap(), 3);
+    assert_eq!(runner.begin(changed, None, Envelope::fixture()).unwrap(), 3);
 }
 
 #[test]
@@ -282,7 +295,10 @@ fn foreground_reuses_completed_preparation_chunks_before_the_checkpoint() {
     runner.advance_preparation(1).unwrap();
     runner.cancel_preparation(1).unwrap();
     assert!(runner.backend.prefix.is_empty());
-    assert_eq!(runner.begin(request(2), None).unwrap(), 2);
+    assert_eq!(
+        runner.begin(request(2), None, Envelope::fixture()).unwrap(),
+        2
+    );
     assert_eq!(runner.backend.calls, [vec![2, 5]]);
     runner.advance(2).unwrap();
     assert_eq!(runner.backend.prefix, [2, 5, 6]);
@@ -300,5 +316,8 @@ fn changed_foreground_tokens_reject_partial_preparation() {
         .unwrap();
     runner.advance_preparation(1).unwrap();
     runner.cancel_preparation(1).unwrap();
-    assert_eq!(runner.begin(request(2), None).unwrap(), 0);
+    assert_eq!(
+        runner.begin(request(2), None, Envelope::fixture()).unwrap(),
+        0
+    );
 }

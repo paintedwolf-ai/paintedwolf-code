@@ -48,7 +48,8 @@ impl Plan {
         let device_reservation_bytes =
             weights + kv_capacity_bytes + workspace_bytes + allocator_cache_bytes;
         // Tokenizer, grammar compilation, IPC and mapped rows share host memory.
-        let host_reservation_bytes = if unified { 512 << 20 } else { 768 << 20 };
+        let host_reservation_bytes =
+            (if unified { 512 << 20 } else { 768 << 20 }) + crate::output_contract::HOST_BYTES;
         Ok(Self {
             resident_weights_bytes: weights,
             mapped_ple_bytes: mapped,
@@ -70,7 +71,10 @@ mod tests {
         let large = Plan::e4b(2787934208, 2290089984, 8192, 256, true).unwrap();
         assert_eq!(small.workspace_bytes, 384 << 20);
         assert_eq!(large.workspace_bytes, 768 << 20);
-        assert_eq!(small.host_reservation_bytes, 512 << 20);
+        assert_eq!(
+            small.host_reservation_bytes,
+            (512 << 20) + crate::output_contract::HOST_BYTES
+        );
         assert!(
             small.device_reservation_bytes + small.host_reservation_bytes + (2 << 30) < 6 << 30
         );

@@ -223,6 +223,7 @@ def bench(args):
     destination = artifact_root(ROOT) / "generation-bench" / datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
     destination.mkdir(parents=True)
     state, prompt = 0, [2]
+    allowed_tools = []
     for _ in range(args.prompt - 1):
         state = (1664525 * state + 1013904223) & 0xffffffff
         prompt.append(256 + state % (262144 - 256))
@@ -232,6 +233,7 @@ def bench(args):
              "python", Path(__file__).with_name("prompt.py"), args.model, args.messages, rendered],
             env=python_environment())
         prompt = json.loads(rendered.read_text())["prompt_tokens"]
+        allowed_tools = [tool["function"]["name"] for tool in json.loads(args.messages.read_text()).get("tools", [])]
         if (not prompt or len(prompt) + args.tokens > 65536 or
                 any(type(token) is not int or not 0 <= token < 262144 for token in prompt)):
             raise ValueError("rendered prompt exceeds its bounds")
@@ -239,12 +241,14 @@ def bench(args):
     if args.prompt_file:
         if args.prompt_file.stat().st_size > 1 << 20:
             raise ValueError("rendered prompt file exceeds its bound")
-        prompt = json.loads(args.prompt_file.read_text())["prompt_tokens"]
+        fixture = json.loads(args.prompt_file.read_text())
+        prompt = fixture["prompt_tokens"]
+        allowed_tools = fixture.get("allowed_tools", [])
         if (not isinstance(prompt, list) or not prompt or len(prompt) + args.tokens > 65536 or
                 any(type(token) is not int or not 0 <= token < 262144 for token in prompt)):
             raise ValueError("rendered prompt exceeds its bounds")
         shutil.copyfile(args.prompt_file, destination / "rendered-prompt.json")
-    specification = {"prompt_tokens": prompt, "generation_tokens": args.tokens,
+    specification = {"prompt_tokens": prompt, "allowed_tools": allowed_tools, "generation_tokens": args.tokens,
                      "trials": args.trials, "ple": args.ple, "prefill_chunk": args.prefill_chunk, "kv_bits": args.kv_bits,
                      "verify_last_logits": args.verify_last_logits, "reference_model_size": args.reference_model_size}
     input_path = destination / "input.json"

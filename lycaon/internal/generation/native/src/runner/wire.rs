@@ -7,7 +7,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

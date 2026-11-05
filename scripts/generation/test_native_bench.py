@@ -19,6 +19,7 @@ class NativeBenchmarkTests(unittest.TestCase):
 import json, struct, sys
 n, = struct.unpack('<I', sys.stdin.buffer.read(4))
 request = json.loads(sys.stdin.buffer.read(n))
+assert request['version'] == 2
 response = json.loads(sys.argv[1])
 if response == 'echo':
     response = {'id': request['id'], 'status': 'ok', 'result': request['command']}
@@ -69,11 +70,12 @@ sys.stdout.buffer.flush()
         class Fixture:
             def call(self, method, **fields):
                 if method == "begin":
+                    assert fields["request"]["output_contract"] == {"allowed_tools": ["command"]}
                     return {"reused_prefix_tokens": 2}
                 return {"progress": {"generated_tokens": 1, "token": None,
                                      "stop_reason": "eos"}}
 
-        result = trial(Fixture(), {"prompt_tokens": [2, 3, 4], "generation_tokens": 10}, 1, 2)
+        result = trial(Fixture(), {"prompt_tokens": [2, 3, 4], "generation_tokens": 10, "allowed_tools": ["command"]}, 1, 2)
         self.assertEqual(result["generated_tokens"], 1)
         self.assertEqual(result["tokens"], [])
         self.assertEqual(result["reused_prefix_tokens"], 2)

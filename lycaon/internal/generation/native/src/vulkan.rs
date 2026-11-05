@@ -1,6 +1,7 @@
+use crate::sampler::Sampling;
 use crate::{
     error::{Error, Result},
-    execution::{Backend, Sampling},
+    execution::Backend,
 };
 use std::{
     ffi::{CStr, CString, c_char, c_int, c_void},
@@ -122,7 +123,13 @@ impl Vulkan {
     fn cache(&mut self, operation: c_int) -> Result<bool> {
         let mut restored = 0;
         checked(|error, capacity| unsafe {
-            pw_generation_cache(self.engine.as_ptr(), operation, &mut restored, error, capacity)
+            pw_generation_cache(
+                self.engine.as_ptr(),
+                operation,
+                &mut restored,
+                error,
+                capacity,
+            )
         })?;
         Ok(restored != 0)
     }

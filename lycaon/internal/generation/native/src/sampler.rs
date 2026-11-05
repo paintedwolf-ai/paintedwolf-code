@@ -2,6 +2,40 @@
 
 use crate::error::{Error, Result};
 
+pub struct Sampling {
+    pub temperature: f32,
+    pub top_p: f32,
+    pub top_k: usize,
+    pub rng: Rng,
+    pub constraint: Option<llguidance::Matcher>,
+    pub envelope: crate::output_contract::Envelope,
+}
+
+impl Sampling {
+    pub fn sample(&mut self, logits: &[f32]) -> Result<u32> {
+        let masked = self
+            .constraint
+            .as_mut()
+            .map(|grammar| crate::constraints::mask_logits(grammar, logits))
+            .transpose()?;
+        let candidates = self
+            .envelope
+            .candidates(masked.as_deref().unwrap_or(logits));
+        let token = sample(
+            candidates,
+            self.temperature,
+            self.top_p,
+            self.top_k,
+            &mut self.rng,
+        )?;
+        self.envelope.consume(token)?;
+        if let Some(grammar) = &mut self.constraint {
+            crate::constraints::consume(grammar, token)?;
+        }
+        Ok(token)
+    }
+}
+
 /// xoshiro256**; the seed lives in the request, not in process state.
 pub struct Rng {
     s: [u64; 4],
@@ -41,14 +75,14 @@ impl Rng {
 
 /// Sample one token from logits. `top_p == 1.0` means plain temperature sampling.
 pub fn sample(
-    logits: &[f32],
+    logits: impl Iterator<Item = (u32, f32)> + Clone,
     temperature: f32,
     top_p: f32,
     top_k: usize,
     rng: &mut Rng,
 ) -> Result<u32> {
-    if logits.is_empty() || logits.len() > 262144 || top_k > 262144 {
-        return Err(Error::Capacity("logit count exceeds its bounds".into()));
+    if top_k > 262144 {
+        return Err(Error::Capacity("sampling support exceeds its bound".into()));
     }
     if !temperature.is_finite()
         || temperature < 0.0
@@ -57,19 +91,31 @@ pub fn sample(
     {
         return Err(Error::Protocol("invalid sampling parameters".into()));
     }
-    if logits.iter().any(|l| l.is_nan() || *l == f32::INFINITY)
-        || !logits.iter().any(|l| l.is_finite())
-    {
-        return Err(Error::Device("invalid model logits".into()));
+    let mut count = 0usize;
+    let mut best = (u32::MAX, f32::NEG_INFINITY);
+    for (id, value) in logits.clone() {
+        count += 1;
+        if count > 262144 || id >= 262144 {
+            return Err(Error::Capacity("sampling support exceeds its bound".into()));
+        }
+        if value.is_nan() || value == f32::INFINITY {
+            return Err(Error::Device("invalid model logits".into()));
+        }
+        if value > best.1 || (value == best.1 && id < best.0) {
+            best = (id, value);
+        }
+    }
+    if !best.1.is_finite() {
+        return Err(Error::Protocol(
+            "output constraint has no finite supported token".into(),
+        ));
     }
     if temperature == 0.0 {
-        return Ok(argmax(logits));
+        return Ok(best.0);
     }
-    let max = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let max = best.1;
     let mut probs: Vec<(u32, f32)> = logits
-        .iter()
-        .enumerate()
-        .map(|(i, &l)| (i as u32, (l - max) / temperature))
+        .map(|(id, value)| (id, (value - max) / temperature))
         .collect();
     if top_k > 0 && top_k < probs.len() {
         probs.select_nth_unstable_by(top_k - 1, |a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
@@ -111,19 +157,44 @@ pub fn sample(
     Ok(last_supported)
 }
 
-fn argmax(logits: &[f32]) -> u32 {
-    let mut best = 0usize;
-    for (i, &l) in logits.iter().enumerate() {
-        if l > logits[best] {
-            best = i;
-        }
-    }
-    best as u32
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sample(
+        logits: &[f32],
+        temperature: f32,
+        top_p: f32,
+        top_k: usize,
+        rng: &mut Rng,
+    ) -> Result<u32> {
+        super::sample(
+            logits
+                .iter()
+                .enumerate()
+                .map(|(id, value)| (id as u32, *value)),
+            temperature,
+            top_p,
+            top_k,
+            rng,
+        )
+    }
+
+    #[test]
+    fn sparse_greedy_ties_use_lowest_token_id() {
+        let mut rng = Rng::new(1);
+        assert_eq!(
+            super::sample(
+                [(900, 3.0), (300, 3.0), (100, f32::NEG_INFINITY)].into_iter(),
+                0.0,
+                1.0,
+                0,
+                &mut rng
+            )
+            .unwrap(),
+            300
+        );
+    }
 
     #[test]
     fn xoshiro_reference_state_sequence() {

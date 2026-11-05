@@ -70,7 +70,7 @@ impl Settings {
             .map(|value| {
                 value
                     .as_u64()
-                    .filter(|n| *n < 262144)
+                    .filter(|n| crate::output_contract::terminal(*n as u32) && *n < 262144)
                     .map(|n| n as u32)
                     .ok_or_else(invalid)
             })
@@ -87,7 +87,8 @@ impl Settings {
             .get("top_k")
             .map_or(Some(50), Value::as_u64)
             .ok_or_else(invalid)?;
-        if !temperature.is_finite()
+        if !eos.iter().any(|id| matches!(id, 1 | 106))
+            || !temperature.is_finite()
             || temperature < 0.0
             || sample && temperature == 0.0
             || !top_p.is_finite()
@@ -126,6 +127,7 @@ mod tests {
         assert_eq!(settings.sampling.top_p, 0.95);
         for value in [
             json!({"eos_token_id":null}),
+            json!({"eos_token_id":[50]}),
             json!({"eos_token_id":1,"top_k":-1}),
             json!({"eos_token_id":1,"temperature":"1"}),
             json!({"eos_token_id":1,"top_p":0}),
