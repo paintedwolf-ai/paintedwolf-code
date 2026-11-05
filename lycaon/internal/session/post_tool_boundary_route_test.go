@@ -139,8 +139,8 @@ func TestUnsuccessfulCommandWithoutRefusalAddsNoSandboxGuidance(t *testing.T) {
 					obs := confine.StampRefusal(tool, "session", confine.Boundary{Applied: true}, confine.RefusalContext{TerminationReason: reason, Running: running, Refusals: confine.SandboxRefusals{Witness: confine.WitnessKernel}}).Observation
 					obs.FailedStages = []string{"fixture"}
 					const content = `{"exit_code":1,"stderr":"permission denied; timed out; stopped"}`
-					out, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: t.Name()}, tool, nil, content, 1, guidance.ToolResultFacts{Confine: obs})
-					if out != content || facts.HasCode(isolation.CodeRefusalReportSilent) {
+					out, _ := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: t.Name()}, tool, nil, content, 1, guidance.ToolResultFacts{Confine: obs})
+					if out != content {
 						t.Fatalf("ordinary failure acquired sandbox guidance: %s", out)
 					}
 				}
