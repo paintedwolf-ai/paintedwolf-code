@@ -48,7 +48,6 @@ describe("ProjectFilesView stage chrome", () => {
       await screen.findByTestId(
         "files-root-summary-working-tree",
         {},
-        { timeout: 5000 },
       ),
     );
 
