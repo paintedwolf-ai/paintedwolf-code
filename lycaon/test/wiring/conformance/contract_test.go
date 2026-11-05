@@ -111,9 +111,9 @@ var baseContractCases = []contractCase{
 				"edit:--path", "edit:--old-string", "edit:--new-string", "edit:--replace-all",
 				"replace-lines:--path", "replace-lines:--start", "replace-lines:--end", "replace-lines:--content",
 				"code-rewrite:--pattern", "code-rewrite:--rewrite", "code-rewrite:--path", "code-rewrite:--recursive", "code-rewrite:--dry-run",
-				"jq-edit:--path", "jq-edit:--query", "jq-edit:--format",
+				"jq-edit:--path", "jq-edit:--query", "jq-edit:--format", "jq-edit:--arg",
 			},
-			Program: `edit --path sub/a.txt --old-string first --new-string EDITED --replace-all && replace-lines --path sub/b.txt --start 1 --end 1 --content REPLACED && code-rewrite --pattern 'OldName' --rewrite 'NewName' --path sub/nested/deep.go --dry-run >/dev/null && jq-edit --path config.json --query '.enabled = true' --format json`,
+			Program: `edit --path sub/a.txt --old-string first --new-string EDITED --replace-all && replace-lines --path sub/b.txt --start 1 --end 1 --content REPLACED && code-rewrite --pattern 'OldName' --rewrite 'NewName' --path sub/nested/deep.go --dry-run >/dev/null && jq-edit --path config.json --query '.enabled = ($on == "yes")' --format json --arg on yes`,
 			Tracked: []string{"sub/a.txt", "sub/b.txt", "config.json"},
 		},
 		Files: map[string]string{
