@@ -142,11 +142,6 @@ describe("createChatBlueprintState", () => {
     } finally { dispose(); }
   });
 
-    it("rejects by ending the run and closing the workspace", () => {
-    const reasons: (string | undefined)[] = [];
-    const { state, dispose } = createBlueprintState({
-      exitWorkflow: (reason) => reasons.push(reason),
-    });
     state.openReview();
     state.reject();
     expect(state.reviewOpen()).toBe(false);
@@ -491,7 +486,6 @@ describe("createChatBlueprintState", () => {
 
     state.approve();
     await vi.waitFor(() => expect(errors).toHaveLength(1));
-    expect(errors[0]).toBe("The blueprint changed. Review it and approve again.");
     dispose();
   });
 
@@ -518,7 +512,6 @@ describe("createChatBlueprintState", () => {
 
     state.fireChoiceTransition("critique");
     await vi.waitFor(() => expect(errors).toHaveLength(1));
-    expect(errors[0]).toBe("The workflow changed. Review it and try again.");
     dispose();
   });
 

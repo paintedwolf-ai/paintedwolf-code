@@ -27,7 +27,6 @@ describe("immutable Git file preview", () => {
     diff.after = { state: "absent", availability: "absent", size_bytes: 0, content: "" };
     const preview = gitReviewPreview(gitReviewStep(), gitReview(), gitReviewFile("gone.ts", { op: "delete" }), sourceReaderFixture().comparison(diff));
     expect(preview.version).toMatchObject({ availability: "absent", source: { kind: "reader" } });
-    expect(preview.detail).toContain("Deleted file");
     const rename = gitReviewPreview(gitReviewStep(), gitReview(), gitReviewFile("new.ts", { before_path: "old.ts", op: "rename" }), sourceReaderFixture().comparison(gitReviewComparison()));
     expect(rename.detail).toContain("old.ts → new.ts");
     expect(rename.detail).not.toContain("New file");

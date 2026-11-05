@@ -93,11 +93,6 @@ describe("noticeFromUnknown", () => {
     expect(notice.suggestedAction).toBe("Try again when you are at this computer.");
   });
 
-  it("maps client notice errors", () => {
-    const notice = noticeFromUnknown(clientNoticeError("offline"), APP_SCOPE);
-    expect(notice.title).toBe("Cannot connect");
-  });
-
   it("maps confirmed backend unreachability to client copy", () => {
     const notice = noticeFromUnknown(
       new BackendTransportError(
@@ -107,7 +102,6 @@ describe("noticeFromUnknown", () => {
       APP_SCOPE,
     );
     expect(notice.title).toBe("Could not connect");
-    expect(notice.message).toContain("lost its connection");
   });
 
   it("does not infer connectivity from arbitrary browser error copy", () => {

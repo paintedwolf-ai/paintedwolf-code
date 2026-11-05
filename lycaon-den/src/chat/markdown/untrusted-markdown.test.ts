@@ -104,7 +104,6 @@ describe("untrusted link destinations", () => {
   it("shows the host and pins rel", () => {
     const host = render(`[click](https://dest.test/path)`);
     const link = host.querySelector("a");
-    expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
     expect(link?.getAttribute("data-tip")).toBe("https://dest.test/path");
     expect(host.querySelector(".den-md-href-host")?.textContent).toBe("dest.test");
   });

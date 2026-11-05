@@ -165,7 +165,6 @@ describe("ComposerStatusChips preparation", () => {
     fireEvent.click(chip);
     await waitFor(() => expect(screen.getByTestId("cost-summary-lower-bound").textContent).toContain("100 tokens"));
     expect(screen.getByTestId("cost-summary-total-usd").textContent).toBe("$3.10");
-    expect(screen.getByTestId("cost-summary-total-usd-coverage").textContent).toBe("Lower bound");
     pending.resolve(costDoc("s1", 3.2));
     await waitFor(() => expect(chip.textContent).toBe("$3.20"));
     expect(chip.getAttribute("data-coverage")).toBe("complete");

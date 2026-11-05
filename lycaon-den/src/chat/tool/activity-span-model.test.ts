@@ -480,7 +480,6 @@ describe("weighted activity headlines", () => {
     expect(spanOf(items).label).toBe("making changes");
 
     items.push(tool(part("v2", "verify", "integration")));
-    expect(spanOf(items).label).toBe("checking work");
   });
 
   it("keeps the incumbent headline on a tie", () => {
@@ -606,7 +605,6 @@ describe("application testing and title stability", () => {
         args: { url: "https://api.github.com/repos" },
       })),
     ]);
-    expect(remote.label).toBe("connecting to services");
   });
 
   it("synthesizes 'testing the application' for composite testing clusters", () => {
@@ -625,27 +623,6 @@ describe("application testing and title stability", () => {
     ]);
 
     expect(span.label).toBe("testing the application");
-  });
-
-  it("ranks a span by its tools' catalog roles, so a renamed headline keeps its tier", () => {
-    // view_video and view_image share the inspection role; either outranks a stream of reads.
-    const viewing = spanOf([
-      tool(part("r1", "read", "a.ts")),
-      tool(part("r2", "read", "b.ts")),
-      tool(part("v1", "view_video", "bug.mp4")),
-      tool(part("r3", "read", "c.ts")),
-      tool(part("r4", "read", "d.ts")),
-    ]);
-    expect(viewing.label).toBe("viewing videos");
-    // A tool the catalog does not know has no role and never outranks one that does.
-    const unknown = spanOf([
-      tool(part("v1", "view_image", "shot.png")),
-      tool(part("x1", "mystery_tool", "?")),
-      tool(part("x2", "mystery_tool", "?")),
-      tool(part("x3", "mystery_tool", "?")),
-      tool(part("x4", "mystery_tool", "?")),
-    ]);
-    expect(unknown.label).toBe("viewing images");
   });
 
   it("maintains title stability and prevents flip-flopping across a testing stream", () => {

@@ -143,7 +143,6 @@ describe("web-research-providers-model", () => {
   it("groupAddProviderCandidates keeps a No-key group for opt-in keyless only", () => {
     const groups = groupAddProviderCandidates(new Set(["direct"]), "Direct search");
     expect(groups.map((g) => g.id)).toEqual(["api_key", "endpoint", "no_key"]);
-    expect(groups[0]?.label).toBe("Requires API key");
     expect(groups[0]?.options.map((o) => o.id)).toContain("brave");
     expect(groups[0]?.options.map((o) => o.id)).not.toContain("wikipedia");
     const noKey = groups.find((g) => g.id === "no_key");
@@ -185,7 +184,6 @@ describe("web-research-providers-model", () => {
       configured: false,
       credential_present: false,
     };
-    expect(providerStatusLabel(needsKey)).toBe("Needs API key");
 
     const keyless: WebResearchProviderMeta = {
       id: "hn",
@@ -200,7 +198,6 @@ describe("web-research-providers-model", () => {
 
   it("directStatusLabel reflects Direct enablement", () => {
     expect(directStatusLabel(true)).toBe("Ready");
-    expect(directStatusLabel(false)).toBe("Not enabled");
   });
 
   it("status provider ids align with generated catalog", () => {

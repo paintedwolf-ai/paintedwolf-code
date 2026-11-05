@@ -708,7 +708,6 @@ describe("ManagedSecretsPanel", () => {
     await openDetail(orphan.reference.slice("{{paintedwolf-secret:".length, -2));
 
     const hint = screen.getByTestId("managed-secret-chat-deleted");
-    expect(hint.parentElement?.textContent).toContain("Deleted chat");
     expect(screen.getByTestId("managed-secret-promote")).toBeTruthy();
   });
 

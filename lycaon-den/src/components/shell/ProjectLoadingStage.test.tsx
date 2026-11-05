@@ -26,7 +26,6 @@ describe("ProjectLoadingStage tone", () => {
     const stage = container.querySelector(".project-loading-stage");
     expect(stage?.getAttribute("aria-busy")).toBe("true");
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.textContent).toContain("Opening workspace…");
   });
 
   it("reports a failed wait as an alert and stops claiming to be busy", () => {

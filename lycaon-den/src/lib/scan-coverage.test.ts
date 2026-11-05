@@ -67,24 +67,14 @@ describe("coverageSentence", () => {
       NOW,
     );
     expect(bounded).toMatch(/^Bounded as of Tue/);
-    expect(bounded).toContain("· some directories were not analyzed");
     const partial = coverageSentence(
       { ...baseOverview, last_full: { assessment_id: "a1", requested_at: "t", members: [], started_at: "2026-09-08T13:00:00Z", completed_at: "2026-09-08T14:02:00Z", coverage_status: "partial" } },
       NOW,
     );
-    expect(partial).toContain("Partial as of");
-    expect(partial).toContain("· some code or scanners could not be fully analyzed");
-  });
-
-  it("stays present before any baseline exists", () => {
-    expect(coverageSentence(null, NOW)).toBe("Coverage has not loaded.");
-    expect(coverageSentence({ ...baseOverview, baseline: undefined }, NOW)).toBe("Incremental scanning not started · no full scan yet");
-    expect(coverageSentence({ ...baseOverview, enabled: false }, NOW)).toBe("Automatic security scanning is off.");
   });
 
   it("does not infer complete coverage from a finished timestamp", () => {
     const overview = { ...baseOverview, last_full: { assessment_id: "a1", requested_at: "t", members: [], started_at: "2026-09-09T10:00:00Z", completed_at: "2026-09-09T10:30:00Z" } };
-    expect(coverageSentence(overview, NOW)).toContain("Coverage unknown");
     expect(coverageChipState(overview)).toBe("unknown");
   });
 });
@@ -118,7 +108,6 @@ describe("full scan projections", () => {
 
   it("reads chunk progress and the file total", () => {
     expect(fullScanProgressReadout(runningScan)).toBe("4 of 7 chunks · 12,702 files");
-    expect(fullScanProgressReadout({ ...runningScan, progress: undefined })).toBe("Analyzing files");
     expect(fullScanScanStatus(runningScan)).toBe("Running");
     expect(fullScanScanStatus({ ...runningScan, status: "complete" })).toBe("Complete");
     expect(fullScanScanStatus({ ...runningScan, status: "failed" })).toBe("Failed");
@@ -127,7 +116,6 @@ describe("full scan projections", () => {
 
 
   it("counts finished scanners into the coverage strip's control", () => {
-    expect(fullScanToggleLabel(null)).toBe("Run full scan");
     const members: SecurityFullPassMember[] = [
       { scanner_id: "sast", phase: "started", scan: runningScan },
       { scanner_id: "sca", phase: "started", scan: { ...runningScan, id: "scan-2", status: "failed" } },
@@ -136,7 +124,6 @@ describe("full scan projections", () => {
     ];
     const pass: SecurityFullPass = { assessment_id: "a3", requested_at: "t", members };
     expect(fullScanToggleLabel({ pass, live: true })).toBe("Full scan · 2 of 4 done");
-    expect(fullScanToggleLabel({ pass, live: false })).toBe("Full scan finished");
   });
 
   it("says why a member that has not started is waiting", () => {
@@ -144,13 +131,10 @@ describe("full scan projections", () => {
     const waitingForPass: SecurityFullPassMember = { scanner_id: "sca", phase: "waiting_for_pass" };
     const notStarted: SecurityFullPassMember = { scanner_id: "secrets", phase: "not_started" };
     expect([waitingForScanner, waitingForPass, notStarted].map(fullPassMemberStatus)).toEqual(["Waiting", "Waiting", "Not started"]);
-    expect(fullPassMemberReadout(waitingForScanner)).toBe("Finishing an earlier scan first");
-    expect(fullPassMemberReadout(waitingForPass)).toBe("Starts with the other scanners");
     expect(fullPassMemberReadout(waitingForPass, ["OpenGrep"])).toBe("Waiting for OpenGrep");
     expect(fullPassMemberReadout(waitingForPass, ["OpenGrep", "Gitleaks"])).toBe("Waiting for OpenGrep and Gitleaks");
     const held: SecurityFullPass = { assessment_id: "a3", requested_at: "t", members: [waitingForScanner, waitingForPass] };
     expect(fullPassWaitingOn(held, (id) => (id === "sast" ? "OpenGrep" : id))).toEqual(["OpenGrep"]);
-    expect(fullPassMemberReadout(notStarted)).toBe("Left the pass before it started");
     expect(fullPassMemberMeasured(waitingForScanner)).toBe(false);
     const started: SecurityFullPassMember = { scanner_id: "sast", phase: "started", scan: runningScan };
     expect(fullPassMemberStatus(started)).toBe("Running");

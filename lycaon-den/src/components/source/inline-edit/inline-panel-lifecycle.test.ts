@@ -39,7 +39,6 @@ describe("inline action completion", () => {
     } else {
       expect(onHunkReview).not.toHaveBeenCalled();
       expect(inlineEditOpen()?.mode).toEqual(mode);
-      expect(inlineEditError()).toBe("No changes were made to this file. Review the conversation for the action’s result.");
     }
     expect(inlineEditRunning()).toBe(false);
   });

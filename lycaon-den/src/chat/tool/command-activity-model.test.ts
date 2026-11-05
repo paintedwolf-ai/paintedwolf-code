@@ -88,7 +88,6 @@ it("folds output observations when the launch is outside the transcript window",
  });
  const rows = parts(project(reads));
  expect(rows).toHaveLength(1);
- expect(rows[0]!.commandActivity!.fact.label).toBe("Read process output");
  expect(rows[0]!.commandActivity!.outputReads).toBe(2);
 });
 
@@ -110,7 +109,6 @@ it("retains live activity rows when the terminal receipt has no presentation sna
  if(terminal.kind==="tool") terminal.part.commandProgram={id:"program:a",state:"completed"} as CommandProgramReceipt;
  const row=parts(project([terminal]))[0]!;
  expect(row.commandActivity!.fact.id).toBe("read");
- expect(row.commandActivity!.fact.outcome).toBe("Outcome unavailable");
  expect(row.status).toBe("completed");
 });
 

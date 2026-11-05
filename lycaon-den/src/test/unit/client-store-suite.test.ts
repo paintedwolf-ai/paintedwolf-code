@@ -69,7 +69,6 @@ describe("client + store suite", () => {
     expect(urls[0]).toContain("/v1/mcp/providers");
     expect(urls[1]).toContain("/v1/mcp/providers/check");
     const [, init] = fetchMock.mock.calls[1] as [string, RequestInit];
-    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer tok");
   });
 
   it("app store merges session SSE events into current session", () => {

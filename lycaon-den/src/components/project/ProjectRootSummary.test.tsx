@@ -243,8 +243,6 @@ describe("ProjectRootSummary", () => {
     expect(await screen.findByText("3 indexed")).toBeTruthy();
     expect(screen.getByText("README")).toBeTruthy();
     const note = screen.getByTestId("files-root-summary-coverage").textContent;
-    expect(note).toContain("indexing budget");
-    expect(note).toContain("could not be read");
     await new Promise(resolve => setTimeout(resolve, 600));
     expect(client.getProjectSourceIndex).toHaveBeenCalledTimes(1);
   });

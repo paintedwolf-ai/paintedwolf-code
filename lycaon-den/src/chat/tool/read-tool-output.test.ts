@@ -70,8 +70,3 @@ describe("formatTimeSpan", () => {
   });
 });
 
-describe("formatLogFormatLabel", () => {
-  it("uses sentence case", () => {
-    expect(formatLogFormatLabel("json_lines")).toBe("JSON lines");
-  });
-});

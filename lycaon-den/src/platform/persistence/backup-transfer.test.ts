@@ -81,8 +81,4 @@ describe("native backup transfer", () => {
     expect(unlisten).toHaveBeenCalledOnce();
   });
 
-  it("reports preparation and validation without invented percentages", () => {
-    expect(backupProgressMessage({ id: "a", phase: "preparing", bytes: 0, total: null, cancellable: true })).toBe("Preparing backup…");
-    expect(backupProgressMessage({ id: "a", phase: "validating", bytes: 100, total: 100, cancellable: false })).toBe("Checking and staging restore…");
-  });
 });

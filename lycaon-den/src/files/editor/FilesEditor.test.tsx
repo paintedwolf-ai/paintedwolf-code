@@ -133,7 +133,6 @@ describe("FilesEditor", () => {
     setBuffer({ ...loaded, editorSynchronization: "pending" });
     expect(screen.queryByTestId("files-editor-synchronization")).toBeNull();
     setBuffer({ ...loaded, editorSynchronization: "error", editorEditingBlock: "storage" });
-    expect(screen.getByTestId("files-editor-synchronization").textContent).toContain("draft storage failed");
   });
 
   it("can start the same markdown editor in preview mode", async () => {

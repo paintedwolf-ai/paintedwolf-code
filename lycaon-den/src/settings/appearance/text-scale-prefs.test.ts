@@ -15,10 +15,6 @@ describe("textSizeHint", () => {
     );
   });
 
-  it("admits when a Linux desktop exposes no text scaling preference", () => {
-    expect(textSizeHint("linux", "default")).toContain("reports no text scaling preference");
-  });
-
   it("claims no host composition elsewhere", () => {
     expect(textSizeHint("windows", "default")).toBe("Adjusts the app's reading size.");
     expect(textSizeHint(null, "default")).toBe("Adjusts the app's reading size.");

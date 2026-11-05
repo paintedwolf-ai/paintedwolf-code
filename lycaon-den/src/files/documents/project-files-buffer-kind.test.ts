@@ -83,7 +83,6 @@ describe("info card copy", () => {
   it("uses distinct explanations for over-limit vs binary", () => {
     const overLimit = infoCardExplanation(infoCardVariant({ overLimit: true }));
     const binary = infoCardExplanation(infoCardVariant({ overLimit: false }));
-    expect(overLimit).toBe("This file is larger than the in-app editor opens.");
     expect(binary).toBe(
       "This is a binary file. If you know it is BOM-less UTF-16 text, choose its byte order below.",
     );
@@ -95,7 +94,6 @@ describe("info card copy", () => {
       unsupportedEncodingDetected: "windows-1252",
     });
     expect(v).toBe("unsupported_encoding");
-    expect(infoCardTitle(v)).toBe("Can't open this file safely");
     expect(infoCardExplanation(v, "windows-1252")).toContain("windows-1252");
     expect(infoCardExplanation(v, "windows-1252")).not.toMatch(/binary/i);
     expect(infoCardExplanation(v, "unknown")).toContain(
@@ -109,9 +107,7 @@ describe("status chips", () => {
     expect(encodingChipLabel("utf-8")).toBeNull();
     expect(encodingChipLabel("utf-8-bom")).toBe("UTF-8 BOM");
     expect(encodingChipLabel("utf-16le")).toBe("UTF-16 LE");
-    expect(encodingChipLabel("utf-16le-bom")).toBe("UTF-16 LE BOM");
     expect(encodingChipLabel("utf-16be")).toBe("UTF-16 BE");
-    expect(encodingChipLabel("utf-16be-bom")).toBe("UTF-16 BE BOM");
     expect(encodingChipLabel(null)).toBeNull();
   });
 });

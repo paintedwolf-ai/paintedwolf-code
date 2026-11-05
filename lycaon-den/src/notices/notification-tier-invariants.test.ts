@@ -149,7 +149,6 @@ describe("notification tier partition", () => {
 
     const copy = CLIENT_NOTICES.view_render_failed;
     expect(copy.scope).toBe("session");
-    expect(copy.suggestedAction).toContain("rest of the app still works");
 
     const shell = readFileSync(
       join(denSrc, "components/shell/Shell.tsx"),

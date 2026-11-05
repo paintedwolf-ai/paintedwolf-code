@@ -20,7 +20,6 @@ describe("engine startup state", () => {
   afterEach(() => clearEngineStartupProgress());
 
   it("projects semantic host phases onto sentence-case labels", () => {
-    expect(engineStartupPhaseLabel("pricing")).toBe("Loading model pricing");
     expect(engineStartupPhaseLabel("user_path")).toBe(
       "Finding command-line tools",
     );

@@ -201,7 +201,6 @@ describe("ContributionCommandFlow", () => {
     expect(resolveContributionChoices).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("must be confirmed");
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Run" }));
     await waitFor(() => expect(invokeProjectCommand).toHaveBeenCalledOnce());

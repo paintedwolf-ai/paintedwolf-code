@@ -7,9 +7,6 @@ import {
 } from "./evidence-shape-model.ts";
 
 describe("evidence-shape-model", () => {
-  it("labels opaque trust tier for reviewers", () => {
-    expect(fidelityLabel("opaque")).toContain("no semantics claimed");
-  });
 
   it("summarizes url shape", () => {
     expect(

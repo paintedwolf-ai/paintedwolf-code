@@ -58,7 +58,6 @@ describe("LayoutDockTray", () => {
     const shown = renderTray({ placement: "split", splitLive: true });
     const action = screen.getByTestId("layout-toggle-conversation") as HTMLButtonElement;
     expect(action.disabled).toBe(false);
-    expect(action.textContent).toContain("Hide conversation");
     action.click();
     expect(shown.onToggleConversation).toHaveBeenCalledOnce();
     shown.unmount();

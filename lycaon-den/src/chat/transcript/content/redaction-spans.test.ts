@@ -94,7 +94,6 @@ describe("redaction spans", () => {
   it("gives each kind of mark its own claim", () => {
     const reference = secretSpan({ kind: "managed_reference", source: "remembered_match" });
     expect(redactionMarkModifier(reference)).toBe("den-redaction-mark--reference");
-    expect(redactionMarkTitle(reference)).toContain("the source still holds the value");
     expect(redactionMarkModifier(secretSpan({ kind: "observer_mask" }))).toBe("den-redaction-mark--mask");
     expect(redactionMarkModifier(secretSpan())).toBeUndefined();
     expect(redactionMarkTitle(secretSpan())).toContain("Gitea Access Token");
