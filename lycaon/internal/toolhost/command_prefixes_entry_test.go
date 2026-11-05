@@ -316,15 +316,15 @@ func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	if got.Status != 0 || len(lines) != 2 || lines[0] != lines[1] {
 		t.Fatalf("ulimit -n differs from the child's own: %+v", got)
 	}
-	raw, err = f.Call(t, t.Context(), "ulimit -n 256; "+probe)
+	raw, err = f.Call(t, t.Context(), "ulimit -n 32; "+probe)
 	testutil.FailErr(t, "lower the child limit", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout != "256\n" {
+	if got := decodeProgramOutcome(t, raw); got.Stdout != "32\n" {
 		t.Fatalf("lowered limit outcome: %+v", got)
 	}
 	raw, err = f.Call(t, t.Context(), probe)
 	testutil.FailErr(t, "next call", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout == "256\n" {
-		t.Fatalf("the limit persisted into the next call: %+v", got)
+	if got := decodeProgramOutcome(t, raw); got.Stdout != lines[0]+"\n" {
+		t.Fatalf("the limit persisted into the next call: %+v, want %s", got, lines[0])
 	}
 }
 

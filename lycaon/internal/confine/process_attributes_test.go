@@ -15,7 +15,7 @@ import (
 // The helper sets the requested limits and an ignored SIGHUP in itself just
 // before it becomes the target, so the target starts with them.
 func TestHelperAppliesProcessAttributesToTheTarget(t *testing.T) {
-	nofile, err := confine.ReadResourceLimit("nofile")
+	nofile, err := confine.ChildResourceLimit(t.Context(), "nofile")
 	testutil.FailErr(t, "read descriptor limit", err)
 	if nofile.Soft > nofile.Hard || nofile.Soft < 64 {
 		t.Fatalf("descriptor limit %+v", nofile)
@@ -52,13 +52,13 @@ func TestHelperAppliesProcessAttributesToTheTarget(t *testing.T) {
 	}
 }
 
-func TestReadResourceLimitRefusesUnknownResources(t *testing.T) {
+func TestChildResourceLimitRefusesUnknownResources(t *testing.T) {
 	for resource := range map[string]bool{"core": true, "fsize": true, "stack": true, "cpu": true, "nproc": true, "as": true} {
-		if limit, err := confine.ReadResourceLimit(resource); err != nil || limit.Soft > limit.Hard {
+		if limit, err := confine.ChildResourceLimit(t.Context(), resource); err != nil || limit.Soft > limit.Hard {
 			t.Errorf("%s: %+v, %v", resource, limit, err)
 		}
 	}
-	if _, err := confine.ReadResourceLimit("rss"); err == nil {
+	if _, err := confine.ChildResourceLimit(t.Context(), "rss"); err == nil {
 		t.Fatal("read an unsupported resource")
 	}
 }
