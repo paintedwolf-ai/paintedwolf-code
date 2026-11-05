@@ -97,6 +97,7 @@ func (f *waitStateFixture) start(t *testing.T, source string) <-chan string {
 	}()
 	return done
 }
+
 // waitYields bounds a wait in scheduler yields, so a lost wake fails the test that
 // lost it instead of the package timeout. Nothing here reads a wall clock.
 const waitYields = 1 << 28
