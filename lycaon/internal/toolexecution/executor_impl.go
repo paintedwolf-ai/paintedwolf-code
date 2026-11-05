@@ -11,8 +11,10 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -243,10 +245,47 @@ func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID strin
 			tc.Invocation.Contract = def.Contract
 		}
 	}
+	if err := e.admitProgramEntryProfile(ctx, tool, profileID, args, tc); err != nil {
+		return "", err
+	}
+	var err error
+	tc, err = e.prepareWorkerBranch(ctx, tool, profileID, args, tc)
+	if err != nil {
+		return "", err
+	}
 	tc.Files.FileChangeReview = e.Boundary.fileChangeReviewer(tool, args, tc)
 	out, err := e.Metadata.registry.Run(ctx, tool, args, tc)
 	if tr := toolrejection.AsToolReject(err); tr != nil {
 		return out, e.Rejections.settleReject(ctx, tool, profileID, args, toolrejection.CompleteFailureMetadata(tr, tool, tc.Invocation.Contract.Owner))
 	}
 	return out, err
+}
+
+func (e *Executor) admitProgramEntryProfile(ctx context.Context, tool, profileID string, args map[string]any, tc tools.ToolContext) error {
+	if e == nil || e.Metadata == nil || e.Metadata.policy == nil {
+		return nil
+	}
+	policyEval := platform.PolicyContext{
+		ProfileID:  profileID,
+		ToolAccess: tc.Turn.ToolAccess,
+		ToolName:   tool,
+		ToolArgs:   args,
+	}
+	var (
+		decision *platform.PolicyDecision
+		err      error
+	)
+	if approvalPolicy, ok := e.Metadata.policy.(*ApprovalPolicyEngine); ok {
+		decision, err = approvalPolicy.EvaluateForList(ctx, policyEval)
+	} else {
+		decision, err = e.Metadata.policy.Evaluate(ctx, policyEval)
+	}
+	if err != nil {
+		return err
+	}
+	if decision != nil && decision.Blocked {
+		e.Approvals.recordToolDenied(ctx, policyEval, decision, decision.Approval)
+		return e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, toolprofiles.PolicyBlockReject(decision, tool, profileID))
+	}
+	return nil
 }

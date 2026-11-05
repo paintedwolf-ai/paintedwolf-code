@@ -53,8 +53,16 @@ func TestProgramReachMatchesTheExecutor(t *testing.T) {
 	probes := map[string]string{
 		"ls": "ls .", "cat": "cat notes.txt", "grep": "grep note notes.txt", "stat": "stat notes.txt",
 		"mkdir": "mkdir made", "rm": "rm notes.txt", "tee": "printf 'x' | tee made.txt", "edit": "edit --path notes.txt --old-string first --new-string changed",
+		"code-rewrite": "code-rewrite --path notes.txt --pattern '$A' --rewrite '$A' --dry-run",
+		"repo-map":     "repo-map",
+		"summarize":    "summarize --path notes.txt",
 	}
-	for _, agent := range []struct{ id, profile string }{{"implementer", "implement"}, {"path-explorer", "explore_readonly"}} {
+	for _, agent := range []struct{ id, profile string }{
+		{"implementer", "implement"},
+		{"path-explorer", "explore_readonly"},
+		{"plan-writer", "plan_write_only"},
+		{"plan-reviewer", "plan_review_readonly"},
+	} {
 		t.Run(agent.id, func(t *testing.T) {
 			for program, source := range probes {
 				t.Run(program, func(t *testing.T) {
