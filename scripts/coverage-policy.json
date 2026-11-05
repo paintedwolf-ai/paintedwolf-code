@@ -30,6 +30,10 @@
         "pattern": "test_*execution.py",
         "requirements": "scripts/workflow_lint/requirements.txt"
       },
+      "harness": {
+        "start": "scripts/harness",
+        "pattern": "test_*.py"
+      },
       "coordinator benchmark": {
         "start": "scripts/coordinator-benchmark",
         "pattern": "test_*.py",

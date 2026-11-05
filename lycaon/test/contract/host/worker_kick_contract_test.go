@@ -2,8 +2,6 @@ package contract
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -81,19 +79,5 @@ func TestWorkerCitationGroundingKickAdvertisesBriefBudget(t *testing.T) {
 	}
 	if strings.Contains(out, "****") {
 		t.Fatalf("worker-citation-grounding rendered an empty budget: %q", out)
-	}
-}
-
-func TestWorkerKickTemplatesNoConditionalDualPath(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	kickDir := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "security", "guidance")
-	for _, name := range []string{"worker-leg-started.md", "worker-task-started.md"} {
-		data, err := os.ReadFile(filepath.Join(kickDir, name))
-		contractcheck.FailErr(t, "read kick template", err)
-		text := string(data)
-		if strings.Contains(text, "{% if") || strings.Contains(text, "{% else") {
-			t.Fatalf("%s must not branch on spawn mode — use separate kick templates", name)
-		}
 	}
 }

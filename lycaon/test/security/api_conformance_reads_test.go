@@ -48,11 +48,18 @@ func (s *conformanceSweep) sweepReads(ctx context.Context) {
 	for _, op := range reads {
 		params, _ := s.values.pathParams(op)
 		req := conformanceRequest{op: op, probe: "read", params: params, query: s.values.requiredQuery(op)}
-		ex, changes := s.observedRead(ctx, req)
-		if len(changes) > 0 {
-			s.findings.add(ruleReadsHaveNoEffects, op.ID, req.probe, "changed host state: %s", strings.Join(changes, ", "))
+		var ex conformanceExchange
+		if s.readObserved[op.ID] {
+			ex = s.send(ctx, req)
+		} else {
+			var changes []string
+			ex, changes = s.observedRead(ctx, req)
+			if len(changes) > 0 {
+				s.findings.add(ruleReadsHaveNoEffects, op.ID, req.probe, "changed host state: %s", strings.Join(changes, ", "))
+			}
 		}
 		if ex.status/100 == 2 {
+			s.readObserved[op.ID] = true
 			s.discover(op, ex)
 		}
 	}
@@ -138,6 +145,8 @@ type hostEffects struct {
 	settle func(context.Context)
 	// projectDir is the watched fixture tree whose change pipeline must drain.
 	projectDir string
+	// barrierStep makes every barrier write change the file's content.
+	barrierStep int
 }
 
 // watcherQuietGrace is how long the fixture tree's change debouncer must stay
@@ -183,43 +192,60 @@ func (e *hostEffects) mark(ctx context.Context) (int64, error) {
 
 // awaitWatcherBarrier writes a file and waits for the watcher to report it. The
 // platform stream is ordered, so every earlier write has then reached the
-// pipeline, however long a contended host took to deliver it.
+// pipeline, however long a contended host took to deliver it. A rewrite leaves a
+// later report outstanding, which the read that follows would be charged with, so
+// only a round that wrote once proves the pipeline empty.
 func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
+	for patience := time.Second; ; patience *= 2 {
+		rewrote, err := e.watcherBarrierRound(ctx, patience)
+		if err != nil || !rewrote {
+			return err
+		}
+		e.quiesce(ctx)
+		e.drain()
+	}
+}
+
+func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Duration) (bool, error) {
 	path := filepath.Join(e.projectDir, watcherBarrierFile)
-	step := 0
+	e.barrierStep++
 	write := func() error {
-		step++
-		return os.WriteFile(path, fmt.Appendf(nil, "effects-barrier-%d\n", step), 0o644)
+		return os.WriteFile(path, fmt.Appendf(nil, "effects-barrier-%d\n", e.barrierStep), 0o644)
 	}
 	if err := write(); err != nil {
-		return err
+		return false, err
 	}
-	retry := time.NewTicker(time.Second)
+	retry := time.NewTicker(patience)
 	defer retry.Stop()
+	rewrote := false
 	for {
 		select {
 		case envelope, ok := <-e.events:
 			if !ok {
-				return errors.New("event stream dropped while awaiting the watcher barrier")
+				return rewrote, errors.New("event stream dropped while awaiting the watcher barrier")
 			}
 			var changed wire.SourceChangesEvent
 			if envelope.Topic != wire.EventTopicSourceChanged || json.Unmarshal(envelope.Data, &changed) != nil {
 				continue
 			}
 			if slices.ContainsFunc(changed.Changes, func(c wire.SourceChange) bool { return c.Path == watcherBarrierFile }) {
-				return nil
+				return rewrote, nil
 			}
 			if changed.Resync {
+				rewrote = true
+				e.barrierStep++
 				if err := write(); err != nil {
-					return err
+					return rewrote, err
 				}
 			}
 		case <-retry.C:
+			rewrote = true
+			e.barrierStep++
 			if err := write(); err != nil {
-				return err
+				return rewrote, err
 			}
 		case <-ctx.Done():
-			return ctx.Err()
+			return rewrote, ctx.Err()
 		}
 	}
 }

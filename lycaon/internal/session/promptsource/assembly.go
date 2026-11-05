@@ -139,11 +139,7 @@ func (m *Assembly) PromptTools(ctx context.Context, sess *api.Session, profileID
 	if m == nil || sess == nil {
 		return nil, nil
 	}
-	policy := m.Guards.Policy()
-	if policy == nil {
-		return nil, nil
-	}
-	metas := policy.ListForPrompt(ctx, sess, profileID)
+	metas := m.Guards.Policy().ListForPrompt(ctx, sess, profileID)
 	machine := m.Profiles.CompileMachine(ctx, sess, profileID)
 	return tools.HideSkillsReadWhenEmpty(metas, machine.SkillCount), nil
 }
