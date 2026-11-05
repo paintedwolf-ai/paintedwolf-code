@@ -9,9 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
+	setupanchor "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	setupanchor "github.com/lycaon/lycaon/internal/testsetup/anchor"
 )
 
 type recordedKick struct {
