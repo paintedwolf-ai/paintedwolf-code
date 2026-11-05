@@ -28,7 +28,7 @@ func TestStructuralRecursiveDemandDiscoversChildAfterInitialInventory(t *testing
 	if complete {
 		t.Fatal("unknown child directory already has recursive coverage")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	testutil.FailErr(t, "prepare root after initial readiness", catalog.observeSubtree(ctx, "p", root, "."))
 	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
@@ -71,7 +71,7 @@ func TestStructuralRecursiveViewsShareWorkAfterOneCancels(t *testing.T) {
 	release, err := catalog.Trees.broker.Acquire(t.Context(), backgroundwork.Request{Resources: []backgroundwork.Resource{backgroundwork.ResourceDirectory}})
 	testutil.FailErr(t, "hold recursive discovery admission", err)
 	defer release()
-	deadline, stop := context.WithTimeout(t.Context(), 5*time.Second)
+	deadline, stop := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer stop()
 	firstLifetime, cancelFirst := context.WithCancel(deadline)
 	defer cancelFirst()

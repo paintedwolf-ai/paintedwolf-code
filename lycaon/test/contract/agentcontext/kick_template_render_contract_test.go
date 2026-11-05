@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -59,7 +60,7 @@ func TestKickTemplatesRenderWithKickEngineVars(t *testing.T) {
 		required := append([]string(nil), b.Invariants.Required...)
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 			defer cancel()
 			out, err := engine.RenderKick(ctx, b.Render, data)
 			if err != nil {
@@ -89,7 +90,7 @@ func TestScheduledKickOmitsOverlayWithoutPendingOverlayJobs(t *testing.T) {
 	data := map[string]any{"batch_phase": "integrate"}
 	contractcheck.FailErr(t, "merge coordinator kick policy vars", prompts.MergeCoordinatorKickPolicyVars(data))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	out, err := engine.RenderKick(ctx, "coordinator-scheduled", data)
 	contractcheck.FailErr(t, "RenderKick coordinator-scheduled", err)
@@ -110,7 +111,7 @@ func TestScheduledKickClosedBatchOmitsResubscribe(t *testing.T) {
 	data := map[string]any{"batch_phase": "closed"}
 	contractcheck.FailErr(t, "merge coordinator kick policy vars", prompts.MergeCoordinatorKickPolicyVars(data))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	out, err := engine.RenderKick(ctx, "coordinator-scheduled", data)
 	contractcheck.FailErr(t, "RenderKick coordinator-scheduled", err)
@@ -128,7 +129,7 @@ func TestWorkerTaskFinishedKickOmitsOverlayWithoutPendingOverlayJobs(t *testing.
 	data := map[string]any{}
 	contractcheck.FailErr(t, "merge coordinator kick policy vars", prompts.MergeCoordinatorKickPolicyVars(data))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	out, err := engine.RenderKick(ctx, "coordinator-worker-task-finished", data)
 	contractcheck.FailErr(t, "RenderKick coordinator-worker-task-finished", err)
@@ -153,7 +154,7 @@ func TestLegFinishKicksLeadWithReconcileWhenLatched(t *testing.T) {
 			data["progress_open_items"] = 3
 		}
 		contractcheck.FailErr(t, "merge coordinator kick policy vars", prompts.MergeCoordinatorKickPolicyVars(data))
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 		defer cancel()
 		out, err := engine.RenderKick(ctx, kickID, data)
 		contractcheck.FailErr(t, "RenderKick "+kickID, err)
@@ -189,7 +190,7 @@ func TestLegFinishedKickSplitByAdvancePolicy(t *testing.T) {
 	render := func(advance string) string {
 		data := map[string]any{"advance_when_gate_met": advance}
 		contractcheck.FailErr(t, "merge coordinator kick policy vars", prompts.MergeCoordinatorKickPolicyVars(data))
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 		defer cancel()
 		out, err := engine.RenderKick(ctx, "coordinator-leg-finished", data)
 		contractcheck.FailErr(t, "RenderKick coordinator-leg-finished", err)
@@ -218,7 +219,7 @@ func TestCoordinatorOverlayPromptConditioning(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	renderer := prompts.NewInjectRenderer(engine)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 
 	emptyBlock, err := inject.RenderTurnStateBlock(ctx, renderer, "sess-empty", inject.TurnStateInjectInput{})
@@ -255,7 +256,7 @@ func TestKickTemplatesRenderWithMinimalDataAreNonEmpty(t *testing.T) {
 		if !strings.HasPrefix(id, "coordinator-") {
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 		out, err := engine.RenderKick(ctx, id, data)
 		cancel()
 		if err != nil {

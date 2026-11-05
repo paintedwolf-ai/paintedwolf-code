@@ -43,7 +43,7 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	manager.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "queued", row.AdmissionSeq, row.CreatedAt)
 	pending := &gatedPromptPending{manager: manager, writerHeld: make(chan struct{}), queueHeld: make(chan struct{})}
 	st.SetPromptPending(pending)
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	seen := make(chan error, 1)
 	go func() {

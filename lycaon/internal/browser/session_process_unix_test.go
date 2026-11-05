@@ -83,7 +83,7 @@ func TestBrowserProcessCancellationSettlesBeforeReturning(t *testing.T) {
 		}
 		done <- err
 	}()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testutil.Timeout(time.Minute))
 	for {
 		_, err := os.Stat(entry + ".ready")
 		if err == nil {

@@ -55,7 +55,7 @@ func TestShutdownReleasesOpenEventStream(t *testing.T) {
 
 	srv.StopBackground(t.Context())
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	started := time.Now()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {

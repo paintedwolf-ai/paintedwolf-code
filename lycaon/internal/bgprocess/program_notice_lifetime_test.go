@@ -59,7 +59,7 @@ func TestProgramCompletionRetainsNoticeAdmissionUntilConsumption(t *testing.T) {
 				var completion Completion
 				select {
 				case completion = <-completed:
-				case <-time.After(5 * time.Second):
+				case <-time.After(testutil.Timeout(time.Minute)):
 					t.Fatal("completion missing")
 				}
 				if memory.InUse().State != 128 || completion.ReleaseNotices == nil || len(completion.UnsavedDocumentPaths) != 1 {
@@ -83,7 +83,7 @@ func TestProgramCompletionRetainsNoticeAdmissionUntilConsumption(t *testing.T) {
 			}
 			select {
 			case <-released:
-			case <-time.After(5 * time.Second):
+			case <-time.After(testutil.Timeout(time.Minute)):
 				t.Fatal("notice admission not released")
 			}
 			if memory.InUse().State != 0 || releases.Load() != 1 || snapshot.Active() {

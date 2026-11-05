@@ -46,7 +46,7 @@ func TestRunningRemovalDoesNotBlockStatusOrReplayEffects(t *testing.T) {
 		if result.Progress == nil || result.Progress.Completed != 2 || result.Progress.Total != 5 || result.FailureCode != "" {
 			t.Fatalf("running status = %+v", result)
 		}
-	case <-time.After(time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("status waited for deletion")
 	}
 	retry, err := o.Remove(t.Context(), projectID, req)

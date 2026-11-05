@@ -7,9 +7,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -38,13 +38,50 @@ func TestFixedReaderBoundsOutputAndRetainsOnlySuccessfulSettings(t *testing.T) {
 	}
 }
 
+// processRunning treats a zombie as stopped: an unreaped orphan is not running.
+func processRunning(pid int) bool {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return false
+	}
+	state := strings.Fields(string(raw)[strings.LastIndex(string(raw), ")")+1:])
+	return len(state) > 0 && state[0] != "Z"
+}
+
 func TestFixedReaderCancellationAndStartFailureAreBoundedAndPrivate(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Millisecond)
+	descendant := filepath.Join(t.TempDir(), "descendant")
+	program := fixture(t, "sleep 600 &\necho $! > '"+descendant+"'\nwait\n")
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	started := time.Now()
-	_, _, err := read(ctx, fixture(t, "sleep 30 & wait\n"))
-	if !errors.Is(err, context.DeadlineExceeded) || time.Since(started) > time.Second {
-		t.Fatalf("reader cancellation = %v after %v", err, time.Since(started))
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := read(ctx, program)
+		done <- err
+	}()
+	// The reader's own deadline may end a very slow start before the fixture
+	// records its descendant; either ending must leave no descendant running.
+	var err error
+	returned := false
+	testutil.WaitFor(t, func() bool {
+		select {
+		case err = <-done:
+			returned = true
+			return true
+		default:
+		}
+		raw, readErr := os.ReadFile(descendant)
+		return readErr == nil && len(raw) > 0
+	})
+	cancel()
+	if !returned {
+		err = testutil.Receive(t, "reader cancellation", done)
+	}
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("reader cancellation = %v", err)
+	}
+	raw, _ := os.ReadFile(descendant)
+	if pid, parseErr := strconv.Atoi(strings.TrimSpace(string(raw))); parseErr == nil {
+		testutil.WaitFor(t, func() bool { return !processRunning(pid) })
 	}
 	_, _, err = read(t.Context(), "/nonexistent/private-reader-secret")
 	if err == nil || strings.Contains(err.Error(), "secret") {

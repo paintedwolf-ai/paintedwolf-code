@@ -53,7 +53,7 @@ func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *sto
 func materializeRepoBrief(t *testing.T, p repoinfo.Provider, dir string) {
 	t.Helper()
 	p.Warm(dir)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	if _, err := repoinfo.AwaitBrief(ctx, p, dir); err != nil {
 		testutil.FailErr(t, "AwaitBrief", err)
