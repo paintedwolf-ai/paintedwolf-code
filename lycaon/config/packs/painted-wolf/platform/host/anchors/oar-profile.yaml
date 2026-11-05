@@ -934,6 +934,10 @@ host_facts:
    type: bool
  - name: paintedwolf.tool_retired_to_content
    type: bool
+ - name: paintedwolf.tool_retired_to_command
+   type: bool
+ - name: paintedwolf.tool_command_forms
+   type: list<string>
  - name: paintedwolf.native_replacement_tools
    type: list<string>
  - name: paintedwolf.native_replacement_exact

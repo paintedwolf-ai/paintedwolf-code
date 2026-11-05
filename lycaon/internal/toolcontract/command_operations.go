@@ -70,3 +70,21 @@ var commandFormTools = sync.OnceValues(func() (map[string]bool, error) {
 func ProgramResultTool(name string) bool {
 	return name == "command" || name == "verify" || CommandFormTool(name)
 }
+
+// RetiredCommandForms returns the native forms that replaced a retired tool, and
+// whether name is one. A retired tool may have no direct form.
+func RetiredCommandForms(name string) ([]string, bool) {
+	if !IsCommandOperation(name) {
+		return nil, false
+	}
+	catalog, err := ReadOnlyLanguageV1()
+	if err != nil {
+		return nil, true
+	}
+	for _, disposition := range catalog.Tools {
+		if disposition.Tool == name {
+			return slices.Clone(disposition.CommandForms), true
+		}
+	}
+	return nil, true
+}

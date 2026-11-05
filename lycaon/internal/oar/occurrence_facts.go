@@ -233,6 +233,8 @@ var occurrenceFactDecls = []factDecl{
 	{"can_request_tools", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_loadable", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_retired_to_content", oarcore.TypeBool, FactTierHost, ""},
+	{"tool_retired_to_command", oarcore.TypeBool, FactTierHost, ""},
+	{"tool_command_forms", oarcore.TypeListString, FactTierHost, ""},
 	{"task_loadable", oarcore.TypeBool, FactTierHost, ""},
 	{"native_replacement_tools", oarcore.TypeListString, FactTierHost, ""},
 	{"native_replacement_exact", oarcore.TypeBool, FactTierHost, ""},

@@ -174,6 +174,9 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 		loadable := toolCtx.Turn.TurnToolPlan.Deferred(tc.Name) && tools.ToolOffered(ctx, "request_tools")
 		data["tool_loadable"] = loadable
 		data["tool_retired_to_content"] = toolRetiredToPublishedText(sess, tc.Name, toolCtx.Turn.TurnSurfaceID)
+		if forms, retired := toolcontract.RetiredCommandForms(tc.Name); retired {
+			data["tool_retired_to_command"], data["tool_command_forms"] = true, forms
+		}
 		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
 		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0
 		if loadable {
