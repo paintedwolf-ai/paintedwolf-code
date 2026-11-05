@@ -45,7 +45,7 @@ export function LocalGenerationCard(props: Props) {
       <p class="den-settings-hint">{view().detail}</p>
       <Show when={view().ready && (status()?.context_tokens ?? 0) > 0}>
         <p class="den-settings-hint" data-testid="local-model-context">
-          Context window: {status()!.context_tokens!.toLocaleString()} tokens
+          Context window: {(status()?.context_tokens ?? 0).toLocaleString()} tokens
         </p>
       </Show>
       <Show when={view().reinstall}>
