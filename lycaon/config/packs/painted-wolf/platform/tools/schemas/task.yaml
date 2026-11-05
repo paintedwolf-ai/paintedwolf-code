@@ -2,7 +2,7 @@ description: >-
   Start background workers for parallel execution across concurrent legs
   and return control immediately. Dispatch ready legs together in the same turn
   or launch companion legs while work runs. For single-thread, localized changes,
-  execute inline directly. Write workers execute inside a private snapshot overlay with no version-control metadata (.git is excluded) and no remote or publish capability; sibling files do not appear live. Version-control inspection (git status, git diff), committing, and any publication steps belong to the coordinator on the host workspace after promotion. Use after_workers when a worker needs completed producer files. Match the worker profile and scope to the assignment.
+  execute inline directly. Write workers execute inside a private snapshot overlay with no version-control metadata (.git is excluded) and no remote or publish capability; sibling files do not appear live. Version-control inspection, committing, and any publication steps belong to the coordinator on the host workspace after promotion. Use after_workers when a worker needs completed producer files. Match the worker profile and scope to the assignment.
 schema:
   type: object
   additionalProperties: false
