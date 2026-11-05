@@ -20,7 +20,7 @@ func TestRetainedReleaseArchiveCanStage(t *testing.T) {
 		version string
 		schema  int
 	}{
-		{"1.0.0", 1}, {"1.0.2-rc1", 2}, {"1.0.2", 4}, {"1.0.3-rc2", 12},
+		{"1.0.0", 1}, {"1.0.2-rc1", 2}, {"1.0.2", 4}, {"1.0.3-rc2", 5},
 	}
 	for _, fixture := range fixtures {
 		t.Run(fixture.version, func(t *testing.T) {

@@ -13,11 +13,10 @@ var manifestLayoutSource = Baseline{Revision: 4, Shape: "c0280798481d97c01e3ddf3
 
 // SourceManifestLayout moves retained source snapshots onto per-root,
 // content-defined manifests and drops the unreferenced bucket chunks.
-func SourceManifestLayout(target Baseline) Step {
-	return Step{
-		ID: "source-manifest-layout", Source: bytes.Join([][]byte{manifestLayoutImplementation, manifestLayoutSchema, manifestLayoutConverterImplementation, manifestLayoutMemoImplementation}, nil),
-		Checksum: "ae4d80d6bcf5cb51657e0b8d31648093917e22116b9e4e64b6c707643f1b42d1",
-		From:     manifestLayoutSource, To: target, Apply: migrateManifestLayout, Validate: validateManifestLayout,
+func SourceManifestLayout() Part {
+	return Part{
+		Source: bytes.Join([][]byte{manifestLayoutImplementation, manifestLayoutSchema, manifestLayoutConverterImplementation, manifestLayoutMemoImplementation}, nil),
+		Apply:  migrateManifestLayout, Validate: validateManifestLayout,
 		Writes:       manifestLayoutWrites,
 		RetainedCopy: retainedManifestCopy(),
 	}

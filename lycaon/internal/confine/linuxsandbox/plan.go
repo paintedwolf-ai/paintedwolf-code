@@ -16,7 +16,7 @@ import (
 )
 
 // PlanVersion is the plan shape this helper reads.
-const PlanVersion = 4
+const PlanVersion = 2
 
 // Plan is the typed boundary the helper applies. The host renders it from the
 // same policy inputs as the macOS profile; the helper never widens it.

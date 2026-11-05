@@ -21,7 +21,7 @@ func preparedRebuildFixture(t *testing.T) (string, rebuildJournal) {
 	testutil.FailErr(t, "create work directory", err)
 	identity, err := fspath.EntryIdentity(work)
 	testutil.FailErr(t, "identify work directory", err)
-	record := rebuildJournal{Version: 2, Database: "custom.db", Directory: filepath.Base(work), DirectoryIdentity: identity, State: "prepared"}
+	record := rebuildJournal{Version: 1, Database: "custom.db", Directory: filepath.Base(work), DirectoryIdentity: identity, State: "prepared"}
 	testutil.FailErr(t, "seed original file", os.WriteFile(path, []byte("original"), 0o600))
 	record.OriginalIdentity, err = fspath.EntryIdentity(path)
 	testutil.FailErr(t, "identify original", err)
