@@ -310,6 +310,9 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	ports := commandprogram.EvaluationPorts{
 		Invocation: run.root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
 		Publication: publication, Input: owners.Input, Sources: sources,
+		DocumentUnresolvable: func(body string) bool {
+			return secretmatch.ContainsReferenceToken(body) || secretmatch.ContainsMalformedReferenceToken(body)
+		},
 		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:         memory,
 		Clock:          r.clock(),

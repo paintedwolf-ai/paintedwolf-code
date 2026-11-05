@@ -1980,7 +1980,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "jq-edit --path PATH --query QUERY [--format FORMAT]",
+      "argv": "jq-edit --path PATH --query QUERY [--format FORMAT] [--arg NAME VALUE ...]",
       "forms": [
         {
           "spellings": [
@@ -2016,6 +2016,19 @@
           "consumption": "fixed",
           "sample_values": [
             "json"
+          ]
+        },
+        {
+          "spellings": [
+            "--arg"
+          ],
+          "arity": 2,
+          "value_role": "name-value-pair",
+          "fixture_id": "jq-edit-option-arg",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "value"
           ]
         }
       ],
@@ -2093,7 +2106,8 @@
         "jq-edit-rejection",
         "jq-edit-option-path",
         "jq-edit-option-query",
-        "jq-edit-option-format"
+        "jq-edit-option-format",
+        "jq-edit-option-arg"
       ]
     }
   ]

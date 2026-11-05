@@ -12,6 +12,7 @@ const (
 	codeLimitExceeded     = "COMMAND_LIMIT_EXCEEDED"
 	codeOperandInvalid    = "COMMAND_OPERAND_INVALID"
 	codeSyntaxUnsupported = "COMMAND_SYNTAX_UNSUPPORTED"
+	codeToolArgsInvalid   = "TOOL_ARGS_INVALID"
 )
 
 // ExpansionError is a typed refusal of expansion or invocation-variable state,

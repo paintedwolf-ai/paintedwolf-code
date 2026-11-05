@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -202,6 +203,12 @@ type ArgvReview struct {
 	Options     []ReviewedOption `json:"options"`
 	Operands    []string         `json:"operands"`
 	PathTargets []PathTarget     `json:"path_targets,omitempty"`
+	// ValueSinks maps an option to the named argument that carries its last value,
+	// where the host screens and resolves managed-secret references.
+	ValueSinks map[string]string `json:"-"`
+	// PairSinks maps a name-value option to the named object that carries its
+	// pairs; the first definition of a name wins.
+	PairSinks map[string]string `json:"-"`
 }
 
 // PathTarget is a bound native file operand and its exact access direction.
@@ -230,22 +237,34 @@ func (b BoundArgv) Review(operationID string) ArgvReview {
 // Arguments is the review record as the native review/approval input value.
 func (r ArgvReview) Arguments() map[string]any {
 	options := make([]any, 0, len(r.Options))
-	for _, option := range r.Options {
-		values := make([]any, len(option.Values))
-		for i, value := range option.Values {
-			values[i] = value
+	sunk := make(map[string]any, len(r.ValueSinks))
+	for i := len(r.Options) - 1; i >= 0; i-- {
+		option := r.Options[i]
+		if slot, ok := r.PairSinks[option.Option]; ok && len(option.Values) == 2 {
+			pairs, _ := sunk[slot].(map[string]any)
+			if pairs == nil {
+				pairs = map[string]any{}
+				sunk[slot] = pairs
+			}
+			pairs[option.Values[0]] = option.Values[1]
+			continue
 		}
-		entry := map[string]any{"option": option.Option, "value_role": option.ValueRole, "values": values}
-		if option.Scope != "" {
-			entry["scope"] = option.Scope
+		if slot, ok := r.ValueSinks[option.Option]; ok && len(option.Values) == 1 {
+			if _, taken := sunk[slot]; !taken {
+				sunk[slot] = option.Values[0]
+				continue
+			}
 		}
-		options = append(options, entry)
+		options = slices.Insert(options, 0, any(reviewedOptionArgument(option)))
 	}
 	operands := make([]any, len(r.Operands))
 	for i, operand := range r.Operands {
 		operands[i] = operand
 	}
 	result := map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
+	for slot, value := range sunk {
+		result[slot] = value
+	}
 	if r.PathTargets != nil {
 		// Grouped by direction, each target is one captured value, so a command
 		// at the operand limit stays within the input capture's node bound.
@@ -260,6 +279,18 @@ func (r ArgvReview) Arguments() map[string]any {
 		result["path_targets"] = map[string]any{"read": reads, "write": writes}
 	}
 	return result
+}
+
+func reviewedOptionArgument(option ReviewedOption) map[string]any {
+	values := make([]any, len(option.Values))
+	for i, value := range option.Values {
+		values[i] = value
+	}
+	entry := map[string]any{"option": option.Option, "value_role": option.ValueRole, "values": values}
+	if option.Scope != "" {
+		entry["scope"] = option.Scope
+	}
+	return entry
 }
 
 // ArgvError carries an existing public rejection code and the exact word span.
