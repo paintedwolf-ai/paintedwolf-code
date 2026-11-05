@@ -24,6 +24,10 @@ func wrapProviderIfDebug(p modelcall.Provider) modelcall.Provider {
 
 func (p *loggingProvider) ID() string { return p.inner.ID() }
 
+func (p *loggingProvider) CapacityGroup() *modelcall.CapacityGroup {
+	return modelcall.ProviderCapacity(p.inner)
+}
+
 func (p *loggingProvider) Models() []modelcall.ModelInfo { return p.inner.Models() }
 
 func (p *loggingProvider) Profile() providerprofile.Profile { return p.inner.Profile() }

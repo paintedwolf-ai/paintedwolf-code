@@ -79,14 +79,18 @@ func (m *Service) SharesCoordinatorCapacity(ctx context.Context, sess *wire.Sess
 			coordID = override
 		}
 	}
-	if lite.ProviderID == "" || coordID == "" || lite.ProviderID != coordID {
+	if lite.ProviderID == "" || coordID == "" {
 		return false
 	}
 	p, err := m.providers.Get(lite.ProviderID)
 	if err != nil || p == nil {
 		return false
 	}
-	return p.Profile().UtilitySingleFlight
+	if !p.Profile().UtilitySingleFlight {
+		return false
+	}
+	coordinator, err := m.providers.Get(coordID)
+	return err == nil && coordinator != nil && modelcall.CapacityKey(p) == modelcall.CapacityKey(coordinator)
 }
 
 func (m *Service) Begin(ctx context.Context, sess *wire.Session, userPrompt string) func() {
