@@ -187,6 +187,12 @@ func mentionsToolName(corpus, tool string) bool {
 	return containsWord(corpus, tool)
 }
 
+// namesToolCall reports a backticked tool name, how copy tells a reader to call
+// something, as opposed to a word that collides with a tool name.
+func namesToolCall(corpus, tool string) bool {
+	return strings.Contains(corpus, "`"+tool+"`") || strings.Contains(corpus, "`"+tool+"(")
+}
+
 func containsWord(haystack, needle string) bool {
 	if needle == "" {
 		return false

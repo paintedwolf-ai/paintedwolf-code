@@ -215,7 +215,7 @@ func assertPromptToolsSubsetOfWire(t *testing.T, corpus string, wire []string, e
 	profile := loadCoordinatorProfileTools(t)
 	var violations []string
 	for tool, enabled := range profile.Tools {
-		if !enabled || !mentionsToolName(corpus, tool) {
+		if !enabled || !namesToolCall(corpus, tool) {
 			continue
 		}
 		if _, ok := implementPromptToolsNotOnWire[tool]; ok {

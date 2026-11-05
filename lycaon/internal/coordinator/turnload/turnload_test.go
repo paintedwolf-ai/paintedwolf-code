@@ -317,7 +317,7 @@ func TestToolAndSkillIdentifiersShareBoundaryMatching(t *testing.T) {
 }
 
 func TestGitCommitSchemaRequestCandidateLeadsWithBranchCommitAndPushOperation(t *testing.T) {
-	raw, err := config.Read(config.PlatformTools + "/schemas/git_commit.yaml")
+	raw, err := config.Read(config.PlatformTools + "/operation-schemas/git_commit.yaml")
 	testutil.FailErr(t, "read git_commit schema", err)
 	var desc string
 	for _, line := range strings.Split(string(raw), "\n") {

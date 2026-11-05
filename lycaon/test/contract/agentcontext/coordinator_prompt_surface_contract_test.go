@@ -145,7 +145,7 @@ func TestCoordinatorSurfaceInvariants_promptCallableToolsOnImplementSurface(t *t
 			wireTools := plan.AddressableNames()
 			var violations []string
 			for tool, enabled := range profile.Tools {
-				if !enabled || !mentionsToolName(tc.corpus, tool) {
+				if !enabled || !namesToolCall(tc.corpus, tool) {
 					continue
 				}
 				if _, ok := implementPromptToolsNotOnWire[tool]; ok {

@@ -20,7 +20,7 @@ func TestGrantIdentityNeutralArgsExistInToolSchemas(t *testing.T) {
 	if len(cfg.GrantIdentityNeutralArgs) == 0 {
 		t.Fatal("grant_identity_neutral_args is empty — the grant identity hashes every argument again")
 	}
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(
+	schemas, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(
 		contractcheck.RepoRoot(t), "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "load tool schemas", err)
 

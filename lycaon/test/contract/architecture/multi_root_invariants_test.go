@@ -39,8 +39,8 @@ func TestMultiRootExemptionHygiene(t *testing.T) {
 		if cap != toolcontract.MultiRootPathConsume && cap != toolcontract.MultiRootDiscovery && cap != toolcontract.MultiRootCommand {
 			t.Errorf("multiRootProbeExempt[%q] is capability %q — drop the stale exempt entry", name, cap)
 		}
-		if !registered[name] {
-			t.Errorf("multiRootProbeExempt[%q] is not a boot-registered tool", name)
+		if !registered[name] && !toolcontract.IsCommandOperation(name) {
+			t.Errorf("multiRootProbeExempt[%q] is not a boot-registered tool or operation", name)
 		}
 	}
 }
@@ -50,7 +50,7 @@ func TestMultiRootCapabilityDeclaredNamesAreBootTools(t *testing.T) {
 	registered := toolfixture.BootRegisteredToolSet(t, reg)
 	schemas := contractToolSchemas(t)
 	for _, name := range toolcontract.MultiRootDeclaredNames() {
-		if registered[name] {
+		if registered[name] || toolcontract.IsCommandOperation(name) {
 			continue
 		}
 		if _, ok := schemas.Tools[name]; ok {

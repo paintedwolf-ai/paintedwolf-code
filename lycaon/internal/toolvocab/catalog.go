@@ -169,7 +169,7 @@ func ValidateProfiles(c *Catalog, profiles []sandbox.ToolProfile) error {
 	var problems []string
 	for _, p := range profiles {
 		for _, name := range sortedKeys(p.Tools) {
-			if !c.KnownPattern(name) {
+			if !c.KnownPattern(name) && !c.knownOperationPattern(name) {
 				problems = append(problems, fmt.Sprintf(
 					"profile %q grants %q, which resolves to no registered tool", p.ID, name))
 			}

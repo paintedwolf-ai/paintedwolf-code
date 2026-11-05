@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"gopkg.in/yaml.v3"
@@ -222,11 +223,11 @@ func stepCall(step NextStep, gc *GuardContext, facts map[string]any) toolreach.C
 		call.Tool, call.Partial = gc.Invocation.Tool, true
 	}
 	for _, path := range sortedStepPaths(step.Args) {
-		setArgPath(&call.Args, path, resolveStepArg(step.Args[path], facts))
+		setStepArg(&call, path, resolveStepArg(step.Args[path], facts))
 	}
 	for _, path := range sortedStepPaths(step.Pick) {
 		if value, ok := firstListValue(facts[step.Pick[path]]); ok {
-			setArgPath(&call.Args, path, value)
+			setStepArg(&call, path, value)
 		}
 	}
 	return call
@@ -257,21 +258,11 @@ func sortedStepPaths[V any](m map[string]V) []string {
 	return out
 }
 
-func setArgPath(args *map[string]any, path string, value any) {
-	if *args == nil {
-		*args = map[string]any{}
+func setStepArg(call *toolreach.Call, path string, value any) {
+	if call.Args == nil {
+		call.Args = map[string]any{}
 	}
-	cur := *args
-	segments := strings.Split(path, ".")
-	for _, segment := range segments[:len(segments)-1] {
-		next, ok := cur[segment].(map[string]any)
-		if !ok {
-			next = map[string]any{}
-			cur[segment] = next
-		}
-		cur = next
-	}
-	cur[segments[len(segments)-1]] = value
+	conditions.DotPathSet(call.Args, path, value)
 }
 
 func firstListValue(v any) (any, bool) {

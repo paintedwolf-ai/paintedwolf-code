@@ -235,6 +235,9 @@ func TestToolRegistryTriStateCoordinatorProfileToolsHaveSchemas(t *testing.T) {
 		if _, ok := schemas[name]; ok {
 			continue
 		}
+		if toolcontract.IsCommandOperation(name) {
+			continue
+		}
 		if _, exempt := toolsProfileSchemaExempt[name]; exempt {
 			continue
 		}

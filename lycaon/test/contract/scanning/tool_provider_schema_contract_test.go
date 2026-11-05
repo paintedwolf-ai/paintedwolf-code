@@ -36,7 +36,7 @@ func TestServeBootToolMetadataMatchesCatalog(t *testing.T) {
 func TestCoordinatorTrimmedToolsKeepProviderArgsSchema(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 	meta, ok := cfg.ToolMeta("read")
 	if !ok {
@@ -53,7 +53,7 @@ func TestCoordinatorTrimmedToolsKeepProviderArgsSchema(t *testing.T) {
 func TestCoordinatorTrimmedCatalogRootsAreProviderSafe(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 
 	catalogRoots := map[string][]string{}
