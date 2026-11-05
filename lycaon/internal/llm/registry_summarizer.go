@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,11 +12,15 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+const summaryRequestHeadroom = 1024
 
 // RegistrySummarizer uses a Provider from Registry for lite summarization.
 type RegistrySummarizer struct {
@@ -120,22 +125,9 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 	if err != nil {
 		return "", err
 	}
-	var rawMessages []api.Message
-	if prefix := compaction.SharedPrefixMessages(ctx); len(prefix) > 0 {
-		rawMessages = make([]api.Message, 0, len(prefix)+1)
-		rawMessages = append(rawMessages, prefix...)
-		rawMessages = append(rawMessages, api.Message{
-			Role:      api.MessageRoleUser,
-			Content:   today + "\n\n" + systemPrompt + "\n\n" + userPrompt,
-			Origin:    api.MessageOriginHost,
-			Authority: api.ContentAuthoritySystem,
-			TrustTier: api.ContentTrustTierTrusted,
-		})
-	} else {
-		rawMessages = []api.Message{
-			{Role: api.MessageRoleSystem, Content: today + "\n\n" + systemPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
-			{Role: api.MessageRoleUser, Content: userPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
-		}
+	rawMessages := []api.Message{
+		{Role: api.MessageRoleSystem, Content: today + "\n\n" + systemPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
+		{Role: api.MessageRoleUser, Content: userPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
 	}
 	req := modelcall.CompletionRequest{
 		Model:    model,
@@ -147,6 +139,16 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 	}
 	if compaction.SummaryFormatRequested(ctx) {
 		req.ResponseFormat = compaction.CompactionSummaryResponseFormat()
+	}
+	if window := r.Registry.ContextLength(p.ID(), model); window > 0 && compaction.SummaryFormatRequested(ctx) {
+		encoded, err := json.Marshal(req.ResponseFormat)
+		if err != nil {
+			return "", fmt.Errorf("encode summary response format: %w", err)
+		}
+		estimated := modelcall.EstimateRequestInput(req) + tokenest.EstimateDefault(string(encoded))
+		if estimated+maxTokens+summaryRequestHeadroom > window {
+			return "", &failure.ProviderContextTooSmallError{ProviderID: p.ID(), Model: model, PromptTokens: estimated + summaryRequestHeadroom, CompletionReserve: maxTokens, MaxContext: window, Source: "summary-request-estimate"}
+		}
 	}
 	resp, err := r.completeUtility(ctx, p, model, req)
 	if err != nil && req.ResponseFormat != nil && providerretry.IsRequestRejected(err) {
@@ -256,5 +258,5 @@ func (r *RegistrySummarizer) SummaryBudget(ctx context.Context) compaction.Summa
 		return compaction.SummaryBudget{}
 	}
 	output := min(1536, max(1, window/8))
-	return compaction.SummaryBudget{Input: max(1, window*3/4-output-1024), Output: output}
+	return compaction.SummaryBudget{Input: max(1, window*3/4-output-summaryRequestHeadroom), Output: output}
 }

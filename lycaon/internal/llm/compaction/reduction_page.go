@@ -24,7 +24,7 @@ func (c *SimpleCompactor) reductionPage(ctx context.Context, info SessionInfo, a
 	var page reductionPage
 	for len(bounded) > 0 {
 		prefix := oldestCompactionPrefix(bounded, min(limit, len(bounded)))
-		sources, _ := continuationSegments(prefix, c.cfg.SummaryMessageTokens)
+		sources, _, _ := continuationSegments(prefix, c.cfg.SummaryMessageTokens)
 		record := continuationFor(info, prefix, priorSummary(info.PriorContinuation), sources, ErrNoLiteProvider)
 		record.Window = c.cfg.ModelContextWindow
 		text, err := RenderContinuation(ctx, record, info.RecallAvailable, 0)

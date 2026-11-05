@@ -8,13 +8,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
-	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestRegistrySummarizerSharedPrefixAndLocalDefault(t *testing.T) {
+func TestRegistrySummarizerSourceDataAndLocalDefault(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	coordProvider := &captureProvider{id: "anthropic"}
 	localProvider := &captureProvider{id: IncludedProviderID}
@@ -34,12 +33,7 @@ func TestRegistrySummarizerSharedPrefixAndLocalDefault(t *testing.T) {
 		Scope:    SettingsScopeGlobal,
 	}
 
-	prefix := []api.Message{
-		{Role: api.MessageRoleSystem, Content: "Coordinator system instructions.", Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
-		{Role: api.MessageRoleUser, Content: "Inspect store.go"},
-		{Role: api.MessageRoleAssistant, Content: "Checked store.go lease lifecycle."},
-	}
-	ctx := compaction.WithSummaryFormat(compaction.WithSharedPrefixMessages(context.Background(), prefix))
+	ctx := compaction.WithSummaryFormat(context.Background())
 	_, err := summarizer.Summarize(ctx, "Synthesize continuation.", "Covered page.", 512)
 	if err != nil {
 		t.Fatalf("Summarize: %v", err)
@@ -50,19 +44,14 @@ func TestRegistrySummarizerSharedPrefixAndLocalDefault(t *testing.T) {
 	if coordProvider.last.Model != "" {
 		t.Fatalf("coordinator should not be called when local default is available, got model %q", coordProvider.last.Model)
 	}
-	if len(localProvider.last.Messages) != len(prefix)+1 {
-		t.Fatalf("len(messages) = %d, want %d", len(localProvider.last.Messages), len(prefix)+1)
+	if len(localProvider.last.Messages) != 2 {
+		t.Fatal("summary must have only system and source-data messages")
 	}
-	projectedPrefix := transcript.Project(prefix)
-	for i := range projectedPrefix {
-		if localProvider.last.Messages[i].Role != projectedPrefix[i].Role || localProvider.last.Messages[i].Content != projectedPrefix[i].Content {
-			t.Fatalf("prefix message[%d] = %+v, want %+v", i, localProvider.last.Messages[i], projectedPrefix[i])
-		}
+	if !strings.Contains(localProvider.last.Messages[0].Content, "Synthesize continuation.") ||
+		!strings.Contains(localProvider.last.Messages[1].Content, "Covered page.") {
+		t.Fatal("summary input lost instructions or source")
 	}
-	tail := localProvider.last.Messages[len(localProvider.last.Messages)-1]
-	if tail.Role != api.MessageRoleUser || !strings.Contains(tail.Content, "Synthesize continuation.") || !strings.Contains(tail.Content, "Covered page.") {
-		t.Fatalf("trailing summary instruction message = %+v", tail)
-	}
+
 }
 
 func TestCompactionPromptPlacesCoveredSourceBeforeInstructions(t *testing.T) {
@@ -91,7 +80,7 @@ func TestCompactionPromptPlacesCoveredSourceBeforeInstructions(t *testing.T) {
 	}
 }
 
-func TestSimpleCompactorAttachesSharedPrefixInProductionCompaction(t *testing.T) {
+func TestSimpleCompactorKeepsSourceOutOfLiveHistory(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	summaryJSON, err := (compaction.MockSummarizer{Text: "Compacted session state."}).Summarize(
 		compaction.WithSummaryFormat(t.Context()), "", "", 0,
@@ -133,9 +122,9 @@ func TestSimpleCompactorAttachesSharedPrefixInProductionCompaction(t *testing.T)
 	if localProvider.last.Model != nativegen.DefaultModelID {
 		t.Fatalf("local model = %q, want %q", localProvider.last.Model, nativegen.DefaultModelID)
 	}
-	// The retained prefix precedes the summary request.
-	if len(localProvider.last.Messages) < 3 {
-		t.Fatalf("expected shared prefix + trailing instruction in provider messages, got %d messages: %+v",
+	// Summary pages are data even when their source is conversation history.
+	if len(localProvider.last.Messages) != 2 {
+		t.Fatalf("expected system and source-data messages, got %d messages: %+v",
 			len(localProvider.last.Messages), localProvider.last.Messages)
 	}
 	tail := localProvider.last.Messages[len(localProvider.last.Messages)-1]

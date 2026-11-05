@@ -184,6 +184,14 @@ rewrites a signed block. A retained assistant's content and reasoning are not
 independently summarized or truncated. Whole old exchanges may leave the request
 through normal compaction, while retained tool exchanges keep their replay state.
 
+Summary input is bounded source data, not replay history. Tool call identities,
+arguments or references, and result linkage remain quoted evidence even when a
+page splits an exchange. Opaque provider replay state stays out of summary input.
+The summary request contains only its system instructions and source-data turn;
+it does not duplicate source pages as a claimed cache prefix. Request estimates
+include projected messages, response format, output and framing reserve. Invalid
+or oversized source input retains canonical recovery references without synthesis.
+
 Adapters select replay without mutating the stored history:
 
 | Transport | Replay selection |
