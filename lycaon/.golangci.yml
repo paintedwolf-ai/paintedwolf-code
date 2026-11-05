@@ -4,7 +4,7 @@
 version: "2"
 
 run:
-  timeout: 20m
+  timeout: 60m
   tests: true
   # Analyze integration- and budget-tagged files.
   build-tags:
