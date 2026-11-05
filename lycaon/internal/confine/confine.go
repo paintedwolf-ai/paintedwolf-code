@@ -354,6 +354,9 @@ func writeProcessAllows(b *strings.Builder, processControl bool) {
 		b.WriteString("(allow signal (target same-sandbox))\n")
 	}
 	b.WriteString("(allow sysctl-read)\n")
+	// Where macOS gates statfs and volume-space attributes, denial rounds the
+	// values and reports a refusal for every program that asks.
+	b.WriteString("(allow system-info (info-type \"vfs.disk-space\"))\n")
 	b.WriteString("(allow mach-lookup)\n")
 	b.WriteString("(allow ipc-posix-shm)\n")
 	// Interactive terminals require ioctl access to pseudo-terminals.
