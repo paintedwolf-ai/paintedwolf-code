@@ -75,6 +75,7 @@ type toolCallOutcome struct {
 	toolMsg            api.Message
 	taskCommitted      bool
 	handleEligible     bool
+	deliveries         []tools.SourceDeliveryTag
 	taskMessageID      string
 	committed          bool
 	storedID           string
@@ -249,6 +250,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 					toolArgs:       run[0].Args,
 					toolMsg:        out.toolMsg,
 					handleEligible: out.handleEligible,
+					deliveries:     out.deliveries,
 				}, &lastToolTS, st,
 			)
 			if err != nil {
@@ -386,6 +388,7 @@ func (l *toolBatch) runConcurrentToolBatch(
 				toolMsg:        out.toolMsg,
 				taskCommitted:  out.taskCommitted,
 				handleEligible: out.handleEligible,
+				deliveries:     out.deliveries,
 				taskMessageID:  out.toolMsg.ID,
 				endTurn:        out.endTurn,
 			}
