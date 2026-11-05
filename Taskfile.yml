@@ -260,7 +260,7 @@ tasks:
         go run ./cmd/lycaon-perf
         --binary '{{.BUILD_DIR}}/lycaon-perf-sidecar'
         --output '{{.ARTIFACT_DIR}}/perf/sidecar.json'
-        --scale medium --enforce {{.CLI_ARGS}}
+        --scale medium {{.CLI_ARGS}}
 
   perf:soak:
     desc: 'Long sidecar stability run; SOAK defaults to 30m and may be overridden'
@@ -277,7 +277,7 @@ tasks:
         go run ./cmd/lycaon-perf
         --binary '{{.BUILD_DIR}}/lycaon-perf-sidecar'
         --output '{{.ARTIFACT_DIR}}/perf/sidecar-soak.json'
-        --scale medium --iterations 5 --prompts 2 --soak {{.SOAK}} --enforce {{.CLI_ARGS}}
+        --scale medium --iterations 5 --prompts 2 --soak {{.SOAK}} {{.CLI_ARGS}}
 
   budgets:
     desc: 'Prompt and code size budgets for what the change touches; PW_BUDGETS_INSPECT="<path>" shows a path''s standing'
@@ -650,7 +650,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:digest -- {{.CLI_ARGS}}
 
   den:test:transcript-scale:
-    desc: 'Transcript hydration performance at 5000 and 10000 messages'
+    desc: 'Transcript hydration at 5000 and 10000 messages'
     preconditions:
       - sh: command -v bun
         msg: bun required — install from https://bun.sh

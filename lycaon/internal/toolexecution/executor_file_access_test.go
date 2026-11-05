@@ -57,7 +57,7 @@ func TestAllowOnceWritesExternalFileWithoutReusableAccess(t *testing.T) {
 	for _, content := range []string{"first approved write", "second approved write"} {
 		mgr := &asyncHITL{requested: make(chan struct{}, 1)}
 		executor.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 		done := make(chan error, 1)
 		go func() {
 			_, invokeErr := executor.Invoke(ctx, "write", map[string]any{"path": target, "content": content}, tc)

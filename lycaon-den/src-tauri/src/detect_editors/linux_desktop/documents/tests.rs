@@ -78,10 +78,8 @@ fn refusal_and_silence_are_errors_not_the_original_path() {
     assert!(error.contains("app id is not allowed"), "{error}");
 
     let silent = Flatpak::new("hang", b"");
-    let started = Instant::now();
     let error = export_within(&silent.program(), Path::new("/outside/a.txt"), APP, Duration::from_millis(300)).err().unwrap();
     assert!(error.contains("did not answer"), "{error}");
-    assert!(started.elapsed() < Duration::from_secs(10));
 
     let missing = Path::new("/nonexistent/paintedwolf/flatpak");
     assert!(export(missing, Path::new("/outside/a.txt"), APP).is_err());

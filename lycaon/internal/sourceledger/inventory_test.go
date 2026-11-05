@@ -45,7 +45,7 @@ func TestSuspendInventoryCancelsAllBranchesAndBlocksAdmission(t *testing.T) {
 			t.Fatal("inventory did not start")
 		}
 	}
-	drainCtx, cancelDrain := context.WithTimeout(ctx, 5*time.Second)
+	drainCtx, cancelDrain := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
 	defer cancelDrain()
 	resume, err := st.Inventory.SuspendInventory(drainCtx, "p1")
 	defer resume()

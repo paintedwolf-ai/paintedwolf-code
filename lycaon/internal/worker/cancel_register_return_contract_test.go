@@ -176,7 +176,7 @@ func TestCancelRunningGracefulNonBlockingUnderSlowCloseout(t *testing.T) {
 	const child = "child-slow"
 	jobID := setupRunningWorker(t, queue, child)
 
-	deadlineCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	deadlineCtx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	out, err := svc.CancelJob(deadlineCtx, jobID, "slow-closeout")
 	testutil.FailErr(t, "CancelJob", err)

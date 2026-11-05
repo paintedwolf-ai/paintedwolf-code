@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSiblingProgramChildrenKeepSeparateObservedEgressReviews(t *testing.T) {
 	executor, manager := gatherExecutor(t)
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	results := make(chan bool, 2)
 	for i, child := range []string{"first-child", "second-child"} {

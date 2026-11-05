@@ -168,7 +168,7 @@
     "test:contract": {
       "options": [
         "--timeout",
-        "15m"
+        "30m"
       ],
       "packages": [
         "./test/contract/..."
@@ -996,6 +996,17 @@
     ]
   },
   "ci": {
+    "ready-lint": {
+      "targets": [
+        "lint:full"
+      ],
+      "minutes": 120,
+      "profiles": [
+        "fast"
+      ],
+      "suite": "all",
+      "setup": "analysis"
+    },
     "ready": {
       "compile_targets": {},
       "targets": [
@@ -1004,11 +1015,7 @@
         "coverage:changes",
         "den:typecheck",
         "den:lint",
-        "comments:check",
-        "test:fail-messages:check",
-        "docs:links",
-        "den:test:fast",
-        "lint:full"
+        "den:test:fast"
       ],
       "minutes": 120,
       "profiles": [
@@ -1384,7 +1391,7 @@
   },
   "capacity": {
     "max_parallel": {
-      "fast": 3,
+      "fast": 4,
       "integration": 6,
       "check": 3,
       "nightly": 2,

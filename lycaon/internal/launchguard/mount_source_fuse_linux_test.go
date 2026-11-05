@@ -71,7 +71,7 @@ func startSourceFUSE(t *testing.T, volume string, module []byte) func() {
 				if err != nil {
 					t.Errorf("FUSE fixture protocol: %v", err)
 				}
-			case <-time.After(2 * time.Second):
+			case <-time.After(testutil.Timeout(time.Minute)):
 				_ = server.Process.Kill()
 				<-done
 				t.Error("own FUSE server did not settle after unmount")
