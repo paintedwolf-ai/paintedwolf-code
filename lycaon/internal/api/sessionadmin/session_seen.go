@@ -43,5 +43,8 @@ func (s *Transcript) HandleMarkSessionSeen(w http.ResponseWriter, r *http.Reques
 		}
 		projectview.PublishTouch(s.Projects, s.Events, ctx, sess.ProjectID)
 	}
+	if s.Sessions != nil {
+		s.Sessions.ContextPreparation.Focus(ctx, sess.ID, sess.ProjectID)
+	}
 	httpio.WriteJSON(w, http.StatusOK, sess)
 }

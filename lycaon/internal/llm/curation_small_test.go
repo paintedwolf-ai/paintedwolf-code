@@ -188,7 +188,7 @@ func TestRegistryModelHasVision(t *testing.T) {
 	writeProvidersLocal(t, localPath, []byte(yaml))
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "catalog", err)
-	reg, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
+	reg, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

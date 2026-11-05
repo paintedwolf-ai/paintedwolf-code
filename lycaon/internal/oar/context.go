@@ -11,6 +11,7 @@ type ContentObservation struct {
 	Segments        []ContentSegment
 	TextActionTools []string
 	EmptyResponse   *EmptyResponseObservation
+	InvalidResponse bool
 	// ToolCallUnparsed records a native call the provider dropped as invalid JSON.
 	ToolCallUnparsed   bool
 	ToolCallDiagnostic string
@@ -28,6 +29,9 @@ func (gc *GuardContext) SetContentObservation(observation ContentObservation) {
 	if observation.EmptyResponse != nil {
 		gc.Rejection.RejectObservation = "terminal_empty_response"
 		gc.Response = *observation.EmptyResponse
+	}
+	if observation.InvalidResponse {
+		gc.Rejection.RejectObservation = "provider_response_invalid"
 	}
 	if observation.ToolCallUnparsed {
 		gc.Rejection.RejectObservation = "provider_tool_call_unparsed"

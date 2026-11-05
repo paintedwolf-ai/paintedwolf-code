@@ -11,12 +11,20 @@ import (
 
 // StaticModelRouter resolves models from model_policy (coordinator, lite, agent pool).
 type StaticModelRouter struct {
-	policy      *PolicyStore
-	pool        *PoolSelector
-	pools       *scopedstore.LRU[*PoolSelector]
-	scope       SettingsScope
-	projectDir  string
-	projectDirs []string
+	policy       *PolicyStore
+	pool         *PoolSelector
+	pools        *scopedstore.LRU[*PoolSelector]
+	scope        SettingsScope
+	projectDir   string
+	projectDirs  []string
+	localDefault func(context.Context) bool
+}
+
+// WithLocalDefault enables bundled local-model fallback for unset coordinator and lite roles.
+func (r *StaticModelRouter) WithLocalDefault(localAvailable func(context.Context) bool) *StaticModelRouter {
+	cp := *r
+	cp.localDefault = localAvailable
+	return &cp
 }
 
 // NewStaticModelRouter constructs a router bound to the policy store.
@@ -85,11 +93,18 @@ func (r *StaticModelRouter) scopedPool(policy ModelPolicy) *PoolSelector {
 	return pool
 }
 
-func (r *StaticModelRouter) effectivePolicy() (ModelPolicy, error) {
+func (r *StaticModelRouter) effectivePolicy(ctx context.Context) (ModelPolicy, error) {
+	var policy ModelPolicy
+	var err error
 	if len(r.projectDirs) > 0 {
-		return r.policy.GetForProjectRoots(r.projectDirs)
+		policy, err = r.policy.GetForProjectRoots(r.projectDirs)
+	} else {
+		policy, err = r.policy.Get(r.scope, r.projectDir)
 	}
-	return r.policy.Get(r.scope, r.projectDir)
+	if err != nil {
+		return ModelPolicy{}, err
+	}
+	return ResolveModelPolicy(policy, r.localDefault != nil && r.localDefault(ctx)), nil
 }
 
 // Coordinator returns the coordinator model selection.
@@ -97,7 +112,7 @@ func (r *StaticModelRouter) Coordinator(ctx context.Context) (*ModelSelection, e
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	p, err := r.effectivePolicy()
+	p, err := r.effectivePolicy(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -110,17 +125,17 @@ func (r *StaticModelRouter) Lite(ctx context.Context) (*ModelSelection, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	p, err := r.effectivePolicy()
+	p, err := r.effectivePolicy(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ref := SummarizerRef(p)
+	ref := p.Lite
 	return selectionFromRef(ref, ModelRoleLite, false), nil
 }
 
 // SelectGroup picks n diverse models from the agent pool.
 func (r *StaticModelRouter) SelectGroup(ctx context.Context, n int) ([]ModelSelection, error) {
-	p, err := r.effectivePolicy()
+	p, err := r.effectivePolicy(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +148,7 @@ func (r *StaticModelRouter) Select(ctx context.Context) (*ModelSelection, error)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	p, err := r.effectivePolicy()
+	p, err := r.effectivePolicy(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +168,7 @@ func (r *StaticModelRouter) ResolveSession(ctx context.Context, sess *api.Sessio
 		}, nil
 	}
 	if strings.TrimSpace(sess.ParentSessionID) != "" {
-		p, err := r.effectivePolicy()
+		p, err := r.effectivePolicy(ctx)
 		if err != nil {
 			return nil, err
 		}

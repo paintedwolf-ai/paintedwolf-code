@@ -31,7 +31,7 @@ func (r *RegistrySummarizer) SummarizeStreamOnce(ctx context.Context, systemProm
 }
 
 func (r *RegistrySummarizer) summarizeStream(ctx context.Context, systemPrompt, userPrompt string, maxTokens int, onDelta func(delta string), allowFallback bool) (string, error) {
-	p, model, err := r.liteProvider()
+	p, model, err := r.liteProvider(ctx)
 	if err != nil || p == nil {
 		if allowFallback {
 			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
@@ -47,15 +47,19 @@ func (r *RegistrySummarizer) summarizeStream(ctx context.Context, systemPrompt, 
 		}
 		return "", ErrLiteUnavailable
 	}
-	release, laneErr := r.planeAcquire(ctx, p, r.utilityClass())
+	callCtx, release, laneErr := r.planeAcquire(ctx, p, r.utilityClass())
 	if laneErr != nil {
 		if allowFallback {
 			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
 		}
 		return "", laneErr
 	}
-	out := r.streamLite(ctx, p, model, systemPrompt, userPrompt, maxTokens, onDelta)
+	out := r.streamLite(callCtx, p, model, systemPrompt, userPrompt, maxTokens, onDelta)
+	callErr := callCtx.Err()
 	release()
+	if callErr != nil {
+		return out.content, callErr
+	}
 	if out.setupErr != nil {
 		if allowFallback {
 			return r.Summarize(ctx, systemPrompt, userPrompt, maxTokens)
@@ -75,7 +79,7 @@ type streamLiteResult struct {
 }
 
 func (r *RegistrySummarizer) streamLite(ctx context.Context, p modelcall.Provider, model, systemPrompt, userPrompt string, maxTokens int, onDelta func(delta string)) streamLiteResult {
-	observe := r.observingLiteSlot(p)
+	observe := r.observingLiteSlot(ctx, p)
 	today, todayErr := guidance.RenderTodayLine(ctx, time.Now(), ResolveModelCutoff(model))
 	if todayErr != nil {
 		return streamLiteResult{setupErr: todayErr}

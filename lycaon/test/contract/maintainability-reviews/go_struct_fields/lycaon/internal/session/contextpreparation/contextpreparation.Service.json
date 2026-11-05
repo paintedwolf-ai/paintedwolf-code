@@ -1,0 +1,14 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/session/contextpreparation/contextpreparation.Service",
+  "kind": "runtime_service",
+  "workstream": "local-inference",
+  "disposition": "retain",
+  "reason": "Retain the thirteen fields for one mutex-protected focus, revision, bounded wake and worker cancellation lifetime. Splitting scheduling state would weaken atomic invalidation and shutdown. Deterministic fixtures cover coalescing, stale builds, focus replacement, suspension and cancellation.",
+  "reviewed_commit": "e033acac702d36f5e358de3cab884f372d152c6c",
+  "ceiling": 13,
+  "boundaries": {
+    "lycaon/internal/session/contextpreparation/service_test.go": "07734afcac4b740a23e1471702ff3ed922935949e77af7e78240f271ed6248ec"
+  },
+  "reviewed_shape": "e5bdceb7b11c604250ca7d45a01fe3b56f8ff62a7347d2c689912c0899230646"
+}

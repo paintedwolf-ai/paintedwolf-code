@@ -3859,6 +3859,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/providers/{provider_id}/repair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Repair the bundled local generation model
+         * @description Releases the generation reader, restores the authenticated packaged revision, and attempts admission. Failed attempts return their current recovery state.
+         */
+        post: operations["repairLocalGeneration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/providers/{provider_id}/refresh": {
         parameters: {
             query?: never;
@@ -9078,7 +9098,7 @@ export interface components {
             /** @description URL, SDK region, or empty derived value according to endpoint_style. */
             base_url?: string;
             endpoint_style?: components["schemas"]["ProviderEndpointStyle"];
-            /** @description True when the provider can make API calls. Keyed AI providers require a non-empty credential saved via PUT /v1/providers/{provider_id}/credential (environment variables do not configure). Local keyless providers are ready without credentials; ambient providers must resolve their declared credential chain. List membership is providers.local.yaml — Den does not keep a parallel hide allowlist. */
+            /** @description True when the provider can make API calls. Keyed AI providers require a non-empty credential saved via PUT /v1/providers/{provider_id}/credential (environment variables do not configure). Keyless providers need no credentials; bundled local generation also requires host admission. Ambient providers must resolve their declared credential chain. List membership is providers.local.yaml — Den does not keep a parallel hide allowlist. */
             configured: boolean;
             /** @description True when credentials are saved for this provider instance. */
             credential_present: boolean;
@@ -9114,6 +9134,7 @@ export interface components {
              * @enum {string}
              */
             catalog_status?: "ok" | "stale" | "unavailable";
+            local_runtime?: components["schemas"]["LocalGenerationStatus"];
             /**
              * @description Live /models discovery outcome for this list projection.
              * @enum {string}
@@ -14906,6 +14927,24 @@ export interface components {
              */
             overage_nano_usd?: number;
         };
+        LocalGenerationStatus: {
+            /**
+             * @description Current host runtime state, independent of cached model discovery.
+             * @enum {string}
+             */
+            state: "idle" | "loading" | "ready" | "repairing" | "unavailable" | "repair_required" | "insufficient_memory" | "stopped";
+            /**
+             * @description Available recovery action selected from host facts.
+             * @enum {string}
+             */
+            recovery_action: "none" | "retry" | "repair" | "reinstall";
+            /** @description Diagnostic detail; recovery_action supplies the available action. */
+            detail?: string;
+            /** @description Authenticated revision held by the admitted model process. */
+            revision?: string;
+            /** @description Admitted context capacity of the ready process. */
+            context_tokens?: number;
+        };
         ProviderListResponse: {
             providers: components["schemas"]["ProviderMeta"][];
         };
@@ -14933,6 +14972,10 @@ export interface components {
         };
         ProviderKindListResponse: {
             kinds: components["schemas"]["ProviderKindTemplate"][];
+        };
+        LocalGenerationRepairResult: {
+            ok: boolean;
+            status: components["schemas"]["LocalGenerationStatus"];
         };
         /** @enum {string} */
         WebResearchProviderRole: "results" | "seeds";
@@ -26150,6 +26193,33 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    repairLocalGeneration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Repair attempt completed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalGenerationRepairResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
     refreshProviderModels: {
         parameters: {
             query?: never;
@@ -30738,10 +30808,12 @@ export type ProviderModelCapabilities = components["schemas"]["ProviderModelCapa
 export type ModelRoleEligibility = components["schemas"]["ModelRoleEligibility"];
 export type ModelRoleEligibilitySet = components["schemas"]["ModelRoleEligibilitySet"];
 export type ProviderUsageQuota = components["schemas"]["ProviderUsageQuota"];
+export type LocalGenerationStatus = components["schemas"]["LocalGenerationStatus"];
 export type ProviderListResponse = components["schemas"]["ProviderListResponse"];
 export type ProviderModelConfig = components["schemas"]["ProviderModelConfig"];
 export type ProviderKindTemplate = components["schemas"]["ProviderKindTemplate"];
 export type ProviderKindListResponse = components["schemas"]["ProviderKindListResponse"];
+export type LocalGenerationRepairResult = components["schemas"]["LocalGenerationRepairResult"];
 export type WebResearchProviderRole = components["schemas"]["WebResearchProviderRole"];
 export type WebResearchIndexHealth = components["schemas"]["WebResearchIndexHealth"];
 export type WebResearchWarmActivity = components["schemas"]["WebResearchWarmActivity"];

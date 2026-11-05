@@ -14,7 +14,7 @@ import (
 func newTestLocalRegistry(t *testing.T, entries ...CatalogEntry) (*Registry, *ProviderCatalog) {
 	t.Helper()
 	catalog := mustTestProviderCatalog(t, entries...)
-	reg, err := NewRegistry(t.Context(), catalog, nil)
+	reg, err := NewRegistry(t.Context(), catalog, nil, nil)
 	testutil.FailErr(t, "NewRegistry failed", err)
 	reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	for _, entry := range entries {

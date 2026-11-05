@@ -250,6 +250,18 @@
     }
   },
   "tasks": {
+    "generation:prepare": [
+      "generation:prepare"
+    ],
+    "generation:build": [
+      "generation:build"
+    ],
+    "generation:test": [
+      "generation:test"
+    ],
+    "generation:bench": [
+      "generation:bench"
+    ],
     "den:harness:test": [
       "den:harness:test"
     ],
@@ -459,6 +471,9 @@
     ],
     "test:conformance:live": [
       "test:conformance:live"
+    ],
+    "decide:prepare": [
+      "decide:prepare"
     ]
   },
   "private": [
@@ -469,6 +484,10 @@
     "seatbelt:scanstress"
   ],
   "selection": {
+    "generation:prepare": "passthrough",
+    "generation:build": "passthrough",
+    "generation:test": "passthrough",
+    "generation:bench": "passthrough",
     "test:runner": "unittest",
     "test:digest": "go",
     "test:oar": "go",
@@ -504,9 +523,36 @@
     "release:rehearse:rpm-metadata": "passthrough",
     "release:rehearse:pacman-construction": "passthrough",
     "userlands:build": "passthrough",
-    "test:conformance:live": "passthrough"
+    "test:conformance:live": "passthrough",
+    "decide:prepare": "passthrough"
   },
   "resources": {
+    "generation:prepare": {
+      "locks": [
+        "generation-runtime"
+      ],
+      "workers": "shared"
+    },
+    "generation:build": {
+      "locks": [
+        "generation-runtime",
+        "rust"
+      ],
+      "workers": "shared"
+    },
+    "generation:test": {
+      "locks": [
+        "generation-runtime",
+        "rust"
+      ],
+      "workers": "shared"
+    },
+    "generation:bench": {
+      "locks": [
+        "generation-runtime"
+      ],
+      "workers": "shared"
+    },
     "den:harness:test": {
       "locks": [
         "harness",
@@ -756,21 +802,27 @@
     "build:lycaon-dev": {
       "locks": [
         "dev-engine",
-        "scanners"
+        "scanners",
+        "generation-runtime",
+        "rust"
       ],
       "workers": "shared"
     },
     "upgrade:corpus:seed": {
       "locks": [
         "dev-engine",
-        "scanners"
+        "scanners",
+        "generation-runtime",
+        "rust"
       ],
       "workers": "shared"
     },
     "upgrade:corpus:boot": {
       "locks": [
         "dev-engine",
-        "scanners"
+        "scanners",
+        "generation-runtime",
+        "rust"
       ],
       "workers": "shared"
     },
@@ -942,6 +994,12 @@
       "shared_locks": [
         "go"
       ]
+    },
+    "decide:prepare": {
+      "locks": [
+        "rust"
+      ],
+      "workers": 1
     }
   },
   "environment": {
@@ -972,7 +1030,9 @@
       "SSL_CERT_DIR",
       "DOCKER_HOST",
       "DOCKER_CONTEXT",
-      "DOCKER_CONFIG"
+      "DOCKER_CONFIG",
+      "BIALY_GENERATION_BUNDLE",
+      "BIALY_GENERATION_AUTHORITY"
     ],
     "prefixes": [
       "LC_",

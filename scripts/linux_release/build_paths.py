@@ -13,7 +13,7 @@ from pathlib import Path
 import sys
 
 INSTALL_ROOT = "opt/painted-wolf-code"
-FIRST_PARTY = ("painted-wolf-code", "pw", "pw-logs", "pw-document-core", "bialy", "pw-vault-identity")
+FIRST_PARTY = ("painted-wolf-code", "pw", "pw-logs", "pw-document-core", "bialy", "nativegen", "pw-vault-identity")
 CHUNK = 1 << 20
 
 

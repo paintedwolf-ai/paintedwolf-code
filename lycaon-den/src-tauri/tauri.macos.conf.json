@@ -24,7 +24,8 @@
     "externalBin": [
       "binaries/pw-logs",
       "binaries/pw-document-core",
-      "binaries/bialy"
+      "binaries/bialy",
+      "binaries/nativegen"
     ],
     "macOS": {
       "files": {

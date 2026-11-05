@@ -37,7 +37,10 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		if budgets != nil {
 			budget = budgets.RequestBudget(ctx, provider, candidate)
 		}
-		if calibration := m.Calibration(ctx, sess); calibration.Calibrated() {
+		if budget.Err != nil {
+			return budget
+		}
+		if calibration := m.Calibration(ctx, sess); !budget.Exact && calibration.Calibrated() {
 			tools := modelcall.EstimateRequestInput(modelcall.CompletionRequest{Tools: candidate.Tools})
 			transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(candidate.Messages))
 			calibration.TranscriptEstimate += tools
@@ -52,6 +55,9 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		return budget
 	}
 	budget := measure(req)
+	if budget.Err != nil {
+		return req, budget.Err
+	}
 	if budget.Window <= 0 || budget.Input+budget.Output+budget.Headroom <= budget.Window {
 		return req, nil
 	}
@@ -71,6 +77,9 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 	frame := req
 	frame.Messages = projection.frame
 	frameBudget := measure(frame)
+	if frameBudget.Err != nil {
+		return req, frameBudget.Err
+	}
 	if req.MaxTokens <= 0 {
 		if availableAfterFrame := budget.Window - budget.Headroom - frameBudget.Input; availableAfterFrame > max(128, budget.MinimumOutput) {
 			reserve = max(max(128, budget.MinimumOutput), min(reserve, availableAfterFrame/4))
@@ -96,6 +105,9 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		candidate := req
 		candidate.Messages = projection.replace(rows)
 		budget = measure(candidate)
+		if budget.Err != nil {
+			return req, budget.Err
+		}
 		if budget.Input <= ceiling {
 			if req.MaxTokens <= 0 && (budget.Output <= 0 || budget.Input+budget.Output+budget.Headroom > budget.Window) {
 				candidate.MaxTokens = budget.Window - budget.Headroom - budget.Input

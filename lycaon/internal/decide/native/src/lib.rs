@@ -12,6 +12,8 @@ pub mod device;
 pub mod engine;
 pub mod error;
 pub mod heads;
+pub mod memory;
+pub mod pci;
 pub mod protocol;
 pub mod pyjson;
 pub mod question;
@@ -21,6 +23,8 @@ mod mlx;
 mod model;
 mod modernbert;
 mod runtime;
+#[cfg(all(test, feature = "mlx"))]
+mod runtime_startup_tests;
 mod select;
 mod sequence;
 #[cfg(test)]

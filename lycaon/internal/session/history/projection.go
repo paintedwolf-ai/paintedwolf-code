@@ -12,6 +12,23 @@ import (
 
 // Load uses a bounded tail when a projection cannot cover the live suffix.
 func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, error) {
+	return m.project(ctx, sess, true)
+}
+
+// Project reads history without scheduling compaction or changing the supplied session.
+func (m *Service) Project(ctx context.Context, sess *api.Session) ([]api.Message, error) {
+	if sess != nil {
+		copy := *sess
+		sess = &copy
+	}
+	rows, err := m.project(ctx, sess, false)
+	if err != nil {
+		return nil, err
+	}
+	return m.ApplyView(ctx, sess, rows), nil
+}
+
+func (m *Service) project(ctx context.Context, sess *api.Session, refresh bool) ([]api.Message, error) {
 	if m == nil || m.store == nil || sess == nil {
 		return nil, fmt.Errorf("session store and session are required")
 	}
@@ -20,15 +37,17 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 		return nil, err
 	}
 	if !ok || view.Generation < sess.CompactionGeneration {
-		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
+		return m.loadBoundedCanonicalPromptHistory(ctx, sess, refresh)
 	}
 	current, err := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
 	if err != nil {
 		return nil, err
 	}
 	if !current {
-		m.Schedule(ctx, sess)
-		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
+		if refresh {
+			m.Schedule(ctx, sess)
+		}
+		return m.loadBoundedCanonicalPromptHistory(ctx, sess, refresh)
 	}
 	// Background publication may advance the caller's session snapshot.
 	sess.CompactionGeneration = view.Generation
@@ -44,7 +63,7 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 		return nil, err
 	}
 	if hasMore {
-		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
+		return m.loadBoundedCanonicalPromptHistory(ctx, sess, refresh)
 	}
 	active, err := m.loadActiveWorkingSet(ctx, sess, cfg, view.CoveredThroughOrd)
 	if err != nil {
@@ -70,7 +89,7 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 	return append(retained, suffix...), nil
 }
 
-func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *api.Session) ([]api.Message, error) {
+func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *api.Session, refresh bool) ([]api.Message, error) {
 	bounds := m.canonicalTailBounds(m.compactionConfig(ctx, sess))
 	history, err := m.readBoundedCanonicalTail(ctx, sess.ID, bounds)
 	if err != nil {
@@ -84,7 +103,9 @@ func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *a
 	if err != nil {
 		return nil, err
 	}
-	m.Schedule(ctx, sess)
+	if refresh {
+		m.Schedule(ctx, sess)
+	}
 	text, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
 		"level": "references", "through_ord": firstTailOrd - 1, "reference_only": true,
 		"recall_available": m.recallAvailable != nil && m.recallAvailable(ctx, sess),

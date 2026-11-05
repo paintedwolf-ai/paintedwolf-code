@@ -154,6 +154,13 @@ done
     --features "${DECIDE_FEATURES}" -o "${TMP}/decide-crates.json"
 )
 
+echo "licenses:notices — generation engine crates" >&2
+(
+  cd "${GO_DIR}/internal/generation/native"
+  "${CARGO_ABOUT}" generate --fail --format json --config "${TAURI_DIR}/about.toml" \
+    --features mlx,vulkan -o "${TMP}/generation-crates.json"
+)
+
 echo "licenses:notices — verified Opengrep release notices" >&2
 OPENGREP_ARTIFACT="$("${ROOT}/scripts/resolve-opengrep.sh" --artifact-dir-only)"
 
@@ -166,6 +173,7 @@ bun "${ROOT}/scripts/licenses-assemble.ts" \
   --crates-json "${TMP}/crates.json" \
   --document-crates-json "${TMP}/document-crates.json" \
   --decide-crates-json "${TMP}/decide-crates.json" \
+  --generation-crates-json "${TMP}/generation-crates.json" \
   --opengrep-artifact "${OPENGREP_ARTIFACT}" \
   --out "${OUT}"
 assemble_rc=$?

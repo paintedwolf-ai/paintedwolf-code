@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/coordinator/promptloop/promptloop.modelTurn",
+  "kind": "runtime_service",
+  "workstream": "model-output-recovery",
+  "disposition": "retain",
+  "reason": "Retain the model-turn lifecycle adapter: it joins request collection, source attribution, OAR feedback and the response-before-tool-dispatch barrier. Recovery eligibility and the shared replacement allowance live in responserecovery. Keep this orchestration bounded without splitting the commit boundary; focused fixtures cover mixed failures, preserved request contracts, prior committed effects, and failed-draft withdrawal.",
+  "reviewed_commit": "0baf83d4b7b03f8c0108e842af73211a0be0826a",
+  "ceiling": 922,
+  "boundaries": {
+    "lycaon/internal/llm/responserecovery/policy_test.go": "88cc669efce7f71d7fd234df61564220836a5ac2e7b107deaeba848997e3e50a",
+    "lycaon/internal/coordinator/promptloop/response_recovery_test.go": "9f64f289f747a201f2380b606df9622060d4283668895c35890665e88ea5eaa1",
+    "lycaon/internal/coordinator/promptloop/stream_lifecycle_test.go": "7231075983bc2f03d314b2bf7d443e6d45aab2e0fc0e38c600daccc131aa1801"
+  },
+  "reviewed_shape": "b077a94458d8129f55418734f4e66c68aa03f50d4835f8163b974ad8248456a2"
+}

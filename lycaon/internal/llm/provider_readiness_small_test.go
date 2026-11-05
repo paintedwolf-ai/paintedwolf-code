@@ -194,7 +194,7 @@ func TestRegistryTestConnectivityAzureProbesDataPlaneKey(t *testing.T) {
 		catalog := mustTestProviderCatalog(t, entry)
 		credentials := providercredentials.NewAt(t.TempDir() + "/credential-vault.age")
 		testutil.FailErr(t, "store Azure key", credentials.Set("azure", key))
-		registry, err := NewRegistry(t.Context(), catalog, credentials)
+		registry, err := NewRegistry(t.Context(), catalog, credentials, nil)
 		if err == nil {
 			registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 		}
@@ -293,14 +293,14 @@ func TestNewProviderForEntryAttachesHTTPRetry(t *testing.T) {
 			}))
 			defer server.Close()
 			entry := CatalogEntry{ID: "p", Kind: kind, BaseURL: server.URL + "/v1", HTTPRetry: policy, Models: []modelinfo.Entry{{ID: "model", ContextLength: 32768, ThinkStyle: "none"}}}
-			reg, err := NewRegistry(t.Context(), mustTestProviderCatalog(t, entry), providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+			reg, err := NewRegistry(t.Context(), mustTestProviderCatalog(t, entry), providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 			if err == nil {
 				reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 			}
 			if err != nil {
 				t.Fatalf("NewRegistry: %v", err)
 			}
-			p, err := newProviderForEntry(context.Background(), entry, "key", reg.providerRetryPolicy(entry), reg.cloudflareUsage, reg.discoveryClient)
+			p, err := newProviderForEntry(context.Background(), entry, "key", reg.providerRetryPolicy(entry), reg.cloudflareUsage, reg.discoveryClient, nil)
 			if err != nil {
 				t.Fatalf("newProviderForEntry: %v", err)
 			}

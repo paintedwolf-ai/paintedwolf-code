@@ -360,8 +360,18 @@ structured output, the adapter types an error matching the kind's declared
 loop settles the prose the model streamed before it, and `TOOL_CALL_UNPARSED`
 enters the same `content.output` occurrence and rejected-draft lifecycle. The
 feedback asks the model to resubmit the call with valid JSON arguments. No call
-is reconstructed, so nothing executes. A third consecutive drop ends the turn
-with the provider's original error.
+is reconstructed, so nothing executes. The separate response-recovery policy shares at most two consecutive replacements
+with malformed response envelopes; a third failure returns the original error.
+
+Provider parsers remain strict and emit typed failure facts. The recovery policy
+requires an uncommitted response, an uncanceled turn and another admitted model
+iteration. `MODEL_RESPONSE_INVALID` supplies catalog-owned feedback for malformed
+envelopes, including text-only and structured-output requests without adding
+tools or changing their output contract. Decoder disagreement and resource bounds
+remain terminal. Each replacement passes normal output and operation validation.
+Prior committed work remains in history; rejected calls never execute. Accepted
+output resets the shared allowance; another rejection does not. Existing terminal
+error presentation and Continue/Retry actions remain unchanged.
 
 ## Coordinator nudges
 

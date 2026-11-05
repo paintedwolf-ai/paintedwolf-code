@@ -10045,6 +10045,38 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
+  /v1/providers/{provider_id}/repair:
+    post:
+      tags:
+        - providers
+      operationId: repairLocalGeneration
+      x-person-action: record
+      summary: Repair the bundled local generation model
+      description: Releases the generation reader, restores the authenticated packaged revision, and attempts admission. Failed attempts return their current recovery state.
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-zA-Z0-9_.-]+$
+      responses:
+        '200':
+          description: Repair attempt completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalGenerationRepairResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/providers/{provider_id}/refresh:
     post:
       tags:
@@ -23324,7 +23356,7 @@ components:
         configured:
           type: boolean
           description: |
-            True when the provider can make API calls. Keyed AI providers require a non-empty credential saved via PUT /v1/providers/{provider_id}/credential (environment variables do not configure). Local keyless providers are ready without credentials; ambient providers must resolve their declared credential chain. List membership is providers.local.yaml — Den does not keep a parallel hide allowlist.
+            True when the provider can make API calls. Keyed AI providers require a non-empty credential saved via PUT /v1/providers/{provider_id}/credential (environment variables do not configure). Keyless providers need no credentials; bundled local generation also requires host admission. Ambient providers must resolve their declared credential chain. List membership is providers.local.yaml — Den does not keep a parallel hide allowlist.
         credential_present:
           type: boolean
           description: True when credentials are saved for this provider instance.
@@ -23391,6 +23423,9 @@ components:
             - stale
             - unavailable
           description: models.dev document freshness for catalog merge.
+        local_runtime:
+          x-go-pointer: true
+          $ref: '#/components/schemas/LocalGenerationStatus'
         discovery_status:
           type: string
           enum:
@@ -37179,6 +37214,44 @@ components:
           type: integer
           format: int64
           description: Estimated USD overage in nano-USD for usage above the included daily allowance when applicable.
+    LocalGenerationStatus:
+      x-go-generate: true
+      type: object
+      required:
+        - state
+        - recovery_action
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          enum:
+            - idle
+            - loading
+            - ready
+            - repairing
+            - unavailable
+            - repair_required
+            - insufficient_memory
+            - stopped
+          description: Current host runtime state, independent of cached model discovery.
+        recovery_action:
+          type: string
+          enum:
+            - none
+            - retry
+            - repair
+            - reinstall
+          description: Available recovery action selected from host facts.
+        detail:
+          type: string
+          description: Diagnostic detail; recovery_action supplies the available action.
+        revision:
+          type: string
+          description: Authenticated revision held by the admitted model process.
+        context_tokens:
+          type: integer
+          minimum: 0
+          description: Admitted context capacity of the ready process.
     ProviderListResponse:
       x-go-generate: true
       type: object
@@ -37265,6 +37338,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProviderKindTemplate'
+    LocalGenerationRepairResult:
+      x-go-generate: true
+      type: object
+      required:
+        - ok
+        - status
+      additionalProperties: false
+      properties:
+        ok:
+          x-go-name: OK
+          type: boolean
+        status:
+          $ref: '#/components/schemas/LocalGenerationStatus'
     WebResearchProviderRole:
       type: string
       enum:

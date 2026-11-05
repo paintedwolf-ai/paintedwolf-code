@@ -62,6 +62,7 @@ func openAICompatConformanceCases() []openAICompatConformanceCase {
 func driverConformanceCoverage() map[string]string {
 	covered := map[string]string{
 		"anthropic":      "TestAnthropicDriverConformance",
+		"nativegen":      "providers/nativegen: TestNativeProcessResponseConformance",
 		"bedrock":        "covered by unit wire tests in bedrock_test.go",
 		"ollama":         "native driver; covered by ollama_test.go",
 		"vertex-express": "TestVertexExpressDriverConformance",
@@ -276,12 +277,15 @@ func abortConformanceBody(w http.ResponseWriter, contentType, partial string) {
 	}
 }
 
-func TestAllRegisteredDriversInterruptedAndEmptyConformance(t *testing.T) {
+func TestHTTPDriversInterruptedAndEmptyConformance(t *testing.T) {
 	req := modelcall.CompletionRequest{
 		Model:    "m",
 		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "ping"}},
 	}
 	for _, kind := range driverFactories.Kinds() {
+		if providerKindSpecs[kind].Protocol == ProtocolNativeGeneration {
+			continue
+		}
 		t.Run(kind, func(t *testing.T) {
 			contentType, partialFrame := driverPartialStreamFrame(kind)
 

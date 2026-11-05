@@ -36,6 +36,14 @@ Together, local inference, and Gemini adapters project one leading system messag
 
 Mistral's `/v1/models` discovery reads `max_context_length` and the structured `capabilities` block (`completion_chat`, `function_calling`, `vision`), filtering rows that declare `completion_chat: false` while leaving omitted capability fields unknown. On the chat-completions wire, the Mistral profile (`ToolCallIDAlphanumeric9`) preserves 9-character ASCII alphanumeric wire tool-call IDs and deterministically normalizes non-conforming host or imported tool-call IDs to 9 alphanumeric characters across both `tool_calls[].id` and paired `tool_call_id` messages.
 
+### Native output contract
+
+The bundled native engine and Go adapter use co-versioned private protocol 2. Each generation request includes the exact callable tool names in `output_contract.allowed_tools`; structured output and prose-only requests carry an empty array. The sampler constrains control-token order and callable headers. The Go decoder independently validates envelopes and arguments; ordinary prose never becomes a tool call.
+
+The native E4B profile does not advertise thinking or reasoning replay. Paired spontaneous thought channels are decoded separately, but captured reasoning is omitted from subsequent requests, including tool-call chains. Supporting a trained artifact that requires reasoning continuation needs an explicit capability and artifact qualification.
+
+A token cap inside a channel or partial tool header returns typed truncation without fabricated calls. Completed tool headers with incomplete arguments retain argument-truncation facts. Output failures expose a typed malformed-envelope, decoding-mismatch, or output-bound classification; recovery policy remains outside the adapter. Native diagnostics retain parser phase, sampled position, and at most 16 control-token IDs and positions, excluding generated text and ordinary token IDs.
+
 ## Catalog authority
 
 Catalog entries declare stable provider kind, model id, display metadata, context/output limits, feature flags, driver profile, utility eligibility, and optional pricing/feed keys.
@@ -183,6 +191,14 @@ drops the entire trace if any plaintext or structured block matches; it never
 rewrites a signed block. A retained assistant's content and reasoning are not
 independently summarized or truncated. Whole old exchanges may leave the request
 through normal compaction, while retained tool exchanges keep their replay state.
+
+Summary input is bounded source data, not replay history. Tool call identities,
+arguments or references, and result linkage remain quoted evidence even when a
+page splits an exchange. Opaque provider replay state stays out of summary input.
+The summary request contains only its system instructions and source-data turn;
+it does not duplicate source pages as a claimed cache prefix. Request estimates
+include projected messages, response format, output and framing reserve. Invalid
+or oversized source input retains canonical recovery references without synthesis.
 
 Adapters select replay without mutating the stored history:
 
