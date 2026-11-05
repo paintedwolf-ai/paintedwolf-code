@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/commandconformance"
@@ -166,6 +168,11 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c comm
 			}
 			testutil.FailErr(t, "decode settled program", json.Unmarshal([]byte(winner.Report), &obs.Outcome))
 		}
+		if obs.Outcome.State == "running" {
+			var running command.RunningProgramResult
+			testutil.FailErr(t, "decode running program", json.NewDecoder(strings.NewReader(body)).Decode(&running))
+			obs.Outcome = r.joinRunningProgram(t, projectID, sess.ID, running)
+		}
 	} else {
 		obs.TopLevelReject = content
 	}
@@ -223,6 +230,52 @@ func (r *conformanceRunner) promptAnsweringApprovals(t *testing.T, projectID, se
 			testutil.FailErr(t, "answer recommended approval", resolveErr)
 		}
 	}
+}
+
+// joinRunningProgram follows a program past the foreground budget to its end: how long
+// a case takes on a given host decides nothing about what it prints. The program's
+// final outcome is the last line of its stderr stream.
+func (r *conformanceRunner) joinRunningProgram(t *testing.T, projectID, sessionID string, running command.RunningProgramResult) command.ProgramOutcome {
+	t.Helper()
+	var stdout, stderr strings.Builder
+	cursor := 0
+	done := false
+	testutil.WaitFor(t, func() bool {
+		raw, err := r.h.ToolRegistry.Run(t.Context(), "command_output", map[string]any{"handle": running.Handle, "cursor": cursor},
+			tools.ToolContext{Identity: tools.InvocationIdentity{ProjectID: projectID, SessionID: sessionID}})
+		testutil.FailErr(t, "read running program", err)
+		var page struct {
+			NextCursor string `json:"next_cursor"`
+			Running    bool   `json:"running"`
+			Truncated  bool   `json:"truncated"`
+			Chunks     []struct {
+				Stream string `json:"stream"`
+				Text   string `json:"text"`
+			} `json:"chunks"`
+		}
+		testutil.FailErr(t, "decode running program output", json.Unmarshal([]byte(raw), &page))
+		if page.Truncated {
+			t.Fatalf("running program output truncated: %s", raw)
+		}
+		for _, chunk := range page.Chunks {
+			if chunk.Stream == "stderr" {
+				stderr.WriteString(chunk.Text)
+			} else {
+				stdout.WriteString(chunk.Text)
+			}
+		}
+		next, err := strconv.Atoi(page.NextCursor)
+		testutil.FailErr(t, "parse output cursor", err)
+		cursor = next
+		done = !page.Running
+		return done && len(page.Chunks) == 0
+	})
+	text := strings.TrimRight(stderr.String(), "\n")
+	cut := strings.LastIndexByte(text, '\n') + 1
+	var outcome command.ProgramOutcome
+	testutil.FailErr(t, "decode final outcome", json.Unmarshal([]byte(text[cut:]), &outcome))
+	outcome.Stdout, outcome.Stderr = stdout.String(), text[:cut]
+	return outcome
 }
 
 func (r *conformanceRunner) toolResult(t *testing.T, sessionID, callID string) string {
