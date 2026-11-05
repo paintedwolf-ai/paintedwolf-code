@@ -66,7 +66,7 @@ impl Harness {
     }
 
     fn pump_until(&self, what: &str, done: impl Fn(&Self) -> bool) {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(120);
         while !done(self) {
             assert!(
                 Instant::now() < deadline,

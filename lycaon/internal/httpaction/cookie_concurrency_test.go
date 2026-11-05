@@ -103,8 +103,13 @@ func TestCookieJarSavesCookiesReceivedBeforeBodyCancellation(t *testing.T) {
 	t.Cleanup(server.Close)
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register", Register(reg, Deps{Boundary: testBoundary(), Secrets: secrets}))
-	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
+	// The client exposes no event for headers arriving, so allow their delivery after the server flushes.
+	go func() {
+		<-received
+		time.AfterFunc(testutil.Timeout(2*time.Second), cancel)
+	}()
 	_, err := reg.Run(ctx, "http_request", map[string]any{
 		"url": server.URL, "cookie_jar": "session", "capability_request": loopbackCapability(t, server.URL),
 	}, sessionContext(t.TempDir(), "canceled-body"))

@@ -41,8 +41,18 @@ func TestRunInOwnGroupEndsWhatTheCommandLeftBehind(t *testing.T) {
 // Interactive shells ignore SIGTERM.
 func TestRunInOwnGroupCancellationKillsAShellIgnoringTerm(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "helper.pid")
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	// The pid file appears only after the shell has installed its trap.
+	go func() {
+		for t.Context().Err() == nil {
+			if _, err := os.Stat(pidFile); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
 	cmd, cleanup, err := PrepareCommand(ctx, "sh",
 		[]string{"-c", fmt.Sprintf("trap '' TERM; sleep 30 & echo $! > %s; wait", strconv.Quote(pidFile))},
 		ExecOpts{Launch: HostLaunch("exec test")})
