@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"

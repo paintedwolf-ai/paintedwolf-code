@@ -30,7 +30,7 @@ func main() {
 		if cfg.HasTool(tool) {
 			return true
 		}
-		_, ok := cfg.ApprovalReversibility[tool]
+		_, ok := cfg.Reversibility(tool)
 		return ok
 	}
 	if err := cfg.ValidateRequiresWorkerBranch(known); err != nil {

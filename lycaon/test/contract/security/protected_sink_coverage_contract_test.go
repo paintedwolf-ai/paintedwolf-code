@@ -44,8 +44,8 @@ var nonPathMutatingAck = map[string]string{
 func TestEveryMutatingToolIsSinkGuarded(t *testing.T) {
 	t.Parallel()
 	gateable := append(
-		append([]string(nil), settings.ApprovalRecoverableToolIDs()...),
-		settings.ApprovalIrreversibleToolIDs()...,
+		append([]string(nil), settings.ApprovalRecoverableIDs()...),
+		settings.ApprovalIrreversibleIDs()...,
 	)
 	if len(gateable) == 0 {
 		t.Fatal("no gateable tools resolved; this guard would pass vacuously")
@@ -66,10 +66,10 @@ func TestEveryMutatingToolIsSinkGuarded(t *testing.T) {
 func TestSinkAckHasNoStaleEntries(t *testing.T) {
 	t.Parallel()
 	known := make(map[string]bool)
-	for _, id := range settings.ApprovalRecoverableToolIDs() {
+	for _, id := range settings.ApprovalRecoverableIDs() {
 		known[id] = true
 	}
-	for _, id := range settings.ApprovalIrreversibleToolIDs() {
+	for _, id := range settings.ApprovalIrreversibleIDs() {
 		known[id] = true
 	}
 	for tool := range nonPathMutatingAck {

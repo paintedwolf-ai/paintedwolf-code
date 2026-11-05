@@ -70,13 +70,15 @@ func bindsNextSteps(r *Rule) bool {
 // validateNextSteps rejects a catalog entry that could not render, and any rule
 // that lets the fact reach a decision ([OAR-DOC-26] holds for the same reason).
 func (l *Loader) validateNextSteps(r *Rule) error {
-	refs, err := oarcore.ConditionReferences(r.When)
-	if err != nil {
-		return err
-	}
-	for _, name := range refs {
-		if name == NextStepsFact {
-			return fmt.Errorf("rule %s: when reads %s, which only copy may bind", r.ID, NextStepsFact)
+	if strings.TrimSpace(r.When) != "" {
+		refs, err := oarcore.ConditionReferences(r.When)
+		if err != nil {
+			return err
+		}
+		for _, name := range refs {
+			if name == NextStepsFact {
+				return fmt.Errorf("rule %s: when reads %s, which only copy may bind", r.ID, NextStepsFact)
+			}
 		}
 	}
 	if r.NextSteps == nil {

@@ -373,11 +373,11 @@ func trimRetryReport(
 }
 
 func workerReportEvalInput(childSessionID, agentType string, report workercompletion.WorkerCompletionReport, messages []api.Message, opts WorkerSummaryFinalizeOpts) workercompletion.WorkerSummaryEvalInput {
-	return workercompletion.WorkerSummaryEvalInput{AgentType: agentType, MaxChars: workerSummaryMaxChars(opts), Report: report, ChildSessionID: childSessionID, ChildMessages: messages, ProjectDir: opts.ProjectDir, ProjectRoots: opts.ProjectRoots, ActiveRootID: opts.ActiveRootID, WorkspaceCheck: opts.WorkspaceCheck, Hints: opts.WorkflowHints, Ledger: opts.Ledger, Pipeline: opts.Pipeline, OfferedTools: opts.OfferedTools}
+	return workercompletion.WorkerSummaryEvalInput{AgentType: agentType, MaxChars: workerSummaryMaxChars(opts), Report: report, ChildSessionID: childSessionID, ChildMessages: messages, ProjectDir: opts.ProjectDir, ProjectRoots: opts.ProjectRoots, ActiveRootID: opts.ActiveRootID, WorkspaceCheck: opts.WorkspaceCheck, Hints: opts.WorkflowHints, Ledger: opts.Ledger, Pipeline: opts.Pipeline, Reach: opts.Reach}
 }
 
 func missingWorkerReportOutcome(ctx context.Context, childSessionID, agentType, provenance string, messages []api.Message, opts WorkerSummaryFinalizeOpts) (WorkerSummaryOutcome, error) {
-	evaluated, err := workercompletion.EvaluateWorkerSummary(ctx, workercompletion.WorkerSummaryEvalInput{AgentType: agentType, MissingReport: true, ChildSessionID: childSessionID, ChildMessages: messages, ProjectDir: opts.ProjectDir, ProjectRoots: opts.ProjectRoots, ActiveRootID: opts.ActiveRootID, WorkspaceCheck: opts.WorkspaceCheck, Hints: opts.WorkflowHints, Ledger: opts.Ledger, Pipeline: opts.Pipeline, OfferedTools: opts.OfferedTools})
+	evaluated, err := workercompletion.EvaluateWorkerSummary(ctx, workercompletion.WorkerSummaryEvalInput{AgentType: agentType, MissingReport: true, ChildSessionID: childSessionID, ChildMessages: messages, ProjectDir: opts.ProjectDir, ProjectRoots: opts.ProjectRoots, ActiveRootID: opts.ActiveRootID, WorkspaceCheck: opts.WorkspaceCheck, Hints: opts.WorkflowHints, Ledger: opts.Ledger, Pipeline: opts.Pipeline, Reach: opts.Reach})
 	if err != nil {
 		return WorkerSummaryOutcome{}, err
 	}

@@ -68,7 +68,7 @@ func TestBundledGrantTargetScopesValid(t *testing.T) {
 		if cfg.HasTool(tool) {
 			return true
 		}
-		_, ok := cfg.ApprovalReversibility[tool]
+		_, ok := cfg.Reversibility(tool)
 		return ok
 	}
 	if err := cfg.ValidateGrantTargetScopes(known); err != nil {
@@ -109,7 +109,7 @@ func TestBundledProcessSpawningToolsValid(t *testing.T) {
 		if cfg.HasTool(tool) {
 			return true
 		}
-		_, ok := cfg.ApprovalReversibility[tool]
+		_, ok := cfg.Reversibility(tool)
 		return ok
 	}
 	if err := cfg.ValidateSpawnsProcess(known); err != nil {
@@ -142,7 +142,7 @@ func TestBundledMultiRootIsClosed(t *testing.T) {
 		if cfg.HasTool(tool) {
 			return true
 		}
-		_, ok := cfg.ApprovalReversibility[tool]
+		_, ok := cfg.Reversibility(tool)
 		return ok
 	}
 	if err := cfg.ValidateMultiRoot(known); err != nil {

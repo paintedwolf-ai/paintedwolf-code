@@ -613,10 +613,8 @@ retired_to_content_contract:
 host_produced_tools:
   - content_apply
 
-# Approval presentation class for each tool.
+# Approval class for each tool an agent can call.
 approval_reversibility:
-  process_list: reversible
-  process_signal: recoverable
   answer_decision: reversible
   ask_user: reversible
   command: recoverable
@@ -626,50 +624,20 @@ approval_reversibility:
   complete_leg: reversible
   command_stop: recoverable
   capture_page: recoverable
-  chmod: recoverable
-  chown: recoverable
-  code_rewrite: reversible
-  copy: recoverable
   decline_worker_budget: reversible
   delegate_decompose: reversible
   delegate_dispatch: reversible
   delegate_init: reversible
   delegate_status: reversible
-  delete: recoverable
-  diff: reversible
-  edit: reversible
   extend_worker_budget: reversible
-  extract_archive: recoverable
   fetch_url: recoverable
-  http_request: recoverable
   fanout_plan: reversible
-  find: reversible
-  git_blame: reversible
-  git_branches: reversible
-  git_commit: recoverable
-  git_diff: reversible
-  git_log: reversible
-  git_ref: reversible
-  git_restore: recoverable
-  git_compare: reversible
-  git_checkout: recoverable
-  git_merge: recoverable
-  git_stash: recoverable
-  git_stash_list: reversible
-  git_show: reversible
-  git_status: reversible
-  grep: reversible
   handoff_health: reversible
   handoff_init: reversible
   handoff_release: reversible
   handoff_release_all: reversible
   handoff_reserve: reversible
-  jq: reversible
-  jq_edit: reversible
-  list_dir: reversible
   measure_page: recoverable
-  mkdir: recoverable
-  move: recoverable
   pack_board: reversible
   parse_decomposition: reversible
   parse_delegation_plan: reversible
@@ -683,12 +651,10 @@ approval_reversibility:
   preview_overlay: reversible
   plan_append_review_evidence: reversible
   promote_overlay: reversible
-  read: reversible
   recall: reversible
   record_finding: reversible
   reject_overlay: reversible
   render_view: recoverable
-  replace_lines: reversible
   restore_version: reversible
   request_budget: reversible
   request_decision: reversible
@@ -705,10 +671,7 @@ approval_reversibility:
   state_query: reversible
   state_start: reversible
   state_update: reversible
-  stat: reversible
   submit_verdict: reversible
-  summarize: reversible
-  survey_repo: reversible
   skills_read: reversible
   source_history: reversible
   task: recoverable
@@ -722,7 +685,6 @@ approval_reversibility:
   view_image: reversible
   view_video: reversible
   wait: reversible
-  wc: reversible
   web_search: recoverable
   worker_cancel: reversible
   workflow_advance: reversible
@@ -732,6 +694,48 @@ approval_reversibility:
   workflow_persist: reversible
   workflow_transition: reversible
   workflow_user_feedback: reversible
+
+# Approval class for each native operation reached through command. These names
+# are operation identities; as tools they are retired.
+operation_reversibility:
+  process_list: reversible
+  process_signal: recoverable
+  chmod: recoverable
+  chown: recoverable
+  code_rewrite: reversible
+  copy: recoverable
+  delete: recoverable
+  diff: reversible
+  edit: reversible
+  extract_archive: recoverable
+  http_request: recoverable
+  find: reversible
+  git_blame: reversible
+  git_branches: reversible
+  git_commit: recoverable
+  git_diff: reversible
+  git_log: reversible
+  git_ref: reversible
+  git_restore: recoverable
+  git_compare: reversible
+  git_checkout: recoverable
+  git_merge: recoverable
+  git_stash: recoverable
+  git_stash_list: reversible
+  git_show: reversible
+  git_status: reversible
+  grep: reversible
+  jq: reversible
+  jq_edit: reversible
+  list_dir: reversible
+  mkdir: recoverable
+  move: recoverable
+  read: reversible
+  replace_lines: reversible
+  stat: reversible
+  summarize: reversible
+  survey_repo: reversible
+  wc: reversible
   write: reversible
 
 # Subsystem owner for commit and recovery.

@@ -52,6 +52,8 @@ const (
 type Config struct {
 	Native                map[string][]string `yaml:"native"`
 	ApprovalReversibility map[string]string   `yaml:"approval_reversibility"`
+	// OperationReversibility classifies native operations reached through command.
+	OperationReversibility map[string]string `yaml:"operation_reversibility"`
 	Owner                 map[string]string   `yaml:"owner"`
 	BatchPolicy           map[string]string   `yaml:"batch_policy"`
 	// BatchOptInArg names the argument that enables sibling concurrency.
@@ -156,14 +158,46 @@ func (c Config) Group(name string) []string {
 	return c.Native[name]
 }
 
-// ValidateApprovalReversibility checks every tool's approval class.
+// Reversibility returns the approval class of a tool or native operation.
+func (c Config) Reversibility(name string) (string, bool) {
+	if tier, ok := c.ApprovalReversibility[name]; ok {
+		return tier, true
+	}
+	tier, ok := c.OperationReversibility[name]
+	return tier, ok
+}
+
+// classifiedNames lists every tool and native operation with an approval class.
+func (c Config) classifiedNames() []string {
+	out := make([]string, 0, len(c.ApprovalReversibility)+len(c.OperationReversibility))
+	for name := range c.ApprovalReversibility {
+		out = append(out, name)
+	}
+	for name := range c.OperationReversibility {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ValidateApprovalReversibility checks every tool's and operation's approval class.
 func (c Config) ValidateApprovalReversibility() error {
 	if len(c.ApprovalReversibility) == 0 {
 		return fmt.Errorf("approval_reversibility map is empty")
 	}
+	var both []string
+	for name := range c.OperationReversibility {
+		if _, ok := c.ApprovalReversibility[name]; ok {
+			both = append(both, name)
+		}
+	}
+	if len(both) > 0 {
+		sort.Strings(both)
+		return fmt.Errorf("names classified as both tool and operation: %s", strings.Join(both, ", "))
+	}
 	var missing []string
 	for _, tool := range c.AllTools() {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
+		if _, ok := c.Reversibility(tool); !ok {
 			missing = append(missing, tool)
 		}
 	}
@@ -172,7 +206,8 @@ func (c Config) ValidateApprovalReversibility() error {
 		return fmt.Errorf("native tools missing approval_reversibility: %s", strings.Join(missing, ", "))
 	}
 	var bad []string
-	for tool, tier := range c.ApprovalReversibility {
+	for _, tool := range c.classifiedNames() {
+		tier, _ := c.Reversibility(tool)
 		switch tier {
 		case TierReversible, TierRecoverable, TierIrreversible:
 		default:
@@ -192,7 +227,7 @@ func (c Config) ValidateToolContracts() error {
 		return err
 	}
 	var faults []string
-	for tool := range c.ApprovalReversibility {
+	for _, tool := range c.classifiedNames() {
 		owner, ok := c.Owner[tool]
 		if !ok || strings.TrimSpace(owner) == "" {
 			faults = append(faults, tool+" missing subsystem owner")
@@ -211,12 +246,12 @@ func (c Config) ValidateToolContracts() error {
 		}
 	}
 	for tool := range c.Owner {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
+		if _, ok := c.Reversibility(tool); !ok {
 			faults = append(faults, tool+" subsystem owner without approval_reversibility")
 		}
 	}
 	for tool := range c.BatchPolicy {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
+		if _, ok := c.Reversibility(tool); !ok {
 			faults = append(faults, tool+" batch_policy without approval_reversibility")
 		}
 	}
@@ -265,19 +300,19 @@ func (c Config) ValidateToolContracts() error {
 		}
 	}
 	for tool := range c.Lifecycle {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
+		if _, ok := c.Reversibility(tool); !ok {
 			faults = append(faults, tool+" lifecycle without approval_reversibility")
 		}
 	}
 	for tool, order := range c.TurnOrder {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
+		if _, ok := c.Reversibility(tool); !ok {
 			faults = append(faults, tool+" turn_order without approval_reversibility")
 		} else if !validTurnOrder(order) {
 			faults = append(faults, fmt.Sprintf("%s turn_order=%q", tool, order))
 		}
 	}
 	for tool, capabilities := range c.ExecutionCapabilities {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
+		if _, ok := c.Reversibility(tool); !ok {
 			faults = append(faults, tool+" execution_capabilities without approval_reversibility")
 		}
 		seen := map[string]struct{}{}
@@ -319,7 +354,7 @@ func (c Config) ValidateFamilies() error {
 		if c.HasTool(tool) {
 			return true
 		}
-		_, ok := c.ApprovalReversibility[tool]
+		_, ok := c.Reversibility(tool)
 		return ok
 	}
 	memberFamily := map[string]string{}
@@ -774,7 +809,16 @@ func (c Config) ValidateRequiresWorkerBranch(known func(string) bool) error {
 
 // ToolsByTier returns sorted tool ids for each locked tier value.
 func (c Config) ToolsByTier() (reversible, recoverable, irreversible []string) {
-	for tool, tier := range c.ApprovalReversibility {
+	return namesByTier(c.ApprovalReversibility)
+}
+
+// OperationsByTier returns sorted native operation ids for each locked tier value.
+func (c Config) OperationsByTier() (reversible, recoverable, irreversible []string) {
+	return namesByTier(c.OperationReversibility)
+}
+
+func namesByTier(tiers map[string]string) (reversible, recoverable, irreversible []string) {
+	for tool, tier := range tiers {
 		switch tier {
 		case TierReversible:
 			reversible = append(reversible, tool)
@@ -853,12 +897,14 @@ func (c Config) ToolContractRows() []ToolContractRow {
 	for _, tool := range c.BoundedInProcess {
 		bounded[strings.TrimSpace(tool)] = true
 	}
-	rows := make([]ToolContractRow, 0, len(c.ApprovalReversibility))
-	for tool := range c.ApprovalReversibility {
+	names := c.classifiedNames()
+	rows := make([]ToolContractRow, 0, len(names))
+	for _, tool := range names {
+		tier, _ := c.Reversibility(tool)
 		rows = append(rows, ToolContractRow{
 			Tool:                  tool,
 			Owner:                 c.Owner[tool],
-			Reversibility:         c.ApprovalReversibility[tool],
+			Reversibility:         tier,
 			Batch:                 c.BatchPolicy[tool],
 			BatchOptInArg:         strings.TrimSpace(c.BatchOptInArg[tool]),
 			BatchConcurrencyLimit: c.BatchConcurrencyLimit[tool],

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 // ContentObservation combines attributed content with response protocol facts.
