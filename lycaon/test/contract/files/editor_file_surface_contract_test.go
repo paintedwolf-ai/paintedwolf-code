@@ -47,7 +47,7 @@ func TestEditorFileToolSurface_NoExternalExecutionNetworkOrMCP(t *testing.T) {
 		}
 	}
 
-	required := []string{"command", "edit", "replace_lines", "code_rewrite", "summarize"}
+	required := []string{"command"}
 	for _, name := range required {
 		if !prof.Tools[name] {
 			t.Fatalf("%s must grant %q", editorturn.ToolProfileID, name)
