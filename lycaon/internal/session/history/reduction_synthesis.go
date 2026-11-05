@@ -42,7 +42,7 @@ func (m *Service) scheduleReductionSynthesis(ctx context.Context, sc *compaction
 			m.runReductionSynthesis(workCtx, token, sc, info, input, attempt)
 		})
 		if !started {
-			m.attemptControl().deferRetry(info.ID, attempt)
+			m.attemptControl().deferRetry(info.ID, attempt) //nolint:contextcheck // the deferred retry fires after this pass's context ends.
 		}
 		return nil
 	})
