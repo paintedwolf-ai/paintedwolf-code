@@ -1140,6 +1140,7 @@ tasks:
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
@@ -1155,6 +1156,7 @@ tasks:
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
@@ -1258,6 +1260,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-native-tool-contracts/**/*
       - internal/nativemanifest/**/*
     generates:
@@ -1274,6 +1277,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-native-tool-contracts/**/*
       - internal/nativemanifest/**/*
       - internal/settings/approval_tiers.generated.go
@@ -1292,6 +1296,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-worker-branch-tools/**/*
       - internal/nativemanifest/**/*
     generates:
@@ -1306,6 +1311,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-worker-branch-tools/**/*
       - internal/nativemanifest/**/*
       - internal/tools/worker_branch_tools.generated.go

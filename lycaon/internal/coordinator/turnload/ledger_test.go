@@ -253,28 +253,3 @@ func TestLedgerNeverPromotesPredictionOutsideLoadableSurface(t *testing.T) {
 	}
 }
 
-func TestPredictedToolsLoadTheirDeclaredCompanions(t *testing.T) {
-	l := NewLedger()
-	// write, edit, and replace_lines declare one another; command's family is not a companion set.
-	l.BeginTurn("s1", opening("u1", Boundary{Cache: CacheCold, Reason: ColdFirstTurn}, "edit", "write", "replace_lines", "command", "command_output"), predict("edit", "command"))
-	if got := standingNames(l, "s1"); got != "command,edit,replace_lines,write" {
-		t.Fatalf("standing = %s", got)
-	}
-	for _, load := range l.Standing("s1").Tools {
-		switch load.Tool {
-		case "write", "replace_lines":
-			if load.Source != SourceCompanion || load.With != "edit" {
-				t.Fatalf("%s = %+v, want a companion of edit", load.Tool, load)
-			}
-		case "edit", "command":
-			if load.Source != SourcePredicted {
-				t.Fatalf("%s = %+v, want predicted", load.Tool, load)
-			}
-		}
-	}
-	// A companion the surface does not offer stays out.
-	l.BeginTurn("s2", opening("u1", Boundary{Cache: CacheCold, Reason: ColdFirstTurn}, "edit", "write"), predict("edit"))
-	if got := standingNames(l, "s2"); got != "edit,write" {
-		t.Fatalf("standing = %s", got)
-	}
-}

@@ -147,21 +147,6 @@ var compiledFamilies = map[string][]string{
 	},
 }
 
-var compiledCompanions = map[string][]string{
-	"edit": {
-		"write",
-		"replace_lines",
-	},
-	"replace_lines": {
-		"write",
-		"edit",
-	},
-	"write": {
-		"edit",
-		"replace_lines",
-	},
-}
-
 var compiledGrantIdentityNeutralArgs = map[string][]string{
 	"command": {
 		"terminal_capture",

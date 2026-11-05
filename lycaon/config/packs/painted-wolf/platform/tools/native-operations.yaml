@@ -1,0 +1,438 @@
+# Native operations reached through command. Agents cannot call these names as
+# tools; each section has the same meaning as in native-tools.yaml.
+operations:
+  filesystem:
+    - read
+    - write
+    - edit
+    - replace_lines
+    - code_rewrite
+    - grep
+    - find
+    - jq
+    - jq_edit
+    - stat
+    - wc
+    - list_dir
+    - chmod
+    - delete
+    - copy
+    - move
+    - mkdir
+    - chown
+    - diff
+    - extract_archive
+  git:
+    - git_status
+    - git_diff
+    - git_log
+    - git_commit
+    - git_show
+    - git_blame
+    - git_restore
+    - git_ref
+    - git_branches
+    - git_compare
+    - git_checkout
+    - git_merge
+    - git_stash
+    - git_stash_list
+  meta:
+    - survey_repo
+    - summarize
+  processes:
+    - process_list
+    - process_signal
+  network:
+    - http_request
+
+grant_target_scope:
+  write: path
+  edit: path
+  replace_lines: path
+  code_rewrite: path
+  jq_edit: path
+
+multi_root:
+  path:
+    - read
+    - write
+    - edit
+    - replace_lines
+    - code_rewrite
+    - stat
+    - wc
+    - delete
+    - chmod
+    - chown
+    - copy
+    - move
+    - mkdir
+    - extract_archive
+    - diff
+    - jq
+    - jq_edit
+    - git_status
+    - git_diff
+    - git_log
+    - git_commit
+    - git_show
+    - git_blame
+    - git_restore
+    - git_ref
+    - git_branches
+    - git_compare
+    - git_checkout
+    - git_merge
+    - git_stash
+    - git_stash_list
+  discovery:
+    - find
+    - grep
+    - list_dir
+    - survey_repo
+    - summarize
+  none:
+    - process_list
+    - process_signal
+    - http_request
+
+requires_worker_branch:
+  - write
+  - edit
+  - replace_lines
+  - code_rewrite
+  - jq_edit
+  - delete
+  - mkdir
+  - copy
+  - move
+  - chmod
+  - chown
+  - extract_archive
+  - git_commit
+  - git_restore
+  - git_checkout
+  - git_merge
+  - git_stash
+
+mutates_content:
+  - write
+  - edit
+  - replace_lines
+  - code_rewrite
+  - jq_edit
+
+mutates_path:
+  - write
+  - edit
+  - replace_lines
+  - code_rewrite
+  - jq_edit
+  - delete
+  - copy
+  - move
+  - mkdir
+  - chmod
+  - chown
+  - extract_archive
+  - git_commit
+  - git_restore
+  - git_checkout
+  - git_merge
+  - git_stash
+  - http_request
+
+socket_arg:
+  http_request: unix_socket
+
+secret_reference_surface:
+  http_request: http_request
+  write: file
+  edit: file
+  replace_lines: file
+  jq_edit: file
+
+secret_reference_args:
+  write:
+    - content
+  edit:
+    - old_string
+    - new_string
+  replace_lines:
+    - new_content
+    - "operations.[].new_content"
+  jq_edit:
+    - vars
+
+execution_capabilities:
+  write: [file_change]
+  edit: [file_change]
+  replace_lines: [file_change]
+  code_rewrite: [file_change]
+  jq_edit: [file_change]
+  copy: [file_change]
+  move: [file_change]
+  delete: [file_change]
+  mkdir: [file_change]
+  chmod: [file_change]
+  chown: [file_change]
+  extract_archive: [file_change]
+  git_restore: [file_change]
+  git_checkout: [file_change]
+  git_merge: [file_change]
+  git_stash: [file_change]
+  http_request:
+    - direct_ip
+    - loopback_connect
+
+families:
+  processes:
+    - process_list
+    - process_signal
+
+grant_identity_neutral_args:
+  grep:
+    - max_matches
+    - offset
+    - context_lines
+  read:
+    - limit
+    - offset
+  find:
+    - offset
+    - max_results
+
+chunkable_payload:
+  - write
+  - replace_lines
+  - code_rewrite
+
+bounded_in_process:
+  - read
+  - write
+  - edit
+  - replace_lines
+  - code_rewrite
+  - grep
+  - find
+  - jq
+  - jq_edit
+  - stat
+  - wc
+  - list_dir
+  - chmod
+  - delete
+  - copy
+  - move
+  - mkdir
+  - chown
+  - diff
+  - extract_archive
+  - git_status
+  - git_diff
+  - git_log
+  - git_commit
+  - git_show
+  - git_blame
+  - git_restore
+  - git_ref
+  - git_branches
+  - git_compare
+  - git_checkout
+  - git_merge
+  - git_stash
+  - git_stash_list
+
+detach_after_budget:
+  - find
+  - grep
+  - wc
+  - list_dir
+  - summarize
+  - survey_repo
+  - diff
+  - git_status
+  - git_diff
+  - git_log
+  - git_show
+  - git_blame
+  - git_compare
+  - git_branches
+  - git_ref
+  - git_stash_list
+
+session_scope:
+  git_checkout: addressed_session
+  git_merge: addressed_session
+  git_stash: addressed_session
+
+approval_reversibility:
+  process_list: reversible
+  process_signal: recoverable
+  chmod: recoverable
+  chown: recoverable
+  code_rewrite: reversible
+  copy: recoverable
+  delete: recoverable
+  diff: reversible
+  edit: reversible
+  extract_archive: recoverable
+  http_request: recoverable
+  find: reversible
+  git_blame: reversible
+  git_branches: reversible
+  git_commit: recoverable
+  git_diff: reversible
+  git_log: reversible
+  git_ref: reversible
+  git_restore: recoverable
+  git_compare: reversible
+  git_checkout: recoverable
+  git_merge: recoverable
+  git_stash: recoverable
+  git_stash_list: reversible
+  git_show: reversible
+  git_status: reversible
+  grep: reversible
+  jq: reversible
+  jq_edit: reversible
+  list_dir: reversible
+  mkdir: recoverable
+  move: recoverable
+  read: reversible
+  replace_lines: reversible
+  stat: reversible
+  summarize: reversible
+  survey_repo: reversible
+  wc: reversible
+  write: reversible
+
+owner:
+  process_list: processes
+  process_signal: processes
+  chmod: filesystem
+  chown: filesystem
+  code_rewrite: filesystem
+  copy: filesystem
+  delete: filesystem
+  diff: filesystem
+  edit: filesystem
+  extract_archive: filesystem
+  http_request: outbound_http
+  find: filesystem
+  git_blame: git
+  git_branches: git
+  git_commit: git
+  git_diff: git
+  git_log: git
+  git_ref: git
+  git_restore: git
+  git_compare: git
+  git_checkout: git
+  git_merge: git
+  git_stash: git
+  git_stash_list: git
+  git_show: git
+  git_status: git
+  grep: filesystem
+  jq: filesystem
+  jq_edit: filesystem
+  list_dir: filesystem
+  mkdir: filesystem
+  move: filesystem
+  read: filesystem
+  replace_lines: filesystem
+  stat: filesystem
+  summarize: summarization
+  survey_repo: survey
+  wc: filesystem
+  write: filesystem
+
+batch_policy:
+  process_list: serial
+  process_signal: serial
+  chmod: serial
+  chown: serial
+  code_rewrite: serial
+  copy: serial
+  delete: serial
+  diff: shared
+  edit: serial
+  extract_archive: serial
+  http_request: serial
+  find: shared
+  git_blame: shared
+  git_branches: shared
+  git_commit: serial
+  git_diff: shared
+  git_log: shared
+  git_ref: shared
+  git_restore: serial
+  git_compare: shared
+  git_checkout: serial
+  git_merge: serial
+  git_stash: serial
+  git_stash_list: shared
+  git_show: shared
+  git_status: shared
+  grep: shared
+  jq: shared
+  jq_edit: serial
+  list_dir: shared
+  mkdir: serial
+  move: serial
+  read: shared
+  replace_lines: serial
+  stat: shared
+  summarize: same_tool
+  survey_repo: shared
+  wc: shared
+  write: serial
+
+batch_concurrency_limit:
+  summarize: 4
+
+turn_order:
+  summarize: late
+
+lifecycle:
+  process_list: read_only
+  process_signal: effect_attempt
+  chmod: effect_attempt
+  chown: effect_attempt
+  code_rewrite: effect_attempt
+  copy: effect_attempt
+  delete: effect_attempt
+  diff: read_only
+  edit: effect_attempt
+  extract_archive: effect_attempt
+  http_request: effect_attempt
+  find: read_only
+  git_blame: read_only
+  git_branches: read_only
+  git_commit: effect_attempt
+  git_diff: read_only
+  git_log: read_only
+  git_ref: read_only
+  git_restore: effect_attempt
+  git_compare: read_only
+  git_checkout: effect_attempt
+  git_merge: effect_attempt
+  git_stash: effect_attempt
+  git_stash_list: read_only
+  git_show: read_only
+  git_status: read_only
+  grep: read_only
+  jq: read_only
+  jq_edit: effect_attempt
+  list_dir: read_only
+  mkdir: effect_attempt
+  move: effect_attempt
+  read: read_only
+  replace_lines: effect_attempt
+  stat: read_only
+  summarize: read_only
+  survey_repo: read_only
+  wc: read_only
+  write: effect_attempt

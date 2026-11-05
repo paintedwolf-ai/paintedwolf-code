@@ -248,7 +248,7 @@ func TestEveryNativeToolDeclaresATier(t *testing.T) {
 	if err := cfg.ValidateApprovalReversibility(); err != nil {
 		t.Fatalf("approval_reversibility map: %v", err)
 	}
-	manifest := cfg.AllTools()
+	manifest := append(cfg.AllTools(), cfg.AllOperations()...)
 	if len(manifest) == 0 {
 		t.Fatal("native tools manifest is empty")
 	}

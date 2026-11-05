@@ -3,6 +3,8 @@ package nativemanifest
 
 import (
 	"fmt"
+	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -48,12 +50,12 @@ const (
 	ResourceFactHeldCalls   = "held_calls"
 )
 
-// Config holds native tools and their invocation contracts.
+// Config holds native tools, the operations command reaches, and their contracts.
 type Config struct {
-	Native                map[string][]string `yaml:"native"`
+	Native map[string][]string `yaml:"native"`
+	// Operations groups native operations that have no callable tool.
+	Operations            map[string][]string `yaml:"operations"`
 	ApprovalReversibility map[string]string   `yaml:"approval_reversibility"`
-	// OperationReversibility classifies native operations reached through command.
-	OperationReversibility map[string]string `yaml:"operation_reversibility"`
 	Owner                 map[string]string   `yaml:"owner"`
 	BatchPolicy           map[string]string   `yaml:"batch_policy"`
 	// BatchOptInArg names the argument that enables sibling concurrency.
@@ -67,8 +69,6 @@ type Config struct {
 	SpawnsProcess         []string            `yaml:"spawns_process"`
 	ExecutionCapabilities map[string][]string `yaml:"execution_capabilities"`
 	Families              map[string][]string `yaml:"families"`
-	// Companions load with a tool a request selects.
-	Companions      map[string][]string `yaml:"companions"`
 	ResourceImplied map[string][]string `yaml:"resource_implied"`
 	// GrantIdentityNeutralArgs names arguments a grant identity ignores.
 	GrantIdentityNeutralArgs map[string][]string `yaml:"grant_identity_neutral_args"`
@@ -102,17 +102,77 @@ type Config struct {
 	RuntimeRegisteredPrefixes []string `yaml:"runtime_registered_prefixes"`
 }
 
-// Load reads the native tool manifest.
+// Load reads the native tool and operation manifests as one contract set.
 func Load() (Config, error) {
-	data, err := config.Read(config.NativeTools)
-	if err != nil {
-		return Config{}, err
+	var merged Config
+	for _, path := range []config.Rel{config.NativeTools, config.NativeOperations} {
+		data, err := config.Read(path)
+		if err != nil {
+			return Config{}, err
+		}
+		var part Config
+		if err := config.DecodeYAML(data, &part); err != nil {
+			return Config{}, err
+		}
+		if err := merged.absorb(part); err != nil {
+			return Config{}, fmt.Errorf("%s: %w", path, err)
+		}
 	}
-	var cfg Config
-	if err := config.DecodeYAML(data, &cfg); err != nil {
-		return Config{}, err
+	return merged, nil
+}
+
+// absorb merges one manifest. Grouped lists combine; a name keyed in both
+// manifests is an error, because one name has one contract.
+func (c *Config) absorb(part Config) error {
+	into, from := reflect.ValueOf(c).Elem(), reflect.ValueOf(part)
+	for i := range into.NumField() {
+		dst, src := into.Field(i), from.Field(i)
+		switch dst.Kind() {
+		case reflect.Slice:
+			dst.Set(reflect.AppendSlice(dst, src))
+		case reflect.Map:
+			if dst.IsNil() {
+				dst.Set(reflect.MakeMap(dst.Type()))
+			}
+			for _, key := range src.MapKeys() {
+				existing, value := dst.MapIndex(key), src.MapIndex(key)
+				switch {
+				case !existing.IsValid():
+					dst.SetMapIndex(key, value)
+				case value.Kind() == reflect.Slice:
+					dst.SetMapIndex(key, reflect.AppendSlice(existing, value))
+				default:
+					return fmt.Errorf("%s declared in both manifests", key)
+				}
+			}
+		}
 	}
-	return cfg, nil
+	return nil
+}
+
+// AllOperations returns every operation name that has no callable tool, sorted.
+func (c Config) AllOperations() []string {
+	var out []string
+	for _, group := range c.Operations {
+		out = append(out, group...)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// HasOperation reports whether name is an operation with no callable tool.
+func (c Config) HasOperation(name string) bool {
+	for _, group := range c.Operations {
+		if slices.Contains(group, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// OperationGroup returns the operations of one family, or nil.
+func (c Config) OperationGroup(name string) []string {
+	return c.Operations[name]
 }
 
 // AllTools returns flattened native tool names.
@@ -160,20 +220,14 @@ func (c Config) Group(name string) []string {
 
 // Reversibility returns the approval class of a tool or native operation.
 func (c Config) Reversibility(name string) (string, bool) {
-	if tier, ok := c.ApprovalReversibility[name]; ok {
-		return tier, true
-	}
-	tier, ok := c.OperationReversibility[name]
+	tier, ok := c.ApprovalReversibility[name]
 	return tier, ok
 }
 
 // classifiedNames lists every tool and native operation with an approval class.
 func (c Config) classifiedNames() []string {
-	out := make([]string, 0, len(c.ApprovalReversibility)+len(c.OperationReversibility))
+	out := make([]string, 0, len(c.ApprovalReversibility))
 	for name := range c.ApprovalReversibility {
-		out = append(out, name)
-	}
-	for name := range c.OperationReversibility {
 		out = append(out, name)
 	}
 	sort.Strings(out)
@@ -186,17 +240,16 @@ func (c Config) ValidateApprovalReversibility() error {
 		return fmt.Errorf("approval_reversibility map is empty")
 	}
 	var both []string
-	for name := range c.OperationReversibility {
-		if _, ok := c.ApprovalReversibility[name]; ok {
+	for _, name := range c.AllOperations() {
+		if c.HasTool(name) {
 			both = append(both, name)
 		}
 	}
 	if len(both) > 0 {
-		sort.Strings(both)
-		return fmt.Errorf("names classified as both tool and operation: %s", strings.Join(both, ", "))
+		return fmt.Errorf("names listed as both tool and operation: %s", strings.Join(both, ", "))
 	}
 	var missing []string
-	for _, tool := range c.AllTools() {
+	for _, tool := range append(c.AllTools(), c.AllOperations()...) {
 		if _, ok := c.Reversibility(tool); !ok {
 			missing = append(missing, tool)
 		}
@@ -388,26 +441,6 @@ func (c Config) ValidateFamilies() error {
 				faults = append(faults, member+" in families "+other+" and "+family)
 			}
 			memberFamily[member] = family
-		}
-	}
-	for tool, companions := range c.Companions {
-		tool = strings.TrimSpace(tool)
-		if !known(tool) {
-			faults = append(faults, "companions unknown tool "+tool)
-		}
-		if len(companions) == 0 {
-			faults = append(faults, "companions "+tool+" has no companions")
-		}
-		for _, companion := range companions {
-			companion = strings.TrimSpace(companion)
-			switch {
-			case companion == "":
-				faults = append(faults, "companions "+tool+" has an empty companion")
-			case companion == tool:
-				faults = append(faults, "companions "+tool+" names itself")
-			case !known(companion):
-				faults = append(faults, "companions "+tool+" unknown companion "+companion)
-			}
 		}
 	}
 	for fact, tools := range c.ResourceImplied {
@@ -809,16 +842,19 @@ func (c Config) ValidateRequiresWorkerBranch(known func(string) bool) error {
 
 // ToolsByTier returns sorted tool ids for each locked tier value.
 func (c Config) ToolsByTier() (reversible, recoverable, irreversible []string) {
-	return namesByTier(c.ApprovalReversibility)
+	return c.namesByTier(false)
 }
 
 // OperationsByTier returns sorted native operation ids for each locked tier value.
 func (c Config) OperationsByTier() (reversible, recoverable, irreversible []string) {
-	return namesByTier(c.OperationReversibility)
+	return c.namesByTier(true)
 }
 
-func namesByTier(tiers map[string]string) (reversible, recoverable, irreversible []string) {
-	for tool, tier := range tiers {
+func (c Config) namesByTier(operations bool) (reversible, recoverable, irreversible []string) {
+	for tool, tier := range c.ApprovalReversibility {
+		if c.HasOperation(tool) != operations {
+			continue
+		}
 		switch tier {
 		case TierReversible:
 			reversible = append(reversible, tool)
@@ -847,21 +883,6 @@ func (c Config) FamilyIDs() []string {
 // FamilyMembers returns a copy of one family's members in catalog order.
 func (c Config) FamilyMembers(id string) []string {
 	return append([]string(nil), c.Families[id]...)
-}
-
-// CompanionTools returns the sorted tools that declare companions.
-func (c Config) CompanionTools() []string {
-	out := make([]string, 0, len(c.Companions))
-	for tool := range c.Companions {
-		out = append(out, tool)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// CompanionsOf returns a copy of one tool's companions in catalog order.
-func (c Config) CompanionsOf(tool string) []string {
-	return append([]string(nil), c.Companions[tool]...)
 }
 
 // ResourceImpliedFacts returns sorted live-resource fact keys.

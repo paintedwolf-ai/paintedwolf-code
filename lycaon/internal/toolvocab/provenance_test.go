@@ -15,8 +15,8 @@ import (
 // profile that does not.
 func readOnlyProfiles() []sandbox.ToolProfile {
 	return []sandbox.ToolProfile{
-		{ID: "explore_readonly", Tools: map[string]bool{"read": true, "grep": true}},
-		{ID: "acme_narrow", Tools: map[string]bool{"read": true}},
+		{ID: "explore_readonly", Tools: map[string]bool{"recall": true, "source_history": true}},
+		{ID: "acme_narrow", Tools: map[string]bool{"recall": true}},
 	}
 }
 
@@ -25,9 +25,9 @@ func readRuleNamingGrep(t *testing.T) *oar.RuleSet {
 	return oar.NewRuleSet([]*oar.Rule{{
 		ID:       "READ_TOO_BIG",
 		Anchor:   oar.AnchorToolHandler,
-		Selector: oar.Selector{"tool": {"read"}},
-		Fix:      "Use `grep` to find the region first.",
-		Copy:     oar.Copy{Fix: "Use `grep` to find the region first."},
+		Selector: oar.Selector{"tool": {"recall"}},
+		Fix:      "Use `source_history` to find the region first.",
+		Copy:     oar.Copy{Fix: "Use `source_history` to find the region first."},
 	}})
 }
 
@@ -96,7 +96,7 @@ func TestCredentialAssignmentAudienceFollowsInvokingTool(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, []sandbox.ToolProfile{
 		{ID: "coordinator", Tools: map[string]bool{"write": true}},
 		{ID: "editor", Tools: map[string]bool{"write": true}},
-		{ID: "reader", Tools: map[string]bool{"read": true}},
+		{ID: "reader", Tools: map[string]bool{"recall": true}},
 	}, toolvocab.Provenance{})
 	testutil.FailErr(t, "create catalog", err)
 	audience, err := toolvocab.Audience(catalog, toolvocab.Surfaces{Coordinator: "coordinator", Workers: []string{"reader"}}, &oar.Rule{
@@ -111,9 +111,9 @@ func TestCredentialAssignmentAudienceFollowsInvokingTool(t *testing.T) {
 func TestRecoveryReachabilityIncludesCallExamples(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
 	testutil.FailErr(t, "create catalog", err)
-	for _, remedy := range []string{"Call `grep`.", "Call `grep(pattern=\"needle\")`.", "Use `grep (pattern=…)` then inspect the result."} {
+	for _, remedy := range []string{"Call `source_history`.", "Call `source_history(pattern=\"needle\")`.", "Use `source_history (pattern=…)` then inspect the result."} {
 		rules := oar.NewRuleSet([]*oar.Rule{{ID: "RECOVERY", Anchor: oar.AnchorToolRejected,
-			Selector: oar.Selector{"tool": {"read"}}, Fix: remedy, Copy: oar.Copy{Fix: remedy}}})
+			Selector: oar.Selector{"tool": {"recall"}}, Fix: remedy, Copy: oar.Copy{Fix: remedy}}})
 		if _, err := toolvocab.CheckRules(catalog, surfaces(), rules); err == nil || !strings.Contains(err.Error(), "acme_narrow") {
 			t.Errorf("unreachable call %q was not rejected: %v", remedy, err)
 		}
@@ -124,7 +124,7 @@ func TestRejectionAnchorRecomputesRecoveryAudience(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
 	testutil.FailErr(t, "create catalog", err)
 	rule := &oar.Rule{ID: "RECOVERY", Anchor: oar.AnchorCoordinatorPreInvoke,
-		Fix: "Use `grep`.", Copy: oar.Copy{Fix: "Use `grep`."}}
+		Fix: "Use `source_history`.", Copy: oar.Copy{Fix: "Use `source_history`."}}
 	_, err = toolvocab.CheckRules(catalog, surfaces(), oar.NewRuleSet([]*oar.Rule{rule}))
 	testutil.FailErr(t, "coordinator recovery", err)
 	rule.Anchor = oar.AnchorToolRejected

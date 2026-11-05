@@ -272,19 +272,6 @@ func renderToolContracts(cfg nativemanifest.Config) ([]byte, error) {
 		b.WriteString("\t},\n")
 	}
 	b.WriteString("}\n\n")
-	b.WriteString("var compiledCompanions = map[string][]string{\n")
-	for _, tool := range cfg.CompanionTools() {
-		b.WriteString("\t")
-		b.WriteString(strconv.Quote(tool))
-		b.WriteString(": {\n")
-		for _, companion := range cfg.CompanionsOf(tool) {
-			b.WriteString("\t\t")
-			b.WriteString(strconv.Quote(companion))
-			b.WriteString(",\n")
-		}
-		b.WriteString("\t},\n")
-	}
-	b.WriteString("}\n\n")
 	b.WriteString("var compiledGrantIdentityNeutralArgs = map[string][]string{\n")
 	for _, row := range cfg.GrantIdentityNeutralArgRows() {
 		b.WriteString("\t")

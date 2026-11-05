@@ -15,7 +15,7 @@ func TestSkillProcedureToolsMustBeReachable(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
 	testutil.FailErr(t, "build tool catalog", err)
 	const resource = "references/search.md"
-	fsys := fstest.MapFS{resource: {Data: []byte("Use `grep` to locate the definition.")}}
+	fsys := fstest.MapFS{resource: {Data: []byte("Use `source_history` to locate the definition.")}}
 	sk := skills.Skill{Name: "search", Body: "Select a reference.", Metadata: map[string]string{skills.TemplateResourcesMetadata: resource}}
 	sk.BindResources(fsys, ".", skills.DiscoverBundledResources(fsys, "."), "")
 	for _, tc := range []struct {
@@ -27,7 +27,7 @@ func TestSkillProcedureToolsMustBeReachable(t *testing.T) {
 			if (err != nil) != tc.wantError {
 				t.Fatalf("profile=%s: %v", tc.profile, err)
 			}
-			if err != nil && !strings.Contains(err.Error(), "grep") {
+			if err != nil && !strings.Contains(err.Error(), "source_history") {
 				t.Fatalf("missing procedure tool in error: %v", err)
 			}
 		})
