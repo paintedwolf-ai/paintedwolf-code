@@ -4,8 +4,10 @@ package confine_test
 
 import (
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -27,13 +29,19 @@ func TestHelperAppliesProcessAttributesToTheTarget(t *testing.T) {
 	self, err := os.Executable()
 	testutil.FailErr(t, "helper binary", err)
 	probe := []string{"-c", `ulimit -n; kill -HUP $$; echo survived`}
+	// Without IgnoreHangup the target keeps the disposition this test inherited,
+	// which is already ignored under nohup and some agent shells.
+	unprotected := "48\n"
+	if signal.Ignored(syscall.SIGHUP) {
+		unprotected = "48\nsurvived\n"
+	}
 	for _, tc := range []struct {
 		name       string
 		attributes confine.ProcessAttributes
 		want       string
 	}{
 		{"limit and ignored hangup", confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 64, Hard: nofile.Hard}}, IgnoreHangup: true}, "64\nsurvived\n"},
-		{"limit only", confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 48, Hard: nofile.Hard}}}, "48\n"},
+		{"limit only", confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 48, Hard: nofile.Hard}}}, unprotected},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			boundary := *c
