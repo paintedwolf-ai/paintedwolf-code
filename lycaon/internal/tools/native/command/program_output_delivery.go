@@ -200,5 +200,8 @@ func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programR
 	for _, part := range ranges {
 		r.commitStreamSourceDeliveries(ctx, run, program, reference, part.data, mappings, [][2]int64{{part.start, part.start + int64(len(part.data))}})
 	}
+	if name == "stdout" {
+		r.commitProgramWindows(ctx, run, program, reference, ranges)
+	}
 	return delivered, window, nil
 }

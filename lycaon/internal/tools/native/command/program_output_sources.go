@@ -1,6 +1,7 @@
 package command
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
 func (r *ProgramRuntime) resolveOutputMappings(ctx context.Context, run *programRun, mappings []toolcontract.StreamSourceMapping, streamLen int64) *sourceMappingBuffer {
@@ -204,8 +206,15 @@ func (r *ProgramRuntime) commitSourceDelivery(ctx context.Context, run *programR
 		}
 	}
 	settlement, commitErr := r.Recorder.CommitProgramSourceDelivery(ctx, delivery, observer, r.sessionResources(run.tc.Identity.SessionID))
-	handle := strings.TrimSpace(settlement.SourceOwnerReference)
-	if commitErr != nil || handle == "" || run.tc.Effects.Out == nil {
+	if commitErr == nil {
+		tagDelivery(run, settlement.SourceOwnerReference, relPath, obs)
+	}
+}
+
+// tagDelivery prints a delivery's handle and coverage on the call's result.
+func tagDelivery(run *programRun, reference, path string, obs evidence.DeliveredSourceObservation) {
+	handle := strings.TrimSpace(reference)
+	if handle == "" || run.tc.Effects.Out == nil {
 		return
 	}
 	for _, seen := range run.tc.Effects.Out.SourceDeliveries {
@@ -217,9 +226,47 @@ func (r *ProgramRuntime) commitSourceDelivery(ctx context.Context, run *programR
 		rec := obs.Record()
 		fact := rec.SourceDelivery
 		run.tc.Effects.Out.SourceDeliveries = append(run.tc.Effects.Out.SourceDeliveries, tools.SourceDeliveryTag{
-			Handle: handle, Coverage: hostmarker.FormatEvidenceCoverage(relPath, fact.StartLine, fact.EndLine),
+			Handle: handle, Coverage: hostmarker.FormatEvidenceCoverage(path, fact.StartLine, fact.EndLine),
 		})
 	}
+}
+
+// commitProgramWindows records the windows operations returned, from their own results.
+// A window counts only when its rows reached the delivered output as encoded: one
+// screened or cut from the preview was not delivered and stays uncited.
+func (r *ProgramRuntime) commitProgramWindows(ctx context.Context, run *programRun, programID, ref string, parts []deliveredOutputPart) {
+	observer := r.sourceObserver()
+	windows := run.windows.Take()
+	if observer == nil || len(windows) == 0 {
+		return
+	}
+	responseID := run.parentReceipt
+	if responseID == "" {
+		responseID = programID
+	}
+	for i, window := range windows {
+		encoded, err := surveyjson.Marshal(window.Body)
+		if err != nil || !outputRangesContain(parts, encoded) {
+			continue
+		}
+		obs, err := evidence.ConfirmNumberedWindow(window.Path, window.Body, responseID, fmt.Sprintf("%s:window:%d", ref, i))
+		if err != nil {
+			continue
+		}
+		reference, err := observer.CommitDeliveredSource(ctx, run.tc.Identity.SessionID, obs)
+		if err == nil {
+			tagDelivery(run, reference, window.Path, obs)
+		}
+	}
+}
+
+func outputRangesContain(parts []deliveredOutputPart, encoded []byte) bool {
+	for _, part := range parts {
+		if bytes.Contains(part.data, encoded) {
+			return true
+		}
+	}
+	return false
 }
 
 // maxPrintedDeliveryTags bounds a result's tags. A wide search would otherwise print

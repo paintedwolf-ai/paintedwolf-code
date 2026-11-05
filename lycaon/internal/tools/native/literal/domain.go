@@ -1,6 +1,7 @@
 package literal
 
 import (
+	"github.com/lycaon/lycaon/internal/tools"
 	"fmt"
 	"slices"
 
@@ -89,7 +90,7 @@ func runSummarize(inv *invocation) error {
 	cursor, _ := inv.value("--cursor")
 	diskCtx := inv.tc
 	diskCtx.Source.EditorDocuments = nil
-	resp, _, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus, Cursor: cursor, Observe: inv.pinOpened}, diskCtx)
+	resp, windows, err := inv.owners.Domain.Summarize.Summarize(inv.ctx, survey.SummarizeRequest{Path: abs, Task: focus, Cursor: cursor, Observe: inv.pinOpened}, diskCtx)
 	if err != nil {
 		return err
 	}
@@ -98,6 +99,11 @@ func runSummarize(inv *invocation) error {
 		resp.NextActions[i], err = action.CommandFollowup()
 		if err != nil {
 			return fmt.Errorf("summarize follow-up: %w", err)
+		}
+	}
+	for _, window := range windows {
+		if window.Path != "inline" {
+			tools.RecordProgramWindow(inv.ctx, tools.ProgramWindow{Path: window.Path, Body: window.Body})
 		}
 	}
 	return inv.structured(resp)

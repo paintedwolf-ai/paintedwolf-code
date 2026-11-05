@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -108,6 +109,40 @@ func ConfirmDeliveredLines(path string, pin toolcontract.SourcePin, captured []b
 		return DeliveredSourceObservation{}, fmt.Errorf("printed numbers are not these source lines")
 	}
 	fact.LineNumbered = true
+	return out, nil
+}
+
+// ConfirmNumberedWindow records a source window a host operation returned as its own
+// numbered rows, from that operation's result. The caller confirms the rows reached the
+// delivered output unchanged. A row out of sequence confirms nothing.
+func ConfirmNumberedWindow(path, numbered, responseID, deliveryID string) (DeliveredSourceObservation, error) {
+	var out DeliveredSourceObservation
+	if path == "" || responseID == "" || deliveryID == "" {
+		return out, fmt.Errorf("numbered window requires a path and its delivery identity")
+	}
+	rows := strings.Split(numbered, "\n")
+	lines := make([]string, 0, len(rows))
+	first := 0
+	for i, row := range rows {
+		number, text, ok := hostmarker.ParseNumberedLine(row)
+		if !ok || (i > 0 && number != first+i) {
+			return out, fmt.Errorf("numbered window has an unnumbered or out of sequence row")
+		}
+		if i == 0 {
+			first = number
+		}
+		lines = append(lines, text)
+	}
+	if first < 1 {
+		return out, fmt.Errorf("numbered window starts before the first line")
+	}
+	text := strings.Join(lines, "\n")
+	digest := sha256.Sum256([]byte(text))
+	size := int64(len(text))
+	pin := toolcontract.SourcePin{SourceID: "window:" + path, Revision: hex.EncodeToString(digest[:]), SHA256: hex.EncodeToString(digest[:]), Representation: toolcontract.LogicalUTF8LF, EndByte: size}
+	last := first + len(lines) - 1
+	fact := SourceDelivery{ResponseID: responseID, DeliveryID: deliveryID, Source: pin, SourceEndByte: size, StartLine: first, EndLine: last, LineNumbered: true}
+	out.record = Record{Kind: "read", Shape: ShapeFileRegion, Fidelity: FidelityStructured, SourceTool: "command", Path: path, LineRanges: []LineRange{{Start: first, End: last}}, Body: lines, SourceDelivery: &fact}
 	return out, nil
 }
 
