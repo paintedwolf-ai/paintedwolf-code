@@ -139,7 +139,7 @@ func TestCommandEntryRealShortSleepStaysInline(t *testing.T) {
 	}
 }
 func TestCommandEntryRealWaitUsesExactSupervisedJob(t *testing.T) {
-	for _, reference := range []string{"$!", "%1", ""} {
+	for reference, status := range map[string]int{"$!": 7, "%1": 7, "": 0} {
 		t.Run(reference, func(t *testing.T) {
 			f := newWaitStateFixture(t)
 			f.call(t, "{ sleep 120; exit 7; } & wait "+reference)
@@ -154,7 +154,7 @@ func TestCommandEntryRealWaitUsesExactSupervisedJob(t *testing.T) {
 			}
 			f.clock.Advance(120 * time.Second)
 			outcome := decodeWaitOutcome(t, <-pending.settled)
-			if outcome.Status != 7 || outcome.State != "completed" {
+			if outcome.Status != status || outcome.State != "completed" {
 				t.Fatalf("outcome %+v", outcome)
 			}
 		})
