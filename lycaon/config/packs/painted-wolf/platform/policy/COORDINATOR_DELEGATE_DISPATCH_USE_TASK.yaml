@@ -12,7 +12,7 @@ copy:
   what: This turn uses ambient worker dispatch rather than workflow delegation legs.
   cause: delegate_dispatch is not available on this implement surface.
   why: The current task schema determines which worker profiles and scope are accepted.
-  fix: '{{ paintedwolf.next_steps }}'
+  fix: '{% if paintedwolf.task_dispatchable %}{{ paintedwolf.next_steps }}{% else %}This turn has no available worker-dispatch path. Continue with the offered tools, or report the capability limitation if delegation is required.{% endif %}'
   instead: 'Use the worker-dispatch path this request offers, or report that worker dispatch is unavailable.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator

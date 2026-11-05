@@ -1,5 +1,6 @@
 steps:
   - tool: "command_output"
     say: "Use {{ call }} with the existing handle to inspect its outcome."
+    otherwise: "Wait for the active awaited command to settle before starting another."
   - tool: "command_stop"
     say: "Stop it with {{ call }} only if its work is no longer needed; a stop request does not establish exit."

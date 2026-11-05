@@ -34,6 +34,20 @@ func TestSkillProcedureToolsMustBeReachable(t *testing.T) {
 	}
 }
 
+func TestSkillProcedureRejectsRetiredOperationNames(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+	for _, retired := range []string{"list_dir", "grep", "read", "write", "edit", "replace_lines"} {
+		t.Run(retired, func(t *testing.T) {
+			sk := skills.Skill{Name: "retired-" + retired, Body: "Run `" + retired + "` to inspect the tree."}
+			err := toolvocab.ValidateSkills(catalog, []toolvocab.AgentSurface{{AgentID: "reader", ProfileID: "explore_readonly", Skills: skills.Selector{All: true}}}, []skills.Skill{sk})
+			if err == nil || !strings.Contains(err.Error(), retired) {
+				t.Fatalf("retired operation %q in skill body was not rejected: %v", retired, err)
+			}
+		})
+	}
+}
+
 func TestSkillToolsOfferedGatesStockSkillsByNonOptionalTools(t *testing.T) {
 	stock := skills.Skill{
 		Name:          "review-accessibility",

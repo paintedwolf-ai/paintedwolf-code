@@ -1,0 +1,4 @@
+steps:
+  - tool: "answer_decision"
+    say: "Call {{ call }} with the exact job_id from the needs_decision envelope; the host resumes the worker automatically."
+    otherwise: "Pass the exact job_id from the needs_decision envelope; the host resumes the worker automatically."

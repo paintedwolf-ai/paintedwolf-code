@@ -156,6 +156,7 @@ func TestBundledCopyNamesAToolOnlyAsSubjectMentionOrCheckedStep(t *testing.T) {
 		"bare remedy":           {Copy: oar.Copy{Why: "Use source_history first."}},
 		"retired name":          {Copy: oar.Copy{Fix: "Call `list_dir`."}},
 		"post-invoke operation": {Anchor: oar.AnchorToolPost, Selector: oar.Selector{"paintedwolf.operation": {"list_dir"}}},
+		"subject call in fix":   {Selector: oar.Selector{"tool": {"recall"}}, Copy: oar.Copy{Fix: "Retry `recall(query=\"x\")`."}},
 		"retired next step":     {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "list_dir", Say: "{{ call }}"}}}},
 		"undeclared argument":   {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Args: map[string]any{"q": "x"}, Say: "{{ call }}"}}}},
 		"incomplete call":       {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Say: "{{ call }}"}}}},

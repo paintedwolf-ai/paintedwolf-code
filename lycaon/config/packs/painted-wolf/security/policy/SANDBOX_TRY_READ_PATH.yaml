@@ -32,12 +32,14 @@ x-paintedwolf-scenarios:
   - id: key_material
     vars:
       tool: command
+      tool_args: {}
       failed_stages: [ssh-keygen -y -f /Users/person/.ssh/id_ed25519]
       refused_read_paths: [/Users/person/.ssh/id_ed25519]
       refused_read_grants: [/Users/person/.ssh/id_ed25519]
   - id: keychain_traversal
     vars:
       tool: command
+      tool_args: {}
       failed_stages: [gh pr view]
       refused_read_paths:
         - /Users/person/Library/Keychains

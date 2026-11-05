@@ -135,9 +135,6 @@ func TestOfferedProgramsParseAndRun(t *testing.T) {
 			continue
 		}
 		source := fill.Replace(strings.Join(words, " "))
-		if strings.HasPrefix(source, "sed -n 1,2p") {
-			source = "sed -n '1,2p' notes.txt"
-		}
 		if seen[source] {
 			continue
 		}

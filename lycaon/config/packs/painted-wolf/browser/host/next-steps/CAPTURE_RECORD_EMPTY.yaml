@@ -1,3 +1,4 @@
 steps:
   - tool: "page_snapshot"
     say: "Check that the page is loaded and visible with {{ call }}."
+    otherwise: "Check that the page has rendered visible content."

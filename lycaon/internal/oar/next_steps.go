@@ -78,16 +78,16 @@ func bindsNextSteps(r *Rule) bool {
 // validateNextSteps rejects a catalog entry that could not render, and any rule
 // that lets the fact reach a decision ([OAR-DOC-26] holds for the same reason).
 func (l *Loader) validateNextSteps(r *Rule) error {
-	if strings.TrimSpace(r.When) != "" {
-		refs, err := oarcore.ConditionReferences(r.When)
-		if err != nil {
+	if err := rejectDecisionNextSteps(r.ID, "when", r.When); err != nil {
+		return err
+	}
+	for _, expr := range r.Flow {
+		if err := rejectDecisionNextSteps(r.ID, "flow", expr); err != nil {
 			return err
 		}
-		for _, name := range refs {
-			if name == NextStepsFact {
-				return fmt.Errorf("rule %s: when reads %s, which only copy may bind", r.ID, NextStepsFact)
-			}
-		}
+	}
+	if strings.TrimSpace(r.CounterScope) == NextStepsFact {
+		return fmt.Errorf("rule %s: counter_scope reads %s, which only copy may bind", r.ID, NextStepsFact)
 	}
 	if r.NextSteps == nil {
 		return nil
@@ -96,6 +96,22 @@ func (l *Loader) validateNextSteps(r *Rule) error {
 	for i, step := range r.NextSteps.Steps {
 		if err := l.validateNextStep(step, known, fmt.Sprintf("rule %s next-steps[%d]", r.ID, i)); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func rejectDecisionNextSteps(ruleID, field, expr string) error {
+	if strings.TrimSpace(expr) == "" {
+		return nil
+	}
+	refs, err := oarcore.ConditionReferences(expr)
+	if err != nil {
+		return err
+	}
+	for _, name := range refs {
+		if name == NextStepsFact {
+			return fmt.Errorf("rule %s: %s reads %s, which only copy may bind", ruleID, field, NextStepsFact)
 		}
 	}
 	return nil
@@ -115,6 +131,9 @@ func (l *Loader) validateNextStep(step NextStep, known map[string]bool, where st
 		if !nativeProgramKnown(step.Program[0]) {
 			return fmt.Errorf("%s: %q is not a native program", where, step.Program[0])
 		}
+	}
+	if err := rejectDecisionNextSteps(where, "when", step.When); err != nil {
+		return err
 	}
 	if err := l.checkWhen(step.When); err != nil {
 		return fmt.Errorf("%s: when: %w", where, err)

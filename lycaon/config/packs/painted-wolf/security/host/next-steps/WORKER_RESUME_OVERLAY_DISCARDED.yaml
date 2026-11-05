@@ -1,1 +1,7 @@
 mentions: ["reject_overlay"]
+steps:
+  - tool: "task"
+    args:
+      scope.mode: "write"
+    say: "Dispatch a fresh {{ call }} WITHOUT child_session_id so the host creates a new overlay and the worker re-applies the charter."
+    otherwise: "Dispatch a fresh write-scoped worker leg without child_session_id so the host creates a new overlay."

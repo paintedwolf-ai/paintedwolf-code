@@ -8,3 +8,4 @@ steps:
       max_tool_loops: "{{ paintedwolf.suggested_resume_max }}"
     complete: true
     say: "On worker-task-finished wake, call {{ call }}. Use suggested_resume_max, not a fresh write-scoped redispatch."
+    otherwise: "Resume the preserved child session {{ paintedwolf.child_session_id }} with max_tool_loops {{ paintedwolf.suggested_resume_max }} rather than starting a fresh leg."

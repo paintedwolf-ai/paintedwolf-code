@@ -13,9 +13,12 @@ steps:
       need: "{{ tool }}"
     complete: true
     say: "Call {{ call }}. Its schema arrives on the next model call; then retry using that schema. Loading grants no additional permissions."
+    otherwise: "Choose an available tool that can perform the work, or report the missing capability."
   - when: "!paintedwolf.tool_retired_to_command && !paintedwolf.tool_retired_to_content && !paintedwolf.tool_loadable && paintedwolf.tool_discovery_status != ''"
     tool: "request_tools"
     say: "Choose a suitable name from `discovery.entries` in the feedback details and call {{ call }} with that exact name. Use the returned schema on the next model call. The unavailable name `{{ tool }}` cannot be loaded here. Loading grants no additional permissions."
+    otherwise: "Choose an available tool that can perform the work, or report the missing capability."
   - when: "!paintedwolf.tool_retired_to_command && !paintedwolf.tool_retired_to_content && !paintedwolf.tool_loadable && paintedwolf.tool_discovery_status == '' && paintedwolf.tool_discovery_available"
     tool: "request_tools"
     say: "Use a suitable tool from those offered now. If none can perform the operation, call {{ call }} with `need` describing the operation and target in your own words; you do not need a tool name. The unavailable name `{{ tool }}` cannot be loaded here. Use the returned schema on the next model call. Loading grants no additional permissions."
+    otherwise: "Choose an available tool that can perform the work, or report the missing capability."

@@ -123,15 +123,15 @@ var namedTool = regexp.MustCompile("`([a-z][a-z0-9_]*)(?:`|[ \t]*\\()")
 // gated on a declared fact, and that fact is the audience filter.
 var guardedRegion = regexp.MustCompile(`(?s)\{%\s*if\b.*?\{%\s*endif\s*%\}`)
 
-// NamedTools returns the tools that copy unconditionally tells its reader to
-// call, in source order and deduplicated.
+// NamedTools returns the tools and retired operations that copy unconditionally
+// tells its reader to call, in source order and deduplicated.
 func NamedTools(c *Catalog, copyText string) []string {
 	unguarded := guardedRegion.ReplaceAllString(copyText, " ")
 	seen := map[string]bool{}
 	var out []string
 	for _, m := range namedTool.FindAllStringSubmatch(unguarded, -1) {
 		name := m[1]
-		if seen[name] || !c.KnownName(name) {
+		if seen[name] || !(c.KnownName(name) || c.operations[name]) {
 			continue
 		}
 		seen[name] = true
@@ -225,31 +225,50 @@ var copiedName = regexp.MustCompile(`\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b`)
 
 // uncheckedCalls lists what a rule tells its reader about tools without the host
 // having checked it: a tool in copy that is neither the rule's subject nor a
-// declared mention, and a next step that could not be submitted as written.
+// declared mention, a call to the rule's own tool in fix or instead that
+// bypasses next_steps, and a next step that could not be submitted as written.
 func uncheckedCalls(c *Catalog, rule *oar.Rule) []string {
-	declared := map[string]bool{}
+	subject := map[string]bool{}
 	for _, tool := range append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...) {
-		declared[tool] = true
+		subject[tool] = true
 	}
+	mentioned := map[string]bool{}
 	var steps []oar.NextStep
 	if rule.NextSteps != nil {
 		for _, tool := range rule.NextSteps.Mentions {
-			declared[tool] = true
+			mentioned[tool] = true
 		}
 		steps = rule.NextSteps.Steps
 	}
 	var out []string
-	members := []struct{ name, text string }{{"what", rule.Copy.What}, {"cause", rule.Copy.Cause}, {"why", rule.Copy.Why}, {"fix", rule.Copy.Fix}, {"instead", rule.Copy.Instead}}
+	members := []struct {
+		name   string
+		text   string
+		remedy bool
+	}{
+		{"what", rule.Copy.What, false},
+		{"cause", rule.Copy.Cause, false},
+		{"why", rule.Copy.Why, false},
+		{"fix", rule.Copy.Fix, true},
+		{"instead", rule.Copy.Instead, true},
+	}
 	for _, member := range members {
 		// Fact bindings are data names, not claims about tools.
 		text := copyBinding.ReplaceAllString(member.text, " ")
 		seen := map[string]bool{}
 		names := copiedName.FindAllString(text, -1)
+		called := map[string]bool{}
 		for _, m := range namedTool.FindAllStringSubmatch(text, -1) {
 			names = append(names, m[1])
+			if strings.HasSuffix(m[0], "(") {
+				called[m[1]] = true
+			}
 		}
 		for _, name := range names {
-			if seen[name] || declared[name] || !(c.registered[name] || c.operations[name]) {
+			if seen[name] || mentioned[name] || !(c.registered[name] || c.operations[name]) {
+				continue
+			}
+			if subject[name] && !(member.remedy && called[name]) {
 				continue
 			}
 			seen[name] = true

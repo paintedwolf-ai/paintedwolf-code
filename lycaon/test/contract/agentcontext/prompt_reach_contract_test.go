@@ -39,12 +39,27 @@ func unreachableNames(t *testing.T, catalog *toolvocab.Catalog, corpus string, r
 	t.Helper()
 	language, err := toolcontract.ReadOnlyLanguageV1()
 	contractcheck.FailErr(t, "load command language", err)
+	formTool := make(map[string]string)
+	for _, disp := range language.Tools {
+		if !toolcontract.CommandFormTool(disp.Tool) {
+			continue
+		}
+		for _, form := range disp.CommandForms {
+			formTool[form] = disp.Tool
+		}
+	}
 	program := func(name string) bool {
+		if !slices.Contains(reachable, "command") {
+			return false
+		}
+		if tool := formTool[name]; tool != "" && !slices.Contains(reachable, tool) {
+			return false
+		}
 		return slices.ContainsFunc(language.Commands, func(spec toolcontract.CommandSpecification) bool { return spec.Name == name })
 	}
 	var out []string
 	for _, name := range toolvocab.ToolsIn(catalog, corpus) {
-		if slices.Contains(reachable, name) || (program(name) && slices.Contains(reachable, "command")) {
+		if slices.Contains(reachable, name) || program(name) {
 			continue
 		}
 		out = append(out, name)

@@ -39,6 +39,9 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 	if l.Closeout.Deps.BeforeFinishNoToolTurn == nil && outputRejection == nil {
 		return history, nil, false, nil
 	}
+	if st != nil && !tools.CallReach(ctx).Known() {
+		ctx = tools.WithCallReach(ctx, st.requestReach())
+	}
 	workersIdle := true
 	if l.Context.Deps.ImplementSessionState != nil {
 		state := l.Context.Deps.ImplementSessionState(ctx, sess)
