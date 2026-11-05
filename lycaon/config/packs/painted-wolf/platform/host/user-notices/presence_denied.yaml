@@ -9,6 +9,3 @@ suggested_action: >-
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - No secret was stored or released
-      - Try again

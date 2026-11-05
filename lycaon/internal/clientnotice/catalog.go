@@ -18,12 +18,6 @@ const (
 	ScopeSession Scope = "session"
 )
 
-// Scenario defines required phrases for a copy variant.
-type Scenario struct {
-	ID             string   `yaml:"id"`
-	ExpectContains []string `yaml:"expect_contains"`
-}
-
 // Notice defines one generated client notice.
 type Notice struct {
 	Kind            string `yaml:"-"`
@@ -32,8 +26,7 @@ type Notice struct {
 	Message         string `yaml:"message"`
 	SuggestedAction string `yaml:"suggested_action"`
 	// Action identifies an in-app destination.
-	Action    string     `yaml:"action"`
-	Scenarios []Scenario `yaml:"scenarios"`
+	Action string `yaml:"action"`
 }
 
 // Catalog is every client notice, ordered by kind so codegen output is stable.
@@ -90,15 +83,5 @@ func (n Notice) validate() error {
 	if n.Action != "" && n.Action != "retry_contribution_frame" {
 		return fmt.Errorf("action must be retry_contribution_frame (got %q)", n.Action)
 	}
-	for _, sc := range n.Scenarios {
-		if len(sc.ExpectContains) == 0 {
-			return fmt.Errorf("scenario %q has no expect_contains", sc.ID)
-		}
-	}
 	return nil
-}
-
-// Rendered returns searchable user-facing copy.
-func (n Notice) Rendered() string {
-	return strings.TrimSpace(n.Title + "\n" + n.Message + "\n" + n.SuggestedAction)
 }

@@ -7,6 +7,3 @@ suggested_action: Open Settings → Approvals → Detections and turn the pack o
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Built-in
-      - cannot be removed

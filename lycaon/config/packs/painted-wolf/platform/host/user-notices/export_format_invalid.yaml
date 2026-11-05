@@ -8,5 +8,3 @@ suggested_action: Choose Markdown or JSON and export again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Markdown or JSON

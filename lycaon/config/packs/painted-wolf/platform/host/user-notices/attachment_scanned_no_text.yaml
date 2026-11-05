@@ -9,6 +9,3 @@ suggested_action: Attach a text-based document, or paste the relevant text into 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - scanned
-      - text

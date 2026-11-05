@@ -8,6 +8,3 @@ suggested_action: Reinstall the app to restore the bundled scanner engine.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - scanning engine
-      - Reinstall

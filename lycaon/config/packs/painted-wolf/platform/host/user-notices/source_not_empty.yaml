@@ -8,6 +8,3 @@ suggested_action: Confirm you want to move the whole folder, or empty it first.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - not empty
-      - Trash

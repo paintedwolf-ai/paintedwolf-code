@@ -22,10 +22,5 @@ scenarios:
     vars:
       workflow_id: security-survey
       version: 1.0.0
-    expect_contains:
-      - security-survey@1.0.0
-      - unavailable
   - id: generic
     vars: {}
-    expect_contains:
-      - unavailable

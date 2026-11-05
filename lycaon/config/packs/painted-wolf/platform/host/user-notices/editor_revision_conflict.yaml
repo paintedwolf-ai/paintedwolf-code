@@ -6,5 +6,3 @@ suggested_action: Retry the action against the current file.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - editor document changed

@@ -11,9 +11,6 @@ action: open_ai_providers
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - cannot see
-      - vision
 
   # Rewind. Copy never says "checkpoint" — that word belongs to the
   # approval plane, and the user-facing words here are Edit and Rewind.

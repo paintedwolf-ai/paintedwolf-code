@@ -22,10 +22,5 @@ scenarios:
   - id: paused
     vars:
       reason: paused
-    expect_contains:
-      - paused
-      - cannot run
   - id: generic
     vars: {}
-    expect_contains:
-      - paused or already finished

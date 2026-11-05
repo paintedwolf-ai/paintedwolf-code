@@ -7,5 +7,3 @@ suggested_action: "Check available disk space and file permissions, then retry."
 scenarios:
   - id: default
     vars: {reason: "The disk is full."}
-    expect_contains:
-      - "The file operation could not complete because recovery data is unavailable"

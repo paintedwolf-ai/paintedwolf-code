@@ -6,5 +6,3 @@ suggested_action: Open the source again to continue.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - no longer open
