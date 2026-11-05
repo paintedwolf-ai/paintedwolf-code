@@ -278,7 +278,7 @@ func TestCommandEntryTimedReadPreservesPartialInputAndInheritedDescriptor(t *tes
 	f.awaitTimers(t, 120*time.Second, 5*time.Second)
 	f.clock.Advance(5 * time.Second)
 	pending := receive(t, f, f.parked, "the program to park")
-	receive(t, f, done, "the call\'s result")
+	receive(t, f, done, "the call's result")
 	f.clock.Advance(115 * time.Second)
 	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 	if outcome.State != "completed" || outcome.Status != 0 || outcome.Stdout != "142:part::next\n" {
@@ -485,7 +485,7 @@ func TestCommandEntryExternalTimeoutParksAndReapsTheChild(t *testing.T) {
 	done := f.start(t, strings.Replace(f.externalHelper(), " external -- ", " timeout 60 external -- ", 1))
 	f.awaitExternal(t)
 	pending := receive(t, f, f.parked, "the program to park")
-	receive(t, f, done, "the call\'s result")
+	receive(t, f, done, "the call's result")
 	f.clock.Advance(60 * time.Second)
 	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 	if outcome.Status != 124 || outcome.State != "completed" {
@@ -509,7 +509,7 @@ func TestCommandEntryAwaitedBackgroundFramesKeepTheExactJobIdentity(t *testing.T
 			f.awaitTimers(t, command.DefaultParkThreshold)
 			f.clock.Advance(10 * time.Second)
 			pending := receive(t, f, f.parked, "the program to park")
-			receive(t, f, done, "the call\'s result")
+			receive(t, f, done, "the call's result")
 			testutil.FailErr(t, "release background external fixture", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
 			outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 			if outcome.State != "completed" || outcome.Status != tc.status {
