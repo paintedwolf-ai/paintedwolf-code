@@ -12,8 +12,8 @@ import (
 // A durable result replayed after a restart carries no offered tools.
 func TestOfferedToolsAreNotPersisted(t *testing.T) {
 	live := &Result{MessageID: "m1", Reach: toolreach.Offered([]string{"read", "recall"})}
-	if !slices.Equal(live.OfferedToolNames(), []string{"read", "recall"}) {
-		t.Fatalf("live offered tools = %v", live.OfferedToolNames())
+	if !slices.Equal(live.RequestReach().OfferedNames(), []string{"read", "recall"}) {
+		t.Fatalf("live offered tools = %v", live.RequestReach().OfferedNames())
 	}
 	raw, err := json.Marshal(live)
 	testutil.FailErr(t, "encode live result", err)
@@ -22,11 +22,11 @@ func TestOfferedToolsAreNotPersisted(t *testing.T) {
 	}
 	var replayed *Result
 	testutil.FailErr(t, "decode durable result", json.Unmarshal(raw, &replayed))
-	if replayed.OfferedToolNames() != nil {
-		t.Fatalf("replayed offered tools = %v", replayed.OfferedToolNames())
+	if replayed.RequestReach().OfferedNames() != nil {
+		t.Fatalf("replayed offered tools = %v", replayed.RequestReach().OfferedNames())
 	}
 	var missing *Result
-	if missing.OfferedToolNames() != nil {
+	if missing.RequestReach().OfferedNames() != nil {
 		t.Fatal("missing result offers tools")
 	}
 	if missing.IsCloseoutBlocked() {
