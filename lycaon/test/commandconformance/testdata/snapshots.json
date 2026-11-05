@@ -617,6 +617,14 @@
         "stderr": ""
       }
     },
+    "lang-ulimit-report-matches-children": {
+      "gnu": {
+        "input": "sha256:798ece0508b3d8ae68f1e7122eb1236aae2b4107a099e92638f90c92a073fd34",
+        "status": 0,
+        "stdout": "report 0\nlater 0\n32\n32\noutside 0\n48\n48\n",
+        "stderr": ""
+      }
+    },
     "lang-word-splitting-and-empty": {
       "bsd": {
         "input": "sha256:c274a736f942f8e3c649c7282666683a0d97e03206a0c622bac391531f20ce01",
