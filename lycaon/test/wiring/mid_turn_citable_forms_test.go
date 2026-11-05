@@ -18,6 +18,9 @@ import (
 type citableStep struct {
 	text    func(req modelcall.CompletionRequest) string
 	command string
+	// tool calls a tool other than command with args.
+	tool string
+	args map[string]any
 }
 
 type citableScriptLLM struct {
@@ -44,6 +47,9 @@ func (m *citableScriptLLM) Complete(_ context.Context, req modelcall.CompletionR
 	out := &modelcall.Completion{}
 	if step.text != nil {
 		out.Content = step.text(req)
+	}
+	if step.tool != "" {
+		out.ToolCalls = []wire.ToolCall{{ID: "call-" + string(rune('a'+m.next)), Name: step.tool, Args: step.args}}
 	}
 	if step.command != "" {
 		out.ToolCalls = []wire.ToolCall{{ID: "call-" + string(rune('a'+m.next)), Name: "command", Args: map[string]any{"command": step.command}}}
