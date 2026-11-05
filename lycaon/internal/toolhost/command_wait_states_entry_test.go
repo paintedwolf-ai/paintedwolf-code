@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -96,12 +97,41 @@ func (f *waitStateFixture) start(t *testing.T, source string) <-chan string {
 	}()
 	return done
 }
-// waitTimers counts the program's inline-wait timer too, which is pending from
-// the start of the call.
-func (f *waitStateFixture) waitTimers(count int) {
-	for f.clock.Pending() < count {
+// waitYields bounds a wait in scheduler yields, so a lost wake fails the test that
+// lost it instead of the package timeout. Nothing here reads a wall clock.
+const waitYields = 1 << 28
+
+func (f *waitStateFixture) until(t *testing.T, what string, ready func() bool) {
+	t.Helper()
+	for range waitYields {
+		if ready() {
+			return
+		}
 		runtime.Gosched()
 	}
+	t.Fatalf("stuck waiting for %s; pending timers %v", what, f.clock.TimersDue())
+}
+
+// awaitTimers waits until the program has registered these exact timers.
+func (f *waitStateFixture) awaitTimers(t *testing.T, durations ...time.Duration) {
+	t.Helper()
+	for _, d := range durations {
+		f.until(t, "a timer due in "+d.String(), func() bool { return slices.Contains(f.clock.TimersDue(), d) })
+	}
+}
+
+func receive[T any](t *testing.T, f *waitStateFixture, values <-chan T, what string) T {
+	t.Helper()
+	var value T
+	f.until(t, what, func() bool {
+		select {
+		case value = <-values:
+			return true
+		default:
+			return false
+		}
+	})
+	return value
 }
 
 func TestCommandEntryRealSleepParksAndResumesWithCompleteBytes(t *testing.T) {
@@ -112,7 +142,7 @@ func TestCommandEntryRealSleepParksAndResumesWithCompleteBytes(t *testing.T) {
 	if parked.State != "parked" || parked.Reason != "sleep 120" {
 		t.Fatalf("parked %s", content)
 	}
-	pending := <-f.parked
+	pending := receive(t, f, f.parked, "the program to park")
 	f.clock.Advance(119 * time.Second)
 	select {
 	case result := <-pending.settled:
@@ -120,7 +150,7 @@ func TestCommandEntryRealSleepParksAndResumesWithCompleteBytes(t *testing.T) {
 	default:
 	}
 	f.clock.Advance(time.Second)
-	outcome := decodeWaitOutcome(t, <-pending.settled)
+	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 	if outcome.Status != 0 || outcome.Stdout != "start\ndone\n" || outcome.State != "completed" {
 		t.Fatalf("outcome %+v", outcome)
 	}
@@ -128,9 +158,9 @@ func TestCommandEntryRealSleepParksAndResumesWithCompleteBytes(t *testing.T) {
 func TestCommandEntryRealShortSleepStaysInline(t *testing.T) {
 	f := newWaitStateFixture(t)
 	done := f.start(t, "sleep 0.2; echo done")
-	<-f.states
+	receive(t, f, f.states, "a wait state")
 	f.clock.Advance(200 * time.Millisecond)
-	outcome := decodeWaitOutcome(t, <-done)
+	outcome := decodeWaitOutcome(t, receive(t, f, done, "the call's result"))
 	if outcome.Status != 0 || outcome.Stdout != "done\n" {
 		t.Fatalf("outcome %+v", outcome)
 	}
@@ -145,17 +175,17 @@ func TestCommandEntryRealWaitUsesExactSupervisedJob(t *testing.T) {
 		t.Run(reference, func(t *testing.T) {
 			f := newWaitStateFixture(t)
 			f.call(t, "{ sleep 120; exit 7; } & wait "+reference)
-			pending := <-f.parked
+			pending := receive(t, f, f.parked, "the program to park")
 			var state commandprogram.WaitState
 			for len(state.Jobs) == 0 {
-				state = <-f.states
+				state = receive(t, f, f.states, "a wait state")
 			}
 			active := f.Background.ActiveJobs(f.Session)
 			if len(active) != 1 || len(state.Jobs) != 1 || state.Jobs[0] != active[0].Handle || !strings.HasPrefix(state.Statement, "wait") {
 				t.Fatalf("wait %+v jobs %+v", state, active)
 			}
 			f.clock.Advance(120 * time.Second)
-			outcome := decodeWaitOutcome(t, <-pending.settled)
+			outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 			if outcome.Status != status || outcome.State != "completed" {
 				t.Fatalf("outcome %+v", outcome)
 			}
@@ -165,12 +195,12 @@ func TestCommandEntryRealWaitUsesExactSupervisedJob(t *testing.T) {
 func TestCommandEntryRealTimeoutParksAndSettlesItsChild(t *testing.T) {
 	f := newWaitStateFixture(t)
 	content := f.call(t, "timeout 60 sleep 120")
-	pending := <-f.parked
+	pending := receive(t, f, f.parked, "the program to park")
 	if !strings.Contains(content, "timeout 60 sleep 120") {
 		t.Fatalf("reason %s", content)
 	}
 	f.clock.Advance(60 * time.Second)
-	outcome := decodeWaitOutcome(t, <-pending.settled)
+	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 	if outcome.Status != 124 || outcome.State != "completed" {
 		t.Fatalf("outcome %+v", outcome)
 	}
@@ -184,10 +214,10 @@ func TestCommandEntryRealTimeoutParksAndSettlesItsChild(t *testing.T) {
 func TestCommandEntryTimedReadDoesNotWakeSleepEarly(t *testing.T) {
 	f := newWaitStateFixture(t)
 	done := f.start(t, "sleep 120 | read -t 5 value")
-	f.waitTimers(3)
+	f.awaitTimers(t, 120*time.Second, 5*time.Second)
 	f.clock.Advance(5 * time.Second)
-	pending := <-f.parked
-	if result := <-done; !strings.Contains(result, "parked") {
+	pending := receive(t, f, f.parked, "the program to park")
+	if result := receive(t, f, done, "the call's result"); !strings.Contains(result, "parked") {
 		t.Fatalf("remaining timer did not park %s", result)
 	}
 	f.clock.Advance(114 * time.Second)
@@ -197,7 +227,7 @@ func TestCommandEntryTimedReadDoesNotWakeSleepEarly(t *testing.T) {
 	default:
 	}
 	f.clock.Advance(time.Second)
-	outcome := decodeWaitOutcome(t, <-pending.settled)
+	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 	if outcome.Status != 142 || outcome.State != "completed" {
 		t.Fatalf("outcome %+v", outcome)
 	}
@@ -208,7 +238,7 @@ func TestCommandEntryBackgroundOnlyReturnsAndItsTimerSurvives(t *testing.T) {
 	if outcome.State != "running" || outcome.Status != 0 {
 		t.Fatalf("background outcome %+v", outcome)
 	}
-	f.waitTimers(1)
+	f.awaitTimers(t, 120*time.Second)
 	select {
 	case parked := <-f.parked:
 		t.Fatalf("background-only call parked %+v", parked.request)
@@ -243,14 +273,14 @@ func TestCommandEntryTimedReadPreservesPartialInputAndInheritedDescriptor(t *tes
 	done := f.start(t, `{ printf part; sleep 120; printf '\nnext\n'; } | { read -t 5 first; status=$?; read second; read third; printf '%s:%s:%s:%s\n' "$status" "$first" "$second" "$third"; }`)
 	var state commandprogram.WaitState
 	for state.Statement != "read -t 5 first" {
-		state = <-f.states
+		state = receive(t, f, f.states, "a wait state")
 	}
-	f.waitTimers(3)
+	f.awaitTimers(t, 120*time.Second, 5*time.Second)
 	f.clock.Advance(5 * time.Second)
-	pending := <-f.parked
-	<-done
+	pending := receive(t, f, f.parked, "the program to park")
+	receive(t, f, done, "the call\'s result")
 	f.clock.Advance(115 * time.Second)
-	outcome := decodeWaitOutcome(t, <-pending.settled)
+	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 	if outcome.State != "completed" || outcome.Status != 0 || outcome.Stdout != "142:part::next\n" {
 		t.Fatalf("read reuse %+v", outcome)
 	}
@@ -278,16 +308,16 @@ func TestCommandEntryPollingLoopRunsProbesBetweenFullSleeps(t *testing.T) {
 	started := f.clock.Now()
 	done := f.start(t, `{ sleep 12; touch ready; } & until test -f ready; do sleep 5; done; echo done`)
 	waitUntil := func(until time.Time) {
-		for {
+		f.until(t, "the wait until "+until.String(), func() bool {
 			select {
 			case state := <-f.states:
-				if state.Until.Equal(until) {
-					return
-				}
+				return state.Until.Equal(until)
 			case result := <-done:
 				t.Fatalf("program ended before wait %s: %s", until, result)
+			default:
 			}
-		}
+			return false
+		})
 	}
 	for step := 1; step <= 2; step++ {
 		waitUntil(started.Add(time.Duration(step) * 5 * time.Second))
@@ -304,7 +334,7 @@ func TestCommandEntryPollingLoopRunsProbesBetweenFullSleeps(t *testing.T) {
 	default:
 	}
 	f.clock.Advance(3 * time.Second)
-	outcome := decodeWaitOutcome(t, <-done)
+	outcome := decodeWaitOutcome(t, receive(t, f, done, "the call's result"))
 	if outcome.State != "completed" || outcome.Status != 0 || outcome.Stdout != "done\n" {
 		t.Fatalf("readiness loop %+v", outcome)
 	}
@@ -350,7 +380,7 @@ func TestCommandEntryParallelXargsTracksEachLiveActivity(t *testing.T) {
 			f := newWaitStateFixture(t)
 			program := "printf '" + strings.ReplaceAll(tc.input, "\n", `\n`) + "' | xargs -n1 -P2 sleep; echo done"
 			f.call(t, program)
-			pending := <-f.parked
+			pending := receive(t, f, f.parked, "the program to park")
 			completed := 0
 			for operation, states := range f.Executions(t) {
 				if strings.Contains(operation, "sleep") {
@@ -361,7 +391,7 @@ func TestCommandEntryParallelXargsTracksEachLiveActivity(t *testing.T) {
 				t.Fatalf("completed sleep children %d, want %d", completed, tc.completed)
 			}
 			f.clock.Advance(120 * time.Second)
-			outcome := decodeWaitOutcome(t, <-pending.settled)
+			outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 			if outcome.Status != 0 || outcome.State != "completed" || outcome.Stdout != "done\n" {
 				t.Fatalf("parallel wait %+v", outcome)
 			}
@@ -374,12 +404,10 @@ func TestCommandEntryCompletedOrEmptyWaitStaysInlinePastTheThreshold(t *testing.
 		t.Run(source, func(t *testing.T) {
 			f := newWaitStateFixture(t)
 			done := f.start(t, source)
-			f.waitTimers(2)
-			for len(f.Background.ActiveJobs(f.Session)) > 0 {
-				runtime.Gosched()
-			}
+			f.awaitTimers(t, 200*time.Millisecond)
+			f.until(t, "every job to finish", func() bool { return len(f.Background.ActiveJobs(f.Session)) == 0 })
 			f.clock.Advance(20 * time.Second)
-			outcome := decodeWaitOutcome(t, <-done)
+			outcome := decodeWaitOutcome(t, receive(t, f, done, "the call's result"))
 			if outcome.Status != 0 {
 				t.Fatalf("inline wait %+v", outcome)
 			}
@@ -411,19 +439,18 @@ func TestCommandWaitingExternalHelper(t *testing.T) {
 func (f *waitStateFixture) externalHelper() string {
 	return "PW_COMMAND_WAIT_HELPER=1 external -- " + strconv.Quote(f.helper) + " '-test.run=^TestCommandWaitingExternalHelper$'"
 }
-func (f *waitStateFixture) awaitExternal() {
-	for {
-		if _, err := os.Stat(filepath.Join(f.Dir, "running")); err == nil {
-			return
-		}
-		runtime.Gosched()
-	}
+func (f *waitStateFixture) awaitExternal(t *testing.T) {
+	t.Helper()
+	f.until(t, "the external helper to start", func() bool {
+		_, err := os.Stat(filepath.Join(f.Dir, "running"))
+		return err == nil
+	})
 }
 func TestCommandEntryOrdinaryExternalRemainsRunnableBesideBackgroundSleep(t *testing.T) {
 	f := newWaitStateFixture(t)
 	done := f.start(t, "sleep 120 & "+f.externalHelper())
-	f.awaitExternal()
-	f.waitTimers(1)
+	f.awaitExternal(t)
+	f.awaitTimers(t, 120*time.Second)
 	f.clock.Advance(20 * time.Second)
 	select {
 	case parked := <-f.parked:
@@ -431,7 +458,7 @@ func TestCommandEntryOrdinaryExternalRemainsRunnableBesideBackgroundSleep(t *tes
 	default:
 	}
 	testutil.FailErr(t, "release external fixture", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-	outcome := decodeWaitOutcome(t, <-done)
+	outcome := decodeWaitOutcome(t, receive(t, f, done, "the call's result"))
 	if outcome.Status != 7 || outcome.Stdout != "external done\n" {
 		t.Fatalf("external result %+v", outcome)
 	}
@@ -440,15 +467,15 @@ func TestCommandEntryOrdinaryExternalRemainsRunnableBesideBackgroundSleep(t *tes
 func TestCommandEntryExactExternalJobWaitParksAndResumes(t *testing.T) {
 	f := newWaitStateFixture(t)
 	done := f.start(t, f.externalHelper()+" & wait $!")
-	f.awaitExternal()
-	f.waitTimers(2)
+	f.awaitExternal(t)
+	f.awaitTimers(t, command.DefaultParkThreshold)
 	f.clock.Advance(10 * time.Second)
-	pending := <-f.parked
-	if got := <-done; !strings.Contains(got, "parked") {
+	pending := receive(t, f, f.parked, "the program to park")
+	if got := receive(t, f, done, "the call's result"); !strings.Contains(got, "parked") {
 		t.Fatalf("job wait result %s", got)
 	}
 	testutil.FailErr(t, "complete external job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-	outcome := decodeWaitOutcome(t, <-pending.settled)
+	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 	if outcome.Status != 7 || outcome.State != "completed" {
 		t.Fatalf("external job %+v", outcome)
 	}
@@ -456,11 +483,11 @@ func TestCommandEntryExactExternalJobWaitParksAndResumes(t *testing.T) {
 func TestCommandEntryExternalTimeoutParksAndReapsTheChild(t *testing.T) {
 	f := newWaitStateFixture(t)
 	done := f.start(t, strings.Replace(f.externalHelper(), " external -- ", " timeout 60 external -- ", 1))
-	f.awaitExternal()
-	pending := <-f.parked
-	<-done
+	f.awaitExternal(t)
+	pending := receive(t, f, f.parked, "the program to park")
+	receive(t, f, done, "the call\'s result")
 	f.clock.Advance(60 * time.Second)
-	outcome := decodeWaitOutcome(t, <-pending.settled)
+	outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 	if outcome.Status != 124 || outcome.State != "completed" {
 		t.Fatalf("external timeout %+v", outcome)
 	}
@@ -478,13 +505,13 @@ func TestCommandEntryAwaitedBackgroundFramesKeepTheExactJobIdentity(t *testing.T
 			f := newWaitStateFixture(t)
 			body := strings.ReplaceAll(tc.body, "HELPER", f.externalHelper())
 			done := f.start(t, "{ "+body+"; } & wait $!")
-			f.awaitExternal()
-			f.waitTimers(2)
+			f.awaitExternal(t)
+			f.awaitTimers(t, command.DefaultParkThreshold)
 			f.clock.Advance(10 * time.Second)
-			pending := <-f.parked
-			<-done
+			pending := receive(t, f, f.parked, "the program to park")
+			receive(t, f, done, "the call\'s result")
 			testutil.FailErr(t, "release background external fixture", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-			outcome := decodeWaitOutcome(t, <-pending.settled)
+			outcome := decodeWaitOutcome(t, receive(t, f, pending.settled, "the parked program's result"))
 			if outcome.State != "completed" || outcome.Status != tc.status {
 				t.Fatalf("background frame %+v", outcome)
 			}
