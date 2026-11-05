@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -232,44 +231,52 @@ func (r *conformanceRunner) promptAnsweringApprovals(t *testing.T, projectID, se
 	}
 }
 
+// runningProgramPolls bounds joinRunningProgram in reads, so a program that never ends
+// fails its case and names itself instead of taking the package timeout.
+const runningProgramPolls = 1 << 15
+
 // joinRunningProgram follows a program past the foreground budget to its end: how long
 // a case takes on a given host decides nothing about what it prints. The program's
 // final outcome is the last line of its stderr stream.
 func (r *conformanceRunner) joinRunningProgram(t *testing.T, projectID, sessionID string, running command.RunningProgramResult) command.ProgramOutcome {
 	t.Helper()
-	var stdout, stderr strings.Builder
-	cursor := 0
-	done := false
-	testutil.WaitFor(t, func() bool {
-		raw, err := r.h.ToolRegistry.Run(t.Context(), "command_output", map[string]any{"handle": running.Handle, "cursor": cursor},
+	type outputPage struct {
+		Running   bool `json:"running"`
+		Truncated bool `json:"truncated"`
+		Chunks    []struct {
+			Stream string `json:"stream"`
+			Text   string `json:"text"`
+		} `json:"chunks"`
+	}
+	read := func() (outputPage, string) {
+		raw, err := r.h.ToolRegistry.Run(t.Context(), "command_output", map[string]any{"handle": running.Handle, "cursor": 0},
 			tools.ToolContext{Identity: tools.InvocationIdentity{ProjectID: projectID, SessionID: sessionID}})
 		testutil.FailErr(t, "read running program", err)
-		var page struct {
-			NextCursor string `json:"next_cursor"`
-			Running    bool   `json:"running"`
-			Truncated  bool   `json:"truncated"`
-			Chunks     []struct {
-				Stream string `json:"stream"`
-				Text   string `json:"text"`
-			} `json:"chunks"`
-		}
+		var page outputPage
 		testutil.FailErr(t, "decode running program output", json.Unmarshal([]byte(raw), &page))
-		if page.Truncated {
-			t.Fatalf("running program output truncated: %s", raw)
+		return page, raw
+	}
+	polls := 0
+	var page outputPage
+	testutil.WaitFor(t, func() bool {
+		var raw string
+		page, raw = read()
+		if polls++; polls > runningProgramPolls {
+			t.Fatalf("program %s still running after %d reads: %s", running.ProgramID, polls, raw)
 		}
-		for _, chunk := range page.Chunks {
-			if chunk.Stream == "stderr" {
-				stderr.WriteString(chunk.Text)
-			} else {
-				stdout.WriteString(chunk.Text)
-			}
-		}
-		next, err := strconv.Atoi(page.NextCursor)
-		testutil.FailErr(t, "parse output cursor", err)
-		cursor = next
-		done = !page.Running
-		return done && len(page.Chunks) == 0
+		return !page.Running
 	})
+	if page.Truncated {
+		t.Fatalf("running program output truncated: %+v", page)
+	}
+	var stdout, stderr strings.Builder
+	for _, chunk := range page.Chunks {
+		if chunk.Stream == "stderr" {
+			stderr.WriteString(chunk.Text)
+		} else {
+			stdout.WriteString(chunk.Text)
+		}
+	}
 	text := strings.TrimRight(stderr.String(), "\n")
 	cut := strings.LastIndexByte(text, '\n') + 1
 	var outcome command.ProgramOutcome
