@@ -69,7 +69,11 @@ func TestNothingCitedReplyInAReportPhaseStillEndsInAReport(t *testing.T) {
 			calls := script.next
 			script.mu.Unlock()
 			if !runstate.IsTerminal(current.Status) || calls > tc.maxCalls {
-				t.Fatalf("status=%s phase=%s after %d model calls, want a terminal run within %d", current.Status, current.CurrentPhase, calls, tc.maxCalls)
+				rows := make([]string, 0, len(msgs))
+				for _, msg := range msgs {
+					rows = append(rows, string(msg.Role)+"/"+string(msg.Kind)+": "+msg.Content)
+				}
+				t.Fatalf("status=%s phase=%s after %d model calls, want a terminal run within %d; rows %q", current.Status, current.CurrentPhase, calls, tc.maxCalls, rows)
 			}
 			if !tc.assembled {
 				return
