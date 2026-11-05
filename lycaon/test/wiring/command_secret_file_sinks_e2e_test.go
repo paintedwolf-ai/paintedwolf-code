@@ -128,6 +128,12 @@ func TestCommandFileSinksResolveAChatGeneratedReference(t *testing.T) {
 	testutil.FailErr(t, "prompt", err)
 	for i, outcome := range run.outcomes(t) {
 		if outcome.state != "completed" {
+			messages, _ := run.h.Store.GetMessages(t.Context(), run.session)
+			for _, message := range messages {
+				if message.Role == wire.MessageRoleTool {
+					t.Log(message.Content)
+				}
+			}
 			t.Fatalf("command %d = %+v", i, outcome)
 		}
 	}
