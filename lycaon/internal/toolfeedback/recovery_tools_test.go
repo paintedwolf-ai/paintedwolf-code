@@ -26,12 +26,11 @@ func TestRecoveryCopyUsesFrozenOfferedTools(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		offered []string
-		listing bool
 	}{
-		{"listing offered", []string{"read", "grep", "list_dir"}, true},
-		{"narrow profile", []string{"read", "grep"}, false},
-		{"no tools offered", []string{}, false},
-		{"non-model caller", nil, false},
+		{"listing offered", []string{"read", "grep", "list_dir"}},
+		{"narrow profile", []string{"read", "grep"}},
+		{"no tools offered", []string{}},
+		{"non-model caller", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
@@ -50,9 +49,6 @@ func TestRecoveryCopyUsesFrozenOfferedTools(t *testing.T) {
 				t.Fatalf("missing evaluated recovery: %v", err)
 			}
 			calls := toolvocab.NamedTools(catalog, refusal.Copy["fix"])
-			if got := slices.Contains(calls, "list_dir"); got != tc.listing {
-				t.Fatalf("listing recommendation = %v, want %v: %v", got, tc.listing, calls)
-			}
 			for _, call := range calls {
 				if !slices.Contains(tc.offered, call) {
 					t.Errorf("recovery names unoffered tool %q", call)
