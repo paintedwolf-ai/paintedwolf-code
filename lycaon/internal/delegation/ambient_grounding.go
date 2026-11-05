@@ -38,8 +38,8 @@ type AmbientGroundingInput struct {
 	// LastAuditHostAssembled means the host settled the turn's outcome itself, so
 	// nothing remains for feedback to ask of the next turn.
 	LastAuditHostAssembled bool
-	LastAuditCode       string
-	UngroundedState     grounding.UngroundedCounter
+	LastAuditCode          string
+	UngroundedState        grounding.UngroundedCounter
 }
 
 // AmbientGroundingGate grounds default-Build coordinator turns: the worker queue + worker_summary

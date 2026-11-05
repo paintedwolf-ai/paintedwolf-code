@@ -134,8 +134,17 @@ func TestHostAssembledReportLeavesNoFeedbackForTheNextRequest(t *testing.T) {
 	if !runstate.IsTerminal(current.Status) {
 		t.Fatalf("status = %s, want the assembled report to end the run", current.Status)
 	}
+	script.mu.Lock()
+	before := script.next
+	script.mu.Unlock()
 	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "An unrelated question.")
 	testutil.FailErr(t, "next prompt", err)
+	script.mu.Lock()
+	after := script.next
+	script.mu.Unlock()
+	if after <= before {
+		t.Fatal("the next prompt made no scripted request, so nothing was inspected")
+	}
 	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	stored := 0
