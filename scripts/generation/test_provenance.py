@@ -9,6 +9,26 @@ import provenance
 
 
 class ProvenanceTests(unittest.TestCase):
+    def test_reference_source_identity_tracks_only_backend_inputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for directory, files in (
+                    ("llama-reference", ("CMakeLists.txt", "main.cpp", "cache.patch", "ignored.txt")),
+                    ("swift-reference", ("main.swift", "Package.resolved", "ignored.txt"))):
+                for name in files:
+                    path = root / directory / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(name)
+            (root / "sources.json").write_text("{}")
+            with patch.object(provenance, "ROOT", root):
+                llama = provenance.source_identity("reference-llama")
+                swift = provenance.source_identity("reference-swift")
+                self.assertNotEqual(llama, swift)
+                (root / "llama-reference/ignored.txt").write_text("changed")
+                self.assertEqual(llama, provenance.source_identity("reference-llama"))
+                (root / "llama-reference/cache.patch").write_text("changed")
+                self.assertNotEqual(llama, provenance.source_identity("reference-llama"))
+
     def test_rust_identity_includes_patched_bindings_and_build_recipe(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -104,3 +124,19 @@ class ProvenanceTests(unittest.TestCase):
                 adapter.write_bytes(b"changed adapter")
                 with self.assertRaisesRegex(ValueError, "rebuild"):
                     provenance.verified_build("native", root, binary)
+
+    def test_darwin_native_receipt_binds_compiler_sdk_and_shader(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            binary = root / "nativegen"
+            binary.write_bytes(b"native executable")
+            (root / "metal").mkdir()
+            (root / "metal/mlx.metallib").write_bytes(b"shader")
+            with patch.object(provenance.sys, "platform", "darwin"), \
+                    patch.object(provenance, "source_identity", return_value="source"), \
+                    patch.object(provenance.subprocess, "check_output",
+                                 side_effect=["rustc fixture", "cargo fixture", "14.0", "/sdk"]):
+                identity = provenance.build_identity("native", root, binary)
+            self.assertEqual(identity["toolchain"], {"rustc": "rustc fixture", "cargo": "cargo fixture"})
+            self.assertEqual(identity["sdk"], {"version": "14.0", "path": "/sdk"})
+            self.assertEqual(identity["metallib_sha256"], provenance.file_digest(root / "metal/mlx.metallib"))

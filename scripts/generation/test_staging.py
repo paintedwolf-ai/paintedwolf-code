@@ -100,6 +100,21 @@ class StagingTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "requires"):
                         command.stage(Path("nativegen"), Path("generation"))
             build.assert_not_called()
+        with tempfile.TemporaryDirectory() as temporary:
+            with patch.object(command.runtime, "build"), \
+                    patch.object(command.runtime, "paths", return_value=(Path("source"), Path(temporary))), \
+                    patch.object(command.runtime, "native_environment", return_value=({}, "vulkan")), \
+                    patch.object(command, "stage_runtime"), patch.object(command.runtime, "run") as run, \
+                    patch.object(command, "stage_seed") as stage_seed, \
+                    patch.dict(command.os.environ, {
+                        "BIALY_GENERATION_BUNDLE": "/seed",
+                        "BIALY_GENERATION_AUTHORITY": "/keys",
+                    }, clear=True):
+                command.stage(Path("nativegen"), Path("generation"))
+        run.assert_called_once()
+        self.assertEqual(run.call_args.args[0][:2], ["go", "build"])
+        self.assertEqual(stage_seed.call_args.args[1:], (
+            Path("/seed"), Path("/keys"), Path("generation"), "vulkan"))
 
     def test_vulkan_library_is_staged_for_build_and_installed_layouts(self):
         with tempfile.TemporaryDirectory() as temporary:

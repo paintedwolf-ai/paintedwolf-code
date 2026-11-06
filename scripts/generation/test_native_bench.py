@@ -5,11 +5,14 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+import tempfile
+import types
 import unittest
 from unittest import mock
 
 import runtime
 
+import native_bench
 from native_bench import Client, trial
 
 
@@ -97,6 +100,103 @@ sys.stdout.buffer.flush()
         self.assertEqual(result["tokens"], [100, 100, 100])
         self.assertEqual(len(result["steps"]), 3)
         self.assertAlmostEqual(result["decode_tokens_per_second"] * result["decode_seconds"], 2)
+
+    def test_measure_records_a_complete_run_with_a_manual_clock(self):
+        class Pipe:
+            closed = False
+            def close(self):
+                self.closed = True
+
+        class Process:
+            def __init__(self):
+                self.stdin, self.stdout = Pipe(), Pipe()
+                self.returncode = 0
+                self.killed = False
+            def poll(self):
+                return self.returncode
+            def wait(self, timeout=None):
+                self.asserted_timeout = timeout
+                return self.returncode
+            def kill(self):
+                self.killed = True
+                self.returncode = -9
+
+        class Fixture:
+            def call(self, method, **_):
+                if method == "inspect":
+                    return {"plan": {"device_reservation_bytes": 64, "host_reservation_bytes": 128}}
+                if method == "begin":
+                    return {"reused_prefix_tokens": 0}
+                if method == "advance":
+                    return {"progress": {"generated_tokens": 1, "token": None, "stop_reason": "eos"}}
+                return {}
+
+        class Clock:
+            current = 0.0
+            def __call__(self):
+                self.current += 0.25
+                return self.current
+
+        process, output = Process(), io.StringIO()
+        usage = types.SimpleNamespace(ru_maxrss=2, ru_majflt=3, ru_minflt=4, ru_inblock=5,
+                                      ru_oublock=6, ru_utime=7.0, ru_stime=8.0)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "input.json"
+            source.write_text(json.dumps({
+                "prompt_tokens": [1, 2], "generation_tokens": 1, "trials": 1,
+                "prefill_chunk": 32, "allowed_tools": ["command"],
+            }))
+            args = argparse.Namespace(
+                binary=root / "nativegen", model=root / "model", input=source,
+                artifact_identity="artifact", checkpoint_tokens=0, metallib=None, device_pci=None,
+            )
+            with mock.patch.object(native_bench.subprocess, "Popen", return_value=process), \
+                    mock.patch.object(native_bench, "Client", return_value=Fixture()), \
+                    mock.patch.object(native_bench.time, "perf_counter", side_effect=Clock()), \
+                    mock.patch.object(native_bench.resource, "getrusage", return_value=usage), \
+                    mock.patch("sys.stdout", output):
+                native_bench.measure(args)
+        records = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(len(records), 4)
+        self.assertEqual(records[0]["plan"]["host_reservation_bytes"], 128)
+        self.assertTrue(records[1]["warmup"])
+        self.assertFalse(records[2]["warmup"])
+        self.assertEqual(records[3]["process_usage"]["major_page_faults"], 3)
+        self.assertFalse(process.killed)
+        self.assertTrue(process.stdin.closed)
+        self.assertTrue(process.stdout.closed)
+
+    def test_measure_kills_and_closes_a_failed_child(self):
+        class Pipe:
+            def close(self):
+                pass
+        class Process:
+            def __init__(self):
+                self.stdin, self.stdout = Pipe(), Pipe()
+                self.returncode = None
+                self.killed = False
+            def poll(self):
+                return self.returncode
+            def wait(self, timeout=None):
+                self.returncode = -9
+                return self.returncode
+            def kill(self):
+                self.killed = True
+        process = Process()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "input.json"
+            source.write_text(json.dumps({"prompt_tokens": [1], "generation_tokens": 1, "trials": 1}))
+            args = argparse.Namespace(binary=root / "nativegen", model=root / "model", input=source,
+                                      artifact_identity="artifact", checkpoint_tokens=0,
+                                      metallib=None, device_pci=None)
+            with mock.patch.object(native_bench.subprocess, "Popen", return_value=process), \
+                    mock.patch.object(native_bench, "Client") as client:
+                client.return_value.call.side_effect = RuntimeError("fixture failure")
+                with self.assertRaisesRegex(RuntimeError, "fixture failure"):
+                    native_bench.measure(args)
+        self.assertTrue(process.killed)
 
     def test_cli_accepts_full_context_prefixes_and_rejects_invalid_bounds(self):
         for checkpoint in (0, 8193, 65535):

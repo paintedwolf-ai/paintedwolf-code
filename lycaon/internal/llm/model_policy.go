@@ -220,9 +220,6 @@ func DefaultLocalModelRef() ModelRef {
 	}
 }
 
-// CoordinatorRef returns the coordinator assignment.
-func CoordinatorRef(p ModelPolicy) ModelRef { return p.Coordinator }
-
 // CoordinatorRefWithLocalDefault returns the coordinator assignment, falling back to
 // the bundled local model when unset and localAvailable is true.
 func CoordinatorRefWithLocalDefault(p ModelPolicy, localAvailable bool) ModelRef {

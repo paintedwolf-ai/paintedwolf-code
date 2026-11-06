@@ -32,7 +32,8 @@
       },
       "generation staging": {
         "start": "scripts/generation",
-        "pattern": "test_staging.py"
+        "pattern": "test_[!rc]*.py",
+        "requirements": "scripts/generation/requirements-test.txt"
       },
       "harness": {
         "start": "scripts/harness",

@@ -64,3 +64,45 @@ class SwiftToolchainTests(unittest.TestCase):
             self.assertEqual(swift_toolchain.prepare(self.cache), compiler)
             self.assertEqual(swift_toolchain.executable(self.cache), compiler)
             run.assert_called_once_with([str(compiler), "--version"], check=True)
+
+    def test_existing_toolchain_identity_and_space_are_checked(self):
+        destination = self.cache / ("swift-" + swift_toolchain.VERSION)
+        compiler = destination / "usr/bin/swift"
+        compiler.parent.mkdir(parents=True)
+        compiler.write_text("compiler")
+        compiler.chmod(0o755)
+        (destination / "source.json").write_text(
+            '{"url": "' + swift_toolchain.URL + '", "sha256": "' +
+            swift_toolchain.EXPECTED_SHA256 + '"}')
+        self.assertEqual(swift_toolchain.prepare(self.cache), compiler)
+        (destination / "source.json").write_text('{"url": "unexpected", "sha256": "wrong"}')
+        with self.assertRaisesRegex(ValueError, "identity mismatch"):
+            swift_toolchain.prepare(self.cache)
+        compiler.unlink()
+        with patch.object(swift_toolchain.shutil, "disk_usage",
+                          return_value=type("Disk", (), {"free": (10 << 30) - 1})()):
+            with self.assertRaisesRegex(ValueError, "insufficient space"):
+                swift_toolchain.prepare(self.cache)
+
+    def test_download_digest_and_package_layout_are_verified(self):
+        with patch.object(swift_toolchain.shutil, "disk_usage",
+                          return_value=type("Disk", (), {"free": 20 << 30})()), \
+                patch.object(swift_toolchain.urllib.request, "urlopen",
+                             return_value=io.BytesIO(b"wrong package")), \
+                patch.object(swift_toolchain.subprocess, "run") as run:
+            with self.assertRaisesRegex(ValueError, "digest mismatch"):
+                swift_toolchain.prepare(self.cache)
+            run.assert_not_called()
+        with patch.object(swift_toolchain.shutil, "disk_usage",
+                          return_value=type("Disk", (), {"free": 20 << 30})()), \
+                patch.object(swift_toolchain.urllib.request, "urlopen",
+                             return_value=io.BytesIO(b"package")), \
+                patch.object(swift_toolchain.subprocess, "run", side_effect=subprocess.CalledProcessError(1, "pkgutil")):
+            with self.assertRaises(subprocess.CalledProcessError):
+                swift_toolchain.prepare(self.cache)
+        with patch.object(swift_toolchain.subprocess, "check_output",
+                          side_effect=["Swift version fixture", "/sdk", "14.0"]):
+            identity = swift_toolchain.identity(self.cache)
+        self.assertEqual(identity["version"], "Swift version fixture")
+        self.assertEqual(identity["sdk"], "/sdk")
+        self.assertEqual(identity["sdk_version"], "14.0")
