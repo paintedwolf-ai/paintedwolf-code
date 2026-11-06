@@ -33,17 +33,17 @@ function WalkNavigator(props: Props & { onClose: () => void; availableHeight: nu
     onCleanup(() => cancelAnimationFrame(frame));
   });
   return <div class="den-walk-navigator" style={{ "max-height": `min(28rem, ${Math.max(0, props.availableHeight - 14)}px)` }}>
-    <DenInput class="den-walk-navigator__search" type="search" aria-label="Find in walk" placeholder="Find in history…" value={query()}
+    <DenInput class="den-walk-navigator__search" type="search" aria-label="Find in walk" data-testid="walk-navigator-search" placeholder="Find in history…" value={query()}
       onInput={(event) => { setQuery(event.currentTarget.value); if (list) list.scrollTop = 0; }}
       onKeyDown={(event) => {
         if (event.key === "ArrowDown") { event.preventDefault(); list?.querySelector<HTMLButtonElement>("button")?.focus(); }
       }} />
     <Show when={searching()}><span class="shrink-0 text-den-text-muted text-den-caption" role="status">{entries().length} matching changes</span></Show>
     <Scrollport class="den-walk-navigator__list" contentClass="den-walk-navigator__rows" viewportRef={(el) => { list = el; }}
-      viewport={{ role: "toolbar", "aria-label": "Changes by turn", "aria-orientation": "vertical" }}>
+      viewport={{ role: "toolbar", "aria-label": "Changes by turn", "aria-orientation": "vertical", "data-testid": "walk-navigator-toolbar" }}>
       <For each={turns()}>{(turn) => <>
         <div class="den-walk-navigator__turn">
-          <div class="den-walk-navigator__row-head"><strong>{turn.title}</strong><span>{turn.entries.length} {turn.entries.length === 1 ? "change" : "changes"}</span></div>
+          <div class="den-walk-navigator__row-head"><strong data-testid="walk-navigator-turn">{turn.title}</strong><span>{turn.entries.length} {turn.entries.length === 1 ? "change" : "changes"}</span></div>
           <div class="den-walk-navigator__description" data-tip={turn.prompt} data-tip-when-clipped>{turn.prompt}</div>
         </div>
         <For each={turn.entries}>{(entry) =>
