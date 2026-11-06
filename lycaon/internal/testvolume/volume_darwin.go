@@ -32,7 +32,7 @@ func New(t *testing.T, kind Kind) (*Volume, bool) {
 	}
 	image := filepath.Join(base, "volume.dmg")
 	mount := filepath.Join(base, "mount")
-	if err := os.Mkdir(mount, 0o755); err != nil {
+	if err := os.Mkdir(mount, 0o750); err != nil {
 		t.Fatalf("create mount point: %v", err)
 	}
 	hdiutil(t, "create", "-size", "32m", "-fs", fs, "-volname", "pwplacement", "-quiet", image)

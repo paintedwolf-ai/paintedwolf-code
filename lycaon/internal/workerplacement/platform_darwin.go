@@ -23,7 +23,7 @@ func volumeOf(path string) (Volume, error) {
 	if root == "" {
 		return Volume{}, fmt.Errorf("volume of %s has no mount point", path)
 	}
-	return Volume{ID: uint64(stat.Dev), Root: root}, nil
+	return Volume{ID: uint64(stat.Dev), Root: root}, nil // #nosec G115 -- stat.Dev is a non-negative device ID
 }
 
 func readOnlyFilesystem(err error) bool {
