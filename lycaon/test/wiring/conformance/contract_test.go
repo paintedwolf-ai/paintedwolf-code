@@ -94,6 +94,16 @@ var baseContractCases = []contractCase{
 	},
 	{
 		Case: commandconformance.Case{
+			ID:          "inspect-domain-tool-arguments",
+			Description: "Forms the summarize and survey_repo tools rely on return typed results.",
+			Commands:    []string{"repo-map", "summarize"},
+			Forms:       []string{"repo-map:--bundle", "summarize:--pattern", "summarize:--content"},
+			Program:     `repo-map --path . --bundle layout_overview; summarize --path code.go --pattern Alpha --focus Alpha; summarize --content 'Alpha beta' --focus Alpha`,
+		},
+		Validate: verifyDomainToolArguments,
+	},
+	{
+		Case: commandconformance.Case{
 			ID:          "paths-native-path-conversion",
 			Description: "native_path converts a path with and without -0.",
 			Commands:    []string{"native_path"},
@@ -110,10 +120,10 @@ var baseContractCases = []contractCase{
 			Forms: []string{
 				"edit:--path", "edit:--old-string", "edit:--new-string", "edit:--replace-all",
 				"replace-lines:--path", "replace-lines:--start", "replace-lines:--end", "replace-lines:--content",
-				"code-rewrite:--pattern", "code-rewrite:--rewrite", "code-rewrite:--path", "code-rewrite:--recursive", "code-rewrite:--dry-run",
+				"code-rewrite:--pattern", "code-rewrite:--rewrite", "code-rewrite:--path", "code-rewrite:--recursive", "code-rewrite:--dry-run", "code-rewrite:--lang", "code-rewrite:--syntax-override-reason",
 				"jq-edit:--path", "jq-edit:--query", "jq-edit:--format", "jq-edit:--arg",
 			},
-			Program: `edit --path sub/a.txt --old-string first --new-string EDITED --replace-all && replace-lines --path sub/b.txt --start 1 --end 1 --content REPLACED && code-rewrite --pattern 'OldName' --rewrite 'NewName' --path sub/nested/deep.go --dry-run >/dev/null && jq-edit --path config.json --query '.enabled = ($on == "yes")' --format json --arg on yes`,
+			Program: `edit --path sub/a.txt --old-string first --new-string EDITED --replace-all && replace-lines --path sub/b.txt --start 1 --end 1 --content REPLACED && code-rewrite --pattern 'OldName' --rewrite 'NewName' --path sub/nested/deep.go --lang go --syntax-override-reason fixture --dry-run >/dev/null && jq-edit --path config.json --query '.enabled = ($on == "yes")' --format json --arg on yes`,
 			Tracked: []string{"sub/a.txt", "sub/b.txt", "config.json"},
 		},
 		Files: map[string]string{

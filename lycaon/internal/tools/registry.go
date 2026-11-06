@@ -3,6 +3,7 @@ package tools
 
 import (
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"sync/atomic"
 
 	"context"
@@ -214,6 +215,8 @@ type InvocationTurn struct {
 	// TurnToolPlan freezes availability for this model turn.
 	// Zero indicates a caller without a compiled model surface.
 	TurnToolPlan toolsurface.Plan
+	// TurnPrograms freezes which native programs this model turn can run.
+	TurnPrograms toolreach.Programs
 	// TurnWritePinRootID and Globs constrain writes to one root.
 	TurnWritePinRootID string
 	TurnWritePinGlobs  []string

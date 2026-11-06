@@ -14,7 +14,7 @@ func registerCommandOperations(reg *tools.DefaultRegistry, config nativemanifest
 		return err
 	}
 	for _, name := range names {
-		if !config.HasTool(name) {
+		if !config.HasOperation(name) {
 			continue
 		}
 		if err := reg.RegisterOperation(name); err != nil {

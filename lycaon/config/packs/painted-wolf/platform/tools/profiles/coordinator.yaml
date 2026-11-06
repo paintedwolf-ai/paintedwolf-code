@@ -2,6 +2,9 @@ id: coordinator
 description: Coordinator tools — orchestration, scoped inline work, and worker integration
 command_effects: [read_only, mutation, external_exec, network_egress]
 tools:
+  code_rewrite: true
+  survey_repo: sticky
+  summarize: sticky
   recall: sticky
   pack_board: sticky
   delegate_dispatch: sticky

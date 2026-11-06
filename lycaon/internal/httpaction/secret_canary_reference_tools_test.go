@@ -21,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -95,12 +94,44 @@ func (s canaryEchoSession) CallTool(_ context.Context, name string, args map[str
 
 func (canaryEchoSession) Close() error { return nil }
 
+func registerCanaryMCP(t *testing.T, registry *tools.DefaultRegistry, matcher *secretmatch.Matcher, ask secretmatch.AskFunc) func() string {
+	t.Helper()
+	configtest.Overlay(t, map[config.Rel]string{config.DistroMCP: `providers:
+  - id: canary
+    command: canary
+    enabled: true
+`})
+	tempDir := t.TempDir()
+	var received []string
+	runtime, err := mcp.NewRuntime(mcp.RuntimeOptions{
+		StatePath:          filepath.Join(tempDir, "state"),
+		GlobalOverridePath: filepath.Join(tempDir, "mcp.yaml"),
+		Connector:          canaryEchoConnector{received: &received},
+		OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(tempDir, "oauth.json")),
+	})
+	testutil.FailErr(t, "create canary MCP runtime", err)
+	runtime.Tools.SetToolRegistry(registry)
+	runtime.Calls.SetSecretScreen(matcher, ask)
+	testutil.FailErr(t, "load canary MCP tools", runtime.Catalog.Load(t.Context()))
+	t.Cleanup(func() { testutil.FailErr(t, "close canary MCP runtime", runtime.Close(context.Background())) })
+	return func() string {
+		if len(received) == 0 {
+			return ""
+		}
+		return received[len(received)-1]
+	}
+}
+
 // Every tool whose contract resolves managed-secret references returns a
 // result free of the resolved value, whatever its consumer echoes back.
 func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	service, _, _ := newTestSecrets(t)
 	meta := hostSecret(t, service, "canary", "Canary", canaryValue)
-	program := newCanaryProgram(t)
+	completions := make(chan bgprocess.Completion, 1)
+	programBackground := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{Complete: func(_ context.Context, result bgprocess.Completion) { completions <- result }})
+	t.Cleanup(func() { _ = programBackground.Lifecycle.Close(context.Background()) })
+	program := programtest.New(t, programtest.Options{Background: programBackground})
+	program.Configure = func(tc *tools.ToolContext) { tc.Identity.RootSessionID = "root-1" }
 	root := program.Dir
 	script := filepath.Join(root, "echo.sh")
 	testutil.FailErr(t, "write echo script", os.WriteFile(script, []byte(echoScript), 0o755))
@@ -143,156 +174,9 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 	runner := hostcmd.NewRunner()
 	capturedCommand := &command.CommandTool{Runner: runner, Boundary: boundary, Background: background}
-	verify := program.screenedVerify(t, service, matcher, review)
-	testutil.FailErr(t, "register command output", registry.Register("command_output", (&command.CommandOutputTool{Registry: program.Background}).Run))
-	testutil.FailErr(t, "register command", registry.Register("command", capturedCommand.Run))
-	testutil.FailErr(t, "register verify", registry.Register("verify", verify.Run))
-	testutil.FailErr(t, "register terminal tools", native.RegisterTerminalSessionTools(registry, background))
-
-	mcpReceived := registerCanaryMCP(t, registry, matcher, executor.Secrets.AskSecretScreen)
-
-	terminal := ""
-	harnesses := map[string][]canaryCall{
-		"command": {
-			{scheme: "argument", args: map[string]any{"command": "sh echo.sh " + meta.Reference, "terminal_capture": map[string]any{}}, received: seen("seen.txt")},
-		},
-		"verify": {
-			{scheme: "environment", args: map[string]any{"command": "TOKEN=" + meta.Reference + " SEEN=seen-verify.txt sh echo.sh"}, received: seen("seen-verify.txt")},
-			{scheme: "argument", args: map[string]any{"command": "SEEN=seen-verify-argument.txt sh echo.sh " + meta.Reference}, received: seen("seen-verify-argument.txt")},
-			{scheme: "pipeline", args: map[string]any{"command": `sh -c 'printf %s "$1"' canary ` + meta.Reference + ` | sh -c 'v=$(cat); printf %s "$v" > seen-pipeline.txt; printf %s "$v"'`}, received: seen("seen-pipeline.txt")},
-			{scheme: "poll", args: map[string]any{"command": "SEEN=seen-verify-poll.txt sh echo.sh " + meta.Reference + " &"}, received: seen("seen-verify-poll.txt")},
-		},
-		"terminal_open": {
-			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": meta.Reference, "SEEN": "seen-terminal-open.txt"}}, received: seen("seen-terminal-open.txt")},
-		},
-		"terminal_send": {
-			{scheme: "input", args: map[string]any{"input": "SEEN=seen-terminal-send.txt sh echo.sh '" + meta.Reference + "'{Enter}"}, received: seen("seen-terminal-send.txt")},
-		},
-		"http_request": {
-			{scheme: "bearer", args: map[string]any{
-				"url": server.URL + "/echo", "auth": map[string]any{"scheme": "bearer", "token": meta.Reference},
-				"capability_request": loopbackCapability(t, server.URL),
-			}, received: func() string {
-				if len(wire) == 0 {
-					return ""
-				}
-				return wire[len(wire)-1]
-			}},
-		},
-		mcp.QualifiedToolName("canary", "echo"): {
-			{scheme: "result", args: map[string]any{"token": meta.Reference}, received: mcpReceived},
-		},
-		mcp.QualifiedToolName("canary", "reject"): {
-			{scheme: "error result", args: map[string]any{"token": meta.Reference}, received: mcpReceived},
-		},
-	}
-
-	declared := toolcontract.SecretReferenceTools()
-	for _, name := range []string{mcp.QualifiedToolName("canary", "echo"), mcp.QualifiedToolName("canary", "reject")} {
-		definition, ok := registry.Definition(name)
-		if !ok || !definition.Contract.AcceptsSecretReferences() {
-			t.Fatalf("%s: MCP tools must declare a secret reference surface", name)
-		}
-		declared = append(declared, name)
-	}
-	for _, tool := range declared {
-		if contract, ok := toolcontract.Lookup(tool); ok && contract.SecretReferenceSurface.IsFile() {
-			continue
-		}
-		calls, ok := harnesses[tool]
-		if !ok {
-			t.Errorf("%s resolves managed-secret references but has no canary harness", tool)
-			continue
-		}
-		for i, call := range calls {
-			t.Run(tool+"/"+call.scheme, func(t *testing.T) {
-				tctx := sessionContext(root, strings.ReplaceAll(tool+"-"+call.scheme, " ", "-"))
-				tctx.Identity.ToolCallID += "-" + string(rune('a'+i))
-				if tool == "terminal_send" {
-					terminal = openCanaryShell(t, executor, root)
-					call.args["id"] = terminal
-				}
-				ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-				defer cancel()
-				var out string
-				var err error
-				if tool == "verify" {
-					out, err = program.invokeVerify(t, ctx, executor, call)
-				} else {
-					out, err = executor.Invoke(ctx, tool, call.args, tctx)
-				}
-				if err != nil && toolrejection.AsToolReject(err) == nil && !strings.HasPrefix(tool, "mcp_") {
-					t.Fatalf("%s (%s): %v", tool, call.scheme, err)
-				}
-				if got := waitReceived(ctx, call.received); got != canaryValue {
-					t.Fatalf("%s (%s): the consumer did not receive the resolved canary: %q (result %s, err %v)", tool, call.scheme, got, out, err)
-				}
-				assertNoCanary(t, tool, call.scheme, out)
-				echoed := out
-				if err != nil {
-					assertNoCanary(t, tool, call.scheme+" error", err.Error())
-					echoed += err.Error()
-				}
-				if reject := toolrejection.AsToolReject(err); reject != nil {
-					data, marshalErr := json.Marshal(reject.Data)
-					testutil.FailErr(t, "encode reject data", marshalErr)
-					assertNoCanary(t, tool, call.scheme+" reject data", string(data))
-					echoed += string(data)
-				}
-				if !strings.Contains(echoed, meta.Reference) {
-					t.Errorf("%s (%s): the echo was dropped rather than written as its reference: %s", tool, call.scheme, echoed)
-				}
-			})
-		}
-	}
-}
-
-// registerCanaryMCP enables an echoing canary MCP provider and returns the last
-// token it received.
-func registerCanaryMCP(t *testing.T, registry *tools.DefaultRegistry, matcher *secretmatch.Matcher, ask secretmatch.AskFunc) func() string {
-	t.Helper()
-	configtest.Overlay(t, map[config.Rel]string{config.DistroMCP: "providers:\n  - id: canary\n    url: http://127.0.0.1:9/mcp\n    enabled: false\n"})
-	global := filepath.Join(t.TempDir(), "mcp.yaml")
-	testutil.FailErr(t, "write mcp config", os.WriteFile(global, []byte("providers:\n  - id: canary\n    url: http://127.0.0.1:8765/mcp\n    enabled: true\n"), 0o600))
-	var received []string
-	providers, err := mcp.NewRuntime(mcp.RuntimeOptions{
-		StatePath: t.TempDir(), GlobalOverridePath: global, Connector: canaryEchoConnector{received: &received},
-	})
-	testutil.FailErr(t, "open mcp registry", err)
-	providers.Tools.SetToolRegistry(registry)
-	providers.Calls.SetSecretScreen(matcher, ask)
-	testutil.FailErr(t, "load mcp providers", providers.Catalog.Load(t.Context()))
-	return func() string {
-		if len(received) == 0 {
-			return ""
-		}
-		return received[len(received)-1]
-	}
-}
-
-// canaryProgram runs verify as program work so its captures are screened for
-// the root session's managed secrets.
-type canaryProgram struct {
-	*programtest.Fixture
-	completions chan bgprocess.Completion
-}
-
-func newCanaryProgram(t *testing.T) canaryProgram {
-	completions := make(chan bgprocess.Completion, 1)
-	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{Complete: func(_ context.Context, result bgprocess.Completion) { completions <- result }})
-	t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })
-	program := programtest.New(t, programtest.Options{Background: background})
-	program.Configure = func(tc *tools.ToolContext) { tc.Identity.RootSessionID = "root-1" }
-	return canaryProgram{Fixture: program, completions: completions}
-}
-
-// screenedVerify gives the program executor the tool executor's review and
-// secret wiring, and screens program captures with the session's secrets.
-func (program canaryProgram) screenedVerify(t *testing.T, service *secretcap.Service, matcher *secretmatch.Matcher, review *canaryReview) *native.VerifyTool {
-	t.Helper()
 	verify := &native.VerifyTool{Programs: program.Runtime}
 	verifyExecutor := program.Runtime.Executor
-	verifyExecutor.Approvals.SetCheckpointManager(t.Context(), review, review.authority)
+	verifyExecutor.Approvals.SetCheckpointManager(t.Context(), review, authority)
 	verifyExecutor.Secrets.SetSecretResolver(service)
 	verifyExecutor.Secrets.SetSecretMatcher(matcher)
 	verifyExecutor.Capabilities.SetLoopbackConnectGate(review)
@@ -322,40 +206,161 @@ func (program canaryProgram) screenedVerify(t *testing.T, service *secretcap.Ser
 	})
 	program.Runtime.Projector.SetManagedSecretGeneration(service.ScreeningGeneration)
 	program.Background.Output.SetCaptureProjector(program.Runtime.Projector)
+	testutil.FailErr(t, "register command output", registry.Register("command_output", (&command.CommandOutputTool{Registry: program.Background}).Run))
 	verifyExecutor.SetProgramEntry("verify", nil)
 	testutil.FailErr(t, "register program verify", program.Runtime.Registry.Register("verify", verify.Run))
-	return verify
+	testutil.FailErr(t, "register command", registry.Register("command", capturedCommand.Run))
+	testutil.FailErr(t, "register verify", registry.Register("verify", verify.Run))
+	testutil.FailErr(t, "register terminal tools", native.RegisterTerminalSessionTools(registry, background))
+
+	mcpReceived := registerCanaryMCP(t, registry, matcher, executor.Secrets.AskSecretScreen)
+
+	terminal := ""
+	harnesses := buildCanaryHarnesses(t, meta.Reference, server.URL, seen, func() string {
+		if len(wire) == 0 {
+			return ""
+		}
+		return wire[len(wire)-1]
+	}, mcpReceived)
+
+	declared := toolcontract.SecretReferenceTools()
+	for _, name := range []string{mcp.QualifiedToolName("canary", "echo"), mcp.QualifiedToolName("canary", "reject")} {
+		definition, ok := registry.Definition(name)
+		if !ok || !definition.Contract.AcceptsSecretReferences() {
+			t.Fatalf("%s: MCP tools must declare a secret reference surface", name)
+		}
+		declared = append(declared, name)
+	}
+	for _, tool := range declared {
+		if contract, ok := toolcontract.Lookup(tool); ok && contract.SecretReferenceSurface.IsFile() {
+			continue
+		}
+		calls, ok := harnesses[tool]
+		if !ok {
+			t.Errorf("%s resolves managed-secret references but has no canary harness", tool)
+			continue
+		}
+		for i, call := range calls {
+			t.Run(tool+"/"+call.scheme, func(t *testing.T) {
+				runCanaryHarnessCall(t, tool, i, call, root, meta.Reference, program, completions, executor, verifyExecutor, &terminal)
+			})
+		}
+	}
 }
 
-// invokeVerify runs verify as program work. A polled verification is followed
-// to its published completion and read back through command_output.
-func (program canaryProgram) invokeVerify(t *testing.T, ctx context.Context, executor *toolexecution.Executor, call canaryCall) (string, error) {
+func buildCanaryHarnesses(
+	t *testing.T,
+	reference string,
+	serverURL string,
+	seen func(string) func() string,
+	httpReceived func() string,
+	mcpReceived func() string,
+) map[string][]canaryCall {
 	t.Helper()
+	return map[string][]canaryCall{
+		"command": {
+			{scheme: "argument", args: map[string]any{"command": "sh echo.sh " + reference, "terminal_capture": map[string]any{}}, received: seen("seen.txt")},
+		},
+		"verify": {
+			{scheme: "environment", args: map[string]any{"command": "TOKEN=" + reference + " SEEN=seen-verify.txt sh echo.sh"}, received: seen("seen-verify.txt")},
+			{scheme: "argument", args: map[string]any{"command": "SEEN=seen-verify-argument.txt sh echo.sh " + reference}, received: seen("seen-verify-argument.txt")},
+			{scheme: "pipeline", args: map[string]any{"command": `sh -c 'printf %s "$1"' canary ` + reference + ` | sh -c 'v=$(cat); printf %s "$v" > seen-pipeline.txt; printf %s "$v"'`}, received: seen("seen-pipeline.txt")},
+			{scheme: "poll", args: map[string]any{"command": "SEEN=seen-verify-poll.txt sh echo.sh " + reference + " &"}, received: seen("seen-verify-poll.txt")},
+		},
+		"terminal_open": {
+			{scheme: "environment", args: map[string]any{"command": "sh echo.sh", "env": map[string]any{"TOKEN": reference, "SEEN": "seen-terminal-open.txt"}}, received: seen("seen-terminal-open.txt")},
+		},
+		"terminal_send": {
+			{scheme: "input", args: map[string]any{"input": "SEEN=seen-terminal-send.txt sh echo.sh '" + reference + "'{Enter}"}, received: seen("seen-terminal-send.txt")},
+		},
+		"http_request": {
+			{scheme: "bearer", args: map[string]any{
+				"url": serverURL + "/echo", "auth": map[string]any{"scheme": "bearer", "token": reference},
+				"capability_request": loopbackCapability(t, serverURL),
+			}, received: httpReceived},
+		},
+		mcp.QualifiedToolName("canary", "echo"): {
+			{scheme: "result", args: map[string]any{"token": reference}, received: mcpReceived},
+		},
+		mcp.QualifiedToolName("canary", "reject"): {
+			{scheme: "error result", args: map[string]any{"token": reference}, received: mcpReceived},
+		},
+	}
+}
+
+func runCanaryHarnessCall(
+	t *testing.T,
+	tool string,
+	index int,
+	call canaryCall,
+	root string,
+	reference string,
+	program *programtest.Fixture,
+	completions <-chan bgprocess.Completion,
+	executor *toolexecution.Executor,
+	verifyExecutor *toolexecution.Executor,
+	terminal *string,
+) {
+	t.Helper()
+	tctx := sessionContext(root, strings.ReplaceAll(tool+"-"+call.scheme, " ", "-"))
+	tctx.Identity.ToolCallID += "-" + string(rune('a'+index))
+	if tool == "terminal_send" {
+		*terminal = openCanaryShell(t, executor, root)
+		call.args["id"] = *terminal
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
 	var originCallID string
-	out, err := program.Invoke(t, ctx, "verify", call.args, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-		originCallID = tc.Identity.ToolCallID
-		return program.Runtime.Executor.Invoke(ctx, "verify", args, tc)
-	})
-	if call.scheme != "poll" || err != nil {
-		return out, err
+	var out string
+	var err error
+	if tool == "verify" {
+		out, err = program.Invoke(t, ctx, tool, call.args, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+			originCallID = tc.Identity.ToolCallID
+			return verifyExecutor.Invoke(ctx, tool, args, tc)
+		})
+	} else {
+		out, err = executor.Invoke(ctx, tool, call.args, tctx)
 	}
-	jobs := program.Background.Output.List(ctx, program.Session)
-	if len(jobs) != 1 {
-		t.Fatalf("background jobs=%+v", jobs)
-	}
-	_, _, waitErr := program.Background.Lifecycle.Wait(ctx, program.Session, jobs[0].ProcessID)
-	testutil.FailErr(t, "wait for verification job", waitErr)
-	select {
-	case completion := <-program.completions:
-		if completion.OriginTool != "verify" || completion.ToolCallID != originCallID {
-			t.Fatalf("completion origin=%+v", completion)
+	if tool == "verify" && call.scheme == "poll" && err == nil {
+		jobs := program.Background.Output.List(ctx, program.Session)
+		if len(jobs) != 1 {
+			t.Fatalf("background jobs=%+v", jobs)
 		}
-	case <-ctx.Done():
-		t.Fatal("verification completion not published")
+		_, _, waitErr := program.Background.Lifecycle.Wait(ctx, program.Session, jobs[0].ProcessID)
+		testutil.FailErr(t, "wait for verification job", waitErr)
+		select {
+		case completion := <-completions:
+			if completion.OriginTool != "verify" || completion.ToolCallID != originCallID {
+				t.Fatalf("completion origin=%+v", completion)
+			}
+		case <-ctx.Done():
+			t.Fatal("verification completion not published")
+		}
+		out, err = program.Invoke(t, ctx, "command_output", map[string]any{"handle": jobs[0].ProcessID, "cursor": float64(0)}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+			return executor.Invoke(ctx, "command_output", args, tc)
+		})
 	}
-	return program.Invoke(t, ctx, "command_output", map[string]any{"handle": jobs[0].ProcessID, "cursor": float64(0)}, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-		return executor.Invoke(ctx, "command_output", args, tc)
-	})
+	if err != nil && toolrejection.AsToolReject(err) == nil && !strings.HasPrefix(tool, "mcp_") {
+		t.Fatalf("%s (%s): %v", tool, call.scheme, err)
+	}
+	if got := waitReceived(ctx, call.received); got != canaryValue {
+		t.Fatalf("%s (%s): the consumer did not receive the resolved canary: %q (result %s, err %v)", tool, call.scheme, got, out, err)
+	}
+	assertNoCanary(t, tool, call.scheme, out)
+	echoed := out
+	if err != nil {
+		assertNoCanary(t, tool, call.scheme+" error", err.Error())
+		echoed += err.Error()
+	}
+	if reject := toolrejection.AsToolReject(err); reject != nil {
+		data, marshalErr := json.Marshal(reject.Data)
+		testutil.FailErr(t, "encode reject data", marshalErr)
+		assertNoCanary(t, tool, call.scheme+" reject data", string(data))
+		echoed += string(data)
+	}
+	if !strings.Contains(echoed, reference) {
+		t.Errorf("%s (%s): the echo was dropped rather than written as its reference: %s", tool, call.scheme, echoed)
+	}
 }
 
 // openCanaryShell starts an interactive shell for terminal_send.

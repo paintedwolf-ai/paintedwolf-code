@@ -3,8 +3,8 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"maps"
-	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -73,7 +73,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	if l.Deps.EvaluateCloseoutBlock == nil {
 		return out, fmt.Errorf("closeout OAR not configured")
 	}
-	decision, err := l.Deps.EvaluateCloseoutBlock(tools.WithRecoveryTools(ctx, st.offeredToolNames), sess, observation.facts)
+	decision, err := l.Deps.EvaluateCloseoutBlock(tools.WithCallReach(ctx, st.requestReach()), sess, observation.facts)
 	if err != nil {
 		return out, err
 	}
@@ -120,6 +120,9 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 			history[i].CompletionReport = assistantMsg.CompletionReport
 			break
 		}
+	}
+	if st != nil && !tools.CallReach(ctx).Known() {
+		ctx = tools.WithCallReach(ctx, st.requestReach())
 	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, assistantMsg)
 	if err != nil {
@@ -184,7 +187,7 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 	// The repair turn offers the closed turn's tools unless that was the final
 	// turn, so repair copy may name them.
 	renderDecision.Data["resume_work_allowed"] = !st.proseFinish && len(st.offeredToolNames) > 0
-	renderDecision.Data["can_recall"] = slices.Contains(st.offeredToolNames, "recall")
+	renderDecision.Data["can_recall"] = st.requestReach().Status("recall") == toolreach.Callable
 	decision = &renderDecision
 	nudge, err := guard.FormatCloseoutGroundingReject(
 		ctx,

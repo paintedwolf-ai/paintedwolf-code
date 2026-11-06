@@ -6,9 +6,7 @@ selector:
   tool:
   - view_image
 requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.path
+  facts: [paintedwolf.rejection_code, paintedwolf.path, paintedwolf.next_steps]
   profiles:
   - tool
 when: paintedwolf.rejection_code == "IMAGE_IS_DIRECTORY"
@@ -17,7 +15,7 @@ copy:
   what: '{{ tool }} cannot view {{ paintedwolf.path }} because it is a directory.'
   cause: The path names a directory, not an image file.
   why: view_image inspects one image file at a time.
-  fix: List the directory with `ls` in `command` and pass one image file inside it.
+  fix: '{{ paintedwolf.next_steps }} Pass a path to one image file.'
   instead: Branch on Code IMAGE_IS_DIRECTORY; pass a file path
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:view_image

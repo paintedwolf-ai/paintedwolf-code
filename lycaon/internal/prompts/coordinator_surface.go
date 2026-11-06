@@ -171,14 +171,20 @@ func LoadCoordinatorSurfaceLoadable(surfaceID string) ([]string, error) {
 
 // MergeCoordinatorKickPolicyVars adds coordinator kick policy variables.
 func MergeCoordinatorKickPolicyVars(into map[string]any) error {
-	if into == nil {
-		return fmt.Errorf("nil template vars map")
-	}
 	visible, err := CoordinatorProfileVisibleTools()
 	if err != nil {
 		return err
 	}
-	for k, v := range CoordinatorPolicyTemplateVars(visible, nil) {
+	return MergeCoordinatorKickVarsForTools(into, visible)
+}
+
+// MergeCoordinatorKickVarsForTools answers tool facts from the tools the next
+// model call can reach.
+func MergeCoordinatorKickVarsForTools(into map[string]any, reachable []string) error {
+	if into == nil {
+		return fmt.Errorf("nil template vars map")
+	}
+	for k, v := range CoordinatorPolicyTemplateVars(reachable, nil) {
 		if _, exists := into[k]; !exists {
 			into[k] = v
 		}

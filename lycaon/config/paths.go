@@ -21,6 +21,7 @@ const (
 	PlatformPolicy      = Platform + "/policy"
 	PlatformTools       = Platform + "/tools"
 	NativeTools         = PlatformTools + "/native-tools.yaml"
+	NativeOperations    = PlatformTools + "/native-operations.yaml"
 	LycaonTools         = PlatformTools + "/lycaon-tools.yaml"
 	ToolSchemasDir      = PlatformTools + "/schemas"
 	ToolProfilesDir     = PlatformTools + "/profiles"

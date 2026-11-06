@@ -6,6 +6,7 @@ import {
   genericTranscriptToolNames,
   lycaonCatalogToolNames,
   toolEvidenceKindMap,
+  toolOperationSchemaNames,
   toolSchemaNames,
 } from "./tool-catalog-tools.ts";
 import { buildStructuredToolPresentation } from "./tool-part-structured.ts";
@@ -125,8 +126,11 @@ describe("tool structured output invariant", () => {
     }
   });
 
-  it("keeps fixture keys aligned with generic transcript tool union", () => {
-    const catalog = new Set(genericTranscriptToolNames());
+  it("keeps current and legacy operation fixtures scoped to their schemas", () => {
+    const catalog = new Set([
+      ...genericTranscriptToolNames(),
+      ...toolOperationSchemaNames(),
+    ]);
     const fixtureKeys = Object.keys(TOOL_STRUCTURED_OUTPUT_FIXTURES).sort();
     for (const tool of fixtureKeys) {
       expect(catalog.has(tool), `orphan fixture: ${tool}`).toBe(true);

@@ -37,7 +37,7 @@ func TestInjectRenderer_RenderBoardOrientationStub(t *testing.T) {
 	if !strings.Contains(out, "pack-board:v1") {
 		t.Fatalf("missing heading or pack-board envelope:\n%s", out)
 	}
-	if !strings.Contains(out, "per_scan") || !strings.Contains(out, "scan_pack") {
+	if !strings.Contains(out, "Scan`: background assessment") {
 		t.Fatalf("board-orientation must include pack-board-legend partial:\n%s", out)
 	}
 }

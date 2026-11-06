@@ -22,16 +22,13 @@ func TestLoadCoordinatorSurfaceFloor_implementInvestigate(t *testing.T) {
 	}
 }
 
-func TestMergeCoordinatorSurfacePathVarsHasListDirOnInvestigate(t *testing.T) {
+func TestMergeCoordinatorSurfacePathVarsHasCommandOnInvestigate(t *testing.T) {
 	vars := map[string]any{}
 	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
 	if !vars["profile_has_command"].(bool) {
 		t.Fatalf("profile_has_command = %v want true on implement_investigate", vars["profile_has_command"])
-	}
-	if vars["profile_has_list_dir"].(bool) {
-		t.Fatalf("profile_has_list_dir = %v want false on implement_investigate floor", vars["profile_has_list_dir"])
 	}
 	vars = map[string]any{}
 	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"jq_edit": true}}); err != nil {

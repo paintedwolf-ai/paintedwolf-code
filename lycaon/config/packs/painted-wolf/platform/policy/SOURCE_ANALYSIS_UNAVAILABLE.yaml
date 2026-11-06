@@ -2,8 +2,6 @@ oar: '1.0'
 id: SOURCE_ANALYSIS_UNAVAILABLE
 kind: policy
 anchor: tool.post_invoke
-selector:
-  tool: [read, grep]
 requires:
   profiles: [tool]
   facts:
@@ -12,6 +10,7 @@ requires:
     - paintedwolf.parse_failure_count
     - paintedwolf.parse_paths
     - paintedwolf.parse_failure
+    - paintedwolf.next_steps
 when: paintedwolf.source_analysis_unavailable
 effect: warn
 copy:
@@ -19,8 +18,7 @@ copy:
   cause: 'First failure, {{ paintedwolf.path }}: {{ paintedwolf.parse_failure }}. Per-file diagnostics are retained in the result.'
   why: 'Available text and completed matches remain useful, but missing symbols or matches do not establish their absence in the affected files.'
   fix: >-
-    For files, use read with explicit line ranges or grep with structural=false to inspect text.
-    For inline content, inspect the supplied text directly.
+    {{ paintedwolf.next_steps }} For inline content, inspect the supplied text directly.
     Report the host parser failure to the coordinator or user; retry structural analysis after its cause is resolved.
   instead: Keep completed results and account for the missing analysis explicitly
 x-paintedwolf-category: informational

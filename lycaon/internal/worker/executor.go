@@ -182,7 +182,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 	}
 
 	finalizeOpts := e.workerFinalizeOpts(ctx, task, child, run.ProjectDir)
-	finalizeOpts.OfferedTools = turn.OfferedToolNames()
+	finalizeOpts.Reach = turn.RequestReach()
 	if _, reason, pending := e.Graceful.Closeout(child.ID); pending {
 		result, finishErr := e.completeGracefulStop(ctx, task, child, reason, finalizeOpts)
 		e.Graceful.Finish(child.ID)

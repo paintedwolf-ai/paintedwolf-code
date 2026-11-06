@@ -103,6 +103,10 @@ func TestToolWritesAreDeclaredInTheCatalog(t *testing.T) {
 	t.Logf("tools reaching the write floor: %s", strings.Join(writers, ", "))
 	// Content writers provide a positive control for call-graph reachability.
 	for _, name := range manifest.ContentMutatingTools() {
+		// A form tool writes through the program entry, which the walk does not follow.
+		if toolcontract.CommandFormTool(name) {
+			continue
+		}
 		if _, registered := handlers[name]; registered && !slices.Contains(writers, name) {
 			t.Errorf("%s authors file content but never reaches projectpaths.ResolveWrite; route its write through "+
 				"the write floor, or fix the call-graph walk if it lost the path", name)

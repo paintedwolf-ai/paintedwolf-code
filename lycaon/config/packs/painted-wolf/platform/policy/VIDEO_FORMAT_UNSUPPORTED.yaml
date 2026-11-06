@@ -6,10 +6,7 @@ selector:
   tool:
   - view_video
 requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.path
-  - paintedwolf.mime
+  facts: [paintedwolf.rejection_code, paintedwolf.path, paintedwolf.mime, paintedwolf.next_steps]
   profiles:
   - tool
 when: paintedwolf.rejection_code == "VIDEO_FORMAT_UNSUPPORTED"
@@ -19,7 +16,7 @@ copy:
     }}){% endif %}.'
   cause: The file's leading bytes are not an MP4, QuickTime, or WebM container.
   why: view_video draws frames from recordings; the container is read from the bytes, not the file name.
-  fix: For a still image use view_image; for text use read. For an animated GIF, view it with view_image.
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Branch on Code VIDEO_FORMAT_UNSUPPORTED; use the tool for the file's actual type
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:view_video

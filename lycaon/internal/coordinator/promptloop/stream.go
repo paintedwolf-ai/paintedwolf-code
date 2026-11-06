@@ -309,6 +309,9 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	}
 	if st != nil {
 		st.turnToolPlan = turn.ToolPlan
+		if resolve := l.Tools.Deps.ProgramReach; resolve != nil {
+			st.turnPrograms = resolve(ctx, profileID, turn.SurfaceID)
+		}
 	}
 	req, surfaceID, transcriptEstimate := turn.Req, turn.SurfaceID, turn.TranscriptEstimate
 	// One id joins usage and completion records.

@@ -32,7 +32,8 @@ func main() {
 		fatal(err)
 	}
 
-	schemas, err := toolschema.LoadSchemaDir(schemaDirPath(absRoot))
+	// Stored transcripts and reached operations both need their labels.
+	schemas, err := toolschema.LoadSchemaDirWithOperations(schemaDirPath(absRoot))
 	if err != nil {
 		fatal(err)
 	}

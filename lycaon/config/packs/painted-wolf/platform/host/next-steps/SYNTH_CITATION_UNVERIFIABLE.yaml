@@ -1,0 +1,10 @@
+steps:
+  - tool: "recall"
+    args:
+      query: "handle:<handle>"
+    say: "Recover each rejected citation's recorded observation with {{ call }}, passing its exact handle alone, or a `path:` query when you have only the path; copy the line and excerpt from the returned body, not from memory."
+    otherwise: "Copy the line and excerpt from an observation still shown in this chat."
+    or:
+      - program: ["cat", "-n", "{{ paintedwolf.path }}"]
+        complete: true
+        say: "Re-read the cited lines with {{ call }} and cite that observation."

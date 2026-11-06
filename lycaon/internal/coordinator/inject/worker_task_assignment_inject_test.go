@@ -100,7 +100,7 @@ func TestRenderWorkerTaskAssignmentForwardsAttachmentsWhenBriefSet(t *testing.T)
 	if !strings.Contains(out, "33309898") {
 		t.Fatalf("missing size:\n%s", out)
 	}
-	if !strings.Contains(out, `jq(path="prompt-attachments/b3a260fb/127.0.0.1-recording.json")`) {
+	if !strings.Contains(out, `command(command="jq . prompt-attachments/b3a260fb/127.0.0.1-recording.json")`) {
 		t.Fatalf("missing jq hint:\n%s", out)
 	}
 }

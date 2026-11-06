@@ -40,7 +40,7 @@ func feedbackMessage() api.Message {
 	return api.Message{Role: api.MessageRoleTool, Content: "Use the native replacement.", ToolResult: &api.ToolResult{
 		Tool: "command", ToolCallID: "call", Outcome: api.ToolResultOutcomeRejected,
 		Feedback: []api.ToolFeedback{{Code: "USE_NATIVE_TOOL", Details: map[string]any{
-			"replacement_calls": []any{map[string]any{"tool": "git_log", "args": map[string]any{"ref": "benchmark-page", "limit": 6}}},
+			"entries": []any{map[string]any{"name": "git_log", "args": map[string]any{"ref": "benchmark-page", "limit": 6}}},
 		}}},
 	}}
 }
@@ -90,7 +90,7 @@ func TestToolFeedbackProjectionPreservesSecretScreening(t *testing.T) {
 			t.Fatal("feedback credential was not screened")
 		}
 		projected := projectOne(t, screened)
-		if strings.Contains(projected.Content, modelScreenGitHubToken) || !strings.Contains(projected.Content, "replacement_calls") {
+		if strings.Contains(projected.Content, modelScreenGitHubToken) || !strings.Contains(projected.Content, "entries") {
 			t.Fatal("feedback projection leaked a secret or lost the replacement")
 		}
 	}

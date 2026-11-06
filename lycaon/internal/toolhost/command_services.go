@@ -173,6 +173,9 @@ func (r *CommandServices) setProgramExecutor(executor *toolexecution.Executor) {
 		programs.Executor = executor
 		executor.SetProgramEntry("command", command.CaptureInvocation)
 		executor.SetProgramEntry("verify", nil)
+		for _, tool := range formTools {
+			executor.SetProgramEntry(tool.name, nil)
+		}
 	}
 }
 

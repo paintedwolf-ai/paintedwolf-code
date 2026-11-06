@@ -15,7 +15,7 @@ copy:
   what: worker_cancel only applies to pending, running, or held jobs
   cause: The job already finished or was canceled
   why: The job already finished or was canceled
-  fix: Read the completion or cancellation envelope on the transcript instead of calling worker_cancel again
+  fix: 'Read the completion or cancellation envelope on the transcript instead of cancelling it again.'
   instead: Use the existing envelope on the transcript — do not cancel terminal jobs
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator

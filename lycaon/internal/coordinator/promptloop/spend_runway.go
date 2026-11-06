@@ -79,7 +79,7 @@ func (l *turnNudges) applySpendCeiling(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: content,
 		TurnTools:            st.turnTools,
-		OfferedTools:         st.offeredToolNames,
+		Reach:                st.requestReach(),
 		TasksDispatchedCount: st.tasksDispatchedCount,
 	}
 	return out, nil

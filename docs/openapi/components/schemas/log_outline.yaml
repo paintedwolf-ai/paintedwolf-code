@@ -120,7 +120,7 @@ components:
           type: boolean
     ReadOutlineResponse:
       x-go-generate: true
-      x-tool-output: [read]
+      x-tool-output: [command]
       type: object
       required:
         - path

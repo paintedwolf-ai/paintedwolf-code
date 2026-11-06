@@ -77,7 +77,7 @@ func TestFrozenPostureToolMatrix(t *testing.T) {
 					t.Fatalf("expected %q in listed tools: %v", tool, listed)
 				}
 			}
-			for _, tool := range append(row.exclude, "read", "write", "grep", "git_diff") {
+			for _, tool := range append(row.exclude, "read", "write", "edit", "grep", "git_diff") {
 				if containsToolName(listed, tool) {
 					t.Fatalf("expected %q absent from listed tools: %v", tool, listed)
 				}

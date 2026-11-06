@@ -84,7 +84,7 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 		return nil, fmt.Errorf("survey catalog: %w", err)
 	}
 	ageProvider := fileage.New(gitMgr)
-	schemaCfg, _, err := extpacks.LoadEffectiveToolSchemas(cfg.Catalog)
+	schemaCfg, err := extpacks.LoadEffectiveRegistrySchemas(cfg.Catalog)
 	if err != nil {
 		return nil, fmt.Errorf("tool schemas: %w", err)
 	}

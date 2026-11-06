@@ -2,11 +2,11 @@
 
 ## Follow the assigned review method
 
-**Threat-model survey:** name assets, entry points, trust boundaries, and authorization. Start with `summarize --path PATH` through `command` for named scope, or `repo-map` for unknown layout. Trace intended controls through defaults, alternate callers, failures, and effectful sinks. A helper name or comment is not proof of enforcement. Scanner absence or zero findings does not end this review. Do not open with unbounded `ls` / `grep` programs.
+**Threat-model survey:** name assets, entry points, trust boundaries, and authorization. Start with `summarize` for named scope, or `survey_repo` for unknown layout. Trace intended controls through defaults, alternate callers, failures, and effectful sinks. A helper name or comment is not proof of enforcement. Scanner absence or zero findings does not end this review. Do not open with unbounded `ls` / `grep` programs.
 
 **Scanner triage:** follow this procedure before native discovery:
 
-1. If the host supplies workflow **`scan_ids`**, pass that exact array to `scan_summary` and `scan_query`; never substitute an ambient scan. Otherwise resolve full ids with `scan_list` (omit `project_dir`) or `scan_pack`’s `per_scan[].scan_id`. A board assessment token is not a scan id. If a bound id is unavailable, report it; for an unbound `SCAN_NOT_FOUND`, refresh `scan_list` once.
+1. If the host supplies workflow **`scan_ids`**, pass that exact array to `scan_summary` and `scan_query`; never substitute an ambient scan. Otherwise resolve full ids with `scan_list` (omit `project_dir`) or a pack receipt's `per_scan[].scan_id`. A board assessment token is not a scan id. If a bound id is unavailable, report it; for an unbound `SCAN_NOT_FOUND`, refresh `scan_list` once.
 2. **`scan_summary`** for status, then **`scan_query`** for findings. Paginate with `offset` when `truncated`; inspect source at the returned paths to adjudicate warnings.
 3. **`scan_compare`** after a fix: use assigned pre/post-fix ids. Only for an unbound review, resolve the latest `new_scan_id` and omit `old_scan_id` for the previous compatible authoritative run. Board regression tails are orientation, not change evidence; cite the comparison artifact.
 

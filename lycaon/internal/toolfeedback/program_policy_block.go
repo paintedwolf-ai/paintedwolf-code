@@ -98,7 +98,7 @@ func (b *ProgramPolicyBlock) RenderSettled(ctx context.Context, renderer *oar.Re
 		return err
 	}
 	if block, ok := oar.FirstBlock(rendered); ok && block.Text != "" {
-		return guidance.NewRefusal(reject.Code, block.Text).WithPolicyCopy(decision.Copy).WithDetails(reject.Data, nil).WithCause(reject)
+		return guidance.NewRefusal(reject.Code, block.Text).WithPolicyCopy(decision.Copy).WithDetails(oar.NextCallsDetails(reject.Data, decision.Data), nil).WithCause(reject)
 	}
 	return toolrejection.RenderReject(reject, nil)
 }

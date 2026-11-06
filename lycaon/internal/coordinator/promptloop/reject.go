@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -39,6 +38,9 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 ) (hist []api.Message, reject *guidance.Refusal, blocked bool, err error) {
 	if l.Closeout.Deps.BeforeFinishNoToolTurn == nil && outputRejection == nil {
 		return history, nil, false, nil
+	}
+	if st != nil && !tools.CallReach(ctx).Known() {
+		ctx = tools.WithCallReach(ctx, st.requestReach())
 	}
 	workersIdle := true
 	if l.Context.Deps.ImplementSessionState != nil {
@@ -163,7 +165,7 @@ func (l *toolInvocations) retractRejectedAssistantTurn(
 
 // Intrinsic refusals retain occurrence identity and the offered recovery surface.
 func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Session, tc api.ToolCall, toolCtx tools.ToolContext, code string, data map[string]any) *guidance.Refusal {
-	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
+	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
 	ctx = curationctx.WithSession(ctx, curationctx.Session{SessionID: sess.ID, ProjectID: sess.ProjectID, OwnerPersonID: sess.OwnerPersonID, Posture: string(sess.Posture), Agent: toolCtx.Identity.Agent})
 	data = maps.Clone(data)
 	if data == nil {
@@ -174,22 +176,15 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 		loadable := toolCtx.Turn.TurnToolPlan.Deferred(tc.Name) && tools.ToolOffered(ctx, "request_tools")
 		data["tool_loadable"] = loadable
 		data["tool_retired_to_content"] = toolRetiredToPublishedText(sess, tc.Name, toolCtx.Turn.TurnSurfaceID)
+		if forms, retired := toolcontract.RetiredCommandForms(tc.Name); retired {
+			data["tool_retired_to_command"], data["tool_command_forms"] = true, forms
+		}
 		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
 		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0
-		if loadable {
-			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": tc.Name}}}
-		}
 	}
 	if code == "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
-		loadable := !tools.ToolOffered(ctx, "task") && toolCtx.Turn.TurnToolPlan.Deferred("task") && tools.ToolOffered(ctx, "request_tools")
-		if agents, constrained := toolpolicy.TaskSpawnAllowlistFromContext(ctx); constrained && len(agents) == 0 {
-			loadable = false
-		}
-		data["task_loadable"] = loadable
-		delete(data, "replacement_calls")
-		if loadable {
-			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "task"}}}
-		}
+		agents, constrained := toolpolicy.TaskSpawnAllowlistFromContext(ctx)
+		data["task_dispatchable"] = !constrained || len(agents) > 0
 	}
 	tr := &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
 	if code == "TOOL_NOT_OFFERED" && data["tool_loadable"] == false && data["tool_discovery_available"] == true && data["tool_retired_to_content"] == false {

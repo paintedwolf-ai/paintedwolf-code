@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"reflect"
 	"strings"
 	"testing"
@@ -57,7 +58,7 @@ func TestWorkerGroundingRepairRecallFollowsOfferedTools(t *testing.T) {
 			opts.ProjectDir = t.TempDir()
 			opts.AgentType = "path-explorer"
 			opts.MaxGroundingRetries = 2
-			opts.OfferedTools = tc.workerTurn
+			opts.Reach = toolreach.Offered(tc.workerTurn)
 			opts.RenderWorkerKick = prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}).RenderKick
 
 			resolver := &stubSummaryResolver{msgs: append(renderViewRows("rv1"), surfaceClaimReport("render#1"))}
@@ -68,7 +69,7 @@ func TestWorkerGroundingRepairRecallFollowsOfferedTools(t *testing.T) {
 				resolver.msgs = append(resolver.msgs, renderViewRows(fmt.Sprintf("rv%d", len(retries)+1))...)
 				resolver.msgs = append(resolver.msgs, surfaceClaimReport(fmt.Sprintf("render#%d", len(retries)+1)))
 				resolver.stampEvidenceHandles()
-				return &promptresult.Result{MessageID: "retry", OfferedTools: tc.retryTurn}, nil
+				return &promptresult.Result{MessageID: "retry", Reach: toolreach.Offered(tc.retryTurn)}, nil
 			}
 
 			_, err := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", opts))

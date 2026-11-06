@@ -1,6 +1,7 @@
 package toolfeedback
 
 import (
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"testing"
 
@@ -26,7 +27,7 @@ func TestGroundingRejectionsNameRecallOnlyWhenOffered(t *testing.T) {
 			t.Run(tc.code+"/"+strings.Join(offered, ","), func(t *testing.T) {
 				ctx := t.Context()
 				if offered != nil {
-					ctx = tools.WithRecoveryTools(ctx, offered)
+					ctx = tools.WithCallReach(ctx, toolreach.Offered(offered))
 				}
 				data := map[string]any{"can_recall": !callable}
 				for k, v := range tc.data {

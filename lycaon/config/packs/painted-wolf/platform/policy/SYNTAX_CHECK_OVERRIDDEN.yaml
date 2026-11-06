@@ -2,8 +2,6 @@ oar: '1.0'
 id: SYNTAX_CHECK_OVERRIDDEN
 kind: policy
 anchor: tool.post_invoke
-selector:
-  tool: [write, edit, replace_lines, restore_version, code_rewrite, promote_overlay]
 requires:
   profiles: [tool]
   facts:

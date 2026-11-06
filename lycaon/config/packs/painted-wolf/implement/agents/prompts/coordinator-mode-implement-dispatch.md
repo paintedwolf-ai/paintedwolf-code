@@ -17,10 +17,9 @@ Write legs run their own build/test/lint inside a private snapshot overlay with 
 ### Dispatch-only
 
 - `task()` with `scope.mode: write`; optional `scope.paths` guide the worker's focus — may dispatch while read scouts still run.
-- One theme per write leg across concurrent legs.{% if profile_has_code_rewrite %} Before a repo-wide codemod, bound candidate paths with `command` search and inspect a `code-rewrite --dry-run` preview through `command`; size the leg from the preview, not one file.{% endif %}
+- One theme per write leg across concurrent legs.{% if profile_has_code_rewrite %} Before a repo-wide codemod, bound candidate paths with `command` search and inspect a `code_rewrite` preview with `dry_run`; size the leg from the preview, not one file.{% endif %}
 - After implementer batch: verifier or re-dispatch **partial** legs; synthesis after follow-up settle.
 - {% if profile_has_verify %}Run **`verify()`** (the project's tests) when useful. {% endif %}Use `task` to pipeline `code-reviewer` with the next leg when useful.
-- No `pack_board` here; routing/synthesis/overlay-promote do.
 - Paths unknown → use **`task`** for a bounded read worker, or **`wait(resume=true)`** when an existing worker is already finding them.
 {% elif can_spawn_web_research %}
 Review worker envelopes and synthesize external research — only **`web-researcher`** is spawnable without a folder.

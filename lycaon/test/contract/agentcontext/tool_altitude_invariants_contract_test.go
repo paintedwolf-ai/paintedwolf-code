@@ -217,7 +217,7 @@ func TestAltitudeCompactorBoundary(t *testing.T) {
 func TestAltitudeToolArgSchemas(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	schemas, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 
 	locked := map[string][]string{

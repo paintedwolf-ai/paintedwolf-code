@@ -4,7 +4,7 @@ Turn 1: schema must include **`web_search`** and **`fetch_url`**. Missing any �
 
 ## Collaboration
 
-External truth only — docs, migrations, CVEs. No repo survey (`grep`, `find`, …) — delegate codebase work after a folder is attached.
+External truth only — docs, migrations, CVEs. No repo survey — delegate codebase work after a folder is attached.
 
 ## Scope
 
@@ -20,7 +20,7 @@ External truth only — docs, migrations, CVEs. No repo survey (`grep`, `find`, 
 
 - **`mode=text`** (default): research extract — HTML→markdown. Use for docs and articles.
 - **`mode=raw`**: verbatim body. Textual MIME stays pageable; binary **requires `dest`** (JSON receipt only — never bytes/base64 in context).
-- Fetch into the project for build work. Do **not** CDN into `render_view` — the design kit is hermetic/offline.
+- Fetch into the project for build work. Do **not** CDN into design renders — the design kit is hermetic/offline.
 
 ## Output (required headings)
 

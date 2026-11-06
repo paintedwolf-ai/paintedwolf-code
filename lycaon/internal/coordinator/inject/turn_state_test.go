@@ -53,7 +53,7 @@ func TestRenderTurnStateBlock(t *testing.T) {
 		if !strings.Contains(block, "Pending overlay `job-a`, `job-b`") {
 			t.Fatalf("missing pending overlay jobs: %q", block)
 		}
-		if !strings.Contains(block, "Partial `job-c`: `task(implementer)`") {
+		if !strings.Contains(block, "Partial `job-c`: dispatch an implementer") {
 			t.Fatalf("missing partial worker jobs: %q", block)
 		}
 	})

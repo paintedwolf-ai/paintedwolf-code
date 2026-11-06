@@ -14,10 +14,10 @@
 
 ### Rules
 
-1. **Inline survey tools** ({% include "partials/coordinator-lane-s-sync-tools-inline.md" %}) are read/survey only — use `task(agent_type="implementer", …)` for product edits (`Code: COORDINATOR_ORCHESTRATE_WRITE_DENIED`). Survey order matches Discovery.
+1. **Inline survey tools** ({% include "partials/coordinator-lane-s-sync-tools-inline.md" %}) are read/survey only{% if profile_has_task %} — use `task(agent_type="implementer", …)` for product edits{% endif %} (`Code: COORDINATOR_ORCHESTRATE_WRITE_DENIED`). Survey order matches Discovery.
 2. Survey tools attach JSON `receipt` — trust for paths already surveyed.
-3. `pack_board` when schema includes it and board stale — routing/synthesis/overlay-promote; not dispatch.
-
+{% if profile_has_pack_board %}3. `pack_board` when the board is stale.
+{% endif %}
 ### Leaf edits
 
 {% include "partials/primary-tree-concurrent-writers.md" %}

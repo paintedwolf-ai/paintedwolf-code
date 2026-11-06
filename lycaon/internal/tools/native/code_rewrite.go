@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/structrewrite"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -27,14 +28,18 @@ func SupportsRewriteLanguage(path string) bool {
 }
 
 // RewriteSource applies a structural AST pattern rewrite to content.
-func RewriteSource(ctx context.Context, path, pattern, rewrite, content string) (string, bool, error) {
-	if op, tooBroad := structrewrite.BareBinaryMetavarOp(ctx, "", path, pattern); tooBroad {
+func RewriteSource(ctx context.Context, path, lang, pattern, rewrite, content string) (string, bool, error) {
+	if op, tooBroad := structrewrite.BareBinaryMetavarOp(ctx, lang, path, pattern); tooBroad {
 		return "", false, codeRewritePatternTooBroad(path, op, pattern)
 	}
-	if _, ok := structrewrite.SupportedLanguage("", path); !ok {
+	if _, ok := structrewrite.SupportedLanguage(lang, path); !ok {
+		if strings.TrimSpace(lang) != "" {
+			return "", false, sourceview.LanguageUnknown(path, lang)
+		}
 		return content, false, nil
 	}
 	res, err := structrewrite.Run(ctx, structrewrite.Request{
+		LangName: lang,
 		Filename: path,
 		Source:   []byte(content),
 		Pattern:  pattern,

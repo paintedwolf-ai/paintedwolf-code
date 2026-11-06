@@ -132,3 +132,147 @@ retired:
     kind: hint_code
     summary: Sandbox guidance reports only observed refusal facts; silent refusal-report warning is retired.
     date: 2026-10-30
+  - id: chmod
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: chown
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: copy
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: delete
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: diff
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: edit
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: extract_archive
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: find
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_blame
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_branches
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_checkout
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_commit
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_compare
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_diff
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_log
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_merge
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_ref
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_restore
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_show
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_stash
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_stash_list
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: git_status
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: grep
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: http_request
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: jq
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: jq_edit
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: list_dir
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: mkdir
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: move
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: process_list
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: process_signal
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: read
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: replace_lines
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: stat
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: wc
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04
+  - id: write
+    kind: tool_name
+    summary: Retired as a callable tool; the work runs through native forms in command.
+    date: 2026-11-04

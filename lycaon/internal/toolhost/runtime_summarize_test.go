@@ -19,7 +19,7 @@ func TestBuildNativeRegistryConstructsSummarizeWithoutProviderServices(t *testin
 	})
 	nativeConfig, err := nativemanifest.Load()
 	testutil.FailErr(t, "load native config", err)
-	toolSchemas, _, err := extpacks.LoadEffectiveToolSchemas(extpackstest.StockCatalog(t))
+	toolSchemas, err := extpacks.LoadEffectiveRegistrySchemas(extpackstest.StockCatalog(t))
 	testutil.FailErr(t, "load tool schemas", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{
 		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"source_history": true},

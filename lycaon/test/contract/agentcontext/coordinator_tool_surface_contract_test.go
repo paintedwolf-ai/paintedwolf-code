@@ -14,6 +14,7 @@ import (
 )
 
 var implementInvestigateSurfaceTools = []string{
+	"summarize",
 	"command", "source_history", "skills_read",
 	"update_progress", "ask_user", "request_tools",
 	"recall",
@@ -70,6 +71,8 @@ func TestCoordinatorToolSurface_managedSecretLifecycleFollowsMutationCapability(
 }
 
 var implementInvestigateDeferredTools = []string{
+	"code_rewrite",
+	"survey_repo",
 	"command_output",
 	"command_stop",
 	"restore_version",

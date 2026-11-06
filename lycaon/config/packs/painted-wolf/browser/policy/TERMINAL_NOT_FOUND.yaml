@@ -11,12 +11,7 @@ selector:
 requires:
   profiles:
     - tool
-  facts:
-    - paintedwolf.rejection_code
-    - paintedwolf.id
-    - paintedwolf.terminal_not_pty
-    - paintedwolf.can_terminal_open
-    - paintedwolf.can_command_output
+  facts: [paintedwolf.rejection_code, paintedwolf.id, paintedwolf.terminal_not_pty, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "TERMINAL_NOT_FOUND"
 effect: block
 copy:
@@ -24,10 +19,7 @@ copy:
     {% if paintedwolf.terminal_not_pty %}Handle {{ paintedwolf.id }} belongs to a command, not a terminal.{% else %}No terminal in this session matches id {{ paintedwolf.id }}.{% endif %}
   cause: Terminal operations require a terminal id from the same session; closed or reaped ids are no longer available.
   why: Driving a missing handle cannot restore the process.
-  fix: >-
-    {% if paintedwolf.terminal_not_pty %}{% if paintedwolf.can_command_output %}Use command_output with this command handle to inspect its result.{% else %}Inspect the command result using the available process controls.{% endif %}
-    {% else %}Use a terminal id returned in this session.{% if paintedwolf.can_terminal_open %} If a new process is needed, use terminal_open and keep its returned id.{% endif %}{% endif %}
-    Inspect any known prior outcome before repeating work.
+  fix: '{% if paintedwolf.terminal_not_pty %}{% else %}Use a terminal id returned in this session. {% endif %}{{ paintedwolf.next_steps }} Inspect any known prior outcome before repeating work.'
   instead: Keep command handles and terminal ids on their corresponding tools
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:terminal_session

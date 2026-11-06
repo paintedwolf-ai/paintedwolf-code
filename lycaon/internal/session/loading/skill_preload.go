@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -46,9 +45,7 @@ func (m *Service) decisionOfferedTools(sess *api.Session, decision *Decision) ma
 		}
 	}
 	for name := range decision.decision.Tools {
-		for _, with := range toolcontract.WithCompanions([]string{name}) {
-			offered[with] = true
-		}
+		offered[name] = true
 	}
 	return offered
 }

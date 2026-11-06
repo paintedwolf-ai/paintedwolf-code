@@ -88,6 +88,12 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 		if err := registerCommandTools(reg, deps.command, boundary, &commandTool, &verifyTool, &commandOutputTool, &commandStopTool); err != nil {
 			return nil, nil, err
 		}
+		for _, form := range formTools {
+			tool := &native.FormTool{Programs: verifyTool.Programs, Argv: form.argv}
+			if err := register(form.name, tool.Run); err != nil {
+				return nil, nil, err
+			}
+		}
 	}
 
 	skillsRead := &skilltools.SkillsReadTool{}

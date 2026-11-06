@@ -15,12 +15,28 @@ func feedbackMessage() api.Message {
 	return api.Message{Role: api.MessageRoleTool, Content: "Use the native replacement.", ToolResult: &api.ToolResult{
 		Tool: "command", ToolCallID: "call", Outcome: api.ToolResultOutcomeRejected,
 		Feedback: []api.ToolFeedback{{Code: "USE_NATIVE_TOOL", Details: map[string]any{
-			"replacement_calls": []any{map[string]any{"tool": "git_log", "args": map[string]any{"ref": "benchmark-page", "limit": 6}}},
+			"entries": []any{map[string]any{"name": "git_log", "args": map[string]any{"ref": "benchmark-page", "limit": 6}}},
 		}}},
 	}}
 }
 
-func TestToolFeedbackDeliversExactReplacementAsData(t *testing.T) {
+func TestToolFeedbackLeavesNextCallsToTheRenderedCopy(t *testing.T) {
+	msg := feedbackMessage()
+	msg.ToolResult.Feedback[0].Details[api.ToolFeedbackNextCalls] = []any{map[string]any{"tool": "recall"}}
+	parts := toolFeedbackParts(msg)
+	if len(parts) != 1 || strings.Contains(parts[0].Content, api.ToolFeedbackNextCalls) || !strings.Contains(parts[0].Content, "entries") {
+		t.Fatalf("model feedback = %+v", parts)
+	}
+	if msg.ToolResult.Feedback[0].Details[api.ToolFeedbackNextCalls] == nil {
+		t.Fatal("projection changed the stored details")
+	}
+	msg.ToolResult.Feedback[0].Details = map[string]any{api.ToolFeedbackNextCalls: []any{map[string]any{"tool": "recall"}}}
+	if parts := toolFeedbackParts(msg); len(parts) != 0 {
+		t.Fatalf("feedback holding only next calls still projected: %+v", parts)
+	}
+}
+
+func TestToolFeedbackDeliversDetailsAsData(t *testing.T) {
 	msg := feedbackMessage()
 	parts := toolFeedbackParts(msg)
 	if len(parts) != 1 || parts[0].Authority != api.ContentAuthorityNone || parts[0].Origin != api.MessageOriginHost {
@@ -30,10 +46,10 @@ func TestToolFeedbackDeliversExactReplacementAsData(t *testing.T) {
 		Feedback []api.ToolFeedback `json:"tool_feedback"`
 	}
 	testutil.FailErr(t, "decode feedback", json.Unmarshal([]byte(parts[0].Content), &payload))
-	calls := payload.Feedback[0].Details["replacement_calls"].([]any)
+	calls := payload.Feedback[0].Details["entries"].([]any)
 	call := calls[0].(map[string]any)
 	args := call["args"].(map[string]any)
-	if call["tool"] != "git_log" || args["ref"] != "benchmark-page" || args["limit"] != float64(6) {
+	if call["name"] != "git_log" || args["ref"] != "benchmark-page" || args["limit"] != float64(6) {
 		t.Fatalf("replacement changed: %+v", call)
 	}
 	projected := projectOne(t, msg)

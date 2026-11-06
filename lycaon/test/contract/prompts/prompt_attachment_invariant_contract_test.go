@@ -127,7 +127,7 @@ func TestPromptAttachmentFenceAlwaysCarriesPath(t *testing.T) {
 	if !strings.Contains(fence, `truncated="false"`) {
 		t.Fatalf("small body should not be marked truncated:\n%s", fence)
 	}
-	if !strings.Contains(fence, "jq(path=") {
+	if !strings.Contains(fence, `command(command="jq . `+part.Path+`")`) {
 		t.Fatalf("structured body should be pointed at jq:\n%s", fence)
 	}
 }

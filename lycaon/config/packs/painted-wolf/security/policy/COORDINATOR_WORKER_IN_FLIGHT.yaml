@@ -17,10 +17,10 @@ requires:
 when: paintedwolf.tool_is_task && paintedwolf.worker_spawn_blocked
 effect: block
 copy:
-  what: 'This `task()` would exceed the session worker limit: {{ paintedwolf.active_count }}/{{ paintedwolf.max_workers }} total, {{ paintedwolf.active_read_count }}/{{ paintedwolf.max_read_workers }} read, and {{ paintedwolf.active_write_count }}/{{ paintedwolf.max_write_workers }} write jobs are in flight.'
+  what: 'This dispatch would exceed the session worker limit: {{ paintedwolf.active_count }}/{{ paintedwolf.max_workers }} total, {{ paintedwolf.active_read_count }}/{{ paintedwolf.max_read_workers }} read, and {{ paintedwolf.active_write_count }}/{{ paintedwolf.max_write_workers }} write jobs are in flight.'
   cause: The total limit or the limit for this {{ paintedwolf.scope_mode }} scope is full.
   why: Read, write, and total concurrency have separate limits; capacity in another scope does not open this slot.
-  fix: 'Wait for at least one job to finish and its completion envelope to land, or synthesize existing envelopes before dispatching another `task()`.'
+  fix: 'Wait for at least one job to finish and its completion envelope to land, or synthesize existing envelopes before dispatching another worker.'
   instead: 'Wait for a slot in the requested scope and the total worker limit, then dispatch only the remaining work'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator

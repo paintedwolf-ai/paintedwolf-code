@@ -264,7 +264,37 @@ actual boundary refusals keep their specific recovery. The retired
 
 Feedback must not tell an agent to call a tool it does not have, approve its own request, write outside its scope, or bypass a workflow gate. Remedy rendering receives the current tool/worker surface and selects only reachable paths. If no direct remedy exists, the feedback names which party must act (coordinator, user, or a device setting) and the agent returns that dependency rather than looping.
 
-Native command recovery separates parser equivalence from tool availability. The executor validates the complete ordered replacement against registration, current schemas, and the frozen offered surface. Missing targets may receive separate exact-name `request_tools` calls only when the compiled plan permits loading them; loading is never a partial execution recipe. Inexact file-write observations carry no fabricated contents. Copy distinguishes validated replacements from missing prerequisites and refers conditionally to diagnostics that provider projection may omit. Loading schemas grants no additional execution permission.
+A rule's copy does not name its own remedies. Its document binds the host fact
+`paintedwolf.next_steps`, and `host/next-steps/<CODE>.yaml` beside the pack's
+policy lists the calls:
+
+```yaml
+steps:
+  - when: paintedwolf.process_running
+    tool: command_stop
+    say: "If this job is no longer needed, request {{ call }} once."
+    otherwise: "Report that the job needs stopping."
+  - program: ["ls", "{{ paintedwolf.path }}"]
+    complete: true
+    say: "List one level with {{ call }}."
+```
+
+`internal/toolreach` answers each step against the request the reader is on: its
+frozen offered tools, its plan and its native programs. A deferred target renders
+with its loader first. An unreachable step is replaced by the first reachable
+step under `or`, then by `otherwise`, or is dropped, so a rule's copy must read
+correctly with the fact empty. `{{ call }}` is rendered by the host. The calls behind the text go in the
+feedback's `next_calls` details for replay and reporting, and the model reads only
+the rendered copy. Rule documents stay portable: no condition may read the fact,
+and the catalog cannot change a decision.
+
+`toolvocab.CheckRules` holds bundled copy to this at load. A tool named in copy
+must be the rule's subject, a declared `mentions` entry for a statement that asks
+for no call, or a next step. A step must call a current tool with arguments its
+schema declares, and a `complete` step must set every required argument. Third-party
+packs get the same findings as notes.
+
+Native command recovery separates parser equivalence from tool availability. The executor validates the complete ordered replacement against registration, current schemas, and the frozen offered surface. Inexact file-write observations carry no fabricated contents. Copy distinguishes validated replacements from missing prerequisites and refers conditionally to diagnostics that provider projection may omit. Loading schemas grants no additional execution permission.
 
 A named **field** is reachable on the same terms as a named tool. In card copy, an unqualified backticked field name refers to an argument accepted by the receiving tool; name the owning tool when referring to another tool's field. Three things hold this together:
 
@@ -274,20 +304,13 @@ A named **field** is reachable on the same terms as a named tool. In card copy, 
 
 An unreachable remedy is worse than none: the agent retries it, the schema refuses again, and the pair loops until the turn dies.
 
-Both `Fix` and `Instead` must respect the same current facts. A short summary
-cannot reintroduce a tool omitted by the detailed remedy. The production recovery
-catalog test varies every declared offered-tool dimension for intrinsic rejection
-scenarios, including absent request context, and checks both fields. Conflicting
-producer metadata must not change the frozen tool surface. These checks cover
-availability claims; permission, workflow, and evidence validity require their
-corresponding structured facts and contracts. An offered tool still crosses its
-normal admission checks. Advice about approval, workflow readiness, or evidence
-freshness must use those facts separately from schema availability.
+Advice about approval, workflow readiness, or evidence freshness uses those
+structured facts separately from schema availability. An offered tool still crosses
+its normal admission checks.
 
 When a call names a tool whose schema is absent, the compiled tool plan determines
 recovery. A deferred tool with `request_tools` offered returns `TOOL_NOT_OFFERED`
-with `tool_loadable: true` and an exact `replacement_calls` entry that loads its
-schema. The model retries on the next call, after loading; the rejected action is
+with `tool_loadable: true` and a next step that loads its schema. The model retries on the next call, after loading; the rejected action is
 never executed automatically. A name without that loading path receives an
 unavailable-name explanation. The rejection lists the exact tools offered on that
 request from the frozen recovery surface. When the current surface offers the loader and

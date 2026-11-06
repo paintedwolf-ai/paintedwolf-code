@@ -205,6 +205,12 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 			rc.FailedLeaves = append([]string(nil), frame.RunContext.FailedLeaves...)
 		}
 	}
+	if !sess.IsWorkerChild() && msgErr == nil {
+		profile := surface.ResolveTurnProfile(frame.RunContext, sess, msgs, state)
+		if plan, err := surface.CompileToolPlan(profile, frame.ProjectRootCount); err == nil {
+			rc.ToolPlan = plan
+		}
+	}
 	rc.GateObligations = m.GateObligations(ctx, sessionID, frame)
 	rc.ProgressOpenItems, rc.ProgressClosureArmed = m.closureState(ctx, sessionID)
 	return rc

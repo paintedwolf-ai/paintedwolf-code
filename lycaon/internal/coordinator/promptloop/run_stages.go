@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
@@ -11,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -73,6 +75,7 @@ type turnBatchState struct {
 	statusCursorPaths      []string
 	statusCursorGroupDepth int
 	turnToolPlan           toolsurface.Plan
+	turnPrograms           toolreach.Programs
 	deliveryCoverage       map[string]string
 }
 
@@ -325,6 +328,9 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		return out, nil
 	}
 
+	if st != nil && !tools.CallReach(ctx).Known() {
+		ctx = tools.WithCallReach(ctx, st.requestReach())
+	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, st.history, userPrompt, surfaceID, assistantMsg)
 	if err != nil {
 		return out, err
@@ -518,7 +524,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		}
 		return &PromptRunResult{
 			TurnTools:            st.turnTools,
-			OfferedTools:         st.offeredToolNames,
+			Reach:                st.requestReach(),
 			TasksDispatchedCount: st.tasksDispatchedCount,
 			Outcome:              outcome,
 			OutputTruncated:      st.output.truncatedOutcome,
@@ -529,7 +535,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: st.lastAssistantContent,
 		TurnTools:            st.turnTools,
-		OfferedTools:         st.offeredToolNames,
+		Reach:                st.requestReach(),
 		TasksDispatchedCount: st.tasksDispatchedCount,
 		Outcome:              outcome,
 		OutputTruncated:      st.output.truncatedOutcome,

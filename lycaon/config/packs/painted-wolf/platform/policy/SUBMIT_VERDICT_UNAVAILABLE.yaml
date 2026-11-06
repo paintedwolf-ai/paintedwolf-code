@@ -15,7 +15,7 @@ copy:
   cause: "{{ paintedwolf.review_reason }}"
   why: "submit_verdict belongs to an active workflow review_loop phase."
   fix: "Inspect the current workflow state and use its declared exit channel. Preserve the existing run and accepted results."
-  instead: "Call submit_verdict only when the active review_loop accepts it; do not start or replace a workflow merely to submit a verdict."
+  instead: 'Submit a verdict only when the active review_loop accepts it; do not start or replace a workflow merely to submit a verdict.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-severity: error
 x-paintedwolf-message: submit_verdict is unavailable outside an active review_loop phase.

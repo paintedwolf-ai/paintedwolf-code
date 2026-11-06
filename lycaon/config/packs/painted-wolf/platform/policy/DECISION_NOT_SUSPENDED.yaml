@@ -5,18 +5,14 @@ anchor: tool.rejected
 requires:
   profiles:
   - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.job_id
-  - paintedwolf.status
+  facts: [paintedwolf.rejection_code, paintedwolf.job_id, paintedwolf.status, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "DECISION_NOT_SUSPENDED"
 effect: block
 copy:
   what: Worker {{ paintedwolf.job_id }} is {{ paintedwolf.status }} and cannot resume from a decision.
   cause: The decision is unchanged, but the job has not entered the suspended state.
   why: A decision answer must resume the same suspended worker and answer the current question.
-  fix: Use `pack_board` to inspect the worker. If it is running, wait for its decision envelope before
-    answering. If it is terminal, report the inconsistent state instead of repeatedly answering.
+  fix: '{{ paintedwolf.next_steps }} If it is running, wait for its decision envelope before answering. If it is terminal, report the inconsistent state instead of repeatedly answering.'
   instead: Inspect the current worker state before retrying.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator

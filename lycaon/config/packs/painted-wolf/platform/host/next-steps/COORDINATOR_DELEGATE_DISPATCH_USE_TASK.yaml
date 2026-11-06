@@ -1,0 +1,5 @@
+steps:
+  - when: "paintedwolf.task_dispatchable"
+    tool: "task"
+    say: "Dispatch the worker with {{ call }}, using an allowed agent type and the required scope and completion criteria."
+    otherwise: "This turn has no available worker-dispatch path. Continue with the offered tools, or report the capability limitation if delegation is required."

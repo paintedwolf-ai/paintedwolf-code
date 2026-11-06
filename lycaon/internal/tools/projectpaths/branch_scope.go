@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -25,8 +26,8 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 	var branchRel, displayPath string
 	if filepath.IsAbs(modelPath) {
 		var err error
-		branchRel, err = filepath.Rel(filepath.Clean(branch), filepath.Clean(modelPath))
-		if err != nil || branchRel == ".." || strings.HasPrefix(branchRel, ".."+string(filepath.Separator)) {
+		branchRel, err = relativeUnderBranch(branch, modelPath)
+		if err != nil {
 			return Resolved{}, mapResolveErr(fmt.Errorf("%w: %q", projectroot.ErrPathEscape, modelPath), modelPath)
 		}
 		displayPath = workerBranchDisplayPath(tctx, branchRel)
@@ -116,6 +117,21 @@ func workerBranchDisplayPath(tctx tools.ToolContext, branchRel string) string {
 		}
 	}
 	return rel
+}
+
+func relativeUnderBranch(branch, modelPath string) (string, error) {
+	cleanBranch, cleanPath := filepath.Clean(branch), filepath.Clean(modelPath)
+	if rel, err := filepath.Rel(cleanBranch, cleanPath); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return rel, nil
+	}
+	canonBranch := filepath.FromSlash(fspath.CanonicalPath(cleanBranch))
+	canonPath := filepath.FromSlash(fspath.CanonicalPath(cleanPath))
+	if canonBranch != "" && canonPath != "" {
+		if rel, err := filepath.Rel(canonBranch, canonPath); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return rel, nil
+		}
+	}
+	return "", projectroot.ErrPathEscape
 }
 
 func prepareBranchPath(ctx context.Context, tctx tools.ToolContext, scopeRel string, op sandbox.PathOp) error {

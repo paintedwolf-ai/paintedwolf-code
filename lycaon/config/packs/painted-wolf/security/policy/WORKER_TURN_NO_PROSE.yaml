@@ -13,7 +13,7 @@ copy:
   what: 'The worker result has no usable parent-visible brief.'
   cause: 'The completion report did not supply a nonempty brief for the parent.'
   why: 'A missing brief is separate from the status of the underlying work or retained tool observations.'
-  fix: 'Inspect the retained worker result and observations. If a worker report turn is resumed, request complete_leg with a concise brief and honest status. Dispatch new work only for an identified gap, using an eligible profile from the current catalog.'
+  fix: 'Inspect the retained worker result and observations. If a worker report turn is resumed, request a concise completion report with honest status. Dispatch new work only for an identified gap, using an eligible profile from the current catalog.'
   instead: 'Preserve existing results and report the missing brief without claiming that all worker work must be repeated.'
 # The leg is over when this fires; the reader is the dispatching coordinator,
 # whose tools the fix names.

@@ -2,6 +2,7 @@ package evidence
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -12,9 +13,7 @@ func BuildProgramObservation(tool string, receipt *api.CommandProgramReceipt, co
 	if receipt == nil || strings.TrimSpace(receipt.ID) == "" || strings.TrimSpace(receipt.ParentReceiptID) == "" {
 		return Record{}
 	}
-	switch tool {
-	case "command", "command_output", "command_stop", "verify":
-	default:
+	if tool != "command_output" && tool != "command_stop" && !toolcontract.ProgramResultTool(tool) {
 		return Record{}
 	}
 	rec := Record{Kind: "command", Shape: ShapeCommand, SourceTool: tool, Fidelity: FidelityOpaque}

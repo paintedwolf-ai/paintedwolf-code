@@ -76,6 +76,7 @@ func (m *Tools) Build() promptloop.ToolsDeps {
 			}
 			return err
 		},
+		ProgramReach:     m.Guards.ProgramReach,
 		HeldCalls:        m.Processes,
 		BlockPlane:       &toolfeedback.BlockPlane{Pipeline: m.Results.Policy.Pipeline, Renderer: m.Feedback.Renderer()},
 		BeforeToolRun:    m.Guards.BeforeTool,
