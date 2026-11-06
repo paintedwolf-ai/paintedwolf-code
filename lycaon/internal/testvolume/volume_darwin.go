@@ -13,9 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	lexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/hostprocess"
 )
 
 const hdiutilPath = "/usr/bin/hdiutil"
@@ -226,14 +225,7 @@ func processGone(pid int) bool {
 	if pid == os.Getpid() {
 		return true
 	}
-	switch unix.Kill(pid, 0) {
-	case unix.ESRCH:
-		return true
-	case nil, unix.EPERM:
-		return false
-	default:
-		return false
-	}
+	return !hostprocess.ProcessExists(pid)
 }
 
 // RemountIgnoringOwnership mounts the volume the way external disks commonly are.
