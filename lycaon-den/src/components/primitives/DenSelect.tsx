@@ -306,10 +306,9 @@ export function DenSelect(props: Props) {
                         "den-select__option--active": active() === index(),
                       }}
                       role="option"
-                      data-testid={props["data-testid"] ? `${props["data-testid"]}-option-${option.value}` : undefined}
+                      data-testid={props["data-testid"] ? `${props["data-testid"]}-option-${option.value}` : `den-select-option-${option.value}`}
                       aria-selected={currentValue() === option.value}
                       aria-disabled={disabled() || option.disabled || undefined}
-                      data-testid={`den-select-option-${option.value}`}
                       data-option-index={index()}
                       data-value={option.value}
                       onPointerMove={() => {
