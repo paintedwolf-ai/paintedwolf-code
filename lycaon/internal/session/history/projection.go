@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -96,7 +95,7 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 		out = append(out, canonical)
 	}
 	if truncated {
-		notice, err := m.tailOmissionNotice(ctx, sess, covered, oldest, tail)
+		notice, err := tailOmissionNotice(ctx, m.recallAvailable, sess, covered, oldest, tail)
 		if err != nil {
 			return nil, err
 		}
@@ -129,37 +128,11 @@ func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *a
 	if refresh {
 		m.Schedule(ctx, sess)
 	}
-	notice, err := m.tailOmissionNotice(ctx, sess, 0, firstTailOrd, history)
+	notice, err := tailOmissionNotice(ctx, m.recallAvailable, sess, 0, firstTailOrd, history)
 	if err != nil || notice == nil {
 		return history, err
 	}
 	return append([]api.Message{*notice}, history...), nil
-}
-
-// tailOmissionNotice names rows between coverage and the canonical tail that hard
-// limits left out. The opener is retained separately, so it does not count.
-func (m *Service) tailOmissionNotice(ctx context.Context, sess *api.Session, covered, oldest int64, tail []api.Message) (*api.Message, error) {
-	through := oldest - 1
-	if len(tail) > 0 && tail[0].Ord == through {
-		through--
-	}
-	if covered+1 > through {
-		return nil, nil
-	}
-	return m.omissionNotice(ctx, sess, historyCoverageNoticeID, covered+1, through)
-}
-
-// omissionNotice is reference-only: it establishes no summary coverage.
-func (m *Service) omissionNotice(ctx context.Context, sess *api.Session, id string, from, through int64) (*api.Message, error) {
-	text, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
-		"level": "references", "through_ord": through, "omitted_from_ord": from, "omitted_through_ord": through,
-		"recall_available": m.recallAvailable != nil && m.recallAvailable(ctx, sess),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &api.Message{ID: id, Role: api.MessageRoleSystem, Origin: api.MessageOriginHost,
-		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, ContextPinned: true, Content: text}, nil
 }
 
 // Fit assembles prompt history and schedules durable compaction.

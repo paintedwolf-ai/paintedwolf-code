@@ -272,7 +272,7 @@ func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kep
 	if from > through {
 		return kept, nil
 	}
-	notice, err := m.omissionNotice(ctx, sess, historyCoverageNoticeID, from, through)
+	notice, err := omissionNotice(ctx, m.recallAvailable, sess, historyCoverageNoticeID, from, through)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +327,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	}
 	noticeTokens := 0
 	if lastOrd > 0 {
-		sized, err := m.omissionNotice(ctx, sess, historyCoverageNoticeID, lastOrd, lastOrd)
+		sized, err := omissionNotice(ctx, m.recallAvailable, sess, historyCoverageNoticeID, lastOrd, lastOrd)
 		if err != nil {
 			return nil, err
 		}
@@ -375,7 +375,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 func (m *Service) fitWithOmissionNotice(ctx context.Context, sess *api.Session, cfg compaction.CompactionConfig, contexts []compaction.ContextMessage, rows []api.Message, tokens, reserve int, from, through int64) ([]compaction.ContextMessage, error) {
 	var fitted []compaction.ContextMessage
 	for range 2 {
-		notice, err := m.omissionNotice(ctx, sess, historyCoverageNoticeID, from, through)
+		notice, err := omissionNotice(ctx, m.recallAvailable, sess, historyCoverageNoticeID, from, through)
 		if err != nil {
 			return nil, err
 		}
