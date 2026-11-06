@@ -116,7 +116,7 @@ it("reveals a folded call on a later detail page through Find", async () => {
  const value=part();
  value.commandActivity!.calls=Array.from({length:5},(_,index)=>({...value.commandActivity!.calls[0]!,id:`source-${index}`,toolCallId:`source-${index}`,args:{command:index===4?"UNIQUE_FOLDED_NEEDLE":"other command"}}));
  const client=stubClient({getCommandProgramReceipt:vi.fn().mockResolvedValue({program,executions:[receipt()],nodes:[],executions_omitted:0,nodes_omitted:0})});
- const view=render(()=>{
+ render(()=>{
   const [host,setHost]=createSignal<HTMLElement>();
   bindFindableView({id:"session-transcript-activity-find",root:host,primary:true});
   return <div ref={setHost}><CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" projectId="project" client={client}/></div>;

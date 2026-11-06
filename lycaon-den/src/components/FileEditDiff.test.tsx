@@ -227,7 +227,7 @@ describe("FileEditDiff", () => {
       </>
     ));
     const card = (path: string) => document.querySelector<HTMLElement>(`.den-file-edit-diff[data-path="${path}"]`)!;
-    for (const path of ["new.py", "old.py", "gone.py"]) assertNamedControl(card(path).querySelector('[data-testid="file-edit-diff-toggle"]')!, "button").click();
+    for (const path of ["new.py", "old.py", "gone.py"]) assertNamedControl(card(path).querySelector<HTMLElement>('[data-testid="file-edit-diff-toggle"]')!, "button").click();
     // Loaded rows carry their source row; a range placeholder does not.
     const rows = (path: string) => [...card(path).querySelectorAll<HTMLElement>(".cm-den-reader .cm-line[data-source-row]")];
     await waitFor(() => {
