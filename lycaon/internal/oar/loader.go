@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/oarcore"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
@@ -52,14 +53,15 @@ type rawTransform struct {
 
 // Loader validates and loads OAR rules.
 type Loader struct {
-	SchemaDir  string // directory containing oar.schema.json (+ refs); required for Validate
-	schema     *jsonschema.Schema
-	detectors  *DetectorRegistry // [OAR-OPS-12]: resolve detector.ref at load
-	capability *CapabilityDocument
-	specEnvErr error
-	specEnv    *oarcore.Environment
-	reachable  map[string]bool
-	hostFacts  map[string]struct{}
+	SchemaDir   string // directory containing oar.schema.json (+ refs); required for Validate
+	schema      *jsonschema.Schema
+	detectors   *DetectorRegistry // [OAR-OPS-12]: resolve detector.ref at load
+	capability  *CapabilityDocument
+	specEnvErr  error
+	specEnv     *oarcore.Environment
+	reachable   map[string]bool
+	hostFacts   map[string]struct{}
+	toolSchemas *toolschema.Config
 }
 
 // NewLoader constructs a loader. An empty schemaDir skips JSON Schema validation.
@@ -80,6 +82,13 @@ func NewLoader(schemaDir string) (*Loader, error) {
 func (l *Loader) SetDetectors(r *DetectorRegistry) {
 	if l != nil {
 		l.detectors = r
+	}
+}
+
+// SetToolSchemas installs the declared tool argument schemas checked at load.
+func (l *Loader) SetToolSchemas(c *toolschema.Config) {
+	if l != nil {
+		l.toolSchemas = c
 	}
 }
 
