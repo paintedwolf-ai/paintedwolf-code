@@ -194,7 +194,7 @@ func (c attemptController) settle(ctx context.Context, sc *compaction.SimpleComp
 	if result.outcome == attemptTransient && pass.retries < maxTransientRetries {
 		delay := max(transientRetryDelays[pass.retries], result.retryAfter)
 		record.retryAt = c.ledger.clock.Now().Add(delay)
-		c.ledger.arm(sessionID, delay, func() { c.fire(sessionID) })
+		c.ledger.arm(sessionID, delay, func() { c.fire(sessionID) }) //nolint:contextcheck // the retry fires after this pass's context ends.
 	}
 	c.ledger.records.Store(sessionID, record)
 }

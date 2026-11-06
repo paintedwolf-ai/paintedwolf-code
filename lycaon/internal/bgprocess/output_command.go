@@ -58,7 +58,7 @@ func (r *Output) screenWindow(ctx context.Context, proc *Process, projector *cap
 	if err != nil {
 		return "", spans, release, err
 	}
-	if err = memory.ReserveBytes(ctx, int64(len(out.data))); err != nil {
+	if err := memory.ReserveBytes(ctx, int64(len(out.data))); err != nil {
 		return "", spans, release, err
 	}
 	charged += int64(len(out.data))

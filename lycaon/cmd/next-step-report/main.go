@@ -21,7 +21,7 @@ func main() {
 func run(paths []string) error {
 	var report nextstepreport.Report
 	for _, path := range paths {
-		raw, err := os.ReadFile(path)
+		raw, err := os.ReadFile(path) // #nosec G304,G703 -- this CLI intentionally reads caller-selected transcript files.
 		if err != nil {
 			return err
 		}

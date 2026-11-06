@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -50,18 +49,6 @@ func loadImplementSurfaces(t *testing.T) map[string][]string {
 	return surfaces
 }
 
-// fileText reads an embedded or linked pack file.
-func fileText(t *testing.T, at extpacks.Source) string {
-	t.Helper()
-	data, err := at.Read()
-	contractcheck.FailErr(t, "read "+at.String(), err)
-	return string(data)
-}
-
 func coordinatorProfileGrantsTool(profile sandbox.ToolProfile, tool string) bool {
 	return profile.Tools[tool]
-}
-
-func toolOnImplementSurface(surfaceTools []string, tool string) bool {
-	return contractcheck.ContainsString(surfaceTools, tool)
 }

@@ -1,7 +1,6 @@
 package native
 
 import (
-	"os"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -39,10 +38,4 @@ func TestReplaceLineRange(t *testing.T) {
 			}
 		})
 	}
-}
-func readFileString(t *testing.T, abs string) string {
-	t.Helper()
-	raw, err := os.ReadFile(abs) // #nosec G304 -- test-owned temp path.
-	testutil.FailErr(t, "read back", err)
-	return string(raw)
 }

@@ -42,7 +42,7 @@ func NewScanner(values ...string) *Scanner {
 		for j := 0; j < len(v); j++ {
 			at := int(state)*256 + int(v[j])
 			if s.next[at] == 0 {
-				s.next[at] = int32(len(s.match))
+				s.next[at] = int32(len(s.match)) // #nosec G115 -- trie states are bounded by the fixture's total secret bytes.
 				s.next = append(s.next, make([]int32, 256)...)
 				s.match = append(s.match, -1)
 			}
@@ -196,5 +196,7 @@ func collect(v reflect.Value, values *[]string, visited map[uintptr]bool) {
 		for i := range v.Len() {
 			collect(v.Index(i), values, visited)
 		}
+	default:
+		// Other kinds hold no strings.
 	}
 }

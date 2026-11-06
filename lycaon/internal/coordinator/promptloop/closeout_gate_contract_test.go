@@ -315,8 +315,16 @@ func TestRetiredFenceMembersSpendOnlyTheDocumentBudget(t *testing.T) {
 		t.Fatalf("budgets = %+v friction=%d", st.closeoutRetry, c.friction)
 	}
 	body := refusalBody(t, out.history)
-	fence := body[strings.Index(body, "```json"):]
-	fence = fence[:strings.Index(fence[3:], "```")+3]
+	start := strings.Index(body, "```json")
+	if start < 0 {
+		t.Fatalf("no json fence:\n%s", body)
+	}
+	fence := body[start:]
+	end := strings.Index(fence[3:], "```")
+	if end < 0 {
+		t.Fatalf("unterminated json fence:\n%s", body)
+	}
+	fence = fence[:end+3]
 	if strings.Contains(fence, "cited_evidence") || !strings.Contains(fence, `"headline":"H"`) {
 		t.Fatalf("retained fence:\n%s", fence)
 	}

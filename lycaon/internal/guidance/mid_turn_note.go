@@ -92,7 +92,7 @@ func AuditMidTurnNote(in MidTurnNoteInput) MidTurnNoteAudit {
 	if embeds := CloseoutMarkdownArtifactEmbedIDs(draft.Parsed); len(embeds) > 0 {
 		return audit.withhold(MidTurnNoteEmbedCode, OffenderHintData(embeds))
 	}
-	if sources := CloseoutUnobservedImageSources(draft.Parsed, in.Evidence.Ledger.URLSeen); len(sources) > 0 {
+	if sources := CloseoutUnobservedImageSources(draft.Parsed, in.Evidence.URLSeen); len(sources) > 0 {
 		return audit.withhold(MidTurnNoteImageCode, OffenderHintData(sources))
 	}
 	resolved := ResolveDraftCitations(in.Roots, in.SurfaceID, draft, in.Evidence, in.Presentable)

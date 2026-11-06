@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"testing"
 
@@ -173,25 +172,4 @@ func renderCoordinatorTripartiteForRunContextWithRoots(
 		}
 	}
 	return strings.Join(parts, "\n\n")
-}
-
-func coordinatorWireToolsAtRootCount(t *testing.T, root, surfaceID string, rootCount int) []string {
-	t.Helper()
-	profile := surface.TurnProfile{SurfaceID: surfaceID}
-	plan, err := surface.CompileToolPlan(profile, rootCount)
-	contractcheck.FailErr(t, "CompileToolPlan", err)
-	tools := plan.ImmediateNames()
-	sort.Strings(tools)
-	return tools
-}
-
-func rootCountLabel(n int) string {
-	switch n {
-	case 0:
-		return "zero_root"
-	case 1:
-		return "one_root"
-	default:
-		return "multi_root"
-	}
 }

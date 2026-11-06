@@ -145,6 +145,8 @@ func (c *Config) absorb(part Config) error {
 					return fmt.Errorf("%s declared in both manifests", key)
 				}
 			}
+		default:
+			return fmt.Errorf("unsupported manifest field kind %s", dst.Kind())
 		}
 	}
 	return nil
