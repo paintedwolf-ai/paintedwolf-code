@@ -30,7 +30,7 @@ services:
   # The engine runs reads through the native document core; build it for Linux.
   document-core:
     # Match rust-toolchain.toml.
-    image: rust:1.97.1-bookworm
+    image: rust:1.99.1-bookworm
     # Host-owned outputs stay readable and removable by the test process.
     user: ${LYCAON_E2E_UID:-0}:${LYCAON_E2E_GID:-0}
     working_dir: /workspace/document-core
@@ -67,7 +67,7 @@ services:
   # Git surfaces require the pinned toolchain for the container's platform.
   gitengine:
     # Reuses the document-core image, which has rustc for the platform probe.
-    image: rust:1.97.1-bookworm
+    image: rust:1.99.1-bookworm
     user: ${LYCAON_E2E_UID:-0}:${LYCAON_E2E_GID:-0}
     working_dir: /workspace
     volumes:
