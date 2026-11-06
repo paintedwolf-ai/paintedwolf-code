@@ -3,9 +3,9 @@ package editoradmin
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -71,9 +71,7 @@ func TestMarkingASecretProtectsTheSelectedBytes(t *testing.T) {
 	expectCode(t, "stale mark", mark(wire.SecretMarkRequest{Range: stale, Name: "relay", Purpose: "staging relay"}), wire.ApiErrorCodeEditorRevisionConflict)
 
 	response := mark(wire.SecretMarkRequest{Range: token, Name: " relay ", Purpose: "staging relay"})
-	if strings.Contains(response.Body.String(), relayToken) {
-		t.Fatal("marked metadata exposed the value")
-	}
+	exposure.Absent(t, response.Body.String(), relayToken)
 	marked := decodeStatus[wire.ManagedSecret](t, "mark", response, http.StatusOK)
 	if marked.Reference == "" || marked.Name != "relay" {
 		t.Fatalf("marked secret = %+v", marked)

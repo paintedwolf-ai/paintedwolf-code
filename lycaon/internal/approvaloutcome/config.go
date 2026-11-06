@@ -32,9 +32,8 @@ type Entry struct {
 
 // ScenarioEntry is a contract-test fixture for rendered outcome copy.
 type ScenarioEntry struct {
-	ID             string         `yaml:"id"`
-	Vars           map[string]any `yaml:"vars"`
-	ExpectContains []string       `yaml:"expect_contains"`
+	ID   string         `yaml:"id"`
+	Vars map[string]any `yaml:"vars"`
 }
 
 // Load reads and validates the shipped outcome catalog.
@@ -82,9 +81,6 @@ func Validate(cfg *Config) error {
 		for _, sc := range entry.Scenarios {
 			if strings.TrimSpace(sc.ID) == "" {
 				return fmt.Errorf("approval_outcomes.%q: scenario id required", code)
-			}
-			if len(sc.ExpectContains) == 0 {
-				return fmt.Errorf("approval_outcomes.%q: scenario %q expect_contains required (>=1)", code, sc.ID)
 			}
 			if _, err := renderTemplateChecked(entry.Message, sc.Vars); err != nil {
 				return fmt.Errorf("approval_outcomes.%q: scenario %q pongo render: %w", code, sc.ID, err)

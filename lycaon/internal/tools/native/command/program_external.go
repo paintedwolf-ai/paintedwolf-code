@@ -9,6 +9,9 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/lycaon/lycaon/internal/agentpolicy"
+	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
@@ -16,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // ExternalStages launches one confined external stage per request through the
@@ -23,9 +27,12 @@ import (
 // stays literal: no shell, no PATH re-resolution by the host, no fallback.
 type ExternalStages struct {
 	ToolContext     tools.ToolContext
-	Dir             string
+	Cwd             projectpaths.Resolved
 	ExtraWriteRoots []string
 	BaseEnvironment []string
+	ObserveStage    func(tools.ToolContext, confine.StampedRefusal, []confine.EgressHost, bool)
+	// window observes the source changes of the program this launch belongs to.
+	window *programWindow
 }
 
 var _ commandprogram.ExternalLauncher = ExternalStages{}
@@ -39,9 +46,17 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a program")
 	}
 	tctx := l.ToolContext
-	cwd := l.Dir
+	cwd := l.Cwd.Abs
 	if cwd == "" {
 		return refusedResult("COMMAND_OPERAND_INVALID"), fmt.Errorf("external launch requires a bound directory frame")
+	}
+	rootID := reachedRootID(tctx, l.Cwd)
+	if l.Cwd.External {
+		rootID = ""
+	}
+	policyTargets := []agentpolicy.Target{{RootID: rootID, Path: cwd, Mutation: true}}
+	if err := tctx.CheckPolicyTargets(ctx, policyTargets); err != nil {
+		return externalLaunchFailure(err, refusedResult("POLICY_CONTEXT_CHANGED")), err
 	}
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		if ctx.Err() != nil {
@@ -72,12 +87,22 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	if streams.Input != nil && !commandprogram.IsNullInput(streams.Input) {
 		opts.Stdin = &lycexec.StdinSpec{Reader: streams.Input}
 	}
+	if err := tctx.CheckPolicyTargets(ctx, policyTargets); err != nil {
+		return externalLaunchFailure(err, refusedResult("POLICY_CONTEXT_CHANGED")), err
+	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
 		}
 		return externalLaunchFailure(err, refusedResult("COMMAND_EXEC_DENIED")), err
 	}
+	// Open before the process starts, so earlier drift is not attributed to it,
+	// and stay held until it has exited, on every path out of this launch.
+	release, err := l.window.enter(ctx)
+	if err != nil {
+		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
+	}
+	defer release()
 	launchArgv, cleanupProcSubst, err := materializeExternalArgv(tctx.Host.SessionScratchDir, fields)
 	if err != nil {
 		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, err
@@ -113,6 +138,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	}
 	run, waitErr := async.Wait()
 	detach()
+	l.settleStageConfine(ctx, tctx, bound, commandLine, run)
 	if run != nil && len(run.Stages) == 1 {
 		request.Process.Times.Add(run.Stages[0].UserTime, run.Stages[0].SystemTime)
 	}
@@ -121,6 +147,11 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	}
 	if run == nil {
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.EffectUnknown}, waitErr
+	}
+	var socketErr *confine.SocketResolveError
+	if errors.As(waitErr, &socketErr) {
+		reject := capabilityrequest.SocketResolveReject(socketErr)
+		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, StopCode: reject.Code, EffectCertainty: toolcontract.EffectAttempted}, reject
 	}
 	status := run.ExitCode
 	if len(run.Stages) == 1 {
@@ -144,7 +175,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 // Installed reports whether the confined launch would find name: the same
 // final PATH, launch directory and environment as Launch.
 func (l ExternalStages) Installed(name string, environment []string) bool {
-	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}.WithTrustedEnvironment(l.BaseEnvironment), l.Dir, environment, l.ToolContext.Host.HostResourcePathExtra)
+	opts, err := lycexec.AgentLaunchOptions(lycexec.LaunchPlan{}.WithTrustedEnvironment(l.BaseEnvironment), l.Cwd.Abs, environment, l.ToolContext.Host.HostResourcePathExtra)
 	if err != nil {
 		return false
 	}
@@ -254,6 +285,10 @@ func nonNilWriter(w io.Writer) io.Writer {
 }
 
 func externalLaunchFailure(err error, fallback toolcontract.ProducerResult) toolcontract.ProducerResult {
+	var socketErr *confine.SocketResolveError
+	if errors.As(err, &socketErr) {
+		return refusedResult(capabilityrequest.SocketResolveReject(socketErr).Code)
+	}
 	if rejection := toolrejection.AsToolReject(err); rejection != nil {
 		return refusedResult(rejection.Code)
 	}
@@ -269,3 +304,55 @@ func refusedResult(code string) toolcontract.ProducerResult {
 type launchClosure struct{ lycexec.StageRun }
 
 func (launchClosure) Error() string { return "external producer stopped after its consumer closed" }
+
+func (l ExternalStages) settleStageConfine(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, commandLine string, run *lycexec.PipelineResult) {
+	settleCtx := context.WithoutCancel(ctx)
+	refusals := bound.lease.SettledRefusals(settleCtx)
+	network := bound.close(settleCtx)
+	boundary := confine.BoundaryOf(bound.confinement)
+	if !boundary.Applied {
+		return
+	}
+	termination := string(bgprocess.TerminationExited)
+	var failed []string
+	switch {
+	case ctx.Err() != nil:
+		termination = string(bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationStoppedByAgent))
+	case run == nil:
+		failed = []string{commandLine}
+	case len(run.Stages) == 1:
+		if run.Stages[0].Failed {
+			failed = []string{commandLine}
+		}
+	case run.ExitCode != 0:
+		failed = []string{commandLine}
+	}
+	report := CommandConfinementReport(boundary, "", tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution)
+	stamped := confine.StampRefusal("command", tctx.Identity.SessionID, boundary, confine.RefusalContext{
+		MediatedNetwork:        network,
+		RemotePackageExecution: report.RemotePackageExecution,
+		FailedStages:           failed,
+		TerminationReason:      termination,
+		Refusals:               refusals,
+	})
+	if l.ObserveStage != nil {
+		l.ObserveStage(tctx, stamped, network, bound.directIPApplied)
+		return
+	}
+	if tctx.Effects.Out != nil {
+		tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
+		tools.CaptureExternalAccess(tctx, network, bound.directIPApplied)
+	}
+}
+
+func (d *ProgramDispatcher) recordExternalStage(admitted tools.ToolContext, stamped confine.StampedRefusal, hosts []confine.EgressHost, directIPApplied bool) {
+	if d == nil || d.run == nil || d.run.tc.Effects.Out == nil {
+		return
+	}
+	d.shared.mu.Lock()
+	defer d.shared.mu.Unlock()
+	d.run.tc.Effects.Out.Facts = tools.ApplyRefusalFacts(d.run.tc.Effects.Out.Facts, stamped)
+	childTC := admitted
+	childTC.Effects.Out = d.run.tc.Effects.Out
+	tools.CaptureExternalAccess(childTC, hosts, directIPApplied)
+}

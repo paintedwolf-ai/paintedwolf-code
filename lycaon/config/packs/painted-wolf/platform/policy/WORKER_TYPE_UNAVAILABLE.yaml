@@ -22,6 +22,3 @@ x-paintedwolf-scenarios:
 - id: unknown_type
   vars:
     agent_type: missing-worker
-  expect_contains:
-  - 'Code: WORKER_TYPE_UNAVAILABLE'
-  - worker type

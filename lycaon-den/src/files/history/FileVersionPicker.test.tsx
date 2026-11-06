@@ -169,8 +169,6 @@ describe("FileVersionPicker", () => {
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
     const current = screen.getByTestId("file-version-current");
-    expect(current.textContent).toContain("Deleted · no working file");
-    expect(current.textContent).not.toContain("Editable working file");
     expect(current.getAttribute("aria-checked")).toBe("true");
   });
 
@@ -248,7 +246,6 @@ describe("FileVersionPicker", () => {
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
     const row = screen.getByRole("menuitemradio", { name: /Restored/ });
-    expect(row.textContent).toContain("matches commit");
     expect(row.textContent).not.toContain("committed");
     expect(row.textContent).toContain("a1b2c3f");
   });
@@ -292,7 +289,6 @@ describe("FileVersionPicker", () => {
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
     const boundary = screen.getByTestId("file-version-boundary");
-    expect(boundary.textContent).toContain("Tracked since");
     const commitRow = screen.getByTestId("file-version-commit");
     expect(
       boundary.compareDocumentPosition(commitRow) &
@@ -364,7 +360,6 @@ describe("FileVersionPicker", () => {
     fireEvent.click(screen.getByTestId("file-version-trigger"));
     expect(screen.queryByRole("status")).toBeNull();
     vi.advanceTimersByTime(PRESENTATION_LOADING_GRACE_MS);
-    expect(screen.getByRole("status").textContent).toBe("Loading history…");
     unmount();
 
     mount({

@@ -2,12 +2,18 @@ import type { LycaonClient } from "../../api/client.ts";
 import { LycaonApiError, isApiErrorCode } from "../../api/http.ts";
 import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
 import type {
+  ProjectBackgroundProcess,
   ProjectRemovalAssessment,
   ProjectRemovalRequest,
   ProjectRemovalProgress,
   ProjectRemovalResult,
 } from "../../api/types.ts";
 import type { ConfirmDestructivePresenter } from "../../platform/interaction/confirm-dialog.ts";
+import {
+  formatBackgroundCommandWithChat,
+  sameRunningCommandList,
+  type RunningCommandSummary,
+} from "../../session/confirm-chat-delete.ts";
 import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
 import { clientNoticeError } from "../../notices/client-notices.ts";
 import type { NoticeInput } from "../../notices/notice-model.ts";
@@ -24,20 +30,37 @@ const statusPause = (unanswered: number) =>
 type RemovalClient = Pick<
   LycaonClient,
   "assessProjectRemoval" | "createProjectRemoval" | "getProjectRemoval"
->;
+> &
+  Partial<Pick<LycaonClient, "listProjectBackgroundProcesses">>;
 
 export function forceRemovalMessage(
-  result: Pick<ProjectRemovalResult, "documents" | "sessions" | "workers" | "overlays">,
+  result: Pick<ProjectRemovalResult, "documents" | "sessions" | "workers" | "overlays"> & {
+    background_processes?: readonly RunningCommandSummary[];
+  },
+  fallbackProcesses?: readonly RunningCommandSummary[],
 ): string {
+  const bgProcesses = result.background_processes ?? fallbackProcesses ?? [];
   const parts = [
     [result.documents, "open or unsaved file"],
     [result.sessions, "active turn"],
     [result.workers, "worker"],
     [result.overlays, "unmerged worker result"],
+    [bgProcesses.length, "background command"],
   ]
     .filter(([count]) => Number(count) > 0)
     .map(([count, label]) => `${count} ${label}${count === 1 ? "" : "s"}`);
-  return `${parts.join(", ") || "In-flight project work"} will be discarded or stopped. Any edits made before removal completes may also be lost. This cannot be undone.`;
+  const summary = `${parts.join(", ") || "In-flight project work"} will be discarded or stopped. Any edits made before removal completes may also be lost. This cannot be undone.`;
+  if (bgProcesses.length === 0) {
+    return summary;
+  }
+  const lines = [
+    summary,
+    bgProcesses.length === 1
+      ? "1 background command in this project will stop:"
+      : `${bgProcesses.length} background commands in this project will stop:`,
+    ...bgProcesses.map((proc) => `• ${formatBackgroundCommandWithChat(proc)}`),
+  ];
+  return lines.join("\n");
 }
 
 export type ProjectRemovalOptions = {
@@ -67,24 +90,52 @@ export function createProjectRemoval(options: {
     client: RemovalClient,
     projectId: string,
     opts?: ProjectRemovalOptions,
-  ): Promise<ProjectRemovalRequest> => {
+  ): Promise<{ request: ProjectRemovalRequest; assessment: ProjectRemovalAssessment | null }> => {
     let assessment: ProjectRemovalAssessment | null = null;
     try {
       assessment = await client.assessProjectRemoval(projectId);
     } catch {
       // Deletion can proceed while keeping extensions.
     }
-    const skipReview = Boolean(opts?.confirmed && assessment && assessment.extensions.length === 0);
-    const selected = skipReview
-      ? []
-      : await options.review(assessment, projectId);
-    if (selected === null) throw new RemovalCancelled();
-    return {
-      operation_id: newID(),
-      assessment_token: assessment?.assessment_token ?? "",
-      remove_extensions: selected,
-      force: false,
-    };
+    for (;;) {
+      const hasBackground = Boolean(
+        assessment?.background_processes && assessment.background_processes.length > 0,
+      );
+      const skipReview = Boolean(
+        opts?.confirmed && assessment && assessment.extensions.length === 0 && !hasBackground,
+      );
+      const selected = skipReview
+        ? []
+        : await options.review(assessment, projectId);
+      if (selected === null) throw new RemovalCancelled();
+      if (typeof client.listProjectBackgroundProcesses === "function") {
+        let liveRunning: ProjectBackgroundProcess[] | null = null;
+        try {
+          const resp = await client.listProjectBackgroundProcesses(projectId);
+          liveRunning = (resp.processes ?? []).filter((p) => p.running);
+        } catch {
+          liveRunning = null;
+        }
+        if (
+          liveRunning !== null &&
+          !sameRunningCommandList(assessment?.background_processes ?? [], liveRunning)
+        ) {
+          assessment = assessment
+            ? { ...assessment, background_processes: liveRunning }
+            : null;
+          continue;
+        }
+      }
+      return {
+        request: {
+          operation_id: newID(),
+          assessment_token: assessment?.assessment_token ?? "",
+          remove_extensions: selected,
+          force: false,
+        },
+        assessment,
+      };
+    }
   };
 
   const readStatus = async (client: RemovalClient, projectId: string, operationId: string) => {
@@ -150,19 +201,44 @@ export function createProjectRemoval(options: {
     }
     try {
       let request = pending.get(projectId);
+      let reviewedAssessment: ProjectRemovalAssessment | null = null;
       if (!request) {
         await options.prepare(projectId);
-        request = await review(client, projectId, opts);
+        const reviewed = await review(client, projectId, opts);
+        request = reviewed.request;
+        reviewedAssessment = reviewed.assessment;
       }
       let result = await settle(client, projectId, request);
       if (result.failure_code === "root_busy") {
         pending.delete(projectId);
-        const force = await options.confirm({
-          title: "Delete project",
-          message: forceRemovalMessage(result),
-          okLabel: "Delete anyway",
-        });
-        if (!force) return;
+        let fallbackBg: readonly RunningCommandSummary[] | undefined =
+          result.background_processes ?? reviewedAssessment?.background_processes;
+        for (;;) {
+          const force = await options.confirm({
+            title: "Delete project",
+            message: forceRemovalMessage(result, fallbackBg),
+            okLabel: "Delete anyway",
+          });
+          if (!force) return;
+          if (typeof client.listProjectBackgroundProcesses === "function") {
+            let liveRunning: ProjectBackgroundProcess[] | null = null;
+            try {
+              const resp = await client.listProjectBackgroundProcesses(projectId);
+              liveRunning = (resp.processes ?? []).filter((p) => p.running);
+            } catch {
+              liveRunning = null;
+            }
+            if (
+              liveRunning !== null &&
+              !sameRunningCommandList(fallbackBg ?? [], liveRunning)
+            ) {
+              fallbackBg = liveRunning;
+              result = { ...result, background_processes: liveRunning };
+              continue;
+            }
+          }
+          break;
+        }
         request = { ...request, force: true, operation_id: newID() };
         result = await settle(client, projectId, request);
       }

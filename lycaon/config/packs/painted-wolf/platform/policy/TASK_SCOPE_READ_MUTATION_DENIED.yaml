@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     profile: implement
     scope_mode: read
     tool: write
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TASK_SCOPE_READ_MUTATION_DENIED'

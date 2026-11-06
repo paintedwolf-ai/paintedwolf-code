@@ -20,9 +20,7 @@ func TestProgressCompletionAppendsTranscriptMessage(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 
 	runUpdate := func(content string) {
-		if _, err := h.ToolRegistry.Run(ctx, "update_progress", map[string]any{
-			"content": content,
-		}, tools.ToolContext{
+		if _, err := h.ToolRegistry.Run(ctx, "update_progress", h.ProgressUpdateArgs(t, ctx, sess.ID, content), tools.ToolContext{
 			Identity: tools.InvocationIdentity{SessionID: sess.ID},
 		}); err != nil {
 			testutil.FailErr(t, "update_progress", err)

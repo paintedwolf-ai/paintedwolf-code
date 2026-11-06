@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/scopedstore"
@@ -29,7 +30,7 @@ func seedCloseoutState(c *Service, sessionID, rootID string) {
 		c.Delay(sessionID, rootID, kind, true, 2)
 	}
 	c.recordFriction(sessionID, rootID)
-	c.noteGroundingReject(rootID, "citation", "offender", "retained draft", nil)
+	c.noteGroundingReject(rootID, "citation", "offender", guidance.ParseCloseoutDraft("retained draft", citationmd.Options{}), nil)
 }
 
 func TestCloseoutPromptBoundary(t *testing.T) {

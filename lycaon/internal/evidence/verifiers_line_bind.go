@@ -73,7 +73,9 @@ func excerptAtCitedLine(rec Record, claimPath string, line int, excerpt string, 
 	if window < 0 {
 		window = 0
 	}
-	for anchor := line - window; anchor <= line+window; anchor++ {
+	// Counting by offset keeps a line near the integer limit from wrapping.
+	for offset := -window; offset <= window; offset++ {
+		anchor := line + offset
 		if anchor <= 0 {
 			continue
 		}

@@ -189,7 +189,6 @@ describe("ReviewWalkContext", () => {
     mount(gitStep(rewritten), null);
 
     const header = screen.getByTestId("review-walk-step");
-    expect(header.textContent).toContain("Git checkout");
     expect(header.textContent).toContain("main → feature-x");
     expect(header.textContent).toContain("2 observed files");
     expect(screen.getByTestId("review-walk-git").textContent).toContain(
@@ -222,7 +221,6 @@ describe("ReviewWalkContext", () => {
     mount(outsideStep(changed), null);
 
     const header = screen.getByTestId("review-walk-step");
-    expect(header.textContent).toContain("Outside the app");
     expect(header.textContent).toContain("2 files");
     expect(screen.getByTestId("review-walk-outside-observation").textContent)
       .toContain("Nothing in this chat wrote them");

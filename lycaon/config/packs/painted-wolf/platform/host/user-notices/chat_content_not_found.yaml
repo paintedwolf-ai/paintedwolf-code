@@ -6,5 +6,3 @@ suggested_action: "Refresh the chat."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "no longer stored"

@@ -18,5 +18,5 @@ agents:
       focus: "Triage scanner findings and map assets, entry points, and trust boundaries. The brief says which; manual repo audit satisfies neither."
       process:
         - "Scanner legs: scan_summary then scan_query, paginating when truncated."
-        - "Survey legs: orient with survey_repo or summarize on the declared scope."
+        - "Survey legs: orient with `survey-repo` or `summarize` on the declared scope."
         - "native `command` reads only on paths a scan tool or the task named; cite path:line and put unreviewed areas in remaining_risk."

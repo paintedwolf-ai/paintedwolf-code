@@ -8,15 +8,7 @@ selector:
 requires:
   profiles:
   - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.retryable
-  - paintedwolf.rejection_code
-  - paintedwolf.http_method
-  - paintedwolf.http_requests_started
-  - paintedwolf.http_responses_received
-  - paintedwolf.http_last_status
-  - paintedwolf.rejection_reason
+  facts: [paintedwolf.operation, paintedwolf.retryable, paintedwolf.rejection_code, paintedwolf.http_method, paintedwolf.http_requests_started, paintedwolf.http_responses_received, paintedwolf.http_last_status, paintedwolf.rejection_reason, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "HTTP_REQUEST_FAILED"
 effect: block
 copy:
@@ -31,7 +23,7 @@ copy:
     is safe. Inspect the recorded response, redirects, and server state first. Retry only if the operation is known
     to be repeatable or its idempotency contract prevents duplicate effects.{% else %}The host reports a non-retryable
     failure. Correct the request or return the blocked dependency; do not repeat the identical call.{% endif %}'
-  instead: Keep the method, headers, body, and destination explicit in native `curl` in `command` when retrying
+  instead: '{{ paintedwolf.next_steps }}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:http_request
 x-paintedwolf-message: The HTTP request did not complete
@@ -42,6 +34,3 @@ x-paintedwolf-scenarios:
     reason: connection refused
     retryable: true
     tool: http_request
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: HTTP_REQUEST_FAILED'

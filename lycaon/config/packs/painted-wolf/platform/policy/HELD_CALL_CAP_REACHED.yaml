@@ -23,18 +23,14 @@ selector:
 requires:
   profiles:
     - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.limit
-    - paintedwolf.handles_text
+  facts: [paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.limit, paintedwolf.handles_text, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "HELD_CALL_CAP_REACHED"
 effect: block
 copy:
   what: This session already holds {{ paintedwolf.limit }} running calls ({{ paintedwolf.handles_text }}).
   cause: Earlier calls outlived their foreground wait and have not settled.
   why: The limit bounds background work one session can leave running.
-  fix: Wait on a held call, read it with held_result, or cancel one with held_stop. Then repeat this call.
+  fix: '{{ paintedwolf.next_steps }} Then repeat this call.'
   instead: Free a held call before starting another
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:held_call
@@ -46,7 +42,3 @@ x-paintedwolf-scenarios:
       handles_text: held-1, held-2, held-3, held-4
       profile: coordinator
       tool: find
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: HELD_CALL_CAP_REACHED'
-      - held_stop

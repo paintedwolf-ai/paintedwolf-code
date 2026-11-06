@@ -1,0 +1,5 @@
+steps:
+  - tool: "pack_board"
+    complete: true
+    say: "Read the current decision with {{ call }}, then answer its current option."
+    otherwise: "Inspect the current decision state and answer its active option."

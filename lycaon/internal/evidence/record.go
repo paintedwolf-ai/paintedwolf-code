@@ -49,6 +49,12 @@ type Record struct {
 	RecordedAt     string         `json:"at,omitempty"` // RFC3339 in gate JSONL
 }
 
+// ShowedLineNumbers reports whether the output behind this record let its reader
+// see line numbers. Only program output can have hidden them.
+func (r Record) ShowedLineNumbers() bool {
+	return r.SourceDelivery == nil || r.SourceDelivery.LineNumbered
+}
+
 // IsGate reports whether rec is an inspector gate row.
 func (r Record) IsGate() bool { return r.GateType != "" }
 

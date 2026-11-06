@@ -28,12 +28,11 @@ func (l *toolBatch) persistClassifiedToolOutcome(
 	stampCommitOrderTS(&out.toolMsg, lastToolTS)
 	bindReviewResult(&out.toolMsg, st)
 	stored, transient := l.Projection.storageSafeMessage(ctx, out.toolMsg)
-	history, err := l.Tools.commitToolResultWithOptionalNote(
-		ctx, sessionID, history, stored, transient, out.agentNote, lastToolTS, st,
-	)
+	history, err := l.Projection.appendStorageSafeMessages(ctx, sessionID, history, []api.Message{stored}, []*api.Message{transient}, st)
 	if err != nil {
 		return history, err
 	}
+	st.noteDeliveryCoverage(out.deliveries)
 	return l.enrichCommittedToolRow(ctx, sessionID, sess, history, out.toolName, out.toolArgs, stored.ID, out.handleEligible, st)
 }
 
@@ -68,6 +67,7 @@ func (l *toolBatch) enrichCommittedToolRow(
 	if err := l.tagToolHandleOnCommit(ctx, sessionID, sess, toolName, toolArgsForEnrich(stored, args), &stored, handleEligible); err != nil {
 		return history, err
 	}
+	st.stateDeliveryCoverage(&stored)
 	l.compactToolWireOnCommit(ctx, sess, toolName, &stored)
 	if !toolRowNeedsEnrichmentPatch(before, beforeHandles, stored) {
 		return history, nil
@@ -206,7 +206,7 @@ func (l *toolBatch) appendParallelOutcomeLocked(
 	}
 	bindReviewResult(&out.toolMsg, commit.st)
 	stored, transient := l.Projection.storageSafeMessage(ctx, out.toolMsg)
-	rows, transients := l.Tools.classifiedResultRows(ctx, stored, transient, out.agentNote, commit.lastToolTS)
+	rows, transients := []api.Message{stored}, []*api.Message{transient}
 	if err := l.Projection.persistStorageSafeMessages(ctx, commit.sessionID, rows); err != nil {
 		return err
 	}
@@ -245,6 +245,7 @@ func (l *toolBatch) finishParallelToolOutcomes(
 			}
 		}
 		commit.history = foldStorageSafeMessages(commit.history, out.persistedStored, out.persistedTransient, commit.st)
+		commit.st.noteDeliveryCoverage(out.deliveries)
 		var err error
 		commit.history, err = l.enrichCommittedToolRow(
 			ctx, commit.sessionID, commit.sess, commit.history, out.toolName, out.toolArgs, out.storedID, out.handleEligible, commit.st,
@@ -271,20 +272,8 @@ func (l *toolBatch) tagToolHandleOnCommit(ctx context.Context, sessionID string,
 	if msg == nil {
 		return nil
 	}
-	if sess != nil && toolName == "verify" && l.Tools.Deps.ConfirmVerifyResult != nil &&
-		msg.ToolResult != nil && msg.ToolResult.Outcome == api.ToolResultOutcomeCompleted {
-		content := strings.TrimSpace(msg.ToolResult.Content)
-		if content == "" {
-			content = strings.TrimSpace(msg.Content)
-		}
-		if stamped := l.Tools.Deps.ConfirmVerifyResult(sess, content); stamped != "" {
-			msg.ToolResult.Content = stamped
-		}
-	}
 	if msg.ToolResult != nil && msg.ToolResult.CommandProgram != nil {
-		// Portable source observations come only from confirmed delivered native
-		// mappings. A legacy command fingerprint must not scrape its stdout.
-		return nil
+		return l.tagProgramObservation(ctx, sessionID, toolName, msg)
 	}
 	if !eligible {
 		return nil

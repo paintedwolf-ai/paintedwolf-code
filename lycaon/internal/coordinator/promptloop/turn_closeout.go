@@ -4,14 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/tools"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -276,9 +277,15 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 	}
 	closeoutState.proseFinish = true
 	closeoutState.closeoutCauseText = cause.Text()
-	iterIndex := closeoutState.turnsRanThisRun
-	assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, iterIndex, maxIter, in.HostTurn)
+	assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(ctx, sessionID, sess, history, closeoutState, profileID, userPrompt, 0, maxIter, in.HostTurn)
 	if err != nil {
+		if finalTurnGaveNoAnswer(ctx, err, closeoutState) && l.canCloseWithoutAnswer(sess) {
+			closeoutState.history = history
+			if _, cerr := l.endWithClosing(ctx, sess, sessionID, userPrompt, l.Context.promptTurnSurface(sessionID), closeoutState); cerr != nil {
+				return history, "", "", cerr
+			}
+			return closeoutState.history, closeoutState.lastAssistantID, closeoutState.lastAssistantContent, nil
+		}
 		return history, "", "", err
 	}
 	closeoutState.turnsRanThisRun++
@@ -295,15 +302,15 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 
 	if completion != nil && len(completion.ToolCalls) > 0 && sess.IsWorkerChild() {
 		calls := retainOfferedToolCalls(history, assistantMsg.ID, completion.ToolCalls, workerProseOfferedTools(sess))
-		var batchTools []string
-		history, batchTools, _, _, _, _, err = l.Batch.executeToolCallsInTurn(
+		batchResult, err := l.Batch.executeToolCallsInTurn(
 			ctx, sess, sessionID, calls, in.ToolCtx, history, userPrompt, assistantMsg.ID, surfaceID, closeoutState,
 		)
+		history = batchResult.history
 		if err != nil {
 			return history, "", "", err
 		}
 		if st != nil {
-			st.turnTools = append(st.turnTools, batchTools...)
+			st.turnTools = append(st.turnTools, batchResult.turnTools...)
 		}
 		assistantMsg.ToolCalls = answeredToolCalls(history, assistantMsg.ID, calls)
 		history = patchAssistantToolCalls(history, assistantMsg.ID, assistantMsg.ToolCalls)
@@ -318,33 +325,33 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		assistantMsg.ToolCalls = answeredToolCalls(history, assistantMsg.ID, completion.ToolCalls)
 		history = patchAssistantToolCalls(history, assistantMsg.ID, assistantMsg.ToolCalls)
 		if l.Projection.Deps.UpdateMessage != nil {
-			wire := assistantMsg
-			wire.Content = closeoutWireContent(surfaceID)(assistantMsg.Content)
-			_ = l.Projection.Deps.UpdateMessage(ctx, sessionID, assistantMsg.ID, wire)
+			_ = l.Projection.Deps.UpdateMessage(ctx, sessionID, assistantMsg.ID, assistantMsg)
 		}
 	}
 
-	coercedContent, unread := l.Tools.maybeCoerceCloseoutContent(ctx, history, sessionID, surfaceID, assistantMsg.Content, assistantMsg.ID)
-	assistantMsg.Content = coercedContent
+	read, err := l.readCloseoutDraft(ctx, sess, surfaceID, st, history, assistantMsg)
+	if err != nil {
+		return history, "", "", err
+	}
 	history, reject, blocked, err := l.Tools.tryRejectNoToolTurn(
-		ctx, sess, history, userPrompt, coercedContent, surfaceID, turnTools, sessionID, assistantMsg.ID, st, false, nil,
+		ctx, sess, history, userPrompt, assistantMsg.Content, read.Draft, surfaceID, turnTools, sessionID, assistantMsg.ID, st, false, nil,
 	)
 	if err != nil {
 		return history, "", "", err
 	}
 	if blocked {
 		return l.emitEarlyCloseoutAfterFinishBlock(
-			ctx, sess, sessionID, userPrompt, surfaceID, coercedContent, reject, st, history,
+			ctx, sess, sessionID, userPrompt, surfaceID, assistantMsg.Content, read.Draft, reject, st, history,
 		)
 	}
 
-	if report, ok := guidance.ParseCoordinatorCompletionReport(assistantMsg.Content); ok && surface.SurfaceDeliversReport(surfaceID) {
+	if read.Draft.HasAnswer() {
 		closeoutState := st
 		if closeoutState == nil {
 			closeoutState = &promptLoopTurnState{}
 		}
 		commitOut, cerr := l.handleAcceptedCloseoutReport(
-			ctx, sess, sessionID, userPrompt, surfaceID, closeoutState, history, assistantMsg, guidance.CloseoutRead{Report: report, Unread: unread},
+			ctx, sess, sessionID, userPrompt, surfaceID, closeoutState, history, assistantMsg, read,
 		)
 		if cerr != nil {
 			return history, "", "", cerr
@@ -358,10 +365,13 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		}
 		// Forced finish has no further iteration; assemble from the draft.
 		return l.returnAssembledEarlyCloseout(
-			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.draftedContent, closeoutState.closeoutRetry.codes, closeoutState, history,
+			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.drafted, closeoutState.closeoutRetry.codes, closeoutState, history,
 		)
 	}
 
+	if st != nil && !tools.CallReach(ctx).Known() {
+		ctx = tools.WithCallReach(ctx, st.requestReach())
+	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, assistantMsg)
 	if err != nil {
 		return history, "", "", err
@@ -390,7 +400,8 @@ func workerCompletionAccepted(history []api.Message, assistantMessageID string) 
 func (l *turnCloseout) emitEarlyCloseoutAfterFinishBlock(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID, coercedContent string,
+	sessionID, userPrompt, surfaceID, content string,
+	draft guidance.CloseoutDraft,
 	reject *guidance.Refusal,
 	st *promptLoopTurnState,
 	history []api.Message,
@@ -399,26 +410,30 @@ func (l *turnCloseout) emitEarlyCloseoutAfterFinishBlock(
 	if closeoutState == nil {
 		closeoutState = &promptLoopTurnState{}
 	}
-	drafted := strings.TrimSpace(coercedContent)
+	// A surface without a typed read still keeps its text for assembly.
+	if !draft.HasAnswer() {
+		draft = guidance.ParseCloseoutDraft(content, citationmd.Options{})
+	}
 	forcedBy := closeoutState.closeoutRetry.codes
 	if code := reject.Code(); code != "" {
 		forcedBy = append(append([]string(nil), forcedBy...), code)
 	}
 	return l.returnAssembledEarlyCloseout(
-		ctx, sess, sessionID, userPrompt, surfaceID, drafted, forcedBy, closeoutState, history,
+		ctx, sess, sessionID, userPrompt, surfaceID, draft, forcedBy, closeoutState, history,
 	)
 }
 
 func (l *turnCloseout) returnAssembledEarlyCloseout(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID, draftedContent string,
+	sessionID, userPrompt, surfaceID string,
+	draft guidance.CloseoutDraft,
 	forcedBy []string,
 	st *promptLoopTurnState,
 	history []api.Message,
 ) ([]api.Message, string, string, error) {
 	emitOut, err := l.emitAssembledCloseout(
-		ctx, sess, sessionID, userPrompt, surfaceID, draftedContent, forcedBy, st, history,
+		ctx, sess, sessionID, userPrompt, surfaceID, draft, forcedBy, st, history,
 	)
 	if err != nil {
 		return history, "", "", err
@@ -426,13 +441,14 @@ func (l *turnCloseout) returnAssembledEarlyCloseout(
 	if emitOut.committed {
 		return emitOut.history, emitOut.assistantMsg.ID, emitOut.assistantMsg.Content, nil
 	}
-	if st != nil {
-		st.turnEndedGuidanceReject = true
-		if err := l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID); err != nil {
-			return emitOut.history, "", "", err
-		}
+	if st == nil {
+		return history, "", "", nil
 	}
-	return emitOut.history, "", "", nil
+	st.history = history
+	if _, err := l.endWithClosing(ctx, sess, sessionID, userPrompt, surfaceID, st); err != nil {
+		return history, "", "", err
+	}
+	return st.history, st.lastAssistantID, st.lastAssistantContent, nil
 }
 
 // turnNudges keeps the host's in-turn guidance: nudges, spend and budget runways, and repeat-call fuses.

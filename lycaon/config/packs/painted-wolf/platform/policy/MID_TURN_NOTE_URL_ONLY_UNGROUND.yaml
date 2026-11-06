@@ -1,0 +1,28 @@
+oar: '1.0'
+id: MID_TURN_NOTE_URL_ONLY_UNGROUND
+kind: invariant
+anchor: coordinator.mid_turn_note
+requires:
+  facts:
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.reject_observation
+when: paintedwolf.reject_observation == "mid_turn_note_url_only_unground"
+effect: warn
+copy:
+  what: '[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} link(s) were not observed: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  cause: 'This session has observed nothing the link could rest on, so it cannot support the update.'
+  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
+  fix: 'Fetch the page first and cite it in a later response, or write the address as inline code if it is not a source. Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
+  instead: 'Branch on Code MID_TURN_NOTE_URL_ONLY_UNGROUND; observe the page before citing it'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mid_turn_note
+x-paintedwolf-message: A mid-turn link was not observed and the text was withheld.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: 'coordinator'
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: 'https://example.test/spec'

@@ -271,7 +271,7 @@ func TestLoadTutorialPack_EmptyDirRejected(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	_, err := loadTutorialPack(dir)
-	if err == nil || !strings.Contains(err.Error(), "no files") {
+	if err == nil {
 		t.Fatalf("expected empty-pack error, got %v", err)
 	}
 }

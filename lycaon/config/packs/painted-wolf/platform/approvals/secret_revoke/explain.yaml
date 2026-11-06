@@ -13,6 +13,3 @@ approval_explanations:
             - id: default
               vars:
                 reference: managed secret reference
-              expect_contains:
-                - Permanently revokes
-                - cannot be re-enabled

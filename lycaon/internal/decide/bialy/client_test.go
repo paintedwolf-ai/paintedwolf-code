@@ -355,7 +355,7 @@ func TestClientAdmissionRetainsTimedOutNativeWork(t *testing.T) {
 		if err == nil {
 			t.Fatal("unsupported state encoded successfully")
 		}
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 		defer cancel()
 		_, _, err = client.Rank(ctx, decide.HeadCodeRank, "after encoding error", []string{"a", "b"})
 		testutil.FailErr(t, "admit request after encoding failure", err)
@@ -385,17 +385,19 @@ while IFS=`, 1)
 			client := bialy.New(cfg)
 			t.Cleanup(func() { _ = client.Close() })
 			testutil.FailErr(t, "warm native engine", client.Warm(t.Context()))
-			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+			parent, cancel := context.WithCancel(t.Context())
 			defer cancel()
+			ctx := parent
+			if terminal == "exit" {
+				ctx = expiringContext{parent}
+			}
 			first := make(chan error, 1)
 			go func() {
 				_, _, err := client.Rank(ctx, decide.HeadCodeRank, "blocked", []string{"a", "b"})
 				first <- err
 			}()
 			waitForEngineMarker(t, filepath.Join(dir, "blocked"))
-			if terminal != "exit" {
-				cancel()
-			}
+			cancel()
 			err := <-first
 			if terminal != "exit" && !errors.Is(err, context.Canceled) {
 				t.Fatalf("in-flight cancellation = %v", err)
@@ -476,6 +478,17 @@ func waitForEngineMarker(t *testing.T, path string) {
 }
 
 // Done is first read by process admission after Client resolves its process.
+// expiringContext reports its parent's cancellation as an expired deadline, so a test
+// chooses the moment a deadline passes.
+type expiringContext struct{ context.Context }
+
+func (c expiringContext) Err() error {
+	if c.Context.Err() != nil {
+		return context.DeadlineExceeded
+	}
+	return nil
+}
+
 type admissionContext struct {
 	context.Context
 	observed chan struct{}

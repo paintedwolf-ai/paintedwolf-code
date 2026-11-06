@@ -45,8 +45,17 @@ type PromptCacheObservation struct {
 	ReadTokens      int               `json:"read_tokens"`
 	WrittenTokens   int               `json:"written_tokens"`
 	Window          PromptCacheWindow `json:"window"`
-	Alert           string            `json:"alert,omitempty"`
-	Warn            bool              `json:"-"`
+	// Prefix reuse is measured on the serialized request, separately from the
+	// provider's reported reads: a stable prefix does not prove a cache hit.
+	PrefixMethod         string `json:"prefix_method,omitempty"`
+	ModelInputBytes      int    `json:"model_input_bytes,omitempty"`
+	ReusablePrefixBytes  int    `json:"reusable_prefix_bytes,omitempty"`
+	ReusablePrefixTokens int    `json:"reusable_prefix_tokens,omitempty"`
+	FirstDifference      string `json:"first_difference,omitempty"`
+	CutoffChange         string `json:"cutoff_change,omitempty"`
+	CutoffChanges        int    `json:"cutoff_changes,omitempty"`
+	Alert                string `json:"alert,omitempty"`
+	Warn                 bool   `json:"-"`
 }
 
 var (

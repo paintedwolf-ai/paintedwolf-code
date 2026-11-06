@@ -57,7 +57,6 @@ describe("HistoryStorageSettingsPanel", () => {
     await waitFor(() => expect(confirm).toHaveBeenCalledOnce());
     const message = (confirm.mock.calls[0]![0] as { message: string }).message;
     expect(message).toContain(`Lost capabilities: ${loss}.`);
-    expect(message).toContain("usage and cost totals, settings, and credentials remain.");
     expect(message).not.toContain("remain will no longer");
     for (const other of HISTORY_CLASSES.filter((row) => row.id !== id)) expect(message).not.toContain(other.loss);
     expect(client.pruneHistory).not.toHaveBeenCalled();

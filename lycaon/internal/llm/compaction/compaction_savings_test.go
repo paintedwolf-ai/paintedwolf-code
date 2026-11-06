@@ -62,7 +62,7 @@ func TestCompactionKeepsCurrentRequestOnceWithOriginalAuthority(t *testing.T) {
 	request := strings.Repeat("Keep SQL and HTTP checks. ", 250)
 	messages := []ContextMessage{
 		{ID: "old", Role: "assistant", Content: strings.Repeat("Earlier work and measurements. ", 2000)},
-		{ID: "request", Role: "user", Content: request, Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser},
+		{ID: "request", Role: "user", Content: request, ContextMessageProvenance: ContextMessageProvenance{Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser}},
 		{ID: "tail", Role: "assistant", Content: "Ready."},
 	}
 	out, report, err := c.Compact(t.Context(), SessionInfo{LatestUserRequestID: "request", Model: "gpt-oss-120b"}, messages, 100)

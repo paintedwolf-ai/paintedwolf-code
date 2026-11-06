@@ -208,3 +208,80 @@ func TestCanonicalDirResolvesSymlinksAndKeepsAbsentPaths(t *testing.T) {
 		t.Fatalf("CanonicalDir(blank) = %q, want \"\"", got)
 	}
 }
+
+func TestIsGitlinkFileReadsFirstLineOnly(t *testing.T) {
+	dir := canonicalTempDir(t)
+	gitlink := filepath.Join(dir, ".git")
+	testutil.FailErr(t, "write gitlink", os.WriteFile(gitlink, []byte("gitdir: /real/worktree\nsecond line\n"), 0o644))
+	if !gitrepo.IsGitlinkFile(gitlink) {
+		t.Fatal("IsGitlinkFile rejected valid gitdir pointer")
+	}
+
+	// Only the first line counts; a later gitdir: line must not match.
+	secondLine := filepath.Join(canonicalTempDir(t), ".git")
+	testutil.FailErr(t, "write second-line gitdir", os.WriteFile(secondLine, []byte("not a pointer\ngitdir: /real/worktree\n"), 0o644))
+	if gitrepo.IsGitlinkFile(secondLine) {
+		t.Fatal("IsGitlinkFile matched gitdir: on second line")
+	}
+
+	nonGitName := filepath.Join(dir, "other")
+	testutil.FailErr(t, "write other", os.WriteFile(nonGitName, []byte("gitdir: /real/worktree\n"), 0o644))
+	if gitrepo.IsGitlinkFile(nonGitName) {
+		t.Fatal("IsGitlinkFile matched file not named .git")
+	}
+
+	plain := plainRepo(t)
+	if gitrepo.IsGitlinkFile(filepath.Join(plain, ".git")) {
+		t.Fatal("IsGitlinkFile matched .git directory")
+	}
+}
+
+func TestScopeIncludesLinkedCheckout(t *testing.T) {
+	root := canonicalTempDir(t)
+	wt := filepath.Join(root, "worktrees", "feature")
+	sub := filepath.Join(root, "vendor", "sub")
+	plain := filepath.Join(root, "pkg")
+	testutil.FailErr(t, "mkdir wt", os.MkdirAll(filepath.Join(wt, "cmd"), 0o755))
+	testutil.FailErr(t, "mkdir sub", os.MkdirAll(sub, 0o755))
+	testutil.FailErr(t, "mkdir plain", os.MkdirAll(plain, 0o755))
+	testutil.FailErr(t, "write wt .git", os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: /tmp/main/.git/worktrees/feature\n"), 0o644))
+	testutil.FailErr(t, "write sub .git", os.WriteFile(filepath.Join(sub, ".git"), []byte("gitdir: ../../.git/modules/vendor/sub\n"), 0o644))
+	testutil.FailErr(t, "write plain file", os.WriteFile(filepath.Join(plain, "a.go"), []byte("package pkg\n"), 0o644))
+
+	for _, scope := range []struct {
+		path string
+		want bool
+	}{
+		{"worktrees/feature/cmd/main.go", true},
+		{"worktrees/feature/**", true},
+		{"vendor/sub/**", true},
+		{"pkg/a.go", false},
+		{"pkg/*", false},
+		{"../outside/**", false},
+	} {
+		for _, path := range []string{scope.path, filepath.Join(root, scope.path)} {
+			if got := gitrepo.ScopeIncludesLinkedCheckout(root, []string{path}); got != scope.want {
+				t.Errorf("scope %q: linked=%t, want %t", path, got, scope.want)
+			}
+		}
+	}
+
+	if !gitrepo.ScopeIncludesLinkedCheckout(root, []string{"worktrees/feature/cmd/main.go"}) {
+		t.Fatal("expected write scope inside linked worktree to report true")
+	}
+	if !gitrepo.ScopeIncludesLinkedCheckout(root, []string{"vendor/sub/**"}) {
+		t.Fatal("expected write scope inside submodule to report true")
+	}
+	if !gitrepo.ScopeIncludesLinkedCheckout(root, []string{"."}) {
+		t.Fatal("expected root scope containing linked worktree to report true")
+	}
+	if !gitrepo.ScopeIncludesLinkedCheckout(wt, []string{"cmd/main.go"}) {
+		t.Fatal("expected projectDir at linked worktree root to report true")
+	}
+	if gitrepo.ScopeIncludesLinkedCheckout(root, []string{"pkg/a.go"}) {
+		t.Fatal("expected sibling path outside linked checkouts to report false")
+	}
+	if gitrepo.ScopeIncludesLinkedCheckout(plainRepo(t), []string{"."}) {
+		t.Fatal("expected ordinary .git directory repo to report false")
+	}
+}

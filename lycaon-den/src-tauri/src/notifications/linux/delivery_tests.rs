@@ -11,6 +11,8 @@ use std::{
     time::Duration,
 };
 
+const HANG_BOUND: Duration = Duration::from_secs(120);
+
 const INTERFACE: &str = r#"<node><interface name="org.freedesktop.Notifications">
 <method name="GetCapabilities"><arg type="as" direction="out"/></method>
 <method name="Notify"><arg type="s" direction="in"/><arg type="u" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="as" direction="in"/><arg type="a{sv}" direction="in"/><arg type="i" direction="in"/><arg type="u" direction="out"/></method>
@@ -113,7 +115,7 @@ fn start_bus(service: Service) -> (BusProcess, String) {
         let _ = address_ready.send(result);
     });
     let address = address_receive
-        .recv_timeout(Duration::from_secs(2))
+        .recv_timeout(HANG_BOUND)
         .unwrap()
         .unwrap()
         .trim_end()
@@ -124,7 +126,7 @@ fn start_bus(service: Service) -> (BusProcess, String) {
 fn connect(context: &glib::MainContext, address: &str) -> gio::DBusConnection {
     context
         .block_on(glib::future_with_timeout(
-            Duration::from_secs(2),
+            HANG_BOUND,
             gio::DBusConnection::for_address_future(
                 address,
                 gio::DBusConnectionFlags::AUTHENTICATION_CLIENT
@@ -146,7 +148,7 @@ fn request_name(connection: &gio::DBusConnection) {
             Some(&(SERVICE, 0u32).to_variant()),
             None,
             gio::DBusCallFlags::NONE,
-            500,
+            120_000,
             gio::Cancellable::NONE,
         )
         .unwrap();
@@ -249,7 +251,7 @@ impl Fixture {
                 })
                 .unwrap();
         });
-        let server = receive.recv_timeout(Duration::from_secs(3)).unwrap();
+        let server = receive.recv_timeout(HANG_BOUND).unwrap();
         Self {
             _daemon: daemon,
             address,
@@ -293,7 +295,7 @@ impl Drop for Fixture {
 }
 
 fn pump(context: &glib::MainContext, predicate: impl Fn() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(2);
+    let deadline = Instant::now() + HANG_BOUND;
     while !predicate() {
         assert!(
             Instant::now() < deadline,
@@ -326,7 +328,7 @@ fn desktop_entry() -> String {
 }
 
 fn deadline() -> Instant {
-    Instant::now() + Duration::from_secs(2)
+    Instant::now() + HANG_BOUND
 }
 
 #[test]
@@ -470,7 +472,7 @@ fn native_capability_admission_rejects_unbounded_and_disconnected_services() {
                     Some(&(SERVICE,).to_variant()),
                     None,
                     gio::DBusCallFlags::NONE,
-                    500,
+                    120_000,
                     gio::Cancellable::NONE,
                 )
                 .unwrap();

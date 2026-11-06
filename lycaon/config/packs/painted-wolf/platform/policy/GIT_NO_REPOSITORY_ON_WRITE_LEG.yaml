@@ -1,0 +1,29 @@
+oar: '1.0'
+id: GIT_NO_REPOSITORY_ON_WRITE_LEG
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool: [command]
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.git_no_repository_on_write_leg, paintedwolf.next_steps]
+when: paintedwolf.git_no_repository_on_write_leg
+effect: warn
+copy:
+  what: A Git read in this command found no repository on this write leg.
+  cause: This directory has no repository, and the leg's own copy of the project has no Git metadata, so Git reported its own fatal and status 128.
+  why: The command ran normally and Git's answer stands. A retry in this directory gets the same answer.
+  fix: '{{ paintedwolf.next_steps }}'
+  instead: Committed history belongs to a read-scoped leg or the coordinator on the primary tree.
+x-paintedwolf-category: informational
+x-paintedwolf-emit: guard:git_no_repository_on_write_leg
+x-paintedwolf-message: a Git read found no repository on this write leg
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: command
+    profile: implement
+- id: without_source_history
+  vars:
+    tool: command
+    profile: plan_write_only

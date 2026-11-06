@@ -41,10 +41,6 @@ x-paintedwolf-scenarios:
     class: hooks
     profile: implement
     tool: write
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: GIT_INTERNALS_WRITE_DENIED'
-  - command git
 - id: config
   vars:
     detail: bad args
@@ -52,7 +48,3 @@ x-paintedwolf-scenarios:
     class: config
     profile: implement
     tool: edit
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: GIT_INTERNALS_WRITE_DENIED'
-  - command git

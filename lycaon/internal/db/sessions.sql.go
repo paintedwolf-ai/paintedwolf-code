@@ -3258,7 +3258,7 @@ func (q *Queries) SetSessionPosture(ctx context.Context, arg SetSessionPosturePa
 	return result.RowsAffected()
 }
 
-const setSessionSourceTurnBrief = `-- name: SetSessionSourceTurnBrief :exec
+const setSessionSourceTurnBrief = `-- name: SetSessionSourceTurnBrief :execrows
 UPDATE session_source_turns SET source_change_brief = ?
 WHERE session_id = ? AND opening_message_id = ? AND source_change_brief IS NULL
 `
@@ -3270,9 +3270,12 @@ type SetSessionSourceTurnBriefParams struct {
 }
 
 // A turn's source-change brief is written once, when the turn opens.
-func (q *Queries) SetSessionSourceTurnBrief(ctx context.Context, arg SetSessionSourceTurnBriefParams) error {
-	_, err := q.db.ExecContext(ctx, setSessionSourceTurnBrief, arg.SourceChangeBrief, arg.SessionID, arg.OpeningMessageID)
-	return err
+func (q *Queries) SetSessionSourceTurnBrief(ctx context.Context, arg SetSessionSourceTurnBriefParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setSessionSourceTurnBrief, arg.SourceChangeBrief, arg.SessionID, arg.OpeningMessageID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const stampMessageScreenGeneration = `-- name: StampMessageScreenGeneration :exec

@@ -6,6 +6,7 @@ import {
   genericTranscriptToolNames,
   lycaonCatalogToolNames,
   toolEvidenceKindMap,
+  toolOperationSchemaNames,
   toolSchemaNames,
 } from "./tool-catalog-tools.ts";
 import { buildStructuredToolPresentation } from "./tool-part-structured.ts";
@@ -22,6 +23,7 @@ import { TOOL_CARD_KINDS } from "./tool-presentation.generated.ts";
 import {
   GIT_UNAVAILABLE_OUTPUT_FIXTURE,
   TOOL_GUIDANCE_OUTPUT_FIXTURE,
+  SOURCE_HISTORY_MODE_FIXTURES,
   TOOL_STRUCTURED_OUTPUT_FIXTURES,
 } from "./tool-structured-output-fixtures.ts";
 import { peelEvidenceHandleTag } from "./tool-output-handle.ts";
@@ -124,8 +126,11 @@ describe("tool structured output invariant", () => {
     }
   });
 
-  it("keeps fixture keys aligned with generic transcript tool union", () => {
-    const catalog = new Set(genericTranscriptToolNames());
+  it("keeps current and legacy operation fixtures scoped to their schemas", () => {
+    const catalog = new Set([
+      ...genericTranscriptToolNames(),
+      ...toolOperationSchemaNames(),
+    ]);
     const fixtureKeys = Object.keys(TOOL_STRUCTURED_OUTPUT_FIXTURES).sort();
     for (const tool of fixtureKeys) {
       expect(catalog.has(tool), `orphan fixture: ${tool}`).toBe(true);
@@ -136,6 +141,45 @@ describe("tool structured output invariant", () => {
         `missing fixture: ${tool}`,
       ).toBeDefined();
     }
+  });
+
+  it("renders a stored surface_note result with the default card", () => {
+    expect(TOOL_STRUCTURED_OUTPUT_FIXTURES.surface_note).toBeUndefined();
+    const output = JSON.stringify({ status: "noted", message_id: "note-1" });
+    const view = buildStructuredToolPresentation(part("surface_note", output));
+    expect(violatesStructuredToolPresentation(view, output)).toBeNull();
+  });
+
+  it("presents source_history overview and session diff results", () => {
+    for (const [mode, output] of Object.entries(SOURCE_HISTORY_MODE_FIXTURES)) {
+      const view = buildStructuredToolPresentation(part("source_history", output));
+      expect(violatesStructuredToolPresentation(view, output), mode).toBeNull();
+    }
+    for (const mode of ["overview", "overview_write_leg"]) {
+      const overview = SOURCE_HISTORY_MODE_FIXTURES[mode] ?? "";
+      const rendered = JSON.stringify(
+        buildStructuredToolPresentation(part("source_history", overview)).sections,
+      );
+      const rows = (JSON.parse(overview) as { files: { path: string; op: string }[] }).files;
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(rendered).toContain(row.path);
+        expect(rendered).toContain(row.op);
+      }
+    }
+    const writeLeg = JSON.stringify(
+      buildStructuredToolPresentation(
+        part("source_history", SOURCE_HISTORY_MODE_FIXTURES.overview_write_leg ?? ""),
+      ).sections,
+    );
+    expect(writeLeg).toContain("unrecorded");
+    const unrecordedDiff = JSON.stringify(
+      buildStructuredToolPresentation(
+        part("source_history", SOURCE_HISTORY_MODE_FIXTURES.diff_unrecorded_write_leg ?? ""),
+      ).sections,
+    );
+    expect(unrecordedDiff).toMatch(/unrecorded/i);
+    expect(unrecordedDiff).toContain("(live)");
   });
 
   it("formats agent guidance without raw disclosure", () => {

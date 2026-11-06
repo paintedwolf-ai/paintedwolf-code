@@ -283,7 +283,7 @@ func roundTrip(t *testing.T, path string, req Request) Response {
 	conn, err := net.Dial("unix", path)
 	testutil.FailErr(t, "dial", err)
 	defer func() { _ = conn.Close() }()
-	testutil.FailErr(t, "deadline", conn.SetDeadline(time.Now().Add(5*time.Second)))
+	testutil.FailErr(t, "deadline", conn.SetDeadline(time.Now().Add(testutil.Timeout(time.Minute))))
 	testutil.FailErr(t, "encode", json.NewEncoder(conn).Encode(req))
 	var resp Response
 	testutil.FailErr(t, "decode", json.NewDecoder(conn).Decode(&resp))

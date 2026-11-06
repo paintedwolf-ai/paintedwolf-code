@@ -209,8 +209,11 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"before_count": true, "after_count": true, "after_omitted_count": true, "added_count": true, "removed_count": true,
 		"changes": true, "changes_omitted": true, "generation": true, "primary_changed": true,
 		"attempt": true, "max_attempts": true, "drafted_synthesis": true, "reason_text": true,
-		"repair_observations": true, "retained_citations": true,
+		"repair_observations": true, "repair_targets": true, "document_citation_targets": true,
 		"offenders_sample": true, "observed_handles_sample": true, "observed_paths_sample": true, "observed_urls_sample": true,
+		// The host progress note ranges over structured worker facts.
+		"worker":                   true,
+		"observed_handles_omitted": true, "observed_paths_omitted": true, "observed_urls_omitted": true,
 		// Report-document repair supplies the refusal's reason, the current document fence,
 		// and whether the draft delivers its run's report.
 		"rejection_reason": true, "offenders_omitted": true, "retained_document": true, "run_report": true, "document_issues": true,
@@ -239,7 +242,7 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 			// Skip syntax names and local loop bindings.
 			if len(v) <= 2 || v == "forloop" || v == "after" || v == "new_primary" ||
 				v == "attempt" || v == "max_attempts" || v == "drafted_synthesis" || v == "reason_text" ||
-				v == "issue" || v == "offender" || v == "id" || v == "include" || v == "endif" || v == "endfor" || v == "elif" || v == "else" {
+				v == "issue" || v == "offender" || v == "target" || v == "id" || v == "include" || v == "endif" || v == "endfor" || v == "elif" || v == "else" {
 				continue
 			}
 			if !allowed[v] {

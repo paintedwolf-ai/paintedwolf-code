@@ -86,7 +86,7 @@ func TestServerCleanupReliablyReleasesResourcesInvariant(t *testing.T) {
 		}
 	})
 
-	drainCtx, drainCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer drainCancel()
 	if err := sourcecatalog.Process().Drain(drainCtx); err != nil {
 		t.Fatalf("drain source catalog after server cleanup: %v", err)

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
@@ -14,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -73,6 +76,8 @@ type NativeEffect struct {
 //
 //nolint:funlen // Linear reached-effect admission, review, and receipt settlement pipeline.
 func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface ProgramSurface, admission *toolcontract.ProgramMemory, progressFacts ProgramProgressFacts, observer NativeEffectStart, effect NativeEffect, tc tools.ToolContext) (result NativeInvocationResult, err error) {
+	ctx, socketScope := socketref.WithScope(ctx)
+	defer socketScope.Close()
 	end, err := frame.beginUse()
 	if err != nil {
 		return result, err
@@ -104,15 +109,26 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesOperation(bound, effect.Stage.Argv) {
 		return result, fmt.Errorf("native stage does not match bound operation")
 	}
+	program := tc.Effects.Out
 	tc, err = frame.ChildContext(ctx, definition, invocation, tc)
 	if err != nil {
 		return result, err
 	}
+	child := &tools.ToolInvocationOut{}
+	tc.Effects.Out = child
+	defer func() {
+		if err == nil {
+			forwardChildFeedback(program, child)
+		}
+	}()
 	tc.Effects.CheckMutationProgress = func(ctx context.Context, rootID, path string) error {
 		return checkReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
 	}
 	if !facts.Contract.AdmitsSession(tc.Identity.ParentSessionID != "") {
 		return result, fmt.Errorf("native operation is outside its declared session scope")
+	}
+	if err := tc.CheckScopePolicy(ctx, invocation.Scope.RootID, invocation.Scope.Directory, nativePolicyMutation(bound)); err != nil {
+		return result, err
 	}
 	values := effect.Arguments
 	if effect.Argv != nil {
@@ -156,7 +172,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := checkLiveProgramProgress(ctx, progressFacts, bound); err != nil {
 		return result, err
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(facts.Contract, arguments.values); reject != nil {
+	if reject := capabilityrequest.ValidateCapabilityContract(facts.Identity, facts.Contract, arguments.values); reject != nil {
 		return result, reject
 	}
 	if err := validateNativeArguments(facts, effect.Argv, arguments.values, tc); err != nil {
@@ -399,7 +415,15 @@ func (e *Executor) recheckNativeOwnerAdmission(ctx context.Context, frame Progra
 	if err := frame.validateScope(invocation.Scope, tc); err != nil {
 		return err
 	}
+	if err := tc.CheckScopePolicy(ctx, invocation.Scope.RootID, invocation.Scope.Directory, nativePolicyMutation(bound)); err != nil {
+		return err
+	}
 	return checkLiveProgramProgress(ctx, progressFacts, bound)
+}
+
+func nativePolicyMutation(bound toolcontract.BoundOperation) bool {
+	classes := bound.Effects().Classes()
+	return slices.Contains(classes, toolcontract.CommandMutation) || slices.Contains(classes, toolcontract.CommandExternalExec)
 }
 
 // validateNativeArguments checks structured native tool values against their
@@ -423,4 +447,20 @@ func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandpro
 		return reject
 	}
 	return nil
+}
+
+// childFeedback serializes advisories from children of concurrent pipeline stages.
+var childFeedback sync.Mutex
+
+// forwardChildFeedback states a completed child's advisories on the program's
+// result, the only tool result its reader sees.
+func forwardChildFeedback(program, child *tools.ToolInvocationOut) {
+	if program == nil || len(child.Facts.Feedback) == 0 {
+		return
+	}
+	childFeedback.Lock()
+	defer childFeedback.Unlock()
+	for _, item := range child.Facts.Feedback {
+		program.Facts = program.Facts.WithFeedback(item.Code, item.Details, item.Subject)
+	}
 }

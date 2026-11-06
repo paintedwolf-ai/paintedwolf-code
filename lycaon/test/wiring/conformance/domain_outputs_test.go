@@ -41,3 +41,20 @@ func verifyInspectDomainOutputs(t *testing.T, observed runtimeObservation) {
 		t.Fatalf("extra output after native domain results: %v (%v)", extra, err)
 	}
 }
+
+func verifyDomainToolArguments(t *testing.T, observed runtimeObservation) {
+	t.Helper()
+	decoder := json.NewDecoder(strings.NewReader(observed.Outcome.Stdout))
+	var layout reposurvey.RepoResponse
+	testutil.FailErr(t, "decode bundle survey", decoder.Decode(&layout))
+	if layout.Bundle != "layout_overview" {
+		t.Fatalf("survey = %+v", layout)
+	}
+	for _, source := range []string{"path with a pattern", "supplied content"} {
+		var summary nativesurvey.SummarizeResponse
+		testutil.FailErr(t, "decode summary of "+source, decoder.Decode(&summary))
+		if summary.Task != "Alpha" {
+			t.Fatalf("summary of %s = %+v", source, summary)
+		}
+	}
+}

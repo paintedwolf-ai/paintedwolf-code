@@ -1,0 +1,18 @@
+steps:
+  - when: "paintedwolf.handle != ''"
+    tool: "wait"
+    args:
+      conditions: [{"kind": "process_done", "handles": ["{{ paintedwolf.handle }}"]}]
+      reason: "waiting for command completion"
+      until_complete: true
+    complete: true
+    say: "Call {{ call }} now. The host will wake this session when the command finishes or becomes unavailable."
+  - when: "paintedwolf.handle == '' && paintedwolf.deferred_unactivated > 0"
+    tool: "request_tools"
+    say: "If the action you are trying to take needs a tool that is not in this turn's schema, no retry will surface it: call {{ call }} with that tool's name, then take the action."
+  - when: "paintedwolf.handle == '' && paintedwolf.worker_leg"
+    tool: "complete_leg"
+    args:
+      leg_status: "partial"
+    say: "If a required fact cannot be obtained through an available prerequisite or corrected call, call {{ call }} now, name the unanswered question in `remaining_risk`, and put the next step in `suggested_next_task`."
+    otherwise: "If a required fact cannot be obtained through an available prerequisite or corrected call, report the dependency through the actual completion channel."

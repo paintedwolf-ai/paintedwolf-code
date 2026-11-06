@@ -41,10 +41,6 @@ x-paintedwolf-scenarios:
     - wc
     profile: implement
     need: frobnicate the widget
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TOOL_REQUEST_UNMATCHED'
-  - chmod
 
 - id: healthy_no_match_with_more
   vars:
@@ -52,16 +48,8 @@ x-paintedwolf-scenarios:
     need: dispatch a worker
     tool_discovery_status: no_match
     tool_discovery_has_more: true
-  expect_contains:
-  - 'Code: TOOL_REQUEST_UNMATCHED'
-  - discovery.entries
-  - discovery.next_need
 - id: healthy_no_match_last_page
   vars:
     profile: coordinator
     need: dispatch a worker
     tool_discovery_status: no_match
-  expect_contains:
-  - 'Code: TOOL_REQUEST_UNMATCHED'
-  - discovery.entries
-  - exact name

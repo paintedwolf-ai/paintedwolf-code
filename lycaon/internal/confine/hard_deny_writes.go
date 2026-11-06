@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // HardDenyWriteSpec describes one protected write target and its override layer.
@@ -47,6 +48,9 @@ func HardDenyWriteSpecs(c Confinement) ([]HardDenyWriteSpec, error) {
 		return nil, fmt.Errorf("resolve launcher for hard-deny: %w", err)
 	}
 	addLit(FloorControlPlane, exe)
+	if pattern := socketref.ControlPlanePathPattern(); pattern != "" {
+		out = append(out, HardDenyWriteSpec{Layer: FloorControlPlane, Regex: pattern})
+	}
 
 	// Read roots remain read-only inside writable ancestors.
 	for _, r := range c.ReadRoots {

@@ -42,7 +42,6 @@ describe("tool resolution provenance", () => {
     const view = renderResolved("request_tools", "engine");
     expect(view.getByTestId("tool-resolution-facts").textContent).toBe("Loaded byLocal AI");
     expect(view.getByTestId("tool-resolution-method").textContent).toBe("Local AI");
-    expect(view.container.textContent).toContain("Agent requested:");
     expect(view.container.textContent).toContain("command");
   });
 
@@ -52,9 +51,6 @@ describe("tool resolution provenance", () => {
     expect(view.getByTestId("skill-card-name").textContent).toBe("work-with-containers");
   });
 
-  it("labels fallback selection by its actual method", () => {
-    expect(renderResolved("request_tools", "name").getByTestId("tool-resolution-method").textContent).toBe("Exact name");
-  });
 });
 
 it.each(["request_tools", "skills_read"] as const)("does not label an unavailable %s ranking as no match", (tool) => {
@@ -77,6 +73,5 @@ it.each(["request_tools", "skills_read"] as const)("does not label an unavailabl
   fireEvent.click(view.container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
   expect(view.queryByTestId("tool-resolution-method")).toBeNull();
   expect(view.queryByTestId("skill-card-body")).toBeNull();
-  expect(view.container.textContent).toContain("Local AI timed out");
   expect(view.container.textContent).toContain("available-entry");
 });

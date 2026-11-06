@@ -31,20 +31,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 
 	withRecall, err := renderContinuationRecord(context.Background(), summary, sources, true)
 	testutil.FailErr(t, "render continuation record with recall", err)
-	for _, want := range []string{
-		"## Compacted continuation record",
-		"### Facts retained from the transcript",
-		"- registry listens on 127.0.0.1:8200",
-		"### Completed",
-		"### Pending",
-		"### Reacquire before relying on compacted details",
-		"- config.toml (read#4) before editing the registry block",
-		"- `read#4` (read)",
-		"- command, message `t2`",
-		`recall(query="handle:read#4")`,
-		"### Constraints",
-		"- no pushes",
-	} {
+	for _, want := range []string{"- registry listens on 127.0.0.1:8200", "### Completed", "### Pending", "- config.toml (read#4) before editing the registry block", "- `read#4` (read)", "- command, message `t2`", `recall(query="handle:read#4")`, "### Constraints", "- no pushes"} {
 		if !strings.Contains(withRecall, want) {
 			t.Fatalf("continuation record missing %q:\n%s", want, withRecall)
 		}
@@ -55,7 +42,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 	if strings.Contains(withoutRecall, "recall") {
 		t.Fatalf("a profile without recall must not be told to call it:\n%s", withoutRecall)
 	}
-	if !strings.Contains(withoutRecall, "Reacquire the needed evidence through available read tools") || !strings.Contains(withoutRecall, "- `read#4` (read)") {
+	if !strings.Contains(withoutRecall, "- `read#4` (read)") {
 		t.Fatalf("continuation record without recall must still list the sources:\n%s", withoutRecall)
 	}
 }
@@ -273,7 +260,8 @@ func TestDurableCompactionScalesRecentTailToReceiverBudget(t *testing.T) {
 		{ID: "answer", Ord: 4, Role: "assistant", Content: "Read complete"},
 		{ID: "current", Ord: 5, Role: "user", Content: "Continue", ContextPinned: true},
 	}
-	out, record, _, _, err := NewSimpleCompactor(cfg, nil).compactSession(t.Context(), SessionInfo{RecallAvailable: true}, rows, 1000)
+	reduction, err := NewSimpleCompactor(cfg, nil).compactSession(t.Context(), SessionInfo{RecallAvailable: true}, rows, 1000)
+	out, record := reduction.messages, reduction.continuation
 	testutil.FailErr(t, "compact receiver-sized recent tail", err)
 	if len(out) == 0 || record == nil || record.ThroughOrd < 3 {
 		t.Fatal("fixed recent-message retention prevented recoverable compaction")

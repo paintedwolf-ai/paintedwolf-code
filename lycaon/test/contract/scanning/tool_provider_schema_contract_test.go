@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -35,7 +36,7 @@ func TestServeBootToolMetadataMatchesCatalog(t *testing.T) {
 func TestCoordinatorTrimmedToolsKeepProviderArgsSchema(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 	meta, ok := cfg.ToolMeta("read")
 	if !ok {
@@ -52,7 +53,7 @@ func TestCoordinatorTrimmedToolsKeepProviderArgsSchema(t *testing.T) {
 func TestCoordinatorTrimmedCatalogRootsAreProviderSafe(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 
 	catalogRoots := map[string][]string{}
@@ -121,6 +122,7 @@ func TestProviderCapabilityFieldsMatchExecutionContract(t *testing.T) {
 		"loopback_connect": toolcontract.CapabilityLoopbackConnect,
 		"write_root":       toolcontract.CapabilityWriteRoot,
 		"read_path":        toolcontract.CapabilityReadPath,
+		"credential_store": toolcontract.CapabilityCredentialStore,
 	}
 	for name := range cfg.Tools {
 		contract, ok := toolcontract.Lookup(name)
@@ -132,9 +134,15 @@ func TestProviderCapabilityFieldsMatchExecutionContract(t *testing.T) {
 		request, _ := properties["capability_request"].(map[string]any)
 		capabilities, _ := request["properties"].(map[string]any)
 		for field, capability := range fields {
-			_, offered := capabilities[field]
+			raw, offered := capabilities[field]
 			if offered != contract.Supports(capability) {
 				t.Errorf("%s capability_request.%s offered=%v, execution supports=%v", name, field, offered, contract.Supports(capability))
+			}
+			if field == "socket_paths" && offered {
+				socketSchema, _ := raw.(map[string]any)
+				if socketSchema["maxItems"] != confine.MaxSocketGrants {
+					t.Errorf("%s capability_request.socket_paths maxItems = %v, want %d", name, socketSchema["maxItems"], confine.MaxSocketGrants)
+				}
 			}
 		}
 	}

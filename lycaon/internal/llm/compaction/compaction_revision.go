@@ -12,7 +12,7 @@ import (
 )
 
 // compactionRevision keys memoized attempts and projections to the current summary and projection semantics.
-const compactionRevision = 3
+const compactionRevision = 4
 
 func (c *SimpleCompactor) summaryRevision() (string, error) {
 	if revision, ok := c.summary.(interface{ SummaryRevision() (string, error) }); ok {
@@ -21,7 +21,7 @@ func (c *SimpleCompactor) summaryRevision() (string, error) {
 	return "local", nil
 }
 
-func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo, messages []ContextMessage, target int) (string, error) {
+func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo, messages []ContextMessage) (string, error) {
 	prompt, err := guidance.RenderCompactionSystemPrompt(ctx, guidance.CompactionSessionSummarySystemRef)
 	if err != nil {
 		return "", err
@@ -36,14 +36,34 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 	}
 	info.Attempts, info.ChunkProjections = nil, nil
 	info.CompactionGeneration = 0
+	info.WorkingSetStartOrd = 0
 	return RevisionDigest(struct {
 		Version                                                        int
 		Messages                                                       []ContextMessage
 		Policy                                                         CompactionConfig
 		Info                                                           SessionInfo
-		Target                                                         int
+		Synthesis                                                      bool
 		Prompt, Record, SummaryModel, Input, Encoding, AuthorityNotice string
-	}{compactionRevision, messages, c.cfg, info, target, prompt, record, model, "covered_prefix", modelinfo.DefaultModelContextWindows().TextEncoding(info.Model), transcript.ContentAuthorityNotice()})
+	}{compactionRevision, messages, c.cfg, info, c.summary != nil, prompt, record, model, "covered_prefix", modelinfo.DefaultModelContextWindows().TextEncoding(info.Model), transcript.ContentAuthorityNotice(transcript.AudienceUtility)})
+}
+
+// AttemptRevision identifies the policy and summarizer that decide an automatic
+// attempt's outcome, without any source rows.
+func AttemptRevision(ctx context.Context, c *SimpleCompactor) (string, error) {
+	prompt, err := guidance.RenderCompactionSystemPrompt(ctx, guidance.CompactionSessionSummarySystemRef)
+	if err != nil {
+		return "", err
+	}
+	model, err := c.summaryRevision()
+	if err != nil {
+		return "", err
+	}
+	return RevisionDigest(struct {
+		Version              int
+		Policy               CompactionConfig
+		Synthesis            bool
+		Prompt, SummaryModel string
+	}{compactionRevision, c.cfg, c.summary != nil, prompt, model})
 }
 
 // RevisionDigest hashes the JSON form of a revision identity.

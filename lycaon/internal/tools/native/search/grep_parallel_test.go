@@ -36,7 +36,7 @@ func submitFiles(t *testing.T, r *grepRun, workers int, paths ...string) {
 	for _, path := range paths {
 		e, err := r.walker.operand(path, false)
 		testutil.FailErr(t, "bind file", err)
-		testutil.FailErr(t, "submit file", r.files.submit(e, true, true))
+		testutil.FailErr(t, "submit file", r.files.submit(e, true, true, false))
 	}
 }
 
@@ -149,7 +149,7 @@ func TestGrepCancellationReleasesQueuedFiles(t *testing.T) {
 	testutil.FailErr(t, "start one worker", err)
 	e, err := r.walker.operand("a", false)
 	testutil.FailErr(t, "bind first file", err)
-	testutil.FailErr(t, "submit first file", r.files.submit(e, true, true))
+	testutil.FailErr(t, "submit first file", r.files.submit(e, true, true, false))
 	<-started
 	e, err = r.walker.operand("b", false)
 	testutil.FailErr(t, "bind queued file", err)
@@ -180,10 +180,27 @@ func TestGrepWorkerConstructionAndSubmitRespectCancellation(t *testing.T) {
 	r.files, err = newGrepFiles(r, 2)
 	testutil.FailErr(t, "construct idle workers", err)
 	stop()
-	if err := r.files.submit(entry{}, true, false); !errors.Is(err, context.Canceled) {
+	if err := r.files.submit(entry{}, true, false, false); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled submission = %v", err)
 	}
 	if err := r.files.finish(nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled idle finish = %v", err)
+	}
+}
+
+func TestPrunedFileNeedsNoWorkerOnlyWhenItsNoMatchIsSilent(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		run    grepRun
+		silent bool
+	}{
+		{"matching lines", grepRun{}, true},
+		{"grep count reports zero", grepRun{mode: modeCount}, false},
+		{"ripgrep count omits zero", grepRun{mode: modeCount, rg: true}, true},
+		{"files without a match are listed", grepRun{mode: modeFilesWithout}, false},
+	} {
+		if got := tc.run.noMatchIsSilent(); got != tc.silent {
+			t.Errorf("%s: silent = %v", tc.name, got)
+		}
 	}
 }

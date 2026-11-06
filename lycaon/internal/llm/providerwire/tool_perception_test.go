@@ -1,11 +1,15 @@
 package providerwire
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/base64"
 	"fmt"
+	"image/png"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/contactsheet"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -56,8 +60,62 @@ func TestStoredToolImageIsAttachedWithItsBytes(t *testing.T) {
 	if image.Mime != "image/png" || image.Base64 != base64.StdEncoding.EncodeToString(png) {
 		t.Fatalf("image = %+v", image)
 	}
-	if !strings.Contains(out[0].Content, "⟦D:host:perception⟧") || !strings.Contains(out[0].Content, `"image":"attached"`) {
+	if !strings.Contains(out[0].Content, "Data from host (perception):") || !strings.Contains(out[0].Content, `"image":"attached"`) {
 		t.Fatalf("content lacks the attached fact: %q", out[0].Content)
+	}
+}
+
+func TestFilmstripArtifactIsPerceivedAsContactSheetPNG(t *testing.T) {
+	framePNG := perceptionPNG(t)
+	var zbuf bytes.Buffer
+	zw := zip.NewWriter(&zbuf)
+	for _, entry := range []struct {
+		name string
+		data []byte
+	}{
+		{"000.png", framePNG},
+		{"001.png", framePNG},
+		{"manifest.json", []byte(`{"version":1,"frames":[{"index":0,"file":"000.png","caption":"initial"},{"index":1,"file":"001.png","caption":"click #next"}]}`)},
+	} {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: entry.name, Method: zip.Store})
+		testutil.FailErr(t, "CreateHeader", err)
+		_, err = w.Write(entry.data)
+		testutil.FailErr(t, "Write", err)
+	}
+	testutil.FailErr(t, "Close", zw.Close())
+
+	withVisualResolver(t, func(sessionID, artifactID string) ([]byte, string, bool) {
+		if sessionID != "sess-1" || artifactID != "art-film" {
+			return nil, "", false
+		}
+		return zbuf.Bytes(), contactsheet.FilmstripMime, true
+	})
+
+	msg := storedVisualMessage("call-film", "art-film")
+	msg.ToolResult.Visual.Mime = contactsheet.FilmstripMime
+	out := PrepareMessagesForVision([]api.Message{msg}, true, "sess-1")
+
+	imgPart, ok := ToolResultImage(out[0])
+	if !ok {
+		t.Fatalf("filmstrip capture was not attached: %+v", out[0].ToolResult.Visual)
+	}
+	if imgPart.Mime != "image/png" {
+		t.Fatalf("image mime = %q, want image/png", imgPart.Mime)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(imgPart.Base64)
+	testutil.FailErr(t, "DecodeString", err)
+	cfg, err := png.DecodeConfig(bytes.NewReader(decoded))
+	testutil.FailErr(t, "DecodeConfig", err)
+	if cfg.Width <= 1 || cfg.Height <= 1 {
+		t.Fatalf("expected contact sheet dimensions > 1x1, got %dx%d", cfg.Width, cfg.Height)
+	}
+
+	withVisualResolver(t, func(string, string) ([]byte, string, bool) {
+		return []byte("not-a-filmstrip-zip"), contactsheet.FilmstripMime, true
+	})
+	badOut := PrepareMessagesForVision([]api.Message{msg}, true, "sess-1")
+	if _, ok := ToolResultImage(badOut[0]); ok {
+		t.Fatal("corrupt filmstrip should not attach")
 	}
 }
 
@@ -173,5 +231,34 @@ func TestVisualResolverReleasePreservesReplacement(t *testing.T) {
 	}
 	if _, _, ok := UserArtifactWireImage("session", "artifact"); ok {
 		t.Fatal("released visual resolver still serves images")
+	}
+}
+
+func TestPerceptionFactAndToolImageCaptionCarryEvidenceHandle(t *testing.T) {
+	png := perceptionPNG(t)
+	withVisualResolver(t, func(string, string) ([]byte, string, bool) { return png, "image/png", true })
+
+	msg := storedVisualMessage("call-8", "art-8")
+	msg.EvidenceHandles = []string{"page#8"}
+
+	out := PrepareMessagesForVision([]api.Message{msg}, true, "sess-1")
+	if !strings.Contains(out[0].Content, `"evidence":"page#8"`) {
+		t.Fatalf("perception fact lacks evidence handle: %q", out[0].Content)
+	}
+	caption := ToolImageCaption(out[0], "call-8")
+	for _, want := range []string{`"tool_call_id":"call-8"`, `"tool":"capture_page"`, `"evidence":"page#8"`, `"artifact_id":"art-8"`} {
+		if !strings.Contains(caption, want) {
+			t.Fatalf("caption = %q, missing %s", caption, want)
+		}
+	}
+
+	visualFallback := storedVisualMessage("call-9", "art-9")
+	visualFallback.ToolResult.Visual.EvidenceHandle = "page#9"
+	outFallback := PrepareMessagesForVision([]api.Message{visualFallback}, true, "sess-1")
+	if !strings.Contains(outFallback[0].Content, `"evidence":"page#9"`) {
+		t.Fatalf("visual fallback fact lacks evidence handle: %q", outFallback[0].Content)
+	}
+	if got := ToolImageCaption(outFallback[0], ""); !strings.Contains(got, `"evidence":"page#9"`) {
+		t.Fatalf("visual fallback caption lacks evidence handle: %q", got)
 	}
 }

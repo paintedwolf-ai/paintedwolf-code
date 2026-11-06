@@ -14,5 +14,5 @@ This project spans {{ root_count }} folders:
 {% include "partials/multi-root-addressing.md" %}
 {% endif %}
 {% if root_count > 0 %}
-For a path the person gives you, use it in `command`. The host will either allow access, ask the person, or return a refusal with `Code:`. Do not ask them to paste the file.
+For a path the person gives you, use it directly. The host will either allow access, ask the person, or return a refusal with `Code:`. Do not ask them to paste the file.
 {% endif %}

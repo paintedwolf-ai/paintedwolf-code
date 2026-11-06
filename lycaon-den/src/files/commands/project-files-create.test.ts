@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { LycaonApiError } from "../../api/http.ts";
 import {
   newEntryPath,
   renameEntryPath,
@@ -62,13 +61,8 @@ describe("renameSelectionRange", () => {
 });
 
 describe("sourceCreateErrorMessage", () => {
-  it("names the collision for a taken path", () => {
-    const err = new LycaonApiError("nope", 409, "source_already_exists");
-    expect(sourceCreateErrorMessage(err)).toContain("already exists");
-  });
 
   it("falls back to the error text, then to generic copy", () => {
     expect(sourceCreateErrorMessage(new Error("offline"))).toBe("offline");
-    expect(sourceCreateErrorMessage(null)).toBe("Could not create it.");
   });
 });

@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { Message } from "../../../api/types.ts";
 import {
   advanceTranscriptAnnouncement,
+  clearTranscriptAnnouncementMemory,
+  isCommittedAssistantReply,
+  noteTranscriptAnnouncementBaseline,
   type TranscriptAnnouncementState,
 } from "./transcript-live-announcement.ts";
 
@@ -31,6 +34,10 @@ function step(
 }
 
 describe("advanceTranscriptAnnouncement", () => {
+  afterEach(() => {
+    clearTranscriptAnnouncementMemory();
+  });
+
   it("seeds hydrated history without announcing it", () => {
     const result = step(undefined, [assistant("a1", "History")]);
     expect(result.announcement).toBeUndefined();
@@ -40,6 +47,16 @@ describe("advanceTranscriptAnnouncement", () => {
     const initial = step(undefined, []);
     const result = step(initial.state, [assistant("a1", "Done", "complete")]);
     expect(result.announcement).toBe("Assistant: Done");
+  });
+
+  it.each([
+    ["The limit is in [a.go:42-58](a.go#L42-L58).", "The limit is in a.go:42-58."],
+    ["See [my\\_file.go:1](<my_file v2.go#L1>).", "See my_file.go:1."],
+    ["Read [RFC 9110](https://example.test/spec) and [x].", "Read RFC 9110 and [x]."],
+  ])("speaks a link's label and not its destination: %s", (content, spoken) => {
+    const initial = step(undefined, []);
+    const result = step(initial.state, [assistant("a1", content, "complete")]);
+    expect(result.announcement).toBe(`Assistant: ${spoken}`);
   });
 
   it("waits for a streaming assistant turn to complete", () => {
@@ -143,5 +160,57 @@ describe("advanceTranscriptAnnouncement", () => {
     const first = step(undefined, [assistant("a1", "First")], "s1");
     const next = step(first.state, [assistant("a2", "Second")], "s2");
     expect(next.announcement).toBeUndefined();
+  });
+
+  it("re-seeds baseline when a restored session hydrates a completed assistant reply after a stale snapshot", () => {
+    const user: Message = {
+      id: "u1",
+      role: "user",
+      origin: "user",
+      authority: "user",
+      trust_tier: "trusted",
+      content: "Prompt before reload",
+      created_at: "t",
+    };
+    const restoredReply = assistant("a1", "Committed before reload", "complete");
+
+    noteTranscriptAnnouncementBaseline("s1", [user]);
+    const fromStaleSnapshot = step(undefined, [user], "s1");
+    expect(fromStaleSnapshot.announcement).toBeUndefined();
+
+    noteTranscriptAnnouncementBaseline("s1", [user, restoredReply]);
+    const hydrated = step(fromStaleSnapshot.state, [user, restoredReply], "s1");
+    expect(hydrated.announcement).toBeUndefined();
+
+    const liveFollowUp = step(
+      hydrated.state,
+      [user, restoredReply, assistant("a2", "Live reply", "complete")],
+      "s1",
+    );
+    expect(liveFollowUp.announcement).toBe("Assistant: Live reply");
+  });
+
+  it("identifies committed assistant replies for snapshot persistence", () => {
+    expect(isCommittedAssistantReply(assistant("a1", "Ready", "complete"))).toBe(true);
+    expect(isCommittedAssistantReply(assistant("a1", "Streaming", "streaming"))).toBe(false);
+    expect(isCommittedAssistantReply(assistant("a1", "   ", "complete"))).toBe(false);
+    expect(
+      isCommittedAssistantReply({
+        ...assistant("a1", "Draft"),
+        visibility: "internal",
+        draft_status: "live",
+      }),
+    ).toBe(false);
+    expect(
+      isCommittedAssistantReply({
+        id: "u1",
+        role: "user",
+        origin: "user",
+        authority: "user",
+        trust_tier: "trusted",
+        content: "User prompt",
+        created_at: "t",
+      }),
+    ).toBe(false);
   });
 });

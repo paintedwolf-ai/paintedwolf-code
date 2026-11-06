@@ -27,13 +27,16 @@ type ParseOptions struct {
 // SyntaxDiagnostic is a typed admission refusal. Diagnostic text is never an
 // authority decision or a proof of an exact source correction.
 type SyntaxDiagnostic struct {
-	Code     string
-	Span     toolcontract.SourceSpan
-	Expected string
-	Limit    string
-	Unit     string
-	Maximum  int64
-	Observed int64
+	Code       string
+	Span       toolcontract.SourceSpan
+	Expected   string
+	Limit      string
+	Unit       string
+	Maximum    int64
+	Observed   int64
+	Parser     *toolcontract.ParserDiagnostic
+	SourceName string
+	Sourced    bool
 }
 
 func (d *SyntaxDiagnostic) Error() string {
@@ -89,7 +92,17 @@ func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
 	return parseProgram(context.Background(), source, options, nil, nil)
 }
 
-func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory ProgramMemoryAdmission, pool *syntax.AllocationBudget) (*ParsedProgram, error) {
+func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory ProgramMemoryAdmission, pool *syntax.AllocationBudget) (program *ParsedProgram, resultErr error) {
+	defer func() {
+		var diagnostic *SyntaxDiagnostic
+		if errors.As(resultErr, &diagnostic) {
+			diagnostic.Sourced = options.Sourced
+			diagnostic.captureContext(source)
+			if len(options.SourceName) <= 512 {
+				diagnostic.SourceName = strings.Clone(options.SourceName)
+			}
+		}
+	}()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -210,26 +223,6 @@ func languageLimitUnit(c toolcontract.LanguageCatalog, id string) string {
 	panic("missing compiled command language limit: " + id)
 }
 func unitStart() toolcontract.SourceSpan { return toolcontract.SourceSpan{Line: 1, Column: 1} }
-func parserDiagnostic(err error, length int) error {
-	var budget *syntax.BudgetError
-	if errors.As(err, &budget) {
-		if budget.Cause != nil {
-			// Aggregate refusal (ProgramMemoryLimitError) or cancellation stays typed.
-			return budget.Cause
-		}
-		return &SyntaxDiagnostic{Code: "COMMAND_LIMIT_EXCEEDED", Span: parserPosition(budget.Pos, length), Expected: "bounded parser working storage", Limit: "evaluation_memory_bytes", Unit: "bytes", Maximum: budget.Maximum, Observed: budget.Observed}
-	}
-	var dialect syntax.LangError
-	if errors.As(err, &dialect) {
-		return &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: parserPosition(dialect.Pos, length), Expected: "a supported version 1 syntax form"}
-	}
-	span := unitStart()
-	var parse syntax.ParseError
-	if errors.As(err, &parse) {
-		span = parserPosition(parse.Pos, length)
-	}
-	return &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_INVALID", Span: span, Expected: "a complete version 1 syntax form"}
-}
 
 func parserPosition(pos syntax.Pos, length int) toolcontract.SourceSpan {
 	if !pos.IsValid() {
@@ -275,7 +268,7 @@ func nodeSpan(n syntax.Node) toolcontract.SourceSpan {
 }
 func (c *programCompiler) unsupported(n syntax.Node, expected string) {
 	if c.err == nil {
-		c.err = &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: c.span(n), Expected: expected}
+		c.err = &SyntaxDiagnostic{Code: "COMMAND_SYNTAX_UNSUPPORTED", Span: c.span(n), Expected: expected, Parser: &toolcontract.ParserDiagnostic{Kind: "unsupported_form", Message: expected}}
 	}
 }
 func (c *programCompiler) limit(n syntax.Node, id string, observed int64) {

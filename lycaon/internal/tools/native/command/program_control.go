@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcommand"
 	"io"
+	"maps"
 	"strings"
 	"sync"
 
@@ -84,6 +86,10 @@ func (r *programRun) controlDefinitions() (map[string]toolcontract.OperationDefi
 // InvokeEvaluator admits the evaluator's local owner under its real execution
 // identity. It does not create a model tool call or grant child effects.
 func (d *ProgramDispatcher) InvokeEvaluator(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, commandprogram.Streams) (toolcontract.ProducerResult, error)) (result toolcontract.ProducerResult, err error) {
+	request, err = d.bindReachedDirectory(request)
+	if err != nil {
+		return refusedResult("COMMAND_OPERAND_INVALID"), err
+	}
 	return d.invokeHost(ctx, request, streams, func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		return body(ctx, streams)
 	})
@@ -164,6 +170,9 @@ func (d *ProgramDispatcher) reportRefusal(w io.Writer, report commandprogram.Ref
 		return
 	}
 	reject := toolrejection.AsToolReject(report.Cause)
+	if syntax := toolcommand.ProgramSyntaxObservation("command", report.Cause); syntax != nil {
+		reject = syntax
+	}
 	if reject == nil {
 		reject = &toolrejection.ToolReject{Code: report.Code}
 	}
@@ -177,5 +186,12 @@ func (d *ProgramDispatcher) reportRefusal(w io.Writer, report commandprogram.Ref
 	if refusal, ok := guidance.RefusalFromError(report.Cause); ok {
 		policyCopy = refusal.Copy
 	}
-	writeShellRefusal(w, report.Operation, report.Operand, reject.Code, policyCopy, map[string]any{"expected_form": report.Expected})
+	facts := maps.Clone(reject.Data)
+	if facts == nil {
+		facts = map[string]any{}
+	}
+	if _, present := facts["expected_form"]; !present {
+		facts["expected_form"] = report.Expected
+	}
+	writeShellRefusal(w, report.Operation, report.Operand, reject.Code, policyCopy, facts)
 }

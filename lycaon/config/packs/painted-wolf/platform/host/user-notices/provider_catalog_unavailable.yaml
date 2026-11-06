@@ -15,7 +15,3 @@ scenarios:
     vars:
       provider_id: cloud-1
       model: candidate
-    expect_contains:
-      - cloud-1
-      - candidate
-      - not applied

@@ -146,7 +146,7 @@ class CachePayloadTests(unittest.TestCase):
 
     def test_compiler_keys_include_their_payload_policy(self):
         root = Path(__file__).resolve().parents[3]
-        for family, warm_script in (("go", None), ("decide", "warm-workspace-build.sh"),
+        for family, warm_script in (("decide", "warm-workspace-build.sh"),
                                     ("rust", "warm-workspace-build.sh"),
                                     ("release-build", "warm-release-build.sh")):
             source = (root / f".github/actions/cache-{family}/action.yml").read_text()
@@ -164,21 +164,10 @@ class CachePayloadTests(unittest.TestCase):
                 cache_payload.status(records, "push")
         for args, function, expected in [(["workspace", "manifest", "--target", "aarch64-apple-darwin"],
                                          "prune_workspace", (Path("manifest"), "aarch64-apple-darwin")),
-                                        (["go", "compiler-cache"], "trim_go", (Path("compiler-cache"),)),
                                         (["status"], "report_status", ())]:
             with patch('sys.argv', ["cache_payload", *args]), patch.object(cache_payload, function) as call:
                 cache_payload.main()
                 call.assert_called_once_with(*expected)
-
-    def test_go_trimming_keeps_non_cache_files(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / ("a" * 64 + "-d")).write_bytes(b"12345")
-            (root / "README").write_text("keep")
-            (root / "link").symlink_to(root / ("a" * 64 + "-d"))
-            self.assertEqual(cache_payload.trim_go(root, 4), 4)
-            self.assertEqual(sorted(p.name for p in root.iterdir()), ["README", "link"])
-            self.assertEqual(cache_payload.trim_go(root, 0), 4)
 
     def test_workspace_pruning_keeps_registry_dependencies(self):
         data = dict(workspace_members=["local-b", "local-a"], packages=[

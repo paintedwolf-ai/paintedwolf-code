@@ -125,8 +125,8 @@ func TestRequestDiscoveryPartialSelectionAndCancellation(t *testing.T) {
 	testutil.FailErr(t, "partial selection", err)
 	var result turnload.RequestToolsResult
 	testutil.FailErr(t, "decode partial result", json.Unmarshal([]byte(raw), &result))
-	// The exact name loads with its declared companion; the rest goes to discovery.
-	if !activation.Active("partial")["write"] || !activation.Active("partial")["edit"] || result.Discovery == nil || result.Discovery.Failure != turnload.RankingUnavailable {
+	// The exact name loads; the rest goes to discovery.
+	if !activation.Active("partial")["write"] || result.Discovery == nil || result.Discovery.Failure != turnload.RankingUnavailable {
 		t.Fatalf("partial=%s", raw)
 	}
 	_, err = reg.Run(t.Context(), "request_tools", map[string]any{"need": "read"}, tctx)

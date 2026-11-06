@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/tools/native/textutil/textutil.xargsBatcher",
+  "kind": "algorithm",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain 13 fields describing one incremental argv batch: parsed plan, input cursor, command/items, counters, one pending item and resource budget. These fields participate in the same transition loop; separating them behind a forwarding controller would obscure batch ownership. Bounded input, literal child, cancellation and resource-sharing contracts support this shape.",
+  "reviewed_commit": "abd7258eca3ad0cdf084a28196481237096744cd",
+  "ceiling": 13,
+  "boundaries": {
+    "lycaon/internal/tools/native/textutil/xargs_stream_test.go": "a9d11525a5a3202fb58e3e89a628c01d8eb9cb9fc01a6fab582fd906c584cbcd",
+    "lycaon/internal/tools/native/textutil/xargs_test.go": "3ea9be9d7a826eb362913731c9eda24d548fff5e8844e12219595e06ee0dac6f",
+    "lycaon/internal/commandprogram/batch_budget_test.go": "9a0c89b3fbf0bc99edc5e566085c1ed3dd2eccb068fc68763e9d7d850d169f4e"
+  },
+  "reviewed_shape": "08e4874ddb452483b7d6d1314db45ee97833ed6a44ea64757fc06434f6ddbe49"
+}

@@ -4,13 +4,15 @@ description: >
   `coordinator_profile`.
 command_effects: [read_only]
 tools:
+  summarize: sticky
   command: sticky
+  command_output: sticky
+  command_stop: sticky
   recall: sticky
   view_image: sticky
   view_video: sticky
   record_finding: sticky
   pack_board: sticky
-  summarize: sticky
   source_history: sticky
   wait: sticky
   held_result: true

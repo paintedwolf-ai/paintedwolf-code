@@ -21,11 +21,11 @@ func TestProjectToolMetaForModelMarksOnlyUntrustedAnnotations(t *testing.T) {
 		},
 	}
 	projected := ProjectToolMetaForModel(raw)
-	if !strings.HasPrefix(projected.Description, "⟦D⟧") {
+	if !strings.HasPrefix(projected.Description, "Data from tool (tool_metadata):\n") {
 		t.Fatalf("description = %q", projected.Description)
 	}
 	mode := projected.ArgsSchema["properties"].(map[string]any)["mode"].(map[string]any)
-	if !strings.HasPrefix(mode["description"].(string), "⟦D⟧") {
+	if !strings.HasPrefix(mode["description"].(string), "Data from tool (tool_metadata):\n") {
 		t.Fatalf("schema description = %q", mode["description"])
 	}
 	if mode["type"] != "string" || mode["enum"].([]any)[0] != "safe" {

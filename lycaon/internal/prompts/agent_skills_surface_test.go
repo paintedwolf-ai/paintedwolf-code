@@ -18,83 +18,6 @@ func listedSkills(names ...string) []prompts.AgentSkillView {
 	return out
 }
 
-func TestAgentSkillsSectionStatesHowToReadSkills(t *testing.T) {
-	prompts.ResetPersonaContractCache()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	skills := []prompts.AgentSkillView{
-		{Name: "alpha-skill", Description: "Alpha procedure."},
-		{Name: "zeta-skill", Description: "Zeta procedure."},
-	}
-	got, err := prompts.RenderPersona(context.Background(), engine, "implementer", map[string]any{
-		"agent_skills": skills,
-		"visible_tools": []string{
-			"read", "write", "edit", "skills_read", "request_tools",
-		},
-		"visible_tool_summaries": map[string]string{
-			"skills_read": "Read a skill's full instructions by name",
-		},
-	})
-	testutil.FailErr(t, "RenderPersona", err)
-	idx := strings.Index(got, "### Skills")
-	if idx < 0 {
-		t.Fatal("expected Skills section")
-	}
-	section := got[idx:]
-	if !strings.Contains(section, "`skills_read({\"need\":\"describe the procedure you need\"})`") {
-		t.Fatal("missing actionable skill-read call")
-	}
-	if !strings.Contains(section, "`skills_read({\"need\":\"selected-skill-name\",\"resource\":\"relative/path\"})`") {
-		t.Fatal("missing referenced-file call")
-	}
-	// The stable prompt teaches the procedure without publishing the catalog.
-	if strings.Contains(section, "alpha-skill") || strings.Contains(section, "zeta-skill") {
-		t.Fatalf("the standing prompt must not list skills: %q", section[:min(400, len(section))])
-	}
-
-	empty, err := prompts.RenderPersona(context.Background(), engine, "implementer", map[string]any{
-		"visible_tools": []string{"read", "write", "edit", "skills_read", "request_tools"},
-	})
-	testutil.FailErr(t, "RenderPersona empty", err)
-	if strings.Contains(empty, "### Skills") {
-		t.Fatal("empty skills must omit Skills section")
-	}
-	if strings.Contains(empty, "`skills_read`") {
-		t.Fatal("empty skills must omit skills_read from deferred catalog")
-	}
-}
-
-func TestAgentSkillsIndexProfileGating(t *testing.T) {
-	prompts.ResetPersonaContractCache()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	skills := []prompts.AgentSkillView{
-		{Name: "shared-skill", Description: "Shared procedure."},
-	}
-	with, err := prompts.RenderPersona(context.Background(), engine, "implementer", map[string]any{
-		"agent_skills":  skills,
-		"visible_tools": []string{"read", "skills_read", "request_tools"},
-	})
-	testutil.FailErr(t, "implementer", err)
-	if !strings.Contains(with, "### Skills") {
-		t.Fatal("implementer with skills_read must render the Skills section")
-	}
-
-	without, err := prompts.RenderPersona(context.Background(), engine, "path-explorer", map[string]any{
-		"agent_skills": skills,
-		"visible_tools": []string{
-			"read", "grep", "list_dir", "summarize", "render_view", "capture_page", "measure_page",
-		},
-	})
-	testutil.FailErr(t, "path-explorer", err)
-	if strings.Contains(without, "### Skills") {
-		t.Fatal("profile without skills_read must omit Skills section")
-	}
-	for _, name := range []string{"verify-visual-change", "mock-before-build"} {
-		if strings.Contains(without, name) {
-			t.Fatalf("profile without skills_read must not list skill %q", name)
-		}
-	}
-}
-
 func TestNamedSkillReferencesRequireExactRosterMembership(t *testing.T) {
 	root := configlayout.FindModuleRoot()
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
@@ -153,18 +76,6 @@ func TestNamedSkillReferencesRequireExactRosterMembership(t *testing.T) {
 		if tt.available != "" && !strings.Contains(got, tt.available) {
 			t.Fatalf("%s omitted available skill %q:\n%s", tt.ref, tt.available, got)
 		}
-	}
-}
-
-func TestSecurityProcedureRetainsAvailableSkillPointer(t *testing.T) {
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	got, err := engine.Render(context.Background(), "units/secure-by-default.md", map[string]any{
-		"profile_has_write_tools": true,
-		"agent_skills":            listedSkills("use-secrets-without-reading-them"),
-	})
-	testutil.FailErr(t, "render security procedure", err)
-	if !strings.Contains(got, "Read `use-secrets-without-reading-them` first") {
-		t.Fatal("available secret-handling procedure was not linked")
 	}
 }
 

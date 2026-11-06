@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/blobstore"
@@ -24,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -133,13 +135,14 @@ func New(t testing.TB, options Options) *Fixture {
 	}
 	classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec)
 	testutil.FailErr(t, "compile profile effects", err)
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"command": true, "verify": true, "summarize": true, "survey_repo": true, "code_rewrite": true}, CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "fixture")
 	owner := progress.NewMemoryStore()
 	testutil.FailErr(t, "set actual progress", owner.Set(session, "- [ ] Run the fixture program"))
 	background := options.Background
 	if background == nil {
 		background = bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
+		background.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 		t.Cleanup(func() { _ = background.Lifecycle.Close(context.Background()) })
 	}
 	natives := map[string]command.NativeOperation{}
@@ -174,6 +177,25 @@ func New(t testing.TB, options Options) *Fixture {
 	return f
 }
 
+// AttachLedger binds the fixture's root to a real source ledger, so programs
+// run against the host's actual observation windows.
+func (f *Fixture) AttachLedger(t testing.TB) *sourceledger.Store {
+	t.Helper()
+	_, err := f.Database.ExecContext(context.Background(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
+		VALUES ('r1', ?, ?, 'root', 1, ?, 'attached')`, testdbseed.DefaultProjectID, f.Dir, db.FormatTime(time.Now().UTC()))
+	testutil.FailErr(t, "insert fixture root", err)
+	ledger := sourceledger.New(f.Database, t.TempDir())
+	configure := f.Configure
+	f.Configure = func(tc *tools.ToolContext) {
+		tc.Source.Commands = ledger.Commands
+		tc.Source.Observations = ledger.Inventory
+		if configure != nil {
+			configure(tc)
+		}
+	}
+	return ledger
+}
+
 // SetProgress changes the session checklist observed by reached command writes.
 func (f *Fixture) SetProgress(content string) error { return f.progress.Set(f.Session, content) }
 
@@ -186,11 +208,19 @@ func (f *Fixture) Call(t testing.TB, ctx context.Context, source string) (string
 // CallArgs runs one command call with the model's complete arguments.
 func (f *Fixture) CallArgs(t testing.TB, ctx context.Context, args map[string]any) (string, error) {
 	t.Helper()
+	return f.Invoke(t, ctx, "command", args, func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
+		return f.Runtime.Run(ctx, "command", args, tc)
+	})
+}
+
+// Invoke opens the initiating tool's receipt and runs its handler.
+func (f *Fixture) Invoke(t testing.TB, ctx context.Context, tool string, args map[string]any, handler tools.ToolHandler) (string, error) {
+	t.Helper()
 	f.calls++
 	callID := fmt.Sprintf("model-call-%d", f.calls)
-	contract, _ := toolcontract.Lookup("command")
+	contract, _ := toolcontract.Lookup(tool)
 	//nolint:contextcheck // The test context keeps the initiating receipt available after execution cancellation.
-	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
+	parent, err := f.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Session, ToolCallID: callID, ToolName: tool, Args: args, Contract: contract})
 	testutil.FailErr(t, "begin model receipt", err)
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, callID
@@ -202,7 +232,7 @@ func (f *Fixture) CallArgs(t testing.TB, ctx context.Context, args map[string]an
 	if f.Configure != nil {
 		f.Configure(&tc)
 	}
-	return f.Runtime.Run(ctx, args, tc)
+	return handler(ctx, args, tc)
 }
 
 // Programs lists program receipt states in start order.

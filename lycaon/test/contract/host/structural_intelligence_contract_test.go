@@ -40,7 +40,7 @@ func TestStructuralIntelligenceStructuralHintsPointAtStructuralTools(t *testing.
 func TestStructuralIntelligenceSchemaExtensions(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	schemas, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 
 	codeRewrite, ok := schemas.Tools["code_rewrite"]

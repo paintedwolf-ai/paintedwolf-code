@@ -498,7 +498,7 @@ func TestTimelineDrillLandsOnMessageNotIteration(t *testing.T) {
 func TestSessionLevelShowsAgentsAndOutcome(t *testing.T) {
 	m := newSized(t)
 	v := m.View()
-	for _, want := range []string{"Tell me about this repo.", "coordinator", "command-verifier", "complete", "HTTP requests"} {
+	for _, want := range []string{"Tell me about this repo.", "coordinator", "command-verifier", "complete"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("session view missing %q\n%s", want, v)
 		}

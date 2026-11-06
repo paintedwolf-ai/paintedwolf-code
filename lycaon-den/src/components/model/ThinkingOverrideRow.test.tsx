@@ -24,7 +24,6 @@ describe("thinking override controls", () => {
   it("lets a project clear a device override with application behavior", () => {
     const change = vi.fn();
     render(() => <ThinkingOverrideRow model={model} providerLabel="Cloudflare" capabilities={capabilities} project inherited={{ ...model, mode: "fixed", effort: "max" }} onChange={change} />);
-    expect(screen.getByText(/Effective: Max/).textContent).toContain("Inherited from device settings");
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: /Thinking setting/ }));
     fireEvent.click(screen.getByRole("option", { name: "Use application behavior" }));

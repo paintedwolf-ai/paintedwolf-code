@@ -102,7 +102,7 @@ Depth parameter: `{{ phase_exit.depth_param }}`.
 
 This workflow phase delivers a report document. Write for readers outside the chat: third person, present tense, named subject.
 
-Answer in Markdown, then end with one `json` fence of the report's fields, not a tool call. This is the fence's whole shape; the host reads no other member, and `ask` and `set_asides` appear once, at the top level. Omit optional fields that have no value rather than setting them to null or empty strings:
+Answer in Markdown with citations inline, then end with one `json` fence of the report's fields, not a tool call. This is the fence's whole shape; the host reads no other member, and `ask` and `set_asides` appear once, at the top level. Omit optional fields that have no value rather than setting them to null or empty strings:
 
 ```json
 {
@@ -124,8 +124,7 @@ Answer in Markdown, then end with one `json` fence of the report's fields, not a
   ],
   "limits": ["An area not checked, reached, or verified."],
   "ask": {"do": "The decision asked of the reader.", "effort": "small", "why": "Why it is worth their time."},
-  "set_asides": [{"scanner": "…", "paths": ["…"], "reason": "…"}],
-  "cited_evidence": [{"path": "pkg/file.go", "line": 12, "excerpt": "…"}]
+  "set_asides": [{"scanner": "…", "paths": ["…"], "reason": "…"}]
 }
 ```
 

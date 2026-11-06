@@ -360,6 +360,9 @@ func (s *sequenceRun) finalize(buf []byte, truncated bool, maxOut int) (*Pipelin
 	if s.commitErr != nil {
 		return res, s.commitErr
 	}
+	if err := s.opts.Launch.Confinement.SocketError(); err != nil {
+		return res, err
+	}
 	// A stage that never started has no exit status to explain the failure.
 	for _, err := range s.waitErrs {
 		if errors.Is(err, ErrStageNotLaunched) {

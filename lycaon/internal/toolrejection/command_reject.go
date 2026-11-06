@@ -24,7 +24,7 @@ func CommandSurfaceObservation(
 		return nil
 	}
 	switch toolName {
-	case "command", "verify", "terminal_open":
+	case "command", "terminal_open":
 	default:
 		return nil
 	}

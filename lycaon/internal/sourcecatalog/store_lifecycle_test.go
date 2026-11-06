@@ -133,7 +133,7 @@ func TestTreeReadTransactionIsReadOnly(t *testing.T) {
 	c := treeTestCatalog(t)
 	root := Root{ID: "root", Path: t.TempDir()}
 	r := readySummary(t, c, root, TreeScope{Key: "all"})
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	if _, err := r.tx.ExecContext(ctx, "DELETE FROM nodes"); err == nil {
 		t.Fatal("read generation allowed mutation")

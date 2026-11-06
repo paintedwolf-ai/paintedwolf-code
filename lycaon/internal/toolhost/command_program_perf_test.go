@@ -132,6 +132,10 @@ func newPerfFixture(tb testing.TB, catalog *sourcecatalog.Catalog) *perfFixture 
 			testutil.FailErr(tb, "compose program owners", err)
 			return owners
 		}})
+	// Program time stands still, so the outcome of heavy work never depends on
+	// runner speed: the production foreground budget and park window apply,
+	// but no timer fires unless a test advances this clock.
+	f.Runtime.Clock = programtest.NewManualClock()
 	return f
 }
 

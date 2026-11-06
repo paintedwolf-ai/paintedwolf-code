@@ -29,7 +29,7 @@ func TestCommandSubjectSurvivesProcessExit(t *testing.T) {
 		Request: hostcmd.Request{Launch: exec.HostLaunch("command presentation test"), ProjectDir: t.TempDir(), Stages: []exec.Stage{{Name: executable, Args: []string{argument}}}},
 	})
 	testutil.FailErr(t, "start command", err)
-	t.Cleanup(func() { _, _ = registry.Lifecycle.Stop("session", handle) })
+	t.Cleanup(func() { _, _ = registry.Lifecycle.Stop("session", handle, bgprocess.TerminationStoppedByAgent) })
 	done, err := registry.Lifecycle.Await(t.Context(), "session", handle, 5*time.Second)
 	testutil.FailErr(t, "await command", err)
 	if !done {

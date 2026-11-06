@@ -1,0 +1,14 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/coordinator/promptloop",
+  "kind": "test_suite",
+  "workstream": "program-observation-evidence",
+  "disposition": "retain",
+  "reason": "Prompt-loop files implement one response lifecycle; program observations join the existing post-storage commit seam, without a new scheduler or invocation path. Retain the measured immediate membership; further membership changes require review.",
+  "reviewed_commit": "62c955c3704aaefe1d48fc485b09e6201a4244cd",
+  "ceiling": 74,
+  "boundaries": {
+    "lycaon/internal/coordinator/promptloop/program_observation_test.go": "40935de64422248c362110a4153dc2c9ca3c49b423b190a71d547111513a4975"
+  },
+  "reviewed_shape": "f859aec15274b823865052714b3073b2031b6720f09556d9e2646d2bc618dd16"
+}

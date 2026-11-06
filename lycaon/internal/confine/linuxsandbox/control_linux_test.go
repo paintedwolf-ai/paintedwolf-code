@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestControlCloseInterruptsDescriptorReceive(t *testing.T) {
@@ -19,7 +21,7 @@ func TestControlCloseInterruptsDescriptorReceive(t *testing.T) {
 		if err != nil {
 			t.Fatalf("create control pair: %v", err)
 		}
-		if err := parent.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		if err := parent.SetReadDeadline(time.Now().Add(testutil.Timeout(time.Minute))); err != nil {
 			t.Fatalf("register control deadline: %v", err)
 		}
 		done := make(chan error, 1)

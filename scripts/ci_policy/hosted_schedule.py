@@ -1,31 +1,10 @@
 """Comparable execution estimates for a capped hosted matrix."""
-from collections import Counter
-import heapq
-
 from ci_policy.timings import valid_seconds
-from verification_plan import expand
 
-PRIORITIES = {"reject": 0, "critical": 1, "compile": 2, "normal": 3}
-
-
-def validate_sources(lanes):
-    for name, lane in lanes.items():
-        if "timing_source" not in lane:
-            continue
-        key = lane["timing_source"]
-        source = lanes.get(key) if isinstance(key, str) else None
-        measured = source and "nightly" in source["profiles"]
-        if not measured or key == name or "timing_source" in source:
-            raise ValueError(f"CI lane {name} needs a direct nightly timing source")
-        if any(lane.get(field, default) != source.get(field, default)
-               for field, default in [("runner", "ubuntu-24.04"), ("setup", None), ("workers", None), ("shards", 1)]):
-            raise ValueError(f"CI lane {name} timing source must use the same execution configuration")
-        stages = lambda value: Counter(stage["name"] for stage in expand(value["targets"]))
-        if stages(lane) - stages(source):
-            raise ValueError(f"CI lane {name} timing source must cover its stages")
+PRIORITIES = {"reject": 0, "critical": 1, "normal": 2}
 
 
-def order(rows, lanes, timings=None, capacity=4):
+def order(rows, lanes, timings=None):
     measured = (timings or {}).get("lanes", {})
     missing = [row["timing_row"] for row in rows
                if not valid_seconds(measured.get(row["timing_row"]))]
@@ -38,30 +17,7 @@ def order(rows, lanes, timings=None, capacity=4):
                "timing_basis": "measured" if complete else "catalog-budget",
                "priority": lanes[row["lane"]].get("priority", "normal")} for row in rows]
     # Package balancing changes shard assignments; siblings share the lane's longest estimate.
-    baseline = sorted(result, key=lambda row: (min(PRIORITIES[row['priority']], 2),
-                                               -row['expected_seconds'], row['lane'], row['shard']))
-    return promote_compilation(baseline, capacity)
-
-
-def duration(rows, capacity):
-    slots = [0] * capacity
-    for row in rows:
-        finish = heapq.heappop(slots) + row['expected_seconds']
-        heapq.heappush(slots, finish)
-    return max(slots)
-
-
-def promote_compilation(rows, capacity):
-    limit = duration(rows, capacity)
-    boundary = sum(row['priority'] in {'reject', 'critical'} for row in rows)
-    for row in [row for row in rows if row['priority'] == 'compile']:
-        index = rows.index(row)
-        for position in range(boundary, index):
-            candidate = [*rows[:position], row, *rows[position:index], *rows[index + 1:]]
-            if duration(candidate, capacity) <= limit:
-                rows = candidate
-                break
-    return rows
+    return sorted(result, key=lambda row: (PRIORITIES[row['priority']], -row['expected_seconds'], row['lane'], row['shard']))
 
 
 def summarize(matrix, timings=None):

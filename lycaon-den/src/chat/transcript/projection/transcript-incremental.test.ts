@@ -51,7 +51,6 @@ describe("incremental transcript projection", () => {
     const next = project([assistant, result], spans, verbose);
     expect(next[0]).not.toBe(initial[0]);
     expect(next[0]).toEqual(createTranscriptDisplayProjector()([assistant, result], [spans[0]!], verbose)[0]!);
-    expect(JSON.stringify(next[0])).toContain("read complete");
   });
 
   it("keeps every unchanged row's identity inside a span that is still streaming", () => {

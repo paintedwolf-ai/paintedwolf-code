@@ -33,6 +33,28 @@ var ErrSessionOwnerRequired = errors.New("session owner is required")
 // ErrSessionModelRefIncomplete identifies an unpaired provider or model.
 var ErrSessionModelRefIncomplete = errors.New("provider_id and model must be set together")
 
+// ErrModelOutputIterationCollision rejects settling a second model output at an
+// iteration already settled for the same turn attempt.
+var ErrModelOutputIterationCollision = errors.New("model output iteration already settled for turn attempt")
+
+// ModelOutputIterationCollisionError reports an attempt to settle a second
+// model output at an iteration already settled for the same turn attempt.
+type ModelOutputIterationCollisionError struct {
+	TurnAttemptID string
+	Iteration     int
+}
+
+func (e *ModelOutputIterationCollisionError) Error() string {
+	if e == nil {
+		return ErrModelOutputIterationCollision.Error()
+	}
+	return fmt.Sprintf("%s: turn_attempt_id=%s iteration=%d", ErrModelOutputIterationCollision.Error(), e.TurnAttemptID, e.Iteration)
+}
+
+func (e *ModelOutputIterationCollisionError) Is(target error) bool {
+	return target == ErrModelOutputIterationCollision
+}
+
 // SessionStatusTransitionError identifies an illegal lifecycle edge.
 type SessionStatusTransitionError struct {
 	From api.SessionStatus

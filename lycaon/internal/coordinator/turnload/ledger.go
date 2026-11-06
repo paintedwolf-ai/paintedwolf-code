@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,7 +17,7 @@ const (
 	SourcePredicted Source = "predicted"
 	// SourceRequested came from request_tools.
 	SourceRequested Source = "requested"
-	// SourceCompanion loaded with a predicted tool that declares it.
+	// SourceCompanion is read from standing surfaces recorded before companions retired.
 	SourceCompanion Source = "companion"
 )
 
@@ -29,7 +28,7 @@ type Load struct {
 	P      float64 `json:"p,omitempty"`
 	// Need is the request_tools text that loaded the tool.
 	Need string `json:"need,omitempty"`
-	// With is the predicted tool a companion loaded with.
+	// With is the predicted tool a recorded companion loaded with.
 	With string `json:"with,omitempty"`
 	// Turn is the message that opened the turn the tool joined on.
 	Turn string `json:"turn,omitempty"`
@@ -119,8 +118,8 @@ func (l *Ledger) Active(sessionID string) map[string]bool {
 	return out
 }
 
-// Activate records tools request_tools loaded for need; they stand until the
-// next cold boundary.
+// Activate records tools request_tools loaded for need; they stand while the
+// surface can load them.
 func (l *Ledger) Activate(sessionID string, names []string, need string) {
 	if l == nil || strings.TrimSpace(sessionID) == "" || len(names) == 0 {
 		return
@@ -132,7 +131,7 @@ func (l *Ledger) Activate(sessionID string, names []string, need string) {
 	for _, name := range names {
 		if name = strings.TrimSpace(name); name != "" {
 			s.requested[name] = need
-			if _, standing := s.standing[name]; !standing {
+			if cur, standing := s.standing[name]; !standing || cur.Source != SourceRequested {
 				s.standing[name] = Load{Tool: name, Source: SourceRequested, Need: need, Turn: s.openingMessageID}
 			}
 		}
@@ -201,11 +200,11 @@ func (s *sessionLoads) open(opening TurnOpening) {
 	s.toolEvent = ""
 }
 
-// BeginTurn applies a turn decision to the standing surface. Cold, the
-// decision replaces the standing tools and omissions. Warm, its predictions
-// join the standing tools and an omission holds only while every turn since
-// the last cold boundary agreed with it. Abstained, the tools stay and every
-// unit renders.
+// BeginTurn applies a turn decision to the standing surface. Tools the chat
+// requested stay while the turn can load them. Cold, the decision replaces
+// predicted tools and omissions. Warm, its predictions join the standing tools
+// and an omission holds only while every turn since the last cold boundary
+// agreed with it. Abstained, the tools stay and every unit renders.
 func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decision) {
 	if l == nil || strings.TrimSpace(sessionID) == "" {
 		return
@@ -216,11 +215,9 @@ func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decis
 	s.open(opening)
 	cold := opening.Boundary.Cold()
 	standing := make(map[string]Load, len(s.standing)+len(decision.Tools))
-	if !cold || decision.Abstained {
-		for name, load := range s.standing {
-			if s.loadable[name] {
-				standing[name] = load
-			}
+	for name, load := range s.standing {
+		if s.loadable[name] && (load.Source == SourceRequested || !cold || decision.Abstained) {
+			standing[name] = load
 		}
 	}
 	for tool, p := range decision.Tools {
@@ -229,17 +226,6 @@ func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decis
 		}
 		if _, kept := standing[tool]; !kept {
 			standing[tool] = Load{Tool: tool, Source: SourcePredicted, P: p, Turn: s.openingMessageID}
-		}
-	}
-	// A predicted tool's declared companions load with it, when the surface offers them.
-	for tool := range decision.Tools {
-		if !s.loadable[tool] {
-			continue
-		}
-		for _, companion := range toolcontract.WithCompanions([]string{tool})[1:] {
-			if _, kept := standing[companion]; !kept && s.loadable[companion] {
-				standing[companion] = Load{Tool: companion, Source: SourceCompanion, With: tool, Turn: s.openingMessageID}
-			}
 		}
 	}
 	s.standing = standing

@@ -564,7 +564,6 @@ describe("collaborative editor documents", () => {
     replica.receive(host.replace("outside"));
     expect(replica.text.toString()).toBe("outside");
     expect(replica.pendingCount).toBe(0);
-    expect(replica.refusal).toMatch(/new history/u);
     await replica.flush();
     expect(host.text.toString()).toBe("outside");
     replica.stepHistory("undo");

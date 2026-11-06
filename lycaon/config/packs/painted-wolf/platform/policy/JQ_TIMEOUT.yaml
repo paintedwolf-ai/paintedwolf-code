@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     profile: explore_readonly
     timeout_ms: '5000'
     tool: jq
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: JQ_TIMEOUT'

@@ -45,16 +45,15 @@ func TestRejectedCheckpointDirectionReachesTheModelAsInstruction(t *testing.T) {
 	if !strings.Contains(projected.Content, deniedDirection) {
 		t.Fatalf("direction never reached the wire: %q", projected.Content)
 	}
-	for _, line := range strings.Split(projected.Content, "\n") {
-		if strings.Contains(line, deniedDirection) && strings.HasPrefix(line, "⟦D⟧") {
-			t.Fatalf("direction arrived data-marked, so it reads as ignorable: %q", line)
-		}
+	// The direction carries the person's authority, so no data header owns it.
+	if head, _, ok := strings.Cut(projected.Content, deniedDirection); !ok || strings.HasSuffix(strings.TrimRight(head, "\n"), ":") {
+		t.Fatalf("direction arrived under a data header, so it reads as ignorable: %q", projected.Content)
 	}
 	if !strings.Contains(projected.Content, CheckpointGuidanceNotice()) {
 		t.Fatal("direction arrived without the frame that keeps it from reading as permission")
 	}
-	if !strings.Contains(projected.Content, "⟦D⟧") {
-		t.Fatalf("tool body lost its data marking: %q", projected.Content)
+	if !strings.Contains(projected.Content, "Data from") {
+		t.Fatalf("tool body lost its data header: %q", projected.Content)
 	}
 }
 

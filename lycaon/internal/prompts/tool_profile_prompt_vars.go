@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"runtime"
 	"sort"
 	"strings"
@@ -14,25 +15,15 @@ import (
 )
 
 var (
-	surveyToolDisplayOrder = []string{
-		"summarize", "survey_repo", "command", "find", "grep", "read", "list_dir", "stat", "wc", "jq",
-		"git_status", "git_diff", "git_log", "git_show", "git_blame", "git_ref", "git_branches",
-	}
-	writeToolDisplayOrder = []string{
-		"write", "edit", "replace_lines", "code_rewrite", "jq_edit",
-	}
-	// Content readers that can pull secret values into the transcript.
-	readContentToolDisplayOrder = []string{
-		"command", "read", "grep", "jq", "summarize",
-	}
-	mutationToolDisplayOrder = []string{
-		"write", "edit", "replace_lines", "code_rewrite", "chmod", "delete",
-		"git_commit", "git_restore", "command",
-	}
-	nativeToolFamiliesOnce sync.Once
-	nativeFilesystemTools  []string
-	nativeTerminalTools    []string
-	nativeMutationTools    []string
+	surveyToolDisplayOrder = []string{"command"}
+	writeToolDisplayOrder  = []string{"restore_version"}
+	// Command content can include secret values.
+	readContentToolDisplayOrder = []string{"command"}
+	mutationToolDisplayOrder    = []string{"restore_version", "command"}
+	nativeToolFamiliesOnce      sync.Once
+	nativeFilesystemTools       []string
+	nativeTerminalTools         []string
+	nativeMutationTools         []string
 )
 
 func loadNativeToolFamilies() {
@@ -41,7 +32,7 @@ func loadNativeToolFamilies() {
 		if err != nil {
 			return
 		}
-		nativeFilesystemTools = append([]string(nil), cfg.Group("filesystem")...)
+		nativeFilesystemTools = append(append([]string(nil), cfg.Group("filesystem")...), cfg.OperationGroup("filesystem")...)
 		nativeTerminalTools = append([]string(nil), cfg.Group("terminal")...)
 		// Worker-branch tools define mutation capability.
 		nativeMutationTools = cfg.WorkerBranchTools()
@@ -187,6 +178,43 @@ func VisibleToolsNativePartialVars(visibleTools []string) map[string]any {
 	return toolProfileCapabilityTemplateVars(AgentToolSurfaceData{Tools: views})
 }
 
+// MergeProfileRequestableVars sets profile_can_request for the tools profileID
+// can still load when request_tools is offered.
+func MergeProfileRequestableVars(profileID string, offered []string, into map[string]any) {
+	if into == nil {
+		return
+	}
+	into["profile_can_request"] = requestableToolSet(offered, profileAllowedToolNames(profileID))
+}
+
+func profileAllowedToolNames(profileID string) []string {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
+		return nil
+	}
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return nil
+	}
+	resolvedID := profileID
+	if mapped, err := ToolProfileForAgent(profileID); err == nil {
+		resolvedID = mapped
+	}
+	for _, p := range profiles {
+		if p.ID != profileID && p.ID != resolvedID {
+			continue
+		}
+		var out []string
+		for _, name := range visibleToolNames(p, nil) {
+			if p.ToolAllowed(name) {
+				out = append(out, name)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
 func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any {
 	enabled := enabledToolSet(data.Tools)
 	surveyTools := orderedEnabledTools(surveyToolDisplayOrder, enabled)
@@ -197,45 +225,23 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	preferNative := orderedEnabledTools(PreferNativeFileToolOrder(), enabled)
 	hostRunner := orderedEnabledTools(HostRunnerToolOrder(), enabled)
 	mutationCapable := ProfileMutationCapable(data)
-	commandMutates := enabled["command"] && mutationCapable
+	mutation, _ := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+	commandMutates := enabled["command"] && (data.CommandEffects == 0 || data.CommandEffects.Allows(mutation))
+	if commandMutates {
+		writeTools = append([]string{"command"}, writeTools...)
+	}
 	out := map[string]any{
-		"profile_has_write_tools":         len(writeTools) > 0,
+		"profile_has_write_tools":         len(writeTools) > 0 || commandMutates,
 		"profile_has_read_tools":          len(readTools) > 0,
 		"profile_mutation_capable":        mutationCapable,
-		"profile_has_command":             enabled["command"],
 		"profile_command_mutation":        commandMutates,
 		"command_output_files":            enabled["command"],
-		"profile_has_task":                enabled["task"],
-		"profile_has_wait":                enabled["wait"],
-		"profile_has_verify":              enabled["verify"],
 		"profile_can_request":             requestableToolSet(toolViewNames(data.Tools), requestableToolNames(data.Requestable)),
 		"has_find_tool":                   enabled["find"],
-		"profile_has_git_commit":          enabled["git_commit"],
-		"profile_has_grep":                enabled["grep"],
-		"profile_has_code_rewrite":        enabled["code_rewrite"],
 		"native_edit_limit_mib":           readcaps.MaxMutationBytes >> 20,
-		"profile_has_list_dir":            enabled["list_dir"],
-		"profile_has_read":                enabled["read"],
-		"profile_has_jq":                  enabled["jq"],
-		"profile_has_jq_edit":             enabled["jq_edit"],
-		"profile_has_survey_repo":         enabled["survey_repo"],
-		"profile_has_summarize":           enabled["summarize"],
-		"profile_has_view_image":          enabled["view_image"],
-		"profile_has_view_video":          enabled["view_video"],
+		"profile_has_jq_edit":             commandMutates,
 		"profile_has_retrieval":           profileHasRetrievalTool(enabled),
-		"profile_has_skills_read":         enabled["skills_read"],
-		"profile_has_ask_user":            enabled["ask_user"],
-		"profile_has_surface_note":        enabled["surface_note"],
-		"profile_has_recall":              enabled["recall"],
-		"profile_has_terminal_open":       enabled["terminal_open"],
-		"profile_has_terminal_read":       enabled["terminal_read"],
-		"profile_has_terminal_send":       enabled["terminal_send"],
-		"profile_has_terminal_snapshot":   enabled["terminal_snapshot"],
 		"profile_has_terminal_capture":    commandMutates,
-		"profile_has_process_list":        enabled["process_list"],
-		"profile_has_process_signal":      enabled["process_signal"],
-		"profile_has_command_output":      enabled["command_output"],
-		"profile_has_command_stop":        enabled["command_stop"],
 		"command_on_floor":                enabled["command"] && !data.CommandDeferred,
 		"is_coordinator":                  data.ToolProfile == CoordinatorProfileID,
 		"platform_os":                     runtime.GOOS,
@@ -252,6 +258,10 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"prefer_native_file_tools":        preferNative,
 		"host_runner_tools":               hostRunner,
 	}
+	// Every current tool answers, so a template cannot mistake a typo for false.
+	for _, name := range currentToolNames() {
+		out["profile_has_"+name] = enabled[name]
+	}
 	offeredNames := toolViewNames(data.Tools)
 	MergeRunnerCapabilityVars(offeredNames, out)
 	MergeHTTPActionVars(offeredNames, out)
@@ -259,6 +269,24 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	out["more_tools_loadable"] = len(data.Requestable) > 0
 	return out
 }
+
+// currentToolNames lists every tool a stock profile or the manifest declares.
+var currentToolNames = sync.OnceValue(func() []string {
+	var names []string
+	if cfg, err := nativemanifest.Load(); err == nil {
+		names = append(cfg.AllTools(), cfg.HostProducedTools...)
+	}
+	if profiles, err := sandbox.LoadToolProfiles(); err == nil {
+		for _, profile := range profiles {
+			for name := range profile.Tools {
+				if toolschema.ValidToolName(name) {
+					names = append(names, name)
+				}
+			}
+		}
+	}
+	return names
+})
 
 // MergeRunnerCapabilityVars populates runner_<capability>_tools for offered tools,
 // excluding command when command mutation is not allowed on the surface.
@@ -418,6 +446,12 @@ func ApplyReadOnlyCommandEffects(offered, requestable []string, into map[string]
 	delete(enabled, "command")
 	into["profile_mutation_capable"] = toolSetMutationCapable(enabled)
 	into["profile_command_mutation"] = false
+	into["profile_has_code_rewrite"] = false
+	into["profile_has_jq_edit"] = false
+	writeTools := orderedEnabledTools(writeToolDisplayOrder, toolNameSet(offered))
+	into["profile_has_write_tools"] = len(writeTools) > 0
+	into["tool_check_write_tools"] = writeTools
+	into["progress_gated_tools"] = orderedEnabledTools([]string{"restore_version", "task", "delegate_dispatch", "delegate_decompose"}, toolNameSet(offered))
 	into["profile_has_terminal_capture"] = false
 	offeredSet := make(map[string]bool, len(offered))
 	for _, name := range offered {
@@ -603,10 +637,10 @@ func profileHasRetrievalTool(enabled map[string]bool) bool {
 // Capability guidance follows the offered schemas.
 func mergeOfferedToolGuidance(offered []string, into map[string]any) {
 	set := toolNameSet(offered)
-	for _, name := range []string{"render_view", "capture_page", "measure_page", "page_open", "page_snapshot", "page_act", "page_close", "view_image", "view_video", "update_progress", "delegate_dispatch", "delegate_decompose", "write", "edit", "replace_lines", "restore_version", "jq_edit", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board", "process_list", "process_signal", "command_output", "command_stop"} {
+	for _, name := range []string{"render_view", "capture_page", "measure_page", "page_open", "page_snapshot", "page_act", "page_close", "view_image", "view_video", "update_progress", "delegate_dispatch", "delegate_decompose", "write", "edit", "replace_lines", "restore_version", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board", "process_list", "process_signal", "command_output", "command_stop"} {
 		into["profile_has_"+name] = set[name]
 	}
-	into["progress_gated_tools"] = orderedEnabledTools([]string{"write", "edit", "replace_lines", "restore_version", "jq_edit", "task", "delegate_dispatch", "delegate_decompose"}, set)
+	into["progress_gated_tools"] = orderedEnabledTools([]string{"command", "restore_version", "task", "delegate_dispatch", "delegate_decompose"}, set)
 	into["profile_has_page_controls"] = set["page_open"] || set["page_snapshot"] || set["page_act"] || set["page_close"]
 	into["profile_has_scan_drilldown"] = profileHasScanDrilldownTools(set)
 	into["profile_has_managed_secrets"] = set["secret_generate"] && set["secret_list"] && set["secret_revoke"]

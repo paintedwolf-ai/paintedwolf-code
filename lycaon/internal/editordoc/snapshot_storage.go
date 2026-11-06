@@ -91,14 +91,22 @@ func decodeSnapshot(payload []byte) (*Document, error) {
 	if state.Format != snapshotFormat {
 		return nil, fmt.Errorf("unsupported editor snapshot format %d", state.Format)
 	}
-	d := &Document{ID: state.ID, ProjectID: state.ProjectID, FileID: state.FileID, RootID: state.RootID,
-		Path: state.Path, Draft: state.Draft, BaseContent: state.BaseContent, BaseSHA256: state.BaseSHA256,
-		Encoding: state.Encoding, EOL: state.EOL, BaseEOL: state.BaseEOL, MixedEOL: state.MixedEOL,
-		BaseMixedEOL: state.BaseMixedEOL, Dirty: state.Dirty, Diverged: state.Diverged, Absent: state.Absent,
-		HeldAgentVersionID: state.HeldVersion, Revision: state.Revision, Epoch: state.Epoch,
-		PublishedRevision: state.PublishedRevision, SizeBytes: state.SizeBytes, CRDTUpdate: state.Checkpoint,
-		StateVector: state.Vector, CreatedAt: state.CreatedAt, UpdatedAt: state.UpdatedAt,
-		pinnedCheckpoint: state.Checkpoint}
+	d := &Document{
+		ID: state.ID, ProjectID: state.ProjectID, FileID: state.FileID, RootID: state.RootID,
+		Path: state.Path, Draft: state.Draft, Dirty: state.Dirty,
+		HeldAgentVersionID: state.HeldVersion, Revision: state.Revision,
+		DocumentBase: DocumentBase{
+			BaseContent: state.BaseContent, BaseSHA256: state.BaseSHA256,
+			Encoding: state.Encoding, EOL: state.EOL, BaseEOL: state.BaseEOL, MixedEOL: state.MixedEOL,
+			BaseMixedEOL: state.BaseMixedEOL, SizeBytes: state.SizeBytes, CreatedAt: state.CreatedAt,
+			DocumentState: DocumentState{
+				Diverged: state.Diverged, Absent: state.Absent, Epoch: state.Epoch,
+				PublishedRevision: state.PublishedRevision, CRDTUpdate: state.Checkpoint,
+				StateVector: state.Vector, UpdatedAt: state.UpdatedAt,
+				DocumentReplica: DocumentReplica{pinnedCheckpoint: state.Checkpoint},
+			},
+		},
+	}
 	d.BranchID = sourcebranch.ID(state.BranchID)
 	return d, nil
 }

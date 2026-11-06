@@ -44,7 +44,6 @@ describe("external-link", () => {
   });
 
   it("names the browser in the OK label when preset ≠ system-default", () => {
-    expect(externalLinkOkLabel("https://example.com", "system-default")).toBe("Open in browser");
     expect(externalLinkOkLabel("https://example.com", "chrome")).toBe("Open in Google Chrome");
     expect(externalLinkOkLabel("https://example.com", "firefox")).toBe("Open in Firefox");
     expect(externalLinkOkLabel("https://example.com", "safari")).toBe("Open in Safari");

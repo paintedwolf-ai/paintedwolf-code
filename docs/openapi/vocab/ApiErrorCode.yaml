@@ -3,6 +3,10 @@ description: Closed machine-readable error identity emitted by the private Den-s
 go_const_prefix: ApiErrorCode
 http_status: true
 values:
+  - id: approval_capacity_exceeded
+    status: 422
+    comment: >-
+      Approval authority exceeds the bounded decision capacity.
   - id: source_view_not_found
     status: 404
     comment: >-

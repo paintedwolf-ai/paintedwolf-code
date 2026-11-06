@@ -4,9 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/session/decisions"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
-	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
@@ -24,6 +21,9 @@ import (
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/decisions"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/page"
@@ -32,7 +32,6 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // WireGroundingAndFindings wires grounding coordinators, progress, visual, and decision tools.
@@ -94,23 +93,10 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	}, r.Findings, r.rootSessionKey); err != nil {
 		return fmt.Errorf("record_finding tool: %w", err)
 	}
-	if err := native.RegisterSurfaceNoteTool(r.deps.Execution.Host.Registry, reporttools.SurfaceNoteDeps{
-		Ledger: r.deps.Sessions.Manager.Verification.Evidence,
-		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
-			return r.deps.Storage.Sessions.GetMessages(ctx, sessionID)
-		},
-		Friction: func(ctx context.Context, sessionID, code string) {
-			if r.deps.Sessions != nil && r.deps.Sessions.Manager != nil {
-				r.deps.Sessions.Manager.Runner.Closeouts.RecordGroundingFriction(ctx, sessionID)
-			}
-		},
-	}); err != nil {
-		return fmt.Errorf("surface_note tool: %w", err)
-	}
 	r.Progress = progress.NewSQLStore(r.deps.Storage.Database)
 	r.deps.Workflows.Manager.Fanout.Progress = r.Progress
 	r.deps.Sessions.Manager.SetProgressStore(r.Progress)
-	if err := native.RegisterUpdateProgressTool(r.deps.Execution.Host.Registry, r.Progress, r.rootSessionKey); err != nil {
+	if err := native.RegisterUpdateProgressTool(r.deps.Execution.Host.Registry, r.Progress, r.rootSessionKey, r.deps.Sessions.Manager.Coordinator.ProgressClosure); err != nil {
 		return fmt.Errorf("update_progress tool: %w", err)
 	}
 	if err := native.RegisterCompleteLegTool(r.deps.Execution.Host.Registry, r.deps.DecodeCompleteLeg); err != nil {

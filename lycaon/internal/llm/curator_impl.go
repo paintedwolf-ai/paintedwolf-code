@@ -239,7 +239,8 @@ func resolveSelections(projectDir string, snapshot evidence.Ledger, triples []ev
 			continue
 		}
 		res := evidence.Resolve(evidence.CitationRoots{ProjectDir: projectDir}, triple, snapshot, "")
-		if res.Verdict != evidence.VerdictMatched {
+		// A triple with no excerpt is traced at best; Materialize holds it to observed lines.
+		if res.Verdict != evidence.VerdictMatched && (res.Verdict != evidence.VerdictTraced || strings.TrimSpace(triple.Excerpt) != "") {
 			dropped++
 			continue
 		}

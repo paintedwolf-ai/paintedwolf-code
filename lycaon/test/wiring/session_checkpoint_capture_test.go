@@ -37,8 +37,8 @@ func visibleUserMessageIDs(t *testing.T, msgs []api.Message) []string {
 
 func TestPromptSealsARewindAnchorInAProductionBuild(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
-		{Pattern: "first ask", FollowUpText: MockCoordinatorCloseoutJSON("Done with the first ask.", "")},
-		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutJSON("Done with the second ask.", "")},
+		{Pattern: "first ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Done with the first ask.", "")},
+		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Done with the second ask.", "")},
 	}})
 	h := BuildForTest(t, WithLLMClient(mock))
 	cancel := h.StartBackgroundWorkers(t, context.Background())

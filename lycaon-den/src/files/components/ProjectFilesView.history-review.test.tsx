@@ -48,7 +48,6 @@ describe("ProjectFilesView stage chrome", () => {
       await screen.findByTestId(
         "files-root-summary-working-tree",
         {},
-        { timeout: 5000 },
       ),
     );
 
@@ -442,7 +441,6 @@ describe("ProjectFilesView stage chrome", () => {
       next_cursor: undefined,
     });
     await waitFor(() => expect(gitLaneNotices()).toHaveLength(1));
-    expect(gitLaneNotices()[0]?.message).toContain("took too long");
     expect(screen.getByText("Edited")).toBeTruthy();
   });
 

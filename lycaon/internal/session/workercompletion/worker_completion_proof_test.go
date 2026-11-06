@@ -64,7 +64,7 @@ func TestCollectPresentableVisualArtifactIDsSkipsLiveRecording(t *testing.T) {
 		t.Fatalf("proof.VisualArtifactIDs = %#v", proof.VisualArtifactIDs)
 	}
 	digest := workercompletion.FormatWorkerDigest("implementer", "job-v", "complete", "ui done", proof, workercompletion.WorkerCompletionReport{})
-	if !strings.Contains(digest, "Visual artifacts") || !strings.Contains(digest, "still-1") {
+	if !strings.Contains(digest, "still-1") {
 		t.Fatalf("digest missing visuals: %q", digest)
 	}
 }

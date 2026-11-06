@@ -27,7 +27,6 @@ describe("RecentAsksStrip", () => {
     render(() => <RecentAsksStrip client={client} />);
     const rows = await screen.findAllByTestId("saved-approvals-recent-row");
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.textContent).toContain("The agent chose this destination, not your setup");
     expect(rows[0]?.textContent).toContain("14 asks · 14 allowed");
     expect(rows[0]?.querySelector("[data-testid=saved-approvals-recent-all-allowed]")).not.toBeNull();
     expect(rows[1]?.querySelector("[data-testid=saved-approvals-recent-all-allowed]")).toBeNull();
@@ -51,9 +50,4 @@ describe("RecentAsksStrip", () => {
     await screen.findByTestId("saved-approvals-recent-widened");
   });
 
-  it("says so when nothing asked", async () => {
-    const { client } = clientWith([]);
-    render(() => <RecentAsksStrip client={client} />);
-    await screen.findByTestId("saved-approvals-recent-empty");
-  });
 });

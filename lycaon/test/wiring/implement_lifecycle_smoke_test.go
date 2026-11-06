@@ -84,7 +84,7 @@ func (state *implementLifecycleState) awaitWorker() modelcall.Completion {
 			Args: map[string]any{"conditions": []any{map[string]any{"kind": "all_workers_idle"}}},
 		}}}
 	}
-	return modelcall.Completion{Content: MockCoordinatorCloseoutJSON("Repair complete.", "main.go")}
+	return modelcall.Completion{Content: MockCoordinatorCloseoutMarkdown("Repair complete.", "main.go")}
 }
 
 func TestImplementLifecycleWaitsForWorkerNotifications(t *testing.T) {

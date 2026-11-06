@@ -4,15 +4,19 @@
 package linuxsandbox
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/linuxbus"
 )
 
 // PlanVersion is the plan shape this helper reads.
-const PlanVersion = 3
+const PlanVersion = 2
 
 // Plan is the typed boundary the helper applies. The host renders it from the
 // same policy inputs as the macOS profile; the helper never widens it.
@@ -103,7 +107,8 @@ type Network struct {
 	SocksProxyAddr       string           `json:"socks_proxy_addr,omitempty"`
 	DirectIPPermits      []DirectIPPermit `json:"direct_ip_permits,omitempty"`
 	// SocketGrants connect through retained descriptors owned by the outer helper.
-	SocketGrants []SocketGrant `json:"socket_grants,omitempty"`
+	SocketGrants         []SocketGrant                  `json:"socket_grants,omitempty"`
+	CredentialReadPolicy *linuxbus.CredentialReadPolicy `json:"credential_read_policy,omitempty"`
 	// beforeSocketConnect is an in-process synchronization seam; it is never
 	// read from a plan or configuration and carries no authorization.
 	beforeSocketConnect func() `json:"-"`
@@ -119,8 +124,9 @@ const SocketReferenceFD = 7
 
 // SocketGrant associates an approved selector with its retained destination.
 type SocketGrant struct {
-	Path string `json:"path"`
-	FD   int    `json:"fd"`
+	Path           string `json:"path"`
+	FD             int    `json:"fd"`
+	CredentialRead bool   `json:"credential_read,omitempty"`
 	// Delegated is set when the retained object is a delegated service's
 	// endpoint socket, however the grant named it.
 	Delegated DelegatedService `json:"delegated,omitempty"`
@@ -186,8 +192,13 @@ func (p Plan) Encode() ([]byte, error) {
 // DecodePlan reads a plan the host rendered and checks its version.
 func DecodePlan(raw []byte) (Plan, error) {
 	var p Plan
-	if err := json.Unmarshal(raw, &p); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&p); err != nil {
 		return Plan{}, fmt.Errorf("decode boundary plan: %w", err)
+	}
+	if err := decoder.Decode(new(any)); err != io.EOF {
+		return Plan{}, fmt.Errorf("boundary plan must contain one object")
 	}
 	if p.Version != PlanVersion {
 		return Plan{}, &Unsupported{Code: UnsupportedPlanVersion, Detail: fmt.Sprintf("version %d, helper reads %d", p.Version, PlanVersion)}
@@ -226,6 +237,7 @@ func (p Plan) Validate() error {
 	}
 	seenSockets := make(map[string]bool)
 	seenFDs := make(map[int]bool)
+	credentialRead := false
 	for _, grant := range n.SocketGrants {
 		if !filepath.IsAbs(grant.Path) || strings.ContainsRune(grant.Path, 0) || grant.FD < SocketReferenceFD || grant.FD >= SocketReferenceFD+8 || seenSockets[grant.Path] || seenFDs[grant.FD] {
 			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "invalid or repeated socket reference"}
@@ -233,7 +245,21 @@ func (p Plan) Validate() error {
 		if grant.Delegated != "" && grant.Delegated != DelegatedNixDaemon {
 			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "unknown delegated service " + string(grant.Delegated)}
 		}
+		if grant.CredentialRead {
+			if grant.Delegated != "" {
+				return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "credential read cannot delegate host authority"}
+			}
+			credentialRead = true
+		}
 		seenSockets[grant.Path], seenFDs[grant.FD] = true, true
+	}
+	if credentialRead != (n.CredentialReadPolicy != nil) {
+		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "credential read requires its frozen policy"}
+	}
+	if n.CredentialReadPolicy != nil {
+		if err := n.CredentialReadPolicy.Validate(); err != nil {
+			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: err.Error()}
+		}
 	}
 	return nil
 }

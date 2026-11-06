@@ -10,9 +10,10 @@ const (
 // Report describes the applied process boundary and refusal attribution.
 type Report struct {
 	// Confined reports whether the OS sandbox was applied.
-	Confined       bool `json:"confined"`
-	ProcessControl bool `json:"process_control,omitempty"`
-	HostExecution  bool `json:"host_execution,omitempty"`
+	Confined        bool `json:"confined"`
+	ProcessControl  bool `json:"process_control,omitempty"`
+	CredentialStore bool `json:"credential_store,omitempty"`
+	HostExecution   bool `json:"host_execution,omitempty"`
 	// NetworkMode is the applied egress boundary.
 	NetworkMode string `json:"network_mode,omitempty"`
 	// SocksProxy reports whether the process received ALL_PROXY.
@@ -71,10 +72,11 @@ func ReportOf(b Boundary) Report {
 		return Report{}
 	}
 	return Report{
-		ProcessControl: b.ProcessControl,
-		Confined:       true,
-		NetworkMode:    NetworkLabel(b.Network),
-		SocksProxy:     b.SocksProxyEnv,
+		ProcessControl:  b.ProcessControl,
+		CredentialStore: b.CredentialStore,
+		Confined:        true,
+		NetworkMode:     NetworkLabel(b.Network),
+		SocksProxy:      b.SocksProxyEnv,
 	}
 }
 

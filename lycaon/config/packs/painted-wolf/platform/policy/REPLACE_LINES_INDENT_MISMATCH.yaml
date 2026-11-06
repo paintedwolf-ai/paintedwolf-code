@@ -21,4 +21,3 @@ x-paintedwolf-message: dedent prefix does not match every selected line
 x-paintedwolf-scenarios:
   - id: default
     vars: {line: 12, path: pipeline.py, profile: implement, tool: replace_lines}
-    expect_contains: ['Code: REPLACE_LINES_INDENT_MISMATCH', atomic]

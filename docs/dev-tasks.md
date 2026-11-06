@@ -774,7 +774,7 @@ editing modular OpenAPI sources, run `./task openapi:bundle` and
 
 ### Digest captures and locking
 
-Digest runners write unique captures inside a per-run isolation directory, then take a **short publish lock** only while publishing canonical evidence and failure pointers. Suite runtime does not hold that lock. Each test tree gets an isolated home, config, and temp directory; normal exit removes it, and the next run reclaims directories whose lease-holder PID is gone. Go and Rust toolchain and dependency stores (`GOCACHE`, `GOMODCACHE`, `GOPATH`, `RUSTUP_HOME`, `CARGO_HOME`) stay on the real home. Stale publish locks from killed agents are reclaimed via `${lockdir}/pid`. Commands under a lease run git with `core.fsmonitor`, `gc.autoDetach`, and `maintenance.autoDetach` off: a detached git daemon would inherit the lease and reservation descriptors and keep a finished run admitted.
+Digest runners write unique captures inside a per-run isolation directory, then take a **short publish lock** only while publishing canonical evidence and failure pointers. Suite runtime does not hold that lock. Each test tree gets an isolated home, config, and temp directory; normal exit removes it, and the next run reclaims directories whose lease no process holds. A directory that cannot be removed, such as one holding a dead test server's mount, stays in place with a warning, never crosses into the mount, and does not affect any run's verdict; later runs retry it. Go and Rust toolchain and dependency stores (`GOCACHE`, `GOMODCACHE`, `GOPATH`, `RUSTUP_HOME`, `CARGO_HOME`) stay on the real home. Stale publish locks from killed agents are reclaimed via `${lockdir}/pid`. Commands under a lease run git with `core.fsmonitor`, `gc.autoDetach`, and `maintenance.autoDetach` off: a detached git daemon would inherit the lease and reservation descriptors and keep a finished run admitted.
 
 
 Decision-engine compiler intermediates use the checkout's `compiler-cache/decide`
@@ -862,8 +862,9 @@ those tools apply. Arguments that passthrough targets and non-catalog targets
 forward are still parsed by their own scripts when the run starts.
 
 Go lint accepts repeatable `--scope <package-pattern>` arguments, for example
-`./task lint:full -- --scope ./internal/launchguard`. Both Go vet and golangci-lint
-receive that scope; full mode retains its whole-program deadcode check. Without
+`./task lint:full -- --scope ./internal/launchguard`. Golangci-lint, which covers
+vet in full mode, and fast mode's Go vet receive that scope; full mode retains its
+whole-program deadcode check. Without
 `--scope`, analysis still covers `./...`. Other golangci-lint flags remain forwarded.
 
 ### Health and queue advisories

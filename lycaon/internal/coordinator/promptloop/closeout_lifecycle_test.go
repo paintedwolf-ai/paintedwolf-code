@@ -17,8 +17,10 @@ func TestAssembledCloseoutClearsRetryStateOnlyAfterCommit(t *testing.T) {
 			failure := errors.New("commit failed")
 			loop := NewPromptLoopForTest(PromptLoopDeps{
 				Closeout: CloseoutDeps{
-					ClearCloseoutStall: func(context.Context, string) { cleared++ },
-					AssembleLedgerCloseout: func(context.Context, string, string, []string, string, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+					CloseoutTrackingDeps: CloseoutTrackingDeps{
+						ClearCloseoutStall: func(context.Context, string) { cleared++ },
+					},
+					AssembleLedgerCloseout: func(context.Context, string, string, []string, guidance.CloseoutDraft, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 						text := "retained report"
 						if result == "empty" {
 							text = ""
@@ -36,8 +38,8 @@ func TestAssembledCloseoutClearsRetryStateOnlyAfterCommit(t *testing.T) {
 				},
 			})
 			st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true,
-				closeoutRetry: closeoutRetryState{attempt: 3, prevKey: "offender", codes: []string{"citation"}}}
-			out, err := loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", "draft", nil, st, nil)
+				turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 3, prevKey: "offender", codes: []string{"citation"}}}}
+			out, err := loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", markdownRead("draft", false).Draft, nil, st, nil)
 			if result == "failed" {
 				if !errors.Is(err, failure) {
 					t.Fatalf("error = %v, want commit failure", err)
@@ -63,7 +65,9 @@ func TestUserSendStartsCloseoutIntentOnlyOnDelivery(t *testing.T) {
 			failure := errors.New("delivery failed")
 			loop := NewPromptLoopForTest(PromptLoopDeps{
 				Closeout: CloseoutDeps{
-					BeginCloseoutIntent: func(context.Context, string) { resets++ },
+					CloseoutTrackingDeps: CloseoutTrackingDeps{
+						BeginCloseoutIntent: func(context.Context, string) { resets++ },
+					},
 				},
 				Inbox: InboxDeps{
 					TakeUserSend: func(context.Context, string) ([]api.Message, error) {
@@ -78,7 +82,7 @@ func TestUserSendStartsCloseoutIntentOnlyOnDelivery(t *testing.T) {
 					},
 				},
 			})
-			st := &promptLoopTurnState{closeoutRetry: closeoutRetryState{attempt: 3, prevKey: "offender", codes: []string{"citation"}}}
+			st := &promptLoopTurnState{turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 3, prevKey: "offender", codes: []string{"citation"}}}}
 			prompt := "original"
 			sent, err := loop.Inbox.takeUserSend(t.Context(), "session", st, &prompt)
 			if delivery == "failed" {
@@ -103,7 +107,7 @@ func TestCloseoutContinuationRestoresWholeRetryProjection(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
-				return guidance.RetainedCloseout{Active: true, Attempt: 3, PrevKey: "offender", Drafted: "retained draft", ForcedBy: []string{"first", "second"}}
+				return guidance.RetainedCloseout{Active: true, Attempt: 3, PrevKey: "offender", Draft: markdownRead("retained draft", false).Draft, ForcedBy: []string{"first", "second"}}
 			},
 		},
 	})

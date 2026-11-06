@@ -7,7 +7,7 @@ Source of truth for host rules: `docs/den.md` (visual evidence) and `docs/tools.
 | Binding | Use when | Do not |
 |---|---|---|
 | `project_dir` | Plain static HTML/CSS/JS or a built export on disk. The tree is served same-origin at `http://lycaon.capture/`, so site-absolute assets including JSON (`/config.json`) are fulfilled from disk | Point at `src/` or bare `.` for bundler-only trees; start a generic HTTP file server |
-| `url` | Project's own loopback server (dev/SSR/HMR/auth/API), started with `command(command="npm run dev", background=true)` with `capability_request.local_listen`. The managed browser reaches host-local TCP | Pass remote/LAN URLs; combine with `project_dir` in one call |
+| `url` | Project's own loopback server (dev/SSR/HMR/auth/API), started with `command(command="npm run dev &")` with `capability_request.local_listen`. The managed browser reaches host-local TCP | Pass remote/LAN URLs; combine with `project_dir` in one call |
 
 Pick exactly one binding. Prefer `url` when the ask is how it looks **running**. Prefer `project_dir` for "do these built files render?" A click handler that `fetch`es a file from the same tree does not require a loopback server. `CAPTURE_URL_UNREACHABLE` after a successful request to that URL is a down server or a wrong port.
 
@@ -62,8 +62,8 @@ For a screen recording or an attached video, read the attachment's overview shee
 
 | Claim | Capture mode | Cite |
 |---|---|---|
-| Static page, no drive script | default `capture: "screenshot"` | The single `page#` handle |
-| Ordering, post-async settlement, multi-step flow | `capture: "filmstrip"` with `actions` | Per-frame `page#` (`frames[].evidence_handle` / `frame_index`) for "after step K" |
+| Static page, no drive script | default `capture: "screenshot"` | The single page handle |
+| Ordering, post-async settlement, multi-step flow | `capture: "filmstrip"` with `actions` | Per-frame page handles (`frames[].evidence_handle` / `frame_index`) for "after step K" |
 | Motion, flicker, late content, layout shift | `capture: "timeline"`, or `page_act` with `record` | The timeline summary's times and values |
 
 N action steps produce N+1 settled frames (navigate idle + after each action). Do not cite only the final after-shot for a sequence claim.
@@ -85,6 +85,6 @@ N action steps produce N+1 settled frames (navigate idle + after each action). D
 
 ## Presentation
 
-- Copy producer `artifact_id` values into `artifact_ids` — on `surface_note` to show one mid-run, or on the final report at close.
-- Never embed `![…](artifact-uuid)` or `<img src="artifact-uuid">` in synthesis.
+- Write producer `artifact_id` values as `[artifact:<uuid>]`, in a mid-run update or in your final answer.
+- Never embed `![…](artifact-uuid)` or `<img src="artifact-uuid">` in your text.
 - Stop a `url` server with `command_stop(handle=…)` when the turn is done. `project_dir` leaves nothing to stop.

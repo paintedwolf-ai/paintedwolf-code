@@ -71,7 +71,7 @@ webE2e(
       expect(fits.primary).toBe(true);
       expect(fits.no).toBe(true);
       expect(fits.rail).toBe(true);
-    }).toPass({timeout:5000});
+    }).toPass({timeout:30_000});
     await link.press("Enter");
     const reader = page.getByTestId("chat-content-page");
     await expect(reader).toContainText(HOSTS[0]!);

@@ -644,11 +644,61 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
     prompt: "Which API style?",
     response_type: "text",
   }),
-  surface_note: JSON.stringify({
-    status: "noted",
-    message_id: "note-1",
-  }),
   ...Object.fromEntries(CATALOG_OK_TOOLS.map((tool) => [tool, OK])),
+};
+
+/** The other shapes `source_history` returns: the overview and session-baseline diff, on the trunk and a write leg. */
+export const SOURCE_HISTORY_MODE_FIXTURES: Record<string, string> = {
+  overview: JSON.stringify({
+    mode: "overview",
+    recorded: true,
+    since: { ordinal: 4 },
+    files: [
+      { path: "gen/main.go", op: "write", actor: "external", at: "2026-08-26 14:02 UTC", effects: 2, version_id: "v-2", window_id: "w-1", settled: true, during_your_command: true },
+      { path: "@docs/guide.md", op: "rename", actor: "user", at: "2026-08-26 13:50 UTC", effects: 1, version_id: "v-5" },
+    ],
+    open_windows: [{ id: "w-2", running: true }],
+    count: 2,
+    note: "commands in open_windows have not settled, so this list may be incomplete",
+  }),
+  overview_write_leg: JSON.stringify({
+    mode: "overview",
+    recorded: true,
+    since: { ordinal: 0 },
+    branch: "0f0d3a52-6a53-4a3e-9d55-6f1b1a2c7e10",
+    files: [
+      { path: "main.go", op: "write", actor: "you", at: "2026-08-26 14:02 UTC", effects: 1, version_id: "v-2" },
+      { path: "gen/schema.json", op: "create", unrecorded: true },
+      { path: "obsolete.go", op: "delete", unrecorded: true },
+    ],
+    count: 3,
+  }),
+  diff: JSON.stringify({
+    mode: "diff",
+    path: "main.go",
+    recorded: true,
+    since: { ordinal: 4 },
+    base_version_id: "v-1",
+    version_id: "v-2",
+    diff: "--- main.go (v-1, session baseline)\n+++ main.go (v-2)\n@@ -1 +1 @@\n- old\n+ new\n",
+  }),
+  diff_unrecorded_write_leg: JSON.stringify({
+    mode: "diff",
+    path: "gen/schema.json",
+    recorded: false,
+    unrecorded: true,
+    since: { ordinal: 0 },
+    diff: "--- gen/schema.json (absent)\n+++ gen/schema.json (live)\n@@ -1,0 +1,1 @@\n+ {}\n",
+  }),
+  diff_past_record_write_leg: JSON.stringify({
+    mode: "diff",
+    path: "main.go",
+    recorded: true,
+    since: { ordinal: 0 },
+    base_version_id: "v-1",
+    note: "this file changed after its last recorded version, so the live side names no version",
+    diff: "--- main.go (v-1, session baseline)\n+++ main.go (live)\n@@ -1 +1 @@\n- old\n+ generated\n",
+  }),
 };
 
 /** Wire-compacted tool payloads — mirrors Go chunk compactor residue shapes. */

@@ -10,8 +10,7 @@ import tempfile
 import unittest
 
 from linux_release.installed_results import admit
-from linux_release.support_matrix import CATALOG, expand
-from linux_release.support_variants import variants
+from linux_release.support_matrix import CATALOG, expand, variants
 
 SOURCE = "a" * 40
 

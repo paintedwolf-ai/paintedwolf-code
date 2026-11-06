@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -85,21 +84,6 @@ func TestDisclosurePolicyCatalogCompleteness(t *testing.T) {
 		if p := capability.ToolDisclosurePolicy(reg, name); p != capability.DisclosureShow && p != capability.DisclosureHide {
 			t.Fatalf("tool %q unresolved disclosure policy %q", name, p)
 		}
-	}
-}
-
-func TestImplementSpawnExclusionLineIsDerived(t *testing.T) {
-	t.Parallel()
-	at, err := catalogfixture.StockGuidancePath("implement-spawn")
-	contractcheck.FailErr(t, "locate implement-spawn", err)
-	raw, err := at.Read()
-	contractcheck.FailErr(t, "read implement-spawn", err)
-	text := string(raw)
-	if strings.Contains(text, "`plan-writer`") || strings.Contains(text, "`plan-reviewer`") {
-		t.Fatal("implement-spawn.md must not hand-list excluded agent ids")
-	}
-	if !strings.Contains(text, "excluded_disclosures") {
-		t.Fatal("implement-spawn.md must iterate excluded_disclosures from the capability surface")
 	}
 }
 

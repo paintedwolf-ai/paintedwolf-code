@@ -24,6 +24,7 @@ type WorkerFindingInput struct {
 	Path     string
 	Evidence string // optional handle hint for evidence.Resolve
 	Line     int
+	EndLine  int // closes an inclusive range; zero means one line or none
 	Excerpt  string
 }
 
@@ -285,63 +286,18 @@ func resolveCloseoutFindingCitations(
 	seenUnverifiable := map[string]struct{}{}
 	surveySeen := map[string]struct{}{}
 	for _, finding := range findings {
-		path := strings.TrimSpace(finding.Path)
-		handle := strings.TrimSpace(finding.Evidence)
-		if path == "" && handle == "" {
-			continue
+		outcome := classifyCloseoutFinding(roots, finding, ev)
+		if outcome.resolved {
+			resolved = append(resolved, outcome.resolution)
 		}
-		line := finding.Line
-		excerpt := strings.TrimSpace(finding.Excerpt)
-		if handle == "" && path != "" && line <= 0 && excerpt == "" {
-			if citationResolvesToSurveyRecord(roots, finding, ev) {
-				addOffender(&surveyAdvisories, surveySeen, path)
-				continue
-			}
-			if citationWasObserved(roots, finding, ev) {
-				addOffender(&unverifiable, seenUnverifiable, path)
-			} else {
-				addOffender(&notObserved, seenNotObserved, path)
-			}
-			continue
-		}
-		// Bare handles still require ledger membership.
-		if line <= 0 && excerpt == "" {
-			res, found := resolveBareHandleCitation(roots, ev, handle, path)
-			resolved = append(resolved, res)
-			if !found {
-				offender := FormatResolutionOffender(res, finding)
-				if _, ok := evidence.ResolveHandle(ev, handle); ok {
-					addOffender(&unverifiable, seenUnverifiable, offender)
-				} else {
-					addOffender(&notObserved, seenNotObserved, offender)
-				}
-			} else if citationResolvesToSurveyRecord(roots, finding, ev) {
-				addOffender(&surveyAdvisories, surveySeen, handle)
-			}
-			continue
-		}
-		if citationResolvesToVisualIntent(finding, ev) {
-			token := handle
-			if token == "" {
-				token = path
-			}
-			addOffender(&unverifiable, seenUnverifiable, token)
-			continue
-		}
-		res := resolveWorkerFindingCitation(roots, finding, ev)
-		resolved = append(resolved, res)
-		if res.Verdict.Grounded() {
-			continue
-		}
-		if citationResolvesToSurveyRecord(roots, finding, ev) {
-			addOffender(&surveyAdvisories, surveySeen, FormatResolutionOffender(res, finding))
-			continue
-		}
-		offender := FormatResolutionOffender(res, finding)
-		if citationWasObserved(roots, finding, ev) {
-			addOffender(&unverifiable, seenUnverifiable, offender)
-		} else {
-			addOffender(&notObserved, seenNotObserved, offender)
+		switch outcome.class {
+		case closeoutCitationSurvey:
+			addOffender(&surveyAdvisories, surveySeen, outcome.offender)
+		case closeoutCitationNotObserved:
+			addOffender(&notObserved, seenNotObserved, outcome.offender)
+		case closeoutCitationUnverifiable:
+			addOffender(&unverifiable, seenUnverifiable, outcome.offender)
+		case closeoutCitationGrounded, closeoutCitationEmpty:
 		}
 	}
 	return resolved, notObserved, unverifiable, surveyAdvisories
@@ -409,7 +365,10 @@ func resolveWorkerFindingCitation(
 	if _, known := evidence.ResolveHandle(ev, finding.Evidence); !known && res.Verdict == evidence.VerdictUnverifiable {
 		res = bindLooseCitation(roots.ProjectDir, finding, ev, res)
 	}
-	return res
+	if finding.EndLine > 0 {
+		res = applyCitationRange(roots, finding, ev, res)
+	}
+	return countedCoordinate(finding, ev, res)
 }
 
 func resolveWorkerFindingCitationExact(
@@ -544,6 +503,9 @@ func excerptMatchesOtherHandle(ev evidence.Ledger, citedHandle string, line int,
 // FormatResolutionOffender renders a resolved citation for reject/audit tokens.
 func FormatResolutionOffender(res evidence.Resolution, finding WorkerFindingInput) string {
 	path := strings.TrimSpace(res.Path)
+	if res.EndLine > 0 {
+		return formatRangeOffender(path, res.Handle, res.Line, res.EndLine, res.Excerpt)
+	}
 	if path != "" {
 		if res.Line > 0 && strings.TrimSpace(res.Excerpt) != "" {
 			return fmt.Sprintf("%s:%d (%q)", path, res.Line, strings.TrimSpace(res.Excerpt))
@@ -562,6 +524,9 @@ func FormatResolutionOffender(res evidence.Resolution, finding WorkerFindingInpu
 func formatFindingOffender(f WorkerFindingInput) string {
 	path := strings.TrimSpace(f.Path)
 	handle := strings.TrimSpace(f.Evidence)
+	if f.EndLine > 0 {
+		return formatRangeOffender(path, handle, f.Line, f.EndLine, f.Excerpt)
+	}
 	if path != "" {
 		if f.Line > 0 && strings.TrimSpace(f.Excerpt) != "" {
 			return fmt.Sprintf("%s:%d (%q)", path, f.Line, strings.TrimSpace(f.Excerpt))
@@ -605,7 +570,7 @@ func citedURLHandleOffenders(urls []string, ev evidence.Ledger) []string {
 // GroundingHintData maps offenders and observed evidence to bounded hint template vars.
 func GroundingHintData(offenders []string, ev evidence.Ledger) map[string]any {
 	data := OffenderHintData(offenders)
-	handleReport := FormatOffenderReport(evidence.HandlesSorted(ev))
+	handleReport := FormatOffenderReport(groundingHintHandles(offenders, ev))
 	data["observed_handles_count"] = handleReport.Count
 	data["observed_handles_sample"] = handleReport.Sample
 	data["observed_handles_omitted"] = handleReport.Omitted
@@ -635,6 +600,7 @@ type ResolvedFinding struct {
 	Handle  string
 	Path    string
 	Line    int
+	EndLine int
 	Excerpt string
 	Verdict evidence.Verdict
 	Note    string
@@ -671,6 +637,7 @@ func ResolveFindingsForWire(
 			Handle:  res.Handle,
 			Path:    res.Path,
 			Line:    res.Line,
+			EndLine: res.EndLine,
 			Excerpt: res.Excerpt,
 			Verdict: res.Verdict,
 			Note:    note,

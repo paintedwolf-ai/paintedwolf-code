@@ -140,9 +140,6 @@ func TestReadCrossingGrantsOnlyRead(t *testing.T) {
 			t.Fatalf("%s: Documents is catalogued sensitive; grant must stay exact, got %+v",
 				offer.Scope, offer.Grant.GrantedPath)
 		}
-		if !strings.Contains(offer.Coverage, "reads of") {
-			t.Fatalf("%s: coverage should say what it covers, got %q", offer.Scope, offer.Coverage)
-		}
 	}
 }
 

@@ -3,9 +3,13 @@
 package confine
 
 import (
+	"context"
 	"fmt"
 	"math"
+	"os/exec"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -24,8 +28,9 @@ func declaredResourceLimits() map[string]LimitCapability {
 	return map[string]LimitCapability{"core": full, "fsize": full, "nofile": full, "stack": full, "cpu": full, "nproc": full, "as": full}
 }
 
-// ReadResourceLimit reports this process's current limit for resource.
-func ReadResourceLimit(resource string) (ResourceLimit, error) {
+// ChildResourceLimit reports the limit a program launched with none set
+// receives for resource.
+func ChildResourceLimit(ctx context.Context, resource string) (ResourceLimit, error) {
 	id, ok := limitResourceIDs[resource]
 	if !ok {
 		return ResourceLimit{}, fmt.Errorf("unknown resource %q", resource)
@@ -37,7 +42,41 @@ func ReadResourceLimit(resource string) (ResourceLimit, error) {
 	if err := syscall.Getrlimit(id, &raw); err != nil {
 		return ResourceLimit{}, err
 	}
-	return ResourceLimit{Resource: resource, Soft: fromPlatformLimit(raw.Cur), Hard: fromPlatformLimit(raw.Max)}, nil
+	limit := ResourceLimit{Resource: resource, Soft: fromPlatformLimit(raw.Cur), Hard: fromPlatformLimit(raw.Max)}
+	if resource == "nofile" {
+		soft, err := childDescriptorSoftLimit(ctx)
+		if err != nil {
+			return ResourceLimit{}, err
+		}
+		limit.Soft = soft
+	}
+	return limit, nil
+}
+
+// childDescriptorSoftLimit measures a started child. This process cannot read
+// the value: the Go runtime raised its own soft limit at startup, and it keeps
+// the original privately to restore in each process it starts.
+func childDescriptorSoftLimit(ctx context.Context) (uint64, error) {
+	command := exec.CommandContext(ctx, "/bin/sh", "-c", "ulimit -Sn")
+	command.Env = []string{}
+	command.Dir = "/"
+	out, err := command.Output()
+	if err != nil {
+		return 0, fmt.Errorf("measure the child descriptor limit: %w", err)
+	}
+	return parseChildLimit(string(out))
+}
+
+func parseChildLimit(report string) (uint64, error) {
+	report = strings.TrimSuffix(report, "\n")
+	if report == "unlimited" {
+		return math.MaxUint64, nil
+	}
+	value, err := strconv.ParseUint(report, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("measure the child descriptor limit: unexpected report %q", report)
+	}
+	return value, nil
 }
 
 // applyProcessAttributes runs in the helper just before it becomes the

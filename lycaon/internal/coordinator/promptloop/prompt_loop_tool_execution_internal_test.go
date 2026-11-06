@@ -3,9 +3,9 @@ package promptloop
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"reflect"
@@ -378,15 +378,12 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 					t.Fatalf("loading fact = %v, want %v", data, wantLoad)
 				}
 				if wantLoad {
-					want := []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "command"}}}
-					if !reflect.DeepEqual(data["replacement_calls"], want) {
-						t.Fatalf("loading call = %#v", data["replacement_calls"])
+					want := []toolreach.Call{toolreach.Load("command")}
+					if !reflect.DeepEqual(refusalNextCalls(reject), want) {
+						t.Fatalf("loading call = %#v", refusalNextCalls(reject))
 					}
-					if !strings.Contains(reject.Copy["instead"], "request_tools") {
-						t.Fatalf("next action lost loading recovery: %v", reject.Copy)
-					}
-				} else if _, exists := data["replacement_calls"]; exists {
-					t.Fatalf("unavailable tool has loading remedy: %v", data)
+				} else if slices.ContainsFunc(refusalNextCalls(reject), func(call toolreach.Call) bool { return call.Args["need"] == "command" }) {
+					t.Fatalf("unavailable tool has loading remedy: %v", refusalNextCalls(reject))
 				}
 			}
 			rule, _ := rules.Get(tc.code)
@@ -408,25 +405,22 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 				if reject.Copy == nil {
 					t.Fatalf("missing dynamic copy: %+v", reject)
 				}
-				canTask := slices.Contains(offered, "task")
-				loadable := (agents == nil || len(agents) > 0) && !canTask && slices.Contains(offered, "request_tools") && slices.Contains(deferred, "task")
-				data := toolrejection.AsToolReject(reject).Data
-				if data["task_loadable"] != loadable {
-					t.Fatalf("task loadability disagrees with offered=%v deferred=%v: %v", offered, deferred, data)
-				}
+				dispatchable := agents == nil || len(agents) > 0
+				canTask := dispatchable && slices.Contains(offered, "task")
+				loadable := dispatchable && !canTask && slices.Contains(offered, "request_tools") && slices.Contains(deferred, "task")
+				var want []string
 				if loadable {
-					want := []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "task"}}}
-					if !reflect.DeepEqual(data["replacement_calls"], want) {
-						t.Fatalf("wrong loader replacement: %v", data)
-					}
-				} else if _, exists := data["replacement_calls"]; exists {
-					t.Fatalf("unreachable replacement survived: %v", data)
+					want = append(want, "request_tools")
 				}
-				for _, field := range []string{"fix", "instead"} {
-					copy := reject.Copy[field]
-					if strings.Contains(copy, "request_tools") != loadable || strings.Contains(copy, "task") != (canTask || loadable) || strings.Contains(copy, "implementer") {
-						t.Fatalf("%s disagrees with offered=%v deferred=%v: %s", field, offered, deferred, copy)
-					}
+				if canTask || loadable {
+					want = append(want, "task")
+				}
+				var got []string
+				for _, call := range refusalNextCalls(reject) {
+					got = append(got, call.Tool)
+				}
+				if !slices.Equal(got, want) {
+					t.Fatalf("next calls = %v, want %v, offered=%v deferred=%v agents=%v", got, want, offered, deferred, agents)
 				}
 			}
 		}
@@ -444,4 +438,55 @@ func TestDelegateDispatchOnImplementSurfaceRedirectsToTask(t *testing.T) {
 	if got := unofferedToolCode("delegate_dispatch", "plan_execute"); got != "TOOL_NOT_OFFERED" {
 		t.Fatalf("unofferedToolCode(delegate_dispatch, plan_execute) = %q, want TOOL_NOT_OFFERED", got)
 	}
+}
+
+// A model calling a tool retired to content is told to write the text, only
+// where that text can reach the user. Elsewhere the ordinary refusal is the truth.
+func TestToolRetiredToContentRefusalSaysWriteText(t *testing.T) {
+	root := testutil.CheckoutRoot(t)
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	testutil.FailErr(t, "install anchors", anchorcatalog.InstallFile(filepath.Join(root, "lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml")))
+	loader, err := oar.NewLoader(filepath.Join(root, "schemas"))
+	testutil.FailErr(t, "create loader", err)
+	rules, err := loader.LoadEffectivePolicy()
+	testutil.FailErr(t, "load policy", err)
+	pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
+	pipeline.EnableAnchor(oar.AnchorToolRejected)
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Tools: ToolsDeps{BlockPlane: &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}},
+	})
+	for _, tc := range []struct {
+		name, tool, surfaceID, parent string
+		want                          bool
+	}{
+		{name: "publishing surface", tool: "surface_note", surfaceID: "implement_routing", want: true},
+		{name: "synthesis keeps tool-step text private", tool: "surface_note", surfaceID: "implement_synthesis"},
+		{name: "worker text stays private", tool: "surface_note", surfaceID: "implement_routing", parent: "root"},
+		{name: "another unknown tool", tool: "made_up", surfaceID: "implement_routing"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sess := &api.Session{ID: t.Name(), AgentType: "coordinator", ParentSessionID: tc.parent}
+			reject := loop.Tools.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: tc.tool}, tools.ToolContext{
+				Identity: tools.InvocationIdentity{Agent: "coordinator"},
+				Turn:     tools.InvocationTurn{TurnSurfaceID: tc.surfaceID, TurnOfferedToolNames: []string{"read", "request_tools"}, TurnToolPlan: toolsurface.Compile([]string{"read", "request_tools"}, []string{"recall"})},
+			}, "TOOL_NOT_OFFERED", nil)
+			if reject.Code() != "TOOL_NOT_OFFERED" || reject.Copy == nil {
+				t.Fatalf("refusal = %+v", reject)
+			}
+			if got := strings.Contains(reject.Copy["fix"], "Write the update as assistant text"); got != tc.want {
+				t.Fatalf("write-text recovery = %v, want %v: %s", got, tc.want, reject.Copy["fix"])
+			}
+			if _, discovery := toolrejection.AsToolReject(reject).Data["discovery"]; discovery && tc.want {
+				t.Fatal("a retired name needs no tool catalog")
+			}
+		})
+	}
+}
+
+func refusalNextCalls(reject *guidance.Refusal) []toolreach.Call {
+	if len(reject.Facts.Feedback) == 0 {
+		return nil
+	}
+	calls, _ := reject.Facts.Feedback[0].Details[api.ToolFeedbackNextCalls].([]toolreach.Call)
+	return calls
 }

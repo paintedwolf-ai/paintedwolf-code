@@ -130,7 +130,7 @@ webE2e("den:harness — detections catalog, scope, toggle, and import lifecycle"
   // Vitest covers badge and incompleteness copy; soft-provider recovery can take
   // the settings stage during a longer check.
   await expect(page.getByTestId("detection-egress-note")).toBeVisible({
-    timeout: 5_000,
+    timeout: 30_000,
   });
 
   // Re-enable via API + confirm UI after reopen.

@@ -1,6 +1,7 @@
 package textutil
 
 import (
+	"bufio"
 	"container/heap"
 	"context"
 	"encoding/binary"
@@ -63,8 +64,22 @@ func sortInto(inv *invocation, order sortOrder, delimiter byte, out io.Writer) e
 		inv.status = 2
 		return errMissingInput
 	}
-	s := &sorter{inv: inv, order: order, delimiter: delimiter, out: out}
+	buffered := bufio.NewWriterSize(out, sortOutputBytes)
+	s := &sorter{inv: inv, order: order, delimiter: delimiter, out: buffered}
 	defer s.cleanup()
+	if err := s.run(sources); err != nil {
+		_ = buffered.Flush()
+		return err
+	}
+	return buffered.Flush()
+}
+
+// sortOutputBytes spares each sorted record a pipe rendezvous. Sort reads all
+// input before it writes, so held output cannot delay a live consumer.
+const sortOutputBytes = 64 << 10
+
+func (s *sorter) run(sources []source) error {
+	inv := s.inv
 	for _, source := range sources {
 		if err := s.read(source.reader); err != nil {
 			return err

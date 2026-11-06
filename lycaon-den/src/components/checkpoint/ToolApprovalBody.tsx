@@ -1,3 +1,4 @@
+import { GrantMenu } from "./GrantMenu.tsx";
 import { IgnoreSecretDialog } from "../source/secrets/IgnoreSecretDialog.tsx";
 import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import { For, Show, createMemo, createSignal, createEffect, on, onCleanup, onMount } from "solid-js";
@@ -7,9 +8,12 @@ import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 import { DenSelect } from "../primitives/DenSelect.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { openSourceLocation } from "../../platform/navigation/open-source.ts";
+import { openRunningStage } from "../../platform/navigation/open-running.ts";
+import { openChatDestination } from "../../chat/composer/chat-destination.ts";
+import { openSessionFromNotification } from "../../notifications/notification-open.ts";
 import { revealApprovalOrigin } from "../../chat/checkpoint/approval-reveal.ts";
 import { approvalSlot } from "../../chat/checkpoint/approval-slots.ts";
-import { ActionsZone, approvalKeyHandler, ContextZone, GrantMenu, RedirectRail, ShellCard, ShellHeader, ShellScroll, SubjectBlock, SubjectFact, SubjectLocation, SubjectTargets, useApprovalCollapse } from "./ApprovalShell.tsx";
+import { ActionsZone, approvalKeyHandler, ContextZone, RedirectRail, ShellCard, ShellHeader, ShellScroll, SubjectBlock, SubjectFact, SubjectLocation, SubjectTargets, useApprovalCollapse } from "./ApprovalShell.tsx";
 import { ApprovalContentLink } from "./ApprovalContentLink.tsx";
 import { ApprovalFileChanges } from "./ApprovalFileChanges.tsx";
 import { checkpointRowLabel } from "./checkpoint-row-label.ts";
@@ -193,6 +197,63 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
     };
   });
   const detailRows = createMemo(() => approvalEvidenceRows(plan(), directIPDeclaration(), socketResolutions()));
+  const otherSessionHolders = createMemo(() => {
+    const seen = new Set<string>();
+    const currentSessionId = (props.sessionId ?? props.checkpoint.sessionId ?? "").trim();
+    const out: Array<{ sessionId: string; sessionTitle: string; projectId: string; projectName: string }> = [];
+    for (const target of targets()) {
+      const holders = target.details?.holders;
+      if (!Array.isArray(holders)) continue;
+      for (const raw of holders) {
+        if (!raw || typeof raw !== "object") continue;
+        const record = raw as Record<string, unknown>;
+        const kind = typeof record.kind === "string" ? record.kind.trim() : "";
+        const sessionId = typeof record.session_id === "string" ? record.session_id.trim() : "";
+        if (!sessionId || seen.has(sessionId)) continue;
+        if (kind !== "other_session" && sessionId === currentSessionId) continue;
+        seen.add(sessionId);
+        out.push({
+          sessionId,
+          sessionTitle: typeof record.session_title === "string" ? record.session_title.trim() : "",
+          projectId: typeof record.project_id === "string" ? record.project_id.trim() : "",
+          projectName: typeof record.project_name === "string" ? record.project_name.trim() : "",
+        });
+      }
+    }
+    return out;
+  });
+  const openHolderChat = (holder: { sessionId: string; projectId: string }) => {
+    if (holder.projectId) {
+      void openChatDestination({
+        projectId: holder.projectId,
+        sessionId: holder.sessionId,
+      });
+      return;
+    }
+    openSessionFromNotification(holder.sessionId);
+  };
+  const hasProjectBackgroundHolder = createMemo(() => {
+    const currentProjectId = (props.projectId ?? "").trim();
+    for (const target of targets()) {
+      const holders = target.details?.holders;
+      if (!Array.isArray(holders)) continue;
+      for (const raw of holders) {
+        if (!raw || typeof raw !== "object") continue;
+        const record = raw as Record<string, unknown>;
+        if (record.background !== true) continue;
+        const holderProjectId =
+          typeof record.project_id === "string" ? record.project_id.trim() : "";
+        if (
+          !holderProjectId ||
+          !currentProjectId ||
+          holderProjectId === currentProjectId
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  });
 
   const joinedWaiterCount = createMemo(() => {
     const count = payload()?.joined_count;
@@ -228,6 +289,7 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
       elevatedTip={elevatedTip()}
       describedBy={describedBy()}
       inert={props.inert}
+      decisionNotice={props.decisionNotice}
       collapse={collapse}
       peek={checkpointRowLabel(props.checkpoint)}
       header={
@@ -355,10 +417,34 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
           noteTestid="approval-option-note"
           agent={agent()}
           detailRows={detailRows()}
-          detailActions={<Show when={location()?.originKind === "file" && location()?.revealToolCallId}>
-            <button type="button" class="den-approval-card-location-origin" data-testid="approval-show-in-chat"
-              onClick={() => { const id = location()?.revealToolCallId; if (id) showInChat(id); }}>{copy.showInChat}</button>
-          </Show>}
+          detailActions={<>
+            <Show when={location()?.originKind === "file" && location()?.revealToolCallId}>
+              <button type="button" class="den-approval-card-location-origin" data-testid="approval-show-in-chat"
+                onClick={() => { const id = location()?.revealToolCallId; if (id) showInChat(id); }}>{copy.showInChat}</button>
+            </Show>
+            <For each={otherSessionHolders()}>
+              {(holder) => (
+                <button
+                  type="button"
+                  class="den-approval-card-location-origin"
+                  data-testid="approval-open-holder-chat"
+                  onClick={() => openHolderChat(holder)}
+                >
+                  {holder.sessionTitle ? `Open chat '${holder.sessionTitle}'` : `Open chat ${holder.sessionId}`}
+                </button>
+              )}
+            </For>
+            <Show when={hasProjectBackgroundHolder()}>
+              <button
+                type="button"
+                class="den-approval-card-location-origin"
+                data-testid="approval-open-running-pane"
+                onClick={() => openRunningStage({ projectId: props.projectId })}
+              >
+                Open Running
+              </button>
+            </Show>
+          </>}
         />
 
         <Show when={joinedWaiterCount()}>

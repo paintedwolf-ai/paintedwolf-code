@@ -166,7 +166,7 @@ func manifestGitTools(t *testing.T) []string {
 	t.Helper()
 	cfg, err := nativemanifest.Load()
 	contractcheck.FailErr(t, "nativemanifest.Load", err)
-	group := cfg.Group("git")
+	group := append(cfg.Group("git"), cfg.OperationGroup("git")...)
 	if len(group) == 0 {
 		t.Fatal("native.git group is empty — this test would assert nothing")
 	}

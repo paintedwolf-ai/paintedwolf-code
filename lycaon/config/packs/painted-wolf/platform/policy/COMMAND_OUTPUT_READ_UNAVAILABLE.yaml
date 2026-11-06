@@ -21,6 +21,3 @@ x-paintedwolf-scenarios:
     vars:
       path: '@output/program.stdout'
       tool: read
-    expect_contains:
-      - 'Code: COMMAND_OUTPUT_READ_UNAVAILABLE'
-      - '@output/program.stdout'

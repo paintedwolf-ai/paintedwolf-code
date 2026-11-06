@@ -75,6 +75,9 @@ func rejectArgs(t *testing.T, schema, args map[string]any) map[string]any {
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("expected TOOL_ARGS_INVALID, got %#v", reject)
 	}
+	if reject.Data["argument_schema_tool"] != "submit_verdict" {
+		t.Fatalf("schema diagnostic lost its validator identity: %#v", reject.Data)
+	}
 	return reject.Data
 }
 
@@ -227,5 +230,117 @@ func TestDiagnoseArgumentsSwallowedByJSONText(t *testing.T) {
 	rep, _ := data["replacement_args"].(map[string]any)
 	if rep["files"] == nil || rep["scope"] == nil {
 		t.Fatalf("replacement = %#v, want files and scope beside brief", rep)
+	}
+}
+
+func commandCapabilitySchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []any{"command"},
+		"properties": map[string]any{
+			"command": map[string]any{"type": "string"},
+			"capability_request": map[string]any{
+				"type":                 "object",
+				"additionalProperties": false,
+				"minProperties":        1,
+				"properties": map[string]any{
+					"direct_ip": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"properties": map[string]any{
+							"declared_destinations": map[string]any{
+								"type":  "array",
+								"items": map[string]any{"type": "string"},
+							},
+						},
+					},
+					"local_listen": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"properties": map[string]any{
+							"ports": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}},
+						},
+					},
+					"loopback_connect": map[string]any{
+						"type":                 "object",
+						"additionalProperties": false,
+						"properties": map[string]any{
+							"ports": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}},
+						},
+					},
+					"read_path":    map[string]any{"type": "string"},
+					"write_root":   map[string]any{"type": "string"},
+					"socket_paths": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				},
+			},
+		},
+	}
+}
+
+func TestRelocationDoesNotGuessMissingCapabilityStructure(t *testing.T) {
+	schema := commandCapabilitySchema()
+	for _, field := range []string{"direct_ip", "local_listen", "loopback_connect"} {
+		t.Run(field, func(t *testing.T) {
+			data := rejectArgs(t, schema, map[string]any{
+				"command": "curl -s http://127.0.0.1:8080/health",
+				field:     true,
+			})
+			assertMisplaced(t, data, []string{field}, "", "capability_request")
+			if data["replacement_args"] != nil || data["replacement_args_json"] != nil {
+				t.Fatalf("relocation invented capability structure: %#v", data)
+			}
+		})
+	}
+}
+
+func TestDiagnosisDoesNotGuessArgumentNamesOrCardinality(t *testing.T) {
+	schema := commandCapabilitySchema()
+	cases := []struct {
+		input string
+		value any
+	}{
+		{input: "read_paths", value: []any{"/tmp"}},
+		{input: "write_paths", value: []any{"/tmp"}},
+		{input: "write_roots", value: []any{"/tmp"}},
+		{input: "socket_path", value: "/tmp/daemon.sock"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			data := rejectArgs(t, schema, map[string]any{
+				"command": "ls /tmp",
+				tc.input:  tc.value,
+			})
+			if data["did_you_mean"] != nil || data["replacement_args"] != nil || data["replacement_args_json"] != nil {
+				t.Fatalf("unknown intent became an argument repair: %#v", data)
+			}
+		})
+	}
+}
+
+func TestRelocationPreservesSchemaAcceptedValues(t *testing.T) {
+	for _, value := range []any{true, false, []any{"udp://example.test:123"}, map[string]any{}} {
+		encoded, _ := json.Marshal(value)
+		t.Run(string(encoded), func(t *testing.T) {
+			union := map[string]any{"oneOf": []any{
+				map[string]any{"type": "boolean"},
+				map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				map[string]any{"type": "object", "additionalProperties": false},
+			}}
+			schema := map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{
+				"access": map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"network": union}},
+			}}
+			args := map[string]any{"network": value}
+			data := rejectArgs(t, schema, args)
+			replacement, ok := data["replacement_args"].(map[string]any)
+			if !ok {
+				t.Fatalf("missing validated replacement: %#v", data)
+			}
+			got, _ := json.Marshal(replacement["access"].(map[string]any)["network"])
+			original, _ := json.Marshal(args["network"])
+			if string(got) != string(encoded) || string(original) != string(encoded) {
+				t.Fatalf("relocation changed the value: got %s, input %s, want %s", got, original, encoded)
+			}
+		})
 	}
 }

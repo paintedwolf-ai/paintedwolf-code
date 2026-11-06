@@ -59,7 +59,7 @@ func (bp *BlockPlane) Evaluate(ctx context.Context, anchor, tool, profile string
 		return rerr
 	}
 	if rd, ok := oar.FirstBlock(rendered); ok && rd.Text != "" {
-		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy)
+		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(oar.NextCallsDetails(nil, rd.Decision.Data), nil)
 	}
 	if d := strings.TrimSpace(decision.Code); d != "" {
 		return toolrejection.FormatDecisionReject(d, nil, nil)
@@ -76,8 +76,8 @@ func (bp *BlockPlane) evaluateBlock(ctx context.Context, anchor, tool, profile s
 		return nil, nil
 	}
 	gc := oar.NewGuardContext()
-	fillOccurrenceIdentity(ctx, gc)
 	gc.ObserveToolCall(tool, args)
+	fillOccurrenceIdentity(ctx, gc)
 	gc.Session.Profile = profile
 	gc.Session.PermissionProfile = profile
 	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
@@ -115,8 +115,8 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 		return nil
 	}
 	gc := oar.NewGuardContext()
-	fillOccurrenceIdentity(ctx, gc)
 	gc.ObserveToolCall(tool, args)
+	fillOccurrenceIdentity(ctx, gc)
 	gc.Session.Profile = profile
 	gc.Session.PermissionProfile = profile
 	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
@@ -159,7 +159,7 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 		return toolrejection.RenderRejectBlock(gc.ObservedRejectCode, tr.Data, tr, nil)
 	}
 	if rd, ok := oar.FirstBlock(rendered); ok && rd.Text != "" {
-		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(tr.Data, nil).WithCause(tr)
+		return guidance.NewRefusal(rd.Decision.Code, rd.Text).WithPolicyCopy(rd.Decision.Copy).WithDetails(oar.NextCallsDetails(tr.Data, rd.Decision.Data), nil).WithCause(tr)
 	}
 	if d := strings.TrimSpace(res.Decision.Code); d != "" {
 		return toolrejection.RenderRejectBlock(d, tr.Data, tr, nil)
@@ -174,6 +174,10 @@ func ApplyToolRejectObservations(gc *oar.GuardContext, tr *toolrejection.ToolRej
 	}
 	code := strings.TrimSpace(tr.Code)
 	gc.ObservedRejectCode = code
+	if tr.CapabilityContract != nil {
+		snapshot := *tr.CapabilityContract
+		gc.Invocation.CapabilityContract = &snapshot
+	}
 	// [OAR-PROF-3] A handler or host-state failure is not an argument check.
 	if tr.ArgumentValidation {
 		gc.Invocation.ArgValidationErrors = AppendUnique(gc.Invocation.ArgValidationErrors, code)

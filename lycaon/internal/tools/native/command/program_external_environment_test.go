@@ -109,10 +109,22 @@ func TestProgramJobsStaySessionScopedWhilePsRunsForBothSessions(t *testing.T) {
 	}
 }
 
-func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
-	if runtime.GOOS != "darwin" || !confine.Available() {
-		t.Skip("darwin + seatbelt sandbox required")
+// requireAppliedBoundary fails on Linux when confinement is missing, since the
+// capability report is the finding.
+func requireAppliedBoundary(t *testing.T) {
+	t.Helper()
+	if confine.Available() {
+		return
 	}
+	if runtime.GOOS == "linux" {
+		caps, _ := confine.LinuxCapabilities()
+		t.Fatalf("linux confinement unavailable on this host: %+v", caps)
+	}
+	t.Skip("this host has no confinement adapter")
+}
+
+func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
+	requireAppliedBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 
@@ -144,6 +156,11 @@ func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
 	}
 
 	outsideTarget := filepath.Join(outsideDir, "refused.txt")
+	var effects tools.ToolInvocationOut
+	f.Configure = func(tc *tools.ToolContext) {
+		effects = tools.ToolInvocationOut{}
+		tc.Effects.Out = &effects
+	}
 	out, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf nope > \"$1\"' sh "+outsideTarget)
 	testutil.FailErr(t, "run confined outside write", err)
 	if outcome := decodeOutcome(t, out); outcome.Status == 0 {
@@ -152,12 +169,33 @@ func TestProgramExternalOutsideWriteRefusedWhileTempWriteAllowed(t *testing.T) {
 	if _, statErr := os.Lstat(outsideTarget); !os.IsNotExist(statErr) {
 		t.Fatalf("confined outside write created %s: %v", outsideTarget, statErr)
 	}
+	if !effects.Facts.Confine.Applied || len(effects.Facts.Confine.FailedStages) == 0 || effects.Facts.Confine.TerminationReason != "exited" {
+		t.Fatalf("program external stage failed to record confinement facts: %+v", effects.Facts.Confine)
+	}
+
+	// Verify a multi-stage pipeline preserves the failing external stage's confinement facts
+	// even when a downstream stage exits 0.
+	_, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf nope > \"$1\"' sh "+outsideTarget+" 2>&1 | head -n 1")
+	testutil.FailErr(t, "run confined outside write pipeline", err)
+	if !effects.Facts.Confine.Applied || len(effects.Facts.Confine.FailedStages) == 0 {
+		t.Fatalf("pipeline lost earlier external stage confinement facts: %+v", effects.Facts.Confine)
+	}
+	if effects.Facts.Confine.Refusals.Witness == confine.WitnessKernel {
+		var sawWriteRefusal bool
+		for _, r := range effects.Facts.Confine.Refusals.Refusals {
+			if r.Recovery == confine.RecoverWriteRoot {
+				sawWriteRefusal = true
+				break
+			}
+		}
+		if !sawWriteRefusal {
+			t.Fatalf("complete refusal witness missing write_root refusal: %+v", effects.Facts.Confine.Refusals)
+		}
+	}
 }
 
-func TestProgramExternalMacOSShimToolsWriteDarwinUserTempWithoutStderr(t *testing.T) {
-	if runtime.GOOS != "darwin" || !confine.Available() {
-		t.Skip("darwin + seatbelt sandbox required")
-	}
+func TestProgramExternalSystemToolsRunWithoutStderr(t *testing.T) {
+	requireAppliedBoundary(t)
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	t.Setenv("TMPDIR", t.TempDir())

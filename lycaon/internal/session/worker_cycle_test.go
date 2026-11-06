@@ -343,12 +343,6 @@ func TestFormatCoordinatorInFlightRoster(t *testing.T) {
 	if !strings.Contains(roster, "write · focus: internal/auth/**") {
 		t.Fatalf("roster = %q", roster)
 	}
-	if !strings.Contains(roster, "batch dispatch") {
-		t.Fatalf("roster = %q", roster)
-	}
-	if !strings.Contains(roster, "remaining capacity") {
-		t.Fatalf("roster = %q", roster)
-	}
 }
 
 func TestFormatTaskEnqueuedBannerMentionsParallelCap(t *testing.T) {

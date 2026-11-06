@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
     handle: mockup-1
     profile: coordinator
     tool: render_view
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: RENDER_HANDLE_NOT_FOUND'

@@ -163,7 +163,7 @@ func TestLinuxByteInputEarlyExitAndCancellationSettleDescendants(t *testing.T) {
 				t.Fatal("early exit/cancellation consumed the whole input")
 			}
 			// Wait joins the outer helper; its PID namespace may still be exiting.
-			deadline := time.Now().Add(5 * time.Second)
+			deadline := time.Now().Add(testutil.Timeout(time.Minute))
 			for {
 				survivors, err := lease.Survivors()
 				testutil.FailErr(t, "inspect stream descendants after settlement", err)
@@ -211,6 +211,36 @@ func TestLinuxNonregularInputRetainsPipeAndTerminalSemantics(t *testing.T) {
 			t.Fatalf("terminal input lost its ABI: %v: %s", err, out)
 		}
 	})
+}
+
+// A command on a host terminal keeps that terminal's name, and that is what
+// bounds it from allocating another: see Platform coverage in docs/security.md.
+func TestLinuxHostTerminalKeepsItsNameAndAllocatesNoOther(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	python, err := exec.LookPath("python3")
+	testutil.FailErr(t, "locate interpreter", err)
+	master, slave := openPty(t)
+	defer master.Close()
+	defer slave.Close()
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	const probe = `
+import os
+print(os.ttyname(0))
+try:
+    os.openpty()
+    print('allocated')
+except OSError:
+    print('not allocated')
+`
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), python, []string{"-c", probe}, denyConfinement(t.TempDir()))
+	testutil.FailErr(t, "confine.Command", err)
+	defer cleanup()
+	cmd.Stdin = slave
+	out, err := cmd.CombinedOutput()
+	if want := slave.Name() + "\nnot allocated\n"; err != nil || string(out) != want {
+		t.Fatalf("host terminal: err=%v out=%q want %q", err, out, want)
+	}
 }
 
 func TestLinuxClosedInputArrivesAsNullStream(t *testing.T) {

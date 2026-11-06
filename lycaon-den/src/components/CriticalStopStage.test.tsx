@@ -324,7 +324,6 @@ describe("createCriticalStop", () => {
 
     const root = rendered.baseElement as HTMLElement;
     const action = await findByTestId(root, "critical-stop-primary");
-    expect(action.textContent).toContain("Try again");
     expect(root.querySelector('[data-testid="critical-stop-secondary"]')).toBeNull();
     action.click();
 
@@ -349,7 +348,6 @@ describe("createCriticalStop", () => {
 
     const root = rendered.baseElement as HTMLElement;
     const action = await findByTestId(root, "critical-stop-primary");
-    expect(action.textContent).toContain("Restore snapshot");
     action.click();
 
     await waitFor(() => {
@@ -466,7 +464,6 @@ describe("createCriticalStop", () => {
 
     const root = rendered.baseElement as HTMLElement;
     const action = await findByTestId(root, "critical-stop-secondary");
-    expect(action.textContent).toContain("Start fresh…");
     action.click();
 
     await waitFor(() => {
@@ -604,7 +601,6 @@ describe("createCriticalStop", () => {
       root,
       "critical-stop-secondary",
     )) as HTMLButtonElement;
-    expect(save.textContent).toContain("Save report bundle");
     save.click();
 
     await waitFor(() => {

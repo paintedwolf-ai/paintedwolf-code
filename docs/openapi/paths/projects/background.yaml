@@ -1,0 +1,72 @@
+paths:
+  /v1/projects/{id}/background:
+    get:
+      tags:
+      - projects
+      operationId: listProjectBackgroundProcesses
+      summary: List active and recently ended background commands for a project
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Active and recently ended background commands in the project
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/events.yaml#/components/schemas/ProjectBackgroundProcessListResponse
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+  /v1/projects/{id}/background/{process_id}/stop:
+    post:
+      tags:
+      - projects
+      operationId: stopProjectBackgroundProcess
+      summary: Request termination of a background command in a project
+      x-person-action: record
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: process_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[A-Za-z0-9_-]+$'
+      responses:
+        '200':
+          description: Stop request accepted
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/events.yaml#/components/schemas/BackgroundProcessStopResult
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '429':
+          $ref: ../../components/responses.yaml#/components/responses/TooManyRequests
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error

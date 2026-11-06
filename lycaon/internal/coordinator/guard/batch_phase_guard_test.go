@@ -59,7 +59,7 @@ func TestObserveHostNoToolTurn_allowsFirstSynthesis(t *testing.T) {
 
 			nil),
 
-		coordinatorReportJSON(t, "Summary for the user.", []guidance.CoordinatorCitedEvidence{{
+		coordinatorReportMarkdown("Summary for the user.", []guidance.CoordinatorCitedEvidence{{
 			Path: "internal/retention.go", Line: 1, Excerpt: "package retention",
 		}}),
 		nil,
@@ -123,7 +123,7 @@ func TestFormatHostNoToolTurnReject_secondProseAfterLatchWithPriorTools(t *testi
 	fmt := coordinatorRejectFmt(t)
 	sess := &api.Session{Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}
 	history := groundedLegHistory("implementer")
-	prose := coordinatorReportJSON(t, "Summary for the user.", []guidance.CoordinatorCitedEvidence{{
+	prose := coordinatorReportMarkdown("Summary for the user.", []guidance.CoordinatorCitedEvidence{{
 		Path: "internal/retention.go", Line: 1, Excerpt: "package retention",
 	}})
 	reject, block := guard.FormatHostNoToolTurnReject(

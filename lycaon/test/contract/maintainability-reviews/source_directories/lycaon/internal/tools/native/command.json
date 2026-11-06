@@ -1,0 +1,17 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/tools/native/command",
+  "kind": "module",
+  "workstream": "shared-verification-runtime",
+  "disposition": "retain",
+  "reason": "This package adapts command programs to host admission, receipts, confinement, output publication and supervision. Evaluation, path authority and native mutations remain separate packages. Command and verification share these adapters and their actual invocation identities; splitting by initiating tool would duplicate lifecycle ownership. Retain the measured 49 ceiling; growth requires renewed review.",
+  "reviewed_commit": "e2519cef51d263fbb797b9f1137df6dc3fc996c0",
+  "ceiling": 49,
+  "boundaries": {
+    "lycaon/internal/tools/native/verify_test.go": "30d258e73e5f1fa299b24fe66452ed1a6c2bde65971e3e9da629986d39eb4cad",
+    "lycaon/internal/tools/native/command/verify_program_park_test.go": "7bc32bb756c8e0fec108fb29eff2011839eb2a48eaad0f046ce6c11f1da17338",
+    "lycaon/internal/toolexecution/program_model_invocation_test.go": "4a2d9417a4e5c4c3f41aa36699a8a11b370929cf2d90955784ddcc39f398d3f7",
+    "lycaon/internal/session/verify_evidence_test.go": "4e71a3d113c6a868e58a32f207aaa929ce52fe67b6bfb4cfc7c59623a3c3ac90"
+  },
+  "reviewed_shape": "cdc23b47a7bfa763d3c2a97f9c7ca7c5bd1c97f93d5e3de92785ee72692e02e9"
+}

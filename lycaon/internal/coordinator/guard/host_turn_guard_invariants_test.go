@@ -56,10 +56,10 @@ func TestHostTurnGuard_fullChainMatrix(t *testing.T) {
 	rejectFmt := coordinatorRejectFmt(t)
 	history := groundedLegHistory(orchestration.ProfileImplementer)
 	sess := &api.Session{WorkspacePath: t.TempDir(), Posture: api.SessionPostureBuild}
-	grounded := coordinatorReportJSON(t, "The N+1 deletion loop batches deletes in retention.go.", []guidance.CoordinatorCitedEvidence{{
+	grounded := coordinatorReportMarkdown("The N+1 deletion loop batches deletes in retention.go.", []guidance.CoordinatorCitedEvidence{{
 		Path: "internal/retention.go", Line: 1, Excerpt: "package retention",
 	}})
-	ungrounded := coordinatorReportJSON(t, "The hot loop is in phantom.go.", []guidance.CoordinatorCitedEvidence{{
+	ungrounded := coordinatorReportMarkdown("The hot loop is in phantom.go.", []guidance.CoordinatorCitedEvidence{{
 		Path: "phantom.go", Line: 1, Excerpt: "package phantom",
 	}})
 	pendingOverlay := surface.ImplementSessionState{PendingOverlayIDs: []string{"job-1"}}
@@ -82,7 +82,7 @@ func TestHostTurnGuard_fullChainMatrix(t *testing.T) {
 				}
 			} else if s.closeoutJSON {
 				if block {
-					t.Fatalf("idle envelope json must pass guard on %s, got reject=%q", s.surface, reject)
+					t.Fatalf("idle report must pass guard on %s, got reject=%q", s.surface, reject)
 				}
 			} else if !block || !strings.Contains(reject, guard.CoordinatorHostTurnRequiresWaitCode) {
 				t.Fatalf("idle prose must require a tool terminal on %s, got reject=%q block=%v", s.surface, reject, block)
@@ -112,10 +112,10 @@ func TestHostTurnGuard_fullChainMatrix(t *testing.T) {
 func TestHostTurnGuard_readScoutSynthesisFinish(t *testing.T) {
 	rejectFmt := coordinatorRejectFmt(t)
 	sess := &api.Session{WorkspacePath: t.TempDir(), Posture: api.SessionPostureBuild}
-	grounded := coordinatorReportJSON(t, "The retention cleanup batches deletes in retention.go.", []guidance.CoordinatorCitedEvidence{{
+	grounded := coordinatorReportMarkdown("The retention cleanup batches deletes in retention.go.", []guidance.CoordinatorCitedEvidence{{
 		Path: "internal/retention.go", Line: 1, Excerpt: "package retention",
 	}})
-	ungrounded := coordinatorReportJSON(t, "The hot path is in phantom.go.", []guidance.CoordinatorCitedEvidence{{
+	ungrounded := coordinatorReportMarkdown("The hot path is in phantom.go.", []guidance.CoordinatorCitedEvidence{{
 		Path: "phantom.go", Line: 1, Excerpt: "package phantom",
 	}})
 
@@ -130,7 +130,7 @@ func TestHostTurnGuard_readScoutSynthesisFinish(t *testing.T) {
 
 	history := groundedLegHistory(orchestration.ProfileRepoResearcher)
 	if reject, block := chain(history, "implement_synthesis", grounded); block {
-		t.Fatalf("read-scout synthesis turn must accept envelope json, got reject=%q block=%v", reject, block)
+		t.Fatalf("read-scout synthesis turn must accept the report, got reject=%q block=%v", reject, block)
 	}
 	if reject, block := chain(history, "implement_synthesis", ungrounded); block {
 		t.Fatalf("ungrounded read-scout synthesis must pass structural guard, got reject=%q block=%v", reject, block)
@@ -145,7 +145,7 @@ func TestHostTurnGuard_hostCycleOpenPlanBlocksProse(t *testing.T) {
 	rejectFmt := coordinatorRejectFmt(t)
 	history := groundedLegHistory(orchestration.ProfileImplementer)
 	sess := &api.Session{WorkspacePath: t.TempDir(), Posture: api.SessionPostureBuild}
-	prose := coordinatorReportJSON(t, "Engine leg is done; AI and UI are next.", nil)
+	prose := coordinatorReportMarkdown("Engine leg is done; AI and UI are next.", nil)
 	state := surface.ImplementSessionState{ProgressOpenCount: 1}
 
 	reject, block := guard.FormatHostNoToolTurnReject(

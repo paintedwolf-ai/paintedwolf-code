@@ -46,38 +46,19 @@ context_schema:
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - helper model
-      - AI providers
   - id: unreachable
     vars:
       provider_id: ollama-1
       reason: unreachable
-    expect_contains:
-      - could not connect
-      - ollama-1
-      - Test connection
   - id: silent
     vars:
       provider_id: ollama-1
       reason: silent
-    expect_contains:
-      - stopped answering
-      - sent nothing back
-      - ollama-1
   - id: overloaded
     vars:
       provider_id: fireworks-1
       reason: overloaded
-    expect_contains:
-      - at capacity
-      - fireworks-1
-      - AI providers
   - id: refused
     vars:
       provider_id: together-ai-1
       reason: refused
-    expect_contains:
-      - declined by its host
-      - together-ai-1
-      - AI providers

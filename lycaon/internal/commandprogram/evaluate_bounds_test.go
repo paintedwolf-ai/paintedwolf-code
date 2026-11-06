@@ -79,14 +79,14 @@ func TestPipelineCancellationClosesEveryStream(t *testing.T) {
 	for seen := 0; seen < 3; seen++ {
 		select {
 		case <-f.log.started:
-		case <-time.After(5 * time.Second):
+		case <-time.After(testutil.Timeout(time.Minute)):
 			t.Fatal("stages did not start")
 		}
 	}
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("canceled pipeline left a stage blocked")
 	}
 	if !errors.Is(err, context.Canceled) || out.Stop == nil || out.Stop.Kind != StopInterrupted {

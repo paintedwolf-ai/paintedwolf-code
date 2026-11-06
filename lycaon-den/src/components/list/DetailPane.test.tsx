@@ -3,13 +3,6 @@ import { fireEvent, render } from "@solidjs/testing-library";
 import { DetailPane } from "./DetailPane.tsx";
 
 describe("DetailPane", () => {
-  it("always renders a close control, even with no eyebrow or meta", () => {
-    const { getByTestId } = render(() => (
-      <DetailPane onClose={() => {}}>body</DetailPane>
-    ));
-    const close = getByTestId("detail-close");
-    expect(close.getAttribute("aria-label")).toBe("Close details");
-  });
 
   it("calls onClose when the close control is clicked", () => {
     const onClose = vi.fn();

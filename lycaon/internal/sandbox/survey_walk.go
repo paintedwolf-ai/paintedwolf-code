@@ -119,6 +119,10 @@ func surveySkipsDirName(name string, opts SurveyOptions) bool {
 	return false
 }
 
+func surveySkipsFile(name, abs string, entry fs.DirEntry, opts SurveyOptions) bool {
+	return !opts.IncludeVCSMetadata && IsGitlinkDirEntry(name, abs, entry)
+}
+
 var errSurveyStop = errors.New("sandbox: survey walk stopped")
 
 // SurveyWalk visits admitted entries below root without following symlinks.
@@ -221,6 +225,9 @@ func (w *surveyWalker) visitEntries(rel, abs string, depth, dirDepth int, entrie
 				continue
 			}
 		} else {
+			if surveySkipsFile(name, childAbs, d, w.opts) {
+				continue
+			}
 			if !w.opts.IncludeHidden && IsHiddenName(name) {
 				continue
 			}
@@ -370,11 +377,15 @@ func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts Surv
 		if relDir != "" && relDir != "." {
 			rel = relDir + "/" + name
 		}
-		if surveySkipsDirName(name, opts) || settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel) {
+		if settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel) {
 			continue
 		}
 		abs := filepath.Join(dir, name)
-		if e.IsDir() && settingsoverlay.IsRecoveryOnlyDir(abs) {
+		if e.IsDir() {
+			if surveySkipsDirName(name, opts) || settingsoverlay.IsRecoveryOnlyDir(abs) {
+				continue
+			}
+		} else if surveySkipsFile(name, abs, e, opts) {
 			continue
 		}
 		if opts.Admit != nil && !opts.Admit(rel, abs, e.IsDir()) {

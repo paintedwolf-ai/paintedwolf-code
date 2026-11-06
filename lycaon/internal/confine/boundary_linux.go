@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/installbinding"
 	"github.com/lycaon/lycaon/internal/lineage"
+	"github.com/lycaon/lycaon/internal/linuxbus"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/socketref"
 )
@@ -160,6 +162,16 @@ func renderProfile(c Confinement) (string, error) {
 		Filesystem:     fs,
 		Network:        networkPlan(c),
 	}
+	for _, grant := range plan.Network.SocketGrants {
+		if grant.CredentialRead {
+			policy, err := linuxbus.LoadCredentialReadPolicy()
+			if err != nil {
+				return "", err
+			}
+			plan.Network.CredentialReadPolicy = &policy
+			break
+		}
+	}
 	if err := plan.Validate(); err != nil {
 		return "", err
 	}
@@ -168,6 +180,15 @@ func renderProfile(c Confinement) (string, error) {
 		return "", err
 	}
 	return string(raw), nil
+}
+
+// hostResolvers lists the resolvers a direct IP sandbox relays names to.
+var hostResolvers = func() []string {
+	conf, err := os.ReadFile("/etc/resolv.conf")
+	if err != nil {
+		return nil
+	}
+	return linuxsandbox.HostResolvers(string(conf))
 }
 
 // networkPlan carries the network axis with the same derivations BoundaryOf
@@ -188,9 +209,7 @@ func networkPlan(c Confinement) linuxsandbox.Network {
 	}
 	n.SocketGrants = socketPlan(c.SocketGrants)
 	if c.Network == NetworkDirectIP {
-		if conf, err := os.ReadFile("/etc/resolv.conf"); err == nil {
-			n.Resolvers = linuxsandbox.HostResolvers(string(conf))
-		}
+		n.Resolvers = hostResolvers()
 	}
 	return n
 }
@@ -306,10 +325,19 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 		}
 	}
 	for p := range pc.readOnly {
+		// A read restoration beneath a placeholder has nothing to cover until it
+		// is mounted, and the helper seals it unless a write grant reaches it.
+		if pc.restored[p] && coveredBy(pc.hidden, p) {
+			pc.fs.WriteRoots = slices.DeleteFunc(pc.fs.WriteRoots, func(root string) bool { return root == p })
+			continue
+		}
 		pc.fs.ReadOnly = append(pc.fs.ReadOnly, p)
 	}
 	for p := range pc.hidden {
-		pc.fs.Hidden = append(pc.fs.Hidden, p)
+		// A placeholder inside a placeholder has no mountpoint to cover.
+		if !pc.concealed(filepath.Dir(p)) {
+			pc.fs.Hidden = append(pc.fs.Hidden, p)
+		}
 	}
 	for p := range pc.restored {
 		if coveredBy(pc.hidden, p) || coveredBy(pc.readOnly, p) {
@@ -333,13 +361,13 @@ func (pc *planCompiler) readRule(rule fsRule) {
 		if path == "" {
 			continue
 		}
-		switch {
-		case !rule.allow:
+		if !rule.allow {
 			pc.hidden[path] = true
 			delete(pc.restored, path)
-		case pc.hidden[path]:
-			delete(pc.hidden, path)
-		case coveredBy(pc.hidden, path):
+			continue
+		}
+		lift(pc.hidden, path, m.subpath != "")
+		if coveredBy(pc.hidden, path) {
 			pc.restored[path] = true
 		}
 	}
@@ -361,35 +389,58 @@ func (pc *planCompiler) writeRule(rule fsRule) error {
 		}
 		for _, path := range paths {
 			if rule.allow {
-				pc.allowWrite(path)
+				pc.allowWrite(path, m.subpath != "")
 			} else {
-				pc.denyWrite(path, m.except)
+				pc.denyWrite(path, m.except, m.subpath != "")
 			}
 		}
 	}
 	return nil
 }
 
+// lift removes the denial a later allow overrides: the rules are last-match, so
+// a subtree allow also overrides every denial beneath it.
+func lift(denied map[string]bool, path string, subtree bool) {
+	delete(denied, path)
+	if !subtree {
+		return
+	}
+	for p := range denied {
+		if PathAtOrUnder(p, path) {
+			delete(denied, p)
+		}
+	}
+}
+
 // allowWrite grants the path to Landlock and restores it beneath any mask.
-func (pc *planCompiler) allowWrite(path string) {
+func (pc *planCompiler) allowWrite(path string, subtree bool) {
 	if st, err := os.Stat(path); err == nil && !st.IsDir() {
 		pc.fs.WriteFiles = append(pc.fs.WriteFiles, path)
 	} else {
 		pc.fs.WriteRoots = append(pc.fs.WriteRoots, path)
 	}
 	pc.grants = append(pc.grants, path)
-	switch {
-	case pc.readOnly[path]:
-		delete(pc.readOnly, path)
-	case coveredBy(pc.readOnly, path), coveredBy(pc.hidden, path):
+	lift(pc.readOnly, path, subtree)
+	if coveredBy(pc.readOnly, path) || coveredBy(pc.hidden, path) {
 		pc.restored[path] = true
 	}
 }
 
 // denyWrite masks a path read-only when a grant would otherwise reach it; its
-// exceptions are restored.
-func (pc *planCompiler) denyWrite(path string, except []string) {
-	if coveredBy(pc.hidden, path) || !coveredByList(pc.grants, path) {
+// exceptions are restored. Only a path still behind its placeholder needs no
+// mask: one a restoration brought back is as reachable as any other.
+//
+// A subtree denial also overrides the earlier grants beneath it, and those stay
+// masked even when no grant reaches the denied path itself.
+func (pc *planCompiler) denyWrite(path string, except []string, subtree bool) {
+	if subtree {
+		for _, grant := range pc.grants {
+			if grant != path && PathAtOrUnder(grant, path) && !coveredByList(except, grant) {
+				pc.readOnly[grant] = true
+			}
+		}
+	}
+	if pc.concealed(path) || !coveredByList(pc.grants, path) {
 		return
 	}
 	pc.readOnly[path] = true
@@ -398,6 +449,23 @@ func (pc *planCompiler) denyWrite(path string, except []string) {
 			pc.restored[e] = true
 		}
 	}
+}
+
+// concealed reports whether the nearest placeholder or restoration at or above
+// path is a placeholder. A restoration of the same path covers its placeholder.
+func (pc *planCompiler) concealed(path string) bool {
+	nearest, hidden := -1, false
+	for ancestor := range pc.hidden {
+		if PathAtOrUnder(path, ancestor) && len(ancestor) > nearest {
+			nearest, hidden = len(ancestor), true
+		}
+	}
+	for ancestor := range pc.restored {
+		if PathAtOrUnder(path, ancestor) && len(ancestor) >= nearest {
+			nearest, hidden = len(ancestor), false
+		}
+	}
+	return hidden
 }
 
 // loaderName is the basename a write filter protects at any depth below its

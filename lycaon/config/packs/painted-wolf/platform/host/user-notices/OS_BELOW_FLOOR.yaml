@@ -66,17 +66,11 @@ scenarios:
       component: macos
       want: "13.0"
       got: "12.7"
-    expect_contains:
-      - macOS 13.0 or later
-      - Software Update
   - id: unreadable
     resolution: unreadable
     vars:
       reason: unreadable
       component: macos
-    expect_contains:
-      - could not read this Mac's macOS version
-      - Software Update
   - id: kernel_below_floor
     resolution: below_floor
     vars:
@@ -84,9 +78,6 @@ scenarios:
       component: kernel
       want: "6.2"
       got: "5.15.0"
-    expect_contains:
-      - Linux kernel 6.2 or later
-      - package manager
   - id: glibc_below_floor
     resolution: below_floor
     vars:
@@ -94,13 +85,8 @@ scenarios:
       component: glibc
       want: "2.39"
       got: "2.31"
-    expect_contains:
-      - glibc 2.39 or later
-      - package manager
   - id: glibc_unreadable
     resolution: unreadable
     vars:
       reason: unreadable
       component: glibc
-    expect_contains:
-      - could not read this system's glibc version

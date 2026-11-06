@@ -18,9 +18,17 @@ func (r *ReadRoot) DirectoryPath(dir *os.File) (string, error) {
 	if err := r.validateDirectoryRoot(); err != nil {
 		return "", err
 	}
-	path, err := readDirectoryPath(dir)
+	known := ""
+	if last := r.lastDirectory.Load(); last != nil {
+		known = *last
+	}
+	path, err := readDirectoryPath(dir, known)
 	if err != nil {
 		return r.directoryPathFromName(dir)
+	}
+	if path != known {
+		current := path
+		r.lastDirectory.Store(&current)
 	}
 	return r.directoryPathFromNative(dir, path)
 }

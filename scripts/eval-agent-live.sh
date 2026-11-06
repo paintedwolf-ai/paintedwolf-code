@@ -140,7 +140,7 @@ NODE
   export LYCAON_SESSION_DEBUG_FILE="$EVAL_RUN_DIR/sessions.jsonl"
   export LYCAON_TOOL_DEBUG_FILE="$EVAL_RUN_DIR/tool-invocations.jsonl"
   "$EVAL_RUN_DIR/engine" decide ensure
-  "$EVAL_RUN_DIR/engine" serve --db "$EVAL_RUN_DIR/store.db" >"$EVAL_RUN_DIR/sidecar.log" 2>&1 &
+  "$EVAL_RUN_DIR/engine" serve --db "$LYCAON_CONFIG_DIR/store.db" >"$EVAL_RUN_DIR/sidecar.log" 2>&1 &
   EVAL_PID=$!
   EVAL_URL="http://$LYCAON_ADDR"
   echo "Isolated live evaluation: $EVAL_RUN_DIR (owned sidecar pid $EVAL_PID)"
@@ -165,7 +165,7 @@ NODE
   # The driver resolves repository-relative fixture paths from the Go module.
   (cd lycaon && "$EVAL_DRIVER" eval tool-usage "${EVAL_LIVE_ARGS[@]}" --suite "$EVAL_SUITE" \
     --addr "$EVAL_URL" --expect-model "$EVAL_MODEL" --label "$EVAL_LABEL" --cases "$EVAL_CASES" \
-    --runs "$EVAL_RUNS" --state-db "$EVAL_RUN_DIR/store.db" --timeout "$EVAL_TIMEOUT" --capture "$EVAL_RUN_DIR" --out "$EVAL_RUN_DIR/report.json") &
+    --runs "$EVAL_RUNS" --state-db "$LYCAON_CONFIG_DIR/store.db" --timeout "$EVAL_TIMEOUT" --capture "$EVAL_RUN_DIR" --out "$EVAL_RUN_DIR/report.json") &
   EVAL_DRIVER_PID=$!
   while kill -0 "$EVAL_DRIVER_PID" 2>/dev/null; do
     if ! kill -0 "$EVAL_PID" 2>/dev/null; then

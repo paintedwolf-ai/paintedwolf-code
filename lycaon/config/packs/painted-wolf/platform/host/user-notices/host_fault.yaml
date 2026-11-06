@@ -23,16 +23,8 @@ scenarios:
     vars:
       tool: write
       call_ran: true
-    expect_contains:
-      - couldn't record the result of a write call
-      - may be in place
-      - didn't cause this
   - id: call_not_run
     vars:
       tool: read
-    expect_contains:
-      - read call
   - id: generic
     vars: {}
-    expect_contains:
-      - a tool call

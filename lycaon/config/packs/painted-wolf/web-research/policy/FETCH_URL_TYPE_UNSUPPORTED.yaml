@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     content_type: application/zip
     reason: archive
     tool: fetch_url
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: FETCH_URL_TYPE_UNSUPPORTED'

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
@@ -16,6 +17,10 @@ import (
 	"github.com/lycaon/lycaon/internal/verification"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func draftOf(markdown string) guidance.CloseoutDraft {
+	return guidance.ParseCloseoutDraft(markdown, citationmd.Options{})
+}
 
 func TestAssembleFanoutCloseoutFromLegs(t *testing.T) {
 	legs := []legCloseout{
@@ -37,7 +42,7 @@ func TestAssembleFanoutCloseoutFromLegs(t *testing.T) {
 		{Handle: "leg-b:read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "billing/invoice.go", LineRanges: []evidence.LineRange{{Start: 40, End: 40}}},
 	})}
 
-	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_synthesis", ev, legs, "", []string{"SYNTH_HANDLE_NOT_IN_LEGS"}, 3)
+	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_synthesis", ev, legs, guidance.CloseoutDraft{}, nil, []string{"SYNTH_HANDLE_NOT_IN_LEGS"}, 3)
 
 	if !strings.Contains(report.Synthesis, "Rate limiter added to login.") ||
 		!strings.Contains(report.Synthesis, "Invoice totals now reconcile.") {
@@ -117,7 +122,7 @@ func TestStructuredWorkerSummaryCloseoutPreservesPinnedReport(t *testing.T) {
 		LineRanges: []evidence.LineRange{{Start: 1, End: 1}},
 	}})}
 	report, grounding := assembleGroundedLedgerCloseout(
-		evidence.CitationRoots{}, "implement_synthesis", ev, legs, pinned,
+		evidence.CitationRoots{}, "implement_synthesis", ev, legs, draftOf(pinned), nil,
 		[]string{guidance.SynthHandleNotInLegsCode}, 2,
 	)
 	if report.Synthesis != pinned {
@@ -139,7 +144,7 @@ func TestLedgerFallbackDoesNotMarkStaleWorkerCitationTraced(t *testing.T) {
 		cited: []api.CitationGroundingCitedEvidence{{Handle: "read#99", Path: "phantom.go", Line: 1}},
 	}}
 	report, grounding := assembleGroundedLedgerCloseout(
-		evidence.CitationRoots{}, "implement_synthesis", ev, legs, "Pinned report.",
+		evidence.CitationRoots{}, "implement_synthesis", ev, legs, draftOf("Pinned report."), nil,
 		[]string{guidance.SynthHandleNotInLegsCode}, 3,
 	)
 	if report.Synthesis != "Pinned report." {
@@ -178,9 +183,8 @@ func TestAssembleInvestigateCloseoutBindsSecondaryRootEvidence(t *testing.T) {
 		LineRanges: []evidence.LineRange{{Start: 1, End: 1}},
 	}})}
 
-	draft, err := guidance.MarshalCoordinatorCompletionReport(guidance.CoordinatorCompletionReport{Synthesis: "Secondary package inspected.", CitedEvidence: []guidance.CoordinatorCitedEvidence{{Evidence: "read#1", Path: path, Line: 1}}})
-	testutil.FailErr(t, "marshal secondary-root report", err)
-	report, grounding := assembleGroundedLedgerCloseout(roots, "implement_investigate", ev, nil, draft, nil, 0)
+	draft := draftOf("Secondary package inspected [read#1 " + path + ":1].")
+	report, grounding := assembleGroundedLedgerCloseout(roots, "implement_investigate", ev, nil, draft, nil, nil, 0)
 	if len(report.CitedEvidence) != 1 || report.CitedEvidence[0].Path != path {
 		t.Fatalf("cited evidence = %+v want secondary-root path", report.CitedEvidence)
 	}
@@ -202,7 +206,7 @@ func TestAssembleInvestigateCloseoutRetainsProseAndBindsObserved(t *testing.T) {
 	ev := guidance.CloseoutEvidence{Ledger: ledgertest.BuildFromMessages("", msgs)}
 	prose := "The outage began when the cache warmer looped; root cause is a missing backoff."
 
-	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, prose, []string{"INVEST_CITATIONS_REQUIRED"}, 3)
+	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, draftOf(prose), nil, []string{"INVEST_CITATIONS_REQUIRED"}, 3)
 
 	if !strings.Contains(report.Synthesis, prose) {
 		t.Fatalf("investigate closeout must retain model prose verbatim; got %q", report.Synthesis)
@@ -267,7 +271,7 @@ func TestAssembleInvestigateIncidentShapeBoundsCitedSet(t *testing.T) {
 	ev := guidance.CloseoutEvidence{Ledger: ledgertest.BuildFromMessages("", msgs)}
 	prose := "Root cause: a cache-warmer retry storm with no backoff cascaded across the fleet."
 
-	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, prose, []string{"INVEST_CITATIONS_REQUIRED"}, 3)
+	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, draftOf(prose), nil, []string{"INVEST_CITATIONS_REQUIRED"}, 3)
 
 	if !strings.Contains(report.Synthesis, prose) {
 		t.Fatalf("prose not retained: %q", report.Synthesis)
@@ -307,7 +311,7 @@ func TestAssembleInvestigateCloseoutPrefersProsePathAnchors(t *testing.T) {
 	ev := guidance.CloseoutEvidence{Ledger: ledgertest.BuildFromMessages("", msgs)}
 	prose := "Flagged `" + target + ":20` in shipped policy."
 
-	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, prose, []string{"INVEST_CITATIONS_REQUIRED"}, 1)
+	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, draftOf(prose), nil, []string{"INVEST_CITATIONS_REQUIRED"}, 1)
 	if grounding == nil || !grounding.HostAssembled {
 		t.Fatal("expected host_assembled grounding")
 	}
@@ -325,7 +329,7 @@ func TestAssembleInvestigateCloseoutPrefersProsePathAnchors(t *testing.T) {
 }
 
 func TestAssembleInvestigateEmptyLedgerHonest(t *testing.T) {
-	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", guidance.CloseoutEvidence{Ledger: evidence.InitLedger()}, nil, "", []string{"INVEST_CITATIONS_REQUIRED"}, 3)
+	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", guidance.CloseoutEvidence{Ledger: evidence.InitLedger()}, nil, guidance.CloseoutDraft{}, nil, []string{"INVEST_CITATIONS_REQUIRED"}, 3)
 
 	if !strings.Contains(report.Synthesis, hostEmptyCloseoutSynthesis) {
 		t.Fatalf("empty ledger must yield honest empty closeout, got %q", report.Synthesis)
@@ -338,48 +342,24 @@ func TestAssembleInvestigateEmptyLedgerHonest(t *testing.T) {
 	}
 }
 
-func TestAssembleInvestigateCloseoutSanitizesEnvelopeDraft(t *testing.T) {
-	msgs := []api.Message{
-		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{Name: "read", Args: map[string]any{"path": "weather_cli.py"}}}},
-		{Role: api.MessageRoleTool, Content: `{"path":"weather_cli.py","content":"1|#!/usr/bin/env python3","offset":1,"end_line":1,"limit":1}`},
-	}
-	ev := guidance.CloseoutEvidence{Ledger: ledgertest.BuildFromMessages("", msgs)}
-	malformed := `{"synthesis":"## Report\n\nCLI ready."}, "cited_evidence":[{"path":"weather_cli.py","line":1,"excerpt":"x"}],"cited_urls":[],"artifact_ids":[]}`
-
-	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, malformed, []string{"INVEST_CITATIONS_REQUIRED"}, 1)
-
-	if report.Synthesis != "## Report\n\nCLI ready." {
-		t.Fatalf("must salvage synthesis from failed envelope, got %q", report.Synthesis)
-	}
-	if guidance.CloseoutBodyIsEnvelopeShaped(report.Synthesis) {
-		t.Fatal("assembled synthesis must not remain envelope-shaped")
-	}
-	if grounding == nil || !grounding.HostAssembled {
-		t.Fatal("expected host_assembled grounding after salvage")
-	}
-
-	// Invalid closeout JSON yields an empty report.
-	report, _ = assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, `{"not":"closeout"}`, []string{"INVEST_CITATIONS_REQUIRED"}, 1)
-	if report.Synthesis != hostEmptyCloseoutSynthesis {
-		t.Fatalf("irreparable envelope draft must fall back to host empty closeout, got %q", report.Synthesis)
-	}
-}
-
-func TestAssembleLedgerCloseoutKeepsCitationTrailerOutOfNarrative(t *testing.T) {
+// Protocol nodes never reach the assembled display, and a literal example does.
+func TestAssembleLedgerCloseoutPresentsWithoutProtocolNodes(t *testing.T) {
 	t.Parallel()
 	msgs := []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{Name: "read", Args: map[string]any{"path": "greeting.py"}}}},
 		{Role: api.MessageRoleTool, Content: `{"path":"greeting.py","content":"4|def format_greeting(name):","offset":4,"end_line":4,"limit":1}`},
 	}
 	ev := guidance.CloseoutEvidence{Ledger: ledgertest.BuildFromMessages("", msgs)}
-	draft := "Design note written.\n\n```json\n" +
-		`{"cited_evidence":[{"evidence":"read#1","path":"greeting.py","line":4,"excerpt":"def format_greeting(name):"}],"verification":{"method":"inspection","reason":"Documentation only."}}` + "\n```"
-	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, draft, []string{"INVEST_CITATION_UNVERIFIABLE"}, 1)
-	if report.Synthesis != "Design note written." {
-		t.Fatalf("closeout leaked trailer into narrative: %q", report.Synthesis)
+	draft := draftOf("Design note written [read#1:4] [missing#9], see `[read#1]`.\n[verify: inspection - Documentation only.]")
+	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, draft, nil, []string{"INVEST_CITATION_UNVERIFIABLE"}, 1)
+	if report.Synthesis != "Design note written [greeting.py:4](greeting.py#L4), see `[read#1]`." {
+		t.Fatalf("display = %q", report.Synthesis)
 	}
-	if grounding == nil || !grounding.HostAssembled || len(grounding.CitedEvidence) == 0 {
+	if grounding == nil || !grounding.HostAssembled || grounding.Traced || len(grounding.CitedEvidence) == 0 {
 		t.Fatalf("expected separately assembled grounding, got %+v", grounding)
+	}
+	if grounding.Verification == nil || grounding.Verification.Method != "inspection" {
+		t.Fatalf("verification = %+v", grounding.Verification)
 	}
 }
 
@@ -388,23 +368,19 @@ func TestHostAttachedCloseoutPreservesReportMetadata(t *testing.T) {
 		Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "README.md",
 		Body: []string{"1|Project overview"}, LineRanges: []evidence.LineRange{{Start: 1, End: 1}},
 	}})}
-	original := guidance.CoordinatorCompletionReport{
-		Synthesis: "The project provides a desktop application.", Headline: "Project overview",
-		Summary: "Architecture inspected.", Limits: []string{"Runtime behavior not exercised."},
-		ArtifactIDs:  []string{"capture-1"},
-		Findings:     []guidance.CoordinatorFinding{{Title: "Desktop application", Impact: "Runs locally"}},
-		Verification: &verification.Assessment{Method: "inspection", Reason: "Read the architecture."},
-	}
-	raw, err := guidance.MarshalCoordinatorCompletionReport(original)
-	testutil.FailErr(t, "marshal uncited report", err)
-	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, raw, []string{guidance.InvestCitationsRequiredCode}, 0)
-	if report.Synthesis != original.Synthesis || report.Headline != original.Headline || report.Summary != original.Summary || len(report.ArtifactIDs) != 1 || len(report.Findings) != 1 || len(report.Limits) != 1 {
+	const answer = "The project provides a desktop application."
+	const artifact = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+	read := guidance.ReadCloseoutReport(answer+"\n[verify: inspection - Read the architecture.]\n[artifact:"+artifact+"]\n\n```json\n"+
+		`{"headline":"Project overview","summary":"Architecture inspected.","limits":["Runtime behavior not exercised."],"findings":[{"title":"Desktop application","impact":"Runs locally"}]}`+"\n```",
+		guidance.RetainedCloseout{}, true, citationmd.Options{})
+	report, grounding := assembleGroundedLedgerCloseout(evidence.CitationRoots{}, "implement_investigate", ev, nil, read.Draft, []string{artifact}, []string{guidance.InvestCitationsRequiredCode}, 0)
+	if report.Synthesis != answer || report.Headline != "Project overview" || report.Summary != "Architecture inspected." || len(report.ArtifactIDs) != 1 || len(report.Findings) != 1 || len(report.Limits) != 1 {
 		t.Fatalf("host attachment changed report metadata: %+v", report)
 	}
 	if grounding == nil || !grounding.HostAssembled || grounding.Traced || grounding.RetryCount != 0 || len(grounding.CitedEvidence) != 1 {
 		t.Fatalf("host attachment did not expose observed sources immediately: %+v", grounding)
 	}
-	if grounding.Verification == nil || grounding.Verification.Method != original.Verification.Method || grounding.Verification.Reason != original.Verification.Reason {
+	if grounding.Verification == nil || grounding.Verification.Method != verification.Inspection || grounding.Verification.Reason != "Read the architecture." {
 		t.Fatalf("host attachment lost the reported validation scope: %+v", grounding)
 	}
 }
