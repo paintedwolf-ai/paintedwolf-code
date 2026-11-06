@@ -106,7 +106,6 @@ implement_investigate:
   loadable:
     # project utilities
     - survey_repo
-    # edit
     - code_rewrite
     - restore_version
     # process and terminal

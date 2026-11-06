@@ -3,7 +3,7 @@ id: AMBIENT_UNGROUNDED_COMPLETION
 kind: invariant
 anchor: coordinator.post_turn
 requires:
-  facts: [paintedwolf.citation_unverifiable, paintedwolf.grounding_escalated, paintedwolf.last_audit_ungrounded, paintedwolf.unobserved_cited_handles, paintedwolf.unobserved_cited_urls, paintedwolf.missing_summary_job_ids, paintedwolf.next_steps]
+  facts: [paintedwolf.citation_unverifiable, paintedwolf.grounding_escalated, paintedwolf.last_audit_ungrounded, paintedwolf.unobserved_cited_handles, paintedwolf.unobserved_cited_urls, paintedwolf.missing_summary_job_ids, paintedwolf.can_recall, paintedwolf.next_steps]
 when: paintedwolf.last_audit_ungrounded && size(paintedwolf.unobserved_cited_handles) == 0 && size(paintedwolf.unobserved_cited_urls)
   == 0 && !paintedwolf.citation_unverifiable && !paintedwolf.grounding_escalated
 effect: nudge

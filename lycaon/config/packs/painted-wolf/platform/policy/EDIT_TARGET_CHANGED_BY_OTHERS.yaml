@@ -39,6 +39,7 @@ x-paintedwolf-scenarios:
     old_string_chars: 42
     path: internal/foo.go
     profile: implement
+    source_history_offered: true
     tool: edit
     total_lines: 120
 

@@ -3,7 +3,7 @@ id: AMBIENT_GROUNDING_ESCALATED
 kind: invariant
 anchor: coordinator.post_turn
 requires:
-  facts: [paintedwolf.claims_completion, paintedwolf.grounding_escalated, paintedwolf.next_steps]
+  facts: [paintedwolf.claims_completion, paintedwolf.grounding_escalated, paintedwolf.can_recall, paintedwolf.next_steps]
 when: paintedwolf.grounding_escalated && !paintedwolf.claims_completion
 effect: nudge
 copy:

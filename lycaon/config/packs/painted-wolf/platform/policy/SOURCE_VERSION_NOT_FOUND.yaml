@@ -26,9 +26,11 @@ x-paintedwolf-scenarios:
     vars:
       detail: version v_missing was not found
       profile: implement
+      source_history_offered: true
       tool: source_history
   - id: without_source_history
     vars:
       detail: version v_missing was not found
       profile: plan_write_only
+      source_history_offered: false
       tool: restore_version

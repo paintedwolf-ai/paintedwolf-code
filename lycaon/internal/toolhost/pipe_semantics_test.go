@@ -61,6 +61,10 @@ func newPipeSemanticsEnv(t *testing.T) *pipeSemanticsEnv {
 	}).compose(f.Recorder)
 	testutil.FailErr(t, "compose program owners", err)
 	f.Runtime.Owners = owners
+	// Program time stands still, so the outcome of heavy work never depends on
+	// runner speed: the production foreground budget and park window apply,
+	// but no timer fires unless a test advances this clock.
+	f.Runtime.Clock = programtest.NewManualClock()
 	scratchDir := t.TempDir()
 	f.Context = func(_ string, tc *tools.ToolContext) {
 		tc.Host.SessionScratchDir = scratchDir

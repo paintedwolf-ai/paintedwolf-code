@@ -8,7 +8,7 @@ selector:
 requires:
   profiles:
   - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.offenders_sample, paintedwolf.observed_handles_sample, paintedwolf.reference_required, paintedwolf.grounding_escalated, paintedwolf.next_steps]
+  facts: [paintedwolf.rejection_code, paintedwolf.offenders_sample, paintedwolf.observed_handles_sample, paintedwolf.reference_required, paintedwolf.grounding_escalated, paintedwolf.can_recall, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "FINDING_UNGROUNDED"
 effect: block
 copy:

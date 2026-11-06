@@ -3,7 +3,7 @@ id: SURFACE_CLAIM_UNGROUNDED
 kind: invariant
 anchor: worker.report_check
 requires:
-  facts: [paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.profile, paintedwolf.surface_claim_ungrounded, paintedwolf.next_steps]
+  facts: [paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.profile, paintedwolf.surface_claim_ungrounded, paintedwolf.can_recall, paintedwolf.next_steps]
 when: paintedwolf.profile == "worker" && paintedwolf.surface_claim_ungrounded
 effect: block
 copy:

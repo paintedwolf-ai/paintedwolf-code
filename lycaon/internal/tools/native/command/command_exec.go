@@ -124,11 +124,6 @@ func commandWaitBudget(args map[string]any) time.Duration {
 	return exec.DefaultCommandWait
 }
 
-// CommandTimeout resolves the command timeout.
-func CommandTimeout(args map[string]any, toolName string) time.Duration {
-	return commandTimeout(args, toolName)
-}
-
 func commandTimeout(args map[string]any, toolName string) time.Duration {
 	if v, ok := args["timeout_ms"].(float64); ok && v > 0 {
 		d := time.Duration(v) * time.Millisecond

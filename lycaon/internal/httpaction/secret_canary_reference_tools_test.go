@@ -3,8 +3,6 @@ package httpaction
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/toolexecution"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,10 +21,13 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -185,23 +186,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	testutil.FailErr(t, "register verify", registry.Register("verify", verify.Run))
 	testutil.FailErr(t, "register terminal tools", native.RegisterTerminalSessionTools(registry, background))
 
-	configtest.Overlay(t, map[config.Rel]string{config.DistroMCP: "providers:\n  - id: canary\n    url: http://127.0.0.1:9/mcp\n    enabled: false\n"})
-	global := filepath.Join(t.TempDir(), "mcp.yaml")
-	testutil.FailErr(t, "write mcp config", os.WriteFile(global, []byte("providers:\n  - id: canary\n    url: http://127.0.0.1:8765/mcp\n    enabled: true\n"), 0o600))
-	var received []string
-	providers, err := mcp.NewRuntime(mcp.RuntimeOptions{
-		StatePath: t.TempDir(), GlobalOverridePath: global, Connector: canaryEchoConnector{received: &received},
-	})
-	testutil.FailErr(t, "open mcp registry", err)
-	providers.Tools.SetToolRegistry(registry)
-	providers.Calls.SetSecretScreen(matcher, executor.Secrets.AskSecretScreen)
-	testutil.FailErr(t, "load mcp providers", providers.Catalog.Load(t.Context()))
-	mcpReceived := func() string {
-		if len(received) == 0 {
-			return ""
-		}
-		return received[len(received)-1]
-	}
+	mcpReceived := registerCanaryMCP(t, registry, matcher, executor.Secrets.AskSecretScreen)
 
 	terminal := ""
 	harnesses := buildCanaryHarnesses(t, meta.Reference, server.URL, seen, func() string {

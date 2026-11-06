@@ -26,10 +26,12 @@ x-paintedwolf-scenarios:
       detail: file has only one recorded version
       path: main.go
       profile: implement
+      source_history_offered: true
       tool: restore_version
   - id: without_source_history
     vars:
       detail: file has only one recorded version
       path: main.go
       profile: plan_write_only
+      source_history_offered: false
       tool: restore_version

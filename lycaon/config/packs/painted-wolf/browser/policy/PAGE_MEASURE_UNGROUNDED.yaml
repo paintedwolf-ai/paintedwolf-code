@@ -3,7 +3,7 @@ id: PAGE_MEASURE_UNGROUNDED
 kind: invariant
 anchor: worker.report_check
 requires:
-  facts: [paintedwolf.page_measure_ungrounded, paintedwolf.profile, paintedwolf.next_steps]
+  facts: [paintedwolf.page_measure_ungrounded, paintedwolf.profile, paintedwolf.can_recall, paintedwolf.next_steps]
 when: paintedwolf.profile == "worker" && paintedwolf.page_measure_ungrounded
 effect: block
 copy:

@@ -3,7 +3,7 @@ id: INVEST_CITATION_UNVERIFIABLE
 kind: invariant
 anchor: coordinator.closeout_check
 requires:
-  facts: [paintedwolf.offender_count, paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.citation_unverifiable, paintedwolf.surface, paintedwolf.path, paintedwolf.next_steps]
+  facts: [paintedwolf.offender_count, paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.citation_unverifiable, paintedwolf.surface, paintedwolf.path, paintedwolf.can_recall, paintedwolf.next_steps]
 when: paintedwolf.surface == "implement_investigate" && paintedwolf.citation_unverifiable
 effect: block
 copy:
