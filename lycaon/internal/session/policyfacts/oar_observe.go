@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -40,9 +39,6 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	gc.Execution.ConfineSignals = append([]string(nil), obs.Signals...)
 	gc.Execution.FailedStages = append([]string(nil), obs.FailedStages...)
 	gc.Execution.ProcessRunning = obs.Running
-	gc.Execution.ProcessTimedOut = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationTimedOut)
-	gc.Execution.ProcessStopped = !obs.Running && bgprocess.TerminationReason(obs.TerminationReason).IsStopped()
-	gc.Execution.ProcessExited = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationExited)
 	observeSandboxRefusals(gc, obs.Refusals)
 	data := map[string]any{"tool": gc.Invocation.Tool}
 	if dest := obs.Destination; dest != "" {
@@ -60,9 +56,7 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 // capability whose rule would admit it. Refused paths carry the grant each
 // layer's recovery would request; control-plane paths have none.
 func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusals) {
-	gc.Refusals.SandboxRefusalWitness = string(refusals.Witness)
 	for _, refusal := range refusals.Refusals {
-		gc.Execution.SandboxRefusals = append(gc.Execution.SandboxRefusals, refusal.Display())
 		switch refusal.Recovery {
 		case confine.RecoverCredentialStore:
 			target := refusal.Target

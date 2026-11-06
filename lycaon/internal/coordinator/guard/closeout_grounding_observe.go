@@ -35,7 +35,6 @@ func PublishCloseoutGrounding(gc *oar.GuardContext, surfaceID string, draft guid
 		return
 	}
 	gc.Session.Surface = strings.TrimSpace(surfaceID)
-	gc.Grounding.CitationFieldsPresent = draft.CitationCount() > 0
 	if verdict.CitationsRequired {
 		gc.Rejection.RejectObservation = "citations_required"
 		putCloseoutRejectData(gc, verdict.HintData,

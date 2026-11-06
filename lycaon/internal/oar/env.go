@@ -329,35 +329,6 @@ func EvalToolArgBool(gc *GuardContext, key string) bool {
 	return b
 }
 
-// EvalSourceIncludes is the observation for source_includes(id).
-func EvalSourceIncludes(gc *GuardContext, id string) bool {
-	if gc == nil || gc.Source.SourceIncludes == nil {
-		return false
-	}
-	return gc.Source.SourceIncludes[id]
-}
-
-// EvalHostResourceStatus and EvalHostResourcePolicy expose resource catalog state.
-func EvalHostResourceStatus(gc *GuardContext, id string) string {
-	if gc == nil || gc.Access.HostResourceStatus == nil {
-		return ""
-	}
-	if status, ok := gc.Access.HostResourceStatus[id]; ok {
-		return status
-	}
-	return ""
-}
-
-func EvalHostResourcePolicy(gc *GuardContext, id string) string {
-	if gc == nil || gc.Access.HostResourcePolicy == nil {
-		return ""
-	}
-	if policy, ok := gc.Access.HostResourcePolicy[id]; ok {
-		return policy
-	}
-	return ""
-}
-
 // FlowMatches reports whether pattern is an ordered subsequence of recent tool names.
 func FlowMatches(recent, pattern []string) bool {
 	if len(pattern) == 0 {
