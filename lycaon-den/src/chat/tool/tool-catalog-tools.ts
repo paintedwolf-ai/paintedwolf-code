@@ -10,6 +10,10 @@ const SCHEMA_DIR = join(
   REPO_ROOT,
   "lycaon/config/packs/painted-wolf/platform/tools/schemas",
 );
+const OPERATION_SCHEMA_DIR = join(
+  REPO_ROOT,
+  "lycaon/config/packs/painted-wolf/platform/tools/operation-schemas",
+);
 const CATALOG_PATH = join(
   REPO_ROOT,
   "lycaon/config/packs/painted-wolf/platform/tools/lycaon-tools.yaml",
@@ -26,6 +30,13 @@ function namesFromYamlList(text: string): string[] {
 /** Native + boot-registered tools with JSON schemas. */
 export function toolSchemaNames(): string[] {
   return loadSourceCorpus(SCHEMA_DIR, { extensions: [".yaml"] }).files
+    .map((file) => file.rel.replace(/\.yaml$/, ""))
+    .sort();
+}
+
+/** Native operation identities that may appear in older direct-tool transcripts. */
+export function toolOperationSchemaNames(): string[] {
+  return loadSourceCorpus(OPERATION_SCHEMA_DIR, { extensions: [".yaml"] }).files
     .map((file) => file.rel.replace(/\.yaml$/, ""))
     .sort();
 }
