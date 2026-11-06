@@ -33,6 +33,11 @@ function browse(viewport: HTMLElement, left: number) {
   fireEvent.scroll(viewport);
 }
 function current() { return document.querySelector<HTMLButtonElement>('[data-testid="step-bar-dot"][aria-current="step"]')!; }
+function stepDot(step: number) {
+  const dot = screen.getAllByTestId("step-bar-dot").find((el) => el.getAttribute("aria-label")?.startsWith(`Step ${step} of`));
+  expect(dot).toBeTruthy();
+  return assertNamedControl(dot!, "button");
+}
 
 describe("long walk browsing", () => {
   it("bounds mounted markers while retaining the selected tab stop", async () => {
@@ -73,7 +78,7 @@ describe("long walk browsing", () => {
     const { viewport } = await mount();
     browse(viewport, 400);
     for (const index of [10, 19, 10]) {
-      const dot = screen.getByRole("button", { name: new RegExp(`^Step ${index + 1} of`) });
+      const dot = stepDot(index + 1);
       dot.focus();
       fireEvent.click(dot);
       await waitFor(() => expect(walkState("p1").at).toBe(index));
@@ -137,10 +142,10 @@ describe("long walk browsing", () => {
     await mount();
     const counter = screen.getByTestId("step-bar-read");
     fireEvent.click(counter);
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("searchbox", { name: "Find in walk" })));
-    const history = screen.getByRole("toolbar", { name: "Changes by turn" });
+    await waitFor(() => expect(document.activeElement).toBe(assertNamedControl(screen.getByTestId("walk-navigator-search"), "searchbox")));
+    const history = assertNamedControl(screen.getByTestId("walk-navigator-toolbar"), "toolbar");
     expect(history.querySelectorAll("button[data-walk-destination]")).toHaveLength(240);
-    expect(screen.getByText("Turn 24")).toBeTruthy();
+    expect(screen.getAllByTestId("walk-navigator-turn").map((heading) => heading.textContent)).toContain("Turn 24");
     fireEvent.keyDown(screen.getByRole("searchbox"), { key: "ArrowDown" });
     fireEvent.keyDown(document.activeElement!, { key: "End" });
     expect(document.activeElement?.textContent).toContain("Step 240");
@@ -149,10 +154,10 @@ describe("long walk browsing", () => {
     expect(document.activeElement).toBe(counter);
     fireEvent.click(counter);
     fireEvent.input(screen.getByRole("searchbox"), { target: { value: "Make change 20" } });
-    expect(screen.getByRole("toolbar", { name: "Changes by turn" }).querySelectorAll("button[data-walk-destination]")).toHaveLength(10);
-    expect(screen.queryByText("Turn 19")).toBeNull();
+    expect(screen.getByTestId("walk-navigator-toolbar").querySelectorAll("button[data-walk-destination]")).toHaveLength(10);
+    expect(screen.getAllByTestId("walk-navigator-turn").map((heading) => heading.textContent)).not.toContain("Turn 19");
     fireEvent.input(screen.getByRole("searchbox"), { target: { value: "" } });
-    expect(screen.getByRole("toolbar", { name: "Changes by turn" }).querySelectorAll("button[data-walk-destination]")).toHaveLength(240);
+    expect(screen.getByTestId("walk-navigator-toolbar").querySelectorAll("button[data-walk-destination]")).toHaveLength(240);
     fireEvent.input(screen.getByRole("searchbox"), { target: { value: "Make change 20" } });
     fireEvent.click(screen.getByRole("button", { name: /a\.ts\s*Step 191\s*Modified/ }));
     await waitFor(() => expect(walkState("p1").at).toBe(190));

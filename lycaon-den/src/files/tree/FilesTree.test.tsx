@@ -293,13 +293,13 @@ describe("Files interactions with host rows", () => {
     try {
       button("README.md").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 10, clientY: 10 }));
       window.dispatchEvent(new MouseEvent("pointermove", { clientX: 40, clientY: 60 }));
-      expect(await screen.findByText("Move to docs")).toBeTruthy();
+      expect((await screen.findByTestId("files-tree-drop-hint")).textContent).toBe("Move to docs");
       window.dispatchEvent(new MouseEvent("pointerup", { clientX: 40, clientY: 60 }));
       expect(onMovePath).toHaveBeenCalledWith("r1", "README.md", "docs", false);
-      expect(screen.queryByText("Move to docs")).toBeNull();
-      expect(await screen.findByText("Moving README.md to docs…")).toBeTruthy();
+      expect(screen.queryByTestId("files-tree-drop-hint")).toBeNull();
+      expect((await screen.findByTestId("files-tree-move-status")).textContent).toBe("Moving README.md to docs…");
       finishMove();
-      await waitFor(() => expect(screen.queryByText("Moving README.md to docs…")).toBeNull());
+      await waitFor(() => expect(screen.queryByTestId("files-tree-move-status")).toBeNull());
     } finally { delete (document as { elementFromPoint?: unknown }).elementFromPoint; }
   });
 
