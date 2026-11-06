@@ -68,5 +68,5 @@ func TestRetentionAndInventoryFindABranchOnAnotherVolume(t *testing.T) {
 	if _, err := workspace.LoadJobMeta(enginepaths.MetaDirForBranchRoot(binding.Root)); err != nil {
 		t.Fatalf("evicted branch lost its record: %v", err)
 	}
-	testutil.FailErr(t, "destroy", mgr.DestroyWorkerWorkspace(binding))
+	testutil.FailErr(t, "destroy", mgr.DestroyWorkerWorkspace(t.Context(), binding))
 }

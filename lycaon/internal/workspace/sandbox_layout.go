@@ -119,7 +119,7 @@ func (m *Manager) CreateWorkerWorkspaceFromSources(
 	}
 	preparation, err := m.snapshotSourceRoots(ctx, binding.Root, sources.Roots, decision)
 	if err != nil {
-		_ = m.DestroyWorkerWorkspace(binding)
+		_ = m.DestroyWorkerWorkspace(ctx, binding)
 		return nil, SandboxLayout{}, err
 	}
 	binding.Preparation = preparation

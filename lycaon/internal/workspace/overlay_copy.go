@@ -84,7 +84,7 @@ func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID s
 
 // DestroyWorkerWorkspace removes a branch and its metadata. A branch on an absent
 // volume keeps its record, so it can be removed when the volume returns.
-func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
+func (m *Manager) DestroyWorkerWorkspace(ctx context.Context, binding *Binding) error {
 	if binding == nil {
 		return nil
 	}
@@ -100,7 +100,7 @@ func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 	if err := os.RemoveAll(root); err != nil {
 		return err
 	}
-	return forgetPlacedBranch(m.stateRoot, root)
+	return forgetPlacedBranch(ctx, m.stateRoot, root)
 }
 
 func (m *Manager) jobRoot(primaryDir, jobID string) string {

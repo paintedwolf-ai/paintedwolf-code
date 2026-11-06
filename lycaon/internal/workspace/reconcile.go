@@ -49,7 +49,7 @@ func ReconcileStaleSandboxes(
 		if err := removeJobSandbox(dir.root); err != nil {
 			return removed, err
 		}
-		if err := forgetPlacedBranch(stateRoot, dir.root); err != nil {
+		if err := forgetPlacedBranch(ctx, stateRoot, dir.root); err != nil {
 			return removed, err
 		}
 		removed++
@@ -144,7 +144,7 @@ func removeUnretainedOrphanMeta(ctx context.Context, stateRoot, primaryDir strin
 		if err := os.RemoveAll(meta.root); err != nil {
 			return removed, fmt.Errorf("remove orphan sandbox meta %s: %w", meta.root, err)
 		}
-		if err := forgetPlacedBranch(stateRoot, jobRoot); err != nil {
+		if err := forgetPlacedBranch(ctx, stateRoot, jobRoot); err != nil {
 			return removed, err
 		}
 		removed++

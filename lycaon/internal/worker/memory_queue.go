@@ -328,7 +328,7 @@ func finalizeCanceled(ctx context.Context, q *InMemoryQueue, jobID string, resul
 	snapshot := job.task
 	projectID := job.projectID
 	q.mu.Unlock()
-	destroyWorkspaceRoot(q, jobID, workspaceRoot)
+	destroyWorkspaceRoot(ctx, q, jobID, workspaceRoot)
 	q.refreshBoard(ctx, snapshot, projectID)
 	return nil
 }

@@ -40,12 +40,12 @@ func reflinkVolume(t *testing.T) *Volume {
 	if dir == "" {
 		t.Skipf("%s is not set; no reflink volume can be made without elevation", ReflinkVolumeEnv)
 	}
-	root, err := os.MkdirTemp(dir, ".pw-placement-test-")
+	root, err := os.MkdirTemp(dir, ".pw-placement-test-") //nolint:usetesting // the directory must live on the operator-configured reflink volume
 	if err != nil {
 		t.Fatalf("create test directory on reflink volume: %v", err)
 	}
 	t.Cleanup(func() {
-		if err := os.RemoveAll(root); err != nil {
+		if err := os.RemoveAll(root); err != nil { // #nosec G703 -- root is a test-created directory under the operator-configured volume
 			t.Errorf("remove test directory on reflink volume: %v", err)
 		}
 	})
@@ -101,7 +101,7 @@ func tmpfsVolume(t *testing.T) *Volume {
 	store := filepath.Join(base, "store")
 	mount := filepath.Join(base, "mount")
 	for _, dir := range []string{store, mount} {
-		if err := os.Mkdir(dir, 0o755); err != nil {
+		if err := os.Mkdir(dir, 0o750); err != nil {
 			t.Fatalf("create %s: %v", dir, err)
 		}
 	}

@@ -132,7 +132,7 @@ func reconcileDetachedBranchBucket(ctx context.Context, stateRoot string, bucket
 			return changed, err
 		}
 		if removed {
-			if err := forgetPlacedBranch(stateRoot, root); err != nil {
+			if err := forgetPlacedBranch(ctx, stateRoot, root); err != nil {
 				return changed, err
 			}
 		}

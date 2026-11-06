@@ -128,7 +128,7 @@ func (q *memoryQueueQuery) publishMemoryWorkerBranch(
 		return nil, ErrWorkerBranchClaimFailed
 	}
 	if lost && ws != nil {
-		_ = ws.DestroyWorkerWorkspace(binding)
+		_ = ws.DestroyWorkerWorkspace(ctx, binding)
 	}
 	cp := task
 	return &cp, nil
@@ -185,7 +185,7 @@ func holdBaseOverlay(ctx context.Context, q *InMemoryQueue, task *api.WorkerTask
 
 // destroyWorkspaceRoot removes an isolated sandbox copy after a terminal
 // transition; a queue without a workspace manager leaves the path alone.
-func destroyWorkspaceRoot(q *InMemoryQueue, jobID, root string) {
+func destroyWorkspaceRoot(ctx context.Context, q *InMemoryQueue, jobID, root string) {
 	if strings.TrimSpace(root) == "" {
 		return
 	}
@@ -195,7 +195,9 @@ func destroyWorkspaceRoot(q *InMemoryQueue, jobID, root string) {
 	if ws == nil {
 		return
 	}
-	_ = ws.DestroyWorkerWorkspace(&workspace.Binding{ID: jobID, Root: root})
+	cleanupCtx, cancel := promoteCleanupContext(ctx)
+	defer cancel()
+	_ = ws.DestroyWorkerWorkspace(cleanupCtx, &workspace.Binding{ID: jobID, Root: root})
 }
 
 func workerWorkspaceIdentity(ctx context.Context, database db.DBTX, root, baseline string) (string, string, error) {

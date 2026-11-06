@@ -432,7 +432,7 @@ func TestEjectedVolumeKeepsRecordsAndTheWorkerRecoversOnRemount(t *testing.T) {
 	if len(trees) != 1 || !trees[0].Unavailable || trees[0].Present || trees[0].Root != binding.Root {
 		t.Fatalf("trees = %+v", trees)
 	}
-	if err := fixture.mgr.DestroyWorkerWorkspace(binding); !errors.Is(err, ErrBranchVolumeUnavailable) {
+	if err := fixture.mgr.DestroyWorkerWorkspace(t.Context(), binding); !errors.Is(err, ErrBranchVolumeUnavailable) {
 		t.Fatalf("destroy err = %v", err)
 	}
 	if _, err := AcquireBranchUse(t.Context(), binding.Root); !errors.Is(err, ErrBranchVolumeUnavailable) {
@@ -474,7 +474,7 @@ func TestEjectedVolumeKeepsRecordsAndTheWorkerRecoversOnRemount(t *testing.T) {
 	if len(trees) != 1 || trees[0].Unavailable || !trees[0].Present || trees[0].Root != binding.Root {
 		t.Fatalf("trees after remount = %+v", trees)
 	}
-	testutil.FailErr(t, "destroy after remount", fixture.mgr.DestroyWorkerWorkspace(binding))
+	testutil.FailErr(t, "destroy after remount", fixture.mgr.DestroyWorkerWorkspace(t.Context(), binding))
 	registry, err := workerplacement.Load(fixture.state)
 	testutil.FailErr(t, "registry", err)
 	if len(registry.Folders) != 0 || len(registry.Branches) != 0 {

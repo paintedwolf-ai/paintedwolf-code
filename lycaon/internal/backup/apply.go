@@ -77,7 +77,7 @@ func (r *pendingRestore) apply(ctx context.Context, configDir string) error {
 		return err
 	}
 	if r.marker.Operation == PendingOperationFreshStart {
-		if err := localdata.ResetStoreDependents(filepath.Join(configDir, r.marker.liveRelPath(storeRelPath))); err != nil {
+		if err := localdata.ResetStoreDependents(ctx, filepath.Join(configDir, r.marker.liveRelPath(storeRelPath))); err != nil {
 			return fmt.Errorf("clear replaced-store dependents: %w", err)
 		}
 	}

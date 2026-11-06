@@ -30,7 +30,7 @@ func TestCreateWorkerWorkspaceCapturesCompleteImmutableSnapshot(t *testing.T) {
 	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "skip")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
-	defer func() { _ = mgr.DestroyWorkerWorkspace(binding) }()
+	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
 
 	if _, err := os.Stat(filepath.Join(binding.Root, "main.go")); err != nil {
 		t.Fatalf("claimed snapshot missing main.go: %v", err)
@@ -57,7 +57,7 @@ func TestOverlaySurveyListsCompleteSnapshot(t *testing.T) {
 	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "survey")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
-	defer func() { _ = mgr.DestroyWorkerWorkspace(binding) }()
+	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
 
 	entries, err := workspace.OverlaySurveyReadDir(binding.Root, "", sandbox.SurveyOptions{IncludeHidden: true})
 	testutil.FailErr(t, "OverlaySurveyReadDir", err)
@@ -135,7 +135,7 @@ func TestWorkerSnapshotMirrorsBuildSymlink(t *testing.T) {
 	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "symlink")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
-	defer func() { _ = mgr.DestroyWorkerWorkspace(binding) }()
+	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
 
 	link := filepath.Join(binding.Root, ".build", "debug")
 	info, err := os.Lstat(link)
@@ -174,7 +174,7 @@ func TestWorkerSnapshotPrunesMetadataNotGitignore(t *testing.T) {
 	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "prune")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
-	defer func() { _ = mgr.DestroyWorkerWorkspace(binding) }()
+	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
 
 	copied := []string{"src/app.go", "keep/notes.txt", ".gitignore", "build-out/o.js", "debug.log", "target/big.bin", "node_modules/x"}
 	for _, rel := range copied {
@@ -241,7 +241,7 @@ func TestWorkerSnapshotExcludesLinkedWorktreeAndSubmoduleGitlinks(t *testing.T) 
 	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "gitlink-isolation")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
-	defer func() { _ = mgr.DestroyWorkerWorkspace(binding) }()
+	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
 
 	// Working tree files are copied into the worker branch.
 	if _, err := os.Stat(filepath.Join(binding.Root, "worktree", "tracked.go")); err != nil {

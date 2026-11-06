@@ -114,12 +114,12 @@ func (m *Manager) createPlacedSkeleton(ctx context.Context, logicalRoot, branchR
 			return nil, err
 		}
 		if err := WriteJobMeta(enginepaths.MetaDirForBranchRoot(logicalRoot), jobMetaFromLayout(layout)); err != nil {
-			return nil, errors.Join(err, forgetPlacedBranch(m.stateRoot, branchRoot))
+			return nil, errors.Join(err, forgetPlacedBranch(ctx, m.stateRoot, branchRoot))
 		}
 	}
 	binding, err := m.createBranchSkeleton(ctx, branchRoot, layout, jobID)
 	if err != nil {
-		return nil, errors.Join(err, forgetPlacedBranch(m.stateRoot, branchRoot))
+		return nil, errors.Join(err, forgetPlacedBranch(ctx, m.stateRoot, branchRoot))
 	}
 	return binding, nil
 }
@@ -130,7 +130,7 @@ func branchIdentity(branchRoot string) (projectKey, jobID string) {
 }
 
 // forgetPlacedBranch clears what a placed branch keeps in the state folder.
-func forgetPlacedBranch(stateRoot, branchRoot string) error {
+func forgetPlacedBranch(ctx context.Context, stateRoot, branchRoot string) error {
 	if enginepaths.WorkerPlacementFolderOf(branchRoot) == "" {
 		return nil
 	}
@@ -141,7 +141,7 @@ func forgetPlacedBranch(stateRoot, branchRoot string) error {
 		_ = os.RemoveAll(enginepaths.MetaDirForBranchRoot(logical))
 		removeBranchLocks(logical)
 	}
-	return workerplacement.ForgetBranch(context.Background(), stateRoot, projectKey, jobID)
+	return workerplacement.ForgetBranch(ctx, stateRoot, projectKey, jobID)
 }
 
 // placedTreeSuperseded reports a placed tree that restore replaced with one in
@@ -290,8 +290,9 @@ func declareCopyCost(ctx context.Context, sourceRoot, branchRoot string, admit s
 	if err != nil {
 		return sourceCost{}, err
 	}
-	if known && available < uint64(cost.bytes) {
-		return sourceCost{}, &CapacityError{Path: branchRoot, Required: uint64(cost.bytes), Available: available}
+	required := uint64(cost.bytes) // #nosec G115 -- bytes sums file sizes, never negative; wrapping keeps the refusal
+	if known && available < required {
+		return sourceCost{}, &CapacityError{Path: branchRoot, Required: required, Available: available}
 	}
 	return cost, nil
 }

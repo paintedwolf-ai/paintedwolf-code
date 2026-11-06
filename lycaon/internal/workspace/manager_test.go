@@ -37,7 +37,7 @@ func TestCreateWorkerWorkspaceIsolatedCopy(t *testing.T) {
 		t.Fatalf("primary=%q overlay=%q", primaryBytes, overlayBytes)
 	}
 
-	if err := mgr.DestroyWorkerWorkspace(binding); err != nil {
+	if err := mgr.DestroyWorkerWorkspace(t.Context(), binding); err != nil {
 		testutil.FailErr(t, "DestroyWorkerWorkspace", err)
 	}
 	if _, err := os.Stat(binding.Root); !os.IsNotExist(err) {
@@ -63,10 +63,10 @@ func TestCreateWorkerWorkspaceLivesOutsideRepo(t *testing.T) {
 
 func TestDestroyWorkerWorkspaceNil(t *testing.T) {
 	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
-	if err := mgr.DestroyWorkerWorkspace(nil); err != nil {
+	if err := mgr.DestroyWorkerWorkspace(t.Context(), nil); err != nil {
 		testutil.FailErr(t, "DestroyWorkerWorkspace nil", err)
 	}
-	if err := mgr.DestroyWorkerWorkspace(&workspace.Binding{}); err != nil {
+	if err := mgr.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{}); err != nil {
 		testutil.FailErr(t, "DestroyWorkerWorkspace empty", err)
 	}
 }

@@ -21,7 +21,7 @@ func (s *stubWorkspaceBinder) CreateWorkerWorkspace(_ context.Context, _, legID 
 	return b, nil
 }
 
-func (s *stubWorkspaceBinder) DestroyWorkerWorkspace(*workspace.Binding) error {
+func (s *stubWorkspaceBinder) DestroyWorkerWorkspace(context.Context, *workspace.Binding) error {
 	return nil
 }
 

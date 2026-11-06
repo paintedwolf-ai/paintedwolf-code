@@ -50,7 +50,7 @@ func (v *Volume) Remount(t *testing.T) {
 func (v *Volume) Dir(t *testing.T, name string) string {
 	t.Helper()
 	dir := filepath.Join(v.Root, name)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatalf("create volume directory: %v", err)
 	}
 	return dir
