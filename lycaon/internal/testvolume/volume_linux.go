@@ -34,6 +34,14 @@ func New(t *testing.T, kind Kind) (*Volume, bool) {
 	return tmpfsVolume(t), false
 }
 
+// sharedVolume returns a fresh volume: on Linux every test already gets its own
+// namespace or tmpfs, so sharing adds only the shared lifecycle rules.
+func sharedVolume(t *testing.T, kind Kind) (*Volume, bool) {
+	return New(t, kind)
+}
+
+func sweepStrays() {}
+
 func reflinkVolume(t *testing.T) *Volume {
 	t.Helper()
 	dir := strings.TrimSpace(os.Getenv(ReflinkVolumeEnv))
@@ -132,6 +140,9 @@ func tmpfsVolume(t *testing.T) *Volume {
 // MakeReadOnly remounts the volume read-only.
 func (v *Volume) MakeReadOnly(t *testing.T) {
 	t.Helper()
+	if v.shared {
+		t.Fatal("the shared test volume serves the whole test binary; tests that re-own it need testvolume.New")
+	}
 	if err := unix.Mount("", v.Root, "", unix.MS_REMOUNT|unix.MS_BIND|unix.MS_RDONLY, ""); err != nil {
 		t.Fatalf("remount test volume read-only: %v", err)
 	}

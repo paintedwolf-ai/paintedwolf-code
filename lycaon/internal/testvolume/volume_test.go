@@ -5,6 +5,7 @@ package testvolume
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -45,5 +46,21 @@ func TestNoCloneVolumeIsASeparateFilesystem(t *testing.T) {
 	testutil.FailErr(t, "stat parent", err)
 	if os.SameFile(mounted, parent) {
 		t.Fatal("volume is its parent")
+	}
+}
+
+func TestSharedScopeNamesAreUniqueAndFilesystemSafe(t *testing.T) {
+	first := sharedScopeName(t)
+	second := sharedScopeName(t)
+	if first == second {
+		t.Fatalf("two scopes share a name: %s", first)
+	}
+	for _, name := range []string{first, second} {
+		if !strings.HasPrefix(name, "t") {
+			t.Fatalf("scope name lacks its counter: %s", name)
+		}
+		if strings.ContainsAny(name, "/: ") {
+			t.Fatalf("scope name keeps unsafe characters: %s", name)
+		}
 	}
 }
