@@ -5,8 +5,6 @@ oar: '1.0'
 id: EDITORCONFIG_MISMATCH
 kind: policy
 anchor: tool.post_invoke
-selector:
-  tool: [write, edit, replace_lines, restore_version, code_rewrite, jq_edit]
 requires:
   profiles: [tool]
   facts:

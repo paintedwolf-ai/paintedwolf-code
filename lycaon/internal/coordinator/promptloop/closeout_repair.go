@@ -125,7 +125,7 @@ func (l *turnCloseout) settleCloseoutBlocked(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: blocked.Notice,
 		TurnTools:            st.turnTools,
-		OfferedTools:         st.offeredToolNames,
+		Reach:                st.requestReach(),
 		TasksDispatchedCount: st.tasksDispatchedCount,
 		Outcome:              promptresult.OutcomeCloseoutBlocked,
 		CloseoutBlocked:      blocked,

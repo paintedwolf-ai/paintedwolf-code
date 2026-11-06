@@ -21,12 +21,12 @@ func TestRewriteSourceAcrossLanguages(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
-			got, changed, err := RewriteSource(t.Context(), c.file, c.pattern, c.rewrite, c.src)
+			got, changed, err := RewriteSource(t.Context(), c.file, "", c.pattern, c.rewrite, c.src)
 			testutil.FailErr(t, "rewrite source", err)
 			if !changed || got != c.want || !SupportsRewriteLanguage(c.file) {
 				t.Fatalf("changed=%v got=%q want=%q", changed, got, c.want)
 			}
-			unchanged, changed, err := RewriteSource(t.Context(), c.file, c.pattern, c.rewrite, got)
+			unchanged, changed, err := RewriteSource(t.Context(), c.file, "", c.pattern, c.rewrite, got)
 			testutil.FailErr(t, "rewrite without matches", err)
 			if changed || unchanged != got {
 				t.Fatalf("unmatched source changed: %q", unchanged)
@@ -40,7 +40,7 @@ func TestRewriteSourceRejectsInvalidAndBroadPatterns(t *testing.T) {
 		{"app.py", "x = (0 << 6) | 3\ny: float | None = None\n", "$T | $B", "Union[$T, $B]", "CODE_REWRITE_PATTERN_TOO_BROAD"},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
-			_, changed, err := RewriteSource(t.Context(), tc.path, tc.pattern, tc.rewrite, tc.source)
+			_, changed, err := RewriteSource(t.Context(), tc.path, "", tc.pattern, tc.rewrite, tc.source)
 			reject := toolrejection.AsToolReject(err)
 			if changed || reject == nil || reject.Code != tc.code {
 				t.Fatalf("changed=%v err=%v", changed, err)
@@ -49,14 +49,14 @@ func TestRewriteSourceRejectsInvalidAndBroadPatterns(t *testing.T) {
 	}
 }
 func TestRewriteSourceNarrowUnionPreservesBitwiseExpression(t *testing.T) {
-	got, changed, err := RewriteSource(t.Context(), "app.py", "$T | None", "Union[$T, None]", "x = (0 << 6) | 3\ny: float | None = None\n")
+	got, changed, err := RewriteSource(t.Context(), "app.py", "", "$T | None", "Union[$T, None]", "x = (0 << 6) | 3\ny: float | None = None\n")
 	testutil.FailErr(t, "rewrite narrow union", err)
 	if !changed || !strings.Contains(got, "Union[float, None]") || !strings.Contains(got, "(0 << 6) | 3") {
 		t.Fatalf("rewritten=%q changed=%v", got, changed)
 	}
 }
 func TestRewriteSourceUnsupportedLanguageIsUnchanged(t *testing.T) {
-	got, changed, err := RewriteSource(t.Context(), "data.qzx9", "$A", "$A", "hello\n")
+	got, changed, err := RewriteSource(t.Context(), "data.qzx9", "", "$A", "$A", "hello\n")
 	testutil.FailErr(t, "unsupported language", err)
 	if got != "hello\n" || changed || SupportsRewriteLanguage("data.qzx9") {
 		t.Fatalf("got=%q changed=%v", got, changed)
@@ -65,7 +65,7 @@ func TestRewriteSourceUnsupportedLanguageIsUnchanged(t *testing.T) {
 func TestRewriteSourcePreservesParserFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, _, err := RewriteSource(ctx, "a.go", "f($A)", "g($A)", "package p\nfunc run() { f(1) }\n")
+	_, _, err := RewriteSource(ctx, "a.go", "", "f($A)", "g($A)", "package p\nfunc run() { f(1) }\n")
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "SOURCE_PARSE_INCOMPLETE" || reject.Data["parse_reason"] != "canceled" {
 		t.Fatalf("parser failure=%v", err)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
@@ -108,10 +109,18 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if effect.Stage.ExecutionID != invocation.Identity.ExecutionID || effect.Stage.OperationID != facts.Identity || len(effect.Stage.Argv) == 0 || !stageMatchesOperation(bound, effect.Stage.Argv) {
 		return result, fmt.Errorf("native stage does not match bound operation")
 	}
+	program := tc.Effects.Out
 	tc, err = frame.ChildContext(ctx, definition, invocation, tc)
 	if err != nil {
 		return result, err
 	}
+	child := &tools.ToolInvocationOut{}
+	tc.Effects.Out = child
+	defer func() {
+		if err == nil {
+			forwardChildFeedback(program, child)
+		}
+	}()
 	tc.Effects.CheckMutationProgress = func(ctx context.Context, rootID, path string) error {
 		return checkReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
 	}
@@ -438,4 +447,20 @@ func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandpro
 		return reject
 	}
 	return nil
+}
+
+// childFeedback serializes advisories from children of concurrent pipeline stages.
+var childFeedback sync.Mutex
+
+// forwardChildFeedback states a completed child's advisories on the program's
+// result, the only tool result its reader sees.
+func forwardChildFeedback(program, child *tools.ToolInvocationOut) {
+	if program == nil || len(child.Facts.Feedback) == 0 {
+		return
+	}
+	childFeedback.Lock()
+	defer childFeedback.Unlock()
+	for _, item := range child.Facts.Feedback {
+		program.Facts = program.Facts.WithFeedback(item.Code, item.Details, item.Subject)
+	}
 }

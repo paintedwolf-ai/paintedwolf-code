@@ -450,9 +450,7 @@ pointer 2.4, margin 0.3.
 a `request` receipt as `ranked` without the tool the model then asked for
 again. The ranker reads the first 60 words of each description, so write the
 operation first and the rejection codes after; probe the phrasings that missed
-with `request_probe.py` before and after the edit. Tools that rank near one
-another on the same need declare `companions` in `native-tools.yaml`, so one
-selection loads the set. Lower the bar only when the probe shows the wanted
+with `request_probe.py` before and after the edit. Lower the bar only when the probe shows the wanted
 tool just under it and nothing wrong just above it. Shipped: 1.8, four loads,
 no nearest fallback: in the recorded sessions the nearest tool was wrong both
 times it loaded (`verify` for a file creation, `code_rewrite` for a render),

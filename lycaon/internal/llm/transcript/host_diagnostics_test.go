@@ -70,12 +70,12 @@ func TestHostDiagnosticsBoundEncodedValuesAndPreserveNumbers(t *testing.T) {
 	details := map[string]any{
 		"reason": strings.Repeat("\x00", 300),
 		"field":  "payload", "revision": json.Number("9007199254740993"), "issues": rows,
-		"replacement_calls": []any{map[string]any{"tool": "write", "args": map[string]any{"content": "must stay whole"}}},
+		"entries": []any{map[string]any{"tool": "write", "args": map[string]any{"content": "must stay whole"}}},
 	}
 	got := boundedHostDiagnostics(details, maxHostDiagnosticBytes)
 	raw, err := json.Marshal(got)
 	testutil.FailErr(t, "encode diagnostics", err)
-	if len(raw) > maxHostDiagnosticBytes || got["reason"] != nil || got["replacement_calls"] != nil || got["field"] != "payload" {
+	if len(raw) > maxHostDiagnosticBytes || got["reason"] != nil || got["entries"] != nil || got["field"] != "payload" {
 		t.Fatalf("bounds or identity lost: %s", raw)
 	}
 	if got["revision"] != json.Number("9007199254740993") {

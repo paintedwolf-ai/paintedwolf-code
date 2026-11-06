@@ -100,7 +100,7 @@ func TestWebResearchPromptVarsSuppliedAndGated(t *testing.T) {
 		folderRendered, err := engine.Render(context.Background(), "agents/coordinator-core.md", folderVars)
 		contractcheck.FailErr(t, "render coordinator-core folder", err)
 		hasFresh := strings.Contains(folderRendered, "Stale-training check:") &&
-			strings.Contains(folderRendered, "require this-turn `web_search` + `fetch_url` evidence")
+			strings.Contains(folderRendered, "require this-turn web research evidence")
 		if enabled {
 			if !hasFresh {
 				t.Fatalf("enabled=true + has_file_tools must keep the stale-training check")

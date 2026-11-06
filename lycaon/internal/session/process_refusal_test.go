@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"testing"
 	"time"
@@ -80,7 +81,7 @@ func testHandleCommandRefusalWakesWithDigest(t *testing.T, offered []string) {
 		[]loopwake.WaitTrigger{loopwake.WaitTriggerProcessDone}, []string{"command-1"}, loopwake.SleepMoverHost)
 	ctx := t.Context()
 	if offered != nil {
-		ctx = tools.WithRecoveryTools(ctx, offered)
+		ctx = tools.WithCallReach(ctx, toolreach.Offered(offered))
 	}
 	mgr.Processes.HandleCommandRefusal(ctx, bgprocess.RefusalNotice{
 		SessionID: sess.ID, Handle: "command-1", OriginTool: "command", Mode: bgprocess.JobModeBackground,
@@ -176,7 +177,7 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 				if !running {
 					obs.FailedStages = []string{"fixture"}
 				}
-				ctx := tools.WithRecoveryTools(t.Context(), names)
+				ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 				text, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: t.Name()}, "command", nil, "{}", 1, guidance.ToolResultFacts{Confine: obs})
 				if !facts.HasCode(access.code) || !facts.HasCode("SANDBOX_TERMINAL_PATH_REFUSED") {
 					t.Fatalf("mixed refusals lost a remedy: %s", text)
@@ -190,7 +191,7 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 					t.Errorf("terminal path repeated in recovery copy: %s", text)
 				}
 				for i, control := range []string{"command_output", "command_stop"} {
-					if strings.Contains(text, "`"+control+"`") != (running && offered&(1<<i) != 0) {
+					if strings.Contains(text, "`"+control+"(") != (running && offered&(1<<i) != 0) {
 						t.Errorf("control %s running=%v offered=%v: %s", control, running, names, text)
 					}
 				}

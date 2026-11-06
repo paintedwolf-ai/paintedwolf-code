@@ -15,7 +15,7 @@ copy:
   cause: "The accepted-report latch or durable closed batch state forbids this further orientation or report action."
   why: The in-turn latch and batch_phase=closed mirror enforce one report per batch
   fix: "Preserve the accepted synthesis and end this turn. The host admits a new batch when the next applicable user turn begins."
-  instead: "Do not repeat pack_board or the closing report for the batch that is already closed."
+  instead: 'Do not repeat the board or the closing report for the batch that is already closed.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: Coordinator batch is closed — one synthesis per batch

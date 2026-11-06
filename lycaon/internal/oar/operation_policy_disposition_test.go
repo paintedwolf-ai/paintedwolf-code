@@ -11,22 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// structuredOnlyOperationRules keep a structured tool selector for an operation
-// that also has native command forms. Every other operation-specific unit is
-// translated to the paintedwolf.operation selector; units naming no native
-// operation are preserved unchanged because their selection never depended on
-// a replaced schema.
-var structuredOnlyOperationRules = map[string]string{
-	"CHOWN_GROUP_UNKNOWN":                 "native chown accepts numeric UID[:GID] only; the owner cannot emit an account lookup failure there",
-	"CHOWN_USER_UNKNOWN":                  "native chown accepts numeric UID[:GID] only; the owner cannot emit an account lookup failure there",
-	"CHOWN_RECURSIVE_DENIED":              "native chown has no recursive option; the structured request remains the only producer",
-	"HTTP_REQUEST_LOOPBACK_OTHER_SESSION": "post-invoke advisory from structured HTTP result facts; native children publish no such post-invoke observation",
-	"HTTP_REQUEST_WEB_PAGE":               "post-invoke advisory from the structured result observation; native children publish no such observation",
-	"SOURCE_ANALYSIS_UNAVAILABLE":         "post-invoke advisory from the structured result observation; native children publish no such observation",
-	"EDITORCONFIG_MISMATCH":               "post-invoke advisory from the structured result observation; native children publish no such observation",
-	"SYNTAX_CHECK_OVERRIDDEN":             "post-invoke advisory from the structured result observation; native children publish no such observation",
-}
-
 func nativeOperationIdentities(t *testing.T) map[string]bool {
 	t.Helper()
 	catalog, err := toolcontract.LanguageV1()
@@ -43,17 +27,12 @@ func nativeOperationIdentities(t *testing.T) map[string]bool {
 	return out
 }
 
-// Each bundled unit has one mechanical disposition: translated through the
-// operation selector, structured-only by recorded reason, or preserved because
-// it names no native operation. Prose selection by tool name is refused.
+// Each bundled unit selects a native operation through the operation selector or
+// names none. Prose selection by tool name is refused.
 func TestBundledPolicyDispositionsForNativeOperations(t *testing.T) {
 	native := nativeOperationIdentities(t)
 	rs := loadStockRules(t)
 	counts := map[string]int{}
-	unused := map[string]bool{}
-	for id := range structuredOnlyOperationRules {
-		unused[id] = true
-	}
 	for _, rule := range rs.All() {
 		var named []string
 		for _, tool := range rule.Selector["tool"] {
@@ -68,16 +47,9 @@ func TestBundledPolicyDispositionsForNativeOperations(t *testing.T) {
 				}
 			}
 		}
-		_, structuredOnly := structuredOnlyOperationRules[rule.ID]
-		delete(unused, rule.ID)
 		switch {
-		case len(named) > 0 && !structuredOnly:
-			t.Errorf("%s selects native operations %v by structured tool only; translate it to the paintedwolf.operation selector or record why it stays structured", rule.ID, named)
-		case structuredOnly:
-			if len(named) == 0 {
-				t.Errorf("%s is recorded structured-only but selects no native operation", rule.ID)
-			}
-			counts["structured-only"]++
+		case len(named) > 0:
+			t.Errorf("%s selects native operations %v by structured tool only; translate it to the paintedwolf.operation selector", rule.ID, named)
 		case len(rule.Selector["paintedwolf.operation"]) > 0:
 			for _, op := range rule.Selector["paintedwolf.operation"] {
 				if _, known := toolcontract.Lookup(op); !known {
@@ -88,9 +60,6 @@ func TestBundledPolicyDispositionsForNativeOperations(t *testing.T) {
 		default:
 			counts["preserved"]++
 		}
-	}
-	for id := range unused {
-		t.Errorf("structured-only record %s names no bundled unit", id)
 	}
 	if counts["translated"] == 0 || counts["preserved"] == 0 {
 		t.Fatalf("disposition inventory is empty: %v", counts)

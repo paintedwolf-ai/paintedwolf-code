@@ -5,16 +5,14 @@ anchor: coordinator.pre_invoke
 requires:
   profiles:
     - tool
-  facts:
-    - paintedwolf.batch_closed
-    - paintedwolf.batch_phase
+  facts: [paintedwolf.batch_closed, paintedwolf.batch_phase, paintedwolf.next_steps]
 when: paintedwolf.batch_phase == "synthesize" && tool == "pack_board" && !paintedwolf.batch_closed
 effect: block
 copy:
-  what: "pack_board is unavailable while the batch is in {{ paintedwolf.batch_phase }}."
+  what: 'The board is unavailable while the batch is in {{ paintedwolf.batch_phase }}.'
   cause: "The current batch is ready for synthesis and already carries its board context."
   why: Phase-gated tools keep dispatch/integrate/synthesize/closed boundaries enforceable in code
-  fix: "Use the current board and retained evidence to produce the required report. Request a fresh board only on a later request that offers pack_board."
+  fix: 'Use the current board and retained evidence to produce the required report. {{ paintedwolf.next_steps }}'
   instead: "Do not restart routing or promotion solely to refresh orientation during synthesis."
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator

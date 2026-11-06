@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -58,6 +59,16 @@ func startCommandProgramSession(t *testing.T, args map[string]any, request wire.
 		ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: args}},
 		FollowUpText: "Program finished.",
 	}}})
+	return startSessionWithClient(t, mock, request, approvals, posture...)
+}
+
+func startCommandProgramSessionWithClient(t *testing.T, client modelcall.LLMClient) *commandProgramSession {
+	t.Helper()
+	return startSessionWithClient(t, client, wire.CreateSessionRequest{}, "")
+}
+
+func startSessionWithClient(t *testing.T, mock modelcall.LLMClient, request wire.CreateSessionRequest, approvals string, posture ...gate.Posture) *commandProgramSession {
+	t.Helper()
 	options := []Option{WithLLMClient(mock)}
 	if len(posture) > 0 {
 		options = append(options, withGlobalApprovalPosture(posture[0]))

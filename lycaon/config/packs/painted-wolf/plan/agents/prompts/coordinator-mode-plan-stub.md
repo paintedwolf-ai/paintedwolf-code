@@ -26,4 +26,4 @@ Approval status is host-set. Never write `approved`, `implementing`, or `done`.
 
 Satisfy **`plan_stub_valid`** in one command redirect or scoped patch with that frontmatter and those headings. Fold intake answers and research facts into them.
 
-Do not `task(repo-researcher|path-explorer, …)` or `delegate_dispatch` in stub.
+Do not dispatch workers in stub.

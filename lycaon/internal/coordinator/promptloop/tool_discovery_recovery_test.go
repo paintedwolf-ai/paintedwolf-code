@@ -95,7 +95,7 @@ func TestUnknownToolRecoveryPagesAndLoadsThroughProductionLoader(t *testing.T) {
 	if !strings.Contains(content, `"status":"catalog"`) || strings.Contains(content, "details_omitted") || strings.Contains(content, "privateprivate") {
 		t.Fatalf("provider lost safe catalog: %s", content)
 	}
-	if page.Instruction != "" || !strings.Contains(rejected.Copy["fix"], "`request_tools`") {
+	if page.Instruction != "" || !strings.Contains(rejected.Copy["fix"], "`request_tools(") {
 		t.Fatal("catalog must defer recovery instructions to rendered OAR")
 	}
 	pageBytes, err := json.Marshal(page)
@@ -212,5 +212,23 @@ func TestUnknownToolDiscoveryGuidanceRequiresProjectedCurrentCatalog(t *testing.
 				}
 			}
 		})
+	}
+}
+
+// A retired name is told the forms that replaced it, never offered as loadable.
+func TestRetiredToolNameReportsItsCommandForms(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	active := tools.NewMemoryActivation()
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s", Agent: "coordinator"}, Turn: tools.InvocationTurn{TurnSurfaceID: "fixture", TurnOfferedToolNames: []string{"command", "request_tools"}, TurnToolPlan: toolsurface.Compile([]string{"command", "request_tools"}, nil)}}
+	loop := discoveryRecoveryLoop(t, reg, active.Active)
+	rejected := loop.Tools.rejectToolOccurrence(t.Context(), &api.Session{ID: "s"}, api.ToolCall{Name: "read", Args: map[string]any{"path": "a"}}, tctx, "TOOL_NOT_OFFERED", nil)
+	data := toolrejection.AsToolReject(rejected).Data
+	forms, _ := data["tool_command_forms"].([]string)
+	if data["tool_retired_to_command"] != true || !slices.Contains(forms, "cat") || data["tool_loadable"] != false {
+		t.Fatalf("retired facts = %+v", data)
+	}
+	current := loop.Tools.rejectToolOccurrence(t.Context(), &api.Session{ID: "s"}, api.ToolCall{Name: "task"}, tctx, "TOOL_NOT_OFFERED", nil)
+	if _, retired := toolrejection.AsToolReject(current).Data["tool_retired_to_command"]; retired {
+		t.Fatal("a current tool was reported as retired")
 	}
 }

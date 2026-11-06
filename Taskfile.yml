@@ -1140,9 +1140,11 @@ tasks:
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
+      - config/packs/painted-wolf/platform/tools/operation-schemas/**/*
     generates:
       - internal/toolcontract/language_catalog.generated.go
     cmds:
@@ -1155,9 +1157,11 @@ tasks:
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
+      - config/packs/painted-wolf/platform/tools/operation-schemas/**/*
       - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check
@@ -1258,6 +1262,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-native-tool-contracts/**/*
       - internal/nativemanifest/**/*
     generates:
@@ -1274,6 +1279,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-native-tool-contracts/**/*
       - internal/nativemanifest/**/*
       - internal/settings/approval_tiers.generated.go
@@ -1292,6 +1298,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-worker-branch-tools/**/*
       - internal/nativemanifest/**/*
     generates:
@@ -1306,6 +1313,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-worker-branch-tools/**/*
       - internal/nativemanifest/**/*
       - internal/tools/worker_branch_tools.generated.go
@@ -1323,6 +1331,7 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
       - config/packs/painted-wolf/platform/tools/schemas/*.yaml
+      - config/packs/painted-wolf/platform/tools/operation-schemas/*.yaml
       - cmd/codegen-tool-presentation/**/*
     generates:
       - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
@@ -1339,6 +1348,7 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
       - config/packs/painted-wolf/platform/tools/schemas/*.yaml
+      - config/packs/painted-wolf/platform/tools/operation-schemas/*.yaml
       - cmd/codegen-tool-presentation/**/*
       - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
       - internal/toolpresentation/visibility.generated.go

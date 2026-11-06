@@ -17,7 +17,7 @@ when: paintedwolf.tool_is_task && paintedwolf.base_overlay_checked && paintedwol
   && !paintedwolf.base_overlay_pending
 effect: block
 copy:
-  what: '`task()` base_overlay_id {{ paintedwolf.base_overlay_id }} is {{ paintedwolf.merge_status }} — cannot stack on it{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}'
+  what: 'Dispatch base_overlay_id {{ paintedwolf.base_overlay_id }} is {{ paintedwolf.merge_status }}, so it cannot stack on it{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}'
   cause: The observed base state does not permit stacking a new worker.
   why: The worker needs an eligible base whose changes remain available as its starting tree.
   fix: If the base is merged, start from primary with scope.base_overlay_id unset. If it is rejected, orphaned, or aborted, inspect the retained work before choosing an eligible replacement base or an independent task on primary. For another state, refresh the roster and resolve eligibility before retrying.

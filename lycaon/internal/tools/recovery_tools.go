@@ -2,13 +2,14 @@ package tools
 
 import (
 	"context"
-	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
-type recoveryToolsKey struct{}
+type callReachKey struct{}
 
 type recoveryContractKey struct{ tool string }
 
@@ -17,38 +18,48 @@ func WithRecoveryContract(ctx context.Context, tool string, contract toolcontrac
 	return context.WithValue(ctx, recoveryContractKey{tool}, toolcontract.ToolCapabilitySnapshot{Tool: tool, Capabilities: contract.Capabilities})
 }
 
-// WithRecoveryTools freezes the tool names actually offered on this request.
-// An absent list provides no evidence that a proposed recovery tool is available.
-func WithRecoveryTools(ctx context.Context, names []string) context.Context {
-	return context.WithValue(ctx, recoveryToolsKey{}, slices.Clone(names))
+// WithCallReach freezes what the current model request can call.
+func WithCallReach(ctx context.Context, request toolreach.Request) context.Context {
+	return context.WithValue(ctx, callReachKey{}, request)
+}
+
+// CallReach returns the frozen request. A context without one reaches nothing.
+func CallReach(ctx context.Context) toolreach.Request {
+	request, _ := ctx.Value(callReachKey{}).(toolreach.Request)
+	return request
 }
 
 // ToolOffered reports membership in the request's frozen schema list.
 func ToolOffered(ctx context.Context, name string) bool {
-	names, _ := ctx.Value(recoveryToolsKey{}).([]string)
-	return slices.Contains(names, name)
+	return CallReach(ctx).Status(name) == toolreach.Callable
 }
 
-// RegisterRecoveryFacts publishes the frozen offered-tool snapshot lazily.
+// TurnReach freezes the request a tool context is executing under.
+func TurnReach(tc ToolContext) toolreach.Request {
+	return toolreach.Freeze(tc.Turn.TurnOfferedToolNames, tc.Turn.TurnToolPlan).WithPrograms(tc.Turn.TurnPrograms)
+}
+
+// RegisterRecoveryFacts publishes the frozen request and its tool facts lazily.
 func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 	if snapshot, ok := ctx.Value(recoveryContractKey{gc.Invocation.Tool}).(toolcontract.ToolCapabilitySnapshot); ok {
 		gc.Invocation.CapabilityContract = &snapshot
 	}
-	names, _ := ctx.Value(recoveryToolsKey{}).([]string)
+	request := CallReach(ctx)
+	gc.Reach = request
 	gc.RegisterProvider("paintedwolf.offered_tools", func(target *oar.GuardContext) error {
 		if target.ObservationData == nil {
 			target.ObservationData = map[string]any{}
 		}
-		target.ObservationData["offered_tools"] = slices.Clone(names)
+		target.ObservationData["offered_tools"] = request.OfferedNames()
 		return nil
 	})
-	for _, tool := range []string{"read", "write", "edit", "list_dir", "find", "grep", "request_tools", "task", "complete_leg", "terminal_open", "terminal_close", "terminal_read", "command_stop", "command_output", "secret_generate", "ask_user", "capture_page", "measure_page", "page_act", "page_snapshot", "page_close", "stat", "view_image", "command", "recall"} {
-		fact := "can_" + tool
+	for _, fact := range oar.CanCallFacts() {
+		tool := strings.TrimPrefix(fact, "can_")
 		gc.RegisterProvider("paintedwolf."+fact, func(target *oar.GuardContext) error {
 			if target.ObservationData == nil {
 				target.ObservationData = map[string]any{}
 			}
-			target.ObservationData[fact] = slices.Contains(names, tool)
+			target.ObservationData[fact] = request.Status(tool) == toolreach.Callable
 			return nil
 		})
 	}

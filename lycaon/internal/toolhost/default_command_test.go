@@ -14,7 +14,7 @@ import (
 func TestDefaultRegistryKeepsOperationsOutsideTheToolRoster(t *testing.T) {
 	config, err := nativemanifest.Load()
 	testutil.FailErr(t, "load native manifest", err)
-	schemas, _, err := extpacks.LoadEffectiveToolSchemas(extpackstest.StockCatalog(t))
+	schemas, err := extpacks.LoadEffectiveRegistrySchemas(extpackstest.StockCatalog(t))
 	testutil.FailErr(t, "load stock metadata", err)
 	registry, _, err := buildNativeRegistry(buildDeps{nativeConfig: config, toolSchemas: schemas, git: git.NewManager()})
 	testutil.FailErr(t, "build default registry", err)

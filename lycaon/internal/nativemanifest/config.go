@@ -3,6 +3,8 @@ package nativemanifest
 
 import (
 	"fmt"
+	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
@@ -48,9 +50,11 @@ const (
 	ResourceFactHeldCalls   = "held_calls"
 )
 
-// Config holds native tools and their invocation contracts.
+// Config holds native tools, the operations command reaches, and their contracts.
 type Config struct {
-	Native                map[string][]string `yaml:"native"`
+	Native map[string][]string `yaml:"native"`
+	// Operations groups native operations that have no callable tool.
+	Operations            map[string][]string `yaml:"operations"`
 	ApprovalReversibility map[string]string   `yaml:"approval_reversibility"`
 	Owner                 map[string]string   `yaml:"owner"`
 	BatchPolicy           map[string]string   `yaml:"batch_policy"`
@@ -65,9 +69,7 @@ type Config struct {
 	SpawnsProcess         []string            `yaml:"spawns_process"`
 	ExecutionCapabilities map[string][]string `yaml:"execution_capabilities"`
 	Families              map[string][]string `yaml:"families"`
-	// Companions load with a tool a request selects.
-	Companions      map[string][]string `yaml:"companions"`
-	ResourceImplied map[string][]string `yaml:"resource_implied"`
+	ResourceImplied       map[string][]string `yaml:"resource_implied"`
 	// GrantIdentityNeutralArgs names arguments a grant identity ignores.
 	GrantIdentityNeutralArgs map[string][]string `yaml:"grant_identity_neutral_args"`
 	// ChunkablePayload names tools whose arguments can be split across calls.
@@ -100,17 +102,79 @@ type Config struct {
 	RuntimeRegisteredPrefixes []string `yaml:"runtime_registered_prefixes"`
 }
 
-// Load reads the native tool manifest.
+// Load reads the native tool and operation manifests as one contract set.
 func Load() (Config, error) {
-	data, err := config.Read(config.NativeTools)
-	if err != nil {
-		return Config{}, err
+	var merged Config
+	for _, path := range []config.Rel{config.NativeTools, config.NativeOperations} {
+		data, err := config.Read(path)
+		if err != nil {
+			return Config{}, err
+		}
+		var part Config
+		if err := config.DecodeYAML(data, &part); err != nil {
+			return Config{}, err
+		}
+		if err := merged.absorb(part); err != nil {
+			return Config{}, fmt.Errorf("%s: %w", path, err)
+		}
 	}
-	var cfg Config
-	if err := config.DecodeYAML(data, &cfg); err != nil {
-		return Config{}, err
+	return merged, nil
+}
+
+// absorb merges one manifest. Grouped lists combine; a name keyed in both
+// manifests is an error, because one name has one contract.
+func (c *Config) absorb(part Config) error {
+	into, from := reflect.ValueOf(c).Elem(), reflect.ValueOf(part)
+	for i := range into.NumField() {
+		dst, src := into.Field(i), from.Field(i)
+		switch dst.Kind() {
+		case reflect.Slice:
+			dst.Set(reflect.AppendSlice(dst, src))
+		case reflect.Map:
+			if dst.IsNil() {
+				dst.Set(reflect.MakeMap(dst.Type()))
+			}
+			for _, key := range src.MapKeys() {
+				existing, value := dst.MapIndex(key), src.MapIndex(key)
+				switch {
+				case !existing.IsValid():
+					dst.SetMapIndex(key, value)
+				case value.Kind() == reflect.Slice:
+					dst.SetMapIndex(key, reflect.AppendSlice(existing, value))
+				default:
+					return fmt.Errorf("%s declared in both manifests", key)
+				}
+			}
+		default:
+			return fmt.Errorf("unsupported manifest field kind %s", dst.Kind())
+		}
 	}
-	return cfg, nil
+	return nil
+}
+
+// AllOperations returns every operation name that has no callable tool, sorted.
+func (c Config) AllOperations() []string {
+	var out []string
+	for _, group := range c.Operations {
+		out = append(out, group...)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// HasOperation reports whether name is an operation with no callable tool.
+func (c Config) HasOperation(name string) bool {
+	for _, group := range c.Operations {
+		if slices.Contains(group, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// OperationGroup returns the operations of one family, or nil.
+func (c Config) OperationGroup(name string) []string {
+	return c.Operations[name]
 }
 
 // AllTools returns flattened native tool names.
@@ -156,14 +220,39 @@ func (c Config) Group(name string) []string {
 	return c.Native[name]
 }
 
-// ValidateApprovalReversibility checks every tool's approval class.
+// Reversibility returns the approval class of a tool or native operation.
+func (c Config) Reversibility(name string) (string, bool) {
+	tier, ok := c.ApprovalReversibility[name]
+	return tier, ok
+}
+
+// classifiedNames lists every tool and native operation with an approval class.
+func (c Config) classifiedNames() []string {
+	out := make([]string, 0, len(c.ApprovalReversibility))
+	for name := range c.ApprovalReversibility {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ValidateApprovalReversibility checks every tool's and operation's approval class.
 func (c Config) ValidateApprovalReversibility() error {
 	if len(c.ApprovalReversibility) == 0 {
 		return fmt.Errorf("approval_reversibility map is empty")
 	}
+	var both []string
+	for _, name := range c.AllOperations() {
+		if c.HasTool(name) {
+			both = append(both, name)
+		}
+	}
+	if len(both) > 0 {
+		return fmt.Errorf("names listed as both tool and operation: %s", strings.Join(both, ", "))
+	}
 	var missing []string
-	for _, tool := range c.AllTools() {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
+	for _, tool := range append(c.AllTools(), c.AllOperations()...) {
+		if _, ok := c.Reversibility(tool); !ok {
 			missing = append(missing, tool)
 		}
 	}
@@ -172,7 +261,8 @@ func (c Config) ValidateApprovalReversibility() error {
 		return fmt.Errorf("native tools missing approval_reversibility: %s", strings.Join(missing, ", "))
 	}
 	var bad []string
-	for tool, tier := range c.ApprovalReversibility {
+	for _, tool := range c.classifiedNames() {
+		tier, _ := c.Reversibility(tool)
 		switch tier {
 		case TierReversible, TierRecoverable, TierIrreversible:
 		default:
@@ -182,121 +272,6 @@ func (c Config) ValidateApprovalReversibility() error {
 	if len(bad) > 0 {
 		sort.Strings(bad)
 		return fmt.Errorf("invalid approval_reversibility values: %s", strings.Join(bad, ", "))
-	}
-	return nil
-}
-
-// ValidateToolContracts checks the closed invocation-contract maps.
-func (c Config) ValidateToolContracts() error {
-	if err := c.ValidateApprovalReversibility(); err != nil {
-		return err
-	}
-	var faults []string
-	for tool := range c.ApprovalReversibility {
-		owner, ok := c.Owner[tool]
-		if !ok || strings.TrimSpace(owner) == "" {
-			faults = append(faults, tool+" missing subsystem owner")
-		}
-		batch, ok := c.BatchPolicy[tool]
-		if !ok {
-			faults = append(faults, tool+" missing batch_policy")
-		} else if !validBatchPolicy(batch) {
-			faults = append(faults, fmt.Sprintf("%s batch_policy=%q", tool, batch))
-		}
-		lifecycle, ok := c.Lifecycle[tool]
-		if !ok {
-			faults = append(faults, tool+" missing lifecycle")
-		} else if !validLifecycle(lifecycle) {
-			faults = append(faults, fmt.Sprintf("%s lifecycle=%q", tool, lifecycle))
-		}
-	}
-	for tool := range c.Owner {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
-			faults = append(faults, tool+" subsystem owner without approval_reversibility")
-		}
-	}
-	for tool := range c.BatchPolicy {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
-			faults = append(faults, tool+" batch_policy without approval_reversibility")
-		}
-	}
-	for tool, arg := range c.BatchOptInArg {
-		batch, ok := c.BatchPolicy[tool]
-		switch {
-		case !ok:
-			faults = append(faults, tool+" batch_opt_in_arg without batch_policy")
-		case batch != BatchSameTool:
-			faults = append(faults, tool+" batch_opt_in_arg requires same_tool batch_policy")
-		}
-		if strings.TrimSpace(arg) == "" {
-			faults = append(faults, tool+" has empty batch_opt_in_arg")
-		}
-	}
-	for tool, limit := range c.BatchConcurrencyLimit {
-		batch, ok := c.BatchPolicy[tool]
-		switch {
-		case !ok:
-			faults = append(faults, tool+" batch_concurrency_limit without batch_policy")
-		case batch == BatchSerial:
-			faults = append(faults, tool+" batch_concurrency_limit on serial tool")
-		}
-		if limit < 2 {
-			faults = append(faults, fmt.Sprintf("%s batch_concurrency_limit=%d", tool, limit))
-		}
-	}
-	for tool, arg := range c.BatchSerialWhenArg {
-		batch, ok := c.BatchPolicy[tool]
-		if !ok {
-			faults = append(faults, tool+" batch_serial_when_arg without batch_policy")
-		} else if batch != BatchSameTool {
-			faults = append(faults, tool+" batch_serial_when_arg requires same_tool batch_policy")
-		}
-		arg = strings.TrimSpace(arg)
-		if arg == "" {
-			faults = append(faults, tool+" has empty batch_serial_when_arg")
-		}
-		if arg == strings.TrimSpace(c.BatchOptInArg[tool]) {
-			faults = append(faults, fmt.Sprintf("%s batch_serial_when_arg equals opt-in arg %q", tool, arg))
-		}
-	}
-	for tool, batch := range c.BatchPolicy {
-		if batch == BatchSameTool && c.BatchConcurrencyLimit[tool] < 2 {
-			faults = append(faults, tool+" same_tool batch_policy missing batch_concurrency_limit")
-		}
-	}
-	for tool := range c.Lifecycle {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
-			faults = append(faults, tool+" lifecycle without approval_reversibility")
-		}
-	}
-	for tool, order := range c.TurnOrder {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
-			faults = append(faults, tool+" turn_order without approval_reversibility")
-		} else if !validTurnOrder(order) {
-			faults = append(faults, fmt.Sprintf("%s turn_order=%q", tool, order))
-		}
-	}
-	for tool, capabilities := range c.ExecutionCapabilities {
-		if _, ok := c.ApprovalReversibility[tool]; !ok {
-			faults = append(faults, tool+" execution_capabilities without approval_reversibility")
-		}
-		seen := map[string]struct{}{}
-		for _, capability := range capabilities {
-			if !validExecutionCapability(capability) {
-				faults = append(faults, fmt.Sprintf("%s execution_capability=%q", tool, capability))
-			}
-			if _, duplicate := seen[capability]; duplicate {
-				faults = append(faults, fmt.Sprintf("%s duplicate execution_capability=%q", tool, capability))
-			}
-			seen[capability] = struct{}{}
-		}
-	}
-	if err := c.ValidateFamilies(); err != nil {
-		faults = append(faults, err.Error())
-	}
-	if len(faults) > 0 {
-		sort.Strings(faults)
-		return fmt.Errorf("invalid tool contracts: %s", strings.Join(faults, "; "))
 	}
 	return nil
 }
@@ -319,7 +294,7 @@ func (c Config) ValidateFamilies() error {
 		if c.HasTool(tool) {
 			return true
 		}
-		_, ok := c.ApprovalReversibility[tool]
+		_, ok := c.Reversibility(tool)
 		return ok
 	}
 	memberFamily := map[string]string{}
@@ -353,26 +328,6 @@ func (c Config) ValidateFamilies() error {
 				faults = append(faults, member+" in families "+other+" and "+family)
 			}
 			memberFamily[member] = family
-		}
-	}
-	for tool, companions := range c.Companions {
-		tool = strings.TrimSpace(tool)
-		if !known(tool) {
-			faults = append(faults, "companions unknown tool "+tool)
-		}
-		if len(companions) == 0 {
-			faults = append(faults, "companions "+tool+" has no companions")
-		}
-		for _, companion := range companions {
-			companion = strings.TrimSpace(companion)
-			switch {
-			case companion == "":
-				faults = append(faults, "companions "+tool+" has an empty companion")
-			case companion == tool:
-				faults = append(faults, "companions "+tool+" names itself")
-			case !known(companion):
-				faults = append(faults, "companions "+tool+" unknown companion "+companion)
-			}
 		}
 	}
 	for fact, tools := range c.ResourceImplied {
@@ -774,7 +729,19 @@ func (c Config) ValidateRequiresWorkerBranch(known func(string) bool) error {
 
 // ToolsByTier returns sorted tool ids for each locked tier value.
 func (c Config) ToolsByTier() (reversible, recoverable, irreversible []string) {
+	return c.namesByTier(false)
+}
+
+// OperationsByTier returns sorted native operation ids for each locked tier value.
+func (c Config) OperationsByTier() (reversible, recoverable, irreversible []string) {
+	return c.namesByTier(true)
+}
+
+func (c Config) namesByTier(operations bool) (reversible, recoverable, irreversible []string) {
 	for tool, tier := range c.ApprovalReversibility {
+		if c.HasOperation(tool) != operations {
+			continue
+		}
 		switch tier {
 		case TierReversible:
 			reversible = append(reversible, tool)
@@ -805,21 +772,6 @@ func (c Config) FamilyMembers(id string) []string {
 	return append([]string(nil), c.Families[id]...)
 }
 
-// CompanionTools returns the sorted tools that declare companions.
-func (c Config) CompanionTools() []string {
-	out := make([]string, 0, len(c.Companions))
-	for tool := range c.Companions {
-		out = append(out, tool)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// CompanionsOf returns a copy of one tool's companions in catalog order.
-func (c Config) CompanionsOf(tool string) []string {
-	return append([]string(nil), c.Companions[tool]...)
-}
-
 // ResourceImpliedFacts returns sorted live-resource fact keys.
 func (c Config) ResourceImpliedFacts() []string {
 	out := make([]string, 0, len(c.ResourceImplied))
@@ -834,88 +786,6 @@ func (c Config) ResourceImpliedFacts() []string {
 func (c Config) ResourceImpliedTools(fact string) []string {
 	return append([]string(nil), c.ResourceImplied[fact]...)
 }
-
-// ToolContractRows returns the exact sorted runtime contract table.
-func (c Config) ToolContractRows() []ToolContractRow {
-	chunkable := make(map[string]bool, len(c.ChunkablePayload))
-	for _, tool := range c.ChunkablePayload {
-		chunkable[strings.TrimSpace(tool)] = true
-	}
-	neutral := make(map[string]bool, len(c.SurveyNeutral))
-	for _, tool := range c.SurveyNeutral {
-		neutral[strings.TrimSpace(tool)] = true
-	}
-	detach := make(map[string]bool, len(c.DetachAfterBudget))
-	for _, tool := range c.DetachAfterBudget {
-		detach[strings.TrimSpace(tool)] = true
-	}
-	bounded := make(map[string]bool, len(c.BoundedInProcess))
-	for _, tool := range c.BoundedInProcess {
-		bounded[strings.TrimSpace(tool)] = true
-	}
-	rows := make([]ToolContractRow, 0, len(c.ApprovalReversibility))
-	for tool := range c.ApprovalReversibility {
-		rows = append(rows, ToolContractRow{
-			Tool:                  tool,
-			Owner:                 c.Owner[tool],
-			Reversibility:         c.ApprovalReversibility[tool],
-			Batch:                 c.BatchPolicy[tool],
-			BatchOptInArg:         strings.TrimSpace(c.BatchOptInArg[tool]),
-			BatchConcurrencyLimit: c.BatchConcurrencyLimit[tool],
-			BatchSerialWhenArg:    strings.TrimSpace(c.BatchSerialWhenArg[tool]),
-			TurnOrder:             c.TurnOrder[tool],
-			Lifecycle:             c.Lifecycle[tool],
-			Capabilities:          append([]string(nil), c.ExecutionCapabilities[tool]...),
-
-			ChunkablePayload:  chunkable[tool],
-			SurveyNeutral:     neutral[tool],
-			DetachAfterBudget: detach[tool],
-			SessionScope:      strings.TrimSpace(c.SessionScope[tool]),
-			SocketArg:         strings.TrimSpace(c.SocketArg[tool]),
-			BoundedInProcess:  bounded[tool],
-
-			SecretReferenceSurface: strings.TrimSpace(c.SecretReferenceSurface[tool]),
-			SecretReferenceArgs:    append([]string(nil), c.SecretReferenceArgs[tool]...),
-		})
-	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].Tool < rows[j].Tool })
-	return rows
-}
-
-// ToolContractRow is one generated tool-invocation contract.
-type ToolContractRow struct {
-	Tool          string
-	Owner         string
-	Reversibility string
-	Batch         string
-	BatchOptInArg string
-	// BatchConcurrencyLimit caps a concurrent run below the host ceiling.
-	BatchConcurrencyLimit int
-	// BatchSerialWhenArg disables sibling execution when this argument is present.
-	BatchSerialWhenArg string
-	TurnOrder          string
-	Lifecycle          string
-	Capabilities       []string
-	// ChunkablePayload marks a tool whose arguments can be split across calls.
-	ChunkablePayload bool
-	// SurveyNeutral marks a bookkeeping tool that neither observes nor acts.
-	SurveyNeutral bool
-	// DetachAfterBudget marks a read-only tool whose call may outlive its foreground wait.
-	DetachAfterBudget bool
-	// SessionScope is the session shape this tool belongs to, empty for either.
-	SessionScope string
-	// SocketArg names the argument whose AF_UNIX socket the tool dials itself.
-	SocketArg string
-	// BoundedInProcess marks a tool that executes synchronously in-process.
-	BoundedInProcess bool
-	// SecretReferenceSurface names the outbound screen for resolved managed-secret references.
-	SecretReferenceSurface string
-	// SecretReferenceArgs names the value slots resolved when SecretReferenceSurface is SecretSurfaceFile.
-	SecretReferenceArgs []string
-}
-
-// argvHostRunnerTools lists catalog argv runners for host prompts.
-var argvHostRunnerTools = []string{"command", "verify"}
 
 // ArgvHostRunnerTools returns a copy of the argv host-runner tool names.
 func ArgvHostRunnerTools() []string {

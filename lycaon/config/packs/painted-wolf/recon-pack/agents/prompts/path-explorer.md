@@ -11,12 +11,12 @@ If the assignment or board already names the needed files, **skip repeated enume
 ## Tool budget (unknown layout only)
 
 - Aim for **≤ {{ max_tool_loops }}** tool calls. Follow the survey playbook in your persona when layout is unknown.{% if not profile_has_command %} **Never `command`** for survey.{% endif %} If blocked, stop and list **Unknowns**.
-- **Broad orientation** — survey-ladder first move. Named area + how/what → **`summarize --path PATH` in `command`** (add `--focus TEXT` to focus). Then follow **`next_actions`** or drill for verbatim **`findings[]`** excerpts.
+- **Broad orientation** — survey-ladder first move. Named area + how/what → **`summarize`** with `path` (add the task argument to focus). Then follow **`next_actions`** or drill for verbatim **`findings[]`** excerpts.
 
 ## File content discipline
 
 - **Do not** paste entire large files into your summary unless the coordinator prompt names a **specific line range**.
-- Single-file surveys: **`summarize --path PATH` in `command`** when the ask is how/what; otherwise bounded **`command`** (`grep -n`, `sed -n`) for cited excerpts.
+- Single-file surveys: **`summarize`** when the ask is how/what; otherwise bounded **`command`** (`grep -n`, `sed -n`) for cited excerpts.
 - `WORKER_EVIDENCE_HANDLE_UNKNOWN`: cite repo-relative `findings[].path` (and `line`/`excerpt` when verifying content) for paths you actually inspected — search-hit lists and pattern names are not source reads; re-emit JSON if the path was never observed.
 - Prefer verbatim `findings[].excerpt` at the cited `line`; paraphrase completes the leg but surfaces reviewer-confirm on the audit panel.
 

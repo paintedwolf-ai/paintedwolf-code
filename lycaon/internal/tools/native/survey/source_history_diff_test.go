@@ -176,12 +176,9 @@ func expectReject(t *testing.T, err error, code string) *toolrejection.ToolRejec
 	return reject
 }
 
-// A source_history reject comes from a call to the tool, so its copy may name it.
 func expectNotFoundFromHistory(t *testing.T, err error) {
 	t.Helper()
-	if reject := expectReject(t, err, "SOURCE_VERSION_NOT_FOUND"); reject.Data["source_history_offered"] != true {
-		t.Fatalf("reject data = %+v, want source_history_offered", reject.Data)
-	}
+	expectReject(t, err, "SOURCE_VERSION_NOT_FOUND")
 }
 
 func TestSourceHistoryDiffACDF06BaseAloneNeedsAVersion(t *testing.T) {

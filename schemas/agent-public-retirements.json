@@ -8,6 +8,18 @@
   },
   "vocabularies": {
     "host_facts": {
+      "paintedwolf.fetch_url_deferred": [
+        "paintedwolf.next_steps"
+      ],
+      "paintedwolf.replacement_calls_available": [
+        "paintedwolf.next_steps"
+      ],
+      "paintedwolf.source_history_offered": [
+        "paintedwolf.next_steps"
+      ],
+      "paintedwolf.task_loadable": [
+        "paintedwolf.next_steps"
+      ],
       "paintedwolf.habit_redirect_match": [
         "paintedwolf.native_operation",
         "paintedwolf.native_command"
@@ -128,9 +140,6 @@
       "chown": [
         "command"
       ],
-      "code_rewrite": [
-        "command"
-      ],
       "copy": [
         "command"
       ],
@@ -227,16 +236,10 @@
       "stat": [
         "command"
       ],
-      "summarize": [
-        "command"
-      ],
       "surface_note": {
         "content_contract": "paintedwolf.markdown_note",
         "version": 1
       },
-      "survey_repo": [
-        "command"
-      ],
       "wc": [
         "command"
       ],

@@ -63,9 +63,8 @@ func (t *SourceHistoryTool) runDiff(
 			return "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_NOT_FOUND",
 				Data: map[string]any{
-					"source_history_offered": true,
-					"version_id":             baseVersionID,
-					"detail":                 fmt.Sprintf("cannot resolve %s head for %s: %v", baseVersionID, display, err),
+					"version_id": baseVersionID,
+					"detail":     fmt.Sprintf("cannot resolve %s head for %s: %v", baseVersionID, display, err),
 				},
 			}
 		}
@@ -290,9 +289,8 @@ func comparisonError(err error, versionID string) error {
 		return &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_NOT_FOUND",
 			Data: map[string]any{
-				"source_history_offered": true,
-				"version_id":             versionID,
-				"detail":                 "one of the requested versions was not found in this project",
+				"version_id": versionID,
+				"detail":     "one of the requested versions was not found in this project",
 			},
 		}
 	}

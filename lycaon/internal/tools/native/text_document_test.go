@@ -118,7 +118,7 @@ func TestCodeRewritePreservesSelfIdentifyingEncodings(t *testing.T) {
 			if err := os.WriteFile(path, seed, 0o644); err != nil {
 				t.Fatalf("write fixture: %v", err)
 			}
-			rewritten, _, err := RewriteSource(t.Context(), "main.go", `fmt.Println($A)`, `log.Info($A)`, seedText)
+			rewritten, _, err := RewriteSource(t.Context(), "main.go", "", `fmt.Println($A)`, `log.Info($A)`, seedText)
 			testutil.FailErr(t, "transform source", err)
 			if _, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
 				"path": "main.go", "content": rewritten,

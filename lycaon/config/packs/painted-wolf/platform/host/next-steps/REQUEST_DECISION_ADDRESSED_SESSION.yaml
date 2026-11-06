@@ -1,0 +1,4 @@
+steps:
+  - tool: "ask_user"
+    say: "Ask the user with {{ call }}."
+    otherwise: "State the options in your answer."

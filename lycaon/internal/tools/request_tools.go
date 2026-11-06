@@ -165,8 +165,7 @@ func (t requestTools) resolve(ctx context.Context, tctx ToolContext, need string
 }
 
 func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, profileID string, plan toolsurface.Plan, constrained bool, outcome turnload.RequestOutcome) turnload.RequestToolsResult {
-	// Declared companions load with a selected tool; the plan keeps out any the surface lacks.
-	names := toolcontract.WithCompanions(outcome.Loaded())
+	names := outcome.Loaded()
 	registered := make([]turnload.ToolCard, 0)
 	for _, meta := range t.reg.List() {
 		registered = append(registered, turnload.ToolCard{Name: meta.Name})

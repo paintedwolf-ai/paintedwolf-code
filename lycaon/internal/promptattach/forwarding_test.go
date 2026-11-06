@@ -26,7 +26,7 @@ func TestForwardedAttachmentFromPartUsesStamp(t *testing.T) {
 	if attachment.Kind != promptattach.ForwardedPayload {
 		t.Fatalf("kind = %q", attachment.Kind)
 	}
-	if !strings.Contains(attachment.Hint(), `jq(path="prompt-attachments/deadbeef/recording.json")`) {
+	if !strings.Contains(attachment.Hint(), `command(command="jq . prompt-attachments/deadbeef/recording.json")`) {
 		t.Fatalf("hint = %q", attachment.Hint())
 	}
 }

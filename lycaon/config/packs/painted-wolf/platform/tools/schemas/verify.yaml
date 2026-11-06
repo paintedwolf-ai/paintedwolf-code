@@ -66,7 +66,7 @@ schema:
           description: >-
             `true` requests, for this invocation,signaling outside the command sandbox.
             Filesystem and network confinement stay applied. Actual signal
-            targets will be unobserved. Prefer process_signal for exact targets.
+            targets will be unobserved.
           oneOf:
             - type: boolean
               enum: [true]

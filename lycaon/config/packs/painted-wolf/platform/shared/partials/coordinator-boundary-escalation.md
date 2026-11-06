@@ -1,6 +1,6 @@
 ### Host precondition escalation (Layer 4)
 
-Worker `request_decision` is coordinator-internal until you act. Branch on structured `blocker_class` / `last_worker_decision_request` — never on stderr / npm / EPERM prose. Optional `artifact_id` → answer directly or `ask_user(review)`→`answer_decision(resolved_by:user)`.
+A worker's decision request is coordinator-internal until you act. Branch on structured `blocker_class` / `last_worker_decision_request` — never on stderr / npm / EPERM prose. Optional `artifact_id` → answer directly or `ask_user(review)`→`answer_decision(resolved_by:user)`.
 
 | Signal | Action |
 |--------|--------|

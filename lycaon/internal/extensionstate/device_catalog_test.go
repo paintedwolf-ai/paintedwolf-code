@@ -81,7 +81,7 @@ func TestPublishDeviceCatalogFloorsOnDisabledPlatform(t *testing.T) {
 // Disabling an optional tool schema does not require the stock fallback.
 func TestPublishDeviceCatalogServesCommittedStateWithDisabledToolSchema(t *testing.T) {
 	cache := deviceCatalogFixture(t)
-	writeDeviceDesired(t, "format: 1\npacks: []\ndisabled: [tools/schemas/write]\nown: {}\n")
+	writeDeviceDesired(t, "format: 1\npacks: []\ndisabled: [tools/schemas/parse_validate]\nown: {}\n")
 
 	eff, view, err := extensionstate.PublishDeviceCatalog(t.Context(), cache, nil, nil)
 	testutil.FailErr(t, "publish committed view", err)
@@ -91,12 +91,12 @@ func TestPublishDeviceCatalogServesCommittedStateWithDisabledToolSchema(t *testi
 	if floorDiag(eff) {
 		t.Fatal("a disabled tool schema must not degrade to the stock floor")
 	}
-	if eff.HasLoaded("tools/schemas/write") {
+	if eff.HasLoaded("tools/schemas/parse_validate") {
 		t.Fatal("the user's disable must be honored, not overridden by the floor")
 	}
 	found := false
 	for _, d := range eff.Diagnostics {
-		if d.Code == extpacks.DiagToolSchemaMissing && d.UnitID == "tools/schemas/write" {
+		if d.Code == extpacks.DiagToolSchemaMissing && d.UnitID == "tools/schemas/parse_validate" {
 			found = true
 		}
 	}

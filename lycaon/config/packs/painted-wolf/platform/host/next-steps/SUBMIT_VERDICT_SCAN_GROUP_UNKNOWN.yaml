@@ -1,0 +1,5 @@
+steps:
+  - tool: "scan_query"
+    args:
+      view: "groups"
+    say: "{{ call }} on the run's scan_ids returns the group ids."

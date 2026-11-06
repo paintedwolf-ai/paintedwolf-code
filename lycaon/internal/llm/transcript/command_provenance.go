@@ -1,6 +1,9 @@
 package transcript
 
-import "github.com/lycaon/lycaon/pkg/api"
+import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/pkg/api"
+)
 
 // CommandResultProvenance retains receipts needed for command presentation.
 type CommandResultProvenance struct {
@@ -8,12 +11,16 @@ type CommandResultProvenance struct {
 	program    api.CommandProgramReceipt
 }
 
+func commandResultTool(tool string) bool {
+	return tool == "command" || toolcontract.CommandFormTool(tool)
+}
+
 func commandReceiptBound(result *api.ToolResult) bool {
-	if result == nil || result.Tool != "command" || result.CommandProgram == nil || result.Invocation == nil {
+	if result == nil || !commandResultTool(result.Tool) || result.CommandProgram == nil || result.Invocation == nil {
 		return false
 	}
 	p, inv := result.CommandProgram, result.Invocation
-	return p.ID != "" && inv.ID != "" && p.ParentReceiptID == inv.ID && inv.Tool == "command" && inv.ToolCallID != "" && inv.ToolCallID == result.ToolCallID && inv.Invoked
+	return p.ID != "" && inv.ID != "" && p.ParentReceiptID == inv.ID && commandResultTool(inv.Tool) && inv.ToolCallID != "" && inv.ToolCallID == result.ToolCallID && inv.Invoked
 }
 
 func CommandProvenance(result *api.ToolResult) *CommandResultProvenance {

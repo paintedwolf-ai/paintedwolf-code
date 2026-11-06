@@ -3,7 +3,9 @@ package session
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -89,13 +91,14 @@ func TestDoomLoopWarnForCommandOutputRoutesToProcessWait(t *testing.T) {
 	args := map[string]any{"handle": "cmd-docker-1", "cursor": 15395}
 
 	out, _ := mgr.ToolPolicy.AfterTool(
-		context.Background(), sess, "command_output", args, `{"running":true,"next_cursor":15395}`,
+		tools.WithCallReach(context.Background(), toolreach.Offered([]string{"wait"})), sess, "command_output", args, `{"running":true,"next_cursor":15395}`,
 		doomLoopWarnAfter(t, mgr), guidance.ToolResultFacts{},
 	)
 	for _, want := range []string{
 		"DOOM_LOOP_REPEAT_WARN",
-		`"handles":["cmd-docker-1"]`,
-		`"kind":"process_done"`,
+		"`wait(",
+		"cmd-docker-1",
+		"process_done",
 		"exact `next_cursor`",
 	} {
 		if !strings.Contains(out, want) {
@@ -108,7 +111,7 @@ func TestDoomLoopBlockForCommandOutputRoutesToProcessWait(t *testing.T) {
 	mgr := newPostToolGuidanceManager(t)
 	mgr.ToolPolicy.Pipeline.EnableAnchor(oar.AnchorToolPreInvoke)
 	reject, err := mgr.ToolPolicy.FormatDoomLoopReject(
-		context.Background(), "sess-1", "command_output",
+		tools.WithCallReach(context.Background(), toolreach.Offered([]string{"wait"})), "sess-1", "command_output",
 		map[string]any{"handle": "cmd-docker-1", "cursor": 15395},
 		loopguard.DoomLoopMaxAttempts, "",
 	)
@@ -116,7 +119,7 @@ func TestDoomLoopBlockForCommandOutputRoutesToProcessWait(t *testing.T) {
 	if reject == nil {
 		t.Fatal("command_output repetition did not render a block")
 	}
-	for _, want := range []string{"DOOM_LOOP_REPEAT", `"handles":["cmd-docker-1"]`, `"kind":"process_done"`} {
+	for _, want := range []string{"DOOM_LOOP_REPEAT", "`wait(", "cmd-docker-1", "process_done"} {
 		if !strings.Contains(reject.Body, want) {
 			t.Fatalf("command_output block missing %q:\n%s", want, reject.Body)
 		}

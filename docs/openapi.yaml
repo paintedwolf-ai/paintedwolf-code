@@ -15305,7 +15305,7 @@ components:
     ReadOutlineResponse:
       x-go-generate: true
       x-tool-output:
-        - read
+        - command
       type: object
       required:
         - path

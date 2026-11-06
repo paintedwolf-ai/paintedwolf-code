@@ -23,7 +23,8 @@ func TestWorkerMultiRootDiscoveryUnionFind(t *testing.T) {
 
 func TestWorkerZeroRootsStructuredReject(t *testing.T) {
 	f := toolfixture.NewProgramFixture(t)
-	tc := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "explore_readonly", WorkerJobID: "job"}}
+	// No worker job is allocated here: a rootless session cannot claim a project branch.
+	tc := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "explore_readonly"}}
 	for _, source := range []string{"cat x.go", "find .", "rg pattern .", "ls .", "pwd"} {
 		t.Run(source, func(t *testing.T) {
 			out, err := f.Invoke(t, source, tc)

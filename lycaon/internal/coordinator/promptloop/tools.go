@@ -225,7 +225,7 @@ func (l *toolInvocations) executeToolCall(
 	assistantMessageID string,
 	_ api.CoordinatorRunContext,
 ) toolInvocation {
-	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
+	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
 	// A non-nil roster constrains task spawning.
 	if taskAllowlist != nil {
 		ctx = toolpolicy.WithTaskSpawnAllowlist(ctx, taskAllowlist)

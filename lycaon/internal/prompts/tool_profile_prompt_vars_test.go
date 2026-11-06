@@ -277,8 +277,8 @@ func TestToolProfileCapabilityVarsImplementVerify(t *testing.T) {
 
 func TestToolProfileCapabilityVarsWebResearch(t *testing.T) {
 	vars := loadProfileCapabilityVars(t, "web_research")
-	if vars["profile_has_grep"] != false {
-		t.Fatalf("web_research must not have grep")
+	if vars["profile_has_command"] != false {
+		t.Fatalf("web_research must not have command")
 	}
 	if vars["profile_has_read_tools"] != false {
 		t.Fatalf("web_research must not advertise read tools")
@@ -290,11 +290,16 @@ func TestToolProfileCapabilityVarsWebResearch(t *testing.T) {
 }
 
 func TestVisibleToolsNativePartialVarsFromSurfaceTools(t *testing.T) {
-	vars := prompts.VisibleToolsNativePartialVars([]string{"command"})
+	vars := prompts.VisibleToolsNativePartialVars([]string{"command", "survey_repo", "summarize"})
 	for _, key := range []string{"profile_has_command", "profile_has_survey_repo", "profile_has_summarize", "profile_has_write_tools", "profile_has_read_tools", "profile_has_jq_edit"} {
 		if vars[key] != true {
 			t.Errorf("%s = %v, want true", key, vars[key])
 		}
+	}
+	// Having command is not having a tool that shares its form.
+	commandOnly := prompts.VisibleToolsNativePartialVars([]string{"command"})
+	if commandOnly["profile_has_summarize"] != false || commandOnly["profile_has_survey_repo"] != false {
+		t.Fatalf("command implied a form tool: %v", commandOnly)
 	}
 	vars = prompts.VisibleToolsNativePartialVars([]string{"restore_version"})
 	if vars["profile_has_write_tools"] != true || vars["profile_has_read_tools"] != false {

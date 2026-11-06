@@ -61,7 +61,7 @@ func TestProgramAdmissionPreservesActualFirstCreationAndMissingProgress(t *testi
 	testutil.FailErr(t, "compile fixture profile", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
 	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), tools.NewDefaultRegistry(), "fixture")
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "operation-schemas"))
 	testutil.FailErr(t, "read actual write schema", err)
 	meta, ok := schemas.ToolMeta("write")
 	if !ok {

@@ -57,6 +57,10 @@ func TestLoopRecoveryCopyIsReachableFromAWorkerLeg(t *testing.T) {
 		var unit loopPolicyCopy
 		contractcheck.FailErr(t, "parse "+entry.Name(), yaml.Unmarshal(raw, &unit))
 		copyText := unit.Copy.Fix + "\n" + unit.Copy.Instead
+		// Calls live in the host catalog beside the policy.
+		if steps, err := os.ReadFile(filepath.Join(dir, "..", "host", "next-steps", entry.Name())); err == nil {
+			copyText += "\n" + string(steps)
+		}
 		named := namedReferents(copyText, coordinatorOnlyReferents)
 		if len(named) == 0 {
 			continue

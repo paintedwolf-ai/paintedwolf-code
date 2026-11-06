@@ -8,20 +8,14 @@ selector:
 requires:
   profiles:
     - tool
-  facts:
-    - paintedwolf.rejection_code
-    - paintedwolf.id
-    - paintedwolf.can_terminal_read
-    - paintedwolf.can_terminal_open
+  facts: [paintedwolf.rejection_code, paintedwolf.id, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "TERMINAL_NOT_RUNNING"
 effect: block
 copy:
   what: Pty handle {{ paintedwolf.id }} has already exited.
   cause: The process finished or was killed before input could be sent.
   why: Writing to an exited pty cannot continue the session.
-  fix: >-
-    {% if paintedwolf.can_terminal_read %}Use terminal_read on this id to inspect retained output and exit state.{% else %}Inspect the existing process result and retained output.{% endif %}
-    {% if paintedwolf.can_terminal_open %}Open a replacement terminal only if more work is needed; do not replay completed or partially completed commands blindly.{% endif %}
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Preserve the exited process outcome before deciding whether another process is needed
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:terminal_session

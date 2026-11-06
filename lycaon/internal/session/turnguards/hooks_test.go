@@ -3,6 +3,7 @@ package turnguards
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"path/filepath"
 	"testing"
 
@@ -91,7 +92,7 @@ func TestBeforeToolObservesWaitVisibility(t *testing.T) {
 		ToolCalls: []api.ToolCall{{ID: "wait-1", Name: "wait"}},
 	}}
 
-	ctx := tools.WithRecoveryTools(t.Context(), []string{"wait"})
+	ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"wait"}))
 	_, _, err = svc.BeforeTool(ctx, sess, history, "", "wait", map[string]any{"timeout_ms": 60000})
 	refusal, rejected := guidance.RefusalFromError(err)
 	if !rejected || refusal.Code() != guard.WaitHiddenTextCode {

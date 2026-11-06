@@ -2,6 +2,7 @@ package settings
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -18,20 +19,25 @@ const (
 	TierIrreversible
 )
 
-// Tool tiers come from native-tools.yaml.
+// Tiers come from native-tools.yaml.
 
-func tierSet(tools []string) map[string]struct{} {
-	out := make(map[string]struct{}, len(tools))
-	for _, t := range tools {
-		out[t] = struct{}{}
+func tierSet(lists ...[]string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, names := range lists {
+		for _, name := range names {
+			out[name] = struct{}{}
+		}
 	}
 	return out
 }
 
+// An approval names the tool it invokes or the native operation command reached.
 var (
-	reversibleSet   = tierSet(reversibleTools)
-	recoverableSet  = tierSet(recoverableTools)
-	irreversibleSet = tierSet(irreversibleTools)
+	reversibleSet   = tierSet(reversibleTools, reversibleOperations)
+	recoverableSet  = tierSet(recoverableTools, recoverableOperations)
+	irreversibleSet = tierSet(irreversibleTools, irreversibleOperations)
+	toolTierSet     = tierSet(reversibleTools, recoverableTools, irreversibleTools)
+	operationSet    = tierSet(reversibleOperations, recoverableOperations, irreversibleOperations)
 )
 
 // ClassifyTier maps a proposed action to a reversibility tier.
@@ -185,29 +191,29 @@ func isWindowsAbsPath(path string) bool {
 	return path[1] == ':'
 }
 
-// ApprovalRecoverableToolIDs returns recoverable-tier tool names (from catalog codegen).
-func ApprovalRecoverableToolIDs() []string {
-	return append([]string(nil), recoverableTools...)
+// ApprovalRecoverableIDs returns recoverable-tier tool and operation names.
+func ApprovalRecoverableIDs() []string {
+	return append(slices.Clone(recoverableTools), recoverableOperations...)
 }
 
-// ToolTierDeclared reports whether a tool has a defined tier.
+// ToolTierDeclared reports whether a callable tool has a defined tier.
 func ToolTierDeclared(tool string) bool {
 	tool = strings.TrimSpace(tool)
-	if _, ok := reversibleSet[tool]; ok {
-		return true
-	}
-	if _, ok := recoverableSet[tool]; ok {
-		return true
-	}
-	if _, ok := irreversibleSet[tool]; ok {
+	if _, ok := toolTierSet[tool]; ok {
 		return true
 	}
 	return ingestion.IsMCPToolName(tool)
 }
 
-// ApprovalIrreversibleToolIDs returns irreversible-tier tool names (from catalog codegen).
-func ApprovalIrreversibleToolIDs() []string {
-	return append([]string(nil), irreversibleTools...)
+// OperationTierDeclared reports whether a native operation has a defined tier.
+func OperationTierDeclared(operation string) bool {
+	_, ok := operationSet[strings.TrimSpace(operation)]
+	return ok
+}
+
+// ApprovalIrreversibleIDs returns irreversible-tier tool and operation names.
+func ApprovalIrreversibleIDs() []string {
+	return append(slices.Clone(irreversibleTools), irreversibleOperations...)
 }
 
 // boundaryHolds reports whether filesystem and egress confinement both apply.

@@ -1,6 +1,7 @@
 package mutation
 
 import (
+	"github.com/lycaon/lycaon/internal/tools"
 	"os"
 	"strconv"
 	"strings"
@@ -148,24 +149,43 @@ func runCodeRewrite(inv *invocation) error {
 	if !ok || strings.TrimSpace(rewrite) == "" {
 		return inv.usage(inv.name(), "--rewrite TEXT")
 	}
-	path, ok := inv.value("--path")
-	if !ok || strings.TrimSpace(path) == "" {
+	var paths []string
+	for _, option := range inv.argv.Options("--path") {
+		for _, value := range option.Values {
+			if strings.TrimSpace(value.Value) != "" {
+				paths = append(paths, value.Value)
+			}
+		}
+	}
+	if len(paths) == 0 {
 		return inv.usage(inv.name(), "--path PATH")
 	}
+	lang, _ := inv.value("--lang")
 	dryRun := inv.flag("--dry-run")
 	recursive := inv.flag("--recursive")
-	bound, err := inv.bind(path, !dryRun)
-	if err != nil {
-		return err
+	ctx := inv.ctx
+	if reason, ok := inv.value("--syntax-override-reason"); ok && !dryRun {
+		overridden, err := tools.WithSyntaxOverride(ctx, map[string]any{"syntax_override_reason": reason})
+		if err != nil {
+			return err
+		}
+		ctx = overridden
 	}
-	targets := []string{bound.Resolved.Abs}
-	if info, statErr := os.Stat(bound.Resolved.Abs); statErr == nil && info.IsDir() {
+	var targets []string
+	for _, path := range paths {
+		bound, err := inv.bind(path, !dryRun)
+		if err != nil {
+			return err
+		}
+		if info, statErr := os.Stat(bound.Resolved.Abs); statErr != nil || !info.IsDir() {
+			targets = append(targets, bound.Resolved.Abs)
+			continue
+		}
 		if !recursive {
 			return inv.usage(path, "a file path, or pass --recursive for a directory")
 		}
-		targets = nil
 		if walkErr := sandbox.SurveyWalk(inv.ctx, bound.Resolved.Abs, sandbox.SurveyOptions{}, func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
-			if entry.DirEntry.Type().IsRegular() && native.SupportsRewriteLanguage(entry.Abs) {
+			if entry.DirEntry.Type().IsRegular() && (lang != "" || native.SupportsRewriteLanguage(entry.Abs)) {
 				targets = append(targets, entry.Abs)
 			}
 			return sandbox.SurveyContinue, nil
@@ -181,7 +201,7 @@ func runCodeRewrite(inv *invocation) error {
 		if err := inv.recordPin(source.Revision); err != nil {
 			return err
 		}
-		rewritten, changed, err := native.RewriteSource(inv.ctx, source.Path, pattern, rewrite, source.Content)
+		rewritten, changed, err := native.RewriteSource(ctx, source.Path, lang, pattern, rewrite, source.Content)
 		if err != nil {
 			return err
 		}
@@ -201,7 +221,7 @@ func runCodeRewrite(inv *invocation) error {
 		if err := inv.recordPin(destination); err != nil {
 			return err
 		}
-		result, err := inv.owners.Operations.Write.Apply(inv.ctx, native.WriteInput{Operation: inv.owners.ops[inv.name()], Path: abs, Content: rewritten, Memory: inv.owners.Revisions.Memory,
+		result, err := inv.owners.Operations.Write.Apply(ctx, native.WriteInput{Operation: inv.owners.ops[inv.name()], Path: abs, Content: rewritten, Memory: inv.owners.Revisions.Memory,
 			Admission: native.WriteExecutionPinned, Destination: destination, Sources: []toolcontract.ExecutionRevision{source.Revision}}, inv.tc)
 		if err != nil {
 			return err

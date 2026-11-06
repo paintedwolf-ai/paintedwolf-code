@@ -5,19 +5,14 @@ anchor: tool.rejected
 requires:
   profiles:
     - tool
-  facts:
-    - paintedwolf.rejection_code
-    - paintedwolf.review_expected_call
-    - paintedwolf.review_observed_handles
-    - paintedwolf.review_ungrounded_sample
-    - paintedwolf.can_recall
+  facts: [paintedwolf.rejection_code, paintedwolf.review_expected_call, paintedwolf.review_observed_handles, paintedwolf.review_ungrounded_sample, paintedwolf.can_recall, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_CITATION_UNGROUNDED"
 effect: block
 copy:
   what: "Some submitted citations do not resolve to the active review evidence union."
   cause: "Unresolved sample: {{ paintedwolf.review_ungrounded_sample }}."
   why: "A terminal verdict must resolve to observed coordinator and reviewer evidence for this review."
-  fix: "Correct the unresolved references using existing reviewer envelopes and the observed sample {{ paintedwolf.review_observed_handles }}. Preserve valid citations.{% if paintedwolf.can_recall %} Confirm what a handle recorded with `recall(query=\"handle:read#3\")` before citing it.{% else %} Cite only handles shown in this chat or the observed sample.{% endif %} Current call shape: {{ paintedwolf.review_expected_call }}."
+  fix: 'Correct the unresolved references using existing reviewer envelopes and the observed sample {{ paintedwolf.review_observed_handles }}. Preserve valid citations. {{ paintedwolf.next_steps }} Current call shape: {{ paintedwolf.review_expected_call }}.'
   instead: "Report an evidence gap if no observed citation supports the claim; never invent a handle or rerun a completed review just to change a citation."
 x-paintedwolf-category: recoverable
 x-paintedwolf-severity: error

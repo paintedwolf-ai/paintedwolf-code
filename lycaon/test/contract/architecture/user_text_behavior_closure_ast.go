@@ -492,7 +492,8 @@ func scanCoordinatorPongoBooleanGates(catalogRoot string) ([]string, error) {
 				violations = append(violations, rel+": forbidden NL-style prompt gate "+gate)
 				continue
 			}
-			if !registeredCoordinatorBooleanGates[gate] {
+			// The host answers profile_has_<tool> for every declared tool.
+			if !registeredCoordinatorBooleanGates[gate] && !strings.HasPrefix(gate, "profile_has_") {
 				violations = append(violations, rel+": unregistered coordinator boolean gate "+gate+" — add typed Go source or registeredCoordinatorBooleanGates")
 			}
 		}

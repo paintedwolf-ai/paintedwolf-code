@@ -14,8 +14,8 @@ copy:
   what: worker_cancel may only stop jobs spawned from the active session
   cause: The job_id belongs to another session or project
   why: The job_id belongs to another session or project
-  fix: Cancel only jobs you spawned in this session via `task()`
-  instead: Use job_id from this session `task()` enqueue or pulse roster
+  fix: 'Cancel only jobs you spawned in this session.'
+  instead: 'Use job_id from this session''s enqueue result or pulse roster.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: Worker job {{ paintedwolf.job_id }} does not belong to this coordinator session

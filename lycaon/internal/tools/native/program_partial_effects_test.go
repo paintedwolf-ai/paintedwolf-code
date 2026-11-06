@@ -220,7 +220,7 @@ func beginPartialEffectsProgram(t *testing.T, recorder *invocation.SQLRecorder, 
 
 func partialEffectsDefinitions(t *testing.T) (toolcontract.OperationDefinition, toolcontract.OperationDefinition) {
 	t.Helper()
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "operation-schemas"))
 	testutil.FailErr(t, "read actual schemas", err)
 	definitionFor := func(name string) toolcontract.OperationDefinition {
 		meta, ok := schemas.ToolMeta(name)

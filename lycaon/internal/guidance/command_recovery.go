@@ -1,11 +1,14 @@
 package guidance
 
-import "github.com/lycaon/lycaon/internal/oarcopy"
+import (
+	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+)
 
 // commandRecoveryView exposes consistent producer-stated execution observations.
 func commandRecoveryView(data map[string]any) map[string]any {
 	tool, _ := data["tool"].(string)
-	if tool != "command" && tool != "verify" {
+	if !toolcontract.ProgramResultTool(tool) {
 		return nil
 	}
 	state, _ := data["command_execution"].(string)

@@ -928,24 +928,28 @@ host_facts:
    type: string
  - name: paintedwolf.tool_discovery_has_more
    type: bool
- - name: paintedwolf.task_loadable
+ - name: paintedwolf.task_dispatchable
    type: bool
  - name: paintedwolf.tool_loadable
    type: bool
  - name: paintedwolf.tool_retired_to_content
    type: bool
+ - name: paintedwolf.tool_retired_to_command
+   type: bool
+ - name: paintedwolf.tool_command_forms
+   type: list<string>
  - name: paintedwolf.native_replacement_tools
    type: list<string>
  - name: paintedwolf.native_replacement_exact
    type: bool
  - name: paintedwolf.native_replacement_manual
    type: bool
- - name: paintedwolf.replacement_calls_available
-   type: bool
  - name: paintedwolf.tool_discovery_available
    type: bool
  - name: paintedwolf.offered_tools
    type: list<string>
+ - name: paintedwolf.next_steps
+   type: string
  - name: paintedwolf.can_task
    type: bool
  - name: paintedwolf.can_complete_leg
@@ -1238,8 +1242,6 @@ host_facts:
    type: string
  - name: paintedwolf.shell_metacharacters
    type: bool
- - name: paintedwolf.source_history_offered
-   type: bool
  - name: paintedwolf.side
    type: string
  - name: paintedwolf.size
@@ -1454,8 +1456,6 @@ host_facts:
    type: string
  - name: paintedwolf.year
    type: string
- - name: paintedwolf.fetch_url_deferred
-   type: bool
  - name: paintedwolf.http_request_web_page
    type: bool
  - name: paintedwolf.http_request_loopback_other_session

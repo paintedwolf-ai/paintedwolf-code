@@ -1,0 +1,12 @@
+steps:
+  - when: "paintedwolf.handle != ''"
+    tool: "wait"
+    args:
+      conditions: [{"kind": "process_done", "handles": ["{{ paintedwolf.handle }}"]}]
+      reason: "waiting for command completion"
+      until_complete: true
+    complete: true
+    say: "Call {{ call }}."
+  - when: "paintedwolf.handle == '' && paintedwolf.deferred_unactivated > 0"
+    tool: "request_tools"
+    say: "If the next action needs a tool listed as deferred in the tool catalog, activate it with {{ call }}. Tools withheld from the current role or mode cannot be activated this way."
