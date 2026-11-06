@@ -23,3 +23,8 @@ func (h *preparationHub) Publish(ctx context.Context, topic api.EventTopic, key 
 	h.observer.Observe(topic, key, data)
 	return nil
 }
+
+// Unwrap exposes the wrapped hub so callers needing the concrete hub can reach it.
+func (h *preparationHub) Unwrap() events.ReplayHub {
+	return h.ReplayHub
+}

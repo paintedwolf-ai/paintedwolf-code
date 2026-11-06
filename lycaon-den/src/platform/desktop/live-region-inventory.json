@@ -57,6 +57,7 @@
   "components/settings/budgets/CostSourcesPanel.tsx": 1,
   "components/settings/extensions/ExtensionsConfigurationPanel.tsx": 1,
   "components/settings/extensions/ExtensionsSettingsPanel.tsx": 1,
+  "components/settings/providers/LocalGenerationCard.tsx": 1,
   "components/settings/providers/ProvidersPanel.tsx": 5,
   "components/settings/providers/ProvidersSettingsPanel.tsx": 2,
   "components/settings/providers/WebResearchProviderCard.tsx": 1,

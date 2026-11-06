@@ -431,7 +431,7 @@ describe("OnboardingGate setup page", () => {
       MODELS_SETTINGS_COPY.onboardingSummarizerOptional,
     );
     expect(getByTestId("onboarding-summarizer-local-tip").textContent).toContain(
-      "save money",
+      MODELS_SETTINGS_COPY.onboardingSummarizerLocalSaveHint,
     );
     expect(getByTestId("onboarding-summarizer-settings")).toBeTruthy();
     expect(getByTestId("default-summarizer-model-select")).toBeTruthy();

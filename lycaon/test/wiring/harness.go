@@ -287,13 +287,23 @@ func (h *Harness) StartBackgroundWorkers(t *testing.T, ctx context.Context) cont
 	return cancel
 }
 
-// MemoryHub returns the event hub when backed by MemoryHub.
+// MemoryHub returns the event hub when backed by MemoryHub, unwrapping publishers.
 func (h *Harness) MemoryHub() *events.MemoryHub {
 	if h == nil {
 		return nil
 	}
-	hub, _ := h.Events.(*events.MemoryHub)
-	return hub
+	hub := h.Events
+	for hub != nil {
+		if memory, ok := hub.(*events.MemoryHub); ok {
+			return memory
+		}
+		unwrap, ok := hub.(interface{ Unwrap() events.ReplayHub })
+		if !ok {
+			return nil
+		}
+		hub = unwrap.Unwrap()
+	}
+	return nil
 }
 
 func mockLLMConfigPath(t *testing.T) string {

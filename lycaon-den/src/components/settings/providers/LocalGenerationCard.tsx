@@ -63,7 +63,7 @@ export function LocalGenerationCard(props: Props) {
       </Show>
       <Show when={detail() || status()?.revision}>
         <details class="den-settings-hint">
-          <summary>Model details</summary>
+          <summary><span class="den-disclosure-caret" aria-hidden="true" />Model details</summary>
           <Show when={status()?.revision}>{revision => <p>Version: {revision()}</p>}</Show>
           <Show when={detail()}>{message => <p>{message()}</p>}</Show>
         </details>
