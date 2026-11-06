@@ -23,8 +23,8 @@ function Disclosure() {
   const disclosure = useTranscriptDisclosure(() => ROW);
   return (
     <TranscriptDisclosureShell disclosure={disclosure} data-testid="shell">
-      <TranscriptDisclosureToggle disclosure={disclosure}>Details</TranscriptDisclosureToggle>
-      <TranscriptDisclosurePanel disclosure={disclosure}>Body</TranscriptDisclosurePanel>
+      <TranscriptDisclosureToggle disclosure={disclosure} data-testid="details">Details</TranscriptDisclosureToggle>
+      <TranscriptDisclosurePanel disclosure={disclosure} data-testid="panel">Body</TranscriptDisclosurePanel>
     </TranscriptDisclosureShell>
   );
 }
@@ -163,10 +163,10 @@ describe("transcript disclosure leases", () => {
       </TranscriptViewportProvider>
     ));
     const toggle = assertNamedControl(view.getByTestId("details"), "button");
-    expect(view.queryByText("Body")).toBeNull();
+    expect(view.queryByTestId("panel")).toBeNull();
     expect(toggle.hasAttribute("aria-controls")).toBe(false);
     fireEvent.click(toggle);
-    const panel = view.getByText("Body");
+    const panel = view.getByTestId("panel");
     expect(panel.hidden).toBe(false);
     expect(toggle.getAttribute("aria-controls")).toBe(panel.id);
   });
@@ -179,7 +179,7 @@ describe("transcript disclosure leases", () => {
       </TranscriptViewportProvider>
     ));
     const toggle = assertNamedControl(view.getByTestId("details"), "button");
-    const panel = view.getByText("Body");
+    const panel = view.getByTestId("panel");
     expect(toggle.getAttribute("type")).toBe("button");
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(toggle.getAttribute("aria-controls")).toBe(panel.id);
@@ -201,18 +201,18 @@ describe("transcript disclosure leases", () => {
       return (
         <TranscriptDisclosureShell disclosure={disclosure} data-testid="shell">
           <div data-testid="header">
-            <TranscriptDisclosureToggle disclosure={disclosure} inHeader>Open</TranscriptDisclosureToggle>
-            <TranscriptDisclosureToggle disclosure={disclosure} inHeader onClick={onClick}>Custom</TranscriptDisclosureToggle>
+            <TranscriptDisclosureToggle disclosure={disclosure} inHeader data-testid="toggle-open">Open</TranscriptDisclosureToggle>
+            <TranscriptDisclosureToggle disclosure={disclosure} inHeader onClick={onClick} data-testid="toggle-custom">Custom</TranscriptDisclosureToggle>
           </div>
           <TranscriptDisclosurePanel disclosure={disclosure}>Body</TranscriptDisclosurePanel>
         </TranscriptDisclosureShell>
       );
     });
-    const toggle = view.getByRole("button", { name: "Open" });
+    const toggle = assertNamedControl(view.getByTestId("toggle-open"), "button");
     expect(toggle.classList.contains("den-transcript-disclosure-header")).toBe(false);
     fireEvent.click(toggle);
     expect(view.getByTestId("shell").getAttribute("data-expanded") === "true").toBe(true);
-    fireEvent.click(view.getByRole("button", { name: "Custom" }));
+    fireEvent.click(assertNamedControl(view.getByTestId("toggle-custom"), "button"));
     expect(onClick).toHaveBeenCalledOnce();
     expect(view.getByTestId("shell").getAttribute("data-expanded") === "true").toBe(true);
   });
