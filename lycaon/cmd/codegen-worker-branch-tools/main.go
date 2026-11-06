@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,17 +15,26 @@ import (
 )
 
 func main() {
-	outGo := flag.String("out-go", "", "output path for worker_branch_tools.generated.go")
-	check := flag.Bool("check", false, "exit 1 if output is stale")
-	flag.Parse()
+	if err := run(os.Args[1:], os.Stdout); err != nil {
+		fatal(err)
+	}
+}
 
+func run(args []string, stdout io.Writer) error {
+	flags := flag.NewFlagSet("codegen-worker-branch-tools", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	outGo := flags.String("out-go", "", "output path for worker_branch_tools.generated.go")
+	check := flags.Bool("check", false, "exit 1 if output is stale")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
 	if *outGo == "" {
-		fatal(fmt.Errorf("--out-go is required"))
+		return fmt.Errorf("--out-go is required")
 	}
 
 	cfg, err := nativemanifest.Load()
 	if err != nil {
-		fatal(err)
+		return err
 	}
 	known := func(tool string) bool {
 		if cfg.HasTool(tool) {
@@ -34,26 +44,27 @@ func main() {
 		return ok
 	}
 	if err := cfg.ValidateRequiresWorkerBranch(known); err != nil {
-		fatal(err)
+		return err
 	}
 	body := renderGo(cfg.WorkerBranchTools())
 
 	if *check {
 		existing, err := os.ReadFile(*outGo) // #nosec G304 -- path from Taskfile
 		if err != nil || string(existing) != string(body) {
-			fatal(fmt.Errorf("stale %s — run ./task codegen:worker-branch-tools", *outGo))
+			return fmt.Errorf("stale %s — run ./task codegen:worker-branch-tools", *outGo)
 		}
-		fmt.Fprintln(os.Stdout, "worker-branch-tools codegen OK")
-		return
+		_, err = fmt.Fprintln(stdout, "worker-branch-tools codegen OK")
+		return err
 	}
 
 	if err := os.MkdirAll(filepath.Dir(*outGo), 0o750); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := os.WriteFile(*outGo, body, 0o600); err != nil { // #nosec G306 -- generated artifact
-		fatal(err)
+		return err
 	}
-	fmt.Fprintln(os.Stdout, "wrote", *outGo)
+	_, err = fmt.Fprintln(stdout, "wrote", *outGo)
+	return err
 }
 
 func renderGo(tools []string) []byte {

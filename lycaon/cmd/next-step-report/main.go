@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/nextstepreport"
@@ -12,13 +13,13 @@ import (
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	if err := run(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(paths []string) error {
+func run(paths []string, stdout io.Writer) error {
 	var report nextstepreport.Report
 	for _, path := range paths {
 		raw, err := os.ReadFile(path) // #nosec G304,G703 -- this CLI intentionally reads caller-selected transcript files.
@@ -31,7 +32,7 @@ func run(paths []string) error {
 		}
 		report.Add(messages)
 	}
-	out := json.NewEncoder(os.Stdout)
+	out := json.NewEncoder(stdout)
 	out.SetIndent("", "  ")
 	return out.Encode(report)
 }
