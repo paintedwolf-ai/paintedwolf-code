@@ -33,12 +33,8 @@ func TestRenderWorkerTaskPreambleWriteMode(t *testing.T) {
 	testutil.FailErr(t, "RenderWorkerTaskPreamble failed", err)
 	for _, want := range []string{
 		guidance.MarkerWorkerTaskPreamble,
-		"Manifest touch paths",
-		"Task mode",
-		"mode: write",
+		"internal/**",
 		"src/game.js",
-		"obligation:",
-		"write, edit, replace_lines, or restore_version",
 	} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)

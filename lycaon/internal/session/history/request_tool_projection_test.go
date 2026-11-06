@@ -172,7 +172,7 @@ func TestRecallSearchFitKeepsRecoverableHits(t *testing.T) {
 func TestSmallObservationSurvivesModelFormattingOverhead(t *testing.T) {
 	raw, err := json.Marshal(map[string]any{"content": "   731: checksum=original-cypress-7826", "offset": 731, "end_line": 731, "mode": "content", "receipt": map[string]any{"tool": "read"}})
 	testutil.FailErr(t, "encode small observed row", err)
-	content := "[read#1]\n" + string(raw) + "\n>>> Tool feedback\n" + strings.Repeat("recorded feedback\n", 100)
+	content := "[read#1]\n" + string(raw) + "\n>>> Tool feedback\n" + strings.Repeat("recorded feedback\n", 105)
 	original := api.Message{ID: "small-read", Ord: 3, Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Content: content, EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{Tool: "read", Content: content, Outcome: api.ToolResultOutcomeCompleted}}
 	projected := transcript.Project([]api.Message{original})
 	var row api.Message

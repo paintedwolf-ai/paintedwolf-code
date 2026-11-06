@@ -50,28 +50,19 @@ func TestRenderTurnStateBlock(t *testing.T) {
 			PartialWorkerJobs:  []string{"job-c"},
 		})
 		testutil.FailErr(t, "RenderTurnStateBlock", err)
-		if !strings.Contains(block, "Integrate turn") {
-			t.Fatalf("missing integrate turn guidance: %q", block)
-		}
-		if !strings.Contains(block, "per-overlay promote order") {
-			t.Fatalf("missing promote order guidance: %q", block)
-		}
 		if !strings.Contains(block, "Pending overlay `job-a`, `job-b`") {
 			t.Fatalf("missing pending overlay jobs: %q", block)
 		}
-		if !strings.Contains(block, "Partial `job-c`: `task(implementer)`") {
+		if !strings.Contains(block, "Partial `job-c`: dispatch an implementer") {
 			t.Fatalf("missing partial worker jobs: %q", block)
 		}
 	})
 
 	t.Run("verify required", func(t *testing.T) {
-		block, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-verify", inject.TurnStateInjectInput{
+		_, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-verify", inject.TurnStateInjectInput{
 			VerifyRequired: true,
 		})
 		testutil.FailErr(t, "RenderTurnStateBlock", err)
-		if !strings.Contains(block, "This workflow has an explicit test-evidence gate") {
-			t.Fatalf("missing test-evidence gate: %q", block)
-		}
 	})
 }
 

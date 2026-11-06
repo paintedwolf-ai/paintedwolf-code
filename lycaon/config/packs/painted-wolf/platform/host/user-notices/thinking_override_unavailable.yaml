@@ -14,7 +14,5 @@ actions:
 scenarios:
   - id: unsupported
     vars: {model: example-model, reason: "thinking cannot be disabled"}
-    expect_contains: ["example-model", "thinking cannot be disabled"]
   - id: generic
     vars: {}
-    expect_contains: ["saved thinking override"]

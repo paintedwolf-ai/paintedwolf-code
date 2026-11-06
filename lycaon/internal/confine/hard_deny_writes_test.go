@@ -1,10 +1,8 @@
 package confine_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -131,14 +129,10 @@ func TestReviewedWriteRootOverridesBaselineButNotProtectedOrAgentPolicy(t *testi
 	}
 }
 
-func TestSeatbeltDeniesUngrantedAgentPolicyWrites(t *testing.T) {
-	if runtime.GOOS != "darwin" || testing.Short() || !confine.Available() {
-		t.Skip("darwin + sandbox required")
-	}
+func TestBoundaryDeniesUngrantedAgentPolicyWrites(t *testing.T) {
+	self := requireLiveBoundary(t)
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	self, err := os.Executable()
-	testutil.FailErr(t, "Executable", err)
 	proj := t.TempDir()
 	ly := filepath.Join(proj, settingsoverlay.DirName())
 	testutil.FailErr(t, "mkdir overlay", os.MkdirAll(ly, 0o700))
@@ -148,12 +142,7 @@ func TestSeatbeltDeniesUngrantedAgentPolicyWrites(t *testing.T) {
 	sibling := filepath.Join(proj, "ok.txt")
 
 	run := func(name string, args ...string) int {
-		cmd, cleanup, err := confine.Command(context.Background(), self, name, args,
-			confine.Confinement{Roots: []string{proj}})
-		testutil.FailErr(t, "Command", err)
-		defer cleanup()
-		_ = cmd.Run()
-		return cmd.ProcessState.ExitCode()
+		return confinedExit(t, self, confine.Confinement{Roots: []string{proj}}, name, args...)
 	}
 
 	if code := run("/usr/bin/touch", sibling); code != 0 {
@@ -172,17 +161,14 @@ func TestSeatbeltDeniesUngrantedAgentPolicyWrites(t *testing.T) {
 		_ = os.Remove(hostSink)
 		t.Fatal("touch of UserConfigDir/approvals.yaml should be denied")
 	}
-	draft := filepath.Join(cfg, "drafts", "x.txt")
-	testutil.FailErr(t, "mkdir drafts", os.MkdirAll(filepath.Dir(draft), 0o700))
-	// The draft path may also be outside the project root.
-	_ = draft
 }
 
 // The launcher remains immutable inside its writable parent.
-func TestSeatbeltLauncherUntamperable(t *testing.T) {
-	self := requireSeatbelt(t)
-	exe := self
-	if rp, err := filepath.EvalSymlinks(self); err == nil {
+func TestBoundaryLauncherUntamperable(t *testing.T) {
+	self := requireLiveBoundary(t)
+	exe, err := os.Executable()
+	testutil.FailErr(t, "Executable", err)
+	if rp, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = rp
 	}
 	launcherDir := filepath.Dir(exe)

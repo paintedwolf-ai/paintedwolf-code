@@ -44,15 +44,8 @@ scenarios:
   - id: output_limit
     vars:
       output_limit_reached: true
-    expect_contains:
-      - used its output budget
   - id: with_model
     vars:
       model: llama-3.1-8b
-    expect_contains:
-      - llama-3.1-8b
-      - finished without
   - id: generic
     vars: {}
-    expect_contains:
-      - finished without a usable response

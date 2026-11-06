@@ -18,6 +18,8 @@ type output struct {
 	mappings         commandprogram.SourceMappingRecorder
 	pending          *toolcontract.StreamSourceMapping
 	maximum, written int64
+	// printedLine is the number just printed for the next literal bytes.
+	printedLine int64
 }
 
 func newOutput(ctx context.Context, w io.Writer, maximum int64) *output {
@@ -50,10 +52,12 @@ func (o *output) literal(in *input, p []byte, offset int64) error {
 		return err
 	}
 	if o.mappings == nil || in.pin == nil {
+		o.printedLine = 0
 		return nil
 	}
-	next := toolcontract.StreamSourceMapping{Source: *in.pin, SourceStartByte: offset, SourceEndByte: offset + int64(len(p)), OutputStartByte: outStart, OutputEndByte: o.written}
-	if last := o.pending; last != nil && last.Source == next.Source && last.SourceEndByte == next.SourceStartByte && last.OutputEndByte == next.OutputStartByte {
+	next := toolcontract.StreamSourceMapping{Source: *in.pin, SourceStartByte: offset, SourceEndByte: offset + int64(len(p)), OutputStartByte: outStart, OutputEndByte: o.written, PrintedLine: o.printedLine}
+	o.printedLine = 0
+	if last := o.pending; last != nil && next.PrintedLine == 0 && last.Source == next.Source && last.SourceEndByte == next.SourceStartByte && last.OutputEndByte == next.OutputStartByte {
 		last.SourceEndByte, last.OutputEndByte = next.SourceEndByte, next.OutputEndByte
 		return nil
 	}

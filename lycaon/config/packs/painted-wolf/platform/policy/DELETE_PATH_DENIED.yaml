@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: delete
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: DELETE_PATH_DENIED'

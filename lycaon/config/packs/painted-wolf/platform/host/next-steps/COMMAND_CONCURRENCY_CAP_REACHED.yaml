@@ -1,0 +1,10 @@
+steps:
+  - tool: "command_output"
+    pick:
+      handle: "paintedwolf.live_command_handles"
+    say: "Use {{ call }} to inspect an existing handle."
+    otherwise: "Wait for an active command to finish before starting another."
+  - tool: "command_stop"
+    pick:
+      handle: "paintedwolf.live_command_handles"
+    say: "Stop only work that is no longer needed with {{ call }}, then observe its exit before replacement work."

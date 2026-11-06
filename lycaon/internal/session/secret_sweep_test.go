@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"runtime"
 	"strings"
 	"testing"
@@ -68,9 +69,7 @@ func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 
 	swept, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read swept messages", err)
-	if strings.Contains(swept[0].Content, sweepSecret) {
-		t.Fatalf("the minting row still holds the value after the host learned it:\n%s", swept[0].Content)
-	}
+	exposure.Absent(t, swept[0].Content, sweepSecret)
 	if swept[0].HostSecretRedaction == nil || swept[0].HostSecretRedaction.Occurrences() != 1 {
 		t.Fatalf("swept row carries no provenance: %+v", swept[0].HostSecretRedaction)
 	}
@@ -132,9 +131,7 @@ func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 
 	swept, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read swept messages", err)
-	if strings.Contains(swept[0].Content, sweepSecret) {
-		t.Fatalf("a row stamped before the restart was never revisited:\n%s", swept[0].Content)
-	}
+	exposure.Absent(t, swept[0].Content, sweepSecret)
 }
 
 // failingUpdateStore refuses to rewrite one row.
@@ -171,17 +168,13 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 	if !strings.Contains(swept[0].Content, sweepSecret) {
 		t.Fatalf("precondition failed: the refused row was rewritten anyway:\n%s", swept[0].Content)
 	}
-	if strings.Contains(swept[1].Content, sweepSecret) {
-		t.Fatalf("a refused row abandoned the rest of the pass:\n%s", swept[1].Content)
-	}
+	exposure.Absent(t, swept[1].Content, sweepSecret)
 	// The refused row keeps its earlier stamp, so the next pass finds it again.
 	blocked.messageID = ""
 	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 2)
 	retried, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read retried messages", err)
-	if strings.Contains(retried[0].Content, sweepSecret) {
-		t.Fatalf("the refused row was stamped as screened and never retried:\n%s", retried[0].Content)
-	}
+	exposure.Absent(t, retried[0].Content, sweepSecret)
 }
 
 // Stale rows are found below the generation, and a stamp lifts them out of the

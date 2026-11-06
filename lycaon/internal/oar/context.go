@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 // ContentObservation combines attributed content with response protocol facts.
@@ -76,7 +77,9 @@ type GuardContext struct {
 	RejectData         map[string]map[string]any
 	ObservationData    map[string]any
 	ObservedRejectCode string
-	Published          map[string]any
+	// Reach is the frozen model request this occurrence's reader acts on.
+	Reach     toolreach.Request
+	Published map[string]any
 }
 
 // ClearMCPObservation zeros all MCP structural facts and clears MCPFields.

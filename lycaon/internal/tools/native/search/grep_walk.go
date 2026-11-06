@@ -212,20 +212,42 @@ func displayOr(display string) string {
 
 // searchFile pins and searches one regular file, applying recursive binary policy.
 func (r *grepRun) searchFile(e entry, names, walked bool) error {
-	if r.files != nil {
-		return r.files.submit(e, names, walked)
+	if r.files == nil {
+		return r.searchFileLive(e, names, walked)
 	}
-	return r.searchFileLive(e, names, walked)
+	if r.mode != modeFileList && r.noMatchIsSilent() {
+		if r.index.canPrune(e) {
+			return nil
+		}
+		return r.files.submit(e, names, walked, true)
+	}
+	return r.files.submit(e, names, walked, false)
+}
+
+// noMatchIsSilent reports whether a pruned file produces no output, so it needs no ordered worker job.
+func (r *grepRun) noMatchIsSilent() bool {
+	switch r.mode {
+	case modeCount:
+		return r.rg
+	case modeFilesWithout:
+		return false
+	default:
+		return true
+	}
 }
 
 func (r *grepRun) searchFileLive(e entry, names, walked bool) error {
 	if r.mode == modeFileList {
 		return r.inv.out.text(e.display, "\n")
 	}
-	checkBinary := r.rg && walked && r.selection.unrestricted < 3 && r.binaryMode != "text"
 	if r.index.canPrune(e) {
 		return r.searchNoMatch(e.display, names)
 	}
+	return r.searchUnpruned(e, names, walked)
+}
+
+func (r *grepRun) searchUnpruned(e entry, names, walked bool) error {
+	checkBinary := r.rg && walked && r.selection.unrestricted < 3 && r.binaryMode != "text"
 	streamed, pin, err := r.inv.openWalkedPinnedStream(e, r.walker)
 	if err != nil {
 		if reason, ok := ordinary(err); ok {

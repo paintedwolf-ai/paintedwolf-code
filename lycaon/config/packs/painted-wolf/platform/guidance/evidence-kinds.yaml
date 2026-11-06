@@ -39,8 +39,15 @@ evidence_kinds:
   secret_lifecycle: { shape: structured_event, transcript_diet: shape_bounded }
   http_response: { shape: surface_snapshot, transcript_diet: shape_bounded }
   terminal_session: { shape: surface_snapshot, transcript_diet: shape_bounded }
+  # An accepted dispatch: worker identity and status, not the worker's results.
+  task: { shape: structured_event }
+  # A brief row the host stated from the source ledger: the change was recorded,
+  # not what it contains. No tool produces it.
+  source_change: { shape: structured_event }
 
 tools:
+  task:          { produces_evidence: { kind: task } }
+  delegate_dispatch: { produces_evidence: { kind: task } }
   read:          { produces_evidence: { kind: read } }
   grep:          { produces_evidence: { kind: grep } }
   find:          { produces_evidence: { kind: find } }
@@ -62,6 +69,8 @@ tools:
       variants:
         - when_arg_present: terminal_capture
           kind: tui
+  command_output: { produces_evidence: { kind: command } }
+  command_stop:   { produces_evidence: { kind: command } }
   verify:        { produces_evidence: { kind: command } }
   preview_overlay: { produces_evidence: { kind: overlay_receipt } }
   promote_overlay: { produces_evidence: { kind: overlay_receipt } }

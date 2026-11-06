@@ -343,7 +343,9 @@ func TestEvaluateCloseoutCitations_groundedHandle(t *testing.T) {
 	}
 }
 
-func TestEvaluateCloseoutCitations_proseLeakIsAdvisory(t *testing.T) {
+// D7: citing inline is the protocol, so a path in a closeout's prose is no leak and
+// raises no check beyond the vacuous one.
+func TestEvaluateCloseoutCitations_proseMentionIsNoCheck(t *testing.T) {
 	msgs := []api.Message{
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
 			{Name: "read", ID: "c1", Args: map[string]any{"path": "src/new.go", "offset": 10, "limit": 1}},
@@ -356,24 +358,19 @@ func TestEvaluateCloseoutCitations_proseLeakIsAdvisory(t *testing.T) {
 	ev := guidance.CloseoutEvidence{
 		Ledger: evidence.NamespaceLedger(ledgertest.BuildFromMessages("", msgs), "leg-a"),
 	}
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "Issue at src/new.go:10 without typed citation",
-	}
+	report := guidance.CoordinatorCompletionReport{Synthesis: "Issue at src/new.go:10 and [src/new.go:10]"}
 	eval := guidance.EvaluateCloseoutCitations(evidence.CitationRoots{ProjectDir: t.TempDir()}, "implement_synthesis", report, ev)
 	if eval.Code != "" {
-		t.Fatalf("code=%q want no code — synthesis prose placement is advisory", eval.Code)
-	}
-	if eval.ProseAdvisoryCount != 1 {
-		t.Fatalf("ProseAdvisoryCount = %d want 1 advisory surfaced", eval.ProseAdvisoryCount)
+		t.Fatalf("code=%q want none", eval.Code)
 	}
 	grounding := guidance.BuildCloseoutCitationGrounding(evidence.CitationRoots{ProjectDir: t.TempDir()}, "implement_synthesis", report, ev, eval)
-	statuses := map[string]api.CitationGroundingCheckStatus{}
-	for _, check := range grounding.Checks {
-		statuses[check.ID] = check.Status
+	if grounding.ProseLeakCount != 0 || grounding.ProseAdvisoryCount != 0 {
+		t.Fatalf("grounding = %+v, want no prose counts", grounding)
 	}
-	if statuses["typed_citations"] != api.CitationGroundingCheckStatusPassed ||
-		statuses["prose_advisories"] != api.CitationGroundingCheckStatusAdvisory {
-		t.Fatalf("check statuses = %v want vacuous typed pass plus prose advisory", statuses)
+	for _, check := range grounding.Checks {
+		if check.ID == "prose_duplication" || check.ID == "prose_advisories" {
+			t.Fatalf("false prose check: %+v", check)
+		}
 	}
 }
 

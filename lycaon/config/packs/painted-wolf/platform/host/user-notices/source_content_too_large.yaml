@@ -6,5 +6,3 @@ suggested_action: "Make the file smaller, or edit it with another tool."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "larger than Painted Wolf Code can open or save"

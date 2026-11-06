@@ -81,7 +81,7 @@ func cacheRequestIdentity(req modelcall.CompletionRequest, policy providerprofil
 		MaxTokens int
 		Format    *modelcall.ResponseFormat
 		Wire      []map[string]json.RawMessage
-	}{policy, req.Think, req.ThinkingOverride, req.StrictBudget, req.MaxTokens, req.ResponseFormat, controls})
+	}{policy, req.Think, req.ThinkingOverride, req.ReasoningRecovery, req.MaxTokens, req.ResponseFormat, controls})
 	out.valid = out.valid && len(req.Messages) > 0
 	return out
 }

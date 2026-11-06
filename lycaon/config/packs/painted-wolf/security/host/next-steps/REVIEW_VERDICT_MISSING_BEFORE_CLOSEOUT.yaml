@@ -1,0 +1,3 @@
+steps:
+  - tool: "submit_verdict"
+    say: "Use {{ call }} with the current phase schema and observed review evidence."

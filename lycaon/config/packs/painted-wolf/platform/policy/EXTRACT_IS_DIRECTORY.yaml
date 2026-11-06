@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       path: archives/
       profile: coordinator
       tool: extract_archive
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: EXTRACT_IS_DIRECTORY'

@@ -3,16 +3,16 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -75,6 +75,8 @@ type turnBatchState struct {
 	statusCursorPaths      []string
 	statusCursorGroupDepth int
 	turnToolPlan           toolsurface.Plan
+	turnPrograms           toolreach.Programs
+	deliveryCoverage       map[string]string
 }
 
 type turnCloseoutState struct {
@@ -235,19 +237,25 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 	}
 
 	if completion == nil || len(completion.ToolCalls) == 0 {
-		var unread []jsonshape.Issue
-		st.lastAssistantContent, unread = l.Tools.maybeCoerceCloseoutContent(ctx, st.history, sessionID, surfaceID, st.lastAssistantContent, st.lastAssistantID)
+		read, err := l.Closeout.readCloseoutDraft(ctx, sess, surfaceID, st, st.history, assistantMsg)
+		if err != nil {
+			return out, err
+		}
 		invokeAllowed := !st.proseTurn(sess, step, maxIter)
 		var blocked bool
 		var refusal *guidance.Refusal
-		var err error
 		st.history, refusal, blocked, err = l.Tools.tryRejectNoToolTurn(
-			ctx, sess, st.history, userPrompt, st.lastAssistantContent, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed, st.output.rejection,
+			ctx, sess, st.history, userPrompt, st.lastAssistantContent, read.Draft, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed, st.output.rejection,
 		)
 		if err != nil {
 			return out, err
 		}
+		lastTurn := !sess.IsWorkerChild() && step+1 >= maxIter
 		if blocked {
+			// With no further turn the refusal cannot be answered; the answer still can be.
+			if lastTurn {
+				return l.Closeout.applyAssembledFinalTurn(ctx, sess, sessionID, userPrompt, surfaceID, st, read.Draft, assistantMsg.Content, refusal)
+			}
 			if refusal != nil && st.noteBlockedBatch(refusal.Code(), "") {
 				out.breakLoop = true
 				out.exit = loopExitBlockedLoop
@@ -256,13 +264,12 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			out.continueLoop = true
 			return out, nil
 		}
-		if report, ok := guidance.ParseCoordinatorCompletionReport(st.lastAssistantContent); ok && surface.SurfaceDeliversReport(surfaceID) {
-			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, guidance.CloseoutRead{Report: report, Unread: unread})
+		if read.Draft.HasAnswer() {
+			st.closeoutRetry.noFurtherTurn = lastTurn
+			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, read)
 		}
 	} else {
-		if batchResumesCloseoutWork(completion.ToolCalls) {
-			l.Closeout.resumeWork(ctx, sessionID, st)
-		}
+		settleRetained := l.Closeout.keepRetainedForObservers(ctx, sessionID, st, completion.ToolCalls)
 		if st != nil && st.turnID != "" && st.attemptID != "" && l.Projection.Deps.CheckpointTurn != nil {
 			checkpoint := fmt.Sprintf(`{"model_output_id":%q,"assistant_message_id":%q}`, st.output.id, assistantMsg.ID)
 			if err := l.Projection.Deps.CheckpointTurn(ctx, st.turnID, st.attemptID, store.TurnPhaseTools, checkpoint); err != nil {
@@ -276,6 +283,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		if err != nil {
 			return out, err
 		}
+		settleRetained(st.history, assistantMsg.ID)
 		batchTurnTools := batchResult.turnTools
 		anyTaskEnqueued := batchResult.anyTaskEnqueued
 		taskEnqueuedThisTurn := batchResult.taskEnqueuedThisTurn
@@ -320,6 +328,9 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		return out, nil
 	}
 
+	if st != nil && !tools.CallReach(ctx).Known() {
+		ctx = tools.WithCallReach(ctx, st.requestReach())
+	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, st.history, userPrompt, surfaceID, assistantMsg)
 	if err != nil {
 		return out, err
@@ -367,7 +378,7 @@ func (l *turnCloseout) applyAcceptedCloseoutReport(
 	if commitOut.exhausted {
 		// Exhaustion preserves the pinned report and latest proposed citations.
 		emitOut, eerr := l.emitAssembledCloseout(
-			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.draftedContent, st.closeoutRetry.codes, st, st.history,
+			ctx, sess, sessionID, userPrompt, surfaceID, commitOut.drafted, st.closeoutRetry.codes, st, st.history,
 		)
 		if eerr != nil {
 			return out, eerr
@@ -380,13 +391,7 @@ func (l *turnCloseout) applyAcceptedCloseoutReport(
 			out.exit = loopExitCompleted
 			return out, nil
 		}
-		st.turnEndedGuidanceReject = true
-		if err := l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID); err != nil {
-			return out, err
-		}
-		out.breakLoop = true
-		out.exit = loopExitCompleted
-		return out, nil
+		return l.endWithClosing(ctx, sess, sessionID, userPrompt, surfaceID, st)
 	}
 	if !commitOut.committed {
 		st.turnEndedGuidanceReject = true
@@ -504,6 +509,11 @@ func (l *PromptLoop) finalizePromptLoopRun(
 	if err := l.Inbox.takePolicyFeedback(ctx, sessionID, st); err != nil {
 		return nil, err
 	}
+	if st.lastAssistantID == "" && !st.turnEndedGuidanceReject && loopExit != loopExitSecretWithheld && loopExit != loopExitOutputTruncated && l.Closeout.canCloseWithoutAnswer(sess) {
+		if _, err := l.Closeout.endWithClosing(ctx, sess, sessionID, userPrompt, l.Context.promptTurnSurface(sessionID), st); err != nil {
+			return nil, err
+		}
+	}
 	outcome := promptresult.OutcomeCompleted
 	if st.output.truncatedOutcome != nil {
 		outcome = promptresult.OutcomeOutputTruncated
@@ -514,7 +524,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		}
 		return &PromptRunResult{
 			TurnTools:            st.turnTools,
-			OfferedTools:         st.offeredToolNames,
+			Reach:                st.requestReach(),
 			TasksDispatchedCount: st.tasksDispatchedCount,
 			Outcome:              outcome,
 			OutputTruncated:      st.output.truncatedOutcome,
@@ -525,7 +535,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: st.lastAssistantContent,
 		TurnTools:            st.turnTools,
-		OfferedTools:         st.offeredToolNames,
+		Reach:                st.requestReach(),
 		TasksDispatchedCount: st.tasksDispatchedCount,
 		Outcome:              outcome,
 		OutputTruncated:      st.output.truncatedOutcome,

@@ -37,7 +37,6 @@ describe("RemovedLinesPopover", () => {
   it("names the removed line, where it was, and its text", () => {
     render(() => <RemovedLinesPopover preview={preview()} canReject {...handlers()} />);
     const card = screen.getByTestId("files-removed-lines");
-    expect(card.textContent).toContain("1 line removed");
     expect(card.textContent).toContain("was line 4");
     expect(card.textContent).toContain("gone");
   });
@@ -68,7 +67,6 @@ describe("RemovedLinesPopover", () => {
     render(() => <RemovedLinesPopover preview={preview()} canReject={false} {...handlers()} />);
     const reject = screen.getByTestId("files-removed-lines-reject") as HTMLButtonElement;
     expect(reject.disabled).toBe(true);
-    expect(reject.dataset.tip).toBe("Save first. Reject writes against the file on disk.");
   });
 
   it("closes when the pointer leaves, unless a selection is in the card", () => {

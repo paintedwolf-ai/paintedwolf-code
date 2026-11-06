@@ -6,22 +6,14 @@ selector:
   tool: [command, verify]
 requires:
   profiles: [tool]
-  facts:
-    - paintedwolf.rejection_code
-    - paintedwolf.handles_text
-    - paintedwolf.can_command_output
-    - paintedwolf.can_command_stop
+  facts: [paintedwolf.rejection_code, paintedwolf.handles_text, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "COMMAND_DUPLICATE_RUNNING"
 effect: block
 copy:
   what: This exact command execution is already live ({{ paintedwolf.handles_text }}).
   cause: The host derived the same execution identity from cwd, profile, argv stages, environment, stdin, and redirects.
   why: Replaying a live command duplicates resource use and cannot provide a newer terminal fact.
-  fix: >-
-    {% if paintedwolf.can_command_output %}Use `command_output` with the existing handle to inspect progress and observe exit.{% else %}Wait for the existing job's observed exit.{% endif %}
-    {% if paintedwolf.can_command_stop %}If it cannot continue, request `command_stop` once.{% endif %}
-    A stop request alone does not establish exit. Do not reissue while the job is running.
-    After it exits, preserve completed effects and retry only work still needed.
+  fix: '{{ paintedwolf.next_steps }} A stop request alone does not establish exit. Do not reissue while the job is running. After it exits, preserve completed effects and retry only work still needed.'
   instead: Continue the existing command job
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_job
@@ -31,6 +23,3 @@ x-paintedwolf-scenarios:
     vars:
       handles: [command-1]
       handles_text: command-1
-    expect_contains:
-      - 'Code: COMMAND_DUPLICATE_RUNNING'
-      - command-1

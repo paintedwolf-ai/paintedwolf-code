@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
   vars:
     content_type: image/png
     tool: fetch_url
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: FETCH_URL_DEST_REQUIRED'

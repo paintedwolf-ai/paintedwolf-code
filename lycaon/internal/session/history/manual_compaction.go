@@ -62,6 +62,10 @@ func (m *Service) forceCompact(ctx context.Context, sessionID string) (compactio
 	if synth != nil {
 		baselineInfo.Attempts = nil
 	}
+	var attempt attemptPass
+	if synth != nil {
+		attempt = m.attemptControl().explicit(ctx, sess, synth)
+	}
 	compact, report, err := compactor.Compact(ctx, baselineInfo, ctxMsgs, cfg.TargetTokens)
 	report.CompactionGeneration = sess.CompactionGeneration
 	if err != nil {
@@ -70,7 +74,7 @@ func (m *Service) forceCompact(ctx context.Context, sessionID string) (compactio
 	if !report.SessionCompacted && report.ChunksCompacted == 0 {
 		if synth != nil {
 			m.scheduleProjectionSynthesis(ctx, synth, info, originals, ctxMsgs, report, store.CompactionView{Generation: sess.CompactionGeneration,
-				CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq})
+				CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq}, attempt)
 		}
 		return report, nil
 	}
@@ -80,7 +84,7 @@ func (m *Service) forceCompact(ctx context.Context, sessionID string) (compactio
 	report.CompactionGeneration = sess.CompactionGeneration + 1
 	if synth != nil {
 		m.scheduleProjectionSynthesis(ctx, synth, info, originals, compact, report, store.CompactionView{Generation: report.CompactionGeneration, Continuation: report.Continuation,
-			CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq})
+			CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq}, attempt)
 	}
 	return report, nil
 }

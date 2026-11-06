@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -148,9 +149,7 @@ func TestBundleRedactsInlineSecretsInConfigAndLogs(t *testing.T) {
 	entries, _ := buildTestBundle(t)
 
 	settings := entries["config/settings.yaml"]
-	if strings.Contains(settings, fakeToken) {
-		t.Fatalf("settings.yaml leaked an inline token: %s", settings)
-	}
+	exposure.Absent(t, settings, fakeToken)
 	if !strings.Contains(settings, "posture: balanced") {
 		t.Fatalf("settings.yaml lost its readable content: %s", settings)
 	}

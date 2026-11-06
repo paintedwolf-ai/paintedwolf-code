@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"testing"
 
@@ -31,9 +32,7 @@ func TestSnapshotTreeOmitsNonRenderingText(t *testing.T) {
 		"createElement",
 		"color: #333",
 	} {
-		if strings.Contains(tree, leak) {
-			t.Fatalf("snapshot tree leaked non-rendering text %q:\n%s", leak, tree)
-		}
+		exposure.Absent(t, tree, leak)
 	}
 	// Filtering preserves content produced by scripts.
 	if !strings.Contains(tree, "rendered row") {

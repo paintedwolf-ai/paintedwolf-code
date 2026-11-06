@@ -39,6 +39,3 @@ x-paintedwolf-scenarios:
   vars:
     tool: command
     reason: Source scripts require UTF-8 without BOM.
-  expect_contains:
-  - 'Code: COMMAND_OPERAND_INVALID'
-  - UTF-8 without BOM

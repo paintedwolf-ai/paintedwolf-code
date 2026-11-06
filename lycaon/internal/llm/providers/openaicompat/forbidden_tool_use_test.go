@@ -13,7 +13,7 @@ import (
 )
 
 func TestForbiddenToolUseKeepsDefinitionsAndSendsNoCallChoice(t *testing.T) {
-	provider := New("fireworks", "https://api.fireworks.ai/inference/v1", "key", []modelinfo.Entry{{ID: "m"}})
+	provider := New("openrouter", "https://openrouter.ai/api/v1", "key", []modelinfo.Entry{{ID: "m"}}).WithProfile(providerprofile.Openrouter())
 	for _, tc := range []struct {
 		use  modelcall.ToolUse
 		want any
@@ -38,7 +38,9 @@ func TestForbiddenToolUseKeepsDefinitionsAndSendsNoCallChoice(t *testing.T) {
 func TestForbiddenToolUseOmitsDefinitionsOnLocalInferenceProfiles(t *testing.T) {
 	for name, profile := range map[string]providerprofile.Profile{
 		"openai-compatible": providerprofile.LocalInference(providerprofile.OpenAI()),
+		"openai":            providerprofile.OpenAI(),
 		"fireworks":         providerprofile.Fireworks(),
+		"together":          providerprofile.Together(),
 		"lmstudio":          providerprofile.Lmstudio(),
 		"omlx":              providerprofile.Omlx(),
 		"litellm":           providerprofile.Litellm(),

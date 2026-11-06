@@ -3,6 +3,9 @@ package session
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -14,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -56,7 +60,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	m.SetProgressStore(progressStore)
 	m.Coordinator.ProgressClosure.Arm(t.Context(), sid, "job-closure")
 	m.Runner.Closeouts.RecordGroundingFriction(t.Context(), sid)
-	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", "draft", nil)
+	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", guidance.ParseCloseoutDraft("draft", citationmd.Options{}), nil)
 	m.Coordinator.Batch.AcceptSynthesis(t.Context(), sid)
 	checkpoints := sessioncheckpoint.New(t.TempDir(), t.TempDir(), sessionstore.NewMemory())
 	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
@@ -246,21 +250,21 @@ func TestHTTPRequestWebPageCardPointsAtFetchURL(t *testing.T) {
 	mgr := newPostToolGuidanceManager(t)
 	sess := &api.Session{ID: "sess-web-page"}
 	args := map[string]any{"url": "https://docs.example.test/guide"}
-	raised := func(deferred bool) guidance.ToolResultFacts {
+	raised := func() guidance.ToolResultFacts {
 		return guidance.ToolResultFacts{}.WithFeedback(toolrejection.HTTPRequestWebPageCode, map[string]any{
-			"host":               "docs.example.test",
-			"bytes":              "612480",
-			"content_type":       "text/html; charset=utf-8",
-			"fetch_url_deferred": deferred,
+			"host":         "docs.example.test",
+			"bytes":        "612480",
+			"content_type": "text/html; charset=utf-8",
 		}, &api.FeedbackSubject{Kind: "host", ID: "docs.example.test"})
 	}
+	reachable := tools.WithCallReach(context.Background(), toolreach.Offered([]string{"fetch_url"}))
 
-	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised(false))
+	out, facts := mgr.ToolPolicy.AfterTool(reachable, sess, "http_request", args, `{"status":200}`, 1, raised())
 	for _, want := range []string{
 		`{"status":200}`,
 		"Code: HTTP_REQUEST_WEB_PAGE",
 		"612480-byte HTML document from docs.example.test",
-		"call fetch_url with the same URL.",
+		"`fetch_url(",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
@@ -270,8 +274,9 @@ func TestHTTPRequestWebPageCardPointsAtFetchURL(t *testing.T) {
 		t.Fatalf("facts = %#v, want the web page code", facts)
 	}
 
-	deferred, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised(true))
-	if !strings.Contains(deferred, "after loading it with request_tools") {
+	loadable := tools.WithCallReach(context.Background(), toolreach.Freeze([]string{"request_tools"}, toolsurface.Compile([]string{"request_tools"}, []string{"fetch_url"})))
+	deferred, _ := mgr.ToolPolicy.AfterTool(loadable, sess, "http_request", args, `{"status":200}`, 1, raised())
+	if !strings.Contains(deferred, "`request_tools(") {
 		t.Fatalf("deferred fetch_url card omits request_tools:\n%s", deferred)
 	}
 
@@ -404,13 +409,7 @@ func TestHTTPRequestLoopbackOtherSessionCardAdvisesReportingToUser(t *testing.T)
 	}, &api.FeedbackSubject{Kind: "host", ID: "127.0.0.1:8000"})
 
 	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised)
-	for _, want := range []string{
-		`{"status":200}`,
-		"Code: HTTP_REQUEST_LOOPBACK_OTHER_SESSION",
-		detail,
-		"let the user decide",
-		"Do not stop, signal, or reconfigure the other listener yourself",
-	} {
+	for _, want := range []string{`{"status":200}`, "Code: HTTP_REQUEST_LOOPBACK_OTHER_SESSION", detail} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
 		}

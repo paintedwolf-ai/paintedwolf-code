@@ -62,9 +62,10 @@ type Profile struct {
 	// transport, whose tool messages accept images only on some providers.
 	ToolResultImages ToolResultImagePlacement
 	// OmitToolsWhenNotCallable drops tool definitions instead of sending
-	// tool_choice: none when the request forbids calling tools, for
-	// template-rendered servers that inject tool instructions whenever tools
-	// are present.
+	// tool_choice: none when the request forbids calling tools. Models answer a
+	// final turn with a call despite the choice, and template-rendered servers
+	// inject tool instructions whenever tools are present. Off only where the
+	// route may reach an API that requires definitions beside tool history.
 	OmitToolsWhenNotCallable bool
 	// Local marks local inference endpoints (such as llama.cpp, vLLM, Ollama,
 	// LM Studio, oMLX, and LiteLLM proxy).

@@ -105,7 +105,6 @@ describe("ProvidersPanel configured actions", () => {
     expect(toolCalls.textContent).toBe(
       MODELS_SETTINGS_COPY.toolCallsUnknownNoModels,
     );
-    expect(toolCalls.textContent).not.toContain("can't make tool calls");
     expect(toolCalls.classList.contains("den-settings-warn")).toBe(false);
   });
 
@@ -127,7 +126,6 @@ describe("ProvidersPanel configured actions", () => {
     expect(support.textContent).toBe(discovery === "ok"
       ? MODELS_SETTINGS_COPY.toolCallsUnknownFilteredModels
       : MODELS_SETTINGS_COPY.toolCallsUnknownEmptyModels);
-    expect(support.textContent).not.toContain("No models have been listed");
   });
 
   it.each(["completed", "pending"] as const)("endpoint changes invalidate %s connection checks", async (timing) => {

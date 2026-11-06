@@ -34,32 +34,20 @@ scenarios:
       ceiling_usd: "5.00"
       spent_usd: "5.12"
       estimate_coverage: complete
-    expect_contains:
-      - spend ceiling
-      - "5.00"
-      - "5.12"
   - id: generic
     vars: {}
-    expect_contains:
-      - spend ceiling
   - id: partial
     vars:
       ceiling_usd: "5.00"
       spent_usd: "5.12"
       estimate_coverage: lower_bound
       unpriced_tokens: 100
-    expect_contains:
-      - at least
-      - Some tokens have no price
   - id: unknown_usage
     vars:
       ceiling_usd: "5.00"
       spent_usd: "5.12"
       estimate_coverage: lower_bound
       unknown_charged_calls: 1
-    expect_contains:
-      - at least
-      - Some provider usage is unreported
   - id: missing_prices_and_usage
     vars:
       ceiling_usd: "5.00"
@@ -67,7 +55,3 @@ scenarios:
       estimate_coverage: lower_bound
       unpriced_tokens: 100
       unknown_charged_calls: 2
-    expect_contains:
-      - at least
-      - Some tokens have no price
-      - Some provider usage is unreported

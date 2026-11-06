@@ -13,7 +13,7 @@ import (
 
 func loadBundled(t *testing.T) (Config, *toolschema.Config) {
 	t.Helper()
-	schemas, err := toolschema.LoadSchemaDir(schemaDirPath(configlayout.FindModuleRoot()))
+	schemas, err := toolschema.LoadSchemaDirWithOperations(schemaDirPath(configlayout.FindModuleRoot()))
 	if err != nil {
 		testutil.FailErr(t, "load tools/schemas", err)
 	}

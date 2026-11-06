@@ -60,7 +60,7 @@ func (l *toolInvocations) composeToolResultMessage(
 		Authority:       api.ContentAuthorityNone,
 		TrustTier:       api.ContentTrustTierUntrusted,
 		Content:         content,
-		EvidenceHandles: append([]string(nil), run.captures.sourceDeliveryHandles...),
+		EvidenceHandles: deliveryHandles(run.captures.sourceDeliveries),
 		ToolResult:      result,
 	}
 }

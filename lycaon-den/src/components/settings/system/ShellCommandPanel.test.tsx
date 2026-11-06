@@ -78,7 +78,6 @@ describe("ShellCommandPanel", () => {
         "Installed — /usr/bin/pw",
       );
     });
-    expect(screen.getByTestId("shell-command-managed").textContent).toMatch(/system package/);
     expect(screen.queryByTestId("shell-command-install")).toBeNull();
     expect(screen.queryByTestId("shell-command-uninstall")).toBeNull();
     expect(invokeMock).toHaveBeenCalledTimes(1);

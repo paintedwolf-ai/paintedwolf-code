@@ -42,6 +42,18 @@ func TestProjectMessageGroundingRows(t *testing.T) {
 	}
 }
 
+// Exempt speech has nothing behind it, so search never reports it as verified.
+func TestProjectMessageEvidenceOptionalIsNotVerified(t *testing.T) {
+	msg := api.Message{ID: "msg-1", Role: api.MessageRoleAssistant, Grounding: &api.CitationGrounding{
+		Traced: true, EvidenceOptional: true,
+		EvidenceRecords: []api.CitationGroundingEvidenceRecord{{Handle: "read#1", Path: "src/a.go"}},
+	}}
+	rows := ProjectMessage("proj-1", "sess-1", msg)
+	if len(rows) != 1 || rows[0].Verified == nil || *rows[0].Verified {
+		t.Fatalf("rows = %+v", rows)
+	}
+}
+
 func TestProjectMessageWorkerSummaryGrounding(t *testing.T) {
 	ts := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
 	// Worker completion summaries store grounding under WorkerSummary.

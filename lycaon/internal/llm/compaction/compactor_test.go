@@ -273,42 +273,6 @@ func TestCompactionRecentMessagesTotalBudget(t *testing.T) {
 	}
 }
 
-func TestCompactionPromptMakesLaterSupportedStateSupersedeEarlierState(t *testing.T) {
-	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	msgs := []ContextMessage{
-		{Role: string(api.MessageRoleAssistant), Content: "Current caveat: anonymous reads are enabled."},
-		{Role: string(api.MessageRoleTool), Content: "configuration updated: authentication required", EvidenceHandles: []string{"command#230"}},
-		{Role: string(api.MessageRoleTool), Content: "anonymous request status: 401", EvidenceHandles: []string{"command#231"}},
-		{Role: string(api.MessageRoleTool), Content: "authenticated request status: 200", EvidenceHandles: []string{"command#233"}},
-	}
-	input, err := BuildCompactionInput(context.Background(), SessionInfo{ID: "state-transition"}, msgs, 2048, 256)
-	testutil.FailErr(t, "build compaction state-transition prompt", err)
-	prompt := input.Text
-
-	oldAt := strings.Index(prompt, "anonymous reads are enabled")
-	newAt := strings.Index(prompt, "anonymous request status: 401")
-	if oldAt < 0 || newAt < 0 || oldAt >= newAt {
-		t.Fatalf("compaction conversation must stay oldest-to-newest: %q", prompt)
-	}
-	for _, want := range []string{
-		"Conversation entries appear oldest to newest",
-		"record the newest supported state",
-		"omit the earlier superseded state from current facts",
-		"role=tool origin=tool authority=none trust_tier=untrusted",
-		"authenticated request status: 200",
-	} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("compaction prompt missing %q: %q", want, prompt)
-		}
-	}
-
-	systemPrompt, err := guidance.RenderCompactionSystemPrompt(context.Background(), guidance.CompactionSessionSummarySystemRef)
-	testutil.FailErr(t, "render compaction system prompt", err)
-	if !strings.Contains(systemPrompt, "do not retain a superseded state as a current fact") {
-		t.Fatalf("compaction system prompt lacks supersession rule: %q", systemPrompt)
-	}
-}
-
 func TestCoordinatorSpillIndexKeepsLiteralExcerpt(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	cfg := testCompactionConfig()

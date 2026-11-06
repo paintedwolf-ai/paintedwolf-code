@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: command_output
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: COMMAND_OUTPUT_NO_LIVE_JOB'

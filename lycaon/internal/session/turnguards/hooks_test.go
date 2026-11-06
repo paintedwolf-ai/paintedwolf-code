@@ -2,16 +2,21 @@ package turnguards
 
 import (
 	"context"
+	"errors"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
+	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -49,7 +54,7 @@ func (s stubSessions) Get(context.Context, string) (*api.Session, error) {
 
 type stubSurface struct{}
 
-func (stubSurface) PromptTurnSurfaceID(string) string { return "" }
+func (stubSurface) PromptTurnSurfaceID(string) string { return "implement_routing" }
 
 type stubFeedback struct{}
 
@@ -87,11 +92,37 @@ func TestBeforeToolObservesWaitVisibility(t *testing.T) {
 		ToolCalls: []api.ToolCall{{ID: "wait-1", Name: "wait"}},
 	}}
 
-	ctx := tools.WithRecoveryTools(t.Context(), []string{"wait", "surface_note"})
+	ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"wait"}))
 	_, _, err = svc.BeforeTool(ctx, sess, history, "", "wait", map[string]any{"timeout_ms": 60000})
 	refusal, rejected := guidance.RefusalFromError(err)
 	if !rejected || refusal.Code() != guard.WaitHiddenTextCode {
 		t.Fatalf("expected %s refusal, got %v", guard.WaitHiddenTextCode, err)
+	}
+}
+
+type unreadableLedger struct{ err error }
+
+func (unreadableLedger) Get(context.Context, string) (*api.Session, error) { return nil, nil }
+func (s unreadableLedger) LoadLedger(context.Context, string) (evidence.Ledger, error) {
+	return evidence.Ledger{}, s.err
+}
+
+func TestMidTurnEvidenceUnreadable(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		svc  *Service
+		want bool
+	}{
+		{name: "no ledger wired", svc: &Service{}},
+		{name: "no evidence service", svc: &Service{Verification: &sessionverification.Service{}}},
+		{name: "readable", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(unreadableLedger{})}}},
+		{name: "read fails", svc: &Service{Verification: &sessionverification.Service{Evidence: closeoutevidence.New(unreadableLedger{err: errors.New("offline")})}}, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.svc.midTurnEvidenceUnreadable(t.Context(), "coord-1", nil); got != tc.want {
+				t.Fatalf("unreadable = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -113,7 +144,7 @@ func TestBeforeFinishSkipsHostNoToolTurnWhenInvokeDisallowed(t *testing.T) {
 	svc := New(stubSessions{sess: sess}, policy, nil, nil, state, nil, nil, nil, nil, closeouts.New(stubSessions{sess: sess}), nil, nil)
 
 	reject, blocked := svc.BeforeFinish(
-		t.Context(), sess, nil, "", "Final summary.", surface.SurfaceImplementDispatch, false, nil, false,
+		t.Context(), sess, nil, "", "Final summary.", guidance.CloseoutDraft{}, surface.SurfaceImplementDispatch, false, nil, false,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("BeforeFinish with invokeAllowed=false blocked: blocked=%v reject=%v", blocked, reject)
@@ -147,14 +178,14 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	}
 	for i := 0; i < synthesisDelayMaxPerPrompt; i++ {
 		reject, blocked := svc.BeforeFinish(
-			t.Context(), sess, history, "", "Final summary.", "implement_routing", true, nil, true,
+			t.Context(), sess, history, "", "Final summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 		)
 		if !blocked || reject == nil || reject.Code() != progressOpenBeforeCloseoutCode {
 			t.Fatalf("attempt %d: got blocked=%v reject=%v, want %s", i+1, blocked, reject, progressOpenBeforeCloseoutCode)
 		}
 	}
 	reject, blocked := svc.BeforeFinish(
-		t.Context(), sess, history, "", "Final summary.", "implement_routing", true, nil, true,
+		t.Context(), sess, history, "", "Final summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
 	)
 	if blocked || reject != nil {
 		t.Fatalf("after %d retries: got blocked=%v reject=%v, want waiver", synthesisDelayMaxPerPrompt, blocked, reject)

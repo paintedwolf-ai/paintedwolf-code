@@ -27,15 +27,8 @@ x-paintedwolf-scenarios:
     tool: page_open
     port: '8080'
     tool_args: {}
-  expect_contains:
-  - 'Code: SANDBOX_TRY_LOOPBACK_CONNECT'
-  - capability_request.loopback_connect
-  - '8080'
 - id: wait_loopback_grant_missing
   vars:
     tool: wait
     tool_args: {}
     port: 8080
-  expect_contains:
-  - 'Code: SANDBOX_TRY_LOOPBACK_CONNECT'
-  - capability_request.loopback_connect

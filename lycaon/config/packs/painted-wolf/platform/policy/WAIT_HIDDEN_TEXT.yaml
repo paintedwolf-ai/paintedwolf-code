@@ -7,26 +7,38 @@ selector:
 requires:
   profiles: [tool]
   facts:
-    - paintedwolf.surface_note_offered
-    - paintedwolf.tool_turn_has_text
-    - paintedwolf.tool_turn_has_agent_note
-when: paintedwolf.surface_note_offered && paintedwolf.tool_turn_has_text && !paintedwolf.tool_turn_has_agent_note
+    - paintedwolf.unpublished_tool_text_pending
+    - paintedwolf.mid_turn_citations_required
+    - paintedwolf.mid_turn_citation_attempted
+    - paintedwolf.mid_turn_evidence_unreadable
+    - paintedwolf.observed_handles_sample
+when: paintedwolf.unpublished_tool_text_pending
 effect: block
 copy:
-  what: '`wait` has not started; this tool turn contains assistant text hidden from the user'
-  cause: No user-visible note was committed in this batch
-  why: Waiting parks the turn without publishing that text
-  fix: 'If the user needs an update, send a grounded `surface_note` and `wait` together. Otherwise call `wait` with empty assistant text.'
-  instead: 'Retry with the same wait conditions after choosing either recovery path.'
+  what: '`wait` has not started; your latest update is an unpublished draft the user has not received'
+  cause: '{% if paintedwolf.mid_turn_evidence_unreadable %}The host could not read the evidence for this request, so the update was never checked. Nothing in it is at fault{% else %}{% if paintedwolf.mid_turn_citation_attempted %}Its citations did not resolve{% else %}{% if paintedwolf.mid_turn_citations_required %}It cited nothing, and this request already has citable observations{% else %}It was not published{% endif %}{% endif %}{% endif %}'
+  why: Waiting parks the turn with the user unaware of that update
+  fix: '{% if paintedwolf.mid_turn_evidence_unreadable %}Send `wait` again; it goes ahead, with the update still unpublished. Put the explanation in a later update or your final reply.{% else %}Send `wait` again with a brief update in the same response, citing what it reports, for example [task#1] for a dispatch. A dispatch citation proves the dispatch, not the worker''s results.{% if paintedwolf.observed_handles_sample %} Observed handles: {{ paintedwolf.observed_handles_sample }}.{% endif %}{% endif %}'
+  instead: '{% if paintedwolf.mid_turn_evidence_unreadable %}Do not rewrite citations to clear this{% else %}Empty text does not clear this. Keep the same wait conditions and add the cited update.{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: Hidden assistant text before wait
+x-paintedwolf-message: Unpublished update before wait
 x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: coordinator
       tool: wait
-    expect_contains:
-      - 'Code: WAIT_HIDDEN_TEXT'
-      - surface_note
-      - empty assistant text
+      mid_turn_citations_required: true
+      observed_handles_sample: task#1
+  - id: evidence_unreadable
+    vars:
+      profile: coordinator
+      tool: wait
+      mid_turn_evidence_unreadable: true
+      mid_turn_citation_attempted: true
+      mid_turn_citations_required: true
+  - id: citation_attempted
+    vars:
+      profile: coordinator
+      tool: wait
+      mid_turn_citation_attempted: true

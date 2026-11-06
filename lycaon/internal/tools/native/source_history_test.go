@@ -31,6 +31,7 @@ func TestSourceHistoryEffectsClassifiesActors(t *testing.T) {
 		},
 		effects: map[string][]sourceledger.Effect{
 			"f1": {
+				{Origin: api.SourceChangeOriginAgent, SessionID: "other", Op: api.SourceChangeOpWrite, Ordinal: 10, BranchID: "newer-worker-job"},
 				{Origin: api.SourceChangeOriginUser, Op: api.SourceChangeOpWrite, Ordinal: 9, AfterVersionID: "v3", TS: time.Date(2026, 8, 26, 14, 2, 0, 0, time.UTC)},
 				{Origin: api.SourceChangeOriginAgent, SessionID: "test-session", Turn: 2, Op: api.SourceChangeOpWrite, Ordinal: 7, AfterVersionID: "v2"},
 				{Origin: api.SourceChangeOriginAgent, SessionID: "other", ActorLabel: "refactor worker", Op: api.SourceChangeOpCreate, Ordinal: 4, AfterVersionID: "v1"},
@@ -39,7 +40,7 @@ func TestSourceHistoryEffectsClassifiesActors(t *testing.T) {
 		},
 	}
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
-	out, err := tool.Run(context.Background(), map[string]any{"path": "main.go"}, provenanceCtx(dir, ledger))
+	out, err := tool.Run(context.Background(), map[string]any{"path": "main.go", "limit": 3}, provenanceCtx(dir, ledger))
 	testutil.FailErr(t, "source_history effects", err)
 	payload := decodeSourceHistory(t, out)
 	if payload["recorded"] != true {
@@ -47,7 +48,7 @@ func TestSourceHistoryEffectsClassifiesActors(t *testing.T) {
 	}
 	effects, _ := payload["effects"].([]any)
 	if len(effects) != 3 {
-		t.Fatalf("effects = %d, want 3 (foreign-workspace effect excluded)", len(effects))
+		t.Fatalf("effects = %d, want a full page of 3 (foreign-workspace effects neither listed nor filling it)", len(effects))
 	}
 	first := effects[0].(map[string]any)
 	second := effects[1].(map[string]any)
@@ -269,8 +270,8 @@ func TestSourceHistoryVersionRejections(t *testing.T) {
 	_, err = tool.Run(context.Background(), map[string]any{
 		"path": "main.go", "mode": "version", "version_id": "nonexistent",
 	}, tctx)
-	if !errors.As(err, &reject) || reject.Code != "SOURCE_VERSION_NOT_FOUND" {
-		t.Fatalf("not found err = %v, want SOURCE_VERSION_NOT_FOUND", err)
+	if !errors.As(err, &reject) || reject.Code != "SOURCE_VERSION_NOT_FOUND" || reject.Data["source_history_offered"] != true {
+		t.Fatalf("not found err = %v, want SOURCE_VERSION_NOT_FOUND stating source_history_offered", err)
 	}
 
 	// 3. Path mismatch

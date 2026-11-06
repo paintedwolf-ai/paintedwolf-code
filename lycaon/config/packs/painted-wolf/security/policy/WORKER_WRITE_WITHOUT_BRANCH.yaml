@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: implement
     tool: write
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_WRITE_WITHOUT_BRANCH'

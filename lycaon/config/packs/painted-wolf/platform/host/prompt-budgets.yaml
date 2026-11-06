@@ -24,8 +24,8 @@ sizes:
                 reason: The integration surface lands or rejects worker overlays and verifies them, so its floor carries overlay, command, verification, terminal, secret, and scan tools.
         worker_tool_surfaces:
             implement:
-                cap: 68000
-                reason: The only worker profile that runs commands; it keeps command, verification, and terminal tools sticky beside the file editing tools.
+                cap: 46000
+                reason: The only worker profile that runs commands; it keeps command, verification and terminal tools sticky beside summarize, survey_repo and code_rewrite, which agents use as tools.
         worker_personas:
             implementer:
                 cap: 36000

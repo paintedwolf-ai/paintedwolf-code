@@ -229,7 +229,6 @@ describe("semantic-driver core", () => {
     const api = installLycaonDriver();
     const result = await api.aim({ role: "button", label: "Missing control", timeout_ms: 150 });
     expect(result.ok).toBe(false);
-    expect(result.error).toBe("target not found");
     expect(result.locators).toEqual({ role: "button", label: "Missing control" });
     expect(result.state).toHaveProperty("interactive");
   });

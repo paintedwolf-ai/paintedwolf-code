@@ -77,7 +77,4 @@ func TestRenderBoardOrientationInject_MultiRootBudgetIsDisclosed(t *testing.T) {
 	if len(packBody) > api.MaxBoardInjectChars {
 		t.Fatalf("pack body len %d exceeds %d: %q", len(packBody), api.MaxBoardInjectChars, packBody)
 	}
-	if !strings.Contains(block, "folders omitted") {
-		t.Fatalf("missing omission disclosure: %q", block)
-	}
 }

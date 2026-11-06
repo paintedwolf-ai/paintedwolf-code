@@ -1,4 +1,4 @@
-description: "One catalog map (Tier 1 digest, selected=0), not a briefing. Call when you still cannot name a destination and the ask is unknown layout (layout_overview), duplicated env/config/stores (ssot_drift), or where HTTP routes/handlers live (api_routes). Then summarize the destination. For how/what on a named file/package/dir, use summarize(path=…) — never survey_repo for depth on a path you can already say."
+description: "One catalog map (Tier 1 digest, selected=0), not a briefing. Call when you still cannot name a destination and the ask is unknown layout (layout_overview), duplicated env/config/stores (ssot_drift), or where HTTP routes/handlers live (api_routes). Then summarize the destination. For how/what on a named file/package/dir, use `summarize --path PATH` in `command` — never survey_repo for depth on a path you can already say."
 schema:
   type: object
   properties:

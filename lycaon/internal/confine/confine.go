@@ -354,6 +354,9 @@ func writeProcessAllows(b *strings.Builder, processControl bool) {
 		b.WriteString("(allow signal (target same-sandbox))\n")
 	}
 	b.WriteString("(allow sysctl-read)\n")
+	// Where macOS gates statfs and volume-space attributes, denial rounds the
+	// values and reports a refusal for every program that asks.
+	b.WriteString("(allow system-info (info-type \"vfs.disk-space\"))\n")
 	b.WriteString("(allow mach-lookup)\n")
 	b.WriteString("(allow ipc-posix-shm)\n")
 	// Interactive terminals require ioctl access to pseudo-terminals.
@@ -409,25 +412,29 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		// macOS Security stat a store before opening it and exit without a
 		// kernel refusal report when stat succeeds on an unreadable file.
 		rules.add(fsRule{op: opRead, matches: deny})
-		// Managed read roots and approved read grants override denied ancestors.
-		allow := SecretReadAllowBackRoots()
+		allow := workspaceReadAllowBacks(c)
 		allow = append(allow, resolveEach(c.ReadRoots)...)
 		if c.SessionScratchRoot != "" {
 			allow = append(allow, fspath.CanonicalPath(c.SessionScratchRoot))
 		}
-		var literals []string
+		addManagedReadRoots(&rules, deny, allow)
+		// An approved read grant also lifts the denials beneath it.
+		var subtrees, literals []string
 		for _, g := range c.ProtectedReadGrants {
 			if g.Subtree {
-				allow = append(allow, g.ResolvedPath)
+				subtrees = append(subtrees, g.ResolvedPath)
 			} else {
 				literals = append(literals, g.ResolvedPath)
 			}
 		}
+		rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(subtrees, ""), literalMatches(literals, "")...)})
+		allow = append(allow, subtrees...)
 		if c.CredentialStore {
-			allow = mergeSortedStrings(allow, linuxCredentialStoreReadRoots())
-			literals = mergeSortedStrings(literals, darwinLoginKeychainLiterals())
+			storeRoots, keychains := linuxCredentialStoreReadRoots(), darwinLoginKeychainLiterals()
+			rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(storeRoots, ""), literalMatches(keychains, "")...)})
+			allow = mergeSortedStrings(allow, storeRoots)
+			literals = mergeSortedStrings(literals, keychains)
 		}
-		rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(allow, ""), literalMatches(literals, "")...)})
 		// Ancestor metadata permits traversal into allowed descendants.
 		if len(allow) > 0 || len(literals) > 0 {
 			ancestors := traversalAncestors(matchPaths(deny), append(append([]string(nil), allow...), literals...))
@@ -437,7 +444,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 			rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(ancestors, "")})
 		}
 	}
-	addControlPlaneReadFloor(&rules, c.ReadRoots, c.SessionScratchRoot)
+	addControlPlaneReadFloor(&rules, c)
 	// Writes confined to the project plus temp and the standard device sinks.
 	sinks := subpathMatches(writeRoots, "")
 	sinks = append(sinks,

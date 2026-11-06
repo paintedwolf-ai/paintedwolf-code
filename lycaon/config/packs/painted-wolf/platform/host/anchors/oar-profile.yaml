@@ -23,6 +23,10 @@ host: paintedwolf
 # Retired: paintedwolf.habit_redirect_match selected command-to-tool redirects.
 # Successors: paintedwolf.native_operation and paintedwolf.native_command identify
 # the reached native operation directly; command programs do not redirect to tools.
+# Retired: paintedwolf.surface_note_offered gated a tool that direct publication replaces.
+# Successor: the paintedwolf.markdown_note content contract.
+# Retired: paintedwolf.has_completion_report meant the closeout parsed as JSON.
+# Successor: paintedwolf.closeout_has_answer.
 # Retired fact names must never be reused.
 # Retired: paintedwolf.high_risk_tool combined policy categories (OAR-FACT-7).
 # Successor: compose paintedwolf.tool_is_state, tool_is_delegation,
@@ -47,6 +51,7 @@ anchors:
     - session.pre_invoke
     - coordinator.post_turn
     - coordinator.closeout_check
+    - coordinator.mid_turn_note
     - worker.finalize
     - worker.report_check
     - content.input
@@ -409,7 +414,13 @@ host_facts:
    type: bool
  - name: paintedwolf.tool_turn_has_agent_note
    type: bool
- - name: paintedwolf.surface_note_offered
+ - name: paintedwolf.unpublished_tool_text_pending
+   type: bool
+ - name: paintedwolf.mid_turn_citations_required
+   type: bool
+ - name: paintedwolf.mid_turn_citation_attempted
+   type: bool
+ - name: paintedwolf.mid_turn_evidence_unreadable
    type: bool
  - name: paintedwolf.surface_may_finish
    type: bool
@@ -423,7 +434,9 @@ host_facts:
    type: int
  - name: paintedwolf.progress_has_open_steps
    type: bool
- - name: paintedwolf.has_completion_report
+ - name: paintedwolf.closeout_has_answer
+   type: bool
+ - name: paintedwolf.closeout_only_repair_directives
    type: bool
  - name: paintedwolf.task_envelope_echo
    type: bool
@@ -745,6 +758,9 @@ host_facts:
  - name: paintedwolf.credential_harvested
    type: bool
    observation: Whether the root session's harvest contains the candidate fingerprint. Provider failure if provenance lookup is unavailable.
+ - name: paintedwolf.git_no_repository_on_write_leg
+   type: bool
+   observation: True when a native Git read in this command's program, on a worker branch, found no repository.
  - name: paintedwolf.editorconfig_mismatch
    type: bool
    observation: True when a landed text write broke a rule its .editorconfig chain declares on lines the write inserted or rewrote; false when no rule is declared or the chain could not be read.
@@ -912,22 +928,28 @@ host_facts:
    type: string
  - name: paintedwolf.tool_discovery_has_more
    type: bool
- - name: paintedwolf.task_loadable
+ - name: paintedwolf.task_dispatchable
    type: bool
  - name: paintedwolf.tool_loadable
    type: bool
+ - name: paintedwolf.tool_retired_to_content
+   type: bool
+ - name: paintedwolf.tool_retired_to_command
+   type: bool
+ - name: paintedwolf.tool_command_forms
+   type: list<string>
  - name: paintedwolf.native_replacement_tools
    type: list<string>
  - name: paintedwolf.native_replacement_exact
    type: bool
  - name: paintedwolf.native_replacement_manual
    type: bool
- - name: paintedwolf.replacement_calls_available
-   type: bool
  - name: paintedwolf.tool_discovery_available
    type: bool
  - name: paintedwolf.offered_tools
    type: list<string>
+ - name: paintedwolf.next_steps
+   type: string
  - name: paintedwolf.can_task
    type: bool
  - name: paintedwolf.can_complete_leg
@@ -1220,6 +1242,8 @@ host_facts:
    type: string
  - name: paintedwolf.shell_metacharacters
    type: bool
+ - name: paintedwolf.side
+   type: string
  - name: paintedwolf.size
    type: string
  - name: paintedwolf.failure_source_unchanged
@@ -1231,6 +1255,8 @@ host_facts:
  - name: paintedwolf.spill_path
    type: string
  - name: paintedwolf.start_line
+   type: string
+ - name: paintedwolf.state
    type: string
  - name: paintedwolf.status
    type: string
@@ -1430,8 +1456,6 @@ host_facts:
    type: string
  - name: paintedwolf.year
    type: string
- - name: paintedwolf.fetch_url_deferred
-   type: bool
  - name: paintedwolf.http_request_web_page
    type: bool
  - name: paintedwolf.http_request_loopback_other_session

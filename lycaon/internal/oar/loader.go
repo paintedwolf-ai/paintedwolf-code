@@ -241,6 +241,18 @@ func (l *Loader) compileEntries(entries []hintregistry.Entry, tier Tier, source 
 		if skip {
 			continue
 		}
+		if len(ent.NextSteps) > 0 {
+			steps, err := DecodeNextSteps(ent.NextSteps)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("%s next-steps: %v", ent.Code, err))
+				continue
+			}
+			rule.NextSteps = steps
+		}
+		if err := l.validateNextSteps(rule); err != nil {
+			errs = append(errs, fmt.Sprintf("%s %s: %v", ent.Path, ent.Code, err))
+			continue
+		}
 		rule.Tier = tier
 		rule.Source = ent.Path.String()
 		if rule.Source == "" {

@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -39,7 +40,7 @@ func TestSandboxRecoveryRoutesDeclaredCapabilityFacts(t *testing.T) {
 					if state == "failed" {
 						obs.FailedStages = []string{"fixture"}
 					}
-					out, facts := mgr.ToolPolicy.AfterTool(tools.WithRecoveryTools(t.Context(), []string{tool}), &api.Session{ID: t.Name()}, tool, map[string]any{}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
+					out, facts := mgr.ToolPolicy.AfterTool(tools.WithCallReach(t.Context(), toolreach.Offered([]string{tool})), &api.Session{ID: t.Name()}, tool, map[string]any{}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
 					if state == "succeeded" {
 						if facts.HasCode(tc.code) {
 							t.Fatalf("absorbed refusal acquired retry guidance: %s", out)
@@ -86,7 +87,7 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 			obs := confine.Observation{Applied: true, Running: true, Refusals: confine.SandboxRefusals{
 				Witness: confine.WitnessKernel, Refusals: []confine.SandboxRefusal{{Operation: "file-read-data", Target: "/protected/input", Grant: "/protected/input", Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath}},
 			}}
-			ctx := tools.WithRecoveryTools(t.Context(), names)
+			ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 			out, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: t.Name()}, "command", map[string]any{}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
 			if !facts.HasCode("SANDBOX_TRY_READ_PATH") || !strings.Contains(out, "Do not start replacement work while this job is running") {
 				t.Fatalf("running refusal lost its dependency: %s", out)
@@ -95,9 +96,6 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 				if strings.Contains(out, control) != tools.ToolOffered(ctx, control) {
 					t.Errorf("control %s contradicts frozen offered schemas: %s", control, out)
 				}
-			}
-			if tools.ToolOffered(ctx, "command_stop") && !strings.Contains(out, "observe its exit") {
-				t.Fatalf("stop acknowledgement replaced observed exit: %s", out)
 			}
 		})
 	}

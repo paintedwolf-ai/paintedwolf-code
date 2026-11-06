@@ -1,127 +1,15 @@
 package native
 
 import (
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"strconv"
+	"context"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/runeclamp"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
-	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 )
-
-func editOldStringNotFound(path, fileContent, oldString, newString string) error {
-	return &toolrejection.ToolReject{
-		Code: "EDIT_OLD_STRING_NOT_FOUND",
-		Data: editMissData(path, fileContent, oldString, newString),
-	}
-}
-
-// editTargetChangedByOthers is the miss whose cause the ledger can state: the
-// file changed during this session, and not by this session. The provenance
-// rows are recorded facts; the miss itself may still also involve a misquote.
-func editTargetChangedByOthers(
-	path, fileContent, oldString, newString string,
-	changes []*surveyreceipt.SourceChange,
-	totalChanges int,
-) error {
-	data := editMissData(path, fileContent, oldString, newString)
-	rows := make([]map[string]any, 0, len(changes))
-	for _, change := range changes {
-		row := map[string]any{"actor": change.Actor, "op": change.Op, "at": change.At}
-		if change.Detail != "" {
-			row["detail"] = change.Detail
-		}
-		rows = append(rows, row)
-	}
-	data["changed_by"] = rows
-	data["change_count"] = totalChanges
-	return &toolrejection.ToolReject{Code: "EDIT_TARGET_CHANGED_BY_OTHERS", Data: data}
-}
-
-func editMissData(path, fileContent, oldString, newString string) map[string]any {
-	data := map[string]any{
-		"path":             path,
-		"old_string_chars": utf8.RuneCountInString(oldString),
-		"total_lines":      toolkit.CountLines(fileContent),
-	}
-	if newString != "" {
-		data["replacement_matches"] = strings.Count(fileContent, newString)
-		if at := strings.Index(fileContent, newString); at >= 0 {
-			data["replacement_line"] = strings.Count(fileContent[:at], "\n") + 1
-		}
-	}
-	if nearLine, ok := editNearLine(fileContent, oldString); ok {
-		data["near_line"] = nearLine
-		data["read_hint"] = fmtReadHint(path, nearLine)
-	}
-	if preview := editMismatchPreview(fileContent, oldString); preview != "" {
-		data["file_preview"] = preview
-	}
-	return data
-}
-
-func editNearLine(fileContent, oldString string) (int, bool) {
-	lines := toolkit.SplitLines(fileContent)
-	if len(lines) == 0 {
-		return 0, false
-	}
-	firstOld := strings.SplitN(oldString, "\n", 2)[0]
-	if firstOld == "" {
-		return 0, false
-	}
-	bestLine := 0
-	bestScore := 0
-	for i, line := range lines {
-		score := editLineMatchScore(line, firstOld)
-		if score > bestScore {
-			bestScore = score
-			bestLine = i + 1
-		}
-	}
-	const minScore = 4
-	if bestScore < minScore {
-		return 0, false
-	}
-	return bestLine, true
-}
-
-func editLineMatchScore(line, needle string) int {
-	if line == needle {
-		return 100
-	}
-	if strings.Contains(line, needle) {
-		return 60 + min(len(needle), 20)
-	}
-	if strings.Contains(needle, line) && len(line) >= 4 {
-		return 50 + min(len(line), 20)
-	}
-	prefix := 0
-	limit := min(len(line), len(needle))
-	for prefix < limit && line[prefix] == needle[prefix] {
-		prefix++
-	}
-	return prefix
-}
-
-func fmtReadHint(path string, nearLine int) string {
-	start := nearLine - 3
-	if start < 1 {
-		start = 1
-	}
-	return "read(path=" + strconv.Quote(path) + ", offset=" + strconv.Itoa(start) + ", limit=20)"
-}
-
-func editOldStringAmbiguous(path string, occurrences int) error {
-	return &toolrejection.ToolReject{
-		Code: "EDIT_OLD_STRING_AMBIGUOUS",
-		Data: map[string]any{
-			"path":        path,
-			"occurrences": occurrences,
-		},
-	}
-}
 
 // EditArgsConflict refuses edit arguments that cannot name one replacement.
 func EditArgsConflict(detail string) error {
@@ -131,28 +19,34 @@ func EditArgsConflict(detail string) error {
 	}
 }
 
-func editMismatchPreview(fileContent, oldString string) string {
-	lines := toolkit.SplitLines(fileContent)
-	if len(lines) == 0 {
-		return ""
+// EditMiss refuses an old_string that is not in the file. When the ledger recorded
+// another actor's change during this session it states them, as recorded facts: the
+// miss itself may still be a misquote.
+func EditMiss(ctx context.Context, tc tools.ToolContext, path, abs, content, oldString, newString string) error {
+	data := map[string]any{
+		"path":             path,
+		"old_string_chars": utf8.RuneCountInString(oldString),
+		"total_lines":      toolkit.CountLines(content),
 	}
-	firstOld := strings.SplitN(oldString, "\n", 2)[0]
-	if firstOld == "" {
-		return truncateEditPreview(lines[0])
-	}
-	for _, line := range lines {
-		if strings.Contains(line, firstOld) || strings.Contains(firstOld, line) {
-			return truncateEditPreview(line)
+	if newString != "" {
+		data["replacement_matches"] = strings.Count(content, newString)
+		if at := strings.Index(content, newString); at >= 0 {
+			data["replacement_line"] = strings.Count(content[:at], "\n") + 1
 		}
 	}
-	return truncateEditPreview(lines[0])
-}
-
-func truncateEditPreview(line string) string {
-	const max = 120
-	line = strings.TrimSpace(line)
-	if len(line) <= max {
-		return line
+	changes, total, ok := sourceview.ForeignChanges(ctx, tc, abs)
+	if !ok {
+		return &toolrejection.ToolReject{Code: "EDIT_OLD_STRING_NOT_FOUND", Data: data}
 	}
-	return runeclamp.ClampBytes(line, max)
+	rows := make([]map[string]any, 0, len(changes))
+	for _, change := range changes {
+		row := map[string]any{"actor": change.Actor, "op": change.Op, "at": change.At}
+		if change.Detail != "" {
+			row["detail"] = change.Detail
+		}
+		rows = append(rows, row)
+	}
+	data["changed_by"] = rows
+	data["change_count"] = total
+	return &toolrejection.ToolReject{Code: "EDIT_TARGET_CHANGED_BY_OTHERS", Data: data}
 }

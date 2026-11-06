@@ -14,7 +14,7 @@ import (
 
 func invocationContext(ctx context.Context, tc tools.ToolContext) context.Context {
 	ctx = people.WithoutCaller(ctx)
-	ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
+	ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
 	if tc.Invocation.ToolName != "" && tc.Invocation.Contract.Owner != "" {
 		ctx = tools.WithRecoveryContract(ctx, tc.Invocation.ToolName, tc.Invocation.Contract)
 	}

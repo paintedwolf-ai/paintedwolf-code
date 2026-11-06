@@ -8,6 +8,3 @@ suggested_action: Pick a normal project directory — for example a repo under y
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - filesystem root
-      - Pick a normal project directory

@@ -60,7 +60,7 @@ func TestStoredToolImageIsAttachedWithItsBytes(t *testing.T) {
 	if image.Mime != "image/png" || image.Base64 != base64.StdEncoding.EncodeToString(png) {
 		t.Fatalf("image = %+v", image)
 	}
-	if !strings.Contains(out[0].Content, "⟦D:host:perception⟧") || !strings.Contains(out[0].Content, `"image":"attached"`) {
+	if !strings.Contains(out[0].Content, "Data from host (perception):") || !strings.Contains(out[0].Content, `"image":"attached"`) {
 		t.Fatalf("content lacks the attached fact: %q", out[0].Content)
 	}
 }

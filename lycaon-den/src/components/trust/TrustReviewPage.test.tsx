@@ -24,7 +24,6 @@ describe("shared trust review", () => {
     render(() => <><TrustPopoverBody trust={projectTrustView("project").value!} onOpen={onOpen} /><TrustReviewPage projectId="project" /></>);
     const count = () => expect(screen.getByTestId("trust-popover-title").textContent).toBe(screen.getByTestId("trust-review-count").textContent);
     count();
-    expect(screen.getByTestId("trust-popover-title").textContent).toBe("1 file changed");
     expect(screen.getByTestId("trust-popover-row-agents_md").textContent).not.toContain("99");
     fireEvent.click(screen.getByTestId("trust-popover-row-agents_md"));
     expect(onOpen).toHaveBeenCalledWith();

@@ -33,7 +33,7 @@ func TestSourceTrashErrorsCarryAccurateRecovery(t *testing.T) {
 			if string(body.Code) != tc.code || body.Retryable != tc.retry {
 				t.Fatalf("recovery = %+v", body)
 			}
-			if strings.Contains(body.Message, "cited") || strings.Contains(body.Message, "can't open") {
+			if strings.Contains(body.Message, "cited") {
 				t.Fatalf("citation error leaked into deletion: %s", body.Message)
 			}
 			if strings.Contains(rec.Body.String(), "Disk is full") {

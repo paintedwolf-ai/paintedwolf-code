@@ -47,7 +47,7 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission *t
 	if err != nil {
 		return nil, nil, err
 	}
-	if model.ToolName != "command" || model.ToolCallID != tc.Identity.ToolCallID {
+	if !programModelTool(model.ToolName) || model.ToolCallID != tc.Identity.ToolCallID {
 		return nil, nil, fmt.Errorf("program observation model call changed")
 	}
 	frame.lifetime.mu.Lock()
@@ -63,5 +63,5 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission *t
 }
 
 func (p *programPolicyObservation) evaluate(ctx context.Context, bp *toolfeedback.BlockPlane, anchor, profile string) error {
-	return bp.EvaluateProgram(ctx, anchor, profile, p.submitted, p.operation, p.frame.retainProgramFacts)
+	return bp.EvaluateProgram(ctx, anchor, p.frame.lifetime.model.ToolName, profile, p.submitted, p.operation, p.frame.retainProgramFacts)
 }

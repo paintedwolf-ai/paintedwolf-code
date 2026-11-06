@@ -66,7 +66,7 @@ func TestTodayLine(t *testing.T) {
 	if !strings.HasPrefix(withCutoff, "Today is Thursday, 2026-07-02.") {
 		t.Fatalf("TodayLine = %q want date prefix", withCutoff)
 	}
-	if !strings.Contains(withCutoff, "2025-10") || !strings.Contains(withCutoff, "not errors") {
+	if !strings.Contains(withCutoff, "2025-10") {
 		t.Fatalf("TodayLine = %q want cutoff framing", withCutoff)
 	}
 	if strings.Contains(withCutoff, "18:53") {

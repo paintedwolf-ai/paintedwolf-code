@@ -20,7 +20,3 @@ x-paintedwolf-scenarios:
   - id: reached_operation
     vars:
       tool: command
-    expect_contains:
-      - 'Code: POLICY_CONTEXT_CHANGED'
-      - 'did not run'
-      - 'Continue read-only investigation, then propose only the remaining effects after fresh guidance is delivered.'

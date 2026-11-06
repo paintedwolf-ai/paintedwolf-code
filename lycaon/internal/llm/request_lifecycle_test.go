@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -80,9 +80,7 @@ func TestRequestLifecycleScreensBeforeTransportAndRecordsSafeTimings(t *testing.
 		t.Fatalf("requests = %d", requests.Load())
 	}
 	text := logs.text()
-	if strings.Contains(text, modelScreenGitHubToken) {
-		t.Fatal("timing log retained secret")
-	}
+	exposure.Absent(t, text, modelScreenGitHubToken)
 	phases := map[string][]string{}
 	for _, line := range bytes.Split([]byte(text), []byte("\n")) {
 		if len(line) == 0 {

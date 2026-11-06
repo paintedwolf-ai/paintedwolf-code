@@ -94,6 +94,7 @@ repairs carry the validating tool identity; unrelated operation schemas do not
 authorize a replacement outer call. Unproven name guesses and remedies are not
 part of the recovery contract. Canonical rejection identities remain readable.
 
+The command language v1 summary output projects follow-up actions onto `command` arguments. Native `summarize --cursor` continues the same path and focus. This command interface is unpublished; released structured summary results and internal routing identities retain their existing shape and meaning.
 
 The compiled catalog freezes the language, operation definitions and limits for each invocation. The model call owns the aggregate receipt; child identities are host operations. Persistence and wire consumers follow the classifications below.
 
@@ -176,8 +177,8 @@ ledger. A screened view's digest never replaces the original reviewed digest.
 
 A run pins its definition by id and version (`durable-db` state). Released
 workflow definitions are contracts for existing runs. An unreleased candidate
-can be corrected under its current version; the security workflow remains
-`2.0.0` until that candidate ships.
+can be corrected under its current version. Security workflow `2.0.0` shipped
+in product `v1.0.2`; command-oriented guidance belongs to workflow `2.0.1`.
 
 Released workflow content changes receive a new workflow version. The prior
 version is stored byte-for-byte under its pack's `archive/<workflow>/<version>/`,

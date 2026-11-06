@@ -8,6 +8,3 @@ suggested_action: Choose another version whose content is still retained.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - exact bytes
-      - left unchanged

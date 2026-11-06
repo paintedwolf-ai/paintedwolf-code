@@ -337,13 +337,18 @@ func sealRevisionPins(ctx context.Context, tx *sql.Tx, program, executionID stri
 	return err
 }
 
+// revisionPinCompressors keeps compressor state across a wide read's segments.
+var revisionPinCompressors = sync.Pool{New: func() any { return gzip.NewWriter(io.Discard) }}
+
 func writeRevisionPinSegment(ctx context.Context, tx *sql.Tx, program, executionID string, first int, pins []storedPin) error {
 	plain, err := json.Marshal(pins)
 	if err != nil {
 		return err
 	}
 	var body bytes.Buffer
-	writer := gzip.NewWriter(&body)
+	writer := revisionPinCompressors.Get().(*gzip.Writer)
+	defer revisionPinCompressors.Put(writer)
+	writer.Reset(&body)
 	if _, err := writer.Write(plain); err != nil {
 		return err
 	}

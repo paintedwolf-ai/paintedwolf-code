@@ -1,6 +1,7 @@
 import type { CitationGrounding, CitationGroundingCheck, CitationVerdict } from "../../api/types.ts";
 import {
   citationVerdictLabel,
+  GROUNDING_HEADLINE_EVIDENCE_OPTIONAL,
   GROUNDING_HEADLINE_GROUNDED,
   GROUNDING_HEADLINE_NO_WORK,
   GROUNDING_HEADLINE_PARTIAL,
@@ -13,7 +14,7 @@ import {
   type EvidenceRecordView,
 } from "./evidence-shape-model.ts";
 
-export type CitationGroundingOutcome = "traced" | "partial";
+export type CitationGroundingOutcome = "traced" | "partial" | "evidence_optional";
 
 export type CitationGroundingCheckView = {
   id: string;
@@ -53,6 +54,8 @@ export type CitationGroundingCitedEvidenceView = {
   handle?: string;
   path?: string;
   line?: number;
+  /** Last line of an inclusive range starting at line. */
+  endLine?: number;
   excerpt?: string;
   verdict?: CitationVerdict;
   verdictLabel?: string;
@@ -95,6 +98,8 @@ export function citationGroundingHadTraceableWork(
   grounding?: CitationGrounding | null,
 ): boolean {
   if (!grounding) return false;
+  // Traced is true on exempt speech only because nothing failed to trace.
+  if (grounding.evidence_optional) return false;
   if (grounding.hint_code?.trim()) return true;
   if ((grounding.prose_leak_count ?? 0) > 0) return true;
   if ((grounding.prose_advisory_count ?? 0) > 0) return true;
@@ -104,6 +109,10 @@ export function citationGroundingHadTraceableWork(
   return checks.some(citationGroundingCheckHadTraceableWork);
 }
 
+/**
+ * Whether the host attached an audit, which is its accept signal for a row.
+ * Exempt speech has one; that says nothing about sources being checked.
+ */
 export function citationGroundingPresent(
   grounding?: CitationGrounding | null,
 ): boolean {
@@ -149,11 +158,14 @@ function mapCheck(check: CitationGroundingCheck): CitationGroundingCheckView {
 export function buildCitationGroundingView(
   grounding: CitationGrounding,
 ): CitationGroundingView {
-  const checks = (grounding.checks ?? []).map(mapCheck);
+  const evidenceOptional = Boolean(grounding.evidence_optional);
+  const checks = evidenceOptional ? [] : (grounding.checks ?? []).map(mapCheck);
   const hadTraceableWork = citationGroundingHadTraceableWork(grounding);
   const hostAssembled = Boolean(grounding.host_assembled);
   const failedCheck = checks.find((c) => c.status === "failed");
-  const headline = !hadTraceableWork
+  const headline = evidenceOptional
+    ? GROUNDING_HEADLINE_EVIDENCE_OPTIONAL
+    : !hadTraceableWork
     ? GROUNDING_HEADLINE_NO_WORK
     : grounding.traced || hostAssembled
       ? GROUNDING_HEADLINE_GROUNDED
@@ -161,7 +173,7 @@ export function buildCitationGroundingView(
         ? groundingHeadlinePartialWithCheck(failedCheck.label)
         : GROUNDING_HEADLINE_PARTIAL;
   return {
-    outcome: grounding.traced ? "traced" : "partial",
+    outcome: evidenceOptional ? "evidence_optional" : grounding.traced ? "traced" : "partial",
     headline,
     hostAssembled,
     sourceLabel: hostAssembled ? GROUNDING_SOURCE_HOST : GROUNDING_SOURCE_AGENT,
@@ -186,6 +198,7 @@ export function buildCitationGroundingView(
       handle: item.handle?.trim() || undefined,
       path: item.path?.trim() || undefined,
       line: item.line,
+      endLine: item.end_line,
       excerpt: item.excerpt?.trim() || undefined,
       verdict: item.verdict,
       verdictLabel: citationVerdictLabel(item.verdict),

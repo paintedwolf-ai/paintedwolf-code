@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/tools/native/command/command.ProgramRuntime",
+  "kind": "runtime_service",
+  "workstream": "shared-verification-runtime",
+  "disposition": "retain",
+  "reason": "Retain the single program lifetime shared by command and verify. Foreground continuation transfers output custody and settlement of the original evaluation; it does not replay statements or introduce another authority owner. Admission, review and persistence remain with their existing collaborators. Continuation, cancellation, screened-stream ordering and parked-verification contracts cover this boundary. Retain the measured ceiling; growth requires renewed review.",
+  "reviewed_commit": "4738f54a38b1fc727d9c144fdccb77e043e0d002",
+  "ceiling": 24,
+  "boundaries": {
+    "lycaon/internal/tools/native/command/program_continue_test.go": "118121800a4e8683a057b6124e2da4ce1feb74a57f79a3ada58485285d5358e9",
+    "lycaon/internal/tools/native/command/program_continue_stream_test.go": "9bdbd8e4826f11e79583a9f1712b7341adff930d31c0dc2429ccbd68b3221582",
+    "lycaon/internal/tools/native/command/verify_program_park_test.go": "7bc32bb756c8e0fec108fb29eff2011839eb2a48eaad0f046ce6c11f1da17338"
+  },
+  "reviewed_shape": "08398093733b1c39c97f65668d1aa970280519f1e02ca5dcaca37b3730072287"
+}

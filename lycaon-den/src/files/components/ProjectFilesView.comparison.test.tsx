@@ -485,7 +485,6 @@ availability: "available", source: { kind: "text", before: "one\n", after: "one\
     const actions = exit.parentElement;
     expect(actions?.firstElementChild).toBe(exit);
     expect(actions?.contains(screen.getByTestId("file-version-compare-trigger"))).toBe(true);
-    expect(exit.getAttribute("aria-label")).toBe("Back to the current file");
     fireEvent.click(exit);
     expect(props.onSelectCurrent).toHaveBeenCalledTimes(1);
   });

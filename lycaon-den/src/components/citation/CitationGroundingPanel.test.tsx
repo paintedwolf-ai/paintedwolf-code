@@ -329,7 +329,10 @@ describe("CitationGroundingPanel provenance presentation", () => {
     };
     render(() => <CitationGroundingPanel view={view} />);
     const advisory = screen.getByTestId("citation-grounding-advisory");
+    expect(advisory.textContent).toContain("1 source mention outside the typed citations");
     expect(advisory.textContent).toContain("surfaced for review");
+    // Inline citations in a narrative are the contract, so the narrative is not what lowers trust.
+    expect(advisory.textContent).not.toMatch(/lower-trust|in narrative/);
     expect(advisory.classList.contains("den-citation-grounding-context--advisory")).toBe(
       true,
     );

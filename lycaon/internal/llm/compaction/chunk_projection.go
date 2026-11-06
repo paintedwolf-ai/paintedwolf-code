@@ -29,7 +29,7 @@ func (c *SimpleCompactor) chunkRevision(ctx context.Context, info SessionInfo, m
 		Prompt, SummaryModel, Model, ProviderID, Encoding, AuthorityNotice string
 		Minimum                                                            int
 		MaxToolSpillBytes                                                  int
-	}{compactionRevision, msg, c.cfg, ch.Class, prompt, model, info.Model, info.ProviderID, modelinfo.DefaultModelContextWindows().TextEncoding(info.Model), transcript.ContentAuthorityNotice(), minSavings, info.MaxToolSpillBytes})
+	}{compactionRevision, msg, c.cfg, ch.Class, prompt, model, info.Model, info.ProviderID, modelinfo.DefaultModelContextWindows().TextEncoding(info.Model), transcript.ContentAuthorityNotice(transcript.AudienceUtility), minSavings, info.MaxToolSpillBytes})
 	return revision
 }
 

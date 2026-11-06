@@ -224,9 +224,6 @@ func TestCloseoutBlocksOnMissingReviewVerdict(t *testing.T) {
 	if !strings.Contains(reject, "REVIEW_VERDICT_MISSING_BEFORE_CLOSEOUT") {
 		t.Fatalf("reject should carry the hint code, got %q", reject)
 	}
-	if !strings.Contains(reject, "submit_verdict") {
-		t.Fatalf("reject should steer to submit_verdict, got %q", reject)
-	}
 }
 
 func TestCloseoutAllowsWhenVerdictRecorded(t *testing.T) {

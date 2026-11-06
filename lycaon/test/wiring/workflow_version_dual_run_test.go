@@ -78,8 +78,8 @@ func TestWorkflowVersionDualRun_Concurrent100And200Isolation(t *testing.T) {
 	if !ok || active100.Archive != "security-survey/1.0.0" {
 		t.Fatalf("1.0.0 run archive = %+v, want security-survey/1.0.0", active100)
 	}
-	if active200, ok := h.Workflows.Manager.Policy.ActiveManifest(ctx, sessB.ID); !ok || active200.Archive != "" {
-		t.Fatalf("2.0.0 run archive = %+v, want the live definition", active200)
+	if active200, ok := h.Workflows.Manager.Policy.ActiveManifest(ctx, sessB.ID); !ok || active200.Archive != "security-survey/2.0.0" {
+		t.Fatalf("2.0.0 run archive = %+v, want security-survey/2.0.0", active200)
 	}
 
 	catalog, err := feedback.LoadGateFeedbackCatalog()

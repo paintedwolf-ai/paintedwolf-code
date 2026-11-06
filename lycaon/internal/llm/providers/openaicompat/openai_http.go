@@ -159,26 +159,25 @@ func (p *Provider) streamChatCompletionFromResponse(ctx context.Context, req mod
 				sawTerminal = true
 			}
 			delta := choice.Delta
-			if delta.Content != "" {
-				sawOutput = true
-				if !modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Content: delta.Content}) {
-					return
-				}
-			}
-			if reasoning := reasoningWireText(delta.Reasoning, delta.ReasoningContent); reasoning != "" {
-				if !modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Reasoning: reasoning}) {
-					return
-				}
+			output := modelcall.StreamChunk{
+				Content:          delta.Content,
+				Reasoning:        reasoningWireText(delta.Reasoning, delta.ReasoningContent),
+				ReasoningPresent: len(delta.ReasoningDetails) > 0,
 			}
 			if len(delta.ReasoningDetails) > 0 {
 				before := reasoningAcc.reasoningText()
 				reasoningAcc.merge(delta.ReasoningDetails)
-				// Block-only reasoning advances stream liveness.
-				if text := strings.TrimPrefix(reasoningAcc.reasoningText(), before); text != "" &&
-					reasoningWireText(delta.Reasoning, delta.ReasoningContent) == "" {
-					if !modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Reasoning: text}) {
-						return
-					}
+				if output.Reasoning == "" {
+					output.Reasoning = strings.TrimPrefix(reasoningAcc.reasoningText(), before)
+				}
+			}
+			if output.Content != "" {
+				sawOutput = true
+			}
+			// A wire delta's channels must reach classification together.
+			if output.Content != "" || output.Reasoning != "" || output.ReasoningPresent {
+				if !modelcall.SendChunk(ctx, ch, output) {
+					return
 				}
 			}
 			if len(delta.ToolCalls) > 0 {

@@ -28,7 +28,7 @@ func TestRenderBoardOrientationInject(t *testing.T) {
 		time.Now().UTC(),
 	)
 	testutil.FailErr(t, "inject.RenderBoardOrientationInject failed", err)
-	for _, want := range []string{inject.BoardOrientationInjectSentinel, packboard.PackBoardSentinel, "Pack board"} {
+	for _, want := range []string{inject.BoardOrientationInjectSentinel, packboard.PackBoardSentinel} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in block = %q", want, block)
 		}

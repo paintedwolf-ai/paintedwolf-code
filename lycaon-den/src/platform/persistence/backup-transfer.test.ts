@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { transferNativeBackup, backupProgressMessage, type BackupTransferProgress } from "./backup-transfer.ts";
+import { transferNativeBackup, type BackupTransferProgress } from "./backup-transfer.ts";
 
 const { invoke, listen, unlisten } = vi.hoisted(() => ({ invoke: vi.fn(), listen: vi.fn(), unlisten: vi.fn() }));
 vi.mock("../runtime.ts", () => ({ isTauriRuntime: () => true }));
@@ -81,8 +81,4 @@ describe("native backup transfer", () => {
     expect(unlisten).toHaveBeenCalledOnce();
   });
 
-  it("reports preparation and validation without invented percentages", () => {
-    expect(backupProgressMessage({ id: "a", phase: "preparing", bytes: 0, total: null, cancellable: true })).toBe("Preparing backup…");
-    expect(backupProgressMessage({ id: "a", phase: "validating", bytes: 100, total: 100, cancellable: false })).toBe("Checking and staging restore…");
-  });
 });

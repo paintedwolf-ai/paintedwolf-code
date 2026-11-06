@@ -121,13 +121,18 @@ func CoordinatorProfileVisibleToolsFromProfiles(profiles []sandbox.ToolProfile) 
 	return nil, fmt.Errorf("tool profile %q not found", CoordinatorProfileID)
 }
 
-// LoadCoordinatorSurfaceCard returns the surface banner copy.
-func LoadCoordinatorSurfaceCard(surfaceID string) (label, rule string, err error) {
+// LoadCoordinatorSurfaceCard returns the surface banner copy and whether the
+// surface publishes text accompanying tool calls.
+func LoadCoordinatorSurfaceCard(surfaceID string) (SurfaceCard, error) {
 	row, err := loadCoordinatorSurfaceRow(surfaceID)
 	if err != nil {
-		return "", "", err
+		return SurfaceCard{}, err
 	}
-	return strings.TrimSpace(row.Card.Label), strings.TrimSpace(row.Card.Rule), nil
+	return SurfaceCard{
+		Label:         strings.TrimSpace(row.Card.Label),
+		Rule:          strings.TrimSpace(row.Card.Rule),
+		PublishesText: row.PublishesMidTurnText,
+	}, nil
 }
 
 func loadCoordinatorSurfaceRow(surfaceID string) (surfacecatalog.Surface, error) {
@@ -166,14 +171,20 @@ func LoadCoordinatorSurfaceLoadable(surfaceID string) ([]string, error) {
 
 // MergeCoordinatorKickPolicyVars adds coordinator kick policy variables.
 func MergeCoordinatorKickPolicyVars(into map[string]any) error {
-	if into == nil {
-		return fmt.Errorf("nil template vars map")
-	}
 	visible, err := CoordinatorProfileVisibleTools()
 	if err != nil {
 		return err
 	}
-	for k, v := range CoordinatorPolicyTemplateVars(visible, nil) {
+	return MergeCoordinatorKickVarsForTools(into, visible)
+}
+
+// MergeCoordinatorKickVarsForTools answers tool facts from the tools the next
+// model call can reach.
+func MergeCoordinatorKickVarsForTools(into map[string]any, reachable []string) error {
+	if into == nil {
+		return fmt.Errorf("nil template vars map")
+	}
+	for k, v := range CoordinatorPolicyTemplateVars(reachable, nil) {
 		if _, exists := into[k]; !exists {
 			into[k] = v
 		}

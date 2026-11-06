@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"go/format"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -16,95 +17,109 @@ import (
 )
 
 func main() {
-	outGo := flag.String("out-go", "", "output path for approval_tiers.generated.go")
-	outContractGo := flag.String("out-contract-go", "", "output path for contracts.generated.go")
-	check := flag.Bool("check", false, "exit 1 if any output is stale")
-	flag.Parse()
+	if err := run(os.Args[1:], os.Stdout); err != nil {
+		fatal(err)
+	}
+}
 
+func run(args []string, stdout io.Writer) error {
+	return runWithManifest(args, stdout, nativemanifest.Load)
+}
+
+func runWithManifest(args []string, stdout io.Writer, load func() (nativemanifest.Config, error)) error {
+	flags := flag.NewFlagSet("codegen-native-tool-contracts", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	outGo := flags.String("out-go", "", "output path for approval_tiers.generated.go")
+	outContractGo := flags.String("out-contract-go", "", "output path for contracts.generated.go")
+	check := flags.Bool("check", false, "exit 1 if any output is stale")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
 	if *outGo == "" || *outContractGo == "" {
-		fatal(fmt.Errorf("--out-go and --out-contract-go are required"))
+		return fmt.Errorf("--out-go and --out-contract-go are required")
 	}
 
-	cfg, err := nativemanifest.Load()
+	cfg, err := load()
 	if err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateToolContracts(); err != nil {
-		fatal(err)
+		return err
 	}
 	// Grant scopes may name native or approval-catalog tools.
 	known := func(tool string) bool {
 		if cfg.HasTool(tool) {
 			return true
 		}
-		_, ok := cfg.ApprovalReversibility[tool]
+		_, ok := cfg.Reversibility(tool)
 		return ok
 	}
 	if err := cfg.ValidateGrantTargetScopes(known); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateSpawnsProcess(known); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateSurveyNeutral(known); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateBoundedInProcess(known); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateChunkablePayload(known); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateDetachAfterBudget(known); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateSessionScope(known); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateSocketArg(known); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateSecretReferenceSurface(known); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateSecretReferenceArgs(known); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateGrantIdentityNeutralArgs(known); err != nil {
-		fatal(err)
+		return err
 	}
 	// Path mutations include host-produced tools without model schemas.
 	knownOrHostProduced := func(tool string) bool {
 		return known(tool) || cfg.HasHostProducedTool(tool)
 	}
 	if err := cfg.ValidateMutatesPath(knownOrHostProduced); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateMutatesContent(knownOrHostProduced); err != nil {
-		fatal(err)
+		return err
 	}
 	if err := cfg.ValidateMultiRoot(known); err != nil {
-		fatal(err)
+		return err
 	}
 
 	reversible, recoverable, irreversible := cfg.ToolsByTier()
+	reversibleOps, recoverableOps, irreversibleOps := cfg.OperationsByTier()
 	pathScoped := cfg.PathScopedTools()
 	commandScoped := cfg.CommandScopedTools()
 	processSpawning := cfg.ProcessSpawningTools()
 	pathMutating := cfg.PathMutatingTools()
-	goBody := renderGo(reversible, recoverable, irreversible, commandScoped, pathScoped, processSpawning, pathMutating)
+	goBody := renderGo(reversible, recoverable, irreversible, reversibleOps, recoverableOps, irreversibleOps, commandScoped, pathScoped, processSpawning, pathMutating)
 	contractBody, err := renderToolContracts(cfg)
 	if err != nil {
-		fatal(err)
+		return err
 	}
 
 	goBody, err = gofmtSource(goBody)
 	if err != nil {
-		fatal(err)
+		return err
 	}
 	contractBody, err = gofmtSource(contractBody)
 	if err != nil {
-		fatal(err)
+		return err
 	}
 
 	outputs := []struct {
@@ -120,22 +135,25 @@ func main() {
 		for _, out := range outputs {
 			existing, err := os.ReadFile(out.path) // #nosec G304 -- path from Taskfile
 			if err != nil || string(existing) != string(out.body) {
-				fatal(fmt.Errorf("stale %s (%s) — run ./task codegen:native-tool-contracts", out.path, out.hint))
+				return fmt.Errorf("stale %s (%s) — run ./task codegen:native-tool-contracts", out.path, out.hint)
 			}
 		}
-		fmt.Fprintln(os.Stdout, "native tool contract codegen OK")
-		return
+		_, err := fmt.Fprintln(stdout, "native tool contract codegen OK")
+		return err
 	}
 
 	for _, out := range outputs {
 		if err := os.MkdirAll(filepath.Dir(out.path), 0o750); err != nil {
-			fatal(err)
+			return err
 		}
 		if err := os.WriteFile(out.path, out.body, 0o600); err != nil { // #nosec G306 -- generated artifact
-			fatal(err)
+			return err
 		}
-		fmt.Fprintln(os.Stdout, "wrote", out.path)
+		if _, err := fmt.Fprintln(stdout, "wrote", out.path); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // gofmtSource canonicalizes generated Go before drift checks.
@@ -147,7 +165,7 @@ func gofmtSource(body []byte) ([]byte, error) {
 	return formatted, nil
 }
 
-func renderGo(reversible, recoverable, irreversible, commandScoped, pathScoped, processSpawning, pathMutating []string) []byte {
+func renderGo(reversible, recoverable, irreversible, reversibleOps, recoverableOps, irreversibleOps, commandScoped, pathScoped, processSpawning, pathMutating []string) []byte {
 	var b bytes.Buffer
 	b.WriteString("// Code generated by codegen-native-tool-contracts. DO NOT EDIT.\n\n")
 	b.WriteString("package settings\n\n")
@@ -156,6 +174,11 @@ func renderGo(reversible, recoverable, irreversible, commandScoped, pathScoped, 
 	writeGoSlice(&b, "reversibleTools", reversible)
 	writeGoSlice(&b, "recoverableTools", recoverable)
 	writeGoSlice(&b, "irreversibleTools", irreversible)
+	b.WriteString("\n")
+	b.WriteString("\t// Native operations reached through command.\n")
+	writeGoSlice(&b, "reversibleOperations", reversibleOps)
+	writeGoSlice(&b, "recoverableOperations", recoverableOps)
+	writeGoSlice(&b, "irreversibleOperations", irreversibleOps)
 	b.WriteString("\n")
 	b.WriteString("\t// Command grants match exact structured arguments.\n")
 	writeGoSlice(&b, "commandScopedTools", commandScoped)
@@ -266,19 +289,6 @@ func renderToolContracts(cfg nativemanifest.Config) ([]byte, error) {
 		b.WriteString("\t},\n")
 	}
 	b.WriteString("}\n\n")
-	b.WriteString("var compiledCompanions = map[string][]string{\n")
-	for _, tool := range cfg.CompanionTools() {
-		b.WriteString("\t")
-		b.WriteString(strconv.Quote(tool))
-		b.WriteString(": {\n")
-		for _, companion := range cfg.CompanionsOf(tool) {
-			b.WriteString("\t\t")
-			b.WriteString(strconv.Quote(companion))
-			b.WriteString(",\n")
-		}
-		b.WriteString("\t},\n")
-	}
-	b.WriteString("}\n\n")
 	b.WriteString("var compiledGrantIdentityNeutralArgs = map[string][]string{\n")
 	for _, row := range cfg.GrantIdentityNeutralArgRows() {
 		b.WriteString("\t")
@@ -326,6 +336,21 @@ func renderToolContracts(cfg nativemanifest.Config) ([]byte, error) {
 		b.WriteString(strconv.Quote(tool))
 		b.WriteString(": MultiRoot")
 		b.WriteString(multiRootIdent(multiRoot[tool]))
+		b.WriteString(",\n")
+	}
+	b.WriteString("}\n\n")
+	b.WriteString("// Retired tools whose successor is content rather than a call.\n")
+	b.WriteString("var compiledRetiredToContent = map[string]string{\n")
+	retired := make([]string, 0, len(cfg.RetiredToContentContract))
+	for tool := range cfg.RetiredToContentContract {
+		retired = append(retired, tool)
+	}
+	sort.Strings(retired)
+	for _, tool := range retired {
+		b.WriteString("\t")
+		b.WriteString(strconv.Quote(tool))
+		b.WriteString(": ")
+		b.WriteString(strconv.Quote(cfg.RetiredToContentContract[tool]))
 		b.WriteString(",\n")
 	}
 	b.WriteString("}\n")

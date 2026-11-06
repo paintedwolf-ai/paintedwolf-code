@@ -1,0 +1,5 @@
+steps:
+  - program: ["cat", "{{ paintedwolf.path }}"]
+    complete: true
+    say: "Inspect the file with {{ call }}."
+    otherwise: "This request cannot read the file; report what the edit needs."

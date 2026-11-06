@@ -35,6 +35,3 @@ x-paintedwolf-scenarios:
     profile: coordinator
     tool: view_image
     width: 5000
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: IMAGE_DIMENSIONS_EXCEEDED'

@@ -59,7 +59,7 @@ func TestRenderWorkerTaskAssignment_rendersStructuredCharter(t *testing.T) {
 	if strings.Contains(out, "User task (parent session):") {
 		t.Fatalf("parent user task must not appear in worker charter:\n%s", out)
 	}
-	for _, want := range []string{"Goal:", "Expand engine.py", "Known facts:", "Constraints:", "Done when:", "Context references:", "render(state: ViewState): void", "private snapshot"} {
+	for _, want := range []string{"Goal:", "Expand engine.py", "Constraints:", "render(state: ViewState): void"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing charter section %q in %q", want, out)
 		}
@@ -91,9 +91,6 @@ func TestRenderWorkerTaskAssignmentForwardsAttachmentsWhenBriefSet(t *testing.T)
 	if strings.Contains(out, body) || strings.Contains(out, "SECRET-BODY") {
 		t.Fatalf("assignment must not copy attachment body:\n%s", out)
 	}
-	if !strings.Contains(out, "Parent attachments") {
-		t.Fatalf("missing attachment block:\n%s", out)
-	}
 	if !strings.Contains(out, "127.0.0.1-recording.json") {
 		t.Fatalf("missing filename:\n%s", out)
 	}
@@ -103,7 +100,7 @@ func TestRenderWorkerTaskAssignmentForwardsAttachmentsWhenBriefSet(t *testing.T)
 	if !strings.Contains(out, "33309898") {
 		t.Fatalf("missing size:\n%s", out)
 	}
-	if !strings.Contains(out, `jq(path="prompt-attachments/b3a260fb/127.0.0.1-recording.json")`) {
+	if !strings.Contains(out, `command(command="jq . prompt-attachments/b3a260fb/127.0.0.1-recording.json")`) {
 		t.Fatalf("missing jq hint:\n%s", out)
 	}
 }

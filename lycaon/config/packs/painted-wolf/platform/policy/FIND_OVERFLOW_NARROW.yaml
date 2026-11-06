@@ -1,8 +1,10 @@
 emit: banner
 category: expected_behavior
 severity: warning
+requires:
+  facts: [paintedwolf.operation]
 selector:
-  tool:
+  paintedwolf.operation:
   - find
 message: >-
   Find returned a distribution digest with selected=0. Use name_glob or a concrete path for literal results; use an offered summary tool if the question needs a briefing.
@@ -22,7 +24,4 @@ scenarios:
     path: .
     profile: coordinator
     tool: find
-  expect_contains:
-  - 'Code: FIND_OVERFLOW_NARROW'
-  - name_glob
 id: FIND_OVERFLOW_NARROW

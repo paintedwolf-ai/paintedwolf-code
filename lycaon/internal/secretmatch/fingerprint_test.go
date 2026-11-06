@@ -1,6 +1,7 @@
 package secretmatch
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,9 +25,7 @@ func TestFingerprinterStableAndDeviceKeyed(t *testing.T) {
 	if got == first.Fingerprint(secret+"x") || got == second.Fingerprint(secret) {
 		t.Fatal("fingerprint did not bind exact bytes and device key")
 	}
-	if strings.Contains(string(got), secret) {
-		t.Fatal("fingerprint contains the secret")
-	}
+	exposure.Absent(t, string(got), secret)
 }
 
 func TestFingerprintKeyPersistsInPrivateCredentialStore(t *testing.T) {

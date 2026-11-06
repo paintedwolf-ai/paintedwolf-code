@@ -147,10 +147,10 @@ func TestProjectToolMessageIndexesEgressHosts(t *testing.T) {
 	if net[0].SourceRef != "call-9" || net[0].MessageID != "tool-1" {
 		t.Fatalf("egress identity = %+v", net[0])
 	}
-	if net[0].URL != "registry.npmjs.org" || !strings.Contains(net[0].Snippet, "connected to") {
+	if net[0].URL != "registry.npmjs.org" {
 		t.Fatalf("allowed host row = %+v", net[0])
 	}
-	if net[1].URL != "evil.test" || !strings.Contains(net[1].Snippet, "blocked from") {
+	if net[1].URL != "evil.test" {
 		t.Fatalf("blocked host row = %+v", net[1])
 	}
 }

@@ -1,0 +1,6 @@
+steps:
+  - when: "size(paintedwolf.missing_summary_job_ids) == 0"
+    tool: "recall"
+    args:
+      query: "handle:<handle>"
+    say: "Recover an observation the audit could not trace with {{ call }} before re-running its tool."

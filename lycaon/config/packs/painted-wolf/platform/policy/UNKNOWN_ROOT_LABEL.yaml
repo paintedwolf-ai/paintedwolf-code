@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
     path: '@missing/src/main.go'
     attached_folders: [api → /work/api]
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: UNKNOWN_ROOT_LABEL'

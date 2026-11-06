@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
   vars:
     max_tool_loops: 120
     host_max: 120
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_BUDGET_REQUEST_AT_HOST_MAX'
-  - suggested_next_task

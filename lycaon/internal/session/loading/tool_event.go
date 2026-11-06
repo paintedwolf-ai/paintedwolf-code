@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -97,10 +96,8 @@ func (m *Service) toolEventOfferedTools(ctx context.Context, sess *api.Session, 
 			offered[name] = true
 		}
 	}
-	for _, with := range toolcontract.WithCompanions([]string{tool}) {
-		if with = strings.TrimSpace(with); with != "" {
-			offered[with] = true
-		}
+	if tool = strings.TrimSpace(tool); tool != "" {
+		offered[tool] = true
 	}
 	return offered
 }

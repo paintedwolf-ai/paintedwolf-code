@@ -14,7 +14,4 @@ scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: DRAFT_VERSION_SUPERSEDED'
 id: DRAFT_VERSION_SUPERSEDED

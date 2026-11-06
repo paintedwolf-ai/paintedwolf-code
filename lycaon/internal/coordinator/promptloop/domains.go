@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -69,6 +70,8 @@ type ModelDeps struct {
 }
 
 type ToolsDeps struct {
+	// ProgramReach freezes which native programs a model turn can run.
+	ProgramReach                func(ctx context.Context, profileID, surfaceID string) toolreach.Programs
 	Invocations                 invocation.Recorder
 	VisualStore                 visual.Store
 	AgentPresence               *agentpresence.Tracker
@@ -84,9 +87,9 @@ type ToolsDeps struct {
 	CompactToolWire             func(ctx context.Context, sess *api.Session, toolName, content string, opts compaction.CompactToolWireOpts) (string, *api.CompactedChunkMeta)
 	HeldCalls                   HeldCallRunner
 	HeldCallBudget              time.Duration
+	CommitProgramObservation    func(ctx context.Context, sessionID, tool string, receipt *api.CommandProgramReceipt, content string) (string, error)
 	CommitEvidenceToolResult    func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (handle string, patchedContent string, err error)
 	RecordSourceRunEvidence     func(ctx context.Context, sessionID string, sess *api.Session, toolName string, run tools.SourceRunCapture)
-	ConfirmVerifyResult         func(sess *api.Session, content string) string
 }
 
 type CloseoutDeps struct {
@@ -95,25 +98,25 @@ type CloseoutDeps struct {
 	HintConfig             *guidance.HintConfig
 	EvaluateContentAnchor  func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (reject *guidance.Refusal, blocked bool, content string, transformed bool)
 	EvaluateCloseoutBlock  func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error)
-	ProseCitationGrounding func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, prose, surfaceID string) *api.CitationGrounding
+	EvaluateMidTurnNote    func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) error
+	AssembleLedgerCloseout func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draft guidance.CloseoutDraft, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)
+	CheckRunReportDocument func(ctx context.Context, sessionID string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error)
 	EvidenceLedger         guidance.CloseoutEvidenceReader
 	CloseoutStallState     func(ctx context.Context, sessionID string) guidance.RetainedCloseout
-	AssembleLedgerCloseout func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draftedContent string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)
-	CheckRunReportDocument func(ctx context.Context, sessionID string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error)
 	CloseoutTrackingDeps
 }
 
 type CloseoutTrackingDeps struct {
 	TurnCloseoutNudge                   TurnCloseoutNudge
 	IterationRunwayNudge                IterationRunwayNudge
-	BeforeFinishNoToolTurn              func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, lastAssistant, surfaceID string, workersIdle bool, turnTools []string, invokeAllowed bool) (reject *guidance.Refusal, block bool)
+	BeforeFinishNoToolTurn              func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, lastAssistant string, draft guidance.CloseoutDraft, surfaceID string, workersIdle bool, turnTools []string, invokeAllowed bool) (reject *guidance.Refusal, block bool)
 	CitationRoots                       func(ctx context.Context, sess *api.Session) evidence.CitationRoots
 	OnGroundedSynthesisAccepted         func(ctx context.Context, sess *api.Session, sessionID string)
 	MaxCloseoutCitationGroundingRetries int
 	RenderHostKick                      func(ctx context.Context, kickID string, data map[string]any) (string, error)
 	BeginCloseoutIntent                 func(ctx context.Context, sessionID string)
 	RecordGroundingFriction             func(ctx context.Context, sessionID string) guidance.GroundingFriction
-	NoteCloseoutGroundingReject         func(ctx context.Context, sessionID, code, offenderKey, draftedContent string, unread []jsonshape.Issue) (attempt int, prevKey string)
+	NoteCloseoutGroundingReject         func(ctx context.Context, sessionID, code, offenderKey string, draft guidance.CloseoutDraft, unread []jsonshape.Issue) (attempt int, prevKey string)
 	ResumeCloseoutWork                  func(ctx context.Context, sessionID string)
 	ClearCloseoutStall                  func(ctx context.Context, sessionID string)
 }

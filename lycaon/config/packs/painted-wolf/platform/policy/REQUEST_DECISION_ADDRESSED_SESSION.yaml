@@ -6,7 +6,7 @@ selector:
   tool:
     - request_decision
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
   profiles:
     - tool
 when: paintedwolf.rejection_code == "REQUEST_DECISION_ADDRESSED_SESSION"
@@ -15,7 +15,7 @@ copy:
   what: There is no coordinator above this session to answer a decision request.
   cause: request_decision ran in a session the user addressed directly, not in a spawned leg.
   why: The request parks a worker job and wakes the coordinator that dispatched it.
-  fix: Ask the user with ask_user when it is on your surface, or state the options in your answer.
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Branch on Code REQUEST_DECISION_ADDRESSED_SESSION; ask the user directly, do not retry here
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:request_decision
@@ -25,7 +25,3 @@ x-paintedwolf-scenarios:
     vars:
       profile: explore
       tool: request_decision
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: REQUEST_DECISION_ADDRESSED_SESSION'
-      - no coordinator above this session

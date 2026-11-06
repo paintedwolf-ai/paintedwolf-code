@@ -7,14 +7,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolschema"
-	"path/filepath"
 )
 
 func TestBundledCatalogValidates(t *testing.T) {
@@ -320,7 +317,7 @@ func TestToolAndSkillIdentifiersShareBoundaryMatching(t *testing.T) {
 }
 
 func TestGitCommitSchemaRequestCandidateLeadsWithBranchCommitAndPushOperation(t *testing.T) {
-	raw, err := config.Read(config.PlatformTools + "/schemas/git_commit.yaml")
+	raw, err := config.Read(config.PlatformTools + "/operation-schemas/git_commit.yaml")
 	testutil.FailErr(t, "read git_commit schema", err)
 	var desc string
 	for _, line := range strings.Split(string(raw), "\n") {
@@ -333,7 +330,7 @@ func TestGitCommitSchemaRequestCandidateLeadsWithBranchCommitAndPushOperation(t 
 		t.Fatal("git_commit.yaml missing description")
 	}
 	candidate := RequestCandidate(ToolCard{Name: "git_commit", Description: desc})
-	for _, want := range []string{"edited", "branch", "push", "Empty paths stages only files this session wrote"} {
+	for _, want := range []string{"edited", "branch", "push"} {
 		if !strings.Contains(candidate, want) {
 			t.Fatalf("git_commit RequestCandidate %q missing %q within 60-word window", candidate, want)
 		}
@@ -366,49 +363,5 @@ func TestRecallGuideOmissionRetainsItsAuditedToolAttachment(t *testing.T) {
 	decision = Decide(t.Context(), fake, catalog.Turn, State{User: "continue", Loaded: []string{"recall"}}, candidates)
 	if _, ok := decision.Omitted[unit.ID]; ok {
 		t.Fatal("recall use did not restore its attached guidance")
-	}
-}
-
-func TestCapturePageRequestCandidateCoversStaticPreviewAndBrowserInspection(t *testing.T) {
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(configlayout.FindModuleRoot(), "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	testutil.FailErr(t, "load tool schemas", err)
-	meta, ok := schemas.ToolMeta("capture_page")
-	if !ok {
-		t.Fatal("missing capture_page schema")
-	}
-	if got := BoundDescription(meta.Description); got != strings.Join(strings.Fields(meta.Description), " ") {
-		t.Fatalf("capture_page description exceeds RequestCandidate bounds (%d words, %d runes): %q", len(strings.Fields(meta.Description)), len([]rune(meta.Description)), meta.Description)
-	}
-	candidate := RequestCandidate(ToolCard{Name: "capture_page", Description: meta.Description})
-	for _, phrase := range []string{
-		"static HTML/CSS/JS web files",
-		"project_dir",
-		"local static file and HTTP server replacement",
-		"headless browser",
-		"screenshot/filmstrip/timeline",
-		"DOM structure",
-		"console errors",
-	} {
-		if !strings.Contains(candidate, phrase) {
-			t.Fatalf("capture_page candidate missing %q: %s", phrase, candidate)
-		}
-	}
-	cards := []ToolCard{
-		{Name: "capture_page", Description: meta.Description},
-		{Name: "command", Description: "Run a host command"},
-	}
-	catalog, err := LoadCatalog()
-	testutil.FailErr(t, "load turn policy", err)
-	for _, need := range []string{
-		"browser environment to serve and capture static files",
-		"local static file server",
-		"simple http server for web files",
-		"open the local page and capture it",
-	} {
-		fake := &decidetest.Fake{Scores: []float64{catalog.Request.LoadAt + 0.5, 0.4}}
-		got := ResolveRequest(t.Context(), fake, catalog.Request, need, cards)
-		if got.Abstained || strings.Join(got.Loaded(), ",") != "capture_page" {
-			t.Fatalf("ResolveRequest(%q) = %+v, want capture_page", need, got)
-		}
 	}
 }

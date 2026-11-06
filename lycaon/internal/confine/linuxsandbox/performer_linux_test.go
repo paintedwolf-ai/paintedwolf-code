@@ -26,7 +26,7 @@ func startTestPerformer(t *testing.T, fs Filesystem) *performerClient {
 	testutil.FailErr(t, "performer socket", err)
 	floors, err := json.Marshal(fs)
 	testutil.FailErr(t, "encode floors", err)
-	testutil.FailErr(t, "send floors", unix.Sendmsg(pair[0], floors, nil, nil, 0))
+	testutil.FailErr(t, "send floors", sendFloors(pair[0], floors))
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -538,7 +538,7 @@ func BenchmarkPerformerCreate(b *testing.B) {
 		b.Fatalf("socket: %v", err)
 	}
 	floors, _ := json.Marshal(Filesystem{WriteRoots: []string{root}, ReadOnlyNames: []NamedFloor{{Below: root, Name: "AGENTS.md"}}})
-	_ = unix.Sendmsg(pair[0], floors, nil, nil, 0)
+	_ = sendFloors(pair[0], floors)
 	go func() {
 		runtime.LockOSThread()
 		if unix.Unshare(unix.CLONE_FS) == nil {

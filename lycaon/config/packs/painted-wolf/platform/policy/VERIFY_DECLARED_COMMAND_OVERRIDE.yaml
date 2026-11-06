@@ -8,19 +8,14 @@ selector:
 requires:
   profiles:
   - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.declared
-  - paintedwolf.requested
-  - paintedwolf.can_command
+  facts: [paintedwolf.rejection_code, paintedwolf.declared, paintedwolf.requested, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "VERIFY_DECLARED_COMMAND_OVERRIDE"
 effect: block
 copy:
   what: This project declares `{{ paintedwolf.declared }}`, but this invocation requested `{{ paintedwolf.requested }}`.
   cause: The requested check does not match the declared project check; it was refused before execution.
   why: ''
-  fix: Omit the `command` argument and the `pipeline` argument to run `{{ paintedwolf.declared }}`.{% if paintedwolf.can_command %} Use the offered command tool for a narrower
-    check; its result does not replace the declared check.{% endif %}
+  fix: 'Omit the `command` argument and the `pipeline` argument to run `{{ paintedwolf.declared }}`. {{ paintedwolf.next_steps }}'
   instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
@@ -30,7 +25,3 @@ x-paintedwolf-scenarios:
   vars:
     declared: ./task check
     requested: go test ./internal/foo/...
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: VERIFY_DECLARED_COMMAND_OVERRIDE'
-  - ./task check

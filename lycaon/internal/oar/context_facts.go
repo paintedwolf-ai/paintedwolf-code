@@ -29,26 +29,34 @@ type InvocationFacts struct {
 type SessionFacts struct {
 	ToolTurnHasText      bool
 	ToolTurnHasAgentNote bool
-	SurfaceNoteOffered   bool
-	LastAssistant        string
-	TurnTools            []string
-	ProjectID            string
-	SessionID            string
-	SessionPosture       string
-	Surface              string
-	Profile              string
-	Phase                string
-	WorkerLeg            bool
-	SurfaceMayFinish     bool
-	IsHostCycleTurn      bool
-	CloseoutSurface      bool
-	PendingUserInput     bool
-	StubValid            bool
-	PermissionProfile    string
-	Principal            string
-	PrincipalRoles       []string
-	PostureUnresolved    bool
-	RecentToolNames      []string
+	// UnpublishedToolTextPending holds a carrier's text with no later note this intent.
+	UnpublishedToolTextPending bool
+	// MidTurnEvidenceUnreadable means the host failed to read evidence, so pending
+	// text was never judged and no citation of its is at fault.
+	MidTurnEvidenceUnreadable bool
+	// MidTurnCitationsRequired holds once this intent has citable observations.
+	MidTurnCitationsRequired bool
+	// MidTurnCitationAttempted holds when the latest unpublished text tried to cite.
+	MidTurnCitationAttempted bool
+	LastAssistant            string
+	TurnTools                []string
+	ProjectID                string
+	SessionID                string
+	SessionPosture           string
+	Surface                  string
+	Profile                  string
+	Phase                    string
+	WorkerLeg                bool
+	SurfaceMayFinish         bool
+	IsHostCycleTurn          bool
+	CloseoutSurface          bool
+	PendingUserInput         bool
+	StubValid                bool
+	PermissionProfile        string
+	Principal                string
+	PrincipalRoles           []string
+	PostureUnresolved        bool
+	RecentToolNames          []string
 }
 
 type ProgressFacts struct {
@@ -60,7 +68,8 @@ type ProgressFacts struct {
 	ProgressMissing              bool
 	ProgressClosedBeyondBaseline bool
 	ProgressReconciledSinceArm   bool
-	HasCompletionReport          bool
+	CloseoutHasAnswer            bool
+	CloseoutOnlyRepairDirectives bool
 	TaskEnvelopeEcho             bool
 	VerifyRequired               bool
 	VerifierPass                 bool
@@ -170,6 +179,7 @@ type SourceFacts struct {
 	WorktreeLeftoverPaths     []string
 	WorktreeConflictPaths     []string
 	EditorConfigMismatch      bool
+	GitNoRepositoryOnWriteLeg bool
 	SourceAnalysisUnavailable bool
 	SyntaxCheckOverridden     bool
 	SourceIncludes            map[string]bool

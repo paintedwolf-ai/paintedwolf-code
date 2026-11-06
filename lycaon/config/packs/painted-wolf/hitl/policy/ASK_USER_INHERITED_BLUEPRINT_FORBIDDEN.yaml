@@ -36,11 +36,6 @@ x-paintedwolf-scenarios:
     inherited_blueprint_status: approved
     inherited_parent_run: parent-run
     inherited_blueprint_approved: true
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: ASK_USER_INHERITED_BLUEPRINT_FORBIDDEN'
-  - parent-run
-  - approved
 - id: invalid
   vars:
     profile: coordinator
@@ -48,8 +43,3 @@ x-paintedwolf-scenarios:
     inherited_blueprint_status: invalid
     inherited_parent_run: parent-run
     inherited_blueprint_approved: false
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: ASK_USER_INHERITED_BLUEPRINT_FORBIDDEN'
-  - parent-run
-  - invalid

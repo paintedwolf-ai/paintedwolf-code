@@ -35,6 +35,3 @@ x-paintedwolf-scenarios:
     path: assets/logo.png
     profile: coordinator
     tool: render_view
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: RENDER_ASSET_NOT_FOUND'

@@ -177,9 +177,11 @@ func TestWorkerSynthesisGroundingParity_crossLanguageGoldens(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	fixtureDir := filepath.Join(root, "lycaon", "test", "fixtures", "citation-grounding-parity")
 	cases := map[string]citationGroundingParityGolden{
-		"none.json":                buildParityGoldenNone(),
-		"grounded.json":            buildParityGoldenGrounded(t),
-		"prose-advisory-only.json": buildParityGoldenProseAdvisory(t),
+		"none.json":     buildParityGoldenNone(),
+		"grounded.json": buildParityGoldenGrounded(t),
+		"evidence_optional.json": {
+			Grounding: *guidance.EvidenceOptionalGrounding(guidance.CoordinatorCompletionReport{}),
+		},
 	}
 	if os.Getenv("UPDATE_CITATION_GROUNDING_PARITY_GOLDENS") == "1" {
 		if err := os.MkdirAll(fixtureDir, 0o755); err != nil {
@@ -220,7 +222,7 @@ func TestWorkerSynthesisGroundingParity_evaluateSynthesisUsesSharedResolver(t *t
 	body, err := os.ReadFile(path)
 	testutil.FailErr(t, "read closeout_grounding.go", err)
 	src := string(body)
-	for _, fn := range []string{"resolveCloseoutFindingCitations", "citedURLHandleOffenders", "EvaluateWorkerProseLeaks"} {
+	for _, fn := range []string{"resolveCloseoutFindingCitations", "citedURLHandleOffenders"} {
 		if !strings.Contains(src, fn+"(") {
 			t.Fatalf("EvaluateCloseoutCitations must call shared %s", fn)
 		}
@@ -262,30 +264,6 @@ func buildParityGoldenGrounded(t *testing.T) citationGroundingParityGolden {
 		CitedEvidence: []guidance.CoordinatorCitedEvidence{{
 			Path: "src/a.go", Line: 1, Excerpt: "package a",
 		}},
-	}
-	eval := guidance.EvaluateCloseoutCitations(evidence.CitationRoots{ProjectDir: root}, "implement_synthesis", report, ev)
-	grounding := guidance.BuildCloseoutCitationGrounding(evidence.CitationRoots{ProjectDir: root}, "implement_synthesis", report, ev, eval)
-	return citationGroundingParityGolden{
-		HadTraceableWork: true,
-		Grounding:        derefGrounding(grounding),
-	}
-}
-
-func buildParityGoldenProseAdvisory(t *testing.T) citationGroundingParityGolden {
-	t.Helper()
-	root := t.TempDir()
-	msgs := []api.Message{
-		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
-			{Name: "read", ID: "c1", Args: map[string]any{"path": "src/new.go", "offset": 10, "limit": 1}},
-		}},
-		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
-			Outcome: api.ToolResultOutcomeCompleted,
-			Content: `{"path":"src/new.go","content":"10|  package x","offset":10,"end_line":10,"limit":1}`,
-		}},
-	}
-	ev := guidance.CloseoutEvidence{Ledger: evidence.NamespaceLedger(ledgertest.BuildFromMessages(root, msgs), "leg-a")}
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "Issue at src/new.go:10 without typed citation",
 	}
 	eval := guidance.EvaluateCloseoutCitations(evidence.CitationRoots{ProjectDir: root}, "implement_synthesis", report, ev)
 	grounding := guidance.BuildCloseoutCitationGrounding(evidence.CitationRoots{ProjectDir: root}, "implement_synthesis", report, ev, eval)

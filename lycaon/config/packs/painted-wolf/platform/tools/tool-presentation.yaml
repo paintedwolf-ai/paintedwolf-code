@@ -186,6 +186,7 @@ tools:
     activity: {headline: "investigating", salience: supporting, role: investigation}
   source_history:
     title_keys: [path]
+    title_fallback: "Session changes"
     running_label: "Loading file history…"
     activity: {headline: "investigating", salience: supporting, role: investigation}
   git_branches:
@@ -416,10 +417,6 @@ tools:
     title_keys: [query]
     running_label: "Recalling…"
     activity: {headline: "investigating", salience: supporting, role: investigation}
-  surface_note:
-    running_label: "Sharing a note…"
-    title_keys: [summary]
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
   task:
     kind: task
     running_label: "Spawning worker…"
@@ -453,7 +450,7 @@ tools:
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   verify:
     kind: command
-    title_keys: [command, pipeline]
+    title_keys: [command]
     running_label: "Running tests…"
     visibility: long_running
     activity: {headline: "checking work", salience: defining, role: automated_test}

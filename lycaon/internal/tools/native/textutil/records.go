@@ -107,6 +107,9 @@ func writeRecord(out io.Writer, record []byte, delimiter byte) error {
 	if _, err := out.Write(record); err != nil {
 		return err
 	}
+	if single, ok := out.(io.ByteWriter); ok {
+		return single.WriteByte(delimiter)
+	}
 	_, err := out.Write([]byte{delimiter})
 	return err
 }

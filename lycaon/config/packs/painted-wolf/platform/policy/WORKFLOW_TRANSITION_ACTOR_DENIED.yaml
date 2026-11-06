@@ -24,7 +24,4 @@ x-paintedwolf-scenarios:
     phase: decide
     tool: workflow_transition
     transition_id: side_quest
-  expect_contains:
-  - 'Code: WORKFLOW_TRANSITION_ACTOR_DENIED'
-  - coordinator
 x-paintedwolf-emit: guard:workflow

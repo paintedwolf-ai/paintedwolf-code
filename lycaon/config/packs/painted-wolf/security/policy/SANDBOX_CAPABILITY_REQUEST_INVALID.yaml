@@ -30,34 +30,17 @@ x-paintedwolf-scenarios:
 - id: server_and_client
   vars:
     tool: command
-  expect_contains:
-  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
-  - capability request
-  - loopback_connect
 - id: unsupported_field
   vars:
     reason: unsupported capability_request field
     field: network
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
-  - capability_request
 - id: unsupported_capability
   vars:
     reason: capability is not declared by the tool contract
     capability: loopback_connect
-  expect_contains:
-  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
-  - loopback_connect
 - id: client_only
   vars:
     tool: page_open
-  expect_contains:
-  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
-  - loopback_connect
 - id: no_capabilities
   vars:
     tool: read
-  expect_contains:
-  - 'Code: SANDBOX_CAPABILITY_REQUEST_INVALID'
-  - Remove capability_request

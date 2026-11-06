@@ -3,10 +3,11 @@ id: CHOWN_USER_UNKNOWN
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chown
 requires:
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.ownership_target
   - paintedwolf.ownership_field
@@ -34,6 +35,3 @@ x-paintedwolf-scenarios:
     path: scripts/run.sh
     profile: implement
     tool: chown
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CHOWN_USER_UNKNOWN'

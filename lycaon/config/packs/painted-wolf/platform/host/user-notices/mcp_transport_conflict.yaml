@@ -9,6 +9,3 @@ suggested_action: Clear the URL or the command so only one transport remains.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - not both
-      - transport

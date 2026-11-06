@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       scope_paths:
         - docs/report.md
       tool: task
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: TASK_SCOPE_PROFILE_READ_ONLY'

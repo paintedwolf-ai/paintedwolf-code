@@ -55,7 +55,7 @@ func (s *ProgramSupervisor) Jobs(sessionID, projectID string) *SessionJobs {
 	}
 	jobs, ok := s.sessions[sessionID]
 	if !ok {
-		jobs = &SessionJobs{Registry: s.Background, Supervisor: s, SessionID: sessionID, RootSessionID: sessionID, ProjectID: projectID}
+		jobs = &SessionJobs{Registry: s.Background, Supervisor: s, SessionID: sessionID, ProjectID: projectID}
 		s.sessions[sessionID] = jobs
 	}
 	return jobs
@@ -116,7 +116,7 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 		return toolcontract.ProducerResult{}, fmt.Errorf("program %s is already supervised", root.Identity.ProgramID)
 	}
 	program.sessionJobs = s.sessions[root.SessionID]
-	if admitted, ok := ctx.Value(sessionJobsKey{}).(*SessionJobs); ok && admitted != program.sessionJobs {
+	if admitted, ok := ctx.Value(sessionJobsKey{}).(programJobsBinding); ok && admitted.owner != program.sessionJobs {
 		s.mu.Unlock()
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}, ErrProgramStopped
 	}

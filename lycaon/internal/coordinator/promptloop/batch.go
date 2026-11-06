@@ -75,8 +75,8 @@ type toolCallOutcome struct {
 	toolMsg            api.Message
 	taskCommitted      bool
 	handleEligible     bool
+	deliveries         []tools.SourceDeliveryTag
 	taskMessageID      string
-	agentNote          *tools.AgentNoteCapture
 	committed          bool
 	storedID           string
 	persistedStored    []api.Message
@@ -135,6 +135,7 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 	}
 	refreshed.Turn.TurnSurfaceID = base.Turn.TurnSurfaceID
 	refreshed.Turn.TurnToolPlan = base.Turn.TurnToolPlan
+	refreshed.Turn.TurnPrograms = base.Turn.TurnPrograms
 	refreshed.Turn.TurnOfferedToolNames = slices.Clone(base.Turn.TurnOfferedToolNames)
 	refreshed.Turn.TurnOfferedToolSchemas = base.Turn.TurnOfferedToolSchemas
 	refreshed.Source.ModelSourceContext = base.Source.ModelSourceContext
@@ -198,6 +199,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 	}
 	if st != nil {
 		baseToolCtx.Turn.TurnToolPlan = st.turnToolPlan
+		baseToolCtx.Turn.TurnPrograms = st.turnPrograms
 		baseToolCtx.Turn.TurnOfferedToolNames = slices.Clone(st.offeredToolNames)
 		baseToolCtx.Turn.TurnOfferedToolSchemas = st.offeredToolSchemas
 		baseToolCtx.Source.ModelSourceContext = st.output.sourceContext
@@ -223,6 +225,12 @@ func (l *toolBatch) executeToolCallsInTurn(
 	if err := commitAssistant(); err != nil {
 		return result, err
 	}
+	// Publication precedes every tool, and the wait guard reads its result.
+	published, err := l.publishMidTurnText(ctx, sess, sessionID, result.history, assistantMessageID, turnSurfaceID, toolCalls, &lastToolTS, st)
+	result.history = published
+	if err != nil {
+		return result, err
+	}
 	// Batch closure survives request cancellation.
 	l.Nudges.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().BeginBatch(len(toolCalls)), false)
 	defer func() {
@@ -244,7 +252,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 					toolArgs:       run[0].Args,
 					toolMsg:        out.toolMsg,
 					handleEligible: out.handleEligible,
-					agentNote:      out.agentNote,
+					deliveries:     out.deliveries,
 				}, &lastToolTS, st,
 			)
 			if err != nil {
@@ -382,8 +390,8 @@ func (l *toolBatch) runConcurrentToolBatch(
 				toolMsg:        out.toolMsg,
 				taskCommitted:  out.taskCommitted,
 				handleEligible: out.handleEligible,
+				deliveries:     out.deliveries,
 				taskMessageID:  out.toolMsg.ID,
-				agentNote:      out.agentNote,
 				endTurn:        out.endTurn,
 			}
 			l.appendParallelResult(ctx, commit, &outcomes[i])
@@ -462,8 +470,9 @@ type singleToolOutcome struct {
 	completion     *api.ToolCompletion
 	taskCommitted  bool
 	handleEligible bool
-	breakToolLoop  bool
-	agentNote      *tools.AgentNoteCapture
+	// deliveries states what each source read covered, for the row's tags.
+	deliveries    []tools.SourceDeliveryTag
+	breakToolLoop bool
 	// endTurn is a host fault that ends the turn once toolMsg is durable.
 	endTurn error
 }
@@ -481,7 +490,7 @@ func (l *toolBatch) executeOneToolCall(
 	runCtx api.CoordinatorRunContext,
 	proseTurn bool,
 ) singleToolOutcome {
-	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
+	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
 	if proseTurn && !workerProseAllowsTool(sess, tc.Name) {
 		return l.refuseToolCall(tc, assistantMessageID, l.Tools.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
 	}
@@ -509,9 +518,6 @@ func (l *toolBatch) executeOneToolCall(
 				"cap", data["cap"])
 			run = l.Tools.refuseOutputDelivery(ctx, sess, tc, toolCtx, run, code, data)
 		}
-	}
-	if !run.succeeded() {
-		run.captures.note = nil
 	}
 	if run.facts.Resolution() == api.ToolResultOutcomeRejected {
 		return l.settleRejectedInvocation(ctx, sess, sessionID, tc, assistantMessageID, run)
@@ -579,6 +585,6 @@ func (l *toolBatch) executeOneToolCall(
 		completion:     run.captures.completion,
 		taskCommitted:  taskSpawnCommitted(tc.Name, toolMsg.ToolResult, run.succeeded()),
 		handleEligible: sess != nil && toolEvidenceEligible(run, tc.Name, tc.Args),
-		agentNote:      run.captures.note,
+		deliveries:     run.captures.sourceDeliveries,
 	}
 }

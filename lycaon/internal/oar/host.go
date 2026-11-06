@@ -29,7 +29,7 @@ var hostCoreAdapters = map[string]string{
 }
 
 func (p *CapabilityDocument) requireHostAdapters() error {
-	native := map[string]bool{AnchorCoordinatorPreInvoke: true, AnchorSessionPreInvoke: true, AnchorCredentialAssignment: true, AnchorToolRejected: true, AnchorWorkerReportCheck: true, AnchorCoordinatorCloseoutCheck: true}
+	native := map[string]bool{AnchorCoordinatorMidTurnNote: true, AnchorCoordinatorPreInvoke: true, AnchorSessionPreInvoke: true, AnchorCredentialAssignment: true, AnchorToolRejected: true, AnchorWorkerReportCheck: true, AnchorCoordinatorCloseoutCheck: true}
 	for core, local := range hostCoreAdapters {
 		native[local] = true
 		if declared, ok := p.Anchors.Core[core]; ok && declared != local {

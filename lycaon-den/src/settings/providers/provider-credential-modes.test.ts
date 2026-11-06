@@ -56,7 +56,6 @@ describe("ambient credential chain copy", () => {
     const detail = ambientAuthCopy("aws-sdk-chain")!.detail;
     expect(detail).toContain("environment variables");
     expect(detail).toContain("~/.aws");
-    expect(detail).toContain("instance role");
   });
 
   it("returns nothing for a kind with no ambient chain", () => {

@@ -26,7 +26,7 @@ func TestBuildCompletionMessagesOmitsWorkflowBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildCompletionMessages: %v", err)
 	}
-	if len(out) != 2 || out[0].Content != transcript.ContentAuthorityNotice() || out[1].ID != "u1" {
+	if len(out) != 2 || out[0].Content != transcript.ContentAuthorityNotice(transcript.AudiencePrivate) || out[1].ID != "u1" {
 		t.Fatalf("messages = %+v want user row plus host authority notice", out)
 	}
 }

@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"slices"
 	"sort"
 	"strings"
@@ -167,9 +168,7 @@ func TestLinuxPackageKeyStaysInSigningCustody(t *testing.T) {
 			t.Errorf("%s receives the Linux package key outside release-signing", name)
 		}
 		for _, credential := range append(storageCredentials, "secrets.HOMEBREW_TAP_TOKEN", "secrets.WWW_DISPATCH_TOKEN") {
-			if strings.Contains(job.text(), credential) {
-				t.Errorf("%s holds the Linux package key with publication credential %s", name, credential)
-			}
+			exposure.Absent(t, job.text(), credential)
 		}
 	}
 	if !slices.Equal(holders, []string{"build-release", "linux-pacman-repositories", "linux-repositories"}) {
@@ -188,9 +187,7 @@ func TestLinuxPackageKeyStaysInSigningCustody(t *testing.T) {
 		t.Fatalf("release halt package key holders = %v", holders)
 	}
 	for _, credential := range append(storageCredentials, "secrets.HOMEBREW_TAP_TOKEN", "secrets.WWW_DISPATCH_TOKEN") {
-		if strings.Contains(signer.text(), credential) {
-			t.Errorf("the halt signer holds the Linux package key with publication credential %s", credential)
-		}
+		exposure.Absent(t, signer.text(), credential)
 	}
 	for _, step := range signer.Steps {
 		if step.Env["LINUX_PACKAGE_SIGNING_KEY"] != "" && !strings.Contains(step.Run, "scripts.linux_release.repository_withdrawal resign") {
@@ -341,9 +338,7 @@ func TestNixCacheCredentialReachesOnlyItsGatedPublisher(t *testing.T) {
 	}
 	const credential = "secrets.NIX_CACHE_SIGNING_KEY"
 	for _, name := range sortedJobs(release) {
-		if strings.Contains(release.Jobs[name].text(), credential) {
-			t.Errorf("release.yml %s holds the cache key outside the delivery workflow", name)
-		}
+		exposure.Absent(t, release.Jobs[name].text(), credential)
 	}
 	delivery := parseLane(t, ".github/workflows/release-linux-delivery.yml")
 	var holders []string

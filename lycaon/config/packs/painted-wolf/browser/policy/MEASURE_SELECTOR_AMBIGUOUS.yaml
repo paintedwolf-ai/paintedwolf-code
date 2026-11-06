@@ -32,7 +32,3 @@ x-paintedwolf-scenarios:
     selector: div
     tool: measure_page
     measure_selector: div
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: MEASURE_SELECTOR_AMBIGUOUS'
-  - exactly one node

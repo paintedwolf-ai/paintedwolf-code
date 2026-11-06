@@ -55,6 +55,8 @@ type RunOutcome struct {
 	// IndexWatch is the Git index captured at spawn; the result's facts own it.
 	IndexWatch      indexwatch.Snapshot
 	SnapshotCapture *SnapshotCaptureResult
+	// SourceWindow is the window ConfinedForeground observed this dispatch with.
+	SourceWindow *hostcmd.SourceWindow
 }
 
 // CanonicalToolArgs returns reference-bearing arguments when available.
@@ -120,11 +122,6 @@ func commandWaitBudget(args map[string]any) time.Duration {
 		return d
 	}
 	return exec.DefaultCommandWait
-}
-
-// CommandTimeout resolves the command timeout.
-func CommandTimeout(args map[string]any, toolName string) time.Duration {
-	return commandTimeout(args, toolName)
 }
 
 func commandTimeout(args map[string]any, toolName string) time.Duration {

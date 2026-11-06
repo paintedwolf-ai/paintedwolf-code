@@ -201,7 +201,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		if deps.ScanGuidance != nil {
 			messages = deps.ScanGuidance.PrependGuidance(ctx, sess.ID, history)
 		}
-		return transcript.Project(llm.AppendHostSecretRedactionNotice(messages)), nil
+		return transcript.ProjectFor(contentAudience(sess, e.cache.LoadTurn(sess.ID).SurfaceID), llm.AppendHostSecretRedactionNotice(messages)), nil
 	}
 
 	turn := e.cache.LoadTurn(sess.ID)
@@ -257,7 +257,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		messages = deps.EnrichHistory(sess.ID, messages)
 	}
 	if coordinator && !sess.IsWorkerChild() {
-		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, turn, messages)
+		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
 	}
 	if deps.ScanGuidance != nil {
 		out = append(out, deps.ScanGuidance.PrependGuidance(ctx, sess.ID, messages)...)
@@ -291,7 +291,16 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	markPromptCacheBreakpoints(out, prefixIdx, lastStableIdx)
 
 	turn.Iteration++
-	return transcript.Project(deduplicateProjectGuidance(out)), nil
+	return transcript.ProjectFor(contentAudience(sess, turn.SurfaceID), deduplicateProjectGuidance(out)), nil
+}
+
+// contentAudience selects the notice's account of tool-step text, the same split
+// publication makes: workers and non-publishing surfaces keep that text private.
+func contentAudience(sess *api.Session, surfaceID string) transcript.ContentAudience {
+	if sess != nil && !sess.IsWorkerChild() && surface.PublishesMidTurnText(surfaceID) {
+		return transcript.AudiencePublisher
+	}
+	return transcript.AudiencePrivate
 }
 
 // markPromptCacheBreakpoints marks each stable boundary a provider may cache

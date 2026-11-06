@@ -139,7 +139,7 @@ func TestClassifyEmitRejectDoesNotReadReceiptFromOpaqueText(t *testing.T) {
 }
 
 func TestEmitRecoveryFieldsBelongToReceivingSchema(t *testing.T) {
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(testutil.CheckoutRoot(t), "lycaon/config/packs/painted-wolf/platform/tools/schemas"))
+	schemas, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(testutil.CheckoutRoot(t), "lycaon/config/packs/painted-wolf/platform/tools/schemas"))
 	testutil.FailErr(t, "load receiving tool schemas", err)
 	raw, err := json.Marshal(map[string]any{"matches": []any{map[string]any{"content": strings.Repeat("x", 2048)}}})
 	testutil.FailErr(t, "marshal oversized survey", err)

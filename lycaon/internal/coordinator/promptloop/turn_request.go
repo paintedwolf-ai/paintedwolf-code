@@ -65,8 +65,9 @@ func (l *modelTurn) buildTurnRequest(
 	if st != nil && st.spendSoftStopGranted {
 		turnTools = filterSpendSoftStopToolMetas(turnTools)
 	}
-	// A final turn with no completion tool keeps its tool definitions, which
-	// transports validate tool history against, and forbids calling them.
+	// A final turn with no completion tool forbids calling tools. The provider
+	// drops the definitions where its API allows that, and otherwise keeps them
+	// with its no-call control.
 	// Closeout repairs on earlier turns keep the surface callable: the repair
 	// kick offers resuming work, which retires the pinned report.
 	toolUse := modelcall.ToolUseAllowed

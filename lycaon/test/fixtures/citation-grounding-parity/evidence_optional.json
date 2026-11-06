@@ -1,0 +1,17 @@
+{
+  "had_traceable_work": false,
+  "grounding": {
+    "traced": true,
+    "evidence_optional": true,
+    "checks": [
+      {
+        "id": "evidence_optional",
+        "label": "Citations",
+        "status": "passed",
+        "kind": "citation",
+        "vacuous": true,
+        "summary": "No citations required: no tool observations in this turn"
+      }
+    ]
+  }
+}

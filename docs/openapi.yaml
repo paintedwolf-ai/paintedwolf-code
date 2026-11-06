@@ -15337,7 +15337,7 @@ components:
     ReadOutlineResponse:
       x-go-generate: true
       x-tool-output:
-        - read
+        - command
       type: object
       required:
         - path
@@ -21287,6 +21287,7 @@ components:
       x-go-generate: true
       x-go-field-order:
         - traced
+        - evidence_optional
         - host_assembled
         - hint_code
         - retry_count
@@ -21312,6 +21313,9 @@ components:
       properties:
         traced:
           type: boolean
+        evidence_optional:
+          type: boolean
+          description: No citations were required and none were supplied, because this user turn has no citable observations. Traced is true because nothing failed to trace; no observed source stands behind this message.
         host_assembled:
           type: boolean
         hint_code:
@@ -27452,6 +27456,9 @@ components:
           type: string
         line:
           type: integer
+        end_line:
+          type: integer
+          description: Last line of an inclusive range starting at line. Absent for a single line.
           minimum: 0
     CompletionReportFindingDisposition:
       type: string
@@ -28298,6 +28305,9 @@ components:
           type: string
         line:
           type: integer
+        end_line:
+          type: integer
+          description: Last line of an inclusive range starting at line. Absent for a single line.
         excerpt:
           type: string
         verdict:

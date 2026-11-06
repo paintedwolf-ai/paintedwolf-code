@@ -17,7 +17,7 @@ Maintained sources of truth: `docs/tools.md` (Interactive exec) and `docs/ground
 
 1. Put the exact program argv, working directory, capability request, `terminal_capture`, size, and caption on one `command` call.
 2. Use it when no input is needed and one settled screen establishes the claim. It is the required route when the action needs direct network authority, which cannot be held across turns.
-3. Inspect the returned terminal state and screen. Cite the `tui#` handle and present the visual artifact when useful.
+3. Inspect the returned terminal state and screen. Cite its terminal evidence handle and present the visual artifact when useful.
 4. Do not run a weaker second invocation for the screenshot, replay saved output, or print a prior result into another PTY.
 
 ## Drive a held screen

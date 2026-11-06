@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: render_view
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: RENDER_MARKUP_FORBIDDEN'

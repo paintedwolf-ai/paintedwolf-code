@@ -287,7 +287,11 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	}
 	cwd, display := d.paths.Cwd(), d.paths.Cwd().DisplayPath
 	line := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
-	child, err := d.prepareDefinition(ctx, definition, request, map[string]any{"command": line, "cwd": display})
+	arguments := externalValueArguments(request, line, display)
+	for field, value := range d.run.envelope {
+		arguments[field] = value
+	}
+	child, err := d.prepareDefinition(ctx, definition, request, arguments)
 	if err != nil {
 		return d.prepareChildFailure(streams, "external", request, err)
 	}
@@ -315,12 +319,16 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	effect := toolexecution.NativeEffect{
 		Operation: bound, Streams: streams, Inspection: d.run.capture,
 		// The existing command review, detection and policy read these fields.
-		Arguments: d.run.launchArguments(line, display),
+		Arguments: arguments,
 		Stage:     toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: argv, CommandLine: line, PipelineCommandLine: line},
-		PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+		PrepareReviewed: func(_ context.Context, resolved map[string]any, _ tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
+			execution, err := externalResolvedRequest(request, resolved)
+			if err != nil {
+				return toolexecution.PreparedNativeEffect{}, err
+			}
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: d.recordExternalStage}.Launch(ctx, request, streams)
+					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: d.recordExternalStage, window: d.run.window}.Launch(ctx, execution, streams)
 				})
 			}}, nil
 		},
@@ -738,31 +746,20 @@ func (d *ProgramDispatcher) settleWith(ctx context.Context, child programChild, 
 	return d.run.recorder.SettleChild(context.WithoutCancel(ctx), child.id, settlement)
 }
 
-var compiledCatalogDefinitions sync.Map
-
 // catalogDefinition compiles one definition per catalog command without a
 // registered tool, attributed to the command's declared owner.
 func (d *ProgramDispatcher) catalogDefinition(spec toolcontract.CommandSpecification) (toolcontract.OperationDefinition, error) {
+	return catalogOperationDefinition(spec, d.run.catalog.Language.Limits)
+}
+
+// compiledCatalogDefinitions holds each command's definition for the process:
+// every caller passes a specification and limits from the one compiled catalog.
+var compiledCatalogDefinitions sync.Map
+
+func catalogOperationDefinition(spec toolcontract.CommandSpecification, limits []toolcontract.ResourceLimit) (toolcontract.OperationDefinition, error) {
 	if cached, ok := compiledCatalogDefinitions.Load(spec.Name); ok {
 		return cached.(toolcontract.OperationDefinition), nil
 	}
-	d.shared.mu.Lock()
-	defer d.shared.mu.Unlock()
-	if definition, ok := d.shared.definitions[spec.Name]; ok {
-		return definition, nil
-	}
-	definition, err := catalogOperationDefinition(spec, d.run.catalog.Language.Limits)
-	if err != nil {
-		return toolcontract.OperationDefinition{}, err
-	}
-	if d.shared.definitions == nil {
-		d.shared.definitions = map[string]toolcontract.OperationDefinition{}
-	}
-	d.shared.definitions[spec.Name] = definition
-	return definition, nil
-}
-
-func catalogOperationDefinition(spec toolcontract.CommandSpecification, limits []toolcontract.ResourceLimit) (toolcontract.OperationDefinition, error) {
 	contract, ok := toolcontract.Lookup("command")
 	if !ok {
 		return toolcontract.OperationDefinition{}, fmt.Errorf("command contract missing")
@@ -787,6 +784,7 @@ func catalogOperationDefinition(spec toolcontract.CommandSpecification, limits [
 	if err != nil {
 		return toolcontract.OperationDefinition{}, err
 	}
+	compiledCatalogDefinitions.Store(spec.Name, definition)
 	return definition, nil
 }
 

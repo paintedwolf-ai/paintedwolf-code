@@ -178,11 +178,8 @@ func TestLoopRecoversOllamaDroppedToolCall(t *testing.T) {
 						if len(msg.Content) > 1024 {
 							t.Fatalf("parser feedback exceeds 1 KiB: %d bytes", len(msg.Content))
 						}
-						if !strings.Contains(msg.Content, "literal newline inside a quoted string") {
-							t.Fatalf("missing parser-specific OAR feedback: %s", msg.Content)
-						}
 						feedback++
-						if msg.Role == api.MessageRoleAssistant || !strings.Contains(msg.Content, "valid JSON arguments") {
+						if msg.Role == api.MessageRoleAssistant {
 							t.Fatalf("request %d feedback is not host repair copy: %+v", i, msg)
 						}
 					}

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	lycexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -127,5 +128,21 @@ func TestProgramPythonReceivesEOFWithoutControllingTerminal(t *testing.T) {
 	got := decodeOutcome(t, out)
 	if got.Status != 1 || got.Stdout != fmt.Sprintf("0\n%d\n", syscall.ENXIO) || !strings.Contains(got.Stderr, "EOFError") {
 		t.Fatalf("Python did not receive EOF without a terminal: %+v", got)
+	}
+}
+
+func TestProgramNpmInitSettlesOnEOF(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	f := newProgramFixture(t)
+	f.Runtime.Clock = programtest.NewManualClock()
+	binary := requiredExternal(t, "npm")
+	out, err := f.call(t, t.Context(), externalProgram(binary, "init"))
+	testutil.FailErr(t, "run npm init", err)
+	got := decodeOutcome(t, out)
+	if got.Status != 1 {
+		t.Fatalf("npm did not settle on EOF: %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(f.Dir, "package.json")); !os.IsNotExist(err) {
+		t.Fatalf("abandoned init published a package: %v", err)
 	}
 }

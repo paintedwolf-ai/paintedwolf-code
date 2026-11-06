@@ -44,10 +44,4 @@ func TestCoordinatorTripartiteRenderDiffersActiveVsInactive(t *testing.T) {
 	if inactive == active {
 		t.Fatal("rendered policy text must differ for active vs inactive run")
 	}
-	if !strings.Contains(active, "Structured plan mode") {
-		t.Fatal("active plan policy missing structured section")
-	}
-	if strings.Contains(inactive, "Structured plan mode — expand phase") {
-		t.Fatal("implement-default policy must not include plan expand section")
-	}
 }

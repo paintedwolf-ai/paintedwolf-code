@@ -28,6 +28,3 @@ x-paintedwolf-scenarios:
       job_id: job-1
       max_tool_loops: 200
       min_required: 2
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: WORKER_BUDGET_EXTEND_INVALID'

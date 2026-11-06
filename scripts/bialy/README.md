@@ -150,6 +150,31 @@ turn set in 0.81 s against 1.32 s p50 on the same Apple GPU. Changing it means
 training the turn-load head and running the replay eval under each id on the
 held-out captures.
 
+## Callable vocabulary for training
+
+Training exports describe the host's callable surface. Native command operation
+identities are execution and receipt vocabulary, not additional preload or
+`request_tools` labels. Command is already available on routine floors; a need
+for an edit, search, summary, or Git operation does not create a deferred-tool
+training target.
+
+Keep recorded observations intact. Corpus admission must reject incompatible
+candidate vocabularies explicitly rather than relabel old calls as command or
+silently score them as unused tools. New collection uses the current callable
+roster for preload, request ranking, and instruction labels. Exported option
+texts for a new training run come from that roster; an installed release keeps
+its evaluated vocabulary until a newly trained and evaluated release replaces
+it.
+
+The export contract is `pw-decide-corpus/2`: tool options come from the current
+callable schemas, including worker tools. Unversioned exports used the installed
+release's preload options and cannot be consumed as this contract. Re-export
+with the current host; retain old corpora with the artifacts they qualified.
+Training, calibration, replay, skill discovery and parity checks reject offered
+candidates or scored labels absent from the selected corpus before model work.
+Unknown names in requests remain observations, not invented candidate labels.
+`pw-decide-row/1` and retention rows keep their existing meanings and versions.
+
 ## Corpus
 
 The host exports the corpus the decision scores; nothing here parses packs:
@@ -425,9 +450,7 @@ pointer 2.4, margin 0.3.
 a `request` receipt as `ranked` without the tool the model then asked for
 again. The ranker reads the first 60 words of each description, so write the
 operation first and the rejection codes after; probe the phrasings that missed
-with `request_probe.py` before and after the edit. Tools that rank near one
-another on the same need declare `companions` in `native-tools.yaml`, so one
-selection loads the set. Lower the bar only when the probe shows the wanted
+with `request_probe.py` before and after the edit. Lower the bar only when the probe shows the wanted
 tool just under it and nothing wrong just above it. Shipped: 1.8, four loads,
 no nearest fallback: in the recorded sessions the nearest tool was wrong both
 times it loaded (`verify` for a file creation, `code_rewrite` for a render),

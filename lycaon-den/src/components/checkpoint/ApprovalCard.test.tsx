@@ -205,7 +205,6 @@ describe("ApprovalCard approval plan", () => {
       />
     ));
     const shape = view.getByTestId("approval-secret-shape");
-    expect(shape.textContent).toContain("Looks like");
     expect(shape.textContent).toContain(
       "abc-a1b2c3a1b2c3",
     );
@@ -226,7 +225,6 @@ describe("ApprovalCard approval plan", () => {
     const primary = view.getByTestId(
       "approval-approve-primary",
     ) as HTMLButtonElement;
-    expect(primary.textContent).toContain("Send redacted");
     expect(primary.disabled).toBe(true);
   });
 

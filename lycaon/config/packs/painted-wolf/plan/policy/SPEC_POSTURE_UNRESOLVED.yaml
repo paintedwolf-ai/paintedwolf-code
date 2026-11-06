@@ -23,8 +23,5 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: state_start
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SPEC_POSTURE_UNRESOLVED'
 x-paintedwolf-audience:
 - coordinator

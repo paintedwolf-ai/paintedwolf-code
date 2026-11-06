@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+const dispositionsPath = packsRoot + "/painted-wolf/platform/tools/command-language-v1/dispositions.json"
 
 func publicVocabularies(source releaseSource) (map[string]map[string]string, error) {
 	result := map[string]map[string]string{"tools": {}, "workflow_terms": {}, "anchors": {}, "themes": {}}
@@ -58,6 +61,26 @@ func publicVocabularies(source releaseSource) (map[string]map[string]string, err
 	}
 	for _, prefix := range tools.Prefixes {
 		result["tools"][prefix+"*"] = ""
+	}
+	if slices.Contains(paths, dispositionsPath) {
+		raw, err = source.show(dispositionsPath)
+		if err != nil {
+			return nil, err
+		}
+		var dispositions struct {
+			Tools []struct {
+				Tool        string `json:"tool"`
+				Disposition string `json:"disposition"`
+			} `json:"tools"`
+		}
+		if err := json.Unmarshal(raw, &dispositions); err != nil {
+			return nil, err
+		}
+		for _, entry := range dispositions.Tools {
+			if entry.Disposition == "replace-routine-schema" {
+				delete(result["tools"], entry.Tool)
+			}
+		}
 	}
 	raw, err = source.show("schemas/workflow_vocabulary.json")
 	if err != nil {

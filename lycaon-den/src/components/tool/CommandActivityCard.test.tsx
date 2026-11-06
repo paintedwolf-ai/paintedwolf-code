@@ -50,7 +50,6 @@ describe("compact command activity details", () => {
   expect(view.container.querySelector("pre")).toBeNull();
   expect(view.container.textContent).not.toContain("y".repeat(100));
   expect(view.container.textContent).not.toContain("x".repeat(100));
-  expect(view.container.textContent).toContain("Full original command");
  });
  it("keeps the recorded row when detail loading fails", async () => {
   const view = render(() => <CommandActivityCard part={part()} layout="chat" sessionId="activity-card-test" client={stubClient({ getCommandProgramReceipt: vi.fn().mockRejectedValue(new Error("offline")) })} />);

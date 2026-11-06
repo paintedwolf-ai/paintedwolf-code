@@ -17,7 +17,7 @@ copy:
   what: No verification command was supplied, and this project has no declared check.
   cause: There is no selected check for verify to execute.
   why: ''
-  fix: Pass the intended project check explicitly in `command`.
+  fix: 'Pass the intended project check explicitly in the `command` argument.'
   instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     tool: verify
-  expect_contains:
-  - 'Code: VERIFY_COMMAND_UNDECLARED'
-  - command

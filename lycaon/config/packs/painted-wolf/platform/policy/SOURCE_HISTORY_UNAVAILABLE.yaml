@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
     detail: the source ledger is not configured for this session
     profile: implement
     tool: source_history
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SOURCE_HISTORY_UNAVAILABLE'

@@ -112,3 +112,41 @@ func pinPaths(pins []toolcontract.ExecutionRevision) []string {
 	}
 	return out
 }
+
+// The form carries every argument the tool ships with.
+func TestSummarizeFormCarriesShippedArguments(t *testing.T) {
+	h := domainHarness(t)
+	several := h.exec("", "summarize", "--path", "main.go", "--path", "pkg/store.go", "--pattern", "package")
+	if several.err != nil || several.result.Status != 0 {
+		t.Fatalf("several paths = %+v %v", several.result, several.err)
+	}
+	var brief survey.SummarizeResponse
+	testutil.FailErr(t, "decode several paths", json.Unmarshal([]byte(several.stdout), &brief))
+	seen := map[string]bool{}
+	for _, identity := range brief.Pack.Identity {
+		seen[identity.Path] = true
+	}
+	if !seen["main.go"] || !seen["pkg/store.go"] {
+		t.Fatalf("identity = %+v", brief.Pack.Identity)
+	}
+	inline := h.exec("", "summarize", "--content", "supplied text")
+	if inline.err != nil || inline.result.Status != 0 {
+		t.Fatalf("inline content = %+v %v", inline.result, inline.err)
+	}
+	if empty := h.exec("", "summarize"); empty.err == nil && empty.result.Status == 0 {
+		t.Fatal("summarize ran with no path or content")
+	}
+}
+
+func TestRepoMapSelectsItsBundle(t *testing.T) {
+	h := domainHarness(t)
+	r := h.exec("", "repo-map", "--bundle", "api_routes")
+	if r.err != nil || r.result.Status != 0 {
+		t.Fatalf("repo-map --bundle = %+v %v", r.result, r.err)
+	}
+	var result reposurvey.RepoResponse
+	testutil.FailErr(t, "decode repo-map", json.Unmarshal([]byte(r.stdout), &result))
+	if result.Bundle != "api_routes" {
+		t.Fatalf("bundle = %q", result.Bundle)
+	}
+}
