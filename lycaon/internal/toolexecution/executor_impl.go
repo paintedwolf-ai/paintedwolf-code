@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsecrets"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -121,8 +120,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 			return "", e.Rejections.settleReject(ctx, qualifiedName, profileID, canonicalArgs,
 				toolrejection.CompleteFailureMetadata(tr, qualifiedName, owner))
 		}
-		if tr := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, displayCmd, canonicalArgs,
-			toolschema.ArgFieldPaths(e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName)), err); tr != nil {
+		if tr := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, displayCmd, canonicalArgs, err); tr != nil {
 			return "", e.Rejections.settleReject(ctx, qualifiedName, profileID, canonicalArgs,
 				toolrejection.CompleteFailureMetadata(tr, qualifiedName, owner))
 		}
@@ -165,7 +163,7 @@ func (e *Executor) validateInvocation(
 	}
 	if qualifiedName == "command" {
 		_, parseErr := commandsurface.ParsePlan(args)
-		if reject := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, commandsurface.PrimaryCommandLine(args, nil), args, toolschema.ArgFieldPaths(e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName)), parseErr); reject != nil {
+		if reject := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, commandsurface.PrimaryCommandLine(args, nil), args, parseErr); reject != nil {
 			return reject
 		}
 	}

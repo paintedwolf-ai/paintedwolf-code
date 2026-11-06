@@ -212,7 +212,7 @@ func TestCommandSurfaceRejectRoutesStayInsideTheirSelector(t *testing.T) {
 	for _, tool := range toolNames {
 		for label, surfaceErr := range surfaceErrors {
 			rej := toolrejection.CommandSurfaceObservation(tool, "implement",
-				"go test ./... | head", map[string]any{"command": "go test ./... | head"}, idx.fieldsFor(tool), surfaceErr)
+				"go test ./... | head", map[string]any{"command": "go test ./... | head"}, surfaceErr)
 			if rej == nil {
 				continue
 			}

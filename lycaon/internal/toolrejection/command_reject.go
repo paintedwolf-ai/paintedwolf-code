@@ -13,11 +13,10 @@ import (
 )
 
 // CommandSurfaceObservation maps parse failures to COMMAND_NOT_ARGV.
-// Recovery follows the invocation mode as well as the accepted schema fields.
+// Recovery follows the invocation mode.
 func CommandSurfaceObservation(
 	toolName, profileID, displayCommand string,
 	args map[string]any,
-	argFields []string,
 	err error,
 ) *ToolReject {
 	if err == nil || !commandsurface.IsCommandSurfaceError(err) {
@@ -29,7 +28,7 @@ func CommandSurfaceObservation(
 		return nil
 	}
 	rawCommand, _ := args["command"].(string)
-	vars := commandsurface.CommandRejectVars(profileID, displayCommand, rawCommand, argFields, err)
+	vars := commandsurface.CommandRejectVars(profileID, displayCommand, rawCommand, err)
 	_, capture := args["terminal_capture"].(map[string]any)
 	vars["terminal_capture"] = toolName == "command" && capture
 	return RejectInvalidArguments("COMMAND_NOT_ARGV", vars)

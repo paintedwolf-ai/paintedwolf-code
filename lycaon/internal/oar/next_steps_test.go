@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
@@ -147,5 +148,72 @@ func TestValidateNextStepsRejectsDecisionReadsAcrossAllConditionSurfaces(t *test
 				t.Fatalf("accepted %s reading %s", tc.name, NextStepsFact)
 			}
 		})
+	}
+}
+
+func schemaTestConfig() *toolschema.Config {
+	return &toolschema.Config{Tools: map[string]toolschema.Entry{
+		"recall":  {Schema: map[string]any{"query": map[string]any{"type": "string"}}},
+		"preview": {Schema: map[string]any{"overlay_id": map[string]any{"type": "string"}}},
+	}}
+}
+
+func TestValidateNextStepsChecksArgsAgainstToolSchemas(t *testing.T) {
+	loader, err := NewLoader("")
+	testutil.FailErr(t, "load OAR", err)
+	loader.SetToolSchemas(schemaTestConfig())
+	for _, tc := range []struct {
+		name    string
+		rule    *Rule
+		wantErr string
+	}{
+		{"explicit tool unknown path", &Rule{ID: "R", NextSteps: &NextSteps{Steps: []NextStep{
+			{Tool: "recall", Args: map[string]any{"overlay_id": "x"}, Say: "Use {{ call }}."},
+		}}}, "recall does not accept overlay_id"},
+		{"reissue path no tool accepts", &Rule{ID: "R", NextSteps: &NextSteps{Steps: []NextStep{
+			{Args: map[string]any{"bogus": "x"}, Say: "Use {{ call }}."},
+		}}}, "no declared tool accepts bogus"},
+		{"reissue selector must accept", &Rule{ID: "R", Selector: Selector{"tool": {"recall"}}, NextSteps: &NextSteps{Steps: []NextStep{
+			{Args: map[string]any{"overlay_id": "x"}, Say: "Use {{ call }}."},
+		}}}, "recall does not accept overlay_id"},
+		{"pick path checked", &Rule{ID: "R", Requires: Requires{Facts: []string{"paintedwolf.x"}}, NextSteps: &NextSteps{Steps: []NextStep{
+			{Tool: "recall", Pick: map[string]string{"bogus": "paintedwolf.x"}, Say: "Use {{ call }}."},
+		}}}, "recall does not accept bogus"},
+		{"or alternatives checked", &Rule{ID: "R", NextSteps: &NextSteps{Steps: []NextStep{
+			{Tool: "recall", Say: "Use {{ call }}.", Or: []NextStep{
+				{Args: map[string]any{"bogus": "x"}, Say: "Use {{ call }}."},
+			}},
+		}}}, "no declared tool accepts bogus"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := loader.validateNextSteps(tc.rule)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("err = %v, want containing %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateNextStepsAcceptsSchemaValidArgs(t *testing.T) {
+	loader, err := NewLoader("")
+	testutil.FailErr(t, "load OAR", err)
+	loader.SetToolSchemas(schemaTestConfig())
+	rule := &Rule{ID: "R", Requires: Requires{Facts: []string{"paintedwolf.command"}}, NextSteps: &NextSteps{Steps: []NextStep{
+		{Tool: "recall", Args: map[string]any{"query": "{{ paintedwolf.command }}"}, Say: "Use {{ call }}."},
+		{Args: map[string]any{"overlay_id": "x"}, Say: "Use {{ call }}."},
+	}}}
+	if err := loader.validateNextSteps(rule); err != nil {
+		t.Fatalf("rejected schema-valid steps: %v", err)
+	}
+}
+
+func TestValidateNextStepsSkipsArgCheckWithoutSchemas(t *testing.T) {
+	loader, err := NewLoader("")
+	testutil.FailErr(t, "load OAR", err)
+	rule := &Rule{ID: "R", NextSteps: &NextSteps{Steps: []NextStep{
+		{Args: map[string]any{"bogus": "x"}, Say: "Use {{ call }}."},
+	}}}
+	if err := loader.validateNextSteps(rule); err != nil {
+		t.Fatalf("nil schemas must skip the arg check: %v", err)
 	}
 }
