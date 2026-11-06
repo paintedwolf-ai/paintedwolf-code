@@ -16,6 +16,7 @@ import (
 type ToolOutputEnricher struct {
 	hints        *HintConfig
 	gateFeedback *feedback.GateFeedbackCatalog
+	nextSteps    NextStepsResolver
 
 	mu                      sync.Mutex
 	lastProgressState       map[string]string
@@ -48,10 +49,11 @@ type EnrichResult struct {
 	ToolSpecificBannerApplied bool
 }
 
-func NewToolOutputEnricher(hints *HintConfig, gateFeedback *feedback.GateFeedbackCatalog) *ToolOutputEnricher {
+func NewToolOutputEnricher(hints *HintConfig, gateFeedback *feedback.GateFeedbackCatalog, nextSteps NextStepsResolver) *ToolOutputEnricher {
 	return &ToolOutputEnricher{
 		hints:                   hints,
 		gateFeedback:            gateFeedback,
+		nextSteps:               nextSteps,
 		lastProgressState:       make(map[string]string),
 		lastWorkflowProgressKey: make(map[string]string),
 	}
@@ -79,16 +81,16 @@ func (e *ToolOutputEnricher) Enrich(ctx context.Context, in EnrichInput) EnrichR
 
 	acc := newEnrichAccumulator(in.Output, in.Facts)
 	var toolSpecific bool
-	toolSpecific = e.appendRaisedBanners(in, acc) || toolSpecific
-	toolSpecific = e.renderSecretReceiptIfPresent(acc) || toolSpecific
-	toolSpecific = e.renderPeriodHintIfPresent(acc) || toolSpecific
+	toolSpecific = e.appendRaisedBanners(ctx, in, acc) || toolSpecific
+	toolSpecific = e.renderSecretReceiptIfPresent(ctx, in, acc) || toolSpecific
+	toolSpecific = e.renderPeriodHintIfPresent(ctx, acc) || toolSpecific
 	toolSpecific = e.appendFindOverflowNarrowIfNeeded(in, acc) || toolSpecific
 	toolSpecific = e.appendTUINotDrivenIfNeeded(in, acc) || toolSpecific
 	if strings.TrimSpace(in.Session.ParentSessionID) == "" {
 		toolSpecific = e.appendToolSpecificBanners(in, acc) || toolSpecific
 		e.appendPendingFeedbackLine(in, acc)
 		toolSpecific = e.appendWorkflowGateBanner(ctx, in, acc) || toolSpecific
-		toolSpecific = e.appendWorkflowPhaseExitRequired(in, acc) || toolSpecific
+		toolSpecific = e.appendWorkflowPhaseExitRequired(ctx, in, acc) || toolSpecific
 		e.appendWorkflowProgressLine(in, acc)
 		e.appendSpecProgressBannerIfNeeded(in, acc, toolSpecific)
 	}
@@ -99,7 +101,7 @@ func (e *ToolOutputEnricher) Enrich(ctx context.Context, in EnrichInput) EnrichR
 	}
 }
 
-func (e *ToolOutputEnricher) appendRaisedBanners(in EnrichInput, acc *enrichAccumulator) bool {
+func (e *ToolOutputEnricher) appendRaisedBanners(ctx context.Context, in EnrichInput, acc *enrichAccumulator) bool {
 	if e == nil || e.hints == nil {
 		return false
 	}
@@ -110,7 +112,7 @@ func (e *ToolOutputEnricher) appendRaisedBanners(in EnrichInput, acc *enrichAccu
 			continue
 		}
 		feedback := in.Facts.FeedbackFor(code)
-		message := e.bannerMessage(code, feedback.Details)
+		message := e.bannerMessage(ctx, code, feedback.Details)
 		if message == "" {
 			continue
 		}
@@ -230,11 +232,11 @@ func (e *ToolOutputEnricher) appendWorkflowGateBanner(ctx context.Context, in En
 	return acc.raise("WORKFLOW_GATE_BLOCKED", msg)
 }
 
-func (e *ToolOutputEnricher) appendWorkflowPhaseExitRequired(in EnrichInput, acc *enrichAccumulator) bool {
+func (e *ToolOutputEnricher) appendWorkflowPhaseExitRequired(ctx context.Context, in EnrichInput, acc *enrichAccumulator) bool {
 	if e == nil || !in.Workflow.CoordinatorPhaseExitRequired() {
 		return false
 	}
-	return acc.raise("WORKFLOW_PHASE_EXIT_REQUIRED", e.bannerMessage("WORKFLOW_PHASE_EXIT_REQUIRED", map[string]any{
+	return acc.raise("WORKFLOW_PHASE_EXIT_REQUIRED", e.bannerMessage(ctx, "WORKFLOW_PHASE_EXIT_REQUIRED", map[string]any{
 		"workflow_id": in.Workflow.WorkflowID,
 		"phase":       in.Workflow.CurrentPhase,
 	}))
@@ -367,7 +369,7 @@ func AppendOutputBanner(out, code, msg string) string {
 }
 
 // renderSecretReceiptIfPresent expands a host receipt marker.
-func (e *ToolOutputEnricher) renderSecretReceiptIfPresent(acc *enrichAccumulator) bool {
+func (e *ToolOutputEnricher) renderSecretReceiptIfPresent(ctx context.Context, in EnrichInput, acc *enrichAccumulator) bool {
 	if e == nil || e.hints == nil || !strings.Contains(acc.body, MarkerSecretReceipt) {
 		return false
 	}
@@ -383,7 +385,8 @@ func (e *ToolOutputEnricher) renderSecretReceiptIfPresent(acc *enrichAccumulator
 		if !parsed {
 			continue
 		}
-		what, _, fix := RenderHintFields(code, entry, nil)
+		data := map[string]any{"receipt_token": token, "tool": in.Tool}
+		what, _, fix := RenderHintFields(ctx, code, entry, data, e.nextSteps)
 		lines[i] = strings.TrimSpace(what+" "+fix) +
 			"\nredacted: " + strconv.Itoa(count) + " · unredact: " + strconv.Quote(token) +
 			"\nCode: " + code
@@ -398,7 +401,7 @@ func (e *ToolOutputEnricher) renderSecretReceiptIfPresent(acc *enrichAccumulator
 }
 
 // renderPeriodHintIfPresent expands a host period marker.
-func (e *ToolOutputEnricher) renderPeriodHintIfPresent(acc *enrichAccumulator) bool {
+func (e *ToolOutputEnricher) renderPeriodHintIfPresent(ctx context.Context, acc *enrichAccumulator) bool {
 	if e == nil || e.hints == nil || !strings.Contains(acc.body, MarkerPeriodHint) {
 		return false
 	}
@@ -414,7 +417,7 @@ func (e *ToolOutputEnricher) renderPeriodHintIfPresent(acc *enrichAccumulator) b
 		if !parsed {
 			continue
 		}
-		what, _, fix := RenderHintFields(code, entry, map[string]any{"year": year})
+		what, _, fix := RenderHintFields(ctx, code, entry, map[string]any{"year": year}, e.nextSteps)
 		lines[i] = strings.TrimSpace(what+" "+fix) + "\nCode: " + code
 		rendered = true
 	}
@@ -426,7 +429,7 @@ func (e *ToolOutputEnricher) renderPeriodHintIfPresent(acc *enrichAccumulator) b
 	return true
 }
 
-func (e *ToolOutputEnricher) bannerMessage(code string, ctx map[string]any) string {
+func (e *ToolOutputEnricher) bannerMessage(ctx context.Context, code string, data map[string]any) string {
 	if e == nil || e.hints == nil {
 		return ""
 	}
@@ -434,5 +437,5 @@ func (e *ToolOutputEnricher) bannerMessage(code string, ctx map[string]any) stri
 	if !ok {
 		return ""
 	}
-	return renderHintMessage(code, entry, ctx)
+	return renderHintMessage(ctx, code, entry, data, e.nextSteps)
 }
