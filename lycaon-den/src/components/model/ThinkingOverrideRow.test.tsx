@@ -8,7 +8,7 @@ const model = { provider_id: "cloudflare-1", model: "glm-5.3-flash" };
 
 const optionByValue = (value: string): HTMLElement =>
   assertNamedControl(
-    [...screen.getByTestId("thinking-override-row").querySelectorAll("[role=\"option\"]")].find(
+    screen.getAllByRole("option").find(
       (candidate) => candidate.getAttribute("data-value") === value,
     )! as HTMLElement,
     "option",

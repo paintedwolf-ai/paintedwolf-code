@@ -104,7 +104,7 @@ describe("NotificationStack", () => {
       (card) => within(card).queryByText("App one"),
     );
     expect(appOne).toBeDefined();
-    assertNamedControl(within(appOne!).getByTestId("system-nudge-dismiss"), "button").click();
+    assertNamedControl(within(appOne!).getByTestId("notice-dismiss"), "button").click();
 
     expect(screen.queryByText("App one")).toBeNull();
     expect(screen.getByText("App two")).toBeTruthy();

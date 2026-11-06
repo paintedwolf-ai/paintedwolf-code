@@ -52,7 +52,7 @@ describe("ContextMenu", () => {
       <ContextMenu
         anchor={{ x: 10, y: 10 }}
         onDismiss={vi.fn()}
-        items={[{ label: "Add to chat", shortcut: "⌘L", onSelect }]}
+        items={[{ label: "Add to chat", shortcut: "⌘L", testId: "item-add-to-chat", onSelect }]}
       />
     ));
     await Promise.resolve();

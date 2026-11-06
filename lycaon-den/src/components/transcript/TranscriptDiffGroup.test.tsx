@@ -133,7 +133,7 @@ describe("TranscriptDiffGroup", () => {
     expect(group.getAttribute("data-files")).toBe("3");
     expect(screen.getByTestId("diff-group-files").textContent).toContain("3");
     // pipeline +2 −1, cli +2 −1, new test file +3 −0.
-    await screen.findByTestId("diff-group");
+    await screen.findByTestId("diff-group-net");
     expect(screen.getByTestId("diff-group-net").textContent).toContain("−2");
     expect(screen.getByTestId("diff-group-writes").textContent).toContain("4");
   });

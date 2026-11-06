@@ -474,7 +474,7 @@ describe("ProjectRootSummary", () => {
       />
     ));
 
-    await screen.findByTestId("files-root-summary");
+    await screen.findByTestId("files-root-summary-context-status");
     expect(screen.getByTestId("files-root-summary-context-status").textContent).toBe("None");
   });
 });

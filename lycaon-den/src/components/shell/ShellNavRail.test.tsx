@@ -19,7 +19,7 @@ describe("ShellNavRail", () => {
     ));
     const nav = assertNamedControl(screen.getByTestId("shell-nav-rail"), "navigation");
     const frame = nav.parentElement;
-    const content = screen.getByTestId("chats").parentElement;
+    const content = screen.getByText("Chats").parentElement;
 
     expect(frame?.classList.contains("den-shell-nav-frame")).toBe(true);
     expect(content?.parentElement).toBe(nav);
