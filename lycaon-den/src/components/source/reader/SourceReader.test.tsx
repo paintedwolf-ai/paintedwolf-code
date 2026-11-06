@@ -12,6 +12,7 @@ import { createNoticeStore, registerNoticePublisher } from "../../../notices/not
 import { selectProjectNoticeGroups } from "../../../notices/notice-select.ts";
 import { receiveSourceViewEvent } from "../../../ui/paged-view/source-view-session.ts";
 import { mockReaderViewport } from "../../../test/reader-viewport-mock.ts";
+import { assertNamedControl } from "../../../test/controls.ts";
 
 afterEach(() => { registerNoticePublisher(null); cleanup(); });
 
@@ -156,8 +157,8 @@ it("expands only the chosen unchanged range through host intent", async () => {
   const source = Array.from({ length: 1000 }, (_, i) => `line ${i}\n`).join("");
   const value = fixture(source, source.replace("line 500\n", "changed\n"));
   render(() => <SourceReader access={value.access} path="example.ts" />);
-  await waitFor(() => expect(screen.getAllByText("Show lines")).toHaveLength(2));
-  fireEvent.click(screen.getAllByText("Show lines")[0]!);
+  await waitFor(() => expect(screen.getAllByTestId("source-reader-gap")).toHaveLength(2));
+  fireEvent.click(assertNamedControl(screen.getAllByTestId("source-reader-gap")[0]!, "button"));
   await waitFor(() => expect(value.updates).toHaveBeenCalledOnce());
   expect(value.updates.mock.calls[0]?.[2]).toMatchObject({ kind: "comparison", intent: { mode: "changes", expanded: [{ start: 0, end: 497 }] } });
   await screen.findByTestId("source-reader");
@@ -208,7 +209,7 @@ it("reads an added file as the file itself, with nothing to fold or split", asyn
   await waitFor(() => expect(document.querySelectorAll(".cm-den-reader [data-source-row]")).toHaveLength(2));
   expect(document.querySelector(".cm-den-reader-add, .cm-den-reader-delete")).toBeNull();
   expect(document.querySelectorAll(".cm-editor")).toHaveLength(1);
-  expect(screen.queryByText("Full file")).toBeNull();
+  expect(screen.queryByTestId("full-file")).toBeNull();
   expect(value.create.mock.calls.every(call => call[1].intent && !("mode" in call[1].intent && call[1].intent.mode === "split"))).toBe(true);
 });
 
@@ -218,15 +219,15 @@ it("keeps a deleted file's last contents marked as removed and numbered by them"
   render(() => <SourceReader access={value.access} path="example.ts" split onHandle={next => { handle = next; }} />);
   await waitFor(() => expect(document.querySelectorAll(".cm-den-reader-delete")).toHaveLength(3));
   expect(document.querySelectorAll(".cm-editor")).toHaveLength(1);
-  expect(screen.queryByText("Full file")).toBeNull();
+  expect(screen.queryByTestId("full-file")).toBeNull();
   expect(await handle!.content()).toBe("one\ntwo\nthree\n");
 });
 
 it("says so when neither side of the comparison has a file", async () => {
   const value = fixture(null, null);
   render(() => <SourceReader access={value.access} path="example.ts" />);
-  await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/either side/));
-  expect(screen.getByLabelText("Contents of example.ts").hidden).toBe(true);
+  await waitFor(() => expect(screen.getByTestId("source-reader-absent")).toBeTruthy());
+  expect(screen.getByTestId("source-reader-editors").hidden).toBe(true);
   expect(value.rows).not.toHaveBeenCalled();
 });
 

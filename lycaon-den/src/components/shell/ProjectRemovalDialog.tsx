@@ -166,7 +166,7 @@ export function ProjectRemovalDialog(props: { review: ReturnType<typeof createPr
                   </DenButton>
                 </Show>
                 <DenButton data-testid="cancel" variant="ghost" autofocus onClick={() => props.review.settle(null)}>Cancel</DenButton>
-                <DenButton variant="danger" onClick={() => props.review.settle(selected())}>
+                <DenButton data-testid="project-removal-confirm" variant="danger" onClick={() => props.review.settle(selected())}>
                   {selected().length > 0
                     ? `Delete project and remove ${selected().length} extension${selected().length === 1 ? "" : "s"}`
                     : request.assessment && request.assessment.extensions.length === 0

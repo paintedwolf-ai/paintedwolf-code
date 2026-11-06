@@ -1,4 +1,5 @@
 import { stubClient } from "../../../test/client-fixture.ts";
+import { assertNamedControl } from "../../../test/controls.ts";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import type { LycaonClient } from "../../../api/client.ts";
@@ -101,7 +102,9 @@ describe("HostResourcesSettingsPanel", () => {
     fireEvent.click(screen.getByTestId("resource-row-docker"));
     const select = await screen.findByTestId("resource-access-docker");
     fireEvent.click(select);
-    fireEvent.click(screen.getByRole("option", { name: "Ask before use" }));
+    fireEvent.click(
+      assertNamedControl(document.querySelector('[role="option"][data-value="ask"]')! as HTMLElement, "option"),
+    );
     await waitFor(() =>
       expect(mock.updateHostResource).toHaveBeenCalledWith("docker", { access: "ask" }),
     );

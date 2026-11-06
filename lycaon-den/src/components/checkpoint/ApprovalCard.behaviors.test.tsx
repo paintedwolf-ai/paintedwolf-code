@@ -306,12 +306,12 @@ it("writes a reviewed project ignore without resolving the held approval", async
   });
   render(() => <ApprovalCard client={client} projectId="project" checkpoint={checkpoint} onToolApproval={approve} onContentApply={noopContent} />);
   fireEvent.click(assertNamedControl(screen.getByTestId("ignore-this-value-in-this-project"), "button"));
-  const reason = await screen.findByLabelText("Reason");
+  const reason = await screen.findByTestId("ignore-secret-reason");
   fireEvent.input(reason, { target: { value: "Published example" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save project ignore" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("ignore-secret-save"), "button"));
   await waitFor(() => expect(add).toHaveBeenCalledOnce());
   expect(approve).not.toHaveBeenCalled();
-  await screen.findByText("Project ignore saved. The held request still needs your decision.");
+  await screen.findByTestId("approval-ignore-saved");
 });
 
 describe("ApprovalCard shortcuts", () => {
@@ -417,7 +417,7 @@ describe("directory scope", () => {
       recommendedOptionId: "chat-0",
     });
     const view = render(() => <ApprovalCard checkpoint={cp} resolving={false} onToolApproval={onToolApproval} onContentApply={vi.fn()} />);
-    const selector = view.getByRole("button", {name: "Directory scope"});
+    const selector = assertNamedControl(view.getByTestId("approval-directory-scope"), "button");
     expect(selector.textContent).toContain(narrow);
     fireEvent.keyDown(selector, {key:"Enter"});
     expect(onToolApproval).not.toHaveBeenCalled();

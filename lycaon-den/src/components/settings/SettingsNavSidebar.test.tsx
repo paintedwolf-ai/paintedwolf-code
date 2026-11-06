@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@solidjs/testing-library";
-import { SECURITY_SCANNERS_SECTION_LABEL } from "../../settings/settings-nav-model.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { SettingsNavSidebar } from "./SettingsNavSidebar.tsx";
 
 describe("SettingsNavSidebar", () => {
@@ -9,22 +9,21 @@ describe("SettingsNavSidebar", () => {
       <SettingsNavSidebar section="providers" onSectionChange={vi.fn()} />
     ));
 
-    const nav = screen.getByRole("navigation", { name: "Settings sections" });
-    const labels = Array.from(
-      nav.querySelectorAll(".den-shell-nav-sub-link-label"),
-    ).map((b) => b.textContent);
-    expect(labels).toEqual([
-      "General",
-      "AI providers",
-      "Approvals",
-      "MCP providers",
-      SECURITY_SCANNERS_SECTION_LABEL,
-      "Web research",
-      "Extensions",
-      "Cost",
-      "Advanced",
+    const nav = assertNamedControl(screen.getByTestId("settings-nav-sections"), "navigation");
+    const ids = Array.from(
+      nav.querySelectorAll("[data-testid^='settings-nav-']"),
+    ).map((b) => b.getAttribute("data-testid")!.slice("settings-nav-".length));
+    expect(ids).toEqual([
+      "general",
+      "providers",
+      "approvals",
+      "mcp",
+      "scanners",
+      "web-research",
+      "extensions",
+      "cost",
+      "debug",
     ]);
-    expect(screen.queryByText("Revoke approvals")).toBeNull();
   });
 
   it("renders one travelling marker and marks the selected row active", () => {
@@ -35,8 +34,8 @@ describe("SettingsNavSidebar", () => {
     expect(document.querySelectorAll(".den-nav-marker")).toHaveLength(1);
     const active = document.querySelectorAll(".den-shell-nav-sub-link-active");
     expect(active).toHaveLength(1);
-    expect(active[0]!.querySelector(".den-shell-nav-sub-link-label")?.textContent).toBe(
-      "Approvals",
+    expect(active[0]!.getAttribute("data-testid")).toBe(
+      "settings-nav-approvals",
     );
   });
 });

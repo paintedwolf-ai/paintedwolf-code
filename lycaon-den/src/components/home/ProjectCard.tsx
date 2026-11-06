@@ -166,7 +166,7 @@ export function ProjectCard(props: Props) {
               >
                 Attach folder…
               </button>
-              <button type="button" role="menuitem" class="project-card__menu-danger" onClick={() => { setMenuOpen(false); props.onDelete(props.project.id); }}>{props.project.isDraft ? "Discard draft" : "Delete"}</button>
+              <button type="button" role="menuitem" class="project-card__menu-danger" data-testid={`project-card-delete-${props.project.id}`} onClick={() => { setMenuOpen(false); props.onDelete(props.project.id); }}>{props.project.isDraft ? "Discard draft" : "Delete"}</button>
             </AnchoredSurface>
           </Show>
         </div>

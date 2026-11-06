@@ -60,6 +60,7 @@ export function HostFolderDialog() {
               <label for="host-folder-path">Folder path</label>
               <DenInput
                 id="host-folder-path"
+                data-testid="host-folder-path-input"
                 autofocus
                 autocomplete="off"
                 spellcheck={false}

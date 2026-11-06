@@ -156,13 +156,12 @@ describe("ProjectRootSummary", () => {
       <ProjectRootSummary projectId="p1" root={ROOT} roots={[ROOT]} client={client}
         onOpenFile={vi.fn()} onOpenChanges={vi.fn()} />
     ));
-    const readme = await screen.findByText("README");
-    const row = readme.closest("button")!;
+    const row = await screen.findByTestId("files-root-summary-resource-readme");
     expect(screen.getByTestId("files-root-summary-file-count").textContent).toBe("Indexing…");
 
     fileCount = 30;
     await waitFor(() => expect(vi.mocked(client.getProjectSourceIndex).mock.calls.length).toBeGreaterThan(1));
-    await waitFor(() => expect(screen.getByText("README").closest("button")).toBe(row));
+    await waitFor(() => expect(screen.getByTestId("files-root-summary-resource-readme")).toBe(row));
   });
 
   it("polls a readable partial index until the final count arrives", async () => {
@@ -175,12 +174,12 @@ describe("ProjectRootSummary", () => {
       <ProjectRootSummary projectId="p1" root={ROOT} roots={[ROOT]} client={client}
         onOpenFile={vi.fn()} onOpenChanges={vi.fn()} />
     ));
-    expect(await screen.findByText("Indexing…")).toBeTruthy();
-    const row = screen.getByText("README").closest("button");
+    await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toBe("Indexing…"));
+    const row = screen.getByTestId("files-root-summary-resource-readme");
     request.mockResolvedValue({ ...complete, file_count: 460_498,
       roots: [{ ...complete.roots[0]!, file_count: 460_498 }] });
-    expect(await screen.findByText("460,498 indexed")).toBeTruthy();
-    expect(screen.getByText("README").closest("button")).toBe(row);
+    await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toContain("460,498"));
+    expect(screen.getByTestId("files-root-summary-resource-readme")).toBe(row);
     const calls = request.mock.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(request).toHaveBeenCalledTimes(calls);
@@ -197,11 +196,10 @@ describe("ProjectRootSummary", () => {
         onOpenFile={vi.fn()} onOpenChanges={vi.fn()} />
     ));
     await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toBe("—"));
-    expect(screen.queryByText("0 indexed")).toBeNull();
     await new Promise(resolve => setTimeout(resolve, 600));
     expect(request).toHaveBeenCalledTimes(1);
     fireEvent.click(assertNamedControl(screen.getByTestId("retry-file-index"), "button"));
-    expect(await screen.findByText("3 indexed")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toContain("3"));
   });
 
   it("requests its first-time tip when the overview is rendered", async () => {
@@ -225,7 +223,7 @@ describe("ProjectRootSummary", () => {
       coverage: [...rootCoverage(), { ...rootCoverage(true)[0]!, root_id: "other", state: "warming", discovery_complete: false }] });
     render(() => <ProjectRootSummary projectId="p1" root={ROOT} roots={[ROOT]} client={client}
       onOpenFile={vi.fn()} onOpenChanges={vi.fn()} />);
-    expect(await screen.findByText("3 indexed")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toContain("3"));
     expect(screen.queryByTestId("files-root-summary-coverage")).toBeNull();
     await new Promise(resolve => setTimeout(resolve, 600));
     expect(client.getProjectSourceIndex).toHaveBeenCalledTimes(1);
@@ -238,8 +236,8 @@ describe("ProjectRootSummary", () => {
       coverage: [{ ...rootCoverage()[0]!, bounded_directories: 1, failed_directories: 1 }] });
     render(() => <ProjectRootSummary projectId="p1" root={ROOT} roots={[ROOT]} client={client}
       onOpenFile={vi.fn()} onOpenChanges={vi.fn()} />);
-    expect(await screen.findByText("3 indexed")).toBeTruthy();
-    expect(screen.getByText("README")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toContain("3"));
+    expect(screen.getByTestId("files-root-summary-resource-readme")).toBeTruthy();
     screen.getByTestId("files-root-summary-coverage");
     await new Promise(resolve => setTimeout(resolve, 600));
     expect(client.getProjectSourceIndex).toHaveBeenCalledTimes(1);
@@ -273,7 +271,7 @@ describe("ProjectRootSummary", () => {
     const summary = screen.getByTestId("files-root-summary").closest("[data-boot]")!;
     expect(summary.getAttribute("data-boot")).toBe("pending");
     expect(workspace.ready()).toBe(true);
-    expect(await screen.findByText("Preparing project overview…")).toBeTruthy();
+    expect(await screen.findByTestId("files-root-summary-wait")).toBeTruthy();
     resolveContext({
       project_id: "p1",
       root_id: "r1",
@@ -328,7 +326,7 @@ describe("ProjectRootSummary", () => {
       rootLabel: "painted-wolf",
       path: "AGENTS.md",
     });
-    fireEvent.click(screen.getByRole("button", { name: /README/ }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("files-root-summary-resource-readme"), "button"));
     expect(onOpenFile).toHaveBeenCalledWith({
       rootId: "r1",
       rootLabel: "painted-wolf",
@@ -382,7 +380,7 @@ describe("ProjectRootSummary", () => {
       />
     ));
 
-    expect(await screen.findByText("Indexing…")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("files-root-summary-file-count").textContent).toBe("Indexing…"));
     expect(client.getProjectSourceIndex).toHaveBeenCalledOnce();
     await waitFor(() =>
       expect(

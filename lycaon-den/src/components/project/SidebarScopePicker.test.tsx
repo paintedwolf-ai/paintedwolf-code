@@ -235,11 +235,7 @@ describe("SidebarScopePicker", () => {
     ));
     fireEvent.click(screen.getByTestId("sidebar-scope-picker"));
     fireEvent.click(screen.getByTestId("sidebar-scope-pin-current"));
-    expect(
-      await screen.findByText(
-        "Repository history is still being indexed. Try again shortly.",
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByTestId("sidebar-scope-pin-error")).toBeTruthy();
   });
 
   it("removes a saved snapshot and falls back from its active comparison", async () => {
@@ -574,7 +570,7 @@ describe("the scope picker", () => {
     ));
     fireEvent.click(screen.getByTestId("sidebar-scope-picker"));
     await screen.findByTestId("sidebar-scope-pins-load-error");
-    expect(screen.queryByText("No pins yet")).toBeNull();
+    expect(screen.queryByTestId("sidebar-scope-pins-empty")).toBeNull();
   });
 
   it('says "No pins yet" only after a load proved the project has none', async () => {
@@ -582,7 +578,7 @@ describe("the scope picker", () => {
       <SidebarScopePicker projectId="p1" client={mockClient()} appStore={mockAppStore()} />
     ));
     fireEvent.click(screen.getByTestId("sidebar-scope-picker"));
-    await waitFor(() => expect(screen.getByText("No pins yet")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("sidebar-scope-pins-empty")).toBeTruthy());
     expect(screen.queryByTestId("sidebar-scope-pins-load-error")).toBeNull();
   });
 });

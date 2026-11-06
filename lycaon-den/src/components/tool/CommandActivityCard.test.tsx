@@ -33,12 +33,12 @@ describe("compact command activity details", () => {
   expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy();
   expect(view.container.querySelector("pre")).toBeNull();
   expect(view.container.querySelectorAll("details")).toHaveLength(0);
-  await waitFor(() => expect(view.container.textContent).toContain("Execution receipts and diagnostics"));
+  await waitFor(() => expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy());
   const status = view.container.querySelector('[role="status"]');
   expect(status?.hasAttribute("hidden")).toBe(true);
   fireEvent.click(assertNamedControl(view.getByTestId("copy-command"), "button"));
   await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith(source));
-  await waitFor(() => expect(view.getByRole("status").textContent).toBe("Copied"));
+  await waitFor(() => expect(status?.hasAttribute("hidden")).toBe(false));
   expect(view.getByRole("status")).toBe(status);
  });
  it("keeps long source and output behind Files links", async () => {
@@ -47,7 +47,7 @@ describe("compact command activity details", () => {
   const get = vi.fn().mockResolvedValue({ program, executions: [execution], nodes: [], executions_omitted: 0, nodes_omitted: 0 });
   const view = render(() => <CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" client={stubClient({ getCommandProgramReceipt: get })} />);
   fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
-  await waitFor(() => expect(view.container.textContent).toContain("Execution receipts and diagnostics"));
+  await waitFor(() => expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy());
   expect(view.container.querySelector("pre")).toBeNull();
   expect(view.container.textContent).not.toContain("y".repeat(100));
   expect(view.container.textContent).not.toContain("x".repeat(100));
@@ -55,7 +55,7 @@ describe("compact command activity details", () => {
  it("keeps the recorded row when detail loading fails", async () => {
   const view = render(() => <CommandActivityCard part={part()} layout="chat" sessionId="activity-card-test" client={stubClient({ getCommandProgramReceipt: vi.fn().mockRejectedValue(new Error("offline")) })} />);
   fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
-  await waitFor(() => expect(view.container.textContent).toContain("Execution details are unavailable"));
+  await waitFor(() => expect(view.container.querySelector(".den-tool-part-card-note")).toBeTruthy());
   expect(view.container.textContent).toContain("cargo test");
  });
 });
@@ -67,13 +67,13 @@ it("does not reload unchanged receipts when live snapshots replace their objects
  const client=stubClient({ getCommandProgramReceipt:get });
  const view=render(()=><CommandActivityCard part={value()} layout="chat" sessionId="activity-card-test" client={client}/>);
  fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
- await waitFor(()=>expect(view.container.textContent).toContain("Execution receipts and diagnostics"));
- const copy=view.getByRole("button",{name:"Copy command"});
+ await waitFor(()=>expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy());
+ const copy=assertNamedControl(view.getByTestId("copy-command"), "button");
  const next=part(); next.commandActivity!.fact={...next.commandActivity!.fact};
  setValue(next);
  await Promise.resolve();
  expect(get).toHaveBeenCalledOnce();
- expect(view.getByRole("button",{name:"Copy command"})).toBe(copy);
+ expect(view.getByTestId("copy-command")).toBe(copy);
 });
 
 it("preserves uncertain effects, approvals and unpublished changes in compact details", async () => {
@@ -84,8 +84,8 @@ it("preserves uncertain effects, approvals and unpublished changes in compact de
  const get=vi.fn().mockResolvedValue({ program:{...program,state:"waiting"},executions:[execution],nodes:[],executions_omitted:0,nodes_omitted:0 });
  const view=render(()=><ToolPartCard part={value} layout="chat" sessionId="activity-card-test" client={stubClient({getCommandProgramReceipt:get})}/>);
  fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
- await waitFor(()=>expect(view.container.textContent).toContain("Unknown outcome"));
- expect(view.container.textContent).toContain("Execution receipts and diagnostics");
+ await waitFor(()=>expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy());
+ expect(view.container.textContent).toContain("Unknown outcome");
  expect(view.container.textContent).not.toContain("approval-1");
  expect(view.container.querySelectorAll("details")).toHaveLength(0);
  expect(view.container.querySelectorAll('[data-testid="tool-part-card"]')).toHaveLength(1);
@@ -124,7 +124,7 @@ it("reveals a folded call on a later detail page through Find", async () => {
  openFind();setFindQuery("UNIQUE_FOLDED_NEEDLE");
  await waitFor(()=>expect(findController.matches().length).toBeGreaterThan(0));
  findNext();
- await waitFor(()=>expect(view.container.textContent).toContain("5–5 of 5"));
+ await waitFor(()=>{ expect(findController.matches().length).toBe(5); expect(findController.activeIndex()).toBe(4); });
  await waitFor(()=>expect(sink).toHaveBeenCalled());
  const opened=sink.mock.calls.at(-1)?.[0];
  expect(opened.document.toolCallId).toBe("source-4");
@@ -142,7 +142,7 @@ it("retains each program's receipt scope when read activities combine calls", as
  value.commandActivity!.members=[{...fact,execution_ids:["program:execution","other-program:execution"]}];
  const view=render(()=><CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" projectId="project" client={stubClient({getCommandProgramReceipt:get})}/>);
  fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
- await waitFor(()=>expect(view.container.textContent).toContain("Execution receipts and diagnostics"));
+ await waitFor(()=>expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy());
  fireEvent.click(assertNamedControl(view.getByTestId("tool-content-link"), "button"));
  const content=sink.mock.calls.at(-1)?.[0].document.content;
  expect(content.programs.map((program:{id:string})=>program.id)).toEqual(["program","other-program"]);

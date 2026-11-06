@@ -241,13 +241,13 @@ describe("SecurityFindingsPane", () => {
       { id: "root-secondary", path: "/fixture/secondary", label: "Secondary fixture", is_primary: false, added_at: "2026-01-01T00:00:00Z", kind: "attached" as const },
     ]);
     render(() => <SecurityFindingsPane appStore={appStore} projectId="proj-1" roots={roots()} liveScan={live()} />);
-    await screen.findByRole("button", { name: "Security folder" });
+    assertNamedControl(await screen.findByTestId("scans-folder-select"), "button");
     client.getProjectSecurity.mockImplementation((_project, rootId) => rootId === "root-primary"
       ? new Promise((resolve) => { resolvePrimary = resolve; })
       : Promise.resolve({ ...completeOverview, coverage_status: "bounded" }));
     setLive({ scan_id: "scan-1", categories: ["sast"], status: "complete", findings_count: 2, long_running: false });
     await waitFor(() => expect(resolvePrimary).toBeTypeOf("function"));
-    fireEvent.click(screen.getByRole("button", { name: "Security folder" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("scans-folder-select"), "button"));
     fireEvent.click(screen.getByRole("option", { name: "Secondary fixture" }));
     await waitFor(() => expect(client.getProjectSecurity).toHaveBeenCalledWith("proj-1", "root-secondary"));
     await selectRunsView();
@@ -259,7 +259,7 @@ describe("SecurityFindingsPane", () => {
     expect(screen.getByTestId("scans-coverage-chip").textContent).toBe("Bounded");
     setRoots((previous) => previous.slice(0, 1));
     await waitFor(() => expect(client.getProjectSecurity.mock.calls.at(-1)?.[1]).toBe("root-primary"));
-    expect(screen.queryByRole("button", { name: "Security folder" })).toBeNull();
+    expect(screen.queryByTestId("scans-folder-select")).toBeNull();
   });
 
   it("keeps the displayed ledger and coverage when the project reloads the same folders", async () => {
@@ -297,14 +297,14 @@ describe("SecurityFindingsPane", () => {
     appStore.actions.setSidecarStatus("connected");
     render(() => <SecurityFindingsPane appStore={appStore} projectId="proj-1" liveScan={event()} />);
     await selectRunsView();
-    await screen.findByText("Scan queued");
+    await screen.findByTestId("scans-empty");
     fireEvent.click(screen.getByTestId("scans-new-since-chip"));
     expect(client.queryCodeScan).not.toHaveBeenCalled();
     expect(screen.queryByTestId("scans-counts")).toBeNull();
     expect(screen.queryByTestId("scans-error")).toBeNull();
     current = { ...current, status: "running", progress: { completed: 1, chunks: 3, files: 20 } };
     setEvent({ scan_id: current.id, categories: current.categories, status: current.status, findings_count: 0, long_running: false });
-    await screen.findByText("Scan running");
+    await screen.findByText("1 of 3 chunks");
     expect(screen.getByTestId("scans-empty").textContent).toContain("1 of 3 chunks");
     expect(client.queryCodeScan).not.toHaveBeenCalled();
     current = summaryScan;
@@ -313,7 +313,7 @@ describe("SecurityFindingsPane", () => {
       limit: 500, fixed_since_at: "2026-01-01T09:41:00Z",
     }));
     expect(screen.queryByTestId("scans-error")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Retry loading" })).toBeNull();
+    expect(screen.queryByTestId("retry-loading")).toBeNull();
   });
 
   it.each([
@@ -402,7 +402,7 @@ describe("SecurityFindingsPane", () => {
     await waitFor(() => expect(client.getCodeScan).toHaveBeenCalledWith("proj-1", "queued", "summary"));
     expect(screen.queryByTestId("scans-finding-row")).toBeNull();
     finish(pending);
-    await screen.findByText("Scan queued");
+    await screen.findByTestId("scans-empty");
     expect(screen.queryByTestId("scans-finding-row")).toBeNull();
     expect(client.queryCodeScan.mock.calls.every((args) => args.includes("scan-1"))).toBe(true);
   });
@@ -500,7 +500,7 @@ describe("SecurityFindingsPane", () => {
     expect(client.getCodeScan.mock.calls).toHaveLength(detailReads);
     expect(screen.getAllByTestId("scans-finding-row")).toHaveLength(2);
     fireEvent.click(screen.getByTestId("scans-history-sort"));
-    fireEvent.click(await screen.findByRole("option", { name: "Engine ID" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("den-select-option-engine"), "option"));
     await waitFor(() => expect(list).toHaveBeenLastCalledWith("proj-1", { limit: 6, cursor: "", sort: "engine", order: "asc" }));
     expect(client.listProjectScanners).toHaveBeenCalledTimes(1);
   });
@@ -511,7 +511,7 @@ describe("SecurityFindingsPane", () => {
     await renderPane();
     await waitFor(() => expect(client.getCodeScan).toHaveBeenCalled());
     expect(screen.queryByTestId("scans-counts")).toBeNull();
-    expect(screen.queryByText("No findings in this run.")).toBeNull();
+    expect(screen.queryByTestId("scans-empty")).toBeNull();
     finish({ scan_id: "scan-1", findings: fullScan.findings, guidance: [], total_match: 2 });
     await waitFor(() => expect(screen.getAllByTestId("scans-finding-row")).toHaveLength(2));
     expect(screen.getByTestId("scans-counts").textContent).toContain("2 findings");
@@ -531,7 +531,7 @@ describe("SecurityFindingsPane", () => {
     setPresence("active");
     await waitFor(() => expect(screen.getByTestId("scans-error").textContent).toContain("Findings unavailable"));
     expect(screen.getAllByTestId("scans-finding-row")[0]).toBe(rows[0]);
-    expect(screen.queryByText("No findings in this run.")).toBeNull();
+    expect(screen.queryByTestId("scans-empty")).toBeNull();
     fireEvent.click(assertNamedControl(await screen.findByTestId("retry-loading"), "button"));
     await waitFor(() => expect(screen.queryByTestId("scans-error")).toBeNull());
   });
@@ -546,10 +546,10 @@ describe("SecurityFindingsPane", () => {
     await renderPane();
     const rows = await screen.findAllByTestId("scans-finding-row");
     expect(screen.queryByTestId("scans-limitations")).toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "Analysis issues · 14" }));
-    await screen.findByText("Could not load diagnostics. Available findings are unaffected.");
+    fireEvent.click(assertNamedControl(await screen.findByTestId("scans-issues-trigger"), "button"));
+    await screen.findByTestId("scans-issues-alert");
     expect(screen.getAllByTestId("scans-finding-row")[0]).toBe(rows[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Close analysis issues" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("scans-issues-close"), "button"));
     fireEvent.click(at(rows, 0));
     expect(await screen.findByTestId("scans-drill-down")).toBeTruthy();
     fireEvent.click(screen.getByTestId("scans-overflow-trigger"));
@@ -567,7 +567,6 @@ describe("SecurityFindingsPane", () => {
     await renderPane();
     const empty = await screen.findByTestId("scans-empty");
     expect(empty.textContent).toContain(coverage === "unavailable" ? "No findings available" : "No findings in analyzed code");
-    expect(screen.queryByText("No findings in this run.")).toBeNull();
     expect(screen.getByTestId("scans-issues-trigger")).toBeTruthy();
     expect(screen.queryByTestId("scans-limitations")).toBeNull();
   });

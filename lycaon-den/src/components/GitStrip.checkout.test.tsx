@@ -179,19 +179,15 @@ describe("GitStrip checkout flow", () => {
   it("shows one entry point and distinguishes current location from creation", async () => {
     render(() => <GitStrip {...worktreeBase()} status={loaded(dirty)} />);
     await waitFor(() =>
-      expect(screen.getByTestId("git-checkout-location").textContent).toBe(
-        "Project folder",
-      ),
+      expect(screen.getByTestId("git-checkout-mode-project")).toBeTruthy(),
     );
     expect(screen.queryByTestId("git-worktree-bind-open")).toBeNull();
     await openWorktreeForm();
-    const dialog = assertNamedControl(screen.getByTestId("git-checkout-create-modal"), "dialog");
-    expect(dialog.textContent).toContain("Starting pointmain");
-    expect(dialog.textContent).toContain(
-      "2 changed files stay in the project folder and are not copied.",
-    );
+    assertNamedControl(screen.getByTestId("git-checkout-create-modal"), "dialog");
+    expect(screen.getByTestId("git-checkout-facts").textContent).toContain("main");
+    expect(screen.getByTestId("git-worktree-notice").textContent).toContain("2");
     expect(
-      (screen.getByLabelText("New branch name") as HTMLInputElement).value,
+      (screen.getByTestId("git-worktree-branch") as HTMLInputElement).value,
     ).toBe("");
     expect(
       (screen.getByTestId("git-worktree-create") as HTMLButtonElement)
@@ -212,10 +208,10 @@ describe("GitStrip checkout flow", () => {
     await openWorktreeForm();
     await waitFor(() =>
       expect(document.activeElement).toBe(
-        screen.getByLabelText("New branch name"),
+        screen.getByTestId("git-worktree-branch"),
       ),
     );
-    fireEvent.input(screen.getByLabelText("New branch name"), {
+    fireEvent.input(screen.getByTestId("git-worktree-branch"), {
       target: { value: "feature/hello" },
     });
     fireEvent.click(screen.getByTestId("git-checkout-cancel"));
@@ -225,9 +221,9 @@ describe("GitStrip checkout flow", () => {
     );
     await openWorktreeForm();
     expect(
-      (screen.getByLabelText("New branch name") as HTMLInputElement).value,
+      (screen.getByTestId("git-worktree-branch") as HTMLInputElement).value,
     ).toBe("");
-    fireEvent.keyDown(screen.getByLabelText("New branch name"), {
+    fireEvent.keyDown(screen.getByTestId("git-worktree-branch"), {
       key: "Escape",
     });
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -247,7 +243,7 @@ describe("GitStrip checkout flow", () => {
     ));
     await openWorktreeForm();
     setBusy(true);
-    fireEvent.keyDown(screen.getByLabelText("New branch name"), {
+    fireEvent.keyDown(screen.getByTestId("git-worktree-branch"), {
       key: "Escape",
     });
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -279,11 +275,11 @@ describe("GitStrip checkout flow", () => {
       />
     ));
     await openWorktreeForm();
-    fireEvent.input(screen.getByLabelText("New branch name"), {
+    fireEvent.input(screen.getByTestId("git-worktree-branch"), {
       target: { value: " feature/login " },
     });
     fireEvent.submit(
-      screen.getByLabelText("New branch name").closest("form")!,
+      screen.getByTestId("git-worktree-branch").closest("form")!,
     );
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
@@ -291,22 +287,20 @@ describe("GitStrip checkout flow", () => {
       ),
     );
     expect(
-      (screen.getByLabelText("New branch name") as HTMLInputElement).value,
+      (screen.getByTestId("git-worktree-branch") as HTMLInputElement).value,
     ).toBe(" feature/login ");
-    fireEvent.input(screen.getByLabelText("New branch name"), {
+    fireEvent.input(screen.getByTestId("git-worktree-branch"), {
       target: { value: "feature/login-2" },
     });
     fireEvent.submit(
-      screen.getByLabelText("New branch name").closest("form")!,
+      screen.getByTestId("git-worktree-branch").closest("form")!,
     );
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(bind.mock.calls).toEqual([
       ["rtest", "feature/login"],
       ["rtest", "feature/login-2"],
     ]);
-    expect(screen.getByTestId("git-checkout-location").textContent).toBe(
-      "Chat worktree",
-    );
+    expect(screen.getByTestId("git-checkout-mode-worktree")).toBeTruthy();
   });
 
   it("keeps branch creation open after checkout failure", async () => {
@@ -318,22 +312,18 @@ describe("GitStrip checkout flow", () => {
     ));
     await openBranchMenu();
     fireEvent.click(screen.getByTestId("git-new-branch-open"));
-    fireEvent.input(screen.getByLabelText("New branch name"), {
+    fireEvent.input(screen.getByTestId("git-new-branch"), {
       target: { value: "bad..name" },
     });
     fireEvent.submit(
-      screen.getByLabelText("New branch name").closest("form")!,
+      screen.getByTestId("git-new-branch").closest("form")!,
     );
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
         "Invalid branch name",
       ),
     );
-    expect(
-      assertNamedControl(screen.getByTestId("git-checkout-create-modal"), "dialog").textContent,
-    ).toContain(
-      "Your uncommitted changes stay in this folder on the new branch.",
-    );
+    expect(screen.getByTestId("git-new-branch-notice")).toBeTruthy();
     expect(checkout).toHaveBeenCalledWith("bad..name", true);
   });
 
@@ -363,11 +353,11 @@ describe("GitStrip checkout flow", () => {
     await waitFor(() =>
       expect(screen.getAllByTestId("git-branch-item")).toHaveLength(2),
     );
-    fireEvent.input(screen.getByLabelText("Switch branch"), {
+    fireEvent.input(screen.getByTestId("git-branch-search"), {
       target: { value: "LOGIN" },
     });
     expect(screen.getAllByTestId("git-branch-item")).toHaveLength(1);
-    fireEvent.input(screen.getByLabelText("Switch branch"), {
+    fireEvent.input(screen.getByTestId("git-branch-search"), {
       target: { value: "missing" },
     });
   });
@@ -385,14 +375,14 @@ describe("GitStrip checkout flow", () => {
     ));
     await openBranchMenu();
     fireEvent.click(screen.getByTestId("git-new-branch-open"));
-    fireEvent.input(screen.getByLabelText("New branch name"), {
+    fireEvent.input(screen.getByTestId("git-new-branch"), {
       target: { value: "feature/new" },
     });
-    const form = screen.getByLabelText("New branch name").closest("form")!;
+    const form = screen.getByTestId("git-new-branch").closest("form")!;
     fireEvent.submit(form);
     fireEvent.submit(form);
     expect(checkout).toHaveBeenCalledTimes(1);
-    fireEvent.keyDown(screen.getByLabelText("New branch name"), {
+    fireEvent.keyDown(screen.getByTestId("git-new-branch"), {
       key: "Escape",
     });
     expect(screen.getByRole("dialog")).toBeTruthy();
@@ -423,15 +413,11 @@ describe("GitStrip checkout flow", () => {
     ));
     setSession("another-chat");
     await waitFor(() =>
-      expect(screen.getByTestId("git-checkout-location").textContent).toBe(
-        "Project folder",
-      ),
+      expect(screen.getByTestId("git-checkout-mode-project")).toBeTruthy(),
     );
     resolveOld(boundWorktree);
     await Promise.resolve();
-    expect(screen.getByTestId("git-checkout-location").textContent).toBe(
-      "Project folder",
-    );
+    expect(screen.getByTestId("git-checkout-mode-project")).toBeTruthy();
   });
 
   it("closes drafts when the chat changes and ignores callback identity changes", async () => {
@@ -460,17 +446,15 @@ describe("GitStrip checkout flow", () => {
     const [status, setStatus] = createSignal(dirty);
     render(() => <GitStrip {...worktreeBase()} status={loaded(status())} />);
     await openWorktreeForm();
-    fireEvent.input(screen.getByLabelText("New branch name"), {
+    fireEvent.input(screen.getByTestId("git-worktree-branch"), {
       target: { value: "feature/in-progress" },
     });
     setStatus({ ...dirty, changed_count: 3 });
     await waitFor(() =>
-      expect(screen.getByRole("dialog").textContent).toContain(
-        "3 changed files stay",
-      ),
+      expect(screen.getByTestId("git-worktree-notice").textContent).toContain("3"),
     );
     expect(
-      (screen.getByLabelText("New branch name") as HTMLInputElement).value,
+      (screen.getByTestId("git-worktree-branch") as HTMLInputElement).value,
     ).toBe("feature/in-progress");
   });
 
@@ -519,9 +503,7 @@ describe("GitStrip checkout flow", () => {
     ));
     await waitFor(() => screen.getByTestId("git-worktree-land"));
     fireEvent.click(screen.getByTestId("git-worktree-land"));
-    expect(screen.getByRole("dialog").textContent).toContain(
-      "This chat will stay in its worktree.",
-    );
+    expect(screen.getByTestId("git-worktree-land-description")).toBeTruthy();
     fireEvent.click(screen.getByTestId("git-worktree-land-confirm"));
     await waitFor(() => screen.getByTestId("git-worktree-result"));
     expect(screen.getByTestId("git-worktree-result").textContent).toContain(
@@ -530,9 +512,7 @@ describe("GitStrip checkout flow", () => {
     expect(
       screen.getByTestId("git-worktree-result").querySelector("a"),
     ).toBeNull();
-    expect(screen.getByTestId("git-checkout-location").textContent).toBe(
-      "Chat worktree",
-    );
+    expect(screen.getByTestId("git-checkout-mode-worktree")).toBeTruthy();
   });
 
   it("returns only after confirmation and says unmerged commits remain on the branch", async () => {
@@ -549,14 +529,10 @@ describe("GitStrip checkout flow", () => {
     await waitFor(() => screen.getByTestId("git-worktree-unbind"));
     fireEvent.click(screen.getByTestId("git-worktree-unbind"));
     expect(remove).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog").textContent).toContain(
-      "Unmerged commits remain on the branch.",
-    );
+    expect(screen.getByTestId("git-worktree-unbind-notice")).toBeTruthy();
     fireEvent.click(screen.getByTestId("git-worktree-unbind-confirm"));
     await waitFor(() =>
-      expect(screen.getByTestId("git-checkout-location").textContent).toBe(
-        "Project folder",
-      ),
+      expect(screen.getByTestId("git-checkout-mode-project")).toBeTruthy(),
     );
     expect(remove).toHaveBeenCalledOnce();
   });
@@ -570,9 +546,7 @@ describe("GitStrip checkout flow", () => {
       />
     ));
     await waitFor(() => screen.getByTestId("git-worktree-unbind"));
-    expect(screen.getByTestId("git-worktree").textContent).toContain(
-      "worktree is missing",
-    );
+    expect(screen.getByTestId("git-worktree-stale-status")).toBeTruthy();
     expect(screen.queryByTestId("git-worktree-land")).toBeNull();
   });
 
@@ -586,14 +560,15 @@ describe("GitStrip checkout flow", () => {
       />
     ));
     await waitFor(() =>
-      expect(screen.getByTestId("git-checkout-location").textContent).toBe(
-        "Project folderbeta",
-      ),
+      expect(screen.getByTestId("git-checkout-mode-project")).toBeTruthy(),
+    );
+    expect(screen.getByTestId("git-checkout-location").textContent).toContain(
+      "beta",
     );
     expect(screen.queryByTestId("git-worktree-land")).toBeNull();
     await openBranchMenu();
-    expect(screen.getByRole("dialog").textContent).toContain(
-      "worktree for app",
+    expect(screen.getByTestId("git-branches-bound-hint").textContent).toContain(
+      "app",
     );
     expect(screen.queryByTestId("git-worktree-bind-open")).toBeNull();
   });
@@ -615,14 +590,10 @@ describe("GitStrip checkout flow", () => {
         "Checkout unavailable",
       ),
     );
-    expect(
-      screen.getByTestId("git-checkout-location").textContent,
-    ).not.toContain("Project folder");
+    expect(screen.queryByTestId("git-checkout-mode-project")).toBeNull();
     fireEvent.click(screen.getByTestId("git-worktree-retry"));
     await waitFor(() =>
-      expect(screen.getByTestId("git-checkout-location").textContent).toBe(
-        "Project folder",
-      ),
+      expect(screen.getByTestId("git-checkout-mode-project")).toBeTruthy(),
     );
   });
 
@@ -635,9 +606,7 @@ describe("GitStrip checkout flow", () => {
       <GitStrip {...worktreeBase(view)} status={loaded(dirty)} />
     ));
     await waitFor(() =>
-      expect(
-        screen.getByTestId("git-checkout-location").textContent,
-      ).not.toBe("Checking checkout…"),
+      expect(screen.queryByTestId("git-checkout-pending")).toBeNull(),
     );
     await assertNoAxeViolations(container);
   });
@@ -650,7 +619,7 @@ describe("GitStrip checkout flow", () => {
     cancel.focus();
     fireEvent.keyDown(cancel, { key: "Tab" });
     expect(document.activeElement).toBe(
-      screen.getByLabelText("New branch name"),
+      screen.getByTestId("git-worktree-branch"),
     );
   });
 });

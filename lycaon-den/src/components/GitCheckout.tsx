@@ -314,8 +314,19 @@ export function GitCheckout(props: Props) {
   return (
     <div class="git-checkout" ref={container} data-testid="git-checkout">
       <div class="git-checkout__location" data-testid="git-checkout-location">
-        <Show when={checkoutKnown()} fallback="Checking checkout…">
-          <span>{scopedWorktree() ? "Chat worktree" : "Project folder"}</span>
+        <Show
+          when={checkoutKnown()}
+          fallback={<span data-testid="git-checkout-pending">Checking checkout…</span>}
+        >
+          <span
+            data-testid={
+              scopedWorktree()
+                ? "git-checkout-mode-worktree"
+                : "git-checkout-mode-project"
+            }
+          >
+            {scopedWorktree() ? "Chat worktree" : "Project folder"}
+          </span>
           <Show when={props.repoLabel}>
             <span class="git-checkout__repository">{props.repoLabel}</span>
           </Show>
@@ -370,7 +381,7 @@ export function GitCheckout(props: Props) {
             when={!stale()}
             fallback={
               <>
-                <p role="status">
+                <p role="status" data-testid="git-worktree-stale-status">
                   This chat's worktree is missing or invalid. Return to the
                   project folder to continue.
                 </p>
@@ -439,7 +450,7 @@ export function GitCheckout(props: Props) {
             when={!bound()}
             fallback={
               <>
-                <p class="git-checkout__hint">
+                <p class="git-checkout__hint" data-testid="git-branches-bound-hint">
                   This chat uses a worktree
                   {!scopedWorktree()
                     ? ` for ${worktree()?.label || "another repository"}`
@@ -466,6 +477,7 @@ export function GitCheckout(props: Props) {
             <input
               id={`${id}-search`}
               class="git-checkout__input"
+              data-testid="git-branch-search"
               type="search"
               placeholder="Find a branch…"
               value={query()}
@@ -616,7 +628,14 @@ export function GitCheckout(props: Props) {
                   <Show
                     when={creating()}
                     fallback={
-                      <p id={`${id}-description`}>
+                      <p
+                        id={`${id}-description`}
+                        data-testid={
+                          dialog() === "merge"
+                            ? "git-worktree-land-description"
+                            : "git-worktree-unbind-description"
+                        }
+                      >
                         <Show
                           when={dialog() === "merge"}
                           fallback={
@@ -640,7 +659,10 @@ export function GitCheckout(props: Props) {
                         ? "Give this chat a separate checkout on a new branch."
                         : "Create and switch to a new branch in the project folder."}
                     </p>
-                    <dl class="git-checkout-dialog__facts">
+                    <dl
+                      class="git-checkout-dialog__facts"
+                      data-testid="git-checkout-facts"
+                    >
                       <Show when={props.repoLabel}>
                         <div>
                           <dt>Repository</dt>
@@ -686,7 +708,14 @@ export function GitCheckout(props: Props) {
                         setActionError(undefined);
                       }}
                     />
-                    <div class="git-checkout-dialog__notice">
+                    <div
+                      class="git-checkout-dialog__notice"
+                      data-testid={
+                        dialog() === "worktree"
+                          ? "git-worktree-notice"
+                          : "git-new-branch-notice"
+                      }
+                    >
                       <Show
                         when={dialog() === "worktree"}
                         fallback={
@@ -727,7 +756,14 @@ export function GitCheckout(props: Props) {
                     </div>
                   </Show>
                   <Show when={!creating()}>
-                    <p class="git-checkout-dialog__notice">
+                    <p
+                      class="git-checkout-dialog__notice"
+                      data-testid={
+                        dialog() === "merge"
+                          ? "git-worktree-land-notice"
+                          : "git-worktree-unbind-notice"
+                      }
+                    >
                       {dialog() === "merge"
                         ? "Both checkouts must have their changes committed or stashed before merging."
                         : "Commit or stash any worktree changes before returning. Unmerged commits remain on the branch."}

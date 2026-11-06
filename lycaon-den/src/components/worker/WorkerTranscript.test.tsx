@@ -5,6 +5,7 @@ import { createSignal } from "solid-js";
 import type { WorkerTask } from "../../api/types.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { WorkerTranscript } from "./WorkerTranscript.tsx";
+import { assertNamedControl } from "../../test/controls.ts";
 
 import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
 import { addToChat } from "../../chat/composer/add-to-chat.ts";
@@ -91,7 +92,7 @@ describe("WorkerTranscript", () => {
     if (activity && !isDisclosureOpen(activity)) fireEvent.click(disclosureToggle(activity));
     const card = view.container.querySelector<HTMLElement>('[data-tool-call-id="worker-command-output"]')!;
     if (!isDisclosureOpen(card)) fireEvent.click(disclosureToggle(card));
-    fireEvent.click(view.getByRole("button", { name: "Raw output in Files" }));
+    fireEvent.click(assertNamedControl(view.getByTestId("tool-content-link"), "button"));
     expect(openFilesSurface).toHaveBeenCalledWith(expect.objectContaining({
       kind: "chat-content", projectId: "project-output", document: expect.objectContaining({
         sessionId: "child-output", messageId: "worker-result-output", toolCallId: "worker-command-output",
@@ -205,7 +206,7 @@ describe("WorkerTranscript", () => {
     ));
 
     expect(screen.getByTestId("worker-activity")).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 3, name: "Activity" })).toBeTruthy();
+    expect(within(screen.getByTestId("worker-activity")).getByRole("heading", { level: 3 })).toBeTruthy();
     expect(screen.getByTestId("message-stream")).toBeTruthy();
     expect(screen.queryByTestId("worker-working-indicator")).toBeNull();
   });

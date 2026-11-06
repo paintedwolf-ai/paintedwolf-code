@@ -71,7 +71,7 @@ describe("ProjectCard drafts", () => {
   it("calls onDelete from the project menu", () => {
     const { getByTestId, onDelete } = renderCard(summary({ id: "s2" }));
     fireEvent.click(getByTestId("project-card-menu-s2"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("project-card-delete-s2"), "menuitem"));
     expect(onDelete).toHaveBeenCalledWith("s2");
   });
 });

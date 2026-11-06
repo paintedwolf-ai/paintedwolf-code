@@ -279,6 +279,7 @@ export function DenSelect(props: Props) {
           class={`${DEN_SCROLLPORT_CLASS} den-menu-surface den-select__listbox`}
           role="listbox"
           tabIndex={0}
+          testId="den-select-listbox"
           ariaLabel={props["aria-label"]}
           ariaActiveDescendant={active() >= 0 ? optionId(active()) : undefined}
           onKeyDown={onKeyDown}
@@ -307,6 +308,7 @@ export function DenSelect(props: Props) {
                       role="option"
                       aria-selected={currentValue() === option.value}
                       aria-disabled={disabled() || option.disabled || undefined}
+                      data-testid={`den-select-option-${option.value}`}
                       data-option-index={index()}
                       data-value={option.value}
                       onPointerMove={() => {

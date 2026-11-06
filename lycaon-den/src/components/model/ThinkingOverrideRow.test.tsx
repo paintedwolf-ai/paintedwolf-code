@@ -5,6 +5,14 @@ import { describe, expect, it, vi } from "vitest";
 import { ThinkingOverrideRow } from "./ThinkingOverrideRow.tsx";
 
 const model = { provider_id: "cloudflare-1", model: "glm-5.3-flash" };
+
+const optionByValue = (value: string): HTMLElement =>
+  assertNamedControl(
+    [...screen.getByTestId("thinking-override-row").querySelectorAll("[role=\"option\"]")].find(
+      (candidate) => candidate.getAttribute("data-value") === value,
+    )! as HTMLElement,
+    "option",
+  );
 const capabilities = { state: "supported" as const, efforts: ["low", "high", "max"], source: "model-rule" };
 
 describe("thinking override controls", () => {
@@ -16,7 +24,7 @@ describe("thinking override controls", () => {
     fireEvent.click(checkbox);
     expect(change).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /Thinking setting/ }));
-    fireEvent.click(screen.getByRole("option", { name: "High" }));
+    fireEvent.click(optionByValue("effort:high"));
     expect(change).toHaveBeenCalledWith({ ...model, mode: "fixed", effort: "high" });
   });
   it("lets a project clear a device override with application behavior", () => {
@@ -24,7 +32,7 @@ describe("thinking override controls", () => {
     render(() => <ThinkingOverrideRow model={model} providerLabel="Cloudflare" capabilities={capabilities} project inherited={{ ...model, mode: "fixed", effort: "max" }} onChange={change} />);
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: /Thinking setting/ }));
-    fireEvent.click(screen.getByRole("option", { name: "Use application behavior" }));
+    fireEvent.click(optionByValue("application"));
     expect(change).toHaveBeenCalledWith({ ...model, mode: "application" });
   });
   it("keeps an unavailable saved setting visible and removable", () => {
@@ -39,10 +47,10 @@ describe("thinking override controls", () => {
     render(() => <ThinkingOverrideRow model={model} providerLabel="Provider" capabilities={{ state: "supported", budget: { min: 1024, max: 8192 } }} onChange={change} />);
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: /Thinking setting/ }));
-    fireEvent.click(screen.getByRole("option", { name: "Token budget" }));
+    fireEvent.click(optionByValue("budget"));
     const input = screen.getByRole("spinbutton");
     fireEvent.input(input, { target: { value: "512" } });
-    expect((screen.getByRole("button", { name: "Apply budget" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((assertNamedControl(screen.getByTestId("apply-budget"), "button") as HTMLButtonElement).disabled).toBe(true);
     fireEvent.input(input, { target: { value: "4096" } });
     fireEvent.click(assertNamedControl(screen.getByTestId("apply-budget"), "button"));
     expect(change).toHaveBeenCalledWith({ ...model, mode: "fixed", budget_tokens: 4096 });
@@ -52,7 +60,7 @@ describe("thinking override controls", () => {
     render(() => <ThinkingOverrideRow model={model} providerLabel="Provider" capabilities={metadata()} onChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: /Thinking setting/ }));
-    fireEvent.click(screen.getByRole("option", { name: "Token budget" }));
+    fireEvent.click(optionByValue("budget"));
     fireEvent.input(screen.getByRole("spinbutton"), { target: { value: "4096" } });
     setMetadata({ state: "supported", budget: { min: 1024, max: 8192 } });
     expect((screen.getByRole("spinbutton") as HTMLInputElement).value).toBe("4096");

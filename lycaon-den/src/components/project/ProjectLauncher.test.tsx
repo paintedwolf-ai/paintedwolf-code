@@ -70,9 +70,9 @@ describe("ProjectLauncher", () => {
     const dialog = assertNamedControl(screen.getByTestId("project-launcher"), "dialog");
     expect(dialog.getAttribute("aria-modal")).toBe("true");
     expect(dialog.contains(document.activeElement)).toBe(true);
-    expect(screen.getByRole("textbox", { name: "Search projects" })).toBe(
-      document.activeElement,
-    );
+    expect(
+      assertNamedControl(screen.getByTestId("project-launcher-search"), "textbox"),
+    ).toBe(document.activeElement);
   });
 
   it("offers New project and Manage all", () => {

@@ -155,7 +155,7 @@ describe("WorklogPanel", () => {
         onClose={() => undefined}
       />
     ));
-    expect(screen.getByText("No worker findings yet.")).toBeTruthy();
+    expect(screen.getByTestId("worklog-findings-empty")).toBeTruthy();
   });
 
   it("links a worker approval entry to the child checkpoint", () => {
@@ -239,7 +239,7 @@ describe("WorklogPanel", () => {
         onClose={() => undefined}
       />
     ));
-    expect(screen.queryByText("No worker findings yet.")).toBeNull();
+    expect(screen.queryByTestId("worklog-findings-empty")).toBeNull();
     expect(screen.getByTestId("worklog-findings-load-error")).toBeTruthy();
   });
 });

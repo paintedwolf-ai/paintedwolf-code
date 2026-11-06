@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@solidjs/testing-library";
+import { assertNamedControl } from "../test/controls.ts";
 import { APP_SCOPE, projectScope, type NoticeScope } from "../notices/notice-scope.ts";
 import { createNoticeStore } from "../notices/notice-store.ts";
 import { NotificationStack } from "./NotificationStack.tsx";
@@ -66,7 +67,7 @@ describe("NotificationStack", () => {
 
     mount(store, { onOpenProject });
 
-    screen.getByLabelText("Open project Alpha").click();
+    assertNamedControl(screen.getByTestId("project-notice-open"), "button").click();
     expect(onOpenProject).toHaveBeenCalledWith("proj-a");
   });
 
@@ -87,7 +88,7 @@ describe("NotificationStack", () => {
     expect(within(group).getByTestId("project-notice-card")).toBeTruthy();
     expect(within(group).getByText("Nothing was enabled.")).toBeTruthy();
     expect(within(group).getByText("Review the updated project settings.")).toBeTruthy();
-    within(group).getByLabelText("Dismiss").click();
+    assertNamedControl(within(group).getByTestId("system-nudge-dismiss"), "button").click();
     expect(screen.queryByTestId("notification-stack")).toBeNull();
   });
 
@@ -103,7 +104,7 @@ describe("NotificationStack", () => {
       (card) => within(card).queryByText("App one"),
     );
     expect(appOne).toBeDefined();
-    within(appOne!).getByLabelText("Dismiss").click();
+    assertNamedControl(within(appOne!).getByTestId("system-nudge-dismiss"), "button").click();
 
     expect(screen.queryByText("App one")).toBeNull();
     expect(screen.getByText("App two")).toBeTruthy();

@@ -70,7 +70,7 @@ describe("NetworkChicklet / External access", () => {
   });
 
   it("shows External access label and a11y visibility text", () => {
-    const { getByTestId } = render(() => (
+    const { getByTestId, getByText } = render(() => (
       <NetworkChicklet
         externalAccess={{
           modes: ["local_socket"],

@@ -29,7 +29,7 @@ describe("update settings", () => {
     render(() => <UpdatesSettingsPanel updateService={service} />);
     fireEvent.click(assertNamedControl(await screen.findByTestId("updates-install"), "button"));
     await waitFor(() => expect(download).toHaveBeenCalledWith("release-1"));
-    expect(await screen.findByRole("button", { name: "Restart to update" })).toBeTruthy();
+    expect(assertNamedControl(await screen.findByTestId("updates-install"), "button")).toBeTruthy();
   });
   it("requires confirmation only for an immediate restart", async () => {
     const restart = vi.fn(async () => {}); const confirm = vi.fn(async () => false); setConfirmDestructivePresenter(confirm);
@@ -143,6 +143,6 @@ describe("update settings", () => {
   });
   it("shows typed recovery guidance and keeps diagnostic detail separate", async () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => updateFixture({ last_error: { code: "disk_space", detail: "test detail" } }) })} />);
-    expect((await screen.findByRole("alert")).textContent).toContain("free space"); expect(screen.getByText("Technical details")).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain("free space"); expect(screen.getByTestId("updates-technical-details")).toBeTruthy();
   });
 });

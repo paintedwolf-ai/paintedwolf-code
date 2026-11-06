@@ -143,7 +143,7 @@ export function HistoryStorageSettingsPanel(props: { client: LycaonClient | null
         <DenSelect aria-label={`${row.label} retention`} data-testid={`history-${row.id}-mode`} options={RETENTION_MODES} value={policy()[row.id].mode} disabled={!!busy()} onValueChange={(mode) => changeRule(row.id, retentionRule(mode as HistoryRetentionRule["mode"]))} />
         <Show when={policy()[row.id].mode !== "forever"}>
           <label>{policy()[row.id].mode === "max_age" ? "Days" : "GiB"}
-            <DenInput aria-label={`${row.label} limit`} inputmode="numeric" disabled={!!busy()} value={policy()[row.id].mode === "max_age" ? policy()[row.id].max_age_days : (policy()[row.id].max_bytes ?? 0) / 1024 ** 3} onInput={(event) => {
+            <DenInput aria-label={`${row.label} limit`} data-testid={`history-${row.id}-limit`} inputmode="numeric" disabled={!!busy()} value={policy()[row.id].mode === "max_age" ? policy()[row.id].max_age_days : (policy()[row.id].max_bytes ?? 0) / 1024 ** 3} onInput={(event) => {
               const value = Number(event.currentTarget.value);
               changeRule(row.id, policy()[row.id].mode === "max_age" ? { mode: "max_age", max_age_days: value } : { mode: "max_bytes", max_bytes: Math.round(value * 1024 ** 3) });
             }} />
@@ -165,10 +165,10 @@ export function HistoryStorageSettingsPanel(props: { client: LycaonClient | null
       <Show when={busy() === "prune"}><DenButton variant="secondary" onClick={() => { stopPruning = true; }}>Stop after this batch</DenButton></Show>
     </>}</ShowLatest>
     <h3>Protected history</h3>
-    <DenSelect aria-label="Project to protect" options={[{ value: "", label: "Choose a project" }, ...projectOptions()]} value={protectionProject()} disabled={!!busy()} onValueChange={(id) => { setProtectionProject(id); setProtectionTask(""); setTasks([]); setTaskCursor(undefined); if (id) void loadTasks(id, archived()); }} />
+    <DenSelect aria-label="Project to protect" data-testid="protect-project" options={[{ value: "", label: "Choose a project" }, ...projectOptions()]} value={protectionProject()} disabled={!!busy()} onValueChange={(id) => { setProtectionProject(id); setProtectionTask(""); setTasks([]); setTaskCursor(undefined); if (id) void loadTasks(id, archived()); }} />
     <Show when={protectionProject()}>
-      <DenCheckbox checked={archived()} disabled={!!busy()} onChange={(event) => { setArchived(event.currentTarget.checked); setProtectionTask(""); void loadTasks(protectionProject(), event.currentTarget.checked); }}>Show archived tasks</DenCheckbox>
-      <DenSelect aria-label="Task to protect" options={[{ value: "", label: "Entire project" }, ...tasks().map((task) => ({ value: task.id, label: task.title || "Untitled task" }))]} value={protectionTask()} disabled={!!busy()} onValueChange={setProtectionTask} />
+      <DenCheckbox checked={archived()} data-testid="protect-archived" disabled={!!busy()} onChange={(event) => { setArchived(event.currentTarget.checked); setProtectionTask(""); void loadTasks(protectionProject(), event.currentTarget.checked); }}>Show archived tasks</DenCheckbox>
+      <DenSelect aria-label="Task to protect" data-testid="protect-task" options={[{ value: "", label: "Entire project" }, ...tasks().map((task) => ({ value: task.id, label: task.title || "Untitled task" }))]} value={protectionTask()} disabled={!!busy()} onValueChange={setProtectionTask} />
       <Show when={taskCursor()}><DenButton variant="secondary" disabled={!!busy()} onClick={() => void loadTasks(protectionProject(), archived(), true)}>Load more tasks</DenButton></Show>
       <DenButton data-testid="protect-history" variant="secondary" disabled={!!busy()} onClick={() => void protect({ scope_type: protectionTask() ? "session" : "project", scope_id: protectionTask() || protectionProject(), protected: true })}>Protect history</DenButton>
     </Show>

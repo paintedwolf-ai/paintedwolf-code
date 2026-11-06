@@ -169,7 +169,10 @@ export function WorklogPanel(props: WorklogPanelProps) {
           onSelect={() => selectSection("findings")}
         >
           <Show when={findingsSettled() && findings().length === 0}>
-            <p class="den-worker-transcript-empty den-worker-transcript-empty--inline">
+            <p
+              class="den-worker-transcript-empty den-worker-transcript-empty--inline"
+              data-testid="worklog-findings-empty"
+            >
               No worker findings yet.
             </p>
           </Show>

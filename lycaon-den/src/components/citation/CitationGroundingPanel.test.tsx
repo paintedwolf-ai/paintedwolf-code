@@ -78,9 +78,8 @@ describe("CitationGroundingPanel render-by-shape", () => {
     render(() => <CitationGroundingPanel view={view} />);
     const record = screen.getByTestId("citation-grounding-record");
     expect(record.getAttribute("data-shape")).toBe("opaque");
-    expect(
-      screen.getByText("Opaque — verbatim capture, no semantics claimed"),
-    ).toBeTruthy();
+    expect(record.getAttribute("data-fidelity")).toBe("opaque");
+    expect(record.querySelector(".den-citation-grounding-record-trust")).toBeTruthy();
     expect(screen.getByText("payload bytes captured verbatim")).toBeTruthy();
   });
 
@@ -101,7 +100,7 @@ describe("CitationGroundingPanel render-by-shape", () => {
     };
     render(() => <CitationGroundingPanel view={view} />);
     expect(screen.getByText("src/main.go:42")).toBeTruthy();
-    expect(screen.getByText("Structured")).toBeTruthy();
+    expect(screen.getByTestId("citation-grounding-record").getAttribute("data-fidelity")).toBe("structured");
   });
 
   it("renders artifact scan evidence with flagged path", () => {
@@ -125,7 +124,7 @@ describe("CitationGroundingPanel render-by-shape", () => {
       "artifact",
     );
     expect(screen.getByText("internal/auth/handler.go")).toBeTruthy();
-    expect(screen.getByText("Structured")).toBeTruthy();
+    expect(screen.getByTestId("citation-grounding-record").getAttribute("data-fidelity")).toBe("structured");
   });
 
   it("renders every grounded url from a web_search record", () => {

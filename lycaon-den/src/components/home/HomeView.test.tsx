@@ -7,7 +7,6 @@ import { createSignal } from "solid-js";
 import { ALL_PROJECTS_PAGE_SIZE } from "../../home/home-model.ts";
 import type { ProjectSummary } from "../../project/project-summary.ts";
 import { HomeView } from "./HomeView.tsx";
-import { MODELS_SETTINGS_COPY } from "../../settings/providers/models-settings-copy.ts";
 
 afterEach(() => {
   cleanup();
@@ -65,7 +64,7 @@ describe("HomeView missing provider config", () => {
 
   // The two halves of the config need different instructions.
   it("asks for a model, not a provider, when a provider is already ready", () => {
-    const { getByText } = render(() => (
+    const { getByTestId } = render(() => (
       <HomeView
         summaries={[]}
         section="recents"
@@ -75,7 +74,7 @@ describe("HomeView missing provider config", () => {
         {...homeHandlers}
       />
     ));
-    expect(getByText(MODELS_SETTINGS_COPY.noDefaultModelTitle)).toBeTruthy();
+    expect(getByTestId("no-provider-title-model")).toBeTruthy();
   });
 
   it("omits the card when config is complete", () => {
@@ -246,7 +245,7 @@ describe("HomeView all projects list", () => {
       />
     ));
     fireEvent.click(getByTestId("project-card-menu-p0"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("project-card-delete-p0"), "menuitem"));
     expect(onDelete).toHaveBeenCalledWith("p0");
     expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
@@ -317,30 +316,43 @@ describe("HomeView all projects list", () => {
 
 
 describe("HomeView project identity", () => {
+  // The card (recents) and row (all) surfaces name their controls per project id.
+  const renameTestId = (section: "recents" | "all") =>
+    section === "recents" ? "project-card-rename-p1" : "project-list-rename-p1";
+  const renameField = (section: "recents" | "all") =>
+    assertNamedControl(screen.getByTestId(renameTestId(section)), "textbox");
+  const projectMenuTrigger = (section: "recents" | "all") =>
+    assertNamedControl(
+      screen.getByTestId(
+        section === "recents" ? "project-card-menu-p1" : "project-list-menu-p1",
+      ),
+      "button",
+    );
+
   it.each(["recents", "all"] as const)("removes and recreates a project safely in %s", (section) => {
     const [summaries, setSummaries] = createSignal([stubSummary(1), stubSummary(2)]);
     render(() => <HomeView summaries={summaries()} section={section} registry={loaded(null)} {...homeHandlers} />);
-    fireEvent.click(screen.getAllByRole("button", { name: "Project actions" })[0]!);
+    fireEvent.click(projectMenuTrigger(section));
     fireEvent.click(assertNamedControl(screen.getByTestId("rename"), "menuitem"));
-    fireEvent.input(assertNamedControl(screen.getByTestId("rename"), "textbox"), { target: { value: "Unsubmitted name" } });
+    fireEvent.input(renameField(section), { target: { value: "Unsubmitted name" } });
     setSummaries([stubSummary(2)]);
-    expect(screen.queryByRole("textbox", { name: "Rename" })).toBeNull();
+    expect(screen.queryByTestId(renameTestId(section))).toBeNull();
     expect(screen.queryByText("Project 1")).toBeNull();
     setSummaries([{ ...stubSummary(1), displayName: "Recreated project" }, stubSummary(2)]);
     expect(screen.getByText("Recreated project")).toBeTruthy();
-    expect(screen.queryByRole("textbox", { name: "Rename" })).toBeNull();
+    expect(screen.queryByTestId(renameTestId(section))).toBeNull();
   });
 
   it.each(["recents", "all"] as const)("keeps an unfinished rename through %s refresh and reorder", (section) => {
     const [summaries, setSummaries] = createSignal([stubSummary(1), stubSummary(2)]);
     const onRename = vi.fn();
     render(() => <HomeView summaries={summaries()} section={section} registry={loaded(null)} {...homeHandlers} onRename={onRename} />);
-    fireEvent.click(screen.getAllByRole("button", { name: "Project actions" })[0]!);
+    fireEvent.click(projectMenuTrigger(section));
     fireEvent.click(assertNamedControl(screen.getByTestId("rename"), "menuitem"));
-    const input = assertNamedControl(screen.getByTestId("rename"), "textbox") as HTMLInputElement;
+    const input = renameField(section) as HTMLInputElement;
     fireEvent.input(input, { target: { value: "Unsaved café rename" } });
     setSummaries([{ ...stubSummary(2), lastActivityAtMs: 999 }, { ...stubSummary(1), displayName: "Host updated name" }]);
-    expect(screen.getByRole("textbox", { name: "Rename" })).toBe(input);
+    expect(renameField(section)).toBe(input);
     expect(input.value).toBe("Unsaved café rename");
     expect(onRename).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: "Enter" });

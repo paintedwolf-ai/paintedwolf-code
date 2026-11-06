@@ -379,7 +379,7 @@ describe("TranscriptVisualArtifact refused fetch", () => {
     await screen.findByTestId("transcript-visual-error");
     expect(stageFailed).not.toHaveBeenCalled();
     expect(screen.queryByTestId("stage-boundary")).toBeNull();
-    const frame = screen.getByRole("button", { name: "Enlarge visual artifact" });
+    const frame = assertNamedControl(screen.getByTestId("transcript-visual-artifact-enlarge"), "button");
     expect(frame.getAttribute("aria-busy")).toBe("false");
   });
 });

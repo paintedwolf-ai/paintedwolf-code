@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ManagedSecretAddForm, ManagedSecretValueForm } from "./ManagedSecretForms.tsx";
+import { assertNamedControl } from "../../test/controls.ts";
 
 afterEach(cleanup);
 
@@ -14,12 +15,12 @@ describe("managed-secret value entry", () => {
       fireEvent.input(screen.getByTestId("managed-secret-add-name"), { target: { value: "Local credential" } });
       fireEvent.input(screen.getByTestId("managed-secret-add-purpose"), { target: { value: "Disposable validation" } });
     }
-    const value = screen.getByLabelText(mode === "add" ? "Value" : "New value", { exact: true });
+    const value = screen.getByTestId(mode === "add" ? "managed-secret-add-value" : "managed-secret-new-value");
     expect(value.tagName).toBe("INPUT");
     expect(value.getAttribute("type")).toBe("password");
-    fireEvent.click(screen.getByRole("button", { name: "Show value" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId(`${mode === "add" ? "managed-secret-add-value" : "managed-secret-new-value"}-reveal`), "button"));
     expect(value.getAttribute("type")).toBe("text");
-    fireEvent.click(screen.getByRole("button", { name: "Hide value" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId(`${mode === "add" ? "managed-secret-add-value" : "managed-secret-new-value"}-reveal`), "button"));
     expect(value.getAttribute("type")).toBe("password");
     fireEvent.input(value, { target: { value: "🐺🐺🐺" } });
     const save = screen.getByTestId(mode === "add" ? "managed-secret-add-submit" : "managed-secret-value-submit");

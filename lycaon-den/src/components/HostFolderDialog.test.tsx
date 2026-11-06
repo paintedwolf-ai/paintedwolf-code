@@ -13,7 +13,7 @@ describe("host folder entry", () => {
     const dialog = assertNamedControl(await screen.findByTestId("host-folder-dialog"), "dialog");
     const submit = assertNamedControl(screen.getByTestId("choose-folder"), "button");
     expect(submit.hasAttribute("disabled")).toBe(true);
-    fireEvent.input(screen.getByLabelText("Folder path"), { target: { value: "  /host/café notes  " } });
+    fireEvent.input(assertNamedControl(screen.getByTestId("host-folder-path-input"), "textbox"), { target: { value: "  /host/café notes  " } });
     expect(submit.hasAttribute("disabled")).toBe(false);
     fireEvent.submit(dialog);
     await expect(pending).resolves.toBe("/host/café notes");
@@ -40,13 +40,15 @@ describe("host folder entry", () => {
     const second = requestHostFolder();
     const third = requestHostFolder();
     const dialog = await screen.findByRole("dialog");
-    fireEvent.input(screen.getByLabelText("Folder path"), { target: { value: "/first" } });
+    const pathInput = () =>
+      assertNamedControl(screen.getByTestId("host-folder-path-input"), "textbox") as HTMLInputElement;
+    fireEvent.input(pathInput(), { target: { value: "/first" } });
     fireEvent.submit(dialog);
     await expect(first).resolves.toBe("/first");
-    expect((screen.getByLabelText("Folder path") as HTMLInputElement).value).toBe("");
+    expect(pathInput().value).toBe("");
     fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));
     await expect(second).resolves.toBeNull();
-    fireEvent.input(screen.getByLabelText("Folder path"), { target: { value: "/third" } });
+    fireEvent.input(pathInput(), { target: { value: "/third" } });
     fireEvent.submit(dialog);
     await expect(third).resolves.toBe("/third");
     expect(screen.queryByRole("dialog")).toBeNull();

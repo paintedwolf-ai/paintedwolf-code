@@ -214,7 +214,7 @@ function ArtifactGalleryTile(props: TileProps) {
         </Show>
       </button>
       <Show when={blob.error || decodeFailed()}>
-        <p role="status">This artifact could not be loaded.</p>
+        <p role="status" data-testid="project-artifact-load-error">This artifact could not be loaded.</p>
       </Show>
       <figcaption class="project-artifacts-tile__meta">
         <Show when={caption()}>

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, isInaccessible, render, screen } from "@solidjs/testing-library";
+import { assertNamedControl } from "../../test/controls.ts";
 import type { WorkerTask } from "../../api/types.ts";
 import {
   type OpenInSearchRequest,
@@ -45,7 +46,10 @@ describe("WorkerEvidenceSection", () => {
       <WorkerEvidenceSection worker={tracedWorkerWithCitation()} onSelect={onSelect} />
     ));
 
-    const header = screen.getByRole("button", { name: /Evidence/ });
+    const header = assertNamedControl(
+      screen.getByTestId("worker-evidence-section").querySelector("button")!,
+      "button",
+    );
     expect(header.hasAttribute("aria-expanded")).toBe(false);
     fireEvent.click(header);
     expect(onSelect).toHaveBeenCalledOnce();

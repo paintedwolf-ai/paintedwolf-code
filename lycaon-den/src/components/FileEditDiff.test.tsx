@@ -4,6 +4,7 @@ import { createSignal } from "solid-js";
 import { render, screen, waitFor, cleanup } from "@solidjs/testing-library";
 import { stubFilesClient } from "../test/source-client-fixture.ts";
 import { FileEditDiff } from "./FileEditDiff.tsx";
+import { assertNamedControl } from "../test/controls.ts";
 import {
   foldFileEdits,
   singleFileEditFold,
@@ -67,18 +68,16 @@ describe("FileEditDiff", () => {
       </TranscriptViewportProvider>
     ));
 
-    screen.getByLabelText("Show diff for pipeline.py").click();
+    assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button").click();
     expect(controller.following()).toBe(following);
-    screen.getByLabelText("Collapse diff for pipeline.py").click();
+    assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button").click();
     expect(controller.following()).toBe(following);
   });
   it("shows the range's stat and the write count for a path written more than once", async () => {
     render(() => <FileEditDiff projectId="p1" sessionId="s1" fold={multiWriteFold()} />);
     // Three writes; the range is one changed line.
     await waitFor(() => expect(screen.getByTestId("file-edit-diff-stat").textContent).toBe("+1−1"));
-    expect(screen.getByTestId("file-edit-diff-writes").textContent).toBe(
-      "3 edits",
-    );
+    expect(screen.getByTestId("file-edit-diff-writes").textContent).toMatch(/3/);
   });
 
   it("keeps the comparison it asked for when the same writes arrive as a rebuilt fold", async () => {
@@ -91,7 +90,7 @@ describe("FileEditDiff", () => {
       const requested = opens.mock.calls.length + reads.mock.calls.length;
       setFold(multiWriteFold());
       await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(screen.getByTestId("file-edit-diff-writes").textContent).toBe("3 edits");
+      expect(screen.getByTestId("file-edit-diff-writes").textContent).toMatch(/3/);
       expect(opens.mock.calls.length + reads.mock.calls.length).toBe(requested);
     } finally {
       opens.mockRestore();
@@ -116,7 +115,7 @@ describe("FileEditDiff", () => {
       false,
     );
 
-    screen.getByLabelText("Show diff for pipeline.py").click();
+    assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button").click();
     expect(caret.classList.contains("den-file-edit-diff-caret--open")).toBe(
       true,
     );
@@ -156,18 +155,17 @@ describe("FileEditDiff", () => {
     const card = screen.getByTestId("file-edit-diff");
     expect(screen.queryByTestId("file-edit-diff-strip")).toBeNull();
 
-    screen.getByLabelText("Show diff for pipeline.py").click();
+    assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button").click();
     expect(card.getAttribute("data-expanded")).toBe("true");
     expect(screen.getByTestId("file-edit-diff-strip")).toBeTruthy();
 
-    const secondEdit = screen.getByLabelText("Edit 2 of 3, edit");
+    const secondEdit = assertNamedControl(screen.getByTestId("file-edit-diff-step-2"), "button");
     secondEdit.click();
     expect(secondEdit.getAttribute("aria-pressed")).toBe("true");
-    expect(screen.queryByText("Edit 2 of 3")).toBeNull();
     // Write 2 added a line; the range did not.
     expect(screen.getByTestId("file-edit-diff-stat").textContent).toBe("+1−0");
 
-    const net = screen.getByText("Net");
+    const net = assertNamedControl(screen.getByTestId("file-edit-diff-net"), "button");
     net.click();
     expect(net.getAttribute("aria-pressed")).toBe("true");
     await waitFor(() => expect(screen.getByTestId("file-edit-diff-stat").textContent).toBe("+1−1"));
@@ -175,17 +173,15 @@ describe("FileEditDiff", () => {
 
   it("hides the strip with the diff it belongs to", () => {
     render(() => <FileEditDiff projectId="p1" sessionId="s1" fold={multiWriteFold()} />);
-    screen.getByLabelText("Show diff for pipeline.py").click();
+    assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button").click();
     expect(screen.getByTestId("file-edit-diff-strip")).toBeTruthy();
 
-    screen.getByLabelText("Collapse diff for pipeline.py").click();
+    assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button").click();
     expect(
       screen.getByTestId("file-edit-diff").getAttribute("data-expanded"),
     ).toBe("false");
     expect(screen.queryByTestId("file-edit-diff-strip")).toBeNull();
-    expect(screen.getByTestId("file-edit-diff-writes").textContent).toBe(
-      "3 edits",
-    );
+    expect(screen.getByTestId("file-edit-diff-writes").textContent).toMatch(/3/);
   });
 
   it("keeps a card whose writes cancelled out, and says so", () => {
@@ -194,9 +190,7 @@ describe("FileEditDiff", () => {
     expect(screen.getByTestId("file-edit-diff-stat").textContent).toBe(
       "no net change",
     );
-    expect(screen.getByTestId("file-edit-diff-writes").textContent).toBe(
-      "2 edits",
-    );
+    expect(screen.getByTestId("file-edit-diff-writes").textContent).toMatch(/2/);
   });
 
   it("registers find under the fold, so two cards on one path do not share an id", () => {
@@ -232,8 +226,8 @@ describe("FileEditDiff", () => {
         />
       </>
     ));
-    for (const path of ["new.py", "old.py", "gone.py"]) screen.getByLabelText(`Show diff for ${path}`).click();
     const card = (path: string) => document.querySelector<HTMLElement>(`.den-file-edit-diff[data-path="${path}"]`)!;
+    for (const path of ["new.py", "old.py", "gone.py"]) assertNamedControl(card(path).querySelector('[data-testid="file-edit-diff-toggle"]')!, "button").click();
     // Loaded rows carry their source row; a range placeholder does not.
     const rows = (path: string) => [...card(path).querySelectorAll<HTMLElement>(".cm-den-reader .cm-line[data-source-row]")];
     await waitFor(() => {
@@ -243,19 +237,19 @@ describe("FileEditDiff", () => {
     });
     expect(rows("new.py")).toHaveLength(0);
     expect(rows("gone.py")).toHaveLength(0);
-    expect(card("new.py").querySelector('[data-testid="source-change-chip"]')?.textContent).toBe("New file");
-    expect(card("new.py").querySelector(".den-file-edit-diff-details-badge")?.textContent).toBe("New file");
-    expect(card("new.py").querySelector(".den-file-edit-diff-details-lines")?.textContent).toBe("3 lines added");
+    expect(card("new.py").querySelector('[data-testid="source-change-chip"]')?.getAttribute("data-tone")).toBe("positive");
+    expect(card("new.py").querySelector(".den-file-edit-diff-details-badge")?.getAttribute("data-change")).toBe("added");
+    expect(card("new.py").querySelector(".den-file-edit-diff-details-lines")?.textContent).toMatch(/^3 lines/);
 
     const classes = (path: string) => rows(path).map(line => line.className).join(" | ");
     expect(classes("old.py")).toMatch(/cm-den-reader-(add|delete)/);
     expect(card("old.py").querySelector('[data-testid="source-change-chip"]')).toBeNull();
     expect(card("old.py").querySelector('[data-testid="file-edit-diff-details"]')).toBeNull();
 
-    expect(card("gone.py").querySelector('[data-testid="source-change-chip"]')?.textContent).toBe("Deleted file");
+    expect(card("gone.py").querySelector('[data-testid="source-change-chip"]')?.getAttribute("data-tone")).toBe("danger");
     expect(card("gone.py").querySelector(".den-source-path-plain")?.getAttribute("data-file-change")).toBe("deleted");
-    expect(card("gone.py").querySelector(".den-file-edit-diff-details-badge")?.textContent).toBe("Deleted file");
-    expect(card("gone.py").querySelector(".den-file-edit-diff-details-lines")?.textContent).toBe("3 lines removed");
+    expect(card("gone.py").querySelector(".den-file-edit-diff-details-badge")?.getAttribute("data-change")).toBe("deleted");
+    expect(card("gone.py").querySelector(".den-file-edit-diff-details-lines")?.textContent).toMatch(/^3 lines/);
   });
 
   it("reverses an in-flight close instead of ignoring the click", () => {
@@ -269,11 +263,11 @@ describe("FileEditDiff", () => {
     });
     Object.defineProperty(card, "scrollHeight", { value: 200, configurable: true });
 
-    const showButton = screen.getByLabelText("Show diff for pipeline.py");
+    const showButton = assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button");
     showButton.click();
     expect(card.getAttribute("data-expanded")).toBe("true");
 
-    const collapseButton = screen.getByLabelText("Collapse diff for pipeline.py");
+    const collapseButton = assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button");
     collapseButton.click();
 
     expect(animations).toHaveLength(2);

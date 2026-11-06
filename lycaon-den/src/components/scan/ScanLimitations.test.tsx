@@ -19,10 +19,11 @@ describe("ScanLimitations", () => {
       })),
     }));
     render(() => <ScanLimitations projectId="project" scan={limited} client={{ getCodeScan: loadFull }} />);
-    expect(screen.getByRole("button", { name: "Analysis issues · 100" })).toBeTruthy();
+    const issuesTrigger = assertNamedControl(screen.getByTestId("scans-issues-trigger"), "button");
+    expect(issuesTrigger.textContent).toContain("100");
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
     expect(loadFull).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Analysis issues · 100" }));
+    fireEvent.click(issuesTrigger);
     await screen.findByTestId("scans-limitations");
     expect(loadFull).toHaveBeenCalledWith("project", "scan", "full");
     expect(screen.getAllByRole("listitem")).toHaveLength(21);

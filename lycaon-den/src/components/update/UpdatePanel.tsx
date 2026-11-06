@@ -91,6 +91,6 @@ export function UpdatePanel(props: UpdatePanelProps) {
     <Show when={state()?.capabilities.can_download || state()?.capabilities.can_restart_to_update}>
       <DenButton variant="primary" data-testid="updates-install" disabled={updates.busy()} onClick={action}>{state()?.capabilities.can_restart_to_update ? "Restart to update" : state()?.installation === "failed" ? "Retry update" : "Download update"}</DenButton>
     </Show>
-    <Show when={updates.error() ?? state()?.last_error}>{(error) => <div class="den-settings-hint" data-testid="updates-install-status"><p role="alert">{UPDATE_ERROR_MESSAGES[error().code]}</p><Show when={error().detail}>{(detail) => <details><summary><span class="den-disclosure-caret" aria-hidden="true" />Technical details</summary><p>{detail()}</p></details>}</Show></div>}</Show>
+    <Show when={updates.error() ?? state()?.last_error}>{(error) => <div class="den-settings-hint" data-testid="updates-install-status"><p role="alert">{UPDATE_ERROR_MESSAGES[error().code]}</p><Show when={error().detail}>{(detail) => <details data-testid="updates-technical-details"><summary><span class="den-disclosure-caret" aria-hidden="true" />Technical details</summary><p>{detail()}</p></details>}</Show></div>}</Show>
   </div>;
 }

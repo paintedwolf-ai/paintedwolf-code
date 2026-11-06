@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { readSourceText } from "../../test/stylesheet-source.ts";
 import { join } from "node:path";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
+import { assertNamedControl } from "../../test/controls.ts";
 import { SessionWorkflowLauncher } from "./SessionWorkflowLauncher.tsx";
 import { sessionLauncherTiles } from "../../workflow/session-launcher-model.ts";
 import type { WorkflowSummary } from "../../api/types.ts";
@@ -33,9 +34,7 @@ describe("SessionWorkflowLauncher", () => {
     expect(plan).toBeTruthy();
     expect(plan.getAttribute("aria-label")).toBe("Plan");
     expect(screen.getByTestId("session-launcher-tile-recon-pack")).toBeTruthy();
-    expect(screen.getByTestId("session-launcher-more").getAttribute("aria-label")).toBe(
-      "More",
-    );
+    assertNamedControl(screen.getByTestId("session-launcher-more"), "button");
   });
 
   it("selects a workflow when an enabled tile is clicked", () => {

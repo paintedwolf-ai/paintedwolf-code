@@ -17,6 +17,7 @@ describe("TooltipHost", () => {
       <>
         <button
           type="button"
+          data-testid="reject"
           data-tip="Restore these lines"
           data-tip-pos="end"
         >
@@ -26,7 +27,7 @@ describe("TooltipHost", () => {
       </>
     ));
 
-    const button = screen.getByRole("button", { name: "Reject" });
+    const button = assertNamedControl(screen.getByTestId("reject"), "button");
     fireEvent.mouseOver(button);
     await vi.advanceTimersByTimeAsync(349);
     expect(screen.queryByRole("tooltip")).toBeNull();
@@ -48,6 +49,7 @@ describe("TooltipHost", () => {
       <>
         <button
           type="button"
+          data-testid="files"
           data-tip="Open files"
           data-tip-pos="below"
         >
@@ -71,6 +73,7 @@ describe("TooltipHost", () => {
       <>
         <button
           type="button"
+          data-testid="progress"
           data-tip="Progress"
           data-tip-when-clipped=".label"
         >
@@ -116,17 +119,17 @@ describe("TooltipHost", () => {
   it("dismisses a visible tip when its anchor disappears", async () => {
     render(() => (
       <>
-        <button type="button" data-tip="Back to the current file">
+        <button type="button" data-testid="current" data-tip="Back to the current file">
           Current
         </button>
-        <button type="button" data-tip="Copy path">
+        <button type="button" data-testid="copy" data-tip="Copy path">
           Copy
         </button>
         <TooltipHost />
       </>
     ));
 
-    const button = screen.getByRole("button", { name: "Current" });
+    const button = assertNamedControl(screen.getByTestId("current"), "button");
     fireEvent.mouseOver(button);
     await vi.advanceTimersByTimeAsync(350);
     expect(screen.getByRole("tooltip").textContent).toBe(
@@ -150,6 +153,7 @@ describe("TooltipHost", () => {
         <aside aria-hidden={collapsed()} inert={collapsed() ? true : undefined}>
           <button
             type="button"
+            data-testid="hide"
             data-tip="Hide sidebar"
             onClick={() => setCollapsed(true)}
           >
@@ -160,7 +164,7 @@ describe("TooltipHost", () => {
       </>
     ));
 
-    const button = screen.getByRole("button", { name: "Hide" });
+    const button = assertNamedControl(screen.getByTestId("hide"), "button");
     fireEvent.mouseOver(button);
     await vi.advanceTimersByTimeAsync(350);
     expect(screen.getByRole("tooltip").textContent).toBe("Hide sidebar");
@@ -174,7 +178,7 @@ describe("TooltipHost", () => {
     render(() => (
       <>
         <div>
-          <button type="button" disabled data-tip="Needs a repository">
+          <button type="button" disabled data-testid="land" data-tip="Needs a repository">
             Land
           </button>
         </div>
@@ -182,7 +186,7 @@ describe("TooltipHost", () => {
       </>
     ));
 
-    const button = screen.getByRole("button", { name: "Land" });
+    const button = assertNamedControl(screen.getByTestId("land"), "button");
     button.getBoundingClientRect = () =>
       ({ left: 10, right: 90, top: 10, bottom: 30 }) as DOMRect;
     // The event targets the parent: a disabled control never receives one.

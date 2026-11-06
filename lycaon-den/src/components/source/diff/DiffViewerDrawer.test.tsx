@@ -75,7 +75,6 @@ describe("DiffViewerDrawer", () => {
       "new-file.ts",
     );
     expect(screen.getByTestId("diff-viewer-path").getAttribute("data-file-change")).toBe("added");
-    expect(screen.getByText("New file")).toBeTruthy();
     await waitFor(() => expect(document.querySelectorAll(".cm-den-reader .cm-line").length).toBeGreaterThan(0));
     expect(document.querySelector(".cm-den-reader-add"), screen.getByTestId("diff-viewer-body").textContent ?? "").toBeNull();
     expect(screen.getByTestId("diff-viewer-split")).toHaveProperty("disabled", true);

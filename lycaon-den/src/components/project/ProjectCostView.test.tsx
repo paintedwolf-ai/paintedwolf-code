@@ -274,7 +274,9 @@ describe("ProjectCostView", () => {
     });
     fireEvent.click(screen.getByTestId("project-cost-soft-stop"));
     await screen.findByTestId("project-cost-guardrails");
-    expect(screen.getByLabelText("Warn at $8.40 then close out at $12.00")).toBeTruthy();
+    const sequence = screen.getByTestId("project-cost-guardrail-sequence");
+    expect(sequence.getAttribute("aria-label")).toContain("$8.40");
+    expect(sequence.getAttribute("aria-label")).toContain("$12.00");
     fireEvent.click(screen.getByTestId("project-cost-save-guardrails"));
 
     await waitFor(() => expect(client.updateLimitsSettings).toHaveBeenCalledOnce());
@@ -300,8 +302,11 @@ describe("ProjectCostView", () => {
       : { ...globalLimits(), spend_soft_stop: deviceSoft });
     render(() => <ProjectCostView projectId="project-1" projectName="Demo project"
       appStore={createAppStore()} client={client as never} onOpenSession={vi.fn()} />);
-    expect(await screen.findByRole("heading", { name: `Warn, then ${action}` })).toBeTruthy();
-    expect(screen.getByLabelText(`Warn at $4.00 then ${action} at $5.00`)).toBeTruthy();
+    const mode = await screen.findByTestId("project-cost-guardrail-mode");
+    expect(mode.textContent).toContain(action);
+    const sequence = screen.getByTestId("project-cost-guardrail-sequence");
+    expect(sequence.getAttribute("aria-label")).toContain("$4.00");
+    expect(sequence.getAttribute("aria-label")).toContain("$5.00");
     if (action === "close out") {
     }
   });

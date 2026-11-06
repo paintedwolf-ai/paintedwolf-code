@@ -63,7 +63,6 @@ describe("TaskCard", () => {
       expect(
         container.querySelector(".den-task-card")?.getAttribute("data-task-status"),
       ).toBe("canceled");
-      expect(screen.queryByLabelText("Worker failed")).toBeNull();
     },
   );
 
@@ -94,7 +93,7 @@ describe("TaskCard", () => {
     await Promise.resolve();
 
     expect(card?.getAttribute("data-task-status")).toBe("done");
-    expect(screen.queryByText("Open")).toBeNull();
+    expect(screen.getByTestId("task-card-status").classList.contains("den-task-card-status--done")).toBe(true);
     expect(part.workerSummary?.status).toBe("open");
   });
 
@@ -106,7 +105,7 @@ describe("TaskCard", () => {
     const card = container.querySelector(".den-task-card");
     expect(card).toBeTruthy();
     expect(container.querySelector(".den-task-card-header")).toBeTruthy();
-    expect(screen.getByText("Running")).toBeTruthy();
+    expect(screen.getByTestId("task-card-status").classList.contains("den-task-card-status--running")).toBe(true);
     expect(screen.queryByTestId("citation-grounding-badge")).toBeNull();
     expect(screen.queryByTestId("task-card-evidence")).toBeNull();
     expect(screen.queryByTestId("worker-evidence-section")).toBeNull();

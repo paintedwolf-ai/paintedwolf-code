@@ -162,20 +162,21 @@ export function IgnoredSecretValues(props: { client: LycaonClient; projectId: st
         <Show when={!detailOpen()}>
           <div class="den-settings-detail">
             <DenInput
-              aria-label="Search ignored values" type="search" placeholder="Search values or reasons" value={query()}
+              aria-label="Search ignored values" data-testid="ignored-values-search" type="search" placeholder="Search values or reasons" value={query()}
               onInput={(event) => { setQuery(event.currentTarget.value); setPage(0); }}
             />
           </div>
         </Show>
         <ListSurfaceInbox
           scrollport detailOpen={detailOpen()} isEmpty={filtered().length === 0}
-          empty={<p class="den-settings-hint den-settings-list-inbox__empty">{validRules().length ? "No values match this search." : "No ignored public values."}</p>}
+          empty={<p class="den-settings-hint den-settings-list-inbox__empty" data-testid="ignored-values-empty">{validRules().length ? "No values match this search." : "No ignored public values."}</p>}
           list={<>
             <For each={paged().slice}>{(entry) => (
               <SettingsListRow
                 primary={entry.reason}
                 secondary={`${folder(entry.root_id)} · ${entry.expires_on ? `Expires ${entry.expires_on}` : "No expiry"}`}
                 status={statusLabel[entry.status]} aria-label={`Review ignored value: ${entry.reason}`}
+                testId={`ignored-value-${entry.id}`}
                 onSelect={() => { setError(""); setSelected(key(entry)); }}
               />
             )}</For>
@@ -188,12 +189,12 @@ export function IgnoredSecretValues(props: { client: LycaonClient; projectId: st
                 <DenField label="Exact public value" hint="Matched exactly, whitespace included. There are no patterns, prefixes, or paths." hintId={valueHintId}>
                   <DenTextarea
                     class="den-settings-api-key-input" rows={4} required spellcheck={false}
-                    aria-label="Exact public value" aria-describedby={valueHintId}
+                    aria-label="Exact public value" aria-describedby={valueHintId} data-testid="add-value-input"
                     value={value()} onInput={(event) => setValue(event.currentTarget.value)}
                   />
                 </DenField>
                 <DenField label="Reason" hint="Recorded beside the value, so the next reader knows why it is safe." hintId={reasonHintId}>
-                  <DenInput aria-label="Reason" aria-describedby={reasonHintId} required maxlength={240} value={reason()} placeholder="Published example from the vendor docs" onInput={(event) => setReason(event.currentTarget.value)} />
+                  <DenInput aria-label="Reason" aria-describedby={reasonHintId} required maxlength={240} data-testid="add-reason-input" value={reason()} placeholder="Published example from the vendor docs" onInput={(event) => setReason(event.currentTarget.value)} />
                 </DenField>
                 <DenField label="Folder" hint="Written to .paintedwolf/ignores.yaml in this folder." hintId={folderHintId}>
                   <DenSelect
@@ -207,7 +208,7 @@ export function IgnoredSecretValues(props: { client: LycaonClient; projectId: st
                 <p class="den-settings-hint">The value is written in plaintext. Declare only what is safe to commit and share. Protected credentials stay protected.</p>
                 <Show when={error()}><p role="alert" class="den-settings-hint">{error()}</p></Show>
                 <div class="den-settings-actions">
-                  <DenButton variant="primary" type="submit" disabled={!canSave()}>{busy() ? "Saving…" : "Save declaration"}</DenButton>
+                  <DenButton variant="primary" type="submit" data-testid="save-declaration" disabled={!canSave()}>{busy() ? "Saving…" : "Save declaration"}</DenButton>
                   <DenButton variant="ghost" type="button" disabled={busy()} onClick={closeDetail}>Cancel</DenButton>
                 </div>
               </form>
@@ -217,7 +218,7 @@ export function IgnoredSecretValues(props: { client: LycaonClient; projectId: st
                 <h3>{entry().reason}</h3>
                 <p class="den-settings-hint">{statusHint[entry().status]}</p>
                 <DenField label="Exact public value">
-                  <DenTextarea class="den-settings-api-key-input" readonly rows={4} value={entry().value} />
+                  <DenTextarea class="den-settings-api-key-input" readonly rows={4} data-testid="ignored-value-input" value={entry().value} />
                 </DenField>
                 <p class="den-settings-hint">{folder(entry().root_id)} · {entry().expires_on ? `Expires at midnight UTC on ${entry().expires_on}` : "No expiry"}</p>
                 <p class="den-settings-hint"><code class="break-all">{entry().path}</code></p>
@@ -226,7 +227,7 @@ export function IgnoredSecretValues(props: { client: LycaonClient; projectId: st
                 <section class="den-settings-detail__danger">
                   <h4>Stop ignoring this value</h4>
                   <p class="den-settings-hint">Removes the entry from the ignore file. This value is screened as a secret again, without a rescan.</p>
-                  <DenButton variant="danger" compact disabled={busy()} onClick={() => void withdraw(entry())}>{busy() ? "Removing…" : "Remove declaration"}</DenButton>
+                  <DenButton variant="danger" compact data-testid="remove-declaration" disabled={busy()} onClick={() => void withdraw(entry())}>{busy() ? "Removing…" : "Remove declaration"}</DenButton>
                 </section>
               </div>
             )}</ShowLatest>

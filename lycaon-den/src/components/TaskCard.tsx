@@ -319,7 +319,7 @@ export function TaskCardShell(props: ShellProps) {
         }
       >
         <header class="den-task-card-header">
-          <span class="den-task-card-title">Worker · {props.agent()}</span>
+          <span class="den-task-card-title" data-testid="task-card-agent">Worker · {props.agent()}</span>
           <div class="den-task-card-tags">
             <CitationGroundingBadge
               grounding={props.grounding()}
@@ -328,6 +328,7 @@ export function TaskCardShell(props: ShellProps) {
             <span
               class={`den-task-card-status den-task-card-status--${props.status()}`}
               classList={{ "den-task-card-status--live": running() }}
+              data-testid="task-card-status"
             >
               {formatSentenceCase(props.status())}
             </span>

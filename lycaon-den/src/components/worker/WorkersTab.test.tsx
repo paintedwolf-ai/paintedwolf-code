@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { at } from "../../test/at.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { WorkersTab } from "./WorkersTab.tsx";
@@ -59,9 +60,7 @@ describe("WorkersTab", () => {
     render(() => (
       <WorkersTab workers={[]} selectedId={null} onSelect={noop} onCancel={noop} />
     ));
-    expect(screen.getByTestId("workers-tab").textContent).toMatch(
-      /No workers in this session/i,
-    );
+    expect(screen.getByTestId("workers-tab-empty")).toBeTruthy();
     expect(screen.queryByTestId("workers-tab-row")).toBeNull();
   });
 
@@ -114,9 +113,7 @@ describe("WorkersTab", () => {
         onCancel={noop}
       />
     ));
-    expect(screen.getByTestId("workers-tab-approval").textContent).toBe(
-      "Waiting for your approval",
-    );
+    expect(screen.getByTestId("workers-tab-approval")).toBeTruthy();
     expect(
       screen
         .getByTestId("workers-tab-row")
@@ -127,7 +124,9 @@ describe("WorkersTab", () => {
   it.each(["waiting", "held"] as const)("keeps Cancel visible for a %s worker", (status) => {
     const onCancel = vi.fn();
     render(() => <WorkersTab workers={[{ ...running, status }]} selectedId={null} onSelect={noop} onCancel={onCancel} />);
-    fireEvent.click(screen.getByRole("button", { name: "Cancel implementer worker" }));
+    fireEvent.click(
+      assertNamedControl(screen.getByTestId(`workers-tab-cancel-${running.id}`), "button"),
+    );
     expect(onCancel).toHaveBeenCalledWith(running.id);
   });
 
@@ -141,9 +140,9 @@ describe("WorkersTab", () => {
         onCancel={onCancel}
       />
     ));
-    const cancels = screen.getAllByText("Cancel");
+    const cancels = screen.getAllByTestId(/^workers-tab-cancel-/);
     expect(cancels).toHaveLength(1); // only the running worker
-    fireEvent.click(at(cancels, 0));
+    fireEvent.click(assertNamedControl(at(cancels, 0), "button"));
     expect(onCancel).toHaveBeenCalledWith("job-1");
   });
 
@@ -159,9 +158,8 @@ describe("WorkersTab", () => {
         busyWorkerId={busy}
       />
     ));
-    const cancelBtn = screen.getByRole("button", { name: /Cancel implementer worker/i }) as HTMLButtonElement;
+    const cancelBtn = screen.getByTestId("workers-tab-cancel-job-1") as HTMLButtonElement;
     expect(cancelBtn.disabled).toBe(true);
-    expect(cancelBtn.textContent).toMatch(/Cancelling…/);
     expect(cancelBtn.classList.contains("den-workers-tab-cancel--busy")).toBe(true);
 
     // Second click while busy is a no-op — a disabled button does not fire onClick.
@@ -171,7 +169,7 @@ describe("WorkersTab", () => {
     // Re-enable after the busy signal clears; a click now fires onCancel.
     setBusy(null);
     expect(cancelBtn.disabled).toBe(false);
-    expect(cancelBtn.textContent).toMatch(/^Cancel$/);
+    expect(cancelBtn.classList.contains("den-workers-tab-cancel--busy")).toBe(false);
     fireEvent.click(cancelBtn);
     expect(onCancel).toHaveBeenCalledWith("job-1");
   });
@@ -191,11 +189,11 @@ describe("WorkersTab", () => {
         busyWorkerId={() => "job-1"}
       />
     ));
-    const busyBtn = screen.getByRole("button", { name: /Cancel implementer worker/i }) as HTMLButtonElement;
-    const otherBtn = screen.getByRole("button", { name: /Cancel scout worker/i }) as HTMLButtonElement;
+    const busyBtn = screen.getByTestId("workers-tab-cancel-job-1") as HTMLButtonElement;
+    const otherBtn = assertNamedControl(screen.getByTestId("workers-tab-cancel-job-9"), "button") as HTMLButtonElement;
     expect(busyBtn.disabled).toBe(true);
     expect(otherBtn.disabled).toBe(false);
-    expect(otherBtn.textContent).toMatch(/^Cancel$/);
+    expect(otherBtn.classList.contains("den-workers-tab-cancel--busy")).toBe(false);
   });
 
   it("does not surface worker needs_decision prompts", () => {

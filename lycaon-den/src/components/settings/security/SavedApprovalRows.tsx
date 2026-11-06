@@ -165,7 +165,7 @@ export function SavedApprovalGrantRow(props: {
               )}
             </small>
           </Show>
-          <small class="den-saved-approvals-detail">{formatRowDetail(props.grant)}</small>
+          <small class="den-saved-approvals-detail" data-testid="saved-approvals-row-detail">{formatRowDetail(props.grant)}</small>
           <Show when={(props.grant.secret_recipients?.length ?? 0) > 0}>
             <small class="den-saved-approvals-detail" data-testid="saved-secret-recipients">
               {props.grant.secret_recipients?.map((recipient) => recipient.label).join("; ")}

@@ -232,9 +232,7 @@ describe("FirstTimeTipsLayer", () => {
     ));
     screen.getByRole("button", { name: "Outside" }).focus();
     requestFirstTimeTip("project-search");
-    await screen.findByRole("dialog", {
-      name: "Search connects code and project work",
-    });
+    assertNamedControl(await screen.findByTestId("first-time-tip-project-search"), "dialog");
 
     fireEvent.keyDown(document, { key: "Escape" });
 

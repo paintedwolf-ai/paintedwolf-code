@@ -211,7 +211,7 @@ describe("ProjectFolderZone", () => {
     ));
 
     expect(screen.getByText("Draft cleanup needs attention")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.queryByTestId("cancel")).toBeNull();
     fireEvent.click(assertNamedControl(screen.getByTestId("retry"), "button"));
     expect(onRetryPromotion).toHaveBeenCalledOnce();
   });

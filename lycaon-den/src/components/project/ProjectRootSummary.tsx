@@ -480,6 +480,7 @@ export function ProjectRootSummary(props: Props) {
                 <button
                   type="button"
                   class="den-files-root-summary__resource"
+                  data-testid={`files-root-summary-resource-${resource.label.toLowerCase()}`}
                   onClick={() => openResource(resource)}
                 >
                   <span class="den-files-root-summary__resource-mark">MD</span>
