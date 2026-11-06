@@ -44,7 +44,7 @@ rustup_line='export PATH=/opt/homebrew/opt/rustup/bin:$PATH'
 grep -qxF "${brew_line}" "${zshenv}" || printf '%s\n' "${brew_line}" >> "${zshenv}"
 grep -qxF "${rustup_line}" "${zshenv}" || printf '%s\n' "${rustup_line}" >> "${zshenv}"
 
-formulae=(go node bun rustup direnv python gh)
+formulae=(go node bun rustup direnv python gh cmake)
 missing=()
 for formula in "${formulae[@]}"; do
 	brew list --formula "${formula}" >/dev/null 2>&1 || missing+=("${formula}")
