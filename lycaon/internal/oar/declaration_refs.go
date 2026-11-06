@@ -52,7 +52,9 @@ var (
 // the lycaon module root; the scan covers the repository around it, including
 // the test tree, the den frontend, schemas, and docs. Dynamically constructed
 // fact names are matched through their bare string literals, so a fact is
-// flagged only when no literal of any form references it.
+// flagged only when no literal of any form references it. Declared can_*
+// facts are referenced by the recovery publication contract itself and are
+// checked against the live publication set instead of the text scan.
 func UnreferencedDeclaredFacts(moduleRoot string) ([]string, error) {
 	profilePath := filepath.Join(moduleRoot, "config", "packs", "painted-wolf",
 		"platform", "host", "anchors", "oar-profile.yaml")
@@ -108,6 +110,19 @@ func UnreferencedDeclaredFacts(moduleRoot string) ([]string, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// RegisterRecoveryFacts derives its lazy provider set from CanCallFacts,
+	// so every declared can_* fact is published to the observation stream by
+	// the recovery contract regardless of rule or copy references;
+	// TestSessionOccurrencesPreserveOfferedRecoverySnapshot pins that
+	// publication. Taking the live publication set as the reference keeps the
+	// audit structural: a can_* declaration is flagged exactly when the
+	// contract stops publishing it.
+	for _, name := range CanCallFacts() {
+		if declared["paintedwolf."+name] {
+			referenced["paintedwolf."+name] = true
+		}
 	}
 
 	var unreferenced []string
