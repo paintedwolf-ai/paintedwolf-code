@@ -48,7 +48,7 @@ require (
 	github.com/keybase/go-keychain v0.0.1
 	github.com/klauspost/compress v1.20.3
 	github.com/mattn/go-runewidth v0.0.30
-	github.com/mikefarah/yq/v4 v4.54.2
+	github.com/mikefarah/yq/v4 v4.54.1
 	github.com/moby/moby/client v0.5.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/odvcencio/gotreesitter v0.52.0
@@ -299,7 +299,7 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	go.yaml.in/yaml/v4 v4.0.0-rc.7 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.6 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
 	golang.org/x/telemetry v0.0.0-20261009151841-97e8ea77aa2a // indirect
