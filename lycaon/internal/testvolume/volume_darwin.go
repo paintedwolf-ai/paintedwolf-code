@@ -74,7 +74,7 @@ func (v *Volume) MakeReadOnly(t *testing.T) {
 	t.Helper()
 	image := filepath.Join(filepath.Dir(v.Root), "volume.dmg")
 	v.Eject(t)
-	hdiutil(t, "attach", image, "-nobrowse", "-readonly", "-mountpoint", v.Root, "-quiet")
+	hdiutil(t, "attach", image, "-nobrowse", "-readonly", "-owners", "on", "-mountpoint", v.Root, "-quiet")
 	t.Cleanup(func() { _, _ = runHdiutil("detach", v.Root, "-force", "-quiet") })
 }
 
