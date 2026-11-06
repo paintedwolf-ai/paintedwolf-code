@@ -53,7 +53,7 @@ func TestPlatformDeclaresItsResourceLimits(t *testing.T) {
 		if capability != want {
 			t.Errorf("%s %s = %b, want %b", runtime.GOOS, resource, capability, want)
 		}
-		limit, err := ReadResourceLimit(resource)
+		limit, err := ChildResourceLimit(t.Context(), resource)
 		if capability&LimitQuery == 0 {
 			if !errors.Is(err, ErrLimitUnsupported) {
 				t.Errorf("unsupported %s read: %+v, %v", resource, limit, err)
@@ -67,7 +67,7 @@ func TestPlatformDeclaresItsResourceLimits(t *testing.T) {
 	if ResourceLimitCapability("rss") != LimitUnsupported {
 		t.Fatal("an undeclared resource has a capability")
 	}
-	if _, err := ReadResourceLimit("rss"); err == nil || errors.Is(err, ErrLimitUnsupported) {
+	if _, err := ChildResourceLimit(t.Context(), "rss"); err == nil || errors.Is(err, ErrLimitUnsupported) {
 		t.Fatalf("unknown resource read: %v", err)
 	}
 }
