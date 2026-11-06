@@ -86,5 +86,7 @@ func (e *AssemblyEngine) BuildKnownPrefix(ctx context.Context, sess *api.Session
 	// Pending scan guidance is delivered only by a real turn.
 	out = llm.AppendHostSecretRedactionNotice(append(out, messages...))
 	markPromptCacheBreakpoints(out, standing, len(out)-1)
-	return transcript.Project(deduplicateProjectGuidance(out)), nil
+	// The known prefix projects before a turn pins its surface, so it uses the
+	// same unpinned-surface audience the completion path starts from.
+	return transcript.ProjectFor(contentAudience(sess, ""), deduplicateProjectGuidance(out)), nil
 }
