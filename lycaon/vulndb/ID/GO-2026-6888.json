@@ -1,0 +1,83 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/andybalholm/brotli",
+      "symbols": [
+       "Reader.Read",
+       "decodeBlockTypeAndLength",
+       "decodeCommandBlockSwitch",
+       "decodeCommandBlockSwitchInternal",
+       "decodeDistanceBlockSwitch",
+       "decodeDistanceBlockSwitchInternal",
+       "decodeError.Error",
+       "decodeLiteralBlockSwitch",
+       "decodeLiteralBlockSwitchInternal",
+       "decoderErrorString",
+       "processCommandsInternal",
+       "safeDecodeCommandBlockSwitch",
+       "safeDecodeDistanceBlockSwitch",
+       "safeDecodeLiteralBlockSwitch"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/andybalholm/brotli"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "1.2.7"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-111497",
+  "GHSA-c9gr-gmg4-2vqv"
+ ],
+ "credits": [
+  {
+   "name": "Philippe Antoine (Catena cyber)"
+  }
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6888"
+ },
+ "details": "In github.com/andybalholm/brotli before v1.2.7, the decompressor allocates memory for Huffman tables and block-type trees on every meta-block header without bounding the cumulative allocations relative to the input size. A small crafted brotli stream containing many empty meta-blocks with new Huffman trees can trigger hundreds of megabytes of allocations per kilobyte of input, leading to denial of service.",
+ "id": "GO-2026-6888",
+ "modified": "2026-11-05T22:55:15Z",
+ "published": "2026-11-05T22:55:15Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/andybalholm/brotli/security/advisories/GHSA-c9gr-gmg4-2vqv"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/andybalholm/brotli/commit/33c2a9884269798192b5ecf171288f98939dbe42"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/andybalholm/brotli/releases/tag/v1.2.7"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/google/brotli/commit/0ed4268a4401abcb4472096340477cf4af7d1a2b"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Excessive memory allocation when decompressing crafted streams in github.com/andybalholm/brotli"
+}

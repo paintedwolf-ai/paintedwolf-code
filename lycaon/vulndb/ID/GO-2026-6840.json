@@ -1,0 +1,71 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {
+    "imports": [
+     {
+      "path": "github.com/labstack/echo/v4/middleware",
+      "symbols": [
+       "BodyDump",
+       "BodyDumpWithConfig",
+       "Decompress",
+       "DecompressWithConfig",
+       "Proxy",
+       "ProxyWithConfig",
+       "proxyHTTP",
+       "proxyRaw"
+      ]
+     }
+    ]
+   },
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/labstack/echo/v4"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "4.0.0"
+      },
+      {
+       "fixed": "4.16.1"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "GHSA-f48p-c9v4-h7xv"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6840"
+ },
+ "details": "Echo: BodyDump captures request and response bodies without size limits in v4 in github.com/labstack/echo",
+ "id": "GO-2026-6840",
+ "modified": "2026-11-05T22:54:11Z",
+ "published": "2026-11-05T22:54:11Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/labstack/echo/security/advisories/GHSA-f48p-c9v4-h7xv"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/labstack/echo/commit/3fb0ba7e17645bb65611e2a08875d0a2f65c421f"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/labstack/echo/pull/3105"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/labstack/echo/releases/tag/v4.16.1"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Echo: BodyDump captures request and response bodies without size limits in v4 in github.com/labstack/echo"
+}
