@@ -380,7 +380,7 @@ describe("editor shows the eye's comparison", () => {
       await waitFor(() => {
         expect(container.querySelector(".cm-foldPlaceholder")).toBeNull();
       });
-      expect(screen.queryByRole("button", { name: "Full file" })).toBeNull();
+      expect(screen.queryByTestId("full-file")).toBeNull();
     });
 
     it("folds again when review reopens a file already unfolded", async () => {
@@ -411,7 +411,7 @@ describe("editor shows the eye's comparison", () => {
       await waitFor(() => {
         expect(foldedRangeCount(container)).toBe(2);
       });
-      expect(screen.getByRole("button", { name: "Full file" })).toBeTruthy();
+      expect(assertNamedControl(screen.getByTestId("full-file"), "button")).toBeTruthy();
     });
 
     it("leaves a file opened elsewhere unfolded", async () => {
@@ -425,7 +425,7 @@ describe("editor shows the eye's comparison", () => {
         expect(editorScopeDiffOriginal(viewIn(container).state)).toBe(LONG_BEFORE);
       });
       expect(foldedRangeCount(container)).toBe(0);
-      expect(screen.queryByRole("button", { name: "Full file" })).toBeNull();
+      expect(screen.queryByTestId("full-file")).toBeNull();
     });
   });
 
@@ -459,7 +459,7 @@ availability: "available", source: { kind: "text", before: LONG_BEFORE, after: L
     await waitFor(() => {
       expect(container.querySelector(".cm-den-reader-gap")).toBeNull();
     });
-    expect(screen.queryByRole("button", { name: "Full file" })).toBeNull();
+    expect(screen.queryByTestId("full-file")).toBeNull();
   });
 
   it("offers the exit ahead of the version actions", async () => {
@@ -512,7 +512,7 @@ availability: "not_captured", source: { kind: "text", before: "", after: "" } }}
 
     const exit = await screen.findByTestId("file-version-exit");
     expect(screen.queryByTestId("file-version-compare-trigger")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Full file" })).toBeNull();
+    expect(screen.queryByTestId("full-file")).toBeNull();
     fireEvent.click(exit);
     expect(props.onSelectCurrent).toHaveBeenCalledTimes(1);
   });

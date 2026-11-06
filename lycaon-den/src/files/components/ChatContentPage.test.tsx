@@ -4,6 +4,7 @@ import type { ChatContentDocument } from "../../chat/transcript/content/chat-con
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatContentPage } from "./ChatContentPage.tsx";
 import { stubClient } from "../../test/client-fixture.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
 import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { findController, resetFindControllerForTests, setFindQuery } from "../../find/find-controller.ts";
@@ -32,7 +33,7 @@ describe("chat content Files pane", () => {
         content:{kind:"command_receipts",programs:[{id:"program"}],context:"{}"},
       }} />);
       await waitFor(() => expect(view.container.querySelector(".cm-content")?.textContent).toContain("Execution records are unavailable"));
-      fireEvent.click(view.getByRole("button", {name:"Copy contents"}));
+      fireEvent.click(assertNamedControl(view.getByTestId("files-readonly-copy"), "button"));
       const rows = selectProjectNoticeGroups(notices.index()).find(group => group.projectId === "project")?.notices ?? [];
       expect(rows.some(row => row.code === "chat_content_copy_failed")).toBe(true);
     } finally { registerNoticePublisher(null); }
@@ -50,8 +51,8 @@ describe("chat content Files pane", () => {
     expect(view.container.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("false");
     expect(view.container.querySelector("header")).toBeNull();
     expect(view.container.querySelector(".den-files-toolbar")).not.toBeNull();
-    expect(view.getByRole("button", {name:"Go to line"})).toBeTruthy();
-    expect(view.getByRole("button", {name:"Wrap"})).toBeTruthy();
+    expect(assertNamedControl(view.getByTestId("files-readonly-goto"), "button")).toBeTruthy();
+    expect(assertNamedControl(view.getByTestId("files-editor-wrap-toggle"), "button")).toBeTruthy();
     expect(view.container.querySelectorAll(".cm-line").length).toBeLessThan(100);
     expect(getRows).not.toHaveBeenCalled();
   });
@@ -64,8 +65,8 @@ describe("chat content Files pane", () => {
     expect(view.container.querySelector(".cm-content")?.textContent).toContain("read file.md");
     expect(view.container.querySelector("header")).toBeNull();
     expect(view.container.querySelector(".den-files-toolbar")).not.toBeNull();
-    expect(view.getByRole("button", {name:"Go to line"})).toBeTruthy();
-    expect(view.getByRole("button", {name:"Wrap"})).toBeTruthy();
+    expect(assertNamedControl(view.getByTestId("files-readonly-goto"), "button")).toBeTruthy();
+    expect(assertNamedControl(view.getByTestId("files-editor-wrap-toggle"), "button")).toBeTruthy();
   });
 
   it("does not copy a retained preview as if it were the complete offline document", () => {
@@ -80,7 +81,7 @@ describe("chat content Files pane", () => {
     const notices = createNoticeStore();
     registerNoticePublisher(notices);
     try {
-      fireEvent.click(view.getByRole("button", { name: "Copy contents" }));
+      fireEvent.click(assertNamedControl(view.getByTestId("files-readonly-copy"), "button"));
       const rows = selectProjectNoticeGroups(notices.index()).find(group => group.projectId === "project")?.notices ?? [];
       expect(rows).toMatchObject([{ code: "chat_content_copy_failed", message: "Reconnect to copy the complete document." }]);
       expect(view.queryByRole("alert")).toBeNull();
@@ -115,12 +116,12 @@ describe("chat content Files pane", () => {
       <ChatContentPage projectId="project" client={null} document={first} />
       <ChatContentPage projectId="project" client={null} document={second()} />
     </>);
-    const find = view.getAllByRole("button", { name: "Find in file" })[0]!;
+    const find = assertNamedControl(view.getAllByTestId("files-readonly-find")[0]!, "button");
     expect(find.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(find);
     expect(find.getAttribute("aria-expanded")).toBe("true");
     expect(find.getAttribute("aria-controls")).toBe(FIND_BAR_ID);
-    expect(view.getAllByRole("button", { name: "Go to line" })[0]!.getAttribute("aria-expanded")).toBe("false");
+    expect(assertNamedControl(view.getAllByTestId("files-readonly-goto")[0]!, "button").getAttribute("aria-expanded")).toBe("false");
     setFindQuery("NEEDLE");
     expect(findController.cmCount().total).toBe(0);
     setSecond({ ...second(), find: { query: "NEEDLE", caseSensitive: true, offset: 12 } });

@@ -91,6 +91,7 @@ function FileSummarySectionLine(props: SummarySectionProps) {
                 <button
                   type="button"
                   class="den-file-summary__symbol"
+                  data-testid="file-summary-location"
                   data-tip={`${target().name} · Line ${target().line}`}
                   aria-label={`Open ${target().name} at line ${target().line}`}
                   onClick={() => props.onOpen(target().line)}
@@ -161,7 +162,7 @@ export function FileSummaryPanel(props: Props) {
               class="den-file-summary__meta"
               onClick={() => props.onOpenLocation(props.target, 1)}
             >
-              <span>{languageLabel()}</span>
+              <span data-testid="file-summary-language">{languageLabel()}</span>
               <span aria-hidden="true">·</span>
               <span>
                 {preview().line_count} {preview().line_count === 1 ? "line" : "lines"}
