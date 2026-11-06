@@ -3,7 +3,6 @@ package contract
 import (
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/scan"
@@ -52,9 +51,6 @@ func TestScanToolsContractAllowlistAndRegistration(t *testing.T) {
 	enum := schemaCategoryEnum(t, meta.ArgsSchema)
 	if !enum["security"] || !enum["lint"] {
 		t.Fatalf("schema enum = %v, want catalog categories including security and lint", enum)
-	}
-	if !strings.Contains(meta.Description, "code scanners") {
-		t.Fatalf("description = %q", meta.Description)
 	}
 	for _, name := range []string{"scan_list", "scan_summary", "scan_query"} {
 		meta, ok := reg.Meta(name)

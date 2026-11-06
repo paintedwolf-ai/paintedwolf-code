@@ -3,6 +3,7 @@ package coordinator_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -389,9 +390,7 @@ func TestAssemblyImplementSpawnInjectWithoutWorkflow(t *testing.T) {
 				t.Fatalf("spawn inject missing implementer: %q", m.Content)
 			}
 		}
-		if strings.Contains(m.Content, inject.ActiveWorkflowInjectSentinel) {
-			t.Fatal("implement-default must not render active-workflow inject")
-		}
+		exposure.Absent(t, m.Content, inject.ActiveWorkflowInjectSentinel)
 	}
 	if !found {
 		t.Fatalf("messages missing implement-spawn inject: %+v", msgs)
@@ -424,7 +423,7 @@ func TestAssemblyWorkflowSessionIncludesSpawnRoster(t *testing.T) {
 	for _, m := range msgs {
 		if strings.Contains(m.Content, inject.ImplementSpawnInjectSentinel) {
 			spawnFound = true
-			for _, want := range []string{"Spawn roster", "Pool:", "DISALLOWED_AGENT"} {
+			for _, want := range []string{"Pool:", "DISALLOWED_AGENT"} {
 				if !strings.Contains(m.Content, want) {
 					t.Fatalf("spawn roster missing %q on workflow session: %q", want, m.Content)
 				}
@@ -673,15 +672,10 @@ func TestTransitionInjectOncePerPromptTurn(t *testing.T) {
 	store := surface.NewExecutionModeStateStore()
 	store.Save("s1", surface.ExecutionModeFamilyInvestigate)
 	deps := assembly.AssemblyDeps{
-		Prompts: pe,
-		Injects: prompts.NewInjectRenderer(pe),
-		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		LoadExecutionModeState: func(_ context.Context, sessionID string) surface.ExecutionModeState {
-			return store.Load(sessionID)
-		},
-		SaveExecutionModeState: func(_ context.Context, sessionID, family string) {
-			store.Save(sessionID, family)
-		},
+		Prompts:        pe,
+		Injects:        prompts.NewInjectRenderer(pe),
+		Limits:         func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		ExecutionModes: store,
 		ImplementSessionState: func(context.Context, *api.Session) surface.ImplementSessionState {
 			return surface.ImplementSessionState{WorkersInFlight: 1, PendingOverlayIDs: []string{}}
 		},

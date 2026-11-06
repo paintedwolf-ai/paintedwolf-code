@@ -41,6 +41,7 @@ type invocation struct {
 	releases         []func()
 	pins             []toolcontract.ExecutionRevision
 	flushedPins      int
+	pinReleases      []func()
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -58,6 +59,9 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 	}
 	inv.out = newOutput(ctx, streams.Output, p.owners.streamBytes())
 	inv.out.beforeWrite = inv.flushPins
+	if !commandprogram.IsNullInput(inv.input) {
+		inv.input = drainingInput{input: inv.input, out: inv.out}
+	}
 	return inv
 }
 
@@ -92,6 +96,7 @@ func (inv *invocation) warn(quiet bool, format string, args ...any) {
 	if quiet {
 		return
 	}
+	_ = inv.out.drain()
 	_, _ = fmt.Fprintf(inv.stderr, "%s: "+format+"\n", append([]any{inv.word()}, args...)...)
 }
 
@@ -164,40 +169,6 @@ func patternRejection(err error) error {
 		}})
 	}
 	return err
-}
-
-const searchPinBatchSize = 1024
-
-// recordPin retains every capture of this execution before its bytes are used.
-func (inv *invocation) recordPin(revision toolcontract.ExecutionRevision) error {
-	execution := inv.request.Invocation.Identity.ExecutionID
-	if inv.owners.Pins == nil || execution == "" {
-		return fmt.Errorf("search reads require a program execution and pin recorder")
-	}
-	if err := revision.Validate(); err != nil {
-		return err
-	}
-	inv.pins = append(inv.pins, revision)
-	if len(inv.pins)%searchPinBatchSize == 0 || len(inv.pins)-inv.flushedPins >= searchPinBatchSize {
-		return inv.flushPins()
-	}
-	return nil
-}
-
-func (inv *invocation) flushPins() error {
-	if len(inv.pins) <= inv.flushedPins {
-		return nil
-	}
-	execution := inv.request.Invocation.Identity.ExecutionID
-	if inv.owners.Pins == nil || execution == "" {
-		return fmt.Errorf("search reads require a program execution and pin recorder")
-	}
-	first := inv.flushedPins
-	if err := inv.owners.Pins.RecordRevisionPins(inv.ctx, execution, first, inv.pins[first:]); err != nil {
-		return err
-	}
-	inv.flushedPins = len(inv.pins)
-	return nil
 }
 
 // capture pins one file operand's exact bytes before any are searched.
@@ -318,7 +289,16 @@ type output struct {
 	mappings         commandprogram.SourceMappingRecorder
 	pending          *toolcontract.StreamSourceMapping
 	maximum, written int64
+	// printedLine is the number just printed for the next literal bytes.
+	printedLine int64
+	buffered    bool
+	buffer      []byte
+	failure     error
 }
+
+// outputBufferBytes bounds the output held for a sink without source mappings.
+// One pipe rendezvous per record would otherwise cost a writer and reader wakeup.
+const outputBufferBytes = 64 << 10
 
 func newOutput(ctx context.Context, w io.Writer, maximum int64) *output {
 	if w == nil {
@@ -326,6 +306,7 @@ func newOutput(ctx context.Context, w io.Writer, maximum int64) *output {
 	}
 	o := &output{ctx: ctx, w: w, maximum: maximum}
 	o.mappings, _ = w.(commandprogram.SourceMappingRecorder)
+	o.buffered = o.mappings == nil
 	return o
 }
 
@@ -340,10 +321,12 @@ func (o *output) literal(pin *toolcontract.SourcePin, p []byte, offset int64) er
 		return err
 	}
 	if o.mappings == nil || pin == nil {
+		o.printedLine = 0
 		return nil
 	}
-	next := toolcontract.StreamSourceMapping{Source: *pin, SourceStartByte: offset, SourceEndByte: offset + int64(len(p)), OutputStartByte: outStart, OutputEndByte: o.written}
-	if last := o.pending; last != nil && last.Source == next.Source && last.SourceEndByte == next.SourceStartByte && last.OutputEndByte == next.OutputStartByte {
+	next := toolcontract.StreamSourceMapping{Source: *pin, SourceStartByte: offset, SourceEndByte: offset + int64(len(p)), OutputStartByte: outStart, OutputEndByte: o.written, PrintedLine: o.printedLine}
+	o.printedLine = 0
+	if last := o.pending; last != nil && next.PrintedLine == 0 && last.Source == next.Source && last.SourceEndByte == next.SourceStartByte && last.OutputEndByte == next.OutputStartByte {
 		last.SourceEndByte, last.OutputEndByte = next.SourceEndByte, next.OutputEndByte
 		return nil
 	}
@@ -370,7 +353,46 @@ func (o *output) Write(p []byte) (int, error) {
 			return 0, err
 		}
 	}
-	return nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", o.maximum, &o.written, p)
+	if !o.buffered || len(p) >= outputBufferBytes {
+		if err := o.drain(); err != nil {
+			return 0, err
+		}
+		return nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", o.maximum, &o.written, p)
+	}
+	if err := o.admit(int64(len(p))); err != nil {
+		return 0, err
+	}
+	o.buffer = append(o.buffer, p...)
+	o.written += int64(len(p))
+	return len(p), nil
+}
+
+// admit makes room for size buffered bytes, refusing them past the stream limit.
+func (o *output) admit(size int64) error {
+	if o.failure != nil {
+		return o.failure
+	}
+	if err := o.ctx.Err(); err != nil {
+		return err
+	}
+	if o.maximum > 0 && size > o.maximum-o.written {
+		return tools.CommandLimitExceeded("stream_throughput_bytes", o.maximum, o.written+size)
+	}
+	if int64(len(o.buffer))+size > outputBufferBytes {
+		return o.drain()
+	}
+	return nil
+}
+
+// drain delivers buffered bytes. Their limit was charged when they were written.
+func (o *output) drain() error {
+	if o.failure != nil || len(o.buffer) == 0 {
+		return o.failure
+	}
+	var sent int64
+	_, o.failure = nativeutility.WriteChunked(o.ctx, o.w, "stream_throughput_bytes", 0, &sent, o.buffer)
+	o.buffer = o.buffer[:0]
+	return o.failure
 }
 
 func (o *output) text(parts ...string) error {
@@ -390,4 +412,38 @@ func (o *output) text(parts ...string) error {
 		}
 	}
 	return nil
+}
+
+// WriteString keeps a buffered record's prefix and terminator from allocating.
+func (o *output) WriteString(s string) (int, error) {
+	if !o.buffered || len(s) >= outputBufferBytes {
+		return o.Write([]byte(s))
+	}
+	if len(s) > 0 && o.beforeWrite != nil {
+		if err := o.beforeWrite(); err != nil {
+			return 0, err
+		}
+	}
+	if err := o.admit(int64(len(s))); err != nil {
+		return 0, err
+	}
+	o.buffer = append(o.buffer, s...)
+	o.written += int64(len(s))
+	return len(s), nil
+}
+
+// drainingInput delivers held output before a read that would wait, so a
+// consumer of a live stream sees each result before the next input arrives.
+type drainingInput struct {
+	input io.Reader
+	out   *output
+}
+
+func (i drainingInput) Read(p []byte) (int, error) {
+	if ready, ok := i.input.(interface{ InputReady() bool }); !ok || !ready.InputReady() {
+		if err := i.out.drain(); err != nil {
+			return 0, err
+		}
+	}
+	return i.input.Read(p)
 }

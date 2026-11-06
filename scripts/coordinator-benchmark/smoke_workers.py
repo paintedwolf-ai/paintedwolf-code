@@ -4,7 +4,7 @@ import json
 import pathlib
 import sqlite3
 import uuid
-from dispatch_graph import waves
+from orchestration_evidence import waves
 
 
 def pending(application, session):
@@ -48,22 +48,27 @@ def finish(application, session, text, *, completion_signals=()):
 
 
 def closeout(operation, text, findings=()):
-    """Build the declared closeout trailer using exact worker findings."""
-    trailer = {}
+    """Write the closeout as Markdown, citing exact worker findings inline."""
+    nodes = []
     if operation.get('cited_findings'):
         observed = {(f['path'], f['line']): f for f in findings}
-        trailer['cited_evidence'] = [{'path': f['path'], 'line': f['line'], **({'excerpt': observed[(f['path'], f['line'])]['excerpt']} if (f['path'], f['line']) in observed else {})}
-                                     for f in operation['cited_findings']]
+        for f in operation['cited_findings']:
+            excerpt = observed.get((f['path'], f['line']), {}).get('excerpt')
+            quoted = (' ' + json.dumps(excerpt, ensure_ascii=False)) if excerpt else ''
+            nodes.append('[' + citation_path(f['path']) + ':' + str(f['line']) + quoted + ']')
     if operation.get('closeout_method'):
-        trailer['verification'] = {'method': operation['closeout_method'], 'reason': 'Declared by the intended trajectory.'}
+        nodes.append('[verify: ' + operation['closeout_method'] + ' - Declared by the intended trajectory.]')
     elif operation.get('verification'):
-        trailer['verification'] = {'method': 'project', 'reason': 'The supplied project checks passed.'}
-    elif trailer:
+        nodes.append('[verify: project - The supplied project checks passed.]')
+    elif nodes:
         # Surveys cite inspection evidence without modifying files.
-        trailer['verification'] = {'method': 'inspection', 'reason': 'The worker survey changed nothing; its finding is cited.'}
-    if not trailer:
-        return text
-    return text + '\n\n```json\n' + json.dumps(trailer) + '\n```'
+        nodes.append('[verify: inspection - The worker survey changed nothing; its finding is cited.]')
+    return text + (' ' + ' '.join(nodes) if nodes else '')
+
+
+def citation_path(path):
+    """Quote a path the bracket grammar would otherwise split."""
+    return json.dumps(path, ensure_ascii=False) if ' ' in path or ',' in path else path
 
 
 def completion_wake(db, session, allowed):

@@ -37,6 +37,12 @@ type Options struct {
 	// carry, such as `@label/`. Nil means one root. An unknown id leaves the
 	// source URL as the path, which no observation matches.
 	SourceRoot func(rootID string) (prefix string, ok bool)
+	// CanonicalPath spells a citation's written path as the evidence does. Nil keeps
+	// it as written.
+	CanonicalPath func(string) string
+	// CodeCitation reports whether the evidence supports a citation written as a
+	// standalone code span. Nil, or false, leaves the span literal code.
+	CodeCitation func(Citation) bool
 	// MaxSourceBytes and MaxOccurrences override the declared budgets.
 	MaxSourceBytes int
 	MaxOccurrences int
@@ -97,12 +103,10 @@ const (
 	LinkInline    LinkForm = "inline"
 	LinkReference LinkForm = "reference"
 	LinkAutolink  LinkForm = "autolink"
-	LinkRawHTML   LinkForm = "raw_html"
 )
 
-// Link is a standard Markdown link or another form that renders as one.
-// Destination is the resolved destination, for a reference link the one its
-// definition names.
+// Link is a standard Markdown link or a bare URL that renders as one. Destination
+// is the resolved destination, for a reference link the one its definition names.
 type Link struct {
 	Form        LinkForm
 	Label       string
@@ -131,6 +135,9 @@ type Occurrence struct {
 	Artifact string
 	Verify   *verification.Assessment
 	Repair   *Repair
+	// InlineCode marks a citation read from a code span. It presents as a citation
+	// only when accepted; otherwise its bytes stay, as any other code does.
+	InlineCode bool
 }
 
 // IssueCode names a structured grammar defect.
@@ -171,6 +178,8 @@ const (
 	ZoneLink       ZoneKind = "link"
 	ZoneImage      ZoneKind = "image"
 	ZoneAutolink   ZoneKind = "autolink"
+	// ZoneEscapedDocument is a whole source past a budget, displayed literally.
+	ZoneEscapedDocument ZoneKind = "escaped_document"
 )
 
 // Zone is a source range the custom scanner never enters. Links, images and
@@ -179,6 +188,12 @@ const (
 type Zone struct {
 	Kind ZoneKind
 	Span Span
+}
+
+// Image is one image node the document renders.
+type Image struct {
+	Span        Span
+	Destination string
 }
 
 // Document is one parsed source. Spans index Source. Body is the document's
@@ -190,7 +205,12 @@ type Document struct {
 	Issues      []Issue
 	// Zones are the literal zones the parse honoured, in source order.
 	Zones []Zone
-	parts []part
+	// Images are the image nodes the document renders, wherever they nest. A
+	// reference image's destination is its definition's.
+	Images []Image
+	parts  []part
+	// overBudget means the source displays as one escaped literal block.
+	overBudget bool
 }
 
 // partKind is how a non-text region of the source presents.
@@ -198,6 +218,8 @@ type partKind int
 
 const (
 	partLiteral partKind = iota
+	partRawHTML
+	partHTMLBlock
 	partLink
 	partNode
 	partDamaged
@@ -210,6 +232,11 @@ type part struct {
 	span  Span
 	first int
 	count int
+	// link is a link part's parse; broken means it raised an issue.
+	link   *Link
+	broken bool
+	// definition is a link definition's destination.
+	definition string
 }
 
 // boundedToken returns at most maxIssueTokenBytes of token without splitting a

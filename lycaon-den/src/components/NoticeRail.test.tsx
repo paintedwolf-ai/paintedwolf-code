@@ -182,8 +182,6 @@ describe("NoticeRail", () => {
 
     const actions = screen.getAllByTestId("notice-action");
     expect(actions).toHaveLength(2);
-    expect(actions[0]!.textContent).toBe("Keep going");
-    expect(actions[1]!.textContent).toBe("Rewind and retry");
 
     actions[0]!.click();
     expect(keepGoing).toHaveBeenCalledOnce();

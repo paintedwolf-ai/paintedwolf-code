@@ -460,3 +460,27 @@ func TestCurlRefusesInvalidUsage(t *testing.T) {
 		}
 	}
 }
+
+func TestCurlDirectIPHonorsDeclaredDestinationPolicy(t *testing.T) {
+	h := newHarness(t)
+	denied := h.curl(t.Context(), "-s", "--connect-timeout", "0.05", "http://192.0.2.1:8080/health")
+	reject := toolrejection.AsToolReject(denied.err)
+	if reject == nil || reject.Code != "HTTP_REQUEST_HOST_DENIED" {
+		t.Fatalf("ungranted private destination = %v (reject=%+v), want HTTP_REQUEST_HOST_DENIED", denied.err, reject)
+	}
+
+	h.tc.Direct.DirectIPAuthorized = true
+	h.tc.Direct.DirectIPDeclared = []string{"192.0.2.1:9090"}
+	mismatch := h.curl(t.Context(), "-s", "--connect-timeout", "0.05", "http://192.0.2.1:8080/health")
+	reject = toolrejection.AsToolReject(mismatch.err)
+	if reject == nil || reject.Code != "HTTP_REQUEST_HOST_DENIED" {
+		t.Fatalf("mismatched declared port = %v (reject=%+v), want HTTP_REQUEST_HOST_DENIED", mismatch.err, reject)
+	}
+
+	h.tc.Direct.DirectIPDeclared = []string{"192.0.2.1:8080"}
+	metadata := h.curl(t.Context(), "-s", "--connect-timeout", "0.05", "http://169.254.169.254:8080/latest/meta-data")
+	reject = toolrejection.AsToolReject(metadata.err)
+	if reject == nil || reject.Code != "HTTP_REQUEST_HOST_DENIED" {
+		t.Fatalf("link-local metadata under direct_ip = %v (reject=%+v), want HTTP_REQUEST_HOST_DENIED", metadata.err, reject)
+	}
+}

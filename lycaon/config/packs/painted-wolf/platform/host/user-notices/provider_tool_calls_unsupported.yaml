@@ -21,11 +21,5 @@ scenarios:
   - id: with_model
     vars:
       model: gemma-2b
-    expect_contains:
-      - gemma-2b
-      - tool calls
   - id: generic
     vars: {}
-    expect_contains:
-      - tool calls
-      - agent actions

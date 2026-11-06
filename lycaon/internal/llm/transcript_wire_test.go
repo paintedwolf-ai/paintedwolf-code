@@ -40,7 +40,7 @@ func feedbackMessage() api.Message {
 	return api.Message{Role: api.MessageRoleTool, Content: "Use the native replacement.", ToolResult: &api.ToolResult{
 		Tool: "command", ToolCallID: "call", Outcome: api.ToolResultOutcomeRejected,
 		Feedback: []api.ToolFeedback{{Code: "USE_NATIVE_TOOL", Details: map[string]any{
-			"replacement_calls": []any{map[string]any{"tool": "git_log", "args": map[string]any{"ref": "benchmark-page", "limit": 6}}},
+			"entries": []any{map[string]any{"name": "git_log", "args": map[string]any{"ref": "benchmark-page", "limit": 6}}},
 		}}},
 	}}
 }
@@ -90,7 +90,7 @@ func TestToolFeedbackProjectionPreservesSecretScreening(t *testing.T) {
 			t.Fatal("feedback credential was not screened")
 		}
 		projected := projectOne(t, screened)
-		if strings.Contains(projected.Content, modelScreenGitHubToken) || !strings.Contains(projected.Content, "replacement_calls") {
+		if strings.Contains(projected.Content, modelScreenGitHubToken) || !strings.Contains(projected.Content, "entries") {
 			t.Fatal("feedback projection leaked a secret or lost the replacement")
 		}
 	}
@@ -216,11 +216,8 @@ func TestInvocationFactsSurviveContextAndProviderWire(t *testing.T) {
 }
 
 func TestFileContentLabelsSurviveProviderProjection(t *testing.T) {
-	for _, tool := range []string{"read", "summarize"} {
-		body := `{"path":"input.json","mode":"content","offset":1,"end_line":1,"content":"     1: {\"receipt\":\"payload\"}","receipt":{"tool":"read"}}`
-		if tool == "summarize" {
-			body = `{"pack":{"substance":[{"path":"input.json","start_line":1,"end_line":1,"handle":"summarize#1","body":"     1: {\"receipt\":\"payload\"}"}]}}`
-		}
+	for _, tool := range []string{"source_history"} {
+		body := `{"path":"input.json","mode":"version","offset":1,"end_line":1,"content":"     1: {\"receipt\":\"payload\"}","receipt":{"tool":"source_history"}}`
 		original := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: body, PromptCacheBreakpoint: api.PromptCacheTierHistory, ToolResult: &api.ToolResult{Tool: tool, ToolCallID: "source-call", Outcome: api.ToolResultOutcomeCompleted, Content: body}}
 		messages := transcript.Project([]api.Message{
 			{Role: api.MessageRoleSystem, Content: "Standing guidance", PromptCacheBreakpoint: api.PromptCacheTierStanding},

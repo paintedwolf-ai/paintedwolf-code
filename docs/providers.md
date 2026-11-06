@@ -34,6 +34,8 @@ The Gemini chat adapter preserves signed tool-call groups exactly. Unsigned impo
 
 Together, local inference, and Gemini adapters project one leading system message: the initial system blocks join in order and later host events keep their position as user turns. This satisfies chat templates that reject a system message outside the first slot without moving new host state into the past. OpenAI's native adapter keeps its supported system-message timeline.
 
+Mistral's `/v1/models` discovery reads `max_context_length` and the structured `capabilities` block (`completion_chat`, `function_calling`, `vision`), filtering rows that declare `completion_chat: false` while leaving omitted capability fields unknown. On the chat-completions wire, the Mistral profile (`ToolCallIDAlphanumeric9`) preserves 9-character ASCII alphanumeric wire tool-call IDs and deterministically normalizes non-conforming host or imported tool-call IDs to 9 alphanumeric characters across both `tool_calls[].id` and paired `tool_call_id` messages.
+
 ## Catalog authority
 
 Catalog entries declare stable provider kind, model id, display metadata, context/output limits, feature flags, driver profile, utility eligibility, and optional pricing/feed keys.
@@ -104,7 +106,7 @@ Model assignment resolves models, explicit refusals, and discovery errors togeth
 
 Callability is established two ways, both positive statements someone made:
 
-1. **From the host's own listing**, when a discovery profile declares how that host expresses it. Together publishes token prices only for models served on the shared chat path, so its profile reads a listed row without prices as the host declining to serve it there. Such a row is stamped, not dropped: refused rows stay out of the assignable set but are retained, so an assignment naming one is answered with what the host said instead of "unknown model".
+1. **From the host's own listing**, when a discovery profile declares how that host expresses it. Together publishes token prices only for models served on the shared chat path, so its profile reads a listed row without prices as the host declining to serve it there. Cerebras returns only the models available to the authenticated account from `GET /v1/models` while the global feed also lists models that require dedicated capacity; when live discovery succeeds, catalog rows omitted by `/v1/models` (or returned with `active: false`) are marked uncallable unless explicitly declared in local configuration. Such a row is stamped, not dropped: refused rows stay out of the assignable set but are retained, so an assignment naming one is answered with what the host said instead of "unknown model".
 2. **From a refusal at call time**: the `model_refused` fault below, recorded per (provider, model) in the refusal gate when, and only when, the host answered about the model's *identity*.
 
 Each only removes a specific named pair; nothing is inferred from absence from a catalog, because a catalog can be stale, partial, or unreachable.
@@ -146,7 +148,7 @@ providers:
     reasoning_wire: reasoning_content
 ```
 
-`reasoning_content` sends the prior trace in that field. `reasoning_details` sends the `reasoning` text and structured `reasoning_details` blocks. `none` disables replay; omission inherits the kind default. Cloudflare uses `reasoning_content`; OpenRouter uses `reasoning_details`. Unknown values are refused, and native transports with a different message protocol reject this setting.
+`reasoning_content` sends the prior trace in that field. `reasoning_details` sends the `reasoning` text and structured `reasoning_details` blocks. `none` disables replay; omission inherits the kind default. Cloudflare, DeepInfra, and Scaleway use `reasoning_content`; OpenRouter uses `reasoning_details`. Unknown values are refused, and native transports with a different message protocol reject this setting.
 
 Streaming and complete responses retain reasoning separately from visible assistant text. Replay is restricted to the exact provider instance and model that produced it; tool-call identities remain paired with their results. Reasoning control (`think_style`, effort mapping, thinking settings) is a separate axis from preserving the response history.
 
@@ -336,28 +338,48 @@ The bundled GLM-5.3-Flash rule uses low/high/max because [Z.ai documents that ev
 
 #### Reasoning markers
 
-Some families' chat templates wrap reasoning in literal tags inside the
-content channel, and serving stacks differ in what they do with them: one
-reports the reasoning in its own field yet still streams the open tag as
-content, another leaves the whole block in the content. A rule declares the
-family's tags with `reasoning_markers`, and the host reads every transport's
-output the same way:
+Many chat templates wrap reasoning in literal tags inside the content
+channel, and serving stacks differ in what they do with them: one reports the
+reasoning in its own field yet still streams the open tag as content, another
+leaves the whole block in the content. The host reads every model's output
+for `<think>` and `</think>`, whether or not a rule names the model, so a
+model the catalog has never heard of still keeps its reasoning out of the
+transcript. A family whose template uses other tags declares them with
+`reasoning_markers`, which replace the default for that family:
 
 ```yaml
 model_thinking:
-  - match: [qwen3]
-    style: boolean_think
-    reasoning_markers: {open: "<think>", close: "</think>"}
+  - match: [example-family]
+    style: none
+    reasoning_markers: {open: "<reasoning>", close: "</reasoning>"}
 ```
 
 Content between the tags is reasoning. Reasoning that arrives in its own
-field settles the block: the open tag stood alone, whitespace after it is
+field or structured block settles the block: the open tag stood alone, whitespace after it is
 dropped, and the text that follows is the visible answer, as is anything after
 the close tag. Bytes that could still begin a tag wait for the next delta, so
 a tag split across deltas is still read as one. A tag that never completes is
-visible text, and an open block that never closes is reasoning. Each tag is a
-literal of at most 32 bytes, and the two must differ. A family with no rule,
-or a rule without markers, passes content through untouched.
+visible text, and an open block that never closes is reasoning, including one
+cut off by a tool call or the output cap. Each tag is a literal of at most 32
+bytes, and the two must differ. Content that does not open with the tag passes
+through untouched.
+
+Separation runs directly over the transport, before response retry judges the
+payload. A turn that spent its whole output cap on reasoning is therefore an
+empty completion to the retry layer, which recovers it by lowering reasoning
+and asking again, rather than a raw block or a blank turn in the transcript.
+
+Compatible transports preserve answer and reasoning fields from one wire delta
+together. Structured blocks identify the reasoning channel even when their
+contents are encrypted; their full payload is retained at stream completion.
+This keeps streaming and complete-response classification consistent without
+interpreting the wording of an answer. A closing tag without a declared opening
+boundary does not authorize reclassifying earlier answer text.
+
+The [Fireworks chat-completions contract](https://docs.fireworks.ai/api-reference/post-chatcompletions)
+exposes reasoning separately as `reasoning_content`. That field remains separate
+from `content` on receipt; its existence does not establish an inline-marker
+grammar for every model served by the endpoint.
 
 #### Model cutoff
 
@@ -503,7 +525,7 @@ Streaming completion is committed in recoverable stages:
 
 Retries occur only before an unsafe replay boundary. Once the host has observed a tool call or committed visible assistant content, it does not silently send the same turn to another provider. An interrupted stream remains visible and may be continued by an explicit new turn. The host never fabricates a clean completion from a transport error.
 
-An empty response ending at its output allowance is recovered once within the same turn when the adapter can send a lower reasoning control: the minimum supported reasoning setting and a 4,096-token ceiling (or a smaller explicit cap), inside the existing call timeout. Fixed thinking overrides are preserved, and an unchanged reasoning control is never presented as a recovery. No visible content or tool-call progress may have escaped the failed attempt. Failed-attempt reasoning is removed from the recovered response; reported charges from both attempts are retained. A failed recovery produces a notice that completed work remains.
+An empty response ending at its output allowance is recovered once within the same turn when the adapter can send a lower reasoning control: the minimum supported reasoning setting, inside the existing call timeout. Recovery preserves the admitted answer allowance; explicit request, model, and context limits still apply. Fixed thinking overrides are preserved, and an unchanged reasoning control is never presented as a recovery. No visible content or tool-call progress may have escaped the failed attempt. Failed-attempt reasoning is removed from the recovered response; reported charges from both attempts are retained. A failed recovery produces a notice that completed work remains.
 
 Tool requests reserve 16,384 tokens of base answer room plus the application reasoning allowance: 1,024, 8,192, or 16,384 tokens at low, medium, or high effort. The model's declared output ceiling and explicit request limits still bound the request. Providers with a shared reasoning/output counter cannot promise a separate visible-output ceiling; the host does not cut a live tool call at an estimated token boundary.
 
@@ -616,6 +638,8 @@ The local-inference column is longer because loading a model into memory is a re
 <a id="local-inference-profile"></a>
 Provider kind selects that service class; the host does not guess from a URL or process name. Five kinds select the local-inference profile: `ollama`, `lmstudio`, `omlx`, `litellm-proxy`, and `openai-compatible`. That one profile sets both header bounds, both utility-call budgets, and single-flight behavior together, so a driver cannot be half local.
 
+Settings and model pickers use the same kind authority: `ollama`, `lmstudio`, `omlx`, and `litellm-proxy` group under local providers (`openai-compatible` stays under `Custom`) regardless of whether an instance points at loopback, a LAN host, or an internet-accessible server, or whether it requires an API key. For a self-hosted gateway such as `litellm-proxy`, local placement describes the gateway instance the user operates, not where each upstream model runs: one gateway can route to both self-hosted runners and paid cloud APIs, and unknown upstream inference location stays unknown. Provider grouping is separate from pricing (`local_free` is set only on runner kinds with no per-token billing, while `litellm-proxy` uses discovered or catalog model rates) and from outbound secret trust (`secret_screen_trusted` is an explicit per-instance decision and endpoint loopback is evaluated from `base_url` alone).
+
 ## Capacity and concurrency
 
 Provider capacity is separate from workflow concurrency. An adapter can advertise or enforce in-flight limits, but the coordinator still schedules task waves and the utility lane enforces single-flight behavior.
@@ -667,6 +691,15 @@ Ollama context sizing starts with 50% tokenizer padding. Reported `prompt_eval_c
 Ollama reloads a model whenever a request's `num_ctx` differs from the loaded runner's, and a reload costs a full weight load. Each request therefore reads `/api/ps` first: when a runner for the model is loaded with a context that holds the request and fits the model's limit, the request reuses that context instead of dropping to a smaller bucket. A request that needs more than the runner holds still grows to its bucket. Without a loaded runner, or when the listing does not answer within a second, sizing uses the smallest bucket that fits.
 
 Ollama replay includes native `tool_name` on tool results. Presentation-only `agent_note` echoes stay in the user transcript, not the native message array, because a trailing assistant message is a continuation prefix in Ollama's Qwen renderer; this keeps the next model turn at a completed tool boundary.
+
+## Cerebras
+
+Cerebras (`kind: cerebras`, default endpoint `https://api.cerebras.ai/v1`, credential environment variable `CEREBRAS_API_KEY`) uses the OpenAI-compatible chat completions transport with `providerprofile.Cerebras()`.
+
+- **Setup and model availability**: **Test connection** and model discovery query `GET /v1/models` with the configured Bearer token. Cerebras returns only the models available to the authenticated account on `GET /v1/models`, whereas the `models.dev` catalog (`cerebras`) includes both shared-tier models (such as `gpt-oss-120b` and `llama3.1-8b`) and models that require dedicated capacity or preview access (such as `qwen-3-235b-a22b-instruct-2507` and `zai-glm-4.7`). Discovered models are enriched with `models.dev` context limits, output limits, pricing, and declared capabilities, while any capability not established by the catalog or discovery remains `unknown`. Catalog models omitted by a live `/v1/models` response (or marked `active: false`) are withheld from the assignable list as uncallable so selecting one reports that the provider lists the model but does not serve it. Dedicated deployments returned by `/v1/models` that are not in `models.dev` remain assignable with `chat: supported` and unadvertised capabilities left `unknown`.
+- **Streaming, tool use, and reasoning**: Streaming chat completions (`stream: true` with `stream_options.include_usage: true`), tool definitions, tool call deltas, and multi-turn tool result continuations use the standard OpenAI wire contract. Assistant reasoning is replayed via `reasoning_content` (`reasoning_wire: reasoning_content`), and `reasoning_effort` supports `"none"` for disabling reasoning where supported.
+- **Usage, caching, and error handling**: Automatic prefix cache hits reported in `usage.prompt_tokens_details.cached_tokens` flow into standard usage accounting (`prompt_cache_profile: implicit`). Both nested (`{"error": {...}}`) and flat top-level (`{"message": ..., "type": ..., "param": ..., "code": ...}`) error payloads are parsed into structured `ProviderHTTPError` values so 401/403 authentication failures, 429 rate limits, 503 capacity errors, and 404 `model_not_found` refusals follow standard recovery paths.
+- **Verified limitations**: Cerebras does not support several OpenAI sampling or penalty fields (`frequency_penalty`, `presence_penalty`, `logit_bias`, `service_tier`), which the adapter does not emit, and enforces strict schema constraints on structured outputs and tool parameters that are handled by standard tool schema projection and structured-output fallback.
 
 ## Adapter discipline
 

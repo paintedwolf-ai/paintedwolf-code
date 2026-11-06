@@ -22,6 +22,22 @@ func midTurnLedger() guidance.CloseoutEvidence {
 	})}
 }
 
+// AC-MID-06, MC-INV-07: a progress note keeps the handle of what it cited, so its
+// evidence kind stays what the receipt proves rather than a file read.
+func TestProgressNotesKeepTheirReceiptHandle(t *testing.T) {
+	t.Parallel()
+	for text, handle := range map[string]string{
+		"Dispatched the worker [task#1].": "task#1",
+		"The package exists [list#2].":    "list#2",
+		"Tests ran [command#4].":          "command#4",
+	} {
+		audit := guidance.AuditMidTurnNote(guidance.MidTurnNoteInput{Text: text, Evidence: midTurnLedger(), CitationsRequired: true})
+		if audit.Outcome != guidance.MidTurnPublish || audit.Grounding == nil || len(audit.Grounding.CitedEvidence) != 1 || audit.Grounding.CitedEvidence[0].Handle != handle {
+			t.Errorf("%q: outcome %v grounding %+v, want %s", text, audit.Outcome, audit.Grounding, handle)
+		}
+	}
+}
+
 func TestAuditMidTurnNote(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("Worker one finished its survey. ", 40) + "\n\n" + strings.Repeat("Worker two is still running. ", 40)
@@ -40,7 +56,7 @@ func TestAuditMidTurnNote(t *testing.T) {
 		traced      bool
 		optional    bool
 	}{
-		{name: "AC-MID-01 pre-evidence update publishes as evidence-optional", text: "I'll inspect the parser.", ev: empty, want: guidance.MidTurnPublish, contains: "inspect the parser", optional: true},
+		{name: "AC-MID-01 pre-evidence update publishes as evidence-optional", text: "I'll inspect the parser.", ev: empty, want: guidance.MidTurnPublish, contains: "inspect the parser", traced: true, optional: true},
 		{name: "AC-MID-02 pending handle is rejected even before evidence", text: "Started [task#1].", ev: empty, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteHandleUngroundCode, friction: true},
 		{name: "AC-MID-03 cited update publishes without its marker", text: "The timeout is set in [read#3:42]. Checking callers.", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "Checking callers", absent: "read#3", traced: true},
 		{name: "AC-MID-04 uncited after observations withholds", text: "Still looking.", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteUngroundedCode},
@@ -52,12 +68,12 @@ func TestAuditMidTurnNote(t *testing.T) {
 		{name: "AC-MID-12 unknown artifact withholds without friction", text: "Screenshot [read#3:42] [artifact:" + midTurnArtifact + "].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteArtifactCode},
 		{name: "presentable artifact publishes with its citation", text: "Screenshot [read#3:42] [artifact:" + midTurnArtifact + "].", ev: midTurnLedger(), required: true, presentable: []string{midTurnArtifact}, want: guidance.MidTurnPublish, traced: true},
 		{name: "artifact alone does not satisfy a citation requirement", text: "[artifact:" + midTurnArtifact + "]", ev: midTurnLedger(), required: true, presentable: []string{midTurnArtifact}, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteUngroundedCode},
-		{name: "artifact alone publishes before evidence", text: "[artifact:" + midTurnArtifact + "]", ev: empty, presentable: []string{midTurnArtifact}, want: guidance.MidTurnPublish, optional: true},
+		{name: "artifact alone publishes before evidence", text: "[artifact:" + midTurnArtifact + "]", ev: empty, presentable: []string{midTurnArtifact}, want: guidance.MidTurnPublish, traced: true, optional: true},
 		{name: "malformed node withholds without friction", text: "Range [read#3:9-2] is odd.", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteSyntaxCode},
 		{name: "repair directive has no meaning here", text: "Fixed [cite: c1 => read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteSyntaxCode},
 		{name: "embedded artifact image withholds", text: "Look [read#3:42] ![shot](" + midTurnArtifact + ").", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteEmbedCode},
 		{name: "literal embed example stays allowed", text: "Syntax is `![shot](" + midTurnArtifact + ")` [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "![shot]", traced: true},
-		{name: "literal citation example is not a citation", text: "The form is `[read#99]`.", ev: empty, want: guidance.MidTurnPublish, contains: "[read#99]", optional: true},
+		{name: "literal citation example is not a citation", text: "The form is `[read#99]`.", ev: empty, want: guidance.MidTurnPublish, contains: "[read#99]", traced: true, optional: true},
 		{name: "pathless citation alone says nothing", text: "[task#1]", ev: midTurnLedger(), required: true, want: guidance.MidTurnSilent},
 		{name: "a dispatch receipt has no line to cite", text: "Started [task#1:1].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteHandleUngroundCode, friction: true},
 		{name: "a command receipt has no line to cite", text: "Ran [command#4:2].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteHandleUngroundCode, friction: true},
@@ -66,6 +82,12 @@ func TestAuditMidTurnNote(t *testing.T) {
 		{name: "an unregistered kind is prose, not an invalid citation", text: "Linked to [pr#123] [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "[pr#123]", traced: true},
 		{name: "an unregistered kind alone is uncited, not invalid", text: "Linked to [pr#123].", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteUngroundedCode},
 		{name: "prose brackets are not attempts", text: "Use [and/or] as needed [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "[and/or]", traced: true},
+		{name: "AC-MID-12 unobserved image withholds without friction", text: "Screenshot [read#3:42] ![shot](https://placeholder.example/1.png).", ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteImageCode},
+		{name: "unobserved image withholds before evidence too", text: "Plan ![shot](https://placeholder.example/1.png).", ev: empty, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteImageCode},
+		{name: "literal image example stays allowed", text: "Syntax is `![shot](https://placeholder.example/1.png)` [read#3:42].", ev: midTurnLedger(), required: true, want: guidance.MidTurnPublish, contains: "![shot]", traced: true},
+		{name: "bare retired tool JSON is not an update", text: `{"name":"surface_note","arguments":{"summary":"Done."}}`, ev: empty, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteSyntaxCode},
+		{name: "bare report JSON is not an update", text: `{"synthesis":"Done."}`, ev: midTurnLedger(), required: true, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteSyntaxCode},
+		{name: "fenced JSON is literal text", text: "```json\n{\"a\":1}\n```", ev: empty, want: guidance.MidTurnPublish, contains: "{\"a\":1}", traced: true, optional: true},
 		{name: "unobserved URL before evidence", text: "See [RFC](https://example.test/spec).", ev: empty, want: guidance.MidTurnWithhold, code: guidance.MidTurnNoteURLOnlyCode, friction: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -111,8 +133,8 @@ func TestIntentWindowObservations(t *testing.T) {
 	t.Parallel()
 	user := api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "go"}
 	read := api.Message{Role: api.MessageRoleTool, EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{Tool: "read"}}
-	dispatch := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "task", Dispatch: &api.WorkerDispatch{WorkerID: "w1"}}}
-	command := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "command", CommandProgram: &api.CommandProgramReceipt{}}}
+	dispatch := api.Message{Role: api.MessageRoleTool, EvidenceHandles: []string{"task#1"}, ToolResult: &api.ToolResult{Tool: "task", Dispatch: &api.WorkerDispatch{WorkerID: "w1"}}}
+	command := api.Message{Role: api.MessageRoleTool, EvidenceHandles: []string{"command#1"}, ToolResult: &api.ToolResult{Tool: "command"}}
 	control := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "update_progress"}}
 	for _, tc := range []struct {
 		name    string
@@ -123,8 +145,8 @@ func TestIntentWindowObservations(t *testing.T) {
 		{"control tool only", []api.Message{user, control}, false},
 		{"earlier window does not count", []api.Message{read, user}, false},
 		{"handle", []api.Message{user, read}, true},
-		{"dispatch", []api.Message{user, dispatch}, true},
-		{"command receipt", []api.Message{user, command}, true},
+		{"dispatch with its printed handle", []api.Message{user, dispatch}, true},
+		{"a command prints its handle", []api.Message{user, command}, true},
 	} {
 		if got := guidance.IntentWindowHasCitableObservations(tc.history); got != tc.want {
 			t.Errorf("%s: got %v", tc.name, got)

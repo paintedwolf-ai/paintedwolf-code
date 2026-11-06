@@ -15,8 +15,8 @@ const fixtures = JSON.parse(
 function summarize(source: string): { links: string[]; code: string[] } {
   const links: string[] = [];
   const code: string[] = [];
-  marked.walkTokens(marked.lexer(source, { gfm: true }), (token: Token) => {
-    if (token.type === "link" && /^https?:\/\//i.test(token.href)) links.push(token.href);
+  void marked.walkTokens(marked.lexer(source, { gfm: true }), (token: Token) => {
+    if (token.type === "link" && /^https?:/i.test(token.href)) links.push(token.href);
     if (token.type === "code" || token.type === "codespan") code.push(token.text);
   });
   return { links, code };

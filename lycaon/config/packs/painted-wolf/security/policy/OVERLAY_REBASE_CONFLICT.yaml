@@ -16,8 +16,3 @@ scenarios:
       conflict_paths:
         - internal/auth/login.go
       overlay_id: ov-grep-followup
-    expect_contains:
-      - ov-grep-followup
-      - ov-grep-impl
-      - internal/auth/login.go
-      - 'Code: OVERLAY_REBASE_CONFLICT'

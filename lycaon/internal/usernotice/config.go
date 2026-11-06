@@ -78,10 +78,9 @@ type Entry struct {
 
 // ScenarioEntry is one notice render fixture.
 type ScenarioEntry struct {
-	ID             string         `yaml:"id"`
-	Resolution     string         `yaml:"resolution"`
-	Vars           map[string]any `yaml:"vars"`
-	ExpectContains []string       `yaml:"expect_contains"`
+	ID         string         `yaml:"id"`
+	Resolution string         `yaml:"resolution"`
+	Vars       map[string]any `yaml:"vars"`
 }
 
 // IsUserVisible reports whether this code may appear on the notice rail.

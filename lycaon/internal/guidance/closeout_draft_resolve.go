@@ -38,6 +38,8 @@ type OccurrenceResolution struct {
 	Code            string
 	Offender        string
 	Resolution      evidence.Resolution
+	// ObservedURL is the URL a web link matched in the ledger.
+	ObservedURL string
 }
 
 // Rejected reports whether this occurrence fails supplied-reference validation.
@@ -87,17 +89,23 @@ func ResolveDraftCitations(
 		switch occurrence.Kind {
 		case citationmd.KindCitation, citationmd.KindWorkspaceLink:
 			result = resolveDraftCitation(roots, occurrence, ev.Ledger, handleCode, unverifiableCode)
+			// The ledger moved since the parse: this is code again, not a defect.
+			if occurrence.InlineCode && result.Rejected() {
+				result = OccurrenceResolution{OccurrenceIndex: occurrence.Index, Kind: occurrence.Kind, Outcome: DirectiveParsed}
+			}
 		case citationmd.KindWebLink:
 			result.Outcome = CitationGrounded
-			if url := occurrence.Link.Destination; !webLinkObserved(*occurrence.Link, ev.Ledger) {
-				result.Outcome, result.Code, result.Offender = CitationNotObserved, urlCode, url
+			observed := observedWebURL(*occurrence.Link, ev.Ledger)
+			result.ObservedURL = observed
+			if observed == "" {
+				result.Outcome, result.Code, result.Offender = CitationNotObserved, urlCode, occurrence.Link.Destination
 			}
 		case citationmd.KindArtifact:
-			result.Outcome = ArtifactNotPresentable
+			result.Outcome, result.Code = ArtifactNotPresentable, handleCode
 			result.Offender = occurrence.Artifact
 			for _, id := range presentable {
 				if strings.EqualFold(strings.TrimSpace(id), occurrence.Artifact) {
-					result.Outcome, result.Offender = ArtifactPresentable, ""
+					result.Outcome, result.Code, result.Offender = ArtifactPresentable, "", ""
 					break
 				}
 			}
@@ -108,23 +116,30 @@ func ResolveDraftCitations(
 	return out
 }
 
-// webLinkObserved matches a schemeless `www.` link at either scheme, since it names
-// neither.
-func webLinkObserved(link citationmd.Link, ev evidence.Ledger) bool {
-	if ev.URLSeen(link.Destination) {
-		return true
+// observedWebURL finds the observed URL a link names, or "". A schemeless `www.`
+// link matches at either scheme, since it names neither.
+func observedWebURL(link citationmd.Link, ev evidence.Ledger) string {
+	destination := strings.TrimSpace(link.Destination)
+	if ev.URLSeen(destination) {
+		return destination
 	}
-	if rest, ok := strings.CutPrefix(link.Destination, "http://"); ok && strings.HasPrefix(strings.ToLower(link.Label), "www.") {
-		return ev.URLSeen("https://" + rest)
+	if rest, ok := strings.CutPrefix(destination, "http://"); ok && strings.HasPrefix(strings.ToLower(link.Label), "www.") {
+		if observed := "https://" + rest; ev.URLSeen(observed) {
+			return observed
+		}
 	}
-	return false
+	return ""
 }
 
 func resolveDraftCitation(roots evidence.CitationRoots, occurrence DraftOccurrence, ev evidence.Ledger, handleCode, unverifiableCode string) OccurrenceResolution {
 	c := occurrence.Citation
 	finding := WorkerFindingInput{Evidence: c.Handle, Path: c.Path, Line: c.Line, EndLine: c.EndLine, Excerpt: c.Excerpt}
 	result := OccurrenceResolution{OccurrenceIndex: occurrence.Index, Kind: occurrence.Kind}
-	outcome := classifyDraftFinding(roots, finding, ev)
+	classify := classifyDraftFinding
+	if occurrence.Kind == citationmd.KindWorkspaceLink {
+		classify = classifyDraftExactPath
+	}
+	outcome := classify(roots, finding, ev)
 	result.Resolution, result.Offender = outcome.resolution, outcome.offender
 	switch outcome.class {
 	case closeoutCitationSurvey:
@@ -159,6 +174,19 @@ func classifyDraftCoordinate(roots evidence.CitationRoots, finding WorkerFinding
 // classifyDraftFinding binds a bare path to an eligible observed record, preferring
 // content over survey. A Markdown path citation names a file and needs no line.
 func classifyDraftFinding(roots evidence.CitationRoots, finding WorkerFindingInput, ev evidence.Ledger) closeoutFindingOutcome {
+	if finding.Evidence == "" && finding.Path != "" {
+		resolved, candidates := resolveWrittenPath(roots, ev, finding.Path)
+		if len(candidates) > 0 {
+			return closeoutFindingOutcome{class: closeoutCitationUnverifiable, offender: formatFindingOffender(finding)}
+		}
+		finding.Path = resolved
+	}
+	return classifyDraftExactPath(roots, finding, ev)
+}
+
+// classifyDraftExactPath takes the path as written. A link stays what it says, since
+// a kept link presents its own destination.
+func classifyDraftExactPath(roots evidence.CitationRoots, finding WorkerFindingInput, ev evidence.Ledger) closeoutFindingOutcome {
 	if finding.Line > 0 {
 		return classifyDraftCoordinate(roots, finding, ev)
 	}

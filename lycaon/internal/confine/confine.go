@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -72,10 +73,11 @@ const (
 )
 
 type Boundary struct {
-	ProcessControl bool
-	HostExecution  bool
-	Applied        bool
-	Network        NetworkMode
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
+	Applied         bool
+	Network         NetworkMode
 	// EgressOff is why Network is NetworkDeny. Meaningless for any other mode.
 	EgressOff EgressOffCause
 	// SocksProxyEnv records mediated non-HTTP routing.
@@ -107,9 +109,10 @@ func BoundaryOf(c *Confinement) Boundary {
 		return Boundary{}
 	}
 	return Boundary{
-		ProcessControl: c.ProcessControl,
-		Filesystem:     filesystem,
-		Applied:        true, Network: c.Network, EgressOff: c.EgressOff,
+		ProcessControl:  c.ProcessControl,
+		CredentialStore: c.CredentialStore,
+		Filesystem:      filesystem,
+		Applied:         true, Network: c.Network, EgressOff: c.EgressOff,
 		SocksProxyEnv:   c.SocksProxyEnv && c.Network == NetworkProxyOnly && c.SocksProxyAddr != "",
 		WriteRoots:      writeRoots,
 		LocalListen:     c.Network == NetworkDirectIP || c.Browser || c.LocalListen,
@@ -124,8 +127,9 @@ func (b Boundary) DeniesDirectSockets() bool {
 
 // Confinement describes the box for one command.
 type Confinement struct {
-	ProcessControl bool
-	HostExecution  bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
 	// ProjectID routes project-scoped grants.
 	ProjectID string
 	// Roots are attached write locations.
@@ -142,6 +146,8 @@ type Confinement struct {
 	EgressOff EgressOffCause
 	// SocketGrants are exact AF_UNIX connect literals validated at the choke point.
 	SocketGrants []SocketGrant
+	// socketEndpoints are compiled from retained action authority, never input.
+	socketEndpoints map[string]string
 	// DroppedSocketGrants records rejected socket grants.
 	DroppedSocketGrants []SocketGrantDrop
 	// ProtectedWriteGrants are approved protected-path write transactions.
@@ -201,6 +207,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 	}
 	c := &Confinement{
 		ProcessControl:              req.ProcessControl,
+		CredentialStore:             req.CredentialStore,
 		ProjectID:                   req.ProjectID,
 		Roots:                       prepared.Roots,
 		GrantedWriteRoots:           append([]string(nil), prepared.GrantedWriteRoots...),
@@ -295,7 +302,19 @@ func validateProfileInputs(c Confinement) (Confinement, error) {
 }
 
 func renderSeatbeltProfile(c Confinement) (string, error) {
-	if err := validateSocketRealization(c.SocketGrants, socketref.KernelPathname); err != nil {
+	if runtime.GOOS == "darwin" {
+		if err := validateSocketRealization(c.SocketGrants, socketref.RetainedObject); err != nil {
+			return "", err
+		}
+		if err := c.SocketError(); err != nil {
+			return "", err
+		}
+		for _, grant := range c.SocketGrants {
+			if c.socketEndpoints[socketEndpointKey(grant.Binding, "unix")] == "" || c.socketEndpoints[socketEndpointKey(grant.Binding, "unixgram")] == "" {
+				return "", &SocketResolveError{Code: SocketResolveChanged, Path: grant.ApprovedPath, Err: socketref.ErrUnbound}
+			}
+		}
+	} else if err := validateSocketRealization(c.SocketGrants, socketref.KernelPathname); err != nil {
 		return "", err
 	}
 	var b strings.Builder
@@ -335,6 +354,9 @@ func writeProcessAllows(b *strings.Builder, processControl bool) {
 		b.WriteString("(allow signal (target same-sandbox))\n")
 	}
 	b.WriteString("(allow sysctl-read)\n")
+	// Where macOS gates statfs and volume-space attributes, denial rounds the
+	// values and reports a refusal for every program that asks.
+	b.WriteString("(allow system-info (info-type \"vfs.disk-space\"))\n")
 	b.WriteString("(allow mach-lookup)\n")
 	b.WriteString("(allow ipc-posix-shm)\n")
 	// Interactive terminals require ioctl access to pseudo-terminals.
@@ -386,29 +408,43 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 	rules.add(fsRule{op: opRead, allow: true, everywhere: true})
 	deny := readDenyMatches(c)
 	if len(deny) > 0 {
+		// Denying file-read* blocks metadata probes too; frameworks such as
+		// macOS Security stat a store before opening it and exit without a
+		// kernel refusal report when stat succeeds on an unreadable file.
 		rules.add(fsRule{op: opRead, matches: deny})
-		// Managed read roots and approved read grants override denied ancestors.
-		allow := SecretReadAllowBackRoots()
+		allow := workspaceReadAllowBacks(c)
 		allow = append(allow, resolveEach(c.ReadRoots)...)
 		if c.SessionScratchRoot != "" {
 			allow = append(allow, fspath.CanonicalPath(c.SessionScratchRoot))
 		}
-		var literals []string
+		addManagedReadRoots(&rules, deny, allow)
+		// An approved read grant also lifts the denials beneath it.
+		var subtrees, literals []string
 		for _, g := range c.ProtectedReadGrants {
 			if g.Subtree {
-				allow = append(allow, g.ResolvedPath)
+				subtrees = append(subtrees, g.ResolvedPath)
 			} else {
 				literals = append(literals, g.ResolvedPath)
 			}
 		}
-		rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(allow, ""), literalMatches(literals, "")...)})
+		rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(subtrees, ""), literalMatches(literals, "")...)})
+		allow = append(allow, subtrees...)
+		if c.CredentialStore {
+			storeRoots, keychains := linuxCredentialStoreReadRoots(), darwinLoginKeychainLiterals()
+			rules.add(fsRule{op: opRead, allow: true, matches: append(subpathMatches(storeRoots, ""), literalMatches(keychains, "")...)})
+			allow = mergeSortedStrings(allow, storeRoots)
+			literals = mergeSortedStrings(literals, keychains)
+		}
 		// Ancestor metadata permits traversal into allowed descendants.
 		if len(allow) > 0 || len(literals) > 0 {
 			ancestors := traversalAncestors(matchPaths(deny), append(append([]string(nil), allow...), literals...))
+			if c.CredentialStore {
+				ancestors = mergeSortedStrings(ancestors, darwinLoginKeychainMetadataDirs())
+			}
 			rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(ancestors, "")})
 		}
 	}
-	addControlPlaneReadFloor(&rules, c.ReadRoots, c.SessionScratchRoot)
+	addControlPlaneReadFloor(&rules, c)
 	// Writes confined to the project plus temp and the standard device sinks.
 	sinks := subpathMatches(writeRoots, "")
 	sinks = append(sinks,
@@ -457,7 +493,13 @@ func readDenyMatches(c Confinement) []fsMatch {
 			}
 		}
 	}
-	out = append(out, subpathMatches(KeyMaterialReadDenyPaths(), FloorReadKeyMaterial)...)
+	for _, p := range KeyMaterialReadDenyPaths() {
+		layer := FloorReadKeyMaterial
+		if !c.CredentialStore && isOSCredentialStoreDenyPath(p) {
+			layer = FloorReadCredentialStore
+		}
+		out = append(out, subpathMatches([]string{p}, layer)...)
+	}
 	return append(out, subpathMatches(resolveEach(c.ReadDenyPaths), FloorReadConfigured)...)
 }
 

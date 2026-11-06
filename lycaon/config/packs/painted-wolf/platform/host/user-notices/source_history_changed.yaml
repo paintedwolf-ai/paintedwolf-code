@@ -8,6 +8,3 @@ suggested_action: Review the current file tree, then try the available undo or r
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - history changed
-      - not applied

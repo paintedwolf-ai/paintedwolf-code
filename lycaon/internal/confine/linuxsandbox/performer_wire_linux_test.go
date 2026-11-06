@@ -3,7 +3,10 @@
 package linuxsandbox
 
 import (
+	"bytes"
 	"testing"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -47,5 +50,31 @@ func TestPathCallFramesRefuseMalformedInput(t *testing.T) {
 		if call, err := decodePathCall(b); err == nil || call != (pathCall{}) {
 			t.Errorf("%s: decoded a malformed frame as %+v", name, call)
 		}
+	}
+}
+
+// A plan of any length arrives whole, since a packet longer than the reader's
+// buffer would be cut without an error.
+func TestFloorsArriveWholeAtAnySize(t *testing.T) {
+	for _, size := range []int{1, maxPathMessage - 1, maxPathMessage, maxPathMessage + 1, 40 * maxPathMessage} {
+		pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			t.Fatalf("socketpair: %v", err)
+		}
+		want := bytes.Repeat([]byte("f"), size)
+		sent := make(chan error, 1)
+		go func() { sent <- sendFloors(pair[0], want) }()
+		got, err := receiveFloors(pair[1], make([]byte, maxPathMessage))
+		if err != nil {
+			t.Fatalf("size %d: receive: %v", size, err)
+		}
+		if err := <-sent; err != nil {
+			t.Fatalf("size %d: send: %v", size, err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("size %d: got %d bytes", size, len(got))
+		}
+		_ = unix.Close(pair[0])
+		_ = unix.Close(pair[1])
 	}
 }

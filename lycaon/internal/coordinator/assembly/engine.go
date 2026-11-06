@@ -76,8 +76,8 @@ type SessionView func(ctx context.Context, sess *api.Session) *catalogview.View
 // AgentsMDIndexInjector renders the cached session AGENTS.md index for each request.
 type AgentsMDIndexInjector func(ctx context.Context, sess *api.Session) (block api.Message, ok bool)
 
-// AgentsMDChainInjector renders path-scoped AGENTS.md chain content for a turn.
-type AgentsMDChainInjector func(ctx context.Context, sess *api.Session, relPath string) (block api.Message, err error)
+// AgentsMDPoliciesInjector renders current guidance for resolved working scopes.
+type AgentsMDPoliciesInjector func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error)
 
 // AssemblyDeps wires prompt message assembly for coordinator and worker turns.
 type AssemblyDeps struct {
@@ -87,7 +87,7 @@ type AssemblyDeps struct {
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
 	SessionView             SessionView
 	AgentsMDIndex           AgentsMDIndexInjector
-	AgentsMDChain           AgentsMDChainInjector
+	AgentsMDPolicies        AgentsMDPoliciesInjector
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
 	Agents                  AgentProfileResolver
 	Workflows               WorkflowManifestSource
@@ -105,19 +105,21 @@ type AssemblyDeps struct {
 	BoardOrientReady BoardOrientReadyRecorder
 	EnrichHistory    func(sessionID string, history []api.Message) []api.Message
 	PromptToolLister PromptToolLister
+	// ReadMessageWindow reads canonical rows for projections that must not vary
+	// with compaction. Unwired, they read the supplied history.
+	ReadMessageWindow inject.MessageWindowReader
 	// LoadedTools returns the tools the turn ledger loaded beyond the surface floor.
 	LoadedTools func(sessionID string) map[string]bool
 	// OmittedUnits returns the instruction units the turn ledger left out.
-	OmittedUnits           func(sessionID string) map[string]bool
-	SkillPreload           func(sessionID string) *turnload.SkillPreload
-	SkillPointer           func(sessionID string) *turnload.SkillRank
-	ModelVision            func(context.Context, *api.Session) bool
-	ImplementSessionState  func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
-	LoadExecutionModeState func(ctx context.Context, sessionID string) surface.ExecutionModeState
-	SaveExecutionModeState func(ctx context.Context, sessionID, family string)
-	WebSearchEnabled       func() bool
-	SynthesisEvidence      SynthesisEvidenceSource
-	CommandJobs            func(sessionID string) []bgprocess.JobSnapshot
+	OmittedUnits          func(sessionID string) map[string]bool
+	SkillPreload          func(sessionID string) *turnload.SkillPreload
+	SkillPointer          func(sessionID string) *turnload.SkillRank
+	ModelVision           func(context.Context, *api.Session) bool
+	ImplementSessionState func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
+	ExecutionModes        *surface.ExecutionModeStateStore
+	WebSearchEnabled      func() bool
+	SynthesisEvidence     SynthesisEvidenceSource
+	CommandJobs           func(sessionID string) []bgprocess.JobSnapshot
 	// HeldCalls lists the session's tool calls held past their foreground wait.
 	HeldCalls func(sessionID string) []heldcall.Running
 	// TurnSourceBriefs returns each turn's source-change brief, keyed by the
@@ -295,7 +297,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		messages = deps.EnrichHistory(sess.ID, messages)
 	}
 	if coordinator && !sess.IsWorkerChild() {
-		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, turn, messages)
+		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
 	}
 	if deps.ScanGuidance != nil {
 		out = append(out, deps.ScanGuidance.PrependGuidance(ctx, sess.ID, messages)...)
@@ -368,9 +370,7 @@ func (e *AssemblyEngine) EndPromptTurn(sessionID string) {
 	}
 	turn := e.cache.LoadTurn(sessionID)
 	if family := strings.TrimSpace(turn.CurrentExecutionModeFamily); family != "" {
-		if save := e.deps().SaveExecutionModeState; save != nil {
-			save(context.Background(), sessionID, family)
-		}
+		e.deps().ExecutionModes.Save(sessionID, family)
 	}
 	e.cache.EndTurn(sessionID)
 }

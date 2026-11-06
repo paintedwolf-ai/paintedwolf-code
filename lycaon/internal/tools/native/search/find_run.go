@@ -34,10 +34,12 @@ type findRun struct {
 
 // execBatch accumulates one -exec ... {} + primary's paths.
 type execBatch struct {
-	words commandprogram.Fields
-	span  toolcontract.SourceSpan
-	paths commandprogram.Fields
-	bytes int64
+	words     commandprogram.Fields
+	span      toolcontract.SourceSpan
+	paths     commandprogram.Fields
+	bytes     int64
+	baseBytes int64
+	budget    commandprogram.BatchBudget
 }
 
 func unavailable(form, reason string) error {
@@ -217,7 +219,8 @@ func (r *findRun) execPrimary(option commandprogram.BoundOption) (*findNode, err
 				return nil, inv.usage(word.Value, "one {} immediately before + in -exec ... {} +")
 			}
 		}
-		batch := &execBatch{words: head, span: words[len(words)-1].Span}
+		budget := commandprogram.NewBatchBudget(r.inv.owners.Revisions.Memory, r.inv.request.Invocation.Scope.Directory, r.inv.owners.limit("argv_bytes"), r.inv.owners.limit("expanded_fields"), 1)
+		batch := &execBatch{words: head, span: words[len(words)-1].Span, budget: budget}
 		r.batches = append(r.batches, batch)
 		return &findNode{op: "primary", test: func(r *findRun, e entry) (bool, error) {
 			return true, r.batch(batch, e.display)
@@ -241,13 +244,18 @@ func (r *findRun) batch(b *execBatch, path string) error {
 	if b.bytes == 0 {
 		for _, word := range b.words {
 			b.bytes += int64(len(word.Value)) + 1
+			b.baseBytes = b.bytes
 		}
 	}
 	size := int64(len(path)) + 1
-	if b.bytes+size > maximum && len(b.paths) > 0 {
+	fields := int64(len(b.words) + len(b.paths) + 1)
+	if (b.bytes+size > maximum || !b.budget.Fits(b.bytes+size, fields)) && len(b.paths) > 0 {
 		if err := r.flush(b); err != nil {
 			return err
 		}
+	}
+	if !b.budget.Fits(b.bytes+size, int64(len(b.words)+len(b.paths)+1)) {
+		return b.budget.Refusal(b.bytes+size, int64(len(b.words)+len(b.paths)+1))
 	}
 	b.paths = append(b.paths, commandprogram.Field{Value: path, Span: b.span})
 	b.bytes += size
@@ -259,7 +267,7 @@ func (r *findRun) flush(b *execBatch) error {
 		return nil
 	}
 	argv := append(append(commandprogram.Fields{}, b.words...), b.paths...)
-	b.paths, b.bytes = nil, 0
+	b.paths, b.bytes = nil, b.baseBytes
 	result, err := r.dispatch(argv)
 	if err != nil {
 		return err
@@ -294,6 +302,9 @@ func (r *findRun) dispatch(argv commandprogram.Fields) (toolcontract.ProducerRes
 	}
 	if native && len(spec.Effects) == 1 {
 		request.EffectMode = spec.Effects[0].Mode
+	}
+	if err := inv.out.drain(); err != nil {
+		return toolcontract.ProducerResult{}, err
 	}
 	streams := commandprogram.Streams{Input: commandprogram.NullInput(), Output: inv.out, Error: inv.stderr}
 	var result toolcontract.ProducerResult

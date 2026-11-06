@@ -169,7 +169,7 @@ func PrepareProgramFailure(ctx context.Context, frame ProgramFrame, ledger Progr
 		return nil, fmt.Errorf("program feedback rejection does not match settled execution")
 	}
 	projection := retained.Projection
-	if err := validateProgramFeedbackBinding(tc, operation, retained.Binding, projection); err != nil {
+	if err := validateProgramFeedbackBinding(frame.lifetime.model.ToolName, tc, operation, retained.Binding, projection); err != nil {
 		return nil, err
 	}
 	facts, err := programOutcomeFacts(projection)
@@ -185,7 +185,7 @@ func PrepareProgramFailure(ctx context.Context, frame ProgramFrame, ledger Progr
 	for name, value := range facts {
 		clone.Data[name] = value
 	}
-	clone.Data["tool"] = "command"
+	clone.Data["tool"] = frame.lifetime.model.ToolName
 	clone.Data["model_tool_call_id"] = tc.Identity.ToolCallID
 	clone.Data["native_operation"] = operation.Definition().Facts().Identity
 	clone.Data["native_command"] = operation.Command()
@@ -251,7 +251,7 @@ func PrepareProgramProgressFailure(ctx context.Context, ledger ProgramFeedbackLe
 		}
 	}()
 	projection := retained.Projection
-	if projection.ParentTool != "command" || projection.ParentToolCallID != tc.Identity.ToolCallID || projection.ParentSessionID != parent.SessionID || projection.Program.ID != parent.Identity.ProgramID || projection.Program.CatalogDigest != parent.CatalogDigest || projection.Program.State != "rejected" || projection.Program.ProgressState != "rejected" || projection.Program.StopCode != rejected.Code {
+	if projection.ParentTool != frame.lifetime.model.ToolName || projection.ParentToolCallID != tc.Identity.ToolCallID || projection.ParentSessionID != parent.SessionID || projection.Program.ID != parent.Identity.ProgramID || projection.Program.CatalogDigest != parent.CatalogDigest || projection.Program.State != "rejected" || projection.Program.ProgressState != "rejected" || projection.Program.StopCode != rejected.Code {
 		return nil, fmt.Errorf("program progress feedback does not match settled envelope")
 	}
 	facts, err := programOutcomeFacts(projection)
@@ -266,7 +266,7 @@ func PrepareProgramProgressFailure(ctx context.Context, ledger ProgramFeedbackLe
 	for name, value := range facts {
 		clone.Data[name] = value
 	}
-	clone.Data["tool"] = "command"
+	clone.Data["tool"] = frame.lifetime.model.ToolName
 	clone.Data["model_tool_call_id"] = tc.Identity.ToolCallID
 	clone.Data["native_operation"] = "update_progress"
 	clone.Data["envelope_field"] = "progress"
@@ -307,10 +307,10 @@ func prepareFeedbackDiagnostic(ctx context.Context, memory *toolcontract.Program
 	return diagnostic, screened, func() { releaseScreened(); releaseDiagnostic() }, nil
 }
 
-func validateProgramFeedbackBinding(tc tools.ToolContext, operation toolcontract.BoundOperation, b invocation.ProgramExecutionBinding, p invocation.ProgramProjection) error {
+func validateProgramFeedbackBinding(modelTool string, tc tools.ToolContext, operation toolcontract.BoundOperation, b invocation.ProgramExecutionBinding, p invocation.ProgramProjection) error {
 	inv := operation.Invocation()
-	if b.Invocation != inv || b.DefinitionDigest != operation.Definition().Digest() || b.ParentTool != "command" || b.ParentToolCallID != tc.Identity.ToolCallID || b.ParentReceiptID != p.Program.ParentReceiptID || b.LanguageVersion != p.Program.LanguageVersion || p.ParentTool != "command" || p.ParentToolCallID != tc.Identity.ToolCallID || p.ParentSessionID != inv.SessionID || p.Program.ID != inv.Identity.ProgramID || p.Program.CatalogDigest != inv.CatalogDigest {
-		return fmt.Errorf("program feedback provenance does not match actual command child")
+	if b.Invocation != inv || b.DefinitionDigest != operation.Definition().Digest() || b.ParentTool != modelTool || b.ParentToolCallID != tc.Identity.ToolCallID || b.ParentReceiptID != p.Program.ParentReceiptID || b.LanguageVersion != p.Program.LanguageVersion || p.ParentTool != modelTool || p.ParentToolCallID != tc.Identity.ToolCallID || p.ParentSessionID != inv.SessionID || p.Program.ID != inv.Identity.ProgramID || p.Program.CatalogDigest != inv.CatalogDigest {
+		return fmt.Errorf("program feedback provenance does not match actual program child")
 	}
 	if b.Source.Representation != toolcontract.UTF8SourceBytes || b.Source.SourceID == "" || b.Source.Revision == "" || len(b.Source.SHA256) != 64 || b.Source.EndByte < b.Source.StartByte || int64(inv.Span.StartByte) < b.Source.StartByte || int64(inv.Span.EndByte) > b.Source.EndByte {
 		return fmt.Errorf("program feedback source does not match captured syntax unit")

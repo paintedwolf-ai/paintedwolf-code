@@ -100,9 +100,7 @@ func (s logStreamSource) reclaim() {
 	if json.Unmarshal(data, &prior) != nil || prior.PID <= 0 || prior.PID == os.Getpid() {
 		return
 	}
-	if start, ok := osprocess.StartTime(prior.PID); ok && start == prior.Start {
-		_ = syscall.Kill(prior.PID, syscall.SIGTERM)
-	}
+	_ = osprocess.Signal(osprocess.Incarnation{PID: prior.PID, Start: prior.Start}, syscall.SIGTERM)
 	_ = os.Remove(path)
 }
 

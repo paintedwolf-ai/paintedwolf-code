@@ -33,7 +33,6 @@ const (
 	CodeBoundaryRefused                    = "SANDBOX_BOUNDARY_REFUSED"
 	CodeCapabilityRequestInvalid           = "SANDBOX_CAPABILITY_REQUEST_INVALID"
 	CodeTerminalPathRefused                = "SANDBOX_TERMINAL_PATH_REFUSED"
-	CodeRefusalReportSilent                = "SANDBOX_REFUSAL_REPORT_SILENT"
 	CodeControlPlaneDenied                 = "SANDBOX_CONTROL_PLANE_DENIED"
 	CodeDirectIPDenied                     = "SANDBOX_DIRECT_IP_DENIED"
 	CodeDirectIPAuthorizationChanged       = "SANDBOX_DIRECT_IP_AUTHORIZATION_CHANGED"
@@ -52,6 +51,7 @@ const (
 	CodeSocketPathNotSocket                = "SANDBOX_SOCKET_PATH_NOT_SOCKET"
 	CodeSocketPathRefused                  = "SANDBOX_SOCKET_PATH_REFUSED"
 	CodeSocksProxyInvalid                  = "SANDBOX_SOCKS_PROXY_INVALID"
+	CodeTryCredentialStore                 = "SANDBOX_TRY_CREDENTIAL_STORE"
 	CodeTryHostExecution                   = "SANDBOX_TRY_HOST_EXECUTION"
 	CodeTryLocalNetwork                    = "SANDBOX_TRY_LOCAL_NETWORK"
 	CodeTryLoopbackConnect                 = "SANDBOX_TRY_LOOPBACK_CONNECT"
@@ -75,7 +75,6 @@ var outcomes = [...]Outcome{
 	{CodeCapabilityRequestInvalid, DispositionRetry},
 	{CodeControlPlaneDenied, DispositionControlPlane},
 	{CodeTerminalPathRefused, DispositionControlPlane},
-	{CodeRefusalReportSilent, DispositionRetry},
 	{CodeDirectIPDenied, DispositionHumanDecision},
 	{CodeDirectIPAuthorizationChanged, DispositionRetry},
 	{CodeDirectIPRequestInvalid, DispositionRetry},
@@ -93,6 +92,7 @@ var outcomes = [...]Outcome{
 	{CodeSocketPathNotSocket, DispositionRetry},
 	{CodeSocketPathRefused, DispositionRetry},
 	{CodeSocksProxyInvalid, DispositionRetry},
+	{CodeTryCredentialStore, DispositionRetry},
 	{CodeTryHostExecution, DispositionRetry},
 	{CodeTryLocalNetwork, DispositionRetry},
 	{CodeTryLoopbackConnect, DispositionRetry},

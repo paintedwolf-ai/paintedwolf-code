@@ -2,16 +2,24 @@ package native
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/native/survey"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRestoreVersionWithExplicitVersionID(t *testing.T) {
@@ -179,6 +187,46 @@ func TestRestoreVersionNoPredecessorRejected(t *testing.T) {
 	}
 }
 
+// A restore's rejects name source_history only when this turn's plan offers it.
+func TestRestoreVersionRejectsStateWhetherThePlanOffersSourceHistory(t *testing.T) {
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{
+		{ID: "holds", Tools: map[string]bool{"restore_version": true, "source_history": true}},
+	})
+	version := sourceledger.RestorableVersion{ID: "v1", FileID: "f1", ProjectID: "p1", RootID: "r1", Path: "main.go", State: "content", Content: []byte("v1")}
+	rejects := []struct {
+		code string
+		args map[string]any
+	}{
+		{"SOURCE_VERSION_NO_PREDECESSOR", map[string]any{"path": "main.go"}},
+		{"SOURCE_VERSION_BASE_MISMATCH", map[string]any{"path": "main.go", "version_id": "v1", "base_version_id": "v1"}},
+		{"SOURCE_VERSION_NOT_FOUND", map[string]any{"path": "main.go", "version_id": "v_missing"}},
+	}
+	for _, offered := range []bool{true, false} {
+		for _, tc := range rejects {
+			t.Run(fmt.Sprintf("%s offered %v", tc.code, offered), func(t *testing.T) {
+				dir := t.TempDir()
+				writeProvenanceFile(t, dir, "main.go", "package main\n")
+				ledger := &fakeSourceLedger{
+					heads:        map[string]sourceledger.BranchHead{"r1/main.go": {FileID: "f1", VersionID: "v2", State: "content"}},
+					versions:     map[string]sourceledger.RestorableVersion{"v1": version},
+					fileVersions: map[string][]sourceledger.Version{"f1": {{ID: "v2", FileID: "f1"}}},
+				}
+				tctx := provenanceCtx(dir, ledger)
+				tctx.Identity.Agent = "holds"
+				tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"restore_version"}, nil)
+				if offered {
+					tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"restore_version"}, []string{"source_history"})
+				}
+				_, err := (&RestoreVersionTool{Boundary: boundary}).Run(context.Background(), tc.args, tctx)
+				var reject *toolrejection.ToolReject
+				if !errors.As(err, &reject) || reject.Code != tc.code || reject.Data["source_history_offered"] != offered {
+					t.Fatalf("restore = %v, want %s with source_history_offered %v", err, tc.code, offered)
+				}
+			})
+		}
+	}
+}
+
 func TestRestoreVersionRestoresAbsentState(t *testing.T) {
 	dir := t.TempDir()
 	writeProvenanceFile(t, dir, "newfile.txt", "created in turn\n")
@@ -269,5 +317,48 @@ func TestRestoreVersionDefaultsToTheContentBeforeADeletion(t *testing.T) {
 	testutil.FailErr(t, "read restored file", err)
 	if string(data) != "kept\n" {
 		t.Fatalf("restored %q", data)
+	}
+}
+
+// Restoring a deleted path mints a new file identity; the path's baseline survives it.
+func TestRestoreVersionOfADeletedFileIsAnEmptySessionDiffACDF12(t *testing.T) {
+	dir := t.TempDir()
+	st := bindLedgerForWrites(t, dir)
+	tctx := nativefixture.Context(dir)
+	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1
+	tctx.Source.SourceLedger = st
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands, tctx.Source.Observations, tctx.Source.GitMutations = st.Commands, st.Inventory, st.Git
+	const body = "package main\n"
+	writeProvenanceFile(t, dir, "a.go", body)
+	testutil.FailErr(t, "record baseline", st.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: "r1", Path: "a.go"}, ProjectID: "p1",
+		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, SessionID: "s0", Turn: 1,
+		OperationID: "create", After: []byte(body),
+	}))
+	baseline, err := st.History.ResolveHead(t.Context(), "p1", sourcebranch.Trunk, "r1", "a.go")
+	testutil.FailErr(t, "resolve baseline", err)
+	_, err = st.Checkpoints.CreateStructuralCheckpoint(t.Context(), sourceledger.StructuralCheckpointInput{
+		ProjectID: "p1", Kind: sourceledger.CheckpointTurn, Label: "Turn start", SessionID: "s1", Turn: 1,
+	})
+	testutil.FailErr(t, "create turn checkpoint", err)
+	testutil.FailErr(t, "delete file", os.Remove(filepath.Join(dir, "a.go")))
+	testutil.FailErr(t, "record deletion", st.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: "r1", Path: "a.go"}, ProjectID: "p1",
+		Op: api.SourceChangeOpDelete, Origin: api.SourceChangeOriginAgent, SessionID: "s1", Turn: 1, OperationID: "delete",
+	}))
+
+	_, err = (&RestoreVersionTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"path": "a.go"}, tctx)
+	testutil.FailErr(t, "restore_version", err)
+	raw, err := (&survey.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"path": "a.go", "mode": "diff"}, tctx)
+	testutil.FailErr(t, "source_history diff", err)
+	var diff struct {
+		BaseVersionID string `json:"base_version_id"`
+		VersionID     string `json:"version_id"`
+		Diff          string `json:"diff"`
+	}
+	testutil.FailErr(t, "decode diff", json.Unmarshal([]byte(raw), &diff))
+	if diff.BaseVersionID != baseline.VersionID || diff.VersionID == "" || diff.Diff != "" {
+		t.Fatalf("diff = %+v, want an empty diff from %s", diff, baseline.VersionID)
 	}
 }

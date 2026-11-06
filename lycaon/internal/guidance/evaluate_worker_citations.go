@@ -368,7 +368,7 @@ func resolveWorkerFindingCitation(
 	if finding.EndLine > 0 {
 		res = applyCitationRange(roots, finding, ev, res)
 	}
-	return res
+	return countedCoordinate(finding, ev, res)
 }
 
 func resolveWorkerFindingCitationExact(
@@ -570,7 +570,7 @@ func citedURLHandleOffenders(urls []string, ev evidence.Ledger) []string {
 // GroundingHintData maps offenders and observed evidence to bounded hint template vars.
 func GroundingHintData(offenders []string, ev evidence.Ledger) map[string]any {
 	data := OffenderHintData(offenders)
-	handleReport := FormatOffenderReport(evidence.HandlesSorted(ev))
+	handleReport := FormatOffenderReport(groundingHintHandles(offenders, ev))
 	data["observed_handles_count"] = handleReport.Count
 	data["observed_handles_sample"] = handleReport.Sample
 	data["observed_handles_omitted"] = handleReport.Omitted
@@ -600,6 +600,7 @@ type ResolvedFinding struct {
 	Handle  string
 	Path    string
 	Line    int
+	EndLine int
 	Excerpt string
 	Verdict evidence.Verdict
 	Note    string
@@ -636,6 +637,7 @@ func ResolveFindingsForWire(
 			Handle:  res.Handle,
 			Path:    res.Path,
 			Line:    res.Line,
+			EndLine: res.EndLine,
 			Excerpt: res.Excerpt,
 			Verdict: res.Verdict,
 			Note:    note,

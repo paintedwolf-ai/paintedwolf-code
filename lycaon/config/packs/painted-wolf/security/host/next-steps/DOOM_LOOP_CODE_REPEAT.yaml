@@ -1,0 +1,13 @@
+steps:
+  - when: "paintedwolf.worker_leg"
+    tool: "request_decision"
+    say: "If an answer could unblock the work, use {{ call }} to suspend the same leg."
+  - when: "paintedwolf.worker_leg"
+    tool: "complete_leg"
+    args:
+      leg_status: "blocked"
+    say: "Otherwise use {{ call }} with the observed constraint and the remaining risk."
+    otherwise: "Report the observed constraint and remaining risk rather than repeating the rejected call."
+  - when: "!paintedwolf.worker_leg"
+    tool: "ask_user"
+    say: "Use {{ call }} when human input or authority is required."

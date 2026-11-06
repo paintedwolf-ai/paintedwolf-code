@@ -1,0 +1,33 @@
+# PRESENT_IMAGE_UNOBSERVED — image source in the answer that is neither a visual artifact nor an observed URL.
+
+oar: '1.0'
+id: PRESENT_IMAGE_UNOBSERVED
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.reject_observation
+when: paintedwolf.reject_observation == "present_image_unobserved"
+effect: block
+copy:
+  what: The answer embedded {{ paintedwolf.offender_count }} image(s) from a source this chat never observed. The client shows no image for it, so the reply presents a capture that does not exist.
+  cause: Captures are presented with an `[artifact:<id>]` directive; an image URL is presentable only when it was fetched in this chat
+  why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  fix: Send the whole answer again without the image syntax; it replaces the retained answer. Write `[artifact:<id>]` for IDs the capture tools returned and describe in prose what each shows. Do not stand in for a capture with a generated or remote image.
+  instead: Present captures with `[artifact:<id>]`; embed only an image URL that was fetched in this chat
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_synthesis
+x-paintedwolf-evidence:
+  ui_label: Visual present
+  ui_check_id: visual_present
+  in_session_retry: true
+x-paintedwolf-message: The answer embedded an image from an unobserved source
+x-paintedwolf-scenarios:
+  - id: remote_placeholder
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: https://example.com/640x480.png

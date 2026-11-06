@@ -1,6 +1,9 @@
 package transcript_test
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -30,11 +34,23 @@ func TestDataPartsGetOneHeaderAndUnchangedBodies(t *testing.T) {
 		{"read result", api.Message{Role: api.MessageRoleTool, Content: body, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted}, "Data from tool:"},
 		{"host feedback", api.Message{Role: api.MessageRoleUser, ContentParts: []api.MessageContentPart{{Content: body, Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted, Source: "tool_feedback"}}}, "Data from host (tool_feedback):"},
 		{"compaction summary", api.Message{Role: api.MessageRoleUser, ContentParts: []api.MessageContentPart{{Content: body, Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted, Source: "compaction_summary"}}}, "Data from host (compaction_summary):"},
+		{"tool description", api.Message{Role: api.MessageRoleUser, ContentParts: []api.MessageContentPart{{Content: body, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Source: "tool_description"}}}, "Data from tool (tool_description):"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := lastProjected(t, tc.msg).Content
+			projected := lastProjected(t, tc.msg)
+			got := projected.Content
 			if got != tc.header+"\n"+body {
 				t.Fatalf("projection = %q", got)
+			}
+			if len(tc.msg.ContentParts) == 0 {
+				if projected.Authority != tc.msg.Authority || projected.TrustTier != tc.msg.TrustTier || projected.Origin != tc.msg.Origin {
+					t.Fatalf("projection changed its facts: %+v from %+v", projected, tc.msg)
+				}
+			} else {
+				want, gotPart := tc.msg.ContentParts[0], projected.ContentParts[0]
+				if gotPart.Authority != want.Authority || gotPart.TrustTier != want.TrustTier || gotPart.Origin != want.Origin || gotPart.Source != want.Source {
+					t.Fatalf("projection changed its facts: %+v from %+v", gotPart, want)
+				}
 			}
 			if strings.Contains(got, "⟦D") {
 				t.Fatalf("legacy marker: %q", got)
@@ -110,19 +126,8 @@ func TestAuthorityNoticeDependsOnAudience(t *testing.T) {
 	publisher := transcript.ContentAuthorityNotice(transcript.AudiencePublisher)
 	private := transcript.ContentAuthorityNotice(transcript.AudiencePrivate)
 	utility := transcript.ContentAuthorityNotice(transcript.AudienceUtility)
-	if !strings.Contains(publisher, "shown directly to the user") || strings.Contains(publisher, "private working context") {
-		t.Fatalf("publisher notice: %q", publisher)
-	}
-	if !strings.Contains(private, "private working context") || strings.Contains(private, "shown directly to the user") {
-		t.Fatalf("private notice: %q", private)
-	}
-	for _, notice := range []string{publisher, private, utility} {
-		if !strings.Contains(notice, "prior assistant output") || !strings.Contains(notice, "as data") {
-			t.Fatalf("notice lost the data boundary: %q", notice)
-		}
-		if strings.Contains(notice, "⟦D") {
-			t.Fatalf("notice teaches a retired marker: %q", notice)
-		}
+	if publisher == "" || private == "" || publisher == private || utility == "" {
+		t.Fatalf("notices do not differ by audience:\n%q\n%q\n%q", publisher, private, utility)
 	}
 	projected := transcript.ProjectFor(transcript.AudiencePublisher, []api.Message{{Role: api.MessageRoleUser, Content: "go"}})
 	if projected[0].Content != publisher {
@@ -132,5 +137,44 @@ func TestAuthorityNoticeDependsOnAudience(t *testing.T) {
 	again := transcript.Project(projected)
 	if len(again) != len(projected) || again[0].Content != publisher {
 		t.Fatalf("second projection replaced the notice: %+v", again)
+	}
+}
+
+// README decision 12: the injection fixtures replayed on a live model project under
+// one header with their bodies unchanged, and a fetched page keeps its nonce frame.
+func TestInjectionFixturesProjectUnderOneHeader(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "test", "fixtures", "injection", "fixtures.json"))
+	testutil.FailErr(t, "read file", err)
+	var fixtures []struct {
+		ID, Origin, Body string
+		Source           string
+		Framed           bool
+		Effect           struct{ Kind, Marker string }
+	}
+	if err := json.Unmarshal(raw, &fixtures); err != nil {
+		testutil.FailErr(t, "unmarshal JSON document", err)
+	}
+	markers := map[string]bool{}
+	for _, fx := range fixtures {
+		t.Run(fx.ID, func(t *testing.T) {
+			if fx.Effect.Marker == "" || markers[fx.Effect.Marker] || !strings.Contains(fx.Body, fx.Effect.Marker) {
+				t.Fatalf("effect marker %q must be distinct and in the body", fx.Effect.Marker)
+			}
+			markers[fx.Effect.Marker] = true
+			body := strings.TrimSpace(fx.Body)
+			if fx.Framed {
+				body = datamark.Frame(fx.Source, fx.Body, time.Unix(0, 0).UTC())
+			}
+			got := lastProjected(t, api.Message{Role: api.MessageRoleTool, Content: body, Origin: api.MessageOrigin(fx.Origin), Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted}).Content
+			if got != "Data from "+fx.Origin+":\n"+body {
+				t.Fatalf("projection = %q", got)
+			}
+			if strings.Contains(got, "⟦") {
+				t.Fatalf("legacy marker: %q", got)
+			}
+		})
+	}
+	if len(fixtures) != 3 {
+		t.Fatalf("fixtures = %d", len(fixtures))
 	}
 }

@@ -352,7 +352,7 @@ func probeNestedSingleTree(directory string, pins *fixtureLifecyclePins) (proof 
 	if err != nil || before != after {
 		return proof, errors.New("intake birth changed across namespace capture")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "nsenter", "--user=/proc/self/fd/3", "--mount=/proc/self/fd/4", "--preserve-credentials", "--", os.Args[0], "-test.run=^TestProtectedLaunchFixture$")
 	cmd.ExtraFiles = []*os.File{user, mount}

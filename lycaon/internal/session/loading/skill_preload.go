@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,7 +24,7 @@ func (m *Service) SkillPointer(sessionID string) *turnload.SkillRank {
 }
 
 func (m *Service) selectSkillPreload(ctx context.Context, sess *api.Session, profileID, text string, decision *Decision) {
-	if decision.catalog.Turn.Skills.PreloadAt <= 0 || m.skillBody == nil {
+	if decision.catalog.Turn.Skills.PreloadAt <= 0 || m.skillBody == nil || m.skills == nil {
 		return
 	}
 	roots, err := m.Workspace.Paths(ctx, sess)
@@ -31,8 +32,32 @@ func (m *Service) selectSkillPreload(ctx context.Context, sess *api.Session, pro
 		return
 	}
 	roster, _ := m.skills(ctx, sess, profileID, roots)
+	roster = eligibleSkillsForOfferedTools(roster, m.decisionOfferedTools(sess, decision))
 	decision.ranking = turnload.RankSkills(ctx, m.Decider(), decision.catalog.Turn.Deadline(), text, roster)
 	decision.skill, decision.skillScore = RankedSkillPreload(decision.ranking, roster, decision.catalog.Turn.Skills)
+}
+
+func (m *Service) decisionOfferedTools(sess *api.Session, decision *Decision) map[string]bool {
+	offered := nameSet(decision.floor)
+	if m != nil && m.Ledger != nil && sess != nil {
+		for name := range m.Ledger.Active(sess.ID) {
+			offered[name] = true
+		}
+	}
+	for name := range decision.decision.Tools {
+		offered[name] = true
+	}
+	return offered
+}
+
+func eligibleSkillsForOfferedTools(roster []skills.Skill, offered map[string]bool) []skills.Skill {
+	out := make([]skills.Skill, 0, len(roster))
+	for _, sk := range roster {
+		if toolvocab.SkillToolsOffered(sk, offered) {
+			out = append(out, sk)
+		}
+	}
+	return out
 }
 
 func (m *Service) renderSkillPreload(ctx context.Context, sessionID string, tctx tools.ToolContext, decision *Decision) {
@@ -47,7 +72,12 @@ func (m *Service) renderSkillPreload(ctx context.Context, sessionID string, tctx
 	if strings.TrimSpace(body) == "" {
 		return
 	}
-	decision.preload = &turnload.SkillPreload{Name: decision.skill.Name, Score: decision.skillScore, Body: body}
+	decision.preload = &turnload.SkillPreload{
+		Name:      decision.skill.Name,
+		Score:     decision.skillScore,
+		Body:      body,
+		Resources: append([]string(nil), decision.skill.Resources...),
+	}
 	m.Ledger.SetPreload(sessionID, decision.preload)
 }
 

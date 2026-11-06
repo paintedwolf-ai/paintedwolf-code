@@ -62,7 +62,7 @@ func (l *toolBatch) publishMidTurnText(
 		return l.settleExhaustedVisibility(ctx, sess, sessionID, history, carrierID, surfaceID, lastToolTS, st)
 	}
 	if audit.Outcome == guidance.MidTurnWithhold {
-		l.notifyMidTurnWithheld(ctx, sess, sessionID, surfaceID, audit.Code, audit.Data, history, audit.Attempted)
+		l.notifyMidTurnWithheld(ctx, sess, sessionID, surfaceID, audit)
 	}
 	return history, nil
 }
@@ -85,43 +85,28 @@ func (l *toolBatch) auditCarrier(ctx context.Context, sess *api.Session, session
 			return guidance.MidTurnNoteAudit{Outcome: guidance.MidTurnSilent}
 		}
 		if msg.ID == carrierID {
-			text = hostmarker.StripParrotedTransportMarkers(msg.Content)
+			// History may hold the raw overlay of a redacted carrier.
+			screened, _ := l.Projection.storageSafeMessage(ctx, msg)
+			text = hostmarker.StripParrotedTransportMarkers(screened.Content)
 		}
 	}
 	if strings.TrimSpace(text) == "" {
 		return guidance.MidTurnNoteAudit{Outcome: guidance.MidTurnSilent}
 	}
-	ev, legsCite, err := midTurnEvidence(ctx, l.Closeout.Deps.EvidenceLedger, sessionID, history)
+	ev, legsCite, err := guidance.MidTurnEvidence(ctx, l.Closeout.Deps.EvidenceLedger, sessionID, history)
 	if err != nil {
 		slog.WarnContext(ctx, "mid-turn note evidence unavailable; text stays unpublished", "session_id", sessionID, "error", err)
-		return guidance.MidTurnNoteAudit{Outcome: guidance.MidTurnSilent}
+		return guidance.MidTurnNoteAudit{Outcome: guidance.MidTurnWithhold, Code: guidance.MidTurnNoteEvidenceUnreadable}
 	}
 	return guidance.AuditMidTurnNote(guidance.MidTurnNoteInput{
 		Text:              text,
 		Roots:             l.Context.citationRoots(ctx, sess),
 		SurfaceID:         surfaceID,
 		Evidence:          ev,
-		Presentable:       guidance.PresentableVisualArtifactIDs(history),
+		Presentable:       guidance.SessionPresentableArtifactIDs(history),
 		CitationsRequired: (legsCite || guidance.IntentWindowHasCitableObservations(history)) && guidance.CloseoutLedgerHasCitableEvidence(ev),
 		RecentHandles:     guidance.IntentWindowHandles(history, midTurnHandleSample),
 	})
-}
-
-// midTurnEvidence unions the session and worker-leg ledgers, and reports whether
-// a leg dispatched since the current intent has observations.
-func midTurnEvidence(ctx context.Context, reader guidance.CloseoutEvidenceReader, sessionID string, history []api.Message) (guidance.CloseoutEvidence, bool, error) {
-	if reader == nil {
-		return guidance.CloseoutEvidence{}, false, errors.New("evidence ledger not configured")
-	}
-	ev, err := guidance.UnionCloseoutEvidence(ctx, reader, sessionID, history)
-	if err != nil {
-		return guidance.CloseoutEvidence{}, false, err
-	}
-	legs, err := guidance.CurrentIntentLegEvidence(ctx, reader, sessionID, history)
-	if err != nil {
-		return guidance.CloseoutEvidence{}, false, err
-	}
-	return ev, guidance.CloseoutLedgerHasCitableEvidence(legs), nil
 }
 
 // commitMidTurnNote persists through the storage-safe path. A duplicate means an
@@ -149,7 +134,8 @@ func (l *toolBatch) settleExhaustedVisibility(ctx context.Context, sess *api.Ses
 			ID: hostProgressNoteID(carrierID), Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote,
 			Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
 			Visibility: api.MessageVisibilityTranscript, Content: body,
-			Grounding: &api.CitationGrounding{EvidenceOptional: true},
+			// Structured worker facts in the host's words: nothing to trace or cite.
+			Grounding: &api.CitationGrounding{Traced: true, EvidenceOptional: true},
 		}
 		var err error
 		if history, err = l.commitMidTurnNote(ctx, sessionID, history, note, lastToolTS, st); err != nil {
@@ -157,7 +143,7 @@ func (l *toolBatch) settleExhaustedVisibility(ctx context.Context, sess *api.Ses
 		}
 	}
 	slog.InfoContext(ctx, "mid-turn visibility repair exhausted", "session_id", sessionID, "surface", surfaceID)
-	l.notifyMidTurnWithheld(ctx, sess, sessionID, surfaceID, guidance.MidTurnNoteWaitFallbackCode, nil, history, false)
+	l.notifyMidTurnWithheld(ctx, sess, sessionID, surfaceID, guidance.MidTurnNoteAudit{Code: guidance.MidTurnNoteWaitFallbackCode})
 	return history, nil
 }
 
@@ -198,18 +184,18 @@ func (l *toolBatch) midTurnHostProgress(ctx context.Context, history []api.Messa
 
 // notifyMidTurnWithheld queues one structured notice for the next model request.
 // The notice is advisory, so a delivery failure never stops the tools.
-func (l *toolBatch) notifyMidTurnWithheld(ctx context.Context, sess *api.Session, sessionID, surfaceID, code string, data map[string]any, history []api.Message, attempted bool) {
+func (l *toolBatch) notifyMidTurnWithheld(ctx context.Context, sess *api.Session, sessionID, surfaceID string, audit guidance.MidTurnNoteAudit) {
 	if l.Closeout.Deps.EvaluateMidTurnNote == nil {
 		return
 	}
 	gc := oar.NewGuardContext()
 	gc.Session.SessionID = sessionID
 	gc.Session.Surface = strings.TrimSpace(surfaceID)
-	gc.Session.MidTurnCitationsRequired = guidance.IntentWindowHasCitableObservations(history)
-	gc.Session.MidTurnCitationAttempted = attempted
-	gc.Rejection.RejectObservation = guidance.MidTurnObservation(code)
-	gc.PutRejectData(code, data)
+	gc.Session.MidTurnCitationsRequired = audit.CitationsRequired
+	gc.Session.MidTurnCitationAttempted = audit.Attempted
+	gc.Rejection.RejectObservation = guidance.MidTurnObservation(audit.Code)
+	gc.PutRejectData(audit.Code, audit.Data)
 	if err := l.Closeout.Deps.EvaluateMidTurnNote(ctx, sess, gc); err != nil {
-		slog.WarnContext(ctx, "mid-turn note feedback", "session_id", sessionID, "code", code, "error", err)
+		slog.WarnContext(ctx, "mid-turn note feedback", "session_id", sessionID, "code", audit.Code, "error", err)
 	}
 }

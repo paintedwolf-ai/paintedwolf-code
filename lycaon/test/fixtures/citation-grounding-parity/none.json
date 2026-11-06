@@ -5,11 +5,11 @@
     "checks": [
       {
         "id": "typed_citations",
-        "label": "Typed citations",
+        "label": "Citations",
         "status": "passed",
         "kind": "citation",
         "vacuous": true,
-        "summary": "No typed citations in synthesis report"
+        "summary": "No citations in synthesis report"
       }
     ]
   }

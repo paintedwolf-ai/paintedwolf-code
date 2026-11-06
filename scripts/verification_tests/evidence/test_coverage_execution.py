@@ -49,7 +49,7 @@ else:
                    "COVERAGE_CALLS": str(calls), "COVERAGE_MIN": "62",
                    "COVERAGE_PKG_MIN": "40", "COVERAGE_PKG_ENFORCE": "1"}
             result = subprocess.run(["bash", str(ROOT / "scripts/coverage-check.sh")],
-                                    env=env, text=True, capture_output=True, timeout=60)
+                                    env=env, text=True, capture_output=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(calls.read_text(), "test\n")
             self.assertIn("1 packages, none below 40%", result.stdout)

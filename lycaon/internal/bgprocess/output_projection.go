@@ -2,6 +2,7 @@ package bgprocess
 
 import (
 	"context"
+	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
@@ -13,7 +14,8 @@ const captureUnavailableText = "[Capture screening unavailable]"
 
 // safeProjection is one screened view of a process's retained output window.
 type safeProjection struct {
-	Text string
+	Text   string
+	Chunks []OutputChunk
 	// Head is the cursor of the first byte the projection covers. It sits past
 	// the buffer head when a withheld range straddled it.
 	Head      int64
@@ -28,13 +30,12 @@ type safeProjection struct {
 // projectWindow screens retained bytes together and drops masked tails.
 //
 // Callers hold proc.publishMu.
-func (r *Output) projectWindow(ctx context.Context, proc *Process) safeProjection {
+func (r *Output) projectWindow(ctx context.Context, proc *Process, cursor int64) safeProjection {
 	chunks, next, truncated := proc.buffer.ReadSince(0)
 	if len(chunks) == 0 {
 		return safeProjection{Next: next, Truncated: truncated, Screened: true, Empty: true}
 	}
 	head := chunks[0].Cursor
-	raw := joinOutputChunks(chunks)
 	r.jobs.mu.Lock()
 	projector := r.projector
 	r.jobs.mu.Unlock()
@@ -42,17 +43,42 @@ func (r *Output) projectWindow(ctx context.Context, proc *Process) safeProjectio
 	if projector == nil {
 		return out
 	}
+	memory, err := r.screenMemory()
+	if err != nil {
+		return out
+	}
+	rawBytes := int64(0)
+	for _, chunk := range chunks {
+		rawBytes += int64(len(chunk.Text))
+	}
+	rawCharge := rawBytes*2 + 1024
+	if err = memory.ReserveBytes(ctx, rawCharge); err != nil {
+		return out
+	}
+	defer memory.ReleaseBytes(rawCharge)
+	raw := joinOutputChunks(chunks)
 	if resume := withheldThrough(proc.withheld, head); resume > head {
 		drop := min(int(resume-head), len(raw))
 		raw = raw[drop:]
 		out.Head = head + int64(drop)
 	}
-	projected, spans, err := projector.TextSpans(ctx, processCaptureScope(proc), "capture.process", raw)
+	text, mappings, release, err := r.screenWindow(ctx, proc, projector, raw)
+	defer release()
 	if err != nil {
 		return out
 	}
+	copyCharge := int64(len(text))*2 + int64(len(chunks))*128
+	if err = memory.ReserveBytes(ctx, copyCharge); err != nil {
+		return out
+	}
+	defer memory.ReleaseBytes(copyCharge)
+	spans := make([]captureprojection.Span, len(mappings))
+	for i, span := range mappings {
+		spans[i] = captureprojection.Span{Start: int(span.InputStart), End: int(span.InputEnd)}
+	}
 	proc.withheld = recordWithheld(proc.withheld, head, out.Head, spans)
-	out.Text = projected.Value
+	out.Text = text
+	out.Chunks = projectedChunks(chunks, out.Head, cursor, raw, text, mappings)
 	out.Screened = true
 	return out
 }
@@ -81,28 +107,43 @@ func recordWithheld(
 	for _, span := range spans {
 		out = append(out, cursorRange{start: spanBase + int64(span.Start), end: spanBase + int64(span.End)})
 	}
-	return out
+	sort.Slice(out, func(i, j int) bool { return out[i].start < out[j].start })
+	merged := out[:0]
+	for _, span := range out {
+		if len(merged) > 0 && span.start <= merged[len(merged)-1].end {
+			merged[len(merged)-1].end = max(merged[len(merged)-1].end, span.end)
+		} else {
+			merged = append(merged, span)
+		}
+	}
+	return merged
 }
 
 func (r *Output) publishStream(ctx context.Context, proc *Process, stream string, cursor int64) {
-	if r == nil || r.publish == nil || proc == nil {
+	if r == nil || proc == nil {
 		return
 	}
 	r.jobs.mu.Lock()
 	silent := proc.silent
 	running := proc.running
 	r.jobs.mu.Unlock()
+	if !silent && running {
+		r.sweeper.onOutputChunk() //nolint:contextcheck // The sweeper loop outlives this call and holds its own context.
+	}
+	if r.publish == nil {
+		return
+	}
 	if silent {
 		// Screen before eviction to retain masked ranges that cross writes.
 		if proc.buffer.Overflowing() {
 			proc.publishMu.Lock()
-			r.projectWindow(ctx, proc)
+			r.projectWindow(ctx, proc, 0)
 			proc.publishMu.Unlock()
 		}
 		return
 	}
 	proc.publishMu.Lock()
-	projection := r.projectWindow(ctx, proc)
+	projection := r.projectWindow(ctx, proc, 0)
 	if projection.Empty {
 		proc.publishMu.Unlock()
 		return
@@ -139,10 +180,8 @@ func (r *Output) publishStream(ctx context.Context, proc *Process, stream string
 type tailScreening int
 
 const (
-	// tailUnscreened means no projector is configured.
-	tailUnscreened tailScreening = iota
 	// tailScreened means the projection completed.
-	tailScreened
+	tailScreened tailScreening = iota
 	// tailFailed suppresses a tail whose projection failed.
 	tailFailed
 )
@@ -152,22 +191,11 @@ const (
 func (r *Output) safeOutput(ctx context.Context, proc *Process) (body string, evicted bool, screening tailScreening) {
 	proc.publishMu.Lock()
 	defer proc.publishMu.Unlock()
-	chunks, _, evicted := proc.buffer.ReadSince(0)
-	if len(chunks) == 0 {
-		return "", evicted, tailScreened
+	projection := r.projectWindow(ctx, proc, 0)
+	if !projection.Screened {
+		return "", projection.Truncated, tailFailed
 	}
-	r.jobs.mu.Lock()
-	projector := r.projector
-	r.jobs.mu.Unlock()
-	body = RenderChunks(trimWithheldChunks(chunks, proc.withheld))
-	if projector == nil {
-		return body, evicted, tailUnscreened
-	}
-	projected, err := projector.Text(ctx, processCaptureScope(proc), "capture.process", body)
-	if err != nil {
-		return "", evicted, tailFailed
-	}
-	return projected.Value, evicted, tailScreened
+	return RenderChunks(projection.Chunks), projection.Truncated, tailScreened
 }
 
 // screenedOrSuppressed withholds text whose screening was attempted and failed.
@@ -176,31 +204,6 @@ func screenedOrSuppressed(text string, screening tailScreening) string {
 		return captureUnavailableText
 	}
 	return text
-}
-
-// trimWithheldChunks drops leading bytes that fall inside a withheld range.
-func trimWithheldChunks(chunks []OutputChunk, withheld []cursorRange) []OutputChunk {
-	if len(chunks) == 0 {
-		return chunks
-	}
-	resume := withheldThrough(withheld, chunks[0].Cursor)
-	if resume <= chunks[0].Cursor {
-		return chunks
-	}
-	out := make([]OutputChunk, 0, len(chunks))
-	for _, chunk := range chunks {
-		end := chunk.Cursor + int64(len(chunk.Text))
-		if end <= resume {
-			continue
-		}
-		if chunk.Cursor < resume {
-			drop := int(resume - chunk.Cursor)
-			chunk.Cursor = resume
-			chunk.Text = chunk.Text[drop:]
-		}
-		out = append(out, chunk)
-	}
-	return out
 }
 
 func processCaptureScope(proc *Process) captureprojection.Scope {
@@ -254,19 +257,4 @@ func joinOutputChunks(chunks []OutputChunk) string {
 		out.WriteString(chunk.Text)
 	}
 	return out.String()
-}
-
-func toAPIChunks(chunks []OutputChunk) []api.BackgroundProcessChunk {
-	if len(chunks) == 0 {
-		return nil
-	}
-	out := make([]api.BackgroundProcessChunk, len(chunks))
-	for i, c := range chunks {
-		out[i] = api.BackgroundProcessChunk{
-			Offset: c.Cursor,
-			Stream: c.Stream,
-			Text:   c.Text,
-		}
-	}
-	return out
 }

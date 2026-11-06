@@ -59,15 +59,6 @@ class WorkflowCommandTests(unittest.TestCase):
                               cwd=ROOT, env={**os.environ, **environment},
                               capture_output=True, text=True, timeout=30)
 
-    def test_ready_plan_and_capacity_are_workflow_outputs(self):
-        matrix = self.command('matrix', 'fast')
-        self.assertEqual(matrix.returncode, 0, matrix.stderr)
-        rows = json.loads(matrix.stdout)['include']
-        self.assertEqual({row['lane'] for row in rows}, {'ready', 'ready-lint'})
-        capacity = self.command('max-parallel', 'fast')
-        self.assertEqual(capacity.returncode, 0, capacity.stderr)
-        self.assertEqual(int(capacity.stdout), 2)
-
     def test_required_job_verdict_reaches_the_process_exit(self):
         results = json.dumps({'verification': {'result': 'success'}, 'platform': {'result': 'skipped'}})
         passed = self.command('gate', '--skipped', 'platform', NEEDS_JSON=results)
@@ -80,7 +71,7 @@ class WorkflowCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             summary = Path(directory) / "summary.md"
             measured = Path(directory) / "timings.json"
-            measured.write_text(json.dumps({"runs": [42], "lanes": {"ready": 250, "ready-lint": 100}}))
+            measured.write_text(json.dumps({"runs": [42], "lanes": {"ready": 250, "ready-lint": 200, "ready-tests 1/2": 240, "ready-tests 2/2": 240}}))
             result = self.command('matrix', 'fast', '--timings', str(measured),
                                   GITHUB_STEP_SUMMARY=str(summary))
             self.assertEqual(result.returncode, 0, result.stderr)

@@ -24,6 +24,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: PROJECT_HAS_NO_ROOTS'

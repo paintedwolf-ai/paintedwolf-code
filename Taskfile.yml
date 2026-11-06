@@ -188,7 +188,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh fast {{.CLI_ARGS}}
 
   lint:full:
-    desc: GitHub workflows + Go vet + full golangci-lint + deadcode
+    desc: GitHub workflows + full golangci-lint + deadcode
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
@@ -260,7 +260,7 @@ tasks:
         go run ./cmd/lycaon-perf
         --binary '{{.BUILD_DIR}}/lycaon-perf-sidecar'
         --output '{{.ARTIFACT_DIR}}/perf/sidecar.json'
-        --scale medium --enforce {{.CLI_ARGS}}
+        --scale medium {{.CLI_ARGS}}
 
   perf:soak:
     desc: 'Long sidecar stability run; SOAK defaults to 30m and may be overridden'
@@ -277,7 +277,7 @@ tasks:
         go run ./cmd/lycaon-perf
         --binary '{{.BUILD_DIR}}/lycaon-perf-sidecar'
         --output '{{.ARTIFACT_DIR}}/perf/sidecar-soak.json'
-        --scale medium --iterations 5 --prompts 2 --soak {{.SOAK}} --enforce {{.CLI_ARGS}}
+        --scale medium --iterations 5 --prompts 2 --soak {{.SOAK}} {{.CLI_ARGS}}
 
   budgets:
     desc: 'Prompt and code size budgets for what the change touches; PW_BUDGETS_INSPECT="<path>" shows a path''s standing'
@@ -650,7 +650,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:digest -- {{.CLI_ARGS}}
 
   den:test:transcript-scale:
-    desc: 'Transcript hydration performance at 5000 and 10000 messages'
+    desc: 'Transcript hydration at 5000 and 10000 messages'
     preconditions:
       - sh: command -v bun
         msg: bun required — install from https://bun.sh
@@ -1140,9 +1140,11 @@ tasks:
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
+      - config/packs/painted-wolf/platform/tools/operation-schemas/**/*
     generates:
       - internal/toolcontract/language_catalog.generated.go
     cmds:
@@ -1155,9 +1157,11 @@ tasks:
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
+      - config/packs/painted-wolf/platform/tools/operation-schemas/**/*
       - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check
@@ -1258,6 +1262,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-native-tool-contracts/**/*
       - internal/nativemanifest/**/*
     generates:
@@ -1274,6 +1279,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-native-tool-contracts/**/*
       - internal/nativemanifest/**/*
       - internal/settings/approval_tiers.generated.go
@@ -1292,6 +1298,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-worker-branch-tools/**/*
       - internal/nativemanifest/**/*
     generates:
@@ -1306,6 +1313,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-worker-branch-tools/**/*
       - internal/nativemanifest/**/*
       - internal/tools/worker_branch_tools.generated.go
@@ -1323,6 +1331,7 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
       - config/packs/painted-wolf/platform/tools/schemas/*.yaml
+      - config/packs/painted-wolf/platform/tools/operation-schemas/*.yaml
       - cmd/codegen-tool-presentation/**/*
     generates:
       - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
@@ -1339,6 +1348,7 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
       - config/packs/painted-wolf/platform/tools/schemas/*.yaml
+      - config/packs/painted-wolf/platform/tools/operation-schemas/*.yaml
       - cmd/codegen-tool-presentation/**/*
       - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
       - internal/toolpresentation/visibility.generated.go
@@ -1555,10 +1565,11 @@ tasks:
   codegen:dependency-inventory:
     desc: >-
       Project dependencies/policy.yaml, the tree's pins, and the upstream snapshot into
-      docs/operations/dependency-inventory.md and .github/dependabot.yml
+      docs/operations/dependency-inventory.md and .github/dependabot.yml;
+      --nix-bun refreshes the pinned Nix Bun expression (requires Nix)
     dir: '{{.GO_DIR}}'
     cmds:
-      - go run ./cmd/codegen-dependency-inventory --repo ..
+      - go run ./cmd/codegen-dependency-inventory --repo .. {{.CLI_ARGS}}
 
   codegen:dependency-inventory:check:
     desc: Fail if dependencies/ no longer matches the manifests or .github/dependabot.yml is stale (offline)

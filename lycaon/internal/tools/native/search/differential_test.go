@@ -80,6 +80,10 @@ func references(t *testing.T) []reference {
 }
 
 func runReference(t *testing.T, ref reference, dir string, argv []string) (string, int) {
+	if ref.kind == "rg" {
+		// The native search reads captured streams; mapping changes binary JSON records.
+		argv = append([]string{"--no-mmap"}, argv...)
+	}
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -129,6 +133,7 @@ var differentialCorpus = map[string]string{
 	"sub/.hidden":   "alpha hidden\n",
 	"sub/deep/d.md": "alpha deep\n",
 	"bin.dat":       "alpha\x00binary\n",
+	"nul.dat":       "beta alpha\x00gamma alpha\nmore\x00\nlast alpha\n",
 	"tree/a.go":     "package a\n",
 	"tree/b.txt":    "x",
 	"tree/s/c.go":   "package c\n",
@@ -198,7 +203,7 @@ var grepDifferential = []differentialCase{
 	{argv: []string{"grep", "-r", "--include-dir=sub", "--include-dir=*deep", "alpha", "sub"}, kinds: []string{"bsd"}, sorted: true},
 	{argv: []string{"grep", "-u", "-U", "alpha", "input"}, kinds: []string{"bsd"}},
 	{argv: []string{"grep", "-H", "--label=piped", "alpha", "-"}, kinds: []string{"gnu", "bsd"}},
-	{argv: []string{"find", "tree/s", "-depth"}, kinds: []string{"bsd-find", "gnu-find"}},
+	{argv: []string{"find", "tree/s", "-depth"}, kinds: []string{"bsd-find", "gnu-find"}, sorted: true},
 	{argv: []string{"find", "tree", "-depth", "2"}, kinds: []string{"bsd-find"}, sorted: true},
 	{argv: []string{"find", "-x", "tree/s"}, kinds: []string{"bsd-find"}, sorted: true},
 	{argv: []string{"find", "tree", "-name", "a.go", "-or", "-name", "c.go"}, kinds: []string{"bsd-find", "gnu-find"}, sorted: true},
@@ -215,6 +220,14 @@ var grepDifferential = []differentialCase{
 	{argv: []string{"rg", "--json", "-v", "alpha", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "--json", "-w", "alpha", "sub/c.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "--json", "alpha", "bin.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "binary", "bin.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "-v", "zz", "bin.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "zz", "bin.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "-r", "X", "alpha", "bin.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "alpha", "nul.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "^gamma", "nul.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "-C", "1", "gamma", "nul.dat"}, kinds: []string{"rg"}, json: true},
+	{argv: []string{"rg", "--json", "-m", "1", "alpha", "nul.dat"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "--json", "zz", "a.txt"}, kinds: []string{"rg"}, json: true},
 	{argv: []string{"rg", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},
 	{argv: []string{"rg", "--hidden", "alpha", "sub"}, kinds: []string{"rg"}, sorted: true},

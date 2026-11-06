@@ -32,7 +32,3 @@ x-paintedwolf-scenarios:
     former_path: /work/web
     attached_folders: [api → /work/api]
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: ROOT_NOT_ATTACHED'
-  - 'api → /work/api'

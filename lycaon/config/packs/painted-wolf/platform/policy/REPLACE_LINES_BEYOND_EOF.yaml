@@ -21,7 +21,7 @@ effect: block
 copy:
   what: replace_lines on {{ paintedwolf.path }} range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line
     }} exceeds file length ({{ paintedwolf.total_lines }} lines).
-  cause: Line numbers must fall within the file; use wc or read total_lines before replacing.
+  cause: Line numbers must fall within the file; check the file's line count before replacing a range.
   why: Splicing past EOF would corrupt file structure — narrow the range from a fresh read.
   fix: Read {{ paintedwolf.path }} from a valid current offset (offset 1 also handles an empty file) and use
     its source block's line range to select the intended replacement. Do not retry a read at the rejected out-of-range
@@ -39,6 +39,3 @@ x-paintedwolf-scenarios:
     start_line: 150
     tool: replace_lines
     total_lines: 120
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: REPLACE_LINES_BEYOND_EOF'

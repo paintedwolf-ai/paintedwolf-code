@@ -48,6 +48,8 @@ var evidenceGroundedInvestigateCodes = []string{
 // run report's document fields. The hint registry's evidence.in_session_retry
 // must list the same set.
 var evidenceGroundingInSessionRetryCodes = []string{
+	"CITATION_REPAIR_INVALID",
+	"CITATION_SYNTAX_INVALID",
 	"WORKER_EVIDENCE_HANDLE_UNKNOWN",
 	"WORKER_URL_NOT_OBSERVED",
 	"WORKER_SCOUT_NO_SURVEY_EVIDENCE",
@@ -57,6 +59,7 @@ var evidenceGroundingInSessionRetryCodes = []string{
 	"SYNTH_URL_NOT_OBSERVED",
 	"SYNTH_CITATION_UNVERIFIABLE",
 	"PRESENT_MARKDOWN_EMBED",
+	"PRESENT_IMAGE_UNOBSERVED",
 	"INVEST_HANDLE_NOT_OBSERVED",
 	"INVEST_URL_NOT_OBSERVED",
 	"INVEST_CITATION_UNVERIFIABLE",

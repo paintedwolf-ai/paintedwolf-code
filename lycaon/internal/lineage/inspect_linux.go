@@ -14,7 +14,7 @@ import (
 )
 
 // hostProc is the procfs mount the kernel tables are read from.
-var hostProc = procFS{root: "/proc"}
+var hostProc = procFS{root: "/proc", ipv6Only: inet6V6Only}
 
 // pipePeerHandle returns the pipe's inode. Both ends share it, so holders are
 // narrowed to write ends by their open flags.
@@ -111,7 +111,14 @@ func peerPID(local, remote netip.AddrPort) (int, bool) {
 	return holders[inode][0], true
 }
 
-func listeners(query ListenerQuery) ([]Listener, error) { return hostProc.listeners(query) }
+// /proc/net reports every socket in the namespace to any reader.
+func listeners(query ListenerQuery) (ListenerTable, error) {
+	rows, err := hostProc.listeners(query)
+	if err != nil {
+		return ListenerTable{}, err
+	}
+	return ListenerTable{Listeners: rows, Complete: true}, nil
+}
 
 func livePIDs() ([]int, error) { return hostProc.livePIDs() }
 

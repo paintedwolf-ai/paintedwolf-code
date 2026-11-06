@@ -29,14 +29,7 @@ func DiffScript(oldLines, newLines []string, equal func(string, string) bool, ma
 	if equal == nil {
 		equal = func(a, b string) bool { return a == b }
 	}
-	prefix := 0
-	for prefix < len(oldLines) && prefix < len(newLines) && equal(oldLines[prefix], newLines[prefix]) {
-		prefix++
-	}
-	suffix := 0
-	for suffix < len(oldLines)-prefix && suffix < len(newLines)-prefix && equal(oldLines[len(oldLines)-1-suffix], newLines[len(newLines)-1-suffix]) {
-		suffix++
-	}
+	prefix, suffix := commonEdges(oldLines, newLines, equal)
 	a, b := oldLines[prefix:len(oldLines)-suffix], newLines[prefix:len(newLines)-suffix]
 	cells := int64(len(oldLines)+len(newLines)) * 6
 	if maxCells > 0 && cells > maxCells {
@@ -83,6 +76,16 @@ func DiffScript(oldLines, newLines []string, equal func(string, string) bool, ma
 	}
 	slices.Reverse(ops)
 	return ops, nil
+}
+
+func commonEdges(oldLines, newLines []string, equal func(string, string) bool) (prefix, suffix int) {
+	for prefix < len(oldLines) && prefix < len(newLines) && equal(oldLines[prefix], newLines[prefix]) {
+		prefix++
+	}
+	for suffix < len(oldLines)-prefix && suffix < len(newLines)-prefix && equal(oldLines[len(oldLines)-1-suffix], newLines[len(newLines)-1-suffix]) {
+		suffix++
+	}
+	return prefix, suffix
 }
 
 func frontierAt(frontier []int32, k int) int32 {

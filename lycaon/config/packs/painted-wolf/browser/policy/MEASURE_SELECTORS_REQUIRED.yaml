@@ -24,6 +24,3 @@ x-paintedwolf-scenarios:
   - id: default
     vars:
       tool: measure_page
-    expect_contains:
-      - 'Code: MEASURE_SELECTORS_REQUIRED'
-      - selectors

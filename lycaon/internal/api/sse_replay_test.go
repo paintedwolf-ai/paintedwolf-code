@@ -125,3 +125,33 @@ func TestSettledLiveSubscriptionRechecksTranscript(t *testing.T) {
 	srv.Routes.Conversation.followLiveStream(r, w, w, sess.ID, messageID)
 	assertErrorResponse(t, w, http.StatusNotFound, "message_not_found")
 }
+
+// Replay shows only accepted text. A settled draft keeps its status on the row, and
+// its raw citation nodes do not reach a reconnecting stream, cached or stored.
+func TestStreamReplayOmitsUnacceptedText(t *testing.T) {
+	srv := newTestServer(t)
+	sess := createSessionAtPathOnServer(t, srv, t.TempDir(), wire.SessionPostureBuild)
+	streams := srv.Admin.SessionAdmin.Lifecycle.Sessions.Runner.Transcript.Streams
+	replay := func(id string) string {
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, newAuthedRequest(http.MethodGet, "/v1/sessions/"+sess.ID+"/stream?message="+id, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", rec.Code, rec.Body.String())
+		}
+		return rec.Body.String()
+	}
+	internal := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Visibility: wire.MessageVisibilityInternal, Content: "Raw [read#3:42]."}
+	draft := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Kind: wire.MessageKindDraft, Visibility: wire.MessageVisibilityTranscript, Content: "Draft [read#3:42]."}
+	accepted := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Visibility: wire.MessageVisibilityTranscript, Content: "Shown [a.go:42](a.go#L42)."}
+	testutil.FailErr(t, "append messages", srv.Sources.Workspace.SessionStore.AppendMessages(t.Context(), sess.ID, internal, draft, accepted))
+	for _, msg := range []wire.Message{internal, draft} {
+		streams.CacheReplay(msg.ID, msg.Content, []string{msg.Content})
+		if body := replay(msg.ID); strings.Contains(body, "read#3") {
+			t.Fatalf("unaccepted text replayed: %s", body)
+		}
+	}
+	streams.CacheReplay(accepted.ID, "", nil)
+	if body := replay(accepted.ID); !strings.Contains(body, "a.go#L42") {
+		t.Fatalf("accepted text not replayed from its row: %s", body)
+	}
+}

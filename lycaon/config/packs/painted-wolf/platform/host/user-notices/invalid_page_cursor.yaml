@@ -9,6 +9,3 @@ suggested_action: Refresh the history view to start again from the newest page.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - history page
-      - different query

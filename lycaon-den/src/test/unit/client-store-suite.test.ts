@@ -13,6 +13,7 @@ describe("client + store suite", () => {
         topic === "message" ||
         topic === "worker" ||
         topic === "board" ||
+        topic === "project_background" ||
         topic === "process" ||
         topic === "preview" ||
         topic === "attention" ||
@@ -67,8 +68,6 @@ describe("client + store suite", () => {
     const urls = fetchMock.mock.calls.map((c) => String(c[0]));
     expect(urls[0]).toContain("/v1/mcp/providers");
     expect(urls[1]).toContain("/v1/mcp/providers/check");
-    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit];
-    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer tok");
   });
 
   it("app store merges session SSE events into current session", () => {

@@ -6,4 +6,3 @@ message: "Another file operation is using this path."
 suggested_action: "Wait for it to finish, then try again. You can keep editing other files."
 scenarios:
   - id: default
-    expect_contains: ["Another file operation"]

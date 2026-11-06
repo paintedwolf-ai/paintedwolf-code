@@ -87,6 +87,27 @@
       "examples": [
         {
           "active_work_count": 1,
+          "background_processes": [
+            {
+              "command": "command",
+              "ended_at": "2026-01-02T03:04:05Z",
+              "exit_code": 1,
+              "ports": [
+                "ports"
+              ],
+              "process_id": "process_id",
+              "project_id": "project_id",
+              "project_name": "project_name",
+              "root_id": "root_id",
+              "running": true,
+              "session_archived": true,
+              "session_id": "session_id",
+              "session_title": "session_title",
+              "started_at": "2026-01-02T03:04:05Z",
+              "termination_reason": "termination_reason",
+              "working_dir": "working_dir"
+            }
+          ],
           "inhibiting": true,
           "keep_awake_while_working": true,
           "last_error": "last_error",
@@ -102,6 +123,30 @@
           "expires_at": "expires_at",
           "prompt": "prompt",
           "proof_payload": "proof_payload"
+        }
+      ]
+    },
+    "project_background_process": {
+      "source": "pkg/api.ProjectBackgroundProcess",
+      "examples": [
+        {
+          "command": "command",
+          "ended_at": "2026-01-02T03:04:05Z",
+          "exit_code": 1,
+          "ports": [
+            "ports"
+          ],
+          "process_id": "process_id",
+          "project_id": "project_id",
+          "project_name": "project_name",
+          "root_id": "root_id",
+          "running": true,
+          "session_archived": true,
+          "session_id": "session_id",
+          "session_title": "session_title",
+          "started_at": "2026-01-02T03:04:05Z",
+          "termination_reason": "termination_reason",
+          "working_dir": "working_dir"
         }
       ]
     },

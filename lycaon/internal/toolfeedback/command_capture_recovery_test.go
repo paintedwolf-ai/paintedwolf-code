@@ -1,56 +1,70 @@
 package toolfeedback
 
 import (
-	"github.com/lycaon/lycaon/internal/toolrejection"
-
-	"context"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/argv"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
-func TestCommandRecoveryFollowsCaptureMode(t *testing.T) {
+func TestCommandRecoveryFollowsReceivingSchemaAndCaptureMode(t *testing.T) {
 	bp := stockBlockPlane(t)
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join(testutil.CheckoutRoot(t), "lycaon/config/packs/painted-wolf/platform/tools/schemas"))
+	testutil.FailErr(t, "load receiving schemas", err)
 	for _, tc := range []struct {
-		name, tool, command string
-		capture             bool
-		parseErr            error
-		want                string
+		name, tool, source, field string
+		capture                   bool
+		cause                     error
 	}{
-		{"capture sequence", "command", "tool --check; echo $?", true, commandsurface.ErrSequenceUnsupported, "omit `terminal_capture`"},
-		{"capture pipe", "command", "tool --check | tee output.txt", true, argv.ErrShellMetacharacters, "omit `terminal_capture`"},
-		{"ordinary pipe", "command", "tool --check | tee output.txt", false, argv.ErrShellMetacharacters, "Use the `verify` tool's `pipeline` array"},
-		{"terminal pipe", "terminal_open", "tool --check | tee output.txt", false, argv.ErrShellMetacharacters, "run the composed form under `command`"},
+		{"capture sequence", "command", "tool; echo $?", "exit_code", true, commandsurface.ErrSequenceUnsupported},
+		{"capture pipe", "command", "tool | tee output", "exit_code", true, argv.ErrShellMetacharacters},
+		{"terminal pipe", "terminal_open", "tool | tee output", "", false, argv.ErrShellMetacharacters},
+		{"terminal environment", "terminal_open", "VALUE=one tool", "env", false, argv.ErrEnvAssignmentCommand},
+		{"terminal directory", "terminal_open", "cd src && tool", "cwd", false, commandsurface.ErrDirectoryChangeCommand},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			args := map[string]any{"command": tc.command}
-			fields := []string{"command", "cwd", "env"}
-			if tc.tool == "command" {
-				fields = append(fields, "pipeline", "stdin", "stdout_to", "stderr_to", "background", "terminal_capture")
-			}
-			if tc.capture {
-				args["terminal_capture"] = map[string]any{"caption": "Final check"}
-			}
-			reject := toolrejection.CommandSurfaceObservation(tc.tool, "implement", tc.command, args, fields, tc.parseErr)
-			if reject == nil || reject.Data["terminal_capture"] != tc.capture {
-				t.Fatalf("capture observation = %#v, want capture=%v", reject, tc.capture)
-			}
-			err := bp.RejectObservation(context.Background(), tc.tool, "implement", args, reject)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("recovery = %v, want %q", err, tc.want)
-			}
-			if tc.capture {
-				for _, forbidden := range []string{"run the composed form under `command`", "Use the `pipeline` array instead"} {
-					if strings.Contains(err.Error(), forbidden) {
-						t.Fatalf("capture recovery offers unsupported retry %q: %v", forbidden, err)
-					}
+		for _, commandOffered := range []bool{false, true} {
+			t.Run(tc.name, func(t *testing.T) {
+				args := map[string]any{"command": tc.source}
+				if tc.capture {
+					args["terminal_capture"] = map[string]any{}
 				}
-				if !strings.Contains(err.Error(), "read `exit_code` from its result") {
-					t.Fatalf("capture recovery omits the existing exit receipt: %v", err)
+				meta, ok := schemas.ToolMeta(tc.tool)
+				if !ok {
+					t.Fatalf("missing %s schema", tc.tool)
 				}
-			}
-		})
+				rejected := toolrejection.CommandSurfaceObservation(tc.tool, "implement", tc.source, args, toolschema.ArgFieldPaths(meta.ArgsSchema), tc.cause)
+				if rejected == nil {
+					t.Fatal("missing typed argv refusal")
+				}
+				var offered []string
+				if commandOffered {
+					offered = []string{"command"}
+				}
+				ctx := tools.WithCallReach(t.Context(), toolreach.Offered(offered))
+				err := bp.RejectObservation(ctx, tc.tool, "implement", args, rejected)
+				refusal, ok := guidance.RefusalFromError(err)
+				if !ok {
+					t.Fatalf("missing argv feedback: %v", err)
+				}
+				fix := strings.TrimSpace(refusal.Copy["fix"])
+				if (tc.field == "" && fix != "") || (tc.field != "" && !strings.Contains(fix, "`"+tc.field+"`")) {
+					t.Fatalf("schema or mode acquired the wrong repair: %s", fix)
+				}
+				if (strings.TrimSpace(refusal.Copy["instead"]) != "") != commandOffered {
+					t.Fatalf("unoffered program tool became a recovery: %#v", refusal.Copy)
+				}
+				if tc.capture && (strings.Contains(fix, "pipeline") || strings.Contains(fix, "env") || strings.Contains(fix, "background")) {
+					t.Fatalf("captured argv acquired program arguments: %s", fix)
+				}
+			})
+		}
 	}
 }

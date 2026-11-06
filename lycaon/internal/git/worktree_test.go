@@ -17,17 +17,13 @@ import (
 func initWorktreeRepo(t *testing.T) (mgr *Manager, dir string) {
 	t.Helper()
 	mgr = NewManager()
-	dir = t.TempDir()
-	ctx := context.Background()
-	testutil.FailErr(t, "init", mgr.Init(ctx, dir))
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
-	_, commitErr1 := mgr.Commit(ctx, dir, GitCommitOpts{Message: "init", Paths: []string{"a.txt"}})
-	testutil.FailErr(t, "commit", commitErr1)
-	branch, err := mgr.Branch(ctx, dir)
-	testutil.FailErr(t, "branch", err)
-	if branch == "" {
-		t.Fatal("expected a branch after init commit")
-	}
+	dir = CloneFixtureRepo(t, "worktree-base", func(seed string) {
+		ctx := context.Background()
+		testutil.FailErr(t, "init", mgr.Init(ctx, seed))
+		testutil.FailErr(t, "write", os.WriteFile(filepath.Join(seed, "a.txt"), []byte("one\n"), 0o644))
+		_, commitErr1 := mgr.Commit(ctx, seed, GitCommitOpts{Message: "init", Paths: []string{"a.txt"}})
+		testutil.FailErr(t, "commit", commitErr1)
+	})
 	return mgr, dir
 }
 
@@ -39,6 +35,7 @@ func worktreeParent(t *testing.T) string {
 }
 
 func TestAddListRemoveWorktreeRoundTrip(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	ctx := context.Background()
 	base, err := mgr.Branch(ctx, dir)
@@ -88,6 +85,7 @@ func TestAddListRemoveWorktreeRoundTrip(t *testing.T) {
 }
 
 func TestRepoConfigFingerprintUnchangedAcrossVerbs(t *testing.T) {
+	t.Parallel()
 	runFrom := func(t *testing.T, useLinked bool) {
 		t.Helper()
 		mgr, dir := initWorktreeRepo(t)
@@ -139,11 +137,18 @@ func TestRepoConfigFingerprintUnchangedAcrossVerbs(t *testing.T) {
 		}
 	}
 
-	t.Run("primary", func(t *testing.T) { runFrom(t, false) })
-	t.Run("linked", func(t *testing.T) { runFrom(t, true) })
+	t.Run("primary", func(t *testing.T) {
+		t.Parallel()
+		runFrom(t, false)
+	})
+	t.Run("linked", func(t *testing.T) {
+		t.Parallel()
+		runFrom(t, true)
+	})
 }
 
 func TestAddWorktree_noForbiddenConfigKeys(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	ctx := context.Background()
 	base, err := mgr.Branch(ctx, dir)
@@ -184,6 +189,7 @@ func TestAddWorktree_noForbiddenConfigKeys(t *testing.T) {
 }
 
 func TestAddWorktree_baseStillResolvesToItself(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	ctx := context.Background()
 	base, err := mgr.Branch(ctx, dir)
@@ -213,6 +219,7 @@ func TestAddWorktree_baseStillResolvesToItself(t *testing.T) {
 }
 
 func TestRemoveWorktree_dirtyRefused(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	ctx := context.Background()
 	base, err := mgr.Branch(ctx, dir)
@@ -231,6 +238,7 @@ func TestRemoveWorktree_dirtyRefused(t *testing.T) {
 }
 
 func TestRemoveWorktree_branchSurvives(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	ctx := context.Background()
 	base, err := mgr.Branch(ctx, dir)
@@ -250,6 +258,7 @@ func TestRemoveWorktree_branchSurvives(t *testing.T) {
 }
 
 func TestLandWorktree_success(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	ctx := context.Background()
 	base, err := mgr.Branch(ctx, dir)
@@ -274,7 +283,7 @@ func TestLandWorktree_success(t *testing.T) {
 	if status.Dirty {
 		t.Fatalf("base should be clean after merge: %+v", status)
 	}
-	// Merge commit: HEAD should have two parents.
+	// Merge commit: HEAD has two parents.
 	out, code, err := gitexec.Run(ctx, dir, []string{"rev-list", "--parents", "-n", "1", "HEAD"}, hermeticOpts(0))
 	if err != nil && code < 0 {
 		t.Fatalf("rev-list: %v", err)
@@ -289,6 +298,7 @@ func TestLandWorktree_success(t *testing.T) {
 }
 
 func TestLandWorktree_conflictAborts(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	ctx := context.Background()
 	base, err := mgr.Branch(ctx, dir)
@@ -341,6 +351,7 @@ func TestLandWorktree_conflictAborts(t *testing.T) {
 }
 
 func TestAheadBehindRefs(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	ctx := context.Background()
 	base, err := mgr.Branch(ctx, dir)
@@ -371,6 +382,7 @@ func TestAheadBehindRefs(t *testing.T) {
 }
 
 func TestValidateWorktreeRejectsMarkerWithoutRegistration(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	fake := t.TempDir()
 	testutil.FailErr(t, "write fake marker", os.WriteFile(filepath.Join(fake, ".git"), []byte("gitdir: /tmp/not-a-worktree\n"), 0o600))
@@ -380,6 +392,7 @@ func TestValidateWorktreeRejectsMarkerWithoutRegistration(t *testing.T) {
 }
 
 func TestValidateWorktreeAcceptsRegisteredCheckout(t *testing.T) {
+	t.Parallel()
 	mgr, dir := initWorktreeRepo(t)
 	ctx := context.Background()
 	base, err := mgr.Branch(ctx, dir)
@@ -397,6 +410,7 @@ func TestValidateWorktreeAcceptsRegisteredCheckout(t *testing.T) {
 }
 
 func TestAgentWorkspaceRootsUnder_sessionWorktreesCarveOut(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	roots := enginepaths.AgentWorkspaceRootsUnder(dir)
 	want := enginepaths.SessionWorktreesRootUnder(dir)
@@ -412,6 +426,7 @@ func TestAgentWorkspaceRootsUnder_sessionWorktreesCarveOut(t *testing.T) {
 }
 
 func TestWorktreeGo_noShellOutEscape(t *testing.T) {
+	t.Parallel()
 	pkgDir, err := os.Getwd()
 	testutil.FailErr(t, "wd", err)
 	path := filepath.Join(pkgDir, "worktree.go")

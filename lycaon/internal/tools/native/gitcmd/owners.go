@@ -179,7 +179,7 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, filesystem *mutation.
 	}
 	mode := effectMode(spec, parsed, bound)
 	review := bound.Review(reviewID)
-	review.PathTargets = gitPathTargets(bound, parsed, mode)
+	review.PathTargets = gitPathTargets(bound, parsed, mode, paths.Cwd().Abs)
 	return Prepared{
 		Command:    spec.Name,
 		Operation:  o.ops[spec.Name],
@@ -210,7 +210,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.command.spec.Name == "git grep" {
 		run = p.grep
 	}
-	status, err := run(ctx, streams)
+	status, err := run(ctx, tc, streams)
 	if err == nil {
 		err = ctx.Err()
 	}

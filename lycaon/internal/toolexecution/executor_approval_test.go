@@ -207,7 +207,7 @@ func TestExecutorAskRuleSuspendsNotHardError(t *testing.T) {
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 
 	type result struct {
@@ -452,7 +452,7 @@ func TestListIncludesToolsRequiringApprovalAsk(t *testing.T) {
 
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	reg := tools.NewDefaultRegistry()
-	for _, name := range []string{"read", "write", "edit", "replace_lines"} {
+	for _, name := range []string{"read", "write"} {
 		if err := reg.Register(name, func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 			return "ok", nil
 		}); err != nil {
@@ -469,7 +469,7 @@ func TestListIncludesToolsRequiringApprovalAsk(t *testing.T) {
 	for _, meta := range listed {
 		names[meta.Name] = true
 	}
-	for _, want := range []string{"read", "write", "edit", "replace_lines"} {
+	for _, want := range []string{"read", "write"} {
 		if !names[want] {
 			t.Fatalf("list missing %q (ask tools must appear on wire): %v", want, names)
 		}

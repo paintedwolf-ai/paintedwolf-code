@@ -29,7 +29,26 @@ type process struct {
 	done      chan struct{}
 	exitErr   error
 	exitCode  int
+	stderr    *stderrTail
 }
+
+// EngineExitError reports an engine that exited instead of answering: its
+// exit status and the last lines it wrote to stderr, so a fault can be read
+// from the host log and the turn receipt without the engine's own log.
+type EngineExitError struct {
+	Status int
+	Stderr []string
+}
+
+func (e *EngineExitError) Error() string {
+	msg := fmt.Sprintf("decide: engine exited with status %d", e.Status)
+	if n := len(e.Stderr); n > 0 {
+		msg += ": " + e.Stderr[n-1]
+	}
+	return msg
+}
+
+func (e *EngineExitError) Unwrap() error { return errEngineExited }
 
 type request struct {
 	ID         int64                      `json:"id"`
@@ -68,7 +87,8 @@ func startProcess(ctx context.Context, bin string, args []string) (*process, err
 		cleanup()
 		return nil, fmt.Errorf("decide: engine stdout: %w", err)
 	}
-	cmd.Stderr = stderrLogger{}
+	stderr := &stderrTail{}
+	cmd.Stderr = stderr
 	if err := execpkg.StartPrepared(ctx, cmd); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("decide: start engine: %w", err)
@@ -82,6 +102,7 @@ func startProcess(ctx context.Context, bin string, args []string) (*process, err
 		admitted: make(chan struct{}, 1),
 		pending:  make(map[int64]chan response),
 		done:     make(chan struct{}),
+		stderr:   stderr,
 	}
 	go proc.read(stdout)
 	return proc, nil
@@ -111,12 +132,12 @@ func (p *process) read(stdout io.Reader) {
 			ch <- resp
 		}
 	}
-	p.exitErr = errors.Join(errEngineExited, scanner.Err())
 	// Reaped before done closes, so a waiter on done reads the exit status.
 	_ = p.cmd.Wait()
 	if p.cmd.ProcessState != nil {
 		p.exitCode = p.cmd.ProcessState.ExitCode()
 	}
+	p.exitErr = errors.Join(&EngineExitError{Status: p.exitCode, Stderr: p.stderr.lines()}, scanner.Err())
 	close(p.done)
 	p.pendingMu.Lock()
 	for id, ch := range p.pending {
@@ -206,14 +227,41 @@ func (p *process) stop() {
 	<-p.done
 }
 
-// stderrLogger forwards engine diagnostics line by line.
-type stderrLogger struct{}
+const (
+	// stderrTailLines is how many of the engine's last diagnostic lines an
+	// exit error carries.
+	stderrTailLines = 8
+	// stderrLineLimit bounds one kept line.
+	stderrLineLimit = 256
+)
 
-func (stderrLogger) Write(b []byte) (int, error) {
+// stderrTail forwards engine diagnostics line by line and keeps the last few
+// for the exit error.
+type stderrTail struct {
+	mu   sync.Mutex
+	kept []string
+}
+
+func (t *stderrTail) Write(b []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			log.Debug("decision engine", "stderr", line)
+			if len(line) > stderrLineLimit {
+				line = line[:stderrLineLimit]
+			}
+			t.kept = append(t.kept, line)
+			if len(t.kept) > stderrTailLines {
+				t.kept = t.kept[1:]
+			}
 		}
 	}
 	return len(b), nil
+}
+
+func (t *stderrTail) lines() []string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]string(nil), t.kept...)
 }

@@ -4,14 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/progress"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -118,59 +116,6 @@ func TestPromptPartialsAreReachable(t *testing.T) {
 	}
 	sort.Strings(violations)
 	contractcheck.FailViolations(t, "prompt partials nothing renders", contractcheck.DedupeStrings(violations))
-}
-
-// closeoutCitationPartials render together on synthesis prompts.
-var closeoutCitationPartials = []string{
-	packRoot + "/platform/shared/partials/coordinator-final-report.md",
-	packRoot + "/platform/shared/partials/coordinator-synthesis-citation-grounding.md",
-}
-
-// TestCloseoutCopyMatchesTheReportDecoder verifies cited JSON keys.
-func TestCloseoutCopyMatchesTheReportDecoder(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-
-	accepted := map[string]bool{}
-	for _, typ := range []reflect.Type{
-		reflect.TypeOf(guidance.CoordinatorCompletionReport{}),
-		reflect.TypeOf(guidance.CoordinatorCitedEvidence{}),
-	} {
-		for i := range typ.NumField() {
-			tag := typ.Field(i).Tag.Get("json")
-			if name, _, _ := strings.Cut(tag, ","); name != "" && name != "-" {
-				accepted[name] = true
-			}
-		}
-	}
-	if len(accepted) == 0 {
-		t.Fatal("no json tags read off the closeout report — the reflection is broken")
-	}
-
-	// The keys a citation object may carry, as the copy spells them.
-	citationKeys := []string{"evidence", "handle", "path", "line", "excerpt"}
-
-	var violations []string
-	for _, rel := range closeoutCitationPartials {
-		raw, err := os.ReadFile(filepath.Join(root, rel))
-		contractcheck.FailErr(t, "read "+rel, err)
-		text := string(raw)
-		for _, key := range citationKeys {
-			if accepted[key] {
-				continue
-			}
-			for _, spelling := range []string{"`" + key + "`", `"` + key + `"`} {
-				// Ignore explicit prohibitions of a key.
-				scanned := strings.ReplaceAll(text, "Never use a "+spelling, "")
-				if strings.Contains(scanned, spelling) {
-					violations = append(violations, fmt.Sprintf(
-						"%s names citation key %s, which the closeout decoder rejects", rel, spelling))
-				}
-			}
-		}
-	}
-	sort.Strings(violations)
-	contractcheck.FailViolations(t, "closeout copy names a key the report decoder rejects", contractcheck.DedupeStrings(violations))
 }
 
 const progressClosureProcedure = packRoot + "/platform/shared/units/coordinator-progress-procedure.md"

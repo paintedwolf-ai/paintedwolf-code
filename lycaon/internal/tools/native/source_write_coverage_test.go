@@ -37,13 +37,12 @@ func TestEveryMutatingToolRecordsAnAttributedRow(t *testing.T) {
 			path: "a.go", op: api.SourceChangeOpCreate,
 		},
 		{
-			tool: "replace_lines",
+			tool: "overwrite",
 			seed: func(t *testing.T, dir string) { seedFile(t, dir, "a.go", "one\ntwo\nthree\n") },
 			run: func(t *testing.T, dir string, tctx tools.ToolContext) error {
-				_, err := (&ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(),
+				_, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(),
 					map[string]any{
-						"path": "a.go", "start_line": 2, "end_line": 2,
-						"new_content": "TWO\n",
+						"path": "a.go", "content": "one\nTWO\nthree\n",
 					}, tctx)
 				return err
 			},

@@ -1,0 +1,3 @@
+steps:
+  - tool: "page_open"
+    say: "If {{ call }} can establish the intended target, continue on its returned ID after recreating required state."

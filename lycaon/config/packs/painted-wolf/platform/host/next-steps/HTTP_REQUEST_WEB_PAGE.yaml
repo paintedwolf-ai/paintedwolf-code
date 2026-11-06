@@ -1,0 +1,4 @@
+steps:
+  - tool: "fetch_url"
+    say: "To read this page or other documentation, call {{ call }} with the same URL. It extracts readable text as markdown and pages long documents with offset and limit."
+    otherwise: "Extract only the needed section of the response rather than reading the full HTML markup."

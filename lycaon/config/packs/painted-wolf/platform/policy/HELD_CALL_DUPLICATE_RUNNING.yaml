@@ -23,17 +23,14 @@ selector:
 requires:
   profiles:
     - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.handle
+  facts: [paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.handle, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "HELD_CALL_DUPLICATE_RUNNING"
 effect: block
 copy:
   what: This exact call is already running as held call {{ paintedwolf.handle }}.
   cause: An identical call outlived its foreground wait and is still running.
   why: Repeating it starts the same work again and cannot return a newer result.
-  fix: Wait on the handle, read it with held_result, or cancel it with held_stop.
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Continue with the running call
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:held_call
@@ -44,7 +41,3 @@ x-paintedwolf-scenarios:
       handle: held-1
       profile: coordinator
       tool: find
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: HELD_CALL_DUPLICATE_RUNNING'
-      - held_result

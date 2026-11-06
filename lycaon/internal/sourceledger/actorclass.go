@@ -57,6 +57,14 @@ func (e Effect) ActorClassFor(viewerSessionID string) ActorClass {
 	return actor
 }
 
+// DuringCommandOf reports that the viewer's own command window was open when
+// this effect was observed. A window attributes all drift it sees, so this does
+// not say the command caused the change.
+func (e Effect) DuringCommandOf(viewerSessionID string) bool {
+	viewer := strings.TrimSpace(viewerSessionID)
+	return e.CommandWindowID != "" && viewer != "" && strings.TrimSpace(e.SessionID) == viewer
+}
+
 // ActorDisplay names foreign contributors and explains mixed publications.
 func (e Effect) ActorDisplay(viewerSessionID string) string {
 	classification := e.ActorClassFor(viewerSessionID)

@@ -123,18 +123,13 @@ func TestMountSourceDeadlineAbortsReceiveAndOnlyItsOwnedChild(t *testing.T) {
 	opener := &mountSourceOpener{process: child, socket: parent, deadline: time.Now().Add(30 * time.Millisecond), finished: done}
 	opener.armDeadline()
 	defer opener.stopTimer()
-	start := time.Now()
+	// The peer stays open and silent, so only the deadline can end this receive.
 	_, fd, receiveErr := receiveMountTransfer(pair[0])
-	if receiveErr == nil || fd >= 0 || time.Since(start) > 2*time.Second {
-		t.Fatalf("deadline did not abort stalled transport: fd=%d err=%v elapsed=%s", fd, receiveErr, time.Since(start))
+	if receiveErr == nil || fd >= 0 {
+		t.Fatalf("deadline did not abort stalled transport: fd=%d err=%v", fd, receiveErr)
 	}
-	select {
-	case err := <-done:
-		if err == nil {
-			t.Fatal("deadline left its stalled child running normally")
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("deadline did not terminate its owned child")
+	if err := testutil.Receive(t, "owned child termination", done); err == nil {
+		t.Fatal("deadline left its stalled child running normally")
 	}
 }
 

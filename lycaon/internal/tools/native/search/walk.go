@@ -214,16 +214,19 @@ func (w *walker) readChildren(dir entry, follow bool, opened *projectpaths.Bound
 		if err := w.visit(); err != nil {
 			return nil, err
 		}
-		rel := name
-		if parent := dir.bound.Resolved.ScopeRel; parent != "" && parent != "." {
-			rel = parent + "/" + name
+		child, err := opened.BindChild(name)
+		if err != nil {
+			if _, ok := ordinary(err); ok {
+				continue
+			}
+			return nil, err
 		}
-		if !entryMayBeRead(filter, rel) {
+		if !entryMayBeRead(filter, child.Resolved.ScopeRel) {
 			continue
 		}
 		w.work.metadata++
 		w.work.relative++
-		child, st, err := opened.StatChild(name)
+		st, err := opened.StatBoundChild(child, name)
 		if err != nil {
 			if _, ok := ordinary(err); ok {
 				continue // removed between listing and inspection

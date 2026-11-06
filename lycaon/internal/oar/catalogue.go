@@ -68,6 +68,7 @@ var factDecls = []factDecl{
 	{"unpublished_tool_text_pending", oarcore.TypeBool, FactTierHost, ""},
 	{"mid_turn_citations_required", oarcore.TypeBool, FactTierHost, ""},
 	{"mid_turn_citation_attempted", oarcore.TypeBool, FactTierHost, ""},
+	{"mid_turn_evidence_unreadable", oarcore.TypeBool, FactTierHost, ""},
 	{"last_assistant", oarcore.TypeString, FactTierHost, ""},
 	{"turn_tools", oarcore.TypeListString, FactTierHost, ""},
 	{"session_posture", oarcore.TypeString, FactTierStandard, ProfileSession},
@@ -85,7 +86,8 @@ var factDecls = []factDecl{
 	{"batch_closed", oarcore.TypeBool, FactTierHost, ""},
 	{"progress_open_items", oarcore.TypeInt, FactTierHost, ""},
 	{"progress_has_open_steps", oarcore.TypeBool, FactTierHost, ""},
-	{"has_completion_report", oarcore.TypeBool, FactTierHost, ""},
+	{"closeout_has_answer", oarcore.TypeBool, FactTierHost, ""},
+	{"closeout_only_repair_directives", oarcore.TypeBool, FactTierHost, ""},
 	{"task_envelope_echo", oarcore.TypeBool, FactTierHost, ""},
 	{"closeout_surface", oarcore.TypeBool, FactTierHost, ""},
 	{"progress_reconcile_needed", oarcore.TypeBool, FactTierHost, ""},
@@ -125,6 +127,7 @@ var factDecls = []factDecl{
 	{"refused_write_grants", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_read_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_read_grants", oarcore.TypeListString, FactTierHost, ""},
+	{"refused_credential_store_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"receiving_tool_summarize", oarcore.TypeBool, FactTierHost, ""},
 	{"refused_terminal_read_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_terminal_write_paths", oarcore.TypeListString, FactTierHost, ""},
@@ -241,9 +244,11 @@ var factDecls = []factDecl{
 	{"credential_harvested", oarcore.TypeBool, FactTierHost, ""},
 	{"credential_ignored", oarcore.TypeBool, FactTierHost, ""},
 	{"editorconfig_mismatch", oarcore.TypeBool, FactTierHost, ""},
+	{"git_no_repository_on_write_leg", oarcore.TypeBool, FactTierHost, ""},
 	{"syntax_check_overridden", oarcore.TypeBool, FactTierHost, ""},
 	{"source_analysis_unavailable", oarcore.TypeBool, FactTierHost, ""},
 	{"http_request_web_page", oarcore.TypeBool, FactTierHost, ""},
+	{"http_request_loopback_other_session", oarcore.TypeBool, FactTierHost, ""},
 }
 
 // observationFn is one parameterized observation function.

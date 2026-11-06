@@ -2,6 +2,7 @@ package guidance
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/citationmd"
@@ -17,8 +18,13 @@ const (
 	MidTurnNoteArtifactCode       = "MID_TURN_NOTE_ARTIFACT_UNKNOWN"
 	MidTurnNoteSyntaxCode         = "MID_TURN_NOTE_INVALID_SYNTAX"
 	MidTurnNoteEmbedCode          = "MID_TURN_NOTE_MARKDOWN_EMBED"
+	MidTurnNoteImageCode          = "MID_TURN_NOTE_IMAGE_UNOBSERVED"
 	MidTurnNoteWaitFallbackCode   = "MID_TURN_NOTE_WAIT_FALLBACK"
+	MidTurnNoteEvidenceUnreadable = "MID_TURN_NOTE_EVIDENCE_UNREADABLE"
 )
+
+// bareJSONOffender names a withheld JSON-only response in place of a node.
+const bareJSONOffender = "the whole response is JSON"
 
 // midTurnNoteFrictionCodes spend the shared grounding budget: a reference that
 // names something unobserved. Uncited text is ordinary narration on a tool step,
@@ -68,18 +74,26 @@ type MidTurnNoteAudit struct {
 	Data        map[string]any
 	// Attempted reports that the text supplied a citation, valid or not.
 	Attempted bool
+	// CitationsRequired echoes the requirement this audit applied.
+	CitationsRequired bool
 }
 
 // AuditMidTurnNote validates every supplied reference, then decides whether
 // citations were required. Neither step reads the prose around a reference.
 func AuditMidTurnNote(in MidTurnNoteInput) MidTurnNoteAudit {
 	draft := ParseCloseoutDraft(in.Text, DraftParseOptions(in.Roots, in.Evidence.Ledger))
-	audit := MidTurnNoteAudit{Attempted: midTurnCitationCount(draft.Parsed) > 0 || len(draft.Issues) > 0}
+	audit := MidTurnNoteAudit{Attempted: midTurnCitationCount(draft.Parsed) > 0 || len(draft.Issues) > 0, CitationsRequired: in.CitationsRequired}
+	if IsBareJSONResponse(in.Text) {
+		return audit.withhold(MidTurnNoteSyntaxCode, OffenderHintData([]string{bareJSONOffender}))
+	}
 	if offenders := midTurnSyntaxOffenders(draft); len(offenders) > 0 {
 		return audit.withhold(MidTurnNoteSyntaxCode, OffenderHintData(offenders))
 	}
-	if embeds := midTurnEmbedIDs(draft.Parsed); len(embeds) > 0 {
+	if embeds := CloseoutMarkdownArtifactEmbedIDs(draft.Parsed); len(embeds) > 0 {
 		return audit.withhold(MidTurnNoteEmbedCode, OffenderHintData(embeds))
+	}
+	if sources := CloseoutUnobservedImageSources(draft.Parsed, in.Evidence.URLSeen); len(sources) > 0 {
+		return audit.withhold(MidTurnNoteImageCode, OffenderHintData(sources))
 	}
 	resolved := ResolveDraftCitations(in.Roots, in.SurfaceID, draft, in.Evidence, in.Presentable)
 	var unknownArtifacts, unresolved []string
@@ -117,7 +131,7 @@ func AuditMidTurnNote(in MidTurnNoteInput) MidTurnNoteAudit {
 		}, in.Evidence, CloseoutGroundingEval{})
 		return audit
 	}
-	audit.Grounding = &api.CitationGrounding{EvidenceOptional: true}
+	audit.Grounding = EvidenceOptionalGrounding(CoordinatorCompletionReport{Verification: draft.Verification})
 	return audit
 }
 
@@ -162,20 +176,6 @@ func midTurnSyntaxOffenders(draft CloseoutDraft) []string {
 	return offenders
 }
 
-// midTurnEmbedIDs finds bare artifact ids used as image sources. Only image and
-// HTML zones are searched, so a literal example in code stays allowed.
-func midTurnEmbedIDs(doc citationmd.Document) []string {
-	var ids []string
-	for _, zone := range doc.Zones {
-		switch zone.Kind {
-		case citationmd.ZoneImage, citationmd.ZoneRawHTML, citationmd.ZoneHTMLBlock:
-			ids = append(ids, CloseoutMarkdownArtifactEmbedIDs(doc.Source[zone.Span.Start:zone.Span.End])...)
-		case citationmd.ZoneFence, citationmd.ZoneIndented, citationmd.ZoneDefinition, citationmd.ZoneCodeSpan, citationmd.ZoneLink, citationmd.ZoneAutolink:
-		}
-	}
-	return ids
-}
-
 // midTurnStructuralOptions parse text with no ledger at hand: registered handle
 // kinds are attempts, as in the audit, and bare paths stay prose.
 func midTurnStructuralOptions() citationmd.Options {
@@ -194,17 +194,11 @@ func MidTurnTextAttemptsCitation(text string) bool {
 	return midTurnCitationCount(doc) > 0 || len(doc.Issues) > 0
 }
 
-// IntentWindowHasCitableObservations reads tool rows since the current user
-// intent: a minted handle, an accepted dispatch, or a command receipt.
+// IntentWindowHasCitableObservations reports whether a tool row since the current
+// user intent printed a handle the model can cite. Every command prints one.
 func IntentWindowHasCitableObservations(history []api.Message) bool {
 	for _, msg := range intentWindow(history) {
-		if msg.Role != api.MessageRoleTool {
-			continue
-		}
-		if len(msg.EvidenceHandles) > 0 {
-			return true
-		}
-		if msg.ToolResult != nil && (msg.ToolResult.Dispatch != nil || msg.ToolResult.CommandProgram != nil) {
+		if msg.Role == api.MessageRoleTool && len(msg.EvidenceHandles) > 0 {
 			return true
 		}
 	}
@@ -225,6 +219,24 @@ func IntentWindowHandles(history []api.Message, limit int) []string {
 
 func intentWindow(history []api.Message) []api.Message {
 	return history[api.UserIntentBoundary(history):]
+}
+
+// MidTurnEvidence unions the session and worker-leg ledgers, and reports whether a
+// leg dispatched since the current intent has observations. An error is not an
+// empty ledger: nothing can be decided about citations.
+func MidTurnEvidence(ctx context.Context, reader CloseoutEvidenceReader, sessionID string, history []api.Message) (CloseoutEvidence, bool, error) {
+	if reader == nil {
+		return CloseoutEvidence{}, false, errors.New("evidence ledger not configured")
+	}
+	ev, err := UnionCloseoutEvidence(ctx, reader, sessionID, history)
+	if err != nil {
+		return CloseoutEvidence{}, false, err
+	}
+	legs, err := CurrentIntentLegEvidence(ctx, reader, sessionID, history)
+	if err != nil {
+		return CloseoutEvidence{}, false, err
+	}
+	return ev, CloseoutLedgerHasCitableEvidence(legs), nil
 }
 
 // CurrentIntentLegEvidence is the evidence of worker legs dispatched since the

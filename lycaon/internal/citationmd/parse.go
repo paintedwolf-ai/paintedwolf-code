@@ -8,42 +8,46 @@ import (
 )
 
 var (
-	webScheme    = regexp.MustCompile(`(?i)^https?://`)
+	webScheme    = regexp.MustCompile(`(?i)^[ \t]*https?:`)
 	anyScheme    = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
-	lineFragment = regexp.MustCompile(`^L?([0-9]+)(?:-L?([0-9]+))?$`)
+	lineFragment = regexp.MustCompile(`^L([0-9]+)(?:-L?([0-9]+))?$`)
 )
 
+// isWebDestination takes any spelling a browser opens as HTTP(S), including one
+// with no slashes.
 func isWebDestination(dest string) bool { return webScheme.MatchString(dest) }
 
-// Parse reads source into ordered occurrences, literal zones and explicit
-// issues. Work is linear in source size except inside the structural parse, whose
-// costly shapes are bounded. A source past those bounds keeps a structured issue
-// and is scanned with coarse literal zones, so its display keeps the prose and
-// fence-like regions and loses only protocol nodes.
+// Parse reads source into ordered occurrences, literal zones and explicit issues.
+// Work is linear in source size except inside the structural parse, whose costly
+// shapes are refused first. A refused or over-budget source keeps a structured issue
+// and displays as one literal block; nothing is taken from it as a citation.
 func Parse(source string, opts Options) Document {
 	doc := Document{Source: source, Body: Span{0, len(source)}}
-	shape := structure{body: doc.Body}
+	var code IssueCode
+	var shape structure
 	switch {
 	case len(source) > opts.sourceBudget():
-		doc.Issues = append(doc.Issues, Issue{Code: IssueSourceBudget, Token: boundedToken(source)})
-		shape.zones = coarseLiteralZones(source)
+		code = IssueSourceBudget
 	case structureExceeded(source):
-		doc.Issues = append(doc.Issues, Issue{Code: IssueStructureBudget, Token: boundedToken(source)})
-		shape.zones = coarseLiteralZones(source)
+		code = IssueStructureBudget
 	default:
-		parsed := documentStructure(source)
-		if parsed.exhausted {
-			doc.Issues = append(doc.Issues, Issue{Code: IssueStructureBudget, Token: boundedToken(source)})
-			shape.zones = coarseLiteralZones(source)
-		} else {
-			shape = parsed
+		if shape = documentStructure(source); shape.exhausted {
+			code = IssueStructureBudget
 		}
 	}
+	if code != "" {
+		doc.Issues = append(doc.Issues, Issue{Code: code, Token: boundedToken(source)})
+		doc.overBudget = true
+		doc.Zones = []Zone{{Kind: ZoneEscapedDocument, Span: doc.Body}}
+		return doc
+	}
 	doc.Body = shape.body
+	doc.Images = shape.images
 	builder := &documentBuilder{doc: &doc, budget: opts.occurrenceBudget(), opts: opts}
 	machine := newNodeMachine(source, opts, builder)
 	machine.skipTo(doc.Body.Start)
-	scan := bodyScan{source: source, zones: shape.zones, links: shape.links, end: doc.Body.End, machine: machine, builder: builder}
+	builder.definitions = shape.definitions
+	scan := bodyScan{source: source, zones: shape.zones, links: shape.links, end: doc.Body.End, machine: machine, builder: builder, lastOpen: -1}
 	scan.run()
 	for machine.finish() {
 		scan.run()
@@ -55,14 +59,19 @@ func Parse(source string, opts Options) Document {
 // bodyScan offers the document's non-literal text to the machine, passing literal
 // zones and bare links.
 type bodyScan struct {
-	source  string
-	zones   []Zone
-	links   map[int]*Link
-	next    int
-	end     int
-	runEnd  int
-	machine *nodeMachine
-	builder *documentBuilder
+	source string
+	zones  []Zone
+	links  map[int]*Link
+	next   int
+	end    int
+	// runStart and runEnd bound the last measured run of URL bytes. A released
+	// bracket can move the scan back before it.
+	runStart int
+	runEnd   int
+	// lastOpen is the latest `[` still open on its line, or -1.
+	lastOpen int
+	machine  *nodeMachine
+	builder  *documentBuilder
 }
 
 func (s *bodyScan) run() {
@@ -79,8 +88,17 @@ func (s *bodyScan) run() {
 			s.enterZone(at)
 			continue
 		}
-		if m.idle() && !m.escaped && s.enterBareLink(at) {
+		if m.idle() && s.enterBareLink(at) {
 			continue
+		}
+		// Only idle text counts: a node attempt that is released is scanned again.
+		if m.idle() {
+			switch s.source[at] {
+			case '[':
+				s.lastOpen = at
+			case ']':
+				s.lastOpen = -1
+			}
 		}
 		m.feed(s.source[at])
 	}
@@ -88,19 +106,11 @@ func (s *bodyScan) run() {
 
 // urlTailEnd finds where a run of URL bytes ends, measuring each run only once.
 func (s *bodyScan) urlTailEnd(at int) int {
-	if at < s.runEnd {
-		return s.runEnd
+	if at < s.runStart || at >= s.runEnd {
+		s.runStart = at
+		s.runEnd = at + urlRunEnd(s.source[at:s.end])
 	}
-	end := at
-	for end < s.end && !isURLStop(s.source[end]) {
-		end++
-	}
-	s.runEnd = end
-	return end
-}
-
-func isURLStop(b byte) bool {
-	return b == '<' || b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f' || b == '\v'
+	return s.runEnd
 }
 
 func (s *bodyScan) enterZone(at int) {
@@ -114,15 +124,27 @@ func (s *bodyScan) enterZone(at int) {
 	s.machine.skipTo(zone.Span.End)
 }
 
-// enterBareLink takes a bare URL as an autolink zone. In a prose bracket such as
-// `[https://x]` the closing bracket is the bracket's, not the URL's.
+// enterBareLink takes a bare URL as an autolink zone. A `]` ending it closes a
+// surrounding bracket on the line rather than belonging to the URL. A URL past the
+// node cap is one rejected unit: validating a prefix would vouch for the whole.
 func (s *bodyScan) enterBareLink(at int) bool {
-	url := bareLinkAt(s.source[at:s.end], func() int { return s.urlTailEnd(at) - at })
+	run := bareLinkRun(s.source[at:s.end], func() int { return s.urlTailEnd(at) - at })
+	if run == 0 {
+		return false
+	}
+	if run > MaxInlineProtocolNodeBytes {
+		span := Span{at, at + run}
+		s.builder.damaged(Issue{Code: IssueNodeTooLong, Kind: KindWebLink, Span: span, Token: boundedToken(s.source[span.Start:span.End])})
+		s.machine.skipTo(span.End)
+		return true
+	}
+	url := backpedalURL(s.source[at : at+run])
 	if url == "" {
 		return false
 	}
-	if strings.HasSuffix(url, "]") && at > 0 && s.source[at-1] == '[' {
+	if strings.HasSuffix(url, "]") && s.lastOpen >= 0 && s.lastOpen < at && strings.IndexByte(s.source[s.lastOpen:at], '\n') < 0 {
 		url = url[:len(url)-1]
+		s.lastOpen = -1
 	}
 	span := Span{at, at + len(url)}
 	var link *Link
@@ -141,6 +163,9 @@ type documentBuilder struct {
 	budget  int
 	dropped int
 	verify  *Occurrence
+	// brokenLink marks the link in hand as one that raised an issue.
+	brokenLink  bool
+	definitions map[int]string
 }
 
 func (b *documentBuilder) damaged(issue Issue) {
@@ -157,6 +182,10 @@ func (b *documentBuilder) closed(token []byte, node parsedNode, start int) {
 	}
 	first := len(b.doc.Occurrences)
 	for _, member := range node.members {
+		b.canonicalize(member.citation)
+		if member.repair != nil {
+			b.canonicalize(member.repair.Citation)
+		}
 		occurrence := member.occurrence()
 		occurrence.Index, occurrence.Span, occurrence.Node = len(b.doc.Occurrences), span, span
 		if member.end > member.start {
@@ -171,6 +200,12 @@ func (b *documentBuilder) closed(token []byte, node parsedNode, start int) {
 		b.addIssue(Issue{Code: IssueMalformedCitation, Kind: KindCitation, Span: member, Token: boundedToken(b.doc.Source[member.Start:member.End])})
 	}
 	b.doc.parts = append(b.doc.parts, part{kind: partNode, span: span, first: first, count: len(node.members)})
+}
+
+func (b *documentBuilder) canonicalize(c *Citation) {
+	if c != nil && c.Path != "" && b.opts.CanonicalPath != nil {
+		c.Path = b.opts.CanonicalPath(c.Path)
+	}
 }
 
 // addIssue records a defect up to the budget; past it, the count is what reports.
@@ -199,43 +234,34 @@ func (b *documentBuilder) checkVerification(o Occurrence) {
 
 func (b *documentBuilder) addZone(zone Zone, link *Link) {
 	b.doc.Zones = append(b.doc.Zones, zone)
-	if zone.Kind == ZoneRawHTML || zone.Kind == ZoneHTMLBlock {
-		b.addRawZone(zone)
+	if zone.Kind == ZoneCodeSpan && b.addCodeCitation(zone) {
 		return
 	}
-	kind := partLiteral
-	first, count := 0, 0
+	entry := part{kind: literalPartKind(zone.Kind), span: zone.Span, definition: b.definitions[zone.Span.Start]}
 	if link != nil {
-		kind = partLink
+		entry.kind = partLink
+		entry.link = link
+		b.brokenLink = false
 		if occurrence, ok := b.linkOccurrence(zone, link); ok {
-			first, count = len(b.doc.Occurrences), 1
-			occurrence.Index = first
+			entry.first, entry.count = len(b.doc.Occurrences), 1
+			occurrence.Index = entry.first
 			b.doc.Occurrences = append(b.doc.Occurrences, occurrence)
 		}
+		entry.broken = b.brokenLink
 	}
-	b.doc.parts = append(b.doc.parts, part{kind: kind, span: zone.Span, first: first, count: count})
+	b.doc.parts = append(b.doc.parts, entry)
 }
 
-// addRawZone splits raw HTML around anchors that render live links, so that each
-// is validated like any other link and the rest stays literal.
-func (b *documentBuilder) addRawZone(zone Zone) {
-	at := zone.Span.Start
-	for _, tag := range htmlAnchors(b.doc.Source, zone.Span) {
-		if tag.Start > at {
-			b.doc.parts = append(b.doc.parts, part{kind: partLiteral, span: Span{at, tag.Start}})
-		}
-		at = tag.End
-		link := &Link{Form: LinkRawHTML, LabelSpan: Span{tag.End, tag.End}, Destination: htmlAnchorHref(b.doc.Source[tag.Start:tag.End])}
-		first, count := 0, 0
-		if occurrence, ok := b.linkOccurrence(Zone{Kind: zone.Kind, Span: tag}, link); ok {
-			first, count = len(b.doc.Occurrences), 1
-			occurrence.Index = first
-			b.doc.Occurrences = append(b.doc.Occurrences, occurrence)
-		}
-		b.doc.parts = append(b.doc.parts, part{kind: partLink, span: tag, first: first, count: count})
-	}
-	if at < zone.Span.End {
-		b.doc.parts = append(b.doc.parts, part{kind: partLiteral, span: Span{at, zone.Span.End}})
+// literalPartKind separates code, which stays byte for byte, from raw HTML, which
+// the display still has to neutralize.
+func literalPartKind(kind ZoneKind) partKind {
+	switch kind {
+	case ZoneRawHTML:
+		return partRawHTML
+	case ZoneHTMLBlock:
+		return partHTMLBlock
+	default:
+		return partLiteral
 	}
 }
 
@@ -278,6 +304,7 @@ func (b *documentBuilder) linkOccurrence(zone Zone, link *Link) (Occurrence, boo
 
 func (b *documentBuilder) linkIssue(code IssueCode, zone Zone, token string) {
 	b.addIssue(Issue{Code: code, Kind: KindWorkspaceLink, Span: zone.Span, Token: boundedToken(token)})
+	b.brokenLink = true
 }
 
 // workspaceCitation reads a destination's path and coordinates. An unencoded `#`
@@ -336,5 +363,6 @@ func sourceCitation(dest string, opts Options) (*Citation, IssueCode) {
 func (b *documentBuilder) finishBudget() {
 	if b.dropped > 0 {
 		b.doc.Issues = append(b.doc.Issues, Issue{Code: IssueOccurrenceBudget, Token: strconv.Itoa(b.dropped)})
+		b.doc.overBudget = true
 	}
 }

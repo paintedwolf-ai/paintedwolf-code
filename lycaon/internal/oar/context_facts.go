@@ -1,24 +1,29 @@
 package oar
 
-import "sync"
+import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"sync"
+)
 
 type InvocationFacts struct {
-	Tool                  string
-	ToolArgs              map[string]any
-	ToolArgsFingerprint   string
-	ToolAllowedForProfile bool
-	PatternParseOK        bool
-	ArgValidationErrors   []string
-	ArgValidationReason   string
-	ArgValidationField    string
-	ToolIsState           bool
-	ToolIsDelegation      bool
-	ToolIsTask            bool
-	ToolPayloadChunkable  bool
-	ToolIsHandoff         bool
-	PackRunnerTask        bool
-	CommandNotArgv        bool
-	HTTPRequestWebPage    bool
+	CapabilityContract              *toolcontract.ToolCapabilitySnapshot
+	Tool                            string
+	ToolArgs                        map[string]any
+	ToolArgsFingerprint             string
+	ToolAllowedForProfile           bool
+	PatternParseOK                  bool
+	ArgValidationErrors             []string
+	ArgValidationReason             string
+	ArgValidationField              string
+	ToolIsState                     bool
+	ToolIsDelegation                bool
+	ToolIsTask                      bool
+	ToolPayloadChunkable            bool
+	ToolIsHandoff                   bool
+	PackRunnerTask                  bool
+	CommandNotArgv                  bool
+	HTTPRequestWebPage              bool
+	HTTPRequestLoopbackOtherSession bool
 }
 
 type SessionFacts struct {
@@ -26,6 +31,9 @@ type SessionFacts struct {
 	ToolTurnHasAgentNote bool
 	// UnpublishedToolTextPending holds a carrier's text with no later note this intent.
 	UnpublishedToolTextPending bool
+	// MidTurnEvidenceUnreadable means the host failed to read evidence, so pending
+	// text was never judged and no citation of its is at fault.
+	MidTurnEvidenceUnreadable bool
 	// MidTurnCitationsRequired holds once this intent has citable observations.
 	MidTurnCitationsRequired bool
 	// MidTurnCitationAttempted holds when the latest unpublished text tried to cite.
@@ -60,7 +68,8 @@ type ProgressFacts struct {
 	ProgressMissing              bool
 	ProgressClosedBeyondBaseline bool
 	ProgressReconciledSinceArm   bool
-	HasCompletionReport          bool
+	CloseoutHasAnswer            bool
+	CloseoutOnlyRepairDirectives bool
 	TaskEnvelopeEcho             bool
 	VerifyRequired               bool
 	VerifierPass                 bool
@@ -150,18 +159,19 @@ type ExecutionFacts struct {
 }
 
 type RefusalsFacts struct {
-	RefusedWritePaths         []string
-	RefusedWriteGrants        []string
-	RefusedReadPaths          []string
-	RefusedReadGrants         []string
-	RefusedTerminalReadPaths  []string
-	RefusedTerminalWritePaths []string
-	SandboxRefusalWitness     string
-	RefusedSocketPaths        []string
-	RefusedConnectPorts       []string
-	RefusedListenPorts        []string
-	RefusedSignals            []string
-	UnsandboxedRefusals       []string
+	RefusedWritePaths           []string
+	RefusedWriteGrants          []string
+	RefusedReadPaths            []string
+	RefusedReadGrants           []string
+	RefusedCredentialStorePaths []string
+	RefusedTerminalReadPaths    []string
+	RefusedTerminalWritePaths   []string
+	SandboxRefusalWitness       string
+	RefusedSocketPaths          []string
+	RefusedConnectPorts         []string
+	RefusedListenPorts          []string
+	RefusedSignals              []string
+	UnsandboxedRefusals         []string
 }
 
 type SourceFacts struct {
@@ -169,6 +179,7 @@ type SourceFacts struct {
 	WorktreeLeftoverPaths     []string
 	WorktreeConflictPaths     []string
 	EditorConfigMismatch      bool
+	GitNoRepositoryOnWriteLeg bool
 	SourceAnalysisUnavailable bool
 	SyntaxCheckOverridden     bool
 	SourceIncludes            map[string]bool

@@ -8,8 +8,9 @@ import (
 
 func publicVocabularyFixture() treeRelease {
 	return treeRelease{
-		packsRoot + "/painted-wolf/platform/tools/native-tools.yaml":         []byte("native:\n  files: [read]\nhost_produced_tools: [observe]\nruntime_registered_prefixes: [mcp_]\n"),
-		"schemas/workflow_vocabulary.json":                                   []byte(`{"entries":[{"id":"complete","layer":"core","domain":"workflow","parameterized":false}]}`),
+		packsRoot + "/painted-wolf/platform/tools/native-tools.yaml": []byte("native:\n  files: [read, copy]\nhost_produced_tools: [observe]\nruntime_registered_prefixes: [mcp_]\n"),
+		dispositionsPath:                   []byte(`{"tools":[{"tool":"copy","disposition":"replace-routine-schema"},{"tool":"read","disposition":"retain-domain-structured"}]}`),
+		"schemas/workflow_vocabulary.json": []byte(`{"entries":[{"id":"complete","layer":"core","domain":"workflow","parameterized":false}]}`),
 		packsRoot + "/painted-wolf/platform/host/anchors/catalog.yaml":       []byte("schema_version: '2.0'\nanchors:\n  - id: gate.blocked\n"),
 		packsRoot + "/painted-wolf/themes/contributions/themes/example.yaml": []byte("id: painted-wolf/themes:example\n"),
 		packsRoot + "/painted-wolf/platform/tools/schemas/extra.yaml":        []byte("schema: {}\n"),
@@ -20,6 +21,9 @@ func TestPublicVocabularyUsesCatalogIdentities(t *testing.T) {
 	source := publicVocabularyFixture()
 	vocabulary, err := publicVocabularies(source)
 	testutil.FailErr(t, "read public vocabulary", err)
+	if _, ok := vocabulary["tools"]["copy"]; ok {
+		t.Error("command-only operation remained in public tool vocabulary")
+	}
 	for kind, names := range map[string][]string{"tools": {"read", "observe", "mcp_*", "extra"}, "anchors": {"gate.blocked"}, "themes": {"painted-wolf/themes:example"}, "workflow_terms": {"complete"}} {
 		for _, name := range names {
 			if _, ok := vocabulary[kind][name]; !ok {
@@ -31,11 +35,11 @@ func TestPublicVocabularyUsesCatalogIdentities(t *testing.T) {
 			after[name] = signature
 		}
 		delete(after, names[0])
-		if err := checkVocabulary(kind, vocabulary[kind], after, map[string][]string{}); err == nil {
+		if err := checkVocabulary(kind, vocabulary[kind], after, map[string]retirementSuccessors{}); err == nil {
 			t.Errorf("%s removal passed", kind)
 		}
 	}
-	for _, file := range []string{"schemas/workflow_vocabulary.json", packsRoot + "/painted-wolf/platform/host/anchors/catalog.yaml", packsRoot + "/painted-wolf/platform/tools/native-tools.yaml", packsRoot + "/painted-wolf/themes/contributions/themes/example.yaml"} {
+	for _, file := range []string{"schemas/workflow_vocabulary.json", packsRoot + "/painted-wolf/platform/host/anchors/catalog.yaml", packsRoot + "/painted-wolf/platform/tools/native-tools.yaml", dispositionsPath, packsRoot + "/painted-wolf/themes/contributions/themes/example.yaml"} {
 		raw := source[file]
 		source[file] = []byte("invalid")
 		if _, err := publicVocabularies(source); err == nil {

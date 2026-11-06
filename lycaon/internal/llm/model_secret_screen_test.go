@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"testing"
 
@@ -55,9 +56,7 @@ func TestModelSecretScreenRedactsEphemeralRequestWithProvenance(t *testing.T) {
 	original := modelSecretRequest()
 	got, err := screen.Screen(context.Background(), ScreenDestination{ID: "fireworks-main", Label: "Fireworks"}, original)
 	testutil.FailErr(t, "screen redacted request", err)
-	if strings.Contains(got.Messages[0].Content, modelScreenGitHubToken) {
-		t.Fatal("redacted request retained token")
-	}
+	exposure.Absent(t, got.Messages[0].Content, modelScreenGitHubToken)
 	if !strings.Contains(got.Messages[0].Content, "[REDACTED]") {
 		t.Fatalf("redacted content = %q", got.Messages[0].Content)
 	}
@@ -411,12 +410,10 @@ func TestModelSecretScreenScansToolArgumentsAndDefinitions(t *testing.T) {
 	if occurrences != 2 {
 		t.Fatalf("occurrences = %d want 2", occurrences)
 	}
-	if strings.Contains(strings.Join([]string{
+	exposure.Absent(t, strings.Join([]string{
 		got.Messages[0].ToolCalls[0].Args["env"].([]any)[0].(string),
 		got.Tools[0].ArgsSchema["description"].(string),
-	}, " "), modelScreenGitHubToken) {
-		t.Fatal("nested request fields retained token")
-	}
+	}, " "), modelScreenGitHubToken)
 }
 
 // Replayed reasoning passes through the outbound screen.
@@ -526,9 +523,7 @@ func TestModelSecretScreenInspectsEveryFieldItWouldRedact(t *testing.T) {
 			}
 			raw, err := json.Marshal(got)
 			testutil.FailErr(t, "marshal screened request", err)
-			if strings.Contains(string(raw), modelScreenGitHubToken) {
-				t.Fatalf("provider-bound request retained the token: %s", raw)
-			}
+			exposure.Absent(t, string(raw), modelScreenGitHubToken)
 		})
 	}
 }
@@ -667,9 +662,7 @@ func TestRedactMessageForStorageCoversWorkflowAndCheckpointProjections(t *testin
 	}
 	raw, err := json.Marshal(stored)
 	testutil.FailErr(t, "marshal screened message", err)
-	if strings.Contains(string(raw), secret) {
-		t.Fatalf("structured message retained secret: %s", raw)
-	}
+	exposure.Absent(t, string(raw), secret)
 	if original.ToolResult.OverlayPromotion.Files[0].After != "after "+secret {
 		t.Fatal("storage redaction mutated promotion snapshots")
 	}

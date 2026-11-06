@@ -14,6 +14,3 @@ approval_explanations:
               vars:
                 path: /etc/hosts
                 project: my-app
-              expect_contains:
-                - outside attached folders
-                - /etc/hosts

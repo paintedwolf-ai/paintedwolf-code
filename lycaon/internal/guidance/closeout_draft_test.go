@@ -148,7 +148,7 @@ func TestDraftResolvesObservedIdentity(t *testing.T) {
 func TestDraftSingleSegmentNeedsLedgerMatch(t *testing.T) {
 	t.Parallel()
 	ev := ledgerOf(readMessages("LICENSE", lineTexts(1, 3)))
-	if got := resolveMarkdown("See [sic] and [draft] and `LICENSE:2`.", evidence.CitationRoots{}, ev); len(got.Occurrences) != 0 || len(got.Issues) != 0 {
+	if got := resolveMarkdown("See [sic] and [draft] and `LICENSE:9`.", evidence.CitationRoots{}, ev); len(got.Occurrences) != 0 || len(got.Issues) != 0 {
 		t.Fatalf("prose yielded %+v", got)
 	}
 	got := onlyOutcome(t, "[LICENSE]", evidence.CitationRoots{}, ev)
@@ -173,6 +173,9 @@ func TestDraftWebLinks(t *testing.T) {
 		got := onlyOutcome(t, source, evidence.CitationRoots{}, ev)
 		if got.Outcome != guidance.CitationNotObserved || got.Code != guidance.SynthURLNotObservedCode || got.Offender != "https://example.test/other" {
 			t.Fatalf("%s = %+v", source, got)
+		}
+		if ev.URLSeen("https://example.test/other") {
+			t.Fatalf("%s: resolving an unobserved link made it observed", source)
 		}
 	}
 	investigate := guidance.ResolveDraftCitations(evidence.CitationRoots{}, "implement_investigate",
@@ -298,6 +301,16 @@ func TestDraftValidatesEveryOccurrence(t *testing.T) {
 		if occurrence.OccurrenceIndex != i {
 			t.Fatalf("occurrence %d has index %d", i, occurrence.OccurrenceIndex)
 		}
+		want := guidance.CitationGrounded
+		if i == 30 {
+			want = guidance.CitationUnverifiable
+		}
+		if occurrence.Outcome != want {
+			t.Fatalf("occurrence %d (%s) = %s, want %s", i, draft.Occurrences[i].Token, occurrence.Outcome, want)
+		}
+	}
+	if rejected := got.Rejected(); len(rejected) != 1 || rejected[0].OccurrenceIndex != 30 || rejected[0].Offender != "a.go:99" {
+		t.Fatalf("rejected = %+v", rejected)
 	}
 	if draft.Occurrences[32].RepairID != "c33" || draft.Occurrences[32].Owner != guidance.DraftFieldSynthesis {
 		t.Fatalf("identity = %+v", draft.Occurrences[32])

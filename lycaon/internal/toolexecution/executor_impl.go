@@ -9,9 +9,12 @@ import (
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -30,6 +33,15 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 	defer func() { tc.Effects.Secrets.Finish(ctx) }()
 	// Exits render their own rejects; this is the backstop for one that does not.
 	defer func() {
+		if err != nil && !errors.Is(err, context.Canceled) && toolrejection.AsToolReject(err) == nil {
+			var socketErr *confine.SocketResolveError
+			if errors.As(err, &socketErr) || errors.Is(err, socketref.ErrUnbound) && len(tc.Socket.SocketGrants) > 0 {
+				if socketErr == nil {
+					socketErr = &confine.SocketResolveError{Code: confine.SocketResolveChanged, Err: err}
+				}
+				err = e.Rejections.settleReject(ctx, qualifiedName, tc.Identity.Agent, args, capabilityrequest.SocketResolveReject(socketErr))
+			}
+		}
 		err = e.Rejections.renderUnrenderedReject(qualifiedName, err)
 		if tc.Effects.Out != nil && strings.HasPrefix(qualifiedName, "mcp_") {
 			tc.Effects.Out.Facts.ProviderErrorCode = oar.MCPMachineErrorCode(err)
@@ -43,12 +55,20 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		profileID = e.defaultProfile
 	}
 	tc.Identity.Agent = profileID
+	contract := tc.Invocation.Contract
+	if contract.Owner == "" {
+		if definition, ok := e.definitionFor(qualifiedName); ok {
+			contract = definition.Contract
+		}
+	}
+	tc.Invocation.Contract = contract
+	ctx = tools.WithRecoveryContract(ctx, qualifiedName, contract)
 	ctx = invocationContext(ctx, tc)
 	if retained, entry := e.programEntries[qualifiedName]; entry && (retained == nil || !retained(args)) {
 		return e.invokeProgramEntry(ctx, qualifiedName, profileID, args, tc)
 	}
 	if reject := e.validateInvocation(ctx, qualifiedName, profileID, args, &tc); reject != nil {
-		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
+		ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
 	if reject := admitCredentialFiles(ctx, qualifiedName, tc); reject != nil {
@@ -132,13 +152,18 @@ func (e *Executor) validateInvocation(
 	args map[string]any,
 	tc *tools.ToolContext,
 ) *toolrejection.ToolReject {
+	if _, registered := e.definitionFor(qualifiedName); !registered {
+		if reject := tools.CommandOperationReject(qualifiedName); reject != nil {
+			return reject
+		}
+	}
 	if reject := tools.ValidateCallArguments(qualifiedName, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName), *tc); reject != nil {
 		return reject
 	}
 	if reject := toolcommand.ArgvShapeReject(qualifiedName, args); reject != nil {
 		return reject
 	}
-	if qualifiedName == "command" || qualifiedName == "verify" {
+	if qualifiedName == "command" {
 		_, parseErr := commandsurface.ParsePlan(args)
 		if reject := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, commandsurface.PrimaryCommandLine(args, nil), args, toolschema.ArgFieldPaths(e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName)), parseErr); reject != nil {
 			return reject
@@ -160,7 +185,7 @@ func (e *Executor) validateInvocation(
 		}
 		tc.Invocation.Contract = def.Contract
 	}
-	if reject := capabilityrequest.ValidateCapabilityContract(tc.Invocation.Contract, args); reject != nil {
+	if reject := capabilityrequest.ValidateCapabilityContract(qualifiedName, tc.Invocation.Contract, args); reject != nil {
 		return reject
 	}
 	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)
@@ -209,7 +234,7 @@ func (e *Executor) ensureWorkerBranchIfNeeded(ctx context.Context, tool string, 
 // child then passes the full per-operation boundary through InvokeNative.
 func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID string, args map[string]any, tc tools.ToolContext) (string, error) {
 	if reject := tools.ValidateCallArguments(tool, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, tool), tc); reject != nil {
-		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
+		ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
 		return "", e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 	}
 	if reject := admitCredentialFiles(ctx, tool, tc); reject != nil {
@@ -220,10 +245,47 @@ func (e *Executor) invokeProgramEntry(ctx context.Context, tool, profileID strin
 			tc.Invocation.Contract = def.Contract
 		}
 	}
+	if err := e.admitProgramEntryProfile(ctx, tool, profileID, args, tc); err != nil {
+		return "", err
+	}
+	var err error
+	tc, err = e.prepareWorkerBranch(ctx, tool, profileID, args, tc)
+	if err != nil {
+		return "", err
+	}
 	tc.Files.FileChangeReview = e.Boundary.fileChangeReviewer(tool, args, tc)
 	out, err := e.Metadata.registry.Run(ctx, tool, args, tc)
 	if tr := toolrejection.AsToolReject(err); tr != nil {
 		return out, e.Rejections.settleReject(ctx, tool, profileID, args, toolrejection.CompleteFailureMetadata(tr, tool, tc.Invocation.Contract.Owner))
 	}
 	return out, err
+}
+
+func (e *Executor) admitProgramEntryProfile(ctx context.Context, tool, profileID string, args map[string]any, tc tools.ToolContext) error {
+	if e == nil || e.Metadata == nil || e.Metadata.policy == nil {
+		return nil
+	}
+	policyEval := platform.PolicyContext{
+		ProfileID:  profileID,
+		ToolAccess: tc.Turn.ToolAccess,
+		ToolName:   tool,
+		ToolArgs:   args,
+	}
+	var (
+		decision *platform.PolicyDecision
+		err      error
+	)
+	if approvalPolicy, ok := e.Metadata.policy.(*ApprovalPolicyEngine); ok {
+		decision, err = approvalPolicy.EvaluateForList(ctx, policyEval)
+	} else {
+		decision, err = e.Metadata.policy.Evaluate(ctx, policyEval)
+	}
+	if err != nil {
+		return err
+	}
+	if decision != nil && decision.Blocked {
+		e.Approvals.recordToolDenied(ctx, policyEval, decision, decision.Approval)
+		return e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, toolprofiles.PolicyBlockReject(decision, tool, profileID))
+	}
+	return nil
 }

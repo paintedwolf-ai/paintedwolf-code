@@ -161,7 +161,8 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 		"pkill": pkillBuiltin(jobs, commands["pkill"]),
 		"wait": jobBuiltin(func(ctx context.Context, request commandprogram.OperationRequest, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			handles := request.Argv.Values()[1:]
-			if len(handles) == 0 {
+			named := len(handles) > 0
+			if !named {
 				var err error
 				handles, err = jobs.Unwaited(ctx)
 				if err != nil {
@@ -185,7 +186,11 @@ func jobBuiltins(jobs *SessionJobs, commands map[string]toolcontract.CommandSpec
 					}
 					return ownerFailure(err), err
 				}
-				last = toolcontract.ProducerResult{Status: result.Status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: result.Status == 0, EffectCertainty: toolcontract.NoEffect}
+				// Only a named job's status is reported; a bare wait is status 0
+				// unless a job's refusal or host failure returned above.
+				if named {
+					last = toolcontract.ProducerResult{Status: result.Status, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: result.Status == 0, EffectCertainty: toolcontract.NoEffect}
+				}
 			}
 			return last, nil
 		}),

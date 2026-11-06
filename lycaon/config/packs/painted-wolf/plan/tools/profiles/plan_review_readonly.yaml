@@ -2,14 +2,16 @@ id: plan_review_readonly
 description: Read-only plan review — command in read-only mode on plan paths
 command_effects: [read_only]
 tools:
+  summarize: sticky
   command: sticky
+  command_output: sticky
+  command_stop: sticky
   complete_leg: sticky
   recall: sticky
   record_finding: sticky
   pack_board: sticky
   request_decision: sticky
   request_budget: sticky
-  summarize: sticky
   source_history: sticky
   skills_read: sticky
   wait: sticky

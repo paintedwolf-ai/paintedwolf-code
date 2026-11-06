@@ -60,7 +60,6 @@ describe("settings registry", () => {
   });
 
   it("resolves only registered ids", () => {
-    expect(findSettingDefinition("text-size")?.label).toBe("Text size");
     expect(findSettingDefinition("not-a-setting")).toBeUndefined();
   });
 

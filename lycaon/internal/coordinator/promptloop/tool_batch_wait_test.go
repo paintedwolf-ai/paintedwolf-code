@@ -53,14 +53,12 @@ func TestSanitizeToolCallsForExecutionPreservesRepeatableStatefulCalls(t *testin
 
 func TestWaitVisibilityAtBatchBoundary(t *testing.T) {
 	for _, tc := range []struct {
-		name, text           string
-		note, failNote, park bool
+		name, text string
+		note, park bool
 	}{
-		{"hidden answer", "The build is still running", false, false, false},
-		{"silent wait", "", false, false, true},
-		{"note and wait", "", true, false, true},
-		{"note covers text", "The build is still running", true, false, true},
-		{"rejected note", "The build is still running", true, true, false},
+		{"hidden answer", "The build is still running", false, false},
+		{"silent wait", "", false, true},
+		{"note covers text", "The build is still running", true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := tools.NewStubRegistry()
@@ -69,13 +67,6 @@ func TestWaitVisibilityAtBatchBoundary(t *testing.T) {
 				waitRuns++
 				ctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked", ResourceKind: "wait"}
 				return `{"status":"sleeping"}`, nil
-			}))
-			testutil.FailErr(t, "register note", reg.Register("surface_note", func(_ context.Context, _ map[string]any, ctx tools.ToolContext) (string, error) {
-				if tc.failNote {
-					return "", guidance.NewRefusal("TEST_NOTE_REJECTED", "")
-				}
-				ctx.Effects.Out.AgentNote = &tools.AgentNoteCapture{MessageID: "note-1", Content: "Build running", Grounding: &api.CitationGrounding{Traced: true}}
-				return `{"status":"noted"}`, nil
 			}))
 			loop := NewPromptLoopForTest(PromptLoopDeps{
 				Context:    ContextDeps{Tools: reg},
@@ -89,15 +80,16 @@ func TestWaitVisibilityAtBatchBoundary(t *testing.T) {
 					return "", false, nil
 				}},
 			})
-			// Deliberately request wait first; execution must commit the note first.
 			calls := []api.ToolCall{{ID: "wait-1", Name: "wait", Args: map[string]any{"timeout_ms": 60000}}}
-			if tc.note {
-				calls = append(calls, api.ToolCall{ID: "note-1", Name: "surface_note", Args: map[string]any{"summary": "Build running"}})
-			}
 			sess := &api.Session{ID: "coordinator", Posture: api.SessionPostureBuild}
 			history := []api.Message{{ID: "assistant-1", Role: api.MessageRoleAssistant, Content: tc.text, ToolCalls: calls}}
-			history, _, _, _, _, parked, err := loop.Batch.executeToolCallsInTurn(context.Background(), sess, sess.ID, calls,
+			if tc.note {
+				history = append(history, api.Message{ID: api.MidTurnNoteID("assistant-1"), Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote, Content: tc.text})
+			}
+			batchResult, err := loop.Batch.executeToolCallsInTurn(context.Background(), sess, sess.ID, calls,
 				tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID, Agent: "coordinator"}}, history, "investigate", "assistant-1", "", nil)
+			history = batchResult.history
+			parked := batchResult.breakToolLoop
 			testutil.FailErr(t, "execute wait batch", err)
 			if parked != tc.park || (waitRuns == 1) != tc.park {
 				t.Fatalf("parked=%v, wait invocations=%d, want park=%v", parked, waitRuns, tc.park)
@@ -159,7 +151,7 @@ type midTurnHarness struct {
 }
 
 // newMidTurnHarness runs real publication and the real wait observation. Its
-// wait refusal stands in for OAR, which TestWaitHiddenTextPolicy covers.
+// wait refusal stands in for OAR, which TestBeforeWaitReadsSurfaceAndDurableNotes covers.
 func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 	t.Helper()
 	h := &midTurnHarness{ledger: &midTurnLedgerStub{}, sess: &api.Session{ID: "coordinator", Posture: api.SessionPostureBuild}}
@@ -199,26 +191,27 @@ func newMidTurnHarness(t *testing.T, surfaceID string) *midTurnHarness {
 		}},
 		Closeout: CloseoutDeps{
 			EvidenceLedger: h.ledger,
-			RecordGroundingFriction: func(context.Context, string) guidance.GroundingFriction {
+
+			EvaluateMidTurnNote: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) error {
+				h.notices = append(h.notices, gc.Rejection.RejectObservation)
+				return nil
+			}, CloseoutTrackingDeps: CloseoutTrackingDeps{RecordGroundingFriction: func(context.Context, string) guidance.GroundingFriction {
 				h.friction++
 				if h.budget != nil {
 					return h.budget.RecordGroundingFriction(context.Background(), h.sess.ID)
 				}
 				return guidance.GroundingFriction{Remaining: 3}
 			},
-			EvaluateMidTurnNote: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) error {
-				h.notices = append(h.notices, gc.Rejection.RejectObservation)
-				return nil
-			},
-			RenderHostKick: func(_ context.Context, id string, data map[string]any) (string, error) {
-				h.kick = id
-				workers, _ := data["workers"].([]guidance.MidTurnWorkerFact)
-				parts := []string{"Worker status from the host:"}
-				for _, worker := range workers {
-					parts = append(parts, worker.AgentType+": "+worker.Status)
-				}
-				return strings.Join(parts, "\n"), nil
-			},
+
+				RenderHostKick: func(_ context.Context, id string, data map[string]any) (string, error) {
+					h.kick = id
+					workers, _ := data["workers"].([]guidance.MidTurnWorkerFact)
+					parts := []string{"Worker status from the host:"}
+					for _, worker := range workers {
+						parts = append(parts, worker.AgentType+": "+worker.Status)
+					}
+					return strings.Join(parts, "\n"), nil
+				}},
 		},
 		Tools: ToolsDeps{
 			BeforeToolRun: func(_ context.Context, sess *api.Session, history []api.Message, _, tool string, _ map[string]any) (string, bool, error) {
@@ -251,10 +244,10 @@ func (h *midTurnHarness) respond(t *testing.T, history []api.Message, surfaceID,
 		toolCalls = append(toolCalls, api.ToolCall{ID: id + "-" + string(rune('a'+i)), Name: name, Args: map[string]any{"timeout_ms": 60000, "path": "a.go"}})
 	}
 	history = append(history, api.Message{ID: id, Role: api.MessageRoleAssistant, Content: text, ToolCalls: toolCalls})
-	out, _, _, _, _, parked, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, toolCalls,
+	batch, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, toolCalls,
 		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID, Agent: "coordinator"}}, history, "go", id, surfaceID, midTurnState(t, surfaceID))
 	testutil.FailErr(t, "execute batch", err)
-	return out, parked
+	return batch.history, batch.breakToolLoop
 }
 
 // midTurnState carries the tool plan a coordinator turn compiles for its surface.
@@ -441,6 +434,25 @@ func TestPublicationPrecedesToolsAndToolsAlwaysRun(t *testing.T) {
 	}
 }
 
+// AC-MID-02, MC-INV-07: a response cannot cite the dispatch its own call has not
+// made. The text is withheld and charged, and the dispatch still runs.
+func TestPendingDispatchCannotBeCitedBesideItsOwnCall(t *testing.T) {
+	h := newMidTurnHarness(t, publishingSurface)
+	out, _ := h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "Started [task#1].", "task")
+	if strings.Join(h.order, ",") != "task" {
+		t.Fatalf("order = %v, want the dispatch alone", h.order)
+	}
+	if _, ok := noteFor(out, "c1"); ok {
+		t.Fatal("a predicted handle published")
+	}
+	if len(h.notices) != 1 || h.notices[0] != strings.ToLower(guidance.MidTurnNoteHandleUngroundCode) || h.friction != 1 {
+		t.Fatalf("notices = %v, friction = %d", h.notices, h.friction)
+	}
+	if !guard.DeriveWaitVisibility(out).Unpublished {
+		t.Fatal("withheld text left no debt")
+	}
+}
+
 // AC-MID-14, AC-MID-19: private text is neither published nor owed.
 func TestPrivateTextPublishesNothingAndOwesNothing(t *testing.T) {
 	for _, tc := range []struct {
@@ -480,12 +492,12 @@ func TestNoteStorageOutcomes(t *testing.T) {
 			return nil
 		}
 		history := []api.Message{midTurnUser(), {ID: "c1", Role: api.MessageRoleAssistant, Content: "Starting.", ToolCalls: []api.ToolCall{{ID: "e", Name: "recall"}}}}
-		out, _, _, _, _, _, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, history[1].ToolCalls,
+		out, err := h.loop.Batch.executeToolCallsInTurn(context.Background(), h.sess, h.sess.ID, history[1].ToolCalls,
 			tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: h.sess.ID}}, history, "go", "c1", publishingSurface, midTurnState(t, publishingSurface))
 		if !errors.Is(err, boom) || len(h.order) != 0 {
 			t.Fatalf("err=%v order=%v", err, h.order)
 		}
-		if _, ok := noteFor(out, "c1"); ok || !guard.DeriveWaitVisibility(out).Unpublished {
+		if _, ok := noteFor(out.history, "c1"); ok || !guard.DeriveWaitVisibility(out.history).Unpublished {
 			t.Fatal("a failed commit must stay unpublished")
 		}
 	})
@@ -541,6 +553,9 @@ func TestUnreadableLedgerNeverPublishesAsExempt(t *testing.T) {
 			if !guard.DeriveWaitVisibility(out).Unpublished {
 				t.Fatal("unpublished text must be owed")
 			}
+			if len(h.notices) != 1 || h.notices[0] != guidance.MidTurnObservation(guidance.MidTurnNoteEvidenceUnreadable) {
+				t.Fatalf("a host read failure must say so: %v", h.notices)
+			}
 		})
 	}
 }
@@ -567,27 +582,46 @@ func TestExhaustedRepairWithoutFactsPermitsSilentWait(t *testing.T) {
 	}
 }
 
-// A note goes through the same storage screen as every row: what lands on disk
-// is the redacted revision, and the carrier's text is what was audited.
-func TestPublishedNoteUsesTheStorageSafeRevision(t *testing.T) {
-	h := newMidTurnHarness(t, publishingSurface)
-	h.loop.Projection.Deps.RedactMessageForStorage = func(_ context.Context, msg api.Message) (api.Message, bool) {
-		if !api.IsAgentNoteMessage(msg) {
-			return msg, false
-		}
-		msg.Content = strings.ReplaceAll(msg.Content, "s3cret", "[redacted]")
-		return msg, true
+// Decision 004: the audit parses the screened revision, the bytes that publish.
+// History can hold the raw overlay of a redacted carrier, so redaction may shift
+// spans or change a token after the raw text would have validated.
+func TestMidTurnAuditParsesTheScreenedRevision(t *testing.T) {
+	observed := []api.Message{
+		midTurnUser(),
+		{ID: "call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "r1", Name: "read"}}},
+		{ID: "result", Role: api.MessageRoleTool, EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{ToolCallID: "r1", Tool: "read", Outcome: api.ToolResultOutcomeCompleted}},
 	}
-	h.respond(t, []api.Message{midTurnUser()}, publishingSurface, "c1", "The key is s3cret.", "recall")
-	for _, msg := range h.appended {
-		if api.IsAgentNoteMessage(msg) {
-			if msg.Content != "The key is [redacted]." {
-				t.Fatalf("stored note = %q", msg.Content)
+	cases := []struct {
+		name, secret, text, want string
+		published                bool
+	}{
+		{name: "redaction shifts the citation's span", secret: "s3cret", text: "The key s3cret lives at [read#1:2].", want: "The key [redacted] lives at [a.go:2](a.go#L2).", published: true},
+		{name: "redaction removes the citation", secret: "read#1:2", text: "The key lives at [read#1:2]."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newMidTurnHarness(t, publishingSurface)
+			h.ledger.records = []evidence.Record{{
+				Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go",
+				Body: []string{"1|one", "2|two"}, LineRanges: []evidence.LineRange{{Start: 1, End: 2}},
+			}}
+			h.loop.Projection.Deps.RedactMessageForStorage = func(_ context.Context, msg api.Message) (api.Message, bool) {
+				if !strings.Contains(msg.Content, tc.secret) {
+					return msg, false
+				}
+				msg.Content = strings.ReplaceAll(msg.Content, tc.secret, "[redacted]")
+				return msg, true
 			}
-			return
-		}
+			history, _ := h.respond(t, observed, publishingSurface, "c1", tc.text, "recall")
+			note, ok := noteFor(history, "c1")
+			if ok != tc.published {
+				t.Fatalf("published = %v, want %v: %+v", ok, tc.published, note)
+			}
+			if tc.published && (note.Content != tc.want || note.Grounding == nil || !note.Grounding.Traced) {
+				t.Fatalf("note = %q grounding %+v, want %q traced", note.Content, note.Grounding, tc.want)
+			}
+		})
 	}
-	t.Fatal("no note stored")
 }
 
 // A host progress note is labelled data for the model, not its own speech.

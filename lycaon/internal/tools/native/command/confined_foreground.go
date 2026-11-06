@@ -42,6 +42,7 @@ func (c ConfinedForeground) Run(
 	default:
 		window.closeOnExit(ctx, c.Background, tctx.Identity.SessionID, outcome.Handle)
 	}
+	outcome.SourceWindow = window.fact()
 	if err != nil || !outcome.Finished {
 		return nil, outcome, err
 	}

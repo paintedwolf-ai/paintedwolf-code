@@ -178,21 +178,6 @@ func RegisterTerminalSessionTools(reg *tools.DefaultRegistry, bg *bgprocess.Regi
 	return reg.Register(terminal.CloseToolName, terminal.CloseHandler(bg))
 }
 
-func RegisterSurfaceNoteTool(reg *tools.DefaultRegistry, deps reporttools.SurfaceNoteDeps) error {
-	if reg == nil {
-		return fmt.Errorf("registry required")
-	}
-	if deps.Ledger == nil {
-		return fmt.Errorf("evidence ledger required")
-	}
-	if deps.Messages == nil {
-		return fmt.Errorf("session messages required")
-	}
-	return reg.Register(reporttools.SurfaceNoteTool, func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		return reporttools.RunSurfaceNote(ctx, args, tctx, deps)
-	})
-}
-
 func RegisterRecordFindingTool(reg *tools.DefaultRegistry, gates reporttools.RecordFindingGates, store findings.Store, scopeKey reporttools.FindingsScopeKey) error {
 	if reg == nil {
 		return fmt.Errorf("registry required")
@@ -206,7 +191,7 @@ func RegisterRecordFindingTool(reg *tools.DefaultRegistry, gates reporttools.Rec
 	return reg.Register("record_finding", reporttools.FindingsHandler(gates, store, scopeKey))
 }
 
-func RegisterUpdateProgressTool(reg *tools.DefaultRegistry, store progress.Store, scopeKey reporttools.ProgressScopeKey) error {
+func RegisterUpdateProgressTool(reg *tools.DefaultRegistry, store progress.Store, scopeKey reporttools.ProgressScopeKey, reconciliation progress.Reconciler) error {
 	if reg == nil {
 		return fmt.Errorf("registry required")
 	}
@@ -216,7 +201,7 @@ func RegisterUpdateProgressTool(reg *tools.DefaultRegistry, store progress.Store
 	if scopeKey == nil {
 		return fmt.Errorf("progress scope key required")
 	}
-	return reg.Register("update_progress", reporttools.ProgressHandler(store, scopeKey))
+	return reg.Register("update_progress", reporttools.ProgressHandler(store, scopeKey, reconciliation))
 }
 
 func RegisterCompleteLegTool(reg *tools.DefaultRegistry, decode workertools.CompleteLegDecoder) error {

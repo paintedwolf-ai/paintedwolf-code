@@ -1,0 +1,11 @@
+steps:
+  - tool: "task"
+    args:
+      brief:
+        done_when: ["Finish the original leg or return a grounded blocker."]
+        goal: "Continue the preserved leg."
+      child_session_id: "{{ paintedwolf.child_session_id }}"
+      max_tool_loops: "{{ paintedwolf.suggested_resume_max }}"
+    complete: true
+    say: "On worker-task-finished wake, call {{ call }}. Use suggested_resume_max, not a fresh write-scoped redispatch."
+    otherwise: "Resume the preserved child session {{ paintedwolf.child_session_id }} with max_tool_loops {{ paintedwolf.suggested_resume_max }} rather than starting a fresh leg."

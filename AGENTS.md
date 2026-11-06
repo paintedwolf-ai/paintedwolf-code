@@ -119,7 +119,7 @@ Live model benchmarks require explicit authorization. Fix causes; never `t.Skip`
 failures to get green. Test conventions: [backend](lycaon/AGENTS.md#testing) and
 [frontend](lycaon-den/AGENTS.md#testing).
 
-**Both gates enforce size budgets; exact-landing qualification enforces changed-statement coverage.** Files,
+**Both gates enforce size budgets and changed Go statement coverage; exact-landing qualification also enforces frontend and script coverage.** Files,
 directories, and Go types must not grow above category limits without justified
 exceptions. Warnings create architectural review obligations after merge; hard limits block new or
 growing excess. Unchanged legacy excess is tracked; explicit caps and prompt
@@ -234,9 +234,10 @@ person roles, and per-operation/event authorization in `internal/people`.
 Before changing persisted state, wire shapes, overlays, or agent-public vocabulary,
 classify the artifact using [compatibility](docs/compatibility.md).
 
-- **Database:** record the shipped baseline in `lycaon/internal/db/released-baselines.json`,
-  advance `SchemaVersion`, register a migration under `lycaon/internal/db/migrations`,
-  and keep `schema.sql` the complete fresh target. No dual reads. Refuse unknown
+- **Database:** if a published build holds the current revision, record that baseline in
+  `lycaon/internal/db/released-baselines.json`, advance `SchemaVersion` once, and register
+  a migration under `lycaon/internal/db/migrations`; otherwise extend the current revision's
+  step. Keep `schema.sql` the complete fresh target. No dual reads. Refuse unknown
   shapes without mutation. Capture a verified recovery snapshot before live upgrades.
 - **Wire:** change `docs/openapi/**` → `./task openapi:bundle` →
   `./task codegen:den-types` → Go behavior and Den consumers together. Never edit

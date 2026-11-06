@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -27,6 +28,7 @@ func (m *Service) ForceCancelForRootDetach(ctx context.Context, projectID, rootI
 	if path := strings.TrimSpace(detachedPath); path != "" {
 		reason = fmt.Sprintf("%s: %s", rootDetachCancelReason, path)
 	}
+	ctx = bgprocess.WithTerminationReason(ctx, bgprocess.TerminationRootDetached)
 	return m.forceCancelDependents(ctx, projectID, rootID, dependents, reason, detachedPath)
 }
 
@@ -39,6 +41,7 @@ func (m *Service) ForceCancelForProjectDelete(ctx context.Context, projectID str
 	if projectID == "" {
 		return fmt.Errorf("project_id required")
 	}
+	ctx = bgprocess.WithTerminationReason(ctx, bgprocess.TerminationProjectDeleted)
 	return m.forceCancelDependents(ctx, projectID, "", dependents, "project deleted", "")
 }
 
@@ -47,6 +50,11 @@ func (m *Service) forceCancelDependents(ctx context.Context, projectID, rootID s
 	if m.projects != nil {
 		if p, err := m.projects.Get(ctx, projectID); err == nil && p != nil {
 			roots = project.RootRefsFrom(p)
+		}
+	}
+	if rootID != "" && strings.TrimSpace(detachedPath) == "" {
+		if detached, ok := projectroot.RootRefByID(roots, rootID); ok {
+			detachedPath = detached.Path
 		}
 	}
 	if m.workerAbort != nil {
@@ -74,8 +82,42 @@ func (m *Service) forceCancelDependents(ctx context.Context, projectID, rootID s
 		_ = m.stops.Abort(ctx, sessionID, reason)
 		m.status.PublishIdle(ctx, sessionID, api.SessionIdleDispositionTurnError)
 	}
+	if m.processes != nil {
+		stopReason := bgprocess.TerminationRootDetached
+		if rootID == "" {
+			stopReason = bgprocess.TerminationProjectDeleted
+		}
+		handles := make([]bgprocess.RootProcess, 0, len(dependents.BackgroundProcesses))
+		for _, proc := range dependents.BackgroundProcesses {
+			handles = append(handles, bgprocess.RootProcess{
+				Handle:    proc.Handle,
+				SessionID: proc.SessionID,
+				Cwd:       proc.Cwd,
+			})
+		}
+		if err := m.processes.Lifecycle.StopUnderRoot(ctx, projectID, m.projectSessionIDs(ctx, projectID), detachedPath, handles, stopReason); err != nil {
+			return err
+		}
+	}
 	m.enqueueRootDetachCanceledKick(ctx, projectID, rootID, detachedPath, dependents)
 	return nil
+}
+
+func (m *Service) projectSessionIDs(ctx context.Context, projectID string) map[string]struct{} {
+	if m == nil || m.store == nil {
+		return nil
+	}
+	sessions, err := m.store.List(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]struct{}, len(sessions))
+	for _, sess := range sessions {
+		if sess != nil && sess.ProjectID == projectID {
+			out[sess.ID] = struct{}{}
+		}
+	}
+	return out
 }
 
 func (m *Service) enqueueRootDetachCanceledKick(ctx context.Context, projectID, rootID, detachedPath string, dependents RootDependents) {

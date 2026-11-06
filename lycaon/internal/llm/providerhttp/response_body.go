@@ -19,10 +19,6 @@ func ReadCompletionResponse(provider string, resp *http.Response) ([]byte, error
 	return readProviderResponse(provider, "response", resp, MaxCompletionResponseBodyBytes)
 }
 
-func DecodeCompletionResponse(provider string, resp *http.Response, out any) error {
-	return decodeProviderResponse(provider, "response", resp, MaxCompletionResponseBodyBytes, out)
-}
-
 func DecodeDiscoveryResponse(provider string, resp *http.Response, out any) error {
 	return decodeProviderResponse(provider, "metadata response", resp, MaxDiscoveryResponseBodyBytes, out)
 }

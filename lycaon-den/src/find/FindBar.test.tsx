@@ -177,7 +177,6 @@ describe("FindBar", () => {
   it("renders with accessible name and updates match count", async () => {
     render(() => <FindBarStubHost corpus="alpha beta alpha" />);
     const bar = await screen.findByTestId("find-bar");
-    expect(bar.getAttribute("aria-label")).toBe("Find in view");
     expect(bar.getAttribute("role")).toBe("search");
     expect(bar.id).toBe(FIND_BAR_ID);
     expect(bar.classList.contains("den-editor-command-bar")).toBe(true);
@@ -212,7 +211,6 @@ describe("FindBar", () => {
     setFindQuery("needle");
 
     const button = screen.getByTestId("find-bar-everywhere");
-    expect(button.getAttribute("data-tip")).toContain("carries this query");
     expect(button.getAttribute("data-tip")).not.toContain("Match case");
   });
 

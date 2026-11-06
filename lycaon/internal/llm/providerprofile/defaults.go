@@ -39,13 +39,20 @@ func OpenAI() Profile {
 		Discovery:        DiscoveryConfigured,
 		DiscoveryProfile: discovery.OpenAIProfile(),
 		// Chat-completions tool messages take text parts only.
-		ToolResultImages: ToolResultImagesUserTurn,
+		ToolResultImages:         ToolResultImagesUserTurn,
+		OmitToolsWhenNotCallable: true,
 	}
 }
 
 func OpenAIVendor() Profile {
 	profile := OpenAI()
 	profile.ReasoningEffortOff = OpenAIReasoningEffortOff
+	return profile
+}
+
+func Cerebras() Profile {
+	profile := OpenAIVendor()
+	profile.DiscoveryProfile = discovery.CerebrasProfile()
 	return profile
 }
 
@@ -66,6 +73,14 @@ func Fireworks() Profile {
 	profile.Discovery = DiscoveryFireworks
 	// Fireworks tool messages accept image parts.
 	profile.ToolResultImages = ToolResultImagesInline
+	profile.OmitToolsWhenNotCallable = true
+	return profile
+}
+
+func DeepInfra() Profile {
+	profile := OpenAI()
+	profile.ReasoningEffortOff = OpenAIReasoningEffortOff
+	profile.ReasoningWire = ReasoningWireContent
 	return profile
 }
 
@@ -94,12 +109,28 @@ func CloudflareWorkersAI() Profile {
 	return profile
 }
 
+func Scaleway() Profile {
+	profile := OpenAI()
+	profile.ReasoningEffortOff = OpenAIReasoningEffortOff
+	profile.ReasoningWire = ReasoningWireContent
+	return profile
+}
+
+func Mistral() Profile {
+	profile := OpenAI()
+	profile.DiscoveryProfile = discovery.MistralProfile()
+	profile.ToolCallID = ToolCallIDAlphanumeric9
+	return profile
+}
+
 func Openrouter() Profile {
 	profile := OpenAI()
 	profile.DiscoveryProfile = discovery.OpenRouterProfile()
 	profile.Thinking = modelinfo.ThinkStyleReasoningObject
 	profile.ThinkingStyles = nil
 	profile.RequireProviderParameters = true
+	// A route may reach an API that requires definitions beside tool history.
+	profile.OmitToolsWhenNotCallable = false
 	return profile
 }
 
@@ -151,6 +182,10 @@ func Litellm() Profile {
 func LocalInference(profile Profile) Profile {
 	if profile.ReasoningWire == "" {
 		profile.ReasoningWire = ReasoningWireContent
+	}
+	profile.Local = true
+	if profile.Discovery == DiscoveryConfigured {
+		profile.DiscoveryProfile.ProbeProps = true
 	}
 	profile.SystemPreambleOnly = true
 	profile.StreamResponseHeaderTimeout = LocalInferenceStreamResponseHeaderTimeout

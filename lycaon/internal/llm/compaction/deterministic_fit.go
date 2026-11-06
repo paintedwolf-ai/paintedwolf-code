@@ -14,6 +14,12 @@ const contextTrimNoticeID = "host-context-trim-notice"
 // DeterministicFit drops old rows in blocks while preserving checkpoints, pins, and recent exchanges.
 // Protected rows may leave the result over budget.
 func DeterministicFit(cfg CompactionConfig, messages []ContextMessage, maxTokens int) []ContextMessage {
+	return DeterministicFitWithReserve(cfg, messages, maxTokens, 0)
+}
+
+// DeterministicFitWithReserve also aims to leave reserve tokens free after a
+// required drop, so the cut it chooses can hold across later appends.
+func DeterministicFitWithReserve(cfg CompactionConfig, messages []ContextMessage, maxTokens, reserve int) []ContextMessage {
 	// Repeated fitting retains one notice even when a later pass fits.
 	trimmed := hasContextTrimNotice(messages)
 	messages = withoutContextTrimNotice(messages)
@@ -31,7 +37,8 @@ func DeterministicFit(cfg CompactionConfig, messages []ContextMessage, maxTokens
 	defaultFloor := len(body) - recentCompactionStart(body, max(1, cfg.KeepRecentMessages))
 	recent := recentCompactionCount(cfg, body, budget)
 	keepFloor := len(body) - recentCompactionStart(body, recent)
-	drop := fitFrontDropCount(body, keepFloor, defaultFloor, budget)
+	drop := fitFrontDropCount(body, keepFloor, defaultFloor, budget, reserve)
+	drop = completeFitStart(body, drop)
 
 	pinned := pinnedRows(body[:drop])
 	kept := alignCompactionTail(body[drop:])
@@ -61,10 +68,19 @@ func assembleFit(head, body []ContextMessage, trimmed bool) []ContextMessage {
 	return append(out, body[lead:]...)
 }
 
-// splitCompactionCheckpointHead retains the checkpoint and its summary together.
+// splitCompactionCheckpointHead retains the checkpoint and its summary together,
+// with any pinned rows placed before them, such as an opener preceding intra-turn coverage.
 func splitCompactionCheckpointHead(messages []ContextMessage) (head, body []ContextMessage) {
-	if len(messages) >= 2 && messages[0].CompactionCheckpoint && messages[1].Role == string(api.MessageRoleAssistant) {
-		return append([]ContextMessage(nil), messages[0], messages[1]), messages[2:]
+	for i := range messages {
+		if messages[i].CompactionCheckpoint {
+			if i+1 < len(messages) && messages[i+1].Role == string(api.MessageRoleAssistant) {
+				return append([]ContextMessage(nil), messages[:i+2]...), messages[i+2:]
+			}
+			return nil, messages
+		}
+		if !messages[i].ContextPinned {
+			break
+		}
 	}
 	return nil, messages
 }
@@ -79,9 +95,57 @@ func pinnedRows(messages []ContextMessage) []ContextMessage {
 	return out
 }
 
+// completeFitStart advances past results whose call the cut would strand,
+// including parallel results interleaved with host rows.
+func completeFitStart(body []ContextMessage, drop int) int {
+	start := drop
+	for {
+		calls := make(map[string]bool)
+		orphan := -1
+		for i := start; i < len(body); i++ {
+			for _, call := range body[i].ToolCalls {
+				calls[call.ID] = true
+			}
+			if body[i].Role == string(api.MessageRoleTool) && body[i].ToolCallID != "" && !calls[body[i].ToolCallID] {
+				orphan = i
+			}
+		}
+		if orphan < 0 {
+			return start
+		}
+		if orphan+1 >= len(body) {
+			return drop
+		}
+		start = orphan + 1
+	}
+}
+
+// fitAnchorDrop places a required drop on the stable ordinal grid: the nearest
+// anchor to its reserve target that still moves past the minimum. Rows without
+// ordinals round by position.
+func fitAnchorDrop(body []ContextMessage, minimum, target int) int {
+	if target >= len(body) || body[target].Ord <= 0 {
+		return (target + fitDropBlockMessages - 1) / fitDropBlockMessages * fitDropBlockMessages
+	}
+	anchor := (body[target].Ord + fitDropBlockMessages/2) / fitDropBlockMessages * fitDropBlockMessages
+	for {
+		at := len(body)
+		for i := range body {
+			if body[i].Ord >= anchor && body[i].Ord > 0 {
+				at = i
+				break
+			}
+		}
+		if at > minimum || at == len(body) {
+			return at
+		}
+		anchor += fitDropBlockMessages
+	}
+}
+
 // fitFrontDropCount rounds drops to block boundaries within the retention limit.
 // Pinned rows remain in the budget on both sides of the cut.
-func fitFrontDropCount(body []ContextMessage, keepFloor, defaultFloor, budget int) int {
+func fitFrontDropCount(body []ContextMessage, keepFloor, defaultFloor, budget, reserve int) int {
 	if len(body) <= keepFloor {
 		return 0
 	}
@@ -107,8 +171,15 @@ func fitFrontDropCount(body []ContextMessage, keepFloor, defaultFloor, budget in
 		if drop >= blockCap {
 			return drop
 		}
-		// Round up to the next block boundary, but never past the recent window floor.
-		blocked := (drop + fitDropBlockMessages - 1) / fitDropBlockMessages * fitDropBlockMessages
+		if drop == 0 {
+			return 0
+		}
+		target := drop
+		for target < blockCap && pinnedPrefix[target]+remaining[target] > budget-reserve {
+			target++
+		}
+		// Stay on the grid, but never past the recent window floor.
+		blocked := fitAnchorDrop(body, drop, target)
 		if blocked > blockCap {
 			return blockCap
 		}
@@ -123,10 +194,12 @@ func contextTrimNotice() ContextMessage {
 		ID:            contextTrimNoticeID,
 		Role:          string(api.MessageRoleSystem),
 		Content:       guidance.ContextTrimNotice,
-		Origin:        api.MessageOriginHost,
-		Authority:     api.ContentAuthoritySystem,
-		TrustTier:     api.ContentTrustTierTrusted,
 		ContextPinned: true,
+		ContextMessageProvenance: ContextMessageProvenance{
+			Origin:    api.MessageOriginHost,
+			Authority: api.ContentAuthoritySystem,
+			TrustTier: api.ContentTrustTierTrusted,
+		},
 	}
 }
 

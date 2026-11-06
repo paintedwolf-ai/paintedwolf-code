@@ -133,7 +133,7 @@ type Service struct {
 	// members reports the processes descended from the session's launches.
 	members func(session string) (map[int]struct{}, error)
 	// listeners reads the host's listening sockets and their holders.
-	listeners func(lineage.ListenerQuery) ([]lineage.Listener, error)
+	listeners func(lineage.ListenerQuery) (lineage.ListenerTable, error)
 }
 
 func New() (*Service, error) {

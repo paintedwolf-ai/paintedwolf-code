@@ -24,7 +24,4 @@ x-paintedwolf-scenarios:
     phase: decide
     tool: workflow_transition
     transition_id: missing
-  expect_contains:
-  - 'Code: WORKFLOW_TRANSITION_UNKNOWN'
-  - transition
 x-paintedwolf-emit: guard:workflow

@@ -188,7 +188,7 @@ The **mutation floor** is not a toolkit primitive. `IsSensitivePath` lives in th
 | [`tools/native/sourceview`](../lycaon/internal/tools/native/sourceview) | Source access shared by read and write tools: target reporting, bounded ingest, text-document encoding, editor-document reads, file metadata, ledger provenance, unified diffs |
 | [`tools/native/terminal`](../lycaon/internal/tools/native/terminal) | `terminal_open` / `send` / `read` / `snapshot` / `close` |
 | [`tools/native/page`](../lycaon/internal/tools/native/page) | `capture_page`, `measure_page`, `render_view`, `view_image`, `view_video`, `page_open` / `act` / `snapshot` / `close` |
-| [`tools/native/reporting`](../lycaon/internal/tools/native/reporting) | `surface_note`, `record_finding`, `update_progress`, with their grounding and scope gates |
+| [`tools/native/reporting`](../lycaon/internal/tools/native/reporting) | `record_finding` and `update_progress`, with their scope gates |
 | [`tools/native/workercontrol`](../lycaon/internal/tools/native/workercontrol) | `complete_leg` and `request_decision` |
 | [`tools/native/jq`](../lycaon/internal/tools/native/jq) | `jq` |
 | [`tools/native/skills`](../lycaon/internal/tools/native/skills) | `skills_read` |

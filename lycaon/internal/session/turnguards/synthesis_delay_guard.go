@@ -22,23 +22,32 @@ const synthesisDelayMaxPerPrompt = 2
 
 // Synthesis skips progress-repair retries; other surfaces need tool access.
 func (m *Service) OpenProgress(ctx context.Context, sess *api.Session, history []api.Message, surfaceID string, workersIdle bool, implState surface.ImplementSessionState, invokeAllowed bool) (*guidance.Refusal, bool) {
+	reject, block, _ := m.openProgressWithWaiver(ctx, sess, history, surfaceID, workersIdle, implState, invokeAllowed)
+	return reject, block
+}
+
+func (m *Service) openProgressWithWaiver(ctx context.Context, sess *api.Session, history []api.Message, surfaceID string, workersIdle bool, implState surface.ImplementSessionState, invokeAllowed bool) (*guidance.Refusal, bool, bool) {
 	if m == nil || m.progress == nil || sess == nil {
-		return nil, false
+		return nil, false, false
 	}
 	if !invokeAllowed {
-		return nil, false
+		return nil, false, false
 	}
 	surfaceID = strings.TrimSpace(surfaceID)
 	if surfaceID == spawn.SurfaceImplementSynthesis || !guard.SurfaceFinishesWithUserProse(surfaceID) {
-		return nil, false
+		return nil, false, false
 	}
 	root := sessiontree.RootID(ctx, m.store, sess.ID)
 	content := m.progress.Get(ctx, root)
-	verifyRequired, verifyPassed, _, verifyUnverified := m.Verification.WorkflowGateState(ctx, sess, history)
+	var verifyRequired, verifyPassed, verifyUnverified bool
+	if m.Verification != nil {
+		verifyRequired, verifyPassed, _, verifyUnverified = m.Verification.WorkflowGateState(ctx, sess, history)
+	}
 	batchReady := workeroutcomes.SynthesisBlockedOnlyByOpenProgress(implState, history, content, verifyRequired, verifyPassed || verifyUnverified)
 	_, pending, _ := progress.CloseCounts(content)
-	delayCount, delayed := m.closeouts.Delay(sess.ID, root, closeouts.ProgressDelay, workersIdle && batchReady && pending > 0, synthesisDelayMaxPerPrompt)
-	return m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
+	eligible := workersIdle && batchReady && pending > 0
+	delayCount, delayed := m.closeouts.Delay(sess.ID, root, closeouts.ProgressDelay, eligible, synthesisDelayMaxPerPrompt)
+	reject, block := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 		gc.Workers.WorkersIdle = workersIdle
 		gc.Progress.ProgressOpenItems = int64(pending)
 		gc.Workflow.BatchReadyIgnoringProgress = batchReady
@@ -48,4 +57,5 @@ func (m *Service) OpenProgress(ctx context.Context, sess *api.Session, history [
 		}
 		return nil
 	})
+	return reject, block, eligible && !block
 }

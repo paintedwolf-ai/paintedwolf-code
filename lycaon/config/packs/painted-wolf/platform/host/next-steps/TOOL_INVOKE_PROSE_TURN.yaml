@@ -1,0 +1,4 @@
+steps:
+  - tool: "complete_leg"
+    say: "Submit {{ call }} with the actual completed, blocked, or failed result and its observed evidence."
+    otherwise: "Reply using the current closeout format and end the turn."

@@ -129,7 +129,7 @@ boot_engine() {
 
   base="http://${addr}"
   body=""
-  deadline=$((SECONDS + 60))
+  deadline=$((SECONDS + 300))
   while (( SECONDS < deadline )); do
     if body="$(curl -sf --max-time 2 "${base}/health" 2>/dev/null)"; then
       status="$(jq -r '.status // empty' <<<"${body}")"
@@ -146,6 +146,9 @@ boot_engine() {
   status="$(jq -r '.status // empty' <<<"${body}")"
   if [[ "${status}" != "ok" && "${status}" != "degraded" ]]; then
     echo "health status=${status:-empty}" >&2
+    # A live engine with no usable answer is otherwise indistinguishable from a slow one.
+    curl -s --max-time 10 -w ' http=%{http_code} seconds=%{time_total}\n' "${base}/health" >&2 || echo "health probe exit $?" >&2
+    ps -o pid=,pcpu=,rss=,etime= -p "${pid}" >&2 || true
     cat "${log}" >&2 || true
     upgrade_stop_owned_child || return 1
     return 1

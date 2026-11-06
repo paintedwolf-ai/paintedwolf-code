@@ -138,6 +138,11 @@ type QueryError struct{ Err error }
 func (e *QueryError) Error() string { return e.Err.Error() }
 func (e *QueryError) Unwrap() error { return e.Err }
 
+// Iterate returns a pull iterator over one immutable compiled query.
+func (p *Program) Iterate(ctx context.Context, input any) gojq.Iter {
+	return p.code.RunWithContext(ctx, input, p.values...)
+}
+
 // Run evaluates one input, passing each result to emit in order. Evaluation
 // observes ctx; because gojq exposes no VM instruction/step counter hook and
 // instead polls ctx.Done() at the start of every bytecode instruction in

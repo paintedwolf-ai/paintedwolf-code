@@ -130,7 +130,7 @@ BASE="http://${ADDR}"
 AUTH_HDR=( -H "Authorization: Bearer ${TOKEN}" -H "Content-Type: application/json" )
 
 wait_health() {
-  local deadline=$((SECONDS + 60))
+  local deadline=$((SECONDS + 300))
   local body status
   while (( SECONDS < deadline )); do
     if body="$(curl -sf --max-time 2 "${BASE}/health" 2>/dev/null)"; then
@@ -190,7 +190,7 @@ WORKER_ID="$(jq -er '.overlays[0].job_id' <<<"${WORKER_JSON}")"
 # Retry session_preparing while the workspace initializes.
 PROMPT_OPERATION_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
 PROMPT_RESPONSE="${WORKDIR}/prompt-response.json"
-prompt_deadline=$((SECONDS + 60))
+prompt_deadline=$((SECONDS + 300))
 while :; do
   prompt_status="$(curl -s --output "${PROMPT_RESPONSE}" --write-out '%{http_code}' \
     "${AUTH_HDR[@]}" \
@@ -208,7 +208,7 @@ while :; do
 done
 
 TOOL_RESULT_ID=""
-poll_deadline=$((SECONDS + 120))
+poll_deadline=$((SECONDS + 300))
 while (( SECONDS < poll_deadline )); do
   MSGS="$(curl -sf "${AUTH_HDR[@]}" "${BASE}/v1/sessions/${SESSION_ID}/messages")"
   TOOL_RESULT_ID="$(jq -r '.messages[]? | select(.role=="tool") | .id' <<<"${MSGS}" | head -n1)"

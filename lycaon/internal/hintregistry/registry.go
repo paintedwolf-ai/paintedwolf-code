@@ -25,6 +25,8 @@ type Entry struct {
 	Code string
 	Path extpacks.Source
 	Body []byte
+	// NextSteps is the host catalog entry paired with this rule by code.
+	NextSteps []byte
 }
 
 // ListEffective loads policy units from every contributing pack — stock and
@@ -151,7 +153,11 @@ func parseEffectiveEntries(catalog *extpacks.EffectiveCatalog) ([]Entry, error) 
 			return nil, fmt.Errorf("%s: duplicate policy code %q", at, code)
 		}
 		seen[code] = true
-		out = append(out, Entry{Code: code, Path: at, Body: flat})
+		entry := Entry{Code: code, Path: at, Body: flat}
+		if steps, _, ok := catalog.UnitContent(extpacks.NextStepsUnitID(code)); ok {
+			entry.NextSteps = steps
+		}
+		out = append(out, entry)
 	}
 	if len(out) == 0 {
 		return nil, fmt.Errorf("policy registry: no policy entries found after resolve filter")

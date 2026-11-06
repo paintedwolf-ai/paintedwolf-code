@@ -16,15 +16,11 @@ requires:
 when: paintedwolf.rejection_code == "CWD_NOT_DIRECTORY"
 effect: block
 copy:
-  what: The requested cwd {{ paintedwolf.cwd }} could not be resolved to an existing directory for {{ tool
-    }}.
-  cause: Working directory must be a directory under the attached project roots (or under the worker branch
-    when on a write leg).
-  why: The process needs an existing working directory within its assigned roots.
-  fix: For the current project folder, use `cwd:"."`, not its folder name. For a subdirectory, confirm it exists
-    with a native directory listing in `command` and use its path relative to the project folder. Use an attached @label only when that root is offered;
-    a worker’s branch remains its execution root. Do not create an unrelated directory to clear this refusal.
-  instead: Branch on Code; fix args and retry once
+  what: The requested cwd {{ paintedwolf.cwd }} could not be resolved to an existing directory for {{ tool }}.
+  cause: The working directory must resolve to an existing directory within the permitted scope.
+  why: The process needs an existing working directory.
+  fix: Use an existing directory within this invocation's permitted scope.
+  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool
 x-paintedwolf-message: '`command`/`terminal_open` cwd is not a directory'
@@ -34,8 +30,3 @@ x-paintedwolf-scenarios:
     cwd: README.md
     profile: implement
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CWD_NOT_DIRECTORY'
-  - 'cwd:"."'
-  - not its folder name

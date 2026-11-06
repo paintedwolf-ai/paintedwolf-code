@@ -96,7 +96,7 @@ func TestTruncateToolResultForSessionGenericSpillsInHostData(t *testing.T) {
 		t.Fatalf("expected truncation banner, got tail=%q", got.content[max(0, len(got.content)-200):])
 	}
 	// Spill hints expose only host-data-relative paths.
-	if !strings.Contains(got.content, tooloutput.ToolOutputSpillDir+"/") || !strings.Contains(got.content, "read(path=") {
+	if !strings.Contains(got.content, tooloutput.ToolOutputSpillDir+"/") || !strings.Contains(got.content, "sed -n") {
 		t.Fatalf("expected spill read hint, got tail=%q", got.content[max(0, len(got.content)-200):])
 	}
 	if strings.Contains(got.content, ".config/paintedwolf") {

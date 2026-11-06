@@ -1,0 +1,17 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/session/history/history.Service",
+  "kind": "runtime_service",
+  "workstream": "bounded-compaction-reduction",
+  "disposition": "retain",
+  "reason": "The 1235 receiver lines own bounded canonical history, receiver fitting, source validation, and compaction publication. Manual submission has its own file; asynchronous preparation remains outside publication admission, and one writer commits each captured generation. Retain this exact ceiling while source, model, cancellation, generation, and submission-separation contracts preserve the lifecycle.",
+  "reviewed_commit": "515c793b129a749bbdcc5716ff59e46531e0e71c",
+  "ceiling": 1235,
+  "boundaries": {
+    "lycaon/internal/session/history/reduction_synthesis_test.go": "7c89a89c2b5f466f2ef9308d230a0ea344e9f41c970103bd9fd11856b4d2bcca",
+    "lycaon/internal/session/history/reduction_submission_test.go": "2a9e3064b77a27fb3f760effea36047272fe7eb6ad56255139cafc30730da9d1",
+    "lycaon/internal/session/history/reduction_rescue_test.go": "c75c6d4d388ff49e08ee25fd367c3e8a24d325c77cd2913f5e411cf2f15e1b7a",
+    "lycaon/internal/session/history/compaction_snapshot_test.go": "eddf51fea70550454d74514f66e757d1fa25de31d7fc25585c570eb0983498f0"
+  },
+  "reviewed_shape": "49f2639305fd7e0088d1d902fb013278928a8155989316f0bb392cb1527bf74d"
+}

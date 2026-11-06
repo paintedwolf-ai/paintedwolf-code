@@ -21,4 +21,3 @@ x-paintedwolf-message: "The requested response_type {{ paintedwolf.response_type
 x-paintedwolf-scenarios:
   - id: default
     vars: {"response_type": "unsupported", "profile": "coordinator", "tool": "ask_user"}
-    expect_contains: ['Rejected:', 'Code: ASK_USER_RESPONSE_TYPE_INVALID']

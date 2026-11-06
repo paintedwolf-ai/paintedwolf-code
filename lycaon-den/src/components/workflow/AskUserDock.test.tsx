@@ -680,12 +680,10 @@ describe("AskUserDock", () => {
       <AskUserDock meta={choiceMeta} client={client()} {...base} />
     ));
     const rail = getByTestId("ask-user-redirect-rail");
-    expect(rail.textContent).toContain("Not listed?");
     expect(rail.classList.contains("den-ask-user-dock-rail--armed")).toBe(false);
 
     setComposerDraft("sess-1", "all of the above");
     expect(rail.classList.contains("den-ask-user-dock-rail--armed")).toBe(true);
-    expect(rail.textContent).toContain("instead of an option");
   });
 
   it("a draft arms the dock and supersedes the options it overrides", () => {

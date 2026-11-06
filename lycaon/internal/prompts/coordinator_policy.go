@@ -56,14 +56,11 @@ func IsImplementDeferUntilUserReplyTool(toolName string) bool {
 // CoordinatorPolicyTemplateVars builds shared coordinator template data from
 // the tools offered on this call and the loadable tools request_tools can add.
 func CoordinatorPolicyTemplateVars(offered, requestable []string) map[string]any {
-	deferTools := append([]string(nil), implementDeferUntilUserReplyTools...)
-	sort.Strings(deferTools)
 	laneS := LaneSyncTools(offered)
 	out := map[string]any{
-		"coordinator_read_line_limit":  readcaps.LineLimit,
-		"defer_until_user_reply_tools": deferTools,
-		"lane_s_sync_tools":            laneS,
-		"visual_review_cadence":        "on_request",
+		"coordinator_read_line_limit": readcaps.LineLimit,
+		"lane_s_sync_tools":           laneS,
+		"visual_review_cadence":       "on_request",
 	}
 	for k, v := range spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget()) {
 		out[k] = v
@@ -79,8 +76,12 @@ func CoordinatorPolicyTemplateVars(offered, requestable []string) map[string]any
 	// Coordinator surfaces render for root sessions, which may widen recall;
 	// set after the spawn merge so the worker default does not win.
 	out["recall_may_widen"] = true
+	// The partial vars above default this for a worker profile.
+	out["is_coordinator"] = true
 	out["more_tools_loadable"] = len(requestable) > 0
 	out["profile_can_request"] = requestableToolSet(offered, requestable)
+	available := append(append([]string(nil), offered...), requestable...)
+	out["profile_mutation_capable"] = ToolNamesMutationCapable(available)
 	MergeHTTPActionVars(offered, out)
 	return out
 }

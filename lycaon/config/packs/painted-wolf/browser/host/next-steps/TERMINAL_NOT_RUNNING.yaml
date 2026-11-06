@@ -1,0 +1,6 @@
+steps:
+  - tool: "terminal_read"
+    say: "Use {{ call }} on this id to inspect retained output and exit state."
+    otherwise: "Inspect the existing process result and retained output."
+  - tool: "terminal_open"
+    say: "Open a replacement terminal with {{ call }} only if more work is needed; do not replay completed or partially completed commands blindly."

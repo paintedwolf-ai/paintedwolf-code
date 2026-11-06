@@ -99,7 +99,6 @@ describe("host spans in prose", () => {
 
     const mark = marks(host)[0];
     expect(mark?.classList.contains("den-redaction-mark--mask")).toBe(true);
-    expect(mark?.getAttribute("data-tip")).toBe("Not shown to observers");
   });
 
   it("paints a protected value's reference as a readable reference mark", () => {

@@ -27,7 +27,7 @@ func seedLegacyManifestStore(t *testing.T, dir string, rootEntries map[string]in
 	defer func() { _ = source.Close() }()
 	released, err := inspectSchema(t.Context(), source)
 	testutil.FailErr(t, "inspect released store", err)
-	if released != migrations.SourceManifestLayout(released).From {
+	if released != migrations.Revision5(released).From {
 		t.Fatalf("released store is %+v, not the registered revision-4 source", released)
 	}
 	want := map[string]map[string][]string{}
@@ -154,11 +154,9 @@ func TestSourceManifestLayoutBoundsItsWrites(t *testing.T) {
 	source, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "open seeded store", err)
 	defer func() { _ = source.Close() }()
-	released, err := inspectSchema(t.Context(), source)
-	testutil.FailErr(t, "inspect seeded store", err)
-	step := migrations.SourceManifestLayout(released)
+	part := migrations.SourceManifestLayout()
 	const storeBytes = 40 << 30
-	writes, err := step.Writes(t.Context(), source, storeBytes)
+	writes, err := part.Writes(t.Context(), source, storeBytes)
 	testutil.FailErr(t, "estimate writes", err)
 	if writes >= storeBytes/32 || writes < (900+900+40)*1024 {
 		t.Fatalf("write bound = %d for a %d-byte store", writes, uint64(storeBytes))

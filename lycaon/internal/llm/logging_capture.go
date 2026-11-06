@@ -49,7 +49,7 @@ func captureLLMComplete(providerID string, profile providerprofile.Profile, req 
 		TTFTMs:     elapsed,
 	}, usage, observability.LLMRequestDebug{
 		CallID:            req.Debug.CallID,
-		ReasoningRecovery: req.StrictBudget,
+		ReasoningRecovery: req.ReasoningRecovery,
 		RequestControls:   req.ControlCapture.Snapshot(),
 		EmptyCompletion:   captureEmptyCompletion(err),
 		SessionID:         req.Debug.SessionID,
@@ -93,6 +93,11 @@ func captureLLMStream(ctx context.Context, providerID string, profile providerpr
 		var streamErr error
 		var reasoning reasoningCapture
 		for chunk := range ch {
+			if chunk.ResetAttempt() {
+				content.Reset()
+				toolCalls = nil
+				reasoning.reset()
+			}
 			reasoning.append(chunk.Reasoning)
 			if chunk.Err != nil {
 				streamErr = chunk.Err
@@ -151,7 +156,7 @@ func logStreamCapture(providerID string, req modelcall.CompletionRequest, start 
 		TTFTMs:     ttftMs,
 	}, usage, observability.LLMRequestDebug{
 		CallID:            req.Debug.CallID,
-		ReasoningRecovery: req.StrictBudget,
+		ReasoningRecovery: req.ReasoningRecovery,
 		RequestControls:   req.ControlCapture.Snapshot(),
 		EmptyCompletion:   captureEmptyCompletion(responseErr),
 		SessionID:         req.Debug.SessionID,

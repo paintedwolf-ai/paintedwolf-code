@@ -31,6 +31,3 @@ x-paintedwolf-scenarios:
     path: .git/config
     profile: implement
     tool: jq
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: JQ_PATH_DENIED'

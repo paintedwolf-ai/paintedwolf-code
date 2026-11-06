@@ -71,7 +71,7 @@ type nodeScanner struct {
 // end and the node cap.
 func (s *nodeScanner) begin(window string, indexed bool, opts Options) {
 	*s = nodeScanner{opts: opts, window: window, buf: append(s.buf[:0], '['), indexed: indexed, memberStart: 1}
-	if match := namespacedHandleHead.FindStringSubmatch(window); match != nil && opts.knownKind(match[1]) {
+	if match := namespacedHandleHead.FindStringSubmatch(window); len(match) > 1 && opts.knownKind(match[1]) {
 		return
 	}
 	if match := reservedHead.FindStringSubmatch(window); match != nil {
@@ -241,7 +241,7 @@ func judgeMember(member string, indexed bool, opts Options) (attempt, plausible 
 	if isBareURL(member) {
 		return false, false
 	}
-	if !indexed && malformedCoordinate.MatchString(member) {
+	if !indexed && isMalformedCoordinate(member) {
 		return true, true
 	}
 	if strings.Contains(member, "#") {
@@ -252,6 +252,13 @@ func judgeMember(member string, indexed bool, opts Options) (attempt, plausible 
 		return false, false
 	}
 	return isCitationAttempt(path, start, indexed, opts), true
+}
+
+// isMalformedCoordinate spares digits and dots, as in `[1.5:10:30]`, which are prose
+// under the same rule that makes `[1.5:2]` prose.
+func isMalformedCoordinate(member string) bool {
+	head, _, _ := strings.Cut(member, ":")
+	return malformedCoordinate.MatchString(member) && strings.Trim(head, "0123456789.") != ""
 }
 
 var handleShaped = regexp.MustCompile(`^[a-zA-Z0-9_:-]+#[a-zA-Z0-9_-]*$`)

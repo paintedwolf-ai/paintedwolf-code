@@ -96,7 +96,7 @@ func (r *applyRun) apply(stdin io.Reader, stdout io.Writer) error {
 	}
 	r.dir = dir
 	if r.cached || r.index {
-		if _, r.repo, status, err = resolveCommandRepo(r.ctx, r.p, r.stderr, true); err != nil || status != 0 {
+		if _, r.repo, status, err = resolveCommandRepo(r.ctx, r.p, r.tc, r.stderr, true); err != nil || status != 0 {
 			r.status = status
 			return err
 		}

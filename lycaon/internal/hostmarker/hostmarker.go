@@ -2,12 +2,15 @@
 package hostmarker
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
 
 const (
 	EvidenceHandlePattern = `(?:[a-zA-Z0-9_-]+:)*[a-z_]+#[1-9][0-9]*`
+	// EvidenceCoveragePattern is the path and lines a source-delivery tag states.
+	EvidenceCoveragePattern = `(?:"[^"\n\]]*"|[^\s\],"]+):[0-9]+(?:-[0-9]+)?`
 
 	OverlayPromoteEventPrefix = "[host:overlay-promote-event]"
 	OverlayRejectEventPrefix  = "[host:overlay-reject-event]"
@@ -33,6 +36,7 @@ const (
 // markers defines the generated client constants in emission order.
 var markers = []Marker{
 	{Name: "EVIDENCE_HANDLE_PATTERN", Value: EvidenceHandlePattern},
+	{Name: "EVIDENCE_COVERAGE_PATTERN", Value: EvidenceCoveragePattern},
 	{Name: "OVERLAY_PROMOTE_EVENT_PREFIX", Value: OverlayPromoteEventPrefix},
 	{Name: "OVERLAY_REJECT_EVENT_PREFIX", Value: OverlayRejectEventPrefix},
 	{Name: "COMPACTION_BANNER_OPEN", Value: CompactionBannerOpen},
@@ -59,7 +63,31 @@ func CompactionBanner(body string) string {
 	return CompactionBannerOpen + body + CompactionBannerClose
 }
 
-var evidenceHandleTag = regexp.MustCompile(`^\[` + EvidenceHandlePattern + `\]\n?`)
+var evidenceHandleTag = regexp.MustCompile(`^\[(` + EvidenceHandlePattern + `)(?: ` + EvidenceCoveragePattern + `)?\]\n?`)
+
+// EvidenceTagHandle returns the handle of a leading tag, without its coverage.
+func EvidenceTagHandle(tag string) string {
+	match := evidenceHandleTag.FindStringSubmatch(tag)
+	if match == nil {
+		return ""
+	}
+	return match[1]
+}
+
+// FormatEvidenceCoverage states a delivery's path and lines in citation grammar, so
+// a copied tag is a citation. A path the grammar cannot carry states nothing.
+func FormatEvidenceCoverage(path string, start, end int) string {
+	if path == "" || start < 1 || end < start || strings.ContainsAny(path, "]\"\n\r") {
+		return ""
+	}
+	if strings.ContainsAny(path, " \t,") {
+		path = `"` + path + `"`
+	}
+	if start == end {
+		return fmt.Sprintf("%s:%d", path, start)
+	}
+	return fmt.Sprintf("%s:%d-%d", path, start, end)
+}
 
 // SplitEvidenceHandleTag preserves the optional leading handle tag.
 func SplitEvidenceHandleTag(content string) (prefix, body string) {

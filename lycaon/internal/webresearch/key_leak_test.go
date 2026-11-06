@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -145,7 +146,5 @@ func TestWebResearchKeyLeakInvariant(t *testing.T) {
 
 func assertNoSecretLeak(t *testing.T, field, value string) {
 	t.Helper()
-	if strings.Contains(strings.ToLower(value), strings.ToLower(sentinelKeySecret)) {
-		t.Fatalf("%s leaked sentinel key! Value: %q", field, value)
-	}
+	exposure.Absent(t, strings.ToLower(value), strings.ToLower(sentinelKeySecret))
 }

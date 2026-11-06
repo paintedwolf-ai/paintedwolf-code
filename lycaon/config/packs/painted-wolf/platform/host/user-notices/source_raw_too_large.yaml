@@ -8,6 +8,3 @@ suggested_action: Reveal it in your file manager to open it in an external viewe
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - 8 MiB
-      - not

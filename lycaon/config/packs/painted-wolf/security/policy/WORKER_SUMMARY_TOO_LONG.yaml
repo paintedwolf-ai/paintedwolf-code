@@ -3,18 +3,15 @@ id: WORKER_SUMMARY_TOO_LONG
 kind: invariant
 anchor: worker.report_check
 requires:
-  facts:
-    - paintedwolf.actual_chars
-    - paintedwolf.max_chars
-    - paintedwolf.reject_observation
+  facts: [paintedwolf.actual_chars, paintedwolf.max_chars, paintedwolf.reject_observation, paintedwolf.next_steps]
 when: paintedwolf.reject_observation == "summary_too_long"
 effect: block
 copy:
   what: Worker survey exceeded the parent character budget ({{ paintedwolf.actual_chars }} > {{ paintedwolf.max_chars }}).
   cause: Parent worker_summary envelopes must stay within compaction budget so coordinator context stays usable.
   why: Parent worker_summary envelopes must stay within compaction budget so coordinator context stays usable.
-  fix: 'Call complete_leg with a shorter brief. Preserve the report status, findings and unresolved risks; summarize conclusions and refer to existing evidence instead of pasting tool dumps.'
-  instead: 'This trim turn accepts complete_leg only. Keep the brief within {{ paintedwolf.max_chars }} characters; do not resume acquisition or mutation.'
+  fix: '{{ paintedwolf.next_steps }} Preserve the report status, findings and unresolved risks; summarize conclusions and refer to existing evidence instead of pasting tool dumps.'
+  instead: 'This trim turn accepts the completion report only. Keep the brief within {{ paintedwolf.max_chars }} characters; do not resume acquisition or mutation.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
 x-paintedwolf-message: Worker survey exceeded the parent character budget
@@ -27,7 +24,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: worker
       tool: read
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: WORKER_SUMMARY_TOO_LONG'
-      - '16384'

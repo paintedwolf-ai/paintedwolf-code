@@ -86,7 +86,7 @@ func TestOfferedSchemaResolvesEarlierLoadingRejections(t *testing.T) {
 		return "SVG source", nil
 	}))
 	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".*", FollowUpText: "Inspected.", ToolCalls: []llm.MockToolCall{{ID: "read-svg", Name: "edit", Args: args}}}}})
-	_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}})
+	_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect"), ProfileID: "implementer", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}})
 	testutil.FailErr(t, "run after loading", err)
 	if invoked != 1 {
 		t.Fatalf("loaded tool invoked %d times, want once", invoked)
@@ -127,7 +127,7 @@ func TestToolPreflightResolvesOnlyItsFrozenReadPrerequisite(t *testing.T) {
 				return "Edited.", nil
 			}))
 			deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".*", FollowUpText: "Finished.", ToolCalls: []llm.MockToolCall{{ID: "retry-edit", Name: "edit", Args: args}}}}})
-			_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("retry the edit after reading"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID}, Source: tools.InvocationSource{EditorDocuments: retryReadDocuments{reads: map[string]documentcore.ReadBasis{document: {Revision: 2, Whole: true}}}}}})
+			_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("retry the edit after reading"), ProfileID: "implementer", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID}, Source: tools.InvocationSource{EditorDocuments: retryReadDocuments{reads: map[string]documentcore.ReadBasis{document: {Revision: 2, Whole: true}}}}}})
 			testutil.FailErr(t, "run recovered invocation", err)
 			want := 0
 			if document == "required" {

@@ -2,6 +2,7 @@ package observability
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,9 +75,7 @@ func TestLogWebSearchFetchNeverLogsRawSecrets(t *testing.T) {
 	if len(data) == 0 {
 		t.Fatal("expected a debug row")
 	}
-	if strings.Contains(string(data), secret) {
-		t.Fatalf("raw secret leaked into debug log: %s", data)
-	}
+	exposure.Absent(t, string(data), secret)
 	var entry webSearchFetchEntry
 	line := strings.TrimSpace(string(data))
 	testutil.FailErr(t, "unmarshal", json.Unmarshal([]byte(line), &entry))

@@ -83,15 +83,15 @@ func TestSynthesisGroundingInvariants_lastUserTurnBoundarySkipsInternalRows(t *t
 	}
 }
 
-func TestSynthesisGroundingInvariants_proseCitationAuditUsesCloseoutEvidenceUnion(t *testing.T) {
+func TestSynthesisGroundingInvariants_closeoutCitationAuditUsesCloseoutEvidenceUnion(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "coordinator", "guard", "prose_citation_grounding.go")
+	path := filepath.Join(root, "lycaon", "internal", "coordinator", "guard", "closeout_grounding.go")
 	body, err := os.ReadFile(path)
-	testutil.FailErr(t, "read prose_citation_grounding.go", err)
+	testutil.FailErr(t, "read closeout_grounding.go", err)
 	src := string(body)
 	if !strings.Contains(src, "guidance.UnionCloseoutEvidence") {
-		t.Fatal("prose citation audit must union coordinator + worker evidence via guidance.UnionCloseoutEvidence")
+		t.Fatal("closeout citation audit must union coordinator + worker evidence via guidance.UnionCloseoutEvidence")
 	}
 }
 

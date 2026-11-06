@@ -15,7 +15,7 @@ copy:
   what: '[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} citation(s) did not resolve: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
   cause: 'A citation must name something already observed. A handle from a tool call in the same response does not exist until that call has run.'
   why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
-  fix: 'Copy a handle exactly as printed in a [kind#ordinal] tag you have seen, with only lines that observation covers.{% if paintedwolf.observed_handles_sample %} Observed handles: {{ paintedwolf.observed_handles_sample }}.{% endif %} Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
+  fix: 'Copy a handle exactly as printed in a [kind#ordinal] tag you have seen, with only lines that observation covers, or cite an observed file as [path:line]. A line number needs output that printed it: re-read with numbers, or cite the path with no line.{% if paintedwolf.observed_handles_sample %} Observed handles: {{ paintedwolf.observed_handles_sample }}.{% endif %} Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
   instead: 'Branch on Code MID_TURN_NOTE_HANDLE_UNGROUND; correct the named citation rather than removing every citation'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:mid_turn_note
@@ -28,8 +28,3 @@ x-paintedwolf-scenarios:
       offenders_omitted: 0
       offenders_sample: 'task#1'
       observed_handles_sample: 'read#2'
-    expect_contains:
-      - 'Code: MID_TURN_NOTE_HANDLE_UNGROUND'
-      - 'task#1'
-      - 'read#2'
-      - 'MESSAGE WITHHELD FROM USER'

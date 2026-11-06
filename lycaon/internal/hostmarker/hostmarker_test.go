@@ -38,6 +38,7 @@ func TestAllCoversEveryMarkerConstant(t *testing.T) {
 
 	for name, want := range map[string]string{
 		"EVIDENCE_HANDLE_PATTERN":      EvidenceHandlePattern,
+		"EVIDENCE_COVERAGE_PATTERN":    EvidenceCoveragePattern,
 		"OVERLAY_PROMOTE_EVENT_PREFIX": OverlayPromoteEventPrefix,
 		"OVERLAY_REJECT_EVENT_PREFIX":  OverlayRejectEventPrefix,
 		"COMPACTION_BANNER_OPEN":       CompactionBannerOpen,
@@ -56,7 +57,7 @@ func TestAllCoversEveryMarkerConstant(t *testing.T) {
 			t.Errorf("All()[%s] = %s, want %s", name, strconv.Quote(got), strconv.Quote(want))
 		}
 	}
-	if len(declared) != 9 {
+	if len(declared) != 10 {
 		t.Errorf("All() holds %d markers; update this test when the set changes", len(declared))
 	}
 }
@@ -85,5 +86,43 @@ func TestStripParrotedTransportMarkers(t *testing.T) {
 				t.Fatalf("got %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestEvidenceCoverageTagsSplitLikePlainTags(t *testing.T) {
+	for _, tc := range []struct {
+		name, content, tag, handle, body string
+	}{
+		{"plain", "[read#7]\n{}", "[read#7]\n", "read#7", "{}"},
+		{"range", "[read#7 a/b.go:10-20]\n{}", "[read#7 a/b.go:10-20]\n", "read#7", "{}"},
+		{"one line", "[read#7 a.go:14]\nrest", "[read#7 a.go:14]\n", "read#7", "rest"},
+		{"quoted path", "[read#7 \"a b.go\":1-2]\n{}", "[read#7 \"a b.go\":1-2]\n", "read#7", "{}"},
+		{"leg handle", "[leg-a:read#7 a.go:1-2]\n{}", "[leg-a:read#7 a.go:1-2]\n", "leg-a:read#7", "{}"},
+		{"prose after a handle is no tag", "[read#7 see below]\n{}", "", "", "[read#7 see below]\n{}"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tag, body := SplitEvidenceHandleTag(tc.content)
+			if tag != tc.tag || body != tc.body || EvidenceTagHandle(tag) != tc.handle {
+				t.Fatalf("split = %q %q handle %q", tag, body, EvidenceTagHandle(tag))
+			}
+		})
+	}
+}
+
+func TestFormatEvidenceCoverage(t *testing.T) {
+	for _, tc := range []struct {
+		path       string
+		start, end int
+		want       string
+	}{
+		{"a.go", 10, 20, "a.go:10-20"},
+		{"a.go", 14, 14, "a.go:14"},
+		{"a b.go", 1, 2, `"a b.go":1-2`},
+		{"a]b.go", 1, 2, ""},
+		{"a.go", 0, 2, ""},
+	} {
+		if got := FormatEvidenceCoverage(tc.path, tc.start, tc.end); got != tc.want {
+			t.Errorf("%q: got %q, want %q", tc.path, got, tc.want)
+		}
 	}
 }

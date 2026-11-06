@@ -93,10 +93,13 @@ var markdownParser = sync.OnceValue(func() parser.Parser {
 // wrapper is the body of a fence that is the entire source, when there is one.
 type structure struct {
 	zones     []Zone
+	images    []Image
 	links     map[int]*Link
 	exhausted bool
 	wrapper   *Span
 	body      Span
+	// definitions holds each link definition's destination by its zone's start.
+	definitions map[int]string
 }
 
 // LiteralZones returns the source's literal zones, under Parse's budgets. Past a
@@ -126,8 +129,16 @@ func (s *structure) shift(body Span) {
 		moved[start+body.Start] = link
 	}
 	s.links = moved
+	definitions := make(map[int]string, len(s.definitions))
+	for start, destination := range s.definitions {
+		definitions[start+body.Start] = destination
+	}
+	s.definitions = definitions
 	for i := range s.zones {
 		s.zones[i].Span = Span{s.zones[i].Span.Start + body.Start, s.zones[i].Span.End + body.Start}
+	}
+	for i := range s.images {
+		s.images[i].Span = Span{s.images[i].Span.Start + body.Start, s.images[i].Span.End + body.Start}
 	}
 }
 
@@ -155,7 +166,7 @@ func parseStructure(source string) structure {
 	pc := parser.NewContext()
 	pc.Set(parseLogKey, log)
 	doc := markdownParser().Parse(text.NewReader(data), parser.WithContext(pc))
-	out := structure{links: map[int]*Link{}, exhausted: log.linkWork > maxStructureWork, body: Span{0, len(data)}, wrapper: wrapperBody(doc, data)}
+	out := structure{links: map[int]*Link{}, definitions: map[int]string{}, exhausted: log.linkWork > maxStructureWork, body: Span{0, len(data)}, wrapper: wrapperBody(doc, data)}
 	_ = ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -199,15 +210,26 @@ func (s *structure) visit(n ast.Node, data []byte, log *parseLog) ast.WalkStatus
 		}
 		s.addBlock(ZoneHTMLBlock, span)
 	case *ast.LinkReferenceDefinition:
-		s.addBlock(ZoneDefinition, linesSpan(node, data))
+		span := linesSpan(node, data)
+		s.addBlock(ZoneDefinition, span)
+		s.definitions[span.Start] = cleanDestination(node.Destination)
 	case *ast.CodeSpan:
 		s.addInline(ZoneCodeSpan, log, n)
 	case *ast.RawHTML:
 		s.addInline(ZoneRawHTML, log, n)
 	case *ast.Image:
 		s.addInline(ZoneImage, log, n)
+		s.addImage(node, log)
 	case *ast.Link:
 		s.addLink(node, data, log)
+		// A link's children are not walked, yet an image in its label still renders.
+		_ = ast.Walk(node, func(child ast.Node, entering bool) (ast.WalkStatus, error) {
+			if image, ok := child.(*ast.Image); ok && entering {
+				s.addImage(image, log)
+				return ast.WalkSkipChildren, nil
+			}
+			return ast.WalkContinue, nil
+		})
 	case *ast.AutoLink:
 		s.addAutolink(node, data, log)
 	default:
@@ -219,6 +241,12 @@ func (s *structure) visit(n ast.Node, data []byte, log *parseLog) ast.WalkStatus
 func (s *structure) addBlock(kind ZoneKind, span Span) {
 	if span.End > span.Start {
 		s.zones = append(s.zones, Zone{Kind: kind, Span: span})
+	}
+}
+
+func (s *structure) addImage(node *ast.Image, log *parseLog) {
+	if extent, ok := log.extents[node]; ok {
+		s.images = append(s.images, Image{Span: Span{extent.start, extent.end}, Destination: cleanDestination(node.Destination)})
 	}
 }
 

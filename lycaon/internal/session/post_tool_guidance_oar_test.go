@@ -3,7 +3,9 @@ package session
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -89,13 +91,14 @@ func TestDoomLoopWarnForCommandOutputRoutesToProcessWait(t *testing.T) {
 	args := map[string]any{"handle": "cmd-docker-1", "cursor": 15395}
 
 	out, _ := mgr.ToolPolicy.AfterTool(
-		context.Background(), sess, "command_output", args, `{"running":true,"next_cursor":15395}`,
+		tools.WithCallReach(context.Background(), toolreach.Offered([]string{"wait"})), sess, "command_output", args, `{"running":true,"next_cursor":15395}`,
 		doomLoopWarnAfter(t, mgr), guidance.ToolResultFacts{},
 	)
 	for _, want := range []string{
 		"DOOM_LOOP_REPEAT_WARN",
-		`"handles":["cmd-docker-1"]`,
-		`"kind":"process_done"`,
+		"`wait(",
+		"cmd-docker-1",
+		"process_done",
 		"exact `next_cursor`",
 	} {
 		if !strings.Contains(out, want) {
@@ -108,7 +111,7 @@ func TestDoomLoopBlockForCommandOutputRoutesToProcessWait(t *testing.T) {
 	mgr := newPostToolGuidanceManager(t)
 	mgr.ToolPolicy.Pipeline.EnableAnchor(oar.AnchorToolPreInvoke)
 	reject, err := mgr.ToolPolicy.FormatDoomLoopReject(
-		context.Background(), "sess-1", "command_output",
+		tools.WithCallReach(context.Background(), toolreach.Offered([]string{"wait"})), "sess-1", "command_output",
 		map[string]any{"handle": "cmd-docker-1", "cursor": 15395},
 		loopguard.DoomLoopMaxAttempts, "",
 	)
@@ -116,12 +119,7 @@ func TestDoomLoopBlockForCommandOutputRoutesToProcessWait(t *testing.T) {
 	if reject == nil {
 		t.Fatal("command_output repetition did not render a block")
 	}
-	for _, want := range []string{
-		"DOOM_LOOP_REPEAT",
-		`"handles":["cmd-docker-1"]`,
-		`"kind":"process_done"`,
-		"terminal envelope",
-	} {
+	for _, want := range []string{"DOOM_LOOP_REPEAT", "`wait(", "cmd-docker-1", "process_done"} {
 		if !strings.Contains(reject.Body, want) {
 			t.Fatalf("command_output block missing %q:\n%s", want, reject.Body)
 		}
@@ -180,15 +178,13 @@ func TestRemotePackageDestinationBannerGivesNonWideningRecovery(t *testing.T) {
 		context.Background(), sess, "command", map[string]any{"command": "go run code.gitea.io/tea@v1.3.3"},
 		`{"exit_code":1,"network_mode":"proxy_only"}`, 1, guidance.ToolResultFacts{Confine: obs},
 	)
-	for _, want := range []string{
-		"Code: REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED",
-		"gitea.example.com",
-		"install or add the package",
-		"later command",
-	} {
+	for _, want := range []string{"Code: REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED", "gitea.example.com"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("remote package guidance missing %q:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "Fix:") || strings.Contains(out, "Next:") {
+		t.Fatalf("destination denial invented a widening or retry recipe: %s", out)
 	}
 	if !facts.HasCode(isolation.CodeRemotePackageDestinationDenied) {
 		t.Fatalf("facts = %+v", facts)
@@ -211,8 +207,8 @@ func TestVerifyUnverifiableBannerFiresOnConfineStop(t *testing.T) {
 	if !strings.Contains(out, "Code: VERIFY_UNVERIFIABLE") {
 		t.Fatalf("verify confine stop carried no banner:\n%s", out)
 	}
-	if strings.Contains(out, "Code: SANDBOX_BOUNDARY_REFUSED") || facts.HasCode(isolation.CodeBoundaryRefused) {
-		t.Fatalf("verify uses VERIFY_UNVERIFIABLE, not the command last-resort:\n%s", out)
+	if !strings.Contains(out, "Code: SANDBOX_BOUNDARY_REFUSED") || !facts.HasCode(isolation.CodeBoundaryRefused) {
+		t.Fatalf("verify lost the observed boundary refusal:\n%s", out)
 	}
 	if !facts.HasCode("VERIFY_UNVERIFIABLE") {
 		t.Fatalf("OAR must state VERIFY_UNVERIFIABLE on facts: %#v", facts)

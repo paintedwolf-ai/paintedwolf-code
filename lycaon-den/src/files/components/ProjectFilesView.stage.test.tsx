@@ -741,7 +741,6 @@ describe("ProjectFilesView stage chrome", () => {
 
     await waitFor(
       () => expect(calls).toBeGreaterThanOrEqual(2),
-      { timeout: 5000 },
     );
     await waitForFilesStageReady();
     expect(calls).toBe(2);

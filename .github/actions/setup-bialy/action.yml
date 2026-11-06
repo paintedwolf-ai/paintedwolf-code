@@ -17,7 +17,7 @@ runs:
         for HEAD in $(jq -r '.heads | keys[]' "${MANIFEST}"); do
           curl --fail --location --silent --show-error \
             --proto '=https' --proto-redir '=https' \
-            --retry 3 --connect-timeout 30 --max-time 600 \
+            --retry 20 --retry-all-errors --retry-delay 30 --connect-timeout 30 --max-time 600 \
             "https://huggingface.co/${HEADS_REPO}/resolve/${HEADS_REVISION}/${HEAD}.safetensors" \
             --output "${SOURCE_DIR}/${HEAD}.safetensors"
         done

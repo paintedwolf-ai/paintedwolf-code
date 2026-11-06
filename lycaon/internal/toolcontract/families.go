@@ -68,32 +68,6 @@ func ExpandFamilies(names []string) []string {
 	return out
 }
 
-// WithCompanions adds each listed tool's declared companions after the list.
-func WithCompanions(names []string) []string {
-	seen := make(map[string]struct{}, len(names))
-	out := make([]string, 0, len(names))
-	add := func(name string) {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return
-		}
-		if _, ok := seen[name]; ok {
-			return
-		}
-		seen[name] = struct{}{}
-		out = append(out, name)
-	}
-	for _, name := range names {
-		add(name)
-	}
-	for _, name := range names {
-		for _, companion := range compiledCompanions[strings.TrimSpace(name)] {
-			add(companion)
-		}
-	}
-	return out
-}
-
 // Implied returns the control tools required by live resources.
 func Implied(presence ResourcePresence) []string {
 	var facts []string

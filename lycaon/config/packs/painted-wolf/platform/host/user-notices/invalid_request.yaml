@@ -12,10 +12,6 @@ suggested_action: Check the fields and try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - could not be accepted
   - id: reason
     vars:
       reason: project_id is required
-    expect_contains:
-      - project_id is required

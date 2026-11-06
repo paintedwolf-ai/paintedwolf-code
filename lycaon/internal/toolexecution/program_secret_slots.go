@@ -4,7 +4,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"strings"
 )
 
 // Native reference sinks are explicit immutable operation metadata. The retained
@@ -24,7 +23,7 @@ func validateNativeSecretSlots(contract toolcontract.Contract, args map[string]a
 		outside = secretcap.ReferenceUseOutsideSlots(args, contract.SecretReferenceArgs)
 	}
 	if outside.Complete || outside.Malformed {
-		return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "managed secret reference is outside the operation's declared value sinks", "expected_form": strings.Join(contract.SecretReferenceArgs, ", ")})
+		return &toolrejection.ToolReject{Code: "SECRET_REFERENCE_OUTSIDE_SINK"}
 	}
 	return nil
 }

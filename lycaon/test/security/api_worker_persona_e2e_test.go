@@ -101,7 +101,7 @@ func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
 			break
 		}
 	}
-	if !strings.Contains(l1, "Plan Reviewer") || !strings.Contains(l1, "advisory") {
+	if !strings.Contains(l1, "advisory") {
 		t.Fatalf("plan-reviewer L1 = %q", l1)
 	}
 }

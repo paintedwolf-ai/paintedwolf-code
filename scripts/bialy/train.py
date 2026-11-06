@@ -484,10 +484,10 @@ def main():
         sys.stderr.write("holding out %d units from %s\n" % (len(held), ", ".join(args.holdout_pack)))
 
     schema = rowfile.RETENTION_SCHEMA if retention else rowfile.SCHEMA
-    train = rowfile.load(args.train, schema)
+    train = rowfile.load(args.train, schema, corpus=corpus)
     rng.shuffle(train)
     if args.val:
-        val = rowfile.load(args.val, schema)
+        val = rowfile.load(args.val, schema, corpus=corpus)
     else:
         cut = max(1, len(train) // 10)
         val, train = train[:cut], train[cut:]

@@ -123,7 +123,7 @@ func TestGrepCapturesEveryOccurrenceInCharacters(t *testing.T) {
 
 func TestTextIntentsNameTheLinesAWriteReplaces(t *testing.T) {
 	tctx, recorder := presenceCtx(t, map[string]string{"a.go": "one\ntwo\nthree\nfour\n"})
-	_, err := (&ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{"path": "a.go", "start_line": 2, "end_line": 3, "new_content": "TWO\nTHREE\nextra"}, tctx)
+	_, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{"path": "a.go", "content": "one\nTWO\nTHREE\nextra\nfour\n"}, tctx)
 	testutil.FailErr(t, "replace lines", err)
 	if len(recorder.intents) != 1 {
 		t.Fatalf("intents = %+v", recorder.intents)

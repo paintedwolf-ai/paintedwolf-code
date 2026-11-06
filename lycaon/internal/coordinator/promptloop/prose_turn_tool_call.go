@@ -1,9 +1,12 @@
 package promptloop
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -39,4 +42,49 @@ func proseTurnToolNames(calls []api.ToolCall) []string {
 		}
 	}
 	return names
+}
+
+func allBookkeepingToolCalls(calls []api.ToolCall) bool {
+	if len(calls) == 0 {
+		return false
+	}
+	for _, call := range calls {
+		if strings.TrimSpace(call.Name) != "update_progress" {
+			return false
+		}
+	}
+	return true
+}
+
+func (l *modelTurn) retryProseFinishAfterBookkeeping(
+	ctx context.Context,
+	sess *api.Session,
+	client modelcall.LLMClient,
+	req modelcall.CompletionRequest,
+	onProgress func(*modelcall.Completion),
+	llmCallID, providerID, model string,
+) (*modelcall.Completion, []string, bool) {
+	retryReq := req
+	retryReq.ToolUse = modelcall.ToolUseForbidden
+	retryReq.Tools = nil
+	msgs := make([]api.Message, 0, len(req.Messages)+1)
+	msgs = append(msgs, req.Messages...)
+	msgs = append(msgs, api.Message{
+		Role:       api.MessageRoleUser,
+		Origin:     api.MessageOriginHost,
+		Visibility: api.MessageVisibilityInternal,
+		Content:    "[host:coordinator-closeout]\n\nTool calls are disabled on this final turn, and open checklist items may remain unchecked. Write only the final Markdown report and citations fence now.",
+	})
+	retryReq.Messages = msgs
+	retryCallID := llmCallID + "-prose-retry"
+	collected, err := l.collectPromptStream(ctx, sess, client, retryReq, onProgress, retryCallID, providerID, model)
+	if err != nil || collected.completion == nil || strings.TrimSpace(collected.completion.Content) == "" {
+		return nil, nil, false
+	}
+	completion := collected.completion
+	completion.ToolCalls = nil
+	if err := l.recordUsage(ctx, sess, retryCallID, collected.providerID, collected.model, retryReq, completion); err != nil {
+		slog.WarnContext(ctx, "record llm call usage", "call_id", retryCallID, "error", err)
+	}
+	return completion, collected.tokens, true
 }

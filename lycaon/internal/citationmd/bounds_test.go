@@ -31,7 +31,7 @@ func allocatedBytes(source string) (Document, uint64) {
 
 // C1, H9, AC-AST-12: the review's shapes report a structured issue before the
 // structural parse, and allocate in proportion to their size, at the full budget.
-func TestStructureBudgetShapes(t *testing.T) { //nolint:paralleltest // Reads the process-wide allocation counter.
+func TestStructureBudgetShapes(t *testing.T) {
 	const size = MaxSourceBytes
 	shapes := map[string]string{
 		"C1 table":          tableShape(2730),
@@ -45,6 +45,11 @@ func TestStructureBudgetShapes(t *testing.T) { //nolint:paralleltest // Reads th
 		"image labels":      strings.Repeat("![a", size/7) + strings.Repeat("](x)", size/7),
 		"nested list":       nestedListShape(size),
 		"blockquote depth":  strings.Repeat(">", maxContainerDepth+1) + " x",
+		"declarations":      "a " + strings.Repeat("<!A ", size/4),
+		"multi-line labels": strings.Repeat("[a\nb]: c\n", size/8),
+		"escaped labels":    strings.Repeat("[a\\]b]: c\n", size/9),
+		"bracket lines":     strings.Repeat("[a.go:0]\n", size/9),
+		"list definitions":  strings.Repeat("- [a]: b\n", size/9),
 	}
 	for name, source := range shapes {
 		if len(source) > MaxSourceBytes {
@@ -61,7 +66,7 @@ func TestStructureBudgetShapes(t *testing.T) { //nolint:paralleltest // Reads th
 }
 
 // H9: shapes under the budgets are parsed, and stay proportional in allocation.
-func TestParsedShapesAllocateInProportion(t *testing.T) { //nolint:paralleltest // Reads the process-wide allocation counter.
+func TestParsedShapesAllocateInProportion(t *testing.T) {
 	const size = 1 << 20
 	shapes := map[string]string{
 		"plain":      strings.Repeat("word word word\n", size/15),
@@ -99,45 +104,63 @@ func TestStructureBudgetLeavesOrdinaryDocumentsAlone(t *testing.T) {
 	}
 }
 
-// M5: the literal helpers answer under the same budgets.
+// M5: the literal helpers answer under the same budgets, and past one they offer no
+// range where a node could begin.
 func TestLiteralHelpersRespectBudgets(t *testing.T) {
 	t.Parallel()
 	over := "```\n[read#1]\n```\n" + tableShape(2730)
 	zones := LiteralZones(over)
-	if len(zones) != 1 || zones[0].Kind != ZoneFence {
+	if len(zones) != 1 || zones[0].Kind != ZoneEscapedDocument || zones[0].Span != (Span{0, len(over)}) {
 		t.Fatalf("zones = %+v", zones)
 	}
-	ranges := TextRanges(over)
-	if len(ranges) != 1 || ranges[0].Start != zones[0].Span.End {
+	if ranges := TextRanges(over); len(ranges) != 0 {
 		t.Fatalf("ranges = %+v", ranges)
 	}
 }
 
-// M6: a source past a budget keeps fence-like regions; the check does not fire on
-// a thematic break.
-func TestBudgetFallbackKeepsLiterals(t *testing.T) {
+// N5, N6: past any budget a document displays as one literal block, whatever it holds,
+// and nothing is taken from it.
+func TestOverBudgetDisplaysLiterally(t *testing.T) {
 	t.Parallel()
-	const overflow = "\n\n<! " // Keeps the table shape's block separate from the tail.
-	cases := []struct{ name, tail string }{
-		{"fence", "```\n[read#1]\n\nx\n```\nAfter [read#2] text"},
-		{"quoted fence", "> ~~~\n> [read#1]\n> ~~~\nAfter [read#2] text"},
-		{"unclosed fence", "After [read#2] text\n```\n[read#1]\n"},
-		{"code span", "After [read#2] text `[read#1]` end"},
-		{"code span of two", "After [read#2] text ``a ` [read#1]`` end ` x"},
+	links := "[x](https://unobs.test/z) https://unobs.test/y <a href=\"https://unobs.test/h\">h</a> ````"
+	cases := []struct {
+		name   string
+		source string
+		opts   Options
+		code   IssueCode
+	}{
+		{"source", links + strings.Repeat(" word", 3), Options{MaxSourceBytes: 10}, IssueSourceBudget},
+		{"structure", tableShape(2730) + "\n\n" + links, Options{}, IssueStructureBudget},
+		{"occurrences", strings.Repeat("[read#1] ", 3) + links, Options{MaxOccurrences: 2}, IssueOccurrenceBudget},
+		{"issues", strings.Repeat("[read#x] ", 3) + links, Options{MaxOccurrences: 2}, IssueOccurrenceBudget},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			source := tableShape(2730) + overflow + "\n\n" + tc.tail
-			doc := Parse(source, Options{})
-			if got := issueCodes(doc); len(got) == 0 || got[0] != IssueStructureBudget {
-				t.Fatalf("issues = %v", got)
+			doc := Parse(tc.source, tc.opts)
+			codes := issueCodes(doc)
+			if len(codes) == 0 || codes[len(codes)-1] != tc.code {
+				t.Fatalf("issues = %v", codes)
 			}
-			got := Project(doc)
-			if !strings.Contains(got, "[read#1]") || strings.Contains(got, "[read#2]") || !strings.Contains(got, "After") {
-				t.Fatalf("presented %.200q", got[max(0, len(got)-200):])
+			want := "`````\n" + tc.source + "\n`````"
+			if got := Render(doc, func(Occurrence) Rendition { return Rendition{Keep: true} }); got != want {
+				t.Fatalf("got %.80q", got)
 			}
 		})
+	}
+}
+
+// B4: presentation is one linear pass whatever the shape.
+func TestRenderWorkIsLinear(t *testing.T) {
+	t.Parallel()
+	const size = 1 << 20
+	for _, unit := range []string{"[a.go:0] ", "[a.go:0]\n", "[read#1] ", "[read#1] x ", "x[read#1]", "[read#1]   ", "- [read#1]\n", "[read#1] [read#x] ---\n"} {
+		source := strings.Repeat(unit, size/len(unit))
+		doc := Parse(source, Options{MaxOccurrences: size, KnownHandleKind: func(string) bool { return true }})
+		_, work := renderCounted(doc, func(Occurrence) Rendition { return Rendition{} })
+		if work > 4*len(source) {
+			t.Errorf("unit %q took %d lookups for %d bytes", unit, work, len(source))
+		}
 	}
 }
 

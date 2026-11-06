@@ -20,6 +20,7 @@ export const PROVIDER_ONBOARDING_MODEL_HINTS = {
   "litellm-proxy": "Route the proxy to a strong upstream model with tools.",
   gemini: "Gemini 3.5 Flash or a Pro model work well.",
   fireworks: "Prefer Kimi K2.7 Code or K2.6, or another strong model with tools.",
+  deepinfra: "Prefer Kimi K2.7 Code or K2.6, or another strong model with tools.",
   bedrock: "Claude Sonnet or Opus with tool use work well.",
   vertex: "Gemini Flash or Pro models work well.",
   "vertex-express":
@@ -28,6 +29,10 @@ export const PROVIDER_ONBOARDING_MODEL_HINTS = {
     "Claude Sonnet, Gemini Flash, or Kimi — pick a strong model with tools.",
   "cloudflare-workers-ai":
     "Prefer large Workers AI models with tools; small ones struggle.",
+  scaleway:
+    "Prefer Qwen3 235B or Llama 3.3 70B, or another strong model with tools.",
+  mistral: "Mistral Large or Magistral Medium with tool calling work well.",
+  cerebras: "Prefer GPT-OSS 120B or Qwen 3 235B with tool calling.",
 } as const satisfies Record<string, string>;
 
 export type ProviderOnboardingKind = keyof typeof PROVIDER_ONBOARDING_MODEL_HINTS;

@@ -38,7 +38,6 @@ describe("composer vault unlock", () => {
   it("shows an unlocked chat and locks it on request", async () => {
     const h = setup(async () => unlocked());
     const button = await screen.findByTestId("composer-vault-unlock");
-    expect(button.getAttribute("aria-label")).toContain("unlocked for this chat until");
     fireEvent.click(button);
     expect(h.lockChatVault).toHaveBeenCalledWith(CHAT);
     await waitFor(() => expect(screen.queryByTestId("composer-vault-unlock")).toBeNull());

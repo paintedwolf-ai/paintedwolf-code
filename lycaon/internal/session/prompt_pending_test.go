@@ -5,15 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -228,5 +233,108 @@ func TestDraftItemsPendUnlessHeldForEditing(t *testing.T) {
 	}
 	if last := lastSessionEvent(t, sessionEventsFor(t, hub, ch, sess.ID)); !last.PromptPending {
 		t.Fatalf("send update = %+v, want the reserved item pending again", last)
+	}
+}
+
+func TestQueuedPromptDispatchesWhenRoundCompletesAfterTurnEndCheck(t *testing.T) {
+	ctx := context.Background()
+	mgr, st := newTestManager(t)
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	dir := t.TempDir()
+	testdbseed.BindSessionWorkspace(t, st, sess.ID, dir)
+	workers := &queueRoundWorkerQueue{jobs: []api.WorkerTask{{
+		ID: "job-1", ParentSessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
+		WorkspacePath: dir, Status: api.WorkerStatusRunning,
+	}}}
+	mgr.SetWorkerQueue(workers)
+
+	row, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "second", promptinput.Input{Text: "second of two"})
+	testutil.FailErr(t, "admit prompt", err)
+	_, err = mgr.Submissions.RunPromptSubmission(ctx, row.ID)
+	testutil.FailErr(t, "dispatch check with open round", err)
+	waiting, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
+	testutil.FailErr(t, "get waiting receipt", err)
+	if waiting.Status != store.PromptSubmissionQueued {
+		t.Fatalf("receipt status = %s, want queued while the worker cycle runs", waiting.Status)
+	}
+
+	workers.jobs[0].Status = api.WorkerStatusComplete
+	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
+	mgr.Coordinator.WaitForTurns(ctx)
+
+	closed, err := mgr.Submissions.GetPromptSubmission(ctx, row.ID)
+	testutil.FailErr(t, "get drained receipt", err)
+	if closed.Status != store.PromptSubmissionComplete {
+		t.Fatalf("receipt status = %s, want complete once the round completes", closed.Status)
+	}
+	if draft := mgr.Resources.Queue.Snapshot(sess.ID); len(draft.QueueItems) != 0 {
+		t.Fatalf("draft retained items after round-end drain: %+v", draft.QueueItems)
+	}
+
+	// A later quiescence finds nothing queued and does not replay the turn.
+	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
+	mgr.Coordinator.WaitForTurns(ctx)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
+	testutil.FailErr(t, "get messages", err)
+	userTurns := 0
+	for _, msg := range msgs {
+		if msg.Role == api.MessageRoleUser && msg.Content == "second of two" {
+			userTurns++
+		}
+	}
+	if userTurns != 1 {
+		t.Fatalf("queued prompt dispatched %d times, want exactly once", userTurns)
+	}
+}
+
+type gatedPromptPending struct {
+	manager    *Host
+	writerHeld chan struct{}
+	queueHeld  chan struct{}
+}
+
+func (p *gatedPromptPending) PromptPendingAmong(sessionID string, ids []string) bool {
+	close(p.writerHeld)
+	<-p.queueHeld
+	return p.manager.Runner.SubmissionState.PromptPendingAmong(sessionID, ids)
+}
+
+func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
+	database := testdbfixture.Open(t, "queue-seen.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	st := store.NewSQL(database)
+	st.SetEventOutbox(eventoutbox.New(database, events.NewMemoryHub()))
+	manager := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	row, _, err := manager.Submissions.AdmitPrompt(t.Context(), sess.ID, uuid.NewString(), "queued", promptinput.Input{Text: "queued"})
+	testutil.FailErr(t, "admit queued prompt", err)
+	manager.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "queued", row.AdmissionSeq, row.CreatedAt)
+	pending := &gatedPromptPending{manager: manager, writerHeld: make(chan struct{}), queueHeld: make(chan struct{})}
+	st.SetPromptPending(pending)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	seen := make(chan error, 1)
+	go func() {
+		seen <- st.UpdateSession(ctx, sess.ID, func(s *api.Session) { now := time.Now(); s.SeenAt = &now })
+	}()
+	select {
+	case <-pending.writerHeld:
+	case <-ctx.Done():
+		t.Fatal("seen update never acquired writer")
+	}
+	_, taken, claimErr := manager.Resources.Queue.TakeNextTurn(sess.ID, func(items []api.QueueItem) error {
+		close(pending.queueHeld)
+		_, claimed, err := st.ClaimPromptSubmission(ctx, items[0].ID)
+		if err == nil && !claimed {
+			t.Error("queued receipt was not claimed")
+		}
+		return err
+	})
+	testutil.FailErr(t, "claim queued receipt with seen writer active", claimErr)
+	testutil.FailErr(t, "publish seen state during queue claim", <-seen)
+	if !taken {
+		t.Fatal("queue did not drain")
 	}
 }

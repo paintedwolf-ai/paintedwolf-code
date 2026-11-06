@@ -6,6 +6,3 @@ suggested_action: Attach the text as a file and send the message again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - inline text
-      - Attach

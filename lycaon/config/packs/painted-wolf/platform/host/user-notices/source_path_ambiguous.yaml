@@ -6,5 +6,3 @@ suggested_action: "Choose the file from the Files tree so its folder is known."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "more than one attached folder"

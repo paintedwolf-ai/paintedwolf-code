@@ -23,8 +23,6 @@ func (diag Diagnosis) Reason(err error, args map[string]any) string {
 		m := diag.Misplaced[0]
 		return fmt.Sprintf("properties %s under %s belong under %s%s",
 			strings.Join(m.Fields, ", "), argPathLabel(m.FoundUnder), argPathLabel(m.BelongsUnder), received)
-	case diag.DidYouMean != nil:
-		return fmt.Sprintf("unknown property %q; did you mean %q?%s", diag.DidYouMean.Path, diag.DidYouMean.DidYouMean, received)
 	case len(diag.ConflictKeys) > 0:
 		return fmt.Sprintf("conflicting properties: provide only one of %s%s", strings.Join(diag.ConflictKeys, ", "), received)
 	case err == nil:

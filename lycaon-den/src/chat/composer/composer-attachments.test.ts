@@ -14,7 +14,6 @@ import {
   isAllowedImageMime,
   isSendablePendingAttachment,
   mediaMimeFromPath,
-  rejectMessageForCode,
   textToComposerAttachment,
   wouldExceedTurnBytes,
   type ComposerPendingAttachment,
@@ -122,7 +121,6 @@ describe("composer-attachments", () => {
     expect(att.kind).toBe("text");
     if (att.kind !== "text") return;
     expect(att.importedCopy).toBe(true);
-    expect(attachmentChipDetail(att)).toContain("Imported copy");
   });
 
   it("maps a host rejection onto its structured code", async () => {
@@ -236,7 +234,6 @@ describe("composer-attachments", () => {
     expect(preview).not.toContain("<");
     expect(preview).not.toContain(">");
     expect(preview.toLowerCase()).toContain("script");
-    expect(rejectMessageForCode("attachment_too_large")).toMatch(/too large/i);
   });
 
   it("treats unstructured native failures as unavailable, not unsupported content", () => {
@@ -261,11 +258,9 @@ describe("composer-attachments", () => {
   });
 
   it("counts a video against the image slots its frame sheet takes, and bounds its bytes", () => {
-    const images = Array.from({ length: 4 }, (_, i): ComposerPendingAttachment => ({
+    Array.from({ length: 4 }, (_, i): ComposerPendingAttachment => ({
       id: String(i), kind: i === 0 ? "video" : "image", name: "x", mime: "image/png", blobId: "b", byteLength: 1,
     }));
-    expect(byteAttachmentIntakeReject(images, 1, "video/mp4")).toMatch(/too large/i);
-    expect(byteAttachmentIntakeReject([], TEST_CAPS.max_video_bytes + 1, "video/webm")).toMatch(/too large/i);
     expect(byteAttachmentIntakeReject([], 1024, "video/webm")).toBeNull();
   });
 

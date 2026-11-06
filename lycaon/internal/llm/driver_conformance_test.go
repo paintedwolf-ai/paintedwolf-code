@@ -3,15 +3,19 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	bedrockprovider "github.com/lycaon/lycaon/internal/llm/providers/bedrock"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -39,6 +43,7 @@ func openAICompatConformanceCases() []openAICompatConformanceCase {
 		{kind: "openai", wantBearer: true, promptCache: promptCacheRequireKey},
 		{kind: "openai-compatible", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "fireworks", wantBearer: true, promptCache: promptCacheRequireKey},
+		{kind: "deepinfra", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "together", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "openrouter", wantBearer: true, promptCache: promptCacheRequireKey},
 		{kind: "gemini", wantBearer: true, promptCache: promptCacheForbidKey},
@@ -47,7 +52,10 @@ func openAICompatConformanceCases() []openAICompatConformanceCase {
 		{kind: "lmstudio", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "omlx", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "cloudflare-workers-ai", wantBearer: true, promptCache: promptCacheForbidKey, cloudflareAccount: true},
+		{kind: "scaleway", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "vertex", wantBearer: true, promptCache: promptCacheForbidKey},
+		{kind: "mistral", wantBearer: true, promptCache: promptCacheForbidKey},
+		{kind: "cerebras", wantBearer: true, promptCache: promptCacheForbidKey},
 	}
 }
 
@@ -216,6 +224,152 @@ func buildConformanceProvider(t *testing.T, kind, baseURL, apiKey string) modelc
 		if err != nil {
 			t.Fatalf("build conformance provider: %v", err)
 		}
+		if bp, ok := provider.(*bedrockprovider.Provider); ok {
+			bp.WithEndpoint(baseURL)
+		}
 		return attachPromptCache(provider, policy)
+	}
+}
+
+func driverPartialStreamFrame(kind string) (contentType, frame string) {
+	switch kind {
+	case "anthropic":
+		return "text/event-stream", "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"half\"}}\n\n"
+	case "vertex-express":
+		return "text/event-stream", "data: {\"candidates\":[{\"content\":{\"role\":\"model\",\"parts\":[{\"text\":\"half\"}]}}]}\n\n"
+	case "ollama":
+		return "application/x-ndjson", "{\"message\":{\"content\":\"half\"},\"done\":false}\n"
+	case "bedrock":
+		return "application/json", "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"half"
+	default:
+		return "text/event-stream", "data: {\"choices\":[{\"delta\":{\"content\":\"half\"}}]}\n\n"
+	}
+}
+
+func buildFaultConformanceProvider(t *testing.T, kind, srvURL string) modelcall.Provider {
+	t.Helper()
+	baseURL := srvURL
+	switch kind {
+	case "cloudflare-workers-ai":
+		baseURL = srvURL + "/accounts/conftest/ai/v1"
+	case "vertex-express", "ollama":
+		baseURL = srvURL + "/v1"
+	}
+	return buildConformanceProvider(t, kind, baseURL, "conformance-key")
+}
+
+func abortConformanceBody(w http.ResponseWriter, contentType, partial string) {
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", "4096")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(partial))
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	if hijacker, ok := w.(http.Hijacker); ok {
+		if conn, _, err := hijacker.Hijack(); err == nil {
+			if tcp, ok := conn.(*net.TCPConn); ok {
+				_ = tcp.SetLinger(0)
+			}
+			_ = conn.Close()
+		}
+	}
+}
+
+func TestAllRegisteredDriversInterruptedAndEmptyConformance(t *testing.T) {
+	req := modelcall.CompletionRequest{
+		Model:    "m",
+		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "ping"}},
+	}
+	for _, kind := range driverFactories.Kinds() {
+		t.Run(kind, func(t *testing.T) {
+			contentType, partialFrame := driverPartialStreamFrame(kind)
+
+			t.Run("complete broken body after headers", func(t *testing.T) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					abortConformanceBody(w, "application/json", `{"broken":`)
+				}))
+				defer srv.Close()
+
+				p := buildFaultConformanceProvider(t, kind, srv.URL)
+				_, err := p.Complete(t.Context(), req)
+				if _, ok := failure.AsProviderResponseInterrupted(err); !ok {
+					t.Fatalf("kind %s Complete err = %v, want ProviderResponseInterruptedError", kind, err)
+				}
+			})
+
+			t.Run("stream mid-stream connection reset", func(t *testing.T) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					abortConformanceBody(w, contentType, partialFrame)
+				}))
+				defer srv.Close()
+
+				p := buildFaultConformanceProvider(t, kind, srv.URL)
+				ch, err := p.Stream(t.Context(), req)
+				testutil.FailErr(t, "open stream", err)
+				_, _, err = modelcall.CollectStream(ch)
+				if _, ok := failure.AsProviderResponseInterrupted(err); !ok {
+					t.Fatalf("kind %s Stream reset err = %v, want ProviderResponseInterruptedError", kind, err)
+				}
+			})
+
+			if kind == "bedrock" {
+				t.Run("empty converse completion", func(t *testing.T) {
+					srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						_, _ = io.Copy(io.Discard, r.Body)
+						w.Header().Set("Content-Type", "application/json")
+						_, _ = w.Write([]byte(`{"output":{"message":{"role":"assistant","content":[]}},"stopReason":"end_turn"}`))
+					}))
+					defer srv.Close()
+
+					p := buildFaultConformanceProvider(t, kind, srv.URL)
+					ch, err := p.Stream(t.Context(), req)
+					testutil.FailErr(t, "open stream", err)
+					_, _, err = modelcall.CollectStream(ch)
+					empty, ok := failure.AsProviderEmptyCompletion(err)
+					if !ok || !empty.Retryable {
+						t.Fatalf("kind %s empty stream err = %v, want retryable ProviderEmptyCompletionError", kind, err)
+					}
+				})
+				return
+			}
+
+			t.Run("stream closes after output without terminal event", func(t *testing.T) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					w.Header().Set("Content-Type", contentType)
+					_, _ = w.Write([]byte(partialFrame))
+				}))
+				defer srv.Close()
+
+				p := buildFaultConformanceProvider(t, kind, srv.URL)
+				ch, err := p.Stream(t.Context(), req)
+				testutil.FailErr(t, "open stream", err)
+				_, _, err = modelcall.CollectStream(ch)
+				if _, ok := failure.AsProviderResponseInterrupted(err); !ok || !errors.Is(err, io.ErrUnexpectedEOF) {
+					t.Fatalf("kind %s Stream missing terminal err = %v, want ProviderResponseInterruptedError wrapping unexpected EOF", kind, err)
+				}
+			})
+
+			t.Run("stream closes before any output", func(t *testing.T) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					w.Header().Set("Content-Type", contentType)
+					w.WriteHeader(http.StatusOK)
+				}))
+				defer srv.Close()
+
+				p := buildFaultConformanceProvider(t, kind, srv.URL)
+				ch, err := p.Stream(t.Context(), req)
+				testutil.FailErr(t, "open stream", err)
+				_, _, err = modelcall.CollectStream(ch)
+				empty, ok := failure.AsProviderEmptyCompletion(err)
+				if !ok || !empty.Retryable {
+					t.Fatalf("kind %s empty stream err = %v, want retryable ProviderEmptyCompletionError", kind, err)
+				}
+			})
+		})
 	}
 }

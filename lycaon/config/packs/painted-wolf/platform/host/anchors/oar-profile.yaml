@@ -24,7 +24,9 @@ host: paintedwolf
 # Successors: paintedwolf.native_operation and paintedwolf.native_command identify
 # the reached native operation directly; command programs do not redirect to tools.
 # Retired: paintedwolf.surface_note_offered gated a tool that direct publication replaces.
-# Successor: paintedwolf.unpublished_tool_text_pending.
+# Successor: the paintedwolf.markdown_note content contract.
+# Retired: paintedwolf.has_completion_report meant the closeout parsed as JSON.
+# Successor: paintedwolf.closeout_has_answer.
 # Retired fact names must never be reused.
 # Retired: paintedwolf.high_risk_tool combined policy categories (OAR-FACT-7).
 # Successor: compose paintedwolf.tool_is_state, tool_is_delegation,
@@ -418,6 +420,8 @@ host_facts:
    type: bool
  - name: paintedwolf.mid_turn_citation_attempted
    type: bool
+ - name: paintedwolf.mid_turn_evidence_unreadable
+   type: bool
  - name: paintedwolf.surface_may_finish
    type: bool
  - name: paintedwolf.is_host_cycle_turn
@@ -430,7 +434,9 @@ host_facts:
    type: int
  - name: paintedwolf.progress_has_open_steps
    type: bool
- - name: paintedwolf.has_completion_report
+ - name: paintedwolf.closeout_has_answer
+   type: bool
+ - name: paintedwolf.closeout_only_repair_directives
    type: bool
  - name: paintedwolf.task_envelope_echo
    type: bool
@@ -692,6 +698,9 @@ host_facts:
  - name: paintedwolf.refused_read_grants
    type: list<string>
    observation: The capability_request.read_path path whose approval would open each refused read path that a reviewed grant can open; empty when none.
+ - name: paintedwolf.refused_credential_store_paths
+   type: list<string>
+   observation: Host OS credential store paths or session D-Bus endpoints the kernel refused the invocation's processes; empty when none.
  - name: paintedwolf.receiving_tool_summarize
    type: bool
    observation: The receiving tool identity is summarize.
@@ -749,6 +758,9 @@ host_facts:
  - name: paintedwolf.credential_harvested
    type: bool
    observation: Whether the root session's harvest contains the candidate fingerprint. Provider failure if provenance lookup is unavailable.
+ - name: paintedwolf.git_no_repository_on_write_leg
+   type: bool
+   observation: True when a native Git read in this command's program, on a worker branch, found no repository.
  - name: paintedwolf.editorconfig_mismatch
    type: bool
    observation: True when a landed text write broke a rule its .editorconfig chain declares on lines the write inserted or rewrote; false when no rule is declared or the chain could not be read.
@@ -790,6 +802,70 @@ host_facts:
    type: list<string>
  - name: paintedwolf.missing_summary_job_ids
    type: list<string>
+ - name: paintedwolf.missing_capability_host_resources
+   type: bool
+ - name: paintedwolf.missing_capability_socket_paths
+   type: bool
+ - name: paintedwolf.missing_capability_direct_ip
+   type: bool
+ - name: paintedwolf.missing_capability_process_control
+   type: bool
+ - name: paintedwolf.missing_capability_credential_store
+   type: bool
+ - name: paintedwolf.missing_capability_host_execution
+   type: bool
+ - name: paintedwolf.missing_capability_local_listen
+   type: bool
+ - name: paintedwolf.missing_capability_loopback_connect
+   type: bool
+ - name: paintedwolf.missing_capability_write_root
+   type: bool
+ - name: paintedwolf.missing_capability_read_path
+   type: bool
+ - name: paintedwolf.expected_revision
+   type: string
+ - name: paintedwolf.observed_revision
+   type: string
+ - name: paintedwolf.revision_change_observed
+   type: bool
+ - name: paintedwolf.limit_observation_known
+   type: bool
+ - name: paintedwolf.glob_limit_known
+   type: bool
+ - name: paintedwolf.background_limit_known
+   type: bool
+ - name: paintedwolf.awaited_capacity_known
+   type: bool
+ - name: paintedwolf.failure_count_known
+   type: bool
+ - name: paintedwolf.use_env_param
+   type: bool
+ - name: paintedwolf.use_cwd_param
+   type: bool
+ - name: paintedwolf.env_var
+   type: string
+ - name: paintedwolf.argument_schema_tool
+   type: string
+ - name: paintedwolf.argument_schema_matches_tool
+   type: bool
+ - name: paintedwolf.capability_contract_known
+   type: bool
+ - name: paintedwolf.supports_host_resources
+   type: bool
+ - name: paintedwolf.supports_socket_paths
+   type: bool
+ - name: paintedwolf.supports_direct_ip
+   type: bool
+ - name: paintedwolf.supports_process_control
+   type: bool
+ - name: paintedwolf.supports_credential_store
+   type: bool
+ - name: paintedwolf.supports_host_execution
+   type: bool
+ - name: paintedwolf.supports_write_root
+   type: bool
+ - name: paintedwolf.supports_read_path
+   type: bool
  - name: paintedwolf.supports_local_listen
    type: bool
  - name: paintedwolf.supports_loopback_connect
@@ -852,22 +928,28 @@ host_facts:
    type: string
  - name: paintedwolf.tool_discovery_has_more
    type: bool
- - name: paintedwolf.task_loadable
+ - name: paintedwolf.task_dispatchable
    type: bool
  - name: paintedwolf.tool_loadable
    type: bool
+ - name: paintedwolf.tool_retired_to_content
+   type: bool
+ - name: paintedwolf.tool_retired_to_command
+   type: bool
+ - name: paintedwolf.tool_command_forms
+   type: list<string>
  - name: paintedwolf.native_replacement_tools
    type: list<string>
  - name: paintedwolf.native_replacement_exact
    type: bool
  - name: paintedwolf.native_replacement_manual
    type: bool
- - name: paintedwolf.replacement_calls_available
-   type: bool
  - name: paintedwolf.tool_discovery_available
    type: bool
  - name: paintedwolf.offered_tools
    type: list<string>
+ - name: paintedwolf.next_steps
+   type: string
  - name: paintedwolf.can_task
    type: bool
  - name: paintedwolf.can_complete_leg
@@ -1160,6 +1242,8 @@ host_facts:
    type: string
  - name: paintedwolf.shell_metacharacters
    type: bool
+ - name: paintedwolf.side
+   type: string
  - name: paintedwolf.size
    type: string
  - name: paintedwolf.failure_source_unchanged
@@ -1171,6 +1255,8 @@ host_facts:
  - name: paintedwolf.spill_path
    type: string
  - name: paintedwolf.start_line
+   type: string
+ - name: paintedwolf.state
    type: string
  - name: paintedwolf.status
    type: string
@@ -1296,8 +1382,60 @@ host_facts:
    type: int
  - name: paintedwolf.source_column
    type: int
+ - name: paintedwolf.command_execution
+   type: string
  - name: paintedwolf.expected_form
    type: string
+ - name: paintedwolf.parser_unclosed_quote
+   type: bool
+ - name: paintedwolf.parser_unclosed_heredoc
+   type: bool
+ - name: paintedwolf.parser_expected_closer
+   type: bool
+ - name: paintedwolf.parser_expected_following
+   type: bool
+ - name: paintedwolf.parser_utf8_bom
+   type: bool
+ - name: paintedwolf.parser_nul_byte
+   type: bool
+ - name: paintedwolf.parser_invalid_utf8
+   type: bool
+ - name: paintedwolf.parser_single_quote
+   type: bool
+ - name: paintedwolf.source_excerpt
+   type: string
+ - name: paintedwolf.source_excerpt_start_byte
+   type: int
+ - name: paintedwolf.source_excerpt_end_byte
+   type: int
+ - name: paintedwolf.source_excerpt_line
+   type: int
+ - name: paintedwolf.source_excerpt_column
+   type: int
+ - name: paintedwolf.diagnostic_stage
+   type: string
+ - name: paintedwolf.diagnostic_pre_evaluation
+   type: bool
+ - name: paintedwolf.diagnostic_top_level
+   type: bool
+ - name: paintedwolf.parser_kind
+   type: string
+ - name: paintedwolf.parser_message
+   type: string
+ - name: paintedwolf.parser_expected
+   type: string
+ - name: paintedwolf.parser_found
+   type: string
+ - name: paintedwolf.parser_detected_line
+   type: int
+ - name: paintedwolf.parser_detected_column
+   type: int
+ - name: paintedwolf.parser_incomplete
+   type: bool
+ - name: paintedwolf.parser_details_omitted
+   type: bool
+ - name: paintedwolf.source_unit_id_omitted
+   type: bool
  - name: paintedwolf.resource_unit
    type: string
  - name: paintedwolf.limit_id
@@ -1318,9 +1456,9 @@ host_facts:
    type: string
  - name: paintedwolf.year
    type: string
- - name: paintedwolf.fetch_url_deferred
-   type: bool
  - name: paintedwolf.http_request_web_page
+   type: bool
+ - name: paintedwolf.http_request_loopback_other_session
    type: bool
  - name: paintedwolf.misplaced_fields
    type: list<string>

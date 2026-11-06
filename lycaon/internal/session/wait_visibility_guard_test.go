@@ -16,6 +16,7 @@ type pinnedSurface string
 
 func (s pinnedSurface) PromptTurnSurfaceID(string) string { return string(s) }
 
+// AC-COMPAT-09: WAIT_HIDDEN_TEXT fires through the real guard and stock policy.
 func TestBeforeWaitReadsSurfaceAndDurableNotes(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	calls := []api.ToolCall{{ID: "wait-1", Name: "wait"}}
@@ -50,6 +51,34 @@ func TestBeforeWaitReadsSurfaceAndDurableNotes(t *testing.T) {
 
 // AC-MID-04, AC-MID-12: a withheld reason reaches the next request as one durable
 // host row whose parts keep their provenance, and it blocks nothing.
+// AC-MID-12: each withheld notice names its own defect, not a generic refusal.
+func TestWithheldNoticesStateTheirOwnDefect(t *testing.T) {
+	for _, tc := range []struct{ code, offender string }{
+		{guidance.MidTurnNoteArtifactCode, "11111111-1111-1111-1111-111111111111"},
+		{guidance.MidTurnNoteEmbedCode, "22222222-2222-2222-2222-222222222222"},
+		{guidance.MidTurnNoteImageCode, "https://example.test/unseen.png"},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			mgr, sess := newSynthesisDelayManager(t)
+			gc := oar.NewGuardContext()
+			gc.Session.SessionID = sess.ID
+			gc.Rejection.RejectObservation = guidance.MidTurnObservation(tc.code)
+			gc.PutRejectData(tc.code, guidance.OffenderHintData([]string{tc.offender}))
+			testutil.FailErr(t, "evaluate", mgr.ToolPolicy.MidTurnNoteFeedback(context.Background(), sess, gc))
+			messages, err := mgr.Coordinator.Guidance.TakePolicy(context.Background(), sess.ID)
+			testutil.FailErr(t, "take notice", err)
+			if len(messages) != 1 {
+				t.Fatalf("notice rows = %+v", messages)
+			}
+			for _, want := range []string{"MESSAGE WITHHELD FROM USER", "Code: " + tc.code, tc.offender} {
+				if !strings.Contains(messages[0].Content, want) {
+					t.Fatalf("notice lacks %q: %s", want, messages[0].Content)
+				}
+			}
+		})
+	}
+}
+
 func TestWithheldTextBecomesOneStructuredNotice(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	gc := oar.NewGuardContext()

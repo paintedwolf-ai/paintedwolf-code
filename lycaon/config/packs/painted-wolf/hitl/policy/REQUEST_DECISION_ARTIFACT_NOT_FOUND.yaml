@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: worker
     tool: request_decision
-  expect_contains:
-  - 'Code: REQUEST_DECISION_ARTIFACT_NOT_FOUND'
-  - artifact

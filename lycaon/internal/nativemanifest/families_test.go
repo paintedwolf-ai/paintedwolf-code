@@ -37,7 +37,6 @@ func TestValidateFamiliesRejectsOverlapAndUnknown(t *testing.T) {
 			"command": {"command", "missing"},
 			"other":   {"command"},
 		},
-		Companions:      map[string][]string{"command": {"command", "absent"}, "ghost": {"command"}},
 		ResourceImplied: map[string][]string{"not_a_fact": {"command"}},
 	}
 	err := cfg.ValidateFamilies()
@@ -45,7 +44,7 @@ func TestValidateFamiliesRejectsOverlapAndUnknown(t *testing.T) {
 		t.Fatal("expected invalid families")
 	}
 	got := err.Error()
-	for _, want := range []string{"missing", "command in families", "unknown fact", "command names itself", "unknown companion absent", "unknown tool ghost"} {
+	for _, want := range []string{"missing", "command in families", "unknown fact"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("error %q missing %q", got, want)
 		}

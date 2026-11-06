@@ -95,7 +95,7 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 	}
 	legToolLister := delegation.LegToolListerFunc(func(ctx context.Context, sess *wire.Session, profileID string) []string {
 		policy := deps.Sessions.Manager.Coordinator.Guards.Policy()
-		if policy == nil || sess == nil {
+		if sess == nil {
 			return nil
 		}
 		var names []string

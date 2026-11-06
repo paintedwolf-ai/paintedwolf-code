@@ -68,14 +68,15 @@ func concurrentRunLimit(reg tools.ToolRegistry, run []api.ToolCall) int {
 }
 
 type toolCallOutcome struct {
+	advanced           bool
 	index              int
 	toolName           string
 	toolArgs           map[string]any
 	toolMsg            api.Message
 	taskCommitted      bool
 	handleEligible     bool
+	deliveries         []tools.SourceDeliveryTag
 	taskMessageID      string
-	agentNote          *tools.AgentNoteCapture
 	committed          bool
 	storedID           string
 	persistedStored    []api.Message
@@ -134,6 +135,7 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 	}
 	refreshed.Turn.TurnSurfaceID = base.Turn.TurnSurfaceID
 	refreshed.Turn.TurnToolPlan = base.Turn.TurnToolPlan
+	refreshed.Turn.TurnPrograms = base.Turn.TurnPrograms
 	refreshed.Turn.TurnOfferedToolNames = slices.Clone(base.Turn.TurnOfferedToolNames)
 	refreshed.Turn.TurnOfferedToolSchemas = base.Turn.TurnOfferedToolSchemas
 	refreshed.Source.ModelSourceContext = base.Source.ModelSourceContext
@@ -141,6 +143,16 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 	refreshed.Turn.TurnWritePinRootID = base.Turn.TurnWritePinRootID
 	refreshed.Turn.TurnWritePinGlobs = append([]string(nil), base.Turn.TurnWritePinGlobs...)
 	return refreshed, nil
+}
+
+type toolBatchOutcome struct {
+	history              []api.Message
+	turnTools            []string
+	anyTaskEnqueued      bool
+	taskEnqueuedThisTurn int
+	lastTaskMessageID    string
+	breakToolLoop        bool
+	progress             batchProgressOutcome
 }
 
 func (l *toolBatch) executeToolCallsInTurn(
@@ -154,7 +166,8 @@ func (l *toolBatch) executeToolCallsInTurn(
 	assistantMessageID string,
 	turnSurfaceID string,
 	st *promptLoopTurnState,
-) ([]api.Message, []string, bool, int, string, bool, error) {
+) (toolBatchOutcome, error) {
+	result := toolBatchOutcome{history: history}
 	startHolds := l.Control.batchStartHolds(ctx, sessionID, turnSurfaceID)
 	if st != nil && st.spendSoftStopGranted {
 		toolCalls = filterSpendSoftStopToolCalls(toolCalls)
@@ -162,15 +175,16 @@ func (l *toolBatch) executeToolCallsInTurn(
 	toolCalls = reorderToolBatchExecution(l.Context.Deps.Tools, toolCalls)
 	toolCalls = sanitizeToolCallsForExecution(toolCalls)
 	// Persist only storage-safe tool results.
-	history = patchAssistantToolCalls(history, assistantMessageID, toolCalls)
-	l.syncAssistantToolCallsOnStore(ctx, sessionID, assistantMessageID, history, toolCalls)
+	result.history = patchAssistantToolCalls(result.history, assistantMessageID, toolCalls)
+	l.syncAssistantToolCallsOnStore(ctx, sessionID, assistantMessageID, result.history, toolCalls)
 	hasAssistant := strings.TrimSpace(assistantMessageID) != ""
 	if l.Control.Deps.AssertRunnable != nil {
 		if err := l.Control.Deps.AssertRunnable(ctx, sessionID); err != nil {
 			if hasAssistant {
-				return history, nil, false, 0, "", true, nil
+				result.breakToolLoop = true
+				return result, nil
 			}
-			return history, nil, false, 0, "", false, err
+			return result, err
 		}
 	}
 	if baseToolCtx.Source.EditorDocuments != nil {
@@ -185,15 +199,13 @@ func (l *toolBatch) executeToolCallsInTurn(
 	}
 	if st != nil {
 		baseToolCtx.Turn.TurnToolPlan = st.turnToolPlan
+		baseToolCtx.Turn.TurnPrograms = st.turnPrograms
 		baseToolCtx.Turn.TurnOfferedToolNames = slices.Clone(st.offeredToolNames)
 		baseToolCtx.Turn.TurnOfferedToolSchemas = st.offeredToolSchemas
 		baseToolCtx.Source.ModelSourceContext = st.output.sourceContext
+		ctx = tools.WithAgentPolicy(ctx, st.output.policyCheck)
 	}
 	taskAllowlist := taskSpawnAllowlistForTurn(frame)
-	var turnTools []string
-	var anyTaskEnqueued bool
-	var taskEnqueuedThisTurn int
-	var lastTaskMessageID string
 	var lastToolTS time.Time
 	assistantCommitted := false
 	commitAssistant := func() error {
@@ -201,7 +213,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 			return nil
 		}
 		var err error
-		history, err = l.Projection.commitProvisionalAssistantInHistory(ctx, sess, sessionID, history, userPrompt, turnSurfaceID, assistantMessageID)
+		result.history, err = l.Projection.commitProvisionalAssistantInHistory(ctx, sess, sessionID, result.history, userPrompt, turnSurfaceID, assistantMessageID)
 		if err != nil {
 			return err
 		}
@@ -211,12 +223,13 @@ func (l *toolBatch) executeToolCallsInTurn(
 	}
 	// Commit tool cards before execution.
 	if err := commitAssistant(); err != nil {
-		return history, nil, false, 0, "", false, err
+		return result, err
 	}
 	// Publication precedes every tool, and the wait guard reads its result.
-	history, err := l.publishMidTurnText(ctx, sess, sessionID, history, assistantMessageID, turnSurfaceID, toolCalls, &lastToolTS, st)
+	published, err := l.publishMidTurnText(ctx, sess, sessionID, result.history, assistantMessageID, turnSurfaceID, toolCalls, &lastToolTS, st)
+	result.history = published
 	if err != nil {
-		return history, nil, false, 0, "", false, err
+		return result, err
 	}
 	// Batch closure survives request cancellation.
 	l.Nudges.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().BeginBatch(len(toolCalls)), false)
@@ -228,62 +241,69 @@ func (l *toolBatch) executeToolCallsInTurn(
 		if len(run) == 1 {
 			tctx, refreshErr := l.toolContextForCall(ctx, sess, baseToolCtx, machine)
 			if refreshErr != nil {
-				return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, false, refreshErr
+				return result, refreshErr
 			}
-			out := l.executeOneToolCall(ctx, sess, sessionID, userPrompt, history, run[0], tctx, taskAllowlist, assistantMessageID, frame.RunContext, st != nil && st.proseFinish)
+			out := l.executeOneToolCall(ctx, sess, sessionID, userPrompt, result.history, run[0], tctx, taskAllowlist, assistantMessageID, frame.RunContext, st != nil && st.proseFinish)
+			result.progress.observe(out.advanced, out.toolMsg.ToolResult)
 			var err error
-			history, err = l.persistClassifiedToolOutcome(
-				ctx, sessionID, sess, history, toolCallOutcome{
+			result.history, err = l.persistClassifiedToolOutcome(
+				ctx, sessionID, sess, result.history, toolCallOutcome{
 					toolName:       out.toolName,
 					toolArgs:       run[0].Args,
 					toolMsg:        out.toolMsg,
 					handleEligible: out.handleEligible,
-					agentNote:      out.agentNote,
+					deliveries:     out.deliveries,
 				}, &lastToolTS, st,
 			)
 			if err != nil {
-				return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, false, err
+				return result, err
 			}
-			turnTools = l.settleToolRow(ctx, sess, sessionID, out.toolName, turnTools, st)
+			result.turnTools = l.settleToolRow(ctx, sess, sessionID, out.toolName, result.turnTools, st)
 			if out.taskCommitted {
-				anyTaskEnqueued = true
-				taskEnqueuedThisTurn++
-				lastTaskMessageID = out.toolMsg.ID
+				result.anyTaskEnqueued = true
+				result.taskEnqueuedThisTurn++
+				result.lastTaskMessageID = out.toolMsg.ID
 			}
 			if out.endTurn != nil {
-				history, turnTools, err = l.closeBatchForHostFault(ctx, sess, sessionID, assistantMessageID, history, toolCalls, turnTools, &lastToolTS, st, out.endTurn)
-				return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, false, err
+				result.history, result.turnTools, err = l.closeBatchForHostFault(ctx, sess, sessionID, assistantMessageID, result.history, toolCalls, result.turnTools, &lastToolTS, st, out.endTurn)
+				return result, err
 			}
 			if out.breakToolLoop || loopwake.ParkedCompletionEndsCycle(out.completion) ||
 				loopwake.AskUserEndsCycle(out.toolName, out.toolMsg.Content, true) ||
 				native.WorkerToolEndsCycle(out.toolName, out.toolMsg.ToolResult) ||
 				l.Control.hostHITLParked(ctx, sessionID, startHolds) {
-				history, turnTools, err = l.settleUnattemptedCalls(ctx, sess, sessionID, assistantMessageID, history, toolCalls, turnTools, &lastToolTS, st)
-				return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, true, err
+				result.history, result.turnTools, err = l.settleUnattemptedCalls(ctx, sess, sessionID, assistantMessageID, result.history, toolCalls, result.turnTools, &lastToolTS, st)
+				result.breakToolLoop = true
+				return result, err
 			}
 			continue
 		}
 
 		commit := newParallelBatchCommit(
-			history, run, &lastToolTS, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, st, sess, sessionID,
+			result.history, run, &lastToolTS, result.turnTools, result.anyTaskEnqueued, result.taskEnqueuedThisTurn, result.lastTaskMessageID, st, sess, sessionID,
 		)
-		outcomes := l.runConcurrentToolBatch(ctx, sess, sessionID, userPrompt, history, run, baseToolCtx, taskAllowlist, assistantMessageID, frame.RunContext, machine, commit, st != nil && st.proseFinish)
+		outcomes := l.runConcurrentToolBatch(ctx, sess, sessionID, userPrompt, result.history, run, baseToolCtx, taskAllowlist, assistantMessageID, frame.RunContext, machine, commit, st != nil && st.proseFinish)
+
+		for _, out := range outcomes {
+			result.progress.observe(out.advanced, out.toolMsg.ToolResult)
+		}
 
 		var err error
-		history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, err =
+		result.history, result.turnTools, result.anyTaskEnqueued, result.taskEnqueuedThisTurn, result.lastTaskMessageID, err =
 			l.applyParallelToolOutcomes(ctx, outcomes, commit)
 		if fault := batchHostFault(outcomes); err == nil && fault != nil {
-			history, turnTools, err = l.closeBatchForHostFault(ctx, sess, sessionID, assistantMessageID, history, toolCalls, turnTools, &lastToolTS, st, fault)
+			result.history, result.turnTools, err = l.closeBatchForHostFault(ctx, sess, sessionID, assistantMessageID, result.history, toolCalls, result.turnTools, &lastToolTS, st, fault)
 		}
 		if err != nil {
-			return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, false, err
+			return result, err
 		}
 		if l.Control.hostHITLParked(ctx, sessionID, startHolds) {
-			history, turnTools, err = l.settleUnattemptedCalls(ctx, sess, sessionID, assistantMessageID, history, toolCalls, turnTools, &lastToolTS, st)
-			return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, true, err
+			result.history, result.turnTools, err = l.settleUnattemptedCalls(ctx, sess, sessionID, assistantMessageID, result.history, toolCalls, result.turnTools, &lastToolTS, st)
+			result.breakToolLoop = true
+			return result, err
 		}
 	}
-	return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, false, nil
+	return result, nil
 }
 
 // batchHolds are the host-managed waits a batch may run under.
@@ -364,13 +384,14 @@ func (l *toolBatch) runConcurrentToolBatch(
 			out := l.executeOneToolCall(ctx, sess, sessionID, userPrompt, history, call, tctx, taskAllowlist, assistantMessageID, runCtx, proseTurn)
 			outcomes[i] = toolCallOutcome{
 				index:          i,
+				advanced:       out.advanced,
 				toolName:       out.toolName,
 				toolArgs:       call.Args,
 				toolMsg:        out.toolMsg,
 				taskCommitted:  out.taskCommitted,
 				handleEligible: out.handleEligible,
+				deliveries:     out.deliveries,
 				taskMessageID:  out.toolMsg.ID,
-				agentNote:      out.agentNote,
 				endTurn:        out.endTurn,
 			}
 			l.appendParallelResult(ctx, commit, &outcomes[i])
@@ -443,13 +464,15 @@ func (l *toolBatch) announceToolAskAfterCommit(ctx context.Context, sessionID, t
 }
 
 type singleToolOutcome struct {
+	advanced       bool
 	toolName       string
 	toolMsg        api.Message
 	completion     *api.ToolCompletion
 	taskCommitted  bool
 	handleEligible bool
-	breakToolLoop  bool
-	agentNote      *tools.AgentNoteCapture
+	// deliveries states what each source read covered, for the row's tags.
+	deliveries    []tools.SourceDeliveryTag
+	breakToolLoop bool
 	// endTurn is a host fault that ends the turn once toolMsg is durable.
 	endTurn error
 }
@@ -467,7 +490,7 @@ func (l *toolBatch) executeOneToolCall(
 	runCtx api.CoordinatorRunContext,
 	proseTurn bool,
 ) singleToolOutcome {
-	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
+	ctx = tools.WithCallReach(ctx, tools.TurnReach(toolCtx))
 	if proseTurn && !workerProseAllowsTool(sess, tc.Name) {
 		return l.refuseToolCall(tc, assistantMessageID, l.Tools.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
 	}
@@ -495,9 +518,6 @@ func (l *toolBatch) executeOneToolCall(
 				"cap", data["cap"])
 			run = l.Tools.refuseOutputDelivery(ctx, sess, tc, toolCtx, run, code, data)
 		}
-	}
-	if !run.succeeded() {
-		run.captures.note = nil
 	}
 	if run.facts.Resolution() == api.ToolResultOutcomeRejected {
 		return l.settleRejectedInvocation(ctx, sess, sessionID, tc, assistantMessageID, run)
@@ -559,11 +579,12 @@ func (l *toolBatch) executeOneToolCall(
 		toolMsg.ToolResult.Invocation = run.receipt
 	}
 	return singleToolOutcome{
+		advanced:       toolWorkflowAdvanced(tc.Name, run.facts),
 		toolName:       tc.Name,
 		toolMsg:        toolMsg,
 		completion:     run.captures.completion,
 		taskCommitted:  taskSpawnCommitted(tc.Name, toolMsg.ToolResult, run.succeeded()),
 		handleEligible: sess != nil && toolEvidenceEligible(run, tc.Name, tc.Args),
-		agentNote:      run.captures.note,
+		deliveries:     run.captures.sourceDeliveries,
 	}
 }

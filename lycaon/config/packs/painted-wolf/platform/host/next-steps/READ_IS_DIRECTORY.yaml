@@ -1,0 +1,11 @@
+steps:
+  - program: ["ls", "{{ paintedwolf.path }}"]
+    complete: true
+    say: "List one level with {{ call }}; use `.` for the repo root."
+  - program: ["find", "{{ paintedwolf.path }}", "-type", "f"]
+    complete: true
+    say: "Use {{ call }} to locate candidate files in the directory tree."
+  - program: ["grep", "-rn", "SYMBOL", "{{ paintedwolf.path }}"]
+    say: "To locate a symbol across files, use {{ call }}."
+  - program: ["cat", "-n", "FILE"]
+    say: "Read a resulting concrete file with {{ call }}, or `sed -n 'A,Bp' FILE` for a bounded line range."

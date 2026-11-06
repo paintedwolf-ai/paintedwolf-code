@@ -35,9 +35,10 @@ const (
 
 // SocketGrant is one host-approved exact AF_UNIX connect literal.
 type SocketGrant struct {
-	ApprovedPath string
-	ResolvedPath string
-	Binding      socketref.Binding `json:"socket_binding,omitempty,omitzero"`
+	ApprovedPath   string
+	ResolvedPath   string
+	Binding        socketref.Binding `json:"socket_binding,omitempty,omitzero"`
+	credentialRead bool
 }
 
 // SocketGrantDropReason is a stable machine reason a grant was not applied.
@@ -61,8 +62,9 @@ type SocketGrantDrop struct {
 
 // Request is the intentional boundary input for DefaultConfinement.
 type Request struct {
-	ProcessControl bool
-	HostExecution  bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
 	// ProjectID is an opaque write-root routing key.
 	ProjectID string
 	// Roots are attached jail identity (project trees and draft scratch).

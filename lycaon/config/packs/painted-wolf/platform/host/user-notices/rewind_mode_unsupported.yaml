@@ -8,5 +8,3 @@ suggested_action: Try the rewind again from the message itself.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - just before the message

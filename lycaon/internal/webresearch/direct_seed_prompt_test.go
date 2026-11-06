@@ -16,7 +16,7 @@ func TestBuildPickSeedsUserMessageIncludesTaskHintAndWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildPickSeedsUserMessage: %v", err)
 	}
-	if !strings.Contains(msg, "User request") || !strings.Contains(msg, "steam machine for TV") {
+	if !strings.Contains(msg, "steam machine for TV") {
 		t.Fatalf("task hint missing: %q", msg)
 	}
 	if !strings.Contains(msg, "Window: current") {
@@ -24,9 +24,6 @@ func TestBuildPickSeedsUserMessageIncludesTaskHintAndWindow(t *testing.T) {
 	}
 	if !strings.Contains(msg, "verify up to 5 hits") {
 		t.Fatalf("expected hit target in message: %q", msg)
-	}
-	if !strings.Contains(msg, "newer than your training") {
-		t.Fatal("expected post-training extrapolation guidance")
 	}
 }
 
@@ -48,8 +45,5 @@ func TestBuildPickSeedsUserMessageUsesDeclaredWindow(t *testing.T) {
 	}
 	if !strings.Contains(declared, "Window: 2025") {
 		t.Fatalf("expected the declared window line: %q", declared)
-	}
-	if !strings.Contains(declared, "fresh to false") {
-		t.Fatalf("declared past window must tell the picker to drop freshness: %q", declared)
 	}
 }

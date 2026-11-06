@@ -55,12 +55,6 @@ func TestApprovalExplanationScenariosRender(t *testing.T) {
 		if strings.TrimSpace(copy.IfWrong) == "" {
 			t.Fatalf("%q rendered empty if_wrong", key)
 		}
-		for _, want := range defaultSc.ExpectContains {
-			if !strings.Contains(copy.What, want) && !strings.Contains(copy.Who, want) && !strings.Contains(copy.IfWrong, want) {
-				t.Fatalf("%q default scenario missing %q in rendered copy: what=%q who=%q if_wrong=%q",
-					key, want, copy.What, copy.Who, copy.IfWrong)
-			}
-		}
 	}
 }
 

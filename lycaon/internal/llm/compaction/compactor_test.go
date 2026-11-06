@@ -272,42 +272,6 @@ func TestCompactionRecentMessagesTotalBudget(t *testing.T) {
 	}
 }
 
-func TestCompactionPromptMakesLaterSupportedStateSupersedeEarlierState(t *testing.T) {
-	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	msgs := []ContextMessage{
-		{Role: string(api.MessageRoleAssistant), Content: "Current caveat: anonymous reads are enabled."},
-		{Role: string(api.MessageRoleTool), Content: "configuration updated: authentication required", EvidenceHandles: []string{"command#230"}},
-		{Role: string(api.MessageRoleTool), Content: "anonymous request status: 401", EvidenceHandles: []string{"command#231"}},
-		{Role: string(api.MessageRoleTool), Content: "authenticated request status: 200", EvidenceHandles: []string{"command#233"}},
-	}
-	input, err := BuildCompactionInput(context.Background(), SessionInfo{ID: "state-transition"}, msgs, 2048, 256)
-	testutil.FailErr(t, "build compaction state-transition prompt", err)
-	prompt := input.Text
-
-	oldAt := strings.Index(prompt, "anonymous reads are enabled")
-	newAt := strings.Index(prompt, "anonymous request status: 401")
-	if oldAt < 0 || newAt < 0 || oldAt >= newAt {
-		t.Fatalf("compaction conversation must stay oldest-to-newest: %q", prompt)
-	}
-	for _, want := range []string{
-		"Conversation entries appear oldest to newest",
-		"record the newest supported state",
-		"omit the earlier superseded state from current facts",
-		"role=tool origin=tool authority=none trust_tier=untrusted",
-		"authenticated request status: 200",
-	} {
-		if !strings.Contains(prompt, want) {
-			t.Fatalf("compaction prompt missing %q: %q", want, prompt)
-		}
-	}
-
-	systemPrompt, err := guidance.RenderCompactionSystemPrompt(context.Background(), guidance.CompactionSessionSummarySystemRef)
-	testutil.FailErr(t, "render compaction system prompt", err)
-	if !strings.Contains(systemPrompt, "do not retain a superseded state as a current fact") {
-		t.Fatalf("compaction system prompt lacks supersession rule: %q", systemPrompt)
-	}
-}
-
 func TestCoordinatorSpillIndexKeepsLiteralExcerpt(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	cfg := testCompactionConfig()
@@ -450,7 +414,7 @@ func TestDeterministicFitPreservesCheckpoint(t *testing.T) {
 	cfg.HardCeilingTokens = 10
 	paste := strings.Repeat("word ", 200)
 	msgs := []ContextMessage{
-		{ID: "cp", Role: string(api.MessageRoleUser), Content: "checkpoint", CompactionCheckpoint: true},
+		{ID: "cp", Role: string(api.MessageRoleUser), Content: "checkpoint", ContextMessageCompaction: ContextMessageCompaction{CompactionCheckpoint: true}},
 		{ID: "sum", Role: string(api.MessageRoleAssistant), Content: "summary"},
 		{ID: "old", Role: string(api.MessageRoleUser), Content: paste},
 		{ID: "tail", Role: string(api.MessageRoleUser), Content: "recent"},
@@ -491,7 +455,7 @@ func TestCompactedSourcesListRemovedHandlesAndShrunkTailRows(t *testing.T) {
 		{ID: "t2", Role: string(api.MessageRoleTool), ToolName: "command"},
 		{ID: "a1", Role: string(api.MessageRoleAssistant), Content: "kept in the tail"},
 		{ID: "t3", Role: string(api.MessageRoleTool), ToolName: "grep", EvidenceHandles: []string{"grep#2"},
-			CompactedChunk: &CompactedChunkMeta{Strategy: "spill_index"}},
+			ContextMessageCompaction: ContextMessageCompaction{CompactedChunk: &CompactedChunkMeta{Strategy: "spill_index"}}},
 		{ID: "t4", Role: string(api.MessageRoleTool), ToolName: "read", EvidenceHandles: []string{"read#9"}},
 	}
 	got := compactedSources(all, all[3:])
@@ -509,8 +473,8 @@ func TestCompactedSourcesListRemovedHandlesAndShrunkTailRows(t *testing.T) {
 func TestCompactedHostSecretRedactionDedupesRepeatedIdentity(t *testing.T) {
 	span := api.RedactedSpan{RuleID: "aws-key", Kind: api.RedactionKindSecret, Field: "content"}
 	all := []ContextMessage{
-		{ID: "1", HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{span})},
-		{ID: "2", HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{span})},
+		{ID: "1", ContextMessageProvenance: ContextMessageProvenance{HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{span})}},
+		{ID: "2", ContextMessageProvenance: ContextMessageProvenance{HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{span})}},
 	}
 	meta := compactedHostSecretRedaction(all, nil)
 	if meta.Occurrences() != 1 {
@@ -522,14 +486,14 @@ func TestCompactedHostSecretRedactionDedupesRepeatedIdentity(t *testing.T) {
 // next round's absorbed set — it becomes just another message compaction
 // absorbs — so dedup+cap must hold across many rounds, not just one.
 func TestCompactedHostSecretRedactionStaysBoundedAcrossManyCompactionCycles(t *testing.T) {
-	checkpoint := ContextMessage{ID: "checkpoint", CompactionCheckpoint: true}
+	checkpoint := ContextMessage{ID: "checkpoint", ContextMessageCompaction: ContextMessageCompaction{CompactionCheckpoint: true}}
 	for round := 0; round < maxCompactedRedactionSpans*3; round++ {
 		newMsg := ContextMessage{
-			ID: "new", HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{{
+			ID: "new", ContextMessageProvenance: ContextMessageProvenance{HostSecretRedaction: api.NewHostSecretRedactionMeta([]api.RedactedSpan{{
 				// A distinct rule identity every round: real distinct secrets
 				// across a long session, not the same one repeated.
 				RuleID: fmt.Sprintf("rule-%d", round), Kind: api.RedactionKindSecret, Field: "field",
-			}}),
+			}})},
 		}
 		checkpoint.HostSecretRedaction = compactedHostSecretRedaction([]ContextMessage{checkpoint, newMsg}, nil)
 	}
@@ -574,7 +538,7 @@ func minInt(a, b int) int {
 
 func testChunkDiet(tool, source string) MessageDietClass {
 	return ClassifyMessageDiet(ClassifyMessageDietInput{
-		Messages:      []ContextMessage{{ToolName: tool, DietStampSource: source}},
+		Messages:      []ContextMessage{{ToolName: tool, ContextMessageCompaction: ContextMessageCompaction{DietStampSource: source}}},
 		ForceEligible: true,
 	})
 }

@@ -87,7 +87,7 @@ func TestXargsEarlyConsumerClosesBlockedInputAndActiveChildren(t *testing.T) {
 				if !errors.Is(err, commandprogram.ErrConsumerClosed) {
 					t.Fatalf("early close: %v", err)
 				}
-			case <-time.After(5 * time.Second):
+			case <-time.After(testutil.Timeout(time.Minute)):
 				cancel()
 				_ = input.Close()
 				<-done

@@ -291,6 +291,10 @@ var coordinatorPongoBooleanGateRE = regexp.MustCompile(`\{%\s*(?:if|elif)\s+(?:n
 var bannedCoordinatorGateNameRE = regexp.MustCompile(`(?i)(greenfield|dispatch[_-]?hint|user[_-]?intent|(^|[_-])nl([_-]|$)|build[_-]?intent|chat[_-]?approv)`)
 
 var registeredCoordinatorBooleanGates = map[string]bool{
+	// Bounded grounding repair samples carry host-observed omitted counts.
+	"observed_handles_omitted":                     true,
+	"observed_paths_omitted":                       true,
+	"observed_urls_omitted":                        true,
 	"document_issues":                              true,
 	"agent_skills":                                 true,
 	"rating_questions":                             true,
@@ -326,6 +330,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"host_runner_tools":                            true,
 	"profile_has_verify":                           true,
 	"profile_has_command":                          true,
+	"profile_has_source_history":                   true,
 	"profile_has_http_request":                     true,
 	"http_request_needs_request":                   true,
 	"managed_secrets_needs_request":                true,
@@ -355,7 +360,6 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"profile_has_summarize":                        true,
 	"profile_has_ask_user":                         true,
 	"profile_has_skills_read":                      true,
-	"profile_has_surface_note":                     true,
 	"profile_has_recall":                           true,
 	"progress_closure_armed":                       true,
 	"card_edit_deferred":                           true,
@@ -367,6 +371,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"card_requestable":                             true,
 	"card_rule":                                    true,
 	"surface_card_label":                           true,
+	"surface_publishes_text":                       true,
 	"profile_has_terminal_open":                    true,
 	"profile_has_terminal_snapshot":                true,
 	"profile_has_render_view":                      true,
@@ -390,7 +395,8 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"drafted_synthesis":        true,
 	// JSON projections of typed citation evaluation in guidance.CloseoutRepairHintData.
 	"repair_observations":          true,
-	"retained_citations":           true,
+	"repair_targets":               true, // citation repair: rejected occurrences by repair ID
+	"document_citation_targets":    true, // citation repair: rejected finding where entries
 	"resume_work_allowed":          true,
 	"can_recall":                   true, // recall in the closed turn's offered tools (promptloop rejectCloseoutGrounding)
 	"offenders_sample":             true, // report-document repair: guidance.OffenderHintData
@@ -486,7 +492,8 @@ func scanCoordinatorPongoBooleanGates(catalogRoot string) ([]string, error) {
 				violations = append(violations, rel+": forbidden NL-style prompt gate "+gate)
 				continue
 			}
-			if !registeredCoordinatorBooleanGates[gate] {
+			// The host answers profile_has_<tool> for every declared tool.
+			if !registeredCoordinatorBooleanGates[gate] && !strings.HasPrefix(gate, "profile_has_") {
 				violations = append(violations, rel+": unregistered coordinator boolean gate "+gate+" — add typed Go source or registeredCoordinatorBooleanGates")
 			}
 		}

@@ -84,6 +84,7 @@ func FinalProcessEnvironment(opts ExecOpts, stageEnv map[string]string) ([]strin
 		return nil, err
 	}
 	env = confine.ProcessEnvironment(env, boundary)
+	env = withoutConfinedGitFsmonitor(env, boundary)
 	if boundary.Network != confine.NetworkDeny {
 		if self, err := os.Executable(); err == nil {
 			env = overlayProcessEnv(env, confine.GitSSHEnv(boundary, self, confine.SSHKnownHostsPath(boundary)))
@@ -429,7 +430,11 @@ func startWiredStages(ctx context.Context, wired []wiredStage, started func(pid 
 func reapWired(stages []wiredStage) {
 	for i := range stages {
 		if stages[i].cmd != nil && stages[i].cmd.Process != nil {
-			_ = stages[i].cmd.Wait()
+			if stages[i].guard != nil {
+				_ = stages[i].guard.wait(stages[i].cmd)
+			} else {
+				_ = stages[i].cmd.Wait()
+			}
 		}
 	}
 }
@@ -439,7 +444,11 @@ func waitWiredStages(runCtx context.Context, wired []wiredStage) (timedOut bool,
 	waitDone := make(chan struct{})
 	go func() {
 		for i := range wired {
-			waitErrs[i] = wired[i].cmd.Wait()
+			if wired[i].guard != nil {
+				waitErrs[i] = wired[i].guard.wait(wired[i].cmd)
+			} else {
+				waitErrs[i] = wired[i].cmd.Wait()
+			}
 		}
 		close(waitDone)
 	}()

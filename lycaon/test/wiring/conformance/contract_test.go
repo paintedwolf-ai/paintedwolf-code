@@ -87,10 +87,20 @@ var baseContractCases = []contractCase{
 			ID:          "inspect-domain-builtins",
 			Description: "The outline, repo-map, survey-repo and summarize built-ins return typed results.",
 			Commands:    []string{"outline", "repo-map", "survey-repo", "summarize"},
-			Forms:       []string{"outline:--path", "repo-map:--path", "repo-map:--depth", "summarize:--path", "summarize:--focus"},
+			Forms:       []string{"outline:--path", "repo-map:--path", "repo-map:--depth", "summarize:--path", "summarize:--focus", "summarize:--cursor"},
 			Program:     `outline --path code.go; repo-map --path . --depth 2; survey-repo --path . --depth 1; summarize --path code.go --focus Alpha`,
 		},
 		Validate: verifyInspectDomainOutputs,
+	},
+	{
+		Case: commandconformance.Case{
+			ID:          "inspect-domain-tool-arguments",
+			Description: "Forms the summarize and survey_repo tools rely on return typed results.",
+			Commands:    []string{"repo-map", "summarize"},
+			Forms:       []string{"repo-map:--bundle", "summarize:--pattern", "summarize:--content"},
+			Program:     `repo-map --path . --bundle layout_overview; summarize --path code.go --pattern Alpha --focus Alpha; summarize --content 'Alpha beta' --focus Alpha`,
+		},
+		Validate: verifyDomainToolArguments,
 	},
 	{
 		Case: commandconformance.Case{
@@ -110,10 +120,10 @@ var baseContractCases = []contractCase{
 			Forms: []string{
 				"edit:--path", "edit:--old-string", "edit:--new-string", "edit:--replace-all",
 				"replace-lines:--path", "replace-lines:--start", "replace-lines:--end", "replace-lines:--content",
-				"code-rewrite:--pattern", "code-rewrite:--rewrite", "code-rewrite:--path", "code-rewrite:--recursive", "code-rewrite:--dry-run",
-				"jq-edit:--path", "jq-edit:--query", "jq-edit:--format",
+				"code-rewrite:--pattern", "code-rewrite:--rewrite", "code-rewrite:--path", "code-rewrite:--recursive", "code-rewrite:--dry-run", "code-rewrite:--lang", "code-rewrite:--syntax-override-reason",
+				"jq-edit:--path", "jq-edit:--query", "jq-edit:--format", "jq-edit:--arg",
 			},
-			Program: `edit --path sub/a.txt --old-string first --new-string EDITED --replace-all && replace-lines --path sub/b.txt --start 1 --end 1 --content REPLACED && code-rewrite --pattern 'OldName' --rewrite 'NewName' --path sub/nested/deep.go --dry-run && jq-edit --path config.json --query '.enabled = true' --format json`,
+			Program: `edit --path sub/a.txt --old-string first --new-string EDITED --replace-all && replace-lines --path sub/b.txt --start 1 --end 1 --content REPLACED && code-rewrite --pattern 'OldName' --rewrite 'NewName' --path sub/nested/deep.go --lang go --syntax-override-reason fixture --dry-run >/dev/null && jq-edit --path config.json --query '.enabled = ($on == "yes")' --format json --arg on yes`,
 			Tracked: []string{"sub/a.txt", "sub/b.txt", "config.json"},
 		},
 		Files: map[string]string{

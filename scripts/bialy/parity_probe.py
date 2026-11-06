@@ -59,6 +59,8 @@ def main():
     ap.add_argument("--n", type=int, default=6)
     ap.add_argument("--tolerance", type=float, default=1e-3, help="the largest engine-trainer probability gap that passes")
     args = ap.parse_args()
+    corpus = Corpus.load(args.corpus)
+    examples = [ex for ex in rowfile.load(args.examples, corpus=corpus) if not ex["partial"]][: args.n]
     device = os.environ.get("LYCAON_DECIDE_DEVICE") or ("mps" if torch.backends.mps.is_available() else "cpu")
     agent = laya.load(args.model, device=device)
     model = agent.model
@@ -72,7 +74,7 @@ def main():
     # another length would agree here and still have learned from different inputs.
     meta = headfile.read_metadata(args.head)[0]
     context = int(agent.cfg.get("max_len", 512))
-    budget = min(int(Corpus.load(args.corpus).state_spec.get("head_tokens", 512)), context - 64)
+    budget = min(int(corpus.state_spec.get("head_tokens", 512)), context - 64)
     if "max_len" not in meta or "head_max_len" not in meta:
         print("parity: unverified; the head records no encoding settings")
         return 2
@@ -80,7 +82,6 @@ def main():
         print("parity: the head was trained at max_len %s, head budget %s; the engine encodes at %d, %d" % (
             meta["max_len"], meta["head_max_len"], context, budget))
         return 1
-    corpus = Corpus.load(args.corpus)
     proc = None
     if args.engine:
         proc = subprocess.Popen([args.engine], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
@@ -88,7 +89,6 @@ def main():
         proc.stdin.flush()
         proc.stdout.readline()
     worst = 0.0
-    examples = [ex for ex in rowfile.load(args.examples) if not ex["partial"]][: args.n]
     for ex in examples:
         pt = torch_probs(agent, model, corpus, ex, device)
         top = sorted(pt.items(), key=lambda kv: -kv[1])[:5]

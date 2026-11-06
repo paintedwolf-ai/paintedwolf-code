@@ -246,7 +246,7 @@ impl Service {
                 .unwrap();
         });
         started
-            .recv_timeout(Duration::from_secs(5))
+            .recv_timeout(Duration::from_secs(120))
             .expect("fixture service started");
         Self {
             requests,

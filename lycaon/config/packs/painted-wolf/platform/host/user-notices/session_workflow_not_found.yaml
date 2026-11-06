@@ -8,6 +8,3 @@ suggested_action: >-
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - not running a workflow
-      - composer

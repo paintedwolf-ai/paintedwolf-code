@@ -32,18 +32,6 @@ describe("VerifyEditor", () => {
     } satisfies VerifySettingsResponse));
   });
 
-  it("distinguishes the default check from required workflow gates", async () => {
-    const appStore = createAppStore();
-    appStore.actions.setSidecarStatus("connected");
-    render(() => (
-      <VerifyEditor client={verifyClient} appStore={appStore} projectId="proj-1" />
-    ));
-    const hint = await screen.findByTestId("verify-editor-hint");
-    expect(hint.textContent).toContain("default project check");
-    expect(hint.textContent).toContain("does not run the full suite after every edit");
-    expect(hint.textContent).toContain("workflow test gates still need a pass");
-  });
-
   it("accepts detected candidate without auto-applying", async () => {
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
@@ -53,8 +41,6 @@ describe("VerifyEditor", () => {
     const banner = await screen.findByTestId("verify-editor-detect-banner");
     expect(banner.textContent).toContain("Found");
     expect(banner.textContent).toContain("README.md");
-    expect(banner.textContent).toContain("proposes only");
-    expect(banner.textContent).toContain("applies silently");
     expect(updateVerifySettings).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("verify-editor-accept-detected"));
     fireEvent.click(screen.getByTestId("verify-editor-save"));

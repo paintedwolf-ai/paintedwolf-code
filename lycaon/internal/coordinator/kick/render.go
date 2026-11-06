@@ -105,7 +105,13 @@ func (k *KickEngine) renderCoordinatorKick(ctx context.Context, kickID string, m
 		return "", fmt.Errorf("kick %q: prompt engine not configured", kickID)
 	}
 	data := buildKickRenderData(meta, live, time.Now().UTC())
-	if err := prompts.MergeCoordinatorKickPolicyVars(data); err != nil {
+	var err error
+	if live.ToolPlan.Compiled() {
+		err = prompts.MergeCoordinatorKickVarsForTools(data, live.ToolPlan.AddressableNames())
+	} else {
+		err = prompts.MergeCoordinatorKickPolicyVars(data)
+	}
+	if err != nil {
 		return "", fmt.Errorf("kick policy vars: %w", err)
 	}
 	return cfg.engine.RenderKick(ctx, strings.TrimSpace(kickID), data)

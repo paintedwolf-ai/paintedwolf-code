@@ -34,7 +34,7 @@ func (e *Secrets) screenFileSecrets(
 		return nil
 	}
 
-	filePath, _ := args["path"].(string)
+	filePath := fileSecretPath(args)
 	finding := argvSecretFinding(secretmatch.SurfaceFile, tool, tc, known[0], known)
 	finding.DestinationID, finding.DestinationLabel = fileSecretDestination(filePath)
 	finding.SecretNames = secretmatch.ManagedNames(known)
@@ -47,6 +47,21 @@ func (e *Secrets) screenFileSecrets(
 	ctx = secretmatch.WithAskAttribution(ctx, attribution)
 
 	return e.resolveArgumentSecretFinding(ctx, tool, tc, secretmatch.SurfaceFile, known[0], finding)
+}
+
+// fileSecretPath is the screened write's destination: a structured write names
+// it, and a reached command form carries its single bound write target.
+func fileSecretPath(args map[string]any) string {
+	if path, ok := args["path"].(string); ok {
+		return path
+	}
+	targets, _ := args["path_targets"].(map[string]any)
+	writes, _ := targets["write"].([]any)
+	if len(writes) != 1 {
+		return ""
+	}
+	path, _ := writes[0].(string)
+	return path
 }
 
 // fileSecretDestination is the recipient identity and label for a file write.

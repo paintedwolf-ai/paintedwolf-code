@@ -61,7 +61,7 @@ func (s *streamScreen) flush(ctx context.Context, dst io.Writer, raw string, mas
 	safe := prefix
 	var replacements []Replacement
 	if len(hits) > 0 {
-		safe, replacements = rewriteMatches(prefix, hits, false)
+		safe, replacements = rewriteMatches(prefix, hits, s.policy.ManagedEchoes)
 	}
 	outputStart := s.result.OutputBytes
 	if err := s.write(ctx, dst, safe); err != nil {

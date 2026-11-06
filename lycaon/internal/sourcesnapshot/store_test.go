@@ -634,7 +634,8 @@ func TestSweepRemovesOnlyUnreachableSnapshotManifests(t *testing.T) {
 	old := time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339Nano)
 	_, err = store.db.ExecContext(t.Context(), `UPDATE source_snapshots SET created_ts = ? WHERE id = ?`, old, first.ID)
 	testutil.FailErr(t, "age first snapshot", err)
-	testutil.FailErr(t, "sweep source snapshots", store.Sweep(t.Context(), time.Now().UTC().Add(-time.Hour)))
+	_, err = store.Sweep(t.Context(), time.Now().UTC().Add(-time.Hour))
+	testutil.FailErr(t, "sweep source snapshots", err)
 
 	_, err = store.Get(t.Context(), first.ID)
 	if !errors.Is(err, ErrSnapshotNotFound) {
@@ -656,7 +657,8 @@ func TestSweepExpiresUnusedRootsHead(t *testing.T) {
 	writeSource(t, root, "main.go", "package main\n")
 	snapshot, err := store.Ensure(t.Context(), Request{Roots: []Root{{Path: root}}})
 	testutil.FailErr(t, "publish snapshot", err)
-	testutil.FailErr(t, "expire snapshot head", store.Sweep(t.Context(), time.Now().UTC().Add(time.Hour)))
+	_, err = store.Sweep(t.Context(), time.Now().UTC().Add(time.Hour))
+	testutil.FailErr(t, "expire snapshot head", err)
 	_, err = store.Get(t.Context(), snapshot.ID)
 	if !errors.Is(err, ErrSnapshotNotFound) {
 		t.Fatalf("expired snapshot error = %v want ErrSnapshotNotFound", err)
@@ -677,7 +679,8 @@ func TestSweepKeepsCurrentProjectInventorySnapshot(t *testing.T) {
 		) VALUES (?, 1, 1, 'ready', 1, ?, ?)
 	`, "project-inventory", time.Now().UTC().Format(time.RFC3339Nano), snapshot.ID)
 	testutil.FailErr(t, "claim inventory snapshot", err)
-	testutil.FailErr(t, "expire snapshot head", store.Sweep(t.Context(), time.Now().UTC().Add(time.Hour)))
+	_, err = store.Sweep(t.Context(), time.Now().UTC().Add(time.Hour))
+	testutil.FailErr(t, "expire snapshot head", err)
 	current, err := store.Get(t.Context(), snapshot.ID)
 	testutil.FailErr(t, "load inventory snapshot", err)
 	if current.ID != snapshot.ID {

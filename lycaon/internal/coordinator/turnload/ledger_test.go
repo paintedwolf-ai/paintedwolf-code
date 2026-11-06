@@ -70,14 +70,14 @@ func TestLedgerKeepsTheStandingSetAcrossWarmTurns(t *testing.T) {
 			}
 		}
 	}
-	// A cold turn chooses again from its own decision.
+	// A cold turn replaces predicted tools while keeping tools the chat requested.
 	l.BeginTurn("s1", opening("u3", cold, all...), predict("git_diff"))
-	if got := standingNames(l, "s1"); got != "git_diff" {
+	if got := standingNames(l, "s1"); got != "git_diff,web_search" {
 		t.Fatalf("cold turn standing = %s", got)
 	}
 	// An abstained decision keeps the standing set even when cold.
 	l.BeginTurn("s1", opening("u4", cold, all...), Decision{Abstained: true})
-	if got := standingNames(l, "s1"); got != "git_diff" {
+	if got := standingNames(l, "s1"); got != "git_diff,web_search" {
 		t.Fatalf("abstained cold turn standing = %s", got)
 	}
 	// A tool the surface no longer offers leaves.
@@ -92,6 +92,27 @@ func TestLedgerKeepsTheStandingSetAcrossWarmTurns(t *testing.T) {
 	l.Forget("s1")
 	if l.Active("s1") != nil {
 		t.Fatal("forget must drop the session")
+	}
+}
+
+func TestLedgerBeginTurnKeepsRequestedToolsAcrossColdIdleBoundaries(t *testing.T) {
+	l := NewLedger()
+	all := []string{"command", "command_output", "command_stop", "edit", "git_commit"}
+	l.BeginTurn("s1", opening("u1", Boundary{Cache: CacheCold, Reason: ColdFirstTurn}, all...), predict("command", "edit"))
+	// Explicitly requesting an already-predicted tool upgrades its standing source to SourceRequested,
+	// and requesting a deferred tool adds it as SourceRequested.
+	l.Activate("s1", []string{"edit", "git_commit"}, "commit the edited verification-plan.json on the branch")
+
+	// After a long wait lease expires the prompt cache (ColdIdle), predicted and companion
+	// tools are replaced by the new decision while requested tools remain standing.
+	l.BeginTurn("s1", opening("u2", Boundary{Cache: CacheCold, Reason: ColdIdle}, all...), predict())
+	if got := standingNames(l, "s1"); got != "edit,git_commit" {
+		t.Fatalf("cold idle standing = %s, want edit,git_commit", got)
+	}
+	for _, load := range l.Standing("s1").Tools {
+		if load.Source != SourceRequested || load.Turn != "u1" {
+			t.Fatalf("unexpected standing load after cold idle: %+v", load)
+		}
 	}
 }
 
@@ -229,31 +250,5 @@ func TestLedgerNeverPromotesPredictionOutsideLoadableSurface(t *testing.T) {
 	l.BeginTurn("session", opening("u1", cold, "read"), predict("read", "command"))
 	if got := standingNames(l, "session"); got != "read" {
 		t.Fatalf("off-surface prediction loaded: %s", got)
-	}
-}
-
-func TestPredictedToolsLoadTheirDeclaredCompanions(t *testing.T) {
-	l := NewLedger()
-	// write, edit, and replace_lines declare one another; command's family is not a companion set.
-	l.BeginTurn("s1", opening("u1", Boundary{Cache: CacheCold, Reason: ColdFirstTurn}, "edit", "write", "replace_lines", "command", "command_output"), predict("edit", "command"))
-	if got := standingNames(l, "s1"); got != "command,edit,replace_lines,write" {
-		t.Fatalf("standing = %s", got)
-	}
-	for _, load := range l.Standing("s1").Tools {
-		switch load.Tool {
-		case "write", "replace_lines":
-			if load.Source != SourceCompanion || load.With != "edit" {
-				t.Fatalf("%s = %+v, want a companion of edit", load.Tool, load)
-			}
-		case "edit", "command":
-			if load.Source != SourcePredicted {
-				t.Fatalf("%s = %+v, want predicted", load.Tool, load)
-			}
-		}
-	}
-	// A companion the surface does not offer stays out.
-	l.BeginTurn("s2", opening("u1", Boundary{Cache: CacheCold, Reason: ColdFirstTurn}, "edit", "write"), predict("edit"))
-	if got := standingNames(l, "s2"); got != "edit,write" {
-		t.Fatalf("standing = %s", got)
 	}
 }

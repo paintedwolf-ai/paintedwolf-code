@@ -16,12 +16,12 @@ const (
 	// ManifestVersion is the extension.yaml document format understood by this host.
 	ManifestVersion = 1
 	// ExtensionAPIVersion is the semantic contract implemented by pack discovery and resolve.
-	ExtensionAPIVersion = "1.3.0"
+	ExtensionAPIVersion = "1.2.0"
 )
 
 var extensionCapabilities = map[string]struct{}{
 	"agents": {}, "approvals": {}, "guidance": {}, "host.bindings": {},
-	"host.user_notices": {}, "mcp.bindings": {}, "playbooks": {}, "policy": {},
+	"host.next_steps": {}, "host.user_notices": {}, "mcp.bindings": {}, "playbooks": {}, "policy": {},
 	"shared": {}, "skills": {}, "tools.profiles": {}, "tools.schemas": {},
 	"workflows": {}, "workflows.topologies": {},
 	"host.credential_slots": {},

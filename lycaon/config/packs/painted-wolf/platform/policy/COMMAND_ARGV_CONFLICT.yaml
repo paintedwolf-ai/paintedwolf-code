@@ -16,24 +16,16 @@ copy:
   what: '`{{ tool }}()` received conflicting explicit command forms.'
   cause: The invocation supplies both a command line and a stage array, which are exclusive.
   why: The host cannot choose which form to run. Reissuing means choosing one form and supplying it again.
-  fix: 'Keep `command` and remove the alternative command form. For `verify`, its `pipeline` array is another option: keep that array and omit the command line.'
-  instead: 'Retry with one explicit command form, not both'
+  fix: Supply only one command form, preserving the intended stages and arguments.
+  instead: Retry with one explicit command form, not both
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: command and pipeline are exclusive
 x-paintedwolf-scenarios:
-  - id: default
-    vars:
-      tool: command
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: COMMAND_ARGV_CONFLICT'
-      - conflicting explicit command forms
-  - id: verify_forms
+- id: default
+  vars:
+    tool: command
+- id: verify_forms
+  tool: verify
+  vars:
     tool: verify
-    vars:
-      tool: verify
-    expect_contains:
-      - 'Code: COMMAND_ARGV_CONFLICT'
-      - conflicting explicit command forms
-      - keep that array and omit the command line

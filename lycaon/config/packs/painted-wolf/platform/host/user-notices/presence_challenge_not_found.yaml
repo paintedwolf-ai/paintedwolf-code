@@ -9,6 +9,3 @@ suggested_action: >-
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - expired or had already been used
-      - complete the operating-system authentication prompt

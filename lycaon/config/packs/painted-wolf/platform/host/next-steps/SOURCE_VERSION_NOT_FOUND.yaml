@@ -1,0 +1,6 @@
+steps:
+  - tool: "source_history"
+    args:
+      mode: "effects"
+    say: "Check {{ call }} for valid version IDs recorded for this file."
+    otherwise: "Omit version_id to restore the immediate predecessor, or pass a version ID a result in this session named."
