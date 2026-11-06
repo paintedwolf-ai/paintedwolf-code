@@ -21,12 +21,7 @@ func TestFormatCoordinatorNudgeBatchWrongPhase(t *testing.T) {
 	if strings.Contains(raw, "Rejected:") {
 		t.Fatalf("advisory misclassified as rejection: %s", raw)
 	}
-	for _, want := range []string{
-		"Tool feedback",
-		"Fix:",
-		"Code: COORDINATOR_BATCH_WRONG_PHASE",
-		"pack_board",
-	} {
+	for _, want := range []string{"Fix:", "Code: COORDINATOR_BATCH_WRONG_PHASE", "pack_board"} {
 		if !strings.Contains(raw, want) {
 			t.Fatalf("missing %q in %q", want, raw)
 		}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -31,7 +32,6 @@ type supervisionTimer struct {
 
 type supervisionClock struct {
 	mu        sync.Mutex
-	timers    []func()
 	scheduled chan supervisionTimer
 }
 
@@ -53,7 +53,6 @@ func (c *supervisionClock) AfterFunc(d time.Duration, fn func()) func() bool {
 			fn()
 		}
 	}
-	c.timers = append(c.timers, fire)
 	c.mu.Unlock()
 	c.scheduled <- supervisionTimer{after: d, fire: fire}
 	return func() bool {
@@ -65,14 +64,18 @@ func (c *supervisionClock) AfterFunc(d time.Duration, fn func()) func() bool {
 	}
 }
 
-// fireNext waits for the next timer the program schedules and fires it.
-func (c *supervisionClock) fireNext(t *testing.T, want time.Duration) {
-	t.Helper()
-	event := <-c.scheduled
-	if event.after != want {
-		t.Fatalf("scheduled %v, want %v", event.after, want)
+// await returns the next timer of this length. The call's own inline wait shares the clock.
+func (c *supervisionClock) await(want time.Duration) supervisionTimer {
+	for {
+		if event := <-c.scheduled; event.after == want {
+			return event
+		}
 	}
-	event.fire()
+}
+
+// fireNext waits for the program's timer of this length and fires it.
+func (c *supervisionClock) fireNext(want time.Duration) {
+	c.await(want).fire()
 }
 
 type programCall struct {
@@ -120,7 +123,7 @@ func TestCommandEntryTimeoutEndsTheInnerCommandWith124(t *testing.T) {
 			clock := newSupervisionClock()
 			f.Runtime.Clock = clock
 			done := callAsync(t, t.Context(), f, tc.program)
-			clock.fireNext(t, time.Second)
+			clock.fireNext(time.Second)
 			got := <-done
 			// The program only settles once the inner command is gone.
 			if got.err != nil || got.outcome.Status != 0 || got.outcome.Stdout != tc.stdout || got.outcome.Refusal != nil {
@@ -143,13 +146,10 @@ func TestCommandEntryTimeoutKillAfterEscalates(t *testing.T) {
 			f.Runtime.Clock = clock
 			ready := filepath.Join(f.Dir, "ready")
 			done := callAsync(t, t.Context(), f, `timeout -v `+tc.flags+`-k 2 1 /bin/sh -c 'trap "" TERM; : > ready; while :; do :; done'; echo "status $?"`)
-			<-clock.scheduled
+			expire := clock.await(time.Second)
 			awaitFile(t, t.Context(), ready)
-			clock.mu.Lock()
-			expire := clock.timers[0]
-			clock.mu.Unlock()
-			expire()
-			clock.fireNext(t, 2*time.Second)
+			expire.fire()
+			clock.fireNext(2 * time.Second)
 			got := <-done
 			if got.err != nil || got.outcome.Stdout != "status "+tc.status+"\n" {
 				t.Fatalf("kill-after outcome: %+v, %v", got.outcome, got.err)
@@ -168,7 +168,7 @@ func TestCommandEntryTimeoutLeavesTheOuterBoundInCharge(t *testing.T) {
 	f.Runtime.Clock = clock
 	ctx, cancel := context.WithCancel(t.Context())
 	done := callAsync(t, ctx, f, `timeout 600 /bin/sleep 30; echo "status $?"`)
-	<-clock.scheduled
+	clock.await(600 * time.Second)
 	cancel()
 	got := <-done
 	if !errors.Is(got.err, context.Canceled) || strings.Contains(got.outcome.Stdout, "124") {
@@ -309,22 +309,30 @@ func TestCommandEntryNohupRefusesNohupOutAndMissingCommand(t *testing.T) {
 func TestCommandEntryUlimitReachesLaterExternalChildrenOnly(t *testing.T) {
 	f := newPathsFixture(t)
 	probe := `external -- /bin/sh -c 'ulimit -n'`
-	raw, err := f.Call(t, t.Context(), "ulimit -n; "+probe)
+	raw, err := f.Call(t, t.Context(), probe)
+	testutil.FailErr(t, "measure a child with no ulimit", err)
+	fresh := decodeProgramOutcome(t, raw).Stdout
+	raw, err = f.Call(t, t.Context(), "ulimit -n; "+probe)
 	testutil.FailErr(t, "report the child limit", err)
 	got := decodeProgramOutcome(t, raw)
 	lines := strings.Split(strings.TrimSuffix(got.Stdout, "\n"), "\n")
 	if got.Status != 0 || len(lines) != 2 || lines[0] != lines[1] {
 		t.Fatalf("ulimit -n differs from the child's own: %+v", got)
 	}
-	raw, err = f.Call(t, t.Context(), "ulimit -n 256; "+probe)
+	// Halve the limit a child receives with no ulimit, so the change is visible
+	// whatever the host's inherited limit is.
+	inherited, err := strconv.Atoi(strings.TrimSpace(fresh))
+	testutil.FailErr(t, "parse the inherited limit", err)
+	lowered := strconv.Itoa(inherited / 2)
+	raw, err = f.Call(t, t.Context(), "ulimit -n "+lowered+"; "+probe)
 	testutil.FailErr(t, "lower the child limit", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout != "256\n" {
+	if got := decodeProgramOutcome(t, raw); got.Stdout != lowered+"\n" {
 		t.Fatalf("lowered limit outcome: %+v", got)
 	}
 	raw, err = f.Call(t, t.Context(), probe)
 	testutil.FailErr(t, "next call", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout == "256\n" {
-		t.Fatalf("the limit persisted into the next call: %+v", got)
+	if got := decodeProgramOutcome(t, raw); got.Stdout != fresh {
+		t.Fatalf("the next call did not start with the limit %q: %+v", fresh, got)
 	}
 }
 

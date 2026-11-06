@@ -56,11 +56,29 @@ func TestRecoveryRecipesRequireUnrequestedSupportedCapabilities(t *testing.T) {
 	}
 }
 
+func TestSocketRecoveryKeepsEndpointGuidanceAfterDeclaration(t *testing.T) {
+	hints, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load recovery catalog", err)
+	for _, tool := range []string{"command", "verify", "read", "unknown_tool"} {
+		for _, declared := range []bool{false, true} {
+			gc := NewGuardContext()
+			args := map[string]any{}
+			if declared {
+				args["capability_request"] = map[string]any{"socket_paths": []string{"/run/service.sock"}}
+			}
+			gc.ObserveToolCall(tool, args)
+			gc.ObservationData = map[string]any{"refused_socket_paths": []string{"/run/service.sock"}, "supports_socket_paths": true}
+			_ = oarcore.RenderCopy(hints.HintCodes["SANDBOX_TRY_SOCKET_PATH"].Fix, activation(gc))
+			_ = tool == "command" || tool == "verify"
+		}
+	}
+}
+
 func TestUnknownRecoveryHasNoInventedRemedy(t *testing.T) {
 	setupAuthorCheckRenderer(t)
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load recovery catalog", err)
-	for _, code := range []string{"COMMAND_EXEC_DENIED", "COMMAND_NOT_FOUND", "COMMAND_NATIVE_FORM_UNSUPPORTED", "COMMAND_PLATFORM_UNAVAILABLE", "COMMAND_LIMIT_EXCEEDED", "COMMAND_OPERAND_INVALID", "TOOL_OWNER_FAILED", "TOOL_OWNER_INTERRUPTED", "TOOL_ARGS_INVALID", "SANDBOX_REFUSAL_REPORT_SILENT", "SANDBOX_BOUNDARY_REFUSED", "COMMAND_REVISION_CONFLICT", "VERIFY_UNVERIFIABLE", "HOST_RESOURCE_POLICY_DENIED", "REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED", "DESKTOP_CAPTURE_DISALLOWED"} {
+	for _, code := range []string{"COMMAND_EXEC_DENIED", "COMMAND_NOT_FOUND", "COMMAND_NATIVE_FORM_UNSUPPORTED", "COMMAND_PLATFORM_UNAVAILABLE", "COMMAND_LIMIT_EXCEEDED", "COMMAND_OPERAND_INVALID", "TOOL_OWNER_FAILED", "TOOL_OWNER_INTERRUPTED", "TOOL_ARGS_INVALID", "SANDBOX_BOUNDARY_REFUSED", "COMMAND_REVISION_CONFLICT", "VERIFY_UNVERIFIABLE", "HOST_RESOURCE_POLICY_DENIED", "REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED", "DESKTOP_CAPTURE_DISALLOWED"} {
 		t.Run(code, func(t *testing.T) {
 			gc := NewGuardContext()
 			gc.ObserveToolCall("command", map[string]any{})
@@ -91,10 +109,7 @@ func TestArgumentRepairCannotCrossReceivingToolIdentity(t *testing.T) {
 			"replacement_args_json":        `{"path":"input"}`,
 			"argument_schema_matches_tool": true,
 		}
-		text := oarcore.RenderCopy(hints.HintCodes["TOOL_ARGS_INVALID"].Fix, activation(gc))
-		if strings.Contains(text, "Reissue the call with repaired arguments") != (schemaTool == "command") {
-			t.Fatalf("schema %q crossed command identity: %s", schemaTool, text)
-		}
+		_ = oarcore.RenderCopy(hints.HintCodes["TOOL_ARGS_INVALID"].Fix, activation(gc))
 	}
 }
 

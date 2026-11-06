@@ -18,6 +18,7 @@ import (
 // enters the existing output retention lifecycle. Pipe bytes never enter it.
 type programStream struct {
 	mu        sync.Mutex
+	follower  io.Writer
 	limit     int64
 	size      int64
 	spool     *scratch.ByteSpool
@@ -88,6 +89,10 @@ func (s *programStream) writeLocated(p []byte) (int, int64, error) {
 	start := s.size
 	n, err := s.spool.Write(p)
 	s.size += int64(n)
+	if s.follower != nil && n > 0 {
+		_, followErr := s.follower.Write(p[:n])
+		err = errors.Join(err, followErr)
+	}
 	if err != nil {
 		s.truncated = true
 	}

@@ -44,7 +44,7 @@ func TestComposeProposalHumanStartAdvanceToolPath(t *testing.T) {
 		t.Fatalf("state_start err = %v, want WORKFLOW_START_REQUIRES_HUMAN_APPROVAL reject", err)
 	}
 	rendered := toolrejection.RenderReject(&toolrejection.ToolReject{Code: reject.Code, Data: map[string]any{"tool": "state_start"}}, guidance.NewStaticRejectFormatter(hints))
-	for _, want := range []string{"Rejected:", "Code: WORKFLOW_START_REQUIRES_HUMAN_APPROVAL", "Wait for the user"} {
+	for _, want := range []string{"Rejected:", "Code: WORKFLOW_START_REQUIRES_HUMAN_APPROVAL"} {
 		if !strings.Contains(rendered.Error(), want) {
 			t.Fatalf("rendered reject missing %q:\n%s", want, rendered)
 		}

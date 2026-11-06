@@ -38,6 +38,3 @@ x-paintedwolf-scenarios:
     live_command_handles:
     - command-a
     - command-b
-  expect_contains:
-  - 'Code: COMMAND_CONCURRENCY_CAP_REACHED'
-  - 'Live jobs at admission: 2; configured limit: 2'

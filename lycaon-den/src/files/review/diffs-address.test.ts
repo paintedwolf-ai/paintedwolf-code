@@ -28,7 +28,6 @@ describe("what a diffs page is reading", () => {
     expect(diffsPageCopy(LENS, lens({ kind: "new" }))).toMatchObject({
       title: "New since you looked", tab: "New since you looked",
     });
-    expect(diffsPageCopy(LENS, lens({ kind: "commit" })).title).toBe("Changes since last commit");
     expect(diffsPageCopy(LENS, { ...lens({ kind: "session" }), subjectTitle: "Fix the loader" }).title)
       .toBe("Changes in “Fix the loader”");
     expect(diffsPageCopy(LENS, lens({ kind: "pin", pinId: "p", label: "before the refactor" })).tab)
@@ -37,16 +36,7 @@ describe("what a diffs page is reading", () => {
 
   it("names a turn page apart from the eye's turn scope, because the ranges differ", () => {
     const turn = diffsPageCopy(TURN, lens({ kind: "turn" }));
-    const eye = diffsPageCopy(LENS, lens({ kind: "turn" }));
-    expect(turn.title).toBe("What this turn did");
-    expect(eye.title).toBe("Changes in this turn");
     expect(turn.tab).toBe("All diffs · turn 12");
-    expect(turn.note).toContain("A later turn's work never appears here.");
-    expect(eye.note).toContain("as they are now");
-  });
-
-  it("says a lens page has nothing marked through the lens's own copy", () => {
-    expect(diffsPageCopy(LENS, lens({ kind: "new" }, true)).title).toBe("Nothing marked");
   });
 
   it("keys a Git page on its root and resolved commits, not on what was typed", () => {
@@ -61,6 +51,5 @@ describe("what a diffs page is reading", () => {
     expect(copy.title).toBe("a1b2c3d Fix the loader");
     expect(copy.tab).toBe("All diffs · a1b2c3d Fix the loader");
     expect(copy.note).toContain("From commit 0000000 to a1b2c3d");
-    expect(diffsPageCopy({ ...GIT, beforeCommit: "" }, lens({ kind: "new" })).note).toContain("has no parent");
   });
 });

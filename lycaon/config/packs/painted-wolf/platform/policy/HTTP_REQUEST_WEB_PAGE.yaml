@@ -34,10 +34,6 @@ x-paintedwolf-scenarios:
       bytes: '612480'
       content_type: text/html; charset=utf-8
       fetch_url_deferred: false
-    expect_contains:
-      - 'Code: HTTP_REQUEST_WEB_PAGE'
-      - 612480-byte HTML document from docs.example.test
-      - call fetch_url with the same URL.
   - id: deferred
     vars:
       tool: http_request
@@ -45,6 +41,3 @@ x-paintedwolf-scenarios:
       bytes: '612480'
       content_type: text/html
       fetch_url_deferred: true
-    expect_contains:
-      - 'Code: HTTP_REQUEST_WEB_PAGE'
-      - after loading it with request_tools

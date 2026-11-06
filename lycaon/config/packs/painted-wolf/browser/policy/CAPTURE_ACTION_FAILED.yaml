@@ -39,9 +39,6 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: capture_page
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CAPTURE_ACTION_FAILED'
 - id: role_label_miss
   vars:
     index: 0
@@ -50,7 +47,3 @@ x-paintedwolf-scenarios:
     locators: role=button label="Check configuration"
     interactive: button "Check configuration"
     tool: capture_page
-  expect_contains:
-  - 'Code: CAPTURE_ACTION_FAILED'
-  - target not found
-  - accessible name

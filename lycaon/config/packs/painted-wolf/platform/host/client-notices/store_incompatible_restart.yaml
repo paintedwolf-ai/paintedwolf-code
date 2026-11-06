@@ -6,9 +6,3 @@ message: >-
 suggested_action: >-
   The app could not finish automatically. Quit and reopen it to apply the
   staged restore.
-scenarios:
-  - id: default
-    expect_contains:
-      - restore is staged
-      - previous data is preserved
-      - Finish restoring

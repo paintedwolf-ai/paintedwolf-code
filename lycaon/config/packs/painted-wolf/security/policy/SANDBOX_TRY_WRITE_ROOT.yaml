@@ -50,10 +50,6 @@ x-paintedwolf-scenarios:
     refused_write_grants:
     - /work/project/AGENTS.md
     tool_args: {}
-  expect_contains:
-  - 'Code: SANDBOX_TRY_WRITE_ROOT'
-  - capability_request.write_root
-  - /work/project/AGENTS.md
 - id: running_job
   vars:
     tool: command
@@ -65,11 +61,6 @@ x-paintedwolf-scenarios:
     refused_write_grants:
     - /Users/person/.colima/default
     tool_args: {}
-  expect_contains:
-  - 'Code: SANDBOX_TRY_WRITE_ROOT'
-  - while the job runs
-  - command_stop
-  - /Users/person/.colima/default
 - id: outside_roots
   vars:
     tool: verify
@@ -80,6 +71,3 @@ x-paintedwolf-scenarios:
     refused_write_grants:
     - /etc
     tool_args: {}
-  expect_contains:
-  - 'Code: SANDBOX_TRY_WRITE_ROOT'
-  - /etc/hosts

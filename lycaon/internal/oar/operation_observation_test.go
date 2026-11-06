@@ -33,6 +33,12 @@ func TestNativeOperationObservationKeepsRealToolAndSelectorConjunction(t *testin
 	if selectorMatches(Selector{"tool": {"read"}}, facts) || selectorMatches(Selector{"tool": {"write"}, "paintedwolf.native_operation": {"read"}}, facts) {
 		t.Fatal("native operation impersonated old tool or changed selector AND semantics")
 	}
+	gc.ObserveToolCall("verify", args)
+	testutil.FailErr(t, "observe verification operation", gc.ObserveNativeOperation(operation))
+	facts = activation(gc)
+	if facts["tool"] != "verify" || facts["paintedwolf.native_operation"] != "read" || !selectorMatches(Selector{"tool": {"verify"}, "paintedwolf.native_operation": {"read"}}, facts) {
+		t.Fatalf("verification operation attribution changed: %+v", facts)
+	}
 	gc.ObserveToolCall("read", map[string]any{"path": "input"})
 	if activation(gc)["paintedwolf.native_operation"] != "" {
 		t.Fatal("subsequent actual structured call inherited a native operation")

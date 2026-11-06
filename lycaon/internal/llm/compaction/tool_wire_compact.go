@@ -96,7 +96,7 @@ func extractChunkHandles(m ContextMessage) []string {
 		out = append(out, h)
 	}
 	if tag, _ := hostmarker.SplitEvidenceHandleTag(m.Content); tag != "" {
-		tag = strings.Trim(strings.TrimSpace(tag), "[]")
+		tag = hostmarker.EvidenceTagHandle(tag)
 		if evidence.IsEvidenceHandleToken(tag) {
 			if _, dup := seen[tag]; !dup {
 				out = append(out, tag)

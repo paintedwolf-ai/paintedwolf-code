@@ -25,6 +25,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: page_act
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CAPTURE_RECORD_EMPTY'

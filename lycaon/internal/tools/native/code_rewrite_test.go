@@ -2,99 +2,14 @@ package native
 
 import (
 	"context"
-	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
-func TestCodeRewriteApply(t *testing.T) {
-	tmpDir := t.TempDir()
-	seed := "package main\n\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n"
-	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(seed), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path":    "main.go",
-		"pattern": `fmt.Println($A)`,
-		"rewrite": `log.Info($A)`,
-	}, nativefixture.Context(tmpDir))
-	testutil.FailErr(t, "code_rewrite apply", err)
-	got, err := os.ReadFile(filepath.Join(tmpDir, "main.go"))
-	testutil.FailErr(t, "read file", err)
-	want := "package main\n\nfunc main() {\n\tlog.Info(\"hi\")\n}\n"
-	if string(got) != want {
-		t.Fatalf("content = %q want %q", got, want)
-	}
-}
-
-func TestCodeRewriteRequiresRewrite(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\n"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path":    "main.go",
-		"pattern": `fmt.Println($A)`,
-	}, nativefixture.Context(tmpDir))
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "STRUCTURAL_PATTERN_INVALID" {
-		t.Fatalf("want STRUCTURAL_PATTERN_INVALID when rewrite omitted, got %v", err)
-	}
-	if !strings.Contains(reject.Data["reason"].(string), "grep") {
-		t.Fatalf("reject should point at grep for search: %+v", reject.Data)
-	}
-}
-
-func TestCodeRewriteDryRunReturnsDiff(t *testing.T) {
-	tmpDir := t.TempDir()
-	seed := "package main\n\nfunc main() {\n\tfmt.Println(\"hi\")\n}\n"
-	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(seed), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	out, err := tool.Run(context.Background(), map[string]any{
-		"path":    "main.go",
-		"pattern": `fmt.Println($A)`,
-		"rewrite": `log.Info($A)`,
-		"dry_run": true,
-	}, nativefixture.Context(tmpDir))
-	testutil.FailErr(t, "code_rewrite dry_run", err)
-	if !strings.Contains(out, `"dry_run":true`) || !strings.Contains(out, "log.Info") || !strings.Contains(out, "-") {
-		t.Fatalf("expected unified diff in dry_run output, got: %s", out)
-	}
-	got, err := os.ReadFile(filepath.Join(tmpDir, "main.go"))
-	testutil.FailErr(t, "read file", err)
-	if string(got) != seed {
-		t.Fatalf("dry_run mutated the file:\n%s", got)
-	}
-}
-
-func TestCodeRewriteInvalidPattern(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\n"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path":    "main.go",
-		"pattern": "func (",
-		"rewrite": "func ()",
-	}, nativefixture.Context(tmpDir))
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "STRUCTURAL_PATTERN_INVALID" {
-		t.Fatalf("want STRUCTURAL_PATTERN_INVALID reject, got %v", err)
-	}
-}
-
-func TestCodeRewriteAcrossLanguagesViaExtension(t *testing.T) {
+func TestRewriteSourceAcrossLanguages(t *testing.T) {
 	cases := []struct {
 		file, src, pattern, rewrite, want string
 	}{
@@ -106,108 +21,53 @@ func TestCodeRewriteAcrossLanguagesViaExtension(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			if err := os.WriteFile(filepath.Join(tmpDir, c.file), []byte(c.src), 0o644); err != nil {
-				testutil.FailErr(t, "write file", err)
+			got, changed, err := RewriteSource(t.Context(), c.file, c.pattern, c.rewrite, c.src)
+			testutil.FailErr(t, "rewrite source", err)
+			if !changed || got != c.want || !SupportsRewriteLanguage(c.file) {
+				t.Fatalf("changed=%v got=%q want=%q", changed, got, c.want)
 			}
-			tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-			_, err := tool.Run(context.Background(), map[string]any{
-				"path":    c.file,
-				"pattern": c.pattern,
-				"rewrite": c.rewrite,
-			}, nativefixture.Context(tmpDir))
-			testutil.FailErr(t, "code_rewrite "+c.file, err)
-			got, err := os.ReadFile(filepath.Join(tmpDir, c.file))
-			testutil.FailErr(t, "read file", err)
-			if string(got) != c.want {
-				t.Fatalf("[%s] got %q want %q", c.file, got, c.want)
+			unchanged, changed, err := RewriteSource(t.Context(), c.file, c.pattern, c.rewrite, got)
+			testutil.FailErr(t, "rewrite without matches", err)
+			if changed || unchanged != got {
+				t.Fatalf("unmatched source changed: %q", unchanged)
 			}
 		})
 	}
 }
-
-func TestCodeRewriteUnsupportedLangDegradesGracefully(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "data.qzx9"), []byte("hello world\n"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	msg, err := tool.Run(context.Background(), map[string]any{
-		"path":    "data.qzx9",
-		"pattern": "$A",
-		"rewrite": "$A",
-	}, nativefixture.Context(tmpDir))
-	testutil.FailErr(t, "code_rewrite unsupported apply", err)
-	if !strings.Contains(msg, "skipped") {
-		t.Fatalf("expected skip message, got: %s", msg)
-	}
-	got, err := os.ReadFile(filepath.Join(tmpDir, "data.qzx9"))
-	testutil.FailErr(t, "read file", err)
-	if string(got) != "hello world\n" {
-		t.Fatalf("unsupported apply mutated the file: %q", got)
+func TestRewriteSourceRejectsInvalidAndBroadPatterns(t *testing.T) {
+	for _, tc := range []struct{ path, source, pattern, rewrite, code string }{
+		{"main.go", "package main\n", "func (", "func ()", "STRUCTURAL_PATTERN_INVALID"},
+		{"app.py", "x = (0 << 6) | 3\ny: float | None = None\n", "$T | $B", "Union[$T, $B]", "CODE_REWRITE_PATTERN_TOO_BROAD"},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			_, changed, err := RewriteSource(t.Context(), tc.path, tc.pattern, tc.rewrite, tc.source)
+			reject := toolrejection.AsToolReject(err)
+			if changed || reject == nil || reject.Code != tc.code {
+				t.Fatalf("changed=%v err=%v", changed, err)
+			}
+		})
 	}
 }
-
-func TestCodeRewriteBareBinaryPatternRejected(t *testing.T) {
-	tmpDir := t.TempDir()
-	seed := "x = (0 << 6) | 3\ny: float | None = None\n"
-	if err := os.WriteFile(filepath.Join(tmpDir, "app.py"), []byte(seed), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path":    "app.py",
-		"pattern": "$T | $B",
-		"rewrite": "Union[$T, $B]",
-	}, nativefixture.Context(tmpDir))
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "CODE_REWRITE_PATTERN_TOO_BROAD" {
-		t.Fatalf("want CODE_REWRITE_PATTERN_TOO_BROAD, got %v", err)
-	}
-	got, err := os.ReadFile(filepath.Join(tmpDir, "app.py"))
-	testutil.FailErr(t, "read file", err)
-	if string(got) != seed {
-		t.Fatalf("too-broad pattern must not apply: %q", got)
+func TestRewriteSourceNarrowUnionPreservesBitwiseExpression(t *testing.T) {
+	got, changed, err := RewriteSource(t.Context(), "app.py", "$T | None", "Union[$T, None]", "x = (0 << 6) | 3\ny: float | None = None\n")
+	testutil.FailErr(t, "rewrite narrow union", err)
+	if !changed || !strings.Contains(got, "Union[float, None]") || !strings.Contains(got, "(0 << 6) | 3") {
+		t.Fatalf("rewritten=%q changed=%v", got, changed)
 	}
 }
-
-func TestCodeRewriteNarrowUnionPatternApplies(t *testing.T) {
-	tmpDir := t.TempDir()
-	seed := "x = (0 << 6) | 3\ny: float | None = None\n"
-	if err := os.WriteFile(filepath.Join(tmpDir, "app.py"), []byte(seed), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path":    "app.py",
-		"pattern": "$T | None",
-		"rewrite": "Union[$T, None]",
-	}, nativefixture.Context(tmpDir))
-	testutil.FailErr(t, "narrow union rewrite", err)
-	got, err := os.ReadFile(filepath.Join(tmpDir, "app.py"))
-	testutil.FailErr(t, "read file", err)
-	if !strings.Contains(string(got), "Union[float, None]") {
-		t.Fatalf("narrow rewrite missed the type union: %q", got)
-	}
-	if !strings.Contains(string(got), "(0 << 6) | 3") {
-		t.Fatalf("narrow rewrite must not touch bitwise or: %q", got)
+func TestRewriteSourceUnsupportedLanguageIsUnchanged(t *testing.T) {
+	got, changed, err := RewriteSource(t.Context(), "data.qzx9", "$A", "$A", "hello\n")
+	testutil.FailErr(t, "unsupported language", err)
+	if got != "hello\n" || changed || SupportsRewriteLanguage("data.qzx9") {
+		t.Fatalf("got=%q changed=%v", got, changed)
 	}
 }
-
-func TestCodeRewriteExplicitBadLangRejects(t *testing.T) {
-	tmpDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte("package main\n"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{
-		"path":    "main.go",
-		"pattern": "$A",
-		"rewrite": "$A",
-		"lang":    "not-a-language",
-	}, nativefixture.Context(tmpDir))
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "STRUCTURAL_LANG_UNKNOWN" {
-		t.Fatalf("want STRUCTURAL_LANG_UNKNOWN reject, got %v", err)
+func TestRewriteSourcePreservesParserFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, _, err := RewriteSource(ctx, "a.go", "f($A)", "g($A)", "package p\nfunc run() { f(1) }\n")
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != "SOURCE_PARSE_INCOMPLETE" || reject.Data["parse_reason"] != "canceled" {
+		t.Fatalf("parser failure=%v", err)
 	}
 }

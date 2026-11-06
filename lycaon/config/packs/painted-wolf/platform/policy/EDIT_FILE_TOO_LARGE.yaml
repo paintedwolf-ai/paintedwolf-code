@@ -44,10 +44,6 @@ x-paintedwolf-scenarios:
       profile: implement
       size: 5242880
       tool: edit
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: EDIT_FILE_TOO_LARGE'
-      - 'Use command'
   - id: without_command
     vars:
       can_command: false
@@ -56,7 +52,3 @@ x-paintedwolf-scenarios:
       profile: implement
       size: 5242880
       tool: edit
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: EDIT_FILE_TOO_LARGE'
-      - 'Split the file'

@@ -133,11 +133,11 @@ func observeLoopbackEndpointFallback(tctx tools.ToolContext, peer netip.AddrPort
 	raw, err := lineage.Listeners(lineage.ListenerQuery{
 		Protocols: []lineage.Protocol{lineage.ProtocolTCP},
 	})
-	if err != nil || len(raw) == 0 {
+	if err != nil || len(raw.Listeners) == 0 {
 		return nil
 	}
 	var flat []fallbackSocketListener
-	for _, l := range raw {
+	for _, l := range raw.Listeners {
 		if len(l.Holders) == 0 {
 			flat = append(flat, fallbackSocketListener{Addr: l.Addr.Addr(), Port: l.Addr.Port(), IPv6Only: l.IPv6Only})
 			continue

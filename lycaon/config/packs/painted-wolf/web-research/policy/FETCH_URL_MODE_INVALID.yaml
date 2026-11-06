@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
     vars:
       mode: html
       tool: fetch_url
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: FETCH_URL_MODE_INVALID'

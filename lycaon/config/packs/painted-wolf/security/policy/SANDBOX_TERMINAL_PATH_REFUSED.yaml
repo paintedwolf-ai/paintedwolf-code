@@ -39,6 +39,3 @@ x-paintedwolf-scenarios:
       tool: command
       refused_terminal_read_paths: [/state/store.db]
       refused_terminal_write_paths: []
-    expect_contains:
-      - 'Code: SANDBOX_TERMINAL_PATH_REFUSED'
-      - no approval

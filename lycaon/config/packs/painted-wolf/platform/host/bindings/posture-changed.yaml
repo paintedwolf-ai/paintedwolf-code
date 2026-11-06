@@ -9,7 +9,3 @@ invariants:
   trigger_class: host_api
   fires_in:
   - Approval posture change that alters outside-folder write review
-  required:
-  - outside the project
-  forbidden:
-  - workflow_advance

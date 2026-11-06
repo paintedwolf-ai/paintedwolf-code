@@ -331,7 +331,14 @@ func offeredProgramDefinition(tool string, definition toolcontract.OperationDefi
 	return programOperationDefinition(definition)
 }
 
+// programDefinitions maps a registered definition's digest to its program
+// form. Definitions are immutable, so the derivation runs once per digest.
+var programDefinitions sync.Map
+
 func programOperationDefinition(definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
+	if cached, ok := programDefinitions.Load(definition.Digest()); ok {
+		return cached.(toolcontract.OperationDefinition)
+	}
 	facts := definition.Facts()
 	// A command child retains its structured owner's identity, while the
 	// enclosing command may request file authority for that child's paths.
@@ -344,6 +351,7 @@ func programOperationDefinition(definition toolcontract.OperationDefinition) too
 	if err != nil {
 		return definition
 	}
+	programDefinitions.Store(definition.Digest(), updated)
 	return updated
 }
 

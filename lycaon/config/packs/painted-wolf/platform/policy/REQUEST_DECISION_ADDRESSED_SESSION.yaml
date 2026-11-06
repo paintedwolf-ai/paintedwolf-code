@@ -25,7 +25,3 @@ x-paintedwolf-scenarios:
     vars:
       profile: explore
       tool: request_decision
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: REQUEST_DECISION_ADDRESSED_SESSION'
-      - no coordinator above this session

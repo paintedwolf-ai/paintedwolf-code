@@ -395,7 +395,7 @@ func leadingEnvelopeHandle(prefix string) string {
 		if tag == "" {
 			break
 		}
-		last = strings.Trim(strings.TrimSpace(tag), "[]")
+		last = hostmarker.EvidenceTagHandle(tag)
 		rest = strings.TrimSpace(after)
 	}
 	return last

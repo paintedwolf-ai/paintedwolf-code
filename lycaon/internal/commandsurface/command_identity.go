@@ -1,32 +1,86 @@
 package commandsurface
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
+	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/exec"
+	"mvdan.cc/sh/v3/expand"
+	"mvdan.cc/sh/v3/syntax"
 )
 
-// CommandIdentity preserves executable arguments and connectors while ignoring quote syntax.
+// CommandIdentity preserves Bash expansion and control semantics. Static argv
+// forms also ignore equivalent literal quoting.
 func CommandIdentity(line string) string {
-	stages, err := exec.StagesFromCommandLine(strings.TrimSpace(line))
-	if err != nil {
+	line = strings.TrimSpace(line)
+	catalog, catalogErr := programLanguage()
+	if catalogErr != nil || line == "" || !utf8.ValidString(line) || int64(len(line)) > languageLimit(catalog, "program_bytes") {
 		return ""
 	}
-	raw, err := json.Marshal(stages)
-	if err != nil {
+	tree, err := syntax.NewParser(syntax.Variant(syntax.LangBash), syntax.WithBudget(syntax.Budget{MaxBytes: languageLimit(catalog, "evaluation_memory_bytes")})).Parse(strings.NewReader(line), "")
+	if err != nil || len(tree.Stmts) == 0 {
 		return ""
 	}
-	return string(raw)
+	static := true
+	syntax.Walk(tree, func(node syntax.Node) bool {
+		switch n := node.(type) {
+		case nil, *syntax.File, *syntax.CallExpr, *syntax.Word, *syntax.BinaryCmd:
+		case *syntax.Stmt:
+			if n.Negated || n.Background {
+				static = false
+			}
+		case *syntax.SglQuoted:
+			if n.Dollar {
+				static = false
+			}
+		case *syntax.DblQuoted:
+			if n.Dollar {
+				static = false
+			}
+		case *syntax.Lit:
+			if strings.ContainsAny(n.Value, "*?[{~") {
+				static = false
+			}
+		default:
+			static = false
+		}
+		return static
+	})
+	prefix := "program:"
+	if static {
+		prefix = "argv:"
+		syntax.Walk(tree, func(node syntax.Node) bool {
+			if word, ok := node.(*syntax.Word); ok {
+				literal, literalErr := expand.Fields(nil, word)
+				if literalErr != nil || len(literal) != 1 {
+					static = false
+					return false
+				}
+				// JSON encodes literal values for identity, never execution.
+				encoded, _ := json.Marshal(literal[0])
+				word.Parts = []syntax.WordPart{&syntax.Lit{Value: string(encoded)}}
+			}
+			return true
+		})
+		if !static {
+			return ""
+		}
+	}
+	var formatted bytes.Buffer
+	if err := syntax.NewPrinter().Print(&formatted, tree); err != nil {
+		return ""
+	}
+	return prefix + formatted.String()
 }
 
-// SameCommandLine compares executable arguments and connectors; invalid commands do not match.
+// SameCommandLine compares valid program identities without evaluating them.
 func SameCommandLine(left, right string) bool {
 	identity := CommandIdentity(left)
 	return identity != "" && identity == CommandIdentity(right)
 }
 
-// CheckKey groups settled runs, including structured pipelines that are not command-line inputs.
+// CheckKey keeps check programs and working directories separate.
 func CheckKey(command, cwd string) string {
 	identity := CommandIdentity(command)
 	if identity == "" {

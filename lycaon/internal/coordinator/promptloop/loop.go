@@ -191,6 +191,13 @@ loop:
 
 		assistantMsg, completion, _, err := l.Model.runAssistantStreamTurn(turnCtx, id, sess, st.history, st, profileID, userPrompt, step, maxIter, in.HostTurn)
 		if err != nil {
+			if finalTurnGaveNoAnswer(turnCtx, err, st) && l.Closeout.canCloseWithoutAnswer(sess) {
+				if _, cerr := l.Closeout.endWithClosing(turnCtx, sess, id, userPrompt, surfaceID, st); cerr != nil {
+					return nil, cerr
+				}
+				loopExit = loopExitCompleted
+				break
+			}
 			retry, exit, serr := l.Nudges.handleStreamTurnError(turnCtx, sess, id, err, completion, st)
 			if serr != nil {
 				return nil, serr

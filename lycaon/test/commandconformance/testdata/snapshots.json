@@ -1704,6 +1704,134 @@
         "stdout": "1:alpha line 1\n4:alpha line 4\n1\nsub/nested/deep.go\nsub/a.txt\nsub/a.txt\nsub/b.txt\nsub/bad.sh\nsub/nested/deep.go\nsub/script.sh\nFIRST\n./.hidden.txt:secret-dotfile\n",
         "stderr": ""
       }
+    },
+    "status-branches": {
+      "gnu": {
+        "input": "sha256:ebb6659cd9a31d05deccdbf2f095042e02e77e41f7f341050c438d8e433f62d2",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0\n0.1 status=0 pipe=1\n0.2 status=0 pipe=3\n0.3 status=0 pipe=1\n0.4 status=0 pipe=1\n0.5 status=0 pipe=1\n0.6 status=0 pipe=128\n0.7 status=0 pipe=5\n1.0 status=1 pipe=1\n1.1 status=4 pipe=4\n1.2 status=4 pipe=4\n1.3 status=4 pipe=4\n1.4 status=4 pipe=4\n1.5 status=4 pipe=4\n1.6 status=4 pipe=4\n1.7 status=4 pipe=4\n2.0 status=0 pipe=0\n2.1 status=1 pipe=1\n2.2 status=3 pipe=3\n2.3 status=1 pipe=1\n2.4 status=1 pipe=1\n2.5 status=1 pipe=1\n2.6 status=128 pipe=128\n2.7 status=5 pipe=5\n3.0 status=0 pipe=0\n3.1 status=0 pipe=1\n3.2 status=0 pipe=3\n3.3 status=0 pipe=1\n3.4 status=0 pipe=1\n3.5 status=0 pipe=1\n3.6 status=0 pipe=128\n3.7 status=0 pipe=5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-declarations": {
+      "gnu": {
+        "input": "sha256:8035509adccdaaad62e7b382818f05827c3f582b9a156dbee6e901cbd0893386",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0\n0.1 status=0 pipe=1\n0.2 status=0 pipe=3\n0.3 status=0 pipe=1\n0.4 status=0 pipe=1\n0.5 status=0 pipe=1\n0.6 status=0 pipe=128\n0.7 status=0 pipe=5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-frames": {
+      "gnu": {
+        "input": "sha256:cc6635ea32e97e3f783c58ee0459ef190cdaa313138b1fe9f7f5905057a99aa8",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0\n0.1 status=1 pipe=1\n0.2 status=3 pipe=3\n0.3 status=1 pipe=1\n0.4 status=1 pipe=1\n0.5 status=1 pipe=1\n0.6 status=128 pipe=128\n0.7 status=5 pipe=5\n1.0 status=0 pipe=0\n1.1 status=1 pipe=1\n1.2 status=3 pipe=3\n1.3 status=1 pipe=1\n1.4 status=1 pipe=1\n1.5 status=1 pipe=1\n1.6 status=128 pipe=128\n1.7 status=5 pipe=5\n2.0 status=0 pipe=0\n2.1 status=1 pipe=1\n2.2 status=3 pipe=3\n2.3 status=1 pipe=1\n2.4 status=1 pipe=1\n2.5 status=1 pipe=1\n2.6 status=128 pipe=128\n2.7 status=5 pipe=5\n3.0 status=0 pipe=0\n3.1 status=1 pipe=1\n3.2 status=3 pipe=3\n3.3 status=1 pipe=1\n3.4 status=1 pipe=1\n3.5 status=1 pipe=1\n3.6 status=128 pipe=128\n3.7 status=5 pipe=5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-frames-pipeline": {
+      "gnu": {
+        "input": "sha256:b7d161e5fd49f17527b1d720c6eeac4e32d67bbb0b36063647af48e65439693a",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0 0\n0.1 status=1 pipe=1 0\n0.2 status=3 pipe=3 0\n0.3 status=1 pipe=1 0\n0.4 status=1 pipe=1 0\n0.5 status=1 pipe=1 0\n0.6 status=128 pipe=128 0\n0.7 status=5 pipe=5 0\n1.0 status=0 pipe=0\n1.1 status=1 pipe=1\n1.2 status=3 pipe=3\n1.3 status=1 pipe=1\n1.4 status=1 pipe=1\n1.5 status=1 pipe=1\n1.6 status=128 pipe=128\n1.7 status=5 pipe=5\n2.0 status=0 pipe=0\n2.1 status=1 pipe=1\n2.2 status=3 pipe=3\n2.3 status=1 pipe=1\n2.4 status=1 pipe=1\n2.5 status=1 pipe=1\n2.6 status=128 pipe=128\n2.7 status=5 pipe=5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-jobs-started": {
+      "gnu": {
+        "input": "sha256:75cea1091059d05c5931ffde2c020f93fc826577134a51ce80bcabb0da3f0b79",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0\n0.1 status=0 pipe=0\n0.2 status=0 pipe=0\n0.3 status=0 pipe=0\n0.4 status=0 pipe=0\n0.5 status=0 pipe=0\n0.6 status=0 pipe=0\n0.7 status=0 pipe=0\n1.0 status=0 pipe=0\n1.1 status=0 pipe=0\n1.2 status=0 pipe=0\n1.3 status=0 pipe=0\n1.4 status=0 pipe=0\n1.5 status=0 pipe=0\n1.6 status=0 pipe=0\n1.7 status=0 pipe=0\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-lists": {
+      "gnu": {
+        "input": "sha256:d8265253e67002a1a35e6b415a65b434fca4bc03d0df512ca3457e1168998aed",
+        "status": 0,
+        "stdout": "0.0 status=1 pipe=0\n0.1 status=0 pipe=1\n0.2 status=0 pipe=3\n0.3 status=0 pipe=1\n0.4 status=0 pipe=1\n0.5 status=0 pipe=1\n0.6 status=0 pipe=128\n0.7 status=0 pipe=5\n1.0 status=0 pipe=0\n1.1 status=1 pipe=1\n1.2 status=3 pipe=3\n1.3 status=1 pipe=1\n1.4 status=1 pipe=1\n1.5 status=1 pipe=1\n1.6 status=128 pipe=128\n1.7 status=5 pipe=5\n2.0 status=0 pipe=0\n2.1 status=0 pipe=0\n2.2 status=0 pipe=0\n2.3 status=0 pipe=0\n2.4 status=0 pipe=0\n2.5 status=0 pipe=0\n2.6 status=0 pipe=0\n2.7 status=0 pipe=0\n3.0 status=1 pipe=1\n3.1 status=1 pipe=1\n3.2 status=3 pipe=3\n3.3 status=1 pipe=1\n3.4 status=1 pipe=1\n3.5 status=1 pipe=1\n3.6 status=128 pipe=128\n3.7 status=5 pipe=5\n4.0 status=0 pipe=0\n4.1 status=4 pipe=4\n4.2 status=4 pipe=4\n4.3 status=4 pipe=4\n4.4 status=4 pipe=4\n4.5 status=4 pipe=4\n4.6 status=4 pipe=4\n4.7 status=4 pipe=4\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-loops": {
+      "gnu": {
+        "input": "sha256:8909bbd001cab0f914cf8790156fb0621e4d96f5cd539bd325ce7183f7015c35",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0\n0.1 status=0 pipe=1\n0.2 status=0 pipe=3\n0.3 status=0 pipe=1\n0.4 status=0 pipe=1\n0.5 status=0 pipe=1\n0.6 status=0 pipe=128\n0.7 status=0 pipe=5\n1.0 status=0 pipe=0\n1.1 status=0 pipe=0\n1.2 status=0 pipe=0\n1.3 status=0 pipe=0\n1.4 status=0 pipe=0\n1.5 status=0 pipe=0\n1.6 status=0 pipe=0\n1.7 status=0 pipe=0\n2.0 status=0 pipe=0\n2.1 status=1 pipe=1\n2.2 status=3 pipe=3\n2.3 status=1 pipe=1\n2.4 status=1 pipe=1\n2.5 status=1 pipe=1\n2.6 status=128 pipe=128\n2.7 status=5 pipe=5\n3.0 status=0 pipe=0\n3.1 status=0 pipe=1\n3.2 status=0 pipe=3\n3.3 status=0 pipe=1\n3.4 status=0 pipe=1\n3.5 status=0 pipe=1\n3.6 status=0 pipe=128\n3.7 status=0 pipe=5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-pipeline-external": {
+      "gnu": {
+        "input": "sha256:a9ec0ea7f76a8ec769f3da047431d6914c2080366514dd73a2e55a7116f7921c",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0 0\n0.1 status=1 pipe=1 0\n0.2 status=3 pipe=3 0\n0.3 status=1 pipe=1 0\n0.4 status=1 pipe=1 0\n0.5 status=1 pipe=1 0\n0.6 status=128 pipe=128 0\n0.7 status=5 pipe=5 0\n1.0 status=0 pipe=0 0\n1.1 status=1 pipe=0 1\n1.2 status=3 pipe=0 3\n1.3 status=1 pipe=0 1\n1.4 status=1 pipe=0 1\n1.5 status=1 pipe=0 1\n1.6 status=128 pipe=0 128\n1.7 status=5 pipe=0 5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-pipeline-negated": {
+      "gnu": {
+        "input": "sha256:65a46bc17743f08c5524712604e00101d0f245e025f8c49c2852cd4f069f7d5b",
+        "status": 0,
+        "stdout": "0.0 status=1 pipe=0 0\n0.1 status=0 pipe=1 0\n0.2 status=0 pipe=3 0\n0.3 status=0 pipe=1 0\n0.4 status=0 pipe=1 0\n0.5 status=0 pipe=1 0\n0.6 status=0 pipe=128 0\n0.7 status=0 pipe=5 0\n1.0 status=1 pipe=0 0\n1.1 status=0 pipe=0 1\n1.2 status=0 pipe=0 3\n1.3 status=0 pipe=0 1\n1.4 status=0 pipe=0 1\n1.5 status=0 pipe=0 1\n1.6 status=0 pipe=0 128\n1.7 status=0 pipe=0 5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-pipeline-stages": {
+      "gnu": {
+        "input": "sha256:26bb87aaf3157fad07d8c4ba0272469acd500c427cbf0808ed8672b8e030e651",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0 0\n0.1 status=1 pipe=1 0\n0.2 status=3 pipe=3 0\n0.3 status=1 pipe=1 0\n0.4 status=1 pipe=1 0\n0.5 status=1 pipe=1 0\n0.6 status=128 pipe=128 0\n0.7 status=5 pipe=5 0\n1.0 status=0 pipe=0 0\n1.1 status=1 pipe=0 1\n1.2 status=3 pipe=0 3\n1.3 status=1 pipe=0 1\n1.4 status=1 pipe=0 1\n1.5 status=1 pipe=0 1\n1.6 status=128 pipe=0 128\n1.7 status=5 pipe=0 5\n2.0 status=0 pipe=0 0 0\n2.1 status=1 pipe=0 1 0\n2.2 status=3 pipe=0 3 0\n2.3 status=1 pipe=0 1 0\n2.4 status=1 pipe=0 1 0\n2.5 status=1 pipe=0 1 0\n2.6 status=128 pipe=0 128 0\n2.7 status=5 pipe=0 5 0\n3.0 status=1 pipe=0 1\n3.1 status=1 pipe=1 1\n3.2 status=1 pipe=3 1\n3.3 status=1 pipe=1 1\n3.4 status=1 pipe=1 1\n3.5 status=1 pipe=1 1\n3.6 status=1 pipe=128 1\n3.7 status=1 pipe=5 1\n4.0 status=1 pipe=1 0\n4.1 status=1 pipe=1 1\n4.2 status=3 pipe=1 3\n4.3 status=1 pipe=1 1\n4.4 status=1 pipe=1 1\n4.5 status=1 pipe=1 1\n4.6 status=128 pipe=1 128\n4.7 status=5 pipe=1 5\n5.0 status=0 pipe=0 0\n5.1 status=1 pipe=1 0\n5.2 status=3 pipe=3 0\n5.3 status=1 pipe=1 0\n5.4 status=1 pipe=1 0\n5.5 status=1 pipe=1 0\n5.6 status=128 pipe=128 0\n5.7 status=5 pipe=5 0\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-wait-again": {
+      "gnu": {
+        "input": "sha256:42a74ddfea1abe6518c2573c3ab523499fa3d713b589776e1d61a614b42fea24",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0\n0.1 status=1 pipe=1\n0.2 status=3 pipe=3\n0.3 status=1 pipe=1\n0.4 status=1 pipe=1\n0.5 status=1 pipe=1\n0.6 status=128 pipe=128\n0.7 status=5 pipe=5\n1.0 status=0 pipe=0\n1.1 status=1 pipe=1\n1.2 status=3 pipe=3\n1.3 status=1 pipe=1\n1.4 status=1 pipe=1\n1.5 status=1 pipe=1\n1.6 status=128 pipe=128\n1.7 status=5 pipe=5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-wait-bare": {
+      "gnu": {
+        "input": "sha256:9b1292e027fd859fa3d32d12d0856ae4a3cb65eff72ec919dc9b3ece711c950b",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0\n0.1 status=0 pipe=0\n0.2 status=0 pipe=0\n0.3 status=0 pipe=0\n0.4 status=0 pipe=0\n0.5 status=0 pipe=0\n0.6 status=0 pipe=0\n0.7 status=0 pipe=0\n1.0 status=0 pipe=0\n1.1 status=0 pipe=0\n1.2 status=0 pipe=0\n1.3 status=0 pipe=0\n1.4 status=0 pipe=0\n1.5 status=0 pipe=0\n1.6 status=0 pipe=0\n1.7 status=0 pipe=0\n2.0 status=0 pipe=0\n2.1 status=0 pipe=0\n2.2 status=0 pipe=0\n2.3 status=0 pipe=0\n2.4 status=0 pipe=0\n2.5 status=0 pipe=0\n2.6 status=0 pipe=0\n2.7 status=0 pipe=0\n3.0 status=0 pipe=0\n3.1 status=0 pipe=0\n3.2 status=0 pipe=0\n3.3 status=0 pipe=0\n3.4 status=0 pipe=0\n3.5 status=0 pipe=0\n3.6 status=0 pipe=0\n3.7 status=0 pipe=0\n4.0 status=0 pipe=0\n4.1 status=0 pipe=0\n4.2 status=0 pipe=0\n4.3 status=0 pipe=0\n4.4 status=0 pipe=0\n4.5 status=0 pipe=0\n4.6 status=0 pipe=0\n4.7 status=0 pipe=0\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-wait-in-lists": {
+      "gnu": {
+        "input": "sha256:351d55f49ca1d633b1aa97ddd4cabe91260591598838c7825271166e19a69731",
+        "status": 0,
+        "stdout": "0.0 status=6 pipe=6\n0.1 status=6 pipe=6\n0.2 status=6 pipe=6\n0.3 status=6 pipe=6\n0.4 status=6 pipe=6\n0.5 status=6 pipe=6\n0.6 status=6 pipe=6\n0.7 status=6 pipe=6\n1.0 status=0 pipe=0\n1.1 status=0 pipe=0\n1.2 status=0 pipe=0\n1.3 status=0 pipe=0\n1.4 status=0 pipe=0\n1.5 status=0 pipe=0\n1.6 status=0 pipe=0\n1.7 status=0 pipe=0\n2.0 status=6 pipe=6\n2.1 status=1 pipe=1\n2.2 status=3 pipe=3\n2.3 status=1 pipe=1\n2.4 status=1 pipe=1\n2.5 status=1 pipe=1\n2.6 status=128 pipe=128\n2.7 status=5 pipe=5\n3.0 status=0 pipe=0\n3.1 status=6 pipe=6\n3.2 status=6 pipe=6\n3.3 status=6 pipe=6\n3.4 status=6 pipe=6\n3.5 status=6 pipe=6\n3.6 status=6 pipe=6\n3.7 status=6 pipe=6\n4.0 status=1 pipe=0\n4.1 status=0 pipe=1\n4.2 status=0 pipe=3\n4.3 status=0 pipe=1\n4.4 status=0 pipe=1\n4.5 status=0 pipe=1\n4.6 status=0 pipe=128\n4.7 status=0 pipe=5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-wait-in-substitution": {
+      "gnu": {
+        "input": "sha256:d2bdf54c90beedb031751c42aa362538aac8ae546ba0138372285d36caa832d1",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0\n0.1 status=0 pipe=0\n0.2 status=0 pipe=0\n0.3 status=0 pipe=0\n0.4 status=0 pipe=0\n0.5 status=0 pipe=0\n0.6 status=0 pipe=0\n0.7 status=0 pipe=0\n1.0 status=0 pipe=0\n1.1 status=1 pipe=1\n1.2 status=3 pipe=3\n1.3 status=1 pipe=1\n1.4 status=1 pipe=1\n1.5 status=1 pipe=1\n1.6 status=128 pipe=128\n1.7 status=5 pipe=5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-wait-named": {
+      "gnu": {
+        "input": "sha256:bd43b16332e24bf91bc941af4717f44c1ebac780d37055f7abf5e456f69b37c9",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0\n0.1 status=1 pipe=1\n0.2 status=3 pipe=3\n0.3 status=1 pipe=1\n0.4 status=1 pipe=1\n0.5 status=1 pipe=1\n0.6 status=128 pipe=128\n0.7 status=5 pipe=5\n1.0 status=0 pipe=0\n1.1 status=1 pipe=1\n1.2 status=3 pipe=3\n1.3 status=1 pipe=1\n1.4 status=1 pipe=1\n1.5 status=1 pipe=1\n1.6 status=128 pipe=128\n1.7 status=5 pipe=5\n2.0 status=0 pipe=0\n2.1 status=1 pipe=1\n2.2 status=3 pipe=3\n2.3 status=1 pipe=1\n2.4 status=1 pipe=1\n2.5 status=1 pipe=1\n2.6 status=128 pipe=128\n2.7 status=5 pipe=5\n3.0 status=0 pipe=0\n3.1 status=1 pipe=1\n3.2 status=3 pipe=3\n3.3 status=1 pipe=1\n3.4 status=1 pipe=1\n3.5 status=1 pipe=1\n3.6 status=128 pipe=128\n3.7 status=5 pipe=5\n4.0 status=0 pipe=0\n4.1 status=1 pipe=1\n4.2 status=3 pipe=3\n4.3 status=1 pipe=1\n4.4 status=1 pipe=1\n4.5 status=1 pipe=1\n4.6 status=128 pipe=128\n4.7 status=5 pipe=5\nend status=0\n",
+        "stderr": ""
+      }
+    },
+    "status-wait-operands": {
+      "gnu": {
+        "input": "sha256:097efc54783ec4335f10ca2dd6fb8b93e0b23e4371178aacbb513302ffc6eecb",
+        "status": 0,
+        "stdout": "0.0 status=0 pipe=0\n0.1 status=0 pipe=0\n0.2 status=0 pipe=0\n0.3 status=0 pipe=0\n0.4 status=0 pipe=0\n0.5 status=0 pipe=0\n0.6 status=0 pipe=0\n0.7 status=0 pipe=0\n1.0 status=0 pipe=0\n1.1 status=1 pipe=1\n1.2 status=3 pipe=3\n1.3 status=1 pipe=1\n1.4 status=1 pipe=1\n1.5 status=1 pipe=1\n1.6 status=128 pipe=128\n1.7 status=5 pipe=5\nend status=0\n",
+        "stderr": ""
+      }
     }
   }
 }

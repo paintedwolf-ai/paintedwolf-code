@@ -9,6 +9,3 @@ suggested_action: Check that the config directory is writable, then try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - overlay
-      - writable

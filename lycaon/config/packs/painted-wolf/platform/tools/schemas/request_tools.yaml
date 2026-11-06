@@ -1,9 +1,9 @@
-description: "Load tools for the next concrete operation"
+description: "Load a missing tool when offered tools cannot perform the next operation"
 schema:
   type: object
   properties:
     need:
       type: string
-      description: "Describe one concrete operation and target (such as create a file, edit code, or run a command), not the whole task, or pass a tool name from feedback."
+      description: "Describe one missing operation and target (such as capturing a local page), or an exact tool name from feedback. Offered capabilities need no loading."
   required: [need]
   additionalProperties: false

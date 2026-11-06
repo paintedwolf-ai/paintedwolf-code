@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/sys/unix"
 )
@@ -101,6 +102,8 @@ type ReadRoot struct {
 	mu        sync.Mutex
 	lastDir   string
 	lastDirFD int
+	// lastDirectory is only a comparison buffer: every read re-reads the address.
+	lastDirectory atomic.Pointer[string]
 }
 
 // OpenReadRoot opens the directory at path.

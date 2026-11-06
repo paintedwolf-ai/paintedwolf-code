@@ -12,10 +12,12 @@ requires:
   facts:
     - paintedwolf.rejection_code
     - paintedwolf.detail
+    - paintedwolf.side
+    - paintedwolf.state
 when: paintedwolf.rejection_code == "SOURCE_VERSION_UNAVAILABLE"
 effect: block
 copy:
-  what: Content for source version is unavailable — {{ paintedwolf.detail }}.
+  what: Content for source version is unavailable{% if paintedwolf.side %} on the {{ paintedwolf.side }} side ({{ paintedwolf.state }}){% endif %} — {{ paintedwolf.detail }}.
   cause: The version is recorded in the ledger, but its exact bytes were not captured or are no longer addressable.
   why: Large files, binary content, and metadata-only observations retain ledger coordinates without content blobs.
   fix: Inspect metadata via mode effects or lines instead of requesting content.
@@ -29,6 +31,10 @@ x-paintedwolf-scenarios:
       detail: exact content for this version is unavailable
       profile: implement
       tool: source_history
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SOURCE_VERSION_UNAVAILABLE'
+  - id: diff_side
+    vars:
+      detail: version v1 has no text to diff
+      side: base
+      state: binary
+      profile: implement
+      tool: source_history

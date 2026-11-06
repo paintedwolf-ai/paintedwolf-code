@@ -2,6 +2,7 @@ package observability
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -341,9 +342,7 @@ func TestHTTPDebugMiddlewareStructurallyRedactsCredentialRequestBodies(t *testin
 	}
 	data, err := os.ReadFile(logPath)
 	testutil.FailErr(t, "read file", err)
-	if strings.Contains(string(data), credential) {
-		t.Fatalf("credential body leaked: %s", data)
-	}
+	exposure.Absent(t, string(data), credential)
 	var entry httpDebugEntry
 	testutil.FailErr(t, "decode log entry", json.Unmarshal(data[:len(data)-1], &entry))
 	var captured map[string]any
@@ -412,9 +411,7 @@ func TestHTTPDebugMiddlewareCategoricallyWithholdsCredentialResponseBodies(t *te
 	}
 	data, err := os.ReadFile(logPath)
 	testutil.FailErr(t, "read file", err)
-	if strings.Contains(string(data), credential) {
-		t.Fatalf("credential response leaked: %s", data)
-	}
+	exposure.Absent(t, string(data), credential)
 	if strings.Contains(string(data), `\"version\":2`) || !strings.Contains(string(data), withheldResponseBody) {
 		t.Fatalf("log did not withhold the response body: %s", data)
 	}
@@ -469,9 +466,7 @@ func TestHTTPDebugMiddlewareFailsClosedForMalformedCredentialJSON(t *testing.T) 
 
 	data, err := os.ReadFile(logPath)
 	testutil.FailErr(t, "read file", err)
-	if strings.Contains(string(data), credential) {
-		t.Fatalf("malformed credential body leaked: %s", data)
-	}
+	exposure.Absent(t, string(data), credential)
 	if !strings.Contains(string(data), invalidCredentialBody) {
 		t.Fatalf("missing malformed credential marker: %s", data)
 	}
@@ -500,9 +495,7 @@ func TestDeclaredCredentialBodyRedactsEveryLeafShape(t *testing.T) {
 	body := []byte(`{"outer":{"pin":1234,"nested":["one","two"],"flag":true,"absent":null}}`)
 	declared := redactHTTPBody(body, true)
 	for _, leaked := range []string{"1234", "one", "two", "true"} {
-		if strings.Contains(declared, leaked) {
-			t.Fatalf("declared credential body kept leaf %q: %s", leaked, declared)
-		}
+		exposure.Absent(t, declared, leaked)
 	}
 	if !strings.Contains(declared, `"nested"`) || !strings.Contains(declared, `"pin"`) {
 		t.Fatalf("declared credential body lost its shape: %s", declared)

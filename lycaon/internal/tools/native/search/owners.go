@@ -335,6 +335,9 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if err == nil {
 		err = ctx.Err()
 	}
+	if drained := inv.out.drain(); err == nil {
+		err = drained
+	}
 	if err == nil {
 		err = inv.out.flush()
 	}

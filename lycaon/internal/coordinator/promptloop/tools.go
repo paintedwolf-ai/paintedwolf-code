@@ -38,23 +38,22 @@ func warnLedgerUnwired() {
 
 // toolCaptures holds per-invocation UI metadata.
 type toolCaptures struct {
-	sourceContext         *api.SourceContext
-	overlayPromotion      *api.OverlayPromotion
-	ownerRef              string
-	fileEdit              *tools.FileEditCapture
-	visual                *tools.VisualCapture
-	note                  *tools.AgentNoteCapture
-	externalAccess        *api.ExternalAccess
-	displaySubject        string
-	skill                 *api.SkillActivation
-	process               *api.ToolProcessHandle
-	verdict               *api.VerdictOutcome
-	commandProgram        *api.CommandProgramReceipt
-	sourceDeliveryHandles []string
-	sourceRun             *tools.SourceRunCapture
-	listener              *api.LoopbackListenerFact
-	dispatch              *api.WorkerDispatch
-	completion            *api.ToolCompletion
+	sourceContext    *api.SourceContext
+	overlayPromotion *api.OverlayPromotion
+	ownerRef         string
+	fileEdit         *tools.FileEditCapture
+	visual           *tools.VisualCapture
+	externalAccess   *api.ExternalAccess
+	displaySubject   string
+	skill            *api.SkillActivation
+	process          *api.ToolProcessHandle
+	verdict          *api.VerdictOutcome
+	commandProgram   *api.CommandProgramReceipt
+	sourceDeliveries []tools.SourceDeliveryTag
+	sourceRun        *tools.SourceRunCapture
+	listener         *api.LoopbackListenerFact
+	dispatch         *api.WorkerDispatch
+	completion       *api.ToolCompletion
 	// retrievedFrom is the handler-observed retrieval host.
 	retrievedFrom string
 	// sourceReads is the project text the handler returned.
@@ -116,7 +115,6 @@ func (t toolInvocation) refusedBy(reject *guidance.Refusal) toolInvocation {
 	// The final refusal selects the card; earlier observations remain attached.
 	t.facts = reject.Facts.Merge(t.facts)
 	t.reject = reject
-	t.captures.note = nil
 	return t
 }
 
@@ -424,11 +422,11 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		overlayPromotion: out.OverlayPromotion,
 		sourceContext:    out.SourceContext,
 		ownerRef:         out.OwnerRef, fileEdit: out.FileEdit, visual: out.Visual,
-		note: out.AgentNote, externalAccess: out.ExternalAccess,
-		skill: out.Skill, process: out.Process, verdict: out.Verdict,
-		commandProgram:        out.CommandProgram,
-		sourceDeliveryHandles: append([]string(nil), out.SourceDeliveryHandles...),
-		sourceRun:             out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
+		externalAccess: out.ExternalAccess,
+		skill:          out.Skill, process: out.Process, verdict: out.Verdict,
+		commandProgram:   out.CommandProgram,
+		sourceDeliveries: append([]tools.SourceDeliveryTag(nil), out.SourceDeliveries...),
+		sourceRun:        out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
 		listener:      out.Listener,
 		retrievedFrom: out.RetrievedFrom,
 		sourceReads:   out.SourceReads,

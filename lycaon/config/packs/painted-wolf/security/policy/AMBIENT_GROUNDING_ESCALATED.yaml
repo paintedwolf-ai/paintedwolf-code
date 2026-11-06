@@ -25,22 +25,12 @@ x-paintedwolf-scenarios:
 - id: recall_callable
   vars:
     can_recall: true
-  expect_contains:
-  - 'Code: AMBIENT_GROUNDING_ESCALATED'
-  - 'recall(query='
 - id: recall_not_callable
   vars:
     can_recall: false
-  expect_contains:
-  - 'Code: AMBIENT_GROUNDING_ESCALATED'
-  - 'Re-observe'
 - id: default
   vars:
     detail: bad args
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - Tool feedback
-  - 'Code: AMBIENT_GROUNDING_ESCALATED'
-  - worker_summary

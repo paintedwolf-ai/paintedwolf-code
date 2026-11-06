@@ -121,13 +121,18 @@ func CoordinatorProfileVisibleToolsFromProfiles(profiles []sandbox.ToolProfile) 
 	return nil, fmt.Errorf("tool profile %q not found", CoordinatorProfileID)
 }
 
-// LoadCoordinatorSurfaceCard returns the surface banner copy.
-func LoadCoordinatorSurfaceCard(surfaceID string) (label, rule string, err error) {
+// LoadCoordinatorSurfaceCard returns the surface banner copy and whether the
+// surface publishes text accompanying tool calls.
+func LoadCoordinatorSurfaceCard(surfaceID string) (SurfaceCard, error) {
 	row, err := loadCoordinatorSurfaceRow(surfaceID)
 	if err != nil {
-		return "", "", err
+		return SurfaceCard{}, err
 	}
-	return strings.TrimSpace(row.Card.Label), strings.TrimSpace(row.Card.Rule), nil
+	return SurfaceCard{
+		Label:         strings.TrimSpace(row.Card.Label),
+		Rule:          strings.TrimSpace(row.Card.Rule),
+		PublishesText: row.PublishesMidTurnText,
+	}, nil
 }
 
 func loadCoordinatorSurfaceRow(surfaceID string) (surfacecatalog.Surface, error) {

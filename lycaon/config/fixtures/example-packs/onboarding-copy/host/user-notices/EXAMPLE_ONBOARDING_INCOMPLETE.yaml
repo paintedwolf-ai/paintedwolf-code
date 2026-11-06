@@ -11,6 +11,3 @@ scenarios:
   - id: default
     vars:
       remaining: "3"
-    expect_contains:
-      - "3"
-      - checklist

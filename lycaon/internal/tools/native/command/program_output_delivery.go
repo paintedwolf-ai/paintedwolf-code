@@ -123,6 +123,7 @@ func (r *ProgramRuntime) retainProgramStream(ctx context.Context, run *programRu
 		done <- retained{spill, err}
 	}()
 	metadata, screenErr := r.Projector.ScreenStream(ctx, scope, "capture.native", raw, output, captureprojection.StreamOptions{
+		Policy:        secretmatch.StreamPolicy{ManagedEchoes: true},
 		WorkingMemory: run.memory,
 		Bounds:        secretmatch.StreamBounds{InputBytes: maximum, OutputBytes: maximum, MemoryBytes: 32 << 20, DetectorWork: 1 << 30},
 	})
@@ -198,6 +199,9 @@ func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programR
 	}
 	for _, part := range ranges {
 		r.commitStreamSourceDeliveries(ctx, run, program, reference, part.data, mappings, [][2]int64{{part.start, part.start + int64(len(part.data))}})
+	}
+	if name == "stdout" {
+		r.commitProgramWindows(ctx, run, program, reference, ranges)
 	}
 	return delivered, window, nil
 }

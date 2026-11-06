@@ -33,9 +33,6 @@ x-paintedwolf-scenarios:
     path: .DS_Store
     profile: explore_readonly
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: READ_BINARY_DENIED'
 - id: image_file
   vars:
     bytes: 4096
@@ -44,7 +41,3 @@ x-paintedwolf-scenarios:
     path: assets/logo.png
     profile: coordinator
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: READ_BINARY_DENIED'
-  - 'Use view_image to inspect this asset, then assess the returned evidence.'

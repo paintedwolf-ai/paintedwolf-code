@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     current_max: 40
     job_id: job-1
     max_tool_loops: 40
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_BUDGET_EXTEND_NOT_INCREASE'

@@ -75,8 +75,8 @@ func TestBuildObservedAutobindGroundingSurfacesTypedCitedEvidence(t *testing.T) 
 		if c.Handle == "" {
 			t.Fatalf("bound cited_evidence missing resolved handle: %+v", c)
 		}
-		if c.Verdict != api.CitationVerdictMatched {
-			t.Fatalf("observed cited_evidence verdict=%q want matched", c.Verdict)
+		if c.Verdict != api.CitationVerdictTraced {
+			t.Fatalf("observed cited_evidence verdict=%q want traced", c.Verdict)
 		}
 	}
 }

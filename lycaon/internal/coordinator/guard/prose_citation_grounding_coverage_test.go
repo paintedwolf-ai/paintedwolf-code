@@ -51,57 +51,6 @@ func proseGroundingSurfaceUniverse(t *testing.T) []string {
 	return out
 }
 
-// TestProjectCoordinatorCloseoutProse pins the host-side projection that turns a coordinator
-// closeout envelope into the narrative the transcript shows. Without it the raw
-// `{"synthesis", "cited_evidence", "cited_urls"}` JSON renders verbatim to the user.
-func TestProjectCoordinatorCloseoutProse(t *testing.T) {
-	t.Parallel()
-
-	const envelope = `{"synthesis":"The repo follows best practices.","cited_evidence":[{"path":"a.go","line":1,"excerpt":"x"}],"cited_urls":["https://go.dev"]}`
-
-	t.Run("prose-closeout surface projects synthesis", func(t *testing.T) {
-		t.Parallel()
-		prose, ok := guard.ProjectCoordinatorCloseoutProse(toolcontract.SurfaceImplementInvestigate, envelope)
-		if !ok {
-			t.Fatal("expected projection on a prose-closeout surface")
-		}
-		if prose != "The repo follows best practices." {
-			t.Fatalf("projected prose = %q, want the synthesis narrative only", prose)
-		}
-	})
-
-	t.Run("fenced envelope projects synthesis", func(t *testing.T) {
-		t.Parallel()
-		prose, ok := guard.ProjectCoordinatorCloseoutProse(spawn.SurfaceImplementSynthesis, "```json\n"+envelope+"\n```")
-		if !ok || prose != "The repo follows best practices." {
-			t.Fatalf("fenced envelope projected = %q, ok=%v", prose, ok)
-		}
-	})
-
-	t.Run("non-closeout surface passes through", func(t *testing.T) {
-		t.Parallel()
-		if _, ok := guard.ProjectCoordinatorCloseoutProse(surface.SurfaceImplementOverlayPromote, envelope); ok {
-			t.Fatal("overlay-promote closes via a tool — it must not project closeout prose")
-		}
-	})
-
-	t.Run("non-envelope prose is not projected", func(t *testing.T) {
-		t.Parallel()
-		if _, ok := guard.ProjectCoordinatorCloseoutProse(toolcontract.SurfaceImplementInvestigate, "Plain prose, no envelope."); ok {
-			t.Fatal("non-envelope content must not be projected")
-		}
-	})
-
-	t.Run("hybrid markdown plus json rejected", func(t *testing.T) {
-		t.Parallel()
-		leading := "## Code-quality survey\n\nDuplicate constants across models."
-		content := leading + "\n\n" + envelope
-		if _, ok := guard.ProjectCoordinatorCloseoutProse(toolcontract.SurfaceImplementInvestigate, content); ok {
-			t.Fatal("hybrid closeout must not project")
-		}
-	})
-}
-
 // Prose completion and grounding share one surface predicate.
 func TestProseFinishSurfacesAreAlwaysGrounded(t *testing.T) {
 	t.Parallel()

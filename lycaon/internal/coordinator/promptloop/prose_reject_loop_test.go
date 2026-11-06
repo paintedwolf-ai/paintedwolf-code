@@ -46,14 +46,14 @@ func TestRepeatedProseRejectionEndsWithBoundedHandoff(t *testing.T) {
 	deps.Model.LLM = client
 	deps.Context.Tools = tools.NewStubRegistry()
 	deps.Context.Policy = &recordingToolPolicy{}
-	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		return guidance.NewRefusal("SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT", "Required check is unresolved."), true
 	}
 	deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, string, promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "Report delivered work and the unresolved check."}
 	}
-	deps.Closeout.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-		return guidance.CoordinatorCompletionReport{Synthesis: drafted}, &api.CitationGrounding{HostAssembled: true}
+	deps.Closeout.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted guidance.CloseoutDraft, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+		return guidance.CoordinatorCompletionReport{Synthesis: drafted.Synthesis}, &api.CitationGrounding{HostAssembled: true}
 	}
 	deps.Context.PromptTurnSurface = func(string) string { return "implement_investigate" }
 	loop := promptloop.NewPromptLoopForTest(deps)
@@ -115,7 +115,7 @@ func TestGatedCloseoutGetsOneActingRepairRound(t *testing.T) {
 						return nil
 					}
 				} else {
-					deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
+					deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
 						if !gateOpen {
 							return nil, false
 						}
@@ -212,7 +212,7 @@ func TestGatedCloseoutPathsSettleAsCloseoutBlocked(t *testing.T) {
 					return stoppedRefusal(rejections == 1)
 				}
 			} else {
-				deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
+				deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, invoke bool) (*guidance.Refusal, bool) {
 					rejections++
 					if invoke && rejections <= 2 {
 						return guidance.NewRefusal("WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT", "Required workflow gate remains open").

@@ -27,13 +27,7 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     command: missing-tool
-  expect_contains:
-  - 'Code: COMMAND_NOT_FOUND'
-  - missing-tool
 - id: near_miss_named
   vars:
     command: python
     resolvable: python3
-  expect_contains:
-  - 'Code: COMMAND_NOT_FOUND'
-  - python

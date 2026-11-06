@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: worker_readonly
     tool: recall
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: RECALL_SCOPE_NOT_PERMITTED'

@@ -27,13 +27,6 @@ func registerCommandTools(
 	if err != nil {
 		return err
 	}
-	processTools := &native.ProcessTools{Service: service}
-	if err := reg.Register("process_list", processTools.List); err != nil {
-		return err
-	}
-	if err := reg.Register("process_signal", processTools.Signal); err != nil {
-		return err
-	}
 	ft := command.NewCommandFailureTracker()
 	hostUtilities, err := hostenv.NewOwners(hostos.Host{}, time.Now, boundary)
 
@@ -45,7 +38,7 @@ func registerCommandTools(
 			return hostUtilities.Builtins(tc, nested, bound)
 		}}
 	*commandTool = &command.CommandTool{Runner: runner, Boundary: boundary, FailureTracker: ft, Programs: programs}
-	*verifyTool = &native.VerifyTool{Runner: runner, Boundary: boundary, FailureTracker: ft}
+	*verifyTool = &native.VerifyTool{Programs: programs}
 	*commandOutputTool = &command.CommandOutputTool{}
 	*commandStopTool = &command.CommandStopTool{}
 	if err := reg.Register("command", (*commandTool).Run); err != nil {

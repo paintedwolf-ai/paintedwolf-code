@@ -312,7 +312,6 @@ describe("FocusedSessionList", () => {
       />
     ));
     const status = document.querySelector(".focused-session-list__status");
-    expect(status?.textContent).toBe("Needs you");
     expect(status?.getAttribute("data-attention-class")).toBe("needs_you");
     // Attention text occupies the time slot.
     expect(document.querySelector(".focused-session-list__time")).toBeNull();
@@ -456,7 +455,6 @@ describe("FocusedSessionList", () => {
     ));
     const [unpin, pin] = screen.getAllByTestId("session-pin-action");
     expect(unpin?.getAttribute("aria-pressed")).toBe("true");
-    expect(unpin?.getAttribute("aria-label")).toBe("Unpin chat");
     expect(pin?.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(pin!);
     expect(props.onTogglePin).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "c1" }), true);

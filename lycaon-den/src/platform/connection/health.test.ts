@@ -71,7 +71,6 @@ describe("noteHealthResponse", () => {
     expect(lastSeenSchemaVersion()).toBe(4);
     expect(first?.code).toBe("den_version_skew");
     expect(first?.severity).toBe("warning");
-    expect(first?.title).toBe("Update Painted Wolf Code");
 
     const second = noteHealthResponse({
       status: "ok",

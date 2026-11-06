@@ -328,6 +328,21 @@ func renderToolContracts(cfg nativemanifest.Config) ([]byte, error) {
 		b.WriteString(multiRootIdent(multiRoot[tool]))
 		b.WriteString(",\n")
 	}
+	b.WriteString("}\n\n")
+	b.WriteString("// Retired tools whose successor is content rather than a call.\n")
+	b.WriteString("var compiledRetiredToContent = map[string]string{\n")
+	retired := make([]string, 0, len(cfg.RetiredToContentContract))
+	for tool := range cfg.RetiredToContentContract {
+		retired = append(retired, tool)
+	}
+	sort.Strings(retired)
+	for _, tool := range retired {
+		b.WriteString("\t")
+		b.WriteString(strconv.Quote(tool))
+		b.WriteString(": ")
+		b.WriteString(strconv.Quote(cfg.RetiredToContentContract[tool]))
+		b.WriteString(",\n")
+	}
 	b.WriteString("}\n")
 	return b.Bytes(), nil
 }

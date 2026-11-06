@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,7 +27,18 @@ type ProgramSourceObserver interface {
 type ProgramSourceDelivery struct {
 	SessionID, ProgramID, OutputReference string
 	OutputStartByte, OutputEndByte        int64
-	Observation                           evidence.DeliveredSourceObservation
+	// NumberedLines replaces the output range when numbered output delivered one source
+	// window through many stream positions, each in stream coordinates.
+	NumberedLines []toolcontract.StreamSourceMapping
+	Observation   evidence.DeliveredSourceObservation
+}
+
+// spans lists the stream positions of a delivery in source order.
+func (in ProgramSourceDelivery) spans(fact *evidence.SourceDelivery) []toolcontract.StreamSourceMapping {
+	if len(in.NumberedLines) > 0 {
+		return in.NumberedLines
+	}
+	return []toolcontract.StreamSourceMapping{{Source: fact.Source, SourceStartByte: fact.SourceStartByte, SourceEndByte: fact.SourceEndByte, OutputStartByte: in.OutputStartByte, OutputEndByte: in.OutputEndByte}}
 }
 
 // ProgramDeliverySettlement keeps the authoritative source-owner acknowledgement
@@ -55,10 +67,16 @@ func (r *SQLRecorder) CommitProgramSourceDelivery(ctx context.Context, in Progra
 	defer release()
 	record := in.Observation.Record()
 	fact := record.SourceDelivery
-	if fact == nil || in.OutputStartByte < 0 || in.OutputEndByte <= in.OutputStartByte || in.OutputEndByte-in.OutputStartByte != fact.SourceEndByte-fact.SourceStartByte {
+	if fact == nil {
 		return out, fmt.Errorf("source delivery has no exact page identity")
 	}
-	outputID, mapping, releaseMapping, err := r.bindProgramDelivery(ctx, in, admission)
+	spans := in.spans(fact)
+	for _, span := range spans {
+		if span.OutputStartByte < 0 || span.OutputEndByte <= span.OutputStartByte || span.OutputEndByte-span.OutputStartByte != span.SourceEndByte-span.SourceStartByte {
+			return out, fmt.Errorf("source delivery has no exact page identity")
+		}
+	}
+	outputID, mappings, releaseMapping, err := r.bindProgramDelivery(ctx, in, spans, admission)
 	if err != nil {
 		return out, err
 	}
@@ -73,34 +91,15 @@ func (r *SQLRecorder) CommitProgramSourceDelivery(ctx context.Context, in Progra
 	// Preserve a known owner acknowledgement even when its post-commit work or
 	// this receipt transaction fails. Acknowledged delivery is not retracted.
 	ownerErr := err
-	encoded, err := json.Marshal([]toolcontract.StreamSourceMapping{mapping})
-	if err != nil {
-		return out, errors.Join(ownerErr, err)
-	}
 	tx, err := r.database.BeginTx(ctx, nil)
 	if err != nil {
 		return out, errors.Join(ownerErr, err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	ins, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_deliveries(id,output_id,response_id,delivery_id,start_byte,end_byte,source_owner_ref,mappings_json,created_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(output_id,response_id,delivery_id) DO NOTHING`, uuid.NewString(), outputID, fact.ResponseID, fact.DeliveryID, in.OutputStartByte, in.OutputEndByte, out.SourceOwnerReference, string(encoded), time.Now().UTC().Format(time.RFC3339Nano))
-	if err != nil {
-		return out, errors.Join(ownerErr, err)
-	}
-	if written, rowsErr := ins.RowsAffected(); rowsErr != nil {
-		return out, errors.Join(ownerErr, rowsErr)
-	} else if written > 0 {
-		if err = chargeProgramTrace(ctx, tx, in.ProgramID, 1, int64(len(fact.ResponseID)+len(fact.DeliveryID)+len(out.SourceOwnerReference)+len(encoded)), traceChargeNonTerminal); err != nil {
+	for i, mapping := range mappings {
+		if err = recordDeliveryReceipt(ctx, tx, in.ProgramID, outputID, out.SourceOwnerReference, fact, i, mapping); err != nil {
 			return out, errors.Join(ownerErr, err)
 		}
-	}
-	var start, end int64
-	var reference, mappings string
-	err = tx.QueryRowContext(ctx, `SELECT start_byte,end_byte,source_owner_ref,mappings_json FROM invocation_program_deliveries WHERE output_id=? AND response_id=? AND delivery_id=?`, outputID, fact.ResponseID, fact.DeliveryID).Scan(&start, &end, &reference, &mappings)
-	if err != nil {
-		return out, errors.Join(ownerErr, err)
-	}
-	if start != in.OutputStartByte || end != in.OutputEndByte || reference != out.SourceOwnerReference || mappings != string(encoded) {
-		return out, errors.Join(ownerErr, fmt.Errorf("delivery identity conflicts with existing exact receipt"))
 	}
 	if err = tx.Commit(); err != nil {
 		return out, errors.Join(ownerErr, err)
@@ -109,8 +108,44 @@ func (r *SQLRecorder) CommitProgramSourceDelivery(ctx context.Context, in Progra
 	return out, ownerErr
 }
 
-func (r *SQLRecorder) bindProgramDelivery(ctx context.Context, in ProgramSourceDelivery, admission ProgramFeedbackAdmission) (string, toolcontract.StreamSourceMapping, func(), error) {
-	var none toolcontract.StreamSourceMapping
+// recordDeliveryReceipt links one stream position to its owner's acknowledgement.
+// A numbered delivery's later positions extend its identity with their index.
+func recordDeliveryReceipt(ctx context.Context, tx *sql.Tx, programID, outputID, reference string, fact *evidence.SourceDelivery, index int, mapping toolcontract.StreamSourceMapping) error {
+	encoded, err := json.Marshal([]toolcontract.StreamSourceMapping{mapping})
+	if err != nil {
+		return err
+	}
+	deliveryID := fact.DeliveryID
+	if index > 0 {
+		deliveryID = fmt.Sprintf("%s#%d", deliveryID, index)
+	}
+	ins, err := tx.ExecContext(ctx, `INSERT INTO invocation_program_deliveries(id,output_id,response_id,delivery_id,start_byte,end_byte,source_owner_ref,mappings_json,created_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(output_id,response_id,delivery_id) DO NOTHING`, uuid.NewString(), outputID, fact.ResponseID, deliveryID, mapping.OutputStartByte, mapping.OutputEndByte, reference, string(encoded), time.Now().UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return err
+	}
+	written, err := ins.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if written > 0 {
+		if err := chargeProgramTrace(ctx, tx, programID, 1, int64(len(fact.ResponseID)+len(deliveryID)+len(reference)+len(encoded)), traceChargeNonTerminal); err != nil {
+			return err
+		}
+	}
+	var start, end int64
+	var storedRef, storedMappings string
+	err = tx.QueryRowContext(ctx, `SELECT start_byte,end_byte,source_owner_ref,mappings_json FROM invocation_program_deliveries WHERE output_id=? AND response_id=? AND delivery_id=?`, outputID, fact.ResponseID, deliveryID).Scan(&start, &end, &storedRef, &storedMappings)
+	if err != nil {
+		return err
+	}
+	if start != mapping.OutputStartByte || end != mapping.OutputEndByte || storedRef != reference || storedMappings != string(encoded) {
+		return fmt.Errorf("delivery identity conflicts with existing exact receipt")
+	}
+	return nil
+}
+
+func (r *SQLRecorder) bindProgramDelivery(ctx context.Context, in ProgramSourceDelivery, spans []toolcontract.StreamSourceMapping, admission ProgramFeedbackAdmission) (string, []toolcontract.StreamSourceMapping, func(), error) {
+	var none []toolcontract.StreamSourceMapping
 	tx, err := beginOutputRead(ctx, r.database)
 	if err != nil {
 		return "", none, nil, err
@@ -146,8 +181,10 @@ func (r *SQLRecorder) bindProgramDelivery(ctx context.Context, in ProgramSourceD
 	if err := tx.QueryRowContext(ctx, `SELECT o.id,o.mappings_json,json_extract(o.blob_json,'$.Size')`+selection, in.ProgramID, in.OutputReference, in.SessionID).Scan(&output, &encoded, &bytes); err != nil {
 		return "", none, nil, err
 	}
-	if in.OutputEndByte > bytes {
-		return "", none, nil, fmt.Errorf("delivered page exceeds actual retained body")
+	for _, span := range spans {
+		if span.OutputEndByte > bytes {
+			return "", none, nil, fmt.Errorf("delivered page exceeds actual retained body")
+		}
 	}
 	var candidates []toolcontract.StreamSourceMapping
 	decoder := json.NewDecoder(strings.NewReader(encoded))
@@ -177,25 +214,35 @@ func (r *SQLRecorder) bindProgramDelivery(ctx context.Context, in ProgramSourceD
 	if fact == nil {
 		return "", none, nil, fmt.Errorf("source owner confirmation missing")
 	}
-	for _, candidate := range candidates {
-		if candidate.Source != fact.Source || candidate.SourceStartByte > fact.SourceStartByte || candidate.SourceEndByte < fact.SourceEndByte {
-			continue
+	exact := make([]toolcontract.StreamSourceMapping, 0, len(spans))
+	for _, span := range spans {
+		bound, ok := exactDeliveryMapping(candidates, fact.Source, span)
+		if !ok {
+			return "", none, nil, fmt.Errorf("delivered page has no matching native source mapping")
 		}
-		start := candidate.OutputStartByte + fact.SourceStartByte - candidate.SourceStartByte
-		end := candidate.OutputStartByte + fact.SourceEndByte - candidate.SourceStartByte
-		if start != in.OutputStartByte || end != in.OutputEndByte {
-			continue
-		}
-		exact := candidate
-		exact.SourceStartByte = fact.SourceStartByte
-		exact.SourceEndByte = fact.SourceEndByte
-		exact.OutputStartByte = start
-		exact.OutputEndByte = end
-		if err := tx.Commit(); err != nil {
-			return "", none, nil, err
-		}
-		accepted = true
-		return output, exact, release, nil
+		exact = append(exact, bound)
 	}
-	return "", none, nil, fmt.Errorf("delivered page has no matching native source mapping")
+	if err := tx.Commit(); err != nil {
+		return "", none, nil, err
+	}
+	accepted = true
+	return output, exact, release, nil
+}
+
+// exactDeliveryMapping finds the retained mapping holding one delivered span.
+func exactDeliveryMapping(candidates []toolcontract.StreamSourceMapping, source toolcontract.SourcePin, span toolcontract.StreamSourceMapping) (toolcontract.StreamSourceMapping, bool) {
+	for _, candidate := range candidates {
+		if candidate.Source != source || candidate.SourceStartByte > span.SourceStartByte || candidate.SourceEndByte < span.SourceEndByte {
+			continue
+		}
+		start := candidate.OutputStartByte + span.SourceStartByte - candidate.SourceStartByte
+		end := candidate.OutputStartByte + span.SourceEndByte - candidate.SourceStartByte
+		if start == span.OutputStartByte && end == span.OutputEndByte {
+			exact := candidate
+			exact.SourceStartByte, exact.SourceEndByte = span.SourceStartByte, span.SourceEndByte
+			exact.OutputStartByte, exact.OutputEndByte = start, end
+			return exact, true
+		}
+	}
+	return toolcontract.StreamSourceMapping{}, false
 }

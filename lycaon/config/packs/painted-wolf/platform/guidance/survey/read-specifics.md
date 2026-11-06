@@ -1,1 +1,1 @@
-Specifics: summarize(path=…) for a briefing of this large file; read(path, symbol=…) / ranges / offset+limit for quotes, then edit with the exact source text
+Specifics: use `summarize --path PATH` in `command` for a briefing; inspect exact source windows with `cat -n` or `sed -n` in `command`, then edit the observed text.

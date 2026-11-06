@@ -21,7 +21,3 @@ x-paintedwolf-message: Close out blocked — this review phase has no recorded v
 x-paintedwolf-scenarios:
   - id: verdict_missing
     vars: {}
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: REVIEW_VERDICT_MISSING_BEFORE_CLOSEOUT'
-      - submit_verdict

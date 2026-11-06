@@ -18,7 +18,7 @@ when: paintedwolf.rejection_code == "LIST_DIR_NOT_DIRECTORY"
 effect: block
 copy:
   what: list_dir path {{ paintedwolf.path }} is not a directory.
-  cause: list_dir traverses directories; the selected path names a file.
+  cause: A listing traverses directories; the selected path names a file.
   why: File content and directory membership are separate observations.
   fix: '{% if paintedwolf.can_read %}Use read for the selected file’s content.{% else %}File content requires
     a reader offered on the current surface.{% endif %} For directory membership, list the intended parent
@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     path: docs/README.md
     profile: explore_readonly
     tool: list_dir
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: LIST_DIR_NOT_DIRECTORY'

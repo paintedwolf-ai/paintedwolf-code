@@ -355,7 +355,7 @@ model_thinking:
 ```
 
 Content between the tags is reasoning. Reasoning that arrives in its own
-field settles the block: the open tag stood alone, whitespace after it is
+field or structured block settles the block: the open tag stood alone, whitespace after it is
 dropped, and the text that follows is the visible answer, as is anything after
 the close tag. Bytes that could still begin a tag wait for the next delta, so
 a tag split across deltas is still read as one. A tag that never completes is
@@ -368,6 +368,18 @@ Separation runs directly over the transport, before response retry judges the
 payload. A turn that spent its whole output cap on reasoning is therefore an
 empty completion to the retry layer, which recovers it by lowering reasoning
 and asking again, rather than a raw block or a blank turn in the transcript.
+
+Compatible transports preserve answer and reasoning fields from one wire delta
+together. Structured blocks identify the reasoning channel even when their
+contents are encrypted; their full payload is retained at stream completion.
+This keeps streaming and complete-response classification consistent without
+interpreting the wording of an answer. A closing tag without a declared opening
+boundary does not authorize reclassifying earlier answer text.
+
+The [Fireworks chat-completions contract](https://docs.fireworks.ai/api-reference/post-chatcompletions)
+exposes reasoning separately as `reasoning_content`. That field remains separate
+from `content` on receipt; its existence does not establish an inline-marker
+grammar for every model served by the endpoint.
 
 #### Model cutoff
 
@@ -513,7 +525,7 @@ Streaming completion is committed in recoverable stages:
 
 Retries occur only before an unsafe replay boundary. Once the host has observed a tool call or committed visible assistant content, it does not silently send the same turn to another provider. An interrupted stream remains visible and may be continued by an explicit new turn. The host never fabricates a clean completion from a transport error.
 
-An empty response ending at its output allowance is recovered once within the same turn when the adapter can send a lower reasoning control: the minimum supported reasoning setting and a 4,096-token ceiling (or a smaller explicit cap), inside the existing call timeout. Fixed thinking overrides are preserved, and an unchanged reasoning control is never presented as a recovery. No visible content or tool-call progress may have escaped the failed attempt. Failed-attempt reasoning is removed from the recovered response; reported charges from both attempts are retained. A failed recovery produces a notice that completed work remains.
+An empty response ending at its output allowance is recovered once within the same turn when the adapter can send a lower reasoning control: the minimum supported reasoning setting, inside the existing call timeout. Recovery preserves the admitted answer allowance; explicit request, model, and context limits still apply. Fixed thinking overrides are preserved, and an unchanged reasoning control is never presented as a recovery. No visible content or tool-call progress may have escaped the failed attempt. Failed-attempt reasoning is removed from the recovered response; reported charges from both attempts are retained. A failed recovery produces a notice that completed work remains.
 
 Tool requests reserve 16,384 tokens of base answer room plus the application reasoning allowance: 1,024, 8,192, or 16,384 tokens at low, medium, or high effort. The model's declared output ceiling and explicit request limits still bound the request. Providers with a shared reasoning/output counter cannot promise a separate visible-output ceiling; the host does not cut a live tool call at an estimated token boundary.
 

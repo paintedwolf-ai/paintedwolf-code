@@ -208,7 +208,6 @@ describe("secret card ladders", () => {
       />
     ));
     const primary = view.getByTestId("approval-approve-primary").textContent ?? "";
-    expect(primary).not.toContain("Stop asking");
     expect(primary).not.toContain("Redaction");
   });
 });

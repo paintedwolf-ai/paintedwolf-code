@@ -25,14 +25,16 @@ type closeoutRetryState struct {
 	documentAttempt int
 	prevKey         string
 	codes           []string
+	// noFurtherTurn marks the response being settled as the run's last.
+	noFurtherTurn bool
 }
 
 type closeoutCommitOutcome struct {
-	// Terminal exits retain the complete report, including its citation fields.
-	draftedContent string
-	committed      bool
-	retry          bool
-	exhausted      bool
+	// Terminal exits retain the complete typed draft.
+	drafted   guidance.CloseoutDraft
+	committed bool
+	retry     bool
+	exhausted bool
 	// endWithoutAssemble prevents a duplicate assembled report.
 	endWithoutAssemble bool
 	history            []api.Message
@@ -59,22 +61,12 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	if l == nil {
 		return out, fmt.Errorf("closeout grounding not configured")
 	}
-	report := read.Report
-	if l.Deps.CloseoutStallState != nil {
-		if retained := l.Deps.CloseoutStallState(ctx, sessionID); retained.Active {
-			repair := retained.Repair()
-			if pinned := guidance.UsableCloseoutSynthesis(retained.Drafted); pinned != "" && !repair.Body {
-				report.Synthesis = pinned
-			}
-			if original, ok := guidance.ParseCoordinatorCompletionReport(retained.Drafted); ok {
-				report = guidance.PinCloseoutReport(original, report, repair)
-			}
-		} else {
-			st.closeoutRetry.prevKey = ""
-			st.closeoutRetry.codes = nil
-		}
+	draft := read.Draft
+	if l.Deps.CloseoutStallState != nil && !l.Deps.CloseoutStallState(ctx, sessionID).Active {
+		st.closeoutRetry.prevKey = ""
+		st.closeoutRetry.codes = nil
 	}
-	observation, err := l.observeCloseoutReport(ctx, sess, history, surfaceID, report, read.Unread, st.turnTools, completionReportBinding(st).PhaseDeliversRunReport)
+	observation, err := l.observeCloseoutReport(ctx, sess, history, surfaceID, read, completionReportBinding(st).PhaseDeliversRunReport)
 	if err != nil {
 		return out, err
 	}
@@ -86,10 +78,6 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 		return out, err
 	}
 	if decision != nil && decision.Code != "" {
-		draft, err := guidance.MarshalCoordinatorCompletionReport(report)
-		if err != nil {
-			return out, err
-		}
 		out, err := l.rejectCloseoutGrounding(ctx, sessionID, st, history, assistantMsg.ID, decision, draft, read.Unread)
 		if err != nil {
 			return out, err
@@ -104,23 +92,18 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	}
 
 	// Missing references are attached from host evidence without another model turn.
-	if observation.citations.CitationsRequired {
+	if observation.citations.CitationsRequired || owesReportWithoutEvidence(st, observation.citations.Grounding) {
 		code := strings.TrimSpace(observation.citations.Code)
 		if code == "" {
 			code = guidance.CloseoutCitationsRequiredCode(surfaceID)
 		}
-		draft, err := guidance.MarshalCoordinatorCompletionReport(report)
-		if err != nil {
-			return out, err
-		}
 		return l.emitAssembledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, draft, []string{code}, st, history)
 	}
 
-	raw, err := guidance.MarshalCoordinatorCompletionReport(report)
-	if err != nil {
-		return out, err
-	}
-	assistantMsg.Content = raw
+	presented := strings.TrimSpace(guidance.PresentCloseoutMarkdown(draft, observation.citations.Resolved))
+	report := draft.Report()
+	assistantMsg.Content = presented
+	assistantMsg.Grounding = observation.citations.Grounding
 	assistantMsg.Kind = api.MessageKindCompletionReport
 	binding := completionReportBinding(st)
 	assistantMsg.WorkflowRunID = binding.RunID
@@ -131,7 +114,8 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	}
 	for i := range history {
 		if history[i].ID == assistantMsg.ID {
-			history[i].Content = raw
+			history[i].Content = presented
+			history[i].Grounding = assistantMsg.Grounding
 			history[i].ArtifactIDs = append([]string(nil), assistantMsg.ArtifactIDs...)
 			history[i].CompletionReport = assistantMsg.CompletionReport
 			break
@@ -160,6 +144,13 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	return out, nil
 }
 
+// owesReportWithoutEvidence is a reply that had nothing to cite, in a phase only a
+// report can complete. It would otherwise end the turn with the gate open and nothing
+// left to wake the coordinator.
+func owesReportWithoutEvidence(st *promptLoopTurnState, grounding *api.CitationGrounding) bool {
+	return grounding != nil && grounding.EvidenceOptional && completionReportBinding(st).PhaseOwesReport
+}
+
 func (l *turnCloseout) rejectCloseoutGrounding(
 	ctx context.Context,
 	sessionID string,
@@ -167,10 +158,10 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 	history []api.Message,
 	assistantMessageID string,
 	decision *oar.Decision,
-	draftedContent string,
+	draft guidance.CloseoutDraft,
 	unread []jsonshape.Issue,
 ) (closeoutCommitOutcome, error) {
-	out := closeoutCommitOutcome{draftedContent: draftedContent}
+	out := closeoutCommitOutcome{drafted: draft}
 	code, hintData := decision.Code, decision.Data
 	if c := strings.TrimSpace(code); c != "" {
 		st.closeoutRetry.codes = append(st.closeoutRetry.codes, c)
@@ -178,12 +169,12 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 	retryEligible := l.Deps.HintConfig != nil && l.Deps.HintConfig.IsInSessionRetry(code)
 	key := guidance.GroundingOffenderKey(code, hintData)
 	stuck := key != "" && key == st.closeoutRetry.prevKey && !guidance.GroundingRetryBypassesStuckDetection(code)
-	budget := l.closeoutRetryBudget(ctx, sessionID, st, code, draftedContent)
+	budget := l.closeoutRetryBudget(ctx, sessionID, st, code, draft)
 	// Retries retain their count and report across runs.
 	if l.Deps.NoteCloseoutGroundingReject != nil {
-		l.Deps.NoteCloseoutGroundingReject(ctx, sessionID, code, key, draftedContent, unread)
+		l.Deps.NoteCloseoutGroundingReject(ctx, sessionID, code, key, draft, unread)
 	}
-	exhausted := !retryEligible || stuck || budget.exhausted()
+	exhausted := !retryEligible || stuck || budget.exhausted() || st.closeoutRetry.noFurtherTurn
 	renderDecision := *decision
 	renderDecision.Data = budget.hintData(hintData, unread)
 	renderDecision.Data = maps.Clone(renderDecision.Data)
@@ -203,7 +194,7 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 		budget.attempt,
 		budget.displayMax(),
 		decision,
-		guidance.UsableCloseoutSynthesis(draftedContent),
+		draft.Synthesis,
 	)
 	if err != nil {
 		return out, err
@@ -250,17 +241,6 @@ func closeoutDraftSlotID(st *promptLoopTurnState, assistantMessageID string) str
 		return st.draftSlotID
 	}
 	return ""
-}
-
-func (l *turnCloseout) pinnedCloseoutSynthesis(ctx context.Context, sessionID string) string {
-	if l == nil || l.Deps.CloseoutStallState == nil {
-		return ""
-	}
-	retained := l.Deps.CloseoutStallState(ctx, sessionID)
-	if !retained.Active {
-		return ""
-	}
-	return guidance.UsableCloseoutSynthesis(retained.Drafted)
 }
 
 func closeoutHasCitationIssues(gc *oar.GuardContext) bool {

@@ -291,7 +291,7 @@ func FilterPromptHistory(messages []Message) []Message {
 			out = append(out, msg)
 		}
 	}
-	return EnsureToolCallGroupContiguityForPrompt(CloseToolCallGroupsForPrompt(orderDraftRecovery(out)))
+	return EnsureToolCallGroupContiguityForPrompt(CloseToolCallGroupsForPrompt(orderDraftRecovery(dropDerivedMidTurnNotes(out))))
 }
 
 // RehydrateTranscriptProjectionFields restores transcript projection fields that

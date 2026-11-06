@@ -92,6 +92,15 @@ function workflowExplainAnnouncement(message: Message): string | undefined {
 }
 
 /** Announces the latest visible assistant completion or newly written phase note. */
+// A screen reader should say a link's label, not its destination.
+function spokenText(content: string): string {
+  return content
+    .trim()
+    .replace(/\[((?:\\.|[^\]\\])*)\]\((?:<[^>]*>|[^)\s]*)\)/g, (_link, label: string) =>
+      label.replace(/\\(.)/g, "$1"),
+    );
+}
+
 export function advanceTranscriptAnnouncement(
   previous: TranscriptAnnouncementState | undefined,
   sessionId: string,
@@ -137,7 +146,7 @@ export function advanceTranscriptAnnouncement(
       continue;
     }
     const settled = prior.assistantPending.get(message.id) === true;
-    if (settled || appended) announcement = `Assistant: ${message.content.trim()}`;
+    if (settled || appended) announcement = `Assistant: ${spokenText(message.content)}`;
   }
 
   return { state, announcement };

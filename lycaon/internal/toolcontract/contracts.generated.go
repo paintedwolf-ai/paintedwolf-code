@@ -98,7 +98,6 @@ var compiledContracts = map[string]Contract{
 	"state_update":                   {Owner: "workflow_state", Reversibility: ReversibilityReversible, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleDBTransaction, Capabilities: 0},
 	"submit_verdict":                 {Owner: "workflow_verdicts", Reversibility: ReversibilityReversible, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleDBTransaction, Capabilities: 0},
 	"summarize":                      {Owner: "summarization", Reversibility: ReversibilityReversible, Batch: BatchSameTool, BatchConcurrencyLimit: 4, Order: TurnOrderLate, Lifecycle: LifecycleReadOnly, Capabilities: 0, DetachAfterBudget: true},
-	"surface_note":                   {Owner: "sessions", Reversibility: ReversibilityReversible, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleDBTransaction, Capabilities: 0, SessionScope: SessionScopeAddressed},
 	"survey_repo":                    {Owner: "survey", Reversibility: ReversibilityReversible, Batch: BatchShared, Order: TurnOrderNormal, Lifecycle: LifecycleReadOnly, Capabilities: 0, DetachAfterBudget: true},
 	"task":                           {Owner: "workers", Reversibility: ReversibilityRecoverable, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleDurableJob, Capabilities: 0},
 	"terminal_close":                 {Owner: "terminals", Reversibility: ReversibilityRecoverable, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleEphemeralControl, Capabilities: 0},
@@ -194,7 +193,6 @@ var compiledGrantIdentityNeutralArgs = map[string][]string{
 	},
 	"verify": {
 		"timeout_ms",
-		"wait_ms",
 	},
 	"view_image": {
 		"scale",
@@ -343,7 +341,6 @@ var compiledMultiRoot = map[string]MultiRootCapability{
 	"state_update":                   MultiRootNone,
 	"submit_verdict":                 MultiRootNone,
 	"summarize":                      MultiRootDiscovery,
-	"surface_note":                   MultiRootNone,
 	"survey_repo":                    MultiRootDiscovery,
 	"task":                           MultiRootNone,
 	"terminal_close":                 MultiRootNone,
@@ -367,4 +364,9 @@ var compiledMultiRoot = map[string]MultiRootCapability{
 	"workflow_transition":            MultiRootNone,
 	"workflow_user_feedback":         MultiRootNone,
 	"write":                          MultiRootPathConsume,
+}
+
+// Retired tools whose successor is content rather than a call.
+var compiledRetiredToContent = map[string]string{
+	"surface_note": "paintedwolf.markdown_note",
 }

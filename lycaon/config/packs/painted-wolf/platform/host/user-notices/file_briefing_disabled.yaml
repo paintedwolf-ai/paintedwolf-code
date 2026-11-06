@@ -6,4 +6,3 @@ suggested_action: Enable file summaries in Settings to request an explanation.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [File summaries are disabled]

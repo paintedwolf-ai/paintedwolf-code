@@ -1,0 +1,28 @@
+oar: '1.0'
+id: MID_TURN_NOTE_INVALID_SYNTAX
+kind: invariant
+anchor: coordinator.mid_turn_note
+requires:
+  facts:
+    - paintedwolf.offender_count
+    - paintedwolf.offenders_omitted
+    - paintedwolf.offenders_sample
+    - paintedwolf.reject_observation
+when: paintedwolf.reject_observation == "mid_turn_note_invalid_syntax"
+effect: warn
+copy:
+  what: '[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} citation or directive node(s) could not be read: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+  cause: 'A reserved bracket form was malformed, unterminated, too long, or a repair directive outside an active repair, or the response was only JSON. Updates are Markdown text.'
+  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
+  fix: 'Correct the named node. Write literal syntax as inline code so it stays text. Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
+  instead: 'Branch on Code MID_TURN_NOTE_INVALID_SYNTAX; correct the node'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mid_turn_note
+x-paintedwolf-message: A mid-turn citation node was malformed and the text was withheld.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: 'coordinator'
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: '[read#3:9-2]'

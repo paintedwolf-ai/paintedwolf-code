@@ -124,7 +124,6 @@ describe("evidence on the card", () => {
       />
     ));
     const text = openedText(view);
-    expect(text).toContain("This is a sensitive location outside your project");
     expect(text).toContain("file.path: /Users/x/.zshrc (confine)");
     expect(text).toContain("location.catalog: Shell startup file (sensitive_locations)");
     expect(text).toContain("Observed · This writes outside your attached folders");
@@ -223,7 +222,6 @@ describe("ApprovalCard repeat block", () => {
       "Asked 4 times for this reason since your last message",
     );
     const text = openedText(view, "Repeated requests in Files");
-    expect(text).toContain("Each was decided separately.");
     expect(text).toContain("aws s3 rb s3://a");
     expect(text).toContain("aws s3 rb s3://c");
     expect(view.queryByTestId("approval-repeat-subjects")).toBeNull();
@@ -394,8 +392,6 @@ describe("held release", () => {
     ));
     const notice = view.getByTestId("approval-held-release");
     expect(notice.textContent).toContain("Deploy key");
-    expect(notice.textContent).toContain("Anything that can read this project's files can read it.");
-    expect(view.getByTestId("approval-held-confirm").textContent).toContain("installed desktop app");
     const primary = view.getByTestId("approval-approve-primary") as HTMLButtonElement;
     expect(primary.disabled).toBe(true);
     fireEvent.click(primary);

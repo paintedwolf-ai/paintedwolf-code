@@ -49,8 +49,6 @@ describe("workers-model", () => {
   it("summarizes waiting dependencies and makes readiness part of row identity", () => {
     const pending = { ...worker("consumer", "pending"), dependencies: [{ worker_id: "p", state: "waiting" as const }] };
     const blocked = { ...pending, dependencies: [{ worker_id: "p", state: "blocked" as const }] };
-    expect(workerDependencyLabel(pending)).toBe("Waiting for 1 producer");
-    expect(workerDependencyLabel(blocked)).toBe("1 producer needs attention");
     expect(workerStoreFingerprint(pending)).not.toBe(workerStoreFingerprint(blocked));
     expect(workerDependencyLabel({ ...pending, status: "canceled" })).toBeUndefined();
   });

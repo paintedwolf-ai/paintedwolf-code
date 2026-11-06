@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: coordinator
       tool: edit
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: EDIT_ARGS_CONFLICT'

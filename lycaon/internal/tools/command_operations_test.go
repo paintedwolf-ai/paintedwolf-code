@@ -35,7 +35,7 @@ func TestCommandOperationIsBoundButNeverCallable(t *testing.T) {
 
 func TestCommandOperationsRejectDomainToolsAndCallableCollisions(t *testing.T) {
 	registry := NewDefaultRegistry()
-	if err := registry.RegisterOperation("summarize"); err == nil {
+	if err := registry.RegisterOperation("restore_version"); err == nil {
 		t.Fatal("domain tool classified as a command-only operation")
 	}
 	testutil.FailErr(t, "register read fixture", registry.Register("read", func(context.Context, map[string]any, ToolContext) (string, error) { return "", nil }))

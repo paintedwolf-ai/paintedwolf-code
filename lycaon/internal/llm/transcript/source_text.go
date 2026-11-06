@@ -3,15 +3,15 @@ package transcript
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// projectSourceText separates source bytes from their result coordinates.
-// Projected source lines carry no line labels, so they can be copied into exact
-// edit arguments; each block's label names its line range, starting at its first line.
+// projectSourceText separates retained source bytes from their result coordinates.
+// Command output is delivered as printed and never comes through here.
 func projectSourceText(message api.Message, parts []api.MessageContentPart) []api.MessageContentPart {
 	if message.Role != api.MessageRoleTool || message.Origin != api.MessageOriginTool || message.ToolResult == nil ||
 		message.ToolResult.Outcome != api.ToolResultOutcomeCompleted || len(parts) != 1 {
@@ -24,73 +24,25 @@ func projectSourceText(message api.Message, parts []api.MessageContentPart) []ap
 	switch message.ToolResult.Tool {
 	case "recall":
 		return projectRecallText(message, part, parts)
-	case "read":
-		return projectReadSource(message, part, parts)
-	case "summarize":
-		return projectSummarizeSource(message, part, parts)
 	case "source_history":
 		return projectSourceHistoryVersion(message, part, parts)
 	}
 	return parts
 }
 
-// resultHandles splits leading evidence handles from a result body.
+// resultHandles splits the leading tags of the result's own handles from its body.
 func resultHandles(message api.Message, body string) ([]string, string) {
-	var handles []string
-	for _, handle := range message.EvidenceHandles {
-		prefix := "[" + handle + "]\n"
-		if strings.HasPrefix(body, prefix) {
-			handles = append(handles, "["+handle+"]")
-			body = strings.TrimPrefix(body, prefix)
+	var tags []string
+	for {
+		tag, rest := hostmarker.SplitEvidenceHandleTag(body)
+		if tag == "" || !slices.Contains(message.EvidenceHandles, hostmarker.EvidenceTagHandle(tag)) {
+			return tags, body
 		}
+		tags = append(tags, strings.TrimSpace(tag))
+		body = rest
 	}
-	return handles, body
 }
 
-// projectSummarizeSource sends each source window as text beside its coordinates.
-func projectSummarizeSource(message api.Message, part api.MessageContentPart, parts []api.MessageContentPart) []api.MessageContentPart {
-	handles, body := resultHandles(message, part.Content)
-	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(body)
-	if !ok || prefix != "" {
-		return parts
-	}
-	var metadata map[string]json.RawMessage
-	if json.Unmarshal([]byte(body), &metadata) != nil {
-		return parts
-	}
-	var pack map[string]json.RawMessage
-	if json.Unmarshal(metadata["pack"], &pack) != nil {
-		return parts
-	}
-	var windows []map[string]json.RawMessage
-	if json.Unmarshal(pack["substance"], &windows) != nil || len(windows) == 0 {
-		return parts
-	}
-	sources := make([]sourceText, 0, len(windows))
-	for _, window := range windows {
-		text, ok := numberedSourceBlock(window, "body")
-		if !ok {
-			return parts
-		}
-		sources = append(sources, text)
-	}
-	encoded, err := json.Marshal(windows)
-	if err != nil {
-		return parts
-	}
-	pack["substance"] = encoded
-	if encoded, err = json.Marshal(pack); err != nil {
-		return parts
-	}
-	metadata["pack"] = encoded
-	if encoded, err = json.Marshal(metadata); err != nil {
-		return parts
-	}
-	return sourceParts(part, "summarize_metadata", handles, encoded, sources, suffix)
-}
-
-// receiptMetadata decodes a native result whose receipt names tool, returning
-// its leading handles, JSON fields, mode, and trailing feedback.
 func receiptMetadata(message api.Message, part api.MessageContentPart, tool string) (handles []string, metadata map[string]json.RawMessage, mode, suffix string, ok bool) {
 	handles, body := resultHandles(message, part.Content)
 	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(body)
@@ -119,7 +71,7 @@ func projectSourceHistoryVersion(message api.Message, part api.MessageContentPar
 	if !ok || mode != "version" {
 		return parts
 	}
-	text, ok := readSourceBlock(metadata)
+	text, ok := numberedSourceBlock(metadata, "content")
 	if !ok {
 		return parts
 	}
@@ -130,54 +82,6 @@ func projectSourceHistoryVersion(message api.Message, part api.MessageContentPar
 	_ = json.Unmarshal(metadata["version_id"], &text.version)
 	text.handle = strings.Join(handles, " ")
 	return sourceParts(part, "source_history_metadata", handles, encoded, []sourceText{text}, suffix)
-}
-
-func projectReadSource(message api.Message, part api.MessageContentPart, parts []api.MessageContentPart) []api.MessageContentPart {
-	handles, metadata, mode, suffix, ok := receiptMetadata(message, part, "read")
-	if !ok {
-		return parts
-	}
-	var sources []sourceText
-	switch mode {
-	case "content", "symbol":
-		text, ok := readSourceBlock(metadata)
-		if !ok {
-			return parts
-		}
-		sources = append(sources, text)
-	case "ranges":
-		var ranges []map[string]json.RawMessage
-		if json.Unmarshal(metadata["ranges"], &ranges) != nil || len(ranges) == 0 {
-			return parts
-		}
-		for _, block := range ranges {
-			text, ok := readSourceBlock(block)
-			if !ok {
-				return parts
-			}
-			sources = append(sources, text)
-		}
-		encoded, err := json.Marshal(ranges)
-		if err != nil {
-			return parts
-		}
-		metadata["ranges"] = encoded
-	default:
-		return parts
-	}
-	encoded, err := json.Marshal(metadata)
-	if err != nil {
-		return parts
-	}
-	var path string
-	_ = json.Unmarshal(metadata["path"], &path)
-	for i := range sources {
-		if sources[i].path == "" {
-			sources[i].path = path
-		}
-		sources[i].handle = strings.Join(handles, " ")
-	}
-	return sourceParts(part, "read_metadata", handles, encoded, sources, suffix)
 }
 
 type sourceText struct {
@@ -218,10 +122,6 @@ func sourceParts(part api.MessageContentPart, metadataSource string, handles []s
 		out = append(out, part)
 	}
 	return out
-}
-
-func readSourceBlock(block map[string]json.RawMessage) (sourceText, bool) {
-	return numberedSourceBlock(block, "content")
 }
 
 // numberedSourceBlock decodes the host's numbered-source format held under key and removes it from block.

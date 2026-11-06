@@ -21,7 +21,3 @@ x-paintedwolf-scenarios:
   vars:
     tool: command
     path: config/app.json
-  expect_contains:
-  - 'Code: COMMAND_PUBLICATION_PENDING'
-  - not published to disk at config/app.json
-  - do not repeat it

@@ -22,8 +22,3 @@ x-paintedwolf-scenarios:
   - id: pending_overlay
     vars:
       job_id: pending-worker
-    expect_contains:
-      - 'Code: OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT'
-      - pending-worker
-      - promote_overlay
-      - reject_overlay

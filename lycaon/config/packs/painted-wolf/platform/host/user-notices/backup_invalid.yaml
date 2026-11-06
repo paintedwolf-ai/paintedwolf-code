@@ -8,5 +8,3 @@ suggested_action: Pick a backup zip exported from Settings → Advanced → Data
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - does not look like

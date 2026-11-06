@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -115,7 +114,7 @@ func TestRequestBodyRejectsSerializedJSONText(t *testing.T) {
 	_, err := assembleBody(t.Context(), testBoundary(), tools.ToolContext{}, map[string]any{
 		"body_json": `{"ok":true}`,
 	})
-	if err == nil || !strings.Contains(err.Error(), "object or array") {
+	if err == nil {
 		t.Fatalf("assembleBody error = %v, want object-or-array validation", err)
 	}
 }

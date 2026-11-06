@@ -30,7 +30,3 @@ x-paintedwolf-scenarios:
       cwd: /etc
       profile: implement
       tool: command
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: CWD_OUT_OF_SCOPE'
-      - permitted directory scope

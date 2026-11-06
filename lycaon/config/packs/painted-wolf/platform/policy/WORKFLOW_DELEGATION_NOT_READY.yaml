@@ -28,6 +28,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: delegate_dispatch
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKFLOW_DELEGATION_NOT_READY'

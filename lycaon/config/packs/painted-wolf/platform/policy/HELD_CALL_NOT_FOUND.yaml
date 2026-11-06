@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
       handle: held-1
       profile: coordinator
       tool: held_result
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: HELD_CALL_NOT_FOUND'

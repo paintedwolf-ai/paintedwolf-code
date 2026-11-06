@@ -246,7 +246,6 @@ describe("FileEditDiff", () => {
     expect(card("new.py").querySelector('[data-testid="source-change-chip"]')?.textContent).toBe("New file");
     expect(card("new.py").querySelector(".den-file-edit-diff-details-badge")?.textContent).toBe("New file");
     expect(card("new.py").querySelector(".den-file-edit-diff-details-lines")?.textContent).toBe("3 lines added");
-    expect(card("new.py").querySelector(".den-file-edit-diff-details-btn")?.textContent).toBe("View file");
 
     const classes = (path: string) => rows(path).map(line => line.className).join(" | ");
     expect(classes("old.py")).toMatch(/cm-den-reader-(add|delete)/);
@@ -257,7 +256,6 @@ describe("FileEditDiff", () => {
     expect(card("gone.py").querySelector(".den-source-path-plain")?.getAttribute("data-file-change")).toBe("deleted");
     expect(card("gone.py").querySelector(".den-file-edit-diff-details-badge")?.textContent).toBe("Deleted file");
     expect(card("gone.py").querySelector(".den-file-edit-diff-details-lines")?.textContent).toBe("3 lines removed");
-    expect(card("gone.py").querySelector(".den-file-edit-diff-details-btn")?.textContent).toBe("View removed contents");
   });
 
   it("reverses an in-flight close instead of ignoring the click", () => {

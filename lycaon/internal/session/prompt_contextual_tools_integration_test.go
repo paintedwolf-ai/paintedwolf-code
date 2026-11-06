@@ -218,8 +218,13 @@ func TestWorkerChildPromptUsesToolPolicy(t *testing.T) {
 		}
 		return false
 	}
-	if !has("command") || !has("edit") || !has("replace_lines") {
-		t.Fatalf("implementer child must list command/edit/replace_lines on wire, got %v", names)
+	if !has("command") {
+		t.Fatalf("implementer child must list command on wire, got %v", names)
+	}
+	for _, retired := range []string{"edit", "replace_lines"} {
+		if has(retired) {
+			t.Fatalf("implementer child must not list retired tool %q, got %v", retired, names)
+		}
 	}
 }
 

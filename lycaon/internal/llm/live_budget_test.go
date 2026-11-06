@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -252,5 +253,71 @@ func TestResolveTrueWindowLocalFallbackNotHosted262K(t *testing.T) {
 	}
 	if metas[0].Models[0].ContextLength != 0 {
 		t.Fatalf("projected model ContextLength = %d; want 0 (unknown)", metas[0].Models[0].ContextLength)
+	}
+}
+
+func TestPromptSizingLimitsFollowTheCappedBudget(t *testing.T) {
+	policy := ModelPolicy{Coordinator: ModelRef{ProviderID: "fixture", Model: "unlisted-model"}}
+	for _, tc := range []struct {
+		name                  string
+		window, maxLive       int
+		toolBytes, loops, sum int
+		explicit              bool
+	}{
+		{name: "large window keeps the capped sizes and its own loop allowance", window: 1_048_572, toolBytes: 524288, loops: 1023, sum: 16384},
+		{name: "fallback sized window", window: 262144, toolBytes: 524288, loops: 256, sum: 16384},
+		{name: "small window lowers every limit", window: 32768, toolBytes: 65536, loops: 32, sum: 2048},
+		{name: "a raised cap raises the sizes", window: 1_048_572, maxLive: 393216, toolBytes: 1048576, loops: 1023, sum: 32768},
+		{name: "explicit window stays uncapped", window: 1_048_572, explicit: true, toolBytes: 2097144, loops: 1023, sum: 65535},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := compaction.DefaultCompactionConfig()
+			if tc.maxLive > 0 {
+				cfg.MaxLiveBudgetTokens = tc.maxLive
+			}
+			if tc.explicit {
+				cfg.WindowSource = compaction.WindowSourceExplicit
+				cfg.ModelContextWindow = tc.window
+			}
+			out, limits, err := ApplyLiveBudget(cfg, policy, stubContextLength{n: tc.window}, testWindows(t))
+			testutil.FailErr(t, "ApplyLiveBudget", err)
+			if limits.MaxToolResultBytes != tc.toolBytes || limits.MaxCoordinatorLoopCycles != tc.loops || limits.MaxWorkerSummaryChars != tc.sum || out.MaxWorkerSummaryChars != tc.sum {
+				t.Fatalf("limits %+v summary %d", limits, out.MaxWorkerSummaryChars)
+			}
+		})
+	}
+}
+
+func TestLiveBudgetIsCappedAbsolutely(t *testing.T) {
+	policy := ModelPolicy{Coordinator: ModelRef{ProviderID: "fixture", Model: "unlisted-model"}}
+	for _, tc := range []struct {
+		name         string
+		maxLive      int
+		window, live int
+	}{
+		{name: "larger window never raises it", window: 1_048_572, live: 196608},
+		{name: "fallback sized window meets it", window: 262144, live: 196608},
+		{name: "smaller window lowers it", window: 32768, live: 24576},
+		{name: "project raises it deliberately", maxLive: 400000, window: 1_048_572, live: 400000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := compaction.DefaultCompactionConfig()
+			if tc.maxLive > 0 {
+				cfg.MaxLiveBudgetTokens = tc.maxLive
+			}
+			out, _, err := ApplyLiveBudget(cfg, policy, stubContextLength{n: tc.window}, testWindows(t))
+			testutil.FailErr(t, "ApplyLiveBudget", err)
+			if out.ModelContextWindow != tc.live || out.HardCeilingTokens != tc.live*85/100 {
+				t.Fatalf("live %d hard %d, want live %d", out.ModelContextWindow, out.HardCeilingTokens, tc.live)
+			}
+		})
+	}
+	cfg := compaction.DefaultCompactionConfig()
+	cfg.MaxLiveBudgetTokens = 0
+	if out, _, err := ApplyLiveBudget(cfg, policy, stubContextLength{n: 1_048_572}, testWindows(t)); err != nil || out.ModelContextWindow != compaction.DefaultMaxLiveBudgetTokens {
+		t.Fatalf("omitted cap: live %d err %v", out.ModelContextWindow, err)
+	}
+	if _, err := compaction.NormalizeConfig(compaction.CompactionConfig{ModelContextWindow: 1, MaxLiveBudgetTokens: -1}); err == nil {
+		t.Fatal("negative cap accepted")
 	}
 }

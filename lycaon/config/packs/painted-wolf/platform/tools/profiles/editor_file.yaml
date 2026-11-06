@@ -6,18 +6,14 @@ description: >
 command_effects: [read_only, mutation]
 tools:
   command: sticky
+  command_output: sticky
+  command_stop: sticky
   recall: sticky
-  edit: sticky
-  replace_lines: sticky
-  code_rewrite: sticky
   restore_version: sticky
-  summarize: sticky
-  jq_edit: true
   scan_query: sticky
   scan_list: sticky
   record_finding: sticky
   pack_board: sticky
-  surface_note: sticky
   wait: sticky
   skills_read: sticky
   secret_generate: sticky
@@ -27,8 +23,6 @@ tools:
   held_stop: true
 wait_conditions: [http_ready, port_ready]
 deny_tools:
-  - command_output
-  - command_stop
   - web_search
   - fetch_url
   - terminal_open

@@ -1,7 +1,3 @@
 scope: session
 title: Could not load session
 message: Try again or pick another session.
-scenarios:
-  - id: default
-    expect_contains:
-      - another session

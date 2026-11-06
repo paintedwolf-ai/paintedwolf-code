@@ -10,7 +10,7 @@ import {
   workerFailureStatusLines,
 } from "./worker-failure-model.ts";
 
-export type WorkerEvidenceOutcome = "traced" | "partial" | "pending" | "failed";
+export type WorkerEvidenceOutcome = "traced" | "partial" | "evidence_optional" | "pending" | "failed";
 
 /** Fallback evidence copy when the host has not attached a grounding audit. */
 export type WorkerEvidenceFallbackView = {

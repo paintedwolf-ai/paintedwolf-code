@@ -24,7 +24,3 @@ x-paintedwolf-scenarios:
     tool: update_progress
     profile: coordinator
     max_characters: 8000
-  expect_contains:
-  - 'Code: PROGRESS_DOCUMENT_TOO_LARGE'
-  - 'one concise row per deliverable'
-  - 'reported character limit'

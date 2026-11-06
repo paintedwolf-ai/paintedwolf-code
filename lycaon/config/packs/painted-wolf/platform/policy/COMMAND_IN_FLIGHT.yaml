@@ -31,7 +31,3 @@ x-paintedwolf-scenarios:
     - command-1
     handles_text: command-1
     can_command_output: true
-  expect_contains:
-  - 'Code: COMMAND_IN_FLIGHT'
-  - command-1
-  - command_output

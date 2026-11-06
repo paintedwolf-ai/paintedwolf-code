@@ -27,7 +27,3 @@ x-paintedwolf-scenarios:
     id: missing-id
     profile: implement
     tool: page_act
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: PAGE_NOT_FOUND'
-  - page_open

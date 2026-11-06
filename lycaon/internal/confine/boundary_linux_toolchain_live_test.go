@@ -59,6 +59,7 @@ func TestLinuxToolchainsWorkInsideTheBoundary(t *testing.T) {
 		{"python", []string{requireTool(t, "python3"), "-c", "import json, sqlite3, hashlib; open('p.txt','w').write('x'); print('python-ok')"}, "python-ok"},
 		{"node", []string{requireTool(t, "node"), "-e", "require('fs').writeFileSync('n.txt', 'x'); console.log('node-ok')"}, "node-ok"},
 		{"go", []string{goTool, "run", "."}, "go-ok"},
+		{"disk space", []string{requireTool(t, "df"), "-k", "/"}, "Filesystem"},
 	}
 	c := denyConfinement(proj)
 	for _, tc := range cases {

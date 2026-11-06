@@ -58,7 +58,8 @@ func (m *streamMemory) available() int64 { return m.maximum - m.used }
 type StreamSpan struct{ InputStart, InputEnd, OutputStart, OutputEnd int64 }
 
 // StreamBounds are explicit operation budgets, separate from pipe queue capacity.
-// DetectorWork bounds each catalog pass and each pending evidence-fusion step.
+// DetectorWork bounds each catalog pass and each pending evidence-fusion step. Managed echoes add one bounded decoding
+// pass over each retained window under the same per-pass allowance.
 // Source-owned evidence and static catalog storage remain owned by their source.
 type StreamBounds struct{ InputBytes, OutputBytes, MemoryBytes, DetectorWork int64 }
 

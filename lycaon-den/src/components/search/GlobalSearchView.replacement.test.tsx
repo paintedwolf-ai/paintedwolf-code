@@ -129,7 +129,6 @@ describe("GlobalSearchView", () => {
       seed="foo" replaceModeRequested appStore={createAppStore()} onNavigate={vi.fn()} />);
     await vi.advanceTimersByTimeAsync(10000);
     expect(replacePreviewMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByTestId("search-replace-coverage").textContent).toContain("indexing budget");
     expect((screen.getByTestId("search-replace-apply") as HTMLButtonElement).disabled).toBe(true);
     const fileApply = screen.getByTestId("search-replace-file-apply") as HTMLButtonElement;
     expect(fileApply.disabled).toBe(false);

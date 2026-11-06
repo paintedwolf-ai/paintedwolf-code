@@ -21,8 +21,11 @@ import (
 // PortInventory reads host listeners and the processes holding them, marking
 // the ones a session's launches own.
 type PortInventory interface {
-	PortHolders(context.Context, string, lineage.ListenerQuery) ([]hostprocess.PortHolder, error)
+	PortHolders(context.Context, string, lineage.ListenerQuery) (hostprocess.PortHolderTable, error)
 }
+
+// LsofWithheldNote tells the reader a missing row is not proof a port is free.
+const LsofWithheldNote = "lsof: this host withholds some sockets from this view, so a port not listed here may still be held\n"
 
 // maxJobAncestry bounds the parent walk from a listener to the job that started it.
 const maxJobAncestry = 64
@@ -54,10 +57,11 @@ func lsofBuiltin(spec toolcontract.CommandSpecification, sessionID string, jobs 
 			err := errors.New("host listener inventory is not configured")
 			return ownerFailure(err), err
 		}
-		holders, err := ports.PortHolders(ctx, sessionID, query)
+		table, err := ports.PortHolders(ctx, sessionID, query)
 		if err != nil {
 			return ownerFailure(err), err
 		}
+		holders := table.Holders
 		shown := slices.DeleteFunc(slices.Clone(holders), func(h hostprocess.PortHolder) bool { return h.Process == nil || !h.Process.Owned })
 		uninspected := ""
 		switch {
@@ -85,6 +89,9 @@ func lsofBuiltin(spec toolcontract.CommandSpecification, sessionID string, jobs 
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Output), out.String()); err != nil {
 			return ownerFailure(err), err
+		}
+		if !table.Complete {
+			uninspected += LsofWithheldNote
 		}
 		if _, err := fmt.Fprint(nonNilWriter(streams.Error), uninspected); err != nil {
 			return ownerFailure(err), err

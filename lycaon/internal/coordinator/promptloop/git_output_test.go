@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"strings"
 	"testing"
@@ -90,9 +91,7 @@ func TestGitDiffSpillsOnlyScreenedHunks(t *testing.T) {
 	if got.reject != nil {
 		t.Fatalf("screened diff rejected: %+v", got.reject)
 	}
-	if strings.Contains(got.content, storageBoundarySecret) {
-		t.Fatal("raw secret in model view")
-	}
+	exposure.Absent(t, got.content, storageBoundarySecret)
 	for _, rel := range tooloutput.SpillPaths(got.content) {
 		stored, err := os.ReadFile(tooloutput.DiskPath(project.HostDataDir(dir, sess.ProjectID), rel))
 		testutil.FailErr(t, "read screened spill", err)

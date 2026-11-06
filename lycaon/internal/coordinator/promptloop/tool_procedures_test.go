@@ -45,7 +45,7 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 	var delivered []string
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{
-			Policy:      registryTestPolicy{metas: []tools.ToolMeta{{Name: "command"}, {Name: "request_tools"}, {Name: "survey_repo", Deferred: true}}},
+			Policy:      registryTestPolicy{metas: []tools.ToolMeta{{Name: "command"}, {Name: "request_tools"}, {Name: "verify", Deferred: true}}},
 			LoadedTools: func(string) map[string]bool { return active },
 			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 				return history, nil
@@ -53,7 +53,7 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 			ContextSurfaceDeps: ContextSurfaceDeps{
 				ToolProcedures: func(_ context.Context, _ *api.Session, _ string, offered []string) (string, error) {
 					delivered = slices.Clone(offered)
-					if slices.Contains(offered, "survey_repo") {
+					if slices.Contains(offered, "verify") {
 						return "runner procedure", nil
 					}
 					return "", nil
@@ -66,7 +66,7 @@ func TestProviderRequestProceduresUseActualToolSet(t *testing.T) {
 	for _, activated := range []bool{false, true, false, true} {
 		active = map[string]bool{}
 		if activated {
-			active["survey_repo"] = true
+			active["verify"] = true
 		}
 		turn, err := loop.Model.buildTurnRequest(t.Context(), sess, sess.ID, history, prompts.CoordinatorProfileID, "inspect", 0, 20, false, &promptLoopTurnState{})
 		testutil.FailErr(t, "build provider request", err)

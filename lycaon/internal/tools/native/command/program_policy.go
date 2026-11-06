@@ -53,8 +53,12 @@ func (d *ProgramDispatcher) bindReachedDirectory(request commandprogram.Operatio
 // reachedRootID names the project root a directory belongs to. A worker branch
 // resolves under a synthetic root, so it maps back to the root it mirrors.
 func (d *ProgramDispatcher) reachedRootID(cwd projectpaths.Resolved) string {
-	if d.run.tc.Source.WorkerBranchRoot != "" {
-		if root, _, ok := d.run.tc.SourceLocation(cwd.Abs); ok && root.ID != "" {
+	return reachedRootID(d.run.tc, cwd)
+}
+
+func reachedRootID(tc tools.ToolContext, cwd projectpaths.Resolved) string {
+	if tc.Source.WorkerBranchRoot != "" {
+		if root, _, ok := tc.SourceLocation(cwd.Abs); ok && root.ID != "" {
 			return root.ID
 		}
 	}

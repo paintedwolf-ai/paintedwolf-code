@@ -171,6 +171,20 @@ func (e *promptSurface) resolveTurnRoster(
 	roster := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, repoKnownEmpty, webSearchEnabled)
 	return &roster
 }
+
+// sourceHistoryOffered answers from the compile the turn's plan starts from: the
+// plan freezes after assembly, and nothing later adds a catalog tool the surface
+// leaves out.
+func (e *promptSurface) sourceHistoryOffered(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch) bool {
+	if e == nil {
+		return false
+	}
+	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
+	_, rootCount, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
+	plan, err := surface.CompileToolPlan(profile, rootCount)
+	return err == nil && plan.Addressable("source_history")
+}
+
 func (e *promptSurface) taskOffered(sess *api.Session, surfaceID string, rootCount int) bool {
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, rootCount)
 	if err != nil {

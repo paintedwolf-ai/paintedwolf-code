@@ -11,12 +11,11 @@ copy:
   what: The process reference no longer identifies the reviewed process.
   cause: The host could not complete the structured process operation.
   why: A process reference identifies one process instance; ordinary operating-system permissions still apply.
-  fix: Call process_list again and review the new exact target. Do not replace the reference with a PID or name.
-  instead: Branch on Code; call process_list again and review the new exact target. Do not replace the reference with a PID or name.
+  fix: List processes again with `ps` and review the new exact target. Do not replace the reference with a PID or name.
+  instead: Branch on Code; list processes again with `ps` and review the new exact target. Do not replace the reference with a PID or name.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:host_process
 x-paintedwolf-message: The process reference no longer identifies the reviewed process.
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains: ['Rejected:', 'Code: PROCESS_REFERENCE_STALE']

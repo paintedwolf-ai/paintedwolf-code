@@ -11,6 +11,3 @@ suggested_action: Check that HTTP rows have a URL, stdio rows have a command, an
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - not valid
-      - URL

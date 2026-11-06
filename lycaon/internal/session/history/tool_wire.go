@@ -27,7 +27,7 @@ func (m *Service) ToolWire(ctx context.Context, sess *api.Session, toolName, con
 			return in, nil
 		}
 		providerID, model := m.Model(ctx, sess)
-		out, meta, changed, err := sc.CompactToolWireIfOversized(ctx, compaction.SessionInfo{
+		out, meta, changed, err := sc.WithConfig(m.compactionConfig(ctx, sess)).CompactToolWireIfOversized(ctx, compaction.SessionInfo{
 			ID:                sess.ID,
 			ProviderID:        providerID,
 			Model:             model,

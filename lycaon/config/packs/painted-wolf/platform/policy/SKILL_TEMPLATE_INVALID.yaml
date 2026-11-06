@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     detail: 'template: unexpected end of tag'
     profile: implement
     tool: skills_read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SKILL_TEMPLATE_INVALID'

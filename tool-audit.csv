@@ -94,7 +94,6 @@ state_start,retain-domain-structured,workflow_state,,retained,lycaon/config/pack
 state_update,retain-domain-structured,workflow_state,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/state_update.yaml
 submit_verdict,retain-domain-structured,workflow_verdicts,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/submit_verdict.yaml
 summarize,retain-structured-and-command,summarization,summarize,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/summarize.yaml
-surface_note,retain-domain-structured,sessions,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/surface_note.yaml
 survey_repo,retain-structured-and-command,survey,repo-map,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/survey_repo.yaml
 task,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/task.yaml
 terminal_close,retain-domain-structured,terminals,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/terminal_close.yaml

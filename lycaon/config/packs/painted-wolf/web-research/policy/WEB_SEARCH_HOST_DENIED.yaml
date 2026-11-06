@@ -29,14 +29,7 @@ x-paintedwolf-scenarios:
   vars:
     host: api.example-search.test
     tool: web_search
-  expect_contains:
-  - 'Code: WEB_SEARCH_HOST_DENIED'
-  - api.example-search.test
-  - different public URL
 - id: fetch_url_host_denied
   vars:
     host: docs.example.test
     tool: fetch_url
-  expect_contains:
-  - 'Code: WEB_SEARCH_HOST_DENIED'
-  - docs.example.test

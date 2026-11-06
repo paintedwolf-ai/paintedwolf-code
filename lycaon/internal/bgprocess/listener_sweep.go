@@ -43,7 +43,7 @@ func defaultListenerObserver(ctx context.Context) ([]ObservedListener, error) {
 		return nil, err
 	}
 	var out []ObservedListener
-	for _, l := range table {
+	for _, l := range table.Listeners {
 		for _, h := range l.Holders {
 			out = append(out, ObservedListener{
 				Addr:     l.Addr,

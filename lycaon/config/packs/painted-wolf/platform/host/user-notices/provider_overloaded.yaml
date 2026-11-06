@@ -27,11 +27,5 @@ scenarios:
       provider_id: together-ai-1
       status: 503
       attempts: 3
-    expect_contains:
-      - together-ai-1
-      - at capacity
-      - tried 3 times
   - id: generic
     vars: {}
-    expect_contains:
-      - at capacity

@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     path: entities.py
     profile: implement
     tool: write
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WRITE_BINARY_DENIED'

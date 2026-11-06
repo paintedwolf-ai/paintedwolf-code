@@ -11,6 +11,8 @@ import (
 // SourceChangeFile is one file another actor changed since the session's
 // previous turn, grouped from the ledger effects in that window.
 type SourceChangeFile struct {
+	// Handle cites this row. Briefs stored without one render no handle.
+	Handle string `json:"handle,omitempty"`
 	// Path is the canonical display path (@label-qualified off the primary root).
 	Path string `json:"path,omitempty"`
 	// Actor is the sourceledger.ActorClass spelling for the file's newest
@@ -24,11 +26,19 @@ type SourceChangeFile struct {
 	At string `json:"at,omitempty"`
 	// Effects counts the window's foreign effects on this file.
 	Effects int `json:"effects,omitempty"`
+	// WorkingSet marks a path the session read or wrote. Briefs stored without
+	// the field render through the unflagged branch.
+	WorkingSet bool `json:"working_set,omitempty"`
+	// DuringYourCommand marks a file only the session's own command windows
+	// touched. Rows with it follow every other row.
+	DuringYourCommand bool `json:"during_your_command,omitempty"`
 }
 
 // SourceGitLine is one observed git ref movement inside the turn window,
 // stated from the ledger's transition record.
 type SourceGitLine struct {
+	// Handle cites this row. Briefs stored without one render no handle.
+	Handle string `json:"handle,omitempty"`
 	// Root is the display label of the moved root; empty for the primary root.
 	Root string `json:"root,omitempty"`
 	// Kind is the SourceGitChangeKind wire spelling (checkout, commit, …).
@@ -50,18 +60,25 @@ type SourceGitLine struct {
 // no foreign change or no baseline exists — the builder never guesses. It is
 // stored on the turn it opened, so its JSON shape is durable.
 type SourceChangeBrief struct {
-	// Files itemizes foreign changes to paths in the session's working set.
+	// Files itemizes changes up to the row cap: foreign changes with the working
+	// set first, then the session's own command effects with the working set first.
 	Files []SourceChangeFile `json:"files,omitempty"`
 	// Git itemizes observed ref movements in the window, oldest first, so file
 	// changes below read against their cause.
 	Git []SourceGitLine `json:"git,omitempty"`
-	// OtherFiles / OtherEffects collapse foreign changes elsewhere in the
-	// project to a bounded count.
+	// OtherFiles / OtherEffects count the foreign changes that did not fit in
+	// Files.
 	OtherFiles   int `json:"other_files,omitempty"`
 	OtherEffects int `json:"other_effects,omitempty"`
-	// Truncated reports that the window overflowed the effect cap, so the
-	// counts above are a floor, not a total.
+	// OtherWorkingSet reports that a counted file is in the working set.
+	OtherWorkingSet bool `json:"other_working_set,omitempty"`
+	// Truncated reports that other actors' effects overflowed their cap, so a
+	// row may be missing and the counts above are a floor. Briefs stored before
+	// the classes were read apart set it for any overflow.
 	Truncated bool `json:"truncated,omitempty"`
+	// OwnTruncated reports that the session's own command effects overflowed
+	// their cap. Every other actor's change was still read.
+	OwnTruncated bool `json:"own_truncated,omitempty"`
 }
 
 // Empty reports whether the brief carries nothing worth injecting.
@@ -69,28 +86,47 @@ func (b SourceChangeBrief) Empty() bool {
 	return len(b.Files) == 0 && len(b.Git) == 0 && b.OtherFiles == 0 && !b.Truncated
 }
 
+// OtherMayIncludeWorkingSet reports whether the counted files could be in the
+// working set. A foreign last row says nothing about own command files counted
+// behind it, so the builder records that. Briefs stored without the record had
+// no third class, and there an unflagged last row means every working-set file
+// was itemized.
+func (b SourceChangeBrief) OtherMayIncludeWorkingSet() bool {
+	if b.OtherFiles == 0 {
+		return false
+	}
+	return b.OtherWorkingSet || (len(b.Files) > 0 && b.Files[len(b.Files)-1].WorkingSet)
+}
+
 // RenderSourceChangesBlock renders guidance/source-changes.md via Binding stem.
 // When renderer is nil, returns empty (fail closed — no Go prose builder).
+// sourceHistoryOffered is the current surface's: the record is fixed at turn
+// open, but it restates on later surfaces that may not have the tool.
 func RenderSourceChangesBlock(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
 	sessionID string,
 	brief SourceChangeBrief,
+	sourceHistoryOffered bool,
 ) string {
 	if renderer == nil || brief.Empty() {
 		return ""
 	}
+	citable := false
 	files := make([]map[string]any, 0, len(brief.Files))
 	for _, f := range brief.Files {
+		citable = citable || f.Handle != ""
 		files = append(files, map[string]any{
-			"path": f.Path, "actor": f.Actor, "detail": f.Detail,
-			"op": f.Op, "at": f.At, "effects": f.Effects,
+			"handle": f.Handle, "path": f.Path, "actor": f.Actor, "detail": f.Detail,
+			"op": f.Op, "at": f.At, "effects": f.Effects, "working_set": f.WorkingSet,
+			"during_your_command": f.DuringYourCommand,
 		})
 	}
 	git := make([]map[string]any, 0, len(brief.Git))
 	for _, g := range brief.Git {
+		citable = citable || g.Handle != ""
 		git = append(git, map[string]any{
-			"root": g.Root, "kind": g.Kind, "from_ref": g.FromRef, "to_ref": g.ToRef,
+			"handle": g.Handle, "root": g.Root, "kind": g.Kind, "from_ref": g.FromRef, "to_ref": g.ToRef,
 			"from_commit": g.FromCommit, "to_commit": g.ToCommit,
 			"detail": g.Detail, "at": g.At,
 		})
@@ -99,7 +135,10 @@ func RenderSourceChangesBlock(
 		ctx, anchor.InjectSourceChanges, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID},
 		renderer, map[string]any{
 			"files": files, "git": git, "other_files": brief.OtherFiles,
-			"other_effects": brief.OtherEffects, "truncated": brief.Truncated,
+			"other_effects": brief.OtherEffects, "truncated": brief.Truncated, "own_truncated": brief.OwnTruncated,
+			"other_may_include_working_set": brief.OtherMayIncludeWorkingSet(),
+			"source_history_offered":        sourceHistoryOffered,
+			"citable":                       citable,
 		},
 	)
 	if err != nil {

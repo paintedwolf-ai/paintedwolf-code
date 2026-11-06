@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
   vars:
     line: '- [ ] nested sub-step'
     tool: update_progress
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: PROGRESS_NESTED_LINE'

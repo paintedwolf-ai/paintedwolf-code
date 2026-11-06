@@ -150,13 +150,18 @@ func (e *Executor) validateInvocation(
 	args map[string]any,
 	tc *tools.ToolContext,
 ) *toolrejection.ToolReject {
+	if _, registered := e.definitionFor(qualifiedName); !registered {
+		if reject := tools.CommandOperationReject(qualifiedName); reject != nil {
+			return reject
+		}
+	}
 	if reject := tools.ValidateCallArguments(qualifiedName, args, e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName), *tc); reject != nil {
 		return reject
 	}
 	if reject := toolcommand.ArgvShapeReject(qualifiedName, args); reject != nil {
 		return reject
 	}
-	if qualifiedName == "command" || qualifiedName == "verify" {
+	if qualifiedName == "command" {
 		_, parseErr := commandsurface.ParsePlan(args)
 		if reject := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, commandsurface.PrimaryCommandLine(args, nil), args, toolschema.ArgFieldPaths(e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, qualifiedName)), parseErr); reject != nil {
 			return reject

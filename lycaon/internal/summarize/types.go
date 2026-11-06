@@ -48,6 +48,7 @@ type Anchor struct {
 type NextAction struct {
 	TargetKind string   `json:"-"`
 	Command    string   `json:"-"`
+	Continue   bool     `json:"-"`
 	Task       string   `json:"task,omitempty"`
 	Tool       string   `json:"tool"`              // read | grep | find | list_dir | summarize
 	Path       string   `json:"path,omitempty"`    // for read/find/list_dir

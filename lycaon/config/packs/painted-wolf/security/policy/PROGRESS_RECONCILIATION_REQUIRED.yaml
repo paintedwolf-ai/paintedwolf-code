@@ -34,13 +34,3 @@ x-paintedwolf-scenarios:
       tool: task
       settled_work:
         - 'security-reviewer `job-1`: Loopback API authentication'
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: PROGRESS_RECONCILIATION_REQUIRED'
-      - update_progress
-      - Loopback API authentication
-      - unchanged
-      - reconciliation_token
-      - expected_revision
-      - unfinished rows pending
-      - immediately

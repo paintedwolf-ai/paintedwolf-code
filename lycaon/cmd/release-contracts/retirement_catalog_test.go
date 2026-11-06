@@ -3,10 +3,12 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -156,5 +158,36 @@ func TestShippedRetirementCatalogDeclaresMarkdownNote(t *testing.T) {
 	}
 	if successors := catalog.Vocabularies["host_facts"]["paintedwolf.unparsed_json"]; len(successors.Names) != 2 || successors.Contract != nil {
 		t.Fatalf("string successors changed form: %+v", successors)
+	}
+}
+
+// AC-COMPAT-03: a name list passes the checker whenever its names exist, so only
+// the shipped entries can show these names retire to the content contract.
+func TestShippedRetirementsOfNoteNameTheContentContract(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join(configlayout.FindModuleRoot(), "..", filepath.FromSlash(retirementCatalogPath)))
+	testutil.FailErr(t, "read shipped catalog", err)
+	catalog, err := parseRetirements(raw)
+	testutil.FailErr(t, "parse shipped catalog", err)
+	for _, tc := range []struct{ kind, name string }{
+		{"tools", "surface_note"},
+		{"host_facts", "paintedwolf.surface_note_offered"},
+		{"rejection_codes", "SURFACE_NOTE_WORKER_SESSION"},
+	} {
+		got, ok := catalog.Vocabularies[tc.kind][tc.name]
+		if !ok || len(got.Names) != 0 || got.Contract == nil || got.Contract.ContentContract != "paintedwolf.markdown_note" {
+			t.Errorf("%s %s = %+v, want the markdown note contract", tc.kind, tc.name, got)
+		}
+	}
+	// The refusal a model sees reads the manifest; both must name the same tools.
+	manifest, err := nativemanifest.Load()
+	testutil.FailErr(t, "load native manifest", err)
+	want := map[string]string{}
+	for name, successors := range catalog.Vocabularies["tools"] {
+		if successors.Contract != nil {
+			want[name] = successors.Contract.ContentContract
+		}
+	}
+	if !reflect.DeepEqual(manifest.RetiredToContentContract, want) {
+		t.Fatalf("manifest %v, retirement catalog %v", manifest.RetiredToContentContract, want)
 	}
 }

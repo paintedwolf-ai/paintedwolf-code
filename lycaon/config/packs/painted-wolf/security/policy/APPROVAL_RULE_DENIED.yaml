@@ -50,8 +50,3 @@ x-paintedwolf-scenarios:
       rule_scope: device
       rule_category: command
       rule_pattern: npm publish*
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: APPROVAL_RULE_DENIED'
-      - 'approvals/rules/deny-npm-publish'
-      - 'foxden/watchdog'

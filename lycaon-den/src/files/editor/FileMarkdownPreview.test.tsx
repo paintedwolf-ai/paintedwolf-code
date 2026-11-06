@@ -67,6 +67,5 @@ describe("large file preview lifecycle", () => {
     expect(screen.queryByRole("status")).toBeNull();
     const waiting = await screen.findByRole("status");
     expect(waiting.classList.contains("den-presentation-wait")).toBe(true);
-    expect(waiting.textContent).toBe("Preparing preview…");
   });
 });

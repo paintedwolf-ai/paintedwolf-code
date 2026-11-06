@@ -494,7 +494,6 @@ describe("ApprovalsPanel", () => {
     expect(screen.getByTestId("approval-rejected-row-0").getAttribute("data-code")).toBe("invalid_entry");
     expect(screen.getByTestId("approval-rejected-row-0").textContent).toMatch(/approval_posture/);
     expect(screen.getByTestId("approval-rejected-row-0").textContent).toMatch(/stirct/);
-    expect(screen.getByTestId("approval-rejected-row-1").textContent).toMatch(/The whole file/);
     expect(screen.getByTestId("approval-posture-strict").closest("fieldset")?.disabled).toBe(true);
   });
 

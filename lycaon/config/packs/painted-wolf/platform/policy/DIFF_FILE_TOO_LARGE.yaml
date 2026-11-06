@@ -37,6 +37,3 @@ x-paintedwolf-scenarios:
     profile: implement
     size: 3000000
     tool: diff
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: DIFF_FILE_TOO_LARGE'

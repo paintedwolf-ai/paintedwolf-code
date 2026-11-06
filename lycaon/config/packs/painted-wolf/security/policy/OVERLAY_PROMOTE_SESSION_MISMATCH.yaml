@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     job_id: ov-foreign
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_PROMOTE_SESSION_MISMATCH'

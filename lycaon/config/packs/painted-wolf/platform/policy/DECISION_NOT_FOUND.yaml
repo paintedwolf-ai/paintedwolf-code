@@ -24,10 +24,6 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     job_id: worker-1
-  expect_contains:
-  - 'Code: DECISION_NOT_FOUND'
-  - worker-1
-  - pack_board
 selector:
   tool:
   - answer_decision

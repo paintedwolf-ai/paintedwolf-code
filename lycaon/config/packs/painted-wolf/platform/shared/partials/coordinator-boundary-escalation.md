@@ -5,7 +5,7 @@ Worker `request_decision` is coordinator-internal until you act. Branch on struc
 | Signal | Action |
 |--------|--------|
 | `blocker_class: decision` | `answer_decision` when you own the choice |
-| `blocker_class: checkpoint` | User approves the **surfaced child checkpoint** — narrate if needed; do not mint a parallel ask |
+| `blocker_class: checkpoint` | User approves the **surfaced child checkpoint** ; do not mint a parallel ask |
 | `blocker_class: sandbox` or host/env blocker | Confinement or host-env only. Path/`cwd` mistakes → redispatch with corrected paths. Else reissue with `capability_request.write_root`, or **`ask_user`** with actionable steps (not Allow once / Always allow / Deny) |
 
 `ask_user` uses the workflow feedback card — distinct from Approvals. Never invent a approval grant for a host precondition.

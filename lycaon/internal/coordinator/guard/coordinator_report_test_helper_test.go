@@ -1,24 +1,21 @@
 package guard_test
 
 import (
-	"encoding/json"
-	"testing"
+	"fmt"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 )
 
-func coordinatorReportJSON(t *testing.T, synthesis string, citedEvidence []guidance.CoordinatorCitedEvidence, citedURLs ...string) string {
-	t.Helper()
-	payload := map[string]any{"synthesis": synthesis}
-	if len(citedEvidence) > 0 {
-		payload["cited_evidence"] = citedEvidence
+// coordinatorReportMarkdown writes a closeout the way a model is asked to.
+func coordinatorReportMarkdown(synthesis string, citedEvidence []guidance.CoordinatorCitedEvidence, citedURLs ...string) string {
+	var b strings.Builder
+	b.WriteString(synthesis)
+	for _, cited := range citedEvidence {
+		fmt.Fprintf(&b, " [%s:%d]", cited.Path, cited.Line)
 	}
-	if len(citedURLs) > 0 {
-		payload["cited_urls"] = citedURLs
+	for _, url := range citedURLs {
+		fmt.Fprintf(&b, " <%s>", url)
 	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("marshal report: %v", err)
-	}
-	return string(b)
+	return b.String()
 }

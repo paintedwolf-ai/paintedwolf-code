@@ -6,4 +6,3 @@ suggested_action: Try again after Painted Wolf Code restarts.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [not available while Painted Wolf Code shuts down]

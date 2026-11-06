@@ -96,3 +96,39 @@ retired:
     kind: hint_code
     summary: Retired command-to-schema redirect; stream redirects and tee write natively inside command programs.
     date: 2026-10-21
+  - id: surface_note
+    kind: tool_name
+    summary: Mid-turn note tool. Updates are now assistant text with inline citations, under the paintedwolf.markdown_note content contract; wait is not its successor.
+    date: 2026-11-03
+  - id: SURFACE_NOTE_UNGROUNDED
+    kind: hint_code
+    summary: Rejected an uncited surface_note. Successor MID_TURN_NOTE_UNGROUNDED withholds uncited text and lets tools run.
+    date: 2026-11-03
+  - id: SURFACE_NOTE_HANDLE_UNGROUND
+    kind: hint_code
+    summary: Rejected an unresolved surface_note reference. Successor MID_TURN_NOTE_HANDLE_UNGROUND.
+    date: 2026-11-03
+  - id: SURFACE_NOTE_URL_ONLY_UNGROUND
+    kind: hint_code
+    summary: Rejected a surface_note citing only unobserved URLs. Successor MID_TURN_NOTE_URL_ONLY_UNGROUND.
+    date: 2026-11-03
+  - id: SURFACE_NOTE_ARTIFACT_UNKNOWN
+    kind: hint_code
+    summary: Rejected a surface_note artifact that was not presentable. Successor MID_TURN_NOTE_ARTIFACT_UNKNOWN.
+    date: 2026-11-03
+  - id: SURFACE_NOTE_INVALID_ARGS
+    kind: hint_code
+    summary: Rejected malformed surface_note arguments. Successor MID_TURN_NOTE_INVALID_SYNTAX covers malformed content protocol.
+    date: 2026-11-03
+  - id: SURFACE_NOTE_WORKER_SESSION
+    kind: hint_code
+    summary: Refused surface_note in a worker. Worker text is private and no call exists to refuse; see the paintedwolf.markdown_note content contract.
+    date: 2026-11-03
+  - id: COORDINATOR_CLOSEOUT_ENVELOPE_ONLY
+    kind: hint_code
+    summary: Refused a closeout envelope with no synthesis. Successor COORDINATOR_CLOSEOUT_NO_ANSWER fires when the narrative is empty after parsing.
+    date: 2026-11-03
+  - id: SANDBOX_REFUSAL_REPORT_SILENT
+    kind: hint_code
+    summary: Sandbox guidance reports only observed refusal facts; silent refusal-report warning is retired.
+    date: 2026-10-30

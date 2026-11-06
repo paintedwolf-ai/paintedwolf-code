@@ -14,7 +14,7 @@ import (
 // process of its own; external stages it launches keep their own supervision.
 const processKindProgram = "program"
 
-// ProgramJobSpec is one statement-trailing & job. Run receives the job's
+// ProgramJobSpec is a background statement or continued root program. Run receives its
 // context, which Stop cancels, and the registry's stdout/stderr capture.
 type ProgramJobSpec struct {
 	SessionID     string

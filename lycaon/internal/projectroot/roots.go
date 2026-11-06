@@ -20,6 +20,22 @@ type RootRef struct {
 	IsPrimary bool
 }
 
+// DisplayPath renders a ledger (root, relative path) pair in the canonical
+// display spelling: bare off the primary root, @label-qualified off any other,
+// and unqualified when the root is unknown.
+func DisplayPath(roots []RootRef, rootID, rel string) string {
+	for _, root := range roots {
+		if root.ID != rootID {
+			continue
+		}
+		if root.IsPrimary || root.Label == "" {
+			return rel
+		}
+		return "@" + root.Label + "/" + rel
+	}
+	return rel
+}
+
 // VirtualScratchLabel names the host namespace for the invoking session's
 // scratch folder. Virtual roots are addressed like attached roots, so no
 // attached root may carry their labels.

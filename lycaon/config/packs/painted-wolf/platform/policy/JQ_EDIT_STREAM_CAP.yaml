@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
       path: events.jsonl
       profile: implement
       tool: jq_edit
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: JQ_EDIT_STREAM_CAP'

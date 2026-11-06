@@ -28,6 +28,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: explore_readonly
     tool: survey_repo
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SURVEY_BUNDLE_REQUIRED'

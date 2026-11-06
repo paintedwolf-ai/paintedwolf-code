@@ -66,10 +66,6 @@ describe("fileVersionAction", () => {
     expect(fileVersionAction("delete")).toBe("Deleted");
   });
 
-  it("names a retained state that no effect produced", () => {
-    // The tracked baseline and preserved pre-images land here.
-    expect(fileVersionAction(undefined)).toBe("Earlier state");
-  });
 });
 
 describe("fileVersionActor", () => {

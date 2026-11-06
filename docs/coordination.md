@@ -215,7 +215,7 @@ Details: [Worker result contract](worker-result-contract.md).
 
 The coordinator may close the batch only after it has reconciled every terminal worker envelope, resolved pending overlays and decisions, updated progress, and satisfied current verification and grounding obligations.
 
-Synthesis uses the union of parent and child evidence but keeps provenance: a child observation does not become a parent first-hand read. The final answer is committed once, with citations the host can resolve. Missing citation metadata does not require another coordinator turn; the host preserves the answer and attaches recorded references with visible host attribution. Supplied references that fail to resolve use the bounded [citation repair path](grounding.md#evidence-grounded-prose).
+Synthesis uses the union of parent and child evidence but keeps provenance: a child observation does not become a parent first-hand read. The final answer is committed once, with citations the host can resolve. Missing citations do not require another coordinator turn; the host preserves the answer and attaches recorded references with visible host attribution. Supplied references that fail to resolve use the bounded [citation repair path](grounding.md#evidence-grounded-prose).
 
 If the model cannot produce a valid closeout after bounded repair, the host may assemble a conservative result from the ledger. Failure to format a report must not erase completed work or leave the batch permanently open.
 

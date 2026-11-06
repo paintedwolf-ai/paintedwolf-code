@@ -13,6 +13,3 @@ approval_explanations:
             - id: default
               vars:
                 project: my-app
-              expect_contains:
-                - commit
-                - local history

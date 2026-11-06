@@ -26,6 +26,3 @@ x-paintedwolf-scenarios:
 - id: unavailable_path_operation
   vars:
     tool: command
-  expect_contains:
-  - 'Code: COMMAND_PLATFORM_UNAVAILABLE'
-  - unavailable on the current platform

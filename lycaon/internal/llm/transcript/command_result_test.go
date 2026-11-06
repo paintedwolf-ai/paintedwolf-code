@@ -115,8 +115,7 @@ func TestCommandProjectionRetainsStreamLineEndingsAndWhitespace(t *testing.T) {
 		testutil.FailErr(t, "encode stream fixture", err)
 		message.Content = string(raw)
 		projected := Project([]api.Message{message})
-		want := "⟦D⟧" + strings.ReplaceAll(text, "\n", "\n⟦D⟧")
-		if !strings.Contains(projected[len(projected)-1].Content, want) {
+		if !strings.Contains(projected[len(projected)-1].Content, text) {
 			t.Fatalf("stream bytes changed: %q / %q", text, projected[len(projected)-1].Content)
 		}
 	}

@@ -19,6 +19,11 @@ func sessionCommitStaging(ctx context.Context, gm git.GitManager, tctx tools.Too
 	if gm == nil {
 		return git.CommitStaging{}, fmt.Errorf("git manager required")
 	}
+	// A commit in the next call includes the build's output though its window is
+	// still settling.
+	if windows := tctx.Source.History.Windows; windows != nil {
+		tools.AwaitClosingWindows(ctx, windows.OpenSessionWindows(tctx.Identity.ProjectID, tctx.Identity.SessionID), tools.WindowSettleBudget)
+	}
 	changed, err := gm.ChangedPaths(ctx, cwd)
 	if err != nil {
 		return git.CommitStaging{}, err
