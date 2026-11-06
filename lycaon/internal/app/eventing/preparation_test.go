@@ -19,6 +19,14 @@ func (h refusedPreparationHub) Publish(context.Context, api.EventTopic, events.P
 	return errors.New("publication refused")
 }
 
+func TestPreparationHubUnwrapReturnsWrappedHub(t *testing.T) {
+	inner := events.NewMemoryHub()
+	hub := &preparationHub{ReplayHub: inner, observer: &observedPreparation{}}
+	if hub.Unwrap() != inner {
+		t.Fatal("unwrap did not return the wrapped hub")
+	}
+}
+
 func TestPreparationObservesCommittedEventsWithoutPresence(t *testing.T) {
 	observer := &observedPreparation{}
 	hub := &preparationHub{ReplayHub: events.NewMemoryHub(), observer: observer}
