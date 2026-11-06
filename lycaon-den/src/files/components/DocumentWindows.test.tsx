@@ -4,6 +4,7 @@ import { createSignal } from "solid-js";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
 import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { DocumentWindows } from "./DocumentWindows.tsx";
+import { assertNamedControl } from "../../test/controls.ts";
 import type { DocumentReplica } from "../documents/document-replica.ts";
 import type { ItemWindowView } from "../../platform/windows/item-windows.ts";
 import type { EditorWindow } from "../../platform/windows/editor-windows.ts";
@@ -17,10 +18,9 @@ const peer = (slot: number): EditorWindow => ({ clientId: `window:file:${slot}`,
 describe("document windows", () => {
   it("lists this window and stable peer identities, focuses exactly the selected window", async () => {
     render(() => <DocumentWindows projectId="p1" peerViews={[peer(2), peer(7)]} />);
-    fireEvent.click(screen.getByRole("button", { name: "Open in 3 windows" }));
-    expect(screen.getByRole("menu", { name: "Windows with this file open" })).toBeTruthy();
-    expect(screen.getByRole<HTMLButtonElement>("menuitem", { name: "Main window, this window" }).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Focus window 7" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("document-windows"), "button"));
+    expect(assertNamedControl(screen.getByTestId<HTMLButtonElement>("document-windows-focus-0"), "menuitem").disabled).toBe(true);
+    fireEvent.click(assertNamedControl(screen.getByTestId("document-windows-focus-7"), "menuitem"));
     await waitFor(() => expect(host.focus).toHaveBeenCalledWith("file:7"));
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
   });
@@ -37,12 +37,12 @@ describe("document windows", () => {
       subscribe: (listener: () => void) => { notify = listener; return () => {}; },
     } as unknown as DocumentReplica;
     render(() => <DocumentWindows projectId="p1" replica={replica} />);
-    fireEvent.click(screen.getByRole("button", { name: "Open in 3 windows" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("document-windows"), "button"));
     setViews(views().filter(window => window.viewNumber === 9));
     notify();
-    expect(screen.queryByRole("menuitem", { name: "Focus window 2" })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Focus window 9" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open in 2 windows" })).toBeTruthy();
+    expect(screen.queryByTestId("document-windows-focus-2")).toBeNull();
+    expect(screen.getByTestId("document-windows-focus-9")).toBeTruthy();
+    expect(assertNamedControl(screen.getByTestId("document-windows"), "button").getAttribute("aria-label")).toBe("Open in 2 windows");
     setViews([]);
     notify();
     expect(screen.queryByTestId("document-windows")).toBeNull();
@@ -54,21 +54,21 @@ describe("document windows", () => {
     registerNoticePublisher(notices);
     host.focus.mockResolvedValueOnce(false);
     render(() => <DocumentWindows projectId="p1" peerViews={[peer(3)]} />);
-    fireEvent.click(screen.getByRole("button", { name: "Open in 2 windows" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Focus window 3" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("document-windows"), "button"));
+    fireEvent.click(assertNamedControl(screen.getByTestId("document-windows-focus-3"), "menuitem"));
     await waitFor(() => expect(selectProjectNoticeGroups(notices.index()).find(group => group.projectId === "p1")?.notices[0]?.message).toContain("no longer available"));
     expect(screen.queryByRole("alert")).toBeNull();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Close window 3" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("document-windows-close-3"), "menuitem"));
     await waitFor(() => expect(host.close).toHaveBeenCalledWith("file:3"));
   });
 
   it("removes stale rows and the indicator when the last peer leaves", async () => {
     const [peers, setPeers] = createSignal([peer(2), peer(9)]);
     render(() => <DocumentWindows projectId="p1" peerViews={peers()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Open in 3 windows" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("document-windows"), "button"));
     setPeers([peer(9)]);
-    expect(screen.queryByRole("menuitem", { name: "Focus window 2" })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: "Focus window 9" })).toBeTruthy();
+    expect(screen.queryByTestId("document-windows-focus-2")).toBeNull();
+    expect(screen.getByTestId("document-windows-focus-9")).toBeTruthy();
     setPeers([]);
     expect(screen.queryByTestId("document-windows")).toBeNull();
     expect(screen.queryByRole("menu")).toBeNull();

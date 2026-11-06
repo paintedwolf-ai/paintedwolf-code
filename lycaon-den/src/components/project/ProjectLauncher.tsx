@@ -97,6 +97,7 @@ export function ProjectLauncher(props: ProjectLauncherProps) {
               autofocus
               class="den-launcher__input"
               aria-label="Search projects"
+              data-testid="project-launcher-search"
               value={query()}
               placeholder="Search projects…"
               onInput={(e) => {

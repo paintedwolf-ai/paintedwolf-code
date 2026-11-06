@@ -126,7 +126,7 @@ export function SkillCard(props: Props) {
             <Show when={!resource() && skillResourceListing(activated)} keyed>
               {(listing) => (
                 <div class="den-tool-part-card-section">
-                  <p class="den-tool-part-card-section-label">Files</p>
+                  <p data-testid="files" class="den-tool-part-card-section-label">Files</p>
                   <Show when={listing.files.length > 0}>
                     <ToolContentLink pane="skill-files" label="Skill files" projectId={props.projectId}
                       content={{ kind: "inline", text: listing.files.join("\n") }} />

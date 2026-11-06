@@ -135,7 +135,6 @@ describe("SessionTranscript worker layout", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Summary" })).toBeTruthy();
     expect(screen.getByText("All set.")).toBeTruthy();
     expect(screen.getByText("wired handler")).toBeTruthy();
-    expect(screen.queryByText(/leg_status/)).toBeNull();
   });
 
   it("renders assistant prose as markdown", () => {

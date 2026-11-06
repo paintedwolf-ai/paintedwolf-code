@@ -36,7 +36,7 @@ function CommandSource(props: CallProps & { text: string; copy: (text: string) =
   return <div class="den-command-activity-source">
 
     <div class="den-command-activity-paging">
-      <button type="button" class="den-chat-content-link" onClick={() => props.copy(props.text)}>Copy command</button>
+      <button data-testid="copy-command" type="button" class="den-chat-content-link" onClick={() => props.copy(props.text)}>Copy command</button>
       <ToolContentLink pane={`activity:${props.activity.fact.id}:original:${props.call.id}`} label="Full original command"
         messageId={props.call.argsMessageId ?? props.call.assistantMessageId} toolCallId={props.call.toolCallId}
         content={{ kind: "inline", text: props.text, redaction: props.call.argsRedaction?.meta }} projectId={props.projectId} />
@@ -64,7 +64,7 @@ export function CommandActivitySources(props: {
     <Show when={props.offset > 0 || props.calls.length < props.activity.calls.length}>
       <div class="den-command-activity-paging" role="group" aria-label="Activity calls">
         <button type="button" class="den-chat-content-link" disabled={props.offset === 0} onClick={props.onPrevious}>Previous calls</button>
-        <span>{props.offset + 1}–{props.offset + props.calls.length} of {props.activity.calls.length}</span>
+        <span data-testid="command-activity-calls-range">{props.offset + 1}–{props.offset + props.calls.length} of {props.activity.calls.length}</span>
         <button type="button" class="den-chat-content-link" disabled={props.offset + props.calls.length >= props.activity.calls.length} onClick={props.onNext}>Next calls</button>
       </div>
     </Show>

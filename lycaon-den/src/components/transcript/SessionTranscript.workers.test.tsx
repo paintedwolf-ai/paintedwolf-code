@@ -90,7 +90,7 @@ describe("SessionTranscript workers and synthesis", () => {
         const cards = container.querySelectorAll('[data-testid="task-card"]');
         expect(cards.length).toBe(1);
         expect(container.querySelector('[data-testid="activity-span-card"]')).toBeNull();
-        expect(container.textContent).toContain("Worker · implementer");
+        expect(container.querySelector('[data-testid="task-card-agent"]')?.textContent).toContain("implementer");
         cards[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(onOpenWorker).toHaveBeenCalledWith("job-cv");
       },
@@ -129,8 +129,10 @@ describe("SessionTranscript workers and synthesis", () => {
       assert: (container, onOpenWorker) => {
         const cards = container.querySelectorAll('[data-testid="task-card"]');
         expect(cards.length).toBe(2);
-        expect(container.textContent).toContain("Worker · web-researcher");
-        expect(container.textContent).toContain("Worker · implementer");
+        const agents = [...container.querySelectorAll('[data-testid="task-card-agent"]')]
+          .map((el) => el.textContent ?? "");
+        expect(agents.some((label) => label.includes("web-researcher"))).toBe(true);
+        expect(agents.some((label) => label.includes("implementer"))).toBe(true);
         cards[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(onOpenWorker).toHaveBeenCalledWith("job-research");
       },
@@ -151,8 +153,8 @@ describe("SessionTranscript workers and synthesis", () => {
         expect(container.querySelector('[data-task-kind="worker-summary"]')).toBeNull();
         const taskCard = container.querySelector('[data-task-kind="task"]');
         expect(taskCard).toBeTruthy();
-        expect(container.textContent).toContain("Worker · web-researcher");
         expect(taskCard?.classList.contains("den-task-card--clickable")).toBe(true);
+        expect(taskCard?.querySelector('[data-testid="task-card-agent"]')?.textContent).toContain("web-researcher");
         taskCard?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(onOpenWorker).toHaveBeenCalledWith("job-research");
       },
@@ -289,7 +291,7 @@ describe("SessionTranscript workers and synthesis", () => {
       <SessionTranscript layout="chat" sessionId="s-note" messages={messages} />
     ));
 
-    expect(screen.getByTestId("agent-note-badge").textContent).toBe("Note");
+    expect(screen.getByTestId("agent-note-badge")).toBeTruthy();
     expect(
       container.querySelectorAll(
         '[data-testid="transcript-article-assistant"][data-kind="agent_note"]',

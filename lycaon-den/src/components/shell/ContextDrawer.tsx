@@ -22,6 +22,7 @@ type Props = {
   closeLabel: string;
   onClose: () => void;
   scrollTestId?: string;
+  closeTestId?: string;
   children: JSX.Element;
 };
 
@@ -45,6 +46,7 @@ export function ContextDrawer(props: Props) {
         <ChromeCloseButton
           class="den-context-drawer-close den-inset-icon-btn"
           label={props.closeLabel}
+          testId={props.closeTestId}
           onClick={() => props.onClose()}
         />
       </header>

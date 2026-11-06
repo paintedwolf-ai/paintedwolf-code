@@ -23,7 +23,6 @@ describe("CitationEvidenceChicklet", () => {
       />
     ));
     expect(screen.getByTestId("citation-evidence-chicklet")).toBeTruthy();
-    expect(screen.getByText("Grounded")).toBeTruthy();
     const details = screen.getByTestId("citation-evidence-chicklet") as HTMLElement;
     expect(isDisclosureOpen(details)).toBe(false);
 

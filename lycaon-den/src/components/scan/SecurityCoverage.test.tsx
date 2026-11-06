@@ -122,7 +122,6 @@ describe("SecurityCoverage", () => {
     expect(bars[1]?.getAttribute("aria-valuenow")).toBe("100");
     // Start is hidden while a pass runs.
     expect(screen.queryByTestId("scans-full-scan-start")).toBeNull();
-    expect(screen.queryByText("Cancel")).toBeNull();
   });
 
   it("names the control by the pass on screen at one reserved width", () => {

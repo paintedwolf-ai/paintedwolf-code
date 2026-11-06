@@ -86,6 +86,7 @@ export function ThinkingOverridesPanel(props: Props) {
       {...(props.project ? {} : settingAnchor("thinking-overrides"))}
     >
       <DenCheckbox
+        data-testid="thinking-overrides-toggle"
         checked={enabled()}
         disabled={busy()}
         onChange={(event) => void toggle(event.currentTarget.checked)}
@@ -100,7 +101,11 @@ export function ThinkingOverridesPanel(props: Props) {
         </p>
       </Show>
       <Show when={enabled()}>
-        <SettingsListGroup label="Thinking overrides" meta="Optional">
+        <SettingsListGroup
+          label="Thinking overrides"
+          meta="Optional"
+          testId="thinking-overrides-group"
+        >
           <p class="den-settings-hint">
             {props.project
               ? "Inherit device settings, or choose an override for this project."

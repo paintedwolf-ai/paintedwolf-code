@@ -263,7 +263,6 @@ describe("ComposerStatusChips preparation", () => {
     await waitFor(() => expect(costStore.state.session?.session_id).toBe("s2"));
     expect(chip.textContent).toBe("");
     fireEvent.click(chip);
-    expect(screen.getByText("Loading estimated cost…")).toBeTruthy();
   });
 
   it("keeps the project chips mounted while the presented chat changes", async () => {

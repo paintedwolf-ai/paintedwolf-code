@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import {
   setupFilesEditorTests,
 } from "./files-editor-test-harness.ts";
@@ -203,7 +204,7 @@ describe("FilesEditor", () => {
     );
     expect(screen.getByTestId("files-editor-mode").getAttribute("data-editor-identity"))
       .toBe("read-only-file");
-    const action = screen.getByRole("button", { name: "Make editable" });
+    const action = assertNamedControl(screen.getByTestId("files-editor-make-editable"), "button");
     expect(action.textContent).toBe("");
     fireEvent.click(action);
     expect(onMakeEditable).toHaveBeenCalledOnce();
@@ -221,7 +222,7 @@ describe("FilesEditor", () => {
     ));
     const actions = document.querySelectorAll("[data-state-action]");
     expect(actions).toHaveLength(1);
-    const action = screen.getByRole("button", { name: "Open current file" });
+    const action = assertNamedControl(screen.getByTestId("files-editor-open-current"), "button");
     expect(action.textContent).toBe("");
     fireEvent.click(action);
     expect(onOpenCurrent).toHaveBeenCalledOnce();
@@ -251,7 +252,7 @@ describe("FilesEditor", () => {
     expect(notices()).toEqual([]);
     setOpening({ status: "error", message: "Unable to read the local checkpoint." });
     expect(notices()).toMatchObject([{ code: "files_editing_unavailable", message: "Unable to read the local checkpoint." }]);
-    fireEvent.click(screen.getByRole("button", { name: "Retry editing" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("files-editor-retry-editing"), "button"));
     expect(retry).toHaveBeenCalledOnce();
   });
 

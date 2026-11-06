@@ -366,7 +366,7 @@ export function McpProviderDetailCard(props: McpProviderDetailCardProps) {
                 )
               }
             >
-              <p class="den-settings-hint">{MCP_SETTINGS_COPY.toolsEmpty}</p>
+              <p class="den-settings-hint" data-testid={`mcp-tools-empty-${provider().id}`}>{MCP_SETTINGS_COPY.toolsEmpty}</p>
             </Show>
             <Show
               when={

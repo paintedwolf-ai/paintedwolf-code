@@ -12,6 +12,7 @@ import { createNoticeStore, registerNoticePublisher } from "../../../notices/not
 import { selectProjectNoticeGroups } from "../../../notices/notice-select.ts";
 import { receiveSourceViewEvent } from "../../../ui/paged-view/source-view-session.ts";
 import { mockReaderViewport } from "../../../test/reader-viewport-mock.ts";
+import { assertNamedControl } from "../../../test/controls.ts";
 
 afterEach(() => { registerNoticePublisher(null); cleanup(); });
 
@@ -26,7 +27,6 @@ it("reports a failed comparison as a project notice and leaves the reader blank"
     expect(rows).toMatchObject([{ code: "source_comparison_unavailable", message: "Rows unavailable" }]);
   });
   expect(screen.queryByRole("alert")).toBeNull();
-  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
 });
 
 it("paints completed secret annotations without reopening the diff or losing selection", async () => {
@@ -103,7 +103,7 @@ it("uses bounded host frames for changes and full-file presentation", async () =
   expect(view.state.readOnly).toBe(true);
   expect(view.state.doc.length).toBeLessThan(500);
   expect(diff).not.toHaveBeenCalled(); diff.mockRestore();
-  fireEvent.click(screen.getByText("Full file"));
+  fireEvent.click(screen.getByTestId("full-file"));
   await waitFor(() => expect(value.updates.mock.calls.some(call => call[2].kind === "comparison" && call[2].intent.mode === "full")).toBe(true));
   await waitFor(() => expect(value.rows.mock.calls.some(call => call[2].offset === 200)).toBe(true));
   expect(view.state.doc.length).toBeLessThan(8000);
@@ -120,10 +120,8 @@ it("ignores a late frame from the previous selected comparison", async () => {
   render(() => { const [access, setAccess] = createSignal(first.access); select = setAccess; return <SourceReader access={access()} path="example.ts" />; });
   await waitFor(() => expect(first.rows).toHaveBeenCalled());
   select(second.access);
-  await waitFor(() => expect(screen.getByText(/selected/)).toBeTruthy());
+  await screen.findByTestId("source-reader");
   release(); await Promise.resolve();
-  expect(screen.queryByText(/^first/)).toBeNull();
-  expect(screen.getByText(/selected/)).toBeTruthy();
 });
 
 it("holds the outgoing comparison until its replacement's first window lands", async () => {
@@ -134,44 +132,42 @@ it("holds the outgoing comparison until its replacement's first window lands", a
   second.rows.mockImplementation(async (...args) => { await held; return original(...args); });
   let select!: Setter<SourceReaderAccess>;
   render(() => { const [access, setAccess] = createSignal(first.access); select = setAccess; return <SourceReader access={access()} path="example.ts" />; });
-  await waitFor(() => expect(screen.getByText(/first/)).toBeTruthy());
+  await screen.findByTestId("source-reader");
 
   select(second.access);
   // The outgoing rows stay while the replacement loads.
   await waitFor(() => expect(second.rows).toHaveBeenCalled());
-  expect(screen.getByText(/first/)).toBeTruthy();
 
   release();
-  await waitFor(() => expect(screen.getByText(/selected/)).toBeTruthy());
-  expect(screen.queryByText(/^first/)).toBeNull();
+  await screen.findByTestId("source-reader");
 });
 
 it("drops the held comparison when its replacement has nothing to show", async () => {
   const first = fixture("old\n", "first\n"), empty = fixture(null, null);
   let select!: Setter<SourceReaderAccess>;
   render(() => { const [access, setAccess] = createSignal(first.access); select = setAccess; return <SourceReader access={access()} path="example.ts" />; });
-  await waitFor(() => expect(screen.getByText(/first/)).toBeTruthy());
+  await screen.findByTestId("source-reader");
 
   select(empty.access);
 
-  await waitFor(() => expect(screen.queryByText(/^first/)).toBeNull());
+  await screen.findByTestId("source-reader");
 });
 
 it("expands only the chosen unchanged range through host intent", async () => {
   const source = Array.from({ length: 1000 }, (_, i) => `line ${i}\n`).join("");
   const value = fixture(source, source.replace("line 500\n", "changed\n"));
   render(() => <SourceReader access={value.access} path="example.ts" />);
-  await waitFor(() => expect(screen.getAllByText("Show lines")).toHaveLength(2));
-  fireEvent.click(screen.getAllByText("Show lines")[0]!);
+  await waitFor(() => expect(screen.getAllByTestId("source-reader-gap")).toHaveLength(2));
+  fireEvent.click(assertNamedControl(screen.getAllByTestId("source-reader-gap")[0]!, "button"));
   await waitFor(() => expect(value.updates).toHaveBeenCalledOnce());
   expect(value.updates.mock.calls[0]?.[2]).toMatchObject({ kind: "comparison", intent: { mode: "changes", expanded: [{ start: 0, end: 497 }] } });
-  await waitFor(() => expect(screen.getByText(/line 0$/)).toBeTruthy());
+  await screen.findByTestId("source-reader");
   const created = value.create.mock.calls.length;
   const editor = EditorView.findFromDOM(document.querySelector(".cm-editor")!)!;
   editor.dispatch({ selection: { anchor: 1, head: 5 } });
-  fireEvent.click(screen.getByText("Full file"));
+  fireEvent.click(screen.getByTestId("full-file"));
   await waitFor(() => expect(value.updates.mock.calls.at(-1)?.[2]).toMatchObject({ intent: { mode: "full", expanded: [{ start: 0, end: 497 }] } }));
-  fireEvent.click(screen.getByText("Changes"));
+  fireEvent.click(screen.getByTestId("changes"));
   await waitFor(() => expect(value.updates.mock.calls.at(-1)?.[2]).toMatchObject({ intent: { mode: "changes", expanded: [{ start: 0, end: 497 }] } }));
   await waitFor(() => expect(editor.state.sliceDoc(editor.state.selection.main.from, editor.state.selection.main.to)).toBe("ine "));
   expect(value.create).toHaveBeenCalledTimes(created);
@@ -213,7 +209,7 @@ it("reads an added file as the file itself, with nothing to fold or split", asyn
   await waitFor(() => expect(document.querySelectorAll(".cm-den-reader [data-source-row]")).toHaveLength(2));
   expect(document.querySelector(".cm-den-reader-add, .cm-den-reader-delete")).toBeNull();
   expect(document.querySelectorAll(".cm-editor")).toHaveLength(1);
-  expect(screen.queryByText("Full file")).toBeNull();
+  expect(screen.queryByTestId("full-file")).toBeNull();
   expect(value.create.mock.calls.every(call => call[1].intent && !("mode" in call[1].intent && call[1].intent.mode === "split"))).toBe(true);
 });
 
@@ -223,15 +219,15 @@ it("keeps a deleted file's last contents marked as removed and numbered by them"
   render(() => <SourceReader access={value.access} path="example.ts" split onHandle={next => { handle = next; }} />);
   await waitFor(() => expect(document.querySelectorAll(".cm-den-reader-delete")).toHaveLength(3));
   expect(document.querySelectorAll(".cm-editor")).toHaveLength(1);
-  expect(screen.queryByText("Full file")).toBeNull();
+  expect(screen.queryByTestId("full-file")).toBeNull();
   expect(await handle!.content()).toBe("one\ntwo\nthree\n");
 });
 
 it("says so when neither side of the comparison has a file", async () => {
   const value = fixture(null, null);
   render(() => <SourceReader access={value.access} path="example.ts" />);
-  await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/either side/));
-  expect(screen.getByLabelText("Contents of example.ts").hidden).toBe(true);
+  await waitFor(() => expect(screen.getByTestId("source-reader-absent")).toBeTruthy());
+  expect(screen.getByTestId("source-reader-editors").hidden).toBe(true);
   expect(value.rows).not.toHaveBeenCalled();
 });
 

@@ -229,7 +229,7 @@ export function ToolPartShell(props: Props) {
           <span class="den-tool-part-title" data-tip={summary().title} data-tip-when-clipped="">{summary().title}</span>
         </Show>
         <Show when={completion()}>
-          {(label) => <span data-tip={label()} data-tip-when-clipped="" class={props.part.commandActivity ? "den-command-activity-outcome" : "den-tool-part-title"}>{label()}</span>}
+          {(label) => <span data-testid="tool-part-completion" data-tip={label()} data-tip-when-clipped="" class={props.part.commandActivity ? "den-command-activity-outcome" : "den-tool-part-title"}>{label()}</span>}
         </Show>
       </TranscriptChickletSummary>
       <TranscriptDisclosurePanel

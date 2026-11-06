@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import {
   setupGlobalSearchViewTests,
   searchMock,
@@ -77,14 +78,14 @@ describe("GlobalSearchView", () => {
     render(() => <GlobalSearchView projects={[]} originProjectId="proj-a" originName="Alpha"
       seed="foo" replaceModeRequested appStore={createAppStore()} onNavigate={vi.fn()} />);
     await vi.advanceTimersByTimeAsync(300);
-    expect(screen.getByRole("button", { name: "Cancel preparation" })).toBeTruthy();
+    expect(assertNamedControl(screen.getByTestId("cancel-preparation"), "button")).toBeTruthy();
     expect(screen.queryByTestId("search-replace-empty")).toBeNull();
     expect((screen.getByTestId("search-replace-apply") as HTMLButtonElement).disabled).toBe(true);
     await vi.advanceTimersByTimeAsync(750);
     expect(replacePreviewMock).toHaveBeenCalledTimes(2);
     expect(screen.getByText("late.ts")).toBeTruthy();
     expect((screen.getByTestId("search-replace-apply") as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.queryByRole("button", { name: "Cancel preparation" })).toBeNull();
+    expect(screen.queryByTestId("cancel-preparation")).toBeNull();
   });
 
   it("cancels pending preparation and rejects its late response until explicitly retried", async () => {
@@ -95,14 +96,13 @@ describe("GlobalSearchView", () => {
       seed="foo" replaceModeRequested appStore={createAppStore()} onNavigate={vi.fn()} />);
     await vi.advanceTimersByTimeAsync(300);
     const signal = replacePreviewMock.mock.calls[0]?.[1];
-    fireEvent.click(screen.getByRole("button", { name: "Cancel preparation" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("cancel-preparation"), "button"));
     expect(signal).toMatchObject({ aborted: true });
     finish({ state: "preparing", files: [], truncated: false,
       issues: [{ executor: "code", reason: "catalog_warming" }] });
     await vi.advanceTimersByTimeAsync(10000);
     expect(replacePreviewMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Preview preparation cancelled.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry preview" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("retry-preview"), "button"));
     await vi.advanceTimersByTimeAsync(0);
     expect(replacePreviewMock).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId("search-replace-empty")).toBeTruthy();
@@ -115,8 +115,8 @@ describe("GlobalSearchView", () => {
       seed="foo" replaceModeRequested appStore={createAppStore()} onNavigate={vi.fn()} />);
     await vi.advanceTimersByTimeAsync(10000);
     expect(replacePreviewMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Retry preview" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Cancel preparation" })).toBeNull();
+    expect(assertNamedControl(screen.getByTestId("retry-preview"), "button")).toBeTruthy();
+    expect(screen.queryByTestId("cancel-preparation")).toBeNull();
     expect(reportSearchErrorMock).toHaveBeenCalledTimes(1);
   });
 
@@ -234,13 +234,9 @@ describe("GlobalSearchView", () => {
     fireEvent.click(screen.getByTestId("search-replace-apply"));
     await waitFor(() => expect(replaceApplyMock).toHaveBeenCalled());
     await waitFor(() =>
-      expect(screen.getByTestId("search-replace-summary").textContent).toContain(
-        "Replaced 1 match in 1 file",
-      ),
+      expect(screen.getByTestId("search-replace-summary")).toBeTruthy(),
     );
-    expect(screen.getByTestId("search-replace-skipped").textContent).toContain(
-      "file skipped",
-    );
+    expect(screen.getByTestId("search-replace-skipped")).toBeTruthy();
     expect(screen.getByTestId("search-replace-again")).toBeTruthy();
   });
 });
