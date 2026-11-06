@@ -28,6 +28,19 @@ func main() {
 	if dir == "" {
 		dir = oar.FindCorpusDir("")
 	}
+	// Structural invariant: every declared host fact has a reference outside
+	// the declaration and projection plumbing.
+	unreferenced, err := oar.AuditDeclarationReferences()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "oar-conformance: declaration reference audit: %v\n", err)
+		os.Exit(2)
+	}
+	for _, name := range unreferenced {
+		fmt.Fprintf(os.Stderr, "oar-conformance: declared fact %q has no reference outside declaration plumbing\n", name)
+	}
+	if len(unreferenced) != 0 {
+		os.Exit(1)
+	}
 	outcomes, err := oar.RunCorpusDir(dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "oar-conformance: %v\n", err)
