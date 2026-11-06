@@ -113,7 +113,7 @@ func volumeListing(t *testing.T, root string) map[string]bool {
 }
 
 func TestSecondVolumeSourceClonesWithZeroCopiedBytes(t *testing.T) {
-	volume, ran := testvolume.New(t, testvolume.Clonable)
+	volume, ran := testvolume.Shared(t, testvolume.Clonable)
 	if ran {
 		return
 	}
@@ -223,7 +223,7 @@ func TestHomeAttachmentHoldingTheStateFolderClonesTwiceWithoutGrowth(t *testing.
 }
 
 func TestHomeOnSecondVolumePlacesAtVolumeRoot(t *testing.T) {
-	volume, ran := testvolume.New(t, testvolume.Clonable)
+	volume, ran := testvolume.Shared(t, testvolume.Clonable)
 	if ran {
 		return
 	}
@@ -245,7 +245,7 @@ func TestHomeOnSecondVolumePlacesAtVolumeRoot(t *testing.T) {
 }
 
 func TestRootsSpanningVolumesAreNotClonable(t *testing.T) {
-	volume, ran := testvolume.New(t, testvolume.NoClone)
+	volume, ran := testvolume.Shared(t, testvolume.NoClone)
 	if ran {
 		return
 	}
@@ -296,7 +296,7 @@ func TestUnwritableVolumeRootIsNotClonableAndWritesNothing(t *testing.T) {
 }
 
 func TestSourceThatCannotCloneDeclaresCostBeforeCopying(t *testing.T) {
-	volume, ran := testvolume.New(t, testvolume.NoClone)
+	volume, ran := testvolume.Shared(t, testvolume.NoClone)
 	if ran {
 		return
 	}
@@ -345,7 +345,7 @@ func TestSourceThatCannotCloneDeclaresCostBeforeCopying(t *testing.T) {
 }
 
 func TestDiskThatCannotHoldTheCopyRefusesWithTheNumbers(t *testing.T) {
-	volume, ran := testvolume.New(t, testvolume.NoClone)
+	volume, ran := testvolume.Shared(t, testvolume.NoClone)
 	if ran {
 		return
 	}
@@ -371,7 +371,7 @@ func TestDiskThatCannotHoldTheCopyRefusesWithTheNumbers(t *testing.T) {
 }
 
 func TestCancelledCopyReleasesOnlyItsOwnPreparation(t *testing.T) {
-	volume, ran := testvolume.New(t, testvolume.NoClone)
+	volume, ran := testvolume.Shared(t, testvolume.NoClone)
 	if ran {
 		return
 	}
@@ -483,7 +483,7 @@ func TestEjectedVolumeKeepsRecordsAndTheWorkerRecoversOnRemount(t *testing.T) {
 }
 
 func TestPlacedBranchIsFoundByRetentionAndLifecycle(t *testing.T) {
-	volume, ran := testvolume.New(t, testvolume.Movable)
+	volume, ran := testvolume.Shared(t, testvolume.Movable)
 	if ran {
 		return
 	}
@@ -534,7 +534,7 @@ func TestPlacedBranchIsFoundByRetentionAndLifecycle(t *testing.T) {
 }
 
 func TestStateFolderTreeWinsOverAStaleRecordAfterRestore(t *testing.T) {
-	volume, ran := testvolume.New(t, testvolume.Movable)
+	volume, ran := testvolume.Shared(t, testvolume.Movable)
 	if ran {
 		return
 	}
