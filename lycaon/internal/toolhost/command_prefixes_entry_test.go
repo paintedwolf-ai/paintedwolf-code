@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -277,10 +279,15 @@ func TestCommandEntryNohupBackgroundJob(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(f.Dir, "nohup.out")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("nohup.out was written: %v", statErr)
 	}
-	// Without nohup the same SIGHUP ends the script.
+	// Without nohup the same SIGHUP ends the script, unless this test inherited
+	// SIGHUP already ignored, as under nohup and some agent shells.
+	want := "status 129\n"
+	if signal.Ignored(syscall.SIGHUP) {
+		want = "listening\nbye\nstatus 0\n"
+	}
 	raw, err = f.Call(t, t.Context(), `./server; echo "status $?"`)
 	testutil.FailErr(t, "run without nohup", err)
-	if got := decodeProgramOutcome(t, raw); got.Stdout != "status 129\n" {
+	if got := decodeProgramOutcome(t, raw); got.Stdout != want {
 		t.Fatalf("plain run outcome: %+v", got)
 	}
 }

@@ -4,8 +4,10 @@ package confine_test
 
 import (
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -15,7 +17,7 @@ import (
 // The helper sets the requested limits and an ignored SIGHUP in itself just
 // before it becomes the target, so the target starts with them.
 func TestHelperAppliesProcessAttributesToTheTarget(t *testing.T) {
-	nofile, err := confine.ReadResourceLimit("nofile")
+	nofile, err := confine.ChildResourceLimit(t.Context(), "nofile")
 	testutil.FailErr(t, "read descriptor limit", err)
 	if nofile.Soft > nofile.Hard || nofile.Soft < 64 {
 		t.Fatalf("descriptor limit %+v", nofile)
@@ -27,13 +29,19 @@ func TestHelperAppliesProcessAttributesToTheTarget(t *testing.T) {
 	self, err := os.Executable()
 	testutil.FailErr(t, "helper binary", err)
 	probe := []string{"-c", `ulimit -n; kill -HUP $$; echo survived`}
+	// Without IgnoreHangup the target keeps the disposition this test inherited,
+	// which is already ignored under nohup and some agent shells.
+	unprotected := "48\n"
+	if signal.Ignored(syscall.SIGHUP) {
+		unprotected = "48\nsurvived\n"
+	}
 	for _, tc := range []struct {
 		name       string
 		attributes confine.ProcessAttributes
 		want       string
 	}{
 		{"limit and ignored hangup", confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 64, Hard: nofile.Hard}}, IgnoreHangup: true}, "64\nsurvived\n"},
-		{"limit only", confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 48, Hard: nofile.Hard}}}, "48\n"},
+		{"limit only", confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 48, Hard: nofile.Hard}}}, unprotected},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			boundary := *c
@@ -52,13 +60,13 @@ func TestHelperAppliesProcessAttributesToTheTarget(t *testing.T) {
 	}
 }
 
-func TestReadResourceLimitRefusesUnknownResources(t *testing.T) {
+func TestChildResourceLimitRefusesUnknownResources(t *testing.T) {
 	for resource := range map[string]bool{"core": true, "fsize": true, "stack": true, "cpu": true, "nproc": true, "as": true} {
-		if limit, err := confine.ReadResourceLimit(resource); err != nil || limit.Soft > limit.Hard {
+		if limit, err := confine.ChildResourceLimit(t.Context(), resource); err != nil || limit.Soft > limit.Hard {
 			t.Errorf("%s: %+v, %v", resource, limit, err)
 		}
 	}
-	if _, err := confine.ReadResourceLimit("rss"); err == nil {
+	if _, err := confine.ChildResourceLimit(t.Context(), "rss"); err == nil {
 		t.Fatal("read an unsupported resource")
 	}
 }
