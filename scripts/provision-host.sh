@@ -56,6 +56,18 @@ else
 	echo "==> Homebrew formulae already installed"
 fi
 
+# -version also fails when Xcode is absent or its license is unaccepted.
+if xcodebuild -version >/dev/null 2>&1; then
+	if xcrun -f metal >/dev/null 2>&1; then
+		echo "==> Metal toolchain already installed"
+	else
+		echo "==> Downloading the Xcode Metal toolchain (needed by the decide build)"
+		xcodebuild -downloadComponent MetalToolchain
+	fi
+else
+	echo "==> xcodebuild unavailable; skipping the Metal toolchain (install Xcode, then re-run this script)"
+fi
+
 echo "==> Preparing GitHub access"
 mkdir -p "${HOME}/.ssh"
 chmod 700 "${HOME}/.ssh"
