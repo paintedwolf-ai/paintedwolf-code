@@ -81,7 +81,7 @@ func (e *AssemblyEngine) BuildKnownPrefix(ctx context.Context, sess *api.Session
 		messages = deps.EnrichHistory(sess.ID, messages)
 	}
 	if coordinator {
-		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, turn, messages)
+		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
 	}
 	// Pending scan guidance is delivered only by a real turn.
 	out = llm.AppendHostSecretRedactionNotice(append(out, messages...))

@@ -31,7 +31,7 @@ func feedOnlyRegistry(t *testing.T, feedWindow int, localModels string) (*Regist
 	catalog := mustCatalogCloneShipToLocal(t, "providers:\n  - id: hosted\n    kind: openai\n    base_url: "+server.URL+"/v1\n    api_key_env: \"\"\n    models: "+localModels+"\n"+MinimalShipHTTPRetryYAML)
 	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "set key", creds.Set("hosted", "test-key"))
-	reg, err := NewRegistry(t.Context(), catalog, creds)
+	reg, err := NewRegistry(t.Context(), catalog, creds, nil)
 	testutil.FailErr(t, "build registry", err)
 	t.Cleanup(func() { testutil.FailErr(t, "close discovery", reg.discovery.Close(context.Background())) })
 	raw, err := json.Marshal(map[string]any{"openai": map[string]any{"id": "openai", "models": map[string]any{feedOnlyModel: map[string]any{
@@ -109,7 +109,7 @@ func TestFeedOnlyWindowReachesLiveBudgetAndSummaryBudget(t *testing.T) {
 	testutil.FailErr(t, "policy store", err)
 	testutil.FailErr(t, "put policy", store.PutGlobal(policy))
 	summarizer := &RegistrySummarizer{Registry: reg, Policy: store}
-	got := summarizer.SummaryBudget()
+	got := summarizer.SummaryBudget(t.Context())
 	if want := (compaction.SummaryBudget{Input: 22016, Output: 1536}); got != want {
 		t.Fatalf("summary budget = %+v, want %+v", got, want)
 	}

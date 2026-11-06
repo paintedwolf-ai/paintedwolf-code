@@ -60,13 +60,13 @@ func (m *Service) project(ctx context.Context, sess *api.Session, refresh bool) 
 	} else if ok {
 		return restored, nil
 	}
-	return m.loadViewHistory(ctx, sess, view, cfg)
+	return m.loadViewHistory(ctx, sess, view, cfg, refresh)
 }
 
 // loadViewHistory reads the canonical rows a valid view does not replace, plus
 // the canonical copies of its retained assistant rows for replay fields. Those
 // copies sit before the opener: the rows after it are the contiguous working tail.
-func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *store.CompactionView, cfg compaction.CompactionConfig) ([]api.Message, error) {
+func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *store.CompactionView, cfg compaction.CompactionConfig, refresh bool) ([]api.Message, error) {
 	covered := view.CoveredThroughOrd
 	bounds := m.canonicalTailBounds(cfg)
 	tail, truncated, err := m.readCanonicalTail(ctx, sess.ID, bounds, viewTailStop(covered, activeTurnAllocation(cfg)))
