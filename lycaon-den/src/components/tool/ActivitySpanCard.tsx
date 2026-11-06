@@ -17,12 +17,14 @@ import {
   ActivitySpanAccordionProvider,
 } from "../../chat/tool/activity-span-accordion.ts";
 import {
-  formatActivitySpanComposition,
-  activitySpanComposition,
   activitySpanFailureCount,
   activitySpanHint,
   activitySpanStatus,
 } from "../../chat/tool/activity-span-model.ts";
+import {
+  commandActivityProgression,
+  formatCommandActivityProgression,
+} from "../../chat/tool/command-activity-model.ts";
 import type { ActivitySpanEntry } from "../../chat/transcript/projection/transcript-item-model.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import { bindFindRevealHost } from "../../find/use-findable-view.ts";
@@ -214,11 +216,14 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
   };
 
   const summary = createMemo(() => {
-    const composition = activitySpanComposition(entries());
-    const hint = activitySpanHint(entries(), props.label, props.sessionId);
+    const progression = commandActivityProgression(entries());
+    const path = progression.groups.join(" → ");
+    const directory = commandActivityDirectory(entries());
     return {
-      composition,
-      detail: commandActivityDirectory(entries()) || hint || formatActivitySpanComposition(composition),
+      progression,
+      detail: progression.groups.length > 1
+        ? directory ? `${directory} · ${path}` : path
+        : directory || activitySpanHint(entries(), props.label, props.sessionId) || path,
     };
   });
   const singletonToolKey = () => {
@@ -275,16 +280,16 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
       <TranscriptDisclosurePanel disclosure={disclosure} class="den-activity-span-items">
         <span
           class="den-activity-span-composition"
-          aria-label={formatActivitySpanComposition(summary().composition)}
+          aria-label={formatCommandActivityProgression(summary().progression)}
         >
-          <Index each={summary().composition}>
-            {(part) => (
+          <Index each={summary().progression.chips}>
+            {(chip) => (
               <span class="den-activity-span-cmd">
                 <span class="den-activity-span-cmd-name">
-                  {formatSentenceCase(part().label)}
+                  {formatSentenceCase(chip().group)}
                 </span>
-                <Show when={part().count > 1}>
-                  <span class="den-activity-span-cmd-count">×{part().count}</span>
+                <Show when={chip().steps > 0}>
+                  <span class="den-activity-span-cmd-count">{chip().steps} {chip().steps === 1 ? "step" : "steps"}</span>
                 </Show>
               </span>
             )}
