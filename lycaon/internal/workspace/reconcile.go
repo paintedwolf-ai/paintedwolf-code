@@ -19,7 +19,8 @@ func ReconcileStaleSandboxes(
 	branchRoot, primaryDir string,
 	loadRetainedJobIDs func(context.Context) (map[string]struct{}, error),
 ) (removed int, err error) {
-	listing, err := listSandboxEntries(branchRoot, primaryDir)
+	stateRoot := filepath.Dir(strings.TrimSpace(branchRoot))
+	listing, err := listAllSandboxEntries(stateRoot, branchRoot, primaryDir)
 	if err != nil {
 		return 0, err
 	}
@@ -42,10 +43,13 @@ func ReconcileStaleSandboxes(
 		if err := ctx.Err(); err != nil {
 			return removed, err
 		}
-		if _, keep := retainJobIDs[dir.jobID]; keep {
+		if _, keep := retainJobIDs[dir.jobID]; keep && !placedTreeSuperseded(stateRoot, dir.root) {
 			continue
 		}
 		if err := removeJobSandbox(dir.root); err != nil {
+			return removed, err
+		}
+		if err := forgetPlacedBranch(ctx, stateRoot, dir.root); err != nil {
 			return removed, err
 		}
 		removed++
@@ -55,7 +59,7 @@ func ReconcileStaleSandboxes(
 			"path", dir.root,
 		)
 	}
-	orphans, err := removeUnretainedOrphanMeta(ctx, primaryDir, listing.metas, retainJobIDs)
+	orphans, err := removeUnretainedOrphanMeta(ctx, stateRoot, primaryDir, listing.metas, retainJobIDs)
 	if err != nil {
 		return removed, err
 	}
@@ -124,7 +128,7 @@ func listSandboxEntries(branchRoot, primaryDir string) (sandboxListing, error) {
 	return listing, nil
 }
 
-func removeUnretainedOrphanMeta(ctx context.Context, primaryDir string, metas []sandboxDir, retainJobIDs map[string]struct{}) (int, error) {
+func removeUnretainedOrphanMeta(ctx context.Context, stateRoot, primaryDir string, metas []sandboxDir, retainJobIDs map[string]struct{}) (int, error) {
 	removed := 0
 	for _, meta := range metas {
 		if err := ctx.Err(); err != nil {
@@ -139,6 +143,9 @@ func removeUnretainedOrphanMeta(ctx context.Context, primaryDir string, metas []
 		}
 		if err := os.RemoveAll(meta.root); err != nil {
 			return removed, fmt.Errorf("remove orphan sandbox meta %s: %w", meta.root, err)
+		}
+		if err := forgetPlacedBranch(ctx, stateRoot, jobRoot); err != nil {
+			return removed, err
 		}
 		removed++
 		slog.InfoContext(ctx, "removed orphan worker sandbox meta",

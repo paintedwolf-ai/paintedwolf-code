@@ -11190,10 +11190,12 @@ export interface components {
         };
         /** @enum {string} */
         WorkspaceProvisionStrategy: "direct_cow" | "bridge_cow" | "direct_copy";
+        /** @enum {string} */
+        WorkspaceNotClonableReason: "roots_span_volumes" | "volume_cannot_clone" | "volume_root_inside_attached_root" | "volume_root_unwritable" | "volume_not_identified" | "placement_folder_not_private" | "volume_ignores_ownership";
         WorkspacePreparation: {
             strategy?: components["schemas"]["WorkspaceProvisionStrategy"];
             /** @enum {string} */
-            stage: "probing" | "surveying_source" | "materializing_seed" | "snapshotting_branch";
+            stage: "probing" | "surveying_source" | "cost_declared" | "materializing_seed" | "snapshotting_branch" | "branch_prepared";
             /** Format: int64 */
             files: number;
             /** Format: int64 */
@@ -11203,6 +11205,17 @@ export interface components {
              * @description Logical regular-file bytes when a source survey has completed
              */
             total_bytes?: number;
+            /**
+             * Format: int64
+             * @description Files, directories and links when a source survey has completed
+             */
+            total_entries?: number;
+            /**
+             * Format: int64
+             * @description Source entries this user could not read, left out of the branch
+             */
+            unreadable_entries?: number;
+            not_clonable_reason?: components["schemas"]["WorkspaceNotClonableReason"];
         };
         /** @enum {string} */
         TaskScopeMode: "read" | "write";
@@ -15142,6 +15155,11 @@ export interface components {
              * @description Best-effort on-disk size; may be omitted when unknown
              */
             bytes?: number;
+            /**
+             * Format: int64
+             * @description Recorded entries on a volume that is absent right now; not in bytes, and left alone by clearing
+             */
+            unavailable_entries?: number;
         };
         WorkspaceCacheStatus: {
             id: string;
@@ -30425,6 +30443,7 @@ export type WorkerDependency = components["schemas"]["WorkerDependency"];
 export type WorkerBudgetRequest = components["schemas"]["WorkerBudgetRequest"];
 export type WorkerContextUsage = components["schemas"]["WorkerContextUsage"];
 export type WorkspaceProvisionStrategy = components["schemas"]["WorkspaceProvisionStrategy"];
+export type WorkspaceNotClonableReason = components["schemas"]["WorkspaceNotClonableReason"];
 export type WorkspacePreparation = components["schemas"]["WorkspacePreparation"];
 export type TaskScopeMode = components["schemas"]["TaskScopeMode"];
 export type TaskScope = components["schemas"]["TaskScope"];

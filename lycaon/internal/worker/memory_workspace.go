@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceblob"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -128,7 +128,7 @@ func (q *memoryQueueQuery) publishMemoryWorkerBranch(
 		return nil, ErrWorkerBranchClaimFailed
 	}
 	if lost && ws != nil {
-		_ = ws.DestroyWorkerWorkspace(binding)
+		_ = ws.DestroyWorkerWorkspace(ctx, binding)
 	}
 	cp := task
 	return &cp, nil
@@ -185,7 +185,7 @@ func holdBaseOverlay(ctx context.Context, q *InMemoryQueue, task *api.WorkerTask
 
 // destroyWorkspaceRoot removes an isolated sandbox copy after a terminal
 // transition; a queue without a workspace manager leaves the path alone.
-func destroyWorkspaceRoot(q *InMemoryQueue, jobID, root string) {
+func destroyWorkspaceRoot(ctx context.Context, q *InMemoryQueue, jobID, root string) {
 	if strings.TrimSpace(root) == "" {
 		return
 	}
@@ -195,7 +195,9 @@ func destroyWorkspaceRoot(q *InMemoryQueue, jobID, root string) {
 	if ws == nil {
 		return
 	}
-	_ = ws.DestroyWorkerWorkspace(&workspace.Binding{ID: jobID, Root: root})
+	cleanupCtx, cancel := promoteCleanupContext(ctx)
+	defer cancel()
+	_ = ws.DestroyWorkerWorkspace(cleanupCtx, &workspace.Binding{ID: jobID, Root: root})
 }
 
 func workerWorkspaceIdentity(ctx context.Context, database db.DBTX, root, baseline string) (string, string, error) {
@@ -214,11 +216,14 @@ func workerWorkspaceIdentity(ctx context.Context, database db.DBTX, root, baseli
 	if filepath.Clean(baseline) != resolved {
 		return "", "", fmt.Errorf("worker baseline is outside the active installation")
 	}
-	rel, err := filepath.Rel(dataDir, root)
-	if err != nil || !filepath.IsAbs(root) || !filepath.IsLocal(rel) || !strings.HasPrefix(filepath.ToSlash(rel), enginepaths.WorkerBranchesDirName+"/") {
+	rel, ok, err := workerplacement.LogicalFromPhysical(dataDir, root)
+	if err != nil {
+		return "", "", err
+	}
+	if !ok {
 		return "", "", fmt.Errorf("worker branch is outside the active installation")
 	}
-	return id, filepath.ToSlash(rel), nil
+	return id, rel, nil
 }
 
 // TaskRootRefs returns a worker's captured or attached roots.

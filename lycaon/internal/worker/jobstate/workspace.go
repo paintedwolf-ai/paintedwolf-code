@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -32,7 +33,10 @@ func resolveWorkerWorkspace(ctx context.Context, database db.DBTX, row db.Worker
 		if !filepath.IsLocal(rel) || !strings.HasPrefix(rel, enginepaths.WorkerBranchesDirName+"/") || strings.Contains(rel, "\\") {
 			return fmt.Errorf("invalid worker branch reference")
 		}
-		task.WorkspaceRoot = filepath.Join(dataDir, filepath.FromSlash(rel))
+		task.WorkspaceRoot, err = workerplacement.PhysicalFromLogical(dataDir, rel)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
@@ -90,6 +91,9 @@ func HumanFilesSurveyOptions() SurveyOptions {
 }
 
 func surveySkipsDir(rel, name string, opts SurveyOptions) bool {
+	if enginepaths.IsWorkerPlacementDirName(name) {
+		return true
+	}
 	if settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel) {
 		return true
 	}
@@ -103,6 +107,9 @@ func surveySkipsDir(rel, name string, opts SurveyOptions) bool {
 }
 
 func surveySkipsDirName(name string, opts SurveyOptions) bool {
+	if enginepaths.IsWorkerPlacementDirName(name) {
+		return true
+	}
 	if !opts.IncludeVCSMetadata && IsVCSDirBaseName(name) {
 		return true
 	}

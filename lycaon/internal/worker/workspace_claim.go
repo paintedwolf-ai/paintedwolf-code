@@ -29,7 +29,7 @@ var workerWorkspaceLog = observability.LazyComponent("worker_workspace")
 type WorkerWorkspaceManager interface {
 	CreateWorkerWorkspaceFromSources(ctx context.Context, roots, sourceRoots []projectroot.RootRef, activeRootID, jobID string) (*workspace.Binding, workspace.SandboxLayout, error)
 	RebuildWorkerWorkspace(ctx context.Context, branchRoot string, restore func(ctx context.Context, layout workspace.SandboxLayout, branchRoot string) error) (workspace.SandboxLayout, error)
-	DestroyWorkerWorkspace(binding *workspace.Binding) error
+	DestroyWorkerWorkspace(ctx context.Context, binding *workspace.Binding) error
 }
 
 // ProjectStore loads project metadata for worker sandbox provisioning.
@@ -140,7 +140,7 @@ func (q *sqlQueuePromotion) adoptExistingWorkerWorkspace(ctx context.Context, ta
 		return ErrWorkerBranchClaimFailed
 	}
 	if filepath.Clean(stored.WorkspaceRoot) != filepath.Clean(binding.Root) {
-		_ = ws.DestroyWorkerWorkspace(binding)
+		_ = ws.DestroyWorkerWorkspace(ctx, binding)
 	}
 	task.WorkspaceRoot = stored.WorkspaceRoot
 	task.WorkspaceBaselinePath = stored.WorkspaceBaselinePath
@@ -158,11 +158,14 @@ func (q *sqlQueueCore) withWorkspacePreparation(ctx context.Context, task *api.W
 		reportMu.Lock()
 		defer reportMu.Unlock()
 		preparation := &api.WorkspacePreparation{
-			Strategy:   api.WorkspaceProvisionStrategy(progress.Strategy),
-			Stage:      progress.Stage,
-			Files:      progress.Files,
-			Bytes:      progress.Bytes,
-			TotalBytes: progress.TotalBytes,
+			Strategy:          api.WorkspaceProvisionStrategy(progress.Strategy),
+			Stage:             progress.Stage,
+			Files:             progress.Files,
+			Bytes:             progress.Bytes,
+			TotalBytes:        progress.TotalBytes,
+			TotalEntries:      progress.TotalEntries,
+			UnreadableEntries: progress.UnreadableEntries,
+			NotClonableReason: api.WorkspaceNotClonableReason(progress.NotClonableReason),
 		}
 		now := time.Now()
 		emit := progress.Stage != lastStage || now.Sub(lastEmit) >= workspacePreparationEmitInterval
@@ -209,7 +212,7 @@ func (q *sqlQueueCore) overlayDivergesFromProject(ctx context.Context, task *api
 	return len(session.OverlayWorkspaceDivergencePaths(task, roots)) > 0
 }
 
-func (q *sqlQueueCore) destroyWorkerWorkspace(_ context.Context, task *api.WorkerTask) {
+func (q *sqlQueueCore) destroyWorkerWorkspace(ctx context.Context, task *api.WorkerTask) {
 	if task == nil || strings.TrimSpace(task.WorkspaceRoot) == "" {
 		return
 	}
@@ -219,7 +222,9 @@ func (q *sqlQueueCore) destroyWorkerWorkspace(_ context.Context, task *api.Worke
 	if ws == nil {
 		return
 	}
-	_ = ws.DestroyWorkerWorkspace(&workspace.Binding{
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	_ = ws.DestroyWorkerWorkspace(cleanupCtx, &workspace.Binding{
 		ID:   task.ID,
 		Root: task.WorkspaceRoot,
 	})

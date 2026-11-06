@@ -531,7 +531,10 @@ func workspaceAllowBacks(c Confinement) []string {
 	if err != nil || strings.TrimSpace(dir) == "" {
 		return nil
 	}
-	control := fspath.CanonicalPath(dir)
+	controls := []string{fspath.CanonicalPath(dir)}
+	for _, folder := range placementFolders(dir) {
+		controls = append(controls, fspath.CanonicalPath(folder.Path))
+	}
 	sep := string(filepath.Separator)
 	var backs []string
 	candidates := append(append([]string(nil), c.Roots...), c.GrantedWriteRoots...)
@@ -542,8 +545,12 @@ func workspaceAllowBacks(c Confinement) []string {
 		if r = strings.TrimSpace(r); r == "" {
 			continue
 		}
-		if p := fspath.CanonicalPath(r); strings.HasPrefix(p, control+sep) {
-			backs = append(backs, p)
+		p := fspath.CanonicalPath(r)
+		for _, control := range controls {
+			if strings.HasPrefix(p, control+sep) {
+				backs = append(backs, p)
+				break
+			}
 		}
 	}
 	sort.Strings(backs)

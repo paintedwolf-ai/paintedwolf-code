@@ -2,7 +2,9 @@ package localdata
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/scratch"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
 // ExtensionCacheClear serializes deletion with extension mutations.
@@ -32,8 +35,16 @@ type Registry struct {
 	reclaimSessionScratch   func(context.Context) error
 }
 
+// WorkerBranches is the bucket's inventory across every placement.
+type WorkerBranches struct {
+	Present bool
+	Bytes   int64
+	// Unavailable counts recorded branches on a volume that is absent right now.
+	Unavailable int64
+}
+
 // WorkerBranchesStatus reports the branch trees on disk and their allocated size.
-type WorkerBranchesStatus func(context.Context) (present bool, bytes int64, err error)
+type WorkerBranchesStatus func(context.Context) (WorkerBranches, error)
 
 // SetWorkerBranches configures disk accounting and sealed-tree reclamation.
 func (r *Registry) SetWorkerBranches(status WorkerBranchesStatus, reclaim func(context.Context) error) {
@@ -117,6 +128,9 @@ type Status struct {
 	ID      string
 	Present bool
 	Bytes   int64
+	// Unavailable counts entries the bucket records on an absent volume. They
+	// are not in Bytes, and clearing leaves them alone.
+	Unavailable int64
 }
 
 // ClearResult is the per-bucket outcome for a clear request.
@@ -194,18 +208,61 @@ func (r *Registry) Status(ctx context.Context, id string) (Status, error) {
 		st.Bytes, err = scanScratchBytes(r.baseDir)
 	case BucketWorkerBranches:
 		if r.workerBranchesStatus != nil {
-			st.Present, st.Bytes, err = r.workerBranchesStatus(ctx)
+			var branches WorkerBranches
+			branches, err = r.workerBranchesStatus(ctx)
+			st.Present, st.Bytes, st.Unavailable = branches.Present, branches.Bytes, branches.Unavailable
 			break
 		}
-		p := enginepaths.WorkerBranchesRootUnder(r.baseDir)
-		st.Present = dirNonEmpty(p)
-		st.Bytes, err = dirOrFileBytes(p)
+		st, err = r.workerBranchesWithoutEngine()
 	case BucketSessionScratch:
 		st.Present, st.Bytes, err = scratch.New(r.baseDir).Inventory(ctx)
 	default:
 		return Status{}, fmt.Errorf("unknown local-data bucket %q", id)
 	}
 	return st, err
+}
+
+// purgeWorkerPlacements removes branches on other volumes. A registry this build
+// cannot read stays unchanged and must not stand in the way of clearing or
+// resetting everything else, which is often how a person recovers.
+func purgeWorkerPlacements(ctx context.Context, base string) error {
+	_, err := workerplacement.Purge(ctx, base)
+	if errors.Is(err, workerplacement.ErrUnknownRegistryFormat) {
+		slog.WarnContext(ctx, "left an unreadable worker placement registry in place", "err", err)
+		return nil
+	}
+	return err
+}
+
+func (r *Registry) workerBranchesWithoutEngine() (Status, error) {
+	st := Status{ID: BucketWorkerBranches}
+	p := enginepaths.WorkerBranchesRootUnder(r.baseDir)
+	st.Present = dirNonEmpty(p)
+	bytes, err := dirOrFileBytes(p)
+	if err != nil {
+		return st, err
+	}
+	st.Bytes = bytes
+	placed, err := workerplacement.PlacedBranches(r.baseDir)
+	if errors.Is(err, workerplacement.ErrUnknownRegistryFormat) {
+		return st, nil
+	}
+	if err != nil {
+		return st, err
+	}
+	for _, branch := range placed {
+		if !branch.Available {
+			st.Unavailable++
+			continue
+		}
+		bytes, err := dirOrFileBytes(branch.Root)
+		if err != nil {
+			return st, err
+		}
+		st.Present = st.Present || bytes > 0
+		st.Bytes += bytes
+	}
+	return st, nil
 }
 
 func (r *Registry) debugLogsPresent() bool {
@@ -265,6 +322,9 @@ func (r *Registry) ClearOne(ctx context.Context, id string) error {
 			return r.reclaimWorkerBranches(ctx)
 		}
 		// Without an engine to judge the trees, only an idle root is safe to clear.
+		if err := purgeWorkerPlacements(ctx, r.baseDir); err != nil {
+			return err
+		}
 		return clearDirContents(r.baseDir, enginepaths.WorkerBranchesRootUnder(r.baseDir))
 	case BucketSessionScratch:
 		if r.reclaimSessionScratch != nil {

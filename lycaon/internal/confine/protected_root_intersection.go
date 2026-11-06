@@ -3,6 +3,9 @@ package confine
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 // underSecretReadDeny reports whether path sits in the control-plane read floor.
@@ -26,6 +29,29 @@ func attachedWriteRootForbidden(path string) bool {
 // NormalizeWriteRootKey returns a stable deny-set / pending-map key for a write root.
 func NormalizeWriteRootKey(root string) string {
 	return filepath.Clean(strings.TrimSpace(root))
+}
+
+// defaultRootContainsStateFolder drops an OS default root above the state folder.
+// A placement folder under one is denied by HardDenyWriteSpecs instead, because
+// losing /var/tmp as a write root would break ordinary builds.
+func defaultRootContainsStateFolder(path string) bool {
+	dir, err := configdir.Root()
+	if err != nil || strings.TrimSpace(dir) == "" {
+		return false
+	}
+	return PathAtOrUnder(fspath.CanonicalPath(dir), path)
+}
+
+func defaultRootAbovePlacementOnly(path string) bool {
+	if defaultRootContainsStateFolder(path) {
+		return false
+	}
+	for _, root := range osDefaultWriteRoots() {
+		if fspath.CanonicalPath(root) == path {
+			return true
+		}
+	}
+	return false
 }
 
 // writeRootContainsStateTree prevents an ancestor rename from moving host state.

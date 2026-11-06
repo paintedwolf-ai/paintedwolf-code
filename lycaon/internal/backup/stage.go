@@ -136,7 +136,7 @@ func stageManifest(ctx context.Context, opts StageOpts, manifest Manifest, local
 		return StageResult{}, err
 	}
 
-	if err := validateStagedReferences(ctx, stagingDir, manifest); err != nil {
+	if err := validateStagedReferences(ctx, stagingDir, manifest, opts.ConfigDir); err != nil {
 		_ = os.RemoveAll(stagingDir)
 		return StageResult{}, err
 	}

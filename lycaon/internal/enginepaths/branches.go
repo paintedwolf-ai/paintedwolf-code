@@ -113,7 +113,7 @@ func RewriteWorkerBranchPaths(s string) string {
 	if s == "" || !strings.Contains(filepath.ToSlash(s), WorkerBranchPathSegment) {
 		return s
 	}
-	out := s
+	out := withoutWorkerPlacementPrefixes(s)
 	for range 32 {
 		slash := filepath.ToSlash(out)
 		idx := strings.Index(slash, WorkerBranchPathSegment)

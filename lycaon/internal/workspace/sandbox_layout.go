@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
 // SandboxLayout describes how a worker branch maps project roots into the sandbox.
@@ -82,42 +83,70 @@ func (m *Manager) CreateWorkerWorkspaceFromSources(
 	if err := validateLayout(sources); err != nil {
 		return nil, SandboxLayout{}, err
 	}
-	var branchRoot string
-	if len(layout.Roots) == 1 {
-		primary, err := projectroot.PrimaryRoot(layout.Roots)
-		if err != nil {
-			return nil, SandboxLayout{}, err
-		}
-		branchRoot = m.jobRoot(primary.Path, jobID)
-	} else {
-		active, err := projectroot.ActiveRoot(layout.Roots, activeRootID)
-		if err != nil {
-			return nil, SandboxLayout{}, err
-		}
-		branchRoot = m.jobRoot(active.Path, jobID)
+	keyPath, err := branchKeyPath(layout, activeRootID)
+	if err != nil {
+		return nil, SandboxLayout{}, err
 	}
-	release, err := acquireWorkspaceProvisionLock(ctx, branchRoot)
+	logicalRoot := m.jobRoot(keyPath, jobID)
+	release, err := acquireWorkspaceProvisionLock(ctx, logicalRoot)
 	if err != nil {
 		return nil, SandboxLayout{}, err
 	}
 	defer release()
-	if completeBranchMatchesLayout(branchRoot, layout) {
-		return &Binding{ID: jobID, Root: branchRoot}, layout, nil
+	if existing, err := m.completeBranch(logicalRoot, layout); err != nil {
+		return nil, SandboxLayout{}, err
+	} else if existing != "" {
+		return &Binding{ID: jobID, Root: existing}, layout, nil
 	}
-	binding, err := m.createBranchSkeleton(ctx, branchRoot, layout, jobID)
+	decision, err := m.decidePlacement(ctx, layout.Roots, sources.Roots)
+	if err != nil {
+		return nil, SandboxLayout{}, classifyProvisionError(err)
+	}
+	branchRoot := enginepaths.JobBranchDir(decision.Base, keyPath, jobID)
+	if err := workerplacement.AssertOutsideRoots(branchRoot, placementRoots(layout.Roots, sources.Roots)); err != nil {
+		return nil, SandboxLayout{}, err
+	}
+	if branchRoot != logicalRoot {
+		releasePlaced, err := acquireWorkspaceProvisionLock(ctx, branchRoot)
+		if err != nil {
+			return nil, SandboxLayout{}, err
+		}
+		defer releasePlaced()
+	}
+	binding, err := m.createPlacedSkeleton(ctx, logicalRoot, branchRoot, layout, jobID, decision)
 	if err != nil {
 		return nil, SandboxLayout{}, err
 	}
-	if err := m.snapshotSourceRoots(ctx, binding.Root, sources.Roots); err != nil {
-		_ = m.DestroyWorkerWorkspace(binding)
+	preparation, err := m.snapshotSourceRoots(ctx, binding.Root, sources.Roots, decision)
+	if err != nil {
+		_ = m.DestroyWorkerWorkspace(ctx, binding)
 		return nil, SandboxLayout{}, err
 	}
+	binding.Preparation = preparation
 	return binding, layout, nil
+}
+
+func branchKeyPath(layout SandboxLayout, activeRootID string) (string, error) {
+	if len(layout.Roots) == 1 {
+		primary, err := projectroot.PrimaryRoot(layout.Roots)
+		if err != nil {
+			return "", err
+		}
+		return primary.Path, nil
+	}
+	active, err := projectroot.ActiveRoot(layout.Roots, activeRootID)
+	if err != nil {
+		return "", err
+	}
+	return active.Path, nil
 }
 
 const provisionLockSuffix = ".provision.lock"
 
 func tryWorkspaceProvisionLock(branchRoot string) (func(), error) {
+	if err := branchVolumeAvailable(branchRoot); err != nil {
+		return nil, err
+	}
 	file, err := filelock.Open(branchRoot + provisionLockSuffix)
 	if err != nil {
 		return nil, err
@@ -137,6 +166,9 @@ func tryWorkspaceProvisionLock(branchRoot string) (func(), error) {
 }
 
 func acquireWorkspaceProvisionLock(ctx context.Context, branchRoot string) (func(), error) {
+	if err := branchVolumeAvailable(branchRoot); err != nil {
+		return nil, err
+	}
 	file, err := filelock.Open(branchRoot + provisionLockSuffix)
 	if err != nil {
 		return nil, err
@@ -179,23 +211,27 @@ func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
 	return true
 }
 
-func (m *Manager) snapshotSourceRoots(ctx context.Context, branchRoot string, sources []projectroot.RootRef) error {
-	if len(sources) == 1 {
-		if err := m.provisionRoot(ctx, sources[0].Path, branchRoot); err != nil {
-			return err
-		}
-	} else {
-		for _, source := range sources {
+func (m *Manager) snapshotSourceRoots(ctx context.Context, branchRoot string, sources []projectroot.RootRef, decision workerplacement.Decision) (Preparation, error) {
+	out := Preparation{Clonable: decision.Clonable, NotClonableReason: decision.Reason}
+	if decision.Folder != nil {
+		out.PlacementFolder = decision.Folder.Path
+	}
+	for _, source := range sources {
+		target := branchRoot
+		if len(sources) > 1 {
 			dir, err := projectroot.BranchDirForID(source.ID)
 			if err != nil {
-				return err
+				return out, err
 			}
-			if err := m.provisionRoot(ctx, source.Path, filepath.Join(branchRoot, dir)); err != nil {
-				return err
-			}
+			target = filepath.Join(branchRoot, dir)
 		}
+		prepared, err := m.provisionRoot(ctx, source.Path, target, decision)
+		if err != nil {
+			return out, err
+		}
+		out.Roots = append(out.Roots, prepared)
 	}
-	return markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
+	return out, markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
 }
 
 // jobIDForBranch is the branch directory name: the worker job id.

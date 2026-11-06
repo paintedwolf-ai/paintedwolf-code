@@ -135,7 +135,7 @@ func retainedFilePath(kind, projectID, ref string) (string, error) {
 	return rel, nil
 }
 
-func validateStagedReferences(ctx context.Context, stagingDir string, manifest Manifest) error {
+func validateStagedReferences(ctx context.Context, stagingDir string, manifest Manifest, configDir string) error {
 	if err := editoroutbox.Validate(ctx, stagingDir); err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func validateStagedReferences(ctx context.Context, stagingDir string, manifest M
 		return fmt.Errorf("backup: open captured store: %w", err)
 	}
 	defer func() { _ = snapshot.Close() }()
-	if err := validateRequiredBranchTrees(ctx, snapshot, manifest); err != nil {
+	if err := validateRequiredBranchTrees(ctx, snapshot, manifest, configDir); err != nil {
 		return err
 	}
 	files := make(map[string]archiveSource, len(manifest.Files))

@@ -436,6 +436,9 @@ func ValidateLiveReferences(ctx context.Context, database db.DBTX, dataDir strin
 	if err != nil {
 		return err
 	}
+	if branches, err = branches.withoutPlaced(dataDir); err != nil {
+		return err
+	}
 	if err := branches.verifyPresent(dataDir); err != nil {
 		return err
 	}
