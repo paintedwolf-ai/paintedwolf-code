@@ -84,77 +84,11 @@ supports_transform: true
 expression_nodes_max: 256
 
 host_facts:
- - name: paintedwolf.operation_source_unit_id
-   type: string
- - name: paintedwolf.operation_source_start_byte
-   type: int
- - name: paintedwolf.operation_source_end_byte
-   type: int
- - name: paintedwolf.operation_source_line
-   type: int
- - name: paintedwolf.operation_source_column
-   type: int
  - name: paintedwolf.native_operation
    type: string
  - name: paintedwolf.operation
    type: string
- - name: paintedwolf.program_id
-   type: string
- - name: paintedwolf.execution_id
-   type: string
- - name: paintedwolf.node_id
-   type: string
- - name: paintedwolf.source_unit_id
-   type: string
- - name: paintedwolf.model_tool_call_id
-   type: string
  - name: paintedwolf.native_command
-   type: string
- - name: paintedwolf.program_completed_effects
-   type: int
- - name: paintedwolf.program_uncertain_effects
-   type: int
- - name: paintedwolf.program_executed_children
-   type: int
- - name: paintedwolf.program_executed_reads
-   type: int
- - name: paintedwolf.program_static_not_started
-   type: int
- - name: paintedwolf.program_static_untaken
-   type: int
- - name: paintedwolf.program_completed_details_retained_omitted
-   type: int
- - name: paintedwolf.program_unknown_details_retained_omitted
-   type: int
- - name: paintedwolf.program_effect_details_omitted
-   type: bool
- - name: paintedwolf.program_stopped_details_omitted
-   type: bool
- - name: paintedwolf.program_completed_details
-   type: list<map>
- - name: paintedwolf.program_unknown_details
-   type: list<map>
- - name: paintedwolf.program_stopped_details
-   type: list<map>
- - name: paintedwolf.program_detail_ref
-   type: string
- - name: paintedwolf.program_progress_state
-   type: string
- - name: paintedwolf.program_progress_ref
-   type: string
- - name: paintedwolf.program_progress_ref_omitted
-   type: bool
- - name: paintedwolf.program_progress_owner_invoked
-   type: bool
- - name: paintedwolf.program_progress_execution_id
-   type: string
- - name: paintedwolf.program_progress_detail_ref
-   type: string
- - name: paintedwolf.program_replay_available
-   type: bool
- - name: paintedwolf.program_replay_source_ref
-   type: string
- - name: paintedwolf.program_replay_limitation
    type: string
  - name: paintedwolf.json_unescaped_newline
    type: bool
@@ -212,10 +146,6 @@ host_facts:
    type: string
  - name: paintedwolf.scan_new_status
    type: string
- - name: paintedwolf.can_stat
-   type: bool
- - name: paintedwolf.can_view_image
-   type: bool
  - name: paintedwolf.workspace_image_supported
    type: bool
  - name: paintedwolf.recall_widen_invalid
@@ -258,8 +188,6 @@ host_facts:
    type: int
  - name: paintedwolf.max_width
    type: int
- - name: paintedwolf.is_image
-   type: bool
  - name: paintedwolf.extension
    type: string
  - name: paintedwolf.supported_formats
@@ -272,8 +200,6 @@ host_facts:
    type: int
  - name: paintedwolf.max_pairs
    type: int
- - name: paintedwolf.can_page_close
-   type: bool
  - name: paintedwolf.mcp_probe_in_flight
    type: bool
  - name: paintedwolf.page_live_ids
@@ -286,16 +212,8 @@ host_facts:
    type: string
  - name: paintedwolf.grep_nested_repeat
    type: bool
- - name: paintedwolf.can_page_act
-   type: bool
- - name: paintedwolf.can_page_snapshot
-   type: bool
  - name: paintedwolf.measure_page_id
    type: string
- - name: paintedwolf.can_capture_page
-   type: bool
- - name: paintedwolf.can_measure_page
-   type: bool
  - name: paintedwolf.fetch_budget_used
    type: int
  - name: paintedwolf.fetch_budget_retry_after_seconds
@@ -408,12 +326,6 @@ host_facts:
    type: int
  - name: paintedwolf.pending_overlay_promote
    type: bool
- - name: paintedwolf.overlay_state
-   type: string
- - name: paintedwolf.tool_turn_has_text
-   type: bool
- - name: paintedwolf.tool_turn_has_agent_note
-   type: bool
  - name: paintedwolf.unpublished_tool_text_pending
    type: bool
  - name: paintedwolf.mid_turn_citations_required
@@ -472,15 +384,7 @@ host_facts:
    type: bool
  - name: paintedwolf.stub_valid
    type: bool
- - name: paintedwolf.tool_allowed_for_profile
-   type: bool
- - name: paintedwolf.write_roots
-   type: list<string>
  - name: paintedwolf.pattern_parse_ok
-   type: bool
- - name: paintedwolf.mode_bits
-   type: string
- - name: paintedwolf.posture_unresolved
    type: bool
  - name: paintedwolf.tool_is_state
    type: bool
@@ -493,27 +397,15 @@ host_facts:
    observation: True when this tool's arguments carry a free-form payload the model can split across calls; false when its arguments are always small.
  - name: paintedwolf.tool_is_handoff
    type: bool
- - name: paintedwolf.pack_runner_task
-   type: bool
- - name: paintedwolf.agent_is_plan_writer
-   type: bool
- - name: paintedwolf.disallowed_agent
-   type: bool
- - name: paintedwolf.plan_awaiting_approval
-   type: bool
  - name: paintedwolf.unobserved_cited_paths
    type: list<string>
  - name: paintedwolf.unobserved_cited_urls
    type: list<string>
  - name: paintedwolf.unobserved_cited_handles
    type: list<string>
- - name: paintedwolf.citation_fields_present
-   type: bool
  - name: paintedwolf.claims_completion
    type: bool
  - name: paintedwolf.has_matching_ledger_job
-   type: bool
- - name: paintedwolf.ledger_criteria_met
    type: bool
  - name: paintedwolf.worker_summary_present
    type: bool
@@ -521,10 +413,6 @@ host_facts:
    type: bool
  - name: paintedwolf.worker_artifact_measured
    type: bool
- - name: paintedwolf.files_touched
-   type: list<string>
- - name: paintedwolf.summary_length
-   type: int
  - name: paintedwolf.repeat_count
    type: int
  - name: paintedwolf.fruitless_search_run
@@ -549,8 +437,6 @@ host_facts:
    type: bool
  - name: paintedwolf.closeout_gate_open_leaves
    type: string
- - name: paintedwolf.closeout_gate_delay_count
-   type: int
  - name: paintedwolf.workflow_report_phase_pending
    type: bool
  - name: paintedwolf.phase_obligation_pending
@@ -640,13 +526,6 @@ host_facts:
    type: string
  - name: paintedwolf.rejection_code
    type: string
- - name: paintedwolf.recent_tool_names
-   type: list<string>
- - name: paintedwolf.source_includes
-   type: (string) -> bool
- - name: paintedwolf.action_host_resources
-   type: list<string>
-   observation: Exact host-resource ids resolved for this action; empty when none were requested.
  - name: paintedwolf.action_host_resource_denials
    type: list<string>
    observation: Exact action host-resource ids denied by the host authorization layer; empty when none were denied.
@@ -674,18 +553,6 @@ host_facts:
  - name: paintedwolf.process_running
    type: bool
    observation: True when the invocation's process was still running when observed.
- - name: paintedwolf.process_timed_out
-   type: bool
-   observation: True when a terminal invocation reached its host deadline. False while running or when the terminal reason is unknown.
- - name: paintedwolf.process_stopped
-   type: bool
-   observation: True when the host recorded a terminal invocation as stopped. False while running or when the terminal reason is unknown.
- - name: paintedwolf.process_exited
-   type: bool
-   observation: True when the host recorded a terminal invocation as exited, independently of success. False while running or when the terminal reason is unknown.
- - name: paintedwolf.sandbox_refusals
-   type: list<string>
-   observation: Each operation the kernel reported refusing the invocation's processes, as operation, target, and process; empty when none was reported or the host cannot read the reports.
  - name: paintedwolf.refused_write_paths
    type: list<string>
    observation: Paths the kernel refused the invocation's processes for writing, at any layer; empty when none.
@@ -710,9 +577,6 @@ host_facts:
  - name: paintedwolf.refused_terminal_write_paths
    type: list<string>
    observation: Kernel-observed write paths whose floor no approval opens.
- - name: paintedwolf.sandbox_refusal_witness
-   type: string
-   observation: The confinement reporting layer's declared witness (kernel, incomplete, or unavailable); empty without an observed invocation.
  - name: paintedwolf.refused_socket_paths
    type: list<string>
    observation: Unix socket paths the kernel refused the invocation's processes a connection to; empty when none.
@@ -764,12 +628,6 @@ host_facts:
  - name: paintedwolf.editorconfig_mismatch
    type: bool
    observation: True when a landed text write broke a rule its .editorconfig chain declares on lines the write inserted or rewrote; false when no rule is declared or the chain could not be read.
- - name: paintedwolf.host_resource_status_for
-   type: (string) -> string
-   observation: Discovery status for a known host-resource id; empty when the host has no report for the id.
- - name: paintedwolf.host_resource_policy_for
-   type: (string) -> string
-   observation: Effective host authorization posture for a known host-resource id; empty when the host has no report for the id.
  - name: paintedwolf.active_count
    type: string
  - name: paintedwolf.actual_chars
@@ -777,8 +635,6 @@ host_facts:
  - name: paintedwolf.agent_type
    type: string
  - name: paintedwolf.allowed
-   type: string
- - name: paintedwolf.args_hint
    type: string
  - name: paintedwolf.assignment
    type: string
@@ -802,11 +658,7 @@ host_facts:
    type: list<string>
  - name: paintedwolf.missing_summary_job_ids
    type: list<string>
- - name: paintedwolf.missing_capability_host_resources
-   type: bool
  - name: paintedwolf.missing_capability_socket_paths
-   type: bool
- - name: paintedwolf.missing_capability_direct_ip
    type: bool
  - name: paintedwolf.missing_capability_process_control
    type: bool
@@ -850,21 +702,7 @@ host_facts:
    type: bool
  - name: paintedwolf.capability_contract_known
    type: bool
- - name: paintedwolf.supports_host_resources
-   type: bool
  - name: paintedwolf.supports_socket_paths
-   type: bool
- - name: paintedwolf.supports_direct_ip
-   type: bool
- - name: paintedwolf.supports_process_control
-   type: bool
- - name: paintedwolf.supports_credential_store
-   type: bool
- - name: paintedwolf.supports_host_execution
-   type: bool
- - name: paintedwolf.supports_write_root
-   type: bool
- - name: paintedwolf.supports_read_path
    type: bool
  - name: paintedwolf.supports_local_listen
    type: bool
@@ -892,8 +730,6 @@ host_facts:
    type: string
  - name: paintedwolf.declared
    type: string
- - name: paintedwolf.definitions
-   type: string
  - name: paintedwolf.dest
    type: string
  - name: paintedwolf.destination
@@ -918,12 +754,8 @@ host_facts:
    type: list<string>
  - name: paintedwolf.extracted_paths_omitted
    type: int
- - name: paintedwolf.extracted_paths
-   type: list<string>
  - name: paintedwolf.workflow_allowed_agents
    type: list<string>
- - name: paintedwolf.can_request_tools
-   type: bool
  - name: paintedwolf.tool_discovery_status
    type: string
  - name: paintedwolf.tool_discovery_has_more
@@ -938,12 +770,6 @@ host_facts:
    type: bool
  - name: paintedwolf.tool_command_forms
    type: list<string>
- - name: paintedwolf.native_replacement_tools
-   type: list<string>
- - name: paintedwolf.native_replacement_exact
-   type: bool
- - name: paintedwolf.native_replacement_manual
-   type: bool
  - name: paintedwolf.tool_discovery_available
    type: bool
  - name: paintedwolf.offered_tools
@@ -951,8 +777,6 @@ host_facts:
  - name: paintedwolf.next_steps
    type: string
  - name: paintedwolf.can_task
-   type: bool
- - name: paintedwolf.can_complete_leg
    type: bool
  - name: paintedwolf.turn_surface
    type: string
@@ -972,23 +796,9 @@ host_facts:
    type: list<string>
  - name: paintedwolf.live_command_handles
    type: list<string>
- - name: paintedwolf.terminal_failure
-   type: string
  - name: paintedwolf.terminal_not_pty
    type: bool
- - name: paintedwolf.can_terminal_open
-   type: bool
- - name: paintedwolf.can_terminal_close
-   type: bool
- - name: paintedwolf.can_terminal_read
-   type: bool
- - name: paintedwolf.can_command_stop
-   type: bool
  - name: paintedwolf.can_command_output
-   type: bool
- - name: paintedwolf.can_secret_generate
-   type: bool
- - name: paintedwolf.can_ask_user
    type: bool
  - name: paintedwolf.grounding_reason
    type: string
@@ -1014,10 +824,6 @@ host_facts:
    type: bool
  - name: paintedwolf.can_read
    type: bool
- - name: paintedwolf.can_write
-   type: bool
- - name: paintedwolf.can_edit
-   type: bool
  - name: paintedwolf.can_list_dir
    type: bool
  - name: paintedwolf.can_find
@@ -1033,8 +839,6 @@ host_facts:
  - name: paintedwolf.error
    type: string
  - name: paintedwolf.escape
-   type: string
- - name: paintedwolf.example
    type: string
  - name: paintedwolf.fault_stage
    type: string
@@ -1162,8 +966,6 @@ host_facts:
    type: string
  - name: paintedwolf.opaque_overflow
    type: bool
- - name: paintedwolf.original_author
-   type: string
  - name: paintedwolf.original_bytes
    type: string
  - name: paintedwolf.overlap_job_ids
@@ -1202,10 +1004,6 @@ host_facts:
    type: string
  - name: paintedwolf.prior_job_id
    type: string
- - name: paintedwolf.prior_summary
-   type: string
- - name: paintedwolf.program
-   type: string
  - name: paintedwolf.project_dir
    type: string
  - name: paintedwolf.promote_order
@@ -1224,8 +1022,6 @@ host_facts:
    type: string
  - name: paintedwolf.rule_id
    type: string
- - name: paintedwolf.rule_match_count
-   type: string
  - name: paintedwolf.rule_pack_id
    type: string
  - name: paintedwolf.rule_pattern
@@ -1240,8 +1036,6 @@ host_facts:
    type: string
  - name: paintedwolf.shape
    type: string
- - name: paintedwolf.shell_metacharacters
-   type: bool
  - name: paintedwolf.side
    type: string
  - name: paintedwolf.size
@@ -1264,11 +1058,7 @@ host_facts:
    type: string
  - name: paintedwolf.suggested_resume_max
    type: string
- - name: paintedwolf.suggested_tool
-   type: string
  - name: paintedwolf.supplied
-   type: string
- - name: paintedwolf.symbol
    type: string
  - name: paintedwolf.terminal_capture
    type: bool
@@ -1278,21 +1068,11 @@ host_facts:
    type: string
  - name: paintedwolf.tool_loops_used
    type: string
- - name: paintedwolf.tools
-   type: list<string>
  - name: paintedwolf.total_lines
    type: string
  - name: paintedwolf.type
    type: string
  - name: paintedwolf.directory_change
-   type: bool
- - name: paintedwolf.env_assignment
-   type: bool
- - name: paintedwolf.reissue_via_command
-   type: bool
- - name: paintedwolf.sequence_unsupported
-   type: bool
- - name: paintedwolf.scratch_var
    type: bool
  - name: paintedwolf.unpaginated_survey
    type: bool
@@ -1302,15 +1082,11 @@ host_facts:
    type: bool
  - name: paintedwolf.use_stdin_param
    type: bool
- - name: paintedwolf.use_substitution_result
-   type: bool
  - name: paintedwolf.unused_fields
    type: string
  - name: paintedwolf.user_guidance
    type: string
  - name: paintedwolf.valid_categories
-   type: string
- - name: paintedwolf.verify_command
    type: string
  - name: paintedwolf.window
    type: string
@@ -1342,10 +1118,6 @@ host_facts:
    type: string
  - name: paintedwolf.former_path
    type: string
- - name: paintedwolf.current_label
-   type: string
- - name: paintedwolf.current_path
-   type: string
  - name: paintedwolf.attached_folders
    type: list<string>
  - name: paintedwolf.port
@@ -1360,8 +1132,6 @@ host_facts:
    type: string
  - name: paintedwolf.progress
    type: string
- - name: paintedwolf.resolvable
-   type: string
  - name: paintedwolf.resource
    type: string
  - name: paintedwolf.resume_field
@@ -1374,16 +1144,10 @@ host_facts:
    type: list<string>
  - name: paintedwolf.redirect
    type: bool
- - name: paintedwolf.source_start_byte
-   type: int
- - name: paintedwolf.source_end_byte
-   type: int
  - name: paintedwolf.source_line
    type: int
  - name: paintedwolf.source_column
    type: int
- - name: paintedwolf.command_execution
-   type: string
  - name: paintedwolf.expected_form
    type: string
  - name: paintedwolf.parser_unclosed_quote
@@ -1404,38 +1168,18 @@ host_facts:
    type: bool
  - name: paintedwolf.source_excerpt
    type: string
- - name: paintedwolf.source_excerpt_start_byte
-   type: int
- - name: paintedwolf.source_excerpt_end_byte
-   type: int
  - name: paintedwolf.source_excerpt_line
    type: int
  - name: paintedwolf.source_excerpt_column
    type: int
- - name: paintedwolf.diagnostic_stage
-   type: string
  - name: paintedwolf.diagnostic_pre_evaluation
    type: bool
  - name: paintedwolf.diagnostic_top_level
    type: bool
- - name: paintedwolf.parser_kind
-   type: string
  - name: paintedwolf.parser_message
    type: string
  - name: paintedwolf.parser_expected
    type: string
- - name: paintedwolf.parser_found
-   type: string
- - name: paintedwolf.parser_detected_line
-   type: int
- - name: paintedwolf.parser_detected_column
-   type: int
- - name: paintedwolf.parser_incomplete
-   type: bool
- - name: paintedwolf.parser_details_omitted
-   type: bool
- - name: paintedwolf.source_unit_id_omitted
-   type: bool
  - name: paintedwolf.resource_unit
    type: string
  - name: paintedwolf.limit_id
@@ -1469,10 +1213,6 @@ host_facts:
  - name: paintedwolf.belongs_under
    type: string
  - name: paintedwolf.close_before
-   type: string
- - name: paintedwolf.expected_path
-   type: string
- - name: paintedwolf.did_you_mean
    type: string
  - name: paintedwolf.json_encoded
    type: bool
