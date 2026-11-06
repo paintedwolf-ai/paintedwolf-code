@@ -1096,8 +1096,6 @@ host_facts:
    type: string
  - name: paintedwolf.supplied
    type: string
- - name: paintedwolf.terminal_capture
-   type: bool
  - name: paintedwolf.threshold
    type: string
  - name: paintedwolf.timeout_ms
