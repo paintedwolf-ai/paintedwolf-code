@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
@@ -129,9 +130,7 @@ func TestNextCallsDetailsLeavesOtherDetailsAlone(t *testing.T) {
 
 func TestValidateNextStepsRejectsDecisionReadsAcrossAllConditionSurfaces(t *testing.T) {
 	loader, err := NewLoader("")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "load OAR", err)
 	for _, tc := range []struct {
 		name string
 		rule *Rule

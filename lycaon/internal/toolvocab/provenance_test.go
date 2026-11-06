@@ -180,9 +180,7 @@ func TestBundledCopyNamesAToolOnlyAsSubjectMentionOrCheckedStep(t *testing.T) {
 // A deny that names a native operation stays live: command programs consult it.
 func TestProfileDenyMayNameANativeOperation(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "create catalog", err)
 	valid := []sandbox.ToolProfile{{ID: "reader", DenyTools: []string{"write", "git_*"}}}
 	if err := toolvocab.ValidateProfiles(catalog, valid); err != nil {
 		t.Fatalf("operation deny refused: %v", err)
