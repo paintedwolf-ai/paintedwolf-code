@@ -119,7 +119,7 @@ func TestRowBoundHoldsAcrossALongActiveTurn_AC_KV_03(t *testing.T) {
 	testutil.FailErr(t, "normalize", err)
 	svc, mem, sess := stableTurnSession(t, normalized)
 	seedTurn(t, mem, sess.ID, 200, "small")
-	maxRows := svc.canonicalTailBounds(normalized).maxRows
+	maxRows := canonicalTailBounds(normalized).maxRows
 	if maxRows >= 600 {
 		t.Fatalf("row bound %d is out of the fixture's reach", maxRows)
 	}

@@ -67,7 +67,7 @@ func (m *Service) project(ctx context.Context, sess *api.Session, refresh bool) 
 // copies sit before the opener: the rows after it are the contiguous working tail.
 func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *store.CompactionView, cfg compaction.CompactionConfig, refresh bool) ([]api.Message, error) {
 	covered := view.CoveredThroughOrd
-	bounds := m.canonicalTailBounds(cfg)
+	bounds := canonicalTailBounds(cfg)
 	tail, truncated, err := m.readCanonicalTail(ctx, sess.ID, bounds, viewTailStop(covered, activeTurnAllocation(cfg)))
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 		oldest = tail[0].Ord
 	}
 	if _, ok := api.LastUserIntentMessage(tail); !ok {
-		if tail, err = m.withCurrentRequest(ctx, sess, tail); err != nil {
+		if tail, err = withCurrentRequest(ctx, m.store, sess, tail); err != nil {
 			return nil, err
 		}
 	}
@@ -111,7 +111,7 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 
 func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *api.Session, refresh bool) ([]api.Message, error) {
 	cfg := m.compactionConfig(ctx, sess)
-	bounds := m.canonicalTailBounds(cfg)
+	bounds := canonicalTailBounds(cfg)
 	history, truncated, err := m.readCanonicalTail(ctx, sess.ID, bounds, nil)
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *a
 		return history, nil
 	}
 	firstTailOrd := history[0].Ord
-	history, err = m.withCurrentRequest(ctx, sess, history)
+	history, err = withCurrentRequest(ctx, m.store, sess, history)
 	if err != nil {
 		return nil, err
 	}
@@ -247,27 +247,27 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 }
 
 // withCurrentRequest restores the active human opener when it predates the tail.
-func (m *Service) withCurrentRequest(ctx context.Context, sess *api.Session, tail []api.Message) ([]api.Message, error) {
+func withCurrentRequest(ctx context.Context, store Store, sess *api.Session, tail []api.Message) ([]api.Message, error) {
 	if len(tail) == 0 {
 		return tail, nil
 	}
 	currentTurn := sess.CurrentTurn
 	if currentTurn <= 0 {
-		if latest, err := m.store.Get(ctx, sess.ID); err == nil && latest != nil {
+		if latest, err := store.Get(ctx, sess.ID); err == nil && latest != nil {
 			currentTurn = latest.CurrentTurn
 		}
 	}
 	if currentTurn <= 0 {
 		return tail, nil
 	}
-	turn, err := m.store.ReadSourceTurn(ctx, sess.ID, currentTurn)
+	turn, err := store.ReadSourceTurn(ctx, sess.ID, currentTurn)
 	if err != nil {
 		return nil, err
 	}
 	if turn.OpeningMessageID == "" {
 		return tail, nil
 	}
-	opener, err := m.store.GetMessage(ctx, sess.ID, turn.OpeningMessageID)
+	opener, err := store.GetMessage(ctx, sess.ID, turn.OpeningMessageID)
 	if err != nil {
 		return nil, err
 	}

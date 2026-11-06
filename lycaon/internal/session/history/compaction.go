@@ -72,7 +72,7 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 
 	// Full summaries run only above the session watermark.
 	cfg := sc.Config()
-	bounds := m.canonicalTailBounds(cfg)
+	bounds := canonicalTailBounds(cfg)
 	budgetEst := m.BudgetTokens(ctx, sess, compaction.EstimateMessagesTokens(working))
 	rowPressure := hasMore || len(working) > bounds.maxRows
 	needed := compaction.ShouldCompactSession(budgetEst, cfg.ModelContextWindow, cfg) || rowPressure
@@ -142,7 +142,7 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 			sourceSeq = view.SourceSeq
 		}
 	}
-	bounds := m.canonicalTailBounds(m.compactionConfig(ctx, sess))
+	bounds := canonicalTailBounds(m.compactionConfig(ctx, sess))
 	suffix, hasMore, err := m.readBoundedSuffix(ctx, sess.ID, coveredThroughOrd, bounds)
 	if err != nil {
 		return nil, 0, "", 0, false, err
