@@ -269,6 +269,7 @@ command is interrupted through its context, KILL follows after `-k`, and the
 caller's context always wins. `time` reads the clock around the pipeline and
 reports processor time that external children reported when reaped; native
 operations count zero and set `ProgramOutcome.CPUTimeUnmeasured`. `ulimit`
-keeps a frame's `childLimits`: the first use pins the reported or set limits,
-which every later external child of the frame receives, and a `( )` frame
-keeps its own copy.
+keeps a frame's `childLimits`: setting a limit pins it for every later external
+child of the frame, and a `( )` frame keeps its own copy. A report states what a
+child with no `ulimit` receives, from the `ResourceLimits` owner, and pins
+nothing.

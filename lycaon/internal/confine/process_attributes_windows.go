@@ -3,13 +3,14 @@
 package confine
 
 import (
+	"context"
 	"fmt"
 	"slices"
 )
 
-// ReadResourceLimit reports ErrLimitUnsupported: Windows has no per-process
+// ChildResourceLimit reports ErrLimitUnsupported: Windows has no per-process
 // resource limits.
-func ReadResourceLimit(resource string) (ResourceLimit, error) {
+func ChildResourceLimit(_ context.Context, resource string) (ResourceLimit, error) {
 	if !slices.Contains(limitResources(), resource) {
 		return ResourceLimit{}, fmt.Errorf("unknown resource %q", resource)
 	}
