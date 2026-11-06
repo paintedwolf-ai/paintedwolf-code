@@ -66,7 +66,7 @@ describe("update settings", () => {
     expect((await screen.findByTestId("updates-package-identity")).textContent).toContain("package (rpm)");
     expect(screen.queryByTestId("updates-package-upgrade")).toBeNull();
     expect(screen.queryByTestId("updates-unpackaged")).toBeNull();
-    expect(screen.queryByTestId("updates-up-to-date")).toBeNull();
+    expect(screen.getByTestId("updates-up-to-date")).toBeTruthy();
   });
   it("shows pacman package identity and package-manager ownership", async () => {
     const state = packageFixture();

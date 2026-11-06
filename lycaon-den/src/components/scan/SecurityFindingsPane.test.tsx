@@ -304,8 +304,7 @@ describe("SecurityFindingsPane", () => {
     expect(screen.queryByTestId("scans-error")).toBeNull();
     current = { ...current, status: "running", progress: { completed: 1, chunks: 3, files: 20 } };
     setEvent({ scan_id: current.id, categories: current.categories, status: current.status, findings_count: 0, long_running: false });
-    await screen.findByText("1 of 3 chunks");
-    expect(screen.getByTestId("scans-empty").textContent).toContain("1 of 3 chunks");
+    await waitFor(() => expect(screen.getByTestId("scans-empty").textContent).toContain("1 of 3 chunks"));
     expect(client.queryCodeScan).not.toHaveBeenCalled();
     current = summaryScan;
     setEvent({ scan_id: current.id, categories: current.categories, status: "complete", findings_count: 2, long_running: false });
@@ -500,7 +499,7 @@ describe("SecurityFindingsPane", () => {
     expect(client.getCodeScan.mock.calls).toHaveLength(detailReads);
     expect(screen.getAllByTestId("scans-finding-row")).toHaveLength(2);
     fireEvent.click(screen.getByTestId("scans-history-sort"));
-    fireEvent.click(assertNamedControl(await screen.findByTestId("den-select-option-engine"), "option"));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("scans-history-sort-option-engine"), "option"));
     await waitFor(() => expect(list).toHaveBeenLastCalledWith("proj-1", { limit: 6, cursor: "", sort: "engine", order: "asc" }));
     expect(client.listProjectScanners).toHaveBeenCalledTimes(1);
   });

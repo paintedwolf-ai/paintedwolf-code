@@ -91,7 +91,10 @@ describe("WhatsNewNotice", () => {
     expect(screen.getByTestId("notice").getAttribute("data-notice-code")).toBe("whats_new");
     expect(screen.getByTestId("notice").querySelector(".den-notice-action")).toBeTruthy();
 
-    fireEvent.click(assertNamedControl(screen.getByTestId("notice-action"), "button"));
+    fireEvent.click(assertNamedControl(
+      screen.getAllByTestId("notice-action").find((el) => el.getAttribute("data-action-id") === "read_release_notes")!,
+      "button",
+    ));
     expect(screen.getByTestId("whats-new-dialog-notes").textContent).toMatch(
       /Cool feature/,
     );
@@ -135,7 +138,10 @@ describe("WhatsNewNotice", () => {
     await waitFor(() => {
       expect(screen.getByTestId("notice-rail")).toBeTruthy();
     });
-    fireEvent.click(assertNamedControl(screen.getByTestId("notice-action"), "button"));
+    fireEvent.click(assertNamedControl(
+      screen.getAllByTestId("notice-action").find((el) => el.getAttribute("data-action-id") === "read_release_notes")!,
+      "button",
+    ));
     fireEvent.click(screen.getByTestId("whats-new-dialog-close"));
 
     expect(screen.getByTestId("notice-rail")).toBeTruthy();

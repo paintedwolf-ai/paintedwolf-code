@@ -24,11 +24,11 @@ describe("ScanLimitations", () => {
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
     expect(loadFull).not.toHaveBeenCalled();
     fireEvent.click(issuesTrigger);
-    await screen.findByTestId("scans-limitations");
+    await screen.findByText(/source-0\.py:7/);
     expect(loadFull).toHaveBeenCalledWith("project", "scan", "full");
     expect(screen.getAllByRole("listitem")).toHaveLength(21);
     fireEvent.click(assertNamedControl(screen.getByTestId("table-pager-next"), "button"));
-    await screen.findByTestId("scans-limitations");
+    await screen.findByText(/source-20\.py:7/);
   });
 
   it("stays quiet for complete coverage", () => {

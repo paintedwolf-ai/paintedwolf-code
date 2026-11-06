@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import type { ModelPolicy } from "../../api/types.ts";
@@ -17,14 +17,14 @@ describe("thinking section opt-in", () => {
     fireEvent.click(
       assertNamedControl(screen.getByTestId("thinking-overrides-toggle"), "checkbox"),
     );
-    expect(assertNamedControl(screen.getByTestId("thinking-overrides-group"), "heading")).toBeTruthy();
+    expect(within(screen.getByTestId("thinking-overrides-group")).getByRole("heading")).toBeTruthy();
     expect(change).not.toHaveBeenCalled();
   });
   it("turns off every local override and hides the section", async () => {
     const [saved, setSaved] = createSignal<ModelPolicy>({ ...policy, thinking_overrides: [{ ...ref, mode: "application" }] });
     const change = vi.fn(async (thinking_overrides) => { setSaved({ ...saved(), thinking_overrides }); });
     render(() => <ThinkingOverridesPanel policy={saved()} providers={[]} project onChange={change} />);
-    expect(assertNamedControl(screen.getByTestId("thinking-overrides-group"), "heading")).toBeTruthy();
+    expect(within(screen.getByTestId("thinking-overrides-group")).getByRole("heading")).toBeTruthy();
     fireEvent.click(
       assertNamedControl(screen.getByTestId("thinking-overrides-toggle"), "checkbox"),
     );
@@ -38,6 +38,6 @@ describe("thinking section opt-in", () => {
       assertNamedControl(screen.getByTestId("thinking-overrides-toggle"), "checkbox"),
     );
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Could not save"));
-    expect(assertNamedControl(screen.getByTestId("thinking-overrides-group"), "heading")).toBeTruthy();
+    expect(within(screen.getByTestId("thinking-overrides-group")).getByRole("heading")).toBeTruthy();
   });
 });
