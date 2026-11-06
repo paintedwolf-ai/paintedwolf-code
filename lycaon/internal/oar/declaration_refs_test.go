@@ -34,6 +34,8 @@ host_facts:
     type: bool
   - name: paintedwolf.audited_orphan
     type: bool
+  - name: paintedwolf.can_ask_user
+    type: bool
 `
 	if err := os.WriteFile(filepath.Join(anchors, "oar-profile.yaml"), []byte(profile), 0o644); err != nil {
 		t.Fatal(err)
@@ -50,6 +52,9 @@ host_facts:
 	if err != nil {
 		t.Fatal(err)
 	}
+	// can_ask_user has no literal reference in the fixture tree but is in the
+	// live recovery publication set, so only the truly unreferenced fact is
+	// flagged.
 	if len(got) != 1 || got[0] != "paintedwolf.audited_orphan" {
 		t.Fatalf("unreferenced = %q, want [paintedwolf.audited_orphan]", got)
 	}
