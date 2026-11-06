@@ -1,6 +1,7 @@
 package command
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -55,7 +56,7 @@ func catalogShellReason(code, command string, facts map[string]any) string {
 	}
 	data["command"] = command
 	data["rejection_code"] = code
-	what, cause, _ := guidance.RenderHintFields(code, entry, data)
+	what, cause, _ := guidance.RenderHintFields(context.Background(), code, entry, data, nil)
 	if cause = strings.TrimSpace(cause); cause != "" {
 		return cause
 	}
