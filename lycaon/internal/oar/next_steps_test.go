@@ -153,8 +153,8 @@ func TestValidateNextStepsRejectsDecisionReadsAcrossAllConditionSurfaces(t *test
 
 func schemaTestConfig() *toolschema.Config {
 	return &toolschema.Config{Tools: map[string]toolschema.Entry{
-		"recall":  {Schema: map[string]any{"query": map[string]any{"type": "string"}}},
-		"preview": {Schema: map[string]any{"overlay_id": map[string]any{"type": "string"}}},
+		"recall":  {Schema: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}}}},
+		"preview": {Schema: map[string]any{"type": "object", "properties": map[string]any{"overlay_id": map[string]any{"type": "string"}}}},
 	}}
 }
 
