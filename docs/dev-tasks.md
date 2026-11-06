@@ -22,6 +22,10 @@ Toolchain setup, local dev stacks, debug capture, and the `./task` targets with 
 ./task setup-dev # validates toolchains, installs deps and managed runtimes
 ```
 
+On a fresh macOS Apple Silicon host, `scripts/provision-host.sh` handles
+everything except three operator prerequisites: GitHub SSH access, passwordless
+sudo, and `gh auth login`.
+
 After changing a frontend dependency patch, run `./task setup-dev -- --frontend`
 to refresh the pinned packages before verification. Captured test trees share
 the workspace's installed dependencies.
