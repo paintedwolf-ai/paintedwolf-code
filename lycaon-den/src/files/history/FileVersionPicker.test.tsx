@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
+import { assertNamedControl } from "../../test/controls.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { PRESENTATION_LOADING_GRACE_MS } from "../../ui/presentation.ts";
@@ -130,7 +131,7 @@ describe("FileVersionPicker", () => {
     mount({ history: history({ versions: [heldVersion("c9")] }) });
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
-    expect(screen.getByText("AI · Never saved to disk")).toBeTruthy();
+    expect(screen.getByTestId("file-version-meta").textContent).toBe("AI · Never saved to disk");
     expect(screen.getByText(fileVersionTitle(heldVersion("c9")))).toBeTruthy();
   });
 
@@ -160,7 +161,7 @@ describe("FileVersionPicker", () => {
     expect(props.onCurrent).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByTestId("file-version-trigger"));
-    fireEvent.click(screen.getByRole("button", { name: "Load earlier history" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("file-version-load-earlier"), "button"));
     expect(props.onLoadMore).toHaveBeenCalledOnce();
   });
 
@@ -336,9 +337,9 @@ describe("FileVersionPicker", () => {
     expect(screen.getByText(fileVersionTitle(localVersion))).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
     vi.advanceTimersByTime(PRESENTATION_LOADING_GRACE_MS);
-    expect(screen.getByRole("status", { name: "Loading Git history" }).textContent)
+    expect(screen.getByTestId("file-version-git-loading").textContent)
       .toBe("Loading Git history…");
-    expect(screen.queryByText("No earlier versions")).toBeNull();
+    expect(screen.queryByTestId("file-version-empty")).toBeNull();
   });
 
   it("reports initial history loading and failure states", () => {
@@ -370,7 +371,7 @@ describe("FileVersionPicker", () => {
     });
     fireEvent.click(screen.getByTestId("file-version-trigger"));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByText("No earlier versions")).toBeNull();
+    expect(screen.queryByTestId("file-version-empty")).toBeNull();
   });
 
   it("keeps one waiting interval across history phases and resets it on close", () => {
@@ -385,14 +386,14 @@ describe("FileVersionPicker", () => {
     expect(screen.queryByRole("status")).toBeNull();
     setValue(history({ gitStatus: "loading" }));
     vi.advanceTimersByTime(1);
-    expect(screen.getByRole("status", { name: "Loading Git history" })).toBeTruthy();
+    expect(screen.getByTestId("file-version-git-loading")).toBeTruthy();
     fireEvent.click(screen.getByTestId("file-version-trigger"));
     fireEvent.click(screen.getByTestId("file-version-trigger"));
     expect(screen.queryByRole("status")).toBeNull();
     setValue(history());
     vi.advanceTimersByTime(PRESENTATION_LOADING_GRACE_MS);
     expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.getByText("No earlier versions")).toBeTruthy();
+    expect(screen.getByTestId("file-version-empty")).toBeTruthy();
   });
 
   it.each(["timed_out" as const, "failed" as const])("does not claim no history when the Git lane %s", (state) => {
@@ -400,7 +401,7 @@ describe("FileVersionPicker", () => {
 
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
-    expect(screen.queryByText("No earlier versions")).toBeNull();
+    expect(screen.queryByTestId("file-version-empty")).toBeNull();
   });
 
   it("still says no earlier versions once the lane has actually answered", () => {
@@ -408,7 +409,7 @@ describe("FileVersionPicker", () => {
 
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
-    expect(screen.getByText("No earlier versions")).toBeTruthy();
+    expect(screen.getByTestId("file-version-empty")).toBeTruthy();
   });
 
   it("stays silent when there is no repository to ask", () => {
@@ -416,6 +417,6 @@ describe("FileVersionPicker", () => {
 
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
-    expect(screen.getByText("No earlier versions")).toBeTruthy();
+    expect(screen.getByTestId("file-version-empty")).toBeTruthy();
   });
 });

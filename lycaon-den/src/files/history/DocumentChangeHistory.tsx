@@ -83,7 +83,7 @@ export function DocumentChangeHistory(props: { client: LycaonClient; projectId: 
 
   return <Show when={changes().length > 0 || waiting()}><div class="flex flex-col gap-2 p-3 text-den-caption" role="group" aria-label="Recent edits">
     <For each={changes()}>{(change) => <div class="flex items-center gap-3">
-      <span>{changeAuthorLabel(change)}</span>
+      <span data-testid="document-change-author">{changeAuthorLabel(change)}</span>
       <time dateTime={change.created_at}>{new Date(change.created_at).toLocaleTimeString()}</time>
       <DenButton variant="ghost" compact disabled={busy() || !!change.reverted_by || change.epoch !== editorReplica(props.documentId)?.accepted.epoch}
         onClick={() => void revert(change)}>{change.reverted_by ? "Undone" : "Undo"}</DenButton>

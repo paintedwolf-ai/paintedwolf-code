@@ -49,7 +49,7 @@ describe("recent edits presentation", () => {
     await vi.advanceTimersByTimeAsync(PRESENTATION_LOADING_GRACE_MS);
     read.resolve(page());
     await vi.advanceTimersByTimeAsync(0);
-    expect(screen.getByText("From First edit · turn 1")).toBeTruthy();
+    expect(screen.getByTestId("document-change-author").textContent).toBe("From First edit · turn 1");
     expect(screen.queryByRole("status")).toBeNull();
   });
 
@@ -65,13 +65,13 @@ describe("recent edits presentation", () => {
     await vi.advanceTimersByTimeAsync(0);
     first.unmount();
     mount();
-    expect(screen.getByText("From First edit · turn 1")).toBeTruthy();
+    expect(screen.getByTestId("document-change-author").textContent).toBe("From First edit · turn 1");
     await vi.advanceTimersByTimeAsync(PRESENTATION_LOADING_GRACE_MS);
     expect(screen.queryByRole("status")).toBeNull();
     refresh.reject(new Error("History unavailable"));
     await vi.advanceTimersByTimeAsync(0);
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("From First edit · turn 1")).toBeTruthy();
+    expect(screen.getByTestId("document-change-author").textContent).toBe("From First edit · turn 1");
     const rows = selectProjectNoticeGroups(notices.index()).find(group => group.projectId === "project")?.notices ?? [];
     expect(rows).toMatchObject([{ code: "document_change_history_unavailable", message: "History unavailable" }]);
   });
@@ -86,11 +86,11 @@ describe("recent edits presentation", () => {
     await vi.advanceTimersByTimeAsync(0);
     fireEvent.click(assertNamedControl(screen.getByTestId("earlier-edits"), "button"));
     setDocumentId("other");
-    expect(screen.queryByText("From First edit · turn 1")).toBeNull();
+    expect(screen.queryByTestId("document-change-author")?.textContent).not.toBe("From First edit · turn 1");
     await vi.advanceTimersByTimeAsync(0);
     earlier.resolve(page("Old page"));
     await vi.advanceTimersByTimeAsync(0);
-    expect(screen.getByText("From Other document · turn 1")).toBeTruthy();
-    expect(screen.queryByText("From Old page · turn 1")).toBeNull();
+    expect(screen.getByTestId("document-change-author").textContent).toBe("From Other document · turn 1");
+    expect(screen.queryByTestId("document-change-author")?.textContent).not.toBe("From Old page · turn 1");
   });
 });
