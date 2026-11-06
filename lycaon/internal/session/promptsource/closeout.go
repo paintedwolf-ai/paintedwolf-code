@@ -35,9 +35,9 @@ type Closeout struct {
 
 func (m *Closeout) Build() promptloop.CloseoutDeps {
 	deps := promptloop.CloseoutDeps{
-		RejectFmt:          m.Rejects,
-		HintConfig:         m.Hints,
-		HintNextSteps:      tools.HintNextStepsResolver(m.Policy.Pipeline.Rules()),
+		RejectFmt:     m.Rejects,
+		HintConfig:    m.Hints,
+		HintNextSteps: tools.HintNextStepsResolver(m.Policy.Pipeline.Rules()),
 		EvaluateContentAnchor: func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
 			reject, blocked, content, transformed, err := m.Policy.ContentBlock(ctx, sess, anchor, observation, tool, args)
 			if err != nil {
