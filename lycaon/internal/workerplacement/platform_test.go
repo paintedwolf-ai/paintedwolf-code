@@ -29,6 +29,6 @@ func TestExclusionsAreApplied(t *testing.T) {
 	testutil.FailErr(t, "exclude", excludeFromBackupsAndIndexing(dir))
 	assertExcluded(t, dir)
 	if _, err := os.Stat(dir); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "stat path", err)
 	}
 }
