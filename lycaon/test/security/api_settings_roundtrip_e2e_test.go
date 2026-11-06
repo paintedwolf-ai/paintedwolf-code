@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -23,8 +24,8 @@ func TestSettingsRoundTripE2E(t *testing.T) {
 	base := httpSrv.URL
 
 	initial := openAPIGetJSON[wire.ProviderListResponse](t, base, "/v1/providers", nil, http.StatusOK).Providers
-	if len(initial) != 0 {
-		t.Fatalf("fresh config dir must expose no provider instances, got %+v", initial)
+	if len(initial) != 1 || initial[0].ID != llm.IncludedProviderID || initial[0].Configured {
+		t.Fatalf("fresh config dir must expose only the unconfigured included provider, got %+v", initial)
 	}
 	kinds := settingsGetJSON[wire.ProviderKindListResponse](t, base, "/v1/provider-kinds").Kinds
 	if len(kinds) == 0 {
