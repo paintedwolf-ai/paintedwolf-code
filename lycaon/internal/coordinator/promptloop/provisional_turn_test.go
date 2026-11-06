@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -60,7 +59,8 @@ func TestCommitProvisionalAssistantInHistorySkipsAlreadyTranscript(t *testing.T)
 	}
 }
 
-func TestCommitProvisionalAssistantInHistoryAttachesGrounding(t *testing.T) {
+// A row the closeout path grounded commits as that grounding says.
+func TestCommitProvisionalAssistantInHistoryKeepsAttachedGrounding(t *testing.T) {
 	var committed api.Message
 	grounding := &api.CitationGrounding{Traced: true}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
@@ -70,132 +70,59 @@ func TestCommitProvisionalAssistantInHistoryAttachesGrounding(t *testing.T) {
 				return nil
 			},
 		},
-		Closeout: CloseoutDeps{
-			ProseCitationGrounding: func(_ context.Context, _ *api.Session, _ []api.Message, _, prose, surfaceID string) *api.CitationGrounding {
-				if surfaceID != "implement_synthesis" {
-					t.Fatalf("surfaceID = %q want implement_synthesis", surfaceID)
-				}
-				if prose != "the fix landed" {
-					t.Fatalf("prose = %q", prose)
-				}
-				return grounding
-			},
-		},
 	})
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
-		{ID: "a1", Role: api.MessageRoleAssistant, Content: "the fix landed", Visibility: api.MessageVisibilityInternal},
+		{ID: "a1", Role: api.MessageRoleAssistant, Content: "the fix landed", Visibility: api.MessageVisibilityInternal, Grounding: grounding},
 	}
 	out, err := loop.Projection.commitProvisionalAssistantInHistory(
 		context.Background(), &api.Session{}, "s1", history, "go", "implement_synthesis", "a1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
-	if committed.Grounding != grounding {
-		t.Fatalf("committed grounding = %+v want attached", committed.Grounding)
+	if committed.Grounding != grounding || committed.Visibility != api.MessageVisibilityTranscript {
+		t.Fatalf("committed = %+v", committed)
 	}
-	if committed.Visibility != api.MessageVisibilityTranscript {
-		t.Fatalf("committed visibility = %q want transcript", committed.Visibility)
-	}
-	if out[1].Grounding != grounding {
-		t.Fatalf("history grounding not updated: %+v", out[1].Grounding)
-	}
-	if out[1].Kind != "" {
-		t.Fatalf("closeout kind = %q want empty (answer bubble)", out[1].Kind)
+	if out[1].Grounding != grounding || out[1].Kind != "" {
+		t.Fatalf("history row = %+v", out[1])
 	}
 }
 
-func TestCommitKeepsRawCloseoutEnvelopeInternal(t *testing.T) {
-	// Incomplete closeout envelopes stay internal for retry.
-	for _, raw := range []string{
-		`{"synthesis":"The backend CLI is the ` + "`lycaon`" + ` binary, built from ` + "`lyca",
-		"```json\n{\n  \"synthesis\": \"partial",
+// What the closeout path did not accept on a report surface is at most a draft,
+// and never shows a protocol node. D15: opening with a fence is ordinary Markdown.
+func TestCommitOfUnacceptedReportSurfaceReply(t *testing.T) {
+	for _, tc := range []struct {
+		name, content, want string
+		visible             bool
+	}{
+		{"prose", "Plain answer.", "Plain answer.", true},
+		{"fence-led Markdown", "```\nexample\n```\n\nDone.", "```\nexample\n```\n\nDone.", true},
+		{"protocol nodes leave", "Done [read#1].\n[verify: targeted - Ran it]", "Done.", true},
+		{"directives alone stay internal", "[verify: targeted - Ran it]", "", false},
 	} {
-		var patched api.Message
-		loop := NewPromptLoopForTest(PromptLoopDeps{
-			Projection: ProjectionDeps{
-				UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-					patched = msg
-					return nil
+		t.Run(tc.name, func(t *testing.T) {
+			var committed api.Message
+			loop := NewPromptLoopForTest(PromptLoopDeps{
+				Projection: ProjectionDeps{
+					UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+						committed = msg
+						return nil
+					},
 				},
-			},
+			})
+			history := []api.Message{
+				{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
+				{ID: "a1", Role: api.MessageRoleAssistant, Content: tc.content, Visibility: api.MessageVisibilityInternal},
+			}
+			_, err := loop.Projection.commitProvisionalAssistantInHistory(context.Background(), &api.Session{}, "s1", history, "go", "implement_investigate", "a1")
+			testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
+			if tc.visible {
+				if committed.Visibility != api.MessageVisibilityTranscript || committed.Kind != api.MessageKindDraft || committed.Content != tc.want || committed.CompletionReport != nil {
+					t.Fatalf("committed = %+v", committed)
+				}
+			} else if committed.Visibility != api.MessageVisibilityInternal {
+				t.Fatalf("committed = %+v, want internal", committed)
+			}
 		})
-		history := []api.Message{
-			{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
-			{ID: "slot-1", Role: api.MessageRoleAssistant, Content: raw, Visibility: api.MessageVisibilityInternal},
-		}
-		out, err := loop.Projection.commitProvisionalAssistantInHistory(
-			context.Background(), &api.Session{}, "s1", history, "go", "implement_investigate", "slot-1",
-		)
-		testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
-		if patched.Visibility != api.MessageVisibilityInternal {
-			t.Fatalf("raw envelope visibility = %q want internal (hidden)", patched.Visibility)
-		}
-		if out[1].Visibility != api.MessageVisibilityInternal {
-			t.Fatalf("history row visibility = %q want internal", out[1].Visibility)
-		}
-	}
-}
-
-func TestCommitKeepsPoisonedSynthesisEnvelopeInternal(t *testing.T) {
-	// The synthesis contains a nested completion envelope.
-	inner := `{"synthesis":"## Report\n\nDone."}, "cited_evidence":[]}`
-	raw, err := guidance.MarshalCoordinatorCompletionReport(guidance.CoordinatorCompletionReport{Synthesis: inner})
-	testutil.FailErr(t, "MarshalCoordinatorCompletionReport", err)
-
-	var patched api.Message
-	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Projection: ProjectionDeps{
-			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-				patched = msg
-				return nil
-			},
-		},
-	})
-	history := []api.Message{
-		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
-		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: raw, Visibility: api.MessageVisibilityInternal},
-	}
-	out, err := loop.Projection.commitProvisionalAssistantInHistory(
-		context.Background(), &api.Session{}, "s1", history, "go", "implement_investigate", "slot-1",
-	)
-	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
-	if patched.Visibility != api.MessageVisibilityInternal {
-		t.Fatalf("poisoned synthesis visibility = %q want internal", patched.Visibility)
-	}
-	// Grounding can expose an internal slot, so its wire content stays empty.
-	if patched.Content != "" {
-		t.Fatalf("wire body must not carry the machine envelope, got %q", patched.Content)
-	}
-	// Retry handling reads the envelope from internal history.
-	if out[1].Content != raw {
-		t.Fatalf("history must keep the machine envelope body, got %q", out[1].Content)
-	}
-}
-
-func TestCommitStampsDraftOnInvestigateProseNotEnvelope(t *testing.T) {
-	// Investigation prose commits as a visible draft.
-	var committed api.Message
-	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Projection: ProjectionDeps{
-			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-				committed = msg
-				return nil
-			},
-		},
-	})
-	history := []api.Message{
-		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
-		{ID: "a1", Role: api.MessageRoleAssistant, Content: "I'll scan the CLI entry point next.", Visibility: api.MessageVisibilityInternal},
-	}
-	_, err := loop.Projection.commitProvisionalAssistantInHistory(
-		context.Background(), &api.Session{}, "s1", history, "go", "implement_investigate", "a1",
-	)
-	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
-	if committed.Visibility != api.MessageVisibilityTranscript {
-		t.Fatalf("orchestration prose visibility = %q want transcript", committed.Visibility)
-	}
-	if committed.Kind != api.MessageKindDraft {
-		t.Fatalf("orchestration prose kind = %q want draft", committed.Kind)
 	}
 }
 

@@ -303,6 +303,9 @@ func (r *findRun) dispatch(argv commandprogram.Fields) (toolcontract.ProducerRes
 	if native && len(spec.Effects) == 1 {
 		request.EffectMode = spec.Effects[0].Mode
 	}
+	if err := inv.out.drain(); err != nil {
+		return toolcontract.ProducerResult{}, err
+	}
 	streams := commandprogram.Streams{Input: commandprogram.NullInput(), Output: inv.out, Error: inv.stderr}
 	var result toolcontract.ProducerResult
 	if native && spec.Name != "external" {

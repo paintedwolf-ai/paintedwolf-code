@@ -33,7 +33,7 @@ func TestCommandObservationDoesNotWaitIndefinitelyForOtherProjects(t *testing.T)
 			ledger.store.Snapshots = sourcesnapshot.New(ledger.sqlDB, ledger.store.Content,
 				filepath.Join(t.TempDir(), "observations.db"), broker)
 			ledger.store.Inventory.snapshots = ledger.store.Snapshots
-			ledger.store.Commands.snapshots = ledger.store.Snapshots
+			ledger.store.Commands.retention.snapshots = ledger.store.Snapshots
 			t.Cleanup(func() {
 				testutil.FailErr(t, "close snapshot store", ledger.store.Snapshots.Close())
 			})

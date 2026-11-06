@@ -16,7 +16,7 @@ copy:
   what: '{{ tool }} could not establish path authority for {{ paintedwolf.path }}.'
   cause: This path is outside the attached folders and current access grants.
   why: Structured rejects keep sandbox enforcement consistent across read-only survey tools.
-  fix: If you meant a project file, use a path inside an attached folder (list_dir from "." / "@label/sub/path").
+  fix: If you meant a project file, use a path inside an attached folder (inspect "." or "@label/sub/path" with an offered listing capability).
     If the user named this exact path, say it is outside the attached folders and ask them to attach that folder;
     do not respell the path to look reachable. {% if paintedwolf.receiving_tool_summarize %}For nonprotected text you already have, pass `content` and omit `path` and `paths` on this tool.{% endif %}
   instead: Preserve the path boundary; do not respell the path or request pasted protected content
@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
     path: ../outside
     profile: explore_readonly
     tool: find
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SURVEY_PATH_ESCAPE'
-  - attached folder

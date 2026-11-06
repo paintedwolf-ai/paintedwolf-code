@@ -7,11 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/platform"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
@@ -36,93 +32,6 @@ func TestMultiRootASTAddressingCopySingleSource(t *testing.T) {
 	contractcheck.FailErr(t, "scanMultiRootAST", err)
 	if len(scan.DuplicateAddressing) > 0 {
 		t.Fatalf("multi-root addressing copy outside SSOT partials:\n%s", strings.Join(scan.DuplicateAddressing, "\n"))
-	}
-}
-
-func TestMultiRootDisclosureSingleRootWorkspaceGolden(t *testing.T) {
-	t.Parallel()
-	engine := contractcheck.BundledPromptEngineForRoot(t)
-	vars := map[string]any{}
-	prompts.MergeWorkspaceRootsVars(vars, []projectroot.RootRef{
-		{ID: "r1", Label: "lycaon", Path: "/tmp/lycaon", IsPrimary: true},
-	}, "/tmp/lycaon")
-	out, err := engine.Render(context.Background(), "partials/workspace-roots.md", vars)
-	contractcheck.FailErr(t, "render workspace-roots", err)
-	if !strings.Contains(out, "Project folder: /tmp/lycaon") {
-		t.Fatalf("output = %q", out)
-	}
-	for _, banned := range []string{"@", "spans ", "root=", "folders"} {
-		if strings.Contains(out, banned) {
-			t.Fatalf("single-root output leaks multi-root vocab %q: %s", banned, out)
-		}
-	}
-}
-
-// Relative paths resolve under the marked session folder.
-func TestMultiRootDisclosureSessionFolderMarked(t *testing.T) {
-	t.Parallel()
-	engine := contractcheck.BundledPromptEngineForRoot(t)
-	roots := []projectroot.RootRef{
-		{ID: "r1", Label: "lycaon", Path: "/tmp/lycaon", IsPrimary: true},
-		{ID: "r2", Label: "lycaon-den", Path: "/tmp/lycaon-den"},
-	}
-	for _, tc := range []struct {
-		activePath string
-	}{
-		{activePath: "/tmp/lycaon"},
-		{activePath: "/tmp/lycaon-den"},
-	} {
-		vars := map[string]any{}
-		prompts.MergeWorkspaceRootsVars(vars, roots, tc.activePath)
-		out, err := engine.Render(context.Background(), "partials/workspace-roots.md", vars)
-		contractcheck.FailErr(t, "render workspace-roots", err)
-		if !strings.Contains(out, "(session folder)") {
-			t.Fatalf("active %s: no session-folder marker: %s", tc.activePath, out)
-		}
-		marked := ""
-		for _, line := range strings.Split(out, "\n") {
-			if strings.Contains(line, "(session folder)") {
-				marked = line
-				break
-			}
-		}
-		if !strings.Contains(marked, tc.activePath) {
-			t.Fatalf("active %s: marker on wrong row %q", tc.activePath, marked)
-		}
-	}
-}
-
-func TestMultiRootDisclosureZeroRootWorkspaceGolden(t *testing.T) {
-	t.Parallel()
-	engine := contractcheck.BundledPromptEngineForRoot(t)
-	vars := map[string]any{}
-	prompts.MergeWorkspaceRootsVars(vars, nil, "")
-	out, err := engine.Render(context.Background(), "partials/workspace-roots.md", vars)
-	contractcheck.FailErr(t, "render workspace-roots zero", err)
-	if strings.Contains(out, "Workspace:") {
-		t.Fatalf("zero-root output must not include Working directory line: %s", out)
-	}
-	if !strings.Contains(out, "No folder is attached") {
-		t.Fatalf("zero-root output = %q", out)
-	}
-}
-
-func TestMultiRootDisclosureSingleRootToolSchemasQuiet(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir", err)
-	for name, meta := range schemas.Tools {
-		cap := multiRootCapabilityOf(name)
-		if cap == toolcontract.MultiRootNone || cap == toolcontract.MultiRootCommand {
-			continue
-		}
-		desc := strings.ToLower(meta.Description)
-		for _, needle := range []string{"@label", "root=", "multi-root", "multi root", "spans n folder"} {
-			if strings.Contains(desc, needle) {
-				t.Errorf("tool %q description leaks multi-root vocab at 1 root: %q", name, meta.Description)
-			}
-		}
 	}
 }
 

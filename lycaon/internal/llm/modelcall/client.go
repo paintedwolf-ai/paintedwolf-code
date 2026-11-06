@@ -32,6 +32,16 @@ type RequestDebug struct {
 	Purpose string
 	// CommandGuidance records rendered command-guidance templates and facts.
 	CommandGuidance *CommandGuidanceDebug
+	// HistoryCut records where fitted history starts for prefix-reuse attribution.
+	HistoryCut HistoryCutFacts
+}
+
+// HistoryCutFacts are the host's history cutoffs for one request. Change names
+// why a cutoff moved since the previous request, empty when none did.
+type HistoryCutFacts struct {
+	Generation                                int
+	TailOrd, WorkingSetOrd, FitOrd, BodiesOrd int64
+	Change                                    string
 }
 
 // CommandGuidanceDebug records the command guidance templates/partials/units
@@ -67,7 +77,7 @@ type CompletionRequest struct {
 	// EmptyResponseRecovery renders host policy only for an admitted terminal-empty retry.
 	EmptyResponseRecovery func(context.Context) (string, error) `json:"-" yaml:"-"`
 	ToolProtocol          ToolCallProtocol                      `json:"-" yaml:"-"`
-	StrictBudget          bool                                  `json:"-" yaml:"-"`
+	ReasoningRecovery     bool                                  `json:"-" yaml:"-"`
 	AttemptBudget         *CompletionBudget                     `json:"-" yaml:"-"`
 	ThinkingOverride      *ThinkingOverride                     `json:"-" yaml:"-"`
 	ThinkingOverrideStyle modelinfo.ThinkStyle                  `json:"-" yaml:"-"`
@@ -96,9 +106,9 @@ type ToolUse uint8
 const (
 	// ToolUseAllowed lets the model call any offered tool.
 	ToolUseAllowed ToolUse = iota
-	// ToolUseForbidden asks for a prose answer. Tool definitions stay in the
-	// request, since transports validate tool history against them; each
-	// adapter maps the restriction onto its own no-call control.
+	// ToolUseForbidden asks for a prose answer. Each adapter drops the tool
+	// definitions where its API allows that, and otherwise keeps them with its
+	// no-call control, because that API validates tool history against them.
 	ToolUseForbidden
 )
 
@@ -136,6 +146,8 @@ type StreamChunk struct {
 	Fallback   bool
 	// Reasoning is a separate provider reasoning delta.
 	Reasoning string
+	// ReasoningPresent identifies a separate reasoning block without requiring text.
+	ReasoningPresent bool `json:"-" yaml:"-"`
 	// ReasoningDetails carries terminal structured reasoning blocks.
 	ReasoningDetails []json.RawMessage
 	ToolCalls        []api.ToolCall

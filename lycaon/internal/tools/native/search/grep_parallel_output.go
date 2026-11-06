@@ -125,6 +125,9 @@ func (p *grepFiles) apply(event grepFileEvent, base int64) error {
 		return inv.out.mappings.RecordSourceMapping(mapping)
 	}
 	if event.stderr {
+		if err := inv.out.drain(); err != nil {
+			return err
+		}
 		n, err := inv.stderr.Write(event.bytes)
 		if err == nil && n != len(event.bytes) {
 			err = io.ErrShortWrite

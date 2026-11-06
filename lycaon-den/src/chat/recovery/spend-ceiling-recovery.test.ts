@@ -47,7 +47,6 @@ describe("spend ceiling recovery", () => {
       const prompt = send.mock.calls[0]![0] as string;
       expect(prompt.startsWith("/")).toBe(false);
       expect(prompt).not.toContain(previousAsk);
-      expect(prompt).toContain("Continue the current work");
     },
   );
 

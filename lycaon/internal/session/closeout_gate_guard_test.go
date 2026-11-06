@@ -136,7 +136,7 @@ func TestPendingOverlayCloseoutUsesLedgerOnEveryTurnOrigin(t *testing.T) {
 				history[0].Kind = api.MessageKindHostLoopWake
 			}
 			for _, invokeAllowed := range []bool{true, false} {
-				reject, blocked := mgr.Coordinator.Guards.BeforeFinish(t.Context(), sess, history, "", "Finished", "implement_overlay_promote", true, []string{"read"}, invokeAllowed)
+				reject, blocked := mgr.Coordinator.Guards.BeforeFinish(t.Context(), sess, history, "", "Finished", guidance.CloseoutDraft{}, "implement_overlay_promote", true, []string{"read"}, invokeAllowed)
 				if !blocked || reject == nil || reject.Code() != "OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT" {
 					t.Fatalf("invoke=%t closeout=%v blocked=%t", invokeAllowed, reject, blocked)
 				}

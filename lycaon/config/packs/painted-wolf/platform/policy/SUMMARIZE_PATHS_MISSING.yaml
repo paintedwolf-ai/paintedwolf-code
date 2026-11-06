@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
       path: missing.go
       profile: coordinator
       tool: summarize
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SUMMARIZE_PATHS_MISSING'

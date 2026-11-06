@@ -7,6 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -88,5 +90,23 @@ func TestPerCodeTotalIsPerSessionAndIgnoresCodelessRejections(t *testing.T) {
 	}
 	if got := g.CodeRejectResponses("s2", "command", "COMMAND_NOT_ARGV"); got != 0 {
 		t.Errorf("s2 total=%d want 0 — one session's rejections are not another's", got)
+	}
+}
+
+// AC-MID-09: visibility repair ends in a wait this guard must also admit. An
+// identical wait refused up to the repair bound still passes, or the coordinator
+// would trade one refusal loop for another.
+func TestExhaustedVisibilityRepairAdmitsTheIdenticalWait(t *testing.T) {
+	t.Parallel()
+	g := NewMemoryDoomLoopGuard()
+	ctx := context.Background()
+	args := map[string]any{"timeout_ms": 60000}
+	for range limits.DefaultWaitVisibilityRepairs {
+		testutil.FailErr(t, "RecordAttempt", g.RecordAttempt(ctx, "s1", uuid.NewString(), "wait", args, &api.InvocationFailure{Code: guard.WaitHiddenTextCode}, false))
+	}
+	allowed, _, _, err := g.Check(ctx, "s1", uuid.NewString(), "wait", args, true, nil)
+	testutil.FailErr(t, "Check", err)
+	if !allowed {
+		t.Fatalf("%d visibility refusals made the doom-loop guard refuse the permitted wait", limits.DefaultWaitVisibilityRepairs)
 	}
 }

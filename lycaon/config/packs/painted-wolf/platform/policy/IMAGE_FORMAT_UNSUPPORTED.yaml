@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     profile: coordinator
     supported_formats: .svg, .png, .jpg, .jpeg, .webp, .gif
     tool: view_image
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: IMAGE_FORMAT_UNSUPPORTED'

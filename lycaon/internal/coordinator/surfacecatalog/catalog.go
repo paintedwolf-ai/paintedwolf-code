@@ -30,6 +30,8 @@ type Surface struct {
 	Exit           string                            `yaml:"exit"`
 	// ProseFinish lets a turn on this surface end with grounded prose to the person.
 	ProseFinish bool `yaml:"prose_finish"`
+	// PublishesMidTurnText publishes valid text accompanying tool calls as a note.
+	PublishesMidTurnText bool `yaml:"publishes_mid_turn_text"`
 	// Floor is offered on every model call.
 	Floor []string `yaml:"floor"`
 	// Loadable names the tools the turn may add; whatever is not loaded stays

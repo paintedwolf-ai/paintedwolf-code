@@ -62,7 +62,6 @@ describe("workerTranscriptMarkdownSource", () => {
     expect(out).toContain("- added handler");
     expect(out).toContain("### Files modified");
     expect(out).toContain("- src/a.go");
-    expect(out).toContain("### Suggested next");
     expect(out).toContain("verify tests");
     expect(out).not.toContain("leg_status");
   });

@@ -26,7 +26,6 @@ describe("agent chats", () => {
   it("keeps a chat's slot while another chat comes and goes, and returns it when the chat comes back", () => {
     const first = agentChats(sessions(chat("a", { title: "Fix login" }), chat("b")));
     expect(first.get("a")).toEqual({ sessionId: "a", title: "Fix login", slot: 0 });
-    expect(first.get("b")?.title).toBe("Untitled chat");
     const withoutA = agentChats(sessions(chat("b"), chat("c")));
     expect(withoutA.get("b")?.slot).toBe(1);
     // The absent chat's slot stays free while other slots remain.

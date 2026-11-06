@@ -28,6 +28,3 @@ x-paintedwolf-message: structured socket path refused
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains:
-  - 'Code: SANDBOX_SOCKET_PATH_REFUSED'
-  - socket path

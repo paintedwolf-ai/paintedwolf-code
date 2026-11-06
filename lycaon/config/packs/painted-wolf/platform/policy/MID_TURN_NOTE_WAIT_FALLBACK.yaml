@@ -1,0 +1,22 @@
+oar: '1.0'
+id: MID_TURN_NOTE_WAIT_FALLBACK
+kind: invariant
+anchor: coordinator.mid_turn_note
+requires:
+  facts:
+    - paintedwolf.reject_observation
+when: paintedwolf.reject_observation == "mid_turn_note_wait_fallback"
+effect: warn
+copy:
+  what: '`wait` proceeds, but your earlier text remains an unpublished draft: the user has not received it.'
+  cause: 'Repeated attempts left the update unpublished, so the host stopped refusing the wait.'
+  why: 'The host reports worker state it can read from dispatches and results, when it has any. It does not speak for your conclusions.'
+  fix: 'When you resume, include the relevant explanation in your next cited update or your final reply.'
+  instead: 'Branch on Code MID_TURN_NOTE_WAIT_FALLBACK; carry the explanation forward'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mid_turn_note
+x-paintedwolf-message: Visibility repair exhausted; wait permitted with the draft unpublished.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: 'coordinator'

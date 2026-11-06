@@ -48,7 +48,7 @@ func TestSynthesisAssemblyProjectsHistoricalChecksWithoutChecklist(t *testing.T)
 				}},
 			}})
 			got := s.SynthesisEvidenceForAssembly(t.Context(), &api.Session{ID: "parent"}, "implement_investigate")
-			for _, want := range []string{`"command":"go test ./parser"`, `"cwd":"module"`, `"recorded_verdict":"passed"`, `"source_match":"` + string(match) + `"`, `"prior_user_intent":true`, `"required_by_workflow":false`, "A historical pass does not prove changed source passes"} {
+			for _, want := range []string{`"command":"go test ./parser"`, `"cwd":"module"`, `"recorded_verdict":"passed"`, `"source_match":"` + string(match) + `"`, `"prior_user_intent":true`, `"required_by_workflow":false`} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("assembled OAR projection lacks %q: %s", want, got)
 				}

@@ -1,4 +1,4 @@
-{% if level == "references" %}[host:compacted history through ordinal {{ through_ord }}]
+{% if level == "references" %}{% if omitted_through_ord %}[host:omitted history ordinals {{ omitted_from_ord }} through {{ omitted_through_ord }}; no summary covers them]{% else %}[host:compacted history through ordinal {{ through_ord }}]{% endif %}
 {% if recall_available %}Recover recorded details with `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})`. Use `search` for an index, `message_id` for a body, and `format="record"` for original tool arguments. Pass returned `next_request` to continue.{% else %}Reacquire omitted observations before relying on them.{% endif %}
 {% for s in compacted_sources %}{% if s.handles %}{% for h in s.handles %}`{{ h }}`{% if recall_available %}: `recall(query="handle:{{ h }}")`{% endif %}
 {% endfor %}{% elif s.message_id %}{% if recall_available and through_ord %}{{ s.tool }}: `recall(history={"through_ord":{{ through_ord }},"message_id":"{{ s.message_id }}","format":"record"})`

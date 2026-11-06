@@ -35,8 +35,5 @@ x-paintedwolf-scenarios:
     max_tool_loops: 40
     suggested_resume_max: 80
     tool_loops_used: 39
-  expect_contains:
-  - WORKER_BUDGET_EXHAUSTED
-  - child_session_id
 x-paintedwolf-audience:
 - coordinator

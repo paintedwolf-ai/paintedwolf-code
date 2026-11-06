@@ -1,6 +1,6 @@
 ## First-turn tool check
 
-Before any other action on turn 1, check the eager schemas below for this assignment.{% if more_tools_loadable %} Load a needed capability through `request_tools` by describing it before using it. Only missing eager schemas trigger `SUBAGENT_MISCONFIGURED` during this check.{% endif %}
+Before any other action on turn 1, check the eager schemas below for this assignment.{% if more_tools_loadable %} Use offered tools when sufficient; describe only a missing capability to `request_tools` before using it. Only missing eager schemas trigger `SUBAGENT_MISCONFIGURED` during this check.{% endif %}
 
 {% if profile_has_write_tools %}- If you need product edits but {% for t in tool_check_write_tools %}`{{ t }}`{% if not forloop.Last %}, {% endif %}{% endfor %} is missing → reply with plain text starting with `SUBAGENT_MISCONFIGURED` and name the missing tools.
 {% endif %}{% if tool_check_survey_tools %}- If you need read-only survey but required tools ({% for t in tool_check_survey_tools %}`{{ t }}`{% if not forloop.Last %}, {% endif %}{% endfor %}) are missing → same `SUBAGENT_MISCONFIGURED` pattern.

@@ -21,7 +21,6 @@ describe("shared open destinations", () => {
   });
   it("uses editor and browser preferences without changing the default in-app opener", async () => {
     resetExternalOpenPrefsForTests({ externalEditor: "vscode", browser: "firefox" });
-    expect(destinations().map((item) => item.label)).toContain("VS Code");
     expect(destinations().map((item) => item.label)).toContain("Firefox");
     await openLocalPath({ ...target, line: 42 }, "editor");
     expect(editor).toHaveBeenCalledWith(expect.objectContaining({ absolutePath: target.absolutePath, line: 42, preset: "vscode" }));

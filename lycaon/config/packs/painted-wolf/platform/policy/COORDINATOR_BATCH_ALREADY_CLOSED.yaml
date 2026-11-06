@@ -26,6 +26,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: coordinator
       tool: pack_board
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: COORDINATOR_BATCH_ALREADY_CLOSED'

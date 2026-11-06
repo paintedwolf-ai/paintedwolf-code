@@ -178,12 +178,14 @@ func (s *Inventory) reconcileSnapshot(
 		}
 	}
 	if window == nil {
-		return out, nil
+		recorded, err := s.admitUnclaimed(ctx, projectID, batchID, roots, snapshot, live, rootIDs, transitionByRoot)
+		out.recorded += recorded
+		return out, err
 	}
 	window.mu.Lock()
 	window.admissionMode = string(snapshot.AdmissionMode)
 	window.mu.Unlock()
-	admitted, err := s.windowAdmissions(ctx, projectID, batchID, window, snapshot, live, rootIDs, transitionByRoot)
+	admitted, err := s.windowAdmissions(ctx, projectID, batchID, window, window, snapshot, live, rootIDs, transitionByRoot)
 	if err != nil {
 		return out, err
 	}
@@ -287,11 +289,57 @@ func (s *Inventory) versionFacts(ctx context.Context, entry sourcesnapshot.Entry
 	return sha, raw, nil
 }
 
-// Admit untracked changes against the window's start, reading only changed manifest buckets.
+// admitUnclaimed records what registered windows saw but none may claim, as
+// outside changes: untracked drift has no head for a pass to find, so without
+// this it would never reach history. Moving each start past it keeps a window
+// that claims again later from taking it.
+func (s *Inventory) admitUnclaimed(
+	ctx context.Context,
+	projectID, batchID string,
+	roots []RootSpec,
+	snapshot sourcesnapshot.Snapshot,
+	live map[string]struct{},
+	rootIDs map[string]string,
+	transitionByRoot map[string]string,
+) (int, error) {
+	windows := s.commands.unclaimedWindows(projectID, roots)
+	var inputs []RecordInput
+	seen := make(map[string]struct{})
+	starts := make(map[string]struct{})
+	for _, window := range windows {
+		start := window.currentStart()
+		if _, repeat := starts[start]; repeat || start == snapshot.ID {
+			continue
+		}
+		starts[start] = struct{}{}
+		admitted, err := s.windowAdmissions(ctx, projectID, batchID, window, nil, snapshot, live, rootIDs, transitionByRoot)
+		if err != nil {
+			return 0, err
+		}
+		for _, in := range admitted {
+			key := entryKey(in.RootID, in.Path)
+			if _, repeat := seen[key]; !repeat {
+				seen[key] = struct{}{}
+				inputs = append(inputs, in)
+			}
+		}
+	}
+	recorded, err := s.recordWindowAdmissions(ctx, inputs)
+	if err != nil {
+		return recorded, err
+	}
+	for _, window := range windows {
+		window.moveStart(snapshot.ID)
+	}
+	return recorded, nil
+}
+
+// Admit untracked changes against the source window's start, reading only changed
+// manifest buckets, and attribute them to claim; nil claim records them as outside.
 func (s *Inventory) windowAdmissions(
 	ctx context.Context,
 	projectID, batchID string,
-	window *openCommandWindow,
+	window, claim *openCommandWindow,
 	snapshot sourcesnapshot.Snapshot,
 	live map[string]struct{},
 	rootIDs map[string]string,
@@ -304,7 +352,7 @@ func (s *Inventory) windowAdmissions(
 	var inputs []RecordInput
 	now := time.Now().UTC()
 	admit := func(rootID, path string, op api.SourceChangeOp, before, after *sourcesnapshot.Entry) error {
-		in := observationCause{batchID: batchID, gitTransitionID: transitionByRoot[rootID], window: window}.apply(RecordInput{
+		in := observationCause{batchID: batchID, gitTransitionID: transitionByRoot[rootID], window: claim}.apply(RecordInput{
 			RecordLocation: RecordLocation{RootID: rootID, Path: path, EntryKind: EntryKindFile},
 			ProjectID:      projectID, BranchID: branchForObservedRoot(window.roots, rootID), Op: op, TS: now})
 		if before != nil {

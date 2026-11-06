@@ -25,6 +25,13 @@ func layeringRules() []layeringRule {
 	const modulePath = "github.com/lycaon/lycaon"
 	return []layeringRule{
 		{
+			name:         "citationmd is pure grammar",
+			fromGlob:     modulePath + "/internal/citationmd",
+			forbidden:    modulePath + "/internal/",
+			allowImports: []string{modulePath + "/internal/hostmarker", modulePath + "/internal/verification"},
+			why:          "the citation grammar knows syntax only; evidence types and resolution stay with its callers",
+		},
+		{
 			name:         "toolcontract remains pure compiled facts",
 			fromGlob:     modulePath + "/internal/toolcontract",
 			forbidden:    modulePath + "/internal/",

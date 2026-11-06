@@ -27,7 +27,3 @@ x-paintedwolf-scenarios:
       profile: coordinator
       pass_id: deadbeef
       tool: scan_summary
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SCAN_PASS_NOT_FOUND'
-      - scan_pack

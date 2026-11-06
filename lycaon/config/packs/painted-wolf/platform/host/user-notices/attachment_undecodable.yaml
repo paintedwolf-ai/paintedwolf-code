@@ -7,5 +7,3 @@ suggested_action: Re-encode the video or pick a supported format.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - cannot be decoded

@@ -17,8 +17,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// Only macOS references a socket through a private hard link. Linux retains a
+// descriptor, which leaves no name to mutate.
 func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	for _, mutation := range []string{"unlink-alias", "rename-alias", "rename-private-directory", "rename-alias-root", "rename-config-root", "rename-ancestor"} {
 		t.Run(mutation, func(t *testing.T) {
 			broad := shortTempDir(t)
@@ -89,7 +91,7 @@ func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
 }
 
 func TestShortSocketNamespaceIsProtectedWithoutAnySocketGrant(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	root := shortTempDir(t)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(root, "state"))
 	path := filepath.Join(root, "service")

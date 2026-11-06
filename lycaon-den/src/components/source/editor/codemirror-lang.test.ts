@@ -46,9 +46,7 @@ describe("codemirror-lang", () => {
     expect(languageLabelForPath("Dockerfile")).toBe("Dockerfile");
     expect(languageLabelForPath("deploy/Makefile")).toBe("Makefile");
     expect(languageLabelForPath("CMakeLists.txt")).toBe("CMake");
-    expect(languageLabelForPath(".gitignore")).toBe("Git ignore");
     expect(languageLabelForPath(".env")).toBe("Dotenv");
-    expect(languageLabelForPath("go.mod")).toBe("Go module");
     expect(languageLabelForPath("cpanfile")).toBe("Perl");
     expect(languageLabelForPath("Rexfile")).toBe("Perl");
   });

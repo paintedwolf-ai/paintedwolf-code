@@ -330,6 +330,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"host_runner_tools":                            true,
 	"profile_has_verify":                           true,
 	"profile_has_command":                          true,
+	"profile_has_source_history":                   true,
 	"profile_has_http_request":                     true,
 	"http_request_needs_request":                   true,
 	"managed_secrets_needs_request":                true,
@@ -359,7 +360,6 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"profile_has_summarize":                        true,
 	"profile_has_ask_user":                         true,
 	"profile_has_skills_read":                      true,
-	"profile_has_surface_note":                     true,
 	"profile_has_recall":                           true,
 	"progress_closure_armed":                       true,
 	"card_edit_deferred":                           true,
@@ -371,6 +371,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"card_requestable":                             true,
 	"card_rule":                                    true,
 	"surface_card_label":                           true,
+	"surface_publishes_text":                       true,
 	"profile_has_terminal_open":                    true,
 	"profile_has_terminal_snapshot":                true,
 	"profile_has_render_view":                      true,
@@ -394,7 +395,8 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"drafted_synthesis":        true,
 	// JSON projections of typed citation evaluation in guidance.CloseoutRepairHintData.
 	"repair_observations":          true,
-	"retained_citations":           true,
+	"repair_targets":               true, // citation repair: rejected occurrences by repair ID
+	"document_citation_targets":    true, // citation repair: rejected finding where entries
 	"resume_work_allowed":          true,
 	"can_recall":                   true, // recall in the closed turn's offered tools (promptloop rejectCloseoutGrounding)
 	"offenders_sample":             true, // report-document repair: guidance.OffenderHintData

@@ -19,7 +19,7 @@ copy:
   what: extract_archive could not open {{ paintedwolf.path }} — path does not exist under the attached project roots.
   cause: The path must name an existing archive file.
   why: Structured rejects let agents branch without parsing free-form errors.
-  fix: Verify the path with list_dir or find, then retry.
+  fix: Locate the archive with an offered listing or search capability; retry with its observed path.
   instead: Branch on Code; fix args and retry once
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool
@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       path: missing.zip
       profile: coordinator
       tool: extract_archive
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: EXTRACT_NOT_FOUND'

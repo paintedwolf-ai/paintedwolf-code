@@ -4,6 +4,16 @@ import { type TranscriptItem } from "./transcript-item-model.ts";
 function messageOrdById(messages: readonly Message[]): Map<string, number> {
   const index = new Map<string, number>();
   for (const msg of messages) index.set(msg.id, msg.ord ?? 0);
+  if (!messages.some((msg) => msg.kind === "agent_note")) return index;
+  // A running tool sits at its carrier and a settled one at its result, which
+  // follows the note. Holding the note at the carrier keeps it above both.
+  const ordered = [...messages].sort((a, b) => (a.ord ?? 0) - (b.ord ?? 0));
+  ordered.forEach((msg, at) => {
+    const carrier = ordered[at - 1];
+    if (msg.kind === "agent_note" && carrier?.role === "assistant" && carrier.tool_calls?.length) {
+      index.set(msg.id, carrier.ord ?? 0);
+    }
+  });
   return index;
 }
 

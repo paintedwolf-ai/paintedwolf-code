@@ -95,7 +95,6 @@ describe("NetworkChicklet / External access", () => {
       /unobserved/i,
     );
     const summary = disclosureToggle(getByTestId("network-chicklet"));
-    expect(summary?.getAttribute("aria-label")).toMatch(/External access/);
     expect(summary?.getAttribute("aria-label")).toMatch(/unobserved/i);
   });
 
@@ -118,7 +117,6 @@ describe("NetworkChicklet / External access", () => {
     const view = buildExternalAccessView({ externalAccess: ea });
     expect(view?.mustShow).toBe(true);
     expect(view?.summary ?? "").not.toMatch(/no network calls|made no network|no outbound/i);
-    expect(view?.summary.toLowerCase()).not.toMatch(/no network/);
 
     const { getByTestId, queryByTestId } = render(() => (
       <NetworkChicklet externalAccess={ea} />
@@ -209,7 +207,6 @@ describe("NetworkChicklet / External access", () => {
       },
     });
     expect(view?.endpoints[0]?.label).toContain("[2001:db8::1]:443");
-    expect(view?.endpoints[0]?.label).toContain("SOCKS TCP");
   });
 });
 

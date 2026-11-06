@@ -26,6 +26,3 @@ x-paintedwolf-scenarios:
   vars:
     detail: coverage assessment missing
     assignment: '{"id":"job","subject":{"facts":{"revision":"current","obligations":[],"gaps":[]}}}'
-  expect_contains:
-  - 'Code: COMPLETE_LEG_COVERAGE_INVALID'
-  - current

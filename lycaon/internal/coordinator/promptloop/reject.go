@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
@@ -13,35 +14,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
-	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// maybeCoerceCloseoutContent stores a report surface's draft as its envelope
-// and returns the members of it the report did not take.
-func (l *toolInvocations) maybeCoerceCloseoutContent(
-	ctx context.Context,
-	history []api.Message,
-	sessionID, surfaceID, content, assistantMessageID string,
-) (string, []jsonshape.Issue) {
-	pinned := l.Closeout.pinnedCloseoutSynthesis(ctx, sessionID)
-	prepared, read, ok := guard.PrepareCoordinatorCloseoutContent(surfaceID, content, pinned)
-	if !ok {
-		return content, nil
-	}
-	assistantMessageID = strings.TrimSpace(assistantMessageID)
-	for i := range history {
-		if history[i].ID == assistantMessageID {
-			history[i].Content = prepared
-			break
-		}
-	}
-	return prepared, read.Unread
-}
 
 func (l *toolInvocations) tryRejectNoToolTurn(
 	ctx context.Context,
@@ -49,6 +28,7 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 	history []api.Message,
 	userPrompt string,
 	lastAssistantContent string,
+	draft guidance.CloseoutDraft,
 	surfaceID string,
 	turnTools []string,
 	sessionID string,
@@ -71,7 +51,7 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 
 	block := reject != nil
 	if !block && l.Closeout.Deps.BeforeFinishNoToolTurn != nil {
-		reject, block = l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, surfaceID, workersIdle, turnTools, invokeAllowed)
+		reject, block = l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, draft, surfaceID, workersIdle, turnTools, invokeAllowed)
 	}
 	if !block {
 		return history, nil, false, nil
@@ -193,6 +173,7 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 	if code == "TOOL_NOT_OFFERED" {
 		loadable := toolCtx.Turn.TurnToolPlan.Deferred(tc.Name) && tools.ToolOffered(ctx, "request_tools")
 		data["tool_loadable"] = loadable
+		data["tool_retired_to_content"] = toolRetiredToPublishedText(sess, tc.Name, toolCtx.Turn.TurnSurfaceID)
 		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
 		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0
 		if loadable {
@@ -211,7 +192,7 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 		}
 	}
 	tr := &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
-	if code == "TOOL_NOT_OFFERED" && data["tool_loadable"] == false && data["tool_discovery_available"] == true {
+	if code == "TOOL_NOT_OFFERED" && data["tool_loadable"] == false && data["tool_discovery_available"] == true && data["tool_retired_to_content"] == false {
 		tr = toolrejection.CompleteFailureMetadata(tr, tc.Name, "")
 		l.addToolDiscovery(sess.ID, toolCtx, data)
 	}
@@ -227,6 +208,13 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 		return refusal
 	}
 	return l.toolReject(code, tr.Data).WithCause(tr)
+}
+
+// toolRetiredToPublishedText reports a call to a tool whose job is now text, where
+// that text can actually reach the user. Elsewhere the ordinary refusal is the truth.
+func toolRetiredToPublishedText(sess *api.Session, tool, surfaceID string) bool {
+	_, retired := toolcontract.RetiredToContent(tool)
+	return retired && sess != nil && !sess.IsWorkerChild() && surface.PublishesMidTurnText(surfaceID)
 }
 
 // toolReject renders a refusal with a structured code.

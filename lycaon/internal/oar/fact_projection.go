@@ -61,7 +61,10 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"tool_args":                           mapOrEmpty(gc.Invocation.ToolArgs),
 		"tool_turn_has_text":                  gc.Session.ToolTurnHasText,
 		"tool_turn_has_agent_note":            gc.Session.ToolTurnHasAgentNote,
-		"surface_note_offered":                gc.Session.SurfaceNoteOffered,
+		"unpublished_tool_text_pending":       gc.Session.UnpublishedToolTextPending,
+		"mid_turn_citations_required":         gc.Session.MidTurnCitationsRequired,
+		"mid_turn_citation_attempted":         gc.Session.MidTurnCitationAttempted,
+		"mid_turn_evidence_unreadable":        gc.Session.MidTurnEvidenceUnreadable,
 		"last_assistant":                      gc.Session.LastAssistant,
 		"turn_tools":                          strList(gc.Session.TurnTools),
 		"session_posture":                     gc.Session.SessionPosture,
@@ -78,7 +81,8 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"batch_closed":                        gc.Workflow.BatchClosed,
 		"progress_open_items":                 gc.Progress.ProgressOpenItems,
 		"progress_has_open_steps":             gc.Progress.ProgressHasOpenSteps,
-		"has_completion_report":               gc.Progress.HasCompletionReport,
+		"closeout_has_answer":                 gc.Progress.CloseoutHasAnswer,
+		"closeout_only_repair_directives":     gc.Progress.CloseoutOnlyRepairDirectives,
 		"task_envelope_echo":                  gc.Progress.TaskEnvelopeEcho,
 		"closeout_surface":                    gc.Session.CloseoutSurface,
 		"progress_reconcile_needed":           gc.Progress.ProgressReconcileNeeded,
@@ -203,6 +207,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"source_analysis_unavailable":         gc.Source.SourceAnalysisUnavailable,
 		"http_request_web_page":               gc.Invocation.HTTPRequestWebPage,
 		"http_request_loopback_other_session": gc.Invocation.HTTPRequestLoopbackOtherSession,
+		"git_no_repository_on_write_leg":      gc.Source.GitNoRepositoryOnWriteLeg,
 	}
 	maps.Copy(out, rejectObservationActivation(gc))
 	maps.Copy(out, standardActivation(gc))

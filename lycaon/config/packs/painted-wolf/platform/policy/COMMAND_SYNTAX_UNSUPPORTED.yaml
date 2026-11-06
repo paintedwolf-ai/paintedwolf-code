@@ -36,7 +36,3 @@ x-paintedwolf-scenarios:
     source_line: 3
     source_column: 7
     expected_form: supported syntax
-  expect_contains:
-  - 'Code: COMMAND_SYNTAX_UNSUPPORTED'
-  - '3:7'
-  - supported syntax

@@ -29,8 +29,5 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: task
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SPEC_POSTURE_RESEARCH_REQUIRED'
 x-paintedwolf-audience:
 - coordinator

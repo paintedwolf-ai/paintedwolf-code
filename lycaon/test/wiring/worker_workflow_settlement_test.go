@@ -22,7 +22,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			testutil.FailErr(t, "seed survey source", os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644))
 			sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 			testutil.FailErr(t, "create survey", err)
-			run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0"})
+			run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.1"})
 			testutil.FailErr(t, "start survey", err)
 			settleScanObligationAndAdvance(t, h, ctx, run.ID, "plan")
 			call := wiringToolContext(sess.ID, dir)

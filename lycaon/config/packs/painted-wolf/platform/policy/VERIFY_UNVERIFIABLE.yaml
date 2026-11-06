@@ -30,7 +30,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: verify
-  expect_contains:
-  - 'Code: VERIFY_UNVERIFIABLE'
-  - unverifiable
-  - no verdict

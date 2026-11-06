@@ -362,16 +362,13 @@ func (p *responseRetryProvider) prepareResponseRetry(ctx context.Context, req *m
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	empty.RecoveryAttempted = req.StrictBudget
+	empty.RecoveryAttempted = req.ReasoningRecovery
 	if empty.OutputLimitReached() {
-		if req.StrictBudget || req.ThinkingOverride != nil || req.AttemptBudget == nil || !req.AttemptBudget.CanReduceReasoning {
+		if req.ReasoningRecovery || req.ThinkingOverride != nil || req.AttemptBudget == nil || !req.AttemptBudget.CanReduceReasoning {
 			return false, nil
 		}
-		req.StrictBudget = true
-		modelcall.MarkSessionStrictBudget(req.Debug.SessionID)
-		if req.MaxTokens > modelcall.StrictMaxTokens {
-			req.MaxTokens = modelcall.StrictMaxTokens
-		}
+		req.ReasoningRecovery = true
+		modelcall.MarkSessionReasoningRecovery(req.Debug.SessionID)
 		slog.InfoContext(ctx, "recovering empty output-limit response with lower reasoning", "provider", p.ID(), "model", req.Model, "attempt", attempt+2)
 		providerretry.ObserveRetry(ctx, providerretry.RetryAttempt{Attempt: attempt + 2, MaxAttempts: attempt + 2, Reason: providerretry.RetryReasonEmptyCompletion})
 		return true, ctx.Err()
@@ -394,8 +391,8 @@ func noteResponseBudget(req modelcall.CompletionRequest, completion *modelcall.C
 	if completion == nil || req.AttemptBudget == nil || req.ThinkingOverride != nil {
 		return
 	}
-	if req.AttemptBudget.Strict && modelcall.CompletionHasPayload(completion) {
-		modelcall.ClearSessionStrictBudget(strings.TrimSpace(req.Debug.SessionID))
+	if req.AttemptBudget.ReducedReasoning && modelcall.CompletionHasPayload(completion) {
+		modelcall.ClearSessionReasoningRecovery(strings.TrimSpace(req.Debug.SessionID))
 	}
 	visibleBytes := len(completion.Content)
 	for _, call := range completion.ToolCalls {

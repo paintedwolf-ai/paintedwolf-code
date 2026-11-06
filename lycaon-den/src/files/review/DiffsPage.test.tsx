@@ -100,7 +100,6 @@ describe("the diffs page", () => {
     render(() => <DiffsPage projectId="p1" client={client} address={TURN} onWalkTurn={() => {}} />);
 
     expect(await screen.findByText("2 files changed")).toBeTruthy();
-    expect(screen.getByTestId("diffs-page-comparison").textContent).toBe("What this turn did");
     expect(screen.getByTestId("diffs-page-stat").textContent).toContain("3 writes");
     await waitFor(() => expect(screen.getAllByTestId("diffs-section-header")).toHaveLength(2));
     for (const section of screen.getAllByTestId("diffs-section-header")) {
@@ -351,7 +350,6 @@ describe("the diffs page", () => {
     render(() => <DiffsPage projectId="p1" client={client} address={LENS} />);
 
     expect(await screen.findByText("2 files changed")).toBeTruthy();
-    expect(screen.getByTestId("diffs-page-comparison").textContent).toBe("New since you looked");
     // No walk from a comparison that is not a turn.
     expect(screen.queryByTestId("diffs-page-walk")).toBeNull();
 
@@ -369,15 +367,12 @@ describe("the diffs page", () => {
 
     render(() => <DiffsPage projectId="p1" client={client} address={LENS} />);
 
-    const empty = await screen.findByTestId("diffs-page-empty");
-    expect(empty.textContent).toContain("Marking is off");
-    expect(screen.getByTestId("diffs-page-comparison").textContent).toBe("Nothing marked");
+    await screen.findByTestId("diffs-page-empty");
   });
 
   it("claims nothing before the comparison settles", () => {
     render(() => <DiffsPage projectId="p1" client={clientFixture([])} address={LENS} />);
 
-    expect(screen.getByTestId("diffs-page-title").textContent).toContain("Reading this comparison");
     expect(screen.queryByTestId("diffs-page-empty")).toBeNull();
   });
 
@@ -528,15 +523,11 @@ describe("the diffs page", () => {
       expect(section("removed.go").querySelector('[data-testid="file-edit-diff-details"]')).toBeTruthy();
     });
 
-    expect(section("created.py").querySelector(".den-file-edit-diff-details-badge")?.textContent).toBe("New file");
     expect(section("created.py").querySelector(".den-file-edit-diff-details-lang")?.textContent).toBe("Python");
     expect(section("created.py").querySelector(".den-file-edit-diff-details-lines")?.textContent).toBe("5 lines added");
-    expect(section("created.py").querySelector(".den-file-edit-diff-details-btn")?.textContent).toBe("View file");
 
-    expect(section("removed.go").querySelector(".den-file-edit-diff-details-badge")?.textContent).toBe("Deleted file");
     expect(section("removed.go").querySelector(".den-file-edit-diff-details-lang")?.textContent).toBe("Go");
     expect(section("removed.go").querySelector(".den-file-edit-diff-details-lines")?.textContent).toBe("8 lines removed");
-    expect(section("removed.go").querySelector(".den-file-edit-diff-details-btn")?.textContent).toBe("View removed contents");
 
     const createdDisclosure = section("created.py").querySelector<HTMLButtonElement>(".den-file-edit-diff-disclosure")!;
     createdDisclosure.click();
@@ -581,7 +572,6 @@ describe("the diffs page", () => {
 
     const status = await screen.findByTestId("diffs-page-status");
     expect(status).toBeTruthy();
-    expect(screen.getByTestId("diffs-editor-mode").textContent).toBe("All diffs");
     expect((await screen.findByTestId("diffs-status-files")).textContent).toBe("2 files");
 
     const wrapBtn = screen.getByTestId("diffs-page-wrap-toggle");

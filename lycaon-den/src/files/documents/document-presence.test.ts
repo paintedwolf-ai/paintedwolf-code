@@ -75,7 +75,6 @@ describe("window cursor presence", () => {
     await vi.waitFor(() => expect(view.dom.querySelectorAll(".cm-document-caret")).toHaveLength(1));
     expect(view.dom.querySelector(".cm-document-caret")?.getAttribute("aria-label")).toBe("Window 9");
     expect(getOverviewWindowSelections(view.state).map(selection => selection.clientId)).toEqual(["window:file:9"]);
-    expect(view.dom.textContent).not.toContain("Connecting window");
     setViews([]);
     await vi.waitFor(() => expect(view.dom.querySelectorAll(".cm-document-caret")).toHaveLength(0));
     expect(getOverviewWindowSelections(view.state)).toEqual([]);

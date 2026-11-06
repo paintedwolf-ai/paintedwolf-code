@@ -407,6 +407,48 @@ WHERE e.project_id = sqlc.arg(project_id) AND e.ordinal > sqlc.arg(ordinal)
   AND ((SELECT roots FROM scope_input) = '' OR EXISTS (SELECT 1 FROM scoped_roots r WHERE r.root_id=e.root_id AND (r.branch_id=o.branch_id OR (o.branch_id!='' AND substr(o.branch_id,1,9)!='worktree:'))))
 ORDER BY e.ordinal DESC LIMIT sqlc.arg(page_limit);
 
+-- Each attached root admits only the branch given for it, trunk included, so
+-- other branches neither fill nor truncate the page.
+-- name: ListSourceEffectsAfterOrdinalOnBranch :many
+WITH scope_input AS (SELECT CAST(sqlc.arg(root_branches) AS TEXT) AS roots), scoped_roots AS (
+ SELECT CAST(r.key AS TEXT) AS root_id, CAST(r.value AS TEXT) AS branch_id FROM scope_input, json_each(roots) r
+)
+SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
+       COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.root_id, e.path, e.from_root_id, e.from_path,
+       e.op, e.entry_kind, e.ordinal, e.created_ts,
+       o.branch_id, o.origin, o.cause, o.actor_label,
+       o.session_id, o.job_id, o.turn, o.tool_call_id, o.tool_name, o.batch_id, o.capture_quality,
+       COALESCE(o.git_transition_id, '') AS git_transition_id,
+       COALESCE(o.command_window_id, '') AS command_window_id
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = sqlc.arg(project_id) AND e.ordinal > sqlc.arg(ordinal)
+  AND e.walk_visible = 1
+  AND (CAST(sqlc.arg(before_ordinal) AS INTEGER) = 0 OR e.ordinal < CAST(sqlc.arg(before_ordinal) AS INTEGER))
+  AND EXISTS (SELECT 1 FROM scoped_roots r WHERE r.root_id = e.root_id AND r.branch_id = o.branch_id)
+ORDER BY e.ordinal DESC LIMIT sqlc.arg(page_limit);
+
+-- One class of what a session's turn brief reads, so one class cannot fill the
+-- other's page: the viewer's own command windows, or every other actor. Worker
+-- branches and the viewer's own writes are in neither.
+-- name: ListSourceEffectsForBriefClass :many
+SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
+       COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.root_id, e.path, e.from_root_id, e.from_path,
+       e.op, e.entry_kind, e.ordinal, e.created_ts,
+       o.branch_id, o.origin, o.cause, o.actor_label,
+       o.session_id, o.job_id, o.turn, o.tool_call_id, o.tool_name, o.batch_id, o.capture_quality,
+       COALESCE(o.git_transition_id, '') AS git_transition_id,
+       COALESCE(o.command_window_id, '') AS command_window_id
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = sqlc.arg(project_id) AND e.ordinal > sqlc.arg(ordinal)
+  AND e.walk_visible = 1
+  AND e.ordinal <= sqlc.arg(through_ordinal)
+  AND (o.branch_id = '' OR substr(o.branch_id, 1, 9) = 'worktree:')
+  AND (o.origin != 'agent' OR o.session_id != sqlc.arg(viewer_session_id))
+  AND (COALESCE(o.command_window_id, '') != '' AND o.session_id = sqlc.arg(viewer_session_id)) = CAST(sqlc.arg(during_command) AS INTEGER)
+ORDER BY e.ordinal DESC LIMIT sqlc.arg(page_limit);
+
 -- name: ListSourceEffectsForPresentation :many
 WITH scope_input AS (SELECT CAST(sqlc.arg(root_branches) AS TEXT) AS roots), scoped_roots AS (
  SELECT CAST(r.key AS TEXT) AS root_id, CAST(r.value AS TEXT) AS branch_id FROM scope_input, json_each(CASE WHEN roots='' THEN '{}' ELSE roots END) r
@@ -441,6 +483,7 @@ SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(o.command_window_id, '') AS command_window_id
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = sqlc.arg(project_id) AND e.file_id = sqlc.arg(file_id)
+  AND o.branch_id = sqlc.arg(branch_id)
   AND e.ordinal > CAST(sqlc.arg(after_ordinal) AS INTEGER) AND e.walk_visible = 1
   AND (CAST(sqlc.arg(before_ordinal) AS INTEGER) = 0 OR e.ordinal < CAST(sqlc.arg(before_ordinal) AS INTEGER))
 ORDER BY e.ordinal DESC LIMIT sqlc.arg(page_limit);
@@ -450,6 +493,26 @@ SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
        e.after_version_id, e.ordinal
 FROM source_effects e
 WHERE e.project_id = ? AND e.file_id = ? AND e.ordinal > ? AND e.walk_visible = 1
+ORDER BY e.ordinal ASC LIMIT 1;
+
+-- name: OldestSourceEffectForFileAfterOrdinalOnBranch :one
+SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.ordinal
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = sqlc.arg(project_id) AND e.file_id = sqlc.arg(file_id)
+  AND o.branch_id = sqlc.arg(branch_id) AND e.ordinal > sqlc.arg(ordinal) AND e.walk_visible = 1
+ORDER BY e.ordinal ASC LIMIT 1;
+
+-- The first thing this branch recorded at a location past the ordinal, whichever
+-- file held it, including a move away from it.
+-- name: OldestSourceEffectAtPathAfterOrdinalOnBranch :one
+SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.ordinal, e.from_root_id, e.from_path
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = sqlc.arg(project_id) AND o.branch_id = sqlc.arg(branch_id)
+  AND e.ordinal > sqlc.arg(ordinal) AND e.walk_visible = 1
+  AND ((e.root_id = sqlc.arg(root_id) AND e.path = sqlc.arg(path))
+    OR (e.from_root_id = sqlc.arg(root_id) AND e.from_path = sqlc.arg(path)))
 ORDER BY e.ordinal ASC LIMIT 1;
 
 -- name: OldestSourceEffectForFileInSession :one
@@ -561,13 +624,18 @@ GROUP BY e.file_id ORDER BY first_ordinal ASC, e.path ASC LIMIT ?;
 
 -- Paths a session's work produced on the primary tree: its own tool writes
 -- plus what its commands were observed changing, so a lockfile a build
--- regenerated stages with the edit that caused it.
+-- regenerated stages with the edit that caused it. A command's claim on a file
+-- lasts until the file's next change by anyone else on that branch.
 -- name: ListSessionAuthoredFiles :many
 SELECT e.file_id, e.root_id, e.path, e.from_path,
        MIN(e.ordinal) AS first_ordinal, MIN(e.created_ts) AS first_ts
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = ? AND o.session_id = ? AND e.root_id = ?
-  AND (o.origin = 'agent' OR o.command_window_id IS NOT NULL)
+  AND (o.origin = 'agent' OR (o.command_window_id IS NOT NULL AND o.session_id = (
+        SELECT newest_op.session_id
+        FROM source_effects newest JOIN source_operations newest_op ON newest_op.id = newest.operation_id
+        WHERE newest.file_id = e.file_id AND newest_op.branch_id = o.branch_id
+        ORDER BY newest.ordinal DESC LIMIT 1)))
   AND (o.branch_id = '' OR substr(o.branch_id,1,9)='worktree:')
 GROUP BY e.file_id ORDER BY first_ordinal ASC, e.path ASC LIMIT ?;
 

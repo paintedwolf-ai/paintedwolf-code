@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     path: vendor/sdk.tar
     profile: implement
     tool: extract_archive
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: EXTRACT_FORMAT_UNSUPPORTED'

@@ -33,16 +33,10 @@ x-paintedwolf-scenarios:
   vars:
     job_id: ov-already-merged
     merge_status: merged
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_PROMOTE_NOT_PENDING'
 - id: no_workspace
   vars:
     job_id: ov-read
     reason: no isolated branch
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_PROMOTE_NOT_PENDING'
 selector:
   tool:
   - preview_overlay

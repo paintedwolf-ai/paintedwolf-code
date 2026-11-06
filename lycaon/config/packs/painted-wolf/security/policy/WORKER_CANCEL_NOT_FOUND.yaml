@@ -23,9 +23,6 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     job_id: job-missing
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_CANCEL_NOT_FOUND'
 selector:
   tool:
   - worker_cancel

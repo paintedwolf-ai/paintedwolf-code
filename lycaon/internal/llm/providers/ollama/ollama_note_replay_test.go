@@ -50,3 +50,20 @@ func TestOllamaToolResultsCarryNativeNames(t *testing.T) {
 		t.Fatalf("native tool association lost: %s", encoded)
 	}
 }
+
+// AC-MID-17: published text survives on a wire that drops every note row.
+func TestPublishedCarrierTextReachesOllama(t *testing.T) {
+	carrier := api.Message{ID: "c1", Role: api.MessageRoleAssistant, Content: "Checking the parser.", ToolCalls: []api.ToolCall{{ID: "t1", Name: "read"}}}
+	note := api.Message{ID: api.MidTurnNoteID("c1"), Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote, Content: "Checking the parser."}
+	result := api.Message{Role: api.MessageRoleTool, Content: "ok", ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "t1"}}
+	wire := ProjectMessages(api.FilterPromptHistory([]api.Message{carrier, note, result}), MessageProjection{})
+	seen := 0
+	for _, msg := range wire {
+		if msg.Role == "assistant" && msg.Content == carrier.Content {
+			seen++
+		}
+	}
+	if seen != 1 {
+		t.Fatalf("published text reached the wire %d times: %+v", seen, wire)
+	}
+}

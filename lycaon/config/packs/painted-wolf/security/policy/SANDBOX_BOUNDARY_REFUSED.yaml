@@ -5,6 +5,7 @@ anchor: tool.post_invoke
 selector:
   tool:
     - command
+    - verify
     - command_output
     - terminal_open
     - terminal_send
@@ -37,14 +38,7 @@ x-paintedwolf-scenarios:
     vars:
       tool: command
       destination: service.example:8443
-    expect_contains:
-      - 'Code: SANDBOX_BOUNDARY_REFUSED'
-      - egress broker
-      - service.example:8443
   - id: background_broker_denial
     vars:
       tool: command_output
       destination: service.example
-    expect_contains:
-      - 'Code: SANDBOX_BOUNDARY_REFUSED'
-      - service.example

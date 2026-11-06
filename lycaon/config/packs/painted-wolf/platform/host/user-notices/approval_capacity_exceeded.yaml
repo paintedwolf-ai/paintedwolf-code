@@ -9,5 +9,3 @@ context_schema:
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "still waiting"

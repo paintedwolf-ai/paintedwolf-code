@@ -13,6 +13,7 @@ import (
 type RequestControlCapture struct {
 	mu       sync.Mutex
 	requests []map[string]json.RawMessage
+	input    []ModelInputSegment
 	// Wire receives serialized adapter requests only for an opted-in collection.
 	Wire *WireCapture
 }
@@ -40,6 +41,7 @@ func (c *RequestControlCapture) recordControls(body []byte) {
 	if json.Unmarshal(body, &wire) != nil {
 		return
 	}
+	input := modelInputSegments(wire)
 	controls := map[string]json.RawMessage{}
 	for _, key := range []string{"reasoning_effort", "thinking", "reasoning", "max_tokens", "max_completion_tokens", "temperature", "output_config", "think"} {
 		if value, ok := wire[key]; ok {
@@ -69,6 +71,7 @@ func (c *RequestControlCapture) recordControls(body []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.requests = append(c.requests, controls)
+	c.input = input
 }
 
 // RequestRenderer serializes a request exactly as an adapter would dispatch it,

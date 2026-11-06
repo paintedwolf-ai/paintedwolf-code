@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"image"
 	"image/color"
 	"image/png"
@@ -118,9 +119,7 @@ func TestGateSVGRedactsMatchedMarkup(t *testing.T) {
 	if bytes.Contains(outcome.PerceiveBytes, []byte(testSecret)) {
 		t.Fatalf("secret survives in perceived svg: %s", outcome.PerceiveBytes)
 	}
-	if strings.Contains(outcome.ExtractedText, testSecret) {
-		t.Fatalf("secret survives in extracted text: %s", outcome.ExtractedText)
-	}
+	exposure.Absent(t, outcome.ExtractedText, testSecret)
 	if err := xml.Unmarshal(outcome.PerceiveBytes, new(struct{})); err != nil {
 		testutil.FailErr(t, "redacted svg parses", err)
 	}

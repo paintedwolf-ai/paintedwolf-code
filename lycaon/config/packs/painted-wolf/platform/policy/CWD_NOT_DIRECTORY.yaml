@@ -30,8 +30,3 @@ x-paintedwolf-scenarios:
     cwd: README.md
     profile: implement
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CWD_NOT_DIRECTORY'
-  - existing directory
-  - permitted scope

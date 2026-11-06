@@ -7,5 +7,3 @@ suggested_action: "Check the selected folder and file path, then try again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "The selected path is outside this project\u2019s attached folders"

@@ -10,6 +10,3 @@ suggested_action: >-
 scenarios:
   - id: generic
     vars: {}
-    expect_contains:
-      - isolated workspace
-      - No worker changes

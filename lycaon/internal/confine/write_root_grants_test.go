@@ -498,7 +498,7 @@ func TestWriteRootsForBoundaryIncludesSessionScratch(t *testing.T) {
 
 func TestWriteRootsForBoundaryIncludesDarwinConfstrRootsWithOverriddenTMPDIR(t *testing.T) {
 	if runtime.GOOS != "darwin" {
-		t.Skip("darwin confstr user roots only")
+		t.Skip("confstr's per-user temporary roots exist only on macOS")
 	}
 	userRoots := darwinUserRoots()
 	if len(userRoots) == 0 {

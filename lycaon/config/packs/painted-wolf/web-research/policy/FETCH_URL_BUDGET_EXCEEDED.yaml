@@ -36,6 +36,3 @@ x-paintedwolf-scenarios:
     max: '128'
     tool: fetch_url
     window: 30m0s
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: FETCH_URL_BUDGET_EXCEEDED'

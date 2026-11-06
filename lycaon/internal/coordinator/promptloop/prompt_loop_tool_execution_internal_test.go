@@ -445,3 +445,46 @@ func TestDelegateDispatchOnImplementSurfaceRedirectsToTask(t *testing.T) {
 		t.Fatalf("unofferedToolCode(delegate_dispatch, plan_execute) = %q, want TOOL_NOT_OFFERED", got)
 	}
 }
+
+// A model calling a tool retired to content is told to write the text, only
+// where that text can reach the user. Elsewhere the ordinary refusal is the truth.
+func TestToolRetiredToContentRefusalSaysWriteText(t *testing.T) {
+	root := testutil.CheckoutRoot(t)
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	testutil.FailErr(t, "install anchors", anchorcatalog.InstallFile(filepath.Join(root, "lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml")))
+	loader, err := oar.NewLoader(filepath.Join(root, "schemas"))
+	testutil.FailErr(t, "create loader", err)
+	rules, err := loader.LoadEffectivePolicy()
+	testutil.FailErr(t, "load policy", err)
+	pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
+	pipeline.EnableAnchor(oar.AnchorToolRejected)
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Tools: ToolsDeps{BlockPlane: &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}},
+	})
+	for _, tc := range []struct {
+		name, tool, surfaceID, parent string
+		want                          bool
+	}{
+		{name: "publishing surface", tool: "surface_note", surfaceID: "implement_routing", want: true},
+		{name: "synthesis keeps tool-step text private", tool: "surface_note", surfaceID: "implement_synthesis"},
+		{name: "worker text stays private", tool: "surface_note", surfaceID: "implement_routing", parent: "root"},
+		{name: "another unknown tool", tool: "made_up", surfaceID: "implement_routing"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sess := &api.Session{ID: t.Name(), AgentType: "coordinator", ParentSessionID: tc.parent}
+			reject := loop.Tools.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: tc.tool}, tools.ToolContext{
+				Identity: tools.InvocationIdentity{Agent: "coordinator"},
+				Turn:     tools.InvocationTurn{TurnSurfaceID: tc.surfaceID, TurnOfferedToolNames: []string{"read", "request_tools"}, TurnToolPlan: toolsurface.Compile([]string{"read", "request_tools"}, []string{"recall"})},
+			}, "TOOL_NOT_OFFERED", nil)
+			if reject.Code() != "TOOL_NOT_OFFERED" || reject.Copy == nil {
+				t.Fatalf("refusal = %+v", reject)
+			}
+			if got := strings.Contains(reject.Copy["fix"], "Write the update as assistant text"); got != tc.want {
+				t.Fatalf("write-text recovery = %v, want %v: %s", got, tc.want, reject.Copy["fix"])
+			}
+			if _, discovery := toolrejection.AsToolReject(reject).Data["discovery"]; discovery && tc.want {
+				t.Fatal("a retired name needs no tool catalog")
+			}
+		})
+	}
+}

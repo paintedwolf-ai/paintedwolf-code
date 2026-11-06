@@ -24,7 +24,7 @@ func TestToolImagesRideTheNextUserMessage(t *testing.T) {
 	if tool.Role != "tool" || len(tool.Images) != 0 {
 		t.Fatalf("tool message = %+v", tool)
 	}
-	if images.Role != "user" || len(images.Images) != 1 || !strings.Contains(images.Content, "⟦D:tool:image⟧") {
+	if images.Role != "user" || len(images.Images) != 1 || !strings.Contains(images.Content, "Data from tool (image):") {
 		t.Fatalf("image message = %+v", images)
 	}
 }

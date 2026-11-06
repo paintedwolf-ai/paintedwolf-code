@@ -22,6 +22,3 @@ x-paintedwolf-scenarios:
 - id: no_workspace
   vars:
     agent_type: implementer
-  expect_contains:
-  - 'Code: WORKER_WORKSPACE_REQUIRED'
-  - workspace

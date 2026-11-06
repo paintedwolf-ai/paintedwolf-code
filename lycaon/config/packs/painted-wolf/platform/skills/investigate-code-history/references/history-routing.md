@@ -1,14 +1,16 @@
 # Code history routing reference
 
-Native Git commands in `command` provide committed history. `source_history` provides the live source ledger. Write-leg overlays contain no Git metadata; use `source_history` there.
+Native Git commands in `command` provide committed history. `source_history` provides the live source ledger. Write-leg overlays contain no Git metadata; there `source_history()` and `source_history(path, mode=diff)` replace `git status` and `git diff`.
 
 ## Choose the evidence
 
 | Question | Evidence |
 |---|---|
 | Is the change only local? | `git status --short` and `git diff -- path` in `command` |
+| What changed on this branch this session, by anyone? | `source_history()` |
+| What has this file changed since the session began? | `source_history(path, mode=diff)` |
 | Who changed this file during live work? | `source_history(path)` |
-| What did an uncommitted version contain or change? | `source_history(path, mode=version, version_id=…)` or `mode=diff` |
+| What did an uncommitted version contain or change? | `source_history(path, mode=version, version_id=…)` or `mode=diff` with `version_id` |
 | Who wrote these uncommitted lines? | `source_history(path, mode=lines, start_line, end_line)` |
 | What has this session changed? | `source_history(mode=mine)` |
 | Which commit last touched these lines? | `git blame -L A,B -- path`, then `git show ref -- path` in `command` |

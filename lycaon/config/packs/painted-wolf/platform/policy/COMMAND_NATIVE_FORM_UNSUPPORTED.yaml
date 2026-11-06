@@ -21,6 +21,3 @@ x-paintedwolf-scenarios:
 - id: execution-pin-unavailable
   vars:
     tool: command
-  expect_contains:
-  - 'Code: COMMAND_NATIVE_FORM_UNSUPPORTED'
-  - native

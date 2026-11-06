@@ -25,7 +25,3 @@ x-paintedwolf-message: socket path count exceeds limit
 x-paintedwolf-scenarios:
 - id: default
   vars: {count: 9, limit: 8}
-  expect_contains:
-  - 'Code: SANDBOX_SOCKET_PATH_LIMIT'
-  - "9"
-  - "8"

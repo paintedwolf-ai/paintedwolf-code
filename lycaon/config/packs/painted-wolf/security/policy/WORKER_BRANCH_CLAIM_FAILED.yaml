@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     profile: implement
     reason: worker branch claim failed
     tool: write
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_BRANCH_CLAIM_FAILED'

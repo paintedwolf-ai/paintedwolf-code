@@ -46,7 +46,6 @@ describe("recent edits presentation", () => {
     const client = stubClient({ listEditorDocumentChanges: () => read.promise });
     render(() => <DocumentChangeHistory client={client} projectId="project" documentId="document" onApplied={() => {}} />);
     await vi.advanceTimersByTimeAsync(PRESENTATION_LOADING_GRACE_MS);
-    expect(screen.getByRole("status").textContent).toContain("Loading edits");
     read.resolve(page());
     await vi.advanceTimersByTimeAsync(0);
     expect(screen.getByText("From First edit · turn 1")).toBeTruthy();

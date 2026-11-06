@@ -126,8 +126,8 @@ func TestPublicLoopbackResolverUsesNativeObservationWithListenerTable(t *testing
 		t.Fatal("public constructor omitted an observation source")
 	}
 	session := "no-native-lineage-" + t.Name()
-	resolver.listeners = func(context.Context) ([]socketListener, error) {
-		return []socketListener{listenerAt(4242, "127.0.0.1:8123")}, nil
+	resolver.listeners = func(context.Context) (listenerView, error) {
+		return listenerView{listeners: []socketListener{listenerAt(4242, "127.0.0.1:8123")}, complete: true}, nil
 	}
 	resolver.lineageSession = func(int) (string, bool) { return session, true }
 	// Keep the real native producer while making the PID table positive.

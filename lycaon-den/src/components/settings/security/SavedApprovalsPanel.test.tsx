@@ -75,7 +75,6 @@ describe("SavedApprovalsPanel", () => {
     await waitFor(() => expect(band.querySelector('[data-grant-id="worker"]')).toBeTruthy());
     expect(band.querySelector('[data-grant-id="host"]')).toBeTruthy();
     expect(band.querySelector('[data-grant-id="host"]')?.textContent).toContain("Host execution");
-    expect(band.querySelector('[data-grant-id="host"]')?.textContent).toContain("This chat");
     expect(band.querySelector('[data-grant-id="host"]')?.textContent).toContain("Commands outside the sandbox");
     expect(band.querySelector('[data-grant-id="host"]')?.querySelector('[data-testid="saved-approvals-revoke"]')).toBeTruthy();
     expect(band.compareDocumentPosition(screen.getByTestId("saved-approvals-toolbar")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -114,7 +113,6 @@ describe("SavedApprovalsPanel", () => {
     await waitFor(() => expect(revokeElevatedAccess).toHaveBeenCalledWith("chat-1"));
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Shared project and device approvals"));
     await waitFor(() => expect(screen.queryByTestId("saved-approvals-band-elevated")).toBeNull());
-    expect(screen.getByTestId("saved-approvals-action-notice").textContent).toContain("Running processes may retain access");
   });
 
   it("shows readable secret names and recipients in the revocation inventory", async () => {

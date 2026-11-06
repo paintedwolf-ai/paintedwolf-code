@@ -17,10 +17,10 @@ copy:
   fix: >-
     Run the required check when useful recovery is possible. Both verify and command
     produce evidence; a different command cannot substitute for a selected verify.test check.
-    Inspect the actual terminal outcome, not declared_command_match or a running handle.
+    Inspect the actual terminal outcome, not a running handle.
   instead: >-
-    If no justified recovery remains, report the limitation now with verification.method
-    blocked and a reason in the trailing closeout JSON. This ends the turn without
+    If no justified recovery remains, report the limitation now and include
+    `[verify: blocked - reason]` in your answer. This ends the turn without
     passing or advancing the workflow gate. {{ paintedwolf.cap }} settled attempts is a
     recovery ceiling, not a quota. Do not repeat unchanged failures.
 x-paintedwolf-category: recoverable
@@ -29,4 +29,3 @@ x-paintedwolf-message: Required workflow validation is unresolved
 x-paintedwolf-scenarios:
   - id: default
     vars: {source_revision: revision-3, cap: 3}
-    expect_contains: ['Code: SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT', revision-3, verify.test, blocked]

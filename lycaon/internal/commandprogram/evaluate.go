@@ -23,6 +23,9 @@ type EvaluationPorts struct {
 	Input       InputRedirection
 	Sources     SourceCapture
 	Supervision ProgramSupervision
+	// DocumentUnresolvable reports a document body holding text the host would
+	// have to resolve; those bytes are stdin, which no consumer resolves.
+	DocumentUnresolvable func(body string) bool
 	// Waits receives the program's wait states; nil reports none.
 	Waits ProgramWaits
 	// Predicates supplies the filesystem and pattern ports for test, [ and [[.

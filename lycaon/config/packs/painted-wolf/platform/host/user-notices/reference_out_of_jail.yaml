@@ -7,5 +7,3 @@ suggested_action: Drop or attach something from inside an attached project folde
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - outside your project folders

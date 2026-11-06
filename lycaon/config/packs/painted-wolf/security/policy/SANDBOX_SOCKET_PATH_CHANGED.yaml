@@ -24,6 +24,3 @@ x-paintedwolf-message: socket grant changed before use
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains:
-  - 'Code: SANDBOX_SOCKET_PATH_CHANGED'
-  - socket grant

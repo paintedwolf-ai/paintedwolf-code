@@ -97,8 +97,16 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 
 	ledger := deps.Storage.SourceLedger
+	if deps.RegisterRecovery != nil {
+		if err := deps.RegisterRecovery(bootrecovery.Entry{
+			Name: "source-command-windows", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
+			Run: ledger.Commands.RecoverInterruptedWindows,
+		}); err != nil {
+			return nil, err
+		}
+	}
 	mgr.SetSourceLedger(ledger, tools.SourceHistory{
-		Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk,
+		Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk, Windows: ledger.Commands, Tree: session.OverlayTree{},
 	}, ledger.Commands, ledger.Git, ledger.Checkpoints, ledger.Inventory)
 	mgr.Profiles.SetAgentRegistry(deps.Agents.Registry)
 	mgr.Profiles.SetHostResources(deps.Settings.HostResources)
@@ -156,7 +164,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		return nil, err
 	}
 	mgr.Runner.Authorization.SetSealer(deps.Security.Authority.Sealer)
-	if compactor, err := loadCompactor(deps.Providers.Service, deps.Catalog.ModuleRoot, deps.Providers.Costs); err == nil && compactor != nil {
+	if compactor, err := loadCompactor(deps.Providers.Service, deps.Providers.Costs); err == nil && compactor != nil {
 		mgr.Runner.History.SetCompactor(compactor)
 	}
 

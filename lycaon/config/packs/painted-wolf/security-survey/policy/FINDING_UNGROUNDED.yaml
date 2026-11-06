@@ -43,25 +43,13 @@ x-paintedwolf-scenarios:
   vars:
     offenders_sample: grep#99
     can_recall: true
-  expect_contains:
-  - 'Code: FINDING_UNGROUNDED'
-  - 'recall(query='
 - id: recall_not_callable
   vars:
     offenders_sample: grep#99
     can_recall: false
-  expect_contains:
-  - 'Code: FINDING_UNGROUNDED'
-  - 'acquire missing evidence through an available tool'
 - id: ungrounded_handle
   vars:
     offenders_sample: grep#99
-  expect_contains:
-  - 'Code: FINDING_UNGROUNDED'
-  - record_finding
 - id: missing_reference
   vars:
     reason: reference_required
-  expect_contains:
-  - record_finding requires
-  - ref

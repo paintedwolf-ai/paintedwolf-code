@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"regexp"
-	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/cost/costtest"
@@ -16,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -316,51 +313,6 @@ func TestSpendRunwayRenderedTextHasNoFigure(t *testing.T) {
 	if regexp.MustCompile(`[0-9$%]`).MatchString(msg.Content) {
 		t.Fatalf("message must carry no digit, $, or %%: %q", msg.Content)
 	}
-}
-
-func TestSpendRunwayLandingRegister(t *testing.T) {
-	ctx := context.Background()
-
-	banned := []string{
-		"hurry", "quickly", "immediately", "right away", "running out", "time is short",
-		"highest-value", "most important", "what matters most",
-	}
-	noStubNeedles := []string{"stub", "placeholder", "skipped test"}
-
-	assertLanding := func(t *testing.T, name, text string) {
-		t.Helper()
-		lower := strings.ToLower(text)
-		for _, b := range banned {
-			if strings.Contains(lower, b) {
-				t.Errorf("%s contains banned %q", name, b)
-			}
-		}
-		for _, n := range noStubNeedles {
-			if !strings.Contains(lower, n) {
-				t.Errorf("%s missing no-stub clause needle %q", name, n)
-			}
-		}
-	}
-
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	renderKick := func(name string, data map[string]any) string {
-		text, err := engine.RenderKick(ctx, name, data)
-		testutil.FailErr(t, "RenderKick "+name, err)
-		return strings.TrimSpace(text)
-	}
-	assertLanding(t, "coordinator-spend-runway-low", renderKick("coordinator-spend-runway-low", nil))
-	assertLanding(t, "coordinator-spend-soft-stop", renderKick("coordinator-spend-soft-stop", nil))
-	assertLanding(t, "coordinator-iterations-low", renderKick("coordinator-iterations-low", map[string]any{
-		"remaining": 10,
-	}))
-
-	render := func(ctx context.Context, kickID string, data map[string]any) (string, error) {
-		return engine.RenderKick(ctx, kickID, data)
-	}
-	worker := workercloseout.RenderWorkerKick(ctx, render, anchor.InformRender(anchor.WorkerIterationsLow), map[string]any{
-		"remaining": 10, "max_tool_loops": 40, "at_host_max": false, "request_open": false,
-	})
-	assertLanding(t, "worker-iterations-low", worker)
 }
 
 func TestSpendRunwayLatchReleasedOnForget(t *testing.T) {

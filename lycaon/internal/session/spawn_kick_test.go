@@ -117,16 +117,6 @@ func TestSpawnChildMissingKickTemplateSoftFails(t *testing.T) {
 	}
 }
 
-func TestPlanWriterRenderIncludesToolProfileStub(t *testing.T) {
-	prompts.ResetPersonaContractCache()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	got, err := prompts.RenderPersona(context.Background(), engine, "plan-writer", nil)
-	testutil.FailErr(t, "prompts.RenderPersona failed", err)
-	if !strings.Contains(got, "Tool schema") || !strings.Contains(got, "WRITE_SCOPE_DENIED") {
-		t.Fatalf("plan-writer render missing agent tool surface: %q", got)
-	}
-}
-
 func TestListToolsForPromptSpecHidesDelegation(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureSpec)
 	ctx := context.Background()

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -33,8 +34,9 @@ type SourceRunRecorder interface {
 // ParkedProgramResult is a command call's result when its program parked: the
 // turn ends, and the program's complete result resumes it.
 type ParkedProgramResult struct {
-	ProgramID string `json:"program_id"`
-	State     string `json:"state"`
+	ResultVersion int    `json:"result_version,omitempty"`
+	ProgramID     string `json:"program_id"`
+	State         string `json:"state"`
 	// Reason is the statement the program waits at.
 	Reason  string `json:"reason"`
 	LeaseID string `json:"lease_id"`
@@ -71,10 +73,16 @@ type programEnding struct {
 	err    error
 }
 
-// attend holds the call until its program ends, or parks the call when the
-// program waits past the inline budget.
+// attend returns completion, parks an explicit wait, or exposes a running
+// program after the foreground budget.
 func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (string, error) {
 	ending := &programEnding{done: make(chan struct{})}
+	lifetime := &programLifetime{release: e.release}
+	e.release = lifetime.settled
+	defer lifetime.callerDone()
+	expired := make(chan struct{})
+	stop := r.clock().AfterFunc(DefaultProgramInlineWait, func() { close(expired) })
+	defer stop()
 	//nolint:contextcheck // Detached evaluation outlives a parked call.
 	go func() {
 		ending.result, ending.err = r.finish(e)
@@ -84,6 +92,16 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		select {
 		case <-ending.done:
 			waiting = false
+		case <-expired:
+			select {
+			case <-ending.done:
+				waiting = false
+			default:
+				if callCtx.Err() == nil {
+					return r.continueProgram(callCtx, e, ending)
+				}
+				expired = nil
+			}
 		case blocked := <-e.park.parks:
 			if parked, ok := r.parkProgram(callCtx, e, ending, blocked); ok {
 				return parked, nil
@@ -97,9 +115,22 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 		if e.run.tc.Effects.Out.ExternalAccess != nil {
 			out.ExternalAccess = e.run.tc.Effects.Out.ExternalAccess
 		}
-		out.SourceDeliveryHandles = append([]string(nil), e.run.tc.Effects.Out.SourceDeliveryHandles...)
+		out.SourceDeliveries = append([]tools.SourceDeliveryTag(nil), e.run.tc.Effects.Out.SourceDeliveries...)
 	}
+	stateGitNoRepository(e)
 	return ending.result, ending.err
+}
+
+// stateGitNoRepository puts the program's write-leg Git miss on the call's
+// result, for its post-invoke warning.
+func stateGitNoRepository(e *programEvaluation) {
+	out, missed := e.callTC.Effects.Out, e.run.tc.Effects.GitNoRepository
+	if out == nil || missed == nil || !missed.Load() {
+		return
+	}
+	out.Facts = out.Facts.WithFeedback(toolrejection.GitNoRepositoryOnWriteLegCode, map[string]any{
+		"source_history_offered": tools.OffersSourceHistory(e.callTC),
+	}, nil)
 }
 
 // parkProgram ends the call's turn on the session's wait lease. The program
@@ -142,7 +173,11 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 			out.CommandProgram = &receipt
 		}
 	}
+	stateGitNoRepository(e)
 	result := ParkedProgramResult{ProgramID: programID, State: "parked", Reason: state.Statement, LeaseID: parked.LeaseID()}
+	if run.tool == "verify" {
+		result.ResultVersion = 2
+	}
 	if !state.Until.IsZero() {
 		result.WakeAt = state.Until.UTC().Format(time.RFC3339)
 	}
@@ -186,7 +221,7 @@ func (r *ProgramRuntime) recordParkedRun(ctx context.Context, run *programRun) {
 	if err != nil || sess == nil {
 		return
 	}
-	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, "command", *capture)
+	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, run.tool, *capture)
 }
 
 // ReceiptResult is a program's result as its durable receipts record it, for
@@ -204,6 +239,9 @@ func (r *ProgramRuntime) ReceiptResult(ctx context.Context, sessionID, programID
 		ProgramID: programID, State: projection.Program.State, Status: 130, StopCode: projection.Program.StopCode,
 		ExecutedChildren: projection.ExecutedChildren, CompletedEffects: projection.CompletedEffects,
 		UncertainEffects: projection.UncertainEffects, NativeGaps: projection.NativeGaps,
+	}
+	if projection.ParentTool == "verify" {
+		outcome.ResultVersion = 2
 	}
 	if status := projection.Program.StatusCode; status != nil {
 		outcome.Status = *status
@@ -227,6 +265,9 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 		return evaluatedResult(evaluated), err
 	})
 	e.park.settle()
+	// Attribution ends with evaluation: a detached job must not hold other
+	// sessions' attribution or claim a person's edits for its whole life.
+	run.window.settle(ctx)
 	settled := make(chan error, 1)
 	lifetime := &programLifetime{release: e.release}
 	defer lifetime.callerDone()
@@ -261,9 +302,16 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 	outcome.Stderr = e.documents.appendNotes(outcome.Stderr)
 	outcome.Refusal = refusal
 	outcome.CPUTimeUnmeasured = evaluated.CPUTimeUnmeasured
+	outcome.SourceWindow = run.window.fact()
 	if settledNow {
 		recordProgramAttempt(r.FailureTracker, e.failureAttempt, ctx, outcome)
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
+		if run.tc.Execution.VerificationCheck && run.tc.Effects.Out.SourceRun != nil {
+			outcome.Outcome = run.tc.Effects.Out.SourceRun.Verdict
+		}
+	}
+	if run.tool == "verify" {
+		outcome.ResultVersion = 2
 	}
 	out, err := surveyjson.Marshal(outcome)
 	if err != nil {
@@ -320,4 +368,7 @@ func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resol
 		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
 	}
 	tc.Effects.Out.SourceRun = run
+	if tc.Execution.VerificationCheck && verdict == api.SourceVerdictUnverifiable {
+		tc.Effects.Out.Facts = guidance.ToolResultFacts{}.WithCode(toolrejection.VerifyUnverifiableCode).Merge(tc.Effects.Out.Facts)
+	}
 }

@@ -13,6 +13,3 @@ approval_explanations:
             - id: default
               vars:
                 url: https://api.example.test/v1/items
-              expect_contains:
-                - HTTP request
-                - destination

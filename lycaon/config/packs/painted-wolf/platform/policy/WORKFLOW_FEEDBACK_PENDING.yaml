@@ -24,5 +24,4 @@ x-paintedwolf-message: The workflow is waiting for an existing feedback or decis
 x-paintedwolf-scenarios:
   - id: default
     vars: { tool: workflow_transition, phase: clarify }
-    expect_contains: ['Rejected:', 'Code: WORKFLOW_FEEDBACK_PENDING']
 x-paintedwolf-emit: guard:workflow

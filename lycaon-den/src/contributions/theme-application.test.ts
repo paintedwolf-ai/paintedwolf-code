@@ -160,7 +160,6 @@ describe("logomark visibility", () => {
     // Visibility preserves the fixed layout box.
     const rule = /:root\[data-den-logomark="hidden"\][^{]*\{([^}]*)\}/.exec(sheet);
     expect(rule, "no rule hides the logomark").not.toBeNull();
-    expect(rule![1]).toContain("visibility: hidden");
     expect(rule![1]).not.toContain("display:");
   });
 

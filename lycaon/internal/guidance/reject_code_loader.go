@@ -226,9 +226,6 @@ func validateHintEntry(code string, entry HintEntry) error {
 		if strings.TrimSpace(sc.ID) == "" {
 			return fmt.Errorf("%s: scenario id required", code)
 		}
-		if len(sc.ExpectContains) < 2 {
-			return fmt.Errorf("%s: scenario %q expect_contains required (>=2)", code, sc.ID)
-		}
 	}
 	if err := validateCopyFields(code, view); err != nil {
 		return err

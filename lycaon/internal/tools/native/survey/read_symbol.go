@@ -98,7 +98,7 @@ func (t *ReadTool) runSymbol(ctx context.Context, path, text string, args map[st
 	case 1:
 		resp.Count = 1
 		startLine := matches[0].StartRow + 1
-		endLine := matches[0].EndRow + 1
+		endLine := lastShownRow(matches[0]) + 1
 		resp.StartLine = startLine
 		resp.EndLine = endLine
 		capture.lines(startLine, endLine)
@@ -113,17 +113,26 @@ func (t *ReadTool) runSymbol(ctx context.Context, path, text string, args map[st
 				Kind:      m.Bindings["kind"],
 				Name:      symbol,
 				StartLine: m.StartRow + 1,
-				EndLine:   m.EndRow + 1,
+				EndLine:   lastShownRow(m) + 1,
 			})
 		}
 	}
 	return marshalReadSymbolResponse(path, resp, source)
 }
 
+// lastShownRow is the match's last row with content: a node that ends at column zero
+// stopped at the previous line's newline.
+func lastShownRow(m structrewrite.Match) int {
+	if m.EndCol == 0 && m.EndRow > m.StartRow {
+		return m.EndRow - 1
+	}
+	return m.EndRow
+}
+
 func linesFromMatch(text string, m structrewrite.Match) []string {
 	lines := strings.Split(text, "\n")
 	start := m.StartRow
-	end := m.EndRow
+	end := lastShownRow(m)
 	if start < 0 {
 		start = 0
 	}

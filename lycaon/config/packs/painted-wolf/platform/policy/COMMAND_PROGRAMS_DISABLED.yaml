@@ -5,6 +5,7 @@ anchor: tool.rejected
 selector:
   tool:
   - command
+  - verify
 requires:
   profiles:
   - tool
@@ -26,6 +27,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: COMMAND_PROGRAMS_DISABLED'

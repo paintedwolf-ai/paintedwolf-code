@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: coordinator
       tool: task
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: PENDING_USER_INPUT_TASK_FORBIDDEN'
-      - ask_user

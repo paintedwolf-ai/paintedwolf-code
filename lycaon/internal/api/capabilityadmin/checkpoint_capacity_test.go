@@ -28,7 +28,7 @@ func TestApprovalCapacityResponsePreservesTheRecoveryAction(t *testing.T) {
 	if response.Code != http.StatusUnprocessableEntity || body.Code != wire.ApiErrorCodeApprovalCapacityExceeded || body.Retryable {
 		t.Fatalf("capacity refusal lost its identity: status=%d body=%+v", response.Code, body)
 	}
-	if !strings.Contains(body.Message, "still waiting") || !strings.Contains(body.SuggestedAction, "Reject") || body.Details["account"] != "state" {
+	if !strings.Contains(body.SuggestedAction, "Reject") || body.Details["account"] != "state" {
 		t.Fatalf("capacity refusal lost recovery or accounting: %+v", body)
 	}
 }

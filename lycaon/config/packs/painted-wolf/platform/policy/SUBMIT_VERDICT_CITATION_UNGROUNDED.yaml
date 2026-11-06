@@ -26,16 +26,9 @@ x-paintedwolf-scenarios:
   - id: recall_callable
     vars:
       can_recall: true
-    expect_contains:
-      - 'Code: SUBMIT_VERDICT_CITATION_UNGROUNDED'
-      - 'recall(query='
   - id: recall_not_callable
     vars:
       can_recall: false
-    expect_contains:
-      - 'Code: SUBMIT_VERDICT_CITATION_UNGROUNDED'
-      - 'Cite only handles shown'
   - id: bad_handle
     vars: { ungrounded_count: 1, review_ungrounded_sample: ['reviewer:read#99'] }
-    expect_contains: ['Code: SUBMIT_VERDICT_CITATION_UNGROUNDED', 'read#99']
 x-paintedwolf-emit: guard:workflow

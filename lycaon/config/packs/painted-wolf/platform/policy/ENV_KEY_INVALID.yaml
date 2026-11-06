@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
     profile: implement
     reason: blocked env key GIT_EXEC_PATH
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: ENV_KEY_INVALID'

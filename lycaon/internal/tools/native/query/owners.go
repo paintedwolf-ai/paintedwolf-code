@@ -1,8 +1,5 @@
-// Package query is the command frontend for jq, yq and the jq-edit built-in.
-// jq streams complete values through the same compiled gojq program the
-// structured jq tool evaluates; yq runs mikefarah yq v4's library; jq-edit
-// runs the structured jq_edit's format-preserving edit. Edits publish at
-// captured execution revisions.
+// Package query implements jq and yq value queries and format-preserving
+// jq-edit writes. Edits publish at captured execution revisions.
 package query
 
 import (
@@ -150,6 +147,9 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 		}
 	}
 	review := bound.Review(o.ops[command])
+	if command == "jq-edit" {
+		review.PairSinks = map[string]string{"--arg": editVarsSlot}
+	}
 	review.PathTargets = queryPathTargets(bound, program.Paths)
 	return Prepared{Operation: o.ops[command], Mode: mode, Argv: bound, Review: review, owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }

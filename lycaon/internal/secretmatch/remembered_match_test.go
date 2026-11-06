@@ -2,7 +2,7 @@ package secretmatch
 
 import (
 	"context"
-	"strings"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"sync"
 	"testing"
 )
@@ -66,9 +66,7 @@ func TestRememberedMatchRedactsWhereTheRuleCannotReach(t *testing.T) {
 	m.Remember("root-1", remembered)
 
 	out, spans := redactMatches(mint, m.screenRaw(ctx, mint))
-	if strings.Contains(out, token) {
-		t.Fatalf("the minting line still holds the value after the same value was confirmed elsewhere:\n%s", out)
-	}
+	exposure.Absent(t, out, token)
 	if len(spans) != 1 {
 		t.Fatalf("spans = %d, want 1", len(spans))
 	}

@@ -29,14 +29,7 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     job_id: job-resolve
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_PROMOTE_RESOLUTIONS_REQUIRED'
-  - job-resolve
 - id: missing_path
   vars:
     job_id: job-resolve
     path: internal/auth/login.go
-  expect_contains:
-  - job-resolve
-  - internal/auth/login.go

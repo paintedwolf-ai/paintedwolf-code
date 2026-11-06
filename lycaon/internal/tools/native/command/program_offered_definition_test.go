@@ -37,3 +37,37 @@ func TestOfferedProgramDefinitionKeepsTheWriteDoor(t *testing.T) {
 		t.Fatal("program definition lost its path capabilities")
 	}
 }
+
+// Binding a program surface runs per command call, so deriving a definition it
+// has already derived must not recompile the declaration.
+func TestProgramSurfaceDefinitionsCompileOncePerDeclaration(t *testing.T) {
+	contract, ok := toolcontract.Lookup("read")
+	if !ok {
+		t.Fatal("no read contract")
+	}
+	read, err := toolcontract.ToolOperation("read", json.RawMessage(`{"type":"object"}`), contract)
+	if err != nil {
+		t.Fatalf("compile read: %v", err)
+	}
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		t.Fatalf("read catalog: %v", err)
+	}
+	spec := catalog.Commands[0]
+	first := programOperationDefinition(read)
+	compiled, err := catalogOperationDefinition(spec, catalog.Language.Limits)
+	if err != nil {
+		t.Fatalf("compile catalog definition: %v", err)
+	}
+	if allocations := testing.AllocsPerRun(20, func() {
+		if programOperationDefinition(read).Digest() != first.Digest() {
+			t.Fatal("program definition changed between derivations")
+		}
+		again, err := catalogOperationDefinition(spec, catalog.Language.Limits)
+		if err != nil || again.Digest() != compiled.Digest() {
+			t.Fatalf("catalog definition changed between compilations: %v", err)
+		}
+	}); allocations > 4 {
+		t.Fatalf("repeated derivation allocated %v times", allocations)
+	}
+}

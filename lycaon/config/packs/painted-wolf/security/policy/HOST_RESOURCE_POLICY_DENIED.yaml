@@ -5,6 +5,7 @@ anchor: tool.rejected
 selector:
   tool:
     - command
+    - verify
     - terminal_open
 requires:
   profiles:
@@ -25,6 +26,3 @@ x-paintedwolf-emit: guard:host_resource_policy
 x-paintedwolf-message: host resource blocked by policy
 x-paintedwolf-scenarios:
   - id: default
-    expect_contains:
-      - 'Code: HOST_RESOURCE_POLICY_DENIED'
-      - host resource

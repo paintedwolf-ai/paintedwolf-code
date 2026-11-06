@@ -74,7 +74,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 	testutil.FailErr(t, "create survey", err)
 	parentID = sess.ID
-	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0", Request: "Review each trust boundary."})
+	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.1", Request: "Review each trust boundary."})
 	testutil.FailErr(t, "start survey", err)
 	scans := scan.NewSQLStore(h.DB)
 	inventory, err := scans.ListByWorkflowRunID(ctx, run.ID)
@@ -169,10 +169,10 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	manifest, err := h.Workflows.Manager.Resolver.ForRunID(ctx, run.ID)
 	testutil.FailErr(t, "load report brief", err)
 	levels := manifest.ReportBrief().LevelLabels()
-	raw, err := json.Marshal(map[string]any{"synthesis": "Reviewed all five assigned boundaries and independently checked the coverage. No security issue was found in the fixture.", "cited_evidence": []any{map[string]any{"evidence": surveyCitation.Handle, "path": "audit.go", "line": 1, "excerpt": "package audit"}}, "cited_urls": []any{}, "rating": map[string]any{"level": levels[len(levels)-1], "why": "All required work completed without a supported finding."}, "findings": []any{}, "set_asides": []any{}})
+	raw, err := json.Marshal(map[string]any{"rating": map[string]any{"level": levels[len(levels)-1], "why": "All required work completed without a supported finding."}, "findings": []any{}, "set_asides": []any{}})
 	testutil.FailErr(t, "encode final report", err)
 	mu.Lock()
-	reportBody = string(raw)
+	reportBody = "Reviewed all five assigned boundaries and independently checked the coverage [" + surveyCitation.Handle + ` audit.go:1 "package audit"]. No security issue was found in the fixture.` + "\n\n```json\n" + string(raw) + "\n```"
 	mu.Unlock()
 	h.Sessions.Manager.Runner.Coordinator.Kicks().ClearPending(sess.ID)
 	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Deliver the completed security assessment.")

@@ -1,6 +1,8 @@
 package sourcesnapshot
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -94,5 +96,39 @@ func TestLiveVerificationRetainsIdentityAndFileBoundaries(t *testing.T) {
 				t.Fatal("symlink accepted as the original regular file")
 			}
 		})
+	}
+}
+
+// A hashed file's bytes come from a digest-checked read; Git is the fallback
+// once the file moved on, and the source for a file only Git identified.
+func TestBytesAsksGitOnlyWhenTheFileCannotAnswer(t *testing.T) {
+	store := openSnapshotStore(t)
+	root := t.TempDir()
+	writeSource(t, root, "main.go", "package main\n")
+	snapshot, err := store.EnsurePath(t.Context(), root, VerifyStat)
+	testutil.FailErr(t, "publish", err)
+	entry := lookupEntry(t, store, snapshot, "main.go")
+	if entry.SHA256 == "" || entry.GitOID == "" {
+		t.Fatalf("entry = %+v, want a hashed file with a Git identity", entry)
+	}
+	gitReads := 0
+	store.gitObject = func(context.Context, Entry) ([]byte, error) {
+		gitReads++
+		return []byte("from git"), nil
+	}
+	raw, err := store.Bytes(t.Context(), entry)
+	testutil.FailErr(t, "read hashed file", err)
+	if string(raw) != "package main\n" || gitReads != 0 {
+		t.Fatalf("hashed read = %q with %d Git reads", raw, gitReads)
+	}
+	writeSource(t, root, "main.go", "package next\n")
+	raw, err = store.Bytes(t.Context(), entry)
+	testutil.FailErr(t, "read moved file", err)
+	if string(raw) != "from git" || gitReads != 1 {
+		t.Fatalf("moved read = %q with %d Git reads", raw, gitReads)
+	}
+	store.gitObject = func(context.Context, Entry) ([]byte, error) { return nil, errChanged }
+	if _, err := store.Bytes(t.Context(), entry); !errors.Is(err, ErrContentUnavailable) {
+		t.Fatalf("moved read with no object = %v", err)
 	}
 }

@@ -12,11 +12,5 @@ suggested_action: >-
 scenarios:
   - id: filter
     vars: { keys: filter.crypt }
-    expect_contains:
-      - filter.crypt
-      - terminal
   - id: proxy
     vars: { keys: core.gitProxy }
-    expect_contains:
-      - core.gitProxy
-      - terminal

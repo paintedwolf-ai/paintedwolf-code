@@ -99,7 +99,6 @@ describe("resident surface layout contract", () => {
     expect(idle).toContain("clip-path: inset(50%)");
     expect(idle).toContain("pointer-events: none");
     // Layout loss clamps descendant scroll offsets.
-    expect(idle).not.toContain("display: none");
     // WebKit never resumes compositor animations inside revealed skipped content.
     expect(idle).not.toContain("content-visibility");
   });

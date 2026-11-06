@@ -1,99 +1,14 @@
 package prompts_test
 
 import (
-	"context"
 	"reflect"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
-
-func TestManagedSecretPartialTeachesReferenceOnlyWorkflowWhenCapabilityIsPresent(t *testing.T) {
-	t.Parallel()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	got, err := engine.Render(context.Background(), "units/managed-secret-tools.md", map[string]any{})
-	testutil.FailErr(t, "render managed secret partial", err)
-	for _, want := range []string{
-		"Managed secrets", "Most authenticated work needs none", "{{paintedwolf-secret:…}}",
-		"Default to chat scope", "Raw values never enter model requests",
-		"tracked and replaced", "Destination approval",
-		"Pass the returned reference unchanged", "Project files do not resolve references",
-		"revoke disposable test references afterward",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("managed secret partial missing %q:\n%s", want, got)
-		}
-	}
-	withAsk, err := engine.Render(context.Background(), "units/managed-secret-tools.md", map[string]any{
-		"profile_has_ask_user": true,
-	})
-	testutil.FailErr(t, "render managed secret partial with ask_user", err)
-	for _, want := range []string{"`ask_user`", "`response_type: secret`", "only the reference", "Never request credentials as text or choices"} {
-		if !strings.Contains(withAsk, want) {
-			t.Fatalf("managed secret ask guidance missing %q:\n%s", want, withAsk)
-		}
-	}
-}
-
-func TestCoordinatorTeachesSecretUseOnceSecretToolsLoad(t *testing.T) {
-	vars := map[string]any{
-		"has_file_tools": true,
-		"agent_skills":   listedSkills("use-secrets-without-reading-them"),
-	}
-	loaded := map[string]bool{"secret_generate": true, "secret_list": true, "secret_revoke": true, "write": true}
-	testutil.FailErr(t, "merge coordinator surface", prompts.MergeCoordinatorSurfacePathVars("implement_investigate", nil, vars, prompts.SurfaceTurn{Loaded: loaded}))
-	if vars["profile_has_update_progress"] != true {
-		t.Fatal("coordinator checklist guidance must follow its offered authoring tool")
-	}
-	sticky, err := prompts.LoadCoordinatorSurfaceFloor("implement_investigate")
-	testutil.FailErr(t, "resolve coordinator tools", err)
-	deferred, err := prompts.LoadCoordinatorSurfaceLoadable("implement_investigate")
-	testutil.FailErr(t, "resolve deferred coordinator tools", err)
-	if slices.Contains(sticky, "secret_generate") || !slices.Contains(deferred, "secret_generate") {
-		t.Fatal("fixture must exercise deferred secret generation")
-	}
-	testutil.FailErr(t, "merge coordinator prompt", prompts.MergeCoordinatorPromptVars("implement_investigate",
-		prompts.ExecutionModePromptTransition{ExecutionMode: "investigate"}, "", vars))
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	mergeUnits(t, engine, vars, promptunit.HostCoordinator, "investigate", nil)
-	out, err := engine.Render(context.Background(), "agents/coordinator-core.md", vars)
-	testutil.FailErr(t, "render loaded secret guidance", err)
-	for _, want := range []string{
-		"Before handling a credential, read `use-secrets-without-reading-them`",
-		"Pass the returned reference unchanged",
-		"`response_type: secret`",
-		"Raw values never enter model requests",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("first-turn secret teaching missing %q", want)
-		}
-	}
-}
-
-func TestHTTPRequestPartialTeachesFirstClassActionWorkflow(t *testing.T) {
-	t.Parallel()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	got, err := engine.Render(context.Background(), "units/http-request-tools.md", map[string]any{
-		"profile_has_fetch_url": true,
-	})
-	testutil.FailErr(t, "render HTTP request partial", err)
-	for _, want := range []string{
-		"Use `fetch_url` for readable web research",
-		"pages and documentation arrive as markdown with paging",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("HTTP request partial missing %q:\n%s", want, got)
-		}
-	}
-	if strings.Contains(got, "request_tools") {
-		t.Fatalf("sticky HTTP tools must not be taught as deferred:\n%s", got)
-	}
-}
 
 func TestHTTPActionVarsFollowOfferedTools(t *testing.T) {
 	t.Parallel()
@@ -163,16 +78,19 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 	if vars["profile_has_read_tools"] != true {
 		t.Fatalf("implement must advertise read tools")
 	}
+	if vars["profile_has_source_history"] != true {
+		t.Fatalf("implement holds source_history sticky: %#v", vars["profile_has_source_history"])
+	}
 	// Isolated branches omit VCS metadata and commit tools.
 	if vars["profile_has_git_commit"] == true {
 		t.Fatalf("implement is isolated and must not have git_commit")
 	}
 	writeTools, _ := vars["tool_check_write_tools"].([]string)
-	if !slices.Contains(writeTools, "edit") {
-		t.Fatalf("write tools missing edit: %v", writeTools)
+	if !slices.Contains(writeTools, "command") {
+		t.Fatalf("write tools missing command: %v", writeTools)
 	}
 	surveyTools, _ := vars["tool_check_survey_tools"].([]string)
-	for _, want := range []string{"summarize", "survey_repo", "command"} {
+	for _, want := range []string{"command"} {
 		if !slices.Contains(surveyTools, want) {
 			t.Fatalf("survey tools missing %q: %v", want, surveyTools)
 		}
@@ -182,27 +100,15 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 			t.Fatalf("survey tools still require retired routine schema %q: %v", retired, surveyTools)
 		}
 	}
-	concurrent, _ := vars["profile_concurrent_tools"].([]string)
-	if !slices.Contains(concurrent, "summarize") {
-		t.Fatalf("summarize should be concurrent: %v", concurrent)
-	}
 	canRequest, _ := vars["profile_can_request"].(map[string]bool)
-	for _, loadable := range []string{"jq_edit"} {
-		if !canRequest[loadable] {
-			t.Fatalf("implement profile_can_request missing %q: %v", loadable, canRequest)
-		}
-	}
-	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq", "write"} {
+	for _, retired := range []string{"read", "grep", "find", "list_dir", "jq", "write", "edit", "jq_edit", "summarize", "survey_repo"} {
 		if canRequest[retired] {
-			t.Errorf("retired routine schema %s is requestable", retired)
+			t.Errorf("command operation %s is requestable", retired)
 		}
 	}
 	serial, _ := vars["profile_serial_tools"].([]string)
-	if !slices.Contains(serial, "edit") || !slices.Contains(serial, "command") {
-		t.Fatalf("serial tools missing edit/command: %v", serial)
-	}
-	if slices.Contains(serial, "summarize") {
-		t.Fatalf("summarize must not be listed as serial mutation: %v", serial)
+	if !slices.Contains(serial, "command") {
+		t.Fatalf("serial tools missing command: %v", serial)
 	}
 	if vars["visual_show_available"] != true || vars["visual_show_terminal"] != true || vars["visual_show_page"] != false {
 		t.Fatalf("implement must expose terminals and leave page capture untaught until loaded: %#v", vars)
@@ -233,6 +139,9 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	if vars["profile_has_read_tools"] != true {
 		t.Fatalf("explore_readonly must advertise read tools")
 	}
+	if vars["profile_has_source_history"] != false {
+		t.Fatalf("a deferred source_history stays untaught until it loads: %#v", vars["profile_has_source_history"])
+	}
 	if vars["profile_mutation_capable"] != false {
 		t.Fatalf("explore_readonly must not be mutation-capable")
 	}
@@ -255,7 +164,7 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	if slices.Contains(surveyTools, "write") || slices.Contains(surveyTools, "edit") {
 		t.Fatalf("survey tools must be read-only: %v", surveyTools)
 	}
-	for _, want := range []string{"summarize", "survey_repo", "command"} {
+	for _, want := range []string{"command"} {
 		if !slices.Contains(surveyTools, want) {
 			t.Fatalf("explore_readonly survey tools missing %q: %v", want, surveyTools)
 		}
@@ -381,39 +290,15 @@ func TestToolProfileCapabilityVarsWebResearch(t *testing.T) {
 }
 
 func TestVisibleToolsNativePartialVarsFromSurfaceTools(t *testing.T) {
-	vars := prompts.VisibleToolsNativePartialVars([]string{"list_dir", "find", "grep", "read", "jq", "write"})
-	if !vars["profile_has_list_dir"].(bool) {
-		t.Fatalf("profile_has_list_dir = %v", vars["profile_has_list_dir"])
+	vars := prompts.VisibleToolsNativePartialVars([]string{"command"})
+	for _, key := range []string{"profile_has_command", "profile_has_survey_repo", "profile_has_summarize", "profile_has_write_tools", "profile_has_read_tools", "profile_has_jq_edit"} {
+		if vars[key] != true {
+			t.Errorf("%s = %v, want true", key, vars[key])
+		}
 	}
-	if !vars["profile_has_grep"].(bool) {
-		t.Fatalf("profile_has_grep = %v", vars["profile_has_grep"])
-	}
-	if !vars["profile_has_jq"].(bool) {
-		t.Fatalf("profile_has_jq = %v", vars["profile_has_jq"])
-	}
-	if !vars["has_find_tool"].(bool) {
-		t.Fatalf("has_find_tool = %v", vars["has_find_tool"])
-	}
-	if !vars["profile_has_write_tools"].(bool) {
-		t.Fatalf("profile_has_write_tools = %v", vars["profile_has_write_tools"])
-	}
-	if !vars["profile_has_read_tools"].(bool) {
-		t.Fatalf("profile_has_read_tools = %v", vars["profile_has_read_tools"])
-	}
-	vars = prompts.VisibleToolsNativePartialVars([]string{"read", "grep", "survey_repo"})
-	if !vars["profile_has_survey_repo"].(bool) {
-		t.Fatalf("profile_has_survey_repo = %v", vars["profile_has_survey_repo"])
-	}
-	if !vars["profile_has_read_tools"].(bool) {
-		t.Fatalf("profile_has_read_tools = %v", vars["profile_has_read_tools"])
-	}
-	vars = prompts.VisibleToolsNativePartialVars([]string{"list_dir", "find"})
-	if vars["profile_has_read_tools"].(bool) {
-		t.Fatalf("list_dir+find alone must not set profile_has_read_tools")
-	}
-	vars = prompts.VisibleToolsNativePartialVars([]string{"read", "grep"})
-	if vars["profile_has_list_dir"].(bool) || vars["has_find_tool"].(bool) {
-		t.Fatalf("unexpected list_dir/find flags for read+grep only: %+v", vars)
+	vars = prompts.VisibleToolsNativePartialVars([]string{"restore_version"})
+	if vars["profile_has_write_tools"] != true || vars["profile_has_read_tools"] != false {
+		t.Fatalf("restoration capabilities = %+v", vars)
 	}
 	pageOnly := prompts.VisibleToolsNativePartialVars([]string{"capture_page", "page_open"})
 	if _, ok := pageOnly["visual_show_available"]; ok {
@@ -496,5 +381,17 @@ func TestMergeProfileRequestableVars(t *testing.T) {
 		if canRequest["capture_page"] {
 			t.Fatalf("%s/%v unexpectedly marked capture_page requestable: %#v", tc.profile, tc.offered, canRequest)
 		}
+	}
+}
+
+func TestCommandProgressGuidanceFollowsOfferedEffects(t *testing.T) {
+	offered := []string{"command", "restore_version", "task", "edit", "jq_edit"}
+	vars := prompts.VisibleToolsNativePartialVars(offered)
+	if got := vars["progress_gated_tools"]; !reflect.DeepEqual(got, []string{"command", "restore_version", "task"}) {
+		t.Fatalf("offered progress guidance = %v", got)
+	}
+	prompts.ApplyReadOnlyCommandEffects(offered, nil, vars)
+	if got := vars["progress_gated_tools"]; !reflect.DeepEqual(got, []string{"restore_version", "task"}) {
+		t.Fatalf("read-only command progress guidance = %v", got)
 	}
 }

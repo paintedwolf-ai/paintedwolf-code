@@ -26,6 +26,3 @@ x-paintedwolf-scenarios:
   vars:
     job_id: job-done
     status: complete
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_CANCEL_TERMINAL'

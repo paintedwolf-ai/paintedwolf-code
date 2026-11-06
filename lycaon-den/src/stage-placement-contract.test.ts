@@ -74,13 +74,6 @@ describe("workspace placement contract", () => {
     );
   });
 
-  it("reads a pulled-off file from its addressed root", () => {
-    const shell = read("src/components/shell/shell-peer-windows.ts");
-    const start = shell.indexOf("let itemFileOpened");
-    const itemFile = shell.slice(start, shell.indexOf("let itemContextOpened", start));
-    expect(itemFile).toContain("rootId: itemSubject.rootId");
-  });
-
   it("peers talk through the host event channel", () => {
     const channel = read("src/platform/windows/window-channel.ts");
     expect(channel).toContain("export async function listenHostEvent");

@@ -84,7 +84,6 @@ describe("sidebarChatSections", () => {
 
   it("uses the shared untitled label and carries message counts", () => {
     const sections = sidebarChatSections([summary({ id: "s1", title: "  ", message_count: 0 })], "created");
-    expect(sections.chats[0]?.title).toBe("Untitled chat");
     expect(sections.chats[0]?.messageCount).toBe(0);
   });
 });

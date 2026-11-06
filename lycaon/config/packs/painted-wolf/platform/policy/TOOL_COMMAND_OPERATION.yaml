@@ -1,0 +1,22 @@
+oar: '1.0'
+id: TOOL_COMMAND_OPERATION
+kind: policy
+anchor: tool.rejected
+requires:
+  profiles: [tool]
+  facts: [paintedwolf.rejection_code, paintedwolf.need, paintedwolf.can_command]
+when: paintedwolf.rejection_code == "TOOL_COMMAND_OPERATION"
+effect: block
+copy:
+  what: '"{{ paintedwolf.need }}" is a command operation, not a callable tool.'
+  cause: Routine operations use the command interface.
+  why: Operation names retain their meaning in receipts and history.
+  fix: '{% if paintedwolf.can_command %}Use the native form through `command`; `COMMAND --help` lists supported forms.{% else %}Use an available capability or report the missing operation.{% endif %} Existing permission and scope restrictions still apply.'
+  instead: Do not request or invoke this operation as a separate tool.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_operation
+x-paintedwolf-message: 'Command operation {{ paintedwolf.need }} is not a callable tool'
+x-paintedwolf-scenarios:
+- id: retired_operation
+  vars:
+    need: edit

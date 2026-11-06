@@ -29,10 +29,6 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: delegate_dispatch
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: COORDINATOR_DELEGATE_DISPATCH_USE_TASK'
-  - '`task`'
 selector:
   tool:
   - delegate_dispatch

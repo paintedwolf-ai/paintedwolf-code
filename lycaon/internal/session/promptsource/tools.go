@@ -24,6 +24,7 @@ import (
 )
 
 type ToolsRepository interface {
+	CommitProgramObservation(ctx context.Context, sessionID, tool string, receipt *api.CommandProgramReceipt, content string) (string, error)
 	CommitEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content string) (handle string, patchedContent string, err error)
 	CommitVisualEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (handle string, patchedContent string, err error)
 	Get(ctx context.Context, id string) (*api.Session, error)
@@ -81,6 +82,9 @@ func (m *Tools) Build() promptloop.ToolsDeps {
 		AfterToolRun:     m.Results.AfterTool,
 		EnrichToolOutput: m.Results.EnrichTool,
 	}
+	if m.Sessions != nil {
+		deps.CommitProgramObservation = m.Sessions.CommitProgramObservation
+	}
 	deps.CommitEvidenceToolResult = func(ctx context.Context, sessionID string, sess *api.Session, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 		if m == nil || sess == nil {
 			return "", content, nil
@@ -95,7 +99,6 @@ func (m *Tools) Build() promptloop.ToolsDeps {
 		return m.Sessions.CommitEvidenceToolResult(ctx, sessionID, projectDir, toolName, args, content)
 	}
 	deps.RecordSourceRunEvidence = m.Verification.RecordSourceRunEvidence
-	deps.ConfirmVerifyResult = m.Verification.ConfirmVerifyResult
 	deps.InFlightWorkerRosterNote = func(ctx context.Context, sess *api.Session) string {
 		if m == nil || m.Workers == nil || sess == nil {
 			return ""

@@ -47,7 +47,10 @@ func (m *Service) BeforeTool(
 		guard.PrepareVerifyCall(tool, declaredVerify, args)
 	}
 	if reject, skip, err := m.ToolPolicy.Block(ctx, oar.AnchorCoordinatorPreInvoke, sess, tool, args, func(gc *oar.GuardContext) error {
-		guard.ObserveWaitVisibility(sess, history, tool, tools.ToolOffered(ctx, "surface_note"), gc)
+		guard.ObserveWaitVisibility(sess, history, tool, surface.PublishesMidTurnText(surfaceID), gc)
+		if gc.Session.UnpublishedToolTextPending {
+			gc.Session.MidTurnEvidenceUnreadable = m.midTurnEvidenceUnreadable(ctx, sess.ID, history)
+		}
 		guard.ObserveTaskWhilePendingUserInput(sess, implState, tool, gc)
 		guard.ObserveCoordinatorWorkerBranchPath(sess, tool, args, gc)
 		guard.ObserveProgressMissingBeforeDispatch(sess, currentProgress, tool, reviewLoopActive, gc)
@@ -72,6 +75,7 @@ func (m *Service) BeforeFinish(
 	history []api.Message,
 	_ string,
 	lastAssistant string,
+	draft guidance.CloseoutDraft,
 	surfaceID string,
 	workersIdle bool,
 	turnTools []string,
@@ -121,7 +125,7 @@ func (m *Service) BeforeFinish(
 		}
 		if reject, block := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 			guard.ObserveCoordinatorHostNoToolTurn(
-				sess, history, lastAssistant, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
+				sess, history, lastAssistant, draft, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
 			)
 			return nil
 		}); block {
@@ -131,10 +135,10 @@ func (m *Service) BeforeFinish(
 	if reject, block := m.MissingVerdict(ctx, sess, workersIdle, invokeAllowed); block {
 		return reject, true
 	}
-	if reject, block := m.BeforeReportPhase(ctx, sess, lastAssistant, surfaceID, invokeAllowed); block {
+	if reject, block := m.BeforeReportPhase(ctx, sess, draft, surfaceID, invokeAllowed); block {
 		return reject, true
 	}
-	if reject, block := m.SourceEvidence(ctx, sess, history, surfaceID, invokeAllowed); block {
+	if reject, block := m.SourceEvidence(ctx, sess, history, draft.Verification, surfaceID, invokeAllowed); block {
 		return reject, true
 	}
 	if reject, block := m.OpenGates(ctx, sess, workersIdle, invokeAllowed); block {
@@ -146,4 +150,14 @@ func (m *Service) BeforeFinish(
 	return m.OpenProgress(
 		ctx, sess, history, surfaceID, workersIdle, implState, invokeAllowed,
 	)
+}
+
+// midTurnEvidenceUnreadable repeats publication's read, so wait feedback can tell a
+// host failure from a citation defect. A host with no ledger wired has no such failure.
+func (m *Service) midTurnEvidenceUnreadable(ctx context.Context, sessionID string, history []api.Message) bool {
+	if m.Verification == nil || m.Verification.Evidence == nil {
+		return false
+	}
+	_, _, err := guidance.MidTurnEvidence(ctx, m.Verification.Evidence, sessionID, history)
+	return err != nil
 }

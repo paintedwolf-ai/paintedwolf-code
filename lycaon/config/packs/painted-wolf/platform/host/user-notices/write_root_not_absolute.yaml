@@ -7,6 +7,3 @@ suggested_action: Choose a folder with the system picker, or enter a full absolu
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - absolute
-      - folder

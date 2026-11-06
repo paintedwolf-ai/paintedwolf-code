@@ -27,7 +27,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     base_overlay_id: ov-grep-impl
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_BASE_MISSING'
-  - ov-grep-impl

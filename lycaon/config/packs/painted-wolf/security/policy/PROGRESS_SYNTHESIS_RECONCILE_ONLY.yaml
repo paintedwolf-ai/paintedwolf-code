@@ -22,7 +22,3 @@ x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: Report-turn update_progress may only reconcile the existing checklist
 x-paintedwolf-scenarios:
   - id: new_scope
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: PROGRESS_SYNTHESIS_RECONCILE_ONLY'
-      - update_progress

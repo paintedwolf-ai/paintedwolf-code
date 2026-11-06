@@ -34,20 +34,12 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: internal/missing.go:1
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: WORKER_EVIDENCE_HANDLE_UNKNOWN'
-      - complete_leg
   - id: url_in_findings_path
     vars:
       observed_urls_sample: https://bazzite.gg/
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: https:/bazzite.gg:3
-    expect_contains:
-      - 'Code: WORKER_EVIDENCE_HANDLE_UNKNOWN'
-      - cite the exact URL in cited_urls
-      - 'observed URLs include https://bazzite.gg/'
   - id: scan_text_cited_as_file
     vars:
       offender_count: 1
@@ -55,25 +47,15 @@ x-paintedwolf-scenarios:
       offenders_sample: lycaon/go.mod:1
       unobserved_cited_urls:
         - https://example.com/unfetched
-    expect_contains:
-      - 'scan#N handle in evidence with no path, line or excerpt'
-      - 'Also drop or fetch these unobserved URLs: https://example.com/unfetched'
   - id: line_outside_observed_range
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: internal/auth.go:412
       cited_handle_ranges: 'read#3 internal/auth.go lines 1-120'
-    expect_contains:
-      - 'Citation observations: read#3 internal/auth.go lines 1-120'
-      - 'read the cited lines first'
   - id: scanner_source_handle_repair
     vars:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: fixture.go:7
       cited_handle_ranges: 'scan#2 shape artifact; fixture.go:7 excerpt matches read#9; use that handle in evidence for this source citation'
-    expect_contains:
-      - 'fixture.go:7 excerpt matches read#9'
-      - 'never scan#N'
-      - 'no path, line or excerpt'

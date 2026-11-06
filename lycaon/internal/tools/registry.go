@@ -3,6 +3,7 @@ package tools
 
 import (
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"sync/atomic"
 
 	"context"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -61,16 +62,6 @@ type SourceRunCapture struct {
 	Cwd              string
 }
 
-// AgentNoteCapture is a grounded note produced by one invocation.
-type AgentNoteCapture struct {
-	SourceContext *api.SourceContext
-	MessageID     string
-	Content       string
-	Grounding     *api.CitationGrounding
-	// ArtifactIDs lists stills shown with the note.
-	ArtifactIDs []string
-}
-
 // ToolInvocationOut collects host-side invocation outputs.
 type ToolInvocationOut struct {
 	// DisplaySubject names the resolved target before durable secret screening.
@@ -90,7 +81,6 @@ type ToolInvocationOut struct {
 	OverlayPromotion *api.OverlayPromotion
 	FileEdit         *FileEditCapture
 	Visual           *VisualCapture
-	AgentNote        *AgentNoteCapture
 	// ExternalAccess is Den UI metadata for exceptional external-access on this result.
 	ExternalAccess *api.ExternalAccess
 	// Skill is Den UI metadata for the skill a skills_read activation resolved to.
@@ -101,8 +91,8 @@ type ToolInvocationOut struct {
 	Verdict *api.VerdictOutcome
 	// CommandProgram is the settled command program receipt for a portable command call.
 	CommandProgram *api.CommandProgramReceipt
-	// SourceDeliveryHandles lists confirmed source-delivery handles minted during the call.
-	SourceDeliveryHandles []string
+	// SourceDeliveries lists the source deliveries confirmed during the call.
+	SourceDeliveries []SourceDeliveryTag
 	// Listener is Den UI and wire metadata for loopback listener attribution on http_request.
 	Listener *api.LoopbackListenerFact
 	// SourceRun is nil until a command or verify run exits.
@@ -164,6 +154,11 @@ type InvocationIdentity struct {
 	HandoffAgentID   string
 }
 
+// SourceDeliveryTag is a delivery's handle and the coverage its tag states.
+type SourceDeliveryTag struct {
+	Handle, Coverage string
+}
+
 // InvocationSource carries the source workspace and mutation services.
 type InvocationSource struct {
 	ProjectSourceBranch sourcebranch.ID
@@ -180,6 +175,8 @@ type InvocationSource struct {
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
+	// WorkerBaselinePath is the manifest sealed when the branch was prepared.
+	WorkerBaselinePath string
 	// WorkerSourceRoots are primary roots captured into the private branch.
 	WorkerSourceRoots []string
 	// BranchWorkspace validates and prepares the branch.
@@ -360,6 +357,10 @@ type InvocationEffects struct {
 	// CredentialFiles receives credential-file reads and model-authored writes.
 	CredentialFiles CredentialFiles
 	Out             *ToolInvocationOut
+	// GitNoRepository records that a native Git read on this program's worker
+	// branch found no repository. Program children have no Out and may run
+	// concurrently, so they share this.
+	GitNoRepository *atomic.Bool
 	// Presence receives what this call does to project files as the handler
 	// resolves it: targets, resolved mutations, approval holds, and landings.
 	Presence PresenceReporter

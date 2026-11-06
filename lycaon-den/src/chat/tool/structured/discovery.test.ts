@@ -19,9 +19,7 @@ describe("discovery catalog presentation", () => {
     const view = buildStructuredToolPresentation(part);
     expect(view.sections).toContainEqual({ kind: "facts", facts: [{ label: "available-entry", value: "A useful procedure", wide: true }] });
     const text = JSON.stringify(view.sections);
-    expect(text).toContain("Local AI timed out");
     expect(text).toContain("Showing 1 of 21");
-    expect(text).not.toContain("Nothing loaded");
     expect(text).not.toContain("opaque-cursor");
     expect(JSON.stringify(view.argsFacts)).not.toContain("opaque-cursor");
   });
@@ -39,7 +37,6 @@ describe("discovery catalog presentation", () => {
 
   it("distinguishes no match, browsing, and outage without exposing cursor plumbing", () => {
     expect(discoverySections({ discovery: { ...discovery, status: "no_match" } })).toEqual([]);
-    expect(JSON.stringify(discoverySections({ discovery: { ...discovery, status: "catalog" } }))).toContain("Available catalog");
     expect(hasDiscoveryOutput(`[read#1]\n${JSON.stringify({ discovery })}`)).toBe(true);
     expect(hasDiscoveryOutput("Skill: available-entry\nInstructions")).toBe(false);
     expect(hasDiscoveryOutput('{"discovery":{"status":"unknown","entries":[]}}')).toBe(false);

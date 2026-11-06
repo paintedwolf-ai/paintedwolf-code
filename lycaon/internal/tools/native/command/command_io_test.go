@@ -268,6 +268,10 @@ func TestCommandIOParseEnvValidation(t *testing.T) {
 }
 
 func TestCommitCommandOutputWithoutCommitter(t *testing.T) {
+	// Registering the native tools in this binary installs the committer.
+	previous := defaultOutputCommitter
+	SetOutputCommitter(nil)
+	t.Cleanup(func() { SetOutputCommitter(previous) })
 	err := commitCommandOutput(t.Context(), tools.ToolContext{}, fseffect.Location{}, strings.NewReader("out"), false)
 	if err == nil || !strings.Contains(err.Error(), "output committer not configured") {
 		t.Fatalf("err = %v, want output committer not configured", err)

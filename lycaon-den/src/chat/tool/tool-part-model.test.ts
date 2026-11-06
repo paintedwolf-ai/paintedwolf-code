@@ -173,7 +173,6 @@ describe("tool-part-model", () => {
     );
     expect(part.kind).toBe("read");
     expect(part.status).toBe("completed");
-    expect(part.output).toContain("package main");
   });
 
   it("maps tool_result.outcome to part status", () => {

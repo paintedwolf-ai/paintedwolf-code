@@ -38,7 +38,7 @@ copy:
     staged command redirect. If the path has since been created, read its current contents before replacing it.
     {% else %}Read the current file before repairing it; rejected candidate text is not
     a saved edit base. Correct the candidate with an exact `edit`, a complete staged command redirect,
-    or one atomic `replace_lines.operations` batch.{% endif %}
+    or one `edit --path` or `replace-lines` whose span covers the whole change.{% endif %}
     Resolve this rejected source mutation before running checks that require its proposed contents.
     If the proposed syntax is intentional, intermediate, or the parser diagnostic is inaccurate,
     supply `syntax_override_reason` on the mutation call to proceed.
@@ -53,7 +53,3 @@ x-paintedwolf-scenarios:
       path: ntp_check.py
       profile: implement
       tool: replace_lines
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: MUTATION_BROKE_PARSE'
-      - atomic

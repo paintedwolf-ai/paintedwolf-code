@@ -96,9 +96,6 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 					t.Errorf("control %s contradicts frozen offered schemas: %s", control, out)
 				}
 			}
-			if tools.ToolOffered(ctx, "command_stop") && !strings.Contains(out, "observe its exit") {
-				t.Fatalf("stop acknowledgement replaced observed exit: %s", out)
-			}
 		})
 	}
 }

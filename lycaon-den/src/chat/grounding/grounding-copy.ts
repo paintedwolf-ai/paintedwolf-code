@@ -25,6 +25,8 @@ export const GROUNDING_BADGE_TITLE_PARTIAL =
   "Some citations not found in captured output";
 
 export const GROUNDING_HEADLINE_NO_WORK = "No citations to trace";
+export const GROUNDING_HEADLINE_EVIDENCE_OPTIONAL =
+  "No sources checked. This message cites none, and none were required.";
 export const GROUNDING_HEADLINE_GROUNDED =
   "All citations grounded in captured evidence";
 export const GROUNDING_HEADLINE_PARTIAL =
@@ -39,7 +41,9 @@ export const GROUNDING_PANEL_SCOPE =
 
 export const GROUNDING_CITATIONS_SECTION = "Cited evidence";
 
-export const GROUNDING_ADVISORY_NOTE_SUFFIX = "surfaced for review";
+export function groundingAdvisoryNote(count: number): string {
+  return `${count} source mention${count === 1 ? "" : "s"} outside the typed citations — surfaced for review`;
+}
 
 export const GROUNDING_VERDICT_MATCHED = "Traced — exact";
 export const GROUNDING_VERDICT_TRACED = "Traced — confirm";

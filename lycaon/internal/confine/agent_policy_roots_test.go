@@ -77,8 +77,8 @@ func TestBuildProfileRefusesFilterTheProfileReaderCannotRead(t *testing.T) {
 
 // The kernel must accept the package-execution profile however many projects
 // are registered, and enforce the agent-policy floor it carries.
-func TestSeatbeltAppliesPackageExecutionProfileWithManyRegisteredRoots(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryAppliesPackageExecutionPlanWithManyRegisteredRoots(t *testing.T) {
+	self := requireLiveBoundary(t)
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	registeredLongRoots(t, 8)
 	project := t.TempDir()

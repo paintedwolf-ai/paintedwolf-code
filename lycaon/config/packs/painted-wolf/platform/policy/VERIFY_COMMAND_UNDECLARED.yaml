@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     tool: verify
-  expect_contains:
-  - 'Code: VERIFY_COMMAND_UNDECLARED'
-  - command

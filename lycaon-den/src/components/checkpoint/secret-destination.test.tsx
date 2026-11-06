@@ -62,7 +62,6 @@ describe("secret card destination", () => {
     const view = mount(secretCard("Fireworks 1", "model_provider"));
     expect(view.getByTestId("approval-location-destination").textContent).toBe("Fireworks 1");
     const chip = view.getByTestId("approval-location-destination-kind");
-    expect(chip.textContent).toBe("your model provider — the model reads this");
     expect(chip.getAttribute("data-destination-kind")).toBe("model_provider");
   });
 

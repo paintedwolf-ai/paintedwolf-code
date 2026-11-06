@@ -109,6 +109,7 @@ Use the narrow fixture at the boundary being exercised:
 | Need | Fixture |
 |------|---------|
 | Disposable prepared SQLite store | `internal/testdbfixture` |
+| Whether values a test supplied reach an output | `internal/testutil/exposure`; tests assert on supplied values and typed results, never on product wording |
 | Temporary Git repository and commits | `internal/testutil/gittest` |
 | Go module or checkout root | `configlayout.FindModuleRoot` or `testutil.CheckoutRoot` |
 | Process-wide Anchor, guidance, Git, or browser setup | the corresponding `internal/testsetup/*` package, called explicitly from `TestMain` |
@@ -227,6 +228,10 @@ fallback to an installed program, so none of them is compared. Programs whose
 result the command language defines itself, such as native built-ins, `external`,
 `native_path` and redirects that publish over their own input, are contract
 cases in `lycaon/test/wiring/conformance` with their expected results.
+
+The `status-*` cases compare how statuses compose. Each places every status
+source, across native and external owners, in every pipeline, list, frame, branch,
+loop, job and `wait` form, and reports `$?` and `PIPESTATUS` after each.
 
 Snapshots record behaviour only, never a tool's `--help`, `--version`, `info`
 or manual output; the corpus refuses a program that asks for them.

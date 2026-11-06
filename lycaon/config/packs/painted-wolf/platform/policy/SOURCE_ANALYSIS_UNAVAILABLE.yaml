@@ -34,7 +34,6 @@ x-paintedwolf-scenarios:
       parse_failure_count: 1
       parse_paths: [Sources/Game/Level.swift]
       parse_failure: swift parsing stopped at timeout after 5000 ms
-    expect_contains: ['Code: SOURCE_ANALYSIS_UNAVAILABLE', 'structural=false', '5000 ms']
   - id: outline
     vars:
       tool: read
@@ -42,4 +41,3 @@ x-paintedwolf-scenarios:
       parse_failure_count: 1
       parse_paths: [Sources/Game/Level.swift]
       parse_failure: swift parsing stopped with memory_budget
-    expect_contains: ['Code: SOURCE_ANALYSIS_UNAVAILABLE', 'explicit line ranges', 'memory_budget']

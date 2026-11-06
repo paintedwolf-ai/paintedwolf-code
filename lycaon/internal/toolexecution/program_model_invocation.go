@@ -40,8 +40,8 @@ type programFrameLifetime struct {
 }
 
 func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission *toolcontract.ProgramMemory) (*programFrameLifetime, error) {
-	if ctx == nil || admission == nil || model.ToolName != "command" || model.Arguments == nil {
-		return nil, fmt.Errorf("program frame requires actual command invocation and retained state admission")
+	if ctx == nil || admission == nil || !programModelTool(model.ToolName) || model.Arguments == nil {
+		return nil, fmt.Errorf("program frame requires an actual program invocation and retained state admission")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -219,4 +219,8 @@ func (f ProgramFrame) retainProgramFacts(ctx context.Context, n int64) error {
 	}
 	l.releases = append(l.releases, release)
 	return nil
+}
+
+func programModelTool(name string) bool {
+	return name == "command" || name == "verify"
 }

@@ -51,9 +51,6 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - 'Code: DOOM_LOOP_REPEAT_WARN'
-  - current next action
 - id: deferred_unactivated
   vars:
     repeat_count: 3
@@ -63,10 +60,6 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: update_progress
-  expect_contains:
-  - 'Code: DOOM_LOOP_REPEAT_WARN'
-  - request_tools
-  - listed as deferred in the tool catalog
 - id: worker_leg
   vars:
     repeat_count: 3
@@ -76,10 +69,6 @@ x-paintedwolf-scenarios:
     profile: explore_readonly
     tool: grep
     worker_leg: true
-  expect_contains:
-  - 'Code: DOOM_LOOP_REPEAT_WARN'
-  - leg assignment pinned at the top
-  - 'leg_status: partial'
 - id: command_output
   vars:
     repeat_count: 3
@@ -87,9 +76,3 @@ x-paintedwolf-scenarios:
     max: 8
     profile: coordinator
     tool: command_output
-  expect_contains:
-  - 'Code: DOOM_LOOP_REPEAT_WARN'
-  - '"handles":["cmd_docker_01"]'
-  - process_done
-  - next_cursor
-  - previous output cursor

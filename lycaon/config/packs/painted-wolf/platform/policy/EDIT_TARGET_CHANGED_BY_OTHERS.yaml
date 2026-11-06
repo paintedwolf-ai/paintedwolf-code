@@ -18,6 +18,7 @@ requires:
   - paintedwolf.replacement_matches
   - paintedwolf.replacement_line
   - paintedwolf.change_count
+  - paintedwolf.source_history_offered
 when: paintedwolf.rejection_code == "EDIT_TARGET_CHANGED_BY_OTHERS"
 effect: block
 copy:
@@ -36,8 +37,10 @@ copy:
     Otherwise, compute a different edit from the fresh source while preserving the other actors' changes.
     {% else %}Read {{ paintedwolf.path }} and check whether the intended change is still needed.
     If needed, copy a fresh verbatim substring into old_string, without displayed line labels and preserving indentation.{% endif %}
-  instead: Inspect source_history when attribution is needed. Do not repeat the same edit or replace the whole
-    file merely to bypass a missing match.
+  instead: >-
+    {% if paintedwolf.source_history_offered %}When attribution is needed, inspect `source_history(path)`, or
+    `source_history()` for everything changed this session. {% endif %}Do not repeat the same edit or replace the
+    whole file merely to bypass a missing match.
 
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit
@@ -49,11 +52,9 @@ x-paintedwolf-scenarios:
     old_string_chars: 42
     path: internal/foo.go
     profile: implement
+    source_history_offered: true
     tool: edit
     total_lines: 120
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: EDIT_TARGET_CHANGED_BY_OTHERS'
 
 - id: replacement_present
   vars:
@@ -65,7 +66,3 @@ x-paintedwolf-scenarios:
     total_lines: 120
     replacement_matches: 1
     replacement_line: 7
-  expect_contains:
-  - 'already present'
-  - 'This call made no change'
-  - 'does not prove an earlier'

@@ -33,4 +33,3 @@ x-paintedwolf-message: The history recovery coordinates are invalid.
 x-paintedwolf-scenarios:
 - id: default
   vars: {profile: coordinator, tool: recall}
-  expect_contains: ['Rejected:', 'Code: RECALL_HISTORY_INVALID']

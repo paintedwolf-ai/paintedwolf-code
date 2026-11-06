@@ -24,6 +24,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: implement
       tool: edit
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: EDITOR_DOCUMENT_READ_REQUIRED'

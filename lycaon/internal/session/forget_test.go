@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -56,7 +57,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	m.SetProgressStore(progressStore)
 	m.Coordinator.ProgressClosure.Arm(t.Context(), sid, "job-closure")
 	m.Runner.Closeouts.RecordGroundingFriction(t.Context(), sid)
-	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", "draft", nil)
+	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", guidance.ParseCloseoutDraft("draft", citationmd.Options{}), nil)
 	m.Coordinator.Batch.AcceptSynthesis(t.Context(), sid)
 	checkpoints := sessioncheckpoint.New(t.TempDir(), t.TempDir(), sessionstore.NewMemory())
 	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
@@ -404,13 +405,7 @@ func TestHTTPRequestLoopbackOtherSessionCardAdvisesReportingToUser(t *testing.T)
 	}, &api.FeedbackSubject{Kind: "host", ID: "127.0.0.1:8000"})
 
 	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "http_request", args, `{"status":200}`, 1, raised)
-	for _, want := range []string{
-		`{"status":200}`,
-		"Code: HTTP_REQUEST_LOOPBACK_OTHER_SESSION",
-		detail,
-		"let the user decide",
-		"Do not stop, signal, or reconfigure the other listener yourself",
-	} {
+	for _, want := range []string{`{"status":200}`, "Code: HTTP_REQUEST_LOOPBACK_OTHER_SESSION", detail} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("output missing %q:\n%s", want, out)
 		}

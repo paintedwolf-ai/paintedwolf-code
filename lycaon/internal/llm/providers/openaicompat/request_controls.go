@@ -38,7 +38,7 @@ func (p *Provider) resolveRequestControls(req modelcall.CompletionRequest, model
 		override = entry.ReasoningEffort
 	}
 
-	strict := opts.strictRetry || req.StrictOutputBudget()
+	strict := opts.strictRetry || req.ReduceReasoning()
 
 	mt := p.modelThinking(model)
 	if req.ThinkingOverride != nil {
@@ -142,10 +142,10 @@ func (p *Provider) reasoningActive(mt modelcall.ModelThinking, controls requestC
 func (p *Provider) finishRequestBudget(req modelcall.CompletionRequest, model string, opts controlOpts, out *requestControls) {
 	entry, _ := p.ModelEntry(model)
 	mt := p.modelThinking(model)
-	level := modelcall.ResolveThinkLevel(req, entry.ReasoningEffort, opts.strictRetry || req.StrictOutputBudget())
+	level := modelcall.ResolveThinkLevel(req, entry.ReasoningEffort, opts.strictRetry || req.ReduceReasoning())
 	reasoning := out.ReasoningEffort != "" && out.ReasoningEffort != mt.EffortOff || out.Thinking != nil && out.Thinking.Type == "enabled" || out.Reasoning != nil && !out.Reasoning.Disables()
 	budgetReq := req
-	budgetReq.StrictBudget = budgetReq.StrictBudget || opts.strictRetry
+	budgetReq.ReasoningRecovery = budgetReq.ReasoningRecovery || opts.strictRetry
 	// Native fixed efforts are not ordered by the host ladder. Reserve the
 	// largest application allowance without reinterpreting the fixed setting.
 	if req.ThinkingOverride != nil && reasoning {
@@ -157,7 +157,7 @@ func (p *Provider) finishRequestBudget(req modelcall.CompletionRequest, model st
 	}
 	reducedReq := req
 	reducedReq.AttemptBudget = nil
-	reducedReq.StrictBudget = true
+	reducedReq.ReasoningRecovery = true
 	reduced := p.resolveRequestControls(reducedReq, model, controlOpts{strictRetry: true, reasoning: opts.reasoning})
 	current := *out
 	current.MaxTokens, reduced.MaxTokens = 0, 0

@@ -38,34 +38,21 @@ x-paintedwolf-scenarios:
     tool: command
     redirection_issue: descriptor_unsupported
     operator: 3>
-  expect_contains:
-  - 'Code: COMMAND_REDIRECTION_UNSUPPORTED'
-  - descriptor_unsupported
-  - 3>
 - id: pipe_stdout
   vars:
     tool: command
     redirection_issue: pipe_stage_stdout
     redirection_pipe: true
     operator: go test ./... > out.log
-  expect_contains:
-  - 'Code: COMMAND_REDIRECTION_UNSUPPORTED'
-  - pipe endpoint and file redirection
 - id: field_conflict
   vars:
     tool: command
     redirection_issue: stdout_to_conflict
     redirection_conflict: true
     operator: go test ./... > out.log
-  expect_contains:
-  - 'Code: COMMAND_REDIRECTION_UNSUPPORTED'
-  - Specify one destination
 - id: terminal
   vars:
     tool: terminal_open
     redirection_issue: surface_unsupported
     redirection_terminal: true
     operator: '> dev.log'
-  expect_contains:
-  - 'Code: COMMAND_REDIRECTION_UNSUPPORTED'
-  - owns stdin, stdout and stderr

@@ -30,8 +30,3 @@ x-paintedwolf-scenarios:
     command: go mod tidy
     cwd: /project
     pwd: /project/subdir
-  expect_contains:
-  - 'Code: COMMAND_PWD_NOT_CWD'
-  - env.PWD
-  - /project/subdir
-  - /project

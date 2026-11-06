@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
 // lsofReview answers the host process inspection review and counts it.
@@ -58,7 +59,8 @@ func TestProgramEntryLsofNamesHostListenersOnlyAfterApproval(t *testing.T) {
 	outcome := decodeOutcome(t, out)
 	lines := strings.Split(strings.TrimSuffix(outcome.Stdout, "\n"), "\n")
 	want := []string{self.Name, strconv.Itoa(os.Getpid()), strconv.Itoa(os.Getuid()), "IPv4", "TCP", fmt.Sprintf("127.0.0.1:%d", port), "(LISTEN)"}
-	if outcome.Status != 0 || outcome.Stderr != "" || len(lines) != 2 || strings.Join(strings.Fields(lines[0]), " ") != "COMMAND PID USER TYPE NAME" || strings.Join(strings.Fields(lines[1]), " ") != strings.Join(want, " ") {
+	// Whether this host withholds sockets from the table is the host's fact.
+	if outcome.Status != 0 || strings.TrimSuffix(outcome.Stderr, command.LsofWithheldNote) != "" || len(lines) != 2 || strings.Join(strings.Fields(lines[0]), " ") != "COMMAND PID USER TYPE NAME" || strings.Join(strings.Fields(lines[1]), " ") != strings.Join(want, " ") {
 		t.Fatalf("approved lsof %s", out)
 	}
 	out, err = f.call(t, t.Context(), fmt.Sprintf("lsof -t -i :%d", port))
@@ -81,7 +83,7 @@ func TestProgramEntryLsofNamesHostListenersOnlyAfterApproval(t *testing.T) {
 	testutil.FailErr(t, "denied lsof", err)
 	outcome = decodeOutcome(t, out)
 	if outcome.Status != 1 || outcome.Stdout != "" || outcome.Refusal != nil ||
-		outcome.Stderr != fmt.Sprintf("lsof: port %d is held outside this session; host process inspection was not approved, so those holders were not inspected\n", port) {
+		strings.TrimSuffix(outcome.Stderr, command.LsofWithheldNote) != fmt.Sprintf("lsof: port %d is held outside this session; host process inspection was not approved, so those holders were not inspected\n", port) {
 		t.Fatalf("denied lsof %s", out)
 	}
 	f.Configure = nil
@@ -97,11 +99,12 @@ func TestProgramEntryLsofNamesHostListenersOnlyAfterApproval(t *testing.T) {
 
 // fixedPorts answers lsof from a fixed holder table.
 type fixedPorts struct {
-	holders []hostprocess.PortHolder
-	queries []lineage.ListenerQuery
+	holders  []hostprocess.PortHolder
+	queries  []lineage.ListenerQuery
+	withheld bool
 }
 
-func (p *fixedPorts) PortHolders(_ context.Context, _ string, query lineage.ListenerQuery) ([]hostprocess.PortHolder, error) {
+func (p *fixedPorts) PortHolders(_ context.Context, _ string, query lineage.ListenerQuery) (hostprocess.PortHolderTable, error) {
 	p.queries = append(p.queries, query)
 	var out []hostprocess.PortHolder
 	for _, holder := range p.holders {
@@ -109,7 +112,7 @@ func (p *fixedPorts) PortHolders(_ context.Context, _ string, query lineage.List
 			out = append(out, holder)
 		}
 	}
-	return out, nil
+	return hostprocess.PortHolderTable{Holders: out, Complete: !p.withheld}, nil
 }
 
 // A session job's listener, held by the job's process or by a process it
@@ -184,6 +187,20 @@ func TestProgramEntryLsofKeepsJobIdentityAndUnknownHolders(t *testing.T) {
 	}
 	if fmt.Sprint(ports.queries) != fmt.Sprint(wantQueries) {
 		t.Fatalf("listener queries %v, want %v", ports.queries, wantQueries)
+	}
+}
+
+// A withheld table turns "no row" into an unknown, and says so.
+func TestProgramEntryLsofSaysAWithheldTableLeavesAPortUnknown(t *testing.T) {
+	f := newProgramFixture(t)
+	f.Runtime.Ports = &fixedPorts{withheld: true}
+	review := &lsofReview{}
+	review.install(f)
+	out, err := f.call(t, t.Context(), "lsof -i :3000")
+	testutil.FailErr(t, "lsof", err)
+	outcome := decodeOutcome(t, out)
+	if outcome.Status != 1 || outcome.Stdout != "" || outcome.Stderr != command.LsofWithheldNote {
+		t.Fatalf("withheld lsof %s", out)
 	}
 }
 

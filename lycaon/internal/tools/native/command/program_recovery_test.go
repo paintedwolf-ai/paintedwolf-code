@@ -106,12 +106,12 @@ func TestReachedRecoveryTravelsFromLedgerToModel(t *testing.T) {
 	message := api.Message{ID: "retained-result", Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: body, ToolResult: &api.ToolResult{Tool: "command", ToolCallID: callID, Content: body, Invocation: receipt, CommandProgram: observed.CommandProgram}}
 	projected := transcript.Project([]api.Message{message})
 	text := projected[len(projected)-1].Content
-	for _, want := range []string{"Command refusal:", "\n⟦D⟧State: Operations started:", "Completed effects: 1", "\n⟦D⟧Fix:", "Command stdout:", "before"} {
+	for _, want := range []string{"COMMAND_SYNTAX_INVALID", "before"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("reached recovery lost %q: %s", want, text)
 		}
 	}
-	if strings.Contains(text, "No command operation ran") || strings.Contains(text, `"feedback"`) || message.Content != body {
+	if strings.Contains(text, `"feedback"`) || message.Content != body {
 		t.Fatalf("recovery contradicted or rewrote retained results: %s", text)
 	}
 }

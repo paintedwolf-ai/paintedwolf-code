@@ -30,7 +30,7 @@ func groundingRows(projectID, sessionID, messageID, ts, role string, gr *api.Cit
 	if gr == nil {
 		return nil
 	}
-	verified := gr.Traced
+	verified := gr.Traced && !gr.EvidenceOptional
 	recByHandle := make(map[string]api.CitationGroundingEvidenceRecord, len(gr.EvidenceRecords))
 	for _, rec := range gr.EvidenceRecords {
 		if h := strings.TrimSpace(rec.Handle); h != "" {

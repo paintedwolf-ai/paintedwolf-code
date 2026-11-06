@@ -21,6 +21,13 @@ func multiRootCommandProbe(operation, path string) (string, bool) {
 		"jq": "jq '.' " + path, "copy": "cp -- " + path + " copy-probe", "move": "mv -- " + path + " move-probe",
 		"delete": "rm -- " + path, "mkdir": "mkdir -- " + path, "diff": "diff -- " + path + " " + path,
 		"git_blame": "git blame -- " + path,
+		"chmod":     "chmod 644 -- " + path, "chown": "chown 0 -- " + path,
+		"code_rewrite": "code-rewrite --path " + path + " --pattern x --rewrite y",
+		"edit":         "edit --path " + path + " --old-string probe-old --new-string probe-new",
+		"git_merge":    "git -C " + path + " merge HEAD", "git_restore": "git restore -- " + path,
+		"git_stash": "git stash push -- " + path, "jq_edit": "jq-edit --path " + path + " --query .",
+		"replace_lines": "replace-lines --path " + path + " --start 1 --end 1 --content x",
+		"summarize":     "summarize --path " + path + " --focus probe", "survey_repo": "repo-map --path " + path,
 	}
 	source, ok := probes[operation]
 	return source, ok

@@ -49,31 +49,11 @@ func allBookkeepingToolCalls(calls []api.ToolCall) bool {
 		return false
 	}
 	for _, call := range calls {
-		switch strings.TrimSpace(call.Name) {
-		case "update_progress", "surface_note":
-		default:
+		if strings.TrimSpace(call.Name) != "update_progress" {
 			return false
 		}
 	}
 	return true
-}
-
-func toolCallPreservesCloseoutPin(name string) bool {
-	switch strings.TrimSpace(name) {
-	case "recall", "update_progress", "surface_note", "find_tools", "load_skill":
-		return true
-	default:
-		return false
-	}
-}
-
-func batchResumesCloseoutWork(calls []api.ToolCall) bool {
-	for _, call := range calls {
-		if !toolCallPreservesCloseoutPin(call.Name) {
-			return true
-		}
-	}
-	return false
 }
 
 func (l *modelTurn) retryProseFinishAfterBookkeeping(

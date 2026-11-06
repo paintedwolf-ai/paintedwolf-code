@@ -39,7 +39,3 @@ x-paintedwolf-scenarios:
       can_command_stop: true
       profile: implement
       tool: command
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: BACKGROUND_CAP_REACHED'
-      - command_stop

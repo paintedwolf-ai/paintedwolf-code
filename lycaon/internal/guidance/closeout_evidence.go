@@ -12,6 +12,9 @@ import (
 // CloseoutEvidence is the merged coordinator + worker leg ledger for closeout grounding.
 type CloseoutEvidence struct {
 	evidence.Ledger
+	// LegObservations marks citable worker evidence from legs dispatched in the
+	// current intent window.
+	LegObservations bool
 }
 
 // EvidenceLeg is one worker leg whose ledger a closeout may cite. LegID
@@ -55,6 +58,7 @@ func UnionCloseoutEvidence(ctx context.Context, reader CloseoutEvidenceReader, p
 	if err != nil {
 		return CloseoutEvidence{}, err
 	}
+	out.LegObservations = CloseoutLedgerHasCitableEvidence(out)
 	coordEv, err := reader.LoadLedger(ctx, parentSessionID)
 	if err != nil {
 		return CloseoutEvidence{}, err

@@ -1,7 +1,6 @@
 package guidance
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -16,10 +15,13 @@ type CoordinatorCitedEvidence struct {
 	Evidence string `json:"evidence,omitempty"`
 	Path     string `json:"path,omitempty"`
 	Line     int    `json:"line,omitempty"`
-	Excerpt  string `json:"excerpt,omitempty"`
+	// EndLine closes an inclusive range; zero means a single line or no line.
+	EndLine int    `json:"end_line,omitempty"`
+	Excerpt string `json:"excerpt,omitempty"`
 }
 
-// CoordinatorCompletionReport is typed coordinator closeout metadata.
+// CoordinatorCompletionReport is a closeout's flat typed view: its answer, bounded
+// citation metadata, and document fields. It never travels as JSON.
 type CoordinatorCompletionReport struct {
 	Verification  *verification.Assessment   `json:"verification,omitempty"`
 	Synthesis     string                     `json:"synthesis"`
@@ -83,18 +85,6 @@ type CoordinatorSetAside struct {
 	Scanner      string   `json:"scanner,omitempty"`
 	Paths        []string `json:"paths,omitempty"`
 	Reason       string   `json:"reason"`
-}
-
-// CoordinatorCloseoutTranscriptNarrative extracts displayable report prose.
-func CoordinatorCloseoutTranscriptNarrative(content string) (string, bool) {
-	report, ok := ParseCoordinatorCompletionReport(content)
-	if !ok {
-		return "", false
-	}
-	if CloseoutBodyIsEnvelopeShaped(report.Synthesis) {
-		return "", false
-	}
-	return report.Synthesis, true
 }
 
 // Normalize trims and caps closeout report fields.
@@ -203,16 +193,6 @@ func normalizeReportAnswers(in map[string]string) map[string]string {
 	return out
 }
 
-// MarshalCoordinatorCompletionReport JSON-encodes a closeout report for transcript commit.
-func MarshalCoordinatorCompletionReport(report CoordinatorCompletionReport) (string, error) {
-	report.Normalize()
-	raw, err := json.Marshal(report)
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
 func normalizeCoordinatorCitedEvidence(in []CoordinatorCitedEvidence, max int) []CoordinatorCitedEvidence {
 	if len(in) == 0 {
 		return nil
@@ -227,6 +207,9 @@ func normalizeCoordinatorCitedEvidence(in []CoordinatorCitedEvidence, max int) [
 		key := item.Evidence + "\x00" + item.Path
 		if item.Line > 0 {
 			key = fmt.Sprintf("%s:%d", key, item.Line)
+		}
+		if item.EndLine > 0 {
+			key = fmt.Sprintf("%s-%d", key, item.EndLine)
 		}
 		if _, dup := seen[key]; dup {
 			continue
@@ -269,10 +252,15 @@ func normalizeSingleCoordinatorCitedEvidence(item CoordinatorCitedEvidence) (Coo
 	if handle == "" && path == "" {
 		return CoordinatorCitedEvidence{}, false
 	}
+	endLine := item.EndLine
+	if endLine == line {
+		endLine = 0
+	}
 	return CoordinatorCitedEvidence{
 		Evidence: handle,
 		Path:     path,
 		Line:     line,
+		EndLine:  endLine,
 		Excerpt:  strings.TrimSpace(item.Excerpt),
 	}, true
 }

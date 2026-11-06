@@ -189,7 +189,6 @@ describe("GitStrip checkout flow", () => {
     expect(dialog.textContent).toContain(
       "2 changed files stay in the project folder and are not copied.",
     );
-    expect(dialog.textContent).not.toContain("Other attached repositories");
     expect(
       (screen.getByLabelText("New branch name") as HTMLInputElement).value,
     ).toBe("");

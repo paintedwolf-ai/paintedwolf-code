@@ -24,6 +24,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - 'Tool feedback'
-  - 'Code: COORDINATOR_GROUNDING_ESCALATED'

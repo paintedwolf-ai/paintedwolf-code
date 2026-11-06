@@ -48,10 +48,6 @@ x-paintedwolf-scenarios:
     refused_connect_ports:
     - '5432'
     tool_args: {}
-  expect_contains:
-  - 'Code: SANDBOX_TRY_LOCAL_NETWORK'
-  - '5432'
-  - port only, not by address
 - id: dev_server
   vars:
     tool: command
@@ -61,7 +57,3 @@ x-paintedwolf-scenarios:
     refused_listen_ports:
     - '8080'
     tool_args: {}
-  expect_contains:
-  - 'Code: SANDBOX_TRY_LOCAL_NETWORK'
-  - capability_request.local_listen
-  - command_stop

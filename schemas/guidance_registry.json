@@ -226,7 +226,7 @@
       "summary": "Scoped preview for {{ paintedwolf.path }} exposes {{ paintedwolf.hunk_count }} inline hunks (inline limit {{ paintedwolf.inline_threshold }})."
     },
     "BANNER_PROMOTE_SPILL_FIRST": {
-      "branch_instruction": "Never loop `read()` on primary for merge reconstruction when spill_path is present",
+      "branch_instruction": "Never repeatedly read the primary tree for merge reconstruction when spill_path is present",
       "category": "informational",
       "emit": "banner",
       "severity": "info",
@@ -476,6 +476,18 @@
       "emit": "guard:chown",
       "summary": "The requested owner {{ paintedwolf.ownership_target }} is unavailable for chown."
     },
+    "CITATION_REPAIR_INVALID": {
+      "branch_instruction": "Keep the retained text as it is. A tool that only reads keeps it; to change your conclusions, use a tool with effects, then write a fresh report.",
+      "category": "recoverable",
+      "emit": "guard:coordinator_synthesis",
+      "summary": "The host applied none of this citation repair: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}."
+    },
+    "CITATION_SYNTAX_INVALID": {
+      "branch_instruction": "Keep the retained text as it is; change only the listed nodes.",
+      "category": "recoverable",
+      "emit": "guard:coordinator_synthesis",
+      "summary": "The report has {{ paintedwolf.offender_count }} malformed citation or directive(s): {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}."
+    },
     "CODE_REWRITE_PATTERN_TOO_BROAD": {
       "branch_instruction": "Branch on Code; narrow the pattern and dry_run",
       "category": "recoverable",
@@ -679,11 +691,11 @@
       "emit": "guard:coordinator",
       "summary": "pack_board is unavailable while the batch is in {{ paintedwolf.batch_phase }}."
     },
-    "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY": {
-      "branch_instruction": "Keep the answer outside the trailing metadata fence; do not rerun checks or reread evidence to repair formatting",
+    "COORDINATOR_CLOSEOUT_NO_ANSWER": {
+      "branch_instruction": "Do not rerun checks or reread evidence to repair this; answer from what you already found.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Final report requires a Markdown answer with an optional trailing metadata block"
+      "summary": "Final report has no answer"
     },
     "COORDINATOR_CRITERIA_UNMET": {
       "branch_instruction": "Resolve the reported criterion using the existing job and its evidence before closing the delegation",
@@ -984,13 +996,13 @@
       "summary": "edit on {{ paintedwolf.path }} found {{ paintedwolf.occurrences }} matches for old_string — a single-occurrence edit needs a unique target."
     },
     "EDIT_OLD_STRING_NOT_FOUND": {
-      "branch_instruction": "Inspect source_history only when attribution is needed. Do not replace the whole file to bypass a missing match.",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Only when attribution is needed, inspect `source_history(path)`, or `source_history()` for everything changed this session. {% endif %}Do not replace the whole file to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
       "summary": "{% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}. The requested new_string is already present {{ paintedwolf.replacement_matches }} time(s), first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}: old_string ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis ({{ paintedwolf.total_lines }} lines).{% endif %}"
     },
     "EDIT_TARGET_CHANGED_BY_OTHERS": {
-      "branch_instruction": "Inspect source_history when attribution is needed. Do not repeat the same edit or replace the whole file merely to bypass a missing match.",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}When attribution is needed, inspect `source_history(path)`, or `source_history()` for everything changed this session. {% endif %}Do not repeat the same edit or replace the whole file merely to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
       "summary": "edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars), and the ledger recorded {{ paintedwolf.change_count }} change(s) to this file by other actors during this session."
@@ -1175,6 +1187,12 @@
       "emit": "guard:git_internals_write",
       "summary": "Cannot write {{ paintedwolf.path }} — repository git internals ({{ paintedwolf.class }}) are not writable via native tools."
     },
+    "GIT_NO_REPOSITORY_ON_WRITE_LEG": {
+      "branch_instruction": "Committed history belongs to a read-scoped leg or the coordinator on the primary tree.",
+      "category": "informational",
+      "emit": "guard:git_no_repository_on_write_leg",
+      "summary": "A Git read in this command found no repository on this write leg."
+    },
     "GIT_OPERATION_FAILED": {
       "branch_instruction": "Report any unresolved state; do not claim the repository was left unchanged or that the operation completed.",
       "category": "recoverable",
@@ -1254,10 +1272,10 @@
       "summary": "The search pattern uses a construct outside its declared regex dialect."
     },
     "GREP_SCOPE_REQUIRED": {
-      "branch_instruction": "Branch on Code; re-emit grep with path or a narrowing path_glob",
+      "branch_instruction": "Branch on Code; repeat the search with a narrower directory or file filter",
       "category": "recoverable",
       "emit": "guard:grep",
-      "summary": "Open-root grep requires an expressed path or narrowing path_glob when the file count is unknown or meets the structural threshold."
+      "summary": "Open-root grep requires a selected directory or narrowing file filter when the file count is unknown or meets the structural threshold."
     },
     "HELD_CALL_CAP_REACHED": {
       "branch_instruction": "Free a held call before starting another",
@@ -1394,7 +1412,7 @@
       "branch_instruction": "The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.",
       "category": "recoverable",
       "emit": "guard:coordinator_investigate",
-      "summary": "The report has no cited_evidence or cited_urls although recorded tool observations are available."
+      "summary": "The report has no citations although recorded tool observations are available."
     },
     "INVEST_CITATION_UNVERIFIABLE": {
       "branch_instruction": "Use existing coordinator or worker observations. Resuming work requires a fresh report.",
@@ -1403,7 +1421,7 @@
       "summary": "Investigate supplied {{ paintedwolf.offender_count }} citation(s) whose location or excerpt does not match the recorded evidence."
     },
     "INVEST_HANDLE_NOT_OBSERVED": {
-      "branch_instruction": "Use existing coordinator or worker observations that support the pinned report. Resuming work requires a fresh report.",
+      "branch_instruction": "Use existing coordinator or worker observations that support the retained answer. Resuming work requires a fresh report.",
       "category": "recoverable",
       "emit": "guard:coordinator_investigate",
       "summary": "Investigate cited {{ paintedwolf.offender_count }} evidence item(s) not seen in your tool results or worker results for this chat."
@@ -1521,7 +1539,7 @@
       "branch_instruction": "Remove cursor and retry the same scope once",
       "category": "recoverable",
       "emit": "guard:list_dir",
-      "summary": "`list_dir` received a cursor that is not valid for this scope and source generation."
+      "summary": "A directory listing received a cursor that is not valid for this scope and source generation."
     },
     "LIST_DIR_NOT_DIRECTORY": {
       "branch_instruction": "Choose a directory to list, or use an offered file reader",
@@ -1530,7 +1548,7 @@
       "summary": "list_dir path {{ paintedwolf.path }} is not a directory."
     },
     "LIST_DIR_PATH_NOT_FOUND": {
-      "branch_instruction": "Branch on Code; choose an existing directory before retrying list_dir",
+      "branch_instruction": "Branch on Code; choose an existing directory before listing again",
       "category": "recoverable",
       "emit": "guard:list_dir",
       "summary": "list_dir path {{ paintedwolf.path }} does not exist."
@@ -1588,6 +1606,60 @@
       "category": "recoverable",
       "emit": "guard:visual_capture",
       "summary": "querySelectorAll rejected selector {{ paintedwolf.measure_selector }}."
+    },
+    "MID_TURN_NOTE_ARTIFACT_UNKNOWN": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; use an observed artifact id or omit the directive",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} artifact directive(s) name an artifact this session has not seen: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_EVIDENCE_UNREADABLE": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_EVIDENCE_UNREADABLE; do not rewrite citations to clear it",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] The host could not read the evidence for this request, so your text alongside the last tool calls was not checked."
+    },
+    "MID_TURN_NOTE_HANDLE_UNGROUND": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_HANDLE_UNGROUND; correct the named citation rather than removing every citation",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} citation(s) did not resolve: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_IMAGE_UNOBSERVED": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_IMAGE_UNOBSERVED; drop the image or use the artifact directive",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] The update embedded {{ paintedwolf.offender_count }} image(s) from a source this chat never observed: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_INVALID_SYNTAX": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_INVALID_SYNTAX; correct the node",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} citation or directive node(s) could not be read: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_MARKDOWN_EMBED": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_MARKDOWN_EMBED; use the artifact directive",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] The update used {{ paintedwolf.offender_count }} visual artifact id(s) as an image source: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_UNGROUNDED": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_UNGROUNDED; do not repeat the same text uncited",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] Your text alongside the last tool calls cited nothing."
+    },
+    "MID_TURN_NOTE_URL_ONLY_UNGROUND": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_URL_ONLY_UNGROUND; observe the page before citing it",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} link(s) were not observed: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
+    },
+    "MID_TURN_NOTE_WAIT_FALLBACK": {
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_WAIT_FALLBACK; carry the explanation forward",
+      "category": "recoverable",
+      "emit": "guard:mid_turn_note",
+      "summary": "`wait` proceeds, but your earlier text remains an unpublished draft: the user has not received it."
     },
     "MKDIR_BULK_DENIED": {
       "branch_instruction": "Keep each batch bounded and preserve completed results",
@@ -1827,16 +1899,16 @@
       "summary": "A persistent terminal cannot carry instruction-file write approval."
     },
     "PRESENT_IMAGE_UNOBSERVED": {
-      "branch_instruction": "Present captures through artifact_ids; embed only an image URL that was fetched in this chat",
+      "branch_instruction": "Present captures with `[artifact:\u003cid\u003e]`; embed only an image URL that was fetched in this chat",
       "category": "recoverable",
       "emit": "guard:coordinator_synthesis",
-      "summary": "Synthesis embedded {{ paintedwolf.offender_count }} image(s) from a source this chat never observed. The client shows no image for it, so the reply presents a capture that does not exist."
+      "summary": "The answer embedded {{ paintedwolf.offender_count }} image(s) from a source this chat never observed. The client shows no image for it, so the reply presents a capture that does not exist."
     },
     "PRESENT_MARKDOWN_EMBED": {
-      "branch_instruction": "Use artifact_ids in the trailing metadata fence for observed artifacts; do not use a bare artifact UUID as an image URL",
+      "branch_instruction": "Use `[artifact:\u003cid\u003e]` for observed artifacts; do not use a bare artifact UUID as an image URL",
       "category": "recoverable",
       "emit": "guard:coordinator_synthesis",
-      "summary": "Synthesis used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image."
+      "summary": "The answer used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image."
     },
     "PROCESS_NOT_OWNED": {
       "branch_instruction": "Branch on Code; do not retry with another reference, PID, name, or command for the same process. Ask the user to stop it themselves.",
@@ -1845,7 +1917,7 @@
       "summary": "The target process was not started by this session."
     },
     "PROCESS_REFERENCE_STALE": {
-      "branch_instruction": "Branch on Code; call process_list again and review the new exact target. Do not replace the reference with a PID or name.",
+      "branch_instruction": "Branch on Code; list processes again with `ps` and review the new exact target. Do not replace the reference with a PID or name.",
       "category": "recoverable",
       "emit": "guard:host_process",
       "summary": "The process reference no longer identifies the reviewed process."
@@ -2132,7 +2204,7 @@
       "summary": "replace_lines did not change {{ paintedwolf.path }} because line {{ paintedwolf.line }} does not begin with the exact dedent prefix."
     },
     "REPLACE_LINES_INVALID_RANGE": {
-      "branch_instruction": "Branch on Code; fix the line range and retry replace_lines",
+      "branch_instruction": "Branch on Code; fix the line range and retry `replace-lines`",
       "category": "recoverable",
       "emit": "guard:replace_lines",
       "summary": "replace_lines on {{ paintedwolf.path }} rejected range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line }} — {{ paintedwolf.rejection_reason }}."
@@ -2328,11 +2400,6 @@
       "category": "user-decision",
       "emit": "guard:sandbox_read_path",
       "summary": "{{ tool }} was not granted read access to {{ paintedwolf.path }}."
-    },
-    "SANDBOX_REFUSAL_REPORT_SILENT": {
-      "category": "recoverable",
-      "emit": "guard:sandbox",
-      "summary": "{% if paintedwolf.process_timed_out %}The command reached its host deadline; no kernel refusal was reported.{% else %}{% if paintedwolf.process_stopped %}The command was stopped; no kernel refusal was reported.{% else %}{% if paintedwolf.process_exited %}The command exited unsuccessfully; no kernel refusal was reported.{% else %}The invocation did not finish successfully; no kernel refusal was reported.{% endif %}{% endif %}{% endif %}"
     },
     "SANDBOX_SOCKET_PATH_CHANGED": {
       "branch_instruction": "Branch on Code; re-request after the socket path is stable",
@@ -2591,6 +2658,12 @@
       "emit": "guard:tool",
       "summary": "The managed secret reference was not found."
     },
+    "SECRET_REFERENCE_OUTSIDE_SINK": {
+      "branch_instruction": "Do not put a reference in a here-document, `printf`, or a path",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "A managed secret reference reached an argument that does not resolve it."
+    },
     "SECRET_REFERENCE_OUT_OF_SCOPE": {
       "branch_instruction": "Do not copy identifiers across chat or project boundaries",
       "category": "recoverable",
@@ -2686,13 +2759,13 @@
       "summary": "Some source analysis is unavailable ({{ paintedwolf.parse_failure_count }} failure(s)): {{ paintedwolf.parse_paths }}."
     },
     "SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT": {
-      "branch_instruction": "If no justified recovery remains, report the limitation now with verification.method blocked and a reason in the trailing closeout JSON. This ends the turn without passing or advancing the workflow gate. {{ paintedwolf.cap }} settled attempts is a recovery ceiling, not a quota. Do not repeat unchanged failures.",
+      "branch_instruction": "If no justified recovery remains, report the limitation now and include `[verify: blocked - reason]` in your answer. This ends the turn without passing or advancing the workflow gate. {{ paintedwolf.cap }} settled attempts is a recovery ceiling, not a quota. Do not repeat unchanged failures.",
       "category": "recoverable",
       "emit": "guard:source_evidence",
       "summary": "An explicit workflow check is unresolved for revision {{ paintedwolf.source_revision }}."
     },
     "SOURCE_HISTORY_MODE_INVALID": {
-      "branch_instruction": "Branch on Code; pick one of the five modes",
+      "branch_instruction": "Branch on Code; pick one of the six modes",
       "category": "recoverable",
       "emit": "guard:source_history",
       "summary": "source_history does not know mode {{ paintedwolf.mode }}."
@@ -2722,19 +2795,19 @@
       "summary": "Deleting {{ paintedwolf.path }} without recovery needs approval."
     },
     "SOURCE_VERSION_BASE_MISMATCH": {
-      "branch_instruction": "Branch on Code; re-read current version from source_history",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Branch on Code; re-read current version from source_history {% else %}Branch on Code{% endif %}",
       "category": "recoverable",
       "emit": "guard:restore_version",
       "summary": "Base version mismatch for {{ paintedwolf.path }} — {{ paintedwolf.detail }}."
     },
     "SOURCE_VERSION_NOT_FOUND": {
-      "branch_instruction": "Branch on Code; verify version_id from effects",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Branch on Code; verify version_id from effects {% else %}Branch on Code{% endif %}",
       "category": "recoverable",
       "emit": "guard:source_history",
       "summary": "Source version not found — {{ paintedwolf.detail }}."
     },
     "SOURCE_VERSION_NO_PREDECESSOR": {
-      "branch_instruction": "Branch on Code; verify history via source_history",
+      "branch_instruction": "{% if paintedwolf.source_history_offered %}Branch on Code; verify history via source_history {% else %}Branch on Code{% endif %}",
       "category": "recoverable",
       "emit": "guard:restore_version",
       "summary": "No predecessor version for {{ paintedwolf.path }} — {{ paintedwolf.detail }}."
@@ -2749,13 +2822,13 @@
       "branch_instruction": "Branch on Code; pass version_id",
       "category": "recoverable",
       "emit": "guard:source_history",
-      "summary": "source_history mode {{ paintedwolf.mode }} requires version_id."
+      "summary": "source_history mode {{ paintedwolf.mode }} needs version_id here."
     },
     "SOURCE_VERSION_UNAVAILABLE": {
       "branch_instruction": "Branch on Code; query metadata instead of content",
       "category": "recoverable",
       "emit": "guard:source_history",
-      "summary": "Content for source version is unavailable — {{ paintedwolf.detail }}."
+      "summary": "Content for source version is unavailable{% if paintedwolf.side %} on the {{ paintedwolf.side }} side ({{ paintedwolf.state }}){% endif %} — {{ paintedwolf.detail }}."
     },
     "SPEC_POSTURE_BREAKING_REQUIRED": {
       "branch_instruction": "Capture breaking policy in Phase 0",
@@ -2770,7 +2843,7 @@
       "summary": "Delegation/implement tools are forbidden until the plan workflow is complete"
     },
     "SPEC_POSTURE_HANDOFF_FORBIDDEN": {
-      "branch_instruction": "Use command redirects or `edit` for blueprint files until approval/handoff",
+      "branch_instruction": "Use command redirects or scoped patches for blueprint files until approval/handoff",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "Handoff tools blocked until plan workflow milestones are met"
@@ -2819,7 +2892,7 @@
       "summary": "Plan scope section required before research or critic Tasks"
     },
     "SPEC_POSTURE_STATE_FORBIDDEN": {
-      "branch_instruction": "Use command redirects or `edit` on the blueprint file; state tracking tools are build-only",
+      "branch_instruction": "Use command redirects or scoped patches on the blueprint file; state tracking tools are build-only",
       "category": "recoverable",
       "emit": "rule:spec",
       "summary": "State tracking tools are forbidden in spec posture"
@@ -2974,42 +3047,6 @@
       "emit": "guard:worker_summary",
       "summary": "A claim about how a running UI or app behaves has no runtime surface snapshot evidence (page capture for DOM; sealed terminal_capture or held terminal_snapshot for terminal screens). Cited instead: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
-    "SURFACE_NOTE_ARTIFACT_UNKNOWN": {
-      "branch_instruction": "Capture the required visual before presenting it, or omit artifact_ids and accurately report the remaining work.",
-      "category": "recoverable",
-      "emit": "guard:surface_note",
-      "summary": "The note includes an artifact ID not observed as presentable in this turn."
-    },
-    "SURFACE_NOTE_HANDLE_UNGROUND": {
-      "branch_instruction": "Branch on Code SURFACE_NOTE_HANDLE_UNGROUND; correct the named token and retry — do not drop cited_evidence, and do not resend the same summary uncited",
-      "category": "recoverable",
-      "emit": "guard:surface_note",
-      "summary": "{{ paintedwolf.offender_count }} citation(s) did not bind to observed evidence: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
-    },
-    "SURFACE_NOTE_INVALID_ARGS": {
-      "branch_instruction": "Branch on Code SURFACE_NOTE_INVALID_ARGS; fix summary or citation args",
-      "category": "recoverable",
-      "emit": "guard:surface_note",
-      "summary": "surface_note field {{ paintedwolf.rejection_field }} is invalid: {{ paintedwolf.rejection_reason }}."
-    },
-    "SURFACE_NOTE_UNGROUNDED": {
-      "branch_instruction": "Branch on Code SURFACE_NOTE_UNGROUNDED; cite evidence or observe first — do not retry the same summary uncited",
-      "category": "recoverable",
-      "emit": "guard:surface_note",
-      "summary": "That note cited nothing. Add one citation and send it again."
-    },
-    "SURFACE_NOTE_URL_ONLY_UNGROUND": {
-      "branch_instruction": "Branch on Code SURFACE_NOTE_URL_ONLY_UNGROUND; observe once and add a cited_evidence entry — keep the URLs, they are not the problem",
-      "category": "recoverable",
-      "emit": "guard:surface_note",
-      "summary": "URLs alone cannot ground this note because the current coordinator/worker evidence union has no citable observation."
-    },
-    "SURFACE_NOTE_WORKER_SESSION": {
-      "branch_instruction": "Branch on Code SURFACE_NOTE_WORKER_SESSION; report through the leg, do not retry here",
-      "category": "recoverable",
-      "emit": "guard:surface_note",
-      "summary": "A note posted here would land on this worker's transcript, not the user's chat."
-    },
     "SURVEY_BUNDLE_REQUIRED": {
       "branch_instruction": "Branch on Code; retry with a valid bundle id from your Tools section",
       "category": "recoverable",
@@ -3050,7 +3087,7 @@
       "branch_instruction": "The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.",
       "category": "recoverable",
       "emit": "guard:coordinator_synthesis",
-      "summary": "The report has no cited_evidence or cited_urls although recorded tool observations are available."
+      "summary": "The report has no citations although recorded tool observations are available."
     },
     "SYNTH_CITATION_UNVERIFIABLE": {
       "branch_instruction": "Use existing coordinator or worker observations. Resuming work requires a fresh report.",
@@ -3059,7 +3096,7 @@
       "summary": "Synthesis supplied {{ paintedwolf.offender_count }} citation(s) whose location or excerpt does not match the recorded evidence."
     },
     "SYNTH_HANDLE_NOT_IN_LEGS": {
-      "branch_instruction": "Repair the trailing citation metadata using only evidence already present in this chat",
+      "branch_instruction": "Repair the rejected citations using only evidence already present in this chat",
       "category": "recoverable",
       "emit": "guard:coordinator_synthesis",
       "summary": "Synthesis cited {{ paintedwolf.offender_count }} evidence item(s) not seen in your tool results or worker results for this chat."
@@ -3190,6 +3227,12 @@
       "emit": "guard:coordinator",
       "summary": "No tool executed. The model provider could not parse the arguments of your last tool call as JSON and dropped the call."
     },
+    "TOOL_COMMAND_OPERATION": {
+      "branch_instruction": "Do not request or invoke this operation as a separate tool.",
+      "category": "recoverable",
+      "emit": "guard:command_operation",
+      "summary": "\"{{ paintedwolf.need }}\" is a command operation, not a callable tool."
+    },
     "TOOL_INVOKE_PROSE_TURN": {
       "branch_instruction": "Complete the current closeout without starting another execution arc",
       "category": "recoverable",
@@ -3197,10 +3240,10 @@
       "summary": "This tool cannot run during closeout"
     },
     "TOOL_NOT_OFFERED": {
-      "branch_instruction": "{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_status %}Select an exact catalog name{% if paintedwolf.tool_discovery_has_more %}, or continue with next_need{% endif %}; do not repeat an unavailable name{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable offered tool, or describe the missing operation and target to `request_tools`{% else %}Use an available capability or report the constraint{% endif %}{% endif %}{% endif %}",
+      "branch_instruction": "{% if paintedwolf.tool_retired_to_content %}Write the update as text and keep your other tool calls{% else %}{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_status %}Select an exact catalog name{% if paintedwolf.tool_discovery_has_more %}, or continue with next_need{% endif %}; do not repeat an unavailable name{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable offered tool, or describe the missing operation and target to `request_tools`{% else %}Use an available capability or report the constraint{% endif %}{% endif %}{% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "{% if paintedwolf.tool_loadable %}`{{ tool }}` is available but its schema is not loaded{% else %}`{{ tool }}` is unavailable on this model call{% endif %}"
+      "summary": "{% if paintedwolf.tool_retired_to_content %}`{{ tool }}` no longer exists; updates are assistant text{% else %}{% if paintedwolf.tool_loadable %}`{{ tool }}` is available but its schema is not loaded{% else %}`{{ tool }}` is unavailable on this model call{% endif %}{% endif %}"
     },
     "TOOL_OUTPUT_SPILL_CAPPED": {
       "branch_instruction": "Preserve the operation outcome and distinguish retained evidence from the omitted suffix",
@@ -3339,10 +3382,10 @@
       "summary": "Wait condition {{ paintedwolf.condition }} is unavailable in profile {{ paintedwolf.profile }}."
     },
     "WAIT_HIDDEN_TEXT": {
-      "branch_instruction": "Retry with the same wait conditions after choosing either recovery path.",
+      "branch_instruction": "{% if paintedwolf.mid_turn_evidence_unreadable %}Do not rewrite citations to clear this{% else %}Empty text does not clear this. Keep the same wait conditions and add the cited update.{% endif %}",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "`wait` has not started; this tool turn contains assistant text hidden from the user"
+      "summary": "`wait` has not started; your latest update is an unpublished draft the user has not received"
     },
     "WAIT_PROBE_SECRET_UNSUPPORTED": {
       "branch_instruction": "Do not reveal or persist the protected value",
@@ -3519,13 +3562,13 @@
       "branch_instruction": "Do not mark the leg complete without its required survey evidence; preserve any existing work and report the unresolved scope.",
       "category": "recoverable",
       "emit": "guard:worker_summary",
-      "summary": "Read scout marked leg complete without any successful survey tool (read, grep, find, list_dir, etc.)."
+      "summary": "Read scout marked leg complete without a successful source-survey observation."
     },
     "WORKER_SUMMARY_NO_ARTIFACT": {
       "branch_instruction": "Treat the implementation claim as unverified until the actual artifact evidence or no-change justification is established",
       "category": "recoverable",
       "emit": "guard:worker_summary",
-      "summary": "Worker finished without disk proof of implementation (no successful write, edit, replace_lines, restore_version, or workspace change)"
+      "summary": "Worker finished without disk proof of implementation (no successful file change, restore_version, or workspace change)"
     },
     "WORKER_SUMMARY_TOO_LONG": {
       "branch_instruction": "This trim turn accepts complete_leg only. Keep the brief within {{ paintedwolf.max_chars }} characters; do not resume acquisition or mutation.",
@@ -3622,7 +3665,7 @@
       "summary": "Workflow `{{ paintedwolf.workflow_id }}` phase `{{ paintedwolf.phase }}` is satisfied but still active."
     },
     "WORKFLOW_REPORT_PHASE_REQUIRED_BEFORE_CLOSEOUT": {
-      "branch_instruction": "Complete phase `{{ paintedwolf.phase }}` before claiming completion. If no justified recovery remains, an honest blocked report with verification.method blocked and its reason can end the turn without passing or advancing the workflow gate.",
+      "branch_instruction": "Complete phase `{{ paintedwolf.phase }}` before claiming completion. If no justified recovery remains, an honest blocked report carrying `[verify: blocked - reason]` can end the turn without passing or advancing the workflow gate.",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Tried to deliver the workflow's completion report while the durable run is still in phase `{{ paintedwolf.phase }}`."

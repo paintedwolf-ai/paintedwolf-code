@@ -251,14 +251,6 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	}
 	memStore := store.NewMemory()
 	wireContractProgramServices(t, rt, sqlDB, memStore)
-	if err := native.RegisterSurfaceNoteTool(rt.Registry, reporttools.SurfaceNoteDeps{
-		Ledger: session.NewHost(memStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry()).Verification.Evidence,
-		Messages: func(ctx context.Context, sessionID string) ([]api.Message, error) {
-			return memStore.GetMessages(ctx, sessionID)
-		},
-	}); err != nil {
-		contractcheck.FailErr(t, "native.RegisterSurfaceNoteTool failed", err)
-	}
 	if err := native.RegisterRecallTool(rt.Registry, recall.NewService(sqlDB, t.TempDir())); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRecallTool failed", err)
 	}

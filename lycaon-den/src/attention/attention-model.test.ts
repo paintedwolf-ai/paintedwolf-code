@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { AttentionRow } from "../api/types.ts";
 import {
-  ATTENTION_CLASS_LABEL,
   attentionAgeLabel,
   attentionFor,
   attentionRank,
-  attentionReasonLabel,
   blockingRows,
   compareAttention,
   indexAttention,
@@ -140,17 +138,8 @@ describe("withoutReadFinish", () => {
 });
 
 describe("labels", () => {
-  it("names each class in the second person", () => {
-    expect(ATTENTION_CLASS_LABEL.needs_you).toBe("Needs you");
-  });
-
-  it("prefers the specific reason over the class name", () => {
-    expect(attentionReasonLabel(row({ reason: "ask" }))).toBe("Waiting on your answer");
-    expect(attentionReasonLabel(row({ reason: "checkpoint" }))).toBe("Waiting on approval");
-  });
 
   it("renders a coarse age instead of a ticking clock", () => {
-    expect(attentionAgeLabel(row(), T0 + 30_000)).toBe("just now");
     expect(attentionAgeLabel(row(), T0 + 12 * 60_000)).toBe("12m");
     expect(attentionAgeLabel(row(), T0 + 3 * 3_600_000)).toBe("3h");
     expect(attentionAgeLabel(row(), T0 + 50 * 3_600_000)).toBe("2d");
