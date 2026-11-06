@@ -21,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -94,6 +93,34 @@ func (s canaryEchoSession) CallTool(_ context.Context, name string, args map[str
 }
 
 func (canaryEchoSession) Close() error { return nil }
+
+func registerCanaryMCP(t *testing.T, registry *tools.DefaultRegistry, matcher *secretmatch.Matcher, ask secretmatch.AskFunc) func() string {
+	t.Helper()
+	configtest.Overlay(t, map[config.Rel]string{config.DistroMCP: `providers:
+  - id: canary
+    command: canary
+    enabled: true
+`})
+	tempDir := t.TempDir()
+	var received []string
+	runtime, err := mcp.NewRuntime(mcp.RuntimeOptions{
+		StatePath:          filepath.Join(tempDir, "state"),
+		GlobalOverridePath: filepath.Join(tempDir, "mcp.yaml"),
+		Connector:          canaryEchoConnector{received: &received},
+		OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(tempDir, "oauth.json")),
+	})
+	testutil.FailErr(t, "create canary MCP runtime", err)
+	runtime.Tools.SetToolRegistry(registry)
+	runtime.Calls.SetSecretScreen(matcher, ask)
+	testutil.FailErr(t, "load canary MCP tools", runtime.Catalog.Load(t.Context()))
+	t.Cleanup(func() { testutil.FailErr(t, "close canary MCP runtime", runtime.Close(context.Background())) })
+	return func() string {
+		if len(received) == 0 {
+			return ""
+		}
+		return received[len(received)-1]
+	}
+}
 
 // Every tool whose contract resolves managed-secret references returns a
 // result free of the resolved value, whatever its consumer echoes back.

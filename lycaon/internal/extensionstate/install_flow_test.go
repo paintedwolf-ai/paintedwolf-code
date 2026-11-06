@@ -511,18 +511,18 @@ func TestInstallToolSchemaCollisionThenOwnResolves(t *testing.T) {
 
 	voice := filepath.Join(t.TempDir(), "tool-voice")
 	extpackstest.WriteMinimalPack(t, voice, "acme/tool-voice", 1)
-	extpackstest.MustWrite(t, filepath.Join(voice, "tools", "schemas", "write.yaml"),
-		"description: acme write\nschema:\n  type: object\n")
+	extpackstest.MustWrite(t, filepath.Join(voice, "tools", "schemas", "summarize.yaml"),
+		"description: acme summarize\nschema:\n  type: object\n")
 
 	apply(t, owner, deviceScope(), extensionstate.InstallOp{Source: "path:" + voice})
 	rep := validateScope(t, "")
 	if rep.OK {
-		t.Fatal("want validate to flag the unresolved tools/schemas/write conflict")
+		t.Fatal("want validate to flag the unresolved tools/schemas/summarize conflict")
 	}
 
 	packID := "acme/tool-voice"
 	apply(t, owner, deviceScope(), extensionstate.SetUnitOwnOp{
-		UnitID: "tools/schemas/write", PackID: &packID,
+		UnitID: "tools/schemas/summarize", PackID: &packID,
 	})
 	rep = validateScope(t, "")
 	if !rep.OK {
