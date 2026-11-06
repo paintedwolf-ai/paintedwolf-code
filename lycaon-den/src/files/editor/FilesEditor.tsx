@@ -369,7 +369,7 @@ export function FilesEditor(props: FilesEditorProps) {
           />
         </Show>
         <Show when={annotations.showPreviewWait()}>
-          <div class="den-presentation-wait" role="status">
+          <div class="den-presentation-wait" role="status" data-testid="files-editor-preview-wait">
             {historicalActive() ? "Loading…" : "Preparing preview…"}
           </div>
         </Show>

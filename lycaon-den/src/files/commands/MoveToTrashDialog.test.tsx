@@ -38,7 +38,7 @@ describe("Move to trash", () => {
 
   it("does not offer retry when the host requires a different action", () => {
     render(() => <MoveToTrashDialog state={{ ...selection, error: "Protected project metadata", retryable: false }} onCancel={() => {}} onConfirm={() => {}} />);
-    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(screen.queryByTestId("files-trash-confirm")).toBeNull();
   });
 
   it("prevents duplicate submissions while a move is running", () => {

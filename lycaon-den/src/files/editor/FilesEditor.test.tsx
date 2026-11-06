@@ -80,7 +80,7 @@ describe("FilesEditor", () => {
       fireEvent.click(screen.getByTestId("files-editor-md-preview"));
       expect(host.hidden).toBe(false);
       expect(host.inert).toBe(true);
-      expect(await screen.findByText("Preparing preview…")).toBeTruthy();
+      expect(await screen.findByTestId("files-editor-preview-wait")).toBeTruthy();
       expect(host.dataset.retained).toBe("true");
       expect(screen.getByTestId("files-editor-preview").classList.contains("den-files-editor__preview--preparing")).toBe(true);
       await waitFor(() => expect(postMessage).toHaveBeenCalledOnce());
@@ -88,7 +88,7 @@ describe("FilesEditor", () => {
       expect(host.hidden).toBe(false);
       expect(host.inert).not.toBe(true);
       expect(host.dataset.retained).toBe("false");
-      expect(screen.queryByText("Preparing preview…")).toBeNull();
+      expect(screen.queryByTestId("files-editor-preview-wait")).toBeNull();
       expect(terminate).toHaveBeenCalledOnce();
       view.unmount();
     } finally {

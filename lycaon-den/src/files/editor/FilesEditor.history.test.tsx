@@ -349,6 +349,6 @@ initialComparison: "before", source: { kind: "text" as const, before: before.con
       expect(preparation.ready()).toBe(true);
     });
     expect(screen.getByTestId("file-current-absent")).toBeTruthy();
-    expect(screen.getByText("This file has been deleted.")).toBeTruthy();
+    expect(screen.getByTestId("file-current-absent").textContent).toContain("This file has been deleted.");
   });
 });
