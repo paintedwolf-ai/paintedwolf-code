@@ -375,6 +375,7 @@ var occurrenceFactDecls = []factDecl{
 	{"resume_field", oarcore.TypeString, FactTierHost, ""},
 	{"resume_recorded", oarcore.TypeString, FactTierHost, ""},
 	{"resume_requested", oarcore.TypeString, FactTierHost, ""},
+	{"receipt_token", oarcore.TypeString, FactTierHost, ""},
 	{"settled_work", oarcore.TypeListString, FactTierHost, ""},
 	{"retryable", oarcore.TypeBool, FactTierHost, ""},
 	{"rule_category", oarcore.TypeString, FactTierHost, ""},

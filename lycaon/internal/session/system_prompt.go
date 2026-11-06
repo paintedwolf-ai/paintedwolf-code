@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // SetPromptEngine wires system prompt template rendering for LLM completion.
@@ -64,7 +65,7 @@ func (m *Host) SetWorkflowHints(cfg *guidance.HintConfig, gateFeedback *feedback
 		m.Coordinator.Feedback.Rejects = guidance.NewToolRejectFormatter(guidance.NewFeedbackDeduper())
 		m.Resources.Tools.Rejects = m.Coordinator.Feedback.Rejects
 		m.Coordinator.Guards.SetRejects(m.Coordinator.Completion.Rejects, m.Coordinator.Feedback.Rejects)
-		m.Coordinator.Tools.Results.Enricher = guidance.NewToolOutputEnricher(cfg, gateFeedback)
+		m.Coordinator.Tools.Results.Enricher = guidance.NewToolOutputEnricher(cfg, gateFeedback, tools.HintNextStepsResolver(m.ToolPolicy.Pipeline.Rules()))
 
 		m.Resources.Tools.Outputs = m.Coordinator.Tools.Results.Enricher
 	}
