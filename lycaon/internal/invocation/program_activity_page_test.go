@@ -78,3 +78,27 @@ func TestActivitySummaryCountsRepetitionsBeyondReceiptPage(t *testing.T) {
 		t.Fatal("cursor crossed activity boundary")
 	}
 }
+
+func TestActivityPageCoversFoldedRoots(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	child := f.child(t)
+	f.start(t, child)
+	id := child.Invocation().Identity.ExecutionID
+	_, err := f.database.ExecContext(t.Context(), `UPDATE invocation_program_executions SET state='completed',status_code=0,effect_certainty='none' WHERE id=?`, id)
+	testutil.FailErr(t, "settle representative", err)
+	// A second same-phase root folds into the first activity's row.
+	_, err = f.database.ExecContext(t.Context(), `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,arguments_representation,arguments_digest,arguments_ref,reviewed_arguments_ref,canonical,state,owner,lifecycle,native_command,effect_mode,effect_classes_json,started_at,status_code,effect_certainty)
+ SELECT 'folded-root',program_id,'untaken-node',2,parent_execution_id,actor_id,scope_json,'sed',definition_digest,arguments_representation,arguments_digest,arguments_ref,reviewed_arguments_ref,canonical,'completed',owner,lifecycle,'sed',effect_mode,effect_classes_json,started_at,0,'none'
+ FROM invocation_program_executions WHERE id=?`, id)
+	testutil.FailErr(t, "record folded root", err)
+	summary, err := f.recorder.ActivitySummary(t.Context(), f.session, f.program)
+	testutil.FailErr(t, "read folded activity summary", err)
+	if len(summary.Activities) != 1 || summary.Activities[0].ID != id || summary.Activities[0].Phase != "inspect" || len(summary.Activities[0].ExecutionIDs) != 2 {
+		t.Fatalf("folded summary: %+v", summary.Activities)
+	}
+	page, err := f.recorder.ReadProgramActivityPage(t.Context(), f.session, f.program, id, "", 10)
+	testutil.FailErr(t, "read folded activity page", err)
+	if len(page.Executions) != 2 || page.Executions[0].ID != id || page.Executions[1].ID != "folded-root" {
+		t.Fatalf("folded paging: %+v", page.Executions)
+	}
+}

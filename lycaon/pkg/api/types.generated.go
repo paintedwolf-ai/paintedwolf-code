@@ -1286,8 +1286,10 @@ type CodeScanPage struct {
 
 // CommandActivity
 type CommandActivity struct {
-	ID      string `json:"id"`
-	Group   string `json:"group"`
+	ID    string `json:"id"`
+	Group string `json:"group"`
+	// Typed activity phase. Folding and headline ranking compare this, never the display group.
+	Phase   string `json:"phase,omitempty"`
 	Label   string `json:"label"`
 	Subject string `json:"subject"`
 	// Registered session-owned background job started by this activity.

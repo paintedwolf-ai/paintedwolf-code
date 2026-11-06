@@ -26687,6 +26687,13 @@ components:
           format: uuid
         group:
           type: string
+        phase:
+          type: string
+          enum:
+            - inspect
+            - execute
+            - mutate
+          description: Typed activity phase. Folding and headline ranking compare this, never the display group.
         label:
           type: string
         subject:

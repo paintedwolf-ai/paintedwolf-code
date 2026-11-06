@@ -7,64 +7,77 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type activityRule struct{ role, group, label string }
+// Phase is the typed fold and headline key; group is its display name.
+type activityRule struct{ role, group, label, phase string }
 
 func activityPresentation(input activityInput) activityRule {
 	receipt := input.receipt
 	if input.operation == "program &" {
-		return activityRule{"primary", "Running programs", "Start background job"}
+		return activityRule{"primary", "Running programs", "Start background job", "execute"}
 	}
 	if strings.HasPrefix(input.operation, "program ") {
-		return activityRule{"container", "Running commands", "Run command"}
+		return activityRule{"container", "Running commands", "Run command", "execute"}
 	}
 	if receipt.EffectMode == "external" || receipt.NativeCommand == "external" || (input.operation == "command" && receipt.Owner == "processes") {
-		return activityRule{"primary", "Running programs", "Run process"}
+		return activityRule{"primary", "Running programs", "Run process", "execute"}
 	}
 	if input.operation == "cd" {
-		return activityRule{"context", "Exploring project files", "Change directory"}
+		return activityRule{"context", "Exploring project files", "Change directory", "inspect"}
 	}
 	if input.operation == "find" || input.operation == "list_dir" {
-		return activityRule{"primary", "Exploring project files", "Search paths"}
+		return activityRule{"primary", "Exploring project files", "Search paths", "inspect"}
 	}
 	switch input.operation {
 	case "git_commit":
-		return activityRule{"primary", "Recording changes", "Create commit"}
+		return activityRule{"primary", "Recording changes", "Create commit", "mutate"}
 	case "git_add", "git add":
-		return activityRule{"primary", "Recording changes", "Stage changes"}
+		return activityRule{"primary", "Recording changes", "Stage changes", "mutate"}
 	}
 	if strings.HasPrefix(input.operation, "git") || input.family == "git" {
 		if receipt.Lifecycle == "read_only" || hasActivityClass(receipt, "read_only") {
-			return activityRule{"primary", "Inspecting version history", "Inspect Git"}
+			return activityRule{"primary", "Inspecting version history", "Inspect Git", "inspect"}
 		}
-		return activityRule{"primary", "Recording changes", "Change Git state"}
+		return activityRule{"primary", "Recording changes", "Change Git state", "mutate"}
 	}
 	if hasActivityClass(receipt, "mutation") {
-		return activityRule{"primary", "Changing files", "Change files"}
+		return activityRule{"primary", "Changing files", "Change files", "mutate"}
 	}
 	if hasActivityClass(receipt, "network_egress") {
-		return activityRule{"primary", "Accessing the network", "Access network"}
+		return activityRule{"primary", "Accessing the network", "Access network", "execute"}
 	}
 	reads := activityPaths(input.arguments, "read")
 	switch input.family {
 	case "search", "query":
 		if len(reads) > 0 {
-			return activityRule{"primary", "Exploring project files", "Search contents"}
+			return activityRule{"primary", "Exploring project files", "Search contents", "inspect"}
 		}
 	case "inspect", "sed", "metadata":
 		if len(reads) > 0 {
-			return activityRule{"primary", "Exploring project files", "Read source"}
+			return activityRule{"primary", "Exploring project files", "Read source", "inspect"}
 		}
 	}
 	if receipt.Lifecycle == "read_only" && len(reads) > 0 {
-		return activityRule{"primary", "Exploring project files", "Read source"}
+		return activityRule{"primary", "Exploring project files", "Read source", "inspect"}
 	}
 	if receipt.Lifecycle == "read_only" || hasActivityClass(receipt, "read_only") {
 		if input.pipeline || len(reads) == 0 {
-			return activityRule{"support", "Processing output", "Process output"}
+			return activityRule{"support", "Processing output", "Process output", "inspect"}
 		}
-		return activityRule{"primary", "Processing output", "Process output"}
+		return activityRule{"primary", "Processing output", "Process output", "inspect"}
 	}
-	return activityRule{"primary", "Running commands", "Run command"}
+	return activityRule{"primary", "Running commands", "Run command", "execute"}
+}
+
+// Steps read as actions: label with subject when the operation has one.
+func activityStepLabel(g activityGroup) string {
+	rule := activityPresentation(g.input)
+	if subject := activitySubject(g.input); subject != "" {
+		return boundedActivityText(rule.label + " · " + subject)
+	}
+	if command := g.input.receipt.Command; command != "" {
+		return boundedActivityText(command)
+	}
+	return rule.label
 }
 
 func hasActivityClass(receipt api.CommandExecutionReceipt, class string) bool {
