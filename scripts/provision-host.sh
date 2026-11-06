@@ -73,7 +73,8 @@ fi
 # GitHub's sshd exits 1 on successful `ssh -T` authentication; 255 means the
 # SSH key prerequisite is missing.
 ssh_rc=0
-ssh -o BatchMode=yes -o ConnectTimeout=10 -T git@github.com >/dev/null 2>&1 || ssh_rc=$?
+# -n keeps the probe from consuming the script's own stdin under `bash -s`.
+ssh -n -o BatchMode=yes -o ConnectTimeout=10 -T git@github.com >/dev/null 2>&1 || ssh_rc=$?
 if [[ "${ssh_rc}" != 0 && "${ssh_rc}" != 1 ]]; then
 	echo "error: SSH authentication to github.com failed — set up GitHub SSH access, then re-run this script" >&2
 	exit 1
