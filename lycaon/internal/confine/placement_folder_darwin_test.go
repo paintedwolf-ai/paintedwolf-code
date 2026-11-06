@@ -11,7 +11,7 @@ import (
 )
 
 func TestSeatbeltWorkerCanReachOnlyItsPlacedBranch(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	f := newPlacementGrantFixture(t)
 	boundary := confine.Confinement{Roots: []string{f.branch}, Network: confine.NetworkDeny}
 	if code, out := confinedRun(t, self, boundary, "/usr/bin/touch", filepath.Join(f.branch, "written")); code != 0 {
