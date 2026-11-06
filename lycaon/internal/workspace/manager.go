@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
 // ErrWorkspaceStorageExhausted identifies a branch or seed write that failed
@@ -32,7 +34,7 @@ type CapacityError struct {
 }
 
 func (e *CapacityError) Error() string {
-	return fmt.Sprintf("worker seed needs %d bytes but only %d bytes are available on %s", e.Required, e.Available, e.Path)
+	return fmt.Sprintf("worker workspace needs %d bytes but only %d bytes are available on %s", e.Required, e.Available, e.Path)
 }
 
 // ProvisionStrategy is the storage path selected from successful clone probes.
@@ -44,14 +46,24 @@ const (
 	ProvisionDirectCopy ProvisionStrategy = "direct_copy"
 )
 
-// PreparationProgress is ephemeral worker-claim progress. TotalBytes is known
-// only after a bridge source survey has completed.
+// StageCostDeclared is reported before the first byte of a copy, with the cost in
+// TotalEntries and TotalBytes.
+const StageCostDeclared = "cost_declared"
+
+// StageBranchPrepared closes one root's preparation with what it left out.
+const StageBranchPrepared = "branch_prepared"
+
+// PreparationProgress is ephemeral worker-claim progress. The totals are known
+// only after a source survey has completed.
 type PreparationProgress struct {
-	Strategy   ProvisionStrategy
-	Stage      string
-	Files      int64
-	Bytes      int64
-	TotalBytes int64
+	Strategy          ProvisionStrategy
+	Stage             string
+	Files             int64
+	Bytes             int64
+	TotalBytes        int64
+	TotalEntries      int64
+	UnreadableEntries int64
+	NotClonableReason workerplacement.NotClonableReason
 }
 
 type preparationReporterKey struct{}
@@ -89,8 +101,34 @@ func reportPreparation(ctx context.Context, progress PreparationProgress) {
 // Binding is one isolated worker sandbox — a copy of the project tree living
 // outside the repo. There is no git interaction and no linked worktree.
 type Binding struct {
-	ID   string
-	Root string
+	ID          string
+	Root        string
+	Preparation Preparation
+}
+
+// RootPreparation is what preparing one source root did, in counts and bytes.
+type RootPreparation struct {
+	Strategy          ProvisionStrategy
+	Files             int64
+	Directories       int64
+	Symlinks          int64
+	Bytes             int64
+	ClonedFiles       int64
+	ClonedBytes       int64
+	CopiedBytes       int64
+	UnreadableEntries int64
+	// DeclaredEntries and DeclaredBytes are the cost stated before copying.
+	DeclaredEntries int64
+	DeclaredBytes   int64
+}
+
+// Preparation records the placement decision and each root's result. It is empty
+// for a binding that reused an already complete branch.
+type Preparation struct {
+	Clonable          bool
+	NotClonableReason workerplacement.NotClonableReason
+	PlacementFolder   string
+	Roots             []RootPreparation
 }
 
 // Manager creates and destroys per-job worker sandboxes, retaining a central
@@ -98,14 +136,22 @@ type Binding struct {
 type Manager struct {
 	branchRoot string
 	seedRoot   string
-	locks      seedLockSet
+	// stateRoot holds the placement registry; branchRoot sits directly under it.
+	stateRoot string
+	locks     seedLockSet
 }
 
 // NewManager returns a workspace manager rooted at out-of-repo branch and seed bases.
 func NewManager(branchRoot, seedRoot string) *Manager {
+	branchRoot = strings.TrimSpace(branchRoot)
+	stateRoot := filepath.Dir(branchRoot)
+	if registry, err := workerplacement.Load(stateRoot); err == nil {
+		workerplacement.Publish(registry)
+	}
 	return &Manager{
-		branchRoot: strings.TrimSpace(branchRoot),
+		branchRoot: branchRoot,
 		seedRoot:   strings.TrimSpace(seedRoot),
+		stateRoot:  stateRoot,
 		locks:      newSeedLockSet(),
 	}
 }

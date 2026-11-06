@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/localdata"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -81,6 +82,13 @@ func (s *Service) refreshUsage(ctx context.Context) error {
 			return err
 		}
 		lane := api.HistoryStorageLane{ID: name, StoredBytes: size}
+		if name == enginepaths.WorkerBranchesDirName {
+			placed, err := placedBranchBytes(ctx, s.DataDir)
+			if err != nil {
+				return err
+			}
+			lane.StoredBytes += placed
+		}
 		if name == db.UpgradeRecoveryDirName {
 			// Independent clones can share physical extents with live files.
 			lane.StoredBytes = 0
@@ -168,6 +176,24 @@ func (s *Service) attachmentProjectPage(ctx context.Context, after string) ([]st
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// placedBranchBytes adds branch folders on other volumes. An absent one counts as
+// nothing rather than failing the storage report.
+func placedBranchBytes(ctx context.Context, dataDir string) (int64, error) {
+	folders, err := workerplacement.AvailableFolders(dataDir)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	for _, folder := range folders {
+		size, err := directoryBytes(ctx, folder.BranchesRoot())
+		if err != nil {
+			return 0, err
+		}
+		total += size
+	}
+	return total, nil
 }
 
 func directoryBytes(ctx context.Context, path string) (int64, error) {

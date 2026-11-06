@@ -27,7 +27,7 @@ func (b *mockWorkspaceBinder) CreateWorkerWorkspace(_ context.Context, primaryDi
 	return &workspace.Binding{ID: legID, Root: root}, nil
 }
 
-func (b *mockWorkspaceBinder) DestroyWorkerWorkspace(*workspace.Binding) error {
+func (b *mockWorkspaceBinder) DestroyWorkerWorkspace(context.Context, *workspace.Binding) error {
 	return nil
 }
 

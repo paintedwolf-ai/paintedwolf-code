@@ -53,6 +53,9 @@ func ensureWorkerBranch(ctx context.Context, task *api.WorkerTask, ws WorkerWork
 		return nil, fmt.Errorf("%w: %s has no branch", ErrWorkerBranchUnavailable, task.ID)
 	}
 	release, err := workspace.AcquireBranchUse(ctx, root)
+	if errors.Is(err, workspace.ErrBranchVolumeUnavailable) {
+		return nil, fmt.Errorf("%w: %s: %w", ErrWorkerBranchUnavailable, task.ID, err)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -243,11 +246,13 @@ func (s mergeEngine) releaseMergeClaim(ctx context.Context, claim *mergeApplyCla
 	return s.Store.ReleaseMergeApply(cleanupCtx, claim.jobID, claim.token)
 }
 
-func (s mergeEngine) teardownBranch(task *api.WorkerTask) error {
+func (s mergeEngine) teardownBranch(ctx context.Context, task *api.WorkerTask) error {
 	if s.MergeService == nil || s.Workspace == nil || task == nil {
 		return nil
 	}
-	return s.Workspace.DestroyWorkerWorkspace(&workspace.Binding{
+	cleanupCtx, cancel := promoteCleanupContext(ctx)
+	defer cancel()
+	return s.Workspace.DestroyWorkerWorkspace(cleanupCtx, &workspace.Binding{
 		ID:   task.ID,
 		Root: task.WorkspaceRoot,
 	})

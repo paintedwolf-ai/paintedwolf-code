@@ -168,7 +168,7 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 		}
 	}
 	eng.clearReconcilePaths(sessionID)
-	if err := eng.teardownBranch(task); err != nil {
+	if err := eng.teardownBranch(ctx, task); err != nil {
 		slog.WarnContext(ctx, "rejected overlay cleanup deferred", "overlay_id", overlayID, "err", err)
 	} else if s.Store != nil {
 		cleanupCtx, cancel := promoteCleanupContext(ctx)

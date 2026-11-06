@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/localdata"
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
@@ -131,18 +132,23 @@ func ReclaimSealed(ctx context.Context, deps Deps) (Report, error) {
 	return Sweep(ctx, deps, Config{IdleAge: time.Nanosecond, BudgetBytes: 1, SweepInterval: time.Hour})
 }
 
-// Inventory reports whether any branch tree is on disk and their allocated size.
-func Inventory(ctx context.Context, branchRoot string) (present bool, allocatedBytes int64, err error) {
+// Inventory reports the branch trees on disk, their allocated size, and how many
+// recorded branches are on a volume that is absent right now.
+func Inventory(ctx context.Context, branchRoot string) (localdata.WorkerBranches, error) {
 	trees, err := workspace.ListJobTrees(ctx, branchRoot)
 	if err != nil {
-		return false, 0, err
+		return localdata.WorkerBranches{}, err
 	}
+	var out localdata.WorkerBranches
 	for _, tree := range trees {
+		if tree.Unavailable {
+			out.Unavailable++
+		}
 		if !tree.Present {
 			continue
 		}
-		present = true
-		allocatedBytes += tree.AllocatedBytes
+		out.Present = true
+		out.Bytes += tree.AllocatedBytes
 	}
-	return present, allocatedBytes, nil
+	return out, nil
 }

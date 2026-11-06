@@ -98,6 +98,8 @@ func run(ctx context.Context, args []string) error {
 		return runDiagnostics(ctx, rest)
 	case "credentials":
 		return runCredentials(rest)
+	case "placements":
+		return runPlacements(ctx, rest, os.Stdout)
 	case "git-credential-osxkeychain":
 		if len(rest) != 1 {
 			return errors.New("usage: pw git-credential-osxkeychain {get|store|erase}")

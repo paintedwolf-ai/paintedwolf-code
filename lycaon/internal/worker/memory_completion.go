@@ -203,7 +203,7 @@ func (q *memoryQueueClaims) failAdmitted(ctx context.Context, claimed *api.Worke
 	snapshot := job.task
 	projectID := job.projectID
 	q.mu.Unlock()
-	destroyWorkspaceRoot(q.self, jobID, workspaceRoot)
+	destroyWorkspaceRoot(ctx, q.self, jobID, workspaceRoot)
 	q.refreshBoard(ctx, snapshot, projectID)
 	return true, nil
 }

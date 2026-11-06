@@ -117,6 +117,10 @@ func Create(ctx context.Context, opts CreateOpts, destPath string) (Manifest, er
 		}
 	}
 
+	if err := collectPlacedBranchTrees(ctx, opts.ConfigDir, files, branches, maxArchiveEntries); err != nil {
+		return Manifest{}, err
+	}
+
 	if err := validateArchiveReferences(ctx, snapshot, files); err != nil {
 		return Manifest{}, fmt.Errorf("%w: %w", ErrCaptureIncomplete, err)
 	}

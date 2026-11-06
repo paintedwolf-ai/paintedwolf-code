@@ -22,10 +22,12 @@ func ReconcileSandboxRoots(ctx context.Context, branchRoot, seedRoot string, liv
 		}
 	}
 	var errs []error
-	branches, branchErr := reconcileBranchRoots(ctx, branchRoot, live, loadRetainedJobs)
-	removed += branches
-	if branchErr != nil {
-		errs = append(errs, branchErr)
+	for _, base := range branchBases(filepath.Dir(strings.TrimSpace(branchRoot)), branchRoot) {
+		branches, branchErr := reconcileBranchRoots(ctx, base, filepath.Dir(strings.TrimSpace(branchRoot)), live, loadRetainedJobs)
+		removed += branches
+		if branchErr != nil {
+			errs = append(errs, branchErr)
+		}
 	}
 	seeds, seedErr := reconcileSeedRoots(ctx, seedRoot, live)
 	removed += seeds
@@ -85,7 +87,7 @@ func detachedBranchCandidates(ctx context.Context, branchRoot string, live map[s
 	return candidates, nil
 }
 
-func reconcileBranchRoots(ctx context.Context, branchRoot string, live map[string]struct{}, loadRetainedJobs func(context.Context) (map[string]struct{}, error)) (int, error) {
+func reconcileBranchRoots(ctx context.Context, branchRoot, stateRoot string, live map[string]struct{}, loadRetainedJobs func(context.Context) (map[string]struct{}, error)) (int, error) {
 	if loadRetainedJobs == nil {
 		return 0, nil
 	}
@@ -101,7 +103,7 @@ func reconcileBranchRoots(ctx context.Context, branchRoot string, live map[strin
 	}
 	removed := 0
 	for _, bucket := range candidates {
-		changed, err := reconcileDetachedBranchBucket(ctx, bucket, retainedJobs)
+		changed, err := reconcileDetachedBranchBucket(ctx, stateRoot, bucket, retainedJobs)
 		if err != nil {
 			return removed, err
 		}
@@ -112,7 +114,7 @@ func reconcileBranchRoots(ctx context.Context, branchRoot string, live map[strin
 	return removed, nil
 }
 
-func reconcileDetachedBranchBucket(ctx context.Context, bucket detachedBranchBucket, retainedJobs map[string]struct{}) (bool, error) {
+func reconcileDetachedBranchBucket(ctx context.Context, stateRoot string, bucket detachedBranchBucket, retainedJobs map[string]struct{}) (bool, error) {
 	changed := false
 	for jobID := range bucket.jobs {
 		if err := ctx.Err(); err != nil {
@@ -121,9 +123,18 @@ func reconcileDetachedBranchBucket(ctx context.Context, bucket detachedBranchBuc
 		if _, keep := retainedJobs[jobID]; keep {
 			continue
 		}
-		removed, err := removeUnownedBranch(ctx, filepath.Join(bucket.path, jobID))
+		root := filepath.Join(bucket.path, jobID)
+		if placedBranchAbsent(stateRoot, root) {
+			continue
+		}
+		removed, err := removeUnownedBranch(ctx, root)
 		if err != nil {
 			return changed, err
+		}
+		if removed {
+			if err := forgetPlacedBranch(ctx, stateRoot, root); err != nil {
+				return changed, err
+			}
 		}
 		changed = changed || removed
 	}
