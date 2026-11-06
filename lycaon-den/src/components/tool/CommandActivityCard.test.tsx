@@ -11,10 +11,10 @@ vi.mock("../../utils/clipboard.ts", () => ({ writeClipboardText: vi.fn().mockRes
 
 const source = "cd /project && cargo build --release | tail -2 && cargo test | head -3";
 const program: CommandProgramReceipt = { id: "program", parent_receipt_id: "receipt", language_version: 1, catalog_digest: "catalog", source_digest: "digest", source_ref: "source", state: "completed", progress_state: "unchanged", detail_ref: "detail", started_at: "2026-10-30T10:00:00Z" };
-const fact: CommandActivity = { id: "test", group: "Running programs", label: "Run process", subject: "cargo test", state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: ["test"], spans: [{ source_ref: "source", start_byte: source.indexOf("cargo test"), end_byte: source.length }] };
+const fact: CommandActivity = { id: "test", group: "Running programs", phase: "execute", label: "Run process", subject: "cargo test", state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: ["test"], spans: [{ source_ref: "source", start_byte: source.indexOf("cargo test"), end_byte: source.length }] };
 function part(): ToolPartView {
  const original: ToolPartView = { id: "assistant:call", assistantMessageId: "assistant", messageId: "result", toolCallId: "call", tool: "command", kind: "command", status: "completed", args: { command: source }, commandProgram: program };
- return { ...original, commandActivity: { fact, members: [fact], calls: [original] } };
+ return { ...original, commandActivity: { fact, members: [fact], calls: [original], programIds: [program.id] } };
 }
 function receipt(): CommandExecutionReceipt {
  return { id: "test", program_id: "program", node_id: "node", parent_execution_id: "pipeline", owner: "processes", lifecycle: "effect_attempt", definition_digest: "definition", arguments_digest: "args", arguments_ref: "args", command: "cargo test", state: "completed", owner_started: true, owner_invoked: true, effect_certainty: "attempted", complete: true, publication_eligible: false, output_publishable: true, detail_ref: "detail", status_code: 0, outputs: [{ stream: "stdout", ref: "out", size_bytes: 12, complete: true, redacted: false, preview: "test output", preview_truncated: false }] };
