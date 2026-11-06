@@ -32,4 +32,4 @@ x-paintedwolf-scenarios:
       profile: coordinator
       spill_bytes: 67108864
       spill_path: tool-output/example.txt
-      tool: run_terminal_cmd
+      tool: command

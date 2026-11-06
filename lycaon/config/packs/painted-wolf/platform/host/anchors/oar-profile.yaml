@@ -1174,6 +1174,8 @@ host_facts:
    type: string
  - name: paintedwolf.resume_requested
    type: string
+ - name: paintedwolf.receipt_token
+   type: string
  - name: paintedwolf.settled_work
    type: list<string>
  - name: paintedwolf.redirect
