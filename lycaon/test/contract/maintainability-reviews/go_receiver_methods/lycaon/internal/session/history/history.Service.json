@@ -4,9 +4,9 @@
   "kind": "runtime_service",
   "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain one canonical history and compaction publication boundary at 53 methods. The merge of main added the request-fit machinery; extracting the omission-notice helpers to package functions and removing the uncalled CitationGroundingRetries accessor holds the merged count at its base. Idle preparation reads bounded canonical rows and applies the same persisted view on a private session copy; focused preparation, receiver-restoration, and reduction contracts cover the unchanged publication paths.",
-  "reviewed_commit": "b88eff578d012016baf556389149b2ae8d1ebb73",
-  "ceiling": 53,
+  "reason": "Retain one canonical history and compaction publication boundary at 51 methods. The merge of main added the request-fit machinery; the omission-notice, canonical-tail-bounds, and current-request helpers are plain functions with explicit dependencies, and the uncalled CitationGroundingRetries accessor is removed, holding the merged count below its base. Idle preparation reads bounded canonical rows and applies the same persisted view on a private session copy; focused preparation, receiver-restoration, and reduction contracts cover the unchanged publication paths.",
+  "reviewed_commit": "387459d7f7f8de43ab54b4b868c3537988e015bc",
+  "ceiling": 51,
   "boundaries": {
     "lycaon/internal/session/history/reduction_synthesis_test.go": "cd453e275138a51607bbdb31fe94da2e43d9a8092860ed34010a85aafabac450",
     "lycaon/internal/session/history/reduction_submission_test.go": "2a9e3064b77a27fb3f760effea36047272fe7eb6ad56255139cafc30730da9d1",
@@ -14,5 +14,5 @@
     "lycaon/internal/session/history/compaction_snapshot_test.go": "cb60879e68adf95379e33bbd5d97f2eab486287936ef4b0aa016e27ded13e681",
     "lycaon/internal/session/history/preparation_projection_test.go": "b2236be0c360d28e04bf4af2c1dd697dcbf523331d28d8e641c11fad55c02594"
   },
-  "reviewed_shape": "1653d8519d6c994dfa4a7dc90fbbe14007c845a7d12b4ef4e36359bd2c27202c"
+  "reviewed_shape": "b4aa2f29809dec41aec91ff8cbf3222a7a26a3dd641891d6540acee22f8c7000"
 }
