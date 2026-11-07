@@ -1,5 +1,0 @@
-steps:
-  - program: ["sed", "-n", "1,200p", "{{ paintedwolf.spill_path }}"]
-    complete: true
-    say: "Inspect bounded windows of the retained output with {{ call }}; adjust the window to the evidence you need."
-    otherwise: "Work from an existing narrower result; the command capability that could read the retained output is not offered on this request."

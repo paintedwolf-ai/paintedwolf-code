@@ -1,5 +1,0 @@
-steps:
-  - tool: "workflow_advance"
-    complete: true
-    say: "Call {{ call }} now."
-    otherwise: "Report the satisfied phase to the coordinating session, which holds the advancement call."
