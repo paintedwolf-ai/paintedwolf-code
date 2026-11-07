@@ -121,6 +121,13 @@ func newExecutionStateRow(result *api.ToolResult, age int, declared string) exec
 	if receipt.Failure != nil {
 		row.Code = receipt.Failure.Code
 	}
+	if program, ok := rejectedCommandProgram(result); ok {
+		row.Status = string(api.InvocationStatusRejected)
+		row.completed = false
+		if row.Code == "" {
+			row.Code = program.StopCode
+		}
+	}
 	row.rawPath, _ = result.ToolArgs["path"].(string)
 	row.rawCommand, _ = result.ToolArgs["command"].(string)
 	row.rawCwd, _ = result.ToolArgs["cwd"].(string)
@@ -152,6 +159,9 @@ func isExecutionTool(tool string) bool {
 // failedExecution reads one receipt. A poll without a verdict says nothing about
 // the work it polled.
 func failedExecution(result *api.ToolResult) bool {
+	if _, ok := rejectedCommandProgram(result); ok {
+		return true
+	}
 	receipt := result.Invocation
 	if !isExecutionTool(result.Tool) {
 		return false
