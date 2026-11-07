@@ -19,9 +19,13 @@ import (
 // wait collapses, transient contention fails the render, and the bubble
 // deadlocks. Resolving here, before any test runs, makes later renders cache
 // hits that take no lock.
+//
+// The warm is best-effort: environments that cannot resolve the catalog here
+// (for example a read-only config root, which the resolution needs to
+// materialize) keep a cold cache and behave exactly as before the warm
+// existed. Such environments never rendered guidance from the parent process
+// before, so no bubble hazard is introduced by skipping.
 func Install() {
 	guidance.SetGuidanceRenderer(promptstest.BundledRenderer())
-	if _, err := guidance.RenderTodayLine(context.Background(), time.Now(), ""); err != nil {
-		panic("guidancetestsetup: resolve guidance catalog: " + err.Error())
-	}
+	_, _ = guidance.RenderTodayLine(context.Background(), time.Now(), "")
 }
