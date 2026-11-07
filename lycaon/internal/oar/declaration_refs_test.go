@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestUnreferencedDeclaredFactsFlagsOrphans(t *testing.T) {
@@ -11,7 +13,7 @@ func TestUnreferencedDeclaredFactsFlagsOrphans(t *testing.T) {
 	module := filepath.Join(root, "lycaon")
 	anchors := filepath.Join(module, "config", "packs", "painted-wolf", "platform", "host", "anchors")
 	if err := os.MkdirAll(anchors, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	profile := `oar_capability_version: "1.0"
 host: paintedwolf
@@ -38,20 +40,18 @@ host_facts:
     type: bool
 `
 	if err := os.WriteFile(filepath.Join(anchors, "oar-profile.yaml"), []byte(profile), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	policy := filepath.Join(module, "config", "packs", "painted-wolf", "platform", "policy")
 	if err := os.MkdirAll(policy, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	rule := "when: paintedwolf.audited_present == true\n"
 	if err := os.WriteFile(filepath.Join(policy, "CONSUMER.yaml"), []byte(rule), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	got, err := UnreferencedDeclaredFacts(module)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "UnreferencedDeclaredFacts failed", err)
 	// can_ask_user has no literal reference in the fixture tree but is in the
 	// live recovery publication set, so only the truly unreferenced fact is
 	// flagged.

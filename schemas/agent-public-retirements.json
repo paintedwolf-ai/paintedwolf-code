@@ -164,6 +164,42 @@
     "paintedwolf.write_roots": {
       "version": 1,
       "summary": "Host fact of type list<string>; no observation was declared."
+    },
+    "paintedwolf.native_replacement_exact": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.native_replacement_manual": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.native_replacement_tools": {
+      "version": 1,
+      "summary": "Host fact of type list<string>; no observation was declared."
+    },
+    "paintedwolf.process_exited": {
+      "version": 1,
+      "summary": "Host fact of type bool; True when the host recorded a terminal invocation as exited, independently of success. False while running or when the terminal reason is unknown."
+    },
+    "paintedwolf.process_stopped": {
+      "version": 1,
+      "summary": "Host fact of type bool; True when the host recorded a terminal invocation as stopped. False while running or when the terminal reason is unknown."
+    },
+    "paintedwolf.process_timed_out": {
+      "version": 1,
+      "summary": "Host fact of type bool; True when a terminal invocation reached its host deadline. False while running or when the terminal reason is unknown."
+    },
+    "paintedwolf.sandbox_refusal_witness": {
+      "version": 1,
+      "summary": "Host fact of type string; The confinement reporting layer's declared witness (kernel, incomplete, or unavailable); empty without an observed invocation."
+    },
+    "paintedwolf.tool_turn_has_agent_note": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.tool_turn_has_text": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
     }
   },
   "vocabularies": {
@@ -382,7 +418,43 @@
       ],
       "paintedwolf.use_stdin_param": [
         "paintedwolf.next_steps"
-      ]
+      ],
+      "paintedwolf.native_replacement_exact": {
+        "content_contract": "paintedwolf.native_replacement_exact",
+        "version": 1
+      },
+      "paintedwolf.native_replacement_manual": {
+        "content_contract": "paintedwolf.native_replacement_manual",
+        "version": 1
+      },
+      "paintedwolf.native_replacement_tools": {
+        "content_contract": "paintedwolf.native_replacement_tools",
+        "version": 1
+      },
+      "paintedwolf.process_exited": {
+        "content_contract": "paintedwolf.process_exited",
+        "version": 1
+      },
+      "paintedwolf.process_stopped": {
+        "content_contract": "paintedwolf.process_stopped",
+        "version": 1
+      },
+      "paintedwolf.process_timed_out": {
+        "content_contract": "paintedwolf.process_timed_out",
+        "version": 1
+      },
+      "paintedwolf.sandbox_refusal_witness": {
+        "content_contract": "paintedwolf.sandbox_refusal_witness",
+        "version": 1
+      },
+      "paintedwolf.tool_turn_has_agent_note": {
+        "content_contract": "paintedwolf.tool_turn_has_agent_note",
+        "version": 1
+      },
+      "paintedwolf.tool_turn_has_text": {
+        "content_contract": "paintedwolf.tool_turn_has_text",
+        "version": 1
+      }
     },
     "rejection_codes": {
       "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY": [
