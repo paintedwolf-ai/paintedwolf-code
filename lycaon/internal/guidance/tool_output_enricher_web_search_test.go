@@ -12,7 +12,7 @@ func TestEnricher_WebSearchRepeatCached(t *testing.T) {
 		HintCodes: map[string]HintEntry{
 			"WEB_SEARCH_DUPLICATE_QUERY": {Message: "duplicate query — fetch_url instead"},
 		},
-	}, nil)
+	}, nil, nil)
 	out := e.Enrich(t.Context(), EnrichInput{
 		Session: &api.Session{},
 		Tool:    "web_search",
@@ -32,7 +32,7 @@ func TestEnricher_WebSearchPeriodHintRendersRegistryCopy(t *testing.T) {
 				Fix:  "Re-run with period={{ paintedwolf.year }} if the question is about that year.",
 			},
 		},
-	}, nil)
+	}, nil, nil)
 	body := `{"ok":true,"query":"design trends 2025","period":"current","results":[]}`
 	out := e.Enrich(t.Context(), EnrichInput{
 		Session: &api.Session{},
@@ -58,7 +58,7 @@ func TestEnricher_WebSearchPeriodHintRendersRegistryCopy(t *testing.T) {
 func TestEnricher_NoPeriodHintWithoutMarker(t *testing.T) {
 	e := NewToolOutputEnricher(&HintConfig{
 		HintCodes: map[string]HintEntry{"WEB_SEARCH_YEAR_IN_QUERY": {What: "x", Fix: "y"}},
-	}, nil)
+	}, nil, nil)
 	out := e.Enrich(t.Context(), EnrichInput{
 		Session: &api.Session{},
 		Tool:    "web_search",
