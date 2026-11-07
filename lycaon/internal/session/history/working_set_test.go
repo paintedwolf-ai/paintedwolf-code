@@ -535,3 +535,26 @@ func TestRequestInputLimit(t *testing.T) {
 		t.Fatalf("unknown ceiling limited input to %d", got)
 	}
 }
+
+func TestApplyViewPreservesDeferredUnindexedLiveRows(t *testing.T) {
+	cfg := compaction.DefaultCompactionConfig()
+	svc, mem, sess := newTurnSession(t, cfg)
+	canonical := seedTurn(t, mem, sess.ID, 4, "observation")
+	publishView(t, mem, sess.ID, 1, canonical[0].Ord, canonical[len(canonical)-1].Seq, canonical[:1])
+
+	deferred := api.Message{
+		ID:      "deferred-nudge",
+		Role:    api.MessageRoleUser,
+		Origin:  api.MessageOriginHost,
+		Content: "Repair closeout citations before finishing",
+	}
+	input := append(append([]api.Message(nil), canonical...), deferred)
+	projected := svc.ApplyView(t.Context(), sess, input)
+	if indexOfID(projected, "deferred-nudge") != len(projected)-1 {
+		t.Fatalf("deferred nudge missing from projected tail: %+v", projected)
+	}
+	again := svc.ApplyView(t.Context(), sess, projected)
+	if len(again) != len(projected) || indexOfID(again, "deferred-nudge") != len(again)-1 {
+		t.Fatalf("repeated ApplyView dropped or duplicated rows: got %d want %d", len(again), len(projected))
+	}
+}

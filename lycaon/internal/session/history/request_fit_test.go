@@ -450,3 +450,32 @@ func TestRequestFittingCanProjectRecallBelowSixteenKilobytes(t *testing.T) {
 		t.Fatal("request fitting changed the recorded observation")
 	}
 }
+
+func TestRequestProjectionReplaceKeepsTrailingFrameAfterOpenerFirstAndMovedCoverage(t *testing.T) {
+	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, Content: "Standing instructions"}
+	chk := api.Message{ID: "chk", Role: api.MessageRoleUser, CompactionCheckpoint: true, Origin: api.MessageOriginHost}
+	sum := api.Message{ID: "sum", Role: api.MessageRoleAssistant, Content: "Summary",
+		ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "Summary"}}}
+	brief := api.Message{ID: "host-source-changes-u2", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Source brief"}
+	u2 := api.Message{ID: "u2", Ord: 10, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Current turn"}
+	a2 := api.Message{ID: "a2", Ord: 40, Role: api.MessageRoleAssistant, Content: "Working reply"}
+	execState := api.Message{ID: "exec-state", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "<execution_state>"}
+	toolProc := api.Message{ID: "tool-proc", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Tool procedure"}
+
+	messages := []api.Message{standing, chk, sum, brief, u2, a2, execState, toolProc}
+	initialHistory := []api.Message{chk, sum, u2, a2}
+	proj := projectRequest(messages, initialHistory)
+
+	notice := api.Message{ID: historyCoverageNoticeID, Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Coverage notice"}
+	reorderedHistory := []api.Message{u2, chk, sum, notice, a2}
+	replaced := proj.replace(reorderedHistory)
+
+	wantIDs := []string{"standing", "host-source-changes-u2", "u2", "chk", "sum", historyCoverageNoticeID, "a2", "exec-state", "tool-proc"}
+	gotIDs := make([]string, 0, len(replaced))
+	for _, m := range replaced {
+		gotIDs = append(gotIDs, m.ID)
+	}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("replaced message order = %v, want %v", gotIDs, wantIDs)
+	}
+}

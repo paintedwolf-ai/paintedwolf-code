@@ -225,13 +225,16 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 			notice = append(notice[:0], msg)
 			continue
 		}
-		if i == splice.intentIdx || msg.Ord <= splice.replacedThrough {
+		if i == splice.intentIdx || isCompactionHeadRow(msg, viewByID) {
+			continue
+		}
+		if msg.Ord > 0 && msg.Ord <= splice.replacedThrough {
 			continue
 		}
 		if viewMsg, ok := viewByID[msg.ID]; ok && viewMsg.CompactedChunk != nil {
 			msg = api.RehydrateTranscriptProjectionFields(viewMsg, msg)
 		}
-		if splice.intentIdx >= 0 && msg.Ord < splice.intentOrd {
+		if splice.intentIdx >= 0 && (msg.Ord > 0 && msg.Ord < splice.intentOrd || msg.Ord <= 0 && i < splice.intentIdx) {
 			beforeIntent = append(beforeIntent, msg)
 		} else {
 			tail = append(tail, msg)
