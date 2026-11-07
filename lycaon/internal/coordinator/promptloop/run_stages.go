@@ -338,6 +338,10 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		return out, err
 	}
 	st.history[len(st.history)-1] = committed
+	st.history, err = l.Nudges.retireToolFreeDraftRecovery(ctx, sessionID, st.history, committed.ID)
+	if err != nil {
+		return out, err
+	}
 	if err := l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
 		return out, err
 	}

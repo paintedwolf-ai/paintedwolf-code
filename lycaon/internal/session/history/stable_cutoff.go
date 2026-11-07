@@ -57,8 +57,9 @@ func fittingStart(rows []api.Message, alloc workingSetAllocation) int {
 
 // firstAtOrAfter returns the index of the first canonical row at or after ord.
 func firstAtOrAfter(rows []api.Message, ord int64) int {
+	bounds := indexDraftExchanges(rows)
 	for i := range rows {
-		if rows[i].Ord > 0 && rows[i].Ord >= ord {
+		if rows[i].Ord > 0 && bounds.minOrd(rows[i]) >= ord {
 			return i
 		}
 	}
@@ -69,12 +70,13 @@ func firstAtOrAfter(rows []api.Message, ord int64) int {
 // nearest anchor. Hard budgets are met by floor; the reserve is best effort, and
 // the latest exchange stays whole however little room that leaves.
 func advanceCutoff(rows []api.Message, alloc workingSetAllocation, floor int) int {
+	bounds := indexDraftExchanges(rows)
 	protected := latestExchangeStart(rows)
 	pick := max(floor, fittingStart(rows, alloc.lessReserve()))
 	if pick < len(rows) {
-		anchor := firstAtOrAfter(rows, (rows[pick].Ord+PrefixGridRowStep/2)/PrefixGridRowStep*PrefixGridRowStep)
+		anchor := firstAtOrAfter(rows, (bounds.minOrd(rows[pick])+PrefixGridRowStep/2)/PrefixGridRowStep*PrefixGridRowStep)
 		if anchor <= floor && floor < len(rows) {
-			anchor = firstAtOrAfter(rows, (rows[floor].Ord/PrefixGridRowStep+1)*PrefixGridRowStep)
+			anchor = firstAtOrAfter(rows, (bounds.minOrd(rows[floor])/PrefixGridRowStep+1)*PrefixGridRowStep)
 		}
 		if anchor <= protected {
 			pick = anchor
@@ -203,13 +205,15 @@ func (t *cutoffTracker) holdTail(key cutoffKey, sessionID string, rows []api.Mes
 		return rows, truncated
 	}
 	alloc := workingSetAllocation{rows: bounds.maxRows, tokens: bounds.maxTokens, bytes: bounds.maxBytes}
+	exchangeBounds := indexDraftExchanges(rows)
 	out, cut := rows, truncated
 	t.update(sessionID, key, rows, func(st *cutoffState) {
-		if truncated && st.tail.ord < rows[0].Ord {
-			st.tail = markRow(rows[advanceCutoff(rows, alloc, 0)])
+		firstOrd := exchangeBounds.minOrd(rows[0])
+		if truncated && st.tail.ord < firstOrd {
+			st.tail = exchangeBounds.mark(rows[advanceCutoff(rows, alloc, 0)])
 			st.note(cutoffTailAdvanced)
 		}
-		if st.tail.ord > rows[0].Ord {
+		if st.tail.ord > firstOrd {
 			if at := firstAtOrAfter(rows, st.tail.ord); at < len(rows) {
 				out, cut = rows[at:], true
 			}
@@ -225,8 +229,10 @@ func (t *cutoffTracker) holdWorkingSet(key cutoffKey, sessionID string, rows []a
 		return 0
 	}
 	start := rows[idx].Ord + 1
+	after := rows[idx+1:]
+	bounds := indexDraftExchanges(after)
 	t.update(sessionID, key, rows, func(st *cutoffState) {
-		boundary := selectWorkingSetBoundary(rows[idx+1:], alloc, st.work.ord)
+		boundary := selectWorkingSetBoundary(after, alloc, st.work.ord)
 		if boundary.startOrd == 0 {
 			return
 		}
@@ -235,7 +241,7 @@ func (t *cutoffTracker) holdWorkingSet(key cutoffKey, sessionID string, rows []a
 			st.note(cutoffWorkAdvanced)
 		}
 		if start > st.work.ord {
-			st.work = markRow(rows[idx+1:][firstAtOrAfter(rows[idx+1:], start)])
+			st.work = bounds.mark(after[firstAtOrAfter(after, start)])
 		}
 	})
 	return start
@@ -249,16 +255,17 @@ func (t *cutoffTracker) noteFit(key cutoffKey, sessionID string, rows, fitted []
 	if through == 0 && bodies == 0 {
 		return
 	}
-	at := slices.IndexFunc(fitted, func(row api.Message) bool { return row.Ord > through && !row.ContextPinned })
+	bounds := indexDraftExchanges(fitted)
+	at := slices.IndexFunc(fitted, func(row api.Message) bool { return bounds.minOrd(row) > through })
 	t.update(sessionID, key, rows, func(st *cutoffState) {
 		if bodies > st.bodies {
 			st.bodies = bodies
 			st.note(cutoffFitAdvanced)
 		}
-		if through == 0 || at < 0 || fitted[at].Ord <= st.fit.ord {
+		if through == 0 || at < 0 || bounds.minOrd(fitted[at]) <= st.fit.ord {
 			return
 		}
-		st.fit = markRow(fitted[at])
+		st.fit = bounds.mark(fitted[at])
 		st.note(cutoffFitAdvanced)
 		if st.fit.ord > st.work.ord {
 			st.work = st.fit

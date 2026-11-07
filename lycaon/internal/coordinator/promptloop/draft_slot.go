@@ -117,3 +117,35 @@ func (l *turnNudges) withdrawCoordinatorDraft(
 	}
 	return l.closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID)
 }
+
+// retireToolFreeDraftRecovery marks draft-recovery nudges bound to draftID as
+// withdrawn once that draft commits as a tool-free final response, keeping the
+// rows in the store for audit while excluding them from subsequent prompts.
+func (l *turnNudges) retireToolFreeDraftRecovery(
+	ctx context.Context,
+	sessionID string,
+	history []api.Message,
+	draftID string,
+) ([]api.Message, error) {
+	draftID = strings.TrimSpace(draftID)
+	if l == nil || draftID == "" || len(history) == 0 {
+		return history, nil
+	}
+	for _, msg := range history {
+		if msg.ID == draftID && len(msg.ToolCalls) > 0 {
+			return history, nil
+		}
+	}
+	for i := range history {
+		if api.DraftRecoveryTarget(history[i]) != draftID || history[i].DraftStatus == api.DraftStatusWithdrawn {
+			continue
+		}
+		history[i].DraftStatus = api.DraftStatusWithdrawn
+		if l.Projection.Deps.UpdateMessage != nil && history[i].ID != "" {
+			if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, history[i].ID, history[i]); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return history, nil
+}

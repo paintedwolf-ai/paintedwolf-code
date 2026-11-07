@@ -115,6 +115,7 @@ func (m *Service) BeforeFinish(
 			return reject, true
 		}
 		if waived {
+			m.waiveOpenProgress(ctx, sess)
 			implState.ProgressOpenCount = 0
 		}
 	}
