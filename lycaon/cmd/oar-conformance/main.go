@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/oar"
+	"io"
 	"os"
 )
 
@@ -28,18 +29,8 @@ func main() {
 	if dir == "" {
 		dir = oar.FindCorpusDir("")
 	}
-	// Structural invariant: every declared host fact has a reference outside
-	// the declaration and projection plumbing.
-	unreferenced, err := oar.AuditDeclarationReferences()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "oar-conformance: declaration reference audit: %v\n", err)
-		os.Exit(2)
-	}
-	for _, name := range unreferenced {
-		fmt.Fprintf(os.Stderr, "oar-conformance: declared fact %q has no reference outside declaration plumbing\n", name)
-	}
-	if len(unreferenced) != 0 {
-		os.Exit(1)
+	if code := auditDeclarationReferences(os.Stderr, oar.AuditDeclarationReferences); code != 0 {
+		os.Exit(code)
 	}
 	outcomes, err := oar.RunCorpusDir(dir)
 	if err != nil {
@@ -78,4 +69,22 @@ func main() {
 	if failed != 0 {
 		os.Exit(1)
 	}
+}
+
+// auditDeclarationReferences enforces the structural invariant that every
+// declared host fact has a reference outside the declaration and projection
+// plumbing, reporting violations and returning the process exit code.
+func auditDeclarationReferences(report io.Writer, audit func() ([]string, error)) int {
+	unreferenced, err := audit()
+	if err != nil {
+		fmt.Fprintf(report, "oar-conformance: declaration reference audit: %v\n", err)
+		return 2
+	}
+	for _, name := range unreferenced {
+		fmt.Fprintf(report, "oar-conformance: declared fact %q has no reference outside declaration plumbing\n", name)
+	}
+	if len(unreferenced) != 0 {
+		return 1
+	}
+	return 0
 }
