@@ -51,8 +51,12 @@ func (m *Service) AppendContinuation(ctx context.Context, sessionID string, in p
 		TrustTier:      api.ContentTrustTierTrusted, CreatedAt: time.Now().UTC(),
 	}
 	StampUserVisibility(&msg)
-	if err := m.Append(ctx, sessionID, msg); err != nil && !errors.Is(err, store.ErrDuplicateMessageID) {
+	if stamped, err := m.AppendMessage(ctx, sessionID, msg); err == nil {
+		msg = stamped
+	} else if !errors.Is(err, store.ErrDuplicateMessageID) {
 		return api.Message{}, err
+	} else if stored, getErr := m.store.GetMessage(ctx, sessionID, msg.ID); getErr == nil && stored.ID != "" {
+		msg = stored
 	}
 	if m.workflows != nil && in.Recovery == nil && api.IsUserInstructionMessage(msg) {
 		if err := m.workflows.Feedback.TryResolveUserFeedback(ctx, sessionID, msg.ID, msg.AuthorPersonID, msg.Content); err != nil {

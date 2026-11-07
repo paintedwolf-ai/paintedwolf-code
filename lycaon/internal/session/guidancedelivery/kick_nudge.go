@@ -142,7 +142,11 @@ func (m *Service) appendHostKickMessage(ctx context.Context, sessionID, kickID, 
 		Visibility:   api.MessageVisibilityInternal,
 		CreatedAt:    time.Now().UTC(),
 	}
-	return kickMsg, m.transcript.Append(ctx, sessionID, kickMsg)
+	rows := []api.Message{kickMsg}
+	if err := m.transcript.Append(ctx, sessionID, rows...); err != nil {
+		return api.Message{}, err
+	}
+	return rows[0], nil
 }
 
 // TakePhase renders and records the guidance of a phase entered since

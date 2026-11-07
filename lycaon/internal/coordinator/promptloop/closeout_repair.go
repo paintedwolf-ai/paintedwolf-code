@@ -101,7 +101,9 @@ func (l *turnCloseout) settleCloseoutBlocked(
 		CreatedAt:     time.Now().UTC(),
 	}
 	if l.Projection != nil && l.Projection.Deps.AppendMessages != nil {
-		if appendErr := l.Projection.Deps.AppendMessages(ctx, setup.sessionID, noticeMsg); appendErr != nil {
+		var appendErr error
+		noticeMsg, appendErr = l.Projection.appendMessage(ctx, setup.sessionID, noticeMsg)
+		if appendErr != nil {
 			return nil, appendErr
 		}
 	}
