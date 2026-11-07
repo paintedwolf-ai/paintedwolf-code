@@ -8,7 +8,7 @@ metadata:
 
 **Entry check:** the work has several useful worker outcomes, concurrent or dependent, or one bounded leg that benefits from isolation, a worker capability, or extra context. Keep trivial work inline.
 
-{% if profile_has_task %}Without `task` on your surface you are a worker:{% endif %} apply decomposition, dependency, and verification within your own assignment and report work that needs another role to the parent. Do not dispatch, invent worker results, or widen scope.
+{% if not profile_has_task %}You are a worker for this procedure: apply decomposition, dependency, and verification within your own assignment and report work that needs another role to the parent. Do not dispatch, invent worker results, or widen scope.{% endif %}
 
 ## The loop
 

@@ -179,6 +179,8 @@ func skillPreviewVars(explicit map[string]any, profileID, surfaceID string, sk s
 	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
 		ProfileID:        profileID,
 		SurfaceID:        surfaceID,
+		HasGit:           true,
+		RootCount:        1,
 		DelegationBudget: spawn.DefaultWorkerToolBudget(),
 	})
 	if err != nil {
