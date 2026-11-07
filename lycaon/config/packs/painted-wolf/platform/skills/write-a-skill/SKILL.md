@@ -14,7 +14,7 @@ metadata:
 1. Create a folder named for the skill id: lowercase letters, numbers, and single hyphens.
 2. Add `SKILL.md` with YAML frontmatter. `name` matches the folder. `description` is one sentence of at most 180 characters saying what the skill handles and when, using the nouns a user would type. The host ranks skills by `Skill: <name>` plus this description, so generic verbs ("run", "debug", "create") match everything; name the artifacts and tools. Put `Do not` guidance and workflow coaching in the body.
 3. Keep the body under 4 KiB. The host preloads the best-ranked skill at turn start or at the turn's first loadable tool call, and the body then rides every model call of that turn beside the standing prompt, including on small local models.
-4. Move detail into `references/` files of at most 8 KiB each, linked from the body by relative path. The agent opens one with `skills_read` (`need` = the skill name, `resource` = the path) only when it needs it. Optional `assets/` hold specimens.
+4. Move detail into `references/` files of at most 8 KiB each, linked from the body by relative path. {% if profile_has_skills_read %}The agent opens one with `skills_read` (`need` = the skill name, `resource` = the path) only when it needs it.{% endif %} Optional `assets/` hold specimens.
 5. Field table, host bounds, and template rules: [FORMAT.md](references/FORMAT.md).
 
 ## Body standard
@@ -40,4 +40,6 @@ A skill grants nothing. Its commands still go through the ordinary capability, a
 - `name`, folder, and links resolve; every referenced file exists.
 - The description reads as a ranking card: concrete nouns, no generic verb list.
 - Body and each reference fit their size limits (`wc -c SKILL.md references/*` in `command`).
-- Read the skill back with `skills_read` and confirm it loads without a template or metadata error.
+- Render what you wrote the way the host delivers it: `pw prompts render --skill <name> --check` for the body, plus `--resource <path>` per reference, and fix every reported violation.
+{% if profile_has_skills_read %}- Read the skill back with `skills_read` and confirm it loads without a template or metadata error.{% endif %}
+- Guard a tool mention the reader may not hold: wrap it in {% verbatim %}{% if profile_has_<tool> %}{% endverbatim %} … {% verbatim %}{% endif %}{% endverbatim %}, so a surface without the tool never sees an unreachable call.
