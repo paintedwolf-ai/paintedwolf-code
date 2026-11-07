@@ -1,5 +1,6 @@
 import { render, screen } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
+import { assertNamedControl } from "../../test/controls.ts";
 import { attachThemedViewportScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
 import { ShellNavRail } from "./ShellNavRail.tsx";
 
@@ -16,7 +17,7 @@ describe("ShellNavRail", () => {
         <p>Chats</p>
       </ShellNavRail>
     ));
-    const nav = screen.getByRole("navigation", { name: "Main" });
+    const nav = assertNamedControl(screen.getByTestId("shell-nav-rail"), "navigation");
     const frame = nav.parentElement;
     const content = screen.getByText("Chats").parentElement;
 

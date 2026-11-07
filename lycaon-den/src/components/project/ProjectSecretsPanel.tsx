@@ -26,8 +26,8 @@ export function ProjectSecretsPanel(props: { client: LycaonClient; projectId: st
           value={view()}
           onChange={setView}
           options={[
-            { id: "managed", label: "Managed secrets" },
-            { id: "ignored", label: "Ignored values" },
+            { id: "managed", label: "Managed secrets", testId: "secrets-view-managed" },
+            { id: "ignored", label: "Ignored values", testId: "secrets-view-ignored" },
           ]}
         />
       </div>

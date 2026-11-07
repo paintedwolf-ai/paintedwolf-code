@@ -107,6 +107,7 @@ export function SecurityFindingsPane(props: Props) {
             <Show when={(props.roots?.length ?? 0) > 1}>
               <DenSelect
                 aria-label="Security folder"
+                data-testid="scans-folder-select"
                 value={root()?.id ?? ""}
                 options={(props.roots ?? []).map((entry) => ({
                   value: entry.id,

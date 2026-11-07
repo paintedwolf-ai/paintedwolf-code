@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import {
@@ -16,12 +17,16 @@ vi.mock("../../settings/system/onboarding-prefs.ts", () => ({
 }));
 
 describe("WhatsNewNotice", () => {
-  it.each(["Got it", "Dismiss"])("acknowledges through %s across shared surfaces", async (action) => {
+  it.each(["acknowledge_release", "dismiss"])("acknowledges through %s across shared surfaces", async (action) => {
     const saveLatch = vi.fn(async (version: string) => resetWhatsNewPrefsForTests({ lastSeenVersion: version }));
     render(() => <><Notice currentVersion="0.2.0" notesFor={() => "Release notes"} saveLatch={saveLatch} /><NoticeRail notices={rows()} onDismiss={notices.dismiss} /></>);
     await waitFor(() => expect(rows()).toHaveLength(1));
-    expect(screen.queryByText("Notice")).toBeNull();
-    fireEvent.click(screen.getAllByRole("button", { name: action })[0]!);
+    fireEvent.click(action === "dismiss"
+      ? assertNamedControl(screen.getAllByTestId("notice-dismiss")[0]!, "button")
+      : assertNamedControl(
+        screen.getAllByTestId("notice-action").find((el) => el.getAttribute("data-action-id") === action)!,
+        "button",
+      ));
     await waitFor(() => expect(saveLatch).toHaveBeenCalledExactlyOnceWith("0.2.0"));
     expect(rows()).toHaveLength(0);
   });
@@ -83,14 +88,13 @@ describe("WhatsNewNotice", () => {
     await waitFor(() => {
       expect(screen.getByTestId("notice-rail")).toBeTruthy();
     });
-    expect(screen.getByTestId("notice-rail").textContent).toMatch(
-      /What’s new in 0\.2\.0/,
-    );
-    expect(screen.getByTestId("notice-rail").textContent).toMatch(
-      /Review the latest changes/,
-    );
+    expect(screen.getByTestId("notice").getAttribute("data-notice-code")).toBe("whats_new");
+    expect(screen.getByTestId("notice").querySelector(".den-notice-action")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Read more" }));
+    fireEvent.click(assertNamedControl(
+      screen.getAllByTestId("notice-action").find((el) => el.getAttribute("data-action-id") === "read_release_notes")!,
+      "button",
+    ));
     expect(screen.getByTestId("whats-new-dialog-notes").textContent).toMatch(
       /Cool feature/,
     );
@@ -134,7 +138,10 @@ describe("WhatsNewNotice", () => {
     await waitFor(() => {
       expect(screen.getByTestId("notice-rail")).toBeTruthy();
     });
-    fireEvent.click(screen.getByRole("button", { name: "Read more" }));
+    fireEvent.click(assertNamedControl(
+      screen.getAllByTestId("notice-action").find((el) => el.getAttribute("data-action-id") === "read_release_notes")!,
+      "button",
+    ));
     fireEvent.click(screen.getByTestId("whats-new-dialog-close"));
 
     expect(screen.getByTestId("notice-rail")).toBeTruthy();

@@ -44,7 +44,7 @@ export function ConfirmDestructiveDialog(props: DialogProps) {
               data-testid="confirm-destructive-dialog"
             >
               <header class="den-dialog__header" {...chromeProps()}>
-                <h2 id="confirm-destructive-title">{req.title}</h2>
+                <h2 id="confirm-destructive-title" data-testid="confirm-destructive-title">{req.title}</h2>
               </header>
               <For each={messageLines(req.message)}>
                 {(line) => <p class="den-dialog__hint">{line}</p>}

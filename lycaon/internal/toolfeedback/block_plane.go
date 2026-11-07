@@ -217,7 +217,6 @@ func ApplyToolRejectObservations(gc *oar.GuardContext, tr *toolrejection.ToolRej
 		gc.Invocation.CommandNotArgv = true
 		gc.Rejection.PolicyDenied = true
 	case "TOOL_PROFILE_DENIED", "COORDINATOR_TOOL_DENIED":
-		gc.Invocation.ToolAllowedForProfile = false
 		gc.Rejection.PolicyDenied = true
 	case "WRITE_SCOPE_DENIED", "COORDINATOR_READ_OUTSIDE_SCOPE", "COORDINATOR_INVESTIGATE_DENIED_PATH":
 		gc.Access.PathOutsideScope = true

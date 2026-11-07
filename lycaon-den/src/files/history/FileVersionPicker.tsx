@@ -183,8 +183,8 @@ export function FileVersionPicker(props: Props) {
           </Show>
         </span>
         <span class="den-file-version__copy">
-          <strong>{fileVersionTitle(version)}</strong>
-          <small>
+          <strong data-testid="file-version-title">{fileVersionTitle(version)}</strong>
+          <small data-testid="file-version-meta">
             {meta}
             <Show when={note}>
               {(commit) => (
@@ -428,7 +428,7 @@ export function FileVersionPicker(props: Props) {
                 rows().length === 0
               }
             >
-              <div class="den-file-version__empty">No earlier versions</div>
+              <div class="den-file-version__empty" data-testid="file-version-empty">No earlier versions</div>
             </Show>
             <For each={rows()}>{historyRow}</For>
             <Show
@@ -440,6 +440,7 @@ export function FileVersionPicker(props: Props) {
               <div
                 class="den-file-version__git-loading"
                 role="status"
+                data-testid="file-version-git-loading"
                 aria-label="Loading Git history"
               >
                 <span class="den-file-version__spinner" aria-hidden="true" />
@@ -457,6 +458,7 @@ export function FileVersionPicker(props: Props) {
               <button
                 type="button"
                 class="den-file-version__option"
+                data-testid="file-version-load-earlier"
                 disabled={props.history.loadingMore}
                 onClick={() => props.onLoadMore()}
               >

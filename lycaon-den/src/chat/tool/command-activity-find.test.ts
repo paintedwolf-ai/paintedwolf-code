@@ -6,7 +6,7 @@ it("keeps each folded call searchable with its own reveal identity", async () =>
  const source = (id:string,text:string):ToolPartView => ({ id,toolCallId:id,assistantMessageId:"assistant",messageId:"result",tool:"command",kind:"command",status:"completed",args:{command:text} });
  const first=source("first","cat first.rs");
  const second=source("second","cat second.rs");
- const row:ToolPartView={...first,commandActivity:{fact:{id:"activity",label:"Read files",subject:"files",group:"Exploring files",outcome:"Completed",state:"completed",execution_ids:[],spans:[]},members:[],calls:[first,second]}};
+ const row:ToolPartView={...first,commandActivity:{fact:{id:"activity",label:"Read files",subject:"files",group:"Exploring files",phase:"inspect",outcome:"Completed",state:"completed",execution_ids:[],spans:[]},members:[],calls:[first,second],programIds:[]}};
  expect(toolPartFindCorpus(row)).toContain("second.rs");
  const matches=await searchToolPart(row,undefined,"second.rs",true,new AbortController().signal);
  expect(matches).toHaveLength(1);

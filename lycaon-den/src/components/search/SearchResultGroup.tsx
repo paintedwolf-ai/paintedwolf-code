@@ -55,7 +55,7 @@ export function SearchResultGroup(props: Props) {
           </p>
         )}
       </Show>
-      <div role="list" aria-label="Search results" aria-busy={props.busy ?? false}>
+      <div role="list" aria-label="Search results" aria-busy={props.busy ?? false} data-testid="search-result-list">
         <For each={props.groups}>
           {(group) => (
             <section role="presentation">

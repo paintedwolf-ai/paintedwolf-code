@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import {
   setupGlobalSearchViewTests,
   searchMock,
@@ -624,7 +625,7 @@ describe("GlobalSearchView", () => {
       expect(screen.getByTestId("browse-stage-panel").dataset.boot).toBe("ready"),
     );
     expect(screen.getByTestId("search-type-filters")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Code" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("search-type-code"), "button"));
     await waitFor(() =>
       expect(searchMock).toHaveBeenCalledWith(
         "project:current",
@@ -633,7 +634,7 @@ describe("GlobalSearchView", () => {
         expect.any(AbortSignal),
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Code" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("search-type-code"), "button"));
     await waitFor(() =>
       expect(searchMock).toHaveBeenCalledWith(
         "kind:code project:current",

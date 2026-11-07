@@ -1,6 +1,7 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render } from "@solidjs/testing-library";
+import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { GenericToolCard } from "./GenericToolCard.tsx";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 
@@ -107,7 +108,7 @@ describe("GenericToolCard", () => {
   });
 
   it("renders a typed lifecycle completion in the card summary", () => {
-    const { getByText } = render(() => (
+    const { getByTestId } = render(() => (
       <GenericToolCard
         part={readPart({
           completion: { operation: "overlay_promotion", state: "promoted" },
@@ -115,7 +116,9 @@ describe("GenericToolCard", () => {
         layout="chat"
       />
     ));
-    expect(getByText("overlay promotion · promoted")).toBeTruthy();
+    const completion = getByTestId("tool-part-completion");
+    expect(completion.textContent).toContain("overlay promotion");
+    expect(completion.textContent).toContain("promoted");
   });
 
   it("opens generic tool body on summary click", async () => {
@@ -147,7 +150,7 @@ describe("GenericToolCard", () => {
   });
 
   it("opens complete raw output in Files and searches only related calls", async () => {
-    const { container, getByRole } = render(() => (
+    const { container } = render(() => (
       <GenericToolCard
         part={readPart({
           tool: "find",
@@ -168,7 +171,7 @@ describe("GenericToolCard", () => {
     if (!(card instanceof HTMLElement)) throw new Error("Missing find details");
     fireEvent.click(disclosureToggle(card));
     await Promise.resolve();
-    expect(getByRole("button", { name: "Results in Files" })).toBeTruthy();
+    expect(assertNamedControl(screen.getByTestId("tool-content-link"), "button")).toBeTruthy();
     expect(
       card?.querySelector('[data-testid="tool-related-search-link"]'),
     ).toBeTruthy();
@@ -177,7 +180,7 @@ describe("GenericToolCard", () => {
     ).toBeTruthy();
     expect(card?.querySelector('[data-testid="tool-raw-output"]')).toBeNull();
     expect(card?.textContent).not.toContain("View raw output in search");
-    fireEvent.click(getByRole("button", { name: "Raw output in Files" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("tool-raw-output-link"), "button"));
     expect(openFilesSurface).toHaveBeenCalledWith(expect.objectContaining({
       kind: "chat-content", projectId: "proj-1", document: expect.objectContaining({
         sessionId: "sess-1", messageId: "m1", toolCallId: "r1", pane: "output",
@@ -186,19 +189,19 @@ describe("GenericToolCard", () => {
       }),
     }));
     expect(openInSearch).not.toHaveBeenCalled();
-    fireEvent.click(getByRole("button", { name: "Find related tool calls" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("tool-related-search-link"), "button"));
     expect(openInSearch).toHaveBeenCalledWith("proj-1", "session:sess-1 tool:find kind:tool NOT ref:r1");
   });
 
   it("opens retained raw output through its content reference instead of its preview", async () => {
     const reference = { field: "tool_output" as const, sha256: "hash", total_runes: 20000, size_bytes: 20000, rows: 500 };
-    const { container, getByRole } = render(() => <GenericToolCard
+    const { container } = render(() => <GenericToolCard
       part={readPart({ output: "bounded preview", outputReference: reference })}
       layout="worker" sessionId="worker-session" projectId="proj-1" />);
     const card = container.querySelector<HTMLElement>("[data-transcript-disclosure]")!;
     fireEvent.click(disclosureToggle(card));
     await Promise.resolve();
-    fireEvent.click(getByRole("button", { name: "Raw output in Files" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("tool-raw-output-link"), "button"));
     expect(openFilesSurface).toHaveBeenCalledWith(expect.objectContaining({ document: expect.objectContaining({
       sessionId: "worker-session", messageId: "m1", pane: "output", content: { kind: "retained", reference },
     }) }));

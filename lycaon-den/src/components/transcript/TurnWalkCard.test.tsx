@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -36,7 +37,7 @@ describe("Turn Walk cards in the live chat timeline", () => {
     const client = walkClientFixture(() => response);
     vi.spyOn(client, "getProjectSourceWalkSummary").mockResolvedValue([{message_id: "s1-user-2", turn: 2, steps: 1, items: 0}]);
     render(() => <TurnWalkCard projectId="p1" sessionId="s1" messageId="s1-user-2" client={client} />);
-    fireEvent.click(await screen.findByRole("button", {name: "Walk from here"}));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("turn-walk-action"), "button"));
     await waitFor(() => expect(walkState("p1").status).toBe("ready"));
     expect(screen.queryByTestId("turn-diffs-action")).toBeNull();
     expect(walkState("p1").walk.steps[walkState("p1").at]).toMatchObject({kind: "git", key: "git:commit", toolCallId: "commit-call"});
@@ -71,7 +72,7 @@ describe("Turn Walk cards in the live chat timeline", () => {
       <TurnWalkCard projectId="p1" sessionId="s1" messageId="s1-user-2" client={client} />
       <WalkButton projectId="p1" client={client} appStore={store} />
     </>);
-    fireEvent.click(await screen.findByRole("button", { name: "Walk from here" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("turn-walk-action"), "button"));
     await waitFor(() => expect(walkState("p1").status).toBe("ready"));
     expect(walkState("p1").sessionId).toBe("s1");
     expect(walkState("p1").walk.steps[walkState("p1").at]?.key).toBe("a");
@@ -91,7 +92,7 @@ describe("Turn Walk cards in the live chat timeline", () => {
     const sink = vi.fn(); registerOpenFilesSurfaceSink(sink);
     render(() => <TurnWalkCard projectId="p1" sessionId="s1" messageId="s1-user-2" client={client} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "All diffs" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("turn-diffs-action"), "button"));
 
     expect(sink).toHaveBeenCalledWith({
       kind: "diffs", projectId: "p1",

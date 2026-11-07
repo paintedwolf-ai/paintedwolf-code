@@ -228,7 +228,7 @@ describe("ProjectTrustPanel", () => {
     expect(row.tagName).toBe("BUTTON");
     fireEvent.click(row);
 
-    expect(await screen.findByText("AGENTS.md files")).toBeTruthy();
+    await screen.findByTestId("project-trust-detail-group-agents_md");
     expect(screen.getAllByText("AGENTS.md")).toHaveLength(3);
     expect(document.querySelector('[data-trust-folder="backend"]')).toBeTruthy();
     expect(document.querySelector('[data-trust-folder=".paintedwolf"]')).toBeTruthy();

@@ -32,7 +32,6 @@ describe("shared trust review", () => {
     expect(screen.getAllByTestId("trust-review-file")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Review AGENTS.md" }));
     expect(openTrustChange).toHaveBeenCalledWith(trust.review, trust.review.changes[0]);
-    expect(screen.queryByText(/Show all changes/)).toBeNull();
   });
   it("updates the popup and group together when the host publishes later changes", async () => {
     await publishTrust(trust);

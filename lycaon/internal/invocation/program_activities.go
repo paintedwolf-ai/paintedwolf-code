@@ -16,10 +16,6 @@ type activityInput struct {
 	pipeline                 bool
 }
 
-func activityNeedsAttention(receipt api.CommandExecutionReceipt) bool {
-	return (receipt.StatusCode != nil && *receipt.StatusCode != 0) || receipt.State == "refused" || receipt.State == "failed" || receipt.State == "interrupted" || receipt.State == "waiting" || receipt.ApprovalRef != "" || receipt.HostStopCode != "" || receipt.StopCode != ""
-}
-
 func activityOutcome(receipt api.CommandExecutionReceipt) (string, string) {
 	switch receipt.State {
 	case "prepared":
@@ -57,7 +53,7 @@ func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandP
 			state = "refused"
 		}
 		normalized, outcome := activityOutcome(api.CommandExecutionReceipt{State: state, StatusCode: program.StatusCode})
-		activities = []api.CommandActivity{{ID: program.ID, Group: "Running commands", Label: "Run command", Subject: program.StopCode, State: normalized, Outcome: outcome, StatusCode: program.StatusCode, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Steps: []api.CommandActivityStep{}}}
+		activities = []api.CommandActivity{{ID: program.ID, Group: "Running commands", Phase: "execute", Label: "Run command", Subject: program.StopCode, State: normalized, Outcome: outcome, StatusCode: program.StatusCode, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Steps: []api.CommandActivityStep{}}}
 	}
 	return activities, nil
 }

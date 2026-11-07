@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../../test/controls.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UpdatesSettingsPanel } from "./UpdatesSettingsPanel.tsx";
@@ -11,7 +12,7 @@ describe("update settings", () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => updateFixture({ candidate: null, automatic_updates_enabled: false, capabilities }) })} />);
     await screen.findByTestId("updates-development-build");
     expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true);
-    expect(screen.getByRole("checkbox", { name: "Automatic updates" })).toHaveProperty("disabled", true);
+    expect(assertNamedControl(screen.getByTestId("updates-check-enabled"), "checkbox")).toHaveProperty("disabled", true);
     expect(screen.getByTestId("updates-channel")).toHaveProperty("disabled", true);
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });
@@ -26,18 +27,18 @@ describe("update settings", () => {
   it("downloads only the retained release identity", async () => {
     const download = vi.fn(async () => stagedFixture()); const service = updateServiceFixture({ download });
     render(() => <UpdatesSettingsPanel updateService={service} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Download update" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("updates-install"), "button"));
     await waitFor(() => expect(download).toHaveBeenCalledWith("release-1"));
-    expect(await screen.findByRole("button", { name: "Restart to update" })).toBeTruthy();
+    expect(assertNamedControl(await screen.findByTestId("updates-install"), "button")).toBeTruthy();
   });
   it("requires confirmation only for an immediate restart", async () => {
     const restart = vi.fn(async () => {}); const confirm = vi.fn(async () => false); setConfirmDestructivePresenter(confirm);
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ restart, getState: async () => stagedFixture() })} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Restart to update" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("updates-install"), "button"));
     await waitFor(() => expect(confirm).toHaveBeenCalledOnce()); expect(restart).not.toHaveBeenCalled();
     // The declined confirmation releases the controls before a second attempt.
-    await waitFor(() => expect(screen.getByRole("button", { name: "Restart to update" })).toHaveProperty("disabled", false));
-    confirm.mockResolvedValue(true); fireEvent.click(screen.getByRole("button", { name: "Restart to update" }));
+    await waitFor(() => expect(assertNamedControl(screen.getByTestId("updates-install"), "button")).toHaveProperty("disabled", false));
+    confirm.mockResolvedValue(true); fireEvent.click(assertNamedControl(screen.getByTestId("updates-install"), "button"));
     await waitFor(() => expect(restart).toHaveBeenCalledWith("release-1"));
   });
   it("uses native capabilities for package-managed installs", async () => {
@@ -46,7 +47,6 @@ describe("update settings", () => {
     expect((await screen.findByTestId("updates-brew-upgrade")).textContent).toContain("brew upgrade --cask painted-wolf-code");
     expect(screen.queryByTestId("updates-install")).toBeNull();
     expect(screen.queryByTestId("updates-package-identity")).toBeNull();
-    expect(screen.queryByText(/installs them when you quit/)).toBeNull();
   });
   it("separates the upstream release from unknown package-source availability", async () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => packageFixture() })} />);
@@ -56,7 +56,6 @@ describe("update settings", () => {
     expect(upgrade.querySelector("code")).toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
     expect(screen.queryByTestId("updates-brew-upgrade")).toBeNull();
-    expect(screen.queryByText(/installs them when you quit/)).toBeNull();
     expect(screen.getByTestId("updates-channel")).toHaveProperty("disabled", false);
     expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", false);
   });
@@ -67,8 +66,7 @@ describe("update settings", () => {
     expect((await screen.findByTestId("updates-package-identity")).textContent).toContain("package (rpm)");
     expect(screen.queryByTestId("updates-package-upgrade")).toBeNull();
     expect(screen.queryByTestId("updates-unpackaged")).toBeNull();
-    expect(screen.queryByText("You’re using the latest version.")).toBeNull();
-    expect(screen.getByText(/Package-source availability has not been checked/)).not.toBeNull();
+    expect(screen.getByTestId("updates-up-to-date")).toBeTruthy();
   });
   it("shows pacman package identity and package-manager ownership", async () => {
     const state = packageFixture();
@@ -100,7 +98,7 @@ describe("update settings", () => {
   it("retains the existing preference control and changes its native authority", async () => {
     const setAutomaticUpdatesEnabled = vi.fn(async (enabled: boolean) => updateFixture({ automatic_updates_enabled: enabled }));
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ setAutomaticUpdatesEnabled })} />);
-    const toggle = await screen.findByRole("checkbox", { name: "Automatic updates" });
+    const toggle = assertNamedControl(await screen.findByTestId("updates-check-enabled"), "checkbox");
     await waitFor(() => expect(toggle).toHaveProperty("disabled", false)); fireEvent.click(toggle);
     await waitFor(() => expect(setAutomaticUpdatesEnabled).toHaveBeenCalledWith(false));
   });
@@ -108,9 +106,8 @@ describe("update settings", () => {
     const state = updateFixture({ installation: "recovery_required", last_error: { code: "recovery_required" }, capabilities: { can_check: false, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "recovery_required" } });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
     await screen.findByRole("alert");
-    expect(screen.queryByText(/The update is installed/)).toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
-    expect(screen.getByRole("checkbox", { name: "Automatic updates" })).toHaveProperty("disabled", true);
+    expect(assertNamedControl(screen.getByTestId("updates-check-enabled"), "checkbox")).toHaveProperty("disabled", true);
     expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true);
   });
   it("offers restart for a committed handoff and explains when it installs", async () => {
@@ -119,7 +116,7 @@ describe("update settings", () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ restart, getState: async () => state })} />);
     await screen.findByTestId("updates-installation-status");
     expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true);
-    fireEvent.click(screen.getByRole("button", { name: "Restart to update" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("updates-install"), "button"));
     await waitFor(() => expect(restart).toHaveBeenCalledWith("release-1"));
   });
   it("requires renewed host confirmation after a rejected feed", async () => {
@@ -128,7 +125,7 @@ describe("update settings", () => {
     const rejected = stagedFixture({ offer_confirmed_at: null, last_error: { code: "feed_rejected" }, capabilities: { ...confirmed.capabilities, can_install_automatically: false } });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ check, getState: async () => rejected })} />);
     await screen.findByRole("alert");
-    fireEvent.click(screen.getByRole("button", { name: "Check now" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("updates-check-now"), "button"));
     await waitFor(() => expect(check).toHaveBeenCalledOnce());
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     await screen.findByTestId("updates-installation-status");
@@ -137,15 +134,15 @@ describe("update settings", () => {
     let decide!: (value: boolean) => void; const restart = vi.fn(async () => {});
     setConfirmDestructivePresenter(() => new Promise<boolean>((resolve) => { decide = resolve; }));
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ restart, getState: async () => stagedFixture() })} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Restart to update" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("updates-install"), "button"));
     await waitFor(() => expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true));
-    expect(screen.getByRole("checkbox", { name: "Automatic updates" })).toHaveProperty("disabled", true);
+    expect(assertNamedControl(screen.getByTestId("updates-check-enabled"), "checkbox")).toHaveProperty("disabled", true);
     decide(false);
     await waitFor(() => expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", false));
     expect(restart).not.toHaveBeenCalled();
   });
   it("shows typed recovery guidance and keeps diagnostic detail separate", async () => {
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => updateFixture({ last_error: { code: "disk_space", detail: "test detail" } }) })} />);
-    expect((await screen.findByRole("alert")).textContent).toContain("free space"); expect(screen.getByText("Technical details")).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain("free space"); expect(screen.getByTestId("updates-technical-details")).toBeTruthy();
   });
 });

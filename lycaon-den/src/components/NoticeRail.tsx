@@ -199,6 +199,7 @@ export function NoticeRail(props: Props) {
                                 variant={action.variant ?? "secondary"}
                                 compact
                                 data-testid="notice-action"
+                                data-action-id={action.id}
                                 {...chromeProps()}
                                 onClick={() => {
                                   action.run?.();
@@ -235,6 +236,7 @@ export function NoticeRail(props: Props) {
                     <button
                       type="button"
                       class="den-notice-dismiss den-inset-icon-btn"
+                      data-testid="notice-dismiss"
                       aria-label="Dismiss"
                       onClick={() => props.onDismiss(notice.id)}
                     >

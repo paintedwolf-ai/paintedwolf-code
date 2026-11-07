@@ -14,6 +14,7 @@ export function ToolContentLink(props: {
   messageId?: string;
   toolCallId?: string;
   revealOffset?: number;
+  testId?: string;
 }) {
   const tool = useToolContent();
   const source = useSourceContext();
@@ -40,5 +41,5 @@ export function ToolContentLink(props: {
   createEffect(() => {
     if (props.revealOffset !== undefined && findController.isOpen()) untrack(open);
   });
-  return <ChatContentLink searchable={searchable()} label={props.label} projectId={projectId()} document={document} testId="tool-content-link" />;
+  return <ChatContentLink searchable={searchable()} label={props.label} projectId={projectId()} document={document} testId={props.testId ?? "tool-content-link"} />;
 }

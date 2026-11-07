@@ -330,6 +330,7 @@ export function McpProviderDialogs(props: McpProviderDialogsProps) {
                   <DenButton
                     variant="secondary"
                     compact
+                    data-testid="cancel"
                     disabled={Boolean(props.oauthBusyId())}
                     onClick={() => void props.cancelSignIn()}
                   >

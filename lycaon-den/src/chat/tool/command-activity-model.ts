@@ -1,16 +1,25 @@
 import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
+import { formatSentenceCase } from "../../format/format-sentence-case.ts";
 
 export type CommandActivityView = {
   fact: CommandActivity;
   calls: ToolPartView[];
   members: CommandActivity[];
+  programIds: string[];
   outputReads?: number;
   decisions?: Extract<ActivitySpanEntry, { kind: "turn_load" }>[];
 };
 
 type Assignment = { program: string; key: string; label: string; group: string; subject: string };
+type CallAssignment = { row: string; program: string };
+
+const ACTIVITY_PHASE_RANK: Readonly<Record<string, number>> = { inspect: 1, execute: 2, mutate: 3 };
+
+function activityFacts(entries: readonly ActivitySpanEntry[]): CommandActivity[] {
+  return entries.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity ? [entry.part.commandActivity.fact] : []);
+}
 
 function status(fact: CommandActivity): ToolPartView["status"] {
   if (fact.state === "running" || fact.state === "waiting") return "running";
@@ -24,14 +33,17 @@ export function createCommandActivityProjection() {
   const positions = new Map<string, number>();
   const outputAssignments = new Map<string, string>();
   const remembered = new Map<string, CommandProgramReceipt>();
+  const callAssignments = new Map<string, CallAssignment>();
   let nextPosition = 0;
   return (entries: readonly ActivitySpanEntry[], live: (part: ToolPartView) => CommandProgramReceipt | undefined = () => undefined): ActivitySpanEntry[] => {
     const result: ActivitySpanEntry[] = [];
     const rows = new Map<string, ToolPartView>();
     let decisions: Extract<ActivitySpanEntry, { kind: "turn_load" }>[] = [];
+    let lastRow: ToolPartView | undefined;
     for (const entry of entries) {
-      if (entry.kind === "turn_load") { decisions.push(entry); continue; }
+      if (entry.kind === "turn_load") { decisions.push(entry); lastRow = undefined; continue; }
       if (entry.kind !== "tool") { result.push(entry); continue; }
+      if (entry.part.tool !== "command") lastRow = undefined;
       const canonical = entry.part.commandProgram;
       const observed = live(entry.part);
       let program = observed && (!canonical || (observed.activity_revision ?? 0) >= (canonical.activity_revision ?? 0)) ? observed : canonical;
@@ -67,8 +79,8 @@ export function createCommandActivityProjection() {
           continue;
         }
         if (handle) {
-          const fact: CommandActivity = { id: entry.part.id, group: "Following a running program", label: "Read process output", subject: handle, job_handle: handle, state: entry.part.status === "running" ? "running" : entry.part.status === "error" ? "failed" : "completed", outcome: entry.part.status === "running" ? "Reading" : entry.part.status === "error" ? "Read failed" : "Completed", execution_ids: [], spans: [] };
-          const row: ToolPartView = { ...entry.part, commandActivity: { fact, calls: [entry.part], members: [fact], outputReads: 1 } };
+          const fact: CommandActivity = { id: entry.part.id, group: "Following a running program", label: "Read process output", subject: handle, job_handle: handle, phase: "execute", state: entry.part.status === "running" ? "running" : entry.part.status === "error" ? "failed" : "completed", outcome: entry.part.status === "running" ? "Reading" : entry.part.status === "error" ? "Read failed" : "Completed", execution_ids: [], spans: [] };
+          const row: ToolPartView = { ...entry.part, commandActivity: { fact, calls: [entry.part], members: [fact], programIds: entry.part.commandProgram ? [entry.part.commandProgram.id] : [], outputReads: 1 } };
           rows.set(row.id, row); result.push({ ...entry, part: row });
           continue;
         }
@@ -80,6 +92,24 @@ export function createCommandActivityProjection() {
       }
       for (const [index, fact] of facts.entries()) {
         const identity = `${program.id}:${fact.id}`;
+        if (fact.phase !== "inspect" || fact.job_handle) lastRow = undefined;
+        const foldTarget = index === 0
+          ? callAssignments.get(identity)?.row ?? (lastRow && lastRow.commandActivity?.fact.group === fact.group ? lastRow.id : undefined)
+          : undefined;
+        const target = foldTarget ? rows.get(foldTarget) : undefined;
+        if (target?.commandActivity) {
+          if (!assignments.has(identity)) assignments.set(identity, { program: program.id, key: target.id, label: fact.label, group: fact.group, subject: fact.subject });
+          if (!callAssignments.has(identity)) callAssignments.set(identity, { row: target.id, program: program.id });
+          const established = target.commandActivity;
+          established.calls.push({ ...entry.part, commandProgram: program });
+          established.members.push(fact);
+          established.fact = { ...established.fact,
+            steps: [...(established.fact.steps ?? []), ...(fact.steps ?? [])],
+            execution_count: (established.fact.execution_count ?? 0) + (fact.execution_count ?? 0) };
+          if (!established.programIds.includes(program.id)) established.programIds.push(program.id);
+          if (status(fact) === "error") target.status = "error";
+          continue;
+        }
         let assigned = assignments.get(identity);
         if (!assigned) {
           assigned = { program: program.id, key: index === 0 && ![...assignments.values()].some(value => value.key === entry.part.id)
@@ -90,10 +120,11 @@ export function createCommandActivityProjection() {
         const row: ToolPartView = { ...entry.part, id: assigned.key, title: frozen.subject, commandProgram: program,
           status: status(fact), process: entry.part.process?.handle === fact.job_handle ? entry.part.process : undefined,
           invocation: undefined, error: null,
-          commandActivity: { fact: frozen, calls: [{ ...entry.part, commandProgram: program }], members: [fact], decisions } };
+          commandActivity: { fact: frozen, calls: [{ ...entry.part, commandProgram: program }], members: [fact], programIds: [program.id], decisions } };
         decisions = [];
         rows.set(row.id, row);
         result.push({ ...entry, part: row });
+        if (fact.phase === "inspect" && !fact.job_handle) lastRow = row;
       }
     }
     const key = (entry: ActivitySpanEntry) => entry.kind === "tool" ? entry.part.id : entry.key;
@@ -110,17 +141,48 @@ export function createCommandActivityProjection() {
     for (const call of remembered.keys()) if (!activeCalls.has(call)) remembered.delete(call);
     const activePrograms = new Set([...remembered.values()].map(program => program.id));
     for (const [identity, assigned] of assignments) if (!activePrograms.has(assigned.program)) assignments.delete(identity);
+    for (const [identity, assigned] of callAssignments) if (!activePrograms.has(assigned.program)) callAssignments.delete(identity);
     const activeRows = new Set(result.map(key));
     for (const row of positions.keys()) if (!activeRows.has(row)) positions.delete(row);
     return result;
   };
 }
 
-/** The first activity anchors the group title. */
+/** The highest present phase anchors the group title; entries only grow, so it never oscillates. */
 export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], fallback: string): string {
- const activities = entries.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity ? [entry.part.commandActivity.fact] : []);
+ const activities = activityFacts(entries);
  if (!activities.length) return fallback;
- return activities[0]!.group;
+ let headline = activities[0]!.group;
+ let rank = ACTIVITY_PHASE_RANK[activities[0]!.phase ?? ""] ?? 0;
+ for (const fact of activities) {
+  const candidate = ACTIVITY_PHASE_RANK[fact.phase ?? ""] ?? 0;
+  if (candidate > rank) { headline = fact.group; rank = candidate; }
+ }
+ return headline;
+}
+
+export type CommandActivityProgressionChip = { group: string; steps: number };
+export type CommandActivityProgression = { groups: string[]; chips: CommandActivityProgressionChip[] };
+
+/** First-appearance group order with consecutive chip runs and their step counts. */
+export function commandActivityProgression(entries: readonly ActivitySpanEntry[]): CommandActivityProgression {
+  const groups: string[] = [];
+  const chips: CommandActivityProgressionChip[] = [];
+  for (const entry of entries) {
+    if (entry.kind !== "tool") continue;
+    const fact = entry.part.commandActivity?.fact;
+    const key = fact ? fact.group : entry.part.tool.trim().toLowerCase() || "tool activity";
+    const steps = fact?.steps?.length ?? 0;
+    if (fact && !groups.includes(fact.group)) groups.push(fact.group);
+    const last = chips[chips.length - 1];
+    if (last?.group === key) last.steps += steps;
+    else chips.push({ group: key, steps });
+  }
+  return { groups, chips };
+}
+
+export function formatCommandActivityProgression(progression: CommandActivityProgression): string {
+  return progression.chips.map(chip => `${formatSentenceCase(chip.group)} · ${chip.steps} ${chip.steps === 1 ? "step" : "steps"}`).join(" · ");
 }
 
 
@@ -130,6 +192,6 @@ export function commandActivityPart(part: ToolPartView): ToolPartView {
  const program = part.commandProgram;
  const state = program.state === "rejected" ? "refused" : program.state;
  const outcome = state === "completed" && program.status_code !== undefined ? `Exited ${program.status_code}` : ({ running:"Running",waiting:"Waiting",refused:"Refused",failed:"Failed",interrupted:"Interrupted",completed:"Completed" }[state]);
- const fact: CommandActivity = { id:`${program.id}:result`, group:"Running commands", label:"Run command", subject:program.stop_code ?? part.title ?? "Recorded command", state, outcome, status_code:program.status_code, execution_ids:[], spans:[] };
- return {...part,commandActivity:{fact,calls:[part],members:[fact]}};
+ const fact: CommandActivity = { id:`${program.id}:result`, group:"Running commands", label:"Run command", subject:program.stop_code ?? part.title ?? "Recorded command", phase:"execute", state, outcome, status_code:program.status_code, execution_ids:[], spans:[] };
+ return {...part,commandActivity:{fact,calls:[part],members:[fact],programIds:[program.id]}};
 }

@@ -174,7 +174,7 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 func TestSpecToolFeedbackCompletionBannerShape(t *testing.T) {
 	t.Parallel()
 	hints := loadBundledHintConfig(t)
-	enricher := guidance.NewToolOutputEnricher(hints, nil)
+	enricher := guidance.NewToolOutputEnricher(hints, nil, nil)
 
 	scenarios := []specCompletionScenario{
 		{

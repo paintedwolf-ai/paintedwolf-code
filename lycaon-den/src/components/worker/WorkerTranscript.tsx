@@ -171,7 +171,7 @@ function WorkerTranscriptPane(props: WorkerTranscriptPaneProps) {
             !props.activityPreview()
           }
         >
-          <p class="den-worker-transcript-empty den-worker-transcript-empty--inline">
+          <p class="den-worker-transcript-empty den-worker-transcript-empty--inline" data-testid="worker-no-activity">
             No activity yet for this worker.
           </p>
         </Show>

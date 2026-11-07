@@ -27,7 +27,7 @@ describe("package-source observations", () => {
   it("reports held packages without suggesting that a cached candidate is installable", async () => {
     renderSource({ availability: "blocked", reason: "held", held: true });
     await screen.findByTestId("updates-source-reason");
-    expect(screen.queryByText("You’re using the latest version.")).toBeNull();
+    expect(screen.queryByTestId("updates-up-to-date")).toBeNull();
   });
   it("keeps DNF transaction policy unknown even when its query returns a candidate", async () => {
     renderSource({ availability: "unknown", reason: "policy_unobserved", candidate: { version: "1.2.0-1", architecture: "x86_64", newer_than_installed: true, repositories: [{ id: "chosen-repo", suite: null, trusted: null }] } });
@@ -43,7 +43,7 @@ describe("package-source observations", () => {
     renderSource({ availability: "no_newer_candidate", candidate: { version: "1.1.0-1", architecture: "amd64", newer_than_installed: false,
       repositories: [{ id: "Painted Wolf Code", suite: "stable", trusted: true }] } });
     await screen.findByTestId("updates-source-candidate");
-    expect(screen.queryByText("You’re using the latest version.")).toBeNull();
+    expect(screen.queryByTestId("updates-up-to-date")).toBeNull();
   });
   it("reports an unknown owner without claiming that repository metadata was read", async () => {
     renderSource({ availability: "unknown", reason: "unsupported_owner", cached_only: false, database_owner: null, database_version: null, architecture: null });

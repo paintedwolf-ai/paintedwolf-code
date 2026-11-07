@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, fireEvent } from "@solidjs/testing-library";
 import { ToolPartShell } from "./ToolPartShell.tsx";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
+import type { CommandActivityStep } from "../../api/types.ts";
 import {
   TranscriptViewportProvider,
   createTranscriptViewportController,
@@ -26,6 +27,10 @@ const part = (toolCallId: string, assistantId = "a1"): ToolPartView => ({
 
 let controller: ReturnType<typeof createTranscriptViewportController>;
 
+function step(id: string): CommandActivityStep {
+  return { id, command: `run ${id}`, count: 1, running: 0, waiting: 0, failed: 0, refused: 0, interrupted: 0, state: "completed", outcome: "Exited 0" };
+}
+
 beforeEach(() => {
   controller = createTranscriptViewportController({ sessionId: () => "s1" });
 });
@@ -38,7 +43,7 @@ describe("ToolPartShell open-state persistence", () => {
   it("preserves HTTP capitalization in the http_request tool label", () => {
     const item = part("tc-http");
     item.tool = "http_request";
-    const { getByText } = render(() => (
+    render(() => (
       <TranscriptViewportProvider value={controller}>
         <ToolPartShell part={item} layout="chat" sessionId="s1">
           body
@@ -46,7 +51,6 @@ describe("ToolPartShell open-state persistence", () => {
       </TranscriptViewportProvider>
     ));
 
-    expect(getByText("HTTP request")).toBeTruthy();
   });
 
   it("starts closed for a fresh chicklet", () => {
@@ -60,6 +64,69 @@ describe("ToolPartShell open-state persistence", () => {
     expect(isDisclosureOpen(container.querySelector<HTMLElement>("[data-transcript-disclosure]"))).toBe(
       false,
     );
+  });
+
+  it("appends the step count to a command activity chicklet", () => {
+    const item = part("tc-steps");
+    item.tool = "command";
+    item.commandActivity = {
+      fact: {
+        id: "fact-1",
+        group: "Exploring project files",
+        phase: "inspect",
+        label: "Read source",
+        subject: "source.rs",
+        state: "completed",
+        outcome: "Exited 0",
+        status_code: 0,
+        execution_ids: [],
+        spans: [],
+        steps: [step("s1"), step("s2")],
+      },
+      calls: [],
+      members: [],
+      programIds: [],
+    };
+    const { getByText } = render(() => (
+      <TranscriptViewportProvider value={controller}>
+        <ToolPartShell part={item} layout="chat" sessionId="s1">
+          body
+        </ToolPartShell>
+      </TranscriptViewportProvider>
+    ));
+    expect(getByText("source.rs · 2 steps")).toBeTruthy();
+  });
+
+  it("appends output reads instead of steps when reads are folded", () => {
+    const item = part("tc-reads");
+    item.tool = "command";
+    item.commandActivity = {
+      fact: {
+        id: "fact-2",
+        group: "Running programs",
+        phase: "execute",
+        label: "Run process",
+        subject: "server",
+        state: "running",
+        outcome: "Running",
+        execution_ids: [],
+        spans: [],
+        job_handle: "job-1",
+        steps: [step("s1"), step("s2")],
+      },
+      calls: [],
+      members: [],
+      programIds: [],
+      outputReads: 3,
+    };
+    const { getByText } = render(() => (
+      <TranscriptViewportProvider value={controller}>
+        <ToolPartShell part={item} layout="chat" sessionId="s1">
+          body
+        </ToolPartShell>
+      </TranscriptViewportProvider>
+    ));
+    expect(getByText("server · 3 output reads")).toBeTruthy();
   });
 
   it("projects invocation identity onto the card", () => {

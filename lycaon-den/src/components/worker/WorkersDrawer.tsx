@@ -28,6 +28,7 @@ export function WorkersDrawer(props: Props) {
       title={selected() ? workerAgentLabel(selected() as WorkerTask) : "Worker"}
       closeLabel="Close worker"
       onClose={() => props.onClose()}
+      closeTestId="workers-drawer-close"
       scrollTestId="worker-transcript"
     >
       <WorkerTranscript

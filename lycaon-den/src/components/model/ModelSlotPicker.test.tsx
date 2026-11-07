@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import type { ProviderMeta } from "../../api/types.ts";
@@ -11,7 +12,7 @@ it("reflects a save hold on every open picker choice and permits selection after
   const provider = { id: "test", kind: "together", configured: true, ready_to_assign: true, models: [providerModel("new-model")] } as ProviderMeta;
   const change = vi.fn();
   render(() => <ModelSlotPicker label="Worker" providers={[provider]} roleSlot="agent_pool" disabled={saving()} value={{provider_id:"",model:""}} onChange={change} />);
-  fireEvent.click(screen.getByRole("button", { name: "Worker" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("model-slot-picker"), "button"));
   const option = screen.getByTestId("model-slot-picker-option-test-new-model");
   const unset = screen.getByTestId("model-slot-picker-unset");
   setSaving(true);
@@ -34,7 +35,7 @@ it("allows an unknown tool capability without invoking a diagnostic", () => {
   const provider={id:"test",kind:"together",configured:true,ready_to_assign:false,models:[model]} as ProviderMeta;
   const change=vi.fn();
   render(()=><ModelSlotPicker label="Coordinator" providers={[provider]} roleSlot="coordinator" value={{provider_id:"",model:""}} onChange={change}/>);
-  fireEvent.click(screen.getByRole("button",{name:"Coordinator"}));
+  fireEvent.click(assertNamedControl(screen.getByTestId("model-slot-picker"), "button"));
   const option=screen.getByTestId("model-slot-picker-option-test-new-model");
   expect(option).toHaveProperty("disabled",false);
   expect(option.textContent).toContain("Tool support is unknown");
@@ -47,6 +48,6 @@ it("Show all reveals an incompatible model but cannot select it", () => {
   model.eligibility.coordinator={state:"incompatible",selectable:false,code:"role_excluded",reason:"Specialty interface"};
   const provider={id:"test",kind:"together",configured:true,ready_to_assign:true,models:[model]} as ProviderMeta;
   render(()=><ModelSlotPicker label="Coordinator" providers={[provider]} roleSlot="coordinator" showAllModels value={{provider_id:"",model:""}} onChange={()=>{}}/>);
-  fireEvent.click(screen.getByRole("button",{name:"Coordinator"}));
+  fireEvent.click(assertNamedControl(screen.getByTestId("model-slot-picker"), "button"));
   expect(screen.getByTestId("model-slot-picker-option-test-special")).toHaveProperty("disabled",true);
 });

@@ -93,10 +93,10 @@ export function SearchReplacePreview(props: Props) {
         <p class="den-search-status" role="status" data-testid="search-replace-updating">
           {props.preparationNotice || "Preparing an up-to-date preview. Nothing can be replaced yet."}
           <Show when={props.preparing && props.onCancelPreparation}>
-            <DenButton variant="ghost" compact onClick={() => props.onCancelPreparation?.()}>Cancel preparation</DenButton>
+            <DenButton data-testid="cancel-preparation" variant="ghost" compact onClick={() => props.onCancelPreparation?.()}>Cancel preparation</DenButton>
           </Show>
           <Show when={!props.preparing && props.onRetryPreparation}>
-            <DenButton variant="ghost" compact onClick={() => props.onRetryPreparation?.()}>Retry preview</DenButton>
+            <DenButton data-testid="retry-preview" variant="ghost" compact onClick={() => props.onRetryPreparation?.()}>Retry preview</DenButton>
           </Show>
         </p>
       </Show>

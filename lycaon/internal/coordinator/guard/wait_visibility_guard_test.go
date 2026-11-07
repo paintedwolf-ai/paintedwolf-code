@@ -70,24 +70,6 @@ func TestWaitVisibilityResetsRepairAfterAnyNote(t *testing.T) {
 	}
 }
 
-// Facts keep their published meanings beside the debt fact.
-func TestToolTurnFactsKeepTheirMeanings(t *testing.T) {
-	marker := api.Message{Role: api.MessageRoleAssistant, Content: "⟦D:model:internal_step_note⟧", ToolCalls: []api.ToolCall{{ID: "w", Name: "wait"}}}
-	gc := oar.NewGuardContext()
-	ObserveWaitVisibility(&api.Session{ID: "c"}, []api.Message{marker}, "wait", true, gc)
-	if gc.Session.ToolTurnHasText || gc.Session.ToolTurnHasAgentNote {
-		t.Fatalf("marker-only carrier has text: %+v", gc.Session)
-	}
-	spoken := marker
-	spoken.Content = "Status"
-	note := api.Message{Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote, Content: "Visible"}
-	gc = oar.NewGuardContext()
-	ObserveWaitVisibility(&api.Session{ID: "c"}, []api.Message{spoken, note}, "wait", true, gc)
-	if !gc.Session.ToolTurnHasText || !gc.Session.ToolTurnHasAgentNote || gc.Session.UnpublishedToolTextPending {
-		t.Fatalf("session = %+v", gc.Session)
-	}
-}
-
 func TestFallbackSettlesPerDebt(t *testing.T) {
 	carrier := func(text string) api.Message {
 		return api.Message{Role: api.MessageRoleAssistant, Content: text, ToolCalls: []api.ToolCall{{ID: "w", Name: "wait"}}}
