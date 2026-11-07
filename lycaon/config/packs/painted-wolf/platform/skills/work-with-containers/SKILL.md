@@ -3,7 +3,6 @@ name: work-with-containers
 description: Write Dockerfiles and Compose files, and build, run, debug, size, test in, or publish Docker and Podman container images, volumes, and networks.
 metadata:
   host_resources: docker|kubectl|podman
-optional_tools:
 ---
 
 # Work with containers

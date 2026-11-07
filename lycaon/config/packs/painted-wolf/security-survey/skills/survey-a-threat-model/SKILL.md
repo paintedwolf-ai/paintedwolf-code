@@ -1,9 +1,6 @@
 ---
 name: survey-a-threat-model
 description: Map a system’s threat model from source and classify claims against it; not scanner-finding triage.
-# record_finding is the worker's half; the coordinator reads the result.
-optional_tools:
-  - record_finding
 ---
 
 # Survey a threat model
@@ -17,4 +14,4 @@ optional_tools:
    - `hardening` — real improvement; not exploitable under the stated model; omit `severity`
    - `accepted_residual` — only if this repo documented the residual; omit `severity`
 6. Adjudicate scan warnings from source without pre-classifying them as noise. Record only claims you grounded. Unreviewed areas and incomplete bound scans go in `remaining_risk`, not as issues. An empty vulnerability set is a successful closeout.
-7. Finish with citation triples plus the optional `claim` / `adversary` / `precondition` / `severity` fields. Do not treat the Findings plane (`record_finding` peer notes) as the closeout.
+7. Finish with citation triples plus the optional `claim` / `adversary` / `precondition` / `severity` fields. Do not treat the Findings plane {% if profile_has_record_finding %}(`record_finding` peer notes){% endif %} as the closeout.

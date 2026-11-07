@@ -1,9 +1,8 @@
 ---
 name: investigate-code-history
 description: Explain how and why code reached its current form from live edit history, git blame, and commit logs, including who changed which lines.
-optional_tools:
-  - command
-  - source_history
+metadata:
+  paintedwolf.any_of_tools: command, source_history
 ---
 
 # Investigate code history

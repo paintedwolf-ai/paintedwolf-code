@@ -1,15 +1,11 @@
 ---
 name: triage-security-findings
 description: Use stored scanner evidence to assess findings, credibility, and changes introduced or resolved by a fix.
-# Triage reads stored scans; running one is the coordinator's action.
-optional_tools:
-  - scan_pack
-  - command
 ---
 
 # Triage security findings
 
-1. Use the exact workflow `scan_ids` when supplied; do not call `scan_list` or substitute a newer ambient scan. Otherwise resolve full ids with `scan_list` or `scan_pack`’s `per_scan` rows. Board assessment ids are orientation. Report unavailable bound scans; never guess ids.
+1. Use the exact workflow `scan_ids` when supplied; do not call `scan_list` or substitute a newer ambient scan. Otherwise resolve full ids with `scan_list` {% if profile_has_scan_pack %}or `scan_pack`’s `per_scan` rows{% endif %}. Board assessment ids are orientation. Report unavailable bound scans; never guess ids.
 2. Call `scan_summary` before drilling. If the scan is incomplete, follow its status or structured rejection instead of treating partial or absent ingest as a clean result.
 3. Use `scan_query` as the primary finding source. Narrow by the requested category, rule, severity, or path and page with `offset` whenever `truncated` is true.
 4. Inspect source only at paths returned by the scanner. Use `summarize` first, or bounded `command` (`sed -n`, `grep -n`) reads when needed, to decide whether the flagged data and control path are reachable; do not replace scanner triage with a repository-wide manual audit.
