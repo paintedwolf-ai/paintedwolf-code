@@ -27,8 +27,17 @@ func (m *Service) Append(ctx context.Context, sessionID string, msgs ...api.Mess
 	if err != nil {
 		return err
 	}
+	copy(msgs, stamped)
 	m.PublishAppends(ctx, sessionID, stamped...)
 	return nil
+}
+
+func (m *Service) AppendMessage(ctx context.Context, sessionID string, msg api.Message) (api.Message, error) {
+	rows := []api.Message{msg}
+	if err := m.Append(ctx, sessionID, rows...); err != nil {
+		return api.Message{}, err
+	}
+	return rows[0], nil
 }
 
 func (m *Service) Update(ctx context.Context, sessionID, messageID string, msg api.Message) error {

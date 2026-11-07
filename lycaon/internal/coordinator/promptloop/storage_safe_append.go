@@ -28,6 +28,17 @@ func (l *turnProjection) persistStorageSafeMessages(ctx context.Context, session
 	return l.Deps.AppendMessages(ctx, sessionID, stored...)
 }
 
+func (l *turnProjection) appendMessage(ctx context.Context, sessionID string, msg api.Message) (api.Message, error) {
+	if l == nil || l.Deps.AppendMessages == nil {
+		return api.Message{}, fmt.Errorf("append messages not configured")
+	}
+	rows := []api.Message{msg}
+	if err := l.Deps.AppendMessages(ctx, sessionID, rows...); err != nil {
+		return api.Message{}, err
+	}
+	return rows[0], nil
+}
+
 func foldStorageSafeMessages(
 	history []api.Message,
 	stored []api.Message,

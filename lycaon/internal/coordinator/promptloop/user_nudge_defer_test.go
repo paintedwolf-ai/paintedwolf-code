@@ -203,3 +203,38 @@ func TestDraftRecoveryPersistsBeforeRetryAndScopesDeduplication(t *testing.T) {
 		t.Fatal("different drafts must retain separate recovery identities")
 	}
 }
+
+func TestAppendAndFlushHostNudgesStampCanonicalOrdinals(t *testing.T) {
+	var nextOrd int64
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				for i := range msgs {
+					nextOrd++
+					msgs[i].Ord = nextOrd
+					msgs[i].Seq = nextOrd
+				}
+				return nil
+			},
+		},
+	})
+	st := &promptLoopTurnState{}
+	var err error
+	st.history, err = loop.Nudges.appendUserNudge(t.Context(), "s1", st.history, "Immediate nudge\nCode: IMMEDIATE\n", st)
+	testutil.FailErr(t, "append immediate nudge", err)
+	if len(st.history) != 1 || st.history[0].Ord != 1 || st.history[0].Seq != 1 {
+		t.Fatalf("immediate nudge = (ord=%d, seq=%d), want (1, 1)", st.history[0].Ord, st.history[0].Seq)
+	}
+
+	st.draftSlotID = "slot-1"
+	st.draftSlotAppended = true
+	st.history, err = loop.Nudges.appendUserNudge(t.Context(), "s1", st.history, "Deferred nudge\nCode: DEFERRED\n", st)
+	testutil.FailErr(t, "append deferred nudge", err)
+	if len(st.history) != 2 || st.history[1].Ord != 0 {
+		t.Fatalf("deferred nudge before flush = %+v, want Ord=0", st.history[1])
+	}
+	testutil.FailErr(t, "close draft slot and flush deferred nudges", loop.Nudges.closeCoordinatorDraftSlot(t.Context(), "s1", st, "slot-1"))
+	if st.history[1].Ord != 2 || st.history[1].Seq != 2 {
+		t.Fatalf("flushed deferred nudge in history = (ord=%d, seq=%d), want (2, 2)", st.history[1].Ord, st.history[1].Seq)
+	}
+}

@@ -24,9 +24,7 @@ func (l *turnCloseout) resumeWork(ctx context.Context, sessionID string, st *pro
 	st.closeoutRetry.codes = nil
 }
 
-// storedReportIssues are the requirements a run report the host stores
-// without accepting still fails: members of the draft the report could not
-// read, from its latest refusal, and then the run's document checks.
+// storedReportIssues collects unread draft members and failed document checks.
 func (l *turnCloseout) storedReportIssues(ctx context.Context, sessionID string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
 	var issues []guidance.ReportDocumentIssue
 	var unread []jsonshape.Issue
@@ -114,7 +112,9 @@ func (l *turnCloseout) emitAssembledCloseout(
 	}
 	if appendNew {
 		if l.Projection.Deps.AppendMessages != nil {
-			if err := l.Projection.Deps.AppendMessages(ctx, sessionID, msg); err != nil {
+			var err error
+			msg, err = l.Projection.appendMessage(ctx, sessionID, msg)
+			if err != nil {
 				return out, err
 			}
 		}
@@ -128,12 +128,18 @@ func (l *turnCloseout) emitAssembledCloseout(
 		found := false
 		for i := range history {
 			if history[i].ID == msgID {
+				msg.Ord = history[i].Ord
+				msg.Seq = history[i].Seq
 				history[i] = msg
 				found = true
 				break
 			}
 		}
 		if !found {
+			if st != nil && st.usesCoordinatorDraftSlot(msgID) {
+				msg.Ord = st.draftSlotOrd
+				msg.Seq = st.draftSlotSeq
+			}
 			history = append(history, msg)
 		}
 	}

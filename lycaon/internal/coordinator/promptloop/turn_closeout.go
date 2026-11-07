@@ -513,18 +513,15 @@ func (l *turnNudges) appendHostNudge(
 		return history, nil
 	}
 	nudge := newHostNudge(hostNudge, kind)
-	history = append(history, nudge)
 	if deferUserNudgeStore(st) && hostNudge.DraftID == "" {
 		st.deferredUserNudges = append(st.deferredUserNudges, nudge)
-		return history, nil
+		return append(history, nudge), nil
 	}
-	if l.Projection.Deps.AppendMessages == nil {
-		return nil, fmt.Errorf("append messages not configured")
-	}
-	if err := l.Projection.Deps.AppendMessages(ctx, sessionID, nudge); err != nil {
+	nudge, err := l.Projection.appendMessage(ctx, sessionID, nudge)
+	if err != nil {
 		return nil, err
 	}
-	return history, nil
+	return append(history, nudge), nil
 }
 
 func lastHostNudgeWithSignal(history []api.Message, nudge HostNudge) int {
@@ -598,6 +595,15 @@ func (l *turnNudges) flushDeferredUserNudges(ctx context.Context, sessionID stri
 	}
 	if err := l.Projection.Deps.AppendMessages(ctx, sessionID, pending...); err != nil {
 		return err
+	}
+	for _, stamped := range pending {
+		for i := range st.history {
+			if st.history[i].ID == stamped.ID {
+				st.history[i].Ord = stamped.Ord
+				st.history[i].Seq = stamped.Seq
+				break
+			}
+		}
 	}
 	st.deferredUserNudges = nil
 	return nil
