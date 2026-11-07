@@ -101,7 +101,21 @@ func quotedExecutionValue(value string) string {
 	return string(raw)
 }
 
+func rejectedCommandProgram(result *api.ToolResult) (*api.CommandProgramReceipt, bool) {
+	if result == nil || result.Invocation == nil || result.CommandProgram == nil {
+		return nil, false
+	}
+	program := result.CommandProgram
+	if program.ID == "" || program.ParentReceiptID != result.Invocation.ID || program.State != string(api.InvocationStatusRejected) {
+		return nil, false
+	}
+	return program, true
+}
+
 func rejectedChange(result *api.ToolResult) bool {
+	if program, ok := rejectedCommandProgram(result); ok {
+		return program.StopCode == "PROGRESS_MISSING" || program.StopCode == "PROGRESS_ITEM_NOT_CLOSED" || program.StopCode == "PROGRESS_RECONCILIATION_REQUIRED"
+	}
 	receipt := result.Invocation
 	if receipt.Status != api.InvocationStatusRejected || receipt.Failure == nil {
 		return false
