@@ -170,8 +170,10 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 // Compilation or execution failures fall back to the raw body.
 func renderSkillBody(sk skills.Skill, offered map[string]bool) string {
 	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
-	for tool := range offered {
-		vars["profile_has_"+tool] = true
+	for tool, ok := range offered {
+		if ok {
+			vars["profile_has_"+tool] = true
+		}
 	}
 	vars["is_coordinator"] = offered["task"]
 	vars["has_git"] = true
