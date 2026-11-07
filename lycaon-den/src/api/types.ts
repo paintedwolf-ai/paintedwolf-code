@@ -10320,6 +10320,11 @@ export interface components {
             /** Format: uuid */
             id: string;
             group: string;
+            /**
+             * @description Typed activity phase. Folding and headline ranking compare this, never the display group.
+             * @enum {string}
+             */
+            phase?: "inspect" | "execute" | "mutate";
             label: string;
             subject: string;
             /** @description Registered session-owned background job started by this activity. */

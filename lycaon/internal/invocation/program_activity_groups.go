@@ -87,27 +87,55 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
 
 func groupActivity(g activityGroup) api.CommandActivity {
 	rule := activityPresentation(g.input)
-	state, outcome := "completed", "Finished"
-	if g.counts.waiting > 0 {
-		state, outcome = "waiting", "Waiting"
-	} else if g.counts.running > 0 {
-		state, outcome = "running", "Running"
-	} else if g.counts.refused > 0 {
-		state, outcome = "refused", "Refused"
-	} else if g.counts.interrupted > 0 {
-		state, outcome = "interrupted", "Interrupted"
-	} else if g.counts.failed > 0 {
-		state, outcome = "failed", "Failed"
-	}
+	state := activityStepState(g.counts, g.input.receipt)
+	outcome := activityStateOutcome(state)
 	if g.input.operation == "program &" && state == "completed" {
 		outcome = "Started"
 	}
-	return api.CommandActivity{ID: g.input.receipt.ID, Group: rule.group, Label: rule.label, Subject: activitySubject(g.input), Directory: stringArgument(g.input.arguments, "cwd"), JobHandle: g.input.receipt.JobHandle, State: state, Outcome: outcome, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Repetitions: g.counts.total, Steps: []api.CommandActivityStep{}}
+	return api.CommandActivity{ID: g.input.receipt.ID, Group: rule.group, Phase: rule.phase, Label: rule.label, Subject: activitySubject(g.input), Directory: stringArgument(g.input.arguments, "cwd"), JobHandle: g.input.receipt.JobHandle, State: state, Outcome: outcome, ExecutionIDs: []string{}, Spans: []api.CommandActivitySpan{}, Repetitions: g.counts.total, Steps: []api.CommandActivityStep{}}
+}
+
+// Precedence over folded steps decides the row state; membership never does.
+var activityStateRank = map[string]int{"unknown": 0, "completed": 0, "failed": 1, "interrupted": 2, "refused": 3, "running": 4, "waiting": 5}
+
+func activityStepState(c activityCounts, receipt api.CommandExecutionReceipt) string {
+	switch {
+	case c.waiting > 0:
+		return "waiting"
+	case c.running > 0:
+		return "running"
+	case c.refused > 0 || receipt.State == "refused":
+		return "refused"
+	case c.interrupted > 0:
+		return "interrupted"
+	case c.failed > 0 || receipt.State == "failed" || receipt.RevisionConflict != nil:
+		return "failed"
+	default:
+		return "completed"
+	}
+}
+
+func activityStateOutcome(state string) string {
+	switch state {
+	case "waiting":
+		return "Waiting"
+	case "running":
+		return "Running"
+	case "refused":
+		return "Refused"
+	case "interrupted":
+		return "Interrupted"
+	case "failed":
+		return "Failed"
+	default:
+		return "Finished"
+	}
 }
 
 func appendActivityStep(a *api.CommandActivity, g activityGroup) {
 	c := g.counts
-	state, outcome := activityOutcome(g.input.receipt)
+	state := activityStepState(c, g.input.receipt)
+	_, outcome := activityOutcome(g.input.receipt)
 	a.ExecutionCount += c.total
 	a.FailedCount += c.failed + c.refused + c.interrupted
 	a.WaitingCount += c.waiting
@@ -115,16 +143,13 @@ func appendActivityStep(a *api.CommandActivity, g activityGroup) {
 	a.CompletedEffects += c.effects
 	a.ExecutionIDs = append(a.ExecutionIDs, g.input.receipt.ID)
 	a.Spans = append(a.Spans, g.input.span)
-	a.Steps = append(a.Steps, api.CommandActivityStep{ID: g.input.receipt.ID, Command: boundedActivityText(g.input.receipt.Command), Count: c.total, Running: c.running, Waiting: c.waiting, Failed: c.failed, Refused: c.refused, Interrupted: c.interrupted, State: state, Outcome: outcome})
-	if a.State == "completed" && c.running > 0 {
-		a.State, a.Outcome = "running", "Running"
-	}
-	if c.waiting > 0 {
-		a.State, a.Outcome = "waiting", "Waiting"
+	a.Steps = append(a.Steps, api.CommandActivityStep{ID: g.input.receipt.ID, Command: activityStepLabel(g), Count: c.total, Running: c.running, Waiting: c.waiting, Failed: c.failed, Refused: c.refused, Interrupted: c.interrupted, State: state, Outcome: outcome})
+	if activityStateRank[state] > activityStateRank[a.State] {
+		a.State, a.Outcome = state, activityStateOutcome(state)
 	}
 }
 
-// Supporting steps follow recorded ancestry, independent of execution start order.
+// Supporting steps follow recorded ancestry; sequential primaries fold by phase.
 func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandActivity {
 	byKey := make(map[activityKey]int, len(groups))
 	for i, g := range groups {
@@ -132,9 +157,7 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	}
 	primary := make(map[int]bool)
 	for i, g := range groups {
-		role := activityPresentation(g.input).role
-		attention := activityNeedsAttention(g.input.receipt) || g.counts.failed+g.counts.refused+g.counts.interrupted+g.counts.waiting > 0
-		if role == "primary" || (role == "context" && attention) {
+		if activityPresentation(g.input).role == "primary" {
 			primary[i] = true
 		}
 	}
@@ -174,27 +197,36 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 			parent = groups[p].parent
 		}
 	}
+	// Failed work with nowhere to fold becomes its own row instead of disappearing.
 	for i, g := range groups {
 		if _, assigned := assignments[i]; assigned {
 			continue
 		}
-		if activityPresentation(g.input).role == "container" {
+		if g.counts.failed+g.counts.refused+g.counts.interrupted+g.counts.waiting == 0 {
 			continue
 		}
-		_, hasParent := byKey[g.parent]
-		if g.counts.failed+g.counts.refused+g.counts.interrupted+g.counts.waiting > 0 && !hasParent {
-			primary[i] = true
-			assignments[i] = i
+		if activityPresentation(g.input).role == "container" && g.parent != (activityKey{}) {
+			if _, ok := byKey[g.parent]; ok {
+				continue
+			}
 		}
+		primary[i] = true
+		assignments[i] = i
 	}
 	var result []api.CommandActivity
 	positions := map[int]int{}
+	active := -1
 	for i, g := range groups {
 		if !primary[i] {
 			continue
 		}
+		if active >= 0 && activityFolds(groups[active], g) {
+			positions[i] = positions[active]
+			continue
+		}
 		positions[i] = len(result)
 		result = append(result, groupActivity(g))
+		active = i
 	}
 	for i, g := range groups {
 		if owner, ok := assignments[i]; ok {
@@ -212,11 +244,21 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	}
 	for i := range result {
 		a := &result[i]
-		if a.State == "completed" && a.FailedCount > 0 {
+		if a.State == "failed" && a.FailedCount < a.ExecutionCount {
 			a.Outcome = fmt.Sprintf("Finished · %d steps reported failure", a.FailedCount)
 		}
 	}
 	return result
+}
+
+// Membership is fixed at recording time: same phase, no launches, no external processes.
+func activityFolds(active, g activityGroup) bool {
+	ar, gr := activityPresentation(active.input), activityPresentation(g.input)
+	if ar.group != gr.group || ar.label == "Run process" || gr.label == "Run process" {
+		return false
+	}
+	return active.input.operation != "program &" && g.input.operation != "program &" &&
+		active.input.receipt.JobHandle == "" && g.input.receipt.JobHandle == ""
 }
 
 func groupDescendsFrom(g activityGroup, parent activityKey, groups []activityGroup, byKey map[activityKey]int) bool {

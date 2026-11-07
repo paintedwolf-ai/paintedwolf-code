@@ -3,7 +3,7 @@ import type { CommandExecutionReceipt } from "../../api/types.ts";
 import type { CommandActivityView } from "./command-activity-model.ts";
 import { commandActivityFacts } from "./command-activity-details.ts";
 
-const view: CommandActivityView = { fact:{ id:"activity",group:"Changing files",label:"Change files",subject:"file.rs",state:"waiting",outcome:"Waiting",job_handle:"job",directory:"/project",execution_ids:["execution"],spans:[] },members:[],calls:[] };
+const view: CommandActivityView = { fact:{ id:"activity",group:"Changing files",phase:"mutate",label:"Change files",subject:"file.rs",state:"waiting",outcome:"Waiting",job_handle:"job",directory:"/project",execution_ids:["execution"],spans:[] },members:[],calls:[],programIds:[] };
 
 it("keeps uncertainty and recovery facts attached to their actual executions", () => {
  const row={command:"write file.rs",effect_certainty:"unknown",state:"waiting",owner_started:true,owner_invoked:false,approval_ref:"approval",evidence_ref:"captured:file@r1",stop_code:"REFUSED",host_stop_code:"HOST_REFUSED",accepted_revision:"r2",held_version_id:"held",recovery_ref:"recovery",revision_conflict:{path:"file.rs",expected_revision:"r1",observed_revision:"r3"}} as CommandExecutionReceipt;
