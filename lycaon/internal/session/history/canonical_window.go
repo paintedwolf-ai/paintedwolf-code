@@ -71,7 +71,7 @@ func (m *Service) readCanonicalTail(ctx context.Context, sessionID string, bound
 				}
 			}
 			admittedStart = i
-			needExchange = page[i].Role == api.MessageRoleTool
+			needExchange = page[i].Role == api.MessageRoleTool || api.DraftRecoveryTarget(page[i]) != ""
 			rowsCount++
 			usedTokens += msgTokens
 			usedBytes += msgBytes
@@ -187,18 +187,20 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 	budget := max(1, cfg.TargetTokens-reserve)
 	// The restored tail holds its start across appends like any other cutoff.
 	alloc := workingSetAllocation{rows: len(tail) + 1, tokens: budget, bytes: math.MaxInt / 2}
+	exchangeBounds := indexDraftExchanges(tail)
 	m.cutoffs.update(sess.ID, m.cutoffKey(ctx, sess, cfg, view), tail, func(st *cutoffState) {
 		at, advanced := selectCutoff(tail, alloc, st.tail.ord)
 		tail = tail[at:]
 		if advanced {
 			st.note(cutoffTailAdvanced)
 		}
-		st.tail = markRow(tail[0])
+		st.tail = exchangeBounds.mark(tail[0])
 	})
-	if len(tail) == 0 || tail[0].Ord <= 1 || tail[0].Ord > view.Continuation.ThroughOrd {
+	tailStart := exchangeBounds.minOrd(tail[0])
+	if len(tail) == 0 || tailStart <= 1 || tailStart > view.Continuation.ThroughOrd {
 		return nil, false
 	}
-	record := restoredCoverage(view.Continuation, tail[0].Ord)
+	record := restoredCoverage(view.Continuation, tailStart)
 	record.Window = cfg.ModelContextWindow
 	record.Receiver = sess.Model
 	recall := m.recallAvailable != nil && m.recallAvailable(ctx, sess)
@@ -223,7 +225,7 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 		}
 	}
 	out = append(out, tail...)
-	return out, true
+	return api.FilterPromptHistory(out), true
 }
 
 // restoredCoverage narrows a record to rows before the restored tail. Prose that

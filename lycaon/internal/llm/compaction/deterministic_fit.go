@@ -96,10 +96,20 @@ func pinnedRows(messages []ContextMessage) []ContextMessage {
 }
 
 // completeFitStart advances past results whose call the cut would strand,
-// including parallel results interleaved with host rows.
+// including parallel results interleaved with host rows and draft-recovery pairs.
 func completeFitStart(body []ContextMessage, drop int) int {
 	start := drop
 	for {
+		priorDrafts := make(map[string]bool)
+		priorTargets := make(map[string]bool)
+		for i := 0; i < start && i < len(body); i++ {
+			if body[i].Role == string(api.MessageRoleAssistant) && body[i].ID != "" {
+				priorDrafts[body[i].ID] = true
+			}
+			if body[i].DraftRecoveryTarget != "" {
+				priorTargets[body[i].DraftRecoveryTarget] = true
+			}
+		}
 		calls := make(map[string]bool)
 		orphan := -1
 		for i := start; i < len(body); i++ {
@@ -107,6 +117,12 @@ func completeFitStart(body []ContextMessage, drop int) int {
 				calls[call.ID] = true
 			}
 			if body[i].Role == string(api.MessageRoleTool) && body[i].ToolCallID != "" && !calls[body[i].ToolCallID] {
+				orphan = i
+			}
+			if body[i].Role == string(api.MessageRoleAssistant) && body[i].ID != "" && priorTargets[body[i].ID] {
+				orphan = i
+			}
+			if body[i].DraftRecoveryTarget != "" && priorDrafts[body[i].DraftRecoveryTarget] {
 				orphan = i
 			}
 		}

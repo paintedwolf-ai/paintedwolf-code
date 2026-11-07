@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
 	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -40,7 +41,7 @@ type stubProgress struct {
 	content string
 }
 
-func (s stubProgress) Get(context.Context, string) string {
+func (s *stubProgress) Get(context.Context, string) string {
 	return s.content
 }
 
@@ -169,8 +170,10 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	state := stubState{state: surface.ImplementSessionState{
 		ProgressOpenCount: 1,
 	}}
-	svc := New(store, policy, nil, nil, state, nil, nil, nil, nil, closeouts.New(store), nil, nil)
-	svc.SetProgress(stubProgress{content: "- [x] Done\n- [ ] Pending item\n"})
+	closeoutSvc := closeouts.New(store)
+	progressStore := &stubProgress{content: "- [x] Done\n- [ ] Pending item\n"}
+	svc := New(store, policy, nil, nil, state, nil, nil, nil, nil, closeoutSvc, nil, nil)
+	svc.SetProgress(progressStore)
 
 	history := []api.Message{
 		{Role: api.MessageRoleUser, Kind: api.MessageKindHostLoopWake, Content: "worker completed"},
@@ -189,5 +192,21 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	)
 	if blocked || reject != nil {
 		t.Fatalf("after %d retries: got blocked=%v reject=%v, want waiver", synthesisDelayMaxPerPrompt, blocked, reject)
+	}
+
+	closeoutSvc.BeginPrompt(t.Context(), sess, promptinput.Input{Text: "next user prompt"})
+	reject, blocked = svc.BeforeFinish(
+		t.Context(), sess, history, "", "Next turn summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
+	)
+	if blocked || reject != nil {
+		t.Fatalf("unchanged waived checklist on subsequent prompt: got blocked=%v reject=%v, want waiver preserved", blocked, reject)
+	}
+
+	progressStore.content = "- [x] Done\n- [ ] Newly added item\n"
+	reject, blocked = svc.BeforeFinish(
+		t.Context(), sess, history, "", "Updated checklist summary.", guidance.CloseoutDraft{}, "implement_routing", true, nil, true,
+	)
+	if !blocked || reject == nil || reject.Code() != progressOpenBeforeCloseoutCode {
+		t.Fatalf("updated checklist after waiver: got blocked=%v reject=%v, want %s", blocked, reject, progressOpenBeforeCloseoutCode)
 	}
 }

@@ -361,3 +361,62 @@ func TestNonSlotRejectSupersedesInPlace(t *testing.T) {
 		t.Fatalf("visibility = %q want internal", patched.Visibility)
 	}
 }
+
+func TestRetireToolFreeDraftRecoveryWithdrawsSupersededGuidanceAndKeepsToolRetryGuidance(t *testing.T) {
+	var updated []api.Message
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				updated = append(updated, msg)
+				return nil
+			},
+		},
+	})
+	recovery := api.Message{
+		ID:           "rec-1",
+		Role:         api.MessageRoleUser,
+		Origin:       api.MessageOriginHost,
+		Authority:    api.ContentAuthoritySystem,
+		Visibility:   api.MessageVisibilityInternal,
+		Kind:         api.MessageKindCoordinatorGuidance,
+		HostSignalID: api.DraftRecoverySignal("slot-1", "guidance:PROGRESS_OPEN_BEFORE_CLOSEOUT"),
+		Content:      "Rejected: open progress",
+	}
+	toolHistory := []api.Message{
+		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
+		recovery,
+		{
+			ID:          "slot-1",
+			Role:        api.MessageRoleAssistant,
+			DraftStatus: api.DraftStatusCommitted,
+			ToolCalls:   []api.ToolCall{{ID: "call-1", Name: "update_progress"}},
+		},
+		{ID: "t1", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "call-1", Tool: "update_progress"}},
+	}
+	gotTool, err := loop.Nudges.retireToolFreeDraftRecovery(t.Context(), "s1", toolHistory, "slot-1")
+	testutil.FailErr(t, "retireToolFreeDraftRecovery on tool turn", err)
+	if gotTool[1].DraftStatus != "" || len(updated) != 0 {
+		t.Fatalf("tool-calling retry must keep recovery active: status=%q updated=%d", gotTool[1].DraftStatus, len(updated))
+	}
+
+	proseHistory := []api.Message{
+		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
+		recovery,
+		{
+			ID:          "slot-1",
+			Role:        api.MessageRoleAssistant,
+			Kind:        api.MessageKindCompletionReport,
+			DraftStatus: api.DraftStatusCommitted,
+			Content:     "Completed report.",
+		},
+	}
+	gotProse, err := loop.Nudges.retireToolFreeDraftRecovery(t.Context(), "s1", proseHistory, "slot-1")
+	testutil.FailErr(t, "retireToolFreeDraftRecovery on tool-free closeout", err)
+	if gotProse[1].DraftStatus != api.DraftStatusWithdrawn || len(updated) != 1 || updated[0].ID != "rec-1" {
+		t.Fatalf("tool-free closeout must withdraw superseded recovery row: row=%+v updated=%+v", gotProse[1], updated)
+	}
+	filtered := api.FilterPromptHistory(gotProse)
+	if len(filtered) != 2 || filtered[0].ID != "u1" || filtered[1].ID != "slot-1" {
+		t.Fatalf("FilterPromptHistory after tool-free closeout = %+v, want [u1 slot-1]", filtered)
+	}
+}
