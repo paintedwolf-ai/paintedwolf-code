@@ -2,6 +2,7 @@ package oar
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -72,6 +73,11 @@ func UnreferencedDeclaredFacts(moduleRoot string) ([]string, error) {
 
 	referenced := map[string]bool{}
 	repoRoot := filepath.Dir(moduleRoot)
+	auditRoot, err := os.OpenRoot(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = auditRoot.Close() }()
 	err = filepath.WalkDir(repoRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -92,7 +98,12 @@ func UnreferencedDeclaredFacts(moduleRoot string) ([]string, error) {
 		if declarationPlumbing[rel] || isPublicationPlumbing(rel) {
 			return nil
 		}
-		text, err := os.ReadFile(path)
+		f, err := auditRoot.Open(rel)
+		if err != nil {
+			return err
+		}
+		text, err := io.ReadAll(f)
+		_ = f.Close()
 		if err != nil {
 			return err
 		}
