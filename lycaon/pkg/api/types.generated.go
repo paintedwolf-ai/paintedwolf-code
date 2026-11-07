@@ -3944,6 +3944,8 @@ type LocalDataBucketStatus struct {
 	Present bool              `json:"present"`
 	// Best-effort on-disk size; may be omitted when unknown
 	Bytes int64 `json:"bytes,omitempty"`
+	// Recorded entries on a volume that is absent right now; not in bytes, and left alone by clearing
+	UnavailableEntries int64 `json:"unavailable_entries,omitempty"`
 }
 
 // LocalDataClearRequest
@@ -9386,4 +9388,9 @@ type WorkspacePreparation struct {
 	Bytes    int64                      `json:"bytes"`
 	// Logical regular-file bytes when a source survey has completed
 	TotalBytes int64 `json:"total_bytes,omitempty"`
+	// Files, directories and links when a source survey has completed
+	TotalEntries int64 `json:"total_entries,omitempty"`
+	// Source entries this user could not read, left out of the branch
+	UnreadableEntries int64                      `json:"unreadable_entries,omitempty"`
+	NotClonableReason WorkspaceNotClonableReason `json:"not_clonable_reason,omitempty"`
 }

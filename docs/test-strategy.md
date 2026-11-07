@@ -122,6 +122,8 @@ state relevant to a scenario. Tests of database recovery, backup, Git plumbing,
 or filesystem traversal may still use the underlying mechanism directly when
 that mechanism is the subject of the test.
 
+Worker placement tests use real second volumes through `internal/testvolume`: a disk image on macOS and a tmpfs in a private mount namespace on Linux. No reflink-capable Linux volume can be made without elevation, so the zero-copied-bytes tests read a writable directory on one from `PW_TEST_REFLINK_VOLUME` and skip without it.
+
 ### Contract organization
 
 Contract suites live in domain packages under `lycaon/test/contract/`:

@@ -102,6 +102,7 @@ var configRootRegistry = []ConfigRootEntry{
 	{Name: extpacks.DeviceLockName, IsDir: false, Class: ClassArchiveExcluded, IncludeInDiagnostics: true, Reason: "lockfile pinning locally installed extension versions"},
 	{Name: db.UpgradeRecoveryDirName, IsDir: true, Class: ClassArchiveExcluded, Reason: "pre-upgrade recovery snapshots preserved outside backups"},
 	{Name: "local-models", IsDir: true, Class: ClassArchiveExcluded, Reason: "verified local generation model store and seeded weights; excluded from backup archives"},
+	{Name: enginepaths.WorkerPlacementsFileName, IsDir: false, Class: ClassArchiveExcluded, Reason: "this device's registry of worker branch folders on other volumes; its paths mean nothing elsewhere"},
 	{Name: storeFileName + db.StoreUpgradeJournalSuffix, Class: ClassArchiveExcluded, Reason: "journal for atomic store upgrade publication; resolved under the installation lease"},
 
 	// Rebuildable state keyed by store.db identities

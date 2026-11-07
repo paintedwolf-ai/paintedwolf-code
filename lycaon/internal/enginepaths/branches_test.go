@@ -111,3 +111,39 @@ func TestProjectSeedDirLayout(t *testing.T) {
 		t.Fatalf("seed dir = %q want %q", got, want)
 	}
 }
+
+func TestWorkerBranchPathsAtAVolumeRootKeepWorking(t *testing.T) {
+	stateRoot := "/home/u/.config/paintedwolf"
+	folder := "/Volumes/My Disk/" + WorkerPlacementDirName(501, stateRoot)
+	base := WorkerBranchesRootUnder(folder)
+	branch := JobBranchDir(base, "/Volumes/My Disk/project", "job-1")
+	file := branch + "/src/main.go"
+
+	if !IsWorkerBranchPath(file) {
+		t.Fatalf("not recognized: %s", file)
+	}
+	if got := WorkerBranchDisplayRel(file); got != "src/main.go" {
+		t.Fatalf("display rel = %q", got)
+	}
+	if got := WorkerBranchDisplayRel(branch); got != "." {
+		t.Fatalf("display rel of root = %q", got)
+	}
+	if got := WorkerPlacementFolderOf(file); got != folder {
+		t.Fatalf("folder = %q", got)
+	}
+	if got := WorkerPlacementFolderOf("/Volumes/My Disk/project/src"); got != "" {
+		t.Fatalf("folder of a project path = %q", got)
+	}
+
+	PublishWorkerPlacementFolders([]string{folder})
+	t.Cleanup(func() { PublishWorkerPlacementFolders(nil) })
+	for input, want := range map[string]string{
+		"error in " + file + ":3":               "error in src/main.go:3",
+		"cwd=" + branch:                         "cwd=.",
+		"\"" + file + "\" and \"" + file + "\"": "\"src/main.go\" and \"src/main.go\"",
+	} {
+		if got := RewriteWorkerBranchPaths(input); got != want {
+			t.Fatalf("rewrite %q = %q, want %q", input, got, want)
+		}
+	}
+}

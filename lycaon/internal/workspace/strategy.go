@@ -11,14 +11,19 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
-func (m *Manager) chooseProvisionStrategy(ctx context.Context, sourceRoot, branchRoot string) (ProvisionStrategy, error) {
+// chooseProvisionStrategy trusts a clonable placement, whose probe already ran
+// from the source to this volume. The other probes serve the not-clonable path.
+func (m *Manager) chooseProvisionStrategy(ctx context.Context, sourceRoot, branchRoot string, clonable bool) (ProvisionStrategy, error) {
 	if strings.TrimSpace(m.branchRoot) == "" {
 		return "", fmt.Errorf("worker branch root is unavailable")
+	}
+	if clonable {
+		return ProvisionDirectCoW, nil
 	}
 	if err := os.MkdirAll(branchRoot, 0o750); err != nil {
 		return "", err
 	}
-	sample, err := firstRegularFile(ctx, sourceRoot)
+	sample, err := firstRegularFile(ctx, sourceRoot, m.sourceAdmit(sourceRoot))
 	if err != nil {
 		return "", err
 	}
@@ -61,9 +66,9 @@ func (m *Manager) chooseProvisionStrategy(ctx context.Context, sourceRoot, branc
 	return ProvisionDirectCopy, nil
 }
 
-func firstRegularFile(ctx context.Context, root string) (string, error) {
+func firstRegularFile(ctx context.Context, root string, admit sourceAdmit) (string, error) {
 	var sample string
-	err := sandbox.SurveyWalk(ctx, root, sandbox.SurveyOptions{IncludeHidden: true},
+	err := sandbox.SurveyWalk(ctx, root, sandbox.SurveyOptions{IncludeHidden: true, Admit: admit, OnReadError: skipUnreadable(nil)},
 		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
 			info, err := entry.DirEntry.Info()
 			if err != nil {
@@ -72,7 +77,8 @@ func firstRegularFile(ctx context.Context, root string) (string, error) {
 				}
 				return sandbox.SurveyContinue, err
 			}
-			if info.Mode().IsRegular() {
+			// An unreadable file says nothing about what the volume can clone.
+			if info.Mode().IsRegular() && !sourceUnreadable(entry.Abs) {
 				sample = entry.Abs
 				return sandbox.SurveyStop, nil
 			}
