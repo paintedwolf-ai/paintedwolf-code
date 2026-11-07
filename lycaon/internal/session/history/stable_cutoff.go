@@ -44,7 +44,7 @@ func fitReserve(tokens int) int { return min(max(2048, tokens/16), tokens/4) }
 func fittingStart(rows []api.Message, alloc workingSetAllocation) int {
 	var used workingSetUsage
 	for i := len(rows) - 1; i >= 0; i-- {
-		if rows[i].Ord <= 0 {
+		if isProjectedHistoryMetadata(rows[i]) {
 			continue
 		}
 		used.add(rows[i])
