@@ -18,7 +18,7 @@ Do not mix read scouts and write workers in one slice when the scouts are expect
 
 ## Sizing by shape
 
-Host sizing integers are in [the orchestration procedure](references/orchestrate_a_large_task.md) (**Sizing by shape**, rendered at `skills_read`). This file is topology-only.
+Host sizing integers are in [the orchestration procedure](references/orchestrate_a_large_task.md) (**Sizing by shape**{% if profile_has_skills_read and root_count %}, rendered at `skills_read`{% endif %}). This file is topology-only.
 
 Every row above names what to count — components, root causes, configuration groups, areas, roles, approaches. That count is the wave. Prefer {% if profile_has_task %}another focused `task()` over a kitchen-sink brief, and{% endif %} a role set{% if profile_has_record_finding %} with `record_finding` sibling notes{% endif %} when complementary agents should share facts mid-flight.
 

@@ -6,7 +6,7 @@ The in-app proxy tunnels TLS bytes without replacing the origin certificate. An 
 
 ## Trust one CA for one client
 
-Scope trust to the call that needs it, as an environment variable or client flag on that `command`, never machine-wide:
+Scope trust to the call that needs it, as an environment variable or client flag {% if profile_has_command and root_count %}on that `command`{% endif %}, never machine-wide:
 
 | Client | Per-call setting |
 |---|---|
