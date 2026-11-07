@@ -44,3 +44,48 @@ func dropDerivedMidTurnNotes(messages []Message) []Message {
 	}
 	return out
 }
+
+func isPolicyFeedbackMessage(msg Message) bool {
+	if msg.Kind != MessageKindCoordinatorGuidance || msg.HostSignalID != "policy_feedback" {
+		return false
+	}
+	if IsInternalHostUserNudge(msg) {
+		return true
+	}
+	msg = NormalizeMessageProvenance(msg)
+	return msg.Role == MessageRoleSystem && msg.Visibility == MessageVisibilityInternal &&
+		msg.Origin == MessageOriginHost && msg.Authority == ContentAuthoritySystem
+}
+
+// dropConsumedPolicyFeedback removes non-blocking policy feedback advisories once a
+// subsequent assistant turn or new user intent has superseded them.
+func dropConsumedPolicyFeedback(messages []Message) []Message {
+	consumedBefore := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if (messages[i].Role == MessageRoleAssistant && !IsAgentNoteMessage(messages[i])) || IsUserIntentMessage(messages[i]) {
+			consumedBefore = i
+			break
+		}
+	}
+	if consumedBefore <= 0 {
+		return messages
+	}
+	hasConsumed := false
+	for i := 0; i < consumedBefore; i++ {
+		if isPolicyFeedbackMessage(messages[i]) {
+			hasConsumed = true
+			break
+		}
+	}
+	if !hasConsumed {
+		return messages
+	}
+	out := make([]Message, 0, len(messages))
+	for i, msg := range messages {
+		if i < consumedBefore && isPolicyFeedbackMessage(msg) {
+			continue
+		}
+		out = append(out, msg)
+	}
+	return out
+}

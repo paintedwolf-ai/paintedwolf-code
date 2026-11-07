@@ -459,3 +459,60 @@ func TestPromptRecoveryConservesInterleavedConversation(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterPromptHistoryDropsConsumedPolicyFeedbackAndKeepsTrailing(t *testing.T) {
+	feedback := func(id string) Message {
+		return Message{
+			ID: id, Role: MessageRoleUser, Origin: MessageOriginHost, Authority: ContentAuthoritySystem,
+			Visibility: MessageVisibilityInternal, Kind: MessageKindCoordinatorGuidance, HostSignalID: "policy_feedback",
+			Content: "Code: MID_TURN_NOTE_UNGROUNDED",
+		}
+	}
+	in := []Message{
+		{ID: "u1", Role: MessageRoleUser, Content: "build game"},
+		{ID: "a1", Role: MessageRoleAssistant, ToolCalls: []ToolCall{{ID: "c1", Name: "command"}}},
+		{ID: "t1", Role: MessageRoleTool, ToolResult: &ToolResult{ToolCallID: "c1", Tool: "command"}, Content: "ok"},
+		feedback("pf-consumed"),
+	}
+	// Before the next assistant turn runs, the trailing policy_feedback row stays in the prompt.
+	beforeNextAssistant := FilterPromptHistory(in)
+	if len(beforeNextAssistant) != 4 || beforeNextAssistant[3].ID != "pf-consumed" {
+		t.Fatalf("before next assistant = %+v, want trailing pf-consumed retained", beforeNextAssistant)
+	}
+	// Once a subsequent assistant turn responds, the earlier policy_feedback row is consumed and dropped,
+	// while a newly emitted trailing policy_feedback row stays active for the next step.
+	in = append(in,
+		Message{ID: "a2", Role: MessageRoleAssistant, ToolCalls: []ToolCall{{ID: "c2", Name: "command"}}},
+		Message{ID: "t2", Role: MessageRoleTool, ToolResult: &ToolResult{ToolCallID: "c2", Tool: "command"}, Content: "ok2"},
+		feedback("pf-trailing"),
+	)
+	afterNextAssistant := FilterPromptHistory(in)
+	want := []string{"u1", "a1", "t1", "a2", "t2", "pf-trailing"}
+	if len(afterNextAssistant) != len(want) {
+		t.Fatalf("len = %d want %d: %+v", len(afterNextAssistant), len(want), afterNextAssistant)
+	}
+	for i, id := range want {
+		if afterNextAssistant[i].ID != id {
+			t.Fatalf("position %d = %s want %s", i, afterNextAssistant[i].ID, id)
+		}
+	}
+
+	// Post-closeout policy_feedback committed at the end of a turn is retired as soon as the
+	// next user intent opens, including when projected to system role in a compaction view.
+	projectedCloseoutFeedback := feedback("pf-closeout")
+	projectedCloseoutFeedback.Role = MessageRoleSystem
+	nextTurn := append(afterNextAssistant[:len(afterNextAssistant)-1],
+		projectedCloseoutFeedback,
+		Message{ID: "u2", Role: MessageRoleUser, Origin: MessageOriginUser, Content: "now play a demo game"},
+	)
+	afterNewUserTurn := FilterPromptHistory(nextTurn)
+	wantNextTurn := []string{"u1", "a1", "t1", "a2", "t2", "u2"}
+	if len(afterNewUserTurn) != len(wantNextTurn) {
+		t.Fatalf("after new user turn len = %d want %d: %+v", len(afterNewUserTurn), len(wantNextTurn), afterNewUserTurn)
+	}
+	for i, id := range wantNextTurn {
+		if afterNewUserTurn[i].ID != id {
+			t.Fatalf("next turn position %d = %s want %s", i, afterNewUserTurn[i].ID, id)
+		}
+	}
+}
