@@ -83,6 +83,7 @@ func (e *AssemblyEngine) BuildKnownPrefix(ctx context.Context, sess *api.Session
 	if coordinator {
 		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
 	}
+	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, messages)
 	// Pending scan guidance is delivered only by a real turn.
 	out = llm.AppendHostSecretRedactionNotice(append(out, messages...))
 	markPromptCacheBreakpoints(out, standing, len(out)-1)

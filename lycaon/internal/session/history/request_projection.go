@@ -25,7 +25,11 @@ func isCompactionHeadRow(row api.Message, viewByID map[string]api.Message) bool 
 }
 
 func isProjectedHistoryMetadata(row api.Message) bool {
-	return isCompactionSummaryOrCheckpoint(row) || row.ID == historyCoverageNoticeID || row.ID == "host-context-trim-notice"
+	return isCompactionSummaryOrCheckpoint(row) ||
+		row.ID == historyCoverageNoticeID ||
+		row.ID == "host-context-trim-notice" ||
+		row.ID == "host-skill-procedure" ||
+		row.ID == "host-skill-pointer"
 }
 
 type interleavedFrameRow struct {
