@@ -1,9 +1,6 @@
 ---
 name: commit-in-logical-groups
 description: When the user asks to commit, split the working tree into coherent Git commits by explicit path and leave other people's uncommitted work alone.
-optional_tools:
-  - command
-  - update_progress
 ---
 
 # Commit in logical groups
@@ -19,7 +16,7 @@ Use native Git commands through `command` for inspection, staging, and commits. 
 
 ## Workflow
 
-1. **Survey once, before staging anything.** The inventory is `git status --short`, `git diff --stat`, and bounded `git log` in `command`, narrowed by path on a large tree; never a read of every hunk. Write the groups in `update_progress`, one line each, before reading any hunk, then read hunks in one batch only for files whose group is ambiguous. Note which paths this session wrote; the rest is the user's finished work or someone else's live work in a shared tree.
+1. **Survey once, before staging anything.** The inventory is `git status --short`, `git diff --stat`, and bounded `git log` in `command`, narrowed by path on a large tree; never a read of every hunk. Write the groups {% if profile_has_update_progress %}in `update_progress`, one line each,{% endif %} before reading any hunk, then read hunks in one batch only for files whose group is ambiguous. Note which paths this session wrote; the rest is the user's finished work or someone else's live work in a shared tree.
 2. **Leave what is not yours.** Work you did not write and the user has not claimed is omitted from the commit: not reverted, not stashed, not finished on their behalf. A repository-wide stash is never the way to get a clean view — it empties every concurrent worker's tree at once.
 3. **Leave live work alone even when it is yours.** A file still being changed belongs in a later commit. Half a change under a confident message is worse than no commit.
 4. **Group by the change, not by the directory.** One commit is one reason: a feature with its tests and docs, a fix with its regression, a rename across every file it touched. Generated output travels with the source that produced it. State each group in one line; if you cannot, it is more than one commit. A group that needs a hunk to describe gets that hunk read, not the whole tree.

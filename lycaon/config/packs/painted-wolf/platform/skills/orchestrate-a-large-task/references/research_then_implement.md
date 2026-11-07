@@ -35,4 +35,4 @@ Research ends when every blocking question is answered or explicitly escalated. 
 
 The decision packet, which questions were blocking, what remains open, and the verification evidence against the researched constraints.
 
-Run research and implementation in parallel only when the builder has a safe default and the research cannot invalidate work already underway. When both should run together, dispatch a role set and brief them to share via `record_finding` — see the sizing table in `references/orchestrate_a_large_task.md`.
+Run research and implementation in parallel only when the builder has a safe default and the research cannot invalidate work already underway. When both should run together, dispatch a role set and brief them to share{% if profile_has_record_finding %} via `record_finding`{% endif %} — see the sizing table in `references/orchestrate_a_large_task.md`.

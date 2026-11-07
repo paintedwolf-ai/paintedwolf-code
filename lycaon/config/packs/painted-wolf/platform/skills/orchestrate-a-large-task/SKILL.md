@@ -14,7 +14,7 @@ metadata:
 
 **Entry check:** the work has several useful worker outcomes, concurrent or dependent, or one bounded leg that benefits from isolation, a worker capability, or extra context. Keep trivial work inline.
 
-Without `task` on your surface you are a worker: apply decomposition, dependency, and verification within your own assignment and report work that needs another role to the parent. Do not dispatch, invent worker results, or widen scope.
+{% if profile_has_task %}Without `task` on your surface you are a worker:{% endif %} apply decomposition, dependency, and verification within your own assignment and report work that needs another role to the parent. Do not dispatch, invent worker results, or widen scope.
 
 ## The loop
 
@@ -23,15 +23,15 @@ Without `task` on your surface you are a worker: apply decomposition, dependency
 3. **Write the progress checklist before the first dispatch**, one row per deliverable. Rows track outcomes, not worker counts.
 4. **Choose the topology from the shape of the work**, not from available capacity. The host runs at most **{{ max_in_flight }}** legs at once.
 5. **Pick `agent_type` from the spawn roster in your prompt**, matching the leg's effect (read, product edit, test edit, review, run). An id not on the roster is rejected.
-6. **Give each `task()` one focus and a self-contained `brief`**: goal, material facts, decided constraints, concrete `done_when`. Workers cannot read this conversation or each other's files.
-7. **Keep dependent stages sequential.** `record_finding` shares short grounded findings; it is not a prerequisite channel.
+{% if profile_has_task %}6. **Give each `task()` one focus and a self-contained `brief`**: goal, material facts, decided constraints, concrete `done_when`. Workers cannot read this conversation or each other's files.{% endif %}
+7. **Keep dependent stages sequential.** {% if profile_has_record_finding %}`record_finding` shares short grounded findings; it is not a prerequisite channel.{% endif %}
 8. **Wait for every leg, inspect complete envelopes, integrate write overlays explicitly, and verify the combined result.**
 
 Stop when every checklist row is closed by an integrated overlay, an explicit rejection, or a named blocker. Repair a partial leg at most once; a second failure is a decomposition problem.
 
 ## Procedures
 
-Read the full orchestration procedure before the first dispatch; it holds the sizing table, the `task()` fields, budget requests, and the dispatch shape.
+{% if profile_has_task %}Read the full orchestration procedure before the first dispatch; it holds the sizing table, the `task()` fields, budget requests, and the dispatch shape.{% endif %}
 
 - [Orchestrate a large task](references/orchestrate_a_large_task.md): briefing, width, budgets, and integration mechanics. Topology choices: [briefs and topologies](references/orchestrate_a_large_task-briefs-and-topologies.md).
 - [Research then implement](references/research_then_implement.md): versions, APIs, standards, or unfamiliar architecture could change the build.

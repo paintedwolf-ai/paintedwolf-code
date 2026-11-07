@@ -9,7 +9,7 @@
 3. Author the progress checklist before the first dispatch — one row per deliverable, updated from worker outcomes. Do not keep a parallel prose plan. Open rows identify remaining outcomes, not a required worker count.
 4. Match the topology to the work with **Sizing by shape** below, and read [briefs and topologies](references/orchestrate_a_large_task-briefs-and-topologies.md) when choosing between scouts, staged research, responsibility fan-out, configuration fan-out, alternatives, role sets, or independent fixes. Choose coherent assignments within the available capacity.
 5. Pick each worker's `agent_type` from the spawn roster in your prompt. It is host-generated and lists every id you may pass, what each one may edit, and which run commands; an id that is not on it rejects with `DISALLOWED_AGENT`. Match the roster entry's capability to the leg's effect: reading and research, product edits, test edits, review, or running commands.
-6. Give each `task()` one focus and a self-contained `brief`: one goal, only material facts and references, decided constraints, and concrete `done_when`. Workers cannot read this conversation or each other's files.
+{% if profile_has_task %}6. Give each `task()` one focus and a self-contained `brief`: one goal, only material facts and references, decided constraints, and concrete `done_when`. Workers cannot read this conversation or each other's files.{% endif %}
 7. Set the remaining fields deliberately:
    - `files` — likely starting points only, not a reading list.
    - `scope.paths` — optional focus hints for any worker; they do not limit access or promotion.
@@ -17,7 +17,7 @@
    - `child_session_id` — only to continue the same leg with new facts or budget.
    - `scope.base_overlay_id` — only for an intentional dependency on a pending write overlay.
 8. Add a recommended worker procedure to `brief.constraints` when one listed skill clearly fits: `Recommended procedure: use the <name> skill.` This does not replace a complete brief. Do not prescribe a skill because its name is adjacent to the topic, and do not invent a task argument for skills.
-9. Keep dependent stages sequential. Workers may exchange short grounded findings via `record_finding`, but a message arriving after a design choice is not a prerequisite.
+9. Keep dependent stages sequential.{% if profile_has_record_finding %} Workers may exchange short grounded findings via `record_finding`, but a message arriving after a design choice is not a prerequisite.{% endif %}
 10. Wait for every dispatched leg, inspect complete envelopes, integrate write overlays explicitly, repair partial legs, and verify the combined result.
 
 ## Sizing by shape
@@ -32,14 +32,14 @@ Use these shapes to identify useful assignments. Group small related outputs whe
 | Independent fix set — findings partitioned by root cause | one leg per root cause, non-overlapping paths | omit; host default |
 | Configuration matrix — the same change across independent groups | one leg per group | omit; host default |
 | Hunt / breadth — unknown layout across distinct areas | one bounded read leg per area; **~{{ hunt_wave_workers }}** in a wave is ordinary when scopes do not duplicate | omit; host default |
-| Role set — one deliverable needing complementary roles | one leg per role, same wave, briefed to share via `record_finding` | omit; host default |
+| Role set — one deliverable needing complementary roles | one leg per role, same wave{% if profile_has_record_finding %}, briefed to share via `record_finding`{% endif %} | omit; host default |
 | Competing approaches — one decision, several candidate designs | one leg per approach, judged against one frozen rubric | omit; host default |
 | Deep single thread — sequential diagnosis or one assigned deep edit path that materially benefits from isolation, worker-only capability, or extra context/tool budget | 1 | ~**{{ deep_tool_loops_hint }}** |
 | Throwaway / bounded — smoke, verify, single-path check | 1 per check | **{{ throwaway_tool_loops_min }}–{{ throwaway_tool_loops_max }}** |
 
 Useful independent legs can overlap within the host cap; duration and shared resources still determine latency. The host wakes you per envelope. Start independent outcomes together; sequence legs for dependencies you can name. Use one worker when one bounded assignment is useful.
 
-`max_tool_loops` bounds a leg; it does not buy quality. A worker that needs more rounds asks with `request_budget` and names the work they cover; grant it with `extend_worker_budget` when that work is worth it, or decline it with `decline_worker_budget`. Answer promptly; the worker's final round waits for the answer. Without a grant it returns partial results and unknowns at the bound and can be resumed on the same child, so leaving the field out is the normal choice.
+`max_tool_loops` bounds a leg; it does not buy quality. A worker that needs more rounds {% if profile_has_request_budget %}asks with `request_budget` and names the work they cover{% endif %}{% if profile_has_extend_worker_budget %}; grant it with `extend_worker_budget` when that work is worth it,{% endif %}{% if profile_has_decline_worker_budget %} or decline it with `decline_worker_budget`{% endif %}. Answer promptly; the worker's final round waits for the answer. Without a grant it returns partial results and unknowns at the bound and can be resumed on the same child, so leaving the field out is the normal choice.
 
 ## Stopping rule
 

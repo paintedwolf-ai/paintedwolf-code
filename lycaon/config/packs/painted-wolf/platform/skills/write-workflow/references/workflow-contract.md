@@ -55,10 +55,10 @@ A domain leaf is refused wherever it appears — in `gates:`, after `gate_satisf
 
 | Host fact | Required tools on the resolved surface |
 |---|---|
-| Advance policy is coordinator | `workflow_advance` |
-| Phase binds HITL | `ask_user` + `wait` (+ `workflow_advance` when advance is coordinator-controlled) |
-| `review_loop:` phase block | `submit_verdict` |
-| Surface lists a progress-gated tool | `update_progress` |
+| Advance policy is coordinator | {% if profile_has_workflow_advance %}`workflow_advance`{% endif %} |
+| Phase binds HITL | {% if profile_has_ask_user %}`ask_user`{% endif %} + `wait` (+ {% if profile_has_workflow_advance %}`workflow_advance`{% endif %} when advance is coordinator-controlled) |
+| `review_loop:` phase block | {% if profile_has_submit_verdict %}`submit_verdict`{% endif %} |
+| Surface lists a progress-gated tool | {% if profile_has_update_progress %}`update_progress`{% endif %} |
 
 A `review_loop` whose `verdict_schema` has a `claims` member declares `claim_statuses`, mapping each status word to `held`, `failed`, or `open`; add `brief_label` to list the review as a check in the report. A report workflow may declare `controls.report.brief`: the rating question, the facts each rated finding answers, and the levels those answers decide, the last level without conditions.
 

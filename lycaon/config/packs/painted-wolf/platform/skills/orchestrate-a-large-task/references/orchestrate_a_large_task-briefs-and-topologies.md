@@ -12,7 +12,7 @@
 | Competing approaches | Independent alternatives against one frozen rubric | Reject losers and integrate one selected result |
 | Independent fix set | Partition by root cause and non-overlapping paths | Every finding maps to exactly one leg |
 | Integrated change needs confidence | Parallel read-only review and verification legs | Findings are resolved or reported as remaining risk |
-| Complementary facts from different roles | Role set in one wave (e.g. web + repo research, research + implement); brief `record_finding` sharing | Each role's questions have grounded notes or explicit unknowns |
+| Complementary facts from different roles | Role set in one wave (e.g. web + repo research, research + implement){% if profile_has_record_finding %}; brief `record_finding` sharing{% endif %} | Each role's questions have grounded notes or explicit unknowns |
 
 Do not mix read scouts and write workers in one slice when the scouts are expected to discover write assignments. Do not parallelize stages whose outputs determine the next stage's interface or scope.
 
@@ -20,7 +20,7 @@ Do not mix read scouts and write workers in one slice when the scouts are expect
 
 Host sizing integers are in [the orchestration procedure](references/orchestrate_a_large_task.md) (**Sizing by shape**, rendered at `skills_read`). This file is topology-only.
 
-Every row above names what to count — components, root causes, configuration groups, areas, roles, approaches. That count is the wave. Prefer another focused `task()` over a kitchen-sink brief, and prefer a role set with `record_finding` sibling notes when complementary agents should share facts mid-flight.
+Every row above names what to count — components, root causes, configuration groups, areas, roles, approaches. That count is the wave. Prefer {% if profile_has_task %}another focused `task()` over a kitchen-sink brief, and{% endif %} a role set{% if profile_has_record_finding %} with `record_finding` sibling notes{% endif %} when complementary agents should share facts mid-flight.
 
 ## Self-contained worker brief
 
