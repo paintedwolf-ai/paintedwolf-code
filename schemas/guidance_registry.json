@@ -2626,6 +2626,7 @@
       "branch_instruction": "Request receipt-based release only when needed and safe to retry",
       "category": "informational",
       "emit": "banner",
+      "severity": "info",
       "summary": "Values were sent redacted before this request left the machine."
     },
     "SECRET_REFERENCE_AGENT_USE_EXPIRED": {
@@ -3255,6 +3256,7 @@
       "branch_instruction": "Preserve the operation outcome and distinguish retained evidence from the omitted suffix",
       "category": "informational",
       "emit": "banner",
+      "severity": "info",
       "summary": "The host saved the first {{ paintedwolf.spill_bytes }} of {{ paintedwolf.original_bytes }} output bytes to {{ paintedwolf.spill_path }} at the {{ paintedwolf.cap }}-byte spill cap. Native utilities read that host path directly; an installed program cannot open it."
     },
     "TOOL_OUTPUT_SPILL_CAP_EXCEEDED": {
@@ -3273,6 +3275,7 @@
       "branch_instruction": "Preserve the recorded operation outcome and recover evidence without repeating a mutation",
       "category": "informational",
       "emit": "banner",
+      "severity": "info",
       "summary": "Tool output was shortened for the inline budget.{% if paintedwolf.spill_path %} Retained output is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes). Native utilities read that host path directly; an installed program cannot open it.{% else %} No spill file is available for the omitted output.{% endif %}"
     },
     "TOOL_OWNER_FAILED": {
@@ -3665,6 +3668,7 @@
       "branch_instruction": "Stop the current tool arc first.",
       "category": "recoverable",
       "emit": "banner",
+      "severity": "error",
       "summary": "Workflow `{{ paintedwolf.workflow_id }}` phase `{{ paintedwolf.phase }}` is satisfied but still active."
     },
     "WORKFLOW_REPORT_PHASE_REQUIRED_BEFORE_CLOSEOUT": {
