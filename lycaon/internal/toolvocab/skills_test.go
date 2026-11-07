@@ -3,9 +3,12 @@ package toolvocab_test
 import (
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 )
@@ -128,5 +131,171 @@ func TestSkillToolsOfferedAnyOfToolsDisjunction(t *testing.T) {
 	}
 	if !toolvocab.SkillToolsOffered(unmentioned, map[string]bool{"command": true, "wait": true}) {
 		t.Fatal("offered any_of member was not honored for unmentioned members")
+	}
+}
+
+// skillWithResource binds one references/*.md resource to a stock skill so
+// MarkdownResources and ReadResource resolve without a filesystem on disk.
+func skillWithResource(body, resource string) skills.Skill {
+	fsys := fstest.MapFS{
+		"pack/skills/demo/references/usage.md": &fstest.MapFile{Data: []byte(resource)},
+	}
+	sk := skills.Skill{Name: "demo", Body: body}
+	sk.BindResources(fsys, "pack/skills/demo", skills.DiscoverBundledResources(fsys, "pack/skills/demo"), "")
+	return sk
+}
+
+func validateWith(t *testing.T, catalog *toolvocab.Catalog, profile string, sk skills.Skill) error {
+	t.Helper()
+	return toolvocab.ValidateSkills(catalog, []toolvocab.AgentSurface{
+		{AgentID: "reader", ProfileID: profile, Skills: skills.Selector{All: true}},
+	}, []skills.Skill{sk})
+}
+
+func TestSkillResourceMentionsMustBeReachable(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+	unguarded := skillWithResource(
+		"Read the overview first.",
+		"Then use `capture_page` to snapshot the page.",
+	)
+	err = validateWith(t, catalog, "explore_readonly", unguarded)
+	if err == nil || !strings.Contains(err.Error(), "capture_page") || !strings.Contains(err.Error(), "references/usage.md") {
+		t.Fatalf("unreachable tool in skill resource was not rejected: %v", err)
+	}
+	guarded := skillWithResource(
+		"Read the overview first.",
+		"{% if profile_has_capture_page %}Then use `capture_page` to snapshot the page.{% endif %}",
+	)
+	if err := validateWith(t, catalog, "explore_readonly", guarded); err != nil {
+		t.Fatalf("guarded resource mention was rejected: %v", err)
+	}
+	if err := validateWith(t, catalog, "acme_narrow", guarded); err != nil {
+		t.Fatalf("guarded resource mention was rejected for a narrower profile: %v", err)
+	}
+}
+
+func TestSkillGuardedMentionsResolvePerReader(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+	guarded := skills.Skill{
+		Name: "snapshot",
+		Body: "{% if profile_has_capture_page %}Use `capture_page` for the snapshot.{% endif %}",
+	}
+	if err := validateWith(t, catalog, "explore_readonly", guarded); err != nil {
+		t.Fatalf("guarded mention was rejected for a reader without the tool: %v", err)
+	}
+	unguarded := guarded
+	unguarded.Body = "Use `capture_page` for the snapshot."
+	err = validateWith(t, catalog, "explore_readonly", unguarded)
+	if err == nil || !strings.Contains(err.Error(), "capture_page") {
+		t.Fatalf("unguarded mention was not rejected: %v", err)
+	}
+	if !strings.Contains(err.Error(), "{% if profile_has_capture_page %}") {
+		t.Fatalf("error does not point at the guard convention: %v", err)
+	}
+}
+
+func TestSkillMutatingCommandFormsNeedCommandMutation(t *testing.T) {
+	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+	testutil.FailErr(t, "build mutation effects", err)
+	readOnly, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	testutil.FailErr(t, "build read-only effects", err)
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, []sandbox.ToolProfile{
+		{ID: "mutating", Tools: map[string]bool{"command": true}, CommandEffects: mutation},
+		{ID: "readonly", Tools: map[string]bool{"command": true}, CommandEffects: readOnly},
+	}, toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+	for _, tc := range []struct {
+		profile   string
+		wantError bool
+	}{{"mutating", false}, {"readonly", true}} {
+		for _, form := range []string{"edit", "replace-lines", "jq-edit"} {
+			t.Run(tc.profile+"/"+form, func(t *testing.T) {
+				sk := skills.Skill{Name: "fixer", Body: "Run `" + form + "` to apply the change."}
+				err := validateWith(t, catalog, tc.profile, sk)
+				if (err != nil) != tc.wantError {
+					t.Fatalf("profile=%s form=%s: %v", tc.profile, form, err)
+				}
+			})
+		}
+	}
+}
+
+func TestUnreachableNamesCommandForms(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, []sandbox.ToolProfile{{ID: "stock"}}, toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+	corpus := "Run `edit`, `replace-lines`, `repo-map`, `summarize`, and `code_rewrite`."
+	for _, tc := range []struct {
+		name      string
+		reachable map[string]bool
+		want      []string
+	}{
+		{"nothing", nil, []string{"code_rewrite", "edit", "replace-lines", "repo-map", "summarize"}},
+		{"command only", map[string]bool{"command": true}, []string{"code_rewrite", "edit", "replace-lines", "repo-map", "summarize"}},
+		{"command mutation", map[string]bool{"command": true, toolvocab.ReachCommandMutation: true}, []string{"code_rewrite", "repo-map", "summarize"}},
+		{"survey tool", map[string]bool{"command": true, toolvocab.ReachCommandMutation: true, "survey_repo": true}, []string{"code_rewrite", "summarize"}},
+		{"rewrite tool", map[string]bool{"command": true, toolvocab.ReachCommandMutation: true, "code_rewrite": true}, []string{"repo-map", "summarize"}},
+		{"summarize tool", map[string]bool{"summarize": true}, []string{"code_rewrite", "edit", "replace-lines", "repo-map"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := toolvocab.UnreachableNames(catalog, corpus, tc.reachable)
+			if strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("UnreachableNames = %v, want %v", got, tc.want)
+			}
+		})
+	}
+	held := toolvocab.UnreachableNames(catalog, "Use `capture_page` when you need a snapshot.", map[string]bool{"capture_page": true})
+	if len(held) != 0 {
+		t.Fatalf("held tool reported unreachable: %v", held)
+	}
+}
+
+func TestSkillRejectsUnknownProfileHasIdentifier(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+	bogus := skills.Skill{
+		Name: "daydream",
+		Body: "{% if profile_has_bogus_tool %}Use `recall`.{% endif %}",
+	}
+	err = validateWith(t, catalog, "explore_readonly", bogus)
+	if err == nil || !strings.Contains(err.Error(), "profile_has_bogus_tool") {
+		t.Fatalf("unknown profile_has_ identifier was not rejected: %v", err)
+	}
+	inResource := skillWithResource(
+		"Read the overview.",
+		"{% if profile_has_bogus_tool %}Then continue.{% endif %}",
+	)
+	err = validateWith(t, catalog, "explore_readonly", inResource)
+	if err == nil || !strings.Contains(err.Error(), "profile_has_bogus_tool") {
+		t.Fatalf("unknown identifier in resource was not rejected: %v", err)
+	}
+	alias := skills.Skill{
+		Name: "writer",
+		Body: "{% if profile_has_write_tools %}Apply the change with `edit`.{% endif %}",
+	}
+	if err := validateWith(t, catalog, "explore_readonly", alias); err != nil {
+		t.Fatalf("write_tools alias was rejected: %v", err)
+	}
+}
+
+func TestSkillRejectsUnknownAnyOfToolsMember(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+	bogus := skills.Skill{
+		Name: "either",
+		Body: "Ask the person or wait.",
+		Metadata: map[string]string{
+			"paintedwolf.any_of_tools": "bogus_tool, capture_page",
+		},
+	}
+	err = validateWith(t, catalog, "explore_readonly", bogus)
+	if err == nil || !strings.Contains(err.Error(), "bogus_tool") {
+		t.Fatalf("unknown any_of_tools member was not rejected: %v", err)
+	}
+	real := bogus
+	real.Metadata = map[string]string{"paintedwolf.any_of_tools": "capture_page"}
+	if err := validateWith(t, catalog, "explore_readonly", real); err != nil {
+		t.Fatalf("registered any_of_tools member was rejected: %v", err)
 	}
 }
