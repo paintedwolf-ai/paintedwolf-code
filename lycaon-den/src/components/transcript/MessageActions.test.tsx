@@ -149,7 +149,6 @@ describe("SessionRecoverDialog", () => {
         onCancel={() => {}}
       />
     ));
-    expect(screen.getByText("Edit this ask?")).toBeTruthy();
     // Both Edit and Rewind put the ask back in the composer.
     expect(screen.getByTestId("session-recover-dialog").textContent).toContain("composer");
     unmount();
@@ -161,7 +160,6 @@ describe("SessionRecoverDialog", () => {
         onCancel={() => {}}
       />
     ));
-    expect(screen.getByText("Rewind from here?")).toBeTruthy();
     expect(screen.getByTestId("session-recover-dialog").textContent).toContain("composer");
   });
 

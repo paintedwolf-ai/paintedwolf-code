@@ -1,6 +1,7 @@
 package command
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -21,7 +22,7 @@ func writeLimitRefusal(w io.Writer, command, subject string, reject *toolrejecti
 	reason := "limit exceeded"
 	if catalog, err := guidance.LoadHintConfigStock(); err == nil && catalog != nil {
 		if entry, ok := catalog.HintCodes[reject.Code]; ok {
-			if what, _, _ := guidance.RenderHintFields(reject.Code, entry, reject.Data); what != "" {
+			if what, _, _ := guidance.RenderHintFields(context.Background(), reject.Code, entry, reject.Data, nil); what != "" {
 				reason = strings.TrimSuffix(strings.Join(strings.Fields(what), " "), ".")
 			}
 		}

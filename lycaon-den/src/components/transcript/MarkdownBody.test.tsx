@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
+import { assertNamedControl } from "../../test/controls.ts";
 import { Lexer, type Token } from "marked";
 import { MarkdownBody } from "./MarkdownBody.tsx";
 import {
@@ -139,7 +140,7 @@ describe("MarkdownBody", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name: "a" }));
 
     const add = await screen.findByTestId("menu-add-to-chat");
-    expect(add.textContent).toBe("Add to chat");
+    assertNamedControl(add, "menuitem");
   });
 
   it("renders file-path links as plain text when projectId is absent", () => {

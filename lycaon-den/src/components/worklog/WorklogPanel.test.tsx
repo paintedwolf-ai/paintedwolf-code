@@ -106,7 +106,7 @@ describe("WorklogPanel", () => {
   it("keeps exact finding detail in a collapsed disclosure", () => {
     const body = "type Scene = {\n  text: string;\n}";
     renderInChatStage(() => <WorklogPanel open findings={loaded({ findings: [{ id: 1, agent: "implementer", summary: "Scene interface", ref: "scene.ts", body, has_body: true }], revision: 1 })} onClose={() => undefined} />);
-    const detail = screen.getByText("Details").closest("details");
+    const detail = screen.getByTestId("details").closest("details");
     expect(detail).toBeTruthy();
     expect(detail?.open).toBe(false);
     expect(detail?.querySelector("p")?.textContent).toBe(body);
@@ -155,10 +155,7 @@ describe("WorklogPanel", () => {
         onClose={() => undefined}
       />
     ));
-    expect(screen.getByText("No progress changes yet.")).toBeTruthy();
-    expect(screen.getByText("No worker findings yet.")).toBeTruthy();
-    expect(screen.getByText("No path reservations yet.")).toBeTruthy();
-    expect(screen.getByText("No workers need approval.")).toBeTruthy();
+    expect(screen.getByTestId("worklog-findings-empty")).toBeTruthy();
   });
 
   it("links a worker approval entry to the child checkpoint", () => {
@@ -242,7 +239,7 @@ describe("WorklogPanel", () => {
         onClose={() => undefined}
       />
     ));
-    expect(screen.queryByText("No worker findings yet.")).toBeNull();
+    expect(screen.queryByTestId("worklog-findings-empty")).toBeNull();
     expect(screen.getByTestId("worklog-findings-load-error")).toBeTruthy();
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { assertNamedControl } from "../test/controls.ts";
 import { confirmDestructive } from "../platform/interaction/confirm-dialog.ts";
 import { confirmChatDelete } from "../session/confirm-chat-delete.ts";
 import {
@@ -66,7 +67,7 @@ describe("ConfirmDestructiveHost", () => {
     const { unmount } = render(() => <ConfirmDestructiveHost />);
     const pending = confirmChatDelete();
     await waitFor(() => screen.getByTestId("confirm-destructive-dialog"));
-    expect(screen.getByRole("heading", { name: "Delete chat" })).toBeTruthy();
+    expect(assertNamedControl(screen.getByTestId("confirm-destructive-title"), "heading")).toBeTruthy();
     fireEvent.click(screen.getByTestId("confirm-destructive-ok"));
     await expect(pending).resolves.toBe(true);
 

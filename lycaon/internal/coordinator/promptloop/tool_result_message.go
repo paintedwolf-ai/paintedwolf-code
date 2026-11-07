@@ -98,7 +98,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 	}
 	// Clamp after redaction so truncation cannot split a matched secret.
 	if clamp, ok := surveyreceipt.ClampSessionToolOutput(durableContent, maxBytes); ok {
-		msg := guidance.EnvelopeHintMessage(ctx, l.Closeout.Deps.HintConfig, "TOOL_SURVEY_BYTE_CLAMPED", clamp.Vars)
+		msg := guidance.EnvelopeHintMessage(ctx, l.Closeout.Deps.HintConfig, l.Closeout.Deps.HintNextSteps, "TOOL_SURVEY_BYTE_CLAMPED", clamp.Vars)
 		return toolResultProjection{
 			content: guidance.AppendOutputBanner(clamp.Output, "TOOL_SURVEY_BYTE_CLAMPED", msg),
 			limit:   agentpresence.OutputLimit{KeptEntries: clamp.KeptEntries, KeptThroughLine: clamp.KeptThroughLine},
@@ -157,7 +157,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 	hintVars := spillHintVars(out)
 	if overlayPromote {
 		hintVars["job_id"] = extractOverlayIDFromToolOutput(durableContent)
-		hint := guidance.EnvelopeHintMessage(ctx, l.Closeout.Deps.HintConfig, "OVERLAY_PROMOTE_SPILL", hintVars)
+		hint := guidance.EnvelopeHintMessage(ctx, l.Closeout.Deps.HintConfig, l.Closeout.Deps.HintNextSteps, "OVERLAY_PROMOTE_SPILL", hintVars)
 		return toolResultProjection{
 			content: guidance.AppendOutputBanner(out.Preview, "OVERLAY_PROMOTE_SPILL", hint),
 			limit:   agentpresence.OutputLimit{Spilled: true},
@@ -169,7 +169,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 		hintVars["cap"] = tooloutput.EffectiveMaxSpillFileBytes(maxSpillBytes)
 	}
 
-	hint := guidance.EnvelopeHintMessage(ctx, l.Closeout.Deps.HintConfig, hintCode, hintVars)
+	hint := guidance.EnvelopeHintMessage(ctx, l.Closeout.Deps.HintConfig, l.Closeout.Deps.HintNextSteps, hintCode, hintVars)
 	return toolResultProjection{
 		content: guidance.AppendOutputBanner(out.Preview, hintCode, hint),
 		limit:   agentpresence.OutputLimit{Spilled: true},

@@ -42,6 +42,7 @@ function LineStat(props: { added: number; removed: number }) {
   return (
     <span
       class="den-diff-group-stat"
+      data-testid="diff-group-net"
       aria-label={`${props.added} added, ${props.removed} removed`}
     >
       <span class="den-file-edit-diff-stat-add">+{props.added}</span>
@@ -139,9 +140,9 @@ export function TranscriptDiffGroup(props: Props) {
         } removed, ${writeLabel()}`}
       >
         <span class="den-diff-group-summary">
-          <span class="den-diff-group-files">{fileLabel()}</span>
+          <span class="den-diff-group-files" data-testid="diff-group-files">{fileLabel()}</span>
           <Show keyed when={summary().stat}>{stat => <LineStat added={stat.added} removed={stat.removed} />}</Show>
-          <span class="den-diff-group-writes">{writeLabel()}</span>
+          <span class="den-diff-group-writes" data-testid="diff-group-writes">{writeLabel()}</span>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
         </span>
       </TranscriptDisclosureToggle>

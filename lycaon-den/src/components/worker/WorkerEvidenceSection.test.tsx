@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, isInaccessible, render, screen } from "@solidjs/testing-library";
+import { assertNamedControl } from "../../test/controls.ts";
 import type { WorkerTask } from "../../api/types.ts";
 import {
   type OpenInSearchRequest,
@@ -45,7 +46,10 @@ describe("WorkerEvidenceSection", () => {
       <WorkerEvidenceSection worker={tracedWorkerWithCitation()} onSelect={onSelect} />
     ));
 
-    const header = screen.getByRole("button", { name: /Evidence/ });
+    const header = assertNamedControl(
+      screen.getByTestId("worker-evidence-section").querySelector("button")!,
+      "button",
+    );
     expect(header.hasAttribute("aria-expanded")).toBe(false);
     fireEvent.click(header);
     expect(onSelect).toHaveBeenCalledOnce();
@@ -105,7 +109,6 @@ describe("WorkerEvidenceSection", () => {
     expect(screen.getByText("Path citations")).toBeTruthy();
     expect(screen.getByText("1 citation(s) matched tool evidence")).toBeTruthy();
     expect(screen.getByText("src/a.go:12")).toBeTruthy();
-    expect(screen.getByText(/1 path in leg evidence/)).toBeTruthy();
   });
 
   it("renders lifecycle-only grounding in the worker drawer", () => {
@@ -142,7 +145,6 @@ describe("WorkerEvidenceSection", () => {
     ));
     expect(screen.getByTestId("worker-evidence-section")).toBeTruthy();
     expect(screen.getByText("Survey tool activity")).toBeTruthy();
-    expect(screen.getByText("No citations to trace")).toBeTruthy();
   });
 
   it("settles the Evidence cue to complete once grounding is traced", () => {

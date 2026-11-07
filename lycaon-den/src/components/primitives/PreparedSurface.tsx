@@ -28,7 +28,7 @@ export function PreparedSurface(props: {
         <PresentationProvider preparation={preparation}>{props.children}</PresentationProvider>
       </div>
       <Show when={waiting()}>
-        <div class="den-presentation-wait" role="status">
+        <div class="den-presentation-wait" role="status" data-testid={`${props.name}-wait`}>
           {props.waiting ?? preparation.notice()?.message ?? "Loading…"}
         </div>
       </Show>

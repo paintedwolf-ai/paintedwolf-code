@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -71,7 +72,7 @@ describe("ContributionCommandFlow", () => {
         onBack={vi.fn()} onClose={vi.fn()} />);
       target = { ...target, path: "other.ts", document_revision: 5 };
       fireEvent.input(screen.getByLabelText("Title *"), { target: { value: "Review" } });
-      fireEvent.click(screen.getByRole("button", { name: "Run" }));
+      fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-run"), "button"));
       await waitFor(() => expect(invokeProjectCommand).toHaveBeenCalledOnce());
       expect(invokeProjectCommand).toHaveBeenCalledWith("p1", command.id,
         expect.objectContaining({ context: { root_id: "root", path: "chosen.ts", document_revision: 4 } }));
@@ -120,7 +121,7 @@ describe("ContributionCommandFlow", () => {
     fireEvent.input(title, { target: { value: "Ship it" } });
     fireEvent.click(screen.getByLabelText("Priority"));
     fireEvent.click(screen.getByRole("option", { name: "high" }));
-    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-run"), "button"));
 
     await waitFor(() => expect(invokeProjectCommand).toHaveBeenCalledOnce());
     expect(invokeProjectCommand).toHaveBeenCalledWith(
@@ -131,9 +132,9 @@ describe("ContributionCommandFlow", () => {
     const output = await screen.findByTestId("contribution-command-output");
     expect(output.textContent).toContain("<img src=x");
     expect(output.querySelector("img")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("copy"), "button"));
     expect(clipboard.copy).toHaveBeenCalledWith(`<img src=x onerror="alert(1)">`);
-    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-result-back"), "button"));
     expect(onBack).toHaveBeenCalledOnce();
     expect(invokeProjectCommand).toHaveBeenCalledOnce();
   });
@@ -151,7 +152,7 @@ describe("ContributionCommandFlow", () => {
         onClose={vi.fn()}
       />
     ));
-    fireEvent.click(screen.getByLabelText("Back to results"));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-back"), "button"));
     expect(onBack).toHaveBeenCalledOnce();
     expect(invokeProjectCommand).not.toHaveBeenCalled();
   });
@@ -191,19 +192,18 @@ describe("ContributionCommandFlow", () => {
     ));
 
     expect(resolveContributionChoices).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Load choices" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-load-choices"), "button"));
     const choice = await screen.findByLabelText("Repository one");
     fireEvent.click(choice);
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    const backButtons = screen.getAllByRole("button", { name: "Back" });
-    fireEvent.click(backButtons[backButtons.length - 1]!);
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-step-primary"), "button"));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-step-back"), "button"));
     expect((screen.getByLabelText("Repository one") as HTMLInputElement).checked).toBe(true);
     expect(resolveContributionChoices).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-step-primary"), "button"));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-step-primary"), "button"));
     await screen.findByRole("alert");
     fireEvent.click(screen.getByRole("checkbox"));
-    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-step-primary"), "button"));
     await waitFor(() => expect(invokeProjectCommand).toHaveBeenCalledOnce());
     expect(invokeProjectCommand).toHaveBeenCalledWith(
       "p1",
@@ -255,15 +255,14 @@ describe("ContributionCommandFlow", () => {
     ));
 
     fireEvent.click(screen.getByLabelText("Organization A"));
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Load choices" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-step-primary"), "button"));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-load-choices"), "button"));
     const firstSignal = resolveContributionChoices.mock.calls[0]?.[4] as AbortSignal;
-    const backButtons = screen.getAllByRole("button", { name: "Back" });
-    fireEvent.click(backButtons[backButtons.length - 1]!);
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-step-back"), "button"));
     fireEvent.click(screen.getByLabelText("Organization B"));
     expect(firstSignal.aborted).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.click(screen.getByRole("button", { name: "Load choices" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-step-primary"), "button"));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-load-choices"), "button"));
 
     resolveFirst({ frame_revision: "frame-1", provider: "tracker", choices: [{ id: "old", label: "Old repository" }] });
     await Promise.resolve();
@@ -318,7 +317,7 @@ describe("input field values", () => {
     const field = document.querySelector('input[type="number"]') as HTMLInputElement;
     expect(field).toBeTruthy();
     fireEvent.input(field, { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("contribution-command-run"), "button"));
     await screen.findByRole("alert");
     expect(invokeProjectCommand).not.toHaveBeenCalled();
   });

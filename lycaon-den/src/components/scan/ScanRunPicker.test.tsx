@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CodeScan } from "../../api/types.ts";
 import { ScanRunPicker } from "./ScanRunPicker.tsx";
+import { assertNamedControl } from "../../test/controls.ts";
 
 const SCANS: CodeScan[] = [
   {
@@ -55,7 +56,7 @@ describe("ScanRunPicker", () => {
 
     const trigger = screen.getByTestId("scans-run-picker");
     fireEvent.keyDown(trigger, { key: "ArrowDown" });
-    const listbox = await screen.findByRole("listbox", { name: "Scan runs" });
+    const listbox = assertNamedControl(await screen.findByTestId("scans-run-listbox"), "listbox");
     await waitFor(() => expect(document.activeElement).toBe(listbox));
     expect(listbox.getAttribute("aria-activedescendant")).toContain("option-0");
 
@@ -63,7 +64,7 @@ describe("ScanRunPicker", () => {
     expect(listbox.getAttribute("aria-activedescendant")).toContain("option-1");
     fireEvent.keyDown(listbox, { key: "Enter" });
     expect(onSelect).toHaveBeenCalledWith("scan-2");
-    expect(screen.queryByRole("listbox", { name: "Scan runs" })).toBeNull();
+    expect(screen.queryByTestId("scans-run-listbox")).toBeNull();
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
@@ -85,7 +86,7 @@ describe("ScanRunPicker", () => {
     ));
     const trigger = screen.getByTestId("scans-run-picker");
     fireEvent.click(trigger);
-    const listbox = await screen.findByRole("listbox", { name: "Scan runs" });
+    const listbox = assertNamedControl(await screen.findByTestId("scans-run-listbox"), "listbox");
     fireEvent.keyDown(listbox, { key: "Escape" });
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
@@ -115,14 +116,14 @@ describe("ScanRunPicker", () => {
     ));
 
     fireEvent.click(screen.getByTestId("scans-run-picker"));
-    const runs = await screen.findByRole("listbox", { name: "Scan runs" });
+    const runs = assertNamedControl(await screen.findByTestId("scans-run-listbox"), "listbox");
 
     fireEvent.scroll(transcript!);
     expect(runs.isConnected).toBe(true);
 
     fireEvent.scroll(stage!);
     await waitFor(() =>
-      expect(screen.queryByRole("listbox", { name: "Scan runs" })).toBeNull(),
+      expect(screen.queryByTestId("scans-run-listbox")).toBeNull(),
     );
   });
 
@@ -144,17 +145,15 @@ describe("ScanRunPicker", () => {
     ));
 
     fireEvent.click(screen.getByTestId("scans-run-picker"));
-    const runs = await screen.findByRole("listbox", { name: "Scan runs" });
+    const runs = assertNamedControl(await screen.findByTestId("scans-run-listbox"), "listbox");
     fireEvent.click(screen.getByTestId("scans-history-sort"));
-    const sort = await screen.findByRole("listbox", {
-      name: "Sort scan history",
-    });
+    const sort = assertNamedControl(await screen.findByTestId("den-select-listbox"), "listbox");
 
     fireEvent.keyDown(sort, { key: "Escape" });
 
     await waitFor(() =>
       expect(
-        screen.queryByRole("listbox", { name: "Sort scan history" }),
+        screen.queryByTestId("den-select-listbox"),
       ).toBeNull(),
     );
     expect(runs.isConnected).toBe(true);

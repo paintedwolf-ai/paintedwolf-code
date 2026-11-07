@@ -38,7 +38,7 @@ func TestExecuteToolCallsInTurnHostDecoratedCycleTerminator(t *testing.T) {
 
 			enricher := guidance.NewToolOutputEnricher(&guidance.HintConfig{HintCodes: map[string]guidance.HintEntry{
 				"SPEC_POSTURE_PROGRESS": {Message: "progress {{.progress}}"},
-			}}, nil)
+			}}, nil, nil)
 			loop := NewPromptLoopForTest(PromptLoopDeps{
 				Context: ContextDeps{
 					Tools: reg,

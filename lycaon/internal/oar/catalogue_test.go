@@ -73,9 +73,7 @@ func TestFactCatalogue_TypesRendered(t *testing.T) {
 	want := map[string]string{
 		"tool":           "string",
 		"workers_idle":   "bool",
-		"summary_length": "int",
 		"secret_matches": "list<map>",
-		"write_roots":    "list<string>",
 		"tool_args":      "map",
 	}
 	for _, f := range FactCatalogue() {

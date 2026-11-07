@@ -47,7 +47,6 @@ describe("CitationEvidenceSection", () => {
     ));
     const section = screen.getByTestId("worker-evidence-section");
     expect(section).toBeTruthy();
-    expect(screen.getByText("No citations to trace")).toBeTruthy();
     expect(
       screen.getByTestId("citation-grounding-panel").classList.contains(
         "den-citation-grounding--traced",

@@ -63,8 +63,6 @@ var factDecls = []factDecl{
 	{"operation", oarcore.TypeString, FactTierHost, ""},
 	{"response_tools_callable", oarcore.TypeBool, FactTierHost, ""},
 	{"response_structured_output", oarcore.TypeBool, FactTierHost, ""},
-	{"tool_turn_has_text", oarcore.TypeBool, FactTierHost, ""},
-	{"tool_turn_has_agent_note", oarcore.TypeBool, FactTierHost, ""},
 	{"unpublished_tool_text_pending", oarcore.TypeBool, FactTierHost, ""},
 	{"mid_turn_citations_required", oarcore.TypeBool, FactTierHost, ""},
 	{"mid_turn_citation_attempted", oarcore.TypeBool, FactTierHost, ""},
@@ -79,7 +77,6 @@ var factDecls = []factDecl{
 	{"worker_spawn_blocked", oarcore.TypeBool, FactTierHost, ""},
 	{"active_worker_count", oarcore.TypeInt, FactTierHost, ""},
 	{"pending_overlay_promote", oarcore.TypeBool, FactTierHost, ""},
-	{"overlay_state", oarcore.TypeString, FactTierHost, ""},
 	{"surface_may_finish", oarcore.TypeBool, FactTierHost, ""},
 	{"is_host_cycle_turn", oarcore.TypeBool, FactTierHost, ""},
 	{"batch_phase", oarcore.TypeString, FactTierHost, ""},
@@ -105,13 +102,10 @@ var factDecls = []factDecl{
 	{"progress_reconciled_since_arm", oarcore.TypeBool, FactTierHost, ""},
 	{"pending_user_input", oarcore.TypeBool, FactTierHost, ""},
 	{"stub_valid", oarcore.TypeBool, FactTierHost, ""},
-	{"tool_allowed_for_profile", oarcore.TypeBool, FactTierHost, ""},
-	{"write_roots", oarcore.TypeListString, FactTierHost, ""},
 	{"pattern_parse_ok", oarcore.TypeBool, FactTierHost, ""},
 	{"arg_validation_errors", oarcore.TypeListString, FactTierStandard, ProfileTool},
 	{"arg_validation_reason", oarcore.TypeString, FactTierStandard, ProfileTool},
 	{"arg_validation_field", oarcore.TypeString, FactTierStandard, ProfileTool},
-	{"action_host_resources", oarcore.TypeListString, FactTierHost, ""},
 	{"action_host_resource_denials", oarcore.TypeListString, FactTierHost, ""},
 	{"confine_applied", oarcore.TypeBool, FactTierHost, ""},
 	{"network_mode", oarcore.TypeString, FactTierHost, ""},
@@ -119,10 +113,6 @@ var factDecls = []factDecl{
 	{"confine_signals", oarcore.TypeListString, FactTierHost, ""},
 	{"failed_stages", oarcore.TypeListString, FactTierHost, ""},
 	{"process_running", oarcore.TypeBool, FactTierHost, ""},
-	{"process_timed_out", oarcore.TypeBool, FactTierHost, ""},
-	{"process_stopped", oarcore.TypeBool, FactTierHost, ""},
-	{"process_exited", oarcore.TypeBool, FactTierHost, ""},
-	{"sandbox_refusals", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_write_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_write_grants", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_read_paths", oarcore.TypeListString, FactTierHost, ""},
@@ -131,7 +121,6 @@ var factDecls = []factDecl{
 	{"receiving_tool_summarize", oarcore.TypeBool, FactTierHost, ""},
 	{"refused_terminal_read_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_terminal_write_paths", oarcore.TypeListString, FactTierHost, ""},
-	{"sandbox_refusal_witness", oarcore.TypeString, FactTierHost, ""},
 	{"refused_socket_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_connect_ports", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_listen_ports", oarcore.TypeListString, FactTierHost, ""},
@@ -140,30 +129,20 @@ var factDecls = []factDecl{
 	{"worktree_stale_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"worktree_leftover_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"worktree_conflict_paths", oarcore.TypeListString, FactTierHost, ""},
-	{"mode_bits", oarcore.TypeString, FactTierHost, ""},
 	{"tool_args_fingerprint", oarcore.TypeString, FactTierStandard, ProfileTool},
-	{"posture_unresolved", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_state", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_delegation", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_task", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_payload_chunkable", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_handoff", oarcore.TypeBool, FactTierHost, ""},
-	{"pack_runner_task", oarcore.TypeBool, FactTierHost, ""},
-	{"agent_is_plan_writer", oarcore.TypeBool, FactTierHost, ""},
-	{"disallowed_agent", oarcore.TypeBool, FactTierHost, ""},
-	{"plan_awaiting_approval", oarcore.TypeBool, FactTierHost, ""},
 	{"unobserved_cited_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"unobserved_cited_urls", oarcore.TypeListString, FactTierHost, ""},
 	{"unobserved_cited_handles", oarcore.TypeListString, FactTierHost, ""},
-	{"citation_fields_present", oarcore.TypeBool, FactTierHost, ""},
 	{"claims_completion", oarcore.TypeBool, FactTierHost, ""},
 	{"has_matching_ledger_job", oarcore.TypeBool, FactTierHost, ""},
-	{"ledger_criteria_met", oarcore.TypeBool, FactTierHost, ""},
 	{"worker_summary_present", oarcore.TypeBool, FactTierHost, ""},
 	{"worker_artifact_present", oarcore.TypeBool, FactTierHost, ""},
 	{"worker_artifact_measured", oarcore.TypeBool, FactTierHost, ""},
-	{"files_touched", oarcore.TypeListString, FactTierHost, ""},
-	{"summary_length", oarcore.TypeInt, FactTierHost, ""},
 	{"repeat_count", oarcore.TypeInt, FactTierHost, ""},
 	{"fruitless_search_run", oarcore.TypeInt, FactTierHost, ""},
 	{"breaker_count", oarcore.TypeInt, FactTierCore, ""},
@@ -177,7 +156,6 @@ var factDecls = []factDecl{
 	{"verdict_delay_count", oarcore.TypeInt, FactTierHost, ""},
 	{"closeout_gates_open", oarcore.TypeBool, FactTierHost, ""},
 	{"closeout_gate_open_leaves", oarcore.TypeString, FactTierHost, ""},
-	{"closeout_gate_delay_count", oarcore.TypeInt, FactTierHost, ""},
 	{"workflow_report_phase_pending", oarcore.TypeBool, FactTierHost, ""},
 	{"phase_obligation_pending", oarcore.TypeBool, FactTierHost, ""},
 	{"phase_obligation_kinds", oarcore.TypeString, FactTierHost, ""},
@@ -227,7 +205,6 @@ var factDecls = []factDecl{
 	{"reject_observation", oarcore.TypeString, FactTierHost, ""},
 	{"rejection_code", oarcore.TypeString, FactTierHost, ""},
 	{"secret_matches", oarcore.TypeListMap, FactTierStandard, ProfileSecrets},
-	{"recent_tool_names", oarcore.TypeListString, FactTierHost, ""},
 	{"mcp_provider_id", oarcore.TypeString, FactTierStandard, ProfileMCP},
 	{"mcp_tool_name", oarcore.TypeString, FactTierStandard, ProfileMCP},
 	{"mcp_qualified_tool", oarcore.TypeString, FactTierStandard, ProfileMCP},
@@ -267,9 +244,6 @@ var observationFns = []observationFn{
 	{"path_outside_scope", oarcore.TypeBool, FactTierStandard, ProfileFilesystem, func(h *evalHolder, s string) any {
 		return EvalPathOutsideScope(h.get(), s)
 	}},
-	{"source_includes", oarcore.TypeBool, FactTierHost, "", func(h *evalHolder, s string) any {
-		return EvalSourceIncludes(h.get(), s)
-	}},
 	// Typed accessors expose heterogeneous tool arguments ([OAR-EXPR-19]).
 	{"tool_arg_string", oarcore.TypeString, FactTierStandard, ProfileTool, func(h *evalHolder, s string) any {
 		return EvalToolArgString(h.get(), s)
@@ -298,12 +272,6 @@ var observationFns = []observationFn{
 	}},
 	{"mcp_field_int", oarcore.TypeInt, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
 		return EvalMCPFieldInt(h.get(), s)
-	}},
-	{"host_resource_status_for", oarcore.TypeString, FactTierHost, "", func(h *evalHolder, s string) any {
-		return EvalHostResourceStatus(h.get(), s)
-	}},
-	{"host_resource_policy_for", oarcore.TypeString, FactTierHost, "", func(h *evalHolder, s string) any {
-		return EvalHostResourcePolicy(h.get(), s)
 	}},
 }
 

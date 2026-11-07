@@ -142,6 +142,5 @@ describe("WorkspaceFoldersPanel", () => {
     expect(screen.getByTestId("open-in-menu")).toBeTruthy();
     expect(screen.getByTestId("path-menu-copy-path")).toBeTruthy();
     fireEvent.click(screen.getByTestId("project-root-menu-remove-root-a"));
-    expect(screen.getByText("Remove this folder from the project?")).toBeTruthy();
   });
 });

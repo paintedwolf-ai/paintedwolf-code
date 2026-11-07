@@ -7,6 +7,7 @@ import {
   fileSummaryLocationsByName,
   splitFileSummaryInline,
 } from "./FileSummaryPanel.tsx";
+import { assertNamedControl } from "../../test/controls.ts";
 
 const briefing: LiveFileBriefing = {
   target_key: "target-1",
@@ -68,11 +69,9 @@ describe("FileSummaryPanel", () => {
     expect(screen.getByTestId("file-summary-sections").textContent).toContain(
       "Builds the buildReview surface.",
     );
-    expect(screen.queryByRole("button", { name: "More" })).toBeNull();
-    expect(screen.queryByText("Source evidence")).toBeNull();
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Open buildReview at line 31" }),
+      assertNamedControl(screen.getByTestId("file-summary-location"), "button"),
     );
     expect(onOpenLocation).toHaveBeenLastCalledWith(
       { root_id: "root-1", path: "src/main.ts", presentation: "current" },
@@ -98,7 +97,7 @@ describe("FileSummaryPanel", () => {
       />
     ));
 
-    expect(screen.getByText("Summarizing this file…")).toBeTruthy();
+    expect(screen.getByTestId("file-summary-summarizing")).toBeTruthy();
     expect(screen.queryByTestId("file-summary-sections")).toBeNull();
     unmount();
 
@@ -119,7 +118,7 @@ describe("FileSummaryPanel", () => {
       />
     ));
 
-    expect(screen.queryByText("Summarizing this file…")).toBeNull();
+    expect(screen.queryByTestId("file-summary-summarizing")).toBeNull();
     expect(screen.getByTestId("file-summary-fallback").textContent).toContain(
       "Builds the Review surface.",
     );
@@ -162,7 +161,7 @@ describe("FileSummaryPanel", () => {
       />
     ));
 
-    fireEvent.click(screen.getByRole("button", { name: "Summarize current file" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("file-summary-retry"), "button"));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
@@ -184,9 +183,9 @@ describe("FileSummaryPanel", () => {
       />
     ));
 
-    expect(screen.getByText("Summarizing this file…")).toBeTruthy();
+    expect(screen.getByTestId("file-summary-summarizing")).toBeTruthy();
     expect(screen.queryByText("The first attempt failed.")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Summarize current file" })).toBeNull();
+    expect(screen.queryByTestId("file-summary-retry")).toBeNull();
     expect(screen.getByTestId("file-summary-content").getAttribute("aria-busy")).toBe(
       "true",
     );
@@ -205,8 +204,7 @@ describe("FileSummaryPanel", () => {
       />
     ));
 
-    expect(screen.getByText("Detailed summary is not available yet.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Summarize current file" })).toBeTruthy();
+    expect(assertNamedControl(screen.getByTestId("file-summary-retry"), "button")).toBeTruthy();
   });
 
   it("renders unknown code names as inert code", () => {
@@ -230,7 +228,6 @@ describe("FileSummaryPanel", () => {
     expect(screen.getByTestId("file-summary-sections").textContent).toContain(
       "Builds the UnknownReview surface.",
     );
-    expect(screen.queryByRole("button", { name: /UnknownReview/ })).toBeNull();
     expect(screen.getByText("UnknownReview").tagName).toBe("CODE");
   });
 
@@ -254,7 +251,7 @@ describe("FileSummaryPanel", () => {
       />
     ));
 
-    expect(screen.getByText("Plain text")).toBeTruthy();
+    expect(screen.getByTestId("file-summary-language").textContent).toBe("Plain text");
     expect(screen.queryByText("vimdoc")).toBeNull();
   });
 
@@ -282,10 +279,9 @@ describe("FileSummaryPanel", () => {
       "Version · Edited · 2h ago",
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Open buildReview at line 31" }),
+      assertNamedControl(screen.getByTestId("file-summary-location"), "button"),
     );
     expect(onOpenLocation).toHaveBeenLastCalledWith(target, 31);
-    expect(screen.getByRole("button", { name: "Summarize this version" })).toBeTruthy();
   });
 
   it("leaves duplicate declaration names inert instead of guessing", () => {

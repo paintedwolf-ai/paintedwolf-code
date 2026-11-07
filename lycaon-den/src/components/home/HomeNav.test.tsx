@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
+import { assertNamedControl } from "../../test/controls.ts";
 import { HomeNav } from "./HomeNav.tsx";
 
 describe("HomeNav", () => {
@@ -13,7 +14,7 @@ describe("HomeNav", () => {
         draftCount={0}
       />
     ));
-    expect(screen.getByRole("navigation", { name: "Main" })).toBeTruthy();
+    expect(assertNamedControl(screen.getByTestId("home-nav"), "navigation")).toBeTruthy();
   });
 
   it("marks Search active and clears Recents while search is open", () => {

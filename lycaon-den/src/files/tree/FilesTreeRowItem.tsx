@@ -297,6 +297,7 @@ export function FileEntryRow(props: {
             tabindex={-1}
             aria-label={`More actions for ${row().name}`}
             aria-haspopup="menu"
+            data-testid="files-tree-more-actions"
             onClick={(e) =>
               ctx.openRowMenu(e, {
                 surface: "tree-row",

@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { BrowseOverflowMenu } from "./BrowseOverflowMenu.tsx";
@@ -8,7 +9,7 @@ describe("BrowseOverflowMenu", () => {
     render(() => <BrowseOverflowMenu items={[{
       label: "Open in", submenu: [{ label: "External editor", onSelect }],
     }]} />);
-    const trigger = screen.getByRole("button", { name: "More" });
+    const trigger = assertNamedControl(screen.getByTestId("browse-overflow-trigger"), "button");
     fireEvent.keyDown(trigger, { key: "F10", shiftKey: true });
     const parent = await screen.findByRole("menuitem", { name: "Open in" });
     await waitFor(() => expect(document.activeElement).toBe(parent));
