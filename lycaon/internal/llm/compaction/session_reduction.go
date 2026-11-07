@@ -117,7 +117,7 @@ func oldestCompactionPrefix(rows []ContextMessage, limit int) []ContextMessage {
 		return rows
 	}
 	end := limit
-	if target := rows[end-1].DraftRecoveryTarget; target != "" {
+	if target := rows[end-1].DraftRecoveryTarget; target != "" { //nolint:gosec // G602 — the guard above returns when len(rows) <= limit, so end-1 stays within rows.
 		for end < len(rows) && rows[end].DraftRecoveryTarget == target {
 			end++
 		}
