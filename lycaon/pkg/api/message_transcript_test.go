@@ -501,7 +501,8 @@ func TestFilterPromptHistoryDropsConsumedPolicyFeedbackAndKeepsTrailing(t *testi
 	// next user intent opens, including when projected to system role in a compaction view.
 	projectedCloseoutFeedback := feedback("pf-closeout")
 	projectedCloseoutFeedback.Role = MessageRoleSystem
-	nextTurn := append(afterNextAssistant[:len(afterNextAssistant)-1],
+	nextTurn := append([]Message{}, afterNextAssistant[:len(afterNextAssistant)-1]...)
+	nextTurn = append(nextTurn,
 		projectedCloseoutFeedback,
 		Message{ID: "u2", Role: MessageRoleUser, Origin: MessageOriginUser, Content: "now play a demo game"},
 	)
