@@ -49,8 +49,15 @@ func TestRenderPersonaIsDeterministic(t *testing.T) {
 
 // TestRenderPersonaConcurrentSafe stresses shared render caches.
 func TestRenderPersonaConcurrentSafe(t *testing.T) {
+	testutil.SkipIfShort(t, "concurrent persona render stress")
+	// The first render resolves the prompt catalog from device state, taking
+	// a cross-process extension lock whose retry deadline collapses on the
+	// bubble's fake clock. Warm the catalog outside the bubble so renders
+	// inside it are cache hits.
+	if _, err := prompts.RenderPersona(context.Background(), prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}), "implementer", nil); err != nil {
+		t.Fatalf("warm persona render: %v", err)
+	}
 	synctest.Test(t, func(t *testing.T) {
-		testutil.SkipIfShort(t, "concurrent persona render stress")
 		prompts.ResetPersonaContractCache()
 		engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 		ctx := t.Context()
