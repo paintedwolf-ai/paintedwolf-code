@@ -100,6 +100,12 @@ host_facts:
    type: string
  - name: paintedwolf.rejection_field
    type: string
+ - name: paintedwolf.shell_metacharacters
+   type: bool
+ - name: paintedwolf.reissue_via_command
+   type: bool
+ - name: paintedwolf.env_assignment
+   type: bool
  - name: paintedwolf.mime
    type: string
  - name: paintedwolf.missing_required_arguments
@@ -704,10 +710,6 @@ host_facts:
    type: bool
  - name: paintedwolf.failure_count_known
    type: bool
- - name: paintedwolf.use_env_param
-   type: bool
- - name: paintedwolf.use_cwd_param
-   type: bool
  - name: paintedwolf.env_var
    type: string
  - name: paintedwolf.argument_schema_tool
@@ -1094,8 +1096,6 @@ host_facts:
    type: string
  - name: paintedwolf.supplied
    type: string
- - name: paintedwolf.terminal_capture
-   type: bool
  - name: paintedwolf.threshold
    type: string
  - name: paintedwolf.timeout_ms
@@ -1109,12 +1109,6 @@ host_facts:
  - name: paintedwolf.directory_change
    type: bool
  - name: paintedwolf.unpaginated_survey
-   type: bool
- - name: paintedwolf.use_background_param
-   type: bool
- - name: paintedwolf.use_pipeline_array
-   type: bool
- - name: paintedwolf.use_stdin_param
    type: bool
  - name: paintedwolf.unused_fields
    type: string
