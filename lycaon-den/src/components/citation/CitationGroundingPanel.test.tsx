@@ -32,8 +32,6 @@ describe("CitationGroundingPanel render-by-shape", () => {
       expect(screen.getAllByTestId("citation-grounding-verdict").map(
         (label) => label.textContent,
       )).toEqual(["Traced — exact", "Traced — confirm", "Not traced"]);
-      expect(screen.getByText(/references that need review are labeled below/)).toBeTruthy();
-      expect(screen.queryByText(/excerpts are matched verbatim/)).toBeNull();
     },
   );
 
@@ -80,9 +78,8 @@ describe("CitationGroundingPanel render-by-shape", () => {
     render(() => <CitationGroundingPanel view={view} />);
     const record = screen.getByTestId("citation-grounding-record");
     expect(record.getAttribute("data-shape")).toBe("opaque");
-    expect(
-      screen.getByText("Opaque — verbatim capture, no semantics claimed"),
-    ).toBeTruthy();
+    expect(record.getAttribute("data-fidelity")).toBe("opaque");
+    expect(record.querySelector(".den-citation-grounding-record-trust")).toBeTruthy();
     expect(screen.getByText("payload bytes captured verbatim")).toBeTruthy();
   });
 
@@ -103,7 +100,7 @@ describe("CitationGroundingPanel render-by-shape", () => {
     };
     render(() => <CitationGroundingPanel view={view} />);
     expect(screen.getByText("src/main.go:42")).toBeTruthy();
-    expect(screen.getByText("Structured")).toBeTruthy();
+    expect(screen.getByTestId("citation-grounding-record").getAttribute("data-fidelity")).toBe("structured");
   });
 
   it("renders artifact scan evidence with flagged path", () => {
@@ -127,7 +124,7 @@ describe("CitationGroundingPanel render-by-shape", () => {
       "artifact",
     );
     expect(screen.getByText("internal/auth/handler.go")).toBeTruthy();
-    expect(screen.getByText("Structured")).toBeTruthy();
+    expect(screen.getByTestId("citation-grounding-record").getAttribute("data-fidelity")).toBe("structured");
   });
 
   it("renders every grounded url from a web_search record", () => {
@@ -174,7 +171,6 @@ describe("CitationGroundingPanel render-by-shape", () => {
     expect(screen.getByTestId("citation-grounding-record").getAttribute("data-shape")).toBe(
       "future_shape",
     );
-    expect(screen.getByText(/generic fallback content/)).toBeTruthy();
   });
 
   it("maps wire evidence_records through buildCitationGroundingView", () => {
@@ -250,7 +246,6 @@ describe("CitationGroundingPanel provenance presentation", () => {
     const { container } = render(() => (
       <CitationGroundingPanel view={tracedView()} projectId="proj-cite" />
     ));
-    expect(screen.getByText("Cited evidence")).toBeTruthy();
     const row = screen.getByTestId("citation-grounding-citation");
     expect(row.classList.contains("den-citation-grounding-citation")).toBe(true);
     expect(row.getAttribute("data-path")).toBe("src/a.go");

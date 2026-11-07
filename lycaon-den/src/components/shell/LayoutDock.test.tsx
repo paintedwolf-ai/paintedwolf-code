@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { readSourceText } from "../../test/stylesheet-source.ts";
 import { render, screen } from "@solidjs/testing-library";
 
@@ -174,7 +175,7 @@ describe("LayoutDockTray", () => {
     const onSwapColumns = vi.fn();
     const onToggleOrientation = vi.fn();
     const view = renderTray({ splitLive: true, onSwapColumns, onToggleOrientation });
-    screen.getByRole("button", { name: "Swap chat and context" }).click();
+    assertNamedControl(screen.getByTestId("layout-swap-columns"), "button").click();
     expect(onSwapColumns).toHaveBeenCalledOnce();
     expect(onToggleOrientation).not.toHaveBeenCalled();
     view.unmount();

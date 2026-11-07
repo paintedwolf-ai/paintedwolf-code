@@ -129,7 +129,7 @@ export function SecurityFindingsRunsStage(props: SecurityFindingsRunsStageProps)
   return (
     <>
       <Show when={props.loadError}>
-        <DenButton variant="link" onClick={props.onRetryLoading}>
+        <DenButton data-testid="retry-loading" variant="link" onClick={props.onRetryLoading}>
           Retry loading
         </DenButton>
       </Show>

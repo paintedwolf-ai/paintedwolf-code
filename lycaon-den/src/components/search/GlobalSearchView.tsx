@@ -393,7 +393,7 @@ export function GlobalSearchView(props: Props) {
         </div>
       </BrowseStagePanel>
       <Show when={showRetainedWait()}>
-        <div class="den-presentation-wait" role="status">
+        <div class="den-presentation-wait" role="status" data-testid="search-updating">
           Updating results…
         </div>
       </Show>

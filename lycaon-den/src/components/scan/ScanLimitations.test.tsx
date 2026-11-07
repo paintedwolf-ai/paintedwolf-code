@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import type { CodeScan } from "../../api/types.ts";
@@ -18,17 +19,16 @@ describe("ScanLimitations", () => {
       })),
     }));
     render(() => <ScanLimitations projectId="project" scan={limited} client={{ getCodeScan: loadFull }} />);
-    expect(screen.getByRole("button", { name: "Analysis issues · 100" })).toBeTruthy();
+    const issuesTrigger = assertNamedControl(screen.getByTestId("scans-issues-trigger"), "button");
+    expect(issuesTrigger.textContent).toContain("100");
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
     expect(loadFull).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Analysis issues · 100" }));
-    expect(await screen.findByText(/source-0.py:7/)).toBeTruthy();
+    fireEvent.click(issuesTrigger);
+    await screen.findByText(/source-0\.py:7/);
     expect(loadFull).toHaveBeenCalledWith("project", "scan", "full");
     expect(screen.getAllByRole("listitem")).toHaveLength(21);
-    expect(screen.queryByText(/source-20.py:7/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(await screen.findByText(/source-20.py:7/)).toBeTruthy();
-    expect(screen.queryByText(/source-0.py:7/)).toBeNull();
+    fireEvent.click(assertNamedControl(screen.getByTestId("table-pager-next"), "button"));
+    await screen.findByText(/source-20\.py:7/);
   });
 
   it("stays quiet for complete coverage", () => {

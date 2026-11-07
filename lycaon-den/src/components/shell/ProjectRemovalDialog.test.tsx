@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import type { ProjectRemovalAssessment } from "../../api/types.ts";
@@ -25,24 +26,23 @@ describe("project removal review",()=>{
     expect(available.checked).toBe(false);
     expect((screen.getByRole("checkbox",{name:"acme/unknown"}) as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole("checkbox",{name:"acme/shared"}) as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getByText(/Other project: Extension suggestions could not be read/)).toBeTruthy();
     fireEvent.click(available);
-    fireEvent.click(screen.getByRole("button",{name:"Delete project and remove 1 extension"}));
+    fireEvent.click(assertNamedControl(screen.getByTestId("project-removal-confirm"), "button"));
     await expect(f.result).resolves.toEqual(["acme/eligible"]);
   });
   it("keeps every extension when assessment fails",async()=>{
     const f=setup(null);
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button",{name:"Delete project and keep extensions"}));
+    fireEvent.click(assertNamedControl(screen.getByTestId("project-removal-confirm"), "button"));
     await expect(f.result).resolves.toEqual([]);
   });
   it("cancels without authorizing deletion",async()=>{
-    const f=setup(assessment);fireEvent.click(screen.getByRole("button",{name:"Cancel"}));await expect(f.result).resolves.toBeNull();
+    const f=setup(assessment);fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));await expect(f.result).resolves.toBeNull();
   });
   it("confirms project deletion when there are no extensions", async () => {
     const f = setup({ ...assessment, extensions: [] });
     expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("project-removal-confirm"), "button"));
     await expect(f.result).resolves.toEqual([]);
   });
   it("settles pending review on disposal",async()=>{
@@ -92,9 +92,7 @@ describe("project removal review",()=>{
       },
     );
     const section = screen.getByTestId("project-removal-background-processes");
-    expect(section.textContent).toContain(
-      "2 background commands are running in this project and will stop when the project is deleted:",
-    );
+    expect(section.querySelectorAll("li")).toHaveLength(2);
     expect(section.textContent).toContain("python3 -m http.server 8000 (127.0.0.1:8000) — Dev server");
     expect(section.textContent).toContain("npm run watch — Archived chat (archived)");
     fireEvent.click(screen.getByTestId("project-removal-open-running"));

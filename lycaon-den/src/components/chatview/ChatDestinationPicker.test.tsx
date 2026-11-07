@@ -61,7 +61,7 @@ describe("ChatDestinationPicker", () => {
     }] });
     render(() => <ChatDestinationPicker {...pickerProps} />);
     const chosen = chooseChatDestination({ projectId: "project-1" });
-    expect(await screen.findByText(`${count} ${count === 1 ? "message" : "messages"}`)).toBeTruthy();
+    await screen.findByTestId("chat-destination-row");
     fireEvent.click(screen.getByText("Destination chat"));
     await expect(chosen).resolves.toEqual({ projectId: "project-1", sessionId: "session-1" });
   });

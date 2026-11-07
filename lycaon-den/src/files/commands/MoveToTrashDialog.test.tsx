@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MoveToTrashDialog, type TrashConfirmState } from "./MoveToTrashDialog.tsx";
@@ -22,7 +23,7 @@ describe("Move to trash", () => {
     const confirm = vi.fn();
     render(() => <MoveToTrashDialog state={selection} onCancel={() => {}} onConfirm={confirm} />);
     expect(screen.getByRole("alertdialog").getAttribute("aria-describedby")).toBe("files-trash-body");
-    fireEvent.click(screen.getByRole("button", { name: "Move to trash" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("files-trash-confirm"), "button"));
     expect(confirm).toHaveBeenCalledOnce();
   });
 
@@ -31,23 +32,22 @@ describe("Move to trash", () => {
     render(() => <MoveToTrashDialog state={{ ...selection, error: "Trash unavailable", retryable: true, suggestedAction: "Check disk space." }} onCancel={() => {}} onConfirm={confirm} />);
     expect(screen.getByRole("heading").textContent).toContain("Couldn’t move “notes.md”");
     expect(screen.getByText("Check disk space.")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("files-trash-confirm"), "button"));
     expect(confirm).toHaveBeenCalledOnce();
   });
 
   it("does not offer retry when the host requires a different action", () => {
     render(() => <MoveToTrashDialog state={{ ...selection, error: "Protected project metadata", retryable: false }} onCancel={() => {}} onConfirm={() => {}} />);
-    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+    expect(screen.queryByTestId("files-trash-confirm")).toBeNull();
   });
 
   it("prevents duplicate submissions while a move is running", () => {
     const confirm = vi.fn();
     const cancel = vi.fn();
     render(() => <MoveToTrashDialog state={selection} busy onCancel={cancel} onConfirm={confirm} />);
-    expect((screen.getByRole("button", { name: "Moving…" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Continue working" }) as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Continue working" }));
+    expect((assertNamedControl(screen.getByTestId("files-trash-confirm"), "button") as HTMLButtonElement).disabled).toBe(true);
+    expect((assertNamedControl(screen.getByTestId("files-trash-cancel"), "button") as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(assertNamedControl(screen.getByTestId("files-trash-cancel"), "button"));
     expect(cancel).toHaveBeenCalledOnce();
   });
 

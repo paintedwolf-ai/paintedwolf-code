@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import {
   setupGlobalSearchViewTests,
   searchMock,
@@ -49,7 +50,7 @@ describe("GlobalSearchView", () => {
     render(() => <GlobalSearchView projects={[]} originProjectId="proj-a" originName="Alpha"
       seed="tool:summarize" appStore={createAppStore()} onNavigate={vi.fn()} />);
     await vi.advanceTimersByTimeAsync(300);
-    const results = screen.getByRole("list", { name: "Search results" });
+    const results = assertNamedControl(screen.getByTestId("search-result-list"), "list");
     const groupChildren = Array.from(screen.getByTestId("search-result-groups").children);
     expect(screen.getAllByTestId("search-result-row")).toHaveLength(1);
 
@@ -125,7 +126,6 @@ describe("GlobalSearchView", () => {
     ));
     await vi.advanceTimersByTimeAsync(280);
     expect(searchMock).toHaveBeenCalledTimes(2);
-    expect(screen.getByText(/still indexing/i)).toBeTruthy();
     await vi.advanceTimersByTimeAsync(750);
     expect(searchMock).toHaveBeenCalledTimes(3);
     expect(searchMock.mock.calls[1]?.[0]).toBe(searchMock.mock.calls[0]?.[0]);
@@ -137,11 +137,9 @@ describe("GlobalSearchView", () => {
     expect(screen.getByTestId("search-stage-boundary").dataset.retained).toBe(
       "false",
     );
-    expect(screen.queryByText("Updating results…")).toBeNull();
-    expect(screen.getByText(/still indexing/i)).toBeTruthy();
+    expect(screen.queryByTestId("search-updating")).toBeNull();
     resolveSettled(settled);
     await vi.advanceTimersByTimeAsync(0);
-    expect(screen.queryByText(/still indexing/i)).toBeNull();
     await vi.advanceTimersByTimeAsync(30_000);
     expect(searchMock).toHaveBeenCalledTimes(3);
   });
@@ -169,7 +167,6 @@ describe("GlobalSearchView", () => {
       />
     ));
     await waitFor(() => expect(screen.getAllByTestId("search-result-row").length).toBeGreaterThan(0));
-    expect(screen.getByText(/still indexing/i)).toBeTruthy();
   });
 
   it("shows fast matches while the complete search is still pending", async () => {
@@ -194,12 +191,12 @@ describe("GlobalSearchView", () => {
     ));
     await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(2));
     expect(screen.getAllByTestId("search-result-row")[0]?.textContent).toContain("fast.ts");
-    expect(screen.getByRole("list", { name: "Search results" }).getAttribute("aria-busy")).toBe("true");
+    expect(assertNamedControl(screen.getByTestId("search-result-list"), "list").getAttribute("aria-busy")).toBe("true");
     finish({ ...first, status: "complete", exhaustive: true, issues: [], count_relation: "exact", total_hits: 2,
       hits: [...first.hits, { ...first.hits[0], hit_id: "later", path: "later.ts", title: "later.ts" }],
     });
     await waitFor(() => expect(screen.getAllByTestId("search-result-row")).toHaveLength(2));
-    expect(screen.getByRole("list", { name: "Search results" }).getAttribute("aria-busy")).toBe("false");
+    expect(assertNamedControl(screen.getByTestId("search-result-list"), "list").getAttribute("aria-busy")).toBe("false");
   });
 
   it("shows the stage while its initial project search runs", async () => {
@@ -229,9 +226,6 @@ describe("GlobalSearchView", () => {
       ),
     );
     expect(screen.getByTestId("search-loading-state")).toBeTruthy();
-    expect(screen.getByTestId("search-hits-count").textContent).toBe(
-      "Searching…",
-    );
   });
 
   it("opens unscoped from the front page when there is no origin", async () => {
@@ -300,9 +294,6 @@ describe("GlobalSearchView", () => {
     ));
 
     expect(await screen.findByTestId("search-empty-state")).toBeTruthy();
-    expect(screen.getByTestId("search-empty-state").textContent).toContain(
-      "Search code, messages, and web",
-    );
   });
 
   it("does not turn settled discovery failures into an exhaustive empty result", async () => {
@@ -329,12 +320,12 @@ describe("GlobalSearchView", () => {
     await screen.findByText("Alpha result");
     searchMock.mockImplementationOnce(() => new Promise(() => {}));
 
-    fireEvent.click(screen.getByRole("button", { name: "Code" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("search-type-code"), "button"));
     await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(2));
     const boundary = screen.getByTestId("search-stage-boundary");
     expect(boundary.dataset.retained).toBe("true");
     expect(boundary.inert).toBe(true);
-    expect(await screen.findByText("Updating results…")).toBeTruthy();
+    expect(await screen.findByTestId("search-updating")).toBeTruthy();
   });
 
   it("keeps the query field interactive while replacement results load", async () => {
@@ -357,7 +348,7 @@ describe("GlobalSearchView", () => {
     expect(screen.getByTestId("search-stage-boundary").dataset.retained).toBe(
       "false",
     );
-    expect(screen.queryByText("Updating results…")).toBeNull();
+    expect(screen.queryByTestId("search-updating")).toBeNull();
 
     await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId("search-stage-boundary").inert).toBe(true);

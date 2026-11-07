@@ -136,7 +136,7 @@ export function DiffsSectionHeader(props: Props) {
         </button>
       </div>
       <Show when={props.open && !wholeFile() && (isNoop() || isBinary())}>
-        <p class="den-file-edit-diff-noop">{props.source.noopNote}</p>
+        <p class="den-file-edit-diff-noop" data-testid="file-edit-diff-noop">{props.source.noopNote}</p>
       </Show>
       <Show when={props.open && hasRevisions()}>
         <div class="den-file-edit-diff-strip den-diffs-section__strip" data-testid="file-edit-diff-strip" data-reloading={props.reloading ? "" : undefined}>

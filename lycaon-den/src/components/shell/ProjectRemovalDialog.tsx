@@ -93,7 +93,7 @@ export function ProjectRemovalDialog(props: { review: ReturnType<typeof createPr
             data-testid="project-removal-dialog"
           >
             <header class="den-dialog__header" {...chromeProps()}>
-              <h2 id="project-removal-title">Delete project</h2>
+              <h2 data-testid="delete-project" id="project-removal-title">Delete project</h2>
             </header>
             <Scrollport class="den-dialog__body">
               <p class="den-dialog__hint">History and any unsaved draft workspace for <strong>{request.projectName}</strong> will be deleted. Attached folders stay on disk.</p>
@@ -165,8 +165,8 @@ export function ProjectRemovalDialog(props: { review: ReturnType<typeof createPr
                     Open Running
                   </DenButton>
                 </Show>
-                <DenButton variant="ghost" autofocus onClick={() => props.review.settle(null)}>Cancel</DenButton>
-                <DenButton variant="danger" onClick={() => props.review.settle(selected())}>
+                <DenButton data-testid="cancel" variant="ghost" autofocus onClick={() => props.review.settle(null)}>Cancel</DenButton>
+                <DenButton data-testid="project-removal-confirm" variant="danger" onClick={() => props.review.settle(selected())}>
                   {selected().length > 0
                     ? `Delete project and remove ${selected().length} extension${selected().length === 1 ? "" : "s"}`
                     : request.assessment && request.assessment.extensions.length === 0

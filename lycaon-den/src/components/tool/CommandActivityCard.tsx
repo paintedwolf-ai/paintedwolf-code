@@ -100,13 +100,13 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
         <KeyedIndex each={(activity().fact.steps ?? []).slice(0, 3)} keyOf={step => step.id}>{step => <div class="den-command-activity-step">
           <code>{step().command.slice(0, STEP_CHARS)}{step().command.length > STEP_CHARS ? "…" : ""}</code><span>{step().count > 1 ? `${step().count.toLocaleString()} executions · ` : ""}{commandActivityStepOutcome(step())}</span>
         </div>}</KeyedIndex>
-        <Show when={(activity().fact.steps?.length ?? 0) > 3 || activity().fact.steps?.some(step => step.command.length > STEP_CHARS)}><ToolContentLink pane={`activity:${activity().fact.id}:steps`} label={stepsLabel()} content={{ kind: "inline", text: (activity().fact.steps ?? []).map(step => `${step.command} · ${step.count.toLocaleString()} executions · ${commandActivityStepOutcome(step)}`).join("\n") }} projectId={props.projectId} /></Show>
+        <Show when={(activity().fact.steps?.length ?? 0) > 3 || activity().fact.steps?.some(step => step.command.length > STEP_CHARS)}><ToolContentLink pane={`activity:${activity().fact.id}:steps`} label={stepsLabel()} testId="command-activity-steps" content={{ kind: "inline", text: (activity().fact.steps ?? []).map(step => `${step.command} · ${step.count.toLocaleString()} executions · ${commandActivityStepOutcome(step)}`).join("\n") }} projectId={props.projectId} /></Show>
       </section>
     </Show>
     <Show when={executions().length > 0}>
       <section class="den-tool-part-card-section" aria-label="Execution records">
         <h4 class="den-tool-part-card-section-label">Execution records</h4>
-        <ToolContentLink pane={`activity:${activity().fact.id}:receipts`} label="Execution receipts and diagnostics" content={{ kind: "command_receipts", programs: (snapshot()?.requests ?? []).map(({ program, activityId }) => ({ id: program.id, activityId })), context: JSON.stringify({ activities: activity().members, facts: facts(), feedback: props.part.feedback }) }} projectId={props.projectId} />
+        <ToolContentLink pane={`activity:${activity().fact.id}:receipts`} label="Execution receipts and diagnostics" testId="command-activity-receipts" content={{ kind: "command_receipts", programs: (snapshot()?.requests ?? []).map(({ program, activityId }) => ({ id: program.id, activityId })), context: JSON.stringify({ activities: activity().members, facts: facts(), feedback: props.part.feedback }) }} projectId={props.projectId} />
       </section>
     </Show>
     <CommandActivitySources activity={activity()} calls={calls()} offset={callPage() * CALL_PAGE} projectId={props.projectId}
@@ -114,7 +114,7 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
     <Show when={activity().decisions?.length}>
       <section class="den-tool-part-card-section" aria-label="Host decisions">
         <h4 class="den-tool-part-card-section-label">Host decisions</h4>
-        <ToolContentLink pane={`activity:${activity().fact.id}:decisions`} label={`${activity().decisions?.length ?? 0} host decisions`} content={{ kind: "inline", text: (activity().decisions ?? []).map(decision => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") }} projectId={props.projectId} />
+        <ToolContentLink pane={`activity:${activity().fact.id}:decisions`} label={`${activity().decisions?.length ?? 0} host decisions`} testId="command-activity-decisions" content={{ kind: "inline", text: (activity().decisions ?? []).map(decision => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") }} projectId={props.projectId} />
       </section>
     </Show>
     <Show when={pages.state === "errored"}><p class="den-tool-part-card-note">Execution details are unavailable. The recorded activity is still shown.</p></Show>

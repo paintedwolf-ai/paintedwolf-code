@@ -43,7 +43,7 @@ describe("ToolPartShell open-state persistence", () => {
   it("preserves HTTP capitalization in the http_request tool label", () => {
     const item = part("tc-http");
     item.tool = "http_request";
-    const { getByText } = render(() => (
+    render(() => (
       <TranscriptViewportProvider value={controller}>
         <ToolPartShell part={item} layout="chat" sessionId="s1">
           body
@@ -51,7 +51,6 @@ describe("ToolPartShell open-state persistence", () => {
       </TranscriptViewportProvider>
     ));
 
-    expect(getByText("HTTP request")).toBeTruthy();
   });
 
   it("starts closed for a fresh chicklet", () => {

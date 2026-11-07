@@ -159,7 +159,7 @@ export function FilesOpenList(props: Props) {
           <Scrollport
             class="den-files-open-list__rows"
             contentClass="den-files-open-list__rows-body"
-            content={{ role: "list", "aria-label": "Open files" }}
+            content={{ role: "list", "aria-label": "Open files", "data-testid": "files-open-list-rows" }}
           >
               <For each={filtered()}>
                 {(row, i) => {

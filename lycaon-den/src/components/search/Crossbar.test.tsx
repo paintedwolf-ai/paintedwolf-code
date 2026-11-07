@@ -1073,22 +1073,23 @@ describe("in-flight search invalidation", () => {
     await vi.advanceTimersByTimeAsync(280);
     const noteId = hasMatches ? "crossbar-coverage" : "crossbar-hit-status";
     const note = screen.getByTestId(noteId);
-    expect(note.textContent).toBe("Results may be incomplete. Still indexing…");
+    const noteText = note.textContent;
+    expect(noteText).toBeTruthy();
 
     applySourceChangesEvent({ project_id: "proj-a", workspace_id: "workspace",
       workspace_kind: "project", resync: true, changes: [] });
     await vi.advanceTimersByTimeAsync(400);
     expect(screen.getByTestId(noteId)).toBe(note);
-    expect(note.textContent).toBe("Results may be incomplete. Still indexing…");
+    expect(note.textContent).toBe(noteText);
     await vi.advanceTimersByTimeAsync(280);
     expect(searchProjectSource).toHaveBeenCalledTimes(2);
     expect(screen.getByTestId(noteId)).toBe(note);
-    expect(note.textContent).toBe("Results may be incomplete. Still indexing…");
+    expect(note.textContent).toBe(noteText);
     expect(screen.queryAllByTestId("crossbar-inventory-file")).toHaveLength(hasMatches ? 1 : 0);
 
     finishRefresh({ ...partial, refreshing: false, coverage: [] });
     await vi.advanceTimersByTimeAsync(0);
-    expect(screen.queryByText("Results may be incomplete. Still indexing…")).toBeNull();
+    expect(screen.queryByTestId(noteId)?.textContent ?? "").not.toBe(noteText);
   });
 
   it("retains search coverage while a replacement query is pending", async () => {

@@ -50,7 +50,7 @@ describe("project chats rows", () => {
     expect(item.tagName).toBe("LI");
     expect(item.firstElementChild?.classList.contains("chat-list-row")).toBe(true);
     expect(screen.getByText("Release notes")).toBeTruthy();
-    expect(item.querySelector('[aria-label="Pinned"]')).toBeTruthy();
+    expect(item.querySelector('[data-testid="chat-list-pin"]')).toBeTruthy();
     expect(item.querySelector('[data-attention-class="running"]')).toBeTruthy();
     expect(item.querySelector(".chat-list-row__count")?.textContent).toBe("4");
   });

@@ -11,7 +11,7 @@ export function ShellNavRail(props: { children: JSX.Element }) {
   });
   return (
     <div ref={frame} class="den-shell-nav-frame">
-      <nav ref={nav} class="den-shell-nav" aria-label="Main">
+      <nav ref={nav} class="den-shell-nav" aria-label="Main" data-testid="shell-nav-rail">
         <div ref={content} class="den-shell-nav-content">
           {props.children}
         </div>

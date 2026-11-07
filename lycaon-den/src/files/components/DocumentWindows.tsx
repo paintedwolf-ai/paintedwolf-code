@@ -80,13 +80,14 @@ export function DocumentWindows(props: { projectId: string; replica?: DocumentRe
         <For each={windows()}>{window => <div class="den-document-windows__row" style={windowColorStyle(palette()?.(window.slot))}>
           <span class="den-document-windows__swatch" aria-hidden="true" />
           <button type="button" class="den-document-windows__focus" role="menuitem" disabled={isCurrent(window.clientId) || !window.nativeLabel || !!busy()}
+            data-testid={`document-windows-focus-${window.slot}`}
             aria-label={isCurrent(window.clientId) ? `${window.label}, this window` : `Focus ${window.label.toLowerCase()}`}
             onClick={() => void operate(window.clientId, () => focusEditorWindow(window))}>
             <span>{window.label}</span>
             <span class="den-document-windows__detail">{isCurrent(window.clientId) ? "This window" : window.title || (window.nativeLabel ? "Desktop window" : "Open in browser")}</span>
           </button>
           <Show when={!isCurrent(window.clientId) && window.nativeLabel && window.nativeLabel !== "main"}>
-            <button type="button" class="den-inset-icon-btn" role="menuitem" aria-label={`Close ${window.label.toLowerCase()}`} disabled={!!busy()}
+            <button type="button" class="den-inset-icon-btn" role="menuitem" data-testid={`document-windows-close-${window.slot}`} aria-label={`Close ${window.label.toLowerCase()}`} disabled={!!busy()}
               onClick={() => void operate(window.clientId, () => closeItemWindow(window.nativeLabel ?? ""))}>
               <ThemeIcon slot="dismiss" />
             </button>

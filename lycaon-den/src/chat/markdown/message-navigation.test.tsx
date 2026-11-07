@@ -3,6 +3,7 @@ import { createSignal } from "solid-js";
 import { fireEvent, render, waitFor, screen } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stubClient } from "../../test/client-fixture.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import type { MessageNavigationResponse, NavigationReference } from "../../api/types.ts";
 import { AssistantProseBody } from "../../components/transcript/AssistantProseBody.tsx";
 import { buildProseNavigationIndex } from "./prose-path-opens.ts";
@@ -31,7 +32,7 @@ describe("message navigation", () => {
     await waitFor(() => expect(resolve).toHaveBeenCalled());
     expect(resolve.mock.calls[0]?.[1].content_sha256).toBe(await navigationContentHash("\nSee `same.go`.\n"));
     fireEvent.click(view.getByRole("button", { name: "same.go" }));
-    await waitFor(() => expect(screen.getByRole("dialog", { name: "File navigation" })).toBeTruthy());
+    await waitFor(() => expect(assertNamedControl(screen.getByTestId("navigation-chooser"), "dialog")).toBeTruthy());
     fireEvent.click(await screen.findByRole("button", { name: "@main/second/same.go" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith(expect.objectContaining({ rootId: "r", path: "second/same.go" })));
   });
@@ -62,7 +63,7 @@ describe("contextual link presentation", () => {
     expect(view.container.querySelector("button")).toBeNull();
     await waitFor(() => expect(resolve).toHaveBeenCalledTimes(1));
     expect(view.container.querySelector("button")).toBeNull();
-    expect(screen.queryByRole("dialog", { name: "File navigation" })).toBeNull();
+    expect(screen.queryByTestId("navigation-chooser")).toBeNull();
   });
 
   it("rechecks a known location before opening a path the host resolved as deleted", async () => {
@@ -78,6 +79,6 @@ describe("contextual link presentation", () => {
     fireEvent.click(view.getByRole("button", { name: "same.go" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith(expect.objectContaining({ rootId: "r", path: ".ignored/same.go" })));
     expect(resolve).toHaveBeenCalledWith("s", expect.objectContaining({ reference_id: "ref-0" }), expect.any(AbortSignal));
-    expect(screen.queryByRole("dialog", { name: "File navigation" })).toBeNull();
+    expect(screen.queryByTestId("navigation-chooser")).toBeNull();
   });
 });

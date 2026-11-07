@@ -17,6 +17,7 @@ import { walkEffectFixture } from "../walk/walk-fixtures.ts";
 import { sourceReaderFixture } from "../../test/source-reader-fixture.ts";
 import { mockReaderViewport } from "../../test/reader-viewport-mock.ts";
 import { stubClient } from "../../test/client-fixture.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { resetGitDiffsForTests } from "./git-diffs.ts";
 import * as layoutBands from "../../layout/layout-bands.ts";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
@@ -87,7 +88,7 @@ describe("the diffs page", () => {
 
     render(() => <DiffsPage projectId="p1" client={client} address={GIT} />);
 
-    expect(await screen.findByText("2 files changed")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("diffs-page-title").textContent).toBe("2 files changed"));
     expect(screen.getByTestId("diffs-page-comparison").textContent).toBe("a1b2c3d Fix the loader");
     await waitFor(() => expect(screen.getByTestId("diffs-page-stat").textContent).toBe("+2−2"));
     expect(screen.queryByTestId("diffs-page-walk")).toBeNull();
@@ -99,7 +100,7 @@ describe("the diffs page", () => {
 
     render(() => <DiffsPage projectId="p1" client={client} address={TURN} onWalkTurn={() => {}} />);
 
-    expect(await screen.findByText("2 files changed")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("diffs-page-title").textContent).toBe("2 files changed"));
     expect(screen.getByTestId("diffs-page-stat").textContent).toContain("3 writes");
     await waitFor(() => expect(screen.getAllByTestId("diffs-section-header")).toHaveLength(2));
     for (const section of screen.getAllByTestId("diffs-section-header")) {
@@ -129,7 +130,7 @@ describe("the diffs page", () => {
 
     render(() => <DiffsPage projectId="p1" client={client} address={TURN} onWalkTurn={() => {}} />);
 
-    expect(await screen.findByText("60 files changed")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("diffs-page-title").textContent).toBe("60 files changed"));
     // Every file is on the page from the start, sized by the host's measure.
     await waitFor(() => expect(screen.getAllByTestId("diffs-section-header")).toHaveLength(60));
     // Far fewer open a comparison: only what comes near the viewport.
@@ -164,8 +165,8 @@ describe("the diffs page", () => {
     });
     render(() => <DiffsPage projectId="p1" client={client} address={TURN} onWalkTurn={() => {}} />);
 
-    expect(await screen.findByText("no net change")).toBeTruthy();
-    expect(screen.getByText("This comparison leaves the file as it found it.")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("file-edit-diff-stat").textContent).toBe("no net change"));
+    expect(screen.getByTestId("file-edit-diff-noop").textContent).toBe("This comparison leaves the file as it found it.");
     expect(screen.queryByTestId("source-reader")).toBeNull();
   });
 
@@ -203,9 +204,8 @@ describe("the diffs page", () => {
     });
     render(() => <DiffsPage projectId="p1" client={client} address={TURN} onWalkTurn={() => {}} />);
 
-    expect(await screen.findByText("binary")).toBeTruthy();
-    expect(screen.getByText("This file is binary and cannot be shown as a text diff.")).toBeTruthy();
-    expect(screen.queryByText("This comparison leaves the file as it found it.")).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("file-edit-diff-stat").textContent).toBe("binary"));
+    expect(screen.queryByTestId("file-edit-diff-noop")?.textContent).not.toBe("This comparison leaves the file as it found it.");
     expect(screen.queryByTestId("source-reader")).toBeNull();
   });
 
@@ -349,7 +349,7 @@ describe("the diffs page", () => {
 
     render(() => <DiffsPage projectId="p1" client={client} address={LENS} />);
 
-    expect(await screen.findByText("2 files changed")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("diffs-page-title").textContent).toBe("2 files changed"));
     // No walk from a comparison that is not a turn.
     expect(screen.queryByTestId("diffs-page-walk")).toBeNull();
 
@@ -448,9 +448,9 @@ describe("the diffs page", () => {
 
     render(() => <DiffsPage projectId="p1" client={client} address={TURN} onWalkTurn={() => {}} />);
 
-    expect(await screen.findByText("no net change")).toBeTruthy();
-    expect(screen.getByText("This comparison leaves the file as it found it.")).toBeTruthy();
-    expect(screen.getByText("2 edits")).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId("file-edit-diff-stat").textContent).toBe("no net change"));
+    expect(screen.getByTestId("file-edit-diff-noop").textContent).toBe("This comparison leaves the file as it found it.");
+    expect(screen.getByTestId("file-edit-diff-writes").textContent).toBe("2 edits");
 
     const strip = screen.getByTestId("file-edit-diff-strip");
     const steps = strip.querySelectorAll<HTMLButtonElement>(".den-file-edit-diff-step");
@@ -476,7 +476,7 @@ describe("the diffs page", () => {
 
     fireEvent.click(steps[0]!);
     await waitFor(() => expect(steps[0]?.getAttribute("aria-pressed")).toBe("true"));
-    expect(screen.getByText("no net change")).toBeTruthy();
+    expect(screen.getByTestId("file-edit-diff-stat").textContent).toBe("no net change");
   });
 
   it("binds diffs layout band for responsive adaptation", async () => {
@@ -548,19 +548,17 @@ describe("the diffs page", () => {
     expect(await screen.findByText("2 files changed")).toBeTruthy();
     await waitFor(() => expect(screen.getAllByTestId("diffs-section-header")).toHaveLength(2));
 
-    const disclosures = screen.getAllByRole("button", { name: /Collapse/i });
-    expect(disclosures.length).toBeGreaterThan(0);
-    fireEvent.click(disclosures[0]!);
+    fireEvent.click(assertNamedControl(screen.getByTestId("diffs-page-fold"), "button"));
 
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: /Expand/i })).toHaveLength(1);
+      expect(screen.getByTestId("diffs-page-fold").textContent).toBe("Expand all");
     });
 
     const nextTurn: DiffsAddress = { kind: "turn", sessionId: "s1", turn: 5, messageId: "s1-user-5" };
     setAddress(nextTurn);
 
     await waitFor(() => {
-      expect(screen.queryAllByRole("button", { name: /Expand/i })).toHaveLength(0);
+      expect(screen.queryByTestId("diffs-page-fold")?.textContent).not.toBe("Expand all");
     });
   });
 
