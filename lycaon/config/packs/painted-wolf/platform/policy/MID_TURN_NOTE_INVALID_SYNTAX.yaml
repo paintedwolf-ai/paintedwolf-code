@@ -13,9 +13,9 @@ effect: warn
 copy:
   what: '[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} citation or directive node(s) could not be read: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
   cause: 'A reserved bracket form was malformed, unterminated, too long, or a repair directive outside an active repair, or the response was only JSON. Updates are Markdown text.'
-  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
-  fix: 'Correct the named node. Write literal syntax as inline code so it stays text. Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
-  instead: 'Branch on Code MID_TURN_NOTE_INVALID_SYNTAX; correct the node'
+  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response already ran and their results appear above; do not re-run them.'
+  fix: 'Correct the named node. Write literal syntax as inline code so it stays text. Continue from the tool results above without re-running completed tool calls. Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
+  instead: 'Branch on Code MID_TURN_NOTE_INVALID_SYNTAX; continue from the tool results above and correct the node without re-running completed tool calls'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:mid_turn_note
 x-paintedwolf-message: A mid-turn citation node was malformed and the text was withheld.
