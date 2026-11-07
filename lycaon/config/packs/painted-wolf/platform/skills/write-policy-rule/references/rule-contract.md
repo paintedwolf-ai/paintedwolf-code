@@ -10,9 +10,11 @@ id: EXAMPLE_RULE
 kind: policy
 anchor: tool.pre_invoke
 selector:
-  tool: [write]
+  tool: [command]
+  paintedwolf.operation: [write]
 requires:
   profiles: [session, tool]
+  facts: [paintedwolf.operation]
 when: session_posture == "spec"
 effect: block
 copy:
@@ -35,6 +37,14 @@ Every non-core fact or profile reference belongs in `requires`. Missing capabili
 Prefer the eight OAR core anchors and core facts for portable rules. A documented host anchor, fact, profile, or `x-paintedwolf-*` field is legal only when host-specific behavior is intentional. Presentation copy cannot substitute for selector or condition logic.
 
 Do not add a natural-language classifier, program-name floor, cloud-action list in Go, or an `allow` rule that clears containment or structured boundary authority. Detection overlays remain additive.
+
+## Host extensions
+
+`x-paintedwolf-*` fields are host-specific extensions the loader validates. Two matter most for authoring:
+
+`x-paintedwolf-audience` limits the tool profiles that can receive the rule. Its value is a list of tool profile ids from the host capability catalogue, for example `[coordinator]`; every declared id must exist, and an unknown id fails the load. A rule without the field reaches every profile the anchor serves, and the anchor's own audience still applies — a `coordinator.pre_invoke` rule stays coordinator-only even with a wider list.
+
+Feedback copy must not name its own remedies. Bind the host fact `paintedwolf.next_steps` in `requires.facts` and place a reachable-remedy catalog at `host/next-steps/<CODE>.yaml` beside the pack's policy, one file per rule code. The catalog's top-level `mentions` lists tools the rule's copy names without asking for a call; `steps` entries carry `when`, `tool`, `args`, `program`, `say`, `otherwise`, and `complete`. The host answers each step against the reader's frozen offered surface, replaces an unreachable step with the first reachable step under `or`, then `otherwise`, or drops it, and renders `{{ call }}` itself — so a rule's copy must read correctly with the fact empty. `toolvocab.CheckRules` holds bundled copy to this at load: a tool named in copy must be the rule's subject, a declared `mentions` entry, or a next step, and a step must call a current tool with arguments its schema declares.
 
 ## Conformance fixtures
 

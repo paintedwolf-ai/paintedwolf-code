@@ -32,6 +32,7 @@ dependencies:
 | `mcp_bindings/` | `mcp_bindings/<id>` |
 | `tools/schemas/` | `tools/schemas/<name>` |
 | `host/user-notices/` | `host/user-notices/<code>` |
+| `host/next-steps/` | `host/next-steps/<CODE>`; one reachable-remedy catalog per rule code, additive |
 | `workflows/<id>/workflow.yaml` | `workflows/<id>` |
 | `agents/`, `tools/`, `playbooks/`, `shared/` | per-kind roots |
 | `approvals/**/explain.yaml` | approval explanation copy |

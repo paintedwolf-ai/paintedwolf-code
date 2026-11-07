@@ -2,6 +2,7 @@ package toolvocab
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -79,14 +80,6 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 		if s.UserProvided {
 			continue
 		}
-		for _, resource := range s.TemplateResources() {
-			body, err := s.ReadResource(resource)
-			if err != nil {
-				problems = append(problems, fmt.Sprintf("skill %q procedure %q: %v", s.Name, resource, err))
-				continue
-			}
-			bodies[s.Name] += "\n" + string(body)
-		}
 	}
 	for _, agent := range agents {
 		for _, name := range offeredSkills(agent.Skills, loaded) {
@@ -145,7 +138,9 @@ var stockCatalog = sync.OnceValue(func() *Catalog {
 })
 
 // SkillToolsOffered reports whether offered covers every non-optional tool sk
-// unconditionally names. User-provided skills are not restricted.
+// unconditionally names and satisfies sk's disjunctive requirement: when
+// `metadata.paintedwolf.any_of_tools` names tools, at least one member must be
+// offered. User-provided skills are not restricted.
 func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 	if sk.UserProvided {
 		return true
@@ -155,10 +150,24 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 		return true
 	}
 	optional := optionalToolSet(sk)
+	anyOf := sk.AnyOfTools()
 	for _, tool := range NamedTools(c, sk.Body) {
-		if !optional[tool] && !offered[tool] {
+		if optional[tool] || offered[tool] {
+			continue
+		}
+		// any_of members are individually optional; the disjunction below
+		// decides usability.
+		if !slices.Contains(anyOf, tool) {
 			return false
 		}
 	}
-	return true
+	if len(anyOf) == 0 {
+		return true
+	}
+	for _, tool := range anyOf {
+		if offered[tool] {
+			return true
+		}
+	}
+	return false
 }

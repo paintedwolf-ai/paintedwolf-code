@@ -10,9 +10,12 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	skilltools "github.com/lycaon/lycaon/internal/tools/native/skills"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -137,5 +140,62 @@ func TestSelectSkillPreloadGatesStockSkillsByTurnOfferedTools(t *testing.T) {
 	m.selectSkillPreload(t.Context(), sess, "coordinator", "custom project workflow", decision)
 	if decision.skill == nil || decision.skill.Name != "user-skill" {
 		t.Fatalf("user-provided skill was blocked by tool gating: %+v", decision.skill)
+	}
+}
+
+func preloadRenderService(t *testing.T) *Service {
+	t.Helper()
+	read := &skilltools.SkillsReadTool{
+		TemplateVars: func(_ context.Context, tctx tools.ToolContext) map[string]any {
+			vars, err := prompts.SkillSurfaceTemplateVars(prompts.SkillSurfaceVarsInput{
+				ProfileID: prompts.CoordinatorProfileID,
+				SurfaceID: strings.TrimSpace(tctx.Turn.TurnSurfaceID),
+			})
+			testutil.FailErr(t, "skill surface vars", err)
+			return vars
+		},
+		PackConfiguration: func(context.Context, tools.ToolContext, string) map[string]any {
+			return map[string]any{"mode": "bounded"}
+		},
+	}
+	m := &Service{Ledger: turnload.NewLedger()}
+	m.SetSkillBodyRenderer(read.RenderBody)
+	return m
+}
+
+func TestRenderSkillPreloadUsesLiveCoordinatorSurfaceAndPackConfig(t *testing.T) {
+	m := preloadRenderService(t)
+	decision := &Decision{
+		skill: &skills.Skill{
+			Name:   "orchestrate",
+			PackID: "example/pack",
+			Body:   "cmd:{% if profile_has_command %}yes{% else %}no{% endif %} cfg:{{ configuration.mode }}",
+		},
+		skillScore: 3.6,
+	}
+	m.renderSkillPreload(t.Context(), "s", tools.ToolContext{Turn: tools.InvocationTurn{TurnSurfaceID: "implement_routing"}}, decision)
+	got := m.SkillPreload("s")
+	if got == nil || got.Body != "cmd:yes cfg:bounded" {
+		t.Fatalf("routing surface preload = %#v", got)
+	}
+
+	m.renderSkillPreload(t.Context(), "s2", tools.ToolContext{Turn: tools.InvocationTurn{TurnSurfaceID: "implement_dispatch"}}, decision)
+	got = m.SkillPreload("s2")
+	if got == nil || got.Body != "cmd:no cfg:bounded" {
+		t.Fatalf("dispatch surface preload = %#v", got)
+	}
+}
+
+func TestRenderSkillPreloadKeepsProjectSkillLiteral(t *testing.T) {
+	m := preloadRenderService(t)
+	const body = "literal {{ configuration.mode }} {% if profile_has_command %}cmd{% endif %}"
+	decision := &Decision{
+		skill:      &skills.Skill{Name: "project-skill", Project: true, Body: body},
+		skillScore: 3.6,
+	}
+	m.renderSkillPreload(t.Context(), "s", tools.ToolContext{Turn: tools.InvocationTurn{TurnSurfaceID: "implement_routing"}}, decision)
+	got := m.SkillPreload("s")
+	if got == nil || got.Body != body {
+		t.Fatalf("project skill body was evaluated: %#v", got)
 	}
 }

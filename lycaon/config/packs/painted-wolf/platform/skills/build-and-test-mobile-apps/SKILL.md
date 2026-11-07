@@ -2,7 +2,6 @@
 name: build-and-test-mobile-apps
 description: Build and test Android, Flutter, iOS, or macOS apps with the project's own toolchain on emulators and simulators, and diagnose mobile build failures.
 metadata:
-  paintedwolf.template_resources: references/build_and_test_android.md|references/build_and_test_flutter.md|references/build_and_test_ios.md
   host_resources: android-sdk|flutter|xcode
 ---
 

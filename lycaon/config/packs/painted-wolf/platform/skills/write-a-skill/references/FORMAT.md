@@ -6,7 +6,7 @@
 | `description` | Yes | Up to 1024 characters; bundled skills use one sentence of at most 180 characters, what and when only. It is the text the host ranks |
 | `license` | No | License name or bundled file reference |
 | `compatibility` | No | Up to 500 characters of environment needs |
-| `metadata` | No | String keys to string values. `host_resources` is a comma-separated list of required host-resource entries; a `\|` inside one entry lists interchangeable alternatives (`docker\|podman`), and each entry needs one available id for the host to advertise or load the skill. `paintedwolf.template_resources` is a `\|`-separated list of references rendered like the body |
+| `metadata` | No | String keys to string values. `host_resources` is a comma-separated list of required host-resource entries; a `\|` inside one entry lists interchangeable alternatives (`docker\|podman`), and each entry needs one available id for the host to advertise or load the skill |
 | `optional_tools` | No | Tools the body mentions that some agents offered the skill may not hold |
 | `allowed-tools` | No | Read and shown, never honored |
 
@@ -25,6 +25,6 @@ Optional directories: `references/`, `assets/`. The host reads `SKILL.md` at loa
 
 ## Pack templates
 
-Pack skill bodies use the isolated pongo profile, so includes are unavailable. At `skills_read` the host renders the body and any `paintedwolf.template_resources` with policy vars (`max_in_flight`, `worker_tool_budget_default`, `worker_tool_budget_min` / `_max`, `hunt_wave_workers`, `throwaway_tool_loops_min` / `_max`, `deep_tool_loops_hint`). Invalid pack templates reject with `SKILL_TEMPLATE_INVALID`. Project skills are not templated.
+Pack skill bodies use the isolated pongo profile, so includes are unavailable. At `skills_read` the host renders the body and every `references/*.md` file with policy vars (`max_in_flight`, `worker_tool_budget_default`, `worker_tool_budget_min` / `_max`, `hunt_wave_workers`, `throwaway_tool_loops_min` / `_max`, `deep_tool_loops_hint`). Invalid pack templates reject with `SKILL_TEMPLATE_INVALID`. Project skills are not templated.
 
-Escape literal `{{` / `{%` with `{% verbatim %}…{% endverbatim %}`. Other references are returned as written.
+Escape literal {% verbatim %}{{{% endverbatim %} / {% verbatim %}{%{% endverbatim %} sequences with a `verbatim` … `endverbatim` block. Other references are returned as written.

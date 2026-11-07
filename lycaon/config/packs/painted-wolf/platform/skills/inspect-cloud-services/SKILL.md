@@ -5,7 +5,6 @@ description: Inspect AWS, Azure, or GCP resources, diagnose a deployed cloud ser
 optional_tools:
   - ask_user
 metadata:
-  paintedwolf.template_resources: references/inspect_aws_resources.md|references/inspect_azure_resources.md|references/inspect_gcp_resources.md|references/debug_a_deployed_cloud_service.md|references/investigate_cloud_costs.md
   host_resources: aws-cli|azure-cli|gcloud-cli
 ---
 

@@ -2,7 +2,6 @@
 name: diagnose-performance
 description: Find the measured cause of a slow query, build, request, or test suite, a performance regression, a memory leak, or disk, memory, or file-descriptor exhaustion.
 metadata:
-  paintedwolf.template_resources: references/diagnose_a_slow_database_query.md|references/hunt_a_performance_regression.md|references/investigate_a_memory_leak.md|references/diagnose_resource_exhaustion.md
 ---
 
 # Diagnose performance

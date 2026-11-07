@@ -8,7 +8,6 @@ optional_tools:
   - request_budget
   - task
 metadata:
-  paintedwolf.template_resources: references/orchestrate_a_large_task.md|references/research_then_implement.md|references/compare_implementation_approaches.md|references/parallelize_a_configuration_matrix.md|references/parallelize_independent_fixes.md|references/sweep_a_policy_class.md
 ---
 
 # Orchestrate a large task

@@ -185,6 +185,28 @@ func (s *Skill) BindResources(fsys fs.FS, root string, catalog ResourceCatalog, 
 	}
 }
 
+// AnyOfTools returns the disjunctive tool requirement from
+// `metadata.paintedwolf.any_of_tools`: a comma-separated tool list of which
+// at least one member must be offered for the skill to be usable. Empty when
+// the skill declares no disjunction.
+func (s Skill) AnyOfTools() []string {
+	raw := strings.TrimSpace(s.Metadata["paintedwolf.any_of_tools"])
+	if raw == "" {
+		return nil
+	}
+	fields := strings.Split(raw, ",")
+	out := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if name := strings.TrimSpace(field); name != "" {
+			out = append(out, name)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // SourcePath returns the host-backed location of the skill or a catalog resource.
 // An empty resource selects SKILL.md; virtual resources have no host path.
 func (s Skill) SourcePath(resource string) string {

@@ -66,3 +66,43 @@ func TestSkillToolsOfferedGatesStockSkillsByNonOptionalTools(t *testing.T) {
 		t.Fatal("user-provided skill was restricted by offered tools")
 	}
 }
+
+func TestSkillToolsOfferedAnyOfToolsDisjunction(t *testing.T) {
+	stock := skills.Skill{
+		Name: "mutate-a-tree",
+		Body: "Apply the change with `code_rewrite` or `jq_edit`.",
+		Metadata: map[string]string{
+			"paintedwolf.any_of_tools": "code_rewrite, jq_edit",
+		},
+	}
+	if toolvocab.SkillToolsOffered(stock, map[string]bool{"command": true}) {
+		t.Fatal("disjunctive skill with no any_of member offered was accepted")
+	}
+	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"command": true, "jq_edit": true}) {
+		t.Fatal("disjunctive skill with one any_of member offered was rejected")
+	}
+	// any_of members are individually optional in the body scan: one offered
+	// member admits the skill even though the other is absent.
+	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"code_rewrite": true}) {
+		t.Fatal("disjunctive skill admitted by its only offered member was rejected")
+	}
+	empty := stock
+	empty.Metadata = nil
+	if toolvocab.SkillToolsOffered(empty, map[string]bool{"command": true}) {
+		t.Fatal("skill without any_of metadata escaped the body-scan requirement")
+	}
+	// The disjunction applies even when the body does not name the members.
+	unmentioned := skills.Skill{
+		Name: "delegate-or-wait",
+		Body: "Hand the work off or wait for the person.",
+		Metadata: map[string]string{
+			"paintedwolf.any_of_tools": "task, wait",
+		},
+	}
+	if toolvocab.SkillToolsOffered(unmentioned, map[string]bool{"command": true}) {
+		t.Fatal("disjunctive requirement was ignored for unmentioned members")
+	}
+	if !toolvocab.SkillToolsOffered(unmentioned, map[string]bool{"command": true, "wait": true}) {
+		t.Fatal("offered any_of member was not honored for unmentioned members")
+	}
+}
