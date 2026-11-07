@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/decide/native/src/engine.rs",
+  "kind": "runtime_service",
+  "workstream": "local-inference",
+  "disposition": "retain",
+  "reason": "Retain loaded backbone, selected device, heads and typed inference transitions together within the 550-line ceiling. Memory enforcement has its own Limits module; the engine applies it at load and evaluated forward boundaries without creating another lifecycle authority. Native protocol fixtures and memory-limit validation cover failure boundaries.",
+  "reviewed_commit": "dc89fe42af84ad6032e9e61fcc786bfc97ad7766",
+  "ceiling": 550,
+  "boundaries": {
+    "lycaon/internal/decide/native/src/protocol.rs": "4772f5c463177ad9a27a7db171971ef21f38e2d3ae1a33ebcf8cc8966c356faa",
+    "lycaon/internal/decide/native/src/memory.rs": "f7b37f36aea48c78da2f8ffb6add018eab18319bfcd74ec2f073f8e4049a04ac"
+  }
+}

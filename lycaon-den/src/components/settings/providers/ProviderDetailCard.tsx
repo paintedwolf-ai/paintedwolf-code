@@ -19,10 +19,10 @@ import {
 } from "../../../settings/providers/provider-credential-modes.ts";
 import { InlineRenameInput } from "../../inline-rename/InlineRenameInput.tsx";
 import { DenButton } from "../../primitives/DenButton.tsx";
-import { DenCheckbox } from "../../primitives/DenCheckbox.tsx";
 import { DenField } from "../../primitives/DenField.tsx";
 import { DenInput } from "../../primitives/DenInput.tsx";
 import { DenRadio } from "../../primitives/DenRadio.tsx";
+import { ProviderSecretTrust } from "./ProviderSecretTrust.tsx";
 import { CloudflareAccountField } from "./CloudflareAccountField.tsx";
 import {
   PROVIDER_LABEL_MAX,
@@ -30,7 +30,6 @@ import {
   endpointLabel,
   endpointStyle,
   providerFeedStatusHints,
-  secretScreenTrustEndpointNote,
   toolCallStateCopy,
   type ProviderCardDraft,
 } from "./provider-form-model.ts";
@@ -154,12 +153,10 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
         )}
       </Show>
 
-      {/* Reuses the provider-card failure block: same role, same card. */}
       <Show when={providerDiscoveryFailure(provider())} keyed>
         {(failure) => props.renderDiscoveryFailure(provider().id, failure)}
       </Show>
 
-      {/* Unknown is a hint, not a warning: nothing has said no. */}
       <Show when={providerToolCallSupport(provider()) !== "supported"}>
         <p
           class="den-settings-hint"
@@ -381,25 +378,11 @@ export function ProviderDetailCard(props: ProviderDetailCardProps) {
         </div>
       </Show>
 
-      <DenCheckbox
-        data-testid={`provider-secret-trust-${provider().id}`}
-        checked={provider().secret_screen_trusted ?? false}
-        disabled={props.card(provider().id).savingSecretTrust}
-        onChange={(e) =>
-          props.onSetSecretScreenTrust(provider(), e.currentTarget.checked)
-        }
-      >
-        {MODELS_SETTINGS_COPY.secretScreenTrustLabel}
-      </DenCheckbox>
-      <p
-        class="den-settings-hint"
-        data-testid={`provider-secret-trust-hint-${provider().id}`}
-      >
-        {MODELS_SETTINGS_COPY.secretScreenTrustHint}
-        <Show when={secretScreenTrustEndpointNote(provider())}>
-          {(note) => <> {note()}</>}
-        </Show>
-      </p>
+      <ProviderSecretTrust
+        provider={provider}
+        saving={() => props.card(provider().id).savingSecretTrust}
+        onChange={props.onSetSecretScreenTrust}
+      />
 
       <Show when={provider().models.length > 0}>
         <p class="den-settings-hint">

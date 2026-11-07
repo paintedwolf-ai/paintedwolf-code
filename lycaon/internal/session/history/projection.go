@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -15,6 +14,23 @@ const historyCoverageNoticeID = "host-history-coverage"
 
 // Load uses a bounded tail when a projection cannot cover the live suffix.
 func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, error) {
+	return m.project(ctx, sess, true)
+}
+
+// Project reads history without scheduling compaction or changing the supplied session.
+func (m *Service) Project(ctx context.Context, sess *api.Session) ([]api.Message, error) {
+	if sess != nil {
+		copy := *sess
+		sess = &copy
+	}
+	rows, err := m.project(ctx, sess, false)
+	if err != nil {
+		return nil, err
+	}
+	return m.ApplyView(ctx, sess, rows), nil
+}
+
+func (m *Service) project(ctx context.Context, sess *api.Session, refresh bool) ([]api.Message, error) {
 	if m == nil || m.store == nil || sess == nil {
 		return nil, fmt.Errorf("session store and session are required")
 	}
@@ -23,15 +39,17 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 		return nil, err
 	}
 	if !ok || view.Generation < sess.CompactionGeneration {
-		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
+		return m.loadBoundedCanonicalPromptHistory(ctx, sess, refresh)
 	}
 	current, err := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
 	if err != nil {
 		return nil, err
 	}
 	if !current {
-		m.Schedule(ctx, sess)
-		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
+		if refresh {
+			m.Schedule(ctx, sess)
+		}
+		return m.loadBoundedCanonicalPromptHistory(ctx, sess, refresh)
 	}
 	// Background publication may advance the caller's session snapshot.
 	sess.CompactionGeneration = view.Generation
@@ -41,15 +59,15 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 	} else if ok {
 		return restored, nil
 	}
-	return m.loadViewHistory(ctx, sess, view, cfg)
+	return m.loadViewHistory(ctx, sess, view, cfg, refresh)
 }
 
 // loadViewHistory reads the canonical rows a valid view does not replace, plus
 // the canonical copies of its retained assistant rows for replay fields. Those
 // copies sit before the opener: the rows after it are the contiguous working tail.
-func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *store.CompactionView, cfg compaction.CompactionConfig) ([]api.Message, error) {
+func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *store.CompactionView, cfg compaction.CompactionConfig, refresh bool) ([]api.Message, error) {
 	covered := view.CoveredThroughOrd
-	bounds := m.canonicalTailBounds(cfg)
+	bounds := canonicalTailBounds(cfg)
 	tail, truncated, err := m.readCanonicalTail(ctx, sess.ID, bounds, viewTailStop(covered, activeTurnAllocation(cfg)))
 	if err != nil {
 		return nil, err
@@ -60,7 +78,7 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 		oldest = tail[0].Ord
 	}
 	if _, ok := api.LastUserIntentMessage(tail); !ok {
-		if tail, err = m.withCurrentRequest(ctx, sess, tail); err != nil {
+		if tail, err = withCurrentRequest(ctx, m.store, sess, tail); err != nil {
 			return nil, err
 		}
 	}
@@ -77,21 +95,23 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 		out = append(out, canonical)
 	}
 	if truncated {
-		notice, err := m.tailOmissionNotice(ctx, sess, covered, oldest, tail)
+		notice, err := tailOmissionNotice(ctx, m.recallAvailable, sess, covered, oldest, tail)
 		if err != nil {
 			return nil, err
 		}
 		if notice != nil {
-			m.Schedule(ctx, sess)
+			if refresh {
+				m.Schedule(ctx, sess)
+			}
 			out = append(out, *notice)
 		}
 	}
 	return append(out, tail...), nil
 }
 
-func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *api.Session) ([]api.Message, error) {
+func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *api.Session, refresh bool) ([]api.Message, error) {
 	cfg := m.compactionConfig(ctx, sess)
-	bounds := m.canonicalTailBounds(cfg)
+	bounds := canonicalTailBounds(cfg)
 	history, truncated, err := m.readCanonicalTail(ctx, sess.ID, bounds, nil)
 	if err != nil {
 		return nil, err
@@ -101,42 +121,18 @@ func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *a
 		return history, nil
 	}
 	firstTailOrd := history[0].Ord
-	history, err = m.withCurrentRequest(ctx, sess, history)
+	history, err = withCurrentRequest(ctx, m.store, sess, history)
 	if err != nil {
 		return nil, err
 	}
-	m.Schedule(ctx, sess)
-	notice, err := m.tailOmissionNotice(ctx, sess, 0, firstTailOrd, history)
+	if refresh {
+		m.Schedule(ctx, sess)
+	}
+	notice, err := tailOmissionNotice(ctx, m.recallAvailable, sess, 0, firstTailOrd, history)
 	if err != nil || notice == nil {
 		return history, err
 	}
 	return append([]api.Message{*notice}, history...), nil
-}
-
-// tailOmissionNotice names rows between coverage and the canonical tail that hard
-// limits left out. The opener is retained separately, so it does not count.
-func (m *Service) tailOmissionNotice(ctx context.Context, sess *api.Session, covered, oldest int64, tail []api.Message) (*api.Message, error) {
-	through := oldest - 1
-	if len(tail) > 0 && tail[0].Ord == through {
-		through--
-	}
-	if covered+1 > through {
-		return nil, nil
-	}
-	return m.omissionNotice(ctx, sess, historyCoverageNoticeID, covered+1, through)
-}
-
-// omissionNotice is reference-only: it establishes no summary coverage.
-func (m *Service) omissionNotice(ctx context.Context, sess *api.Session, id string, from, through int64) (*api.Message, error) {
-	text, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
-		"level": "references", "through_ord": through, "omitted_from_ord": from, "omitted_through_ord": through,
-		"recall_available": m.recallAvailable != nil && m.recallAvailable(ctx, sess),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &api.Message{ID: id, Role: api.MessageRoleSystem, Origin: api.MessageOriginHost,
-		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, ContextPinned: true, Content: text}, nil
 }
 
 // Fit assembles prompt history and schedules durable compaction.
@@ -251,27 +247,27 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 }
 
 // withCurrentRequest restores the active human opener when it predates the tail.
-func (m *Service) withCurrentRequest(ctx context.Context, sess *api.Session, tail []api.Message) ([]api.Message, error) {
+func withCurrentRequest(ctx context.Context, store Store, sess *api.Session, tail []api.Message) ([]api.Message, error) {
 	if len(tail) == 0 {
 		return tail, nil
 	}
 	currentTurn := sess.CurrentTurn
 	if currentTurn <= 0 {
-		if latest, err := m.store.Get(ctx, sess.ID); err == nil && latest != nil {
+		if latest, err := store.Get(ctx, sess.ID); err == nil && latest != nil {
 			currentTurn = latest.CurrentTurn
 		}
 	}
 	if currentTurn <= 0 {
 		return tail, nil
 	}
-	turn, err := m.store.ReadSourceTurn(ctx, sess.ID, currentTurn)
+	turn, err := store.ReadSourceTurn(ctx, sess.ID, currentTurn)
 	if err != nil {
 		return nil, err
 	}
 	if turn.OpeningMessageID == "" {
 		return tail, nil
 	}
-	opener, err := m.store.GetMessage(ctx, sess.ID, turn.OpeningMessageID)
+	opener, err := store.GetMessage(ctx, sess.ID, turn.OpeningMessageID)
 	if err != nil {
 		return nil, err
 	}

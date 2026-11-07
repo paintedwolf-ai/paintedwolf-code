@@ -58,14 +58,19 @@ func (m *Service) fitPolicyFrame(ctx context.Context, sess *api.Session, req mod
 		}
 		return append(messages, notice)
 	}
+	var measureErr error
 	fits := func() bool {
 		candidate := req
 		candidate.Messages = projectRequest(selectMessages(), rows).replace(minimal)
 		budget := measure(candidate)
+		if budget.Err != nil {
+			measureErr = budget.Err
+			return false
+		}
 		return budget.Window <= 0 || budget.Input+reserve+budget.Headroom <= budget.Window
 	}
 	if !fits() {
-		return req, false, nil
+		return req, false, measureErr
 	}
 	for _, group := range groups {
 		var introduced []int
@@ -76,6 +81,9 @@ func (m *Service) fitPolicyFrame(ctx context.Context, sess *api.Session, req mod
 			}
 		}
 		if !fits() {
+			if measureErr != nil {
+				return req, false, measureErr
+			}
 			for _, index := range introduced {
 				deferred[index] = true
 			}

@@ -68,14 +68,14 @@ func handleStreamCollectError(
 	req modelcall.CompletionRequest,
 	collected promptStreamCollection,
 	collectErr error,
-	recoverUnparsed func() (*modelcall.Completion, error),
+	recoverRejected func() (*modelcall.Completion, error),
 	callFailed func(),
 ) (*modelcall.Completion, error) {
 	var truncated *failure.ProviderOutputTruncatedError
 	if errors.As(collectErr, &truncated) {
 		return collected.completion, modelcall.EnrichOutputTruncatedError(truncated, req, l.modelEntryForTurn(ctx, collected.providerID, collected.model), collected.completion)
 	}
-	recovered, err := recoverUnparsed()
+	recovered, err := recoverRejected()
 	if err == nil {
 		callFailed()
 	}

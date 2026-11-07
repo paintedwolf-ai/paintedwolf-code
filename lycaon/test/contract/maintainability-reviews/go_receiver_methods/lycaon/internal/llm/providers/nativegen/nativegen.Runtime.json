@@ -1,0 +1,19 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/llm/providers/nativegen/nativegen.Runtime",
+  "kind": "runtime_service",
+  "workstream": "local-inference",
+  "disposition": "retain",
+  "reason": "Retain the measured 458-line, 21-method resident-model runtime. Begin receives an explicit output contract while admission, prefix preparation, process leases and cancellation keep one lifecycle. Output decoding and recovery facts remain outside Runtime. The focused lifecycle suite verifies admission, repair, preparation and reaping; stream contract fixtures verify version refusal and terminal output handling.",
+  "reviewed_commit": "433e692d0a9d750f4bcd4a4f6fe93dc1ff2f1622",
+  "reviewed_shape": "6e6bdef757ef43fc63fb489ab829d83c3d28ae926521cc4af01835a12640bcdc",
+  "ceiling": 21,
+  "boundaries": {
+    "lycaon/internal/llm/providers/nativegen/context_test.go": "591864c0aa8faf0602fccb6b064b2481c25644747b9cb96896ebcfb525d441db",
+    "lycaon/internal/llm/providers/nativegen/repair_test.go": "3c7d86fa86c3c0ae5213ed18ada7aa0d9158ebff9431ac9a47e5141f2017be33",
+    "lycaon/internal/llm/providers/nativegen/process_cancel_test.go": "7904d2def7a1460a25c5f3e4558da06113e33c6d3c06f4439d7dce7fdb98d4f5",
+    "lycaon/internal/llm/providers/nativegen/admission_test.go": "46a8471bd6ff1013b2958d82047697431ee06473ff13c3365fa98b600210011f",
+    "lycaon/internal/llm/providers/nativegen/preparation_test.go": "6d7687e3d67e75b449b402c8ff617acb3d9f68afbf58fe83e08cb27c84ab45b6",
+    "lycaon/internal/llm/providers/nativegen/stream_contract_test.go": "0ca3b269293135114f1137470b03236ca1b258aa477176e5e863e20b4718e350"
+  }
+}

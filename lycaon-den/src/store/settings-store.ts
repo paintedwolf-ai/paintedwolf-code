@@ -17,6 +17,7 @@ export interface SettingsState {
   /** Canonical labels for provider instances. */
   providerKinds?: ProviderKindTemplate[];
   modelPolicy?: ModelPolicy;
+  effectiveModelPolicy?: ModelPolicy;
   approvals?: ApprovalConfigResponse;
   limits?: SettingsLimitsResponse;
   effectiveLimits?: {
@@ -37,7 +38,7 @@ export type SettingsStoreActions = {
   setError: (error?: string) => void;
   setProviders: (providers: ProviderMeta[]) => void;
   setProviderKinds: (kinds: ProviderKindTemplate[]) => void;
-  setModelPolicy: (policy: ModelPolicy) => void;
+  setModelPolicy: (policy: ModelPolicy, effectivePolicy?: ModelPolicy) => void;
   setApprovals: (approvals: ApprovalConfigResponse) => void;
   setLimits: (limits: SettingsLimitsResponse) => void;
   setEffectiveLimits: (
@@ -87,10 +88,13 @@ export function createSettingsStore(
       if (device) return device.actions.setProviderKinds(kinds);
       setState("providerKinds", kinds);
     },
-    setModelPolicy(policy) {
+    setModelPolicy(policy, effectivePolicy) {
       invalidate();
       // Full replace removes absent pool rows.
-      setState("modelPolicy", reconcile(policy, { key: null }));
+      batch(() => {
+        setState("modelPolicy", reconcile(policy, { key: null }));
+        setState("effectiveModelPolicy", reconcile(effectivePolicy, { key: null }));
+      });
     },
     setApprovals(approvals) {
       invalidate();

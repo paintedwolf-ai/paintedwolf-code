@@ -51,5 +51,10 @@ func (h *DebugHub) SubscriberCount() int {
 	return h.inner.SubscriberCount()
 }
 
+// Unwrap exposes the wrapped hub so callers needing the concrete hub can reach it.
+func (h *DebugHub) Unwrap() ReplayHub {
+	return h.inner
+}
+
 var _ EventHub = (*DebugHub)(nil)
 var _ ReplayHub = (*DebugHub)(nil)

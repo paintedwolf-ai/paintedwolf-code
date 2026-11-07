@@ -17,7 +17,7 @@ type tailWindowBounds struct {
 	maxBytes  int
 }
 
-func (m *Service) canonicalTailBounds(cfg compaction.CompactionConfig) tailWindowBounds {
+func canonicalTailBounds(cfg compaction.CompactionConfig) tailWindowBounds {
 	maxRows := min(messageview.MaxCompactionRows, max(UncompactedLimit, cfg.ModelContextWindow/512))
 	maxTokens := max(cfg.TargetTokens, cfg.HardCeilingTokens)
 	if maxTokens <= 0 {
@@ -140,7 +140,7 @@ func (m *Service) restoreCanonicalTail(ctx context.Context, sess *api.Session, v
 	if view == nil || view.Continuation == nil || view.Continuation.Window <= 0 || cfg.ModelContextWindow <= view.Continuation.Window || cfg.TargetTokens <= 0 {
 		return nil, false, nil
 	}
-	bounds := m.canonicalTailBounds(cfg)
+	bounds := canonicalTailBounds(cfg)
 	bounds.maxTokens = cfg.TargetTokens
 	bounds.maxBytes = min(4<<20, max(64<<10, cfg.TargetTokens*4))
 	tail, err := m.readBoundedCanonicalTail(ctx, sess.ID, bounds)
@@ -153,7 +153,7 @@ func (m *Service) restoreCanonicalTail(ctx context.Context, sess *api.Session, v
 	if tail[0].Ord > view.Continuation.ThroughOrd {
 		return nil, false, nil
 	}
-	tail, err = m.withCurrentRequest(ctx, sess, tail)
+	tail, err = withCurrentRequest(ctx, m.store, sess, tail)
 	if err != nil {
 		return nil, false, err
 	}
@@ -164,7 +164,7 @@ func (m *Service) applyRestoredReceiverView(ctx context.Context, sess *api.Sessi
 	if view == nil || view.Continuation == nil || view.Continuation.Window <= 0 || cfg.ModelContextWindow <= view.Continuation.Window || cfg.TargetTokens <= 0 {
 		return nil, false
 	}
-	bounds := m.canonicalTailBounds(cfg)
+	bounds := canonicalTailBounds(cfg)
 	bounds.maxTokens = cfg.TargetTokens
 	bounds.maxBytes = min(4<<20, max(64<<10, cfg.TargetTokens*4))
 	tail, err := m.readBoundedCanonicalTail(ctx, sess.ID, bounds)

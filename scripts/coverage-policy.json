@@ -30,6 +30,11 @@
         "pattern": "test_*execution.py",
         "requirements": "scripts/workflow_lint/requirements.txt"
       },
+      "generation staging": {
+        "start": "scripts/generation",
+        "pattern": "test_[!rc]*.py",
+        "requirements": "scripts/generation/requirements-test.txt"
+      },
       "harness": {
         "start": "scripts/harness",
         "pattern": "test_*.py"

@@ -15,8 +15,15 @@ import (
 func (r *registryCore) discoverModelsFresh(ctx context.Context, providerID string, profile providerprofile.Profile, baseURL, apiKey string) ([]modelinfo.Entry, error) {
 	key := discoveryCacheKey(providerID, profile, baseURL, apiKey)
 	return r.discovery.Load(ctx, key, func(ctx context.Context) ([]modelinfo.Entry, error) {
-		return fetchDiscoveredModels(ctx, r.discoveryClient, profile, baseURL, apiKey)
+		return r.fetchProviderModels(ctx, profile, baseURL, apiKey)
 	})
+}
+
+func (r *registryCore) fetchProviderModels(ctx context.Context, profile providerprofile.Profile, baseURL, apiKey string) ([]modelinfo.Entry, error) {
+	if profile.Discovery == providerprofile.DiscoveryNativeGeneration {
+		return r.localRuntime.DiscoverModels(ctx)
+	}
+	return fetchDiscoveredModels(ctx, r.discoveryClient, profile, baseURL, apiKey)
 }
 
 func fetchDiscoveredModels(ctx context.Context, client *http.Client, profile providerprofile.Profile, baseURL, apiKey string) ([]modelinfo.Entry, error) {
@@ -26,6 +33,8 @@ func fetchDiscoveredModels(ctx context.Context, client *http.Client, profile pro
 	var discovered []modelinfo.Entry
 	var err error
 	switch profile.Discovery {
+	case providerprofile.DiscoveryNativeGeneration:
+		return nil, fmt.Errorf("native generation discovery requires the host runtime")
 	case providerprofile.DiscoveryFireworks:
 		fwCtx, fwCancel := context.WithTimeout(ctx, discovery.FireworksTimeout)
 		var ids []string

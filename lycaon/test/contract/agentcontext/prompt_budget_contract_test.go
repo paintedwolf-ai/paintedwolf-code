@@ -41,6 +41,7 @@ func TestRenderedPromptsWithinBudget(t *testing.T) {
 	reg, err := LoadPromptBudgetRegistry(lycaonRoot)
 	contractcheck.FailErr(t, "LoadPromptBudgetRegistry", err)
 	measured := measurePromptBudgets(t, root, reg)
+	writeNativePromptFixtures(t, root, reg)
 	raw, err := os.ReadFile(promptBudgetPolicyFile(root))
 	contractcheck.FailErr(t, "read prompt budgets", err)
 	policy, err := decodePromptSizePolicy(raw)

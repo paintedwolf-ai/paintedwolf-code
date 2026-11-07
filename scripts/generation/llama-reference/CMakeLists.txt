@@ -1,0 +1,27 @@
+cmake_minimum_required(VERSION 3.20)
+project(paintedwolf_generation_reference LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(NOT DEFINED LLAMA_SOURCE_DIR)
+  message(FATAL_ERROR "LLAMA_SOURCE_DIR must name the verified source tree")
+endif()
+set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+add_subdirectory("${LLAMA_SOURCE_DIR}" llama)
+add_executable(generation-reference main.cpp memory.cpp)
+target_include_directories(generation-reference PRIVATE "${LLAMA_SOURCE_DIR}/vendor/nlohmann" "${LLAMA_SOURCE_DIR}/src")
+target_link_libraries(generation-reference PRIVATE llama)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_package(Vulkan REQUIRED)
+  add_library(nativegen_vulkan SHARED ../../../lycaon/internal/generation/native/vulkan/adapter.cpp
+    ../../../lycaon/internal/generation/native/vulkan/cache.cpp
+    ../../../lycaon/internal/generation/native/vulkan/checkpoint.cpp
+    ../../../lycaon/internal/generation/native/vulkan/artifact.cpp
+    ../../../lycaon/internal/generation/native/vulkan/inventory.cpp)
+  target_include_directories(nativegen_vulkan PRIVATE "${LLAMA_SOURCE_DIR}/src")
+  target_link_libraries(nativegen_vulkan PRIVATE llama Vulkan::Vulkan)
+endif()

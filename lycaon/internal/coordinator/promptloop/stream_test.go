@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providers/anthropic"
 	"github.com/lycaon/lycaon/internal/llm/providers/ollama"
+	"github.com/lycaon/lycaon/internal/llm/responserecovery"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
@@ -99,8 +100,8 @@ func TestLoopRecoversOllamaDroppedToolCall(t *testing.T) {
 	}{
 		{name: "after output", drops: 1},
 		{name: "before output", beforeOutput: true, drops: 1},
-		{name: "bounded", drops: maxToolCallUnparsedRecoveries},
-		{name: "exhausted", drops: maxToolCallUnparsedRecoveries + 1, wantErr: true},
+		{name: "bounded", drops: responserecovery.MaxConsecutive},
+		{name: "exhausted", drops: responserecovery.MaxConsecutive + 1, wantErr: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var served atomic.Int32
@@ -192,8 +193,8 @@ func TestLoopRecoversOllamaDroppedToolCall(t *testing.T) {
 			if tc.beforeOutput {
 				wantDraft = ""
 			}
-			if len(drafts) != min(tc.drops, maxToolCallUnparsedRecoveries) {
-				t.Fatalf("rejected drafts = %d, want %d", len(drafts), min(tc.drops, maxToolCallUnparsedRecoveries))
+			if len(drafts) != min(tc.drops, responserecovery.MaxConsecutive) {
+				t.Fatalf("rejected drafts = %d, want %d", len(drafts), min(tc.drops, responserecovery.MaxConsecutive))
 			}
 			for _, body := range drafts {
 				if body != wantDraft {
@@ -263,8 +264,8 @@ func TestDroppedToolCallNeedsItsPolicyDecision(t *testing.T) {
 			return tc.decision, tc.decision != nil, "", false
 		}}}}
 		st := &promptLoopTurnState{}
-		got, err := turn.recoverUnparsedToolCall(t.Context(), &api.Session{ID: "s"}, st, req, nil, &modelcall.Completion{Content: "partial"}, cause, false)
-		if got != nil || !errors.Is(err, tc.want) || st.output.rejection != nil || st.output.droppedToolCallStreak != 0 {
+		got, err := turn.recoverRejectedResponse(t.Context(), &api.Session{ID: "s"}, st, req, nil, &modelcall.Completion{Content: "partial"}, cause, 1)
+		if got != nil || !errors.Is(err, tc.want) || st.output.rejection != nil || st.output.recovery.Consecutive() != 0 {
 			t.Fatalf("decision %v: recovered=%v err=%v state=%+v", tc.decision, got, err, st.output)
 		}
 	}

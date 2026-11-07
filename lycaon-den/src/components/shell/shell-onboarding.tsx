@@ -34,7 +34,7 @@ export function createShellOnboarding(appStore: AppStore, projects: ProjectsStor
   const needsConfig = () =>
     needsOnboardingConfig({
       readyProviderCount: readyProviders(settingsStore.state.providers).length,
-      hasDefaultModel: hasDefaultModel(settingsStore.state.modelPolicy),
+      hasDefaultModel: hasDefaultModel(settingsStore.state.effectiveModelPolicy ?? settingsStore.state.modelPolicy),
     });
 
   const showOnboardingGate = () =>

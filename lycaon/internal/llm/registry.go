@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/modelfeed"
@@ -43,6 +44,8 @@ type registryRouting struct {
 
 type registryCore struct {
 	registryState
+	localRuntime    *nativegen.Runtime
+	localStartup    nativegen.Readiness
 	discovery       *discovery.Cache
 	cloudflareUsage *openaicompat.CloudflareUsageCache
 	discoveryClient *http.Client
@@ -228,6 +231,7 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 	if p == nil {
 		return nil
 	}
+	capacity := modelcall.ProviderCapacity(p)
 	var entry CatalogEntry
 	var hasEntry bool
 	if snapshot != nil {
@@ -258,7 +262,7 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 		}
 	}
 	p = &secretScreenedProvider{inner: p, destination: destination, screen: screen}
-	return &lifecycleProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}}
+	return &lifecycleProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}, capacity: capacity}
 }
 
 // Catalog exposes the underlying catalog.
@@ -275,7 +279,7 @@ func (r *Registry) RenderRequest(ctx context.Context, providerID, model string, 
 	if !ok {
 		return "", nil, fmt.Errorf("render request: provider %q is not configured", providerID)
 	}
-	driver, err := driverFactories.Build(ctx, entry.Kind, providerBuild{entry: entry, resolved: ResolveProvider(entry, "")})
+	driver, err := driverFactories.Build(ctx, entry.Kind, providerBuild{localRuntime: r.localRuntime, entry: entry, resolved: ResolveProvider(entry, "")})
 	if err != nil {
 		return entry.Kind, nil, fmt.Errorf("render request for %s: %w", entry.ID, err)
 	}

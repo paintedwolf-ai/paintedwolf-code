@@ -225,7 +225,16 @@ runs:
     - name: Provision native dependencies
       if: inputs.lookup-only != 'true' && (inputs.setup == 'shell' || inputs.setup == 'harness' || inputs.notices == 'true')
       shell: bash
-      run: cargo fetch --locked --manifest-path lycaon-den/src-tauri/Cargo.toml
+      run: |
+        cargo fetch --locked --manifest-path lycaon-den/src-tauri/Cargo.toml
+        cargo fetch --locked --manifest-path lycaon/internal/generation/native/Cargo.toml
+
+    # Shell lanes stage the engine, whose native generation build needs the pinned
+    # llama.cpp source and the Linux Vulkan tools before the lane runs offline.
+    - name: Provision generation runtime inputs
+      if: inputs.lookup-only != 'true' && (runner.os == 'Linux' && inputs.setup == 'shell')
+      shell: bash
+      run: ./task generation:prepare -- --backend native --install-build-tools
 
     - name: Install frontend dependencies
       if: inputs.lookup-only != 'true'

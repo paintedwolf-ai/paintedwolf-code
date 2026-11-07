@@ -78,6 +78,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils rpm rpmlint lintian cpio gnupg libarchive-tools
+      # The bundle build stages the engine, whose native generation build needs
+      # the pinned llama.cpp source and the Linux Vulkan tools.
+      - name: Provision generation runtime inputs
+        run: ./task generation:prepare -- --backend native --install-build-tools
       - name: Verify the catalog row for this candidate
         env:
           PLATFORM: ${{ matrix.updater_key }}

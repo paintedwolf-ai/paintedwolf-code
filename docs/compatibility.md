@@ -235,6 +235,8 @@ Responses remain additive-friendly: Den ignores unknown properties. Request obje
 
 The Linux launch broker's descriptor-slot layout is co-shipped native `bundle` wire, not persisted state or agent vocabulary. Its optional layout preserves explicitly closed inherited slots across descriptor transport; an omitted layout keeps all supplied slots open. The engine relay and broker move together, with validation and actual-child descriptor invariants covering both sides. No store migration or OpenAPI consumer changes are involved.
 
+The packaged `generation/vulkan-drivers.json` resource is co-shipped internal `bundle` data. Format 1 declares the closure's Mesa ICD paths. The inference host validates the exact shape and prepares process-local NVIDIA driver selection when needed. Its temporary ICD files are ephemeral and remain alive until their reader process exits; they contain no device settings or model state.
+
 Health reports product, store, and schema revisions as distinct facts. Product SemVer does not stand in for the database schema version, and the Den cache revision does not stand in for either.
 
 ## User-repository overlays
@@ -369,6 +371,12 @@ Free-form display copy is not agent-public vocabulary. The structured id behind 
 ## Device configuration
 
 Provider credentials, device model policy, extension desired state, exact grants, and application state are not contained in `store.db`. Deleting the database must not silently erase or reinterpret them.
+
+Local model activation history and device selection are device configuration; the authenticated payload bytes are reacquirable content. Model-store journal format 1 authenticates each revision with host-trusted Ed25519 keys. A revision identity cannot be rebound to different contents, and collection or repair cannot remove a revision while a runtime holds its lease. Database deletion does not reset model activation or trust.
+
+A local model bundle contains `manifest.json` and explicitly named payload files. The manifest is bounded to 128 KiB and rejects unknown fields and trailing content. Its signature covers the `paintedwolf-model-manifest/1` domain and the canonical `SigningBytes` representation. The bundle supplies a key identifier, never a new trust authority. Import verifies that signature before opening payloads, then checks each declared size and SHA-256 before activation. Payload names are single safe path components; `manifest.json` is reserved. Activated revisions hard-link verified content inside the store, avoiding a second model copy. Importing a valid bundle establishes artifact integrity, not runtime compatibility or model quality. Published payloads are read-only. Routine lease and readiness checks inspect the revision seal, size, and modification time without scanning model contents. A lease audit hashes the actual pinned revision, detects same-size corruption even with unchanged timestamps, and supports cancellation. Repair replaces damaged inodes only after readers release their leases.
+
+The model release-key registry is a co-versioned application resource, separate from downloaded model bundles and mutable device state. Format 1 contains `format: 1` and a `keys` array of `{id, public_key}` entries, where each public key is a base64-encoded Ed25519 key. The decoder bounds the registry to 16 KiB and 16 distinct keys and refuses unknown fields, formats and trailing content. Key rotation ships through the trusted application distribution.
 
 The host identity key (`host-identity.pem`) is device configuration too. A store reset keeps it, and backups neither carry nor restore it: a backup restored on another machine becomes a new host with the same people. An unreadable key stops startup rather than silently minting a new identity. The people who author durable facts live in `store.db` and travel with it.
 

@@ -127,7 +127,7 @@ func TestModelAssignmentDiscoveryFailure(t *testing.T) {
     api_key_env: ""
     models: []
 `+MinimalShipHTTPRetryYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -204,13 +204,13 @@ providers:
 	shipYAML, err := os.ReadFile(catalogPath)
 	testutil.FailErr(t, "read ship", err)
 	writeProvidersLocal(t, localPath, shipYAML)
-	cat, err := NewProviderCatalog()
+	cat, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "catalog", err)
 	creds, err := providercredentials.New()
 	testutil.FailErr(t, "creds", err)
 	testutil.FailErr(t, "set key", creds.Set("openai", "sk-test"))
 
-	reg, err := NewRegistry(t.Context(), cat, creds)
+	reg, err := NewRegistry(t.Context(), cat, creds, nil)
 
 	if err == nil {
 

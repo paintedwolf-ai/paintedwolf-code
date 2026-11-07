@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerhttp"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/modelfeed"
 	"os"
@@ -18,7 +19,7 @@ import (
 )
 
 // NewService loads catalog, credentials, policy, registry, and router.
-func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error) {
+func NewService(ctx context.Context, mock modelcall.LLMClient, local *nativegen.Availability) (*Service, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -34,7 +35,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error)
 	if err != nil {
 		return nil, err
 	}
-	registry, err := NewRegistry(ctx, catalog, credentials)
+	registry, err := NewRegistry(ctx, catalog, credentials, local)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +53,7 @@ func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error)
 	if ProviderUtilityCallsEnabled() {
 		refreshCancel, refreshDone = startModelFeedRefresh(ctx, feed)
 	}
-	router := NewStaticModelRouter(policy)
+	router := NewStaticModelRouter(policy).WithLocalDefault(registry.IncludedModelAvailable)
 
 	svc := &Service{
 		modelFeedRefreshCancel: refreshCancel,
@@ -105,7 +106,7 @@ func (s *Service) Close(ctx context.Context) error {
 }
 
 // NewRegistry builds providers from catalog and stored credentials.
-func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *providercredentials.Store) (*Registry, error) {
+func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *providercredentials.Store, local *nativegen.Availability) (*Registry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -118,6 +119,10 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 		return nil, fmt.Errorf("shared provider rate state requires an absolute directory in the isolated harness")
 	}
 	r := &Registry{}
+	if local != nil {
+		r.localRuntime = local.Runtime
+		r.localStartup = local.Initial
+	}
 	r.rateGate = providerretry.NewProviderRateGate(rateDirectory)
 	r.catalog = catalog
 	r.credentials = credentials

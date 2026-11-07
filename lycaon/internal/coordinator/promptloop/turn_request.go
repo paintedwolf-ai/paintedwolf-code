@@ -76,7 +76,11 @@ func (l *modelTurn) buildTurnRequest(
 		toolUse = modelcall.ToolUseForbidden
 		callable = []tools.ToolMeta{}
 	}
-	messages, err = l.Tools.appendToolProcedures(ctx, sess, profileID, messages, callable)
+	procedureProfile := profileID
+	if surfaceID != "" {
+		procedureProfile = surfaceID
+	}
+	messages, err = l.Tools.appendToolProcedures(ctx, sess, procedureProfile, messages, callable)
 	if err != nil {
 		return coordinatorTurnRequest{}, err
 	}

@@ -15,12 +15,14 @@ import (
 // SummaryBudget resolves the utility model independently of the receiver.
 type SummaryBudget struct{ Input, Output int }
 
-type summaryBudgetSource interface{ SummaryBudget() SummaryBudget }
+type summaryBudgetSource interface {
+	SummaryBudget(context.Context) SummaryBudget
+}
 
-func (c *SimpleCompactor) summaryBudget() SummaryBudget {
+func (c *SimpleCompactor) summaryBudget(ctx context.Context) SummaryBudget {
 	budget := SummaryBudget{Input: c.cfg.SummaryInputTokens, Output: c.cfg.SummaryOutputTokens}
 	if source, ok := c.summary.(summaryBudgetSource); ok {
-		resolved := source.SummaryBudget()
+		resolved := source.SummaryBudget(ctx)
 		if resolved.Input > 0 {
 			budget.Input = min(budget.Input, resolved.Input)
 		}
@@ -34,7 +36,10 @@ func (c *SimpleCompactor) summaryBudget() SummaryBudget {
 // summarizePrefix accounts for every source even when synthesis is unavailable.
 func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo, prefix []ContextMessage) (compactionSummary, []messageview.ContinuationSource, error) {
 	summary := priorSummary(info.PriorContinuation)
-	sources, segments := continuationSegments(prefix, c.cfg.SummaryMessageTokens)
+	sources, segments, sourceErr := continuationSegments(prefix, c.cfg.SummaryMessageTokens)
+	if sourceErr != nil {
+		return summary, sources, sourceErr
+	}
 	if len(segments) == 0 {
 		return summary, sources, nil
 	}
@@ -45,7 +50,7 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 	if err != nil {
 		return summary, sources, err
 	}
-	budget := c.summaryBudget()
+	budget := c.summaryBudget(ctx)
 	calls, position := 0, 0
 	remaining := map[string]int{}
 	for _, segment := range segments {
@@ -62,7 +67,8 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 				break
 			}
 			calls++
-			raw, callErr := c.summary.Summarize(WithSummaryFormat(ctx), system, input.Text, budget.Output)
+			callCtx := WithSummaryFormat(ctx)
+			raw, callErr := c.summary.Summarize(callCtx, system, input.Text, budget.Output)
 			if ctx.Err() != nil {
 				return summary, sources, ctx.Err()
 			}
@@ -108,15 +114,17 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 	return summary, sources, err
 }
 
-func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.ContinuationSource, []ContextMessage) {
+func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.ContinuationSource, []ContextMessage, error) {
 	var sources []messageview.ContinuationSource
 	var segments []ContextMessage
+	var sourceErr error
 	width := max(1, tokens*tokenest.DefaultDivisor)
 	for _, row := range rows {
 		if row.CompactionCheckpoint || isContinuationSummary(row) {
 			continue
 		}
-		content, _, _, _ := projectCompactionMessage(row)
+		content, err := sourceData(row)
+		sourceErr = errors.Join(sourceErr, err)
 		tool := row.ToolName
 		if tool == "" && len(row.ToolCalls) == 1 {
 			tool = row.ToolCalls[0].Name
@@ -129,11 +137,14 @@ func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.Cont
 			segment := row
 			segment.Content = string(runes[start:min(start+width, len(runes))])
 			segment.ContentParts = nil
+			segment.ToolCalls = nil
+			segment.ToolCallID = ""
+			segment.ToolName = ""
 			segment.Authority = api.ContentAuthorityNone
 			segments = append(segments, segment)
 		}
 	}
-	return sources, segments
+	return sources, segments, sourceErr
 }
 
 func priorSummary(record *messageview.Continuation) compactionSummary {

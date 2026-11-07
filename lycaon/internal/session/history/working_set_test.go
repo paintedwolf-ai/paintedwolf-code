@@ -242,7 +242,7 @@ func TestCoverageLagKeepsGapOrNamesOmissionAC_KV_05(t *testing.T) {
 			t.Fatal("omission lacks a notice")
 		}
 		next := projected[noticeAt+1]
-		want, err := svc.omissionNotice(t.Context(), sess, historyCoverageNoticeID, 41, next.Ord-1)
+		want, err := omissionNotice(t.Context(), svc.recallAvailable, sess, historyCoverageNoticeID, 41, next.Ord-1)
 		testutil.FailErr(t, "render expected notice", err)
 		if projected[noticeAt].Content != want.Content {
 			t.Fatalf("notice does not name interval 41-%d", next.Ord-1)

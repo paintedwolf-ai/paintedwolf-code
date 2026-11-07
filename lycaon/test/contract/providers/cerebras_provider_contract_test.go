@@ -48,7 +48,7 @@ func TestBundledProvidersIncludeCerebras(t *testing.T) {
 func TestCerebrasRegistryUnconfiguredWithoutKey(t *testing.T) {
 	t.Setenv("CEREBRAS_API_KEY", "csk-env-ignored")
 	catalog := liveCatalogForShipIDs(t, "cerebras")
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}
