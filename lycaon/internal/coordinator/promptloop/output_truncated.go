@@ -193,7 +193,7 @@ func (l *turnNudges) handleOutputTruncatedTurn(
 	if l == nil || l.Projection == nil {
 		return false, fmt.Errorf("append messages not configured")
 	}
-	msg, err := l.Projection.appendMessage(ctx, sessionID, msg)
+	msg, err = l.Projection.appendMessage(ctx, sessionID, msg)
 	if err != nil {
 		return false, err
 	}
