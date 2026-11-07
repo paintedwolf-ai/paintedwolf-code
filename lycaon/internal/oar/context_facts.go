@@ -131,12 +131,12 @@ type GroundingFacts struct {
 }
 
 type ExecutionFacts struct {
-	ConfineApplied  bool
-	NetworkMode     string
-	DenialSubject   string
-	ConfineSignals  []string
-	FailedStages    []string
-	ProcessRunning  bool
+	ConfineApplied bool
+	NetworkMode    string
+	DenialSubject  string
+	ConfineSignals []string
+	FailedStages   []string
+	ProcessRunning bool
 }
 
 type RefusalsFacts struct {

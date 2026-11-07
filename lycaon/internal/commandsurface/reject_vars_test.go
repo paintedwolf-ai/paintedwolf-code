@@ -128,4 +128,3 @@ func TestCommandRejectVarsScratchDir(t *testing.T) {
 		t.Fatalf("expected scratch_var=false for $FOO: %#v", varsOther)
 	}
 }
-

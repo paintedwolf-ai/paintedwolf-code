@@ -23,14 +23,14 @@ import (
 // pipeline. A name appearing there is not consumption.
 var declarationPlumbing = map[string]bool{
 	"lycaon/config/packs/painted-wolf/platform/host/anchors/oar-profile.yaml": true,
-	"lycaon/internal/oar/catalogue.go":        true,
-	"lycaon/internal/oar/occurrence_facts.go": true,
-	"lycaon/internal/oar/fact_projection.go":  true,
-	"lycaon/internal/oar/facts.go":            true,
-	"lycaon/internal/oar/conformance.go":      true,
-	"lycaon/internal/oar/context_facts.go":    true,
-	"lycaon/internal/oar/context.go":          true,
-	"lycaon/internal/oar/env.go":              true,
+	"lycaon/internal/oar/catalogue.go":                                        true,
+	"lycaon/internal/oar/occurrence_facts.go":                                 true,
+	"lycaon/internal/oar/fact_projection.go":                                  true,
+	"lycaon/internal/oar/facts.go":                                            true,
+	"lycaon/internal/oar/conformance.go":                                      true,
+	"lycaon/internal/oar/context_facts.go":                                    true,
+	"lycaon/internal/oar/context.go":                                          true,
+	"lycaon/internal/oar/env.go":                                              true,
 }
 
 var (

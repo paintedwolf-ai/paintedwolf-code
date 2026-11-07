@@ -102,4 +102,3 @@ func ObserveWaitVisibility(sess *api.Session, history []api.Message, tool string
 		})
 	}
 }
-
