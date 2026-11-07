@@ -3,7 +3,6 @@ package toolvocab_test
 import (
 	"strings"
 	"testing"
-	"testing/fstest"
 
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -14,10 +13,7 @@ import (
 func TestSkillProcedureToolsMustBeReachable(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
 	testutil.FailErr(t, "build tool catalog", err)
-	const resource = "references/search.md"
-	fsys := fstest.MapFS{resource: {Data: []byte("Use `source_history` to locate the definition.")}}
-	sk := skills.Skill{Name: "search", Body: "Select a reference.", Metadata: map[string]string{skills.TemplateResourcesMetadata: resource}}
-	sk.BindResources(fsys, ".", skills.DiscoverBundledResources(fsys, "."), "")
+	sk := skills.Skill{Name: "search", Body: "Use `source_history` to locate the definition."}
 	for _, tc := range []struct {
 		profile   string
 		wantError bool
@@ -48,22 +44,50 @@ func TestSkillProcedureRejectsRetiredOperationNames(t *testing.T) {
 	}
 }
 
-func TestSkillToolsOfferedGatesStockSkillsByNonOptionalTools(t *testing.T) {
+func TestSkillToolsOfferedGatesStockSkillsByRenderedBody(t *testing.T) {
 	stock := skills.Skill{
-		Name:          "review-accessibility",
-		Body:          "Use `measure_page` and `page_open` to inspect the page, and optionally `capture_page`.",
-		OptionalTools: []string{"capture_page"},
+		Name: "review-accessibility",
+		Body: "Use `measure_page` and `page_open` to inspect the page, and optionally {% if profile_has_capture_page %}`capture_page`{% endif %}.",
 	}
 	if toolvocab.SkillToolsOffered(stock, map[string]bool{"measure_page": true}) {
 		t.Fatal("stock skill with missing required tool was accepted")
 	}
 	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"measure_page": true, "page_open": true}) {
-		t.Fatal("stock skill with all required tools offered was rejected when optional tool was absent")
+		t.Fatal("stock skill with all required tools offered was rejected")
+	}
+	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"measure_page": true, "page_open": true, "capture_page": true}) {
+		t.Fatal("stock skill with the guarded tool offered was rejected")
+	}
+	// Without the guard the mention is a hard requirement: the retired
+	// optional-tool escape hatch is gone, so an unguarded name must gate the skill.
+	unguarded := stock
+	unguarded.Body = "Use `measure_page` and `page_open` to inspect the page, and optionally `capture_page`."
+	if toolvocab.SkillToolsOffered(unguarded, map[string]bool{"measure_page": true, "page_open": true}) {
+		t.Fatal("unguarded tool mention escaped the offered-tools gate")
 	}
 	userSkill := stock
 	userSkill.UserProvided = true
 	if !toolvocab.SkillToolsOffered(userSkill, nil) {
 		t.Fatal("user-provided skill was restricted by offered tools")
+	}
+}
+
+func TestSkillToolsOfferedResolvesCoordinatorBranches(t *testing.T) {
+	stock := skills.Skill{
+		Name: "split-audit",
+		Body: "{% if is_coordinator %}Call `measure_page` for the audit.{% else %}Call `capture_page` to snapshot.{% endif %}",
+	}
+	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"task": true, "measure_page": true}) {
+		t.Fatal("coordinator branch with offered tools was rejected")
+	}
+	if toolvocab.SkillToolsOffered(stock, map[string]bool{"task": true}) {
+		t.Fatal("coordinator branch naming an unoffered tool was accepted")
+	}
+	if !toolvocab.SkillToolsOffered(stock, map[string]bool{"capture_page": true}) {
+		t.Fatal("worker branch with offered tools was rejected")
+	}
+	if toolvocab.SkillToolsOffered(stock, map[string]bool{}) {
+		t.Fatal("worker branch naming an unoffered tool was accepted")
 	}
 }
 

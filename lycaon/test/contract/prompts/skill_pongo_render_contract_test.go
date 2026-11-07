@@ -2,7 +2,11 @@ package contract
 
 import (
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -11,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
 
 // TestStockPackSkillsRenderWithPolicyVars requires every pack SKILL.md body
@@ -108,6 +113,87 @@ func TestStockTerminalEvidenceKeepsSecretPlaceholder(t *testing.T) {
 // stripVerbatimOutput removes verbatim-block contents (which rendering
 // preserves literally) from rendered output, so the leftover-marker check
 // only flags markers a template leaked outside verbatim protection.
+// TestStockPackSkillsFrontmatterSchema requires every stock SKILL.md
+// frontmatter to carry only documented top-level keys (INV-SK-02): the
+// retired optional-tool frontmatter key must not return.
+func TestStockPackSkillsFrontmatterSchema(t *testing.T) {
+	// The test package lives at <module>/test/contract/prompts; resolve the
+	// module root by walking up to go.mod so the walk works from any checkout.
+	moduleRoot, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve module root: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(moduleRoot, "go.mod")); err != nil {
+		t.Fatalf("module root %s does not contain go.mod: %v", moduleRoot, err)
+	}
+	root := filepath.Join(moduleRoot, "config", "packs")
+	var files []string
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && d.Name() == "SKILL.md" {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk stock packs: %v", err)
+	}
+	if len(files) < 60 {
+		t.Fatalf("expected the stock packs' ~61 SKILL.md files, found %d", len(files))
+	}
+	allowed := map[string]bool{
+		"name": true, "description": true, "license": true,
+		"compatibility": true, "metadata": true, "allowed-tools": true,
+	}
+	var failed []string
+	for _, path := range files {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			failed = append(failed, fmt.Sprintf("%s: read: %v", path, err))
+			continue
+		}
+		keys, err := frontmatterKeys(string(raw))
+		if err != nil {
+			failed = append(failed, fmt.Sprintf("%s: frontmatter: %v", path, err))
+			continue
+		}
+		for _, key := range keys {
+			if !allowed[key] {
+				failed = append(failed, fmt.Sprintf("%s: undocumented frontmatter key %q", path, key))
+			}
+		}
+	}
+	if len(failed) > 0 {
+		t.Fatalf("stock pack frontmatter schema violations (%d):\n  - %s", len(failed), strings.Join(failed, "\n  - "))
+	}
+}
+
+// frontmatterKeys returns the sorted top-level YAML keys of a SKILL.md's
+// frontmatter block.
+func frontmatterKeys(raw string) ([]string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if !strings.HasPrefix(trimmed, "---") {
+		return nil, fmt.Errorf("missing frontmatter")
+	}
+	rest := trimmed[3:]
+	end := strings.Index(rest, "\n---")
+	if end < 0 {
+		return nil, fmt.Errorf("unterminated frontmatter")
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(rest[:end]), &doc); err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0, len(doc))
+	for key := range doc {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys, nil
+}
+
 func stripVerbatimOutput(source, out string) string {
 	for _, match := range verbatimPattern.FindAllStringSubmatch(source, -1) {
 		out = strings.ReplaceAll(out, match[1], "")

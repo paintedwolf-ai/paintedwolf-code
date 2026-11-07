@@ -80,10 +80,9 @@ func TestSkillPreloadRecordsOnlySuccessfulRendering(t *testing.T) {
 func TestSelectSkillPreloadGatesStockSkillsByTurnOfferedTools(t *testing.T) {
 	roster := []skills.Skill{
 		{
-			Name:          "review-accessibility",
-			Description:   "Audit the rendered web page for accessibility.",
-			Body:          "Use `measure_page` and `page_open` to inspect the live page, and optionally `capture_page`.",
-			OptionalTools: []string{"capture_page"},
+			Name:        "review-accessibility",
+			Description: "Audit the rendered web page for accessibility.",
+			Body:        "Use `measure_page` and `page_open` to inspect the live page, and optionally {% if profile_has_capture_page %}`capture_page`{% endif %}.",
 		},
 		{
 			Name:         "user-skill",

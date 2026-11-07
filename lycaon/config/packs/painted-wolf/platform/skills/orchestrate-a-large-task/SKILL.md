@@ -1,12 +1,6 @@
 ---
 name: orchestrate-a-large-task
 description: Split broad work across task workers and integrate it, for staged research, parallel fixes, configuration matrices, competing approaches, or repo-wide rule sweeps.
-optional_tools:
-  - decline_worker_budget
-  - extend_worker_budget
-  - record_finding
-  - request_budget
-  - task
 metadata:
 ---
 

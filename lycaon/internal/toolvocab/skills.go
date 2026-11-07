@@ -8,8 +8,10 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -68,8 +70,7 @@ func AgentSurfaces(agents []agentdef.Profile, profiles []sandbox.ToolProfile) ([
 
 // ValidateSkills checks every tool a stock skill names is held by every profile
 // the skill is offered to; instructions naming absent tools reject on contact.
-// optional_tools covers names a skill mentions without depending on. Skills the
-// user supplied are the author's vocabulary and are left alone.
+// Skills the user supplied are the author's vocabulary and are left alone.
 func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) error {
 	byName := make(map[string]skills.Skill, len(loaded))
 	bodies := make(map[string]string, len(loaded))
@@ -92,15 +93,14 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 			if skill.UserProvided {
 				continue
 			}
-			optional := optionalToolSet(skill)
 			for _, tool := range NamedTools(c, bodies[name]) {
-				if optional[tool] || c.ProfileHolds(agent.ProfileID, tool) {
+				if c.ProfileHolds(agent.ProfileID, tool) {
 					continue
 				}
 				problems = append(problems, fmt.Sprintf(
 					"skill %q tells its reader to call %q, but agent %q runs on profile %q, which does not hold it — "+
-						"grant the tool, drop the skill from that agent, or list the name under optional_tools",
-					skill.Name, tool, agent.AgentID, agent.ProfileID))
+						"grant the tool, drop the skill from that agent, or guard the mention with {%% if profile_has_%s %%}",
+					skill.Name, tool, agent.AgentID, agent.ProfileID, tool))
 			}
 		}
 	}
@@ -124,23 +124,17 @@ func offeredSkills(sel skills.Selector, loaded []skills.Skill) []string {
 	return out
 }
 
-func optionalToolSet(s skills.Skill) map[string]bool {
-	out := make(map[string]bool, len(s.OptionalTools))
-	for _, name := range s.OptionalTools {
-		out[strings.TrimSpace(name)] = true
-	}
-	return out
-}
-
 var stockCatalog = sync.OnceValue(func() *Catalog {
 	c, _ := NewCatalog(&toolschema.Config{}, []sandbox.ToolProfile{{ID: "stock"}}, Provenance{})
 	return c
 })
 
-// SkillToolsOffered reports whether offered covers every non-optional tool sk
-// unconditionally names and satisfies sk's disjunctive requirement: when
+// SkillToolsOffered reports whether offered covers every tool the skill's
+// rendered body names and satisfies sk's disjunctive requirement: when
 // `metadata.paintedwolf.any_of_tools` names tools, at least one member must be
-// offered. User-provided skills are not restricted.
+// offered. The body renders through pongoplain with the offered-tool template
+// vars, so guarded branches for tools the reader lacks do not count against
+// reachability. User-provided skills are not restricted.
 func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 	if sk.UserProvided {
 		return true
@@ -149,10 +143,9 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 	if c == nil {
 		return true
 	}
-	optional := optionalToolSet(sk)
 	anyOf := sk.AnyOfTools()
-	for _, tool := range NamedTools(c, sk.Body) {
-		if optional[tool] || offered[tool] {
+	for _, tool := range NamedTools(c, renderSkillBody(sk, offered)) {
+		if offered[tool] {
 			continue
 		}
 		// any_of members are individually optional; the disjunction below
@@ -170,4 +163,25 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+// renderSkillBody renders sk.Body with the offered-tool template vars so
+// profile-guarded branches resolve against the reader's actual tool set.
+// Compilation or execution failures fall back to the raw body.
+func renderSkillBody(sk skills.Skill, offered map[string]bool) string {
+	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	for tool := range offered {
+		vars["profile_has_"+tool] = true
+	}
+	vars["is_coordinator"] = offered["task"]
+	vars["has_git"] = true
+	tpl, err := pongoplain.Compile(sk.Body)
+	if err != nil {
+		return sk.Body
+	}
+	rendered, err := pongoplain.ExecuteDetached(tpl, vars)
+	if err != nil {
+		return sk.Body
+	}
+	return rendered
 }
