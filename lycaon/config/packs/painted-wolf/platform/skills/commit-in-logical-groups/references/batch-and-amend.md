@@ -1,6 +1,6 @@
 # Batch the commits
 
-Batch independent, path-scoped `git status --short` and `git diff --stat` inspections through `command`. Commit groups run in order: `git add -- PATHS && git commit -m MESSAGE -- PATHS`. Quote each path and message. Freeze the surveyed inventory for each group; do not stage every group first.
+{% if profile_has_command and root_count %}Batch independent, path-scoped `git status --short` and `git diff --stat` inspections through `command`.{% endif %} Commit groups run in order: `git add -- PATHS && git commit -m MESSAGE -- PATHS`. Quote each path and message. Freeze the surveyed inventory for each group; do not stage every group first.
 
 The host reviews each Git operation and preserves unrelated staging. A program is not an atomic transaction: earlier commits remain applied when a later operation fails. Inspect the receipt and retry only the unfinished operation. External writers can still change the repository.
 

@@ -36,8 +36,8 @@ errors. Wildcards and regular expressions are unsupported.
   restricts the match; supply `value_flags`, `value: last_positional`, or both.
   Flags match case exactly and may be long or one-character short names. Glued short values are unsupported.
 - `surfaces` maps exact tool names to host parsers. `content` and `terminal`
-  require a top-level string `content_arg`. `command` uses the standard command
-  and stages arguments and forbids `content_arg`. Independent units may add
+  require a top-level string `content_arg`. {% if profile_has_command and root_count %}`command` uses the standard command
+  and stages arguments and forbids `content_arg`.{% endif %} Independent units may add
   multiple payload arguments for one tool without replacing existing mappings.
 
 Definitions cannot change exclusions, SQL parsing, password lists, inspection

@@ -91,4 +91,4 @@ Use a dark technical board only when it improves boundary legibility; inherit a 
 
 ## Verification
 
-At 768px and 1280px, confirm every architecture node stays inside the board, connectors terminate at node edges, the durable spine is visually central, and the decision/failure sections do not repeat or overlap. Use `measure_page` when alignment or overflow is part of the claim.
+At 768px and 1280px, confirm every architecture node stays inside the board, connectors terminate at node edges, the durable spine is visually central, and the decision/failure sections do not repeat or overlap. {% if profile_has_measure_page %}Use `measure_page` when alignment or overflow is part of the claim.{% endif %}

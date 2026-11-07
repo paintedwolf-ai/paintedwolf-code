@@ -7,7 +7,7 @@ description: When the user asks to commit, split the working tree into coherent 
 
 **Entry check:** the user asked for the work to be committed. Committing is never an implicit part of finishing a change.
 
-Use native Git commands through `command` for inspection, staging, and commits. Each operation retains host review and session attribution.
+{% if profile_has_command and root_count %}Use native Git commands through `command` for inspection, staging, and commits.{% endif %} Each operation retains host review and session attribution.
 
 ## Mechanics
 
@@ -16,14 +16,14 @@ Use native Git commands through `command` for inspection, staging, and commits. 
 
 ## Workflow
 
-1. **Survey once, before staging anything.** The inventory is `git status --short`, `git diff --stat`, and bounded `git log` in `command`, narrowed by path on a large tree; never a read of every hunk. Write the groups {% if profile_has_update_progress %}in `update_progress`, one line each,{% endif %} before reading any hunk, then read hunks in one batch only for files whose group is ambiguous. Note which paths this session wrote; the rest is the user's finished work or someone else's live work in a shared tree.
+1. **Survey once, before staging anything.** {% if profile_has_command and root_count %}The inventory is `git status --short`, `git diff --stat`, and bounded `git log` in `command`, narrowed by path on a large tree; never a read of every hunk.{% endif %} Write the groups {% if profile_has_update_progress %}in `update_progress`, one line each,{% endif %} before reading any hunk, then read hunks in one batch only for files whose group is ambiguous. Note which paths this session wrote; the rest is the user's finished work or someone else's live work.
 2. **Leave what is not yours.** Work you did not write and the user has not claimed is omitted from the commit: not reverted, not stashed, not finished on their behalf. A repository-wide stash is never the way to get a clean view — it empties every concurrent worker's tree at once.
-3. **Leave live work alone even when it is yours.** A file still being changed belongs in a later commit. Half a change under a confident message is worse than no commit.
+3. **Leave live work alone even when it is yours.** A file still being changed belongs in a later commit.
 4. **Group by the change, not by the directory.** One commit is one reason: a feature with its tests and docs, a fix with its regression, a rename across every file it touched. Generated output travels with the source that produced it. State each group in one line; if you cannot, it is more than one commit. A group that needs a hunk to describe gets that hunk read, not the whole tree.
-5. **Order them so each stands alone.** Prefer a sequence where every commit leaves the project building — a refactor before the feature that needs it, not after.
+5. **Order them so each stands alone.** Prefer a sequence where every commit leaves the project building — a refactor before the feature that needs it.
 6. **Stage by explicit path, every time.** Never stage by wildcard, "all changes", or directory sweep; a large group is still an explicit list. For each group, run `git add -- PATHS` followed by `git commit -m MESSAGE -- PATHS`. Preserve group order; proceed only after the preceding operation succeeds.
 7. **Write messages in the project's existing style.** State what changed and why; do not narrate the process or add trailers the project does not use.
-8. **Verify once and finish.** Commit receipts confirm hashes and committed paths; omitted `uncommitted_*` fields do not prove a clean tree. Run one final `git status --short` in `command`; if it fails, report cleanliness as unverified and do not infer the cause. Once the declared groups are committed, report that status and stop. List later arrivals as remaining work; do not reopen the survey without a new user request.
+8. **Verify once and finish.** Commit receipts confirm hashes and committed paths; omitted `uncommitted_*` fields do not prove a clean tree. {% if profile_has_command and root_count %}Run one final `git status --short` in `command`; if it fails, report cleanliness as unverified and do not infer the cause.{% endif %} Once the declared groups are committed, report that status and stop. List later arrivals as remaining work; do not reopen the survey without a new user request.
 
 ## Boundaries
 

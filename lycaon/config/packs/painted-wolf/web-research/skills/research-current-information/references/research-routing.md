@@ -27,7 +27,7 @@ Prefer a source that directly establishes the fact. A high-ranking summary does 
 
 ## Fetch and page
 
-`web_search` identifies candidates. `fetch_url` supplies the evidence.
+{% if profile_has_web_search %}`web_search` identifies candidates.{% endif %} {% if profile_has_fetch_url %}`fetch_url` supplies the evidence.{% endif %}
 
 - Read the page section that contains the relevant fact, not a page dump.
 - If the first fetch returns a head and symbol map, request the relevant range with `offset` and `limit`; repeating the same unpaged request only repeats the map.
