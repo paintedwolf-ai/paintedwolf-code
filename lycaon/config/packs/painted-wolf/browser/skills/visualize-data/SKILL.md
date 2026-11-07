@@ -1,8 +1,6 @@
 ---
 name: visualize-data
 description: Render a small chart or comparison table when counts, trends, benchmarks, durations, or sizes merit a visual.
-# Named for readers whose profile holds it; other profiles follow the skill without it.
-optional_tools:
 ---
 
 # Visualize data

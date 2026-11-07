@@ -1,7 +1,6 @@
 ---
 name: evolve-a-system
 description: Review failure, retry, and idempotency policies; design state machines and concurrency; evolve APIs or fix systemic defects.
-optional_tools:
 metadata:
 ---
 

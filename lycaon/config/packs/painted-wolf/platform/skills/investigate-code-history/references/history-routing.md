@@ -17,7 +17,7 @@ Native Git commands in `command` provide committed history. `source_history` pro
 | How did a file evolve? | `git log -- path` in `command` |
 | Which commits differ between branches? | `git rev-list --left-right --count base...head`, `git log base..head`, and `git diff base head -- paths` in `command` |
 | What does a ref resolve to? | `git rev-parse ref` in `command` |
-| How do I undo a retained file change? | `restore_version(path)` or with `version_id`, only when requested |
+{% if profile_has_restore_version %}| How do I undo a retained file change? | `restore_version(path)` or with `version_id`, only when requested |{% endif %}
 | Where did text exist at an older revision? | `command`: `git grep -n PATTERN REV -- PATH`; `git show REV:PATH` for the whole file |
 | Which release contains a commit? | `command`: `git describe --tags --always REV`; `git log` between the named tags |
 | Where did a branch point before a reset or rebase? | `command`: `git reflog -n 20 [REF]`; `git show` the earlier entry before restoring anything |

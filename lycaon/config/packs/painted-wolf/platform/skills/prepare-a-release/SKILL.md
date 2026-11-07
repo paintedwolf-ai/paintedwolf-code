@@ -1,9 +1,6 @@
 ---
 name: prepare-a-release
 description: Assemble and verify release versions, notes, artifacts, provenance, and clean-install evidence without publishing.
-# Named for readers whose profile holds them; other profiles follow the skill without them.
-optional_tools:
-  - command
 ---
 
 # Prepare a release
