@@ -10,7 +10,6 @@ type InvocationFacts struct {
 	Tool                            string
 	ToolArgs                        map[string]any
 	ToolArgsFingerprint             string
-	ToolAllowedForProfile           bool
 	PatternParseOK                  bool
 	ArgValidationErrors             []string
 	ArgValidationReason             string
@@ -20,15 +19,12 @@ type InvocationFacts struct {
 	ToolIsTask                      bool
 	ToolPayloadChunkable            bool
 	ToolIsHandoff                   bool
-	PackRunnerTask                  bool
 	CommandNotArgv                  bool
 	HTTPRequestWebPage              bool
 	HTTPRequestLoopbackOtherSession bool
 }
 
 type SessionFacts struct {
-	ToolTurnHasText      bool
-	ToolTurnHasAgentNote bool
 	// UnpublishedToolTextPending holds a carrier's text with no later note this intent.
 	UnpublishedToolTextPending bool
 	// MidTurnEvidenceUnreadable means the host failed to read evidence, so pending
@@ -55,7 +51,6 @@ type SessionFacts struct {
 	PermissionProfile        string
 	Principal                string
 	PrincipalRoles           []string
-	PostureUnresolved        bool
 	RecentToolNames          []string
 }
 
@@ -82,14 +77,12 @@ type WorkflowFacts struct {
 	BatchClosed                  bool
 	SynthesisWrapupToolForbidden bool
 	ReviewLoopActive             bool
-	PlanAwaitingApproval         bool
 	BatchReadyIgnoringProgress   bool
 	SynthesisDelayCount          int64
 	ReviewVerdictGateOpen        bool
 	VerdictDelayCount            int64
 	CloseoutGatesOpen            bool
 	CloseoutGateOpenLeaves       string
-	CloseoutGateDelayCount       int64
 	WorkflowReportPhasePending   bool
 	PhaseObligationPending       bool
 	PhaseObligationKinds         string
@@ -100,7 +93,6 @@ type WorkersFacts struct {
 	WorkerSpawnBlocked      bool
 	ActiveWorkerCount       int64
 	PendingOverlayPromote   bool
-	OverlayState            string
 	PathIsWorkerBranch      bool
 	WorkerAttemptedMutation bool
 	ScopeMode               string
@@ -116,23 +108,17 @@ type WorkersFacts struct {
 	MaxWriteWorkers         int64
 	AgentIsScout            bool
 	AgentIsImplementer      bool
-	AgentIsPlanWriter       bool
-	DisallowedAgent         bool
 }
 
 type GroundingFacts struct {
 	UnobservedCitedPaths       []string
 	UnobservedCitedURLs        []string
 	UnobservedCitedHandles     []string
-	CitationFieldsPresent      bool
 	ClaimsCompletion           bool
 	HasMatchingLedgerJob       bool
-	LedgerCriteriaMet          bool
 	WorkerSummaryPresent       bool
 	WorkerArtifactPresent      bool
 	WorkerArtifactMeasured     bool
-	FilesTouched               []string
-	SummaryLength              int64
 	CitationUnverifiable       bool
 	ScoutSurveyEvidencePresent bool
 	SurfaceClaimUngrounded     bool
@@ -151,11 +137,6 @@ type ExecutionFacts struct {
 	ConfineSignals  []string
 	FailedStages    []string
 	ProcessRunning  bool
-	ProcessTimedOut bool
-	ProcessStopped  bool
-	ProcessExited   bool
-	SandboxRefusals []string
-	ModeBits        string
 }
 
 type RefusalsFacts struct {
@@ -166,7 +147,6 @@ type RefusalsFacts struct {
 	RefusedCredentialStorePaths []string
 	RefusedTerminalReadPaths    []string
 	RefusedTerminalWritePaths   []string
-	SandboxRefusalWitness       string
 	RefusedSocketPaths          []string
 	RefusedConnectPorts         []string
 	RefusedListenPorts          []string
@@ -182,17 +162,13 @@ type SourceFacts struct {
 	GitNoRepositoryOnWriteLeg bool
 	SourceAnalysisUnavailable bool
 	SyntaxCheckOverridden     bool
-	SourceIncludes            map[string]bool
 }
 
 type AccessFacts struct {
 	WriteRoots                []string
 	PathOutsideScope          bool
 	PathOutsideScopeByTool    map[string]bool
-	ActionHostResources       []string
 	ActionHostResourceDenials []string
-	HostResourceStatus        map[string]string
-	HostResourcePolicy        map[string]string
 }
 
 type ContentFacts struct {

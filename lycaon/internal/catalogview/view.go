@@ -126,6 +126,13 @@ func Build(ctx context.Context, moduleRoot string, eff *extpacks.EffectiveCatalo
 		return nil, fmt.Errorf("catalogview oar loader: %w", err)
 	}
 	loader.SetDetectors(oar.HostDetectors(nil))
+	// Tool schemas must precede rule compilation: next-steps args are checked
+	// against them at load.
+	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
+	if err != nil {
+		return nil, fmt.Errorf("catalogview tool schemas: %w", err)
+	}
+	loader.SetToolSchemas(schemas)
 	rules, err := loader.LoadEffectivePolicyEntries(policy)
 	if err != nil {
 		return nil, fmt.Errorf("catalogview rules: %w", err)
@@ -176,11 +183,6 @@ func Build(ctx context.Context, moduleRoot string, eff *extpacks.EffectiveCatalo
 	}
 
 	// Resolve has already recorded loader diagnostics.
-	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
-	if err != nil {
-		return nil, fmt.Errorf("catalogview tool schemas: %w", err)
-	}
-
 	binds, _, err := extpacks.LoadEffectiveBindings(eff)
 	if err != nil {
 		return nil, fmt.Errorf("catalogview bindings: %w", err)
