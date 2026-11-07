@@ -1,0 +1,56 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/canonical/lxd"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0.0.0-20250721152936-fe86ceb2c3fa"
+      },
+      {
+       "fixed": "0.0.0-20260626085133-7cb96ac80a6d"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-12411",
+  "GHSA-hhf9-qw4v-72xp"
+ ],
+ "database_specific": {
+  "review_status": "REVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6917"
+ },
+ "details": "LXD allows cross-guest volume hijack via DevLXD device patch in github.com/canonical/lxd",
+ "id": "GO-2026-6917",
+ "modified": "2026-11-05T23:49:57Z",
+ "published": "2026-11-05T23:49:57Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/canonical/lxd/security/advisories/GHSA-hhf9-qw4v-72xp"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/canonical/lxd/commit/752e25cfb849a349ff08939ce02747ef4d4e69cc"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/canonical/lxd/commit/7cb96ac80a6d52a96b53b0ae06a8659606fa8dd8"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/canonical/lxd/pull/18585"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "LXD allows cross-guest volume hijack via DevLXD device patch in github.com/canonical/lxd"
+}

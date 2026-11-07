@@ -1,0 +1,57 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "kubevirt.io/kubevirt"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-13218",
+  "GHSA-q3jc-42cq-33fj"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6914"
+ },
+ "details": "KubeVirt virt-handler network cache symlink vulnerability allows arbitrary host file overwrite in kubevirt.io/kubevirt",
+ "id": "GO-2026-6914",
+ "modified": "2026-11-05T22:55:09Z",
+ "published": "2026-11-05T22:55:09Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/advisories/GHSA-q3jc-42cq-33fj"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-13218"
+  },
+  {
+   "type": "WEB",
+   "url": "https://access.redhat.com/security/cve/CVE-2026-13218"
+  },
+  {
+   "type": "WEB",
+   "url": "https://bugzilla.redhat.com/show_bug.cgi?id=2492654"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/kubevirt/kubevirt/blob/e63503d2f3a166f79f0891f8e1c3450eb39f88ac/pkg/network/cache/cache.go#L90-L103"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "KubeVirt virt-handler network cache symlink vulnerability allows arbitrary host file overwrite in kubevirt.io/kubevirt"
+}

@@ -96,8 +96,8 @@ Held packages, restricted update policies, and high-friction upgrades, even when
 | `objc2-user-notifications` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-web-kit` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `ureq` | `2.12.1` | `3.4.2` | **Low** | **High** | No majors | Blocking localhost calls to the sidecar (attachment import, secret reveal). Version 3 rewrites the API. |
-| `candle-core` | `0.11.0` | current | **Moderate** | **High** |  | Update with candle-nn. Validate CPU and the shipped GPU backends with `./task decide:test` and the decision-engine evaluation procedure before release. |
-| `candle-nn` | `0.11.0` | current | **Moderate** | **High** |  | Keep aligned with candle-core; numerical changes can affect the trained heads. |
+| `candle-core` | `0.11.1` | `0.11.0` | **Moderate** | **High** |  | Update with candle-nn. Validate CPU and the shipped GPU backends with `./task decide:test` and the decision-engine evaluation procedure before release. |
+| `candle-nn` | `0.11.1` | `0.11.0` | **Moderate** | **High** |  | Keep aligned with candle-core; numerical changes can affect the trained heads. |
 | `mlx-rs` · cfg(all(target_os = "macos", target_arch = "aarch64")) | `0.32.0` | current | **Moderate** | **High** |  | Apple silicon backend. Review its compiled MLX version and bundled notices, rebuild the metallib, and verify inference on Apple silicon. |
 | `tokenizers` | `0.23.2` | current | **High** | **High** |  | Tokenization must agree with the pinned checkpoint and trained heads. Treat 0.x minor upgrades as breaking and compare token IDs and ranking results before adoption. |
 | `yrs` | `0.27.4` | `0.28.0` | **High** | **High** | Held | Exact pin; see the document core engine row. Bump together with Den's `yjs`. |
@@ -113,7 +113,7 @@ Policy files retain every declared entry, package rating, rationale, and verific
 | Development, build, and verification tools | 10 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
 | Vendored catalogs, datasets, and specifications | 6 | [Policy](../../dependencies/sections/vendored.yaml) | Declared pin sources in policy |
 | Frontend packages (`lycaon-den`) | 67 | [Policy](../../dependencies/sections/frontend.yaml) | [Manifest](../../lycaon-den/package.json) · [Lockfile](../../lycaon-den/bun.lock) |
-| Backend Go modules (`lycaon`) | 78 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
+| Backend Go modules (`lycaon`) | 81 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
 | Tauri shell crates (`lycaon-den/src-tauri`) | 47 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
 | Bialy decision engine crates (`lycaon/internal/decide/native`) | 10 | [Policy](../../dependencies/sections/decision-engine.yaml) | [Manifest](../../lycaon/internal/decide/native/Cargo.toml) · [Lockfile](../../lycaon/internal/decide/native/Cargo.lock) |
 | Document core crates (`lycaon/internal/documentcore/native`) | 4 | [Policy](../../dependencies/sections/document-core.yaml) | [Manifest](../../lycaon/internal/documentcore/native/Cargo.toml) · [Lockfile](../../lycaon/internal/documentcore/native/Cargo.lock) |

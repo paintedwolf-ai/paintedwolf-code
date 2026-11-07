@@ -1,0 +1,60 @@
+{
+ "affected": [
+  {
+   "ecosystem_specific": {},
+   "package": {
+    "ecosystem": "Go",
+    "name": "github.com/kubeflow/pipelines"
+   },
+   "ranges": [
+    {
+     "events": [
+      {
+       "introduced": "0"
+      },
+      {
+       "fixed": "0.0.0-20260904182349-be4723e33727"
+      }
+     ],
+     "type": "SEMVER"
+    }
+   ]
+  }
+ ],
+ "aliases": [
+  "CVE-2026-118759",
+  "GHSA-wg5q-x4j9-qm54"
+ ],
+ "database_specific": {
+  "review_status": "UNREVIEWED",
+  "url": "https://pkg.go.dev/vuln/GO-2026-6900"
+ },
+ "details": "Kubeflow Pipelines: Run-log endpoint permits unauthorized access to pod logs in github.com/kubeflow/pipelines",
+ "id": "GO-2026-6900",
+ "modified": "2026-11-05T22:54:57Z",
+ "published": "2026-11-05T22:54:57Z",
+ "references": [
+  {
+   "type": "ADVISORY",
+   "url": "https://github.com/kubeflow/pipelines/security/advisories/GHSA-wg5q-x4j9-qm54"
+  },
+  {
+   "type": "ADVISORY",
+   "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-118759"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/kubeflow/pipelines/commit/be4723e33727c6dad71a95cba61e8f61562ab20f"
+  },
+  {
+   "type": "FIX",
+   "url": "https://github.com/kubeflow/pipelines/pull/13684"
+  },
+  {
+   "type": "WEB",
+   "url": "https://github.com/kubeflow/pipelines/releases/tag/2.18.0"
+  }
+ ],
+ "schema_version": "1.3.1",
+ "summary": "Kubeflow Pipelines: Run-log endpoint permits unauthorized access to pod logs in github.com/kubeflow/pipelines"
+}
