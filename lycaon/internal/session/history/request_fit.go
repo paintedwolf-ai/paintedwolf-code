@@ -60,7 +60,10 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 		if budgets != nil {
 			budget = budgets.RequestBudget(ctx, provider, candidate)
 		}
-		if calibration := m.Calibration(ctx, sess); calibration.Calibrated() {
+		if budget.Err != nil {
+			return budget
+		}
+		if calibration := m.Calibration(ctx, sess); !budget.Exact && calibration.Calibrated() {
 			tools := modelcall.EstimateRequestInput(modelcall.CompletionRequest{Tools: candidate.Tools})
 			transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(candidate.Messages))
 			calibration.TranscriptEstimate += tools
@@ -75,6 +78,9 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 		return budget
 	}
 	budget := measure(req)
+	if budget.Err != nil {
+		return req, budget.Err
+	}
 	hard := cfg.HardCeilingTokens
 	if budget.Window <= 0 || (hard <= 0 || budget.Input <= hard) && budget.Input+budget.Output+budget.Headroom <= budget.Window {
 		return req, nil
@@ -90,6 +96,9 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 	frame := req
 	frame.Messages = projection.frame
 	frameBudget := measure(frame)
+	if frameBudget.Err != nil {
+		return req, frameBudget.Err
+	}
 	inputLimit := requestInputLimit(hard, frameBudget.Input)
 	ceiling := min(inputLimit, budget.Window-budget.Headroom-reserve)
 	if req.MaxTokens <= 0 && budget.Input <= ceiling {
@@ -124,6 +133,9 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 		candidate := req
 		candidate.Messages = projection.replace(rows)
 		budget = measure(candidate)
+		if budget.Err != nil {
+			return req, budget.Err
+		}
 		if budget.Input <= ceiling {
 			if req.MaxTokens <= 0 && (budget.Output <= 0 || budget.Input+budget.Output+budget.Headroom > budget.Window) {
 				candidate.MaxTokens = budget.Window - budget.Headroom - budget.Input
@@ -260,7 +272,7 @@ func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kep
 	if from > through {
 		return kept, nil
 	}
-	notice, err := m.omissionNotice(ctx, sess, historyCoverageNoticeID, from, through)
+	notice, err := omissionNotice(ctx, m.recallAvailable, sess, historyCoverageNoticeID, from, through)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +327,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	}
 	noticeTokens := 0
 	if lastOrd > 0 {
-		sized, err := m.omissionNotice(ctx, sess, historyCoverageNoticeID, lastOrd, lastOrd)
+		sized, err := omissionNotice(ctx, m.recallAvailable, sess, historyCoverageNoticeID, lastOrd, lastOrd)
 		if err != nil {
 			return nil, err
 		}
@@ -363,7 +375,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 func (m *Service) fitWithOmissionNotice(ctx context.Context, sess *api.Session, cfg compaction.CompactionConfig, contexts []compaction.ContextMessage, rows []api.Message, tokens, reserve int, from, through int64) ([]compaction.ContextMessage, error) {
 	var fitted []compaction.ContextMessage
 	for range 2 {
-		notice, err := m.omissionNotice(ctx, sess, historyCoverageNoticeID, from, through)
+		notice, err := omissionNotice(ctx, m.recallAvailable, sess, historyCoverageNoticeID, from, through)
 		if err != nil {
 			return nil, err
 		}

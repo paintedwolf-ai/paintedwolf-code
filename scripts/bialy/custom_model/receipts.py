@@ -19,8 +19,7 @@ from common import digest
 
 
 def openai_chat(wire):
-    """llama.cpp's server with --jinja: OpenAI chat messages with tool-call
-    arguments deserialized before the checkpoint's own chat template runs."""
+    """Decode structured chat requests for the artifact's exact template."""
     supported = {"model", "messages", "tools", "stream", "stream_options", "temperature", "top_p",
                  "max_tokens", "max_completion_tokens", "reasoning_effort", "tool_choice", "parallel_tool_calls"}
     if set(wire) - supported or not isinstance(wire.get("messages"), list):
@@ -52,9 +51,7 @@ def _object(arguments):
     return value
 
 
-# Serving kinds whose server applies the checkpoint's own chat template, so the
-# trained token sequence is the served one. Ollama renders with its own Go
-# templates, whose parity with the checkpoint template is not established.
+# Serving protocols must apply the artifact's exact chat template.
 SERVING_PROTOCOLS = {"openai-compatible": openai_chat}
 
 

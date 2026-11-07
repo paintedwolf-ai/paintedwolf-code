@@ -49,7 +49,7 @@ func (r *registryRouting) ensureConfigured(ctx context.Context, providerID strin
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
-	provider, buildErr := newProviderForEntry(ctx, entry, key, r.providerRetryPolicy(entry), r.cloudflareUsage, r.discoveryClient)
+	provider, buildErr := newProviderForEntry(ctx, entry, key, r.providerRetryPolicy(entry), r.cloudflareUsage, r.discoveryClient, r.localRuntime)
 	if buildErr != nil {
 		state = providerReadiness{Configuration: "invalid", Authentication: "not_applicable"}
 		ready = false
@@ -103,7 +103,7 @@ func (r *registryRouting) rebuildLocked(ctx context.Context, invalidateObservati
 		state, ready := r.entryReadiness(ctx, entry, key)
 		configured[entry.ID] = ready
 		readiness[entry.ID] = state
-		p, err := newProviderForEntry(ctx, entry, key, r.providerRetryPolicy(entry), r.cloudflareUsage, r.discoveryClient)
+		p, err := newProviderForEntry(ctx, entry, key, r.providerRetryPolicy(entry), r.cloudflareUsage, r.discoveryClient, r.localRuntime)
 		if err != nil {
 			configured[entry.ID] = false
 			readiness[entry.ID] = providerReadiness{

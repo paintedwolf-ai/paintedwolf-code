@@ -173,11 +173,84 @@ or a binary filename alone does not prove build provenance.
 These parity checks do not establish production behavior. Qualify the actual
 quantized artifact on held-out tasks and target hardware before promotion.
 
-## Offline contracts
+## Signed application bundles
+
+The application consumes an authenticated bundle per backend: `mlx` or `vulkan`.
+Its unsigned manifest contains `model`, `revision`, `device`, one primary
+`artifact`, and supplementary `files`. Each payload entry has an explicit flat
+`name`, lowercase SHA-256 `digest`, `format`, and exact `bytes`. Include the
+weights, tokenizer, template, generation settings, architecture/quantization
+configuration and conversion provenance that the runtime reads. The model
+identity is `gemma4-e4b-paintedwolf`; revision names identify immutable exports.
+Keep the export manifest separate from the bundle's signed `manifest.json`.
+
+Use `model-bundle prepare` to compute exact sizes and hashes for explicitly named
+payloads. It emits the unsigned manifest to stdout without copying, converting
+or signing weights. Unlisted files are excluded. Supply an immutable revision
+and add each required runtime/provenance file explicitly; preparation does not
+establish model compatibility or behavioral quality.
 
 ```sh
-uv run --project scripts/bialy/custom_model --locked python -m unittest discover \
-  -s scripts/bialy/custom_model -p 'test_*.py'
+model-bundle prepare -bundle /release/model -model gemma4-e4b-paintedwolf \
+  -revision RELEASE_REVISION -device mlx -artifact model.safetensors:safetensors \
+  -file config.json:config -file tokenizer.json:tokenizer \
+  -file tokenizer_config.json:tokenizer_config -file chat_template.jinja:chat_template \
+  -file generation_config.json:generation_config > /release/export.json
+```
+
+For Vulkan, select `-device vulkan -artifact model.gguf:gguf` and name the
+corresponding runtime and provenance files. Signing audits the prepared hashes
+again, so changed exports require fresh preparation.
+
+The `model-bundle` release tool signs an export using an explicitly supplied
+PEM PKCS#8 Ed25519 key. The key ID and public key must already be present in the
+release authority registry. It audits every declared payload against the export
+manifest before emitting the signed manifest to stdout. It does not generate
+keys, change payloads, install models or publish a release. Keep private keys
+outside model and application resources.
+
+```sh
+model-bundle sign -bundle /release/model -manifest /release/export.json \
+  -authority /release/release-keys.json -key-id RELEASE_KEY_ID \
+  -private-key /private/release-key.pem > /release/model/manifest.json
+model-bundle -bundle /release/model -authority /release/release-keys.json \
+  -model gemma4-e4b-paintedwolf -device mlx
+```
+
+The authority registry is `{ "format": 1, "keys": [{ "id": "RELEASE_KEY_ID",
+"public_key": "BASE64_RAW_ED25519_PUBLIC_KEY" }] }`. Package that registry as a
+trusted application resource, independently of downloaded model bytes. Packaging
+must reverify the copied payloads with that authority. A signature establishes
+artifact identity and release authority; the trained model and precision recipe
+still require separate behavioral and hardware qualification.
+
+## Offline contracts
+
+E4B preparation and training select `gemma4-code-v1` for the 42-layer,
+2,560-wide architecture with 18 shared KV layers. The template lives in
+`lycaon/internal/generation/templates/`; its identity is recorded in the
+training inputs and saved tokenizer. Merge and export preserve that tokenizer.
+The native runner verifies the named template byte for byte before using it.
+This is versioned model-bundle metadata. Unknown formats are refused without
+rewriting installed artifacts; it changes no database or device configuration.
+
+This profile keeps tool results in transcript order, including results separated
+from their calls by user events and results whose calls were compacted away.
+Training resolves omitted tool names by exact call ID without moving messages
+or changing the captured evidence. A result without either a supplied name or
+an identifiable call is rejected. Python/Jinja and Rust/MiniJinja consume the
+same conversation fixtures; saved-tokenizer tests also check the completion
+prefix used by the loss mask.
+
+The profile is a new training recipe, not a template replacement for existing
+weights. Existing prototype artifacts retain their own tokenizer and template.
+Their canonical format rejects histories it cannot represent without losing
+tool results. Model quality under the new profile requires a trained artifact
+and held-out evaluation; format parity alone does not establish it.
+
+```sh
+./task scripts:coverage:changes
+./task generation:test -- --backend native
 ```
 
 The fixtures use SQLite, a tiny randomly initialized local model, and fake export
@@ -202,3 +275,31 @@ directory's `health/` subdirectory. These contain only the epoch, utility purpos
 reason and timestamp. They let a runner stop after repeated truncated compaction
 summaries without parsing provider error prose or capturing utility payloads. The
 receipt exporter does not traverse that directory; they are diagnostic evidence, never training rows.
+
+### Nix seed assembly
+
+The release factory supplies `generationRelease` when constructing
+`packaging/nix/resources.nix`. It contains `manifest`, `authority`, `payloads`
+(an attribute set of exact filenames to immutable file inputs), and the model's
+`license` metadata. Use independently pinned public release files, never a
+signing workspace or a private key directory. The factory must supply this
+input for a release that includes the local generation model; the default
+source package has no trained release artifact selected.
+
+`generation-seed.nix` requires the payload names to exactly match the signed
+manifest, copies those files into the Vulkan seed layout, and authenticates the
+copied bytes with `model-bundle` before publishing the derivation. The packaged
+host repeats authentication when importing its writable model store. The
+build-time verifier is not a runtime dependency. Resource closure notices retain
+the supplied model license metadata.
+
+`./task nix:build -- --component generation-seed-check` builds the seed path
+using a small signed packaging fixture and checks invalid input sets at
+evaluation. Its fixture key is test-only (seed bytes 0 through 31); its payload
+is not a model and must never be selected as a release resource.
+
+### Linux inference drivers
+
+The Nix application stages `generation/vulkan-drivers.json` with its immutable Mesa ICD paths. Generation inventory, the generation service and Bialy use the same host driver adapter. On NixOS the system graphics configuration supplies the drivers. Elsewhere, NVIDIA requires a loaded driver from series 580 or newer and matching, root-owned EGL, glsi, eglcore, glvkspirv and gpucomp libraries. The host prepares an ephemeral EGL Vulkan ICD and preloads only those vendor libraries into the inference child; generic libraries remain supplied by the application closure. Mesa remains available for other devices. Explicit `VK_DRIVER_FILES` selection is preserved.
+
+The adapter never installs a driver or changes the application's global library search path. Driver files come from the operating system, rather than the model artifact. The temporary ICD survives until the inference process exits, including cancellation and failed launches. NVIDIA's [component documentation](https://download.nvidia.com/XFree86/Linux-x86_64/580.119.02/README/installedcomponents.html) specifies the EGL Vulkan entry point used for inference without X11 dependencies.

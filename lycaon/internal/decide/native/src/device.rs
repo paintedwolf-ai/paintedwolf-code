@@ -1,13 +1,9 @@
-//! Choosing where to run.
-//!
-//! A device is named `auto`, `cpu`, `mlx`, `vulkan` or `vulkan:N`; the CLI's `--device` takes
-//! that spelling. `mlx` needs the `mlx` feature (Apple silicon) and `vulkan` the `vulkan`
-//! feature, where `N` indexes the GPUs Vulkan reports. `auto` measures every candidate this
-//! build can reach and keeps the fastest; see [`crate::select`].
+//! Explicit device selection and standalone candidate discovery.
 
 use std::str::FromStr;
 
 use crate::error::{Error, Result};
+use crate::pci::PciAddress;
 
 /// Where the model should run.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -20,6 +16,18 @@ pub enum DeviceChoice {
     Mlx,
     /// A Vulkan GPU, by its index among the GPUs Vulkan reports. Needs the `vulkan` feature.
     Vulkan(usize),
+    /// A Vulkan GPU selected by physical PCI identity.
+    VulkanPci(PciAddress),
+}
+
+/// Physical identity shared across native runtime APIs.
+#[derive(Clone, Debug, serde::Serialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PhysicalDevice {
+    Cpu,
+    AppleSilicon,
+    Pci { address: String },
+    Unknown,
 }
 
 /// A resolved choice, ready to load a model onto.
@@ -36,6 +44,9 @@ impl FromStr for DeviceChoice {
 
     fn from_str(s: &str) -> Result<Self> {
         let spec = s.trim().to_lowercase();
+        if let Some(address) = spec.strip_prefix("vulkan-pci:") {
+            return Ok(DeviceChoice::VulkanPci(address.parse()?));
+        }
         let (kind, index) = match spec.split_once(':') {
             Some((kind, n)) => {
                 let n = n.parse().map_err(|_| {
@@ -51,7 +62,7 @@ impl FromStr for DeviceChoice {
             ("mlx", None) => Ok(DeviceChoice::Mlx),
             ("vulkan", n) => Ok(DeviceChoice::Vulkan(n.unwrap_or(0))),
             _ => Err(Error::Device(format!(
-                "unknown device {s:?}; choose auto, cpu, mlx, vulkan or vulkan:N"
+                "unknown device {s:?}; choose auto, cpu, mlx, vulkan:N or vulkan-pci:ADDRESS"
             ))),
         }
     }
@@ -64,6 +75,7 @@ impl std::fmt::Display for DeviceChoice {
             DeviceChoice::Cpu => f.write_str("cpu"),
             DeviceChoice::Mlx => f.write_str("mlx"),
             DeviceChoice::Vulkan(n) => write!(f, "vulkan:{n}"),
+            DeviceChoice::VulkanPci(address) => write!(f, "vulkan-pci:{address}"),
         }
     }
 }
@@ -79,6 +91,7 @@ impl DeviceChoice {
             DeviceChoice::Cpu => Ok(Selected::Cpu),
             DeviceChoice::Mlx => open_mlx(),
             DeviceChoice::Vulkan(n) => open_vulkan(n),
+            DeviceChoice::VulkanPci(address) => address.open(),
         }
     }
 
@@ -90,8 +103,7 @@ impl DeviceChoice {
         }
         #[cfg(feature = "vulkan")]
         out.extend((0..crate::vulkan::gpus().len()).map(DeviceChoice::Vulkan));
-        // Linux serves the engine on a GPU only, as macOS does through MLX; a machine without
-        // one runs without it rather than on the processor.
+        // Linux requires a hardware GPU.
         if !cfg!(target_os = "linux") {
             out.push(DeviceChoice::Cpu);
         }
@@ -179,6 +191,11 @@ mod tests {
             assert!(bad.parse::<DeviceChoice>().is_err(), "{bad}");
         }
         assert_eq!(DeviceChoice::Vulkan(1).to_string(), "vulkan:1");
+        assert_eq!(Selected::Cpu.physical_device(), PhysicalDevice::Cpu);
+        assert_eq!(
+            serde_json::to_value(PhysicalDevice::Pci { address: "0000:03:00.0".into() }).unwrap(),
+            serde_json::json!({"kind": "pci", "address": "0000:03:00.0"})
+        );
     }
 
     #[test]
@@ -187,7 +204,10 @@ mod tests {
         let candidates = DeviceChoice::candidates();
         assert_eq!(candidates.contains(&DeviceChoice::Cpu), !cfg!(target_os = "linux"));
         if cfg!(target_os = "linux") {
-            assert!(candidates.iter().all(|c| matches!(c, DeviceChoice::Vulkan(_))), "{candidates:?}");
+            assert!(
+                candidates.iter().all(|c| matches!(c, DeviceChoice::Vulkan(_))),
+                "{candidates:?}"
+            );
         }
     }
 
@@ -196,5 +216,20 @@ mod tests {
     fn an_explicit_gpu_without_its_feature_is_an_error_not_a_cpu_run() {
         let err = DeviceChoice::Vulkan(0).select().err().unwrap();
         assert!(matches!(err, Error::Device(ref m) if m.contains("`vulkan` feature")), "{err}");
+    }
+}
+
+impl Selected {
+    pub(crate) fn physical_device(&self) -> PhysicalDevice {
+        match self {
+            Self::Cpu => PhysicalDevice::Cpu,
+            #[cfg(feature = "mlx")]
+            Self::Mlx => PhysicalDevice::AppleSilicon,
+            #[cfg(feature = "vulkan")]
+            Self::Vulkan(gpu) => match &gpu.pci_address {
+                Some(address) => PhysicalDevice::Pci { address: address.clone() },
+                None => PhysicalDevice::Unknown,
+            },
+        }
     }
 }

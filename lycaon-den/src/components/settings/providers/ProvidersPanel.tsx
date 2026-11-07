@@ -1,3 +1,5 @@
+import { LocalGenerationCard } from "./LocalGenerationCard.tsx";
+import { createLocalGenerationActions } from "./local-generation-actions.ts";
 import { createProviderActions } from "./provider-actions.ts";
 import { settingControl, settingLabel } from "../../../settings/settings-registry.ts";
 import { ChromeDragSurface } from "../../shell/ChromeDragSurface.tsx";
@@ -11,6 +13,7 @@ import type { LycaonClient } from "../../../api/client.ts";
 import type { ProviderMeta } from "../../../api/types.ts";
 import {
   groupProvidersByKind,
+  isIncludedProvider,
   providerDisplayName,
   providerEndpointHost,
   providerIsReady,
@@ -77,6 +80,10 @@ export function ProvidersPanel(props: Props) {
     notifyAddOpenChange: (visible) => props.onAddOpenChange?.(visible),
     removeProviderFromSettings: (id) => props.onRemoveProvider(id),
   });
+  const localGeneration = createLocalGenerationActions(
+    () => props.client,
+    (providers) => props.settingsStore.actions.setProviders(providers),
+  );
   const [form, setForm] = createStore<NewProviderForm>(emptyForm());
   const kinds = () => props.settingsStore.state.providerKinds ?? [];
   const [selectedId, setSelectedId] = createSignal<string | null>(null);
@@ -577,6 +584,16 @@ export function ProvidersPanel(props: Props) {
                 by={(provider) => provider.id}
               >
                 {(provider) => (
+                  <Show when={!isIncludedProvider(provider())} fallback={
+                    <LocalGenerationCard
+                      provider={provider}
+                      busy={() => localGeneration.busy(provider().id)}
+                      failure={() => localGeneration.error(provider().id)}
+                      savingSecretTrust={() => card(provider().id).savingSecretTrust}
+                      onRecover={(item, action) => void localGeneration.recover(item, action)}
+                      onSetSecretScreenTrust={(item, trusted) => void setSecretScreenTrust(item, trusted)}
+                    />
+                  }>
                   <ProviderDetailCard
                     provider={provider}
                     kinds={kinds}
@@ -637,6 +654,7 @@ export function ProvidersPanel(props: Props) {
                       </div>
                     )}
                   />
+                  </Show>
                 )}
               </ShowLatest>
             </div>

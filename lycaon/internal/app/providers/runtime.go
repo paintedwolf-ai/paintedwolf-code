@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/pricing"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
@@ -46,7 +47,7 @@ func (b *Runtime) Build(ctx context.Context, options Options, database *db.Store
 		b.Client = llm.WrapLLMClientIfDebug(b.Client, "mock")
 	}
 
-	b.Service, err = llm.NewService(ctx, b.Client)
+	b.Service, err = llm.NewService(ctx, b.Client, options.LocalRuntime)
 	if err != nil {
 		return fmt.Errorf("llm service: %w", err)
 	}
@@ -127,9 +128,10 @@ func (b *Runtime) BindCurator() {
 }
 
 type Options struct {
-	Client  modelcall.LLMClient
-	Pricer  cost.Pricer
-	Startup startupprotocol.Sink
+	LocalRuntime *nativegen.Availability
+	Client       modelcall.LLMClient
+	Pricer       cost.Pricer
+	Startup      startupprotocol.Sink
 }
 
 type ResourceLifetime interface {

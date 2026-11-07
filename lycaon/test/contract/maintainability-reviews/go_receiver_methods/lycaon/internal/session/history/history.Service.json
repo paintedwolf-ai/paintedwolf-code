@@ -2,16 +2,17 @@
   "category": "go_receiver_methods",
   "artifact": "lycaon/internal/session/history/history.Service",
   "kind": "runtime_service",
-  "workstream": "bounded-compaction-reduction",
+  "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Retain the 43 methods of the history lifecycle. Canonical windows, request fitting, captured compaction sources, and publication require the same session gate and store. Provider work and manual submission have explicit phases rather than separate state owners. Focused publication and captured-source contracts constrain this boundary.",
-  "reviewed_commit": "515c793b129a749bbdcc5716ff59e46531e0e71c",
-  "ceiling": 43,
+  "reason": "Retain one canonical history and compaction publication boundary at 51 methods. The merge of main added the request-fit machinery; the omission-notice, canonical-tail-bounds, and current-request helpers are plain functions with explicit dependencies, and the uncalled CitationGroundingRetries accessor is removed, holding the merged count below its base. Idle preparation reads bounded canonical rows and applies the same persisted view on a private session copy; focused preparation, receiver-restoration, and reduction contracts cover the unchanged publication paths.",
+  "reviewed_commit": "387459d7f7f8de43ab54b4b868c3537988e015bc",
+  "ceiling": 51,
   "boundaries": {
-    "lycaon/internal/session/history/reduction_synthesis_test.go": "7c89a89c2b5f466f2ef9308d230a0ea344e9f41c970103bd9fd11856b4d2bcca",
+    "lycaon/internal/session/history/reduction_synthesis_test.go": "cd453e275138a51607bbdb31fe94da2e43d9a8092860ed34010a85aafabac450",
     "lycaon/internal/session/history/reduction_submission_test.go": "2a9e3064b77a27fb3f760effea36047272fe7eb6ad56255139cafc30730da9d1",
-    "lycaon/internal/session/history/reduction_rescue_test.go": "c75c6d4d388ff49e08ee25fd367c3e8a24d325c77cd2913f5e411cf2f15e1b7a",
-    "lycaon/internal/session/history/compaction_snapshot_test.go": "eddf51fea70550454d74514f66e757d1fa25de31d7fc25585c570eb0983498f0"
+    "lycaon/internal/session/history/reduction_rescue_test.go": "7501f276e7909cb990fda84f3809fef8c87953787a8d58a6db4cebcaf1860433",
+    "lycaon/internal/session/history/compaction_snapshot_test.go": "cb60879e68adf95379e33bbd5d97f2eab486287936ef4b0aa016e27ded13e681",
+    "lycaon/internal/session/history/preparation_projection_test.go": "b2236be0c360d28e04bf4af2c1dd697dcbf523331d28d8e641c11fad55c02594"
   },
-  "reviewed_shape": "49f2639305fd7e0088d1d902fb013278928a8155989316f0bb392cb1527bf74d"
+  "reviewed_shape": "b4aa2f29809dec41aec91ff8cbf3222a7a26a3dd641891d6540acee22f8c7000"
 }

@@ -1,0 +1,821 @@
+diff --git a/wgpu-core/src/device/resource.rs b/wgpu-core/src/device/resource.rs
+index 399270e44cd..c8c88955ffc 100644
+--- a/wgpu-core/src/device/resource.rs
++++ b/wgpu-core/src/device/resource.rs
+@@ -361,6 +361,108 @@ impl Device {
+         }
+     }
+ 
++    /// Validate the `subgroup_size` requests on every entry point of a
++    /// passthrough shader module descriptor.
++    ///
++    /// All checks that depend only on the module itself live here:
++    ///
++    /// - Non-[`Varying`] values require [`Features::SUBGROUP_SIZE_CONTROL`].
++    /// - Non-[`Varying`] values are only honored for SPIR-V passthrough on Vulkan;
++    ///   other backends reject the request.
++    /// - The entry point's `workgroup_size.x` must be non-zero, since the
++    ///   checks below would otherwise pass vacuously.
++    /// - For [`Fixed(n)`], `n` must be a power of two within
++    ///   `[subgroup_min_size, subgroup_max_size]`, and the entry point's
++    ///   `workgroup_size.x` must be a multiple of `n` (WebGPU
++    ///   `subgroup-size-control` proposal; Vulkan requirement).
++    /// - For [`Full`], the entry point's `workgroup_size.x` must be at least
++    ///   `subgroup_min_size` so that one full subgroup can fit.
++    ///
++    /// The stage-dependent check ([`Full`] is invalid on vertex/fragment) is
++    /// applied at render-pipeline creation, since it depends on how the module
++    /// is used.
++    ///
++    /// [`Varying`]: wgt::SubgroupSize::Varying
++    /// [`Full`]: wgt::SubgroupSize::Full
++    /// [`Fixed(n)`]: wgt::SubgroupSize::Fixed
++    /// [`Features::SUBGROUP_SIZE_CONTROL`]: wgt::Features::SUBGROUP_SIZE_CONTROL
++    fn validate_passthrough_subgroup_sizes(
++        &self,
++        descriptor: &pipeline::ShaderModuleDescriptorPassthrough<'_>,
++    ) -> Result<(), pipeline::CreateShaderModuleError> {
++        let Some(varying_entry_point) = descriptor
++            .entry_points
++            .iter()
++            .find(|e| !matches!(e.subgroup_size, wgt::SubgroupSize::Varying))
++        else {
++            return Ok(());
++        };
++        self.require_features(wgt::Features::SUBGROUP_SIZE_CONTROL)?;
++        // `subgroup_size` only has a backend mapping for SPIR-V (Vulkan).
++        // `Noop` is allowed for validation tests.
++        if descriptor.spirv.is_none()
++            || !matches!(self.backend(), wgt::Backend::Vulkan | wgt::Backend::Noop)
++        {
++            return Err(
++                pipeline::CreateShaderModuleError::SubgroupSizeNotSupportedForBackend {
++                    entry_point: varying_entry_point.name.to_string(),
++                },
++            );
++        }
++        let info = &self.adapter.raw.info;
++        let min = info.subgroup_min_size;
++        let max = info.subgroup_max_size;
++        for ep in descriptor.entry_points.iter() {
++            if matches!(ep.subgroup_size, wgt::SubgroupSize::Varying) {
++                continue;
++            }
++            // Required for the per-variant checks below to be meaningful: a
++            // zero `workgroup_size.x` would trivially satisfy
++            // `is_multiple_of(n)` and never satisfy `>= subgroup_min_size`.
++            if ep.workgroup_size.0 == 0 {
++                return Err(
++                    pipeline::CreateShaderModuleError::MissingWorkgroupSizeForSubgroupSize {
++                        entry_point: ep.name.to_string(),
++                    },
++                );
++            }
++            match ep.subgroup_size {
++                wgt::SubgroupSize::Varying => unreachable!(),
++                wgt::SubgroupSize::Full => {
++                    if ep.workgroup_size.0 < min {
++                        return Err(
++                            pipeline::CreateShaderModuleError::WorkgroupSizeTooSmallForFullSubgroups {
++                                entry_point: ep.name.to_string(),
++                                workgroup_size_x: ep.workgroup_size.0,
++                                subgroup_min_size: min,
++                            },
++                        );
++                    }
++                }
++                wgt::SubgroupSize::Fixed(n) => {
++                    if !n.is_power_of_two() || n < min || n > max {
++                        return Err(pipeline::CreateShaderModuleError::InvalidSubgroupSize {
++                            entry_point: ep.name.to_string(),
++                            size: n,
++                            min,
++                            max,
++                        });
++                    }
++                    if !ep.workgroup_size.0.is_multiple_of(n) {
++                        return Err(
++                            pipeline::CreateShaderModuleError::WorkgroupSizeXNotMultipleOfSubgroupSize {
++                                entry_point: ep.name.to_string(),
++                                workgroup_size_x: ep.workgroup_size.0,
++                                subgroup_size: n,
++                            },
++                        );
++                    }
++                }
++            }
++        }
++        Ok(())
++    }
++
+     /// # Safety
+     ///
+     /// - See [wgpu::Device::start_graphics_debugger_capture][api] for details the safety.
+@@ -2420,6 +2522,8 @@ impl Device {
+         self.check_is_valid()?;
+         self.require_features(wgt::Features::PASSTHROUGH_SHADERS)?;
+ 
++        self.validate_passthrough_subgroup_sizes(descriptor)?;
++
+         // Mainly important for GLSL or SPIR-V or DXIL, which each take exactly 1 entry point.
+         if (descriptor.dxil.is_some() || descriptor.glsl.is_some())
+             && descriptor.entry_points.len() != 1
+@@ -2502,10 +2606,14 @@ impl Device {
+             raw: ManuallyDrop::new(raw),
+             device: self.clone(),
+             interface: ShaderMetaData::Passthrough(PassthroughInterface {
+-                entry_point_names: descriptor
++                entry_points: descriptor
+                     .entry_points
+                     .iter()
+-                    .map(|e| e.name.to_string())
++                    .map(|e| validation::PassthroughEntryPoint {
++                        name: e.name.to_string(),
++                        workgroup_size: e.workgroup_size,
++                        subgroup_size: e.subgroup_size,
++                    })
+                     .collect(),
+             }),
+             label: descriptor.label.to_string(),
+@@ -3944,6 +4052,7 @@ impl Device {
+                 entry_point: final_entry_point_name.as_ref(),
+                 constants: &desc.stage.constants,
+                 zero_initialize_workgroup_memory: desc.stage.zero_initialize_workgroup_memory,
++                subgroup_size: shader_module.entry_point_subgroup_size(&final_entry_point_name),
+             },
+             cache: cache.as_ref().map(|it| it.raw()),
+         };
+@@ -4458,6 +4567,12 @@ impl Device {
+                         )
+                         .map_err(stage_err)?;
+ 
++                    let vertex_subgroup_size =
++                        vertex_shader_module.entry_point_subgroup_size(&_vertex_entry_point_name);
++                    if matches!(vertex_subgroup_size, wgt::SubgroupSize::Full) {
++                        return Err(pipeline::CreateRenderPipelineError::FullSubgroupsNotAllowed);
++                    }
++
+                     if let Some(interface) = vertex_shader_module.interface.interface() {
+                         immediate_slots_required |= interface
+                             .immediate_slots_required(stage.to_naga(), &_vertex_entry_point_name);
+@@ -4479,6 +4594,7 @@ impl Device {
+                         constants: &stage_desc.constants,
+                         zero_initialize_workgroup_memory: stage_desc
+                             .zero_initialize_workgroup_memory,
++                        subgroup_size: vertex_subgroup_size,
+                     })
+                 };
+             }
+@@ -4525,6 +4641,8 @@ impl Device {
+                         constants: &stage_desc.constants,
+                         zero_initialize_workgroup_memory: stage_desc
+                             .zero_initialize_workgroup_memory,
++                        subgroup_size: task_shader_module
++                            .entry_point_subgroup_size(&_task_entry_point_name),
+                     })
+                 } else {
+                     None
+@@ -4569,6 +4687,8 @@ impl Device {
+                         constants: &stage_desc.constants,
+                         zero_initialize_workgroup_memory: stage_desc
+                             .zero_initialize_workgroup_memory,
++                        subgroup_size: mesh_shader_module
++                            .entry_point_subgroup_size(&_mesh_entry_point_name),
+                     })
+                 };
+             }
+@@ -4602,6 +4722,12 @@ impl Device {
+                     )
+                     .map_err(stage_err)?;
+ 
++                let fragment_subgroup_size =
++                    shader_module.entry_point_subgroup_size(&fragment_entry_point_name);
++                if matches!(fragment_subgroup_size, wgt::SubgroupSize::Full) {
++                    return Err(pipeline::CreateRenderPipelineError::FullSubgroupsNotAllowed);
++                }
++
+                 if let Some(interface) = shader_module.interface.interface() {
+                     immediate_slots_required |= interface
+                         .immediate_slots_required(stage.to_naga(), &fragment_entry_point_name);
+@@ -4625,6 +4751,7 @@ impl Device {
+                     zero_initialize_workgroup_memory: fragment_state
+                         .stage
+                         .zero_initialize_workgroup_memory,
++                    subgroup_size: fragment_subgroup_size,
+                 })
+             }
+             None => None,
+diff --git a/wgpu-core/src/indirect_validation/dispatch.rs b/wgpu-core/src/indirect_validation/dispatch.rs
+index 06002e3d565..c7a17544877 100644
+--- a/wgpu-core/src/indirect_validation/dispatch.rs
++++ b/wgpu-core/src/indirect_validation/dispatch.rs
+@@ -205,6 +205,7 @@ impl Dispatch {
+                 entry_point: "main",
+                 constants: &Default::default(),
+                 zero_initialize_workgroup_memory: false,
++                subgroup_size: wgt::SubgroupSize::Varying,
+             },
+             cache: None,
+         };
+diff --git a/wgpu-core/src/indirect_validation/draw.rs b/wgpu-core/src/indirect_validation/draw.rs
+index 02f81564481..9a013f2b30f 100644
+--- a/wgpu-core/src/indirect_validation/draw.rs
++++ b/wgpu-core/src/indirect_validation/draw.rs
+@@ -598,6 +598,7 @@ fn create_validation_pipeline(
+                 ),
+             ]),
+             zero_initialize_workgroup_memory: false,
++            subgroup_size: wgt::SubgroupSize::Varying,
+         },
+         cache: None,
+     };
+diff --git a/wgpu-core/src/pipeline.rs b/wgpu-core/src/pipeline.rs
+index 6a8bfb96060..08466eb8b72 100644
+--- a/wgpu-core/src/pipeline.rs
++++ b/wgpu-core/src/pipeline.rs
+@@ -92,6 +92,18 @@ impl ShaderModule {
+         self.raw.as_ref()
+     }
+ 
++    /// Returns the [`wgt::SubgroupSize`] requested for the given entry point at
++    /// shader-module creation time. For non-passthrough modules and unknown
++    /// entry-point names, defaults to [`wgt::SubgroupSize::Varying`].
++    pub(crate) fn entry_point_subgroup_size(&self, entry_point: &str) -> wgt::SubgroupSize {
++        match self.interface {
++            ShaderMetaData::Passthrough(ref interface) => interface
++                .entry_point(entry_point)
++                .map_or(wgt::SubgroupSize::Varying, |e| e.subgroup_size),
++            ShaderMetaData::Interface(_) => wgt::SubgroupSize::Varying,
++        }
++    }
++
+     pub(crate) fn finalize_entry_point_name(
+         &self,
+         stage: naga::ShaderStage,
+@@ -103,21 +115,16 @@ impl ShaderModule {
+             }
+             ShaderMetaData::Passthrough(ref interface) => {
+                 if let Some(ep) = entry_point {
+-                    if interface.entry_point_names.contains(ep) {
++                    if interface.entry_point(ep).is_some() {
+                         Ok(ep.to_owned())
+                     } else {
+                         Err(validation::StageError::MissingEntryPoint(ep.to_owned()))
+                     }
+                 } else {
+-                    if interface.entry_point_names.len() != 1 {
++                    if interface.entry_points.len() != 1 {
+                         return Err(validation::StageError::MultipleEntryPointsFound);
+                     }
+-                    Ok(interface
+-                        .entry_point_names
+-                        .iter()
+-                        .next()
+-                        .unwrap()
+-                        .to_owned())
++                    Ok(interface.entry_points[0].name.clone())
+                 }
+             }
+         }
+@@ -159,6 +166,39 @@ pub enum CreateShaderModuleError {
+         "Generic passthrough shaders which use GLSL or DXIL must contain exactly one entry point."
+     )]
+     IncorrectPassthroughEntryPointCount,
++    #[error(
++        "Subgroup size {size} on entry point {entry_point:?} is not a power of two in [{min}, {max}] (subgroup_min_size, subgroup_max_size)"
++    )]
++    InvalidSubgroupSize {
++        entry_point: String,
++        size: u32,
++        min: u32,
++        max: u32,
++    },
++    #[error(
++        "`SubgroupSize::Full` on entry point {entry_point:?} requires `@workgroup_size` x to be at least subgroup_min_size ({subgroup_min_size}); got {workgroup_size_x}"
++    )]
++    WorkgroupSizeTooSmallForFullSubgroups {
++        entry_point: String,
++        workgroup_size_x: u32,
++        subgroup_min_size: u32,
++    },
++    #[error(
++        "Non-`SubgroupSize::Varying` subgroup size on entry point {entry_point:?} requires `PassthroughShaderEntryPoint::workgroup_size` to be set (with a non-zero x component)"
++    )]
++    MissingWorkgroupSizeForSubgroupSize { entry_point: String },
++    #[error(
++        "`SubgroupSize::Fixed({subgroup_size})` on entry point {entry_point:?} requires `@workgroup_size` x to be a multiple of {subgroup_size}; got {workgroup_size_x}"
++    )]
++    WorkgroupSizeXNotMultipleOfSubgroupSize {
++        entry_point: String,
++        workgroup_size_x: u32,
++        subgroup_size: u32,
++    },
++    #[error(
++        "Non-`SubgroupSize::Varying` subgroup size on entry point {entry_point:?} is only supported for SPIR-V passthrough shaders"
++    )]
++    SubgroupSizeNotSupportedForBackend { entry_point: String },
+ }
+ 
+ impl WebGpuError for CreateShaderModuleError {
+@@ -172,7 +212,12 @@ impl WebGpuError for CreateShaderModuleError {
+             Self::Validation(..)
+             | Self::InvalidGroupIndex { .. }
+             | Self::IncorrectPassthroughEntryPointCount
+-            | Self::NotCompiledForBackend => ErrorType::Validation,
++            | Self::NotCompiledForBackend
++            | Self::InvalidSubgroupSize { .. }
++            | Self::WorkgroupSizeTooSmallForFullSubgroups { .. }
++            | Self::WorkgroupSizeXNotMultipleOfSubgroupSize { .. }
++            | Self::MissingWorkgroupSizeForSubgroupSize { .. }
++            | Self::SubgroupSizeNotSupportedForBackend { .. } => ErrorType::Validation,
+             #[cfg(feature = "wgsl")]
+             Self::Parsing(..) => ErrorType::Validation,
+             #[cfg(feature = "glsl")]
+@@ -760,6 +805,8 @@ pub enum CreateRenderPipelineError {
+         "but no render target for the pipeline was specified."
+     ))]
+     NoTargetSpecified,
++    #[error("`SubgroupSize::Full` is only valid on compute, task, and mesh stages")]
++    FullSubgroupsNotAllowed,
+     #[error(transparent)]
+     InvalidResource(#[from] InvalidResourceError),
+ }
+@@ -794,6 +841,7 @@ impl WebGpuError for CreateRenderPipelineError {
+             | Self::DualSourceBlendingWithMultipleColorTargets { .. }
+             | Self::NoTargetSpecified
+             | Self::PipelineConstants { .. }
++            | Self::FullSubgroupsNotAllowed
+             | Self::VertexAttributeStrideTooLarge { .. } => ErrorType::Validation,
+         }
+     }
+diff --git a/wgpu-core/src/timestamp_normalization/mod.rs b/wgpu-core/src/timestamp_normalization/mod.rs
+index 34be348b5af..65eca93ce66 100644
+--- a/wgpu-core/src/timestamp_normalization/mod.rs
++++ b/wgpu-core/src/timestamp_normalization/mod.rs
+@@ -220,6 +220,7 @@ impl TimestampNormalizer {
+                     entry_point: "main",
+                     constants: &constants,
+                     zero_initialize_workgroup_memory: false,
++                    subgroup_size: wgt::SubgroupSize::Varying,
+                 },
+                 cache: None,
+             };
+diff --git a/wgpu-core/src/validation.rs b/wgpu-core/src/validation.rs
+index 44d8b0fecc0..e6b48fa00bd 100644
+--- a/wgpu-core/src/validation.rs
++++ b/wgpu-core/src/validation.rs
+@@ -7,7 +7,7 @@ use alloc::{
+ use core::fmt;
+ 
+ use arrayvec::ArrayVec;
+-use hashbrown::{hash_map::Entry, HashSet};
++use hashbrown::hash_map::Entry;
+ use shader_io_deductions::{display_deductions_as_optional_list, MaxVertexShaderOutputDeduction};
+ use thiserror::Error;
+ use wgt::{
+@@ -304,9 +304,22 @@ pub struct Interface {
+     pub(crate) immediate_size: u32,
+ }
+ 
++#[derive(Debug)]
++pub struct PassthroughEntryPoint {
++    pub name: String,
++    pub workgroup_size: (u32, u32, u32),
++    pub subgroup_size: wgt::SubgroupSize,
++}
++
+ #[derive(Debug)]
+ pub struct PassthroughInterface {
+-    pub entry_point_names: HashSet<String>,
++    pub entry_points: Vec<PassthroughEntryPoint>,
++}
++
++impl PassthroughInterface {
++    pub fn entry_point(&self, name: &str) -> Option<&PassthroughEntryPoint> {
++        self.entry_points.iter().find(|e| e.name == name)
++    }
+ }
+ 
+ // Most shaders will use a standard interface which is very large.
+@@ -1342,6 +1355,17 @@ impl Interface {
+             .map_or(Default::default(), |ep| ep.immediate_slots_required)
+     }
+ 
++    /// Returns the `@workgroup_size` of the given entry point, if any.
++    pub fn workgroup_size(
++        &self,
++        stage: naga::ShaderStage,
++        entry_point_name: &str,
++    ) -> Option<[u32; 3]> {
++        self.entry_points
++            .get(&(stage, entry_point_name.to_string()))
++            .map(|ep| ep.workgroup_size)
++    }
++
+     pub fn finalize_entry_point_name(
+         &self,
+         stage: naga::ShaderStage,
+diff --git a/wgpu-hal/examples/halmark/main.rs b/wgpu-hal/examples/halmark/main.rs
+index 9983de95e76..284a7c2e3ef 100644
+--- a/wgpu-hal/examples/halmark/main.rs
++++ b/wgpu-hal/examples/halmark/main.rs
+@@ -266,6 +266,7 @@ impl<A: hal::Api> Example<A> {
+                     entry_point: "vs_main",
+                     constants: &constants,
+                     zero_initialize_workgroup_memory: true,
++                    subgroup_size: wgpu_types::SubgroupSize::Varying,
+                 },
+                 vertex_buffers: &[],
+             },
+@@ -274,6 +275,7 @@ impl<A: hal::Api> Example<A> {
+                 entry_point: "fs_main",
+                 constants: &constants,
+                 zero_initialize_workgroup_memory: true,
++                subgroup_size: wgpu_types::SubgroupSize::Varying,
+             }),
+             primitive: wgpu_types::PrimitiveState {
+                 topology: wgpu_types::PrimitiveTopology::TriangleStrip,
+diff --git a/wgpu-hal/examples/ray-traced-triangle/main.rs b/wgpu-hal/examples/ray-traced-triangle/main.rs
+index b9cf617bf86..6342228fe3f 100644
+--- a/wgpu-hal/examples/ray-traced-triangle/main.rs
++++ b/wgpu-hal/examples/ray-traced-triangle/main.rs
+@@ -412,6 +412,7 @@ impl<A: hal::Api> Example<A> {
+                     entry_point: "main",
+                     constants: &Default::default(),
+                     zero_initialize_workgroup_memory: true,
++                    subgroup_size: wgpu_types::SubgroupSize::Varying,
+                 },
+                 cache: None,
+             })
+diff --git a/wgpu-hal/src/dynamic/mod.rs b/wgpu-hal/src/dynamic/mod.rs
+index 85d8ca00450..e0e89e07c31 100644
+--- a/wgpu-hal/src/dynamic/mod.rs
++++ b/wgpu-hal/src/dynamic/mod.rs
+@@ -161,6 +161,7 @@ impl<'a> ProgrammableStage<'a, dyn DynShaderModule> {
+             entry_point: self.entry_point,
+             constants: self.constants,
+             zero_initialize_workgroup_memory: self.zero_initialize_workgroup_memory,
++            subgroup_size: self.subgroup_size,
+         }
+     }
+ }
+diff --git a/wgpu-hal/src/lib.rs b/wgpu-hal/src/lib.rs
+index ce2313c1abc..83a15ca694d 100644
+--- a/wgpu-hal/src/lib.rs
++++ b/wgpu-hal/src/lib.rs
+@@ -2449,6 +2449,10 @@ pub struct ProgrammableStage<'a, M: DynShaderModule + ?Sized> {
+     /// This is required by the WebGPU spec, but may have overhead which can be avoided
+     /// for cross-platform applications
+     pub zero_initialize_workgroup_memory: bool,
++    /// Required subgroup size for this stage.
++    ///
++    /// Honored on backends that advertise [`wgt::Features::SUBGROUP_SIZE_CONTROL`].
++    pub subgroup_size: wgt::SubgroupSize,
+ }
+ 
+ impl<M: DynShaderModule + ?Sized> Clone for ProgrammableStage<'_, M> {
+@@ -2458,6 +2462,7 @@ impl<M: DynShaderModule + ?Sized> Clone for ProgrammableStage<'_, M> {
+             entry_point: self.entry_point,
+             constants: self.constants,
+             zero_initialize_workgroup_memory: self.zero_initialize_workgroup_memory,
++            subgroup_size: self.subgroup_size,
+         }
+     }
+ }
+diff --git a/wgpu-hal/src/vulkan/adapter.rs b/wgpu-hal/src/vulkan/adapter.rs
+index 211e53e3731..ad858390028 100644
+--- a/wgpu-hal/src/vulkan/adapter.rs
++++ b/wgpu-hal/src/vulkan/adapter.rs
+@@ -527,9 +527,16 @@ impl PhysicalDeviceFeatures {
+             subgroup_size_control: if device_api_version >= vk::API_VERSION_1_3
+                 || enabled_extensions.contains(&ext::subgroup_size_control::NAME)
+             {
++                // `Features::SUBGROUP_SIZE_CONTROL` is only advertised when the
++                // device supports both `subgroupSizeControl` and
++                // `computeFullSubgroups`, so requesting it implies both must be
++                // enabled here.
++                let needs_full_subgroups =
++                    requested_features.contains(wgt::Features::SUBGROUP_SIZE_CONTROL);
+                 Some(
+                     vk::PhysicalDeviceSubgroupSizeControlFeatures::default()
+-                        .subgroup_size_control(true),
++                        .subgroup_size_control(true)
++                        .compute_full_subgroups(needs_full_subgroups),
+                 )
+             } else {
+                 None
+@@ -902,6 +909,27 @@ impl PhysicalDeviceFeatures {
+             }
+         }
+ 
++        // We require both `subgroupSizeControl` (needed for `Fixed` and the
++        // `ALLOW_VARYING`/`REQUIRE_FULL` flags) and `computeFullSubgroups`
++        // (needed specifically for `REQUIRE_FULL_SUBGROUPS_BIT`) so that all
++        // `SubgroupSize` variants are honorable once the feature is enabled.
++        // Splitting them into two wgpu features would let `SubgroupSize::Full`
++        // sneak through validation only to be rejected by Vulkan. Devices that
++        // expose `subgroupSizeControl` without `computeFullSubgroups` are rare
++        // in practice — Vulkan 1.3 mandates both, and extension-only devices
++        // almost always ship them together.
++        //
++        // `self.subgroup_size_control` is only populated when the device is
++        // Vulkan 1.3+ or supports `VK_EXT_subgroup_size_control`, so we don't
++        // need to re-check that here.
++        if self
++            .subgroup_size_control
++            .as_ref()
++            .is_some_and(|f| f.subgroup_size_control != 0 && f.compute_full_subgroups != 0)
++        {
++            features.insert(F::SUBGROUP_SIZE_CONTROL);
++        }
++
+         let supports_depth_format = |format| {
+             supports_format(
+                 instance,
+@@ -1276,7 +1304,9 @@ impl PhysicalDeviceProperties {
+             }
+ 
+             // Require `VK_EXT_subgroup_size_control` if the associated feature was requested
+-            if requested_features.contains(wgt::Features::SUBGROUP) {
++            if requested_features
++                .intersects(wgt::Features::SUBGROUP | wgt::Features::SUBGROUP_SIZE_CONTROL)
++            {
+                 extensions.push(ext::subgroup_size_control::NAME);
+             }
+ 
+diff --git a/wgpu-hal/src/vulkan/device.rs b/wgpu-hal/src/vulkan/device.rs
+index f5f76de4eac..092dad2f42e 100644
+--- a/wgpu-hal/src/vulkan/device.rs
++++ b/wgpu-hal/src/vulkan/device.rs
+@@ -1,4 +1,6 @@
+-use alloc::{borrow::ToOwned as _, collections::BTreeMap, ffi::CString, sync::Arc, vec::Vec};
++use alloc::{
++    borrow::ToOwned as _, boxed::Box, collections::BTreeMap, ffi::CString, sync::Arc, vec::Vec,
++};
+ use core::{
+     ffi::CStr,
+     mem::{self, MaybeUninit},
+@@ -252,6 +254,8 @@ impl super::DeviceShared {
+ struct CompiledStage {
+     create_info: vk::PipelineShaderStageCreateInfo<'static>,
+     _entry_point: CString,
++    _required_subgroup_size:
++        Option<Box<vk::PipelineShaderStageRequiredSubgroupSizeCreateInfo<'static>>>,
+     temp_raw_module: Option<vk::ShaderModule>,
+ }
+ 
+@@ -757,8 +761,47 @@ impl super::Device {
+         };
+ 
+         let mut flags = vk::PipelineShaderStageCreateFlags::empty();
+-        if self.shared.features.contains(wgt::Features::SUBGROUP) {
+-            flags |= vk::PipelineShaderStageCreateFlags::ALLOW_VARYING_SUBGROUP_SIZE
++        let mut required_subgroup_size = None;
++        if self
++            .shared
++            .features
++            .contains(wgt::Features::SUBGROUP_SIZE_CONTROL)
++        {
++            // wgpu-core validation guarantees `Full` is only used on
++            // compute/task/mesh stages and `Fixed(n)` is a power-of-two within
++            // `[subgroup_min_size, subgroup_max_size]`.
++            match stage.subgroup_size {
++                wgt::SubgroupSize::Varying => {
++                    flags |= vk::PipelineShaderStageCreateFlags::ALLOW_VARYING_SUBGROUP_SIZE;
++                }
++                wgt::SubgroupSize::Full => {
++                    // Pair `REQUIRE_FULL_SUBGROUPS` with `ALLOW_VARYING_SUBGROUP_SIZE`.
++                    //
++                    // Without varying, the driver fixes the subgroup size at
++                    // pipeline creation (typically `maxSubgroupSize`), forcing
++                    // `workgroup_size.x` to be a multiple of `maxSubgroupSize`.
++                    // That breaks shaders that just want full subgroups
++                    // regardless of size, and conflicts with the WebGPU spec,
++                    // where the WGSL `subgroup_size` builtin reflects the size
++                    // actually used at each invocation. Allowing varying lets
++                    // the runtime pick a size in `[min, max]` that divides
++                    // `workgroup_size.x` while still guaranteeing full subgroups.
++                    flags |= vk::PipelineShaderStageCreateFlags::REQUIRE_FULL_SUBGROUPS
++                        | vk::PipelineShaderStageCreateFlags::ALLOW_VARYING_SUBGROUP_SIZE;
++                }
++                wgt::SubgroupSize::Fixed(size) => {
++                    required_subgroup_size = Some(Box::new(
++                        vk::PipelineShaderStageRequiredSubgroupSizeCreateInfo::default()
++                            .required_subgroup_size(size),
++                    ));
++                }
++            }
++        } else if self.shared.features.contains(wgt::Features::SUBGROUP) {
++            // Without `SUBGROUP_SIZE_CONTROL`, wgpu-core enforces that
++            // `subgroup_size` is `Varying`. Preserve the existing behavior:
++            // the `VK_EXT_subgroup_size_control` extension is enabled whenever
++            // `Features::SUBGROUP` is requested, so we always allow varying.
++            flags |= vk::PipelineShaderStageCreateFlags::ALLOW_VARYING_SUBGROUP_SIZE;
+         }
+ 
+         let entry_point = CString::new(stage.entry_point).unwrap();
+@@ -769,10 +812,17 @@ impl super::Device {
+ 
+         // Circumvent struct lifetime check because of a self-reference inside CompiledStage
+         create_info.p_name = entry_point.as_ptr();
++        if let Some(ref boxed) = required_subgroup_size {
++            // Same trick as `p_name`: the boxed struct lives on `CompiledStage`
++            // and its address remains stable across `CompiledStage` moves.
++            let ptr: *const vk::PipelineShaderStageRequiredSubgroupSizeCreateInfo<'_> = &**boxed;
++            create_info.p_next = ptr.cast();
++        }
+ 
+         Ok(CompiledStage {
+             create_info,
+             _entry_point: entry_point,
++            _required_subgroup_size: required_subgroup_size,
+             temp_raw_module: match *stage.module {
+                 super::ShaderModule::Raw(_) => None,
+                 super::ShaderModule::Intermediate { .. } => Some(vk_module),
+diff --git a/wgpu-types/src/features.rs b/wgpu-types/src/features.rs
+index 4048a139ed9..a93288ad781 100644
+--- a/wgpu-types/src/features.rs
++++ b/wgpu-types/src/features.rs
+@@ -1151,6 +1151,18 @@ bitflags_array! {
+         /// This is a native only feature.
+         #[name("wgpu-subgroup-barrier")]
+         const SUBGROUP_BARRIER = 1 << 40;
++        /// Allows requesting a specific subgroup size or full subgroups for a
++        /// shader stage via [`SubgroupSize::Fixed`] / [`SubgroupSize::Full`].
++        ///
++        /// Without this feature, only [`SubgroupSize::Varying`] (the default)
++        /// is accepted.
++        ///
++        /// Supported Platforms:
++        /// - Vulkan (with `VK_EXT_subgroup_size_control`, promoted to Vulkan 1.3)
++        ///
++        /// This is a native only feature.
++        #[name("wgpu-subgroup-size-control")]
++        const SUBGROUP_SIZE_CONTROL = 1 << 24;
+         /// Allows the use of pipeline cache objects
+         ///
+         /// Supported platforms:
+@@ -1869,6 +1881,92 @@ impl Features {
+     }
+ }
+ 
++/// Required subgroup size for a shader stage.
++///
++/// Setting any value other than [`SubgroupSize::Varying`] requires
++/// [`Features::SUBGROUP_SIZE_CONTROL`]. Honored on Vulkan via
++/// `VK_EXT_subgroup_size_control`. On backends that do not advertise the
++/// feature, non-`Varying` values are rejected at pipeline creation.
++///
++/// This API is a precursor to the WebGPU [`subgroup-size-control`
++/// proposal][proposal], which models the same capability as a `@subgroup_size`
++/// WGSL attribute on compute entry points. The validation rules applied here
++/// to [`Fixed`] mirror the ones the proposal places on the attribute, so
++/// shaders authored against `Fixed(n)` should remain valid once the WGSL
++/// attribute lands. [`Full`] is a wgpu extension that has no counterpart in
++/// the proposal.
++///
++/// [`Fixed`]: SubgroupSize::Fixed
++/// [`Full`]: SubgroupSize::Full
++/// [proposal]: https://github.com/gpuweb/gpuweb/blob/main/proposals/subgroup-size-control.md
++#[repr(C)]
++#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Default)]
++#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
++pub enum SubgroupSize {
++    /// The implementation chooses the subgroup size, between
++    /// [`AdapterInfo::subgroup_min_size`] and [`AdapterInfo::subgroup_max_size`]
++    /// (inclusive).
++    ///
++    /// This is the default, and the only value honored on backends that do not
++    /// advertise [`Features::SUBGROUP_SIZE_CONTROL`]. Concretely:
++    /// - On Vulkan, individual subgroups within a single dispatch may use
++    ///   different sizes (`VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT`).
++    /// - On Metal, D3D12, and GL, the subgroup size is determined by the
++    ///   hardware/driver and is not user-controllable.
++    ///
++    /// [`AdapterInfo::subgroup_min_size`]: crate::AdapterInfo::subgroup_min_size
++    /// [`AdapterInfo::subgroup_max_size`]: crate::AdapterInfo::subgroup_max_size
++    #[default]
++    Varying,
++    /// Require full subgroups for the stage.
++    ///
++    /// Guarantees that every subgroup launched is full (no partial subgroups
++    /// at the edges of a workgroup). The actual subgroup size may still vary
++    /// between [`AdapterInfo::subgroup_min_size`] and
++    /// [`AdapterInfo::subgroup_max_size`] — the runtime is free to pick a
++    /// size that divides `workgroup_size.x`. The WGSL `subgroup_size` builtin
++    /// reflects the size actually used at each invocation.
++    ///
++    /// The `x` dimension of the entry point's `@workgroup_size` must be at
++    /// least [`AdapterInfo::subgroup_min_size`]; otherwise no full subgroup
++    /// can fit and pipeline creation fails. (Vulkan forbids partial subgroups
++    /// when `REQUIRE_FULL_SUBGROUPS_BIT` is set.)
++    ///
++    /// For SPIR-V passthrough shaders this is valid on compute, task, and
++    /// mesh stages; setting it on a vertex or fragment stage is a
++    /// render-pipeline creation error. The eventual WGSL `@subgroup_size`
++    /// attribute will be compute-only, matching the WebGPU proposal.
++    ///
++    /// [`AdapterInfo::subgroup_min_size`]: crate::AdapterInfo::subgroup_min_size
++    /// [`AdapterInfo::subgroup_max_size`]: crate::AdapterInfo::subgroup_max_size
++    Full,
++    /// Require a specific subgroup size for the stage.
++    ///
++    /// Validation rules follow the WebGPU `subgroup-size-control` proposal's
++    /// `@subgroup_size` attribute:
++    ///
++    /// - The size must be a power of two (D3D12 requirement).
++    /// - The size must be between [`AdapterInfo::subgroup_min_size`] and
++    ///   [`AdapterInfo::subgroup_max_size`] (inclusive).
++    /// - For compute, task, and mesh stages, `workgroup_size.x` must be a
++    ///   multiple of the requested size (Vulkan requirement).
++    ///
++    /// For SPIR-V passthrough shaders, the set of stages that can carry a
++    /// fixed subgroup size is implementation-dependent (Vulkan's
++    /// `requiredSubgroupSizeStages`), so wgpu forwards the request and lets
++    /// the driver reject unsupported stages at pipeline creation. The
++    /// eventual WGSL `@subgroup_size` attribute will be compute-only,
++    /// matching the WebGPU proposal.
++    ///
++    /// (The proposal also constrains the total workgroup size against a
++    /// `maxComputeWorkgroupSubgroups` limit; wgpu does not yet expose that
++    /// limit, so the corresponding check is currently skipped.)
++    ///
++    /// [`AdapterInfo::subgroup_min_size`]: crate::AdapterInfo::subgroup_min_size
++    /// [`AdapterInfo::subgroup_max_size`]: crate::AdapterInfo::subgroup_max_size
++    Fixed(u32),
++}
++
+ #[cfg(test)]
+ mod tests {
+     use crate::{Features, FeaturesWGPU, FeaturesWebGPU};
+diff --git a/wgpu-types/src/shader.rs b/wgpu-types/src/shader.rs
+index e4cb2a47b06..b5d66a21930 100644
+--- a/wgpu-types/src/shader.rs
++++ b/wgpu-types/src/shader.rs
+@@ -101,9 +101,37 @@ impl Default for ShaderRuntimeChecks {
+ pub struct PassthroughShaderEntryPoint<'a> {
+     /// The name of the entry point. Only used in validation and for GLSL or DXIL.
+     pub name: Cow<'a, str>,
+-    /// Number of workgroups in each dimension x, y and z. Only used for metal with
+-    /// compute-like shader stages.
++    /// Workgroup size in each dimension x, y and z.
++    ///
++    /// Used by the Metal backend for compute-like shader stages, where the
++    /// value is forwarded to the dispatch and must match the local size
++    /// declared in the shader.
++    ///
++    /// Additionally required (with `x > 0`, matching the value declared in
++    /// the shader) whenever [`subgroup_size`] is anything other than
++    /// [`SubgroupSize::Varying`], so module-creation validation can check the
++    /// `subgroup-size-control` rules (`workgroup_size.x` is a multiple of
++    /// `Fixed(n)`, or at least `subgroup_min_size` for `Full`).
++    ///
++    /// [`subgroup_size`]: Self::subgroup_size
++    /// [`SubgroupSize::Varying`]: crate::SubgroupSize::Varying
+     pub workgroup_size: (u32, u32, u32),
++    /// Required subgroup size for this entry point.
++    ///
++    /// Defaults to [`SubgroupSize::Varying`]. Setting any other value requires
++    /// [`Features::SUBGROUP_SIZE_CONTROL`] and a populated [`workgroup_size`].
++    ///
++    /// Only honored for SPIR-V (Vulkan) passthrough shaders, where it maps to
++    /// `VkPipelineShaderStageRequiredSubgroupSizeCreateInfo`. HLSL passthrough
++    /// shaders specify the wave size via a `[WaveSize(n)]` attribute embedded
++    /// in the shader source, and MetalLib/MSL provides no API for it. Module
++    /// creation rejects any non-[`SubgroupSize::Varying`] value when the
++    /// descriptor carries a non-SPIR-V source.
++    ///
++    /// [`workgroup_size`]: Self::workgroup_size
++    /// [`Features::SUBGROUP_SIZE_CONTROL`]: crate::Features::SUBGROUP_SIZE_CONTROL
++    /// [`SubgroupSize::Varying`]: crate::SubgroupSize::Varying
++    pub subgroup_size: crate::SubgroupSize,
+ }
+ 
+ /// Descriptor for a shader module given by any of several sources.
+diff --git a/wgpu/src/lib.rs b/wgpu/src/lib.rs
+index e17be8f48da..c39682d34e5 100644
+--- a/wgpu/src/lib.rs
++++ b/wgpu/src/lib.rs
+@@ -147,8 +147,8 @@ pub use wgt::{
+     PresentationTimestamp, PrimitiveState, PrimitiveTopology, QueryType, RenderBundleDepthStencil,
+     RequestAdapterError, SamplerBindingType, SamplerBorderColor, ShaderLocation, ShaderModel,
+     ShaderRuntimeChecks, ShaderStages, StencilFaceState, StencilOperation, StencilState,
+-    StorageTextureAccess, SurfaceCapabilities, SurfaceStatus, TexelCopyBufferLayout, TextureAspect,
+-    TextureChannel, TextureDimension, TextureFormat, TextureFormatFeatureFlags,
++    StorageTextureAccess, SubgroupSize, SurfaceCapabilities, SurfaceStatus, TexelCopyBufferLayout,
++    TextureAspect, TextureChannel, TextureDimension, TextureFormat, TextureFormatFeatureFlags,
+     TextureFormatFeatures, TextureSampleType, TextureTransition, TextureUsages, TextureUses,
+     TextureViewDimension, Trace, VertexAttribute, VertexFormat, VertexStepMode, WasmNotSend,
+     WasmNotSendSync, WasmNotSync, WriteOnly, WriteOnlyIter, COPY_BUFFER_ALIGNMENT,
+diff --git a/wgpu/src/macros/mod.rs b/wgpu/src/macros/mod.rs
+index 7adb6b169d7..5be87f7ed30 100644
+--- a/wgpu/src/macros/mod.rs
++++ b/wgpu/src/macros/mod.rs
+@@ -145,6 +145,7 @@ macro_rules! include_spirv_raw {
+                     name: $crate::__macro_helpers::Cow::Borrowed("main"),
+                     // This is unused for SPIR-V
+                     workgroup_size: (0, 0, 0),
++                    subgroup_size: $crate::SubgroupSize::Varying,
+                 }]),
+                 dxil: None,
+                 metallib: None,

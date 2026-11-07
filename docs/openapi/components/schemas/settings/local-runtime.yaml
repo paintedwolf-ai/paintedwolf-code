@@ -1,0 +1,37 @@
+components:
+  schemas:
+    LocalGenerationStatus:
+      x-go-generate: true
+      type: object
+      required: [state, recovery_action]
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          enum: [idle, loading, ready, repairing, unavailable, repair_required, insufficient_memory, stopped]
+          description: Current host runtime state, independent of cached model discovery.
+        recovery_action:
+          type: string
+          enum: [none, retry, repair, reinstall]
+          description: Available recovery action selected from host facts.
+        detail:
+          type: string
+          description: Diagnostic detail; recovery_action supplies the available action.
+        revision:
+          type: string
+          description: Authenticated revision held by the admitted model process.
+        context_tokens:
+          type: integer
+          minimum: 0
+          description: Admitted context capacity of the ready process.
+    LocalGenerationRepairResult:
+      x-go-generate: true
+      type: object
+      required: [ok, status]
+      additionalProperties: false
+      properties:
+        ok:
+          x-go-name: OK
+          type: boolean
+        status:
+          $ref: '#/components/schemas/LocalGenerationStatus'

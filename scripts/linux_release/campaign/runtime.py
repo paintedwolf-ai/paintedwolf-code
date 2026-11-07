@@ -22,7 +22,7 @@ from ..installed_cases.package_payload import (
 )
 
 ARCHES = {"x86_64": ("amd64", 62), "aarch64": ("arm64", 183)}
-ROLES = {"painted-wolf-code", "pw", "pw-logs", "pw-vault-identity", "pw-document-core", "bialy"}
+ROLES = {"painted-wolf-code", "pw", "pw-logs", "pw-vault-identity", "pw-document-core", "bialy", "nativegen"}
 SETUID_LAUNCHER = Path("/") / RELATIVE_SETUID_LAUNCHER
 
 

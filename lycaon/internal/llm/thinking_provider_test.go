@@ -148,7 +148,7 @@ func TestOfflineRenderUsesServingThinkingPolicy(t *testing.T) {
       - id: e4b
         thinking: {state: supported, efforts: [low]}
 `+MinimalShipHTTPRetryYAML)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

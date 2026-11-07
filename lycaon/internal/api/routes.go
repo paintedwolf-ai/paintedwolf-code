@@ -103,6 +103,7 @@ func (s *Server) setupRoutes() {
 		s.registerV1Operation(r, operationDeleteProviderCredential, s.Admin.modelAdmin.DeleteCredential)
 		s.registerV1Operation(r, operationTestProvider, s.Admin.modelAdmin.TestProvider)
 		s.registerV1Operation(r, operationRefreshProviderModels, s.Admin.modelAdmin.RefreshModels)
+		s.registerV1Operation(r, operationRepairLocalGeneration, s.Admin.modelAdmin.RepairLocalGeneration)
 		s.registerV1Operation(r, operationGetModelPolicySettings, s.Admin.modelAdmin.GetPolicy)
 		s.registerV1Operation(r, operationUpdateModelPolicySettings, s.Admin.modelAdmin.UpdatePolicy)
 

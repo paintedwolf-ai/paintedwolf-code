@@ -48,7 +48,7 @@ func TestBundledProvidersIncludeDeepInfra(t *testing.T) {
 func TestDeepInfraRegistryUnconfiguredWithoutKey(t *testing.T) {
 	t.Setenv("DEEPINFRA_API_KEY", "di-env-ignored")
 	catalog := liveCatalogForShipIDs(t, "deepinfra")
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}

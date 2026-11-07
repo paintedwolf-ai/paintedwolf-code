@@ -31,7 +31,8 @@ var discoveryKeepSet = map[providerprofile.DiscoveryStrategy]string{
 		"(Together type=chat + token pricing, OpenRouter output modalities, " +
 		"OpenAI/generic id-only marked Untyped for fail-closed merge).",
 
-	providerprofile.DiscoveryNone: "Explicit opt-out — no live listing.",
+	providerprofile.DiscoveryNone:             "Explicit opt-out — no live listing.",
+	providerprofile.DiscoveryNativeGeneration: "Host-admitted artifact and device context capacity.",
 
 	providerprofile.DiscoveryOllama: "Native GET /api/tags exposes feature flags (completion vs embedding); " +
 		"OpenAI-compat /v1/models is id-only and mixes embed models.",

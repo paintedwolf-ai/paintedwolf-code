@@ -41,7 +41,7 @@ func TestKnownModelMetadataDoesNotWaitForCatalogRefresh(t *testing.T) {
 	t.Cleanup(server.Close)
 	yaml := "providers:\n  - id: local\n    kind: openai-compatible\n    base_url: " + server.URL + "/v1\n    api_key_env: \"\"\n    models:\n      - id: known\n        capabilities:\n          vision:\n            state: supported\n            sources: [local-config]\n" + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, yaml)
-	reg, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	reg, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		reg.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -129,7 +129,7 @@ providers:
 	testutil.FailErr(t, "creds", err)
 	testutil.FailErr(t, "set key", creds.Set("openai", "sk-test"))
 
-	reg, err := NewRegistry(t.Context(), cat, creds)
+	reg, err := NewRegistry(t.Context(), cat, creds, nil)
 
 	if err == nil {
 

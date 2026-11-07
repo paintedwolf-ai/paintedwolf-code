@@ -191,12 +191,14 @@ func TestContinuationWithoutSummarizerKeepsInstructionsAndRecovery(t *testing.T)
 
 func TestContinuationSegmentsCoverWholeUnicodeObservation(t *testing.T) {
 	body := strings.Repeat("αβγ\n", 700)
-	sources, segments := continuationSegments([]ContextMessage{{ID: "read", Ord: 7, Role: "tool", Content: body, ToolName: "read"}}, 64)
+	sources, segments, err := continuationSegments([]ContextMessage{{ID: "read", Ord: 7, Role: "tool", Content: body, ToolName: "read"}}, 64)
+	testutil.FailErr(t, "segment sources", err)
 	var recovered strings.Builder
 	for _, segment := range segments {
 		recovered.WriteString(segment.Content)
 	}
-	projected, _, _, _ := projectCompactionMessage(ContextMessage{ID: "read", Ord: 7, Role: "tool", Content: body, ToolName: "read"})
+	projected, err := sourceData(ContextMessage{ID: "read", Ord: 7, Role: "tool", Content: body, ToolName: "read"})
+	testutil.FailErr(t, "project source", err)
 	if recovered.String() != projected || len(sources) != 1 || sources[0].Disposition != "reference" {
 		t.Fatal("segmentation omitted source material")
 	}

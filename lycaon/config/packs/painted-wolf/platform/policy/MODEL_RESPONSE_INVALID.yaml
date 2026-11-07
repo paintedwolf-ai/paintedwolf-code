@@ -1,0 +1,25 @@
+oar: '1.0'
+id: MODEL_RESPONSE_INVALID
+kind: invariant
+anchor: content.output
+requires:
+  facts:
+    - paintedwolf.reject_observation
+when: paintedwolf.reject_observation == "provider_response_invalid"
+effect: block
+copy:
+  what: Your last response had an invalid response structure and was not accepted.
+  cause: The provider parser rejected the response envelope.
+  why: No tool calls from that response were executed.
+  fix: Continue from the recorded conversation and return a complete response in the requested format. Use only the offered tool channels when tools are available.
+  instead: Keep earlier completed work. Do not assume rejected tool calls ran.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: The provider rejected the response structure
+x-paintedwolf-scenarios:
+  - id: malformed_response
+    vars: {}
+    expect_contains:
+      - No tool calls from that response were executed.
+      - requested format
+      - 'Code: MODEL_RESPONSE_INVALID'

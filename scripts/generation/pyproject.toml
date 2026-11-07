@@ -1,0 +1,16 @@
+[project]
+name = "paintedwolf-generation-reference"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "mlx==0.32.4; sys_platform == 'darwin'",
+  "mlx-lm; sys_platform == 'darwin'",
+  "numpy",
+  "safetensors",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+mlx-lm = { git = "https://github.com/ml-explore/mlx-lm", rev = "736ab0d8c1d0edc79c3d798044fe6904e2fa23be" }

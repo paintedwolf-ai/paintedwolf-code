@@ -30,7 +30,10 @@ func BuildCompactionInput(
 		return CompactionInput{}, fmt.Errorf("compaction resume prompt requires positive token budgets")
 	}
 	limit := min(len(sliced), max(1, min(128, maxTokens/maxMessageTokens)))
-	rows, messages := compactionRecentMessages(sliced[:limit])
+	rows, messages, err := compactionRecentMessages(sliced[:limit])
+	if err != nil {
+		return CompactionInput{}, err
+	}
 	for {
 		block, err := renderCompactionUserPrompt(ctx, info, rows)
 		if err != nil {
@@ -78,11 +81,15 @@ func renderCompactionUserPrompt(ctx context.Context, info SessionInfo, rows []ma
 	return block, nil
 }
 
-func compactionRecentMessages(sliced []ContextMessage) ([]map[string]any, []api.Message) {
+func compactionRecentMessages(sliced []ContextMessage) ([]map[string]any, []api.Message, error) {
 	out := make([]map[string]any, 0, len(sliced))
 	messages := make([]api.Message, 0, len(sliced))
 	for _, msg := range sliced {
-		content, origin, authority, trustTier := projectCompactionMessage(msg)
+		_, origin, authority, trustTier := projectCompactionMessage(msg)
+		content, err := sourceData(msg)
+		if err != nil {
+			return nil, nil, err
+		}
 		messages = append(messages, api.Message{Content: content, SourceContext: msg.SourceContext})
 		out = append(out, map[string]any{
 			"role":                   msg.Role,
@@ -96,7 +103,7 @@ func compactionRecentMessages(sliced []ContextMessage) ([]map[string]any, []api.
 			"host_secret_references": msg.HostSecretRedaction.References() > 0,
 		})
 	}
-	return out, messages
+	return out, messages, nil
 }
 
 func compactionStrategy(msg ContextMessage) string {

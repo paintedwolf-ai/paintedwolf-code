@@ -179,7 +179,7 @@ func feedOnlyLimits(t *testing.T, model string, feedWindow int) (*Service, *api.
 	testutil.FailErr(t, "catalog", err)
 	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "set key", creds.Set("hosted", "test-key"))
-	reg, err := llm.NewRegistry(t.Context(), catalog, creds)
+	reg, err := llm.NewRegistry(t.Context(), catalog, creds, nil)
 	testutil.FailErr(t, "registry", err)
 	raw, err := json.Marshal(map[string]any{"openai": map[string]any{"id": "openai", "models": map[string]any{model: map[string]any{
 		"id": model, "tool_call": true, "modalities": map[string]any{"output": []string{"text"}}, "limit": map[string]int{"context": feedWindow},

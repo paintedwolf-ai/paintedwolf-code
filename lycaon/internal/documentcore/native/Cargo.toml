@@ -26,3 +26,7 @@ panic = "abort"
 overflow-checks = true
 debug-assertions = true
 strip = true
+
+[profile.release.build-override]
+# Preserve loadable Mach-O metadata in build-time libraries.
+strip = "none"

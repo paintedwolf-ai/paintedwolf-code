@@ -264,7 +264,8 @@ func TestCompactionRecentMessagesTotalBudget(t *testing.T) {
 	}
 	msgs[len(msgs)-1].Content = "newest-marker " + msgs[len(msgs)-1].Content
 	const messageTokens = 64
-	_, segments := continuationSegments(msgs, messageTokens)
+	_, segments, err := continuationSegments(msgs, messageTokens)
+	testutil.FailErr(t, "segment sources", err)
 	input, err := BuildCompactionInput(context.Background(), SessionInfo{ID: "s1"}, segments, 1024, messageTokens)
 	testutil.FailErr(t, "build bounded source page", err)
 	if tokenest.EstimateDefault(input.Text) > 1024 || input.Consumed <= 0 || !strings.Contains(input.Messages[0].Content, segments[0].Content) {

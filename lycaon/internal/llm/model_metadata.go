@@ -135,7 +135,7 @@ func (r *registryRouting) modelSnapshot(ctx context.Context, providerID string) 
 	}
 	return result, func() {
 		r.discovery.Refresh(ctx, cacheKey, func(ctx context.Context) ([]modelinfo.Entry, error) {
-			return fetchDiscoveredModels(ctx, r.discoveryClient, profile, entry.BaseURL, key)
+			return r.fetchProviderModels(ctx, profile, entry.BaseURL, key)
 		})
 	}
 }

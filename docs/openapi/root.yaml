@@ -479,6 +479,8 @@ paths:
     $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1credential
   /v1/providers/{provider_id}/test:
     $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1test
+  /v1/providers/{provider_id}/repair:
+    $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1repair
   /v1/providers/{provider_id}/refresh:
     $ref: paths/providers.yaml#/paths/~1v1~1providers~1{provider_id}~1refresh
   /v1/settings/web-research:
