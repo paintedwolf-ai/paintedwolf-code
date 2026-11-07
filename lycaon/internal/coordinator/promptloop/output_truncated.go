@@ -162,22 +162,26 @@ func (l *turnNudges) handleOutputTruncatedTurn(
 		}
 	} else {
 		st.draftSlotID = ""
+		st.draftSlotOrd = 0
+		st.draftSlotSeq = 0
 	}
 
 	if st.output.truncatedRetries < maxOutputTruncatedRetries {
 		st.output.truncatedRetries++
 		msg := buildOutputTruncatedRecoveryMessage(truncated)
-		st.history = append(st.history, msg)
 		if deferUserNudgeStore(st) {
+			st.history = append(st.history, msg)
 			st.deferredUserNudges = append(st.deferredUserNudges, msg)
 			return true, nil
 		}
-		if l == nil || l.Projection == nil || l.Projection.Deps.AppendMessages == nil {
+		if l == nil || l.Projection == nil {
 			return false, fmt.Errorf("append messages not configured")
 		}
-		if err := l.Projection.Deps.AppendMessages(ctx, sessionID, msg); err != nil {
+		msg, err := l.Projection.appendMessage(ctx, sessionID, msg)
+		if err != nil {
 			return false, err
 		}
+		st.history = append(st.history, msg)
 		return true, nil
 	}
 
@@ -186,10 +190,11 @@ func (l *turnNudges) handleOutputTruncatedTurn(
 		truncated.Attempts = st.output.truncatedRetries + 1
 	}
 	msg := buildOutputTruncatedTerminalMessage(truncated)
-	if l == nil || l.Projection == nil || l.Projection.Deps.AppendMessages == nil {
+	if l == nil || l.Projection == nil {
 		return false, fmt.Errorf("append messages not configured")
 	}
-	if err := l.Projection.Deps.AppendMessages(ctx, sessionID, msg); err != nil {
+	msg, err := l.Projection.appendMessage(ctx, sessionID, msg)
+	if err != nil {
 		return false, err
 	}
 	if l.Projection.Deps.Streams != nil {

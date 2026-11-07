@@ -39,6 +39,8 @@ type promptLoopTurnState struct {
 	// draftSlotID identifies the draft updated by the current model turn.
 	draftSlotID       string
 	draftSlotAppended bool
+	draftSlotOrd      int64
+	draftSlotSeq      int64
 	// proseFinish is a forced or last-iteration closeout.
 	proseFinish      bool
 	coordinatorFrame inject.CoordinatorTurnFrame

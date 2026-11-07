@@ -94,20 +94,28 @@ func (l *modelTurn) runAssistantStreamTurn(
 			return nil
 		}
 		if st != nil && st.draftSlotAppended && st.usesCoordinatorDraftSlot(assistantMsg.ID) {
+			assistantMsg.Ord = st.draftSlotOrd
+			assistantMsg.Seq = st.draftSlotSeq
 			placeholder.appended = true
 			return nil
 		}
-		if err := l.Projection.Deps.AppendMessages(ctx, sessionID, assistantMsg); err != nil {
+		stamped, err := l.Projection.appendMessage(ctx, sessionID, assistantMsg)
+		if err != nil {
 			if errors.Is(err, store.ErrDuplicateMessageID) && st != nil && st.usesCoordinatorDraftSlot(assistantMsg.ID) {
+				assistantMsg.Ord = st.draftSlotOrd
+				assistantMsg.Seq = st.draftSlotSeq
 				placeholder.appended = true
 				st.draftSlotAppended = true
 				return nil
 			}
 			return err
 		}
+		assistantMsg = stamped
 		placeholder.appended = true
 		if st != nil && st.usesCoordinatorDraftSlot(assistantMsg.ID) {
 			st.draftSlotAppended = true
+			st.draftSlotOrd = assistantMsg.Ord
+			st.draftSlotSeq = assistantMsg.Seq
 		}
 		return nil
 	}
@@ -115,7 +123,7 @@ func (l *modelTurn) runAssistantStreamTurn(
 		if partial == nil {
 			return
 		}
-		// [OAR-OPS-8] Content and tool-call deltas remain private until model.output resolves.
+		// Deltas stay private until model.output resolves.
 		if l.Projection.Deps.Streams != nil {
 			generating := tokenest.EstimateDefault(partial.Content) + tokenest.EstimateDefault(partial.Reasoning)
 			l.Projection.Deps.Streams.CacheLive(sessionID, assistantMsg.ID, "", nil, generating)

@@ -26,6 +26,8 @@ func (st *promptLoopTurnState) ensureCoordinatorDraftSlot() string {
 	if st.draftSlotID == "" {
 		st.draftSlotID = uuid.NewString()
 		st.draftSlotAppended = false
+		st.draftSlotOrd = 0
+		st.draftSlotSeq = 0
 	}
 	return st.draftSlotID
 }
@@ -40,6 +42,8 @@ func (st *promptLoopTurnState) closeCoordinatorDraftSlot(messageID string) {
 	}
 	st.draftSlotID = ""
 	st.draftSlotAppended = false
+	st.draftSlotOrd = 0
+	st.draftSlotSeq = 0
 }
 
 func (st *promptLoopTurnState) usesCoordinatorDraftSlot(assistantMessageID string) bool {
