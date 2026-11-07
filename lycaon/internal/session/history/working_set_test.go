@@ -540,7 +540,7 @@ func TestApplyViewPreservesDeferredUnindexedLiveRows(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
 	svc, mem, sess := newTurnSession(t, cfg)
 	canonical := seedTurn(t, mem, sess.ID, 4, "observation")
-	publishView(t, mem, sess.ID, 1, canonical[0].Ord, canonical[len(canonical)-1].Seq, canonical[:1])
+	publishCoverage(t, mem, sess.ID, canonical, canonical[0].Ord, canonical[0].Ord, cfg.ModelContextWindow)
 
 	deferred := api.Message{
 		ID:      "deferred-nudge",
