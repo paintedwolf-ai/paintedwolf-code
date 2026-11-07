@@ -566,7 +566,6 @@
       "summary": "{% if paintedwolf.command %}{{ paintedwolf.command }} cannot run in this form{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}.{% else %}This command cannot run in the requested form.{% endif %}"
     },
     "COMMAND_NOT_ARGV": {
-      "branch_instruction": "{% if paintedwolf.can_command %}For a Bash program, the offered command tool accepts program text without capture.{% endif %}",
       "category": "recoverable",
       "emit": "guard:command_surface",
       "summary": "This invocation could not be admitted as literal executable arguments{% if paintedwolf.command %}: `{{ paintedwolf.command }}`{% endif %}."
@@ -2627,7 +2626,6 @@
       "branch_instruction": "Request receipt-based release only when needed and safe to retry",
       "category": "informational",
       "emit": "banner",
-      "severity": "info",
       "summary": "Values were sent redacted before this request left the machine."
     },
     "SECRET_REFERENCE_AGENT_USE_EXPIRED": {
@@ -3257,8 +3255,7 @@
       "branch_instruction": "Preserve the operation outcome and distinguish retained evidence from the omitted suffix",
       "category": "informational",
       "emit": "banner",
-      "severity": "info",
-      "summary": "The host saved the first {{ paintedwolf.spill_bytes }} of {{ paintedwolf.original_bytes }} output bytes to {{ paintedwolf.spill_path }} at the {{ paintedwolf.cap }}-byte spill cap. In `command`, native utilities read that host path directly; an installed program cannot open it, so pipe `cat {{ paintedwolf.spill_path }} | program` or redirect `cat` into `@scratch`."
+      "summary": "The host saved the first {{ paintedwolf.spill_bytes }} of {{ paintedwolf.original_bytes }} output bytes to {{ paintedwolf.spill_path }} at the {{ paintedwolf.cap }}-byte spill cap. Native utilities read that host path directly; an installed program cannot open it."
     },
     "TOOL_OUTPUT_SPILL_CAP_EXCEEDED": {
       "branch_instruction": "Preserve completed work; recover only the observations still needed",
@@ -3276,8 +3273,7 @@
       "branch_instruction": "Preserve the recorded operation outcome and recover evidence without repeating a mutation",
       "category": "informational",
       "emit": "banner",
-      "severity": "info",
-      "summary": "Tool output was shortened for the inline budget.{% if paintedwolf.spill_path %} Retained output is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes). In `command`, native utilities read that host path directly; an installed program cannot open it, so pipe `cat {{ paintedwolf.spill_path }} | program` or redirect `cat` into `@scratch`.{% else %} No spill file is available for the omitted output.{% endif %}"
+      "summary": "Tool output was shortened for the inline budget.{% if paintedwolf.spill_path %} Retained output is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes). Native utilities read that host path directly; an installed program cannot open it.{% else %} No spill file is available for the omitted output.{% endif %}"
     },
     "TOOL_OWNER_FAILED": {
       "category": "recoverable",
@@ -3666,10 +3662,9 @@
       "summary": "Tried to dispatch a worker while workflow phase `{{ paintedwolf.phase }}` has unsettled host obligations ({{ paintedwolf.phase_obligation_kinds }})."
     },
     "WORKFLOW_PHASE_EXIT_REQUIRED": {
-      "branch_instruction": "Stop the current tool arc and call `workflow_advance`.",
+      "branch_instruction": "Stop the current tool arc first.",
       "category": "recoverable",
       "emit": "banner",
-      "severity": "error",
       "summary": "Workflow `{{ paintedwolf.workflow_id }}` phase `{{ paintedwolf.phase }}` is satisfied but still active."
     },
     "WORKFLOW_REPORT_PHASE_REQUIRED_BEFORE_CLOSEOUT": {
