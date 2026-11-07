@@ -20,10 +20,19 @@
 
 ## Resources
 
-Optional directories: `references/`, `assets/`. The host reads `SKILL.md` at load time and lists the other files without reading them. The agent opens a file with `skills_read`, passing the skill name as `need` and the relative path as `resource`. Bundled skills ship no `scripts/`.
+Optional directories: `references/`, `assets/`. The host reads `SKILL.md` at load time and lists the other files without reading them. {% if profile_has_skills_read %}The agent opens a file with `skills_read`, passing the skill name as `need` and the relative path as `resource`.{% endif %} Bundled skills ship no `scripts/`.
 
 ## Pack templates
 
-Pack skill bodies use the isolated pongo profile, so includes are unavailable. At `skills_read` the host renders the body and every `references/*.md` file with policy vars (`max_in_flight`, `worker_tool_budget_default`, `worker_tool_budget_min` / `_max`, `hunt_wave_workers`, `throwaway_tool_loops_min` / `_max`, `deep_tool_loops_hint`). Invalid pack templates reject with `SKILL_TEMPLATE_INVALID`. Project skills are not templated.
+Pack skill bodies use the isolated pongo profile, so includes are unavailable. The host renders the body and every `references/*.md` file with the caller's vars; invalid templates reject with `SKILL_TEMPLATE_INVALID`. Project skills are not templated.
+
+The vars describe the caller:
+
+- Sizing: `max_in_flight`, `worker_tool_budget_default`, `worker_tool_budget_min` / `_max`, `hunt_wave_workers`, `throwaway_tool_loops_min` / `_max`, `deep_tool_loops_hint`.
+- Reach: `profile_has_<tool>` is true when the caller's surface offers that tool; `profile_command_mutation`, `profile_has_write_tools`, and `profile_can_request` describe its command effects, write scope, and tool requests.
+- Posture: `is_coordinator`, `on_worker_branch`, `has_git`, `root_count`.
+- Configuration: `configuration.<property>` resolves the caller pack's effective configuration values.
+
+Guard an optional tool mention with {% verbatim %}{% if profile_has_<tool> %}…{% endif %}{% endverbatim %}, so a reader whose surface lacks the tool never sees an unreachable call. Preview a render with `pw prompts render --skill <name> [--resource <path>] [--agent ID] [--surface ID] --check`.
 
 Escape literal {% verbatim %}{{{% endverbatim %} / {% verbatim %}{%{% endverbatim %} sequences with a `verbatim` … `endverbatim` block. Other references are returned as written.
