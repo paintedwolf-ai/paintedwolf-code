@@ -456,6 +456,7 @@ export function ProjectChatsView(props: Props) {
                           class="chat-list-row__pin"
                           aria-label="Pinned"
                           role="img"
+                          data-testid="chat-list-pin"
                         >
                           <PinIcon size={10} />
                         </span>

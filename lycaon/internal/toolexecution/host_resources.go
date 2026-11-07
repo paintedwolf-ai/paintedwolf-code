@@ -99,15 +99,8 @@ func observeHostResourceResolution(gc *oar.GuardContext, resolution hostresource
 	if gc == nil {
 		return
 	}
-	gc.Access.ActionHostResources = sortedHostResourceIDs(resolution.States)
 	gc.Access.ActionHostResourceDenials = append([]string(nil), resolution.Deny...)
 	sort.Strings(gc.Access.ActionHostResourceDenials)
-	gc.Access.HostResourceStatus = make(map[string]string, len(resolution.States))
-	gc.Access.HostResourcePolicy = make(map[string]string, len(resolution.States))
-	for id, state := range resolution.States {
-		gc.Access.HostResourceStatus[id] = string(state.Status)
-		gc.Access.HostResourcePolicy[id] = string(state.Access)
-	}
 }
 
 func mergeHostResourceConnections(

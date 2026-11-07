@@ -93,7 +93,13 @@ export function BackgroundProcessPanel(props: Props) {
             data-testid={
               !snapshot() && Boolean(recordedReason())
                 ? "background-process-historical-reason"
-                : undefined
+                : running()
+                  ? "background-process-running"
+                  : snapshot()
+                    ? "background-process-ended"
+                    : hasHydratedBackgroundProcesses(props.sessionId)
+                      ? "background-process-unavailable"
+                      : "background-process-pending"
             }
           >
             {status()}
@@ -102,7 +108,7 @@ export function BackgroundProcessPanel(props: Props) {
         <Show when={!running() && snapshot()?.exitCode != null}>
           <div>
             <dt>Exit code</dt>
-            <dd>{snapshot()?.exitCode}</dd>
+            <dd data-testid="background-process-exit-code">{snapshot()?.exitCode}</dd>
           </div>
         </Show>
         <div class="den-tool-part-card-facts--wide">
@@ -115,6 +121,7 @@ export function BackgroundProcessPanel(props: Props) {
               variant="secondary"
               compact
               disabled={stopping()}
+              data-testid="background-process-stop"
               onClick={() => void onStop()}
             >
               {stopping() ? "Stopping…" : "Stop"}

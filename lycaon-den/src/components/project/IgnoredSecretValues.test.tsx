@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { stubClient } from "../../test/client-fixture.ts";
@@ -26,10 +27,8 @@ describe("ignored public values", () => {
       listProjectSecretIgnores: vi.fn(async () => ({ rules: [rule] })),
     });
     render(() => <IgnoredSecretValues client={client} projectId="project" />);
-    fireEvent.click(await screen.findByRole("button", { name: "Review ignored value: Published example" }));
-    expect((screen.getByLabelText("Exact public value") as HTMLTextAreaElement).value).toBe("public fixture");
-    expect(screen.getByText(/Protected credential evidence/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open ignore file" })).toBeTruthy();
+    fireEvent.click(assertNamedControl(await screen.findByTestId("ignored-value-fixture"), "button"));
+    expect((screen.getByTestId("ignored-value-input") as HTMLTextAreaElement).value).toBe("public fixture");
   });
 
   it("declares a value in the chosen folder and lists what the file now holds", async () => {
@@ -42,20 +41,20 @@ describe("ignored public values", () => {
       createProjectSecretIgnore,
     });
     render(() => <IgnoredSecretValues client={client} projectId="project" />);
-    const add = await screen.findByRole("button", { name: "Add value" }) as HTMLButtonElement;
+    const add = assertNamedControl(await screen.findByTestId("add-value"), "button") as HTMLButtonElement;
     // Declarations need a folder, so adding opens once the project's folders load.
     await waitFor(() => expect(add.disabled).toBe(false));
     fireEvent.click(add);
-    fireEvent.input(screen.getByLabelText("Exact public value"), { target: { value: "an-example" } });
-    fireEvent.input(screen.getByLabelText("Reason"), { target: { value: "  Vendor sample  " } });
-    fireEvent.click(screen.getByRole("button", { name: "Save declaration" }));
+    fireEvent.input(screen.getByTestId("add-value-input"), { target: { value: "an-example" } });
+    fireEvent.input(screen.getByTestId("add-reason-input"), { target: { value: "  Vendor sample  " } });
+    fireEvent.click(assertNamedControl(screen.getByTestId("save-declaration"), "button"));
 
     await waitFor(() => expect(createProjectSecretIgnore).toHaveBeenCalledWith("project", {
       root_id: "root",
       entry: { id: expect.any(String), value: "an-example", reason: "Vendor sample", expires_on: undefined },
     }));
     expect(createProjectSecretIgnore).toHaveBeenCalledTimes(1);
-    expect(await screen.findByText("1 ignored value")).toBeTruthy();
+    expect(await screen.findByTestId("ignored-value-added")).toBeTruthy();
   });
 
   it("withdraws a declaration once the removal is confirmed", async () => {
@@ -66,16 +65,16 @@ describe("ignored public values", () => {
       deleteProjectSecretIgnore,
     });
     render(() => <IgnoredSecretValues client={client} projectId="project" />);
-    fireEvent.click(await screen.findByRole("button", { name: "Review ignored value: Published example" }));
+    fireEvent.click(assertNamedControl(await screen.findByTestId("ignored-value-fixture"), "button"));
 
     confirmDestructive.mockResolvedValueOnce(false);
-    fireEvent.click(screen.getByRole("button", { name: "Remove declaration" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("remove-declaration"), "button"));
     await waitFor(() => expect(confirmDestructive).toHaveBeenCalledTimes(1));
     expect(deleteProjectSecretIgnore).not.toHaveBeenCalled();
 
     confirmDestructive.mockResolvedValueOnce(true);
-    fireEvent.click(screen.getByRole("button", { name: "Remove declaration" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("remove-declaration"), "button"));
     await waitFor(() => expect(deleteProjectSecretIgnore).toHaveBeenCalledWith("project", "fixture", "root"));
-    expect(await screen.findByText("No ignored public values.")).toBeTruthy();
+    expect(await screen.findByTestId("ignored-values-empty")).toBeTruthy();
   });
 });

@@ -34,7 +34,7 @@ describe("FeedbackArtifactThumb refused fetch", () => {
       </ErrorBoundary>
     ));
 
-    await screen.findByText("Preview unavailable.");
+    await screen.findByTestId("artifact-preview-unavailable");
     expect(stageFailed).not.toHaveBeenCalled();
     expect(screen.queryByTestId("stage-boundary")).toBeNull();
     expect(screen.getByTestId("workflow-feedback-artifact")).toBeTruthy();
@@ -60,7 +60,7 @@ describe("FeedbackArtifactThumb refused fetch", () => {
       />
     ));
 
-    await screen.findByText("Preview unavailable.");
+    await screen.findByTestId("artifact-preview-unavailable");
     const radio = screen.getByLabelText("B") as HTMLInputElement;
     expect(radio.disabled).toBe(false);
   });

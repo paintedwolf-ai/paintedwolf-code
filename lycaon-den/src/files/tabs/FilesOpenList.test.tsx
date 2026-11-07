@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stockBindingId } from "../../contributions/stock-frame-test.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { FilesOpenList } from "./FilesOpenList.tsx";
+import { assertNamedControl } from "../../test/controls.ts";
 import { applyFilesBufferLoad, applyFilesBufferLoadError, applyFilesBufferUnsupportedEncoding, markFilesBufferLoading, openFilesBuffer, resetProjectFilesForTests, setFilesBufferPinned } from "../documents/project-files-buffers.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import type { FileBufferKey } from "../components/project-files-model.ts";
@@ -163,7 +164,7 @@ describe("FilesOpenList", () => {
     expect(
       screen.getByTestId("files-open-list").dataset.denAnchoredSurface,
     ).toBeTruthy();
-    const list = screen.getByRole("list", { name: "Open files" });
+    const list = assertNamedControl(screen.getByTestId("files-open-list-rows"), "list");
     expect(list.classList.contains("den-files-open-list__rows-body")).toBe(true);
     expect(
       list.closest(".den-files-open-list__rows")?.hasAttribute("data-den-scrollport"),

@@ -174,7 +174,7 @@ describe("ProjectArtifactsView", () => {
       const img = await screen.findByRole("img", { name: "Screenshot B" });
       fireEvent.error(img);
     }
-    await screen.findByText("This artifact could not be loaded.");
+    await screen.findByTestId("project-artifact-load-error");
     expect(thumb.getAttribute("aria-busy")).toBe("false");
     expect(thumb.hasAttribute("disabled")).toBe(true);
   });

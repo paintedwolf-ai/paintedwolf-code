@@ -7,9 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -80,15 +83,22 @@ func TestTruncateToolResultForSessionOverlaySpillsUnderProject(t *testing.T) {
 func TestTruncateToolResultForSessionGenericSpillsInHostData(t *testing.T) {
 	dataDir := t.TempDir()
 	payload := strings.Repeat("z", 4096)
+	root := testutil.CheckoutRoot(t)
+	loader, err := oar.NewLoader(filepath.Join(root, "schemas"))
+	testutil.FailErr(t, "create loader", err)
+	rules, err := loader.LoadEffectivePolicy()
+	testutil.FailErr(t, "load policy", err)
+	ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"command"}).WithPrograms(func(string) bool { return true }))
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
-			HintConfig: loadCoordinatorTestHintConfig(t),
+			HintConfig:    loadCoordinatorTestHintConfig(t),
+			HintNextSteps: tools.HintNextStepsResolver(rules),
 		},
 		Tools: ToolsDeps{
 			DataDir: dataDir,
 		},
 	})
-	got := loop.Tools.truncateToolResultForSession(t.Context(), "read", toolResultStorageProjection{content: payload}, payload, 512, 0, &api.Session{
+	got := loop.Tools.truncateToolResultForSession(ctx, "read", toolResultStorageProjection{content: payload}, payload, 512, 0, &api.Session{
 		ID:        "s1",
 		ProjectID: "proj-spill",
 	})

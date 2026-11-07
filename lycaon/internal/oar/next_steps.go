@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 	"gopkg.in/yaml.v3"
 )
@@ -93,8 +94,9 @@ func (l *Loader) validateNextSteps(r *Rule) error {
 		return nil
 	}
 	known := ruleFactRefs(r)
+	selectors := r.Selector["tool"]
 	for i, step := range r.NextSteps.Steps {
-		if err := l.validateNextStep(step, known, fmt.Sprintf("rule %s next-steps[%d]", r.ID, i)); err != nil {
+		if err := l.validateNextStep(step, known, selectors, fmt.Sprintf("rule %s next-steps[%d]", r.ID, i)); err != nil {
 			return err
 		}
 	}
@@ -117,7 +119,7 @@ func rejectDecisionNextSteps(ruleID, field, expr string) error {
 	return nil
 }
 
-func (l *Loader) validateNextStep(step NextStep, known map[string]bool, where string) error {
+func (l *Loader) validateNextStep(step NextStep, known map[string]bool, selectors []string, where string) error {
 	if strings.TrimSpace(step.Say) == "" {
 		return fmt.Errorf("%s: say is required", where)
 	}
@@ -153,12 +155,85 @@ func (l *Loader) validateNextStep(step NextStep, known map[string]bool, where st
 			return fmt.Errorf("%s: %s is set by both args and pick", where, path)
 		}
 	}
+	if err := l.checkStepArgPaths(step, selectors, where); err != nil {
+		return err
+	}
 	for i, alternative := range step.Or {
-		if err := l.validateNextStep(alternative, known, fmt.Sprintf("%s.or[%d]", where, i)); err != nil {
+		if err := l.validateNextStep(alternative, known, selectors, fmt.Sprintf("%s.or[%d]", where, i)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// checkStepArgPaths pins every args and pick path to the argument schema of the
+// tool that will receive it. Schemas the host did not load skip the check; the
+// production catalog view always loads them.
+func (l *Loader) checkStepArgPaths(step NextStep, selectors []string, where string) error {
+	if l.toolSchemas == nil {
+		return nil
+	}
+	paths := make([]string, 0, len(step.Args)+len(step.Pick))
+	for path := range step.Args {
+		paths = append(paths, path)
+	}
+	for path := range step.Pick {
+		paths = append(paths, path)
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	if tool := strings.TrimSpace(step.Tool); tool != "" {
+		return l.checkArgPaths(tool, paths, where)
+	}
+	// A reissue keeps the reader's tool: with selectors, every selected tool
+	// must accept the shape; without them, some declared tool must.
+	for _, path := range paths {
+		if len(selectors) > 0 {
+			for _, tool := range selectors {
+				if err := l.checkArgPaths(tool, []string{path}, where); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if !l.someToolAccepts(path) {
+			return fmt.Errorf("%s: no declared tool accepts %s", where, path)
+		}
+	}
+	return nil
+}
+
+func (l *Loader) checkArgPaths(tool string, paths []string, where string) error {
+	meta, ok := l.toolSchemas.ToolMeta(tool)
+	if !ok {
+		return fmt.Errorf("%s: %s has no declared argument schema", where, tool)
+	}
+	accepted := map[string]bool{}
+	for _, path := range toolschema.ArgFieldPaths(meta.ArgsSchema) {
+		accepted[path] = true
+	}
+	for _, path := range paths {
+		if !accepted[path] {
+			return fmt.Errorf("%s: %s does not accept %s", where, tool, path)
+		}
+	}
+	return nil
+}
+
+func (l *Loader) someToolAccepts(path string) bool {
+	for name := range l.toolSchemas.Tools {
+		meta, ok := l.toolSchemas.ToolMeta(name)
+		if !ok {
+			continue
+		}
+		for _, accepted := range toolschema.ArgFieldPaths(meta.ArgsSchema) {
+			if accepted == path {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func nativeProgramKnown(name string) bool {

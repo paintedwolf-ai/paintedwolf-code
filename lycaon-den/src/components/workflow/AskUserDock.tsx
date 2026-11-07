@@ -442,6 +442,7 @@ export function AskUserDock(props: Props) {
               <button
                 type="button"
                 class="den-ask-user-dock-secret-visibility"
+                data-testid="workflow-secret-visibility"
                 aria-label={secretVisible() ? "Hide secret" : "Show secret"}
                 aria-pressed={secretVisible()}
                 disabled={submitting()}
@@ -452,6 +453,7 @@ export function AskUserDock(props: Props) {
               <button
                 type="button"
                 class="den-ask-user-dock-secret-submit"
+                data-testid="workflow-secret-submit"
                 disabled={!answerReady() || submitting()}
                 onClick={() => void resolveSecret()}
               >
@@ -472,7 +474,11 @@ export function AskUserDock(props: Props) {
         </Show>
 
         <Show when={composerArmed() ? undefined : hint()}>
-          {(text) => <p class="den-ask-user-dock-hint">{text()}</p>}
+          {(text) => (
+            <p class="den-ask-user-dock-hint" data-testid="ask-user-dock-hint">
+              {text()}
+            </p>
+          )}
         </Show>
       </DockCollapseBody>
 

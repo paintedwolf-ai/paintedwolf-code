@@ -30,7 +30,6 @@ func ObserveDelegationGroundingVerdict(gc *oar.GuardContext, verdict GroundingVe
 	case "COORDINATOR_CRITERIA_UNMET":
 		gc.Grounding.ClaimsCompletion = true
 		gc.Grounding.HasMatchingLedgerJob = true
-		gc.Grounding.LedgerCriteriaMet = false
 	case ambientUngroundedCompletionCode:
 		gc.Grounding.LastAuditUngrounded = true
 		gc.Grounding.HasMatchingLedgerJob = false

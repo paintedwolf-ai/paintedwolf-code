@@ -52,10 +52,10 @@ type ManagedSecretDetailProps = {
   onRevoke: () => void;
 };
 
-function Fact(props: { label: string; children: JSX.Element }) {
+function Fact(props: { label: string; testId?: string; children: JSX.Element }) {
   return (
     <div>
-      <dt>{props.label}</dt>
+      <dt data-testid={props.testId}>{props.label}</dt>
       <dd>{props.children}</dd>
     </div>
   );
@@ -171,7 +171,7 @@ export function ManagedSecretDetail(props: ManagedSecretDetailProps) {
       </Show>
 
       <dl class="den-settings-facts">
-        <Fact label={C.factScope}>
+        <Fact label={C.factScope} testId="managed-secret-fact-scope">
           {secretScopeLabel(secret())}{" "}
           <span class="den-settings-hint">{secretScopeHint(secret())}</span>
         </Fact>
@@ -191,17 +191,17 @@ export function ManagedSecretDetail(props: ManagedSecretDetailProps) {
           {(format) => <Fact label={C.factFormat}>{format}</Fact>}
         </Show>
         <Show when={secret().entropy_bits} keyed>
-          {(bits) => <Fact label={C.factEntropy}>{bits} bits</Fact>}
+          {(bits) => <Fact label={C.factEntropy} testId="managed-secret-fact-entropy">{bits} bits</Fact>}
         </Show>
         <Fact label={C.factCreated}>
           {formatSecretTimestamp(secret().created_at) ?? "—"}
         </Fact>
-        <Fact label={C.factVersion}>{C.versionLabel(secret().version)}</Fact>
+        <Fact label={C.factVersion} testId="managed-secret-fact-version">{C.versionLabel(secret().version)}</Fact>
         <Fact label={C.factValueReplaced}>{secretValueReplacedLabel(secret())}</Fact>
         <Fact label={C.factAgentUseEnds}>{secretAgentUseEndsLabel(secret())}</Fact>
         <Fact label={C.factState}>{secretStateLabel(secret())}</Fact>
         <Fact label={C.factLastUsed}>{secretLastUsedLabel(secret())}</Fact>
-        <Fact label={C.factLastRevealed}>
+        <Fact label={C.factLastRevealed} testId="managed-secret-fact-last-revealed">
           {secretLastRevealedLabel(secret())}{" "}
           <span class="den-settings-hint">{C.revealCountLabel(secret().reveal_count)}</span>
         </Fact>

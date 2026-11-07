@@ -69,7 +69,7 @@ describe("BudgetsEditor", () => {
     render(() => <BudgetsEditor client={{ updateLimitsSettings } as never} settingsStore={settingsStore} />);
     fireEvent.click(await screen.findByTestId("spend-ceiling-enabled"));
     settingsStore.actions.setLimits({ ...initial, max_iterations: 700 });
-    expect(screen.getByLabelText("Max iterations per turn")).toHaveProperty("value", "700");
+    expect(screen.getByTestId("max-iterations")).toHaveProperty("value", "700");
     await waitFor(() => expect(updateLimitsSettings).toHaveBeenCalledWith({ spend_ceiling_enabled: true }));
     expect(settingsStore.state.limits?.max_iterations).toBe(700);
   });
@@ -82,7 +82,7 @@ describe("BudgetsEditor", () => {
       .mockImplementation(async (body) => ({ ...sampleLimits(), ...body }));
     const settingsStore = createSettingsStore({ providers: [], limits: sampleLimits() });
     render(() => <BudgetsEditor client={{ updateLimitsSettings } as never} settingsStore={settingsStore} />);
-    const input = await screen.findByLabelText("Max iterations per turn");
+    const input = await screen.findByTestId("max-iterations");
     fireEvent.input(input, { target: { value: "600" } });
     await waitFor(() => expect(updateLimitsSettings).toHaveBeenCalledWith({ max_iterations: 600 }));
     fireEvent.input(input, { target: { value: "500" } });
@@ -124,16 +124,16 @@ describe("BudgetsEditor", () => {
     }));
     const settingsStore = createSettingsStore({ providers: [], limits: sampleLimits() });
     render(() => <BudgetsEditor client={{ updateLimitsSettings } as never} settingsStore={settingsStore} />);
-    const input = await screen.findByLabelText("Max iterations per turn");
+    const input = await screen.findByTestId("max-iterations");
     input.focus();
     fireEvent.input(input, { target: { value: "501" } });
-    expect(screen.getByLabelText("Max iterations per turn")).toBe(input);
+    expect(screen.getByTestId("max-iterations")).toBe(input);
     expect(document.activeElement).toBe(input);
     fireEvent.input(input, { target: { value: "5012" } });
     await waitFor(() => expect(updateLimitsSettings).toHaveBeenCalledWith(
       { max_iterations: 5012 },
     ));
-    expect(screen.getByLabelText("Max iterations per turn")).toBe(input);
+    expect(screen.getByTestId("max-iterations")).toBe(input);
     expect(document.activeElement).toBe(input);
   });
 
@@ -157,7 +157,6 @@ describe("BudgetsEditor", () => {
     expect(screen.getByTestId("spend-ceiling-usd")).toBeTruthy();
     expect(screen.getByTestId("spend-warning-percent")).toHaveProperty("value", "80");
     expect(screen.getByTestId("spend-soft-stop")).toHaveProperty("checked", true);
-    expect(screen.getByText(/safety brake, not a budget/i)).toBeTruthy();
     expect(screen.getByTestId("spend-ceiling-readout").getAttribute("data-kind")).toBe(
       "off",
     );

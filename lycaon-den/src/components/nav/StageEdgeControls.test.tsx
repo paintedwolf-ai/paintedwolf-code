@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
@@ -66,8 +67,8 @@ describe("stage title bar edge controls", () => {
   it.each(["left", "right"] as const)("names two restores sharing the %s edge", (side) => {
     const current = panes({ nav: { collapsed: true, side }, conversation: { collapsed: true, side } });
     render(() => <ShellHeaderTitlebar edges={current} />);
-    const nav = screen.getByRole("button", { name: "Show sidebar" });
-    const chat = screen.getByRole("button", { name: "Show conversation" });
+    const nav = assertNamedControl(screen.getByTestId("nav-expand-btn"), "button");
+    const chat = assertNamedControl(screen.getByTestId("conversation-expand-btn"), "button");
     expect(nav.textContent).toBe("Sidebar");
     expect(chat.textContent).toBe("Chat");
     expect(edge(side)?.contains(nav)).toBe(true);

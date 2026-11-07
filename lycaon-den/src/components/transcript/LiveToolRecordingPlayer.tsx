@@ -15,7 +15,7 @@ type Props = {
 /** A durable live-tool video artifact played beside its source transcript. */
 export function LiveToolRecordingPlayer(props: Props) {
   return <Show when={!artifactWasDeleted(props.artifactId)} fallback={
-    <p role="status" data-artifact-id={props.artifactId}>This artifact was deleted.</p>
+    <p role="status" data-testid="artifact-tombstone" data-artifact-id={props.artifactId}>This artifact was deleted.</p>
   }><RecordingMedia {...props} /></Show>;
 }
 
@@ -80,6 +80,7 @@ function RecordingMedia(props: Props) {
         <p
           class="m-0 px-den-5 pt-den-6 pb-den-7 text-den-compact text-den-text-muted"
           role="status"
+          data-testid="live-tool-recording-player-error"
         >
           {srcResource.error instanceof LycaonApiError && srcResource.error.code === "artifact_deleted"
             ? "This artifact was deleted." : "Recording could not be played."}

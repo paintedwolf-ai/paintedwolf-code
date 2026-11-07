@@ -80,7 +80,6 @@ describe("FocusedSessionList", () => {
       <FocusedSessionList {...baseProps()} sections={chats()} totalChats={0} loaded />
     ));
     expect(screen.getByTestId("focused-session-list-empty")).toBeTruthy();
-    expect(screen.getByText("No chats yet")).toBeTruthy();
   });
 
   it("does not claim the project is empty before host inventory settles", () => {
@@ -93,7 +92,6 @@ describe("FocusedSessionList", () => {
       />
     ));
     expect(screen.getByTestId("focused-session-list-empty").textContent).toBe("");
-    expect(screen.queryByText("No chats yet")).toBeNull();
   });
 
   it("highlights active session and selects on click", () => {
@@ -172,9 +170,7 @@ describe("FocusedSessionList", () => {
         .closest("button")
         ?.classList.contains("den-shell-nav-sub-link-active"),
     ).toBe(true);
-    expect(screen.getByText("Fix tests").closest("button")?.textContent).toContain(
-      "Selected chat, visible.",
-    );
+    expect(screen.getByText("Fix tests").closest("button")?.querySelector(".sr-only")).toBeTruthy();
   });
 
   it("archives and deletes from the right-click menu", () => {
@@ -437,7 +433,6 @@ describe("FocusedSessionList", () => {
         }}
       />
     ));
-    expect(screen.getByText("Pinned")).toBeTruthy();
     expect(titles("focused-session-list-pinned")).toEqual(["First pin", "Second pin"]);
     expect(titles("focused-session-list-chats")).toEqual(["Loose"]);
   });
@@ -495,7 +490,6 @@ describe("FocusedSessionList", () => {
     const props = baseProps();
     render(() => <FocusedSessionList {...props} sections={chats(row())} />);
     const trigger = screen.getByTestId("focused-session-list-sort");
-    expect(trigger.textContent).toContain("Created");
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(

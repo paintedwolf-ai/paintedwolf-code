@@ -1,8 +1,9 @@
 import { stubClient } from "../../test/client-fixture.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stockBindingId } from "../../contributions/stock-frame-test.ts";
-import { render, fireEvent } from "@solidjs/testing-library";
+import { render, fireEvent, screen } from "@solidjs/testing-library";
 import { AskUserDock } from "./AskUserDock.tsx";
+import { assertNamedControl } from "../../test/controls.ts";
 import type { AskUserDockSubmitFn } from "./AskUserDock.tsx";
 import type { LycaonClient } from "../../api/client.ts";
 import type { Message, WorkflowFeedbackMeta } from "../../api/types.ts";
@@ -69,7 +70,7 @@ describe("AskUserDock", () => {
       purpose: "secret",
       secret: { name: "Registry token", purpose: "Authenticate publishing", scope: "chat" },
     };
-    const { getByLabelText, getByRole, getByTestId } = render(() => (
+    const { getByLabelText, getByTestId } = render(() => (
       <AskUserDock meta={meta} client={c} {...base} />
     ));
     const input = getByLabelText("Registry token") as HTMLInputElement;
@@ -79,12 +80,15 @@ describe("AskUserDock", () => {
       "Available only to this chat · No agent-use deadline",
     );
 
-    const visibility = getByRole("button", { name: "Show secret" });
+    const visibility = assertNamedControl(
+      screen.getByTestId("workflow-secret-visibility"),
+      "button",
+    );
     expect(visibility.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(visibility);
     expect(input.type).toBe("text");
-    expect(getByRole("button", { name: "Hide secret" }).textContent).toBe("Hide");
-    fireEvent.click(getByRole("button", { name: "Hide secret" }));
+    expect(visibility.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(visibility);
     expect(input.type).toBe("password");
 
     for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
@@ -92,8 +96,11 @@ describe("AskUserDock", () => {
       expect(c.resolveWorkflowSecret).not.toHaveBeenCalled();
       expect(c.resolveWorkflowFeedback).not.toHaveBeenCalled();
     }
-    if (method === "button") fireEvent.click(getByRole("button", { name: "Store secret" }));
-    else fireEvent.keyDown(input, { key: "Enter" });
+    if (method === "button") {
+      fireEvent.click(
+        assertNamedControl(screen.getByTestId("workflow-secret-submit"), "button"),
+      );
+    } else fireEvent.keyDown(input, { key: "Enter" });
 
     await vi.waitFor(() => expect(c.resolveWorkflowSecret).toHaveBeenCalledWith(
       "run-1",
@@ -178,10 +185,10 @@ describe("AskUserDock", () => {
       response_type: "single_choice",
       options: ["red", "blue"],
     };
-    const { container, getByLabelText } = render(() => (
+    const { getByTestId, getByLabelText } = render(() => (
       <AskUserDock meta={meta} client={client()} {...base} />
     ));
-    const hint = () => container.querySelector(".den-ask-user-dock-hint")?.textContent;
+    const hint = () => getByTestId("ask-user-dock-hint").textContent;
     expect(hint()).toBe("Select one, then Enter");
     fireEvent.click(getByLabelText("blue"));
     expect(hint()).toBe("Press Enter to submit your answer");
@@ -196,11 +203,11 @@ describe("AskUserDock", () => {
       response_type: "single_choice",
       options: ["red", "blue"],
     };
-    const { container } = render(() => (
+    const { getByTestId } = render(() => (
       <AskUserDock meta={meta} client={client()} {...base} />
     ));
     expect(
-      container.querySelector(".den-ask-user-dock-hint")?.textContent,
+      getByTestId("ask-user-dock-hint").textContent,
     ).toBe("Select one, then ⌘Enter");
   });
 

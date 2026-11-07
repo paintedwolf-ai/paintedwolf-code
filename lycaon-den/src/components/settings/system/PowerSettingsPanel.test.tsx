@@ -55,10 +55,10 @@ describe("PowerSettingsPanel", () => {
     ));
     await vi.advanceTimersByTimeAsync(0);
     expect(read).toHaveBeenCalledTimes(1);
-    expect(screen.getByText(/Keeping this .* awake for active work\./)).toBeTruthy();
+    expect(screen.getByTestId("power-active-status")).toBeTruthy();
     facts = { ...facts, supported: false, inhibiting: false };
     await vi.advanceTimersByTimeAsync(5_000);
-    expect(screen.queryByText(/Keeping this .* awake for active work\./)).toBeNull();
+    expect(screen.queryByTestId("power-active-status")).toBeNull();
     expect(screen.getByTestId<HTMLInputElement>("power-keep-awake").disabled).toBe(true);
     setPresence("idle");
     const idleReads = read.mock.calls.length;
@@ -68,7 +68,7 @@ describe("PowerSettingsPanel", () => {
     setPresence("active");
     await vi.advanceTimersByTimeAsync(0);
     expect(screen.getByTestId<HTMLInputElement>("power-keep-awake").disabled).toBe(false);
-    expect(screen.getByText(/Keeping this .* awake for active work\./)).toBeTruthy();
+    expect(screen.getByTestId("power-active-status")).toBeTruthy();
     view.unmount();
     const disposedReads = read.mock.calls.length;
     await vi.advanceTimersByTimeAsync(15_000);

@@ -361,6 +361,7 @@ function RawOutputChrome(props: {
             <ToolContentLink
               pane="output"
               label="Raw output"
+              testId="tool-raw-output-link"
               projectId={props.projectId}
               revealOffset={toolContent?.outputOffset()}
               content={rawContent()}

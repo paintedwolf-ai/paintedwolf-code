@@ -50,7 +50,7 @@ describe("LivePreviewPane", () => {
       />
     ));
 
-    expect(screen.getByTestId("live-preview-status").textContent).toMatch(/Live|Driving/);
+    expect(screen.getByTestId("live-preview-status").getAttribute("data-status")).toMatch(/live|busy/);
     expect(screen.getByTestId("live-preview-action").textContent).toContain("click");
     expect(fireEvent.click(screen.getByTestId("live-preview-stage"))).toBe(false);
     expect(client.watchPreview).toHaveBeenCalledTimes(1);
@@ -71,8 +71,8 @@ describe("LivePreviewPane", () => {
       />
     ));
 
-    expect(screen.getByTestId("live-preview-status").textContent).toBe("Final frame");
-    expect(screen.getByLabelText("Final frame from live tool session")).toBeTruthy();
+    expect(screen.getByTestId("live-preview-status").getAttribute("data-status")).toBe("ended");
+    expect(screen.getByTestId("live-preview-pane")).toBeTruthy();
     expect(screen.getByAltText("Demo")).toBeTruthy();
     expect(client.watchPreview).not.toHaveBeenCalled();
   });

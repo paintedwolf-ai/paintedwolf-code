@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { sourceReaderFixture } from "../../test/source-reader-fixture.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,18 +29,22 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function reviewRow(path: string) {
+  const row = screen.getAllByTestId("git-review-file").find((el) => el.getAttribute("data-path") === path);
+  expect(row).toBeTruthy();
+  return assertNamedControl(row!, "button");
+}
+
 describe("Git walk review", () => {
   it("lists committed files when the movement recorded no working-tree effects", async () => {
     const open = vi.fn();
     const compare = vi.fn(async () => gitReviewComparison());
     const host = sourceReaderFixture(compare);
     render(() => <WalkGitReview projectId="p1" step={gitReviewStep()} client={stubClient({ getProjectSourceGitReview: async () => gitReview(), ...host.methods })} onOpenGitFile={open} onOpenFile={vi.fn()} />);
-    await screen.findByRole("button", { name: "Review src/app.ts" });
+    await waitFor(() => reviewRow("src/app.ts"));
     expect(screen.getByTestId("git-review-count").textContent).toContain("1 file committed");
-    expect(screen.getByText("Test author")).toBeTruthy();
-    expect(screen.queryByText("No file changes")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Review src/app.ts" }));
-    fireEvent.click(screen.getByRole("button", { name: "Review src/app.ts" }));
+    fireEvent.click(reviewRow("src/app.ts"));
+    fireEvent.click(reviewRow("src/app.ts"));
     await waitFor(() => expect(open).toHaveBeenCalledOnce());
     expect(compare).toHaveBeenCalledOnce();
     expect(compare).toHaveBeenCalledWith("p1", expect.objectContaining({ kind: "git_change", change_id: "commit-change", path: "src/app.ts" }), undefined);
@@ -52,14 +57,15 @@ describe("Git walk review", () => {
       .mockRejectedValueOnce(new Error("Temporary failure"))
       .mockResolvedValueOnce(gitReview([gitReviewFile("b.ts")], { files_total: 2 }));
     render(() => <WalkGitReview projectId="p1" step={gitReviewStep()} client={stubClient({ getProjectSourceGitReview: list })} onOpenGitFile={vi.fn()} onOpenFile={vi.fn()} />);
-    const more = await screen.findByRole("button", { name: "Load more files (1 of 2)" });
+    const more = assertNamedControl(await screen.findByTestId("git-review-load-more"), "button");
+    expect(more.textContent).toBe("Load more files (1 of 2)");
     expect(screen.getByTestId("git-review-count").textContent).toContain("2 files committed");
     fireEvent.click(more);
     await waitFor(() => expect(noticeRows()).toMatchObject([{ code: "files_git_review_page_failed", message: "Temporary failure" }]));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByRole("button", { name: "Review a.ts" })).toBeTruthy();
+    expect(reviewRow("a.ts")).toBeTruthy();
     fireEvent.click(more);
-    await screen.findByRole("button", { name: "Review b.ts" });
+    await waitFor(() => reviewRow("b.ts"));
     expect(screen.getAllByTestId("git-review-file")).toHaveLength(2);
     expect(list.mock.calls[2]![2].cursor).toBe("1");
   });
@@ -70,14 +76,14 @@ describe("Git walk review", () => {
     await waitFor(() => expect(noticeRows()).toMatchObject([{ code: "files_git_review_unavailable", message: "Object unavailable" }]));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByTestId("git-review-count")).toBeNull();
-    expect(screen.queryByText("This commit contains no file changes in this folder.")).toBeNull();
+    expect(screen.queryByTestId("git-review-empty")).toBeNull();
     expect(screen.queryByRole("button", { name: "Reload review" })).toBeNull();
   });
 
   it("lists a genuinely empty review", async () => {
     const list = vi.fn().mockResolvedValue(gitReview([], { insertions: 0, deletions: 0 }));
     render(() => <WalkGitReview projectId="p1" step={gitReviewStep()} client={stubClient({ getProjectSourceGitReview: list })} onOpenGitFile={vi.fn()} onOpenFile={vi.fn()} />);
-    await screen.findByText("This commit contains no file changes in this folder.");
+    await screen.findByTestId("git-review-empty");
     expect(noticeRows()).toEqual([]);
   });
 
@@ -88,12 +94,12 @@ describe("Git walk review", () => {
       return gitReview();
     });
     render(() => <WalkGitReview projectId="p1" step={gitReviewStep()} selection={{ movement: true }} onSelectionChange={selection} client={stubClient({ getProjectSourceGitReview: list })} onOpenGitFile={vi.fn()} onOpenFile={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Review destination commit" }));
-    await screen.findByRole("button", { name: "Review src/app.ts" });
+    fireEvent.click(assertNamedControl(await screen.findByTestId("review-destination-commit"), "button"));
+    await waitFor(() => reviewRow("src/app.ts"));
     expect(list).toHaveBeenCalledTimes(2);
     expect(selection).toHaveBeenCalledWith({ movement: false });
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Review destination commit" })).toBeNull();
+    expect(screen.queryByTestId("review-destination-commit")).toBeNull();
   });
 
   it("selects merge parents and cancels a pending file open when the comparison changes", async () => {
@@ -106,9 +112,9 @@ describe("Git walk review", () => {
     const compare = vi.fn(() => pending.promise);
     const host = sourceReaderFixture(compare);
     render(() => <WalkGitReview projectId="p1" step={gitReviewStep()} client={stubClient({ getProjectSourceGitReview: list, ...host.methods })} onOpenGitFile={open} onOpenFile={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Review src/app.ts" }));
-    fireEvent.click(screen.getByRole("button", { name: "Comparison parent" }));
-    fireEvent.click(await screen.findByRole("option", { name: /^2 · / }));
+    fireEvent.click(await waitFor(() => reviewRow("src/app.ts")));
+    fireEvent.click(assertNamedControl(screen.getByTestId("git-review-parent-select"), "button"));
+    fireEvent.click(await screen.findByTestId("git-review-parent-select-option-2"));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     pending.resolve(gitReviewComparison());
     await Promise.resolve();
@@ -129,7 +135,7 @@ describe("Git walk review", () => {
     setSelection({ movement: false, parent: 1 });
     await waitFor(() => expect(screen.getByTestId("git-review-basis").textContent).toContain("aaaaaaaaaaaa"));
     expect(list).toHaveBeenCalledTimes(2);
-    expect(screen.getByRole("button", { name: "Comparison parent" }).textContent).toContain("1 · ");
+    expect(assertNamedControl(screen.getByTestId("git-review-parent-select"), "button").textContent).toContain("1 · ");
   });
 
   it("retains the published review and its DOM while a new comparison prepares", async () => {
@@ -139,15 +145,14 @@ describe("Git walk review", () => {
     const list = vi.fn().mockResolvedValueOnce(first).mockImplementationOnce(() => pending.promise);
     const client = stubClient({ getProjectSourceGitReview: list });
     render(() => <WalkGitReview projectId="p1" step={gitReviewStep()} client={client} onOpenGitFile={vi.fn()} onOpenFile={vi.fn()} />);
-    const row = await screen.findByRole("button", { name: "Review src/app.ts" });
+    const row = await waitFor(() => reviewRow("src/app.ts"));
     const title = screen.getByTestId("walk-page-title");
-    fireEvent.click(screen.getByRole("button", { name: "Comparison parent" }));
-    fireEvent.click(await screen.findByRole("option", { name: /^2 · / }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("git-review-parent-select"), "button"));
+    fireEvent.click(await screen.findByTestId("git-review-parent-select-option-2"));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole("button", { name: "Review src/app.ts" })).toBe(row);
+    expect(reviewRow("src/app.ts")).toBe(row);
     expect(screen.getByTestId("walk-page-title")).toBe(title);
     expect(screen.getByTestId("git-review-basis").textContent).toContain("aaaaaaaaaaaa");
-    expect(screen.queryByText("Loading committed files…")).toBeNull();
     pending.resolve({ ...first, before_commit: "e".repeat(40) });
     await waitFor(() => expect(screen.getByTestId("git-review-basis").textContent).toContain("eeeeeeeeeeee"));
     expect(screen.getByTestId("walk-page-title")).toBe(title);

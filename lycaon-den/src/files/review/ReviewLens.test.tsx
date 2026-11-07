@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { sourceEffectFixture } from "../source/source-effect-fixture.ts";
 import { stubFilesClient as stubClient, type FileClientStubs } from "../../test/source-client-fixture.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
@@ -741,7 +742,7 @@ describe("ReviewLens", () => {
       expect(open).toHaveBeenCalledWith("r1", "src/seen.ts", undefined, seenFile.file_id);
       expect(compare).not.toHaveBeenCalled();
       expect(screen.queryByTestId("changes-row-revert")).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "View reviewed changes" }));
+      fireEvent.click(assertNamedControl(screen.getByTestId("changes-row-view-reviewed"), "button"));
       await waitFor(() => expect(reviewed).toHaveBeenCalledWith(expect.objectContaining({
         reviewedThroughOrdinal: 4, versionId: "reviewed-version",
         initialComparison: "before", source: expect.objectContaining({ kind: "reader" }),
@@ -758,12 +759,12 @@ describe("ReviewLens", () => {
           readComparison: vi.fn().mockRejectedValue(new Error("offline")),
         })} onOpenFile={vi.fn()} onViewReviewed={reviewed} />);
       fireEvent.click(await screen.findByTestId("changes-row-file"));
-      fireEvent.click(screen.getByRole("button", { name: "View reviewed changes" }));
+      fireEvent.click(assertNamedControl(screen.getByTestId("changes-row-view-reviewed"), "button"));
       await waitFor(() => expect(noticeRows()).toMatchObject([
         { code: "files_reviewed_unavailable", message: "Couldn’t load reviewed changes for seen.ts." },
       ]));
       expect(reviewed).not.toHaveBeenCalled();
-      await waitFor(() => expect(screen.getByRole("button", { name: "View reviewed changes" }).hasAttribute("disabled")).toBe(false));
+      await waitFor(() => expect(assertNamedControl(screen.getByTestId("changes-row-view-reviewed"), "button").hasAttribute("disabled")).toBe(false));
     });
 
     it("sit below what is new, and marking one unseen withdraws its look", async () => {

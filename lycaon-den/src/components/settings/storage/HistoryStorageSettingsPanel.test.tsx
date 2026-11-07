@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../../test/controls.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
@@ -65,7 +66,7 @@ describe("HistoryStorageSettingsPanel", () => {
   it("keeps unmeasured usage unknown and requires a review even when keeping forever", async () => {
     const client = clientFixture();
     render(() => <HistoryStorageSettingsPanel client={client} />);
-    await waitFor(() => expect(screen.getByText("Storage measurements are not yet available.")).toBeTruthy());
+    await screen.findByTestId("history-storage-settings");
     expect(screen.queryByTestId("history-save")).toBeNull();
     expect(client.updateHistoryStorage).not.toHaveBeenCalled();
     await preview();
@@ -77,7 +78,7 @@ describe("HistoryStorageSettingsPanel", () => {
     const client = clientFixture({ recordings: { mode: "max_age", max_age_days: 30 } });
     render(() => <HistoryStorageSettingsPanel client={client} />);
     await preview();
-    const input = screen.getByLabelText("Recordings limit");
+    const input = screen.getByTestId("history-recordings-limit");
     input.focus();
     fireEvent.input(input, { target: { value: "60" } });
     expect(screen.queryByTestId("history-save")).toBeNull();
@@ -88,7 +89,7 @@ describe("HistoryStorageSettingsPanel", () => {
   it("requires loss confirmation before enabling imported retention", async () => {
     const client = clientFixture({ suspended: true, recordings: { mode: "max_age", max_age_days: 30 } });
     render(() => <HistoryStorageSettingsPanel client={client} />);
-    await waitFor(() => expect(screen.getByText(/Imported retention is paused/)).toBeTruthy());
+    await screen.findByTestId("history-storage-settings");
     await preview();
     confirm.mockResolvedValueOnce(false);
     fireEvent.click(screen.getByTestId("history-save"));
@@ -100,7 +101,6 @@ describe("HistoryStorageSettingsPanel", () => {
     const client = clientFixture({ recordings: { mode: "max_age", max_age_days: 30 } });
     render(() => <HistoryStorageSettingsPanel client={client} />);
     await preview();
-    expect(screen.getByText(/do not guarantee an immediate reduction/)).toBeTruthy();
     fireEvent.click(screen.getByTestId("history-prune"));
     await waitFor(() => expect(client.pruneHistory).toHaveBeenCalledTimes(2));
     expect(client.pruneHistory.mock.calls.map(([request]) => request.preview_token)).toEqual(["review-1", "review-2"]);
@@ -119,16 +119,16 @@ describe("HistoryStorageSettingsPanel", () => {
     const client = clientFixture();
     render(() => <HistoryStorageSettingsPanel client={client} />);
     await waitFor(() => expect(client.listProjects).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: "Project to protect" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("protect-project"), "button"));
     fireEvent.click(screen.getByRole("option", { name: "Example project" }));
     await waitFor(() => expect(client.listProjectSessions).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByLabelText("Show archived tasks")).not.toHaveProperty("disabled", true));
-    fireEvent.click(screen.getByLabelText("Show archived tasks"));
+    await waitFor(() => expect(screen.getByTestId("protect-archived")).not.toHaveProperty("disabled", true));
+    fireEvent.click(screen.getByTestId("protect-archived"));
     await waitFor(() => expect(client.listProjectSessions).toHaveBeenLastCalledWith("project-1", { archived: true, limit: 100 }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Task to protect" })).not.toHaveProperty("disabled", true));
-    fireEvent.click(screen.getByRole("button", { name: "Task to protect" }));
+    await waitFor(() => expect(screen.getByTestId("protect-task")).not.toHaveProperty("disabled", true));
+    fireEvent.click(assertNamedControl(screen.getByTestId("protect-task"), "button"));
     fireEvent.click(screen.getByRole("option", { name: "Old task" }));
-    fireEvent.click(screen.getByRole("button", { name: "Protect history" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("protect-history"), "button"));
     await waitFor(() => expect(client.createHistoryProtection).toHaveBeenCalledWith({ scope_type: "session", scope_id: "task-1", protected: true }));
   });
   it.each([

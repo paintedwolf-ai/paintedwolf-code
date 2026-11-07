@@ -252,7 +252,7 @@ describe("Security ledger", () => {
     fireEvent.click(screen.getByTestId("ledger-select-all"));
     fireEvent.click(await screen.findByTestId("ledger-selection-add-to-chat"));
     await vi.waitFor(() => expect(addFindingsToChat).toHaveBeenCalledWith("proj-1", rows));
-    expect(await screen.findByText("Upload unavailable.")).toBeTruthy();
+    expect((await screen.findByTestId("scans-error")).textContent).toContain("Upload unavailable.");
     expect(screen.getByTestId("ledger-selection").textContent).toContain("2 selected");
   });
 
