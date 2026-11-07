@@ -135,3 +135,32 @@ func TestAuthorUpdateRequiresAndPreservesStableItemIDs(t *testing.T) {
 		t.Fatalf("minted item ID = %q", id3)
 	}
 }
+
+func TestAuthorUpdateTreatsBootstrappedEmptyProgressAsFirstCreation(t *testing.T) {
+	store := NewMemoryStore()
+	store.EnsureRun("session", "run-1", "Build tic-tac-toe")
+	first, err := PrepareAuthorUpdate("# Goal\n\nBuild tic-tac-toe\n\n## Progress\n- [ ] Create board\n- [ ] Add AI")
+	testutil.FailErr(t, "prepare initial checklist after EnsureRun", err)
+	created, err := first.Apply(t.Context(), store, "session", nil)
+	testutil.FailErr(t, "apply initial checklist without expected_revision after EnsureRun", err)
+	if !created.Updated || len(created.Snapshot.ItemIDs) != 2 {
+		t.Fatalf("unexpected initial creation after EnsureRun: %+v", created)
+	}
+
+	// Complete the first turn's checklist, then reset via EnsureBootstrap for a second turn.
+	done, err := PrepareAuthorUpdate("# Goal\n\nBuild tic-tac-toe\n\n## Progress\n- [x] Create board\n- [x] Add AI")
+	testutil.FailErr(t, "prepare completed checklist", err)
+	_, err = done.ExpectRevision(created.Snapshot.Revision).ExpectItemIDs(created.Snapshot.ItemIDs...).Apply(t.Context(), store, "session", nil)
+	testutil.FailErr(t, "apply completed checklist", err)
+
+	if !EnsureBootstrap(t.Context(), store, "session", "run-1", "Make the AI harder") {
+		t.Fatal("expected EnsureBootstrap to reset terminal plan for new turn")
+	}
+	second, err := PrepareAuthorUpdate("# Goal\n\nMake the AI harder\n\n## Progress\n- [ ] Upgrade heuristic\n- [ ] Verify")
+	testutil.FailErr(t, "prepare second turn checklist", err)
+	createdSecond, err := second.Apply(t.Context(), store, "session", nil)
+	testutil.FailErr(t, "apply second turn initial checklist without expected_revision", err)
+	if !createdSecond.Updated || len(createdSecond.Snapshot.ItemIDs) != 2 {
+		t.Fatalf("unexpected second turn initial creation: %+v", createdSecond)
+	}
+}

@@ -147,13 +147,14 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string, recon
 	var previous Snapshot
 	snapshot, err := store.Update(ctx, root, func(current Snapshot) (Document, error) {
 		previous = current
-		if current.Content != "" && u.expectedRevision == "" {
+		hasExistingItems := len(current.Items()) != 0
+		if hasExistingItems && u.expectedRevision == "" {
 			return Document{}, &AuthorUpdateRejection{Code: "PROGRESS_REVISION_REQUIRED", Data: map[string]any{"snapshot": current}}
 		}
 		if u.expectedRevision != "" && u.expectedRevision != current.Revision {
 			return Document{}, &AuthorUpdateRejection{Code: "PROGRESS_REVISION_CHANGED", Data: map[string]any{"snapshot": current}}
 		}
-		if len(current.Items()) != 0 && !u.itemIDsProvided {
+		if hasExistingItems && !u.itemIDsProvided {
 			return Document{}, &AuthorUpdateRejection{Code: "PROGRESS_REVISION_REQUIRED", Data: map[string]any{"snapshot": current}}
 		}
 		var resolvedIDs []string
@@ -207,6 +208,13 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string, recon
 func resolveAuthorItemIDs(current Snapshot, nextRowCount int, requested []string, invalid bool) ([]string, bool) {
 	if invalid || len(requested) != nextRowCount {
 		return nil, false
+	}
+	if len(current.Items()) == 0 {
+		resolved := make([]string, nextRowCount)
+		for i := range resolved {
+			resolved[i] = uuid.NewString()
+		}
+		return resolved, true
 	}
 	known := make(map[string]struct{}, len(current.ItemIDs))
 	for _, id := range current.ItemIDs {
