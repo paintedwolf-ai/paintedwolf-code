@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { assertNamedControl } from "../../test/controls.ts";
 import { LycaonApiError } from "../../api/http.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { clearArtifactDeletionMemory, notifyArtifactChanged } from "../../chat/visual/artifact-change-store.ts";
@@ -30,11 +31,11 @@ describe("artifact deletion across media lifecycles", () => {
     await waitFor(() => expect(view.container.querySelectorAll("video")).toHaveLength(2));
     notifyArtifactChanged({ project_id: "project", artifact_id: "shared-artifact", op: "deleted" });
     await waitFor(() => expect(view.container.querySelectorAll("video")).toHaveLength(0));
-    expect(screen.getAllByText("This artifact was deleted.")).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Shared artifact — deleted" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getAllByTestId("artifact-tombstone")).toHaveLength(2);
+    expect(assertNamedControl(screen.getByTestId("artifact-reference-chip"), "button").hasAttribute("disabled")).toBe(true);
     expect(revoke).toHaveBeenCalledTimes(2);
     clearVisualArtifactSessionMemory();
-    expect(screen.getAllByText("This artifact was deleted.")).toHaveLength(2);
+    expect(screen.getAllByTestId("artifact-tombstone")).toHaveLength(2);
     view.unmount();
   });
 
@@ -65,9 +66,9 @@ describe("artifact deletion across media lifecycles", () => {
       }
       notifyArtifactChanged({ project_id: "project", artifact_id: "unrelated", op: "deleted" });
       notifyArtifactChanged({ project_id: "project", artifact_id: "deleted-media", op: "written" });
-      expect(screen.queryByText("This artifact was deleted.")).toBeNull();
+      expect(screen.queryByTestId("artifact-tombstone")).toBeNull();
       notifyArtifactChanged({ project_id: "project", artifact_id: "deleted-media", op: "deleted" });
-      expect(screen.getByText("This artifact was deleted.")).toBeTruthy();
+      expect(screen.getByTestId("artifact-tombstone")).toBeTruthy();
       expect(view.container.querySelector("img,video")).toBeNull();
       expect(screen.queryByRole("dialog")).toBeNull();
       if (phase === "pending") release(blob);
@@ -80,7 +81,7 @@ describe("artifact deletion across media lifecycles", () => {
       expect(visualArtifactSrcSync("session", "deleted-media")).toBeUndefined();
       view.unmount();
       const remount = mount();
-      expect(screen.getByText("This artifact was deleted.")).toBeTruthy();
+      expect(screen.getByTestId("artifact-tombstone")).toBeTruthy();
       expect(fetch).toHaveBeenCalledTimes(1);
       remount.unmount();
     });
@@ -91,8 +92,8 @@ describe("artifact deletion across media lifecycles", () => {
         client={stubClient({ getSessionArtifact: vi.fn(async () => {
           throw new LycaonApiError("Removed", 410, "artifact_deleted");
         }) })} /><ArtifactReferenceChip artifactId="old-deletion" face="present" caption="Old artifact" /></>);
-      expect(await screen.findByText("This artifact was deleted.")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Old artifact — deleted" }).hasAttribute("disabled")).toBe(true);
+      expect(await screen.findByTestId("artifact-tombstone")).toBeTruthy();
+      expect(assertNamedControl(screen.getByTestId("artifact-reference-chip"), "button").hasAttribute("disabled")).toBe(true);
     });
   }
 });

@@ -1,6 +1,7 @@
 import { APP_SCOPE, sessionScope } from "../notices/notice-scope.ts";
 import { render, screen } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { assertNamedControl } from "../test/controls.ts";
 import {
   registerSessionPromptActions,
   resetNoticeActionSinksForTest,
@@ -39,11 +40,10 @@ describe("NoticeRail", () => {
     ));
 
     expect(screen.getByTestId("notice-rail")).toBeTruthy();
-    expect(screen.getByText("Model provider not configured")).toBeTruthy();
-    expect(screen.getByText(/openai/)).toBeTruthy();
-    expect(screen.getByText("Open Settings → AI providers")).toBeTruthy();
+    // The message renders only while the notice is expanded.
+    expect(screen.getByText('provider "openai" is not configured')).toBeTruthy();
 
-    screen.getByLabelText("Dismiss").click();
+    assertNamedControl(screen.getByTestId("notice-dismiss"), "button").click();
     expect(onDismiss).toHaveBeenCalledWith("n1");
   });
 
@@ -72,7 +72,8 @@ describe("NoticeRail", () => {
         onDismiss={vi.fn()}
       />
     ));
-    expect(screen.queryByText("Spend ceiling reached")).toBeNull();
+    // The spend-ceiling notice is filtered out entirely, so only the other row renders.
+    expect(screen.getAllByTestId("notice")).toHaveLength(1);
     expect(screen.getByText("Other notice")).toBeTruthy();
   });
 
@@ -146,11 +147,10 @@ describe("NoticeRail", () => {
     const notices = screen.getAllByTestId("notice");
     expect(notices).toHaveLength(2);
     // Older notice shows only its teaser (suggestedAction); latest notice shows its full message.
-    expect(screen.queryByText("Check connection")).toBeTruthy();
+    expect(notices[0]!.querySelector(".den-notice-teaser")).not.toBeNull();
     expect(screen.queryByText("First failure detail")).toBeNull();
     expect(screen.queryByText("Most recent failure detail")).toBeTruthy();
-    expect(screen.queryByText("Retry now")).toBeTruthy();
-    expect(screen.queryByText("Dismiss all")).toBeNull();
+    expect(notices[1]!.querySelector(".den-notice-action")).not.toBeNull();
   });
 
   it("renders multiple action buttons and invokes callback on click", () => {

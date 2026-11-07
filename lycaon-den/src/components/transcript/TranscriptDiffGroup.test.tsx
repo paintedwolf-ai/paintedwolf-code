@@ -1,6 +1,7 @@
 import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { stubFilesClient } from "../../test/source-client-fixture.ts";
 import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import { TranscriptDiffGroup } from "./TranscriptDiffGroup.tsx";
@@ -53,6 +54,17 @@ function renderGroup() {
   ));
 }
 
+function diffToggle(path: string) {
+  const row = screen
+    .getAllByTestId("file-edit-diff")
+    .find((row) => row.getAttribute("data-path") === path);
+  if (!row) throw new Error(`no diff row for ${path}`);
+  return assertNamedControl(
+    row.querySelector<HTMLElement>('[data-testid="file-edit-diff-toggle"]')!,
+    "button",
+  );
+}
+
 describe("TranscriptDiffGroup", () => {
   it.each([1, 3])("retains each child choice when a %s-file group remounts", (count) => {
     const store = createTranscriptDisclosureStore();
@@ -63,16 +75,16 @@ describe("TranscriptDiffGroup", () => {
     let view = mount();
     disclosureToggle(screen.getByTestId("diff-group")).click();
     const chosen = folds.at(-1)!;
-    if (count > 1) screen.getByLabelText(`Show diff for ${chosen.path}`).click();
+    if (count > 1) diffToggle(chosen.path).click();
     expect(store.isOpen(transcriptDisclosureKey.diffFile(chosen.key))).toBe(true);
     view.unmount();
     view = mount();
     expect(isDisclosureOpen(screen.getByTestId("diff-group"))).toBe(true);
-    expect(screen.getByLabelText(`Collapse diff for ${chosen.path}`)).toBeTruthy();
-    screen.getByLabelText(`Collapse diff for ${chosen.path}`).click();
+    expect(diffToggle(chosen.path)).toBeTruthy();
+    diffToggle(chosen.path).click();
     view.unmount();
     mount();
-    expect(screen.getByLabelText(`Show diff for ${chosen.path}`)).toBeTruthy();
+    expect(diffToggle(chosen.path)).toBeTruthy();
     expect(store.isOpen(transcriptDisclosureKey.diffFile(chosen.key))).toBe(false);
   });
 
@@ -119,11 +131,11 @@ describe("TranscriptDiffGroup", () => {
     renderGroup();
     const group = screen.getByTestId("diff-group");
     expect(group.getAttribute("data-files")).toBe("3");
-    expect(screen.getByText("3 files changed")).toBeTruthy();
+    expect(screen.getByTestId("diff-group-files").textContent).toContain("3");
     // pipeline +2 −1, cli +2 −1, new test file +3 −0.
-    await waitFor(() => expect(screen.getByText("+7")).toBeTruthy());
-    expect(screen.getByText("−2")).toBeTruthy();
-    expect(screen.getByText("4 writes")).toBeTruthy();
+    await screen.findByTestId("diff-group-net");
+    expect(screen.getByTestId("diff-group-net").textContent).toContain("−2");
+    expect(screen.getByTestId("diff-group-writes").textContent).toContain("4");
   });
 
   it("loads net totals while collapsed", async () => {
@@ -185,13 +197,13 @@ describe("TranscriptDiffGroup", () => {
     const openState = () =>
       rows().map((row) => row.getAttribute("data-expanded"));
 
-    screen.getByLabelText("Show diff for src/pipeline.py").click();
+    diffToggle("src/pipeline.py").click();
     expect(openState()).toEqual(["true", "false", "false"]);
 
-    screen.getByLabelText("Show diff for tests/test_cli.py").click();
+    diffToggle("tests/test_cli.py").click();
     expect(openState()).toEqual(["false", "false", "true"]);
 
-    screen.getByLabelText("Collapse diff for tests/test_cli.py").click();
+    diffToggle("tests/test_cli.py").click();
     expect(openState()).toEqual(["false", "false", "false"]);
   });
 

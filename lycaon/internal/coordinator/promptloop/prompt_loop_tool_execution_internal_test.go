@@ -132,7 +132,7 @@ func TestPromptLoop_ToolMessageContainsSpecProgress(t *testing.T) {
 	hints := &guidance.HintConfig{HintCodes: map[string]guidance.HintEntry{
 		"SPEC_POSTURE_PROGRESS": {Message: "progress {{.progress}}"},
 	}}
-	enricher := guidance.NewToolOutputEnricher(hints, nil)
+	enricher := guidance.NewToolOutputEnricher(hints, nil, nil)
 	var appended []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Context: ContextDeps{

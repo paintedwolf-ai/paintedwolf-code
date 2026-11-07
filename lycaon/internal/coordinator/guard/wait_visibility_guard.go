@@ -89,7 +89,6 @@ func ObserveWaitVisibility(sess *api.Session, history []api.Message, tool string
 		return
 	}
 	gc.Invocation.Tool = tool
-	observeToolTurnText(history, tool, gc)
 	if !publishes {
 		return
 	}
@@ -101,32 +100,5 @@ func ObserveWaitVisibility(sess *api.Session, history []api.Message, tool string
 		gc.PutRejectData(WaitHiddenTextCode, map[string]any{
 			"observed_handles_sample": strings.Join(guidance.IntentWindowHandles(history, waitHandleSampleSize), ", "),
 		})
-	}
-}
-
-// observeToolTurnText describes the batch holding this call: whether it has text
-// after marker stripping, and whether a note follows it.
-func observeToolTurnText(history []api.Message, tool string, gc *oar.GuardContext) {
-	noteSeen := false
-	for i := len(history) - 1; i >= 0; i-- {
-		msg := history[i]
-		if api.IsUserIntentMessage(msg) {
-			return
-		}
-		if api.IsAgentNoteMessage(msg) {
-			noteSeen = true
-			continue
-		}
-		if msg.Role != api.MessageRoleAssistant {
-			continue
-		}
-		for _, call := range msg.ToolCalls {
-			if call.Name == tool {
-				gc.Session.ToolTurnHasText = strings.TrimSpace(hostmarker.StripParrotedTransportMarkers(msg.Content)) != ""
-				gc.Session.ToolTurnHasAgentNote = noteSeen
-				return
-			}
-		}
-		return
 	}
 }

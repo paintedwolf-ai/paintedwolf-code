@@ -91,7 +91,7 @@ describe("SessionTranscript preview and bubbles", () => {
       />
     ));
 
-    const finalFrame = screen.getByLabelText("Final frame from live tool session");
+    const finalFrame = screen.getByTestId("live-preview-pane");
     const synthesis = screen.getByText("Synthesis after capture");
     expect(finalFrame.compareDocumentPosition(synthesis) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   });

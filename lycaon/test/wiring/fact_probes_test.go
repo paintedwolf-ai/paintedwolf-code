@@ -127,7 +127,7 @@ func TestOfferedProgramsParseAndRun(t *testing.T) {
 		testutil.FailErr(t, "decode "+file, err)
 		collectStepPrograms(entry.Steps, &programs)
 	}
-	fill := strings.NewReplacer("{{ paintedwolf.path }}", "notes.txt", "FILE", "notes.txt", "PATH", "notes.txt", "SYMBOL", "note", "A,Bp", "1,2p")
+	fill := strings.NewReplacer("{{ paintedwolf.path }}", "notes.txt", "{{ paintedwolf.spill_path }}", "notes.txt", "FILE", "notes.txt", "PATH", "notes.txt", "SYMBOL", "note", "A,Bp", "1,2p")
 	seen := map[string]bool{}
 	for _, words := range programs {
 		// Signaling needs a live job, and nothing here should be signaled.

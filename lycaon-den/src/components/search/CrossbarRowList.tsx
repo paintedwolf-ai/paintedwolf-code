@@ -607,7 +607,7 @@ function CrossbarStatusBanner(props: {
   return (
     <>
       <Show when={props.actionStatus}>
-        {(label) => <li class="den-crossbar__status" role="status">{label()}</li>}
+        {(label) => <li class="den-crossbar__status" role="status" data-testid="crossbar-action-status">{label()}</li>}
       </Show>
       <Show when={!props.showHitStatus && props.coverageNote}>
         <li class="den-crossbar__status den-crossbar__coverage" role="status" data-testid="crossbar-coverage">

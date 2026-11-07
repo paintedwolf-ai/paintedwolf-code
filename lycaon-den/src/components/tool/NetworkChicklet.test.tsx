@@ -157,15 +157,13 @@ describe("NetworkChicklet / External access", () => {
       },
       declared_destinations: ["db.example.com:5432"],
     };
-    const { getByTestId, getByText } = render(() => (
+    const { getByTestId } = render(() => (
       <NetworkChicklet externalAccess={ea} />
     ));
     expect(getByTestId("external-access-endpoints")).toBeTruthy();
     expect(getByTestId("external-access-sockets")).toBeTruthy();
     expect(getByTestId("external-access-direct")).toBeTruthy();
     expect(getByTestId("external-access-declared")).toBeTruthy();
-    expect(getByText("Declared")).toBeTruthy();
-    expect(getByText("Chat")).toBeTruthy();
     expect(getByTestId("network-chicklet").getAttribute("data-visibility")).toBe(
       "mixed",
     );

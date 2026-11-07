@@ -9,6 +9,7 @@ import { createAppStore } from "../../store/app-state.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { filesBufferText, filesBufferBase, openFilesBuffer, applyFilesBufferLoad } from "../documents/project-files-buffers.ts";
 import { required } from "../../test/at.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 
 import { StateEffect } from "@codemirror/state";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
@@ -283,7 +284,8 @@ describe("ProjectFilesView stage chrome", () => {
     });
     render(() => <ProjectFilesView projectId={PROJECT} appStore={appStore} roots={ROOTS} />);
     await waitForFilesStageReady();
-    const tab = screen.getByRole("tab", { name: "Review changes, Group summary, Preview" });
+    const tab = assertNamedControl(screen.getByTestId("files-tab"), "tab");
+    expect(tab.getAttribute("aria-label")).toBe("Review changes, Group summary, Preview");
     const cell = tab.closest(".den-files-tab")!;
     expect(cell.getAttribute("data-tauri-drag-region")).toBe("false");
     expect(tab.textContent).toBe("Review changes");
@@ -302,7 +304,8 @@ describe("ProjectFilesView stage chrome", () => {
     expect(cell.querySelectorAll("[data-tip]")).toHaveLength(1);
     expect(tab.querySelector(".den-files-tab__name-end")).toBeNull();
     fireEvent.dblClick(tab);
-    expect(screen.getByRole("tab", { name: "Review changes, Group summary" })).toBe(tab);
+    expect(assertNamedControl(screen.getByTestId("files-tab"), "tab")).toBe(tab);
+    expect(tab.getAttribute("aria-label")).toBe("Review changes, Group summary");
     expect(tab.querySelector(".den-files-tab-kind-icon")).toBe(icon);
     expect(cell.classList.contains("den-files-tab--preview")).toBe(false);
     fireEvent.contextMenu(cell, { clientX: 10, clientY: 10 });

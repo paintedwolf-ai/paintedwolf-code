@@ -339,7 +339,7 @@ export function HostResourcesSettingsPanel(props: Props) {
 
                   <Show when={resource.docs_url} keyed>
                     {(url) => (
-                      <DenButton
+                      <DenButton data-testid="open-documentation"
                         variant="link"
                         class="den-resource-docs"
                         onClick={() => void confirmAndOpenExternalLink(url)}

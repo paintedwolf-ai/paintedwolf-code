@@ -465,7 +465,7 @@ func workflowHintViews(ctx context.Context, hints *guidance.HintConfig, codes []
 		if !ok {
 			continue
 		}
-		msg, _, fix := guidance.RenderHintFields(code, entry, nil)
+		msg, _, fix := guidance.RenderHintFields(ctx, code, entry, nil, nil)
 		if msg == "" {
 			msg = strings.TrimSpace(entry.Message)
 		}

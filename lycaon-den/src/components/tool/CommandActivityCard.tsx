@@ -1,5 +1,6 @@
-import { Index, Show, createEffect, createMemo, createResource, createSignal } from "solid-js";
+import { Index, Show, createEffect, createMemo, createResource, createSignal, type JSX } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
+import type { CommandActivity } from "../../api/types.ts";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
@@ -21,6 +22,8 @@ type Props = {
   projectId?: string;
   client?: LycaonClient | null;
   rootRefs?: readonly ResolveProjectRoot[];
+  /** Slot mounted above Outcome for downstream briefings. */
+  summary?: JSX.Element;
 };
 
 const CALL_PAGE = 2;
@@ -41,18 +44,35 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
     if (index >= 0) setCallPage(Math.floor(index / CALL_PAGE));
   });
   const calls = createMemo(() => activity().calls.slice(callPage() * CALL_PAGE, (callPage() + 1) * CALL_PAGE));
+  // Command calls and members fold in order; output-read calls carry no member.
+  const memberByCall = createMemo(() => {
+    const map = new Map<ToolPartView, CommandActivity>();
+    let index = 0;
+    for (const call of activity().calls) {
+      if (call.tool !== "command") continue;
+      const member = activity().members[index++];
+      if (member) map.set(call, member);
+    }
+    return map;
+  });
   const snapshot = createMemo(() => {
     const client = props.client ?? getLycaonClient();
     if (!client || !props.sessionId) return undefined;
-    const requests = [...new Map(calls().flatMap(call => call.commandProgram ? [[call.commandProgram.id, call.commandProgram] as const] : [])).values()];
+    const seen = new Set<string>();
+    const requests = calls().flatMap(call => {
+      const program = call.commandProgram;
+      if (!program || seen.has(program.id)) return [];
+      seen.add(program.id);
+      const member = memberByCall().get(call);
+      return [{ program, activityId: member && member.execution_ids.length ? member.id : undefined }];
+    });
     const cursor = undefined;
     const limit = 6;
-    const activityId = activity().fact.execution_ids.length ? activity().fact.id : undefined;
-    const key = JSON.stringify([requests.map(program => [program.id, program.state, program.settled_at]), activity().fact.state, activity().fact.execution_count, activity().fact.failed_count, activityId, cursor, limit]);
-    return { client, sessionId: props.sessionId, requests, cursor, limit, activityId, key };
+    const key = JSON.stringify([requests.map(request => [request.program.id, request.program.state, request.program.settled_at, request.activityId]), activity().fact.state, activity().fact.execution_count, activity().fact.failed_count, cursor, limit]);
+    return { client, sessionId: props.sessionId, requests, cursor, limit, key };
   }, undefined, { equals: (a,b) => a?.client === b?.client && a?.sessionId === b?.sessionId && a?.key === b?.key });
-  const [pages] = createResource(snapshot, async ({ client, sessionId, requests, cursor, limit, activityId }) =>
-    Promise.all(requests.map(program => client.getCommandProgramReceipt(sessionId, program.id, { limit, cursor, activity_id: activityId }))),
+  const [pages] = createResource(snapshot, async ({ client, sessionId, requests, cursor, limit }) =>
+    Promise.all(requests.map(({ program, activityId }) => client.getCommandProgramReceipt(sessionId, program.id, { limit, cursor, activity_id: activityId }))),
   );
   const loaded = () => pages.state === "ready" || pages.state === "refreshing" ? pages.latest ?? [] : [];
   const executions = createMemo(() => {
@@ -69,6 +89,7 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
   const stepsLabel = createMemo(() => (activity().fact.steps?.length ?? 0) > 3 ? `All ${activity().fact.steps?.length ?? 0} steps` : "Step details");
   const summary = createMemo(() => commandActivityFacts(activity(), executions(), undefined).filter(fact => ["Outcome", "Launch outcome", "Effects", "Command stop", "Enclosing command"].includes(fact.label)));
   return <div class="den-tool-part-card-structured den-command-activity-details" data-testid="command-activity-details">
+    <Show when={props.summary}>{props.summary}</Show>
     <section class="den-tool-part-card-section" aria-label="Outcome">
       <dl class="den-tool-part-card-facts"><Index each={summary()}>{fact => <div><dt>{fact().label}</dt><dd data-tip={fact().value} data-tip-when-clipped="">{fact().value}</dd></div>}</Index></dl>
 
@@ -79,13 +100,13 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
         <KeyedIndex each={(activity().fact.steps ?? []).slice(0, 3)} keyOf={step => step.id}>{step => <div class="den-command-activity-step">
           <code>{step().command.slice(0, STEP_CHARS)}{step().command.length > STEP_CHARS ? "…" : ""}</code><span>{step().count > 1 ? `${step().count.toLocaleString()} executions · ` : ""}{commandActivityStepOutcome(step())}</span>
         </div>}</KeyedIndex>
-        <Show when={(activity().fact.steps?.length ?? 0) > 3 || activity().fact.steps?.some(step => step.command.length > STEP_CHARS)}><ToolContentLink pane={`activity:${activity().fact.id}:steps`} label={stepsLabel()} content={{ kind: "inline", text: (activity().fact.steps ?? []).map(step => `${step.command} · ${step.count.toLocaleString()} executions · ${commandActivityStepOutcome(step)}`).join("\n") }} projectId={props.projectId} /></Show>
+        <Show when={(activity().fact.steps?.length ?? 0) > 3 || activity().fact.steps?.some(step => step.command.length > STEP_CHARS)}><ToolContentLink pane={`activity:${activity().fact.id}:steps`} label={stepsLabel()} testId="command-activity-steps" content={{ kind: "inline", text: (activity().fact.steps ?? []).map(step => `${step.command} · ${step.count.toLocaleString()} executions · ${commandActivityStepOutcome(step)}`).join("\n") }} projectId={props.projectId} /></Show>
       </section>
     </Show>
     <Show when={executions().length > 0}>
       <section class="den-tool-part-card-section" aria-label="Execution records">
         <h4 class="den-tool-part-card-section-label">Execution records</h4>
-        <ToolContentLink pane={`activity:${activity().fact.id}:receipts`} label="Execution receipts and diagnostics" content={{ kind: "command_receipts", programs: (snapshot()?.requests ?? []).map(program => ({ id: program.id, activityId: snapshot()?.activityId })), context: JSON.stringify({ activities: activity().members, facts: facts(), feedback: props.part.feedback }) }} projectId={props.projectId} />
+        <ToolContentLink pane={`activity:${activity().fact.id}:receipts`} label="Execution receipts and diagnostics" testId="command-activity-receipts" content={{ kind: "command_receipts", programs: (snapshot()?.requests ?? []).map(({ program, activityId }) => ({ id: program.id, activityId })), context: JSON.stringify({ activities: activity().members, facts: facts(), feedback: props.part.feedback }) }} projectId={props.projectId} />
       </section>
     </Show>
     <CommandActivitySources activity={activity()} calls={calls()} offset={callPage() * CALL_PAGE} projectId={props.projectId}
@@ -93,7 +114,7 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
     <Show when={activity().decisions?.length}>
       <section class="den-tool-part-card-section" aria-label="Host decisions">
         <h4 class="den-tool-part-card-section-label">Host decisions</h4>
-        <ToolContentLink pane={`activity:${activity().fact.id}:decisions`} label={`${activity().decisions?.length ?? 0} host decisions`} content={{ kind: "inline", text: (activity().decisions ?? []).map(decision => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") }} projectId={props.projectId} />
+        <ToolContentLink pane={`activity:${activity().fact.id}:decisions`} label={`${activity().decisions?.length ?? 0} host decisions`} testId="command-activity-decisions" content={{ kind: "inline", text: (activity().decisions ?? []).map(decision => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") }} projectId={props.projectId} />
       </section>
     </Show>
     <Show when={pages.state === "errored"}><p class="den-tool-part-card-note">Execution details are unavailable. The recorded activity is still shown.</p></Show>

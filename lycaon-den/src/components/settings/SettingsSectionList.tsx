@@ -20,7 +20,7 @@ export function SettingsSectionList(props: Props) {
 
   return (
     <div class="den-settings-sidebar">
-      <nav class="den-shell-nav-sub" aria-label={props.ariaLabel}>
+      <nav class="den-shell-nav-sub" aria-label={props.ariaLabel} data-testid={`${props.testidPrefix}-sections`}>
         <ul class="den-shell-nav-sub-list den-settings-sidebar-list">
           <NavSelectionDot index={activeIndex()} />
           <For each={props.items}>

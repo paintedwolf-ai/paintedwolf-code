@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProjectLauncher } from "./ProjectLauncher.tsx";
@@ -66,12 +67,12 @@ describe("ProjectLauncher", () => {
   it("exposes modal semantics and moves focus inside", async () => {
     render(() => <ProjectLauncher {...baseProps} />);
     await Promise.resolve();
-    const dialog = screen.getByRole("dialog", { name: "Switch project" });
+    const dialog = assertNamedControl(screen.getByTestId("project-launcher"), "dialog");
     expect(dialog.getAttribute("aria-modal")).toBe("true");
     expect(dialog.contains(document.activeElement)).toBe(true);
-    expect(screen.getByRole("textbox", { name: "Search projects" })).toBe(
-      document.activeElement,
-    );
+    expect(
+      assertNamedControl(screen.getByTestId("project-launcher-search"), "textbox"),
+    ).toBe(document.activeElement);
   });
 
   it("offers New project and Manage all", () => {

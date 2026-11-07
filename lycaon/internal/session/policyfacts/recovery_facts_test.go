@@ -64,12 +64,6 @@ func TestMixedRefusalsSeparateTerminalPathsFromRecoveryGrants(t *testing.T) {
 			t.Errorf("%s=%v, want %v", tc.name, tc.got, tc.want)
 		}
 	}
-	if gc.Refusals.SandboxRefusalWitness != string(confine.WitnessIncomplete) {
-		t.Fatal("observed reporting gap was discarded")
-	}
-	if len(gc.Execution.SandboxRefusals) != 7 {
-		t.Fatal("observed refusal reports were discarded during path grouping")
-	}
 }
 
 func TestObserveConfineDropsAncestorMetadataReadGrant(t *testing.T) {

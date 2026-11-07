@@ -60,6 +60,7 @@ export function HostFolderDialog() {
               <label for="host-folder-path">Folder path</label>
               <DenInput
                 id="host-folder-path"
+                data-testid="host-folder-path-input"
                 autofocus
                 autocomplete="off"
                 spellcheck={false}
@@ -72,8 +73,8 @@ export function HostFolderDialog() {
               </p>
             </Scrollport>
             <footer class="den-dialog__footer">
-              <DenButton type="button" variant="ghost" onClick={() => settle(null)}>Cancel</DenButton>
-              <DenButton type="submit" variant="primary" disabled={!path().trim()}>Choose folder</DenButton>
+              <DenButton data-testid="cancel" type="button" variant="ghost" onClick={() => settle(null)}>Cancel</DenButton>
+              <DenButton data-testid="choose-folder" type="submit" variant="primary" disabled={!path().trim()}>Choose folder</DenButton>
             </footer>
           </form>
         </div>

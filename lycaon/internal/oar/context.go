@@ -98,7 +98,6 @@ func NewGuardContext() *GuardContext {
 	return &GuardContext{
 		Invocation: InvocationFacts{ToolArgs: map[string]any{}},
 		Access:     AccessFacts{PathOutsideScopeByTool: map[string]bool{}},
-		Source:     SourceFacts{SourceIncludes: map[string]bool{}},
 		RejectData: map[string]map[string]any{},
 		Published:  map[string]any{"paintedwolf.native_operation": ""},
 		lazy: providerState{
@@ -260,11 +259,9 @@ func (gc *GuardContext) DeriveToolClassFacts() {
 	gc.Invocation.ToolIsDelegation = hasPrefix(t, "delegate_")
 	gc.Invocation.ToolIsHandoff = hasPrefix(t, "handoff_")
 	gc.Invocation.ToolIsTask = t == "task"
-	gc.Invocation.PackRunnerTask = t == "task" // observation: task tool used; agent-type filter is separate
 	if contract, ok := toolcontract.Lookup(t); ok {
 		gc.Invocation.ToolPayloadChunkable = contract.ChunkablePayload
 	}
-	gc.Session.PostureUnresolved = gc.Session.SessionPosture == "" || gc.Session.SessionPosture == "unresolved"
 	if gc.Session.PermissionProfile == "" {
 		gc.Session.PermissionProfile = gc.Session.Profile
 	}

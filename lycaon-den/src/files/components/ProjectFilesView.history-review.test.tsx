@@ -11,6 +11,7 @@ import { invokeCommand } from "../../shortcuts/dispatcher.ts";
 import { resetFilesStagePaneForTests } from "../review/review-pane.ts";
 import type { SecretScreen, SourceFileVersionsResponse, SourceWalkEffect } from "../../api/types.ts";
 import { stubFilesClient } from "../../test/source-client-fixture.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { EditorView } from "@codemirror/view";
 
 import type { LycaonClient } from "../../api/client.ts";
@@ -148,7 +149,8 @@ describe("ProjectFilesView stage chrome", () => {
         expect(screen.getByTestId("files-editor-mode").textContent)
           .toContain("Historical version");
         // Tab labels describe the displayed version's changes.
-        const tab = screen.getByRole("tab", { name: "main.ts, Previous version, Added in this version" });
+        const tab = assertNamedControl(screen.getByTestId("files-tab"), "tab");
+        expect(tab.getAttribute("aria-label")).toBe("main.ts, Previous version, Added in this version");
         expect(tab.querySelector(".den-files-tab-kind-icon")?.getAttribute("data-tip")).toBe("Previous version");
       });
     };
@@ -320,8 +322,8 @@ describe("ProjectFilesView stage chrome", () => {
       next_cursor: undefined,
     });
     await waitFor(() => {
-      expect(screen.getByText("Edited")).toBeTruthy();
-      expect(screen.getByRole("status", { name: "Loading Git history" }))
+      expect(screen.getByTestId("file-version-title").textContent).toBe("Edited");
+      expect(assertNamedControl(screen.getByTestId("file-version-git-loading"), "status"))
         .toBeTruthy();
     });
     expect(listProjectSourceVersions).toHaveBeenLastCalledWith(
@@ -348,7 +350,7 @@ describe("ProjectFilesView stage chrome", () => {
     });
     await waitFor(() => {
       expect(screen.getByText("Older Git state")).toBeTruthy();
-      expect(screen.queryByRole("status", { name: "Loading Git history" }))
+      expect(screen.queryByTestId("file-version-git-loading"))
         .toBeNull();
     });
   });
@@ -429,7 +431,7 @@ describe("ProjectFilesView stage chrome", () => {
       git_history_state: "not_requested",
       next_cursor: undefined,
     });
-    await waitFor(() => expect(screen.getByText("Edited")).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId("file-version-title").textContent).toBe("Edited"));
 
     gitPage.resolve({
       file_id: "file-main",
@@ -441,7 +443,7 @@ describe("ProjectFilesView stage chrome", () => {
       next_cursor: undefined,
     });
     await waitFor(() => expect(gitLaneNotices()).toHaveLength(1));
-    expect(screen.getByText("Edited")).toBeTruthy();
+    expect(screen.getByTestId("file-version-title").textContent).toBe("Edited");
   });
 
   it("starts Walk at the selected file and retains its presentation during live growth", async () => {

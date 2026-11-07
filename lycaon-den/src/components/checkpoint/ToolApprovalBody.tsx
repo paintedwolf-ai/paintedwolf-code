@@ -335,6 +335,7 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
               <span>{copy.directoryScope}</span>
               <DenSelect
                 aria-label={copy.directoryScope}
+                data-testid="approval-directory-scope"
                 options={directoryScopes().map((path) => ({ value: path, label: path }))}
                 value={directoryScope()}
                 disabled={props.resolving}
@@ -472,10 +473,10 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
       </div>
       </ShellScroll>
 
-      <Show when={ignoreSaved()}><p class="den-settings-hint" role="status">Project ignore saved. The held request still needs your decision.</p></Show>
+      <Show when={ignoreSaved()}><p class="den-settings-hint" role="status" data-testid="approval-ignore-saved">Project ignore saved. The held request still needs your decision.</p></Show>
       <Show when={ignoreReview()} keyed>{(review) => (
         <Show when={!ignoreSaved()}>
-          <DenButton variant="link" disabled={props.resolving} onClick={() => setIgnoreOpen(true)}>Ignore this value in this project…</DenButton>
+          <DenButton data-testid="ignore-this-value-in-this-project" variant="link" disabled={props.resolving} onClick={() => setIgnoreOpen(true)}>Ignore this value in this project…</DenButton>
           <Show when={ignoreOpen()}>
             <IgnoreSecretDialog
               client={review.client}

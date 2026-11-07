@@ -14,51 +14,33 @@ requires:
   - paintedwolf.command
   - paintedwolf.rejection_reason
   - paintedwolf.directory_change
-  - paintedwolf.terminal_capture
-  - paintedwolf.use_env_param
-  - paintedwolf.use_cwd_param
-  - paintedwolf.use_pipeline_array
-  - paintedwolf.use_stdin_param
-  - paintedwolf.use_background_param
-  - paintedwolf.can_command
+  - paintedwolf.shell_metacharacters
+  - paintedwolf.reissue_via_command
+  - paintedwolf.env_assignment
+  - paintedwolf.next_steps
 when: paintedwolf.rejection_code == "COMMAND_NOT_ARGV"
 effect: block
 copy:
   what: 'This invocation could not be admitted as literal executable arguments{% if paintedwolf.command %}: `{{ paintedwolf.command }}`{% endif %}.'
   cause: '{{ paintedwolf.rejection_reason }}'
   why: Each admitted stage uses literal arguments; shell expansions are not evaluated on this surface.
-  fix: '{% if paintedwolf.directory_change %}{% if paintedwolf.use_cwd_param %}To select this call''s working directory, use its `cwd` argument and supply the executable
-    to run there.{% endif %}
-
-    {% else %}{% if paintedwolf.terminal_capture %}A captured call runs one executable with literal arguments. Its result supplies `exit_code`; shell sequences are
-    not part of this capture.
-
-    {% else %}{% if paintedwolf.use_env_param %}`terminal_open` accepts literal environment values in its `env` object; supply the executable in its `command` argument.
-
-    {% else %}{% if paintedwolf.use_pipeline_array %}This tool accepts a `pipeline` array for its stages; follow its declared argument schema.
-
-    {% else %}{% if paintedwolf.use_stdin_param %}This tool accepts literal input in `stdin`; shell substitutions are not evaluated in that field.
-
-    {% else %}{% if paintedwolf.use_background_param %}This tool''s `background` field requests an independently running job and returns its handle.
-
-    {% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
-  instead: '{% if paintedwolf.can_command %}For a Bash program, the offered command tool accepts program text without capture.{% endif %}'
+  fix: '{% if paintedwolf.next_steps %}{{ paintedwolf.next_steps }}{% else %}Repair the command syntax: close quoted strings, name every redirection target, and remove empty stages.{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_surface
 x-paintedwolf-message: command rejected
 x-paintedwolf-scenarios:
 - id: directory_change
-  tool: terminal_open
+  tool: command
   vars:
     command: cd src && tool --check
     reason: '`cd` changes only its own process; pass cwd'
     directory_change: true
-    use_cwd_param: true
+    terminal_capture: true
 - id: capture_sequence
   tool: command
   vars:
     command: tool --check; echo "$?"
-    reason: this surface runs one program
+    reason: this surface runs one program; `&&`, `||`, and `;` run several
     sequence_unsupported: true
     reissue_via_command: true
     terminal_capture: true
@@ -66,8 +48,8 @@ x-paintedwolf-scenarios:
   tool: command
   vars:
     command: tool --check | tee output.txt
-    reason: command contains unquoted shell metacharacters
-    shell_metacharacters: true
+    reason: this surface runs one program; `&&`, `||`, and `;` run several
+    sequence_unsupported: true
     reissue_via_command: true
     terminal_capture: true
 - id: substitution
@@ -77,7 +59,6 @@ x-paintedwolf-scenarios:
     profile_id: implement
     reason: 'command contains unquoted shell metacharacters: `$`'
     shell_metacharacters: true
-    use_substitution_result: true
 - id: scratch_variable
   tool: terminal_open
   vars:
@@ -85,48 +66,47 @@ x-paintedwolf-scenarios:
     profile_id: implement
     reason: 'command contains unquoted shell metacharacters: `$`'
     shell_metacharacters: true
-    use_substitution_result: true
     scratch_var: true
 - id: background_operator
-  tool: terminal_open
+  tool: command
   vars:
     command: python3 -m http.server 8000 &
     profile_id: implement
     reason: '`&` backgrounds a command rather than sequencing it: `&`'
-    use_background_param: true
+    reissue_via_command: true
+    terminal_capture: true
 - id: environment_assignment
-  tool: terminal_open
+  tool: command
   vars:
     command: TOKEN=value
     profile_id: implement
     reason: environment assignments belong in env
     env_assignment: true
-    use_env_param: true
+    terminal_capture: true
 - id: shell_metacharacters
   tool: terminal_open
   vars:
     command: cat <<'EOF' > out.txt
     profile_id: implement
-    reason: 'command contains unquoted shell metacharacters: `<`'
+    reason: 'command contains unquoted shell metacharacters: `<<`'
     shell_metacharacters: true
-    use_stdin_param: true
+    reissue_via_command: true
 - id: pipeline_pipe
   tool: terminal_open
   vars:
     command: git log --oneline | head -20
     profile_id: implement
-    reason: command contains shell metacharacters
-    shell_metacharacters: true
-    use_pipeline_array: true
+    reason: this surface runs one program; `&&`, `||`, and `;` run several
+    sequence_unsupported: true
+    reissue_via_command: true
 - id: terminal_pipe
   tool: terminal_open
   vars:
     command: npm run dev | tee dev.log
     profile_id: implement
-    reason: 'command contains unquoted shell metacharacters: `|`'
-    shell_metacharacters: true
+    reason: this surface runs one program; `&&`, `||`, and `;` run several
+    sequence_unsupported: true
     reissue_via_command: true
-    can_command: true
 - id: terminal_sequence
   tool: terminal_open
   vars:
@@ -135,17 +115,3 @@ x-paintedwolf-scenarios:
     reason: this surface runs one program; `&&`, `||`, and `;` run several
     sequence_unsupported: true
     reissue_via_command: true
-    can_command: true
-- id: snapshot_sequence
-  tool: command
-  vars:
-    command: tool --check && tool --report
-    reason: this surface runs one program
-    sequence_unsupported: true
-    reissue_via_command: true
-- id: snapshot_environment_assignment
-  tool: command
-  vars:
-    command: TOKEN=value tool --check
-    reason: environment assignments belong in env
-    env_assignment: true

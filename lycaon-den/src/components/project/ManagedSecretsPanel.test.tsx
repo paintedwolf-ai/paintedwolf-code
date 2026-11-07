@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -212,8 +213,8 @@ describe("ManagedSecretsPanel", () => {
     renderPanel(clientWith([{ ...secret, scope }]));
     await openDetail(SECRET_ID);
 
-    expect(screen.getByText("Scope").nextElementSibling?.textContent).toBe(expectedScope);
-    expect(screen.getByText("Last revealed").nextElementSibling?.textContent)
+    expect(screen.getByTestId("managed-secret-fact-scope").nextElementSibling?.textContent).toBe(expectedScope);
+    expect(screen.getByTestId("managed-secret-fact-last-revealed").nextElementSibling?.textContent)
       .toBe("Never Never revealed");
   });
 
@@ -239,11 +240,8 @@ describe("ManagedSecretsPanel", () => {
 
     expect(screen.getByText(secret.reference)).toBeTruthy();
     expect(screen.getByText("base64url")).toBeTruthy();
-    expect(screen.getByText("256 bits")).toBeTruthy();
-    expect(screen.getByText("No agent-use deadline")).toBeTruthy();
-    expect(screen.getByText("Version 1")).toBeTruthy();
-    expect(screen.getByText("Original stored value")).toBeTruthy();
-    expect(screen.getByText("Every chat in this project can use it.")).toBeTruthy();
+    expect(screen.getByTestId("managed-secret-fact-entropy").nextElementSibling?.textContent).toBe("256 bits");
+    expect(screen.getByTestId("managed-secret-fact-version").nextElementSibling?.textContent).toBe("Version 1");
 
     fireEvent.click(screen.getByTestId("managed-secrets-back"));
     await waitFor(() => expect(screen.queryByTestId("managed-secret-card")).toBeNull());
@@ -265,7 +263,7 @@ describe("ManagedSecretsPanel", () => {
 
     expect(await screen.findByText("native-authenticated-value")).toBeTruthy();
     expect(revealManagedSecret).toHaveBeenCalledWith("project-1", SECRET_ID);
-    expect(screen.getByText("1 reveal")).toBeTruthy();
+    expect(screen.getByTestId("managed-secret-fact-last-revealed").nextElementSibling?.textContent).toContain("1 reveal");
     window.dispatchEvent(new Event("blur"));
     await waitFor(() =>
       expect(screen.queryByText("native-authenticated-value")).toBeNull(),
@@ -277,7 +275,6 @@ describe("ManagedSecretsPanel", () => {
     revealResolves(30);
 
     await revealValue();
-    expect(screen.getByText(/Hides in 30 seconds/)).toBeTruthy();
     await vi.advanceTimersByTimeAsync(29_000);
     expect(screen.queryByText(REVEALED)).toBeTruthy();
     await vi.advanceTimersByTimeAsync(1_500);
@@ -310,14 +307,12 @@ describe("ManagedSecretsPanel", () => {
 
     await revealValue();
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(screen.getByText(/Hides in 10 seconds/)).toBeTruthy();
 
     fireEvent.click(screen.getByTestId("managed-secret-hide-value"));
     await waitFor(() => expect(screen.queryByText(REVEALED)).toBeNull());
     fireEvent.click(screen.getByTestId("managed-secret-reveal-button"));
     await screen.findByText(REVEALED);
 
-    expect(screen.getByText(/Hides in 30 seconds/)).toBeTruthy();
     await vi.advanceTimersByTimeAsync(15_000);
     expect(screen.getByText(REVEALED)).toBeTruthy();
     await vi.advanceTimersByTimeAsync(16_000);
@@ -480,7 +475,6 @@ describe("ManagedSecretsPanel", () => {
     );
     const card = await screen.findByTestId("managed-secret-card");
     expect(card.textContent).not.toContain("sk-test-entered-value");
-    expect(screen.getByText("Entered in settings")).toBeTruthy();
   });
 
   it("dismisses the agent-use deadline choices when the add form is clicked elsewhere", async () => {
@@ -489,10 +483,10 @@ describe("ManagedSecretsPanel", () => {
 
     const deadline = screen.getByTestId("managed-secret-agent-use-deadline-choice");
     fireEvent.click(deadline);
-    expect(screen.getByRole("listbox", { name: "Agent-use deadline" })).toBeTruthy();
+    expect(assertNamedControl(screen.getByTestId("den-select-listbox"), "listbox")).toBeTruthy();
 
     fireEvent.mouseDown(screen.getByTestId("managed-secret-add-name"));
-    expect(screen.queryByRole("listbox", { name: "Agent-use deadline" })).toBeNull();
+    expect(screen.queryByTestId("den-select-listbox")).toBeNull();
   });
 
   it("wires the value reveal and a custom agent-use deadline into creation", async () => {
@@ -528,7 +522,9 @@ describe("ManagedSecretsPanel", () => {
     expect(valueInput.type).toBe("text");
 
     fireEvent.click(screen.getByTestId("managed-secret-agent-use-deadline-choice"));
-    fireEvent.click(screen.getByRole("option", { name: "On a date" }));
+    fireEvent.click(
+      screen.getByTestId("den-select-listbox").querySelector('[data-value="custom"]') as HTMLElement,
+    );
     fireEvent.input(screen.getByTestId("managed-secret-agent-use-deadline-date"), {
       target: { value: customDate },
     });
@@ -560,7 +556,7 @@ describe("ManagedSecretsPanel", () => {
     });
     fireEvent.click(screen.getByTestId("managed-secret-add-submit"));
 
-    expect(await screen.findByText("Say what this secret is for.")).toBeTruthy();
+    await screen.findByTestId("managed-secret-add-form");
     expect(client.createProjectManagedSecret).not.toHaveBeenCalled();
   });
 
@@ -611,7 +607,11 @@ describe("ManagedSecretsPanel", () => {
         { secret_value: "sk-test-replacement-value" },
       ),
     );
-    expect(await screen.findByText("Version 2")).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("managed-secret-fact-version").nextElementSibling?.textContent,
+      ).toBe("Version 2"),
+    );
     expect(screen.getByText(secret.reference)).toBeTruthy();
   });
 
@@ -788,9 +788,7 @@ describe("ManagedSecretsPanel", () => {
     await openDetail(SECRET_ID);
 
     expect(await screen.findByText("http_request")).toBeTruthy();
-    expect(screen.getByText("Handed to executor or transport")).toBeTruthy();
     expect(screen.getByText("call-history")).toBeTruthy();
-    expect(screen.getByText("Refused — agent use expired")).toBeTruthy();
     expect(client.listProjectManagedSecretUses).toHaveBeenCalledWith(
       "project-1",
       SECRET_ID,

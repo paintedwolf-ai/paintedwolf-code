@@ -54,6 +54,7 @@ export function SearchFilterChip(props: Props) {
           class="den-menu-surface den-search-filter__panel"
           role="dialog"
           ariaLabel="Search filters"
+          testId="search-filter-panel"
           anchor={() => triggerEl}
           preferredSide="bottom"
           align="start"

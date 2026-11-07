@@ -16,7 +16,7 @@ func TestPlanStubGateFailureSurfacesStructuredFeedback(t *testing.T) {
 	contractcheck.FailErr(t, "load hint registry", err)
 	gateCfg, err := feedback.LoadGateFeedbackCatalog()
 	contractcheck.FailErr(t, "LoadGateFeedbackCatalog", err)
-	enricher := guidance.NewToolOutputEnricher(hintCfg, gateCfg)
+	enricher := guidance.NewToolOutputEnricher(hintCfg, gateCfg, nil)
 
 	out := enricher.Enrich(t.Context(), guidance.EnrichInput{
 		SessionID: "s-plan",
@@ -37,7 +37,7 @@ func TestChildRunCompleteFailureFeedback(t *testing.T) {
 	contractcheck.FailErr(t, "load hint registry", err)
 	gateCfg, err := feedback.LoadGateFeedbackCatalog()
 	contractcheck.FailErr(t, "LoadGateFeedbackCatalog", err)
-	enricher := guidance.NewToolOutputEnricher(hintCfg, gateCfg)
+	enricher := guidance.NewToolOutputEnricher(hintCfg, gateCfg, nil)
 
 	out := enricher.Enrich(t.Context(), guidance.EnrichInput{
 		SessionID: "s-plan",

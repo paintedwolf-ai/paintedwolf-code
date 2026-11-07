@@ -4,6 +4,202 @@
     "paintedwolf.markdown_note": {
       "version": 1,
       "summary": "Non-callable publication of user-facing assistant updates as Markdown text."
+    },
+    "paintedwolf.action_host_resources": {
+      "version": 1,
+      "summary": "Host fact of type list<string>; Exact host-resource ids resolved for this action; empty when none were requested."
+    },
+    "paintedwolf.agent_is_plan_writer": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.args_hint": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.citation_fields_present": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.closeout_gate_delay_count": {
+      "version": 1,
+      "summary": "Host fact of type int; no observation was declared."
+    },
+    "paintedwolf.definitions": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.did_you_mean": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.disallowed_agent": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.example": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.expected_path": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.extracted_paths": {
+      "version": 1,
+      "summary": "Host fact of type list<string>; no observation was declared."
+    },
+    "paintedwolf.files_touched": {
+      "version": 1,
+      "summary": "Host fact of type list<string>; no observation was declared."
+    },
+    "paintedwolf.host_resource_policy_for": {
+      "version": 1,
+      "summary": "Host fact of type (string) -> string; Effective host authorization posture for a known host-resource id; empty when the host has no report for the id."
+    },
+    "paintedwolf.host_resource_status_for": {
+      "version": 1,
+      "summary": "Host fact of type (string) -> string; Discovery status for a known host-resource id; empty when the host has no report for the id."
+    },
+    "paintedwolf.is_image": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.ledger_criteria_met": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.mode_bits": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.original_author": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.overlay_state": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.pack_runner_task": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.plan_awaiting_approval": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.posture_unresolved": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.prior_summary": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.program": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.recent_tool_names": {
+      "version": 1,
+      "summary": "Host fact of type list<string>; no observation was declared."
+    },
+    "paintedwolf.resolvable": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.rule_match_count": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.sandbox_refusals": {
+      "version": 1,
+      "summary": "Host fact of type list<string>; Each operation the kernel reported refusing the invocation's processes, as operation, target, and process; empty when none was reported or the host cannot read the reports."
+    },
+    "paintedwolf.scratch_var": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.sequence_unsupported": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.source_includes": {
+      "version": 1,
+      "summary": "Host fact of type (string) -> bool; no observation was declared."
+    },
+    "paintedwolf.suggested_tool": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.summary_length": {
+      "version": 1,
+      "summary": "Host fact of type int; no observation was declared."
+    },
+    "paintedwolf.symbol": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.terminal_failure": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.tool_allowed_for_profile": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.tools": {
+      "version": 1,
+      "summary": "Host fact of type list<string>; no observation was declared."
+    },
+    "paintedwolf.use_substitution_result": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.verify_command": {
+      "version": 1,
+      "summary": "Host fact of type string; no observation was declared."
+    },
+    "paintedwolf.write_roots": {
+      "version": 1,
+      "summary": "Host fact of type list<string>; no observation was declared."
+    },
+    "paintedwolf.native_replacement_exact": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.native_replacement_manual": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.native_replacement_tools": {
+      "version": 1,
+      "summary": "Host fact of type list<string>; no observation was declared."
+    },
+    "paintedwolf.process_exited": {
+      "version": 1,
+      "summary": "Host fact of type bool; True when the host recorded a terminal invocation as exited, independently of success. False while running or when the terminal reason is unknown."
+    },
+    "paintedwolf.process_stopped": {
+      "version": 1,
+      "summary": "Host fact of type bool; True when the host recorded a terminal invocation as stopped. False while running or when the terminal reason is unknown."
+    },
+    "paintedwolf.process_timed_out": {
+      "version": 1,
+      "summary": "Host fact of type bool; True when a terminal invocation reached its host deadline. False while running or when the terminal reason is unknown."
+    },
+    "paintedwolf.sandbox_refusal_witness": {
+      "version": 1,
+      "summary": "Host fact of type string; The confinement reporting layer's declared witness (kernel, incomplete, or unavailable); empty without an observed invocation."
+    },
+    "paintedwolf.tool_turn_has_agent_note": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.tool_turn_has_text": {
+      "version": 1,
+      "summary": "Host fact of type bool; no observation was declared."
     }
   },
   "vocabularies": {
@@ -50,7 +246,215 @@
       "paintedwolf.unparsed_json": [
         "paintedwolf.json_encoded",
         "paintedwolf.json_malformed"
-      ]
+      ],
+      "paintedwolf.action_host_resources": {
+        "content_contract": "paintedwolf.action_host_resources",
+        "version": 1
+      },
+      "paintedwolf.agent_is_plan_writer": {
+        "content_contract": "paintedwolf.agent_is_plan_writer",
+        "version": 1
+      },
+      "paintedwolf.args_hint": {
+        "content_contract": "paintedwolf.args_hint",
+        "version": 1
+      },
+      "paintedwolf.citation_fields_present": {
+        "content_contract": "paintedwolf.citation_fields_present",
+        "version": 1
+      },
+      "paintedwolf.closeout_gate_delay_count": {
+        "content_contract": "paintedwolf.closeout_gate_delay_count",
+        "version": 1
+      },
+      "paintedwolf.definitions": {
+        "content_contract": "paintedwolf.definitions",
+        "version": 1
+      },
+      "paintedwolf.did_you_mean": {
+        "content_contract": "paintedwolf.did_you_mean",
+        "version": 1
+      },
+      "paintedwolf.disallowed_agent": {
+        "content_contract": "paintedwolf.disallowed_agent",
+        "version": 1
+      },
+      "paintedwolf.example": {
+        "content_contract": "paintedwolf.example",
+        "version": 1
+      },
+      "paintedwolf.expected_path": {
+        "content_contract": "paintedwolf.expected_path",
+        "version": 1
+      },
+      "paintedwolf.extracted_paths": {
+        "content_contract": "paintedwolf.extracted_paths",
+        "version": 1
+      },
+      "paintedwolf.files_touched": {
+        "content_contract": "paintedwolf.files_touched",
+        "version": 1
+      },
+      "paintedwolf.host_resource_policy_for": {
+        "content_contract": "paintedwolf.host_resource_policy_for",
+        "version": 1
+      },
+      "paintedwolf.host_resource_status_for": {
+        "content_contract": "paintedwolf.host_resource_status_for",
+        "version": 1
+      },
+      "paintedwolf.is_image": {
+        "content_contract": "paintedwolf.is_image",
+        "version": 1
+      },
+      "paintedwolf.ledger_criteria_met": {
+        "content_contract": "paintedwolf.ledger_criteria_met",
+        "version": 1
+      },
+      "paintedwolf.mode_bits": {
+        "content_contract": "paintedwolf.mode_bits",
+        "version": 1
+      },
+      "paintedwolf.original_author": {
+        "content_contract": "paintedwolf.original_author",
+        "version": 1
+      },
+      "paintedwolf.overlay_state": {
+        "content_contract": "paintedwolf.overlay_state",
+        "version": 1
+      },
+      "paintedwolf.pack_runner_task": {
+        "content_contract": "paintedwolf.pack_runner_task",
+        "version": 1
+      },
+      "paintedwolf.plan_awaiting_approval": {
+        "content_contract": "paintedwolf.plan_awaiting_approval",
+        "version": 1
+      },
+      "paintedwolf.posture_unresolved": {
+        "content_contract": "paintedwolf.posture_unresolved",
+        "version": 1
+      },
+      "paintedwolf.prior_summary": {
+        "content_contract": "paintedwolf.prior_summary",
+        "version": 1
+      },
+      "paintedwolf.program": {
+        "content_contract": "paintedwolf.program",
+        "version": 1
+      },
+      "paintedwolf.recent_tool_names": {
+        "content_contract": "paintedwolf.recent_tool_names",
+        "version": 1
+      },
+      "paintedwolf.resolvable": {
+        "content_contract": "paintedwolf.resolvable",
+        "version": 1
+      },
+      "paintedwolf.rule_match_count": {
+        "content_contract": "paintedwolf.rule_match_count",
+        "version": 1
+      },
+      "paintedwolf.sandbox_refusals": {
+        "content_contract": "paintedwolf.sandbox_refusals",
+        "version": 1
+      },
+      "paintedwolf.scratch_var": {
+        "content_contract": "paintedwolf.scratch_var",
+        "version": 1
+      },
+      "paintedwolf.sequence_unsupported": {
+        "content_contract": "paintedwolf.sequence_unsupported",
+        "version": 1
+      },
+      "paintedwolf.source_includes": {
+        "content_contract": "paintedwolf.source_includes",
+        "version": 1
+      },
+      "paintedwolf.suggested_tool": {
+        "content_contract": "paintedwolf.suggested_tool",
+        "version": 1
+      },
+      "paintedwolf.summary_length": {
+        "content_contract": "paintedwolf.summary_length",
+        "version": 1
+      },
+      "paintedwolf.symbol": {
+        "content_contract": "paintedwolf.symbol",
+        "version": 1
+      },
+      "paintedwolf.terminal_failure": {
+        "content_contract": "paintedwolf.terminal_failure",
+        "version": 1
+      },
+      "paintedwolf.tool_allowed_for_profile": {
+        "content_contract": "paintedwolf.tool_allowed_for_profile",
+        "version": 1
+      },
+      "paintedwolf.tools": {
+        "content_contract": "paintedwolf.tools",
+        "version": 1
+      },
+      "paintedwolf.use_substitution_result": {
+        "content_contract": "paintedwolf.use_substitution_result",
+        "version": 1
+      },
+      "paintedwolf.verify_command": {
+        "content_contract": "paintedwolf.verify_command",
+        "version": 1
+      },
+      "paintedwolf.write_roots": {
+        "content_contract": "paintedwolf.write_roots",
+        "version": 1
+      },
+      "paintedwolf.terminal_capture": [
+        "paintedwolf.can_command"
+      ],
+      "paintedwolf.use_background_param": [
+        "paintedwolf.next_steps"
+      ],
+      "paintedwolf.use_pipeline_array": [
+        "paintedwolf.next_steps"
+      ],
+      "paintedwolf.use_stdin_param": [
+        "paintedwolf.next_steps"
+      ],
+      "paintedwolf.native_replacement_exact": {
+        "content_contract": "paintedwolf.native_replacement_exact",
+        "version": 1
+      },
+      "paintedwolf.native_replacement_manual": {
+        "content_contract": "paintedwolf.native_replacement_manual",
+        "version": 1
+      },
+      "paintedwolf.native_replacement_tools": {
+        "content_contract": "paintedwolf.native_replacement_tools",
+        "version": 1
+      },
+      "paintedwolf.process_exited": {
+        "content_contract": "paintedwolf.process_exited",
+        "version": 1
+      },
+      "paintedwolf.process_stopped": {
+        "content_contract": "paintedwolf.process_stopped",
+        "version": 1
+      },
+      "paintedwolf.process_timed_out": {
+        "content_contract": "paintedwolf.process_timed_out",
+        "version": 1
+      },
+      "paintedwolf.sandbox_refusal_witness": {
+        "content_contract": "paintedwolf.sandbox_refusal_witness",
+        "version": 1
+      },
+      "paintedwolf.tool_turn_has_agent_note": {
+        "content_contract": "paintedwolf.tool_turn_has_agent_note",
+        "version": 1
+      },
+      "paintedwolf.tool_turn_has_text": {
+        "content_contract": "paintedwolf.tool_turn_has_text",
+        "version": 1
+      }
     },
     "rejection_codes": {
       "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY": [

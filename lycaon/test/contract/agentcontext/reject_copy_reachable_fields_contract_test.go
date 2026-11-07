@@ -59,17 +59,6 @@ func loadToolFieldIndex(t *testing.T) toolFieldIndex {
 	return idx
 }
 
-// fieldsFor returns the argument names a tool accepts, as the producer takes them.
-func (idx toolFieldIndex) fieldsFor(name string) []string {
-	fields := idx.byTool[name]
-	out := make([]string, 0, len(fields))
-	for field := range fields {
-		out = append(out, field)
-	}
-	sort.Strings(out)
-	return out
-}
-
 func (idx toolFieldIndex) isTool(name string) bool {
 	_, ok := idx.byTool[name]
 	return ok
@@ -212,7 +201,7 @@ func TestCommandSurfaceRejectRoutesStayInsideTheirSelector(t *testing.T) {
 	for _, tool := range toolNames {
 		for label, surfaceErr := range surfaceErrors {
 			rej := toolrejection.CommandSurfaceObservation(tool, "implement",
-				"go test ./... | head", map[string]any{"command": "go test ./... | head"}, idx.fieldsFor(tool), surfaceErr)
+				"go test ./... | head", map[string]any{"command": "go test ./... | head"}, surfaceErr)
 			if rej == nil {
 				continue
 			}

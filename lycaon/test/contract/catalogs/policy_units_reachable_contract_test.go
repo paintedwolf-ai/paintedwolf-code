@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
@@ -45,7 +46,16 @@ func TestShippedPolicyUnitsAreReachable(t *testing.T) {
 			testutil.FailErr(t, "parse "+rel, yaml.Unmarshal(raw, &unit))
 			seen++
 			if strings.TrimSpace(unit.Enforcement) == "off" {
-				t.Errorf("%s: enforcement 'off' ships copy that can never render — delete the unit or give it a real condition", rel)
+				// [OAR-EVAL-11] keeps an enforcement-off unit load-checked without
+				// rule evaluation; hint emissions render its copy through the
+				// host-raised hint channel. The unit still ships dead copy unless
+				// that channel can render something beyond the bare code.
+				var entry guidance.HintEntry
+				if err := yaml.Unmarshal(raw, &entry); err != nil {
+					t.Errorf("%s: hint copy projection failed: %v", rel, err)
+				} else if !hintViewShipsCopy(unit.ID, entry) {
+					t.Errorf("%s: enforcement 'off' ships copy that can never render — delete the unit or give it a real condition", rel)
+				}
 			}
 			retired := deprecatedWithSuccessor(unit.Status, unit.Related) ||
 				(strings.TrimSpace(unit.Status) == "deprecated" && strings.TrimSpace(unit.Successor) != "")
@@ -72,4 +82,24 @@ func deprecatedWithSuccessor(status string, related []struct {
 		}
 	}
 	return false
+}
+
+// hintViewShipsCopy reports whether the projected hint view carries copy beyond
+// the bare-code fallback.
+func hintViewShipsCopy(id string, entry guidance.HintEntry) bool {
+	view := guidance.NormalizeRejectCodeView(id, entry)
+	return view.What != id || view.Cause != "" || view.Why != "" || view.Fix != "" || view.Instead != ""
+}
+
+func TestHintViewShipsCopy(t *testing.T) {
+	t.Parallel()
+	if hintViewShipsCopy("X", guidance.HintEntry{}) {
+		t.Error("empty entry must not count as copy")
+	}
+	if !hintViewShipsCopy("X", guidance.HintEntry{What: "real copy"}) {
+		t.Error("what copy must count")
+	}
+	if !hintViewShipsCopy("X", guidance.HintEntry{Fix: "do this"}) {
+		t.Error("fix copy must count")
+	}
 }

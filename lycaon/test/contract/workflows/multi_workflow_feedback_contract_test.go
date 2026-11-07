@@ -50,7 +50,7 @@ func TestMultiWorkflowEnrichCitesPhaseAndStructuredGateFeedback(t *testing.T) {
 	contractcheck.FailErr(t, "load hint registry", err)
 	gateCfg, err := feedback.LoadGateFeedbackCatalog()
 	contractcheck.FailErr(t, "LoadGateFeedbackCatalog", err)
-	enricher := guidance.NewToolOutputEnricher(hintCfg, gateCfg)
+	enricher := guidance.NewToolOutputEnricher(hintCfg, gateCfg, nil)
 
 	t.Run("plan_approve_human_approval_read_completes", func(t *testing.T) {
 		t.Parallel()

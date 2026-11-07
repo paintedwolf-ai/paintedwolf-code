@@ -39,6 +39,7 @@ export function ProjectNoticeGroup(props: Props): JSX.Element {
               <button
                 type="button"
                 class="den-project-notices__link"
+                data-testid="project-notice-open"
                 aria-label={`Open project ${projectName}`}
                 onClick={() => props.onOpenProject(props.projectId)}
               >

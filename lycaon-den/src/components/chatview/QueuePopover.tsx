@@ -75,6 +75,15 @@ export function QueuePopover(props: Props) {
     return "Sends next";
   };
 
+  const statusState = () => {
+    if (props.sending) {
+      return props.sendWaitingOnApproval ? "waiting-approval" : "sending";
+    }
+    if (props.paused && !props.arranging) return "paused";
+    if (props.running) return "running";
+    return "idle";
+  };
+
   const closeEdit = () => {
     if (editingId() == null) return;
     const id = editingId();
@@ -200,7 +209,7 @@ export function QueuePopover(props: Props) {
                 Queue
                 <span class="den-status-mark">{count()}</span>
               </span>
-              <span class="queue-card__status" data-testid="queue-status">
+              <span class="queue-card__status" data-testid="queue-status" data-state={statusState()}>
                 {statusText()}
               </span>
               <div class="queue-card__head-actions">
@@ -439,6 +448,7 @@ export function QueuePopover(props: Props) {
           ref={pillEl}
           class="queue-pill"
           data-testid="queue-pill"
+          data-state={props.sending ? "sending" : "queued"}
           aria-expanded={open()}
           onClick={() => setOpen((v) => !v)}
         >
