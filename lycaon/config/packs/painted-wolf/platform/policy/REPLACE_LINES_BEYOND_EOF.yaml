@@ -48,7 +48,7 @@ x-paintedwolf-scenarios:
     path: internal/foo.go
     profile: implement
     start_line: 150
-    tool: command
+    tool: replace_lines
     total_lines: 120
   expect_contains:
   - '`wc -l'

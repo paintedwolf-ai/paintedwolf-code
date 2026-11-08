@@ -42,6 +42,6 @@ x-paintedwolf-scenarios:
     detail: conflict
     path: src/main.go
     profile: coordinator
-    tool: command
+    tool: read
   expect_contains:
   - '`sed -n'

@@ -43,6 +43,6 @@ x-paintedwolf-scenarios:
     can_command: true
     path: vendor/sdk.tar
     profile: implement
-    tool: command
+    tool: extract_archive
   expect_contains:
   - '`unzip -p`'

@@ -42,6 +42,6 @@ x-paintedwolf-scenarios:
       format: json
       path: package.json
       profile: implement
-      tool: command
+      tool: jq_edit
     expect_contains:
       - '`cat`'

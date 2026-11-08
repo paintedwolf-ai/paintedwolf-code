@@ -40,6 +40,6 @@ x-paintedwolf-scenarios:
     path: docs/spec.pdf
     profile: coordinator
     supported_formats: .svg, .png, .jpg, .jpeg, .webp, .gif
-    tool: command
+    tool: view_image
   expect_contains:
   - '`cat`'

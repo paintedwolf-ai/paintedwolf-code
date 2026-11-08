@@ -38,6 +38,6 @@ x-paintedwolf-scenarios:
     can_command: true
     path: docs/README.md
     profile: explore_readonly
-    tool: command
+    tool: list_dir
   expect_contains:
   - '`cat`'
