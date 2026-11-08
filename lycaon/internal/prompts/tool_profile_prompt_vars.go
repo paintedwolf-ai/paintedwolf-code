@@ -27,6 +27,7 @@ var (
 	nativeSecretTools           []string
 	nativeWebResearchTools      []string
 	nativeProgressGatedTools    []string
+	nativeOperationSet          map[string]bool
 	commandGatedByOperations    bool
 )
 
@@ -35,6 +36,10 @@ func loadNativeToolFamilies() {
 		cfg, err := nativemanifest.Load()
 		if err != nil {
 			return
+		}
+		nativeOperationSet = make(map[string]bool, len(cfg.AllOperations()))
+		for _, name := range cfg.AllOperations() {
+			nativeOperationSet[name] = true
 		}
 		nativeFilesystemTools = append(append([]string(nil), cfg.Group("filesystem")...), cfg.OperationGroup("filesystem")...)
 		nativeTerminalTools = append([]string(nil), cfg.Group("terminal")...)
@@ -275,12 +280,13 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	return out
 }
 
-// currentToolNames lists every tool or operation declared by a stock profile or the manifest.
+// currentToolNames lists every tool declared by a stock profile or the manifest.
+// Operations are excluded: agents cannot call them as tools, and the guidance
+// facts that name operations are answered in mergeOfferedToolGuidance.
 var currentToolNames = sync.OnceValue(func() []string {
 	var names []string
 	if cfg, err := nativemanifest.Load(); err == nil {
 		names = append(names, cfg.AllTools()...)
-		names = append(names, cfg.AllOperations()...)
 		names = append(names, cfg.HostProducedTools...)
 	}
 	if profiles, err := sandbox.LoadToolProfiles(); err == nil {
@@ -613,4 +619,17 @@ func mergeOfferedToolGuidance(offered []string, into map[string]any) {
 	into["profile_has_scan_drilldown"] = profileHasScanDrilldownTools(set)
 	into["profile_has_managed_secrets"] = len(nativeSecretTools) > 0 && allPresent(nativeSecretTools, set)
 	into["command_output_files"] = set["command"]
+	// Guidance facts must all be present in captured vars. Operations are not
+	// tools, so answer the fact keys that name manifest operations unless an
+	// explicit capability var already answered them.
+	for _, key := range CommandGuidanceFactKeys() {
+		name, ok := strings.CutPrefix(key, "profile_has_")
+		if !ok || !nativeOperationSet[name] {
+			continue
+		}
+		if _, answered := into[key]; answered {
+			continue
+		}
+		into[key] = set[name]
+	}
 }
