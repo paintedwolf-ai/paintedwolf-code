@@ -74,16 +74,54 @@ func cacheRequestIdentity(req modelcall.CompletionRequest, policy providerprofil
 	controls := req.ControlCapture.Snapshot()
 	out.retried = len(controls) > 1
 	out.controls, out.valid = cacheDigest(struct {
-		Policy    providerprofile.PromptCachePolicy
-		Think     modelcall.ThinkLevel
-		Override  *modelcall.ThinkingOverride
-		Strict    bool
-		MaxTokens int
-		Format    *modelcall.ResponseFormat
-		Wire      []map[string]json.RawMessage
-	}{policy, req.Think, req.ThinkingOverride, req.ReasoningRecovery, req.MaxTokens, req.ResponseFormat, controls})
+		Policy   providerprofile.PromptCachePolicy
+		Think    modelcall.ThinkLevel
+		Override *modelcall.ThinkingOverride
+		Strict   bool
+		Format   *modelcall.ResponseFormat
+		Wire     []map[string]json.RawMessage
+	}{policy, req.Think, req.ThinkingOverride, req.ReasoningRecovery, req.ResponseFormat, cacheControlSnapshots(controls)})
 	out.valid = out.valid && len(req.Messages) > 0
 	return out
+}
+
+// cacheControlSnapshots strips output-length caps so per-turn context fitting
+// does not report a prompt prefix control change.
+func cacheControlSnapshots(controls []map[string]json.RawMessage) []map[string]json.RawMessage {
+	if len(controls) == 0 {
+		return nil
+	}
+	out := make([]map[string]json.RawMessage, len(controls))
+	for i, raw := range controls {
+		filtered := make(map[string]json.RawMessage, len(raw))
+		for k, v := range raw {
+			switch k {
+			case "max_tokens", "max_completion_tokens":
+				continue
+			case "options":
+				filtered[k] = withoutJSONKey(v, "num_predict")
+			case "generationConfig":
+				filtered[k] = withoutJSONKey(v, "maxOutputTokens")
+			default:
+				filtered[k] = v
+			}
+		}
+		out[i] = filtered
+	}
+	return out
+}
+
+func withoutJSONKey(raw json.RawMessage, drop string) json.RawMessage {
+	var nested map[string]json.RawMessage
+	if json.Unmarshal(raw, &nested) != nil {
+		return raw
+	}
+	delete(nested, drop)
+	encoded, err := json.Marshal(nested)
+	if err != nil {
+		return raw
+	}
+	return encoded
 }
 
 func cacheDigest(value any) ([sha256.Size]byte, bool) {
