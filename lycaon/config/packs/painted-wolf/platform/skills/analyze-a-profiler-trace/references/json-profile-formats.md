@@ -18,7 +18,6 @@ Find the renderer main thread from the metadata events (`thread_name` == `CrRend
 
 The CPU sampler in a DevTools trace is a V8 profile riding inside `Profile` and `ProfileChunk` events — reassemble `args.data.cpuProfile` chunks in `ts` order and then treat it as a `.cpuprofile` (below).
 
-
 ## V8 `.cpuprofile`
 
 Times are **microseconds**. `timeDeltas[i]` is the gap preceding `samples[i]`; attributing it to `samples[i]` is the conventional reading.
