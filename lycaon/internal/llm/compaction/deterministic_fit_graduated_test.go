@@ -257,3 +257,28 @@ func TestDeterministicFitLeavesNoInterleavedOrphan(t *testing.T) {
 		}
 	}
 }
+
+func TestDeterministicFitBlockRoundingStopsAtActiveTurnBoundary(t *testing.T) {
+	rows := []ContextMessage{
+		{Ord: 2, ID: "turn-1-user", Role: string(api.MessageRoleUser), ContextPinned: true, Content: fitDistinctBody(2), ContextMessageProvenance: ContextMessageProvenance{Origin: api.MessageOriginUser}},
+	}
+	for ord := int64(14); ord <= 20; ord++ {
+		rows = append(rows, ContextMessage{Ord: ord, ID: strconv.FormatInt(ord, 10), Role: string(api.MessageRoleAssistant), Content: fitDistinctBody(int(ord))})
+	}
+	rows = append(rows, ContextMessage{
+		Ord: 21, ID: "turn-2-user", Role: string(api.MessageRoleUser), ContextPinned: true, Content: fitDistinctBody(21),
+		ContextMessageProvenance: ContextMessageProvenance{Origin: api.MessageOriginUser},
+	})
+	for ord := int64(22); ord <= 50; ord++ {
+		rows = append(rows, ContextMessage{Ord: ord, ID: strconv.FormatInt(ord, 10), Role: string(api.MessageRoleAssistant), Content: fitDistinctBody(int(ord))})
+	}
+	perRow := EstimateMessagesTokens(rows[1:2])
+	budget := EstimateMessagesTokens(rows) - perRow
+	out := DeterministicFitWithReserve(fitCfg(), rows, budget, 4*perRow)
+	for _, row := range out {
+		if row.Ord == 22 {
+			return
+		}
+	}
+	t.Fatalf("block rounding crossed active turn boundary and dropped ord=22: %+v", out)
+}
