@@ -37,7 +37,7 @@ Parameterized prefixes (non-empty suffix required): `var_equals:`, `var_truthy:`
 
 Every `human_approval:` phase is Blueprint-backed; the manifest must declare `blueprint:` and approval binds the reviewed bytes. Approval readiness requires materialized Blueprint content, not the generated scaffold. Keep document frontmatter at `status: draft`; `approved`, `implementing`, and `done` are host-set lifecycle states.
 
-A phase that authors or revises the Blueprint declares `blueprint_write: true`. Every Blueprint-consuming workflow needs at least one declared writer phase, and each writer's resolved coordinator surface must include mutating `command` for Blueprint writes. A verdict-producing decision workflow writes its durable selection report before submitting the verdict or exposing approval.
+A phase that authors or revises the Blueprint declares `blueprint_write: true`. Every Blueprint-consuming workflow needs at least one declared writer phase{% if profile_has_command and root_count %}, and each writer's resolved coordinator surface must include mutating `command` for Blueprint writes{% endif %}. A verdict-producing decision workflow writes its durable selection report before submitting the verdict or exposing approval.
 
 Every `invoke_workflow:` block must declare `blueprint: inherit | own | none`. `inherit` requires an approved parent Blueprint, `own` creates one for the child, and `none` requires a documentless child. Children cannot invoke another workflow and must have a terminal child path. Use `child_complete_when:` plus optional `child_gates:` when the child needs a different completion proof, and `child_next:` on a looping phase when the child needs a finite exit while the root run keeps its ordinary contract.
 
@@ -55,10 +55,10 @@ A domain leaf is refused wherever it appears — in `gates:`, after `gate_satisf
 
 | Host fact | Required tools on the resolved surface |
 |---|---|
-| Advance policy is coordinator | `workflow_advance` |
-| Phase binds HITL | `ask_user` + `wait` (+ `workflow_advance` when advance is coordinator-controlled) |
-| `review_loop:` phase block | `submit_verdict` |
-| Surface lists a progress-gated tool | `update_progress` |
+| Advance policy is coordinator | `coordinator_surface: [workflow_advance]` |
+| Phase binds HITL | `coordinator_surface: [ask_user, wait]`, plus `[workflow_advance]` when advance is coordinator-controlled |
+| `review_loop:` phase block | `coordinator_surface: [submit_verdict]` |
+| Surface lists a progress-gated tool | `coordinator_surface: [update_progress]` |
 
 A `review_loop` whose `verdict_schema` has a `claims` member declares `claim_statuses`, mapping each status word to `held`, `failed`, or `open`; add `brief_label` to list the review as a check in the report. A report workflow may declare `controls.report.brief`: the rating question, the facts each rated finding answers, and the levels those answers decide, the last level without conditions.
 
