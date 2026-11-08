@@ -15,7 +15,7 @@ When building or changing a user-facing interface (pages, interactive terminals,
 {% if visual_show_page %}{% if agent_has_skill_craft_icons_and_chrome %}When creating or styling web UI, read `craft-icons-and-chrome` for vector SVG icons, badges, and chrome.{% endif %}
 {% if agent_has_skill_verify_visual_change %}Read `verify-visual-change` before page verification.{% endif %}
 {% endif %}{% if visual_show_terminal or visual_show_terminal_needs_request %}{% if agent_has_skill_verify_terminal_change %}Read `verify-terminal-change` before terminal verification.{% endif %}
-{% if profile_has_terminal_capture %}- For a simple one-shot capture, use `command` with `terminal_capture: {}`. Include any required `capability_request` in that call. Capture runs one program, without chains, pipes, or redirects.
+{% if profile_has_terminal_capture %}- For a one-shot capture, run one program with `command` and `terminal_capture: {}` (no chains, pipes, or redirects; write any script in a prior step).
 {% endif %}{% if profile_has_terminal_open and profile_has_terminal_send and profile_has_terminal_read and profile_has_terminal_snapshot %}- For an interactive program or a demonstration with several steps, use `terminal_open`, `terminal_send`, `terminal_read`, and `terminal_snapshot` at meaningful states.
 {% elif visual_show_terminal_needs_request %}- For a program that waits for input or a demonstration with several steps, load the held terminal with `request_tools`, such as "open the program in a terminal and snapshot it", then drive it to each state worth showing.
 {% endif %}- Run the actual program; never replay saved output to manufacture a screen. Flat stdout is not `tui#` terminal screen evidence.
