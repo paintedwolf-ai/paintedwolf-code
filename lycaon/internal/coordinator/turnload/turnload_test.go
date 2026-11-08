@@ -3,6 +3,7 @@ package turnload
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -174,7 +175,7 @@ func TestDecideKeepsAGuideWhoseToolTheCurrentTurnLoads(t *testing.T) {
 	})
 	tools := ToolCandidates([]ToolCard{{Name: "terminal_open", Description: "Open an interactive terminal"}})
 	// Place guides before tools in candidates to verify order independence.
-	candidates := append(guides, tools...)
+	candidates := slices.Concat(guides, tools)
 	got := Decide(context.Background(), fake, spec, State{User: "play the terminal adventure game"}, candidates)
 	if _, loaded := got.Tools["terminal_open"]; !loaded {
 		t.Fatalf("tools = %v; expected terminal_open to load", got.Tools)
