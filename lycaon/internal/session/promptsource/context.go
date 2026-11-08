@@ -72,7 +72,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 			presence := toolcontract.ResourcePresence{}
 			if m != nil && m.Processes.Background != nil {
 				presence.CommandJobs = m.Processes.Background.HasPipelineHandles(sessionID)
-				presence.Terminals = m.Processes.Background.CountLivePTYs(sessionID) > 0
+				presence.Terminals = m.Processes.Background.HasPTYHandles(sessionID)
 			}
 			if m != nil && m.Pages != nil {
 				presence.Pages = m.Pages.CountLive(sessionID) > 0

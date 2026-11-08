@@ -322,6 +322,21 @@ func (r *Registry) HasPipelineHandles(sessionID string) bool {
 	return false
 }
 
+// HasPTYHandles reports whether the session still holds a terminal handle.
+func (r *Registry) HasPTYHandles(sessionID string) bool {
+	if r == nil {
+		return false
+	}
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
+	for _, proc := range r.jobs.sessions[trim(sessionID)] {
+		if proc.kind == processKindPTY && proc.pty != nil && !proc.silent {
+			return true
+		}
+	}
+	return false
+}
+
 // ActiveJobs returns host-authoritative state for every live command job in a session.
 func (r *Registry) ActiveJobs(sessionID string) []JobSnapshot {
 	if r == nil {
