@@ -639,6 +639,17 @@ func TestOmissionNoticeAndFitCutoffStopBeforePinnedCurrentTurnOpener(t *testing.
 		t.Fatalf("interval = (at=%d, from=%d, through=%d), want (2, 26, 50)", at, from, through)
 	}
 
+	noViewOmission := requestOmission{firstDropped: 16, throughDropped: 20}
+	noViewKept := []api.Message{
+		{ID: "goal", Ord: 2, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Build tic-tac-toe"},
+		{ID: "turn-2", Ord: 21, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Add scoreboard"},
+		{ID: "call-22", Ord: 22, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c22", Name: "update_progress"}}},
+	}
+	atNoView, fromNoView, throughNoView := noViewOmission.interval(noViewKept, 16, 20)
+	if atNoView != 1 || fromNoView != 1 || throughNoView != 20 {
+		t.Fatalf("no-view interval = (at=%d, from=%d, through=%d), want (1, 1, 20)", atNoView, fromNoView, throughNoView)
+	}
+
 	var tracker cutoffTracker
 	key := cutoffKey{generation: 1, provider: "local", model: "gemma4:26b", window: 32768, hard: 28000, target: 20000}
 	rows := []api.Message{
