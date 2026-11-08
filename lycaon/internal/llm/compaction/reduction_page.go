@@ -46,6 +46,14 @@ func boundedReductionPrefix(rows []ContextMessage, maxRows, maxTokens, maxBytes 
 	end, tokens, bytes := 0, 0, 0
 	for end < len(rows) {
 		next := end + 1
+		if target := rows[end].DraftRecoveryTarget; target != "" {
+			for next < len(rows) && rows[next].DraftRecoveryTarget == target {
+				next++
+			}
+			if next < len(rows) && rows[next].ID == target {
+				next++
+			}
+		}
 		for next < len(rows) && rows[next].Role == "tool" {
 			next++
 		}

@@ -91,9 +91,21 @@ func beforeWorkingSet(rows []ContextMessage, startOrd int64) []ContextMessage {
 	if startOrd <= 0 {
 		return rows
 	}
+	draftOrds := make(map[string]int64)
+	for _, row := range rows {
+		if row.Role == string(api.MessageRoleAssistant) && row.ID != "" && row.Ord > 0 {
+			draftOrds[row.ID] = row.Ord
+		}
+	}
 	out := make([]ContextMessage, 0, len(rows))
 	for _, row := range rows {
-		if row.Ord < startOrd {
+		ord := row.Ord
+		if row.DraftRecoveryTarget != "" {
+			if draftOrd, ok := draftOrds[row.DraftRecoveryTarget]; ok && draftOrd < ord {
+				ord = draftOrd
+			}
+		}
+		if ord < startOrd {
 			out = append(out, row)
 		}
 	}
@@ -105,6 +117,14 @@ func oldestCompactionPrefix(rows []ContextMessage, limit int) []ContextMessage {
 		return rows
 	}
 	end := limit
+	if target := rows[end-1].DraftRecoveryTarget; target != "" { //nolint:gosec // G602 — the guard above returns when len(rows) <= limit, so end-1 stays within rows.
+		for end < len(rows) && rows[end].DraftRecoveryTarget == target {
+			end++
+		}
+		if end < len(rows) && rows[end].ID == target {
+			end++
+		}
+	}
 	for end < len(rows) && rows[end].Role == string(api.MessageRoleTool) {
 		end++
 	}

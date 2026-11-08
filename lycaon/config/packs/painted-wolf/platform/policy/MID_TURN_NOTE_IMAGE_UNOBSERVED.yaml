@@ -13,9 +13,9 @@ effect: warn
 copy:
   what: '[HOST: MESSAGE WITHHELD FROM USER] The update embedded {{ paintedwolf.offender_count }} image(s) from a source this chat never observed: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
   cause: 'An image URL is presentable only when it was fetched in this chat, and a generated or remote image is not a capture.'
-  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
-  fix: 'Present a capture with [artifact:<uuid>] and describe in prose what it shows. Publish a brief update without the image, or include the relevant explanation in your final reply.'
-  instead: 'Branch on Code MID_TURN_NOTE_IMAGE_UNOBSERVED; drop the image or use the artifact directive'
+  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response already ran and their results appear above; do not re-run them.'
+  fix: 'Present a capture with [artifact:<uuid>] and describe in prose what it shows. Continue from the tool results above without re-running completed tool calls. Publish a brief update without the image, or include the relevant explanation in your final reply.'
+  instead: 'Branch on Code MID_TURN_NOTE_IMAGE_UNOBSERVED; continue from the tool results above and drop the image or use the artifact directive'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:mid_turn_note
 x-paintedwolf-message: A mid-turn image came from an unobserved source and the text was withheld.

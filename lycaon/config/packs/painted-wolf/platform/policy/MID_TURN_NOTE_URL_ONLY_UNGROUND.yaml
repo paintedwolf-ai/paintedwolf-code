@@ -13,9 +13,9 @@ effect: warn
 copy:
   what: '[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} link(s) were not observed: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
   cause: 'This session has observed nothing the link could rest on, so it cannot support the update.'
-  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
-  fix: 'Fetch the page first and cite it in a later response, or write the address as inline code if it is not a source. Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
-  instead: 'Branch on Code MID_TURN_NOTE_URL_ONLY_UNGROUND; observe the page before citing it'
+  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response already ran and their results appear above; do not re-run them.'
+  fix: 'Fetch the page first and cite it in a later response, or write the address as inline code if it is not a source. Continue from the tool results above without re-running completed tool calls. Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
+  instead: 'Branch on Code MID_TURN_NOTE_URL_ONLY_UNGROUND; continue from the tool results above and observe the page before citing it'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:mid_turn_note
 x-paintedwolf-message: A mid-turn link was not observed and the text was withheld.

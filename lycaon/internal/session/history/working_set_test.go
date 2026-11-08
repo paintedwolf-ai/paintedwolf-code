@@ -558,3 +558,134 @@ func TestApplyViewPreservesDeferredUnindexedLiveRows(t *testing.T) {
 		t.Fatalf("repeated ApplyView dropped or duplicated rows: got %d want %d", len(again), len(projected))
 	}
 }
+
+func TestDraftRecoveryExchangeKeepsCanonicalBoundaryAndViewSpliceIntact(t *testing.T) {
+	recovery := api.Message{
+		ID:           "recovery-33",
+		Ord:          34,
+		Role:         api.MessageRoleUser,
+		Origin:       api.MessageOriginHost,
+		Authority:    api.ContentAuthoritySystem,
+		Visibility:   api.MessageVisibilityInternal,
+		Kind:         api.MessageKindCoordinatorGuidance,
+		HostSignalID: api.DraftRecoverySignal("draft-33", "guidance:RETRY"),
+		Content:      "Rejected: retry with tool",
+	}
+	draft := api.Message{
+		ID:          "draft-33",
+		Ord:         33,
+		Role:        api.MessageRoleAssistant,
+		DraftStatus: api.DraftStatusCommitted,
+		ToolCalls:   []api.ToolCall{{ID: "call-33", Name: "read"}},
+	}
+	result := api.Message{
+		ID:         "result-33",
+		Ord:        35,
+		Role:       api.MessageRoleTool,
+		Content:    "file body",
+		ToolResult: &api.ToolResult{ToolCallID: "call-33", Tool: "read", Content: "file body"},
+	}
+	reordered := api.FilterPromptHistory([]api.Message{draft, result, recovery})
+	if len(reordered) != 3 || reordered[0].ID != "recovery-33" || reordered[1].ID != "draft-33" || reordered[2].ID != "result-33" {
+		t.Fatalf("unexpected FilterPromptHistory order: %+v", reordered)
+	}
+	if start := completeExchangeStart(reordered, 1); start != len(reordered) {
+		t.Fatalf("completeExchangeStart split draft from preceding recovery at index %d", start)
+	}
+	boundary := selectWorkingSetBoundary(reordered, workingSetAllocation{rows: 16, tokens: 4096, bytes: 16384}, 0)
+	if boundary.startOrd != 33 {
+		t.Fatalf("working-set startOrd = %d, want draft ordinal 33", boundary.startOrd)
+	}
+	kept, firstDropped := rowsFromCut(reordered, 33)
+	if len(kept) != 3 || firstDropped != 0 {
+		t.Fatalf("rowsFromCut(33) kept=%d firstDropped=%d, want 3 and 0", len(kept), firstDropped)
+	}
+
+	cfg := compaction.DefaultCompactionConfig()
+	svc, mem, sess := newTurnSession(t, cfg)
+	canonical := seedTurn(t, mem, sess.ID, 2, "observation")
+	lastOrd := canonical[len(canonical)-1].Ord
+	draft.Ord = lastOrd + 1
+	recovery.Ord = lastOrd + 2
+	result.Ord = lastOrd + 3
+	testutil.FailErr(t, "append draft-recovery exchange", mem.AppendMessages(t.Context(), sess.ID, draft, recovery, result))
+	all, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read canonical messages", err)
+	publishCoverage(t, mem, sess.ID, all[:len(all)-3], lastOrd, lastOrd, cfg.ModelContextWindow)
+
+	filtered := api.FilterPromptHistory(all)
+	projected := svc.ApplyView(t.Context(), sess, filtered)
+	if indexOfID(projected, "recovery-33") < 0 || indexOfID(projected, "draft-33") < 0 || indexOfID(projected, "result-33") < 0 {
+		t.Fatalf("ApplyView dropped part of draft-recovery exchange: %+v", projected)
+	}
+	if indexOfID(projected, "recovery-33") >= indexOfID(projected, "draft-33") {
+		t.Fatalf("ApplyView lost recovery-before-draft order: %+v", projected)
+	}
+	assertPairedExchanges(t, projected)
+}
+
+func TestOmissionNoticeAndFitCutoffStopBeforePinnedCurrentTurnOpener(t *testing.T) {
+	view := &store.CompactionView{Generation: 1, CoveredThroughOrd: 25}
+	omission := requestOmission{view: view, firstDropped: 33, throughDropped: 50}
+	kept := []api.Message{
+		{ID: "sum", Role: api.MessageRoleAssistant, Content: "Summary", ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "Summary"}}},
+		{ID: "goal", Ord: 2, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Build tic-tac-toe"},
+		{ID: "turn-2", Ord: 51, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Make the AI harder"},
+		{ID: "call-53", Ord: 53, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c53", Name: "update_progress"}}},
+		{ID: "res-54", Ord: 54, Role: api.MessageRoleTool, Content: "ok", ToolResult: &api.ToolResult{ToolCallID: "c53", Tool: "update_progress", Content: "ok"}},
+	}
+	at, from, through := omission.interval(kept, 33, 50)
+	if at != 2 || from != 26 || through != 50 {
+		t.Fatalf("interval = (at=%d, from=%d, through=%d), want (2, 26, 50)", at, from, through)
+	}
+
+	var tracker cutoffTracker
+	key := cutoffKey{generation: 1, provider: "local", model: "gemma4:26b", window: 32768, hard: 28000, target: 20000}
+	rows := []api.Message{
+		kept[0],
+		kept[1],
+		{ID: "old-33", Ord: 33, Role: api.MessageRoleAssistant, Content: " Prior turn step"},
+		{ID: "old-50", Ord: 50, Role: api.MessageRoleAssistant, Content: "Prior turn closeout"},
+		kept[2],
+		kept[3],
+		kept[4],
+	}
+	tracker.noteFit(key, "sess-1", rows, kept)
+	held, _ := tracker.heldFit(key, "sess-1", rows)
+	if held != 51 {
+		t.Fatalf("heldFit = %d, want 51 (current turn opener)", held)
+	}
+}
+
+func TestApplyViewFiltersSplicedPromptHistoryAcrossBoundary(t *testing.T) {
+	cfg := compaction.DefaultCompactionConfig()
+	svc, mem, sess := newTurnSession(t, cfg)
+	u1 := api.Message{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser, Content: "First turn"}
+	carrier := api.Message{
+		ID:        "c1",
+		Role:      api.MessageRoleAssistant,
+		Content:   "Checking file.",
+		ToolCalls: []api.ToolCall{{ID: "t1", Name: "read"}},
+	}
+	result := api.Message{
+		ID:         "r1",
+		Role:       api.MessageRoleTool,
+		Content:    "body",
+		ToolResult: &api.ToolResult{ToolCallID: "t1", Tool: "read", Content: "body"},
+	}
+	derived := api.Message{
+		ID:      api.MidTurnNoteID("c1"),
+		Role:    api.MessageRoleAssistant,
+		Kind:    api.MessageKindAgentNote,
+		Content: "Checking file.",
+	}
+	testutil.FailErr(t, "append messages", mem.AppendMessages(t.Context(), sess.ID, u1, carrier, result, derived))
+	all, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "get messages", err)
+	publishCoverage(t, mem, sess.ID, all[:3], all[2].Ord, all[0].Ord, cfg.ModelContextWindow)
+
+	projected := svc.ApplyView(t.Context(), sess, all[2:])
+	if indexOfID(projected, "c1") < 0 || indexOfID(projected, derived.ID) >= 0 {
+		t.Fatalf("expected ApplyView to filter spliced view+tail history and drop duplicate derived mid-turn note: %+v", projected)
+	}
+}

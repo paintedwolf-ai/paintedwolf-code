@@ -369,3 +369,54 @@ func TestRejectedCommandRepairedByCompletedExecutionResolves(t *testing.T) {
 		t.Fatalf("retired state = %q, ok=%v; want resolved (%+v)", state, ok, got.Retired)
 	}
 }
+
+func TestRejectedCommandProgramProjectsRejectionAndChecklistPrerequisite(t *testing.T) {
+	rejectedCmd := receiptMessage(receiptSpec{
+		batch:  "b1",
+		call:   "cmd-1",
+		tool:   "command",
+		digest: "mkdir-game",
+		status: api.InvocationStatusCompleted,
+		args:   map[string]any{"command": "mkdir -p tic-tac-toe"},
+	})
+	rejectedCmd.ToolResult.CommandProgram = &api.CommandProgramReceipt{
+		ID:              "prog-1",
+		ParentReceiptID: rejectedCmd.ToolResult.Invocation.ID,
+		State:           string(api.InvocationStatusRejected),
+		StopCode:        "PROGRESS_MISSING",
+	}
+
+	got := projectExecutionState([]api.Message{rejectedCmd}, "")
+	if !got.Recovery || len(got.Operations) != 1 || got.Operations[0].Status != string(api.InvocationStatusRejected) || got.Operations[0].Code != "PROGRESS_MISSING" {
+		t.Fatalf("expected rejected command program in operations and recovery: %+v", got)
+	}
+	if len(got.Executions) != 1 || got.Executions[0].Status != string(api.InvocationStatusRejected) || got.Executions[0].Code != "PROGRESS_MISSING" {
+		t.Fatalf("expected rejected command program in executions: %+v", got.Executions)
+	}
+
+	progressDone := receiptMessage(receiptSpec{
+		batch:  "b2",
+		call:   "prog-call",
+		tool:   "update_progress",
+		digest: "plan-1",
+		status: api.InvocationStatusCompleted,
+	})
+	gotAfterProgress := projectExecutionState([]api.Message{rejectedCmd, progressDone}, "")
+	if len(gotAfterProgress.Operations) != 1 || !gotAfterProgress.Operations[0].ChecklistAfter {
+		t.Fatalf("expected ChecklistAfter=true after update_progress: %+v", gotAfterProgress.Operations)
+	}
+
+	retryCmd := receiptMessage(receiptSpec{
+		batch:   "b3",
+		call:    "cmd-2",
+		tool:    "command",
+		digest:  "mkdir-game",
+		status:  api.InvocationStatusCompleted,
+		verdict: api.SourceVerdictPassed,
+		args:    map[string]any{"command": "mkdir -p tic-tac-toe"},
+	})
+	gotAfterRetry := projectExecutionState([]api.Message{rejectedCmd, progressDone, retryCmd}, "")
+	if len(gotAfterRetry.Operations) != 0 || gotAfterRetry.Recovery {
+		t.Fatalf("expected identical command retry to resolve rejected command program: %+v", gotAfterRetry)
+	}
+}

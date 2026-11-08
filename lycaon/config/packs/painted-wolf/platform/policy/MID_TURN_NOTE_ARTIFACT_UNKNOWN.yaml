@@ -14,9 +14,9 @@ effect: warn
 copy:
   what: '[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} artifact directive(s) name an artifact this session has not seen: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
   cause: '[artifact:<uuid>] takes ids this session has seen, from tool results, worker proof, or attachments. A made-up id resolves to nothing.'
-  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response still ran.'
-  fix: '{% if paintedwolf.surface_presentable_ids %}Presentable ids: {{ paintedwolf.surface_presentable_ids }}. Use one only if it supports the update. {% else %}This session has no presentable image yet. Produce one before presenting it. {% endif %}Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
-  instead: 'Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; use an observed artifact id or omit the directive'
+  why: 'Unpublished draft: the user has not received this text as an assistant update. The tools in this response already ran and their results appear above; do not re-run them.'
+  fix: '{% if paintedwolf.surface_presentable_ids %}Presentable ids: {{ paintedwolf.surface_presentable_ids }}. Use one only if it supports the update. {% else %}This session has no presentable image yet. Produce one before presenting it. {% endif %}Continue from the tool results above without re-running completed tool calls. Publish a brief update with valid inline citations, or include the relevant explanation in your final reply.'
+  instead: 'Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; continue from the tool results above and use an observed artifact id or omit the directive'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:mid_turn_note
 x-paintedwolf-message: A mid-turn artifact directive was not presentable and the text was withheld.
