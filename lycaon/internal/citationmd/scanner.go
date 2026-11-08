@@ -133,6 +133,10 @@ func (s *nodeScanner) feedLexeme(b byte) scanResult {
 			return s.confirm(modeCitation, b)
 		}
 	case ']', ',', ' ', '\t', '\r':
+		if (b == ' ' || b == '\t') && hasSpacedLineNumber(string(s.buf[s.memberStart:]), s.window[len(s.buf):]) {
+			s.buf = append(s.buf, b)
+			return scanPending
+		}
 		return s.endMember(b)
 	default:
 		if !isPathByte(b) {
