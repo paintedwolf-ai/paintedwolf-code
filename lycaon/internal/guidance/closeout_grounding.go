@@ -55,6 +55,11 @@ func BindObservedSample(report CoordinatorCompletionReport, ev evidence.Ledger, 
 			Line: sample.Line,
 		})
 	}
+	if len(report.CitedEvidence) == 0 && len(report.CitedURLs) == 0 && len(ev.ByPath) == 0 {
+		for _, handle := range SelectObservedHandleSample(ev) {
+			report.CitedEvidence = append(report.CitedEvidence, CoordinatorCitedEvidence{Evidence: handle})
+		}
+	}
 	report.Normalize()
 	return report
 }

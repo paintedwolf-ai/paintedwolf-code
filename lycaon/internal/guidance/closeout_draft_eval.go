@@ -46,7 +46,11 @@ func EvaluateDraftCitations(draft CloseoutDraft, resolved DraftCitationResolutio
 		case outcome.Outcome == CitationUnverifiable:
 			add(&unverifiable, offender)
 			unverifiableCode = outcome.Code
-		case outcome.Outcome == DirectiveParsed, outcome.Outcome == ArtifactPresentable:
+		case outcome.Outcome == ArtifactPresentable:
+			if outcome.Resolution.Handle != "" {
+				bound = append(bound, outcome.Resolution)
+			}
+		case outcome.Outcome == DirectiveParsed:
 		}
 	}
 	switch {
@@ -70,8 +74,10 @@ func EvaluateDraftCitations(draft CloseoutDraft, resolved DraftCitationResolutio
 // like the draft's own metadata.
 func AcceptedDraftReferences(draft CloseoutDraft, resolved DraftCitationResolution) ([]CoordinatorCitedEvidence, []string, []string) {
 	rejected := make(map[int]bool, len(resolved.Occurrences))
+	resolutions := make(map[int]evidence.Resolution, len(resolved.Occurrences))
 	for _, outcome := range resolved.Occurrences {
 		rejected[outcome.OccurrenceIndex] = outcome.Rejected()
+		resolutions[outcome.OccurrenceIndex] = outcome.Resolution
 	}
 	var cited []CoordinatorCitedEvidence
 	var urls, artifacts []string
@@ -86,6 +92,9 @@ func AcceptedDraftReferences(draft CloseoutDraft, resolved DraftCitationResoluti
 			urls = append(urls, occurrence.Link.Destination)
 		case citationmd.KindArtifact:
 			artifacts = append(artifacts, occurrence.Artifact)
+			if h := resolutions[occurrence.Index].Handle; h != "" {
+				cited = append(cited, CoordinatorCitedEvidence{Evidence: h})
+			}
 		case citationmd.KindVerify, citationmd.KindRepair:
 		}
 	}
