@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	handleWithCoordinate = regexp.MustCompile(`^(` + hostmarker.EvidenceHandlePattern + `)(?::([0-9]+)(?:-([0-9]+))?)?$`)
-	coordinateTail       = regexp.MustCompile(`:([0-9]+)(?:-([0-9]+))?$`)
+	handleWithCoordinate = regexp.MustCompile(`^(` + hostmarker.EvidenceHandlePattern + `)(?::(?:line[ \t]*)?([0-9]+)(?:-(?:line[ \t]*)?([0-9]+))?)?$`)
+	coordinateTail       = regexp.MustCompile(`:(?:line[ \t]*)?([0-9]+)(?:-(?:line[ \t]*)?([0-9]+))?$`)
 	artifactID           = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	repairTarget         = regexp.MustCompile(`^c[1-9][0-9]*$`)
 )
@@ -119,13 +119,31 @@ func (r *memberReader) skipSpace() int {
 	return r.at
 }
 
-// lexeme reads an unquoted run up to whitespace or a separator.
+// lexeme reads an unquoted run up to whitespace or a separator, keeping spaces inside
+// `:line N` and `-line N` coordinates.
 func (r *memberReader) lexeme() string {
 	start := r.at
-	for !r.done() && !strings.ContainsRune(" \t,", rune(r.body[r.at])) {
+	for !r.done() {
+		if strings.ContainsRune(" \t,", rune(r.body[r.at])) {
+			if r.body[r.at] != ',' && hasSpacedLineNumber(r.body[start:r.at], r.body[r.at:]) {
+				for !r.done() && (r.body[r.at] == ' ' || r.body[r.at] == '\t') {
+					r.at++
+				}
+				continue
+			}
+			break
+		}
 		r.at++
 	}
 	return r.body[start:r.at]
+}
+
+func hasSpacedLineNumber(prefix, rest string) bool {
+	if !strings.HasSuffix(prefix, ":line") && !strings.HasSuffix(prefix, "-line") {
+		return false
+	}
+	trimmed := strings.TrimLeft(rest, " \t")
+	return len(trimmed) > 0 && trimmed[0] >= '0' && trimmed[0] <= '9'
 }
 
 // quoted reads a JSON string at the cursor. It also takes the Markdown escapes
