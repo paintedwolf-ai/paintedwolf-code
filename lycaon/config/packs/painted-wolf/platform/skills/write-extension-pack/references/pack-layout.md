@@ -54,11 +54,11 @@ Credential-slot units follow the [recognition contract](references/credential-sl
 
 A detection pack under `host/detection-packs/` carries Sigma rules that add one approval ask or hold a mediated CONNECT. Additive at every scope: a pack id already provided is refused — the first claimant keeps it and stays live — `own:` is refused for these units outright, every unit must come from the pack providing its manifest, and a project may contribute none. Ship `fixtures.yaml` — `pw extensions validate` rehearses each declared case through the production adapters, and fails a rule that falls outside the supported Sigma subset, since nothing it declares would run. Use the `write-detection-pack` skill for rule authoring.
 
-An approval rule file contains exactly `category`, `pattern`, and `effect`. Categories are tool, command, mcp, path, host, write_root, and host_resource; effects are only `ask` and `deny`. Unknown fields or an allow/grant/posture/reuse spelling are invalid. A project pack may add a new approval-rule id but cannot collide with, disable, or own a device approval unit; any deny in either layer outranks asks.
+An approval rule file contains exactly `category`, `pattern`, and `effect`. Categories are `tool, command, mcp, path, host, write_root, and host_resource`; effects are only `ask` and `deny`. Unknown fields or an allow/grant/posture/reuse spelling are invalid. A project pack may add a new approval-rule id but cannot collide with, disable, or own a device approval unit; any deny in either layer outranks asks.
 
 ## Forbidden in a pack
 
-- MCP provider bodies (command / url / spawn)
+- MCP provider bodies (`command:` / `url:` / spawn)
 - Scanner engine definitions or binaries
 - Pack-local `remove:` semantics
 - Markdown patch/merge onto stock bodies

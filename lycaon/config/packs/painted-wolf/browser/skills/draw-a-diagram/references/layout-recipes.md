@@ -1,6 +1,6 @@
 # Layout recipes
 
-Adaptable skeletons for {% if profile_has_render_view and root_count %}`render_view`{% endif %} diagrams. Each stays entirely on kit tokens so it renders correctly in both themes and under a project brand overlay. Swap labels, counts, and coordinates; keep the structure.
+Adaptable skeletons for diagrams{% if profile_has_render_view and root_count %}, drawn with `render_view`{% endif %}. Each stays entirely on kit tokens so it renders correctly in both themes and under a project brand overlay. Swap labels, counts, and coordinates; keep the structure.
 
 ## Pipeline flow (SVG)
 
