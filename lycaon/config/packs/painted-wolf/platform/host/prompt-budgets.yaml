@@ -43,13 +43,6 @@ sizes:
             implementer:
                 cap: 36000
                 reason: The worker that implements changes; it alone carries the implement shell archetype and the implement addenda playbook.
-            plan-writer:
-                cap: 20300
-                reason: The PC04 portable-command remediation adds the single-call composition paragraph and clarified edit guidance to the shared partials this persona renders; the cap admits the clarified copy with room for ordinary edits.
-        coordinator_tripartite:
-            implement_overlay_promote_pending_writes:
-                cap: 36600
-                reason: The PC04 portable-command remediation adds mandated multi-statement `command` guidance to the shared partials and units this widest integration surface renders; the cap admits the clarified copy with room for ordinary edits.
         kicks:
             coordinator-process-finished:
                 cap: 6000
