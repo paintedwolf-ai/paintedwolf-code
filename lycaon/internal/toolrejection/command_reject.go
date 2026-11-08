@@ -31,6 +31,9 @@ func CommandSurfaceObservation(
 	vars := commandsurface.CommandRejectVars(profileID, displayCommand, rawCommand, err)
 	_, capture := args["terminal_capture"].(map[string]any)
 	vars["terminal_capture"] = toolName == "command" && capture
+	if toolName == "command" && capture && errors.Is(err, commandsurface.ErrSequenceUnsupported) {
+		vars["reason"] = "terminal_capture runs one program; `|`, `&&`, `||`, and `;` run several without terminal_capture"
+	}
 	return RejectInvalidArguments("COMMAND_NOT_ARGV", vars)
 }
 
