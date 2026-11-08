@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestInventoryOmissionDoesNotEstablishTrackedFileDeletion(t *testing.T) {
@@ -83,3 +84,31 @@ func TestStaleInventoryManifestDoesNotRevertNewerHead(t *testing.T) {
 		t.Fatalf("outside edit recorded=%d head=%+v, want the live bytes", out.recorded, current)
 	}
 }
+
+func TestReconcileSnapshotSkipsTrackedDirectoryHeads(t *testing.T) {
+	store, ctx, root := openLedgerOnDisk(t)
+	testutil.FailErr(t, "mkdir src", os.MkdirAll(filepath.Join(root, "src"), 0o755))
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "src", EntryKind: EntryKindDirectory},
+		ProjectID:      "p1", Origin: api.SourceChangeOriginAgent, Op: api.SourceChangeOpCreate,
+		ToolName: "mkdir",
+	})
+	trackRootFile(t, store, ctx, root, "src/main.py", "print('ok')\n")
+	testutil.FailErr(t, "seed tracking boundary", store.Inventory.seedTrackingBoundary(ctx, "p1"))
+	snapshot, err := store.Snapshots.Ensure(ctx, sourcesnapshot.Request{Roots: snapshotRoots(onDiskRoots(root))})
+	testutil.FailErr(t, "capture manifest", err)
+
+	out, err := store.Inventory.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
+	testutil.FailErr(t, "reconcile snapshot with tracked directory", err)
+	if out.recorded != 0 {
+		t.Fatalf("recorded = %d, want 0 (directory head must not reconcile as deleted file)", out.recorded)
+	}
+	dirHead, err := store.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
+		ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), RootID: "r1", Path: "src",
+	})
+	testutil.FailErr(t, "read directory head", err)
+	if dirHead.State != "directory" {
+		t.Fatalf("directory head state = %q, want directory", dirHead.State)
+	}
+}
+
