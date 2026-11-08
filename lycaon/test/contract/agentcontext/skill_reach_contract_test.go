@@ -71,16 +71,6 @@ func renderSkillParts(t *testing.T, sk skills.Skill, vars map[string]any) []rend
 	return parts
 }
 
-func renderSkillTexts(t *testing.T, sk skills.Skill, vars map[string]any) string {
-	t.Helper()
-	parts := renderSkillParts(t, sk, vars)
-	texts := make([]string, len(parts))
-	for i, part := range parts {
-		texts[i] = part.text
-	}
-	return strings.Join(texts, "\n")
-}
-
 // readerHeld turns a reachable tool list into the map UnreachableNames checks,
 // adding command mutation reachability from the rendered surface vars so the
 // map matches exactly what the reader's template facts claim.

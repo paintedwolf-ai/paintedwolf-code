@@ -313,7 +313,7 @@ func relLabel(rel string) string {
 	if rel == "" {
 		return "body"
 	}
-	return "resource "+rel
+	return "resource " + rel
 }
 
 // ValidateSkills checks every tool and command program a stock skill names is
