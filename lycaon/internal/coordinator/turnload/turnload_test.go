@@ -160,6 +160,33 @@ func TestDecideKeepsAGuideWhoseToolTheChatAlreadyUsed(t *testing.T) {
 	}
 }
 
+func TestDecideKeepsAGuideWhoseToolTheCurrentTurnLoads(t *testing.T) {
+	fake := &decidetest.Fake{Answers: decide.Answers{
+		"tools":  {Kind: decide.KindMulti, Probabilities: map[string]float64{"terminal_open": 0.9}, Confidence: 0.9},
+		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"claim-evidence": 0.05, "survey-ladder": 0.05}, Confidence: 0.95},
+		"kind":   {Kind: decide.KindChoice, Choice: KindRun, Confidence: 0.9},
+	}}
+	spec := testSpec()
+	spec.Guides.Omittable = []string{"claim-evidence", "survey-ladder"}
+	guides := GuideCandidates([]promptunit.Unit{
+		{ID: "claim-evidence", Description: "evidence for claims", NeededWith: []string{"terminal_open", "terminal_snapshot"}},
+		{ID: "survey-ladder", Description: "orienting", NeededWith: []string{"list_dir"}},
+	})
+	tools := ToolCandidates([]ToolCard{{Name: "terminal_open", Description: "Open an interactive terminal"}})
+	// Place guides before tools in candidates to verify order independence.
+	candidates := append(guides, tools...)
+	got := Decide(context.Background(), fake, spec, State{User: "play the terminal adventure game"}, candidates)
+	if _, loaded := got.Tools["terminal_open"]; !loaded {
+		t.Fatalf("tools = %v; expected terminal_open to load", got.Tools)
+	}
+	if _, omitted := got.Omitted["claim-evidence"]; omitted {
+		t.Fatalf("omitted = %v; a guide needed_with a tool loaded this turn must stay", got.Omitted)
+	}
+	if _, omitted := got.Omitted["survey-ladder"]; !omitted {
+		t.Fatalf("omitted = %v; unrelated guide should still be omitted", got.Omitted)
+	}
+}
+
 func TestDecideOmitBelowZeroKeepsEveryUnit(t *testing.T) {
 	fake := &decidetest.Fake{Answers: decide.Answers{
 		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"survey-ladder": 0, "read-tool": 0.01}, Confidence: 1},

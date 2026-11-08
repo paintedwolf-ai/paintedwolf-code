@@ -303,3 +303,28 @@ func TestEvaluateCoordinatorCloseoutGrounding_passesPresentableArtifactFromLedge
 		t.Fatalf("grounding=%+v want traced tui#1", verdict.Grounding)
 	}
 }
+
+func TestCitationsRequiredRendersObservedHandlesWhenPathsAreEmpty(t *testing.T) {
+	t.Parallel()
+	rejectFmt := coordinatorRejectFmt(t)
+	for _, code := range []string{guidance.InvestCitationsRequiredCode, guidance.SynthCitationsRequiredCode} {
+		surface := "implement_investigate"
+		if code == guidance.SynthCitationsRequiredCode {
+			surface = "implement_synthesis"
+		}
+		out, err := rejectFmt.Format(code, map[string]any{
+			"surface":                 surface,
+			"reject_observation":      "citations_required",
+			"observed_handles_sample": "command#1, terminal_session#2",
+			"observed_paths_count":    0,
+			"observed_paths_omitted":  0,
+			"observed_paths_sample":   "",
+			"observed_urls_count":     0,
+			"observed_urls_sample":    "",
+		})
+		testutil.FailErr(t, "Format("+code+")", err)
+		if !strings.Contains(out, "Observed sample: command#1, terminal_session#2") {
+			t.Fatalf("%s rendered without observed_handles_sample:\n%s", code, out)
+		}
+	}
+}

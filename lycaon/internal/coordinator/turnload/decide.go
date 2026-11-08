@@ -150,16 +150,24 @@ func Decide(ctx context.Context, d decide.Decider, spec TurnSpec, state State, c
 			continue
 		}
 		out.Verdicts[c.QuestionID()] = v
-		switch c.Kind {
-		case KindTool:
+		if c.Kind == KindTool {
 			vetoed := spec.Kind.VetoTools && out.Kind == KindAnswerOnly
 			if !vetoed && v.P >= spec.Tools.LoadAt {
 				out.Tools[c.ID] = v.P
 			}
-		case KindGuide:
-			if slices.Contains(spec.Guides.Omittable, c.ID) && !c.Needed(state.Loaded) && v.P < spec.Guides.OmitBelow && v.Confidence >= spec.Guides.ConfidenceFloor {
-				out.Omitted[c.ID] = v
-			}
+		}
+	}
+	loadedTools := out.ToolIDs()
+	for _, c := range candidates {
+		if c.Kind != KindGuide {
+			continue
+		}
+		v, ok := out.Verdicts[c.QuestionID()]
+		if !ok {
+			continue
+		}
+		if slices.Contains(spec.Guides.Omittable, c.ID) && !c.Needed(state.Loaded) && !c.Needed(loadedTools) && v.P < spec.Guides.OmitBelow && v.Confidence >= spec.Guides.ConfidenceFloor {
+			out.Omitted[c.ID] = v
 		}
 	}
 	return out
