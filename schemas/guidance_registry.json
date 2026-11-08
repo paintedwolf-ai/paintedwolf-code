@@ -489,10 +489,10 @@
       "summary": "The report has {{ paintedwolf.offender_count }} malformed citation or directive(s): {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}."
     },
     "CODE_REWRITE_PATTERN_TOO_BROAD": {
-      "branch_instruction": "Branch on Code; narrow the pattern and dry_run",
+      "branch_instruction": "Branch on Code; narrow the pattern and dry-run before apply",
       "category": "recoverable",
       "emit": "guard:structural",
-      "summary": "code_rewrite on {{ paintedwolf.path }} rejected pattern {{ paintedwolf.pattern }} — a bare {{ paintedwolf.operator }} between two metavariables matches every such operator in the file, not one meaning of it."
+      "summary": "The structural rewrite on {{ paintedwolf.path }} rejected pattern {{ paintedwolf.pattern }} — a bare {{ paintedwolf.operator }} between two metavariables matches every such operator in the file, not one meaning of it."
     },
     "COMMAND_ARGV_CONFLICT": {
       "branch_instruction": "Retry with one explicit command form, not both",
@@ -988,19 +988,19 @@
       "branch_instruction": "{% if paintedwolf.can_command %}Change the file with command, or split it into smaller files{% else %}Report the size dependency, or split the file into smaller files{% endif %}",
       "category": "recoverable",
       "emit": "guard:write",
-      "summary": "{{ tool }} did not change {{ paintedwolf.path }}: the file or its new content exceeds the {{ paintedwolf.max_file_bytes }}-byte native edit limit.{% if paintedwolf.size %} Measured size is at least {{ paintedwolf.size }} bytes.{% endif %}"
+      "summary": "{{ tool }} did not change {{ paintedwolf.path }}: the file or its new content exceeds the {{ paintedwolf.max_file_bytes }}-byte whole-file mutation limit.{% if paintedwolf.size %} Measured size is at least {{ paintedwolf.size }} bytes.{% endif %}"
     },
     "EDIT_OLD_STRING_AMBIGUOUS": {
-      "branch_instruction": "Branch on Code; set replace_all true for all sites, else widen old_string until unique",
+      "branch_instruction": "Branch on Code; set replace_all true for all sites, else widen the searched text until unique",
       "category": "recoverable",
       "emit": "guard:edit",
-      "summary": "edit on {{ paintedwolf.path }} found {{ paintedwolf.occurrences }} matches for old_string — a single-occurrence edit needs a unique target."
+      "summary": "edit on {{ paintedwolf.path }} found {{ paintedwolf.occurrences }} matches for the searched text — a single-occurrence edit needs a unique target."
     },
     "EDIT_OLD_STRING_NOT_FOUND": {
       "branch_instruction": "{{ paintedwolf.next_steps }} Do not replace the whole file to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
-      "summary": "{% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}. The requested new_string is already present {{ paintedwolf.replacement_matches }} time(s), first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}: old_string ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis ({{ paintedwolf.total_lines }} lines).{% endif %}"
+      "summary": "{% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}. The requested replacement is already present {{ paintedwolf.replacement_matches }} time(s), first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}: The searched text ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis ({{ paintedwolf.total_lines }} lines).{% endif %}"
     },
     "EDIT_TARGET_CHANGED_BY_OTHERS": {
       "branch_instruction": "{{ paintedwolf.next_steps }} Do not repeat the same edit or replace the whole file merely to bypass a missing match.",
@@ -1017,7 +1017,7 @@
       "branch_instruction": "Branch on Code; fix args and retry once",
       "category": "recoverable",
       "emit": "guard:tool",
-      "summary": "extract_archive destination {{ paintedwolf.dest }} exists but is not a directory."
+      "summary": "The archive extraction destination {{ paintedwolf.dest }} exists but is not a directory."
     },
     "EXTRACT_ENTRY_LIMIT": {
       "branch_instruction": "Do not retry the unchanged archive; the entry cap still applies.",
@@ -1035,13 +1035,13 @@
       "branch_instruction": "Branch on Code; fix args and retry once",
       "category": "recoverable",
       "emit": "guard:tool",
-      "summary": "extract_archive path {{ paintedwolf.path }} is a directory, not an archive file."
+      "summary": "The archive extraction path {{ paintedwolf.path }} is a directory, not an archive file."
     },
     "EXTRACT_NOT_FOUND": {
       "branch_instruction": "Branch on Code; fix args and retry once",
       "category": "recoverable",
       "emit": "guard:tool",
-      "summary": "extract_archive could not open {{ paintedwolf.path }} — path does not exist under the attached project roots."
+      "summary": "The archive extraction could not open {{ paintedwolf.path }} — path does not exist under the attached project roots."
     },
     "EXTRACT_PATH_DENIED": {
       "branch_instruction": "Preserve completed entries and the protected-path boundary",
@@ -1137,7 +1137,7 @@
       "branch_instruction": "Branch on Code; fix the type argument",
       "category": "recoverable",
       "emit": "guard:find",
-      "summary": "find received invalid type {{ paintedwolf.type }} — want file, dir, or any."
+      "summary": "{% if paintedwolf.native_operation %}find received invalid -type value {{ paintedwolf.type }} — want f (file) or d (directory).{% else %}find received invalid type {{ paintedwolf.type }} — want file, dir, or any.{% endif %}"
     },
     "FIND_OVERFLOW_NARROW": {
       "branch_instruction": "Use the actual digest and current tool schema to refine scope; do not repeat identical arguments or invent a continuation cursor.",
@@ -1183,7 +1183,7 @@
       "summary": "The bundled Git engine is unavailable."
     },
     "GIT_INTERNALS_WRITE_DENIED": {
-      "branch_instruction": "Use command git commands for repository settings; do not retry the native write",
+      "branch_instruction": "Change repository settings with `git config` inside command; do not retry the write",
       "category": "recoverable",
       "emit": "guard:git_internals_write",
       "summary": "Cannot write {{ paintedwolf.path }} — repository git internals ({{ paintedwolf.class }}) are not writable via native tools."
@@ -1261,7 +1261,7 @@
       "summary": "grep search root {{ paintedwolf.path }} does not exist."
     },
     "GREP_REGEX_INVALID": {
-      "branch_instruction": "Branch on Code; fix pattern or disable regex",
+      "branch_instruction": "Branch on Code; fix pattern or search literally",
       "category": "recoverable",
       "emit": "guard:grep",
       "summary": "grep received an invalid regex pattern: {{ paintedwolf.detail }}."
@@ -1386,7 +1386,7 @@
       "summary": "{{ tool }} cannot display {{ paintedwolf.path }} because its dimensions ({{ paintedwolf.width }}x{{ paintedwolf.height }}) exceed {{ paintedwolf.max_dimension }}px."
     },
     "IMAGE_FORMAT_UNSUPPORTED": {
-      "branch_instruction": "Branch on Code IMAGE_FORMAT_UNSUPPORTED; use read for text files, or convert the asset to a supported image format",
+      "branch_instruction": "Branch on Code IMAGE_FORMAT_UNSUPPORTED; read text files with an offered reader or command, or convert the asset to a supported image format",
       "category": "recoverable",
       "emit": "guard:view_image",
       "summary": "{{ tool }} does not support the image format of {{ paintedwolf.path }}."
@@ -1495,7 +1495,7 @@
       "summary": "jq: input limit exceeded for {{ paintedwolf.path }} (maximum {{ paintedwolf.max_bytes }} bytes).{% if paintedwolf.bytes %} Input is at least {{ paintedwolf.bytes }} bytes.{% endif %}"
     },
     "JQ_PARSE": {
-      "branch_instruction": "Branch on Code; fix format or use read",
+      "branch_instruction": "Branch on Code; fix format or inspect raw bytes",
       "category": "recoverable",
       "emit": "guard:jq",
       "summary": "jq could not parse {{ paintedwolf.path }} as {{ paintedwolf.format }} — {{ paintedwolf.detail }}."
@@ -1546,13 +1546,13 @@
       "branch_instruction": "Choose a directory to list, or use an offered file reader",
       "category": "recoverable",
       "emit": "guard:list_dir",
-      "summary": "list_dir path {{ paintedwolf.path }} is not a directory."
+      "summary": "The listing path {{ paintedwolf.path }} is not a directory."
     },
     "LIST_DIR_PATH_NOT_FOUND": {
       "branch_instruction": "Branch on Code; choose an existing directory before listing again",
       "category": "recoverable",
       "emit": "guard:list_dir",
-      "summary": "list_dir path {{ paintedwolf.path }} does not exist."
+      "summary": "The listing path {{ paintedwolf.path }} does not exist."
     },
     "MCP_CALL_FAILED": {
       "branch_instruction": "Branch on Code; do not retry the same args without addressing the machine code",
@@ -2035,7 +2035,7 @@
       "branch_instruction": "Branch on Code; fix args and retry once",
       "category": "recoverable",
       "emit": "guard:tool",
-      "summary": "read received mutually exclusive or conflicting arguments: {{ paintedwolf.detail }}."
+      "summary": "The read operation received mutually exclusive or conflicting arguments: {{ paintedwolf.detail }}."
     },
     "READ_BINARY_DENIED": {
       "branch_instruction": "Diagnose the text-decoding failure; do not invent replacement evidence",
@@ -2202,19 +2202,19 @@
       "branch_instruction": "Branch on Code; lower the line range or re-read total_lines",
       "category": "recoverable",
       "emit": "guard:replace_lines",
-      "summary": "replace_lines on {{ paintedwolf.path }} range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line }} exceeds file length ({{ paintedwolf.total_lines }} lines)."
+      "summary": "The line-range replacement on {{ paintedwolf.path }} range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line }} exceeds file length ({{ paintedwolf.total_lines }} lines)."
     },
     "REPLACE_LINES_INDENT_MISMATCH": {
       "branch_instruction": "Branch on Code; read the range and use its exact shared prefix",
       "category": "recoverable",
       "emit": "guard:replace_lines",
-      "summary": "replace_lines did not change {{ paintedwolf.path }} because line {{ paintedwolf.line }} does not begin with the exact dedent prefix."
+      "summary": "The line-range replacement did not change {{ paintedwolf.path }} because line {{ paintedwolf.line }} does not begin with the exact dedent prefix."
     },
     "REPLACE_LINES_INVALID_RANGE": {
-      "branch_instruction": "Branch on Code; fix the line range and retry with a valid 1-based start_line and end_line",
+      "branch_instruction": "Branch on Code; fix the line range and retry with a valid 1-based range",
       "category": "recoverable",
       "emit": "guard:replace_lines",
-      "summary": "replace_lines on {{ paintedwolf.path }} rejected range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line }} — {{ paintedwolf.rejection_reason }}."
+      "summary": "The line-range replacement on {{ paintedwolf.path }} rejected range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line }} — {{ paintedwolf.rejection_reason }}."
     },
     "REPORT_CLAIM_UNREPORTED": {
       "branch_instruction": "Do not change the claims, and do not report an open claim as resolved; each title states where its claim stands.",
@@ -2920,7 +2920,7 @@
       "branch_instruction": "Account for blocked files separately from completed changes",
       "category": "recoverable",
       "emit": "guard:code_rewrite",
-      "summary": "code_rewrite could not prepare a rewrite for {{ paintedwolf.path }}; that file was not changed."
+      "summary": "The structural rewrite could not prepare a rewrite for {{ paintedwolf.path }}; that file was not changed."
     },
     "STRUCTURAL_LANG_UNKNOWN": {
       "branch_instruction": "Branch on Code; fix the lang name (or omit it) and retry",
@@ -3058,13 +3058,13 @@
       "branch_instruction": "Branch on Code; retry with a valid bundle id from your Tools section",
       "category": "recoverable",
       "emit": "guard:survey",
-      "summary": "survey_repo was called without a bundle argument."
+      "summary": "{% if paintedwolf.command_form %}{{ paintedwolf.command_form }}{% else %}survey_repo{% endif %} was called without a bundle argument."
     },
     "SURVEY_BUNDLE_UNKNOWN": {
       "branch_instruction": "Choose an intended listed bundle, or an offered scoped search tool for an ad-hoc query",
       "category": "recoverable",
       "emit": "guard:survey",
-      "summary": "survey_repo bundle {{ paintedwolf.bundle }} is not in the catalog."
+      "summary": "{% if paintedwolf.command_form %}{{ paintedwolf.command_form }} bundle {{ paintedwolf.bundle }} is not in the catalog.{% else %}survey_repo bundle {{ paintedwolf.bundle }} is not in the catalog.{% endif %}"
     },
     "SURVEY_GLOB_INVALID": {
       "branch_instruction": "Branch on Code; correct the glob and retry",
