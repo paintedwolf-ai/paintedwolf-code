@@ -111,4 +111,3 @@ func TestReconcileSnapshotSkipsTrackedDirectoryHeads(t *testing.T) {
 		t.Fatalf("directory head state = %q, want directory", dirHead.State)
 	}
 }
-
