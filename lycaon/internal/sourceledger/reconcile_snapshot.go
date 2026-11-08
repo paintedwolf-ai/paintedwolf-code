@@ -77,7 +77,7 @@ func (s *Inventory) reconcileSnapshot(
 	rootPaths := rootPathsByID(rootIDs)
 	live := make(map[string]struct{}, len(heads))
 	for _, head := range heads {
-		if head.State == "absent" {
+		if head.State == "absent" || head.State == "directory" {
 			continue
 		}
 		key := entryKey(head.RootID, head.Path)
