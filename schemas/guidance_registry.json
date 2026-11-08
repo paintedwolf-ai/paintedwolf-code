@@ -1609,49 +1609,49 @@
       "summary": "querySelectorAll rejected selector {{ paintedwolf.measure_selector }}."
     },
     "MID_TURN_NOTE_ARTIFACT_UNKNOWN": {
-      "branch_instruction": "Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; use an observed artifact id or omit the directive",
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; continue from the tool results above and use an observed artifact id or omit the directive",
       "category": "recoverable",
       "emit": "guard:mid_turn_note",
       "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} artifact directive(s) name an artifact this session has not seen: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
     "MID_TURN_NOTE_EVIDENCE_UNREADABLE": {
-      "branch_instruction": "Branch on Code MID_TURN_NOTE_EVIDENCE_UNREADABLE; do not rewrite citations to clear it",
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_EVIDENCE_UNREADABLE; continue from the tool results above and do not rewrite citations to clear it",
       "category": "recoverable",
       "emit": "guard:mid_turn_note",
       "summary": "[HOST: MESSAGE WITHHELD FROM USER] The host could not read the evidence for this request, so your text alongside the last tool calls was not checked."
     },
     "MID_TURN_NOTE_HANDLE_UNGROUND": {
-      "branch_instruction": "Branch on Code MID_TURN_NOTE_HANDLE_UNGROUND; correct the named citation rather than removing every citation",
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_HANDLE_UNGROUND; continue from the tool results above and correct the named citation rather than removing every citation or re-running completed tool calls",
       "category": "recoverable",
       "emit": "guard:mid_turn_note",
       "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} citation(s) did not resolve: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
     "MID_TURN_NOTE_IMAGE_UNOBSERVED": {
-      "branch_instruction": "Branch on Code MID_TURN_NOTE_IMAGE_UNOBSERVED; drop the image or use the artifact directive",
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_IMAGE_UNOBSERVED; continue from the tool results above and drop the image or use the artifact directive",
       "category": "recoverable",
       "emit": "guard:mid_turn_note",
       "summary": "[HOST: MESSAGE WITHHELD FROM USER] The update embedded {{ paintedwolf.offender_count }} image(s) from a source this chat never observed: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
     "MID_TURN_NOTE_INVALID_SYNTAX": {
-      "branch_instruction": "Branch on Code MID_TURN_NOTE_INVALID_SYNTAX; correct the node",
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_INVALID_SYNTAX; continue from the tool results above and correct the node without re-running completed tool calls",
       "category": "recoverable",
       "emit": "guard:mid_turn_note",
       "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} citation or directive node(s) could not be read: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
     "MID_TURN_NOTE_MARKDOWN_EMBED": {
-      "branch_instruction": "Branch on Code MID_TURN_NOTE_MARKDOWN_EMBED; use the artifact directive",
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_MARKDOWN_EMBED; continue from the tool results above and use the artifact directive",
       "category": "recoverable",
       "emit": "guard:mid_turn_note",
       "summary": "[HOST: MESSAGE WITHHELD FROM USER] The update used {{ paintedwolf.offender_count }} visual artifact id(s) as an image source: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
     },
     "MID_TURN_NOTE_UNGROUNDED": {
-      "branch_instruction": "Branch on Code MID_TURN_NOTE_UNGROUNDED; do not repeat the same text uncited",
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_UNGROUNDED; continue from the tool results above without re-running completed tool calls or repeating the same text uncited",
       "category": "recoverable",
       "emit": "guard:mid_turn_note",
       "summary": "[HOST: MESSAGE WITHHELD FROM USER] Your text alongside the last tool calls cited nothing."
     },
     "MID_TURN_NOTE_URL_ONLY_UNGROUND": {
-      "branch_instruction": "Branch on Code MID_TURN_NOTE_URL_ONLY_UNGROUND; observe the page before citing it",
+      "branch_instruction": "Branch on Code MID_TURN_NOTE_URL_ONLY_UNGROUND; continue from the tool results above and observe the page before citing it",
       "category": "recoverable",
       "emit": "guard:mid_turn_note",
       "summary": "[HOST: MESSAGE WITHHELD FROM USER] {{ paintedwolf.offender_count }} link(s) were not observed: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}"
