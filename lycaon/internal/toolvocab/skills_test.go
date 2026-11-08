@@ -17,31 +17,33 @@ func TestSkillProcedureToolsMustBeReachable(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
 	testutil.FailErr(t, "build tool catalog", err)
 	sk := skills.Skill{Name: "search", Body: "Use `source_history` to locate the definition."}
-	for _, tc := range []struct {
-		profile   string
-		wantError bool
-	}{{"explore_readonly", false}, {"acme_narrow", true}} {
-		t.Run(tc.profile, func(t *testing.T) {
-			err := toolvocab.ValidateSkills(catalog, []toolvocab.AgentSurface{{AgentID: "reader", ProfileID: tc.profile, Skills: skills.Selector{All: true}}}, []skills.Skill{sk})
-			if (err != nil) != tc.wantError {
-				t.Fatalf("profile=%s: %v", tc.profile, err)
-			}
-			if err != nil && !strings.Contains(err.Error(), "source_history") {
-				t.Fatalf("missing procedure tool in error: %v", err)
-			}
-		})
+	// explore_readonly holds the tool, so the skill is offered and validates.
+	if err := toolvocab.ValidateSkills(catalog, []toolvocab.AgentSurface{{AgentID: "reader", ProfileID: "explore_readonly", Skills: skills.Selector{All: true}}}, []skills.Skill{sk}); err != nil {
+		t.Fatalf("profile=explore_readonly: %v", err)
+	}
+	// acme_narrow lacks the tool, so the skill is not offered to that reader
+	// at all and validation stays silent — the runtime never renders it there.
+	if toolvocab.SkillToolsOffered(sk, map[string]bool{"recall": true}) {
+		t.Fatal("skill naming an unheld tool escaped the offered-tools gate")
+	}
+	if err := toolvocab.ValidateSkills(catalog, []toolvocab.AgentSurface{{AgentID: "reader", ProfileID: "acme_narrow", Skills: skills.Selector{All: true}}}, []skills.Skill{sk}); err != nil {
+		t.Fatalf("unoffered skill must be skipped, not rejected: %v", err)
 	}
 }
 
 func TestSkillProcedureRejectsRetiredOperationNames(t *testing.T) {
-	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
-	testutil.FailErr(t, "build tool catalog", err)
 	for _, retired := range []string{"list_dir", "grep", "read", "write", "edit", "replace_lines"} {
 		t.Run(retired, func(t *testing.T) {
 			sk := skills.Skill{Name: "retired-" + retired, Body: "Run `" + retired + "` to inspect the tree."}
-			err := toolvocab.ValidateSkills(catalog, []toolvocab.AgentSurface{{AgentID: "reader", ProfileID: "explore_readonly", Skills: skills.Selector{All: true}}}, []skills.Skill{sk})
-			if err == nil || !strings.Contains(err.Error(), retired) {
-				t.Fatalf("retired operation %q in skill body was not rejected: %v", retired, err)
+			// A reader without command cannot reach the replacing forms, so
+			// the retired name gates the skill off that reader.
+			if toolvocab.SkillToolsOffered(sk, map[string]bool{"recall": true, "source_history": true}) {
+				t.Fatalf("retired operation %q escaped the offered-tools gate", retired)
+			}
+			// Retired names resolve through the forms that replaced them, so
+			// a mutating command reader is offered the skill.
+			if !toolvocab.SkillToolsOffered(sk, map[string]bool{"command": true, toolvocab.ReachCommandMutation: true}) {
+				t.Fatalf("retired operation %q did not resolve through its replacing forms", retired)
 			}
 		})
 	}
@@ -187,12 +189,14 @@ func TestSkillGuardedMentionsResolvePerReader(t *testing.T) {
 	}
 	unguarded := guarded
 	unguarded.Body = "Use `capture_page` for the snapshot."
-	err = validateWith(t, catalog, "explore_readonly", unguarded)
-	if err == nil || !strings.Contains(err.Error(), "capture_page") {
-		t.Fatalf("unguarded mention was not rejected: %v", err)
+	// An unguarded mention is a hard requirement, so the skill is not offered
+	// to a reader without the tool at all — validation stays silent because
+	// the runtime never renders it for that reader.
+	if toolvocab.SkillToolsOffered(unguarded, map[string]bool{"recall": true, "source_history": true}) {
+		t.Fatal("unguarded tool mention escaped the offered-tools gate")
 	}
-	if !strings.Contains(err.Error(), "{% if profile_has_capture_page %}") {
-		t.Fatalf("error does not point at the guard convention: %v", err)
+	if err := validateWith(t, catalog, "explore_readonly", unguarded); err != nil {
+		t.Fatalf("unoffered skill must be skipped, not rejected: %v", err)
 	}
 }
 
@@ -206,19 +210,36 @@ func TestSkillMutatingCommandFormsNeedCommandMutation(t *testing.T) {
 		{ID: "readonly", Tools: map[string]bool{"command": true}, CommandEffects: readOnly},
 	}, toolvocab.Provenance{})
 	testutil.FailErr(t, "build tool catalog", err)
-	for _, tc := range []struct {
-		profile   string
-		wantError bool
-	}{{"mutating", false}, {"readonly", true}} {
-		for _, form := range []string{"edit", "replace-lines", "jq-edit"} {
-			t.Run(tc.profile+"/"+form, func(t *testing.T) {
-				sk := skills.Skill{Name: "fixer", Body: "Run `" + form + "` to apply the change."}
-				err := validateWith(t, catalog, tc.profile, sk)
-				if (err != nil) != tc.wantError {
-					t.Fatalf("profile=%s form=%s: %v", tc.profile, form, err)
+	// An unguarded mutating form is a hard requirement no profile's offered
+	// set satisfies (the form resolves through command mutation, not a tool
+	// grant), so the skill is not offered to either reader and validation
+	// stays silent.
+	for _, form := range []string{"edit", "replace-lines", "jq-edit"} {
+		t.Run("unguarded/"+form, func(t *testing.T) {
+			sk := skills.Skill{Name: "fixer", Body: "Run `" + form + "` to apply the change."}
+			if toolvocab.SkillToolsOffered(sk, map[string]bool{"command": true}) {
+				t.Fatalf("form %s escaped the offered-tools gate", form)
+			}
+			if err := validateWith(t, catalog, "readonly", sk); err != nil {
+				t.Fatalf("unoffered skill must be skipped, not rejected: %v", err)
+			}
+		})
+	}
+	// Guarded on profile_command_mutation the skill is offered to both
+	// readers: the branch drops for the read-only profile and resolves
+	// through command mutation for the mutating one.
+	for _, form := range []string{"edit", "replace-lines", "jq-edit"} {
+		t.Run("guarded/"+form, func(t *testing.T) {
+			sk := skills.Skill{
+				Name: "fixer",
+				Body: "{% if profile_command_mutation %}Run `" + form + "` to apply the change.{% endif %}",
+			}
+			for _, profile := range []string{"mutating", "readonly"} {
+				if err := validateWith(t, catalog, profile, sk); err != nil {
+					t.Fatalf("profile=%s form=%s: %v", profile, form, err)
 				}
-			})
-		}
+			}
+		})
 	}
 }
 
@@ -248,6 +269,51 @@ func TestUnreachableNamesCommandForms(t *testing.T) {
 	held := toolvocab.UnreachableNames(catalog, "Use `capture_page` when you need a snapshot.", map[string]bool{"capture_page": true})
 	if len(held) != 0 {
 		t.Fatalf("held tool reported unreachable: %v", held)
+	}
+}
+
+func TestUnreachableNamesFlagInvocations(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, []sandbox.ToolProfile{{ID: "stock"}}, toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+	corpus := "Write the key with `edit --path FILE --old-string OLD --new-string NEW`, or `jq-edit --path FILE --query '.k = $v' --arg v '<ref>'` for JSON."
+	nothing := toolvocab.UnreachableNames(catalog, corpus, nil)
+	if strings.Join(nothing, ",") != "edit,jq-edit" {
+		t.Fatalf("nothing held: %v", nothing)
+	}
+	held := toolvocab.UnreachableNames(catalog, corpus, map[string]bool{"command": true, toolvocab.ReachCommandMutation: true})
+	if len(held) != 0 {
+		t.Fatalf("command mutation held: %v", held)
+	}
+	if got := toolvocab.UnreachableNames(catalog, "Check state with `git status --short` first.", nil); len(got) != 0 {
+		t.Fatalf("unregistered program with flags flagged: %v", got)
+	}
+}
+
+func TestValidateSkillsSkipsUnofferedSkills(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "build tool catalog", err)
+	offered := skills.Skill{Name: "recall-notes", Body: "Use `recall` to find prior notes."}
+	if err := validateWith(t, catalog, "explore_readonly", offered); err != nil {
+		t.Fatalf("offered skill must validate: %v", err)
+	}
+	// A skill the reader is not offered (its unguarded mutating invocation
+	// names tools the profile cannot supply) is skipped, matching the runtime
+	// and contract matrix, which never render it for that reader.
+	unoffered := skills.Skill{Name: "fixer", Body: "Run `edit --path FILE --old-string OLD --new-string NEW` to apply the change."}
+	if err := validateWith(t, catalog, "explore_readonly", unoffered); err != nil {
+		t.Fatalf("unoffered skill must be skipped, not rejected: %v", err)
+	}
+	// Vocabulary hygiene still applies to skills no reader is offered.
+	bogus := skills.Skill{
+		Name: "daydream",
+		Body: "Think.",
+		Metadata: map[string]string{
+			"paintedwolf.any_of_tools": "bogus_tool",
+		},
+	}
+	err = validateWith(t, catalog, "explore_readonly", bogus)
+	if err == nil || !strings.Contains(err.Error(), "bogus_tool") {
+		t.Fatalf("unknown any_of_tools member was not rejected: %v", err)
 	}
 }
 

@@ -74,8 +74,7 @@ func TestSkillSurfaceTemplateVarsWorkerProfile(t *testing.T) {
 	}
 }
 
-func TestSkillSurfaceTemplateVarsCallerShapeSurvivesMerges(t *testing.T) {
-	for _, tc := range []struct {
+func TestSkillSurfaceTemplateVarsCallerShapeSurvivesMerges(t *testing.T) {	for _, tc := range []struct {
 		name  string
 		input SkillSurfaceVarsInput
 		shape map[string]any
@@ -100,5 +99,70 @@ func TestSkillSurfaceTemplateVarsCallerShapeSurvivesMerges(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSkillSurfaceTemplateVarsDefaultsZeroBudget(t *testing.T) {
+	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
+		ProfileID: "worker_readonly",
+		Offered:   []string{"command", "summarize"},
+		HasGit:    true,
+		RootCount: 1,
+	})
+	testutil.FailErr(t, "worker vars", err)
+	def := spawn.DefaultWorkerToolBudget()
+	for k, want := range map[string]int{
+		"worker_tool_budget_default": def.Default,
+		"worker_tool_budget_min":     def.Min,
+		"worker_tool_budget_max":     def.Max,
+	} {
+		got, _ := vars[k].(int)
+		if got != want {
+			t.Fatalf("%s = %d, want %d (zero budget must default to the host budget)", k, got, want)
+		}
+	}
+}
+
+func TestSkillSurfaceTemplateVarsWorkerOfferedMarksDeferredLoaded(t *testing.T) {
+	// worker_readonly defers held_result/held_stop (tool: true in its
+	// profile), so an empty SurfaceTurn would mark them requestable and blank
+	// profile_has_held_result even when the turn offers the tool.
+	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
+		ProfileID: "worker_readonly",
+		Offered:   []string{"command", "held_result"},
+		HasGit:    true,
+		RootCount: 1,
+	})
+	testutil.FailErr(t, "worker vars", err)
+	if vars["profile_has_held_result"] != true {
+		t.Fatalf("offered deferred tool must render as held: %v", vars["profile_has_held_result"])
+	}
+	if vars["profile_has_held_stop"] != false {
+		t.Fatalf("deferred tool outside Offered must stay requestable: %v", vars["profile_has_held_stop"])
+	}
+	if vars["profile_has_command"] != true {
+		t.Fatalf("sticky tool must render as held: %v", vars["profile_has_command"])
+	}
+}
+
+func TestSkillSurfaceTemplateVarsCoordinatorAddressableTools(t *testing.T) {
+	// implement_routing floors scan_* and loadable command_output/command_stop
+	// via request_tools; skill copy renders against the whole addressable set
+	// so deferred tools do not blank instructions before request_tools runs.
+	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
+		ProfileID: CoordinatorProfileID,
+		SurfaceID: "implement_routing",
+		Offered:   []string{"command", "task", "ask_user"},
+		RootCount: 1,
+	})
+	testutil.FailErr(t, "coordinator vars", err)
+	if vars["profile_has_scan_query"] != true {
+		t.Fatalf("floor tool outside Offered must render as addressable: %v", vars["profile_has_scan_query"])
+	}
+	if vars["profile_has_command_output"] != true {
+		t.Fatalf("loadable tool must render as addressable before request_tools: %v", vars["profile_has_command_output"])
+	}
+	if vars["profile_has_task"] != true {
+		t.Fatalf("offered tool must render as held: %v", vars["profile_has_task"])
 	}
 }

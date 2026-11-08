@@ -28,6 +28,7 @@ import (
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolhost"
+	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -217,6 +218,38 @@ func skillReaderHasGit(tctx tools.ToolContext) bool {
 	return false
 }
 
+// skillReaderOfferedTools maps the tool facts a skill reader is checked
+// against: the turn's offered tools, plus — on a coordinator surface — the
+// surface's full addressable set (floor plus loadable), since request_tools
+// can reach the rest of the surface before any skill read.
+func skillReaderOfferedTools(tctx tools.ToolContext) map[string]bool {
+	offered := make(map[string]bool, len(tctx.Turn.TurnOfferedToolNames))
+	for _, name := range tctx.Turn.TurnOfferedToolNames {
+		offered[name] = true
+	}
+	if surfaceID := strings.TrimSpace(tctx.Turn.TurnSurfaceID); surfaceID != "" && profileIDForSurface(tctx) == prompts.CoordinatorProfileID {
+		if floor, err := prompts.LoadCoordinatorSurfaceFloor(surfaceID); err == nil {
+			for _, name := range floor {
+				offered[name] = true
+			}
+		}
+		if loadable, err := prompts.LoadCoordinatorSurfaceLoadable(surfaceID); err == nil {
+			for _, name := range loadable {
+				offered[name] = true
+			}
+		}
+	}
+	return offered
+}
+
+func profileIDForSurface(tctx tools.ToolContext) string {
+	profileID := strings.TrimSpace(tctx.Identity.Agent)
+	if mapped, err := prompts.ToolProfileForAgent(profileID); err == nil && mapped != "" {
+		return mapped
+	}
+	return profileID
+}
+
 func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResources *hostresources.Service, workerToolBudgetFor func(string) spawn.WorkerToolBudget) {
 	if host != nil && host.Boundary != nil {
 		host.Boundary.SetProfileSource(func(ctx context.Context, sessionID string) []sandbox.ToolProfile {
@@ -251,7 +284,14 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 			}
 			sess, _ := mgr.Chats.Get(ctx, tctx.Identity.SessionID)
 			loaded, _ := mgr.Profiles.EffectiveSkillsForProfile(ctx, sess, tctx.Identity.Agent, roots)
-			return loaded
+			offered := skillReaderOfferedTools(tctx)
+			reachable := make([]skills.Skill, 0, len(loaded))
+			for _, skill := range loaded {
+				if toolvocab.SkillToolsOffered(skill, offered) {
+					reachable = append(reachable, skill)
+				}
+			}
+			return reachable
 		})
 		host.Skills.SetSkillTemplateVars(func(_ context.Context, tctx tools.ToolContext) map[string]any {
 			budget := spawn.DefaultWorkerToolBudget()

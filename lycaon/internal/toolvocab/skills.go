@@ -84,7 +84,9 @@ const profileHasWriteToolsAlias = "write_tools"
 
 // namedForm matches backticked hyphenated command forms, which namedTool cannot
 // see: its character class has no hyphen, so `replace-lines` is invisible to it.
-var namedForm = regexp.MustCompile("`([a-z][a-z0-9_]*-[a-z0-9_-]*)(?:`|[ \t]*\\()")
+// A span that continues with a --flag is an invocation with arguments, not a
+// closed mention.
+var namedForm = regexp.MustCompile("`([a-z][a-z0-9_]*-[a-z0-9_-]*)(?:`|[ \t]*\\(|[ \t]+--)")
 
 // profileHasIdentifier matches the profile_has_<name> template facts copy
 // guards on, so validation can reject facts that name no tool.
@@ -279,6 +281,7 @@ func skillRenderVars(held map[string]bool, coordinator bool) map[string]any {
 		}
 	}
 	vars["profile_has_write_tools"] = held[writeToolMarker] || held[ReachCommandMutation]
+	vars["profile_command_mutation"] = held[ReachCommandMutation]
 	vars["is_coordinator"] = coordinator
 	vars["has_git"] = true
 	vars["root_count"] = 1
@@ -435,6 +438,13 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 			if skill.UserProvided {
 				continue
 			}
+			// Runtime and the contract matrix only offer a skill to readers
+			// whose tools cover its rendered body (SkillToolsOffered), so
+			// validation checks the same eligibility set rather than demanding
+			// every skill render clean for every profile.
+			if !SkillToolsOffered(skill, held) {
+				continue
+			}
 			problems = append(problems, skillReachProblems(c, lang, agent, skill, held, vars)...)
 		}
 	}
@@ -544,12 +554,14 @@ var fallbackStockCatalog = sync.OnceValue(func() *Catalog {
 	return c
 })
 
-// SkillToolsOffered reports whether offered covers every tool the skill's
-// rendered body names and satisfies sk's disjunctive requirement: when
+// SkillToolsOffered reports whether offered covers every tool, retired
+// operation, and command form the skill's rendered body unconditionally names,
+// and satisfies sk's disjunctive requirement: when
 // `metadata.paintedwolf.any_of_tools` names tools, at least one member must be
-// offered. The body renders through pongoplain with the offered-tool template
-// vars, so guarded branches for tools the reader lacks do not count against
-// reachability. User-provided skills are not restricted.
+// offered or reachable as a command program. The body renders through
+// pongoplain with the offered-tool template vars, so guarded branches for
+// tools the reader lacks do not count against reachability. User-provided
+// skills are not restricted.
 func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 	if sk.UserProvided {
 		return true
@@ -559,13 +571,10 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 		return true
 	}
 	anyOf := sk.AnyOfTools()
-	for _, tool := range NamedTools(c, renderSkillBody(sk, offered)) {
-		if offered[tool] {
-			continue
-		}
-		// any_of members are individually optional; the disjunction below
-		// decides usability.
-		if !slices.Contains(anyOf, tool) {
+	// any_of members are individually optional in the body scan; the
+	// disjunction below decides usability.
+	for _, name := range UnreachableNames(c, renderSkillBody(sk, offered), offered) {
+		if !slices.Contains(anyOf, name) {
 			return false
 		}
 	}

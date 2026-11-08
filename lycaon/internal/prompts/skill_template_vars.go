@@ -29,12 +29,12 @@ type SkillSurfaceVarsInput struct {
 // coordinator path scopes and policy for coordinator profiles, profile
 // capability vars for every other reader.
 func SkillSurfaceTemplateVars(in SkillSurfaceVarsInput) (map[string]any, error) {
-	vars := spawn.PolicyTemplateVars(in.DelegationBudget)
+	vars := spawn.PolicyTemplateVars(defaultDelegationBudget(in.DelegationBudget))
 	spawn.RefreshSizingHintVars(vars)
 	coordinator := in.ProfileID == CoordinatorProfileID
 	setCallerShapeVars(vars, in, coordinator)
 	if coordinator && in.SurfaceID != "" {
-		turn := SurfaceTurn{Loaded: toolNameSet(in.Offered)}
+		turn := SurfaceTurn{Loaded: coordinatorSurfaceLoaded(in)}
 		if err := MergeCoordinatorSurfacePathVars(in.SurfaceID, nil, vars, turn); err != nil {
 			return nil, err
 		}
@@ -45,7 +45,7 @@ func SkillSurfaceTemplateVars(in SkillSurfaceVarsInput) (map[string]any, error) 
 	if err != nil {
 		return nil, err
 	}
-	surface, err := LoadAgentToolSurface(in.ProfileID, in.Offered, nil, SurfaceTurn{}, profiles)
+	surface, err := LoadAgentToolSurface(in.ProfileID, in.Offered, nil, SurfaceTurn{Loaded: toolNameSet(in.Offered)}, profiles)
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +54,41 @@ func SkillSurfaceTemplateVars(in SkillSurfaceVarsInput) (map[string]any, error) 
 	}
 	setCallerShapeVars(vars, in, coordinator)
 	return vars, nil
+}
+
+// defaultDelegationBudget fills zero fields with the host default so a caller
+// that omits sizing facts does not render 0 budgets into skill copy.
+func defaultDelegationBudget(budget spawn.WorkerToolBudget) spawn.WorkerToolBudget {
+	def := spawn.DefaultWorkerToolBudget()
+	if budget.Default == 0 {
+		budget.Default = def.Default
+	}
+	if budget.Min == 0 {
+		budget.Min = def.Min
+	}
+	if budget.Max == 0 {
+		budget.Max = def.Max
+	}
+	return budget
+}
+
+// coordinatorSurfaceLoaded marks every tool the surface can reach as loaded:
+// the caller's offered set plus the surface floor and its full loadable set.
+// Skill copy renders against the whole addressable set so deferred tools do not
+// blank instructions before request_tools runs, matching the contract matrix.
+func coordinatorSurfaceLoaded(in SkillSurfaceVarsInput) map[string]bool {
+	loaded := toolNameSet(in.Offered)
+	if floor, err := LoadCoordinatorSurfaceFloor(in.SurfaceID); err == nil {
+		for _, name := range floor {
+			loaded[name] = true
+		}
+	}
+	if loadable, err := LoadCoordinatorSurfaceLoadable(in.SurfaceID); err == nil {
+		for _, name := range loadable {
+			loaded[name] = true
+		}
+	}
+	return loaded
 }
 
 // setCallerShapeVars writes the caller facts surface merges must not clobber.
