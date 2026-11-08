@@ -343,13 +343,7 @@ func toolViewNames(views []AgentToolArgView) []string {
 
 // ProfileMutationCapable reports whether a surface can change the tree.
 func ProfileMutationCapable(data AgentToolSurfaceData) bool {
-	enabled := enabledToolSet(data.Tools)
-	for _, t := range data.Requestable {
-		name := strings.TrimSpace(t.Name)
-		if name != "" {
-			enabled[name] = true
-		}
-	}
+	enabled := toolNameSet(append(toolViewNames(data.Tools), requestableToolNames(data.Requestable)...))
 	if mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation); err == nil && data.CommandEffects != 0 && !data.CommandEffects.Allows(mutation) {
 		delete(enabled, "command")
 	}
@@ -358,11 +352,7 @@ func ProfileMutationCapable(data AgentToolSurfaceData) bool {
 
 // ToolNamesMutationCapable reports whether a tool set can change the project tree.
 func ToolNamesMutationCapable(names []string) bool {
-	enabled := make(map[string]bool, len(names))
-	for _, name := range names {
-		enabled[strings.TrimSpace(name)] = true
-	}
-	return toolSetMutationCapable(enabled)
+	return toolSetMutationCapable(toolNameSet(names))
 }
 
 // CoordinatorSurfaceMutationCapable reports whether a coordinator surface can mutate the tree.
@@ -371,15 +361,8 @@ func CoordinatorSurfaceMutationCapable(surfaceID string) bool {
 	if err != nil {
 		return false
 	}
-	enabled := make(map[string]bool, len(row.Floor)+len(row.LoadableTools()))
-	for _, name := range row.Floor {
-		enabled[strings.TrimSpace(name)] = true
-	}
-	for _, name := range row.LoadableTools() {
-		enabled[strings.TrimSpace(name)] = true
-	}
-	effects, err := toolcontract.NewCommandEffects(row.CommandEffects...)
-	if err == nil && effects != 0 {
+	enabled := toolNameSet(append(append([]string(nil), row.Floor...), row.LoadableTools()...))
+	if effects, err := toolcontract.NewCommandEffects(row.CommandEffects...); err == nil && effects != 0 {
 		if mutation, mErr := toolcontract.NewCommandEffects(toolcontract.CommandMutation); mErr == nil && !effects.Allows(mutation) {
 			delete(enabled, "command")
 		}
@@ -426,14 +409,13 @@ func ScopeAllowsCommandMutation(scopeID string) bool {
 		return true
 	}
 	for _, p := range profiles {
-		if p.ID != scopeID {
-			continue
+		if p.ID == scopeID {
+			if p.CommandEffects == 0 {
+				return true
+			}
+			mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+			return err == nil && p.CommandEffects.Allows(mutation)
 		}
-		if p.CommandEffects == 0 {
-			return true
-		}
-		mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
-		return err == nil && p.CommandEffects.Allows(mutation)
 	}
 	return true
 }
@@ -445,13 +427,7 @@ func ApplyReadOnlyCommandEffects(offered, requestable []string, into map[string]
 		return
 	}
 	loadNativeToolFamilies()
-	enabled := make(map[string]bool, len(offered)+len(requestable))
-	for _, name := range offered {
-		enabled[strings.TrimSpace(name)] = true
-	}
-	for _, name := range requestable {
-		enabled[strings.TrimSpace(name)] = true
-	}
+	enabled := toolNameSet(append(append([]string(nil), offered...), requestable...))
 	delete(enabled, "command")
 	offeredSet := toolNameSet(offered)
 	into["profile_mutation_capable"] = toolSetMutationCapable(enabled)
@@ -486,26 +462,33 @@ func toolSetMutationCapable(enabled map[string]bool) bool {
 	return false
 }
 
-// AgentMutationCapable resolves an agent's mutation capability.
-func AgentMutationCapable(agentType string) (capable bool, ok bool) {
+func loadAgentSurfaceForCheck(agentType string) (AgentToolSurfaceData, []sandbox.ToolProfile, string, bool) {
 	agentType = strings.TrimSpace(agentType)
 	if agentType == "" {
-		return false, false
+		return AgentToolSurfaceData{}, nil, "", false
 	}
 	profileID, err := ToolProfileForAgent(agentType)
 	if err != nil {
-		return false, false
+		return AgentToolSurfaceData{}, nil, "", false
 	}
 	profiles, err := sandbox.LoadToolProfiles()
 	if err != nil {
-		return false, false
+		return AgentToolSurfaceData{}, nil, "", false
 	}
 	surface, err := LoadAgentToolSurface(profileID, nil, nil, SurfaceTurn{}, profiles)
 	if err != nil {
+		return AgentToolSurfaceData{}, profiles, profileID, false
+	}
+	return surface, profiles, profileID, true
+}
+
+// AgentMutationCapable resolves an agent's mutation capability.
+func AgentMutationCapable(agentType string) (capable bool, ok bool) {
+	surface, _, _, ok := loadAgentSurfaceForCheck(agentType)
+	if !ok {
 		return false, false
 	}
-	capable = ProfileMutationCapable(surface)
-	return capable, true
+	return ProfileMutationCapable(surface), true
 }
 
 // ToolProfileMutationCapable reports ProfileMutationCapable for one tool profile.
@@ -514,67 +497,36 @@ func ToolProfileMutationCapable(profile sandbox.ToolProfile) bool {
 		return false
 	}
 	surface, err := LoadAgentToolSurface(profile.ID, nil, nil, SurfaceTurn{}, []sandbox.ToolProfile{profile})
-	if err != nil {
-		return false
-	}
-	return ProfileMutationCapable(surface)
+	return err == nil && ProfileMutationCapable(surface)
 }
 
 // ProfileSurveysProjectTree reports whether a surface can survey the tree.
 func ProfileSurveysProjectTree(data AgentToolSurfaceData) bool {
-	enabled := enabledToolSet(data.Tools)
-	for _, t := range data.Requestable {
-		name := strings.TrimSpace(t.Name)
-		if name != "" {
-			enabled[name] = true
-		}
-	}
+	enabled := toolNameSet(append(toolViewNames(data.Tools), requestableToolNames(data.Requestable)...))
 	return len(orderedEnabledTools(surveyToolDisplayOrder, enabled)) > 0
 }
 
 // AgentSurveysProjectTree resolves an agent's tree-survey capability.
 func AgentSurveysProjectTree(agentType string) (surveys bool, ok bool) {
-	agentType = strings.TrimSpace(agentType)
-	if agentType == "" {
+	surface, _, _, ok := loadAgentSurfaceForCheck(agentType)
+	if !ok {
 		return false, false
 	}
-	profileID, err := ToolProfileForAgent(agentType)
-	if err != nil {
-		return false, false
-	}
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return false, false
-	}
-	surface, err := LoadAgentToolSurface(profileID, nil, nil, SurfaceTurn{}, profiles)
-	if err != nil {
-		return false, false
-	}
-	surveys = ProfileSurveysProjectTree(surface)
-	return surveys, true
+	return ProfileSurveysProjectTree(surface), true
 }
 
 // AgentRunsWithoutWorkspace accepts agents with no tree capability.
 func AgentRunsWithoutWorkspace(agentType string) bool {
 	capable, okCap := AgentMutationCapable(agentType)
 	surveys, okSur := AgentSurveysProjectTree(agentType)
-	if !okCap || !okSur {
-		return true
-	}
-	return !capable && !surveys
+	return !okCap || !okSur || (!capable && !surveys)
 }
 
 // KeepSpawnAgentOnEmptyRepo filters survey-only workers from empty projects.
 func KeepSpawnAgentOnEmptyRepo(agentType string) bool {
 	capable, okCap := AgentMutationCapable(agentType)
 	surveys, okSur := AgentSurveysProjectTree(agentType)
-	if !okCap || !okSur {
-		return true
-	}
-	if capable {
-		return true
-	}
-	return !surveys
+	return !okCap || !okSur || capable || !surveys
 }
 
 func verifyToolsForCheck(enabled map[string]bool, commandMutates bool) []string {
@@ -601,16 +553,8 @@ func scanDrilldownToolsForCheck(enabled map[string]bool) []string {
 // AgentFetchesURLs resolves an agent's URL retrieval capability.
 func AgentFetchesURLs(agentType string) (fetches bool, ok bool) {
 	loadNativeToolFamilies()
-	agentType = strings.TrimSpace(agentType)
-	if agentType == "" {
-		return false, false
-	}
-	profileID, err := ToolProfileForAgent(agentType)
-	if err != nil {
-		return false, false
-	}
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
+	_, profiles, profileID, _ := loadAgentSurfaceForCheck(agentType)
+	if profileID == "" {
 		return false, false
 	}
 	for _, p := range profiles {
@@ -619,11 +563,10 @@ func AgentFetchesURLs(agentType string) (fetches bool, ok bool) {
 		}
 		for _, tool := range nativeWebResearchTools {
 			if p.ToolAllowed(tool) {
-				fetches = true
-				break
+				return true, true
 			}
 		}
-		return fetches, true
+		return false, true
 	}
 	return false, false
 }
@@ -649,11 +592,10 @@ func progressGatedOfferedTools(enabled map[string]bool, commandMutates bool) []s
 
 func hasToolFamily(enabled map[string]bool, family string) bool {
 	for name, on := range enabled {
-		if !on {
-			continue
-		}
-		if got, ok := toolcontract.FamilyOf(name); ok && got == family {
-			return true
+		if on {
+			if got, ok := toolcontract.FamilyOf(name); ok && got == family {
+				return true
+			}
 		}
 	}
 	return false
@@ -662,9 +604,6 @@ func hasToolFamily(enabled map[string]bool, family string) bool {
 func mergeOfferedToolGuidance(offered []string, into map[string]any) {
 	loadNativeToolFamilies()
 	set := toolNameSet(offered)
-	for name := range set {
-		into["profile_has_"+name] = true
-	}
 	commandMutates, ok := into["profile_command_mutation"].(bool)
 	if !ok {
 		commandMutates = set["command"]

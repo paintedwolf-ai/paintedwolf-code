@@ -54,10 +54,9 @@ func profileAgentForProfile(t *testing.T, profileID string) string {
 		return "path-explorer"
 	case "web_research":
 		return "web-researcher"
-	default:
-		t.Fatalf("no fixture agent for profile %q", profileID)
-		return ""
 	}
+	t.Fatalf("no fixture agent for profile %q", profileID)
+	return ""
 }
 
 func TestToolProfileCapabilityVarsImplement(t *testing.T) {
@@ -187,17 +186,11 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 }
 
 func TestAgentMutationCapableByCharacteristic(t *testing.T) {
-	capable, ok := prompts.AgentMutationCapable("implementer")
-	if !ok || !capable {
+	if capable, ok := prompts.AgentMutationCapable("implementer"); !ok || !capable {
 		t.Fatalf("implementer mutation capable = %v ok=%v", capable, ok)
 	}
-	capable, ok = prompts.AgentMutationCapable("repo-researcher")
-	if !ok || capable {
+	if capable, ok := prompts.AgentMutationCapable("repo-researcher"); !ok || capable {
 		t.Fatalf("repo-researcher mutation capable = %v ok=%v", capable, ok)
-	}
-	capable, ok = prompts.AgentMutationCapable("implementer")
-	if !ok || !capable {
-		t.Fatalf("implementer mutation capable = %v ok=%v", capable, ok)
 	}
 }
 
@@ -361,7 +354,7 @@ func TestHostRunnerToolOrderIncludesNativeTerminalThenArgv(t *testing.T) {
 func TestMergeProfileRequestableVars(t *testing.T) {
 	prompts.MergeProfileRequestableVars("coordinator", []string{"command", "request_tools"}, nil)
 
-	for _, profile := range []string{"coordinator", "implementer", "implement", "verify"} {
+	for _, profile := range []string{"coordinator", "implementer", "implement", "implement_investigate"} {
 		vars := map[string]any{}
 		prompts.MergeProfileRequestableVars(profile, []string{"command", "request_tools"}, vars)
 		canRequest, _ := vars["profile_can_request"].(map[string]bool)
