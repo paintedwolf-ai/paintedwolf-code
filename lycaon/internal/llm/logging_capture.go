@@ -91,6 +91,7 @@ func captureLLMStream(ctx context.Context, providerID string, profile providerpr
 		var content strings.Builder
 		var toolCalls []api.ToolCall
 		var streamErr error
+		var abandoned bool
 		var reasoning reasoningCapture
 		for chunk := range ch {
 			if chunk.ResetAttempt() {
@@ -126,6 +127,7 @@ func captureLLMStream(ctx context.Context, providerID string, profile providerpr
 			}
 			if !modelcall.SendChunk(ctx, out, chunk) {
 				// Drain abandoned streams before recording the partial response.
+				abandoned = true
 				modelcall.DrainStream(ch)
 				break
 			}
@@ -139,7 +141,7 @@ func captureLLMStream(ctx context.Context, providerID string, profile providerpr
 			Present:                    usage.Present,
 			Incomplete:                 usage.Incomplete,
 			CacheCreation1HInputTokens: usage.CacheCreation1HInputTokens,
-		}, start, streamErr != nil || ctx.Err() != nil)
+		}, start, streamErr != nil || abandoned)
 		logStreamCapture(providerID, req, start, ttftMs, usage, summary, streamErr)
 	}()
 	return out, nil
