@@ -112,6 +112,30 @@ func rejectedCommandProgram(result *api.ToolResult) (*api.CommandProgramReceipt,
 	return program, true
 }
 
+func commandProgramHadEffects(program *api.CommandProgramReceipt) bool {
+	if program == nil {
+		return false
+	}
+	for _, activity := range program.Activities {
+		if activity.CompletedEffects > 0 || activity.UncertainEffects > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func commandProgramSubject(program *api.CommandProgramReceipt) string {
+	if program == nil {
+		return ""
+	}
+	for _, activity := range program.Activities {
+		if subject := strings.TrimSpace(activity.Subject); subject != "" {
+			return subject
+		}
+	}
+	return ""
+}
+
 func rejectedChange(result *api.ToolResult) bool {
 	if program, ok := rejectedCommandProgram(result); ok {
 		return program.StopCode == "PROGRESS_MISSING" || program.StopCode == "PROGRESS_ITEM_NOT_CLOSED" || program.StopCode == "PROGRESS_RECONCILIATION_REQUIRED"

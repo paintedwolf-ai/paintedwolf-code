@@ -124,6 +124,7 @@ func newExecutionStateRow(result *api.ToolResult, age int, declared string) exec
 	if program, ok := rejectedCommandProgram(result); ok {
 		row.Status = string(api.InvocationStatusRejected)
 		row.completed = false
+		row.Invoked = commandProgramHadEffects(program)
 		if row.Code == "" {
 			row.Code = program.StopCode
 		}
@@ -132,6 +133,9 @@ func newExecutionStateRow(result *api.ToolResult, age int, declared string) exec
 	row.rawCommand, _ = result.ToolArgs["command"].(string)
 	row.rawCwd, _ = result.ToolArgs["cwd"].(string)
 	row.Path, row.Command, row.Cwd = quotedExecutionValue(row.rawPath), quotedExecutionValue(row.rawCommand), quotedExecutionValue(row.rawCwd)
+	if row.Command == "" && result.CommandProgram != nil {
+		row.Command = quotedExecutionValue(commandProgramSubject(result.CommandProgram))
+	}
 	requested, _ := result.ToolArgs["verification"].(bool)
 	row.check = receipt.Tool == "verify" || requested
 	if receipt.Tool == "verify" && row.rawCommand == "" && result.ToolArgs["pipeline"] == nil {
@@ -204,7 +208,9 @@ func withoutRetiredOperations(operations []executionStateRow, completed executio
 	for _, row := range operations {
 		samePath := isChangeTool(completed.Tool) && isChangeTool(row.Tool) && row.rawPath != "" && row.rawPath == completed.rawPath
 		sameOperation := completed.ArgsDigest != "" && row.Tool == completed.Tool && row.ArgsDigest == completed.ArgsDigest
-		if samePath || sameOperation {
+		sameCommand := row.Tool == "command" && completed.Tool == "command" && row.rawCwd == completed.rawCwd &&
+			(row.Command != "" && row.Command == completed.Command || resolvesExecution(row, completed))
+		if samePath || sameOperation || sameCommand {
 			row.State = reminderResolved
 			resolved = append(resolved, row)
 			continue
