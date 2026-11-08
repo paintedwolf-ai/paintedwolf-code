@@ -91,11 +91,6 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 		return nil, err
 	}
 	tail = append(tail, policies...)
-	if block, ok := e.skillProcedureInject(ctx, sess, frame.Machine.ProfileID); ok {
-		tail = append(tail, block)
-	} else if block, ok := e.skillPointerInject(ctx, sess, frame.Machine.ProfileID); ok {
-		tail = append(tail, block)
-	}
 
 	if coordinator {
 		if block, ok := e.prependTransitionInject(ctx, sess, frame, history, turn); ok {

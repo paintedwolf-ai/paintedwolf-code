@@ -83,9 +83,10 @@ func (m *Service) loadViewHistory(ctx context.Context, sess *api.Session, view *
 		}
 	}
 	splice := planViewSplice(tail, view, m.cutoffs.holdWorkingSet(m.cutoffKey(ctx, sess, cfg, view), sess.ID, tail, activeTurnAllocation(cfg)))
+	viewBounds := indexDraftExchanges(view.Messages)
 	var out []api.Message
 	for _, row := range view.Messages {
-		if row.Ord <= 0 || row.Role != api.MessageRoleAssistant || row.CompactedChunk != nil || row.Ord > splice.replacedThrough {
+		if row.Ord <= 0 || row.Role != api.MessageRoleAssistant || row.CompactedChunk != nil || viewBounds.maxOrdFor(row) > splice.replacedThrough {
 			continue
 		}
 		canonical, err := m.store.GetMessage(ctx, sess.ID, row.ID)
@@ -192,9 +193,11 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 		}
 	}
 	splice := planViewSplice(history, view, m.cutoffs.holdWorkingSet(m.cutoffKey(ctx, sess, cfg, view), sess.ID, history, activeTurnAllocation(cfg)))
+	bounds := indexDraftExchanges(history)
+	viewBounds := indexDraftExchanges(view.Messages)
 	var head, older, within []api.Message
 	for _, msg := range view.Messages {
-		if msg.Ord > splice.replacedThrough || splice.intentIdx >= 0 && msg.Ord == splice.intentOrd {
+		if viewBounds.maxOrdFor(msg) > splice.replacedThrough || splice.intentIdx >= 0 && msg.Ord == splice.intentOrd {
 			continue
 		}
 		if canonical, ok := byID[msg.ID]; ok {
@@ -224,7 +227,7 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 		if i == splice.intentIdx || isCompactionHeadRow(msg, viewByID) {
 			continue
 		}
-		if msg.Ord > 0 && msg.Ord <= splice.replacedThrough {
+		if msg.Ord > 0 && bounds.maxOrdFor(msg) <= splice.replacedThrough {
 			continue
 		}
 		if viewMsg, ok := viewByID[msg.ID]; ok && viewMsg.CompactedChunk != nil {
@@ -246,7 +249,7 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 			out = append(out, history[splice.intentIdx])
 		}
 	}
-	return append(append(append(out, within...), notice...), tail...)
+	return api.FilterPromptHistory(append(append(append(out, within...), notice...), tail...))
 }
 
 // withCurrentRequest restores the active human opener when it predates the tail.

@@ -72,3 +72,38 @@ func TestUnreadableEvidenceCopyNamesNoCitationDefect(t *testing.T) {
 		}
 	}
 }
+
+// Withheld mid-turn note copy states that tools in the response already ran so
+// the model continues from their results rather than re-running completed calls.
+func TestWithheldMidTurnNoteCopyStatesToolsAlreadyRan(t *testing.T) {
+	cfg, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load stock policy", err)
+	facts := map[string]any{
+		"paintedwolf.mid_turn_citations_required": true,
+		"paintedwolf.observed_handles_sample":     "task#1",
+		"paintedwolf.offender_sample":             "bad#1",
+	}
+	for _, code := range []string{
+		guidance.MidTurnNoteUngroundedCode,
+		guidance.MidTurnNoteHandleUngroundCode,
+		guidance.MidTurnNoteURLOnlyCode,
+		guidance.MidTurnNoteArtifactCode,
+		guidance.MidTurnNoteSyntaxCode,
+		guidance.MidTurnNoteEmbedCode,
+		guidance.MidTurnNoteImageCode,
+		guidance.MidTurnNoteEvidenceUnreadable,
+	} {
+		entry, ok := cfg.HintCodes[code]
+		if !ok {
+			t.Fatalf("%s missing from stock policy", code)
+		}
+		var body strings.Builder
+		for _, field := range []string{entry.What, entry.Cause, entry.Why, entry.Fix, entry.Instead} {
+			body.WriteString(oarcore.RenderCopy(field, facts) + "\n")
+		}
+		rendered := body.String()
+		if !strings.Contains(rendered, "already ran") || !strings.Contains(rendered, "do not re-run") {
+			t.Errorf("%s omits completed-tool guidance:\n%s", code, rendered)
+		}
+	}
+}
