@@ -4,27 +4,34 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // factValues closes the literal vocabulary of string facts; facts absent here
 // accept any literal.
 var factValues = map[string]map[string]struct{}{
-	"batch_phase": setOf("pre_dispatch", "dispatch", "integrate", "synthesize", "closed"),
-	"phase":       setOf("plan", "execute", "verify", "report", "completed", "review", "drafting", "building", "approved", "changed", "ready", "rejected"),
-	"surface": setOf(
-		"implement_routing", "implement_dispatch", "implement_synthesis",
-		"orchestrate_plan", "recon_reconcile", "implement_overlay_promote",
-		"implement_investigate", "implement_park", "workflow_compose",
-		"plan_stub", "plan_research", "plan_approve", "plan_review",
-		"survey_execute", "review_adjudicate", "decision_adjudicate",
-		"await_user", "plan_execute", "observe_investigate", "observe_plan",
-		"observe_synthesis", "no_folder_allowlist",
-	),
+	"batch_phase":   setOf("pre_dispatch", "dispatch", "integrate", "synthesize", "closed"),
+	"phase":         setOf("plan", "execute", "verify", "report", "completed", "review", "drafting", "building", "approved", "changed", "ready", "rejected"),
+	"surface":       surfaceFactVocabulary(),
 	"scope_mode":    setOf("read", "write"),
 	"status":        setOf("queued", "running", "completed", "failed", "canceled", "aborted"),
 	"promote_order": setOf("independent", "clean_if_first", "sequential", "clean_after"),
 	"profile":       setOf("coordinator", "worker", "implementer", "reviewer"),
+}
+
+func surfaceFactVocabulary() map[string]struct{} {
+	catalog, err := surfacecatalog.Load()
+	if err != nil {
+		return nil
+	}
+	ids := catalog.SurfaceIDs()
+	out := make(map[string]struct{}, len(ids)+1)
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	out[surfacecatalog.NoFolderAllowlistID] = struct{}{}
+	return out
 }
 
 const rejectionCodeFact = "rejection_code"

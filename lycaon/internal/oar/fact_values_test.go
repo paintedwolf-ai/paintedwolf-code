@@ -2,7 +2,23 @@ package oar
 
 import (
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 )
+
+func TestValidateConditionFactValuesCoversEveryCoordinatorSurface(t *testing.T) {
+	t.Parallel()
+	catalog, err := surfacecatalog.Load()
+	if err != nil {
+		t.Fatalf("load coordinator surface catalog: %v", err)
+	}
+	for _, id := range append(catalog.SurfaceIDs(), surfacecatalog.NoFolderAllowlistID) {
+		expr := `paintedwolf.surface == "` + id + `"`
+		if err := ValidateConditionFactValues(expr, nil); err != nil {
+			t.Errorf("surface %q rejected by ValidateConditionFactValues: %v", id, err)
+		}
+	}
+}
 
 func TestValidateConditionFactValuesValid(t *testing.T) {
 	t.Parallel()
