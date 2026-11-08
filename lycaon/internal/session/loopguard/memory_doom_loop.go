@@ -193,6 +193,14 @@ func (g *MemoryDoomLoopGuard) RecordAttempt(
 		return fmt.Errorf("record tool attempt: response id required")
 	}
 	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
+		if mutated && failure == nil {
+			g.mu.Lock()
+			effects, _ := g.effects.Load(sessionID)
+			effects.seq++
+			effects.key = "terminal_send"
+			g.effects.Store(sessionID, effects)
+			g.mu.Unlock()
+		}
 		return nil
 	}
 	if err := g.refreshReviewIntent(ctx, sessionID); err != nil {
