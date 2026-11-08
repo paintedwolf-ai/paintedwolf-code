@@ -272,3 +272,44 @@ func TestCitationRepairChoicesShowUsableCoordinates(t *testing.T) {
 		t.Fatalf("command#1 = %q present=%v, want a choice with no coordinate", got, ok)
 	}
 }
+
+func TestCitationRepairOffersBareHandleForHandleOnlyObservations(t *testing.T) {
+	ev := CloseoutEvidence{Ledger: evidence.AssembleLedger([]evidence.Record{
+		{Handle: "command#1", Kind: "command", Shape: evidence.ShapeCommand, SourceTool: "command"},
+		{Handle: "command#2", Kind: "command", Shape: evidence.ShapeCommand, SourceTool: "command"},
+	})}
+	for _, tc := range []struct {
+		name     string
+		markdown string
+		wantTok  string
+		wantUse  string
+	}{
+		{
+			name:     "path_coordinate_with_only_command_handles",
+			markdown: "Verified unit tests [tests/test_game.py:1].",
+			wantTok:  "tests/test_game.py:1",
+			wantUse:  "command#2",
+		},
+		{
+			name:     "handle_coordinate_on_command_record",
+			markdown: "Verified unit tests [command#1:5].",
+			wantTok:  "command#1:5",
+			wantUse:  "command#1",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			draft, resolved := repairDraft(t, tc.markdown, ev)
+			data := CloseoutRepairHintData(evidence.CitationRoots{}, draft, resolved, ev, []string{tc.wantTok})
+			targets := data["repair_targets"].([]map[string]any)
+			if len(targets) != 1 {
+				t.Fatalf("targets = %+v, want 1 target", targets)
+			}
+			if got := targets[0]["use"]; got != tc.wantUse {
+				t.Fatalf("target use = %v, want %q (target=%+v)", got, tc.wantUse, targets[0])
+			}
+			if got := targets[0]["worker_output"]; got != false {
+				t.Fatalf("target worker_output = %v, want false", got)
+			}
+		})
+	}
+}

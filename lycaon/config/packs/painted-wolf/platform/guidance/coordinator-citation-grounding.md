@@ -7,7 +7,7 @@ Rejected: {{ offenders_sample }}
 {% for target in repair_targets %}- {{ target.id }}: `{{ target.token }}` ({{ target.defect }}){% if target.web_link %}, a web link: give an observed URL{% endif %}{% if target.candidates %}; more than one observed path ends this way, so name one: {{ target.candidates }}{% endif %}{% if target.use %}; sendable: `[cite: {{ target.id }} => {{ target.use }}]`{% endif %}{% if target.worker_output %}, because that worker's output does not hold these lines and you cannot re-read for it{% endif %}
 {% endfor %}{% endif %}
 A coordinate from a pipeline holds only its `command#` handle: re-read with `cat -n` or `grep -n`, quote the line as `[command#3 "text"]`, or cite the bare handle.
-Send one directive per citation and nothing else, such as `[cite: c1 => path/to/file:42]`, `[cite: c1 => path/to/file]`, or `[cite: c2 => <https://example.test/observed-page>]` for a web link. A link keeps its label. Or return the same answer with only its citations corrected.
+Send one directive per citation and nothing else, such as `[cite: c1 => path/to/file:42]`, `[cite: c1 => path/to/file]`, `[cite: c1 => command#1]`, or `[cite: c2 => <https://example.test/observed-page>]` for a web link. A link keeps its label. Or return the exact retained answer text with only its citations corrected.
 {% if document_citation_targets %}Report fence citations to replace:
 {% for target in document_citation_targets %}- {{ target }}
 {% endfor %}
