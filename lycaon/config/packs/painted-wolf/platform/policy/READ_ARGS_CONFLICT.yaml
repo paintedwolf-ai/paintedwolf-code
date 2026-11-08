@@ -13,15 +13,18 @@ requires:
   - paintedwolf.rejection_code
   - paintedwolf.detail
   - paintedwolf.conflict
+  - paintedwolf.can_command
 when: paintedwolf.rejection_code == "READ_ARGS_CONFLICT"
 effect: block
 copy:
-  what: 'read received mutually exclusive or conflicting arguments: {{ paintedwolf.detail }}.'
-  cause: read requires path with each shape. symbol cannot combine with offset, limit, ranges, or mode; ranges
-    cannot combine with offset, limit, or mode.
-  why: One addressing shape determines which content the read selects.
-  fix: Keep the intended path and choose symbol, ranges, or an ordinary read according to the schema. Remove
-    only the conflicting selectors reported above; preserve the intended coverage.
+  what: 'The read operation received mutually exclusive or conflicting arguments: {{ paintedwolf.detail }}.'
+  cause: One addressing shape selects the content. Symbol anchors cannot combine with line ranges or window
+    bounds; line ranges cannot combine with window bounds.
+  why: Mixed addressing leaves no single content window to deliver, so the call is refused rather than guessed.
+  fix: '{% if paintedwolf.can_command %}Keep the intended path and address it one way inside command: `rg -n`
+    for a symbol, `sed -n ''A,Bp''` for a range, `head`/`tail` for a window.{% else %}Keep the intended path
+    and choose one addressing shape according to the schema; remove only the conflicting selectors reported
+    above; preserve the intended coverage.{% endif %}'
   instead: Branch on Code; fix args and retry once
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool
@@ -33,3 +36,12 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
+- id: command-leg
+  vars:
+    can_command: true
+    detail: conflict
+    path: src/main.go
+    profile: coordinator
+    tool: command
+  expect_contains:
+  - '`sed -n'

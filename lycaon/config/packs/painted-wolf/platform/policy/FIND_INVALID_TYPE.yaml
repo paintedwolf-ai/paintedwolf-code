@@ -12,13 +12,14 @@ requires:
     - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.type
+    - paintedwolf.native_operation
 when: paintedwolf.rejection_code == "FIND_INVALID_TYPE"
 effect: block
 copy:
-  what: find received invalid type {{ paintedwolf.type }} — want file, dir, or any.
-  cause: The type filter must be one of file, dir, or any.
+  what: '{% if paintedwolf.native_operation %}find received invalid -type value {{ paintedwolf.type }} — want f (file) or d (directory).{% else %}find received invalid type {{ paintedwolf.type }} — want file, dir, or any.{% endif %}'
+  cause: '{% if paintedwolf.native_operation %}The -type filter takes kind codes: f for files, d for directories.{% else %}The type filter must be one of file, dir, or any.{% endif %}'
   why: Structured find filters keep walk semantics predictable under sandbox caps.
-  fix: Retry find with type file, dir, or any (or omit type).
+  fix: '{% if paintedwolf.native_operation %}Retry find with -type f for files or -type d for directories, or omit -type.{% else %}Retry find with type file, dir, or any (or omit type).{% endif %}'
   instead: Branch on Code; fix the type argument
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:find
@@ -30,3 +31,12 @@ x-paintedwolf-scenarios:
       profile: explore_readonly
       tool: find
       type: symlink
+  - id: command-leg
+    vars:
+      native_operation: find
+      path: src/
+      profile: explore_readonly
+      tool: command
+      type: link
+    expect_contains:
+      - '-type f'

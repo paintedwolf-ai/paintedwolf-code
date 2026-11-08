@@ -16,7 +16,7 @@ requires:
 when: paintedwolf.rejection_code == "STRUCTURAL_APPLY_FAILED"
 effect: block
 copy:
-  what: code_rewrite could not prepare a rewrite for {{ paintedwolf.path }}; that file was not changed.
+  what: The structural rewrite could not prepare a rewrite for {{ paintedwolf.path }}; that file was not changed.
   cause: '{{ paintedwolf.rejection_reason }}'
   why: An incomplete parse is not evidence that a file has no matches. Multi-file results retain blocked paths separately
     from applied changes.

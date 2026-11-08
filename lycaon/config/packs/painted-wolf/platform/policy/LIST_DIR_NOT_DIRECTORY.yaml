@@ -13,16 +13,16 @@ requires:
   - paintedwolf.operation
   - paintedwolf.rejection_code
   - paintedwolf.path
-  - paintedwolf.can_read
+  - paintedwolf.can_command
 when: paintedwolf.rejection_code == "LIST_DIR_NOT_DIRECTORY"
 effect: block
 copy:
-  what: list_dir path {{ paintedwolf.path }} is not a directory.
+  what: The listing path {{ paintedwolf.path }} is not a directory.
   cause: A listing traverses directories; the selected path names a file.
   why: File content and directory membership are separate observations.
-  fix: '{% if paintedwolf.can_read %}Use read for the selected file’s content.{% else %}File content requires
-    a reader offered on the current surface.{% endif %} For directory membership, list the intended parent
-    directory instead.'
+  fix: '{% if paintedwolf.can_command %}Read the selected file’s content with `cat`, `head`, or `sed -n` inside
+    command.{% else %}File content requires a reader offered on the current surface.{% endif %} For directory
+    membership, list the intended parent directory instead.'
   instead: Choose a directory to list, or use an offered file reader
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:list_dir
@@ -33,3 +33,11 @@ x-paintedwolf-scenarios:
     path: docs/README.md
     profile: explore_readonly
     tool: list_dir
+- id: command-leg
+  vars:
+    can_command: true
+    path: docs/README.md
+    profile: explore_readonly
+    tool: command
+  expect_contains:
+  - '`cat`'
