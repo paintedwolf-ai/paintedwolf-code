@@ -3,6 +3,7 @@ package inject
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -387,11 +388,11 @@ func TestRejectedCommandProgramProjectsRejectionAndChecklistPrerequisite(t *test
 	}
 
 	got := projectExecutionState([]api.Message{rejectedCmd}, "")
-	if !got.Recovery || len(got.Operations) != 1 || got.Operations[0].Status != string(api.InvocationStatusRejected) || got.Operations[0].Code != "PROGRESS_MISSING" {
-		t.Fatalf("expected rejected command program in operations and recovery: %+v", got)
+	if !got.Recovery || len(got.Operations) != 1 || got.Operations[0].Status != string(api.InvocationStatusRejected) || got.Operations[0].Code != "PROGRESS_MISSING" || got.Operations[0].Invoked || got.Operations[0].Command != `"mkdir -p tic-tac-toe"` {
+		t.Fatalf("expected pre-execution rejected command program in operations and recovery: %+v", got)
 	}
-	if len(got.Executions) != 1 || got.Executions[0].Status != string(api.InvocationStatusRejected) || got.Executions[0].Code != "PROGRESS_MISSING" {
-		t.Fatalf("expected rejected command program in executions: %+v", got.Executions)
+	if len(got.Executions) != 1 || got.Executions[0].Status != string(api.InvocationStatusRejected) || got.Executions[0].Code != "PROGRESS_MISSING" || got.Executions[0].Invoked {
+		t.Fatalf("expected pre-execution rejected command program in executions: %+v", got.Executions)
 	}
 
 	progressDone := receiptMessage(receiptSpec{
@@ -418,5 +419,51 @@ func TestRejectedCommandProgramProjectsRejectionAndChecklistPrerequisite(t *test
 	gotAfterRetry := projectExecutionState([]api.Message{rejectedCmd, progressDone, retryCmd}, "")
 	if len(gotAfterRetry.Operations) != 0 || gotAfterRetry.Recovery {
 		t.Fatalf("expected identical command retry to resolve rejected command program: %+v", gotAfterRetry)
+	}
+
+	heredoc := "cat <<'EOF' > run_game_capture.py\n" + strings.Repeat("print('line')\n", 30) + "EOF"
+	oversizeReject := receiptMessage(receiptSpec{
+		batch:  "b4",
+		call:   "cmd-3",
+		tool:   "command",
+		digest: "heredoc-1",
+		status: api.InvocationStatusCompleted,
+		args:   map[string]any{"command": heredoc},
+	})
+	oversizeReject.ToolResult.CommandProgram = &api.CommandProgramReceipt{
+		ID:              "prog-2",
+		ParentReceiptID: oversizeReject.ToolResult.Invocation.ID,
+		State:           string(api.InvocationStatusRejected),
+		StopCode:        "PROGRESS_MISSING",
+		Activities: []api.CommandActivity{{
+			Subject: "cat <<EOF ... > run_game_capture.py",
+		}},
+	}
+	gotOversize := projectExecutionState([]api.Message{oversizeReject}, "")
+	wantSubject := quotedExecutionValue("cat <<EOF ... > run_game_capture.py")
+	if len(gotOversize.Operations) != 1 || gotOversize.Operations[0].Command != wantSubject || gotOversize.Operations[0].Invoked {
+		t.Fatalf("expected activity subject fallback on oversize rejected command: %+v", gotOversize.Operations)
+	}
+	oversizeRetry := receiptMessage(receiptSpec{
+		batch:   "b5",
+		call:    "cmd-4",
+		tool:    "command",
+		digest:  "heredoc-2",
+		status:  api.InvocationStatusCompleted,
+		verdict: api.SourceVerdictPassed,
+		args:    map[string]any{"command": heredoc + "\n"},
+	})
+	oversizeRetry.ToolResult.CommandProgram = &api.CommandProgramReceipt{
+		ID:              "prog-3",
+		ParentReceiptID: oversizeRetry.ToolResult.Invocation.ID,
+		State:           string(api.InvocationStatusCompleted),
+		Activities: []api.CommandActivity{{
+			Subject:          "cat <<EOF ... > run_game_capture.py",
+			CompletedEffects: 1,
+		}},
+	}
+	gotAfterOversizeRetry := projectExecutionState([]api.Message{oversizeReject, progressDone, oversizeRetry}, "")
+	if len(gotAfterOversizeRetry.Operations) != 0 || gotAfterOversizeRetry.Recovery {
+		t.Fatalf("expected matching activity subject retry to resolve oversize rejected command: %+v", gotAfterOversizeRetry)
 	}
 }
