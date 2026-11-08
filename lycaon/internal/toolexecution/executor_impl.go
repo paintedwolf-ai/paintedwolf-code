@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
+	"github.com/lycaon/lycaon/internal/argv"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
@@ -162,7 +163,16 @@ func (e *Executor) validateInvocation(
 		return reject
 	}
 	if qualifiedName == "command" {
-		_, parseErr := commandsurface.ParsePlan(args)
+		if reject := validateCommandCaptureArgs(args); reject != nil {
+			return reject
+		}
+		plan, parseErr := commandsurface.ParsePlan(args)
+		if parseErr == nil && hasCommandCaptureFlag(args, "terminal_capture") {
+			parseErr = validateTerminalCapturePlan(plan)
+		}
+		if reject := toolcommand.ArgvShapeObservation(qualifiedName, parseErr); reject != nil {
+			return reject
+		}
 		if reject := toolrejection.CommandSurfaceObservation(qualifiedName, profileID, commandsurface.PrimaryCommandLine(args, nil), args, parseErr); reject != nil {
 			return reject
 		}
@@ -187,6 +197,39 @@ func (e *Executor) validateInvocation(
 		return reject
 	}
 	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)
+}
+
+func hasCommandCaptureFlag(args map[string]any, key string) bool {
+	value, exists := args[key]
+	return exists && value != nil && value != false && value != ""
+}
+
+func validateCommandCaptureArgs(args map[string]any) *toolrejection.ToolReject {
+	if hasCommandCaptureFlag(args, "terminal_capture") {
+		for _, key := range []string{"snapshot_capture", "pipeline", "stdin", "stdin_from", "stdout_to", "stderr_to", "background"} {
+			if hasCommandCaptureFlag(args, key) {
+				return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "terminal_capture_incompatible", "field": key})
+			}
+		}
+	}
+	if hasCommandCaptureFlag(args, "snapshot_capture") {
+		for _, key := range []string{"terminal_capture", "pipeline", "stdin", "stdin_from", "stdout_to", "stderr_to", "background"} {
+			if hasCommandCaptureFlag(args, key) {
+				return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "snapshot_capture_incompatible", "field": key})
+			}
+		}
+	}
+	return nil
+}
+
+func validateTerminalCapturePlan(plan commandsurface.Plan) error {
+	if len(plan.Stages) != 1 {
+		return commandsurface.ErrSequenceUnsupported
+	}
+	if !plan.Stages[0].Streams.Terminal() {
+		return &argv.RedirectionError{Issue: argv.IssueSurfaceUnsupported, Operator: argv.RenderRedirects(plan.Stages[0].Redirects)}
+	}
+	return nil
 }
 
 // definitionFor reads the registry snapshot dispatch will run.
