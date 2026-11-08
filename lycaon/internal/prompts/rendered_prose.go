@@ -77,6 +77,14 @@ func RenderedProseStructureDrift(text string) []string {
 			prev = orderedItem{}
 		}
 	}
+	// A blank line beyond the single final newline is the PC03-009 defect
+	// class: the text ends with a stranded empty line. Two or more trailing
+	// blanks are already reported by the run rule above, so only the
+	// exactly-one-trailing-blank shape lands here, and a fence left open at
+	// EOF keeps its interior literal.
+	if n := len(lines); n >= 2 && !inFence && strings.TrimSpace(lines[n-1]) == "" && strings.TrimSpace(lines[n-2]) != "" {
+		drift = append(drift, fmt.Sprintf("line %d: blank line at EOF (single final newline expected)", n))
+	}
 	return drift
 }
 

@@ -21,8 +21,18 @@ func TestRenderedProseStructureDrift(t *testing.T) {
 			text: "Paragraph.\n\n1. one\n2. two\n",
 		},
 		{
-			name: "one trailing blank line is not a run",
+			name: "one trailing blank line is the PC03-009 defect",
 			text: "Paragraph.\n\n",
+			want: []string{"line 2: blank line at EOF (single final newline expected)"},
+		},
+		{
+			name: "trailing blank after a list is the PC03-009 defect",
+			text: "1. one\n2. two\n\n",
+			want: []string{"line 3: blank line at EOF (single final newline expected)"},
+		},
+		{
+			name: "blank line at EOF inside an open fence stays literal",
+			text: "```\ncode\n\n",
 		},
 		{
 			name: "run of blank lines is reported once",
