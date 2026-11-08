@@ -300,3 +300,83 @@ func TestSmallToLargeReceiverRestoresCanonicalHistory(t *testing.T) {
 		t.Fatalf("expected full canonical restoration on large receiver, got len=%d first=%s", len(largeView), largeView[0].ID)
 	}
 }
+
+func TestBackgroundCompactionSkipsUnsettledLiveDraftTail(t *testing.T) {
+	cfg := compaction.DefaultCompactionConfig()
+	cfg.Enabled = true
+	cfg.ModelContextWindow = 4000
+	cfg.HardCeilingTokens = 2000
+	cfg.TargetTokens = 900
+	cfg.KeepRecentMessages = 2
+	svc, mem := newCompactionManager(t, cfg)
+
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	block := strings.Repeat("word ", 120)
+	var rows []api.Message
+	for i := 1; i <= 16; i++ {
+		role := api.MessageRoleUser
+		if i%2 == 0 {
+			role = api.MessageRoleAssistant
+		}
+		rows = append(rows, api.Message{
+			ID:      fmt.Sprintf("settled-%d", i),
+			Role:    role,
+			Content: fmt.Sprintf("canonical message %d: %s", i, block),
+		})
+	}
+	rows = append(rows,
+		api.Message{
+			ID:          "live-draft",
+			Role:        api.MessageRoleAssistant,
+			Content:     "streaming draft",
+			Visibility:  api.MessageVisibilityInternal,
+			DraftStatus: api.DraftStatusLive,
+		},
+		api.Message{
+			ID:           "draft-nudge",
+			Role:         api.MessageRoleUser,
+			Content:      "guidance",
+			Origin:       api.MessageOriginHost,
+			Authority:    api.ContentAuthoritySystem,
+			Visibility:   api.MessageVisibilityInternal,
+			HostSignalID: "draft-recovery:live-draft:invest-citations",
+		},
+	)
+	testutil.FailErr(t, "append rows with live draft", mem.AppendMessages(t.Context(), sess.ID, rows...))
+
+	svc.Schedule(t.Context(), sess)
+	svc.Wait()
+	testutil.FailErr(t, "drain scheduled synthesis", svc.Runner.WaitContext(t.Context()))
+
+	view, ok, err := mem.GetCompactionView(t.Context(), sess.ID)
+	testutil.FailErr(t, "get compaction view before draft settles", err)
+	if !ok || view == nil {
+		t.Fatal("expected compaction view to be published")
+	}
+	if view.CoveredThroughID != "settled-16" {
+		t.Fatalf("expected compaction view coverage to stop at settled-16, got %s (ord=%d)", view.CoveredThroughID, view.CoveredThroughOrd)
+	}
+
+	committed := api.Message{
+		ID:          "live-draft",
+		Role:        api.MessageRoleAssistant,
+		Content:     "final settled report",
+		Kind:        api.MessageKindCompletionReport,
+		Visibility:  api.MessageVisibilityTranscript,
+		DraftStatus: api.DraftStatusCommitted,
+	}
+	_, err = mem.UpdateMessage(t.Context(), sess.ID, committed.ID, committed)
+	testutil.FailErr(t, "commit live draft", err)
+
+	viewAfter, okAfter, err := mem.GetCompactionView(t.Context(), sess.ID)
+	testutil.FailErr(t, "get compaction view after draft settles", err)
+	if !okAfter || viewAfter == nil {
+		t.Fatal("committing the trailing live draft invalidated the published compaction view")
+	}
+	current, err := mem.CompactionViewCurrent(t.Context(), sess.ID, viewAfter.CoveredThroughOrd, viewAfter.CoveredThroughID, viewAfter.SourceSeq)
+	testutil.FailErr(t, "check compaction view current after draft settles", err)
+	if !current {
+		t.Fatal("expected compaction view to remain current after settling trailing live draft")
+	}
+}
