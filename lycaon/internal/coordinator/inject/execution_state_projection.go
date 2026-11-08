@@ -76,7 +76,7 @@ func projectExecutionState(window []api.Message, declared string) executionState
 			retired = append(retired, resolved...)
 		}
 		if isExecutionTool(result.Tool) {
-			executions = append(executions, row)
+			executions = append(refreshedExecutions(executions, row), row)
 		}
 	}
 	retired = append(retired, resolveExecutions(executions)...)
@@ -226,11 +226,31 @@ func resolveExecutions(executions []executionStateRow) (resolved []executionStat
 	return resolved
 }
 
+// refreshedExecutions drops an older rejected execution when a newer rejection
+// repeats the same command in the same working directory.
+func refreshedExecutions(executions []executionStateRow, repeated executionStateRow) []executionStateRow {
+	if repeated.Status != string(api.InvocationStatusRejected) || repeated.rawCommand == "" {
+		return executions
+	}
+	kept := executions[:0]
+	for _, row := range executions {
+		if row.Status == string(api.InvocationStatusRejected) && row.Tool == repeated.Tool && row.rawCwd == repeated.rawCwd && row.rawCommand == repeated.rawCommand {
+			continue
+		}
+		kept = append(kept, row)
+	}
+	return kept
+}
+
 func resolvesExecution(failed, later executionStateRow) bool {
 	if later.failed || !later.completed || !later.Invoked {
 		return false
 	}
 	if failed.ArgsDigest != "" && later.Tool == failed.Tool && later.ArgsDigest == failed.ArgsDigest {
+		return true
+	}
+	if failed.Status == string(api.InvocationStatusRejected) && later.Tool == failed.Tool && later.rawCwd == failed.rawCwd &&
+		failed.rawCommand != "" && (later.rawCommand == failed.rawCommand || strings.Contains(later.rawCommand, failed.rawCommand)) {
 		return true
 	}
 	return failed.check && later.check && later.SourceVerdict == api.SourceVerdictPassed &&

@@ -339,3 +339,33 @@ func TestPollVerdictsSayNothingWithoutOne(t *testing.T) {
 		t.Fatalf("failed poll verdict was ignored: %+v", got)
 	}
 }
+
+func TestRejectedCommandRepairedByCompletedExecutionResolves(t *testing.T) {
+	rawCmd := `echo -e "easy\n0\n4\n1\n7\n2" | python3 tic_tac_toe.py`
+	firstReject := receiptMessage(receiptSpec{
+		batch: "a", call: "a", tool: "command", digest: "d1",
+		code: "SANDBOX_CONTROL_PLANE_DENIED",
+		args: map[string]any{"command": rawCmd, "snapshot_capture": map[string]any{}},
+	})
+	secondReject := receiptMessage(receiptSpec{
+		batch: "b", call: "b", tool: "command", digest: "d2",
+		code: "COMMAND_NOT_ARGV",
+		args: map[string]any{"command": rawCmd, "terminal_capture": map[string]any{}},
+	})
+	mid := projectExecutionState([]api.Message{firstReject, secondReject}, "")
+	if !sameCalls(mid.Executions, "b") || !mid.Recovery {
+		t.Fatalf("repeated command rejection was not refreshed: %+v", mid.Executions)
+	}
+	repaired := receiptMessage(receiptSpec{
+		batch: "c", call: "c", tool: "command", digest: "d3",
+		verdict: api.SourceVerdictPassed,
+		args:    map[string]any{"command": "sh -c '" + rawCmd + "'"},
+	})
+	got := projectExecutionState([]api.Message{firstReject, secondReject, repaired}, "")
+	if got.Recovery {
+		t.Fatalf("repaired command execution left rejected reminder active: %+v", got)
+	}
+	if state, ok := retiredState(got, "b"); !ok || state != reminderResolved {
+		t.Fatalf("retired state = %q, ok=%v; want resolved (%+v)", state, ok, got.Retired)
+	}
+}
