@@ -73,3 +73,13 @@ func TestExplicitArgumentObservationsRemainSeparateFromDiagnostics(t *testing.T)
 		t.Fatalf("[OAR-PROF-3] observations and diagnostics were conflated: %#v", got)
 	}
 }
+
+func TestPortableVocabularyAccessors(t *testing.T) {
+	if !slices.Contains(RequiredCoreFacts(), "anchor") || !slices.Contains(RequiredCoreFunctions(), "fire_count_of") {
+		t.Fatal("missing core facts or functions")
+	}
+	profiles := StandardProfileFacts()
+	if !slices.Contains(profiles[ProfileTool], "tool") || !IsPortableFact("tool") || !IsPortableFact("anchor") || IsPortableFact("paintedwolf.path") {
+		t.Fatalf("unexpected portable vocabulary: %#v", profiles)
+	}
+}

@@ -24,21 +24,18 @@ const (
 	ProfileMCP               = "mcp"
 )
 
-// RequiredCoreFacts lists the normative core facts.
-var RequiredCoreFacts = []string{
+var requiredCoreFacts = []string{
 	"anchor",
 	"fire_count",
 	"breaker_count",
 }
 
-// RequiredCoreFunctions lists the normative core observation functions.
-var RequiredCoreFunctions = []string{
+var requiredCoreFunctions = []string{
 	"fire_count_of",
 	"breaker_count_of",
 }
 
-// StandardProfileFacts maps each standard profile to its complete membership.
-var StandardProfileFacts = map[string][]string{
+var standardProfileFacts = map[string][]string{
 	ProfileTool: {
 		"tool", "tool_args", "tool_args_fingerprint", "arg_validation_errors",
 		"arg_validation_reason", "arg_validation_field",
@@ -61,14 +58,33 @@ var StandardProfileFacts = map[string][]string{
 	},
 }
 
+// RequiredCoreFacts returns the normative core facts.
+func RequiredCoreFacts() []string {
+	return append([]string(nil), requiredCoreFacts...)
+}
+
+// RequiredCoreFunctions returns the normative core observation functions.
+func RequiredCoreFunctions() []string {
+	return append([]string(nil), requiredCoreFunctions...)
+}
+
+// StandardProfileFacts returns each standard profile and its complete membership.
+func StandardProfileFacts() map[string][]string {
+	out := make(map[string][]string, len(standardProfileFacts))
+	for k, v := range standardProfileFacts {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
+}
+
 var profileNames = buildPortableNames()
 
 func buildPortableNames() map[string]bool {
-	out := make(map[string]bool, len(RequiredCoreFacts)+32)
-	for _, name := range RequiredCoreFacts {
+	out := make(map[string]bool, len(requiredCoreFacts)+32)
+	for _, name := range requiredCoreFacts {
 		out[name] = true
 	}
-	for _, members := range StandardProfileFacts {
+	for _, members := range standardProfileFacts {
 		for _, name := range members {
 			out[name] = true
 		}

@@ -409,7 +409,7 @@ func ValidateCatalogueTiers() error {
 		}
 		fns[f.name] = f.tier
 	}
-	for _, name := range oarcopy.RequiredCoreFacts {
+	for _, name := range requiredCoreFacts {
 		tier, ok := facts[name]
 		if !ok {
 			return fmt.Errorf("core fact %q is not in FactCatalogue()", name)
@@ -418,7 +418,7 @@ func ValidateCatalogueTiers() error {
 			return fmt.Errorf("core fact %q is declared %q", name, tier)
 		}
 	}
-	for _, name := range oarcopy.RequiredCoreFunctions {
+	for _, name := range requiredCoreFunctions {
 		tier, ok := fns[name]
 		if !ok {
 			return fmt.Errorf("core fact %q is not in FactCatalogue()", name)
@@ -427,7 +427,7 @@ func ValidateCatalogueTiers() error {
 			return fmt.Errorf("core fact %q is declared %q", name, tier)
 		}
 	}
-	for profile, members := range oarcopy.StandardProfileFacts {
+	for profile, members := range standardProfileFacts {
 		for _, name := range members {
 			tier, ok := facts[name]
 			if !ok {
@@ -444,10 +444,16 @@ func ValidateCatalogueTiers() error {
 	return nil
 }
 
+var (
+	requiredCoreFacts     = oarcopy.RequiredCoreFacts()
+	requiredCoreFunctions = oarcopy.RequiredCoreFunctions()
+	standardProfileFacts  = oarcopy.StandardProfileFacts()
+)
+
 // StandardProfiles returns the profile names in stable order.
 func StandardProfiles() []string {
-	out := make([]string, 0, len(oarcopy.StandardProfileFacts))
-	for name := range oarcopy.StandardProfileFacts {
+	out := make([]string, 0, len(standardProfileFacts))
+	for name := range standardProfileFacts {
 		out = append(out, name)
 	}
 	sort.Strings(out)
@@ -456,5 +462,5 @@ func StandardProfiles() []string {
 
 // StandardProfileMembers returns a profile's frozen membership.
 func StandardProfileMembers(profile string) []string {
-	return append([]string(nil), oarcopy.StandardProfileFacts[profile]...)
+	return append([]string(nil), standardProfileFacts[profile]...)
 }
