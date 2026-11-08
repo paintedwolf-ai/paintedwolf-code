@@ -291,6 +291,10 @@ var coordinatorPongoBooleanGateRE = regexp.MustCompile(`\{%\s*(?:if|elif)\s+(?:n
 var bannedCoordinatorGateNameRE = regexp.MustCompile(`(?i)(greenfield|dispatch[_-]?hint|user[_-]?intent|(^|[_-])nl([_-]|$)|build[_-]?intent|chat[_-]?approv)`)
 
 var registeredCoordinatorBooleanGates = map[string]bool{
+	// Bounded grounding repair samples carry host-populated sample strings, truthy when non-empty.
+	"observed_handles_sample": true,
+	"observed_paths_sample":   true,
+	"observed_urls_sample":    true,
 	// Bounded grounding repair samples carry host-observed omitted counts.
 	"observed_handles_omitted":                     true,
 	"observed_paths_omitted":                       true,
