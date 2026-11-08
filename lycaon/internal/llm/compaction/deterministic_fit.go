@@ -180,6 +180,7 @@ func fitFrontDropCount(body []ContextMessage, keepFloor, defaultFloor, budget, r
 	}
 	maxDrop := len(body) - keepFloor
 	blockCap := min(maxDrop, max(0, len(body)-defaultFloor))
+	intentIdx := latestUserIntentIndex(body)
 	for drop := 0; drop < maxDrop; drop++ {
 		if pinnedPrefix[drop]+remaining[drop] > budget {
 			continue
@@ -194,7 +195,12 @@ func fitFrontDropCount(body []ContextMessage, keepFloor, defaultFloor, budget, r
 		for target < blockCap && pinnedPrefix[target]+remaining[target] > budget-reserve {
 			target++
 		}
-		// Stay on the grid, but never past the recent window floor.
+		// Stay on the grid, but never past the recent window floor or into the
+		// active turn when shedding earlier turns satisfies the budget.
+		if intentIdx >= 0 && drop <= intentIdx {
+			blocked := min(intentIdx, fitAnchorDrop(body, drop, min(target, intentIdx)))
+			return min(blockCap, max(drop, blocked))
+		}
 		blocked := fitAnchorDrop(body, drop, target)
 		if blocked > blockCap {
 			return blockCap
@@ -202,6 +208,15 @@ func fitFrontDropCount(body []ContextMessage, keepFloor, defaultFloor, budget, r
 		return blocked
 	}
 	return maxDrop
+}
+
+func latestUserIntentIndex(body []ContextMessage) int {
+	for i := len(body) - 1; i >= 0; i-- {
+		if body[i].Role == string(api.MessageRoleUser) && body[i].Origin == api.MessageOriginUser && body[i].Visibility != api.MessageVisibilityInternal {
+			return i
+		}
+	}
+	return -1
 }
 
 // contextTrimNotice omits counts because later fitting passes may remove more rows.
