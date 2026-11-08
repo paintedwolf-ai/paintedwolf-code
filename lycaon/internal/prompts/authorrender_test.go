@@ -352,13 +352,25 @@ func TestCheckSkillRender_UnreachableTool(t *testing.T) {
 	if len(violations) != 1 || violations[0] != "unreachable_tool:task" {
 		t.Fatalf("violations = %v, want [unreachable_tool:task]", violations)
 	}
-	held := skills.Skill{Name: "calls-command", Body: "Inspect with `command`.\n"}
+	held := skills.Skill{Name: "calls-command", Body: "Inspect with `command`, `grep`, and `replace-lines`.\n"}
 	violations, err = checkSkillRender(held, "", held.Body, held.Body, true, profileID, surfaceID)
 	if err != nil {
 		t.Fatalf("checkSkillRender: %v", err)
 	}
 	if len(violations) != 0 {
-		t.Fatalf("a held tool must not be flagged: %v", violations)
+		t.Fatalf("a held tool and its command forms must not be flagged: %v", violations)
+	}
+	readOnlyProfile, readOnlySurface, err := skillPreviewProfile("scout", "")
+	if err != nil {
+		t.Fatalf("skillPreviewProfile(scout): %v", err)
+	}
+	mutatingOnScout := skills.Skill{Name: "calls-replace-lines", Body: "Edit with `replace-lines`.\n"}
+	violations, err = checkSkillRender(mutatingOnScout, "", mutatingOnScout.Body, mutatingOnScout.Body, true, readOnlyProfile, readOnlySurface)
+	if err != nil {
+		t.Fatalf("checkSkillRender(scout): %v", err)
+	}
+	if len(violations) != 1 || violations[0] != "unreachable_tool:replace-lines" {
+		t.Fatalf("scout violations = %v, want [unreachable_tool:replace-lines]", violations)
 	}
 	user := skills.Skill{Name: "user-calls", Body: "Start a leg with `task`.\n", UserProvided: true}
 	violations, err = checkSkillRender(user, "", user.Body, user.Body, true, profileID, surfaceID)

@@ -75,112 +75,22 @@ func AgentSurfaces(agents []agentdef.Profile, profiles []sandbox.ToolProfile) ([
 // ReachCommandMutation marks a reader able to run command programs that mutate
 // the workspace. Callers put it in a reachable map alongside tool names; copy
 // naming a mutating command form stays reachable only while it is set.
-const ReachCommandMutation = "command_mutation"
+const ReachCommandMutation = toolcontract.ReachCommandMutation
 
-// profileHasWriteToolsAlias is the capability alias behind
-// profile_has_write_tools: a fact about the profile's write surface, not one
-// tool.
-const profileHasWriteToolsAlias = "write_tools"
-
-// namedForm matches backticked hyphenated command forms, which namedTool cannot
-// see: its character class has no hyphen, so `replace-lines` is invisible to it.
-// A span that continues with a --flag is an invocation with arguments, not a
-// closed mention.
-var namedForm = regexp.MustCompile("`([a-z][a-z0-9_]*-[a-z0-9_-]*)(?:`|[ \t]*\\(|[ \t]+--)")
+// profileHasCapabilityAliases lists the capability aliases behind
+// profile_has_<alias> template facts that describe a surface capability rather
+// than a single tool name.
+var profileHasCapabilityAliases = map[string]bool{
+	"write_tools":      true,
+	"terminal_capture": true,
+	"jq_edit":          true,
+	"page_controls":    true,
+	"managed_secrets":  true,
+}
 
 // profileHasIdentifier matches the profile_has_<name> template facts copy
 // guards on, so validation can reject facts that name no tool.
 var profileHasIdentifier = regexp.MustCompile(`profile_has_([a-z0-9_]+)`)
-
-// commandLanguage holds the command-program tables copy is checked against:
-// which names are commands, which forms mutate, which forms run through a
-// dual-state tool, and which forms replaced retired operations.
-type commandLanguage struct {
-	commands map[string]bool
-	mutating map[string]bool
-	formTool map[string]string
-	forms    map[string]bool
-	retired  map[string][]string
-}
-
-var commandLanguageTables = sync.OnceValue(func() *commandLanguage {
-	language, err := toolcontract.ReadOnlyLanguageV1()
-	if err != nil {
-		return nil
-	}
-	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
-	if err != nil {
-		return nil
-	}
-	out := &commandLanguage{
-		commands: map[string]bool{},
-		mutating: map[string]bool{},
-		formTool: map[string]string{},
-		forms:    map[string]bool{},
-		retired:  map[string][]string{},
-	}
-	for _, spec := range language.Commands {
-		out.commands[spec.Name] = true
-		mutates := false
-		for _, effect := range spec.Effects {
-			// A wrapper whose child effects are unbound cannot promise
-			// read-only; treat it as mutating so copy stays guarded.
-			required, err := effect.CommandEffects(nil)
-			if err != nil || required.Allows(mutation) {
-				mutates = true
-			}
-		}
-		if mutates {
-			out.mutating[spec.Name] = true
-		}
-	}
-	for _, disposition := range language.Tools {
-		switch disposition.Disposition {
-		case toolcontract.DispositionToolAndCommandForm:
-			for _, form := range disposition.CommandForms {
-				out.formTool[form] = disposition.Tool
-				out.forms[form] = true
-			}
-		case toolcontract.RoutineSchemaRetired:
-			out.retired[disposition.Tool] = disposition.CommandForms
-			for _, form := range disposition.CommandForms {
-				out.forms[form] = true
-			}
-		}
-	}
-	return out
-})
-
-// reachable reports whether a reader with held can run name as a command
-// program: under command, through a form the language admits, honoring each
-// form's mutation requirement and dual-state tool gate. A retired operation is
-// reached through the forms that replaced it.
-func (lang *commandLanguage) reachable(name string, held map[string]bool) bool {
-	forms, ok := lang.retired[name]
-	if !ok {
-		switch {
-		case lang.commands[name]:
-			forms = []string{name}
-		case lang.formTool[name] != "":
-			forms = []string{name}
-		default:
-			return false
-		}
-	}
-	if !held["command"] {
-		return false
-	}
-	for _, form := range forms {
-		if tool := lang.formTool[form]; tool != "" && !held[tool] {
-			continue
-		}
-		if lang.mutating[form] && !held[ReachCommandMutation] {
-			continue
-		}
-		return true
-	}
-	return false
-}
 
 // UnreachableNames returns the tool, operation, and command-program names copy
 // tells its reader to reach but the reachable map cannot, sorted. A name is
@@ -189,7 +99,6 @@ func (lang *commandLanguage) reachable(name string, held map[string]bool) bool {
 // ReachCommandMutation, and a dual-state form needs its tool. Callers render
 // copy first so guarded branches resolve against the reader's actual facts.
 func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []string {
-	lang := commandLanguageTables()
 	seen := map[string]bool{}
 	var out []string
 	add := func(name string) {
@@ -199,22 +108,19 @@ func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []st
 		}
 	}
 	for _, name := range ToolsIn(c, corpus) {
-		if reachable[name] || (lang != nil && lang.reachable(name, reachable)) {
+		if reachable[name] || toolcontract.CommandLanguageReachable(name, reachable) {
 			continue
 		}
 		add(name)
 	}
-	if lang != nil {
-		for _, m := range namedForm.FindAllStringSubmatch(corpus, -1) {
-			name := m[1]
-			if !lang.forms[name] || c.registered[name] || c.operations[name] {
-				continue
-			}
-			if reachable[name] || lang.reachable(name, reachable) {
-				continue
-			}
-			add(name)
+	for _, name := range toolcontract.HyphenatedCommandFormsIn(corpus) {
+		if c.registered[name] || c.operations[name] {
+			continue
 		}
+		if reachable[name] || toolcontract.CommandLanguageReachable(name, reachable) {
+			continue
+		}
+		add(name)
 	}
 	sort.Strings(out)
 	return out
@@ -269,19 +175,26 @@ func (c *Catalog) profileCommandMutates(profileID string) bool {
 }
 
 // skillRenderVars builds the template variables one skill text renders with for
-// a reader: spawn policy facts, a profile_has_<tool> fact per held tool, the
-// profile_has_write_tools capability alias, and the caller shape. Unheld tools
+// a reader: spawn policy and sizing facts, a profile_has_<tool> fact per held
+// tool, derived surface capability aliases, and the caller shape. Unheld tools
 // stay unset, which renders false. root_count is 1: validation checks the
 // workspace case, where guarded command guidance is visible.
 func skillRenderVars(held map[string]bool, coordinator bool) map[string]any {
 	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	spawn.RefreshSizingHintVars(vars)
 	for name, ok := range held {
 		if ok && name != ReachCommandMutation {
 			vars["profile_has_"+name] = true
 		}
 	}
-	vars["profile_has_write_tools"] = held[writeToolMarker] || held[ReachCommandMutation]
-	vars["profile_command_mutation"] = held[ReachCommandMutation]
+	commandMutates := held["command"] && held[ReachCommandMutation]
+	vars["profile_has_write_tools"] = held[writeToolMarker] || commandMutates
+	vars["profile_command_mutation"] = commandMutates
+	vars["profile_has_jq_edit"] = commandMutates
+	vars["profile_has_terminal_capture"] = commandMutates || held["terminal_snapshot"] || held["terminal_read"]
+	vars["profile_has_page_controls"] = held["page_open"] || held["page_act"] || held["page_snapshot"] || held["page_close"]
+	vars["profile_has_managed_secrets"] = held["secret_generate"] && held["secret_list"] && held["secret_revoke"]
+	vars["command_on_floor"] = held["command"]
 	vars["is_coordinator"] = coordinator
 	vars["has_git"] = true
 	vars["root_count"] = 1
@@ -304,14 +217,11 @@ func renderSkillText(text string, vars map[string]any) (string, error) {
 // guardSuggestion names the profile_has_ fact that gates name for readers: the
 // tool itself, or the dual-state tool behind a command form. Empty when no
 // single fact gates it.
-func guardSuggestion(c *Catalog, lang *commandLanguage, name string) string {
+func guardSuggestion(c *Catalog, name string) string {
 	if c.KnownName(name) {
 		return name
 	}
-	if lang != nil {
-		return lang.formTool[name]
-	}
-	return ""
+	return toolcontract.CommandFormToolOf(name)
 }
 
 // skillVocabularyProblems checks the template vocabulary a skill authors
@@ -334,7 +244,7 @@ func skillVocabularyProblems(c *Catalog, skill skills.Skill) []string {
 	for _, text := range texts {
 		for _, m := range profileHasIdentifier.FindAllStringSubmatch(text, -1) {
 			name := m[1]
-			if name == profileHasWriteToolsAlias || c.KnownName(name) {
+			if profileHasCapabilityAliases[name] || c.KnownName(name) {
 				continue
 			}
 			problems = append(problems, fmt.Sprintf(
@@ -359,7 +269,7 @@ func skillVocabularyProblems(c *Catalog, skill skills.Skill) []string {
 // agent and reports every name the rendered copy reaches for that the agent's
 // profile cannot supply.
 func skillReachProblems(
-	c *Catalog, lang *commandLanguage, agent AgentSurface, skill skills.Skill,
+	c *Catalog, agent AgentSurface, skill skills.Skill,
 	held map[string]bool, vars map[string]any,
 ) []string {
 	var problems []string
@@ -383,7 +293,7 @@ func skillReachProblems(
 			continue
 		}
 		for _, name := range UnreachableNames(c, rendered, held) {
-			if guard := guardSuggestion(c, lang, name); guard != "" {
+			if guard := guardSuggestion(c, name); guard != "" {
 				problems = append(problems, fmt.Sprintf(
 					"skill %q: %s tells its reader to call %q, but agent %q runs on profile %q, which does not hold it — "+
 						"grant the tool, drop the skill from that agent, or guard the mention with {%% if profile_has_%s %%}",
@@ -415,7 +325,6 @@ func relLabel(rel string) string {
 // any_of_tools members must be registered tools. Skills the user supplied are
 // the author's vocabulary and are left alone.
 func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) error {
-	lang := commandLanguageTables()
 	byName := make(map[string]skills.Skill, len(loaded))
 	var problems []string
 	for _, s := range loaded {
@@ -445,7 +354,7 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 			if !SkillToolsOffered(skill, held) {
 				continue
 			}
-			problems = append(problems, skillReachProblems(c, lang, agent, skill, held, vars)...)
+			problems = append(problems, skillReachProblems(c, agent, skill, held, vars)...)
 		}
 	}
 	return joinProblems(problems)
@@ -468,12 +377,9 @@ func offeredSkills(sel skills.Selector, loaded []skills.Skill) []string {
 	return out
 }
 
-// stockCatalog returns the catalog the skill gate names against: the bundled
-// stock tool vocabulary (native manifest plus pack tool and operation
-// schemas). The gate must recognize every tool the host registers — a minimal
-// catalog would silently ignore unguarded mentions of native tools such as
-// command or ask_user.
-func stockCatalog() *Catalog {
+// StockCatalog returns the bundled stock tool vocabulary (native manifest plus
+// pack tool and operation schemas).
+func StockCatalog() *Catalog {
 	if c := bundledStockCatalog(); c != nil {
 		return c
 	}
@@ -566,7 +472,7 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 	if sk.UserProvided {
 		return true
 	}
-	c := stockCatalog()
+	c := StockCatalog()
 	if c == nil {
 		return true
 	}
@@ -593,20 +499,7 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 // profile-guarded branches resolve against the reader's actual tool set.
 // Compilation or execution failures fall back to the raw body.
 func renderSkillBody(sk skills.Skill, offered map[string]bool) string {
-	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
-	for tool, ok := range offered {
-		if ok {
-			vars["profile_has_"+tool] = true
-		}
-	}
-	vars["is_coordinator"] = offered["task"]
-	vars["has_git"] = true
-	vars["root_count"] = 1
-	tpl, err := pongoplain.Compile(sk.Body)
-	if err != nil {
-		return sk.Body
-	}
-	rendered, err := pongoplain.ExecuteDetached(tpl, vars)
+	rendered, err := renderSkillText(sk.Body, skillRenderVars(offered, offered["task"]))
 	if err != nil {
 		return sk.Body
 	}

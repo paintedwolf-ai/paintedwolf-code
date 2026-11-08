@@ -223,11 +223,15 @@ func skillReaderHasGit(tctx tools.ToolContext) bool {
 // surface's full addressable set (floor plus loadable), since request_tools
 // can reach the rest of the surface before any skill read.
 func skillReaderOfferedTools(tctx tools.ToolContext) map[string]bool {
-	offered := make(map[string]bool, len(tctx.Turn.TurnOfferedToolNames))
+	offered := make(map[string]bool, len(tctx.Turn.TurnOfferedToolNames)+1)
 	for _, name := range tctx.Turn.TurnOfferedToolNames {
 		offered[name] = true
 	}
-	if surfaceID := strings.TrimSpace(tctx.Turn.TurnSurfaceID); surfaceID != "" && profileIDForSurface(tctx) == prompts.CoordinatorProfileID {
+	profileID := profileIDForSurface(tctx)
+	surfaceID := strings.TrimSpace(tctx.Turn.TurnSurfaceID)
+	scopeID := profileID
+	if surfaceID != "" && profileID == prompts.CoordinatorProfileID {
+		scopeID = surfaceID
 		if floor, err := prompts.LoadCoordinatorSurfaceFloor(surfaceID); err == nil {
 			for _, name := range floor {
 				offered[name] = true
@@ -238,6 +242,9 @@ func skillReaderOfferedTools(tctx tools.ToolContext) map[string]bool {
 				offered[name] = true
 			}
 		}
+	}
+	if offered["command"] && prompts.ScopeAllowsCommandMutation(scopeID) {
+		offered[toolvocab.ReachCommandMutation] = true
 	}
 	return offered
 }

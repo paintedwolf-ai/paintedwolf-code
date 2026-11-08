@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // AuthorRenderRequest describes an authored preview.
@@ -317,17 +318,16 @@ func checkSkillRender(sk skills.Skill, resource, source, rendered string, templa
 	if err != nil {
 		return nil, err
 	}
-	for _, tool := range toolsNamedIn(rendered, declared) {
-		if !reachable[tool] {
-			violations = append(violations, "unreachable_tool:"+tool)
-		}
+	for _, tool := range skillUnreachableNames(rendered, declared, reachable) {
+		violations = append(violations, "unreachable_tool:"+tool)
 	}
 	return violations, nil
 }
 
 // skillReachableTools names every tool the target reader can reach: a
 // coordinator surface's floor plus its loadable set, or a worker profile's
-// enabled plus requestable tools.
+// enabled plus requestable tools, along with ReachCommandMutation when the
+// scope permits mutating command programs.
 func skillReachableTools(profileID, surfaceID string) (map[string]bool, error) {
 	if profileID == CoordinatorProfileID && surfaceID != "" {
 		floor, err := LoadCoordinatorSurfaceFloor(surfaceID)
@@ -339,13 +339,14 @@ func skillReachableTools(profileID, surfaceID string) (map[string]bool, error) {
 			return nil, err
 		}
 		offered, requestable := OfferedTools(floor, loadable, nil)
-		out := make(map[string]bool, len(offered)+len(requestable))
+		out := make(map[string]bool, len(offered)+len(requestable)+1)
 		for _, name := range offered {
 			out[name] = true
 		}
 		for _, name := range requestable {
 			out[name] = true
 		}
+		out[toolcontract.ReachCommandMutation] = out["command"] && CoordinatorSurfaceAllowsCommandMutation(surfaceID)
 		return out, nil
 	}
 	profiles, err := sandbox.LoadToolProfiles()
@@ -356,17 +357,18 @@ func skillReachableTools(profileID, surfaceID string) (map[string]bool, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]bool, len(surface.Tools)+len(surface.Requestable))
+	out := make(map[string]bool, len(surface.Tools)+len(surface.Requestable)+1)
 	for _, tool := range surface.Tools {
 		out[tool.Name] = true
 	}
 	for _, row := range surface.Requestable {
 		out[row.Name] = true
 	}
+	out[toolcontract.ReachCommandMutation] = out["command"] && ScopeAllowsCommandMutation(profileID)
 	return out, nil
 }
 
-// skillToolCatalog builds the declared tool vocabulary the unreachable check
+// skillDeclaredNames builds the declared tool vocabulary the unreachable check
 // resolves names against.
 func skillDeclaredNames() (map[string]bool, error) {
 	cfg, err := nativemanifest.Load()
@@ -401,13 +403,25 @@ func skillDeclaredNames() (map[string]bool, error) {
 // something — the same shape toolvocab scans for.
 var namedToolCall = regexp.MustCompile("`([a-z][a-z0-9_]*)(?:`|[ \t]*\\()")
 
-// toolsNamedIn lists the declared tools rendered text names as calls, sorted.
-func toolsNamedIn(text string, declared map[string]bool) []string {
+// skillUnreachableNames returns the declared tools, operations, and command
+// forms rendered text names that reachable cannot satisfy, sorted.
+func skillUnreachableNames(text string, declared, reachable map[string]bool) []string {
 	seen := map[string]bool{}
 	for _, m := range namedToolCall.FindAllStringSubmatch(text, -1) {
-		if declared[m[1]] {
-			seen[m[1]] = true
+		name := m[1]
+		if !declared[name] {
+			continue
 		}
+		if reachable[name] || toolcontract.CommandLanguageReachable(name, reachable) {
+			continue
+		}
+		seen[name] = true
+	}
+	for _, name := range toolcontract.HyphenatedCommandFormsIn(text) {
+		if reachable[name] || toolcontract.CommandLanguageReachable(name, reachable) {
+			continue
+		}
+		seen[name] = true
 	}
 	out := make([]string, 0, len(seen))
 	for name := range seen {

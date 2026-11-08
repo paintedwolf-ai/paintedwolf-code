@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab"
@@ -52,6 +53,9 @@ func (m *Service) decisionOfferedTools(sess *api.Session, decision *Decision) ma
 	}
 	for name := range decision.decision.Tools {
 		offered[name] = true
+	}
+	if offered["command"] && prompts.ScopeAllowsCommandMutation(decision.state.Surface) {
+		offered[toolvocab.ReachCommandMutation] = true
 	}
 	return offered
 }
