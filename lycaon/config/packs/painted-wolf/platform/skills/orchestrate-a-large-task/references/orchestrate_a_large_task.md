@@ -2,14 +2,16 @@
 
 **Entry check:** use this procedure for work with several useful worker outcomes, concurrent or dependent. A single bounded assignment also fits when isolation, a worker capability, or extra context materially helps. Keep trivial work inline.
 
+The dispatch steps below are coordinator-only: a worker leg applies the matching decomposition, dependency, and verification guidance within its own assignment and reports dispatch needs to the parent.
+
 ## Workflow
 
 1. Investigate until you can name the deliverables, stable interfaces, constraints, likely paths, and unresolved decisions. Use current external research before dispatch when a changing fact can alter the design.
 2. Classify every unresolved fact as blocking or supplemental. Finish blocking research before dependent builders start. Run supplemental research in parallel only when builders have a safe default.
 3. Author the progress checklist before the first dispatch — one row per deliverable, updated from worker outcomes. Do not keep a parallel prose plan. Open rows identify remaining outcomes, not a required worker count.
-4. Match the topology to the work with **Sizing by shape** below, and read [briefs and topologies](references/orchestrate_a_large_task-briefs-and-topologies.md) when choosing between scouts, staged research, responsibility fan-out, configuration fan-out, alternatives, role sets, or independent fixes. Choose coherent assignments within the available capacity.
+4. Match the topology to the work with **Sizing by shape** below, and read [briefs and topologies](references/orchestrate_a_large_task-briefs-and-topologies.md) when choosing between scouts, staged research, responsibility fan-out, configuration fan-out, alternatives, role sets, or independent fixes. Choose coherent assignments within the available capacity.{% if profile_has_task %}
 5. Pick each worker's `agent_type` from the spawn roster in your prompt. It is host-generated and lists every id you may pass, what each one may edit, and which run commands; an id that is not on it rejects with `DISALLOWED_AGENT`. Match the roster entry's capability to the leg's effect: reading and research, product edits, test edits, review, or running commands.
-{% if profile_has_task %}6. Give each `task()` one focus and a self-contained `brief`: one goal, only material facts and references, decided constraints, and concrete `done_when`. Workers cannot read this conversation or each other's files.{% endif %}
+6. Give each `task()` one focus and a self-contained `brief`: one goal, only material facts and references, decided constraints, and concrete `done_when`. Workers cannot read this conversation or each other's files.{% endif %}
 7. Set the remaining fields deliberately:
    - `files` — likely starting points only, not a reading list.
    - `scope.paths` — optional focus hints for any worker; they do not limit access or promotion.

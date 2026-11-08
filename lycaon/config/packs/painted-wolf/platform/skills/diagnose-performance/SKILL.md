@@ -21,7 +21,7 @@ metadata:
 Open the one that matches the symptom:
 
 - [Diagnose a slow database query](references/diagnose_a_slow_database_query.md): a query, report, endpoint, or job is slow. Covers where the time goes, non-executing plans first, and one hypothesis at a time.
-- [Hunt a performance regression](references/hunt_a_performance_regression.md): something got slower. Covers the noise floor, profiling, `git bisect` with the measurement as predicate, and dependency bumps.
+- [Hunt a performance regression](references/hunt_a_performance_regression.md): something got slower. Covers the noise floor, profiling, `git bisect` with the measurement as predicate where Git is available, and dependency bumps.
 - [Investigate a memory leak](references/investigate_a_memory_leak.md): RSS, heap, object, goroutine, or thread counts grow over time. Covers memory domains, retained-state profiles, and slope verification.
 - [Diagnose resource exhaustion](references/diagnose_resource_exhaustion.md): builds fail oddly, a process is killed, or writes fail with space apparently free. Covers disk, inodes, memory limits, descriptors, and containers.
 

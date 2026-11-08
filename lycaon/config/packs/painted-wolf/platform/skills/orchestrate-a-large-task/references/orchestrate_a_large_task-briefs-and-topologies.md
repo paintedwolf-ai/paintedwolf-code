@@ -1,5 +1,7 @@
 # Briefs and topologies
 
+The dispatch guidance below is coordinator-only: a worker leg applies the matching guidance within its own assignment and reports dispatch needs to the parent.
+
 ## Topology selection
 
 | Situation | Dispatch shape | Stop condition |

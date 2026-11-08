@@ -6,19 +6,19 @@ metadata:
 
 # Orchestrate a large task
 
-**Entry check:** the work has several useful worker outcomes, concurrent or dependent, or one bounded leg that benefits from isolation, a worker capability, or extra context. Keep trivial work inline.
+**Entry check:** the work has several useful worker outcomes, concurrent or dependent, or one bounded leg that benefits from isolation, a worker capability, or extra context. Keep trivial work inline.{% if not profile_has_task %}
 
-{% if not profile_has_task %}You are a worker for this procedure: apply decomposition, dependency, and verification within your own assignment and report work that needs another role to the parent. Do not dispatch, invent worker results, or widen scope.{% endif %}
+You are a worker for this procedure: apply decomposition, dependency, and verification within your own assignment and report work that needs another role to the parent. Do not dispatch, invent worker results, or widen scope.{% endif %}
 
 ## The loop
 
 1. **Investigate until you can name** the deliverables, stable interfaces, constraints, likely paths, and open decisions.
 2. **Classify each open fact as blocking or supplemental.** Finish blocking research before dependent builders start.
-3. **Write the progress checklist before the first dispatch**, one row per deliverable. Rows track outcomes, not worker counts.
-4. **Choose the topology from the shape of the work**, not from available capacity. The host runs at most **{{ max_in_flight }}** legs at once.
+3. **Write the progress checklist**{% if profile_has_task %} before the first dispatch{% endif %}, one row per deliverable. Rows track outcomes, not worker counts.
+4. **Choose the topology from the shape of the work**, not from available capacity. The host runs at most **{{ max_in_flight }}** legs at once.{% if profile_has_task %}
 5. **Pick `agent_type` from the spawn roster in your prompt**, matching the leg's effect (read, product edit, test edit, review, run). An id not on the roster is rejected.
-{% if profile_has_task %}6. **Give each `task()` one focus and a self-contained `brief`**: goal, material facts, decided constraints, concrete `done_when`. Workers cannot read this conversation or each other's files.{% endif %}
-7. **Keep dependent stages sequential.** {% if profile_has_record_finding %}`record_finding` shares short grounded findings; it is not a prerequisite channel.{% endif %}
+6. **Give each `task()` one focus and a self-contained `brief`**: goal, material facts, decided constraints, concrete `done_when`. Workers cannot read this conversation or each other's files.{% endif %}
+7. **Keep dependent stages sequential.**{% if profile_has_record_finding %} `record_finding` shares short grounded findings; it is not a prerequisite channel.{% endif %}
 8. **Wait for every leg, inspect complete envelopes, integrate write overlays explicitly, and verify the combined result.**
 
 Stop when every checklist row is closed by an integrated overlay, an explicit rejection, or a named blocker. Repair a partial leg at most once; a second failure is a decomposition problem.

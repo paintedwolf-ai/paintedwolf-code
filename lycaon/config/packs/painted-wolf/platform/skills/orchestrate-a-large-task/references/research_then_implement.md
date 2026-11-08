@@ -2,6 +2,8 @@
 
 **Entry check:** name one implementation decision you cannot make yet and the fact that would settle it. If you cannot name the decision, the research has no stopping condition and will wander.
 
+The dispatch steps below are coordinator-only: a worker leg applies the matching research guidance within its own assignment and reports dispatch needs to the parent.
+
 ## Workflow
 
 1. List the open decisions as questions with an assignee. Separate current external claims ("what does this API return in v3?") from repository questions ("where is this validated today?") — they need different researchers.

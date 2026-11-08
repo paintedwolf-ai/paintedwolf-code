@@ -2,7 +2,7 @@
 
 ## Release identity
 
-Resolve this record before building; every embedded version and generated manifest derives from it. {% if not has_git or on_worker_branch %}On a write leg, this record is a draft over the overlay's prepared files: record the intended identity, the checks run in the overlay, and known limitations; the coordinator completes artifact and clean-install rows after promotion.{% endif %}
+Resolve this record before building; every embedded version and generated manifest derives from it.{% if not has_git or on_worker_branch %} On a write leg, this record is a draft over the overlay's prepared files: record the intended identity, the checks run in the overlay, and known limitations; the coordinator completes artifact and clean-install rows after promotion.{% endif %}
 
 ```text
 commit:   9f2c1ab   version: 2.4.0   tag (unpushed): v2.4.0

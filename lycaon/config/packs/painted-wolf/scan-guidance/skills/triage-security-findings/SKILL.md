@@ -7,7 +7,7 @@ metadata:
 
 # Triage security findings
 
-1. Use the exact workflow `scan_ids` when supplied; do not substitute a newer ambient scan. Otherwise resolve full ids{% if profile_has_scan_list %} with `scan_list`{% endif %}{% if profile_has_scan_pack %} or `scan_pack`'s `per_scan` rows{% endif %}. Board assessment ids are orientation. Report unavailable bound scans; never guess ids.
+1. Use the exact workflow `scan_ids` when supplied; do not substitute a newer ambient scan. Otherwise resolve full ids{% if profile_has_scan_list %} with `scan_list`{% endif %}{% if profile_has_scan_pack %} or `scan_pack`'s `per_scan` rows{% endif %}. Board assessment ids are orientation.{% if not profile_has_scan_list and not profile_has_scan_pack %} With neither bound scan offered, report the ids as unresolved.{% endif %} Report unavailable bound scans; never guess ids.
 2. Check the scan's completion state before drilling{% if profile_has_scan_summary %} with `scan_summary`{% endif %}; if the scan is incomplete, follow its status or structured rejection instead of treating partial or absent ingest as a clean result.
 3. Use `scan_query` as the primary finding source. Narrow by the requested category, rule, severity, or path and page with `offset` whenever `truncated` is true.
 4. Inspect source only at paths returned by the scanner. Use `summarize` first{% if profile_has_command %}, or bounded `command` (`sed -n`, `grep -n`) reads when needed{% endif %}, to decide whether the flagged data and control path are reachable; do not replace scanner triage with a repository-wide manual audit.
