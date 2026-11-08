@@ -251,6 +251,9 @@ func TestSmallToLargeReceiverRestoresCanonicalHistory(t *testing.T) {
 	testutil.FailErr(t, "append seed", mem.AppendMessages(t.Context(), sess.ID, seed...))
 	_, err = svc.ForceCompact(t.Context(), sess.ID)
 	testutil.FailErr(t, "force compact on small receiver", err)
+	// Scheduled synthesis enriches the published view asynchronously; drain it
+	// so the projections below compare against one settled view.
+	testutil.FailErr(t, "drain scheduled synthesis", svc.Runner.WaitContext(t.Context()))
 
 	sess, err = mem.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get compacted session", err)
