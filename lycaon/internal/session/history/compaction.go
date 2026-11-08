@@ -147,6 +147,13 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 	if err != nil {
 		return nil, 0, "", 0, false, err
 	}
+	suffix, trimmedUnsettled := trimUnsettledCompactionSuffix(suffix)
+	if trimmedUnsettled {
+		hasMore = false
+	}
+	if len(suffix) == 0 && len(base) > 0 {
+		return nil, 0, "", 0, false, nil
+	}
 	if len(base) > 0 {
 		// Recheck after reading the suffix: its newer rows would otherwise mask
 		// an edit to the compacted prefix made in between.
@@ -168,6 +175,29 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 		}
 	}
 	return append(base, suffix...), coveredThroughOrd, coveredThroughID, sourceSeq, hasMore, nil
+}
+
+// trimUnsettledCompactionSuffix stops before an in-flight assistant draft slot
+// so settling that slot does not invalidate the newly published compaction view.
+func trimUnsettledCompactionSuffix(suffix []api.Message) ([]api.Message, bool) {
+	cut := len(suffix)
+	for i := len(suffix) - 1; i >= 0; i-- {
+		msg := suffix[i]
+		if api.IsUserIntentMessage(msg) || msg.Role == api.MessageRoleTool {
+			break
+		}
+		if msg.Role == api.MessageRoleAssistant {
+			if msg.Visibility == api.MessageVisibilityInternal || msg.DraftStatus == api.DraftStatusLive {
+				cut = i
+				continue
+			}
+			break
+		}
+	}
+	if cut < len(suffix) {
+		return suffix[:cut], true
+	}
+	return suffix, false
 }
 
 // writeCompactionView stores a generation and its covered canonical messages.

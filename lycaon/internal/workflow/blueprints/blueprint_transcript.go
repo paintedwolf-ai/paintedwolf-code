@@ -177,6 +177,9 @@ func (m *Service) syncBlueprintTranscript(
 		return err
 	}
 	if existing, ok := findBlueprintTranscriptMessage(msgs, blueprintPath); ok {
+		if existing.Content == blueprint.Content && existing.Kind == api.MessageKindBlueprint && existing.Blueprint != nil && *existing.Blueprint == metaCopy {
+			return nil
+		}
 		patch := existing
 		patch.Content = blueprint.Content
 		patch.Blueprint = &metaCopy
