@@ -9,19 +9,10 @@ description: Prove a backup restores required data into an isolated target withi
 
 ## Workflow
 
-1. **Write the recovery claim before touching anything.** This is what the rehearsal tests against:
-
-   ```text
-   system:   orders-db (postgres 16.3)
-   backup:   full 2026-08-11T02:00Z + WAL through 09:15Z
-   RPO:      ≤ 15 min      RTO: ≤ 30 min
-   needs:    base backup, WAL archive, KMS key alias orders-backup
-   ```
-
-   Record whether the restore needs a full backup plus incrementals, logs, manifests, or encryption keys.
+1. **Write the recovery claim before touching anything.** This is what the rehearsal tests against: the system, the backup chain, the RPO and RTO targets, and every input the restore needs. A worked claim: [engine-restore-recipes.md](references/engine-restore-recipes.md).
 2. **Inspect before restoring.** Use the tool's list, manifest, checksum, or verify mode without modifying the source artifact, and confirm every required segment is present. Keep the original read-only. A validator success is evidence the bytes survived, not that the system restores.
-3. **Create the isolated target.** A new empty database, disposable instance, or recovery environment with no route back to production. Keep outbound notifications, scheduled jobs, webhooks, and replication from starting, and do not inject credentials that can reach an external system. Do not alter shared credential state; generate the target's credentials with `secret_generate` (chat scope) and revoke them at cleanup. State the target explicitly before loading data.
-4. **Restore through the documented path and start the clock.** Use the same automation and key-retrieval procedure an incident would use, restore the complete chain to the chosen point, fail on errors, and measure elapsed time. Do not hand-repair the backup during the timed run — record any intervention as a failed or conditional step, because in an incident nobody will know to make it.
+3. **Create the isolated target.** A new empty database, disposable instance, or recovery environment with no route back to production. Do not alter shared credential state; generate the target's credentials with `secret_generate` (chat scope) and revoke them at cleanup. State the target explicitly before loading data.
+4. **Restore through the documented path and start the clock.** Do not hand-repair the backup during the timed run — record any intervention as a failed or conditional step, because in an incident nobody will know to make it.
 5. **Verify usability at four layers**, in order: engine integrity check → schema and object counts against expectation → representative row counts and invariants → bounded read-only application smoke queries. Check permissions and required extensions separately. "The server started" is not evidence the data is correct.
 6. **Compare the result with the claim** from step 1: recovered timestamp, data gap, restore duration, validation results, missing dependencies, and whether measured RPO and RTO were met.
 7. **Hand off cleanup deliberately.** Preserve the restored target when a human needs to inspect it. Remove only task-created resources, and only after confirming they are not the sole evidence.
