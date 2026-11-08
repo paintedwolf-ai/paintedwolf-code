@@ -27,7 +27,7 @@ hosts: [coordinator, worker]
 - **Board shows `Scan: complete`** and the question is those findings → **`scan_summary`** then **`scan_query`**. Do not start a threat-model from `scan_list`.
 {% endif %}
 {% if profile_has_command %}
-- **One named symbol or line range for an exact fact, quote, or edit** → a bounded `grep -n`, `cat -n FILE`, or `sed -n 'A,Bp'` in `command`; `sed` prints no numbers to cite. If existing evidence already answers the request, stop.
+- **One named symbol or line range for an exact fact, quote, or edit** → a bounded `grep -n`, `rg -n`, `cat -n FILE`, `nl`, or `sed -n 'A,Bp'` in `command`; `sed` prints no numbers to cite; one program can search then slice (`rg -n PAT FILE && sed -n 'A,Bp' FILE`). If existing evidence already answers the request, stop.
 {% endif %}
 
 Cite what a numbered read or drill tool returned; a summary or digest orients only.

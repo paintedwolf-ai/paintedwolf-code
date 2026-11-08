@@ -11,6 +11,6 @@ Publish supported source with a syntax-health result. New/clean files finish cle
 
 - Inspect the relevant source before editing. Use quoted here-documents or `printf` redirects for new files; `edit --path FILE --old-string OLD --new-string NEW` for an exact span of existing content, or `replace-lines`, `sed`, `awk`, `patch`, or `git apply`. On a conflict, inspect current state before retrying.
 {% if profile_has_restore_version %}- `restore_version` restores a retained ledger version or removes a newly authored file; prefer it to hand-reverting.{% endif %}
-- For large files, use `outline`,{% if profile_has_summarize %} `summarize`,{% endif %} or bounded `grep -n` and `sed -n` before changing scoped source. Line numbers from `cat -n` or `grep -n` are not file content: never copy them into new text.
+- For large files, use `outline`,{% if profile_has_summarize %} `summarize`,{% endif %} or bounded `grep -n` and `sed -n` before changing scoped source; any delivered source read establishes the edit base; one `command` program can read then edit. Line numbers from `cat -n` or `grep -n` are not file content: never copy them into new text.
 - Use `CMD --help` for native command forms. Scope structural rewrites narrowly.
 {% include "partials/large-file-write-discipline.md" %}
