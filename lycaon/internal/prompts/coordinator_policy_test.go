@@ -16,22 +16,6 @@ func TestCoordinatorReadLineLimitInPolicyVars(t *testing.T) {
 	}
 }
 
-func TestImplementDeferUntilUserReplyToolsExcludesTask(t *testing.T) {
-	for _, tool := range prompts.ImplementDeferUntilUserReplyTools() {
-		if tool == "task" {
-			t.Fatal("task must not be in ImplementDeferUntilUserReplyTools")
-		}
-	}
-	if prompts.IsImplementDeferUntilUserReplyTool("task") {
-		t.Fatal("task should not defer until user reply")
-	}
-	for _, tool := range prompts.ImplementDeferUntilUserReplyTools() {
-		if !prompts.IsImplementDeferUntilUserReplyTool(tool) {
-			t.Fatalf("%q should defer until user reply", tool)
-		}
-	}
-}
-
 func TestLaneSyncToolsFiltersVisible(t *testing.T) {
 	got := prompts.LaneSyncTools([]string{"task", "read", "list_dir", "grep", "pack_board", "git_status"})
 	want := []string{"git_status", "grep", "list_dir", "pack_board", "read"}
