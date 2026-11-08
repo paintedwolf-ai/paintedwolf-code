@@ -266,3 +266,40 @@ func TestCloseoutGroundingKeepsFrozenCopy(t *testing.T) {
 		t.Fatalf("lost frozen closeout copy: %s", text)
 	}
 }
+
+func TestEvaluateCoordinatorCloseoutGrounding_passesPresentableArtifactFromLedgerRecord(t *testing.T) {
+	root := t.TempDir()
+	sess := &api.Session{ID: "parent-1", WorkspacePath: root}
+	const artifactID = "d4227e02-d67d-4683-b819-3c5c56390106"
+	tuiJSON := `{"ok":true,"stages":[{"command":"python3 tic_tac_toe.py","exit_code":0}],"terminal_capture":{"surface":"tui","artifact_id":"` + artifactID + `","snapshot":{"lines":["Tic-Tac-Toe"]}}}`
+	history := []api.Message{
+		{Role: api.MessageRoleUser, Content: "show me a screenshot"},
+		{
+			Role:      api.MessageRoleAssistant,
+			ToolCalls: []api.ToolCall{{Name: "command", ID: "c1", Args: map[string]any{"command": "python3 tic_tac_toe.py", "terminal_capture": map[string]any{}}}},
+		},
+		{
+			Role:    api.MessageRoleTool,
+			Content: tuiJSON,
+			ToolResult: &api.ToolResult{
+				Tool:       "command",
+				ToolCallID: "c1",
+				Content:    tuiJSON,
+				Outcome:    api.ToolResultOutcomeCompleted,
+				Visual:     &api.VisualArtifact{ID: artifactID, Source: api.VisualArtifactSourceCapture, Mime: "image/png"},
+			},
+		},
+	}
+	ledger := investigateLedgerReader{root: root, sessionID: sess.ID, msgs: history[1:]}
+	report := markdownDraft("Here is the terminal capture:\n\n[artifact:" + artifactID + "]")
+	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
+		t.Context(), ledger, sess, history, toolcontract.SurfaceImplementInvestigate, report, evidence.CitationRoots{ProjectDir: root},
+	)
+	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
+	if strings.TrimSpace(verdict.Code) != "" || verdict.CitationsRequired {
+		t.Fatalf("verdict=%+v want traced pass without citations_required", verdict)
+	}
+	if verdict.Grounding == nil || !verdict.Grounding.Traced || len(verdict.Grounding.CitedEvidence) != 1 || verdict.Grounding.CitedEvidence[0].Handle != "tui#1" {
+		t.Fatalf("grounding=%+v want traced tui#1", verdict.Grounding)
+	}
+}

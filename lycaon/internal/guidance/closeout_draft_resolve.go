@@ -106,6 +106,9 @@ func ResolveDraftCitations(
 			for _, id := range presentable {
 				if strings.EqualFold(strings.TrimSpace(id), occurrence.Artifact) {
 					result.Outcome, result.Code, result.Offender = ArtifactPresentable, "", ""
+					if handle := observedArtifactHandle(occurrence.Artifact, ev.Ledger); handle != "" {
+						result.Resolution = evidence.Resolution{Handle: handle, Verdict: evidence.VerdictTraced}
+					}
 					break
 				}
 			}
@@ -114,6 +117,32 @@ func ResolveDraftCitations(
 		out.Occurrences = append(out.Occurrences, result)
 	}
 	return out
+}
+
+// observedArtifactHandle resolves a presentable artifact directive to the
+// newest non-gate ledger record that produced it.
+func observedArtifactHandle(artifactID string, ev evidence.Ledger) string {
+	artifactID = strings.ToLower(strings.TrimSpace(artifactID))
+	if artifactID == "" {
+		return ""
+	}
+	handles := evidence.HandlesSorted(ev)
+	for i := len(handles) - 1; i >= 0; i-- {
+		handle := handles[i]
+		rec, ok := ev.Handles[handle]
+		if !ok || rec.IsGate() {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(rec.ArtifactID), artifactID) {
+			return handle
+		}
+		for _, line := range rec.Body {
+			if strings.Contains(strings.ToLower(line), artifactID) {
+				return handle
+			}
+		}
+	}
+	return ""
 }
 
 // observedWebURL finds the observed URL a link names, or "". A schemeless `www.`

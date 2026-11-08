@@ -105,6 +105,23 @@ func SelectObservedURLSample(ev evidence.Ledger, narrative string, alreadyCited 
 	return out
 }
 
+// SelectObservedHandleSample returns up to ObservedSampleCap citable handles in
+// observation order when no path or URL observations exist.
+func SelectObservedHandleSample(ev evidence.Ledger) []string {
+	var out []string
+	for _, handle := range evidence.HandlesSorted(ev) {
+		rec, ok := ev.Handles[handle]
+		if !ok || strings.TrimSpace(handle) == "" || rec.IsGate() {
+			continue
+		}
+		out = append(out, handle)
+		if len(out) >= ObservedSampleCap {
+			break
+		}
+	}
+	return out
+}
+
 func handleableObservedPaths(ev evidence.Ledger, roots evidence.CitationRoots) []string {
 	var out []string
 	for _, path := range evidence.ObservedPathsSorted(ev) {
