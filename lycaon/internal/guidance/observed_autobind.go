@@ -31,6 +31,13 @@ func observedCitedEvidenceForWire(roots evidence.CitationRoots, ev evidence.Ledg
 	for _, c := range cited {
 		path := normalizedReportPath(roots, c.Path, ev.ByPath)
 		if path == "" {
+			handle := strings.TrimSpace(c.Evidence)
+			if rec, ok := ev.Handles[handle]; ok && handle != "" && !rec.IsGate() {
+				out = append(out, api.CitationGroundingCitedEvidence{
+					Handle:  handle,
+					Verdict: api.CitationVerdictTraced,
+				})
+			}
 			continue
 		}
 		handle, ok := evidence.HandleForPath(ev, path)

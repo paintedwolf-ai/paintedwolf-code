@@ -48,7 +48,8 @@ func EvaluateCoordinatorCloseoutGrounding(
 	resolved := guidance.ResolveDraftCitations(roots, surfaceID, draft, ev, guidance.SessionPresentableArtifactIDs(history))
 	eval := guidance.EvaluateDraftCitations(draft, resolved)
 	report := draft.Report()
-	if eval.Code == "" && draft.CitationCount() == 0 {
+	report.CitedEvidence, report.CitedURLs, report.ArtifactIDs = guidance.AcceptedDraftReferences(draft, resolved)
+	if eval.Code == "" && draft.CitationCount() == 0 && len(report.CitedEvidence) == 0 {
 		if !CoordinatorEvidenceOptional(history, ev) && guidance.CloseoutLedgerHasCitableEvidence(ev) {
 			// Recorded sources permit host attachment when citations are omitted.
 			return CloseoutGroundingVerdict{
