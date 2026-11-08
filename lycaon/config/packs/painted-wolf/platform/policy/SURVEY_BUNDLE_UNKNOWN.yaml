@@ -14,14 +14,14 @@ requires:
   - paintedwolf.available
   - paintedwolf.bundle
   - paintedwolf.unknown_target
-  - paintedwolf.native_operation
+  - paintedwolf.command_form
 when: paintedwolf.rejection_code == "SURVEY_BUNDLE_UNKNOWN"
 effect: block
 copy:
-  what: '{% if paintedwolf.native_operation %}repo-map bundle {{ paintedwolf.bundle }} is not in the catalog.{% else %}survey_repo bundle {{ paintedwolf.bundle }} is not in the catalog.{% endif %}'
+  what: '{% if paintedwolf.command_form %}{{ paintedwolf.command_form }} bundle {{ paintedwolf.bundle }} is not in the catalog.{% else %}survey_repo bundle {{ paintedwolf.bundle }} is not in the catalog.{% endif %}'
   cause: 'The merged host/project catalog offers: {{ paintedwolf.available }}.'
   why: Bundle ids are catalog-defined probe patterns; unknown ids cannot run.
-  fix: '{% if paintedwolf.native_operation %}Retry `repo-map --bundle` with a catalog bundle id from the reject list.{% else %}Retry survey_repo with a catalog bundle id from the reject list or tool schema.{% endif %}'
+  fix: '{% if paintedwolf.command_form %}Retry `{{ paintedwolf.command_form }} --bundle` with a catalog bundle id from the reject list.{% else %}Retry survey_repo with a catalog bundle id from the reject list or tool schema.{% endif %}'
   instead: Choose an intended listed bundle, or an offered scoped search tool for an ad-hoc query
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:survey
@@ -43,6 +43,7 @@ x-paintedwolf-scenarios:
     - ssot_drift
     - api_routes
     bundle: missing_bundle
+    command_form: repo-map
     native_operation: survey_repo
     profile: explore_readonly
     tool: command

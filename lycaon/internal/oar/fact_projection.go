@@ -44,6 +44,14 @@ func activation(gc *GuardContext) map[string]any {
 			operation = gc.Invocation.Tool
 		}
 		out["paintedwolf.operation"] = operation
+		// The canonical command spelling follows the observed native operation,
+		// never diagnostic data; tool legs have no single command form.
+		nativeOperation, _ := out["paintedwolf.native_operation"].(string)
+		if form := oarcopy.CommandFormOf(nativeOperation); form != "" {
+			out["paintedwolf.command_form"] = form
+		} else {
+			delete(out, "paintedwolf.command_form")
+		}
 		// Authoritative invocation and diagnostic facts overwrite any untrusted keys in ObservationData or Published.
 		oarcopy.PublishInvocationRecovery(out, gc.Invocation.Tool, gc.Invocation.ToolArgs, gc.Invocation.CapabilityContract)
 		oarcopy.PublishDiagnosticKnowledge(out, gc.ObservationData)
