@@ -83,7 +83,7 @@ func citationRepairOffer(roots evidence.CitationRoots, ev evidence.Ledger, citat
 		}
 		return map[string]any{"candidates": strings.Join(spelled, ", ")}
 	}
-	if citation.Line <= 0 {
+	if citation.Line <= 0 && len(ev.ByPath) > 0 {
 		return nil
 	}
 	path = evidence.LedgerPathKey(roots, path, ev.ByPath)
@@ -105,13 +105,31 @@ func citationRepairOffer(roots evidence.CitationRoots, ev evidence.Ledger, citat
 			newest = handles[i]
 		}
 	}
-	if evidence.UnionObserved(active, path, citation.Line, end) {
+	if citation.Line > 0 && evidence.UnionObserved(active, path, citation.Line, end) {
 		return map[string]any{"use": citationmd.Citation{Path: path, Line: citation.Line, EndLine: citation.EndLine}.Token()}
+	}
+	if newest == "" && known && cited.SupersededBy == "" && !cited.IsGate() && !cited.Survey {
+		newest = citation.Handle
+	}
+	if newest == "" && len(ev.ByPath) == 0 {
+		newest = newestCitableHandle(ev)
 	}
 	if newest == "" {
 		return nil
 	}
 	return map[string]any{"use": newest, "worker_output": strings.Contains(newest, ":")}
+}
+
+func newestCitableHandle(ev evidence.Ledger) string {
+	handles := evidence.HandlesSorted(ev)
+	for i := len(handles) - 1; i >= 0; i-- {
+		rec, ok := evidence.ResolveHandle(ev, handles[i])
+		if !ok || rec.SupersededBy != "" || rec.IsGate() || rec.Survey {
+			continue
+		}
+		return handles[i]
+	}
+	return ""
 }
 
 // FindingCitation is a bracket citation for a worker's finding that resolves in the
