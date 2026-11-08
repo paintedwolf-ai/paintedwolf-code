@@ -1,6 +1,7 @@
 package toolfeedback
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -76,7 +77,7 @@ func TestCommandRecoveryFollowsInvocationMode(t *testing.T) {
 				if tc.capture && (strings.Contains(fix, "pipeline") || strings.Contains(fix, "env") || strings.Contains(fix, "background")) {
 					t.Fatalf("captured argv acquired program arguments: %s", fix)
 				}
-				if tc.capture && tc.cause == commandsurface.ErrSequenceUnsupported {
+				if tc.capture && errors.Is(tc.cause, commandsurface.ErrSequenceUnsupported) {
 					cause := strings.TrimSpace(refusal.Copy["cause"])
 					if !strings.Contains(cause, "terminal_capture runs one program") || !strings.Contains(cause, "`|`") {
 						t.Fatalf("capture sequence cause %q omits terminal_capture pipe guidance", cause)
