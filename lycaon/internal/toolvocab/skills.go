@@ -177,8 +177,9 @@ func (c *Catalog) profileCommandMutates(profileID string) bool {
 // skillRenderVars builds the template variables one skill text renders with for
 // a reader: spawn policy and sizing facts, a profile_has_<tool> fact per held
 // tool, derived surface capability aliases, and the caller shape. Unheld tools
-// stay unset, which renders false. root_count is 1: validation checks the
-// workspace case, where guarded command guidance is visible.
+// stay unset, which renders false. has_git is true and root_count is 1 — the
+// workspace case, where guarded command guidance is visible; ValidateSkills
+// renders the git-less and other root-count states besides these defaults.
 func skillRenderVars(held map[string]bool, coordinator bool) map[string]any {
 	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
 	spawn.RefreshSizingHintVars(vars)
@@ -316,14 +317,44 @@ func relLabel(rel string) string {
 	return "resource " + rel
 }
 
+// skillRenderVariant is one alternative environment state validation renders
+// besides the default: the label problem reports carry and the variable
+// overrides that produce the state.
+type skillRenderVariant struct {
+	label string
+	vars  map[string]any
+}
+
+// skillRenderVarVariants forks the render variables into the environment
+// states the default never varies — a git-less workspace and workspace root
+// counts other than one — so guard branches under those facts are exercised
+// by validation too, not only by the contract matrix.
+func skillRenderVarVariants(vars map[string]any) []skillRenderVariant {
+	fork := func(key string, value any) map[string]any {
+		variant := make(map[string]any, len(vars)+1)
+		for k, v := range vars {
+			variant[k] = v
+		}
+		variant[key] = value
+		return variant
+	}
+	return []skillRenderVariant{
+		{label: "has_git=false", vars: fork("has_git", false)},
+		{label: "root_count=0", vars: fork("root_count", 0)},
+		{label: "root_count=2", vars: fork("root_count", 2)},
+	}
+}
+
 // ValidateSkills checks every tool and command program a stock skill names is
 // reachable by every profile the skill is offered to; instructions naming
 // absent tools reject on contact. Each skill body and resource renders through
 // its template with the selecting agent's facts first, so guarded branches
-// resolve against what that reader actually holds. It also checks the template
-// vocabulary itself: profile_has_ facts must name registered tools, and
-// any_of_tools members must be registered tools. Skills the user supplied are
-// the author's vocabulary and are left alone.
+// resolve against what that reader actually holds — and again under the
+// environment states the default never varies (skillRenderVarVariants), so a
+// guard that hides an unreachable name on the default render is still caught.
+// It also checks the template vocabulary itself: profile_has_ facts must name
+// registered tools, and any_of_tools members must be registered tools. Skills
+// the user supplied are the author's vocabulary and are left alone.
 func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) error {
 	byName := make(map[string]skills.Skill, len(loaded))
 	var problems []string
@@ -337,6 +368,18 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 	for _, agent := range agents {
 		held := profileReachable(c, agent.ProfileID)
 		vars := skillRenderVars(held, agent.ProfileID == "coordinator")
+		variants := skillRenderVarVariants(vars)
+		seen := map[string]bool{}
+		report := func(problem, label string) {
+			if seen[problem] {
+				return
+			}
+			seen[problem] = true
+			if label != "" {
+				problem += " [rendered with " + label + "]"
+			}
+			problems = append(problems, problem)
+		}
 		for _, name := range offeredSkills(agent.Skills, loaded) {
 			skill, ok := byName[name]
 			if !ok {
@@ -354,7 +397,14 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 			if !SkillToolsOffered(skill, held) {
 				continue
 			}
-			problems = append(problems, skillReachProblems(c, agent, skill, held, vars)...)
+			for _, problem := range skillReachProblems(c, agent, skill, held, vars) {
+				report(problem, "")
+			}
+			for _, variant := range variants {
+				for _, problem := range skillReachProblems(c, agent, skill, held, variant.vars) {
+					report(problem, variant.label)
+				}
+			}
 		}
 	}
 	return joinProblems(problems)

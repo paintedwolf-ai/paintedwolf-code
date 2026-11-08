@@ -33,7 +33,6 @@ Self time is the weight summed per sampled node id. Total time requires rolling 
 
 Exclude the pseudo-frames `(idle)`, `(program)`, `(root)`, and `(garbage collector)` from the "hot function" list. `(idle)` dominates any profile that includes it, and `(garbage collector)` is a real signal but belongs in its own line rather than competing with application functions.
 
-
 ## Gecko / Firefox Profiler
 
 Times are **milliseconds**; sampling interval is `meta.interval`. Often gzipped: decompress with Python's `gzip` module in the script; the `jq FILTER FILE` command cannot read compressed input.
@@ -47,7 +46,6 @@ The format is column-oriented: every "table" is an object of parallel arrays plu
 - `funcTable.name[i]` → index into the string table (`stringArray`, or `stringTable` in older exports)
 
 Walking `prefix` from a sample's stack row yields frames **leaf first**, terminating at the root. Weight each sample by `samples.weight[i]` when present, otherwise by `meta.interval`.
-
 
 ## speedscope
 

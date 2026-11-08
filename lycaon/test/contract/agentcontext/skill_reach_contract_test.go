@@ -294,6 +294,9 @@ func checkRenderedProseStructure(t *testing.T, skill string, part renderedText, 
 			t.Errorf("%s: renders a blanked table cell: %q", where, trimmed)
 		}
 	}
+	for _, drift := range prompts.RenderedProseStructureDrift(part.text) {
+		t.Errorf("skill %q %s as read by %s: %s", skill, part.label, reader, drift)
+	}
 }
 
 // blankedTableCells reports whether a split table row carries a whitespace-only
