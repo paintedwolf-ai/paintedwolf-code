@@ -302,3 +302,57 @@ func TestCaptureEmptyCompletionRetainsProtocolFacts(t *testing.T) {
 		t.Fatalf("protocol facts = %+v", entry.Empty)
 	}
 }
+
+func TestCaptureLLMStreamPostDrainCancelDoesNotMarkPromptCacheFailed(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "requests.jsonl")
+	cachePath := filepath.Join(dir, "prompt-cache-observability.jsonl")
+	t.Setenv("LYCAON_LLM_DEBUG", "1")
+	t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
+	observability.CloseLLMDebug()
+	t.Cleanup(observability.CloseLLMDebug)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	req := modelcall.CompletionRequest{
+		Model: "mock",
+		Messages: []api.Message{
+			{Role: api.MessageRoleSystem, Content: "standing", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+			{Role: api.MessageRoleUser, Content: "hello", PromptCacheBreakpoint: api.PromptCacheTierHistory},
+		},
+		Debug: modelcall.RequestDebug{SessionID: "stream-cancel-after-done"},
+	}
+	profile := providerprofile.Together()
+	ch, err := captureLLMStream(ctx, "together", profile, req, func() (<-chan modelcall.StreamChunk, error) {
+		inner := make(chan modelcall.StreamChunk)
+		go func() {
+			inner <- modelcall.StreamChunk{
+				Content: "ok",
+				Usage:   modelcall.TokenUsage{Present: true, PromptTokens: 1000, CompletionTokens: 10, CacheReadInputTokens: 800},
+				Done:    true,
+			}
+			time.Sleep(25 * time.Millisecond)
+			close(inner)
+		}()
+		return inner, nil
+	})
+	testutil.FailErr(t, "captureLLMStream", err)
+	for chunk := range ch {
+		if chunk.Done {
+			// Callers cancel the stream context as soon as the terminal chunk arrives.
+			cancel()
+			break
+		}
+	}
+
+	var data []byte
+	testutil.WaitFor(t, func() bool {
+		var readErr error
+		data, readErr = os.ReadFile(cachePath)
+		return readErr == nil && len(data) > 0
+	})
+	var obs observability.PromptCacheObservation
+	testutil.FailErr(t, "decode cache observation", json.Unmarshal(data[:len(data)-1], &obs))
+	if obs.Comparison == "request_failed" {
+		t.Fatalf("completed stream marked request_failed after consumer cancel: %+v", obs)
+	}
+}

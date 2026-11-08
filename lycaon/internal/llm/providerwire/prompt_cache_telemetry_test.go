@@ -82,7 +82,7 @@ func TestCacheWindowSeparatesColdAndUnobservableRequests(t *testing.T) {
 	}{
 		{"standing", "prefix_changed", func(f *cacheFixture) { f.req.Messages[0].Content += " changed" }},
 		{"schema", "prefix_changed", func(f *cacheFixture) { f.req.Tools = []tools.ToolMeta{{Name: "read"}} }},
-		{"controls", "prefix_changed", func(f *cacheFixture) { f.req.MaxTokens = 100 }},
+		{"controls", "prefix_changed", func(f *cacheFixture) { f.req.Think = modelcall.ThinkHigh }},
 		{"compaction", "history_changed", func(f *cacheFixture) { f.req.Messages[1].Content = "summary" }},
 		{"idle", "idle", func(f *cacheFixture) { f.now = f.now.Add(11 * time.Minute) }},
 		{"missing usage", "usage_unavailable", func(f *cacheFixture) { f.usage = modelcall.TokenUsage{} }},
@@ -123,6 +123,16 @@ func TestCacheWindowKeepsAppendOnlyHistoryAndIgnoresTailAndMetadata(t *testing.T
 	got := f.note()
 	if got.Comparison != "comparable" || got.HistoryChanged {
 		t.Fatalf("append invalidated prefix: %+v", got)
+	}
+	f.req.MaxTokens = 18952
+	f.req.ControlCapture = &modelcall.RequestControlCapture{}
+	f.req.ControlCapture.Record([]byte(`{"max_tokens":18952,"temperature":1}`))
+	f.note()
+	f.req.MaxTokens = 17261
+	f.req.ControlCapture = &modelcall.RequestControlCapture{}
+	f.req.ControlCapture.Record([]byte(`{"max_tokens":17261,"temperature":1}`))
+	if got = f.note(); got.Comparison != "comparable" || got.ControlsChanged {
+		t.Fatalf("output budget fit invalidated prefix controls: %+v", got)
 	}
 }
 
