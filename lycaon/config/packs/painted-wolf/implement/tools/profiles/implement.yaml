@@ -38,11 +38,11 @@ tools:
   page_act: true
   page_snapshot: true
   page_close: true
-  terminal_open: sticky
-  terminal_send: sticky
-  terminal_read: sticky
-  terminal_snapshot: sticky
-  terminal_close: sticky
+  terminal_open: true
+  terminal_send: true
+  terminal_read: true
+  terminal_snapshot: true
+  terminal_close: true
   command_output: sticky
   command_stop: sticky
   held_result: true
