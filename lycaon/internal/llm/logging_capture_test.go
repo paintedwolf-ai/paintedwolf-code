@@ -313,6 +313,7 @@ func TestCaptureLLMStreamPostDrainCancelDoesNotMarkPromptCacheFailed(t *testing.
 	t.Cleanup(observability.CloseLLMDebug)
 
 	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 	req := modelcall.CompletionRequest{
 		Model: "mock",
 		Messages: []api.Message{
@@ -354,5 +355,59 @@ func TestCaptureLLMStreamPostDrainCancelDoesNotMarkPromptCacheFailed(t *testing.
 	testutil.FailErr(t, "decode cache observation", json.Unmarshal(data[:len(data)-1], &obs))
 	if obs.Comparison == "request_failed" {
 		t.Fatalf("completed stream marked request_failed after consumer cancel: %+v", obs)
+	}
+}
+
+func TestCaptureLLMStreamAbandonedMidStreamMarksPromptCacheFailed(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "requests.jsonl")
+	cachePath := filepath.Join(dir, "prompt-cache-observability.jsonl")
+	t.Setenv("LYCAON_LLM_DEBUG", "1")
+	t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
+	observability.CloseLLMDebug()
+	t.Cleanup(observability.CloseLLMDebug)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req := modelcall.CompletionRequest{
+		Model: "mock",
+		Messages: []api.Message{
+			{Role: api.MessageRoleSystem, Content: "standing", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+			{Role: api.MessageRoleUser, Content: "hello", PromptCacheBreakpoint: api.PromptCacheTierHistory},
+		},
+		Debug: modelcall.RequestDebug{SessionID: "stream-abandoned-mid-flight"},
+	}
+	profile := providerprofile.Together()
+	// Together ships without a cache policy; attach one so the observation
+	// comparison is meaningful rather than vacuously "uncached".
+	profile.PromptCache = providerprofile.PromptCachePolicy{Mode: providerprofile.PromptCacheAutomaticPrefix}
+	// More chunks than the capture output buffer holds, so a consumer that
+	// stops reading strands the capture goroutine on a send.
+	ch, err := captureLLMStream(ctx, "together", profile, req, func() (<-chan modelcall.StreamChunk, error) {
+		inner := make(chan modelcall.StreamChunk)
+		go func() {
+			defer close(inner)
+			for range 80 {
+				inner <- modelcall.StreamChunk{Content: "x"}
+			}
+		}()
+		return inner, nil
+	})
+	testutil.FailErr(t, "captureLLMStream", err)
+	<-ch
+	// Abandon the stream: the consumer stops reading and cancels, so the
+	// capture goroutine drains the rest and records the partial response.
+	cancel()
+
+	var data []byte
+	testutil.WaitFor(t, func() bool {
+		var readErr error
+		data, readErr = os.ReadFile(cachePath)
+		return readErr == nil && len(data) > 0
+	})
+	var obs observability.PromptCacheObservation
+	testutil.FailErr(t, "decode cache observation", json.Unmarshal(data[:len(data)-1], &obs))
+	if obs.Comparison != "request_failed" {
+		t.Fatalf("abandoned stream was not marked request_failed: %+v", obs)
 	}
 }
