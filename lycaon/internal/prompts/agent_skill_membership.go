@@ -1,20 +1,33 @@
 package prompts
 
-import "strings"
+import (
+	"strings"
+	"sync"
+
+	"github.com/lycaon/lycaon/internal/extpacks"
+)
 
 const agentSkillMembershipPrefix = "agent_has_skill_"
 
-// promptSkillMembershipKeys maps shipped prompt references to template keys
-// without punctuation folding to prevent collisions with project skills.
-var promptSkillMembershipKeys = map[string]string{
-	"ask-for-a-decision":               agentSkillMembershipPrefix + "ask_for_a_decision",
-	"craft-icons-and-chrome":           agentSkillMembershipPrefix + "craft_icons_and_chrome",
-	"mock-before-build":                agentSkillMembershipPrefix + "mock_before_build",
-	"research-current-information":     agentSkillMembershipPrefix + "research_current_information",
-	"use-secrets-without-reading-them": agentSkillMembershipPrefix + "use_secrets_without_reading_them",
-	"verify-terminal-change":           agentSkillMembershipPrefix + "verify_terminal_change",
-	"verify-visual-change":             agentSkillMembershipPrefix + "verify_visual_change",
-}
+// stockSkillMembershipKeys maps stock pack skill names to template keys
+// without punctuation folding, preventing collisions with project skills.
+var stockSkillMembershipKeys = sync.OnceValue(func() map[string]string {
+	out := map[string]string{}
+	eff, err := extpacks.CatalogForConsumers()
+	if err != nil || eff == nil {
+		return out
+	}
+	for _, id := range eff.LoadedUnitIDs() {
+		name, ok := strings.CutPrefix(id, "skills/")
+		if !ok || name == "" {
+			continue
+		}
+		if u, ok := eff.Loaded[id]; ok && eff.StockAuthority(u.WinnerPackID) {
+			out[name] = agentSkillMembershipPrefix + strings.ReplaceAll(name, "-", "_")
+		}
+	}
+	return out
+})
 
 func withAgentSkillMembershipVars(data map[string]any) map[string]any {
 	out := make(map[string]any, len(data)+8)
@@ -33,5 +46,5 @@ func withAgentSkillMembershipVars(data map[string]any) map[string]any {
 
 func agentSkillMembershipKey(name string) string {
 	name = strings.TrimSpace(name)
-	return promptSkillMembershipKeys[name]
+	return stockSkillMembershipKeys()[name]
 }

@@ -76,4 +76,8 @@ func TestInitProgressGatedTools_loadsCatalog(t *testing.T) {
 	if IsProgressGatedTool("web_search") {
 		t.Fatal("catalog must not include web_search")
 	}
+	order := GatedToolOrder()
+	if len(order) == 0 || order[0] != "restore_version" {
+		t.Fatalf("GatedToolOrder = %v, want non-empty starting with restore_version", order)
+	}
 }

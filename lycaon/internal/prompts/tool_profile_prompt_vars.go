@@ -1,29 +1,33 @@
 package prompts
 
 import (
-	"github.com/lycaon/lycaon/internal/toolschema"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/ingestion"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 var (
-	surveyToolDisplayOrder = []string{"command"}
-	writeToolDisplayOrder  = []string{"restore_version"}
-	// Command content can include secret values.
+	surveyToolDisplayOrder      = []string{"command"}
 	readContentToolDisplayOrder = []string{"command"}
-	mutationToolDisplayOrder    = []string{"restore_version", "command"}
 	nativeToolFamiliesOnce      sync.Once
 	nativeFilesystemTools       []string
 	nativeTerminalTools         []string
 	nativeMutationTools         []string
+	nativeWriteTools            []string
+	nativeSecretTools           []string
+	nativeWebResearchTools      []string
+	nativeProgressGatedTools    []string
+	commandGatedByOperations    bool
 )
 
 func loadNativeToolFamilies() {
@@ -34,8 +38,31 @@ func loadNativeToolFamilies() {
 		}
 		nativeFilesystemTools = append(append([]string(nil), cfg.Group("filesystem")...), cfg.OperationGroup("filesystem")...)
 		nativeTerminalTools = append([]string(nil), cfg.Group("terminal")...)
-		// Worker-branch tools define mutation capability.
 		nativeMutationTools = cfg.WorkerBranchTools()
+		for _, name := range cfg.Group("filesystem") {
+			if !toolcontract.CommandFormTool(name) {
+				nativeWriteTools = append(nativeWriteTools, name)
+			}
+		}
+		for _, name := range cfg.AllTools() {
+			contract, ok := toolcontract.Lookup(name)
+			if !ok {
+				continue
+			}
+			switch contract.Owner {
+			case "secrets":
+				nativeSecretTools = append(nativeSecretTools, name)
+			case "web_research":
+				nativeWebResearchTools = append(nativeWebResearchTools, name)
+			}
+		}
+		for _, name := range progress.GatedToolOrder() {
+			if cfg.HasOperation(name) {
+				commandGatedByOperations = true
+				continue
+			}
+			nativeProgressGatedTools = append(nativeProgressGatedTools, name)
+		}
 	})
 }
 
@@ -97,38 +124,25 @@ func profileConcurrentTools(toolViews []AgentToolArgView) []string {
 }
 
 func profileSerialTools(toolViews []AgentToolArgView) []string {
+	loadNativeToolFamilies()
 	enabled := enabledToolSet(toolViews)
-	out := orderedEnabledTools(mutationToolDisplayOrder, enabled)
+	mutationOrder := append(append([]string(nil), nativeWriteTools...), "command")
+	out := orderedEnabledTools(mutationOrder, enabled)
 	for _, name := range enabledGitTools(enabled) {
 		if name == "git_commit" || name == "git_restore" {
 			continue
 		}
-		found := false
-		for _, existing := range out {
-			if existing == name {
-				found = true
-				break
-			}
-		}
 		contract, declared := toolcontract.Lookup(name)
-		if !found && (!declared || !contract.Concurrent()) {
+		if !slices.Contains(out, name) && (!declared || !contract.Concurrent()) {
 			out = append(out, name)
 		}
 	}
-	// Append remaining serial tools in manifest order.
 	for _, t := range toolViews {
 		contract, declared := toolcontract.Lookup(t.Name)
 		if (declared && contract.Concurrent()) || orchestrationPromptTool(t.Name) {
 			continue
 		}
-		found := false
-		for _, existing := range out {
-			if existing == t.Name {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(out, t.Name) {
 			out = append(out, t.Name)
 		}
 	}
@@ -137,19 +151,12 @@ func profileSerialTools(toolViews []AgentToolArgView) []string {
 }
 
 func orchestrationPromptTool(name string) bool {
-	name = strings.TrimSpace(strings.ToLower(name))
-	switch {
-	case strings.HasPrefix(name, "handoff_"),
-		strings.HasPrefix(name, "delegate_"),
-		strings.HasPrefix(name, "state_"),
-		strings.HasPrefix(name, "workflow_"),
-		name == "task",
-		name == "wait",
-		name == "promote_overlay",
-		name == "reject_overlay",
-		name == "preview_overlay",
-		name == "worker_cancel",
-		name == "pack_board":
+	contract, ok := toolcontract.Lookup(strings.TrimSpace(strings.ToLower(name)))
+	if !ok {
+		return false
+	}
+	switch contract.Owner {
+	case "delegation", "handoff", "workflow_state", "workflows", "workers", "worker_merge", "board", "loop_wake":
 		return true
 	default:
 		return false
@@ -157,12 +164,7 @@ func orchestrationPromptTool(name string) bool {
 }
 
 func profileHasScanDrilldownTools(enabled map[string]bool) bool {
-	for _, name := range []string{"scan_list", "scan_summary", "scan_query"} {
-		if enabled[name] {
-			return true
-		}
-	}
-	return false
+	return len(scanDrilldownToolsForCheck(enabled)) > 0
 }
 
 // VisibleToolsNativePartialVars returns surface capability flags.
@@ -192,33 +194,37 @@ func profileAllowedToolNames(profileID string) []string {
 	if profileID == "" {
 		return nil
 	}
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return nil
-	}
-	resolvedID := profileID
-	if mapped, err := ToolProfileForAgent(profileID); err == nil {
-		resolvedID = mapped
-	}
-	for _, p := range profiles {
-		if p.ID != profileID && p.ID != resolvedID {
-			continue
+	if profiles, err := sandbox.LoadToolProfiles(); err == nil {
+		resolvedID := profileID
+		if mapped, err := ToolProfileForAgent(profileID); err == nil {
+			resolvedID = mapped
 		}
-		var out []string
-		for _, name := range visibleToolNames(p, nil) {
-			if p.ToolAllowed(name) {
-				out = append(out, name)
+		for _, p := range profiles {
+			if p.ID != profileID && p.ID != resolvedID {
+				continue
 			}
+			var out []string
+			for _, name := range visibleToolNames(p, nil) {
+				if p.ToolAllowed(name) {
+					out = append(out, name)
+				}
+			}
+			return out
 		}
-		return out
+	}
+	if IsCoordinatorSurfaceID(profileID) {
+		if loadable, err := LoadCoordinatorSurfaceLoadable(profileID); err == nil {
+			return loadable
+		}
 	}
 	return nil
 }
 
 func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any {
+	loadNativeToolFamilies()
 	enabled := enabledToolSet(data.Tools)
 	surveyTools := orderedEnabledTools(surveyToolDisplayOrder, enabled)
-	writeTools := orderedEnabledTools(writeToolDisplayOrder, enabled)
+	writeTools := orderedEnabledTools(nativeWriteTools, enabled)
 	readTools := orderedEnabledTools(readContentToolDisplayOrder, enabled)
 	concurrentTools := profileConcurrentTools(data.Tools)
 	serialTools := profileSerialTools(data.Tools)
@@ -258,7 +264,6 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"prefer_native_file_tools":        preferNative,
 		"host_runner_tools":               hostRunner,
 	}
-	// Every current tool answers, so a template cannot mistake a typo for false.
 	for _, name := range currentToolNames() {
 		out["profile_has_"+name] = enabled[name]
 	}
@@ -270,11 +275,13 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	return out
 }
 
-// currentToolNames lists every tool a stock profile or the manifest declares.
+// currentToolNames lists every tool or operation declared by a stock profile or the manifest.
 var currentToolNames = sync.OnceValue(func() []string {
 	var names []string
 	if cfg, err := nativemanifest.Load(); err == nil {
-		names = append(cfg.AllTools(), cfg.HostProducedTools...)
+		names = append(names, cfg.AllTools()...)
+		names = append(names, cfg.AllOperations()...)
+		names = append(names, cfg.HostProducedTools...)
 	}
 	if profiles, err := sandbox.LoadToolProfiles(); err == nil {
 		for _, profile := range profiles {
@@ -299,7 +306,8 @@ func MergeRunnerCapabilityVars(offered []string, vars map[string]any) {
 		commandMutates = true
 	}
 	capabilities := map[string]toolcontract.Capability{
-		"host_execution": toolcontract.CapabilityHostExecution, "host_resource": toolcontract.CapabilityHostResource,
+		"host_execution":   toolcontract.CapabilityHostExecution,
+		"host_resource":    toolcontract.CapabilityHostResource,
 		"socket":           toolcontract.CapabilitySocket,
 		"direct_ip":        toolcontract.CapabilityDirectIP,
 		"local_listen":     toolcontract.CapabilityLocalListen,
@@ -313,12 +321,12 @@ func MergeRunnerCapabilityVars(offered []string, vars map[string]any) {
 			if offeredTool == "command" && !commandMutates {
 				continue
 			}
-			switch offeredTool {
-			case "command", "verify", "terminal_open":
-				contract, ok := toolcontract.Lookup(offeredTool)
-				if ok && contract.Supports(capability) {
-					tools = append(tools, offeredTool)
-				}
+			if multiRoot, ok := toolcontract.MultiRootOf(offeredTool); !ok || multiRoot != toolcontract.MultiRootCommand {
+				continue
+			}
+			contract, ok := toolcontract.Lookup(offeredTool)
+			if ok && contract.Supports(capability) {
+				tools = append(tools, offeredTool)
 			}
 		}
 		vars["runner_"+name+"_tools"] = tools
@@ -436,6 +444,7 @@ func ApplyReadOnlyCommandEffects(offered, requestable []string, into map[string]
 	if into == nil {
 		return
 	}
+	loadNativeToolFamilies()
 	enabled := make(map[string]bool, len(offered)+len(requestable))
 	for _, name := range offered {
 		enabled[strings.TrimSpace(name)] = true
@@ -444,19 +453,16 @@ func ApplyReadOnlyCommandEffects(offered, requestable []string, into map[string]
 		enabled[strings.TrimSpace(name)] = true
 	}
 	delete(enabled, "command")
+	offeredSet := toolNameSet(offered)
 	into["profile_mutation_capable"] = toolSetMutationCapable(enabled)
 	into["profile_command_mutation"] = false
 	into["profile_has_code_rewrite"] = false
 	into["profile_has_jq_edit"] = false
-	writeTools := orderedEnabledTools(writeToolDisplayOrder, toolNameSet(offered))
+	writeTools := orderedEnabledTools(nativeWriteTools, offeredSet)
 	into["profile_has_write_tools"] = len(writeTools) > 0
 	into["tool_check_write_tools"] = writeTools
-	into["progress_gated_tools"] = orderedEnabledTools([]string{"restore_version", "task", "delegate_dispatch", "delegate_decompose"}, toolNameSet(offered))
+	into["progress_gated_tools"] = progressGatedOfferedTools(offeredSet, false)
 	into["profile_has_terminal_capture"] = false
-	offeredSet := make(map[string]bool, len(offered))
-	for _, name := range offered {
-		offeredSet[strings.TrimSpace(name)] = true
-	}
 	into["tool_check_verify_tools"] = verifyToolsForCheck(offeredSet, false)
 	MergeRunnerCapabilityVars(offered, into)
 }
@@ -592,11 +598,9 @@ func scanDrilldownToolsForCheck(enabled map[string]bool) []string {
 	return out
 }
 
-// urlFetchTools identify profiles that can observe URLs.
-var urlFetchTools = []string{"fetch_url", "web_search"}
-
 // AgentFetchesURLs resolves an agent's URL retrieval capability.
 func AgentFetchesURLs(agentType string) (fetches bool, ok bool) {
+	loadNativeToolFamilies()
 	agentType = strings.TrimSpace(agentType)
 	if agentType == "" {
 		return false, false
@@ -613,7 +617,7 @@ func AgentFetchesURLs(agentType string) (fetches bool, ok bool) {
 		if p.ID != profileID {
 			continue
 		}
-		for _, tool := range urlFetchTools {
+		for _, tool := range nativeWebResearchTools {
 			if p.ToolAllowed(tool) {
 				fetches = true
 				break
@@ -634,15 +638,40 @@ func profileHasRetrievalTool(enabled map[string]bool) bool {
 	return false
 }
 
-// Capability guidance follows the offered schemas.
-func mergeOfferedToolGuidance(offered []string, into map[string]any) {
-	set := toolNameSet(offered)
-	for _, name := range []string{"render_view", "capture_page", "measure_page", "page_open", "page_snapshot", "page_act", "page_close", "view_image", "view_video", "update_progress", "delegate_dispatch", "delegate_decompose", "write", "edit", "replace_lines", "restore_version", "task", "preview_overlay", "promote_overlay", "reject_overlay", "wait", "answer_decision", "pack_board", "process_list", "process_signal", "command_output", "command_stop"} {
-		into["profile_has_"+name] = set[name]
+func progressGatedOfferedTools(enabled map[string]bool, commandMutates bool) []string {
+	loadNativeToolFamilies()
+	var out []string
+	if commandMutates && commandGatedByOperations && enabled["command"] {
+		out = append(out, "command")
 	}
-	into["progress_gated_tools"] = orderedEnabledTools([]string{"command", "restore_version", "task", "delegate_dispatch", "delegate_decompose"}, set)
-	into["profile_has_page_controls"] = set["page_open"] || set["page_snapshot"] || set["page_act"] || set["page_close"]
+	return append(out, orderedEnabledTools(nativeProgressGatedTools, enabled)...)
+}
+
+func hasToolFamily(enabled map[string]bool, family string) bool {
+	for name, on := range enabled {
+		if !on {
+			continue
+		}
+		if got, ok := toolcontract.FamilyOf(name); ok && got == family {
+			return true
+		}
+	}
+	return false
+}
+
+func mergeOfferedToolGuidance(offered []string, into map[string]any) {
+	loadNativeToolFamilies()
+	set := toolNameSet(offered)
+	for name := range set {
+		into["profile_has_"+name] = true
+	}
+	commandMutates, ok := into["profile_command_mutation"].(bool)
+	if !ok {
+		commandMutates = set["command"]
+	}
+	into["progress_gated_tools"] = progressGatedOfferedTools(set, commandMutates)
+	into["profile_has_page_controls"] = hasToolFamily(set, "page")
 	into["profile_has_scan_drilldown"] = profileHasScanDrilldownTools(set)
-	into["profile_has_managed_secrets"] = set["secret_generate"] && set["secret_list"] && set["secret_revoke"]
+	into["profile_has_managed_secrets"] = len(nativeSecretTools) > 0 && allPresent(nativeSecretTools, set)
 	into["command_output_files"] = set["command"]
 }

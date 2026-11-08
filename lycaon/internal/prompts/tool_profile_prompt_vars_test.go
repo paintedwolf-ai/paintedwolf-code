@@ -361,7 +361,7 @@ func TestHostRunnerToolOrderIncludesNativeTerminalThenArgv(t *testing.T) {
 func TestMergeProfileRequestableVars(t *testing.T) {
 	prompts.MergeProfileRequestableVars("coordinator", []string{"command", "request_tools"}, nil)
 
-	for _, profile := range []string{"coordinator", "implementer", "implement"} {
+	for _, profile := range []string{"coordinator", "implementer", "implement", "verify"} {
 		vars := map[string]any{}
 		prompts.MergeProfileRequestableVars(profile, []string{"command", "request_tools"}, vars)
 		canRequest, _ := vars["profile_can_request"].(map[string]bool)
