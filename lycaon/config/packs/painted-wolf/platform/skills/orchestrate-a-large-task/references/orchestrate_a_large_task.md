@@ -16,8 +16,10 @@
    - `max_tool_loops` — omit unless the shape table names a number; the host funds a productive leg on its own.
    - `child_session_id` — only to continue the same leg with new facts or budget.
    - `scope.base_overlay_id` — only for an intentional dependency on a pending write overlay.
+   - `after_workers` — sibling producer job ids the host must finish and promote before this leg starts; unusable producer output cancels the wait. Do not combine it with `child_session_id` or `scope.base_overlay_id`.
+   - `shared_context` — up to 8192 bytes of interface agreements copied to each collaborating leg; give collaborators the same text.
 8. Add a recommended worker procedure to `brief.constraints` when one listed skill clearly fits: `Recommended procedure: use the <name> skill.` This does not replace a complete brief. Do not prescribe a skill because its name is adjacent to the topic, and do not invent a task argument for skills.
-9. Keep dependent stages sequential.{% if profile_has_record_finding %} Workers may exchange short grounded findings via `record_finding`, but a message arriving after a design choice is not a prerequisite.{% endif %}
+9. Keep dependent stages sequential; when a consumer must start only after a producer's overlay is promoted, name the producer jobs with `after_workers`.{% if profile_has_record_finding %} Workers may exchange short grounded findings via `record_finding`, but a message arriving after a design choice is not a prerequisite.{% endif %}
 10. Wait for every dispatched leg, inspect complete envelopes, integrate write overlays explicitly, repair partial legs, and verify the combined result.
 
 ## Sizing by shape
@@ -39,7 +41,7 @@ Use these shapes to identify useful assignments. Group small related outputs whe
 
 Useful independent legs can overlap within the host cap; duration and shared resources still determine latency. The host wakes you per envelope. Start independent outcomes together; sequence legs for dependencies you can name. Use one worker when one bounded assignment is useful.
 
-`max_tool_loops` bounds a leg; it does not buy quality. A worker that needs more rounds {% if profile_has_request_budget %}asks with `request_budget` and names the work they cover{% endif %}{% if profile_has_extend_worker_budget %}; grant it with `extend_worker_budget` when that work is worth it,{% endif %}{% if profile_has_decline_worker_budget %} or decline it with `decline_worker_budget`{% endif %}. Answer promptly; the worker's final round waits for the answer. Without a grant it returns partial results and unknowns at the bound and can be resumed on the same child, so leaving the field out is the normal choice.
+`max_tool_loops` bounds a leg; it does not buy quality. {% if profile_has_extend_worker_budget or profile_has_decline_worker_budget %}A worker that needs more rounds asks for them, naming the work the rounds cover; answer promptly with `extend_worker_budget` or `decline_worker_budget`, because the worker's final round waits for the answer. Without a grant it returns partial results and unknowns at the bound and can be resumed on the same child, so leaving the field out is the normal choice.{% elif profile_has_request_budget %}When you need more rounds than the bound allows, ask with `request_budget` and name the work the rounds cover, then wait for the coordinator's decision; without a grant, return partial results and unknowns at the bound.{% else %}Stay within the bound: return partial results and unknowns at the bound rather than overrunning it.{% endif %}
 
 ## Stopping rule
 
