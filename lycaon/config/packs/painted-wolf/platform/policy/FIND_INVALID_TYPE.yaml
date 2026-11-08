@@ -16,10 +16,10 @@ requires:
 when: paintedwolf.rejection_code == "FIND_INVALID_TYPE"
 effect: block
 copy:
-  what: '{% if paintedwolf.native_operation %}find received invalid -type value {{ paintedwolf.type }} — want f (file) or d (directory).{% else %}find received invalid type {{ paintedwolf.type }} — want file, dir, or any.{% endif %}'
-  cause: '{% if paintedwolf.native_operation %}The -type filter takes kind codes: f for files, d for directories.{% else %}The type filter must be one of file, dir, or any.{% endif %}'
+  what: '{% if paintedwolf.native_operation %}find received invalid -type value {{ paintedwolf.type }} — want f (file), d (directory), or l (symlink).{% else %}find received invalid type {{ paintedwolf.type }} — want file, dir, or any.{% endif %}'
+  cause: '{% if paintedwolf.native_operation %}The -type filter takes kind codes: f files, d directories, l symlinks.{% else %}The type filter must be one of file, dir, or any.{% endif %}'
   why: Structured find filters keep walk semantics predictable under sandbox caps.
-  fix: '{% if paintedwolf.native_operation %}Retry find with -type f for files or -type d for directories, or omit -type.{% else %}Retry find with type file, dir, or any (or omit type).{% endif %}'
+  fix: '{% if paintedwolf.native_operation %}Retry find with -type f for files, -type d for directories, or -type l for symlinks, or omit -type.{% else %}Retry find with type file, dir, or any (or omit type).{% endif %}'
   instead: Branch on Code; fix the type argument
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:find

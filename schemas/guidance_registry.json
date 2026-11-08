@@ -1137,7 +1137,7 @@
       "branch_instruction": "Branch on Code; fix the type argument",
       "category": "recoverable",
       "emit": "guard:find",
-      "summary": "{% if paintedwolf.native_operation %}find received invalid -type value {{ paintedwolf.type }} — want f (file) or d (directory).{% else %}find received invalid type {{ paintedwolf.type }} — want file, dir, or any.{% endif %}"
+      "summary": "{% if paintedwolf.native_operation %}find received invalid -type value {{ paintedwolf.type }} — want f (file), d (directory), or l (symlink).{% else %}find received invalid type {{ paintedwolf.type }} — want file, dir, or any.{% endif %}"
     },
     "FIND_OVERFLOW_NARROW": {
       "branch_instruction": "Use the actual digest and current tool schema to refine scope; do not repeat identical arguments or invent a continuation cursor.",
