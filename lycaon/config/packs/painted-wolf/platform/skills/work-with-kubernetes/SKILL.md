@@ -7,7 +7,7 @@ metadata:
 
 # Work with Kubernetes
 
-{% if profile_has_command and root_count %}Run `kubectl`, `helm`, or `kind` in `command` and declare the id in `capability_request.host_resources` on that call.{% endif %}
+Run `kubectl`, `helm`, or `kind` in `command` and declare the id in `capability_request.host_resources` on that call.
 
 ## Rules for every cluster
 

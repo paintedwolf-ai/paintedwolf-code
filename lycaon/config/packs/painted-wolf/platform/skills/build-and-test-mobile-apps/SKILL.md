@@ -7,7 +7,7 @@ metadata:
 
 # Build and test mobile apps
 
-{% if profile_has_command and root_count %}Run the toolchain in `command` and declare its id (`android-sdk`, `flutter`, or `xcode`) in `capability_request.host_resources` on that call.{% endif %}
+Run the toolchain in `command` and declare its id (`android-sdk`, `flutter`, or `xcode`) in `capability_request.host_resources` on that call.
 
 ## Rules for every platform
 
