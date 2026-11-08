@@ -20,7 +20,7 @@
 
 ## Resources
 
-Optional directories: `references/`, `assets/`. The host reads `SKILL.md` at load time and lists the other files without reading them. {% if profile_has_skills_read %}The agent opens a file with `skills_read`, passing the skill name as `need` and the relative path as `resource`.{% endif %} Bundled skills ship no `scripts/`.
+Optional directories: `references/`, `assets/`. The host reads `SKILL.md` at load time and lists the other files without reading them.{% if profile_has_skills_read %} The agent opens a file with `skills_read`, passing the skill name as `need` and the relative path as `resource`.{% endif %} Bundled skills ship no `scripts/`.
 
 ## Pack templates
 

@@ -17,7 +17,7 @@ Use this workflow to turn "it broke sometime" into the exact commit, mechanicall
 6. Report the culprit commit, the mechanism of the breakage, and the bisect log. The fix is a separate decision made on that evidence.
 {% else %}1. Establish the two endpoints from evidence you already hold: the last state where the behavior is verifiably good and the first where it is verifiably bad. This leg cannot check out history, so anchor both endpoints in your report.
 2. Write the check as a script that exits 0 on good, non-zero on bad, and 125 when the state cannot be judged, and include it verbatim in your report so the search is repeatable.
-3. Hand the endpoints, the script, and the failing behavior to a read leg or the coordinator to run the bisect; the fix remains a separate decision made on that evidence.
+3. Include the endpoints, the script, and the failing behavior in your leg report for the coordinator to run the bisect; the fix remains a separate decision made on that evidence.
 {% endif %}
 
 ## Boundaries

@@ -7,7 +7,7 @@ Maintained sources of truth: the project's documented command wrapper and handof
 1. Read the complete digest and identify the earliest root failure, not the largest downstream count.
 2. Classify it as an assertion or behavior failure, compile or type failure, lint or contract failure, missing dependency or environment, timeout or flake, or an unrelated pre-existing failure.
 3. Name the changed path or behavior that could plausibly connect the failure to the edit. If no connection is evident, inspect working-tree state and relevant source before changing anything.
-4. {% if profile_has_command and root_count %}Use bounded `command` (`sed -n`, `grep -n`){% if profile_has_summarize %} or `summarize`{% endif %} to trace the failing symbol and its callers.{% else %}{% if profile_has_summarize %}Use `summarize` to trace the failing symbol and its callers.{% endif %}{% endif %} Do not edit a test until the intended behavior and production path are understood.
+4. {% if profile_has_command and root_count %}Use bounded `command` (`sed -n`, `grep -n`){% if profile_has_summarize %} or `summarize`{% endif %} to trace the failing symbol and its callers.{% else %}{% if profile_has_summarize %}Use `summarize` to trace the failing symbol and its callers.{% else %}Trace the failing symbol and its callers from the supplied digest and the sources you can read.{% endif %}{% endif %} Do not edit a test until the intended behavior and production path are understood.
 
 ## Iterate proportionally
 

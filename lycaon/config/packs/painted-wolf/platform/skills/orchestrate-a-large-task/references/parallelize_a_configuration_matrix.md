@@ -2,6 +2,8 @@
 
 **Entry check:** the same acceptance criteria apply to every cell, and the cells differ only by configuration. If a cell needs different criteria, it is separate work, not a matrix row.
 
+The dispatch steps below are coordinator-only: a worker leg applies the matching cell guidance within its own assignment and reports dispatch needs to the parent.
+
 ## Workflow
 
 1. Write the matrix out before dispatch — one row per required cell, with every dimension as a column. Record deliberate omissions as rows marked untested; do not let workers choose coverage.

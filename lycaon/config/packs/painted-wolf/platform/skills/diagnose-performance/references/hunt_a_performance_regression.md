@@ -15,13 +15,13 @@
 
    If the spread is comparable to the regression you are chasing, **stop and reduce noise or increase the workload.** Bisecting inside the noise floor follows randomness to a confident wrong answer.
 3. **Locate before explaining.** Profile the slow path. CPU, allocation, and wall-clock are different profiles answering different questions, and the most useful early signal is whether wall-clock grew while CPU did not — that means *waiting*, so look at I/O, a lock, or a network call rather than at algorithmic cost.
-4. **Bisect with the measurement as the predicate.** Set the threshold from step 2's noise floor, not from a round number. Run it in a separate worktree (`git worktree add @scratch/bisect HEAD`) when the main tree has changes, and end with `git bisect reset`:
+4. **Bisect with the measurement as the predicate.** Set the threshold from step 2's noise floor, not from a round number.{% if has_git and not on_worker_branch %} Run it in a separate worktree (`git worktree add @scratch/bisect HEAD`) when the main tree has changes, and end with `git bisect reset`:
 
    ```bash
    git bisect start <slow-rev> <fast-rev>
    git bisect run sh -c 'test "$(./bench --median-ms)" -lt 1950'
    ```
-
+{% else %} This environment cannot check out history, so report the two endpoints, the threshold, and the measurement script for a read leg or the coordinator to run the bisect.{% endif %}
 5. **Check the dependency graph, not just your source.** A lockfile diff can move a dependency several versions and account for the entire regression. This is the common miss, because the commit that changed behavior touches nothing you wrote.
 6. **Verify the fix with the same measurement under the same conditions,** and report both numbers with the run count and spread. "Faster" is not a result; `1.90s → 1.11s, ±0.05 over 10 runs` is.
 
