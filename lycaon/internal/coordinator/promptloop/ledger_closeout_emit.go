@@ -157,6 +157,10 @@ func (l *turnCloseout) emitAssembledCloseout(
 			break
 		}
 	}
+	history, err = l.Nudges.retireToolFreeDraftRecovery(ctx, sessionID, history, committed.ID)
+	if err != nil {
+		return out, err
+	}
 	if st != nil {
 		if err := l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
 			return out, err

@@ -377,6 +377,10 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 		return history, "", "", err
 	}
 	history[len(history)-1] = committed
+	history, err = l.Nudges.retireToolFreeDraftRecovery(ctx, sessionID, history, committed.ID)
+	if err != nil {
+		return history, "", "", err
+	}
 	if err := l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
 		return history, "", "", err
 	}

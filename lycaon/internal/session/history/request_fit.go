@@ -192,8 +192,9 @@ func (m *Service) requestView(ctx context.Context, sess *api.Session) *store.Com
 // requestOmission is what later fitting needs to name an interval unchanged:
 // the coverage it starts after and any row a held cut already removed.
 type requestOmission struct {
-	view         *store.CompactionView
-	firstDropped int64
+	view           *store.CompactionView
+	firstDropped   int64
+	throughDropped int64
 }
 
 // applyFitCut replays a held fit cutoff, so requests after the one that chose it
@@ -211,21 +212,25 @@ func (m *Service) applyFitCut(ctx context.Context, sess *api.Session, key cutoff
 		return rows, omission, nil
 	}
 	kept, firstDropped := rowsFromCut(promptassembly.MarkContextPins(sess, rows, min(8192, max(0, cfg.HardCeilingTokens/5))), held)
+	_, throughDropped := omittedOrdinals(rows, compaction.ContextMessagesFromAPI(kept))
 	omission.firstDropped = firstDropped
-	out, err := m.withOmissionNotice(ctx, sess, kept, omission, firstDropped, true)
+	omission.throughDropped = throughDropped
+	out, err := m.withOmissionNotice(ctx, sess, kept, omission, firstDropped, throughDropped, true)
 	return out, omission, err
 }
 
 // rowsFromCut drops unpinned canonical rows below held and any earlier notice.
 func rowsFromCut(rows []api.Message, held int64) ([]api.Message, int64) {
+	bounds := indexDraftExchanges(rows)
 	kept := rows[:0:0]
 	firstDropped := int64(0)
 	for _, row := range rows {
+		lo := bounds.minOrd(row)
 		switch {
 		case row.ID == historyCoverageNoticeID:
-		case row.Ord > 0 && row.Ord < held && !row.ContextPinned:
-			if firstDropped == 0 {
-				firstDropped = row.Ord
+		case row.Ord > 0 && lo < held && !row.ContextPinned:
+			if firstDropped == 0 || lo < firstDropped {
+				firstDropped = lo
 			}
 		default:
 			kept = append(kept, row)
@@ -236,16 +241,23 @@ func rowsFromCut(rows []api.Message, held int64) ([]api.Message, int64) {
 
 // interval returns where the notice goes and the ordinals it names, derived the
 // same way whether this request cut the rows or an earlier one did.
-func (o requestOmission) interval(kept []api.Message, firstDropped int64) (at int, from, through int64) {
+func (o requestOmission) interval(kept []api.Message, firstDropped, throughDropped int64) (at int, from, through int64) {
 	if o.firstDropped > 0 && (firstDropped == 0 || o.firstDropped < firstDropped) {
 		firstDropped = o.firstDropped
 	}
+	throughDropped = max(throughDropped, o.throughDropped)
 	covered := int64(0)
 	if o.view != nil {
 		covered = o.view.CoveredThroughOrd
 	}
 	at = slices.IndexFunc(kept, func(row api.Message) bool {
-		return row.Ord > 0 && !row.ContextPinned && (row.Ord > covered || firstDropped > 0)
+		if row.Ord <= 0 {
+			return false
+		}
+		if throughDropped > 0 {
+			return row.Ord > throughDropped && (!row.ContextPinned || row.Ord > covered)
+		}
+		return !row.ContextPinned && (row.Ord > covered || firstDropped > 0)
 	})
 	if at < 0 {
 		return 0, 1, 0
@@ -264,11 +276,11 @@ func (o requestOmission) interval(kept []api.Message, firstDropped int64) (at in
 	return at, from, through
 }
 
-func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kept []api.Message, omission requestOmission, firstDropped int64, prior bool) ([]api.Message, error) {
+func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kept []api.Message, omission requestOmission, firstDropped, throughDropped int64, prior bool) ([]api.Message, error) {
 	if firstDropped == 0 && omission.firstDropped == 0 && !prior {
 		return kept, nil
 	}
-	at, from, through := omission.interval(kept, firstDropped)
+	at, from, through := omission.interval(kept, firstDropped, throughDropped)
 	if from > through {
 		return kept, nil
 	}
@@ -282,9 +294,15 @@ func (m *Service) withOmissionNotice(ctx context.Context, sess *api.Session, kep
 func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, omission requestOmission, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
 	rows := make([]api.Message, 0, len(history))
 	prior := false
-	for _, row := range history {
+	for i, row := range history {
 		if row.ID == historyCoverageNoticeID {
 			prior = true
+			for _, after := range history[i+1:] {
+				if after.Ord > 0 {
+					omission.throughDropped = max(omission.throughDropped, after.Ord-1)
+					break
+				}
+			}
 			continue
 		}
 		rows = append(rows, row)
@@ -365,9 +383,9 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 			}
 		}
 		fitted = kept
-		firstDropped, _ = omittedOrdinals(rows, fitted)
+		firstDropped, through = omittedOrdinals(rows, fitted)
 	}
-	return m.withOmissionNotice(ctx, sess, compaction.ContextMessagesToAPI(fitted, rows), omission, firstDropped, prior)
+	return m.withOmissionNotice(ctx, sess, compaction.ContextMessagesToAPI(fitted, rows), omission, firstDropped, through, prior)
 }
 
 // fitWithOmissionNotice refits with the notice pinned; its cost can widen the
@@ -396,6 +414,7 @@ func (m *Service) fitWithOmissionNotice(ctx context.Context, sess *api.Session, 
 
 // omittedOrdinals spans the canonical rows a fit left out; zero means none.
 func omittedOrdinals(original []api.Message, fitted []compaction.ContextMessage) (int64, int64) {
+	bounds := indexDraftExchanges(original)
 	kept := make(map[string]bool, len(fitted))
 	for _, row := range fitted {
 		kept[row.ID] = true
@@ -405,10 +424,11 @@ func omittedOrdinals(original []api.Message, fitted []compaction.ContextMessage)
 		if row.Ord <= 0 || kept[row.ID] {
 			continue
 		}
-		if from == 0 {
-			from = row.Ord
+		lo := bounds.minOrd(row)
+		if from == 0 || lo < from {
+			from = lo
 		}
-		through = max(through, row.Ord)
+		through = max(through, bounds.maxOrdFor(row))
 	}
 	return from, through
 }

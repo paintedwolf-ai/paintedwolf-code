@@ -39,6 +39,8 @@ type ContextMessageProvenance struct {
 	ModelReasoning      *api.ModelReasoning
 	// PromptCacheBreakpoint marks a stable boundary for provider caches.
 	PromptCacheBreakpoint api.PromptCacheTier
+	// DraftRecoveryTarget names the reused assistant draft this recovery row precedes.
+	DraftRecoveryTarget string
 	// ModelProjected prevents duplicate data markers after an IR round trip.
 	ModelProjected bool
 }
@@ -80,6 +82,7 @@ func ContextMessageFromAPI(m api.Message) ContextMessage {
 			TrustTier:             m.TrustTier,
 			Visibility:            m.Visibility,
 			PromptCacheBreakpoint: m.PromptCacheBreakpoint,
+			DraftRecoveryTarget:   api.DraftRecoveryTarget(m),
 			SourceContext:         m.SourceContext,
 			HostSecretRedaction:   cloneHostSecretRedaction(m.HostSecretRedaction),
 			ModelProjected:        m.ModelProjected,

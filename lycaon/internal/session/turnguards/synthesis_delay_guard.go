@@ -46,6 +46,9 @@ func (m *Service) openProgressWithWaiver(ctx context.Context, sess *api.Session,
 	batchReady := workeroutcomes.SynthesisBlockedOnlyByOpenProgress(implState, history, content, verifyRequired, verifyPassed || verifyUnverified)
 	_, pending, _ := progress.CloseCounts(content)
 	eligible := workersIdle && batchReady && pending > 0
+	if eligible && m.closeouts != nil && m.closeouts.ProgressWaived(root, content) {
+		return nil, false, true
+	}
 	delayCount, delayed := m.closeouts.Delay(sess.ID, root, closeouts.ProgressDelay, eligible, synthesisDelayMaxPerPrompt)
 	reject, block := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 		gc.Workers.WorkersIdle = workersIdle
@@ -58,4 +61,12 @@ func (m *Service) openProgressWithWaiver(ctx context.Context, sess *api.Session,
 		return nil
 	})
 	return reject, block, eligible && !block
+}
+
+func (m *Service) waiveOpenProgress(ctx context.Context, sess *api.Session) {
+	if m == nil || m.progress == nil || m.closeouts == nil || sess == nil {
+		return
+	}
+	root := sessiontree.RootID(ctx, m.store, sess.ID)
+	m.closeouts.WaiveProgress(root, m.progress.Get(ctx, root))
 }
