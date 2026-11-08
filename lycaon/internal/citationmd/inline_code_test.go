@@ -84,3 +84,29 @@ func TestCodeSpanNeverVanishes(t *testing.T) {
 		t.Fatalf("a parse with no evidence took the span: %+v", plain.Occurrences)
 	}
 }
+
+func TestLinePrefixedCoordinates(t *testing.T) {
+	t.Parallel()
+	const path = "demo_win.py"
+	opts := codeOptions(path)
+	opts.KnownHandleKind = func(kind string) bool { return kind == "read" }
+	for _, tc := range []struct {
+		name, source string
+		want         Citation
+	}{
+		{"spaced line coordinate", "Simulated in [demo_win.py:line 57].", Citation{Path: path, Line: 57}},
+		{"compact line coordinate", "Simulated in [demo_win.py:line57].", Citation{Path: path, Line: 57}},
+		{"spaced line range", "Simulated in [demo_win.py:line 10-20].", Citation{Path: path, Line: 10, EndLine: 20}},
+		{"repeated line range", "Simulated in [demo_win.py:line 10-line 20].", Citation{Path: path, Line: 10, EndLine: 20}},
+		{"handle line coordinate", "Simulated in [read#1:line 5].", Citation{Handle: "read#1", Line: 5}},
+		{"code span line coordinate", "Simulated in `demo_win.py:line 21`.", Citation{Path: path, Line: 21}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc := Parse(tc.source, opts)
+			if len(doc.Issues) != 0 || len(doc.Occurrences) != 1 || doc.Occurrences[0].Citation == nil || *doc.Occurrences[0].Citation != tc.want {
+				t.Fatalf("occurrences = %+v, issues = %+v, want %+v", doc.Occurrences, doc.Issues, tc.want)
+			}
+		})
+	}
+}
