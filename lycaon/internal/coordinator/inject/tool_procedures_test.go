@@ -1,11 +1,14 @@
 package inject_test
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -46,5 +49,13 @@ func TestCalibratedPruningPreservesCoordinatorRequirements(t *testing.T) {
 		if !found {
 			t.Fatalf("calibrated pruning removed required unit %q", id)
 		}
+	}
+	block, err := inject.RenderToolProceduresBlock(
+		t.Context(), renderer, "session", prompts.CoordinatorProfileID,
+		[]string{"command", "update_progress"}, omitted,
+	)
+	testutil.FailErr(t, "render tool procedures block", err)
+	if !strings.Contains(block, "Snapshot the running UI") || !strings.Contains(block, "Snapshot the terminal") {
+		t.Fatalf("rendered tool procedures block missing visual snapshot checklist cue: %q", block)
 	}
 }
