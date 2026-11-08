@@ -270,9 +270,6 @@ func (o requestOmission) interval(kept []api.Message, firstDropped, throughDropp
 	if firstDropped > 0 {
 		from = min(from, firstDropped)
 	}
-	if o.view == nil {
-		at = 0
-	}
 	return at, from, through
 }
 
