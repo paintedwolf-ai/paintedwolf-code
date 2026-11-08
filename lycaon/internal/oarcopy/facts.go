@@ -13,29 +13,89 @@ const HostFactNamespace = "paintedwolf"
 // CapabilitySnapshotKey carries typed host facts only during local formatting.
 const CapabilitySnapshotKey = "_host_capability_snapshot"
 
-var profileNames = map[string]bool{
-	"tool":                    true,
-	"tool_args":               true,
-	"tool_args_fingerprint":   true,
-	"arg_validation_errors":   true,
-	"arg_validation_reason":   true,
-	"arg_validation_field":    true,
-	"permission_profile":      true,
-	"policy_denied":           true,
-	"mcp_error_code":          true,
-	"mcp_provider_id":         true,
-	"mcp_tool_name":           true,
-	"mcp_qualified_tool":      true,
-	"mcp_provider_configured": true,
-	"mcp_provider_enabled":    true,
-	"mcp_call_ok":             true,
-	"mcp_schema_matched":      true,
-	"session_posture":         true,
-	"principal":               true,
-	"principal_roles":         true,
-	"is_directory":            true,
-	"not_found":               true,
-	"path_denied":             true,
+// Standard profile names.
+const (
+	ProfileTool              = "tool"
+	ProfileSession           = "session"
+	ProfileFilesystem        = "filesystem"
+	ProfileContentProvenance = "content-provenance"
+	ProfileContent           = "content"
+	ProfileSecrets           = "secrets"
+	ProfileMCP               = "mcp"
+)
+
+var requiredCoreFacts = []string{
+	"anchor",
+	"fire_count",
+	"breaker_count",
+}
+
+var requiredCoreFunctions = []string{
+	"fire_count_of",
+	"breaker_count_of",
+}
+
+var standardProfileFacts = map[string][]string{
+	ProfileTool: {
+		"tool", "tool_args", "tool_args_fingerprint", "arg_validation_errors",
+		"arg_validation_reason", "arg_validation_field",
+		"permission_profile", "policy_denied",
+		"tool_arg_string", "tool_arg_int", "tool_arg_bool",
+	},
+	ProfileSession:    {"session_posture", "principal", "principal_roles"},
+	ProfileFilesystem: {"is_directory", "not_found", "path_denied", "path_outside_scope"},
+	ProfileSecrets:    {"secret_matches"},
+	ProfileContent:    {"content_length"},
+	ProfileContentProvenance: {
+		"content_roles", "content_origins", "content_authorities", "content_trust_tiers",
+		"content_sources", "content_segment_count", "content_contains_untrusted",
+	},
+	ProfileMCP: {
+		"mcp_provider_id", "mcp_tool_name", "mcp_qualified_tool", "mcp_provider_configured",
+		"mcp_provider_enabled", "mcp_call_ok", "mcp_error_code", "mcp_schema_matched",
+		"mcp_provider_configured_for", "mcp_provider_enabled_for",
+		"mcp_has_field", "mcp_field_bool", "mcp_field_string", "mcp_field_int",
+	},
+}
+
+// RequiredCoreFacts returns the normative core facts.
+func RequiredCoreFacts() []string {
+	return append([]string(nil), requiredCoreFacts...)
+}
+
+// RequiredCoreFunctions returns the normative core observation functions.
+func RequiredCoreFunctions() []string {
+	return append([]string(nil), requiredCoreFunctions...)
+}
+
+// StandardProfileFacts returns each standard profile and its complete membership.
+func StandardProfileFacts() map[string][]string {
+	out := make(map[string][]string, len(standardProfileFacts))
+	for k, v := range standardProfileFacts {
+		out[k] = append([]string(nil), v...)
+	}
+	return out
+}
+
+var profileNames = buildPortableNames()
+
+func buildPortableNames() map[string]bool {
+	out := make(map[string]bool, len(requiredCoreFacts)+32)
+	for _, name := range requiredCoreFacts {
+		out[name] = true
+	}
+	for _, members := range standardProfileFacts {
+		for _, name := range members {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+// IsPortableFact reports whether name is a core or standard-profile identifier
+// published without the host namespace prefix.
+func IsPortableFact(name string) bool {
+	return profileNames[strings.TrimSpace(name)]
 }
 
 var publishedFactNames = map[string]string{
