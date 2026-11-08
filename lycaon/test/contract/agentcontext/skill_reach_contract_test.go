@@ -2,6 +2,7 @@ package contract
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -229,4 +230,100 @@ func TestStockPackSkillsRenderedBudgets(t *testing.T) {
 			}
 		}
 	})
+}
+
+var (
+	emptyListItemRe      = regexp.MustCompile(`^\s*(\d+\.|[-*])\s*$`)
+	spaceBeforePunctRe   = regexp.MustCompile(` [,;]`)
+	spaceBeforeDotRe     = regexp.MustCompile(` \.`)
+	inlineCodeSpanRe     = regexp.MustCompile("`[^`]*`")
+	tableSeparatorCellRe = regexp.MustCompile(`^:?-+:?$`)
+)
+
+// prosePunctuationDrift reports space before punctuation in rendered prose.
+// A space before a dot introducing an uppercase token is a dotted name such
+// as .NET, not drift.
+func prosePunctuationDrift(prose string) bool {
+	if spaceBeforePunctRe.MatchString(prose) {
+		return true
+	}
+	for _, loc := range spaceBeforeDotRe.FindAllStringIndex(prose, -1) {
+		if loc[1] < len(prose) && prose[loc[1]] >= 'A' && prose[loc[1]] <= 'Z' {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// Every rendered skill body and reference keeps its prose structurally intact
+// (INV-SK-09): template conditionals must never hollow out a numbered step,
+// leave an empty backtick span, put space before punctuation, or blank a
+// markdown table cell on any reader state.
+func TestStockSkillsRenderedProseStructure(t *testing.T) {
+	forEachStockSkillRender(t, func(t *testing.T, sk skills.Skill, reader string, _ []string, _ map[string]any, parts []renderedText) {
+		for _, part := range parts {
+			checkRenderedProseStructure(t, sk.Name, part, reader)
+		}
+	})
+}
+
+func checkRenderedProseStructure(t *testing.T, skill string, part renderedText, reader string) {
+	t.Helper()
+	inFence := false
+	for i, line := range strings.Split(part.text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			inFence = !inFence
+			continue
+		}
+		if inFence {
+			continue
+		}
+		where := fmt.Sprintf("skill %q %s as read by %s, line %d", skill, part.label, reader, i+1)
+		if emptyListItemRe.MatchString(line) {
+			t.Errorf("%s: renders an empty list item %q", where, trimmed)
+		}
+		if strings.Contains(line, "``") {
+			t.Errorf("%s: renders an empty backtick span: %q", where, trimmed)
+		}
+		isTableRow := strings.HasPrefix(trimmed, "|") && strings.HasSuffix(trimmed, "|")
+		if !isTableRow {
+			// Inline code spans carry literal command syntax (./..., trailing
+			// dot arguments), so punctuation there is not prose drift. Replace
+			// each span with a letter: a space would fuse the span's trailing
+			// punctuation into fake drift, and the letter keeps real drift
+			// around the span visible.
+			prose := inlineCodeSpanRe.ReplaceAllString(line, "x")
+			if prosePunctuationDrift(prose) {
+				t.Errorf("%s: renders space before punctuation: %q", where, trimmed)
+			}
+			continue
+		}
+		if cells := strings.Split(trimmed, "|"); blankedTableCells(cells) {
+			t.Errorf("%s: renders a blanked table cell: %q", where, trimmed)
+		}
+	}
+}
+
+// blankedTableCells reports whether a split table row carries a whitespace-only
+// cell. Separator rows (| --- |) are not prose and never count.
+func blankedTableCells(cells []string) bool {
+	interior := cells[1 : len(cells)-1]
+	separator := true
+	for _, cell := range interior {
+		if !tableSeparatorCellRe.MatchString(strings.TrimSpace(cell)) {
+			separator = false
+			break
+		}
+	}
+	if separator {
+		return false
+	}
+	for _, cell := range interior {
+		if strings.TrimSpace(cell) == "" {
+			return true
+		}
+	}
+	return false
 }
