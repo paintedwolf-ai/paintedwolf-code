@@ -62,6 +62,9 @@ type grepMatch struct {
 	Bindings      map[string]string `json:"bindings,omitempty"`
 	ContextBefore []string          `json:"context_before,omitempty"`
 	ContextAfter  []string          `json:"context_after,omitempty"`
+	// Structured identity of the matched file; never serialized.
+	rootID   string `json:"-"`
+	scopeRel string `json:"-"`
 }
 
 type grepResponse struct {
@@ -195,7 +198,7 @@ func (t *GrepTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			return "", grepRootStatErr(target.displayRoot, err)
 		}
 		if !info.IsDir() {
-			out, err := t.grepSingleFile(ctx, relRoot, target.displayRoot, target.fullRoot, info, opts.includeHidden, search, opts, args)
+			out, err := t.grepSingleFile(ctx, relRoot, target, info, opts.includeHidden, search, opts, args)
 			if err != nil {
 				return "", grepExecutionError(search, err)
 			}
@@ -274,6 +277,10 @@ func (t *GrepTool) finalizeGrepResponse(ctx context.Context, root string, search
 		resp = buildGrepZoomedOutResponse(ctx, resp, collected)
 	}
 	for _, match := range resp.Matches {
+		if match.rootID != "" && match.scopeRel != "" {
+			search.tctx.RecordSourceIdentity(match.rootID, match.scopeRel, api.NavigationEntryKindFile)
+			continue
+		}
 		search.tctx.RecordSourcePath(match.Path, api.NavigationEntryKindFile)
 	}
 	for _, hit := range resp.Highlights {
@@ -409,12 +416,12 @@ func (t *GrepTool) resolveGrepTargets(ctx context.Context, tctx tools.ToolContex
 	}}, nil
 }
 
-func (t *GrepTool) grepSingleFile(ctx context.Context, relRoot, displayRoot, fullRoot string, info fs.FileInfo, includeHidden bool, search *grepSearch, opts grepOptions, args map[string]any) (string, error) {
-	relSlash := filepath.ToSlash(displayRoot)
+func (t *GrepTool) grepSingleFile(ctx context.Context, relRoot string, target grepTarget, info fs.FileInfo, includeHidden bool, search *grepSearch, opts grepOptions, args map[string]any) (string, error) {
+	relSlash := filepath.ToSlash(target.displayRoot)
 	if (!includeHidden && isHiddenPath(relSlash)) || !search.pathFilter.Match(relSlash) {
 		return t.finalizeGrepResponse(ctx, relRoot, search, opts, args)
 	}
-	content, binary, bytesTruncated, err := search.loadGrepFile(ctx, fullRoot, info)
+	content, binary, bytesTruncated, err := search.loadGrepFile(ctx, target.fullRoot, info)
 	if err != nil {
 		return "", err
 	}
@@ -422,7 +429,7 @@ func (t *GrepTool) grepSingleFile(ctx context.Context, relRoot, displayRoot, ful
 	if binary {
 		scanErr = search.applyFileOutcome(grepFileOutcome{binarySkipped: true})
 	} else {
-		scanErr = search.scanFile(ctx, relSlash, content, bytesTruncated)
+		scanErr = search.scanFile(ctx, relSlash, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, target.fullRoot)}, content, bytesTruncated)
 	}
 	if scanErr != nil && !errors.Is(scanErr, errGrepMatchCap) {
 		return "", scanErr
@@ -444,7 +451,7 @@ func (s *grepSearch) loadGrepFile(ctx context.Context, absPath string, info fs.F
 }
 
 // scanFile matches one loaded text file.
-func (s *grepSearch) scanFile(ctx context.Context, relSlash string, content []byte, bytesTruncated bool) error {
+func (s *grepSearch) scanFile(ctx context.Context, relSlash string, ident grepFileIdentity, content []byte, bytesTruncated bool) error {
 	if !s.pathFilter.Match(relSlash) {
 		return nil
 	}
@@ -454,13 +461,13 @@ func (s *grepSearch) scanFile(ctx context.Context, relSlash string, content []by
 		if bytesTruncated {
 			s.filesBytesTruncated++
 		}
-		return s.scanStructural(ctx, relSlash, content)
+		return s.scanStructural(ctx, relSlash, ident, content)
 	}
 	if s.offset > 0 {
 		s.noteSubtree(relSlash)
-		return s.scanPaginatedText(relSlash, content, bytesTruncated)
+		return s.scanPaginatedText(relSlash, ident, content, bytesTruncated)
 	}
-	out := s.scanContent(relSlash, content)
+	out := s.scanContent(relSlash, ident, content)
 	out.bytesTruncated = bytesTruncated
 	return s.applyFileOutcome(out)
 }
@@ -489,7 +496,7 @@ func (s *grepSearch) largestSubtree() (string, int) {
 }
 
 // scanContent matches non-structural text.
-func (s *grepSearch) scanContent(relSlash string, content []byte) grepFileOutcome {
+func (s *grepSearch) scanContent(relSlash string, ident grepFileIdentity, content []byte) grepFileOutcome {
 	out := grepFileOutcome{rel: relSlash}
 	if !s.pathFilter.Match(relSlash) {
 		out.globSkipped = true
@@ -511,20 +518,20 @@ func (s *grepSearch) scanContent(relSlash string, content []byte) grepFileOutcom
 		s.stats.RegexOrScanRuns.Add(1)
 	}
 	if s.matchSink != nil {
-		out.err = s.forEachTextMatch(relSlash, content, func(match grepMatch) bool {
+		out.err = s.forEachTextMatch(relSlash, ident, content, func(match grepMatch) bool {
 			s.matchSink(match)
 			return true
 		})
 		return out
 	}
-	matches, err := s.collectMatches(relSlash, content)
+	matches, err := s.collectMatches(relSlash, ident, content)
 	out.matches = matches
 	out.err = err
 	return out
 }
 
 // scanStructural matches supported syntax trees and rejects invalid patterns.
-func (s *grepSearch) scanStructural(ctx context.Context, relSlash string, content []byte) error {
+func (s *grepSearch) scanStructural(ctx context.Context, relSlash string, ident grepFileIdentity, content []byte) error {
 	if _, ok := structrewrite.SupportedLanguage(s.lang, relSlash); !ok {
 		return nil
 	}
@@ -565,7 +572,7 @@ func (s *grepSearch) scanStructural(ctx context.Context, relSlash string, conten
 			s.skipped++
 			continue
 		}
-		entry := grepMatch{Path: relSlash, Line: m.StartRow + 1, Content: m.Text}
+		entry := grepMatch{Path: relSlash, Line: m.StartRow + 1, Content: m.Text, rootID: ident.rootID, scopeRel: ident.scopeRel}
 		if len(m.Bindings) > 0 {
 			entry.Bindings = m.Bindings
 		}

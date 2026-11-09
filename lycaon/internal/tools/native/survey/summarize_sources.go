@@ -22,10 +22,10 @@ type structureCacheEntry struct {
 	ok bool
 }
 
-func (g *summarySources) structureFromAbs(ctx context.Context, abs, display string) (summarize.StructureCandidate, int, bool) {
+func (g *summarySources) structureFromAbs(ctx context.Context, abs, display, rootID, scopeRel string) (summarize.StructureCandidate, int, bool) {
 	g.memoMu.Lock()
 	if g.structureByPath != nil {
-		if ent, ok := g.structureByPath[display]; ok {
+		if ent, ok := g.structureByPath[structureMemoKey(display, rootID)]; ok {
 			g.memoMu.Unlock()
 			return ent.sc, ent.n, ent.ok
 		}
@@ -35,34 +35,40 @@ func (g *summarySources) structureFromAbs(ctx context.Context, abs, display stri
 	content, err := g.readFileCached(ctx, abs)
 	if err != nil {
 		if errors.Is(err, errFileNeedsStreaming) {
-			sc, n, ok := g.structureFromStream(ctx, abs, display)
+			sc, n, ok := g.structureFromStream(ctx, abs, display, rootID, scopeRel)
 			g.markPartialStructure(abs, &sc)
-			g.storeStructure(display, sc, n, ok)
+			g.storeStructure(display, rootID, sc, n, ok)
 			return sc, n, ok
 		}
 		if errors.Is(err, errUnsupportedSummaryText) {
 			g.noteNonTextPath(display)
 		}
 		g.noteSkippedPath(display)
-		g.storeStructure(display, summarize.StructureCandidate{}, 0, false)
+		g.storeStructure(display, rootID, summarize.StructureCandidate{}, 0, false)
 		return summarize.StructureCandidate{}, 0, false
 	}
-	sc, n, ok := g.structureFromContent(ctx, display, content)
+	sc, n, ok := g.structureFromContent(ctx, display, rootID, scopeRel, content)
 	g.markPartialStructure(abs, &sc)
-	g.storeStructure(display, sc, n, ok)
+	g.storeStructure(display, rootID, sc, n, ok)
 	return sc, n, ok
 }
 
-func (g *summarySources) storeStructure(display string, sc summarize.StructureCandidate, n int, ok bool) {
+// structureMemoKey separates candidates that share a display spelling but come
+// from different roots (unlabeled non-active roots also render bare paths).
+func structureMemoKey(display, rootID string) string {
+	return display + "\x00" + rootID
+}
+
+func (g *summarySources) storeStructure(display, rootID string, sc summarize.StructureCandidate, n int, ok bool) {
 	g.memoMu.Lock()
 	defer g.memoMu.Unlock()
 	if g.structureByPath == nil {
 		g.structureByPath = map[string]structureCacheEntry{}
 	}
-	g.structureByPath[display] = structureCacheEntry{sc: sc, n: n, ok: ok}
+	g.structureByPath[structureMemoKey(display, rootID)] = structureCacheEntry{sc: sc, n: n, ok: ok}
 }
 
-func (g *summarySources) structureFromContent(ctx context.Context, display string, content []byte) (summarize.StructureCandidate, int, bool) {
+func (g *summarySources) structureFromContent(ctx context.Context, display, rootID, scopeRel string, content []byte) (summarize.StructureCandidate, int, bool) {
 	root := strings.TrimSpace(g.access.activeRoot)
 	if root == "" {
 		return summarize.StructureCandidate{}, 0, false
@@ -78,6 +84,8 @@ func (g *summarySources) structureFromContent(ctx context.Context, display strin
 		LineCount:     strings.Count(string(content), "\n") + 1,
 		Language:      outline.Language,
 		OutlineSource: outline.Source,
+		RootID:        rootID,
+		ScopeRel:      scopeRel,
 		Parses:        outline.Parses,
 	}
 	if outline.TotalLines > 0 {
@@ -155,18 +163,20 @@ func (g *summarySources) Outline(ctx context.Context, relPath string) (summarize
 	if err != nil {
 		return summarize.StructureCandidate{}, false
 	}
-	sc, _, ok := g.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath)
+	sc, _, ok := g.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath, resolved.Root.ID, resolved.ScopeRel)
 	return sc, ok
 }
 
-func (g *summarySources) structureFromStream(ctx context.Context, abs, display string) (summarize.StructureCandidate, int, bool) {
+func (g *summarySources) structureFromStream(ctx context.Context, abs, display, rootID, scopeRel string) (summarize.StructureCandidate, int, bool) {
 	chunkBytes := g.caps.Gather.FileChunkBytes
 	if chunkBytes <= 0 {
 		chunkBytes = 1 << 20
 	}
 	sc := summarize.StructureCandidate{
-		RelPath: display,
-		Kind:    summarize.StructureKindFile,
+		RelPath:  display,
+		Kind:     summarize.StructureKindFile,
+		RootID:   rootID,
+		ScopeRel: scopeRel,
 	}
 	headLimit := chunkBytes
 	headLines := g.caps.Gather.FileHeadLines
