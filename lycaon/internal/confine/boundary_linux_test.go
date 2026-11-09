@@ -88,7 +88,7 @@ func TestCompileFilesystemPlanNamesLoaderFilesAtAnyDepth(t *testing.T) {
 	if got := namedFilesBelow(proj, protectedpath.AgentsMDFileName, secondName); !reflect.DeepEqual(got, []string{top, second, nested}) {
 		t.Fatalf("namedFilesBelow multi = %v, want %v", got, []string{top, second, nested})
 	}
-	fullInv := namedFilesBelowInventory(proj, maxAgentPolicyWalkEntries, protectedpath.AgentsMDFileName)
+	fullInv := namedFilesBelowInventory(proj, agentPolicyWalkBudget, protectedpath.AgentsMDFileName)
 	if !fullInv.Complete || fullInv.ReadDirs == 0 {
 		t.Fatalf("full namedFilesBelowInventory = %+v, want Complete=true and ReadDirs>0", fullInv)
 	}
@@ -101,7 +101,7 @@ func TestCompileFilesystemPlanNamesLoaderFilesAtAnyDepth(t *testing.T) {
 		testutil.FailErr(t, "mkdir locked", os.Mkdir(unreadable, 0o755))
 		testutil.FailErr(t, "chmod locked", os.Chmod(unreadable, 0o000))
 		t.Cleanup(func() { _ = os.Chmod(unreadable, 0o755) })
-		partialInv := namedFilesBelowInventory(proj, maxAgentPolicyWalkEntries, protectedpath.AgentsMDFileName)
+		partialInv := namedFilesBelowInventory(proj, agentPolicyWalkBudget, protectedpath.AgentsMDFileName)
 		if partialInv.Complete || partialInv.ReadDirs == 0 {
 			t.Fatalf("unreadable-dir namedFilesBelowInventory = %+v, want Complete=false and ReadDirs>0", partialInv)
 		}
@@ -244,13 +244,15 @@ func TestCompileFilesystemPlanResolvesMountedViewLoaderFilesFromSourceRoots(t *t
 	testutil.FailErr(t, "layeredfs.New", err)
 	defer func() { _ = core.ReleaseView() }()
 
-	testutil.FailErr(t, "Mkdir private-dir", core.Mkdir(layeredfs.QualifiedPath{RootID: "proj", Rel: "private-dir"}, 0o755))
-	testutil.FailErr(t, "WriteFile private AGENTS.md", core.WriteFile(layeredfs.QualifiedPath{RootID: "proj", Rel: "private-dir/" + protectedpath.AgentsMDFileName}, []byte("priv"), 0o644))
+	_, err = core.Mkdir(layeredfs.QualifiedPath{RootID: "proj", Rel: "private-dir"}, 0o755)
+	testutil.FailErr(t, "Mkdir private-dir", err)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "proj", Rel: "private-dir/" + protectedpath.AgentsMDFileName}, []byte("priv"), 0o644)
+	testutil.FailErr(t, "WriteFile private AGENTS.md", err)
 	testutil.FailErr(t, "Rename draft -> renamed/AGENTS.md", core.Rename(
 		layeredfs.QualifiedPath{RootID: "proj", Rel: "draft.txt"},
 		layeredfs.QualifiedPath{RootID: "proj", Rel: "renamed/" + protectedpath.AgentsMDFileName},
 	))
-	testutil.FailErr(t, "Unlink trunk-priv-unlink/AGENTS.md", core.Unlink(layeredfs.QualifiedPath{RootID: "proj", Rel: "trunk-priv-unlink/" + protectedpath.AgentsMDFileName}))
+	testutil.FailErr(t, "Unlink trunk-priv-unlink/AGENTS.md", core.Unlink(layeredfs.QualifiedPath{RootID: "proj", Rel: "trunk-priv-unlink/" + protectedpath.AgentsMDFileName}, false))
 	core.ResetStepStats()
 
 	mountSingle := filepath.Join(branchesBase, "wb-single", "mount")
@@ -332,7 +334,8 @@ func TestCompileFilesystemPlanResolvesMountedViewLoaderFilesFromSourceRoots(t *t
 	lateTrunkFile := filepath.Join(trunkDir, "late-trunk", protectedpath.AgentsMDFileName)
 	testutil.FailErr(t, "mkdir late-trunk", os.MkdirAll(filepath.Dir(lateTrunkFile), 0o755))
 	testutil.FailErr(t, "write late-trunk AGENTS.md", os.WriteFile(lateTrunkFile, []byte("late"), 0o644))
-	testutil.FailErr(t, "WriteFile private-2", core.WriteFile(layeredfs.QualifiedPath{RootID: "proj", Rel: protectedpath.AgentsMDFileName}, []byte("root-priv"), 0o644))
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "proj", Rel: protectedpath.AgentsMDFileName}, []byte("root-priv"), 0o644)
+	testutil.FailErr(t, "WriteFile private-2", err)
 
 	secondPlan, inv2 := compileWithInventory()
 	if inv2.Generation <= inv1.Generation {

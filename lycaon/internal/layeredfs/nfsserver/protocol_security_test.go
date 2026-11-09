@@ -133,12 +133,12 @@ func TestTwoWorkersAndUnauthorizedLocalClientIsolation(t *testing.T) {
 
 	// 6. Forged/random or HMAC-tampered 64-byte handles are refused on unmounted connections.
 	forgedConn := dialRPC(t, env.Server.Addr(), env.UID, env.GID)
-	randomFH := bytes.Repeat([]byte{0xa5}, nfsserver.WireHandleSize)
+	randomFH := bytes.Repeat([]byte{0xa5}, nfsserver.HandleSize)
 	if nst, _ := forgedConn.getAttr(randomFH); nst != nfs.NFSStatusAccess {
 		t.Fatalf("GETATTR with random 64B handle: got %v, want NFSStatusAccess", nst)
 	}
 	tamperedFH := append([]byte(nil), root1...)
-	tamperedFH[nfsserver.WireHandleSize-1] ^= 0xff
+	tamperedFH[nfsserver.HandleSize-1] ^= 0xff
 	if nst, _, _ := forgedConn.lookup(tamperedFH, "secret-1.txt"); nst != nfs.NFSStatusAccess {
 		t.Fatalf("LOOKUP with tampered HMAC handle: got %v, want NFSStatusAccess", nst)
 	}
