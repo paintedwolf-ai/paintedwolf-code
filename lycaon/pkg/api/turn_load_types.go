@@ -12,6 +12,8 @@ const (
 	TurnLoadTriggerLookup TurnLoadTrigger = "lookup"
 	// TurnLoadTriggerToolEvent is the skill read a turn's first loadable tool call asked for.
 	TurnLoadTriggerToolEvent TurnLoadTrigger = "tool_event"
+	// TurnLoadTriggerVisibility records a changed continuation surface.
+	TurnLoadTriggerVisibility TurnLoadTrigger = "visibility"
 )
 
 // TurnLoadMatchBy names how a request or lookup resolved its text.

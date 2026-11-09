@@ -8386,10 +8386,10 @@ export interface components {
             match?: components["schemas"]["TurnLoadMatch"];
         };
         /**
-         * @description What asked the decision engine. A turn decision runs before the model's first call of a visible user turn or a worker leg; a request resolves request_tools text; a lookup resolves skills_read text; a tool_event ranks the skills against the request and the first loadable tool the turn called, and reads or points to the best one.
+         * @description What asked the decision engine. A turn decision runs before the model's first call of a visible user turn or a worker leg; a request resolves request_tools text; a lookup resolves skills_read text; a tool_event ranks the skills against the request and the first loadable tool the turn called, and reads or points to the best one. A visibility receipt records a changed continuation surface without asking the decision engine.
          * @enum {string}
          */
-        TurnLoadTrigger: "turn" | "request" | "lookup" | "tool_event";
+        TurnLoadTrigger: "turn" | "request" | "lookup" | "tool_event" | "visibility";
         /**
          * @description How a request or lookup resolved its text to names: the engine ranked the candidates, the text spelled names out, or nothing matched.
          * @enum {string}

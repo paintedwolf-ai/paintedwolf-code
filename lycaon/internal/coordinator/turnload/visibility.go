@@ -34,9 +34,9 @@ func (s *sessionLoads) exposeCatalog() {
 }
 
 // ReconcileCatalog applies current permission filtering before a continuation.
-func (l *Ledger) ReconcileCatalog(sessionID string, loadable []string, failure RankingFailure) {
+func (l *Ledger) ReconcileCatalog(sessionID string, loadable []string, failure RankingFailure) bool {
 	if l == nil || strings.TrimSpace(sessionID) == "" {
-		return
+		return false
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -47,12 +47,16 @@ func (l *Ledger) ReconcileCatalog(sessionID string, loadable []string, failure R
 			s.loadable[name] = true
 		}
 	}
+	changed := false
 	for name := range s.standing {
 		if !s.loadable[name] {
+			changed = true
 			delete(s.standing, name)
 		}
 	}
+	wasFull, count := s.fullCatalog, len(s.standing)
 	if s.fullCatalog || failure.RequiresFullCatalog() {
 		s.exposeCatalog()
 	}
+	return changed || wasFull != s.fullCatalog || count != len(s.standing)
 }

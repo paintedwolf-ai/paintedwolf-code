@@ -13,11 +13,14 @@ components:
         resolves request_tools text; a lookup resolves skills_read text; a
         tool_event ranks the skills against the request and the first
         loadable tool the turn called, and reads or points to the best one.
+        A visibility receipt records a changed continuation surface without
+        asking the decision engine.
       enum:
         - turn
         - request
         - lookup
         - tool_event
+        - visibility
 
     TurnLoadMatchBy:
       type: string

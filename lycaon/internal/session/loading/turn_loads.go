@@ -151,7 +151,8 @@ func (m *Service) Begin(
 	request := m.ResolvedRequest(ctx, sess)
 	openingMessageID, text, ok := m.Request(ctx, in, history, openingMessageID, request)
 	if !ok {
-		m.Ledger.ReconcileCatalog(sessionID, loadable, availability)
+		opening, _ := RequestOpening(history, request)
+		m.reconcileVisibility(ctx, sess, opening, surfaceID, floor, loadable, availability)
 		return nil
 	}
 	if sess.IsWorkerChild() {
