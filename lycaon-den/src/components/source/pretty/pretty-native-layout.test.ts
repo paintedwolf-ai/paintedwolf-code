@@ -10,7 +10,7 @@ import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
 import {
@@ -547,5 +547,145 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     } finally {
       parent.remove();
     }
+  });
+
+  it("FMT-AC-05, FMT-AC-10: protected Lezer RegExp/String/Comment spans with interior quotes or comment markers never mutate fallback lexical state across fresh and incremental updates", () => {
+    const cases = [
+      'const r=/"/;const x={a:1,b:2};',
+      "const r=/'/;const x={a:1,b:2};",
+      "const r=/`/;const x={a:1,b:2};",
+      "const r=/\\/*/;const x={a:1,b:2};",
+      "const r=/\\/\\//;const x={a:1,b:2};",
+    ];
+
+    for (const raw of cases) {
+      let state = EditorState.create({
+        doc: raw,
+        extensions: [
+          javascript(),
+          createPrettyNativeDecorationsExtension({
+            enabled: true,
+            path: "regex-protected.js",
+          }),
+        ],
+      });
+
+      const field = state.field(prettyNativeStateField);
+      expect(field.outcome).toBe("formatted");
+      expect(field.counters.syntaxNodesVisited).toBeGreaterThan(0);
+
+      const semiIdx = raw.indexOf(";") + 1;
+      const openBraceIdx = raw.indexOf("{", semiIdx) + 1;
+      const commaIdx = raw.indexOf(",", openBraceIdx) + 1;
+      const closeBraceIdx = raw.indexOf("}", commaIdx);
+      expect(field.lineStates[0]?.relBoundaries).toEqual([
+        { relPos: semiIdx, depth: 0 },
+        { relPos: openBraceIdx, depth: 1 },
+        { relPos: commaIdx, depth: 1 },
+        { relPos: closeBraceIdx, depth: 0 },
+      ]);
+
+      // Verify incremental update matches fresh computePrettyNativeLayout:
+      const multiRaw = `${raw}\nconst tail={c:3,d:4};`;
+      state = EditorState.create({
+        doc: multiRaw,
+        extensions: [
+          javascript(),
+          createPrettyNativeDecorationsExtension({
+            enabled: true,
+            path: "regex-protected.js",
+          }),
+        ],
+      });
+      const valIdx = multiRaw.indexOf("a:1") + 2;
+      state = state.update({
+        changes: { from: valIdx, to: valIdx + 1, insert: "99" },
+      }).state;
+
+      const updatedField = state.field(prettyNativeStateField);
+      const fresh = computePrettyNativeLayout(
+        state.doc,
+        { path: "regex-protected.js" },
+        state,
+      );
+      expect(updatedField.lineStates).toEqual(fresh.lineStates);
+      expect(updatedField.counters).toEqual(fresh.counters);
+      expect(updatedField.lineStates[1]?.relBoundaries.length).toBe(3);
+    }
+  });
+
+  it("FMT-AC-09, FMT-AC-10: invalidates and updates layout when syntaxTree changes without docChanged (background parse / language reconfiguration) or when suffix syntaxSpanSignature changes", () => {
+    const langCompartment = new Compartment();
+    // In CSS/JS, a construct whose syntax-tree spans differ once the language parser attaches:
+    const raw = [
+      'const a=1 / 2;const b="/* not a comment */";const c={x:1,y:2};',
+      'const d=/"/;const e={m:3,n:4};',
+    ].join("\n");
+
+    let state = EditorState.create({
+      doc: raw,
+      extensions: [
+        langCompartment.of([]),
+        createPrettyNativeDecorationsExtension({
+          enabled: true,
+          path: "reconfig.js",
+        }),
+      ],
+    });
+
+    const beforeParse = state.field(prettyNativeStateField);
+    expect(beforeParse.counters.syntaxNodesVisited).toBe(0);
+    expect(beforeParse.lineStates[0]?.syntaxSpanSignature).toBe("");
+
+    // Reconfigure language compartment without docChanged (simulates background Lezer parse completion):
+    state = state.update({
+      effects: langCompartment.reconfigure(javascript()),
+    }).state;
+
+    const afterParse = state.field(prettyNativeStateField);
+    expect(afterParse.counters.syntaxNodesVisited).toBeGreaterThan(0);
+    expect(afterParse.lineStates[0]?.syntaxSpanSignature).not.toBe("");
+    expect(afterParse.lineStates[1]?.syntaxSpanSignature).not.toBe("");
+
+    const freshAfterParse = computePrettyNativeLayout(
+      state.doc,
+      { path: "reconfig.js" },
+      state,
+    );
+    expect(afterParse.lineStates).toEqual(freshAfterParse.lineStates);
+    expect(afterParse.counters).toEqual(freshAfterParse.counters);
+
+    // Suffix syntaxSpanSignature invalidation on docChanged even when fallback lexical continuation on Line 2 converges:
+    const jsxDoc = [
+      "const v = 1;",
+      'id = "x";',
+      'const r = /"/; const x = {a: 1, b: 2};',
+    ].join("\n");
+    let jsxState = EditorState.create({
+      doc: jsxDoc,
+      extensions: [
+        javascript({ jsx: true }),
+        createPrettyNativeDecorationsExtension({
+          enabled: true,
+          path: "comp.jsx",
+        }),
+      ],
+    });
+    const sigBefore =
+      jsxState.field(prettyNativeStateField).lineStates[2]?.syntaxSpanSignature;
+
+    // Edit only Line 1 (`rescanMinEndLine = 2`) so Line 3's syntax tree changes while Line 2's lexical continuation is identical:
+    jsxState = jsxState.update({
+      changes: { from: 0, to: "const v = 1;".length, insert: "const v = <div" },
+    }).state;
+    const jsxAfter = jsxState.field(prettyNativeStateField);
+    const jsxFresh = computePrettyNativeLayout(
+      jsxState.doc,
+      { path: "comp.jsx" },
+      jsxState,
+    );
+    expect(jsxAfter.lineStates[2]?.syntaxSpanSignature).not.toBe(sigBefore);
+    expect(jsxAfter.lineStates).toEqual(jsxFresh.lineStates);
+    expect(jsxAfter.counters).toEqual(jsxFresh.counters);
   });
 });

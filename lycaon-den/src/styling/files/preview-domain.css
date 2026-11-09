@@ -60,50 +60,14 @@
   color: var(--den-accent-text);
 }
 
+/* Compact status-bar sizing on top of shared den-inset-icon-btn chrome. */
 .den-files-editor__status-toggle {
-  border: 1px solid transparent;
+  width: auto;
+  height: auto;
+  padding: 2px 6px;
   border-radius: var(--den-radius-sm);
-  background: none;
-  color: var(--den-text-muted);
   font-size: var(--text-den-caption);
-  padding: 1px 5px;
-  cursor: pointer;
-  transition:
-    background var(--den-duration) var(--den-ease),
-    border-color var(--den-duration) var(--den-ease),
-    box-shadow var(--den-duration) var(--den-ease),
-    color var(--den-duration) var(--den-ease);
-}
-
-.den-files-editor__status-toggle:hover:not(:disabled) {
-  border-color: var(--den-line);
-  background: var(--den-tint-2);
-  color: var(--den-text);
-}
-
-/* Persistent depressed/inset treatment driven by aria-pressed. */
-.den-files-editor__status-toggle[aria-pressed="true"]:not(:disabled) {
-  border-color: color-mix(in srgb, var(--den-accent-signal) 35%, var(--den-line));
-  background: color-mix(in srgb, var(--den-accent-signal) 11%, var(--den-surface-offset));
-  box-shadow: var(--den-bevel-inset);
-  color: var(--den-text);
-}
-
-.den-files-editor__status-toggle[aria-pressed="true"]:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--den-accent-signal) 50%, var(--den-line));
-  background: color-mix(in srgb, var(--den-accent-signal) 16%, var(--den-surface-offset));
-  box-shadow: var(--den-bevel-inset);
-  color: var(--den-text);
-}
-
-.den-files-editor__status-toggle:focus-visible {
-  outline: 1.5px solid var(--den-accent-signal);
-  outline-offset: -1.5px;
-}
-
-.den-files-editor__status-toggle:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
+  font-weight: inherit;
 }
 
 .project-files-view .den-browse-chrome,
