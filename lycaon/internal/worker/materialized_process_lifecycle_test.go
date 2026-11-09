@@ -37,6 +37,10 @@ func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted bool) {
 	t.Helper()
 	if phase := os.Getenv("PW_M14_LIFECYCLE_PHASE"); phase != "" {
 		runWorkerLifecyclePhase(t, os.Getenv("PW_M14_LIFECYCLE_ROOT"), phase, mounted)
+		if phase == "prepare" {
+			// End the process with its published view still live; recovery must repair it.
+			os.Exit(0)
+		}
 		return
 	}
 	root := t.TempDir()
