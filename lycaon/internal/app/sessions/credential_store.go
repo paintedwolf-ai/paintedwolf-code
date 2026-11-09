@@ -27,11 +27,11 @@ func (r *Runtime) wireCredentialFiles(ctx context.Context, deps CheckpointDepend
 }
 
 func (c *credentialFiles) ForgetProject(ctx context.Context, project string) error {
-	if err := ctx.Err(); err != nil {
+	_, finish, err := c.index.begin(ctx)
+	if err != nil {
 		return err
 	}
-	c.index.mu.Lock()
-	defer c.index.mu.Unlock()
+	defer finish()
 	if err := c.harvest.ForgetProject(project); err != nil {
 		return err
 	}

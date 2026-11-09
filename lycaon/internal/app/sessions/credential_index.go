@@ -2,13 +2,14 @@ package sessions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/keylock"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/workscope"
 )
@@ -22,11 +23,11 @@ type credentialRoot struct {
 }
 
 type credentialIndex struct {
-	files *credentialFiles
-	mu    sync.Mutex
-	roots map[string]*credentialRoot
-	work  workscope.Group
-	stop  func()
+	files  *credentialFiles
+	access keylock.Group
+	roots  map[string]*credentialRoot
+	work   workscope.Group
+	stop   func()
 }
 
 func newCredentialIndex(files *credentialFiles) *credentialIndex {
@@ -41,12 +42,7 @@ func (c *credentialFiles) startCredentialIndex() {
 	}
 	i := c.index
 	i.stop = repochange.RegisterObserver(func(ctx context.Context, event repochange.Event) {
-		ctx, finish, err := i.work.Begin(ctx)
-		if err != nil {
-			return
-		}
-		defer finish()
-		if err := i.changed(ctx, event); err != nil {
+		if err := i.changed(ctx, event); err != nil && !errors.Is(err, context.Canceled) {
 			slog.WarnContext(ctx, "credential-file evidence refresh failed", "root", event.ProjectDir, "error", err)
 		}
 	})
@@ -68,13 +64,16 @@ func (c *credentialFiles) EnsureProject(ctx context.Context, projectID string) e
 	if c == nil || c.index == nil || c.harvest == nil || c.fp == nil || projectID == "" {
 		return nil
 	}
+	i := c.index
+	ctx, finish, err := i.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
 	rows, err := c.queries.ListProjectRoots(ctx, projectID)
 	if err != nil {
 		return err
 	}
-	i := c.index
-	i.mu.Lock()
-	defer i.mu.Unlock()
 	attached := map[string]bool{}
 	for _, row := range rows {
 		key := row.ProjectID + "\x00" + row.ID
@@ -119,8 +118,11 @@ func (i *credentialIndex) changed(ctx context.Context, event repochange.Event) e
 	if event.Kind == repochange.IndexChanged {
 		return nil
 	}
-	i.mu.Lock()
-	defer i.mu.Unlock()
+	ctx, finish, err := i.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer finish()
 	for _, root := range i.roots {
 		if filepath.Clean(root.path) != filepath.Clean(event.ProjectDir) {
 			continue
