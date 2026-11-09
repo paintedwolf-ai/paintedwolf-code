@@ -33,9 +33,11 @@ func newCredentialIndex(files *credentialFiles) *credentialIndex {
 	return &credentialIndex{files: files, roots: map[string]*credentialRoot{}}
 }
 
-func (c *credentialFiles) startCredentialIndex(ctx context.Context) error {
+// Startup restores durable evidence and subscribes to changes. Discovery belongs
+// to EnsureProject's provider/tool admission barrier, not the host's boot path.
+func (c *credentialFiles) startCredentialIndex() {
 	if c.index == nil || c.harvest == nil || c.fp == nil {
-		return nil
+		return
 	}
 	i := c.index
 	i.stop = repochange.RegisterObserver(func(ctx context.Context, event repochange.Event) {
@@ -48,21 +50,6 @@ func (c *credentialFiles) startCredentialIndex(ctx context.Context) error {
 			slog.WarnContext(ctx, "credential-file evidence refresh failed", "root", event.ProjectDir, "error", err)
 		}
 	})
-	rows, err := c.queries.ListAllProjectRoots(ctx)
-	if err != nil {
-		i.stop()
-		return err
-	}
-	projects := map[string]bool{}
-	for _, row := range rows {
-		projects[row.ProjectID] = true
-	}
-	for project := range projects {
-		if err := c.EnsureProject(ctx, project); err != nil {
-			slog.WarnContext(ctx, "credential-file index awaits repair", "project_id", project, "error", err)
-		}
-	}
-	return nil
 }
 
 func (c *credentialFiles) closeCredentialIndex(ctx context.Context) error {
