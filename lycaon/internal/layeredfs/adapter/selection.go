@@ -197,10 +197,10 @@ type Choice struct {
 	CopyBudget *CopyBudget
 }
 
-// Choose applies the selection rule. Under the budget it materializes. Over it, a mount serves when
-// its probe succeeds. A lasting reason a mount is unavailable materializes with the cost counted in
-// full first, and a transient one never starts a large copy. Only a disk that cannot hold the result
-// refuses.
+// Choose applies the selection rule. Under the fixed preparation limit it materializes with live
+// overrun enforcement. Over the limit (or after a copy overruns the limit), a mounted provider
+// serves when its probe succeeds; when no mounted provider can serve, selection refuses with an
+// actionable error rather than launching an over-limit copy.
 func (s *Selector) Choose(ctx context.Context, req ChooseRequest) (Choice, error) {
 	roots, anyCopyOnly, err := classifyRootClones(ctx, req)
 	if err != nil {
@@ -229,25 +229,24 @@ func (s *Selector) Choose(ctx context.Context, req ChooseRequest) (Choice, error
 	primary := s.primaryForOS()
 	mountReason, probe, err := s.probeMount(ctx, primary, req.Probe)
 	if err != nil {
-		return Choice{Probe: probe}, err
+		return Choice{Probe: probe, Facts: facts}, err
 	}
 	if mountReason == ReasonNone {
 		facts.Provider, facts.Reason = primary.ID(), SelectionOverBudgetMounted
 		return Choice{Adapter: primary, Probe: probe, Facts: facts}, nil
 	}
 
-	if cost.Partial || req.Overrun != nil {
-		cost, err = countMaterializeCost(ctx, roots, fact, false)
-		if err != nil {
-			return Choice{Probe: probe}, err
-		}
-		if req.Overrun != nil {
-			cost = overrunCost(req.Overrun, cost)
-		}
-		facts.DeclaredCost = cost
+	facts.MountUnavailable = mountReason
+	adapterID := probe.AdapterID
+	if primary != nil {
+		adapterID = primary.ID()
 	}
-	facts.Reason, facts.MountUnavailable = SelectionOverBudgetMaterial, mountReason
-	return s.chooseMaterialized(ctx, req, facts, mountReason, probe, nil)
+	return Choice{Probe: probe, Facts: facts}, &AdapterError{
+		AdapterID:  adapterID,
+		Op:         "choose",
+		ReasonCode: mountReason,
+		Diagnostic: fmt.Sprintf("workspace exceeds preparation limit (%d) and mounted provider is unavailable (%s): %s; select narrower roots/subroots or restore mount capability", fact.Limit, mountReason, probe.Diagnostic),
+	}
 }
 
 func (s *Selector) chooseMaterialized(ctx context.Context, req ChooseRequest, facts SelectionFacts, fallback ReasonCode, probe ProbeResult, budget *CopyBudget) (Choice, error) {
