@@ -6,11 +6,13 @@ import {
   indentMore,
   insertNewlineAndIndent,
 } from "@codemirror/commands";
-import { EditorSelection, EditorState, Transaction } from "@codemirror/state";
+import { EditorSelection, Transaction } from "@codemirror/state";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it } from "vitest";
+import * as Y from "yjs";
 import { stepEditorHistory } from "../../components/source/editor/editor-history.ts";
 import { prettyNativeStateField } from "../../components/source/pretty/pretty-native-layout.ts";
+import { setSecretScreen } from "../../components/source/secrets/secret-span-decorations.ts";
 import {
   gotoLineController,
   openGotoLine,
@@ -25,8 +27,11 @@ import {
   editorProps,
   loadedBuffer,
 } from "../components/project-files-view-test-harness.ts";
+import { type DocumentReplica } from "../documents/document-replica.ts";
 import {
   configureEditorDocuments,
+  editorReplica,
+  resetEditorDocumentsForTests,
   resolveEditorDocument,
 } from "../documents/editor-document.ts";
 import {
@@ -58,7 +63,11 @@ import {
 
 async function openAndAttachDocumentReplica(
   buf: FileBuffer,
-): Promise<NonNullable<Awaited<ReturnType<typeof resolveEditorDocument>>>> {
+): Promise<{
+  docState: NonNullable<Awaited<ReturnType<typeof resolveEditorDocument>>>;
+  replica: DocumentReplica;
+  fixture: ReturnType<typeof editorDocumentFixtureFor>;
+}> {
   const fixture = editorDocumentFixtureFor(PROJECT, buf.rootId, buf.path);
   const client = stubClient({
     openEditorDocument: async () => fixture.snapshot(),
@@ -77,7 +86,9 @@ async function openAndAttachDocumentReplica(
   const docState = await resolveEditorDocument(PROJECT, buf);
   expect(docState).not.toBeNull();
   applyFilesBufferEditorDocument(PROJECT, buf.key, docState!);
-  return docState!;
+  const replica = editorReplica(docState!.documentId)!;
+  expect(replica).toBeDefined();
+  return { docState: docState!, replica, fixture };
 }
 
 describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 & 005, FMT04, FMT05)", () => {
@@ -86,6 +97,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
   afterEach(() => {
     resetPrettyDisplayStateForTests();
     resetGotoLineForTests();
+    resetEditorDocumentsForTests();
   });
 
   it("toggles Pretty from the status bar and surface command without mutating raw bytes, dirty state, or editor identity (FMT-AC-06, FMT-AC-09)", async () => {
@@ -147,8 +159,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
       path: "config.json",
       content: rawJson,
     });
-    const docState = await openAndAttachDocumentReplica(buf);
-    const replica = docState.replica;
+    const { replica } = await openAndAttachDocumentReplica(buf);
 
     const props = editorProps(buf);
     render(() => <FilesEditor {...props} />);
@@ -159,7 +170,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     await waitFor(() => {
       expect(toggleBtn.getAttribute("aria-pressed")).toBe("true");
     });
-    expect(replica.text).toBe(rawJson);
+    expect(replica.currentText).toBe(rawJson);
 
     // 1. Delete comma after `"gateway"` via Backspace (deleteCharBackward):
     // Pretty remains enabled, raw text becomes temporarily malformed JSON, and zero recovery UI appears.
@@ -171,7 +182,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     expect(view.state.doc.toString()).toBe(
       '{"service":"gateway""enabled":true,"ports":[8080,8443]}',
     );
-    expect(replica.text).toBe(view.state.doc.toString());
+    expect(replica.currentText).toBe(view.state.doc.toString());
     expect(view.state.field(prettyNativeStateField).enabled).toBe(true);
     expect(view.state.field(prettyNativeStateField).outcome).toBe("formatted");
     expect(screen.queryByTestId("pretty-recovery-dialog")).toBeNull();
@@ -179,7 +190,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     // 2. Undo restores the deleted comma via replica.stepHistory:
     expect(stepEditorHistory(view, "undo")).toBe(true);
     expect(view.state.doc.toString()).toBe(rawJson);
-    expect(replica.text).toBe(rawJson);
+    expect(replica.currentText).toBe(rawJson);
 
     // 3. Delete comma via forward Delete (deleteCharForward):
     view.dispatch({
@@ -200,7 +211,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     expect(view.state.doc.lines).toBe(2);
     expect(indentMore(view)).toBe(true);
     expect(indentLess(view)).toBe(true);
-    expect(replica.text).toBe(view.state.doc.toString());
+    expect(replica.currentText).toBe(view.state.doc.toString());
 
     // 5. Multi-cursor edit on port numbers `8080` and `8443` directly updates both in raw source:
     const curText = view.state.doc.toString();
@@ -219,7 +230,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
       })),
     );
     expect(view.state.doc.toString()).toContain("[9000,9000]");
-    expect(replica.text).toContain("[9000,9000]");
+    expect(replica.currentText).toContain("[9000,9000]");
   });
 
   it("keeps transaction construction pure, respects later filter rejections, and synchronizes remote replica updates (FMT-AC-12, FMT-AC-17)", async () => {
@@ -228,8 +239,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
       path: "state.json",
       content: rawJson,
     });
-    const docState = await openAndAttachDocumentReplica(buf);
-    const replica = docState.replica;
+    const { replica } = await openAndAttachDocumentReplica(buf);
 
     const props = editorProps(buf);
     render(() => <FilesEditor {...props} />);
@@ -245,15 +255,21 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     });
     expect(undispatched.state.doc.toString()).toContain("999");
     expect(view.state.doc.toString()).toBe(rawJson);
-    expect(replica.text).toBe(rawJson);
+    expect(replica.currentText).toBe(rawJson);
 
-    // 2. Remote replica update (`replica.applyRemote`) updates `view.state.doc` and recalculates native Pretty decorations:
+    // 2. Remote CRDT update on the Y.Doc updates `view.state.doc` and recalculates native Pretty decorations:
     const remoteJson = '{"count":2,"status":"synced","extra":{"ok":true}}';
-    replica.applyRemote(
-      replica.version + 1,
-      [{ start_utf16: 0, end_utf16: rawJson.length, text: remoteJson }],
-      "remote-sha",
-    );
+    const peerDoc = new Y.Doc();
+    peerDoc.clientID = 999991;
+    Y.applyUpdate(peerDoc, Y.encodeStateAsUpdate(replica.doc));
+    const peerText = peerDoc.getText("text");
+    peerDoc.transact(() => {
+      peerText.delete(0, peerText.length);
+      peerText.insert(0, remoteJson);
+    });
+    Y.applyUpdate(replica.doc, Y.encodeStateAsUpdate(peerDoc));
+    peerDoc.destroy();
+
     await waitFor(() => {
       expect(view.state.doc.toString()).toBe(remoteJson);
     });
@@ -261,31 +277,34 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBeGreaterThan(3);
   });
 
-  it("preserves raw source coordinates for Go to line, buffer reveal, SecretScreen spans, Copy contents, common-blob formats, and tab disposal (FMT-AC-13, FMT-AC-15, FMT-AC-18)", async () => {
+  it("preserves raw source coordinates for Go to line, buffer reveal, SecretScreen spans, Copy contents, and tab disposal (FMT-AC-13, FMT-AC-15, FMT-AC-18)", async () => {
     const rawJsonl =
       '{"line":1,"secret":"sk-live-123456"}\n{"line":2,"target":"here","nested":{"x":10}}\n';
     const buf = loadedBuffer({
       path: "audit.jsonl",
       content: rawJsonl,
     });
-    setFilesEditorSecretScreen(buf.key, {
-      status: "findings",
+    const secretStart = rawJsonl.indexOf("sk-live-123456");
+    const secretEnd = secretStart + 14;
+    const screenPayload = {
+      truncated: false,
       screened_bytes: rawJsonl.length,
-      findings: [
+      spans: [
         {
+          start: secretStart,
+          end: secretEnd,
+          state: "detected" as const,
           rule_id: "api-key",
-          title: "API Key",
-          line: 1,
-          start_rune: rawJsonl.indexOf("sk-live-123456"),
-          end_rune: rawJsonl.indexOf("sk-live-123456") + 14,
-          redacted_preview: "sk-****",
+          rule_title: "API Key",
         },
       ],
-    });
+    };
+    setFilesEditorSecretScreen(buf.key, screenPayload);
 
     const props = editorProps(buf);
     render(() => <FilesEditor {...props} />);
     const view = getFilesEditorView(PROJECT, buf.key)!;
+    setSecretScreen(view, screenPayload);
 
     // Enable Pretty
     invokePrettyToggleForTab(PROJECT, buf.key);
@@ -295,37 +314,38 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     // 1. Go to line 2, column 5 lands on raw line 2, column 5:
     openGotoLine(view);
     expect(gotoLineController.isOpen()).toBe(true);
-    gotoLineController.setInput("2:5");
-    expect(submitGotoLine()).toBe(true);
+    expect(submitGotoLine("2:5")).toBe(true);
     const line2 = view.state.doc.line(2);
     expect(view.state.selection.main.head).toBe(line2.from + 4);
 
     // 2. Buffer reveal uses raw line/col directly:
-    buf.reveal = { line: 2, col: 10 };
-    applyBufferReveal(view, buf);
+    applyBufferReveal(view, {
+      revealLine: 2,
+      revealEndLine: null,
+      revealColumn: 10,
+      revealFocus: false,
+    });
     expect(view.state.selection.main.head).toBe(line2.from + 9);
 
     // 3. SecretScreen range & selection operate on raw UTF-16 offsets:
-    const finding = {
-      rule_id: "api-key",
-      title: "API Key",
-      line: 1,
-      start_rune: rawJsonl.indexOf("sk-live-123456"),
-      end_rune: rawJsonl.indexOf("sk-live-123456") + 14,
-      redacted_preview: "sk-****",
-    };
-    const range = secretActionRange(view.state.doc, finding);
-    expect(range).toEqual({
-      from: rawJsonl.indexOf("sk-live-123456"),
-      to: rawJsonl.indexOf("sk-live-123456") + 14,
-    });
-    anchorSecretSelection(view, range!.from, range!.to);
-    expect(
-      view.state.doc.sliceString(
-        view.state.selection.main.from,
-        view.state.selection.main.to,
-      ),
-    ).toBe("sk-live-123456");
+    const range = secretActionRange(view, secretStart + 2);
+    expect(range).not.toBeNull();
+    expect(range!.from).toBe(secretStart);
+    expect(range!.to).toBe(secretEnd);
+    const anchored = anchorSecretSelection(
+      {
+        projectId: PROJECT,
+        documentId: "doc-audit",
+        view,
+        sync: async () => ({ revision: 1, text: view.state.doc.toString() }),
+      },
+      range!.from,
+      range!.to,
+    );
+    expect(anchored).toBeDefined();
+    expect(view.state.doc.sliceString(range!.from, range!.to)).toBe(
+      "sk-live-123456",
+    );
 
     // 4. Copy contents copies exact raw text without generated decoration whitespace:
     await copyTextToClipboard(view.state.doc.toString());
