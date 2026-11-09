@@ -110,27 +110,48 @@ const (
 	nfs4ACETypeAccessAllowed = 0
 	nfs4ACETypeAccessDenied  = 1
 
-	nfs4ACEFileInherit          = 0x00000001
-	nfs4ACEDirectoryInherit     = 0x00000002
-	nfs4ACENoPropagateInherit   = 0x00000004
-	nfs4ACEInheritOnly          = 0x00000008
-	nfs4ACESuccessfulAccessFlag = 0x00000010
-	nfs4ACEFailedAccessFlag     = 0x00000020
-	nfs4ACEIdentifierGroup      = 0x00000040
+	nfs4ACEReadData        = 0x00000001
+	nfs4ACEWriteData       = 0x00000002
+	nfs4ACEAppendData      = 0x00000004
+	nfs4ACEExecute         = 0x00000020
+	nfs4ACEDeleteChild     = 0x00000040
+	nfs4ACEReadAttributes  = 0x00000080
+	nfs4ACEWriteAttributes = 0x00000100
+	nfs4ACEReadACL         = 0x00020000
+	nfs4ACEWriteACL        = 0x00040000
+	nfs4ACESynchronize     = 0x00100000
 
-	nfs4ACEUnsupportedModeFlags = nfs4ACEFileInherit | nfs4ACEDirectoryInherit |
-		nfs4ACENoPropagateInherit | nfs4ACEInheritOnly |
-		nfs4ACESuccessfulAccessFlag | nfs4ACEFailedAccessFlag | nfs4ACEIdentifierGroup
+	// Linux fs/nfsd/nfs4acl.c mode bit translations:
+	// - NFS4_READ_MODE    = NFS4_ACE_READ_DATA
+	// - NFS4_WRITE_MODE   = NFS4_ACE_WRITE_DATA | NFS4_ACE_APPEND_DATA (+ NFS4_ACE_DELETE_CHILD on dirs)
+	// - NFS4_EXECUTE_MODE = NFS4_ACE_EXECUTE
+	// - NFS4_ANYONE_MODE  = NFS4_ACE_READ_ATTRIBUTES | NFS4_ACE_READ_ACL | NFS4_ACE_SYNCHRONIZE
+	//   (unconditionally permitted to all principals in POSIX regardless of rwx mode bits)
+	// - NFS4_OWNER_MODE   = NFS4_ACE_WRITE_ATTRIBUTES | NFS4_ACE_WRITE_ACL
+	//   (unconditionally permitted to the inode owner in POSIX regardless of rwx mode bits)
+	nfs4ReadMode    = nfs4ACEReadData
+	nfs4WriteMode   = nfs4ACEWriteData | nfs4ACEAppendData
+	nfs4ExecuteMode = nfs4ACEExecute
+	nfs4AnyoneMode  = nfs4ACEReadAttributes | nfs4ACEReadACL | nfs4ACESynchronize
+	nfs4OwnerMode   = nfs4ACEWriteAttributes | nfs4ACEWriteACL
 
-	posixACLTagUserObj  = 0x01
-	posixACLTagGroupObj = 0x04
-	posixACLTagOther    = 0x20
+	posixACLXattrVersion = 2
+	posixACLTagUserObj   = 0x01
+	posixACLTagGroupObj  = 0x04
+	posixACLTagOther     = 0x20
+	posixACLUndefinedID  = 0xffffffff
 )
 
+type nfs4CanonicalACE struct {
+	aceType    uint32
+	aceFlag    uint32
+	accessMask uint32
+	who        string
+}
+
 // normalizeSeedSourceXattrs distinguishes transport-synthesized mode-equivalent ACL representations
-// (whose access semantics are already carried by mode.Perm()) from non-trivial ACLs and portable
-// extended attributes. Non-trivial transport ACLs that cannot be represented on the target workspace
-// filesystem fail closed during writePathXattrs.
+// (whose access semantics are already carried by mode.Perm() and mode.IsDir()) from non-trivial ACLs
+// and portable extended attributes. All unproven ACLs fail closed during writePathXattrs.
 func normalizeSeedSourceXattrs(mode fs.FileMode, xattrs map[string][]byte) map[string][]byte {
 	if len(xattrs) == 0 {
 		return nil
@@ -149,7 +170,7 @@ func normalizeSeedSourceXattrs(mode fs.FileMode, xattrs map[string][]byte) map[s
 }
 
 func isModeEquivalentTransportACL(name string, raw []byte, mode fs.FileMode) bool {
-	if mode&os.ModeSymlink != 0 {
+	if mode&fs.ModeType != 0 && mode&fs.ModeType != fs.ModeDir {
 		return false
 	}
 	switch name {
@@ -162,41 +183,122 @@ func isModeEquivalentTransportACL(name string, raw []byte, mode fs.FileMode) boo
 	}
 }
 
+func nfs4DenyMaskFromPOSIX(perm fs.FileMode, isDir bool) uint32 {
+	var mask uint32
+	if perm&0o4 != 0 {
+		mask |= nfs4ReadMode
+	}
+	if perm&0o2 != 0 {
+		mask |= nfs4WriteMode
+		if isDir {
+			mask |= nfs4ACEDeleteChild
+		}
+	}
+	if perm&0o1 != 0 {
+		mask |= nfs4ExecuteMode
+	}
+	return mask
+}
+
+func nfs4AllowMaskFromPOSIX(perm fs.FileMode, isDir, isOwner bool) uint32 {
+	mask := uint32(nfs4AnyoneMode)
+	if isOwner {
+		mask |= nfs4OwnerMode
+	}
+	return mask | nfs4DenyMaskFromPOSIX(perm, isDir)
+}
+
+// canonicalLinuxNFS4ModeACL computes the exact NFSv4 ACL sequence synthesized by Linux knfsd
+// (fs/nfsd/nfs4acl.c: nfsd4_get_nfs4_acl + _posix_to_nfsv4_one) for a mode-only inode.
+func canonicalLinuxNFS4ModeACL(mode fs.FileMode) ([5]nfs4CanonicalACE, int) {
+	perm := mode.Perm()
+	owner := (perm >> 6) & 0o7
+	group := (perm >> 3) & 0o7
+	other := perm & 0o7
+	isDir := mode.IsDir()
+
+	var aces [5]nfs4CanonicalACE
+	n := 0
+	if ownerDeny := ((group | other) &^ owner) & 0o7; ownerDeny != 0 {
+		aces[n] = nfs4CanonicalACE{
+			aceType:    nfs4ACETypeAccessDenied,
+			aceFlag:    0,
+			accessMask: nfs4DenyMaskFromPOSIX(ownerDeny, isDir),
+			who:        "OWNER@",
+		}
+		n++
+	}
+	aces[n] = nfs4CanonicalACE{
+		aceType:    nfs4ACETypeAccessAllowed,
+		aceFlag:    0,
+		accessMask: nfs4AllowMaskFromPOSIX(owner, isDir, true),
+		who:        "OWNER@",
+	}
+	n++
+	aces[n] = nfs4CanonicalACE{
+		aceType:    nfs4ACETypeAccessAllowed,
+		aceFlag:    0,
+		accessMask: nfs4AllowMaskFromPOSIX(group, isDir, false),
+		who:        "GROUP@",
+	}
+	n++
+	if groupDeny := (other &^ group) & 0o7; groupDeny != 0 {
+		aces[n] = nfs4CanonicalACE{
+			aceType:    nfs4ACETypeAccessDenied,
+			aceFlag:    0,
+			accessMask: nfs4DenyMaskFromPOSIX(groupDeny, isDir),
+			who:        "GROUP@",
+		}
+		n++
+	}
+	aces[n] = nfs4CanonicalACE{
+		aceType:    nfs4ACETypeAccessAllowed,
+		aceFlag:    0,
+		accessMask: nfs4AllowMaskFromPOSIX(other, isDir, false),
+		who:        "EVERYONE@",
+	}
+	n++
+	return aces, n
+}
+
 func isModeEquivalentNFS4ACL(raw []byte, mode fs.FileMode) bool {
+	if mode&fs.ModeType != 0 && mode&fs.ModeType != fs.ModeDir {
+		return false
+	}
 	if len(raw) < 4 {
 		return false
 	}
+	expected, expectedCount := canonicalLinuxNFS4ModeACL(mode)
 	count := binary.BigEndian.Uint32(raw[:4])
-	if count == 0 || count > 6 {
+	if count != uint32(expectedCount) {
 		return false
 	}
 	off := 4
-	for i := uint32(0); i < count; i++ {
+	for i := 0; i < expectedCount; i++ {
 		if off+16 > len(raw) {
 			return false
 		}
 		aceType := binary.BigEndian.Uint32(raw[off : off+4])
 		aceFlag := binary.BigEndian.Uint32(raw[off+4 : off+8])
+		accessMask := binary.BigEndian.Uint32(raw[off+8 : off+12])
 		whoLen := int(binary.BigEndian.Uint32(raw[off+12 : off+16]))
 		off += 16
 		if whoLen <= 0 || whoLen > len(raw)-off {
 			return false
 		}
-		who := string(raw[off : off+whoLen])
-		padded := (whoLen + 3) & ^3
+		padded := (whoLen + 3) &^ 3
 		if padded > len(raw)-off {
 			return false
 		}
+		who := string(raw[off : off+whoLen])
+		for padIdx := off + whoLen; padIdx < off+padded; padIdx++ {
+			if raw[padIdx] != 0 {
+				return false
+			}
+		}
 		off += padded
-		if aceType != nfs4ACETypeAccessAllowed && aceType != nfs4ACETypeAccessDenied {
-			return false
-		}
-		if aceFlag&nfs4ACEUnsupportedModeFlags != 0 {
-			return false
-		}
-		switch who {
-		case "OWNER@", "GROUP@", "EVERYONE@":
-		default:
+		want := expected[i]
+		if aceType != want.aceType || aceFlag != want.aceFlag || accessMask != want.accessMask || who != want.who {
 			return false
 		}
 	}
@@ -204,41 +306,36 @@ func isModeEquivalentNFS4ACL(raw []byte, mode fs.FileMode) bool {
 }
 
 func isModeEquivalentPOSIXAccessACL(raw []byte, mode fs.FileMode) bool {
-	// Linux posix_acl_xattr_header (4-byte version = 2) + 3 * posix_acl_xattr_entry (8 bytes each) = 28 bytes.
+	if mode&fs.ModeType != 0 && mode&fs.ModeType != fs.ModeDir {
+		return false
+	}
+	// Linux posix_acl_xattr_header (4-byte version = 2) + 3 * posix_acl_xattr_entry (8 bytes each) = 28 bytes
+	// in canonical posix_acl_valid / posix_acl_from_mode order (fs/posix_acl.c).
 	if len(raw) != 28 {
 		return false
 	}
-	if binary.LittleEndian.Uint32(raw[0:4]) != 2 {
+	if binary.LittleEndian.Uint32(raw[0:4]) != posixACLXattrVersion {
 		return false
 	}
 	perm := mode.Perm()
-	var seenMask uint16
-	for off := 4; off < 28; off += 8 {
+	expected := [3]struct {
+		tag  uint16
+		perm uint16
+	}{
+		{tag: posixACLTagUserObj, perm: uint16((perm >> 6) & 0o7)},
+		{tag: posixACLTagGroupObj, perm: uint16((perm >> 3) & 0o7)},
+		{tag: posixACLTagOther, perm: uint16(perm & 0o7)},
+	}
+	for i, want := range expected {
+		off := 4 + i*8
 		tag := binary.LittleEndian.Uint16(raw[off : off+2])
 		ePerm := binary.LittleEndian.Uint16(raw[off+2 : off+4])
 		id := binary.LittleEndian.Uint32(raw[off+4 : off+8])
-		if id != 0xffffffff {
+		if tag != want.tag || ePerm != want.perm || id != posixACLUndefinedID {
 			return false
 		}
-		switch tag {
-		case posixACLTagUserObj:
-			if fs.FileMode(ePerm&0o7) != (perm>>6)&0o7 {
-				return false
-			}
-		case posixACLTagGroupObj:
-			if fs.FileMode(ePerm&0o7) != (perm>>3)&0o7 {
-				return false
-			}
-		case posixACLTagOther:
-			if fs.FileMode(ePerm&0o7) != perm&0o7 {
-				return false
-			}
-		default:
-			return false
-		}
-		seenMask |= tag
 	}
-	return seenMask == (posixACLTagUserObj | posixACLTagGroupObj | posixACLTagOther)
+	return true
 }
 
 func writePathXattrs(p string, xattrs map[string][]byte) error {
