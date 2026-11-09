@@ -1,7 +1,7 @@
 -- Per-session evidence ledger (grounding handles).
 
 -- name: ListEvidenceRecords :many
-SELECT project_id, handle, kind, shape, fidelity, source_tool, path, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
+SELECT project_id, handle, kind, shape, fidelity, source_tool, path, root_id, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
 FROM evidence_records
 WHERE session_id = ?
 ORDER BY ordinal ASC;
@@ -17,8 +17,8 @@ SELECT EXISTS (
 -- name: InsertEvidenceRecordIfAbsent :execrows
 INSERT INTO evidence_records (
     session_id, project_id, handle, ordinal, kind, shape, fidelity, source_tool, marks_untrusted,
-    path, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+    path, root_id, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
 ON CONFLICT(session_id, handle) DO NOTHING;
 
 -- name: MarkEvidenceRecordSuperseded :exec

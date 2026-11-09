@@ -81,6 +81,55 @@ func TestDeliveredSourcePersistsExactWindowAndDoesNotQualifyUnseenBytes(t *testi
 	}
 }
 
+func TestDeliveredSourceStampsRootedIdentity(t *testing.T) {
+	dir := t.TempDir()
+	database := testdbfixture.OpenPath(t, filepath.Join(dir, "delivery-rooted.db"))
+	rootID := testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, dir)
+	owner := NewSQL(database)
+	owner.SetDataDir(dir)
+	session, err := owner.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create rooted delivery session", err)
+	captured := []byte("rooted first\nrooted second\n")
+	sum := sha256.Sum256(captured)
+	pin := toolcontract.SourcePin{SourceID: "source:rooted", Revision: "revision:rooted", Representation: toolcontract.UTF8SourceBytes, SHA256: hex.EncodeToString(sum[:]), EndByte: int64(len(captured))}
+	mapping := toolcontract.StreamSourceMapping{Source: pin, SourceStartByte: 0, SourceEndByte: int64(len(captured)), OutputEndByte: int64(len(captured))}
+	observation, err := evidence.ConfirmDeliveredSource("src/rooted.txt", pin, captured, captured, mapping, "response:rooted", "delivery:rooted")
+	testutil.FailErr(t, "confirm rooted page bytes", err)
+	handle, err := owner.CommitDeliveredSource(t.Context(), session.ID, observation)
+	testutil.FailErr(t, "commit rooted delivery", err)
+	ledger, err := owner.LoadLedger(t.Context(), session.ID)
+	testutil.FailErr(t, "load rooted delivery ledger", err)
+	record, ok := evidence.ResolveHandle(ledger, handle)
+	if !ok {
+		t.Fatal("rooted delivery record missing")
+	}
+	if record.RootID != rootID {
+		t.Fatalf("delivered source root id = %q, want %q", record.RootID, rootID)
+	}
+	if record.Path != "src/rooted.txt" {
+		t.Fatalf("delivered source scope rel = %q, want src/rooted.txt", record.Path)
+	}
+	// A delivery outside every attached root keeps the legacy identity so the
+	// multi-root scan fallback still resolves it.
+	outside := "/paintedwolf-wr09-legacy-scope/notes.txt"
+	legacyObservation, err := evidence.ConfirmDeliveredSource(outside, pin, captured, captured, mapping, "response:legacy", "delivery:legacy")
+	testutil.FailErr(t, "confirm legacy page bytes", err)
+	legacyHandle, err := owner.CommitDeliveredSource(t.Context(), session.ID, legacyObservation)
+	testutil.FailErr(t, "commit legacy delivery", err)
+	legacyLedger, err := owner.LoadLedger(t.Context(), session.ID)
+	testutil.FailErr(t, "load legacy delivery ledger", err)
+	legacy, ok := evidence.ResolveHandle(legacyLedger, legacyHandle)
+	if !ok {
+		t.Fatal("legacy delivery record missing")
+	}
+	if legacy.RootID != "" {
+		t.Fatalf("unrooted delivery root id = %q, want empty", legacy.RootID)
+	}
+	if legacy.Path != outside {
+		t.Fatalf("unrooted delivery path = %q, want %q", legacy.Path, outside)
+	}
+}
+
 // deliveryQuota pairs the program's aggregate memory with spill and detector accounting.
 type deliveryQuota struct {
 	*toolcontract.ProgramMemory

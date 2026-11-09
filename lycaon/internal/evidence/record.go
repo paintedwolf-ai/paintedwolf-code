@@ -20,7 +20,8 @@ type Record struct {
 	SupersededBy string `json:"-"`
 	Survey       bool   // true for survey-grade observations
 	Truncated    bool   // body capture exceeded EvidenceCaptureBodyCapBytes
-	Path         string // normalized repo-relative when the tool touched a path
+	Path         string // scope-relative when the tool touched a rooted path; legacy normalized token otherwise
+	RootID       string // owning root of Path; empty for legacy rows and unrooted tokens
 	LineRanges   []LineRange
 	Body         []string // result lines for excerpt verification
 	URL          string   // primary observed URL
@@ -32,8 +33,15 @@ type Record struct {
 	grepLines    map[string]map[int]string // grep kind: path → line → content
 	pathsTouched []string                  // additional normalized paths for ByPath index
 	pathTiers    map[string]string         // normalized path → trust tier at capture
-	urlsTouched  []string                  // every URL named by the result
-	urlTitles    map[string]string         // URL → page title the tool reported
+	// pathRoots records the owning root of any indexed path whose root
+	// differs from RootID (stored key → root ID). Absent entries share
+	// RootID; empty values mark legacy tokens.
+	pathRoots map[string]string
+	// pathDisplay stamps the session-folder display token for a stored key,
+	// computed at write and load time against the session's active root.
+	pathDisplay map[string]string
+	urlsTouched []string           // every URL named by the result
+	urlTitles   map[string]string  // URL → page title the tool reported
 
 	// Gate/inspector fields — populated when GateType != "" (scan verify/security rows).
 	GateType       string         `json:"type,omitempty"`

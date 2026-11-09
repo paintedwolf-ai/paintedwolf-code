@@ -11,8 +11,17 @@ import (
 )
 
 // BuildEvidenceRecord constructs one evidence row from a captured tool result.
+// Paths resolve against projectDir alone; use BuildEvidenceRecordRooted when
+// the session's workspace roots are available.
 func BuildEvidenceRecord(projectDir, toolName string, args map[string]any, content string) Record {
-	rec := buildEvidenceRecord(projectDir, toolName, args, content)
+	return BuildEvidenceRecordRooted(CitationRoots{ProjectDir: projectDir}, toolName, args, content)
+}
+
+// BuildEvidenceRecordRooted constructs one evidence row from a captured tool
+// result, resolving every observed path to its durable (root, scope-relative)
+// identity under the session's workspace roots.
+func BuildEvidenceRecordRooted(roots CitationRoots, toolName string, args map[string]any, content string) Record {
+	rec := buildEvidenceRecord(roots, toolName, args, content)
 	if rec.Kind == "" {
 		return Record{}
 	}
@@ -28,16 +37,26 @@ func BuildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 	if toolName == "find" {
 		rec.Survey = FindEvidenceSurvey(args, content)
 	}
+	StampDisplayKeys(roots, &rec)
 	return rec
 }
 
 func indexRecordPaths(ev *Ledger, handle string, rec Record) {
 	for _, path := range IndexedPathsForRecord(rec) {
-		indexLedgerPath(ev, handle, path, pathTrustOnRecord(rec, path))
+		indexLedgerPath(ev, handle, recordDisplayKey(rec, path), pathTrustOnRecord(rec, path))
 	}
 }
 
-func buildEvidenceRecord(projectDir, toolName string, args map[string]any, content string) Record {
+// recordDisplayKey renders a stored path key in the session folder via the
+// record's display stamp, falling back to the stored key.
+func recordDisplayKey(rec Record, stored string) string {
+	if display, ok := rec.pathDisplay[stored]; ok && display != "" {
+		return display
+	}
+	return stored
+}
+
+func buildEvidenceRecord(roots CitationRoots, toolName string, args map[string]any, content string) Record {
 	toolName = strings.TrimSpace(strings.ToLower(toolName))
 	binding := ActiveBinding()
 	kind := binding.ToolKindForArgs(toolName, args)
@@ -48,52 +67,52 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 	rec := Record{Kind: kind, Shape: shape, SourceTool: toolName, Survey: ActiveBinding().IsSurveyKind(kind)}
 	if ingestion.IsMCPToolName(toolName) {
 		rec.Fidelity = FidelityOpaque
-		populateMCPEvidenceRecord(projectDir, &rec, content)
+		populateMCPEvidenceRecord(roots, &rec, content)
 		return rec
 	}
 	switch toolName {
 	case "read":
 		rec.Fidelity = FidelityStructured
-		populateReadRecord(projectDir, &rec, args, content)
+		populateReadRecord(roots, &rec, args, content)
 	case "grep":
 		rec.Fidelity = FidelityStructured
-		populateGrepRecord(projectDir, &rec, args, content)
+		populateGrepRecord(roots, &rec, args, content)
 	case "find":
-		addRecordPath(projectDir, &rec, stringArg(args, "path"), FidelityStructured)
+		addRecordPath(roots, &rec, stringArg(args, "path"), FidelityStructured)
 		for _, p := range findResultPaths(content) {
-			addRecordPath(projectDir, &rec, p, FidelityStructured)
+			addRecordPath(roots, &rec, p, FidelityStructured)
 		}
 	case "list_dir":
-		addRecordPath(projectDir, &rec, stringArg(args, "path"), FidelityStructured)
+		addRecordPath(roots, &rec, stringArg(args, "path"), FidelityStructured)
 		for _, p := range listDirPaths(content) {
-			addRecordPath(projectDir, &rec, p, FidelityStructured)
+			addRecordPath(roots, &rec, p, FidelityStructured)
 		}
 	case "write", "edit", "replace_lines", "restore_version":
-		addRecordPath(projectDir, &rec, stringArg(args, "path"), FidelityStructured)
+		addRecordPath(roots, &rec, stringArg(args, "path"), FidelityStructured)
 		captureRecordBody(&rec, content)
 	case "jq_edit":
 		target := stringArg(args, "dest")
 		if target == "" {
 			target = stringArg(args, "path")
 		}
-		addRecordPath(projectDir, &rec, target, FidelityStructured)
+		addRecordPath(roots, &rec, target, FidelityStructured)
 		captureRecordBody(&rec, content)
 	case "code_rewrite":
 		for _, p := range declaredPathsFromArgs(args) {
-			addRecordPath(projectDir, &rec, p, FidelityStructured)
+			addRecordPath(roots, &rec, p, FidelityStructured)
 		}
 		captureRecordBody(&rec, content)
 	case "delete":
 		for _, p := range declaredPathsFromArgs(args) {
-			addRecordPath(projectDir, &rec, p, FidelityStructured)
+			addRecordPath(roots, &rec, p, FidelityStructured)
 		}
 		for _, p := range deleteResultPaths(content) {
-			addRecordPath(projectDir, &rec, p, FidelityStructured)
+			addRecordPath(roots, &rec, p, FidelityStructured)
 		}
 		captureRecordBody(&rec, content)
 	case "stat", "wc":
 		// Counts and metadata verify against the captured result body.
-		addRecordPath(projectDir, &rec, stringArg(args, "path"), FidelityStructured)
+		addRecordPath(roots, &rec, stringArg(args, "path"), FidelityStructured)
 		captureRecordBody(&rec, content)
 	case "command":
 		if rec.Shape == ShapeSurfaceSnapshot {
@@ -102,19 +121,19 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 			captureRecordBody(&rec, content)
 		} else {
 			rec.Fidelity = FidelityScraped
-			populateCommandRecord(projectDir, &rec, content)
+			populateCommandRecord(roots, &rec, content)
 		}
 	case "source_history":
 		// History claims verify against actor-classified records.
 		rec.Fidelity = FidelityStructured
-		addRecordPath(projectDir, &rec, stringArg(args, "path"), FidelityStructured)
+		addRecordPath(roots, &rec, stringArg(args, "path"), FidelityStructured)
 		captureRecordBody(&rec, content)
 	case "git_status", "git_diff", "git_log", "git_show", "git_blame", "git_branches", "git_ref", "git_compare", "git_stash_list",
 		"git_commit", "git_restore", "git_checkout", "git_merge", "git_stash":
 		// Git results can index unreadable paths.
 		rec.Fidelity = FidelityStructured
-		addRecordPath(projectDir, &rec, stringArg(args, "path"), FidelityStructured)
-		populateGitRecord(projectDir, &rec, content)
+		addRecordPath(roots, &rec, stringArg(args, "path"), FidelityStructured)
+		populateGitRecord(roots, &rec, content)
 	case "web_search":
 		// Every returned URL is an observed search result.
 		rec.Fidelity = FidelityStructured
@@ -125,29 +144,29 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		rec.touchURL(stringArg(args, "url"))
 		populateFetchTitle(&rec, stringArg(args, "url"), content)
 		if dest := stringArg(args, "dest"); dest != "" {
-			addRecordPath(projectDir, &rec, dest, FidelityStructured)
+			addRecordPath(roots, &rec, dest, FidelityStructured)
 		}
 	case "diff":
 		// Diff evidence binds both inputs to the captured body.
-		addRecordPath(projectDir, &rec, stringArg(args, "path_a"), FidelityStructured)
-		addRecordPath(projectDir, &rec, stringArg(args, "path_b"), FidelityStructured)
+		addRecordPath(roots, &rec, stringArg(args, "path_a"), FidelityStructured)
+		addRecordPath(roots, &rec, stringArg(args, "path_b"), FidelityStructured)
 		captureRecordBody(&rec, content)
 	case "scan_pack", "scan_list", "scan_summary", "scan_query", "scan_compare":
 		rec.Fidelity = FidelityStructured
-		populateScanArtifactRecord(projectDir, &rec, content)
+		populateScanArtifactRecord(roots, &rec, content)
 	case "survey_repo":
 		rec.Fidelity = FidelityStructured
 		rec.Survey = true
-		populateSurveyRepoRecord(projectDir, &rec, args, content)
+		populateSurveyRepoRecord(roots, &rec, args, content)
 	case "summarize":
 		rec.Fidelity = FidelityStructured
-		populateSummarizeRecord(projectDir, &rec, content)
-		populateSummarizePackRecord(projectDir, &rec, content)
+		populateSummarizeRecord(roots, &rec, content)
+		populateSummarizePackRecord(roots, &rec, content)
 	case "recall":
 		// Recall observes index results, not file contents.
 		rec.Fidelity = FidelityStructured
 		rec.Survey = true
-		populateRecallRecord(projectDir, &rec, content)
+		populateRecallRecord(roots, &rec, content)
 	case "skills_read":
 		// Skill paths are relative to the skill directory.
 		rec.Fidelity = FidelityStructured
@@ -181,9 +200,9 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 	return rec
 }
 
-func addRecordPath(projectDir string, rec *Record, token, tier string) {
+func addRecordPath(roots CitationRoots, rec *Record, token, tier string) {
 	if rec != nil {
-		rec.touchPath(projectDir, token, tier)
+		rec.touchPath(roots, token, tier)
 	}
 }
 

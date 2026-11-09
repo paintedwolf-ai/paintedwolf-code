@@ -26,7 +26,7 @@ func nextEvidenceOrdinal(ctx context.Context, q *db.Queries, sessionID, kind str
 }
 
 func supersedePathsForRecord(ctx context.Context, q *db.Queries, sessionID, newHandle string, rec evidence.Record, live evidence.Ledger) error {
-	for _, path := range evidence.IndexedPathsForRecord(rec) {
+	for _, path := range evidence.DisplayPathsForRecord(rec) {
 		for _, oldHandle := range live.ByPath[path] {
 			if oldHandle == newHandle {
 				continue
@@ -44,7 +44,7 @@ func supersedePathsForRecord(ctx context.Context, q *db.Queries, sessionID, newH
 }
 
 // loadFileBindings reads live path metadata without loading body blobs.
-func loadFileBindings(ctx context.Context, q *db.Queries, sessionID string, incoming evidence.Record) (evidence.Ledger, error) {
+func loadFileBindings(ctx context.Context, q *db.Queries, sessionID string, roots evidence.CitationRoots, incoming evidence.Record) (evidence.Ledger, error) {
 	if !evidence.UpdatesFileBindings(incoming) {
 		return evidence.InitLedger(), nil
 	}
@@ -57,13 +57,14 @@ func loadFileBindings(ctx context.Context, q *db.Queries, sessionID string, inco
 		if row.SupersededBy.Valid {
 			continue
 		}
-		rec := evidence.Record{Handle: row.Handle, Kind: row.Kind, Shape: row.Shape, Path: row.Path, Survey: row.Survey != 0}
+		rec := evidence.Record{Handle: row.Handle, Kind: row.Kind, Shape: row.Shape, Path: row.Path, RootID: row.RootID, Survey: row.Survey != 0}
 		if err := unmarshalEvidenceLineRanges(row.LineRanges, &rec); err != nil {
 			return evidence.Ledger{}, fmt.Errorf("decode path binding %s: %w", rec.Handle, err)
 		}
 		if !evidence.SupersedesPathHandle(incoming, rec) {
 			continue
 		}
+		evidence.StampDisplayKeys(roots, &rec)
 		records = append(records, rec)
 	}
 	return evidence.AssembleLedger(records), nil
@@ -84,7 +85,20 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 	if err := ctx.Err(); err != nil {
 		return "", content, err
 	}
-	rec := evidence.BuildEvidenceRecord(projectDir, toolName, args, content)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", content, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	qtx := s.queries.WithTx(tx)
+	roots, err := evidenceCitationRoots(ctx, qtx, sessionID)
+	if err != nil {
+		return "", content, err
+	}
+	if len(roots.Roots) == 0 {
+		roots.ProjectDir = projectDir
+	}
+	rec := evidence.BuildEvidenceRecordRooted(roots, toolName, args, content)
 	if rec.Kind == "" {
 		return "", content, nil
 	}
@@ -96,18 +110,12 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 
 	release := bloblifecycle.AcquirePublication(s.dataDir)
 	defer release()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return "", content, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	qtx := s.queries.WithTx(tx)
 	projectID, err := qtx.GetSessionProjectID(ctx, sessionID)
 	if err != nil {
 		return "", content, fmt.Errorf("resolve evidence record project: %w", err)
 	}
 
-	live, err := loadFileBindings(ctx, qtx, sessionID, rec)
+	live, err := loadFileBindings(ctx, qtx, sessionID, roots, rec)
 	if err != nil {
 		return "", content, err
 	}
@@ -120,7 +128,7 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 	var highlightRecs []evidence.Record
 	var handle string
 	if strings.EqualFold(toolName, "summarize") {
-		handle, patched, highlightRecs = evidenceSummarizeCommit(projectDir, content, rec, ordinal)
+		handle, patched, highlightRecs = evidenceSummarizeCommit(roots, content, rec, ordinal)
 	} else if strings.EqualFold(toolName, "capture_page") && len(evidence.CaptureFrameHighlightRecords(content)) > 0 {
 		handle, patched, highlightRecs = evidenceCaptureFilmstripCommit(content, rec, ordinal)
 	} else {
@@ -132,7 +140,7 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 				ordinalCursor[kind]++
 				return ordinalCursor[kind]
 			}
-			patched, highlightRecs = mintToolHighlightRecords(projectDir, toolName, content, nextOrdinal)
+			patched, highlightRecs = mintToolHighlightRecords(roots, toolName, content, nextOrdinal)
 		}
 	}
 	rec.Handle = handle

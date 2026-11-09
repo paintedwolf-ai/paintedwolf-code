@@ -20,8 +20,8 @@ func TestEvidenceRecordPayloadHasOneVersionedShape(t *testing.T) {
 	testutil.FailErr(t, "marshalEvidenceLineRanges", err)
 	var payload map[string]any
 	testutil.FailErr(t, "decode payload", json.Unmarshal([]byte(raw), &payload))
-	if payload["v"] != float64(1) {
-		t.Fatalf("payload = %s, want v=1 object", raw)
+	if payload["v"] != float64(2) {
+		t.Fatalf("payload = %s, want v=2 object", raw)
 	}
 	var rec evidence.Record
 	if err := unmarshalEvidenceLineRanges(`[{"start":2,"end":3}]`, &rec); err == nil {
