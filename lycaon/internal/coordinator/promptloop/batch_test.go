@@ -161,12 +161,12 @@ func TestPartitionToolBatchRuns_webResearchRequiresExplicitOptIn(t *testing.T) {
 	if got := concurrentRunLimit(reg, runs[0]); got != 4 {
 		t.Fatalf("web_search concurrency = %d want 4", got)
 	}
-	writes := []api.ToolCall{
-		{Name: "fetch_url", Args: map[string]any{"url": "https://example.test/a", "dest": "a.bin", "parallel": true}},
-		{Name: "fetch_url", Args: map[string]any{"url": "https://example.test/b", "dest": "b.bin", "parallel": true}},
+	fetches := []api.ToolCall{
+		{Name: "fetch_url", Args: map[string]any{"url": "https://example.test/a", "parallel": true}},
+		{Name: "fetch_url", Args: map[string]any{"url": "https://example.test/b", "parallel": true}},
 	}
-	if runs := partitionToolBatchRuns(reg, writes); len(runs) != 2 {
-		t.Fatalf("destination-writing fetch runs = %v want two singleton runs", runs)
+	if runs := partitionToolBatchRuns(reg, fetches); len(runs) != 1 {
+		t.Fatalf("independent fetch runs = %v want one parallel run", runs)
 	}
 }
 

@@ -19,7 +19,6 @@ External truth only — docs, migrations, CVEs. No repo survey — delegate code
 ## Raw resources / assets
 
 - **`mode=text`** (default): research extract — HTML→markdown. Use for docs and articles.
-- **`mode=raw`**: verbatim body. Textual MIME stays pageable; binary **requires `dest`** (JSON receipt only — never bytes/base64 in context).
 - Fetch into the project for build work. Do **not** CDN into design renders — the design kit is hermetic/offline.
 
 ## Output (required headings)

@@ -233,13 +233,15 @@ If the model cannot produce a valid closeout after bounded repair, the host may 
 - A worker's ceiling rises only when its coordinator grants it; the host neither extends nor shrinks it.
 - A resume continues the child it names: same agent, scope mode, and planned leg.
 
-### Web research loading
+### Tool family loading
 
-Web search and page reading form one schema-loading group. Selecting either
-`web_search` or `fetch_url` loads both tools that the current surface permits.
+The native family catalog defines capabilities offered together, including
+web research, browser pages, and terminals. Prediction and `request_tools`
+load each selected family member permitted by the current surface. Search and
+read-only page reading share the web-research family.
 Loading does not change tool authorization or make an unavailable member
-requestable. The same group applies to predicted tools and `request_tools`;
-explicitly requested schemas retain their normal standing-surface lifetime.
+requestable. Explicitly requested schemas retain their normal
+standing-surface lifetime.
 
 Research proceeds from source discovery to reading relevant passages and citing
 them inline. Search snippets locate candidates; they do not establish that a

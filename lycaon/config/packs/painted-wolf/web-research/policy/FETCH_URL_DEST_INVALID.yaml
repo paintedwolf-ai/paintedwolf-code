@@ -1,3 +1,4 @@
+# Deprecated rejection identity; raw transfers use portable curl.
 oar: '1.0'
 id: FETCH_URL_DEST_INVALID
 kind: schema
@@ -15,8 +16,8 @@ copy:
   what: fetch_url was called with dest while mode was not raw.
   cause: Project writes belong to the raw asset path; text mode is research extract only.
   why: Mixing dest with text mode would mutate the tree while claiming a read-only page extract.
-  fix: Pass mode=raw with dest, or drop dest for a text extract.
-  instead: Branch on Code FETCH_URL_DEST_INVALID; use mode=raw or omit dest
+  fix: Fetch is read-only. Omit mode and dest to read a source. Raw transfers and downloads require portable curl on a command-capable surface; existing access refusals still apply.
+  instead: Use the read-only source reader or an authorized raw transfer.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
 x-paintedwolf-message: fetch_url dest is only valid with mode=raw

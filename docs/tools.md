@@ -1126,7 +1126,7 @@ Requesting `command` does not automatically load `http_request`; `curl` in a pro
 
 ## Web research sources
 
-`web_search` and `fetch_url` are document-research tools whose availability depends on the session's web-research setting and effective provider catalog. `fetch_url` retrieves a source for extraction or a bounded raw asset; it is not a general HTTP client. Text mode pages and maps a cached body by line (a minified JSON document is re-indented before caching); raw mode returns the bytes verbatim.
+`web_search` and `fetch_url` are document-research tools whose availability depends on the session's web-research setting and effective provider catalog. `fetch_url` is a read-only source reader: it extracts readable text, maps and pages cached bodies by line, and screens images before perception. Compact JSON is re-indented for paging. Portable `curl` through `command` handles raw HTTP transfers and file downloads, with its normal effect admission and destination write boundary. The `mode` and `dest` arguments are retired; callers use `curl` for those operations. Stored fetch receipts retain their original meaning.
 
 Direct search uses a catalogued set of keyless sources with declared roles, pacing, and normalization; user-configured providers join the effective set according to settings. Provider ids, endpoints, and enablement live in the generated catalog (`lycaon/config/packs/painted-wolf/web-research/host/web-research-providers.yaml`), not this page.
 

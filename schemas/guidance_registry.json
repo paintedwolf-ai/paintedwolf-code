@@ -1080,19 +1080,19 @@
       "summary": "fetch_url has used {{ paintedwolf.fetch_budget_used }} session reservations; the cap is {{ paintedwolf.max }} per {{ paintedwolf.window }}."
     },
     "FETCH_URL_DEST_DENIED": {
-      "branch_instruction": "Resolve destination authority before repeating network work",
+      "branch_instruction": "Use the read-only source reader or an authorized raw transfer.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
       "summary": "fetch_url could not write dest {{ paintedwolf.path }} under project write scope."
     },
     "FETCH_URL_DEST_INVALID": {
-      "branch_instruction": "Branch on Code FETCH_URL_DEST_INVALID; use mode=raw or omit dest",
+      "branch_instruction": "Use the read-only source reader or an authorized raw transfer.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
       "summary": "fetch_url was called with dest while mode was not raw."
     },
     "FETCH_URL_DEST_REQUIRED": {
-      "branch_instruction": "Branch on Code FETCH_URL_DEST_REQUIRED; supply dest",
+      "branch_instruction": "Use the read-only source reader or an authorized raw transfer.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
       "summary": "mode=raw fetched a non-image binary resource ({{ paintedwolf.content_type }}) without dest."
@@ -1104,7 +1104,7 @@
       "summary": "fetch_url rejected the URL input."
     },
     "FETCH_URL_MODE_INVALID": {
-      "branch_instruction": "Branch on Code FETCH_URL_MODE_INVALID; use text or raw",
+      "branch_instruction": "Use the read-only source reader or an authorized raw transfer.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
       "summary": "fetch_url mode {{ paintedwolf.mode }} is not text or raw."
@@ -1116,10 +1116,10 @@
       "summary": "fetch_url did not send the fetched image to the model."
     },
     "FETCH_URL_TYPE_UNSUPPORTED": {
-      "branch_instruction": "Branch on Code FETCH_URL_TYPE_UNSUPPORTED; choose a supported MIME",
+      "branch_instruction": "Choose a readable source or an authorized raw transfer.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
-      "summary": "mode=raw refused Content-Type {{ paintedwolf.content_type }} ({{ paintedwolf.rejection_reason }})."
+      "summary": "fetch_url cannot read Content-Type {{ paintedwolf.content_type }} ({{ paintedwolf.rejection_reason }})."
     },
     "FILE_CHANGE_APPROVAL_UNAVAILABLE": {
       "branch_instruction": "Do not retry the file change through another command while approval is unavailable.",

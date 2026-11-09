@@ -1,3 +1,4 @@
+# Deprecated rejection identity; raw transfers use portable curl.
 oar: '1.0'
 id: FETCH_URL_DEST_DENIED
 kind: schema
@@ -17,10 +18,8 @@ copy:
   what: fetch_url could not write dest {{ paintedwolf.path }} under project write scope.
   cause: The requested destination failed the ingest write boundary after the response was fetched.
   why: Asset ingest must stay inside the attached folders — same jail as write and copy.
-  fix: Inspect the refused path and intended write authority before any new network request. Use another destination
-    only if it is the intended, permitted target; do not bypass a protected-path refusal. The fetched body
-    was not published as the requested file.
-  instead: Resolve destination authority before repeating network work
+  fix: Fetch is read-only. Omit mode and dest to read a source. Raw transfers and downloads require portable curl on a command-capable surface; existing access refusals still apply.
+  instead: Use the read-only source reader or an authorized raw transfer.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
 x-paintedwolf-message: fetch_url dest path is not writable

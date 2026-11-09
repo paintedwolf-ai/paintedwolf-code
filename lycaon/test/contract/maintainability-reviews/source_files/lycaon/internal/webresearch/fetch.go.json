@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/webresearch/fetch.go",
+  "kind": "module",
+  "workstream": "web-research-flow",
+  "disposition": "retain",
+  "reason": "Retain the 453-line fetch transport and document extraction unit. Raw transfer entry points are removed; URL canonicalization, bounded public-address transport, redirects, and extraction share the response contract. Tool admission, visual perception, formatting, and MIME classification remain separate cohesive units.",
+  "reviewed_commit": "655e22133e9396805819a601fbd788f77270eecb",
+  "ceiling": 453,
+  "boundaries": {
+    "lycaon/internal/webresearch/fetch_readonly_test.go": "9531624acebbd93bf17450c4e2fcceed6af1b4e14f80275f062dbffd91e6a37b",
+    "lycaon/internal/webresearch/fetch_format_test.go": "8c28f8f03259a79bad20ceb86600e9f9690c6f3ac0dd71c9584129970acb7d79",
+    "lycaon/internal/webresearch/fetch_visual_test.go": "44777c7fc7835e6adf426aeb3c1761b56a3a753a1781625ae1d6e1b0532abbef"
+  }
+}

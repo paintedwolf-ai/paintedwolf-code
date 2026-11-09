@@ -2,30 +2,21 @@ package webresearch
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"path"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/decide"
-	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/egressgate"
-	"github.com/lycaon/lycaon/internal/fileoutline"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/runeclamp"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/tooloutput"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
-	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/internal/webindex"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // SearchWarmHook starts attributed index expansion after a search.
@@ -55,16 +46,12 @@ type ToolDeps struct {
 	SearchWarmHook SearchWarmHook
 	// FetchWarmHook runs after fetch_url fetches a fresh page; nil disables post-fetch warming.
 	FetchWarmHook FetchWarmHook
-	// Boundary is required for mode=raw dest writes (same sandbox as write/copy).
-	Boundary *sandbox.Boundary
 	// FetchBudget soft-caps outbound fetch_url network fetches; nil → GlobalFetchBudget().
 	FetchBudget *FetchBudget
 	// SecretMatcher screens outbound content; nil or Inert() ⇒ no ask.
 	SecretMatcher *secretmatch.Matcher
 	// SecretAsk raises the outbound-secret tool_approval ask; nil ⇒ deny on match.
 	SecretAsk secretmatch.AskFunc
-	// VisualStore persists visual artifacts; nil disables visual ingestion.
-	VisualStore visual.Store
 	// VisualScreen coordinates pre-perception credential screening.
 	VisualScreen *visualscreen.Gate
 }
@@ -183,49 +170,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 		return err
 	}
 
-	if err := reg.Register("fetch_url", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		rawURL, _ := args["url"].(string)
-		mode, _ := args["mode"].(string)
-		dest, _ := args["dest"].(string)
-		offset := intArg(args, "offset")
-		limit := intArg(args, "limit")
-		// Model-supplied destinations retain per-host approval checks.
-		contest, _ := args["unredact"].(string)
-		ctx = withToolEgressGate(ctx, deps, tctx, "fetch_url", nil, contest, screenDestination{})
-		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
-		out, fetched, err := fetchURLTool(ctx, fetchURLToolArgs{
-			URL:          rawURL,
-			Mode:         mode,
-			Dest:         dest,
-			Offset:       offset,
-			Limit:        limit,
-			Index:        deps.Index,
-			Boundary:     deps.Boundary,
-			Budget:       deps.FetchBudget,
-			VisualStore:  deps.VisualStore,
-			VisualScreen: deps.VisualScreen,
-			Tctx:         tctx,
-		})
-		if err != nil {
-			return "", mapFetchToolErr(err)
-		}
-		if host, denied := egressgate.Denied(ctx); denied {
-			return "", hostDeniedReject(host)
-		}
-		if fault, ok := SecretScreenFaulted(ctx); ok {
-			return "", secretScreenFaultReject(fault)
-		}
-		if denied, ok := SecretScreenDenied(ctx); ok {
-			return "", secretScreenRejectFromErr(denied)
-		}
-		if deps.FetchWarmHook != nil && fetched != nil {
-			deps.FetchWarmHook(ctx, tctx.Identity.SessionID, tctx.Identity.ToolCallID, fetched.URL, fetched.Title, projectDirFrom(tctx))
-		}
-		return appendSecretReceipt(ctx, out), nil
-	}); err != nil {
-		return err
-	}
-	return nil
+	return registerFetchTool(reg, deps)
 }
 
 // withToolEgressGate attaches declared destinations and secret fanout.
@@ -311,287 +256,6 @@ func WireRuntime(ctx context.Context) (Runtime, error) {
 	return Runtime{Creds: creds, Config: cfg, Catalog: cat, Registry: reg}, nil
 }
 
-type fetchURLToolArgs struct {
-	URL          string
-	Mode         string
-	Dest         string
-	Offset       int
-	Limit        int
-	Index        *webindex.Store
-	Boundary     *sandbox.Boundary
-	Budget       *FetchBudget
-	VisualStore  visual.Store
-	VisualScreen *visualscreen.Gate
-	Tctx         tools.ToolContext
-}
-
-// fetchURLTool returns a cached line range or a fetched structural view.
-func fetchURLTool(ctx context.Context, a fetchURLToolArgs) (string, *FetchURLResult, error) {
-	if a.Offset < 0 || a.Limit < 0 {
-		return "", nil, &toolrejection.ToolReject{
-			Code: "TOOL_ARGS_INVALID",
-			Data: map[string]any{"reason": "offset and limit must be at least 1"},
-		}
-	}
-	// A limit without an offset starts at the first line.
-	if a.Limit > 0 && a.Offset == 0 {
-		a.Offset = 1
-	}
-	if a.Offset > 0 && a.Limit == 0 {
-		return "", nil, &toolrejection.ToolReject{
-			Code: "TOOL_ARGS_INVALID",
-			Data: map[string]any{"reason": "offset needs a limit — an open-ended range is the head-and-map default"},
-		}
-	}
-	mode := strings.ToLower(strings.TrimSpace(a.Mode))
-	if mode == "" {
-		mode = "text"
-	}
-	if mode != "text" && mode != "raw" {
-		return "", nil, &toolrejection.ToolReject{
-			Code: "FETCH_URL_MODE_INVALID",
-			Data: map[string]any{"mode": a.Mode},
-		}
-	}
-	dest := strings.TrimSpace(a.Dest)
-	if dest != "" && mode != "raw" {
-		return "", nil, &toolrejection.ToolReject{
-			Code: "FETCH_URL_DEST_INVALID",
-			Data: map[string]any{"dest": dest},
-		}
-	}
-
-	rawURL := CanonicalFetchURL(a.URL)
-	u, err := normalizeFetchURL(rawURL)
-	if err != nil {
-		return "", nil, err
-	}
-	// Secret screening uses the invocation context before cache access or fetching.
-	screenedURL, err := screenOutbound(ctx, secretmatch.SurfaceFetchURL, httpDestination(u), u.String())
-	if err != nil {
-		return "", nil, err
-	}
-	if screenedURL != u.String() {
-		u, err = normalizeFetchURL(screenedURL)
-		if err != nil {
-			return "", nil, err
-		}
-		rawURL = u.String()
-	}
-	if mode == "text" && isImageExtension(u.Path) {
-		mode = "raw"
-	}
-	if mode == "raw" {
-		return fetchURLRawTool(ctx, a, rawURL, dest)
-	}
-	return fetchURLTextTool(ctx, a, rawURL)
-}
-
-func fetchURLTextTool(ctx context.Context, a fetchURLToolArgs, rawURL string) (string, *FetchURLResult, error) {
-	entry, hit := tooloutput.ReadFetchCache(rawURL)
-	var res FetchURLResult
-	var fetched *FetchURLResult
-	ext := entry.Ext
-	if hit {
-		res = fetchResultFromCache(entry)
-	} else {
-		release, err := acquireFetchBudget(ctx, a, rawURL)
-		if err != nil {
-			return "", nil, err
-		}
-		body, err := fetchBytes(ctx, FetchOptions{URL: rawURL}, "text")
-		release()
-		if err != nil {
-			return "", nil, err
-		}
-		if isImageMIME(body.ContentType) {
-			return handleFetchVisual(ctx, a, body)
-		}
-		res = fetchTextResult(body)
-		fetched = &res
-		ext = fetchCacheExt(res)
-		// Redirecting URLs retain the caller's cache key.
-		_ = tooloutput.WriteFetchCache(rawURL, fetchResultCacheEntry(res, ext))
-		ingestFetchedPage(ctx, a.Index, res)
-	}
-	if a.Offset > 0 && a.Limit > 0 {
-		noteRetrievedFrom(a.Tctx, res.URL)
-		return FormatFetchRange(res.URL, res.Text, a.Offset, a.Limit), fetched, nil
-	}
-	var outline fileoutline.Result
-	if len(res.Text) > inlineFullMaxBytes {
-		outline = fileoutline.AnalyzeText(ctx, "page."+ext, []byte(res.Text))
-	}
-	noteRetrievedFrom(a.Tctx, res.URL)
-	return FormatFetchResult(res, outline, hit), fetched, nil
-}
-
-func isImageMIME(contentType string) bool {
-	ct := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
-	return strings.HasPrefix(ct, "image/") || ct == "image/svg+xml"
-}
-
-func isImageExtension(urlPath string) bool {
-	ext := strings.ToLower(path.Ext(strings.TrimSpace(urlPath)))
-	switch ext {
-	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico":
-		return true
-	default:
-		return false
-	}
-}
-
-// handleFetchVisual screens a fetched image before perception. The receipt
-// names the image by the artifact id the host stamps on the result; the
-// evidence ledger mints its citation handle.
-func handleFetchVisual(ctx context.Context, a fetchURLToolArgs, live FetchRawResult) (string, *FetchURLResult, error) {
-	ct := mediaTypeOnly(live.ContentType)
-	if ct == "" {
-		if strings.HasSuffix(strings.ToLower(live.URL), ".svg") {
-			ct = "image/svg+xml"
-		} else {
-			ct = "image/png"
-		}
-	}
-	rejectData := map[string]any{"url": live.URL, "path": live.URL, "format": strings.TrimPrefix(ct, "image/")}
-	perceiveBytes, perceiveMime := live.Body, ct
-	receipt := map[string]any{
-		"url":          live.URL,
-		"content_type": ct,
-		"size_bytes":   len(live.Body),
-		"mode":         "visual",
-	}
-	perceive := true
-	if a.VisualScreen != nil {
-		outcome, err := a.VisualScreen.Screen(ctx, visualscreen.VisualScreenInput{
-			SessionID:     a.Tctx.Identity.SessionID,
-			ProjectID:     a.Tctx.Identity.ProjectID,
-			ToolName:      "fetch_url",
-			ToolCallID:    a.Tctx.Identity.ToolCallID,
-			Mime:          ct,
-			RawBytes:      live.Body,
-			PublicInbound: true,
-		})
-		if err != nil {
-			if errors.Is(err, visualscreen.ErrVisualSecretWithheld) {
-				return "", nil, &toolrejection.ToolReject{
-					Code: "FETCH_URL_SECRET_WITHHELD",
-					Data: map[string]any{"url": live.URL},
-				}
-			}
-			return "", nil, fetchImageReject(err, rejectData)
-		}
-		if outcome.ExtractedText != "" {
-			receipt["text"] = runeclamp.Clamp(outcome.ExtractedText, 4000)
-		}
-		if outcome.Perception != visualscreen.PerceptionOriginal {
-			receipt["perception"] = string(outcome.Perception)
-		}
-		if outcome.Gap != "" {
-			receipt["screening_gap"] = string(outcome.Gap)
-		}
-		perceiveBytes, perceiveMime, perceive = outcome.PerceiveBytes, outcome.Mime, outcome.PermitPerception()
-	} else if kind, err := visualscreen.Classify(ct, live.Body); err != nil {
-		return "", nil, fetchImageReject(err, rejectData)
-	} else if kind == visualscreen.KindRaster {
-		if _, err := visualscreen.CheckRasterBounds(live.Body); err != nil {
-			return "", nil, fetchImageReject(err, rejectData)
-		}
-	}
-
-	if perceive {
-		if a.Tctx.Effects.Out == nil {
-			a.Tctx.Effects.Out = &tools.ToolInvocationOut{}
-		}
-		a.Tctx.Effects.Out.Visual = &tools.VisualCapture{
-			Mime:      perceiveMime,
-			Bytes:     append([]byte(nil), perceiveBytes...),
-			Source:    api.VisualArtifactSourceFetch,
-			Caption:   live.URL,
-			Perceive:  true,
-			Projected: true,
-		}
-	}
-	raw, _ := surveyjson.Marshal(receipt)
-	noteRetrievedFrom(a.Tctx, live.URL)
-	return string(raw), nil, nil
-}
-
-func fetchImageReject(err error, data map[string]any) error {
-	var dims *visualscreen.DimensionsError
-	if errors.As(err, &dims) {
-		out := map[string]any{"width": dims.Width, "height": dims.Height, "max_dimension": dims.Max}
-		for k, v := range data {
-			out[k] = v
-		}
-		return &toolrejection.ToolReject{Code: "IMAGE_DIMENSIONS_EXCEEDED", Data: out}
-	}
-	if errors.Is(err, visualscreen.ErrImageUndecodable) {
-		out := map[string]any{"rejection_reason": err.Error()}
-		for k, v := range data {
-			out[k] = v
-		}
-		return &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: out}
-	}
-	return err
-}
-
-func mapFetchToolErr(err error) error {
-	if err == nil {
-		return nil
-	}
-	toolReject := &toolrejection.ToolReject{}
-	if errors.As(err, &toolReject) {
-		return err
-	}
-	var denied *egressgate.HostDeniedError
-	if errors.As(err, &denied) {
-		return hostDeniedReject(denied.Host)
-	}
-	var secretFault *SecretScreenFaultError
-	if errors.As(err, &secretFault) {
-		return secretScreenFaultReject(secretFault)
-	}
-	var secretDenied *SecretDeniedError
-	if errors.As(err, &secretDenied) {
-		return secretScreenRejectFromErr(secretDenied)
-	}
-	var tooLarge FetchBodyTooLargeError
-	if errors.As(err, &tooLarge) {
-		return &toolrejection.ToolReject{
-			Code: "FETCH_URL_BODY_TOO_LARGE",
-			Data: map[string]any{
-				"bytes":          tooLarge.Actual,
-				"max_bytes":      tooLarge.Limit,
-				"resource_limit": true,
-			},
-		}
-	}
-	var invalidURL *InvalidURLError
-	if errors.As(err, &invalidURL) {
-		return &toolrejection.ToolReject{
-			Code: "FETCH_URL_INVALID_URL",
-			Data: map[string]any{"detail": invalidURL.Error()},
-		}
-	}
-	var destinationDenied *egress.DestinationDeniedError
-	if errors.As(err, &destinationDenied) {
-		return &toolrejection.ToolReject{
-			Code: "FETCH_URL_BLOCKED",
-			Data: map[string]any{"detail": destinationDenied.Error()},
-		}
-	}
-	return err
-}
-
-func acquireFetchBudget(ctx context.Context, a fetchURLToolArgs, rawURL string) (func(), error) {
-	b := a.Budget
-	if b == nil {
-		b = GlobalFetchBudget()
-	}
-	return b.Acquire(ctx, a.Tctx.Identity.SessionID, rawURL)
-}
-
 func projectDirFrom(tctx tools.ToolContext) string {
 	if root, err := projectroot.ActiveRoot(tctx.Source.Roots, tctx.Source.ActiveRootID); err == nil {
 		return root.Path
@@ -600,14 +264,4 @@ func projectDirFrom(tctx tools.ToolContext) string {
 		return root.Path
 	}
 	return ""
-}
-
-// noteRetrievedFrom records source attribution for live and cached results.
-func noteRetrievedFrom(tctx tools.ToolContext, observedURL string) {
-	if tctx.Effects.Out == nil {
-		return
-	}
-	if host := fetchProvenanceHost(observedURL); host != "" && host != "unknown" {
-		tctx.Effects.Out.RetrievedFrom = host
-	}
 }

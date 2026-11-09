@@ -38,8 +38,8 @@ func TestBundledToolContractsAreClosed(t *testing.T) {
 			t.Fatalf("%s batch contract = policy %q opt-in %q cap %d", tool, cfg.BatchPolicy[tool], cfg.BatchOptInArg[tool], cfg.BatchConcurrencyLimit[tool])
 		}
 	}
-	if got := cfg.BatchSerialWhenArg["fetch_url"]; got != "dest" {
-		t.Fatalf("fetch_url batch_serial_when_arg = %q want dest", got)
+	if got := cfg.BatchSerialWhenArg["fetch_url"]; got != "" {
+		t.Fatalf("fetch_url batch_serial_when_arg = %q want no write condition", got)
 	}
 	if cfg.BatchConcurrencyLimit["summarize"] != 4 {
 		t.Fatalf("summarize batch cap = %d want 4", cfg.BatchConcurrencyLimit["summarize"])
