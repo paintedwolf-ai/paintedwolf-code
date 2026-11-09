@@ -130,10 +130,7 @@ func TestEngineStartersEnterAMountUnderForcedGC(t *testing.T) {
 				_ = release()
 				return errors.New("incomplete checkpoint barrier receipt")
 			}
-			if rErr := release(); rErr != nil {
-				return rErr
-			}
-			return chosen.FlushClientData(ctx, view.ViewID)
+			return release()
 		},
 	}
 

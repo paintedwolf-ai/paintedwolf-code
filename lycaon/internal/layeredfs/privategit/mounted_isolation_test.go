@@ -387,19 +387,20 @@ func TestCoreGitOverlaySyncPrimaryAndSecondaryRootsToCheckpointAndExport(t *test
 	testutil.FailErr(t, "write second HEAD via Core", err)
 
 	cpState, err := mgr.CaptureCheckpointGitState(t.Context(), viewID, "cp-shell-multi")
-	testutil.FailErr(t, "CaptureCheckpointGitState", err)
-	if cpState.HeadRef != "refs/heads/shell-primary" || cpState.HeadOID != primaryShellOID {
-		t.Fatalf("primary HeadRef=%q HeadOID=%q, want refs/heads/shell-primary @ %s", cpState.HeadRef, cpState.HeadOID, primaryShellOID)
+	testutil.FailErr(t, "CaptureCheckpointGitState primary", err)
+	if cpState.HeadSymbolic != "refs/heads/shell-primary" || cpState.HeadOID != primaryShellOID {
+		t.Fatalf("primary HeadSymbolic=%q HeadOID=%q, want refs/heads/shell-primary @ %s", cpState.HeadSymbolic, cpState.HeadOID, primaryShellOID)
 	}
 	if cpState.Refs["refs/heads/shell-primary"] != primaryShellOID {
 		t.Fatalf("primary refs missing refs/heads/shell-primary: %+v", cpState.Refs)
 	}
-	secState, ok := cpState.Roots["second"]
-	if !ok || secState == nil {
-		t.Fatalf("expected secondary root state in CheckpointGitState.Roots, got %+v", cpState.Roots)
+	secState, err := mgr.CaptureCheckpointGitState(t.Context(), SecondaryViewID(viewID, "second"), "cp-shell-multi-second")
+	testutil.FailErr(t, "CaptureCheckpointGitState second", err)
+	if secState.HeadSymbolic != "refs/heads/shell-second" || secState.HeadOID != secondShellOID {
+		t.Fatalf("second HeadSymbolic=%q HeadOID=%q, want refs/heads/shell-second @ %s", secState.HeadSymbolic, secState.HeadOID, secondShellOID)
 	}
-	if secState.HeadRef != "refs/heads/shell-second" || secState.HeadOID != secondShellOID {
-		t.Fatalf("second HeadRef=%q HeadOID=%q, want refs/heads/shell-second @ %s", secState.HeadRef, secState.HeadOID, secondShellOID)
+	if secState.Refs["refs/heads/shell-second"] != secondShellOID {
+		t.Fatalf("second refs missing refs/heads/shell-second: %+v", secState.Refs)
 	}
 
 	exportPrimary := filepath.Join(tmp, "export-primary")
@@ -419,8 +420,11 @@ func TestMountedDirectMutableGitCoherenceLockContentionAndStoreStockMetrics(t *t
 	testutil.FailErr(t, "getManagedView", err)
 	v.kernelMounted = true
 
-	repo, err := mgr.InitRepo(t.Context(), viewID, ".")
+	_, err = mgr.InitRepo(t.Context(), viewID, ".")
 	testutil.FailErr(t, "InitRepo", err)
+	v.mu.Lock()
+	privGitDir := v.repos["."].privateGitDir
+	v.mu.Unlock()
 
 	// Verify #1667 StoreMetrics RetainedObjects and RetainedBytes stock metrics.
 	metrics := mgr.Store().Metrics()
@@ -433,7 +437,7 @@ func TestMountedDirectMutableGitCoherenceLockContentionAndStoreStockMetrics(t *t
 	}
 
 	// 1. Concurrent .lock (O_CREAT|O_EXCL) contention between privateGitDir and Core.
-	lockHostPath := filepath.Join(repo.privateGitDir, "index.lock")
+	lockHostPath := filepath.Join(privGitDir, "index.lock")
 	testutil.FailErr(t, "host create index.lock", os.WriteFile(lockHostPath, []byte("host-lock"), 0o600))
 	if _, _, err := core.CreateFile(q(".git/index.lock"), 0o600, true); !errors.Is(err, os.ErrExist) {
 		t.Fatalf("expected os.ErrExist when host holds index.lock, got %v", err)
@@ -471,7 +475,7 @@ func TestMountedDirectMutableGitCoherenceLockContentionAndStoreStockMetrics(t *t
 		t.Fatalf("ReadHandle after rename=%q, want %q", string(buf[:n]), string(updatedHeadPayload))
 	}
 	testutil.FailErr(t, "CloseHandle hHeadLock", core.CloseHandle(hHeadLock))
-	hostHead, err := os.ReadFile(filepath.Join(repo.privateGitDir, "HEAD"))
+	hostHead, err := os.ReadFile(filepath.Join(privGitDir, "HEAD"))
 	testutil.FailErr(t, "os.ReadFile host HEAD", err)
 	if string(hostHead) != string(updatedHeadPayload) {
 		t.Fatalf("host HEAD=%q, want %q", string(hostHead), string(updatedHeadPayload))
@@ -483,23 +487,15 @@ func TestMountedDirectMutableGitCoherenceLockContentionAndStoreStockMetrics(t *t
 	_, err = core.WriteFile(q(".git/refs/heads/live-branch"), []byte(headOID+"\n"), 0o644)
 	testutil.FailErr(t, "WriteFile live-branch via Core", err)
 
-	exec := NewGitExecutor(mgr, RemotePolicy{})
-	res, err := exec.Run(t.Context(), GitCommandRequest{
-		ViewID:   viewID,
-		WorkerID: "worker-" + viewID,
-		Args:     []string{"rev-parse", "refs/heads/live-branch"},
-	})
+	exec := NewGitExecutor(mgr, viewID, RemotePolicy{})
+	out, err := exec.Run(t.Context(), ".", "rev-parse", "refs/heads/live-branch")
 	testutil.FailErr(t, "GitExecutor rev-parse live-branch", err)
-	if strings.TrimSpace(res.Stdout) != headOID {
-		t.Fatalf("GitExecutor rev-parse live-branch=%q, want %q", strings.TrimSpace(res.Stdout), headOID)
+	if strings.TrimSpace(out) != headOID {
+		t.Fatalf("GitExecutor rev-parse live-branch=%q, want %q", strings.TrimSpace(out), headOID)
 	}
 
 	// Delete refs/heads/live-branch via GitExecutor and verify Core.Stat & Core.ReadDir reflect deletion immediately.
-	_, err = exec.Run(t.Context(), GitCommandRequest{
-		ViewID:   viewID,
-		WorkerID: "worker-" + viewID,
-		Args:     []string{"update-ref", "-d", "refs/heads/live-branch"},
-	})
+	_, err = exec.Run(t.Context(), ".", "update-ref", "-d", "refs/heads/live-branch")
 	testutil.FailErr(t, "GitExecutor update-ref -d live-branch", err)
 
 	if _, err := core.Stat(q(".git/refs/heads/live-branch")); !errors.Is(err, os.ErrNotExist) {

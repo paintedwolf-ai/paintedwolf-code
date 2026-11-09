@@ -11,10 +11,18 @@ import (
 	"github.com/lycaon/lycaon/internal/fssync"
 )
 
-// HasObject reports whether oid (40-character hex SHA-1) exists in the retained store
-// either as a loose object or inside a retained packfile.
+// HasObject reports whether oid (40-character hex SHA-1 or "pack:<base>" pack reference)
+// exists in the retained store either as a loose object or inside a retained packfile.
 func (s *RetainedObjectStore) HasObject(oid string) bool {
 	oid = strings.ToLower(strings.TrimSpace(oid))
+	if strings.HasPrefix(oid, "pack:") {
+		base := strings.TrimPrefix(oid, "pack:")
+		base = strings.TrimSuffix(strings.TrimSuffix(base, ".pack"), ".idx")
+		s.mu.Lock()
+		_, ok := s.stock.packOIDs[base]
+		s.mu.Unlock()
+		return ok
+	}
 	if len(oid) != 40 || !isHexString(oid) {
 		return false
 	}
@@ -106,11 +114,30 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return removed, err
 	}
+	// First pass: remove unleased .pack files before companion .idx/.rev files so an
+	// interrupted GC never leaves an orphan .pack without .idx on disk.
 	for _, pe := range packEntries {
 		if err := ctx.Err(); err != nil {
 			return removed, err
 		}
-		if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") {
+		if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") || filepath.Ext(pe.Name()) != ".pack" {
+			continue
+		}
+		base := strings.TrimSuffix(pe.Name(), ".pack")
+		if _, keep := leasedPacks[base]; keep {
+			continue
+		}
+		if err := os.Remove(filepath.Join(packDir, pe.Name())); err == nil {
+			removePackLocked(s, base)
+			removed++
+		}
+	}
+	// Second pass: remove companion files (.idx, .rev, etc.) for unleased packs.
+	for _, pe := range packEntries {
+		if err := ctx.Err(); err != nil {
+			return removed, err
+		}
+		if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") || filepath.Ext(pe.Name()) == ".pack" {
 			continue
 		}
 		ext := filepath.Ext(pe.Name())
@@ -118,10 +145,7 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 		if _, keep := leasedPacks[base]; keep {
 			continue
 		}
-		if err := os.Remove(filepath.Join(packDir, pe.Name())); err == nil && ext == ".pack" {
-			removePackLocked(s, base)
-			removed++
-		}
+		_ = os.Remove(filepath.Join(packDir, pe.Name()))
 	}
 	return removed, nil
 }

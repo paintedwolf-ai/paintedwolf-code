@@ -86,7 +86,11 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 
 	cpGit, err := fx.gitMgr.CaptureCheckpointGitState(ctx, viewA.ViewID, "cp-multi-git")
 	if err != nil {
-		t.Fatalf("CaptureCheckpointGitState: %v", err)
+		t.Fatalf("CaptureCheckpointGitState primary: %v", err)
+	}
+	cpSecGit, err := fx.gitMgr.CaptureCheckpointGitState(ctx, secViewID, "cp-multi-git-second")
+	if err != nil {
+		t.Fatalf("CaptureCheckpointGitState second: %v", err)
 	}
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		Core:             viewA.Core,
@@ -105,7 +109,18 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 	}
 	manifest, err := pub.Publish(ctx, checkpoint.PublishRequest{
 		CheckpointID: "cp-multi-git",
-		PrivateGit:   checkpoint.PrivateGitFromState(cpGit),
+		PrivateGit: checkpoint.PrivateGitSnapshot{
+			HeadRef:         cpGit.HeadSymbolic,
+			Refs:            cpGit.Refs,
+			RetainedObjects: cpGit.Artifact.ReachableOIDs,
+			Roots: map[string]checkpoint.RootGitSnapshot{
+				"second": {
+					HeadRef:         cpSecGit.HeadSymbolic,
+					Refs:            cpSecGit.Refs,
+					RetainedObjects: cpSecGit.Artifact.ReachableOIDs,
+				},
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("Publish: %v", err)
@@ -134,5 +149,56 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 	gotSecondOID, err := recSecExec.Run(ctx, ".", "rev-parse", "refs/heads/feat-second")
 	if err != nil || strings.TrimSpace(gotSecondOID) != wantSecondOID {
 		t.Fatalf("restored secondary ref = %q (err=%v), want %s", strings.TrimSpace(gotSecondOID), err, wantSecondOID)
+	}
+
+	// Also verify materialized view reconstruction when AdoptMaterializedView registered the view
+	// without pre-initialized Repos (so restoreRootGitRefs initializes via InitRepo on demand).
+	eagerAdp := adapter.NewEagerCopyAdapter(adapter.ReasonNone)
+	viewMat, err := eagerAdp.Prepare(ctx, multiPrepareReq("view-multi-mat"))
+	if err != nil {
+		t.Fatalf("eagerAdp.Prepare: %v", err)
+	}
+	defer func() { _, _ = eagerAdp.Release(context.Background(), viewMat.ViewID) }()
+	var matPrimaryWT, matSecondWT string
+	for _, r := range viewMat.Roots {
+		switch r.RootID {
+		case "primary":
+			matPrimaryWT = r.WorkspacePath
+		case "second":
+			matSecondWT = r.WorkspacePath
+		}
+	}
+	if err := fx.gitMgr.AdoptMaterializedView(ctx, privategit.MaterializedViewBinding{
+		ViewID:      viewMat.ViewID,
+		WorkerID:    workerID + "-mat",
+		RootID:      "primary",
+		TrunkDir:    fx.trunkDir,
+		WorktreeDir: matPrimaryWT,
+		Core:        viewMat.Core,
+	}); err != nil {
+		t.Fatalf("AdoptMaterializedView primary: %v", err)
+	}
+	if err := fx.gitMgr.AdoptMaterializedView(ctx, privategit.MaterializedViewBinding{
+		ViewID:      privategit.SecondaryViewID(viewMat.ViewID, "second"),
+		WorkerID:    workerID + "-mat",
+		RootID:      "second",
+		TrunkDir:    trunkSecond,
+		WorktreeDir: matSecondWT,
+		Core:        viewMat.Core,
+	}); err != nil {
+		t.Fatalf("AdoptMaterializedView second: %v", err)
+	}
+	if err := fx.coord.ApplyCheckpointToView(ctx, viewMat, manifest); err != nil {
+		t.Fatalf("ApplyCheckpointToView materialized: %v", err)
+	}
+	matPrimaryExec := privategit.NewGitExecutor(fx.gitMgr, viewMat.ViewID, privategit.RemotePolicy{})
+	gotMatPrimaryOID, err := matPrimaryExec.Run(ctx, ".", "rev-parse", "refs/heads/feat-primary")
+	if err != nil || strings.TrimSpace(gotMatPrimaryOID) != wantPrimaryOID {
+		t.Fatalf("materialized restored primary ref = %q (err=%v), want %s", strings.TrimSpace(gotMatPrimaryOID), err, wantPrimaryOID)
+	}
+	matSecExec := privategit.NewGitExecutor(fx.gitMgr, privategit.SecondaryViewID(viewMat.ViewID, "second"), privategit.RemotePolicy{})
+	gotMatSecondOID, err := matSecExec.Run(ctx, ".", "rev-parse", "refs/heads/feat-second")
+	if err != nil || strings.TrimSpace(gotMatSecondOID) != wantSecondOID {
+		t.Fatalf("materialized restored secondary ref = %q (err=%v), want %s", strings.TrimSpace(gotMatSecondOID), err, wantSecondOID)
 	}
 }
