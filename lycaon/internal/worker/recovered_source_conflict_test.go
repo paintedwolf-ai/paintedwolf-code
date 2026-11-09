@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
@@ -42,4 +43,11 @@ func assertRecoveredSourceConflict(t *testing.T, service *MergeService, task *ap
 	}
 	// Restore only this fixture's source, then the caller retries the same checkpoint.
 	testutil.FailErr(t, "resolve fixture source conflict", os.WriteFile(filepath.Join(source, "main.go"), base, 0o644))
+	_, err = service.PromoteOverlay(t.Context(), "", task.ID, api.PromoteOverlayInput{})
+	if !errors.Is(err, checkpoint.ErrStalePreviewTargetChanged) {
+		t.Fatalf("changed target bypassed bound preview: %v", err)
+	}
+	assertFileHolds(t, filepath.Join(source, "main.go"), "package main\n")
+	_, err = service.PreviewForSession(t.Context(), "", task.ID, "summary", nil)
+	testutil.FailErr(t, "review retained checkpoint against resolved source", err)
 }
