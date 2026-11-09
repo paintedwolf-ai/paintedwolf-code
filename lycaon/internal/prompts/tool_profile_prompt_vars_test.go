@@ -113,14 +113,15 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 	if vars["visual_show_available"] != true || vars["visual_show_terminal"] != true || vars["visual_show_page"] != false {
 		t.Fatalf("implement must expose terminals and leave page capture untaught until loaded: %#v", vars)
 	}
-	// Terminal and page tools load on demand; the command leg keeps the
-	// sealed one-shot capture.
+	// Terminal driving and page tools load on demand; the terminal lifecycle
+	// stays eager beside the command leg's sealed one-shot capture.
 	if vars["profile_has_capture_page"] != false || vars["profile_has_page_open"] != false || vars["profile_has_terminal_snapshot"] != false {
-		t.Fatalf("implement defers terminal and page tools until they load: capture=%#v page_open=%#v terminal_snapshot=%#v",
+		t.Fatalf("implement defers terminal driving and page tools until they load: capture=%#v page_open=%#v terminal_snapshot=%#v",
 			vars["profile_has_capture_page"], vars["profile_has_page_open"], vars["profile_has_terminal_snapshot"])
 	}
-	if vars["visual_show_terminal_needs_request"] != true {
-		t.Fatalf("implement must ask request_tools for the held terminal: %#v", vars["visual_show_terminal_needs_request"])
+	if vars["profile_has_terminal_open"] != true || vars["visual_show_terminal_needs_request"] != false {
+		t.Fatalf("implement keeps the terminal lifecycle eager: open=%#v needs_request=%#v",
+			vars["profile_has_terminal_open"], vars["visual_show_terminal_needs_request"])
 	}
 	if vars["profile_has_terminal_capture"] != true {
 		t.Fatal("implement command surface must advertise sealed terminal capture")

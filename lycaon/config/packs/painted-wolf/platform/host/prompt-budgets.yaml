@@ -35,6 +35,10 @@ sizes:
             implement_overlay_promote:
                 cap: 44000
                 reason: The integration surface lands or rejects worker overlays and verifies them, so its floor carries overlay, command, verification, and scan tools; terminal, secret, and visual checks load on demand.
+        worker_tool_surfaces:
+            implement:
+                cap: 44000
+                reason: The only worker profile that runs commands; it keeps command, verification, and the contract-required core terminal_open and terminal_close sticky beside summarize, survey_repo and code_rewrite, while the remaining terminal, visual, and secret tools load on demand.
         worker_personas:
             implementer:
                 cap: 36000
