@@ -223,7 +223,7 @@ func TestCommandInstructionGrantUsesOneOrdinaryApproval(t *testing.T) {
 		return "done", nil
 	}))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), reg, "implement")
-	manager := &asyncHITL{requested: make(chan struct{}, 2)}
+	manager := &separateReviewHITL{asyncHITL: asyncHITL{requested: make(chan struct{}, 2)}}
 	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
 	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
@@ -247,7 +247,14 @@ func TestCommandInstructionGrantUsesOneOrdinaryApproval(t *testing.T) {
 		t.Fatalf("incorrect command ask: %+v", manager.request)
 	}
 	manager.approve()
-	testutil.FailErr(t, "execute approved command", <-done)
+	select {
+	case err := <-done:
+		testutil.FailErr(t, "execute approved command", err)
+	case <-manager.requested:
+		t.Fatalf("approved policy command requested another checkpoint: decision=%+v matches=%+v", manager.request.Decision, manager.request.ApprovalMatches)
+	case <-ctx.Done():
+		t.Fatal("approved policy command did not finish")
+	}
 	if len(manager.requested) != 0 {
 		t.Fatal("command required duplicate approvals")
 	}

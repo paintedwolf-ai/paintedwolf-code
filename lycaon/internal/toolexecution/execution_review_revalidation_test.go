@@ -126,7 +126,7 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			select {
 			case err = <-done:
 			case <-manager.requested:
-				t.Fatal("unchanged reviewed reasons requested another approval")
+				t.Fatalf("unchanged reviewed reasons requested another approval: decision=%+v matches=%+v", manager.request.Decision, manager.request.ApprovalMatches)
 			}
 			if scenario.cancel {
 				if !errors.Is(err, context.Canceled) || len(entered) != 0 || len(approvals.ListGrants("task")) != 0 {
