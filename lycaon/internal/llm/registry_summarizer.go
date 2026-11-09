@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/cost"
+	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -170,27 +171,23 @@ func (r *RegistrySummarizer) localDefaultAvailable(ctx context.Context) bool {
 }
 
 func (r *RegistrySummarizer) coordinatorProvider(ctx context.Context) (modelcall.Provider, string, error) {
-	return r.slotProvider(func(p ModelPolicy) ModelRef {
+	return r.slotProvider(ctx, func(p ModelPolicy) ModelRef {
 		return CoordinatorRefWithLocalDefault(p, r.localDefaultAvailable(ctx))
 	}, "coordinator model not configured")
 }
 
 func (r *RegistrySummarizer) liteProvider(ctx context.Context) (modelcall.Provider, string, error) {
-	return r.slotProvider(func(p ModelPolicy) ModelRef {
+	return r.slotProvider(ctx, func(p ModelPolicy) ModelRef {
 		return SummarizerRefWithLocalDefault(p, r.localDefaultAvailable(ctx))
 	}, "lite model not configured")
 }
 
 // slotProvider advances past standing model refusals.
-func (r *RegistrySummarizer) slotProvider(pick func(ModelPolicy) ModelRef, missing string) (modelcall.Provider, string, error) {
+func (r *RegistrySummarizer) slotProvider(ctx context.Context, pick func(ModelPolicy) ModelRef, missing string) (modelcall.Provider, string, error) {
 	if r.Policy == nil || r.Registry == nil {
 		return nil, "", fmt.Errorf("registry not configured")
 	}
-	scope := r.Scope
-	if scope == "" {
-		scope = SettingsScopeGlobal
-	}
-	policy, err := r.Policy.Get(scope, r.ProjectDir)
+	policy, err := r.modelPolicy(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -228,15 +225,11 @@ func (r *RegistrySummarizer) Summarize(ctx context.Context, systemPrompt, userPr
 }
 
 // SummaryRevision identifies the routed utility policy that plans summaries.
-func (r *RegistrySummarizer) SummaryRevision() (string, error) {
+func (r *RegistrySummarizer) SummaryRevision(ctx context.Context) (string, error) {
 	if r.Policy == nil {
 		return "local", nil
 	}
-	scope := r.Scope
-	if scope == "" {
-		scope = SettingsScopeGlobal
-	}
-	policy, err := r.Policy.Get(scope, r.ProjectDir)
+	policy, err := r.modelPolicy(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -259,4 +252,16 @@ func (r *RegistrySummarizer) SummaryBudget(ctx context.Context) compaction.Summa
 	}
 	output := min(1536, max(1, window/8))
 	return compaction.SummaryBudget{Input: max(1, window*3/4-output-summaryRequestHeadroom), Output: output}
+}
+
+// Explicit bindings take precedence over the invoking session's settings roots.
+func (r *RegistrySummarizer) modelPolicy(ctx context.Context) (ModelPolicy, error) {
+	if r.Scope != "" || r.ProjectDir != "" {
+		scope := r.Scope
+		if scope == "" {
+			scope = SettingsScopeProject
+		}
+		return r.Policy.Get(scope, r.ProjectDir)
+	}
+	return r.Policy.GetForProjectRoots(curationctx.SessionFrom(ctx).SettingsRoots)
 }
