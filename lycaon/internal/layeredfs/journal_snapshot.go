@@ -110,6 +110,12 @@ func isPathLogicallyChangedFastLocked(c *Core, qp QualifiedPath) bool {
 	return false
 }
 
+// flushFD is every flush the core makes, counted so tests can pin the flushes an operation costs.
+func flushFD(c *Core, fd int) error {
+	c.counters.flushes.Add(1)
+	return syncFD(fd)
+}
+
 func runJournalSyncHook(c *Core, phase string) error {
 	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.JournalSyncHook != nil {
 		return c.cfg.FaultHooks.JournalSyncHook(phase)
@@ -171,7 +177,7 @@ func persistJournalSnapshot(c *Core, dirFD int, dirPath string, snap JournalSnap
 	if wErr == nil {
 		_, wErr = io.Copy(f, bytes.NewReader(raw))
 	}
-	sErr := errors.Join(runJournalSyncHook(c, "journal_tmp_sync"), syncFD(int(f.Fd())))
+	sErr := errors.Join(runJournalSyncHook(c, "journal_tmp_sync"), flushFD(c, int(f.Fd())))
 	cErr := f.Close()
 	if err := errors.Join(wErr, sErr, cErr); err != nil {
 		_ = unlinkBackingFile(dirFD, tmpName)
@@ -181,7 +187,7 @@ func persistJournalSnapshot(c *Core, dirFD int, dirPath string, snap JournalSnap
 		_ = unlinkBackingFile(dirFD, tmpName)
 		return err
 	}
-	return errors.Join(runJournalSyncHook(c, "journal_dir_sync"), syncFD(dirFD))
+	return errors.Join(runJournalSyncHook(c, "journal_dir_sync"), flushFD(c, dirFD))
 }
 
 // ParseJournalSnapshot decodes and validates a persisted versioned journal payload.
@@ -228,7 +234,11 @@ func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
 	if base.BackingFile != "" {
 		cloned, cloneErr := cloneFileIfSupported(base.BackingFile, workPath)
 		if cloneErr == nil && cloned {
-			_ = syncFD(workDirFD)
+			c.mu.Lock()
+			if !c.state.released {
+				markDirtyBackingFileLocked(c, workPath)
+			}
+			c.mu.Unlock()
 			return workName, workPath, nil
 		}
 		baseFile, err := openBackingFileRO(int(c.backing.baseDirFile.Fd()), filepath.Base(base.BackingFile), base.BackingFile)
@@ -242,13 +252,16 @@ func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
 			return "", "", err
 		}
 		_, copyErr := io.Copy(wf, baseFile)
-		syncErr := syncFD(int(wf.Fd()))
 		closeErr := wf.Close()
-		dirSyncErr := syncFD(workDirFD)
-		if err := errors.Join(copyErr, syncErr, closeErr, dirSyncErr); err != nil {
+		if err := errors.Join(copyErr, closeErr); err != nil {
 			_ = unlinkBackingFile(workDirFD, workName)
 			return "", "", err
 		}
+		c.mu.Lock()
+		if !c.state.released {
+			markDirtyBackingFileLocked(c, workPath)
+		}
+		c.mu.Unlock()
 		return workName, workPath, nil
 	}
 
@@ -256,10 +269,15 @@ func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	if err := errors.Join(wf.Close(), syncFD(workDirFD)); err != nil {
+	if err := wf.Close(); err != nil {
 		_ = unlinkBackingFile(workDirFD, workName)
 		return "", "", err
 	}
+	c.mu.Lock()
+	if !c.state.released {
+		markDirtyBackingFileLocked(c, workPath)
+	}
+	c.mu.Unlock()
 	return workName, workPath, nil
 }
 

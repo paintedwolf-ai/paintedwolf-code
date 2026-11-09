@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -68,23 +69,19 @@ func RevalidateTaskCheckpointPreview(ctx context.Context, task *api.WorkerTask, 
 	if bound == nil {
 		return nil
 	}
-	store, _, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
+	_, _, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
 	if err != nil || !ok {
 		return err
 	}
 	// A worker has one durable promotion completion. Refresh review before applying
 	// a superseded checkpoint rather than marking newer, unreviewed work merged.
-	latest, err := store.LatestCheckpointID()
-	if err != nil {
-		return err
-	}
-	if latest != bound.CheckpointID {
+	if _, published, ok := taskBranchCheckpoint(task); ok && published != bound.CheckpointID {
 		return checkpoint.ErrStalePreviewCheckpointChanged
 	}
 	if err := context.Cause(ctx); err != nil {
 		return err
 	}
-	return promoter.RevalidatePreviewTargets(bound, nil)
+	return promoter.RevalidatePreviewTargets(bound)
 }
 
 // TargetRootsForTaskCheckpoint resolves the target root map for a task's checkpoint manifest and rejects unmapped RootIDs.
@@ -126,20 +123,6 @@ func TargetRootsForTaskCheckpoint(task *api.WorkerTask, roots []projectroot.Root
 	return targetRoots, nil
 }
 
-// DefaultCheckpointRefImporter imports and validates checkpointed private Git objects and refs into the target repository.
-func DefaultCheckpointRefImporter(store *checkpoint.Store, manifest checkpoint.Manifest, targetRoots map[string]string, authorizedGitDirs ...string) func(context.Context, string, string, checkpoint.PrivateGitSnapshot) (map[string]string, error) {
-	storeDir := ""
-	if store != nil {
-		storeDir = store.RootDir()
-	}
-	return func(ctx context.Context, _ string, workerID string, git checkpoint.PrivateGitSnapshot) (map[string]string, error) {
-		if strings.TrimSpace(workerID) == "" {
-			workerID = manifest.WorkerID
-		}
-		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, storeDir, manifest.CheckpointID, workerID, git, targetRoots, authorizedGitDirs...)
-	}
-}
-
 // NewTaskCheckpointPromoter creates a checkpoint.Promoter bound to task's published checkpoint store and target roots.
 func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef) (*checkpoint.Store, checkpoint.Manifest, *checkpoint.Promoter, bool, error) {
 	store, manifest, ok, err := OpenTaskCheckpointStore(task)
@@ -150,8 +133,7 @@ func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef
 	if err != nil {
 		return nil, checkpoint.Manifest{}, nil, true, err
 	}
-	refImporter := DefaultCheckpointRefImporter(store, manifest, targetRoots)
-	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{Store: store, TargetRoots: targetRoots, RefImporter: refImporter})
+	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{Store: store, TargetRoots: targetRoots})
 	if err != nil {
 		return nil, checkpoint.Manifest{}, nil, true, err
 	}
@@ -167,11 +149,6 @@ func SyncTaskCheckpointToWorkspace(task *api.WorkerTask, roots []projectroot.Roo
 	store, manifest, hasCP, err := OpenTaskCheckpointStore(task)
 	if err != nil || !hasCP {
 		return err
-	}
-	if strings.TrimSpace(task.WorkspaceRoot) == "" {
-		if cpDir := CheckpointStoreDirForTask(task); cpDir != "" {
-			task.WorkspaceRoot = filepath.Join(cpDir, ".workspace-rehydrated")
-		}
 	}
 	if strings.TrimSpace(task.WorkspaceRoot) == "" {
 		return nil
@@ -300,8 +277,73 @@ func applyManifestEntryToRoot(store *checkpoint.Store, rootDir string, entry che
 	}
 }
 
-// CommitTaskCheckpointJournal transactionally applies and journals a task's checkpoint promotion and #1671 ref import.
-func CommitTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) error {
+// CheckpointKeepTargetResolutions builds ResolutionKeepTarget entries for any Stage-1 resolved
+// promote paths so Stage-2 checkpoint promotion preserves the bytes Stage-1 already wrote or kept.
+func CheckpointKeepTargetResolutions(task *api.WorkerTask, manifest checkpoint.Manifest, roots []projectroot.RootRef, resolvedPaths []string) map[layeredfs.QualifiedPath]checkpoint.ConflictResolution {
+	if len(resolvedPaths) == 0 {
+		return nil
+	}
+	resolvedSet := make(map[string]struct{}, len(resolvedPaths))
+	for _, p := range resolvedPaths {
+		clean := filepath.ToSlash(filepath.Clean(strings.TrimSpace(p)))
+		if clean != "" && clean != "." {
+			resolvedSet[clean] = struct{}{}
+		}
+	}
+	if len(resolvedSet) == 0 {
+		return nil
+	}
+	out := make(map[layeredfs.QualifiedPath]checkpoint.ConflictResolution, len(resolvedSet)*2)
+	add := func(qp layeredfs.QualifiedPath) {
+		if qp.Rel == "" || qp.Rel == "." {
+			return
+		}
+		out[qp] = checkpoint.ConflictResolution{
+			Path:   qp,
+			Choice: checkpoint.ResolutionKeepTarget,
+		}
+	}
+	for _, entry := range manifest.Entries {
+		rel := QualifyCheckpointPath(entry.Path, roots)
+		if _, ok := resolvedSet[rel]; ok {
+			add(entry.Path)
+			continue
+		}
+		if _, ok := resolvedSet[entry.Path.Rel]; ok {
+			add(entry.Path)
+		}
+	}
+	primaryAliases := []string{"primary", "root-0", ""}
+	if task != nil && strings.TrimSpace(task.WorkspaceRootID) != "" {
+		primaryAliases = append(primaryAliases, strings.TrimSpace(task.WorkspaceRootID))
+	}
+	for _, r := range roots {
+		if r.IsPrimary && r.ID != "" {
+			primaryAliases = append(primaryAliases, r.ID)
+		}
+	}
+	for rel := range resolvedSet {
+		if len(roots) > 0 {
+			if abs, rootRef, err := projectroot.ResolveAbs(roots, "", rel); err == nil {
+				cleanSub := filepath.ToSlash(filepath.Clean(projectroot.ScopeRel(rootRef, abs)))
+				add(layeredfs.QualifiedPath{RootID: rootRef.ID, Rel: cleanSub})
+				if rootRef.IsPrimary {
+					for _, alias := range primaryAliases {
+						add(layeredfs.QualifiedPath{RootID: alias, Rel: cleanSub})
+					}
+				}
+				continue
+			}
+		}
+		for _, alias := range primaryAliases {
+			add(layeredfs.QualifiedPath{RootID: alias, Rel: rel})
+		}
+	}
+	return out
+}
+
+// ApplyTaskCheckpoint joins a task's checkpoint effects and #1671 ref import to the promotion's transaction.
+func ApplyTaskCheckpoint(ctx context.Context, txn *checkpoint.Transaction, task *api.WorkerTask, roots []projectroot.RootRef, resolvedPaths ...string) error {
 	store, manifest, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
 	if err != nil || !ok {
 		return err
@@ -310,19 +352,16 @@ func CommitTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, root
 	if rec, exists, lErr := store.LoadPromotionRecord(txID); lErr != nil || (exists && rec.State == checkpoint.PromotionStateApplied) {
 		return lErr
 	}
-	cpPreview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{CheckpointID: manifest.CheckpointID, ExpectedWorkerID: manifest.WorkerID, ExpectedProjectID: task.ProjectID})
+	resolutions := CheckpointKeepTargetResolutions(task, manifest, roots, resolvedPaths)
+	cpPreview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{
+		CheckpointID:      manifest.CheckpointID,
+		ExpectedWorkerID:  manifest.WorkerID,
+		ExpectedProjectID: task.ProjectID,
+		Resolutions:       resolutions,
+	})
 	if err != nil {
-		return err
+		return errors.Join(err, txn.Rollback(context.WithoutCancel(ctx)))
 	}
-	_, err = checkpoint.NewHostPromotion(promoter).Apply(ctx, checkpoint.ApplyRequest{TransactionID: txID, Preview: cpPreview, ImportGitRefs: true})
+	_, err = txn.ApplyCheckpoint(ctx, promoter, checkpoint.ApplyRequest{TransactionID: txID, Preview: cpPreview, ImportGitRefs: true})
 	return err
-}
-
-// RollbackTaskCheckpointJournal unwinds checkpoint effects before ordinary host file undo.
-func RollbackTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) error {
-	_, _, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
-	if err != nil || !ok {
-		return err
-	}
-	return checkpoint.NewHostPromotion(promoter).Rollback(ctx)
 }

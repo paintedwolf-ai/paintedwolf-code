@@ -64,7 +64,7 @@ func (s *Store) RootDir() string {
 
 func isSafeStoreID(id string) bool {
 	clean := strings.TrimSpace(id)
-	return clean != "" && clean == id && hostComponent(clean) && !strings.Contains(clean, ":")
+	return clean != "" && clean == id && safeComponent(clean) && !strings.Contains(clean, ":")
 }
 
 func isHexSHA256(sha string) bool {

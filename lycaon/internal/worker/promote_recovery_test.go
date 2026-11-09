@@ -33,7 +33,6 @@ func testPromoteCrashAfterCommit(t *testing.T) {
 		}
 		f := newPromoteCrashFixtureIn(t, svc.hostDataDirFor(task))
 		f.task.ID = id
-		testutil.FailErr(t, "seed stale slot for job", os.MkdirAll(promoteTransactionRetainedDir(f.txPath()), 0o700))
 		if err := f.run(t, -1, nil); err != nil {
 			t.Fatalf("apply: %v", err)
 		}
@@ -51,10 +50,8 @@ func testPromoteCrashAfterCommit(t *testing.T) {
 	t.Run("merged job settles without rollback", func(t *testing.T) {
 		svc, f := setup(t, "job-committed", api.WorkerMergeStatusMerged)
 		testutil.FailErr(t, "recover", svc.RecoverOrphanedMergeApplies(ctx))
-		for _, path := range []string{f.txPath(), promoteTransactionRetainedDir(f.txPath())} {
-			if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("%s survived settlement: %v", filepath.Base(path), err)
-			}
+		if _, err := os.Lstat(f.txDir()); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("transaction survived settlement: %v", err)
 		}
 		assertLanded(t, f)
 		alias, err := os.Stat(f.alias)
@@ -67,7 +64,7 @@ func testPromoteCrashAfterCommit(t *testing.T) {
 		t.Run(string(status)+" job keeps its rollback authority", func(t *testing.T) {
 			svc, f := setup(t, "job-uncommitted", status)
 			testutil.FailErr(t, "recover", svc.RecoverOrphanedMergeApplies(ctx))
-			if _, err := os.Lstat(f.txPath()); err != nil {
+			if _, err := os.Lstat(f.journalPath()); err != nil {
 				t.Fatalf("uncommitted journal removed: %v", err)
 			}
 			if _, err := os.Lstat(f.slot("edited.sh")); err != nil {
@@ -77,8 +74,9 @@ func testPromoteCrashAfterCommit(t *testing.T) {
 	}
 	t.Run("journal without a known job is kept", func(t *testing.T) {
 		svc, f := setup(t, "job-known", api.WorkerMergeStatusMerged)
-		foreign := promoteTransactionPath(f.dataDir, "job-unknown")
-		testutil.FailErr(t, "write foreign journal", writePromoteTransaction(foreign, promoteTransactionJournal{Version: promoteTransactionVersion, JobID: "job-unknown", Phase: promotePhaseApplying}))
+		foreign := filepath.Join(promoteTransactionDir(f.dataDir, "job-unknown"), "transaction.json")
+		_, err := beginPromoteTransaction(f.dataDir, "job-unknown", nil)
+		testutil.FailErr(t, "write foreign journal", err)
 		testutil.FailErr(t, "recover", svc.RecoverOrphanedMergeApplies(ctx))
 		if _, err := os.Lstat(foreign); err != nil {
 			t.Fatalf("journal of an unknown job removed: %v", err)
@@ -86,9 +84,10 @@ func testPromoteCrashAfterCommit(t *testing.T) {
 	})
 	t.Run("journal copied from another job is kept", func(t *testing.T) {
 		svc, f := setup(t, "job-merged", api.WorkerMergeStatusMerged)
-		raw, err := os.ReadFile(f.txPath())
+		raw, err := os.ReadFile(f.journalPath())
 		testutil.FailErr(t, "read journal", err)
-		misnamed := promoteTransactionPath(f.dataDir, "job-other")
+		misnamed := filepath.Join(promoteTransactionDir(f.dataDir, "job-other"), "transaction.json")
+		testutil.FailErr(t, "mkdir misnamed", os.MkdirAll(filepath.Dir(misnamed), 0o700))
 		testutil.FailErr(t, "write misnamed journal", os.WriteFile(misnamed, raw, 0o600))
 		testutil.FailErr(t, "recover", svc.RecoverOrphanedMergeApplies(ctx))
 		if _, err := os.Lstat(misnamed); err != nil {
@@ -97,9 +96,9 @@ func testPromoteCrashAfterCommit(t *testing.T) {
 	})
 	t.Run("slots without a journal are inert", func(t *testing.T) {
 		svc, f := setup(t, "job-closed", api.WorkerMergeStatusMerged)
-		testutil.FailErr(t, "drop journal", os.Remove(f.txPath()))
+		testutil.FailErr(t, "drop journal", os.Remove(f.journalPath()))
 		testutil.FailErr(t, "recover", svc.RecoverOrphanedMergeApplies(ctx))
-		if _, err := os.Lstat(promoteTransactionRetainedDir(f.txPath())); !errors.Is(err, os.ErrNotExist) {
+		if _, err := os.Lstat(f.txDir()); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("inert slots survived: %v", err)
 		}
 	})
@@ -119,17 +118,21 @@ func TestPromoteRecoverySurvivesDeviceNumberChange(t *testing.T) {
 	crashed := func(t *testing.T) *promoteCrashFixture {
 		t.Helper()
 		f := newPromoteCrashFixture(t)
-		if err := f.run(t, 5, nil); !errors.Is(err, errPromoteCrash) {
+		if err := f.run(t, 5, nil); err != nil {
 			t.Fatalf("crash: %v", err)
 		}
-		journal, _, err := readPromoteTransaction(f.txPath())
-		testutil.FailErr(t, "read journal", err)
-		for i, mutation := range journal.Mutations {
-			if mutation.OriginalRetention == promoteRetentionInode {
-				journal.Mutations[i].OriginalIdentity = rewriteDevice(t, mutation.OriginalIdentity)
+		document := f.readJournalDocument(t)
+		for _, raw := range document["roots"].(map[string]any) {
+			root := raw.(map[string]any)
+			root["identity"] = rewriteDevice(t, root["identity"].(string))
+		}
+		for _, raw := range document["targets"].([]any) {
+			before := raw.(map[string]any)["before"].(map[string]any)
+			if group, ok := before["hard_link_group"].(string); ok && group != "" {
+				before["hard_link_group"] = rewriteDevice(t, group)
 			}
 		}
-		testutil.FailErr(t, "rewrite journal", writePromoteTransaction(f.txPath(), journal))
+		f.writeJournalDocument(t, document)
 		return f
 	}
 	t.Run("valid recovery proceeds and restores the inode", func(t *testing.T) {
@@ -140,16 +143,16 @@ func TestPromoteRecoverySurvivesDeviceNumberChange(t *testing.T) {
 		testutil.FailErr(t, "remove slot", os.Remove(f.slot("edited.sh")))
 		testutil.FailErr(t, "replace slot", os.WriteFile(f.slot("edited.sh"), []byte("old-edit\n"), 0o750))
 		testutil.FailErr(t, "chmod slot", os.Chmod(f.slot("edited.sh"), 0o750))
-		if _, err := recoverPromoteTransaction(f.dataDir, f.task.ID, f.promote, f.task); err == nil || !strings.Contains(err.Error(), "diverged") {
-			t.Fatalf("recover = %v, want diverged", err)
+		if _, err := recoverPromoteTransaction(t.Context(), f.dataDir, f.task.ID, f.promote, f.task); err == nil {
+			t.Fatal("recovery accepted a replaced entry")
 		}
 	})
 	t.Run("replaced primary refuses", func(t *testing.T) {
 		f := crashed(t)
 		testutil.FailErr(t, "remove primary", os.Remove(f.edited))
 		testutil.FailErr(t, "replace primary", os.WriteFile(f.edited, []byte("external\n"), 0o750))
-		if _, err := recoverPromoteTransaction(f.dataDir, f.task.ID, f.promote, f.task); err == nil || !strings.Contains(err.Error(), "diverged") {
-			t.Fatalf("recover = %v, want diverged", err)
+		if _, err := recoverPromoteTransaction(t.Context(), f.dataDir, f.task.ID, f.promote, f.task); err == nil {
+			t.Fatal("recovery accepted a replaced entry")
 		}
 		if raw, err := os.ReadFile(f.edited); err != nil || string(raw) != "external\n" {
 			t.Fatalf("refusal overwrote primary: %q %v", raw, err)

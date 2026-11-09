@@ -13,6 +13,51 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
+// InitRepo ensures the private Git repository for repoRel in viewID is initialized.
+func (m *Manager) InitRepo(ctx context.Context, viewID, repoRel string) (InitMetrics, error) {
+	view, err := getManagedView(m, viewID)
+	if err != nil {
+		return InitMetrics{}, err
+	}
+	if strings.TrimSpace(repoRel) == "" {
+		repoRel = "."
+	}
+	if err := ensureViewRepoInitialized(ctx, m, view, repoRel); err != nil {
+		return InitMetrics{}, err
+	}
+	if err := syncViewGitOverlay(view); err != nil {
+		return InitMetrics{}, err
+	}
+	metrics, _ := m.RepoMetrics(viewID, repoRel)
+	return metrics, nil
+}
+
+func syncViewGitOverlay(view *managedView) error {
+	if view == nil || view.syncer == nil {
+		return nil
+	}
+	type repoDir struct {
+		repoRel string
+		gitDir  string
+	}
+	view.mu.Lock()
+	rootID := view.rootID
+	var dirs []repoDir
+	for rel, r := range view.repos {
+		if r != nil && r.privateGitDir != "" {
+			dirs = append(dirs, repoDir{repoRel: rel, gitDir: r.privateGitDir})
+		}
+	}
+	view.mu.Unlock()
+	sort.Slice(dirs, func(i, j int) bool { return dirs[i].repoRel < dirs[j].repoRel })
+	for _, d := range dirs {
+		if err := view.syncer.SyncGitOverlayTo(rootID, d.repoRel, d.gitDir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func ensureViewRepoInitialized(
 	ctx context.Context,
 	mgr *Manager,
@@ -82,7 +127,7 @@ func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewB
 	}
 	view := &managedView{
 		viewID: b.ViewID, workerID: b.WorkerID, rootID: b.RootID,
-		trunkDir: absTrunk, worktreeDir: absWorktree, materialized: true, core: b.Core,
+		trunkDir: absTrunk, worktreeDir: absWorktree, materialized: true, core: b.Core, syncer: b.Core,
 		accessOrigin: OriginFilesystem, repos: make(map[string]*initializedRepo, len(b.Repos)),
 	}
 	for _, seeded := range b.Repos {
@@ -235,6 +280,7 @@ func initializeMaterializedSeed(
 		worktreeDir:       absTarget,
 		materialized:      true,
 		core:              cfg.Core,
+		syncer:            cfg.Core,
 		authorizedGitDirs: append([]string(nil), cfg.AuthorizedGitDirs...),
 		accessOrigin:      OriginFilesystem,
 		repos:             make(map[string]*initializedRepo),

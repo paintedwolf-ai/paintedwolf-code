@@ -304,3 +304,352 @@ func TestCollectingAnEmptyStoreLeavesItsHostDirectoryRemovable(t *testing.T) {
 	testutil.FailErr(t, "collect", err)
 	testutil.FailErr(t, "remove host directory", os.RemoveAll(root))
 }
+
+func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	tmp := t.TempDir()
+
+	makeRepo := func(name, content string, pack bool) (string, string) {
+		dir := filepath.Join(tmp, name)
+		testutil.FailErr(t, "mkdir "+name, os.MkdirAll(dir, 0o755))
+		gittest.Init(t, dir)
+		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(dir, name+".txt"), []byte(content), 0o644))
+		gittest.CommitAll(t, dir, "commit "+name)
+		oid := strings.TrimSpace(gittest.Run(t, dir, "rev-parse", "HEAD"))
+		if pack {
+			gittest.Run(t, dir, "repack", "-a", "-d")
+		}
+		return filepath.Join(dir, ".git", "objects"), oid
+	}
+
+	objKeep, oidKeep := makeRepo("keep", "keep-leased-payload\n", true)
+	objLoose, oidLoose := makeRepo("loose", "loose-candidate-payload\n", false)
+	objPack, oidPack := makeRepo("pack", "pack-candidate-payload\n", true)
+
+	srcPackEntries, err := os.ReadDir(filepath.Join(objPack, "pack"))
+	testutil.FailErr(t, "ReadDir src pack", err)
+	var candidateBase string
+	for _, pe := range srcPackEntries {
+		if strings.HasPrefix(pe.Name(), "pack-") && strings.HasSuffix(pe.Name(), ".pack") {
+			candidateBase = strings.TrimSuffix(pe.Name(), ".pack")
+			break
+		}
+	}
+	if candidateBase == "" {
+		t.Fatalf("expected pack-<hash>.pack in candidate source repo")
+	}
+
+	storeRoot := filepath.Join(tmp, "store")
+	store, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "NewRetainedObjectStoreContext", err)
+	t.Cleanup(func() { _ = store.Close() })
+
+	_, reachableKeep, err := store.ImportRepositoryObjects(ctx, []string{objKeep}, []string{oidKeep})
+	testutil.FailErr(t, "import keep", err)
+	_, err = store.RetainForCheckpoint("cp-keep", reachableKeep)
+	testutil.FailErr(t, "lease keep", err)
+	baseMetrics := store.Metrics()
+
+	packDstDir := filepath.Join(storeRoot, "objects", "pack")
+	candidatePackPath := filepath.Join(packDstDir, candidateBase+".pack")
+	candidateIdxPath := filepath.Join(packDstDir, candidateBase+".idx")
+	candidateMarkerPath := filepath.Join(packDstDir, retiringPackPrefix+candidateBase+".pack")
+
+	// 1. Injected post-rename syncDir failure during copyFileAtomicReadOnly rolls back
+	// the already-renamed loose or pack file cleanly via S1-S8 while preserving leased stock.
+	errSyncFault := errors.New("injected post-rename directory sync failure")
+	var syncCalls atomic.Int32
+	oneShotSyncFailCtx := withGCTestHooks(ctx, gcTestHooks{
+		syncDir: func(_ string) error {
+			if syncCalls.Add(1) == 1 {
+				return errSyncFault
+			}
+			return nil
+		},
+	})
+	if _, _, err := store.ImportRepositoryObjects(oneShotSyncFailCtx, []string{objLoose}, []string{oidLoose}); !errors.Is(err, errSyncFault) {
+		t.Fatalf("expected errSyncFault on loose import, got %v", err)
+	}
+	if store.HasObject(oidLoose) {
+		t.Fatalf("expected post-rename loose object to be rolled back after syncDir failure")
+	}
+	syncCalls.Store(0)
+	if _, _, err := store.ImportRepositoryObjects(oneShotSyncFailCtx, []string{objPack}, []string{oidPack}); !errors.Is(err, errSyncFault) {
+		t.Fatalf("expected errSyncFault on pack import, got %v", err)
+	}
+	if store.HasObject(oidPack) {
+		t.Fatalf("expected post-rename pack object to be rolled back after syncDir failure")
+	}
+	invAfterSyncFault, err := store.InspectStock(ctx)
+	testutil.FailErr(t, "InspectStock after syncDir faults", err)
+	if !invAfterSyncFault.Complete || store.Metrics().RetainedObjects != baseMetrics.RetainedObjects || invAfterSyncFault.LogicalObjects != baseMetrics.RetainedObjects {
+		t.Fatalf("expected preexisting leased stock preserved after syncDir rollback: base=%+v current=%+v inv=%+v",
+			baseMetrics, store.Metrics(), invAfterSyncFault)
+	}
+
+	missingTip := strings.Repeat("f", 40)
+
+	// 1b. Preexisting leased pack+idx without .rev: when a subsequent import adds a .rev for the same
+	// preexisting base, reuses the existing .pack/.idx, and then rolls back on connectivity failure,
+	// rollback must unlink only the newly added .rev and MUST NOT retire the preexisting leased .pack/.idx pair.
+	keepPackEntries, err := os.ReadDir(filepath.Join(objKeep, "pack"))
+	testutil.FailErr(t, "ReadDir src keep pack", err)
+	var keepBase string
+	for _, pe := range keepPackEntries {
+		if strings.HasPrefix(pe.Name(), "pack-") && strings.HasSuffix(pe.Name(), ".pack") {
+			keepBase = strings.TrimSuffix(pe.Name(), ".pack")
+			break
+		}
+	}
+	if keepBase == "" {
+		t.Fatalf("expected pack-<hash>.pack in keep source repo")
+	}
+	// Remove any preexisting .rev in the store so keepBase starts with only .pack and .idx in the store,
+	// while ensuring the source directory has a .rev companion to copy.
+	storeKeepRevPath := filepath.Join(packDstDir, keepBase+".rev")
+	_ = os.Chmod(packDstDir, 0o755)
+	_ = os.Remove(storeKeepRevPath)
+	_ = os.Chmod(packDstDir, 0o555)
+	srcKeepRevPath := filepath.Join(objKeep, "pack", keepBase+".rev")
+	if _, err := os.Stat(srcKeepRevPath); os.IsNotExist(err) {
+		testutil.FailErr(t, "write synthetic src .rev for keep", os.WriteFile(srcKeepRevPath, []byte("RIDX\x00\x00\x00\x01"), 0o644))
+	}
+	_, _, revRbErr := store.ImportRepositoryObjects(ctx, []string{objKeep}, []string{oidKeep, missingTip})
+	if !errors.Is(revRbErr, ErrCorruptObjectStore) {
+		t.Fatalf("expected ErrCorruptObjectStore when rollback triggers after copying .rev for preexisting base, got %v", revRbErr)
+	}
+	if !store.HasObject(oidKeep) || !store.HasObject("pack:"+keepBase) {
+		t.Fatalf("expected preexisting leased pack and object preserved when only auxiliary .rev was added and rolled back")
+	}
+	if _, err := os.Stat(filepath.Join(packDstDir, keepBase+".pack")); err != nil {
+		t.Fatalf("expected preexisting leased .pack still on disk after .rev rollback, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(packDstDir, keepBase+".idx")); err != nil {
+		t.Fatalf("expected preexisting leased .idx still on disk after .rev rollback, got %v", err)
+	}
+	if _, err := os.Stat(storeKeepRevPath); !os.IsNotExist(err) {
+		t.Fatalf("expected newly added .rev for preexisting base unlinked on rollback, got %v", err)
+	}
+
+	// 2. S1 Marker-Creation Failure (beforeRollbackMarkerWrite):
+	// Verify zero destructive progression occurs on disk when marker creation fails:
+	// both candidate .pack and .idx companions remain on disk and zero .retiring- markers exist,
+	// while in-memory stock immediately drops the unverified candidate pack so continued-use
+	// HasObject/Metrics/createStoreLease calls never advertise rolled-back candidate objects.
+	errMarkerCreateFault := errors.New("injected S1 marker creation failure")
+	s1CreateFailCtx := withGCTestHooks(ctx, gcTestHooks{
+		beforeRollbackMarkerWrite: func(_, _ string) error {
+			return errMarkerCreateFault
+		},
+	})
+	_, _, s1CreateErr := store.ImportRepositoryObjects(s1CreateFailCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(s1CreateErr, ErrCorruptObjectStore) || !errors.Is(s1CreateErr, errMarkerCreateFault) {
+		t.Fatalf("expected joined ErrCorruptObjectStore and errMarkerCreateFault, got %v", s1CreateErr)
+	}
+	if _, err := os.Stat(candidatePackPath); err != nil {
+		t.Fatalf("expected candidate .pack still present after S1 marker creation failure, got %v", err)
+	}
+	if _, err := os.Stat(candidateIdxPath); err != nil {
+		t.Fatalf("expected candidate .idx still present after S1 marker creation failure, got %v", err)
+	}
+	if _, err := os.Stat(candidateMarkerPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no .retiring- marker on disk after S1 marker creation failure, got %v", err)
+	}
+	if store.HasObject(oidPack) || store.HasObject("pack:"+candidateBase) {
+		t.Fatalf("expected in-memory pack stock dropped on rollback entry so live store never advertises unverified candidate pack")
+	}
+	// Continued-use without reopen: CollectGarbage retires the unleased intact candidate pack cleanly.
+	if _, gcErr := store.CollectGarbage(ctx); gcErr != nil {
+		t.Fatalf("expected CollectGarbage to retire unleased intact candidate pack cleanly, got %v", gcErr)
+	}
+	if !store.HasObject(oidKeep) || store.HasObject(oidPack) {
+		t.Fatalf("expected keep preserved and unleased candidate pack collected after GC")
+	}
+
+	// 3. S1 Barrier-1 Intent-Sync Failure (syncDir failing on first rollback sync after marker write):
+	// Verify zero companion unlinks occur when Barrier-1 fails, while .retiring- marker remains on disk,
+	// and verify BOTH continued-use on the same store instance (without reopen) and reopen recovery.
+	errIntentSyncFault := errors.New("injected S1 Barrier-1 intent directory sync failure")
+	var markerWritten atomic.Bool
+	s1SyncFailCtx := withGCTestHooks(ctx, gcTestHooks{
+		beforeRollbackMarkerWrite: func(_, _ string) error {
+			markerWritten.Store(true)
+			return nil
+		},
+		syncDir: func(dirPath string) error {
+			if markerWritten.Load() && dirPath == packDstDir {
+				return errIntentSyncFault
+			}
+			return nil
+		},
+	})
+	_, _, s1SyncErr := store.ImportRepositoryObjects(s1SyncFailCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(s1SyncErr, ErrCorruptObjectStore) || !errors.Is(s1SyncErr, errIntentSyncFault) {
+		t.Fatalf("expected joined ErrCorruptObjectStore and errIntentSyncFault, got %v", s1SyncErr)
+	}
+	if _, err := os.Stat(candidatePackPath); err != nil {
+		t.Fatalf("expected candidate .pack still present (zero companion unlinks) when S1 Barrier-1 fails, got %v", err)
+	}
+	if _, err := os.Stat(candidateIdxPath); err != nil {
+		t.Fatalf("expected candidate .idx still present (zero companion unlinks) when S1 Barrier-1 fails, got %v", err)
+	}
+	if _, err := os.Stat(candidateMarkerPath); err != nil {
+		t.Fatalf("expected .retiring- marker present on disk when S1 Barrier-1 fails after write, got %v", err)
+	}
+	if store.HasObject(oidPack) || store.HasObject("pack:"+candidateBase) {
+		t.Fatalf("expected live store HasObject false for candidate pack after S1 Barrier-1 failure")
+	}
+	// Continued-use without reopen: importing loose objects on the same store instance reconciles
+	// the leftover .retiring- marker at import start even when srcDirs have no pack subdirectory.
+	_, _, err = store.ImportRepositoryObjects(ctx, []string{objLoose}, []string{oidLoose})
+	testutil.FailErr(t, "continued-use ImportRepositoryObjects(objLoose) after S1 Barrier-1 fault without reopen", err)
+	if _, err := os.Stat(candidateMarkerPath); !os.IsNotExist(err) {
+		t.Fatalf("expected continued-use import to reconcile leftover .retiring- marker on same store instance, got %v", err)
+	}
+	if _, err := os.Stat(candidatePackPath); !os.IsNotExist(err) {
+		t.Fatalf("expected continued-use import to retire leftover candidate .pack on same store instance, got %v", err)
+	}
+	if !store.HasObject(oidKeep) || !store.HasObject(oidLoose) || store.HasObject(oidPack) {
+		t.Fatalf("expected keep and loose present and retired candidate pack absent after continued-use import")
+	}
+	// Also verify reopen after S1 Barrier-1 fault reconciles cleanly.
+	markerWritten.Store(false)
+	_, _, s1SyncErr2 := store.ImportRepositoryObjects(s1SyncFailCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(s1SyncErr2, ErrCorruptObjectStore) || !errors.Is(s1SyncErr2, errIntentSyncFault) {
+		t.Fatalf("expected joined ErrCorruptObjectStore and errIntentSyncFault on second S1 Barrier-1 fault, got %v", s1SyncErr2)
+	}
+	testutil.FailErr(t, "close after S1 Barrier-1 fault", store.Close())
+	store, err = NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "reopen after S1 Barrier-1 fault", err)
+	if !store.HasObject(oidKeep) || store.HasObject(oidPack) {
+		t.Fatalf("expected keep preserved and candidate retired on reopen after S1 Barrier-1 fault")
+	}
+
+	// 4. S4 Mid-Companion-Removal Failure (fail on 2nd companion unlink .idx after unlinking .pack):
+	// Verify .pack is unlinked, .idx and .retiring- marker remain on disk, and reopen recovers cleanly.
+	errCompanionUnlinkFault := errors.New("injected S4 second companion unlink failure")
+	s4FailCtx := withGCTestHooks(ctx, gcTestHooks{
+		removeFile: func(p string) error {
+			if p == candidateIdxPath {
+				return errCompanionUnlinkFault
+			}
+			return os.Remove(p)
+		},
+	})
+	_, _, s4Err := store.ImportRepositoryObjects(s4FailCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(s4Err, ErrCorruptObjectStore) || !errors.Is(s4Err, errCompanionUnlinkFault) {
+		t.Fatalf("expected joined ErrCorruptObjectStore and errCompanionUnlinkFault, got %v", s4Err)
+	}
+	if _, err := os.Stat(candidatePackPath); !os.IsNotExist(err) {
+		t.Fatalf("expected .pack unlinked before 2nd companion failure, got %v", err)
+	}
+	if _, err := os.Stat(candidateIdxPath); err != nil {
+		t.Fatalf("expected .idx still on disk after S4 failure on .idx unlink, got %v", err)
+	}
+	if _, err := os.Stat(candidateMarkerPath); err != nil {
+		t.Fatalf("expected .retiring- marker retained on disk when S4 companion unlink fails, got %v", err)
+	}
+	testutil.FailErr(t, "close after S4 fault", store.Close())
+	store, err = NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "reopen after S4 fault", err)
+	if !store.HasObject(oidKeep) || store.HasObject(oidPack) {
+		t.Fatalf("expected keep preserved and half-unlinked candidate retired on reopen after S4 fault")
+	}
+
+	// 5. S5 Barrier-2 Failure (directory sync between companion removal and marker removal):
+	// Verify companions are unlinked, .retiring- marker is STILL retained on disk (Barrier-2 gated marker deletion),
+	// and reopen reconciles cleanly.
+	errBarrier2SyncFault := errors.New("injected S5 Barrier-2 directory sync failure")
+	var rollbackPackSyncs atomic.Int32
+	markerWritten.Store(false)
+	s5FailCtx := withGCTestHooks(ctx, gcTestHooks{
+		beforeRollbackMarkerWrite: func(_, _ string) error {
+			markerWritten.Store(true)
+			return nil
+		},
+		syncDir: func(dirPath string) error {
+			if markerWritten.Load() && dirPath == packDstDir {
+				if rollbackPackSyncs.Add(1) == 2 {
+					return errBarrier2SyncFault
+				}
+			}
+			return nil
+		},
+	})
+	_, _, s5Err := store.ImportRepositoryObjects(s5FailCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(s5Err, ErrCorruptObjectStore) || !errors.Is(s5Err, errBarrier2SyncFault) {
+		t.Fatalf("expected joined ErrCorruptObjectStore and errBarrier2SyncFault, got %v", s5Err)
+	}
+	if _, err := os.Stat(candidatePackPath); !os.IsNotExist(err) {
+		t.Fatalf("expected candidate .pack unlinked before S5 Barrier-2, got %v", err)
+	}
+	if _, err := os.Stat(candidateIdxPath); !os.IsNotExist(err) {
+		t.Fatalf("expected candidate .idx unlinked before S5 Barrier-2, got %v", err)
+	}
+	if _, err := os.Stat(candidateMarkerPath); err != nil {
+		t.Fatalf("expected .retiring- marker retained on disk when S5 Barrier-2 fails, got %v", err)
+	}
+	testutil.FailErr(t, "close after S5 Barrier-2 fault", store.Close())
+	store, err = NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "reopen after S5 Barrier-2 fault", err)
+	if !store.HasObject(oidKeep) || store.HasObject(oidPack) {
+		t.Fatalf("expected keep preserved and leftover marker cleaned on reopen after S5 Barrier-2 fault")
+	}
+
+	// 6. S6 Marker-Removal Failure & S7 Barrier-3 Failure, followed by clean reopen and retry.
+	errMarkerRemoveFault := errors.New("injected S6 marker removal failure")
+	s6FailCtx := withGCTestHooks(ctx, gcTestHooks{
+		removeFile: func(p string) error {
+			if p == candidateMarkerPath {
+				return errMarkerRemoveFault
+			}
+			return os.Remove(p)
+		},
+	})
+	_, _, s6Err := store.ImportRepositoryObjects(s6FailCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(s6Err, ErrCorruptObjectStore) || !errors.Is(s6Err, errMarkerRemoveFault) {
+		t.Fatalf("expected joined ErrCorruptObjectStore and errMarkerRemoveFault, got %v", s6Err)
+	}
+	if _, err := os.Stat(candidateMarkerPath); err != nil {
+		t.Fatalf("expected .retiring- marker still on disk after S6 marker removal fault, got %v", err)
+	}
+	testutil.FailErr(t, "close after S6 fault", store.Close())
+	store, err = NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "reopen after S6 fault", err)
+
+	errBarrier3SyncFault := errors.New("injected S7 Barrier-3 directory sync failure")
+	rollbackPackSyncs.Store(0)
+	markerWritten.Store(false)
+	s7FailCtx := withGCTestHooks(ctx, gcTestHooks{
+		beforeRollbackMarkerWrite: func(_, _ string) error {
+			markerWritten.Store(true)
+			return nil
+		},
+		syncDir: func(dirPath string) error {
+			if markerWritten.Load() && dirPath == packDstDir {
+				if rollbackPackSyncs.Add(1) == 3 {
+					return errBarrier3SyncFault
+				}
+			}
+			return nil
+		},
+	})
+	_, _, s7Err := store.ImportRepositoryObjects(s7FailCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(s7Err, ErrCorruptObjectStore) || !errors.Is(s7Err, errBarrier3SyncFault) {
+		t.Fatalf("expected joined ErrCorruptObjectStore and errBarrier3SyncFault, got %v", s7Err)
+	}
+	testutil.FailErr(t, "close after S7 Barrier-3 fault", store.Close())
+
+	reopenedFinal, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "reopen after S7 fault", err)
+	t.Cleanup(func() { _ = reopenedFinal.Close() })
+	if !reopenedFinal.HasObject(oidKeep) || reopenedFinal.HasObject(oidPack) {
+		t.Fatalf("expected keep object preserved and failed pack retired on final reopen")
+	}
+	_, _, err = reopenedFinal.ImportRepositoryObjects(ctx, []string{objPack}, []string{oidPack})
+	testutil.FailErr(t, "retry ImportRepositoryObjects after transient fault clears", err)
+	if !reopenedFinal.HasObject(oidKeep) || !reopenedFinal.HasObject(oidPack) {
+		t.Fatalf("expected both keep and newly imported pack objects present after retry")
+	}
+}

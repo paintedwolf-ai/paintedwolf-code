@@ -139,6 +139,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 					PrivateGit: checkpoint.PrivateGitSnapshot{HeadRef: "refs/heads/feature", Refs: map[string]string{"refs/heads/feature": featureOID}},
 				})
 				testutil.FailErr(t, "publish checkpoint after reviewed preview", err)
+				bindRecoveryCheckpoint(t, fixture.overlay, primary, fixture.store, "chk-promote-later")
 			}
 			if publishLater {
 				_, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
@@ -259,6 +260,7 @@ type publishedCheckpointWorker struct {
 	db                                        *db.Store
 	queue                                     *SQLQueue
 	primary, jobID, workerContent, featureOID string
+	overlay                                   string
 	store                                     *checkpoint.Store
 	core                                      *layeredfs.Core
 	path                                      layeredfs.QualifiedPath
@@ -295,9 +297,8 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 	overlay := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", jobID)
 	testutil.FailErr(t, "MkdirAll overlay", os.MkdirAll(overlay, 0o755))
 	baselinePath := testbaseline.Durable(t, sqlDB, jobID, primary)
-	cpStoreDir := filepath.Join(filepath.Dir(baselinePath), session.TaskCheckpointStoreSubdir)
-	cpStore, err := checkpoint.NewStore(cpStoreDir)
-	testutil.FailErr(t, "NewStore", err)
+	cpStore := openRecoveryCheckpointStore(t)
+	cpStoreDir := cpStore.RootDir()
 
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID:     "view-cp-promote",
@@ -344,6 +345,7 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 	})
 	testutil.FailErr(t, "Publish", err)
 	manifest := pubRes.Manifest
+	bindRecoveryCheckpoint(t, overlay, primary, cpStore, manifest.CheckpointID)
 
 	_, err = sqlStore.SetWorkerWorkspace(ctx, jobID, overlay, baselinePath)
 	testutil.FailErr(t, "SetWorkerWorkspace", err)
@@ -352,5 +354,5 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 	// Tear down the active worker view directory completely after checkpoint publication.
 	testutil.FailErr(t, "RemoveAll overlay view", os.RemoveAll(overlay))
 
-	return publishedCheckpointWorker{db: sqlDB, queue: q, primary: primary, jobID: jobID, workerContent: workerContent, featureOID: featureOID, store: cpStore, core: core, path: lp, publisher: pub, manifest: manifest}
+	return publishedCheckpointWorker{overlay: overlay, db: sqlDB, queue: q, primary: primary, jobID: jobID, workerContent: workerContent, featureOID: featureOID, store: cpStore, core: core, path: lp, publisher: pub, manifest: manifest}
 }

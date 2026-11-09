@@ -11,8 +11,9 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/filelock"
+	"github.com/lycaon/lycaon/internal/fssync"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -45,11 +46,7 @@ func (s *MergeService) reclaimOrphanedApply(ctx context.Context, task *api.Worke
 	}
 	roots := s.taskRootRefs(ctx, task)
 	promote := PromoteRootsForTask(task, roots)
-	if err := session.RollbackTaskCheckpointJournal(ctx, task, roots); err != nil {
-		return true, fmt.Errorf("recover checkpoint promotion: %w", err)
-	}
-	found, err := recoverPromoteTransaction(s.hostDataDirFor(task), jobID, promote, task)
-	if err != nil {
+	if _, err := recoverPromoteTransaction(ctx, s.hostDataDirFor(task), jobID, promote, task); err != nil {
 		return true, fmt.Errorf("recover interrupted promote: %w", err)
 	}
 	cleanupCtx, cancel := promoteCleanupContext(ctx)
@@ -58,35 +55,28 @@ func (s *MergeService) reclaimOrphanedApply(ctx context.Context, task *api.Worke
 	if err != nil {
 		return true, fmt.Errorf("recover interrupted promote status: %w", err)
 	}
-	if found {
-		if err := removePromoteTransaction(promoteTransactionPath(s.hostDataDirFor(task), jobID)); err != nil {
-			slog.WarnContext(ctx, "recovered promote journal cleanup deferred", "job_id", jobID, "err", err)
-		}
-	}
 	return true, nil
 }
 
-func failPromoteTransaction(ctx context.Context, tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
-	var unstarted *promoteTransactionUnstartedError
-	if errors.As(cause, &unstarted) {
-		return errors.Join(cause, tx.close(), revertPending())
-	}
+// failPromoteTransaction rolls the target back before the job returns to pending. If rollback
+// cannot finish the job stays applying, so its expired lease brings recovery back to the record.
+func failPromoteTransaction(ctx context.Context, tx *promoteTransaction, revertPending func() error, cause error) error {
 	cleanupCtx, cancel := promoteCleanupContext(ctx)
 	defer cancel()
-	if err := session.RollbackTaskCheckpointJournal(cleanupCtx, task, promote.Roots); err != nil {
+	if err := tx.rollback(cleanupCtx); err != nil {
 		return errors.Join(cause, err)
 	}
-	rollbackErr := tx.rollback(promote, task)
-	if rollbackErr != nil {
-		return errors.Join(cause, rollbackErr)
-	}
-	closeErr := tx.close()
-	return errors.Join(cause, closeErr, revertPending())
+	return errors.Join(cause, revertPending())
 }
 
 func closeCommittedPromoteTransaction(ctx context.Context, tx *promoteTransaction, jobID string) {
 	if err := tx.close(); err != nil {
 		slog.WarnContext(ctx, "committed promote journal cleanup deferred", "job_id", jobID, "err", err)
+	}
+	if tx.afterCommit != nil {
+		if err := tx.afterCommit(); err != nil {
+			slog.WarnContext(ctx, "committed promote settlement deferred", "job_id", jobID, "err", err)
+		}
 	}
 }
 
@@ -126,13 +116,10 @@ func settleCommittedPromotesIn(ctx context.Context, jobs MergeQueue, dir string)
 		name, path := entry.Name(), filepath.Join(journals, entry.Name())
 		var err error
 		switch {
-		case entry.IsDir() && strings.HasSuffix(name, promoteRetainedSuffix):
-			// Journals precede slots and outlive them, so slots alone carry no authority.
-			if _, statErr := os.Lstat(strings.TrimSuffix(path, promoteRetainedSuffix) + promoteJournalSuffix); errors.Is(statErr, os.ErrNotExist) {
-				err = os.RemoveAll(path)
-			}
-		case strings.HasSuffix(name, promoteJournalSuffix) && !strings.HasPrefix(name, "."):
-			err = settleJournalIfCommitted(jobs, dir, path)
+		case entry.IsDir() && strings.HasSuffix(name, promoteTransactionSuffix):
+			err = settleTransactionIfCommitted(jobs, dir, path)
+		case !entry.IsDir() && strings.HasSuffix(name, shippedPromoteJournal) && !strings.HasPrefix(name, "."):
+			err = settleShippedJournalIfCommitted(jobs, dir, path)
 		}
 		if err != nil {
 			slog.WarnContext(ctx, "committed promote settlement deferred", "journal", path, "err", err)
@@ -140,19 +127,39 @@ func settleCommittedPromotesIn(ctx context.Context, jobs MergeQueue, dir string)
 	}
 }
 
-func settleJournalIfCommitted(jobs MergeQueue, dir, path string) error {
-	journal, found, err := readPromoteTransaction(path)
+func settleTransactionIfCommitted(jobs MergeQueue, dir, path string) error {
+	id, found, err := checkpoint.ReadTransactionID(path)
+	if err != nil {
+		return err
+	}
+	if !found {
+		// A close removes the journal first, so what remains carries no authority.
+		return os.RemoveAll(path)
+	}
+	jobID, ok := jobIDFromPromoteTransactionID(id)
+	if !ok || promoteTransactionDir(dir, jobID) != path {
+		return fmt.Errorf("promote transaction %q is not bound to its job", id)
+	}
+	task, ok := jobs.Get(jobID)
+	if !ok || task == nil || task.MergeStatus != api.WorkerMergeStatusMerged {
+		return nil
+	}
+	return checkpoint.RemoveTransactionRecord(path)
+}
+
+func settleShippedJournalIfCommitted(jobs MergeQueue, dir, path string) error {
+	journal, found, err := readShippedPromoteJournal(path)
 	if err != nil || !found {
 		return err
 	}
-	if promoteTransactionPath(dir, journal.JobID) != path {
+	if shippedPromoteJournalPath(dir, journal.JobID) != path {
 		return fmt.Errorf("promote transaction %q is not bound to its job", journal.JobID)
 	}
 	task, ok := jobs.Get(journal.JobID)
 	if !ok || task == nil || task.MergeStatus != api.WorkerMergeStatusMerged {
 		return nil
 	}
-	return removePromoteTransaction(path)
+	return removeShippedPromoteJournal(path)
 }
 
 type promoteFileLock struct {
@@ -183,6 +190,14 @@ func acquirePromoteFileLock(ctx context.Context, dataDir string) (*promoteFileLo
 		case <-ticker.C:
 		}
 	}
+}
+
+// syncPromoteTransactionDir makes a journal removal durable.
+func syncPromoteTransactionDir(dir *os.File) error {
+	if err := fssync.File(dir); err != nil {
+		return fmt.Errorf("sync promote transaction directory: %w", err)
+	}
+	return nil
 }
 
 func (l *promoteFileLock) release() {

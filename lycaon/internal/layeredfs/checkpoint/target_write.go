@@ -3,11 +3,13 @@ package checkpoint
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fssync"
 )
 
@@ -27,7 +29,10 @@ func (tree *promotionTargets) applyPlannedChangeInRoot(root *os.Root, ch Planned
 	case ActionNoop:
 		return nil
 	case ActionDelete:
-		return root.RemoveAll(ch.Path.Rel)
+		if err := root.RemoveAll(ch.Path.Rel); err != nil {
+			return err
+		}
+		return syncTargetParent(root, ch.Path.Rel)
 	case ActionWriteRegular, ActionMkdir, ActionSymlink, ActionHardLink:
 		// These actions retain the current namespace until publication below.
 	case ActionReplaceWithDirectory, ActionReplaceDirWithRegular:
@@ -90,6 +95,7 @@ func (tree *promotionTargets) writeTargetRegular(root *os.Root, ch PlannedChange
 		return err
 	}
 	temp := filepath.Join(parent, ".checkpoint-"+hex.EncodeToString(random[:]))
+	defer fseffect.HoldStagingBeside(filepath.Join(root.Name(), parent), filepath.Base(temp))()
 	mode := pickMode(ch.Mode, 0644).Perm()
 	file, err := root.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
@@ -141,6 +147,19 @@ func (tree *promotionTargets) writeTargetRegular(root *os.Root, ch PlannedChange
 	}
 	published = true
 	dir, err := root.Open(parent)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = dir.Close() }()
+	return fssync.File(dir)
+}
+
+// syncTargetParent makes a removal durable when its parent still exists.
+func syncTargetParent(root *os.Root, rel string) error {
+	dir, err := root.Open(filepath.Dir(rel))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}

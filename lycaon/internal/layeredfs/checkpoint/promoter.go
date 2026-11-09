@@ -85,7 +85,6 @@ type PromoterConfig struct {
 	Store             *Store
 	TargetRoots       map[string]string
 	AuthorizedGitDirs []string
-	RefImporter       func(ctx context.Context, txID, workerID string, git PrivateGitSnapshot) (map[string]string, error)
 }
 
 // Promoter executes exact-base three-way preview and transactional promotion.
@@ -164,16 +163,18 @@ func (pr *Promoter) Preview(_ context.Context, req PreviewRequest) (*PromotionPr
 		if mergedThreeWay {
 			requiresVerify = true
 		}
-		if conflict != nil {
-			if res, ok := req.Resolutions[entry.Path]; ok {
-				resolved, rErr := applyConflictResolution(entry, cur, res)
-				if rErr != nil {
-					return nil, rErr
-				}
-				planned = append(planned, resolved)
-				requiresVerify = true
-				continue
+		if res, ok := req.Resolutions[entry.Path]; ok {
+			resolved, rErr := applyConflictResolution(entry, cur, res)
+			if rErr != nil {
+				return nil, rErr
 			}
+			if resolved.Action != ActionNoop {
+				planned = append(planned, resolved)
+			}
+			requiresVerify = true
+			continue
+		}
+		if conflict != nil {
 			conflicts = append(conflicts, *conflict)
 			continue
 		}

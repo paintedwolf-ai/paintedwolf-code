@@ -279,3 +279,234 @@ func TestTwoWorkersSharingTrunkIsolatedViewResolution(t *testing.T) {
 		t.Fatalf("expected ErrIdentityMismatch for a manager view paired with another worker, got %v", err)
 	}
 }
+
+func TestCoreGitOverlaySyncPrimaryAndSecondaryRootsToCheckpointAndExport(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	trunkPrimary := filepath.Join(tmp, "trunk-primary")
+	trunkSecond := filepath.Join(tmp, "trunk-second")
+	for _, dir := range []string{trunkPrimary, trunkSecond} {
+		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(dir, 0o755))
+		gittest.Init(t, dir)
+		gittest.Run(t, dir, "checkout", "-b", "main")
+		testutil.FailErr(t, "seed "+dir, os.WriteFile(filepath.Join(dir, "README.md"), []byte("seed\n"), 0o644))
+		gittest.CommitAll(t, dir, "seed commit")
+	}
+
+	// Build a second commit in scratch clones so we can inject its loose objects + ref updates
+	// through Core's upper layer (.git/objects/... and .git/refs/heads/...) as a mounted shell git commit does.
+	scratchPrimary := filepath.Join(tmp, "scratch-primary")
+	scratchSecond := filepath.Join(tmp, "scratch-second")
+	gittest.Run(t, tmp, "clone", trunkPrimary, scratchPrimary)
+	gittest.Run(t, tmp, "clone", trunkSecond, scratchSecond)
+	testutil.FailErr(t, "write scratchPrimary", os.WriteFile(filepath.Join(scratchPrimary, "shell.txt"), []byte("primary-shell\n"), 0o644))
+	gittest.CommitAll(t, scratchPrimary, "primary shell commit")
+	primaryShellOID := strings.TrimSpace(gittest.Run(t, scratchPrimary, "rev-parse", "HEAD"))
+
+	testutil.FailErr(t, "write scratchSecond", os.WriteFile(filepath.Join(scratchSecond, "shell2.txt"), []byte("second-shell\n"), 0o644))
+	gittest.CommitAll(t, scratchSecond, "second shell commit")
+	secondShellOID := strings.TrimSpace(gittest.Run(t, scratchSecond, "rev-parse", "HEAD"))
+
+	mgr := newTestManager(t, tmp)
+	const viewID = "view-multi-shell"
+	core, err := layeredfs.New(layeredfs.Config{
+		ViewID:         viewID,
+		BackingDir:     filepath.Join(tmp, "core-backing"),
+		GitInterceptor: mgr,
+		Roots: []layeredfs.RootSpec{
+			{ID: "primary", Label: "primary", TrunkPath: trunkPrimary, IsPrimary: true},
+			{ID: "second", Label: "second", TrunkPath: trunkSecond, IsPrimary: false},
+		},
+	})
+	testutil.FailErr(t, "layeredfs.New", err)
+	defer func() {
+		_ = mgr.ReleaseView(viewID)
+		_ = core.ReleaseView()
+	}()
+
+	wtPrimary := filepath.Join(tmp, "wt-primary")
+	wtSecond := filepath.Join(tmp, "wt-second")
+	populateCopiedWorktreeTestDouble(t, trunkPrimary, wtPrimary)
+	populateCopiedWorktreeTestDouble(t, trunkSecond, wtSecond)
+
+	testutil.FailErr(t, "MountedClaimWithBinding primary", mgr.MountedClaimWithBinding(MountedViewBinding{
+		ViewID: viewID, WorkerID: "worker-multi", RootID: "primary",
+		TrunkDir: trunkPrimary, MountPath: wtPrimary, AdapterID: "nfsdarwin",
+		Core: core, MountID: "mnt-primary", Active: true,
+	}))
+	testutil.FailErr(t, "BindSecondaryRoot second", mgr.BindSecondaryRoot(MountedViewBinding{
+		ViewID: viewID, WorkerID: "worker-multi", RootID: "second",
+		TrunkDir: trunkSecond, MountPath: wtSecond, AdapterID: "nfsdarwin",
+		Core: core, MountID: "mnt-second", Active: true,
+	}))
+
+	// Force kernelMounted=true on both views so privateGitDir is isolated under BackingDir/views/.../private-git
+	// while shell .git writes land in Core's private upper layer.
+	for _, vid := range []string{viewID, SecondaryViewID(viewID, "second")} {
+		v, gErr := getManagedView(mgr, vid)
+		testutil.FailErr(t, "getManagedView "+vid, gErr)
+		v.kernelMounted = true
+		_, iErr := mgr.InitRepo(t.Context(), vid, ".")
+		testutil.FailErr(t, "InitRepo "+vid, iErr)
+	}
+
+	writeLooseObjectsToCore := func(rootID, scratchDir string) {
+		objRoot := filepath.Join(scratchDir, ".git", "objects")
+		err := filepath.WalkDir(objRoot, func(p string, d os.DirEntry, wErr error) error {
+			if wErr != nil || d.IsDir() {
+				return wErr
+			}
+			rel, rErr := filepath.Rel(scratchDir, p)
+			if rErr != nil {
+				return rErr
+			}
+			slashRel := filepath.ToSlash(rel)
+			if strings.HasPrefix(slashRel, ".git/objects/pack/") || strings.HasPrefix(slashRel, ".git/objects/info/") {
+				return nil
+			}
+			raw, readErr := os.ReadFile(p)
+			if readErr != nil {
+				return readErr
+			}
+			_, _ = core.Mkdir(layeredfs.QualifiedPath{RootID: rootID, Rel: filepath.ToSlash(filepath.Dir(rel))}, 0o755)
+			_, writeErr := core.WriteFile(layeredfs.QualifiedPath{RootID: rootID, Rel: slashRel}, raw, 0o444)
+			return writeErr
+		})
+		testutil.FailErr(t, "writeLooseObjectsToCore "+rootID, err)
+	}
+
+	writeLooseObjectsToCore("primary", scratchPrimary)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: ".git/refs/heads/shell-primary"}, []byte(primaryShellOID+"\n"), 0o644)
+	testutil.FailErr(t, "write primary ref via Core", err)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: ".git/HEAD"}, []byte("ref: refs/heads/shell-primary\n"), 0o644)
+	testutil.FailErr(t, "write primary HEAD via Core", err)
+
+	writeLooseObjectsToCore("second", scratchSecond)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "second", Rel: ".git/refs/heads/shell-second"}, []byte(secondShellOID+"\n"), 0o644)
+	testutil.FailErr(t, "write second ref via Core", err)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "second", Rel: ".git/HEAD"}, []byte("ref: refs/heads/shell-second\n"), 0o644)
+	testutil.FailErr(t, "write second HEAD via Core", err)
+
+	cpState, err := mgr.CaptureCheckpointGitState(t.Context(), viewID, "cp-shell-multi")
+	testutil.FailErr(t, "CaptureCheckpointGitState primary", err)
+	if cpState.HeadSymbolic != "refs/heads/shell-primary" || cpState.HeadOID != primaryShellOID {
+		t.Fatalf("primary HeadSymbolic=%q HeadOID=%q, want refs/heads/shell-primary @ %s", cpState.HeadSymbolic, cpState.HeadOID, primaryShellOID)
+	}
+	if cpState.Refs["refs/heads/shell-primary"] != primaryShellOID {
+		t.Fatalf("primary refs missing refs/heads/shell-primary: %+v", cpState.Refs)
+	}
+	secState, err := mgr.CaptureCheckpointGitState(t.Context(), SecondaryViewID(viewID, "second"), "cp-shell-multi-second")
+	testutil.FailErr(t, "CaptureCheckpointGitState second", err)
+	if secState.HeadSymbolic != "refs/heads/shell-second" || secState.HeadOID != secondShellOID {
+		t.Fatalf("second HeadSymbolic=%q HeadOID=%q, want refs/heads/shell-second @ %s", secState.HeadSymbolic, secState.HeadOID, secondShellOID)
+	}
+	if secState.Refs["refs/heads/shell-second"] != secondShellOID {
+		t.Fatalf("second refs missing refs/heads/shell-second: %+v", secState.Refs)
+	}
+
+	exportPrimary := filepath.Join(tmp, "export-primary")
+	testutil.FailErr(t, "ExportCheckpointObjects primary", mgr.ExportCheckpointObjects(t.Context(), viewID, cpState, exportPrimary))
+	exportSecond := filepath.Join(tmp, "export-second")
+	testutil.FailErr(t, "ExportCheckpointObjects second", mgr.ExportCheckpointObjects(t.Context(), SecondaryViewID(viewID, "second"), secState, exportSecond))
+}
+
+func TestMountedDirectMutableGitCoherenceLockContentionAndStoreStockMetrics(t *testing.T) {
+	t.Parallel()
+	fix := buildRichRepoFixture(t)
+	mgr := newTestManager(t, fix.tmpDir)
+	const viewID = "view-direct-git"
+	core := newMountedViewWithManager(t, mgr, viewID, fix.trunkDir)
+
+	v, err := getManagedView(mgr, viewID)
+	testutil.FailErr(t, "getManagedView", err)
+	v.kernelMounted = true
+
+	_, err = mgr.InitRepo(t.Context(), viewID, ".")
+	testutil.FailErr(t, "InitRepo", err)
+	v.mu.Lock()
+	privGitDir := v.repos["."].privateGitDir
+	v.mu.Unlock()
+
+	// Verify #1667 StoreMetrics RetainedObjects and RetainedBytes stock metrics.
+	metrics := mgr.Store().Metrics()
+	if metrics.RetainedObjects <= 0 || metrics.RetainedBytes <= 0 {
+		t.Fatalf("expected positive RetainedObjects and RetainedBytes in StoreMetrics, got %+v", metrics)
+	}
+
+	q := func(rel string) layeredfs.QualifiedPath {
+		return layeredfs.QualifiedPath{RootID: "primary", Rel: rel}
+	}
+
+	// 1. Concurrent .lock (O_CREAT|O_EXCL) contention between privateGitDir and Core.
+	lockHostPath := filepath.Join(privGitDir, "index.lock")
+	testutil.FailErr(t, "host create index.lock", os.WriteFile(lockHostPath, []byte("host-lock"), 0o600))
+	if _, _, err := core.CreateFile(q(".git/index.lock"), 0o600, true); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("expected os.ErrExist when host holds index.lock, got %v", err)
+	}
+	testutil.FailErr(t, "unlink index.lock via Core", core.Unlink(q(".git/index.lock"), false))
+	if _, sErr := os.Lstat(lockHostPath); !errors.Is(sErr, os.ErrNotExist) {
+		t.Fatalf("expected Core.Unlink to remove host index.lock immediately, got %v", sErr)
+	}
+
+	hLock, _, err := core.CreateFile(q(".git/index.lock"), 0o600, true)
+	testutil.FailErr(t, "Core CreateFile index.lock exclusive", err)
+	if _, oErr := os.OpenFile(lockHostPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600); !errors.Is(oErr, os.ErrExist) {
+		t.Fatalf("expected host O_CREAT|O_EXCL on index.lock to fail with os.ErrExist while Core holds it, got %v", oErr)
+	}
+	testutil.FailErr(t, "CloseHandle index.lock", core.CloseHandle(hLock))
+	testutil.FailErr(t, "cleanup index.lock", core.Unlink(q(".git/index.lock"), false))
+
+	// 2. Open-handle read/write across .git rename (HEAD.lock -> HEAD).
+	hHeadLock, _, err := core.CreateFile(q(".git/HEAD.lock"), 0o644, true)
+	testutil.FailErr(t, "CreateFile HEAD.lock", err)
+	initialHeadPayload := []byte("ref: refs/heads/from-lock\n")
+	_, err = core.WriteHandle(hHeadLock, initialHeadPayload, 0)
+	testutil.FailErr(t, "WriteHandle HEAD.lock", err)
+	testutil.FailErr(t, "Rename HEAD.lock -> HEAD", core.Rename(q(".git/HEAD.lock"), q(".git/HEAD")))
+
+	// Write updated ref via the still-open handle after rename and read back via handle and host.
+	updatedHeadPayload := []byte("ref: refs/heads/main\n")
+	testutil.FailErr(t, "Truncate HEAD", func() error { _, e := core.Truncate(q(".git/HEAD"), 0); return e }())
+	_, err = core.WriteHandle(hHeadLock, updatedHeadPayload, 0)
+	testutil.FailErr(t, "WriteHandle after rename", err)
+	buf := make([]byte, len(updatedHeadPayload))
+	n, err := core.ReadHandle(hHeadLock, buf, 0)
+	testutil.FailErr(t, "ReadHandle after rename", err)
+	if string(buf[:n]) != string(updatedHeadPayload) {
+		t.Fatalf("ReadHandle after rename=%q, want %q", string(buf[:n]), string(updatedHeadPayload))
+	}
+	testutil.FailErr(t, "CloseHandle hHeadLock", core.CloseHandle(hHeadLock))
+	hostHead, err := os.ReadFile(filepath.Join(privGitDir, "HEAD"))
+	testutil.FailErr(t, "os.ReadFile host HEAD", err)
+	if string(hostHead) != string(updatedHeadPayload) {
+		t.Fatalf("host HEAD=%q, want %q", string(hostHead), string(updatedHeadPayload))
+	}
+
+	// 3. Direct shell .git ref creation via Core visible immediately to GitExecutor, and
+	// GitExecutor update/deletion visible immediately back through Core.
+	headOID := strings.TrimSpace(gittest.Run(t, fix.trunkDir, "rev-parse", "HEAD"))
+	_, err = core.WriteFile(q(".git/refs/heads/live-branch"), []byte(headOID+"\n"), 0o644)
+	testutil.FailErr(t, "WriteFile live-branch via Core", err)
+
+	exec := NewGitExecutor(mgr, viewID, RemotePolicy{})
+	out, err := exec.Run(t.Context(), ".", "rev-parse", "refs/heads/live-branch")
+	testutil.FailErr(t, "GitExecutor rev-parse live-branch", err)
+	if strings.TrimSpace(out) != headOID {
+		t.Fatalf("GitExecutor rev-parse live-branch=%q, want %q", strings.TrimSpace(out), headOID)
+	}
+
+	// Delete refs/heads/live-branch via GitExecutor and verify Core.Stat & Core.ReadDir reflect deletion immediately.
+	_, err = exec.Run(t.Context(), ".", "update-ref", "-d", "refs/heads/live-branch")
+	testutil.FailErr(t, "GitExecutor update-ref -d live-branch", err)
+
+	if _, err := core.Stat(q(".git/refs/heads/live-branch")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected Core.Stat on deleted ref to return os.ErrNotExist, got %v", err)
+	}
+	entries, err := core.ReadDir(q(".git/refs/heads"))
+	testutil.FailErr(t, "Core.ReadDir .git/refs/heads", err)
+	for _, e := range entries {
+		if e.Name == "live-branch" {
+			t.Fatalf("expected deleted ref live-branch to be absent from Core.ReadDir")
+		}
+	}
+}

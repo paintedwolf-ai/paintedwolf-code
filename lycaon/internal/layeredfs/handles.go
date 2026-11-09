@@ -281,6 +281,9 @@ func openMutableTarget(c *Core, targetPath QualifiedPath, flags OpenFlags, mode 
 		node.mtime = time.Now()
 		node.ctime = node.mtime
 		node.flags.contentChanged = true
+		if node.flags.backingPath != "" {
+			markDirtyBackingFileLocked(c, node.flags.backingPath)
+		}
 		recordJournalLocked(c, JournalOpTruncate, effPath, nil, node, 0)
 	}
 

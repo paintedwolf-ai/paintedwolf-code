@@ -34,28 +34,30 @@ func publishManyChanges(t *testing.T, primary string, count int) (*Store, *Promo
 	return store, promoter, preview
 }
 
-// Rewriting the whole record per path costs O(N^2) bytes across a promotion.
-func TestPromotionRecordIsNotRewrittenPerAppliedPath(t *testing.T) {
+// Rewriting the undo record per path costs O(N^2) bytes across a promotion.
+func TestPromotionJournalIsNotRewrittenPerAppliedPath(t *testing.T) {
 	const count = 12
 	primary := t.TempDir()
 	store, promoter, preview := publishManyChanges(t, primary, count)
-	recordPath := filepath.Join(store.promotionsDir, "tx-cp-scale.json")
+	dir := filepath.Join(t.TempDir(), "tx")
 	var identities []string
-	_, err := promoter.Apply(t.Context(), ApplyRequest{Preview: preview, FaultInjector: func(stage ApplyFaultStage) error {
-		if stage == ApplyFaultMidFileApply {
-			identity, err := fspath.EntryIdentity(recordPath)
-			testutil.FailErr(t, "identify record", err)
+	txn, err := BeginTransaction(TransactionConfig{Dir: dir, ID: "scale", Reached: func(step TransactionStep, _ string) error {
+		if step == StepTargetMutated {
+			identity, err := fspath.EntryIdentity(filepath.Join(dir, transactionJournalName))
+			testutil.FailErr(t, "identify journal", err)
 			identities = append(identities, identity)
 		}
 		return nil
 	}})
+	testutil.FailErr(t, "begin", err)
+	_, err = txn.ApplyCheckpoint(t.Context(), promoter, ApplyRequest{Preview: preview})
 	testutil.FailErr(t, "apply", err)
 	if len(identities) != count {
 		t.Fatalf("observed %d applied paths, want %d", len(identities), count)
 	}
 	for _, identity := range identities {
 		if identity != identities[0] {
-			t.Fatal("promotion record was republished while applying paths")
+			t.Fatal("promotion journal was republished while applying paths")
 		}
 	}
 	rec, found, err := store.LoadPromotionRecord("tx-cp-scale")
@@ -65,55 +67,53 @@ func TestPromotionRecordIsNotRewrittenPerAppliedPath(t *testing.T) {
 	}
 }
 
-func TestPromotionResumeHonorsPathsAppliedBeforeInterruption(t *testing.T) {
-	const count = 6
-	primary := t.TempDir()
-	store, promoter, preview := publishManyChanges(t, primary, count)
-	failure := errors.New("interrupted")
-	applied := 0
-	_, err := promoter.Apply(t.Context(), ApplyRequest{Preview: preview, FaultInjector: func(stage ApplyFaultStage) error {
-		if stage == ApplyFaultMidFileApply {
-			if applied++; applied == 2 {
-				return failure
-			}
+// A failure at any applied path restores every path, and nothing resumes it.
+func TestPromotionFaultAtEachStepRestoresEveryPath(t *testing.T) {
+	const count = 4
+	for failAt := 1; failAt <= count; failAt++ {
+		for _, crash := range []bool{false, true} {
+			t.Run(fmt.Sprintf("path %d crash %v", failAt, crash), func(t *testing.T) {
+				primary := t.TempDir()
+				store, promoter, preview := publishManyChanges(t, primary, count)
+				dir := filepath.Join(t.TempDir(), "tx")
+				failure := errors.New("interrupted")
+				applied := 0
+				txn, err := BeginTransaction(TransactionConfig{Dir: dir, ID: "fault"})
+				testutil.FailErr(t, "begin", err)
+				request := ApplyRequest{Preview: preview, FaultInjector: func(stage ApplyFaultStage) error {
+					if stage == ApplyFaultMidFileApply {
+						if applied++; applied == failAt {
+							if crash {
+								panic(errSimulatedCrash)
+							}
+							return failure
+						}
+					}
+					return nil
+				}}
+				if crash {
+					crashDuring(t, func() { _, _ = txn.ApplyCheckpoint(t.Context(), promoter, request) })
+					found, err := RecoverTransaction(t.Context(), TransactionConfig{Dir: dir})
+					testutil.FailErr(t, "recover", err)
+					if !found {
+						t.Fatal("crash left no record to recover")
+					}
+				} else if _, err := txn.ApplyCheckpoint(t.Context(), promoter, request); !errors.Is(err, failure) {
+					t.Fatalf("apply = %v, want interruption", err)
+				}
+				for i := range count {
+					// Every path was added by the promotion, so the original target has none of them.
+					if _, err := os.Lstat(filepath.Join(primary, fmt.Sprintf("f%02d.txt", i))); !errors.Is(err, os.ErrNotExist) {
+						t.Fatalf("f%02d survived rollback: %v", i, err)
+					}
+				}
+				if _, found, err := store.LoadPromotionRecord("tx-cp-scale"); err != nil || found {
+					t.Fatalf("record survived rollback: found=%v err=%v", found, err)
+				}
+				if _, err := os.Lstat(filepath.Join(dir, transactionJournalName)); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("journal survived rollback: %v", err)
+				}
+			})
 		}
-		return nil
-	}})
-	if !errors.Is(err, failure) {
-		t.Fatalf("apply = %v, want interruption", err)
-	}
-	rec, found, err := store.LoadPromotionRecord("tx-cp-scale")
-	testutil.FailErr(t, "load interrupted record", err)
-	if !found || len(rec.AppliedPaths) != 2 {
-		t.Fatalf("interrupted record found=%v applied=%v", found, rec.AppliedPaths)
-	}
-	// An applied path differs from its preview observation; only the durable fact excuses it.
-	reopened, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}})
-	testutil.FailErr(t, "reopen promoter", err)
-	resumed := 0
-	_, err = reopened.Apply(t.Context(), ApplyRequest{Preview: preview, FaultInjector: func(stage ApplyFaultStage) error {
-		if stage == ApplyFaultMidFileApply {
-			resumed++
-		}
-		return nil
-	}})
-	testutil.FailErr(t, "resume", err)
-	if resumed != count-2 {
-		t.Fatalf("resume applied %d paths, want %d", resumed, count-2)
-	}
-	for i := range count {
-		raw, err := os.ReadFile(filepath.Join(primary, fmt.Sprintf("f%02d.txt", i)))
-		testutil.FailErr(t, "read promoted", err)
-		if string(raw) != "worker\n" {
-			t.Fatalf("f%02d = %q", i, raw)
-		}
-	}
-	rec, _, err = store.LoadPromotionRecord("tx-cp-scale")
-	testutil.FailErr(t, "load completed record", err)
-	if rec.State != PromotionStateApplied || len(rec.AppliedPaths) != count {
-		t.Fatalf("completed record state=%s applied=%d", rec.State, len(rec.AppliedPaths))
-	}
-	if entries, err := os.ReadDir(filepath.Join(store.promotionsDir, "tx-cp-scale.applied")); err == nil && len(entries) != 0 {
-		t.Fatalf("progress markers survived completion: %v", entries)
 	}
 }

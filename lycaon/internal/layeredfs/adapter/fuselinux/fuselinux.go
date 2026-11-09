@@ -247,18 +247,14 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 	res.MountExercised = true
 	defer func() { _, _ = a.Release(context.Background(), probeViewID) }()
 
-	probeFile := filepath.Join(prep.PrimaryWorkPath, "probe.txt")
-	if raw, rErr := os.ReadFile(probeFile); rErr != nil || string(raw) != "seed\n" {
-		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("probe read failed: %v", rErr)
+	readOut, readExit, rErr := execpkg.Run(ctx, "/bin/sh", []string{"-c", "cat probe.txt"}, execpkg.ExecOpts{Launch: execpkg.HostLaunch("fuse_probe"), Dir: prep.PrimaryWorkPath})
+	if rErr != nil || readExit != 0 || string(readOut) != "seed\n" {
+		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("probe read failed: exit=%d err=%v out=%q", readExit, rErr, string(readOut))
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: rErr}
 	}
 	res.ReadExercised = true
 
-	if err := os.WriteFile(probeFile, []byte("coherent-probe\n"), 0o644); err != nil {
-		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, err.Error()
-		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
-	}
-	out, exitCode, cErr := execpkg.Run(ctx, "/bin/sh", []string{"-c", "cat probe.txt"}, execpkg.ExecOpts{Launch: execpkg.HostLaunch("fuse_probe"), Dir: prep.PrimaryWorkPath})
+	out, exitCode, cErr := execpkg.Run(ctx, "/bin/sh", []string{"-c", "printf 'coherent-probe\\n' > probe.txt && cat probe.txt"}, execpkg.ExecOpts{Launch: execpkg.HostLaunch("fuse_probe"), Dir: prep.PrimaryWorkPath})
 	if cErr != nil || exitCode != 0 || strings.TrimSpace(string(out)) != "coherent-probe" {
 		res.ReasonCode, res.Diagnostic = adapter.ReasonProbeReadWriteFailed, fmt.Sprintf("shell coherence check failed: exit=%d err=%v out=%q", exitCode, cErr, string(out))
 		return res, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: cErr}

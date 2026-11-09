@@ -198,8 +198,8 @@ func verifyRecoveredMountAndStackedChild(
 		TaskID:             "task-nfs",
 		ProjectID:          "proj-nfs",
 		ParentCheckpointID: "cp-nfs-A",
-		Adapter:            adp,
-		PrepareReq:         nfsPrepareReq(baseDir, trunkDir, "view-nfs-child", gitMgr),
+		AdapterID:          adp.ID(),
+		Prepare:            prepareStackedOver(adp, nfsPrepareReq(baseDir, trunkDir, "view-nfs-child", gitMgr), "worker-nfs-child", gitMgr),
 	})
 	if err != nil {
 		t.Fatalf("PrepareStackedWorkerView over nfsdarwin: %v", err)
@@ -222,7 +222,7 @@ func verifyRecoveredMountAndStackedChild(
 		ProjectID:         "proj-nfs",
 		SourceGeneration:  "gen-nfs-1",
 		SelectedRoots:     []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunkDir, IsPrimary: true}},
-		ParentCheckpoints: stacked.ParentCheckpointIDs,
+		ParentCheckpoints: stacked.Parents.CheckpointIDs,
 		Callbacks: checkpoint.BarrierCallbacks{
 			FlushClientDirtyData: func(ctx context.Context) error { return adp.FlushClientData(ctx, stacked.ChildViewID) },
 		},
@@ -241,7 +241,7 @@ func verifyRecoveredMountAndStackedChild(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := coord.PromoteStackedCheckpoint(t.Context(), recovery.StackedPromotionRequest{
+	if err := promoteStackedAndCommit(t, coord, recovery.StackedPromotionRequest{
 		ChildCheckpointID: "cp-nfs-child-C",
 		TargetRoots:       map[string]string{"primary": trunkDir},
 		Promoter:          promoter,

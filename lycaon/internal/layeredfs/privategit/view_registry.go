@@ -210,9 +210,12 @@ func prepareManagedViewOperation(
 	}, true); err != nil {
 		return "", noop, true, err
 	}
+	if err := syncViewGitOverlay(view); err != nil {
+		return "", noop, true, err
+	}
 	if !view.materialized && view.kernelMounted {
 		if privGitDir, gErr := readyPrivateGitDir(mgr, view.viewID, "."); gErr == nil && privGitDir != "" {
-			_, _, _ = gitexec.Run(ctx, view.worktreeDir, []string{"--git-dir=" + privGitDir, "--work-tree=" + view.worktreeDir, "update-index", "-q", "--refresh"}, gitexec.Opts{
+			_, _, _ = gitexec.Run(ctx, filepath.Dir(privGitDir), []string{"-C", view.worktreeDir, "--git-dir=" + privGitDir, "--work-tree=" + view.worktreeDir, "update-index", "-q", "--refresh"}, gitexec.Opts{
 				Profile: gitexec.ProfileHermetic,
 			})
 		}
@@ -222,9 +225,10 @@ func prepareManagedViewOperation(
 	}
 	before := captureWorktreeMutationBaseline(view, view.worktreeDir)
 	finish := func() error {
+		overlayErr := syncViewGitOverlay(view)
 		syncErr := syncWorktreeMutationsToCore(view, ".", before)
 		retainErr := retainNewPrivateObjects(ctx, mgr, view, ".")
-		return errors.Join(syncErr, retainErr)
+		return errors.Join(overlayErr, syncErr, retainErr)
 	}
 	return view.worktreeDir, finish, true, nil
 }
@@ -258,6 +262,9 @@ func ViewPathExists(projectOrWorktreeDir, relPath string) bool {
 		if v.core != nil {
 			if st, err := v.core.Stat(layeredfs.QualifiedPath{RootID: v.rootID, Rel: cleanRel}); err == nil && st.Kind != layeredfs.EntryAbsent {
 				return true
+			}
+			if !v.materialized {
+				continue
 			}
 		}
 		if _, err := os.Lstat(filepath.Join(v.worktreeDir, filepath.FromSlash(cleanRel))); err == nil {

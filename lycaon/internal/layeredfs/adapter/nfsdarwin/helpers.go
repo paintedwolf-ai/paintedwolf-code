@@ -139,11 +139,6 @@ func addCandidateWithAncestors(candidates map[string]struct{}, rel string) {
 }
 
 func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootID string, m *rootMount) error {
-	// The volume sync reaches dirty buffers of files the server has never heard of; the per-path
-	// fsyncs that follow report write errors, which the volume sync does not return.
-	if err := syncVolume(m.mountPath); err != nil {
-		return fmt.Errorf("sync volume %s: %w", m.mountPath, err)
-	}
 	candidates := map[string]struct{}{".": {}}
 	if st.core != nil {
 		changes, err := st.core.EnumerateChanges(false)
@@ -175,6 +170,19 @@ func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootI
 	}
 	sort.Strings(rels)
 	rels = append(rels, ".")
+
+	a.mu.RLock()
+	fn := a.cfg.ClientSyncFn
+	a.mu.RUnlock()
+	if fn == nil {
+		return runNFSBarrierFlushSubprocess(ctx, a, st, m.mountPath, rels)
+	}
+
+	// The volume sync reaches dirty buffers of files the server has never heard of; the per-path
+	// fsyncs that follow report write errors, which the volume sync does not return.
+	if err := syncVolume(m.mountPath); err != nil {
+		return fmt.Errorf("sync volume %s: %w", m.mountPath, err)
+	}
 
 	var filesSynced, dirsSynced int64
 	for _, rel := range rels {

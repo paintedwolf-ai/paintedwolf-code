@@ -118,7 +118,7 @@ func initializePrivateRepo(
 	kernelMounted := !view.materialized && view.kernelMounted
 	finalGitDir := filepath.Join(targetWorktreeDir, ".git")
 	if kernelMounted {
-		finalGitDir = filepath.Join(mgr.cfg.BackingDir, "views", view.viewID, "private-git", sanitizeRepoKey(repoRel))
+		finalGitDir = filepath.Join(mgr.cfg.BackingDir, "views", view.viewID, "private-git", sanitizeRepoKey(repoRel), ".git")
 	}
 	if err := os.MkdirAll(filepath.Dir(finalGitDir), 0o755); err != nil {
 		_ = mgr.store.ReleaseLease(leaseID)

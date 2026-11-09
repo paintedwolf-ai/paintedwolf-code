@@ -3,6 +3,8 @@ package layeredfs
 import (
 	"context"
 	"errors"
+	"os"
+	"sort"
 	"sync"
 )
 
@@ -46,7 +48,7 @@ func (c *Core) ReleaseView() error {
 	for _, e := range entries {
 		var sErr error
 		if e.h.file != nil {
-			sErr = errors.Join(runJournalSyncHook(c, "handle_sync"), syncFD(int(e.h.file.Fd())))
+			sErr = errors.Join(runJournalSyncHook(c, "handle_sync"), flushFD(c, int(e.h.file.Fd())))
 		}
 		if sErr != nil {
 			releaseErr = errors.Join(releaseErr, sErr)
@@ -60,17 +62,17 @@ func (c *Core) ReleaseView() error {
 	}
 
 	if c.backing.workDirFile != nil {
-		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "work_dir_sync"), syncFD(int(c.backing.workDirFile.Fd())))
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "work_dir_sync"), flushFD(c, int(c.backing.workDirFile.Fd())))
 	}
 	if c.backing.baseDirFile != nil {
-		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "base_dir_sync"), syncFD(int(c.backing.baseDirFile.Fd())))
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "base_dir_sync"), flushFD(c, int(c.backing.baseDirFile.Fd())))
 	}
 
 	if hasRecoveryState {
 		_, snapErr := snapshotJournal(c)
 		releaseErr = errors.Join(releaseErr, snapErr)
 	} else if c.backing.journalDirFile != nil {
-		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "journal_dir_sync"), syncFD(int(c.backing.journalDirFile.Fd())))
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "journal_dir_sync"), flushFD(c, int(c.backing.journalDirFile.Fd())))
 	}
 
 	if releaseErr != nil {
@@ -283,34 +285,91 @@ func flushBackingState(c *Core) error {
 		c.mu.Unlock()
 		return ErrViewReleased
 	}
-	var held []*openHandle
+	dirtyGenSnap := make(map[string]uint64, len(c.state.dirtyBackingFiles))
+	for p, gen := range c.state.dirtyBackingFiles {
+		dirtyGenSnap[p] = gen
+	}
+	type heldFlushItem struct {
+		h           *openHandle
+		backingPath string
+	}
+	var held []heldFlushItem
+	flushedPaths := make(map[string]struct{}, len(c.state.handles))
 	for _, h := range c.state.handles {
 		if !h.closed && h.file != nil {
 			h.refs++
-			held = append(held, h)
+			var bPath string
+			if node := c.state.nodesByID[h.nodeID]; node != nil && node.flags.backingPath != "" {
+				bPath = node.flags.backingPath
+				flushedPaths[bPath] = struct{}{}
+			}
+			held = append(held, heldFlushItem{h: h, backingPath: bPath})
 		}
 	}
+	var dirtyPaths []string
+	for p := range dirtyGenSnap {
+		if _, already := flushedPaths[p]; !already {
+			dirtyPaths = append(dirtyPaths, p)
+		}
+	}
+	sort.Strings(dirtyPaths)
 	workFile := c.backing.workDirFile
 	baseFile := c.backing.baseDirFile
 	journalFile := c.backing.journalDirFile
 	c.mu.Unlock()
 
 	var flushErr error
-	for _, h := range held {
-		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "handle_sync"), syncFD(int(h.file.Fd())))
-		flushErr = errors.Join(flushErr, releaseHandleRef(c, h))
+	flushedOK := make(map[string]uint64, len(dirtyGenSnap))
+	for _, item := range held {
+		hookErr := runJournalSyncHook(c, "handle_sync")
+		syncErr := flushFD(c, int(item.h.file.Fd()))
+		relErr := releaseHandleRef(c, item.h)
+		flushErr = errors.Join(flushErr, hookErr, syncErr, relErr)
+		if hookErr == nil && syncErr == nil && relErr == nil && item.backingPath != "" {
+			if gen, ok := dirtyGenSnap[item.backingPath]; ok {
+				flushedOK[item.backingPath] = gen
+			}
+		}
 	}
+	for _, p := range dirtyPaths {
+		hookErr := runJournalSyncHook(c, "dirty_backing:"+p)
+		f, openErr := os.Open(p)
+		if openErr != nil {
+			if errors.Is(openErr, os.ErrNotExist) {
+				flushErr = errors.Join(flushErr, hookErr)
+				if hookErr == nil {
+					flushedOK[p] = dirtyGenSnap[p]
+				}
+				continue
+			}
+			flushErr = errors.Join(flushErr, hookErr, openErr)
+			continue
+		}
+		syncErr := flushFD(c, int(f.Fd()))
+		closeErr := f.Close()
+		flushErr = errors.Join(flushErr, hookErr, syncErr, closeErr)
+		if hookErr == nil && syncErr == nil && closeErr == nil {
+			flushedOK[p] = dirtyGenSnap[p]
+		}
+	}
+	c.mu.Lock()
+	for p, gen := range flushedOK {
+		if cur, ok := c.state.dirtyBackingFiles[p]; ok && cur == gen {
+			delete(c.state.dirtyBackingFiles, p)
+		}
+	}
+	c.mu.Unlock()
 	if flushErr != nil {
 		return flushErr
 	}
 	if workFile != nil {
-		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "work_dir_sync"), syncFD(int(workFile.Fd())))
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "work_dir_sync"), flushFD(c, int(workFile.Fd())))
 	}
 	if baseFile != nil {
-		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "base_dir_sync"), syncFD(int(baseFile.Fd())))
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "base_dir_sync"), flushFD(c, int(baseFile.Fd())))
 	}
 	if journalFile != nil {
-		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "journal_dir_sync"), syncFD(int(journalFile.Fd())))
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "journal_dir_sync"), flushFD(c, int(journalFile.Fd())))
 	}
 	return flushErr
 }

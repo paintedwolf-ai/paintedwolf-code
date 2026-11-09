@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
@@ -46,13 +47,13 @@ func validateLayout(layout SandboxLayout) error {
 // (keeping informational taskPathHints separate) before provisioning the worker workspace (#1658).
 func (m *Manager) CreateWorkerWorkspaceSelected(
 	ctx context.Context,
-	roots, sourceRoots []projectroot.RootRef,
+	roots []projectroot.RootRef,
 	selection adapter.WorkspaceSelection,
 	taskPathHints []string,
 	activeRootID, jobID string,
 ) (*Binding, SandboxLayout, error) {
 	ctx = WithWorkspaceSelection(ctx, selection, taskPathHints...)
-	return m.CreateWorkerWorkspaceFromSources(ctx, roots, sourceRoots, activeRootID, jobID)
+	return m.CreateWorkerBranch(ctx, roots, activeRootID, jobID)
 }
 
 func applyWorkspaceSelectionToLayout(
@@ -92,49 +93,42 @@ func applyWorkspaceSelectionToLayout(
 	return SandboxLayout{Roots: narrowedLayout}, SandboxLayout{Roots: narrowedSources}, activeRootID, nil
 }
 
-// CreateWorkerWorkspaceFromSources snapshots sources under canonical root identities.
-func (m *Manager) CreateWorkerWorkspaceFromSources(
-	ctx context.Context,
-	roots, sourceRoots []projectroot.RootRef,
-	activeRootID, jobID string,
-) (*Binding, SandboxLayout, error) {
-	return createWorkerWorkspaceFromSources(ctx, m, roots, sourceRoots, activeRootID, jobID)
+// CreateWorkerBranch creates a worker's branch over live project roots.
+func (m *Manager) CreateWorkerBranch(ctx context.Context, roots []projectroot.RootRef, activeRootID, jobID string) (*Binding, SandboxLayout, error) {
+	return createWorkerBranch(ctx, m, roots, activeRootID, jobID, "")
 }
 
-func createWorkerWorkspaceFromSources(
+// CreateStackedWorkerBranch creates a worker's branch over live project roots and a parent's immutable
+// checkpoint. Nothing reads the parent's working tree.
+func (m *Manager) CreateStackedWorkerBranch(ctx context.Context, roots []projectroot.RootRef, activeRootID, jobID, parentCheckpointID string) (*Binding, SandboxLayout, error) {
+	if strings.TrimSpace(parentCheckpointID) == "" {
+		return nil, SandboxLayout{}, fmt.Errorf("stacked worker %q names no parent checkpoint", jobID)
+	}
+	return createWorkerBranch(ctx, m, roots, activeRootID, jobID, parentCheckpointID)
+}
+
+func createWorkerBranch(
 	ctx context.Context,
 	m *Manager,
-	roots, sourceRoots []projectroot.RootRef,
-	activeRootID, jobID string,
+	roots []projectroot.RootRef,
+	activeRootID, jobID, parentCheckpointID string,
 ) (*Binding, SandboxLayout, error) {
 	if len(roots) == 0 {
 		return nil, SandboxLayout{}, fmt.Errorf("project roots required")
-	}
-	if len(sourceRoots) != len(roots) {
-		return nil, SandboxLayout{}, fmt.Errorf("workspace source roots do not match project roots")
 	}
 	jobID = strings.TrimSpace(jobID)
 	if jobID == "" {
 		jobID = uuid.NewString()
 	}
 	layout := SandboxLayout{Roots: append([]projectroot.RootRef(nil), roots...)}
-	sources := SandboxLayout{Roots: append([]projectroot.RootRef(nil), sourceRoots...)}
+	sources := SandboxLayout{Roots: append([]projectroot.RootRef(nil), roots...)}
 	for i := range layout.Roots {
 		abs, err := absDir(layout.Roots[i].Path)
 		if err != nil {
 			return nil, SandboxLayout{}, err
 		}
 		layout.Roots[i].Path = abs
-		sourceAbs, err := absDir(sources.Roots[i].Path)
-		if err != nil {
-			return nil, SandboxLayout{}, err
-		}
-		sources.Roots[i].Path = sourceAbs
-		if layout.Roots[i].ID != sources.Roots[i].ID ||
-			layout.Roots[i].Label != sources.Roots[i].Label ||
-			layout.Roots[i].IsPrimary != sources.Roots[i].IsPrimary {
-			return nil, SandboxLayout{}, fmt.Errorf("workspace source root %d identity mismatch", i)
-		}
+		sources.Roots[i].Path = abs
 	}
 	if sel, hints, ok := workspaceSelectionFromContext(ctx); ok {
 		var selErr error
@@ -181,7 +175,7 @@ func createWorkerWorkspaceFromSources(
 	if err != nil {
 		return nil, SandboxLayout{}, err
 	}
-	if err := snapshotSourceRoots(ctx, m, binding, sources.Roots); err != nil {
+	if err := snapshotSourceRoots(ctx, m, binding, sources.Roots, parentCheckpointID); err != nil {
 		return nil, SandboxLayout{}, errors.Join(err, m.DestroyWorkerWorkspace(binding))
 	}
 	return binding, layout, nil
@@ -202,8 +196,7 @@ func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
 	return true
 }
 
-func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef) error {
-	branchRoot := binding.Root
+func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef, parentCheckpointID string) error {
 	services, err := m.layered()
 	if err != nil {
 		return err
@@ -214,10 +207,31 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 	}
 	binding.Selection = choice
 	binding.Adapter = choice.Adapter
+	if parentCheckpointID == "" {
+		return prepareBranchViews(ctx, m, services, binding, sources, choice, recovery.StackedParents{})
+	}
+	_, err = services.recovery.PrepareStackedWorkerView(ctx, recovery.StackedViewRequest{
+		ChildWorkerID: binding.ID, ChildViewID: binding.ID, ProjectID: workspaceProjectFromContext(ctx, ""),
+		ParentCheckpointID: parentCheckpointID, AdapterID: choice.Adapter.ID(),
+		Prepare: func(ctx context.Context, parents recovery.StackedParents) (*adapter.PreparedView, error) {
+			if err := prepareBranchViews(ctx, m, services, binding, sources, choice, parents); err != nil {
+				return nil, err
+			}
+			return binding.View, nil
+		},
+		// The caller destroys a branch whose creation failed, which settles its views.
+		Release: func(context.Context, *adapter.PreparedView) error { return nil },
+	})
+	return err
+}
+
+// prepareBranchViews builds the branch's views over its sources and, when stacked, its parent chain.
+func prepareBranchViews(ctx context.Context, m *Manager, services *layeredServices, binding *Binding, sources []projectroot.RootRef, choice WorkspaceStrategySelection, parents recovery.StackedParents) error {
+	branchRoot := binding.Root
 	_, hints, _ := workspaceSelectionFromContext(ctx)
 
 	if choice.Facts.PreparationKind == adapter.PreparationMounted {
-		view, cv, err := prepareMountedWorkspaceView(ctx, m, binding, sources, choice)
+		view, cv, err := prepareMountedWorkspaceView(ctx, m, binding, sources, choice, parents)
 		if err != nil {
 			return classifyProvisionError(err)
 		}
@@ -234,6 +248,9 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 		}
 		binding.View = view
 		m.recordBranchViews(branchRoot, choice, view)
+		if err := services.recovery.OverlayParentChainOnMaterializedView(view, parents.Manifests); err != nil {
+			return err
+		}
 		if err := adoptMaterializedGit(ctx, services, binding.ID, binding.ID, "", sources[0], view, branchRoot); err != nil {
 			return err
 		}
@@ -253,6 +270,9 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 		}
 		views = append(views, view)
 		m.recordBranchViews(branchRoot, choice, views...)
+		if err := services.recovery.OverlayParentChainOnMaterializedView(view, parents.Manifests); err != nil {
+			return err
+		}
 		workerID, branchDir := viewID, ""
 		if source.IsPrimary {
 			workerID, branchDir = binding.ID, branchRoot

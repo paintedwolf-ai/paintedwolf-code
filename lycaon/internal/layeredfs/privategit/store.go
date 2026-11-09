@@ -1,6 +1,7 @@
 package privategit
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type leaseRecord struct {
@@ -17,6 +19,16 @@ type leaseRecord struct {
 	holder string
 	oids   map[string]struct{}
 	packs  map[string]struct{}
+}
+
+type storeStock struct {
+	packOIDs        map[string]map[string]struct{}
+	packSizes       map[string]int64
+	looseSizes      map[string]int64
+	logicalOIDRefs  map[string]int
+	looseBytesTotal int64
+	packBytesTotal  int64
+	startupDuration time.Duration
 }
 
 // RetainedObjectStore manages the engine-retained content-addressed Git object store (#1671).
@@ -28,7 +40,7 @@ type RetainedObjectStore struct {
 	mu        sync.Mutex
 	nextLease uint64
 	leases    map[string]*leaseRecord
-	packOIDs  map[string]map[string]struct{}
+	stock     storeStock
 
 	objectsImported   atomic.Int64
 	objectsReused     atomic.Int64
@@ -39,6 +51,15 @@ type RetainedObjectStore struct {
 
 // NewRetainedObjectStore initializes or opens an engine-retained Git object store at rootDir.
 func NewRetainedObjectStore(rootDir string) (*RetainedObjectStore, error) {
+	return NewRetainedObjectStoreContext(context.Background(), rootDir)
+}
+
+// NewRetainedObjectStoreContext initializes or opens an engine-retained Git object store at rootDir,
+// honoring ctx cancellation while reconstructing preexisting stock on disk.
+func NewRetainedObjectStoreContext(ctx context.Context, rootDir string) (*RetainedObjectStore, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(rootDir) == "" {
 		return nil, fmt.Errorf("privategit: retained store rootDir is required")
 	}
@@ -69,7 +90,15 @@ func NewRetainedObjectStore(rootDir string) (*RetainedObjectStore, error) {
 		objectsDir: objectsDir,
 		importsDir: importsDir,
 		leases:     make(map[string]*leaseRecord),
-		packOIDs:   make(map[string]map[string]struct{}),
+		stock: storeStock{
+			packOIDs:       make(map[string]map[string]struct{}),
+			packSizes:      make(map[string]int64),
+			looseSizes:     make(map[string]int64),
+			logicalOIDRefs: make(map[string]int),
+		},
+	}
+	if err := initStockFromDiskLocked(ctx, s); err != nil {
+		return nil, err
 	}
 	// A store with nothing retained has nothing to protect, and read-only directories
 	// would stop its host directory from being removed.
@@ -89,14 +118,22 @@ func (s *RetainedObjectStore) ObjectsDir() string {
 	return s.objectsDir
 }
 
-// Metrics returns a snapshot of the store's object and byte counters.
+// Metrics returns an O(1) snapshot of the store's cumulative and retained stock counters.
 func (s *RetainedObjectStore) Metrics() StoreMetrics {
+	s.mu.Lock()
+	retainedObjects := int64(len(s.stock.logicalOIDRefs))
+	retainedBytes := s.stock.looseBytesTotal + s.stock.packBytesTotal
+	startupDur := s.stock.startupDuration
+	s.mu.Unlock()
 	return StoreMetrics{
-		ObjectsImported:   s.objectsImported.Load(),
-		ObjectsReused:     s.objectsReused.Load(),
-		BytesImported:     s.bytesImported.Load(),
-		BytesReused:       s.bytesReused.Load(),
-		BytesNewlyWritten: s.bytesNewlyWritten.Load(),
+		ObjectsImported:     s.objectsImported.Load(),
+		ObjectsReused:       s.objectsReused.Load(),
+		BytesImported:       s.bytesImported.Load(),
+		BytesReused:         s.bytesReused.Load(),
+		BytesNewlyWritten:   s.bytesNewlyWritten.Load(),
+		RetainedObjects:     retainedObjects,
+		RetainedBytes:       retainedBytes,
+		StartupInitDuration: startupDur,
 	}
 }
 
@@ -147,14 +184,14 @@ func createStoreLease(s *RetainedObjectStore, kind LeaseKind, holder string, oid
 			continue
 		}
 		oidSet[oid] = struct{}{}
-		for packName, members := range s.packOIDs {
+		for packName, members := range s.stock.packOIDs {
 			if _, ok := members[oid]; ok {
 				packSet[packName] = struct{}{}
 			}
 		}
 	}
-	for packName := range s.packOIDs {
-		if len(s.packOIDs[packName]) == 0 {
+	for packName := range s.stock.packOIDs {
+		if len(s.stock.packOIDs[packName]) == 0 {
 			packSet[packName] = struct{}{}
 		}
 	}
@@ -209,6 +246,13 @@ func storeHoldsObjects(objectsDir string) bool {
 				return true
 			}
 		default:
+			if entry.IsDir() {
+				sub, subErr := os.ReadDir(filepath.Join(objectsDir, entry.Name()))
+				if subErr != nil || len(sub) > 0 {
+					return true
+				}
+				continue
+			}
 			return true
 		}
 	}

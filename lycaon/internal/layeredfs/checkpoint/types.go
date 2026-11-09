@@ -72,6 +72,29 @@ type PrivateGitSnapshot struct {
 	IndexDigest         string            `json:"index_digest,omitempty"`
 	RetainedObjects     []string          `json:"retained_objects,omitempty"`
 	RetainedObjectBytes int64             `json:"retained_object_bytes,omitempty"`
+	// Roots holds the refs of each non-primary root's own private repository, by root ID.
+	Roots map[string]RootGitRefs `json:"roots,omitempty"`
+	// ObjectCheckpoints names further checkpoints whose exported objects these refs reach.
+	ObjectCheckpoints []string `json:"object_checkpoints,omitempty"`
+}
+
+// RootGitRefs records one non-primary root's private refs.
+type RootGitRefs struct {
+	HeadRef string            `json:"head_ref,omitempty"`
+	Refs    map[string]string `json:"refs,omitempty"`
+}
+
+// HasRefs reports whether any root of this snapshot has refs to import.
+func (g PrivateGitSnapshot) HasRefs() bool {
+	if len(g.Refs) > 0 {
+		return true
+	}
+	for _, root := range g.Roots {
+		if len(root.Refs) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // ResourceAccounting tracks explicit overlay file, content, metadata, and retained object budgets.

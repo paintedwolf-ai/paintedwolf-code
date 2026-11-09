@@ -237,19 +237,6 @@ func promoteWorkflowCheckpoint(t *testing.T, cpStore *checkpoint.Store, gitMgr *
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
 		Store:       cpStore,
 		TargetRoots: map[string]string{"primary": trunkDir},
-		RefImporter: func(ctx context.Context, _ string, wID string, _ checkpoint.PrivateGitSnapshot) (map[string]string, error) {
-			impRes, iErr := gitMgr.ImportRefsToTrunk(ctx, privategit.RefImportRequest{
-				JobID:        wID,
-				WorkerID:     wID,
-				CheckpointID: checkpointID,
-				TrunkDir:     trunkDir,
-				Checkpoint:   cpGitState,
-			})
-			if iErr != nil {
-				return nil, iErr
-			}
-			return impRes.ImportedRefs, nil
-		},
 	})
 	if err != nil {
 		t.Fatalf("checkpoint.NewPromoter: %v", err)
@@ -264,12 +251,21 @@ func promoteWorkflowCheckpoint(t *testing.T, cpStore *checkpoint.Store, gitMgr *
 	if err != nil || len(preview.Conflicts) > 0 {
 		t.Fatalf("promoter.Preview failed: conflicts=%+v err=%v", preview, err)
 	}
-	applyRes, err := promoter.Apply(t.Context(), checkpoint.ApplyRequest{
-		Preview:       preview,
-		ImportGitRefs: true,
+	txn, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: filepath.Join(t.TempDir(), "tx"), ID: "workflow"})
+	if err != nil {
+		t.Fatalf("begin promotion: %v", err)
+	}
+	if _, err := txn.ApplyCheckpoint(t.Context(), promoter, checkpoint.ApplyRequest{Preview: preview}); err != nil {
+		t.Fatalf("apply promotion: %v", err)
+	}
+	if err := txn.Commit(); err != nil {
+		t.Fatalf("commit promotion: %v", err)
+	}
+	imported, err := gitMgr.ImportRefsToTrunk(t.Context(), privategit.RefImportRequest{
+		JobID: workerID, WorkerID: workerID, CheckpointID: checkpointID, TrunkDir: trunkDir, Checkpoint: cpGitState,
 	})
-	if err != nil || len(applyRes.ImportedRefs) == 0 {
-		t.Fatalf("promoter.Apply failed: res=%+v err=%v", applyRes, err)
+	if err != nil || len(imported.ImportedRefs) == 0 {
+		t.Fatalf("import refs: res=%+v err=%v", imported, err)
 	}
 
 	// Verify TrunkRoot now contains the promoted files and imported worker checkpoint Git refs.

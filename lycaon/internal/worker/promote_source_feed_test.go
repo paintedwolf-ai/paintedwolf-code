@@ -100,7 +100,7 @@ func TestPromoteOverlayEmitsRootScopeSourceChanges(t *testing.T) {
 	roots := []projectroot.RootRef{{
 		ID: rootID, Label: "project", Path: primary, IsPrimary: true,
 	}}
-	binding, _, err := manager.CreateWorkerWorkspaceFromSources(ctx, roots, roots, rootID, "job-feed")
+	binding, _, err := manager.CreateWorkerBranch(ctx, roots, rootID, "job-feed")
 	testutil.FailErr(t, "create worker workspace", err)
 	overlay := binding.Root
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/**"}}
@@ -324,7 +324,7 @@ func newEditorSyncPromotion(t *testing.T, store *mergeStoreStub) editorSyncPromo
 	roots := []projectroot.RootRef{{
 		ID: rootID, Label: "project", Path: primary, IsPrimary: true,
 	}}
-	binding, _, err := manager.CreateWorkerWorkspaceFromSources(ctx, roots, roots, rootID, "job-sync")
+	binding, _, err := manager.CreateWorkerBranch(ctx, roots, rootID, "job-sync")
 	testutil.FailErr(t, "create worker workspace", err)
 	overlay := binding.Root
 	baseline := workspaceBaselinePath(t, overlay)

@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestHostTransactionRecovery(t *testing.T) {
+func TestTransactionRecovery(t *testing.T) {
 	for _, phase := range []string{"complete", "partial", "file divergence", "unrecorded child", "unknown journal field", "bad journal version", "escaping image digest", "changed root", "hard link restoration"} {
 		t.Run(phase, func(t *testing.T) {
 			primary := t.TempDir()
@@ -46,21 +47,19 @@ func TestHostTransactionRecovery(t *testing.T) {
 			preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "checkpoint"})
 			testutil.FailErr(t, "preview", err)
 			request := ApplyRequest{Preview: preview}
-			failure := errors.New("interrupted checkpoint effects")
+			dir := filepath.Join(t.TempDir(), "tx")
+			txn, err := BeginTransaction(TransactionConfig{Dir: dir, ID: "undo"})
+			testutil.FailErr(t, "begin", err)
 			if phase == "partial" {
 				request.FaultInjector = func(stage ApplyFaultStage) error {
 					if stage == ApplyFaultMidFileApply {
-						return failure
+						panic(errSimulatedCrash)
 					}
 					return nil
 				}
-			}
-			_, err = NewHostPromotion(promoter).Apply(t.Context(), request)
-			if phase == "partial" {
-				if !errors.Is(err, failure) {
-					t.Fatalf("fault = %v", err)
-				}
+				crashDuring(t, func() { _, _ = txn.ApplyCheckpoint(t.Context(), promoter, request) })
 			} else {
+				_, err = txn.ApplyCheckpoint(t.Context(), promoter, request)
 				testutil.FailErr(t, "apply checkpoint", err)
 			}
 			if phase == "file divergence" {
@@ -71,7 +70,7 @@ func TestHostTransactionRecovery(t *testing.T) {
 			}
 			var preservedJournal []byte
 			if phase == "unknown journal field" || phase == "bad journal version" || phase == "escaping image digest" {
-				path := filepath.Join(store.promotionsDir, "host-transaction.json")
+				path := filepath.Join(dir, transactionJournalName)
 				raw, err := os.ReadFile(path)
 				testutil.FailErr(t, "read recovery record", err)
 				var document map[string]any
@@ -97,12 +96,12 @@ func TestHostTransactionRecovery(t *testing.T) {
 			// Recovery uses persisted facts rather than the old Promoter's memory.
 			reopened, err := NewPromoter(config)
 			testutil.FailErr(t, "reopen promoter", err)
-			err = NewHostPromotion(reopened).Rollback(t.Context())
+			_, err = RecoverTransaction(t.Context(), TransactionConfig{Dir: dir})
 			if preservedJournal != nil {
 				if err == nil {
 					t.Fatal("invalid recovery journal was accepted")
 				}
-				raw, readErr := os.ReadFile(filepath.Join(store.promotionsDir, "host-transaction.json"))
+				raw, readErr := os.ReadFile(filepath.Join(dir, transactionJournalName))
 				testutil.FailErr(t, "read refused journal", readErr)
 				if !bytes.Equal(raw, preservedJournal) {
 					t.Fatal("invalid recovery journal was mutated")
@@ -130,7 +129,9 @@ func TestHostTransactionRecovery(t *testing.T) {
 				return
 			}
 			testutil.FailErr(t, "recover checkpoint", err)
-			testutil.FailErr(t, "repeat checkpoint recovery", NewHostPromotion(reopened).Rollback(t.Context()))
+			if found, err := RecoverTransaction(t.Context(), TransactionConfig{Dir: dir}); err != nil || found {
+				t.Fatalf("repeat recovery found=%v err=%v", found, err)
+			}
 			body, err := os.ReadFile(filepath.Join(primary, "a.txt"))
 			testutil.FailErr(t, "read original", err)
 			info, err := os.Stat(filepath.Join(primary, "a.txt"))
@@ -151,7 +152,7 @@ func TestHostTransactionRecovery(t *testing.T) {
 			// The old component's applied record must not suppress a subsequent retry.
 			preview, err = reopened.Preview(t.Context(), PreviewRequest{CheckpointID: "checkpoint"})
 			testutil.FailErr(t, "preview retry", err)
-			_, err = NewHostPromotion(reopened).Apply(t.Context(), ApplyRequest{Preview: preview})
+			_, err = promoteAndCommit(t, reopened, ApplyRequest{Preview: preview})
 			testutil.FailErr(t, "retry checkpoint", err)
 			link, err := os.Readlink(filepath.Join(primary, "nested/link"))
 			testutil.FailErr(t, "read retried link", err)
@@ -162,7 +163,7 @@ func TestHostTransactionRecovery(t *testing.T) {
 	}
 }
 
-func publishAndApplyHostCheckpoint(t *testing.T, primary, checkpointID string, mutate func(*layeredfs.Core, func(string) layeredfs.QualifiedPath)) (*Store, PromoterConfig) {
+func publishAndApplyHostCheckpoint(t *testing.T, primary, checkpointID string, mutate func(*layeredfs.Core, func(string) layeredfs.QualifiedPath)) (string, PromoterConfig) {
 	t.Helper()
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID: checkpointID + "-view", BackingDir: t.TempDir(),
@@ -183,12 +184,46 @@ func publishAndApplyHostCheckpoint(t *testing.T, primary, checkpointID string, m
 	testutil.FailErr(t, "promoter", err)
 	preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: checkpointID})
 	testutil.FailErr(t, "preview", err)
-	_, err = NewHostPromotion(promoter).Apply(t.Context(), ApplyRequest{Preview: preview})
+	dir := filepath.Join(t.TempDir(), "tx")
+	txn, err := BeginTransaction(TransactionConfig{Dir: dir, ID: "applied"})
+	testutil.FailErr(t, "begin", err)
+	_, err = txn.ApplyCheckpoint(t.Context(), promoter, ApplyRequest{Preview: preview})
 	testutil.FailErr(t, "apply", err)
-	return store, cfg
+	return dir, cfg
 }
 
-func TestHostTransactionAllHardLinksModifiedPreservesOriginalInode(t *testing.T) {
+var errSimulatedCrash = errors.New("simulated crash")
+
+// crashDuring stops fn where its fault panicked, so nothing after that point runs, as in a process death.
+func crashDuring(t *testing.T, fn func()) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != errSimulatedCrash {
+			t.Fatalf("expected a simulated crash, got %v", r)
+		}
+	}()
+	fn()
+}
+
+// promoteAndCommit runs one complete promotion through the transaction.
+func promoteAndCommit(t *testing.T, promoter *Promoter, req ApplyRequest) (*PromotionJournalRecord, error) {
+	t.Helper()
+	txn, err := BeginTransaction(TransactionConfig{Dir: filepath.Join(t.TempDir(), "tx"), ID: "promotion"})
+	testutil.FailErr(t, "begin", err)
+	rec, err := txn.ApplyCheckpoint(t.Context(), promoter, req)
+	if err != nil {
+		return nil, err
+	}
+	return rec, txn.Commit()
+}
+
+func recoverDir(t *testing.T, dir string) error {
+	t.Helper()
+	_, err := RecoverTransaction(t.Context(), TransactionConfig{Dir: dir})
+	return err
+}
+
+func TestTransactionAllHardLinksModifiedPreservesOriginalInode(t *testing.T) {
 	primary := t.TempDir()
 	pathA := filepath.Join(primary, "a.txt")
 	pathB := filepath.Join(primary, "sub", "b.txt")
@@ -202,16 +237,14 @@ func TestHostTransactionAllHardLinksModifiedPreservesOriginalInode(t *testing.T)
 	origStat, err := heldFD.Stat()
 	testutil.FailErr(t, "stat held fd", err)
 
-	_, cfg := publishAndApplyHostCheckpoint(t, primary, "cp-all-links", func(core *layeredfs.Core, qp func(string) layeredfs.QualifiedPath) {
+	dir, _ := publishAndApplyHostCheckpoint(t, primary, "cp-all-links", func(core *layeredfs.Core, qp func(string) layeredfs.QualifiedPath) {
 		_, err := core.WriteFile(qp("a.txt"), []byte("worker-a\n"), 0o644)
 		testutil.FailErr(t, "edit a.txt", err)
 		_, err = core.WriteFile(qp("sub/b.txt"), []byte("worker-b\n"), 0o644)
 		testutil.FailErr(t, "edit sub/b.txt", err)
 	})
 
-	reopened, err := NewPromoter(cfg)
-	testutil.FailErr(t, "reopen", err)
-	testutil.FailErr(t, "rollback", NewHostPromotion(reopened).Rollback(t.Context()))
+	testutil.FailErr(t, "rollback", recoverDir(t, dir))
 
 	infoA, err := os.Stat(pathA)
 	testutil.FailErr(t, "stat restored a.txt", err)
@@ -222,14 +255,14 @@ func TestHostTransactionAllHardLinksModifiedPreservesOriginalInode(t *testing.T)
 	}
 }
 
-func TestHostTransactionAliasMutationRefusesRollback(t *testing.T) {
+func TestTransactionAliasMutationRefusesRollback(t *testing.T) {
 	primary := t.TempDir()
 	pathA := filepath.Join(primary, "a.txt")
 	pathB := filepath.Join(primary, "b.txt")
 	testutil.FailErr(t, "seed a.txt", os.WriteFile(pathA, []byte("shared-v1\n"), 0o640))
 	testutil.FailErr(t, "link b.txt", os.Link(pathA, pathB))
 
-	_, cfg := publishAndApplyHostCheckpoint(t, primary, "cp-alias-div", func(core *layeredfs.Core, qp func(string) layeredfs.QualifiedPath) {
+	dir, _ := publishAndApplyHostCheckpoint(t, primary, "cp-alias-div", func(core *layeredfs.Core, qp func(string) layeredfs.QualifiedPath) {
 		_, err := core.WriteFile(qp("a.txt"), []byte("worker-a\n"), 0o640)
 		testutil.FailErr(t, "edit a.txt", err)
 	})
@@ -241,14 +274,12 @@ func TestHostTransactionAliasMutationRefusesRollback(t *testing.T) {
 	testutil.FailErr(t, "write b.txt", err)
 	testutil.FailErr(t, "close b.txt", fB.Close())
 
-	reopened, err := NewPromoter(cfg)
-	testutil.FailErr(t, "reopen", err)
-	if err := NewHostPromotion(reopened).Rollback(t.Context()); err == nil {
+	if err := recoverDir(t, dir); err == nil {
 		t.Fatal("expected rollback to refuse when retained inode was mutated via external hard-link alias")
 	}
 }
 
-func TestHostTransactionPostimageSidecarsFoldOrRefuse(t *testing.T) {
+func TestTransactionPostimageSidecarsFoldOrRefuse(t *testing.T) {
 	primary := t.TempDir()
 	pathA := filepath.Join(primary, "a.txt")
 	testutil.FailErr(t, "seed a.txt", os.WriteFile(pathA, []byte("orig-single\n"), 0o640))
@@ -258,12 +289,12 @@ func TestHostTransactionPostimageSidecarsFoldOrRefuse(t *testing.T) {
 	origStat, err := heldFD.Stat()
 	testutil.FailErr(t, "stat held fd", err)
 
-	store, cfg := publishAndApplyHostCheckpoint(t, primary, "cp-sidecar", func(core *layeredfs.Core, qp func(string) layeredfs.QualifiedPath) {
+	dir, cfg := publishAndApplyHostCheckpoint(t, primary, "cp-sidecar", func(core *layeredfs.Core, qp func(string) layeredfs.QualifiedPath) {
 		_, err := core.WriteFile(qp("a.txt"), []byte("worker-single\n"), 0o640)
 		testutil.FailErr(t, "edit a.txt", err)
 	})
-	postDir := filepath.Join(store.promotionsDir, "host-postimages")
-	retDir := filepath.Join(store.promotionsDir, "host-retained")
+	postDir := filepath.Join(dir, "postimages")
+	retDir := filepath.Join(dir, "retained")
 	testutil.FailErr(t, "mkdir postimages", os.MkdirAll(postDir, 0o700))
 	sidecarPath := filepath.Join(postDir, "target-000000.json")
 	qpA := layeredfs.QualifiedPath{RootID: "primary", Rel: "a.txt"}
@@ -274,28 +305,23 @@ func TestHostTransactionPostimageSidecarsFoldOrRefuse(t *testing.T) {
 		body string
 		want error
 	}{
-		{name: "foreign worker", file: sidecarPath, body: `{"version":1,"checkpoint_id":"cp-sidecar","worker_id":"other","index":0,"path":{"root_id":"primary","rel":"a.txt"}}`, want: ErrOwnershipMismatch},
-		{name: "foreign checkpoint", file: sidecarPath, body: `{"version":1,"checkpoint_id":"other-cp","worker_id":"w1","index":0,"path":{"root_id":"primary","rel":"a.txt"}}`, want: ErrInvalidManifest},
-		{name: "mismatched path", file: sidecarPath, body: `{"version":1,"checkpoint_id":"cp-sidecar","worker_id":"w1","index":0,"path":{"root_id":"primary","rel":"other.txt"}}`, want: ErrInvalidManifest},
-		{name: "unknown field", file: sidecarPath, body: `{"version":1,"checkpoint_id":"cp-sidecar","worker_id":"w1","index":0,"path":{"root_id":"primary","rel":"a.txt"},"extra":true}`, want: ErrInvalidManifest},
+		{name: "foreign transaction", file: sidecarPath, body: `{"version":1,"transaction_id":"other","index":0,"path":{"root_id":"primary","rel":"a.txt"}}`, want: ErrInvalidManifest},
+		{name: "mismatched path", file: sidecarPath, body: `{"version":1,"transaction_id":"applied","index":0,"path":{"root_id":"primary","rel":"other.txt"}}`, want: ErrInvalidManifest},
+		{name: "unknown field", file: sidecarPath, body: `{"version":1,"transaction_id":"applied","index":0,"path":{"root_id":"primary","rel":"a.txt"},"extra":true}`, want: ErrInvalidManifest},
 		{name: "unexpected filename", file: filepath.Join(postDir, "stale.txt"), body: `{}`, want: ErrInvalidManifest},
 	} {
 		testutil.FailErr(t, badSidecar.name+" write", os.WriteFile(badSidecar.file, []byte(badSidecar.body), 0o600))
-		reopened, rErr := NewPromoter(cfg)
-		testutil.FailErr(t, "reopen", rErr)
-		err := NewHostPromotion(reopened).Rollback(t.Context())
+		err := recoverDir(t, dir)
 		_ = os.Remove(badSidecar.file)
 		if !errors.Is(err, badSidecar.want) {
 			t.Fatalf("%s: Rollback err = %v, want %v", badSidecar.name, err, badSidecar.want)
 		}
 	}
 
-	// Foreign entry in host-retained must be refused.
+	// Foreign entry in the retained slots must be refused.
 	foreignSlot := filepath.Join(retDir, "slot-999999")
 	testutil.FailErr(t, "write foreign slot", os.WriteFile(foreignSlot, []byte("orig-single\n"), 0o600))
-	reopened, err := NewPromoter(cfg)
-	testutil.FailErr(t, "reopen", err)
-	if err := NewHostPromotion(reopened).Rollback(t.Context()); !errors.Is(err, ErrInvalidManifest) {
+	if err := recoverDir(t, dir); !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("foreign retained slot: err = %v, want ErrInvalidManifest", err)
 	}
 	testutil.FailErr(t, "remove foreign slot", os.Remove(foreignSlot))
@@ -306,11 +332,11 @@ func TestHostTransactionPostimageSidecarsFoldOrRefuse(t *testing.T) {
 	curXattrs, err := readFileXattrs(fA)
 	_ = fA.Close()
 	testutil.FailErr(t, "read promoted xattrs", err)
-	validRaw, err := json.Marshal(hostPostimageRecord{Version: 1, CheckpointID: "cp-sidecar", WorkerID: "w1", Index: 0, Path: qpA, Xattrs: curXattrs})
+	validRaw, err := json.Marshal(postimageRecord{Version: 1, TransactionID: "applied", Index: 0, Path: qpA, Xattrs: curXattrs})
 	testutil.FailErr(t, "marshal valid sidecar", err)
 	testutil.FailErr(t, "write valid sidecar", os.WriteFile(sidecarPath, validRaw, 0o600))
 
-	testutil.FailErr(t, "rollback with valid sidecar", NewHostPromotion(reopened).Rollback(t.Context()))
+	testutil.FailErr(t, "rollback with valid sidecar", recoverDir(t, dir))
 	restoredStat, err := os.Stat(pathA)
 	testutil.FailErr(t, "stat restored a.txt", err)
 	if !os.SameFile(restoredStat, origStat) {
@@ -318,23 +344,27 @@ func TestHostTransactionPostimageSidecarsFoldOrRefuse(t *testing.T) {
 	}
 
 	// Re-apply and verify that replacing or deleting the retained slot refuses rollback.
+	reopened, err := NewPromoter(cfg)
+	testutil.FailErr(t, "reopen", err)
 	preview, err := reopened.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-sidecar"})
 	testutil.FailErr(t, "preview reapply", err)
-	_, err = NewHostPromotion(reopened).Apply(t.Context(), ApplyRequest{Preview: preview})
+	txn, err := BeginTransaction(TransactionConfig{Dir: dir, ID: "applied"})
+	testutil.FailErr(t, "begin again", err)
+	_, err = txn.ApplyCheckpoint(t.Context(), reopened, ApplyRequest{Preview: preview})
 	testutil.FailErr(t, "reapply", err)
 	slot0 := filepath.Join(retDir, "slot-000000")
 	testutil.FailErr(t, "remove slot-000000", os.Remove(slot0))
 	testutil.FailErr(t, "recreate slot-000000 fresh inode", os.WriteFile(slot0, []byte("orig-single\n"), 0o640))
-	if err := NewHostPromotion(reopened).Rollback(t.Context()); err == nil {
+	if err := recoverDir(t, dir); err == nil {
 		t.Fatal("expected rollback to refuse replaced retained slot with fresh inode")
 	}
 	testutil.FailErr(t, "delete slot-000000", os.Remove(slot0))
-	if err := NewHostPromotion(reopened).Rollback(t.Context()); err == nil {
+	if err := recoverDir(t, dir); err == nil {
 		t.Fatal("expected rollback to refuse missing retained slot")
 	}
 }
 
-func TestHostTransactionReadonlyDirectoryRecoveryAndStoreIDs(t *testing.T) {
+func TestTransactionReadonlyDirectoryRecoveryAndStoreIDs(t *testing.T) {
 	primary := t.TempDir()
 	roDir := filepath.Join(primary, "rodir")
 	roChild := filepath.Join(roDir, "child.txt")
@@ -343,7 +373,7 @@ func TestHostTransactionReadonlyDirectoryRecoveryAndStoreIDs(t *testing.T) {
 	testutil.FailErr(t, "chmod rodir 0500", os.Chmod(roDir, 0o500))
 	t.Cleanup(func() { _ = os.Chmod(roDir, 0o700) })
 
-	store, cfg := publishAndApplyHostCheckpoint(t, primary, "cp-ro-dir", func(core *layeredfs.Core, qp func(string) layeredfs.QualifiedPath) {
+	dir, cfg := publishAndApplyHostCheckpoint(t, primary, "cp-ro-dir", func(core *layeredfs.Core, qp func(string) layeredfs.QualifiedPath) {
 		_, err := core.Chmod(qp("rodir"), 0o755)
 		testutil.FailErr(t, "chmod rodir in view", err)
 		_, err = core.WriteFile(qp("rodir/child.txt"), []byte("after\n"), 0o640)
@@ -351,6 +381,7 @@ func TestHostTransactionReadonlyDirectoryRecoveryAndStoreIDs(t *testing.T) {
 		_, err = core.WriteFile(qp("rodir/added.txt"), []byte("added\n"), 0o640)
 		testutil.FailErr(t, "write rodir/added.txt", err)
 	})
+	store := cfg.Store
 	if _, err := store.LoadManifest("../escape"); !errors.Is(err, ErrInvalidManifest) {
 		t.Fatalf("expected ErrInvalidManifest for traversal checkpoint ID, got %v", err)
 	}
@@ -361,9 +392,7 @@ func TestHostTransactionReadonlyDirectoryRecoveryAndStoreIDs(t *testing.T) {
 		t.Fatalf("expected ErrInvalidManifest for traversal tx ID, got %v", err)
 	}
 
-	reopened, err := NewPromoter(cfg)
-	testutil.FailErr(t, "reopen", err)
-	testutil.FailErr(t, "rollback readonly dir", NewHostPromotion(reopened).Rollback(t.Context()))
+	testutil.FailErr(t, "rollback readonly dir", recoverDir(t, dir))
 
 	dirInfo, err := os.Stat(roDir)
 	testutil.FailErr(t, "stat restored rodir", err)
@@ -377,5 +406,31 @@ func TestHostTransactionReadonlyDirectoryRecoveryAndStoreIDs(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(roDir, "added.txt")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected added.txt removed from rodir, err = %v", err)
+	}
+}
+
+// A promotion stages beside the target, where a watcher can see it, so it must read as staging.
+func TestTransactionStagingIsInvisibleToObservers(t *testing.T) {
+	primary := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "tx")
+	txn, err := BeginTransaction(TransactionConfig{Dir: dir, ID: "staging"})
+	testutil.FailErr(t, "begin", err)
+	seen := 0
+	roots := map[string]string{"primary": primary}
+	testutil.FailErr(t, "add roots", txn.addRoots(roots))
+	txn.targets.recordPostimage = func(_ layeredfs.QualifiedPath, file *os.File) error {
+		seen++
+		if !fseffect.IsStaging(primary, filepath.Base(file.Name())) {
+			t.Fatalf("staged %s is visible to observers", file.Name())
+		}
+		return nil
+	}
+	root, err := txn.targets.openTargetRoot("primary")
+	testutil.FailErr(t, "open root", err)
+	defer func() { _ = root.Close() }()
+	change := PlannedChange{Path: layeredfs.QualifiedPath{RootID: "primary", Rel: "a.txt"}, Action: ActionWriteRegular, MergedBytes: []byte("a\n")}
+	testutil.FailErr(t, "write", txn.targets.writeTargetRegular(root, change))
+	if seen != 1 {
+		t.Fatalf("staged %d times", seen)
 	}
 }

@@ -23,7 +23,7 @@ func createBranch(t *testing.T, mgr *workspace.Manager, jobID string) (string, s
 	project := t.TempDir()
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(project, "main.go"), []byte("package main\n"), 0o644))
 	roots := []projectroot.RootRef{{ID: "primary", Path: project, IsPrimary: true}}
-	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "primary", jobID)
+	binding, _, err := mgr.CreateWorkerBranch(context.Background(), roots, "primary", jobID)
 	testutil.FailErr(t, "create branch", err)
 	return project, binding.Root
 }

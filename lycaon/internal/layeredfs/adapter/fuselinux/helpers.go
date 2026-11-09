@@ -5,9 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
-	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -150,68 +147,16 @@ func (a *Adapter) syncClientPath(ctx context.Context, mountRoot, targetPath stri
 	return mode.IsDir(), true, nil
 }
 
-func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) ([]string, error) {
-	relSet := map[string]struct{}{".": {}}
-	addRel := func(rel string) {
-		cur := cleanFuseRel(rel)
-		for cur != "" && cur != "." {
-			relSet[cur] = struct{}{}
-			parent := path.Dir(cur)
-			if parent == cur {
-				break
-			}
-			cur = cleanFuseRel(parent)
-		}
-		relSet["."] = struct{}{}
-	}
-	if st.core != nil {
-		changes, err := st.core.EnumerateChanges(false)
-		if err != nil {
-			return nil, err
-		}
-		for _, ce := range changes {
-			if ce.Path.RootID != rootID {
-				continue
-			}
-			if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
-				addRel(path.Dir(cleanFuseRel(ce.Path.Rel)))
-				continue
-			}
-			if ce.Kind != layeredfs.EntrySymlink {
-				addRel(ce.Path.Rel)
-			}
-		}
-	}
-	if m.server != nil {
-		for _, r := range m.server.nodes.dirtyCandidatePaths() {
-			addRel(r)
-		}
-	}
-	st.dirtyMu.Lock()
-	for r := range st.dirtyPaths[rootID] {
-		addRel(r)
-	}
-	st.dirtyMu.Unlock()
-
-	rels := make([]string, 0, len(relSet))
-	for r := range relSet {
-		if r != "." {
-			rels = append(rels, r)
-		}
-	}
-	sort.Strings(rels)
-	out := make([]string, 0, len(rels)+1)
-	for _, r := range rels {
-		out = append(out, filepath.Join(m.mountPath, filepath.FromSlash(r)))
-	}
-	out = append(out, m.mountPath)
-	return out, nil
-}
-
 func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootID string, m *rootMount) (filesSynced, dirsSynced int, err error) {
 	paths, err := collectBoundedFlushPaths(st, rootID, m)
 	if err != nil {
 		return 0, 0, err
+	}
+	a.mu.RLock()
+	fn := a.cfg.ClientSyncFn
+	a.mu.RUnlock()
+	if fn == nil {
+		return runFuseBarrierFlushSubprocess(ctx, a, st, m.mountPath, paths)
 	}
 	for _, p := range paths {
 		isDir, synced, sErr := a.syncClientPath(ctx, m.mountPath, p)

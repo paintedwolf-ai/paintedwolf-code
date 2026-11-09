@@ -123,7 +123,7 @@ func TestExactBaseScenariosAndThreeWayPromotion(t *testing.T) {
 	}
 
 	// Apply preview and verify target state.
-	rec, err := promoter.Apply(context.Background(), ApplyRequest{
+	rec, err := promoteAndCommit(t, promoter, ApplyRequest{
 		TransactionID: "tx-scenarios",
 		Preview:       preview1,
 	})
@@ -222,14 +222,9 @@ func TestAmbiguousCandidateBasesStaleTargetAndRetryIdempotency(t *testing.T) {
 	})
 	testutil.FailErr(t, "Publish chk-ambig", err)
 
-	refImports := 0
 	promoter, err := NewPromoter(PromoterConfig{
 		Store:       store,
 		TargetRoots: map[string]string{"primary": trunk},
-		RefImporter: func(_ context.Context, _, workerID string, git PrivateGitSnapshot) (map[string]string, error) {
-			refImports++
-			return map[string]string{"refs/lycaon/workers/" + workerID + "/heads/main": git.Refs["refs/heads/main"]}, nil
-		},
 	})
 	testutil.FailErr(t, "NewPromoter", err)
 
@@ -251,11 +246,11 @@ func TestAmbiguousCandidateBasesStaleTargetAndRetryIdempotency(t *testing.T) {
 	testutil.FailErr(t, "Preview resolved", err)
 
 	testutil.FailErr(t, "mutate target behind preview", os.WriteFile(filepath.Join(trunk, "ambig.txt"), []byte("concurrent-target-change\n"), 0o644))
-	if _, err := promoter.Apply(context.Background(), ApplyRequest{Preview: prevResolved}); !errors.Is(err, ErrStalePreviewTargetChanged) {
+	if _, err := promoteAndCommit(t, promoter, ApplyRequest{Preview: prevResolved}); !errors.Is(err, ErrStalePreviewTargetChanged) {
 		t.Fatalf("expected ErrStalePreviewTargetChanged, got %v", err)
 	}
 
-	// 3. Renew preview on updated target, interrupt Apply after file promotion before ref import, then retry.
+	// 3. Renew preview on updated target. A fault before ref import restores the target, and a retry applies once.
 	prevRenewed, err := promoter.Preview(context.Background(), PreviewRequest{
 		CheckpointID: "chk-ambig",
 		Resolutions: map[layeredfs.QualifiedPath]ConflictResolution{
@@ -264,44 +259,43 @@ func TestAmbiguousCandidateBasesStaleTargetAndRetryIdempotency(t *testing.T) {
 	})
 	testutil.FailErr(t, "Preview renewed", err)
 
-	_, err = promoter.Apply(context.Background(), ApplyRequest{
+	interrupted := errors.New("interrupted before ref import")
+	_, err = promoteAndCommit(t, promoter, ApplyRequest{
 		TransactionID: "tx-retry-1",
 		Preview:       prevRenewed,
-		ImportGitRefs: true,
 		FaultInjector: func(stage ApplyFaultStage) error {
 			if stage == ApplyFaultAfterFilesBeforeRefs {
-				return errors.New("interrupted before ref import")
+				return interrupted
 			}
 			return nil
 		},
 	})
-	if err == nil {
-		t.Fatal("expected interruption error")
+	if !errors.Is(err, interrupted) {
+		t.Fatalf("expected interruption, got %v", err)
 	}
-	if refImports != 0 {
-		t.Fatalf("expected 0 ref imports before fault, got %d", refImports)
+	restored, err := os.ReadFile(filepath.Join(trunk, "ambig.txt"))
+	testutil.FailErr(t, "read restored target", err)
+	if string(restored) != "concurrent-target-change\n" {
+		t.Fatalf("failed promotion left target %q", restored)
+	}
+	if _, found, err := store.LoadPromotionRecord("tx-retry-1"); err != nil || found {
+		t.Fatalf("failed promotion left a record: found=%v err=%v", found, err)
 	}
 
-	// Retry resumes transaction without re-applying file changes and imports refs exactly once.
-	rec, err := promoter.Apply(context.Background(), ApplyRequest{
-		TransactionID: "tx-retry-1",
-		Preview:       prevRenewed,
-		ImportGitRefs: true,
-	})
+	rec, err := promoteAndCommit(t, promoter, ApplyRequest{TransactionID: "tx-retry-1", Preview: prevRenewed})
 	testutil.FailErr(t, "Apply retry", err)
-	if rec.State != PromotionStateApplied || rec.RefImportStatus != EffectCompleted || refImports != 1 {
-		t.Fatalf("unexpected retry state: rec=%+v refImports=%d", rec, refImports)
+	if rec.State != PromotionStateApplied {
+		t.Fatalf("unexpected retry state: rec=%+v", rec)
 	}
 
-	// Second retry is a complete idempotent no-op.
-	_, err = promoter.Apply(context.Background(), ApplyRequest{
-		TransactionID: "tx-retry-1",
-		Preview:       prevRenewed,
-		ImportGitRefs: true,
-	})
+	// A recorded promotion is a complete no-op, whatever the target holds now.
+	testutil.FailErr(t, "edit after landing", os.WriteFile(filepath.Join(trunk, "ambig.txt"), []byte("later\n"), 0o644))
+	_, err = promoteAndCommit(t, promoter, ApplyRequest{TransactionID: "tx-retry-1", Preview: prevRenewed})
 	testutil.FailErr(t, "Apply idempotent second retry", err)
-	if refImports != 1 {
-		t.Fatalf("expected refImports to remain 1 on idempotent retry, got %d", refImports)
+	after, err := os.ReadFile(filepath.Join(trunk, "ambig.txt"))
+	testutil.FailErr(t, "read after idempotent retry", err)
+	if string(after) != "later\n" {
+		t.Fatalf("idempotent retry changed target: %q", after)
 	}
 
 	// Rejected checkpoints remain available in the store.

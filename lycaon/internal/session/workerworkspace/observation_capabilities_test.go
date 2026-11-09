@@ -104,14 +104,13 @@ func TestOrdinaryWorkspacePreparationSuppliesEagerCopyFactsWithoutTestInjection(
 
 	// Prepare workspace through ordinary workspace.Manager (selects eagercopy fallback when no mounted helper is active).
 	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds"))
-	binding, layout, err := wsMgr.CreateWorkerWorkspaceFromSources(
+	binding, layout, err := wsMgr.CreateWorkerBranch(
 		ctx,
-		[]projectroot.RootRef{{ID: "primary", Path: trunkDir, IsPrimary: true}},
 		[]projectroot.RootRef{{ID: "primary", Path: trunkDir, IsPrimary: true}},
 		"primary",
 		"job-prod-eager",
 	)
-	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
+	testutil.FailErr(t, "CreateWorkerBranch", err)
 	t.Cleanup(func() { _ = wsMgr.DestroyWorkerWorkspace(binding) })
 
 	// Construct production workerworkspace.Service and call EnsureTracker / ObserveReadWithFacts
@@ -206,14 +205,13 @@ func TestOrdinaryWorkspacePreparationSuppliesMountedPartialAttributionFactsWitho
 	selector.Confinement = fixtureConfinement{}
 	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds")).WithSelector(selector)
 
-	binding, layout, err := wsMgr.CreateWorkerWorkspaceFromSources(
+	binding, layout, err := wsMgr.CreateWorkerBranch(
 		ctx,
-		[]projectroot.RootRef{{ID: "primary", Path: trunkDir, IsPrimary: true}},
 		[]projectroot.RootRef{{ID: "primary", Path: trunkDir, IsPrimary: true}},
 		"primary",
 		"job-prod-nfs",
 	)
-	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources mounted", err)
+	testutil.FailErr(t, "CreateWorkerBranch mounted", err)
 	t.Cleanup(func() { _ = wsMgr.DestroyWorkerWorkspace(binding) })
 
 	// Construct production workerworkspace.Service and record observations WITHOUT any test-only capability injection.

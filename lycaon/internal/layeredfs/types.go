@@ -93,6 +93,13 @@ type LowerProvider interface {
 	ListXattr(rel string) (map[string][]byte, error)
 }
 
+// MutableGitProvider is an optional LowerProvider capability exposed by privategit
+// so Core mutations under .git operate directly on the view's private Git directory.
+type MutableGitProvider interface {
+	LowerProvider
+	ResolveMutableGitTarget(rel string) (hostPath string, isRepoRoot bool, ok bool, err error)
+}
+
 type ReadSeekCloser interface {
 	Read([]byte) (int, error)
 	ReadAt([]byte, int64) (int, error)
@@ -244,6 +251,7 @@ type Stats struct {
 	LogicalChanges    int64
 	CapturedBaseBytes int64
 	JournalEntries    int64
+	Flushes           int64
 }
 
 type OpenFlags int

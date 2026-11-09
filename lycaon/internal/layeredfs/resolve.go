@@ -234,14 +234,39 @@ func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, err
 	if nodeID, ok := c.state.pathIndex[qpath]; ok {
 		node := c.state.nodesByID[nodeID]
 		if node != nil && !node.flags.unlinked {
-			attr := nodeToAttrLocked(node)
-			c.mu.RUnlock()
-			return resolvedLayerEntry{
-				qpath:    qpath,
-				layer:    LayerPrivate,
-				attr:     attr,
-				privNode: node,
-			}, nil
+			if node.flags.gitHostPath != "" {
+				c.mu.RUnlock()
+				c.mu.Lock()
+				if c.state.released {
+					c.mu.Unlock()
+					return resolvedLayerEntry{}, ErrViewReleased
+				}
+				if curID, stillOK := c.state.pathIndex[qpath]; stillOK {
+					if curNode := c.state.nodesByID[curID]; curNode != nil && !curNode.flags.unlinked {
+						if refreshMutableGitNodeLocked(c, qpath, curNode) {
+							attr := nodeToAttrLocked(curNode)
+							c.mu.Unlock()
+							return resolvedLayerEntry{
+								qpath:    qpath,
+								layer:    LayerPrivate,
+								attr:     attr,
+								privNode: curNode,
+							}, nil
+						}
+					}
+				}
+				c.mu.Unlock()
+				c.mu.RLock()
+			} else {
+				attr := nodeToAttrLocked(node)
+				c.mu.RUnlock()
+				return resolvedLayerEntry{
+					qpath:    qpath,
+					layer:    LayerPrivate,
+					attr:     attr,
+					privNode: node,
+				}, nil
+			}
 		}
 	}
 	if isMaskedByPrivateDeletionOrReplacementLocked(c, qpath) {

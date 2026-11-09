@@ -14,15 +14,19 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-type hostRootIdentity struct {
+type rootIdentity struct {
 	Path     string `json:"path"`
 	Identity string `json:"identity"`
 }
 
-func (host *HostPromotion) hostRootIdentities() (map[string]hostRootIdentity, error) {
-	roots := make(map[string]hostRootIdentity, len(host.targets.roots))
-	for id, path := range host.targets.roots {
-		root, err := host.targets.openTargetRoot(id)
+func (txn *Transaction) rootIdentities() (map[string]rootIdentity, error) {
+	return identifyRoots(txn.targets)
+}
+
+func identifyRoots(targets *promotionTargets) (map[string]rootIdentity, error) {
+	roots := make(map[string]rootIdentity, len(targets.roots))
+	for id, path := range targets.roots {
+		root, err := targets.openTargetRoot(id)
 		if err != nil {
 			return nil, err
 		}
@@ -47,40 +51,46 @@ func (host *HostPromotion) hostRootIdentities() (map[string]hostRootIdentity, er
 		if !os.SameFile(held, current) {
 			return nil, ErrStalePreviewTargetChanged
 		}
-		roots[id] = hostRootIdentity{Path: absolute, Identity: identity}
+		roots[id] = rootIdentity{Path: absolute, Identity: identity}
 	}
 	return roots, nil
 }
 
-// sameHostRoot tolerates a device number that a restart moved.
-func sameHostRoot(live, recorded hostRootIdentity) bool {
+// sameRoot tolerates a device number that a restart moved.
+func sameRoot(live, recorded rootIdentity) bool {
 	return live.Path == recorded.Path && fspath.SameEntryAcrossRestart(recorded.Identity, live.Identity)
 }
 
-func hostComponent(id string) bool {
+func safeComponent(id string) bool {
 	return id != "" && id != "." && id != ".." && filepath.IsLocal(id) && filepath.Base(id) == id && !strings.ContainsAny(id, `/\`)
 }
 
-func (host *HostPromotion) validateHostTransaction(tx hostTransaction) error {
-	if tx.Version != 1 || !hostComponent(tx.CheckpointID) || !hostComponent(tx.WorkerID) {
+// validateJournal refuses any record no build writes, before recovery touches a target.
+func (txn *Transaction) validateJournal(tx transactionJournal) error {
+	if tx.Version != transactionVersion || !safeComponent(tx.ID) {
 		return ErrInvalidManifest
 	}
-	roots, err := host.hostRootIdentities()
+	if tx.Phase != transactionPhasePrepared && tx.Phase != transactionPhaseApplying {
+		return ErrInvalidManifest
+	}
+	recorded := make(map[string]string, len(tx.Roots))
+	for id, root := range tx.Roots {
+		recorded[id] = root.Path
+	}
+	roots, err := identifyRoots(&promotionTargets{roots: recorded})
 	if err != nil {
 		return err
 	}
-	if !maps.EqualFunc(roots, tx.Roots, sameHostRoot) {
+	if !maps.EqualFunc(roots, tx.Roots, sameRoot) {
 		return fmt.Errorf("checkpoint: recovery target roots changed")
 	}
-	m, err := host.store.LoadManifest(tx.CheckpointID)
-	if err != nil {
-		return err
-	}
-	if tx.WorkerID != m.WorkerID {
-		return ErrOwnershipMismatch
+	for _, record := range tx.Records {
+		if !filepath.IsAbs(record) {
+			return ErrInvalidManifest
+		}
 	}
 	seen := map[layeredfs.QualifiedPath]bool{}
-	byPath := make(map[layeredfs.QualifiedPath]hostTargetUndo, len(tx.Targets))
+	byPath := make(map[layeredfs.QualifiedPath]targetUndo, len(tx.Targets))
 	for _, target := range tx.Targets {
 		if !filepath.IsLocal(target.Path.Rel) || target.Path.Rel == "." || seen[target.Path] {
 			return ErrInvalidManifest
@@ -89,11 +99,16 @@ func (host *HostPromotion) validateHostTransaction(tx hostTransaction) error {
 			return ErrInvalidManifest
 		}
 		seen[target.Path] = true
-		if !validHostImage(target.Before) || !validHostImage(target.After) {
+		if !validImage(target.Before) || !validImage(target.After) {
 			return ErrInvalidManifest
 		}
 		if target.After.HardLinkSource != nil || target.After.HardLinkGroup != "" || target.After.RetainedSlot != "" {
 			return ErrInvalidManifest
+		}
+		for _, prior := range target.Prior {
+			if !validImage(prior) {
+				return ErrInvalidManifest
+			}
 		}
 		byPath[target.Path] = target
 	}
@@ -103,36 +118,73 @@ func (host *HostPromotion) validateHostTransaction(tx hostTransaction) error {
 			continue
 		}
 		original, known := byPath[*source]
-		if !known || *source == target.Path || source.RootID != target.Path.RootID || original.Before.HardLinkSource != nil || !sameHostTarget(original.Before, target.Before) {
+		if !known || *source == target.Path || source.RootID != target.Path.RootID || original.Before.HardLinkSource != nil || !sameTarget(original.Before, target.Before) {
 			return ErrInvalidManifest
 		}
+	}
+	return validateJournalRefs(tx)
+}
+
+// validateJournalRefs binds recorded ref undo to the checkpoint that names those refs.
+func validateJournalRefs(tx transactionJournal) error {
+	if tx.Checkpoint == nil {
+		if len(tx.Refs) != 0 {
+			return ErrInvalidManifest
+		}
+		return nil
+	}
+	if !safeComponent(tx.Checkpoint.ID) || !safeComponent(tx.Checkpoint.WorkerID) || !filepath.IsAbs(tx.Checkpoint.StoreDir) {
+		return ErrInvalidManifest
+	}
+	store, err := NewStore(tx.Checkpoint.StoreDir)
+	if err != nil {
+		return err
+	}
+	m, err := store.LoadManifest(tx.Checkpoint.ID)
+	if err != nil {
+		return err
+	}
+	if tx.Checkpoint.WorkerID != m.WorkerID {
+		return ErrOwnershipMismatch
+	}
+	if len(tx.Refs) == 0 {
+		return nil
 	}
 	allowed := map[string]string{}
-	for name, oid := range m.PrivateGit.Refs {
-		suffix, err := ValidateGitRefName(name)
-		if err != nil {
+	addAllowed := func(rootID string, named map[string]string) error {
+		for name, oid := range named {
+			suffix, err := ValidateGitRefName(name)
+			if err != nil {
+				return err
+			}
+			clean := strings.ToLower(strings.TrimSpace(oid))
+			allowed[rootID+"\x00refs/lycaon/workers/"+m.WorkerID+"/"+suffix] = clean
+			allowed[rootID+"\x00refs/lycaon/checkpoints/"+m.CheckpointID+"/"+suffix] = clean
+		}
+		return nil
+	}
+	if err := addAllowed(tx.Checkpoint.PrimaryRootID, m.PrivateGit.Refs); err != nil {
+		return err
+	}
+	for rootID, root := range m.PrivateGit.Roots {
+		if err := addAllowed(rootID, root.Refs); err != nil {
 			return err
 		}
-		allowed["refs/lycaon/workers/"+m.WorkerID+"/"+suffix] = strings.ToLower(strings.TrimSpace(oid))
-		allowed["refs/lycaon/checkpoints/"+m.CheckpointID+"/"+suffix] = strings.ToLower(strings.TrimSpace(oid))
 	}
 	for _, ref := range tx.Refs {
-		if allowed[ref.Name] != ref.After || !isHexOID(ref.After) || (ref.Before != "" && ref.Before != ref.After) {
+		key := ref.RootID + "\x00" + ref.Name
+		if _, known := tx.Roots[ref.RootID]; !known || allowed[key] != ref.After || !isHexOID(ref.After) || (ref.Before != "" && ref.Before != ref.After) {
 			return ErrInvalidManifest
 		}
-		delete(allowed, ref.Name)
-	}
-	if len(allowed) != 0 {
-		return ErrInvalidManifest
 	}
 	return nil
 }
 
-func validHostImage(image hostTargetImage) bool {
+func validImage(image targetImage) bool {
 	if image.Size < 0 || image.Mode != image.Mode.Perm() {
 		return false
 	}
-	if image.RetainedSlot != "" && !hostComponent(image.RetainedSlot) {
+	if image.RetainedSlot != "" && !safeComponent(image.RetainedSlot) {
 		return false
 	}
 	if strings.ContainsAny(image.HardLinkGroup, "/\\\x00") {
@@ -153,7 +205,7 @@ func validHostImage(image hostTargetImage) bool {
 	}
 }
 
-func sameHostTarget(a, b hostTargetImage) bool {
+func sameTarget(a, b targetImage) bool {
 	if a.Kind == "" {
 		a.Kind = layeredfs.EntryAbsent
 	}
@@ -163,30 +215,33 @@ func sameHostTarget(a, b hostTargetImage) bool {
 	return a.Kind == b.Kind && a.Mode == b.Mode && a.SHA256 == b.SHA256 && a.Size == b.Size && a.LinkTarget == b.LinkTarget && maps.EqualFunc(a.Xattrs, b.Xattrs, bytes.Equal)
 }
 
-func (host *HostPromotion) validateHostTargets(tx hostTransaction) error {
+func (txn *Transaction) validateTargets(tx transactionJournal) error {
 	targets := tx.Targets
-	known := map[layeredfs.QualifiedPath]hostTargetImage{}
+	known := map[layeredfs.QualifiedPath]targetImage{}
 	expectedSlots := map[string]bool{}
 	for _, target := range targets {
 		if !filepath.IsLocal(target.Path.Rel) || target.Path.Rel == "." {
 			return ErrInvalidManifest
 		}
-		if err := host.captureHostTree(target.Path, known); err != nil {
+		if err := txn.captureTree(target.Path, known); err != nil {
 			return err
 		}
-		if err := host.validateRetainedSlot(target.Path, target.Before); err != nil {
+		if err := txn.validateRetainedSlot(target.Path, target.Before); err != nil {
 			return err
 		}
 		if target.Before.RetainedSlot != "" {
 			expectedSlots[target.Before.RetainedSlot] = true
 		}
 	}
-	if err := validateRetainedDirEntries(host.retainedDir(), expectedSlots); err != nil {
+	for _, pending := range tx.PendingSlots {
+		expectedSlots[pending] = true
+	}
+	if err := validateRetainedDirEntries(txn.retainedDir(), expectedSlots); err != nil {
 		return err
 	}
 	for _, target := range targets {
 		current := known[target.Path]
-		if !sameHostTarget(current, target.Before) && !sameHostTarget(current, target.After) {
+		if !target.holds(current) {
 			if tx.RollingBack && target.Before.HardLinkSource != nil && current.Kind == layeredfs.EntryAbsent {
 				delete(known, target.Path)
 				continue

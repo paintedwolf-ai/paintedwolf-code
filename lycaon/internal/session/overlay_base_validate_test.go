@@ -97,6 +97,19 @@ func TestValidateStackedBaseReadScopeRejects(t *testing.T) {
 	}
 }
 
+func TestValidateStackedBaseRefusesARunningWorker(t *testing.T) {
+	lister := &stubWorkerCycleLister{tasks: map[string]*api.WorkerTask{
+		"ov-running": writeTask("ov-running", "sess-1", ""),
+	}}
+	r, err := workeradmission.ValidateStackedBase(
+		context.Background(), lister, "sess-1", "/p",
+		api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"x"}, BaseOverlayID: "ov-running"},
+	)
+	if err != nil || r.Code != workeradmission.OverlayBaseNotPendingCode || r.Data["reason"] != "base_still_running" {
+		t.Fatalf("running base must refuse; got code=%q data=%v err=%v", r.Code, r.Data, err)
+	}
+}
+
 func TestValidateStackedBasePendingAccepts(t *testing.T) {
 	lister := &stubWorkerCycleLister{tasks: map[string]*api.WorkerTask{
 		"ov-parent": writeTask("ov-parent", "sess-1", api.WorkerMergeStatusPending),

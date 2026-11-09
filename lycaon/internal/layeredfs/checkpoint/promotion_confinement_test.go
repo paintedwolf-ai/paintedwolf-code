@@ -44,7 +44,7 @@ func TestPromotionRefusesTargetParentSymlinkEscape(t *testing.T) {
 				preview, err = promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-confinement"})
 			}
 			if err == nil {
-				_, err = promoter.Apply(t.Context(), ApplyRequest{Preview: preview})
+				_, err = promoteAndCommit(t, promoter, ApplyRequest{Preview: preview})
 			}
 			if err == nil {
 				t.Error("promotion accepted a target parent outside its root")

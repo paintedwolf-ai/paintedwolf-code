@@ -3,9 +3,11 @@ package privategit
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -30,39 +32,173 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 	var metrics InitMetrics
 	var addedPaths []string
 	var packNames []string
-
-	rollback := func() {
-		for _, p := range addedPaths {
-			_ = os.Chmod(filepath.Dir(p), 0o755)
-			_ = os.Remove(p)
+	var addedPackBases []string
+	looseAddedSizes := make(map[string]int64)
+	packDstDir := filepath.Join(s.objectsDir, "pack")
+	if err := os.MkdirAll(packDstDir, 0o755); err != nil {
+		return InitMetrics{}, nil, err
+	}
+	if err := finalizeInterruptedPackRetirements(ctx, packDstDir); err != nil {
+		return InitMetrics{}, nil, err
+	}
+	preexistingPackBases := make(map[string]struct{}, len(s.stock.packOIDs))
+	for base := range s.stock.packOIDs {
+		preexistingPackBases[base] = struct{}{}
+	}
+	pEntries, rErr := os.ReadDir(packDstDir)
+	if rErr != nil {
+		return InitMetrics{}, nil, fmt.Errorf("privategit: read store pack dir %s for pre-import provenance: %w", packDstDir, rErr)
+	}
+	hasPrePack := make(map[string]bool)
+	hasPreIdx := make(map[string]bool)
+	for _, pe := range pEntries {
+		if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") {
+			continue
 		}
+		ext := filepath.Ext(pe.Name())
+		base := strings.TrimSuffix(pe.Name(), ext)
+		switch ext {
+		case ".pack":
+			hasPrePack[base] = true
+		case ".idx":
+			hasPreIdx[base] = true
+		}
+	}
+	for base := range hasPrePack {
+		if hasPreIdx[base] {
+			preexistingPackBases[base] = struct{}{}
+		}
+	}
+
+	rollback := func() error {
+		var rbErrs []error
+
+		// S0: Derive ordered unique slice R of newly created pack bases from pre-import transaction provenance:
+		// a base enters R only if it was NOT in preexistingPackBases at the start of this import (so both
+		// partial-pair failures before recordPackLocked and post-recordPackLocked failures on newly created
+		// bases retire as a unit, while a newly added auxiliary .rev companion of a preexisting base is
+		// unlinked individually in S3 without retiring the preexisting .pack/.idx pair).
+		seenBases := make(map[string]struct{}, len(addedPackBases))
+		for _, base := range addedPackBases {
+			if _, preexisted := preexistingPackBases[base]; !preexisted && strings.HasPrefix(base, "pack-") {
+				seenBases[base] = struct{}{}
+			}
+		}
+		for _, p := range addedPaths {
+			if filepath.Dir(p) == packDstDir {
+				ext := filepath.Ext(filepath.Base(p))
+				base := strings.TrimSuffix(filepath.Base(p), ext)
+				if _, preexisted := preexistingPackBases[base]; !preexisted && strings.HasPrefix(base, "pack-") {
+					seenBases[base] = struct{}{}
+				}
+			}
+		}
+		R := make([]string, 0, len(seenBases))
+		for base := range seenBases {
+			R = append(R, base)
+		}
+		sort.Strings(R)
+
+		// Drop in-memory stock entries for R immediately on rollback entry so a live store instance
+		// never advertises unverified candidate objects in HasObject/Metrics/createStoreLease even if
+		// S1 intent publication or Barrier-1 fails before reopen/GC reconciliation.
+		for _, base := range R {
+			removePackLocked(s, base)
+		}
+
+		// S1: Publish recovery intent + Barrier-1 BEFORE any destructive companion unlink.
+		// If any marker write or Barrier-1 directory sync fails, stop immediately with zero unlinks.
+		if len(R) > 0 {
+			_ = os.Chmod(packDstDir, 0o755)
+			for _, base := range R {
+				if err := gcBeforeRollbackMarkerWrite(ctx, packDstDir, base); err != nil {
+					rbErrs = append(rbErrs, fmt.Errorf("rollback interrupted before marker write %s: %w", base, err))
+					return errors.Join(rbErrs...)
+				}
+				if err := writeDurablePackRetirementMarker(packDstDir, base); err != nil {
+					rbErrs = append(rbErrs, fmt.Errorf("stage rollback retirement marker %s: %w", base, err))
+					return errors.Join(rbErrs...)
+				}
+			}
+			if syncErr := syncStoreDirectoryCtx(ctx, packDstDir); syncErr != nil {
+				rbErrs = append(rbErrs, fmt.Errorf("sync rollback retirement intent %s: %w", packDstDir, syncErr))
+				return errors.Join(rbErrs...)
+			}
+		}
+
+		// S3: Unlink newly added loose object files (outside packDstDir) and any newly added
+		// auxiliary companion (e.g. .rev) belonging to a preexisting pack base not in R.
+		needPackDirSync := false
+		for _, p := range addedPaths {
+			dir := filepath.Dir(p)
+			if dir == packDstDir {
+				ext := filepath.Ext(filepath.Base(p))
+				base := strings.TrimSuffix(filepath.Base(p), ext)
+				if _, retiringWholeBase := seenBases[base]; retiringWholeBase {
+					continue
+				}
+			}
+			_ = os.Chmod(dir, 0o755)
+			if hookErr := gcBeforeRollbackUnlink(ctx, p); hookErr != nil {
+				rbErrs = append(rbErrs, fmt.Errorf("rollback interrupted before unlinking %s: %w", p, hookErr))
+				return errors.Join(rbErrs...)
+			}
+			if rmErr := removeStoreFile(ctx, p); rmErr != nil && !os.IsNotExist(rmErr) {
+				rbErrs = append(rbErrs, fmt.Errorf("rollback remove %s: %w", p, rmErr))
+			} else if dir == packDstDir {
+				needPackDirSync = true
+			} else if rem, rErr := os.ReadDir(dir); rErr == nil && len(rem) == 0 {
+				_ = os.Remove(dir)
+			}
+		}
+		if needPackDirSync && len(R) == 0 {
+			if syncErr := syncStoreDirectoryCtx(ctx, packDstDir); syncErr != nil {
+				rbErrs = append(rbErrs, fmt.Errorf("sync rollback auxiliary pack companion %s: %w", packDstDir, syncErr))
+				return errors.Join(rbErrs...)
+			}
+		}
+
+		// S4-S7: Delegate pack companion removal, Barrier-2, marker removal, and Barrier-3
+		// to finalizeInterruptedPackRetirements. If any step fails, stop before S8 rescan.
+		if len(R) > 0 {
+			if err := finalizeInterruptedPackRetirements(ctx, packDstDir); err != nil {
+				rbErrs = append(rbErrs, err)
+				return errors.Join(rbErrs...)
+			}
+		}
+
+		// S8: Rescan stock from disk only after S1-S7 succeeded cleanly.
+		if stockErr := initStockFromDiskLocked(ctx, s); stockErr != nil {
+			rbErrs = append(rbErrs, fmt.Errorf("rollback rescan stock: %w", stockErr))
+		}
+		return errors.Join(rbErrs...)
 	}
 
 	for _, srcDir := range srcObjectDirs {
 		if err := ctx.Err(); err != nil {
-			rollback()
-			return InitMetrics{}, nil, err
+			return InitMetrics{}, nil, errors.Join(err, rollback())
 		}
-		looseAdded, err := importStoreLooseFromDir(s, srcDir, &metrics)
-		if err != nil {
-			rollback()
-			return InitMetrics{}, nil, err
-		}
+		looseAdded, err := importStoreLooseFromDir(ctx, s, srcDir, &metrics, looseAddedSizes)
 		addedPaths = append(addedPaths, looseAdded...)
-
-		packsAdded, pNames, err := importStorePacksFromDir(ctx, s, srcDir, &metrics)
 		if err != nil {
-			rollback()
-			return InitMetrics{}, nil, err
+			return InitMetrics{}, nil, errors.Join(err, rollback())
 		}
+
+		packsAdded, pNames, newBases, err := importStorePacksFromDir(ctx, s, srcDir, &metrics)
 		addedPaths = append(addedPaths, packsAdded...)
+		addedPackBases = append(addedPackBases, newBases...)
+		if err != nil {
+			return InitMetrics{}, nil, errors.Join(err, rollback())
+		}
 		packNames = append(packNames, pNames...)
 	}
 
 	reachable, err := verifyStoreConnectivity(ctx, s.objectsDir, tipOIDs)
 	if err != nil {
-		rollback()
-		return InitMetrics{}, nil, fmt.Errorf("%w: %v", ErrCorruptObjectStore, err)
+		return InitMetrics{}, nil, errors.Join(fmt.Errorf("%w: %v", ErrCorruptObjectStore, err), rollback())
+	}
+	for oid, sz := range looseAddedSizes {
+		recordLooseObjectLocked(s, oid, sz)
 	}
 	for _, pName := range packNames {
 		reachable = append(reachable, "pack:"+pName)
@@ -77,7 +213,7 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 	return metrics, reachable, nil
 }
 
-func importStoreLooseFromDir(s *RetainedObjectStore, srcDir string, m *InitMetrics) ([]string, error) {
+func importStoreLooseFromDir(ctx context.Context, s *RetainedObjectStore, srcDir string, m *InitMetrics, looseAddedSizes map[string]int64) ([]string, error) {
 	entries, err := os.ReadDir(srcDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -101,25 +237,32 @@ func importStoreLooseFromDir(s *RetainedObjectStore, srcDir string, m *InitMetri
 			if f.IsDir() || len(f.Name()) != 38 || !isHexString(f.Name()) {
 				continue
 			}
+			oid := strings.ToLower(name + f.Name())
 			srcFile := filepath.Join(subSrc, f.Name())
 			dstFile := filepath.Join(subDst, strings.ToLower(f.Name()))
 			info, sErr := os.Stat(srcFile)
 			if sErr != nil {
 				return added, sErr
 			}
-			if _, dErr := os.Stat(dstFile); dErr == nil {
+			if dInfo, dErr := os.Stat(dstFile); dErr == nil {
 				m.ObjectsReused++
 				m.BytesReused += info.Size()
+				if _, known := s.stock.looseSizes[oid]; !known {
+					looseAddedSizes[oid] = dInfo.Size()
+				}
 				continue
 			}
 			if err := os.MkdirAll(subDst, 0o755); err != nil {
 				return added, err
 			}
-			n, cErr := copyFileAtomicReadOnly(srcFile, dstFile)
+			n, published, cErr := copyFileAtomicReadOnly(ctx, srcFile, dstFile)
+			if published {
+				added = append(added, dstFile)
+			}
 			if cErr != nil {
 				return added, cErr
 			}
-			added = append(added, dstFile)
+			looseAddedSizes[oid] = n
 			m.ObjectsImported++
 			m.BytesImported += n
 		}
@@ -127,21 +270,25 @@ func importStoreLooseFromDir(s *RetainedObjectStore, srcDir string, m *InitMetri
 	return added, nil
 }
 
-func importStorePacksFromDir(ctx context.Context, s *RetainedObjectStore, srcDir string, m *InitMetrics) ([]string, []string, error) {
+func importStorePacksFromDir(ctx context.Context, s *RetainedObjectStore, srcDir string, m *InitMetrics) ([]string, []string, []string, error) {
 	packSrcDir := filepath.Join(srcDir, "pack")
 	entries, err := os.ReadDir(packSrcDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil, nil
+			return nil, nil, nil, nil
 		}
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	packDstDir := filepath.Join(s.objectsDir, "pack")
 	if err := os.MkdirAll(packDstDir, 0o755); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	if err := finalizeInterruptedPackRetirements(ctx, packDstDir); err != nil {
+		return nil, nil, nil, err
 	}
 	var added []string
 	var packNames []string
+	var addedPackBases []string
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasPrefix(e.Name(), "pack-") {
 			continue
@@ -158,7 +305,7 @@ func importStorePacksFromDir(ctx context.Context, s *RetainedObjectStore, srcDir
 		dstFile := filepath.Join(packDstDir, e.Name())
 		info, sErr := os.Stat(srcFile)
 		if sErr != nil {
-			return added, packNames, sErr
+			return added, packNames, addedPackBases, sErr
 		}
 		if _, dErr := os.Stat(dstFile); dErr == nil {
 			if ext == ".pack" {
@@ -167,27 +314,36 @@ func importStorePacksFromDir(ctx context.Context, s *RetainedObjectStore, srcDir
 			m.BytesReused += info.Size()
 			continue
 		}
-		n, cErr := copyFileAtomicReadOnly(srcFile, dstFile)
-		if cErr != nil {
-			return added, packNames, cErr
+		n, published, cErr := copyFileAtomicReadOnly(ctx, srcFile, dstFile)
+		if published {
+			added = append(added, dstFile)
 		}
-		added = append(added, dstFile)
+		if cErr != nil {
+			return added, packNames, addedPackBases, cErr
+		}
 		if ext == ".pack" {
 			m.ObjectsImported++
 		}
 		m.BytesImported += n
 	}
 	for _, base := range packNames {
-		if _, exists := s.packOIDs[base]; !exists {
+		if _, exists := s.stock.packOIDs[base]; !exists {
+			packPath := filepath.Join(packDstDir, base+".pack")
 			idxPath := filepath.Join(packDstDir, base+".idx")
-			oids, err := listPackIndexOIDs(ctx, s.rootDir, idxPath)
-			if err != nil {
-				return added, packNames, fmt.Errorf("%w: verify pack %s: %v", ErrCorruptObjectStore, base, err)
+			pInfo, pErr := os.Stat(packPath)
+			iInfo, iErr := os.Stat(idxPath)
+			if pErr != nil || iErr != nil {
+				return added, packNames, addedPackBases, fmt.Errorf("%w: missing pack or index for %s", ErrCorruptObjectStore, base)
 			}
-			s.packOIDs[base] = oids
+			oids, err := parsePackAndIndexOIDs(ctx, s.rootDir, packPath, idxPath, pInfo.Size())
+			if err != nil {
+				return added, packNames, addedPackBases, fmt.Errorf("%w: verify pack %s: %v", ErrCorruptObjectStore, base, err)
+			}
+			addedPackBases = append(addedPackBases, base)
+			recordPackLocked(s, base, pInfo.Size()+iInfo.Size(), oids)
 		}
 	}
-	return added, packNames, nil
+	return added, packNames, addedPackBases, nil
 }
 
 func listPackIndexOIDs(ctx context.Context, workDir, idxPath string) (map[string]struct{}, error) {

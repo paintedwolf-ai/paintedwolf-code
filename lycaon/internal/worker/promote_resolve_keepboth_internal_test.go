@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -53,5 +54,17 @@ func applyTestPromoteResolution(task *api.WorkerTask, roots []projectroot.RootRe
 	if err != nil || !mutates {
 		return err
 	}
-	return applyTargetPromoteMutation(promote, task, plan)
+	dataDir, err := os.MkdirTemp("", "promote-resolution-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dataDir) }()
+	tx, err := beginPromoteTransaction(dataDir, task.ID, []promoteMutation{plan})
+	if err != nil {
+		return err
+	}
+	if err := tx.apply(context.Background(), promote, task); err != nil {
+		return err
+	}
+	return tx.close()
 }

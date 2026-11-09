@@ -62,6 +62,9 @@ func captureCheckpointGitState(
 	if err := ensureViewRepoInitialized(ctx, m, view, "."); err != nil {
 		return nil, err
 	}
+	if err := syncViewGitOverlay(view); err != nil {
+		return nil, err
+	}
 
 	view.mu.Lock()
 	repo := view.repos["."]
@@ -173,7 +176,7 @@ func captureCheckpointGitState(
 			ConfigBytes:     cfgBytes,
 			LeaseID:         leaseID,
 			ReachableOIDs:   reachableOIDs,
-			ImportedObjects: impMetrics.ObjectsImported,
+			ImportedObjects: impMetrics.ObjectsImported + impMetrics.ObjectsReused,
 			SubmoduleHeads:  subHeads,
 		},
 	}
@@ -282,4 +285,54 @@ func collectStashEntries(ctx context.Context, _ string, gitDir string) ([]StashE
 		return []StashEntry{{Ref: "stash@{0}", OID: oid, Message: "stash"}}, nil
 	}
 	return stashes, nil
+}
+
+// ExportCheckpointObjects packs the objects a checkpoint's refs add beyond what the view started
+// with into dst, so promotion can import them without the private repository.
+func (m *Manager) ExportCheckpointObjects(ctx context.Context, viewID string, state *CheckpointGitState, dst string) error {
+	view, err := getManagedView(m, viewID)
+	if err != nil {
+		return err
+	}
+	if err := ensureViewRepoInitialized(ctx, m, view, "."); err != nil {
+		return err
+	}
+	if err := syncViewGitOverlay(view); err != nil {
+		return err
+	}
+	view.mu.Lock()
+	repo := view.repos["."]
+	view.mu.Unlock()
+	if repo == nil {
+		return layeredfs.ErrGitPending
+	}
+	var revisions strings.Builder
+	addTips := func(oids map[string]string) {
+		for _, oid := range oids {
+			fmt.Fprintln(&revisions, oid)
+		}
+	}
+	addTips(state.Refs)
+	addTips(state.Tags)
+	if state.HeadOID != "" {
+		fmt.Fprintln(&revisions, state.HeadOID)
+	}
+	for _, stash := range state.Stashes {
+		fmt.Fprintln(&revisions, stash.OID)
+	}
+	if revisions.Len() == 0 {
+		return nil
+	}
+	for _, oid := range state.InitialRefs {
+		fmt.Fprintf(&revisions, "^%s\n", oid)
+	}
+	if err := os.MkdirAll(filepath.Join(dst, "pack"), 0o700); err != nil {
+		return err
+	}
+	args := []string{"--git-dir=" + repo.privateGitDir, "pack-objects", "--revs", "--quiet", filepath.Join(dst, "pack", "pack")}
+	output, code, err := gitexec.Run(ctx, repo.privateGitDir, args, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(revisions.String())})
+	if err != nil || code != 0 {
+		return errors.Join(err, fmt.Errorf("privategit: export checkpoint objects (exit %d): %s", code, strings.TrimSpace(string(output))))
+	}
+	return nil
 }

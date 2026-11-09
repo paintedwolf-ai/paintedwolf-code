@@ -108,16 +108,7 @@ func (e *Engine) readMountedOrCore(nq layeredfs.QualifiedPath, absMountPath stri
 			}
 		} else if attr.Kind != layeredfs.EntryRegular {
 			return nil, attr.Layer, attr.Mode, 0, 0, 0, fs.ErrInvalid
-		} else if attr.Layer == layeredfs.LayerPrivate {
-			data, err := e.core.ReadFile(nq)
-			return data, attr.Layer, attr.Mode, attr.ModTime.UnixNano(), 0, 0, err
 		} else {
-			if info, mErr := os.Lstat(absMountPath); mErr == nil && info.Mode().IsRegular() {
-				if data, rErr := os.ReadFile(absMountPath); rErr == nil {
-					ino, dev := statInoDev(info)
-					return data, attr.Layer, info.Mode(), info.ModTime().UnixNano(), ino, dev, nil
-				}
-			}
 			data, err := e.core.ReadFile(nq)
 			return data, attr.Layer, attr.Mode, attr.ModTime.UnixNano(), 0, 0, err
 		}

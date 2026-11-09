@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -18,36 +17,13 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// TaskCheckpointStoreSubdir is the conventional checkpoint store subdirectory of an overlay capture.
-const TaskCheckpointStoreSubdir = ".lycaon-checkpoint-store"
-
-// CheckpointStoreDirForTask resolves the durable checkpoint store directory for task if one exists.
+// CheckpointStoreDirForTask names the recovery store holding the checkpoint a task's branch published.
 func CheckpointStoreDirForTask(task *api.WorkerTask) string {
 	if task == nil {
 		return ""
 	}
-	if dir, _, ok := taskBranchCheckpoint(task); ok {
-		return dir
-	}
-	for _, raw := range []string{task.WorkspaceBaselinePath, task.WorkspaceOverlayPath} {
-		p := strings.TrimSpace(raw)
-		if p == "" {
-			continue
-		}
-		for _, cand := range []string{p, filepath.Join(p, TaskCheckpointStoreSubdir), filepath.Dir(p), filepath.Join(filepath.Dir(p), TaskCheckpointStoreSubdir)} {
-			if isCheckpointStoreDir(cand) {
-				return cand
-			}
-		}
-	}
-	if root := strings.TrimSpace(task.WorkspaceRoot); root != "" {
-		for _, cand := range []string{filepath.Join(root, TaskCheckpointStoreSubdir), root + TaskCheckpointStoreSubdir} {
-			if isCheckpointStoreDir(cand) {
-				return cand
-			}
-		}
-	}
-	return ""
+	dir, _, _ := taskBranchCheckpoint(task)
+	return dir
 }
 
 // taskBranchCheckpoint names the checkpoint a task's mounted branch published. A sealed overlay is
@@ -57,22 +33,6 @@ func taskBranchCheckpoint(task *api.WorkerTask) (storeDir, checkpointID string, 
 		return "", "", false
 	}
 	return workspace.BranchCheckpoint(task.WorkspaceRoot)
-}
-
-func isCheckpointStoreDir(dir string) bool {
-	if dir == "" || dir == "." || dir == "/" {
-		return false
-	}
-	st, err := os.Lstat(dir)
-	if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
-		return false
-	}
-	cpSt, err := os.Stat(filepath.Join(dir, "checkpoints"))
-	if err != nil || !cpSt.IsDir() {
-		return false
-	}
-	blobSt, err := os.Stat(filepath.Join(dir, "blobs"))
-	return err == nil && blobSt.IsDir()
 }
 
 // OpenTaskCheckpointStore loads the reviewed checkpoint, or latest when no preview is bound.
@@ -87,19 +47,11 @@ func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.Store, checkpoin
 	}
 	// The store is shared across workers, so only the branch's own record can name its checkpoint.
 	checkpointID := boundTaskCheckpointID(task.ID)
-	if _, published, ok := taskBranchCheckpoint(task); ok && checkpointID == "" {
-		checkpointID = published
-	}
-	var manifest checkpoint.Manifest
 	if checkpointID == "" {
-		manifest, err = store.LoadLatestManifest()
-	} else {
-		manifest, err = store.LoadManifest(checkpointID)
+		_, checkpointID, _ = taskBranchCheckpoint(task)
 	}
+	manifest, err := store.LoadManifest(checkpointID)
 	if err != nil {
-		if errors.Is(err, checkpoint.ErrCheckpointNotFound) && checkpointID == "" {
-			return store, checkpoint.Manifest{}, false, nil
-		}
 		return nil, checkpoint.Manifest{}, true, err
 	}
 	return store, manifest, true, nil

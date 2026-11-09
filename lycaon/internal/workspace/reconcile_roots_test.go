@@ -199,7 +199,7 @@ func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t 
 		Subroots: map[string]string{"primary": "services/api"},
 	}
 	binding, layout, err := mgr.CreateWorkerWorkspaceSelected(
-		t.Context(), attached, attached, narrowSel,
+		t.Context(), attached, narrowSel,
 		[]string{"docs/README.md", "primary/services/billing/invoice.go"},
 		"primary", "selected-job",
 	)

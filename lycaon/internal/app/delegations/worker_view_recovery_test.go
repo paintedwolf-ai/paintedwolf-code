@@ -108,59 +108,100 @@ func TestRestartAfterCrashInEveryPhaseExposesOnlyCompleteCheckpoints(t *testing.
 	}
 }
 
-// [process-crash evidence, not physical power-loss proof] Promotion faults inside the real apply
-// leave the checkpoint and its claim for repair, and no landing is recorded.
+// [process-crash evidence, not physical power-loss proof] A fault inside the real apply restores the
+// original target, whether the process lives to roll back or a restart does it. The checkpoint and its
+// claim stay for repair, no landing is recorded, and a later promotion starts from the original.
 func TestFailedPromotionKeepsCheckpointForRepairAcrossRestart(t *testing.T) {
 	for _, step := range []string{"mid_file_apply", "before_ref_import"} {
-		t.Run(step, func(t *testing.T) {
-			f := newEngineFixture(t)
-			task := f.claimMountedWorker()
-			view := f.liveView(task.WorkspaceRoot)
-			mutate(t, view, "checkpoint-A\n")
-			f.publish(task, view, "cp-A")
+		for _, crash := range []bool{false, true} {
+			name := step + "/failure"
+			if crash {
+				name = step + "/crash"
+			}
+			t.Run(name, func(t *testing.T) {
+				f := newEngineFixture(t)
+				task := f.claimMountedWorker()
+				view := f.liveView(task.WorkspaceRoot)
+				mutate(t, view, "checkpoint-A\n")
+				f.publish(task, view, "cp-A")
 
-			f.faults = func(_ recovery.TransitionPhase, at string) error {
-				if at == step {
+				f.faults = func(_ recovery.TransitionPhase, at string) error {
+					if at != step {
+						return nil
+					}
+					if crash {
+						panic(errSimulatedCrash)
+					}
 					return errSimulatedCrash
 				}
-				return nil
-			}
-			engine := f.boot()
-			targets := map[string]string{fixtureRootID: f.project}
-			promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{Store: checkpointStore(f), TargetRoots: targets})
-			testutil.FailErr(t, "promoter", err)
-			request := recovery.StackedPromotionRequest{ChildCheckpointID: "cp-A", TargetRoots: targets, Promoter: promoter}
-			if _, err := engine.Recovery.PromoteStackedCheckpoint(t.Context(), request); !errors.Is(err, errSimulatedCrash) {
-				t.Fatalf("promotion fault: %v", err)
-			}
+				engine := f.boot()
+				targets := map[string]string{fixtureRootID: f.project}
+				promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{Store: checkpointStore(f), TargetRoots: targets})
+				testutil.FailErr(t, "promoter", err)
+				txDir := filepath.Join(t.TempDir(), "promotion")
+				txn, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: txDir, ID: "cp-A"})
+				testutil.FailErr(t, "begin", err)
+				request := recovery.StackedPromotionRequest{ChildCheckpointID: "cp-A", TargetRoots: targets, Promoter: promoter, Transaction: txn}
+				if crash {
+					crashPromotion(t, func() { _, _ = engine.Recovery.PromoteStackedCheckpoint(t.Context(), request) })
+				} else if _, err := engine.Recovery.PromoteStackedCheckpoint(t.Context(), request); !errors.Is(err, errSimulatedCrash) {
+					t.Fatalf("promotion fault: %v", err)
+				}
 
-			f.faults = nil
-			engine = f.boot()
-			testutil.FailErr(t, "startup recovery", engine.RecoverWorkerViews(t.Context()))
-			if _, err := engine.Recovery.VerifyCheckpointReconstructible(t.Context(), "cp-A"); err != nil {
-				t.Fatalf("failed promotion lost its checkpoint: %v", err)
-			}
-			claims, err := engine.Recovery.ListClaims()
-			testutil.FailErr(t, "claims", err)
-			if !slices.ContainsFunc(claims, func(c recovery.RetentionClaim) bool { return c.Kind == recovery.ClaimPromotion }) {
-				t.Fatalf("promotion claim gone after failure: %+v", claims)
-			}
-			if _, landed, err := engine.Recovery.LoadLandingReceipt("cp-A"); err != nil || landed {
-				t.Fatalf("failed promotion recorded a landing: landed=%t err=%v", landed, err)
-			}
-			// PromoteStackedCheckpoint applies through Promoter.Apply, which resumes on retry rather than rolling back.
-			raw, err := os.ReadFile(filepath.Join(f.project, "app.txt"))
-			testutil.FailErr(t, "read target", err)
-			if string(raw) != "checkpoint-A\n" {
-				t.Fatalf("target after %s = %q", step, raw)
-			}
-			_, err = engine.Recovery.PromoteStackedCheckpoint(t.Context(), request)
-			testutil.FailErr(t, "retry promotion", err)
-			if _, landed, err := engine.Recovery.LoadLandingReceipt("cp-A"); err != nil || !landed {
-				t.Fatalf("retry did not land: landed=%t err=%v", landed, err)
-			}
-		})
+				f.faults = nil
+				engine = f.boot()
+				testutil.FailErr(t, "startup recovery", engine.RecoverWorkerViews(t.Context()))
+				found, err := checkpoint.RecoverTransaction(t.Context(), checkpoint.TransactionConfig{Dir: txDir})
+				testutil.FailErr(t, "promotion recovery", err)
+				if found != crash {
+					t.Fatalf("record after restart: found=%v crash=%v", found, crash)
+				}
+				if _, err := engine.Recovery.VerifyCheckpointReconstructible(t.Context(), "cp-A"); err != nil {
+					t.Fatalf("failed promotion lost its checkpoint: %v", err)
+				}
+				claims, err := engine.Recovery.ListClaims()
+				testutil.FailErr(t, "claims", err)
+				if !slices.ContainsFunc(claims, func(c recovery.RetentionClaim) bool { return c.Kind == recovery.ClaimPromotion }) {
+					t.Fatalf("promotion claim gone after failure: %+v", claims)
+				}
+				if _, landed, err := engine.Recovery.LoadLandingReceipt("cp-A"); err != nil || landed {
+					t.Fatalf("failed promotion recorded a landing: landed=%v err=%v", landed, err)
+				}
+				raw, err := os.ReadFile(filepath.Join(f.project, "app.txt"))
+				testutil.FailErr(t, "read target", err)
+				if string(raw) != "trunk\n" {
+					t.Fatalf("target after %s = %q, want the original", step, raw)
+				}
+
+				retry, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: txDir, ID: "cp-A"})
+				testutil.FailErr(t, "begin retry", err)
+				request.Transaction = retry
+				_, err = engine.Recovery.PromoteStackedCheckpoint(t.Context(), request)
+				testutil.FailErr(t, "retry promotion", err)
+				testutil.FailErr(t, "commit retry", retry.Commit())
+				testutil.FailErr(t, "settle retry", engine.Recovery.SettleStackedPromotion("cp-A"))
+				if _, landed, err := engine.Recovery.LoadLandingReceipt("cp-A"); err != nil || !landed {
+					t.Fatalf("retry did not land: landed=%v err=%v", landed, err)
+				}
+				raw, err = os.ReadFile(filepath.Join(f.project, "app.txt"))
+				testutil.FailErr(t, "read landed target", err)
+				if string(raw) != "checkpoint-A\n" {
+					t.Fatalf("landed target = %q", raw)
+				}
+			})
+		}
 	}
+}
+
+// crashPromotion stops fn where its fault panicked, so nothing after that point runs.
+func crashPromotion(t *testing.T, fn func()) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != errSimulatedCrash {
+			t.Fatalf("expected a simulated crash, got %v", r)
+		}
+	}()
+	fn()
 }
 
 func quarantineHolds(t *testing.T, dir, want string) bool {

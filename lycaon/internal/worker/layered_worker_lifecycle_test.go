@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/denialprobe"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	lexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -63,6 +64,7 @@ func differentDevice(path string) (bool, error) {
 }
 
 type layeredWorkerFixture struct {
+	db       *db.Store
 	queue    *SQLQueue
 	manager  *workspace.Manager
 	source   string
@@ -89,7 +91,7 @@ func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredW
 	queue := NewSQLQueue(sqlDB, 4)
 	queue.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
 	queue.SetWorkerWorkspaceManager(manager)
-	return &layeredWorkerFixture{queue: queue, manager: manager, source: source, branches: branches}
+	return &layeredWorkerFixture{db: sqlDB, queue: queue, manager: manager, source: source, branches: branches}
 }
 
 // claim runs the ordinary production path: enqueue, ClaimNext, ClaimWorkerBranch.

@@ -57,12 +57,31 @@ const (
 )
 
 // StoreMetrics reports cumulative object and byte accounting for the retained store.
+// RetainedObjects is the number of unique logical Git object OIDs retained in the store
+// (deduplicated across loose shards and packfiles). RetainedBytes is the total on-disk
+// byte count stored in objects/ across loose object files and pack/index files (.pack + .idx).
+// StartupInitDuration records the wall-clock duration spent reconstructing stock on store open/reopen.
 type StoreMetrics struct {
-	ObjectsImported   int64 `json:"objects_imported"`
-	ObjectsReused     int64 `json:"objects_reused"`
-	BytesImported     int64 `json:"bytes_imported"`
-	BytesReused       int64 `json:"bytes_reused"`
-	BytesNewlyWritten int64 `json:"bytes_newly_written"`
+	ObjectsImported     int64         `json:"objects_imported"`
+	ObjectsReused       int64         `json:"objects_reused"`
+	BytesImported       int64         `json:"bytes_imported"`
+	BytesReused         int64         `json:"bytes_reused"`
+	BytesNewlyWritten   int64         `json:"bytes_newly_written"`
+	RetainedObjects     int64         `json:"retained_objects"`
+	RetainedBytes       int64         `json:"retained_bytes"`
+	StartupInitDuration time.Duration `json:"startup_init_duration"`
+}
+
+// StockInventory reports an explicit, cancellable qualification inventory of the retained
+// object store on disk outside the routine O(1) Metrics() hot path (#1671).
+type StockInventory struct {
+	LogicalObjects int64 `json:"logical_objects"`
+	LooseObjects   int64 `json:"loose_objects"`
+	PackedObjects  int64 `json:"packed_objects"`
+	StoredBytes    int64 `json:"stored_bytes"`
+	LooseBytes     int64 `json:"loose_bytes"`
+	PackBytes      int64 `json:"pack_bytes"`
+	Complete       bool  `json:"complete"`
 }
 
 // InitState represents the lifecycle state of a private repository in a view.

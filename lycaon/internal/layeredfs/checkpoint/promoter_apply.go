@@ -2,7 +2,9 @@ package checkpoint
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -11,26 +13,23 @@ import (
 // EffectStatus tracks whether a distinct promotion effect (files vs Git refs) has completed.
 type EffectStatus string
 
-// PromotionState identifies the durable state of a promotion transaction in the journal.
+// PromotionState identifies the durable state of a promotion record.
 type PromotionState string
 
-// ApplyFaultStage identifies a fault-injection boundary during promotion Apply.
+// ApplyFaultStage identifies a boundary inside a checkpoint promotion.
 type ApplyFaultStage string
 
 const (
-	EffectPending                  EffectStatus    = "pending"
 	EffectCompleted                EffectStatus    = "completed"
 	EffectSkipped                  EffectStatus    = "skipped"
-	PromotionStateIntent           PromotionState  = "intent"
-	PromotionStateApplying         PromotionState  = "applying"
 	PromotionStateApplied          PromotionState  = "applied"
 	PromotionStateRejected         PromotionState  = "rejected"
-	ApplyFaultNone                 ApplyFaultStage = ""
 	ApplyFaultMidFileApply         ApplyFaultStage = "mid_file_apply"
 	ApplyFaultAfterFilesBeforeRefs ApplyFaultStage = "after_files_before_refs"
 )
 
-// PromotionJournalRecord durably records a promotion transaction for idempotent retry.
+// PromotionJournalRecord records a promotion outcome. An applied record exists only after every
+// effect happened, and rollback removes it with them.
 type PromotionJournalRecord struct {
 	TransactionID       string                    `json:"transaction_id"`
 	CheckpointID        string                    `json:"checkpoint_id"`
@@ -44,7 +43,7 @@ type PromotionJournalRecord struct {
 	UpdatedAt           time.Time                 `json:"updated_at"`
 }
 
-// ApplyRequest specifies a validated PromotionPreview to apply transactionally.
+// ApplyRequest specifies a validated PromotionPreview to apply.
 type ApplyRequest struct {
 	TransactionID string
 	Preview       *PromotionPreview
@@ -52,20 +51,23 @@ type ApplyRequest struct {
 	FaultInjector func(stage ApplyFaultStage) error
 }
 
-// Apply revalidates target observations, journals intent, and executes file promotion and ref import idempotently.
-func (pr *Promoter) Apply(ctx context.Context, req ApplyRequest) (*PromotionJournalRecord, error) {
+// ApplyCheckpoint revalidates the preview's target observations and applies its file and ref effects.
+// Any failure restores the original target before returning.
+func (txn *Transaction) ApplyCheckpoint(ctx context.Context, pr *Promoter, req ApplyRequest) (*PromotionJournalRecord, error) {
 	pr.applyMu.Lock()
 	defer pr.applyMu.Unlock()
-	return pr.apply(ctx, req, pr.cfg.RefImporter)
+	rec, err := txn.applyCheckpoint(ctx, pr, req)
+	if err != nil {
+		return nil, errors.Join(err, txn.rollback(context.WithoutCancel(ctx)))
+	}
+	return rec, nil
 }
 
-type checkpointRefImporter func(context.Context, string, string, PrivateGitSnapshot) (map[string]string, error)
-
-func (pr *Promoter) apply(ctx context.Context, req ApplyRequest, importRefs checkpointRefImporter) (*PromotionJournalRecord, error) {
-	if req.Preview == nil {
-		return nil, fmt.Errorf("checkpoint: Preview is required")
+func (txn *Transaction) applyCheckpoint(ctx context.Context, pr *Promoter, req ApplyRequest) (*PromotionJournalRecord, error) {
+	if txn.closed {
+		return nil, errors.New("checkpoint: promotion transaction is closed")
 	}
-	if len(req.Preview.Conflicts) > 0 {
+	if req.Preview == nil || len(req.Preview.Conflicts) > 0 {
 		return nil, ErrUnresolvedConflict
 	}
 	m, err := pr.cfg.Store.LoadManifest(req.Preview.CheckpointID)
@@ -76,92 +78,71 @@ func (pr *Promoter) apply(ctx context.Context, req ApplyRequest, importRefs chec
 	if txID == "" {
 		txID = "tx-" + m.CheckpointID
 	}
-
-	rec, exists, err := pr.loadPromotionRecord(txID)
+	existing, found, err := pr.loadPromotionRecord(txID)
 	if err != nil {
 		return nil, err
 	}
-	if exists && rec.State == PromotionStateApplied {
-		return &rec, nil
+	if found && existing.State == PromotionStateApplied {
+		return &existing, nil
 	}
-
-	if err := pr.RevalidatePreviewTargets(req.Preview, rec.AppliedPaths); err != nil {
+	if err := pr.RevalidatePreviewTargets(req.Preview); err != nil {
 		return nil, err
 	}
-
-	if !exists {
-		if err := removeAppliedPathMarkers(pr.cfg.Store.promotionsDir, txID); err != nil {
-			return nil, err
-		}
-		refStatus := EffectSkipped
-		if req.ImportGitRefs && (len(m.PrivateGit.Refs) > 0 || m.PrivateGit.HeadRef != "") {
-			refStatus = EffectPending
-		}
-		rec = PromotionJournalRecord{
-			TransactionID: txID, CheckpointID: m.CheckpointID, PreviewID: req.Preview.PreviewID,
-			State: PromotionStateIntent, FilePromotionStatus: EffectPending, RefImportStatus: refStatus,
-			UpdatedAt: time.Now().UTC(),
-		}
-		if err := pr.savePromotionRecord(rec); err != nil {
-			return nil, err
-		}
-	}
-
-	rec.State, rec.UpdatedAt = PromotionStateApplying, time.Now().UTC()
-	if err := pr.savePromotionRecord(rec); err != nil {
+	if err := txn.addRoots(pr.cfg.TargetRoots); err != nil {
 		return nil, err
 	}
-
-	if rec.FilePromotionStatus != EffectCompleted {
-		applied := appliedPathSet(rec.AppliedPaths)
-		for index, ch := range req.Preview.PlannedChanges {
-			if _, done := applied[ch.Path]; done {
-				continue
-			}
-			if err := pr.targets.applyPlannedChange(ch); err != nil {
-				return nil, err
-			}
-			if err := recordAppliedPath(pr.cfg.Store.promotionsDir, txID, index, ch.Path); err != nil {
-				return nil, err
-			}
-			rec.AppliedPaths = append(rec.AppliedPaths, ch.Path)
-			if req.FaultInjector != nil {
-				if err := req.FaultInjector(ApplyFaultMidFileApply); err != nil {
-					return nil, err
-				}
-			}
-		}
-		rec.FilePromotionStatus, rec.UpdatedAt = EffectCompleted, time.Now().UTC()
-		if err := pr.savePromotionRecord(rec); err != nil {
-			return nil, err
-		}
-		// The record now names every path; a crash here leaves only duplicates to fold.
-		if err := removeAppliedPathMarkers(pr.cfg.Store.promotionsDir, txID); err != nil {
+	txn.targets.store = pr.cfg.Store
+	storeDir, err := filepath.Abs(pr.cfg.Store.RootDir())
+	if err != nil {
+		return nil, err
+	}
+	txn.journal.Checkpoint = &journalCheckpoint{StoreDir: storeDir, ID: m.CheckpointID, WorkerID: m.WorkerID}
+	refStatus := EffectSkipped
+	if req.ImportGitRefs && m.PrivateGit.HasRefs() {
+		refStatus = EffectCompleted
+		if txn.journal.Refs, err = txn.prepareRefs(m, pr.cfg.TargetRoots); err != nil {
 			return nil, err
 		}
 	}
-
+	changes := txn.canonicalChanges(req.Preview.PlannedChanges)
+	if err := txn.addTargets(changes); err != nil {
+		return nil, err
+	}
+	promotions, err := filepath.Abs(pr.cfg.Store.promotionsDir)
+	if err != nil {
+		return nil, err
+	}
+	records := []string{filepath.Join(promotions, txID+".json"), filepath.Join(promotions, gitImportRecordName(m.WorkerID, m.CheckpointID, ""))}
+	for rootID := range m.PrivateGit.Roots {
+		records = append(records, filepath.Join(promotions, gitImportRecordName(m.WorkerID, m.CheckpointID, rootID)))
+	}
+	if err := txn.JoinRecords(records...); err != nil {
+		return nil, err
+	}
+	if err := txn.mutateTargets(ctx, changes, req.FaultInjector); err != nil {
+		return nil, err
+	}
+	if err := txn.reach(StepFilesApplied, ""); err != nil {
+		return nil, err
+	}
 	if req.FaultInjector != nil {
 		if err := req.FaultInjector(ApplyFaultAfterFilesBeforeRefs); err != nil {
 			return nil, err
 		}
 	}
-
-	if rec.RefImportStatus == EffectPending {
-		if importRefs != nil {
-			imported, err := importRefs(ctx, txID, m.WorkerID, m.PrivateGit)
-			if err != nil {
-				return nil, err
-			}
-			rec.ImportedRefs = imported
-		}
-		rec.RefImportStatus, rec.UpdatedAt = EffectCompleted, time.Now().UTC()
-		if err := pr.savePromotionRecord(rec); err != nil {
+	rec := PromotionJournalRecord{
+		TransactionID: txID, CheckpointID: m.CheckpointID, PreviewID: req.Preview.PreviewID, State: PromotionStateApplied,
+		FilePromotionStatus: EffectCompleted, RefImportStatus: refStatus, UpdatedAt: time.Now().UTC(),
+	}
+	for _, change := range req.Preview.PlannedChanges {
+		rec.AppliedPaths = append(rec.AppliedPaths, change.Path)
+	}
+	if refStatus == EffectCompleted {
+		rec.ImportedRefs, err = ImportAndValidateCheckpointGitRefs(ctx, pr.cfg.Store.RootDir(), m.CheckpointID, m.WorkerID, m.PrivateGit, pr.cfg.TargetRoots, txn.cfg.AuthorizedGitDirs...)
+		if err != nil {
 			return nil, err
 		}
 	}
-
-	rec.State, rec.UpdatedAt = PromotionStateApplied, time.Now().UTC()
 	if err := pr.savePromotionRecord(rec); err != nil {
 		return nil, err
 	}
@@ -184,13 +165,9 @@ func (pr *Promoter) Reject(_ context.Context, checkpointID, reason string) (*Pro
 	return &rec, nil
 }
 
-// RevalidatePreviewTargets checks the bound target facts, excluding journaled applied paths on retry.
-func (pr *Promoter) RevalidatePreviewTargets(preview *PromotionPreview, applied []layeredfs.QualifiedPath) error {
-	done := appliedPathSet(applied)
+// RevalidatePreviewTargets checks the bound target facts still hold.
+func (pr *Promoter) RevalidatePreviewTargets(preview *PromotionPreview) error {
 	for _, obs := range preview.TargetObservations {
-		if _, ok := done[obs.Path]; ok {
-			continue
-		}
 		cur, err := pr.targets.observeTarget(obs.Path)
 		if err != nil {
 			return err
@@ -217,12 +194,4 @@ func sameTargetObservation(a, b TargetObservation) bool {
 		return a.DirEmpty == b.DirEmpty && a.Mode.Perm() == b.Mode.Perm() && a.DirectorySHA256 == b.DirectorySHA256
 	}
 	return false
-}
-
-func appliedPathSet(paths []layeredfs.QualifiedPath) map[layeredfs.QualifiedPath]struct{} {
-	set := make(map[layeredfs.QualifiedPath]struct{}, len(paths))
-	for _, path := range paths {
-		set[path] = struct{}{}
-	}
-	return set
 }

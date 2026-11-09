@@ -3,6 +3,7 @@ package layeredfs
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
@@ -166,9 +167,37 @@ func commitFileRename(c *Core, srcPath, dstPath QualifiedPath, srcNode *privateN
 	delete(c.state.transient, dstPath)
 	delete(c.state.pathIndex, srcPath)
 	delete(srcNode.paths, srcPath)
-	c.state.deletedPaths[srcPath] = deletedState{
-		ReplacedKind: srcKind,
-		Timestamp:    time.Now(),
+
+	srcHost, srcRepoRoot, srcIsGit, srcGitErr := resolveMutableGitTarget(c, srcPath)
+	if srcGitErr != nil {
+		c.mu.Unlock()
+		return srcGitErr
+	}
+	dstHost, dstRepoRoot, dstIsGit, dstGitErr := resolveMutableGitTarget(c, dstPath)
+	if dstGitErr != nil {
+		c.mu.Unlock()
+		return dstGitErr
+	}
+	if srcIsGit && dstIsGit && !srcRepoRoot && !dstRepoRoot {
+		if err := os.MkdirAll(filepath.Dir(dstHost), 0o755); err != nil {
+			c.mu.Unlock()
+			return err
+		}
+		if err := os.Rename(srcHost, dstHost); err != nil {
+			c.mu.Unlock()
+			return err
+		}
+		srcNode.flags.gitHostPath = dstHost
+		if srcNode.kind == EntryRegular {
+			srcNode.flags.backingPath = dstHost
+			markDirtyBackingFileLocked(c, dstHost)
+		}
+		delete(c.state.deletedPaths, srcPath)
+	} else {
+		c.state.deletedPaths[srcPath] = deletedState{
+			ReplacedKind: srcKind,
+			Timestamp:    time.Now(),
+		}
 	}
 
 	_, wasDeletedDir := c.state.deletedPaths[dstPath]
@@ -250,15 +279,37 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 		return len(affected[i].Rel) < len(affected[j].Rel)
 	})
 
+	srcHost, srcRepoRoot, srcIsGit, srcGitErr := resolveMutableGitTarget(c, srcPath)
+	if srcGitErr != nil {
+		return srcGitErr
+	}
+	dstHost, dstRepoRoot, dstIsGit, dstGitErr := resolveMutableGitTarget(c, dstPath)
+	if dstGitErr != nil {
+		return dstGitErr
+	}
+	isGitDirRename := srcIsGit && dstIsGit && !srcRepoRoot && !dstRepoRoot
+	if isGitDirRename {
+		if err := os.MkdirAll(filepath.Dir(dstHost), 0o755); err != nil {
+			return err
+		}
+		if err := os.Rename(srcHost, dstHost); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+
 	now := time.Now()
 	for _, oldQP := range affected {
 		nid := c.state.pathIndex[oldQP]
 		node := c.state.nodesByID[nid]
 		delete(c.state.pathIndex, oldQP)
 		delete(c.state.transient, oldQP)
-		c.state.deletedPaths[oldQP] = deletedState{
-			ReplacedKind: node.kind,
-			Timestamp:    now,
+		if isGitDirRename {
+			delete(c.state.deletedPaths, oldQP)
+		} else {
+			c.state.deletedPaths[oldQP] = deletedState{
+				ReplacedKind: node.kind,
+				Timestamp:    now,
+			}
 		}
 		var newRel string
 		if oldQP.Rel == srcPath.Rel {
@@ -284,7 +335,22 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 		delete(node.paths, oldQP)
 		node.paths[newQP] = struct{}{}
 		node.ctime = now
-		node.flags.namespaceAdded = true
+		if isGitDirRename {
+			if newHost, _, ok, _ := resolveMutableGitTarget(c, newQP); ok {
+				node.flags.gitHostPath = newHost
+				if node.kind == EntryRegular {
+					node.flags.backingPath = newHost
+					markDirtyBackingFileLocked(c, newHost)
+				}
+			}
+			if node.kind == EntryDirectory {
+				node.flags.namespaceAdded = false
+			} else {
+				node.flags.namespaceAdded = true
+			}
+		} else {
+			node.flags.namespaceAdded = true
+		}
 		c.state.pathIndex[newQP] = nid
 		updateOpenHandlesPathLocked(c, nid, oldQP, newQP)
 	}

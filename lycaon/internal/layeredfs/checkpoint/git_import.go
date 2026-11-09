@@ -8,6 +8,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -155,13 +156,16 @@ func ValidateGitRefName(ref string) (string, error) {
 
 type plannedRefWrite struct{ dstRef, oid string }
 
-// ImportAndValidateCheckpointGitRefs imports retained Git objects from the checkpoint store,
-// validates reachable object closure, records durable import intent, and updates refs via git update-ref CAS.
+// ImportAndValidateCheckpointGitRefs imports each root's retained Git objects from the checkpoint
+// store into that root's repository, validates reachable object closure, records durable import
+// intent, and updates refs via git update-ref CAS. A non-primary root's imported refs are keyed
+// "<root ID>:<ref>". A root with no repository has nothing to import them into; its objects stay
+// retained with the checkpoint.
 func ImportAndValidateCheckpointGitRefs(
 	ctx context.Context, storeDir, checkpointID, workerID string, git PrivateGitSnapshot,
 	targetRoots map[string]string, authorizedGitDirs ...string,
 ) (map[string]string, error) {
-	if len(git.Refs) == 0 {
+	if !git.HasRefs() {
 		return nil, nil
 	}
 	cleanWorker, cleanCheckpoint := strings.TrimSpace(workerID), strings.TrimSpace(checkpointID)
@@ -173,8 +177,59 @@ func ImportAndValidateCheckpointGitRefs(
 			return nil, err
 		}
 	}
-	primaryDir := selectPrimaryRootDir(targetRoots)
-	gitDir, commonGitDir, err := ResolveGitDirs(primaryDir, authorizedGitDirs...)
+	request := rootRefImport{
+		storeDir: storeDir, checkpointID: cleanCheckpoint, workerID: cleanWorker,
+		objectCheckpoints: git.ObjectCheckpoints, authorizedGitDirs: authorizedGitDirs,
+	}
+	imported := map[string]string{}
+	if len(git.Refs) > 0 {
+		primaryDir := selectPrimaryRootDir(targetRoots)
+		if repositoryPresent(primaryDir) {
+			request.repoRoot, request.refs = primaryDir, git.Refs
+			planned, err := importRootRefs(ctx, request)
+			if err != nil {
+				return nil, err
+			}
+			maps.Copy(imported, planned)
+		}
+	}
+	for _, rootID := range slices.Sorted(maps.Keys(git.Roots)) {
+		dir := strings.TrimSpace(targetRoots[rootID])
+		if dir == "" || !safeComponent(rootID) {
+			return nil, fmt.Errorf("checkpoint: git refs name unknown root %q", rootID)
+		}
+		if len(git.Roots[rootID].Refs) == 0 || !repositoryPresent(dir) {
+			continue
+		}
+		request.repoRoot, request.rootID, request.refs = dir, rootID, git.Roots[rootID].Refs
+		planned, err := importRootRefs(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		for ref, oid := range planned {
+			imported[rootID+":"+ref] = oid
+		}
+	}
+	return imported, nil
+}
+
+// repositoryPresent reports whether a target root has any Git entry to resolve. Anything present
+// goes on to full validation; only a plain absence means there is no repository.
+func repositoryPresent(dir string) bool {
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return !errors.Is(err, os.ErrNotExist)
+}
+
+type rootRefImport struct {
+	storeDir, checkpointID, workerID string
+	repoRoot, rootID                 string
+	refs                             map[string]string
+	objectCheckpoints                []string
+	authorizedGitDirs                []string
+}
+
+func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, error) {
+	gitDir, commonGitDir, err := ResolveGitDirs(req.repoRoot, req.authorizedGitDirs...)
 	if err != nil {
 		return nil, err
 	}
@@ -182,11 +237,11 @@ func ImportAndValidateCheckpointGitRefs(
 	if err := ensureMinimalGitDirLayout(gitDir, commonGitDir); err != nil {
 		return nil, err
 	}
-	if err := copyCandidateGitObjects(storeDir, cleanCheckpoint, targetObjectsDir); err != nil {
+	if err := copyCandidateGitObjects(req.storeDir, req.checkpointID, req.rootID, req.objectCheckpoints, targetObjectsDir); err != nil {
 		return nil, err
 	}
-	refNames := make([]string, 0, len(git.Refs))
-	for name := range git.Refs {
+	refNames := make([]string, 0, len(req.refs))
+	for name := range req.refs {
 		refNames = append(refNames, name)
 	}
 	sort.Strings(refNames)
@@ -197,29 +252,29 @@ func ImportAndValidateCheckpointGitRefs(
 		if nameErr != nil {
 			return nil, nameErr
 		}
-		oid := strings.ToLower(strings.TrimSpace(git.Refs[refName]))
+		oid := strings.ToLower(strings.TrimSpace(req.refs[refName]))
 		if !isHexOID(oid) || isAllZeroOID(oid) {
 			return nil, fmt.Errorf("checkpoint: invalid git oid %q for ref %q", oid, refName)
 		}
-		if err := verifyReachableGitObject(ctx, primaryDir, commonGitDir, targetObjectsDir, oid, verifiedOIDs); err != nil {
+		if err := verifyReachableGitObject(ctx, req.repoRoot, commonGitDir, targetObjectsDir, oid, verifiedOIDs); err != nil {
 			return nil, fmt.Errorf("checkpoint: unreachable or corrupt git object for ref %s (%s): %w", refName, oid, err)
 		}
-		writes = append(writes, plannedRefWrite{dstRef: "refs/lycaon/workers/" + cleanWorker + "/" + cleanRel, oid: oid})
-		if cleanCheckpoint != "" {
-			writes = append(writes, plannedRefWrite{dstRef: "refs/lycaon/checkpoints/" + cleanCheckpoint + "/" + cleanRel, oid: oid})
+		writes = append(writes, plannedRefWrite{dstRef: "refs/lycaon/workers/" + req.workerID + "/" + cleanRel, oid: oid})
+		if req.checkpointID != "" {
+			writes = append(writes, plannedRefWrite{dstRef: "refs/lycaon/checkpoints/" + req.checkpointID + "/" + cleanRel, oid: oid})
 		}
 	}
-	return applyCheckpointRefTransaction(ctx, primaryDir, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker, writes)
+	return applyCheckpointRefTransaction(ctx, req.repoRoot, gitDir, commonGitDir, req.storeDir, req.checkpointID, req.workerID, req.rootID, writes)
 }
 
 func applyCheckpointRefTransaction(
-	ctx context.Context, primaryDir, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker string, writes []plannedRefWrite,
+	ctx context.Context, primaryDir, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker, rootID string, writes []plannedRefWrite,
 ) (map[string]string, error) {
 	planned := make(map[string]string, len(writes))
 	for _, w := range writes {
 		planned[w.dstRef] = w.oid
 	}
-	intentName := "git-import-" + cleanWorker + "--" + cleanCheckpoint + ".json"
+	intentName := gitImportRecordName(cleanWorker, cleanCheckpoint, rootID)
 	if strings.TrimSpace(storeDir) != "" {
 		if raw, err := os.ReadFile(filepath.Join(storeDir, "promotions", intentName)); err == nil {
 			var existing GitRefImportRecord
@@ -255,6 +310,13 @@ func applyCheckpointRefTransaction(
 	}
 	rec.Completed = true
 	return planned, saveGitRefImportRecord(storeDir, intentName, rec)
+}
+
+func gitImportRecordName(workerID, checkpointID, rootID string) string {
+	if rootID == "" {
+		return "git-import-" + workerID + "--" + checkpointID + ".json"
+	}
+	return "git-import-" + workerID + "--" + checkpointID + "--" + rootID + ".json"
 }
 
 func saveGitRefImportRecord(storeDir, intentName string, rec GitRefImportRecord) error {

@@ -124,30 +124,36 @@ func executeViewGitCommand(
 		targetWT = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
 	}
 
-	normalizedArgs, err := prepareAndAuthorizeGitArgs(ctx, view, targetWT, e.policy, args)
-	if err != nil {
-		return "", err
-	}
-
-	if err := syncCoreOverlayToWorktree(view); err != nil {
-		return "", err
-	}
-	beforeTree := captureWorktreeMutationBaseline(view, targetWT)
 	privGitDir, _ := readyPrivateGitDir(e.mgr, e.viewID, repoRel)
 	if privGitDir == "" {
 		privGitDir = filepath.Join(targetWT, ".git")
 	}
+
+	normalizedArgs, err := prepareAndAuthorizeGitArgs(ctx, view, targetWT, privGitDir, e.policy, args)
+	if err != nil {
+		return "", err
+	}
+
+	if err := syncViewGitOverlay(view); err != nil {
+		return "", err
+	}
+	if err := syncCoreOverlayToWorktree(view); err != nil {
+		return "", err
+	}
+	beforeTree := captureWorktreeMutationBaseline(view, targetWT)
+	execDir := targetWT
 	execArgs := normalizedArgs
 	if privGitDir != filepath.Join(targetWT, ".git") {
-		_, _, _ = gitexec.Run(ctx, targetWT, []string{"--git-dir=" + privGitDir, "--work-tree=" + targetWT, "update-index", "-q", "--refresh"}, gitexec.Opts{
+		execDir = filepath.Dir(privGitDir)
+		_, _, _ = gitexec.Run(ctx, execDir, []string{"-C", targetWT, "--git-dir=" + privGitDir, "--work-tree=" + targetWT, "update-index", "-q", "--refresh"}, gitexec.Opts{
 			Profile: gitexec.ProfileHermetic,
 		})
-		execArgs = append([]string{"--git-dir=" + privGitDir, "--work-tree=" + targetWT}, normalizedArgs...)
+		execArgs = append([]string{"-C", targetWT, "--git-dir=" + privGitDir, "--work-tree=" + targetWT}, normalizedArgs...)
 	}
 	privObjDir := filepath.Join(privGitDir, "objects")
 	beforeObjBytes := measureDirBytes(privObjDir)
 
-	out, code, runErr := gitexec.Run(ctx, targetWT, execArgs, gitexec.Opts{
+	out, code, runErr := gitexec.Run(ctx, execDir, execArgs, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
 		Identity: &gitexec.Identity{
 			Name:      "Painted Wolf Worker",
