@@ -11,7 +11,7 @@ selector:
 requires:
   profiles:
   - tool
-  facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.process_running, paintedwolf.refused_socket_paths, paintedwolf.missing_capability_socket_paths, paintedwolf.supports_socket_paths, paintedwolf.next_steps]
+  facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.process_running, paintedwolf.refused_socket_paths, paintedwolf.missing_capability_socket_paths, paintedwolf.supports_socket_paths, paintedwolf.next_steps, paintedwolf.socket_path_references, paintedwolf.socket_url_references]
 when: >-
   paintedwolf.confine_applied
   && size(paintedwolf.refused_socket_paths) > 0
@@ -22,7 +22,7 @@ copy:
   cause: Socket access requires a declaration and authorization; an external client must also select its bound endpoint.
   why: ''
   fix: >-
-    {% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.supports_socket_paths %}{% if paintedwolf.refused_socket_paths %}{% if paintedwolf.missing_capability_socket_paths %}Declare the exact service in `capability_request.socket_paths`. {% endif %}For external clients, use the complete bound reference as the endpoint argument or environment value, without an added `unix:` prefix. Use the `unix-url` reference form from `socket_paths` when the client expects a Unix URL. Native socket arguments use the path. Saved approval does not select the endpoint. Preserve completed effects and resolve uncertain outcomes first.{% endif %}{% endif %}
+    {% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.supports_socket_paths %}{% if paintedwolf.refused_socket_paths %}{% if paintedwolf.missing_capability_socket_paths %}Declare the exact service in `capability_request.socket_paths`. {% endif %}For external clients, use one whole endpoint value: paths `{{ paintedwolf.socket_path_references }}`or Unix URLs `{{ paintedwolf.socket_url_references }}`. Do not add a `unix:` prefix. Native socket arguments use the path. Saved approval does not select the endpoint. Preserve completed effects and resolve uncertain outcomes first.{% endif %}{% endif %}
   instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox

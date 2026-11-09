@@ -122,6 +122,8 @@ var factDecls = []factDecl{
 	{"receiving_tool_summarize", oarcore.TypeBool, FactTierHost, ""},
 	{"refused_terminal_read_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_terminal_write_paths", oarcore.TypeListString, FactTierHost, ""},
+	{"socket_path_references", oarcore.TypeString, FactTierHost, ""},
+	{"socket_url_references", oarcore.TypeString, FactTierHost, ""},
 	{"refused_socket_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_connect_ports", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_listen_ports", oarcore.TypeListString, FactTierHost, ""},
