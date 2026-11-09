@@ -11,7 +11,7 @@ import {
 } from "../components/project-files-model.ts";
 import { captureBufferViewState } from "./editor-session-fidelity.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
-import { invokePrettyToggleForTab, resetPrettyDisplayStateForTests } from "./pretty-display-state.ts";
+import { clearPrettyDisplayTab, invokePrettyToggleForTab, resetPrettyDisplayStateForTests } from "./pretty-display-state.ts";
 export { invokePrettyToggleForTab };
 
 type LiveEntry = {
@@ -322,7 +322,10 @@ function destroyLiveEntry(
     if (buffer) captureBufferViewState(buffer, entry.view);
   }
   releaseEditorViewport(entry.view);
-  if (opts.dropHandlers) handlerBags.delete(k);
+  if (opts.dropHandlers) {
+    handlerBags.delete(k);
+    clearPrettyDisplayTab(entry.projectId, entry.key);
+  }
 }
 
 export function dropFilesEditorHandlers(
@@ -330,6 +333,7 @@ export function dropFilesEditorHandlers(
   key: FileBufferKey,
 ): void {
   handlerBags.delete(id(projectId, key));
+  clearPrettyDisplayTab(projectId, key);
 }
 
 export function resetFilesEditorHostForTests(): void {
