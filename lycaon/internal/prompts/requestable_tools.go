@@ -65,6 +65,8 @@ func RequestableCapabilities(rows []RequestableToolView) []string {
 
 // SurfaceTurn holds session-loaded tools and tool schemas for a turn.
 type SurfaceTurn struct {
+	// Plan bounds catalog availability when a runtime snapshot is present.
+	Plan    toolsurface.Plan
 	Loaded  map[string]bool
 	Schemas *toolschema.Config
 }

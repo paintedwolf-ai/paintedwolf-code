@@ -225,6 +225,8 @@ func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolPr
 	if err != nil {
 		return err
 	}
+	floor = turn.available(floor)
+	loadable = turn.available(loadable)
 	offered, requestable := OfferedTools(floor, loadable, turn.Loaded)
 	if enabled, ok := into["web_search_enabled"].(bool); ok && !enabled {
 		offered = withoutResearchTools(offered)
