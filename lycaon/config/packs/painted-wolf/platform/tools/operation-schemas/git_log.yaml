@@ -18,7 +18,7 @@ schema:
       description: "Start at this commit offset; use next_offset from the preceding page."
     path:
       type: string
-      description: "Optional repo-relative file path; this never selects a branch."
+      description: "Optional session-folder-relative file path; this never selects a branch."
     all:
       type: boolean
       description: "Query commits across all refs and branches (replaces git log --all)."

@@ -25,7 +25,7 @@ schema:
         enum: [all, security, sast, sca, container, secret, lint, types, style, license, custom]
     paths:
       type: array
-      description: Project-relative paths to limit the scan to. Omit to scan the project.
+      description: "Paths to limit the scan to: relative to the session folder, `@label/path` for any attached folder, or absolute. Omit to scan the session folder."
       items:
         type: string
     completion:
