@@ -145,7 +145,7 @@ func TestGrepPerFileResultsAreBounded(t *testing.T) {
 	testutil.FailErr(t, "compile pattern", err)
 	for _, contextLines := range []int{0, 2} {
 		search := &grepSearch{ctx: t.Context(), re: re, offset: 4, maxMatches: 3, contextLines: contextLines}
-		matches, err := search.collectMatches("generated.txt", []byte(strings.Repeat("hit\n", 100000)))
+		matches, err := search.collectMatches("generated.txt", grepFileIdentity{}, []byte(strings.Repeat("hit\n", 100000)))
 		testutil.FailErr(t, "match dense content", err)
 		if len(matches) != 7 {
 			t.Fatalf("retained %d results for a seven-match window", len(matches))

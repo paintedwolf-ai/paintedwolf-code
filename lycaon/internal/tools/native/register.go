@@ -73,7 +73,7 @@ func scopedWriter(boundary *sandbox.Boundary, toolName string) func(ctx context.
 		if err := applyAgentFile(ctx, tctx, target, data, before, ""); err != nil {
 			return err
 		}
-		afterSuccessfulMutation(ctx, tctx, resolved.DisplayPath)
+		afterSuccessfulMutationResolved(ctx, tctx, resolved)
 		return nil
 	}
 }

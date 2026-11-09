@@ -109,6 +109,6 @@ func (t *WriteTool) Link(ctx context.Context, in LinkInput, tc tools.ToolContext
 	if err != nil {
 		return err
 	}
-	afterSuccessfulMutation(ctx, tc, resolved.Abs)
+	afterSuccessfulMutationResolved(ctx, tc, resolved)
 	return nil
 }

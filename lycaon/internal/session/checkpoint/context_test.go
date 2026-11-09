@@ -28,7 +28,7 @@ func TestCheckpointOperationsHonorCancellation(t *testing.T) {
 	operations := map[string]func() error{
 		"open":         func() error { _, err := checkpoints.Open(canceled, sess.ID, "other"); return err },
 		"read":         func() error { _, err := checkpoints.Load(canceled, sess.ID, "anchor"); return err },
-		"capture":      func() error { return checkpoints.CapturePreImage(canceled, sess.ID, "anchor", "main.go") },
+		"capture":      func() error { return checkpoints.CapturePreImage(canceled, sess.ID, "anchor", "main.go", "") },
 		"bind":         func() error { return checkpoints.CaptureBlueprintBinding(canceled, sess.ID, "anchor", "plan.md") },
 		"truncate":     func() error { return checkpoints.MarkTruncated(canceled, sess.ID, "anchor") },
 		"drop anchor":  func() error { return checkpoints.DropAnchor(canceled, sess.ID, "anchor") },

@@ -31,6 +31,7 @@ import (
 // FileEditCapture is optional Den UI metadata for completed file mutation tools.
 type FileEditCapture struct {
 	Path   string
+	RootID string
 	Before *string
 	After  string
 }
@@ -113,9 +114,15 @@ type WorkerWriteCoordinator interface {
 	EnsureBranch(ctx context.Context, tctx ToolContext) (ToolContext, error)
 }
 
+// PrimaryMutation identifies one primary-tree path for rewind checkpoints.
+type PrimaryMutation struct {
+	RootID  string
+	RelPath string
+}
+
 // PrimaryMutationRecorder records primary-tree paths for rewind checkpoints.
 type PrimaryMutationRecorder interface {
-	RecordPrimaryMutation(ctx context.Context, sessionID, relPath string)
+	RecordPrimaryMutation(ctx context.Context, sessionID, rootID, relPath string)
 }
 
 // LoopbackEndpointObserver attributes a loopback destination to its active listener(s).

@@ -34,6 +34,22 @@ func (c ToolContext) RecordSourceLocation(target api.NavigationTarget) {
 	c.Effects.Out.SourceContext.Locations = append(c.Effects.Out.SourceContext.Locations, target)
 }
 
+// RecordSourceIdentity records a location the tool already resolved, so the
+// result carries {RootID, ScopeRel} instead of re-resolving a display string.
+func (c ToolContext) RecordSourceIdentity(rootID, scopeRel string, kind api.NavigationEntryKind) {
+	if c.Effects.Out == nil || c.Identity.ProjectID == "" {
+		return
+	}
+	if rootID == "" || scopeRel == "" || scopeRel == "." {
+		return
+	}
+	target := api.NavigationTarget{ProjectID: c.Identity.ProjectID, RootID: rootID, Path: scopeRel, EntryKind: kind}
+	if c.Source.WorkerBranchRoot != "" {
+		target.WorkerID = c.Identity.WorkerJobID
+	}
+	c.RecordSourceLocation(target)
+}
+
 // RecordSourcePath resolves a structured producer path in its workspace.
 func (c ToolContext) RecordSourcePath(value string, kind api.NavigationEntryKind) {
 	if c.Effects.Out == nil || c.Identity.ProjectID == "" {

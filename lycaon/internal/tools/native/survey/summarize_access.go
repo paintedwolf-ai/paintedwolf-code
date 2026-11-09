@@ -2,6 +2,8 @@ package survey
 
 import (
 	"context"
+	"path/filepath"
+
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/summarize"
 
@@ -59,8 +61,8 @@ func rememberSummaryReads(ctx context.Context, reads *projectpaths.ReadSession, 
 		if window.StartLine != 1 || window.Body == "" || window.Path == "inline" {
 			continue
 		}
-		resolved, err := reads.Resolve(ctx, window.Path)
-		if err != nil {
+		resolved, ok := resolveSummaryWindow(ctx, reads, tctx, window)
+		if !ok {
 			continue
 		}
 		documents, ok := sourceview.DocumentsFor(tctx, resolved)
@@ -81,4 +83,22 @@ func rememberSummaryReads(ctx context.Context, reads *projectpaths.ReadSession, 
 		}
 		documents.RememberAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, doc)
 	}
+}
+
+// resolveSummaryWindow prefers the structured root identity carried by the
+// window and only falls back to display-string resolution for legacy windows.
+func resolveSummaryWindow(ctx context.Context, reads *projectpaths.ReadSession, tctx tools.ToolContext, window summarize.PackWindow) (projectpaths.Resolved, bool) {
+	if window.RootID != "" && window.ScopeRel != "" && window.ScopeRel != "." {
+		for _, root := range tctx.Source.Roots {
+			if root.ID == window.RootID {
+				return projectpaths.Resolved{Root: root, ScopeRel: window.ScopeRel, Abs: filepath.Join(root.Path, filepath.FromSlash(window.ScopeRel)), DisplayPath: window.Path}, true
+			}
+		}
+		return projectpaths.Resolved{}, false
+	}
+	resolved, err := reads.Resolve(ctx, window.Path)
+	if err != nil {
+		return projectpaths.Resolved{}, false
+	}
+	return resolved, true
 }

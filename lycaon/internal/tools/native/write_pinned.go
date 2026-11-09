@@ -224,7 +224,7 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 		if err != nil {
 			return WriteResult{}, err
 		}
-		afterSuccessfulMutation(ctx, tctx, resolved.DisplayPath)
+		afterSuccessfulMutationResolved(ctx, tctx, resolved)
 		return WriteResult{Path: resolved.DisplayPath, Appended: true, InputBytes: len(input.Bytes), ResultBytes: result.bytes, Accepted: true, Saved: true, PublishedSHA256: result.publishedSHA256}, nil
 	}
 	proposed := input.Bytes
@@ -258,7 +258,7 @@ func (t *WriteTool) applyPinnedBytes(ctx context.Context, input WriteInput, tctx
 	if err != nil {
 		return WriteResult{}, err
 	}
-	afterSuccessfulMutation(ctx, tctx, resolved.DisplayPath)
+	afterSuccessfulMutationResolved(ctx, tctx, resolved)
 	return WriteResult{Path: resolved.DisplayPath, Appended: input.Append, InputBytes: len(input.Bytes), ResultBytes: len(proposed),
 		Accepted: true, Saved: true, PublishedSHA256: landed.publishedSHA256}, nil
 }

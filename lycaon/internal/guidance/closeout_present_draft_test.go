@@ -110,7 +110,7 @@ func TestPresentedPathLinksNavigate(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			refs := navigationref.BuildProjectPathReferences(p, "See "+tc.link+" here.", nil)
+			refs := navigationref.BuildProjectPathReferences(p, "See "+tc.link+" here.", nil, "")
 			if len(refs) != 1 {
 				t.Fatalf("refs = %+v", refs)
 			}

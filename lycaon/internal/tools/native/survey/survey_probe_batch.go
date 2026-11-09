@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/litprefilter"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -113,7 +114,7 @@ func scanSurveyProbeTarget(
 		return grepRootStatErr(target.displayRoot, err)
 	}
 	if !info.IsDir() {
-		return scanSurveyProbeFile(ctx, reads, target.fullRoot, target.displayRoot, info, searches, stats)
+		return scanSurveyProbeFile(ctx, reads, target.fullRoot, target.displayRoot, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, target.fullRoot)}, info, searches, stats)
 	}
 	if tctx.Source.WorkerBranchRoot != "" {
 		return scanSurveyProbeTree(ctx, tool, reads, tctx, target, searches, stats)
@@ -124,7 +125,7 @@ func scanSurveyProbeTarget(
 		if statErr != nil || info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return true
 		}
-		scanErr = scanSurveyProbeFile(ctx, reads, job.abs, job.rel, info, searches, stats)
+		scanErr = scanSurveyProbeFile(ctx, reads, job.abs, job.rel, grepFileIdentity{rootID: job.rootID, scopeRel: job.scopeRel}, info, searches, stats)
 		return scanErr == nil
 	})
 	if err != nil {
@@ -158,7 +159,7 @@ func scanSurveyProbeTree(
 			return sandbox.SurveyContinue, nil
 		}
 		rel := projectpaths.QualifyAbs(tctx, target.root, entry.Abs)
-		if scanErr := scanSurveyProbeFile(ctx, reads, entry.Abs, rel, info, searches, stats); scanErr != nil {
+		if scanErr := scanSurveyProbeFile(ctx, reads, entry.Abs, rel, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, entry.Abs)}, info, searches, stats); scanErr != nil {
 			return sandbox.SurveyStop, scanErr
 		}
 		return sandbox.SurveyContinue, nil
@@ -169,6 +170,7 @@ func scanSurveyProbeFile(
 	ctx context.Context,
 	reads *projectpaths.ReadSession,
 	abs, rel string,
+	ident grepFileIdentity,
 	info os.FileInfo,
 	searches []*grepSearch,
 	stats *SurveyGrepBatchStats,
@@ -196,7 +198,7 @@ func scanSurveyProbeFile(
 		return nil
 	}
 	for _, search := range searches {
-		if err := search.scanFile(ctx, rel, content, bytesTruncated); err != nil {
+		if err := search.scanFile(ctx, rel, ident, content, bytesTruncated); err != nil {
 			return err
 		}
 	}

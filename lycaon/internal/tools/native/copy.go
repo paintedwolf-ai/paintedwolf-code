@@ -215,7 +215,7 @@ func (op *CopyOperation) copyFile(ctx context.Context, tctx tools.ToolContext, p
 	if publication.Publication.Committed() {
 		result.Effects++
 		result.Copied = append(result.Copied, copyResult{From: fromSlash, To: toSlash, Bytes: publication.Bytes})
-		afterSuccessfulMutation(ctx, tctx, toSlash)
+		afterSuccessfulMutationResolved(ctx, tctx, dstResolved)
 	}
 	if err != nil {
 		reject := &toolrejection.ToolReject{}

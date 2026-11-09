@@ -97,7 +97,7 @@ func (t *SourceHistoryTool) runOverview(ctx context.Context, tctx tools.ToolCont
 	resp.Files, err = overviewFiles(ctx, ledger.Files, effects, overviewRowFacts{
 		projectID: tctx.Identity.ProjectID, roots: tctx.Source.Roots, sessionID: tctx.Identity.SessionID,
 		statesWindows: ledger.Windows != nil, open: open, namesBranch: !sameBranch,
-		activeRootID:  tctx.Source.ActiveRootID,
+		activeRootID: tctx.Source.ActiveRootID,
 	})
 	if err != nil {
 		return "", fmt.Errorf("source history overview path: %w", err)

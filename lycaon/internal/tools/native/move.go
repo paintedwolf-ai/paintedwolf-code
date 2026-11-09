@@ -171,7 +171,7 @@ func (t *MoveTool) Move(ctx context.Context, in MoveInput, tctx tools.ToolContex
 			return result, fmt.Errorf("move %s -> %s: %w", pair.From, pair.To, err)
 		}
 		result.Moved = append(result.Moved, FilePair{From: fromSlash, To: toSlash})
-		afterSuccessfulMutation(ctx, tctx, fromSlash, toSlash)
+		afterSuccessfulMutationLocations(ctx, tctx, resolvedMutationLocation(srcResolved), resolvedMutationLocation(dstResolved))
 	}
 	return result, nil
 }

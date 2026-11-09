@@ -44,6 +44,9 @@ type PathEntry struct {
 	SHA256 string `json:"sha256,omitempty"`
 	Size   int64  `json:"size,omitempty"`
 	Mode   uint32 `json:"mode,omitempty"`
+	// RootID is the attached project root the path was recorded against.
+	// Empty on legacy manifests and session-artifact paths.
+	RootID string `json:"root_id,omitempty"`
 }
 
 // Manifest is the sealed pre-turn state for one prompt anchor.
@@ -170,7 +173,7 @@ func (s *Store) Open(ctx context.Context, sessionID, anchorMessageID string) (*M
 }
 
 // CapturePreImage records the first pre-turn state for a path.
-func (s *Store) CapturePreImage(ctx context.Context, sessionID, anchorMessageID, rel string) error {
+func (s *Store) CapturePreImage(ctx context.Context, sessionID, anchorMessageID, rel, rootID string) error {
 	if s == nil {
 		return nil
 	}
@@ -203,6 +206,7 @@ func (s *Store) CapturePreImage(ctx context.Context, sessionID, anchorMessageID,
 	if err != nil {
 		return err
 	}
+	entry.RootID = strings.TrimSpace(rootID)
 	if skip {
 		man.Skipped = append(man.Skipped, rel)
 		sort.Strings(man.Skipped)
