@@ -178,7 +178,9 @@ describe("chat content Files pane", () => {
     expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("view-only");
     expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]");
 
-    // Toggle Pretty ON: formats JSON across multiple lines, keeps read-only authority and mapped redaction mark, and blanks continuation line numbers.
+    // Toggle Pretty ON: formats JSON across multiple lines,
+    // keeps read-only authority and mapped redaction mark,
+    // and blanks continuation line numbers.
     fireEvent.click(prettyBtn);
     expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
     await waitFor(() =>
