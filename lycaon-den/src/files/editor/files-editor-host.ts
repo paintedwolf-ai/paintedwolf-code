@@ -11,6 +11,8 @@ import {
 } from "../components/project-files-model.ts";
 import { captureBufferViewState } from "./editor-session-fidelity.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
+import { invokePrettyToggleForTab, resetPrettyDisplayStateForTests } from "./pretty-display-state.ts";
+export { invokePrettyToggleForTab };
 
 type LiveEntry = {
   view: EditorView;
@@ -106,25 +108,16 @@ function filesEditorHandlers(
   return bag;
 }
 
-export function getFilesEditorView(
-  projectId: string,
-  key: FileBufferKey,
-): EditorView | undefined {
+export function getFilesEditorView(projectId: string, key: FileBufferKey): EditorView | undefined {
   return live.get(id(projectId, key))?.view;
 }
 
-export function getFilesEditorViewDoc(
-  projectId: string,
-  key: FileBufferKey,
-): string | undefined {
+export function getFilesEditorViewDoc(projectId: string, key: FileBufferKey): string | undefined {
   const entry = live.get(id(projectId, key));
   return entry?.documentValid ? entry.view.state.doc.toString() : undefined;
 }
 
-export function settleFilesEditorView(
-  projectId: string,
-  key: FileBufferKey,
-): void {
+export function settleFilesEditorView(projectId: string, key: FileBufferKey): void {
   const entry = live.get(id(projectId, key));
   if (entry) {
     entry.documentValid = true;
@@ -351,4 +344,5 @@ export function resetFilesEditorHostForTests(): void {
   handlerBags.clear();
   detachedOrder.length = 0;
   clearEditorViewportPool();
+  resetPrettyDisplayStateForTests();
 }

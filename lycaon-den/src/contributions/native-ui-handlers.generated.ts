@@ -53,6 +53,7 @@ export const NATIVE_UI_HANDLER_IDS: readonly string[] = [
   "editor.toggleBlockComment",
   "editor.toggleComment",
   "editor.toggleLineNumbers",
+  "editor.togglePretty",
   "editor.toggleTabFocus",
   "editor.toggleWrap",
   "editor.undoSelection",
