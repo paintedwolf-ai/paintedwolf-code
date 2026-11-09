@@ -63,7 +63,7 @@ func activityArguments(ctx context.Context, body []byte, digest string) (map[str
 	defer releaseArguments()
 	// Keep only bounded presentation fields after releasing the inspection value.
 	result := map[string]any{}
-	for _, name := range []string{"command", "cwd", "path", "pattern", "query", "url", "message"} {
+	for _, name := range []string{"command", "cwd", "path", "pattern", "query", "url", "message", "task", "focus", "bundle"} {
 		if value := stringArgument(arguments, name); value != "" {
 			result[name] = boundedActivityText(value)
 		}
@@ -83,6 +83,16 @@ func activityArguments(ctx context.Context, body []byte, digest string) (map[str
 	options, _ := arguments["options"].([]any)
 	for _, raw := range options {
 		option, _ := raw.(map[string]any)
+		if optionFlag(option, "--focus") {
+			if value := optionValue(option); value != "" {
+				result["focus"] = boundedActivityText(value)
+			}
+		}
+		if optionFlag(option, "--bundle") {
+			if value := optionValue(option); value != "" {
+				result["bundle"] = boundedActivityText(value)
+			}
+		}
 		role := stringArgument(option, "value_role")
 		if role != "pattern" && role != "glob" && role != "regex" && role != "query" {
 			continue
@@ -97,4 +107,25 @@ func activityArguments(ctx context.Context, body []byte, digest string) (map[str
 	}
 	result["path_targets"] = targets
 	return result, nil
+}
+
+// optionFlag reports whether the restored option spells flag, by spellings or name.
+func optionFlag(option map[string]any, flag string) bool {
+	if spellings, ok := option["spellings"].([]any); ok {
+		for _, raw := range spellings {
+			if spelling, _ := raw.(string); spelling == flag {
+				return true
+			}
+		}
+	}
+	return stringArgument(option, "name") == flag
+}
+
+func optionValue(option map[string]any) string {
+	values, _ := option["values"].([]any)
+	if len(values) == 0 {
+		return ""
+	}
+	value, _ := values[0].(string)
+	return value
 }
