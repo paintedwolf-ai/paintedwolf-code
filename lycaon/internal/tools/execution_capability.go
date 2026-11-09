@@ -38,11 +38,12 @@ type currentActionReview struct {
 }
 
 func invocationMatchesReview(
-	tc ToolContext,
-	args map[string]any,
-	req confine.Request,
+	tc ToolContext, args map[string]any, req confine.Request,
 	session, call, action, boundary, arguments string,
 ) bool {
+	if args == nil && tc.Effects.CanonicalArgs != nil {
+		args = tc.Effects.CanonicalArgs
+	}
 	if arguments != executionArgumentsDigest(args) {
 		return false
 	}
@@ -87,6 +88,10 @@ func finalizeExecutionCapability(tc ToolContext, req confine.Request) *toolrejec
 // AuthorizedExecutionCapabilities returns the execution capabilities covered by
 // an unconsumed current-call permit matching this invocation and boundary.
 func (tc ToolContext) AuthorizedExecutionCapabilities(args map[string]any, req confine.Request) []string {
+	return authorizedExecutionCapabilities(tc, args, req)
+}
+
+func authorizedExecutionCapabilities(tc ToolContext, args map[string]any, req confine.Request) []string {
 	if !req.HostExecution && !req.ProcessControl && !req.CredentialStore {
 		return nil
 	}
@@ -115,10 +120,13 @@ func (tc ToolContext) AuthorizedExecutionCapabilities(args map[string]any, req c
 // RecordCurrentActionReview binds the structured reasons approved by a human
 // checkpoint to this invocation's identity, arguments, and confine boundary.
 func (tc *ToolContext) RecordCurrentActionReview(
-	args map[string]any,
-	req confine.Request,
-	action hitl.ProposedAction,
-	result *hitl.ApprovalResult,
+	args map[string]any, req confine.Request, action hitl.ProposedAction, result *hitl.ApprovalResult,
+) {
+	recordCurrentActionReview(tc, args, req, action, result)
+}
+
+func recordCurrentActionReview(
+	tc *ToolContext, args map[string]any, req confine.Request, action hitl.ProposedAction, result *hitl.ApprovalResult,
 ) {
 	if tc == nil || result == nil || result.Decision == nil {
 		return
@@ -129,105 +137,68 @@ func (tc *ToolContext) RecordCurrentActionReview(
 	}
 	var cited []gate.Fact
 	for _, fact := range result.Decision.Cited {
-		if fact.Gate == api.GateUnobservedChannel || fact.Gate == api.GateIncompleteFacts {
-			continue
-		}
-		if !slices.Contains(cited, fact) {
+		if fact.Gate != api.GateUnobservedChannel && fact.Gate != api.GateIncompleteFacts && !slices.Contains(cited, fact) {
 			cited = append(cited, fact)
 		}
 	}
-	var segments []string
-	for _, segment := range result.Decision.ReasonSegments() {
-		if !slices.Contains(segments, segment) {
-			segments = append(segments, segment)
-		}
-	}
+	segments := uniqueCompactSlice(nil, result.Decision.ReasonSegments())
 	var detection *hitl.DetectionMatch
 	if result.DetectionCitation != nil {
 		cp := *result.DetectionCitation
 		cp.CorrelationID = ""
 		detection = &cp
 	}
-	var matchedRules []hitl.ApprovalRuleMatch
-	for _, match := range result.MatchedRules {
-		if !slices.Contains(matchedRules, match) {
-			matchedRules = append(matchedRules, match)
-		}
-	}
+	matchedRules := uniqueCompactSlice(nil, result.MatchedRules)
 	var agentPolicy []hitl.AgentPolicyTarget
 	if slices.Contains(result.Decision.Gates(), api.GateAgentPolicyChange) {
-		for _, target := range action.Mutations.AgentPolicy {
-			if !slices.Contains(agentPolicy, target) {
-				agentPolicy = append(agentPolicy, target)
-			}
-		}
+		agentPolicy = uniqueCompactSlice(nil, action.Mutations.AgentPolicy)
 	}
-	boundary := ExecutionBoundaryDigest(req)
-	arguments := executionArgumentsDigest(args)
-	effectAction := tc.EffectActionID()
+	boundary, arguments, effectAction := ExecutionBoundaryDigest(req), executionArgumentsDigest(args), tc.EffectActionID()
 	if existing := tc.Execution.currentActionReview; existing != nil {
 		existing.mu.Lock()
-		sameInvocation := existing.session == tc.Identity.SessionID &&
-			existing.call == tc.Identity.ToolCallID &&
-			existing.action == tc.Invocation.ID &&
-			existing.effectAction == effectAction &&
-			existing.arguments == arguments
-		if sameInvocation {
-			existing.boundary = boundary
-			existing.review.ActionKey = actionKey
-			for _, fact := range cited {
-				if !slices.Contains(existing.review.Cited, fact) {
-					existing.review.Cited = append(existing.review.Cited, fact)
-				}
-			}
-			for _, segment := range segments {
-				if !slices.Contains(existing.review.ReasonSegments, segment) {
-					existing.review.ReasonSegments = append(existing.review.ReasonSegments, segment)
-				}
-			}
+		if existing.session == tc.Identity.SessionID && existing.call == tc.Identity.ToolCallID &&
+			existing.action == tc.Invocation.ID && existing.effectAction == effectAction && existing.arguments == arguments {
+			existing.boundary, existing.review.ActionKey = boundary, actionKey
+			existing.review.Cited = uniqueCompactSlice(existing.review.Cited, cited)
+			existing.review.ReasonSegments = uniqueCompactSlice(existing.review.ReasonSegments, segments)
 			if detection != nil {
 				existing.review.Detection = detection
 			}
-			for _, match := range matchedRules {
-				if !slices.Contains(existing.review.MatchedRules, match) {
-					existing.review.MatchedRules = append(existing.review.MatchedRules, match)
-				}
-			}
-			for _, target := range agentPolicy {
-				if !slices.Contains(existing.review.AgentPolicy, target) {
-					existing.review.AgentPolicy = append(existing.review.AgentPolicy, target)
-				}
-			}
+			existing.review.MatchedRules = uniqueCompactSlice(existing.review.MatchedRules, matchedRules)
+			existing.review.AgentPolicy = uniqueCompactSlice(existing.review.AgentPolicy, agentPolicy)
 			existing.mu.Unlock()
 			return
 		}
 		existing.mu.Unlock()
 	}
 	tc.Execution.currentActionReview = &currentActionReview{
-		session:      tc.Identity.SessionID,
-		call:         tc.Identity.ToolCallID,
-		action:       tc.Invocation.ID,
-		effectAction: effectAction,
-		boundary:     boundary,
-		arguments:    arguments,
+		session: tc.Identity.SessionID, call: tc.Identity.ToolCallID, action: tc.Invocation.ID,
+		effectAction: effectAction, boundary: boundary, arguments: arguments,
 		review: hitl.CurrentActionReview{
-			SessionID:      tc.Identity.SessionID,
-			ToolCallID:     tc.Identity.ToolCallID,
-			InvocationID:   tc.Invocation.ID,
-			ActionID:       effectAction,
-			ActionKey:      actionKey,
-			Cited:          cited,
-			ReasonSegments: segments,
-			Detection:      detection,
-			MatchedRules:   matchedRules,
-			AgentPolicy:    agentPolicy,
+			SessionID: tc.Identity.SessionID, ToolCallID: tc.Identity.ToolCallID,
+			InvocationID: tc.Invocation.ID, ActionID: effectAction, ActionKey: actionKey,
+			Cited: cited, ReasonSegments: segments, Detection: detection,
+			MatchedRules: matchedRules, AgentPolicy: agentPolicy,
 		},
 	}
+}
+
+func uniqueCompactSlice[T comparable](dst, src []T) []T {
+	for _, item := range src {
+		if !slices.Contains(dst, item) {
+			dst = append(dst, item)
+		}
+	}
+	return dst
 }
 
 // CurrentActionReview returns the current-call human review receipt when it
 // matches this invocation's identity, arguments, and confine boundary.
 func (tc ToolContext) CurrentActionReview(args map[string]any, req confine.Request) *hitl.CurrentActionReview {
+	return currentActionReviewFor(tc, args, req)
+}
+
+func currentActionReviewFor(tc ToolContext, args map[string]any, req confine.Request) *hitl.CurrentActionReview {
 	r := tc.Execution.currentActionReview
 	if r == nil {
 		return nil

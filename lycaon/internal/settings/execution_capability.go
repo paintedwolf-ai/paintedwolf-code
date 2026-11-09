@@ -11,13 +11,17 @@ import (
 )
 
 func (g *RuleApprovalGate) executionCapabilityCovers(action hitl.ProposedAction) bool {
-	capabilities := hitl.ExecutionCapabilitiesForAction(action)
-	if len(capabilities) == 0 {
-		return false
-	}
 	var live []hitl.ApprovalGrant
 	if g.grants != nil {
 		live = g.grants.live(action.Scope.ChatSession())
+	}
+	return executionCapabilitiesCovered(action, live)
+}
+
+func executionCapabilitiesCovered(action hitl.ProposedAction, live []hitl.ApprovalGrant) bool {
+	capabilities := hitl.ExecutionCapabilitiesForAction(action)
+	if len(capabilities) == 0 {
+		return false
 	}
 	for _, capability := range capabilities {
 		if slices.Contains(action.Execution.AuthorizedExecutionCapabilities, capability) {
