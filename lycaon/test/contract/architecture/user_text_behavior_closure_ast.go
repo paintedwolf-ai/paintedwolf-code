@@ -335,7 +335,6 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"profile_has_verify":                           true,
 	"profile_has_command":                          true,
 	"profile_has_source_history":                   true,
-	"profile_has_http_request":                     true,
 	"http_request_needs_request":                   true,
 	"managed_secrets_needs_request":                true,
 	"profile_has_fetch_url":                        true,
@@ -452,8 +451,6 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"command_on_floor":             true,
 	"session_scratch_dir":          true,
 	"command_output_scratch_files": true,
-	"profile_has_process_list":     true,
-	"profile_has_process_signal":   true,
 	"profile_has_command_output":   true,
 	"profile_has_command_stop":     true,
 }
