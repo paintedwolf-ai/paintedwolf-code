@@ -13,7 +13,7 @@ import (
 func TestNavigationParsingNeverNeedsFilesystem(t *testing.T) {
 	p := &project.Project{ID: "project", Roots: []project.Root{{ID: "root", Label: "main", Path: "/does/not/exist", IsPrimary: true}}}
 	prose := "See `a.go`, `.hidden/ignored.json`, [first](one/config.yaml), [second](two/config.yaml), and [space](<docs/My File.md>)."
-	refs := BuildProjectPathReferences(p, prose, nil)
+	refs := BuildProjectPathReferences(p, prose, nil, "")
 	if len(refs) != 4 {
 		t.Fatalf("refs = %+v", refs)
 	}
@@ -32,7 +32,7 @@ func TestNavigationParsingNeverNeedsFilesystem(t *testing.T) {
 
 func TestNavigationParsingPreservesDestinationsAndScope(t *testing.T) {
 	p := &project.Project{ID: "p", Roots: []project.Root{{ID: "r", Label: "backend", IsPrimary: true}}}
-	refs := BuildProjectPathReferences(p, "[file](@backend/src/a.go#L10-L20) `folder/` [file](docs/a%20b.md)", nil)
+	refs := BuildProjectPathReferences(p, "[file](@backend/src/a.go#L10-L20) `folder/` [file](docs/a%20b.md)", nil, "")
 	got := map[string]api.NavigationReference{}
 	for _, r := range refs {
 		got[r.Mention] = r
@@ -51,7 +51,7 @@ func TestNavigationParsingPreservesDestinationsAndScope(t *testing.T) {
 
 func TestNavigationParsingExcludesForeignMarkupAndCode(t *testing.T) {
 	prose := "[web](https://example.com/a.go) ![image](image.png) <span>hidden.go</span>\n\n```go\nexample.go\n```\n\n`../outside.go` [escape](/tmp/a.go)"
-	refs := BuildProjectPathReferences(&project.Project{ID: "p"}, prose, nil)
+	refs := BuildProjectPathReferences(&project.Project{ID: "p"}, prose, nil, "")
 	for _, ref := range refs {
 		if ref.Mention != "hidden.go" {
 			t.Fatalf("unexpected reference: %+v", ref)
@@ -64,7 +64,7 @@ func TestNavigationParsingIsBounded(t *testing.T) {
 	for i := 0; i < api.MaxMessageNavigationRefs+20; i++ {
 		fmt.Fprintf(&prose, " [file](file-%d.go)", i)
 	}
-	refs := BuildProjectPathReferences(&project.Project{ID: "p"}, prose.String(), nil)
+	refs := BuildProjectPathReferences(&project.Project{ID: "p"}, prose.String(), nil, "")
 	if len(refs) != api.MaxMessageNavigationRefs {
 		t.Fatalf("count=%d", len(refs))
 	}
@@ -72,7 +72,7 @@ func TestNavigationParsingIsBounded(t *testing.T) {
 
 func TestNavigationReusableDestinationsAndAbsolutePaths(t *testing.T) {
 	p := &project.Project{ID: "p", Roots: []project.Root{{ID: "r", Path: "/repo", IsPrimary: true}}}
-	refs := BuildProjectPathReferences(p, "[a](source://r/docs/My%20File.md#L4-L8) [b](/repo/.hidden/file.go) [c](file:///repo/ignored/a.go) [outside](/other/a.go)", nil)
+	refs := BuildProjectPathReferences(p, "[a](source://r/docs/My%20File.md#L4-L8) [b](/repo/.hidden/file.go) [c](file:///repo/ignored/a.go) [outside](/other/a.go)", nil, "")
 	if len(refs) != 3 {
 		t.Fatalf("refs=%+v", refs)
 	}
@@ -90,7 +90,7 @@ func TestNavigationReusableDestinationsAndAbsolutePaths(t *testing.T) {
 
 func TestNavigationExtensionlessCodeAndLink(t *testing.T) {
 	p := &project.Project{ID: "p"}
-	refs := BuildProjectPathReferences(p, "Read `LICENSE` and [build](Makefile). Ordinary words are not references.", &api.SourceContext{Locations: []api.NavigationTarget{{ProjectID: "p", RootID: "r", Path: "LICENSE", EntryKind: api.NavigationEntryKindFile}}})
+	refs := BuildProjectPathReferences(p, "Read `LICENSE` and [build](Makefile). Ordinary words are not references.", &api.SourceContext{Locations: []api.NavigationTarget{{ProjectID: "p", RootID: "r", Path: "LICENSE", EntryKind: api.NavigationEntryKindFile}}}, "")
 	if len(refs) != 2 {
 		t.Fatalf("refs=%+v", refs)
 	}
@@ -107,7 +107,7 @@ func TestNavigationRootAliasesAndEscapedFilenameSyntax(t *testing.T) {
 		{ID: "r", Label: "main", Path: "/branch", IsPrimary: true},
 		{ID: "r", Label: "main", Path: "/primary", IsPrimary: true},
 	}}
-	refs := BuildProjectPathReferences(p, "[root](@main/a.go) [absolute](/primary/a.go) [colon](source://r/file:12) [hash](source://r/a%23L12) [at](source://r/@dir/a.go#L4)", nil)
+	refs := BuildProjectPathReferences(p, "[root](@main/a.go) [absolute](/primary/a.go) [colon](source://r/file:12) [hash](source://r/a%23L12) [at](source://r/@dir/a.go#L4)", nil, "")
 	if len(refs) != 5 {
 		t.Fatalf("refs=%+v", refs)
 	}
@@ -125,7 +125,7 @@ func TestNavigationRootAliasesAndEscapedFilenameSyntax(t *testing.T) {
 }
 
 func TestNavigationSourceDestinationPreservesWorkerIdentity(t *testing.T) {
-	refs := BuildProjectPathReferences(&project.Project{ID: "p"}, "[worker](source://r/src/a.go?job_id=worker-1#L12) [invalid](source://r/a.go?unknown=x)", nil)
+	refs := BuildProjectPathReferences(&project.Project{ID: "p"}, "[worker](source://r/src/a.go?job_id=worker-1#L12) [invalid](source://r/a.go?unknown=x)", nil, "")
 	if len(refs) != 1 || refs[0].WorkerID != "worker-1" || refs[0].Path != "src/a.go" || refs[0].Line != 12 {
 		t.Fatalf("refs=%+v", refs)
 	}
@@ -140,14 +140,14 @@ func TestNavigationBareExtensionlessWordInTextNeverBecomesReference(t *testing.T
 
 	// Plain prose ignores bare extensionless words, while paths with extensions match.
 	prose := "Our primary task is to update main.go before this task is finished."
-	refs := BuildProjectPathReferences(p, prose, context)
+	refs := BuildProjectPathReferences(p, prose, context, "")
 	if len(refs) != 1 || refs[0].Path != "main.go" {
 		t.Fatalf("expected only main.go, got: %+v", refs)
 	}
 
 	// Backticks, path prefixes, and links produce references.
 	syntacticProse := "Run `task` or ./task or [view](task) for details."
-	synRefs := BuildProjectPathReferences(p, syntacticProse, context)
+	synRefs := BuildProjectPathReferences(p, syntacticProse, context, "")
 	if len(synRefs) != 3 {
 		t.Fatalf("expected 3 references for syntactic forms, got: %+v", synRefs)
 	}
@@ -161,10 +161,38 @@ func TestNavigationBareExtensionlessWordInTextNeverBecomesReference(t *testing.T
 	}
 }
 
+func TestNavigationBareAnchoredPathsBindToSessionFolderRoot(t *testing.T) {
+	p := &project.Project{ID: "p", Roots: []project.Root{
+		{ID: "primary", Label: "main", Path: "/primary", IsPrimary: true},
+		{ID: "active", Label: "worktree", Path: "/worktree"},
+	}}
+	refs := BuildProjectPathReferences(p, "[a](docs/a.go)", nil, "active")
+	if len(refs) != 1 || refs[0].RootID != "active" || refs[0].Path != "docs/a.go" {
+		t.Fatalf("bare anchored path must bind to the session folder root: %+v", refs)
+	}
+
+	for _, active := range []string{"", "missing"} {
+		refs := BuildProjectPathReferences(p, "[a](docs/a.go)", nil, active)
+		if len(refs) != 1 || refs[0].RootID != "primary" {
+			t.Fatalf("active=%q must fall back to the primary root: %+v", active, refs)
+		}
+	}
+}
+
+func TestNavigationLabelMatchingIsCaseInsensitive(t *testing.T) {
+	p := &project.Project{ID: "p", Roots: []project.Root{
+		{ID: "r", Label: "Backend", Path: "/backend", IsPrimary: true},
+	}}
+	refs := BuildProjectPathReferences(p, "[file](@BACKEND/src/a.go)", nil, "")
+	if len(refs) != 1 || refs[0].RootID != "r" || refs[0].Path != "src/a.go" {
+		t.Fatalf("label match must ignore case: %+v", refs)
+	}
+}
+
 func TestNavigationParsedPathsAlwaysEncode(t *testing.T) {
 	p := &project.Project{ID: "p", Roots: []project.Root{{ID: "r", Label: "main", Path: "/repo", IsPrimary: true}}}
 	prose := "`GET /` returns 200. Also `POST /` and [trail](foo%20/) [lead](%20foo) [tab](a%09/) `src/ok.go` [fine](docs/a%20b.md)."
-	refs := BuildProjectPathReferences(p, prose, nil)
+	refs := BuildProjectPathReferences(p, prose, nil, "")
 	if _, err := sourceref.EncodeMetadata(refs, nil); err != nil {
 		t.Fatalf("parsed references must satisfy the stored-path rule: %v (refs=%+v)", err, refs)
 	}
