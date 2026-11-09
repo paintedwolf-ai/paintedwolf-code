@@ -74,12 +74,13 @@ func CloneContinuation(record *Continuation) *Continuation {
 	return &copy
 }
 
-// ContinuationExecution preserves recorded outcomes independently of summary prose.
+// ContinuationEffects retains the program owner’s recorded effect counts.
 type ContinuationEffects struct {
 	Completed int `json:"completed"`
 	Uncertain int `json:"uncertain"`
 }
 
+// ContinuationExecution preserves recorded outcomes independently of summary prose.
 type ContinuationExecution struct {
 	Effects           *ContinuationEffects `json:"effects,omitempty"`
 	BackgroundHandles []string             `json:"background_handles,omitempty"`
