@@ -250,7 +250,7 @@ export class PrettyReplicaEditorAdapter {
 
   holdViewProjection(hold: boolean): void {
     this.holdProjection = hold;
-    if (!hold && !this.isComposing && this.projectedRevision !== this.replica.history.revision) {
+    if (!hold && !(this.composing || Boolean(this.view?.composing)) && this.projectedRevision !== this.replica.history.revision) {
       this.syncReplicaToView(true);
     }
   }
@@ -307,7 +307,7 @@ export class PrettyReplicaEditorAdapter {
         this.lastObservedRevision = this.replica.history.revision;
         this.lastObservedDocState = this.replica.history.state;
       }
-      if (!this.holdProjection && !this.isComposing && this.projectedRevision !== this.replica.history.revision) {
+      if (!this.holdProjection && !(this.composing || Boolean(this.view?.composing)) && this.projectedRevision !== this.replica.history.revision) {
         this.syncReplicaToView(true);
       }
     });
@@ -890,7 +890,8 @@ export class PrettyReplicaEditorAdapter {
       head: sourceToDisplayOffset(this.projection.sourceMap, r.head, "right"),
     }));
     if (this.view?.hasFocus) this.replica.publishPresence(rawSel);
-    this.options.onAuthoritativeDocChange?.(this.replica.currentText, userEvent);
+    const updatedRaw = this.replica.currentText;
+    queueMicrotask(() => this.options.onAuthoritativeDocChange?.(updatedRaw, userEvent));
     const diff = computeMinimalTextChange(tr.startState.doc.toString(), this.projection.displayText);
     return {
       ...(diff ? { changes: diff } : {}),
@@ -939,7 +940,7 @@ export class PrettyReplicaEditorAdapter {
           compositionupdate: () => { this.startComposition(); return false; },
           compositionend: () => { this.finishComposition(); return false; },
           beforeinput: (event) => {
-            if (event.isComposing || event.inputType === "insertCompositionText") {
+            if (isImeComposition(event) || event.inputType === "insertCompositionText") {
               this.startComposition();
               return false;
             }

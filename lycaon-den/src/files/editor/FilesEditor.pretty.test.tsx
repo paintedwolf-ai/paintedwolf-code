@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import { setupFilesEditorTests } from "./files-editor-test-harness.ts";
+import {
+  copyTextToClipboard,
+  setupFilesEditorTests,
+} from "./files-editor-test-harness.ts";
 import "../../test/document-outbox-fixture.ts";
 import {
   PROJECT,
@@ -223,13 +226,13 @@ describe("FilesEditor Pretty display integration", () => {
     const adapter = getFilesEditorPrettyAdapter(PROJECT, buf.key)!;
     expect(adapter).not.toBeNull();
     // Line 1 of display is start of source line 1 -> "1"; continuation lines of record 1 -> ""
-    expect(adapter.getLineGutterLabel(1)).toBe("1");
-    expect(adapter.getLineGutterLabel(2)).toBe("");
+    expect(adapter.getLineGutterLabel(1).label).toBe("1");
+    expect(adapter.getLineGutterLabel(2).label).toBe("");
     const line2Mapped = adapter.mapSourceLineColToDisplay(2, 1);
     const line2DispLine = view.state.doc.lineAt(line2Mapped.offset).number;
     expect(line2DispLine).toBeGreaterThan(2);
-    expect(adapter.getLineGutterLabel(line2DispLine)).toBe("2");
-    expect(adapter.getLineGutterLabel(line2DispLine + 1)).toBe("");
+    expect(adapter.getLineGutterLabel(line2DispLine).label).toBe("2");
+    expect(adapter.getLineGutterLabel(line2DispLine + 1).label).toBe("");
 
     // Go to Line uses source line count (3 lines including trailing newline) and navigates by source line:col
     openGotoLine(view);
@@ -396,7 +399,12 @@ describe("FilesEditor Pretty display integration", () => {
     );
 
     // Eviction is blocked while unpersisted recovery exists
-    expect(await evictEditorDocument(docState.documentId)).toBe(false);
+    expect(
+      await evictEditorDocument(docState.documentId, { ifIdle: true }),
+    ).toBe(false);
+    await expect(evictEditorDocument(docState.documentId)).rejects.toThrow(
+      "held in memory only",
+    );
 
     // Close confirmation prompts instead of closing silently even when buffer.dirty is false
     const closeBufferSpy = vi.fn(() => null);
@@ -482,7 +490,7 @@ describe("FilesEditor Pretty display integration", () => {
     adapter.setRecoveryFeedback("Ready");
 
     const tooltip = await waitFor(() => {
-      const el = view.dom.querySelector(
+      const el = document.querySelector(
         '[data-testid="pretty-recovery-tooltip"]',
       ) as HTMLElement | null;
       expect(el).not.toBeNull();
@@ -497,58 +505,38 @@ describe("FilesEditor Pretty display integration", () => {
     expect(applyBtn.textContent).toContain("↵");
 
     // Async clipboard failure path falls back to manual copy instruction
-    const origClipboard = navigator.clipboard;
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: vi.fn(async () => {
-          throw new Error("Denied");
-        }),
-      },
+    copyTextToClipboard.mockRejectedValueOnce(new Error("Denied"));
+    const copyBtn = tooltip.querySelector(
+      '[data-testid="pretty-recovery-copy"]',
+    ) as HTMLButtonElement;
+    fireEvent.click(copyBtn);
+    await waitFor(() => {
+      const feedback = document.querySelector(
+        '[data-testid="pretty-recovery-feedback"]',
+      );
+      expect(feedback?.textContent).toContain(
+        "Selected retained edit in text box",
+      );
     });
-    try {
-      const copyBtn = tooltip.querySelector(
-        '[data-testid="pretty-recovery-copy"]',
-      ) as HTMLButtonElement;
-      fireEvent.click(copyBtn);
-      await waitFor(() => {
-        const feedback = view.dom.querySelector(
-          '[data-testid="pretty-recovery-feedback"]',
-        );
-        expect(feedback?.textContent).toContain(
-          "Selected retained edit in text box",
-        );
-      });
 
-      // Async clipboard success path reports copied to clipboard
-      Object.defineProperty(navigator, "clipboard", {
-        configurable: true,
-        value: {
-          writeText: vi.fn(async () => undefined),
-        },
-      });
-      const copyBtn2 = view.dom.querySelector(
-        '[data-testid="pretty-recovery-copy"]',
-      ) as HTMLButtonElement;
-      fireEvent.click(copyBtn2);
-      await waitFor(() => {
-        const feedback = view.dom.querySelector(
-          '[data-testid="pretty-recovery-feedback"]',
-        );
-        expect(feedback?.textContent).toContain(
-          "Copied retained edit to clipboard",
-        );
-      });
-    } finally {
-      Object.defineProperty(navigator, "clipboard", {
-        configurable: true,
-        value: origClipboard,
-      });
-    }
+    // Async clipboard success path reports copied to clipboard
+    copyTextToClipboard.mockResolvedValueOnce(undefined);
+    const copyBtn2 = document.querySelector(
+      '[data-testid="pretty-recovery-copy"]',
+    ) as HTMLButtonElement;
+    fireEvent.click(copyBtn2);
+    await waitFor(() => {
+      const feedback = document.querySelector(
+        '[data-testid="pretty-recovery-feedback"]',
+      );
+      expect(feedback?.textContent).toContain(
+        "Copied retained edit to clipboard",
+      );
+    });
 
     // Escape inside recovery tooltip returns focus to view.contentDOM
     const focusSpy = vi.spyOn(view.contentDOM, "focus");
-    const activeTooltip = view.dom.querySelector(
+    const activeTooltip = document.querySelector(
       '[data-testid="pretty-recovery-tooltip"]',
     ) as HTMLElement;
     fireEvent.keyDown(activeTooltip, { key: "Escape" });

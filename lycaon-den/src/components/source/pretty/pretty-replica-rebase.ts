@@ -31,8 +31,10 @@ export class PrettyRevisionDeltaRingBuffer {
     }
     this.entries.push(delta);
     while (this.entries.length > this.capacity) {
-      const removed = this.entries.shift()!;
-      this.invalidatedBelowRevision = Math.max(this.invalidatedBelowRevision, removed.toRevision);
+      const removed = this.entries.shift();
+      if (removed) {
+        this.invalidatedBelowRevision = Math.max(this.invalidatedBelowRevision, removed.toRevision);
+      }
     }
   }
 
@@ -43,8 +45,10 @@ export class PrettyRevisionDeltaRingBuffer {
 
   evictBefore(revision: number): void {
     while (this.entries.length > 0 && this.entries[0]!.fromRevision < revision) {
-      const removed = this.entries.shift()!;
-      this.invalidatedBelowRevision = Math.max(this.invalidatedBelowRevision, removed.toRevision);
+      const removed = this.entries.shift();
+      if (removed) {
+        this.invalidatedBelowRevision = Math.max(this.invalidatedBelowRevision, removed.toRevision);
+      }
     }
   }
 

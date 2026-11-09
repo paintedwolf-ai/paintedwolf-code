@@ -206,7 +206,8 @@ function buildNonReplicaPrettyExtensions(session: FilesViewPrettySession): Exten
         : undefined,
     });
     const userEvent = tr.annotation(Transaction.userEvent) ?? "input.type";
-    session.onAuthoritativeDocChange?.(session.nonReplicaRawText, userEvent);
+    const updatedRaw = session.nonReplicaRawText;
+    queueMicrotask(() => session.onAuthoritativeDocChange?.(updatedRaw, userEvent));
     const rawHead = mapped.rawSelection[0]?.head ?? 0;
     const dispHead = sourceToDisplayOffset(
       session.nonReplicaProjection.sourceMap,
@@ -395,6 +396,17 @@ export function rebindFilesCollaboration(
   );
 
   if (wantPretty || hasRecovery || existingSession?.adapterAttached) {
+    if (
+      existingSession &&
+      existingSession.replica === replica &&
+      existingSession.prettyEnabled === wantPretty &&
+      existingSession.adapterAttached === Boolean(replica && (wantPretty || hasRecovery))
+    ) {
+      if (options?.onAuthoritativeDocChange) {
+        existingSession.onAuthoritativeDocChange = options.onAuthoritativeDocChange;
+      }
+      return false;
+    }
     syncFilesCollaborationPrettyMode(view, replica, {
       ...existingSession,
       ...options,

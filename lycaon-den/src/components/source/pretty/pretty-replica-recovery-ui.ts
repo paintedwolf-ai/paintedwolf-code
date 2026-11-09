@@ -1,6 +1,7 @@
 import { setDiagnostics, type Action, type Diagnostic } from "@codemirror/lint";
 import { StateEffect, StateField, type EditorState, type Extension } from "@codemirror/state";
 import { EditorView, showTooltip, type Tooltip } from "@codemirror/view";
+import * as clipboardBridge from "../../../utils/clipboard.ts";
 import { sourceToDisplayOffset } from "./pretty-map.ts";
 import {
   formatRecoverySelectionSnapshot,
@@ -98,23 +99,22 @@ function resolveEntryDisplayRange(
 }
 
 function tryWriteClipboard(text: string, controller: PrettyRecoveryUiController): void {
-  try {
-    const nav = typeof navigator !== "undefined" ? navigator : undefined;
-    if (nav?.clipboard && typeof nav.clipboard.writeText === "function") {
-      void Promise.resolve(nav.clipboard.writeText(text)).then(
-        () => {
-          controller.setRecoveryFeedback("Copied retained edit to clipboard");
-        },
-        () => {
-          controller.setRecoveryFeedback(
-            "Selected retained edit in text box — press Copy shortcut to copy",
-          );
-        },
-      );
-      return;
-    }
-  } catch {
-    // Fall through to text box selection feedback when clipboard access fails.
+  const writer =
+    typeof clipboardBridge.writeClipboardText === "function"
+      ? clipboardBridge.writeClipboardText
+      : clipboardBridge.copyTextToClipboard;
+  if (typeof writer === "function") {
+    void Promise.resolve(writer(text)).then(
+      () => {
+        controller.setRecoveryFeedback("Copied retained edit to clipboard");
+      },
+      () => {
+        controller.setRecoveryFeedback(
+          "Selected retained edit in text box — press Copy shortcut to copy",
+        );
+      },
+    );
+    return;
   }
   controller.setRecoveryFeedback(
     "Selected retained edit in text box — press Copy shortcut to copy",
