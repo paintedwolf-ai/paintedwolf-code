@@ -13,15 +13,19 @@ requires:
   - paintedwolf.rejection_code
   - paintedwolf.path
   - paintedwolf.unsupported
+  - paintedwolf.can_command
 when: paintedwolf.rejection_code == "EXTRACT_FORMAT_UNSUPPORTED"
 effect: block
 copy:
   what: path {{ paintedwolf.path }} is not a supported archive extension.
   cause: This extractor accepts archive formats identified by the .zip and .tar.gz suffixes.
   why: Narrow format set keeps parser and zip-slip defenses auditable.
-  fix: Use an actual supported archive containing the intended data. Renaming an unsupported file does not
-    convert its contents. Inspect a single uncompressed file with an offered read tool when that is the intended
-    task.
+  fix: >-
+    Use an actual supported archive containing the intended data. Renaming an unsupported file does not
+    convert its contents.
+    {% if paintedwolf.can_command %}Inspect a single zip member with `unzip -p`, or extract a tar member
+    with `tar -x -f`, inside command when that is the intended task.{% else %}Inspect a single uncompressed
+    file with an offered reader when that is the intended task.{% endif %}
   instead: Branch on Code
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:extract_archive
@@ -33,3 +37,12 @@ x-paintedwolf-scenarios:
     path: vendor/sdk.tar
     profile: implement
     tool: extract_archive
+- id: command-leg
+  vars:
+    allowed: .zip, .tar.gz
+    can_command: true
+    path: vendor/sdk.tar
+    profile: implement
+    tool: extract_archive
+  expect_contains:
+  - '`unzip -p`'

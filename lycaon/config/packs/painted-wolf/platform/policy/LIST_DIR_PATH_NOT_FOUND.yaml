@@ -16,7 +16,7 @@ requires:
 when: paintedwolf.rejection_code == "LIST_DIR_PATH_NOT_FOUND"
 effect: block
 copy:
-  what: list_dir path {{ paintedwolf.path }} does not exist.
+  what: The listing path {{ paintedwolf.path }} does not exist.
   cause: The path argument must name an existing directory under the attached project roots.
   why: Structured rejects let agents branch without parsing free-form stat errors.
   fix: Inspect the nearest existing parent, then list a directory shown there.
