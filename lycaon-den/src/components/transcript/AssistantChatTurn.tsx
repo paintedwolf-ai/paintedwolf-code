@@ -41,6 +41,8 @@ type Props = {
   sessionId?: string | null;
   projectId?: string;
   rootRefs?: readonly import("../../api/project-path.ts").ResolveProjectRoot[];
+  /** Session's active root; bare prose paths resolve against it. */
+  activeRootId?: string;
   streaming?: boolean;
   client?: import("../../api/client.ts").LycaonClient | null;
   appStore?: AppStore | null;
@@ -151,6 +153,7 @@ export function AssistantChatTurn(props: Props) {
           citations={proseCitations()}
           navigation={proseNavigation()}
           rootRefs={props.rootRefs}
+          activeRootId={props.activeRootId}
         />
         <Show when={!isAgentNote() && reportDownload()} keyed>
           {(dl) => (

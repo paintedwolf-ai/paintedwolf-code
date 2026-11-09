@@ -162,6 +162,7 @@ function WorkerTranscriptPane(props: WorkerTranscriptPaneProps) {
             checkpointClient={getLycaonClient()}
             checkpointAppStore={props.appStore}
             projectDir={props.projectDir}
+            activeRootId={props.worker().workspace_root_id?.trim() || undefined}
           />
         </Show>
         <Show
