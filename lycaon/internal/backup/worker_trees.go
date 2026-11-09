@@ -51,9 +51,9 @@ func branchTreeRoot(rel string) string {
 	return strings.Join(parts[:3], "/")
 }
 
-// materializedBaseOwner names the branch whose exact base rel belongs to: a materialized worker's
+// materializedBaseJobID names the branch whose exact base rel belongs to: a materialized worker's
 // changes can only be derived again from its pristine tree and stat manifest, so they go with its tree.
-func materializedBaseOwner(rel string) string {
+func materializedBaseJobID(rel string) string {
 	if rel != filepath.ToSlash(filepath.Clean(rel)) {
 		return ""
 	}
@@ -73,8 +73,8 @@ func (s branchCapture) includes(rel string, directory bool) bool {
 	if workerMetadataPath(rel, directory) {
 		return true
 	}
-	if owner := materializedBaseOwner(rel); owner != "" {
-		return s.all || s.roots[owner]
+	if jobID := materializedBaseJobID(rel); jobID != "" {
+		return s.all || s.roots[jobID]
 	}
 	root := branchTreeRoot(rel)
 	if root == "" {

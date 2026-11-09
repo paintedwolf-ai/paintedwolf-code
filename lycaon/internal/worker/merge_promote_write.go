@@ -250,7 +250,7 @@ func convertCheckpointConflict(store *checkpoint.Store, prim promotePrimarySnaps
 	}
 }
 
-func commitCheckpointPromotionJournal(ctx context.Context, s *MergeService, task *api.WorkerTask) error {
+func commitCheckpointPromotionJournal(ctx context.Context, s *MergeService, task *api.WorkerTask, resolvedPaths ...string) error {
 	if task == nil {
 		return nil
 	}
@@ -258,5 +258,5 @@ func commitCheckpointPromotionJournal(ctx context.Context, s *MergeService, task
 	if s != nil {
 		roots = s.taskRootRefs(ctx, task)
 	}
-	return session.CommitTaskCheckpointJournal(ctx, task, roots)
+	return session.CommitTaskCheckpointJournal(ctx, task, roots, resolvedPaths...)
 }

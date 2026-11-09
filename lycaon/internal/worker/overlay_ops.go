@@ -146,7 +146,7 @@ func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID 
 	if err != nil {
 		return api.WorkerMergeResult{}, errors.Join(err, revertPending())
 	}
-	if err := s.applyPromoteEffects(claimCtx, tx, promote, task); err != nil {
+	if err := s.applyPromoteEffects(claimCtx, tx, promote, task, validated...); err != nil {
 		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, promote, task, revertPending, err)
 	}
 	if len(plans) > 0 {
@@ -240,11 +240,11 @@ func expandResolutionDropFolders(resolutions []api.WorkerPromoteResolution, allo
 }
 
 // applyPromoteEffects applies file effects, then commits checkpoint effects to the same promotion.
-func (s *MergeService) applyPromoteEffects(ctx context.Context, tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask) error {
+func (s *MergeService) applyPromoteEffects(ctx context.Context, tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, resolvedPaths ...string) error {
 	if err := tx.apply(ctx, promote, task); err != nil {
 		return err
 	}
-	return commitCheckpointPromotionJournal(ctx, s, task)
+	return commitCheckpointPromotionJournal(ctx, s, task, resolvedPaths...)
 }
 
 // finalizeEmptyPromote closes an overlay with no changes.

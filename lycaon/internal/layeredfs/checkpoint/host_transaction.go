@@ -71,7 +71,7 @@ func (host *HostPromotion) prepare(ctx context.Context, preview *PromotionPrevie
 	if err != nil {
 		return err
 	}
-	if found && !old.RolledBack {
+	if found && !old.RolledBack && old.CheckpointID == preview.CheckpointID {
 		return fmt.Errorf("checkpoint: unfinished host transaction requires recovery")
 	}
 	_ = os.RemoveAll(host.retainedDir())

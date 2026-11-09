@@ -72,8 +72,8 @@ func TestRenderExecuteFailureWorkspaceStorageFull(t *testing.T) {
 	if out.Code != "worker_workspace_disk_full" {
 		t.Fatalf("Code = %q want worker_workspace_disk_full", out.Code)
 	}
-	if out.SuggestedAction == "" {
-		t.Fatal("a full disk must offer a repair")
+	if out.SuggestedAction != "Free space or clear retained worker workspaces in Settings, then retry the worker." {
+		t.Fatalf("SuggestedAction = %q", out.SuggestedAction)
 	}
 }
 

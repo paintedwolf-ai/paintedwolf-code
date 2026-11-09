@@ -246,6 +246,7 @@ type materializedGitView struct {
 	RootID      string                          `json:"root_id"`
 	TrunkDir    string                          `json:"trunk_dir"`
 	WorktreeDir string                          `json:"worktree_dir"`
+	WorktreeRel string                          `json:"worktree_rel,omitempty"`
 	BranchDir   string                          `json:"branch_dir,omitempty"`
 	Repos       []privategit.MaterializedRepoAt `json:"repos,omitempty"`
 }
@@ -268,8 +269,14 @@ func adoptMaterializedRepos(
 ) error {
 	record := materializedGitRecord{Format: materializedGitFormat}
 	for _, grant := range grantsForSources(sources) {
+		worktreeDir := targetDirs[grant.RootID]
+		worktreeRel, err := filepath.Rel(branchRoot, worktreeDir)
+		if err != nil {
+			return err
+		}
 		gitView := materializedGitView{
-			ViewID: workerID, WorkerID: workerID, RootID: grant.RootID, TrunkDir: grant.SourcePath, WorktreeDir: targetDirs[grant.RootID],
+			ViewID: workerID, WorkerID: workerID, RootID: grant.RootID,
+			TrunkDir: grant.SourcePath, WorktreeDir: worktreeDir, WorktreeRel: worktreeRel,
 		}
 		if len(sources) > 1 {
 			if grant.IsPrimary {
@@ -330,10 +337,17 @@ func readoptMaterializedRepos(ctx context.Context, services *layeredServices, br
 		return fmt.Errorf("unsupported materialized Git record format %d", record.Format)
 	}
 	for _, gitView := range record.Views {
-		// A restored archive moved the worktree away from its retained objects, so its repository
-		// no longer opens. The files still capture; what a worker committed does not.
+		if gitView.WorktreeRel != "" && filepath.IsLocal(gitView.WorktreeRel) {
+			gitView.WorktreeDir = filepath.Join(branchRoot, gitView.WorktreeRel)
+			if gitView.BranchDir != "" {
+				gitView.BranchDir = branchRoot
+			}
+		}
 		if rel, err := filepath.Rel(branchRoot, gitView.WorktreeDir); err != nil || !filepath.IsLocal(rel) {
 			slog.WarnContext(ctx, "materialized repository moved with a restored archive", "view_id", gitView.ViewID)
+			continue
+		}
+		if !refreshMaterializedRepoAlternates(ctx, services, gitView) {
 			continue
 		}
 		if err := adoptGitView(ctx, services, gitView, core, nil, gitView.Repos); err != nil {
@@ -341,6 +355,62 @@ func readoptMaterializedRepos(ctx context.Context, services *layeredServices, br
 		}
 	}
 	return nil
+}
+
+func refreshMaterializedRepoAlternates(ctx context.Context, services *layeredServices, gitView materializedGitView) bool {
+	if services == nil || services.privateGit == nil || services.privateGit.Store() == nil {
+		return true
+	}
+	store := services.privateGit.Store()
+	for _, at := range gitView.Repos {
+		target := gitView.WorktreeDir
+		trunk := gitView.TrunkDir
+		if at.RepoRel != "" && at.RepoRel != "." {
+			rel := filepath.FromSlash(at.RepoRel)
+			target = filepath.Join(target, rel)
+			trunk = filepath.Join(trunk, rel)
+		}
+		gitDir := filepath.Join(target, ".git")
+		altPath := filepath.Join(gitDir, "objects", "info", "alternates")
+		rawAlt, err := os.ReadFile(altPath)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			slog.WarnContext(ctx, "materialized repository alternates unreadable", "view_id", gitView.ViewID, "err", err)
+			return false
+		}
+		var srcDirs []string
+		for _, line := range strings.Split(string(rawAlt), "\n") {
+			if dir := strings.TrimSpace(line); dir != "" && dir != store.ObjectsDir() {
+				srcDirs = append(srcDirs, dir)
+			}
+		}
+		if trunk != "" {
+			srcDirs = append(srcDirs, filepath.Join(trunk, ".git", "objects"))
+		}
+		srcDirs = append(srcDirs, filepath.Join(gitDir, "objects"))
+		tips := make([]string, 0, 1+len(at.InitialRefs))
+		if at.InitialHead != "" {
+			tips = append(tips, at.InitialHead)
+		}
+		for _, oid := range at.InitialRefs {
+			tips = append(tips, oid)
+		}
+		if len(tips) > 0 {
+			if _, _, err := store.ImportRepositoryObjects(ctx, srcDirs, tips); err != nil {
+				slog.WarnContext(ctx, "materialized repository base objects unavailable", "view_id", gitView.ViewID, "err", err)
+				return false
+			}
+		}
+		if strings.TrimSpace(string(rawAlt)) != store.ObjectsDir() {
+			if err := os.WriteFile(altPath, []byte(store.ObjectsDir()+"\n"), 0o644); err != nil {
+				slog.WarnContext(ctx, "materialized repository alternates update failed", "view_id", gitView.ViewID, "err", err)
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // offerMaterializedBranchesForRecovery makes each materialized branch an earlier process left ready to

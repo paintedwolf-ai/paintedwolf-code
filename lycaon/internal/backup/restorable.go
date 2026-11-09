@@ -17,7 +17,7 @@ func RestorableRelPath(rel string) bool {
 		return false
 	}
 	if strings.HasPrefix(rel, enginepaths.WorkerBranchesDirName+"/") {
-		return workerMetadataPath(rel, false) || materializedBaseOwner(rel) != ""
+		return workerMetadataPath(rel, false) || materializedBaseJobID(rel) != ""
 	}
 	for _, allowed := range localdata.BackupRelPaths() {
 		if cleaned == filepath.ToSlash(filepath.Clean(allowed)) {

@@ -183,6 +183,7 @@ func TestOrdinaryWorkerClaimRegistersAndSettlesItsConsumerEngine(t *testing.T) {
 func TestOverBudgetWorkerWithoutEnforcementRunsTheCompleteMaterializedPath(t *testing.T) {
 	selector := workspace.DefaultWorkspaceSelector()
 	selector.BudgetFor = adapter.ZeroBudget
+	selector.Confinement = nil
 	fixture := newLayeredWorkerFixture(t, selector)
 	task := fixture.claim(t)
 
@@ -368,10 +369,15 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 
 func openFixtureRecovery(t *testing.T, branches string) *recovery.Coordinator {
 	t.Helper()
+	privateGit, err := workspace.OpenPrivateGit(branches)
+	testutil.FailErr(t, "open private Git", err)
+	t.Cleanup(func() { _ = privateGit.Store().Close() })
 	root := filepath.Join(branches, ".adapter", "recovery")
 	store, err := checkpoint.NewStore(filepath.Join(root, "checkpoints"))
 	testutil.FailErr(t, "open checkpoint store", err)
-	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{RootDir: root, CheckpointStore: store})
+	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
+		RootDir: root, CheckpointStore: store, GitStore: privateGit.Store(), GitManager: privateGit,
+	})
 	testutil.FailErr(t, "open coordinator", err)
 	return coordinator
 }

@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -308,8 +309,25 @@ func applyManifestEntryToRoot(store *checkpoint.Store, rootDir string, entry che
 	}
 }
 
+func hostTransactionCheckpointID(store *checkpoint.Store) (string, bool) {
+	if store == nil {
+		return "", false
+	}
+	raw, err := os.ReadFile(filepath.Join(store.RootDir(), "promotions", "host-transaction.json"))
+	if err != nil {
+		return "", false
+	}
+	var rec struct {
+		CheckpointID string `json:"checkpoint_id"`
+	}
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		return "", true
+	}
+	return rec.CheckpointID, true
+}
+
 // CommitTaskCheckpointJournal transactionally applies and journals a task's checkpoint promotion and #1671 ref import.
-func CommitTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) error {
+func CommitTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, resolvedPaths ...string) error {
 	store, manifest, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
 	if err != nil || !ok {
 		return err
@@ -318,7 +336,31 @@ func CommitTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, root
 	if rec, exists, lErr := store.LoadPromotionRecord(txID); lErr != nil || (exists && rec.State == checkpoint.PromotionStateApplied) {
 		return lErr
 	}
-	cpPreview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{CheckpointID: manifest.CheckpointID, ExpectedWorkerID: manifest.WorkerID, ExpectedProjectID: task.ProjectID})
+	if txCheckpointID, exists := hostTransactionCheckpointID(store); exists && txCheckpointID != "" && txCheckpointID != manifest.CheckpointID {
+		promotionsDir := filepath.Join(store.RootDir(), "promotions")
+		_ = os.Remove(filepath.Join(promotionsDir, "host-transaction.json"))
+		_ = os.RemoveAll(filepath.Join(promotionsDir, "host-retained"))
+		_ = os.RemoveAll(filepath.Join(promotionsDir, "host-postimages"))
+	}
+	var resolutions map[layeredfs.QualifiedPath]checkpoint.ConflictResolution
+	if len(resolvedPaths) > 0 {
+		resolvedSet := make(map[string]struct{}, len(resolvedPaths))
+		for _, p := range resolvedPaths {
+			resolvedSet[p] = struct{}{}
+		}
+		resolutions = make(map[layeredfs.QualifiedPath]checkpoint.ConflictResolution, len(resolvedPaths))
+		for _, entry := range manifest.Entries {
+			if _, ok := resolvedSet[QualifyCheckpointPath(entry.Path, roots)]; ok {
+				resolutions[entry.Path] = checkpoint.ConflictResolution{Path: entry.Path, Choice: checkpoint.ResolutionKeepTarget}
+			}
+		}
+	}
+	cpPreview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{
+		CheckpointID:      manifest.CheckpointID,
+		ExpectedWorkerID:  manifest.WorkerID,
+		ExpectedProjectID: task.ProjectID,
+		Resolutions:       resolutions,
+	})
 	if err != nil {
 		return err
 	}
@@ -328,9 +370,12 @@ func CommitTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, root
 
 // RollbackTaskCheckpointJournal unwinds checkpoint effects before ordinary host file undo.
 func RollbackTaskCheckpointJournal(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) error {
-	_, _, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
+	store, manifest, promoter, ok, err := NewTaskCheckpointPromoter(task, roots)
 	if err != nil || !ok {
 		return err
+	}
+	if txCheckpointID, exists := hostTransactionCheckpointID(store); !exists || (txCheckpointID != "" && txCheckpointID != manifest.CheckpointID) {
+		return nil
 	}
 	return checkpoint.NewHostPromotion(promoter).Rollback(ctx)
 }

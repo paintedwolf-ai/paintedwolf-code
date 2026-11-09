@@ -329,10 +329,18 @@ func (q *SQLQueue) ListBranchJobs(ctx context.Context) ([]BranchJob, error) {
 	}
 	out := make([]BranchJob, 0, len(rows))
 	for _, row := range rows {
+		status := api.WorkerStatus(row.Status)
 		mergeStatus := api.WorkerMergeStatus(db.StringFromNull(row.MergeStatus))
+		overlayID := db.StringFromNull(row.WorkspaceOverlayID)
+		var branchRoot string
+		if status == api.WorkerStatusComplete && strings.TrimSpace(overlayID) == "" {
+			if task, ok := q.store.getTask(ctx, row.ID); ok && task != nil {
+				branchRoot = task.WorkspaceRoot
+			}
+		}
 		out = append(out, BranchJob{
 			ID: row.ID, ProjectID: row.ProjectID,
-			Sealed: branchJobSealed(api.WorkerStatus(row.Status), mergeStatus, db.StringFromNull(row.WorkspaceOverlayID)),
+			Sealed: branchJobSealed(status, mergeStatus, overlayID, branchRoot),
 		})
 	}
 	return out, nil

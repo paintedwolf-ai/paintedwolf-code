@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/backup"
@@ -18,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -267,12 +269,17 @@ func TestCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T) {
 	project := t.TempDir()
 	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(project, "main.go"), []byte("package before\n"), 0o644))
 	testutil.FailErr(t, "seed untouched", os.WriteFile(filepath.Join(project, "keep.go"), []byte("package keep\n"), 0o644))
+	gittest.InitCommit(t, project, "initial")
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", project)
 	dataDir := testbaseline.DataDir(t, database)
+	initialBranches := filepath.Join(dataDir, "worker-branches")
+	initialGit, err := workspace.OpenPrivateGit(initialBranches)
+	testutil.FailErr(t, "open initial private Git", err)
+	t.Cleanup(func() { _ = initialGit.Store().Close() })
 	queue := NewSQLQueue(database, 1)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches")))
+	queue.SetWorkerWorkspaceManager(workspace.NewManager(initialBranches).WithPrivateGit(initialGit))
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue", err)
 	next, err := queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
@@ -281,12 +288,24 @@ func TestCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T) {
 	testutil.FailErr(t, "claim branch", err)
 	task.ClaimToken = next.ClaimToken
 	testutil.FailErr(t, "edit", os.WriteFile(filepath.Join(task.WorkspaceRoot, "main.go"), []byte("package after\n"), 0o644))
+	gittest.Run(t, task.WorkspaceRoot, "add", "main.go")
+	gittest.Run(t, task.WorkspaceRoot, "commit", "-m", "worker commit")
+	workerCommit := strings.TrimSpace(gittest.Run(t, task.WorkspaceRoot, "rev-parse", "HEAD"))
 	if won, err := queue.Complete(ctx, task, api.WorkerResult{Status: "complete"}); err != nil || !won {
 		t.Fatalf("Complete: won=%v err=%v", won, err)
 	}
+	jobs, err := queue.ListBranchJobs(ctx)
+	testutil.FailErr(t, "list branch jobs", err)
+	if len(jobs) != 1 || jobs[0].ID != id || !jobs[0].Sealed {
+		t.Fatalf("completed checkpoint worker not sealed: %+v", jobs)
+	}
+	testutil.FailErr(t, "close initial private Git", initialGit.Store().Close())
 
 	restored, manager := relocateWorkerInstallation(t, database, id)
-	restored.SetWorkerWorkspaceManager(manager)
+	restoredGit, err := workspace.OpenPrivateGit(manager.BranchBase())
+	testutil.FailErr(t, "open restored private Git", err)
+	t.Cleanup(func() { _ = restoredGit.Store().Close() })
+	restored.SetWorkerWorkspaceManager(manager.WithPrivateGit(restoredGit))
 	coordinator := openFixtureRecovery(t, manager.BranchBase())
 	manager.WithRecovery(coordinator)
 	_, err = manager.RecoverWorkerViews(ctx)
@@ -305,6 +324,13 @@ func TestCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T) {
 	testutil.FailErr(t, "read base", err)
 	if string(base) != "package before\n" {
 		t.Fatalf("restored base = %q", base)
+	}
+	foundCommit := false
+	for _, oid := range manifest.PrivateGit.Refs {
+		foundCommit = foundCommit || oid == workerCommit
+	}
+	if !foundCommit {
+		t.Fatalf("restored checkpoint lost worker commit: refs=%v want %s", manifest.PrivateGit.Refs, workerCommit)
 	}
 	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(&workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
 }

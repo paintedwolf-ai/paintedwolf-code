@@ -214,7 +214,7 @@ func (q *InMemoryQueue) ListBranchJobs(context.Context) ([]BranchJob, error) {
 	for _, job := range q.jobs {
 		out = append(out, BranchJob{
 			ID: job.task.ID, ProjectID: job.projectID,
-			Sealed: branchJobSealed(job.task.Status, job.task.MergeStatus, job.task.WorkspaceOverlayPath),
+			Sealed: branchJobSealed(job.task.Status, job.task.MergeStatus, job.task.WorkspaceOverlayPath, job.task.WorkspaceRoot),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })

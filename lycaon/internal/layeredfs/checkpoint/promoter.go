@@ -161,19 +161,19 @@ func (pr *Promoter) Preview(_ context.Context, req PreviewRequest) (*PromotionPr
 		if err != nil {
 			return nil, err
 		}
-		if mergedThreeWay {
+		requiresVerify = requiresVerify || mergedThreeWay
+		if res, ok := req.Resolutions[entry.Path]; ok {
+			resolved, rErr := applyConflictResolution(entry, cur, res)
+			if rErr != nil {
+				return nil, rErr
+			}
+			if resolved.Action != ActionNoop {
+				planned = append(planned, resolved)
+			}
 			requiresVerify = true
+			continue
 		}
 		if conflict != nil {
-			if res, ok := req.Resolutions[entry.Path]; ok {
-				resolved, rErr := applyConflictResolution(entry, cur, res)
-				if rErr != nil {
-					return nil, rErr
-				}
-				planned = append(planned, resolved)
-				requiresVerify = true
-				continue
-			}
 			conflicts = append(conflicts, *conflict)
 			continue
 		}

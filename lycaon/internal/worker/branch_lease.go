@@ -147,8 +147,13 @@ type BranchJob struct {
 	Sealed bool
 }
 
-func branchJobSealed(status api.WorkerStatus, mergeStatus api.WorkerMergeStatus, overlayPath string) bool {
-	if strings.TrimSpace(overlayPath) == "" || status != api.WorkerStatusComplete {
+func branchHasPublishedCheckpoint(branchRoot string) bool {
+	_, _, ok := workspace.BranchCheckpoint(branchRoot)
+	return ok
+}
+
+func branchJobSealed(status api.WorkerStatus, mergeStatus api.WorkerMergeStatus, overlayPath, branchRoot string) bool {
+	if status != api.WorkerStatusComplete || (strings.TrimSpace(overlayPath) == "" && !branchHasPublishedCheckpoint(branchRoot)) {
 		return false
 	}
 	switch mergeStatus {
