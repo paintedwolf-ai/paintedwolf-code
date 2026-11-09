@@ -346,7 +346,8 @@ func TestEnqueueRootsChangedKickSkipsPathOnlyMove(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	svc, kicks, history := newRootsKickHarness(t, created.ID, created.Roots[1].ID)
 
-	movedWebDir := t.TempDir()
+	movedParent := t.TempDir()
+	movedWebDir := filepath.Join(movedParent, "web")
 	testutil.FailErr(t, "move web dir", os.Rename(webDir, movedWebDir))
 	before := project.RootRefsFrom(created)
 	after := append([]projectroot.RootRef(nil), before...)
