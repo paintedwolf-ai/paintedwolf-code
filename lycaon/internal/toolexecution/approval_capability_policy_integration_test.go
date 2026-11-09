@@ -138,3 +138,48 @@ func TestCurrentReviewTracksDetectionEffectsRatherThanCorrelation(t *testing.T) 
 		t.Fatalf("reviewed new effect asked again: %+v", result)
 	}
 }
+
+// Reviewing a policy reason cannot replace the launch capability's own binding.
+func TestCurrentReviewCannotReplaceExecutionPermit(t *testing.T) {
+	for _, capability := range []string{"host_execution", "process_control", "credential_store"} {
+		t.Run(capability, func(t *testing.T) {
+			confine.TestingSetAutoConfine(t)
+			stageApprovals(t, settings.ApprovalEffectAsk)
+			root := t.TempDir()
+			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
+			testutil.FailErr(t, "create capability review store", err)
+			approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
+			args := map[string]any{"command": "printf fixture"}
+			req := confine.Request{Roots: []string{root}, HostExecution: capability == "host_execution", ProcessControl: capability == "process_control", CredentialStore: capability == "credential_store"}
+			tc := tools.ToolContext{
+				Identity: tools.InvocationIdentity{SessionID: "task", ToolCallID: "call"}, Invocation: tools.Invocation{ID: "child"},
+				Effects:   tools.InvocationEffects{CanonicalArgs: args},
+				Execution: tools.InvocationExecution{HostExecution: req.HostExecution, ProcessControl: req.ProcessControl, CredentialStore: req.CredentialStore},
+			}
+			action := hitl.ProposedAction{
+				Scope:      hitl.ActionScope{SessionID: "task", ProjectDir: root},
+				Invocation: hitl.ActionInvocation{Tool: "command", Args: args, ActionID: tc.EffectActionID()},
+				Execution:  hitl.ActionExecution{Contained: hitl.ContainedForRequest(req), ExecutionBoundaryDigest: tools.ExecutionBoundaryDigest(req)},
+			}
+			pending, err := approvals.Evaluate(t.Context(), action)
+			testutil.FailErr(t, "evaluate unbound execution capability", err)
+			if pending == nil || !pending.Required() || pending.Gate() != api.GateUnobservedChannel {
+				t.Fatalf("unbound capability did not require its review: %+v", pending)
+			}
+			tc.RecordCurrentActionReview(args, req, action, pending)
+			action.Invocation.CurrentActionReview = tc.CurrentActionReview(args, req)
+			result, err := approvals.Evaluate(t.Context(), action)
+			testutil.FailErr(t, "evaluate review without execution permit", err)
+			if result == nil || !result.Required() || result.Denied {
+				t.Fatalf("review receipt replaced the execution permit: %+v", result)
+			}
+			tc.StampExecutionApproval(args, action)
+			action.Execution.AuthorizedExecutionCapabilities = tc.AuthorizedExecutionCapabilities(args, req)
+			result, err = approvals.Evaluate(t.Context(), action)
+			testutil.FailErr(t, "evaluate bound reviewed capability", err)
+			if result == nil || !result.AutoApproved() {
+				t.Fatalf("bound capability still asked for its own authority: %+v", result)
+			}
+		})
+	}
+}
