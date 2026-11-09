@@ -582,7 +582,8 @@ export class PrettyReplicaEditorAdapter {
     if (!chosen) return null;
     const snap = formatRecoverySelectionSnapshot(chosen);
     this.lastCopiedSelection = snap;
-    recovery.lastRecoveryFeedback = "Copied retained edit";
+    recovery.lastRecoveryFeedback =
+      "Selected retained edit in text box — press Copy shortcut to copy";
     this.syncRecoveryUi();
     return snap;
   }
@@ -594,7 +595,8 @@ export class PrettyReplicaEditorAdapter {
       displayText: recovery.unreadableRawPayload,
       rawText: recovery.unreadableRawPayload,
     };
-    recovery.lastRecoveryFeedback = "Copied unreadable recovery payload";
+    recovery.lastRecoveryFeedback =
+      "Selected retained edit in text box — press Copy shortcut to copy";
     this.syncRecoveryUi();
     return recovery.unreadableRawPayload;
   }

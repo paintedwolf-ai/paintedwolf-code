@@ -12,7 +12,7 @@ import {
 } from "../components/project-files-view-test-harness.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { undo, redo } from "@codemirror/commands";
+import { stepEditorHistory } from "../../components/source/editor/editor-history.ts";
 import { FilesEditor } from "./FilesEditor.tsx";
 import {
   getFilesEditorAuthoritativeViewDoc,
@@ -192,7 +192,7 @@ describe("FilesEditor Pretty display integration", () => {
     });
     expect(view.state.doc.toString()).toBe(expectedRaw);
 
-    expect(undo(view)).toBe(true);
+    expect(stepEditorHistory(view, "undo")).toBe(true);
     expect(view.state.doc.toString()).toBe(rawJsonl);
     expect(getFilesEditorAuthoritativeViewDoc(view)).toBe(rawJsonl);
 
@@ -201,7 +201,7 @@ describe("FilesEditor Pretty display integration", () => {
     await waitFor(() => {
       expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(true);
     });
-    expect(redo(view)).toBe(true);
+    expect(stepEditorHistory(view, "redo")).toBe(true);
     expect(getFilesEditorAuthoritativeViewDoc(view)).toBe(expectedRaw);
     expect(view.state.doc.toString()).toContain('"name": "charlie"');
   });
@@ -241,7 +241,7 @@ describe("FilesEditor Pretty display integration", () => {
 
     const expectedDispPos = adapter.mapSourceLineColToDisplay(2, 8).offset;
     expect(view.state.selection.main.head).toBe(expectedDispPos);
-    expect(props.onCursor).toHaveBeenLastCalledWith({ line: 2, col: 8 });
+    expect(props.onCursor).toHaveBeenLastCalledWith(2, 8);
 
     // applyBufferReveal maps source revealLine/revealColumn to display coordinates
     applyBufferReveal(view, {
@@ -426,8 +426,14 @@ describe("FilesEditor Pretty display integration", () => {
       key: buf.key,
     });
 
-    // Confirmed close clears Pretty display state and recovery state for the tab
-    closeFilesBuffer(PROJECT, buf.key);
+    // Unconfirmed close is blocked while memory-only recovery exists
+    expect(closeFilesBuffer(PROJECT, buf.key)).toBeNull();
+    expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(true);
+
+    // Confirmed close (discardDraft: true) clears Pretty display state and recovery state for the tab
+    expect(
+      closeFilesBuffer(PROJECT, buf.key, { discardDraft: true }),
+    ).not.toBeNull();
     expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(false);
     expect(hasUnpersistedPrettyRecoveryForDocument(docState.documentId)).toBe(
       false,

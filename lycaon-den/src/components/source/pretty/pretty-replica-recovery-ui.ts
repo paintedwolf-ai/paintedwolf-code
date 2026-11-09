@@ -99,10 +99,23 @@ function resolveEntryDisplayRange(
 }
 
 function tryWriteClipboard(text: string, controller: PrettyRecoveryUiController): void {
-  const writer =
-    typeof clipboardBridge.writeClipboardText === "function"
-      ? clipboardBridge.writeClipboardText
-      : clipboardBridge.copyTextToClipboard;
+  let writer: ((value: string) => Promise<void>) | undefined;
+  try {
+    if (typeof clipboardBridge.copyTextToClipboard === "function") {
+      writer = clipboardBridge.copyTextToClipboard;
+    }
+  } catch {
+    // Ignore partial test mocks that omit copyTextToClipboard.
+  }
+  if (!writer) {
+    try {
+      if (typeof clipboardBridge.writeClipboardText === "function") {
+        writer = clipboardBridge.writeClipboardText;
+      }
+    } catch {
+      // Ignore partial test mocks that omit writeClipboardText.
+    }
+  }
   if (typeof writer === "function") {
     void Promise.resolve(writer(text)).then(
       () => {
