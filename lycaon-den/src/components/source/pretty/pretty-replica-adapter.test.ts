@@ -10,6 +10,8 @@ import { DocumentFixture } from "../../../test/document-fixture.ts";
 import { memoryDocumentOutbox } from "../../../test/memory-document-outbox.ts";
 import { PrettyReplicaEditorAdapter } from "./pretty-replica-adapter.ts";
 import {
+  computeRawTextFingerprint,
+  getHistoryRuntimeId,
   resetPrettyDocumentRecoveryStoreForTests,
   simulatePrettyProcessRestartForTests,
 } from "./pretty-replica-recovery.ts";

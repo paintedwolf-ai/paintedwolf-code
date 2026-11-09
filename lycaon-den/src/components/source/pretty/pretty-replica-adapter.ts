@@ -190,19 +190,11 @@ export class PrettyReplicaEditorAdapter {
     this.lastObservedIncarnation = replica.incarnation;
     this.lastObservedDocState = replica.history.state;
     this.projection = this.computeProjection(this.projectedRawText, this.projectedRevision);
-    this.syncReplicaPreservationFlag();
     this.observeReplica();
   }
 
   private recoveryState(): PrettyDocumentRecoveryState {
     return getPrettyDocumentRecoveryState(this.replica.accepted.id, this.replica.incarnation);
-  }
-
-  private syncReplicaPreservationFlag(): void {
-    const recovery = this.recoveryState();
-    if (recovery.preservationBlocked) {
-      this.replica.preservationBlocked = true;
-    }
   }
 
   get currentProjection(): PrettyProjectionResult { return this.projection; }
@@ -380,7 +372,6 @@ export class PrettyReplicaEditorAdapter {
     promoteOverflowRecordIfPossible(recovery);
     recomputeRecoveryRawSegmentRanges(recovery);
     const persisted = persistPrettyDocumentRecoveryState(recovery);
-    this.syncReplicaPreservationFlag();
     this.syncReplicaToView(false);
     return persisted;
   }
@@ -675,7 +666,6 @@ export class PrettyReplicaEditorAdapter {
         this.recoveryState(), baseRuntimeId, this.projectedIncarnation, this.projectedEpoch,
         this.projectedRevision, baseRawFingerprint, mapped.conflict, mapped.affectedRawRanges,
       );
-      this.syncReplicaPreservationFlag();
       if (appendRes.status === "refused-at-capacity") {
         this.lastAdmissionError = appendRes.error;
         return [];
@@ -716,7 +706,6 @@ export class PrettyReplicaEditorAdapter {
           this.replica.accepted.epoch, this.replica.history.revision,
           rebased.status, displayChanges, mapped.changes, rebased.rebasedCursorOffset,
         );
-        this.syncReplicaPreservationFlag();
         if (appendRes.status === "refused-at-capacity") {
           this.lastAdmissionError = appendRes.error;
           return [];

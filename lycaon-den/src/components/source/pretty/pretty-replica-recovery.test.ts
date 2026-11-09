@@ -332,7 +332,7 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     });
     expect(unavailMount.adapter.pendingConflicts).toHaveLength(1);
     expect(unavailMount.adapter.preservationBlocked).toBe(true);
-    expect(unavailMount.replica.preservationBlocked).toBe(true);
+    expect(unavailMount.replica.preservationBlocked).toBe(false);
     expect(unavailMount.adapter.recoveryStorageError).toBeInstanceOf(DocumentStorageError);
 
     const setItemSpy = vi.fn();
