@@ -654,10 +654,18 @@ func outsideRootsRead(f Facts) (bool, []Fact, string) {
 }
 
 func fileFacts(t FileTarget) []Fact {
+	path := t.Path
+	if t.ResolvedPath != "" {
+		path = t.ResolvedPath
+	}
 	facts := []Fact{
-		fact("file.path", t.Path, "boundary"),
+		fact("file.path", path, "boundary"),
 		fact("file.mode", string(t.Mode), "boundary"),
 		fact("file.state", "named by the tool, nothing has happened yet", "tool_args"),
+	}
+	// Only a missing target is notable; an existing one cites no existence fact.
+	if t.Exists != nil && !*t.Exists {
+		facts = append(facts, fact("file.exists", "this path doesn't exist", "boundary"))
 	}
 	if t.OtherTargetCount > 0 {
 		facts = append(facts, fact("file.other_count", strconv.Itoa(t.OtherTargetCount), "tool_args"))

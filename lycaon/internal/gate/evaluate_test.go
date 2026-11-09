@@ -466,6 +466,67 @@ func TestOutsideRootsLiveAtEveryPosture(t *testing.T) {
 	}
 }
 
+// A missing outside-root read target cites its absence so the card can lead
+// with it; an existing or unprobed target cites no existence fact.
+func TestOutsideRootsReadCitesMissingTarget(t *testing.T) {
+	missing, exists := false, true
+	for _, tc := range []struct {
+		name   string
+		exists *bool
+		want   string
+	}{
+		{"missing", &missing, "this path doesn't exist"},
+		{"existing", &exists, ""},
+		{"unprobed", nil, ""},
+	} {
+		facts := baseFacts(StagePreSpawn)
+		facts.File = &FileTarget{Path: "/mnt/data/notes.md", Mode: ModeRead, OutsideRoots: true, Exists: tc.exists}
+		verdict, decision := Evaluate(facts, PostureLight)
+		if verdict != Ask || decision.Primary != api.GateOutsideRootsRead {
+			t.Fatalf("%s: verdict = %s primary = %s, want outside_roots_read ask", tc.name, verdict, decision.Primary)
+		}
+		got := ""
+		for _, f := range decision.Cited {
+			if f.Key == "file.exists" {
+				got = f.Value
+			}
+		}
+		if got != tc.want {
+			t.Fatalf("%s: file.exists = %q, want %q (cited %v)", tc.name, got, tc.want, decision.Cited)
+		}
+	}
+}
+
+// The card names the resolved spelling when the host resolved one, and the
+// existence fact rides the same target.
+func TestFileFactsPreferResolvedPath(t *testing.T) {
+	missing := false
+	facts := baseFacts(StagePreSpawn)
+	facts.File = &FileTarget{
+		Path: "/mnt/data/notes.md", ResolvedPath: "/mnt/data/notes.md",
+		Mode: ModeRead, OutsideRoots: true, Exists: &missing,
+	}
+	_, decision := Evaluate(facts, PostureLight)
+	if decision.Primary != api.GateOutsideRootsRead {
+		t.Fatalf("primary = %s, want outside_roots_read", decision.Primary)
+	}
+	path, existence := "", ""
+	for _, f := range decision.Cited {
+		switch f.Key {
+		case "file.path":
+			path = f.Value
+		case "file.exists":
+			existence = f.Value
+		}
+	}
+	if path != "/mnt/data/notes.md" {
+		t.Fatalf("file.path = %q, want the resolved spelling", path)
+	}
+	if existence != "this path doesn't exist" {
+		t.Fatalf("file.exists = %q, want the missing-path fact", existence)
+	}
+}
+
 // Missing producer facts require approval.
 func TestMissingProducerFailsClosed(t *testing.T) {
 	for _, f := range fixtures() {

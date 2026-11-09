@@ -177,6 +177,14 @@ type FileTarget struct {
 	// OtherTargetCount is how many further crossings a batch action names beyond
 	// this worst one. Card disclosure only; the verdict ignores it.
 	OtherTargetCount int
+	// ResolvedPath is the canonical absolute spelling the host resolved the
+	// target to, when it resolved one. Card disclosure only; grants and verdicts
+	// keep matching on Path.
+	ResolvedPath string
+	// Exists reports the host's Lstat probe of the target: true when the path
+	// exists, false when it does not, nil when unprobed. Card disclosure only;
+	// the verdict ignores it and model-visible results never carry it.
+	Exists *bool
 }
 
 // Consent is the MCP definition pin for the tool being called.

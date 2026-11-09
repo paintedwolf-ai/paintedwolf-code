@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -290,6 +291,23 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 		target := &gate.FileTarget{
 			Path: path, Mode: mode,
 			OutsideRoots: PathEscapesRoots(roots, path),
+		}
+		if target.OutsideRoots {
+			// The card names the resolved spelling and, for reads, whether the
+			// target exists; both come from the host's own resolution and probe.
+			if len(action.Invocation.ResolvedFiles) == len(paths) {
+				target.ResolvedPath = strings.TrimSpace(action.Invocation.ResolvedFiles[i])
+			}
+			if mode == gate.ModeRead {
+				probe := target.ResolvedPath
+				if probe == "" && filepath.IsAbs(path) {
+					probe = path
+				}
+				if probe != "" {
+					_, exists, _ := probeTargetFolder(probe)
+					target.Exists = &exists
+				}
+			}
 		}
 		// Scratch and cache authority comes from the subprocess filesystem boundary.
 		if len(action.Execution.Contained.WriteRoots) > 0 {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -27,8 +28,8 @@ func directoryAuthorityOptions(t *testing.T) []hitl.ApprovalOption {
 	for _, offer := range settings.GrantedPathOffers(action, target, decision, nil) {
 		options = append(options, hitl.GrantOption(offer))
 	}
-	if len(options) != 22 {
-		t.Fatalf("directory ladder has %d options, want 22", len(options))
+	if len(options) < 22 {
+		t.Fatalf("directory ladder has %d options, want at least 22", len(options))
 	}
 	return options
 }
@@ -86,14 +87,14 @@ func mintDirectoryApproval(t *testing.T, host nativeAuthorityHost, memory *toolc
 	testutil.FailErr(t, "encode displayed directory plan", err)
 	var plan hitl.ApprovalPlan
 	testutil.FailErr(t, "read displayed directory plan", json.Unmarshal(raw, &plan))
-	if len(plan.Options) != 22 {
-		t.Fatalf("published %d directory choices, want 22", len(plan.Options))
+	if len(plan.Options) < 22 {
+		t.Fatalf("published %d directory choices, want at least 22", len(plan.Options))
 	}
 	return ctx, response.CheckpointID, &plan
 }
 
 func TestEveryDirectoryChoiceResolvesAfterRestartWithinProductionCapacity(t *testing.T) {
-	for index := range 22 {
+	for index := range len(directoryAuthorityOptions(t)) {
 		t.Run(fmt.Sprint(index), func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "store.db")
 			memory := productionAuthorityMemory(t)
@@ -160,7 +161,10 @@ func TestDirectoryCapacityFailureKeepsRejectionAvailable(t *testing.T) {
 func directoryAuthorityTarget(t *testing.T) gate.FileTarget {
 	t.Helper()
 	scratch := t.TempDir()
-	root := filepath.VolumeName(scratch) + string(filepath.Separator)
-	folder := "paintedwolf-approval-fixture-" + filepath.Base(filepath.Dir(scratch))
-	return gate.FileTarget{Path: filepath.Join(root, folder, "user", "go", "pkg", "mod", "github.com", "module"), Mode: gate.ModeRead, OutsideRoots: true}
+	// The ladder offers a tree only at folders that exist, so the capacity
+	// fixture creates its folder chain; the deepest realistic read stays
+	// wide enough to exercise the authority ledger.
+	folder := filepath.Join(scratch, "paintedwolf-approval-fixture", "user", "go", "pkg", "mod", "github.com")
+	testutil.FailErr(t, "create capacity fixture folders", os.MkdirAll(folder, 0o755))
+	return gate.FileTarget{Path: filepath.Join(folder, "module"), Mode: gate.ModeRead, OutsideRoots: true}
 }
