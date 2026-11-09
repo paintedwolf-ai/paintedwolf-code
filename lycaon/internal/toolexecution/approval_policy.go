@@ -9,10 +9,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ApprovalPolicyEngine evaluates sandbox profiles then user approval rules.
@@ -58,9 +60,6 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 	if decision.Blocked {
 		return decision, nil
 	}
-	if eval.BoundaryApprovalSatisfied && (len(eval.ConfineRequest.PolicyWriteGrants) == 0 || eval.PolicyWritesReviewed) {
-		return decision, nil
-	}
 	if p.gate == nil {
 		return decision, nil
 	}
@@ -79,7 +78,7 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 			Approval:    approval,
 		}, nil
 	}
-	if approval.Required() {
+	if approval.Required() && !boundaryApprovalCovers(eval, action, approval) {
 		return &platform.PolicyDecision{
 			Allowed:            false,
 			RequiresApproval:   true,
@@ -88,6 +87,90 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 		}, nil
 	}
 	return &platform.PolicyDecision{Allowed: true}, nil
+}
+
+// boundaryApprovalCovers reports whether a prior pre-spawn capability review
+// covers the approval reasons cited by the live gate decision. Live deny rules
+// and uncovered independent gate reasons are never suppressed.
+func boundaryApprovalCovers(eval platform.PolicyContext, action hitl.ProposedAction, approval *hitl.ApprovalResult) bool {
+	if !eval.BoundaryApprovalSatisfied || approval == nil || approval.Decision == nil {
+		return false
+	}
+	executionRequested := eval.ConfineRequest.HostExecution ||
+		eval.ConfineRequest.ProcessControl ||
+		eval.ConfineRequest.CredentialStore
+	hasSockets := len(action.Sockets.SocketGrants) > 0 && socketsCovered(action.Sockets)
+	hasDirectIP := eval.DirectIPRequested && eval.AuthorizedDirectIP
+	hasExecution := executionRequested && (eval.PolicyWritesReviewed || (!hasSockets && !hasDirectIP))
+	if !hasExecution && !hasSockets && !hasDirectIP {
+		return false
+	}
+	if len(eval.ConfineRequest.PolicyWriteGrants) > 0 && (!eval.PolicyWritesReviewed || !hasExecution) {
+		return false
+	}
+	for _, g := range approval.Decision.Gates() {
+		switch g {
+		case api.GateUnobservedChannel:
+			if !unobservedChannelCovered(approval.Decision.Cited, hasExecution, hasSockets, hasDirectIP) {
+				return false
+			}
+		case api.GateAgentPolicyChange:
+			if !eval.PolicyWritesReviewed || !hasExecution {
+				return false
+			}
+		case api.GateAuthorityMisuse:
+			if !hasExecution && !hasSockets && !hasDirectIP {
+				return false
+			}
+		default:
+			if !eval.PolicyWritesReviewed || !hasExecution {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func unobservedChannelCovered(cited []gate.Fact, hasExecution, hasSockets, hasDirectIP bool) bool {
+	for _, f := range cited {
+		switch f.Key {
+		case "boundary.execution":
+			if !hasExecution || strings.HasPrefix(f.Value, "native_process:") {
+				return false
+			}
+		case "boundary.egress":
+			if !hasDirectIP {
+				return false
+			}
+		case "boundary.sockets":
+			return false
+		case "boundary.applied", "boundary.visibility":
+			if !hasExecution && !hasSockets && !hasDirectIP {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func socketsCovered(sockets hitl.ActionSockets) bool {
+	if len(sockets.SocketGrants) == 0 {
+		return false
+	}
+	covered := make(map[string]struct{}, len(sockets.AuthorizedSocketDigests))
+	for _, digest := range sockets.AuthorizedSocketDigests {
+		digest = strings.TrimSpace(digest)
+		if digest != "" {
+			covered[digest] = struct{}{}
+		}
+	}
+	for _, grant := range sockets.SocketGrants {
+		digest := confine.SocketPathsDigest([]confine.SocketGrant{grant})
+		if _, ok := covered[digest]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // pathArgKeys are the scalar/list argument names that name a file a tool will touch.
