@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -29,11 +30,22 @@ func TestExecutionPermitRejectsChangedIdentityWithoutConsumingOriginal(t *testin
 			tc, req := reviewedPermitFixture()
 			changed, changedReq := tc, req
 			change.apply(&changed, &changedReq)
+			if covered := changed.AuthorizedExecutionCapabilities(changed.Effects.CanonicalArgs, changedReq); len(covered) != 0 {
+				t.Fatalf("changed action borrowed policy coverage: %v", covered)
+			}
+			for range 2 {
+				if covered := tc.AuthorizedExecutionCapabilities(tc.Effects.CanonicalArgs, req); !slices.Equal(covered, []string{"host_execution"}) {
+					t.Fatalf("inspection lost or expanded original coverage: %v", covered)
+				}
+			}
 			if reject := finalizeExecutionCapability(changed, changedReq); reject == nil {
 				t.Fatal("changed action borrowed authority")
 			}
 			if reject := finalizeExecutionCapability(tc, req); reject != nil {
 				t.Fatalf("rejected probe consumed original authority: %v", reject)
+			}
+			if covered := tc.AuthorizedExecutionCapabilities(tc.Effects.CanonicalArgs, req); len(covered) != 0 {
+				t.Fatalf("consumed authority remained available to policy: %v", covered)
 			}
 			if reject := finalizeExecutionCapability(tc, req); reject == nil {
 				t.Fatal("original authority was reusable")
@@ -75,4 +87,28 @@ func reviewedPermitFixture() (ToolContext, confine.Request) {
 	}
 	tc.StampExecutionApproval(args, hitl.ProposedAction{Execution: hitl.ActionExecution{ExecutionBoundaryDigest: ExecutionBoundaryDigest(req)}})
 	return tc, req
+}
+
+func TestExecutionPermitInspectionDoesNotAuthorizeUnreviewedRequest(t *testing.T) {
+	tc, req := reviewedPermitFixture()
+	unreviewed := tc
+	unreviewed.BeginInvocation()
+	if covered := unreviewed.AuthorizedExecutionCapabilities(tc.Effects.CanonicalArgs, req); len(covered) != 0 {
+		t.Fatalf("new invocation inherited coverage: %v", covered)
+	}
+	changedArgs := map[string]any{"argv": []string{"fixture", "changed"}}
+	if covered := tc.AuthorizedExecutionCapabilities(changedArgs, req); len(covered) != 0 {
+		t.Fatalf("changed proposed arguments borrowed coverage: %v", covered)
+	}
+	ordinary := req
+	ordinary.HostExecution = false
+	if covered := tc.AuthorizedExecutionCapabilities(tc.Effects.CanonicalArgs, ordinary); len(covered) != 0 {
+		t.Fatalf("ordinary action acquired an execution capability: %v", covered)
+	}
+	if reject := finalizeExecutionCapability(tc, ordinary); reject != nil {
+		t.Fatalf("ordinary execution needed an unrelated permit: %v", reject)
+	}
+	if reject := finalizeExecutionCapability(tc, req); reject != nil {
+		t.Fatalf("unrelated inspection or ordinary execution consumed original permit: %v", reject)
+	}
 }
