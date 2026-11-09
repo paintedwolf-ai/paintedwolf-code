@@ -21,10 +21,16 @@ import (
 )
 
 func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
-	for _, scenario := range []struct{ deny, cancel bool }{{}, {deny: true}, {cancel: true}} {
+	for _, scenario := range []struct{ deny, cancel, host bool }{
+		{host: true}, {deny: true, host: true}, {cancel: true, host: true},
+		{}, {deny: true}, {cancel: true},
+	} {
 		name := fmt.Sprintf("deny-during-review-%t", scenario.deny)
 		if scenario.cancel {
 			name = "cancel-during-review"
+		}
+		if !scenario.host {
+			name += "-confined"
 		}
 		t.Run(name, func(t *testing.T) {
 			stageApprovals(t, settings.ApprovalEffectAsk)
@@ -50,8 +56,12 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 			defer cancel()
 			done := make(chan error, 1)
+			args := map[string]any{"command": "printf fixture"}
+			if scenario.host {
+				args["capability_request"] = map[string]any{"host_execution": true}
+			}
 			go func() {
-				_, err := executor.Invoke(ctx, "command", map[string]any{"command": "printf fixture", "capability_request": map[string]any{"host_execution": true}}, tools.ToolContext{
+				_, err := executor.Invoke(ctx, "command", args, tools.ToolContext{
 					Identity: tools.InvocationIdentity{SessionID: "task", ToolCallID: "call", Agent: "implement"},
 					Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root"},
 				})
