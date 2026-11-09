@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -201,6 +202,11 @@ func (inv *invocation) outcome(err error) (toolcontract.ProducerResult, error) {
 	if certainty == toolcontract.NoEffect && !errors.Is(err, commandprogram.ErrConsumerClosed) {
 		certainty = toolcontract.EffectUnknown
 	}
+	message := err.Error()
+	if len(message) > 4096 {
+		message = strings.ToValidUTF8(message[:4096], "")
+	}
+	_, _ = fmt.Fprintf(inv.stderr, "%s: %s\n", inv.name(), message)
 	return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: certainty}, err
 }
 
