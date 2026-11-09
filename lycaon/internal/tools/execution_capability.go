@@ -124,7 +124,7 @@ func (tc *ToolContext) RecordCurrentActionReview(
 	}
 	var cited []gate.Fact
 	for _, fact := range result.Decision.Cited {
-		if fact.Gate != api.GateUnobservedChannel && fact.Gate != api.GateIncompleteFacts && !slices.Contains(cited, fact) {
+		if fact.Gate != api.GateUnobservedChannel && !slices.Contains(cited, fact) {
 			cited = append(cited, fact)
 		}
 	}

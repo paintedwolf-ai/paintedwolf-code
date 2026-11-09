@@ -112,7 +112,7 @@ func CurrentActionReviewCovers(
 		return false
 	}
 	for _, g := range gates {
-		if g == api.GateUnobservedChannel || g == api.GateIncompleteFacts {
+		if g == api.GateUnobservedChannel {
 			return false
 		}
 	}
