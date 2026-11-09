@@ -74,15 +74,12 @@ func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
 	})
 	selDenied := NewSelector("linux", mountDeniedAdp, darwinSupported, NewEagerCopyAdapter(ReasonNone))
 	deniedChoice, err := selDenied.Choose(ctx, overBudget(selDenied))
-	if err != nil {
-		t.Fatalf("unexpected select error: %v", err)
+	var denied *AdapterError
+	if !errors.As(err, &denied) || denied.ReasonCode != ReasonMountDenied || deniedChoice.Adapter != nil {
+		t.Fatalf("permission denial must refuse over-limit preparation: choice=%+v err=%v", deniedChoice, err)
 	}
-	fbAdp, fbRes := deniedChoice.Adapter, deniedChoice.Probe
-	if deniedCalls.Load() != 1 || fbRes.Attempts != 1 {
-		t.Fatalf("permission failure must not be retried: calls=%d attempts=%d", deniedCalls.Load(), fbRes.Attempts)
-	}
-	if fbAdp.ID() != AdapterEagerCopy || fbAdp.Facts().FallbackReason != ReasonMountDenied {
-		t.Fatalf("expected eagercopy with FallbackReason=%s, got id=%s reason=%s", ReasonMountDenied, fbAdp.ID(), fbAdp.Facts().FallbackReason)
+	if deniedCalls.Load() != 1 || deniedChoice.Probe.Attempts != 1 {
+		t.Fatalf("permission failure must not be retried: calls=%d attempts=%d", deniedCalls.Load(), deniedChoice.Probe.Attempts)
 	}
 }
 
