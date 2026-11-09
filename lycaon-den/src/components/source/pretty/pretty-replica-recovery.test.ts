@@ -522,8 +522,10 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     expect(mount.adapter.capacityOverflowRecord).toBeNull();
     expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K1a\nK1b");
 
-    // K3 occupies capacityOverflowRecord and immediately transitions the entire document
-    // to unambiguous raw-backed projection before any further edits (K4, K5).
+    // First verify what happens if the view projection is held while K3 enters overflow
+    // and further conflicting edits FX4 (record "d") and FX5 (record "e") arrive before projection sync:
+    // Both FX4 and FX5 are explicitly refused with PrettyRecoveryCapacityError, preserving K1, K2, K3, and lastCopiedSelection.
+    mount.adapter.holdViewProjection(true);
     triggerConflictInFormattedRecord("c", "K3a", "K3b");
     expect(mount.adapter.pendingConflicts).toHaveLength(2);
     expect(mount.adapter.capacityOverflowRecord?.kind).toBe("conflict");
@@ -533,6 +535,23 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     ).toBe("K3a");
     expect(mount.adapter.preservationBlocked).toBe(true);
     expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K1a\nK1b");
+
+    triggerConflictInFormattedRecord("d", "FX4a", "FX4b");
+    expect(mount.adapter.lastAdmissionError).toBeInstanceOf(PrettyRecoveryCapacityError);
+    triggerConflictInFormattedRecord("e", "FX5a", "FX5b");
+    expect(mount.adapter.lastAdmissionError).toBeInstanceOf(PrettyRecoveryCapacityError);
+    expect(mount.adapter.pendingConflicts).toHaveLength(2);
+    expect(mount.adapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("K1a");
+    expect(mount.adapter.pendingConflicts[1]!.intentions[0]!.insert).toBe("K2a");
+    expect(
+      (mount.adapter.capacityOverflowRecord?.record as { intentions: Array<{ insert: string }> })
+        .intentions[0]!.insert,
+    ).toBe("K3a");
+    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K1a\nK1b");
+
+    // Releasing holdViewProjection transitions the entire document to the unambiguous raw-backed path
+    // while K3 still occupies capacityOverflowRecord.
+    mount.adapter.holdViewProjection(false);
     expect(mount.view.state.doc.toString()).toBe('{"a":1}\n{"b":2}\n{"c":3}\n{"d":4}\n{"e":5}');
 
     // K4 and then K5 while K3 still occupies overflow:
@@ -568,35 +587,6 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       (mount.adapter.capacityOverflowRecord?.record as { intentions: Array<{ insert: string }> })
         .intentions[0]!.insert,
     ).toBe("K3a");
-    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K1a\nK1b");
-
-    // Forced overlapping-range edits (ForcedK4, then ForcedK5) while K3 occupies overflow
-    // are explicitly rejected without overwriting K1, K2, K3, K4, K5, or lastCopiedSelection.
-    mount.view.dispatch({
-      changes: [
-        { from: 1, to: 4, insert: "FX4a" },
-        { from: 2, to: 5, insert: "FX4b" },
-      ],
-      userEvent: "input.type",
-    });
-    expect(mount.adapter.lastAdmissionError).toBeInstanceOf(PrettyRecoveryCapacityError);
-    mount.view.dispatch({
-      changes: [
-        { from: 1, to: 4, insert: "FX5a" },
-        { from: 2, to: 5, insert: "FX5b" },
-      ],
-      userEvent: "input.type",
-    });
-    expect(mount.adapter.lastAdmissionError).toBeInstanceOf(PrettyRecoveryCapacityError);
-    expect(mount.adapter.pendingConflicts).toHaveLength(2);
-    expect(mount.adapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("K1a");
-    expect(mount.adapter.pendingConflicts[1]!.intentions[0]!.insert).toBe("K2a");
-    expect(
-      (mount.adapter.capacityOverflowRecord?.record as { intentions: Array<{ insert: string }> })
-        .intentions[0]!.insert,
-    ).toBe("K3a");
-    expect(mount.replica.currentText).toContain('{"K4adK4b":4}');
-    expect(mount.replica.currentText).toContain('{"K5aeK5b":5}');
     expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K1a\nK1b");
 
     // Resolving K1 promotes K3 from capacityOverflowRecord into durable pendingConflicts

@@ -564,8 +564,7 @@ export function persistPrettyDocumentRecoveryState(
       storage.setItem(storageKey, payload);
       trackedStorageKeys.add(storageKey);
     }
-    state.preservationBlocked =
-      state.capacityOverflowRecord !== null || state.lastBlockedAtCapacityRecord !== null;
+    state.preservationBlocked = state.capacityOverflowRecord !== null;
     state.lastStorageError = null;
     return { ok: true };
   } catch (cause) {
