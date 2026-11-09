@@ -30,10 +30,11 @@ schema:
     cwd:
       type: string
       description: >-
-        Repo-relative working directory for this call. Use `@label` or
-        `@label/sub/path` for a non-primary project root. On a write worker,
-        resolved under the private branch (subdir allowed). Empty = branch root
-        (or active root when not on a worker). Must be a directory in read scope.
+        Working folder for this call. Empty = the session folder; `@label` or
+        `@label/sub` = any attached folder; `@scratch`/`@output` = session
+        scratch/output; absolute paths are accepted. On a write worker, resolved
+        under the private branch (subdir allowed). Must be a directory in read
+        scope.
         Do not use `cd <directory> && <command>` — pass the directory here and
         keep the command bare. Initial Dir for the pty; then it tracks cwd.
     winsize:

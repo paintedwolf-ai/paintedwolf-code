@@ -7,7 +7,7 @@ schema:
       items:
         type: string
       maxItems: 50
-      description: Repo-relative file or directory paths (max 50)
+      description: "File or directory paths relative to the session folder, `@label/path` for any attached folder, `@output/path` for session output, or absolute (max 50)."
     words:
       type: boolean
       description: Include word counts (default true)

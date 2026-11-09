@@ -9,7 +9,7 @@ schema:
       minItems: 1
       maxItems: 500
       items: {type: string, minLength: 1}
-      description: "Required for save; exact repo-relative files or directories. Whole-tree implicit stashing is unavailable."
+      description: "Required for save; exact files or directories relative to the session folder, `@label/path` for any attached folder, or absolute. Whole-tree implicit stashing is unavailable."
     ref: {type: string, minLength: 1, description: "Required for apply/drop: object ID or selector from git_stash_list."}
     message: {type: string, description: "Optional description for save."}
     include_untracked: {type: boolean, default: false, description: "Include untracked files within the explicit save paths."}

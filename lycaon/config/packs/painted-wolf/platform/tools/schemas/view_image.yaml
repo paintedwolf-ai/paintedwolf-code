@@ -5,7 +5,7 @@ schema:
   properties:
     path:
       type: string
-      description: Repo-relative or absolute file path to the image.
+      description: File path relative to the session folder, `@label/path` for any attached folder, `@scratch/path` or `@output/path` for session scratch/output, or absolute.
     handle:
       type: string
       description: "A render_view handle name, a visual artifact id from a tool result's artifact_id, or an evidence handle, to inspect without reading from disk."

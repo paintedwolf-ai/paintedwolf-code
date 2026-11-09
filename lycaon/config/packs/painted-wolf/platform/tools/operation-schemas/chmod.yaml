@@ -1,5 +1,5 @@
 tags: [filesystem]
-description: "Change approval bits on repo-relative paths."
+description: "Change approval bits on paths relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute."
 schema:
   type: object
   properties:
@@ -8,7 +8,7 @@ schema:
       items:
         type: string
       maxItems: 20
-      description: Target paths (capped by maxItems)
+      description: "Each target uses the shared addressing rule: bare names sit in the session folder, a leading `@label/` selects an attached folder, `@scratch/` reaches session scratch, and absolute locations are accepted (capped by maxItems)"
     mode:
       type: string
       description: Symbolic (+x, u+x, -x) or octal allowlist (755, 644, …)

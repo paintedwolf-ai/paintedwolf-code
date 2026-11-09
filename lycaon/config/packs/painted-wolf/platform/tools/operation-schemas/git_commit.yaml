@@ -13,6 +13,6 @@ schema:
       type: array
       items:
         type: string
-      description: Repo-relative paths to stage (empty stages this session's own writes)
+      description: "Paths relative to the session folder, `@label/path` for any attached folder, or absolute (empty stages this session's own writes)."
   required: [message]
   additionalProperties: false

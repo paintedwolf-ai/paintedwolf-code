@@ -7,6 +7,6 @@ schema:
       description: "Which catalog map to run: layout_overview, ssot_drift, or api_routes."
     path:
       type: string
-      description: Repo-relative root for probes (default .)
+      description: "Root for probes: `.` or empty walks every attached folder, a bare path is relative to the session folder, `@label/path` addresses one attached folder, absolute paths are accepted (default .)"
   required: [bundle]
   additionalProperties: false

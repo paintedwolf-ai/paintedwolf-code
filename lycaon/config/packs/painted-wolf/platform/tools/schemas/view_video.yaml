@@ -6,7 +6,7 @@ schema:
   properties:
     path:
       type: string
-      description: Repo-relative or absolute path to the video, or the path in an attachment's fence.
+      description: Path relative to the session folder, `@label/path` for any attached folder, `@scratch/path` or `@output/path` for session scratch/output, or absolute; or the path in an attachment's fence.
     times_ms:
       type: array
       maxItems: 24

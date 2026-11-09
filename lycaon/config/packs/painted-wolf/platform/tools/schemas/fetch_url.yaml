@@ -20,7 +20,7 @@ schema:
       description: text = research extract (default); raw = verbatim resource / asset ingest
     dest:
       type: string
-      description: Destination file location within workspace to save downloaded payload.
+      description: "Destination file for the downloaded payload: relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute."
     offset:
       type: integer
       minimum: 1

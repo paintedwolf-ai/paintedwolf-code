@@ -9,7 +9,7 @@ schema:
       description: "Workflow version to propose."
       type: string
     blueprint_path:
-      description: "Optional blueprint path for the proposed run."
+      description: "Optional plan-store key of the blueprint for the proposed run (not a filesystem path)."
       type: string
     blueprint_title:
       description: "Optional blueprint title for the proposal."
