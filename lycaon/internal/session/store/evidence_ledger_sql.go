@@ -25,15 +25,18 @@ type storedLineRangesPayload struct {
 	URLTitles      map[string]string         `json:"url_titles,omitempty"`
 	GrepLines      map[string]map[int]string `json:"grep_lines,omitempty"`
 	PathTiers      map[string]string         `json:"path_tiers,omitempty"`
-	Surface        string                    `json:"surface,omitempty"`
-	ArtifactID     string                    `json:"artifact_id,omitempty"`
-	FrameIndex     int                       `json:"frame_index,omitempty"`
+	// PathRoots maps a stored path key to its owning root ID (payload v2).
+	// Empty values mark legacy keys that resolve under no attached root.
+	PathRoots  map[string]string `json:"path_roots,omitempty"`
+	Surface    string            `json:"surface,omitempty"`
+	ArtifactID string            `json:"artifact_id,omitempty"`
+	FrameIndex int               `json:"frame_index,omitempty"`
 }
 
 func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
 	aux := evidence.CloneRecordForStore(rec)
 	payload := storedLineRangesPayload{
-		Version:        1,
+		Version:        2,
 		SourceDelivery: rec.SourceDelivery,
 		Ranges:         rec.LineRanges,
 		PathsTouched:   aux.PathsTouched,
@@ -41,6 +44,7 @@ func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
 		URLTitles:      aux.URLTitles,
 		GrepLines:      aux.GrepLines,
 		PathTiers:      aux.PathTiers,
+		PathRoots:      aux.PathRoots,
 		Surface:        rec.Surface,
 		ArtifactID:     rec.ArtifactID,
 		FrameIndex:     rec.FrameIndex,
@@ -61,7 +65,8 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return err
 	}
-	if payload.Version != 1 {
+	// v1 payloads predate durable root identity; v2 adds path_roots.
+	if payload.Version != 1 && payload.Version != 2 {
 		return fmt.Errorf("unsupported evidence record payload version %d", payload.Version)
 	}
 	rec.LineRanges = payload.Ranges
@@ -72,6 +77,7 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 		URLTitles:    payload.URLTitles,
 		GrepLines:    payload.GrepLines,
 		PathTiers:    payload.PathTiers,
+		PathRoots:    payload.PathRoots,
 	})
 	rec.Surface = payload.Surface
 	rec.ArtifactID = payload.ArtifactID
@@ -122,6 +128,10 @@ func loadLedger(ctx context.Context, s *sqlCore, q *db.Queries, sessionID string
 	if err != nil {
 		return evidence.Ledger{}, fmt.Errorf("load evidence ledger: %w", err)
 	}
+	roots, err := evidenceCitationRoots(ctx, q, sessionID)
+	if err != nil {
+		return evidence.Ledger{}, fmt.Errorf("load evidence ledger: %w", err)
+	}
 	records := make([]evidence.Record, 0, len(rows))
 	for _, r := range rows {
 		rec := evidence.Record{
@@ -132,6 +142,7 @@ func loadLedger(ctx context.Context, s *sqlCore, q *db.Queries, sessionID string
 			Fidelity:     r.Fidelity,
 			SourceTool:   r.SourceTool,
 			Path:         r.Path,
+			RootID:       r.RootID,
 			URL:          r.Url,
 			Truncated:    r.Truncated != 0,
 			Survey:       r.Survey != 0,
@@ -142,6 +153,7 @@ func loadLedger(ctx context.Context, s *sqlCore, q *db.Queries, sessionID string
 		if err := s.unmarshalEvidenceBody(r.ProjectID, r.ContentBlobSha256, &rec); err != nil {
 			return evidence.Ledger{}, fmt.Errorf("decode body for %s: %w", rec.Handle, err)
 		}
+		evidence.StampDisplayKeys(roots, &rec)
 		records = append(records, rec)
 	}
 	return evidence.AssembleLedger(records), nil

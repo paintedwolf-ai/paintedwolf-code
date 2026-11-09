@@ -8,13 +8,13 @@ import (
 
 // evidenceSummarizeCommit mints summarize#1..#N per anchor, then assigns the parent
 // tool record the next ordinal so anchor handles match the wire fixture.
-func evidenceSummarizeCommit(projectDir, content string, rec evidence.Record, startOrdinal int) (parentHandle string, patched string, children []evidence.Record) {
+func evidenceSummarizeCommit(roots evidence.CitationRoots, content string, rec evidence.Record, startOrdinal int) (parentHandle string, patched string, children []evidence.Record) {
 	ordinalCursor := map[string]int{rec.Kind: startOrdinal - 1}
 	nextOrdinal := func(kind string) int {
 		ordinalCursor[kind]++
 		return ordinalCursor[kind]
 	}
-	patched, children = mintToolHighlightRecords(projectDir, "summarize", content, nextOrdinal)
+	patched, children = mintToolHighlightRecords(roots, "summarize", content, nextOrdinal)
 	parentOrd := startOrdinal
 	if len(children) > 0 {
 		parentOrd = startOrdinal + len(children)
@@ -58,19 +58,19 @@ func mintCaptureFrameHighlightRecords(content string, nextOrdinal func(kind stri
 	return patchedOut, records
 }
 
-func mintToolHighlightRecords(projectDir, toolName, content string, nextOrdinal func(kind string) int) (patched string, records []evidence.Record) {
+func mintToolHighlightRecords(roots evidence.CitationRoots, toolName, content string, nextOrdinal func(kind string) int) (patched string, records []evidence.Record) {
 	var highlights []evidence.Record
 	switch strings.ToLower(strings.TrimSpace(toolName)) {
 	case "read":
-		highlights = evidence.ReadHighlightRecords(projectDir, content)
+		highlights = evidence.ReadHighlightRecords(roots, content)
 	case "list_dir":
-		highlights = evidence.ListHighlightRecords(projectDir, content)
+		highlights = evidence.ListHighlightRecords(roots, content)
 	case "grep":
-		highlights = evidence.GrepHighlightRecords(projectDir, content)
+		highlights = evidence.GrepHighlightRecords(roots, content)
 	case "find":
-		highlights = evidence.FindHighlightRecords(projectDir, content)
+		highlights = evidence.FindHighlightRecords(roots, content)
 	case "summarize":
-		highlights = evidence.SummarizeAnchorHighlightRecords(projectDir, content)
+		highlights = evidence.SummarizeAnchorHighlightRecords(roots, content)
 	default:
 		return content, nil
 	}
