@@ -17,6 +17,12 @@ import (
 var goldenForms = map[string]string{
 	// Only the macOS base64 wraps with -b; its -D decode spelling is tested there too.
 	"base64:-b": "internal/tools/native/literal/forms_test.go",
+
+	// The syntax override admits intentionally broken source; no reference
+	// userland implements it, and the mutation lane's golden tests own it.
+	"edit:--syntax-override-reason":          "internal/tools/native/mutation/syntax_override_test.go",
+	"replace-lines:--syntax-override-reason": "internal/tools/native/mutation/syntax_override_test.go",
+	"tee:--syntax-override-reason":           "internal/tools/native/mutation/syntax_override_test.go",
 }
 
 func corpus(t *testing.T) []commandconformance.Case {
