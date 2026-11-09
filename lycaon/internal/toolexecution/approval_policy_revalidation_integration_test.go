@@ -24,8 +24,8 @@ func TestBoundaryAuthorityRevalidatesLiveDenyWithoutBlockingRecovery(t *testing.
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 			testutil.FailErr(t, "create policy store", err)
 			neverAsk := true
-			config := settings.ApprovalConfig{NeverAsk: &neverAsk}
-			testutil.FailErr(t, "configure quiet authorized work", store.PutProject(root, config))
+			testutil.FailErr(t, "configure user-owned quiet policy", store.PutGlobal(settings.ApprovalConfig{NeverAsk: &neverAsk}))
+			config := settings.ApprovalConfig{}
 			boundary := sandbox.NewBoundary(sandbox.Config{}, []sandbox.ToolProfile{{
 				ID: "implement", Tools: map[string]bool{"command": true},
 			}})
