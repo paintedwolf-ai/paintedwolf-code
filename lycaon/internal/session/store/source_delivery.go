@@ -27,6 +27,10 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 	defer func() { _ = tx.Rollback() }()
 	fact := rec.SourceDelivery
 	q := s.queries.WithTx(tx)
+	roots, err := evidenceCitationRoots(ctx, q, sessionID)
+	if err != nil {
+		return "", err
+	}
 	existing, err := q.FindSourceDeliveryHandle(ctx, db.FindSourceDeliveryHandleParams{
 		SessionID: sessionID, ResponseID: fact.ResponseID, DeliveryID: fact.DeliveryID,
 		SourceSha256: fact.Source.SHA256, SourceID: fact.Source.SourceID, SourceRevision: fact.Source.Revision,
@@ -47,7 +51,14 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 		return "", err
 	}
 	rec.Handle = evidence.FormatHandle(rec.Kind, ordinal)
-	live, err := loadFileBindings(ctx, q, sessionID, rec)
+	// The mint confirms bytes without workspace context; stamp the durable
+	// (root, scope-relative) identity at write time so delivered source
+	// records key citations the same way as every other rooted record.
+	if id := evidence.ResolvePathIdentity(roots, rec.Path); id.ScopeRel != "" {
+		rec.Path = id.ScopeRel
+		rec.RootID = id.RootID
+	}
+	live, err := loadFileBindings(ctx, q, sessionID, roots, rec)
 	if err != nil {
 		return "", err
 	}
