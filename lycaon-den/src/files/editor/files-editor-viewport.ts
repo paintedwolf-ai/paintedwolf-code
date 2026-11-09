@@ -5,6 +5,10 @@ import {
   filesCollaborationExtension,
   rebindFilesCollaboration,
   canRestoreFilesCollaborationView,
+  getFilesCollaborationAuthoritativeDoc,
+  mapFilesCollaborationDisplayOffsetToSourceLineCol,
+  projectSecretScreenForFilesView,
+  syncFilesCollaborationPrettyMode,
 } from "./files-editor-collaboration.ts";
 import { editorReplica } from "../documents/editor-document.ts";
 import { Compartment, Transaction } from "@codemirror/state";
@@ -19,6 +23,7 @@ import {
   sourceUsesSimplifiedDisplay,
   type SourceEditorHandlers,
 } from "../../components/source/editor/codemirror-theme.ts";
+import { setSecretScreen } from "../../components/source/secrets/secret-span-decorations.ts";
 import { applyBufferReveal, hasPendingReveal } from "./files-editor-reveal.ts";
 import { restoreEditorScrollTop } from "../../components/source/editor/editor-view-state.ts";
 import { lineGutterExtension } from "../../components/source/annotations/line-gutter.ts";
@@ -37,7 +42,13 @@ import {
   settleFilesEditorView,
   softDetachFilesEditor,
 } from "./files-editor-host.ts";
+import { filesEditorSecretScreen } from "./files-editor-secret-screen.ts";
 import { filesGutterContextExtension } from "./files-gutter-context.ts";
+import {
+  isPrettyDisplayEnabled,
+  registerPrettySurfaceCapability,
+  togglePrettyDisplayPref,
+} from "./pretty-display-state.ts";
 import { hunkPlaybackExtension } from "../walk/hunk-playback.ts";
 import { JUMP_CURSOR_LINE_THRESHOLD } from "../history/jump-history.ts";
 import {
@@ -101,40 +112,56 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
     const prefs = untrack(() => currentDisplayPrefs(buffer()));
     const projectId = currentProjectId();
 
+    const triggerDraftSync = (typed: boolean) => {
+      if (typed) {
+        // The cached draft stays dirty until the debounce flushes.
+        markFilesEditorViewDocDirty(projectId, key);
+        noteBufferTyped(projectId, key);
+        markFilesBufferTyping(projectId, key);
+      }
+      scheduleFilesDraftSync(projectId, key, () => {
+        const text = getFilesCollaborationAuthoritativeDoc(binding.view);
+        if (text == null) return;
+        settleFilesEditorView(projectId, key);
+        applyFilesBufferDraft(projectId, key, text);
+        if (typed) {
+          const buffer = projectFilesState(projectId).byKey[key];
+          if (buffer) {
+            scheduleEditorDocumentDraft(projectId, buffer);
+          }
+        }
+      });
+    };
+
+    const onAuthoritativeDocChange = (_rawText: string, userEvent: string | undefined) => {
+      triggerDraftSync(userEvent != null);
+    };
+
     const wireHandlers = (handlers: SourceEditorHandlers) => {
       handlers.onDocChange = (update) => {
         // Remote transactions leave typing state unchanged.
         const typed = update.transactions.some(
           (tr) => tr.annotation(Transaction.userEvent) != null,
         );
-        if (typed) {
-          // The cached draft stays dirty until the debounce flushes.
-          markFilesEditorViewDocDirty(projectId, key);
-          noteBufferTyped(projectId, key);
-          markFilesBufferTyping(projectId, key);
-        }
-        scheduleFilesDraftSync(projectId, key, () => {
-          const text = binding.view?.state.doc.toString();
-          if (text == null) return;
-          settleFilesEditorView(projectId, key);
-          applyFilesBufferDraft(projectId, key, text);
-          if (typed) {
-            const buffer = projectFilesState(projectId).byKey[key];
-            if (buffer) {
-              scheduleEditorDocumentDraft(projectId, buffer);
-            }
-          }
-        });
+        triggerDraftSync(typed);
       };
       handlers.onCursorChange = (line, col) => {
         notifyFilesEditorViewChanged();
-        if (line === lastCursorLine && col === lastCursorCol) return;
-        if (Math.abs(line - lastCursorLine) > JUMP_CURSOR_LINE_THRESHOLD) {
-          onCursorTeleport(line);
+        const mapped = binding.view
+          ? mapFilesCollaborationDisplayOffsetToSourceLineCol(
+              binding.view,
+              binding.view.state.selection.main.head,
+            )
+          : { line, col };
+        const srcLine = mapped.line;
+        const srcCol = mapped.col;
+        if (srcLine === lastCursorLine && srcCol === lastCursorCol) return;
+        if (Math.abs(srcLine - lastCursorLine) > JUMP_CURSOR_LINE_THRESHOLD) {
+          onCursorTeleport(srcLine);
         }
-        lastCursorLine = line;
-        lastCursorCol = col;
-        reportCursor(line, col);
+        lastCursorLine = srcLine;
+        lastCursorCol = srcCol;
+        reportCursor(srcLine, srcCol);
       };
     };
 
@@ -151,7 +178,24 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       const reused = plan.view;
       bindView(reused);
       const replica = editorReplica(buffer().documentId);
-      if (replica) rebindFilesCollaboration(reused, replica);
+      const wantPretty = isPrettyDisplayEnabled(projectId, key);
+      if (replica) {
+        rebindFilesCollaboration(reused, replica, {
+          projectId,
+          key,
+          path,
+          enabled: wantPretty,
+          onAuthoritativeDocChange,
+        });
+      } else if (wantPretty) {
+        syncFilesCollaborationPrettyMode(reused, undefined, {
+          projectId,
+          key,
+          path,
+          enabled: true,
+          onAuthoritativeDocChange,
+        });
+      }
       applyEditable(reused, canEdit);
       setSimplifiedDisplay(sourceUsesSimplifiedDisplay(reused.state));
       if (plan.scrollTop > 0) {
@@ -159,9 +203,9 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
         restoreEditorScrollTop(reused, plan.scrollTop);
       }
       const reusedHead = reused.state.selection.main.head;
-      const reusedLine = reused.state.doc.lineAt(reusedHead);
-      lastCursorLine = reusedLine.number;
-      lastCursorCol = reusedHead - reusedLine.from + 1;
+      const reusedPos = mapFilesCollaborationDisplayOffsetToSourceLineCol(reused, reusedHead);
+      lastCursorLine = reusedPos.line;
+      lastCursorCol = reusedPos.col;
     } else {
       const replica = editorReplica(buffer().documentId);
       const hostExtensions = [
@@ -227,11 +271,47 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       });
       const attached = created;
       untrack(() => { tryRestoreBufferViewState(buffer(), attached); });
+      const wantPretty = isPrettyDisplayEnabled(projectId, key);
+      if (replica || wantPretty) {
+        rebindFilesCollaboration(attached, replica, {
+          projectId,
+          key,
+          path,
+          enabled: wantPretty,
+          onAuthoritativeDocChange,
+        });
+      }
       const attachedHead = attached.state.selection.main.head;
-      const attachedLine = attached.state.doc.lineAt(attachedHead);
-      lastCursorLine = attachedLine.number;
-      lastCursorCol = attachedHead - attachedLine.from + 1;
+      const attachedPos = mapFilesCollaborationDisplayOffsetToSourceLineCol(attached, attachedHead);
+      lastCursorLine = attachedPos.line;
+      lastCursorCol = attachedPos.col;
     }
+
+    const unregisterPretty = registerPrettySurfaceCapability(projectId, key, {
+      enabled: () => isPrettyDisplayEnabled(projectId, key),
+      available: () => !historicalActive() && !currentAbsent(),
+      onToggle: () => {
+        const next = togglePrettyDisplayPref(projectId, key);
+        const v = binding.view;
+        if (v) {
+          syncFilesCollaborationPrettyMode(v, editorReplica(buffer().documentId), {
+            projectId,
+            key,
+            path,
+            enabled: next,
+            onAuthoritativeDocChange,
+          });
+          const screen = filesEditorSecretScreen(key);
+          if (screen) setSecretScreen(v, projectSecretScreenForFilesView(v, screen));
+          const head = v.state.selection.main.head;
+          const srcPos = mapFilesCollaborationDisplayOffsetToSourceLineCol(v, head);
+          lastCursorLine = srcPos.line;
+          lastCursorCol = srcPos.col;
+          reportCursor(srcPos.line, srcPos.col);
+        }
+        return true;
+      },
+    });
 
     const revealView = binding.view;
     if (revealView && untrack(() => hasPendingReveal(buffer()) && !buffer().loading && !historicalActive() && !currentAbsent())) {
@@ -240,8 +320,8 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
     }
     if (binding.view) {
       const head = binding.view.state.selection.main.head;
-      const lineObj = binding.view.state.doc.lineAt(head);
-      reportCursor(lineObj.number, head - lineObj.from + 1);
+      const srcPos = mapFilesCollaborationDisplayOffsetToSourceLineCol(binding.view, head);
+      reportCursor(srcPos.line, srcPos.col);
     }
     let cancelChrome: (() => void) | undefined;
     if (binding.view) {
@@ -257,6 +337,7 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       }
     }
     onCleanup(() => {
+      unregisterPretty();
       cancelChrome?.();
       setChromeReady(false);
       flushFilesDraftSyncFor(projectId, key);
@@ -282,8 +363,18 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
     const current = editorView();
     if (!current) return;
     untrack(() => {
+      const projectId = currentProjectId();
+      const key = buffer().key;
+      const path = buffer().path;
       const restore = replica && canRestoreFilesCollaborationView(current);
-      if (rebindFilesCollaboration(current, replica)) {
+      if (
+        rebindFilesCollaboration(current, replica, {
+          projectId,
+          key,
+          path,
+          enabled: isPrettyDisplayEnabled(projectId, key),
+        })
+      ) {
         applyEditable(current, editable());
         if (restore) tryRestoreBufferViewState(buffer(), current);
       }

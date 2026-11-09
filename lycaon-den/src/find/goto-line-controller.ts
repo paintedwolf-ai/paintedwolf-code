@@ -1,8 +1,14 @@
 import { createSignal } from "solid-js";
+import { Facet } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 export type GotoLineTarget = { lineCount: number; currentLine: number; focus(): void; goTo(line: number, column: number): void };
 type GotoLineState = { target: GotoLineTarget };
+
+export const gotoLineTargetFacet = Facet.define<
+  (view: EditorView) => GotoLineTarget | undefined,
+  ((view: EditorView) => GotoLineTarget | undefined) | undefined
+>({ combine: (values) => values[0] });
 
 const [state, setState] = createSignal<GotoLineState | null>(null);
 
@@ -12,14 +18,15 @@ export const gotoLineController = {
 };
 
 export function openGotoLine(view: EditorView | GotoLineTarget): void {
-  const target: GotoLineTarget = view instanceof EditorView ? {
+  const custom = view instanceof EditorView ? view.state.facet(gotoLineTargetFacet)?.(view) : undefined;
+  const target: GotoLineTarget = custom ?? (view instanceof EditorView ? {
     lineCount: view.state.doc.lines, currentLine: view.state.doc.lineAt(view.state.selection.main.head).number,
     focus: () => view.focus(), goTo: (line, column) => {
       const docLine = view.state.doc.line(Math.min(view.state.doc.lines, line));
       const position = docLine.from + Math.min(column - 1, docLine.length);
       view.dispatch({ selection: { anchor: position }, effects: EditorView.scrollIntoView(position, { y: "center" }), userEvent: "select.gotoLine" });
     },
-  } : view;
+  } : view);
   setState({ target });
 }
 

@@ -778,8 +778,10 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
 
     const statusAlert = tooltip!.querySelector('[data-testid="pretty-recovery-status"]');
     expect(statusAlert?.textContent).toContain(
-      "Capacity limit reached: switched to raw-backed editing",
+      "held in memory only and will be lost on close or reload unless copied or inserted",
     );
+    expect(tooltip!.style.maxHeight).toBe("240px");
+    expect(tooltip!.style.overflowY).toBe("auto");
 
     const c1Id = mount.adapter.pendingConflicts[0]!.conflictId;
     const c2Id = (mount.adapter.capacityOverflowRecord!.record as { conflictId: string }).conflictId;
@@ -789,6 +791,7 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       `[data-testid="pretty-recovery-select-${c2Id}"]`,
     );
     expect(selectC2Btn).not.toBeNull();
+    expect(selectC2Btn!.textContent).toContain("In memory only (Multi-cursor edit): U2a, U2b");
     selectC2Btn!.click();
 
     const copyBtn = mount.view.dom.querySelector<HTMLButtonElement>(
@@ -802,9 +805,12 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     );
     expect(exportTextarea?.value).toContain("U2a\nU2b");
     expect(mount.adapter.lastCopiedSelection?.displayText).toBe("U2a\nU2b");
+    const feedbackText =
+      mount.view.dom.querySelector('[data-testid="pretty-recovery-feedback"]')?.textContent ?? "";
     expect(
-      mount.view.dom.querySelector('[data-testid="pretty-recovery-feedback"]')?.textContent,
-    ).toBe("Copied retained edit");
+      feedbackText === "Copied retained edit to clipboard" ||
+        feedbackText === "Selected retained edit in text box — press Copy shortcut to copy",
+    ).toBe(true);
 
     // Dismiss intention #0 of C2 via the DOM button, then apply intention #1 of C2 via the DOM button
     const dismissInt0Btn = mount.view.dom.querySelector<HTMLButtonElement>(
@@ -817,11 +823,12 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       '[data-testid="pretty-recovery-apply-only-1"]',
     );
     expect(applyInt1Btn).not.toBeNull();
+    expect(applyInt1Btn!.textContent).toBe("Insert #1 only");
     applyInt1Btn!.click();
     expect(mount.replica.currentText).toBe('{"a":1}\n{U2b"b":2}');
     expect(mount.adapter.capacityOverflowRecord).toBeNull();
 
-    // Now select C1 and click Dismiss conflict in the DOM; tooltip and diagnostics clear
+    // Now select C1 and click Dismiss retained edit in the DOM; tooltip and diagnostics clear
     const selectC1Btn = mount.view.dom.querySelector<HTMLButtonElement>(
       `[data-testid="pretty-recovery-select-${c1Id}"]`,
     );
@@ -830,6 +837,7 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       '[data-testid="pretty-recovery-dismiss"]',
     );
     expect(dismissConflictBtn).not.toBeNull();
+    expect(dismissConflictBtn!.textContent).toBe("Dismiss retained edit");
     dismissConflictBtn!.click();
 
     expect(mount.adapter.pendingConflicts).toHaveLength(0);

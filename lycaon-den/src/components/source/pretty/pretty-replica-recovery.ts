@@ -671,7 +671,7 @@ export function appendMultiCursorConflictToRecovery(
   if (recovery.capacityOverflowRecord !== null) {
     recovery.preservationBlocked = true;
     recovery.lastCapacityRejectionMessage =
-      "Edit rejected at capacity: existing retained edits were preserved. Resolve or dismiss retained edits to free capacity.";
+      "Recovery limit reached: existing retained edits were preserved. Copy, insert, or dismiss retained edits to free recovery space.";
     recomputeRecoveryRawSegmentRanges(recovery);
     return {
       status: "refused-at-capacity",
@@ -742,7 +742,7 @@ export function appendStaleEditToRecovery(
   if (recovery.capacityOverflowRecord !== null) {
     recovery.preservationBlocked = true;
     recovery.lastCapacityRejectionMessage =
-      "Edit rejected at capacity: existing retained edits were preserved. Resolve or dismiss retained edits to free capacity.";
+      "Recovery limit reached: existing retained edits were preserved. Copy, insert, or dismiss retained edits to free recovery space.";
     recomputeRecoveryRawSegmentRanges(recovery);
     return {
       status: "refused-at-capacity",
@@ -841,6 +841,75 @@ export function findRecoveryCopyCandidate(
   return desiredId
     ? candidates.find((c) => ("conflictId" in c ? c.conflictId : c.staleEditId) === desiredId) ?? candidates[0]
     : candidates[0];
+}
+
+export function hasUnpersistedPrettyRecoveryForDocument(
+  documentId: string | null | undefined,
+): boolean {
+  if (!documentId) return false;
+  for (const state of recoveryByKey.values()) {
+    if (
+      state.documentId === documentId &&
+      state.preservationBlocked &&
+      (state.capacityOverflowRecord !== null ||
+        state.pendingConflicts.length > 0 ||
+        state.pendingStaleEdits.length > 0 ||
+        state.unreadableRawPayload !== null)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function hasActivePrettyRecoveryForDocument(
+  documentId: string | null | undefined,
+  incarnation?: string,
+): boolean {
+  if (!documentId) return false;
+  if (incarnation) {
+    const r = getPrettyDocumentRecoveryState(documentId, incarnation);
+    return (
+      r.pendingConflicts.length > 0 ||
+      r.pendingStaleEdits.length > 0 ||
+      r.capacityOverflowRecord !== null ||
+      r.unreadableRawPayload !== null ||
+      r.lastStorageError !== null
+    );
+  }
+  for (const r of recoveryByKey.values()) {
+    if (
+      r.documentId === documentId &&
+      (r.pendingConflicts.length > 0 ||
+        r.pendingStaleEdits.length > 0 ||
+        r.capacityOverflowRecord !== null ||
+        r.unreadableRawPayload !== null ||
+        r.lastStorageError !== null)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function clearPrettyDocumentRecoveryForDocument(
+  documentId: string | null | undefined,
+): void {
+  if (!documentId) return;
+  const storage = activeRecoveryStorage();
+  for (const [k, state] of [...recoveryByKey.entries()]) {
+    if (state.documentId !== documentId) continue;
+    recoveryByKey.delete(k);
+    if (storage && !state.storageFormatBlocked && !state.storageReadBlocked) {
+      const storageKey = prettyRecoveryStorageKey(state.documentId, state.incarnation);
+      try {
+        storage.removeItem(storageKey);
+        trackedStorageKeys.delete(storageKey);
+      } catch {
+        // Ignore storage cleanup errors when discarding recovery state.
+      }
+    }
+  }
 }
 
 export function resetPrettyDocumentRecoveryStoreForTests(): void {

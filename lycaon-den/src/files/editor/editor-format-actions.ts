@@ -3,7 +3,7 @@ import { type ContextMenuAnchor, type ContextMenuItem } from "../../components/C
 import { convertIndentationCommand } from "../../components/source/editor/indent-convert.ts";
 import { indentChipLabel, type IndentInfo } from "../../components/source/editor/indent-detect.ts";
 import { effectiveIndent } from "./files-editor-display.ts";
-import { settleFilesEditorView } from "./files-editor-host.ts";
+import { getFilesEditorAuthoritativeViewDoc, settleFilesEditorView } from "./files-editor-host.ts";
 import { prettyStatusToggleForTab } from "./pretty-display-state.ts";
 import { applyFilesBufferDraft, setFilesBufferIndentOverride } from "../documents/project-files-buffers.ts";
 import { type FileBuffer } from "../documents/files-buffer-state.ts";
@@ -42,7 +42,7 @@ export function createEditorFormatActions(options: Pick<FilesEditorScope, "proje
     const fromWidth = effectiveIndent(options.buffer()).width;
     convertIndentationCommand(to, fromWidth)(view);
     setFilesBufferIndentOverride(options.projectId(), options.buffer().key, to);
-    const text = view.state.doc.toString();
+    const text = getFilesEditorAuthoritativeViewDoc(view) ?? view.state.doc.toString();
     settleFilesEditorView(options.projectId(), options.buffer().key);
     applyFilesBufferDraft(options.projectId(), options.buffer().key, text);
   };

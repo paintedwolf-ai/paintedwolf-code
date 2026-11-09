@@ -1,15 +1,17 @@
 import { isolateHistory } from "@codemirror/commands";
-import { EditorSelection, EditorState, Prec, Transaction, type Extension, type TransactionSpec } from "@codemirror/state";
+import { EditorSelection, EditorState, Prec, StateField, Transaction, type Extension, type TransactionSpec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import type * as Y from "yjs";
+import { lineGutterSource } from "../annotations/line-gutter.ts";
 import { editorHistory } from "../editor/editor-history.ts";
 import { documentDeltaChanges, documentHistoryKey, documentRemoteChange, documentSynchronization } from "../../../files/documents/document-editor-binding.ts";
 import type { DocumentStorageError } from "../../../files/documents/document-outbox.ts";
 import type { DocumentReplica } from "../../../files/documents/document-replica.ts";
+import { gotoLineTargetFacet, type GotoLineTarget } from "../../../find/goto-line-controller.ts";
 import { isImeComposition } from "../../../platform/interaction/ime-composition.ts";
 import { shortcutPlatform } from "../../../shortcuts/platform.ts";
 import { extractCopySelection, mapDisplayEditToSource } from "./pretty-edit-mapper.ts";
-import { displayToSourceOffset, sourceToDisplayOffset } from "./pretty-map.ts";
+import { displayOffsetToSourceLineCol, displayToSourceOffset, sourceLineColToDisplay, sourceToDisplayOffset } from "./pretty-map.ts";
 import { advanceProjectionForComposeFrame, PrettyRevisionDeltaRingBuffer, rebaseChangesOverDeltaChain } from "./pretty-replica-rebase.ts";
 import {
   appendMultiCursorConflictToRecovery, appendStaleEditToRecovery, computeRawTextFingerprint, findConflictRecoveryTarget,
@@ -22,7 +24,7 @@ import {
 import { createPrettyRecoveryUiExtension, refreshPrettyRecoveryUi, syncPrettyRecoveryUiAndDiagnostics, type PrettyRecoveryUiController } from "./pretty-replica-recovery-ui.ts";
 import { formatPrettyProjection } from "./pretty-segmenter.ts";
 import type {
-  PrettyCaretAffinity, PrettyDisplayChange, PrettyEditIntentKind, PrettyFormatOptions,
+  PrettyCaretAffinity, PrettyDisplayChange, PrettyEditIntentKind, PrettyFormatOptions, PrettyLineCol,
   PrettyMappedSourceChange, PrettyProjectionResult, PrettyRawRange, PrettySelectionRange, PrettySourceMap,
 } from "./pretty-types.ts";
 
@@ -31,6 +33,7 @@ export interface PrettyReplicaAdapterOptions {
   readonly languageHint?: string;
   readonly indentUnit?: string;
   readonly ringBufferCapacity?: number;
+  readonly onAuthoritativeDocChange?: (rawText: string, userEvent: string | undefined) => void;
 }
 
 export type PrettyConflictResolutionAction =
@@ -161,6 +164,7 @@ export class PrettyReplicaEditorAdapter {
       getCurrentProjection: () => this.projection,
       copyPendingRecovery: (id) => this.copyPendingRecovery(id),
       copyUnreadableRecoveryPayload: () => this.copyUnreadableRecoveryPayload(),
+      setRecoveryFeedback: (msg) => this.setRecoveryFeedback(msg),
       resolvePendingConflict: (res) =>
         this.resolvePendingConflict(res as PrettyConflictResolutionAction),
       discardPendingStaleEdit: (id) => this.discardPendingStaleEdit(id),
@@ -172,6 +176,7 @@ export class PrettyReplicaEditorAdapter {
     syncPrettyRecoveryUiAndDiagnostics(this.view, this.uiController(), ++this.recoveryUiSeq);
   }
 
+  get rawText(): string { return this.replica.currentText; }
   get currentProjection(): PrettyProjectionResult { return this.projection; }
   get isPrettyEnabled(): boolean { return this.prettyEnabled; }
   get isComposing(): boolean { return this.composing || Boolean(this.view?.composing); }
@@ -195,6 +200,72 @@ export class PrettyReplicaEditorAdapter {
   get unreadableRecoveryPayload(): string | null { return this.recoveryState().unreadableRawPayload; }
   get capacityOverflowRecord(): PrettyRecoveryOverflowEntry | null { return this.recoveryState().capacityOverflowRecord; }
   get retainedRecoveryBytes(): number { return this.recoveryState().retainedBytes; }
+
+  hasActiveRecovery(): boolean {
+    const r = this.recoveryState();
+    return (
+      r.pendingConflicts.length > 0 ||
+      r.pendingStaleEdits.length > 0 ||
+      r.capacityOverflowRecord !== null ||
+      r.unreadableRawPayload !== null ||
+      r.lastStorageError !== null
+    );
+  }
+
+  hasUnpersistedRecovery(): boolean {
+    const r = this.recoveryState();
+    return (
+      r.preservationBlocked &&
+      (r.capacityOverflowRecord !== null ||
+        r.pendingConflicts.length > 0 ||
+        r.pendingStaleEdits.length > 0 ||
+        r.unreadableRawPayload !== null)
+    );
+  }
+
+  mapSourceLineColToDisplay(line: number, col = 1): PrettyLineCol & { readonly srcOffset: number } {
+    return sourceLineColToDisplay(this.projection.sourceMap, this.projectedRawText, line, col, "right");
+  }
+
+  mapDisplayOffsetToSourceLineCol(dispOffset: number): PrettyLineCol {
+    return displayOffsetToSourceLineCol(
+      this.projection.sourceMap,
+      this.projectedRawText,
+      dispOffset,
+      this.viewCaretAffinity?.assoc === "before" ? "left" : "right",
+    );
+  }
+
+  getLineGutterLabel(dispLineNumber: number): { label: string; foldable?: boolean } {
+    if (!this.prettyEnabled) return { label: String(dispLineNumber) };
+    const info = this.projection.sourceMap.displayLines[dispLineNumber - 1];
+    if (!info) return { label: String(dispLineNumber) };
+    if (info.isContinuation) return { label: "", foldable: false };
+    return { label: String(info.sourceLine) };
+  }
+
+  getGotoLineTarget(view: EditorView): GotoLineTarget | undefined {
+    if (!this.prettyEnabled) return undefined;
+    let rawLines = 1;
+    for (let i = 0; i < this.projectedRawText.length; i++) {
+      if (this.projectedRawText.charCodeAt(i) === 0x0a) rawLines++;
+    }
+    const currentSrc = this.mapDisplayOffsetToSourceLineCol(view.state.selection.main.head);
+    return {
+      lineCount: rawLines,
+      currentLine: currentSrc.line,
+      focus: () => view.focus(),
+      goTo: (line, column) => {
+        const mapped = this.mapSourceLineColToDisplay(line, column);
+        const pos = Math.max(0, Math.min(view.state.doc.length, mapped.offset));
+        view.dispatch({
+          selection: { anchor: pos },
+          effects: EditorView.scrollIntoView(pos, { y: "center" }),
+          userEvent: "select.gotoLine",
+        });
+      },
+    };
+  }
 
   holdViewProjection(hold: boolean): void {
     this.holdProjection = hold;
@@ -328,6 +399,7 @@ export class PrettyReplicaEditorAdapter {
       this.view.dispatch({
         ...(diff ? { changes: diff } : {}),
         selection: EditorSelection.single(nextDispHead),
+        effects: [refreshPrettyRecoveryUi.of(++this.recoveryUiSeq)],
         annotations: [documentSynchronization.of(true), Transaction.addToHistory.of(false)],
       });
     }
@@ -339,7 +411,8 @@ export class PrettyReplicaEditorAdapter {
     this.replica.stepHistory(direction);
     if (this.replica.history.revision !== prevRev) {
       this.transientRawSegmentRanges = [];
-      this.syncReplicaToView(false);
+      this.syncReplicaToView(false, direction);
+      this.options.onAuthoritativeDocChange?.(this.replica.currentText, direction);
     }
     return true;
   }
@@ -367,7 +440,7 @@ export class PrettyReplicaEditorAdapter {
     status: Extract<PrettyConflictResolutionResult, { readonly ok: false }>["status"],
     error?: unknown,
   ): PrettyConflictResolutionResult {
-    recovery.lastRecoveryFeedback = `Cannot resolve conflict: ${status}`;
+    recovery.lastRecoveryFeedback = `Cannot insert retained edit: ${status}`;
     this.syncRecoveryUi();
     return error !== undefined ? { ok: false, status, error } : { ok: false, status };
   }
@@ -380,7 +453,7 @@ export class PrettyReplicaEditorAdapter {
 
     if (resolution.action === "discard-conflict") {
       remove();
-      recovery.lastRecoveryFeedback = `Dismissed conflict ${conflict.conflictId}`;
+      recovery.lastRecoveryFeedback = "Dismissed retained edit";
       const persisted = this.finalizeRecoveryMutation(recovery);
       return {
         ok: true,
@@ -398,7 +471,7 @@ export class PrettyReplicaEditorAdapter {
       if (intIdx < 0) return this.failConflictResolution(recovery, "invalid-choice");
       conflict.intentions.splice(intIdx, 1);
       if (conflict.intentions.length === 0) remove();
-      recovery.lastRecoveryFeedback = `Dismissed intention #${resolution.order}`;
+      recovery.lastRecoveryFeedback = `Dismissed retained edit #${resolution.order}`;
       const persisted = this.finalizeRecoveryMutation(recovery);
       return {
         ok: true,
@@ -493,8 +566,9 @@ export class PrettyReplicaEditorAdapter {
       if (conflict.intentions.length === 0) remove();
     }
 
-    recovery.lastRecoveryFeedback = `Applied intention #${chosen.order}`;
+    recovery.lastRecoveryFeedback = `Inserted retained edit #${chosen.order}`;
     const persisted = this.finalizeRecoveryMutation(recovery);
+    this.options.onAuthoritativeDocChange?.(this.replica.currentText, "input.type");
     return {
       ok: true,
       status: "applied",
@@ -509,9 +583,16 @@ export class PrettyReplicaEditorAdapter {
   discardPendingStaleEdit(staleEditId?: string): boolean {
     const recovery = this.recoveryState();
     if (!removeStaleEditRecoveryTarget(recovery, staleEditId)) return false;
-    recovery.lastRecoveryFeedback = "Dismissed stale edit";
+    recovery.lastRecoveryFeedback = "Dismissed retained edit";
     this.finalizeRecoveryMutation(recovery);
     return true;
+  }
+
+  setRecoveryFeedback(message: string): void {
+    const recovery = this.recoveryState();
+    if (recovery.lastRecoveryFeedback === message) return;
+    recovery.lastRecoveryFeedback = message;
+    this.syncRecoveryUi();
   }
 
   copyPendingRecovery(targetId?: string): { readonly displayText: string; readonly rawText: string } | null {
@@ -573,7 +654,7 @@ export class PrettyReplicaEditorAdapter {
     return res;
   }
 
-  private syncReplicaToView(remote: boolean): void {
+  private syncReplicaToView(remote: boolean, userEvent?: string): void {
     const currentRawText = this.replica.currentText;
     if (remote && this.viewCaretAffinity) {
       const chain = this.ringBuffer.collectChain(
@@ -612,6 +693,7 @@ export class PrettyReplicaEditorAdapter {
     this.view.dispatch({
       ...(diff ? { changes: diff } : {}),
       selection: nextSel,
+      ...(userEvent ? { userEvent } : {}),
       annotations: [
         documentSynchronization.of(true),
         documentRemoteChange.of(remote),
@@ -827,17 +909,35 @@ export class PrettyReplicaEditorAdapter {
       head: sourceToDisplayOffset(this.projection.sourceMap, r.head, "right"),
     }));
     if (this.view?.hasFocus) this.replica.publishPresence(rawSel);
+    this.options.onAuthoritativeDocChange?.(this.replica.currentText, userEvent);
     const diff = computeMinimalTextChange(tr.startState.doc.toString(), this.projection.displayText);
     return {
       ...(diff ? { changes: diff } : {}),
       selection: toEditorSelection(dispRanges, this.projection.displayText.length),
+      userEvent,
       annotations: [documentSynchronization.of(true), Transaction.addToHistory.of(false)],
     };
   }
 
   get extension(): Extension {
     const command = (direction: "undo" | "redo") => () => this.stepHistory(direction);
+    const gutterStampField = StateField.define<number>({
+      create: () => 0,
+      update: (val, tr) => {
+        if (tr.docChanged) return val + 1;
+        for (const e of tr.effects) {
+          if (e.is(refreshPrettyRecoveryUi)) return val + 1;
+        }
+        return val;
+      },
+      provide: (field) =>
+        lineGutterSource.compute([field], () => (_state, dispLineNumber) =>
+          this.getLineGutterLabel(dispLineNumber),
+        ),
+    });
     return [
+      gutterStampField,
+      gotoLineTargetFacet.of((view) => this.getGotoLineTarget(view)),
       createPrettyRecoveryUiExtension(this.uiController()),
       editorHistory.of((direction) => { this.stepHistory(direction); }),
       EditorState.transactionFilter.of((tr) =>
@@ -852,6 +952,8 @@ export class PrettyReplicaEditorAdapter {
             event.preventDefault();
             return command(direction)();
           },
+          copy: () => { this.copySelection(); return false; },
+          cut: () => { this.copySelection(); return false; },
           compositionstart: () => { this.startComposition(); return false; },
           compositionupdate: () => { this.startComposition(); return false; },
           compositionend: () => { this.finishComposition(); return false; },

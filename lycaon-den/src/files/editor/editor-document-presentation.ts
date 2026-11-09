@@ -13,6 +13,11 @@ import { setScopeDeletedLines } from "../../components/source/diff/scope-diff.ts
 import { getDeletedLines } from "../review/review-pane.ts";
 import { setSecretScreen } from "../../components/source/secrets/secret-span-decorations.ts";
 import { currentDisplayPrefs } from "./files-editor-display.ts";
+import {
+  getFilesCollaborationAuthoritativeDoc,
+  projectSecretScreenForFilesView,
+  syncFilesCollaborationNonReplicaDraft,
+} from "./files-editor-collaboration.ts";
 import { getFilesEditorView, getFilesEditorViewDoc, isFilesEditorViewDocDirty, settleFilesEditorView } from "./files-editor-host.ts";
 import { clearFilesEditorSecretScreen, filesEditorSecretScreen } from "./files-editor-secret-screen.ts";
 import type { DiffLineHunk } from "../review/line-diff.ts";
@@ -31,8 +36,12 @@ export function observeEditorDocumentPresentation(options: Pick<FilesEditorScope
     if (!v || draft === known) return;
     if (isFilesEditorViewDocDirty(options.projectId(), options.buffer().key)) return;
     if (options.buffer().loadError) return;
-    const live = v.state.doc.toString();
+    const live = getFilesCollaborationAuthoritativeDoc(v) ?? v.state.doc.toString();
     if (draft === live) {
+      settleFilesEditorView(options.projectId(), options.buffer().key);
+      return;
+    }
+    if (syncFilesCollaborationNonReplicaDraft(v, draft)) {
       settleFilesEditorView(options.projectId(), options.buffer().key);
       return;
     }
@@ -117,7 +126,7 @@ export function observeEditorDocumentMarks(options: Pick<FilesEditorScope, "proj
     const screen = filesEditorSecretScreen(options.buffer().key);
     const view = getFilesEditorView(options.projectId(), options.buffer().key);
     if (!view) return;
-    setSecretScreen(view, screen ?? null);
+    setSecretScreen(view, projectSecretScreenForFilesView(view, screen ?? null));
   });
   onCleanup(() => clearFilesEditorSecretScreen(options.buffer().key));
 

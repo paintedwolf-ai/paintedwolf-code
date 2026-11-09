@@ -11,7 +11,16 @@ import {
 } from "../components/project-files-model.ts";
 import { captureBufferViewState } from "./editor-session-fidelity.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
-import { invokePrettyToggleForTab, resetPrettyDisplayStateForTests } from "./pretty-display-state.ts";
+import {
+  destroyFilesCollaborationPrettySession,
+  getFilesCollaborationAuthoritativeDoc,
+  getFilesCollaborationPrettyAdapter,
+} from "./files-editor-collaboration.ts";
+import {
+  clearPrettyDisplayTab,
+  invokePrettyToggleForTab,
+  resetPrettyDisplayStateForTests,
+} from "./pretty-display-state.ts";
 export { invokePrettyToggleForTab };
 
 type LiveEntry = {
@@ -112,9 +121,17 @@ export function getFilesEditorView(projectId: string, key: FileBufferKey): Edito
   return live.get(id(projectId, key))?.view;
 }
 
+export function getFilesEditorAuthoritativeViewDoc(view: EditorView | undefined): string | undefined {
+  return getFilesCollaborationAuthoritativeDoc(view);
+}
+
+export function getFilesEditorPrettyAdapter(projectId: string, key: FileBufferKey) {
+  return getFilesCollaborationPrettyAdapter(getFilesEditorView(projectId, key));
+}
+
 export function getFilesEditorViewDoc(projectId: string, key: FileBufferKey): string | undefined {
   const entry = live.get(id(projectId, key));
-  return entry?.documentValid ? entry.view.state.doc.toString() : undefined;
+  return entry?.documentValid ? getFilesCollaborationAuthoritativeDoc(entry.view) : undefined;
 }
 
 export function settleFilesEditorView(projectId: string, key: FileBufferKey): void {
@@ -321,8 +338,12 @@ function destroyLiveEntry(
     const buffer = projectFilesState(entry.projectId).byKey[entry.key];
     if (buffer) captureBufferViewState(buffer, entry.view);
   }
+  destroyFilesCollaborationPrettySession(entry.view, { clearCache: opts.dropHandlers });
   releaseEditorViewport(entry.view);
-  if (opts.dropHandlers) handlerBags.delete(k);
+  if (opts.dropHandlers) {
+    handlerBags.delete(k);
+    clearPrettyDisplayTab(entry.projectId, entry.key);
+  }
 }
 
 export function dropFilesEditorHandlers(
@@ -330,10 +351,12 @@ export function dropFilesEditorHandlers(
   key: FileBufferKey,
 ): void {
   handlerBags.delete(id(projectId, key));
+  clearPrettyDisplayTab(projectId, key);
 }
 
 export function resetFilesEditorHostForTests(): void {
   for (const entry of [...live.values()]) {
+    destroyFilesCollaborationPrettySession(entry.view, { clearCache: true });
     try {
       entry.view.destroy();
     } catch {

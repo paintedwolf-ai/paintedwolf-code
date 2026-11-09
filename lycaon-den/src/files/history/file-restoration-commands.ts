@@ -7,7 +7,7 @@ import { rejectHunkInFile, revertFileToBaseline } from "../history/file-revert.t
 import { showFileUndoToast } from "../history/file-undo-toast.ts";
 import { listedRestoreDisabledReason, restoreListedCommit, restoreRetainedVersion, versionRestoreDisabledReason } from "../history/file-version-restore.ts";
 import { type FileVersionView } from "../history/file-version.ts";
-import { getFilesEditorView } from "../editor/files-editor-host.ts";
+import { getFilesEditorAuthoritativeViewDoc, getFilesEditorView } from "../editor/files-editor-host.ts";
 import type { DiffLineHunk } from "../review/line-diff.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
 import { type FileBuffer } from "../documents/files-buffer-state.ts";
@@ -196,7 +196,7 @@ export function createFileRestoration({ projectId, client, sourceSessionId, acti
       hunk,
       sessionId: sourceSessionId(),
       before,
-      after: view.state.doc.toString(),
+      after: getFilesEditorAuthoritativeViewDoc(view) ?? view.state.doc.toString(),
       encoding: buf.encoding ?? undefined,
       baseSha256: buf.baseSha256 ?? undefined,
       tip: scopeEffectFor(projectId(), buf.rootId, buf.path)?.tip ?? null,

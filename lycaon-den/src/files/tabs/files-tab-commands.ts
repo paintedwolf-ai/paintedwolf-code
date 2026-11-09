@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { hasUnpersistedPrettyRecoveryForDocument } from "../../components/source/pretty/pretty-replica-recovery.ts";
 import { popClosedBuffer } from "./closed-buffer-ring.ts";
 import { putBufferViewState, rememberClosedBufferForProject, scheduleSessionFidelityPersist } from "../editor/editor-session-fidelity.ts";
 import { dropFilesEditorHandlers, getFilesEditorView } from "../editor/files-editor-host.ts";
@@ -42,7 +43,10 @@ export function createFilesTabCommands(options: FilesTabCommandsOptions) {
     const keys = filesCloseTargetKeys(projectId(), family, focusKey);
     if (keys.length === 0) return;
     const s = state();
-    const dirty = keys.filter((key) => s.byKey[key]?.dirty);
+    const dirty = keys.filter((key) => {
+      const buf = s.byKey[key];
+      return Boolean(buf && (buf.dirty || hasUnpersistedPrettyRecoveryForDocument(buf.documentId)));
+    });
     if (dirty.length === 0) {
       closeBuffers(keys);
       return;

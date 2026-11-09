@@ -19,6 +19,7 @@ import { FileVersionPicker } from "../history/FileVersionPicker.tsx";
 import type { DiffLineHunk } from "../review/line-diff.ts";
 import { FileMarkdownPreview } from "./FileMarkdownPreview.tsx";
 import { FilesEditorHeaderChrome, FilesEditorStatus } from "./FilesEditorChrome.tsx";
+import { getFilesEditorAuthoritativeViewDoc } from "./files-editor-host.ts";
 import {
   type DefinitionPickerState, createFilesEditorMenus, FilesEditorContextMenus,
   FilesEditorDefinitionPicker, FilesEditorGitReviewPreview, FilesEditorOverlays,
@@ -222,7 +223,9 @@ export function FilesEditor(props: FilesEditorProps) {
         mdView={annotations.mdView()}
         onChangeMdView={(id) => {
           if (id === "preview") {
-            annotations.setPreviewText(cm.currentView()?.state.doc.toString() ?? filesBufferText(props.buffer));
+            annotations.setPreviewText(
+              getFilesEditorAuthoritativeViewDoc(cm.currentView()) ?? filesBufferText(props.buffer),
+            );
             annotations.setMdView("preview");
           } else annotations.setMdView("code");
         }}
@@ -303,7 +306,9 @@ export function FilesEditor(props: FilesEditorProps) {
               currentContent={() =>
                 history.comparisonPreview()
                   ? props.version?.source.kind === "text" ? props.version.source.before : null
-                  : history.currentTipAbsent() ? null : cm.editorView()?.state.doc.toString() ?? null
+                  : history.currentTipAbsent()
+                    ? null
+                    : getFilesEditorAuthoritativeViewDoc(cm.editorView()) ?? null
               }
               comparisonMenuOpen={() => menus.versionComparisonMenu() != null}
               onOpenComparisonMenu={menus.setVersionComparisonMenu}

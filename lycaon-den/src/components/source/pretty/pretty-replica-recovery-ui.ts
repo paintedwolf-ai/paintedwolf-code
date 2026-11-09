@@ -17,6 +17,7 @@ export interface PrettyRecoveryUiController {
   getCurrentProjection(): PrettyProjectionResult;
   copyPendingRecovery(targetId?: string): { readonly displayText: string; readonly rawText: string } | null;
   copyUnreadableRecoveryPayload(): string | null;
+  setRecoveryFeedback(message: string): void;
   resolvePendingConflict(resolution: {
     readonly action: "apply" | "discard-intention" | "discard-conflict";
     readonly conflictId?: string;
@@ -28,6 +29,12 @@ export interface PrettyRecoveryUiController {
   };
   discardPendingStaleEdit(staleEditId?: string): boolean;
   selectRecoveryRecord(recordId: string): void;
+}
+
+export function summarizePreviewText(text: string, maxChars = 32): string {
+  const singleLine = text.replace(/\r?\n/g, "↵");
+  if (singleLine.length <= maxChars) return singleLine;
+  return `${singleLine.slice(0, maxChars)}… (${text.length} chars)`;
 }
 
 type RecoveryItemEntry =
@@ -90,15 +97,28 @@ function resolveEntryDisplayRange(
   return { from: dispFrom, to: Math.min(docLength, Math.max(dispTo, dispFrom + 1)) };
 }
 
-function tryWriteClipboard(text: string): void {
+function tryWriteClipboard(text: string, controller: PrettyRecoveryUiController): void {
   try {
     const nav = typeof navigator !== "undefined" ? navigator : undefined;
     if (nav?.clipboard && typeof nav.clipboard.writeText === "function") {
-      void Promise.resolve(nav.clipboard.writeText(text)).catch(() => undefined);
+      void Promise.resolve(nav.clipboard.writeText(text)).then(
+        () => {
+          controller.setRecoveryFeedback("Copied retained edit to clipboard");
+        },
+        () => {
+          controller.setRecoveryFeedback(
+            "Selected retained edit in text box — press Copy shortcut to copy",
+          );
+        },
+      );
+      return;
     }
   } catch {
-    // Clipboard access is best-effort alongside the selectable export textarea.
+    // Fall through to text box selection feedback when clipboard access fails.
   }
+  controller.setRecoveryFeedback(
+    "Selected retained edit in text box — press Copy shortcut to copy",
+  );
 }
 
 function buildTooltipDom(
@@ -115,16 +135,27 @@ function buildTooltipDom(
   root.dataset.testid = "pretty-recovery-tooltip";
   root.setAttribute("role", "region");
   root.setAttribute("aria-label", "Pretty edit recovery");
+  root.tabIndex = -1;
+  root.style.maxHeight = "240px";
+  root.style.overflowY = "auto";
+  root.style.maxWidth = "520px";
+  root.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      view.contentDOM.focus();
+    }
+  });
 
   const statusMessages: string[] = [];
   if (recovery.lastStorageError) {
     statusMessages.push(
-      `Storage error: ${recovery.lastStorageError.message}. Unresolved edits are held in memory; copy or resolve before closing.`,
+      `Recovery storage error (${recovery.lastStorageError.message}): retained edits are held in memory only and will be lost on close or reload unless copied or inserted.`,
     );
   }
   if (recovery.capacityOverflowRecord !== null) {
     statusMessages.push(
-      "Capacity limit reached: switched to raw-backed editing until retained edits are resolved or dismissed.",
+      "Recovery storage limit reached: the latest retained edit is held in memory only and will be lost on close or reload unless copied or inserted. Showing original source lines until retained edits are resolved.",
     );
   }
   if (statusMessages.length > 0) {
@@ -162,14 +193,14 @@ function buildTooltipDom(
     const copyUnreadableBtn = view.dom.ownerDocument.createElement("button");
     copyUnreadableBtn.type = "button";
     copyUnreadableBtn.dataset.testid = "pretty-recovery-copy-unreadable";
-    copyUnreadableBtn.textContent = "Copy unreadable store";
+    copyUnreadableBtn.textContent = "Copy unreadable recovery data";
     copyUnreadableBtn.addEventListener("click", () => {
       const payload = controller.copyUnreadableRecoveryPayload();
       if (payload) {
         exportArea.value = payload;
         exportArea.focus();
         exportArea.select();
-        tryWriteClipboard(payload);
+        tryWriteClipboard(payload, controller);
       }
     });
     root.appendChild(copyUnreadableBtn);
@@ -185,11 +216,15 @@ function buildTooltipDom(
       selectBtn.dataset.recordId = entry.id;
       selectBtn.dataset.recordTier = entry.tier;
       selectBtn.setAttribute("aria-pressed", String(entry.id === activeEntry.id));
-      const preview = entry.record.intentions.map((i) => i.insert).join(", ");
+      const kindLabel = entry.kind === "conflict" ? "Multi-cursor edit" : "Concurrent edit";
+      const preview = summarizePreviewText(
+        entry.record.intentions.map((i) => i.insert).join(", "),
+        32,
+      );
       selectBtn.textContent =
         entry.tier === "overflow"
-          ? `Overflow (${entry.kind}): ${preview}`
-          : `${entry.kind}: ${preview}`;
+          ? `In memory only (${kindLabel}): ${preview}`
+          : `Saved (${kindLabel}): ${preview}`;
       selectBtn.addEventListener("click", () => {
         controller.selectRecoveryRecord(entry.id);
       });
@@ -216,17 +251,18 @@ function buildTooltipDom(
         exportArea.value = `${copied.displayText}\n${copied.rawText}`;
         exportArea.focus();
         exportArea.select();
-        tryWriteClipboard(copied.displayText);
+        tryWriteClipboard(copied.displayText, controller);
       }
     });
     recordDetail.appendChild(copyBtn);
 
     if (activeEntry.kind === "conflict") {
       for (const intention of activeEntry.record.intentions) {
+        const previewSnippet = summarizePreviewText(intention.insert, 24);
         const applyBtn = view.dom.ownerDocument.createElement("button");
         applyBtn.type = "button";
         applyBtn.dataset.testid = `pretty-recovery-apply-${intention.order}`;
-        applyBtn.textContent = `Apply #${intention.order} (${intention.insert})`;
+        applyBtn.textContent = `Insert #${intention.order} (${previewSnippet})`;
         applyBtn.addEventListener("click", () => {
           controller.resolvePendingConflict({
             action: "apply",
@@ -239,7 +275,7 @@ function buildTooltipDom(
         const applyOnlyBtn = view.dom.ownerDocument.createElement("button");
         applyOnlyBtn.type = "button";
         applyOnlyBtn.dataset.testid = `pretty-recovery-apply-only-${intention.order}`;
-        applyOnlyBtn.textContent = `Apply #${intention.order} only`;
+        applyOnlyBtn.textContent = `Insert #${intention.order} only`;
         applyOnlyBtn.addEventListener("click", () => {
           controller.resolvePendingConflict({
             action: "apply",
@@ -268,8 +304,7 @@ function buildTooltipDom(
     const dismissBtn = view.dom.ownerDocument.createElement("button");
     dismissBtn.type = "button";
     dismissBtn.dataset.testid = "pretty-recovery-dismiss";
-    dismissBtn.textContent =
-      activeEntry.kind === "conflict" ? "Dismiss conflict" : "Dismiss stale edit";
+    dismissBtn.textContent = "Dismiss retained edit";
     dismissBtn.addEventListener("click", () => {
       if (activeEntry.kind === "conflict") {
         controller.resolvePendingConflict({
@@ -350,14 +385,14 @@ export function buildPrettyRecoveryDiagnostics(
         name: "Copy retained edit",
         apply: () => {
           const copied = controller.copyPendingRecovery(entry.id);
-          if (copied) tryWriteClipboard(copied.displayText);
+          if (copied) tryWriteClipboard(copied.displayText, controller);
         },
       },
     ];
     if (entry.kind === "conflict") {
       for (const intention of entry.record.intentions) {
         actions.push({
-          name: `Apply #${intention.order}`,
+          name: `Insert #${intention.order}`,
           apply: () => {
             controller.resolvePendingConflict({
               action: "apply",
@@ -378,7 +413,7 @@ export function buildPrettyRecoveryDiagnostics(
         });
       }
       actions.push({
-        name: "Dismiss conflict",
+        name: "Dismiss retained edit",
         apply: () => {
           controller.resolvePendingConflict({
             action: "discard-conflict",
@@ -388,7 +423,7 @@ export function buildPrettyRecoveryDiagnostics(
       });
     } else {
       actions.push({
-        name: "Dismiss stale edit",
+        name: "Dismiss retained edit",
         apply: () => {
           controller.discardPendingStaleEdit(entry.id);
         },
@@ -401,8 +436,8 @@ export function buildPrettyRecoveryDiagnostics(
       source: "pretty-recovery",
       message:
         entry.kind === "conflict"
-          ? `Ambiguous multi-cursor edit (${entry.record.reason})`
-          : `Stale edit retained (${entry.record.reason})`,
+          ? "Retained multi-cursor edit needs review before inserting"
+          : "Retained edit needs review after concurrent document update",
       actions,
     });
   }
