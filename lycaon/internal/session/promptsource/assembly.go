@@ -97,6 +97,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		ReadMessageWindow:       m.Messages,
 		PromptToolLister:        m.PromptTools,
 		LoadedTools:             m.Loading.LoadedTools,
+		FullCatalog:             m.Loading.FullCatalog,
 		OmittedUnits:            m.Loading.OmittedUnits,
 		SkillPreload:            m.Loading.SkillPreload,
 		SkillPointer:            m.Loading.SkillPointer,

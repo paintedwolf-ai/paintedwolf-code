@@ -23,6 +23,7 @@ type promptSurfaceDeps struct {
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
 	ExecutionModes          *surface.ExecutionModeStateStore
 	LoadedTools             func(sessionID string) map[string]bool
+	FullCatalog             func(sessionID string) bool
 	OmittedUnits            func(sessionID string) map[string]bool
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
 	PromptToolLister        PromptToolLister
@@ -77,6 +78,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		Limits:                  snapshot.Limits,
 		ExecutionModes:          snapshot.ExecutionModes,
 		LoadedTools:             snapshot.LoadedTools,
+		FullCatalog:             snapshot.FullCatalog,
 		OmittedUnits:            snapshot.OmittedUnits,
 		ProjectOverlayRootPaths: snapshot.ProjectOverlayRootPaths,
 		PromptToolLister:        snapshot.PromptToolLister,

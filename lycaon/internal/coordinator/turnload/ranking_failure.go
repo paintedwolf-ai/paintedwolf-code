@@ -46,3 +46,13 @@ func validateRanking(scores []float64, count int) error {
 	}
 	return nil
 }
+
+// RequiresFullCatalog distinguishes selection failure from cancellation or abstention.
+func (f RankingFailure) RequiresFullCatalog() bool {
+	switch f {
+	case RankingUnavailable, RankingDisabled, RankingTimeout, RankingFault:
+		return true
+	default:
+		return false
+	}
+}

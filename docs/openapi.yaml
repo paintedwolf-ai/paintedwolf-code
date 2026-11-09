@@ -21738,11 +21738,12 @@ components:
         - confidence
     TurnLoadToolSource:
       type: string
-      description: 'Why a tool stands loaded: a turn decision predicted it, the model asked for it through request_tools, or it is a declared companion of a predicted tool.'
+      description: 'Why a tool stands loaded: a turn decision predicted it, the model asked for it through request_tools, selection failed and exposed it, or it was recorded as a companion of a predicted tool.'
       enum:
         - predicted
         - requested
         - companion
+        - fallback
     TurnLoadTool:
       x-go-generate: true
       type: object

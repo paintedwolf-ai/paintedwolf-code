@@ -109,6 +109,7 @@ type AssemblyDeps struct {
 	ReadMessageWindow inject.MessageWindowReader
 	// LoadedTools returns the tools the turn ledger loaded beyond the surface floor.
 	LoadedTools func(sessionID string) map[string]bool
+	FullCatalog func(sessionID string) bool
 	// OmittedUnits returns the instruction units the turn ledger left out.
 	OmittedUnits          func(sessionID string) map[string]bool
 	SkillPreload          func(sessionID string) *turnload.SkillPreload
