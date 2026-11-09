@@ -282,11 +282,16 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       { from: 8, to: 8, insert: ',"w":1' },
     ]);
     expect(divergedReplica.history.revision).toBeGreaterThan(baseRev);
-    expect(divergedAdapter.ringBuffer.entries).toHaveLength(1);
-    expect(divergedAdapter.ringBuffer.entries[0]!.fromHistoryRevision).toBe(baseRev);
-    expect(divergedAdapter.ringBuffer.entries[0]!.toHistoryRevision).toBe(
-      divergedReplica.history.revision,
-    );
+    expect(
+      divergedAdapter.ringBuffer.collectChain(
+        divergedReplica.incarnation,
+        divergedReplica.epoch,
+        baseRev,
+        divergedReplica.incarnation,
+        divergedReplica.epoch,
+        divergedReplica.history.revision,
+      ),
+    ).toHaveLength(1);
     const refusedCrossProcess = divergedAdapter.resolvePendingConflict({
       action: "apply",
       conflictId: divergedAdapter.pendingConflicts[0]!.conflictId,
