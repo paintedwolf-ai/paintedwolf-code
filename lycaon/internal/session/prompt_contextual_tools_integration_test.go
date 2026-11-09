@@ -71,19 +71,6 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	}
 }
 
-func mapsCapability(msgs []api.Message, label string) bool {
-	for _, msg := range msgs {
-		if msg.Role != api.MessageRoleSystem {
-			continue
-		}
-		at := strings.Index(msg.Content, "### More tools")
-		if at >= 0 && strings.Contains(msg.Content[at:], label) {
-			return true
-		}
-	}
-	return false
-}
-
 func TestMockLLMInvestigateCoordinatorReceivesEndToEndHostContract(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	fix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureBuild, rec)
