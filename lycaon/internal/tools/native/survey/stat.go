@@ -51,6 +51,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		return "", err
 	}
 	resp := statResponse{Results: []statResult{}}
+	firstDisplay := ""
 	for _, relPath := range paths {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -58,6 +59,9 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		resolved, err := safecmd.ResolvePath(ctx, t.Boundary, tctx, relPath)
 		if err != nil {
 			return "", err
+		}
+		if firstDisplay == "" {
+			firstDisplay = resolved.DisplayPath
 		}
 		fullPath := resolved.Abs
 		relSlash := filepath.ToSlash(resolved.DisplayPath)
@@ -106,7 +110,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	}
 	root := "."
 	if len(paths) == 1 {
-		root = paths[0]
+		root = firstDisplay
 	}
 	for _, result := range resp.Results {
 		kind := api.NavigationEntryKindFile

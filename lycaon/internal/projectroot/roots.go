@@ -18,6 +18,9 @@ type RootRef struct {
 	Label     string
 	Path      string
 	IsPrimary bool
+	// External marks approved folders outside the attached roots (grants and
+	// host namespaces); they display as canonical absolute paths.
+	External bool
 }
 
 // DisplayPath renders a ledger (root, relative path) pair in the canonical
@@ -252,8 +255,12 @@ func activeRootIDOf(roots []RootRef, activeRootID string) string {
 
 // Qualify returns the canonical display path for abs under root, keyed on the
 // session's active root: bare off the active root, @label-qualified off any
-// other attached root, and the absolute path when the root is unlabeled.
+// other attached root, and the absolute path when the root is unlabeled or an
+// approved outside-root folder.
 func Qualify(roots []RootRef, activeRootID string, root RootRef, abs string) string {
+	if root.External {
+		return filepath.ToSlash(abs)
+	}
 	rootAbs, err := filepath.Abs(root.Path)
 	if err != nil {
 		return abs

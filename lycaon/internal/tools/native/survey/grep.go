@@ -165,6 +165,10 @@ func (t *GrepTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	if err != nil {
 		return "", grepExecutionError(nil, err)
 	}
+	receiptRoot := relRoot
+	if len(targets) == 1 {
+		receiptRoot = targets[0].displayRoot
+	}
 	reportGrepScope(tctx, targets)
 	if opts.structural && strings.TrimSpace(opts.lang) != "" {
 		if _, ok := structrewrite.SupportedLanguage(opts.lang, ""); !ok {
@@ -195,7 +199,7 @@ func (t *GrepTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			return "", grepRootStatErr(target.displayRoot, err)
 		}
 		if !info.IsDir() {
-			out, err := t.grepSingleFile(ctx, relRoot, target.displayRoot, target.fullRoot, info, opts.includeHidden, search, opts, args)
+			out, err := t.grepSingleFile(ctx, receiptRoot, target.displayRoot, target.fullRoot, info, opts.includeHidden, search, opts, args)
 			if err != nil {
 				return "", grepExecutionError(search, err)
 			}
@@ -218,7 +222,7 @@ func (t *GrepTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	if err := ctx.Err(); err != nil {
 		return "", grepExecutionError(search, err)
 	}
-	return t.finalizeGrepResponse(ctx, relRoot, search, opts, args)
+	return t.finalizeGrepResponse(ctx, receiptRoot, search, opts, args)
 }
 
 func (t *GrepTool) finalizeGrepResponse(ctx context.Context, root string, search *grepSearch, opts grepOptions, args map[string]any) (string, error) {
