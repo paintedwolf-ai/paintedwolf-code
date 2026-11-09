@@ -141,7 +141,7 @@ func (s *supervisor) readPathCall(target *targetProcess, n seccompNotif, a pathA
 	if a.flags != noArg {
 		call.Flags = uint64(uint32(arg(a.flags)))
 	}
-	if a.mode != noArg {
+	if a.mode != noArg && (a.op != callOpen || call.Flags&(unix.O_CREAT|unix.O_TMPFILE) != 0) {
 		call.Mode = uint32(arg(a.mode))
 	}
 	if a.dev != noArg {

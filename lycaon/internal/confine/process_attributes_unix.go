@@ -5,6 +5,7 @@ package confine
 import (
 	"fmt"
 	"math"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -54,7 +55,11 @@ func applyProcessAttributes(a ProcessAttributes) error {
 		// An ignored disposition survives exec.
 		signal.Ignore(syscall.SIGHUP)
 	} else {
-		signal.Reset(syscall.SIGHUP)
+		// Installing a Go handler before exec forces setsig(SIGHUP, sighandler)
+		// even when the helper inherited SIG_IGN at startup, and POSIX execve
+		// resets caught signals to SIG_DFL in the target.
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGHUP)
 	}
 	return nil
 }
