@@ -18,7 +18,7 @@ Egress is mediated, so the question is never "is the network up". It is: **which
 | Git over SSH | Host SOCKS connector (`LYCAON_SOCKS_PROXY` via Git) | Nothing — already wired under mediation |
 | UDP — NTP, QUIC, a DNS query you send yourself | Direct IP only | Request `capability_request.direct_ip` |
 | A local daemon by socket path | Exact socket route | Request `capability_request.socket_paths` |
-| **Run a local server** — dev server, HMR, test harness that binds a port | Local listener (egress stays mediated) | `capability_request.local_listen` with `ports` on the `command` or `terminal_open` that runs it; `render_view` / `capture_page` preview pages without a server |
+| **Run a local server** — dev server, HMR, test harness that binds a port | Local listener (egress stays mediated) | `capability_request.local_listen` with `ports` on the `command` or `terminal_open` that runs it; `render_view` / `capture_page` preview static pages without a server |
 | Connect to a service on this machine | Loopback connect | Request `capability_request.loopback_connect`, with exact `ports` when known |
 | One command binds and calls a local service | Both local fields | Request both, narrowed to its ports |
 

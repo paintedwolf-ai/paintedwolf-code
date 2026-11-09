@@ -4,7 +4,6 @@ description: Present system designs, proposals, decision briefs, developer resea
 license: Apache-2.0
 metadata:
   author: painted-wolf
-  paintedwolf.template_resources: references/build_a_system_design_review.md|references/build_an_engineering_decision_brief.md|references/write_an_implementation_proposal.md|references/synthesize_developer_research.md|references/prototype_a_coding_workflow.md|references/mock_an_agent_control_plane.md
 ---
 
 # Present an engineering design

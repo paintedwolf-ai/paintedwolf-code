@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab"
@@ -39,6 +40,12 @@ func (m *Service) selectSkillPreload(ctx context.Context, sess *api.Session, pro
 
 func (m *Service) decisionOfferedTools(sess *api.Session, decision *Decision) map[string]bool {
 	offered := nameSet(decision.floor)
+	// The loadable set is addressable this turn (request_tools can reach it),
+	// so skills naming loadable tools stay preload-eligible, matching the
+	// contract matrix and skills_read discovery.
+	for _, name := range decision.loadable {
+		offered[name] = true
+	}
 	if m != nil && m.Ledger != nil && sess != nil {
 		for name := range m.Ledger.Active(sess.ID) {
 			offered[name] = true
@@ -46,6 +53,9 @@ func (m *Service) decisionOfferedTools(sess *api.Session, decision *Decision) ma
 	}
 	for name := range decision.decision.Tools {
 		offered[name] = true
+	}
+	if offered["command"] && prompts.ScopeAllowsCommandMutation(decision.state.Surface) {
+		offered[toolvocab.ReachCommandMutation] = true
 	}
 	return offered
 }

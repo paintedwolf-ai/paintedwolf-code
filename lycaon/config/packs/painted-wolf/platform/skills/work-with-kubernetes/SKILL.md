@@ -2,7 +2,6 @@
 name: work-with-kubernetes
 description: Inspect or debug Kubernetes workloads, manage Helm releases, or create an explicitly requested local cluster.
 metadata:
-  paintedwolf.template_resources: references/inspect_a_kubernetes_cluster.md|references/debug_a_kubernetes_workload.md|references/manage_a_helm_release.md|references/stand_up_a_local_cluster.md
   host_resources: helm|kind|kubectl
 ---
 

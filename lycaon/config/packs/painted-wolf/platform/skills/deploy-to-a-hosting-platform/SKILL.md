@@ -1,10 +1,6 @@
 ---
 name: deploy-to-a-hosting-platform
 description: Before CLI deployment to Vercel, Netlify, Fly.io, or Cloudflare, select and verify the intended target.
-# ask_user is named for the case where a secret must come from the user; profiles without it still deploy.
-optional_tools:
-  - command
-  - ask_user
 metadata:
   host_resources: vercel-cli|netlify-cli|fly-cli|cloudflare-wrangler
 ---
@@ -21,8 +17,8 @@ Use this workflow to deploy from the CLI. On a process start that deploys, decla
 2. **Know the rollback before you deploy, not after.** Record the current live deployment, version, or release and the platform's recovery path, including what it does not restore.
 3. **Determine where the build runs.** A green local build never proves a remote build, and a green remote build never proves runtime behavior. Read the build log from the environment that actually built the artifact.
 4. **Environment variables are per-environment and are the classic failure.** A variable set for preview but not production makes a deploy that worked in preview fail in production. List the target environment's variables and confirm what the build needs is present *before* promoting.
-5. **Never put a secret in a command-line flag**; argv lands in process listings and the transcript. Pipe a managed reference to the CLI's stdin or set it as an environment variable on that call; when the value must come from the user, request it with `ask_user` `response_type: secret` (see use-secrets-without-reading-them). Never echo the value back.
-6. **Verify after deploying**: request the deployed URL with native `curl` in `command` (status, headers, and a bounded body are the evidence; `fetch_url` when the page's readable content matters) and read the platform's logs for that deployment id. "The command exited 0" is not evidence the site works — a successful upload can still serve a broken app.
+5. **Never put a secret in a command-line flag**; argv lands in process listings and the transcript. Pipe a managed reference to the CLI's stdin or set it as an environment variable on that call{% if profile_has_ask_user %}; when the value must come from the user, request it with `ask_user` `response_type: secret`{% endif %} (see use-secrets-without-reading-them). Never echo the value back.
+6. **Verify after deploying**: request the deployed URL{% if profile_has_command and root_count %} with native `curl` in `command`{% endif %} (status, headers, and a bounded body are the evidence{% if profile_has_fetch_url %}; `fetch_url` when the page's readable content matters{% endif %}) and read the platform's logs for that deployment id. "The command exited 0" is not evidence the site works — a successful upload can still serve a broken app.
 7. Report the deployment/version/release id, exact target, and URL. Also state whether rollback covers code only or includes configuration and data; most platforms do not reverse migrations or external state.
 
 ## Before promoting to production, stop if

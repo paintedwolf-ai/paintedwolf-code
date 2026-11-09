@@ -2,7 +2,6 @@
 name: design-and-debug-tests
 description: Minimize a failing reproduction, fix a flaky or CI-only test, or design property-based and invariant tests that keep a bug class from returning.
 metadata:
-  paintedwolf.template_resources: references/reduce_a_failing_case.md|references/stabilize_a_flaky_test.md|references/write_property_based_tests.md|references/write_invariant_guards.md
 ---
 
 # Design and debug tests

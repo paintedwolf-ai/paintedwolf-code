@@ -83,6 +83,9 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, id string, in pr
 	if err != nil {
 		return zero, err
 	}
+	// Preload rendering resolves coordinator surface vars from the live
+	// surface; the prompt loop sets this later for tool calls.
+	tctx.Turn.TurnSurfaceID = surfaceID
 	m.Loading.Finish(ctx, sess, id, tctx, decision)
 	return Assembly{
 		History:   history,
