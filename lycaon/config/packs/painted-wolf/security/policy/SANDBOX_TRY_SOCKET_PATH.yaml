@@ -21,7 +21,8 @@ copy:
   what: In `{{ tool }}`, the sandbox refused connections to the local sockets {{ paintedwolf.refused_socket_paths }}.
   cause: Socket access requires a declaration and authorization; an external client must also select its bound endpoint.
   why: ''
-  fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.supports_socket_paths %}{% if paintedwolf.refused_socket_paths %}{% if paintedwolf.missing_capability_socket_paths %}Declare the exact service in `capability_request.socket_paths`. {% endif %}For external clients, set their endpoint option to the whole bound endpoint reference from that field''s schema; native socket arguments use the path. If already bound, inspect the refusal before retrying. Preserve completed effects and resolve uncertain outcomes first.{% endif %}{% endif %}'
+  fix: >-
+    {% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.supports_socket_paths %}{% if paintedwolf.refused_socket_paths %}{% if paintedwolf.missing_capability_socket_paths %}Declare the exact service in `capability_request.socket_paths`. {% endif %}For external clients, use the complete bound reference as the endpoint argument or environment value, without an added `unix:` prefix. Use the `unix-url` reference form from `socket_paths` when the client expects a Unix URL. Native socket arguments use the path. Saved approval does not select the endpoint. Preserve completed effects and resolve uncertain outcomes first.{% endif %}{% endif %}
   instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox

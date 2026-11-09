@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -19,7 +19,6 @@ type ConfinedForeground struct {
 	FailureTracker *CommandFailureTracker
 	Runner         *hostcmd.Runner
 	Boundary       *sandbox.Boundary
-	WriteRootGate  SandboxWriteRootGate
 	ToolName       string
 }
 
