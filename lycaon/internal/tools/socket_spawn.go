@@ -90,7 +90,9 @@ func ClaimDeclaredSocket(ctx context.Context, tctx ToolContext, raw string) (con
 
 // ConfineRequestForSpawn finalizes the gate-reviewed confinement.
 func ConfineRequestForSpawn(ctx context.Context, tctx ToolContext, overlayWriteRoots []string) (confine.Request, *toolrejection.ToolReject) {
-	req := hitl.ActionConfineRequest(ActionConfineInputsForContext(tctx, overlayWriteRoots))
+	// Admission freezes reusable grants; extra roots belong to host-managed outputs.
+	roots := append(append([]string(nil), tctx.Files.GrantedWriteRoots...), overlayWriteRoots...)
+	req := hitl.ActionConfineRequest(ActionConfineInputsForContext(tctx, UniqueRoots(roots)))
 	if reject := ValidateAttachedRootsForAction(req.Roots); reject != nil {
 		return confine.Request{}, reject
 	}
