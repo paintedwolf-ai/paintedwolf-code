@@ -13,9 +13,9 @@ import (
 
 func TestDiscoveryGuidanceFollowsAvailableContinuation(t *testing.T) {
 	wireFixtureGuidanceRenderer(t)
-	entries := make([]turnload.DiscoveryEntry, turnload.DiscoveryPageSize+1)
+	entries := make([]turnload.DiscoveryEntry, 20)
 	for i := range entries {
-		entries[i] = turnload.DiscoveryEntry{Name: fmt.Sprintf("skill_%02d", i)}
+		entries[i] = turnload.DiscoveryEntry{Name: fmt.Sprintf("skill_%02d", i), Description: strings.Repeat("界", turnload.CardMaxRunes)}
 	}
 	first, err := DiscoveryPage(t.Context(), ToolContext{}, "skills", "review code", "", "ranking_unavailable", turnload.RankingDisabled, entries)
 	testutil.FailErr(t, "discover first page", err)
