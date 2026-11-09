@@ -112,7 +112,7 @@ func CurrentActionReviewCovers(
 		return false
 	}
 	for _, fact := range decision.Cited {
-		if fact.Key == "boundary.execution" || !slices.Contains(review.Cited, fact) {
+		if !CurrentActionReviewAllowsFact(fact) || !slices.Contains(review.Cited, fact) {
 			return false
 		}
 	}
@@ -121,7 +121,7 @@ func CurrentActionReviewCovers(
 		return false
 	}
 	for _, segment := range segments {
-		if !slices.Contains(review.ReasonSegments, segment) {
+		if !CurrentActionReviewAllowsSegment(segment) || !slices.Contains(review.ReasonSegments, segment) {
 			return false
 		}
 	}
@@ -157,6 +157,31 @@ func detectionIdentityEqual(a, b DetectionMatch) bool {
 		a.Local == b.Local &&
 		a.Unrecoverable == b.Unrecoverable &&
 		a.Tagged == b.Tagged
+}
+
+// CurrentActionReviewAllowsFact reports whether a cited gate fact may be
+// satisfied by a current-invocation human review receipt. Unobserved-channel
+// facts are covered by their dedicated capability permits, except for the
+// explicit LYCAON_SANDBOX=off unconfined subject.
+func CurrentActionReviewAllowsFact(fact gate.Fact) bool {
+	if fact.Gate != api.GateUnobservedChannel {
+		return true
+	}
+	if !confine.SandboxDisabled() {
+		return false
+	}
+	return (fact.Key == "boundary.applied" && fact.Value == "no") ||
+		(fact.Key == "boundary.visibility" && fact.Value == "neither writes nor destinations are observed")
+}
+
+// CurrentActionReviewAllowsSegment reports whether a reason segment may be
+// satisfied by a current-invocation human review receipt.
+func CurrentActionReviewAllowsSegment(segment string) bool {
+	prefix := string(api.GateUnobservedChannel) + ":"
+	if !strings.HasPrefix(segment, prefix) {
+		return true
+	}
+	return confine.SandboxDisabled() && segment == prefix+"unconfined"
 }
 
 type NativePathTarget struct {
