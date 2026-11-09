@@ -108,6 +108,9 @@ type PackWindow struct {
 	EndLine   int
 	Symbol    string
 	Body      string
+	// Structured root identity of Path; empty for legacy callers.
+	RootID   string
+	ScopeRel string
 }
 
 // PackImportEdge is a one-hop module edge.
@@ -191,6 +194,9 @@ type DefinitionItem struct {
 	ErrorKind     string
 	LogDigest     string
 	ImportPath    string
+	// Structured root identity of RelPath; empty for legacy callers.
+	RootID   string
+	ScopeRel string
 }
 
 // Structure kind labels for gathered structural candidates.
@@ -267,6 +273,9 @@ type StructureCandidate struct {
 	Errors        []string
 	ErrorKind     string
 	LogDigest     string
+	// Structured root identity of RelPath; empty for legacy callers.
+	RootID   string
+	ScopeRel string
 	ImportPath    string
 }
 

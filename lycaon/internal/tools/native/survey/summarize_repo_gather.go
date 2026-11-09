@@ -74,7 +74,7 @@ func (g *summarizeGatherer) gatherRepo(ctx context.Context, req summarize.Reques
 		if budget.full() {
 			continue
 		}
-		if sc, n, ok := g.sources.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath); ok {
+		if sc, n, ok := g.sources.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath, resolved.Root.ID, resolved.ScopeRel); ok {
 			out.structure = append(out.structure, sc)
 			budget.spend(n)
 		}

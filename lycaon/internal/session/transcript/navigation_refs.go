@@ -48,7 +48,7 @@ func (m *Service) NavigationRefs(ctx context.Context, sessionID string, msgs []a
 					}
 				}
 			}
-			msgs[i].NavigationRefs = navigationref.BuildProjectPathReferences(&contextProject, msgs[i].Content, msgs[i].SourceContext)
+			msgs[i].NavigationRefs = navigationref.BuildProjectPathReferences(&contextProject, msgs[i].Content, msgs[i].SourceContext, sess.WorkspaceRootID)
 		}
 	}
 }

@@ -33,9 +33,15 @@ func New(database db.Handle, blobs *sourceblob.Store, root string) *Store {
 }
 
 type CaptureFile struct {
-	Path string
-	Abs  string
-	Info os.FileInfo
+	// RootID and ScopeRel carry the structured identity; Path is the display
+	// spelling kept for legacy readers. Walkers that predate structured
+	// identity leave RootID and ScopeRel empty and Capture derives them from
+	// Path.
+	RootID   string
+	ScopeRel string
+	Path     string
+	Abs      string
+	Info     os.FileInfo
 }
 
 type Walk func(context.Context, func(CaptureFile) error) error
@@ -48,7 +54,8 @@ func (s *Store) Capture(ctx context.Context, jobID string, walk Walk) (path stri
 			if err != nil {
 				return err
 			}
-			return w.insert(ctx, file.Path, f)
+			rootID, scopeRel, display := captureIdentity(file)
+			return w.insert(ctx, rootID, scopeRel, display, f)
 		})
 	})
 }
@@ -99,7 +106,7 @@ func (s *Store) CaptureOverlay(ctx context.Context, jobID, baselinePath string, 
 		return OverlayCapture{}, err
 	}
 	defer func() { _ = baseline.Close() }()
-	changed, err := baseline.Changes(ctx, roots, branch)
+	changed, err := baseline.ChangeSet(ctx, roots, branch)
 	if err != nil {
 		return OverlayCapture{}, err
 	}
@@ -110,9 +117,13 @@ func (s *Store) CaptureOverlay(ctx context.Context, jobID, baselinePath string, 
 			Reason:   fmt.Sprintf("%d changed files exceeds limit of %d", len(changed), DefaultMaxOverlayFiles),
 		}
 	}
+	identities := make([]overlayChange, len(changed))
+	for i, change := range changed {
+		identities[i] = overlayChange{rootID: change.RootID, scopeRel: change.ScopeRel, display: change.Path}
+	}
 	out := OverlayCapture{}
 	out.Path, err = s.seal(ctx, jobID, func(ctx context.Context, w *manifestWriter) error {
-		return s.captureOverlayFiles(ctx, w, roots, branch, changed, &out)
+		return s.captureOverlayFiles(ctx, w, roots, branch, identities, &out)
 	})
 	if err != nil {
 		return OverlayCapture{}, err
@@ -120,8 +131,26 @@ func (s *Store) CaptureOverlay(ctx context.Context, jobID, baselinePath string, 
 	return out, nil
 }
 
+// captureIdentity normalizes a captured file's identity. Walkers that predate
+// structured identity leave RootID and ScopeRel empty; the display path is then
+// the only spelling available, and it is already root-qualified.
+func captureIdentity(file CaptureFile) (rootID, scopeRel, display string) {
+	display = file.Path
+	if file.ScopeRel != "" {
+		scopeRel = file.ScopeRel
+	} else {
+		scopeRel = filepath.ToSlash(filepath.Clean(file.Path))
+	}
+	if display == "" {
+		display = scopeRel
+	}
+	return file.RootID, scopeRel, display
+}
+
 type captureItem struct {
-	path    string
+	rootID  string
+	scopeRel string
+	display string
 	file    File
 	blob    *sourceblob.Capture
 	size    int64
@@ -129,8 +158,8 @@ type captureItem struct {
 	err     error
 }
 
-func (s *Store) captureOneFile(ctx context.Context, roots []projectroot.RootRef, branch, path string) captureItem {
-	abs, err := branchPath(roots, branch, path)
+func (s *Store) captureOneFile(ctx context.Context, roots []projectroot.RootRef, branch, rootID, scopeRel, display string) captureItem {
+	abs, err := branchPathAt(roots, branch, rootID, scopeRel)
 	if err != nil {
 		return captureItem{err: err}
 	}
@@ -140,9 +169,11 @@ func (s *Store) captureOneFile(ctx context.Context, roots []projectroot.RootRef,
 	}
 	if err != nil || info.IsDir() {
 		return captureItem{
-			path:    path,
-			file:    File{Deleted: true},
-			deleted: true,
+			rootID:   rootID,
+			scopeRel: scopeRel,
+			display:  display,
+			file:     File{Deleted: true},
+			deleted:  true,
 		}
 	}
 	mode := info.Mode()
@@ -155,26 +186,35 @@ func (s *Store) captureOneFile(ctx context.Context, roots []projectroot.RootRef,
 	if mode&os.ModeSymlink != 0 {
 		target, err := os.Readlink(abs)
 		if err != nil {
-			return captureItem{err: fmt.Errorf("capture symlink %s: %w", path, err)}
+			return captureItem{err: fmt.Errorf("capture symlink %s: %w", display, err)}
 		}
 		f.LinkTarget = target
-		return captureItem{path: path, file: f}
+		return captureItem{rootID: rootID, scopeRel: scopeRel, display: display, file: f}
 	}
 	if !mode.IsRegular() {
-		return captureItem{path: path, file: f}
+		return captureItem{rootID: rootID, scopeRel: scopeRel, display: display, file: f}
 	}
 	captured, err := s.blobs.PutFile(ctx, abs)
 	if err != nil {
-		return captureItem{err: fmt.Errorf("capture baseline %s: %w", path, err)}
+		return captureItem{err: fmt.Errorf("capture baseline %s: %w", display, err)}
 	}
 	f.SHA256 = captured.SHA256
 	f.Opaque = false
 	return captureItem{
-		path: path,
-		file: f,
-		blob: &captured,
-		size: info.Size(),
+		rootID:   rootID,
+		scopeRel: scopeRel,
+		display:  display,
+		file:     f,
+		blob:     &captured,
+		size:     info.Size(),
 	}
+}
+
+// overlayChange is one changed path with its structured identity.
+type overlayChange struct {
+	rootID   string
+	scopeRel string
+	display  string
 }
 
 func (s *Store) captureOverlayFiles(
@@ -182,7 +222,7 @@ func (s *Store) captureOverlayFiles(
 	w *manifestWriter,
 	roots []projectroot.RootRef,
 	branch string,
-	changed []string,
+	changed []overlayChange,
 	out *OverlayCapture,
 ) error {
 	if len(changed) == 0 {
@@ -203,7 +243,7 @@ func (s *Store) captureOverlayFiles(
 	workCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
 
-	workChan := make(chan string, len(changed))
+	workChan := make(chan overlayChange, len(changed))
 	for _, p := range changed {
 		workChan <- p
 	}
@@ -215,11 +255,11 @@ func (s *Store) captureOverlayFiles(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for path := range workChan {
+			for change := range workChan {
 				if workCtx.Err() != nil {
 					return
 				}
-				item := s.captureOneFile(workCtx, roots, branch, path)
+				item := s.captureOneFile(workCtx, roots, branch, change.rootID, change.scopeRel, change.display)
 				select {
 				case resChan <- item:
 				case <-workCtx.Done():
@@ -266,7 +306,7 @@ func (s *Store) captureOverlayFiles(
 				}
 			}
 		}
-		if err := w.insert(ctx, item.path, item.file); err != nil {
+		if err := w.insert(ctx, item.rootID, item.scopeRel, item.display, item.file); err != nil {
 			cancelWorkers()
 			return err
 		}
@@ -279,8 +319,8 @@ type manifestWriter struct {
 	pins *baselinePins
 }
 
-func (w *manifestWriter) insert(ctx context.Context, path string, f File) error {
-	_, err := w.stmt.ExecContext(ctx, path, f.Size, f.MtimeNano, f.SHA256, f.Opaque, f.Mode, f.LinkTarget, f.Deleted)
+func (w *manifestWriter) insert(ctx context.Context, rootID, scopeRel, display string, f File) error {
+	_, err := w.stmt.ExecContext(ctx, rootID, scopeRel, display, f.Size, f.MtimeNano, f.SHA256, f.Opaque, f.Mode, f.LinkTarget, f.Deleted)
 	return err
 }
 
@@ -318,7 +358,7 @@ func (s *Store) seal(ctx context.Context, jobID string, fill func(context.Contex
 		return "", err
 	}
 	defer func() { _ = tx.Rollback() }()
-	stmt, err := tx.PrepareContext(ctx, "INSERT INTO files(path,size,mtime_ns,sha256,opaque,mode,link_target,deleted) VALUES (?,?,?,?,?,?,?,?)")
+	stmt, err := tx.PrepareContext(ctx, "INSERT INTO files(root_id,scope_rel,path,size,mtime_ns,sha256,opaque,mode,link_target,deleted) VALUES (?,?,?,?,?,?,?,?,?,?)")
 	if err != nil {
 		return "", err
 	}
@@ -344,7 +384,7 @@ func (s *Store) seal(ctx context.Context, jobID string, fill func(context.Contex
 		if hashErr != nil {
 			return "", hashErr
 		}
-		if err := s.queries.SealWorkerBaseline(ctx, db.SealWorkerBaselineParams{ManifestSha256: digest, FormatVersion: 1, ID: id}); err != nil {
+		if err := s.queries.SealWorkerBaseline(ctx, db.SealWorkerBaselineParams{ManifestSha256: digest, FormatVersion: 2, ID: id}); err != nil {
 			return "", err
 		}
 	}
@@ -360,10 +400,11 @@ func createManifest(ctx context.Context, path string) (*sql.DB, error) {
 	}
 	d.SetMaxOpenConns(1)
 	_, err = d.ExecContext(ctx, `PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA cache_size=-4096;
- CREATE TABLE manifest(version INTEGER PRIMARY KEY CHECK(version=1)) STRICT;
- CREATE TABLE files(path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, sha256 TEXT NOT NULL, opaque INTEGER NOT NULL, mode INTEGER NOT NULL, link_target TEXT NOT NULL, deleted INTEGER NOT NULL) STRICT, WITHOUT ROWID;`)
+ CREATE TABLE manifest(version INTEGER PRIMARY KEY CHECK(version=2)) STRICT;
+ CREATE TABLE files(root_id TEXT NOT NULL, scope_rel TEXT NOT NULL, path TEXT NOT NULL, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, sha256 TEXT NOT NULL, opaque INTEGER NOT NULL, mode INTEGER NOT NULL, link_target TEXT NOT NULL, deleted INTEGER NOT NULL, PRIMARY KEY(root_id, scope_rel)) STRICT, WITHOUT ROWID;
+ CREATE INDEX files_path ON files(path);`)
 	if err == nil {
-		_, err = d.ExecContext(ctx, "INSERT INTO manifest VALUES(1)")
+		_, err = d.ExecContext(ctx, "INSERT INTO manifest VALUES(2)")
 	}
 	if err != nil {
 		_ = d.Close()

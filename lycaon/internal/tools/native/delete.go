@@ -149,7 +149,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 				}
 				result.Deleted = append(result.Deleted, summary.deleted...)
 				result.Deleted = append(result.Deleted, relSlash)
-				afterSuccessfulMutation(ctx, tctx, relSlash)
+				afterSuccessfulMutationResolved(ctx, tctx, resolved)
 				continue
 			}
 		}
@@ -157,7 +157,7 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 			return result, fmt.Errorf("delete %s: %w", relSlash, err)
 		}
 		result.Deleted = append(result.Deleted, relSlash)
-		afterSuccessfulMutation(ctx, tctx, relSlash)
+		afterSuccessfulMutationResolved(ctx, tctx, resolved)
 	}
 	return result, nil
 }

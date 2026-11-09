@@ -81,15 +81,22 @@ func FilterOverlayPromoteCandidatePathsForRoots(roots []projectroot.RootRef, pat
 	if len(paths) == 0 {
 		return nil
 	}
-	primary, _ := projectroot.PrimaryRoot(roots)
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {
 		p = strings.TrimSpace(p)
 		if p == "" {
 			continue
 		}
-		_, rel := resolveQualifiedPromotePath(roots, primary, p)
-		if rel == "" {
+		_, rel, ok := projectroot.ParseBaselinePath(roots, p)
+		if !ok {
+			if _, primaryErr := projectroot.PrimaryRoot(roots); primaryErr == nil || strings.HasPrefix(p, "@") {
+				continue
+			}
+			// Degenerate root sets without a primary keep bare rel paths so
+			// baseline comparisons still run.
+			rel = filepath.ToSlash(filepath.Clean(p))
+		}
+		if rel == "" || rel == "." {
 			continue
 		}
 		if promotionstate.OmitOverlayPromotePath(rel) {
@@ -98,34 +105,4 @@ func FilterOverlayPromoteCandidatePathsForRoots(roots []projectroot.RootRef, pat
 		out = append(out, p)
 	}
 	return out
-}
-
-func resolveQualifiedPromotePath(roots []projectroot.RootRef, primary projectroot.RootRef, qualified string) (projectroot.RootRef, string) {
-	qualified = strings.TrimSpace(qualified)
-	if qualified == "" {
-		return projectroot.RootRef{}, ""
-	}
-	if strings.HasPrefix(qualified, "@") {
-		rest := strings.TrimPrefix(qualified, "@")
-		slash := strings.Index(rest, "/")
-		label := rest
-		rel := ""
-		if slash >= 0 {
-			label = rest[:slash]
-			rel = strings.TrimPrefix(rest[slash:], "/")
-		}
-		for _, r := range roots {
-			if strings.EqualFold(r.Label, label) {
-				if rel == "" {
-					rel = "."
-				}
-				return r, filepath.ToSlash(filepath.Clean(rel))
-			}
-		}
-		return projectroot.RootRef{}, ""
-	}
-	if primary.Path != "" {
-		return primary, filepath.ToSlash(filepath.Clean(qualified))
-	}
-	return projectroot.RootRef{}, filepath.ToSlash(filepath.Clean(qualified))
 }

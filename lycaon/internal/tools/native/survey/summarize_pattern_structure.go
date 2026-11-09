@@ -20,7 +20,7 @@ func (g *summaryPatterns) structureFromPathPattern(ctx context.Context, display,
 	content, err := g.sources.readFileCached(ctx, resolved.Abs)
 	if err != nil {
 		if errors.Is(err, errFileNeedsStreaming) {
-			sc, n, ok := g.sources.structureFromStream(ctx, resolved.Abs, resolved.DisplayPath)
+			sc, n, ok := g.sources.structureFromStream(ctx, resolved.Abs, resolved.DisplayPath, resolved.Root.ID, resolved.ScopeRel)
 			if !ok {
 				return summarize.StructureCandidate{}, 0, fmt.Errorf("summarize pattern structure %s", display)
 			}
@@ -31,7 +31,7 @@ func (g *summaryPatterns) structureFromPathPattern(ctx context.Context, display,
 		}
 		return summarize.StructureCandidate{}, 0, fmt.Errorf("summarize pattern read %s: %w", display, err)
 	}
-	sc, _, ok := g.sources.structureFromContent(ctx, resolved.DisplayPath, content)
+	sc, _, ok := g.sources.structureFromContent(ctx, resolved.DisplayPath, resolved.Root.ID, resolved.ScopeRel, content)
 	if !ok {
 		return summarize.StructureCandidate{}, 0, fmt.Errorf("summarize pattern structure %s", display)
 	}
@@ -194,7 +194,7 @@ func (g *summaryPatterns) sampleOutlineIdentifiers(ctx context.Context, display 
 	if serr != nil || info.IsDir() {
 		return nil
 	}
-	sc, _, ok := g.sources.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath)
+	sc, _, ok := g.sources.structureFromAbs(ctx, resolved.Abs, resolved.DisplayPath, resolved.Root.ID, resolved.ScopeRel)
 	if !ok {
 		return nil
 	}

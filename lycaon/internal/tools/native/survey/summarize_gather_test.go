@@ -502,7 +502,7 @@ func TestSummarizeStreamsFileStructureInBoundedChunks(t *testing.T) {
 	caps := summarize.DefaultCaps()
 	caps.Gather.FileChunkBytes = 1024
 	g := testSummarizeGatherer(t, dir, caps)
-	sc, _, ok := g.sources.structureFromAbs(context.Background(), largePath, "large.go")
+	sc, _, ok := g.sources.structureFromAbs(context.Background(), largePath, "large.go", "", "")
 	if !ok {
 		t.Fatal("streamed structure was unavailable")
 	}

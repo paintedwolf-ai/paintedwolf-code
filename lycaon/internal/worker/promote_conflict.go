@@ -131,8 +131,19 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 		if raw == "" {
 			continue
 		}
-		abs := filepath.Join(promote.BranchRoot, filepath.FromSlash(raw))
-		info, err := os.Stat(abs)
+		// Requested paths are baseline spellings: bare rel paths are
+		// primary-relative and "@label/rel" addresses another attached root.
+		// Resolve each to its structured identity, then stat the branch
+		// location that identity maps to.
+		root, scopeRel, ok := projectroot.ParseBaselinePath(promote.Roots, raw)
+		if !ok || scopeRel == "" || scopeRel == "." {
+			continue
+		}
+		branchAbs, err := branchAbsFor(promote, root.ID, scopeRel)
+		if err != nil {
+			continue
+		}
+		info, err := os.Stat(branchAbs)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
@@ -140,21 +151,21 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 			return nil, err
 		}
 		if !info.IsDir() {
-			qualifyBranchRel(promote, raw, add)
+			add(projectroot.BaselineDisplayPath(promote.Roots, root.ID, scopeRel))
 			continue
 		}
-		err = filepath.WalkDir(abs, func(walked string, d fs.DirEntry, walkErr error) error {
+		err = filepath.WalkDir(branchAbs, func(walked string, d fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return oswalk.Skip(walkErr)
 			}
 			if d.IsDir() {
 				return nil
 			}
-			rel, relErr := filepath.Rel(promote.BranchRoot, walked)
+			rel, relErr := filepath.Rel(branchAbs, walked)
 			if relErr != nil {
 				return oswalk.Skip(relErr)
 			}
-			qualifyBranchRel(promote, filepath.ToSlash(rel), add)
+			add(projectroot.BaselineDisplayPath(promote.Roots, root.ID, scopeRel+"/"+filepath.ToSlash(rel)))
 			return nil
 		})
 		if err != nil {
@@ -163,21 +174,6 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 	}
 	sort.Strings(files)
 	return files, nil
-}
-
-func qualifyBranchRel(promote PromoteRoots, branchRel string, add func(string)) {
-	parts := strings.SplitN(filepath.ToSlash(branchRel), "/", 2)
-	if len(parts) < 2 {
-		return
-	}
-	branchDir, scopeRel := parts[0], parts[1]
-	for _, root := range promote.Roots {
-		dir, err := projectroot.BranchDirForID(root.ID)
-		if err == nil && dir == branchDir {
-			add(projectroot.Qualify(promote.Roots, promote.ActiveRootID, root, filepath.Join(root.Path, scopeRel)))
-			return
-		}
-	}
 }
 
 func readPromoteFile(path string) ([]byte, error) {

@@ -29,9 +29,13 @@ const (
 )
 
 // Change is one path the branch tree no longer holds as the baseline recorded it.
+// RootID and ScopeRel carry the structured identity; Path is the display spelling
+// kept for legacy readers.
 type Change struct {
-	Path string
-	Kind ChangeKind
+	RootID   string
+	ScopeRel string
+	Path     string
+	Kind     ChangeKind
 }
 
 // Changes compares metadata without loading the complete manifest into memory.
@@ -47,11 +51,11 @@ func (r *Reader) Changes(ctx context.Context, roots []projectroot.RootRef, branc
 	return paths, nil
 }
 
-// ChangeSet is Changes with each path's kind, sorted by path.
+// ChangeSet is Changes with each path's kind, sorted by display path.
 func (r *Reader) ChangeSet(ctx context.Context, roots []projectroot.RootRef, branch string) ([]Change, error) {
 	var changes []Change
-	add := func(path string, kind ChangeKind) error {
-		changes = append(changes, Change{Path: path, Kind: kind})
+	add := func(change Change) error {
+		changes = append(changes, change)
 		if len(changes) > DefaultMaxOverlayFiles {
 			return &OverlayBudgetExceededError{
 				Files:    len(changes),
@@ -61,17 +65,17 @@ func (r *Reader) ChangeSet(ctx context.Context, roots []projectroot.RootRef, bra
 		}
 		return nil
 	}
-	err := r.Each(ctx, func(path string, before File) error {
-		abs, err := branchPath(roots, branch, path)
+	err := r.EachIdentity(ctx, roots, func(entry Entry) error {
+		abs, err := branchPathAt(roots, branch, entry.RootID, entry.ScopeRel)
 		if err != nil {
 			return err
 		}
-		kind, err := statChange(abs, before)
+		kind, err := statChange(abs, entry.File)
 		if err != nil {
 			return err
 		}
 		if kind != "" {
-			if err := add(path, kind); err != nil {
+			if err := add(Change{RootID: entry.RootID, ScopeRel: entry.ScopeRel, Path: entry.Path, Kind: kind}); err != nil {
 				return err
 			}
 		}
@@ -82,19 +86,27 @@ func (r *Reader) ChangeSet(ctx context.Context, roots []projectroot.RootRef, bra
 	}
 
 	err = Branch(roots, branch)(ctx, func(file CaptureFile) error {
-		_, exists, err := r.Lookup(ctx, file.Path)
+		_, exists, err := r.LookupIdentity(ctx, roots, file.RootID, file.ScopeRel)
 		if err != nil {
 			return err
 		}
 		if !exists {
-			return add(file.Path, ChangeCreated)
+			return add(Change{RootID: file.RootID, ScopeRel: file.ScopeRel, Path: file.Path, Kind: ChangeCreated})
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(changes, func(i, j int) bool { return changes[i].Path < changes[j].Path })
+	sort.Slice(changes, func(i, j int) bool {
+		if changes[i].Path != changes[j].Path {
+			return changes[i].Path < changes[j].Path
+		}
+		if changes[i].RootID != changes[j].RootID {
+			return changes[i].RootID < changes[j].RootID
+		}
+		return changes[i].ScopeRel < changes[j].ScopeRel
+	})
 	return changes, nil
 }
 
@@ -250,6 +262,32 @@ func branchPath(roots []projectroot.RootRef, branch, path string) (string, error
 		return "", err
 	}
 	return filepath.Join(base, rel), nil
+}
+
+func branchPathAt(roots []projectroot.RootRef, branch, rootID, scopeRel string) (string, error) {
+	base, rel, err := branchLocationAt(roots, branch, rootID, scopeRel)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(base, rel), nil
+}
+
+// branchLocationAt splits a structured identity into the tree holding it and
+// its place there. Multi-root trees keep one directory per root under the
+// branch; single-root trees keep the root's files at the branch top.
+func branchLocationAt(roots []projectroot.RootRef, branch, rootID, scopeRel string) (base, rel string, err error) {
+	base = branch
+	if len(roots) > 1 {
+		dir, err := projectroot.BranchDirForID(rootID)
+		if err != nil {
+			return "", "", err
+		}
+		base = filepath.Join(branch, dir)
+	}
+	if scopeRel == "" || filepath.IsAbs(scopeRel) || sandbox.HasParentTraversal(scopeRel) {
+		return "", "", fmt.Errorf("invalid baseline path")
+	}
+	return base, filepath.FromSlash(scopeRel), nil
 }
 
 // branchLocation splits a manifest path into the tree holding it and its place there.
