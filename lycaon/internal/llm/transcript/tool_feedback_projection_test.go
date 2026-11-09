@@ -218,7 +218,7 @@ func TestToolFeedbackPreservesBoundedDiscoveryPage(t *testing.T) {
 		entries = append(entries, turnload.DiscoveryEntry{Name: fmt.Sprintf("mcp_fixture_%02d", i), Description: strings.Repeat("界", 500)})
 	}
 	need := "Find the operation that dispatches a worker"
-	page, err := turnload.Discover("request_tools/session", need, "", "no_match", "", entries)
+	page, err := turnload.Discover("request_tools/session", need, "", "no_match", "", entries, turnload.DiscoveryInstructions{More: "fixture", Final: "fixture"})
 	testutil.FailErr(t, "create bounded recovery page", err)
 	msg := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
 		Tool: "request_tools", ToolCallID: "call", Outcome: api.ToolResultOutcomeRejected,

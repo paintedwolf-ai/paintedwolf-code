@@ -53,7 +53,7 @@ func TestUnknownToolRecoveryPagesAndLoadsThroughProductionLoader(t *testing.T) {
 	for i := 0; i < 25; i++ {
 		name := fmt.Sprintf("mcp_recovery_%02d", i)
 		names = append(names, name)
-		testutil.FailErr(t, "register catalog entry", reg.RegisterDefinition(tools.Definition{Meta: tools.ToolMeta{Name: name, Description: strings.Repeat("quoted \" data <tag> 界 ", 60), Source: tools.ToolSourceMCP, SourceID: "fixture", ArgsSchema: map[string]any{"type": "object"}}, Contract: toolcontract.External("mcp:fixture"), Handler: func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }}))
+		testutil.FailErr(t, "register catalog entry", reg.RegisterDefinition(tools.Definition{Meta: tools.ToolMeta{Name: name, Description: strings.Repeat("<界>\"", 90), Source: tools.ToolSourceMCP, SourceID: "fixture", ArgsSchema: map[string]any{"type": "object"}}, Contract: toolcontract.External("mcp:fixture"), Handler: func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }}))
 	}
 	testutil.FailErr(t, "register loader", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: active, Boundary: recoveryCatalogBoundary{}, Resolve: func(context.Context, tools.ToolContext, string, []turnload.ToolCard) turnload.RequestOutcome {
 		t.Fatal("catalog navigation invoked ranker")
