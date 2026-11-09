@@ -246,6 +246,13 @@ func storeHoldsObjects(objectsDir string) bool {
 				return true
 			}
 		default:
+			if entry.IsDir() {
+				sub, subErr := os.ReadDir(filepath.Join(objectsDir, entry.Name()))
+				if subErr != nil || len(sub) > 0 {
+					return true
+				}
+				continue
+			}
 			return true
 		}
 	}

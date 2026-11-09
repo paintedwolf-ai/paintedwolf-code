@@ -304,3 +304,92 @@ func TestCollectingAnEmptyStoreLeavesItsHostDirectoryRemovable(t *testing.T) {
 	testutil.FailErr(t, "collect", err)
 	testutil.FailErr(t, "remove host directory", os.RemoveAll(root))
 }
+
+func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	tmp := t.TempDir()
+
+	makeRepo := func(name, content string, pack bool) (string, string) {
+		dir := filepath.Join(tmp, name)
+		gittest.InitRepo(t, dir)
+		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(dir, name+".txt"), []byte(content), 0o644))
+		gittest.CommitAll(t, dir, "commit "+name)
+		oid := strings.TrimSpace(gittest.Run(t, dir, "rev-parse", "HEAD"))
+		if pack {
+			gittest.Run(t, dir, "repack", "-a", "-d")
+		}
+		return filepath.Join(dir, ".git", "objects"), oid
+	}
+
+	objKeep, oidKeep := makeRepo("keep", "keep-leased-payload\n", true)
+	objLoose, oidLoose := makeRepo("loose", "loose-candidate-payload\n", false)
+	objPack, oidPack := makeRepo("pack", "pack-candidate-payload\n", true)
+
+	storeRoot := filepath.Join(tmp, "store")
+	store, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "NewRetainedObjectStoreContext", err)
+	t.Cleanup(func() { _ = store.Close() })
+
+	_, reachableKeep, err := store.ImportRepositoryObjects(ctx, []string{objKeep}, []string{oidKeep})
+	testutil.FailErr(t, "import keep", err)
+	_, err = store.RetainForCheckpoint("cp-keep", reachableKeep)
+	testutil.FailErr(t, "lease keep", err)
+	baseMetrics := store.Metrics()
+
+	// 1. Injected post-rename syncDir failure rolls back the already-renamed loose or pack file.
+	errSyncFault := errors.New("injected post-rename directory sync failure")
+	syncFailCtx := withGCTestHooks(ctx, gcTestHooks{
+		syncDir: func(_ string) error {
+			return errSyncFault
+		},
+	})
+	if _, _, err := store.ImportRepositoryObjects(syncFailCtx, []string{objLoose}, []string{oidLoose}); !errors.Is(err, errSyncFault) {
+		t.Fatalf("expected errSyncFault on loose import, got %v", err)
+	}
+	if store.HasObject(oidLoose) {
+		t.Fatalf("expected post-rename loose object to be rolled back after syncDir failure")
+	}
+	if _, _, err := store.ImportRepositoryObjects(syncFailCtx, []string{objPack}, []string{oidPack}); !errors.Is(err, errSyncFault) {
+		t.Fatalf("expected errSyncFault on pack import, got %v", err)
+	}
+	if store.HasObject(oidPack) {
+		t.Fatalf("expected post-rename pack object to be rolled back after syncDir failure")
+	}
+	invAfterSyncFault, err := store.InspectStock(ctx)
+	testutil.FailErr(t, "InspectStock after syncDir faults", err)
+	if !invAfterSyncFault.Complete || store.Metrics().RetainedObjects != baseMetrics.RetainedObjects || invAfterSyncFault.LogicalObjects != baseMetrics.RetainedObjects {
+		t.Fatalf("expected preexisting leased stock preserved after syncDir rollback: base=%+v current=%+v inv=%+v",
+			baseMetrics, store.Metrics(), invAfterSyncFault)
+	}
+
+	// 2. Injected removeFile failure during rollback surfaces both primary and rollback errors via errors.Join,
+	// stages retirement for the unremoved pack companion, and reconciles cleanly on reopen and retry.
+	errRollbackRemove := errors.New("injected rollback removeFile failure")
+	rbFailCtx := withGCTestHooks(ctx, gcTestHooks{
+		removeFile: func(p string) error {
+			if strings.HasSuffix(p, ".pack") {
+				return errRollbackRemove
+			}
+			return os.Remove(p)
+		},
+	})
+	missingTip := strings.Repeat("f", 40)
+	_, _, rbErr := store.ImportRepositoryObjects(rbFailCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(rbErr, ErrCorruptObjectStore) || !errors.Is(rbErr, errRollbackRemove) {
+		t.Fatalf("expected joined ErrCorruptObjectStore and errRollbackRemove, got %v", rbErr)
+	}
+	testutil.FailErr(t, "store.Close before reopen", store.Close())
+
+	reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "reopen after rollback removeFile failure", err)
+	t.Cleanup(func() { _ = reopened.Close() })
+	if !reopened.HasObject(oidKeep) || reopened.HasObject(oidPack) {
+		t.Fatalf("expected keep object preserved and failed pack retired on reopen")
+	}
+	_, _, err = reopened.ImportRepositoryObjects(ctx, []string{objPack}, []string{oidPack})
+	testutil.FailErr(t, "retry ImportRepositoryObjects after transient fault clears", err)
+	if !reopened.HasObject(oidKeep) || !reopened.HasObject(oidPack) {
+		t.Fatalf("expected both keep and newly imported pack objects present after retry")
+	}
+}

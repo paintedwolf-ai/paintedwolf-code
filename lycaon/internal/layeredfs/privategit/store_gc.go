@@ -103,7 +103,7 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 				continue
 			}
 			loosePath := filepath.Join(subDir, f.Name())
-			if err := os.Remove(loosePath); err != nil {
+			if err := removeStoreFile(ctx, loosePath); err != nil {
 				if os.IsNotExist(err) {
 					continue
 				}
@@ -111,6 +111,9 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 			}
 			removeLooseObjectLocked(s, oid)
 			removed++
+		}
+		if remaining, rErr := os.ReadDir(subDir); rErr == nil && len(remaining) == 0 {
+			_ = os.Remove(subDir)
 		}
 	}
 
@@ -128,6 +131,7 @@ type gcTestHooks struct {
 	beforeStageRename   func(base, ext string) error
 	beforeUnlinkRetired func(base, ext string) error
 	removeFile          func(path string) error
+	syncDir             func(dirPath string) error
 }
 
 func withGCTestHooks(ctx context.Context, hooks gcTestHooks) context.Context {
@@ -168,6 +172,13 @@ func syncStoreDirectory(dirPath string) error {
 	}
 	defer func() { _ = dir.Close() }()
 	return fssync.File(dir)
+}
+
+func syncStoreDirectoryCtx(ctx context.Context, dirPath string) error {
+	if h, ok := ctx.Value(gcTestHooksKey{}).(gcTestHooks); ok && h.syncDir != nil {
+		return h.syncDir(dirPath)
+	}
+	return syncStoreDirectory(dirPath)
 }
 
 func collectUnleasedPacksLocked(
@@ -359,14 +370,14 @@ func exportStoreObjectsToTrunk(s *RetainedObjectStore, dstObjectsDir string) (in
 }
 
 func copyWritableObjectFile(src, dst string) error {
-	_, err := copyFileAtomicReadOnly(src, dst)
+	_, _, err := copyFileAtomicReadOnly(context.Background(), src, dst)
 	return err
 }
 
-func copyFileAtomicReadOnly(src, dst string) (int64, error) {
+func copyFileAtomicReadOnly(ctx context.Context, src, dst string) (int64, bool, error) {
 	in, err := os.Open(src)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	defer func() { _ = in.Close() }()
 
@@ -374,7 +385,7 @@ func copyFileAtomicReadOnly(src, dst string) (int64, error) {
 	_ = os.Remove(tmp)
 	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	n, copyErr := io.Copy(out, in)
 	syncErr := fssync.File(out)
@@ -382,25 +393,25 @@ func copyFileAtomicReadOnly(src, dst string) (int64, error) {
 	if copyErr != nil || syncErr != nil || closeErr != nil {
 		_ = os.Remove(tmp)
 		if copyErr != nil {
-			return 0, copyErr
+			return 0, false, copyErr
 		}
 		if syncErr != nil {
-			return 0, syncErr
+			return 0, false, syncErr
 		}
-		return 0, closeErr
+		return 0, false, closeErr
 	}
 	if err := os.Chmod(tmp, 0o444); err != nil {
 		_ = os.Remove(tmp)
-		return 0, err
+		return 0, false, err
 	}
 	if err := os.Rename(tmp, dst); err != nil {
 		_ = os.Remove(tmp)
-		return 0, err
+		return 0, false, err
 	}
-	if err := syncStoreDirectory(filepath.Dir(dst)); err != nil {
-		return 0, err
+	if err := syncStoreDirectoryCtx(ctx, filepath.Dir(dst)); err != nil {
+		return 0, true, err
 	}
-	return n, nil
+	return n, true, nil
 }
 
 func isHexString(s string) bool {

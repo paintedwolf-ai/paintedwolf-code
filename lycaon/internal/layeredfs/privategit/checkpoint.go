@@ -176,7 +176,7 @@ func captureCheckpointGitState(
 			ConfigBytes:     cfgBytes,
 			LeaseID:         leaseID,
 			ReachableOIDs:   reachableOIDs,
-			ImportedObjects: impMetrics.ObjectsImported,
+			ImportedObjects: impMetrics.ObjectsImported + impMetrics.ObjectsReused,
 			SubmoduleHeads:  subHeads,
 		},
 	}

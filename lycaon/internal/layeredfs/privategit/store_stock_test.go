@@ -92,6 +92,7 @@ func TestRetainedObjectStoreIncrementalStockRestartDuplicatesGCAndInspect(t *tes
 	testutil.FailErr(t, "store.Close", store.Close())
 	reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
 	testutil.FailErr(t, "NewRetainedObjectStoreContext restart", err)
+	t.Cleanup(func() { _ = reopened.Close() })
 
 	mReopen := reopened.Metrics()
 	if mReopen.StartupInitDuration <= 0 {

@@ -368,6 +368,7 @@ func TestCoreGitOverlaySyncPrimaryAndSecondaryRootsToCheckpointAndExport(t *test
 			if readErr != nil {
 				return readErr
 			}
+			_, _ = core.Mkdir(layeredfs.QualifiedPath{RootID: rootID, Rel: filepath.ToSlash(filepath.Dir(rel))}, 0o755)
 			_, writeErr := core.WriteFile(layeredfs.QualifiedPath{RootID: rootID, Rel: slashRel}, raw, 0o444)
 			return writeErr
 		})
