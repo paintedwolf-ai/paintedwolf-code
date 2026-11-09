@@ -155,10 +155,10 @@ func (m *Manager) recoveryCoordinator() *recovery.Coordinator {
 	return nil
 }
 
-func (m *Manager) recoveryCoordinatorForJob(jobID string) (*recovery.Coordinator, recovery.WorkerTransitionJournal, error) {
+func (m *Manager) recoveryCoordinatorForJob(jobID string) (*recovery.Coordinator, recovery.WorkerLifecycleJournal, error) {
 	coord := m.recoveryCoordinator()
 	if coord == nil {
-		return nil, recovery.WorkerTransitionJournal{}, os.ErrNotExist
+		return nil, recovery.WorkerLifecycleJournal{}, os.ErrNotExist
 	}
 	journal, err := coord.LoadWorkerJournal(jobID)
 	if errors.Is(err, os.ErrNotExist) && m.recovery != nil {

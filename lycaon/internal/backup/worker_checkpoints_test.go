@@ -23,7 +23,7 @@ import (
 )
 
 type seededCheckpointFixture struct {
-	database  *db.DB
+	database  *db.Store
 	root      string
 	branchRel string
 	storeDir  string
@@ -292,14 +292,27 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 		// without including baseBlob/baseCommit in the pack.
 		dstPackDir := filepath.Join(retainedObjectsDir, "pack")
 		testutil.FailErr(t, "mkdir dstPackDir", os.MkdirAll(dstPackDir, 0o700))
-		packPrefix := filepath.Join(dstPackDir, "pack")
 		packInput := strings.Join([]string{deltaCommit, deltaTree, deltaBlob, "^" + baseCommit, "^" + baseBlob}, "\n") + "\n"
-		if out, code, err := gitexec.Run(t.Context(), deltaRepo, []string{"pack-objects", "--thin", "--delta-base-offset", packPrefix}, gitexec.Opts{
+		thinPackBytes, code, err := gitexec.Run(t.Context(), deltaRepo, []string{"pack-objects", "--stdout", "--thin", "--delta-base-offset"}, gitexec.Opts{
 			Profile: gitexec.ProfileHermetic,
 			Input:   []byte(packInput),
-		}); err != nil || code != 0 {
-			t.Fatalf("git pack-objects --thin failed (exit %d): %v (%s)", code, err, out)
+		})
+		if err != nil || code != 0 {
+			t.Fatalf("git pack-objects --stdout --thin failed (exit %d): %v (%s)", code, err, thinPackBytes)
 		}
+		tmpPack := filepath.Join(deltaRepo, "pack-thin.pack")
+		tmpIdx := filepath.Join(deltaRepo, "pack-thin.idx")
+		testutil.FailErr(t, "write tmpPack", os.WriteFile(tmpPack, thinPackBytes, 0o600))
+		if out, code, err := gitexec.Run(t.Context(), deltaRepo, []string{"index-pack", "-o", tmpIdx, tmpPack}, gitexec.Opts{
+			Profile: gitexec.ProfileHermetic,
+		}); err != nil || code != 0 {
+			t.Fatalf("git index-pack failed (exit %d): %v (%s)", code, err, out)
+		}
+		const packBase = "pack-0123456789abcdef0123456789abcdef01234567"
+		testutil.FailErr(t, "install thin .pack", os.WriteFile(filepath.Join(dstPackDir, packBase+".pack"), thinPackBytes, 0o444))
+		idxBytes, err := os.ReadFile(tmpIdx)
+		testutil.FailErr(t, "read tmpIdx", err)
+		testutil.FailErr(t, "install thin .idx", os.WriteFile(filepath.Join(dstPackDir, packBase+".idx"), idxBytes, 0o444))
 
 		writeCheckpointManifestAndMeta(t, fx, checkpoint.PrivateGitSnapshot{
 			HeadRef:         "refs/heads/main",
