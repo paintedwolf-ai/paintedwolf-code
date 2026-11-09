@@ -245,7 +245,8 @@ describe("pretty-edit-mapper (FMT-AC-10, FMT-AC-16)", () => {
       path: "case6.json",
     });
 
-    // Case 6a: Two cursors at disp = 2 and disp = 3 (both inside `\n  ` mapping to insertOffset = 1) typing identical `"x":0,`.
+    // Case 6a: Two cursors at disp = 2 and disp = 3 (both inside `\n  `
+    // mapping to insertOffset = 1) typing identical `"x":0,`.
     const coalesced = mapDisplayEditToSource({
       map: proj.sourceMap,
       rawText: raw,
@@ -260,7 +261,8 @@ describe("pretty-edit-mapper (FMT-AC-10, FMT-AC-16)", () => {
     expect(coalesced.changes).toEqual([{ from: 1, to: 1, insert: '"x":0,' }]);
     expect(coalesced.conflictRequiresRawFallback).toBe(false);
 
-    // Case 6b: Conflicting insertions at the same raw offset 1 (`"x"` vs `"y"`) retain ordered intentions without mutating raw source.
+    // Case 6b: Conflicting insertions at the same raw offset 1
+    // (`"x"` vs `"y"`) retain ordered intentions without mutating raw source.
     const conflict = mapDisplayEditToSource({
       map: proj.sourceMap,
       rawText: raw,
