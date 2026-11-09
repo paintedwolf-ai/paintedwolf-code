@@ -23,6 +23,7 @@ requires:
     - paintedwolf.path
     - paintedwolf.mutation_new_path
     - paintedwolf.command_surface
+    - paintedwolf.syntax_override_commands
 when: paintedwolf.rejection_code == "MUTATION_BROKE_PARSE"
 effect: block
 copy:
@@ -44,7 +45,7 @@ copy:
     Resolve this rejected source mutation before running checks that require its proposed contents.
     If the proposed syntax is intentional, intermediate, or the parser diagnostic is inaccurate,
     {% if paintedwolf.command_surface %}use `tee --syntax-override-reason TEXT PATH`
-    with the complete candidate on stdin, or add that option to `edit`, `replace-lines`, or `code-rewrite`.
+    with the complete candidate on stdin. The catalog supports this option on `{{ paintedwolf.syntax_override_commands }}`.
     Redirects accept no override. The reason applies only to that operation.
     {% else %}supply `syntax_override_reason` on the mutation call to proceed.{% endif %}
   instead: Correct the candidate and retry one atomic mutation

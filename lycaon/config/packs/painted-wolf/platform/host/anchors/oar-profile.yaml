@@ -88,6 +88,9 @@ host_facts:
    type: string
  - name: paintedwolf.operation
    type: string
+ - name: paintedwolf.syntax_override_commands
+   type: string
+   observation: Catalog command forms accepting a scoped syntax override reason.
  - name: paintedwolf.command_surface
    type: bool
  - name: paintedwolf.command_form

@@ -1036,7 +1036,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "tee [-a] [--] [PATH ...] [--syntax-override-reason TEXT]",
+      "argv": "tee [-a] [--syntax-override-reason TEXT] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
