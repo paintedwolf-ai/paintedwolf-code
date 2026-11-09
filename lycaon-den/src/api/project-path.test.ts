@@ -99,7 +99,7 @@ describe("resolveProjectFile", () => {
       ],
       activeRootId: "inner",
     };
-    expect(resolveProjectFile(nested, "../../elsewhere.ts", "macos")).toEqual({
+    expect(resolveProjectFile(nested, "../../../elsewhere.ts", "macos")).toEqual({
       error: "outside_roots",
     });
   });
