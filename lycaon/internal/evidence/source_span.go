@@ -3,6 +3,7 @@ package evidence
 import "strings"
 
 const (
+	VerifyReasonUnknownHandle = "unknown_handle"
 	VerifyReasonSourceWindow  = "invalid_source_window"
 	VerifyReasonSourcePath    = "source_path_mismatch"
 	VerifyReasonSourceRange   = "outside_delivered_range"

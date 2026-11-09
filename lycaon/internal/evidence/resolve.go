@@ -46,6 +46,7 @@ type Resolution struct {
 	LineCorrectedFrom int
 	Excerpt           string
 	Verdict           Verdict
+	Reason            string
 }
 
 // Resolve binds a citation triple against the path-indexed ledger.
