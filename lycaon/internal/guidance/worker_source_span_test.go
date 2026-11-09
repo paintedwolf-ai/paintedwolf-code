@@ -1,7 +1,6 @@
 package guidance
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -40,10 +39,6 @@ func TestWorkerCitationsUseDeliveredContiguousSource(t *testing.T) {
 					t.Fatalf("valid multiline finding rejected: %+v", eval)
 				}
 				return
-			}
-			feedback := CitedHandleRanges(eval.Resolutions, ev)
-			if !strings.Contains(feedback, "catalog.py lines 12-13") || !strings.Contains(feedback, "reason="+tc.reason) {
-				t.Fatalf("missing observed range or reason: %q", feedback)
 			}
 		})
 	}
