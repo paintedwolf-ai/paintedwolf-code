@@ -33,6 +33,8 @@ export function splitQualifiedRootPath(
 
 export type ResolveProjectFileInput = {
   roots: readonly ResolveProjectRoot[];
+  /** Session's active root (`workspace_root_id`); bare paths resolve here first. */
+  activeRootId?: string;
 };
 
 export type ResolveProjectFileOk = {
@@ -106,6 +108,19 @@ export function longestMatchingRoot(
   return best;
 }
 
+/** Bare paths resolve against the session's active root, then the primary root. */
+function baseRootForBarePath(
+  roots: readonly ResolveProjectRoot[],
+  activeRootId?: string,
+): ResolveProjectRoot {
+  const want = activeRootId?.trim();
+  if (want) {
+    const active = roots.find((root) => root.id === want);
+    if (active) return active;
+  }
+  return roots.find((root) => root.is_primary === true) ?? roots[0]!;
+}
+
 /** Resolves paths contained by an attached root. */
 export function resolveProjectFile(
   project: ResolveProjectFileInput,
@@ -145,7 +160,7 @@ export function resolveProjectFile(
         ? joinRootRelative(labeled.path, qualified.rest, platform)
         : normalizePathForJail(labeled.path, platform);
     } else {
-      const base = roots.find((root) => root.is_primary === true) ?? roots[0]!;
+      const base = baseRootForBarePath(roots, project.activeRootId);
       candidate = joinRootRelative(base.path, rel, platform);
     }
   }
@@ -170,9 +185,12 @@ export function projectFileResolvable(
   roots: readonly ResolveProjectRoot[],
   relPath: string,
   rootId?: string,
+  activeRootId?: string,
 ): boolean {
   const scoped = rootId ? roots.filter((root) => root.id === rootId) : roots;
-  return !("error" in resolveProjectFile({ roots: scoped }, relPath));
+  return !(
+    "error" in resolveProjectFile({ roots: scoped, activeRootId }, relPath)
+  );
 }
 
 /** Relative paths use forward slashes; the root itself is ".". */
