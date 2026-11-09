@@ -25,7 +25,7 @@ var compiledContracts = map[string]Contract{
 	"extend_worker_budget":           {Owner: "workers", Reversibility: ReversibilityReversible, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleDBTransaction, Capabilities: 0},
 	"extract_archive":                {Owner: "filesystem", Reversibility: ReversibilityRecoverable, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleEffectAttempt, Capabilities: CapabilityFileChange, BoundedInProcess: true},
 	"fanout_plan":                    {Owner: "blueprints", Reversibility: ReversibilityReversible, Batch: BatchSerial, Order: TurnOrderNormal, Lifecycle: LifecycleDBTransaction, Capabilities: 0},
-	"fetch_url":                      {Owner: "web_research", Reversibility: ReversibilityRecoverable, Batch: BatchSameTool, BatchOptInArg: "parallel", BatchConcurrencyLimit: 4, BatchSerialWhenArg: "dest", Order: TurnOrderNormal, Lifecycle: LifecycleEffectAttempt, Capabilities: 0},
+	"fetch_url":                      {Owner: "web_research", Reversibility: ReversibilityRecoverable, Batch: BatchSameTool, BatchOptInArg: "parallel", BatchConcurrencyLimit: 4, Order: TurnOrderNormal, Lifecycle: LifecycleEffectAttempt, Capabilities: 0},
 	"find":                           {Owner: "filesystem", Reversibility: ReversibilityReversible, Batch: BatchShared, Order: TurnOrderNormal, Lifecycle: LifecycleReadOnly, Capabilities: 0, DetachAfterBudget: true, BoundedInProcess: true},
 	"git_blame":                      {Owner: "git", Reversibility: ReversibilityReversible, Batch: BatchShared, Order: TurnOrderNormal, Lifecycle: LifecycleReadOnly, Capabilities: 0, DetachAfterBudget: true, BoundedInProcess: true},
 	"git_branches":                   {Owner: "git", Reversibility: ReversibilityReversible, Batch: BatchShared, Order: TurnOrderNormal, Lifecycle: LifecycleReadOnly, Capabilities: 0, DetachAfterBudget: true, BoundedInProcess: true},
@@ -144,6 +144,10 @@ var compiledFamilies = map[string][]string{
 		"terminal_read",
 		"terminal_snapshot",
 		"terminal_close",
+	},
+	"web_research": {
+		"web_search",
+		"fetch_url",
 	},
 }
 

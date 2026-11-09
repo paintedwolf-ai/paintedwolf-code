@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/coordinator/turnload/ledger.go",
+  "kind": "runtime_service",
+  "workstream": "web-research-flow",
+  "disposition": "retain",
+  "reason": "Retain the 19-method, 407-line standing-surface ledger. Family completion is a pure catalog operation within the existing turn transaction; request lifetime, cold boundaries, restore, and locking remain in the ledger. Focused lifetime and family contracts bound this responsibility.",
+  "reviewed_commit": "655e22133e9396805819a601fbd788f77270eecb",
+  "ceiling": 407,
+  "boundaries": {
+    "lycaon/internal/coordinator/turnload/families_test.go": "1a6625af96d6d943bc7ec9190e9e8ca3b8cd0e98a5c144ee29f887102019311f",
+    "lycaon/internal/coordinator/turnload/ledger_test.go": "c72faa320b91a4fc73c9315bfdaafcff8b84ed60a6f461bd0ab4c64fc7c44db4"
+  }
+}

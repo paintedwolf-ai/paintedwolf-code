@@ -189,6 +189,7 @@ func skillSurfaceVarsInput(tctx tools.ToolContext, budget spawn.WorkerToolBudget
 		profileID = mapped
 	}
 	return prompts.SkillSurfaceVarsInput{
+		Plan:             tctx.Turn.TurnToolPlan,
 		ProfileID:        profileID,
 		SurfaceID:        strings.TrimSpace(tctx.Turn.TurnSurfaceID),
 		Offered:          tctx.Turn.TurnOfferedToolNames,

@@ -1,4 +1,4 @@
-description: "Load a missing tool when offered tools cannot perform the next operation"
+description: "Load missing tools, including permitted family members, for the next operation"
 schema:
   type: object
   properties:

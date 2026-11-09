@@ -168,8 +168,7 @@ tools:
     title_keys: [rationale]
     activity: {headline: "delegating work", salience: primary, role: coordination}
   fetch_url:
-    # mode is a closed enum.
-    title_keys: [url, dest]
+    title_keys: [url]
     running_label: "Fetching URL…"
     activity: {headline: "researching", salience: primary, role: research}
   http_request:

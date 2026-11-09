@@ -5,9 +5,9 @@ approval_explanations:
     fetch_url:
         tool: fetch_url
         tier_hint: recoverable
-        what_changes: Fetch content from a URL; mode=raw with dest may write the resource into the project.
-        who_affected: The remote host (read), and when dest is set the local project tree (write).
-        if_wrong: A bad page extract is harmless; a bad dest overwrite is a local file mutation you can revert in git.
+        what_changes: Read a web source for extraction or screened image perception.
+        who_affected: The remote host receives the request; source content enters the session.
+        if_wrong: A misleading source can lead to unsupported conclusions. No project file is written.
         allow_line: fetching URLs
         scenarios:
             - id: default
