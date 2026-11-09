@@ -285,10 +285,10 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     expect(
       divergedAdapter.ringBuffer.collectChain(
         divergedReplica.incarnation,
-        divergedReplica.epoch,
+        divergedReplica.accepted.epoch,
         baseRev,
         divergedReplica.incarnation,
-        divergedReplica.epoch,
+        divergedReplica.accepted.epoch,
         divergedReplica.history.revision,
       ),
     ).toHaveLength(1);
