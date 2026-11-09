@@ -36,7 +36,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workspace"
-	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -157,11 +156,12 @@ func TestOrdinaryWorkerClaimRegistersAndSettlesItsConsumerEngine(t *testing.T) {
 	}
 }
 
-// Forced materialization of a tree past the budget: no enforcer means the mount has a lasting reason
-// to be unavailable, so this runs the whole worker, private Git and checkpoint path on the copy adapter.
-func TestOverBudgetWorkerWithoutEnforcementRunsTheCompleteMaterializedPath(t *testing.T) {
+// A small materialized worker retains private Git and exact checkpoint bases without a mount.
+func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T) {
 	selector := workspace.DefaultWorkspaceSelector()
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
+		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
+	}
 	selector.Confinement = nil
 	fixture := newLayeredWorkerFixture(t, selector)
 	task := fixture.claim(t)
@@ -170,8 +170,8 @@ func TestOverBudgetWorkerWithoutEnforcementRunsTheCompleteMaterializedPath(t *te
 	if !ok || snap.Readiness != claim.StateReady {
 		t.Fatalf("claim state ok=%v snap=%+v", ok, snap)
 	}
-	if snap.Adapter.AdapterID != adapter.AdapterEagerCopy || snap.Adapter.FallbackReason != adapter.ReasonConfinementUnavailable || receipt.AdapterID != adapter.AdapterEagerCopy {
-		t.Fatalf("selection did not fall back with the confinement reason: %+v", snap.Adapter)
+	if snap.Adapter.AdapterID != adapter.AdapterEagerCopy || snap.Adapter.FallbackReason != adapter.ReasonNone || receipt.AdapterID != adapter.AdapterEagerCopy {
+		t.Fatalf("small worker was not materialized without fallback: %+v", snap.Adapter)
 	}
 	if _, ok := consumer.LookupBranchEngine(task.WorkspaceRoot); ok {
 		t.Fatal("a materialized branch has no layered engine")
@@ -190,14 +190,8 @@ func TestOverBudgetWorkerWithoutEnforcementRunsTheCompleteMaterializedPath(t *te
 		t.Fatalf("private repository misses the source's history: %q", out)
 	}
 
-	// A claim hashes nothing, so it records nothing a capture would compare with.
-	baseline, err := workspacebaseline.Open(t.Context(), task.WorkspaceBaselinePath, workspacebaseline.ContentStore(task.WorkspaceBaselinePath))
-	testutil.FailErr(t, "open baseline", err)
-	baselineFiles := 0
-	testutil.FailErr(t, "read baseline", baseline.Each(t.Context(), func(string, workspacebaseline.File) error { baselineFiles++; return nil }))
-	testutil.FailErr(t, "close baseline", baseline.Close())
-	if baselineFiles != 0 {
-		t.Fatalf("a materialized claim recorded %d baseline files", baselineFiles)
+	if task.WorkspaceBaselinePath != "" {
+		t.Fatalf("checkpoint worker retained a legacy baseline: %s", task.WorkspaceBaselinePath)
 	}
 
 	testutil.FailErr(t, "edit branch", os.WriteFile(filepath.Join(task.WorkspaceRoot, "main.go"), []byte("package changed\n"), 0o644))
@@ -227,8 +221,10 @@ func TestOverBudgetWorkerWithoutEnforcementRunsTheCompleteMaterializedPath(t *te
 		if entry.Base.SHA256 == "" {
 			t.Fatalf("no exact base for %s", entry.Path.Rel)
 		}
-		if _, err := store.ReadBlob(entry.Base.SHA256); err != nil {
-			t.Fatalf("base bytes of %s are not in the store: %v", entry.Path.Rel, err)
+		wantBase := map[string]string{"main.go": "package main\n", "gone.go": "package gone\n"}
+		body, err := store.ReadBlob(entry.Base.SHA256)
+		if err != nil || string(body) != wantBase[entry.Path.Rel] {
+			t.Fatalf("base bytes of %s: %q err=%v", entry.Path.Rel, body, err)
 		}
 	}
 	found := false

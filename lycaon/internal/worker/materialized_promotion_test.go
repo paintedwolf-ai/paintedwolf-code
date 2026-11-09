@@ -30,7 +30,9 @@ func TestMaterializedWorkerPromotesThreeWayFromItsPristineBase(t *testing.T) {
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
 	dataDir := testbaseline.DataDir(t, database)
 	selector := workspace.DefaultWorkspaceSelector()
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
+		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
+	}
 	selector.Confinement = nil
 	manager := workspace.NewManager(filepath.Join(dataDir, "worker-branches")).WithSelector(selector)
 	queue := NewSQLQueue(database, 4)

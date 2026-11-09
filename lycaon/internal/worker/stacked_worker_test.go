@@ -22,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/workspace"
-	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -76,7 +75,7 @@ func assertFileHolds(t *testing.T, path, want string) {
 	}
 }
 
-// A materialized parent's sealed overlay is immutable, whatever happens to its tree afterwards.
+// A materialized parent's published checkpoint is immutable even if its live tree changes.
 func TestMaterializedStackedWorkerStartsFromItsParentsSealedResult(t *testing.T) {
 	fixture := newLayeredWorkerFixture(t, nil)
 	parent := fixture.claim(t)
@@ -88,8 +87,10 @@ func TestMaterializedStackedWorkerStartsFromItsParentsSealedResult(t *testing.T)
 		testutil.FailErr(t, "edit parent", os.WriteFile(filepath.Join(parent.WorkspaceRoot, "main.go"), []byte("package parent\n"), 0o644))
 		testutil.FailErr(t, "remove in parent", os.Remove(filepath.Join(parent.WorkspaceRoot, "gone.go")))
 	})
-	if completed.WorkspaceOverlayPath == "" {
-		t.Fatal("parent was not sealed")
+	_, parentManifest, published, err := session.OpenTaskCheckpointStore(completed)
+	testutil.FailErr(t, "open parent checkpoint", err)
+	if !published || parentManifest.WorkerID != parent.ID {
+		t.Fatal("parent published no checkpoint")
 	}
 	// Nothing may read this: a later edit of the parent's tree must not reach the child.
 	testutil.FailErr(t, "edit parent after seal", os.WriteFile(filepath.Join(parent.WorkspaceRoot, "main.go"), []byte("package later\n"), 0o644))
@@ -100,12 +101,6 @@ func TestMaterializedStackedWorkerStartsFromItsParentsSealedResult(t *testing.T)
 		t.Fatalf("parent's deletion did not reach the child: %v", err)
 	}
 	assertFileHolds(t, filepath.Join(fixture.source, "main.go"), "package main\n")
-	baseline, err := workspacebaseline.Open(t.Context(), child.WorkspaceBaselinePath, workspacebaseline.ContentStore(child.WorkspaceBaselinePath))
-	testutil.FailErr(t, "open child baseline", err)
-	defer func() { _ = baseline.Close() }()
-	if body, exists, err := baseline.Content(t.Context(), "main.go"); err != nil || !exists || body != "package parent\n" {
-		t.Fatalf("child merge base = %q exists=%v err=%v", body, exists, err)
-	}
 	coordinator, err := fixture.manager.CheckpointCoordinator()
 	testutil.FailErr(t, "coordinator", err)
 	claims, err := coordinator.ListClaims()
@@ -116,6 +111,29 @@ func TestMaterializedStackedWorkerStartsFromItsParentsSealedResult(t *testing.T)
 	}
 	if !pinned {
 		t.Fatalf("child holds no retention on its parent: %+v", claims)
+	}
+	childCompleted := fixture.completeWithChange(t, child, func() {
+		testutil.FailErr(t, "edit child", os.WriteFile(filepath.Join(child.WorkspaceRoot, "main.go"), []byte("package child\n"), 0o644))
+	})
+	store, manifest, published, err := session.OpenTaskCheckpointStore(childCompleted)
+	testutil.FailErr(t, "open child checkpoint", err)
+	if !published {
+		t.Fatal("child published no checkpoint")
+	}
+	foundBase := false
+	for _, entry := range manifest.Entries {
+		if entry.Path.Rel != "main.go" {
+			continue
+		}
+		body, err := store.ReadBlob(entry.Base.SHA256)
+		testutil.FailErr(t, "read child's retained merge base", err)
+		if string(body) != "package parent\n" || entry.Base.Layer != layeredfs.LayerParent {
+			t.Fatalf("child merge base = %q layer=%s", body, entry.Base.Layer)
+		}
+		foundBase = true
+	}
+	if !foundBase {
+		t.Fatal("child checkpoint lost changed main.go")
 	}
 	testutil.FailErr(t, "destroy child", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: child.ID, Root: child.WorkspaceRoot}))
 	claims, err = coordinator.ListClaims()

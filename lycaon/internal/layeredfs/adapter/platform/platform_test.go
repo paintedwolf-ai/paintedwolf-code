@@ -78,13 +78,6 @@ func TestRealEnforcerSelectsAndVerifiesAMountedView(t *testing.T) {
 	testutil.FailErr(t, "write trunk", os.WriteFile(filepath.Join(trunk, "file"), []byte("x\n"), 0o644))
 	selector := platform.NewSelector(platform.Config{Confinement: viewconfine.New()})
 	chosen, probe := overBudgetChoice(t, selector, filepath.Join(state, "probe"), trunk)
-	if chosen.Facts().PreparationKind != adapter.PreparationMounted {
-		switch probe.ReasonCode {
-		case adapter.ReasonFUSEDeviceUnavailable, adapter.ReasonFUSEHelperUnavailable, adapter.ReasonUnsupportedPlatform:
-			t.Skipf("this host cannot mount a view: %s", probe.ReasonCode)
-		}
-		t.Fatalf("an enforcing host fell back: %s %s", probe.ReasonCode, probe.Diagnostic)
-	}
 	if !probe.BackingDenialVerified {
 		t.Fatalf("selected without a verified denial: %+v", probe)
 	}
@@ -113,7 +106,19 @@ func overBudgetChoice(t *testing.T, selector *adapter.Selector, probeDir, source
 		Probe:  adapter.ProbeConfig{RuntimeDir: probeDir},
 		Grants: []adapter.RootGrant{{RootID: "primary", SourcePath: source, IsPrimary: true}},
 	})
-	testutil.FailErr(t, "Choose", err)
+	if err != nil {
+		var refused *adapter.AdapterError
+		if errors.As(err, &refused) && choice.Adapter == nil {
+			switch refused.ReasonCode {
+			case adapter.ReasonFUSEDeviceUnavailable, adapter.ReasonFUSEHelperUnavailable, adapter.ReasonUnsupportedPlatform:
+				t.Skipf("this host cannot mount a view: %s", refused.ReasonCode)
+			}
+		}
+		t.Fatalf("mount selection failed: %v", err)
+	}
+	if choice.Adapter == nil || choice.Adapter.Facts().PreparationKind != adapter.PreparationMounted {
+		t.Fatalf("over-limit fixture did not select a mount: %+v", choice)
+	}
 	return choice.Adapter, choice.Probe
 }
 
@@ -123,10 +128,7 @@ func mountedHostView(t *testing.T, trunk string, mgr *privategit.Manager) (*adap
 	tmp, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve temp", err)
 	selector := platform.NewSelector(platform.Config{Confinement: availableConfinement{}})
-	chosen, probe := overBudgetChoice(t, selector, filepath.Join(tmp, "probe"), trunk)
-	if chosen.Facts().PreparationKind != adapter.PreparationMounted {
-		t.Skipf("this host cannot mount a view: %s %s", probe.ReasonCode, probe.Diagnostic)
-	}
+	chosen, _ := overBudgetChoice(t, selector, filepath.Join(tmp, "probe"), trunk)
 	view, err := chosen.Prepare(t.Context(), adapter.PrepareRequest{
 		ViewID: "view-starters", BackingDir: filepath.Join(tmp, "backing"), RuntimeDir: filepath.Join(tmp, "runtime"),
 		GitInterceptor: mgr,
@@ -311,10 +313,7 @@ func TestEverySelectedRootHasItsOwnPrivateRepository(t *testing.T) {
 	testutil.FailErr(t, "privategit.NewManager", err)
 	t.Cleanup(func() { _ = mgr.Store().Close() })
 	selector := platform.NewSelector(platform.Config{Confinement: availableConfinement{}})
-	chosen, probe := overBudgetChoice(t, selector, filepath.Join(base, "probe"), grants[0].SourcePath)
-	if chosen.Facts().PreparationKind != adapter.PreparationMounted {
-		t.Skipf("this host cannot mount a view: %s %s", probe.ReasonCode, probe.Diagnostic)
-	}
+	chosen, _ := overBudgetChoice(t, selector, filepath.Join(base, "probe"), grants[0].SourcePath)
 	view, err := chosen.Prepare(t.Context(), adapter.PrepareRequest{
 		ViewID: "view-roots", BackingDir: filepath.Join(base, "backing"), RuntimeDir: filepath.Join(base, "runtime"),
 		GitInterceptor: mgr, TargetRootDirs: targets, Grants: grants,
