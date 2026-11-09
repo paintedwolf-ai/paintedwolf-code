@@ -18,7 +18,9 @@ type Retirement struct {
 // retirements lists, by step ID, every released table or column a step drops
 // through DropReleased. The contract suite upgrades the released corpus
 // fixtures that hold these rows and requires Rebuild to reproduce Capture.
-var retirements = map[string][]Retirement{}
+var retirements = map[string][]Retirement{
+	"source-manifests-and-command-records": {turnLoadReceiptRetirement},
+}
 
 // RegisteredRetirements returns a copy of the registered retirements by step ID.
 func RegisteredRetirements() map[string][]Retirement {

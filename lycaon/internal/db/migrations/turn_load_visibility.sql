@@ -16,7 +16,3 @@ CREATE TABLE turn_load_receipts_widened (
     created_at TEXT NOT NULL
 ) STRICT;
 INSERT INTO turn_load_receipts_widened SELECT * FROM turn_load_receipts;
-DROP TABLE turn_load_receipts;
-ALTER TABLE turn_load_receipts_widened RENAME TO turn_load_receipts;
-CREATE INDEX idx_turn_load_receipts_session ON turn_load_receipts(session_id, id);
-CREATE INDEX idx_turn_load_receipts_turn ON turn_load_receipts(opening_message_id, id);
