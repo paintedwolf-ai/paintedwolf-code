@@ -68,13 +68,23 @@ export function ProjectListRow(props: Props) {
               />
             }
           >
-            <button
-              type="button"
-              class="project-list-row__name"
-              onClick={() => props.onOpen(props.project.id)}
-            >
-              {props.project.displayName}
-            </button>
+            <div class="project-list-row__heading">
+              <button
+                type="button"
+                class="project-list-row__name"
+                onClick={() => props.onOpen(props.project.id)}
+              >
+                {props.project.displayName}
+              </button>
+              <Show when={props.project.isDraft}>
+                <span
+                  class="project-list-row__draft-badge"
+                  data-testid={`project-list-draft-${props.project.id}`}
+                >
+                  Draft
+                </span>
+              </Show>
+            </div>
           </Show>
           <button
             type="button"
