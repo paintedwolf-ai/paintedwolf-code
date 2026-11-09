@@ -82,8 +82,10 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted bool) {
 	recoveryRoot := filepath.Join(branches, ".adapter", "recovery")
 	checkpointStore, err := checkpoint.NewStore(filepath.Join(recoveryRoot, "checkpoints"))
 	testutil.FailErr(t, "open durable checkpoint store", err)
-	boot, err := osprocess.BootID()
-	testutil.FailErr(t, "read boot identity", err)
+	boot, ok := osprocess.BootID()
+	if !ok {
+		t.Fatal("boot identity unavailable")
+	}
 	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
 		RootDir: recoveryRoot, CheckpointStore: checkpointStore, CurrentBootID: boot,
 		GitStore: gitManager.Store(), GitManager: gitManager,
