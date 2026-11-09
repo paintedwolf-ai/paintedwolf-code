@@ -557,10 +557,16 @@ function advanceOriginRunsSingleChange(
   const pushRun = (run: PrettyOriginRun): void => {
     if (run.srcFrom === run.srcTo && run.dispFrom === run.dispTo) return;
     const prev = out[out.length - 1];
-    if (prev && prev.kind === run.kind && prev.srcTo === run.srcFrom && prev.dispTo === run.dispFrom) {
+    if (
+      prev &&
+      prev.kind === run.kind &&
+      prev.segmentIndex === run.segmentIndex &&
+      prev.srcTo === run.srcFrom &&
+      prev.dispTo === run.dispFrom
+    ) {
       if (
-        prev.kind === "source" ||
-        (prev.kind === "virtual-layout" && prev.srcFrom === run.srcTo)
+        prev.kind !== "virtual-layout" ||
+        (prev.srcFrom === run.srcTo && prev.insertOffset === run.insertOffset)
       ) {
         out[out.length - 1] = {
           kind: prev.kind,
@@ -568,6 +574,8 @@ function advanceOriginRunsSingleChange(
           srcTo: run.srcTo,
           dispFrom: prev.dispFrom,
           dispTo: run.dispTo,
+          insertOffset: prev.insertOffset,
+          segmentIndex: prev.segmentIndex,
         };
         return;
       }
@@ -575,16 +583,18 @@ function advanceOriginRunsSingleChange(
     out.push(run);
   };
 
-  const emitInsertIfNeeded = (): void => {
+  const emitInsertIfNeeded = (segmentIndex = 0): void => {
     if (insertedEmitted) return;
     insertedEmitted = true;
     if (L > 0) {
       pushRun({
-        kind: "source",
+        kind: "identity",
         srcFrom: rFrom,
         srcTo: rFrom + L,
         dispFrom: dFrom,
         dispTo: dFrom + L,
+        insertOffset: rFrom + L,
+        segmentIndex,
       });
     }
   };
@@ -595,13 +605,15 @@ function advanceOriginRunsSingleChange(
       continue;
     }
     if (run.dispFrom >= dTo) {
-      emitInsertIfNeeded();
+      emitInsertIfNeeded(run.segmentIndex);
       pushRun({
         kind: run.kind,
         srcFrom: run.srcFrom + rawDelta,
         srcTo: run.srcTo + rawDelta,
         dispFrom: run.dispFrom + dispDelta,
         dispTo: run.dispTo + dispDelta,
+        insertOffset: run.insertOffset + rawDelta,
+        segmentIndex: run.segmentIndex,
       });
       continue;
     }
@@ -612,9 +624,11 @@ function advanceOriginRunsSingleChange(
         srcTo: rFrom,
         dispFrom: run.dispFrom,
         dispTo: dFrom,
+        insertOffset: Math.min(run.insertOffset, rFrom),
+        segmentIndex: run.segmentIndex,
       });
     }
-    emitInsertIfNeeded();
+    emitInsertIfNeeded(run.segmentIndex);
     if (run.dispTo > dTo) {
       pushRun({
         kind: run.kind,
@@ -622,10 +636,12 @@ function advanceOriginRunsSingleChange(
         srcTo: run.srcTo + rawDelta,
         dispFrom: dTo + dispDelta,
         dispTo: run.dispTo + dispDelta,
+        insertOffset: Math.max(rTo, run.insertOffset) + rawDelta,
+        segmentIndex: run.segmentIndex,
       });
     }
   }
-  emitInsertIfNeeded();
+  emitInsertIfNeeded(0);
   return out;
 }
 
@@ -655,14 +671,10 @@ export function advanceProjectionForComposeFrame(
       dc.insert.length,
     );
   }
-  const nextMap = buildPrettySourceMap(nextRawText, nextDisplayText, runs);
+  const nextMap = buildPrettySourceMap(nextRevision, nextRawText, nextDisplayText, runs);
   return {
     ...prevProjection,
     displayText: nextDisplayText,
-    sourceMap: {
-      ...nextMap,
-      sourceIdentity: prevProjection.sourceMap.sourceIdentity,
-      sourceRevision: nextRevision,
-    },
+    sourceMap: nextMap,
   };
 }

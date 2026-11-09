@@ -474,7 +474,8 @@ describe("PrettyReplicaEditorAdapter real EditorView + DocumentReplica proof (FM
 
     // Remote peer edits raw [1, 4) (`"a"` -> `"aa"`), overlapping Conflict #1 at raw offset 1!
     applyRemotePeerEdit(replica, (ytext) => {
-      ytext.insert(2, "a");
+      ytext.delete(1, 3);
+      ytext.insert(1, '"aa"');
     });
     expect(replica.currentText).toBe('{"aa":1,"b":2}');
 

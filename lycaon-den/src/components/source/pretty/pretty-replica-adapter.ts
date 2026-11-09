@@ -396,24 +396,9 @@ export class PrettyReplicaEditorAdapter {
   stepHistory(direction: "undo" | "redo"): boolean {
     if (this.view?.state.readOnly) return false;
     const prevRev = this.replica.history.revision;
-    const prevDocState = this.replica.history.state;
     this.replica.stepHistory(direction);
     if (this.replica.history.revision !== prevRev) {
-      const changes = prevDocState.changes({
-        from: 0,
-        to: prevDocState.doc.length,
-        insert: this.replica.currentText,
-      });
-      this.ringBuffer.recordStep({
-        incarnation: this.replica.incarnation,
-        epoch: this.replica.accepted.epoch,
-        fromRevision: prevRev,
-        toRevision: this.replica.history.revision,
-        changes,
-      });
       this.transientRawSegmentRanges = [];
-      this.lastObservedRevision = this.replica.history.revision;
-      this.lastObservedDocState = this.replica.history.state;
       this.syncReplicaToView(false);
     }
     return true;
@@ -525,18 +510,6 @@ export class PrettyReplicaEditorAdapter {
       this.lastAdmissionError = error;
       return { ok: false, status: "admission-refused", error };
     }
-
-    this.ringBuffer.recordStep({
-      incarnation: this.replica.incarnation,
-      epoch: this.replica.accepted.epoch,
-      fromRevision: prevRev,
-      toRevision: this.replica.history.revision,
-      changes: rawTx.changes,
-    });
-    this.lastObservedRevision = this.replica.history.revision;
-    this.lastObservedEpoch = this.replica.accepted.epoch;
-    this.lastObservedIncarnation = this.replica.incarnation;
-    this.lastObservedDocState = this.replica.history.state;
 
     if (resolution.discardRemainingIntentions === true) {
       const cIdx = recovery.pendingConflicts.indexOf(conflict);
@@ -942,7 +915,6 @@ export class PrettyReplicaEditorAdapter {
       userEvent,
     });
 
-    const prevRev = this.replica.history.revision;
     try {
       this.replica.acceptEditorTransaction(finalRawTx);
     } catch (error) {
@@ -951,18 +923,6 @@ export class PrettyReplicaEditorAdapter {
     }
 
     this.viewCaretAffinity = null;
-
-    this.ringBuffer.recordStep({
-      incarnation: this.replica.incarnation,
-      epoch: this.replica.accepted.epoch,
-      fromRevision: prevRev,
-      toRevision: this.replica.history.revision,
-      changes: finalRawTx.changes,
-    });
-    this.lastObservedRevision = this.replica.history.revision;
-    this.lastObservedEpoch = this.replica.accepted.epoch;
-    this.lastObservedIncarnation = this.replica.incarnation;
-    this.lastObservedDocState = this.replica.history.state;
 
     // During active IME composition, advance the projection sourceMap in-place to match
     // `tr.newDoc` without replacing the composing DOM node on intermediate frames.
