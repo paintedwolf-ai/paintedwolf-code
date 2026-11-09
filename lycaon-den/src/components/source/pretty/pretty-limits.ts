@@ -1,7 +1,9 @@
 import type {
-  PrettyProjectionResult,
+  PrettyNativeLayoutResult,
   PrettyResourceCounters,
   PrettyResourceLimits,
+  PrettyRuneOffsetTable,
+  PrettyUtf16Range,
 } from "./pretty-types.ts";
 
 export const DEFAULT_PRETTY_RESOURCE_LIMITS: PrettyResourceLimits = {
@@ -16,7 +18,7 @@ export const DEFAULT_PRETTY_RESOURCE_LIMITS: PrettyResourceLimits = {
   maxCacheBytes: 8 * 1024 * 1024,
 };
 
-/** Aggregate scanner/printer visit limit: 32 * inputUtf16Length + 1024. */
+/** Aggregate scanner visit limit: 32 * inputUtf16Length + 1024. */
 export function maxPrettyVisits(inputUtf16Length: number): number {
   return 32 * Math.max(0, inputUtf16Length) + 1024;
 }
@@ -88,6 +90,7 @@ export function createResourceCounters(
     maxDepthReached: 0,
     tokens: 0,
     mappingRuns: 0,
+    syntaxNodesVisited: 0,
     visits: 0,
   };
 }
@@ -160,6 +163,11 @@ export class PrettyBudgetTracker {
     return true;
   }
 
+  recordSyntaxNode(count = 1): boolean {
+    this.counters.syntaxNodesVisited += count;
+    return this.recordVisit(count);
+  }
+
   recordDepth(depth: number): boolean {
     if (depth > this.limits.maxNestingDepth) {
       this.limitReason = "maxNestingDepth";
@@ -220,16 +228,80 @@ export class PrettyBudgetTracker {
   }
 }
 
-/** Accounts for display text, origin runs, index arrays, line table, and segments. */
+/** Accounts for boundaries and per-line layout states in the native layout cache. */
 export function estimateProjectionCacheBytes(
-  result: PrettyProjectionResult,
+  result: PrettyNativeLayoutResult,
 ): number {
-  const textBytes = result.displayText.length * 2;
-  const runsBytes = result.sourceMap.runs.length * 48;
-  const startsBytes =
-    result.sourceMap.dispStarts.byteLength +
-    result.sourceMap.srcStarts.byteLength;
-  const linesBytes = result.sourceMap.displayLines.length * 24;
-  const segmentsBytes = result.segments.length * 40;
-  return 256 + textBytes + runsBytes + startsBytes + linesBytes + segmentsBytes;
+  const boundariesBytes = result.boundaries.length * 16;
+  const lineStatesBytes = result.lineStates.length * 64;
+  return 256 + boundariesBytes + lineStatesBytes;
+}
+
+/**
+ * Builds a deterministic Unicode scalar value (rune) <-> UTF-16 code unit offset table
+ * on the raw source string without splitting surrogate pairs (FMT-AC-05).
+ */
+export function createRuneOffsetTable(rawText: string): PrettyRuneOffsetTable {
+  const offsets: number[] = [];
+  let i = 0;
+  while (i < rawText.length) {
+    offsets.push(i);
+    const code = rawText.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff && i + 1 < rawText.length) {
+      const low = rawText.charCodeAt(i + 1);
+      if (low >= 0xdc00 && low <= 0xdfff) {
+        i += 2;
+        continue;
+      }
+    }
+    i += 1;
+  }
+  offsets.push(rawText.length);
+  const runeToUtf16 = Int32Array.from(offsets);
+  const runeCount = runeToUtf16.length - 1;
+
+  const runeToUtf16Offset = (runeOffset: number): number => {
+    if (runeOffset <= 0) return 0;
+    if (runeOffset >= runeCount) return rawText.length;
+    return runeToUtf16[runeOffset] ?? rawText.length;
+  };
+
+  const utf16ToRuneOffset = (
+    utf16Offset: number,
+    bias: "left" | "right" = "left",
+  ): number => {
+    if (utf16Offset <= 0) return 0;
+    if (utf16Offset >= rawText.length) return runeCount;
+    let lo = 0;
+    let hi = runeCount;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      const val = runeToUtf16[mid]!;
+      if (val === utf16Offset) return mid;
+      if (val < utf16Offset) lo = mid + 1;
+      else hi = mid - 1;
+    }
+    return bias === "right" ? Math.min(runeCount, lo) : Math.max(0, hi);
+  };
+
+  const runeRangeToUtf16 = (
+    startRune: number,
+    endRune: number,
+  ): PrettyUtf16Range => {
+    const s = Math.max(0, Math.min(runeCount, startRune));
+    const e = Math.max(s, Math.min(runeCount, endRune));
+    return {
+      from: runeToUtf16Offset(s),
+      to: runeToUtf16Offset(e),
+    };
+  };
+
+  return {
+    runeCount,
+    utf16Length: rawText.length,
+    runeToUtf16,
+    runeToUtf16Offset,
+    utf16ToRuneOffset,
+    runeRangeToUtf16,
+  };
 }
