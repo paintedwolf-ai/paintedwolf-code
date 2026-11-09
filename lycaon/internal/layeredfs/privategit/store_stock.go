@@ -264,7 +264,13 @@ func finalizeInterruptedPackRetirements(ctx context.Context, packDir string) err
 	if len(retiringBases) == 0 {
 		return nil
 	}
-	_ = os.Chmod(packDir, 0o755)
+	if info, statErr := os.Stat(packDir); statErr == nil {
+		origPerm := info.Mode().Perm()
+		if origPerm&0o200 == 0 {
+			_ = os.Chmod(packDir, 0o755)
+			defer func() { _ = os.Chmod(packDir, origPerm) }()
+		}
+	}
 	for base := range retiringBases {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -272,7 +278,7 @@ func finalizeInterruptedPackRetirements(ctx context.Context, packDir string) err
 		for _, prefix := range []string{"", retiringPackPrefix} {
 			for _, ext := range []string{".pack", ".idx", ".rev"} {
 				p := filepath.Join(packDir, prefix+base+ext)
-				if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+				if err := removeStoreFile(ctx, p); err != nil && !os.IsNotExist(err) {
 					return fmt.Errorf("privategit: finalize interrupted pack retirement %s: %w", p, err)
 				}
 			}

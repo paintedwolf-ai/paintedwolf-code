@@ -361,3 +361,196 @@ func TestRetainedObjectStoreInterruptedPackRetirementReopenAtEachBoundary(t *tes
 		})
 	}
 }
+
+func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	ctx := t.Context()
+
+	buildPackedRepo := func(name, content string) (string, string) {
+		dir := filepath.Join(tmp, name)
+		testutil.FailErr(t, "mkdir "+name, os.MkdirAll(dir, 0o755))
+		gittest.Init(t, dir)
+		gittest.Run(t, dir, "checkout", "-b", "main")
+		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(dir, name+".txt"), []byte(content), 0o644))
+		gittest.CommitAll(t, dir, "commit "+name)
+		oid := strings.TrimSpace(gittest.Run(t, dir, "rev-parse", "HEAD"))
+		gittest.Run(t, dir, "repack", "-a", "-d")
+		return filepath.Join(dir, ".git", "objects"), oid
+	}
+
+	objDirKeep, oidKeep := buildPackedRepo("keep-gc", "keep-gc-pack-payload\n")
+	objDirRetire, oidRetire := buildPackedRepo("retire-gc", "retire-gc-pack-payload\n")
+
+	findPackBase := func(objDir string) string {
+		entries, err := os.ReadDir(filepath.Join(objDir, "pack"))
+		testutil.FailErr(t, "ReadDir pack", err)
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".pack") {
+				return strings.TrimSuffix(e.Name(), ".pack")
+			}
+		}
+		t.Fatalf("no .pack found in %s", objDir)
+		return ""
+	}
+	baseKeep := findPackBase(objDirKeep)
+	baseRetire := findPackBase(objDirRetire)
+
+	setupTwoPackStore := func(t *testing.T, name string) (string, *RetainedObjectStore) {
+		t.Helper()
+		storeRoot := filepath.Join(tmp, "store-gc-"+name)
+		store, err := NewRetainedObjectStore(storeRoot)
+		testutil.FailErr(t, "NewRetainedObjectStore", err)
+		_, _, err = store.ImportRepositoryObjects(ctx, []string{objDirKeep}, []string{oidKeep})
+		testutil.FailErr(t, "import keep", err)
+		_, _, err = store.ImportRepositoryObjects(ctx, []string{objDirRetire}, []string{oidRetire})
+		testutil.FailErr(t, "import retire", err)
+		_, err = store.RetainForCheckpoint("cp-keep", []string{oidKeep})
+		testutil.FailErr(t, "RetainForCheckpoint keep", err)
+		return storeRoot, store
+	}
+
+	// 1. Unlink failure on .pack during CollectGarbage propagates error, rolls back staging so .idx is not
+	// deleted, and allows clean store reopen with both packs intact.
+	t.Run("pack_unlink_failure_rolls_back_and_reopens_intact", func(t *testing.T) {
+		storeRoot, store := setupTwoPackStore(t, "pack-unlink-fail")
+		injectedErr := errors.New("simulated .pack unlink I/O failure")
+		hookCtx := withGCTestHooks(ctx, gcTestHooks{
+			removeFile: func(p string) error {
+				if strings.HasSuffix(p, baseRetire+".pack") {
+					return injectedErr
+				}
+				return os.Remove(p)
+			},
+		})
+		_, err := store.CollectGarbage(hookCtx)
+		if !errors.Is(err, injectedErr) {
+			t.Fatalf("expected CollectGarbage to propagate %v, got %v", injectedErr, err)
+		}
+		testutil.FailErr(t, "store.Close", store.Close())
+
+		reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+		testutil.FailErr(t, "reopen after .pack unlink failure", err)
+		defer func() { _ = reopened.Close() }()
+
+		if !reopened.HasObject(oidKeep) || !reopened.HasObject("pack:"+baseKeep) {
+			t.Fatalf("expected leased pack %s preserved after .pack unlink failure", baseKeep)
+		}
+		if !reopened.HasObject(oidRetire) || !reopened.HasObject("pack:"+baseRetire) {
+			t.Fatalf("expected unleased pack %s rolled back intact when .pack unlink failed", baseRetire)
+		}
+		inv, err := reopened.InspectStock(ctx)
+		testutil.FailErr(t, "InspectStock", err)
+		m := reopened.Metrics()
+		if !inv.Complete || m.RetainedObjects != inv.LogicalObjects || m.RetainedBytes != inv.StoredBytes {
+			t.Fatalf("stock mismatch after .pack unlink rollback: metrics=%+v inspect=%+v", m, inv)
+		}
+	})
+
+	// 2. Unlink failure on .idx (after .pack is already unlinked) propagates error from CollectGarbage and
+	// from reopen while the failure persists, then reconciles cleanly on reopen once the failure clears.
+	t.Run("idx_unlink_failure_propagates_and_reconciles_on_reopen", func(t *testing.T) {
+		storeRoot, store := setupTwoPackStore(t, "idx-unlink-fail")
+		injectedErr := errors.New("simulated .idx unlink I/O failure")
+		hookCtx := withGCTestHooks(ctx, gcTestHooks{
+			removeFile: func(p string) error {
+				if strings.HasSuffix(p, baseRetire+".idx") {
+					return injectedErr
+				}
+				return os.Remove(p)
+			},
+		})
+		_, err := store.CollectGarbage(hookCtx)
+		if !errors.Is(err, injectedErr) {
+			t.Fatalf("expected CollectGarbage to propagate %v, got %v", injectedErr, err)
+		}
+		testutil.FailErr(t, "store.Close", store.Close())
+
+		// Reopen while unlink failure is still active must propagate the I/O failure.
+		if _, err := NewRetainedObjectStoreContext(hookCtx, storeRoot); !errors.Is(err, injectedErr) {
+			t.Fatalf("expected reopen under active unlink failure to propagate %v, got %v", injectedErr, err)
+		}
+
+		// Once the transient unlink failure clears, reopen reconciles the retired pack and preserves keep.
+		reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+		testutil.FailErr(t, "reopen after .idx unlink failure cleared", err)
+		defer func() { _ = reopened.Close() }()
+
+		if !reopened.HasObject(oidKeep) || !reopened.HasObject("pack:"+baseKeep) {
+			t.Fatalf("expected leased pack %s preserved", baseKeep)
+		}
+		if reopened.HasObject(oidRetire) || reopened.HasObject("pack:"+baseRetire) {
+			t.Fatalf("expected partially unlinked pack %s reconciled on reopen", baseRetire)
+		}
+		inv, err := reopened.InspectStock(ctx)
+		testutil.FailErr(t, "InspectStock", err)
+		m := reopened.Metrics()
+		if !inv.Complete || m.RetainedObjects != inv.LogicalObjects || m.RetainedBytes != inv.StoredBytes {
+			t.Fatalf("stock mismatch after .idx unlink reconciliation: metrics=%+v inspect=%+v", m, inv)
+		}
+	})
+
+	// 3. Context cancellation mid-GC at each stage/unlink boundary returns context.Canceled and reopens cleanly.
+	for _, cancelPoint := range []string{
+		"before_idx_stage_rename",
+		"before_pack_retired_unlink",
+		"before_idx_retired_unlink",
+	} {
+		t.Run("cancel_"+cancelPoint, func(t *testing.T) {
+			storeRoot, store := setupTwoPackStore(t, "cancel-"+cancelPoint)
+			cancelCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
+
+			hooks := gcTestHooks{}
+			switch cancelPoint {
+			case "before_idx_stage_rename":
+				hooks.beforeStageRename = func(base, ext string) error {
+					if base == baseRetire && ext == ".idx" {
+						cancel()
+						return cancelCtx.Err()
+					}
+					return nil
+				}
+			case "before_pack_retired_unlink":
+				hooks.beforeUnlinkRetired = func(base, ext string) error {
+					if base == baseRetire && ext == ".pack" {
+						cancel()
+						return cancelCtx.Err()
+					}
+					return nil
+				}
+			case "before_idx_retired_unlink":
+				hooks.beforeUnlinkRetired = func(base, ext string) error {
+					if base == baseRetire && ext == ".idx" {
+						cancel()
+						return cancelCtx.Err()
+					}
+					return nil
+				}
+			}
+
+			_, err := store.CollectGarbage(withGCTestHooks(cancelCtx, hooks))
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("expected context.Canceled at %s, got %v", cancelPoint, err)
+			}
+			testutil.FailErr(t, "store.Close", store.Close())
+
+			reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+			testutil.FailErr(t, "reopen after "+cancelPoint, err)
+			defer func() { _ = reopened.Close() }()
+
+			if !reopened.HasObject(oidKeep) || !reopened.HasObject("pack:"+baseKeep) {
+				t.Fatalf("expected leased pack %s preserved across %s", baseKeep, cancelPoint)
+			}
+			if reopened.HasObject(oidRetire) || reopened.HasObject("pack:"+baseRetire) {
+				t.Fatalf("expected retiring pack %s finalized on reopen after %s", baseRetire, cancelPoint)
+			}
+			inv, err := reopened.InspectStock(ctx)
+			testutil.FailErr(t, "InspectStock", err)
+			m := reopened.Metrics()
+			if !inv.Complete || m.RetainedObjects != inv.LogicalObjects || m.RetainedBytes != inv.StoredBytes {
+				t.Fatalf("stock mismatch after %s: metrics=%+v inspect=%+v", cancelPoint, m, inv)
+			}
+		})
+	}
+}

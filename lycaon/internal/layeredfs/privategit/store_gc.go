@@ -122,12 +122,54 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 
 const retiringPackPrefix = ".retiring-"
 
+type gcTestHooksKey struct{}
+
+type gcTestHooks struct {
+	beforeStageRename   func(base, ext string) error
+	beforeUnlinkRetired func(base, ext string) error
+	removeFile          func(path string) error
+}
+
+func withGCTestHooks(ctx context.Context, hooks gcTestHooks) context.Context {
+	return context.WithValue(ctx, gcTestHooksKey{}, hooks)
+}
+
+func gcBeforeStageRename(ctx context.Context, base, ext string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if h, ok := ctx.Value(gcTestHooksKey{}).(gcTestHooks); ok && h.beforeStageRename != nil {
+		return h.beforeStageRename(base, ext)
+	}
+	return nil
+}
+
+func gcBeforeUnlinkRetired(ctx context.Context, base, ext string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if h, ok := ctx.Value(gcTestHooksKey{}).(gcTestHooks); ok && h.beforeUnlinkRetired != nil {
+		return h.beforeUnlinkRetired(base, ext)
+	}
+	return nil
+}
+
+func removeStoreFile(ctx context.Context, path string) error {
+	if h, ok := ctx.Value(gcTestHooksKey{}).(gcTestHooks); ok && h.removeFile != nil {
+		return h.removeFile(path)
+	}
+	return os.Remove(path)
+}
+
 func collectUnleasedPacksLocked(
 	ctx context.Context,
 	s *RetainedObjectStore,
 	packDir string,
 	leasedPacks map[string]struct{},
 ) (int, error) {
+	if err := finalizeInterruptedPackRetirements(ctx, packDir); err != nil {
+		return 0, err
+	}
 	packEntries, err := os.ReadDir(packDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -136,19 +178,6 @@ func collectUnleasedPacksLocked(
 		return 0, err
 	}
 	removed := 0
-	// First sweep any leftover .retiring-pack-* files from an earlier interrupted GC.
-	for _, pe := range packEntries {
-		if err := ctx.Err(); err != nil {
-			return removed, err
-		}
-		if pe.IsDir() || !strings.HasPrefix(pe.Name(), retiringPackPrefix) {
-			continue
-		}
-		retPath := filepath.Join(packDir, pe.Name())
-		if err := os.Remove(retPath); err != nil && !os.IsNotExist(err) {
-			return removed, fmt.Errorf("privategit: remove retiring pack artifact %s: %w", retPath, err)
-		}
-	}
 	// Collect candidate unleased pack bases.
 	unleasedBases := make(map[string]struct{})
 	for _, pe := range packEntries {
@@ -164,36 +193,69 @@ func collectUnleasedPacksLocked(
 			unleasedBases[base] = struct{}{}
 		}
 	}
+	type stagedFile struct {
+		ext string
+		src string
+		dst string
+	}
+	rollbackStaged := func(staged []stagedFile) bool {
+		allRestored := true
+		for i := len(staged) - 1; i >= 0; i-- {
+			if err := os.Rename(staged[i].dst, staged[i].src); err != nil && !os.IsNotExist(err) {
+				allRestored = false
+			}
+		}
+		return allRestored
+	}
 	// Retire each unleased pack in two phases: rename pack-* -> .retiring-pack-* first so no
 	// live pack-<hash> member remains partially present, then unlink the retired files.
 	for base := range unleasedBases {
 		if err := ctx.Err(); err != nil {
 			return removed, err
 		}
-		var staged []string
+		var staged []stagedFile
 		hasPack := false
 		for _, ext := range []string{".pack", ".idx", ".rev"} {
+			if err := gcBeforeStageRename(ctx, base, ext); err != nil {
+				if len(staged) > 0 {
+					removePackLocked(s, base)
+				}
+				return removed, err
+			}
 			src := filepath.Join(packDir, base+ext)
 			dst := filepath.Join(packDir, retiringPackPrefix+base+ext)
 			if err := os.Rename(src, dst); err != nil {
 				if os.IsNotExist(err) {
 					continue
 				}
+				if !rollbackStaged(staged) {
+					removePackLocked(s, base)
+				}
 				return removed, fmt.Errorf("privategit: stage pack retirement %s: %w", src, err)
 			}
 			if ext == ".pack" {
 				hasPack = true
 			}
-			staged = append(staged, dst)
+			staged = append(staged, stagedFile{ext: ext, src: src, dst: dst})
+		}
+		unlinkedAny := false
+		for _, item := range staged {
+			if err := gcBeforeUnlinkRetired(ctx, base, item.ext); err != nil {
+				removePackLocked(s, base)
+				return removed, err
+			}
+			if err := removeStoreFile(ctx, item.dst); err != nil && !os.IsNotExist(err) {
+				if !unlinkedAny && rollbackStaged(staged) {
+					return removed, fmt.Errorf("privategit: remove retired pack %s: %w", item.dst, err)
+				}
+				removePackLocked(s, base)
+				return removed, fmt.Errorf("privategit: remove retired pack %s: %w", item.dst, err)
+			}
+			unlinkedAny = true
 		}
 		removePackLocked(s, base)
 		if hasPack {
 			removed++
-		}
-		for _, dst := range staged {
-			if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
-				return removed, fmt.Errorf("privategit: remove retired pack %s: %w", dst, err)
-			}
 		}
 	}
 	return removed, nil
