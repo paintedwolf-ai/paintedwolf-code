@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Invalid uses must neither gain authority nor destroy the legitimate caller's
@@ -33,7 +35,13 @@ func TestExecutionPermitRejectsChangedIdentityWithoutConsumingOriginal(t *testin
 			if covered := changed.AuthorizedExecutionCapabilities(changed.Effects.CanonicalArgs, changedReq); len(covered) != 0 {
 				t.Fatalf("changed action borrowed policy coverage: %v", covered)
 			}
+			if changed.CurrentActionReview(changed.Effects.CanonicalArgs, changedReq) != nil {
+				t.Fatal("changed action borrowed reviewed policy reasons")
+			}
 			for range 2 {
+				if tc.CurrentActionReview(tc.Effects.CanonicalArgs, req) == nil {
+					t.Fatal("inspection lost original reviewed reasons")
+				}
 				if covered := tc.AuthorizedExecutionCapabilities(tc.Effects.CanonicalArgs, req); !slices.Equal(covered, []string{"host_execution"}) {
 					t.Fatalf("inspection lost or expanded original coverage: %v", covered)
 				}
@@ -46,6 +54,9 @@ func TestExecutionPermitRejectsChangedIdentityWithoutConsumingOriginal(t *testin
 			}
 			if covered := tc.AuthorizedExecutionCapabilities(tc.Effects.CanonicalArgs, req); len(covered) != 0 {
 				t.Fatalf("consumed authority remained available to policy: %v", covered)
+			}
+			if tc.CurrentActionReview(tc.Effects.CanonicalArgs, req) != nil {
+				t.Fatal("consumed invocation retained reviewed policy reasons")
 			}
 			if reject := finalizeExecutionCapability(tc, req); reject == nil {
 				t.Fatal("original authority was reusable")
@@ -86,6 +97,13 @@ func reviewedPermitFixture() (ToolContext, confine.Request) {
 		Effects:    InvocationEffects{CanonicalArgs: args},
 	}
 	tc.StampExecutionApproval(args, hitl.ProposedAction{Execution: hitl.ActionExecution{ExecutionBoundaryDigest: ExecutionBoundaryDigest(req)}})
+	tc.RecordCurrentActionReview(args, req, hitl.ProposedAction{
+		Scope:      hitl.ActionScope{SessionID: tc.Identity.SessionID},
+		Invocation: hitl.ActionInvocation{Tool: "command", ActionID: tc.EffectActionID(), Args: args},
+	}, &hitl.ApprovalResult{Decision: &gate.Decision{
+		Primary: api.GateUserRule,
+		Cited:   []gate.Fact{{Gate: api.GateUserRule, Key: "fixture.rule", Value: "reviewed", Source: "fixture"}},
+	}})
 	return tc, req
 }
 
@@ -95,6 +113,9 @@ func TestExecutionPermitInspectionDoesNotAuthorizeUnreviewedRequest(t *testing.T
 	unreviewed.BeginInvocation()
 	if covered := unreviewed.AuthorizedExecutionCapabilities(tc.Effects.CanonicalArgs, req); len(covered) != 0 {
 		t.Fatalf("new invocation inherited coverage: %v", covered)
+	}
+	if unreviewed.CurrentActionReview(tc.Effects.CanonicalArgs, req) != nil {
+		t.Fatal("new invocation inherited reviewed policy reasons")
 	}
 	changedArgs := map[string]any{"argv": []string{"fixture", "changed"}}
 	if covered := tc.AuthorizedExecutionCapabilities(changedArgs, req); len(covered) != 0 {
