@@ -1,6 +1,7 @@
 package command_test
 
 import (
+	"context"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestExternalSpawnUsesOnlyAdmittedWriteRoots(t *testing.T) {
@@ -24,7 +24,13 @@ func TestExternalSpawnUsesOnlyAdmittedWriteRoots(t *testing.T) {
 	approved := filepath.Join(outside, "approved")
 	testutil.FailErr(t, "create approved directory", os.Mkdir(approved, 0700))
 	f := newProgramFixture(t)
-	f.Configure = func(tc *tools.ToolContext) { tc.Files.GrantedWriteRoots = []string{approved} }
+	granted := true
+	f.Runtime.Executor.Boundary.SetSessionWriteRootOverlay(func(context.Context, string, string) []string {
+		if granted {
+			return []string{approved}
+		}
+		return nil
+	})
 	for _, tc := range []struct {
 		path    string
 		allowed bool
@@ -42,7 +48,7 @@ func TestExternalSpawnUsesOnlyAdmittedWriteRoots(t *testing.T) {
 			t.Fatalf("write effect %s: %q, %v", tc.path, data, err)
 		}
 	}
-	f.Configure = nil
+	granted = false
 	out, err := f.call(t, t.Context(), "external -- /bin/sh -c 'printf changed > \"$1\"' sh "+strconv.Quote(filepath.Join(approved, "result")))
 	testutil.FailErr(t, "execute without grant", err)
 	if decodeOutcome(t, out).Status == 0 {

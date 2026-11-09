@@ -1,8 +1,10 @@
 package oarcopy
 
 import (
-	"github.com/lycaon/lycaon/internal/confine"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/isolation"
 )
 
 func publishSocketReferences(facts, data map[string]any) {
@@ -14,7 +16,7 @@ func publishSocketReferences(facts, data map[string]any) {
 			}
 		}
 	}
-	if code, _ := data["rejection_code"].(string); code == "SANDBOX_SOCKET_PERMIT_REQUIRED" {
+	if code, _ := data["rejection_code"].(string); code == isolation.CodeSocketPermitRequired {
 		if path, ok := data["path"].(string); ok {
 			paths = append(append([]string(nil), paths...), path)
 		}
