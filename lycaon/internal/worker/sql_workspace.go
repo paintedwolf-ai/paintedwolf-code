@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/workspace"
 )
 
 // SetChildSessionID records the child session for transcript drill-down.
@@ -28,7 +29,7 @@ func (s *SQLStore) SetWorkerWorkspace(ctx context.Context, jobID, root, baseline
 	jobID = strings.TrimSpace(jobID)
 	root = strings.TrimSpace(root)
 	baselinePath = strings.TrimSpace(baselinePath)
-	if jobID == "" || root == "" || baselinePath == "" {
+	if jobID == "" || root == "" || (baselinePath == "" && !workspace.BranchUsesCheckpoints(root)) {
 		return false, nil
 	}
 	baselineID, relpath, err := workerWorkspaceIdentity(ctx, s.db, root, baselinePath)

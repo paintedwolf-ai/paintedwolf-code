@@ -209,6 +209,37 @@ func verifyBlobOnDisk(ctx context.Context, storeDir, sha string, expectedSize in
 	return fmt.Errorf("missing blob %s", sha)
 }
 
+func collectRootGitRefOIDs(headRef string, refs map[string]string) ([]string, error) {
+	seen := make(map[string]bool)
+	var oids []string
+	addOID := func(oid string) {
+		if !seen[oid] {
+			seen[oid] = true
+			oids = append(oids, oid)
+		}
+	}
+	if head := strings.ToLower(strings.TrimSpace(headRef)); head != "" && !strings.HasPrefix(head, "refs/") {
+		if !isGitOID(head) {
+			return nil, fmt.Errorf("invalid git head_ref %q", headRef)
+		}
+		addOID(head)
+	}
+	refNames := make([]string, 0, len(refs))
+	for ref := range refs {
+		refNames = append(refNames, ref)
+	}
+	sort.Strings(refNames)
+	for _, ref := range refNames {
+		rawOID := refs[ref]
+		oid := strings.ToLower(strings.TrimSpace(rawOID))
+		if !isGitOID(oid) {
+			return nil, fmt.Errorf("invalid git ref %q target %q", ref, rawOID)
+		}
+		addOID(oid)
+	}
+	return oids, nil
+}
+
 func collectRequiredGitOIDs(pg checkpoint.PrivateGitSnapshot) ([]string, []string, error) {
 	seenOIDs := make(map[string]bool)
 	seenPacks := make(map[string]bool)
@@ -221,53 +252,32 @@ func collectRequiredGitOIDs(pg checkpoint.PrivateGitSnapshot) ([]string, []strin
 			requiredOIDs = append(requiredOIDs, oid)
 		}
 	}
-	addSnap := func(headRef string, refs map[string]string, retained []string) error {
-		if head := strings.ToLower(strings.TrimSpace(headRef)); head != "" && !strings.HasPrefix(head, "refs/") {
-			if !isGitOID(head) {
-				return fmt.Errorf("invalid git head_ref %q", headRef)
-			}
-			addOID(head)
-		}
-
-		refNames := make([]string, 0, len(refs))
-		for ref := range refs {
-			refNames = append(refNames, ref)
-		}
-		sort.Strings(refNames)
-		for _, ref := range refNames {
-			rawOID := refs[ref]
-			oid := strings.ToLower(strings.TrimSpace(rawOID))
-			if !isGitOID(oid) {
-				return fmt.Errorf("invalid git ref %q target %q", ref, rawOID)
-			}
-			addOID(oid)
-		}
-
-		for _, raw := range retained {
-			trimmed := strings.TrimSpace(raw)
-			if strings.HasPrefix(trimmed, "pack:") {
-				packBase := strings.TrimSpace(strings.TrimPrefix(trimmed, "pack:"))
-				packBase = strings.TrimSuffix(strings.TrimSuffix(packBase, ".pack"), ".idx")
-				if !isValidGitPackBase(packBase) {
-					return fmt.Errorf("invalid retained git pack %q", raw)
-				}
-				if !seenPacks[packBase] {
-					seenPacks[packBase] = true
-					requiredPacks = append(requiredPacks, packBase)
-				}
-				continue
-			}
-			oid := strings.ToLower(trimmed)
-			if !isGitOID(oid) {
-				return fmt.Errorf("invalid retained git object id %q", raw)
-			}
-			addOID(oid)
-		}
-		return nil
-	}
-
-	if err := addSnap(pg.HeadRef, pg.Refs, pg.RetainedObjects); err != nil {
+	primaryOIDs, err := collectRootGitRefOIDs(pg.HeadRef, pg.Refs)
+	if err != nil {
 		return nil, nil, err
+	}
+	for _, oid := range primaryOIDs {
+		addOID(oid)
+	}
+	for _, raw := range pg.RetainedObjects {
+		trimmed := strings.TrimSpace(raw)
+		if strings.HasPrefix(trimmed, "pack:") {
+			packBase := strings.TrimSpace(strings.TrimPrefix(trimmed, "pack:"))
+			packBase = strings.TrimSuffix(strings.TrimSuffix(packBase, ".pack"), ".idx")
+			if !isValidGitPackBase(packBase) {
+				return nil, nil, fmt.Errorf("invalid retained git pack %q", raw)
+			}
+			if !seenPacks[packBase] {
+				seenPacks[packBase] = true
+				requiredPacks = append(requiredPacks, packBase)
+			}
+			continue
+		}
+		oid := strings.ToLower(trimmed)
+		if !isGitOID(oid) {
+			return nil, nil, fmt.Errorf("invalid retained git object id %q", raw)
+		}
+		addOID(oid)
 	}
 	rootIDs := make([]string, 0, len(pg.Roots))
 	for rootID := range pg.Roots {
@@ -279,8 +289,12 @@ func collectRequiredGitOIDs(pg checkpoint.PrivateGitSnapshot) ([]string, []strin
 	sort.Strings(rootIDs)
 	for _, rootID := range rootIDs {
 		rootSnap := pg.Roots[rootID]
-		if err := addSnap(rootSnap.HeadRef, rootSnap.Refs, rootSnap.RetainedObjects); err != nil {
-			return nil, nil, err
+		rootOIDs, err := collectRootGitRefOIDs(rootSnap.HeadRef, rootSnap.Refs)
+		if err != nil {
+			return nil, nil, fmt.Errorf("root %q: %w", rootID, err)
+		}
+		for _, oid := range rootOIDs {
+			addOID(oid)
 		}
 	}
 	for _, objCID := range pg.ObjectCheckpoints {
@@ -385,7 +399,7 @@ func verifyCheckpointGitClosureOnDisk(ctx context.Context, configDir, branchRel,
 		}
 		for _, entry := range entries {
 			if !entry.IsDir() || !isSafeCheckpointIdentity(entry.Name()) {
-				continue
+				return &InvalidError{Detail: fmt.Sprintf("invalid git-objects-roots entry %q in checkpoint %s", entry.Name(), cid)}
 			}
 			rDir := filepath.Join(rootsDir, entry.Name())
 			rPrefix := syntheticStorePrefix + "/checkpoints/" + cid + "/git-objects-roots/" + entry.Name()
