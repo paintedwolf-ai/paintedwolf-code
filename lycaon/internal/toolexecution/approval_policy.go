@@ -2,6 +2,9 @@ package toolexecution
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -9,12 +12,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // ApprovalPolicyEngine evaluates sandbox profiles then user approval rules.
@@ -64,7 +66,7 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 		return decision, nil
 	}
 
-	action := proposedActionFromPolicy(eval)
+	action := proposedActionFromPolicyWithContext(ctx, eval)
 	approval, err := p.gate.Evaluate(ctx, action)
 	if err != nil {
 		return nil, err
@@ -78,7 +80,7 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 			Approval:    approval,
 		}, nil
 	}
-	if approval.Required() && !boundaryApprovalCovers(eval, action, approval) {
+	if approval.Required() {
 		return &platform.PolicyDecision{
 			Allowed:            false,
 			RequiresApproval:   true,
@@ -89,88 +91,83 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 	return &platform.PolicyDecision{Allowed: true}, nil
 }
 
-// boundaryApprovalCovers reports whether a prior pre-spawn capability review
-// covers the approval reasons cited by the live gate decision. Live deny rules
-// and uncovered independent gate reasons are never suppressed.
-func boundaryApprovalCovers(eval platform.PolicyContext, action hitl.ProposedAction, approval *hitl.ApprovalResult) bool {
-	if !eval.BoundaryApprovalSatisfied || approval == nil || approval.Decision == nil {
-		return false
-	}
-	executionRequested := eval.ConfineRequest.HostExecution ||
-		eval.ConfineRequest.ProcessControl ||
-		eval.ConfineRequest.CredentialStore
-	hasSockets := len(action.Sockets.SocketGrants) > 0 && socketsCovered(action.Sockets)
-	hasDirectIP := eval.DirectIPRequested && eval.AuthorizedDirectIP
-	hasExecution := executionRequested && (eval.PolicyWritesReviewed || (!hasSockets && !hasDirectIP))
-	if !hasExecution && !hasSockets && !hasDirectIP {
-		return false
-	}
-	if len(eval.ConfineRequest.PolicyWriteGrants) > 0 && (!eval.PolicyWritesReviewed || !hasExecution) {
-		return false
-	}
-	for _, g := range approval.Decision.Gates() {
-		switch g {
-		case api.GateUnobservedChannel:
-			if !unobservedChannelCovered(approval.Decision.Cited, hasExecution, hasSockets, hasDirectIP) {
-				return false
-			}
-		case api.GateAgentPolicyChange:
-			if !eval.PolicyWritesReviewed || !hasExecution {
-				return false
-			}
-		case api.GateAuthorityMisuse:
-			if !hasExecution && !hasSockets && !hasDirectIP {
-				return false
-			}
-		default:
-			if !eval.PolicyWritesReviewed || !hasExecution {
-				return false
-			}
-		}
-	}
-	return true
+type executionApprovalWitnessKey struct{}
+
+// executionApprovalWitness binds a current-call execution capability permit to
+// the exact session, action, confine boundary, and argument set that preflight
+// reviewed, so proposedActionFromPolicyWithContext subtracts only that covered
+// execution capability before the shared gate evaluates all remaining facts.
+type executionApprovalWitness struct {
+	toolName        string
+	sessionID       string
+	actionID        string
+	boundaryDigest  string
+	argsDigest      string
+	hostExecution   bool
+	processControl  bool
+	credentialStore bool
 }
 
-func unobservedChannelCovered(cited []gate.Fact, hasExecution, hasSockets, hasDirectIP bool) bool {
-	for _, f := range cited {
-		switch f.Key {
-		case "boundary.execution":
-			if !hasExecution || strings.HasPrefix(f.Value, "native_process:") {
-				return false
-			}
-		case "boundary.egress":
-			if !hasDirectIP {
-				return false
-			}
-		case "boundary.sockets":
-			return false
-		case "boundary.applied", "boundary.visibility":
-			if !hasExecution && !hasSockets && !hasDirectIP {
-				return false
-			}
-		}
-	}
-	return true
+func withExecutionApprovalWitness(ctx context.Context, witness executionApprovalWitness) context.Context {
+	return context.WithValue(ctx, executionApprovalWitnessKey{}, witness)
 }
 
-func socketsCovered(sockets hitl.ActionSockets) bool {
-	if len(sockets.SocketGrants) == 0 {
+func executionApprovalWitnessFromContext(ctx context.Context) (executionApprovalWitness, bool) {
+	if ctx == nil {
+		return executionApprovalWitness{}, false
+	}
+	witness, ok := ctx.Value(executionApprovalWitnessKey{}).(executionApprovalWitness)
+	return witness, ok
+}
+
+func (w executionApprovalWitness) matches(eval platform.PolicyContext) bool {
+	confReq := normalizedPolicyConfineRequest(eval)
+	if !confReq.HostExecution && !confReq.ProcessControl && !confReq.CredentialStore {
 		return false
 	}
-	covered := make(map[string]struct{}, len(sockets.AuthorizedSocketDigests))
-	for _, digest := range sockets.AuthorizedSocketDigests {
-		digest = strings.TrimSpace(digest)
-		if digest != "" {
-			covered[digest] = struct{}{}
-		}
+	return w.toolName == eval.ToolName &&
+		w.sessionID == eval.SessionID &&
+		w.actionID == eval.ActionID &&
+		w.boundaryDigest != "" &&
+		w.boundaryDigest == tools.ExecutionBoundaryDigest(confReq) &&
+		w.argsDigest != "" &&
+		w.argsDigest == policyArgumentsDigest(eval.ToolArgs) &&
+		w.hostExecution == confReq.HostExecution &&
+		w.processControl == confReq.ProcessControl &&
+		w.credentialStore == confReq.CredentialStore
+}
+
+func policyArgumentsDigest(args map[string]any) string {
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return ""
 	}
-	for _, grant := range sockets.SocketGrants {
-		digest := confine.SocketPathsDigest([]confine.SocketGrant{grant})
-		if _, ok := covered[digest]; !ok {
-			return false
-		}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+func normalizedPolicyConfineRequest(eval platform.PolicyContext) confine.Request {
+	return normalizedPolicyConfineRequestFromParts(
+		eval.ConfineRequest,
+		eval.ProjectDir,
+		eval.DirectIPRequested,
+		eval.AuthorizedDirectIP,
+	)
+}
+
+func normalizedPolicyConfineRequestFromParts(
+	confReq confine.Request,
+	projectDir string,
+	directIPRequested, authorizedDirectIP bool,
+) confine.Request {
+	if len(confReq.Roots) == 0 && strings.TrimSpace(projectDir) != "" {
+		confReq.Roots = []string{projectDir}
 	}
-	return true
+	if (directIPRequested || authorizedDirectIP) && confReq.Egress != confine.EgressDirectIP {
+		confReq.Egress = confine.EgressDirectIP
+		confReq.SocksProxyEnv = false
+	}
+	return confReq
 }
 
 // pathArgKeys are the scalar/list argument names that name a file a tool will touch.
@@ -306,17 +303,25 @@ func pairFilesFromArgs(args map[string]any) []string {
 	return files
 }
 
+func proposedActionFromPolicyWithContext(ctx context.Context, eval platform.PolicyContext) hitl.ProposedAction {
+	action := proposedActionFromPolicy(eval)
+	confReq := normalizedPolicyConfineRequest(eval)
+	if witness, ok := executionApprovalWitnessFromContext(ctx); ok && witness.matches(eval) {
+		action.Execution.Contained.HostExecution = false
+		action.Execution.Contained.ProcessControl = false
+		action.Execution.Contained.CredentialStore = false
+		action.Execution.Contained.FSJailed = len(confReq.Roots) > 0
+		if writeRoots, err := confine.WriteRootsForBoundary(confReq.ProjectID, confReq.Roots, confReq.GrantedWriteRoots, confReq.SessionScratchRoot); err == nil {
+			action.Execution.Contained.WriteRoots = writeRoots
+		}
+	}
+	return action
+}
+
 // proposedActionFromPolicy builds the gate input, stamping Contained from the
 // same confine request the executor's spawn path will apply.
 func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
-	confReq := eval.ConfineRequest
-	if len(confReq.Roots) == 0 && strings.TrimSpace(eval.ProjectDir) != "" {
-		confReq.Roots = []string{eval.ProjectDir}
-	}
-	if (eval.DirectIPRequested || eval.AuthorizedDirectIP) && confReq.Egress != confine.EgressDirectIP {
-		confReq.Egress = confine.EgressDirectIP
-		confReq.SocksProxyEnv = false
-	}
+	confReq := normalizedPolicyConfineRequest(eval)
 	return hitl.ProposedAction{
 		Mutations: hitl.ActionMutations{
 			AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),

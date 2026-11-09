@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 
-	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostresources"
@@ -26,7 +25,6 @@ func (e *Executor) applyPreInvokeBoundary(
 	tc tools.ToolContext,
 ) (map[string]any, tools.ToolContext, error) {
 	var err error
-	resetPreInvokeBoundaryState(ctx, &tc)
 	// Stamp SOCKS injection before building confinement requests.
 	if socks, reject := capabilityrequest.ParseSocksProxyArg(args); reject != nil {
 		return nil, tc, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
@@ -93,6 +91,7 @@ func (e *Executor) applyPreInvokeBoundary(
 	if reject != nil {
 		return nil, tc, reject
 	}
+	tc.Execution.ProcessControl, tc.Execution.CredentialStore, tc.Execution.HostExecution = false, false, false
 	if request != nil {
 		tc.Execution.ProcessControl, tc.Execution.CredentialStore, tc.Execution.HostExecution = request.ProcessControl, request.CredentialStore, request.HostExecution
 	}
@@ -124,15 +123,12 @@ func (e *Executor) applyPreInvokeBoundary(
 		tc.Socket.SocketGrantStates = append([]string(nil), socketPreflight.SocketGrantStates...)
 	}
 	tc.Local.AuthzRecorder = e.Approvals.authzRecorder
-	socketSatisfied := socketPreflight != nil &&
-		socketPreflight.ApprovalSatisfied &&
-		socketPreflight.AuthorizationSource == authzledger.AuthorizationSourceHuman
 	directPreflight, err := e.Capabilities.preflightDirectIPCapability(
 		ctx,
 		tool,
 		args,
 		tc,
-		socketSatisfied,
+		socketPreflight != nil && socketPreflight.ApprovalSatisfied,
 	)
 	if err != nil {
 		return nil, tc, err
@@ -166,6 +162,7 @@ func (e *Executor) applyPreInvokeBoundary(
 		tc.Local.LoopbackConnectGranted = true
 		tc.Local.LoopbackConnectPorts = append([]uint16(nil), connectPreflight.Ports...)
 	}
+	ctx = withExecutionApprovalWitness(ctx, executionApprovalWitness{})
 	if err := e.Process.preflightExecutionCapability(ctx, tool, args, &tc); err != nil {
 		return nil, tc, err
 	}
@@ -175,7 +172,25 @@ func (e *Executor) applyPreInvokeBoundary(
 	// Policy, native path resolution, and execution share one request.
 	confReq := e.Boundary.actionConfineRequest(ctx, tc)
 	tc.Files.GrantedWriteRoots = append([]string(nil), confReq.GrantedWriteRoots...)
-	boundaryApproved := socketSatisfied ||
+	if request != nil && (request.HostExecution || request.ProcessControl || request.CredentialStore) && tc.HasExecutionApproval() {
+		normalized := normalizedPolicyConfineRequestFromParts(
+			confReq,
+			tc.ActiveRootPath(),
+			tc.Direct.DirectIPRequested,
+			tc.Direct.DirectIPAuthorized,
+		)
+		ctx = withExecutionApprovalWitness(ctx, executionApprovalWitness{
+			toolName:        tool,
+			sessionID:       tc.Identity.SessionID,
+			actionID:        tc.EffectActionID(),
+			boundaryDigest:  tools.ExecutionBoundaryDigest(normalized),
+			argsDigest:      policyArgumentsDigest(args),
+			hostExecution:   confReq.HostExecution,
+			processControl:  confReq.ProcessControl,
+			credentialStore: confReq.CredentialStore,
+		})
+	}
+	boundaryApproved := (socketPreflight != nil && socketPreflight.ApprovalSatisfied) ||
 		(directPreflight != nil && directPreflight.ApprovalSatisfied) || tc.HasExecutionApproval()
 	// Socket/direct outer actions reach profile policy.Evaluate with BoundaryApprovalSatisfied via applyPreInvokePolicy.
 	args, err = e.applyPreInvokePolicy(ctx, tool, profileID, args, &tc, confReq, boundaryApproved)
@@ -217,6 +232,7 @@ func (e *Executor) applyPreInvokePolicy(
 		if decision.RequiresApproval && (e.Approvals.approvalGate == nil || e.Approvals.checkpointMgr == nil) {
 			return nil, fmt.Errorf("file change approval checkpoints not configured")
 		}
+		tc.Files.PreparedFileAccess = nil
 		if decision.Approval != nil {
 			tc.Files.PreparedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
 		}
@@ -240,36 +256,4 @@ func (e *Executor) applyPreInvokePolicy(
 		}
 	}
 	return args, nil
-}
-
-// resetPreInvokeBoundaryState clears per-attempt boundary state so a re-entered
-// pre-invoke pass (for example after native DisclosedArgv) never inherits an
-// obsolete approval or realization from an earlier target set.
-func resetPreInvokeBoundaryState(ctx context.Context, tc *tools.ToolContext) {
-	if tc == nil {
-		return
-	}
-	if tc.Effects.Secrets != nil {
-		tc.Effects.Secrets.Finish(ctx)
-	}
-	approvedFileAccess := tc.Files.ApprovedFileAccess
-	tc.BeginInvocation()
-	tc.Files.ApprovedFileAccess = approvedFileAccess
-	tc.Files.GrantedWriteRoots = nil
-	tc.Files.SessionReadPaths = nil
-	tc.Files.PackageExecution = nil
-	tc.Host.HostResources = nil
-	tc.Host.HostResourceFamilies = nil
-	tc.Host.HostResourceAsk = nil
-	tc.Host.HostResourcePathExtra = nil
-	tc.Host.RealizationWriteRoots = nil
-	tc.Host.RealizationSockets = nil
-	tc.Socket = tools.InvocationSocket{}
-	tc.Direct = tools.InvocationDirect{}
-	tc.Local.SocksProxyEnv = false
-	tc.Local.LocalListenGranted = false
-	tc.Local.LocalListenPorts = nil
-	tc.Local.OwnedLoopbackPorts = nil
-	tc.Local.LoopbackConnectGranted = false
-	tc.Local.LoopbackConnectPorts = nil
 }
