@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createSignal } from "solid-js";
 import { cleanup, fireEvent, render } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NATIVE_UI_HANDLER_IDS } from "../../contributions/native-ui-handlers.generated.ts";
 import { STOCK_FRAME } from "../../contributions/stock-frame.generated.ts";
+import { editorWordWrapPref, saveEditorWordWrap } from "../../settings/editor/editor-prefs.ts";
+import { extractCssRuleBlock } from "../../styling/css-contract.ts";
 import { fileBufferKey, type FileBufferKey } from "../components/project-files-model.ts";
 import { resolveEditorIdentity } from "../documents/editor-identity.ts";
 import type { FileBuffer } from "../documents/files-buffer-state.ts";
@@ -253,5 +257,97 @@ describe("Pretty display host contributions and status chrome (FMT-AC-06, FMT-IN
     const icons = tabView.container.querySelectorAll(".den-files-tab-kind-icon");
     expect(icons).toHaveLength(1);
     expect(icons[0]?.getAttribute("data-tip")).toBe("File comparison");
+  });
+
+  it("drives persistent depressed styling for both Pretty and Wrap from aria-pressed while keeping their selection independent (FMT-AC-06)", async () => {
+    const projectId = "proj-independent-toggles";
+    const tabKey = fileBufferKey("root", "both.json");
+    const initialWrap = editorWordWrapPref();
+    await saveEditorWordWrap(false);
+
+    try {
+      const unregister = registerPrettySurfaceCapability(projectId, tabKey, {
+        enabled: () => isPrettyDisplayEnabled(projectId, tabKey),
+        onToggle: () => {
+          togglePrettyDisplayPref(projectId, tabKey);
+        },
+      });
+
+      const view = render(() => (
+        <FilesEditorStatus
+          identity={resolveEditorIdentity({
+            historical: false,
+            workerDraft: false,
+            deleted: false,
+            writable: true,
+            preview: false,
+            editable: true,
+          })}
+          dirtyCount={0}
+          language="JSON"
+          pretty={prettyStatusToggleForTab(projectId, tabKey)}
+        />
+      ));
+
+      const prettyBtn = view.getByTestId("files-editor-pretty-toggle") as HTMLButtonElement;
+      const wrapBtn = view.getByTestId("files-editor-wrap-toggle") as HTMLButtonElement;
+
+      // 1. Both off
+      expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("false");
+
+      // 2. Pretty on, Wrap off
+      fireEvent.click(prettyBtn);
+      expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("false");
+
+      // 3. Both Pretty and Wrap on simultaneously
+      fireEvent.click(wrapBtn);
+      expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+
+      // 4. Pretty off via Alt+P/menu handler while Wrap remains on
+      expect(invokePrettyToggleForTab(projectId, tabKey)).toBe(true);
+      expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+
+      unregister();
+    } finally {
+      await saveEditorWordWrap(initialWrap);
+    }
+
+    const previewDomainCss = readFileSync(
+      join(import.meta.dirname, "../../styling/files/preview-domain.css"),
+      "utf8",
+    );
+    const shellUtilitiesCss = readFileSync(
+      join(import.meta.dirname, "../../shell-utilities.css"),
+      "utf8",
+    );
+    const baseRule = extractCssRuleBlock(
+      previewDomainCss,
+      ".den-files-editor__status-toggle",
+    );
+    const sharedInsetRecipe = shellUtilitiesCss.match(
+      /@utility\s+den-inset-icon-btn\s*\{([\s\S]*?)\n\}/,
+    )?.[1] ?? "";
+
+    // Status toggles reuse shared den-inset-icon-btn chrome and only override compact sizing in preview-domain.css:
+    expect(baseRule).toMatch(/width:\s*auto/);
+    expect(baseRule).toMatch(/height:\s*auto/);
+    expect(baseRule).toMatch(/padding:\s*2px 6px/);
+    expect(baseRule).toMatch(/font-size:\s*var\(--text-den-caption\)/);
+    expect(baseRule).not.toMatch(/--den-accent-signal/);
+
+    // Shared den-inset-icon-btn recipe defines neutral-gray pressed/hover/focus/disabled states without accent-signal tint:
+    expect(sharedInsetRecipe).toMatch(
+      /&\[aria-pressed="true"\]:not\(:disabled\):not\([^)]+\)\s*\{[\s\S]*?background:\s*var\(--den-surface-offset\)[\s\S]*?box-shadow:\s*var\(--den-bevel-inset\)[\s\S]*?color:\s*var\(--den-text\)/,
+    );
+    expect(sharedInsetRecipe).toMatch(
+      /&\[aria-pressed="true"\]:hover:not\(:disabled\):not\([^)]+\)\s*\{[\s\S]*?background:\s*var\(--den-tint-2\)[\s\S]*?box-shadow:\s*var\(--den-bevel-inset\)[\s\S]*?color:\s*var\(--den-text\)/,
+    );
+    expect(sharedInsetRecipe).not.toMatch(/--den-accent-signal/);
+    expect(sharedInsetRecipe).toMatch(/&:focus-visible\s*\{[\s\S]*?box-shadow:/);
+    expect(sharedInsetRecipe).toMatch(/&:disabled\s*\{[\s\S]*?opacity:\s*0\.4/);
   });
 });

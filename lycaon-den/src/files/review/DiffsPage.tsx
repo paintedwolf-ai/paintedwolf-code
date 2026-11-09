@@ -371,7 +371,7 @@ export function DiffsPage(props: Props) {
         <span class="den-files-editor__status-spacer" />
         <button
           type="button"
-          class="den-files-editor__status-toggle den-files-editor__status-wrap"
+          class="den-files-editor__status-toggle den-inset-icon-btn den-files-editor__status-wrap"
           data-testid="diffs-page-wrap-toggle"
           aria-pressed={diffWordWrapPref()}
           onClick={() => void saveDiffWordWrap(!diffWordWrapPref())}
