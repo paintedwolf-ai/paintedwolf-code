@@ -148,28 +148,29 @@ func (m *Service) Begin(
 	if !m.Decider().Available() {
 		availability = turnload.RankingUnavailable
 	}
-	m.Ledger.ReconcileCatalog(sessionID, loadable, availability)
 	request := m.ResolvedRequest(ctx, sess)
 	openingMessageID, text, ok := m.Request(ctx, in, history, openingMessageID, request)
 	if !ok {
+		m.Ledger.ReconcileCatalog(sessionID, loadable, availability)
 		return nil
 	}
 	if sess.IsWorkerChild() {
 		text, ok = m.WorkerRequest(sess, in.WorkerJobID, openingMessageID, history)
 		if !ok {
 			m.beginUndecidedTurn(ctx, sess, history, surfaceID, profileID, openingMessageID)
+			m.Ledger.ExposeCatalog(sessionID, availability)
 			return nil
 		}
 	}
 	catalog, err := turnload.LoadCatalog()
 	if err != nil {
-		m.Ledger.ExposeCatalog(sessionID, turnload.RankingUnavailable)
+		m.Ledger.ReconcileCatalog(sessionID, loadable, turnload.RankingUnavailable)
 		turnLoadLog.Warn("decision catalog unavailable", "error", err)
 		return nil
 	}
 	units, err := prompts.UnitCatalogFor(nil)
 	if err != nil {
-		m.Ledger.ExposeCatalog(sessionID, turnload.RankingUnavailable)
+		m.Ledger.ReconcileCatalog(sessionID, loadable, turnload.RankingUnavailable)
 		turnLoadLog.Warn("unit catalog unavailable", "error", err)
 		return nil
 	}

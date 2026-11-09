@@ -472,6 +472,7 @@ func (l *Ledger) Restore(sessionID string, recorded Standing, history []api.Mess
 
 // RequestToolsResult is the request_tools payload the ledger replays.
 type RequestToolsResult struct {
+	FullCatalog   bool       `json:"full_catalog,omitempty"`
 	Need          string     `json:"need"`
 	Discovery     *Discovery `json:"discovery,omitempty"`
 	Loaded        []string   `json:"loaded"`
