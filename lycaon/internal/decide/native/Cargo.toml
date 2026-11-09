@@ -43,5 +43,8 @@ opt-level = 3
 lto = "thin"
 strip = true
 
+[profile.release.build-override]
+strip = "none"
+
 [patch.crates-io]
 mlx-sys = { path = "vendor/mlx-sys" }

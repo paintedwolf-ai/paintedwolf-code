@@ -26,3 +26,6 @@ panic = "abort"
 overflow-checks = true
 debug-assertions = true
 strip = true
+
+[profile.release.build-override]
+strip = "none"
