@@ -229,6 +229,11 @@
   touch-action: none;
 }
 
+/* The browse main suppresses pointer events during resize. Keep the grip clickable. */
+.den-stage--split-resizing .den-files-split {
+  pointer-events: auto;
+}
+
 /* A wider chrome target stops before the tree's scrollbar begins. */
 .den-files-split::after {
   content: "";
