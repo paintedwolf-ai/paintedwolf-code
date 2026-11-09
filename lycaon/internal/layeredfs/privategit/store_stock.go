@@ -186,6 +186,9 @@ func scanPackDir(
 	packSizes map[string]int64, packOIDs map[string]map[string]struct{},
 	uniqueOIDs map[string]struct{}, inv *StockInventory,
 ) error {
+	if err := finalizeInterruptedPackRetirements(ctx, packDir); err != nil {
+		return err
+	}
 	pEntries, err := os.ReadDir(packDir)
 	if err != nil {
 		return fmt.Errorf("privategit: read pack dir %s: %w", packDir, err)
@@ -230,6 +233,49 @@ func scanPackDir(
 		inv.PackedObjects += int64(len(oids))
 		for oid := range oids {
 			uniqueOIDs[oid] = struct{}{}
+		}
+	}
+	return nil
+}
+
+// finalizeInterruptedPackRetirements reconciles any pack retirement interrupted mid-GC:
+// if a pack's retirement was started (.retiring-pack-<base>.* exists), any remaining live
+// companion files for <base> and the .retiring-pack-<base>.* staging files are removed
+// before scanning live pack/idx pairs.
+func finalizeInterruptedPackRetirements(ctx context.Context, packDir string) error {
+	entries, err := os.ReadDir(packDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("privategit: read pack dir %s: %w", packDir, err)
+	}
+	retiringBases := make(map[string]struct{})
+	for _, pe := range entries {
+		if pe.IsDir() || !strings.HasPrefix(pe.Name(), retiringPackPrefix) {
+			continue
+		}
+		trimmed := strings.TrimPrefix(pe.Name(), retiringPackPrefix)
+		ext := filepath.Ext(trimmed)
+		if ext == ".pack" || ext == ".idx" || ext == ".rev" {
+			retiringBases[strings.TrimSuffix(trimmed, ext)] = struct{}{}
+		}
+	}
+	if len(retiringBases) == 0 {
+		return nil
+	}
+	_ = os.Chmod(packDir, 0o755)
+	for base := range retiringBases {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		for _, prefix := range []string{"", retiringPackPrefix} {
+			for _, ext := range []string{".pack", ".idx", ".rev"} {
+				p := filepath.Join(packDir, prefix+base+ext)
+				if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+					return fmt.Errorf("privategit: finalize interrupted pack retirement %s: %w", p, err)
+				}
+			}
 		}
 	}
 	return nil

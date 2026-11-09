@@ -102,50 +102,99 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 			if _, keep := leasedOIDs[oid]; keep {
 				continue
 			}
-			if err := os.Remove(filepath.Join(subDir, f.Name())); err == nil {
-				removeLooseObjectLocked(s, oid)
-				removed++
+			loosePath := filepath.Join(subDir, f.Name())
+			if err := os.Remove(loosePath); err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return removed, fmt.Errorf("privategit: remove unreferenced loose object %s: %w", loosePath, err)
 			}
+			removeLooseObjectLocked(s, oid)
+			removed++
 		}
 	}
 
 	packDir := filepath.Join(s.objectsDir, "pack")
+	removedPacks, err := collectUnleasedPacksLocked(ctx, s, packDir, leasedPacks)
+	removed += removedPacks
+	return removed, err
+}
+
+const retiringPackPrefix = ".retiring-"
+
+func collectUnleasedPacksLocked(
+	ctx context.Context,
+	s *RetainedObjectStore,
+	packDir string,
+	leasedPacks map[string]struct{},
+) (int, error) {
 	packEntries, err := os.ReadDir(packDir)
-	if err != nil && !os.IsNotExist(err) {
-		return removed, err
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
 	}
-	// First pass: remove unleased .pack files before companion .idx/.rev files so an
-	// interrupted GC never leaves an orphan .pack without .idx on disk.
+	removed := 0
+	// First sweep any leftover .retiring-pack-* files from an earlier interrupted GC.
 	for _, pe := range packEntries {
 		if err := ctx.Err(); err != nil {
 			return removed, err
 		}
-		if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") || filepath.Ext(pe.Name()) != ".pack" {
+		if pe.IsDir() || !strings.HasPrefix(pe.Name(), retiringPackPrefix) {
 			continue
 		}
-		base := strings.TrimSuffix(pe.Name(), ".pack")
-		if _, keep := leasedPacks[base]; keep {
-			continue
-		}
-		if err := os.Remove(filepath.Join(packDir, pe.Name())); err == nil {
-			removePackLocked(s, base)
-			removed++
+		retPath := filepath.Join(packDir, pe.Name())
+		if err := os.Remove(retPath); err != nil && !os.IsNotExist(err) {
+			return removed, fmt.Errorf("privategit: remove retiring pack artifact %s: %w", retPath, err)
 		}
 	}
-	// Second pass: remove companion files (.idx, .rev, etc.) for unleased packs.
+	// Collect candidate unleased pack bases.
+	unleasedBases := make(map[string]struct{})
 	for _, pe := range packEntries {
-		if err := ctx.Err(); err != nil {
-			return removed, err
-		}
-		if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") || filepath.Ext(pe.Name()) == ".pack" {
+		if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") {
 			continue
 		}
 		ext := filepath.Ext(pe.Name())
-		base := strings.TrimSuffix(pe.Name(), ext)
-		if _, keep := leasedPacks[base]; keep {
+		if ext != ".pack" && ext != ".idx" && ext != ".rev" {
 			continue
 		}
-		_ = os.Remove(filepath.Join(packDir, pe.Name()))
+		base := strings.TrimSuffix(pe.Name(), ext)
+		if _, keep := leasedPacks[base]; !keep {
+			unleasedBases[base] = struct{}{}
+		}
+	}
+	// Retire each unleased pack in two phases: rename pack-* -> .retiring-pack-* first so no
+	// live pack-<hash> member remains partially present, then unlink the retired files.
+	for base := range unleasedBases {
+		if err := ctx.Err(); err != nil {
+			return removed, err
+		}
+		var staged []string
+		hasPack := false
+		for _, ext := range []string{".pack", ".idx", ".rev"} {
+			src := filepath.Join(packDir, base+ext)
+			dst := filepath.Join(packDir, retiringPackPrefix+base+ext)
+			if err := os.Rename(src, dst); err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return removed, fmt.Errorf("privategit: stage pack retirement %s: %w", src, err)
+			}
+			if ext == ".pack" {
+				hasPack = true
+			}
+			staged = append(staged, dst)
+		}
+		removePackLocked(s, base)
+		if hasPack {
+			removed++
+		}
+		for _, dst := range staged {
+			if err := os.Remove(dst); err != nil && !os.IsNotExist(err) {
+				return removed, fmt.Errorf("privategit: remove retired pack %s: %w", dst, err)
+			}
+		}
 	}
 	return removed, nil
 }

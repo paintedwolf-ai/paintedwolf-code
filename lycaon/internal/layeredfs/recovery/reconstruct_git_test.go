@@ -112,12 +112,11 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 		PrivateGit: checkpoint.PrivateGitSnapshot{
 			HeadRef:         cpGit.HeadSymbolic,
 			Refs:            cpGit.Refs,
-			RetainedObjects: cpGit.Artifact.ReachableOIDs,
-			Roots: map[string]checkpoint.RootGitSnapshot{
+			RetainedObjects: append(append([]string(nil), cpGit.Artifact.ReachableOIDs...), cpSecGit.Artifact.ReachableOIDs...),
+			Roots: map[string]checkpoint.RootGitRefs{
 				"second": {
-					HeadRef:         cpSecGit.HeadSymbolic,
-					Refs:            cpSecGit.Refs,
-					RetainedObjects: cpSecGit.Artifact.ReachableOIDs,
+					HeadRef: cpSecGit.HeadSymbolic,
+					Refs:    cpSecGit.Refs,
 				},
 			},
 		},

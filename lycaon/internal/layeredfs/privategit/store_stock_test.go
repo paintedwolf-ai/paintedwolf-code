@@ -269,3 +269,95 @@ func TestCheckpointCreatedObjectsUpdateRetainedStockAndReopen(t *testing.T) {
 		t.Fatalf("reopened store Metrics (%+v) did not match checkpoint stock (%+v)", mReopen, mAfterCP)
 	}
 }
+
+func TestRetainedObjectStoreInterruptedPackRetirementReopenAtEachBoundary(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	ctx := t.Context()
+
+	// Create two distinct packed repositories so we can lease pack 1 and retire pack 2 across
+	// each interruption boundary while verifying pack 1 remains intact.
+	buildPackedRepo := func(name, content string) (string, string) {
+		dir := filepath.Join(tmp, name)
+		testutil.FailErr(t, "mkdir "+name, os.MkdirAll(dir, 0o755))
+		gittest.Init(t, dir)
+		gittest.Run(t, dir, "checkout", "-b", "main")
+		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(dir, name+".txt"), []byte(content), 0o644))
+		gittest.CommitAll(t, dir, "commit "+name)
+		oid := strings.TrimSpace(gittest.Run(t, dir, "rev-parse", "HEAD"))
+		gittest.Run(t, dir, "repack", "-a", "-d")
+		return filepath.Join(dir, ".git", "objects"), oid
+	}
+
+	objDirKeep, oidKeep := buildPackedRepo("keep", "retained-pack-payload\n")
+	objDirRetire, oidRetire := buildPackedRepo("retire", "retiring-pack-payload\n")
+
+	findPackBase := func(objDir string) string {
+		entries, err := os.ReadDir(filepath.Join(objDir, "pack"))
+		testutil.FailErr(t, "ReadDir pack", err)
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".pack") {
+				return strings.TrimSuffix(e.Name(), ".pack")
+			}
+		}
+		t.Fatalf("no .pack found in %s", objDir)
+		return ""
+	}
+	baseKeep := findPackBase(objDirKeep)
+	baseRetire := findPackBase(objDirRetire)
+
+	for _, boundary := range []string{
+		"after_pack_renamed_to_retiring",
+		"after_idx_renamed_to_retiring",
+		"after_retiring_pack_unlinked",
+	} {
+		t.Run(boundary, func(t *testing.T) {
+			storeRoot := filepath.Join(tmp, "store-"+boundary)
+			store, err := NewRetainedObjectStore(storeRoot)
+			testutil.FailErr(t, "NewRetainedObjectStore", err)
+			_, _, err = store.ImportRepositoryObjects(ctx, []string{objDirKeep}, []string{oidKeep})
+			testutil.FailErr(t, "import keep", err)
+			_, _, err = store.ImportRepositoryObjects(ctx, []string{objDirRetire}, []string{oidRetire})
+			testutil.FailErr(t, "import retire", err)
+			testutil.FailErr(t, "store.Close", store.Close())
+
+			packDir := filepath.Join(store.ObjectsDir(), "pack")
+			srcPack := filepath.Join(packDir, baseRetire+".pack")
+			srcIdx := filepath.Join(packDir, baseRetire+".idx")
+			retPack := filepath.Join(packDir, retiringPackPrefix+baseRetire+".pack")
+			retIdx := filepath.Join(packDir, retiringPackPrefix+baseRetire+".idx")
+
+			switch boundary {
+			case "after_pack_renamed_to_retiring":
+				// Simulate crash right after renaming .pack -> .retiring-pack-*, while .idx is still at baseRetire+".idx".
+				testutil.FailErr(t, "rename .pack", os.Rename(srcPack, retPack))
+			case "after_idx_renamed_to_retiring":
+				// Simulate crash after both .pack and .idx are renamed to .retiring-pack-*.
+				testutil.FailErr(t, "rename .pack", os.Rename(srcPack, retPack))
+				testutil.FailErr(t, "rename .idx", os.Rename(srcIdx, retIdx))
+			case "after_retiring_pack_unlinked":
+				// Simulate crash after .retiring-pack-*.pack was unlinked but .retiring-pack-*.idx remains.
+				testutil.FailErr(t, "rename .pack", os.Rename(srcPack, retPack))
+				testutil.FailErr(t, "rename .idx", os.Rename(srcIdx, retIdx))
+				testutil.FailErr(t, "remove retiring .pack", os.Remove(retPack))
+			}
+
+			reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+			testutil.FailErr(t, "reopen after "+boundary, err)
+			defer func() { _ = reopened.Close() }()
+
+			if !reopened.HasObject(oidKeep) || !reopened.HasObject("pack:"+baseKeep) {
+				t.Fatalf("expected retained pack %s (%s) preserved across %s", baseKeep, oidKeep, boundary)
+			}
+			if reopened.HasObject(oidRetire) || reopened.HasObject("pack:"+baseRetire) {
+				t.Fatalf("expected retired pack %s (%s) finalized and absent after %s", baseRetire, oidRetire, boundary)
+			}
+			inv, err := reopened.InspectStock(ctx)
+			testutil.FailErr(t, "InspectStock after "+boundary, err)
+			m := reopened.Metrics()
+			if !inv.Complete || m.RetainedObjects != inv.LogicalObjects || m.RetainedBytes != inv.StoredBytes {
+				t.Fatalf("reopened stock mismatch after %s: metrics=%+v inspect=%+v", boundary, m, inv)
+			}
+		})
+	}
+}
