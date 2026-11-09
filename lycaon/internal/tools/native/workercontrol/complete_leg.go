@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // CompleteLegTool is the worker closeout tool name.
@@ -14,8 +15,9 @@ const CompleteLegTool = "complete_leg"
 
 // CompleteLegRecord is the accepted-report view the closeout ack states.
 type CompleteLegRecord struct {
-	LegStatus string
-	Findings  int
+	Acceptance *api.WorkerReportAcceptance
+	LegStatus  string
+	Findings   int
 }
 
 // CompleteLegDecoder validates the report stored with an accepted call.
@@ -41,6 +43,9 @@ func CompleteLegHandler(decode CompleteLegDecoder) tools.ToolHandler {
 		})
 		if err != nil {
 			return "", fmt.Errorf("encode complete_leg ack: %w", err)
+		}
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.WorkerReport = record.Acceptance
 		}
 		return string(raw), nil
 	}

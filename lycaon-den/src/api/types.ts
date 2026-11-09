@@ -8031,6 +8031,8 @@ export interface components {
             dispatch?: components["schemas"]["WorkerDispatch"];
             /** @description Producer-stated asynchronous or lifecycle completion fact. */
             completion?: components["schemas"]["ToolCompletion"];
+            /** @description Report accepted against this worker job's observations and policy. */
+            worker_report?: components["schemas"]["WorkerReportAcceptance"];
             file_edit_preview?: components["schemas"]["FileEditPreview"];
             promotion_previews?: components["schemas"]["FileEditPreview"][];
             file_edit?: components["schemas"]["FileEditSnapshot"];
@@ -10857,6 +10859,105 @@ export interface components {
             /** @description What a parked call waits on: the wait's stated reason, or the statement a parked command's program waits at (`sleep 30`, `wait %1`). Present only with state parked. */
             reason?: string;
         };
+        WorkerCoverageGap: {
+            /** @description Worker-local gap id; the host scopes it to the task. */
+            id: string;
+            subject: string;
+            reason: string;
+            paths?: string[];
+        };
+        CitationGroundingCitedEvidence: {
+            /** @description Host-minted evidence handle resolved from the session ledger. */
+            handle?: string;
+            path?: string;
+            line?: number;
+            /** @description Last line of an inclusive range starting at line. Absent for a single line. */
+            end_line?: number;
+            excerpt?: string;
+            verdict?: components["schemas"]["CitationVerdict"];
+            /** @description True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false. */
+            openable?: boolean;
+        };
+        CoverageAssessment: {
+            id: string;
+            /** @enum {string} */
+            disposition: "satisfied" | "covered" | "immaterial" | "material_open" | "essential_open";
+            reason: string;
+            obligations?: string[];
+            cited_evidence: components["schemas"]["CitationGroundingCitedEvidence"][];
+        };
+        CoverageReview: {
+            revision: string;
+            assessments: components["schemas"]["CoverageAssessment"][];
+        };
+        WorkerCompletionFinding: {
+            path: string;
+            evidence?: string;
+            line?: number;
+            excerpt?: string;
+            note?: string;
+            claim?: string;
+            adversary?: string;
+            precondition?: string;
+            severity?: string;
+        };
+        WorkerEvidenceObligation: {
+            kind: string;
+            status: string;
+            evidence_refs?: string[];
+            reason?: string;
+        };
+        WorkerCompletionReport: {
+            coverage_gaps?: components["schemas"]["WorkerCoverageGap"][];
+            coverage_review?: components["schemas"]["CoverageReview"];
+            /**
+             * @description Leg status the worker declared; leg_status is the host-graded status.
+             * @enum {string}
+             */
+            declared_leg_status?: "complete" | "partial" | "blocked";
+            /**
+             * @description Host-graded leg status.
+             * @enum {string}
+             */
+            leg_status: "complete" | "partial" | "blocked";
+            files_modified?: string[];
+            objectives_met?: string[];
+            remaining_risk?: string[];
+            suggested_next_task?: string;
+            brief?: string;
+            findings?: components["schemas"]["WorkerCompletionFinding"][];
+            cited_urls?: string[];
+            evidence_obligations?: components["schemas"]["WorkerEvidenceObligation"][];
+        };
+        /**
+         * @description Host-authored semantic outcome of a grounding check. Advisory checks landed but require review; they are neither passes nor failures.
+         * @enum {string}
+         */
+        CitationGroundingCheckStatus: "passed" | "failed" | "advisory";
+        CitationGroundingFinding: {
+            /** @description Host-minted evidence handle resolved from the session ledger. */
+            handle?: string;
+            path?: string;
+            line?: number;
+            excerpt?: string;
+            verdict?: components["schemas"]["CitationVerdict"];
+            note?: string;
+            /** @description True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false. */
+            openable?: boolean;
+        };
+        /** @description The validation scope the closeout declared. Retained on the grounding audit because the projected prose omits the trailer. */
+        CitationVerification: {
+            /** @enum {string} */
+            method: "inspection" | "targeted" | "project" | "blocked";
+            reason: string;
+        };
+        /** @description Host-accepted worker report retained with its successful submitting invocation. */
+        WorkerReportAcceptance: {
+            /** @description Worker job whose observations and coverage were validated. */
+            worker_job_id: string;
+            report: components["schemas"]["WorkerCompletionReport"];
+            grounding: components["schemas"]["CitationGrounding"];
+        };
         FileEditReference: {
             /** Format: uuid */
             message_id: string;
@@ -10982,40 +11083,6 @@ export interface components {
             /** @description The host's view when the result was written. It never flips on exit; the session process mirror reports that. */
             running: boolean;
             termination_reason?: components["schemas"]["BackgroundProcessTerminationReason"];
-        };
-        /**
-         * @description Host-authored semantic outcome of a grounding check. Advisory checks landed but require review; they are neither passes nor failures.
-         * @enum {string}
-         */
-        CitationGroundingCheckStatus: "passed" | "failed" | "advisory";
-        CitationGroundingFinding: {
-            /** @description Host-minted evidence handle resolved from the session ledger. */
-            handle?: string;
-            path?: string;
-            line?: number;
-            excerpt?: string;
-            verdict?: components["schemas"]["CitationVerdict"];
-            note?: string;
-            /** @description True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false. */
-            openable?: boolean;
-        };
-        CitationGroundingCitedEvidence: {
-            /** @description Host-minted evidence handle resolved from the session ledger. */
-            handle?: string;
-            path?: string;
-            line?: number;
-            /** @description Last line of an inclusive range starting at line. Absent for a single line. */
-            end_line?: number;
-            excerpt?: string;
-            verdict?: components["schemas"]["CitationVerdict"];
-            /** @description True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false. */
-            openable?: boolean;
-        };
-        /** @description The validation scope the closeout declared. Retained on the grounding audit because the projected prose omits the trailer. */
-        CitationVerification: {
-            /** @enum {string} */
-            method: "inspection" | "targeted" | "project" | "blocked";
-            reason: string;
         };
         /** @description A recorded review_loop verdict with its validated citation provenance. Terminal verdicts always carry grounding. */
         VerdictOutcome: {
@@ -11264,64 +11331,6 @@ export interface components {
              *     spawn rejects with OVERLAY_BASE_MISSING or OVERLAY_BASE_NOT_PENDING.
              */
             base_overlay_id?: string;
-        };
-        WorkerCoverageGap: {
-            /** @description Worker-local gap id; the host scopes it to the task. */
-            id: string;
-            subject: string;
-            reason: string;
-            paths?: string[];
-        };
-        CoverageAssessment: {
-            id: string;
-            /** @enum {string} */
-            disposition: "satisfied" | "covered" | "immaterial" | "material_open" | "essential_open";
-            reason: string;
-            obligations?: string[];
-            cited_evidence: components["schemas"]["CitationGroundingCitedEvidence"][];
-        };
-        CoverageReview: {
-            revision: string;
-            assessments: components["schemas"]["CoverageAssessment"][];
-        };
-        WorkerCompletionFinding: {
-            path: string;
-            evidence?: string;
-            line?: number;
-            excerpt?: string;
-            note?: string;
-            claim?: string;
-            adversary?: string;
-            precondition?: string;
-            severity?: string;
-        };
-        WorkerEvidenceObligation: {
-            kind: string;
-            status: string;
-            evidence_refs?: string[];
-            reason?: string;
-        };
-        WorkerCompletionReport: {
-            coverage_gaps?: components["schemas"]["WorkerCoverageGap"][];
-            coverage_review?: components["schemas"]["CoverageReview"];
-            /**
-             * @description Leg status the worker declared; leg_status is the host-graded status.
-             * @enum {string}
-             */
-            declared_leg_status?: "complete" | "partial" | "blocked";
-            /**
-             * @description Host-graded leg status.
-             * @enum {string}
-             */
-            leg_status: "complete" | "partial" | "blocked";
-            files_modified?: string[];
-            objectives_met?: string[];
-            remaining_risk?: string[];
-            suggested_next_task?: string;
-            brief?: string;
-            findings?: components["schemas"]["WorkerCompletionFinding"][];
-            cited_urls?: string[];
-            evidence_obligations?: components["schemas"]["WorkerEvidenceObligation"][];
         };
         WorkerDiffStat: {
             path: string;
@@ -30485,6 +30494,17 @@ export type ToolFeedback = components["schemas"]["ToolFeedback"];
 export type ToolResultUiVisibility = components["schemas"]["ToolResultUiVisibility"];
 export type WorkerDispatch = components["schemas"]["WorkerDispatch"];
 export type ToolCompletion = components["schemas"]["ToolCompletion"];
+export type WorkerCoverageGap = components["schemas"]["WorkerCoverageGap"];
+export type CitationGroundingCitedEvidence = components["schemas"]["CitationGroundingCitedEvidence"];
+export type CoverageAssessment = components["schemas"]["CoverageAssessment"];
+export type CoverageReview = components["schemas"]["CoverageReview"];
+export type WorkerCompletionFinding = components["schemas"]["WorkerCompletionFinding"];
+export type WorkerEvidenceObligation = components["schemas"]["WorkerEvidenceObligation"];
+export type WorkerCompletionReport = components["schemas"]["WorkerCompletionReport"];
+export type CitationGroundingCheckStatus = components["schemas"]["CitationGroundingCheckStatus"];
+export type CitationGroundingFinding = components["schemas"]["CitationGroundingFinding"];
+export type CitationVerification = components["schemas"]["CitationVerification"];
+export type WorkerReportAcceptance = components["schemas"]["WorkerReportAcceptance"];
 export type FileEditReference = components["schemas"]["FileEditReference"];
 export type FileEditPreview = components["schemas"]["FileEditPreview"];
 export type FileEditSnapshot = components["schemas"]["FileEditSnapshot"];
@@ -30494,10 +30514,6 @@ export type VisualArtifact = components["schemas"]["VisualArtifact"];
 export type CheckpointDecisionMeta = components["schemas"]["CheckpointDecisionMeta"];
 export type SkillActivation = components["schemas"]["SkillActivation"];
 export type ToolProcessHandle = components["schemas"]["ToolProcessHandle"];
-export type CitationGroundingCheckStatus = components["schemas"]["CitationGroundingCheckStatus"];
-export type CitationGroundingFinding = components["schemas"]["CitationGroundingFinding"];
-export type CitationGroundingCitedEvidence = components["schemas"]["CitationGroundingCitedEvidence"];
-export type CitationVerification = components["schemas"]["CitationVerification"];
 export type VerdictOutcome = components["schemas"]["VerdictOutcome"];
 export type LoopbackListenerHolder = components["schemas"]["LoopbackListenerHolder"];
 export type LoopbackPublishedContainer = components["schemas"]["LoopbackPublishedContainer"];
@@ -30522,12 +30538,6 @@ export type WorkspaceNotClonableReason = components["schemas"]["WorkspaceNotClon
 export type WorkspacePreparation = components["schemas"]["WorkspacePreparation"];
 export type TaskScopeMode = components["schemas"]["TaskScopeMode"];
 export type TaskScope = components["schemas"]["TaskScope"];
-export type WorkerCoverageGap = components["schemas"]["WorkerCoverageGap"];
-export type CoverageAssessment = components["schemas"]["CoverageAssessment"];
-export type CoverageReview = components["schemas"]["CoverageReview"];
-export type WorkerCompletionFinding = components["schemas"]["WorkerCompletionFinding"];
-export type WorkerEvidenceObligation = components["schemas"]["WorkerEvidenceObligation"];
-export type WorkerCompletionReport = components["schemas"]["WorkerCompletionReport"];
 export type WorkerDiffStat = components["schemas"]["WorkerDiffStat"];
 export type WorkerChangeReport = components["schemas"]["WorkerChangeReport"];
 export type WorkerFailure = components["schemas"]["WorkerFailure"];

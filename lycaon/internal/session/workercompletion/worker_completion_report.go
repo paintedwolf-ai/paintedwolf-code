@@ -88,7 +88,7 @@ type WorkerFinding struct {
 	Cite string `json:"cite,omitempty"`
 }
 
-// LastCompleteLegReport decodes the latest accepted report arguments.
+// LastCompleteLegReport reads the latest host-accepted report.
 func LastCompleteLegReport(msgs []api.Message) (WorkerCompletionReport, string, bool) {
 	for i := len(msgs) - 1; i >= 0; i-- {
 		tr := msgs[i].ToolResult
@@ -101,8 +101,8 @@ func LastCompleteLegReport(msgs []api.Message) (WorkerCompletionReport, string, 
 		if tr.Outcome != api.ToolResultOutcomeCompleted {
 			continue
 		}
-		if report, ok := ReportFromCompleteLegArgs(tr.ToolArgs); ok {
-			return report, msgs[i].ID, true
+		if accepted := tr.WorkerReport; accepted != nil && accepted.WorkerJobID != "" && accepted.Report != nil && accepted.Grounding != nil {
+			return ReportFromWire(accepted.Report), msgs[i].ID, true
 		}
 	}
 	return WorkerCompletionReport{}, "", false

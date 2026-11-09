@@ -8340,7 +8340,9 @@ type ToolResult struct {
 	// Producer-stated worker dispatch identity.
 	Dispatch *WorkerDispatch `json:"dispatch,omitempty"`
 	// Producer-stated asynchronous or lifecycle completion fact.
-	Completion         *ToolCompletion         `json:"completion,omitempty"`
+	Completion *ToolCompletion `json:"completion,omitempty"`
+	// Report accepted against this worker job's observations and policy.
+	WorkerReport       *WorkerReportAcceptance `json:"worker_report,omitempty"`
 	FileEditPreview    *FileEditPreview        `json:"file_edit_preview,omitempty"`
 	PromotionPreviews  []FileEditPreview       `json:"promotion_previews,omitempty"`
 	FileEdit           *FileEditSnapshot       `json:"file_edit,omitempty"`
@@ -9078,6 +9080,14 @@ type WorkerPromotePathStatus struct {
 	BlockedBy        []string                  `json:"blocked_by,omitempty"`
 	PromoteOrderNote string                    `json:"promote_order_note,omitempty"`
 	ConflictTier     WorkerPromoteConflictTier `json:"conflict_tier,omitempty"`
+}
+
+// WorkerReportAcceptance Host-accepted worker report retained with its successful submitting invocation.
+type WorkerReportAcceptance struct {
+	// Worker job whose observations and coverage were validated.
+	WorkerJobID string                  `json:"worker_job_id"`
+	Report      *WorkerCompletionReport `json:"report"`
+	Grounding   *CitationGrounding      `json:"grounding"`
 }
 
 // WorkerResult

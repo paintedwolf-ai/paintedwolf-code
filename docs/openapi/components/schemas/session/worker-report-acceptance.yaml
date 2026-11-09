@@ -1,0 +1,18 @@
+components:
+  schemas:
+    WorkerReportAcceptance:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required: [worker_job_id, report, grounding]
+      properties:
+        worker_job_id:
+          type: string
+          description: Worker job whose observations and coverage were validated.
+        report:
+          x-go-pointer: true
+          $ref: ../worker.yaml#/components/schemas/WorkerCompletionReport
+        grounding:
+          x-go-pointer: true
+          $ref: worker-reports.yaml#/components/schemas/CitationGrounding
+      description: Host-accepted worker report retained with its successful submitting invocation.
