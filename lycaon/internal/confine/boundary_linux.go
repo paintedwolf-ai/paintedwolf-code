@@ -289,14 +289,22 @@ type planCompiler struct {
 	fs linuxsandbox.Filesystem
 	// grants are the write grants so far, which decide whether a later deny
 	// needs a mount or is already refused by Landlock.
-	grants   []string
-	readOnly map[string]bool
-	hidden   map[string]bool
-	restored map[string]bool
+	grants      []string
+	readOnly    map[string]bool
+	hidden      map[string]bool
+	restored    map[string]bool
+	view        ViewBoundary
+	loaderFiles map[string][]string
 }
 
 func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, error) {
-	pc := &planCompiler{readOnly: map[string]bool{}, hidden: map[string]bool{}, restored: map[string]bool{}}
+	pc := &planCompiler{
+		readOnly:    map[string]bool{},
+		hidden:      map[string]bool{},
+		restored:    map[string]bool{},
+		view:        rules.view,
+		loaderFiles: map[string][]string{},
+	}
 	for _, rule := range rules.rules {
 		switch rule.op {
 		case opRead:
@@ -368,18 +376,32 @@ func (pc *planCompiler) readRule(rule fsRule) {
 }
 
 func (pc *planCompiler) writeRule(rule fsRule) error {
+	loaderNames := ruleLoaderNames(rule.matches)
 	for _, m := range rule.matches {
 		if underCuratedDev(m) {
+			continue
+		}
+		if name := loaderName(m); name != "" {
+			if !rule.allow && !pc.grantOverlaps(m.subpath) {
+				continue
+			}
+			if !rule.allow && coveredByList(pc.grants, m.subpath) {
+				// Files named at any depth are also held by name, so one created
+				// after launch cannot bypass the floor.
+				pc.fs.ReadOnlyNames = append(pc.fs.ReadOnlyNames, linuxsandbox.NamedFloor{Below: m.subpath, Name: name})
+			}
+			for _, path := range pc.loaderPaths(m.subpath, name, loaderNames[m.subpath]) {
+				if rule.allow {
+					pc.allowWrite(path)
+				} else {
+					pc.denyWrite(path, m.except)
+				}
+			}
 			continue
 		}
 		paths, err := writeMatchPaths(m)
 		if err != nil {
 			return err
-		}
-		if name := loaderName(m); name != "" && !rule.allow && coveredByList(pc.grants, m.subpath) {
-			// Files named at any depth are also held by name, so one created
-			// after launch cannot bypass the floor.
-			pc.fs.ReadOnlyNames = append(pc.fs.ReadOnlyNames, linuxsandbox.NamedFloor{Below: m.subpath, Name: name})
 		}
 		for _, path := range paths {
 			if rule.allow {
@@ -390,6 +412,97 @@ func (pc *planCompiler) writeRule(rule fsRule) error {
 		}
 	}
 	return nil
+}
+
+func ruleLoaderNames(matches []fsMatch) map[string][]string {
+	var out map[string][]string
+	for _, m := range matches {
+		if name := loaderName(m); name != "" {
+			if out == nil {
+				out = map[string][]string{}
+			}
+			out[m.subpath] = append(out[m.subpath], name)
+		}
+	}
+	return out
+}
+
+func (pc *planCompiler) grantOverlaps(subpath string) bool {
+	return coveredByList(pc.grants, subpath) || coversAny(subpath, pc.grants)
+}
+
+func (pc *planCompiler) loaderPaths(subpath, name string, batch []string) []string {
+	all, ok := pc.loaderFiles[subpath]
+	if !ok {
+		if len(batch) == 0 {
+			batch = []string{name}
+		}
+		if sources := pc.viewLoaderRoots(subpath); len(sources) > 0 {
+			targets := pc.viewMountTargets(subpath)
+			seen := map[string]bool{}
+			for _, src := range sources {
+				for _, p := range namedFilesBelow(src, batch...) {
+					rel, err := filepath.Rel(src, p)
+					if err != nil {
+						continue
+					}
+					for _, target := range targets {
+						mapped := filepath.Join(target, rel)
+						if !seen[mapped] {
+							seen[mapped] = true
+							all = append(all, mapped)
+						}
+					}
+				}
+			}
+		} else {
+			all = namedFilesBelow(subpath, batch...)
+		}
+		pc.loaderFiles[subpath] = all
+	}
+	var out []string
+	for _, p := range all {
+		if strings.EqualFold(filepath.Base(p), name) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// viewLoaderRoots returns the host source directories backing a mounted view root
+// so launch compilation never walks the engine's own FUSE mount.
+func (pc *planCompiler) viewLoaderRoots(subpath string) []string {
+	var sources []string
+	for _, d := range pc.view.DeniedPaths {
+		if d == "" || PathAtOrUnder(subpath, d) || PathAtOrUnder(d, subpath) {
+			continue
+		}
+		if coversAny(d, pc.view.ReopenedPaths) || coversAny(d, pc.view.ReopenedReadPaths) || isViewBackingDir(d) {
+			continue
+		}
+		sources = append(sources, d)
+	}
+	return sources
+}
+
+func (pc *planCompiler) viewMountTargets(subpath string) []string {
+	targets := []string{subpath}
+	for _, r := range pc.view.ReopenedPaths {
+		if !PathEqual(r, subpath) && PathAtOrUnder(r, subpath) {
+			targets = append(targets, r)
+		}
+	}
+	return targets
+}
+
+func isViewBackingDir(dir string) bool {
+	if strings.HasSuffix(filepath.ToSlash(dir), "/.meta/backing") {
+		return true
+	}
+	_, errJ := os.Stat(filepath.Join(dir, "journal"))
+	_, errW := os.Stat(filepath.Join(dir, "work"))
+	_, errB := os.Stat(filepath.Join(dir, "base"))
+	return errJ == nil && errW == nil && errB == nil
 }
 
 // allowWrite grants the path to Landlock and restores it beneath any mask.
@@ -466,8 +579,12 @@ func underCuratedDev(m fsMatch) bool {
 // files named at any depth. A tree past it protects only what was seen.
 const agentPolicyWalkBudget = 200_000
 
-// namedFilesBelow lists the regular files below root whose name folds to name.
-func namedFilesBelow(root, name string) []string {
+// namedFilesBelow lists the regular files below root, outside .git, whose name
+// folds to any of names.
+func namedFilesBelow(root string, names ...string) []string {
+	if len(names) == 0 {
+		return nil
+	}
 	var out []string
 	budget := agentPolicyWalkBudget
 	var walk func(dir string) bool
@@ -480,11 +597,15 @@ func namedFilesBelow(root, name string) []string {
 			if budget--; budget < 0 {
 				return false
 			}
+			name := e.Name()
 			switch {
-			case e.Type().IsRegular() && strings.EqualFold(e.Name(), name):
-				out = append(out, filepath.Join(dir, e.Name()))
+			case e.Type().IsRegular() && foldsToAny(name, names):
+				out = append(out, filepath.Join(dir, name))
 			case e.IsDir():
-				if !walk(filepath.Join(dir, e.Name())) {
+				if strings.EqualFold(name, ".git") {
+					continue
+				}
+				if !walk(filepath.Join(dir, name)) {
 					return false
 				}
 			}
@@ -496,6 +617,24 @@ func namedFilesBelow(root, name string) []string {
 			"component", "sandbox", "root", root, "entries", agentPolicyWalkBudget)
 	}
 	return out
+}
+
+func foldsToAny(name string, targets []string) bool {
+	for _, target := range targets {
+		if strings.EqualFold(name, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func coversAny(ancestor string, paths []string) bool {
+	for _, p := range paths {
+		if PathAtOrUnder(p, ancestor) {
+			return true
+		}
+	}
+	return false
 }
 
 func coveredBy(set map[string]bool, path string) bool {

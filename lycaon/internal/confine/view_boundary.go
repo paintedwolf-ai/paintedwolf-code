@@ -36,14 +36,23 @@ func (v ViewBoundary) normalized() ViewBoundary {
 // are canonical, because a rule on an alias of a path does not apply to the path itself.
 func addViewStorageFloor(rules *FilesystemRules, view ViewBoundary) {
 	denied := resolveEach(slices.Clone(view.DeniedPaths))
+	reopened := resolveEach(slices.Clone(view.ReopenedPaths))
+	reopenedRead := resolveEach(slices.Clone(view.ReopenedReadPaths))
+	writeDenied := resolveEach(slices.Clone(view.WriteDeniedPaths))
+	rules.view = ViewBoundary{
+		DeniedPaths:         denied,
+		ReopenedPaths:       reopened,
+		ReopenedReadPaths:   reopenedRead,
+		WriteDeniedPaths:    writeDenied,
+		DeniedLoopbackPorts: view.DeniedLoopbackPorts,
+	}
 	rules.add(fsRule{op: opRead, matches: subpathMatches(denied, FloorReadControlPlane)})
 	rules.add(fsRule{op: opWrite, matches: subpathMatches(denied, FloorControlPlane)})
-	reopened := resolveEach(slices.Clone(view.ReopenedPaths))
-	readable := append(resolveEach(slices.Clone(view.ReopenedReadPaths)), reopened...)
+	readable := append(slices.Clone(reopenedRead), reopened...)
 	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(readable, "")})
 	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(traversalAncestors(denied, readable), "")})
 	rules.add(fsRule{op: opWrite, allow: true, matches: subpathMatches(reopened, "")})
-	rules.add(fsRule{op: opWrite, matches: subpathMatches(resolveEach(slices.Clone(view.WriteDeniedPaths)), FloorControlPlane)})
+	rules.add(fsRule{op: opWrite, matches: subpathMatches(writeDenied, FloorControlPlane)})
 }
 
 // withoutViewListeners keeps a narrowed loopback grant from ever naming a view's listener.

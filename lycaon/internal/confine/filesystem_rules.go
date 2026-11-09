@@ -164,6 +164,7 @@ type FilesystemRules struct {
 	// roots are the invocation's project roots, which agent-policy grants
 	// resolve against.
 	roots []string
+	view  ViewBoundary
 }
 
 func (r *FilesystemRules) add(rule fsRule) {
