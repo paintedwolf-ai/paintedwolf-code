@@ -51,6 +51,7 @@ func IsBlueprintMessage(msg Message) bool {
 func IsUserIntentMessage(msg Message) bool {
 	return msg.Role == MessageRoleUser &&
 		msg.Kind != MessageKindUserContinuation &&
+		!msg.CompactionCheckpoint &&
 		!IsInternalTranscriptMessage(msg) &&
 		!IsWorkflowBoundaryMessage(msg)
 }
