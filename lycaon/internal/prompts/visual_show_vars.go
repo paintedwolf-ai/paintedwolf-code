@@ -7,19 +7,14 @@ import (
 )
 
 var (
-	visualShowPageTools     = []string{"capture_page", "page_open"}
-	visualShowTerminalTools = []string{"command", "terminal_snapshot"}
-	// visualShowHeldTerminalTools drive a program that waits for input and
-	// capture it at a chosen state.
+	visualShowPageTools         = []string{"capture_page", "page_open"}
+	visualShowTerminalTools     = []string{"command", "terminal_snapshot"}
 	visualShowHeldTerminalTools = []string{"terminal_open", "terminal_snapshot"}
 )
 
-// MergeVisualShowVars derives visual availability from the offered schemas
-// and the tools request_tools can still load. Capture that is only loadable
-// sets a needs_request fact, not the offered fact, so the prompt asks for the
-// tools without teaching schemas it does not carry: visual_show_needs_request
-// for page capture, visual_show_terminal_needs_request for the held terminal.
-// Only an agent that can change files builds an interface to capture.
+// MergeVisualShowVars sets visual capture availability and requestable flags
+// from offered and requestable tool sets. Requestable flags require request_tools
+// and a mutation-capable agent.
 func MergeVisualShowVars(offered, requestable []string, into map[string]any) {
 	if into == nil {
 		return

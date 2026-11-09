@@ -1,29 +1,27 @@
 package prompts
 
 import (
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/toolpresentation"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
-// RequestableToolView is a loadable tool that is not on this call. The prompt
-// names only the capability its role stands for; the summary is the bounded
-// description the decision engine scores, kept for receipts and discovery.
+// RequestableToolView describes a deferred tool for turn-load scoring and receipts.
 type RequestableToolView struct {
 	Name    string
 	Summary string
 	Role    string
 }
 
-// capabilityLabels names the capabilities that can still load, in a fixed
-// order, one per activity role among the roster.
 var capabilityLabels = []struct{ role, label string }{
 	{"investigation", "repository investigation"},
 	{"mutation", "file and git changes"},
-	{"command", "commands and terminals"},
+	{"command", "commands and interactive terminal sessions"},
 	{"process", "processes"},
-	{"interface_test", "browser pages"},
+	{"interface_test", "browser pages and screenshots"},
 	{"inspection", "viewing images, video, and rendered views"},
 	{"research", "web search and page fetch"},
 	{"endpoint", "HTTP requests"},
@@ -32,31 +30,47 @@ var capabilityLabels = []struct{ role, label string }{
 	{"coordination", "workers, workflows, budgets, and managed secrets"},
 }
 
-// RequestableCapabilities lists the capability labels of a roster.
+// RequestableCapabilities lists the capability labels present in rows in a fixed order.
 func RequestableCapabilities(rows []RequestableToolView) []string {
 	present := make(map[string]bool, len(rows))
+	hasCommand := false
+	hasTerminalSession := false
 	for _, row := range rows {
 		present[row.Role] = true
+		if row.Name == "command" {
+			hasCommand = true
+		}
+		if strings.HasPrefix(row.Name, "terminal_") {
+			hasTerminalSession = true
+		}
 	}
 	out := make([]string, 0, len(capabilityLabels))
 	for _, c := range capabilityLabels {
-		if present[c.role] {
-			out = append(out, c.label)
+		if !present[c.role] {
+			continue
 		}
+		label := c.label
+		if c.role == "command" {
+			switch {
+			case hasTerminalSession && !hasCommand:
+				label = "interactive terminal sessions and screen snapshots"
+			case !hasTerminalSession:
+				label = "commands and background output"
+			}
+		}
+		out = append(out, label)
 	}
 	return out
 }
 
-// SurfaceTurn is what a turn adds to a static surface: the tools the session
-// ledger has loaded, and the schemas that describe the rest.
+// SurfaceTurn holds session-loaded tools and tool schemas for a turn.
 type SurfaceTurn struct {
 	Loaded  map[string]bool
 	Schemas *toolschema.Config
 }
 
-// RequestableTools builds the roster rows for names, in the order given. The
-// summary is the tool's schema description cut to the turn catalog's
-// option_words; a name without a schema lists bare.
+// RequestableTools builds roster rows in the order given, truncating each
+// schema description to the turn catalog's option_words limit.
 func RequestableTools(names []string, schemas *toolschema.Config) ([]RequestableToolView, error) {
 	catalog, err := turnload.LoadCatalog()
 	if err != nil {
@@ -75,7 +89,6 @@ func RequestableTools(names []string, schemas *toolschema.Config) ([]Requestable
 	return out, nil
 }
 
-// requestableToolVars is the template shape of a roster.
 func requestableToolVars(rows []RequestableToolView) []map[string]any {
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
@@ -84,7 +97,7 @@ func requestableToolVars(rows []RequestableToolView) []map[string]any {
 	return out
 }
 
-// requestableToolSet exposes loading reachability without teaching unloaded schemas.
+// requestableToolSet returns deferred tools when request_tools is offered.
 func requestableToolSet(offered, requestable []string) map[string]bool {
 	plan := toolsurface.Compile(offered, requestable)
 	out := map[string]bool{}
