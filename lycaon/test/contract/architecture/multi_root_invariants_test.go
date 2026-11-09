@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,9 +11,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repoinfo"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
@@ -294,7 +297,6 @@ func TestMultiRootResolverQualifyRoundTrip(t *testing.T) {
 // secondary folder active, its files display bare, other folders keep the
 // @label prefix, and every display round-trips through ResolveAbs.
 func TestMultiRootActiveFolderDisplayContract(t *testing.T) {
-	t.Parallel()
 	fix := newMultiRootFixture(t)
 	fix.activeID = "d"
 
@@ -339,26 +341,40 @@ func TestMultiRootActiveFolderDisplayContract(t *testing.T) {
 		t.Fatalf("primary folder display = %q", resolved.DisplayPath)
 	}
 
-	// Survey tools render the same spellings.
-	out := assertRootProgramSuccess(t, rootProgram(t, "stat -- secondary-sentinel.txt", fix.tctx("s1")))
-	if !strings.Contains(out, "secondary-sentinel.txt") || strings.Contains(out, "@lycaon-den/secondary-sentinel.txt") {
-		t.Fatalf("active folder stat = %q", out)
+	// Survey tools render the same spellings. The command program expands
+	// @label words to native paths before dispatch, so the model-visible
+	// display contract lives on the survey tools themselves.
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true},
+		[]sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"stat": true, "list_dir": true, "find": true, "grep": true}}})
+	tctx := fix.tctx("s1")
+	statRaw, err := (&survey.StatTool{Boundary: boundary}).Run(context.Background(),
+		map[string]any{"paths": []any{"secondary-sentinel.txt", "@lycaon/primary-sentinel.txt"}}, tctx)
+	contractcheck.FailErr(t, "stat", err)
+	var statResp struct {
+		Results []struct {
+			Path string `json:"path"`
+		} `json:"results"`
 	}
-	out = assertRootProgramSuccess(t, rootProgram(t, "stat -- @lycaon/primary-sentinel.txt", fix.tctx("s1")))
-	if !strings.Contains(out, "@lycaon/primary-sentinel.txt") {
-		t.Fatalf("primary folder stat = %q", out)
+	contractcheck.FailErr(t, "decode stat", json.Unmarshal([]byte(statRaw), &statResp))
+	if len(statResp.Results) != 2 || statResp.Results[0].Path != "secondary-sentinel.txt" || statResp.Results[1].Path != "@lycaon/primary-sentinel.txt" {
+		t.Fatalf("stat paths = %+v", statResp.Results)
 	}
-	out = assertRootProgramSuccess(t, rootProgram(t, "ls -1 . @lycaon", fix.tctx("s1")))
-	if !strings.Contains(out, "secondary-sentinel.txt") || !strings.Contains(out, "@lycaon/primary-sentinel.txt") {
-		t.Fatalf("ls = %q", out)
+	listRaw, err := (&survey.ListDirTool{Boundary: boundary}).Run(context.Background(), map[string]any{"path": "@lycaon"}, tctx)
+	contractcheck.FailErr(t, "list_dir", err)
+	if !strings.Contains(listRaw, "@lycaon/primary-sentinel.txt") {
+		t.Fatalf("list_dir = %q", listRaw)
 	}
-	out = assertRootProgramSuccess(t, rootProgram(t, "find . @lycaon -name '*-sentinel.txt'", fix.tctx("s1")))
-	if !strings.Contains(out, "secondary-sentinel.txt") || !strings.Contains(out, "@lycaon/primary-sentinel.txt") {
-		t.Fatalf("find = %q", out)
+	findRaw, err := (&survey.FindTool{Boundary: boundary}).Run(context.Background(),
+		map[string]any{"path": "@lycaon", "name_glob": "*-sentinel.txt"}, tctx)
+	contractcheck.FailErr(t, "find", err)
+	if !strings.Contains(findRaw, "@lycaon/primary-sentinel.txt") {
+		t.Fatalf("find = %q", findRaw)
 	}
-	out = assertRootProgramSuccess(t, rootProgram(t, "rg sentinel . @lycaon", fix.tctx("s1")))
-	if !strings.Contains(out, "secondary-sentinel.txt") || !strings.Contains(out, "@lycaon/primary-sentinel.txt") {
-		t.Fatalf("grep = %q", out)
+	grepRaw, err := (&survey.GrepTool{Boundary: boundary}).Run(context.Background(),
+		map[string]any{"pattern": "primary", "path": "@lycaon"}, tctx)
+	contractcheck.FailErr(t, "grep", err)
+	if !strings.Contains(grepRaw, "@lycaon/primary-sentinel.txt") {
+		t.Fatalf("grep = %q", grepRaw)
 	}
 }
 
