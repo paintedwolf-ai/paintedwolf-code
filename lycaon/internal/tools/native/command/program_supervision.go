@@ -78,7 +78,9 @@ func (s *ProgramSupervisor) StartJob(ctx context.Context, invocation toolcontrac
 	if jobs == nil {
 		return "", ErrProgramStopped
 	}
-	return jobs.start(ctx, "background job "+invocation.Identity.ExecutionID, run)
+	return jobs.start(ctx, "background job "+invocation.Identity.ExecutionID, func(jobCtx context.Context, handle string, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		return run(hitl.WithStopContext(jobCtx, jobCtx), handle, streams)
+	})
 }
 
 type supervisedProgram struct {
