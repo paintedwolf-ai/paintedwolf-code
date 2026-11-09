@@ -6,7 +6,7 @@ import json
 import unittest
 from unittest.mock import Mock, patch
 
-from harness.model_policy import configure, main, select_model
+from model_policy import configure, main, select_model
 
 
 class HarnessModelPolicyTest(unittest.TestCase):
