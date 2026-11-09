@@ -54,8 +54,9 @@ func TestSeedNormalizationRejectsUnsupportedPOSIXPermissionBits(t *testing.T) {
 		raw = binary.LittleEndian.AppendUint16(raw, entry.permission)
 		raw = binary.LittleEndian.AppendUint32(raw, 0xffffffff)
 	}
+	expected := bytes.Clone(raw)
 	got := normalizeSeedSourceXattrs(0o600, map[string][]byte{"system.posix_acl_access": raw})
-	if !bytes.Equal(got["system.posix_acl_access"], raw) {
+	if !bytes.Equal(got["system.posix_acl_access"], expected) || !bytes.Equal(raw, expected) {
 		t.Fatal("unsupported permission bits were silently masked into mode equivalence")
 	}
 }
