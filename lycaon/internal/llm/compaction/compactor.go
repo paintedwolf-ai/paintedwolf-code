@@ -44,6 +44,7 @@ type SessionInfo struct {
 	ParentSessionID      string
 	ProjectID            string
 	ProjectDir           string
+	SettingsRoots        []string
 	HostDataDir          string
 	MaxToolSpillBytes    int
 	Posture              api.SessionPosture
@@ -224,6 +225,7 @@ func withCompactionSession(ctx context.Context, info SessionInfo) context.Contex
 		ParentSessionID: info.ParentSessionID,
 		ProjectID:       info.ProjectID,
 		ProjectDir:      info.ProjectDir,
+		SettingsRoots:   info.SettingsRoots,
 	})
 }
 
