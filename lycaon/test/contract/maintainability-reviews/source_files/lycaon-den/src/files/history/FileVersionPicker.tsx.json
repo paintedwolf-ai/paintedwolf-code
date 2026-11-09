@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/files/history/FileVersionPicker.tsx",
+  "kind": "projection",
+  "workstream": "file-history",
+  "disposition": "retain",
+  "reason": "Retain the history popover as the boundary for anchoring, keyboard navigation, selection, restore, and its shared scrollport. Document undo and its paging live in the document history and edit group components. The focused picker contracts cover current and historical navigation, source and Git lineage, and bounded document edit disclosure.",
+  "reviewed_commit": "2ca2eff480e1e7918fcd7792b2d5ec95ca0dc7d3",
+  "ceiling": 488,
+  "boundaries": {
+    "lycaon-den/src/files/history/FileVersionPicker.test.tsx": "9bd17dcbe27d39f48ff3698e463beb69a7d8e106c6fc7721a727cc92cbfb1efb",
+    "lycaon-den/src/files/history/DocumentChangeHistory.test.tsx": "62831416b2383e8ef4ffbb62c52e1297a0d0035ba5e12524d3743723cccbdda7"
+  }
+}

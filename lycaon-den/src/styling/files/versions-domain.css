@@ -349,6 +349,7 @@
 
 .den-file-version__edit-items {
   padding-inline-start: 15px;
+  container-type: inline-size;
 }
 
 .den-file-version__edit-item + .den-file-version__edit-item {
@@ -384,4 +385,23 @@
 .den-file-version__edit-pager .den-table-pager-actions > :last-child {
   grid-area: 1 / 3;
   justify-self: end;
+}
+
+@container (max-width: 15rem) {
+  .den-file-version__edit-pager.den-table-pager {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .den-file-version__edit-pager .den-table-pager-page {
+    grid-area: 1 / 1 / auto / -1;
+    justify-self: center;
+  }
+
+  .den-file-version__edit-pager .den-table-pager-actions > :first-child {
+    grid-area: 3 / 1;
+  }
+
+  .den-file-version__edit-pager .den-table-pager-actions > :last-child {
+    grid-area: 3 / 2;
+  }
 }

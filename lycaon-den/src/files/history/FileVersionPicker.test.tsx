@@ -137,12 +137,22 @@ describe("FileVersionPicker", () => {
       revision: 124 - index, epoch: 1, operation_id: `edit-${index}`, person_id: "", client_id: "",
       reverted_by: "", created_at: edited.created_at,
     }));
-    const client = stubClient({ listEditorDocumentChanges: async () => ({ changes }) });
+    const client = stubClient({
+      listEditorDocumentChanges: async (_project, _document, cursor) => {
+        const start = Number(cursor ?? 0);
+        const end = start + 50;
+        return { changes: changes.slice(start, end), next_cursor: end < changes.length ? String(end) : undefined };
+      },
+    });
     mount({
       history: history({ versions: [edited, created], commits: [commit()] }),
       documentHistory: { client, projectId: "project", documentId: "game", onApplied: vi.fn() },
     });
     fireEvent.click(screen.getByTestId("file-version-trigger"));
+    await screen.findByText("50 edits from this turn");
+    fireEvent.click(screen.getByRole("button", { name: "Load earlier document edits" }));
+    await screen.findByText("100 edits from this turn");
+    fireEvent.click(screen.getByRole("button", { name: "Load earlier document edits" }));
     const summary = await screen.findByText("124 edits from this turn");
     const details = summary.closest("details")!;
     const [editedRow, createdRow] = screen.getAllByTestId("file-version-title");

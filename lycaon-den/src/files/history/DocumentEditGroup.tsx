@@ -27,7 +27,7 @@ export function DocumentEditGroup(props: {
   const shown = () => props.changes.slice(page() * pageSize, (page() + 1) * pageSize);
   return (
     <details class="den-file-version__edits" onToggle={(event) => setExpanded(event.currentTarget.open)}>
-      <summary>
+      <summary data-tip={props.related ? changeAuthorLabel(first()) : undefined}>
         <span class="den-file-version__copy">
           <strong>
             {props.changes.length} {props.changes.length === 1 ? "edit" : "edits"}{props.related ? " from this turn" : " in the editor"}

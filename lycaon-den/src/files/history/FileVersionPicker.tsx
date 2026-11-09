@@ -345,8 +345,8 @@ export function FileVersionPicker(props: Props) {
         data-testid="file-version-trigger"
         data-tip={
           bindingForHandler("files.openVersionHistory")
-            ? `Version history (${bindingForHandler("files.openVersionHistory")})`
-            : "Version history"
+            ? `File history (${bindingForHandler("files.openVersionHistory")})`
+            : "File history"
         }
         data-tip-pos="below"
         aria-label={`File version: ${selectedLabel(props.selected)}`}
@@ -369,7 +369,7 @@ export function FileVersionPicker(props: Props) {
         <AnchoredSurface
           class="den-file-version__menu"
           role="menu"
-          ariaLabel="Version history"
+          ariaLabel="File history"
           anchor={() => triggerEl}
           preferredSide="bottom"
           align="end"
@@ -377,7 +377,7 @@ export function FileVersionPicker(props: Props) {
           onKeyDown={handleSurfaceKeyDown}
         >
           <div class="den-file-version__head">
-            <div class="den-file-version__heading">Version history</div>
+            <div class="den-file-version__heading">File history</div>
             <button
               type="button"
               class="den-file-version__option"
