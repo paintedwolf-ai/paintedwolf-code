@@ -59,7 +59,7 @@ func TestMessageNavigationUsesWorkerTree(t *testing.T) {
 	testutil.FailErr(t, "primary-only file", os.WriteFile(filepath.Join(primary, "primary.go"), nil, 0600))
 	testutil.FailErr(t, "worker-only file", os.WriteFile(filepath.Join(branch, "worker.go"), nil, 0600))
 	testutil.FailErr(t, "branch metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
-		Roots: []workspace.JobMetaRoot{{ID: "r", Path: primary, IsPrimary: true}}, SnapshotComplete: true,
+		Roots: []workspace.JobMetaRoot{{ID: "r", Label: "r", Path: primary, IsPrimary: true}}, SnapshotComplete: true,
 	}))
 	queue := worker.NewInMemoryQueue(1)
 	jobID := contractfixture.EnqueueBranchJob(t, queue, "p", branch)

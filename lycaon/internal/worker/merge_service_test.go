@@ -277,7 +277,7 @@ func TestPromoteOverlayRemovesDeletedPath(t *testing.T) {
 	branch := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-del")
 	testutil.FailErr(t, "MkdirAll branch", os.MkdirAll(branch, 0o755))
 	testutil.FailErr(t, "WriteJobMeta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
-		Roots:            []workspace.JobMetaRoot{{ID: "root", Path: dir, IsPrimary: true}},
+		Roots:            []workspace.JobMetaRoot{{ID: "root", Label: "root", Path: dir, IsPrimary: true}},
 		SnapshotComplete: true,
 	}))
 

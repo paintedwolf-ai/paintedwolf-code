@@ -310,3 +310,175 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 		t.Fatal("reverted external selector visibility left a pending notice")
 	}
 }
+
+// newRootsKickHarness builds a service with one idle session of proj and the
+// real kick engine, so notices can be rendered as the coordinator sees them.
+func newRootsKickHarness(t *testing.T, projectID, rootID string) (*Service, *kick.KickEngine, *projectroot.History) {
+	t.Helper()
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
+	kicks := &kick.KickEngine{}
+	kicks.SetPromptEngine(engine)
+	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load anchor registry", err)
+	bus := anchor.NewBus(kicks)
+	bus.SetRegistry(anchorReg)
+
+	var history projectroot.History
+	sessions := &detachSessions{sessions: []*api.Session{
+		{ID: "sess-1", ProjectID: projectID, WorkspaceRootID: rootID, Status: api.SessionStatusIdle},
+	}}
+	svc := New(sessions, nil, nil, nil, nil, nil, nil)
+	svc.SetAnchors(bus)
+	svc.SetRootHistory(&history)
+	return svc, kicks, &history
+}
+
+// WR04: a host path move under an unchanged id and label records history but
+// notifies nothing, because the model-visible (id, label) set is unchanged.
+func TestEnqueueRootsChangedKickSkipsPathOnlyMove(t *testing.T) {
+	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
+	ctx := t.Context()
+	reg := project.NewMemoryRegistry()
+	apiDir, webDir := t.TempDir(), t.TempDir()
+	created, err := reg.Create(ctx, project.CreateParams{
+		Roots: []project.AttachRootParams{{Path: apiDir, Label: "api"}, {Path: webDir, Label: "web"}},
+	})
+	testutil.FailErr(t, "create project", err)
+	svc, kicks, history := newRootsKickHarness(t, created.ID, created.Roots[1].ID)
+
+	movedParent := t.TempDir()
+	movedWebDir := filepath.Join(movedParent, "web")
+	testutil.FailErr(t, "move web dir", os.Rename(webDir, movedWebDir))
+	before := project.RootRefsFrom(created)
+	after := append([]projectroot.RootRef(nil), before...)
+	for i := range after {
+		if after[i].ID == created.Roots[1].ID {
+			after[i].Path = movedWebDir
+		}
+	}
+	svc.EnqueueRootsChangedKick(ctx, created.ID, before, after)
+
+	if _, ok := kicks.PeekPendingKickID("sess-1"); ok {
+		t.Fatal("path-only move queued a roots changed kick")
+	}
+	if r, stale := history.View(created.ID).StalePath(after, webDir); !stale || r.Reason != projectroot.RootMoved {
+		t.Fatalf("move retirement = %+v,%v", r, stale)
+	}
+}
+
+// WR04: renaming the session's active root kicks with the rename row and the
+// session folder change, both label-only.
+func TestEnqueueRootsChangedKickNamesSessionFolderRename(t *testing.T) {
+	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
+	ctx := t.Context()
+	reg := project.NewMemoryRegistry()
+	apiDir, webDir := t.TempDir(), t.TempDir()
+	created, err := reg.Create(ctx, project.CreateParams{
+		Roots: []project.AttachRootParams{{Path: apiDir, Label: "api"}, {Path: webDir, Label: "web"}},
+	})
+	testutil.FailErr(t, "create project", err)
+	svc, kicks, _ := newRootsKickHarness(t, created.ID, created.Roots[1].ID)
+
+	siteLabel := "site"
+	renamed, err := reg.PatchRoot(ctx, created.ID, created.Roots[1].ID, project.PatchRootParams{Label: &siteLabel})
+	testutil.FailErr(t, "rename web", err)
+	svc.EnqueueRootsChangedKick(ctx, created.ID, project.RootRefsFrom(renamed.Before), project.RootRefsFrom(renamed.After))
+
+	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-roots-changed" {
+		t.Fatalf("rename pending kick = %q", got)
+	}
+	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	testutil.FailErr(t, "render rename nudge", err)
+	if !ok {
+		t.Fatal("expected rendered rename nudge")
+	}
+	kicks.AckPendingNudge("sess-1", lease)
+	for _, want := range []string{
+		"renamed @web → @site",
+		"Your session folder changed to @site.",
+		"• @site  (session folder)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("rename notice missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "/abs/") || strings.Contains(text, webDir) {
+		t.Fatalf("rename notice leaked a host path:\n%s", text)
+	}
+}
+
+// WR04: detaching the session's active root kicks with the removal and the
+// primary fallback as the session folder.
+func TestEnqueueRootsChangedKickSessionFolderFallsBackAfterDetach(t *testing.T) {
+	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
+	ctx := t.Context()
+	reg := project.NewMemoryRegistry()
+	apiDir, webDir := t.TempDir(), t.TempDir()
+	created, err := reg.Create(ctx, project.CreateParams{
+		Roots: []project.AttachRootParams{{Path: apiDir, Label: "api"}, {Path: webDir, Label: "web"}},
+	})
+	testutil.FailErr(t, "create project", err)
+	svc, kicks, _ := newRootsKickHarness(t, created.ID, created.Roots[1].ID)
+
+	detached, err := reg.DetachRoot(ctx, created.ID, created.Roots[1].ID)
+	testutil.FailErr(t, "detach web", err)
+	svc.EnqueueRootsChangedKick(ctx, created.ID, project.RootRefsFrom(detached.Before), project.RootRefsFrom(detached.After))
+
+	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-roots-changed" {
+		t.Fatalf("detach pending kick = %q", got)
+	}
+	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	testutil.FailErr(t, "render detach nudge", err)
+	if !ok {
+		t.Fatal("expected rendered detach nudge")
+	}
+	kicks.AckPendingNudge("sess-1", lease)
+	if !strings.Contains(text, "removed @web") || !strings.Contains(text, "Your session folder changed to @api.") {
+		t.Fatalf("detach notice missing removal or fallback folder:\n%s", text)
+	}
+	if strings.Contains(text, "(session folder)") {
+		t.Fatalf("detached root must not carry the session folder marker:\n%s", text)
+	}
+}
+
+// WR04: draft promotion relabels @Draft to the destination folder basename
+// and kicks sessions through the registry observer wired by SetProjects.
+func TestPromotionCommitEnqueuesRootsChangedKick(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
+	ctx := t.Context()
+	reg := project.NewMemoryRegistry()
+	created, err := reg.Create(ctx, project.CreateParams{Draft: true})
+	testutil.FailErr(t, "create draft", err)
+	svc, kicks, _ := newRootsKickHarness(t, created.ID, created.Roots[0].ID)
+	svc.SetProjects(reg)
+
+	destination := filepath.Join(t.TempDir(), "promoted-app")
+	testutil.FailErr(t, "create destination", os.MkdirAll(destination, 0o755))
+	promoter := project.NewPromotionEngine(reg, nil)
+	if _, err := promoter.Create(ctx, created.ID, destination, false); err != nil {
+		testutil.FailErr(t, "create promotion", err)
+	}
+	if _, err := promoter.Run(ctx, created.ID); err != nil {
+		testutil.FailErr(t, "run promotion", err)
+	}
+
+	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-roots-changed" {
+		t.Fatalf("promotion pending kick = %q", got)
+	}
+	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
+	testutil.FailErr(t, "render promotion nudge", err)
+	if !ok {
+		t.Fatal("expected rendered promotion nudge")
+	}
+	kicks.AckPendingNudge("sess-1", lease)
+	for _, want := range []string{
+		"renamed @Draft → @promoted-app",
+		"Your session folder changed to @promoted-app.",
+		"• @promoted-app  (session folder)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("promotion notice missing %q:\n%s", want, text)
+		}
+	}
+}

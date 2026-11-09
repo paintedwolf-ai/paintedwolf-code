@@ -98,6 +98,7 @@ Each root has a stable id, canonical filesystem location, display label, and pos
 | Secondary-root display paths are qualified | Evidence and navigation remain unambiguous |
 | Every root has one canonical label | Den, prompts, and `@label` resolution render the same host-owned fact; automatic labels preserve the folder basename and receive a bounded suffix on collision |
 | Root mutations advance a generation | Cached policy, trust inventory, and source inventory must not survive a changed boundary unnoticed |
+| The roots-changed kick follows labels, not host paths | Sessions address folders by `@label`: a label rename, an added or removed root, a primary change, a session's active folder change, or draft promotion relabeling `@Draft` to the folder basename each kick open sessions, while a host path move under the same id and label changes nothing the model can see and kicks nothing |
 | Attaching a folder (`RootKindAttached`, including promotion) and detaching any root are human-only | Project scope is authority, not agent preference |
 | The draft scratch root (`RootKindDraft`) is the one root kind the host creates on its own | A fresh conversation needs a live file surface before a human has chosen a folder |
 | Symlink traversal is descriptor-relative and jailed | A lexical child path must not escape the approved tree |
