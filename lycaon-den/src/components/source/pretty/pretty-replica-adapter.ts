@@ -1,3 +1,4 @@
+import { isolateHistory } from "@codemirror/commands";
 import {
   EditorSelection,
   EditorState,
@@ -8,7 +9,7 @@ import {
 } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import type * as Y from "yjs";
-import { editorHistory, isolateHistory } from "../editor/editor-history.ts";
+import { editorHistory } from "../editor/editor-history.ts";
 import {
   documentDeltaChanges,
   documentHistoryKey,
@@ -47,7 +48,7 @@ export interface PrettyReplicaAdapterOptions {
 }
 
 function toEditorSelection(ranges: readonly PrettySelectionRange[], docLength: number): EditorSelection {
-  if (ranges.length === 0) return EditorSelection.cursor(0);
+  if (ranges.length === 0) return EditorSelection.single(0);
   return EditorSelection.create(
     ranges.map((r) =>
       EditorSelection.range(
