@@ -312,7 +312,7 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 
 	makeRepo := func(name, content string, pack bool) (string, string) {
 		dir := filepath.Join(tmp, name)
-		gittest.InitRepo(t, dir)
+		gittest.Init(t, dir)
 		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(dir, name+".txt"), []byte(content), 0o644))
 		gittest.CommitAll(t, dir, "commit "+name)
 		oid := strings.TrimSpace(gittest.Run(t, dir, "rev-parse", "HEAD"))
@@ -337,20 +337,26 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	testutil.FailErr(t, "lease keep", err)
 	baseMetrics := store.Metrics()
 
-	// 1. Injected post-rename syncDir failure rolls back the already-renamed loose or pack file.
+	// 1. Injected post-rename syncDir failure rolls back the already-renamed loose or pack file,
+	// and propagates rollback directory-sync errors when syncDir also fails during rollback.
 	errSyncFault := errors.New("injected post-rename directory sync failure")
-	syncFailCtx := withGCTestHooks(ctx, gcTestHooks{
+	var syncCalls atomic.Int32
+	oneShotSyncFailCtx := withGCTestHooks(ctx, gcTestHooks{
 		syncDir: func(_ string) error {
-			return errSyncFault
+			if syncCalls.Add(1) == 1 {
+				return errSyncFault
+			}
+			return nil
 		},
 	})
-	if _, _, err := store.ImportRepositoryObjects(syncFailCtx, []string{objLoose}, []string{oidLoose}); !errors.Is(err, errSyncFault) {
+	if _, _, err := store.ImportRepositoryObjects(oneShotSyncFailCtx, []string{objLoose}, []string{oidLoose}); !errors.Is(err, errSyncFault) {
 		t.Fatalf("expected errSyncFault on loose import, got %v", err)
 	}
 	if store.HasObject(oidLoose) {
 		t.Fatalf("expected post-rename loose object to be rolled back after syncDir failure")
 	}
-	if _, _, err := store.ImportRepositoryObjects(syncFailCtx, []string{objPack}, []string{oidPack}); !errors.Is(err, errSyncFault) {
+	syncCalls.Store(0)
+	if _, _, err := store.ImportRepositoryObjects(oneShotSyncFailCtx, []string{objPack}, []string{oidPack}); !errors.Is(err, errSyncFault) {
 		t.Fatalf("expected errSyncFault on pack import, got %v", err)
 	}
 	if store.HasObject(oidPack) {
@@ -363,9 +369,41 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 			baseMetrics, store.Metrics(), invAfterSyncFault)
 	}
 
-	// 2. Injected removeFile failure during rollback surfaces both primary and rollback errors via errors.Join,
-	// stages retirement for the unremoved pack companion, and reconciles cleanly on reopen and retry.
+	// 2. Interruption during rollback itself (after unlinking the first companion of a newly added pack/idx pair,
+	// before unlinking the second companion): recovery intent (.retiring-pack-<base>.pack) was established durably
+	// BEFORE the first unlink, so the half-unlinked pair is reconciled cleanly on reopen while keeping prior leased objects intact.
+	errRollbackInterrupted := errors.New("injected interruption mid-rollback after first companion unlink")
+	var unlinkedCount atomic.Int32
+	interruptCtx := withGCTestHooks(ctx, gcTestHooks{
+		beforeRollbackUnlink: func(p string) error {
+			if strings.HasSuffix(p, ".pack") || strings.HasSuffix(p, ".idx") {
+				if unlinkedCount.Add(1) == 2 {
+					return errRollbackInterrupted
+				}
+			}
+			return nil
+		},
+	})
+	missingTip := strings.Repeat("f", 40)
+	_, _, intErr := store.ImportRepositoryObjects(interruptCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(intErr, ErrCorruptObjectStore) || !errors.Is(intErr, errRollbackInterrupted) {
+		t.Fatalf("expected joined ErrCorruptObjectStore and errRollbackInterrupted, got %v", intErr)
+	}
+	packDirEntries, err := os.ReadDir(filepath.Join(storeRoot, "objects", "pack"))
+	testutil.FailErr(t, "ReadDir pack after mid-rollback interruption", err)
+	sawRetiringTombstone := false
+	for _, pe := range packDirEntries {
+		if strings.HasPrefix(pe.Name(), retiringPackPrefix) {
+			sawRetiringTombstone = true
+		}
+	}
+	if !sawRetiringTombstone {
+		t.Fatalf("expected durable .retiring- recovery marker present on disk when rollback is interrupted mid-pair")
+	}
+
+	// 3. Also verify removeFile + rollback syncDir error propagation during rollback, then reopen and retry.
 	errRollbackRemove := errors.New("injected rollback removeFile failure")
+	errRollbackSync := errors.New("injected rollback syncDir failure")
 	rbFailCtx := withGCTestHooks(ctx, gcTestHooks{
 		removeFile: func(p string) error {
 			if strings.HasSuffix(p, ".pack") {
@@ -373,23 +411,38 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 			}
 			return os.Remove(p)
 		},
+		syncDir: func(dirPath string) error {
+			if strings.HasSuffix(dirPath, "pack") && unlinkedCount.Load() >= 10 {
+				return errRollbackSync
+			}
+			return nil
+		},
 	})
-	missingTip := strings.Repeat("f", 40)
-	_, _, rbErr := store.ImportRepositoryObjects(rbFailCtx, []string{objPack}, []string{oidPack, missingTip})
-	if !errors.Is(rbErr, ErrCorruptObjectStore) || !errors.Is(rbErr, errRollbackRemove) {
-		t.Fatalf("expected joined ErrCorruptObjectStore and errRollbackRemove, got %v", rbErr)
+	// Reconcile the interrupted state first via a clean reopen, then exercise removeFile + rollback syncDir fault.
+	testutil.FailErr(t, "store.Close after mid-rollback interruption", store.Close())
+	reopenedMid, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "reopen after mid-rollback interruption", err)
+	t.Cleanup(func() { _ = reopenedMid.Close() })
+	if !reopenedMid.HasObject(oidKeep) || reopenedMid.HasObject(oidPack) {
+		t.Fatalf("expected prior leased object preserved and interrupted pack retired on reopen")
 	}
-	testutil.FailErr(t, "store.Close before reopen", store.Close())
 
-	reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
-	testutil.FailErr(t, "reopen after rollback removeFile failure", err)
-	t.Cleanup(func() { _ = reopened.Close() })
-	if !reopened.HasObject(oidKeep) || reopened.HasObject(oidPack) {
-		t.Fatalf("expected keep object preserved and failed pack retired on reopen")
+	unlinkedCount.Store(10)
+	_, _, rbErr := reopenedMid.ImportRepositoryObjects(rbFailCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(rbErr, ErrCorruptObjectStore) || !errors.Is(rbErr, errRollbackRemove) || !errors.Is(rbErr, errRollbackSync) {
+		t.Fatalf("expected joined ErrCorruptObjectStore, errRollbackRemove, and errRollbackSync, got %v", rbErr)
 	}
-	_, _, err = reopened.ImportRepositoryObjects(ctx, []string{objPack}, []string{oidPack})
+	testutil.FailErr(t, "reopenedMid.Close", reopenedMid.Close())
+
+	reopenedFinal, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "reopen after rollback removeFile failure", err)
+	t.Cleanup(func() { _ = reopenedFinal.Close() })
+	if !reopenedFinal.HasObject(oidKeep) || reopenedFinal.HasObject(oidPack) {
+		t.Fatalf("expected keep object preserved and failed pack retired on final reopen")
+	}
+	_, _, err = reopenedFinal.ImportRepositoryObjects(ctx, []string{objPack}, []string{oidPack})
 	testutil.FailErr(t, "retry ImportRepositoryObjects after transient fault clears", err)
-	if !reopened.HasObject(oidKeep) || !reopened.HasObject(oidPack) {
+	if !reopenedFinal.HasObject(oidKeep) || !reopenedFinal.HasObject(oidPack) {
 		t.Fatalf("expected both keep and newly imported pack objects present after retry")
 	}
 }

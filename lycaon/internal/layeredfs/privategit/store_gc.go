@@ -128,14 +128,36 @@ const retiringPackPrefix = ".retiring-"
 type gcTestHooksKey struct{}
 
 type gcTestHooks struct {
-	beforeStageRename   func(base, ext string) error
-	beforeUnlinkRetired func(base, ext string) error
-	removeFile          func(path string) error
-	syncDir             func(dirPath string) error
+	beforeStageRename    func(base, ext string) error
+	beforeUnlinkRetired  func(base, ext string) error
+	beforeRollbackUnlink func(path string) error
+	removeFile           func(path string) error
+	syncDir              func(dirPath string) error
 }
 
 func withGCTestHooks(ctx context.Context, hooks gcTestHooks) context.Context {
 	return context.WithValue(ctx, gcTestHooksKey{}, hooks)
+}
+
+func gcBeforeRollbackUnlink(ctx context.Context, path string) error {
+	if h, ok := ctx.Value(gcTestHooksKey{}).(gcTestHooks); ok && h.beforeRollbackUnlink != nil {
+		return h.beforeRollbackUnlink(path)
+	}
+	return nil
+}
+
+func writeDurablePackRetirementMarker(packDstDir, base string) error {
+	tombstone := filepath.Join(packDstDir, retiringPackPrefix+base+".pack")
+	f, err := os.OpenFile(tombstone, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o444)
+	if err != nil {
+		return err
+	}
+	syncErr := fssync.File(f)
+	closeErr := f.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
 }
 
 func gcBeforeStageRename(ctx context.Context, base, ext string) error {
