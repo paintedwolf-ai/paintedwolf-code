@@ -57,11 +57,11 @@ func (m *Manager) PublishSealedOverlayCheckpoint(ctx context.Context, sealed Sea
 	var parentLayers []layeredfs.ParentLayer
 	if sealed.ParentCheckpointID != "" {
 		manifest.ParentCheckpoints = []string{sealed.ParentCheckpointID}
-		if layers, _, lErr := services.recovery.OpenCheckpointChainLayers(ctx, manifest.ParentCheckpoints); lErr == nil {
-			parentLayers = layers
-		} else if !errors.Is(lErr, checkpoint.ErrCheckpointNotFound) {
+		layers, _, lErr := services.recovery.OpenCheckpointChainLayers(ctx, manifest.ParentCheckpoints)
+		if lErr != nil {
 			return "", lErr
 		}
+		parentLayers = layers
 	}
 	for _, root := range sealed.Roots {
 		manifest.SelectedRoots = append(manifest.SelectedRoots, layeredfs.RootSpec{ID: root.ID, Label: root.Label, TrunkPath: root.Path, IsPrimary: root.IsPrimary})
@@ -71,7 +71,11 @@ func (m *Manager) PublishSealedOverlayCheckpoint(ctx context.Context, sealed Sea
 		if err != nil {
 			return err
 		}
-		if hasExplicitParentEntry(parentLayers, entry.Path) {
+		fromParent, err := hasExplicitParentEntry(parentLayers, entry.Path)
+		if err != nil {
+			return err
+		}
+		if fromParent {
 			entry.Base.Layer = layeredfs.LayerParent
 		}
 		manifest.Entries = append(manifest.Entries, entry)
@@ -136,16 +140,20 @@ func sealedEntryKind(mode fs.FileMode) layeredfs.EntryKind {
 	return layeredfs.EntryRegular
 }
 
-func hasExplicitParentEntry(layers []layeredfs.ParentLayer, path layeredfs.QualifiedPath) bool {
+func hasExplicitParentEntry(layers []layeredfs.ParentLayer, path layeredfs.QualifiedPath) (bool, error) {
 	for _, pl := range layers {
 		if pl == nil {
 			continue
 		}
-		if pe, ok, err := pl.Lookup(path); err == nil && ok && !pe.Synthetic {
-			return true
+		pe, ok, err := pl.Lookup(path)
+		if err != nil {
+			return false, err
+		}
+		if ok && !pe.Synthetic {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 func openBranchParentLayers(ctx context.Context, services *layeredServices, branchRoot string, meta JobMeta, jobID string) ([]layeredfs.ParentLayer, []string, error) {

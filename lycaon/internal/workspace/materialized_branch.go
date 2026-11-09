@@ -451,10 +451,9 @@ func (m *Manager) reopenMaterializedBranch(ctx context.Context, branchRoot, jobI
 		projectID = journal.ProjectID
 	}
 	cv, err := services.coordinator.AdoptPreparedView(ctx, claim.ClaimRequest{
-		Identity:            claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: viewID, SourceGeneration: 1},
-		Hooks:               claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
-		ParentLayers:        parentLayers,
-		ParentCheckpointIDs: parentIDs,
+		Identity: claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: viewID, SourceGeneration: 1},
+		Hooks:    claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
+		ParentLayers: parentLayers, ParentCheckpointIDs: parentIDs,
 	}, eager, view)
 	if err != nil {
 		return nil, err
@@ -522,18 +521,17 @@ func materializedViewOf(ctx context.Context, branchRoot string) (*adapter.Prepar
 }
 
 func reopenForRead(ctx context.Context, branchRoot, manifest string) (*adapter.PreparedView, error) {
-	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
-	viewID := filepath.Base(branchRoot) + "-read"
+	metaDir, viewID := enginepaths.MetaDirForBranchRoot(branchRoot), filepath.Base(branchRoot)+"-read"
 	eager := adapter.NewEagerCopyAdapter(adapter.ReasonNone)
 	if view, ok := eager.LoadedView(viewID); ok {
 		return view, nil
 	}
 	meta, _ := LoadJobMeta(metaDir)
-	parentLayers, _, _ := openBranchParentLayers(ctx, nil, branchRoot, meta, "")
-	return eager.Reopen(ctx, adapter.ReopenRequest{
-		ViewID: viewID, RuntimeDir: filepath.Join(metaDir, "read"), BackingDir: filepath.Join(metaDir, "read", "backing"),
-		StatManifestPath: manifest, ParentLayers: parentLayers,
-	})
+	parentLayers, _, err := openBranchParentLayers(ctx, nil, branchRoot, meta, "")
+	if err != nil {
+		return nil, err
+	}
+	return eager.Reopen(ctx, adapter.ReopenRequest{ViewID: viewID, RuntimeDir: filepath.Join(metaDir, "read"), BackingDir: filepath.Join(metaDir, "read", "backing"), StatManifestPath: manifest, ParentLayers: parentLayers})
 }
 
 func materializedDivergencePaths(ctx context.Context, branchRoot string) ([]string, bool, error) {

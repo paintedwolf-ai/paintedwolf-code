@@ -1,6 +1,7 @@
 package layeredfs
 
 import (
+	"errors"
 	"io/fs"
 	"path/filepath"
 	"strings"
