@@ -42,7 +42,7 @@ class HarnessModelPolicyTest(unittest.TestCase):
         policy = select_model({}, "provider", "model")
         self.assertEqual(policy["agent_pool"]["selection"], "first")
         with self.assertRaises(ValueError):
-            select_model({}, "", "model")
+            select_model({"coordinator": None}, "", "model")
         with self.assertRaises(ValueError):
             select_model({}, "provider", "")
 

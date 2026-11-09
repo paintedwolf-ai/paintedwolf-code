@@ -8,7 +8,7 @@ import urllib.request
 
 
 def select_model(current, provider, model):
-    provider = provider or current.get("coordinator", {}).get("provider_id", "")
+    provider = provider or (current.get("coordinator") or {}).get("provider_id", "")
     if not provider or not model:
         raise ValueError("harness model selection requires a provider and model")
     selection = {"provider_id": provider, "model": model}
