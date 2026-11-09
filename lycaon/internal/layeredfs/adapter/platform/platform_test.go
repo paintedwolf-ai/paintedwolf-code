@@ -36,22 +36,25 @@ type availableConfinement struct{ err error }
 func (c availableConfinement) Available(context.Context, adapter.ProbeConfig) error  { return c.err }
 func (availableConfinement) VerifyView(context.Context, *adapter.PreparedView) error { return nil }
 
-func TestSelectionFallsBackWithTheConfinementReasonWithoutEnforcement(t *testing.T) {
+func TestSelectionRefusesOverLimitWorkWithoutEnforcement(t *testing.T) {
 	for name, cfg := range map[string]platform.Config{
 		"no enforcer":          {},
 		"enforcer unavailable": {Confinement: availableConfinement{err: errors.New("sandbox helper missing")}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			selector := platform.NewSelector(cfg)
-			chosen, probe := overBudgetChoice(t, selector, t.TempDir(), t.TempDir())
-			if chosen.Facts().PreparationKind != adapter.PreparationMaterialized {
-				t.Fatalf("selected %s without enforcement", chosen.ID())
-			}
+			selector.BudgetFor = adapter.ZeroBudget
+			choice, err := selector.Choose(t.Context(), adapter.ChooseRequest{
+				Probe:  adapter.ProbeConfig{RuntimeDir: t.TempDir()},
+				Grants: []adapter.RootGrant{{RootID: "primary", SourcePath: t.TempDir(), IsPrimary: true}},
+			})
+			want := adapter.ReasonConfinementUnavailable
 			if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-				return
+				want = adapter.ReasonUnsupportedPlatform
 			}
-			if chosen.Facts().FallbackReason != adapter.ReasonConfinementUnavailable || probe.ReasonCode != adapter.ReasonConfinementUnavailable {
-				t.Fatalf("fallback reason = %s, probe reason = %s", chosen.Facts().FallbackReason, probe.ReasonCode)
+			var refused *adapter.AdapterError
+			if !errors.As(err, &refused) || refused.ReasonCode != want || choice.Adapter != nil {
+				t.Fatalf("unavailable enforcement must not authorize an over-limit copy: choice=%+v err=%v", choice, err)
 			}
 		})
 	}
