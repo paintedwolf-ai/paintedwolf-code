@@ -34,6 +34,8 @@ const (
 	TurnLoadToolSourcePredicted TurnLoadToolSource = "predicted"
 	// TurnLoadToolSourceRequested means the model asked for it through request_tools.
 	TurnLoadToolSourceRequested TurnLoadToolSource = "requested"
+	// TurnLoadToolSourceFallback exposes a permitted tool after selection failure.
+	TurnLoadToolSourceFallback TurnLoadToolSource = "fallback"
 	// TurnLoadToolSourceCompanion means it loaded with a predicted tool that declares it.
 	TurnLoadToolSourceCompanion TurnLoadToolSource = "companion"
 )

@@ -110,3 +110,21 @@ func TestNamedSkillMembershipDoesNotFoldCollidingNames(t *testing.T) {
 		}
 	}
 }
+
+func TestFullSkillCatalogListsNamesAndDescriptions(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
+	surface := prompts.AgentPromptSurface{FullCatalog: true, Skills: []prompts.AgentSkillView{{Name: "review-accessibility", Description: "Review keyboard navigation."}, {Name: "verify-change", Description: "Run relevant verification."}}}
+	got, err := engine.Render(context.Background(), "partials/agent-skills.md", prompts.AgentPromptSurfaceTemplateVars(surface))
+	testutil.FailErr(t, "render full skill catalog", err)
+	for _, skill := range surface.Skills {
+		if !strings.Contains(got, skill.Name) || !strings.Contains(got, skill.Description) {
+			t.Fatalf("missing skill card %+v: %s", skill, got)
+		}
+	}
+	surface.FullCatalog = false
+	selected, err := engine.Render(context.Background(), "partials/agent-skills.md", prompts.AgentPromptSurfaceTemplateVars(surface))
+	testutil.FailErr(t, "render selected skill availability", err)
+	if strings.Contains(selected, "review-accessibility") {
+		t.Fatal("healthy selection rendered the full catalog")
+	}
+}

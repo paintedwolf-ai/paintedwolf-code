@@ -49,6 +49,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 
 	buildRec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	buildFix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, buildRec)
+	buildFix.Mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	buildFix.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	if _, err := buildFix.Mgr.Submissions.Prompt(context.Background(), buildFix.Sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "buildFix.Mgr.Prompt failed", err)
@@ -63,9 +64,9 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	if run == nil || !runstate.IsAmbientRun(run) {
 		t.Fatalf("prompt did not attach its default workflow: %+v", run)
 	}
-	// The investigate surface keeps task loadable: offered, or behind the capability map.
+	// An absent selector exposes permitted deferred schemas immediately.
 	buildReq := buildRec.LastRequest()
-	if !hasTool(buildReq.Tools, "task") && !mapsCapability(buildReq.Messages, "workers, workflows, budgets, and managed secrets") {
+	if !hasTool(buildReq.Tools, "task") || !hasTool(buildReq.Tools, "request_tools") {
 		t.Fatalf("build prompt must reach task (ambient implement dispatch primitive): tools=%v", toolNames(buildReq.Tools))
 	}
 }

@@ -139,7 +139,7 @@ func (m *Service) turnToolSets(ctx context.Context, sess *api.Session, profileID
 func (m *Service) Begin(
 	ctx context.Context, sess *api.Session, sessionID string, in promptinput.Input, history []api.Message, surfaceID, profileID, openingMessageID string,
 ) *Decision {
-	if m == nil || m.Ledger == nil || sess == nil {
+	if m == nil || m.Ledger == nil || sess == nil || ctx.Err() != nil {
 		return nil
 	}
 	rootCount := m.Workspace.RootCount(ctx, sess)
@@ -163,11 +163,13 @@ func (m *Service) Begin(
 	}
 	catalog, err := turnload.LoadCatalog()
 	if err != nil {
+		m.Ledger.ExposeCatalog(sessionID, turnload.RankingUnavailable)
 		turnLoadLog.Warn("decision catalog unavailable", "error", err)
 		return nil
 	}
 	units, err := prompts.UnitCatalogFor(nil)
 	if err != nil {
+		m.Ledger.ExposeCatalog(sessionID, turnload.RankingUnavailable)
 		turnLoadLog.Warn("unit catalog unavailable", "error", err)
 		return nil
 	}

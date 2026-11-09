@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -211,8 +212,9 @@ func TestCoordinatorPromptUnchanged(t *testing.T) {
 	}
 }
 
-func TestWorkerPromptKeepsCuratedSkillsOutOfStandingPrompt(t *testing.T) {
+func TestWorkerPromptExposesApplicableSkillsWithoutBialy(t *testing.T) {
 	mgr, _, rec := setupWorkerPromptFixture(t)
+	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	wireSkillsCatalogForPromptTest(t, mgr)
 	mgr.SetWorkerContextBuilder(&stubWorkerContext{ctx: inject.WorkerLegContext{Checklist: []string{"survey"}}})
 
@@ -249,8 +251,8 @@ func TestWorkerPromptKeepsCuratedSkillsOutOfStandingPrompt(t *testing.T) {
 		}
 	}
 	for name := range curated {
-		if strings.Contains(system, "- "+name) {
-			t.Fatalf("standing prompt listed skill %q", name)
+		if !strings.Contains(system, "`"+name+"`") {
+			t.Fatalf("standing prompt omitted applicable skill %q", name)
 		}
 	}
 }

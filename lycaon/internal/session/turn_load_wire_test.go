@@ -257,3 +257,12 @@ func TestBeforeFinishReadsVerificationFromTheDraft(t *testing.T) {
 		t.Fatalf("the blocked report did not escape: code=%q blocked=%v", code, blocked)
 	}
 }
+
+func TestTurnLoadWirePreservesFallbackProvenance(t *testing.T) {
+	ledger := turnload.NewLedger()
+	ledger.BeginTurn("s", turnload.TurnOpening{OpeningMessageID: "u", Loadable: []string{"task"}}, turnload.Decision{Abstained: true, Failure: turnload.RankingUnavailable})
+	got := transcript.TurnLoadWire(store.TurnLoadReceipt{SessionID: "s", OpeningMessageID: "u", Trigger: store.TurnLoadTriggerTurn, Abstained: true, Standing: decisionsJSON(t, ledger.Standing("s"))})
+	if len(got.Tools) != 1 || got.Tools[0].Source != api.TurnLoadToolSourceFallback || got.Tools[0].Need != "" || got.Tools[0].P != 0 {
+		t.Fatalf("fallback receipt = %+v", got)
+	}
+}

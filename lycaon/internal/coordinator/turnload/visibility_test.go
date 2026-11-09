@@ -1,6 +1,9 @@
 package turnload
 
 import (
+	"context"
+	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"reflect"
 	"testing"
 )
@@ -53,5 +56,33 @@ func TestMidTurnSelectionFailureExpandsOnlyPermittedTools(t *testing.T) {
 				t.Fatalf("tool state for %q", failure)
 			}
 		})
+	}
+}
+
+func TestContinuationReconcilesRestoredVisibility(t *testing.T) {
+	ledger := NewLedger()
+	ledger.Restore("s", Standing{Tools: []Load{{Tool: "removed", Source: SourcePredicted}}}, nil)
+	ledger.ReconcileCatalog("s", []string{"task"}, RankingUnavailable)
+	if !ledger.FullCatalog("s") || !reflect.DeepEqual(ledger.Active("s"), map[string]bool{"task": true}) {
+		t.Fatalf("continuation = %+v", ledger.Standing("s"))
+	}
+	ledger.BeginUndecidedTurn("s", TurnOpening{Loadable: []string{"task", "search"}, Boundary: Boundary{Cache: CacheCold}})
+	if !ledger.FullCatalog("s") || len(ledger.Active("s")) != 2 {
+		t.Fatalf("undecided = %+v", ledger.Standing("s"))
+	}
+}
+
+func TestSelectionFailureIsTypedWithoutMatchingReason(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want RankingFailure
+	}{{decide.ErrDisabled, RankingDisabled}, {decide.ErrUnavailable, RankingUnavailable}, {decide.ErrDeadline, RankingTimeout}, {context.Canceled, RankingCanceled}} {
+		got := Decide(t.Context(), &decidetest.Fake{Err: tc.err}, testSpec(), State{}, fixtureCandidates())
+		if got.Failure != tc.want {
+			t.Fatalf("failure = %q, want %q", got.Failure, tc.want)
+		}
+	}
+	if got := Decide(t.Context(), &decidetest.Fake{}, testSpec(), State{}, nil); got.Failure != "" {
+		t.Fatalf("empty candidate set became a failure: %+v", got)
 	}
 }

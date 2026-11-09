@@ -134,3 +134,26 @@ func TestMergeWorkerVisibleToolsHidesSkillsReadFromMachine(t *testing.T) {
 		t.Fatalf("visible_tools = %v", got)
 	}
 }
+
+func TestCompiledMachineRefreshesCatalogVisibility(t *testing.T) {
+	full := false
+	engine := &AssemblyEngine{}
+	engine.SetDeps(AssemblyDeps{FullCatalog: func(string) bool { return full }})
+	frame := inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: "coordinator", Surface: prompts.AgentPromptSurface{Skills: []prompts.AgentSkillView{{Name: "review", Description: "Review the change."}}}}}
+	sess := &api.Session{ID: "s"}
+	vars := map[string]any{}
+	projection := testPromptSurface(engine)
+	projection.mergeEffectivePromptSurface(t.Context(), sess, frame, vars)
+	first := vars["prompt_surface_fingerprint"]
+	full = true
+	projection.mergeEffectivePromptSurface(t.Context(), sess, frame, vars)
+	if vars["full_skill_catalog"] != true || vars["prompt_surface_fingerprint"] == first {
+		t.Fatal("mid-turn failure did not refresh catalog projection")
+	}
+	frame.Machine.Surface.Skills[0].Description = "Review accessibility."
+	first = vars["prompt_surface_fingerprint"]
+	projection.mergeEffectivePromptSurface(t.Context(), sess, frame, vars)
+	if vars["prompt_surface_fingerprint"] == first {
+		t.Fatal("changed catalog reused prompt identity")
+	}
+}

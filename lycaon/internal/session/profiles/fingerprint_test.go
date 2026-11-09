@@ -16,3 +16,17 @@ func TestPromptSurfaceFingerprintTracksSkillAvailability(t *testing.T) {
 		t.Fatal("skill availability changes the prompt procedure")
 	}
 }
+
+func TestFullCatalogFingerprintTracksRenderedCards(t *testing.T) {
+	first := prompts.AgentPromptSurface{FullCatalog: true, Skills: []prompts.AgentSkillView{{Name: "review", Description: "Review code"}}}
+	second := first
+	second.Skills = []prompts.AgentSkillView{{Name: "review", Description: "Review accessibility"}}
+	if first.CacheFingerprint() == second.CacheFingerprint() {
+		t.Fatal("changed card reused prompt identity")
+	}
+	second = first
+	second.FullCatalog = false
+	if first.CacheFingerprint() == second.CacheFingerprint() {
+		t.Fatal("catalog visibility reused prompt identity")
+	}
+}
