@@ -187,3 +187,29 @@ func TestIsVirtualRootLabel(t *testing.T) {
 		t.Fatal("IsVirtualRootLabel must reject non-virtual roots")
 	}
 }
+
+// INV-WR-05: an approved outside-root folder renders as its canonical
+// absolute path, not a bare relative path.
+func TestQualifyExternalRootRendersAbsolutePath(t *testing.T) {
+	primary := t.TempDir()
+	grant := t.TempDir()
+	roots := []RootRef{{ID: "p", Label: "lycaon", Path: primary, IsPrimary: true}}
+	external := RootRef{Path: grant, External: true}
+	cases := []struct {
+		abs  string
+		want string
+	}{
+		{grant, filepath.ToSlash(grant)},
+		{filepath.Join(grant, "sub", "file.txt"), filepath.ToSlash(filepath.Join(grant, "sub", "file.txt"))},
+	}
+	for _, tc := range cases {
+		if got := Qualify(roots, "p", external, tc.abs); got != tc.want {
+			t.Fatalf("Qualify(external, %q) = %q want %q", tc.abs, got, tc.want)
+		}
+	}
+	// The grant path must not leak through the attached-root spellings even
+	// when it sits under the primary root's parent.
+	if got := Qualify(roots, "p", external, grant); got != filepath.ToSlash(grant) {
+		t.Fatalf("Qualify(external grant root) = %q want %q", got, filepath.ToSlash(grant))
+	}
+}
