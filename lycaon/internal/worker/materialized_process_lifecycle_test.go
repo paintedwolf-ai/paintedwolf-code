@@ -22,18 +22,27 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Separate processes prevent in-memory registries from making restart recovery appear successful.
-// This proves an orderly process restart, not power-loss durability or mounted-provider behavior.
 func TestSmallMaterializedLifecycleAcrossProcessRestart(t *testing.T) {
+	runWorkerLifecycleAcrossProcessRestart(t, false)
+}
+
+func TestSmallMountedLifecycleAcrossProcessRestart(t *testing.T) {
+	runWorkerLifecycleAcrossProcessRestart(t, true)
+}
+
+// Separate processes prevent registries from substituting for durable recovery.
+// Process restart does not establish power-loss durability.
+func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted bool) {
+	t.Helper()
 	if phase := os.Getenv("PW_M14_LIFECYCLE_PHASE"); phase != "" {
-		runMaterializedLifecyclePhase(t, os.Getenv("PW_M14_LIFECYCLE_ROOT"), phase)
+		runWorkerLifecyclePhase(t, os.Getenv("PW_M14_LIFECYCLE_ROOT"), phase, mounted)
 		return
 	}
 	root := t.TempDir()
 	executable, err := os.Executable()
 	testutil.FailErr(t, "test executable", err)
 	for _, phase := range []string{"prepare", "recover-promote"} {
-		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^TestSmallMaterializedLifecycleAcrossProcessRestart$", "-test.timeout=2m")
+		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^"+t.Name()+"$", "-test.timeout=2m")
 		cmd.Env = append(os.Environ(), "PW_M14_LIFECYCLE_PHASE="+phase, "PW_M14_LIFECYCLE_ROOT="+root)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%s process failed: %v\n%s", phase, err, output)
@@ -41,7 +50,7 @@ func TestSmallMaterializedLifecycleAcrossProcessRestart(t *testing.T) {
 	}
 }
 
-func runMaterializedLifecyclePhase(t *testing.T, root, phase string) {
+func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted bool) {
 	t.Helper()
 	if root == "" {
 		t.Fatal("missing isolated lifecycle root")
@@ -56,6 +65,10 @@ func runMaterializedLifecyclePhase(t *testing.T, root, phase string) {
 	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
 		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
 	}
+	if mounted {
+		selector = workspace.EnforcedWorkspaceSelector()
+		selector.BudgetFor = adapter.ZeroBudget
+	}
 	manager := workspace.NewManager(branches).WithPrivateGit(gitManager).WithSelector(selector)
 	queue := NewSQLQueue(database, 4)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
@@ -68,8 +81,12 @@ func runMaterializedLifecyclePhase(t *testing.T, root, phase string) {
 		testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", source)
 		task := fixture.claim(t)
 		snap, _, ok := WorkerClaimWorkspaceState(task.ID)
-		if !ok || snap.Adapter.PreparationKind != adapter.PreparationMaterialized {
-			t.Fatal("small worker did not materialize")
+		expected := adapter.PreparationMaterialized
+		if mounted {
+			expected = adapter.PreparationMounted
+		}
+		if !ok || snap.Adapter.PreparationKind != expected {
+			t.Fatalf("worker preparation = %s, want %s", snap.Adapter.PreparationKind, expected)
 		}
 		testutil.FailErr(t, "edit worker", os.WriteFile(filepath.Join(task.WorkspaceRoot, "main.go"), []byte("package worker\n"), 0o644))
 		gittest.Run(t, task.WorkspaceRoot, "add", "main.go")
