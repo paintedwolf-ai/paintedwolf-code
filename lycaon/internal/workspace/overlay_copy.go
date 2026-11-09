@@ -127,6 +127,9 @@ func markSnapshotCompleteWithClaim(branchRoot string, choice WorkspaceStrategySe
 	}
 	if cv != nil {
 		meta.JournalPath = cv.Metadata.JournalPath
+		if len(cv.Metadata.Checkpoints.ParentCheckpointIDs) > 0 {
+			meta.ParentCheckpointIDs = append([]string(nil), cv.Metadata.Checkpoints.ParentCheckpointIDs...)
+		}
 	} else {
 		recordBranchClaimState(branchRoot, nil, snapshotFromJobMeta(branchRoot, meta), nil)
 	}

@@ -277,6 +277,7 @@ func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, err
 	provider := c.roots.providers[qpath.RootID]
 	c.mu.RUnlock()
 
+	var syntheticParent *ParentEntry
 	for _, pl := range parentLayers {
 		pe, ok, err := pl.Lookup(qpath)
 		if err != nil {
@@ -288,6 +289,13 @@ func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, err
 		if pe.Kind == EntryAbsent {
 			return resolvedLayerEntry{}, fs.ErrNotExist
 		}
+		if pe.Synthetic {
+			if syntheticParent == nil {
+				cp := pe
+				syntheticParent = &cp
+			}
+			continue
+		}
 		cp := pe
 		return resolvedLayerEntry{
 			qpath:       qpath,
@@ -298,6 +306,14 @@ func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, err
 	}
 
 	if provider == nil {
+		if syntheticParent != nil {
+			return resolvedLayerEntry{
+				qpath:       qpath,
+				layer:       LayerParent,
+				attr:        parentEntryToAttr(qpath, *syntheticParent),
+				parentEntry: syntheticParent,
+			}, nil
+		}
 		if qpath.Rel == "." {
 			return resolvedLayerEntry{
 				qpath: qpath,
@@ -318,9 +334,25 @@ func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, err
 	c.counters.lowerLookups.Add(1)
 	le, err := provider.Lstat(qpath.Rel)
 	if err != nil {
+		if syntheticParent != nil && errors.Is(err, fs.ErrNotExist) {
+			return resolvedLayerEntry{
+				qpath:       qpath,
+				layer:       LayerParent,
+				attr:        parentEntryToAttr(qpath, *syntheticParent),
+				parentEntry: syntheticParent,
+			}, nil
+		}
 		return resolvedLayerEntry{}, err
 	}
 	if le.Kind == EntryAbsent {
+		if syntheticParent != nil {
+			return resolvedLayerEntry{
+				qpath:       qpath,
+				layer:       LayerParent,
+				attr:        parentEntryToAttr(qpath, *syntheticParent),
+				parentEntry: syntheticParent,
+			}, nil
+		}
 		return resolvedLayerEntry{}, fs.ErrNotExist
 	}
 	xattrs, xErr := provider.ListXattr(qpath.Rel)

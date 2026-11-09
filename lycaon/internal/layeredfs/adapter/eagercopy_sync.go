@@ -65,13 +65,32 @@ func newStatCapture(takenNS int64, records []statRecord, roots []PreparedRoot, p
 	for _, rec := range records {
 		qp := rec.qualified()
 		s.manifest[qp] = rec
-		if pe, ok := s.parentEntry(qp); ok && pe.Kind == layeredfs.EntryAbsent {
-			continue
+		if pe, ok := s.parentEntry(qp); ok {
+			if pe.Kind == layeredfs.EntryAbsent {
+				continue
+			}
+			rec.Kind, rec.Mode, rec.Size = pe.Kind, uint32(pe.Mode), pe.Size
+			rec.MtimeNS, rec.LinkTarget, rec.Ino = pe.ModTime.UnixNano(), pe.LinkTarget, 0
 		}
 		s.current[qp] = rec
 	}
 	for _, r := range roots {
 		s.pristine[r.RootID] = r.PristinePath
+		for _, parent := range parents {
+			for rel, pe := range parentEntriesForRoot(parent, r.RootID) {
+				qp := layeredfs.QualifiedPath{RootID: r.RootID, Rel: rel}
+				if _, seen := s.current[qp]; seen {
+					continue
+				}
+				if resolved, ok := s.parentEntry(qp); ok && resolved.Kind != layeredfs.EntryAbsent && !resolved.Synthetic {
+					s.current[qp] = statRecord{
+						Root: r.RootID, Rel: rel, Kind: resolved.Kind, Mode: uint32(resolved.Mode),
+						Size: resolved.Size, MtimeNS: resolved.ModTime.UnixNano(), LinkTarget: resolved.LinkTarget,
+					}
+				}
+				_ = pe
+			}
+		}
 	}
 	return s
 }
@@ -230,12 +249,27 @@ func (s *statCapture) baseFor(ctx context.Context, core *layeredfs.Core, qp laye
 	}
 	if pe, ok := s.parentEntry(qp); ok {
 		if pe.Kind == layeredfs.EntryAbsent {
+			_ = core.RegisterSeedBase(layeredfs.BaseCapture{
+				Path: qp, Layer: layeredfs.LayerParent, Kind: layeredfs.EntryAbsent, CapturedAt: time.Now(),
+			})
 			return layeredfs.BaseCapture{}, nil
 		}
 		base := layeredfs.BaseCapture{
-			Path: qp, Layer: layeredfs.LayerParentCheckpoint, Kind: pe.Kind, Mode: pe.Mode,
+			Path: qp, Layer: layeredfs.LayerParent, Kind: pe.Kind, Mode: pe.Mode,
 			Size: pe.Size, ModTime: pe.ModTime, SHA256: pe.SHA256, LinkTarget: pe.LinkTarget,
-			Xattrs: cloneXattrMap(pe.Xattrs),
+			Xattrs: cloneXattrMap(pe.Xattrs), CapturedAt: time.Now(),
+		}
+		if pe.Kind == layeredfs.EntryRegular && pe.BackingAbs != "" {
+			held, err := s.holdBaseBytes(ctx, pe.BackingAbs)
+			if err != nil {
+				return layeredfs.BaseCapture{}, err
+			}
+			base.BackingFile = held
+		}
+		if pe.Kind != layeredfs.EntryRegular || base.BackingFile != "" {
+			if err := core.RegisterSeedBase(base); err != nil {
+				return layeredfs.BaseCapture{}, err
+			}
 		}
 		s.bases[qp] = base
 		if _, known := s.synced[qp]; !known {
@@ -262,12 +296,35 @@ func (s *statCapture) baseFor(ctx context.Context, core *layeredfs.Core, qp laye
 }
 
 func (s *statCapture) parentEntry(qp layeredfs.QualifiedPath) (layeredfs.ParentEntry, bool) {
+	var synthetic layeredfs.ParentEntry
+	var hasSynthetic bool
 	for _, parent := range s.parents {
-		if pe, ok, err := parent.Lookup(qp); err == nil && ok {
-			return pe, true
+		pe, ok, err := parent.Lookup(qp)
+		if err != nil || !ok {
+			continue
+		}
+		if pe.Synthetic {
+			if !hasSynthetic {
+				synthetic, hasSynthetic = pe, true
+			}
+			continue
+		}
+		return pe, true
+	}
+	if hasSynthetic {
+		if _, inManifest := s.manifest[qp]; !inManifest {
+			return synthetic, true
 		}
 	}
 	return layeredfs.ParentEntry{}, false
+}
+
+func (s *statCapture) hasEffectiveBase(qp layeredfs.QualifiedPath) bool {
+	if pe, ok := s.parentEntry(qp); ok {
+		return pe.Kind != layeredfs.EntryAbsent
+	}
+	_, inManifest := s.manifest[qp]
+	return inManifest
 }
 
 func (s *statCapture) readPristineBase(ctx context.Context, rec statRecord) (layeredfs.BaseCapture, error) {
@@ -324,7 +381,7 @@ func (s *statCapture) changedPaths(ctx context.Context, roots []PreparedRoot) ([
 			return nil, err
 		}
 		for _, rec := range gone {
-			if _, inManifest := s.manifest[rec.qualified()]; inManifest {
+			if s.hasEffectiveBase(rec.qualified()) {
 				out = append(out, rec.qualified())
 			}
 		}
@@ -372,15 +429,20 @@ func (s *statCapture) capturedDifferences(ctx context.Context, r PreparedRoot, v
 			out = append(out, qp)
 		}
 	}
-	for qp := range s.manifest {
-		if _, tracked := s.current[qp]; tracked || qp.RootID != r.RootID {
-			continue
-		}
-		if pe, ok := s.parentEntry(qp); ok && pe.Kind == layeredfs.EntryAbsent {
-			continue
+	checkRemoved := func(qp layeredfs.QualifiedPath) {
+		if _, tracked := s.current[qp]; tracked || qp.RootID != r.RootID || !s.hasEffectiveBase(qp) {
+			return
 		}
 		if _, err := os.Lstat(filepath.Join(r.WorkspacePath, filepath.FromSlash(qp.Rel))); err != nil {
 			out = append(out, qp)
+		}
+	}
+	for qp := range s.manifest {
+		checkRemoved(qp)
+	}
+	for _, parent := range s.parents {
+		for rel := range parentEntriesForRoot(parent, r.RootID) {
+			checkRemoved(layeredfs.QualifiedPath{RootID: r.RootID, Rel: rel})
 		}
 	}
 	return out, nil
@@ -432,34 +494,18 @@ func (s *statCapture) differsFromBase(ctx context.Context, v statVisit) (bool, e
 	return diskSHA != baseSHA, nil
 }
 
-func syncDirEntry(
-	core *layeredfs.Core,
-	qp layeredfs.QualifiedPath,
-	fullPath string,
-	info fs.FileInfo,
-	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
-) error {
+func syncDirEntry(core *layeredfs.Core, qp layeredfs.QualifiedPath, fullPath string, info fs.FileInfo, synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture) error {
 	cur, hasSynced := synced[qp]
 	if !hasSynced || cur.Kind != layeredfs.EntryDirectory {
 		if _, err := core.Mkdir(qp, info.Mode().Perm()); err != nil && !errors.Is(err, os.ErrExist) {
 			return err
 		}
-		synced[qp] = layeredfs.BaseCapture{
-			Path: qp,
-			Kind: layeredfs.EntryDirectory,
-			Mode: fs.ModeDir | info.Mode().Perm(),
-		}
+		synced[qp] = layeredfs.BaseCapture{Path: qp, Kind: layeredfs.EntryDirectory, Mode: fs.ModeDir | info.Mode().Perm()}
 	}
 	return syncEntryMetadataIfChanged(core, qp, fullPath, info, synced)
 }
 
-func syncSymlinkEntry(
-	core *layeredfs.Core,
-	qp layeredfs.QualifiedPath,
-	fullPath string,
-	info fs.FileInfo,
-	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
-) error {
+func syncSymlinkEntry(core *layeredfs.Core, qp layeredfs.QualifiedPath, fullPath string, info fs.FileInfo, synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture) error {
 	target, err := os.Readlink(fullPath)
 	if err != nil {
 		return err
@@ -476,35 +522,17 @@ func syncSymlinkEntry(
 		if _, err := core.Symlink(target, qp); err != nil {
 			return err
 		}
-		synced[qp] = layeredfs.BaseCapture{
-			Path:       qp,
-			Kind:       layeredfs.EntrySymlink,
-			Mode:       fs.ModeSymlink | 0o777,
-			Size:       int64(len(target)),
-			LinkTarget: target,
-		}
+		synced[qp] = layeredfs.BaseCapture{Path: qp, Kind: layeredfs.EntrySymlink, Mode: fs.ModeSymlink | 0o777, Size: int64(len(target)), LinkTarget: target}
 	}
 	return syncEntryMetadataIfChanged(core, qp, fullPath, info, synced)
 }
 
 // syncRegularEntry looks at one file whose stat differs. A hash that matches what Core already holds
 // stops here, so a touched file costs a read and no write.
-func syncRegularEntry(
-	ctx context.Context,
-	core *layeredfs.Core,
-	meter *contentMeter,
-	qp layeredfs.QualifiedPath,
-	fullPath string,
-	info fs.FileInfo,
-	base layeredfs.BaseCapture,
-	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
-) error {
+func syncRegularEntry(ctx context.Context, core *layeredfs.Core, meter *contentMeter, qp layeredfs.QualifiedPath, fullPath string, info fs.FileInfo, base layeredfs.BaseCapture, synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture) error {
 	cur, hasSynced := synced[qp]
-	wasDifferentFromBase := !hasSynced ||
-		cur.Kind != layeredfs.EntryRegular ||
-		cur.SHA256 != base.SHA256 ||
-		cur.Mode.Perm() != base.Mode.Perm() ||
-		!xattrsEqual(cur.Xattrs, base.Xattrs)
+	wasDifferentFromBase := !hasSynced || cur.Kind != layeredfs.EntryRegular ||
+		cur.SHA256 != base.SHA256 || cur.Mode.Perm() != base.Mode.Perm() || !xattrsEqual(cur.Xattrs, base.Xattrs)
 
 	diskSHA, _, err := meter.hashFile(ctx, fullPath)
 	if err != nil {
@@ -521,11 +549,7 @@ func syncRegularEntry(
 			return err
 		}
 		if !hasSynced || cur.Kind != layeredfs.EntryRegular {
-			cur = layeredfs.BaseCapture{
-				Path: qp,
-				Kind: layeredfs.EntryRegular,
-				Mode: info.Mode().Perm(),
-			}
+			cur = layeredfs.BaseCapture{Path: qp, Kind: layeredfs.EntryRegular, Mode: info.Mode().Perm()}
 		}
 		cur.Size, cur.SHA256 = int64(len(raw)), diskSHA
 		synced[qp] = cur
@@ -536,10 +560,8 @@ func syncRegularEntry(
 	}
 
 	after := synced[qp]
-	matchesSeedBase := base.Kind == layeredfs.EntryRegular &&
-		after.SHA256 == base.SHA256 &&
-		after.Mode.Perm() == base.Mode.Perm() &&
-		xattrsEqual(after.Xattrs, base.Xattrs)
+	matchesSeedBase := base.Kind == layeredfs.EntryRegular && after.SHA256 == base.SHA256 &&
+		after.Mode.Perm() == base.Mode.Perm() && xattrsEqual(after.Xattrs, base.Xattrs)
 	if matchesSeedBase && wasDifferentFromBase {
 		if _, err := core.Chtimes(qp, base.ModTime, base.ModTime, true); err != nil {
 			return err
@@ -550,13 +572,7 @@ func syncRegularEntry(
 	return nil
 }
 
-func syncEntryMetadataIfChanged(
-	core *layeredfs.Core,
-	qp layeredfs.QualifiedPath,
-	fullPath string,
-	info fs.FileInfo,
-	synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture,
-) error {
+func syncEntryMetadataIfChanged(core *layeredfs.Core, qp layeredfs.QualifiedPath, fullPath string, info fs.FileInfo, synced map[layeredfs.QualifiedPath]layeredfs.BaseCapture) error {
 	diskXattrs, err := readPathXattrs(fullPath)
 	if err != nil {
 		return err

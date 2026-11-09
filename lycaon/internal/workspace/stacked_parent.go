@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
@@ -53,8 +54,14 @@ func (m *Manager) PublishSealedOverlayCheckpoint(ctx context.Context, sealed Sea
 		CheckpointID: checkpointID, WorkerID: sealed.JobID, TaskID: sealed.JobID, ProjectID: sealed.ProjectID,
 		SourceGeneration: "1", Trigger: checkpoint.TriggerWorkerCompletion,
 	}
+	var parentLayers []layeredfs.ParentLayer
 	if sealed.ParentCheckpointID != "" {
 		manifest.ParentCheckpoints = []string{sealed.ParentCheckpointID}
+		if layers, _, lErr := services.recovery.OpenCheckpointChainLayers(ctx, manifest.ParentCheckpoints); lErr == nil {
+			parentLayers = layers
+		} else if !errors.Is(lErr, checkpoint.ErrCheckpointNotFound) {
+			return "", lErr
+		}
 	}
 	for _, root := range sealed.Roots {
 		manifest.SelectedRoots = append(manifest.SelectedRoots, layeredfs.RootSpec{ID: root.ID, Label: root.Label, TrunkPath: root.Path, IsPrimary: root.IsPrimary})
@@ -63,6 +70,9 @@ func (m *Manager) PublishSealedOverlayCheckpoint(ctx context.Context, sealed Sea
 		entry, err := sealedManifestEntry(store, change)
 		if err != nil {
 			return err
+		}
+		if hasExplicitParentEntry(parentLayers, entry.Path) {
+			entry.Base.Layer = layeredfs.LayerParent
 		}
 		manifest.Entries = append(manifest.Entries, entry)
 		return nil
@@ -124,4 +134,100 @@ func sealedEntryKind(mode fs.FileMode) layeredfs.EntryKind {
 		return layeredfs.EntrySymlink
 	}
 	return layeredfs.EntryRegular
+}
+
+func hasExplicitParentEntry(layers []layeredfs.ParentLayer, path layeredfs.QualifiedPath) bool {
+	for _, pl := range layers {
+		if pl == nil {
+			continue
+		}
+		if pe, ok, err := pl.Lookup(path); err == nil && ok && !pe.Synthetic {
+			return true
+		}
+	}
+	return false
+}
+
+func openBranchParentLayers(ctx context.Context, services *layeredServices, branchRoot string, meta JobMeta, jobID string) ([]layeredfs.ParentLayer, []string, error) {
+	parentIDs := append([]string(nil), meta.ParentCheckpointIDs...)
+	if len(parentIDs) == 0 && services != nil && jobID != "" {
+		if j, err := services.recovery.LoadWorkerJournal(jobID); err == nil && len(j.ParentCheckpointIDs) > 0 {
+			parentIDs = append([]string(nil), j.ParentCheckpointIDs...)
+		}
+	}
+	if len(parentIDs) == 0 {
+		return nil, nil, nil
+	}
+	if services != nil {
+		layers, _, err := services.recovery.OpenCheckpointChainLayers(ctx, parentIDs)
+		return layers, parentIDs, err
+	}
+	storeDir := findBranchCheckpointStoreDir(branchRoot, meta, parentIDs[0])
+	if storeDir == "" {
+		return nil, parentIDs, nil
+	}
+	store, err := checkpoint.NewStore(storeDir)
+	if err != nil {
+		return nil, parentIDs, err
+	}
+	layers, err := openStoreParentChain(ctx, store, parentIDs)
+	return layers, parentIDs, err
+}
+
+func recoveredParentCheckpointIDs(services *layeredServices, branchRoot, jobID string) []string {
+	if meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot)); err == nil && len(meta.ParentCheckpointIDs) > 0 {
+		return append([]string(nil), meta.ParentCheckpointIDs...)
+	}
+	if services != nil && jobID != "" {
+		if j, err := services.recovery.LoadWorkerJournal(jobID); err == nil && len(j.ParentCheckpointIDs) > 0 {
+			return append([]string(nil), j.ParentCheckpointIDs...)
+		}
+	}
+	return nil
+}
+
+func findBranchCheckpointStoreDir(branchRoot string, meta JobMeta, checkpointID string) string {
+	if checkpointManifestExists(meta.CheckpointStoreDir, checkpointID) {
+		return meta.CheckpointStoreDir
+	}
+	workerBranchesDir := filepath.Dir(filepath.Dir(filepath.Clean(branchRoot)))
+	configDir := filepath.Dir(workerBranchesDir)
+	for _, cand := range []string{
+		filepath.Join(configDir, enginepaths.WorkerRecoveryDirName, "checkpoints"),
+		filepath.Join(workerBranchesDir, adapterRuntimeDirName, "recovery", "checkpoints"),
+		filepath.Join(configDir, enginepaths.WorkerBaselinesDirName, ".task-checkpoints"),
+	} {
+		if checkpointManifestExists(cand, checkpointID) {
+			return cand
+		}
+	}
+	return ""
+}
+
+func openStoreParentChain(ctx context.Context, store *checkpoint.Store, ids []string) ([]layeredfs.ParentLayer, error) {
+	seen := make(map[string]bool)
+	var layers []layeredfs.ParentLayer
+	var walk func([]string) error
+	walk = func(cids []string) error {
+		for _, id := range cids {
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			m, err := store.LoadManifest(id)
+			if err != nil {
+				return err
+			}
+			pl, err := checkpoint.NewCheckpointParentLayer(store, m)
+			if err != nil {
+				return err
+			}
+			layers = append(layers, pl)
+			if err := walk(m.ParentCheckpoints); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return layers, walk(ids)
 }

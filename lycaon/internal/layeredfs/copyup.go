@@ -131,6 +131,8 @@ func captureFromLowerOrParent(c *Core, qpath QualifiedPath) (BaseCapture, error)
 	retryHook := c.cfg.CaptureRetryHook
 	c.mu.RUnlock()
 
+	var syntheticLayer ParentLayer
+	var syntheticEntry ParentEntry
 	for _, pl := range parentLayers {
 		pe, ok, err := pl.Lookup(qpath)
 		if err != nil {
@@ -147,7 +149,22 @@ func captureFromLowerOrParent(c *Core, qpath QualifiedPath) (BaseCapture, error)
 				CapturedAt: time.Now(),
 			}, nil
 		}
+		if pe.Synthetic {
+			if syntheticLayer == nil {
+				syntheticLayer, syntheticEntry = pl, pe
+			}
+			continue
+		}
 		return captureParentEntry(c, qpath, pl, pe)
+	}
+
+	if syntheticLayer != nil {
+		if provider == nil {
+			return captureParentEntry(c, qpath, syntheticLayer, syntheticEntry)
+		}
+		if le, err := provider.Lstat(qpath.Rel); err != nil || le.Kind == EntryAbsent {
+			return captureParentEntry(c, qpath, syntheticLayer, syntheticEntry)
+		}
 	}
 
 	if provider == nil {

@@ -109,7 +109,7 @@ func (c *Coordinator) PrepareStackedWorkerView(ctx context.Context, req StackedV
 		}
 	}
 	// A materialized child has no view to rebuild; its claim alone keeps the chain retained.
-	if view.Facts.PreparationKind == adapter.PreparationMounted {
+	if _, jErr := c.LoadWorkerJournal(req.ChildWorkerID); view.Facts.PreparationKind == adapter.PreparationMounted || jErr == nil {
 		if err := c.recordStackedWorker(req, parents, view); err != nil {
 			return abort(err)
 		}

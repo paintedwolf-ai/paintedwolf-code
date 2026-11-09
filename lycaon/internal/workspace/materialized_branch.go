@@ -434,10 +434,14 @@ func (m *Manager) reopenMaterializedBranch(ctx context.Context, branchRoot, jobI
 	if err != nil {
 		return nil, err
 	}
+	parentLayers, parentIDs, err := openBranchParentLayers(ctx, services, branchRoot, meta, jobID)
+	if err != nil {
+		return nil, err
+	}
 	view, err := eager.Reopen(ctx, adapter.ReopenRequest{
 		ViewID: viewID, RuntimeDir: filepath.Join(m.branchRoot, adapterRuntimeDirName, filepath.Base(filepath.Dir(branchRoot))),
 		BackingDir: backing, StatManifestPath: enginepaths.StatManifestForBranchRoot(branchRoot),
-		WorkspaceDirs: targets, PristineDir: enginepaths.PristineTreeForBranchRoot(branchRoot),
+		WorkspaceDirs: targets, PristineDir: enginepaths.PristineTreeForBranchRoot(branchRoot), ParentLayers: parentLayers,
 	})
 	if err != nil {
 		return nil, err
@@ -447,8 +451,10 @@ func (m *Manager) reopenMaterializedBranch(ctx context.Context, branchRoot, jobI
 		projectID = journal.ProjectID
 	}
 	cv, err := services.coordinator.AdoptPreparedView(ctx, claim.ClaimRequest{
-		Identity: claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: viewID, SourceGeneration: 1},
-		Hooks:    claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
+		Identity:            claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: viewID, SourceGeneration: 1},
+		Hooks:               claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
+		ParentLayers:        parentLayers,
+		ParentCheckpointIDs: parentIDs,
 	}, eager, view)
 	if err != nil {
 		return nil, err
@@ -476,8 +482,9 @@ func (m *Manager) adoptRecoveredMaterializedView(ctx context.Context, branchRoot
 		return err
 	}
 	cv, err := services.coordinator.AdoptPreparedView(ctx, claim.ClaimRequest{
-		Identity: claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: view.ViewID, SourceGeneration: 1},
-		Hooks:    claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
+		Identity:            claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: view.ViewID, SourceGeneration: 1},
+		Hooks:               claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
+		ParentCheckpointIDs: recoveredParentCheckpointIDs(services, branchRoot, jobID),
 	}, adp, view)
 	if err != nil {
 		return err
@@ -521,8 +528,11 @@ func reopenForRead(ctx context.Context, branchRoot, manifest string) (*adapter.P
 	if view, ok := eager.LoadedView(viewID); ok {
 		return view, nil
 	}
+	meta, _ := LoadJobMeta(metaDir)
+	parentLayers, _, _ := openBranchParentLayers(ctx, nil, branchRoot, meta, "")
 	return eager.Reopen(ctx, adapter.ReopenRequest{
-		ViewID: viewID, RuntimeDir: filepath.Join(metaDir, "read"), BackingDir: filepath.Join(metaDir, "read", "backing"), StatManifestPath: manifest,
+		ViewID: viewID, RuntimeDir: filepath.Join(metaDir, "read"), BackingDir: filepath.Join(metaDir, "read", "backing"),
+		StatManifestPath: manifest, ParentLayers: parentLayers,
 	})
 }
 
