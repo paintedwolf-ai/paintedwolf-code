@@ -2,11 +2,6 @@ import { batch } from "solid-js";
 import { produce, unwrap } from "solid-js/store";
 import { chatContentDocumentKey, type ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
 import { defaultEol } from "../../components/source/editor/eol.ts";
-import {
-  clearPrettyDocumentRecoveryForDocument,
-  hasUnpersistedPrettyRecoveryForDocument,
-} from "../../components/source/pretty/pretty-replica-recovery.ts";
-import { clearPrettyDisplayTab } from "../editor/pretty-display-state.ts";
 import { isComposedBufferKind, type FileBufferKind } from "./project-files-buffer-kind.ts";
 import {
   closeTargetKeys,
@@ -356,17 +351,10 @@ export function closeFilesBuffer(
   const buffer = state.byKey[key];
   if (!buffer) return null;
   if (buffer.dirty && !buffer.jobId && !buffer.documentId) return null;
-  if (!options.discardDraft && hasUnpersistedPrettyRecoveryForDocument(buffer.documentId)) {
-    return null;
-  }
-  if (options.discardDraft && buffer.documentId) {
-    clearPrettyDocumentRecoveryForDocument(buffer.documentId);
-  }
   const discard = options.discardDraft === true && buffer.dirty && buffer.documentId != null;
   if (buffer.dirty && buffer.documentId && !discard) scheduleEditorDocumentDraft(projectId, buffer);
   const index = state.order.indexOf(key);
   const snapshot: FileBuffer = { ...unwrap(buffer), closeError: null };
-  clearPrettyDisplayTab(projectId, key);
   setFilesStore(projectId, produce((current) => detachBuffer(current, key)));
 
   const closing = closingBuffers.get(projectId) ?? new Set<ClosingBuffer>();

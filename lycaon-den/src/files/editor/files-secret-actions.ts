@@ -12,10 +12,6 @@ import { getSecretSpanMarks } from "../../components/source/secrets/secret-span-
 import { MarkSecretFailure } from "../../components/source/secrets/mark-secret-failure.ts";
 import { SECRET_SPAN_COPY } from "../../components/source/secrets/secret-span-copy.ts";
 import type { SyncedEditorDocument } from "../documents/editor-document.ts";
-import {
-  getFilesCollaborationAuthoritativeDoc,
-  mapFilesCollaborationDisplayRangeToSource,
-} from "./files-editor-collaboration.ts";
 
 /** Identifies a host-synchronized document. */
 export type SecretActionTarget = {
@@ -31,10 +27,7 @@ async function syncedDocument(
   target: SecretActionTarget,
 ): Promise<SyncedEditorDocument> {
   const synced = await target.sync().catch(() => null);
-  const authoritative =
-    getFilesCollaborationAuthoritativeDoc(target.view) ??
-    target.view.state.doc.toString();
-  if (!synced || synced.text !== authoritative) {
+  if (!synced || synced.text !== target.view.state.doc.toString()) {
     throw new MarkSecretFailure(SECRET_SPAN_COPY.unsyncedDraft);
   }
   return synced;
@@ -99,10 +92,9 @@ export function anchorSecretSelection(
 ): AnchoredSecretSelection {
   let anchored: Promise<AnchoredRange> | null = null;
   // The draft is published once; a publish that failed is retried next time.
-  const rawRange = mapFilesCollaborationDisplayRangeToSource(target.view, from, to);
   const anchor = (): Promise<AnchoredRange> => {
     anchored ??= syncedDocument(target).then(
-      (synced) => ({ revision: synced.revision, ...runeRange(synced.text, rawRange.from, rawRange.to) }),
+      (synced) => ({ revision: synced.revision, ...runeRange(synced.text, from, to) }),
       (error: unknown) => {
         anchored = null;
         throw error;

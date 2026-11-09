@@ -11,40 +11,121 @@ import {
   VERBATIM_HEAD_TAIL,
 } from "../../../chat/host-markers.generated.ts";
 
+export type PrettyLayoutFamily =
+  | "json"
+  | "jsonl"
+  | "jsonc"
+  | "xml-html"
+  | "javascript"
+  | "css"
+  | "markdown"
+  | "mixed"
+  | "passthrough";
+
 export type DocumentFormatMode =
   | "code-passthrough"
   | "json"
   | "jsonl"
+  | "jsonc"
+  | "xml-html"
+  | "javascript"
+  | "css"
   | "markdown"
   | "auto";
 
-const CODE_OR_MARKUP_EXTENSIONS = new Set([
-  "go", "ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "py", "pyi", "rs",
-  "html", "htm", "xhtml", "vue", "svelte", "astro", "css", "scss", "sass", "less",
-  "sh", "bash", "zsh", "fish", "ps1", "yaml", "yml", "toml", "ini", "cfg", "conf",
-  "sql", "graphql", "gql", "proto", "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "cs",
-  "java", "kt", "kts", "scala", "swift", "rb", "php", "pl", "pm", "lua", "r", "zig",
-  "nim", "ex", "exs", "erl", "hrl", "hs", "ml", "mli", "fs", "fsx", "clj", "cljs",
-  "dart", "dockerfile", "mk", "cmake", "xml", "svg", "csv", "tsv", "diff", "patch",
-  "tf", "hcl", "nix", "sol", "vim", "el",
+/**
+ * Whitespace-sensitive and unimplemented CodeMirror languages remain truthful native
+ * source presentation (`code-passthrough`) without claiming structural prettification
+ * (Decision 005, FMT-AC-04, FMT-AC-20).
+ */
+const PASSTHROUGH_CODE_EXTENSIONS = new Set([
+  "go", "py", "pyi", "rs", "sass",
+  "sh", "bash", "zsh", "fish", "ps1", "psm1", "psd1",
+  "yaml", "yml", "toml", "ini", "cfg", "conf", "properties", "env",
+  "sql", "graphql", "gql", "proto",
+  "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "hxx", "cs",
+  "java", "kt", "kts", "scala", "swift", "rb", "php", "hack",
+  "pl", "pm", "perl", "lua", "r", "jl", "zig", "nim",
+  "ex", "exs", "erl", "hrl", "hs", "elm", "ml", "mli", "fs", "fsx",
+  "clj", "cljs", "cljc", "edn", "scm", "ss", "lisp", "cl", "lsp",
+  "dart", "dockerfile", "mk", "cmake", "csv", "tsv", "diff", "patch",
+  "tf", "tfvars", "hcl", "nix", "sol", "move", "cairo", "circom",
+  "cls", "trigger", "ql", "qll", "promql", "groovy", "gradle",
+  "tcl", "cr", "d", "f", "f90", "f95", "f03", "pas", "vim", "el",
 ]);
 
-const CODE_OR_MARKUP_BASENAMES = new Set([
-  "dockerfile", "makefile", "gnumakefile", "cmakelists.txt", "justfile", "procfile",
-  "cargo.lock", "go.mod", "go.sum", ".gitignore", ".gitattributes", ".editorconfig", ".env",
+const PASSTHROUGH_CODE_BASENAMES = new Set([
+  "dockerfile", "containerfile", "makefile", "gnumakefile", "cmakelists.txt",
+  "justfile", "procfile", "cargo.lock", "go.mod", "go.sum",
+  ".gitignore", ".gitattributes", ".gitmodules", ".gitconfig",
+  ".editorconfig", ".npmrc", ".env", "gemfile", "rakefile", "vagrantfile",
 ]);
 
-const CODE_OR_MARKUP_HINTS = new Set([
-  ...CODE_OR_MARKUP_EXTENSIONS,
-  "golang", "typescript", "javascript", "python", "rust", "shell", "csharp", "kotlin", "ruby", "makefile",
+const PASSTHROUGH_CODE_HINTS = new Set([
+  ...PASSTHROUGH_CODE_EXTENSIONS,
+  "golang", "python", "rust", "shell", "csharp", "c_sharp", "kotlin",
+  "ruby", "makefile", "dockerfile", "powershell", "haskell", "erlang",
+  "ocaml", "commonlisp", "scheme", "clojure", "julia", "fortran", "pascal",
+  "solidity", "terraform", "apex", "codeql", "elixir",
 ]);
 
 const JSON_EXTENSIONS = new Set(["json", "webmanifest", "har", "avsc"]);
 const JSON_HINTS = new Set(["json", "application/json"]);
+
 const JSONL_EXTENSIONS = new Set(["jsonl", "ndjson"]);
 const JSONL_HINTS = new Set(["jsonl", "ndjson", "application/x-ndjson"]);
+
+const JSONC_EXTENSIONS = new Set(["jsonc", "json5", "jsonnet", "libsonnet"]);
+const JSONC_HINTS = new Set([
+  "jsonc",
+  "json5",
+  "jsonnet",
+  "libsonnet",
+  "application/jsonc",
+  "application/json5",
+]);
+
+const XML_HTML_EXTENSIONS = new Set([
+  "xml",
+  "svg",
+  "xhtml",
+  "html",
+  "htm",
+  "vue",
+  "svelte",
+  "astro",
+]);
+const XML_HTML_HINTS = new Set([
+  ...XML_HTML_EXTENSIONS,
+  "application/xml",
+  "text/xml",
+  "text/html",
+  "image/svg+xml",
+]);
+
+const JAVASCRIPT_EXTENSIONS = new Set([
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "ts",
+  "tsx",
+  "mts",
+  "cts",
+]);
+const JAVASCRIPT_HINTS = new Set([
+  ...JAVASCRIPT_EXTENSIONS,
+  "javascript",
+  "typescript",
+  "application/javascript",
+  "text/javascript",
+]);
+
+const CSS_EXTENSIONS = new Set(["css", "scss", "less"]);
+const CSS_HINTS = new Set(["css", "scss", "less", "text/css"]);
+
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
-const MARKDOWN_HINTS = new Set(["md", "markdown", "gfm"]);
+const MARKDOWN_HINTS = new Set(["md", "markdown", "mdx", "gfm", "text/markdown"]);
 
 const EVIDENCE_TAG_REGEX = new RegExp(
   `^\\[(?:${EVIDENCE_HANDLE_PATTERN})(?: ${EVIDENCE_COVERAGE_PATTERN})?\\]`,
@@ -74,31 +155,16 @@ export function isKnownCodeOrMarkupPath(
   path?: string,
   languageHint?: string,
 ): boolean {
-  if (languageHint) {
-    const hint = languageHint.trim().toLowerCase();
-    if (CODE_OR_MARKUP_HINTS.has(hint)) return true;
-    if (
-      JSON_HINTS.has(hint) ||
-      JSONL_HINTS.has(hint) ||
-      MARKDOWN_HINTS.has(hint)
-    ) {
-      return false;
-    }
-  }
-  if (path) {
-    const { basename, ext } = extractNormalizedExtension(path);
-    if (CODE_OR_MARKUP_BASENAMES.has(basename)) return true;
-    if (ext && CODE_OR_MARKUP_EXTENSIONS.has(ext)) return true;
-  }
-  return false;
+  const mode = classifyDocumentFormat("", path, languageHint);
+  return mode === "code-passthrough";
 }
 
-function looksLikeCodeOrMarkupWithoutHint(rawText: string): boolean {
+function looksLikePassthroughCodeWithoutHint(rawText: string): boolean {
   const trimmed = rawText.trimStart();
   if (!trimmed) return false;
   if (/^(?:```|~~~)/m.test(rawText)) return false;
   if (
-    /^(?:package\s+[a-zA-Z_]|import\s+(?:["({*]|[a-zA-Z_])|export\s+(?:default|const|function|class|type|interface)|func\s+[a-zA-Z_(]|def\s+[a-zA-Z_]|class\s+[a-zA-Z_]|#include\s+[<"]|<!DOCTYPE\s+html|<html[\s>]|<div[\s>]|<span[\s>]|<script[\s>]|<style[\s>])/i.test(
+    /^(?:package\s+[a-zA-Z_]|import\s+(?:["({*]|[a-zA-Z_])|export\s+(?:default|const|function|class|type|interface)|func\s+[a-zA-Z_(]|def\s+[a-zA-Z_]|class\s+[a-zA-Z_]|#include\s+[<"])/i.test(
       trimmed,
     )
   ) {
@@ -114,22 +180,30 @@ export function classifyDocumentFormat(
 ): DocumentFormatMode {
   if (languageHint) {
     const hint = languageHint.trim().toLowerCase();
-    if (CODE_OR_MARKUP_HINTS.has(hint)) return "code-passthrough";
+    if (PASSTHROUGH_CODE_HINTS.has(hint)) return "code-passthrough";
     if (JSON_HINTS.has(hint)) return "json";
     if (JSONL_HINTS.has(hint)) return "jsonl";
+    if (JSONC_HINTS.has(hint)) return "jsonc";
+    if (XML_HTML_HINTS.has(hint)) return "xml-html";
+    if (JAVASCRIPT_HINTS.has(hint)) return "javascript";
+    if (CSS_HINTS.has(hint)) return "css";
     if (MARKDOWN_HINTS.has(hint)) return "markdown";
   }
   if (path) {
     const { basename, ext } = extractNormalizedExtension(path);
-    if (CODE_OR_MARKUP_BASENAMES.has(basename)) return "code-passthrough";
+    if (PASSTHROUGH_CODE_BASENAMES.has(basename)) return "code-passthrough";
     if (ext) {
-      if (CODE_OR_MARKUP_EXTENSIONS.has(ext)) return "code-passthrough";
+      if (PASSTHROUGH_CODE_EXTENSIONS.has(ext)) return "code-passthrough";
       if (JSON_EXTENSIONS.has(ext)) return "json";
       if (JSONL_EXTENSIONS.has(ext)) return "jsonl";
+      if (JSONC_EXTENSIONS.has(ext)) return "jsonc";
+      if (XML_HTML_EXTENSIONS.has(ext)) return "xml-html";
+      if (JAVASCRIPT_EXTENSIONS.has(ext)) return "javascript";
+      if (CSS_EXTENSIONS.has(ext)) return "css";
       if (MARKDOWN_EXTENSIONS.has(ext)) return "markdown";
     }
   }
-  if (looksLikeCodeOrMarkupWithoutHint(rawText)) {
+  if (looksLikePassthroughCodeWithoutHint(rawText)) {
     return "code-passthrough";
   }
   return "auto";
@@ -278,3 +352,18 @@ export function isJsonFenceLang(lang: string): "json" | "jsonl" | null {
   return null;
 }
 
+/**
+ * Resolves a Markdown fence info string to a supported common-blob family.
+ * Unsupported languages return `null` so fenced code in those languages remains raw.
+ */
+export function resolveFenceLayoutFamily(lang: string): PrettyLayoutFamily | null {
+  const normalized = lang.replace(/^\./, "").toLowerCase();
+  if (!normalized) return null;
+  if (JSON_HINTS.has(normalized) || JSON_EXTENSIONS.has(normalized)) return "json";
+  if (JSONL_HINTS.has(normalized) || JSONL_EXTENSIONS.has(normalized)) return "jsonl";
+  if (JSONC_HINTS.has(normalized) || JSONC_EXTENSIONS.has(normalized)) return "jsonc";
+  if (XML_HTML_HINTS.has(normalized) || XML_HTML_EXTENSIONS.has(normalized)) return "xml-html";
+  if (JAVASCRIPT_HINTS.has(normalized) || JAVASCRIPT_EXTENSIONS.has(normalized)) return "javascript";
+  if (CSS_HINTS.has(normalized) || CSS_EXTENSIONS.has(normalized)) return "css";
+  return null;
+}

@@ -7,7 +7,6 @@ import { documentCommand, resumeDocumentCommands } from "./document-command.ts";
 import { refreshFilesCollaborationEpoch } from "../editor/files-editor-collaboration.ts";
 import { captureBufferViewState } from "../editor/editor-session-fidelity.ts";
 import { destroyFilesEditor, getFilesEditorView } from "../editor/files-editor-host.ts";
-import { hasUnpersistedPrettyRecoveryForDocument } from "../../components/source/pretty/pretty-replica-recovery.ts";
 import { createStore, reconcile } from "solid-js/store";
 import type { LycaonClient } from "../../api/client.ts";
 import type { EditorDocument, EditorDocumentEvent, SecretScreen, SecretScreenStatus, SourceEncoding } from "../../api/types.ts";
@@ -451,10 +450,6 @@ export async function evictEditorDocument(documentId: string | null | undefined,
   if (!replica) {
     if (documentId && !options.retainRecovery) await releaseRecoveryRetention(documentId);
     return true;
-  }
-  if (hasUnpersistedPrettyRecoveryForDocument(replica.accepted.id)) {
-    if (options.ifIdle) return false;
-    throw new Error("The editor cannot close while retained Pretty edits are held in memory only.");
   }
   const existing = evictions.get(replica.accepted.id);
   if (existing) return existing;

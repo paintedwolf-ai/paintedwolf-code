@@ -84,7 +84,6 @@
   "components/shell/ResidentSurface.tsx": 1,
   "components/shell/SessionProtectionBanners.tsx": 3,
   "components/source/diff/SourceDiffRow.tsx": 2,
-  "components/source/pretty/pretty-replica-recovery-ui.ts": 3,
   "components/source/reader/SourceReader.tsx": 2,
   "components/source/secrets/IgnoreSecretDialog.tsx": 3,
   "components/source/secrets/MarkSecretDialog.tsx": 2,

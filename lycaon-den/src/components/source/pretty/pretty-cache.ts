@@ -2,10 +2,10 @@ import {
   DEFAULT_PRETTY_RESOURCE_LIMITS,
   estimateProjectionCacheBytes,
 } from "./pretty-limits.ts";
-import { formatPrettyProjection } from "./pretty-segmenter.ts";
+import { computePrettyNativeLayout } from "./pretty-native-layout.ts";
 import type {
-  PrettyFormatOptions,
-  PrettyProjectionResult,
+  PrettyNativeLayoutOptions,
+  PrettyNativeLayoutResult,
 } from "./pretty-types.ts";
 
 interface CacheEntry {
@@ -13,7 +13,7 @@ interface CacheEntry {
   readonly sourceIdentity: string;
   readonly sourceRevision: number;
   readonly bytes: number;
-  readonly result: PrettyProjectionResult;
+  readonly result: PrettyNativeLayoutResult;
 }
 
 function makeCacheKey(
@@ -25,8 +25,8 @@ function makeCacheKey(
 }
 
 /**
- * Bounded LRU cache for computed Pretty projections.
- * Enforces the 8 MiB residency ceiling over accounted text and source maps.
+ * Bounded LRU cache for computed native Pretty layout boundaries.
+ * Enforces the 8 MiB residency ceiling over accounted boundary and line-state arrays.
  */
 export class PrettyProjectionCache {
   readonly maxBytes: number;
@@ -54,7 +54,7 @@ export class PrettyProjectionCache {
     sourceIdentity: string,
     sourceRevision: number,
     optionsKey = "",
-  ): PrettyProjectionResult | undefined {
+  ): PrettyNativeLayoutResult | undefined {
     const key = makeCacheKey(sourceIdentity, sourceRevision, optionsKey);
     const existing = this.entries.get(key);
     if (!existing) return undefined;
@@ -63,7 +63,7 @@ export class PrettyProjectionCache {
     return existing.result;
   }
 
-  set(result: PrettyProjectionResult, optionsKey = ""): boolean {
+  set(result: PrettyNativeLayoutResult, optionsKey = ""): boolean {
     const bytes = estimateProjectionCacheBytes(result);
     if (bytes > this.maxBytes) return false;
     const key = makeCacheKey(
@@ -117,11 +117,13 @@ export class PrettyProjectionCache {
   }
 }
 
-export interface PrettyScheduledJobOptions extends PrettyFormatOptions {
+export interface PrettyScheduledJobOptions extends PrettyNativeLayoutOptions {
+  readonly sourceIdentity: string;
+  readonly sourceRevision: number;
   readonly generation?: number;
   readonly enabled?: boolean;
   readonly optionsKey?: string;
-  readonly onPublish?: (result: PrettyProjectionResult) => void;
+  readonly onPublish?: (result: PrettyNativeLayoutResult) => void;
 }
 
 interface SurfaceJobState {
@@ -133,7 +135,7 @@ interface SurfaceJobState {
 }
 
 /**
- * Coordinates at most one active formatting job per surface.
+ * Coordinates at most one active layout job per surface.
  * Cancels superseded work and refuses to publish stale revisions or disabled states.
  */
 export class PrettyJobScheduler {
@@ -207,7 +209,7 @@ export class PrettyJobScheduler {
   async schedule(
     rawText: string,
     options: PrettyScheduledJobOptions,
-  ): Promise<PrettyProjectionResult | null> {
+  ): Promise<PrettyNativeLayoutResult | null> {
     const {
       sourceIdentity,
       sourceRevision,
@@ -228,7 +230,11 @@ export class PrettyJobScheduler {
     const abort = new AbortController();
     if (options.signal) {
       if (options.signal.aborted) abort.abort();
-      else options.signal.addEventListener("abort", () => abort.abort(), { once: true });
+      else {
+        options.signal.addEventListener("abort", () => abort.abort(), {
+          once: true,
+        });
+      }
     }
 
     const state: SurfaceJobState = {
@@ -246,7 +252,7 @@ export class PrettyJobScheduler {
     }
 
     const cached = this.cache.get(sourceIdentity, sourceRevision, optionsKey);
-    if (cached && !options.rawSegmentRanges?.length) {
+    if (cached) {
       state.abort = undefined;
       this._publishedCount += 1;
       onPublish?.(cached);
@@ -268,7 +274,7 @@ export class PrettyJobScheduler {
       return null;
     }
 
-    const result = formatPrettyProjection(rawText, {
+    const result = computePrettyNativeLayout(rawText, {
       ...options,
       signal: abort.signal,
     });
@@ -293,9 +299,7 @@ export class PrettyJobScheduler {
       return null;
     }
 
-    if (!options.rawSegmentRanges?.length) {
-      this.cache.set(result, optionsKey);
-    }
+    this.cache.set(result, optionsKey);
     this._publishedCount += 1;
     onPublish?.(result);
     return result;

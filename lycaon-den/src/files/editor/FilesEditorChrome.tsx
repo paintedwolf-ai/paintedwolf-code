@@ -16,7 +16,6 @@ import { absolutePathForBuffer } from "../components/project-files-model.ts";
 import type { FileBuffer } from "../documents/files-buffer-state.ts";
 import { filesBufferText } from "../documents/project-files-buffers.ts";
 import { filesEditorFindMenuItems, filesEditorGotoMenuItems, type FilesEditorToolbarMenuKind } from "./files-editor-toolbar-menus.ts";
-import { getFilesEditorAuthoritativeViewDoc } from "./files-editor-host.ts";
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
 import type { editorStateAction, resolveEditorIdentity } from "../documents/editor-identity.ts";
 import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
@@ -124,7 +123,7 @@ export function createEditorToolbarMenus(options: {
       return;
     }
     const text =
-      getFilesEditorAuthoritativeViewDoc(options.activeEditorView()) ??
+      options.activeEditorView()?.state.doc.toString() ??
       filesBufferText(options.buffer());
     void copyTextToClipboard(text);
     flashCopied();

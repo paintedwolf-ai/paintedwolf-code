@@ -18,7 +18,7 @@ import { MoveToTrashDialog } from "../commands/MoveToTrashDialog.tsx";
 import type { FileBuffer } from "../documents/files-buffer-state.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
 import type { createFilesEditorActions } from "../editor/files-editor-actions.ts";
-import { getFilesEditorAuthoritativeViewDoc, getFilesEditorView } from "../editor/files-editor-host.ts";
+import { getFilesEditorView } from "../editor/files-editor-host.ts";
 import { absolutePathForBuffer } from "./project-files-model.ts";
 
 export function FilesStageDialogs(props: {
@@ -43,7 +43,7 @@ export function FilesStageDialogs(props: {
       <InlineEditPanel
         mountEl={props.editorPane}
         docText={() =>
-          getFilesEditorAuthoritativeViewDoc(buildContext()?.view) ?? ""
+          buildContext()?.view.state.doc.toString() ?? ""
         }
         onSubmit={(text) => {
           const ctx = buildContext();

@@ -1,9 +1,5 @@
 import { createEffect, createSignal } from "solid-js";
 import { sourceSaveErrorMessage } from "../../components/source/editor/source-editor-model.ts";
-import {
-  clearPrettyDocumentRecoveryForDocument,
-  hasUnpersistedPrettyRecoveryForDocument,
-} from "../../components/source/pretty/pretty-replica-recovery.ts";
 import { type UnsavedChangesIntent } from "../../components/source/editor/UnsavedChangesDialog.tsx";
 import { getFilesEditorView } from "../editor/files-editor-host.ts";
 import { closeFilesBuffersUnderPath, dirtyFilesBuffersUnderPath, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
@@ -44,14 +40,11 @@ export function createFileConfirmations({ projectId, state, closeBuffer, closeBu
   const [deleteGuard, setDeleteGuard] = createSignal<DeleteGuard | null>(null);
   let editorActionDirtyResolve:
     ((result: "proceed" | "cancel") => void) | null = null;
-  const hasUnsavedOrUnpersistedRecovery = (buf: FileBuffer | undefined): boolean =>
-    Boolean(buf && (buf.dirty || hasUnpersistedPrettyRecoveryForDocument(buf.documentId)));
-
   const ensureCleanDiskForEditorAction = (
     key: FileBufferKey,
   ): Promise<"proceed" | "cancel"> => {
     const buf = state().byKey[key];
-    if (!hasUnsavedOrUnpersistedRecovery(buf)) return Promise.resolve("proceed");
+    if (!buf?.dirty) return Promise.resolve("proceed");
     return new Promise((resolve) => {
       editorActionDirtyResolve = resolve;
       setConfirm({ intent: "editor-action", key });
@@ -61,7 +54,7 @@ export function createFileConfirmations({ projectId, state, closeBuffer, closeBu
   const requestCloseTab = (key: FileBufferKey) => {
     const buf = state().byKey[key];
     if (!buf) return;
-    if (hasUnsavedOrUnpersistedRecovery(buf)) {
+    if (buf.dirty) {
       setConfirm({ intent: "close", key });
       return;
     }
@@ -71,7 +64,7 @@ export function createFileConfirmations({ projectId, state, closeBuffer, closeBu
   const requestReload = (key: FileBufferKey) => {
     const buf = state().byKey[key];
     if (!buf) return;
-    if (hasUnsavedOrUnpersistedRecovery(buf)) {
+    if (buf.dirty) {
       setConfirm({ intent: "reload", key });
       return;
     }
@@ -80,7 +73,7 @@ export function createFileConfirmations({ projectId, state, closeBuffer, closeBu
 
   const requestDiscard = (key: FileBufferKey) => {
     const buf = state().byKey[key];
-    if (!hasUnsavedOrUnpersistedRecovery(buf)) return;
+    if (!buf?.dirty) return;
     setConfirm({ intent: "discard", key });
   };
 
@@ -108,8 +101,6 @@ export function createFileConfirmations({ projectId, state, closeBuffer, closeBu
       return;
     }
     void (async () => {
-      const buf = state().byKey[target.key];
-      if (buf?.documentId) clearPrettyDocumentRecoveryForDocument(buf.documentId);
       await discardBuffer(target.key);
       if (target.intent === "editor-action") {
         setSaveError(null);

@@ -25,7 +25,7 @@ import { goToNextFinding, goToPreviousFinding } from "../../components/source/an
 import { convertIndentationCommand } from "../../components/source/editor/indent-convert.ts";
 import { beginInlineEditPanel, beginRenameCard } from "../../components/source/inline-edit/run-editor-action.ts";
 import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
-import { getFilesEditorAuthoritativeViewDoc, getFilesEditorView, invokePrettyToggleForTab } from "../editor/files-editor-host.ts";
+import { getFilesEditorView, invokePrettyToggleForTab } from "../editor/files-editor-host.ts";
 import { filesTreeCollapsed } from "../tree/files-tree-window-state.ts";
 import { selectedFileVersion, toggleVersionComparison } from "../history/files-version-selection.ts";
 import { versionRestoreOffered } from "../history/file-version-restore.ts";
@@ -103,11 +103,7 @@ export function bindFilesCommands(options: CommandBindings): void {
       const to = { style: toStyle, width: current.width } as const;
       convertIndentationCommand(to, current.width)(view);
       setFilesBufferIndentOverride(scope.projectId(), buf.key, to);
-      applyFilesBufferDraft(
-        scope.projectId(),
-        buf.key,
-        getFilesEditorAuthoritativeViewDoc(view) ?? view.state.doc.toString(),
-      );
+      applyFilesBufferDraft(scope.projectId(), buf.key, view.state.doc.toString());
     }, true);
     for (const [id, command] of Object.entries(EDITOR_STANDARD_COMMANDS)) on(id, withEditor(command));
     on("editor.togglePretty", declinable(() => invokePrettyToggleForTab(scope.projectId(), activeBuffer()?.key)));
