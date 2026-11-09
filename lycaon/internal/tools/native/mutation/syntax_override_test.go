@@ -26,10 +26,7 @@ func TestMutationSyntaxOverrideIsExplicitAndOperationScoped(t *testing.T) {
 	if empty.err == nil {
 		t.Fatal("empty override was accepted")
 	}
-	binary := h.run("package broken\x00", "tee", "--syntax-override-reason", "intentional syntax", "binary.go")
-	if binary.err == nil {
-		t.Fatal("syntax override bypassed content validation")
-	}
+
 }
 
 func TestSourceEditSyntaxOverrideRecordsItsReason(t *testing.T) {
@@ -53,5 +50,22 @@ func TestSourceEditSyntaxOverrideRecordsItsReason(t *testing.T) {
 				t.Fatal("override not recorded")
 			}
 		})
+	}
+}
+
+func TestSyntaxOverridePreservesTeeByteSemantics(t *testing.T) {
+	const body = "package broken\x00"
+	h := newHarness(t, nil)
+	for _, override := range []bool{false, true} {
+		args := []string{"tee"}
+		path := "plain.bin"
+		if override {
+			args = append(args, "--syntax-override-reason", "intentional syntax")
+			path = "override.bin"
+		}
+		result := h.run(body, append(args, path)...)
+		if result.err != nil || h.read(path) != body {
+			t.Fatalf("byte publication (override=%v): %v", override, result.err)
+		}
 	}
 }
