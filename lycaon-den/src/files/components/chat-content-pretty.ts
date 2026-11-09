@@ -6,15 +6,17 @@ import { lineGutterSource } from "../../components/source/annotations/line-gutte
 import {
   createRuneOffsetTable,
   displayOffsetToSourceLineCol,
-  formatPrettyProjection,
   mapRuneSpansToDisplay,
   sourceLineColToDisplay,
   sourceToDisplayOffset,
-  type PrettyFormatOptions,
-  type PrettyProjectionResult,
-  type PrettyRuneOffsetTable,
-  type PrettySourceMap,
-} from "../../components/source/pretty/index.ts";
+} from "../../components/source/pretty/pretty-map.ts";
+import { formatPrettyProjection } from "../../components/source/pretty/pretty-segmenter.ts";
+import type {
+  PrettyFormatOptions,
+  PrettyProjectionResult,
+  PrettyRuneOffsetTable,
+  PrettySourceMap,
+} from "../../components/source/pretty/pretty-types.ts";
 
 export interface ChatPrettyProjectionState {
   readonly rawText: string;

@@ -1,6 +1,6 @@
 import type { LycaonClient } from "../../../api/client.ts";
 import type { ChatContentReference, ChatContentRow, RedactedSpan } from "../../../api/types.ts";
-import { DEFAULT_PRETTY_RESOURCE_LIMITS, utf8ByteLength } from "../../../components/source/pretty/index.ts";
+import { DEFAULT_PRETTY_RESOURCE_LIMITS, utf8ByteLength } from "../../../components/source/pretty/pretty-limits.ts";
 import { ByteCache, retainedValueBytes } from "../../../utils/byte-cache.ts";
 
 export type ChatContentBoundedSnapshot = {

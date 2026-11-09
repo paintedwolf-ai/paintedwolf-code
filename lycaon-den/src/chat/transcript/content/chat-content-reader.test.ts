@@ -68,7 +68,7 @@ describe("retained chat content", () => {
         end_offset: ref.total_runes,
         text: page2,
         complete: true,
-        spans: [{ field: "tool_result.content", start: 0, length: 10, kind: "removed_secret", rule_title: "API Key" }],
+        spans: [{ field: "tool_result.content", start: 0, length: 10, kind: "secret", rule_title: "API Key" }],
       };
     });
     const reader = createChatContentAccess({ client: stubClient({ getChatContent: get }), sessionId: "s", messageId: "m", reference: ref });
@@ -77,7 +77,7 @@ describe("retained chat content", () => {
       sha256: "sha-ok",
       totalRunes: ref.total_runes,
       text: '{"secret":"[REDACTED]","b":2}',
-      spans: [{ field: "tool_result.content", start: 11, length: 10, kind: "removed_secret", rule_title: "API Key" }],
+      spans: [{ field: "tool_result.content", start: 11, length: 10, kind: "secret", rule_title: "API Key" }],
     });
 
     // Mismatched sha256 returns null instead of publishing stale/unprotected text.

@@ -162,7 +162,7 @@ describe("chat content Files pane", () => {
                   field: "tool_result.content",
                   start: 23,
                   length: 10,
-                  kind: "removed_secret",
+                  kind: "secret",
                   rule_title: "Secret Token",
                 },
               ],
@@ -214,7 +214,7 @@ describe("chat content Files pane", () => {
           field: "tool_result.content",
           start: raw.indexOf("[REDACTED]"),
           length: 10,
-          kind: "removed_secret",
+          kind: "secret",
           rule_title: "Token",
         },
       ],
@@ -260,6 +260,7 @@ describe("chat content Files pane", () => {
       running: true,
       stream: "stdout",
       text: '{"step":1}\n',
+      end_offset: 11,
     });
 
     const view = render(() => (
@@ -300,6 +301,7 @@ describe("chat content Files pane", () => {
       running: true,
       stream: "stdout",
       text: '{"step":2}\n',
+      end_offset: 22,
     });
     expect(view.container.querySelector(".cm-content")?.textContent).not.toContain('"step": 2');
 
@@ -318,6 +320,7 @@ describe("chat content Files pane", () => {
       running: true,
       stream: "stdout",
       text: '{"step":3}\n',
+      end_offset: 33,
     });
     await waitFor(() =>
       expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"step":3}'),
