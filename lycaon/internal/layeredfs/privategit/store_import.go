@@ -34,17 +34,51 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 	var packNames []string
 	var addedPackBases []string
 	looseAddedSizes := make(map[string]int64)
+	packDstDir := filepath.Join(s.objectsDir, "pack")
+	if err := os.MkdirAll(packDstDir, 0o755); err != nil {
+		return InitMetrics{}, nil, err
+	}
+	if err := finalizeInterruptedPackRetirements(ctx, packDstDir); err != nil {
+		return InitMetrics{}, nil, err
+	}
+	preexistingPackBases := make(map[string]struct{}, len(s.stock.packOIDs))
+	for base := range s.stock.packOIDs {
+		preexistingPackBases[base] = struct{}{}
+	}
+	if pEntries, rErr := os.ReadDir(packDstDir); rErr == nil {
+		hasPrePack := make(map[string]bool)
+		hasPreIdx := make(map[string]bool)
+		for _, pe := range pEntries {
+			if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") {
+				continue
+			}
+			ext := filepath.Ext(pe.Name())
+			base := strings.TrimSuffix(pe.Name(), ext)
+			switch ext {
+			case ".pack":
+				hasPrePack[base] = true
+			case ".idx":
+				hasPreIdx[base] = true
+			}
+		}
+		for base := range hasPrePack {
+			if hasPreIdx[base] {
+				preexistingPackBases[base] = struct{}{}
+			}
+		}
+	}
 
 	rollback := func() error {
 		var rbErrs []error
-		packDstDir := filepath.Join(s.objectsDir, "pack")
 
-		// S0: Derive ordered unique slice R of newly added pack bases from addedPaths (in packDstDir)
-		// unioned with addedPackBases so both partial-pair failures (before recordPackLocked) and
-		// post-recordPackLocked failures are included without touching preexisting/leased packs.
+		// S0: Derive ordered unique slice R of newly created pack bases from pre-import transaction provenance:
+		// a base enters R only if it was NOT in preexistingPackBases at the start of this import (so both
+		// partial-pair failures before recordPackLocked and post-recordPackLocked failures on newly created
+		// bases retire as a unit, while a newly added auxiliary .rev companion of a preexisting base is
+		// unlinked individually in S3 without retiring the preexisting .pack/.idx pair).
 		seenBases := make(map[string]struct{}, len(addedPackBases))
 		for _, base := range addedPackBases {
-			if strings.HasPrefix(base, "pack-") {
+			if _, preexisted := preexistingPackBases[base]; !preexisted && strings.HasPrefix(base, "pack-") {
 				seenBases[base] = struct{}{}
 			}
 		}
@@ -52,7 +86,7 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 			if filepath.Dir(p) == packDstDir {
 				ext := filepath.Ext(filepath.Base(p))
 				base := strings.TrimSuffix(filepath.Base(p), ext)
-				if strings.HasPrefix(base, "pack-") {
+				if _, preexisted := preexistingPackBases[base]; !preexisted && strings.HasPrefix(base, "pack-") {
 					seenBases[base] = struct{}{}
 				}
 			}
@@ -63,7 +97,14 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 		}
 		sort.Strings(R)
 
-		// S1: Publish recovery intent + Barrier-1 BEFORE any destructive companion unlink or in-memory drop.
+		// Drop in-memory stock entries for R immediately on rollback entry so a live store instance
+		// never advertises unverified candidate objects in HasObject/Metrics/createStoreLease even if
+		// S1 intent publication or Barrier-1 fails before reopen/GC reconciliation.
+		for _, base := range R {
+			removePackLocked(s, base)
+		}
+
+		// S1: Publish recovery intent + Barrier-1 BEFORE any destructive companion unlink.
 		// If any marker write or Barrier-1 directory sync fails, stop immediately with zero unlinks.
 		if len(R) > 0 {
 			_ = os.Chmod(packDstDir, 0o755)
@@ -83,16 +124,17 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 			}
 		}
 
-		// S2: Drop in-memory stock entries for R only after durable retirement intent is synced.
-		for _, base := range R {
-			removePackLocked(s, base)
-		}
-
-		// S3: Unlink newly added loose object files (outside packDstDir).
+		// S3: Unlink newly added loose object files (outside packDstDir) and any newly added
+		// auxiliary companion (e.g. .rev) belonging to a preexisting pack base not in R.
+		needPackDirSync := false
 		for _, p := range addedPaths {
 			dir := filepath.Dir(p)
 			if dir == packDstDir {
-				continue
+				ext := filepath.Ext(filepath.Base(p))
+				base := strings.TrimSuffix(filepath.Base(p), ext)
+				if _, retiringWholeBase := seenBases[base]; retiringWholeBase {
+					continue
+				}
 			}
 			_ = os.Chmod(dir, 0o755)
 			if hookErr := gcBeforeRollbackUnlink(ctx, p); hookErr != nil {
@@ -101,8 +143,16 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 			}
 			if rmErr := removeStoreFile(ctx, p); rmErr != nil && !os.IsNotExist(rmErr) {
 				rbErrs = append(rbErrs, fmt.Errorf("rollback remove %s: %w", p, rmErr))
+			} else if dir == packDstDir {
+				needPackDirSync = true
 			} else if rem, rErr := os.ReadDir(dir); rErr == nil && len(rem) == 0 {
 				_ = os.Remove(dir)
+			}
+		}
+		if needPackDirSync && len(R) == 0 {
+			if syncErr := syncStoreDirectoryCtx(ctx, packDstDir); syncErr != nil {
+				rbErrs = append(rbErrs, fmt.Errorf("sync rollback auxiliary pack companion %s: %w", packDstDir, syncErr))
+				return errors.Join(rbErrs...)
 			}
 		}
 

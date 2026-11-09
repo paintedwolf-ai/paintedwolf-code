@@ -390,10 +390,53 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 
 	missingTip := strings.Repeat("f", 40)
 
+	// 1b. Preexisting leased pack+idx without .rev: when a subsequent import adds a .rev for the same
+	// preexisting base, reuses the existing .pack/.idx, and then rolls back on connectivity failure,
+	// rollback must unlink only the newly added .rev and MUST NOT retire the preexisting leased .pack/.idx pair.
+	keepPackEntries, err := os.ReadDir(filepath.Join(objKeep, "pack"))
+	testutil.FailErr(t, "ReadDir src keep pack", err)
+	var keepBase string
+	for _, pe := range keepPackEntries {
+		if strings.HasPrefix(pe.Name(), "pack-") && strings.HasSuffix(pe.Name(), ".pack") {
+			keepBase = strings.TrimSuffix(pe.Name(), ".pack")
+			break
+		}
+	}
+	if keepBase == "" {
+		t.Fatalf("expected pack-<hash>.pack in keep source repo")
+	}
+	// Remove any preexisting .rev in the store so keepBase starts with only .pack and .idx in the store,
+	// while ensuring the source directory has a .rev companion to copy.
+	storeKeepRevPath := filepath.Join(packDstDir, keepBase+".rev")
+	_ = os.Chmod(packDstDir, 0o755)
+	_ = os.Remove(storeKeepRevPath)
+	_ = os.Chmod(packDstDir, 0o555)
+	srcKeepRevPath := filepath.Join(objKeep, "pack", keepBase+".rev")
+	if _, err := os.Stat(srcKeepRevPath); os.IsNotExist(err) {
+		testutil.FailErr(t, "write synthetic src .rev for keep", os.WriteFile(srcKeepRevPath, []byte("RIDX\x00\x00\x00\x01"), 0o644))
+	}
+	_, _, revRbErr := store.ImportRepositoryObjects(ctx, []string{objKeep}, []string{oidKeep, missingTip})
+	if !errors.Is(revRbErr, ErrCorruptObjectStore) {
+		t.Fatalf("expected ErrCorruptObjectStore when rollback triggers after copying .rev for preexisting base, got %v", revRbErr)
+	}
+	if !store.HasObject(oidKeep) || !store.HasObject("pack:"+keepBase) {
+		t.Fatalf("expected preexisting leased pack and object preserved when only auxiliary .rev was added and rolled back")
+	}
+	if _, err := os.Stat(filepath.Join(packDstDir, keepBase+".pack")); err != nil {
+		t.Fatalf("expected preexisting leased .pack still on disk after .rev rollback, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(packDstDir, keepBase+".idx")); err != nil {
+		t.Fatalf("expected preexisting leased .idx still on disk after .rev rollback, got %v", err)
+	}
+	if _, err := os.Stat(storeKeepRevPath); !os.IsNotExist(err) {
+		t.Fatalf("expected newly added .rev for preexisting base unlinked on rollback, got %v", err)
+	}
+
 	// 2. S1 Marker-Creation Failure (beforeRollbackMarkerWrite):
-	// Verify zero destructive progression occurs when marker creation fails:
-	// both candidate .pack and .idx companions remain on disk, zero .retiring- markers exist,
-	// and removePackLocked did not run before S1 completed.
+	// Verify zero destructive progression occurs on disk when marker creation fails:
+	// both candidate .pack and .idx companions remain on disk and zero .retiring- markers exist,
+	// while in-memory stock immediately drops the unverified candidate pack so continued-use
+	// HasObject/Metrics/createStoreLease calls never advertise rolled-back candidate objects.
 	errMarkerCreateFault := errors.New("injected S1 marker creation failure")
 	s1CreateFailCtx := withGCTestHooks(ctx, gcTestHooks{
 		beforeRollbackMarkerWrite: func(_, _ string) error {
@@ -413,10 +456,10 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	if _, err := os.Stat(candidateMarkerPath); !os.IsNotExist(err) {
 		t.Fatalf("expected no .retiring- marker on disk after S1 marker creation failure, got %v", err)
 	}
-	if !store.HasObject(oidPack) {
-		t.Fatalf("expected in-memory pack stock untouched when S1 stops before S2 removePackLocked")
+	if store.HasObject(oidPack) || store.HasObject("pack:"+candidateBase) {
+		t.Fatalf("expected in-memory pack stock dropped on rollback entry so live store never advertises unverified candidate pack")
 	}
-	// Clean up the unreferenced intact candidate pack via GC so next stage starts clean.
+	// Continued-use without reopen: CollectGarbage retires the unleased intact candidate pack cleanly.
 	if _, gcErr := store.CollectGarbage(ctx); gcErr != nil {
 		t.Fatalf("expected CollectGarbage to retire unleased intact candidate pack cleanly, got %v", gcErr)
 	}
@@ -425,7 +468,8 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	}
 
 	// 3. S1 Barrier-1 Intent-Sync Failure (syncDir failing on first rollback sync after marker write):
-	// Verify zero companion unlinks occur when Barrier-1 fails, while .retiring- marker remains on disk.
+	// Verify zero companion unlinks occur when Barrier-1 fails, while .retiring- marker remains on disk,
+	// and verify BOTH continued-use on the same store instance (without reopen) and reopen recovery.
 	errIntentSyncFault := errors.New("injected S1 Barrier-1 intent directory sync failure")
 	var markerWritten atomic.Bool
 	s1SyncFailCtx := withGCTestHooks(ctx, gcTestHooks{
@@ -453,7 +497,28 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	if _, err := os.Stat(candidateMarkerPath); err != nil {
 		t.Fatalf("expected .retiring- marker present on disk when S1 Barrier-1 fails after write, got %v", err)
 	}
-	// Reopen reconciles the S1 marker cleanly and preserves oidKeep.
+	if store.HasObject(oidPack) || store.HasObject("pack:"+candidateBase) {
+		t.Fatalf("expected live store HasObject false for candidate pack after S1 Barrier-1 failure")
+	}
+	// Continued-use without reopen: importing loose objects on the same store instance reconciles
+	// the leftover .retiring- marker at import start even when srcDirs have no pack subdirectory.
+	_, _, err = store.ImportRepositoryObjects(ctx, []string{objLoose}, []string{oidLoose})
+	testutil.FailErr(t, "continued-use ImportRepositoryObjects(objLoose) after S1 Barrier-1 fault without reopen", err)
+	if _, err := os.Stat(candidateMarkerPath); !os.IsNotExist(err) {
+		t.Fatalf("expected continued-use import to reconcile leftover .retiring- marker on same store instance, got %v", err)
+	}
+	if _, err := os.Stat(candidatePackPath); !os.IsNotExist(err) {
+		t.Fatalf("expected continued-use import to retire leftover candidate .pack on same store instance, got %v", err)
+	}
+	if !store.HasObject(oidKeep) || !store.HasObject(oidLoose) || store.HasObject(oidPack) {
+		t.Fatalf("expected keep and loose present and retired candidate pack absent after continued-use import")
+	}
+	// Also verify reopen after S1 Barrier-1 fault reconciles cleanly.
+	markerWritten.Store(false)
+	_, _, s1SyncErr2 := store.ImportRepositoryObjects(s1SyncFailCtx, []string{objPack}, []string{oidPack, missingTip})
+	if !errors.Is(s1SyncErr2, ErrCorruptObjectStore) || !errors.Is(s1SyncErr2, errIntentSyncFault) {
+		t.Fatalf("expected joined ErrCorruptObjectStore and errIntentSyncFault on second S1 Barrier-1 fault, got %v", s1SyncErr2)
+	}
 	testutil.FailErr(t, "close after S1 Barrier-1 fault", store.Close())
 	store, err = NewRetainedObjectStoreContext(ctx, storeRoot)
 	testutil.FailErr(t, "reopen after S1 Barrier-1 fault", err)
