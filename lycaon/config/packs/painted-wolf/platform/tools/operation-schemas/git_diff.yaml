@@ -10,7 +10,7 @@ schema:
       type: array
       items:
         type: string
-      description: "Restrict selection to these session-folder-relative pathspecs or directories (repo-relative on the active root; not root-labelled paths)."
+      description: "Restrict selection to these session-folder-relative pathspecs or directories (repository-relative; not root-labelled paths)."
     stat:
       type: boolean
       description: When true, return per-path insertion/deletion counts only (no hunks) — the survey view of a large change

@@ -29,7 +29,7 @@ schema:
             maxLength: 1024
           description: Exact HTTP origins (scheme, host, port), without paths, query parameters, or credentials.
     command: {type: string, description: "Bash source. Leave empty for the default."}
-    cwd: {type: string, description: "Working folder for the statement. Empty = the session folder; `@label` or `@label/sub` = any attached folder; `@scratch`/`@output` = session scratch/output; absolute paths are accepted."}
+    cwd: {type: string, description: "Folder for the statement. Empty = the session folder; `@label` or `@label/sub` = any attached folder; `@scratch`/`@output` = session scratch/output; absolute paths are accepted."}
     timeout_ms: {type: integer, minimum: 1000, maximum: 7200000, description: Deadline ms.}
     socks_proxy: {type: boolean, default: false, description: SOCKS5h proxy.}
     capability_request:
