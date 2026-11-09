@@ -27,7 +27,7 @@ func captureRecordBody(rec *Record, content string) string {
 	return body
 }
 
-func populateMCPEvidenceRecord(projectDir string, rec *Record, content string) {
+func populateMCPEvidenceRecord(roots CitationRoots, rec *Record, content string) {
 	if rec == nil {
 		return
 	}
@@ -35,7 +35,7 @@ func populateMCPEvidenceRecord(projectDir string, rec *Record, content string) {
 	for _, url := range urlsInToolBody(body) {
 		rec.touchURL(url)
 	}
-	scanCommandPaths(projectDir, rec, body, nil)
+	scanCommandPaths(roots, rec, body, nil)
 }
 
 func populateSearchRecord(rec *Record, content string) {
@@ -118,13 +118,13 @@ func urlsInToolBody(text string) []string {
 }
 
 // populateScanArtifactRecord captures scan tool JSON and indexes finding paths.
-func populateScanArtifactRecord(projectDir string, rec *Record, content string) {
+func populateScanArtifactRecord(roots CitationRoots, rec *Record, content string) {
 	if rec == nil {
 		return
 	}
 	body := captureRecordBody(rec, content)
 	for _, p := range scanPathsFromArtifactJSON(body) {
-		addRecordPath(projectDir, rec, p, FidelityStructured)
+		addRecordPath(roots, rec, p, FidelityStructured)
 	}
 }
 

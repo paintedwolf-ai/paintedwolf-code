@@ -96,13 +96,20 @@ func LedgerPathKey(roots CitationRoots, token string, byPath map[string][]string
 		if byPath == nil || len(byPath[key]) > 0 {
 			return key
 		}
-		// Bare paths may belong to any configured root.
+		// Bare paths may belong to any configured root. Check each root's
+		// bare spelling and its session-folder display spelling, so keys
+		// stored under any session folder match at the current one.
 		if !strings.HasPrefix(token, "@") && len(roots.Roots) > 1 {
 			for _, r := range roots.Roots {
-				if key2, ok2 := qualifyCitationToken(CitationRoots{
-					Roots: roots.Roots, ActiveRootID: r.ID, ProjectDir: roots.ProjectDir,
-				}, token); ok2 && len(byPath[key2]) > 0 {
+				scan := CitationRoots{Roots: roots.Roots, ActiveRootID: r.ID, ProjectDir: roots.ProjectDir}
+				if key2, ok2 := qualifyCitationToken(scan, token); ok2 && len(byPath[key2]) > 0 {
 					return key2
+				}
+				if abs, root, err := projectroot.ResolveAbs(scan.Roots, r.ID, token); err == nil && !root.External {
+					display := projectroot.DisplayPath(roots.Roots, roots.ActiveRootID, root.ID, projectroot.ScopeRel(root, abs))
+					if display != "" && len(byPath[display]) > 0 {
+						return display
+					}
 				}
 			}
 		}
@@ -134,8 +141,8 @@ func ResolveCitationFile(roots CitationRoots, token string) (absPath, displayPat
 	if token == "" || sandbox.HasParentTraversal(token) {
 		return "", "", false
 	}
-	try := func(activeID string) (string, string, bool) {
-		ctx := CitationRoots{Roots: roots.Roots, ActiveRootID: activeID, ProjectDir: roots.ProjectDir}
+	try := func(resolutionRootID string) (string, string, bool) {
+		ctx := CitationRoots{Roots: roots.Roots, ActiveRootID: resolutionRootID, ProjectDir: roots.ProjectDir}
 		var abs string
 		var display string
 		if len(ctx.Roots) > 0 {
@@ -144,7 +151,9 @@ func ResolveCitationFile(roots CitationRoots, token string) (absPath, displayPat
 				return "", "", false
 			}
 			abs = resolved
-			display = projectroot.Qualify(ctx.Roots, ctx.ActiveRootID, root, abs)
+			// Display follows the session folder, not the resolution root:
+			// bare off the session's active root, @label-qualified otherwise.
+			display = projectroot.Qualify(ctx.Roots, roots.ActiveRootID, root, abs)
 		} else {
 			var rel string
 			var ok bool
