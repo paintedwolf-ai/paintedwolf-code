@@ -659,7 +659,7 @@ export class PrettyReplicaEditorAdapter {
     if (
       intent === "cut" &&
       (mapped.copiedDisplayText !== undefined || mapped.copiedRawText !== undefined) &&
-      (!hasPendingRecoveryState(this.recoveryState()) || this.lastCopiedSelection === null)
+      ((this.pendingConflict === null && this.pendingStaleEdit === null) || this.lastCopiedSelection === null)
     ) {
       this.lastCopiedSelection = {
         displayText: mapped.copiedDisplayText ?? "",
