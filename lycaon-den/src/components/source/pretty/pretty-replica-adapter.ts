@@ -656,7 +656,11 @@ export class PrettyReplicaEditorAdapter {
       segments: this.projection.segments,
     });
 
-    if (mapped.copiedDisplayText !== undefined || mapped.copiedRawText !== undefined) {
+    if (
+      intent === "cut" &&
+      (mapped.copiedDisplayText !== undefined || mapped.copiedRawText !== undefined) &&
+      (!this.hasPendingRecovery() || this.lastCopiedSelection === null)
+    ) {
       this.lastCopiedSelection = {
         displayText: mapped.copiedDisplayText ?? "",
         rawText: mapped.copiedRawText ?? "",
