@@ -42,10 +42,6 @@ func (d presenceDrafts) ReadyFiles(ctx context.Context, jobID string) ([]agentpr
 		return nil, err
 	}
 	promote := worker.PromoteRootsForTask(task, roots)
-	primary, err := projectroot.PrimaryRoot(roots)
-	if err != nil {
-		return nil, err
-	}
 	files := make([]agentpresence.DraftFile, 0, len(paths))
 	for _, changed := range paths {
 		abs, root, err := projectroot.ResolveAbs(roots, task.WorkspaceRootID, changed)
@@ -57,7 +53,7 @@ func (d presenceDrafts) ReadyFiles(ctx context.Context, jobID string) ([]agentpr
 			continue
 		}
 		file := agentpresence.DraftFile{Target: agentpresence.Target{RootID: root.ID, Path: rel}}
-		if d.changedLines(ctx, task, promote, projectroot.Qualify(primary, root, abs), &file) {
+		if d.changedLines(ctx, task, promote, projectroot.Qualify(roots, task.WorkspaceRootID, root, abs), &file) {
 			files = append(files, file)
 		}
 	}

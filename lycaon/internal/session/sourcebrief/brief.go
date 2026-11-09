@@ -159,6 +159,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 		OwnTruncated: ownOverflow,
 		SessionID:    sess.ID,
 		Roots:        roots,
+		ActiveRootID: sess.WorkspaceRootID,
 		Touched:      m.sessionTouchedPaths(ctx, sess, reader, roots),
 	})
 }
@@ -170,6 +171,7 @@ type sourceChangeBriefInputs struct {
 	OwnTruncated bool
 	SessionID    string
 	Roots        []projectroot.RootRef
+	ActiveRootID string
 	Touched      map[string]bool
 }
 
@@ -228,7 +230,7 @@ func assembleSourceChangeBrief(in sourceChangeBriefInputs) inject.SourceChangeBr
 			if _, shared := foreign.byFile[fileID]; duringCommand && shared {
 				continue
 			}
-			display := projectroot.DisplayPath(in.Roots, group.newest.RootID, group.newest.Path)
+			display := projectroot.DisplayPath(in.Roots, in.ActiveRootID, group.newest.RootID, group.newest.Path)
 			if (in.Touched[group.newest.Path] || in.Touched[display]) != workingSet {
 				continue
 			}
@@ -280,7 +282,7 @@ func (m *Service) sessionTouchedPaths(
 		for _, path := range authored {
 			if path = strings.TrimSpace(path); path != "" {
 				touched[path] = true
-				touched[projectroot.DisplayPath(roots, root.ID, path)] = true
+				touched[projectroot.DisplayPath(roots, sess.WorkspaceRootID, root.ID, path)] = true
 			}
 		}
 	}

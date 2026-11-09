@@ -27,8 +27,10 @@ func Branch(roots []projectroot.RootRef, branch string) Walk {
 			if err != nil {
 				return err
 			}
+			// Baseline keys stay primary-relative: readers parse them with
+			// primary-relative semantics.
 			qualify := func(path string) string {
-				return projectroot.Qualify(primary, root, filepath.Join(root.Path, filepath.FromSlash(path)))
+				return projectroot.Qualify(roots, primary.ID, root, filepath.Join(root.Path, filepath.FromSlash(path)))
 			}
 			if err := walkRoot(ctx, filepath.Join(branch, dir), qualify, visit); err != nil {
 				return err

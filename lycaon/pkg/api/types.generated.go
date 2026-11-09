@@ -4379,7 +4379,7 @@ type MessageContentPart struct {
 	ArtifactID string `json:"artifact_id,omitempty"`
 	// Stable blob ID for a payload attachment, used to restage Edit/rewind.
 	BlobID string `json:"blob_id,omitempty"`
-	// Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the path relative to `root_id`, qualified with `@label/` when that root is not primary. Absent when the part has no openable body (search_hit, user prose, host notices).
+	// Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the canonical display path: bare relative to the session's active folder, qualified with `@label/` for any other attached folder. Absent when the part has no openable body (search_hit, user prose, host notices).
 	Path string `json:"path,omitempty"`
 	// Attached root a path_file / path_folder reference resolves under. Absent on payload attachments, search hits, prose, and host notices.
 	RootID string `json:"root_id,omitempty"`

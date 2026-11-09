@@ -16,8 +16,9 @@ import (
 
 // PromoteRoots binds a worker task to primary/branch filesystem locations for merge.
 type PromoteRoots struct {
-	Roots      []projectroot.RootRef
-	BranchRoot string
+	Roots        []projectroot.RootRef
+	BranchRoot   string
+	ActiveRootID string
 }
 
 // PromoteRootsForTask resolves promote path mapping for a worker overlay job.
@@ -27,36 +28,10 @@ func PromoteRootsForTask(task *api.WorkerTask, roots []projectroot.RootRef) Prom
 	}
 	branch := strings.TrimSpace(task.WorkspaceRoot)
 	return PromoteRoots{
-		Roots:      append([]projectroot.RootRef(nil), roots...),
-		BranchRoot: branch,
+		Roots:        append([]projectroot.RootRef(nil), roots...),
+		BranchRoot:   branch,
+		ActiveRootID: task.WorkspaceRootID,
 	}
-}
-
-// BranchRel maps a model path to a path relative to the worker branch root.
-func (p PromoteRoots) BranchRel(activeRootID, modelPath string) (branchRel, displayPath string, err error) {
-	modelPath = strings.TrimSpace(modelPath)
-	if modelPath == "" {
-		return "", "", projectroot.ErrPathEscape
-	}
-	if len(p.Roots) <= 1 {
-		rel := filepath.ToSlash(filepath.Clean(modelPath))
-		return rel, rel, nil
-	}
-	abs, root, err := projectroot.ResolveAbs(p.Roots, activeRootID, modelPath)
-	if err != nil {
-		return "", "", err
-	}
-	primary, err := projectroot.PrimaryRoot(p.Roots)
-	if err != nil {
-		return "", "", err
-	}
-	displayPath = projectroot.Qualify(primary, root, abs)
-	scopeRel := projectroot.ScopeRel(root, abs)
-	dir, err := projectroot.BranchDirForID(root.ID)
-	if err != nil {
-		return "", "", err
-	}
-	return filepath.ToSlash(filepath.Join(dir, scopeRel)), displayPath, nil
 }
 
 // ReadPairBytes loads exact primary and branch bytes for a qualified promote path.

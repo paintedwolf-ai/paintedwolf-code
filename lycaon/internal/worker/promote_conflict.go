@@ -113,10 +113,6 @@ func expandOverlayPromoteFilesFlat(workspaceRoot string, roots []string) ([]stri
 }
 
 func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([]string, error) {
-	primary, err := projectroot.PrimaryRoot(promote.Roots)
-	if err != nil {
-		return nil, err
-	}
 	seen := map[string]struct{}{}
 	var files []string
 	add := func(qualified string) {
@@ -144,7 +140,7 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 			return nil, err
 		}
 		if !info.IsDir() {
-			qualifyBranchRel(promote, primary, raw, add)
+			qualifyBranchRel(promote, raw, add)
 			continue
 		}
 		err = filepath.WalkDir(abs, func(walked string, d fs.DirEntry, walkErr error) error {
@@ -158,7 +154,7 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 			if relErr != nil {
 				return oswalk.Skip(relErr)
 			}
-			qualifyBranchRel(promote, primary, filepath.ToSlash(rel), add)
+			qualifyBranchRel(promote, filepath.ToSlash(rel), add)
 			return nil
 		})
 		if err != nil {
@@ -169,7 +165,7 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 	return files, nil
 }
 
-func qualifyBranchRel(promote PromoteRoots, primary projectroot.RootRef, branchRel string, add func(string)) {
+func qualifyBranchRel(promote PromoteRoots, branchRel string, add func(string)) {
 	parts := strings.SplitN(filepath.ToSlash(branchRel), "/", 2)
 	if len(parts) < 2 {
 		return
@@ -178,7 +174,7 @@ func qualifyBranchRel(promote PromoteRoots, primary projectroot.RootRef, branchR
 	for _, root := range promote.Roots {
 		dir, err := projectroot.BranchDirForID(root.ID)
 		if err == nil && dir == branchDir {
-			add(projectroot.Qualify(primary, root, filepath.Join(root.Path, scopeRel)))
+			add(projectroot.Qualify(promote.Roots, promote.ActiveRootID, root, filepath.Join(root.Path, scopeRel)))
 			return
 		}
 	}

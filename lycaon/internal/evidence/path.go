@@ -120,11 +120,7 @@ func qualifyCitationToken(roots CitationRoots, token string) (string, bool) {
 		if err != nil {
 			return "", false
 		}
-		primary, err := projectroot.PrimaryRoot(roots.Roots)
-		if err != nil {
-			return "", false
-		}
-		return projectroot.Qualify(primary, root, abs), true
+		return projectroot.Qualify(roots.Roots, roots.ActiveRootID, root, abs), true
 	}
 	if rel, ok := NormalizeCitationPath(roots.ProjectDir, token); ok {
 		return rel, true
@@ -148,11 +144,7 @@ func ResolveCitationFile(roots CitationRoots, token string) (absPath, displayPat
 				return "", "", false
 			}
 			abs = resolved
-			primary, err := projectroot.PrimaryRoot(ctx.Roots)
-			if err != nil {
-				return "", "", false
-			}
-			display = projectroot.Qualify(primary, root, abs)
+			display = projectroot.Qualify(ctx.Roots, ctx.ActiveRootID, root, abs)
 		} else {
 			var rel string
 			var ok bool

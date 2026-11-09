@@ -8,11 +8,7 @@ func WorkerBranchRelative(roots []RootRef, activeRootID, modelPath string) (bran
 	if err != nil {
 		return "", "", err
 	}
-	primary, err := PrimaryRoot(roots)
-	if err != nil {
-		return "", "", err
-	}
-	displayPath = Qualify(primary, root, abs)
+	displayPath = Qualify(roots, activeRootID, root, abs)
 	scopeRel := ScopeRel(root, abs)
 	if len(roots) == 1 {
 		return scopeRel, displayPath, nil
