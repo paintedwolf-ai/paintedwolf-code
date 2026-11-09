@@ -99,3 +99,38 @@ func TestMergeCoordinatorSurfacePathVarsListsRequestableToolsWithSummaries(t *te
 		}
 	}
 }
+
+func TestRequestableCapabilitiesDistinguishInteractiveTerminalsFromFloorCommand(t *testing.T) {
+	vars := map[string]any{}
+	testutil.FailErr(t, "MergeCoordinatorSurfacePathVars", prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}))
+	caps, _ := vars["requestable_capabilities"].([]string)
+	hasInteractiveTerminal := false
+	hasBrowserScreenshots := false
+	for _, c := range caps {
+		if c == "interactive terminal sessions and screen snapshots" {
+			hasInteractiveTerminal = true
+		}
+		if c == "browser pages and screenshots" {
+			hasBrowserScreenshots = true
+		}
+	}
+	if !hasInteractiveTerminal || !hasBrowserScreenshots {
+		t.Fatalf("implement_investigate requestable_capabilities = %v; expected interactive terminal and browser screenshot labels", caps)
+	}
+
+	both := prompts.RequestableCapabilities([]prompts.RequestableToolView{
+		{Name: "command", Role: "command"},
+		{Name: "terminal_open", Role: "command"},
+	})
+	if len(both) != 1 || both[0] != "commands and interactive terminal sessions" {
+		t.Fatalf("both command and terminal_open = %v", both)
+	}
+
+	bgOnly := prompts.RequestableCapabilities([]prompts.RequestableToolView{
+		{Name: "command_output", Role: "command"},
+		{Name: "command_stop", Role: "command"},
+	})
+	if len(bgOnly) != 1 || bgOnly[0] != "commands and background output" {
+		t.Fatalf("background command tools only = %v", bgOnly)
+	}
+}
