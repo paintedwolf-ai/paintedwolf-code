@@ -13,6 +13,7 @@ import (
 	"testing/fstest"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -80,22 +81,21 @@ func TestSkillsReadResourceEnvelope(t *testing.T) {
 
 func TestSkillsReadResourceTemplateBoundary(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		project bool
-		marked  bool
-		want    string
+		name     string
+		project  bool
+		resource string
+		want     string
 	}{
-		{name: "pack opt in", marked: true, want: "budget 7, mode bounded"},
-		{name: "literal pack reference", want: "budget {{ test_budget }}, mode {{ configuration.mode }}"},
-		{name: "literal project reference", project: true, marked: true, want: "budget {{ test_budget }}, mode {{ configuration.mode }}"},
+		{name: "pack reference renders", resource: "references/guide.md", want: "budget 7, mode bounded"},
+		{name: "pack markdown outside references stays literal", resource: "docs/notes.md", want: "budget {{ test_budget }}, mode {{ configuration.mode }}"},
+		{name: "literal project reference", project: true, resource: "references/guide.md", want: "budget {{ test_budget }}, mode {{ configuration.mode }}"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			const resource = "references/guide.md"
-			resourceFS := fstest.MapFS{resource: {Data: []byte("budget {{ test_budget }}, mode {{ configuration.mode }}")}}
-			sk := skills.Skill{Name: "example", PackID: "example/pack", Project: tc.project}
-			if tc.marked {
-				sk.Metadata = map[string]string{skills.TemplateResourcesMetadata: resource}
+			resourceFS := fstest.MapFS{
+				"references/guide.md": {Data: []byte("budget {{ test_budget }}, mode {{ configuration.mode }}")},
+				"docs/notes.md":       {Data: []byte("budget {{ test_budget }}, mode {{ configuration.mode }}")},
 			}
+			sk := skills.Skill{Name: "example", PackID: "example/pack", Project: tc.project}
 			sk.BindResources(resourceFS, ".", skills.DiscoverBundledResources(resourceFS, "."), "")
 			tool := &skilltools.SkillsReadTool{
 				Skills:       func(context.Context, tools.ToolContext) []skills.Skill { return []skills.Skill{sk} },
@@ -105,14 +105,42 @@ func TestSkillsReadResourceTemplateBoundary(t *testing.T) {
 				},
 			}
 			out := &tools.ToolInvocationOut{}
-			got, err := tool.Run(t.Context(), map[string]any{"need": "example", "resource": resource}, tools.ToolContext{
+			got, err := tool.Run(t.Context(), map[string]any{"need": "example", "resource": tc.resource}, tools.ToolContext{
 				Effects: tools.InvocationEffects{Out: out},
 			})
 			testutil.FailErr(t, "read reference", err)
-			if got != "Skill resource: example/"+resource+"\n\n"+tc.want+"\n" || out.Skill == nil || out.Skill.Instructions != tc.want {
+			if got != "Skill resource: example/"+tc.resource+"\n\n"+tc.want+"\n" || out.Skill == nil || out.Skill.Instructions != tc.want {
 				t.Fatalf("resource output = %q; projection = %#v", got, out.Skill)
 			}
 		})
+	}
+}
+
+func TestSkillsReadProjectSkillRemainsLiteral(t *testing.T) {
+	const body = "body {{ max_in_flight }} {% if profile_has_command %}cmd{% endif %}"
+	const reference = "reference {{ max_in_flight }} {% if profile_has_command %}cmd{% endif %}"
+	resourceFS := fstest.MapFS{"references/notes.md": {Data: []byte(reference)}}
+	sk := skills.Skill{Name: "project-flow", Project: true, Body: body}
+	sk.BindResources(resourceFS, ".", skills.DiscoverBundledResources(resourceFS, "."), "")
+	tool := &skilltools.SkillsReadTool{
+		Skills:       func(context.Context, tools.ToolContext) []skills.Skill { return []skills.Skill{sk} },
+		TemplateVars: func(context.Context, tools.ToolContext) map[string]any { return map[string]any{"max_in_flight": 4} },
+		PackConfiguration: func(context.Context, tools.ToolContext, string) map[string]any {
+			return map[string]any{"mode": "bounded"}
+		},
+	}
+	got, err := tool.Run(t.Context(), map[string]any{"need": "project-flow"}, tools.ToolContext{})
+	testutil.FailErr(t, "read project skill", err)
+	if !strings.Contains(got, body) {
+		t.Fatalf("project skill body was evaluated:\n%s", got)
+	}
+	out := &tools.ToolInvocationOut{}
+	got, err = tool.Run(t.Context(), map[string]any{"need": "project-flow", "resource": "references/notes.md"}, tools.ToolContext{
+		Effects: tools.InvocationEffects{Out: out},
+	})
+	testutil.FailErr(t, "read project reference", err)
+	if !strings.Contains(got, reference) {
+		t.Fatalf("project skill reference was evaluated:\n%s", got)
 	}
 }
 
@@ -420,5 +448,62 @@ func TestSkillsReadTreatsSelfReferentialSkillMarkdownAsMainBody(t *testing.T) {
 		if !strings.HasPrefix(got, "Skill: prepare-a-release\n\n"+body) || out.Skill == nil || out.Skill.Name != "prepare-a-release" {
 			t.Fatalf("resource %q did not resolve to main skill body: got=%q projection=%#v", resource, got, out.Skill)
 		}
+	}
+}
+
+func TestSkillsReadUsesCallerAgentProfile(t *testing.T) {
+	body := "caller:{% if is_coordinator %}coord{% else %}worker{% endif %} " +
+		"spawn:{% if profile_has_task %}yes{% else %}no{% endif %} " +
+		"branch:{% if on_worker_branch %}isolated{% else %}shared{% endif %} " +
+		"git:{% if has_git %}yes{% else %}no{% endif %}"
+	for _, tc := range []struct {
+		name  string
+		input prompts.SkillSurfaceVarsInput
+		want  string
+	}{
+		{
+			name: "coordinator surface",
+			input: prompts.SkillSurfaceVarsInput{
+				ProfileID: prompts.CoordinatorProfileID,
+				SurfaceID: "implement_routing",
+				Offered:   []string{"command", "task", "ask_user"},
+				HasGit:    true,
+				RootCount: 2,
+			},
+			want: "caller:coord spawn:yes branch:shared git:yes",
+		},
+		{
+			name: "worker readonly leg",
+			input: prompts.SkillSurfaceVarsInput{
+				ProfileID:      "worker_readonly",
+				Offered:        []string{"command", "summarize", "recall"},
+				OnWorkerBranch: true,
+				HasGit:         true,
+				RootCount:      1,
+			},
+			want: "caller:worker spawn:no branch:isolated git:yes",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sk := skills.Skill{Name: "example", PackID: "example/pack", Body: body}
+			tool := &skilltools.SkillsReadTool{
+				Skills: func(context.Context, tools.ToolContext) []skills.Skill {
+					return []skills.Skill{sk}
+				},
+				TemplateVars: func(_ context.Context, _ tools.ToolContext) map[string]any {
+					vars, err := prompts.SkillSurfaceTemplateVars(tc.input)
+					testutil.FailErr(t, "skill surface vars", err)
+					return vars
+				},
+				PackConfiguration: func(context.Context, tools.ToolContext, string) map[string]any {
+					return nil
+				},
+			}
+			got, err := tool.Run(context.Background(), map[string]any{"need": "example"}, tools.ToolContext{})
+			testutil.FailErr(t, "read skill", err)
+			if !strings.Contains(got, tc.want) {
+				t.Fatalf("rendered body missing %q:\n%s", tc.want, got)
+			}
+		})
 	}
 }

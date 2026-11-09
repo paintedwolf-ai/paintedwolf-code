@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
 	"github.com/lycaon/lycaon/internal/hostresources"
@@ -29,6 +30,8 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolvocab"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Dependencies defines the required inputs to build the session manager.
@@ -177,6 +180,83 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}, nil
 }
 
+// skillSurfaceVarsInput maps a tool invocation context to skill surface input:
+// the agent's tool profile, the turn surface, the offered tools, and the
+// workspace shape facts (worker branch, git, root count).
+func skillSurfaceVarsInput(tctx tools.ToolContext, budget spawn.WorkerToolBudget) prompts.SkillSurfaceVarsInput {
+	profileID := strings.TrimSpace(tctx.Identity.Agent)
+	if mapped, err := prompts.ToolProfileForAgent(profileID); err == nil && mapped != "" {
+		profileID = mapped
+	}
+	return prompts.SkillSurfaceVarsInput{
+		ProfileID:        profileID,
+		SurfaceID:        strings.TrimSpace(tctx.Turn.TurnSurfaceID),
+		Offered:          tctx.Turn.TurnOfferedToolNames,
+		OnWorkerBranch:   tctx.Source.SourceWorkspaceKind == api.SourceWorkspaceKindWorker && strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "",
+		HasGit:           skillReaderHasGit(tctx),
+		RootCount:        len(tctx.Source.Roots),
+		DelegationBudget: budget,
+	}
+}
+
+// skillReaderHasGit reports a usable git repository for the skill reader: the
+// active root when known, else the worker branch root, else the first root.
+func skillReaderHasGit(tctx tools.ToolContext) bool {
+	for _, dir := range []string{strings.TrimSpace(tctx.ActiveRootPath()), strings.TrimSpace(tctx.Source.WorkerBranchRoot)} {
+		if dir == "" {
+			continue
+		}
+		if _, ok := gitrepo.Discover(dir); ok {
+			return true
+		}
+	}
+	for _, r := range tctx.Source.Roots {
+		if _, ok := gitrepo.Discover(strings.TrimSpace(r.Path)); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// skillReaderOfferedTools maps the tool facts a skill reader is checked
+// against: the turn's offered tools, plus — on a coordinator surface — the
+// surface's full addressable set (floor plus loadable), since request_tools
+// can reach the rest of the surface before any skill read.
+func skillReaderOfferedTools(tctx tools.ToolContext) map[string]bool {
+	offered := make(map[string]bool, len(tctx.Turn.TurnOfferedToolNames)+1)
+	for _, name := range tctx.Turn.TurnOfferedToolNames {
+		offered[name] = true
+	}
+	profileID := profileIDForSurface(tctx)
+	surfaceID := strings.TrimSpace(tctx.Turn.TurnSurfaceID)
+	scopeID := profileID
+	if surfaceID != "" && profileID == prompts.CoordinatorProfileID {
+		scopeID = surfaceID
+		if floor, err := prompts.LoadCoordinatorSurfaceFloor(surfaceID); err == nil {
+			for _, name := range floor {
+				offered[name] = true
+			}
+		}
+		if loadable, err := prompts.LoadCoordinatorSurfaceLoadable(surfaceID); err == nil {
+			for _, name := range loadable {
+				offered[name] = true
+			}
+		}
+	}
+	if offered["command"] && prompts.ScopeAllowsCommandMutation(scopeID) {
+		offered[toolvocab.ReachCommandMutation] = true
+	}
+	return offered
+}
+
+func profileIDForSurface(tctx tools.ToolContext) string {
+	profileID := strings.TrimSpace(tctx.Identity.Agent)
+	if mapped, err := prompts.ToolProfileForAgent(profileID); err == nil && mapped != "" {
+		return mapped
+	}
+	return profileID
+}
+
 func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResources *hostresources.Service, workerToolBudgetFor func(string) spawn.WorkerToolBudget) {
 	if host != nil && host.Boundary != nil {
 		host.Boundary.SetProfileSource(func(ctx context.Context, sessionID string) []sandbox.ToolProfile {
@@ -211,14 +291,25 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 			}
 			sess, _ := mgr.Chats.Get(ctx, tctx.Identity.SessionID)
 			loaded, _ := mgr.Profiles.EffectiveSkillsForProfile(ctx, sess, tctx.Identity.Agent, roots)
-			return loaded
+			offered := skillReaderOfferedTools(tctx)
+			reachable := make([]skills.Skill, 0, len(loaded))
+			for _, skill := range loaded {
+				if toolvocab.SkillToolsOffered(skill, offered) {
+					reachable = append(reachable, skill)
+				}
+			}
+			return reachable
 		})
 		host.Skills.SetSkillTemplateVars(func(_ context.Context, tctx tools.ToolContext) map[string]any {
 			budget := spawn.DefaultWorkerToolBudget()
 			if workerToolBudgetFor != nil {
 				budget = workerToolBudgetFor(strings.TrimSpace(tctx.ActiveRootPath()))
 			}
-			return spawn.PolicyTemplateVars(budget)
+			vars, err := prompts.SkillSurfaceTemplateVars(skillSurfaceVarsInput(tctx, budget))
+			if err != nil || vars == nil {
+				return spawn.PolicyTemplateVars(budget)
+			}
+			return vars
 		})
 		host.Skills.SetSkillPackConfiguration(
 			func(ctx context.Context, tctx tools.ToolContext, packID string) map[string]any {
