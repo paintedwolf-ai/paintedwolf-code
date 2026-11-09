@@ -218,7 +218,7 @@ func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decis
 	s := l.session(sessionID)
 	s.open(opening)
 	cold := opening.Boundary.Cold()
-	if cold {
+	if cold && !decision.Abstained {
 		s.fullCatalog = false
 	}
 	standing := make(map[string]Load, len(s.standing)+len(decision.Tools))

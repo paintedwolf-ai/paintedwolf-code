@@ -37,6 +37,10 @@ func TestFallbackVisibilityPreservesRequestProvenance(t *testing.T) {
 		t.Fatalf("warm surface = %+v", restored.Standing("s"))
 	}
 	opening.Boundary = Boundary{Cache: CacheCold}
+	restored.BeginTurn("s", opening, Decision{Abstained: true})
+	if !restored.FullCatalog("s") {
+		t.Fatal("an undecided cold turn hid the catalog")
+	}
 	restored.BeginTurn("s", opening, Decision{})
 	if restored.FullCatalog("s") || !reflect.DeepEqual(restored.Active("s"), map[string]bool{"task": true}) {
 		t.Fatalf("healthy cold surface = %+v", restored.Standing("s"))
