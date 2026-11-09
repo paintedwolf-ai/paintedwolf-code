@@ -22,9 +22,9 @@ import (
 )
 
 func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
-	for _, scenario := range []struct{ deny, cancel, host, newAsk bool }{
-		{host: true}, {deny: true, host: true}, {cancel: true, host: true}, {newAsk: true, host: true},
-		{}, {deny: true}, {cancel: true}, {newAsk: true},
+	for _, scenario := range []struct{ deny, cancel, host, newAsk, missingProducer bool }{
+		{host: true}, {deny: true, host: true}, {cancel: true, host: true}, {newAsk: true, host: true}, {missingProducer: true, host: true},
+		{}, {deny: true}, {cancel: true}, {newAsk: true}, {missingProducer: true},
 	} {
 		name := fmt.Sprintf("deny-during-review-%t", scenario.deny)
 		if scenario.cancel {
@@ -32,6 +32,9 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 		}
 		if scenario.newAsk {
 			name = "new-ask-during-review"
+		}
+		if scenario.missingProducer {
+			name = "explicit-review-of-missing-producer"
 		}
 		if !scenario.host {
 			name += "-confined"
@@ -43,7 +46,11 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			testutil.FailErr(t, "create policy store", err)
 			config := settings.ApprovalConfig{Rules: []settings.ApprovalRule{{Category: settings.ApprovalCategoryTool, Pattern: "command", Effect: settings.ApprovalEffectAsk}}}
 			testutil.FailErr(t, "install independent ask", store.PutProject(root, config))
-			approvals := settings.NewRuleApprovalGate(store, settings.NoSources())
+			sources := settings.NoSources()
+			if scenario.missingProducer {
+				sources.Detections = nil
+			}
+			approvals := settings.NewRuleApprovalGate(store, sources)
 			boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 			registry := tools.NewDefaultRegistry()
 			entered := make(chan struct{}, 1)
@@ -78,7 +85,11 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal("required review never arrived")
 			}
-			if manager.request.Decision == nil || !slices.Contains(manager.request.Decision.Gates(), api.GateUserRule) {
+			expectedGate := api.GateUserRule
+			if scenario.missingProducer {
+				expectedGate = api.GateIncompleteFacts
+			}
+			if manager.request.Decision == nil || !slices.Contains(manager.request.Decision.Gates(), expectedGate) {
 				t.Fatalf("review omitted independent ask: %+v", manager.request)
 			}
 			if len(entered) != 0 {
@@ -112,7 +123,11 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 				}
 				manager.approve()
 			}
-			err = <-done
+			select {
+			case err = <-done:
+			case <-manager.requested:
+				t.Fatal("unchanged reviewed reasons requested another approval")
+			}
 			if scenario.cancel {
 				if !errors.Is(err, context.Canceled) || len(entered) != 0 || len(approvals.ListGrants("task")) != 0 {
 					t.Fatalf("canceled review retained authority or reached handler: err=%v entered=%d", err, len(entered))
