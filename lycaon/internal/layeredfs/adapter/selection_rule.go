@@ -13,14 +13,14 @@ const (
 	FilesystemCopyOnly FilesystemClass = "copy_only"
 )
 
-// BudgetClass names one recorded break-even.
+// BudgetClass names one recorded preparation limit class.
 type BudgetClass struct {
 	Platform   string          `json:"platform"`
 	Filesystem FilesystemClass `json:"filesystem"`
 }
 
-// BudgetFact is a recorded break-even between materializing and mounting. Costs are in bytes, and
-// EntryCost is what one entry in one tree weighs against them.
+// BudgetFact is a fixed preparation limit between materializing and mounting. Costs are in work-cost
+// units, and EntryCost is what one entry in one tree weighs against the limit.
 type BudgetFact struct {
 	Class       BudgetClass `json:"class"`
 	Limit       int64       `json:"limit"`
