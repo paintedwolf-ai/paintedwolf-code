@@ -64,12 +64,9 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     const res = computePrettyNativeLayout(jsonc, { path: "tsconfig.jsonc" });
     expect(res.outcome).toBe("formatted");
     expect(res.family).toBe("jsonc");
-    // Inside `"a": /* block {comment} */ [1, 2,],`:
-    // breaks after `[`, after `1,`, before `]` (trailing comma after 2 does not duplicate break before `]`).
     const line3 = res.lineStates[2]!;
     expect(line3.relBoundaries.length).toBeGreaterThanOrEqual(3);
 
-    // Malformed JSONC (unclosed block comment or deleted comma) stays formatted without throwing:
     const malformedJsonc = '{"a":1 "b":2, /* unclosed comment { }';
     const malRes = computePrettyNativeLayout(malformedJsonc, {
       path: "tsconfig.jsonc",
@@ -88,8 +85,6 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     const breakSubstrings = res.boundaries.map((b) =>
       xml.slice(b.pos, b.pos + 8),
     );
-    // Breaks before `<item`, `<name>`, `<flag/>`, `</item>`, `<!--`, `<pre>`, and `</root>`,
-    // NEVER inside `<name>Alpha</name>` or inside `<pre>  <span>keep   spaces</span>  </pre>`!
     expect(breakSubstrings.some((s) => s.startsWith("<item"))).toBe(true);
     expect(breakSubstrings.some((s) => s.startsWith("<name>"))).toBe(true);
     expect(breakSubstrings.some((s) => s.startsWith("<flag/>"))).toBe(true);
@@ -100,7 +95,6 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(breakSubstrings.some((s) => s.startsWith("<span>"))).toBe(false);
     expect(breakSubstrings.some((s) => s.startsWith("</span>"))).toBe(false);
 
-    // Malformed XML/HTML (unclosed tag during typing) keeps existing boundaries active:
     const malformedXml = "<root><item><name>Alpha</name><unclosed";
     const malXmlRes = computePrettyNativeLayout(malformedXml, {
       path: "index.html",
@@ -116,7 +110,6 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(res.outcome).toBe("formatted");
     expect(res.family).toBe("javascript");
 
-    // Verify no break occurred inside `for(let i=0;i<2;i++)` or inside `"a;b,c"` or `/a,b;c/`:
     const forStart = tsCode.indexOf("for(");
     const forOpenBrace = tsCode.indexOf("{", forStart);
     const breaksInsideForHeader = res.boundaries.filter(
@@ -124,14 +117,12 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     );
     expect(breaksInsideForHeader).toEqual([]);
 
-    // Verify breaks DID occur inside `{host:...,ports:[80,443],...}` and `{retry:true,max:3}`:
     const retryPos = tsCode.indexOf("retry:true,");
     expect(
       res.boundaries.some((b) => b.pos === retryPos + "retry:true,".length),
     ).toBe(true);
 
-    // Malformed TypeScript (deleted comma in object literal) remains formatted:
-    const malformedTs = 'const cfg={a:1 b:2,c:[3,4};';
+    const malformedTs = "const cfg={a:1 b:2,c:[3,4};";
     const malTsRes = computePrettyNativeLayout(malformedTs, {
       path: "snippet.ts",
     });
@@ -146,17 +137,13 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(res.outcome).toBe("formatted");
     expect(res.family).toBe("css");
 
-    // Verify no break inside `url("http://example.com/a;b{c}.png")` or `rgb(1,2,3)`:
     const urlStart = cssText.indexOf("url(");
     const urlEnd = cssText.indexOf(")", urlStart);
     expect(
       res.boundaries.filter((b) => b.pos > urlStart && b.pos <= urlEnd),
     ).toEqual([]);
-
-    // Breaks after `.card{`, after `;`, before `}`, after `}` before `.btn`, and inside `.btn{...}`:
     expect(res.boundaries.length).toBeGreaterThanOrEqual(6);
 
-    // Malformed CSS (missing semicolon or unclosed brace) remains formatted:
     const malformedCss = ".card{color:red padding:4px;margin:0";
     const malCssRes = computePrettyNativeLayout(malformedCss, {
       path: "styles.css",
@@ -195,10 +182,10 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     ].join("\n");
     const mdRes = computePrettyNativeLayout(md, { path: "notes.md" });
     expect(mdRes.outcome).toBe("formatted");
-    expect(mdRes.lineStates[0]?.relBoundaries).toEqual([]); // prose untouched
-    expect(mdRes.lineStates[2]?.relBoundaries.length).toBe(3); // json fence formatted
-    expect(mdRes.lineStates[5]?.relBoundaries.length).toBe(3); // css fence formatted
-    expect(mdRes.lineStates[8]?.relBoundaries).toEqual([]); // python fence untouched
+    expect(mdRes.lineStates[0]?.relBoundaries).toEqual([]);
+    expect(mdRes.lineStates[2]?.relBoundaries.length).toBe(3);
+    expect(mdRes.lineStates[5]?.relBoundaries.length).toBe(3);
+    expect(mdRes.lineStates[8]?.relBoundaries).toEqual([]);
 
     const logLine = '2026-11-09T20:00:00Z INFO [gw] {"ok":true,"n":1}';
     const logRes = computePrettyNativeLayout(logLine);
@@ -206,7 +193,231 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(logRes.boundaries[0]?.pos).toBe(logLine.indexOf("{") + 1);
   });
 
-  it("FMT-AC-11: updates decorations incrementally on changed lines and accounts for Lezer syntaxTree nodes when a CodeMirror language is installed", () => {
+  it("FMT-AC-04, FMT-AC-11: preserves multiline template literals, multiline parenthesized calls, multiline XML CDATA/comments, and regexes across lines and incremental edits", () => {
+    // 1. Multiline JS template literal with `{`, `,`, `}` and nested `${`inner`}` + multiline parenthesized call + return regex:
+    const jsDoc = [
+      "const tpl = `header ${`inner`} start",
+      '{"literal":1,"ignored":2}',
+      "footer`;",
+      "callFn(",
+      "  firstArg, secondArg,",
+      "  {nestedA:1,nestedB:2},",
+      "  thirdArg, fourthArg",
+      ");",
+      "function check(){return /a,b{1,2}/;}",
+      "const tail = {x:10,y:20};",
+    ].join("\n");
+
+    let jsState = EditorState.create({
+      doc: jsDoc,
+      extensions: [
+        javascript({ typescript: true }),
+        createPrettyNativeDecorationsExtension({
+          enabled: true,
+          path: "multiline.ts",
+        }),
+      ],
+    });
+
+    const f0 = jsState.field(prettyNativeStateField);
+    expect(f0.outcome).toBe("formatted");
+    // Line 2 (`{"literal":1,"ignored":2}`) is inside multiline backtick template -> 0 boundaries!
+    expect(f0.lineStates[0]?.endQuoteCode).toBe(0x60);
+    expect(f0.lineStates[1]?.startQuoteCode).toBe(0x60);
+    expect(f0.lineStates[1]?.relBoundaries).toEqual([]);
+    expect(f0.lineStates[2]?.endQuoteCode).toBe(0);
+
+    // Line 5 (`  firstArg, secondArg,`) and Line 7 (`  thirdArg, fourthArg`) are directly inside `callFn(` -> 0 boundaries!
+    expect(f0.lineStates[3]?.endDelimSignature).toBe("(");
+    expect(f0.lineStates[4]?.startDelimSignature).toBe("(");
+    expect(f0.lineStates[4]?.relBoundaries).toEqual([]);
+    // Line 6 (`  {nestedA:1,nestedB:2},`) has an inner object `{...}` inside `callFn(` -> formats `{nestedA:1,nestedB:2}`!
+    expect(f0.lineStates[5]?.relBoundaries.length).toBe(3);
+    expect(f0.lineStates[6]?.relBoundaries).toEqual([]);
+    expect(f0.lineStates[7]?.endDelimSignature).toBe("");
+
+    // Line 9 (`function check(){return /a,b{1,2}/;}`) formats `{` and `;}` without splitting inside `/a,b{1,2}/`:
+    expect(f0.lineStates[8]?.relBoundaries.length).toBe(2);
+    // Line 10 (`const tail = {x:10,y:20};`) formats `{x:10,y:20}`:
+    expect(f0.lineStates[9]?.relBoundaries.length).toBe(3);
+    const tailLineStateBefore = f0.lineStates[9];
+
+    // Incremental edit inside Line 2 of the template literal converges and reuses suffix line 10 by reference:
+    const line2 = jsState.doc.line(2);
+    jsState = jsState.update({
+      changes: {
+        from: line2.from + 2,
+        to: line2.from + 9,
+        insert: "updated",
+      },
+    }).state;
+    const f1 = jsState.field(prettyNativeStateField);
+    expect(f1.lineStates[1]?.relBoundaries).toEqual([]);
+    expect(f1.lastIncrementalLinesScanned).toBeLessThanOrEqual(3);
+    expect(f1.lineStates[9]).toBe(tailLineStateBefore);
+    const jsScratch = computePrettyNativeLayout(
+      jsState.doc,
+      { path: "multiline.ts" },
+      jsState,
+    );
+    expect(f1.lineStates).toEqual(jsScratch.lineStates);
+    expect(f1.counters).toEqual(jsScratch.counters);
+
+    // 2. Multiline XML CDATA and multiline XML comments:
+    const xmlDoc = [
+      "<root><item><![CDATA[",
+      "<a><b>literal-not-markup</b></a>",
+      "]]></item><!--",
+      "<c><d>commented-out</d></c>",
+      "--><after><x>1</x><y>2</y></after></root>",
+    ].join("\n");
+
+    let xmlState = EditorState.create({
+      doc: xmlDoc,
+      extensions: [
+        html(),
+        createPrettyNativeDecorationsExtension({
+          enabled: true,
+          path: "cdata.xml",
+        }),
+      ],
+    });
+    const xf0 = xmlState.field(prettyNativeStateField);
+    expect(xf0.outcome).toBe("formatted");
+    // Line 1 enters CDATA (`endInXmlCdata === true`):
+    expect(xf0.lineStates[0]?.endInXmlCdata).toBe(true);
+    // Line 2 (`<a><b>literal-not-markup</b></a>`) is inside CDATA -> 0 boundaries!
+    expect(xf0.lineStates[1]?.startInXmlCdata).toBe(true);
+    expect(xf0.lineStates[1]?.endInXmlCdata).toBe(true);
+    expect(xf0.lineStates[1]?.relBoundaries).toEqual([]);
+    // Line 3 closes `]]></item>` and opens `<!--` (`endInBlockComment === true`):
+    expect(xf0.lineStates[2]?.endInXmlCdata).toBe(false);
+    expect(xf0.lineStates[2]?.endInBlockComment).toBe(true);
+    // Line 4 (`<c><d>commented-out</d></c>`) is inside XML comment -> 0 boundaries!
+    expect(xf0.lineStates[3]?.startInBlockComment).toBe(true);
+    expect(xf0.lineStates[3]?.relBoundaries).toEqual([]);
+    // Line 5 (`--><after><x>1</x><y>2</y></after></root>`) formats normal XML tags after `-->`:
+    expect(xf0.lineStates[4]?.relBoundaries.length).toBeGreaterThanOrEqual(4);
+
+    // Incremental edit on Line 2 inside CDATA keeps Line 2 unformatted and matches fresh construction:
+    const xmlLine2 = xmlState.doc.line(2);
+    xmlState = xmlState.update({
+      changes: {
+        from: xmlLine2.from + 6,
+        to: xmlLine2.from + 13,
+        insert: "changed",
+      },
+    }).state;
+    const xf1 = xmlState.field(prettyNativeStateField);
+    expect(xf1.lineStates[1]?.relBoundaries).toEqual([]);
+    const xmlScratch = computePrettyNativeLayout(
+      xmlState.doc,
+      { path: "cdata.xml" },
+      xmlState,
+    );
+    expect(xf1.lineStates).toEqual(xmlScratch.lineStates);
+    expect(xf1.counters).toEqual(xmlScratch.counters);
+  });
+
+  it("FMT-AC-07, FMT-AC-11: enforces aggregate document-wide resource limits across incremental edits (non-ASCII UTF-8 growth & cumulative synthetic rows) identically to fresh construction", () => {
+    // 1. Repeated non-ASCII UTF-8 growth against `maxInputUtf8Bytes`:
+    const initialJson = ['{"row":1,"msg":"aa"}', '{"row":2,"msg":"bb"}'].join(
+      "\n",
+    );
+    const utf8Limits = { maxInputUtf8Bytes: 52 };
+    let utf8State = EditorState.create({
+      doc: initialJson,
+      extensions: [
+        json(),
+        createPrettyNativeDecorationsExtension({
+          enabled: true,
+          path: "utf8.json",
+          limits: utf8Limits,
+        }),
+      ],
+    });
+    expect(utf8State.field(prettyNativeStateField).outcome).toBe("formatted");
+
+    // Insert "🎉🎉" (8 UTF-8 bytes, 4 UTF-16 units) on line 1 -> stays within 52 UTF-8 bytes (41 + 8 = 49 <= 52):
+    const pos1 = utf8State.doc.line(1).from + 17;
+    utf8State = utf8State.update({
+      changes: { from: pos1, to: pos1, insert: "🎉🎉" },
+    }).state;
+    const step1Field = utf8State.field(prettyNativeStateField);
+    const step1Fresh = computePrettyNativeLayout(
+      utf8State.doc,
+      { path: "utf8.json", limits: utf8Limits },
+      utf8State,
+    );
+    expect(step1Field.outcome).toBe("formatted");
+    expect(step1Field.counters).toEqual(step1Fresh.counters);
+
+    // Insert another "🎉" (4 UTF-8 bytes -> 49 + 4 = 53 > 52) on line 2 -> must transition to limit-exceeded (maxInputUtf8Bytes):
+    const pos2 = utf8State.doc.line(2).from + 17;
+    utf8State = utf8State.update({
+      changes: { from: pos2, to: pos2, insert: "🎉" },
+    }).state;
+    const step2Field = utf8State.field(prettyNativeStateField);
+    const step2Fresh = computePrettyNativeLayout(
+      utf8State.doc,
+      { path: "utf8.json", limits: utf8Limits },
+      utf8State,
+    );
+    expect(step2Field.outcome).toBe("limit-exceeded");
+    expect(step2Field.limitReason).toBe("maxInputUtf8Bytes");
+    expect(step2Fresh.outcome).toBe("limit-exceeded");
+    expect(step2Fresh.limitReason).toBe("maxInputUtf8Bytes");
+
+    // 2. Cumulative synthetic-row growth across multiple edits against `maxOutputLines`:
+    // Initial doc has 2 physical lines + 6 synthetic breaks (3 per line) = 8 outputLines.
+    const rowLimits = { maxOutputLines: 9 };
+    let rowState = EditorState.create({
+      doc: ['{"a":1,"b":2}', '{"c":3,"d":4}'].join("\n"),
+      extensions: [
+        json(),
+        createPrettyNativeDecorationsExtension({
+          enabled: true,
+          path: "rows.jsonl",
+          limits: rowLimits,
+        }),
+      ],
+    });
+    expect(rowState.field(prettyNativeStateField).outcome).toBe("formatted");
+    expect(rowState.field(prettyNativeStateField).counters.outputLines).toBe(8);
+
+    // Edit 1: Add `"e":5` on line 1 -> adds 1 synthetic break -> total outputLines = 9 (<= 9):
+    const line1EndBrace = rowState.doc.line(1).to - 1;
+    rowState = rowState.update({
+      changes: { from: line1EndBrace, to: line1EndBrace, insert: ',"e":5' },
+    }).state;
+    const rowStep1 = rowState.field(prettyNativeStateField);
+    const rowFresh1 = computePrettyNativeLayout(
+      rowState.doc,
+      { path: "rows.jsonl", limits: rowLimits },
+      rowState,
+    );
+    expect(rowStep1.outcome).toBe("formatted");
+    expect(rowStep1.counters.outputLines).toBe(9);
+    expect(rowStep1.counters).toEqual(rowFresh1.counters);
+
+    // Edit 2: Add `"f":6` on line 2 -> adds 1 more synthetic break -> total outputLines = 10 (> 9):
+    const line2EndBrace = rowState.doc.line(2).to - 1;
+    rowState = rowState.update({
+      changes: { from: line2EndBrace, to: line2EndBrace, insert: ',"f":6' },
+    }).state;
+    const rowStep2 = rowState.field(prettyNativeStateField);
+    const rowFresh2 = computePrettyNativeLayout(
+      rowState.doc,
+      { path: "rows.jsonl", limits: rowLimits },
+      rowState,
+    );
+    expect(rowStep2.outcome).toBe("limit-exceeded");
+    expect(rowStep2.limitReason).toBe("maxOutputLines");
+    expect(rowFresh2.outcome).toBe("limit-exceeded");
+    expect(rowFresh2.limitReason).toBe("maxOutputLines");
+  });
+
+  it("FMT-AC-11: updates decorations incrementally on changed lines, reuses suffix line states by reference, and accounts for Lezer syntaxTree nodes", () => {
     const lines = Array.from(
       { length: 200 },
       (_, idx) => `{"row":${idx},"nested":{"a":1,"b":2}}`,
@@ -238,24 +449,22 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
 
     const updatedField = state.field(prettyNativeStateField);
     expect(updatedField.outcome).toBe("formatted");
-    expect(updatedField.lastIncrementalLinesScanned).toBeLessThanOrEqual(4);
-
-    const scratch = computePrettyNativeLayout(state.doc, {
-      path: "rows.jsonl",
-    });
+    expect(updatedField.lastIncrementalLinesScanned).toBeLessThanOrEqual(3);
     expect(
-      updatedField.lineStates.map((ls) => ({
-        lineFrom: ls.lineFrom,
-        relBoundaries: ls.relBoundaries,
-      })),
-    ).toEqual(
-      scratch.lineStates.map((ls) => ({
-        lineFrom: ls.lineFrom,
-        relBoundaries: ls.relBoundaries,
-      })),
-    );
+      updatedField.lastIncrementalSuffixLinesReused,
+    ).toBeGreaterThanOrEqual(99);
+    // Unchanged prefix and suffix lineStates are reused by reference without reallocation:
+    expect(updatedField.lineStates[0]).toBe(initialField.lineStates[0]);
+    expect(updatedField.lineStates[150]).toBe(initialField.lineStates[150]);
 
-    // Also verify Lezer syntaxTree integration for HTML, JS/TS, and CSS modes:
+    const scratch = computePrettyNativeLayout(
+      state.doc,
+      { path: "rows.jsonl" },
+      state,
+    );
+    expect(updatedField.lineStates).toEqual(scratch.lineStates);
+    expect(updatedField.counters).toEqual(scratch.counters);
+
     for (const [ext, path, sample] of [
       [html(), "page.html", "<div><span>Hi</span><p>There</p></div>"],
       [javascript({ typescript: true }), "app.ts", "const x={a:1,b:[2,3]};"],
@@ -295,7 +504,6 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBe(3);
       expect(view.dom.querySelectorAll(".pw-virtual-indent").length).toBe(2);
 
-      // 1. Place caret immediately after the comma (offset 21, assoc -1) and run deleteCharBackward (Backspace):
       const commaOffset = raw.indexOf(",");
       view.dispatch({
         selection: { anchor: commaOffset + 1, head: commaOffset + 1 },
@@ -310,7 +518,6 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       );
       expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBe(2);
 
-      // 2. Re-insert comma, place caret before comma, and run deleteCharForward (Delete):
       view.dispatch({
         changes: { from: commaOffset, to: commaOffset, insert: "," },
         selection: { anchor: commaOffset, head: commaOffset },
@@ -320,7 +527,6 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
         '{"service":"gateway""enabled":true}',
       );
 
-      // 3. Re-insert comma and run Enter (insertNewlineAndIndent) right after comma:
       view.dispatch({
         changes: { from: commaOffset, to: commaOffset, insert: "," },
         selection: { anchor: commaOffset + 1, head: commaOffset + 1 },
@@ -328,12 +534,10 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       expect(insertNewlineAndIndent(view)).toBe(true);
       expect(view.state.doc.lines).toBe(2);
 
-      // 4. Run Tab (indentMore) and Shift+Tab (indentLess) on raw source line:
       expect(indentMore(view)).toBe(true);
       expect(view.state.doc.line(2).text.startsWith("  ")).toBe(true);
       expect(indentLess(view)).toBe(true);
 
-      // 5. Toggling Pretty OFF removes virtual widgets without altering raw doc:
       const docBeforeOff = view.state.doc.toString();
       applyPrettyNativeConfig(view, { enabled: false, path: "config.json" });
       expect(view.state.doc.toString()).toBe(docBeforeOff);
