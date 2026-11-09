@@ -17,7 +17,7 @@ import (
 )
 
 func TestOrdinaryOutsideReadGrantsTheContainingFolder(t *testing.T) {
-	dir := filepath.Join(canonDir(t, t.TempDir()), "unattached", t.Name())
+	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestHomeFileReadOffersHomeAndAncestors(t *testing.T) {
 }
 
 func TestTaskReadGrantSilencesLaterReadsInTheFolder(t *testing.T) {
-	dir := filepath.Join(canonDir(t, t.TempDir()), "unattached", t.Name())
+	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestOutsideReadAsksWithFileAccessAtEveryPosture(t *testing.T) {
 }
 
 func TestTreeGrantDoesNotCoverSensitiveChildren(t *testing.T) {
-	dir := filepath.Join(canonDir(t, t.TempDir()), "unattached", t.Name())
+	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +317,7 @@ func TestOrdinaryOutsideWriteStaysExact(t *testing.T) {
 }
 
 func TestDurableTreeGrantSurvivesReloadAndSilencesReads(t *testing.T) {
-	dir := filepath.Join(canonDir(t, t.TempDir()), "unattached", t.Name())
+	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -397,4 +397,17 @@ func canonDir(t *testing.T, dir string) string {
 	resolved, err := filepath.EvalSymlinks(dir)
 	testutil.FailErr(t, "resolve temp dir", err)
 	return resolved
+}
+
+// outsideScratchDir creates a unique folder under the user home, outside the
+// attached roots and the shared scratch boundary, where an ordinary read
+// still crosses into outside-root review.
+func outsideScratchDir(t *testing.T) string {
+	t.Helper()
+	home, err := os.UserHomeDir()
+	testutil.FailErr(t, "resolve user home", err)
+	base, err := os.MkdirTemp(home, "paintedwolf-fixture-")
+	testutil.FailErr(t, "create outside fixture folder", err)
+	t.Cleanup(func() { os.RemoveAll(base) })
+	return base
 }

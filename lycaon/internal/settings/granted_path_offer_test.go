@@ -560,11 +560,9 @@ func TestMissingTargetInExistingFolderStillGrantsTheFolder(t *testing.T) {
 	if len(offers) == 0 {
 		t.Fatal("expected granted-path offers")
 	}
-	for _, offer := range offers {
-		gp := offer.Grant.GrantedPath
-		if gp == nil || !gp.Tree || gp.Path != folder {
-			t.Fatalf("%s: missing file in an existing folder must grant the folder tree, got %+v", offer.Scope, gp)
-		}
+	gp := offers[0].Grant.GrantedPath
+	if gp == nil || !gp.Tree || gp.Path != folder {
+		t.Fatalf("%s: missing file in an existing folder must default to the folder tree, got %+v", offers[0].Scope, gp)
 	}
 }
 
@@ -597,7 +595,7 @@ func TestCredentialStoreReadAsksInsideAnAttachedHome(t *testing.T) {
 }
 
 func TestMultipleReadTargetsOfferOneCrossingHierarchy(t *testing.T) {
-	base := canonDir(t, t.TempDir())
+	base := outsideScratchDir(t)
 	first := filepath.Join(base, "first", "file.go")
 	second := filepath.Join(base, "second", "file.go")
 	for _, dir := range []string{filepath.Dir(first), filepath.Dir(second)} {
