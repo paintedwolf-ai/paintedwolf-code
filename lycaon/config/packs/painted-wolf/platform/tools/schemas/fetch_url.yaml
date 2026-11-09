@@ -3,9 +3,8 @@ tags: [web, network, research]
 description: >-
   Read web sources as extracted markdown with cached line paging and source
   provenance. Large pages return a head and section map; use offset and limit
-  to read supporting passages. Images return screened visual captures and
-  extracted text. Read-only: raw HTTP transfers and file downloads use portable
-  curl through command when offered.
+  to read supporting passages. Images are screened before perception; extracted text
+  is included when available. This tool does not write files or return raw bytes.
 schema:
   type: object
   properties:

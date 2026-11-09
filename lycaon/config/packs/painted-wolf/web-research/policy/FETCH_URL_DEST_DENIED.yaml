@@ -10,6 +10,7 @@ requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.next_steps
   - paintedwolf.rejection_code
   - paintedwolf.path
 when: paintedwolf.rejection_code == "FETCH_URL_DEST_DENIED"
@@ -17,12 +18,12 @@ effect: block
 copy:
   what: fetch_url could not write dest {{ paintedwolf.path }} under project write scope.
   cause: The requested destination failed the ingest write boundary after the response was fetched.
-  why: Asset ingest must stay inside the attached folders — same jail as write and copy.
-  fix: Fetch is read-only. Omit mode and dest to read a source. Raw transfers and downloads require portable curl on a command-capable surface; existing access refusals still apply.
-  instead: Use the read-only source reader or an authorized raw transfer.
+  why: The recorded write refusal remains binding; switching tools does not grant access.
+  fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
+  instead: Follow the current schema and access boundaries.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
-x-paintedwolf-message: fetch_url dest path is not writable
+x-paintedwolf-message: recorded fetch_url destination was not writable
 x-paintedwolf-scenarios:
 - id: default
   vars:

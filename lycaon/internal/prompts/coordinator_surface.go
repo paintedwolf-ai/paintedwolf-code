@@ -153,7 +153,7 @@ func LoadCoordinatorSurfaceFloor(surfaceID string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := append([]string(nil), row.Floor...)
+	out := row.FloorTools()
 	sort.Strings(out)
 	return out, nil
 }
@@ -226,6 +226,10 @@ func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolPr
 		return err
 	}
 	offered, requestable := OfferedTools(floor, loadable, turn.Loaded)
+	if enabled, ok := into["web_search_enabled"].(bool); ok && !enabled {
+		offered = withoutResearchTools(offered)
+		requestable = withoutResearchTools(requestable)
+	}
 	for k, v := range CoordinatorPolicyTemplateVars(offered, requestable) {
 		if isPreservedEnvironmentFact(k, into) {
 			continue

@@ -9,6 +9,7 @@ requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.next_steps
   - paintedwolf.rejection_code
   - paintedwolf.content_type
   - paintedwolf.unsupported
@@ -19,8 +20,8 @@ copy:
   what: fetch_url cannot read Content-Type {{ paintedwolf.content_type }} ({{ paintedwolf.rejection_reason }}).
   cause: The source is neither readable text nor a supported image.
   why: Fetch produces research evidence without writing project files.
-  fix: Use a readable source for the claim. If the task needs the original resource, use portable curl on a command-capable surface and inspect it with an appropriate tool.
-  instead: Choose a readable source or an authorized raw transfer.
+  fix: 'Choose a readable source for the claim, or report the format limitation. {{ paintedwolf.next_steps }}'
+  instead: Use supported evidence or report the gap.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
 x-paintedwolf-message: fetch_url cannot read this content type

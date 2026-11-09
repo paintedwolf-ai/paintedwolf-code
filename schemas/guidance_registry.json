@@ -1107,7 +1107,7 @@
       "branch_instruction": "Use the read-only source reader or an authorized raw transfer.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
-      "summary": "fetch_url mode {{ paintedwolf.mode }} is not text or raw."
+      "summary": "The recorded fetch_url request used unsupported mode {{ paintedwolf.mode }}."
     },
     "FETCH_URL_SECRET_WITHHELD": {
       "branch_instruction": "Branch on Code FETCH_URL_SECRET_WITHHELD; do not fetch the same image again",

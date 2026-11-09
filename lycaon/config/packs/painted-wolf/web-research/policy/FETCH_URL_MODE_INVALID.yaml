@@ -10,19 +10,20 @@ requires:
   profiles:
     - tool
   facts:
+    - paintedwolf.next_steps
     - paintedwolf.rejection_code
     - paintedwolf.mode
 when: paintedwolf.rejection_code == "FETCH_URL_MODE_INVALID"
 effect: block
 copy:
-  what: fetch_url mode {{ paintedwolf.mode }} is not text or raw.
-  cause: Only mode=text (research extract) and mode=raw (verbatim / asset ingest) are valid.
-  why: The host routes HTML extraction versus byte ingest from the mode field alone.
-  fix: Fetch is read-only. Omit mode and dest to read a source. Raw transfers and downloads require portable curl on a command-capable surface; existing access refusals still apply.
-  instead: Use the read-only source reader or an authorized raw transfer.
+  what: The recorded fetch_url request used unsupported mode {{ paintedwolf.mode }}.
+  cause: That invocation required text or raw; the mode argument is now retired.
+  why: The current source reader has no transfer mode.
+  fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
+  instead: Follow the current schema and access boundaries.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
-x-paintedwolf-message: fetch_url mode must be text or raw
+x-paintedwolf-message: recorded fetch_url mode was invalid
 x-paintedwolf-scenarios:
   - id: default
     vars:
