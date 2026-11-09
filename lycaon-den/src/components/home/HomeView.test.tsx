@@ -199,6 +199,7 @@ describe("HomeView all projects list", () => {
   });
 
   it("includes drafts in all projects with draft badge and promote/discard actions", () => {
+    const onOpenProject = vi.fn();
     const onPromote = vi.fn();
     const onDelete = vi.fn();
     const summaries = [
@@ -211,6 +212,7 @@ describe("HomeView all projects list", () => {
         section="all"
         registry={loaded(null)}
         {...homeHandlers}
+        onOpenProject={onOpenProject}
         onPromote={onPromote}
         onDelete={onDelete}
       />
@@ -219,6 +221,9 @@ describe("HomeView all projects list", () => {
     expect(getByTestId("project-list-row-d1")).toBeTruthy();
     expect(queryByTestId("project-list-draft-p0")).toBeNull();
     expect(getByTestId("project-list-draft-d1").textContent).toBe("Draft");
+
+    fireEvent.click(screen.getByText("Draft Idea"));
+    expect(onOpenProject).toHaveBeenCalledWith("d1");
 
     fireEvent.click(getByTestId("project-list-menu-d1"));
     fireEvent.click(assertNamedControl(screen.getByTestId("project-list-promote-d1"), "menuitem"));
