@@ -122,6 +122,11 @@ func (r *Reader) LookupIdentity(ctx context.Context, roots []projectroot.RootRef
 		row := r.db.QueryRowContext(ctx, "SELECT "+fileColumns+" FROM files WHERE root_id = ? AND scope_rel = ?", rootID, scopeRel)
 		err := scanFile(row.Scan, &f)
 		if errors.Is(err, sql.ErrNoRows) {
+			// Capture and read can disagree about root attribution, so fall
+			// back to the display spelling the way format 1 rows are read.
+			if display, derr := displayPathFor(roots, rootID, scopeRel); derr == nil {
+				return r.Lookup(ctx, display)
+			}
 			return File{}, false, nil
 		}
 		return f, err == nil, err
@@ -166,6 +171,15 @@ func (r *Reader) EachIdentity(ctx context.Context, roots []projectroot.RootRef, 
 			var entry Entry
 			if err := rows.Scan(&entry.RootID, &entry.ScopeRel, &entry.Path, &entry.File.Size, &entry.File.MtimeNano, &entry.File.SHA256, &entry.File.Opaque, &entry.File.Mode, &entry.File.LinkTarget, &entry.File.Deleted); err != nil {
 				return err
+			}
+			if entry.RootID == "" && len(roots) > 0 {
+				// Rows captured without root identity are read the way format
+				// 1 rows are: their display path names the root they belong to.
+				rootID, scopeRel, err := parseDisplayPath(roots, entry.Path)
+				if err != nil {
+					return err
+				}
+				entry.RootID, entry.ScopeRel = rootID, scopeRel
 			}
 			if err := visit(entry); err != nil {
 				return err

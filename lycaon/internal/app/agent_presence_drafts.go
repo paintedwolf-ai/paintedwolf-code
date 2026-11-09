@@ -3,7 +3,6 @@ package app
 import (
 	"bytes"
 	"context"
-	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -44,16 +43,15 @@ func (d presenceDrafts) ReadyFiles(ctx context.Context, jobID string) ([]agentpr
 	promote := worker.PromoteRootsForTask(task, roots)
 	files := make([]agentpresence.DraftFile, 0, len(paths))
 	for _, changed := range paths {
-		abs, root, err := projectroot.ResolveAbs(roots, task.WorkspaceRootID, changed)
-		if err != nil {
-			continue
-		}
-		rel := filepath.ToSlash(projectroot.ScopeRel(root, abs))
-		if rel == "" || rel == "." {
+		// Changed paths are baseline spellings; parse them once into their
+		// structured identity against the session folder instead of
+		// re-resolving display strings against the task-active root.
+		root, rel, ok := projectroot.ParseBaselinePath(roots, changed)
+		if !ok || rel == "" || rel == "." {
 			continue
 		}
 		file := agentpresence.DraftFile{Target: agentpresence.Target{RootID: root.ID, Path: rel}}
-		if d.changedLines(ctx, task, promote, projectroot.Qualify(roots, task.WorkspaceRootID, root, abs), &file) {
+		if d.changedLines(ctx, task, promote, root.ID, rel, &file) {
 			files = append(files, file)
 		}
 	}
@@ -64,8 +62,8 @@ func (d presenceDrafts) ReadyFiles(ctx context.Context, jobID string) ([]agentpr
 // deleted, binary, or unreadable file leaves the draft whole-file. It reports
 // false for a branch file whose bytes still match the primary file, which
 // promotion would not change.
-func (d presenceDrafts) changedLines(ctx context.Context, task *api.WorkerTask, promote worker.PromoteRoots, qualified string, file *agentpresence.DraftFile) bool {
-	primaryBytes, branchBytes, branchPresent, err := promote.ReadPairBytes(task, qualified)
+func (d presenceDrafts) changedLines(ctx context.Context, task *api.WorkerTask, promote worker.PromoteRoots, rootID, scopeRel string, file *agentpresence.DraftFile) bool {
+	primaryBytes, branchBytes, branchPresent, err := promote.ReadPairBytesAt(task, rootID, scopeRel)
 	if err == nil && branchPresent && primaryBytes != nil && bytes.Equal(primaryBytes, branchBytes) {
 		return false
 	}

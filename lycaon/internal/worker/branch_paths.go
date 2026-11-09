@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,18 +41,25 @@ func (p PromoteRoots) ReadPairBytes(task *api.WorkerTask, qualifiedPath string) 
 	if qualifiedPath == "" {
 		return nil, nil, false, nil
 	}
-	if len(p.Roots) <= 1 {
-		return readPromotePairBytes(task.WorkspacePath, p.BranchRoot, qualifiedPath)
-	}
-	primaryAbs, branchAbs, err := p.fileAbs(task, qualifiedPath)
+	id, err := p.locateIdentity(task, qualifiedPath)
 	if err != nil {
 		return nil, nil, false, err
 	}
-	primaryData, err := readPromoteFile(primaryAbs)
+	return p.ReadPairBytesAt(task, id.RootID, id.ScopeRel)
+}
+
+// ReadPairBytesAt loads exact primary and branch bytes for a structured root
+// identity without re-resolving display strings.
+func (p PromoteRoots) ReadPairBytesAt(task *api.WorkerTask, rootID, scopeRel string) (primary, branch []byte, branchPresent bool, err error) {
+	id, err := p.identityAt(task, rootID, scopeRel)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	primaryData, err := readPromoteFile(id.Primary)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, nil, false, err
 	}
-	branchData, branchErr := readPromoteFile(branchAbs)
+	branchData, branchErr := readPromoteFile(id.Branch)
 	switch {
 	case branchErr == nil:
 		branchPresent = true
@@ -80,29 +88,115 @@ func readPromotePairBytes(primaryDir, workspaceRoot, rel string) (primary, branc
 	}
 }
 
-func (p PromoteRoots) fileAbs(task *api.WorkerTask, qualifiedPath string) (primaryAbs, branchAbs string, err error) {
+// promoteIdentity is the structured location of one promote path: the root it
+// belongs to, its scope-relative path, and the absolute source and branch
+// locations those resolve to.
+type promoteIdentity struct {
+	RootID   string
+	ScopeRel string
+	Root     projectroot.RootRef
+	Primary  string
+	Branch   string
+}
+
+// locateIdentity resolves a qualified promote path to its structured root
+// identity and filesystem locations. Multi-root spellings follow the baseline
+// grammar (bare rel paths are primary-relative, "@label/rel" addresses another
+// attached root), so paths are parsed once instead of re-resolved against the
+// task-active root.
+func (p PromoteRoots) locateIdentity(task *api.WorkerTask, qualifiedPath string) (promoteIdentity, error) {
 	if task == nil {
-		return "", "", projectroot.ErrNoProjectRoots
+		return promoteIdentity{}, projectroot.ErrNoProjectRoots
 	}
 	if len(p.Roots) <= 1 {
-		rel := filepath.FromSlash(qualifiedPath)
-		return filepath.Join(task.WorkspacePath, rel), filepath.Join(p.BranchRoot, rel), nil
+		return p.identityAt(task, p.singleRootID(), qualifiedPath)
 	}
-	abs, root, err := projectroot.ResolveAbs(p.Roots, task.WorkspaceRootID, qualifiedPath)
+	root, scopeRel, ok := projectroot.ParseBaselinePath(p.Roots, qualifiedPath)
+	if !ok {
+		return promoteIdentity{}, fmt.Errorf("promote path %q does not address an attached project root", qualifiedPath)
+	}
+	return p.identityAt(task, root.ID, scopeRel)
+}
+
+// identityAt maps a structured root identity to its source and branch locations.
+func (p PromoteRoots) identityAt(task *api.WorkerTask, rootID, scopeRel string) (promoteIdentity, error) {
+	if task == nil {
+		return promoteIdentity{}, projectroot.ErrNoProjectRoots
+	}
+	scopeRel = filepath.ToSlash(filepath.Clean(strings.TrimSpace(scopeRel)))
+	if len(p.Roots) <= 1 {
+		rel := filepath.FromSlash(scopeRel)
+		id := promoteIdentity{
+			ScopeRel: scopeRel,
+			Primary:  filepath.Join(task.WorkspacePath, rel),
+			Branch:   filepath.Join(p.BranchRoot, rel),
+		}
+		if len(p.Roots) == 1 {
+			id.RootID, id.Root = p.Roots[0].ID, p.Roots[0]
+		}
+		return id, nil
+	}
+	root, ok := projectroot.RootRefByID(p.Roots, rootID)
+	if !ok {
+		return promoteIdentity{}, fmt.Errorf("unknown project root %q", rootID)
+	}
+	branchAbs, err := branchAbsFor(p, root.ID, scopeRel)
+	if err != nil {
+		return promoteIdentity{}, err
+	}
+	return promoteIdentity{
+		RootID:   root.ID,
+		ScopeRel: scopeRel,
+		Root:     root,
+		Primary:  filepath.Join(root.Path, filepath.FromSlash(scopeRel)),
+		Branch:   branchAbs,
+	}, nil
+}
+
+func (p PromoteRoots) singleRootID() string {
+	if len(p.Roots) == 1 {
+		return p.Roots[0].ID
+	}
+	return ""
+}
+
+// branchAbsFor maps a structured identity to its isolated branch location.
+func branchAbsFor(p PromoteRoots, rootID, scopeRel string) (string, error) {
+	if len(p.Roots) <= 1 {
+		return filepath.Join(p.BranchRoot, filepath.FromSlash(scopeRel)), nil
+	}
+	dir, err := projectroot.BranchDirForID(rootID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(p.BranchRoot, dir, filepath.FromSlash(scopeRel)), nil
+}
+
+// fileAbs resolves a qualified promote path to its source and branch locations.
+func (p PromoteRoots) fileAbs(task *api.WorkerTask, qualifiedPath string) (primaryAbs, branchAbs string, err error) {
+	id, err := p.locateIdentity(task, qualifiedPath)
 	if err != nil {
 		return "", "", err
 	}
-	scopeRel := projectroot.ScopeRel(root, abs)
-	dir, err := projectroot.BranchDirForID(root.ID)
-	if err != nil {
-		return "", "", err
-	}
-	return abs, filepath.Join(p.BranchRoot, dir, scopeRel), nil
+	return id.Primary, id.Branch, nil
 }
 
 // WritePrimaryBytes writes exact content to the correct source root.
 func (p PromoteRoots) WritePrimaryBytes(task *api.WorkerTask, qualifiedPath string, content []byte) error {
-	return p.writePrimaryBytes(task, qualifiedPath, content, nil, nil)
+	qualifiedPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(qualifiedPath)))
+	if qualifiedPath == "" || qualifiedPath == "." || sandbox.HasParentTraversal(qualifiedPath) {
+		return nil
+	}
+	id, err := p.locateIdentity(task, qualifiedPath)
+	if err != nil {
+		return err
+	}
+	return p.writePrimaryBytesAt(task, id.RootID, id.ScopeRel, content, nil, nil)
+}
+
+// WritePrimaryBytesAt writes exact content to the structured source-root location.
+func (p PromoteRoots) WritePrimaryBytesAt(task *api.WorkerTask, rootID, scopeRel string, content []byte) error {
+	return p.writePrimaryBytesAt(task, rootID, scopeRel, content, nil, nil)
 }
 
 func (p PromoteRoots) writePrimaryBytes(task *api.WorkerTask, qualifiedPath string, content []byte, restoreMode *os.FileMode, verify func(fseffect.Target) error) error {
@@ -110,18 +204,30 @@ func (p PromoteRoots) writePrimaryBytes(task *api.WorkerTask, qualifiedPath stri
 	if qualifiedPath == "" || qualifiedPath == "." || sandbox.HasParentTraversal(qualifiedPath) {
 		return nil
 	}
-	primaryAbs, _, err := p.fileAbs(task, qualifiedPath)
+	id, err := p.locateIdentity(task, qualifiedPath)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(primaryAbs), 0o750); err != nil {
-		return err
+	return p.writePrimaryBytesAt(task, id.RootID, id.ScopeRel, content, restoreMode, verify)
+}
+
+func (p PromoteRoots) writePrimaryBytesAt(task *api.WorkerTask, rootID, scopeRel string, content []byte, restoreMode *os.FileMode, verify func(fseffect.Target) error) error {
+	scopeRel = filepath.ToSlash(filepath.Clean(strings.TrimSpace(scopeRel)))
+	if scopeRel == "" || scopeRel == "." || sandbox.HasParentTraversal(scopeRel) {
+		return nil
 	}
-	primaryRoot, err := p.primaryRoot(task, primaryAbs)
+	id, err := p.identityAt(task, rootID, scopeRel)
 	if err != nil {
 		return err
 	}
-	if err := syncPromoteDirectoryTree(primaryRoot, filepath.Dir(primaryAbs)); err != nil {
+	if err := os.MkdirAll(filepath.Dir(id.Primary), 0o750); err != nil {
+		return err
+	}
+	primaryRoot, err := p.primaryRootAt(task, id)
+	if err != nil {
+		return err
+	}
+	if err := syncPromoteDirectoryTree(primaryRoot, filepath.Dir(id.Primary)); err != nil {
 		return err
 	}
 	mode := os.FileMode(0o600)
@@ -129,7 +235,7 @@ func (p PromoteRoots) writePrimaryBytes(task *api.WorkerTask, qualifiedPath stri
 		mode = restoreMode.Perm()
 	}
 	// The rooted location rejects symlinked parent components.
-	primaryRel, err := filepath.Rel(primaryRoot, primaryAbs)
+	primaryRel, err := filepath.Rel(primaryRoot, id.Primary)
 	if err != nil {
 		return err
 	}
@@ -149,28 +255,18 @@ func (p PromoteRoots) writePrimaryBytes(task *api.WorkerTask, qualifiedPath stri
 	return err
 }
 
-func (p PromoteRoots) primaryRoot(task *api.WorkerTask, primaryAbs string) (string, error) {
+// primaryRootAt returns the source root directory that contains the identity.
+func (p PromoteRoots) primaryRootAt(task *api.WorkerTask, id promoteIdentity) (string, error) {
 	if task == nil {
 		return "", projectroot.ErrNoProjectRoots
 	}
 	if len(p.Roots) <= 1 {
 		return filepath.Abs(task.WorkspacePath)
 	}
-	primaryAbs, err := filepath.Abs(primaryAbs)
-	if err != nil {
-		return "", err
+	if id.RootID == "" {
+		return "", projectroot.ErrNoProjectRoots
 	}
-	for _, root := range p.Roots {
-		rootAbs, absErr := filepath.Abs(root.Path)
-		if absErr != nil {
-			continue
-		}
-		rel, relErr := filepath.Rel(rootAbs, primaryAbs)
-		if relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return rootAbs, nil
-		}
-	}
-	return "", projectroot.ErrNoProjectRoots
+	return filepath.Abs(id.Root.Path)
 }
 
 func syncPromoteDirectoryTree(root, leaf string) error {
@@ -221,15 +317,28 @@ func (p PromoteRoots) dropPrimary(task *api.WorkerTask, qualifiedPath string, ve
 	if qualifiedPath == "" || qualifiedPath == "." || sandbox.HasParentTraversal(qualifiedPath) {
 		return nil
 	}
-	primaryAbs, _, err := p.fileAbs(task, qualifiedPath)
+	id, err := p.locateIdentity(task, qualifiedPath)
 	if err != nil {
 		return err
 	}
-	primaryRoot, err := p.primaryRoot(task, primaryAbs)
+	return p.dropPrimaryAt(task, id.RootID, id.ScopeRel, verify)
+}
+
+// dropPrimaryAt removes the structured source-root location.
+func (p PromoteRoots) dropPrimaryAt(task *api.WorkerTask, rootID, scopeRel string, verify func(fseffect.Target) error) error {
+	scopeRel = filepath.ToSlash(filepath.Clean(strings.TrimSpace(scopeRel)))
+	if scopeRel == "" || scopeRel == "." || sandbox.HasParentTraversal(scopeRel) {
+		return nil
+	}
+	id, err := p.identityAt(task, rootID, scopeRel)
 	if err != nil {
 		return err
 	}
-	primaryRel, err := filepath.Rel(primaryRoot, primaryAbs)
+	primaryRoot, err := p.primaryRootAt(task, id)
+	if err != nil {
+		return err
+	}
+	primaryRel, err := filepath.Rel(primaryRoot, id.Primary)
 	if err != nil {
 		return err
 	}
