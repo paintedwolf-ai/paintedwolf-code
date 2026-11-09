@@ -599,6 +599,12 @@ host_facts:
  - name: paintedwolf.refused_terminal_write_paths
    type: list<string>
    observation: Kernel-observed write paths whose floor no approval opens.
+ - name: paintedwolf.socket_path_references
+   type: string
+   observation: Bound endpoint reference syntax for the observed socket paths.
+ - name: paintedwolf.socket_url_references
+   type: string
+   observation: Unix URL reference syntax for the observed socket paths.
  - name: paintedwolf.refused_socket_paths
    type: list<string>
    observation: Unix socket paths the kernel refused the invocation's processes a connection to; empty when none.

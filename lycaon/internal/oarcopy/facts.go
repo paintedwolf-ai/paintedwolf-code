@@ -133,6 +133,7 @@ func FactsFromData(data map[string]any) map[string]any {
 	}
 	PublishInvocationRecovery(out, tool, args, contract)
 	PublishDiagnosticKnowledge(out, data)
+	publishSocketReferences(out, data)
 	reason, _ := out["paintedwolf.rejection_reason"].(string)
 	if reason == "" {
 		if raw, ok := data["reason"]; ok {

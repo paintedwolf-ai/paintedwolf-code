@@ -2,7 +2,6 @@ package command
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -19,7 +19,6 @@ type ConfinedForeground struct {
 	FailureTracker *CommandFailureTracker
 	Runner         *hostcmd.Runner
 	Boundary       *sandbox.Boundary
-	WriteRootGate  SandboxWriteRootGate
 	ToolName       string
 }
 
@@ -81,18 +80,18 @@ func (c ConfinedForeground) dispatch(
 	if _, ok := args["terminal_capture"]; ok {
 		return runCommandTerminalCapture(
 			ctx, c.Background, c.FailureTracker, c.Runner, c.Boundary,
-			args, tctx, c.SessionWriteRoots(ctx, tctx), c.ToolName,
+			args, tctx, nil, c.ToolName,
 		)
 	}
 	if _, ok := args["snapshot_capture"]; ok {
 		return runCommandSnapshotCapture(
 			ctx, c.Background, c.FailureTracker, c.Runner, c.Boundary,
-			args, tctx, c.SessionWriteRoots(ctx, tctx), c.ToolName,
+			args, tctx, nil, c.ToolName,
 		)
 	}
 	return runCommandForeground(
 		ctx, c.Background, c.FailureTracker, c.Runner, c.Boundary, args, tctx,
-		WaitBudget(args), true, c.SessionWriteRoots(ctx, tctx), c.ToolName,
+		WaitBudget(args), true, nil, c.ToolName,
 	)
 }
 
@@ -122,12 +121,4 @@ func desktopCaptureRefusal(program, line string) error {
 		"reason":  "desktop_screen_capture_disallowed",
 		"instead": "Use command with snapshot_capture or APP_SNAPSHOT to render views offscreen in-process without OS permissions",
 	})
-}
-
-// SessionWriteRoots is the chat write-root overlay; empty without a gate.
-func (c ConfinedForeground) SessionWriteRoots(ctx context.Context, tctx tools.ToolContext) []string {
-	if c.WriteRootGate == nil {
-		return nil
-	}
-	return c.WriteRootGate.SessionWriteRoots(ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID)
 }

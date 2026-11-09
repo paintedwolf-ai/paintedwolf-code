@@ -30,7 +30,6 @@ type CommandTool struct {
 	Boundary        *sandbox.Boundary
 	Background      *bgprocess.Registry
 	FailureTracker  *CommandFailureTracker
-	WriteRootGate   SandboxWriteRootGate
 	// Programs is the v1 program entry every non-capture call runs through.
 	Programs *ProgramRuntime
 }
@@ -106,7 +105,6 @@ func (t *CommandTool) confined() ConfinedForeground {
 		FailureTracker: t.FailureTracker,
 		Runner:         t.Runner,
 		Boundary:       t.Boundary,
-		WriteRootGate:  t.WriteRootGate,
 		ToolName:       "command",
 	}
 }
