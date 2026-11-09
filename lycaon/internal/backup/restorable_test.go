@@ -134,6 +134,47 @@ func TestRestorableRelPathTracksTheBackupSet(t *testing.T) {
 			t.Errorf("RestorableRelPath(%q) = true, want false", rel)
 		}
 	}
+	if !RestorableRelDir("worker-recovery") {
+		t.Error(`RestorableRelDir("worker-recovery") = false, want true`)
+	}
+	for _, durable := range []string{
+		"worker-recovery/checkpoints/checkpoints/cp-1/manifest.json",
+		"worker-recovery/checkpoints/blobs/" + strings.Repeat("a", 64),
+		"worker-recovery/journals/workers/job-1.json",
+		"worker-recovery/quarantine/job-1/changed/primary/main.go",
+		"worker-branches/.adapter/privategit/retained-store/objects/aa/" + strings.Repeat("b", 38),
+		"worker-branches/.adapter/0123456789abcdef/retained-git-store/objects/aa/" + strings.Repeat("b", 38),
+		"worker-branches/.adapter/recovery/checkpoints/checkpoints/cp-1/manifest.json",
+		"worker-branches/0123456789abcdef/job-1.meta/state.json",
+		"worker-branches/0123456789abcdef/job-1.meta/materialized-git.json",
+	} {
+		if !RestorableRelPath(durable) {
+			t.Errorf("RestorableRelPath(%q) = false, want true", durable)
+		}
+	}
+	for _, transient := range []string{
+		"worker-recovery",
+		"worker-recovery/.space-reserve",
+		"worker-recovery/checkpoints/.space-reserve",
+		"worker-recovery/checkpoints/blobs/.blob-1.tmp",
+		"worker-recovery/checkpoints/checkpoints/cp-1/manifest.json.tmp",
+		"worker-recovery/mounts/job-1.json",
+		"worker-recovery/state/mounts/job-1.json",
+		"worker-branches/.adapter",
+		"worker-branches/.adapter/privategit/retained-store/.space-reserve",
+		"worker-branches/.adapter/privategit/retained-store/imports/tx-1/obj",
+		"worker-branches/.adapter/privategit/views/job-1/HEAD",
+		"worker-branches/.adapter/0123456789abcdef/retained-git-store/.space-reserve",
+		"worker-branches/.adapter/0123456789abcdef/retained-git-store/imports/tx-1/obj",
+		"worker-branches/.adapter/0123456789abcdef/job-1/connections.json",
+		"worker-branches/.adapter/recovery/mounts/job-1.json",
+		"worker-branches/.adapter/recovery/state/mounts/job-1.json",
+		"worker-branches/.adapter/recovery/checkpoints/.space-reserve",
+	} {
+		if RestorableRelPath(transient) {
+			t.Errorf("RestorableRelPath(%q) = true, want false", transient)
+		}
+	}
 }
 
 func TestStageRejectsArchiveNamingControlPlaneFiles(t *testing.T) {

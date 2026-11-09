@@ -2,9 +2,11 @@ package workspace
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
@@ -325,92 +328,281 @@ func adoptGitView(ctx context.Context, services *layeredServices, gitView materi
 }
 
 func readoptMaterializedRepos(ctx context.Context, services *layeredServices, branchRoot string, core *layeredfs.Core) error {
-	raw, err := os.ReadFile(materializedGitRecordPath(branchRoot))
+	recordPath := materializedGitRecordPath(branchRoot)
+	if info, err := os.Lstat(recordPath); err != nil {
+		return err
+	} else if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: materialized Git record is a symlink: %s", recovery.ErrIncompleteCheckpoint, recordPath)
+	}
+	raw, err := os.ReadFile(recordPath)
 	if err != nil {
 		return err
 	}
 	var record materializedGitRecord
 	if err := json.Unmarshal(raw, &record); err != nil {
-		return err
+		return fmt.Errorf("%w: decode materialized Git record: %w", recovery.ErrIncompleteCheckpoint, err)
 	}
 	if record.Format != materializedGitFormat {
-		return fmt.Errorf("unsupported materialized Git record format %d", record.Format)
+		return fmt.Errorf("%w: unsupported materialized Git record format %d", recovery.ErrIncompleteCheckpoint, record.Format)
 	}
 	for _, gitView := range record.Views {
-		if gitView.WorktreeRel != "" && filepath.IsLocal(gitView.WorktreeRel) {
-			gitView.WorktreeDir = filepath.Join(branchRoot, gitView.WorktreeRel)
-			if gitView.BranchDir != "" {
-				gitView.BranchDir = branchRoot
-			}
+		resolvedWT, _, _, err := resolveConfinedRepoGitDir(branchRoot, gitView.WorktreeDir, gitView.WorktreeRel, ".")
+		if err != nil {
+			return err
 		}
-		if rel, err := filepath.Rel(branchRoot, gitView.WorktreeDir); err != nil || !filepath.IsLocal(rel) {
-			slog.WarnContext(ctx, "materialized repository moved with a restored archive", "view_id", gitView.ViewID)
-			continue
+		gitView.WorktreeDir = resolvedWT
+		if gitView.BranchDir != "" {
+			gitView.BranchDir = branchRoot
 		}
-		if !refreshMaterializedRepoAlternates(ctx, services, gitView) {
-			continue
+		if err := refreshMaterializedRepoAlternates(ctx, services, branchRoot, gitView); err != nil {
+			return err
 		}
 		if err := adoptGitView(ctx, services, gitView, core, nil, gitView.Repos); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", recovery.ErrIncompleteCheckpoint, err)
 		}
 	}
 	return nil
 }
 
-func refreshMaterializedRepoAlternates(ctx context.Context, services *layeredServices, gitView materializedGitView) bool {
-	if services == nil || services.privateGit == nil || services.privateGit.Store() == nil {
+func isLocalOrDotRel(rel string) bool {
+	if strings.Contains(rel, "\\") {
+		return false
+	}
+	if rel == "." {
 		return true
 	}
-	store := services.privateGit.Store()
-	for _, at := range gitView.Repos {
-		target := gitView.WorktreeDir
-		trunk := gitView.TrunkDir
-		if at.RepoRel != "" && at.RepoRel != "." {
-			rel := filepath.FromSlash(at.RepoRel)
-			target = filepath.Join(target, rel)
-			trunk = filepath.Join(trunk, rel)
+	return filepath.IsLocal(filepath.FromSlash(rel))
+}
+
+func resolveConfinedRepoGitDir(branchRoot, worktreeDir, worktreeRel, repoRel string) (targetDir, gitDir, altPath string, err error) {
+	branchRoot = filepath.Clean(branchRoot)
+	if info, statErr := os.Lstat(branchRoot); statErr != nil {
+		return "", "", "", fmt.Errorf("%w: stat branch root %s: %w", recovery.ErrIncompleteCheckpoint, branchRoot, statErr)
+	} else if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return "", "", "", fmt.Errorf("%w: branch root %s is not a confined directory", recovery.ErrIncompleteCheckpoint, branchRoot)
+	}
+	if worktreeRel != "" {
+		if !isLocalOrDotRel(worktreeRel) {
+			return "", "", "", fmt.Errorf("%w: invalid materialized worktree_rel %q", recovery.ErrIncompleteCheckpoint, worktreeRel)
 		}
-		gitDir := filepath.Join(target, ".git")
-		altPath := filepath.Join(gitDir, "objects", "info", "alternates")
-		rawAlt, err := os.ReadFile(altPath)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
+		worktreeDir = filepath.Join(branchRoot, filepath.FromSlash(worktreeRel))
+	}
+	if strings.TrimSpace(worktreeDir) == "" {
+		return "", "", "", fmt.Errorf("%w: empty materialized worktree directory", recovery.ErrIncompleteCheckpoint)
+	}
+	worktreeDir = filepath.Clean(worktreeDir)
+	relWT, relErr := filepath.Rel(branchRoot, worktreeDir)
+	if relErr != nil || !isLocalOrDotRel(filepath.ToSlash(relWT)) {
+		return "", "", "", fmt.Errorf("%w: materialized worktree %s escapes branch root %s", recovery.ErrIncompleteCheckpoint, worktreeDir, branchRoot)
+	}
+	targetDir = worktreeDir
+	if repoRel != "" && repoRel != "." {
+		if !isLocalOrDotRel(repoRel) {
+			return "", "", "", fmt.Errorf("%w: invalid materialized repo_rel %q", recovery.ErrIncompleteCheckpoint, repoRel)
+		}
+		targetDir = filepath.Join(worktreeDir, filepath.FromSlash(repoRel))
+	}
+	targetDir = filepath.Clean(targetDir)
+	relTarget, relErr := filepath.Rel(branchRoot, targetDir)
+	if relErr != nil || !isLocalOrDotRel(filepath.ToSlash(relTarget)) {
+		return "", "", "", fmt.Errorf("%w: materialized repo %s escapes branch root %s", recovery.ErrIncompleteCheckpoint, targetDir, branchRoot)
+	}
+	gitDir = filepath.Join(targetDir, ".git")
+	altPath = filepath.Join(gitDir, "objects", "info", "alternates")
+	relAlt, relErr := filepath.Rel(branchRoot, altPath)
+	if relErr != nil || !isLocalOrDotRel(filepath.ToSlash(relAlt)) {
+		return "", "", "", fmt.Errorf("%w: alternates path %s escapes branch root %s", recovery.ErrIncompleteCheckpoint, altPath, branchRoot)
+	}
+	cur := branchRoot
+	for _, seg := range strings.Split(relAlt, string(filepath.Separator)) {
+		if seg == "" || seg == "." {
+			continue
+		}
+		cur = filepath.Join(cur, seg)
+		info, lstatErr := os.Lstat(cur)
+		if errors.Is(lstatErr, os.ErrNotExist) {
+			break
+		}
+		if lstatErr != nil {
+			return "", "", "", fmt.Errorf("%w: inspect %s: %w", recovery.ErrIncompleteCheckpoint, cur, lstatErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", "", "", fmt.Errorf("%w: symlink confinement violation at %s", recovery.ErrIncompleteCheckpoint, cur)
+		}
+	}
+	return targetDir, gitDir, altPath, nil
+}
+
+func isHexGitOID(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
+}
+
+func collectRepoCurrentTips(gitDir string) ([]string, error) {
+	seen := make(map[string]bool)
+	var tips []string
+	addOID := func(candidate string) {
+		oid := strings.ToLower(strings.TrimSpace(candidate))
+		if isHexGitOID(oid) && !seen[oid] {
+			seen[oid] = true
+			tips = append(tips, oid)
+		}
+	}
+	packedPath := filepath.Join(gitDir, "packed-refs")
+	if info, err := os.Lstat(packedPath); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("symlink packed-refs in %s", gitDir)
+		}
+		if raw, rErr := os.ReadFile(packedPath); rErr == nil {
+			for _, line := range strings.Split(string(raw), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "^") {
+					continue
+				}
+				fields := strings.Fields(line)
+				if len(fields) >= 2 {
+					addOID(fields[0])
+				}
 			}
-			slog.WarnContext(ctx, "materialized repository alternates unreadable", "view_id", gitView.ViewID, "err", err)
-			return false
 		}
-		var srcDirs []string
+	}
+	refsRoot := filepath.Join(gitDir, "refs")
+	if info, err := os.Lstat(refsRoot); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("symlink refs dir in %s", gitDir)
+		}
+		if walkErr := filepath.WalkDir(refsRoot, func(path string, d fs.DirEntry, wErr error) error {
+			if wErr != nil {
+				return wErr
+			}
+			if d.Type()&fs.ModeSymlink != 0 {
+				return fmt.Errorf("symlink ref %s", path)
+			}
+			if d.IsDir() {
+				return nil
+			}
+			raw, rErr := os.ReadFile(path)
+			if rErr != nil {
+				return rErr
+			}
+			val := strings.TrimSpace(string(raw))
+			if !strings.HasPrefix(val, "ref:") {
+				addOID(val)
+			}
+			return nil
+		}); walkErr != nil {
+			return nil, walkErr
+		}
+	}
+	headPath := filepath.Join(gitDir, "HEAD")
+	if info, err := os.Lstat(headPath); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("symlink HEAD in %s", gitDir)
+		}
+		if raw, rErr := os.ReadFile(headPath); rErr == nil {
+			val := strings.TrimSpace(string(raw))
+			if strings.HasPrefix(val, "ref:") {
+				refName := strings.TrimSpace(strings.TrimPrefix(val, "ref:"))
+				if filepath.IsLocal(filepath.FromSlash(refName)) {
+					refPath := filepath.Join(gitDir, filepath.FromSlash(refName))
+					if rInfo, lErr := os.Lstat(refPath); lErr == nil && rInfo.Mode()&os.ModeSymlink == 0 {
+						if refRaw, rfErr := os.ReadFile(refPath); rfErr == nil {
+							addOID(string(refRaw))
+						}
+					}
+				}
+			} else {
+				addOID(val)
+			}
+		}
+	}
+	return tips, nil
+}
+
+func refreshMaterializedRepoAlternates(ctx context.Context, services *layeredServices, branchRoot string, gitView materializedGitView) error {
+	if services == nil || services.privateGit == nil || services.privateGit.Store() == nil {
+		return fmt.Errorf("%w: private Git store is unavailable", recovery.ErrIncompleteCheckpoint)
+	}
+	store := services.privateGit.Store()
+	workerBranchesDir := filepath.Dir(filepath.Dir(branchRoot))
+	projKey := filepath.Base(filepath.Dir(branchRoot))
+	adapterRetainedObjects := filepath.Join(workerBranchesDir, adapterRuntimeDirName, projKey, "retained-git-store", "objects")
+
+	for _, at := range gitView.Repos {
+		target, gitDir, altPath, err := resolveConfinedRepoGitDir(branchRoot, gitView.WorktreeDir, gitView.WorktreeRel, at.RepoRel)
+		if err != nil {
+			return err
+		}
+		if info, statErr := os.Lstat(gitDir); statErr != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%w: materialized repository .git missing or invalid at %s: %v", recovery.ErrIncompleteCheckpoint, gitDir, statErr)
+		}
+		rawAlt, err := os.ReadFile(altPath)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%w: read materialized repository alternates %s: %w", recovery.ErrIncompleteCheckpoint, altPath, err)
+		}
+		srcDirs := []string{
+			store.ObjectsDir(),
+			adapterRetainedObjects,
+			filepath.Join(gitDir, "objects"),
+		}
 		for _, line := range strings.Split(string(rawAlt), "\n") {
 			if dir := strings.TrimSpace(line); dir != "" && dir != store.ObjectsDir() {
 				srcDirs = append(srcDirs, dir)
 			}
 		}
-		if trunk != "" {
+		if gitView.TrunkDir != "" {
+			trunk := gitView.TrunkDir
+			if at.RepoRel != "" && at.RepoRel != "." {
+				trunk = filepath.Join(trunk, filepath.FromSlash(at.RepoRel))
+			}
 			srcDirs = append(srcDirs, filepath.Join(trunk, ".git", "objects"))
 		}
-		srcDirs = append(srcDirs, filepath.Join(gitDir, "objects"))
-		tips := make([]string, 0, 1+len(at.InitialRefs))
-		if at.InitialHead != "" {
-			tips = append(tips, at.InitialHead)
+
+		currentTips, err := collectRepoCurrentTips(gitDir)
+		if err != nil {
+			return fmt.Errorf("%w: read materialized repository refs in %s: %w", recovery.ErrIncompleteCheckpoint, gitDir, err)
 		}
+		seenTips := make(map[string]bool)
+		var tips []string
+		addTip := func(oid string) {
+			oid = strings.ToLower(strings.TrimSpace(oid))
+			if isHexGitOID(oid) && !seenTips[oid] {
+				seenTips[oid] = true
+				tips = append(tips, oid)
+			}
+		}
+		addTip(at.InitialHead)
 		for _, oid := range at.InitialRefs {
-			tips = append(tips, oid)
+			addTip(oid)
+		}
+		for _, oid := range currentTips {
+			addTip(oid)
 		}
 		if len(tips) > 0 {
 			if _, _, err := store.ImportRepositoryObjects(ctx, srcDirs, tips); err != nil {
-				slog.WarnContext(ctx, "materialized repository base objects unavailable", "view_id", gitView.ViewID, "err", err)
-				return false
+				return fmt.Errorf("%w: materialized repository objects unavailable for view %s: %w", recovery.ErrIncompleteCheckpoint, gitView.ViewID, err)
 			}
 		}
 		if strings.TrimSpace(string(rawAlt)) != store.ObjectsDir() {
+			if err := os.MkdirAll(filepath.Dir(altPath), 0o700); err != nil {
+				return fmt.Errorf("%w: prepare alternates dir %s: %w", recovery.ErrIncompleteCheckpoint, altPath, err)
+			}
 			if err := os.WriteFile(altPath, []byte(store.ObjectsDir()+"\n"), 0o644); err != nil {
-				slog.WarnContext(ctx, "materialized repository alternates update failed", "view_id", gitView.ViewID, "err", err)
-				return false
+				return fmt.Errorf("%w: update alternates %s: %w", recovery.ErrIncompleteCheckpoint, altPath, err)
+			}
+		}
+		for _, tip := range tips {
+			out, code, rErr := gitexec.Run(ctx, target, []string{"rev-list", "--objects", "-n", "1", tip}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+			if rErr != nil || code != 0 {
+				return fmt.Errorf("%w: incomplete git object graph for %s in view %s (exit %d): %v: %s",
+					recovery.ErrIncompleteCheckpoint, tip, gitView.ViewID, code, rErr, strings.TrimSpace(string(out)))
 			}
 		}
 	}
-	return true
+	return nil
 }
 
 // offerMaterializedBranchesForRecovery makes each materialized branch an earlier process left ready to
@@ -445,25 +637,43 @@ func (m *Manager) offerMaterializedBranchesForRecovery(ctx context.Context) erro
 		branchClaimsMu.Unlock()
 		if err := m.republishLostCheckpoint(ctx, clean); err != nil {
 			slog.WarnContext(ctx, "republish materialized checkpoint", "job_id", tree.JobID, "err", err)
+			return err
 		}
 	}
 	return nil
 }
 
-// republishLostCheckpoint serves a branch whose metadata names a checkpoint no store holds, as a restored
-// archive leaves one: its trees came back, and they are all the capture needs.
+// republishLostCheckpoint serves a branch whose metadata names a checkpoint no store holds: if the
+// checkpoint exists in a restored or relocated store, it keeps that checkpoint; otherwise it
+// republishes from the materialized tree without wiping the prior metadata before publication succeeds.
 func (m *Manager) republishLostCheckpoint(ctx context.Context, branchRoot string) error {
 	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
 	meta, err := LoadJobMeta(metaDir)
 	if err != nil || meta.LastPublishedCheckpointID == "" {
 		return err
 	}
-	if _, err := m.recovery.CheckpointStore().LoadManifest(meta.LastPublishedCheckpointID); !errors.Is(err, checkpoint.ErrCheckpointNotFound) {
-		return err
+	if storeDir, cid, ok := BranchCheckpoint(branchRoot); ok && checkpointManifestExists(storeDir, cid) {
+		store, err := checkpoint.NewStore(storeDir)
+		if err != nil {
+			return fmt.Errorf("%w: %w", recovery.ErrIncompleteCheckpoint, err)
+		}
+		if _, err := store.LoadManifest(cid); err != nil {
+			return fmt.Errorf("%w: %w", recovery.ErrIncompleteCheckpoint, err)
+		}
+		if storeDir != meta.CheckpointStoreDir {
+			meta.CheckpointStoreDir = storeDir
+			if err := WriteJobMeta(metaDir, meta); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
-	meta.LastPublishedCheckpointID, meta.CheckpointStoreDir = "", ""
-	if err := WriteJobMeta(metaDir, meta); err != nil {
-		return err
+	if m.recovery != nil && m.recovery.CheckpointStore() != nil {
+		if _, err := m.recovery.CheckpointStore().LoadManifest(meta.LastPublishedCheckpointID); err == nil {
+			return nil
+		} else if !errors.Is(err, checkpoint.ErrCheckpointNotFound) {
+			return fmt.Errorf("%w: %w", recovery.ErrIncompleteCheckpoint, err)
+		}
 	}
 	_, err = PublishBranchCheckpoint(ctx, branchRoot)
 	return err

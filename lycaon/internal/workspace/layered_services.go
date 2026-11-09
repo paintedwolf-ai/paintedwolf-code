@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -290,17 +291,51 @@ func publishWithPrivateGit(ctx context.Context, view *branchLayeredView, checkpo
 	})
 }
 
+func checkpointManifestExists(storeDir, checkpointID string) bool {
+	if strings.TrimSpace(storeDir) == "" || strings.TrimSpace(checkpointID) == "" {
+		return false
+	}
+	for _, p := range []string{
+		filepath.Join(storeDir, "checkpoints", checkpointID, "manifest.json"),
+		filepath.Join(storeDir, "checkpoints", checkpointID+".json"),
+	} {
+		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
+}
+
 // BranchCheckpoint names the store and checkpoint a branch last published.
 func BranchCheckpoint(branchRoot string) (storeDir, checkpointID string, ok bool) {
 	clean := strings.TrimSpace(branchRoot)
 	if clean == "" {
 		return "", "", false
 	}
-	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(filepath.Clean(clean)))
-	if err != nil || meta.CheckpointStoreDir == "" || meta.LastPublishedCheckpointID == "" {
+	clean = filepath.Clean(clean)
+	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(clean))
+	if err != nil || meta.LastPublishedCheckpointID == "" {
 		return "", "", false
 	}
-	return meta.CheckpointStoreDir, meta.LastPublishedCheckpointID, true
+	cid := meta.LastPublishedCheckpointID
+	if checkpointManifestExists(meta.CheckpointStoreDir, cid) {
+		return meta.CheckpointStoreDir, cid, true
+	}
+	workerBranchesDir := filepath.Dir(filepath.Dir(clean))
+	configDir := filepath.Dir(workerBranchesDir)
+	for _, cand := range []string{
+		filepath.Join(configDir, enginepaths.WorkerRecoveryDirName, "checkpoints"),
+		filepath.Join(workerBranchesDir, adapterRuntimeDirName, "recovery", "checkpoints"),
+		filepath.Join(configDir, enginepaths.WorkerBaselinesDirName, ".task-checkpoints"),
+	} {
+		if checkpointManifestExists(cand, cid) {
+			return cand, cid, true
+		}
+	}
+	if meta.CheckpointStoreDir != "" {
+		return meta.CheckpointStoreDir, cid, true
+	}
+	return "", "", false
 }
 
 // privateGitSnapshot captures Git state for the checkpoint only once the repository was initialized:

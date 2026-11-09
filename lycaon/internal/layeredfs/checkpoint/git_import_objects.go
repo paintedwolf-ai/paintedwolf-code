@@ -67,7 +67,12 @@ func copyCandidateGitObjects(storeDir, checkpointID, targetObjectsDir string) er
 	if storeDir = strings.TrimSpace(storeDir); storeDir == "" {
 		return nil
 	}
-	candidates := []string{filepath.Join(storeDir, "objects")}
+	parent2 := filepath.Dir(filepath.Dir(storeDir))
+	candidates := []string{
+		filepath.Join(storeDir, "objects"),
+		filepath.Join(parent2, "privategit", "retained-store", "objects"),
+		filepath.Join(parent2, "worker-branches", ".adapter", "privategit", "retained-store", "objects"),
+	}
 	if checkpointID != "" {
 		candidates = append([]string{filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects")}, candidates...)
 	}

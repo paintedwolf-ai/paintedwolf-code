@@ -75,6 +75,9 @@ func validateArchiveReferences(ctx context.Context, snapshot db.DBTX, files map[
 	if err := validateWorkerManifests(ctx, snapshot, files); err != nil {
 		return err
 	}
+	if err := validateWorkerCheckpoints(ctx, snapshot, files); err != nil {
+		return err
+	}
 	if err := validateRewindJournals(ctx, snapshot, files); err != nil {
 		return err
 	}
@@ -144,7 +147,7 @@ func validateStagedReferences(ctx context.Context, stagingDir string, manifest M
 		return fmt.Errorf("backup: open captured store: %w", err)
 	}
 	defer func() { _ = snapshot.Close() }()
-	if err := validateRequiredBranchTrees(ctx, snapshot, manifest); err != nil {
+	if err := validateRequiredBranchTrees(ctx, stagingDir, snapshot, manifest); err != nil {
 		return err
 	}
 	files := make(map[string]archiveSource, len(manifest.Files))

@@ -79,7 +79,7 @@ func Create(ctx context.Context, opts CreateOpts, destPath string) (Manifest, er
 		return Manifest{}, fmt.Errorf("backup: open captured store: %w", err)
 	}
 	defer func() { _ = snapshot.Close() }()
-	branches, err := unsealedBranchTrees(ctx, snapshot)
+	branches, err := unsealedBranchTrees(ctx, opts.ConfigDir, snapshot)
 	if err != nil {
 		return Manifest{}, err
 	}

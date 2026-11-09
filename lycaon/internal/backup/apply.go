@@ -145,6 +145,20 @@ func (r *pendingRestore) installFiles(ctx context.Context, configDir string) err
 	return nil
 }
 
+func makeTreeWritable(root string) {
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			_ = os.Chmod(p, 0o700)
+		} else if d.Type().IsRegular() {
+			_ = os.Chmod(p, 0o600)
+		}
+		return nil
+	})
+}
+
 func (r *pendingRestore) deleteFiles(configDir string) error {
 	for index, rel := range r.marker.DeleteRelPaths {
 		if _, done := r.appliedSet[rel]; done {
@@ -154,6 +168,8 @@ func (r *pendingRestore) deleteFiles(configDir string) error {
 		if err != nil {
 			return fmt.Errorf("resolve delete %s: %w", rel, err)
 		}
+		_ = os.Chmod(filepath.Dir(dest), 0o700)
+		_ = os.Chmod(dest, 0o600)
 		removeErr := os.Remove(dest)
 		if removeErr != nil && !os.IsNotExist(removeErr) {
 			return fmt.Errorf("delete %s: %w", rel, removeErr)
@@ -188,11 +204,13 @@ func (r *pendingRestore) reconcileDirectory(liveDir, relDir string) error {
 	if err != nil {
 		return err
 	}
+	_ = os.Chmod(liveDir, 0o700)
 	removed := false
 	for _, entry := range entries {
 		rel := relDir + "/" + entry.Name()
 		path := filepath.Join(liveDir, entry.Name())
 		if !r.keepsDirectoryEntry(rel) {
+			makeTreeWritable(path)
 			if err := os.RemoveAll(path); err != nil {
 				return fmt.Errorf("clear %s: %w", rel, err)
 			}

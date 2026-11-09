@@ -20,24 +20,21 @@ var ErrBranchRetained = errors.New("worker branch is retained")
 // complete verified checkpoint; any other tree evicts on its sealed overlay record.
 func (m *Manager) EvictWorkerBranch(ctx context.Context, branchRoot string) error {
 	jobID := jobIDForBranch(branchRoot)
-	if m.recovery == nil {
-		return EvictJobTree(ctx, branchRoot)
-	}
-	journal, err := m.recovery.LoadWorkerJournal(jobID)
-	if errors.Is(err, os.ErrNotExist) {
+	coord, journal, err := m.recoveryCoordinatorForJob(jobID)
+	if errors.Is(err, os.ErrNotExist) || coord == nil {
 		return EvictJobTree(ctx, branchRoot)
 	}
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrBranchRetained, err)
 	}
-	idents, err := m.recovery.ListMountIdentities(jobID)
+	idents, err := coord.ListMountIdentities(jobID)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrBranchRetained, err)
 	}
 	if len(idents) > 0 {
 		return fmt.Errorf("%w: %d recorded views of %s have not settled", ErrBranchRetained, len(idents), jobID)
 	}
-	if _, err := EvictVerifiedCheckpointBranch(ctx, branchRoot, m.recovery, jobID, journal.ViewID, journal.BackingDir); err != nil {
+	if _, err := EvictVerifiedCheckpointBranch(ctx, branchRoot, coord, jobID, journal.ViewID, journal.BackingDir); err != nil {
 		if errors.Is(err, recovery.ErrEvictUnsealedWorkRefused) {
 			return fmt.Errorf("%w: %w", ErrBranchRetained, err)
 		}

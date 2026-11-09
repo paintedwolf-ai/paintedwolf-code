@@ -419,3 +419,63 @@ func TestIndexFactsCountACompletelyObservedRoot(t *testing.T) {
 		t.Fatalf("no project should mean no facts: %+v", bare[0].Estimate)
 	}
 }
+
+func TestMaterializedBranchRecoveryFailsClosedOnMissingGitObjectsOrSymlinkEscape(t *testing.T) {
+	source := materializedSource(t)
+	gittest.InitCommit(t, source, "initial")
+	branches := t.TempDir()
+	first := newMaterializedManager(t, branches)
+	binding, err := first.CreateWorkerWorkspace(t.Context(), source, "job-fail-closed")
+	testutil.FailErr(t, "create", err)
+	root := binding.Root
+	testutil.FailErr(t, "edit", os.WriteFile(filepath.Join(root, "main.go"), []byte("package edited\n"), 0o644))
+	gittest.Run(t, root, "add", "main.go")
+	gittest.Run(t, root, "commit", "-m", "worker commit")
+
+	metaDir := enginepaths.MetaDirForBranchRoot(root)
+	meta, err := LoadJobMeta(metaDir)
+	testutil.FailErr(t, "load meta", err)
+	meta.LastPublishedCheckpointID = "cp-prior-valid"
+	meta.CheckpointStoreDir = filepath.Join(t.TempDir(), "missing-store")
+	testutil.FailErr(t, "write meta", WriteJobMeta(metaDir, meta))
+
+	// Remove all Git object sources (trunk, worktree .git/objects, and adapter retained stores).
+	testutil.FailErr(t, "remove trunk", os.RemoveAll(source))
+	testutil.FailErr(t, "remove worktree objects", os.RemoveAll(filepath.Join(root, ".git", "objects")))
+	testutil.FailErr(t, "mkdir empty worktree objects", os.MkdirAll(filepath.Join(root, ".git", "objects", "info"), 0o700))
+	makeAllWritable := func(dir string) {
+		_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, wErr error) error {
+			if wErr == nil {
+				_ = os.Chmod(p, 0o700)
+			}
+			return nil
+		})
+	}
+	makeAllWritable(filepath.Join(branches, adapterRuntimeDirName))
+	testutil.FailErr(t, "remove adapter runtime stores", os.RemoveAll(filepath.Join(branches, adapterRuntimeDirName)))
+
+	releaseBranchClaimState(root)
+	sharedBranchViews.Delete(filepath.Clean(root))
+	next := newMaterializedManager(t, branches)
+	_, err = next.RecoverWorkerViews(t.Context())
+	if !errors.Is(err, recovery.ErrIncompleteCheckpoint) {
+		t.Fatalf("RecoverWorkerViews with missing Git objects err = %v, want ErrIncompleteCheckpoint", err)
+	}
+	afterMeta, err := LoadJobMeta(metaDir)
+	testutil.FailErr(t, "reload meta", err)
+	if afterMeta.LastPublishedCheckpointID != "cp-prior-valid" {
+		t.Fatalf("failed recovery wiped LastPublishedCheckpointID: got %q, want cp-prior-valid", afterMeta.LastPublishedCheckpointID)
+	}
+
+	// Also verify symlink confinement in resolveConfinedRepoGitDir fails closed with ErrIncompleteCheckpoint.
+	outside := t.TempDir()
+	altPath := filepath.Join(root, ".git", "objects", "info", "alternates")
+	_ = os.Remove(altPath)
+	testutil.FailErr(t, "symlink alternates", os.Symlink(filepath.Join(outside, "alternates"), altPath))
+	if _, _, _, err := resolveConfinedRepoGitDir(root, root, ".", "."); !errors.Is(err, recovery.ErrIncompleteCheckpoint) {
+		t.Fatalf("resolveConfinedRepoGitDir on symlink alternates err = %v, want ErrIncompleteCheckpoint", err)
+	}
+	if _, _, _, err := resolveConfinedRepoGitDir(root, root, "../escape", "."); !errors.Is(err, recovery.ErrIncompleteCheckpoint) {
+		t.Fatalf("resolveConfinedRepoGitDir on escaping worktree_rel err = %v, want ErrIncompleteCheckpoint", err)
+	}
+}
