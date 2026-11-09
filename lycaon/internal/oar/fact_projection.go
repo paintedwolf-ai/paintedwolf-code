@@ -44,6 +44,7 @@ func activation(gc *GuardContext) map[string]any {
 			operation = gc.Invocation.Tool
 		}
 		out["paintedwolf.operation"] = operation
+		// Authoritative invocation and diagnostic facts overwrite any untrusted keys in ObservationData or Published.
 		oarcopy.PublishInvocationRecovery(out, gc.Invocation.Tool, gc.Invocation.ToolArgs, gc.Invocation.CapabilityContract)
 		oarcopy.PublishDiagnosticKnowledge(out, gc.ObservationData)
 

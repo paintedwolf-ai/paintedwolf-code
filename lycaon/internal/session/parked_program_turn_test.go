@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"testing"
+	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
@@ -35,9 +36,13 @@ func TestUserTurnOpensWithTheInterruptedParkedProgram(t *testing.T) {
 	t.Cleanup(func() { loop.ForgetSession(context.Background(), sess.ID) })
 
 	const partial = `{"program_id":"program-1","state":"interrupted","status":130,"stdout":"start\n"}`
+	// A real outer bound keeps the park's timer backstop from firing while the
+	// turn below is opening; a zero deadline arms a one-millisecond backstop
+	// that races InterruptSleep and queues a scheduled kick this test cannot
+	// render. Production parks always carry the program's own deadline.
 	_, err = loopwake.ProgramParking{Subscriptions: loop.Subscriptions}.ParkProgram(t.Context(),
 		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call-1"}},
-		tools.ProgramPark{ProgramID: "program-1", Reason: "sleep 600", Claim: func() bool { return true }, Interrupt: func(context.Context) string { return partial }})
+		tools.ProgramPark{ProgramID: "program-1", Reason: "sleep 600", Deadline: time.Now().UTC().Add(time.Minute), Claim: func() bool { return true }, Interrupt: func(context.Context) string { return partial }})
 	testutil.FailErr(t, "park program", err)
 
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "stop waiting")

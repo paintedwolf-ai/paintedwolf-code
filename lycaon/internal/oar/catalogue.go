@@ -21,13 +21,13 @@ const (
 // Standard profile names. A profile is all-or-nothing: a host either provides
 // every member or declares none of them ([OAR-FACT-16]).
 const (
-	ProfileTool              = "tool"
-	ProfileSession           = "session"
-	ProfileFilesystem        = "filesystem"
-	ProfileContentProvenance = "content-provenance"
-	ProfileContent           = "content"
-	ProfileSecrets           = "secrets"
-	ProfileMCP               = "mcp"
+	ProfileTool              = oarcopy.ProfileTool
+	ProfileSession           = oarcopy.ProfileSession
+	ProfileFilesystem        = oarcopy.ProfileFilesystem
+	ProfileContentProvenance = oarcopy.ProfileContentProvenance
+	ProfileContent           = oarcopy.ProfileContent
+	ProfileSecrets           = oarcopy.ProfileSecrets
+	ProfileMCP               = oarcopy.ProfileMCP
 )
 
 // factDecl is one typed fact in the closed environment.
@@ -362,45 +362,6 @@ func publishedHostName(name string, tier FactTier) string {
 	return oarcopy.HostFactNamespace + "." + name
 }
 
-// requiredCoreFacts lists the section 5.3 core facts.
-var requiredCoreFacts = []string{
-	"anchor",
-	"fire_count",
-	"breaker_count",
-}
-
-// requiredCoreFunctions is the normative core observation-function set.
-var requiredCoreFunctions = []string{
-	"fire_count_of",
-	"breaker_count_of",
-}
-
-// standardProfileFacts is each named standard profile's complete membership,
-// from the standard's vocabulary.yaml. A host provides every member of a
-// profile it claims, or none of them ([OAR-FACT-16]).
-var standardProfileFacts = map[string][]string{
-	ProfileTool: {
-		"tool", "tool_args", "tool_args_fingerprint", "arg_validation_errors",
-		"arg_validation_reason", "arg_validation_field",
-		"permission_profile", "policy_denied",
-		"tool_arg_string", "tool_arg_int", "tool_arg_bool",
-	},
-	ProfileSession:    {"session_posture", "principal", "principal_roles"},
-	ProfileFilesystem: {"is_directory", "not_found", "path_denied", "path_outside_scope"},
-	ProfileSecrets:    {"secret_matches"},
-	ProfileContent:    {"content_length"},
-	ProfileContentProvenance: {
-		"content_roles", "content_origins", "content_authorities", "content_trust_tiers",
-		"content_sources", "content_segment_count", "content_contains_untrusted",
-	},
-	ProfileMCP: {
-		"mcp_provider_id", "mcp_tool_name", "mcp_qualified_tool", "mcp_provider_configured",
-		"mcp_provider_enabled", "mcp_call_ok", "mcp_error_code", "mcp_schema_matched",
-		"mcp_provider_configured_for", "mcp_provider_enabled_for",
-		"mcp_has_field", "mcp_field_bool", "mcp_field_string", "mcp_field_int",
-	},
-}
-
 func buildFactTiers() map[string]FactTier {
 	out := make(map[string]FactTier, len(factDecls)+len(occurrenceFactDecls)+len(observationFns))
 	eachDeclaredFact(func(d factDecl) { out[d.name] = d.tier })
@@ -482,6 +443,12 @@ func ValidateCatalogueTiers() error {
 	}
 	return nil
 }
+
+var (
+	requiredCoreFacts     = oarcopy.RequiredCoreFacts()
+	requiredCoreFunctions = oarcopy.RequiredCoreFunctions()
+	standardProfileFacts  = oarcopy.StandardProfileFacts()
+)
 
 // StandardProfiles returns the profile names in stable order.
 func StandardProfiles() []string {

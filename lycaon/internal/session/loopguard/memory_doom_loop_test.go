@@ -245,6 +245,39 @@ func TestMemoryDoomLoopGuardExemptsTerminalSend(t *testing.T) {
 	}
 }
 
+func TestMemoryDoomLoopGuardTerminalSendSupersedesTerminalRead(t *testing.T) {
+	ctx := context.Background()
+	g := NewMemoryDoomLoopGuard()
+	const sid = "sess-pty-drive"
+	readArgs := map[string]any{"id": "pty-1"}
+	sendArgs := map[string]any{"id": "pty-1", "input": "look\n"}
+
+	for cycle := 0; cycle < DoomLoopMaxAttempts+3; cycle++ {
+		allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "terminal_read", readArgs, true, nil)
+		testutil.FailErr(t, "Check terminal_read", err)
+		if !allowed || count != 0 {
+			t.Fatalf("cycle %d: terminal_read after terminal_send should reset count, got allowed=%v count=%d", cycle, allowed, count)
+		}
+		testutil.FailErr(t, "RecordAttempt terminal_read", g.RecordAttempt(ctx, sid, uuid.NewString(), "terminal_read", readArgs, nil, false))
+		testutil.FailErr(t, "RecordAttempt terminal_send", g.RecordAttempt(ctx, sid, uuid.NewString(), "terminal_send", sendArgs, nil, true))
+	}
+
+	// Without an intervening terminal_send, consecutive terminal_read calls still hit the repeat limit.
+	for attempt := 1; attempt <= DoomLoopMaxAttempts; attempt++ {
+		allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "terminal_read", readArgs, true, nil)
+		testutil.FailErr(t, "Check consecutive terminal_read", err)
+		if !allowed || count != attempt-1 {
+			t.Fatalf("attempt %d: got allowed=%v count=%d, want allowed=true count=%d", attempt, allowed, count, attempt-1)
+		}
+		testutil.FailErr(t, "RecordAttempt consecutive terminal_read", g.RecordAttempt(ctx, sid, uuid.NewString(), "terminal_read", readArgs, nil, false))
+	}
+	allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "terminal_read", readArgs, true, nil)
+	testutil.FailErr(t, "Check blocked terminal_read", err)
+	if allowed || count != DoomLoopMaxAttempts {
+		t.Fatalf("consecutive terminal_read without terminal_send should block: allowed=%v count=%d", allowed, count)
+	}
+}
+
 func TestMemoryDoomLoopGuardPageIDResolvesToTarget(t *testing.T) {
 	ctx := context.Background()
 	g := NewMemoryDoomLoopGuard()
