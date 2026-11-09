@@ -15,7 +15,7 @@ hosts: [coordinator, worker]
 - **Explain an area found through search** → summarize its containing path.
 {% endif %}
 {% if profile_has_command %}
-- **Locate an unfamiliar area** → `ls` or `find . -maxdepth 2 -type d` in `command` (`.` walks every attached folder; bare file paths target the session folder), then scope the next read.
+- **Locate an unfamiliar area** → `ls` or `find . -maxdepth 2 -type d` in `command` (`.` walks every attached folder), then scope the next read.
 {% endif %}
 {% if profile_has_survey_repo %}
 - **Cannot name a destination** → `survey_repo`, then inspect the relevant destination. Use scoped search for routes or repeated configuration.

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -39,13 +40,19 @@ func mergeCoordinatorTemplateVars(t *testing.T) map[string]any {
 	if err := prompts.MergeCoordinatorKickPolicyVars(vars); err != nil {
 		t.Fatalf("MergeCoordinatorKickPolicyVars: %v", err)
 	}
-	projectDir := "/tmp/fixture-project"
-	prompts.MergeWorkspaceRootsVars(vars, nil, "")
-	if count, _ := vars["root_count"].(int); count == 0 {
-		vars["root_count"] = 1
-		vars["project_dir"] = projectDir
-	}
+	mergeFixtureWorkspaceRoot(t, vars, "")
 	return vars
+}
+
+// mergeFixtureWorkspaceRoot attaches one real folder so the render matches a
+// post-milestone-9 single-root turn: the folder block carries a labeled row.
+func mergeFixtureWorkspaceRoot(t *testing.T, vars map[string]any, path string) {
+	t.Helper()
+	if strings.TrimSpace(path) == "" {
+		path = "/tmp/fixture-project"
+	}
+	roots := []projectroot.RootRef{{ID: "fixture-root", Label: "fixture", Path: path, IsPrimary: true}}
+	prompts.MergeWorkspaceRootsVars(vars, roots, "fixture-root")
 }
 
 func mergeCoordinatorPromptVarsForTripartite(
@@ -58,15 +65,11 @@ func mergeCoordinatorPromptVarsForTripartite(
 ) map[string]any {
 	t.Helper()
 	vars := mergeCoordinatorSurfaceVars(t, profile.SurfaceID)
-	projectDir := "/tmp/fixture-project"
-	if sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
-		projectDir = sess.WorkspacePath
+	sessionPath := ""
+	if sess != nil {
+		sessionPath = sess.WorkspacePath
 	}
-	prompts.MergeWorkspaceRootsVars(vars, nil, "")
-	if count, _ := vars["root_count"].(int); count == 0 {
-		vars["root_count"] = 1
-		vars["project_dir"] = projectDir
-	}
+	mergeFixtureWorkspaceRoot(t, vars, sessionPath)
 	mergePromptBudgetHostResources(t, vars)
 	err := prompts.MergeCoordinatorPromptVars(
 		profile.SurfaceID,
