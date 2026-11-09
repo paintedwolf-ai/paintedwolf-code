@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandActivity, CommandActivityStep, CommandProgramReceipt } from "../../api/types.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
-import { commandActivityHeadline, commandActivityProgression, createCommandActivityProjection } from "./command-activity-model.ts";
+import { commandActivityHeadline, commandActivityProgression, commandActivityRank, createCommandActivityProjection } from "./command-activity-model.ts";
 
 function fact(id: string, overrides: Partial<CommandActivity> = {}): CommandActivity {
   return { id, group: "Exploring project files", phase: "inspect", label: "Read source", subject: "source.rs", state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], ...overrides };
@@ -10,9 +10,9 @@ function fact(id: string, overrides: Partial<CommandActivity> = {}): CommandActi
 function step(id: string): CommandActivityStep {
   return { id, command: `run ${id}`, count: 1, running: 0, waiting: 0, failed: 0, refused: 0, interrupted: 0, state: "completed", outcome: "Exited 0" };
 }
-function entry(id: string, facts?: CommandActivity[]): ActivitySpanEntry {
+function entry(id: string, facts?: CommandActivity[], tool = "command"): ActivitySpanEntry {
   const program = facts ? { id: `program:${id}`, activities: facts, state: "completed", source_ref: "source" } as CommandProgramReceipt : undefined;
-  return { kind: "tool", part: { id, toolCallId: id, assistantMessageId: "assistant", messageId: "result", tool: "command", kind: "command", status: "completed", commandProgram: program } };
+  return { kind: "tool", part: { id, toolCallId: id, assistantMessageId: "assistant", messageId: "result", tool, kind: "command", status: "completed", commandProgram: program } };
 }
 function decision(key: string): ActivitySpanEntry {
   return { kind: "turn_load", key, row: { key, role: "tools", assistantMessageId: "assistant", anchorMessageId: "result", sub: 8, load: {} } as never };
@@ -172,6 +172,50 @@ it("advances the headline by phase and never downgrades", () => {
  expect(commandActivityHeadline(rows, "Running commands")).toBe("Running programs");
  expect(commandActivityHeadline(readRows, "Running commands")).toBe("Exploring project files");
  expect(commandActivityHeadline([], "Inspecting changes")).toBe("Inspecting changes");
+});
+
+it("ranks the span headline by two-level phase and group tiers (AT-ACT-HEAD-01)", () => {
+ const headline = (...facts: CommandActivity[]) => commandActivityHeadline(createCommandActivityProjection()(facts.map(f => entry(f.id, [f]))), "Working");
+ expect(headline(fact("a", { group: "Reading files", label: "Read files" }), fact("b", { group: "Searching codebase", label: "Search codebase" }))).toBe("Reading files");
+ expect(headline(fact("a", { group: "Searching codebase", label: "Search codebase" }), fact("b", { group: "Mapping codebase", label: "Map codebase" }))).toBe("Mapping codebase");
+ expect(headline(fact("a", { group: "Mapping codebase", label: "Map codebase" }), fact("b", { group: "Reading files", label: "Read files" }))).toBe("Mapping codebase");
+ expect(headline(fact("a", { group: "Managing files", label: "Manage files", phase: "mutate" }), fact("b", { group: "Editing files", label: "Edit files", phase: "mutate" }))).toBe("Editing files");
+ expect(headline(fact("a", { group: "Running commands", label: "Run command", phase: "execute" }), fact("b", { group: "Running programs", label: "Run program", phase: "execute" }))).toBe("Running programs");
+ expect(commandActivityRank(fact("x", { group: "Unlisted inspection" }))).toBe(11);
+ expect(commandActivityRank(fact("x", { group: "Unlisted execution", phase: "execute" }))).toBe(20);
+ expect(commandActivityRank(fact("x", { group: "Unlisted mutation", phase: "mutate" }))).toBe(30);
+ expect(commandActivityRank(fact("x", { group: "Unlisted", phase: undefined }))).toBe(0);
+ expect(headline(fact("a", { group: "Editing files", label: "Edit files", phase: "mutate" }), fact("b", { group: "Unlisted", phase: undefined }))).toBe("Editing files");
+});
+
+it("holds running FormTool calls back and coalesces the settled inspect sequence (AT-ACT-PROJ-01)", () => {
+ const project = createCommandActivityProjection();
+ const formTools = ["command", "summarize", "survey_repo", "code_rewrite"];
+ const running = formTools.map((tool, index) => {
+  const row = entry(`call-${index}`, undefined, tool);
+  if (row.kind === "tool") row.part.status = "running";
+  return row;
+ });
+ expect(project(running)).toHaveLength(0);
+ const settled = formTools.map((tool, index) => entry(`call-${index}`, [fact(`fact-${index}`)], tool));
+ const rows = parts(project(settled));
+ expect(rows).toHaveLength(1);
+ expect(rows[0]!.id).toBe("call-0");
+ expect(rows[0]!.commandActivity!.calls.map(call => call.toolCallId)).toEqual(["call-0", "call-1", "call-2", "call-3"]);
+ expect(rows[0]!.commandActivity!.members.map(member => member.id)).toEqual(["fact-0", "fact-1", "fact-2", "fact-3"]);
+ expect(rows[0]!.commandActivity!.programIds).toEqual(["program:call-0", "program:call-1", "program:call-2", "program:call-3"]);
+ const interrupted = parts(project([
+  entry("side-a", [fact("side-a")], "summarize"),
+  entry("read", undefined, "read"),
+  entry("side-b", [fact("side-b")], "survey_repo"),
+ ]));
+ expect(interrupted.map(row => row.id)).toEqual(["side-a", "read", "side-b"]);
+ const jobBetween = parts(project([
+  entry("side-c", [fact("side-c")], "summarize"),
+  entry("job", [fact("job-fact", { label: "Run process", job_handle: "job-1" })]),
+  entry("side-d", [fact("side-d")], "code_rewrite"),
+ ]));
+ expect(jobBetween.map(row => row.id)).toEqual(["side-c", "job", "side-d"]);
 });
 
 it("orders the progression by first appearance and counts steps per chip run", () => {

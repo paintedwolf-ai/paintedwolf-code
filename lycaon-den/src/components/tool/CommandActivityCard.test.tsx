@@ -167,3 +167,69 @@ it("bounds the detail summary and opens every structural step in Files", async (
  expect(opened.document.content.text).toContain(`operation 999 ${"long-input".repeat(100)}`);
  expect(opened.document.content.text.split("\n")).toHaveLength(1000);
 });
+
+function formPart(tool: string, args: Record<string, unknown>): ToolPartView {
+const original: ToolPartView = { id: "assistant:call", assistantMessageId: "assistant", messageId: "result", toolCallId: "call", tool, kind: "generic", status: "completed", args, output: "form tool output", commandProgram: program };
+return { ...original, commandActivity: { fact, members: [fact], calls: [original], programIds: [program.id] } };
+}
+function linkByLabel(container: HTMLElement, label: string) {
+return [...container.querySelectorAll("button")].find(button => button.textContent === `${label} in Files`);
+}
+
+describe("form tool command synthesis", () => {
+it("synthesizes the summarize form command and always offers original input", async () => {
+ const get = vi.fn().mockResolvedValue({ program, executions: [receipt()], nodes: [], executions_omitted: 0, nodes_omitted: 0 });
+ const view = render(() => <CommandActivityCard part={formPart("summarize", { path: "lycaon", task: "Explain the high-level architecture" })} layout="chat" sessionId="activity-card-test" projectId="project" client={stubClient({ getCommandProgramReceipt: get })} />);
+ fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
+ await waitFor(() => expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy());
+ expect(get).toHaveBeenCalledWith("activity-card-test", "program", { limit: 6, cursor: undefined, activity_id: "test" });
+ expect([...view.container.querySelectorAll("h4")].map(label => label.textContent)).toContain("Original command");
+ fireEvent.click(assertNamedControl(view.getByTestId("copy-command"), "button"));
+ await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith("summarize --path lycaon --focus 'Explain the high-level architecture'"));
+ expect(linkByLabel(view.container, "Original input")).toBeTruthy();
+ expect(linkByLabel(view.container, "Full original command")).toBeTruthy();
+ expect(linkByLabel(view.container, "Call output")).toBeTruthy();
+});
+it("synthesizes the repo-map form command for survey_repo", async () => {
+ const view = render(() => <CommandActivityCard part={formPart("survey_repo", { path: "lycaon", bundle: "layout_overview" })} layout="chat" sessionId="activity-card-test" client={stubClient({ getCommandProgramReceipt: vi.fn().mockResolvedValue({ program, executions: [], nodes: [], executions_omitted: 0, nodes_omitted: 0 }) })} />);
+ fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
+ await waitFor(() => expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy());
+ fireEvent.click(assertNamedControl(view.getByTestId("copy-command"), "button"));
+ await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith("repo-map --path lycaon --bundle layout_overview"));
+});
+it("synthesizes the code-rewrite form command with shell quoting", async () => {
+ const view = render(() => <CommandActivityCard part={formPart("code_rewrite", { pattern: "it's here", rewrite: "use bar", path: "src", recursive: true, dry_run: true, lang: "ts" })} layout="chat" sessionId="activity-card-test" client={stubClient({ getCommandProgramReceipt: vi.fn().mockResolvedValue({ program, executions: [], nodes: [], executions_omitted: 0, nodes_omitted: 0 }) })} />);
+ fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
+ await waitFor(() => expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy());
+ fireEvent.click(assertNamedControl(view.getByTestId("copy-command"), "button"));
+ await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith("code-rewrite --pattern 'it'\\''s here' --rewrite 'use bar' --path src --recursive --dry-run --lang ts"));
+});
+it("keeps original input behind reveal for plain command calls", async () => {
+ const { TOOL_CONTENT_REVEAL_EVENT } = await import("../../chat/tool/tool-part-find.ts");
+ const view = render(() => <CommandActivityCard part={part()} layout="chat" sessionId="activity-card-test" projectId="project" client={stubClient({ getCommandProgramReceipt: vi.fn().mockResolvedValue({ program, executions: [receipt()], nodes: [], executions_omitted: 0, nodes_omitted: 0 }) })} />);
+ fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
+ await waitFor(() => expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy());
+ expect(linkByLabel(view.container, "Original input")).toBeUndefined();
+ view.container.querySelector('[data-testid="tool-part-card"]')!.dispatchEvent(new CustomEvent(TOOL_CONTENT_REVEAL_EVENT, { detail: { field: "tool_args", from: 4 } }));
+ await waitFor(() => expect(linkByLabel(view.container, "Original input")).toBeTruthy());
+});
+it("transitions a late commandProgram arrival from the generic card and keeps disclosure state", async () => {
+ const { createSignal } = await import("solid-js");
+ const { ToolPartCard } = await import("./ToolPartCard.tsx");
+ const { createTranscriptDisclosureStore, TranscriptDisclosureProvider } = await import("../../chat/transcript/presentation/disclosure-state.tsx");
+ const { transcriptDisclosureKey } = await import("../../chat/transcript/presentation/transcript-disclosure-key.ts");
+ const get = vi.fn().mockResolvedValue({ program, executions: [receipt()], nodes: [], executions_omitted: 0, nodes_omitted: 0 });
+ const early: ToolPartView = { id: "assistant:call", assistantMessageId: "assistant", messageId: "result", toolCallId: "call", tool: "summarize", kind: "generic", status: "completed", args: { path: "lycaon", task: "Explain the high-level architecture" } };
+ const [value, setValue] = createSignal(early);
+ const store = createTranscriptDisclosureStore();
+ const view = render(() => <TranscriptDisclosureProvider value={store}><ToolPartCard part={value()} layout="chat" sessionId="activity-card-test" projectId="project" client={stubClient({ getCommandProgramReceipt: get })} /></TranscriptDisclosureProvider>);
+ expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeNull();
+ fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
+ const key = transcriptDisclosureKey.tool("assistant:call");
+ expect(store.isOpen(key)).toBe(true);
+ setValue({ ...early, commandProgram: program });
+ await waitFor(() => expect(view.container.querySelector('[data-testid="command-activity-details"]')).toBeTruthy());
+ expect(store.isOpen(key)).toBe(true);
+ expect(get).toHaveBeenCalledOnce();
+});
+});
