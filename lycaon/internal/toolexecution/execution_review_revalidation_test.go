@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -21,13 +22,16 @@ import (
 )
 
 func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
-	for _, scenario := range []struct{ deny, cancel, host bool }{
-		{host: true}, {deny: true, host: true}, {cancel: true, host: true},
-		{}, {deny: true}, {cancel: true},
+	for _, scenario := range []struct{ deny, cancel, host, newAsk bool }{
+		{host: true}, {deny: true, host: true}, {cancel: true, host: true}, {newAsk: true, host: true},
+		{}, {deny: true}, {cancel: true}, {newAsk: true},
 	} {
 		name := fmt.Sprintf("deny-during-review-%t", scenario.deny)
 		if scenario.cancel {
 			name = "cancel-during-review"
+		}
+		if scenario.newAsk {
+			name = "new-ask-during-review"
 		}
 		if !scenario.host {
 			name += "-confined"
@@ -51,7 +55,7 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 				return "done", nil
 			}))
 			executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvals), registry, "implement")
-			manager := &asyncHITL{requested: make(chan struct{}, 4)}
+			manager := &separateReviewHITL{asyncHITL: asyncHITL{requested: make(chan struct{}, 4)}}
 			executor.Approvals.SetCheckpointManager(t.Context(), manager, approvals)
 			ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 			defer cancel()
@@ -84,9 +88,28 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 				config.Rules[0].Effect = settings.ApprovalEffectDeny
 				testutil.FailErr(t, "install deny during human wait", store.PutProject(root, config))
 			}
+			if scenario.newAsk {
+				config.Rules = append(config.Rules, settings.ApprovalRule{Category: settings.ApprovalCategoryCommand, Pattern: "printf *", Effect: settings.ApprovalEffectAsk})
+				testutil.FailErr(t, "add independent command review during wait", store.PutProject(root, config))
+			}
 			if scenario.cancel {
 				cancel()
 			} else {
+				manager.approve()
+			}
+			if scenario.newAsk {
+				select {
+				case <-manager.requested:
+				case err := <-done:
+					t.Fatalf("new requirement did not reach review: %v", err)
+				case <-ctx.Done():
+					t.Fatal("new requirement never reached review")
+				}
+				if len(entered) != 0 || !slices.ContainsFunc(manager.request.MatchedRules, func(rule hitl.ApprovalRuleMatch) bool {
+					return rule.Category == "command" && rule.Pattern == "printf *"
+				}) {
+					t.Fatal("new requirement was omitted or dispatched before review")
+				}
 				manager.approve()
 			}
 			err = <-done
@@ -110,4 +133,13 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Every new checkpoint requires its own human reply; the first reply must not
+// make a later checkpoint automatically approved in the fixture.
+type separateReviewHITL struct{ asyncHITL }
+
+func (m *separateReviewHITL) RequestCheckpoint(ctx context.Context, request hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
+	m.approved.Store(false)
+	return m.asyncHITL.RequestCheckpoint(ctx, request)
 }
