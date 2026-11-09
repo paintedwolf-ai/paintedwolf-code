@@ -17,7 +17,10 @@ import (
 )
 
 func TestOrdinaryOutsideReadGrantsTheContainingFolder(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	dir := filepath.Join(canonDir(t, t.TempDir()), "unattached", t.Name())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	file := filepath.Join(dir, "release.go")
 
 	action := hitl.ProposedAction{
@@ -97,7 +100,10 @@ func TestHomeFileReadOffersHomeAndAncestors(t *testing.T) {
 }
 
 func TestTaskReadGrantSilencesLaterReadsInTheFolder(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	dir := filepath.Join(canonDir(t, t.TempDir()), "unattached", t.Name())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	first := filepath.Join(dir, "release.go")
 	sibling := filepath.Join(dir, "client.go")
 	outside := filepath.Join(filepath.Dir(dir), "other.go")
@@ -220,7 +226,10 @@ func TestOutsideReadAsksWithFileAccessAtEveryPosture(t *testing.T) {
 }
 
 func TestTreeGrantDoesNotCoverSensitiveChildren(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	dir := filepath.Join(canonDir(t, t.TempDir()), "unattached", t.Name())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	ordinary := filepath.Join(dir, "main.go")
 	secret := filepath.Join(dir, ".env")
 
@@ -308,7 +317,10 @@ func TestOrdinaryOutsideWriteStaysExact(t *testing.T) {
 }
 
 func TestDurableTreeGrantSurvivesReloadAndSilencesReads(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	dir := filepath.Join(canonDir(t, t.TempDir()), "unattached", t.Name())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	first := filepath.Join(dir, "release.go")
 	sibling := filepath.Join(dir, "client.go")
 

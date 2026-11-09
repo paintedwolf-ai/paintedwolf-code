@@ -166,6 +166,50 @@ describe("evidence on the card", () => {
     ));
     expect(queryByTestId("approval-external-content-chip")).toBeNull();
   });
+
+  it("leads with the missing-path fact on outside-root reads", () => {
+    const cp: PendingCheckpoint = {
+      checkpointId: "checkpoint-missing-path",
+      sessionId: "session-1",
+      kind: "tool_approval",
+      status: "pending",
+      tool_approval: toolApprovalFixture({
+        tool: "read",
+        command: "",
+        reasons: ["outside_roots_read"],
+        presentation: {
+          gate: "outside_roots_read",
+          lead: "This path doesn't exist",
+          cited: [
+            {
+              gate: "outside_roots_read",
+              key: "file.path",
+              value: "/Volumes/data/notes.md",
+              source: "boundary",
+            },
+            {
+              gate: "outside_roots_read",
+              key: "file.exists",
+              value: "this path doesn't exist",
+              source: "boundary",
+            },
+          ],
+        },
+      }),
+    } as PendingCheckpoint;
+    const view = render(() => (
+      <ApprovalCard
+        checkpoint={cp}
+        resolving={false}
+        onToolApproval={() => {}}
+        onContentApply={noopContent}
+      />
+    ));
+    expect(view.getByTestId("approval-lead").textContent).toBe("This path doesn't exist");
+    const text = openedText(view);
+    expect(text).toContain("file.exists: this path doesn't exist (boundary)");
+    expect(text).toContain("file.path: /Volumes/data/notes.md (boundary)");
+  });
 });
 
 describe("ApprovalCard repeat block", () => {

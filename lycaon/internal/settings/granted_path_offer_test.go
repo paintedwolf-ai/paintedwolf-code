@@ -479,6 +479,9 @@ func TestALeaseOnOnePathDoesNotCoverAnother(t *testing.T) {
 func TestDirectoryHierarchyMintsDistinctOptionsAndDefaultsToContainingFolder(t *testing.T) {
 	dir := canonDir(t, t.TempDir())
 	folder := filepath.Join(dir, "src", "pkg")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	file := filepath.Join(folder, "file.go")
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{file}},
@@ -515,6 +518,56 @@ func TestDirectoryHierarchyMintsDistinctOptionsAndDefaultsToContainingFolder(t *
 	}
 }
 
+// A read of a path whose containing folder does not exist offers no tree
+// grant: a lease rooted at a missing folder would widen silently once
+// something creates it. Allow-once and denial stay on the card.
+func TestMissingTargetWithMissingFolderOffersOnlyExact(t *testing.T) {
+	base := canonDir(t, t.TempDir())
+	file := filepath.Join(base, "missing", "deep", "file.go")
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{file}},
+		Scope:      hitl.ActionScope{ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"},
+	}
+	target := gate.FileTarget{Path: file, Mode: gate.ModeRead, OutsideRoots: true}
+	decision := &gate.Decision{Primary: api.GateOutsideRootsRead}
+	offers := settings.GrantedPathOffers(action, target, decision, nil)
+	if len(offers) == 0 {
+		t.Fatal("a missing target must still offer allow-once")
+	}
+	for _, offer := range offers {
+		gp := offer.Grant.GrantedPath
+		if gp == nil || gp.Tree || gp.Path != file {
+			t.Fatalf("%s: missing target must grant exact only, got %+v", offer.Scope, gp)
+		}
+	}
+}
+
+// A missing file inside an existing folder still grants the folder tree: the
+// root exists, so the lease covers a real folder.
+func TestMissingTargetInExistingFolderStillGrantsTheFolder(t *testing.T) {
+	folder := filepath.Join(canonDir(t, t.TempDir()), "created")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(folder, "file.go")
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{file}},
+		Scope:      hitl.ActionScope{ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"},
+	}
+	target := gate.FileTarget{Path: file, Mode: gate.ModeRead, OutsideRoots: true}
+	decision := &gate.Decision{Primary: api.GateOutsideRootsRead}
+	offers := settings.GrantedPathOffers(action, target, decision, nil)
+	if len(offers) == 0 {
+		t.Fatal("expected granted-path offers")
+	}
+	for _, offer := range offers {
+		gp := offer.Grant.GrantedPath
+		if gp == nil || !gp.Tree || gp.Path != folder {
+			t.Fatalf("%s: missing file in an existing folder must grant the folder tree, got %+v", offer.Scope, gp)
+		}
+	}
+}
+
 func TestCredentialStoreReadAsksInsideAnAttachedHome(t *testing.T) {
 	tmp := t.TempDir()
 	stageBundledApprovals(t, nil)
@@ -544,9 +597,14 @@ func TestCredentialStoreReadAsksInsideAnAttachedHome(t *testing.T) {
 }
 
 func TestMultipleReadTargetsOfferOneCrossingHierarchy(t *testing.T) {
-	base := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	base := canonDir(t, t.TempDir())
 	first := filepath.Join(base, "first", "file.go")
 	second := filepath.Join(base, "second", "file.go")
+	for _, dir := range []string{filepath.Dir(first), filepath.Dir(second)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{first, second}},
 		Scope:      hitl.ActionScope{ProjectID: "project", ProjectDir: t.TempDir(), SessionID: "chat"},

@@ -145,9 +145,18 @@ func grantedPathAccess(target gate.FileTarget, locations *sensitivepath.Catalog)
 		return exact
 	}
 	// Canonical folders prevent alias-based tree grants.
-	folder := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
-	if info, err := os.Lstat(folder); err != nil || !info.IsDir() {
+	folder, exists, isDir := probeTargetFolder(abs)
+	if target.Exists != nil && !*target.Exists && filepath.IsAbs(abs) {
+		// The card already says the target is missing; a tree rooted at a
+		// missing folder would cover nothing and mint a dead lease.
+		exists, isDir = false, false
+	}
+	if !exists || !isDir {
 		folder = filepath.Dir(folder)
+		// A tree grant needs a folder that actually exists to root at.
+		if _, parentExists, parentIsDir := probeTargetFolder(folder); !parentExists || !parentIsDir {
+			return exact
+		}
 	}
 	if folder == "" || folder == "." {
 		return exact
@@ -161,6 +170,15 @@ func grantedPathAccess(target gate.FileTarget, locations *sensitivepath.Catalog)
 		}
 	}
 	return hitl.GrantedPathDelta{Path: folder, Tree: true}
+}
+
+// probeTargetFolder stats the canonical spelling of a declared target. The
+// card's existence fact and the grant-shape minting read the same observation,
+// so a missing path is disclosed and granted from one probe.
+func probeTargetFolder(path string) (folder string, exists, isDir bool) {
+	folder = filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(strings.TrimSpace(path))))
+	info, err := os.Lstat(folder)
+	return folder, err == nil, err == nil && info.IsDir()
 }
 
 func grantedPathCoverage(access hitl.GrantedPathDelta) string {
@@ -207,6 +225,11 @@ func grantedPathCandidates(target gate.FileTarget, locations *sensitivepath.Cata
 			if _, sensitive := locations.Match(dir, sensitivepath.ModeRead); sensitive {
 				break
 			}
+		}
+		// Every offered tree roots at a folder that exists; a lease over a
+		// missing folder would silently widen once something creates it.
+		if _, exists, isDir := probeTargetFolder(dir); !exists || !isDir {
+			continue
 		}
 		out = append(out, hitl.GrantedPathDelta{Path: dir, Tree: true})
 		if filepath.Dir(dir) == dir {
