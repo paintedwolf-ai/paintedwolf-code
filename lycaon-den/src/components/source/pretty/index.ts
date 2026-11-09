@@ -47,6 +47,22 @@ export {
   type PrintJsonSegmentResult,
   printJsonSegment,
 } from "./pretty-printer.ts";
+export {
+  PrettyReplicaEditorAdapter,
+  type PrettyReplicaAdapterOptions,
+} from "./pretty-replica-adapter.ts";
+export {
+  clearPrettyDocumentRecoveryState,
+  getPrettyDocumentRecoveryState,
+  type PrettyCaretAffinityState,
+  type PrettyDocumentRecoveryState,
+  type PrettyPendingStaleEdit,
+  type PrettyRebaseOutcome,
+  type PrettyRevisionDelta,
+  PrettyRevisionDeltaRingBuffer,
+  rebaseChangesOverDeltaChain,
+  resetPrettyDocumentRecoveryStoreForTests,
+} from "./pretty-replica-rebase.ts";
 export { formatPrettyProjection } from "./pretty-segmenter.ts";
 export type {
   PrettyAmbiguousMultiCursorConflict,
