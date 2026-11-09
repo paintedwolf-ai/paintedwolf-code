@@ -116,7 +116,7 @@ func (b catalogRequestBudgets) RequestBudget(ctx context.Context, _ string, req 
 
 func TestRequestFittingKeepsUnchangedHistoryCacheBoundary(t *testing.T) {
 	rows := []api.Message{
-		{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "go"},
+		{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "go"},
 		{ID: "a1", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c1", Name: "read"}}},
 		{ID: "t1", Role: api.MessageRoleTool, Content: "result", PromptCacheBreakpoint: api.PromptCacheTierHistory,
 			ToolResult: &api.ToolResult{ToolCallID: "c1", Tool: "read", Content: "result"}},
@@ -134,7 +134,7 @@ func TestRequestFittingKeepsUnchangedHistoryCacheBoundary(t *testing.T) {
 
 func TestRequestFittingUsesRemainingOutputAfterHistoryIsMinimal(t *testing.T) {
 	provider := ollama.New("local", "http://unused.invalid", "", []modelinfo.Entry{{ID: "small", ContextLength: 16384, MaxTokens: 24576}})
-	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Continue"}
+	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Continue"}
 	req := modelcall.CompletionRequest{Model: "small", Messages: []api.Message{{ID: "standing", Role: api.MessageRoleSystem}, current}}
 	low, high := 1, 70000
 	for low < high {
@@ -177,7 +177,7 @@ func TestEveryRequestAdoptsPublishedHistoryProjection(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append original history", mem.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "old", Role: api.MessageRoleAssistant, Content: "Original detail"},
-		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Continue"}))
+		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Continue"}))
 	canonical, err := mem.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read original history", err)
 	summary := api.Message{ID: "summary", Role: api.MessageRoleAssistant, Content: "Recorded continuation",
@@ -212,7 +212,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 	recallBody := strings.Repeat("Recovered page. ", 200)
 	testutil.FailErr(t, "append active exchange", mem.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "earlier", Role: api.MessageRoleAssistant, Content: strings.Repeat("Earlier work. ", 120)},
-		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Read the observations"},
+		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Read the observations"},
 		api.Message{ID: "call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read", Args: args}}},
 		api.Message{ID: "result", Role: api.MessageRoleTool, Content: body, TrustTier: api.ContentTrustTierTrusted,
 			ContentParts: []api.MessageContentPart{{Content: body, TrustTier: api.ContentTrustTierUntrusted}},
@@ -335,7 +335,7 @@ func TestReviewFittingHonorsProviderHeadroom(t *testing.T) {
 }
 
 func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
-	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: strings.Repeat("Measured input. ", 600)}
+	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: strings.Repeat("Measured input. ", 600)}
 	rows := []api.Message{current}
 	req := modelcall.CompletionRequest{Model: "small", Messages: rows}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
@@ -363,7 +363,7 @@ func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
 func TestRequestFittingKeepsToolBodyWhenOutputCanYield(t *testing.T) {
 	body := strings.Repeat("Recorded observation. ", 1000)
 	rows := []api.Message{
-		{ID: "intent", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Inspect the observations"},
+		{ID: "intent", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Inspect the observations"},
 		{ID: "call", Ord: 2, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read"}}},
 		{ID: "result", Ord: 3, Role: api.MessageRoleTool, Content: body, PromptCacheBreakpoint: api.PromptCacheTierHistory,
 			ToolResult: &api.ToolResult{ToolCallID: "read-call", Tool: "read", Content: body}},
@@ -388,7 +388,7 @@ func TestRequestFittingKeepsToolBodyWhenOutputCanYield(t *testing.T) {
 }
 
 func TestRequestFittingDiscardsOtherReceiverCalibration(t *testing.T) {
-	rows := []api.Message{{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Continue the task"}}
+	rows := []api.Message{{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Continue the task"}}
 	req := modelcall.CompletionRequest{Model: "small", MaxTokens: 512, Messages: rows}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 4096}})}
 	for _, receiver := range []struct{ name, providerID, model string }{
@@ -423,7 +423,7 @@ func TestRequestFittingCanProjectRecallBelowSixteenKilobytes(t *testing.T) {
 		t.Fatal("fixture must exercise the medium recall size")
 	}
 	rows := []api.Message{
-		{ID: "current", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Recover the original observation"},
+		{ID: "current", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Recover the original observation"},
 		{ID: "call", Ord: 2, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "recall-call", Name: "recall"}}},
 		{ID: "result", Ord: 3, Role: api.MessageRoleTool, Content: string(raw), ToolResult: &api.ToolResult{ToolCallID: "recall-call", Tool: "recall", Content: string(raw)}},
 	}
@@ -457,7 +457,7 @@ func TestRequestProjectionReplaceKeepsTrailingFrameAfterOpenerFirstAndMovedCover
 	sum := api.Message{ID: "sum", Role: api.MessageRoleAssistant, Content: "Summary",
 		ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "Summary"}}}
 	brief := api.Message{ID: "host-source-changes-u2", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Source brief"}
-	u2 := api.Message{ID: "u2", Ord: 10, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Current turn"}
+	u2 := api.Message{ID: "u2", Ord: 10, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Current turn"}
 	a2 := api.Message{ID: "a2", Ord: 40, Role: api.MessageRoleAssistant, Content: "Working reply"}
 	execState := api.Message{ID: "exec-state", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "<execution_state>"}
 	toolProc := api.Message{ID: "tool-proc", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Tool procedure"}

@@ -9,7 +9,7 @@ import (
 // PreserveRequestIntent preserves the original instruction through view replacement.
 func PreserveRequestIntent(rows, source []api.Message) []api.Message {
 	intent, ok := api.LastUserIntentMessage(source)
-	if !ok {
+	if !ok || intent.ID == "" {
 		return rows
 	}
 	intent.ContextPinned = true

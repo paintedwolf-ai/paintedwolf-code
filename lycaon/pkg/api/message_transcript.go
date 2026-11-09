@@ -78,7 +78,7 @@ func UserIntentBoundary(history []Message) int {
 
 // LastUserIntentMessage returns the most recent visible user intent message.
 func LastUserIntentMessage(history []Message) (Message, bool) {
-	if i := UserIntentBoundary(history); i > 0 {
+	if i := UserIntentBoundary(history); i > 0 && i <= len(history) {
 		return history[i-1], true
 	}
 	return Message{}, false
