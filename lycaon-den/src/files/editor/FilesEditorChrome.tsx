@@ -33,6 +33,7 @@ export function FilesEditorToolbar(props: { children: JSX.Element; actions: JSX.
 }
 
 type StatusChip = { label: string; tip?: string; onOpen?: () => void; ref?: (element: HTMLButtonElement) => void };
+export type FilesEditorPrettyToggle = { enabled: boolean; available?: boolean; tip?: string; onToggle: () => void };
 export type FilesEditorStatusProps = {
   identity: ReturnType<typeof resolveEditorIdentity>;
   windows?: JSX.Element;
@@ -44,6 +45,7 @@ export type FilesEditorStatusProps = {
   eol?: StatusChip;
   details?: JSX.Element;
   simplified?: boolean;
+  pretty?: FilesEditorPrettyToggle;
 };
 
 function StatusChipView(props: { chip: StatusChip; testId: string; class?: string }) {
@@ -70,11 +72,13 @@ export function FilesEditorStatus(props: FilesEditorStatusProps) {
     <Show when={props.simplified}><span class="den-files-editor__status-detail" data-testid="files-editor-simplified-chip"
       data-tip="This file is very large or has very long lines. Wrapping, indent guides, and syntax highlighting stay off here so the editor keeps up.">Simplified</span></Show>
     <span class="den-files-editor__status-spacer" />
+    <button type="button" class="den-files-editor__status-toggle den-files-editor__status-pretty"
+      data-testid="files-editor-pretty-toggle" aria-pressed={props.pretty?.available !== false ? Boolean(props.pretty?.enabled) : false}
+      disabled={!props.pretty || props.pretty.available === false} data-tip={props.pretty?.tip}
+      onClick={() => { if (props.pretty && props.pretty.available !== false) props.pretty.onToggle(); }}>Pretty</button>
     <button type="button" class="den-files-editor__status-toggle den-files-editor__status-wrap"
       data-testid="files-editor-wrap-toggle" aria-pressed={editorWordWrapPref()}
-      onClick={() => void saveEditorWordWrap(!editorWordWrapPref())}>
-      Wrap
-    </button>
+      onClick={() => void saveEditorWordWrap(!editorWordWrapPref())}>Wrap</button>
   </div>;
 }
 
@@ -138,19 +142,10 @@ export function createEditorToolbarMenus(options: {
     });
   };
   onCleanup(() => { if (copiedTimer) clearTimeout(copiedTimer); });
-  const openToolbarMenu = (
-    kind: FilesEditorToolbarMenuKind,
-    anchor: ContextMenuAnchor,
-  ) => options.setToolbarMenu({ kind, anchor });
-  const findMenuBind = bindChromeContextMenu((anchor) =>
-    openToolbarMenu("find", anchor),
-  );
-  const gotoMenuBind = bindChromeContextMenu((anchor) =>
-    openToolbarMenu("goto", anchor),
-  );
-  const copyMenuBind = bindChromeContextMenu((anchor) =>
-    openToolbarMenu("copy", anchor),
-  );
+  const openToolbarMenu = (kind: FilesEditorToolbarMenuKind, anchor: ContextMenuAnchor) => options.setToolbarMenu({ kind, anchor });
+  const findMenuBind = bindChromeContextMenu((anchor) => openToolbarMenu("find", anchor));
+  const gotoMenuBind = bindChromeContextMenu((anchor) => openToolbarMenu("goto", anchor));
+  const copyMenuBind = bindChromeContextMenu((anchor) => openToolbarMenu("copy", anchor));
 
   const toolbarMenuItems = (kind: FilesEditorToolbarMenuKind): ContextMenuItem[] => {
     switch (kind) {

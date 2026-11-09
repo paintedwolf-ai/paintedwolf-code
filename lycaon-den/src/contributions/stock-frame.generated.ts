@@ -915,6 +915,22 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "result_treatment": "effect"
     },
     {
+      "id": "painted-wolf/platform:editor-toggle-pretty",
+      "provider": "painted-wolf/platform",
+      "title": "Toggle pretty display",
+      "category": "navigation",
+      "scope": "files",
+      "icon": "play",
+      "executor": "den",
+      "invocation": "den",
+      "action_kind": "native_ui",
+      "handler_id": "editor.togglePretty",
+      "when": {
+        "fact": "files_stage_active"
+      },
+      "result_treatment": "effect"
+    },
+    {
       "id": "painted-wolf/platform:editor-toggle-tab-focus",
       "provider": "painted-wolf/platform",
       "title": "Toggle Tab moves focus",
@@ -4464,6 +4480,14 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "label": "Toggle line numbers"
     },
     {
+      "id": "painted-wolf/platform:app-menu-view-editor-toggle-pretty",
+      "slot": "app_menu.view",
+      "command": "painted-wolf/platform:editor-toggle-pretty",
+      "group": "2",
+      "order": 7,
+      "label": "Toggle pretty display"
+    },
+    {
       "id": "painted-wolf/platform:app-menu-view-editor-toggle-wrap",
       "slot": "app_menu.view",
       "command": "painted-wolf/platform:editor-toggle-wrap",
@@ -5417,6 +5441,23 @@ export const STOCK_FRAME: ContributionFrameResponse = {
         ],
         "windows": [
           "Mod+Alt+/"
+        ]
+      }
+    },
+    {
+      "id": "painted-wolf/platform:key-editor-toggle-pretty",
+      "command": "painted-wolf/platform:editor-toggle-pretty",
+      "scope": "files",
+      "allow_in_input": true,
+      "bindings": {
+        "linux": [
+          "Alt+P"
+        ],
+        "macos": [
+          "Alt+P"
+        ],
+        "windows": [
+          "Alt+P"
         ]
       }
     },
@@ -7547,6 +7588,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "linux",
       "scope": "files",
+      "chord": "Alt+P",
+      "active": "painted-wolf/platform:key-editor-toggle-pretty",
+      "candidates": [
+        "painted-wolf/platform:key-editor-toggle-pretty"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "files",
       "chord": "Alt+Shift+A",
       "active": "painted-wolf/platform:key-editor-toggle-block-comment",
       "candidates": [
@@ -9077,6 +9127,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "macos",
       "scope": "files",
+      "chord": "Alt+P",
+      "active": "painted-wolf/platform:key-editor-toggle-pretty",
+      "candidates": [
+        "painted-wolf/platform:key-editor-toggle-pretty"
+      ]
+    },
+    {
+      "platform": "macos",
+      "scope": "files",
       "chord": "Alt+Shift+A",
       "active": "painted-wolf/platform:key-editor-toggle-block-comment",
       "candidates": [
@@ -10476,6 +10535,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-editor-unfold-all",
       "candidates": [
         "painted-wolf/platform:key-editor-unfold-all"
+      ]
+    },
+    {
+      "platform": "windows",
+      "scope": "files",
+      "chord": "Alt+P",
+      "active": "painted-wolf/platform:key-editor-toggle-pretty",
+      "candidates": [
+        "painted-wolf/platform:key-editor-toggle-pretty"
       ]
     },
     {

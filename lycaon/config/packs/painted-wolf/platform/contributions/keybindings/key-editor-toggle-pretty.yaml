@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-editor-toggle-pretty
+command: painted-wolf/platform:editor-toggle-pretty
+scope: files
+allow_in_input: true
+bindings:
+  macos:
+    - "Alt+P"
+  windows:
+    - "Alt+P"
+  linux:
+    - "Alt+P"
