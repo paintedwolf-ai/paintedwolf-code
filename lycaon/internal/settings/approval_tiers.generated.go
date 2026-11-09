@@ -177,7 +177,6 @@ var (
 		"delete",
 		"edit",
 		"extract_archive",
-		"fetch_url",
 		"git_checkout",
 		"git_commit",
 		"git_merge",

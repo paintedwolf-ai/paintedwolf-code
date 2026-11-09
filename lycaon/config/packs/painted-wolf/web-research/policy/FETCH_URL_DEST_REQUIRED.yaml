@@ -1,3 +1,4 @@
+# Deprecated rejection identity; raw transfers use portable curl.
 oar: '1.0'
 id: FETCH_URL_DEST_REQUIRED
 kind: schema
@@ -9,22 +10,20 @@ requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.next_steps
   - paintedwolf.rejection_code
   - paintedwolf.content_type
 when: paintedwolf.rejection_code == "FETCH_URL_DEST_REQUIRED"
 effect: block
 copy:
   what: mode=raw fetched a non-image binary resource ({{ paintedwolf.content_type }}) without dest.
-  cause: Non-image binary assets must land as project files — image resources can be perceived directly without dest.
-  why: Putting binary blobs in model context is wasteful and unusable for build work.
-  fix: For non-image binary resources, supply an appropriate file destination within the actual write scope
-    and keep mode=raw. For images, omit dest; fetch_url screens and perceives them directly.
-    The previous response was fetched but not saved; changing the call may fetch it again.
-    Do not invent a filename unrelated to the task.
-  instead: Branch on Code FETCH_URL_DEST_REQUIRED; supply dest
+  cause: That invocation required a destination for binary transfers; that transfer path is retired.
+  why: The current source reader returns readable documents or screened images.
+  fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
+  instead: Follow the current schema and access boundaries.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
-x-paintedwolf-message: fetch_url binary raw requires dest
+x-paintedwolf-message: recorded fetch_url binary transfer lacked a destination
 x-paintedwolf-scenarios:
 - id: default
   vars:
