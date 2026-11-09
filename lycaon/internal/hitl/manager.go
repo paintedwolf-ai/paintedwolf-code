@@ -111,22 +111,17 @@ func CurrentActionReviewCovers(
 	if len(gates) == 0 || len(decision.Cited) == 0 || len(review.Cited) == 0 {
 		return false
 	}
+	for _, fact := range decision.Cited {
+		if fact.Key == "boundary.execution" || !slices.Contains(review.Cited, fact) {
+			return false
+		}
+	}
 	segments := decision.ReasonSegments()
 	if strings.TrimSpace(decision.ReasonKey) != "" && len(segments) == 0 {
 		return false
 	}
-	allowUnconfined := confine.SandboxDisabled() &&
-		slices.Contains(segments, string(api.GateUnobservedChannel)+":unconfined")
-	for _, fact := range decision.Cited {
-		if fact.Key == "boundary.execution" ||
-			(fact.Gate == api.GateUnobservedChannel && !allowUnconfined) ||
-			!slices.Contains(review.Cited, fact) {
-			return false
-		}
-	}
 	for _, segment := range segments {
-		if (strings.HasPrefix(segment, string(api.GateUnobservedChannel)+":") && !allowUnconfined) ||
-			!slices.Contains(review.ReasonSegments, segment) {
+		if !slices.Contains(review.ReasonSegments, segment) {
 			return false
 		}
 	}
