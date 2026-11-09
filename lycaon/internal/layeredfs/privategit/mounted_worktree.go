@@ -250,7 +250,7 @@ func registerMountedClaim(
 		viewID: viewID, workerID: workerID, rootID: rootID,
 		trunkDir: absTrunk, worktreeDir: absWT, materialized: false,
 		kernelMounted: isKernelMountedWorktree(absWT),
-		core:          core, authorizedGitDirs: append([]string(nil), authorizedGitDirs...),
+		core:          core, syncer: core, authorizedGitDirs: append([]string(nil), authorizedGitDirs...),
 		accessOrigin: OriginFilesystem, repos: make(map[string]*initializedRepo),
 	}
 	if err := core.RegisterLowerProvider(rootID, &gitAwareLowerProvider{

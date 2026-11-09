@@ -269,7 +269,7 @@ func taskCheckpointPreview(ctx context.Context, svc *MergeService, task *api.Wor
 	return preview, nil
 }
 
-func (s *MergeService) stackedPromotionRequest(task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest, promoter *checkpoint.Promoter) (*recovery.Coordinator, recovery.StackedPromotionRequest, error) {
+func (s *MergeService) stackedPromotionRequest(task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest, promoter *checkpoint.Promoter, resolvedPaths []string) (*recovery.Coordinator, recovery.StackedPromotionRequest, error) {
 	if s == nil || s.Workspace == nil {
 		return nil, recovery.StackedPromotionRequest{}, fmt.Errorf("stacked promotion requires the recovery coordinator")
 	}
@@ -281,11 +281,18 @@ func (s *MergeService) stackedPromotionRequest(task *api.WorkerTask, roots []pro
 	if err != nil {
 		return nil, recovery.StackedPromotionRequest{}, err
 	}
-	return coordinator, recovery.StackedPromotionRequest{ChildCheckpointID: manifest.CheckpointID, TargetRoots: targetRoots, Promoter: promoter, ImportGitRefs: true}, nil
+	resolutions := session.CheckpointKeepTargetResolutions(task, manifest, roots, resolvedPaths)
+	return coordinator, recovery.StackedPromotionRequest{
+		ChildCheckpointID: manifest.CheckpointID,
+		TargetRoots:       targetRoots,
+		Promoter:          promoter,
+		Resolutions:       resolutions,
+		ImportGitRefs:     true,
+	}, nil
 }
 
 func (s *MergeService) stackedPromotionPlan(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest, promoter *checkpoint.Promoter) (*recovery.StackedPromotionPlan, *recovery.Coordinator, error) {
-	coordinator, request, err := s.stackedPromotionRequest(task, roots, manifest, promoter)
+	coordinator, request, err := s.stackedPromotionRequest(task, roots, manifest, promoter, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -294,7 +301,7 @@ func (s *MergeService) stackedPromotionPlan(ctx context.Context, task *api.Worke
 }
 
 // applyTaskCheckpoint joins a task's checkpoint effects to its promotion transaction, stacked or not.
-func applyTaskCheckpoint(ctx context.Context, s *MergeService, tx *promoteTransaction, task *api.WorkerTask) error {
+func applyTaskCheckpoint(ctx context.Context, s *MergeService, tx *promoteTransaction, task *api.WorkerTask, resolvedPaths []string) error {
 	if task == nil {
 		return nil
 	}
@@ -307,9 +314,9 @@ func applyTaskCheckpoint(ctx context.Context, s *MergeService, tx *promoteTransa
 		return errors.Join(err, tx.txn.Rollback(context.WithoutCancel(ctx)))
 	}
 	if !ok || len(manifest.ParentCheckpoints) == 0 {
-		return session.ApplyTaskCheckpoint(ctx, tx.txn, task, roots)
+		return session.ApplyTaskCheckpoint(ctx, tx.txn, task, roots, resolvedPaths...)
 	}
-	coordinator, request, err := s.stackedPromotionRequest(task, roots, manifest, promoter)
+	coordinator, request, err := s.stackedPromotionRequest(task, roots, manifest, promoter, resolvedPaths)
 	if err != nil {
 		return errors.Join(err, tx.txn.Rollback(context.WithoutCancel(ctx)))
 	}

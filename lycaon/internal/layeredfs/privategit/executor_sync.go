@@ -73,6 +73,9 @@ func isRemoteApproved(approved map[string]bool, remote, remoteURL string) bool {
 }
 
 func syncCoreOverlayToWorktree(view *managedView) error {
+	if err := syncViewGitOverlay(view); err != nil {
+		return err
+	}
 	if view == nil || view.core == nil || (!view.materialized && view.kernelMounted) {
 		return nil
 	}
@@ -81,7 +84,7 @@ func syncCoreOverlayToWorktree(view *managedView) error {
 		return err
 	}
 	for _, ce := range changes {
-		if ce.Path.RootID != view.rootID {
+		if ce.Path.RootID != view.rootID || layeredfs.IsGitMetadataPath(ce.Path.Rel) {
 			continue
 		}
 		dstPath := filepath.Join(view.worktreeDir, filepath.FromSlash(ce.Path.Rel))

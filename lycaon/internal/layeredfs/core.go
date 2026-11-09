@@ -48,6 +48,7 @@ type statsCounters struct {
 	physicalCopyUps   atomic.Int64
 	capturedBaseBytes atomic.Int64
 	journalEntries    atomic.Int64
+	flushes           atomic.Int64
 }
 
 type idAllocator struct {
@@ -60,19 +61,20 @@ type idAllocator struct {
 }
 
 type viewState struct {
-	released     bool
-	nsGen        uint64
-	seq          idAllocator
-	nodesByID    map[NodeID]*privateNode
-	originIndex  map[NodeID]NodeID
-	pathIndex    map[QualifiedPath]NodeID
-	transient    map[QualifiedPath]struct{}
-	lowerDirMod  map[QualifiedPath]time.Time
-	deletedPaths map[QualifiedPath]deletedState
-	basesByPath  map[QualifiedPath]BaseCapture
-	handles      map[HandleID]*openHandle
-	dirCookies   map[uint64]dirCookieState
-	journal      []JournalOperation
+	released          bool
+	nsGen             uint64
+	seq               idAllocator
+	nodesByID         map[NodeID]*privateNode
+	originIndex       map[NodeID]NodeID
+	pathIndex         map[QualifiedPath]NodeID
+	transient         map[QualifiedPath]struct{}
+	lowerDirMod       map[QualifiedPath]time.Time
+	deletedPaths      map[QualifiedPath]deletedState
+	basesByPath       map[QualifiedPath]BaseCapture
+	handles           map[HandleID]*openHandle
+	dirCookies        map[uint64]dirCookieState
+	dirtyBackingFiles map[string]struct{}
+	journal           []JournalOperation
 }
 
 type nodeFlags struct {
@@ -160,15 +162,16 @@ func New(cfg Config) (*Core, error) {
 		roots:    roots,
 		counters: &statsCounters{},
 		state: &viewState{
-			nodesByID:    make(map[NodeID]*privateNode),
-			originIndex:  make(map[NodeID]NodeID),
-			pathIndex:    make(map[QualifiedPath]NodeID),
-			transient:    make(map[QualifiedPath]struct{}),
-			lowerDirMod:  make(map[QualifiedPath]time.Time),
-			deletedPaths: make(map[QualifiedPath]deletedState),
-			basesByPath:  make(map[QualifiedPath]BaseCapture),
-			handles:      make(map[HandleID]*openHandle),
-			dirCookies:   make(map[uint64]dirCookieState),
+			nodesByID:         make(map[NodeID]*privateNode),
+			originIndex:       make(map[NodeID]NodeID),
+			pathIndex:         make(map[QualifiedPath]NodeID),
+			transient:         make(map[QualifiedPath]struct{}),
+			lowerDirMod:       make(map[QualifiedPath]time.Time),
+			deletedPaths:      make(map[QualifiedPath]deletedState),
+			basesByPath:       make(map[QualifiedPath]BaseCapture),
+			handles:           make(map[HandleID]*openHandle),
+			dirCookies:        make(map[uint64]dirCookieState),
+			dirtyBackingFiles: make(map[string]struct{}),
 		},
 		barrier: newBarrierCoordinator(cfg.ViewID),
 	}, nil

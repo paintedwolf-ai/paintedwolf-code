@@ -197,6 +197,7 @@ func (c *Core) Stats() Stats {
 		LogicalChanges:    int64(logical),
 		CapturedBaseBytes: c.counters.capturedBaseBytes.Load(),
 		JournalEntries:    c.counters.journalEntries.Load(),
+		Flushes:           c.counters.flushes.Load(),
 	}
 }
 

@@ -62,6 +62,9 @@ func captureCheckpointGitState(
 	if err := ensureViewRepoInitialized(ctx, m, view, "."); err != nil {
 		return nil, err
 	}
+	if err := syncViewGitOverlay(view); err != nil {
+		return nil, err
+	}
 
 	view.mu.Lock()
 	repo := view.repos["."]
@@ -289,6 +292,12 @@ func collectStashEntries(ctx context.Context, _ string, gitDir string) ([]StashE
 func (m *Manager) ExportCheckpointObjects(ctx context.Context, viewID string, state *CheckpointGitState, dst string) error {
 	view, err := getManagedView(m, viewID)
 	if err != nil {
+		return err
+	}
+	if err := ensureViewRepoInitialized(ctx, m, view, "."); err != nil {
+		return err
+	}
+	if err := syncViewGitOverlay(view); err != nil {
 		return err
 	}
 	view.mu.Lock()

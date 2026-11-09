@@ -147,6 +147,9 @@ func (c *Core) SetAttrNode(nodeID NodeID, gen Generation, req SetAttrRequest) (E
 		now := time.Now()
 		node.size, node.mtime, node.ctime = *req.Size, now, now
 		node.flags.contentChanged = true
+		if node.flags.backingPath != "" {
+			c.state.dirtyBackingFiles[node.flags.backingPath] = struct{}{}
+		}
 		recordJournalLocked(c, JournalOpTruncate, qpath, nil, node, *req.Size)
 	}
 	if err := applyAttrChangesLocked(c, node, qpath, req); err != nil {
@@ -251,6 +254,9 @@ func recordOriginLocked(c *Core, node *privateNode, origin NodeID) {
 // reclaimNodeLocked drops an unlinked node once no handle can reach it, so removing files does not
 // grow view state. The journal keeps what recovery needs.
 func reclaimNodeLocked(c *Core, node *privateNode) {
+	if node.flags.backingPath != "" {
+		delete(c.state.dirtyBackingFiles, node.flags.backingPath)
+	}
 	delete(c.state.nodesByID, node.id)
 	if node.origin != 0 && c.state.originIndex[node.origin] == node.id {
 		delete(c.state.originIndex, node.origin)

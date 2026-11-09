@@ -2,6 +2,7 @@ package recovery
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -76,46 +77,39 @@ func applyPrivateGitSnapshotToView(
 	ctx context.Context,
 	c *Coordinator,
 	view *adapter.PreparedView,
-	workerID string,
+	_ string,
 	pg checkpoint.PrivateGitSnapshot,
 ) error {
 	if c.cfg.GitManager == nil || view == nil {
 		return nil
 	}
-	var primaryTrunk string
-	secondaries := map[string]string{}
+	secondaries := map[string]bool{}
 	for _, r := range view.Roots {
-		if r.RootID == view.PrimaryRootID || primaryTrunk == "" {
-			primaryTrunk = r.SourcePath
-		}
 		if r.RootID != view.PrimaryRootID {
-			secondaries[r.RootID] = r.SourcePath
+			secondaries[r.RootID] = true
 		}
 	}
-	if err := restoreRootGitRefs(ctx, c, view.ViewID, primaryTrunk, workerID, pg.HeadRef, pg.Refs); err != nil {
+	if err := restoreRootGitRefs(ctx, c, view.ViewID, pg.HeadRef, pg.Refs); err != nil {
 		return err
 	}
 	for rootID, root := range pg.Roots {
-		trunk, known := secondaries[rootID]
-		if !known {
+		if !secondaries[rootID] {
 			continue
 		}
 		viewID := privategit.SecondaryViewID(view.ViewID, rootID)
-		if err := restoreRootGitRefs(ctx, c, viewID, trunk, viewID, root.HeadRef, root.Refs); err != nil {
+		if err := restoreRootGitRefs(ctx, c, viewID, root.HeadRef, root.Refs); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func restoreRootGitRefs(ctx context.Context, c *Coordinator, viewID, trunk, workerID, headRef string, refs map[string]string) error {
+func restoreRootGitRefs(ctx context.Context, c *Coordinator, viewID, headRef string, refs map[string]string) error {
 	if len(refs) == 0 && headRef == "" {
 		return nil
 	}
-	if trunk != "" && workerID != "" {
-		if _, finish, managed, err := privategit.PrepareViewGitOperation(ctx, trunk, workerID); err == nil && managed && finish != nil {
-			_ = finish()
-		}
+	if _, err := c.cfg.GitManager.InitRepo(ctx, viewID, "."); err != nil {
+		return fmt.Errorf("recovery: prepare private git on %s: %w", viewID, err)
 	}
 
 	gitExec := privategit.NewGitExecutor(c.cfg.GitManager, viewID, privategit.RemotePolicy{})

@@ -23,6 +23,10 @@ type ManagerConfig struct {
 	FailObjectRetentionHook func(viewID, repoRel string) error
 }
 
+type gitOverlaySyncer interface {
+	SyncGitOverlayTo(rootID, repoRel, privGitDir string) error
+}
+
 type managedView struct {
 	viewID      string
 	workerID    string
@@ -36,6 +40,7 @@ type managedView struct {
 	materialized      bool
 	kernelMounted     bool
 	core              *layeredfs.Core
+	syncer            gitOverlaySyncer
 	authorizedGitDirs []string
 
 	mu           sync.Mutex

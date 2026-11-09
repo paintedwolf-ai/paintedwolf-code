@@ -279,3 +279,131 @@ func TestTwoWorkersSharingTrunkIsolatedViewResolution(t *testing.T) {
 		t.Fatalf("expected ErrIdentityMismatch for a manager view paired with another worker, got %v", err)
 	}
 }
+
+func TestCoreGitOverlaySyncPrimaryAndSecondaryRootsToCheckpointAndExport(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	trunkPrimary := filepath.Join(tmp, "trunk-primary")
+	trunkSecond := filepath.Join(tmp, "trunk-second")
+	for _, dir := range []string{trunkPrimary, trunkSecond} {
+		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(dir, 0o755))
+		gittest.Init(t, dir)
+		gittest.Run(t, dir, "checkout", "-b", "main")
+		testutil.FailErr(t, "seed "+dir, os.WriteFile(filepath.Join(dir, "README.md"), []byte("seed\n"), 0o644))
+		gittest.CommitAll(t, dir, "seed commit")
+	}
+
+	// Build a second commit in scratch clones so we can inject its loose objects + ref updates
+	// through Core's upper layer (.git/objects/... and .git/refs/heads/...) as a mounted shell git commit does.
+	scratchPrimary := filepath.Join(tmp, "scratch-primary")
+	scratchSecond := filepath.Join(tmp, "scratch-second")
+	gittest.Run(t, tmp, "clone", trunkPrimary, scratchPrimary)
+	gittest.Run(t, tmp, "clone", trunkSecond, scratchSecond)
+	testutil.FailErr(t, "write scratchPrimary", os.WriteFile(filepath.Join(scratchPrimary, "shell.txt"), []byte("primary-shell\n"), 0o644))
+	gittest.CommitAll(t, scratchPrimary, "primary shell commit")
+	primaryShellOID := strings.TrimSpace(gittest.Run(t, scratchPrimary, "rev-parse", "HEAD"))
+
+	testutil.FailErr(t, "write scratchSecond", os.WriteFile(filepath.Join(scratchSecond, "shell2.txt"), []byte("second-shell\n"), 0o644))
+	gittest.CommitAll(t, scratchSecond, "second shell commit")
+	secondShellOID := strings.TrimSpace(gittest.Run(t, scratchSecond, "rev-parse", "HEAD"))
+
+	mgr := newTestManager(t, tmp)
+	const viewID = "view-multi-shell"
+	core, err := layeredfs.New(layeredfs.Config{
+		ViewID:         viewID,
+		BackingDir:     filepath.Join(tmp, "core-backing"),
+		GitInterceptor: mgr,
+		Roots: []layeredfs.RootSpec{
+			{ID: "primary", Label: "primary", TrunkPath: trunkPrimary, IsPrimary: true},
+			{ID: "second", Label: "second", TrunkPath: trunkSecond, IsPrimary: false},
+		},
+	})
+	testutil.FailErr(t, "layeredfs.New", err)
+	defer func() {
+		_ = mgr.ReleaseView(viewID)
+		_ = core.ReleaseView()
+	}()
+
+	wtPrimary := filepath.Join(tmp, "wt-primary")
+	wtSecond := filepath.Join(tmp, "wt-second")
+	populateCopiedWorktreeTestDouble(t, trunkPrimary, wtPrimary)
+	populateCopiedWorktreeTestDouble(t, trunkSecond, wtSecond)
+
+	testutil.FailErr(t, "MountedClaimWithBinding primary", mgr.MountedClaimWithBinding(MountedViewBinding{
+		ViewID: viewID, WorkerID: "worker-multi", RootID: "primary",
+		TrunkDir: trunkPrimary, MountPath: wtPrimary, AdapterID: "nfsdarwin",
+		Core: core, MountID: "mnt-primary", Active: true,
+	}))
+	testutil.FailErr(t, "BindSecondaryRoot second", mgr.BindSecondaryRoot(MountedViewBinding{
+		ViewID: viewID, WorkerID: "worker-multi", RootID: "second",
+		TrunkDir: trunkSecond, MountPath: wtSecond, AdapterID: "nfsdarwin",
+		Core: core, MountID: "mnt-second", Active: true,
+	}))
+
+	// Force kernelMounted=true on both views so privateGitDir is isolated under BackingDir/views/.../private-git
+	// while shell .git writes land in Core's private upper layer.
+	for _, vid := range []string{viewID, SecondaryViewID(viewID, "second")} {
+		v, gErr := getManagedView(mgr, vid)
+		testutil.FailErr(t, "getManagedView "+vid, gErr)
+		v.kernelMounted = true
+		_, iErr := mgr.InitRepo(t.Context(), vid, ".")
+		testutil.FailErr(t, "InitRepo "+vid, iErr)
+	}
+
+	writeLooseObjectsToCore := func(rootID, scratchDir string) {
+		objRoot := filepath.Join(scratchDir, ".git", "objects")
+		err := filepath.WalkDir(objRoot, func(p string, d os.DirEntry, wErr error) error {
+			if wErr != nil || d.IsDir() {
+				return wErr
+			}
+			rel, rErr := filepath.Rel(scratchDir, p)
+			if rErr != nil {
+				return rErr
+			}
+			slashRel := filepath.ToSlash(rel)
+			if strings.HasPrefix(slashRel, ".git/objects/pack/") || strings.HasPrefix(slashRel, ".git/objects/info/") {
+				return nil
+			}
+			raw, readErr := os.ReadFile(p)
+			if readErr != nil {
+				return readErr
+			}
+			_, writeErr := core.WriteFile(layeredfs.QualifiedPath{RootID: rootID, Rel: slashRel}, raw, 0o444)
+			return writeErr
+		})
+		testutil.FailErr(t, "writeLooseObjectsToCore "+rootID, err)
+	}
+
+	writeLooseObjectsToCore("primary", scratchPrimary)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: ".git/refs/heads/shell-primary"}, []byte(primaryShellOID+"\n"), 0o644)
+	testutil.FailErr(t, "write primary ref via Core", err)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: ".git/HEAD"}, []byte("ref: refs/heads/shell-primary\n"), 0o644)
+	testutil.FailErr(t, "write primary HEAD via Core", err)
+
+	writeLooseObjectsToCore("second", scratchSecond)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "second", Rel: ".git/refs/heads/shell-second"}, []byte(secondShellOID+"\n"), 0o644)
+	testutil.FailErr(t, "write second ref via Core", err)
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "second", Rel: ".git/HEAD"}, []byte("ref: refs/heads/shell-second\n"), 0o644)
+	testutil.FailErr(t, "write second HEAD via Core", err)
+
+	cpState, err := mgr.CaptureCheckpointGitState(t.Context(), viewID, "cp-shell-multi")
+	testutil.FailErr(t, "CaptureCheckpointGitState", err)
+	if cpState.HeadRef != "refs/heads/shell-primary" || cpState.HeadOID != primaryShellOID {
+		t.Fatalf("primary HeadRef=%q HeadOID=%q, want refs/heads/shell-primary @ %s", cpState.HeadRef, cpState.HeadOID, primaryShellOID)
+	}
+	if cpState.Refs["refs/heads/shell-primary"] != primaryShellOID {
+		t.Fatalf("primary refs missing refs/heads/shell-primary: %+v", cpState.Refs)
+	}
+	secState, ok := cpState.Roots["second"]
+	if !ok || secState == nil {
+		t.Fatalf("expected secondary root state in CheckpointGitState.Roots, got %+v", cpState.Roots)
+	}
+	if secState.HeadRef != "refs/heads/shell-second" || secState.HeadOID != secondShellOID {
+		t.Fatalf("second HeadRef=%q HeadOID=%q, want refs/heads/shell-second @ %s", secState.HeadRef, secState.HeadOID, secondShellOID)
+	}
+
+	exportPrimary := filepath.Join(tmp, "export-primary")
+	testutil.FailErr(t, "ExportCheckpointObjects primary", mgr.ExportCheckpointObjects(t.Context(), viewID, cpState, exportPrimary))
+	exportSecond := filepath.Join(tmp, "export-second")
+	testutil.FailErr(t, "ExportCheckpointObjects second", mgr.ExportCheckpointObjects(t.Context(), SecondaryViewID(viewID, "second"), secState, exportSecond))
+}

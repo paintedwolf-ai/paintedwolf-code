@@ -120,6 +120,9 @@ func writeHandleAdmitted(c *Core, hid HandleID, data []byte, offset int64) (int,
 		node.mtime = now
 		node.ctime = now
 		node.flags.contentChanged = true
+		if node.flags.backingPath != "" {
+			c.state.dirtyBackingFiles[node.flags.backingPath] = struct{}{}
+		}
 		recordJournalLocked(c, JournalOpWrite, h.qpath, nil, node, int64(n))
 		c.mu.Unlock()
 	}
@@ -175,7 +178,8 @@ func statHandleAdmitted(c *Core, hid HandleID) (EntryAttr, error) {
 	return EntryAttr{}, ErrStaleHandle
 }
 
-// SyncHandle flushes dirty data for hid to stable storage.
+// SyncHandle answers a client's fsync or COMMIT. Bytes are already in the backing file, where they
+// survive an engine exit. Stable storage is reached at the checkpoint barrier, not per request.
 func (c *Core) SyncHandle(hid HandleID) error {
 	if err := c.barrier.enterOp(); err != nil {
 		return err
@@ -191,21 +195,13 @@ func syncHandleAdmitted(c *Core, hid HandleID) error {
 		c.mu.Unlock()
 		return err
 	}
-	h.refs++
-	f := h.file
-	if f == nil && node != nil {
-		// fsync on any descriptor covers the file, including one opened read-only.
-		if ro, ok := h.roReader.(*osFileReadHandle); ok {
-			f = ro.file
-		}
-	}
+	hasFile := h.file != nil || (node != nil && h.roReader != nil)
 	c.mu.Unlock()
-	defer func() { _ = releaseHandleRef(c, h) }()
 
-	if f == nil {
+	if !hasFile {
 		return nil
 	}
-	return errors.Join(runJournalSyncHook(c, "handle_sync"), syncFD(int(f.Fd())))
+	return runJournalSyncHook(c, "handle_sync")
 }
 
 // CloseHandle closes and retires an open handle.

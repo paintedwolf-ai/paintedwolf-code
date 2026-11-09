@@ -210,6 +210,9 @@ func prepareManagedViewOperation(
 	}, true); err != nil {
 		return "", noop, true, err
 	}
+	if err := syncViewGitOverlay(view); err != nil {
+		return "", noop, true, err
+	}
 	if !view.materialized && view.kernelMounted {
 		if privGitDir, gErr := readyPrivateGitDir(mgr, view.viewID, "."); gErr == nil && privGitDir != "" {
 			_, _, _ = gitexec.Run(ctx, view.worktreeDir, []string{"--git-dir=" + privGitDir, "--work-tree=" + view.worktreeDir, "update-index", "-q", "--refresh"}, gitexec.Opts{
@@ -222,9 +225,10 @@ func prepareManagedViewOperation(
 	}
 	before := captureWorktreeMutationBaseline(view, view.worktreeDir)
 	finish := func() error {
+		overlayErr := syncViewGitOverlay(view)
 		syncErr := syncWorktreeMutationsToCore(view, ".", before)
 		retainErr := retainNewPrivateObjects(ctx, mgr, view, ".")
-		return errors.Join(syncErr, retainErr)
+		return errors.Join(overlayErr, syncErr, retainErr)
 	}
 	return view.worktreeDir, finish, true, nil
 }

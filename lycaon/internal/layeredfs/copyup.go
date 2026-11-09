@@ -105,6 +105,9 @@ func ensureBaseCaptured(c *Core, qpath QualifiedPath) (BaseCapture, error) {
 		return cloneBaseCapture(existing), nil
 	}
 	c.state.basesByPath[qpath] = captured
+	if captured.BackingFile != "" {
+		c.state.dirtyBackingFiles[captured.BackingFile] = struct{}{}
+	}
 	if captured.Kind == EntryRegular && captured.Size > 0 {
 		c.counters.capturedBaseBytes.Add(captured.Size)
 	}
@@ -226,10 +229,8 @@ func writeBaseStream(c *Core, r io.Reader) (string, string, string, int64, error
 	}
 	h := sha256.New()
 	n, copyErr := io.Copy(io.MultiWriter(f, h), r)
-	syncErr := syncFD(int(f.Fd()))
 	closeErr := f.Close()
-	dirSyncErr := syncFD(baseDirFD)
-	if err := errors.Join(copyErr, syncErr, closeErr, dirSyncErr); err != nil {
+	if err := errors.Join(copyErr, closeErr); err != nil {
 		_ = unlinkBackingFile(baseDirFD, baseName)
 		return "", "", "", 0, err
 	}

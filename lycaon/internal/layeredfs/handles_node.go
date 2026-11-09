@@ -68,6 +68,7 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		}
 		c.state.nodesByID[nid] = node
 		c.state.pathIndex[qpath] = nid
+		c.state.dirtyBackingFiles[workPath] = struct{}{}
 		recordOriginLocked(c, node, originNodeID(qpath, base))
 		c.counters.physicalCopyUps.Add(1)
 		return node, nil
@@ -87,7 +88,7 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		return nil, err
 	}
 	_ = wf.Close()
-	_ = syncFD(workDirFD)
+	c.state.dirtyBackingFiles[workPath] = struct{}{}
 
 	now := time.Now()
 	nid, gen := c.state.allocNodeID()

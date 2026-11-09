@@ -127,6 +127,9 @@ func truncatePathAdmitted(c *Core, qpath QualifiedPath, size int64) (EntryAttr, 
 	node.mtime = now
 	node.ctime = now
 	node.flags.contentChanged = true
+	if node.flags.backingPath != "" {
+		c.state.dirtyBackingFiles[node.flags.backingPath] = struct{}{}
+	}
 	recordJournalLocked(c, JournalOpTruncate, res.qpath, nil, node, size)
 	return nodeToAttrLocked(node), nil
 }

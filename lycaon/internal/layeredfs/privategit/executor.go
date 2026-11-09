@@ -129,6 +129,9 @@ func executeViewGitCommand(
 		return "", err
 	}
 
+	if err := syncViewGitOverlay(view); err != nil {
+		return "", err
+	}
 	if err := syncCoreOverlayToWorktree(view); err != nil {
 		return "", err
 	}
