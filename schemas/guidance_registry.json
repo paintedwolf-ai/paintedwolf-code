@@ -1386,7 +1386,7 @@
       "summary": "{{ tool }} cannot display {{ paintedwolf.path }} because its dimensions ({{ paintedwolf.width }}x{{ paintedwolf.height }}) exceed {{ paintedwolf.max_dimension }}px."
     },
     "IMAGE_FORMAT_UNSUPPORTED": {
-      "branch_instruction": "Branch on Code IMAGE_FORMAT_UNSUPPORTED; read text files with an offered reader or command, or convert the asset to a supported image format",
+      "branch_instruction": "Branch on Code IMAGE_FORMAT_UNSUPPORTED; read text files with an offered reader, or convert the asset to a supported image format",
       "category": "recoverable",
       "emit": "guard:view_image",
       "summary": "{{ tool }} does not support the image format of {{ paintedwolf.path }}."

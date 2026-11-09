@@ -21,7 +21,7 @@ copy:
   cause: 'The file extension {{ paintedwolf.extension }} is not among supported visual formats ({{ paintedwolf.supported_formats }}).'
   why: view_image inspects and perceives visual image assets (.svg, .png, .jpg, .jpeg, .webp, .gif).
   fix: '{% if paintedwolf.can_command %}For text or code files, read them with `cat`, `head`, or `sed -n` inside command instead.{% else %}For text or code files, use an offered reader instead.{% endif %} For image files, ensure the file has a supported image extension.'
-  instead: Branch on Code IMAGE_FORMAT_UNSUPPORTED; read text files with an offered reader or command, or convert the asset to a supported image format
+  instead: Branch on Code IMAGE_FORMAT_UNSUPPORTED; read text files with an offered reader, or convert the asset to a supported image format
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:view_image
 x-paintedwolf-message: view_image format unsupported
