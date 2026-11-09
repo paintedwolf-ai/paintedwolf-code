@@ -197,9 +197,10 @@ func FindByRootPath(list []Project, resolved string) *Project {
 
 // MemoryRegistry is an in-memory project registry for tests.
 type MemoryRegistry struct {
-	mu         sync.RWMutex
-	projects   map[string]*Project
-	promotions map[string]*Promotion
+	mu                   sync.RWMutex
+	projects             map[string]*Project
+	promotions           map[string]*Promotion
+	rootsChangedObserver RootsChangedObserver
 }
 
 func NewMemoryRegistry() *MemoryRegistry {

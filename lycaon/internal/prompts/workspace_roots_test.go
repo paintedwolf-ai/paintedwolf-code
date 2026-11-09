@@ -32,6 +32,8 @@ func TestRootsChangedNoticeNamesEachChange(t *testing.T) {
 	moved.Path = "/abs/new-docs"
 	renamed := web
 	renamed.Label = "site"
+	renamedMoved := renamed
+	renamedMoved.Path = "/abs/new-web"
 	cases := []struct {
 		name          string
 		before, after []projectroot.RootRef
@@ -39,9 +41,9 @@ func TestRootsChangedNoticeNamesEachChange(t *testing.T) {
 	}{
 		{"added", []projectroot.RootRef{docs}, []projectroot.RootRef{docs, api}, []string{"Folders changed: added @api.", "  • @api"}},
 		{"removed", []projectroot.RootRef{docs, web}, []projectroot.RootRef{docs}, []string{"Folders changed: removed @web.", "labels no longer resolve"}},
-		{"moved", []projectroot.RootRef{docs}, []projectroot.RootRef{moved}, []string{"Folders changed: moved @docs.", "start in @docs (session folder)"}},
 		{"renamed", []projectroot.RootRef{docs, web}, []projectroot.RootRef{docs, renamed}, []string{"Folders changed: renamed @web → @site."}},
-		{"several", []projectroot.RootRef{docs, web}, []projectroot.RootRef{moved, api}, []string{"added @api; moved @docs; removed @web."}},
+		{"moved and renamed", []projectroot.RootRef{docs, web}, []projectroot.RootRef{docs, renamedMoved}, []string{"Folders changed: renamed @web → @site."}},
+		{"several", []projectroot.RootRef{docs, web}, []projectroot.RootRef{moved, api}, []string{"added @api; removed @web."}},
 		{"last removed", []projectroot.RootRef{docs}, nil, []string{"removed @docs.", "No folder is attached now."}},
 	}
 	for _, c := range cases {
@@ -53,6 +55,25 @@ func TestRootsChangedNoticeNamesEachChange(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A host path move under an unchanged id and label is not model-visible: it
+// is still recorded in history, but the kick data carries no row for it.
+func TestRootsChangedMoveIsNotModelVisible(t *testing.T) {
+	docs := projectroot.RootRef{ID: "d", Label: "docs", Path: "/abs/docs", IsPrimary: true}
+	moved := docs
+	moved.Path = "/abs/new-docs"
+	change := projectroot.DiffRoots([]projectroot.RootRef{docs}, []projectroot.RootRef{moved})
+	if change.Empty() {
+		t.Fatal("path-only move must still be recorded in history")
+	}
+	if change.ModelVisible() {
+		t.Fatal("path-only move must not be model-visible")
+	}
+	data := prompts.RootsChangedKickData(change, []projectroot.RootRef{moved}, "")
+	if rows := data["changes"].([]map[string]any); len(rows) != 0 {
+		t.Fatalf("move rows = %v", rows)
 	}
 }
 
