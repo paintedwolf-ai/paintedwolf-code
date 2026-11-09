@@ -5,10 +5,10 @@ schema:
   properties:
     path_a:
       type: string
-      description: "Path to the left/before file: relative to the session folder, `@label/path` for any attached folder, `@scratch/path` or `@output/path`, or absolute"
+      description: "Left (before) side of the comparison: bare names sit in the session folder, a leading `@label/` selects an attached folder, `@scratch/` and `@output/` reach the session folders, and absolute locations are accepted"
     path_b:
       type: string
-      description: "Path to the right/after file: relative to the session folder, `@label/path` for any attached folder, `@scratch/path` or `@output/path`, or absolute"
+      description: "Right (after) side of the comparison: bare names sit in the session folder, a leading `@label/` selects an attached folder, `@scratch/` and `@output/` reach the session folders, and absolute locations are accepted"
     context_lines:
       type: integer
       description: Unified hunk context lines (default 3, max 10)
