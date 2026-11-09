@@ -141,7 +141,12 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
     const updateStatus = () => {
       const position = view.state.selection.main.head;
       if (prettyState && view === inlineEditor()) {
-        setCursor(displayOffsetToSourceLineCol(prettyState.projection.sourceMap, position));
+        const srcPos = displayOffsetToSourceLineCol(
+          prettyState.projection.sourceMap,
+          prettyState.rawText,
+          position,
+        );
+        setCursor({ line: srcPos.line, col: srcPos.col });
         return;
       }
       const content = reader()?.reader.document.at(position);
@@ -209,12 +214,13 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
     if (!view) return;
     if (prettyState && view === inlineEditor()) {
       const map = prettyState.projection.sourceMap;
+      const sourceLines = Math.max(1, map.displayLines.at(-1)?.sourceLine ?? 1);
       openGotoLine({
-        lineCount: Math.max(1, map.sourceLineCount),
-        currentLine: displayOffsetToSourceLineCol(map, view.state.selection.main.head).line,
+        lineCount: sourceLines,
+        currentLine: displayOffsetToSourceLineCol(map, prettyState.rawText, view.state.selection.main.head).line,
         focus: () => view.focus(),
         goTo: (line, column) => {
-          const disp = sourceLineColToDisplay(map, line, column ?? 1);
+          const disp = sourceLineColToDisplay(map, prettyState.rawText, line, column ?? 1).offset;
           view.dispatch({ selection: { anchor: disp }, scrollIntoView: true });
           view.focus();
         },

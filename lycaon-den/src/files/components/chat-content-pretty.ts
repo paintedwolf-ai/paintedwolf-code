@@ -86,17 +86,13 @@ export function buildChatPrettyProjectionState(
   const projectedSpans = mapRuneSpansToDisplay(
     projection.sourceMap,
     runeTable,
-    nonEmptySpans.map((span) => ({
-      start: span.start,
-      length: span.length,
-      meta: span,
-    })),
+    nonEmptySpans,
   );
   if (projectedSpans.length < nonEmptySpans.length) {
     return null;
   }
   const marks = projectedSpans.flatMap((projected) => {
-    const span = projected.meta;
+    const span = projected.span;
     if (!span || projected.dispTo <= projected.dispFrom) return [];
     return [
       Decoration.mark({
