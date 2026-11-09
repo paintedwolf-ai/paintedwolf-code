@@ -257,14 +257,22 @@ func (s *statCapture) baseFor(ctx context.Context, core *layeredfs.Core, qp laye
 			Size: pe.Size, ModTime: pe.ModTime, SHA256: pe.SHA256, LinkTarget: pe.LinkTarget,
 			Xattrs: cloneXattrMap(pe.Xattrs), CapturedAt: time.Now(),
 		}
-		if pe.Kind == layeredfs.EntryRegular && pe.BackingAbs != "" {
+		if pe.Kind == layeredfs.EntryRegular {
+			if pe.BackingAbs == "" {
+				return layeredfs.BaseCapture{}, fmt.Errorf("parent layer missing backing file for %v", qp)
+			}
 			held, err := s.holdBaseBytes(ctx, pe.BackingAbs)
 			if err != nil {
 				return layeredfs.BaseCapture{}, err
 			}
+			if base.SHA256 == "" {
+				if base.SHA256, base.Size, err = s.meter.hashFile(ctx, held); err != nil {
+					return layeredfs.BaseCapture{}, err
+				}
+			}
 			base.BackingFile = held
 		}
-		if core != nil && (pe.Kind != layeredfs.EntryRegular || base.BackingFile != "") {
+		if core != nil {
 			if err := core.RegisterSeedBase(base); err != nil {
 				return layeredfs.BaseCapture{}, err
 			}
@@ -307,15 +315,12 @@ func (s *statCapture) readPristineBase(ctx context.Context, rec statRecord) (lay
 		ModTime: rec.modTime(), LinkTarget: rec.LinkTarget, Xattrs: xattrs, CapturedAt: time.Now(),
 	}
 	if rec.Kind == layeredfs.EntryRegular {
-		sha, size, err := s.meter.hashFile(ctx, full)
-		if err != nil {
+		if base.SHA256, base.Size, err = s.meter.hashFile(ctx, full); err != nil {
 			return layeredfs.BaseCapture{}, err
 		}
-		held, err := s.holdBaseBytes(ctx, full)
-		if err != nil {
+		if base.BackingFile, err = s.holdBaseBytes(ctx, full); err != nil {
 			return layeredfs.BaseCapture{}, err
 		}
-		base.SHA256, base.Size, base.BackingFile = sha, size, held
 	}
 	return base, nil
 }
@@ -452,11 +457,20 @@ func (s *statCapture) differsFromBase(ctx context.Context, v statVisit) (bool, e
 		if v.info.Mode().Perm() != pe.Mode.Perm() {
 			return true, nil
 		}
+		if pe.BackingAbs == "" {
+			return false, fmt.Errorf("parent layer missing backing file for %v", v.qp)
+		}
 		diskSHA, _, err := s.meter.hashFile(ctx, v.path)
 		if err != nil {
 			return false, err
 		}
-		return diskSHA != pe.SHA256, nil
+		baseSHA := pe.SHA256
+		if baseSHA == "" {
+			if baseSHA, _, err = s.meter.hashFile(ctx, pe.BackingAbs); err != nil {
+				return false, err
+			}
+		}
+		return diskSHA != baseSHA, nil
 	}
 	rec, inManifest := s.manifest[v.qp]
 	if !inManifest || !entryKindMatchesMode(rec.Kind, v.info.Mode()) {
