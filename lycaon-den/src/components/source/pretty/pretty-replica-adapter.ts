@@ -750,8 +750,7 @@ export class PrettyReplicaEditorAdapter {
         baseIncarnation: this.projectedIncarnation,
         baseEpoch: this.projectedEpoch,
         baseHistoryRevision: this.projectedRevision,
-        rawFrom: mapped.conflict.rawFrom,
-        rawTo: mapped.conflict.rawTo,
+        reason: mapped.conflict.reason,
         affectedRawRanges: mapped.affectedRawRanges.map((r) => ({
           srcFrom: r.srcFrom,
           srcTo: r.srcTo,

@@ -30,8 +30,7 @@ export interface PrettyPendingConflictRecord {
   readonly baseIncarnation: string;
   readonly baseEpoch: number;
   readonly baseHistoryRevision: number;
-  readonly rawFrom: number;
-  readonly rawTo: number;
+  readonly reason: "same-raw-offset-distinct-insert" | "overlapping-raw-ranges";
   readonly affectedRawRanges: readonly PrettyRawRange[];
   readonly intentions: PrettyPendingConflictIntention[];
 }
@@ -175,8 +174,8 @@ function parsePersistedRecoveryState(
         typeof c.baseIncarnation !== "string" ||
         typeof c.baseEpoch !== "number" ||
         typeof c.baseHistoryRevision !== "number" ||
-        typeof c.rawFrom !== "number" ||
-        typeof c.rawTo !== "number" ||
+        (c.reason !== "same-raw-offset-distinct-insert" &&
+          c.reason !== "overlapping-raw-ranges") ||
         !Array.isArray(c.affectedRawRanges) ||
         !c.affectedRawRanges.every(isValidRawRange) ||
         !Array.isArray(c.intentions) ||
@@ -190,8 +189,7 @@ function parsePersistedRecoveryState(
         baseIncarnation: c.baseIncarnation,
         baseEpoch: c.baseEpoch,
         baseHistoryRevision: c.baseHistoryRevision,
-        rawFrom: c.rawFrom,
-        rawTo: c.rawTo,
+        reason: c.reason,
         affectedRawRanges: c.affectedRawRanges.map((r) => ({ srcFrom: r.srcFrom, srcTo: r.srcTo })),
         intentions: c.intentions.map((i) => ({ ...i })),
       });

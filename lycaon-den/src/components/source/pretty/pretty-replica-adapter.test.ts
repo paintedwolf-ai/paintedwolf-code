@@ -545,7 +545,7 @@ describe("PrettyReplicaEditorAdapter real EditorView + DocumentReplica proof (FM
       jsonlMount.fixture.snapshot(),
       () => jsonlMount.client,
       () => undefined,
-      jsonlMount.outbox,
+      memoryDocumentOutbox(),
       undefined,
       "incarnation-other",
     );
@@ -659,24 +659,26 @@ describe("PrettyReplicaEditorAdapter real EditorView + DocumentReplica proof (FM
     // the `.cm-line` DOM node is still the exact same element!
     expect(view.contentDOM.querySelectorAll(".cm-line")[1]).toBe(composingLineBefore);
 
-    // Case 7b: Pre-IME keydown (`Process` / 229) followed by multi-frame composition also preserves `.cm-line` DOM node!
-    view.contentDOM.dispatchEvent(
+    //Case 7b: Pre-IME keydown (`Process` / 229) followed by multi-frame composition on a fresh EditorView also preserves `.cm-line` DOM node!
+    const mount7b = await mountPrettyEditor('{"a":"hello","b":2}', "case7b.json");
+    const line7bBefore = mount7b.view.contentDOM.querySelectorAll(".cm-line")[1]!;
+    mount7b.view.contentDOM.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Process", keyCode: 229, bubbles: true }),
     );
-    expect(adapter.isComposing).toBe(true);
-    expect(view.contentDOM.querySelectorAll(".cm-line")[1]).toBe(composingLineBefore);
+    expect(mount7b.adapter.isComposing).toBe(true);
+    expect(mount7b.view.contentDOM.querySelectorAll(".cm-line")[1]).toBe(line7bBefore);
 
-    view.dispatch({
-      changes: { from: 16, to: 16, insert: "!" },
-      selection: EditorSelection.single(17),
+    mount7b.view.dispatch({
+      changes: { from: 15, to: 15, insert: "猫" },
+      selection: EditorSelection.single(16),
       userEvent: "input.type.compose",
     });
-    view.contentDOM.dispatchEvent(
-      new CompositionEvent("compositionend", { data: "!", bubbles: true }),
+    mount7b.view.contentDOM.dispatchEvent(
+      new CompositionEvent("compositionend", { data: "猫", bubbles: true }),
     );
-    expect(replica.currentText).toBe('{"a":"hello猫!","b":2}');
-    expect(view.state.doc.toString()).toBe('{\n  "a": "hello猫!",\n  "b": 2\n}');
-    expect(view.contentDOM.querySelectorAll(".cm-line")[1]).toBe(composingLineBefore);
+    expect(mount7b.replica.currentText).toBe('{"a":"hello猫","b":2}');
+    expect(mount7b.view.state.doc.toString()).toBe('{\n  "a": "hello猫",\n  "b": 2\n}');
+    expect(mount7b.view.contentDOM.querySelectorAll(".cm-line")[1]).toBe(line7bBefore);
   });
 
   it("Case 8: malformed intermediate typing stays in raw-backed mode, recovers to Pretty when valid, and coalesces typing into one undo step", async () => {
