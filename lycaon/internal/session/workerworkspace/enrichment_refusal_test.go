@@ -119,7 +119,7 @@ func TestWriteWorkerEnrichmentBindsPersistedBranchRoots(t *testing.T) {
 	root := t.TempDir()
 	meta := enginepaths.MetaDirForBranchRoot(root)
 	testutil.FailErr(t, "create branch metadata directory", os.MkdirAll(meta, 0700))
-	testutil.FailErr(t, "persist complete branch layout", workspace.WriteJobMeta(meta, workspace.JobMeta{SnapshotComplete: true, Roots: []workspace.JobMetaRoot{{ID: "root", Path: root, IsPrimary: true}}}))
+	testutil.FailErr(t, "persist complete branch layout", workspace.WriteJobMeta(meta, workspace.JobMeta{SnapshotComplete: true, Roots: []workspace.JobMetaRoot{{ID: "root", Label: "root", Path: root, IsPrimary: true}}}))
 	branch := &boundBranch{}
 	service := New(nil, nil, func(path string) (tools.BranchWorkspace, error) {
 		if path != root {
