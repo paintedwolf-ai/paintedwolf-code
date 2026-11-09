@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -14,6 +15,15 @@ import (
 )
 
 // SnapshotCoreCounters captures a point-in-time deterministic counter snapshot (#1667).
+//
+// Retained-store assumptions: Metrics() flows are cumulative since store creation.
+// A snapshot is only meaningful against a specific store instance; deltas between
+// two snapshots (DiffCounters) are the assertion unit. Baseline: a preexisting
+// (nonempty) store starts from a nonzero baseline, so claim-time zero-ness is
+// asserted only for freshly created stores. Reset: the store exposes no reset;
+// tests must construct a new store per scenario. Concurrency: activity concurrent
+// with the snapshot window inflates both deltas; tests must hold the store
+// quiescent across the window or account for concurrent activity explicitly.
 func SnapshotCoreCounters(
 	core *layeredfs.Core,
 	retained *privategit.RetainedObjectStore,
@@ -23,13 +33,13 @@ func SnapshotCoreCounters(
 	if core != nil {
 		stats = core.Stats()
 	}
-	var retainedCount int64
+	var imports, reuses int64
 	if retained != nil {
-		// The store exposes cumulative import/reuse flows, not a stock count;
-		// zero flows at claim time is the deterministic signal that nothing
-		// was retained during preparation.
+		// Activity flows, not stock: the store exposes cumulative import/reuse
+		// counters only (see WorkResourceCounters for the semantics contract).
 		m := retained.Metrics()
-		retainedCount = m.ObjectsImported + m.ObjectsReused
+		imports = m.ObjectsImported
+		reuses = m.ObjectsReused
 	}
 	return WorkResourceCounters{
 		LowerDirReads:         stats.LowerDirReads,
@@ -39,7 +49,8 @@ func SnapshotCoreCounters(
 		RPCCount:              rpcCount,
 		HandleLookups:         handleLookups,
 		CacheEntries:          cacheEntries,
-		RetainedObjects:       retainedCount,
+		RetainedImports:       imports,
+		RetainedReuses:        reuses,
 		LowerGitConfigTouches: lowerGitConfigTouches,
 	}
 }
@@ -54,13 +65,18 @@ func DiffCounters(before, after WorkResourceCounters) WorkResourceCounters {
 		RPCCount:              after.RPCCount - before.RPCCount,
 		HandleLookups:         after.HandleLookups - before.HandleLookups,
 		CacheEntries:          after.CacheEntries - before.CacheEntries,
-		RetainedObjects:       after.RetainedObjects - before.RetainedObjects,
+		RetainedImports:       after.RetainedImports - before.RetainedImports,
+		RetainedReuses:        after.RetainedReuses - before.RetainedReuses,
 		LowerGitConfigTouches: after.LowerGitConfigTouches - before.LowerGitConfigTouches,
 	}
 }
 
 // AssertPreparationBounds verifies mounted claim invariants: zero lower directory reads,
-// zero physical copy-ups, zero changed nodes, zero retained objects, and zero lower Git config touches (#1667).
+// zero physical copy-ups, zero changed nodes, zero retained-store import/reuse activity,
+// and zero lower Git config touches (#1667).
+// The retained assertions apply to a FRESHLY CREATED store (see SnapshotCoreCounters
+// for baseline semantics): a preexisting store legitimately starts from a nonzero
+// baseline, so claim-time zero-ness is asserted only there.
 func AssertPreparationBounds(c WorkResourceCounters) error {
 	if c.LowerDirReads != 0 {
 		return fmt.Errorf("mounted preparation read %d lower directories; want 0", c.LowerDirReads)
@@ -71,8 +87,11 @@ func AssertPreparationBounds(c WorkResourceCounters) error {
 	if c.ChangedNodes != 0 {
 		return fmt.Errorf("mounted preparation recorded %d changed nodes; want 0", c.ChangedNodes)
 	}
-	if c.RetainedObjects != 0 {
-		return fmt.Errorf("mounted preparation imported %d retained git objects at claim time; want 0", c.RetainedObjects)
+	if c.RetainedImports != 0 {
+		return fmt.Errorf("mounted preparation imported %d retained git objects at claim time; want 0", c.RetainedImports)
+	}
+	if c.RetainedReuses != 0 {
+		return fmt.Errorf("mounted preparation reused %d retained git objects at claim time; want 0", c.RetainedReuses)
 	}
 	if c.LowerGitConfigTouches != 0 {
 		return fmt.Errorf("mounted preparation touched %d lower git configs; want 0", c.LowerGitConfigTouches)
@@ -98,6 +117,14 @@ func AssertScopedTurnBounds(c WorkResourceCounters, maxDirReads, maxCopyUps int6
 // virtualScaleLowerProvider synthesizes a virtual lower tree of arbitrary logical size
 // (e.g. 1,000 vs 2,000,000 entries) so preparation scaling tests can prove that mounted claim
 // performs 0 lower directory reads regardless of lower tree size (#1667).
+//
+// The fixture is faithful and bounded: the logical tree holds EXACTLY logicalEntryCount
+// entries under src/ (src/file-0 … src/file-<N-1>). Lstat accepts only in-range names and
+// returns os.ErrNotExist for out-of-range or non-numeric names; ReadDir("src") returns
+// exactly logicalEntryCount entries, so distinct cardinalities are observable. This
+// fixture qualifies the mounted claim's root-level operation count only — it is NOT a
+// real 2M-entry filesystem workload; actual filesystem workloads are identified
+// separately (#1667 contract).
 type virtualScaleLowerProvider struct {
 	logicalEntryCount int64
 	dirReads          atomic.Int64
@@ -106,6 +133,19 @@ type virtualScaleLowerProvider struct {
 
 func newVirtualScaleLowerProvider(logicalEntryCount int64) *virtualScaleLowerProvider {
 	return &virtualScaleLowerProvider{logicalEntryCount: logicalEntryCount}
+}
+
+// srcFileEntry parses "src/file-<i>" and returns the index, ok=false for other names.
+func srcFileEntry(rel string) (int64, bool) {
+	const prefix = "src/file-"
+	if !strings.HasPrefix(rel, prefix) {
+		return 0, false
+	}
+	idx, err := strconv.ParseInt(rel[len(prefix):], 10, 64)
+	if err != nil || idx < 0 {
+		return 0, false
+	}
+	return idx, true
 }
 
 func (v *virtualScaleLowerProvider) Lstat(rel string) (layeredfs.LowerEntry, error) {
@@ -120,13 +160,23 @@ func (v *virtualScaleLowerProvider) Lstat(rel string) (layeredfs.LowerEntry, err
 			Nlink:   2,
 		}, nil
 	}
-	if strings.HasPrefix(rel, "src/file-") || rel == "README.md" {
+	if rel == "README.md" {
 		return layeredfs.LowerEntry{
 			Kind:    layeredfs.EntryRegular,
 			Mode:    0o644,
 			Size:    16,
 			ModTime: now,
 			Ino:     42,
+			Nlink:   1,
+		}, nil
+	}
+	if idx, ok := srcFileEntry(rel); ok && idx < v.logicalEntryCount {
+		return layeredfs.LowerEntry{
+			Kind:    layeredfs.EntryRegular,
+			Mode:    0o644,
+			Size:    16,
+			ModTime: now,
+			Ino:     uint64(100 + idx),
 			Nlink:   1,
 		}, nil
 	}
@@ -143,10 +193,16 @@ func (v *virtualScaleLowerProvider) ReadDir(rel string) ([]layeredfs.LowerDirEnt
 		}, nil
 	}
 	if rel == "src" {
-		return []layeredfs.LowerDirEntry{
-			{Name: "file-0.go", Kind: layeredfs.EntryRegular, Mode: 0o644, Ino: 10},
-			{Name: "file-1.go", Kind: layeredfs.EntryRegular, Mode: 0o644, Ino: 11},
-		}, nil
+		entries := make([]layeredfs.LowerDirEntry, v.logicalEntryCount)
+		for i := int64(0); i < v.logicalEntryCount; i++ {
+			entries[i] = layeredfs.LowerDirEntry{
+				Name: fmt.Sprintf("file-%d", i),
+				Kind: layeredfs.EntryRegular,
+				Mode: 0o644,
+				Ino:  uint64(100 + i),
+			}
+		}
+		return entries, nil
 	}
 	return nil, os.ErrNotExist
 }

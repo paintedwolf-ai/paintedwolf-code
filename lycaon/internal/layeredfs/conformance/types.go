@@ -37,6 +37,13 @@ const (
 
 // WorkResourceCounters tracks deterministic operation and byte counts (#1667).
 // Automated tests assert bounds on these counters rather than elapsed wall-clock time.
+//
+// RetainedImports and RetainedReuses are cumulative retained-store ACTIVITY flows
+// (objects imported / objects reused) captured as deltas between two snapshots.
+// They are not a retained-stock count: pack and reuse paths can count differently
+// from unique Git objects, and a preexisting store starts from a nonzero baseline.
+// Retained-storage / unique-object acceptance is measured separately (RepoInitCost,
+// PerformanceAcceptanceReport.RetainedStorageGrowthB).
 type WorkResourceCounters struct {
 	LowerDirReads         int64 `json:"lower_dir_reads"`
 	CapturedBytes         int64 `json:"captured_bytes"`
@@ -45,7 +52,8 @@ type WorkResourceCounters struct {
 	RPCCount              int64 `json:"rpc_count"`
 	HandleLookups         int64 `json:"handle_lookups"`
 	CacheEntries          int64 `json:"cache_entries"`
-	RetainedObjects       int64 `json:"retained_objects"`
+	RetainedImports       int64 `json:"retained_imports"`
+	RetainedReuses        int64 `json:"retained_reuses"`
 	LowerGitConfigTouches int64 `json:"lower_git_config_touches"`
 }
 
