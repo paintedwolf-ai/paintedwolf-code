@@ -128,18 +128,32 @@ const retiringPackPrefix = ".retiring-"
 type gcTestHooksKey struct{}
 
 type gcTestHooks struct {
-	beforeStageRename    func(base, ext string) error
-	beforeUnlinkRetired  func(base, ext string) error
-	beforeRollbackUnlink func(path string) error
-	removeFile           func(path string) error
-	syncDir              func(dirPath string) error
+	beforeStageRename         func(base, ext string) error
+	beforeUnlinkRetired       func(base, ext string) error
+	beforeRollbackMarkerWrite func(dir, base string) error
+	beforeRollbackUnlink      func(path string) error
+	removeFile                func(path string) error
+	syncDir                   func(dirPath string) error
 }
 
 func withGCTestHooks(ctx context.Context, hooks gcTestHooks) context.Context {
 	return context.WithValue(ctx, gcTestHooksKey{}, hooks)
 }
 
+func gcBeforeRollbackMarkerWrite(ctx context.Context, dir, base string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if h, ok := ctx.Value(gcTestHooksKey{}).(gcTestHooks); ok && h.beforeRollbackMarkerWrite != nil {
+		return h.beforeRollbackMarkerWrite(dir, base)
+	}
+	return nil
+}
+
 func gcBeforeRollbackUnlink(ctx context.Context, path string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if h, ok := ctx.Value(gcTestHooksKey{}).(gcTestHooks); ok && h.beforeRollbackUnlink != nil {
 		return h.beforeRollbackUnlink(path)
 	}

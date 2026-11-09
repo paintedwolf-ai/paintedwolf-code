@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,73 +38,86 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 	rollback := func() error {
 		var rbErrs []error
 		packDstDir := filepath.Join(s.objectsDir, "pack")
-		rollbackPackBases := make(map[string]struct{})
+
+		// S0: Derive ordered unique slice R of newly added pack bases from addedPaths (in packDstDir)
+		// unioned with addedPackBases so both partial-pair failures (before recordPackLocked) and
+		// post-recordPackLocked failures are included without touching preexisting/leased packs.
+		seenBases := make(map[string]struct{}, len(addedPackBases))
+		for _, base := range addedPackBases {
+			if strings.HasPrefix(base, "pack-") {
+				seenBases[base] = struct{}{}
+			}
+		}
 		for _, p := range addedPaths {
 			if filepath.Dir(p) == packDstDir {
 				ext := filepath.Ext(filepath.Base(p))
 				base := strings.TrimSuffix(filepath.Base(p), ext)
 				if strings.HasPrefix(base, "pack-") {
-					rollbackPackBases[base] = struct{}{}
+					seenBases[base] = struct{}{}
 				}
 			}
 		}
-		for _, base := range addedPackBases {
-			removePackLocked(s, base)
+		R := make([]string, 0, len(seenBases))
+		for base := range seenBases {
+			R = append(R, base)
 		}
-		// Phase 1: Establish recovery intent durably BEFORE any destructive companion unlink.
-		if len(rollbackPackBases) > 0 {
+		sort.Strings(R)
+
+		// S1: Publish recovery intent + Barrier-1 BEFORE any destructive companion unlink or in-memory drop.
+		// If any marker write or Barrier-1 directory sync fails, stop immediately with zero unlinks.
+		if len(R) > 0 {
 			_ = os.Chmod(packDstDir, 0o755)
-			for base := range rollbackPackBases {
+			for _, base := range R {
+				if err := gcBeforeRollbackMarkerWrite(ctx, packDstDir, base); err != nil {
+					rbErrs = append(rbErrs, fmt.Errorf("rollback interrupted before marker write %s: %w", base, err))
+					return errors.Join(rbErrs...)
+				}
 				if err := writeDurablePackRetirementMarker(packDstDir, base); err != nil {
 					rbErrs = append(rbErrs, fmt.Errorf("stage rollback retirement marker %s: %w", base, err))
+					return errors.Join(rbErrs...)
 				}
 			}
 			if syncErr := syncStoreDirectoryCtx(ctx, packDstDir); syncErr != nil {
 				rbErrs = append(rbErrs, fmt.Errorf("sync rollback retirement intent %s: %w", packDstDir, syncErr))
+				return errors.Join(rbErrs...)
 			}
 		}
-		// Phase 2: Unlink added files and remove tombstones only when all companions are gone.
-		keepTombstone := make(map[string]bool)
-		interrupted := false
+
+		// S2: Drop in-memory stock entries for R only after durable retirement intent is synced.
+		for _, base := range R {
+			removePackLocked(s, base)
+		}
+
+		// S3: Unlink newly added loose object files (outside packDstDir).
 		for _, p := range addedPaths {
 			dir := filepath.Dir(p)
+			if dir == packDstDir {
+				continue
+			}
 			_ = os.Chmod(dir, 0o755)
 			if hookErr := gcBeforeRollbackUnlink(ctx, p); hookErr != nil {
 				rbErrs = append(rbErrs, fmt.Errorf("rollback interrupted before unlinking %s: %w", p, hookErr))
-				interrupted = true
-				break
+				return errors.Join(rbErrs...)
 			}
 			if rmErr := removeStoreFile(ctx, p); rmErr != nil && !os.IsNotExist(rmErr) {
 				rbErrs = append(rbErrs, fmt.Errorf("rollback remove %s: %w", p, rmErr))
-				if dir == packDstDir {
-					ext := filepath.Ext(filepath.Base(p))
-					base := strings.TrimSuffix(filepath.Base(p), ext)
-					keepTombstone[base] = true
-				}
-			} else if dir != packDstDir {
-				if rem, rErr := os.ReadDir(dir); rErr == nil && len(rem) == 0 {
-					_ = os.Remove(dir)
-				}
+			} else if rem, rErr := os.ReadDir(dir); rErr == nil && len(rem) == 0 {
+				_ = os.Remove(dir)
 			}
 		}
-		if !interrupted && len(rollbackPackBases) > 0 {
-			for base := range rollbackPackBases {
-				if keepTombstone[base] {
-					continue
-				}
-				tombstone := filepath.Join(packDstDir, retiringPackPrefix+base+".pack")
-				if rmErr := removeStoreFile(ctx, tombstone); rmErr != nil && !os.IsNotExist(rmErr) {
-					rbErrs = append(rbErrs, fmt.Errorf("remove rollback retirement marker %s: %w", tombstone, rmErr))
-				}
-			}
-			if syncErr := syncStoreDirectoryCtx(ctx, packDstDir); syncErr != nil {
-				rbErrs = append(rbErrs, fmt.Errorf("sync rollback pack dir %s: %w", packDstDir, syncErr))
+
+		// S4-S7: Delegate pack companion removal, Barrier-2, marker removal, and Barrier-3
+		// to finalizeInterruptedPackRetirements. If any step fails, stop before S8 rescan.
+		if len(R) > 0 {
+			if err := finalizeInterruptedPackRetirements(ctx, packDstDir); err != nil {
+				rbErrs = append(rbErrs, err)
+				return errors.Join(rbErrs...)
 			}
 		}
-		if !interrupted {
-			if stockErr := initStockFromDiskLocked(ctx, s); stockErr != nil {
-				rbErrs = append(rbErrs, fmt.Errorf("rollback rescan stock: %w", stockErr))
-			}
+
+		// S8: Rescan stock from disk only after S1-S7 succeeded cleanly.
+		if stockErr := initStockFromDiskLocked(ctx, s); stockErr != nil {
+			rbErrs = append(rbErrs, fmt.Errorf("rollback rescan stock: %w", stockErr))
 		}
 		return errors.Join(rbErrs...)
 	}

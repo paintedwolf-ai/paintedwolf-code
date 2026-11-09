@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -280,7 +281,13 @@ func finalizeInterruptedPackRetirements(ctx context.Context, packDir string) err
 			defer func() { _ = os.Chmod(packDir, origPerm) }()
 		}
 	}
+	sortedBases := make([]string, 0, len(retiringBases))
 	for base := range retiringBases {
+		sortedBases = append(sortedBases, base)
+	}
+	sort.Strings(sortedBases)
+
+	for _, base := range sortedBases {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -291,10 +298,10 @@ func finalizeInterruptedPackRetirements(ctx context.Context, packDir string) err
 			}
 		}
 	}
-	if err := syncStoreDirectory(packDir); err != nil {
+	if err := syncStoreDirectoryCtx(ctx, packDir); err != nil {
 		return fmt.Errorf("privategit: sync live companion retirement in %s: %w", packDir, err)
 	}
-	for base := range retiringBases {
+	for _, base := range sortedBases {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -305,7 +312,7 @@ func finalizeInterruptedPackRetirements(ctx context.Context, packDir string) err
 			}
 		}
 	}
-	if err := syncStoreDirectory(packDir); err != nil {
+	if err := syncStoreDirectoryCtx(ctx, packDir); err != nil {
 		return fmt.Errorf("privategit: sync tombstone retirement in %s: %w", packDir, err)
 	}
 	return nil
