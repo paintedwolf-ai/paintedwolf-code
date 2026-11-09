@@ -11,7 +11,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
+	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -37,7 +40,7 @@ func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted bool) {
 	t.Helper()
 	if phase := os.Getenv("PW_M14_LIFECYCLE_PHASE"); phase != "" {
 		runWorkerLifecyclePhase(t, os.Getenv("PW_M14_LIFECYCLE_ROOT"), phase, mounted)
-		if phase == "prepare" {
+		if phase == "prepare" && !t.Failed() {
 			// End the process with its published view still live; recovery must repair it.
 			os.Exit(0)
 		}
@@ -76,7 +79,19 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted bool) {
 		selector = workspace.EnforcedWorkspaceSelector()
 		selector.BudgetFor = adapter.ZeroBudget
 	}
-	manager := workspace.NewManager(branches).WithPrivateGit(gitManager).WithSelector(selector)
+	recoveryRoot := filepath.Join(branches, ".adapter", "recovery")
+	checkpointStore, err := checkpoint.NewStore(filepath.Join(recoveryRoot, "checkpoints"))
+	testutil.FailErr(t, "open durable checkpoint store", err)
+	boot, err := osprocess.BootID()
+	testutil.FailErr(t, "read boot identity", err)
+	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
+		RootDir: recoveryRoot, CheckpointStore: checkpointStore, CurrentBootID: boot,
+		GitStore: gitManager.Store(), GitManager: gitManager,
+		ProcessCtrl:     recovery.RecordedProcessController{},
+		MountReconciler: recovery.ConnectionReconciler{Recoveries: platform.ConnectionRecoveries()},
+	})
+	testutil.FailErr(t, "open recovery coordinator", err)
+	manager := workspace.NewManager(branches).WithPrivateGit(gitManager).WithSelector(selector).WithRecovery(coordinator)
 	queue := NewSQLQueue(database, 4)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
 	queue.SetWorkerWorkspaceManager(manager)
@@ -118,7 +133,6 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted bool) {
 	if len(fields) != 2 {
 		t.Fatalf("invalid phase receipt: %q", raw)
 	}
-	manager.WithRecovery(openFixtureRecovery(t, branches))
 	reports, err := manager.RecoverWorkerViews(t.Context())
 	testutil.FailErr(t, "recover worker views in fresh process", err)
 	recoveredCheckpoint := ""
