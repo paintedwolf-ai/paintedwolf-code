@@ -67,7 +67,6 @@ type WorkerLegInjectData struct {
 // BoardOrientationRootView is one root section for board-orientation inject.
 type BoardOrientationRootView struct {
 	Label     string
-	IsPrimary bool
 	Lines     []BoardLineView
 	Truncated bool
 }
@@ -145,7 +144,7 @@ func boardRootViews(roots []api.BoardOrientationRoot) ([]BoardOrientationRootVie
 		if label == "" {
 			label = "folder"
 		}
-		views[i] = BoardOrientationRootView{Label: label, IsPrimary: roots[i].IsPrimary, Truncated: roots[i].Truncated}
+		views[i] = BoardOrientationRootView{Label: label, Truncated: roots[i].Truncated}
 		remaining -= len(label) + 12
 	}
 	for i := range views {
@@ -180,10 +179,9 @@ func BoardInjectToMap(data BoardInjectData) map[string]any {
 			rootLines[j] = map[string]any{"text": line.Text}
 		}
 		orientationRoots[i] = map[string]any{
-			"label":      root.Label,
-			"is_primary": root.IsPrimary,
-			"lines":      rootLines,
-			"truncated":  root.Truncated,
+			"label":     root.Label,
+			"lines":     rootLines,
+			"truncated": root.Truncated,
 		}
 	}
 	return map[string]any{

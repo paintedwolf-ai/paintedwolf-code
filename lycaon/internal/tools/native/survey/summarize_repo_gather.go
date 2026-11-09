@@ -58,7 +58,7 @@ func (g *summarizeGatherer) gatherRepo(ctx context.Context, req summarize.Reques
 		info, serr := os.Stat(resolved.Abs)
 		if serr != nil {
 			if os.IsNotExist(serr) {
-				missing = append(missing, target)
+				missing = append(missing, resolved.DisplayPath)
 				continue
 			}
 			return repoGather{}, serr
