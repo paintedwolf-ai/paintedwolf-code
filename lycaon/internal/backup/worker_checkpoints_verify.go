@@ -32,7 +32,6 @@ func pinWorkerRecoveryClosure(ctx context.Context, tmpDir string, files map[stri
 		if _, err := copySnapshotRegular(ctx, src, dst); err != nil {
 			return fmt.Errorf("%w: pin %s: %w", ErrCaptureIncomplete, rel, err)
 		}
-		aliasFileDigestInSession(ctx, src.path, dst)
 		src.path = dst
 		files[rel] = src
 	}
@@ -63,7 +62,7 @@ func validateWorkerCheckpoints(ctx context.Context, snapshot db.DBTX, files map[
 		return err
 	}
 
-	visitState := make(map[string]uint8)
+	visitState := sessionFileVisitState(ctx)
 	for _, root := range roots {
 		metaRel := root + ".meta/state.json"
 		metaSrc, ok := files[metaRel]

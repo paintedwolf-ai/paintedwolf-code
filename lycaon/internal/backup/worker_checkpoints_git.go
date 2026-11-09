@@ -42,6 +42,7 @@ type gitClosureSession struct {
 	fileDigests     map[string]fileDigestEntry
 	sharedDiskFiles map[string]map[string]archiveSource
 	verifiedStores  map[string]*verifiedStoreRepo
+	fileVisitState  map[string]uint8
 	stats           *gitClosureStats
 }
 
@@ -50,8 +51,16 @@ func newGitClosureSession(stats *gitClosureStats) *gitClosureSession {
 		fileDigests:     make(map[string]fileDigestEntry),
 		sharedDiskFiles: make(map[string]map[string]archiveSource),
 		verifiedStores:  make(map[string]*verifiedStoreRepo),
+		fileVisitState:  make(map[string]uint8),
 		stats:           stats,
 	}
+}
+
+func sessionFileVisitState(ctx context.Context) map[string]uint8 {
+	if s := gitClosureSessionFromContext(ctx); s != nil {
+		return s.fileVisitState
+	}
+	return make(map[string]uint8)
 }
 
 func gitClosureSessionFromContext(ctx context.Context) *gitClosureSession {
@@ -112,20 +121,6 @@ func sha256FileInSession(ctx context.Context, path string) (string, int64, error
 		s.mu.Unlock()
 	}
 	return sum, size, nil
-}
-
-func aliasFileDigestInSession(ctx context.Context, srcPath, dstPath string) {
-	s := gitClosureSessionFromContext(ctx)
-	if s == nil {
-		return
-	}
-	cleanSrc := filepath.Clean(srcPath)
-	cleanDst := filepath.Clean(dstPath)
-	s.mu.Lock()
-	if entry, ok := s.fileDigests[cleanSrc]; ok {
-		s.fileDigests[cleanDst] = entry
-	}
-	s.mu.Unlock()
 }
 
 func loadSharedDiskGitObjectFiles(ctx context.Context, configDir, storeDir, projKey, syntheticStorePrefix string) (map[string]archiveSource, error) {
@@ -216,7 +211,7 @@ func stageAndVerifyStoreRepo(ctx context.Context, checkpointID string, prefixes 
 	if out, code, err := gitexec.Run(ctx, tmpRepo, []string{"init", "--bare", "-q"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err != nil || code != 0 {
 		return nil, &InvalidError{Detail: fmt.Sprintf("initialize git verification repo: %v (%s)", err, strings.TrimSpace(string(out)))}
 	}
-	installedPacks, err := stageClosureObjectsFromFiles(tmpRepo, prefixes, files)
+	installedPacks, err := stageClosureObjectsFromFiles(ctx, tmpRepo, prefixes, files)
 	if err != nil {
 		return nil, err
 	}
@@ -361,8 +356,9 @@ func verifyReachableOIDsInStoreRepo(ctx context.Context, s *gitClosureSession, r
 	return nil
 }
 
-func stageClosureObjectsFromFiles(tmpRepo string, prefixes []string, files map[string]archiveSource) (map[string]string, error) {
+func stageClosureObjectsFromFiles(ctx context.Context, tmpRepo string, prefixes []string, files map[string]archiveSource) (map[string]string, error) {
 	installedPacks := make(map[string]string)
+	stagedSources := make(map[string]string)
 	for _, objPrefix := range prefixes {
 		prefixSlash := objPrefix + "/"
 		packs := make(map[string]string)
@@ -402,7 +398,7 @@ func stageClosureObjectsFromFiles(tmpRepo string, prefixes []string, files map[s
 			parts := strings.Split(sub, "/")
 			if len(parts) == 2 && len(parts[0]) == 2 && isHexOnly(parts[0]) && (len(parts[1]) == 38 || len(parts[1]) == 62) && isHexOnly(parts[1]) {
 				dst := filepath.Join(tmpRepo, "objects", strings.ToLower(parts[0]), strings.ToLower(parts[1]))
-				if err := linkOrCopyVerifyObject(src.path, dst); err != nil {
+				if err := linkOrCopyVerifyObject(ctx, src.path, dst, stagedSources); err != nil {
 					return nil, &InvalidError{Detail: fmt.Sprintf("stage loose git object %s: %v", rel, err)}
 				}
 			}
@@ -414,10 +410,10 @@ func stageClosureObjectsFromFiles(tmpRepo string, prefixes []string, files map[s
 			}
 			dstPack := filepath.Join(tmpRepo, "objects", "pack", base+".pack")
 			dstIdx := filepath.Join(tmpRepo, "objects", "pack", base+".idx")
-			if err := linkOrCopyVerifyObject(packPath, dstPack); err != nil {
+			if err := linkOrCopyVerifyObject(ctx, packPath, dstPack, stagedSources); err != nil {
 				return nil, &InvalidError{Detail: fmt.Sprintf("stage git pack %s: %v", base, err)}
 			}
-			if err := linkOrCopyVerifyObject(idxPath, dstIdx); err != nil {
+			if err := linkOrCopyVerifyObject(ctx, idxPath, dstIdx, stagedSources); err != nil {
 				return nil, &InvalidError{Detail: fmt.Sprintf("stage git pack index %s: %v", base, err)}
 			}
 			installedPacks[base] = dstIdx
@@ -431,14 +427,20 @@ func stageClosureObjectsFromFiles(tmpRepo string, prefixes []string, files map[s
 	return installedPacks, nil
 }
 
-func linkOrCopyVerifyObject(srcPath, dstPath string) error {
-	if _, err := os.Lstat(dstPath); err == nil {
+func linkOrCopyVerifyObject(ctx context.Context, srcPath, dstPath string, stagedSources map[string]string) error {
+	if prevSrc, ok := stagedSources[dstPath]; ok {
+		sum1, size1, err1 := sha256FileInSession(ctx, prevSrc)
+		sum2, size2, err2 := sha256FileInSession(ctx, srcPath)
+		if err1 != nil || err2 != nil || sum1 != sum2 || size1 != size2 {
+			return fmt.Errorf("conflicting duplicate git object content between %s and %s", prevSrc, srcPath)
+		}
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(dstPath), 0o750); err != nil {
 		return err
 	}
 	if err := os.Link(srcPath, dstPath); err == nil {
+		stagedSources[dstPath] = srcPath
 		return nil
 	}
 	in, err := os.Open(srcPath)
@@ -452,6 +454,9 @@ func linkOrCopyVerifyObject(srcPath, dstPath string) error {
 		Mode:     0o444,
 		DirMode:  0o750,
 	})
+	if err == nil {
+		stagedSources[dstPath] = srcPath
+	}
 	return err
 }
 

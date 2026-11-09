@@ -79,15 +79,6 @@ func Create(ctx context.Context, opts CreateOpts, destPath string) (Manifest, er
 		return Manifest{}, fmt.Errorf("backup: open captured store: %w", err)
 	}
 	defer func() { _ = snapshot.Close() }()
-	ctx, closeClosureSession := ensureGitClosureSession(ctx)
-	defer closeClosureSession()
-	branches, err := unsealedBranchTrees(ctx, opts.ConfigDir, snapshot)
-	if err != nil {
-		return Manifest{}, err
-	}
-	if err := branches.verifyPresent(opts.ConfigDir); err != nil {
-		return Manifest{}, err
-	}
 
 	files := map[string]archiveSource{
 		storeRelPath: {path: snapshotPath, kind: fileKindRegular, mode: fileMode},
@@ -114,12 +105,27 @@ func Create(ctx context.Context, opts CreateOpts, destPath string) (Manifest, er
 		if dir == editoroutbox.Directory() {
 			base = tmpDir
 		}
-		if err := collectDurableDir(ctx, base, dir, files, branches, maxArchiveEntries); err != nil {
+		if err := collectDurableDir(ctx, base, dir, files, branchCapture{}, maxArchiveEntries); err != nil {
 			return Manifest{}, err
 		}
 	}
 	if err := pinWorkerRecoveryClosure(ctx, tmpDir, files); err != nil {
 		return Manifest{}, err
+	}
+
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
+	branches, err := unsealedBranchTreesInFiles(ctx, opts.ConfigDir, snapshot, files)
+	if err != nil {
+		return Manifest{}, err
+	}
+	if err := branches.verifyPresent(opts.ConfigDir); err != nil {
+		return Manifest{}, err
+	}
+	if len(branches.roots) > 0 {
+		if err := collectDurableDir(ctx, opts.ConfigDir, enginepaths.WorkerBranchesDirName, files, branches, maxArchiveEntries); err != nil {
+			return Manifest{}, err
+		}
 	}
 
 	if err := validateArchiveReferences(ctx, snapshot, files); err != nil {
@@ -200,6 +206,9 @@ func collectDurableDir(ctx context.Context, configDir, relDir string, files map[
 			kind = fileKindSymlink
 		} else if !info.Mode().IsRegular() {
 			return fmt.Errorf("durable path is not a regular file: %s", path)
+		}
+		if _, exists := files[filepath.ToSlash(rel)]; exists {
+			return nil
 		}
 		if len(files)+1 >= entryLimit {
 			return fmt.Errorf("archive contains too many entries")
@@ -368,10 +377,24 @@ func sha256File(path string) (string, int64, error) {
 		return "", 0, err
 	}
 	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	n, err := io.Copy(h, f)
+	before, err := f.Stat()
 	if err != nil {
 		return "", 0, err
+	}
+	if !before.Mode().IsRegular() || before.Size() < 0 || before.Size() == math.MaxInt64 {
+		return "", 0, fmt.Errorf("file size cannot be represented")
+	}
+	h := sha256.New()
+	n, err := io.Copy(h, io.LimitReader(f, before.Size()+1))
+	if err != nil {
+		return "", 0, err
+	}
+	after, err := f.Stat()
+	if err != nil {
+		return "", 0, err
+	}
+	if n != before.Size() || after.Size() != before.Size() || !after.ModTime().Equal(before.ModTime()) {
+		return "", 0, fmt.Errorf("file changed during hashing")
 	}
 	return hex.EncodeToString(h.Sum(nil)), n, nil
 }

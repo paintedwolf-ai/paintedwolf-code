@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,6 +47,55 @@ func unsealedBranchTrees(ctx context.Context, configDir string, database db.DBTX
 		selection.roots[root] = true
 	}
 	return selection, rows.Err()
+}
+
+func unsealedBranchTreesInFiles(ctx context.Context, configDir string, database db.DBTX, files map[string]archiveSource) (branchCapture, error) {
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
+	selection := branchCapture{roots: map[string]bool{}}
+	rows, err := database.QueryContext(ctx, `SELECT DISTINCT workspace_relpath FROM worker_jobs WHERE workspace_relpath IS NOT NULL AND workspace_relpath != '' AND (workspace_overlay_id IS NULL OR workspace_overlay_id = '')`)
+	if err != nil {
+		return selection, err
+	}
+	defer func() { _ = rows.Close() }()
+	visitState := sessionFileVisitState(ctx)
+	for rows.Next() {
+		var root string
+		if err := rows.Scan(&root); err != nil {
+			return selection, err
+		}
+		if branchTreeRoot(root) != root {
+			return selection, fmt.Errorf("invalid retained worker branch root")
+		}
+		if configDir != "" {
+			if cid := readBranchPublishedCheckpointIDInFiles(root, files); cid != "" {
+				if verifyCheckpointChainInFiles(ctx, root, cid, files, visitState) == nil {
+					continue
+				}
+				if !branchTreeExistsOnDisk(configDir, root) {
+					continue
+				}
+			}
+		}
+		selection.roots[root] = true
+	}
+	return selection, rows.Err()
+}
+
+func readBranchPublishedCheckpointIDInFiles(branchRel string, files map[string]archiveSource) string {
+	metaSrc, ok := files[branchRel+".meta/state.json"]
+	if !ok || metaSrc.kind != fileKindRegular {
+		return ""
+	}
+	raw, err := os.ReadFile(metaSrc.path)
+	if err != nil {
+		return ""
+	}
+	var meta workerCheckpointMeta
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(meta.LastPublishedCheckpointID)
 }
 
 func branchTreeRoot(rel string) string {

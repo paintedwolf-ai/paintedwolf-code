@@ -670,5 +670,19 @@ func TestBackupCheckpointSharedStoreScalingAndCycleDetection(t *testing.T) {
 			t.Fatalf("Create with self-cyclic checkpoint err = %v, want ErrInvalid", err)
 		}
 	})
+
+	t.Run("conflicting_checkpoint_overlay_git_object_rejected", func(t *testing.T) {
+		fx := setupCheckpointBackupFixture(t)
+		// Write a conflicting corrupt copy of fx.blobOID into the checkpoint-specific git-objects overlay
+		// while the valid loose object remains in the shared retained-store/objects.
+		overlayObj := filepath.Join(fx.storeDir, "checkpoints", "cp-1", "git-objects", fx.blobOID[:2], fx.blobOID[2:])
+		testutil.FailErr(t, "mkdir overlay git-objects", os.MkdirAll(filepath.Dir(overlayObj), 0o700))
+		testutil.FailErr(t, "write conflicting overlay object", os.WriteFile(overlayObj, []byte("conflicting-corrupt-overlay-object"), 0o444))
+
+		opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
+		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "conflicting-overlay.zip")); !errors.Is(err, backup.ErrInvalid) {
+			t.Fatalf("Create with conflicting checkpoint overlay git object err = %v, want ErrInvalid", err)
+		}
+	})
 }
 
