@@ -188,7 +188,7 @@ describe("chat content Files pane", () => {
     expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("view-only");
     expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]");
     const gutterNums = Array.from(
-      view.container.querySelectorAll(".files-line-gutter__number"),
+      view.container.querySelectorAll(".files-line-gutter__number[data-line]"),
     ).map((el) => el.textContent);
     expect(gutterNums[0]).toBe("1");
     expect(gutterNums.slice(1).every((t) => t === "")).toBe(true);
