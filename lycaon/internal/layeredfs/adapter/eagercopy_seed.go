@@ -2,16 +2,14 @@ package adapter
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
@@ -22,18 +20,19 @@ type seedOutcome struct {
 	denyPaths       []string
 	primaryID       string
 	primaryPath     string
-	bases           []layeredfs.BaseCapture
-	filePaths       map[layeredfs.QualifiedPath]string
+	records         []statRecord
 	seededRepos     map[string]SeedGitInitResult
 	gitInterceptMap map[layeredfs.QualifiedPath]layeredfs.QualifiedPath
 	gitStore        *privategit.RetainedObjectStore
 	gitLeases       []string
-	observedEntries int64
-	observedBytes   int64
+	stats           MaterializeStats
+	logicalBytes    int64
 }
 
 type seededDirMode struct {
 	dstPath string
+	rootID  string
+	rel     string
 	perm    fs.FileMode
 	modTime time.Time
 }
@@ -42,51 +41,56 @@ type seedAccumulator struct {
 	ctx            context.Context
 	req            PrepareRequest
 	runtimeViewDir string
-	selectedIDs    []string
 	narrowed       []RootGrant
-	maxEntries     int64
-	maxBytes       int64
 	gitStores      *gitStoreRegistry
 	gitReposBuilt  int
 	seededDirs     []seededDirMode
+	clone          FileCloner
+	meter          contentMeter
 	out            *seedOutcome
 }
 
 func seedSelectedRoots(
 	ctx context.Context,
 	req PrepareRequest,
-	runtimeViewDir string,
+	runtimeViewDir, pristineDir string,
 	narrowed []RootGrant,
-	selectedIDs []string,
-	maxEntries, maxBytes int64,
 	gitStores *gitStoreRegistry,
 ) (*seedOutcome, error) {
 	out := &seedOutcome{
-		filePaths:       make(map[layeredfs.QualifiedPath]string),
 		seededRepos:     make(map[string]SeedGitInitResult),
 		gitInterceptMap: make(map[layeredfs.QualifiedPath]layeredfs.QualifiedPath),
 	}
-	acc := &seedAccumulator{
-		ctx: ctx, req: req, runtimeViewDir: runtimeViewDir, selectedIDs: selectedIDs,
-		narrowed: narrowed, maxEntries: maxEntries, maxBytes: maxBytes, gitStores: gitStores, out: out,
+	clone := req.CloneFile
+	if clone == nil {
+		clone = fileclone.Clone
 	}
+	acc := &seedAccumulator{
+		ctx: ctx, req: req, runtimeViewDir: runtimeViewDir,
+		narrowed: narrowed, gitStores: gitStores, clone: clone, out: out,
+	}
+	defer func() { out.stats.ContentBytesRead = acc.meter.read.Load() }()
 
 	for _, g := range narrowed {
 		seedDir := filepath.Join(runtimeViewDir, "seeds", g.RootID)
 		if custom := strings.TrimSpace(req.TargetRootDirs[g.RootID]); custom != "" {
 			seedDir = filepath.Clean(custom)
 		}
-		if err := os.MkdirAll(seedDir, 0o750); err != nil {
-			return out, err
+		pristine := filepath.Join(pristineDir, g.RootID)
+		for _, dir := range []string{seedDir, pristine} {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
+				return out, err
+			}
 		}
-		if err := acc.walkAndSeedRoot(g, seedDir); err != nil {
+		if err := acc.walkAndSeedRoot(g, seedDir, pristine); err != nil {
 			return out, err
 		}
 		out.rootSpecs = append(out.rootSpecs, layeredfs.RootSpec{
 			ID: g.RootID, Label: g.Label, TrunkPath: seedDir, Subroot: g.Subroot, IsPrimary: g.IsPrimary,
 		})
 		out.preparedRoots = append(out.preparedRoots, PreparedRoot{
-			RootID: g.RootID, Label: g.Label, SourcePath: g.SourcePath, Subroot: g.Subroot, WorkspacePath: seedDir, IsPrimary: g.IsPrimary,
+			RootID: g.RootID, Label: g.Label, SourcePath: g.SourcePath, Subroot: g.Subroot,
+			WorkspacePath: seedDir, PristinePath: pristine, IsPrimary: g.IsPrimary,
 		})
 		out.denyPaths = append(out.denyPaths, g.SourcePath)
 		if g.IsPrimary && out.primaryID == "" {
@@ -101,7 +105,7 @@ func seedSelectedRoots(
 	return out, nil
 }
 
-func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir string) error {
+func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir, pristineDir string) error {
 	srcRoot := filepath.Clean(g.SourcePath)
 	a.seededDirs = a.seededDirs[:0]
 	walkErr := filepath.WalkDir(srcRoot, func(srcPath string, d fs.DirEntry, walkErr error) error {
@@ -128,7 +132,7 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir string) error {
 			}
 			return nil
 		}
-		return a.seedSingleEntry(g, rel, srcPath, filepath.Join(seedDir, relOS))
+		return a.seedSingleEntry(g, rel, srcPath, filepath.Join(seedDir, relOS), filepath.Join(pristineDir, relOS))
 	})
 	if walkErr != nil {
 		return walkErr
@@ -141,6 +145,11 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir string) error {
 		if err := chmodPath(dm.dstPath, dm.perm); err != nil {
 			return err
 		}
+		info, err := os.Lstat(dm.dstPath)
+		if err != nil {
+			return err
+		}
+		a.out.records = append(a.out.records, recordStat(dm.rootID, dm.rel, layeredfs.EntryDirectory, info))
 	}
 	return nil
 }
@@ -169,8 +178,12 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 	spec := SeedGitRepoSpec{
 		ViewID: a.req.ViewID, RootID: g.RootID, RepoRelPath: repoRel, GitEntryRel: gitRel,
 		SourceGitPath: srcGitPath, PrivateGitDir: privGitDir, IsGitlink: !d.IsDir(),
-		AuthorizedGitDirs: authDirs, MaxEntries: max(a.maxEntries-a.out.observedEntries, 1),
-		MaxBytes: max(a.maxBytes-a.out.observedBytes, 1), RetainedStore: a.out.gitStore,
+		AuthorizedGitDirs: authDirs, RetainedStore: a.out.gitStore,
+	}
+	if budget := a.req.CopyBudget; budget != nil {
+		remaining := max(budget.Limit-a.spentCost(), 1)
+		spec.MaxBytes = remaining
+		spec.MaxEntries = max(remaining/max(budget.EntryCost, 1), 1)
 	}
 	if d.Type()&fs.ModeSymlink != 0 {
 		return &AdapterError{AdapterID: AdapterEagerCopy, Op: "seed_git", ReasonCode: ReasonUnauthorizedRoot, Diagnostic: ".git symlink is forbidden", Cause: privategit.ErrUnauthorizedGitTarget}
@@ -189,7 +202,7 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 	res, err := initFn(a.ctx, spec)
 	if err != nil {
 		if errors.Is(err, privategit.ErrSeedLimitExceeded) {
-			return a.chargeUsage(g.RootID, max(res.AddedEntries, a.maxEntries-a.out.observedEntries+1), max(res.AddedBytes, 0))
+			return a.overrun(g.RootID)
 		}
 		return err
 	}
@@ -197,7 +210,10 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 		a.out.gitLeases = append(a.out.gitLeases, res.LeaseID)
 	}
 	a.gitReposBuilt++
-	if err := a.chargeUsage(g.RootID, res.AddedEntries, res.AddedBytes); err != nil {
+	if err := a.chargeEntries(g.RootID, res.AddedEntries); err != nil {
+		return err
+	}
+	if err := a.chargeCopied(g.RootID, res.AddedBytes); err != nil {
 		return err
 	}
 	a.out.seededRepos[g.RootID+":"+repoRel] = res
@@ -205,157 +221,198 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 	return nil
 }
 
-func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath string) error {
+func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath, pristinePath string) error {
 	info, err := os.Lstat(srcPath)
 	if err != nil {
 		return err
 	}
-	qp := layeredfs.QualifiedPath{RootID: g.RootID, Rel: rel}
 	mode := info.Mode()
 	xattrs, err := readPathXattrs(srcPath)
 	if err != nil {
 		return err
 	}
-
 	switch {
 	case mode.IsDir():
-		if err := a.chargeUsage(g.RootID, 1, 0); err != nil {
-			return err
-		}
-		tempPerm := mode.Perm() | 0o700
-		if err := os.MkdirAll(dstPath, tempPerm); err != nil {
-			return err
-		}
-		if err := os.Chmod(dstPath, tempPerm); err != nil {
-			return err
-		}
-		if err := writePathXattrs(dstPath, xattrs); err != nil {
-			return err
-		}
-		a.seededDirs = append(a.seededDirs, seededDirMode{
-			dstPath: dstPath, perm: mode.Perm(), modTime: info.ModTime(),
-		})
-		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
-			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryDirectory,
-			Mode: mode, ModTime: info.ModTime(), Xattrs: xattrs, CapturedAt: time.Now(),
-		})
-		return nil
-
+		return a.seedDirectory(g.RootID, rel, dstPath, pristinePath, info, xattrs)
 	case mode&os.ModeSymlink != 0:
-		target, err := os.Readlink(srcPath)
-		if err != nil {
-			return err
-		}
-		if err := a.chargeUsage(g.RootID, 1, int64(len(target))); err != nil {
-			return err
-		}
-		if err := os.Symlink(target, dstPath); err != nil {
-			return err
-		}
-		if err := writePathXattrs(dstPath, xattrs); err != nil {
-			return err
-		}
-		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
-			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntrySymlink,
-			Mode: mode, Size: int64(len(target)), ModTime: info.ModTime(), LinkTarget: target, Xattrs: xattrs, CapturedAt: time.Now(),
-		})
-		return nil
-
+		return a.seedSymlink(g.RootID, rel, srcPath, dstPath, pristinePath, xattrs)
 	case mode.IsRegular():
-		return a.seedRegularFile(g.RootID, qp, srcPath, dstPath, info, xattrs)
-
+		return a.seedRegularFile(g.RootID, rel, srcPath, dstPath, pristinePath, info, xattrs)
 	default:
 		return nil
 	}
 }
 
-func (a *seedAccumulator) seedRegularFile(rootID string, qp layeredfs.QualifiedPath, srcPath, dstPath string, info fs.FileInfo, xattrs map[string][]byte) error {
-	if err := a.chargeUsage(rootID, 1, 0); err != nil {
+func (a *seedAccumulator) seedDirectory(rootID, rel, dstPath, pristinePath string, info fs.FileInfo, xattrs map[string][]byte) error {
+	if err := a.chargeEntries(rootID, 1); err != nil {
 		return err
 	}
-	if a.req.FileSeeder != nil {
-		sz := max(info.Size(), 0)
-		if err := a.chargeUsage(rootID, 0, sz); err != nil {
-			return err
-		}
-		_, n, shaHex, err := a.req.FileSeeder(a.ctx, rootID, qp.Rel, srcPath, dstPath, info)
-		if err != nil {
-			return err
-		}
-		if n > sz {
-			if err := a.chargeUsage(rootID, 0, n-sz); err != nil {
-				return err
-			}
-		}
-		if err := chmodPath(dstPath, info.Mode().Perm()); err != nil {
-			return err
-		}
-		if err := writePathXattrs(dstPath, xattrs); err != nil {
-			return err
-		}
-		a.out.filePaths[qp] = dstPath
-		a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
-			Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryRegular,
-			Mode: info.Mode(), Size: n, ModTime: info.ModTime(), SHA256: shaHex,
-			Xattrs: xattrs, CapturedAt: time.Now(),
-		})
-		return nil
-	}
-	remainingBytes := a.maxBytes - a.out.observedBytes
-	in, err := os.Open(srcPath)
-	if err != nil {
+	tempPerm := info.Mode().Perm() | 0o700
+	if err := os.MkdirAll(dstPath, tempPerm); err != nil {
 		return err
 	}
-	defer func() { _ = in.Close() }()
-
-	outFile, err := os.OpenFile(dstPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode().Perm()|0o600)
-	if err != nil {
-		return err
-	}
-	h := sha256.New()
-	n, copyErr := io.Copy(io.MultiWriter(outFile, h), io.LimitReader(in, remainingBytes+1))
-	closeErr := outFile.Close()
-	if err := errors.Join(copyErr, closeErr); err != nil {
-		return err
-	}
-	if err := a.chargeUsage(rootID, 0, n); err != nil {
-		return err
-	}
-	if err := chmodPath(dstPath, info.Mode().Perm()); err != nil {
+	if err := os.Chmod(dstPath, tempPerm); err != nil {
 		return err
 	}
 	if err := writePathXattrs(dstPath, xattrs); err != nil {
 		return err
 	}
-	if err := os.Chtimes(dstPath, info.ModTime(), info.ModTime()); err != nil {
+	// Pristine directories stay traversable and removable. A directory's mode is in the manifest.
+	if err := os.MkdirAll(pristinePath, 0o700); err != nil {
 		return err
 	}
-	a.out.filePaths[qp] = dstPath
-	a.out.bases = append(a.out.bases, layeredfs.BaseCapture{
-		Path: qp, Layer: layeredfs.LayerTrunk, Kind: layeredfs.EntryRegular,
-		Mode: info.Mode(), Size: n, ModTime: info.ModTime(), SHA256: hex.EncodeToString(h.Sum(nil)),
-		Xattrs: xattrs, CapturedAt: time.Now(),
+	if err := writePathXattrs(pristinePath, xattrs); err != nil {
+		return err
+	}
+	a.seededDirs = append(a.seededDirs, seededDirMode{
+		dstPath: dstPath, rootID: rootID, rel: rel, perm: info.Mode().Perm(), modTime: info.ModTime(),
 	})
 	return nil
 }
 
-func (a *seedAccumulator) chargeUsage(rootID string, entries, bytesDelta int64) error {
-	a.out.observedEntries += entries
-	a.out.observedBytes += bytesDelta
-	if a.req.ProgressFn != nil {
-		a.req.ProgressFn(FallbackProgress{
-			ViewID: a.req.ViewID, RootID: rootID, ObservedEntries: a.out.observedEntries,
-			ObservedBytes: a.out.observedBytes, MaxEntries: a.maxEntries, MaxBytes: a.maxBytes, GitReposBuilt: a.gitReposBuilt,
-		})
+func (a *seedAccumulator) seedSymlink(rootID, rel, srcPath, dstPath, pristinePath string, xattrs map[string][]byte) error {
+	target, err := os.Readlink(srcPath)
+	if err != nil {
+		return err
 	}
-	if a.out.observedEntries > a.maxEntries || a.out.observedBytes > a.maxBytes {
-		return &PreparationLimitError{
-			ReasonCode: ReasonWorkspacePreparationLimit, ViewID: a.req.ViewID, RootID: rootID,
-			SelectedRoots: a.selectedIDs, ObservedEntries: a.out.observedEntries, ObservedBytes: a.out.observedBytes,
-			MaxEntries: a.maxEntries, MaxBytes: a.maxBytes, EstimatedRejection: false,
-			CleanedIncompleteSeed: true, RetryWithSmallerSelection: true, SuggestedSubroots: suggestSubroots(a.narrowed),
-			Diagnostic: "actual seed traversal exceeded configured workspace preparation limit",
+	if err := a.chargeEntries(rootID, 1); err != nil {
+		return err
+	}
+	for _, path := range []string{dstPath, pristinePath} {
+		if err := os.Symlink(target, path); err != nil {
+			return err
+		}
+		if err := writePathXattrs(path, xattrs); err != nil {
+			return err
 		}
 	}
+	info, err := os.Lstat(dstPath)
+	if err != nil {
+		return err
+	}
+	rec := recordStat(rootID, rel, layeredfs.EntrySymlink, info)
+	rec.LinkTarget = target
+	a.out.records = append(a.out.records, rec)
 	return nil
+}
+
+// seedRegularFile builds both trees for one file: clone where the volume allows it, and copy where it
+// does not. The working file comes from the source and the pristine one from the working file, so the
+// two cannot differ whatever the source does meanwhile. Nothing here hashes.
+func (a *seedAccumulator) seedRegularFile(rootID, rel, srcPath, dstPath, pristinePath string, info fs.FileInfo, xattrs map[string][]byte) error {
+	if err := a.chargeEntries(rootID, 1); err != nil {
+		return err
+	}
+	size := max(info.Size(), 0)
+	a.out.logicalBytes += size
+	if err := a.cloneOrCopy(rootID, srcPath, dstPath, info.Mode().Perm()|0o600, size); err != nil {
+		return err
+	}
+	if err := writePathXattrs(dstPath, xattrs); err != nil {
+		return err
+	}
+	if err := chmodPath(dstPath, info.Mode().Perm()); err != nil {
+		return err
+	}
+	if err := os.Chtimes(dstPath, info.ModTime(), info.ModTime()); err != nil {
+		return err
+	}
+	if err := a.seedPristineFile(rootID, dstPath, pristinePath, info, xattrs); err != nil {
+		return err
+	}
+	final, err := os.Lstat(dstPath)
+	if err != nil {
+		return err
+	}
+	a.out.records = append(a.out.records, recordStat(rootID, rel, layeredfs.EntryRegular, final))
+	return nil
+}
+
+func (a *seedAccumulator) seedPristineFile(rootID, dstPath, pristinePath string, info fs.FileInfo, xattrs map[string][]byte) error {
+	current, err := os.Lstat(dstPath)
+	if err != nil {
+		return err
+	}
+	if err := a.cloneOrCopy(rootID, dstPath, pristinePath, 0o600, max(current.Size(), 0)); err != nil {
+		return err
+	}
+	if err := os.Chmod(pristinePath, 0o600); err != nil {
+		return err
+	}
+	if err := writePathXattrs(pristinePath, xattrs); err != nil {
+		return err
+	}
+	if err := os.Chtimes(pristinePath, info.ModTime(), info.ModTime()); err != nil {
+		return err
+	}
+	return os.Chmod(pristinePath, 0o400)
+}
+
+// cloneOrCopy charges a copy before its first byte moves, so a copy past the budget never starts.
+func (a *seedAccumulator) cloneOrCopy(rootID, src, dst string, mode fs.FileMode, size int64) error {
+	cloned, err := a.clone(src, dst)
+	if err != nil {
+		return err
+	}
+	if cloned {
+		a.out.stats.ClonedFiles++
+		a.out.stats.ClonedBytes += size
+		return nil
+	}
+	if err := a.chargeCopied(rootID, size); err != nil {
+		return err
+	}
+	var limit int64
+	if budget := a.req.CopyBudget; budget != nil {
+		limit = max(budget.Limit-a.spentCost(), 0) + size + 1
+	}
+	n, err := a.meter.copyFile(a.ctx, src, dst, mode, limit)
+	if err != nil {
+		_ = os.Remove(dst)
+		return err
+	}
+	a.out.stats.CopiedFiles++
+	return a.chargeCopied(rootID, n-size)
+}
+
+func (a *seedAccumulator) spentCost() int64 {
+	budget := a.req.CopyBudget
+	if budget == nil {
+		return 0
+	}
+	return 2*a.out.stats.Entries*budget.EntryCost + a.out.stats.CopiedBytes
+}
+
+func (a *seedAccumulator) chargeEntries(rootID string, entries int64) error {
+	a.out.stats.Entries += entries
+	return a.afterCharge(rootID)
+}
+
+func (a *seedAccumulator) chargeCopied(rootID string, copied int64) error {
+	a.out.stats.CopiedBytes += copied
+	return a.afterCharge(rootID)
+}
+
+func (a *seedAccumulator) afterCharge(rootID string) error {
+	if a.req.ProgressFn != nil {
+		a.req.ProgressFn(MaterializeProgress{
+			ViewID: a.req.ViewID, RootID: rootID, Entries: a.out.stats.Entries, LogicalBytes: a.out.logicalBytes,
+			CopiedBytes: a.out.stats.CopiedBytes, GitReposBuilt: a.gitReposBuilt,
+		})
+	}
+	if a.req.CopyBudget.passedBy(a.out.stats.Entries, a.out.stats.CopiedBytes) {
+		return a.overrun(rootID)
+	}
+	return nil
+}
+
+func (a *seedAccumulator) overrun(rootID string) error {
+	limit := int64(0)
+	if a.req.CopyBudget != nil {
+		limit = a.req.CopyBudget.Limit
+	}
+	return &BudgetOverrunError{
+		ViewID: a.req.ViewID, RootID: rootID, Entries: a.out.stats.Entries,
+		CopiedBytes: a.out.stats.CopiedBytes, Limit: limit,
+	}
 }

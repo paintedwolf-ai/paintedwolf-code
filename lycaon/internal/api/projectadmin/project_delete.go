@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectremoval"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
-	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -105,9 +104,6 @@ func (s *Removal) finishProjectDeletion(ctx context.Context, p *project.Project,
 		slog.WarnContext(ctx, "remove project draft scratch", "project_id", id, "err", err)
 	}
 	for _, root := range p.Roots {
-		if err := workspace.RemoveSeed(ctx, s.WorkerSeedRoot, root.Path); err != nil {
-			slog.WarnContext(ctx, "remove worker seed on project delete", "path", root.Path, "err", err)
-		}
 		if err := s.Roots.removeRootCheckpoints(ctx, id, root.Path); err != nil {
 			slog.WarnContext(ctx, "remove session checkpoints on project delete", "path", root.Path, "err", err)
 		}

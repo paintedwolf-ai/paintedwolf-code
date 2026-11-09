@@ -130,15 +130,10 @@ export function taskActivityDisplay(
     if (preparation.stage === "surveying_source") {
       return `Surveying workspace${amount ? ` · ${amount}` : ""}`;
     }
-    if (preparation.stage === "materializing_seed") {
-      return `Building reusable workspace cache${amount ? ` · ${amount}` : ""}`;
-    }
     const action =
       preparation.strategy === "direct_copy"
         ? "Copying isolated workspace"
-        : preparation.strategy === "bridge_cow"
-          ? "Cloning isolated workspace from cache"
-          : "Cloning isolated workspace";
+        : "Cloning isolated workspace";
     return `${action}${amount ? ` · ${amount}` : ""}`;
   }
   const branchLine = ctx?.worker ? workerBranchActivityLine(ctx.worker) : null;

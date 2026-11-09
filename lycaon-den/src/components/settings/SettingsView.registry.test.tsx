@@ -146,7 +146,6 @@ const client = stubClient({
   })),
   getLocalData: vi.fn(async () => ({
     buckets: [{ id: "web_index", present: true, bytes: 2048 }],
-    workspace_caches: [],
   })),
   getHistoryStorage: vi.fn(async () => ({
     policy: {

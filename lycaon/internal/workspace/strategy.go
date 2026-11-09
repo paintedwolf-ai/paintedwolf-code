@@ -2,90 +2,15 @@ package workspace
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
-	"io"
-	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
-	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
-
-// CachedSeedEstimate returns a SourceIndexEstimate from a published bridge seed manifest when available (#1658).
-func CachedSeedEstimate(seedRoot, sourceRoot string) *adapter.SourceIndexEstimate {
-	if strings.TrimSpace(seedRoot) == "" || strings.TrimSpace(sourceRoot) == "" {
-		return nil
-	}
-	seedDir := enginepaths.ProjectSeedDir(seedRoot, sourceRoot)
-	_, tree, manifest := loadCurrentSeed(seedDir)
-	if tree == "" || len(manifest.Entries) == 0 {
-		return nil
-	}
-	return &adapter.SourceIndexEstimate{
-		EstimatedEntries: int64(len(manifest.Entries)),
-		EstimatedBytes:   regularBytes(manifest),
-	}
-}
-
-// PrepareMaterializedSeedView prepares a bounded materialized workspace view using adapter.EagerCopyAdapter,
-// populating missing root estimates from published bridge seed manifests and reporting preparation progress (#1658).
-func PrepareMaterializedSeedView(
-	ctx context.Context,
-	seedRoot string,
-	req adapter.PrepareRequest,
-	fallbackReason adapter.ReasonCode,
-) (*adapter.PreparedView, error) {
-	grants := make([]adapter.RootGrant, len(req.Grants))
-	copy(grants, req.Grants)
-	for i := range grants {
-		if grants[i].Estimate == nil && grants[i].Subroot == "" {
-			grants[i].Estimate = CachedSeedEstimate(seedRoot, grants[i].SourcePath)
-		}
-	}
-	req.Grants = grants
-	if req.ProgressFn == nil {
-		var estTotal int64
-		for _, g := range grants {
-			if g.Estimate != nil && g.Estimate.EstimatedBytes > 0 {
-				estTotal += g.Estimate.EstimatedBytes
-			}
-		}
-		if estTotal == 0 {
-			estTotal = req.MaxBytes
-		}
-		req.ProgressFn = func(fp adapter.FallbackProgress) {
-			reportPreparation(ctx, PreparationProgress{
-				Strategy:   ProvisionMaterializedEagerCopy,
-				Stage:      "materializing_seed",
-				Files:      fp.ObservedEntries,
-				Bytes:      fp.ObservedBytes,
-				TotalBytes: estTotal,
-			})
-		}
-	}
-	adp := adapter.NewEagerCopyAdapter(fallbackReason)
-	return adp.Prepare(ctx, req)
-}
-
-func sha256File(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
 
 // Adapter-backed ProvisionStrategy constants (#1658).
 const (
@@ -94,18 +19,19 @@ const (
 	ProvisionMaterializedEagerCopy ProvisionStrategy = ProvisionStrategy(adapter.AdapterEagerCopy)
 )
 
-// WorkspaceStrategySelection pairs a selected workspace adapter with its structured facts and probe result (#1658).
+// WorkspaceStrategySelection is one worker's selected provider with its facts and probe result (#1658).
 type WorkspaceStrategySelection struct {
-	AdapterID adapter.AdapterID    `json:"adapter_id"`
-	Strategy  ProvisionStrategy    `json:"strategy"`
-	Facts     adapter.AdapterFacts `json:"facts"`
-	Probe     adapter.ProbeResult  `json:"probe"`
-	Adapter   adapter.Adapter      `json:"-"`
+	AdapterID  adapter.AdapterID      `json:"adapter_id"`
+	Strategy   ProvisionStrategy      `json:"strategy"`
+	Facts      adapter.AdapterFacts   `json:"facts"`
+	Probe      adapter.ProbeResult    `json:"probe"`
+	Selection  adapter.SelectionFacts `json:"selection"`
+	CopyBudget *adapter.CopyBudget    `json:"-"`
+	Adapter    adapter.Adapter        `json:"-"`
 }
 
-// DefaultWorkspaceSelector returns this host's selector. Choosing a mount by cost is not decided yet,
-// so it stays without an enforcer: its mounted adapter reports confinement_unavailable and selection
-// falls back to materialized views.
+// DefaultWorkspaceSelector returns this host's selector without a confinement enforcer: an
+// over-budget worker finds its mounted adapter unavailable and refuses when confinement is required.
 func DefaultWorkspaceSelector() *adapter.Selector {
 	return platform.NewSelector(platform.Config{})
 }
@@ -133,108 +59,84 @@ func StrategyForAdapterFacts(facts adapter.AdapterFacts) ProvisionStrategy {
 	}
 }
 
-// SelectWorkspaceAdapter selects one workspace adapter from structured probe capabilities (#1658).
-func SelectWorkspaceAdapter(
+// chooseWorkspaceAdapter applies the selection rule to one worker's roots. An overrun is the copy that
+// just passed its budget, which moves the rule on to the mount.
+func (m *Manager) chooseWorkspaceAdapter(
 	ctx context.Context,
-	probeCfg adapter.ProbeConfig,
-	selector *adapter.Selector,
+	branchRoot string,
+	grants []adapter.RootGrant,
+	projectID string,
+	overrun *adapter.BudgetOverrunError,
 ) (WorkspaceStrategySelection, error) {
+	selector := m.selector
 	if selector == nil {
 		selector = DefaultWorkspaceSelector()
 	}
-	adp, probeRes, err := selector.Select(ctx, probeCfg)
-	if err != nil {
-		return WorkspaceStrategySelection{}, err
+	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
+	clone := adapter.ProbeCloneAt(metaDir)
+	if m.cloneAvailable != nil {
+		clone = m.cloneAvailable(branchRoot)
 	}
-	facts := adp.Facts()
+	choice, err := selector.Choose(ctx, adapter.ChooseRequest{
+		Probe:          adapter.ProbeConfig{RuntimeDir: filepath.Join(m.branchRoot, adapterRuntimeDirName)},
+		Grants:         withIndexFacts(ctx, projectID, grants),
+		CloneAvailable: clone,
+		Disk: func() (adapter.DiskSpace, error) {
+			available, known, err := queryAvailableStorageBytes(filepath.Dir(metaDir))
+			return adapter.DiskSpace{Path: filepath.Dir(metaDir), Available: available, Known: known}, err
+		},
+		Overrun: overrun,
+	})
+	if err != nil {
+		return WorkspaceStrategySelection{Probe: choice.Probe}, err
+	}
+	facts := choice.Adapter.Facts()
 	return WorkspaceStrategySelection{
-		AdapterID: adp.ID(),
-		Strategy:  StrategyForAdapterFacts(facts),
-		Facts:     facts,
-		Probe:     probeRes,
-		Adapter:   adp,
+		AdapterID: choice.Adapter.ID(), Strategy: StrategyForAdapterFacts(facts), Facts: facts,
+		Probe: choice.Probe, Selection: choice.Facts, CopyBudget: choice.CopyBudget, Adapter: choice.Adapter,
 	}, nil
 }
 
-func chooseProvisionStrategy(ctx context.Context, m *Manager, sourceRoot, branchRoot string) (ProvisionStrategy, error) {
-	if strings.TrimSpace(m.branchRoot) == "" {
-		return "", fmt.Errorf("worker branch root is unavailable")
+// withIndexFacts adds what the source catalog already knows, so a root it has fully observed costs no
+// survey. A stale count is safe: the budget also binds the copy itself.
+func withIndexFacts(ctx context.Context, projectID string, grants []adapter.RootGrant) []adapter.RootGrant {
+	out := append([]adapter.RootGrant(nil), grants...)
+	if projectID == "" {
+		return out
 	}
-	if err := os.MkdirAll(branchRoot, 0o750); err != nil {
-		return "", err
+	for i := range out {
+		if out[i].Estimate != nil {
+			continue
+		}
+		root := sourcecatalog.Root{ID: out[i].RootID, Path: out[i].SourcePath}
+		snapshot, settled := sourcecatalog.Process().CurrentSettled(ctx, projectID, []sourcecatalog.Root{root})
+		if !settled || snapshot.State != sourcecatalog.StateReady || snapshot.RootBoundary || snapshot.Moving {
+			continue
+		}
+		estimate := &adapter.SourceIndexEstimate{}
+		for _, entry := range snapshot.Entries {
+			estimate.EstimatedEntries++
+			if !entry.IsDir && !entry.IsSymlink {
+				estimate.EstimatedBytes += max(entry.Size, 0)
+			}
+		}
+		out[i].Estimate = estimate
 	}
-	sample, err := firstRegularFile(ctx, sourceRoot)
-	if err != nil {
-		return "", err
-	}
-	if sample == "" {
-		return ProvisionDirectCoW, nil
-	}
-	direct, err := probeClone(sample, branchRoot)
-	if err != nil {
-		return "", fmt.Errorf("probe source-to-branch clone: %w", err)
-	}
-	if direct {
-		return ProvisionDirectCoW, nil
-	}
-	if strings.TrimSpace(m.seedRoot) == "" {
-		return ProvisionDirectCopy, nil
-	}
-	if err := os.MkdirAll(m.seedRoot, 0o700); err != nil {
-		return "", err
-	}
-	probe, err := os.CreateTemp(m.seedRoot, ".clone-probe-*")
-	if err != nil {
-		return "", err
-	}
-	probePath := probe.Name()
-	defer func() { _ = os.Remove(probePath) }()
-	if _, err := probe.Write(make([]byte, 4096)); err != nil {
-		_ = probe.Close()
-		return "", err
-	}
-	if err := probe.Close(); err != nil {
-		return "", err
-	}
-	bridged, err := probeClone(probePath, branchRoot)
-	if err != nil {
-		return "", fmt.Errorf("probe seed-to-branch clone: %w", err)
-	}
-	if bridged {
-		return ProvisionBridgeCoW, nil
-	}
-	return ProvisionDirectCopy, nil
+	return out
 }
 
-func firstRegularFile(ctx context.Context, root string) (string, error) {
-	var sample string
-	err := sandbox.SurveyWalk(ctx, root, sandbox.SurveyOptions{IncludeHidden: true},
-		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
-			info, err := entry.DirEntry.Info()
-			if err != nil {
-				if sourceChangeSkippable(err) {
-					return sandbox.SurveyContinue, nil
-				}
-				return sandbox.SurveyContinue, err
-			}
-			if info.Mode().IsRegular() {
-				sample = entry.Abs
-				return sandbox.SurveyStop, nil
-			}
-			return sandbox.SurveyContinue, nil
-		})
-	return sample, err
-}
-
-func probeClone(src, dstDir string) (bool, error) {
-	dst := filepath.Join(dstDir, ".clone-probe-"+uuid.NewString())
-	cloned, err := cloneWorkspaceFile(src, dst)
-	removeErr := os.Remove(dst)
-	if err != nil {
-		return false, err
+func grantsForSources(sources []projectroot.RootRef) []adapter.RootGrant {
+	grants := make([]adapter.RootGrant, 0, len(sources))
+	for _, s := range sources {
+		id := s.ID
+		if id == "" {
+			id = "primary"
+		}
+		label := s.Label
+		if label == "" {
+			label = id
+		}
+		grants = append(grants, adapter.RootGrant{RootID: id, Label: label, SourcePath: s.Path, IsPrimary: s.IsPrimary})
 	}
-	if removeErr != nil && !os.IsNotExist(removeErr) {
-		return false, removeErr
-	}
-	return cloned, nil
+	return grants
 }

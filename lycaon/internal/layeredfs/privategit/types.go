@@ -171,8 +171,20 @@ type SeededRepo struct {
 	Metrics       InitMetrics
 }
 
+// MaterializedRepoAt is a seeded repository in place, with what it started from.
+type MaterializedRepoAt struct {
+	RepoRel     string            `json:"repo_rel"`
+	InitialHead string            `json:"initial_head,omitempty"`
+	InitialRefs map[string]string `json:"initial_refs,omitempty"`
+	Metrics     InitMetrics       `json:"metrics"`
+}
+
 // MaterializedViewBinding hands a seeded materialized worktree to this manager.
 type MaterializedViewBinding struct {
+	// CoreViewID names the view whose Core this one shares, for a secondary root of one worker.
+	CoreViewID string
+	// Installed are repositories already in the worktree, from an earlier process's adoption.
+	Installed   []MaterializedRepoAt
 	ViewID      string
 	WorkerID    string
 	RootID      string

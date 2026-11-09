@@ -13,7 +13,6 @@ const sampleStatus = (): LocalDataStatus => ({
     { id: "browser_cache", present: false },
     { id: "debug_logs", present: false },
   ],
-  workspace_caches: [],
 });
 
 describe("CacheSettingsPanel", () => {
@@ -46,7 +45,6 @@ describe("CacheSettingsPanel", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const clearLocalData = vi.fn().mockResolvedValue({
       results: [{ id: "web_index", ok: true }],
-      workspace_cache_results: [],
     });
     const client = {
       getLocalData: vi
@@ -56,8 +54,7 @@ describe("CacheSettingsPanel", () => {
           buckets: sampleStatus().buckets.map((b) =>
             b.id === "web_index" ? { ...b, present: false, bytes: 0 } : b,
           ),
-          workspace_caches: [],
-        }),
+                }),
       clearLocalData,
     };
 
@@ -131,84 +128,5 @@ describe("CacheSettingsPanel", () => {
       CACHE_SETTINGS_COPY.connectHint,
     );
     expect(queryByTestId("cache-bucket-list")).toBeNull();
-  });
-
-  it("shows and independently clears retained workspace caches", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    const clearLocalData = vi.fn().mockResolvedValue({
-      results: [],
-      workspace_cache_results: [{ id: "0123456789abcdef", ok: true }],
-    });
-    const client = {
-      getLocalData: vi.fn().mockResolvedValue({
-        ...sampleStatus(),
-        workspace_caches: [
-          {
-            id: "0123456789abcdef",
-            source_root: "/work/firefox",
-            logical_bytes: 30 * 1024 ** 3,
-            allocated_bytes: 12 * 1024 ** 3,
-            last_used: "2026-08-01T00:00:00Z",
-          },
-        ],
-      }),
-      clearLocalData,
-    };
-    const { getByTestId } = render(() => (
-      <CacheSettingsPanel client={client as never} />
-    ));
-
-    await waitFor(() =>
-      expect(getByTestId("workspace-cache-0123456789abcdef")).toBeTruthy(),
-    );
-    expect(
-      getByTestId("workspace-cache-0123456789abcdef").textContent,
-    ).toContain("30.0 GB");
-    fireEvent.click(getByTestId("workspace-cache-clear-0123456789abcdef"));
-    await waitFor(() =>
-      expect(clearLocalData).toHaveBeenCalledWith({
-        workspace_cache_ids: ["0123456789abcdef"],
-      }),
-    );
-    confirmSpy.mockRestore();
-  });
-
-  it("includes independently managed workspace caches in clear all", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    const clearLocalData = vi.fn().mockResolvedValue({
-      results: sampleStatus().buckets.map((bucket) => ({
-        id: bucket.id,
-        ok: true,
-      })),
-      workspace_cache_results: [{ id: "0123456789abcdef", ok: true }],
-    });
-    const client = {
-      getLocalData: vi.fn().mockResolvedValue({
-        ...sampleStatus(),
-        workspace_caches: [
-          {
-            id: "0123456789abcdef",
-            source_root: "/work/firefox",
-            logical_bytes: 30 * 1024 ** 3,
-            allocated_bytes: 12 * 1024 ** 3,
-            last_used: "2026-08-01T00:00:00Z",
-          },
-        ],
-      }),
-      clearLocalData,
-    };
-    const { getByTestId } = render(() => (
-      <CacheSettingsPanel client={client as never} />
-    ));
-
-    await waitFor(() => expect(getByTestId("cache-clear-all")).toBeTruthy());
-    fireEvent.click(getByTestId("cache-clear-all"));
-    await waitFor(() =>
-      expect(clearLocalData).toHaveBeenCalledWith({
-        buckets: sampleStatus().buckets.map((bucket) => bucket.id),
-        workspace_cache_ids: ["0123456789abcdef"],
-      }),
-    );
-    confirmSpy.mockRestore();
   });
 });

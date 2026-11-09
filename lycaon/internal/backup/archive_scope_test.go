@@ -43,4 +43,12 @@ func TestArchiveVersionsRequireTheirExactReplacementScope(t *testing.T) {
 	if upgraded.FormatVersion != 2 || !slices.Contains(upgraded.ReplaceRelPaths, "command-programs.yaml") || slices.Contains(legacy.ReplaceRelPaths, "command-programs.yaml") {
 		t.Fatal("scope upgrade must add the new path without mutating the released manifest")
 	}
+	if !slices.Contains(upgraded.ReplaceRelDirs, "worker-recovery") || slices.Contains(legacy.ReplaceRelDirs, "worker-recovery") {
+		t.Fatal("scope upgrade must add worker-recovery without mutating the released manifest")
+	}
 }
+
+type GitClosureStats = gitClosureStats
+
+var WithGitClosureStats = withGitClosureStats
+

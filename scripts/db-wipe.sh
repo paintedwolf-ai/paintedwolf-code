@@ -39,7 +39,7 @@ for name in web-index.db source-observations.db; do
   done
 done
 
-for name in projects source-content drafts session-checkpoints worker-branches worker-recovery worker-seeds worker-baselines session-worktrees document-outbox scratch; do
+for name in projects source-content drafts session-checkpoints worker-branches worker-recovery worker-baselines session-worktrees document-outbox scratch; do
   path="${DATA_DIR}/${name}"
   if [[ -e "${path}" ]]; then
     rm -rf -- "${path}"

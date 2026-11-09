@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,13 +18,16 @@ type branchCapture struct {
 	roots map[string]bool
 }
 
-func unsealedBranchTrees(ctx context.Context, database db.DBTX) (branchCapture, error) {
+func unsealedBranchTrees(ctx context.Context, configDir string, database db.DBTX) (branchCapture, error) {
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
 	selection := branchCapture{roots: map[string]bool{}}
 	rows, err := database.QueryContext(ctx, `SELECT DISTINCT workspace_relpath FROM worker_jobs WHERE workspace_relpath IS NOT NULL AND workspace_relpath != '' AND (workspace_overlay_id IS NULL OR workspace_overlay_id = '')`)
 	if err != nil {
 		return selection, err
 	}
 	defer func() { _ = rows.Close() }()
+	visitState := make(map[string]uint8)
 	for rows.Next() {
 		var root string
 		if err := rows.Scan(&root); err != nil {
@@ -32,9 +36,66 @@ func unsealedBranchTrees(ctx context.Context, database db.DBTX) (branchCapture, 
 		if branchTreeRoot(root) != root {
 			return selection, fmt.Errorf("invalid retained worker branch root")
 		}
+		if configDir != "" {
+			if hasVerifiedPublishedCheckpointWithState(ctx, configDir, root, visitState) {
+				continue
+			}
+			if !branchTreeExistsOnDisk(configDir, root) && branchDeclaresPublishedCheckpoint(configDir, root) {
+				continue
+			}
+		}
 		selection.roots[root] = true
 	}
 	return selection, rows.Err()
+}
+
+func unsealedBranchTreesInFiles(ctx context.Context, configDir string, database db.DBTX, files map[string]archiveSource) (branchCapture, error) {
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
+	selection := branchCapture{roots: map[string]bool{}}
+	rows, err := database.QueryContext(ctx, `SELECT DISTINCT workspace_relpath FROM worker_jobs WHERE workspace_relpath IS NOT NULL AND workspace_relpath != '' AND (workspace_overlay_id IS NULL OR workspace_overlay_id = '')`)
+	if err != nil {
+		return selection, err
+	}
+	defer func() { _ = rows.Close() }()
+	visitState := sessionFileVisitState(ctx)
+	for rows.Next() {
+		var root string
+		if err := rows.Scan(&root); err != nil {
+			return selection, err
+		}
+		if branchTreeRoot(root) != root {
+			return selection, fmt.Errorf("invalid retained worker branch root")
+		}
+		if configDir != "" {
+			if cid := readBranchPublishedCheckpointIDInFiles(root, files); cid != "" {
+				if verifyCheckpointChainInFiles(ctx, root, cid, files, visitState) == nil {
+					continue
+				}
+				if !branchTreeExistsOnDisk(configDir, root) {
+					continue
+				}
+			}
+		}
+		selection.roots[root] = true
+	}
+	return selection, rows.Err()
+}
+
+func readBranchPublishedCheckpointIDInFiles(branchRel string, files map[string]archiveSource) string {
+	metaSrc, ok := files[branchRel+".meta/state.json"]
+	if !ok || metaSrc.kind != fileKindRegular {
+		return ""
+	}
+	raw, err := os.ReadFile(metaSrc.path)
+	if err != nil {
+		return ""
+	}
+	var meta workerCheckpointMeta
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(meta.LastPublishedCheckpointID)
 }
 
 func branchTreeRoot(rel string) string {
@@ -51,9 +112,36 @@ func branchTreeRoot(rel string) string {
 	return strings.Join(parts[:3], "/")
 }
 
+// materializedBaseJobID names the branch whose exact base rel belongs to: an unsealed materialized worker's
+// changes can only be derived again from its pristine tree and stat manifest, so they go with its tree.
+func materializedBaseJobID(rel string) string {
+	if rel != filepath.ToSlash(filepath.Clean(rel)) {
+		return ""
+	}
+	parts := strings.Split(rel, "/")
+	if len(parts) < 4 || parts[0] != enginepaths.WorkerBranchesDirName || !enginepaths.IsJobMetaDirName(parts[2]) ||
+		parts[2] == enginepaths.JobMetaDirSuffix || !workerMetadataPath(strings.Join(parts[:2], "/"), true) {
+		return ""
+	}
+	switch parts[3] {
+	case "pristine", "stat-manifest":
+		return strings.Join(append(parts[:2:2], strings.TrimSuffix(parts[2], enginepaths.JobMetaDirSuffix)), "/")
+	}
+	return ""
+}
+
 func (s branchCapture) includes(rel string, directory bool) bool {
+	if rel == enginepaths.WorkerRecoveryDirName || strings.HasPrefix(rel, enginepaths.WorkerRecoveryDirName+"/") {
+		return durableWorkerRecoveryPath(rel, directory)
+	}
+	if rel == enginepaths.WorkerBranchesDirName+"/.adapter" || strings.HasPrefix(rel, enginepaths.WorkerBranchesDirName+"/.adapter/") {
+		return durableWorkerAdapterPath(rel, directory)
+	}
 	if workerMetadataPath(rel, directory) {
 		return true
+	}
+	if jobID := materializedBaseJobID(rel); jobID != "" {
+		return s.all || s.roots[jobID]
 	}
 	root := branchTreeRoot(rel)
 	if root == "" {
@@ -117,8 +205,8 @@ func restorableArchivePath(rel string, trees []string) bool {
 	return false
 }
 
-func validateRequiredBranchTrees(ctx context.Context, database db.DBTX, manifest Manifest) error {
-	required, err := unsealedBranchTrees(ctx, database)
+func validateRequiredBranchTrees(ctx context.Context, configDir string, database db.DBTX, manifest Manifest) error {
+	required, err := unsealedBranchTrees(ctx, configDir, database)
 	if err != nil {
 		return err
 	}

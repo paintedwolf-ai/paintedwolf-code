@@ -103,7 +103,7 @@ func TestOrdinaryWorkspacePreparationSuppliesEagerCopyFactsWithoutTestInjection(
 	testutil.FailErr(t, "WriteFile other v1", os.WriteFile(filepath.Join(trunkDir, "pkg", "other.go"), []byte("package pkg // other v1\n"), 0o644))
 
 	// Prepare workspace through ordinary workspace.Manager (selects eagercopy fallback when no mounted helper is active).
-	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds"))
+	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"))
 	binding, layout, err := wsMgr.CreateWorkerBranch(
 		ctx,
 		[]projectroot.RootRef{{ID: "primary", Path: trunkDir, IsPrimary: true}},
@@ -202,8 +202,9 @@ func TestOrdinaryWorkspacePreparationSuppliesMountedPartialAttributionFactsWitho
 		},
 	})
 	selector := adapter.NewSelector("darwin", nil, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector.BudgetFor = adapter.ZeroBudget
 	selector.Confinement = fixtureConfinement{}
-	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), filepath.Join(t.TempDir(), "seeds")).WithSelector(selector)
+	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches")).WithSelector(selector)
 
 	binding, layout, err := wsMgr.CreateWorkerBranch(
 		ctx,

@@ -243,23 +243,19 @@ func TestFailedRetentionKeepsTheTreeAndReportsUnresolvedThroughEveryCancelPath(t
 	}
 }
 
-// A baseline that may never return, including a job canceled during preparation, must not stop
-// the cancel. Nothing can name the changes, so the whole tree is kept and says so.
-func TestCancelWithNoUsableBaselineRetainsTheWholeTreeWithUnknownScope(t *testing.T) {
-	for name, breakBaseline := range map[string]func(*testing.T, string){
-		"missing": func(t *testing.T, path string) {
-			testutil.FailErr(t, "remove baseline", os.Remove(path))
-		},
-		"unreadable": func(t *testing.T, path string) {
-			testutil.FailErr(t, "remove baseline", os.Remove(path))
-			testutil.FailErr(t, "corrupt baseline", os.WriteFile(path, []byte("not a manifest"), 0o600))
+// An exact base that may never return must not stop the cancel. Nothing can name the changes, so the
+// whole tree is kept and says so.
+func TestCancelWithNoUsableBaseRetainsTheWholeTreeWithUnknownScope(t *testing.T) {
+	for name, breakBase := range map[string]func(*testing.T, string){
+		"pristine tree missing": func(t *testing.T, root string) {
+			testutil.FailErr(t, "remove pristine tree", os.RemoveAll(enginepaths.PristineTreeForBranchRoot(root)))
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newEngineFixture(t)
 			task := f.claimMaterializedWorker()
 			writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
-			breakBaseline(t, task.WorkspaceBaselinePath)
+			breakBase(t, task.WorkspaceRoot)
 			before, err := os.Lstat(filepath.Join(task.WorkspaceRoot, "keep.txt"))
 			testutil.FailErr(t, "stat keep", err)
 
@@ -290,7 +286,6 @@ func TestCancelWithNoUsableBaselineRetainsTheWholeTreeWithUnknownScope(t *testin
 func TestCancelDuringPreparationRetainsThePartialTree(t *testing.T) {
 	f := newEngineFixture(t)
 	task := f.claimMaterializedWorker()
-	testutil.FailErr(t, "remove baseline", os.Remove(task.WorkspaceBaselinePath))
 	testutil.FailErr(t, "partial seed", os.Remove(filepath.Join(task.WorkspaceRoot, "keep.txt")))
 	testutil.FailErr(t, "closed dir", os.Mkdir(filepath.Join(task.WorkspaceRoot, "closed"), 0o755))
 	writeTreeFile(t, task.WorkspaceRoot, "closed/inner.txt", "inside a closed directory\n")
@@ -300,10 +295,16 @@ func TestCancelDuringPreparationRetainsThePartialTree(t *testing.T) {
 	testutil.FailErr(t, "cancel", f.engine.Queue.Cancel(t.Context(), task.ID, nil))
 
 	record := onlyRecord(t, f.engine, task.ID)
-	if raw, err := os.ReadFile(filepath.Join(record.QuarantineDir, "tree", "closed", "inner.txt")); err != nil || string(raw) != "inside a closed directory\n" {
+	// Releasing the view opens its directories, so the changes can usually still be named. Either way
+	// nothing the closed directory held is lost.
+	kept := filepath.Join(record.QuarantineDir, "changed", fixtureRootID)
+	if record.UnknownScope {
+		kept = filepath.Join(record.QuarantineDir, "tree")
+	}
+	if raw, err := os.ReadFile(filepath.Join(kept, "closed", "inner.txt")); err != nil || string(raw) != "inside a closed directory\n" {
 		t.Fatalf("retained %q err=%v", raw, err)
 	}
-	if target, err := os.Readlink(filepath.Join(record.QuarantineDir, "tree", "link")); err != nil || target != "app.txt" {
+	if target, err := os.Readlink(filepath.Join(kept, "link")); err != nil || target != "app.txt" {
 		t.Fatalf("retained link %q err=%v", target, err)
 	}
 }
@@ -330,7 +331,7 @@ func TestWholeTreeRetentionFailureKeepsTheTree(t *testing.T) {
 	f.boot()
 	task := f.claimMaterializedWorker()
 	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
-	testutil.FailErr(t, "remove baseline", os.Remove(task.WorkspaceBaselinePath))
+	testutil.FailErr(t, "remove pristine tree", os.RemoveAll(enginepaths.PristineTreeForBranchRoot(task.WorkspaceRoot)))
 
 	assertRetentionBlocked(t, f, task, f.engine.Queue.Cancel(t.Context(), task.ID, nil))
 }
@@ -340,7 +341,7 @@ func TestCancelWithoutARecoveryCoordinatorStaysUnresolved(t *testing.T) {
 	f := newEngineFixture(t)
 	task := f.claimMaterializedWorker()
 	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
-	unrecorded := workspace.NewManager(f.engine.BranchRoot, f.engine.SeedRoot)
+	unrecorded := workspace.NewManager(f.engine.BranchRoot)
 	f.engine.Queue.SetWorkerWorkspaceManager(unrecorded)
 
 	err := f.engine.Queue.Cancel(t.Context(), task.ID, nil)

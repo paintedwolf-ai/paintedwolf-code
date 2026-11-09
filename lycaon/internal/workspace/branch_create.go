@@ -4,14 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/filelock"
@@ -28,6 +25,8 @@ type branchClaimRecord struct {
 	claimed *claim.ClaimedView
 	state   claim.WorkspaceStateSnapshot
 	layered *branchLayeredView
+	// reopen rebuilds the view of a materialized branch an earlier process left.
+	reopen func(context.Context) (*branchLayeredView, error)
 }
 
 var (
@@ -159,37 +158,16 @@ func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Bindi
 	if err != nil {
 		return nil, nil, err
 	}
-	grants := make([]adapter.RootGrant, 0, len(sources))
-	targetDirs := make(map[string]string, len(sources))
-	primaryPath := sources[0].Path
-	for _, s := range sources {
-		id := s.ID
-		if id == "" {
-			id = "primary"
-		}
-		label := s.Label
-		if label == "" {
-			label = id
-		}
-		grants = append(grants, adapter.RootGrant{RootID: id, Label: label, SourcePath: s.Path, IsPrimary: s.IsPrimary})
-		if len(sources) == 1 {
-			targetDirs[id] = binding.Root
-		} else {
-			dir, err := projectroot.BranchDirForID(id)
-			if err != nil {
-				return nil, nil, err
-			}
-			targetDirs[id] = filepath.Join(binding.Root, dir)
-		}
-		if s.IsPrimary {
-			primaryPath = s.Path
-		}
+	grants := grantsForSources(sources)
+	targetDirs, err := branchTargetDirs(binding.Root, grants)
+	if err != nil {
+		return nil, nil, err
 	}
+	primaryPath := primarySourcePath(sources)
 	tracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: binding.ID, Facts: observation.UnknownVisibilityFacts(string(choice.AdapterID))})
 	if err != nil {
 		return nil, nil, err
 	}
-	maxEntries, maxBytes := effectiveLimits(ctx, m)
 	_, hints, _ := workspaceSelectionFromContext(ctx)
 	projKey := enginepaths.ProjectKey(primaryPath)
 	projectID := workspaceProjectFromContext(ctx, projKey)
@@ -209,9 +187,9 @@ func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Bindi
 		},
 		Grants:              grants,
 		FocusPathHints:      hints,
+		SelectionFacts:      choice.Selection,
 		ParentLayers:        parents.Layers,
 		ParentCheckpointIDs: parents.CheckpointIDs,
-		Limits:              claim.ClaimLimits{MaxEntries: maxEntries, MaxBytes: maxBytes},
 		Hooks: claim.ClaimHooks{
 			Retention:         services.retention,
 			VerifyConfinement: m.selector.VerifyViewConfinement,
@@ -278,76 +256,6 @@ func (m *Manager) adoptRecoveredMountedView(ctx context.Context, branchRoot, job
 // process, so there is nothing further to stop and no writable mapping the engine holds.
 func viewWritersHeldByBarrier(context.Context, string) error { return nil }
 
-func materializeRootWithAdapter(
-	ctx context.Context, m *Manager, source projectroot.RootRef,
-	sourceRoot, seedTree, branchRoot, runtimeDir, viewID string,
-	base PreparationProgress, maxEntries, maxBytes int64, fallbackReason adapter.ReasonCode,
-) (*adapter.PreparedView, mirrorResult, error) {
-	rootID := strings.TrimSpace(source.ID)
-	if rootID == "" {
-		rootID = "primary"
-	}
-	label := strings.TrimSpace(source.Label)
-	if label == "" {
-		label = rootID
-	}
-	if strings.TrimSpace(viewID) == "" {
-		viewID = uuid.NewString()
-	}
-	if strings.TrimSpace(runtimeDir) == "" {
-		runtimeDir = filepath.Join(enginepaths.MetaDirForBranchRoot(branchRoot), "adapter")
-	}
-	services, err := m.layered()
-	if err != nil {
-		return nil, mirrorResult{}, err
-	}
-	gitStore := services.privateGit.Store()
-	var res mirrorResult
-	req := adapter.PrepareRequest{
-		ViewID: viewID, RuntimeDir: runtimeDir,
-		TargetRootDirs: map[string]string{rootID: branchRoot},
-		Grants:         []adapter.RootGrant{{RootID: rootID, Label: label, SourcePath: sourceRoot, IsPrimary: true}},
-		MaxEntries:     maxEntries, MaxBytes: maxBytes, GitObjectStore: gitStore,
-		ProgressFn: func(_ adapter.FallbackProgress) {
-			progress := base
-			progress.Files, progress.Bytes = res.Files, res.Bytes
-			reportPreparation(ctx, progress)
-		},
-		FileSeeder: func(cCtx context.Context, _ string, rel, srcPath, dstPath string, info fs.FileInfo) (bool, int64, string, error) {
-			effectiveSrc := srcPath
-			if seedTree != "" {
-				candidate := filepath.Join(seedTree, filepath.FromSlash(rel))
-				if st, err := os.Stat(candidate); err == nil && st.Mode().IsRegular() {
-					effectiveSrc = candidate
-				}
-			}
-			cloned, err := cloneOrCopyFile(cCtx, effectiveSrc, dstPath, info.Mode(), info.ModTime())
-			if err != nil {
-				return false, 0, "", err
-			}
-			sz := max(info.Size(), 0)
-			if st, err := os.Stat(dstPath); err == nil {
-				sz = max(st.Size(), 0)
-			}
-			res.Files++
-			res.Bytes += sz
-			if cloned {
-				res.ClonedFiles++
-				res.ClonedBytes += sz
-			} else {
-				res.CopiedBytes += sz
-			}
-			progress := base
-			progress.Files, progress.Bytes = res.Files, res.Bytes
-			reportPreparation(cCtx, progress)
-			shaHex, err := sha256File(dstPath)
-			return cloned, sz, shaHex, err
-		},
-	}
-	view, err := PrepareMaterializedSeedView(ctx, m.seedRoot, req, fallbackReason)
-	return view, res, err
-}
-
 // refuseLiveBranchView stops a rebuild from recursing through a mount or discarding an unsettled
 // view. A record whose view something else settled, such as recovery, no longer holds the branch.
 func (m *Manager) refuseLiveBranchView(branchRoot, jobID string) error {
@@ -367,6 +275,14 @@ func (m *Manager) refuseLiveBranchView(branchRoot, jobID string) error {
 	if rec.layered == nil {
 		return nil
 	}
+	if rec.layered.engine == nil {
+		if err := settleMaterializedBranchView(context.Background(), rec.layered); err != nil {
+			return err
+		}
+		m.forgetBranchViews(branchRoot)
+		releaseBranchClaimState(branchRoot)
+		return nil
+	}
 	if supervisor, ok := rec.claimed.Adapter.(adapter.MountSupervisor); ok && rec.layered.services == services && supervisor.IsViewActive(rec.layered.viewID) {
 		return ErrBranchInUse
 	}
@@ -380,7 +296,9 @@ func forgetSettledBranchClaim(branchRoot string) {
 	rec := branchClaimStates[filepath.Clean(branchRoot)]
 	branchClaimsMu.RUnlock()
 	if rec.layered != nil {
-		consumer.UnregisterEngine(rec.layered.engine)
+		if rec.layered.engine != nil {
+			consumer.UnregisterEngine(rec.layered.engine)
+		}
 		rec.layered.services.coordinator.ForgetSettledView(rec.layered.viewID)
 	}
 	releaseBranchClaimState(branchRoot)

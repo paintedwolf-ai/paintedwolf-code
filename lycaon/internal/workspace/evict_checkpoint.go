@@ -7,10 +7,26 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/bloblifecycle"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
+
+func branchLifecycleDataDir(branchRoot string) string {
+	clean := filepath.Clean(branchRoot)
+	for cur := clean; ; {
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return clean
+		}
+		if filepath.Base(cur) == enginepaths.WorkerBranchesDirName {
+			return parent
+		}
+		cur = parent
+	}
+}
 
 // ErrBranchRetained reports a branch that holds the only copy of a result or has unsettled
 // runtime. Retention steps aside; it is not a sweep failure.
@@ -20,30 +36,27 @@ var ErrBranchRetained = errors.New("worker branch is retained")
 // complete verified checkpoint; any other tree evicts on its sealed overlay record.
 func (m *Manager) EvictWorkerBranch(ctx context.Context, branchRoot string) error {
 	jobID := jobIDForBranch(branchRoot)
-	if m.recovery == nil {
-		return EvictJobTree(ctx, branchRoot)
-	}
-	journal, err := m.recovery.LoadWorkerJournal(jobID)
-	if errors.Is(err, os.ErrNotExist) {
+	coord, journal, err := m.recoveryCoordinatorForJob(jobID)
+	if errors.Is(err, os.ErrNotExist) || coord == nil {
 		return EvictJobTree(ctx, branchRoot)
 	}
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrBranchRetained, err)
 	}
-	idents, err := m.recovery.ListMountIdentities(jobID)
+	idents, err := coord.ListMountIdentities(jobID)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrBranchRetained, err)
 	}
 	if len(idents) > 0 {
 		return fmt.Errorf("%w: %d recorded views of %s have not settled", ErrBranchRetained, len(idents), jobID)
 	}
-	if _, err := EvictVerifiedCheckpointBranch(ctx, branchRoot, m.recovery, jobID, journal.ViewID, journal.BackingDir); err != nil {
+	if _, err := EvictVerifiedCheckpointBranch(ctx, branchRoot, coord, jobID, journal.ViewID, journal.BackingDir); err != nil {
 		if errors.Is(err, recovery.ErrEvictUnsealedWorkRefused) {
 			return fmt.Errorf("%w: %w", ErrBranchRetained, err)
 		}
 		return err
 	}
-	return nil
+	return m.settleEvictedMaterializedView(ctx, branchRoot)
 }
 
 // EvictVerifiedCheckpointBranch evicts a worker branch tree and disposable working material only
@@ -57,6 +70,9 @@ func EvictVerifiedCheckpointBranch(ctx context.Context, branchRoot string, coord
 	if err != nil {
 		return nil, err
 	}
+	lifecycle := bloblifecycle.ForDevice(branchLifecycleDataDir(branchRoot))
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
 	releaseUse, err := tryExclusiveBranchUse(branchRoot)
 	if err != nil {
 		return nil, err

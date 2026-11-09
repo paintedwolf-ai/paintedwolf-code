@@ -88,12 +88,14 @@ func releaseGitLeases(store *privategit.RetainedObjectStore, leases []string) {
 	}
 }
 
-func cleanupFailedPrepare(req PrepareRequest, runtimeViewDir string, out *seedOutcome, core *layeredfs.Core) {
+func cleanupFailedPrepare(req PrepareRequest, runtimeViewDir, pristineDir, manifestPath string, out *seedOutcome, core *layeredfs.Core) {
 	releaseGitLeases(outcomeStore(out), outcomeLeases(out))
 	if core != nil {
 		_ = core.ReleaseView()
 	}
 	_ = removeAllForceWritable(runtimeViewDir)
+	_ = removeAllForceWritable(pristineDir)
+	_ = os.Remove(manifestPath)
 	if req.BackingDir != "" {
 		_ = removeAllForceWritable(req.BackingDir)
 	}

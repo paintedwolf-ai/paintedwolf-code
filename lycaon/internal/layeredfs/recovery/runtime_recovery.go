@@ -68,6 +68,31 @@ func (c *Coordinator) AdoptRecordedView(v RecordedView) error {
 	return c.RecordMountIdentity(ident)
 }
 
+// AdoptMaterializedView gives a materialized worker a journal, so its checkpoints have a record and
+// retention follows its rules. It records no mount identity: the tree alone holds a materialized
+// view's state, so there is nothing to settle before a restart or a deletion.
+func (c *Coordinator) AdoptMaterializedView(v RecordedView) error {
+	if strings.TrimSpace(v.WorkerID) == "" || strings.TrimSpace(v.ViewID) == "" {
+		return fmt.Errorf("%w: worker_id and view_id required", ErrCorruptRecoveryMetadata)
+	}
+	c.identityMu.Lock()
+	defer c.identityMu.Unlock()
+	j, err := c.LoadWorkerJournal(v.WorkerID)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return c.SaveWorkerJournal(WorkerLifecycleJournal{
+			WorkerID: v.WorkerID, ViewID: v.ViewID, TaskID: v.TaskID, ProjectID: v.ProjectID,
+			AdapterID: v.AdapterID, BootID: c.cfg.CurrentBootID,
+		})
+	case err != nil:
+		return err
+	case j.ViewID != v.ViewID:
+		j.ViewID, j.AdapterID, j.BootID = v.ViewID, v.AdapterID, c.cfg.CurrentBootID
+		return c.SaveWorkerJournal(j)
+	}
+	return nil
+}
+
 // ListWorkerIDs names every worker with a journal, including journals recovery must refuse.
 func (c *Coordinator) ListWorkerIDs() ([]string, error) {
 	entries, err := os.ReadDir(c.journalsDir)

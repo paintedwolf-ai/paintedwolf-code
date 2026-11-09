@@ -144,8 +144,9 @@ func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTas
 	if binding == nil || strings.TrimSpace(binding.Root) == "" {
 		return ErrWorkerBranchClaimFailed
 	}
+	// A view captured by checkpoint keeps nothing here: hashing the tree is what claiming must not do.
 	walk := workspacebaseline.Branch(layout.Roots, binding.Root)
-	if binding.Selection.Facts.PreparationKind == adapter.PreparationMounted {
+	if workspace.BranchUsesCheckpoints(binding.Root) {
 		walk = func(context.Context, func(workspacebaseline.CaptureFile) error) error { return nil }
 	}
 	baselinePath, err := baselines.Capture(ctx, task.ID, walk)
@@ -316,10 +317,18 @@ func (q *SQLQueue) ListBranchJobs(ctx context.Context) ([]BranchJob, error) {
 	}
 	out := make([]BranchJob, 0, len(rows))
 	for _, row := range rows {
+		status := api.WorkerStatus(row.Status)
 		mergeStatus := api.WorkerMergeStatus(db.StringFromNull(row.MergeStatus))
+		overlayID := db.StringFromNull(row.WorkspaceOverlayID)
+		var branchRoot string
+		if status == api.WorkerStatusComplete && strings.TrimSpace(overlayID) == "" {
+			if task, ok := q.store.getTask(ctx, row.ID); ok && task != nil {
+				branchRoot = task.WorkspaceRoot
+			}
+		}
 		out = append(out, BranchJob{
 			ID: row.ID, ProjectID: row.ProjectID,
-			Sealed: branchJobSealed(api.WorkerStatus(row.Status), mergeStatus, db.StringFromNull(row.WorkspaceOverlayID)),
+			Sealed: branchJobSealed(status, mergeStatus, overlayID, branchRoot),
 		})
 	}
 	return out, nil

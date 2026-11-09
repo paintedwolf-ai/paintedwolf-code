@@ -36,6 +36,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workspace"
+	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -84,7 +85,7 @@ func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredW
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
 	t.Cleanup(func() { _ = privateGit.Store().Close() })
-	manager := workspace.NewManager(branches, t.TempDir()).WithPrivateGit(privateGit)
+	manager := workspace.NewManager(branches).WithPrivateGit(privateGit)
 	if selector != nil {
 		manager = manager.WithSelector(selector)
 	}
@@ -132,6 +133,7 @@ func TestOrdinaryWorkerClaimRegistersAndSettlesItsConsumerEngine(t *testing.T) {
 		},
 	})
 	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector.BudgetFor = adapter.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	fixture := newLayeredWorkerFixture(t, selector)
 	task := fixture.claim(t)
@@ -155,8 +157,13 @@ func TestOrdinaryWorkerClaimRegistersAndSettlesItsConsumerEngine(t *testing.T) {
 	}
 }
 
-func TestOrdinaryWorkerClaimFallsBackWithTheConfinementReason(t *testing.T) {
-	fixture := newLayeredWorkerFixture(t, nil)
+// Forced materialization of a tree past the budget: no enforcer means the mount has a lasting reason
+// to be unavailable, so this runs the whole worker, private Git and checkpoint path on the copy adapter.
+func TestOverBudgetWorkerWithoutEnforcementRunsTheCompleteMaterializedPath(t *testing.T) {
+	selector := workspace.DefaultWorkspaceSelector()
+	selector.BudgetFor = adapter.ZeroBudget
+	selector.Confinement = nil
+	fixture := newLayeredWorkerFixture(t, selector)
 	task := fixture.claim(t)
 
 	snap, receipt, ok := WorkerClaimWorkspaceState(task.ID)
@@ -183,7 +190,21 @@ func TestOrdinaryWorkerClaimFallsBackWithTheConfinementReason(t *testing.T) {
 		t.Fatalf("private repository misses the source's history: %q", out)
 	}
 
+	// A claim hashes nothing, so it records nothing a capture would compare with.
+	baseline, err := workspacebaseline.Open(t.Context(), task.WorkspaceBaselinePath, workspacebaseline.ContentStore(task.WorkspaceBaselinePath))
+	testutil.FailErr(t, "open baseline", err)
+	baselineFiles := 0
+	testutil.FailErr(t, "read baseline", baseline.Each(t.Context(), func(string, workspacebaseline.File) error { baselineFiles++; return nil }))
+	testutil.FailErr(t, "close baseline", baseline.Close())
+	if baselineFiles != 0 {
+		t.Fatalf("a materialized claim recorded %d baseline files", baselineFiles)
+	}
+
 	testutil.FailErr(t, "edit branch", os.WriteFile(filepath.Join(task.WorkspaceRoot, "main.go"), []byte("package changed\n"), 0o644))
+	testutil.FailErr(t, "delete in branch", os.Remove(filepath.Join(task.WorkspaceRoot, "gone.go")))
+	gittest.Run(t, worktree, "add", "-A")
+	gittest.Run(t, worktree, "commit", "-m", "worker commit")
+	workerCommit := strings.TrimSpace(gittest.Run(t, worktree, "rev-parse", "HEAD"))
 	if won, err := fixture.queue.Complete(t.Context(), task, api.WorkerResult{Status: "complete"}); err != nil || !won {
 		t.Fatalf("Complete: won=%v err=%v", won, err)
 	}
@@ -193,6 +214,29 @@ func TestOrdinaryWorkerClaimFallsBackWithTheConfinementReason(t *testing.T) {
 	}
 	if raw, err := os.ReadFile(filepath.Join(fixture.source, "main.go")); err != nil || string(raw) != "package main\n" {
 		t.Fatalf("source changed before promotion: %q err=%v", raw, err)
+	}
+	if completed.WorkspaceOverlayPath != "" {
+		t.Fatalf("a checkpoint worker sealed an overlay too: %s", completed.WorkspaceOverlayPath)
+	}
+	store, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	testutil.FailErr(t, "open task checkpoint", err)
+	if !published || manifest.WorkerID != task.ID || len(manifest.Entries) != 2 {
+		t.Fatalf("published=%v manifest=%+v", published, manifest)
+	}
+	for _, entry := range manifest.Entries {
+		if entry.Base.SHA256 == "" {
+			t.Fatalf("no exact base for %s", entry.Path.Rel)
+		}
+		if _, err := store.ReadBlob(entry.Base.SHA256); err != nil {
+			t.Fatalf("base bytes of %s are not in the store: %v", entry.Path.Rel, err)
+		}
+	}
+	found := false
+	for _, oid := range manifest.PrivateGit.Refs {
+		found = found || oid == workerCommit
+	}
+	if !found {
+		t.Fatalf("the worker's commit left the checkpoint: %v want %s", manifest.PrivateGit.Refs, workerCommit)
 	}
 	testutil.FailErr(t, "destroy branch", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 }
@@ -252,7 +296,9 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	if !confine.Available() {
 		t.Skip("this host applies no confinement")
 	}
-	fixture := newLayeredWorkerFixture(t, workspace.EnforcedWorkspaceSelector())
+	selector := workspace.EnforcedWorkspaceSelector()
+	selector.BudgetFor = adapter.ZeroBudget
+	fixture := newLayeredWorkerFixture(t, selector)
 	// Worker storage sits under the engine's state root, as it does in production.
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(fixture.branches))
 	task := fixture.claim(t)
@@ -450,10 +496,15 @@ func assertWorkerProcessIsDenied(t *testing.T, root, source string, view *adapte
 
 func openFixtureRecovery(t *testing.T, branches string) *recovery.Coordinator {
 	t.Helper()
+	privateGit, err := workspace.OpenPrivateGit(branches)
+	testutil.FailErr(t, "open private Git", err)
+	t.Cleanup(func() { _ = privateGit.Store().Close() })
 	root := filepath.Join(branches, ".adapter", "recovery")
 	store, err := checkpoint.NewStore(filepath.Join(root, "checkpoints"))
 	testutil.FailErr(t, "open checkpoint store", err)
-	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{RootDir: root, CheckpointStore: store})
+	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
+		RootDir: root, CheckpointStore: store, GitStore: privateGit.Store(), GitManager: privateGit,
+	})
 	testutil.FailErr(t, "open coordinator", err)
 	return coordinator
 }
@@ -466,6 +517,7 @@ func fixtureMountedSelector() *adapter.Selector {
 		},
 	})
 	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector.BudgetFor = adapter.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	return selector
 }

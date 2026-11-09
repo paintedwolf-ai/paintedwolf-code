@@ -1,9 +1,6 @@
 package adapter
 
 import (
-	"errors"
-	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -11,19 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
-
-func resolvePrepareLimits(maxEntries, maxBytes int64) (int64, int64) {
-	if maxEntries <= 0 {
-		maxEntries = DefaultMaxEntries
-	}
-	if maxBytes <= 0 {
-		maxBytes = DefaultMaxBytes
-	}
-	return maxEntries, maxBytes
-}
 
 func collectGrantIDs(grants []RootGrant) []string {
 	ids := make([]string, 0, len(grants))
@@ -31,29 +17,6 @@ func collectGrantIDs(grants []RootGrant) []string {
 		ids = append(ids, g.RootID)
 	}
 	return ids
-}
-
-func checkSourceIndexEstimates(viewID string, narrowed []RootGrant, selectedIDs []string, maxEntries, maxBytes int64) error {
-	var totalEntries, totalBytes int64
-	for _, g := range narrowed {
-		if g.Estimate == nil {
-			continue
-		}
-		totalEntries += g.Estimate.EstimatedEntries
-		totalBytes += g.Estimate.EstimatedBytes
-		if g.Estimate.EstimatedEntries > maxEntries || g.Estimate.EstimatedBytes > maxBytes ||
-			totalEntries > maxEntries || totalBytes > maxBytes {
-			return &PreparationLimitError{
-				ReasonCode: ReasonWorkspacePreparationLimit, ViewID: viewID, RootID: g.RootID,
-				SelectedRoots: selectedIDs, ObservedEntries: totalEntries, ObservedBytes: totalBytes,
-				MaxEntries: maxEntries, MaxBytes: maxBytes, EstimatedRejection: true,
-				CleanedIncompleteSeed: true, RetryWithSmallerSelection: true,
-				SuggestedSubroots: suggestSubroots(narrowed),
-				Diagnostic:        "source-index estimate exceeds workspace preparation limit",
-			}
-		}
-	}
-	return nil
 }
 
 func suggestSubroots(grants []RootGrant) []string {
@@ -73,18 +36,16 @@ func suggestSubroots(grants []RootGrant) []string {
 	return suggestions
 }
 
-// seededLowerProvider serves the immutable initial materialized seed snapshot to Core
-// so direct on-disk edits/deletions/replacements in the materialized workspace directory
-// never corrupt Core's LayerTrunk lookups during journal synchronization.
-type seededLowerProvider struct {
-	rootID   string
-	seedDir  string
-	bases    map[string]layeredfs.BaseCapture
-	children map[string][]string
+// pristineLowerProvider serves a root's exact base to Core: names and modes from the stat manifest
+// and bytes from the pristine tree, so a worker's edits in the working tree never reach a trunk lookup.
+type pristineLowerProvider struct {
+	pristineDir string
+	records     map[string]statRecord
+	children    map[string][]string
 }
 
-func newSeededLowerProvider(rootID, seedDir string, allBases []layeredfs.BaseCapture) *seededLowerProvider {
-	bases := make(map[string]layeredfs.BaseCapture)
+func newPristineLowerProvider(rootID, pristineDir string, all []statRecord) *pristineLowerProvider {
+	records := make(map[string]statRecord)
 	childSet := make(map[string]map[string]struct{})
 	addChild := func(parent, name string) {
 		if name == "" || name == "." {
@@ -97,15 +58,15 @@ func newSeededLowerProvider(rootID, seedDir string, allBases []layeredfs.BaseCap
 		}
 		m[name] = struct{}{}
 	}
-	for _, b := range allBases {
-		if b.Path.RootID != rootID {
+	for _, rec := range all {
+		if rec.Root != rootID {
 			continue
 		}
-		rel := strings.TrimPrefix(path.Clean(strings.ReplaceAll(b.Path.Rel, "\\", "/")), "/")
-		if rel == "" || rel == "." {
+		rel := cleanLowerRel(rec.Rel)
+		if rel == "" {
 			continue
 		}
-		bases[rel] = b
+		records[rel] = rec
 		cur := rel
 		for {
 			parent := path.Dir(cur)
@@ -127,115 +88,50 @@ func newSeededLowerProvider(rootID, seedDir string, allBases []layeredfs.BaseCap
 		sort.Strings(names)
 		children[parent] = names
 	}
-	return &seededLowerProvider{
-		rootID:   rootID,
-		seedDir:  seedDir,
-		bases:    bases,
-		children: children,
-	}
+	return &pristineLowerProvider{pristineDir: pristineDir, records: records, children: children}
 }
 
-func registerSeededLowerProviders(
-	core *layeredfs.Core,
-	backingDir string,
-	roots []PreparedRoot,
-	bases []layeredfs.BaseCapture,
-	filePaths map[layeredfs.QualifiedPath]string,
-) error {
-	if core == nil {
-		return nil
-	}
-	basesDir := filepath.Join(backingDir, "bases")
-	if resolved, err := filepath.EvalSymlinks(basesDir); err == nil {
-		basesDir = resolved
-	}
-	for i := range bases {
-		if bases[i].Kind != layeredfs.EntryRegular {
-			continue
-		}
-		srcPath := filePaths[bases[i].Path]
-		if srcPath == "" {
-			continue
-		}
-		dstBase := filepath.Join(basesDir, fmt.Sprintf("seed-base-%08d", i+1))
-		if err := copyOrCloneSeedBase(srcPath, dstBase); err != nil {
-			return err
-		}
-		bases[i].BackingFile = dstBase
-	}
-	for _, r := range roots {
-		if err := core.RegisterLowerProvider(r.RootID, newSeededLowerProvider(r.RootID, r.WorkspacePath, bases)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func copyOrCloneSeedBase(srcPath, dstPath string) error {
-	if cloned, err := fileclone.Clone(srcPath, dstPath); err == nil && cloned {
-		return nil
-	}
-	in, err := os.Open(srcPath)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = in.Close() }()
-	out, err := os.OpenFile(dstPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(out, in)
-	closeErr := out.Close()
-	return errors.Join(copyErr, closeErr)
-}
-
-func (p *seededLowerProvider) Lstat(rel string) (layeredfs.LowerEntry, error) {
+func cleanLowerRel(rel string) string {
 	clean := strings.TrimPrefix(path.Clean(strings.ReplaceAll(rel, "\\", "/")), "/")
-	if clean == "" || clean == "." {
-		return layeredfs.LowerEntry{
-			Kind:  layeredfs.EntryDirectory,
-			Mode:  fs.ModeDir | 0o755,
-			Nlink: 2,
-		}, nil
+	if clean == "." {
+		return ""
 	}
-	b, ok := p.bases[clean]
+	return clean
+}
+
+func (p *pristineLowerProvider) Lstat(rel string) (layeredfs.LowerEntry, error) {
+	clean := cleanLowerRel(rel)
+	if clean == "" {
+		return layeredfs.LowerEntry{Kind: layeredfs.EntryDirectory, Mode: fs.ModeDir | 0o755, Nlink: 2}, nil
+	}
+	rec, ok := p.records[clean]
 	if !ok {
 		return layeredfs.LowerEntry{}, os.ErrNotExist
 	}
 	return layeredfs.LowerEntry{
-		Kind:       b.Kind,
-		Mode:       b.Mode,
-		Size:       b.Size,
-		ModTime:    b.ModTime,
-		Ino:        b.Ino,
-		Nlink:      1,
-		LinkTarget: b.LinkTarget,
+		Kind: rec.Kind, Mode: rec.fileMode(), Size: rec.Size, ModTime: rec.modTime(), Nlink: 1, LinkTarget: rec.LinkTarget,
 	}, nil
 }
 
-func (p *seededLowerProvider) Readlink(rel string) (string, error) {
-	clean := strings.TrimPrefix(path.Clean(strings.ReplaceAll(rel, "\\", "/")), "/")
-	b, ok := p.bases[clean]
+func (p *pristineLowerProvider) Readlink(rel string) (string, error) {
+	rec, ok := p.records[cleanLowerRel(rel)]
 	if !ok {
 		return "", os.ErrNotExist
 	}
-	if b.Kind != layeredfs.EntrySymlink {
+	if rec.Kind != layeredfs.EntrySymlink {
 		return "", os.ErrInvalid
 	}
-	return b.LinkTarget, nil
+	return rec.LinkTarget, nil
 }
 
-func (p *seededLowerProvider) ReadDir(rel string) ([]layeredfs.LowerDirEntry, error) {
-	clean := strings.TrimPrefix(path.Clean(strings.ReplaceAll(rel, "\\", "/")), "/")
-	if clean == "." {
-		clean = ""
-	}
+func (p *pristineLowerProvider) ReadDir(rel string) ([]layeredfs.LowerDirEntry, error) {
+	clean := cleanLowerRel(rel)
 	if clean != "" {
-		b, ok := p.bases[clean]
+		rec, ok := p.records[clean]
 		if !ok {
 			return nil, os.ErrNotExist
 		}
-		if b.Kind != layeredfs.EntryDirectory {
+		if rec.Kind != layeredfs.EntryDirectory {
 			return nil, os.ErrInvalid
 		}
 	}
@@ -246,18 +142,13 @@ func (p *seededLowerProvider) ReadDir(rel string) ([]layeredfs.LowerDirEntry, er
 		if clean != "" {
 			childRel = clean + "/" + name
 		}
-		b := p.bases[childRel]
-		out = append(out, layeredfs.LowerDirEntry{
-			Name: name,
-			Kind: b.Kind,
-			Mode: b.Mode,
-			Ino:  b.Ino,
-		})
+		rec := p.records[childRel]
+		out = append(out, layeredfs.LowerDirEntry{Name: name, Kind: rec.Kind, Mode: rec.fileMode()})
 	}
 	return out, nil
 }
 
-func (p *seededLowerProvider) OpenRead(rel string) (layeredfs.ReadSeekCloser, layeredfs.LowerEntry, error) {
+func (p *pristineLowerProvider) OpenRead(rel string) (layeredfs.ReadSeekCloser, layeredfs.LowerEntry, error) {
 	entry, err := p.Lstat(rel)
 	if err != nil {
 		return nil, layeredfs.LowerEntry{}, err
@@ -265,33 +156,20 @@ func (p *seededLowerProvider) OpenRead(rel string) (layeredfs.ReadSeekCloser, la
 	if entry.Kind != layeredfs.EntryRegular {
 		return nil, layeredfs.LowerEntry{}, os.ErrInvalid
 	}
-	clean := strings.TrimPrefix(path.Clean(strings.ReplaceAll(rel, "\\", "/")), "/")
-	openPath := filepath.Join(p.seedDir, filepath.FromSlash(rel))
-	if b, ok := p.bases[clean]; ok && b.BackingFile != "" {
-		openPath = b.BackingFile
-	}
-	f, err := os.Open(openPath)
+	f, err := contentOpen(filepath.Join(p.pristineDir, filepath.FromSlash(cleanLowerRel(rel))))
 	if err != nil {
 		return nil, layeredfs.LowerEntry{}, err
 	}
 	return f, entry, nil
 }
 
-func (p *seededLowerProvider) ListXattr(rel string) (map[string][]byte, error) {
-	clean := strings.TrimPrefix(path.Clean(strings.ReplaceAll(rel, "\\", "/")), "/")
-	if clean == "" || clean == "." {
+func (p *pristineLowerProvider) ListXattr(rel string) (map[string][]byte, error) {
+	clean := cleanLowerRel(rel)
+	if clean == "" {
 		return nil, nil
 	}
-	b, ok := p.bases[clean]
-	if !ok {
+	if _, ok := p.records[clean]; !ok {
 		return nil, os.ErrNotExist
 	}
-	if len(b.Xattrs) == 0 {
-		return nil, nil
-	}
-	cp := make(map[string][]byte, len(b.Xattrs))
-	for k, v := range b.Xattrs {
-		cp[k] = append([]byte(nil), v...)
-	}
-	return cp, nil
+	return readPathXattrs(filepath.Join(p.pristineDir, filepath.FromSlash(clean)))
 }

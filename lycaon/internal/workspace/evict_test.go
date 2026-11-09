@@ -30,7 +30,7 @@ func createBranch(t *testing.T, mgr *workspace.Manager, jobID string) (string, s
 
 func TestEvictJobTreeKeepsRecordAndRebuildRestores(t *testing.T) {
 	branches := t.TempDir()
-	mgr := workspace.NewManager(branches, t.TempDir())
+	mgr := workspace.NewManager(branches)
 	_, root := createBranch(t, mgr, "job-evict")
 	if !workspace.BranchTreePresent(root) {
 		t.Fatal("fresh branch must read as present")
@@ -76,7 +76,7 @@ func TestEvictJobTreeKeepsRecordAndRebuildRestores(t *testing.T) {
 }
 
 func TestEvictJobTreeRefusesWhileLeased(t *testing.T) {
-	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
+	mgr := workspace.NewManager(t.TempDir())
 	_, root := createBranch(t, mgr, "job-lease")
 	release, err := workspace.AcquireBranchUse(context.Background(), root)
 	testutil.FailErr(t, "lease", err)
@@ -89,7 +89,7 @@ func TestEvictJobTreeRefusesWhileLeased(t *testing.T) {
 
 func TestListJobTreesReportsPresenceSizeAndLastUse(t *testing.T) {
 	branches := t.TempDir()
-	mgr := workspace.NewManager(branches, t.TempDir())
+	mgr := workspace.NewManager(branches)
 	_, kept := createBranch(t, mgr, "job-kept")
 	_, evicted := createBranch(t, mgr, "job-evicted")
 	old := time.Now().Add(-48 * time.Hour)
@@ -117,8 +117,7 @@ func TestListJobTreesReportsPresenceSizeAndLastUse(t *testing.T) {
 
 func TestEvictVerifiedCheckpointBranchAndRebuildWithLocalDataInventory(t *testing.T) {
 	branches := t.TempDir()
-	seeds := t.TempDir()
-	mgr := workspace.NewManager(branches, seeds)
+	mgr := workspace.NewManager(branches)
 	project, root := createBranch(t, mgr, "job-cp-evict")
 
 	cpStore, err := checkpoint.NewStore(t.TempDir())
@@ -190,7 +189,7 @@ func TestEvictVerifiedCheckpointBranchAndRebuildWithLocalDataInventory(t *testin
 	testutil.FailErr(t, "RebuildWorkerWorkspaceFromCheckpoint", err)
 	defer func() { _, _ = adp.Release(t.Context(), recRes.ViewID) }()
 
-	inv, err := workspace.BuildLocalDataInventory(t.Context(), branches, seeds, coord)
+	inv, err := workspace.BuildLocalDataInventory(t.Context(), branches, coord)
 	testutil.FailErr(t, "BuildLocalDataInventory", err)
 	if len(inv.Entries) == 0 {
 		t.Fatal("expected inventory entries")

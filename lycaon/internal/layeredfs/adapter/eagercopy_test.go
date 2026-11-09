@@ -27,19 +27,26 @@ func TestForcedProbeFailureFullMaterializedWorkerPrivateGitAndCheckpointSuite(t 
 		},
 	})
 	sel := NewSelector("darwin", nil, forcedFailPrimary, NewEagerCopyAdapter(ReasonNone))
+	sel.BudgetFor = ZeroBudget
 
-	var progressUpdates []FallbackProgress
-	adp, view, probeRes, err := sel.SelectAndPrepare(ctx, ProbeConfig{RuntimeDir: tmp}, PrepareRequest{
+	grants := []RootGrant{{RootID: "repo", Label: "repo", SourcePath: srcRoot, IsPrimary: true}}
+	choice, err := sel.Choose(ctx, ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: grants})
+	if err != nil {
+		t.Fatalf("Choose failed: %v", err)
+	}
+	adp, probeRes := choice.Adapter, choice.Probe
+	if probeRes.Supported || adp.ID() != AdapterEagerCopy || choice.CopyBudget != nil || choice.Facts.Reason != SelectionOverBudgetMaterial {
+		t.Fatalf("expected the declared cannot-mount case on eagercopy, got %+v", choice)
+	}
+	var progressUpdates []MaterializeProgress
+	view, err := adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "mat-worker-1",
 		RuntimeDir: filepath.Join(tmp, "runtime"),
-		Grants:     []RootGrant{{RootID: "repo", Label: "repo", SourcePath: srcRoot, IsPrimary: true}},
-		ProgressFn: func(p FallbackProgress) { progressUpdates = append(progressUpdates, p) },
+		Grants:     grants,
+		ProgressFn: func(p MaterializeProgress) { progressUpdates = append(progressUpdates, p) },
 	})
 	if err != nil {
-		t.Fatalf("SelectAndPrepare failed: %v", err)
-	}
-	if probeRes.Supported || adp.ID() != AdapterEagerCopy {
-		t.Fatalf("expected fallback to eagercopy, got adapter=%s probe=%+v", adp.ID(), probeRes)
+		t.Fatalf("Prepare failed: %v", err)
 	}
 	if view.Facts.PreparationKind != PreparationMaterialized || view.Facts.UntouchedSourceVisibility != VisibilityFixed || view.Facts.FallbackReason != ReasonMountDenied {
 		t.Fatalf("unexpected materialized facts: %+v", view.Facts)
@@ -152,71 +159,6 @@ func verifyFixedSourceVisibilityAndCheckpoint(t *testing.T, ctx context.Context,
 	}
 }
 
-func TestMaterializedLimitsOversizedEstimateUnderestimatedAndUnknownSize(t *testing.T) {
-	ctx := context.Background()
-	tmp := t.TempDir()
-	srcRoot := filepath.Join(tmp, "bigroot")
-	_ = os.MkdirAll(filepath.Join(srcRoot, "subA"), 0o755)
-	_ = os.MkdirAll(filepath.Join(srcRoot, "subB"), 0o755)
-	for i, name := range []string{"subA/f1.txt", "subA/f2.txt", "subB/f3.txt", "subB/f4.txt"} {
-		_ = os.WriteFile(filepath.Join(srcRoot, filepath.FromSlash(name)), make([]byte, 200*(i+1)), 0o644)
-	}
-
-	adp := NewEagerCopyAdapter(ReasonMountDenied)
-	runtimeDir := filepath.Join(tmp, "runtime")
-
-	// 1. Oversized estimate refuses preparation early.
-	_, err := adp.Prepare(ctx, PrepareRequest{
-		ViewID:     "limit-est",
-		RuntimeDir: runtimeDir,
-		Grants: []RootGrant{{
-			RootID:     "r1",
-			SourcePath: srcRoot,
-			IsPrimary:  true,
-			Estimate:   &SourceIndexEstimate{EstimatedEntries: DefaultMaxEntries + 10, EstimatedBytes: 1024},
-		}},
-	})
-	var limErr *PreparationLimitError
-	if !errors.As(err, &limErr) || !limErr.EstimatedRejection || limErr.ReasonCode != ReasonWorkspacePreparationLimit || !limErr.RetryWithSmallerSelection || len(limErr.SuggestedSubroots) != 2 {
-		t.Fatalf("expected early PreparationLimitError with suggestions, got %+v (err=%v)", limErr, err)
-	}
-
-	// 2. Underestimated root stops at actual entry limit and cleans up incomplete seed.
-	_, err = adp.Prepare(ctx, PrepareRequest{
-		ViewID:     "limit-underest",
-		RuntimeDir: runtimeDir,
-		MaxEntries: 3,
-		Grants: []RootGrant{{
-			RootID:     "r1",
-			SourcePath: srcRoot,
-			IsPrimary:  true,
-			Estimate:   &SourceIndexEstimate{EstimatedEntries: 1, EstimatedBytes: 10},
-		}},
-	})
-	limErr = nil
-	if !errors.As(err, &limErr) || limErr.EstimatedRejection || !limErr.CleanedIncompleteSeed || limErr.ObservedEntries <= 3 {
-		t.Fatalf("expected actual entry limit failure with cleanup, got %+v (err=%v)", limErr, err)
-	}
-	if _, statErr := os.Stat(filepath.Join(runtimeDir, "views", "limit-underest")); !os.IsNotExist(statErr) {
-		t.Fatalf("incomplete seed directory was not cleaned up: %v", statErr)
-	}
-
-	// 3. Unknown-size root stops at actual byte limit mid-copy and cleans up.
-	_, err = adp.Prepare(ctx, PrepareRequest{
-		ViewID:     "limit-bytes",
-		RuntimeDir: runtimeDir,
-		MaxBytes:   350,
-		Grants:     []RootGrant{{RootID: "r1", SourcePath: srcRoot, IsPrimary: true}},
-	})
-	limErr = nil
-	if !errors.As(err, &limErr) || limErr.EstimatedRejection || !limErr.CleanedIncompleteSeed || limErr.ObservedBytes <= 350 {
-		t.Fatalf("expected actual byte limit failure with cleanup, got %+v (err=%v)", limErr, err)
-	}
-	if _, statErr := os.Stat(filepath.Join(runtimeDir, "views", "limit-bytes")); !os.IsNotExist(statErr) {
-		t.Fatalf("incomplete byte-limit seed directory was not cleaned up: %v", statErr)
-	}
-}
-
 func TestMaterializedCancellationCleansOnlyCanceledPreparation(t *testing.T) {
 	ctx := context.Background()
 	tmp := t.TempDir()
@@ -242,7 +184,7 @@ func TestMaterializedCancellationCleansOnlyCanceledPreparation(t *testing.T) {
 		ViewID:     "canceled-prep",
 		RuntimeDir: runtimeDir,
 		Grants:     []RootGrant{{RootID: "r1", SourcePath: srcRoot, IsPrimary: true}},
-		ProgressFn: func(p FallbackProgress) {
+		ProgressFn: func(MaterializeProgress) {
 			cancel()
 		},
 	})
@@ -328,10 +270,6 @@ func verifyPreservedModesAndIntentionalRoDirChmod(
 	roDirInfo, err := os.Lstat(roDirPath)
 	if err != nil || roDirInfo.Mode().Perm() != 0o555 {
 		t.Fatalf("expected seeded rodir mode 0555 on disk, err=%v mode=%v", err, roDirInfo.Mode())
-	}
-	roBase, ok := view.Core.CapturedBase(layeredfs.QualifiedPath{RootID: "repo", Rel: "rodir"})
-	if !ok || roBase.Mode.Perm() != 0o555 {
-		t.Fatalf("expected CapturedBase for rodir mode 0555, ok=%v base=%+v", ok, roBase)
 	}
 	fileInfo, err := os.Lstat(filepath.Join(view.PrimaryWorkPath, "subdir", "script.sh"))
 	if err != nil || fileInfo.Mode().Perm() != 0o750 {

@@ -6,7 +6,6 @@ package adapter
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -42,34 +41,28 @@ const (
 type ReasonCode string
 
 const (
-	ReasonNone                      ReasonCode = ""
-	ReasonUnsupportedKernel         ReasonCode = "unsupported_kernel"
-	ReasonUnsupportedPlatform       ReasonCode = "unsupported_platform"
-	ReasonMountDenied               ReasonCode = "mount_denied"
-	ReasonFUSEDeviceUnavailable     ReasonCode = "fuse_device_unavailable"
-	ReasonFUSEHelperUnavailable     ReasonCode = "fuse_helper_unavailable"
-	ReasonFUSEMountDenied           ReasonCode = "fuse_mount_denied"
-	ReasonConfinementUnavailable    ReasonCode = "confinement_unavailable"
-	ReasonHelperMissing             ReasonCode = "helper_missing"
-	ReasonMountHelperUnavailable    ReasonCode = "mount_helper_unavailable"
-	ReasonBackingConfinementFailed  ReasonCode = "backing_confinement_failed"
-	ReasonTransientStartupFailure   ReasonCode = "transient_startup_failure"
-	ReasonProbeReadWriteFailed      ReasonCode = "probe_read_write_failed"
-	ReasonCleanupFailed             ReasonCode = "cleanup_failed"
-	ReasonBarrierFailed             ReasonCode = "barrier_failed"
-	ReasonPreparationLimit          ReasonCode = "workspace_preparation_limit"
-	ReasonWorkspacePreparationLimit ReasonCode = "workspace_preparation_limit"
-	ReasonUnauthorizedRoot          ReasonCode = "unauthorized_root"
-	ReasonInvalidSelection          ReasonCode = "invalid_selection"
-	ReasonActiveViewMutated         ReasonCode = "active_view_mutated"
-	ReasonViewNotFound              ReasonCode = "view_not_found"
-	ReasonContextCanceled           ReasonCode = "context_canceled"
-)
-
-// Default limits for materialized workspace fallback (#1658).
-const (
-	DefaultMaxEntries int64 = 200_000
-	DefaultMaxBytes   int64 = 5 * 1024 * 1024 * 1024 // 5 GiB
+	ReasonNone                     ReasonCode = ""
+	ReasonUnsupportedKernel        ReasonCode = "unsupported_kernel"
+	ReasonUnsupportedPlatform      ReasonCode = "unsupported_platform"
+	ReasonMountDenied              ReasonCode = "mount_denied"
+	ReasonFUSEDeviceUnavailable    ReasonCode = "fuse_device_unavailable"
+	ReasonFUSEHelperUnavailable    ReasonCode = "fuse_helper_unavailable"
+	ReasonFUSEMountDenied          ReasonCode = "fuse_mount_denied"
+	ReasonConfinementUnavailable   ReasonCode = "confinement_unavailable"
+	ReasonHelperMissing            ReasonCode = "helper_missing"
+	ReasonMountHelperUnavailable   ReasonCode = "mount_helper_unavailable"
+	ReasonBackingConfinementFailed ReasonCode = "backing_confinement_failed"
+	ReasonTransientStartupFailure  ReasonCode = "transient_startup_failure"
+	ReasonProbeReadWriteFailed     ReasonCode = "probe_read_write_failed"
+	ReasonCleanupFailed            ReasonCode = "cleanup_failed"
+	ReasonBarrierFailed            ReasonCode = "barrier_failed"
+	ReasonWorkspaceDoesNotFit      ReasonCode = "workspace_does_not_fit"
+	ReasonCopyPassedBudget         ReasonCode = "copy_passed_budget"
+	ReasonUnauthorizedRoot         ReasonCode = "unauthorized_root"
+	ReasonInvalidSelection         ReasonCode = "invalid_selection"
+	ReasonActiveViewMutated        ReasonCode = "active_view_mutated"
+	ReasonViewNotFound             ReasonCode = "view_not_found"
+	ReasonContextCanceled          ReasonCode = "context_canceled"
 )
 
 // CacheRevalidation describes the adapter's attribute/directory cache coherence guarantees.
@@ -155,15 +148,25 @@ type WorkspaceSelection struct {
 	Subroots map[string]string `json:"subroots,omitempty"`
 }
 
-// FallbackProgress reports live progress during materialized workspace seeding.
-type FallbackProgress struct {
-	ViewID          string `json:"view_id"`
-	RootID          string `json:"root_id"`
-	ObservedEntries int64  `json:"observed_entries"`
-	ObservedBytes   int64  `json:"observed_bytes"`
-	MaxEntries      int64  `json:"max_entries"`
-	MaxBytes        int64  `json:"max_bytes"`
-	GitReposBuilt   int    `json:"git_repos_built"`
+// MaterializeProgress reports live progress while a view's two trees are built.
+type MaterializeProgress struct {
+	ViewID        string `json:"view_id"`
+	RootID        string `json:"root_id"`
+	Entries       int64  `json:"entries"`
+	LogicalBytes  int64  `json:"logical_bytes"`
+	CopiedBytes   int64  `json:"copied_bytes"`
+	GitReposBuilt int    `json:"git_repos_built"`
+}
+
+// MaterializeStats counts what building a view's two trees did. Entries and files count the source
+// once; CopiedBytes counts every byte written, so a byte copy of both trees counts its content twice.
+type MaterializeStats struct {
+	Entries          int64 `json:"entries"`
+	ClonedFiles      int64 `json:"cloned_files"`
+	ClonedBytes      int64 `json:"cloned_bytes"`
+	CopiedFiles      int64 `json:"copied_files"`
+	CopiedBytes      int64 `json:"copied_bytes"`
+	ContentBytesRead int64 `json:"content_bytes_read"`
 }
 
 // SeedGitRepoSpec describes a source repository (.git dir or gitlink) discovered during seed traversal.
@@ -198,8 +201,8 @@ type SeedGitInitResult struct {
 // SeedGitInitializer builds private Git metadata/object retention during materialized seeding.
 type SeedGitInitializer func(ctx context.Context, spec SeedGitRepoSpec) (SeedGitInitResult, error)
 
-// FileSeederFunc optionally seeds a regular file (e.g. via CoW clone or bridge cache) and returns its bytes and SHA-256.
-type FileSeederFunc func(ctx context.Context, rootID, rel, srcPath, dstPath string, info fs.FileInfo) (cloned bool, bytesWritten int64, sha256Hex string, err error)
+// FileCloner clones src to dst, reporting false when this pair of paths cannot clone.
+type FileCloner func(src, dst string) (bool, error)
 
 // PrepareRequest configures preparation of a single worker workspace view.
 type PrepareRequest struct {
@@ -214,12 +217,18 @@ type PrepareRequest struct {
 	GitInterceptor  layeredfs.GitInterceptor
 	ObservationSink layeredfs.ObservationSink
 	// GitObjectStore retains materialized seed Git objects in the host's store instead of a per-root one.
-	GitObjectStore  *privategit.RetainedObjectStore
-	MaxEntries      int64
-	MaxBytes        int64
-	ProgressFn      func(FallbackProgress)
-	SeedGitInit     SeedGitInitializer
-	FileSeeder      FileSeederFunc
+	GitObjectStore *privategit.RetainedObjectStore
+	// PristineDir holds each root's exact base under its root ID, beside the working tree and out of
+	// a worker's reach. StatManifestPath is the view's stat manifest. Both default under BackingDir.
+	PristineDir      string
+	StatManifestPath string
+	// CopyBudget stops a materialization that passes it, cleaning up only this preparation.
+	CopyBudget     *CopyBudget
+	SelectionFacts SelectionFacts
+	ProgressFn     func(MaterializeProgress)
+	SeedGitInit    SeedGitInitializer
+	// CloneFile replaces the host clone primitive for a fixture.
+	CloneFile       FileCloner
 	QuiesceHook     func(ctx context.Context, viewID string) error
 	FlushClientHook func(ctx context.Context, viewID string) error
 }
@@ -231,6 +240,7 @@ type PreparedRoot struct {
 	SourcePath    string `json:"source_path"`
 	Subroot       string `json:"subroot,omitempty"`
 	WorkspacePath string `json:"workspace_path"`
+	PristinePath  string `json:"pristine_path,omitempty"`
 	IsPrimary     bool   `json:"is_primary"`
 }
 
@@ -252,6 +262,8 @@ type PreparedView struct {
 	SeededGitRepos  map[string]SeedGitInitResult `json:"seeded_git_repos,omitempty"`
 	ObservedEntries int64                        `json:"observed_entries"`
 	ObservedBytes   int64                        `json:"observed_bytes"`
+	Selection       SelectionFacts               `json:"selection"`
+	Materialize     MaterializeStats             `json:"materialize"`
 	Core            *layeredfs.Core              `json:"-"`
 }
 
@@ -308,28 +320,6 @@ func (e *AdapterError) Error() string {
 }
 
 func (e *AdapterError) Unwrap() error { return e.Cause }
-
-// PreparationLimitError is returned when materialized seeding exceeds entry or byte limits.
-type PreparationLimitError struct {
-	ReasonCode                ReasonCode `json:"reason_code"`
-	ViewID                    string     `json:"view_id"`
-	RootID                    string     `json:"root_id"`
-	SelectedRoots             []string   `json:"selected_roots"`
-	ObservedEntries           int64      `json:"observed_entries"`
-	ObservedBytes             int64      `json:"observed_bytes"`
-	MaxEntries                int64      `json:"max_entries"`
-	MaxBytes                  int64      `json:"max_bytes"`
-	EstimatedRejection        bool       `json:"estimated_rejection"`
-	CleanedIncompleteSeed     bool       `json:"cleaned_incomplete_seed"`
-	RetryWithSmallerSelection bool       `json:"retry_with_smaller_selection"`
-	SuggestedSubroots         []string   `json:"suggested_subroots,omitempty"`
-	Diagnostic                string     `json:"diagnostic"`
-}
-
-func (e *PreparationLimitError) Error() string {
-	return fmt.Sprintf("%s: root %s observed (%d entries, %d bytes) exceeds limit (%d entries, %d bytes): %s",
-		e.ReasonCode, e.RootID, e.ObservedEntries, e.ObservedBytes, e.MaxEntries, e.MaxBytes, e.Diagnostic)
-}
 
 // MountSupervisor is the live custody a mounted adapter holds over its views. Git bound through it
 // is revoked when the serving process dies or the view is released.

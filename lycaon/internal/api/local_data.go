@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/localdata"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -78,9 +77,7 @@ func (s *LocalData) handleGetLocalData(w http.ResponseWriter, r *http.Request) {
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	out := wire.LocalDataStatus{
-		Buckets: make([]wire.LocalDataBucketStatus, 0, len(rows)), WorkspaceCaches: []wire.WorkspaceCacheStatus{},
-	}
+	out := wire.LocalDataStatus{Buckets: make([]wire.LocalDataBucketStatus, 0, len(rows))}
 	for _, row := range rows {
 		st := wire.LocalDataBucketStatus{
 			ID:      wire.LocalDataBucketId(row.ID),
@@ -91,17 +88,6 @@ func (s *LocalData) handleGetLocalData(w http.ResponseWriter, r *http.Request) {
 		}
 		out.Buckets = append(out.Buckets, st)
 	}
-	caches, err := workspace.ListSeedCaches(r.Context(), s.workerSeedRoot)
-	if err != nil {
-		s.responses.InternalError(w, r, err)
-		return
-	}
-	for _, cache := range caches {
-		out.WorkspaceCaches = append(out.WorkspaceCaches, wire.WorkspaceCacheStatus{
-			ID: cache.ID, SourceRoot: cache.SourceRoot, LogicalBytes: cache.LogicalBytes,
-			AllocatedBytes: cache.AllocatedBytes, LastUsedAt: cache.LastUsed,
-		})
-	}
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
@@ -111,8 +97,8 @@ func (s *LocalData) handleClearLocalData(w http.ResponseWriter, r *http.Request)
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	if len(req.Buckets) == 0 && len(req.WorkspaceCacheIDs) == 0 {
-		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "buckets or workspace_cache_ids required")
+	if len(req.Buckets) == 0 {
+		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "buckets required")
 		return
 	}
 	ids := make([]string, 0, len(req.Buckets))
@@ -128,18 +114,12 @@ func (s *LocalData) handleClearLocalData(w http.ResponseWriter, r *http.Request)
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	var results []localdata.ClearResult
-	if len(ids) > 0 {
-		results, err = reg.ClearBuckets(r.Context(), ids)
-		if err != nil {
-			s.responses.InternalError(w, r, err)
-			return
-		}
+	results, err := reg.ClearBuckets(r.Context(), ids)
+	if err != nil {
+		s.responses.InternalError(w, r, err)
+		return
 	}
-	out := wire.LocalDataClearResponse{
-		Results:               make([]wire.LocalDataClearResult, 0, len(results)),
-		WorkspaceCacheResults: make([]wire.WorkspaceCacheClearResult, 0, len(req.WorkspaceCacheIDs)),
-	}
+	out := wire.LocalDataClearResponse{Results: make([]wire.LocalDataClearResult, 0, len(results))}
 	for _, res := range results {
 		clearRes := wire.LocalDataClearResult{
 			ID: wire.LocalDataBucketId(res.ID),
@@ -151,16 +131,6 @@ func (s *LocalData) handleClearLocalData(w http.ResponseWriter, r *http.Request)
 			clearRes.Message = "this data could not be cleared"
 		}
 		out.Results = append(out.Results, clearRes)
-	}
-	for _, id := range req.WorkspaceCacheIDs {
-		err := workspace.RemoveSeedByID(r.Context(), s.workerSeedRoot, id)
-		result := wire.WorkspaceCacheClearResult{ID: id, OK: err == nil}
-		if err != nil {
-			s.responses.Logger.WarnContext(r.Context(), "worker cache clear failed", "workspace_cache_id", id, "err", err)
-			result.Code = wire.ApiErrorCodeInternalError
-			result.Message = "this worker cache could not be cleared"
-		}
-		out.WorkspaceCacheResults = append(out.WorkspaceCacheResults, result)
 	}
 	httpio.WriteJSON(w, http.StatusOK, out)
 }

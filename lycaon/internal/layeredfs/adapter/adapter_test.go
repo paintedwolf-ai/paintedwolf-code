@@ -31,8 +31,20 @@ func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
 		},
 	})
 
+	source := filepath.Join(tmp, "source")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "f.txt"), []byte("f"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	overBudget := func(sel *Selector) ChooseRequest {
+		sel.BudgetFor = ZeroBudget
+		return ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}}}
+	}
 	selLinux := NewSelector("linux", fuseSupported, darwinSupported, NewEagerCopyAdapter(ReasonNone))
-	adp, res, err := selLinux.Select(ctx, ProbeConfig{RuntimeDir: tmp})
+	linuxChoice, err := selLinux.Choose(ctx, overBudget(selLinux))
+	adp, res := linuxChoice.Adapter, linuxChoice.Probe
 	if err != nil || !res.Supported || adp.ID() != AdapterFUSELinux {
 		t.Fatalf("expected fuselinux supported, got id=%s supported=%v err=%v", adp.ID(), res.Supported, err)
 	}
@@ -45,7 +57,8 @@ func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
 	}
 
 	selDarwin := NewSelector("darwin", fuseSupported, darwinSupported, NewEagerCopyAdapter(ReasonNone))
-	adpD, resD, err := selDarwin.Select(ctx, ProbeConfig{RuntimeDir: tmp})
+	darwinChoice, err := selDarwin.Choose(ctx, overBudget(selDarwin))
+	adpD, resD := darwinChoice.Adapter, darwinChoice.Probe
 	if err != nil || !resD.Supported || adpD.ID() != AdapterNFSDarwin {
 		t.Fatalf("expected nfsdarwin supported, got id=%s supported=%v err=%v", adpD.ID(), resD.Supported, err)
 	}
@@ -60,10 +73,11 @@ func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
 		},
 	})
 	selDenied := NewSelector("linux", mountDeniedAdp, darwinSupported, NewEagerCopyAdapter(ReasonNone))
-	fbAdp, fbRes, err := selDenied.Select(ctx, ProbeConfig{RuntimeDir: tmp})
+	deniedChoice, err := selDenied.Choose(ctx, overBudget(selDenied))
 	if err != nil {
 		t.Fatalf("unexpected select error: %v", err)
 	}
+	fbAdp, fbRes := deniedChoice.Adapter, deniedChoice.Probe
 	if deniedCalls.Load() != 1 || fbRes.Attempts != 1 {
 		t.Fatalf("permission failure must not be retried: calls=%d attempts=%d", deniedCalls.Load(), fbRes.Attempts)
 	}
@@ -87,8 +101,20 @@ func TestSelectorTransientRetryOnce(t *testing.T) {
 			return ReasonNone, "", nil
 		},
 	})
+	source := filepath.Join(tmp, "source")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "f.txt"), []byte("f"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	overBudget := func(sel *Selector) ChooseRequest {
+		sel.BudgetFor = ZeroBudget
+		return ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}}}
+	}
 	selRecover := NewSelector("darwin", nil, recoveringAdp, NewEagerCopyAdapter(ReasonNone))
-	adp, res, err := selRecover.Select(ctx, ProbeConfig{RuntimeDir: tmp})
+	recovered, err := selRecover.Choose(ctx, overBudget(selRecover))
+	adp, res := recovered.Adapter, recovered.Probe
 	if err != nil || !res.Supported || adp.ID() != AdapterNFSDarwin || res.Attempts != 2 {
 		t.Fatalf("expected transient retry to succeed on attempt 2, got id=%s supported=%v attempts=%d err=%v", adp.ID(), res.Supported, res.Attempts, err)
 	}
@@ -103,15 +129,13 @@ func TestSelectorTransientRetryOnce(t *testing.T) {
 		},
 	})
 	selFail := NewSelector("darwin", nil, failingTransientAdp, NewEagerCopyAdapter(ReasonNone))
-	fbAdp, fbRes, err := selFail.Select(ctx, ProbeConfig{RuntimeDir: tmp})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	failed, err := selFail.Choose(ctx, overBudget(selFail))
+	if persistentTransientCalls.Load() != 2 || failed.Probe.Attempts != 2 {
+		t.Fatalf("expected exactly 2 attempts (1 retry), got calls=%d attempts=%d", persistentTransientCalls.Load(), failed.Probe.Attempts)
 	}
-	if persistentTransientCalls.Load() != 2 || fbRes.Attempts != 2 {
-		t.Fatalf("expected exactly 2 attempts (1 retry), got calls=%d attempts=%d", persistentTransientCalls.Load(), fbRes.Attempts)
-	}
-	if fbAdp.ID() != AdapterEagerCopy || fbAdp.Facts().FallbackReason != ReasonTransientStartupFailure {
-		t.Fatalf("expected fallback to eagercopy with transient_startup_failure, got %s (%s)", fbAdp.ID(), fbAdp.Facts().FallbackReason)
+	var aErr *AdapterError
+	if !errors.As(err, &aErr) || aErr.ReasonCode != ReasonTransientStartupFailure || failed.Adapter != nil {
+		t.Fatalf("a transient failure must start no copy: choice=%+v err=%v", failed, err)
 	}
 }
 
@@ -252,15 +276,17 @@ func TestActiveWorkerDataSurvivesAdapterFailure(t *testing.T) {
 		},
 	})
 	sel := NewSelector("darwin", nil, primaryAdp, NewEagerCopyAdapter(ReasonNone))
-	req := PrepareRequest{
-		ViewID:     "active-worker-1",
-		RuntimeDir: filepath.Join(tmp, "runtime"),
-		Grants:     []RootGrant{{RootID: "root", SourcePath: srcRoot, IsPrimary: true}},
+	sel.BudgetFor = ZeroBudget
+	grants := []RootGrant{{RootID: "root", SourcePath: srcRoot, IsPrimary: true}}
+	choice, err := sel.Choose(ctx, ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: grants})
+	if err != nil || choice.Adapter.ID() != AdapterNFSDarwin {
+		t.Fatalf("Choose failed: %v", err)
 	}
-	adp, view, _, err := sel.SelectAndPrepare(ctx, ProbeConfig{RuntimeDir: tmp}, req)
-	if err != nil || adp.ID() != AdapterNFSDarwin {
-		t.Fatalf("SelectAndPrepare failed: %v", err)
+	view, err := choice.Adapter.Prepare(ctx, PrepareRequest{ViewID: "active-worker-1", RuntimeDir: filepath.Join(tmp, "runtime"), Grants: grants})
+	if err != nil {
+		t.Fatalf("Prepare failed: %v", err)
 	}
+	sel.Registry.Register(view, choice.Adapter)
 
 	// Mutate active worker view.
 	qp := layeredfs.QualifiedPath{RootID: "root", Rel: "tracked.txt"}

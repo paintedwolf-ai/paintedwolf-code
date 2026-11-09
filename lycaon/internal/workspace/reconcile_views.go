@@ -145,11 +145,38 @@ func recordedViewForBranch(branchRoot, jobID, root string) (recovery.RecordedVie
 	}, true, nil
 }
 
+func (m *Manager) recoveryCoordinator() *recovery.Coordinator {
+	if m.recovery != nil {
+		return m.recovery
+	}
+	if services, err := m.layered(); err == nil && services != nil {
+		return services.recovery
+	}
+	return nil
+}
+
+func (m *Manager) recoveryCoordinatorForJob(jobID string) (*recovery.Coordinator, recovery.WorkerLifecycleJournal, error) {
+	coord := m.recoveryCoordinator()
+	if coord == nil {
+		return nil, recovery.WorkerLifecycleJournal{}, os.ErrNotExist
+	}
+	journal, err := coord.LoadWorkerJournal(jobID)
+	if errors.Is(err, os.ErrNotExist) && m.recovery != nil {
+		if services, sErr := m.layered(); sErr == nil && services != nil && services.recovery != nil && services.recovery != coord {
+			if j2, err2 := services.recovery.LoadWorkerJournal(jobID); err2 == nil {
+				return services.recovery, j2, nil
+			}
+		}
+	}
+	return coord, journal, err
+}
+
 // RecoverWorkerViews runs once at engine startup, before any worker can run: it settles every
 // recorded mount and writer left by an earlier process, preserves interrupted work and marks
 // each lost mounted tree for rebuild. One stuck worker never blocks the others or the engine.
 func (m *Manager) RecoverWorkerViews(ctx context.Context) ([]recovery.WorkerRuntimeReport, error) {
-	if m.recovery == nil {
+	coord := m.recoveryCoordinator()
+	if coord == nil {
 		return nil, nil
 	}
 	discovered, reports, err := discoverRecordedViews(ctx, m.branchRoot)
@@ -162,7 +189,7 @@ func (m *Manager) RecoverWorkerViews(ctx context.Context) ([]recovery.WorkerRunt
 	}
 	roots := make(map[string]string, len(discovered))
 	for _, found := range discovered {
-		if err := m.recovery.AdoptRecordedView(found.view); err != nil {
+		if err := coord.AdoptRecordedView(found.view); err != nil {
 			reports = append(reports, recovery.WorkerRuntimeReport{
 				WorkerID: found.view.WorkerID, ViewID: found.view.ViewID, Disposition: recovery.RuntimeRefused,
 				Reason: recovery.ReasonInvalidMetadata, Err: err,
@@ -174,7 +201,7 @@ func (m *Manager) RecoverWorkerViews(ctx context.Context) ([]recovery.WorkerRunt
 			roots[found.view.WorkerID] = found.root
 		}
 	}
-	workerIDs, err := m.recovery.ListWorkerIDs()
+	workerIDs, err := coord.ListWorkerIDs()
 	if err != nil {
 		return reports, err
 	}
@@ -182,7 +209,7 @@ func (m *Manager) RecoverWorkerViews(ctx context.Context) ([]recovery.WorkerRunt
 		if _, skip := refused[workerID]; skip {
 			continue
 		}
-		report := m.recovery.RecoverWorkerRuntime(ctx, workerID)
+		report := coord.RecoverWorkerRuntime(ctx, workerID)
 		if report.Deletable() && report.HadRuntime {
 			if root, ok := roots[workerID]; ok {
 				if err := markBranchNeedsRebuild(root); err != nil {
@@ -193,7 +220,7 @@ func (m *Manager) RecoverWorkerViews(ctx context.Context) ([]recovery.WorkerRunt
 		logWorkerRecovery(ctx, report)
 		reports = append(reports, report)
 	}
-	return reports, nil
+	return reports, m.offerMaterializedBranchesForRecovery(ctx)
 }
 
 func logWorkerRecovery(ctx context.Context, report recovery.WorkerRuntimeReport) {
@@ -225,6 +252,9 @@ func markBranchNeedsRebuild(root string) error {
 func (m *Manager) SettleBranchRuntime(ctx context.Context, jobID, root string) error {
 	if m.recovery == nil {
 		return nil
+	}
+	if isMaterializedBranch(root) {
+		return m.settleMaterializedRuntime(ctx, root)
 	}
 	view, recorded, err := recordedViewForBranch(m.branchRoot, jobID, root)
 	if err != nil {
@@ -287,11 +317,8 @@ func (m *Manager) releaseLiveJournaledViews(ctx context.Context, jobID, root str
 // whichever adapter selection now chooses. It reports false when no checkpoint could apply, so
 // the caller's other rebuild source still gets its turn.
 func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string) (bool, error) {
-	if m.recovery == nil {
-		return false, nil
-	}
-	journal, err := m.recovery.LoadWorkerJournal(jobID)
-	if errors.Is(err, os.ErrNotExist) {
+	coord, journal, err := m.recoveryCoordinatorForJob(jobID)
+	if errors.Is(err, os.ErrNotExist) || coord == nil {
 		return false, nil
 	}
 	if err != nil {
@@ -300,34 +327,56 @@ func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string
 	if journal.LastPublishedCheckpointID == "" {
 		return false, nil
 	}
-	choice, err := SelectWorkspaceAdapter(ctx, adapter.ProbeConfig{RuntimeDir: filepath.Join(m.branchRoot, adapterRuntimeDirName)}, m.selector)
+	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(root))
 	if err != nil {
 		return false, err
 	}
+	layout, err := layoutFromJobMeta(meta)
+	if err != nil {
+		return false, err
+	}
+	grants := grantsForSources(layout.Roots)
 	projectKey := filepath.Base(filepath.Dir(root))
-	viewID := fmt.Sprintf("%s-%s", jobID, uuid.NewString()[:8])
-	runtimeDir := filepath.Join(m.branchRoot, adapterRuntimeDirName, projectKey)
-	result, _, err := m.RebuildWorkerWorkspaceFromCheckpoint(ctx, root, m.recovery, recovery.RecoverRequest{
-		WorkerID: jobID, ExpectedTaskID: journal.TaskID, ExpectedProjectID: journal.ProjectID, NewViewID: viewID,
-		Adapter:    choice.Adapter,
-		PrepareReq: adapter.PrepareRequest{ViewID: viewID, RuntimeDir: runtimeDir, BackingDir: filepath.Join(runtimeDir, viewID+".backing")},
-	})
-	if err != nil {
-		return false, err
-	}
-	if result != nil && result.PreparedView != nil {
+	var overrun *adapter.BudgetOverrunError
+	for {
+		choice, err := m.chooseWorkspaceAdapter(ctx, root, grants, journal.ProjectID, overrun)
+		if err != nil {
+			return false, err
+		}
+		viewID := fmt.Sprintf("%s-%s", jobID, uuid.NewString()[:8])
+		runtimeDir := filepath.Join(m.branchRoot, adapterRuntimeDirName, projectKey)
+		req := adapter.PrepareRequest{
+			ViewID: viewID, RuntimeDir: runtimeDir, BackingDir: filepath.Join(runtimeDir, viewID+".backing"),
+			PristineDir: enginepaths.PristineTreeForBranchRoot(root), StatManifestPath: enginepaths.StatManifestForBranchRoot(root),
+			CopyBudget: choice.CopyBudget, SelectionFacts: choice.Selection, CloneFile: m.cloneFile,
+		}
+		result, _, err := m.RebuildWorkerWorkspaceFromCheckpoint(ctx, root, coord, recovery.RecoverRequest{
+			WorkerID: jobID, ExpectedTaskID: journal.TaskID, ExpectedProjectID: journal.ProjectID, NewViewID: viewID,
+			Adapter: choice.Adapter, PrepareReq: req,
+		})
+		if errors.As(err, &overrun) && choice.CopyBudget != nil {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		if result == nil || result.PreparedView == nil {
+			return true, nil
+		}
 		m.recordBranchViews(root, choice, result.PreparedView)
 		if err := markSnapshotCompleteWithClaim(root, choice, result.PreparedView, nil, nil); err != nil {
 			return false, err
 		}
-		if err := recordBranchCheckpoint(root, m.recovery.CheckpointStore(), journal.LastPublishedCheckpointID); err != nil {
+		if err := recordBranchCheckpoint(root, coord.CheckpointStore(), journal.LastPublishedCheckpointID); err != nil {
 			return false, err
 		}
 		if choice.Facts.PreparationKind == adapter.PreparationMounted {
 			if err := m.adoptRecoveredMountedView(ctx, root, jobID, journal.ProjectID, choice.Adapter, result.PreparedView); err != nil {
 				return false, err
 			}
+		} else if err := m.adoptRecoveredMaterializedView(ctx, root, jobID, journal.ProjectID, choice.Adapter, result.PreparedView); err != nil {
+			return false, err
 		}
+		return true, nil
 	}
-	return true, nil
 }

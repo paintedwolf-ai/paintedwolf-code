@@ -26,39 +26,11 @@ components:
       additionalProperties: false
       required:
         - buckets
-        - workspace_caches
       properties:
         buckets:
           type: array
           items:
             $ref: '#/components/schemas/LocalDataBucketStatus'
-        workspace_caches:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkspaceCacheStatus'
-    WorkspaceCacheStatus:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required: [id, source_root, logical_bytes, allocated_bytes, last_used_at]
-      properties:
-        id:
-          type: string
-          pattern: '^[0-9a-f]{16}$'
-        source_root:
-          type: string
-        logical_bytes:
-          type: integer
-          format: int64
-          minimum: 0
-        allocated_bytes:
-          type: integer
-          format: int64
-          minimum: 0
-          description: Best-effort allocated bytes retained by the immutable bridge cache
-        last_used_at:
-          type: string
-          format: date-time
     LocalDataClearRequest:
       x-go-generate: true
       type: object
@@ -70,13 +42,6 @@ components:
           minItems: 1
           items:
             $ref: '#/components/schemas/LocalDataBucketId'
-        workspace_cache_ids:
-          x-go-name: "WorkspaceCacheIDs"
-          type: array
-          minItems: 1
-          items:
-            type: string
-            pattern: '^[0-9a-f]{16}$'
     LocalDataClearResult:
       x-go-generate: true
       type: object
@@ -101,34 +66,11 @@ components:
       additionalProperties: false
       required:
         - results
-        - workspace_cache_results
       properties:
         results:
           type: array
           items:
             $ref: '#/components/schemas/LocalDataClearResult'
-        workspace_cache_results:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkspaceCacheClearResult'
-    WorkspaceCacheClearResult:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required: [id, ok]
-      properties:
-        id:
-          type: string
-          pattern: '^[0-9a-f]{16}$'
-        ok:
-          x-go-name: "OK"
-          type: boolean
-        code:
-          $ref: './api-error-code.generated.yaml#/components/schemas/ApiErrorCode'
-        message:
-          type: string
-          description: Host copy when ok is false; branch on code.
-
     HistoryRetentionRule:
       type: object
       x-go-generate: true

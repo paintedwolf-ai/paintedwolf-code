@@ -185,10 +185,6 @@ func applyXattrDiff(core *layeredfs.Core, qp layeredfs.QualifiedPath, diskXattrs
 	return nil
 }
 
-func isMissingOnDisk(err error) bool {
-	return os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR)
-}
-
 func entryKindMatchesMode(kind layeredfs.EntryKind, mode fs.FileMode) bool {
 	switch kind {
 	case layeredfs.EntryDirectory:

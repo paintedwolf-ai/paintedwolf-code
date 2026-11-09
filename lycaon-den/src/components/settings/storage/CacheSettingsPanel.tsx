@@ -46,12 +46,11 @@ export function CacheSettingsPanel(props: Props) {
 
   const clearTargets = async (
     bucketIds: LocalDataBucketStatus["id"][],
-    workspaceCacheIds: string[],
     okLabel: string,
     confirmMsg: string,
   ) => {
     const c = props.client;
-    const targetCount = bucketIds.length + workspaceCacheIds.length;
+    const targetCount = bucketIds.length;
     if (!c || targetCount === 0) return;
     const title =
       targetCount > 1
@@ -64,16 +63,8 @@ export function CacheSettingsPanel(props: Props) {
     setActionError(undefined);
     setStatusMessage(undefined);
     try {
-      const res = await c.clearLocalData({
-        ...(bucketIds.length > 0 ? { buckets: bucketIds } : {}),
-        ...(workspaceCacheIds.length > 0
-          ? { workspace_cache_ids: workspaceCacheIds }
-          : {}),
-      });
-      const failed = [
-        ...res.results.filter((result) => !result.ok),
-        ...res.workspace_cache_results.filter((result) => !result.ok),
-      ];
+      const res = await c.clearLocalData({ buckets: bucketIds });
+      const failed = res.results.filter((result) => !result.ok);
       if (failed.length > 0) {
         setActionError(
           failed.map((r) => r.message || r.code || r.id).join("; ") ||
@@ -96,63 +87,22 @@ export function CacheSettingsPanel(props: Props) {
     const copy = cacheBucketCopy(bucket.id);
     void clearTargets(
       [bucket.id],
-      [],
       copy.clearLabel,
       cacheClearBucketConfirm(bucket.id),
     );
   };
 
-  const onClearWorkspaceCache = async (id: string, sourceRoot: string) => {
-    const c = props.client;
-    if (!c) return;
-    if (
-      !(await confirmClear(
-        "Clear workspace cache",
-        `Clear the reusable workspace cache for “${sourceRoot}”? Active and completed worker branches are kept. The cache will be rebuilt if needed.`,
-        "Clear cache",
-      ))
-    ) {
-      return;
-    }
-    setBusyId(`workspace:${id}`);
-    setActionError(undefined);
-    setStatusMessage(undefined);
-    try {
-      const res = await c.clearLocalData({ workspace_cache_ids: [id] });
-      const failed = res.workspace_cache_results.filter((result) => !result.ok);
-      if (failed.length > 0) {
-        setActionError(
-          failed.map((result) => result.message || result.code || result.id).join("; "),
-        );
-      } else {
-        setStatusMessage(CACHE_SETTINGS_COPY.cleared);
-      }
-      await reload();
-    } catch (err) {
-      setActionError(
-        err instanceof Error ? err.message : CACHE_SETTINGS_COPY.clearError,
-      );
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const onClearAll = () => {
     const buckets = status()?.buckets ?? [];
-    const cacheIds = (status()?.workspace_caches ?? []).map((cache) => cache.id);
     const labels = buckets.map((b) => cacheBucketCopy(b.id).label);
-    if (cacheIds.length > 0) labels.push("Reusable workspace caches");
     void clearTargets(
       buckets.map((bucket) => bucket.id),
-      cacheIds,
       CACHE_SETTINGS_COPY.clearAll,
       cacheClearAllConfirm(labels),
     );
   };
 
-  const anyPresent = () =>
-    (status()?.buckets ?? []).some((bucket) => bucket.present) ||
-    (status()?.workspace_caches.length ?? 0) > 0;
+  const anyPresent = () => (status()?.buckets ?? []).some((bucket) => bucket.present);
 
   return (
     <section class="den-settings-section" data-testid="cache-settings">
@@ -268,66 +218,6 @@ export function CacheSettingsPanel(props: Props) {
                     : CACHE_SETTINGS_COPY.clearAll}
                 </DenButton>
               </div>
-            </div>
-          </div>
-        </Show>
-
-        <Show when={(status()?.workspace_caches.length ?? 0) > 0}>
-          <div class="den-settings-subsection">
-            <h3 class="den-settings-subhead">Reusable workspace caches</h3>
-            <p class="den-settings-hint">
-              Retained only when this device can clone cached files into worker
-              workspaces without copying their data again. Unused entries expire
-              automatically after 30 days.
-            </p>
-            <div class="den-settings-pref-group">
-              <ul class="den-settings-pref-list" data-testid="workspace-cache-list">
-                <For each={status()?.workspace_caches ?? []}>
-                  {(cache) => {
-                    const busy = () => busyId() === `workspace:${cache.id}`;
-                    const logical = () =>
-                      cachePresenceLabel(true, cache.logical_bytes);
-                    const allocated = () =>
-                      cachePresenceLabel(true, cache.allocated_bytes);
-                    return (
-                      <li
-                        class="den-settings-pref-row"
-                        data-testid={`workspace-cache-${cache.id}`}
-                      >
-                        <div class="den-settings-pref-copy">
-                          <span class="den-settings-pref-label">
-                            {cache.source_root}
-                          </span>
-                          <p class="den-settings-hint">
-                            {logical()} logical · {allocated()} retained · last
-                            used{" "}
-                            {new Date(cache.last_used_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div class="den-settings-pref-control">
-                          <DenButton
-                            type="button"
-                            variant="ghost"
-                            compact
-                            disabled={busy()}
-                            data-testid={`workspace-cache-clear-${cache.id}`}
-                            onClick={() =>
-                              void onClearWorkspaceCache(
-                                cache.id,
-                                cache.source_root,
-                              )
-                            }
-                          >
-                            {busy()
-                              ? CACHE_SETTINGS_COPY.clearing
-                              : CACHE_SETTINGS_COPY.clearAction}
-                          </DenButton>
-                        </div>
-                      </li>
-                    );
-                  }}
-                </For>
-              </ul>
             </div>
           </div>
         </Show>

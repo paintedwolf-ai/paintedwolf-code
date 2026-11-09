@@ -100,14 +100,3 @@ func TestRewriteWorkerBranchPaths(t *testing.T) {
 		t.Fatalf("a closed parenthetical root must not swallow the next path: %q", got)
 	}
 }
-
-func TestProjectSeedDirLayout(t *testing.T) {
-	root := WorkerSeedsRootUnder("/state/paintedwolf")
-	if root != filepath.FromSlash("/state/paintedwolf/worker-seeds") {
-		t.Fatalf("seed root = %q", root)
-	}
-	want := filepath.Join(root, ProjectKey("/Users/me/repo"))
-	if got := ProjectSeedDir(root, "/Users/me/repo"); got != want {
-		t.Fatalf("seed dir = %q want %q", got, want)
-	}
-}

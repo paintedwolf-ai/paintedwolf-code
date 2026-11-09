@@ -3,8 +3,6 @@ package workspace
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,19 +10,17 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
-// BuildLocalDataInventory aggregates workspace job trees, rebuildable seed caches, and
-// coordinator recovery records into the three local-data buckets (#1666):
+// BuildLocalDataInventory aggregates workspace job trees and coordinator recovery records into the three local-data buckets (#1666):
 // BucketRetainedWorkerResults, BucketInterruptedWorkingData, and BucketDisposableRuntimeCache.
 func BuildLocalDataInventory(
 	ctx context.Context,
-	branchRoot, seedRoot string,
+	branchRoot string,
 	coord *recovery.Coordinator,
 ) (recovery.LocalDataInventory, error) {
 	inv := recovery.LocalDataInventory{
@@ -55,19 +51,6 @@ func BuildLocalDataInventory(
 			UpdatedAt: t.LastUsed,
 		})
 	}
-	seeds, err := ListSeedCaches(ctx, seedRoot)
-	if err != nil {
-		return recovery.LocalDataInventory{}, err
-	}
-	for _, s := range seeds {
-		inv.Entries = append(inv.Entries, recovery.InventoryEntry{
-			ID:        "seed-" + s.ID,
-			Bucket:    recovery.BucketDisposableRuntimeCache,
-			Path:      s.SourceRoot,
-			Bytes:     s.AllocatedBytes,
-			UpdatedAt: s.LastUsed,
-		})
-	}
 	return inv, nil
 }
 
@@ -83,15 +66,6 @@ type JobTree struct {
 	AllocatedBytes int64
 	LastUsed       time.Time
 	Roots          []projectroot.RootRef
-}
-
-// SeedCacheStatus describes one retained, rebuildable bridge cache.
-type SeedCacheStatus struct {
-	ID             string
-	SourceRoot     string
-	LogicalBytes   int64
-	AllocatedBytes int64
-	LastUsed       time.Time
 }
 
 // classifyBranchTree separates a tree a retained checkpoint can rebuild from one that may hold
@@ -125,7 +99,7 @@ func ListJobTrees(ctx context.Context, branchRoot string) ([]JobTree, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if !project.IsDir() || !validSeedKey(project.Name()) {
+		if !project.IsDir() || !validProjectKey(project.Name()) {
 			continue
 		}
 		trees, err := listProjectJobTrees(ctx, filepath.Join(branchRoot, project.Name()), project.Name())
@@ -188,83 +162,18 @@ func listProjectJobTrees(ctx context.Context, parent, projectKey string) ([]JobT
 				return nil, err
 			}
 			t.AllocatedBytes = bytes
+			// A byte-copied base holds as much again; a cloned one shows what it does not share.
+			if base := enginepaths.PristineTreeForBranchRoot(t.Root); adapterTreeExists(base) {
+				pristine, err := treeAllocatedBytes(ctx, base)
+				if err != nil {
+					return nil, err
+				}
+				t.AllocatedBytes += pristine
+			}
 		}
 		out = append(out, *t)
 	}
 	return out, nil
-}
-
-// ListSeedCaches inventories valid published bridge caches.
-func ListSeedCaches(ctx context.Context, seedRoot string) ([]SeedCacheStatus, error) {
-	if strings.TrimSpace(seedRoot) == "" {
-		return nil, nil
-	}
-	candidates, err := seedEvictionCandidates(seedRoot, "")
-	if err != nil {
-		return nil, err
-	}
-	statuses := make([]SeedCacheStatus, 0, len(candidates))
-	for _, candidate := range candidates {
-		_, tree, manifest := loadCurrentSeed(candidate.path)
-		if tree == "" || strings.TrimSpace(manifest.SourceRoot) == "" {
-			continue
-		}
-		allocated, err := treeAllocatedBytes(ctx, candidate.path)
-		if err != nil {
-			return nil, err
-		}
-		statuses = append(statuses, SeedCacheStatus{
-			ID:             candidate.key,
-			SourceRoot:     manifest.SourceRoot,
-			LogicalBytes:   regularBytes(manifest),
-			AllocatedBytes: allocated,
-			LastUsed:       candidate.lastUsed,
-		})
-	}
-	sort.Slice(statuses, func(i, j int) bool { return statuses[i].LastUsed.After(statuses[j].LastUsed) })
-	return statuses, nil
-}
-
-// RemoveSeedByID removes one rebuildable bridge cache under an exclusive lease.
-func RemoveSeedByID(ctx context.Context, seedRoot, id string) error {
-	if strings.TrimSpace(seedRoot) == "" {
-		return fmt.Errorf("worker cache storage is unavailable")
-	}
-	if !validSeedKey(id) {
-		return fmt.Errorf("invalid worker cache id")
-	}
-	release, err := lockSeedAcrossProcesses(ctx, seedRoot, id, true)
-	if err != nil {
-		return err
-	}
-	defer release()
-	return os.RemoveAll(filepath.Join(seedRoot, id))
-}
-
-// RemoveSeed removes only rebuildable host state for sourceRoot.
-func RemoveSeed(ctx context.Context, seedRoot, sourceRoot string) error {
-	if strings.TrimSpace(seedRoot) == "" || strings.TrimSpace(sourceRoot) == "" {
-		return nil
-	}
-	target := enginepaths.ProjectSeedDir(seedRoot, sourceRoot)
-	rel, err := filepath.Rel(filepath.Clean(seedRoot), filepath.Clean(target))
-	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return fmt.Errorf("refusing worker seed removal outside seed root")
-	}
-	if _, err := os.Stat(target); errors.Is(err, fs.ErrNotExist) {
-		return nil
-	} else if err != nil {
-		return err
-	}
-	release, err := lockSeedAcrossProcesses(ctx, seedRoot, enginepaths.ProjectKey(sourceRoot), true)
-	if err != nil {
-		return err
-	}
-	defer release()
-	if err := os.RemoveAll(target); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
-	}
-	return nil
 }
 
 func treeAllocatedBytes(ctx context.Context, root string) (int64, error) {
@@ -289,36 +198,20 @@ func treeAllocatedBytes(ctx context.Context, root string) (int64, error) {
 	return total, err
 }
 
-func lockSeedAcrossProcesses(ctx context.Context, seedRoot, key string, exclusive bool) (func(), error) {
-	path := filepath.Join(seedRoot, seedLocksDir, key+".lock")
-	file, err := filelock.Open(path)
-	if err != nil {
-		return nil, err
+func adapterTreeExists(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.IsDir()
+}
+
+// validProjectKey recognizes the directories branch storage keeps per project root.
+func validProjectKey(key string) bool {
+	if len(key) != 16 {
+		return false
 	}
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		var locked bool
-		if exclusive {
-			locked, err = filelock.TryExclusive(file)
-		} else {
-			locked, err = filelock.TryShared(file)
-		}
-		if err != nil {
-			_ = file.Close()
-			return nil, err
-		}
-		if locked {
-			return func() {
-				_ = filelock.Unlock(file)
-				_ = file.Close()
-			}, nil
-		}
-		select {
-		case <-ctx.Done():
-			_ = file.Close()
-			return nil, ctx.Err()
-		case <-ticker.C:
+	for _, char := range key {
+		if !strings.ContainsRune("0123456789abcdef", char) {
+			return false
 		}
 	}
+	return true
 }

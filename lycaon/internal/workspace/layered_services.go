@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/bloblifecycle"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
@@ -148,23 +150,7 @@ func bindViewConsumer(
 		return nil, err
 	}
 	consumer.RegisterBranchEngine(branchRoot, engine)
-	publisher, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
-		Core: prepared.Core, Store: store, WorkerID: cv.Identity.WorkerID, TaskID: cv.Identity.WorkerID,
-		ProjectID: cv.Identity.ProjectID, SourceGeneration: fmt.Sprint(cv.Identity.SourceGeneration), SelectedRoots: roots,
-		ParentCheckpoints: cv.Metadata.Checkpoints.ParentCheckpointIDs,
-		Callbacks: checkpoint.BarrierCallbacks{
-			AcquireAdapterBarrier: func(ctx context.Context) (layeredfs.BarrierToken, func() error, error) {
-				receipt, release, err := cv.Adapter.CheckpointBarrier(ctx, prepared.ViewID)
-				if err != nil {
-					return layeredfs.BarrierToken{}, nil, err
-				}
-				return receipt.Token, release, nil
-			},
-			CommitRetention: func(ctx context.Context, checkpointID string, blobs, gitObjects []string) error {
-				return services.recovery.CommitCheckpointRetention(ctx, cv.Identity.WorkerID, checkpointID, blobs, gitObjects, cv.Metadata.Checkpoints.ParentCheckpointIDs)
-			},
-		},
-	})
+	publisher, err := newViewPublisher(cv, store, services, roots)
 	if err != nil {
 		consumer.UnregisterEngine(engine)
 		return nil, err
@@ -196,6 +182,9 @@ func adoptClaimedView(cv *claim.ClaimedView, projectID string, coordinator *reco
 // settleBranchLayeredView releases a mounted branch. Its Engine is withdrawn first so nothing new
 // starts on the view, and restored if settlement fails, because the view is then still live.
 func settleBranchLayeredView(ctx context.Context, branchRoot string, view *branchLayeredView) error {
+	if view.engine == nil {
+		return settleMaterializedBranchView(ctx, view)
+	}
 	consumer.UnregisterEngine(view.engine)
 	err := view.services.recovery.SettleRecordedWriters(ctx, view.workerID, view.viewID)
 	if err == nil {
@@ -235,16 +224,29 @@ func BranchProcessRecorder(branchRoot string) func(pid int) error {
 	}
 }
 
-// PublishBranchCheckpoint publishes the mounted branch's private changes under the adapter's barrier.
-// handled is false for a branch with no mounted view, whose changes a baseline captures instead.
+// PublishBranchCheckpoint publishes a branch's private changes under the adapter's barrier. It runs at
+// worker completion, the boundary every view shares; only a mounted view has any other. handled is
+// false for a branch of an earlier format, whose changes its baseline captures instead.
 func PublishBranchCheckpoint(ctx context.Context, branchRoot string) (handled bool, err error) {
 	branchClaimsMu.RLock()
 	rec, ok := branchClaimStates[filepath.Clean(branchRoot)]
 	branchClaimsMu.RUnlock()
-	if !ok || rec.layered == nil {
-		return false, nil
+	if ok && rec.layered == nil && rec.reopen != nil {
+		layered, err := rec.reopen(ctx)
+		if err != nil {
+			return true, fmt.Errorf("reopen materialized view: %w", err)
+		}
+		rec.layered = layered
+		ok = true
 	}
-	return true, publishLayeredCheckpoint(ctx, branchRoot, rec.layered)
+	if ok && rec.layered != nil {
+		return true, publishLayeredCheckpoint(ctx, branchRoot, rec.layered)
+	}
+	if materializedBranchLostItsView(branchRoot) {
+		// An empty baseline would seal the whole tree as this worker's change.
+		return true, fmt.Errorf("worker branch %s has no view to capture through", branchRoot)
+	}
+	return false, nil
 }
 
 // publishLayeredCheckpoint journals the publication around the transaction: a crash between the two
@@ -271,6 +273,9 @@ func publishLayeredCheckpoint(ctx context.Context, branchRoot string, view *bran
 }
 
 func recordBranchCheckpoint(branchRoot string, store *checkpoint.Store, checkpointID string) error {
+	lifecycle := bloblifecycle.ForDevice(branchLifecycleDataDir(branchRoot))
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
 	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
 	meta, err := LoadJobMeta(metaDir)
 	if err != nil {
@@ -286,8 +291,23 @@ func publishWithPrivateGit(ctx context.Context, view *branchLayeredView, checkpo
 		return checkpoint.PublishResult{}, err
 	}
 	return view.publisher.Publish(ctx, checkpoint.PublishRequest{
-		CheckpointID: checkpointID, Trigger: checkpoint.TriggerExplicitCapture, PrivateGit: git,
+		CheckpointID: checkpointID, Trigger: checkpoint.TriggerWorkerCompletion, PrivateGit: git,
 	})
+}
+
+func checkpointManifestExists(storeDir, checkpointID string) bool {
+	if strings.TrimSpace(storeDir) == "" || strings.TrimSpace(checkpointID) == "" {
+		return false
+	}
+	for _, p := range []string{
+		filepath.Join(storeDir, "checkpoints", checkpointID, "manifest.json"),
+		filepath.Join(storeDir, "checkpoints", checkpointID+".json"),
+	} {
+		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
 }
 
 // BranchCheckpoint names the store and checkpoint a branch last published.
@@ -296,11 +316,30 @@ func BranchCheckpoint(branchRoot string) (storeDir, checkpointID string, ok bool
 	if clean == "" {
 		return "", "", false
 	}
-	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(filepath.Clean(clean)))
-	if err != nil || meta.CheckpointStoreDir == "" || meta.LastPublishedCheckpointID == "" {
+	clean = filepath.Clean(clean)
+	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(clean))
+	if err != nil || meta.LastPublishedCheckpointID == "" {
 		return "", "", false
 	}
-	return meta.CheckpointStoreDir, meta.LastPublishedCheckpointID, true
+	cid := meta.LastPublishedCheckpointID
+	if checkpointManifestExists(meta.CheckpointStoreDir, cid) {
+		return meta.CheckpointStoreDir, cid, true
+	}
+	workerBranchesDir := filepath.Dir(filepath.Dir(clean))
+	configDir := filepath.Dir(workerBranchesDir)
+	for _, cand := range []string{
+		filepath.Join(configDir, enginepaths.WorkerRecoveryDirName, "checkpoints"),
+		filepath.Join(workerBranchesDir, adapterRuntimeDirName, "recovery", "checkpoints"),
+		filepath.Join(configDir, enginepaths.WorkerBaselinesDirName, ".task-checkpoints"),
+	} {
+		if checkpointManifestExists(cand, cid) {
+			return cand, cid, true
+		}
+	}
+	if meta.CheckpointStoreDir != "" {
+		return meta.CheckpointStoreDir, cid, true
+	}
+	return "", "", false
 }
 
 // privateGitSnapshot captures each root's private refs and exports the objects those refs add, beside

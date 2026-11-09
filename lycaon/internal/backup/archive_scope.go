@@ -1,8 +1,13 @@
 package backup
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
 
-// Version 1 shipped before configured command programs joined the backup set.
+	"github.com/lycaon/lycaon/internal/enginepaths"
+)
+
+// Version 1 shipped before configured command programs and worker recovery joined the backup set.
 var archiveV1Files = []string{
 	"approvals.yaml", "file-summaries.yaml", "history-retention.json", "limits.yaml",
 	"logview.yaml", "model-policy.yaml", "power.yaml", "pricing.yaml", "providers.local.yaml",
@@ -26,12 +31,18 @@ func archiveScope(version int, currentFiles, currentDirectories []string) ([]str
 	}
 }
 
-// The validated legacy snapshot has no configured programs. Include their new
-// path in the restore transaction, preserving any live file in its pre-image.
+// The validated legacy snapshot has no configured programs or worker-recovery
+// directory. Include their new paths in the restore transaction, preserving any
+// live content in its pre-image.
 func upgradeArchiveScope(manifest Manifest) Manifest {
 	if manifest.FormatVersion == 1 {
 		manifest.FormatVersion = FormatVersion
 		manifest.ReplaceRelPaths = append(append([]string(nil), manifest.ReplaceRelPaths...), "command-programs.yaml")
+		manifest.ReplaceRelDirs = append([]string(nil), manifest.ReplaceRelDirs...)
+		if !slices.Contains(manifest.ReplaceRelDirs, enginepaths.WorkerRecoveryDirName) {
+			manifest.ReplaceRelDirs = append(manifest.ReplaceRelDirs, enginepaths.WorkerRecoveryDirName)
+			slices.Sort(manifest.ReplaceRelDirs)
+		}
 	}
 	return manifest
 }

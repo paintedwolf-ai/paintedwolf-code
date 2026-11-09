@@ -21,7 +21,7 @@ func TestCreateWorkerWorkspaceIsolatedCopy(t *testing.T) {
 	if err := os.WriteFile(src, []byte("v1"), 0o644); err != nil {
 		testutil.FailErr(t, "write src", err)
 	}
-	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
+	mgr := workspace.NewManager(t.TempDir())
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "job-1")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
 	if binding == nil || binding.Root == "" {
@@ -50,7 +50,7 @@ func TestCreateWorkerWorkspaceLivesOutsideRepo(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(primary, "main.go"), []byte("package main\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write main.go", err)
 	}
-	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
+	mgr := workspace.NewManager(t.TempDir())
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "job-out")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
 	if rel, err := filepath.Rel(primary, binding.Root); err == nil && !strings.HasPrefix(rel, "..") {
@@ -62,7 +62,7 @@ func TestCreateWorkerWorkspaceLivesOutsideRepo(t *testing.T) {
 }
 
 func TestDestroyWorkerWorkspaceNil(t *testing.T) {
-	mgr := workspace.NewManager(t.TempDir(), t.TempDir())
+	mgr := workspace.NewManager(t.TempDir())
 	if err := mgr.DestroyWorkerWorkspace(nil); err != nil {
 		testutil.FailErr(t, "DestroyWorkerWorkspace nil", err)
 	}

@@ -131,6 +131,7 @@ func TestHostAndDenWorkspaceStateAndReceiptsDistinguishFallbackGitCommandAndChec
 		},
 	})
 	sel := adapter.NewSelector("linux", unsupportedPrimary, unsupportedPrimary, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	sel.BudgetFor = adapter.ZeroBudget
 	coord := NewCoordinator(sel)
 
 	cv, snap, err := coord.ClaimWorkerView(t.Context(), ClaimRequest{
@@ -198,7 +199,10 @@ func TestSmallerWorkspaceSelectionRetryAfterLimitAndFocusHintsDoNotChangeWorkspa
 		testutil.FailErr(t, "write huge", os.WriteFile(filepath.Join(rootHuge, fmt.Sprintf("blob_%02d.bin", i)), []byte("0123456789"), 0o644))
 	}
 
-	// Use EagerCopyAdapter fallback with a small entry limit (MaxEntries: 10).
+	// A disk with room for the small selection only.
+	disk := func() (adapter.DiskSpace, error) {
+		return adapter.DiskSpace{Path: tmp, Available: 64 * 1024, Known: true}, nil
+	}
 	sel := adapter.NewSelector("unknown-os", nil, nil, adapter.NewEagerCopyAdapter(adapter.ReasonUnsupportedPlatform))
 	coord := NewCoordinator(sel)
 	grants := []adapter.RootGrant{
@@ -207,15 +211,19 @@ func TestSmallerWorkspaceSelectionRetryAfterLimitAndFocusHintsDoNotChangeWorkspa
 		{RootID: "huge", Label: "huge", SourcePath: rootHuge},
 	}
 
-	// 1. Attempting to materialize all 3 roots exceeds MaxEntries=10 and returns ReasonPreparationLimit + ActionSelectSmallerWorkspace.
+	// 1. All 3 roots do not fit, which refuses with the number and offers a smaller selection.
 	_, failSnap, err := coord.ClaimWorkerView(t.Context(), ClaimRequest{
-		Identity: ClaimIdentity{WorkerID: "w-limit", ProjectID: "p", ViewID: "v-limit"},
-		Storage:  ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt")},
-		Grants:   grants,
-		Limits:   ClaimLimits{MaxEntries: 10, MaxBytes: 1024 * 1024},
+		Identity:        ClaimIdentity{WorkerID: "w-limit", ProjectID: "p", ViewID: "v-limit"},
+		Storage:         ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt")},
+		Grants:          grants,
+		Materialization: ClaimMaterialization{Disk: disk},
 	})
-	if err == nil || failSnap.Readiness != StateFailedPreparation || failSnap.Notice.ReasonCode != adapter.ReasonPreparationLimit {
-		t.Fatalf("expected StateFailedPreparation with ReasonPreparationLimit, got snap=%+v err=%v", failSnap, err)
+	var capErr *adapter.WorkspaceCapacityError
+	if !errors.As(err, &capErr) || capErr.Available != 64*1024 || capErr.Required <= capErr.Available {
+		t.Fatalf("expected a refusal with the numbers, got %v", err)
+	}
+	if failSnap.Readiness != StateFailedPreparation || failSnap.Notice.ReasonCode != adapter.ReasonWorkspaceDoesNotFit {
+		t.Fatalf("expected StateFailedPreparation with ReasonWorkspaceDoesNotFit, got snap=%+v err=%v", failSnap, err)
 	}
 	if !slices.Contains(failSnap.SupportedActions, ActionSelectSmallerWorkspace) || !slices.Contains(failSnap.SupportedActions, ActionRetryClaim) {
 		t.Fatalf("expected ActionSelectSmallerWorkspace and ActionRetryClaim, got %+v", failSnap.SupportedActions)
@@ -223,12 +231,12 @@ func TestSmallerWorkspaceSelectionRetryAfterLimitAndFocusHintsDoNotChangeWorkspa
 
 	// 2. Caller selects a smaller permitted WorkspaceSelection (primary + docs only) and retries successfully.
 	cv, okSnap, err := coord.ClaimWorkerView(t.Context(), ClaimRequest{
-		Identity:       ClaimIdentity{WorkerID: "w-limit", ProjectID: "p", ViewID: "v-limit"},
-		Storage:        ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt")},
-		Grants:         grants,
-		Selection:      adapter.WorkspaceSelection{RootIDs: []string{"primary", "docs"}},
-		FocusPathHints: []string{"app.go"},
-		Limits:         ClaimLimits{MaxEntries: 10, MaxBytes: 1024 * 1024},
+		Identity:        ClaimIdentity{WorkerID: "w-limit", ProjectID: "p", ViewID: "v-limit"},
+		Storage:         ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt")},
+		Grants:          grants,
+		Selection:       adapter.WorkspaceSelection{RootIDs: []string{"primary", "docs"}},
+		FocusPathHints:  []string{"app.go"},
+		Materialization: ClaimMaterialization{Disk: disk},
 	})
 	testutil.FailErr(t, "retry ClaimWorkerView with smaller selection", err)
 	defer func() { _ = coord.ReleaseWorkerView(t.Context(), "v-limit", nil) }()

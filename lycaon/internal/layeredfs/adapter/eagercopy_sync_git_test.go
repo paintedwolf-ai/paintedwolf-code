@@ -110,18 +110,17 @@ func verifyGitlinkRejectionsAndLimits(t *testing.T, ctx context.Context, tmp str
 		t.Fatalf("expected unresolved gitlink to fail Prepare")
 	}
 
-	// 3. Git seeding must enforce MaxBytes and return ReasonWorkspacePreparationLimit.
+	// 3. Git seeding counts against the copy budget, and passing it cleans up like any other overrun.
 	bigGitRepo := createFixtureRepoWithSubmodule(t, filepath.Join(tmp, "biggit-repo"))
 	_, err = adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "git-byte-limit",
 		RuntimeDir: filepath.Join(tmp, "rt"),
 		Grants:     []RootGrant{{RootID: "repo", Label: "repo", SourcePath: bigGitRepo, IsPrimary: true}},
-		MaxEntries: 1000,
-		MaxBytes:   12,
+		CopyBudget: &CopyBudget{Limit: 12, EntryCost: 1},
 	})
-	var limitErr *PreparationLimitError
-	if !errors.As(err, &limitErr) || limitErr.ReasonCode != ReasonWorkspacePreparationLimit || !limitErr.CleanedIncompleteSeed {
-		t.Fatalf("expected ReasonWorkspacePreparationLimit on git byte limit, got %v", err)
+	var overrun *BudgetOverrunError
+	if !errors.As(err, &overrun) {
+		t.Fatalf("expected a budget overrun on the git byte limit, got %v", err)
 	}
 }
 

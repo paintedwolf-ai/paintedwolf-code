@@ -63,7 +63,6 @@ func registerStubIntegrationRoutes(mux *http.ServeMux, writeJSON stubJSONWriter)
 			Buckets: []api.LocalDataBucketStatus{
 				{ID: api.LocalDataBucketWebIndex, Present: false},
 			},
-			WorkspaceCaches: []api.WorkspaceCacheStatus{},
 		})
 	})
 	mux.HandleFunc("POST /v1/local-data/clear", func(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +70,6 @@ func registerStubIntegrationRoutes(mux *http.ServeMux, writeJSON stubJSONWriter)
 			Results: []api.LocalDataClearResult{
 				{ID: api.LocalDataBucketWebIndex, OK: true},
 			},
-			WorkspaceCacheResults: []api.WorkspaceCacheClearResult{},
 		})
 	})
 	mux.HandleFunc("GET /v1/backup/capabilities", func(w http.ResponseWriter, r *http.Request) {

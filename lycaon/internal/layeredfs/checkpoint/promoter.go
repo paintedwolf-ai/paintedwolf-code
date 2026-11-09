@@ -160,9 +160,7 @@ func (pr *Promoter) Preview(_ context.Context, req PreviewRequest) (*PromotionPr
 		if err != nil {
 			return nil, err
 		}
-		if mergedThreeWay {
-			requiresVerify = true
-		}
+		requiresVerify = requiresVerify || mergedThreeWay
 		if res, ok := req.Resolutions[entry.Path]; ok {
 			resolved, rErr := applyConflictResolution(entry, cur, res)
 			if rErr != nil {
