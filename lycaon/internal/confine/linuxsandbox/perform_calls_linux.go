@@ -225,6 +225,10 @@ func (f creationFloors) open(dirfd int, call pathCall) (pathResult, int) {
 	}
 	p, err := resolveParent(dirfd, call.Path, call.Resolve)
 	if errors.Is(err, errPlainName) || (err == nil && strings.HasSuffix(call.Path, "/")) {
+		if err == nil && f.refuses(createEntry, p.path) {
+			defer p.close()
+			return refusal(refusalCreate, p), -1
+		}
 		p.close()
 		fd, err := unix.Openat2(dirfd, call.Path, &how)
 		return errnoResult(err), fd
@@ -290,17 +294,51 @@ func plainCreate(dirfd int, call pathCall) error {
 }
 
 func (f creationFloors) link(olddir, newdir int, call pathCall) pathResult {
-	if call.Path != "" || call.Flags&unix.AT_EMPTY_PATH == 0 {
-		if old, err := resolveParent(olddir, call.Path, 0); err == nil {
-			defer old.close()
+	linkDir, linkName, linkFlags := olddir, call.Path, int(call.Flags)
+	if call.Path == "" && call.Flags&unix.AT_EMPTY_PATH != 0 {
+		where, err := os.Readlink("/proc/self/fd/" + strconv.Itoa(olddir))
+		if err != nil {
+			return errnoResult(err)
+		}
+		if f.refuses(renameSource, where) {
+			return pathResult{Errno: int(unix.EACCES), Refusal: &Refusal{Operation: refusalCreate, Target: strings.TrimSuffix(where, " (deleted)")}}
+		}
+	} else {
+		old, err := resolveParent(olddir, call.Path, 0)
+		if errors.Is(err, errPlainName) {
+			return errnoResult(unix.Linkat(olddir, call.Path, newdir, call.NewPath, int(call.Flags)))
+		}
+		if err != nil {
+			return errnoResult(err)
+		}
+		defer func() { old.close() }()
+		if f.refuses(renameSource, old.path) {
+			return refusal(refusalCreate, old)
+		}
+		linkDir, linkName = old.fd, old.base
+		if call.Flags&unix.AT_SYMLINK_FOLLOW != 0 && isSymlinkAt(old.fd, old.base) {
+			resolved, err := followFinal(old)
+			if err != nil {
+				return errnoResult(err)
+			}
+			old = resolved
 			if f.refuses(renameSource, old.path) {
 				return refusal(refusalCreate, old)
+			}
+			var st unix.Stat_t
+			if unix.Fstatat(old.fd, old.base, &st, unix.AT_SYMLINK_NOFOLLOW) == nil {
+				linkDir, linkName = old.fd, old.base
+				linkFlags &^= unix.AT_SYMLINK_FOLLOW
+			} else {
+				// Procfs magic link to an unlinked O_TMPFILE descriptor: let
+				// the kernel link from the caller's original link path.
+				linkDir, linkName = olddir, call.Path
 			}
 		}
 	}
 	p, err := resolveParent(newdir, call.NewPath, 0)
 	if errors.Is(err, errPlainName) {
-		return errnoResult(unix.Linkat(olddir, call.Path, newdir, call.NewPath, int(call.Flags)))
+		return errnoResult(unix.Linkat(linkDir, linkName, newdir, call.NewPath, linkFlags))
 	}
 	if err != nil {
 		return errnoResult(err)
@@ -309,7 +347,7 @@ func (f creationFloors) link(olddir, newdir int, call pathCall) pathResult {
 	if f.refuses(createEntry, p.path) {
 		return refusal(refusalCreate, p)
 	}
-	return errnoResult(unix.Linkat(olddir, call.Path, p.fd, p.base, int(call.Flags)))
+	return errnoResult(unix.Linkat(linkDir, linkName, p.fd, p.base, linkFlags))
 }
 
 func (f creationFloors) rename(olddir, newdir int, call pathCall) pathResult {
@@ -330,13 +368,85 @@ func (f creationFloors) rename(olddir, newdir int, call pathCall) pathResult {
 	}
 	defer target.close()
 	exchange := call.Flags&unix.RENAME_EXCHANGE != 0
+	crosses := f.crossesNamedFloor(old.path, target.path)
 	switch {
 	case f.refuses(renameSource, old.path), exchange && f.refuses(renameSource, target.path):
 		return refusal(refusalUnlink, old)
 	case f.refuses(renameTarget, target.path), exchange && f.refuses(renameTarget, old.path):
 		return refusal(refusalCreate, target)
+	case (exchange || crosses) && f.dirHoldsNamedFloor(old):
+		if exchange {
+			return refusal(refusalCreate, target)
+		}
+		return refusal(refusalUnlink, old)
+	case exchange && f.dirHoldsNamedFloor(target):
+		return refusal(refusalCreate, target)
 	}
 	return errnoResult(unix.Renameat2(old.fd, old.base, target.fd, target.base, uint(call.Flags)))
+}
+
+// dirHoldsNamedFloor reports whether p names an existing directory containing
+// any entry whose basename matches a NamedFloor.
+func (f creationFloors) dirHoldsNamedFloor(p parent) bool {
+	if len(f.names) == 0 {
+		return false
+	}
+	var st unix.Stat_t
+	if unix.Fstatat(p.fd, p.base, &st, unix.AT_SYMLINK_NOFOLLOW) != nil || st.Mode&unix.S_IFMT != unix.S_IFDIR {
+		return false
+	}
+	rootFD, err := unix.Openat(p.fd, p.base, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return true
+	}
+	type dirItem struct {
+		fd   int
+		path string
+	}
+	queue := []dirItem{{fd: rootFD, path: p.path}}
+	closeQueue := func() {
+		for _, item := range queue {
+			_ = unix.Close(item.fd)
+		}
+	}
+	seen := 0
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		dirFile := os.NewFile(uintptr(cur.fd), cur.path)
+		entries, err := dirFile.ReadDir(-1)
+		if err != nil {
+			_ = dirFile.Close()
+			closeQueue()
+			return true
+		}
+		for _, entry := range entries {
+			seen++
+			if seen > 4096 {
+				_ = dirFile.Close()
+				closeQueue()
+				return true
+			}
+			name := entry.Name()
+			childPath := joinName(cur.path, name)
+			if f.isNamedFloorBase(name) && !f.exactGrant(childPath) {
+				_ = dirFile.Close()
+				closeQueue()
+				return true
+			}
+			if entry.IsDir() {
+				subFD, err := unix.Openat(int(dirFile.Fd()), name, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+				if err != nil {
+					_ = dirFile.Close()
+					closeQueue()
+					return true
+				}
+				queue = append(queue, dirItem{fd: subFD, path: childPath})
+			}
+		}
+		_ = dirFile.Close()
+	}
+	return false
 }
 
 func (f creationFloors) unlink(dirfd int, call pathCall) pathResult {

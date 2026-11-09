@@ -156,12 +156,24 @@ func TestPerformerCreatesOrdinaryNamesAndRefusesProtectedOnes(t *testing.T) {
 	// enforcement time, and routine project writes to non-policy files succeed.
 	lateAgents := filepath.Join(root, "deep", "AGENTS.md")
 	testutil.FailErr(t, "write late trunk AGENTS.md", os.WriteFile(lateAgents, []byte("policy"), 0o644))
-	result, _ = do(pathCall{Op: callOpen, Path: "deep/AGENTS.md", Flags: unix.O_RDONLY}, dir)
+	result, roFD := do(pathCall{Op: callOpen, Path: "deep/AGENTS.md", Flags: unix.O_RDONLY}, dir)
 	expect("read late trunk AGENTS.md", result, 0, false)
 	for _, wf := range []uint64{unix.O_WRONLY, unix.O_RDWR, unix.O_RDONLY | unix.O_TRUNC, unix.O_WRONLY | unix.O_CREAT} {
 		result, _ = do(pathCall{Op: callOpen, Path: "deep/AGENTS.md", Flags: wf, Mode: 0o644}, dir)
 		expect("write open late trunk AGENTS.md", result, unix.EACCES, true)
 	}
+	result, _ = do(pathCall{Op: callOpen, Path: "deep/pointer", Flags: unix.O_WRONLY}, dir)
+	expect("write open late trunk AGENTS.md via symlink", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callTruncate, Path: "deep/pointer", Dev: 0}, dir)
+	expect("truncate late trunk AGENTS.md via symlink", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callOpen, Path: "/proc/self/fd/" + strconv.Itoa(roFD), Flags: unix.O_WRONLY}, dir)
+	expect("reopen O_RDONLY fd for write via /proc/self/fd", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callLink, Path: "deep/AGENTS.md", NewPath: "deep/hardlink.md"}, dir, dir)
+	expect("hardlink from late trunk AGENTS.md", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callLink, Path: "deep/pointer", NewPath: "deep/hardlink.md", Flags: unix.AT_SYMLINK_FOLLOW}, dir, dir)
+	expect("hardlink via AT_SYMLINK_FOLLOW from late trunk AGENTS.md", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callLink, Path: "", NewPath: "deep/hardlink.md", Flags: unix.AT_EMPTY_PATH}, roFD, dir)
+	expect("hardlink via AT_EMPTY_PATH from O_RDONLY fd to AGENTS.md", result, unix.EACCES, true)
 	result, _ = do(pathCall{Op: callTruncate, Path: "deep/AGENTS.md", Dev: 0}, dir)
 	expect("truncate late trunk AGENTS.md", result, unix.EACCES, true)
 	result, _ = do(pathCall{Op: callUnlink, Path: "deep/AGENTS.md"}, dir)
@@ -170,6 +182,8 @@ func TestPerformerCreatesOrdinaryNamesAndRefusesProtectedOnes(t *testing.T) {
 	expect("rename from late trunk AGENTS.md", result, unix.EACCES, true)
 	result, _ = do(pathCall{Op: callRename, Path: "moved.txt", NewPath: "deep/AGENTS.md"}, dir, dir)
 	expect("rename onto late trunk AGENTS.md", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callRename, Path: "deep", NewPath: "stage", Flags: unix.RENAME_EXCHANGE}, dir, dir)
+	expect("exchange directory holding late trunk AGENTS.md", result, unix.EACCES, true)
 
 	// Routine project writes, truncates, and unlinks on ordinary files remain permitted.
 	result, _ = do(pathCall{Op: callOpen, Path: "moved.txt", Flags: unix.O_WRONLY | unix.O_TRUNC}, dir)
