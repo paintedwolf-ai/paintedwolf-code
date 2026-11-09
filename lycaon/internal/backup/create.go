@@ -116,6 +116,9 @@ func Create(ctx context.Context, opts CreateOpts, destPath string) (Manifest, er
 			return Manifest{}, err
 		}
 	}
+	if err := pinWorkerRecoveryClosure(ctx, tmpDir, files); err != nil {
+		return Manifest{}, err
+	}
 
 	if err := validateArchiveReferences(ctx, snapshot, files); err != nil {
 		return Manifest{}, fmt.Errorf("%w: %w", ErrCaptureIncomplete, err)

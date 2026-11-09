@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -12,6 +13,30 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 )
+
+func pinWorkerRecoveryClosure(ctx context.Context, tmpDir string, files map[string]archiveSource) error {
+	pinnedRoot := filepath.Join(tmpDir, "pinned")
+	for rel, src := range files {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if src.kind != fileKindRegular {
+			continue
+		}
+		if !strings.HasPrefix(rel, enginepaths.WorkerRecoveryDirName+"/") &&
+			!strings.HasPrefix(rel, enginepaths.WorkerBranchesDirName+"/.adapter/") &&
+			!workerMetadataPath(rel, false) {
+			continue
+		}
+		dst := filepath.Join(pinnedRoot, filepath.FromSlash(rel))
+		if _, err := copySnapshotRegular(ctx, src, dst); err != nil {
+			return fmt.Errorf("%w: pin %s: %w", ErrCaptureIncomplete, rel, err)
+		}
+		src.path = dst
+		files[rel] = src
+	}
+	return nil
+}
 
 func validateWorkerCheckpoints(ctx context.Context, snapshot db.DBTX, files map[string]archiveSource) error {
 	rows, err := snapshot.QueryContext(ctx, `SELECT DISTINCT workspace_relpath FROM worker_jobs WHERE workspace_relpath IS NOT NULL AND workspace_relpath != '' AND (workspace_overlay_id IS NULL OR workspace_overlay_id = '')`)
@@ -56,7 +81,7 @@ func validateWorkerCheckpoints(ctx context.Context, snapshot db.DBTX, files map[
 			}
 			continue
 		}
-		if err := verifyCheckpointChainInFiles(root, cid, files, map[string]bool{}); err != nil {
+		if err := verifyCheckpointChainInFiles(ctx, root, cid, files, map[string]bool{}); err != nil {
 			return err
 		}
 	}
@@ -79,7 +104,7 @@ var archiveCheckpointStoreRelPrefixes = []string{
 	enginepaths.WorkerBaselinesDirName + "/.task-checkpoints",
 }
 
-func verifyCheckpointChainInFiles(branchRel, checkpointID string, files map[string]archiveSource, visited map[string]bool) error {
+func verifyCheckpointChainInFiles(ctx context.Context, branchRel, checkpointID string, files map[string]archiveSource, visited map[string]bool) error {
 	checkpointID = strings.TrimSpace(checkpointID)
 	if checkpointID == "" {
 		return &InvalidError{Detail: "worker metadata names an empty checkpoint id"}
@@ -112,13 +137,11 @@ func verifyCheckpointChainInFiles(branchRel, checkpointID string, files map[stri
 			}
 		}
 	}
-	for _, oid := range collectRequiredGitOIDs(m.PrivateGit) {
-		if !gitObjectExistsInFiles(branchRel, storePrefix, checkpointID, oid, files) {
-			return &InvalidError{Detail: fmt.Sprintf("retained checkpoint git object is missing: %s (checkpoint %s)", oid, checkpointID)}
-		}
+	if err := verifyCheckpointGitClosureInFiles(ctx, branchRel, storePrefix, checkpointID, m.PrivateGit, files); err != nil {
+		return err
 	}
 	for _, parentID := range m.ParentCheckpoints {
-		if err := verifyCheckpointChainInFiles(branchRel, parentID, files, visited); err != nil {
+		if err := verifyCheckpointChainInFiles(ctx, branchRel, parentID, files, visited); err != nil {
 			return err
 		}
 	}
@@ -176,40 +199,4 @@ func verifyBlobInFiles(storePrefix, sha string, expectedSize int64, files map[st
 		return nil
 	}
 	return &InvalidError{Detail: "retained checkpoint blob is missing: " + sha}
-}
-
-func gitObjectExistsInFiles(branchRel, storePrefix, checkpointID, oid string, files map[string]archiveSource) bool {
-	if len(oid) < 3 {
-		return false
-	}
-	objectPrefixes := []string{
-		enginepaths.WorkerBranchesDirName + "/.adapter/privategit/retained-store/objects",
-		storePrefix + "/objects",
-		storePrefix + "/checkpoints/" + checkpointID + "/git-objects",
-	}
-	if projKey := branchProjKey(branchRel); projKey != "" {
-		objectPrefixes = append(objectPrefixes, enginepaths.WorkerBranchesDirName+"/.adapter/"+projKey+"/retained-git-store/objects")
-	}
-	for _, objPrefix := range objectPrefixes {
-		looseRel := objPrefix + "/" + oid[:2] + "/" + oid[2:]
-		if src, ok := files[looseRel]; ok && src.kind == fileKindRegular {
-			return true
-		}
-		packPrefix := objPrefix + "/pack/"
-		hasPack, hasIdx := false, false
-		for rel, src := range files {
-			if src.kind != fileKindRegular || !strings.HasPrefix(rel, packPrefix) {
-				continue
-			}
-			if strings.HasSuffix(rel, ".pack") {
-				hasPack = true
-			} else if strings.HasSuffix(rel, ".idx") {
-				hasIdx = true
-			}
-		}
-		if hasPack && hasIdx {
-			return true
-		}
-	}
-	return false
 }

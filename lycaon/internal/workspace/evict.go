@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/lycaon/lycaon/internal/bloblifecycle"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 )
 
@@ -17,6 +18,9 @@ func EvictJobTree(ctx context.Context, branchRoot string) error {
 	if err != nil {
 		return err
 	}
+	lifecycle := bloblifecycle.ForDevice(branchLifecycleDataDir(branchRoot))
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
 	releaseUse, err := tryExclusiveBranchUse(branchRoot)
 	if err != nil {
 		return err

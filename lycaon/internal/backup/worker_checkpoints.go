@@ -1,11 +1,14 @@
 package backup
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
@@ -66,20 +69,20 @@ func candidateCheckpointStoreDirsOnDisk(configDir string, declared string) []str
 	return out
 }
 
-func hasVerifiedPublishedCheckpoint(configDir, branchRel string) bool {
+func hasVerifiedPublishedCheckpoint(ctx context.Context, configDir, branchRel string) bool {
 	meta, ok := readWorkerCheckpointMetaOnDisk(configDir, branchRel)
 	if !ok || strings.TrimSpace(meta.LastPublishedCheckpointID) == "" {
 		return false
 	}
 	for _, storeDir := range candidateCheckpointStoreDirsOnDisk(configDir, meta.CheckpointStoreDir) {
-		if verifyCheckpointChainOnDisk(configDir, branchRel, storeDir, meta.LastPublishedCheckpointID, map[string]bool{}) == nil {
+		if verifyCheckpointChainOnDisk(ctx, configDir, branchRel, storeDir, meta.LastPublishedCheckpointID, map[string]bool{}) == nil {
 			return true
 		}
 	}
 	return false
 }
 
-func verifyCheckpointChainOnDisk(configDir, branchRel, storeDir, checkpointID string, visited map[string]bool) error {
+func verifyCheckpointChainOnDisk(ctx context.Context, configDir, branchRel, storeDir, checkpointID string, visited map[string]bool) error {
 	checkpointID = strings.TrimSpace(checkpointID)
 	if checkpointID == "" {
 		return fmt.Errorf("empty checkpoint id")
@@ -112,13 +115,11 @@ func verifyCheckpointChainOnDisk(configDir, branchRel, storeDir, checkpointID st
 			}
 		}
 	}
-	for _, oid := range collectRequiredGitOIDs(m.PrivateGit) {
-		if !gitObjectExistsOnDisk(configDir, branchRel, storeDir, checkpointID, oid) {
-			return fmt.Errorf("missing retained git object %s for checkpoint %s", oid, checkpointID)
-		}
+	if err := verifyCheckpointGitClosureOnDisk(ctx, configDir, branchRel, storeDir, checkpointID, m.PrivateGit); err != nil {
+		return err
 	}
 	for _, parentID := range m.ParentCheckpoints {
-		if err := verifyCheckpointChainOnDisk(configDir, branchRel, storeDir, parentID, visited); err != nil {
+		if err := verifyCheckpointChainOnDisk(ctx, configDir, branchRel, storeDir, parentID, visited); err != nil {
 			return err
 		}
 	}
@@ -168,24 +169,60 @@ func verifyBlobOnDisk(storeDir, sha string, expectedSize int64) error {
 	return fmt.Errorf("missing blob %s", sha)
 }
 
-func collectRequiredGitOIDs(pg checkpoint.PrivateGitSnapshot) []string {
-	seen := make(map[string]bool)
-	var out []string
-	add := func(oid string) {
-		oid = strings.ToLower(strings.TrimSpace(oid))
-		if !isGitOID(oid) || seen[oid] {
-			return
+func collectRequiredGitOIDs(pg checkpoint.PrivateGitSnapshot) ([]string, []string, error) {
+	seenOIDs := make(map[string]bool)
+	seenPacks := make(map[string]bool)
+	var requiredOIDs []string
+	var requiredPacks []string
+
+	addOID := func(oid string) {
+		if !seenOIDs[oid] {
+			seenOIDs[oid] = true
+			requiredOIDs = append(requiredOIDs, oid)
 		}
-		seen[oid] = true
-		out = append(out, oid)
 	}
-	for _, oid := range pg.RetainedObjects {
-		add(oid)
+	if head := strings.ToLower(strings.TrimSpace(pg.HeadRef)); head != "" && !strings.HasPrefix(head, "refs/") {
+		if !isGitOID(head) {
+			return nil, nil, fmt.Errorf("invalid git head_ref %q", pg.HeadRef)
+		}
+		addOID(head)
 	}
-	for _, oid := range pg.Refs {
-		add(oid)
+
+	refNames := make([]string, 0, len(pg.Refs))
+	for ref := range pg.Refs {
+		refNames = append(refNames, ref)
 	}
-	return out
+	sort.Strings(refNames)
+	for _, ref := range refNames {
+		rawOID := pg.Refs[ref]
+		oid := strings.ToLower(strings.TrimSpace(rawOID))
+		if !isGitOID(oid) {
+			return nil, nil, fmt.Errorf("invalid git ref %q target %q", ref, rawOID)
+		}
+		addOID(oid)
+	}
+
+	for _, raw := range pg.RetainedObjects {
+		trimmed := strings.TrimSpace(raw)
+		if strings.HasPrefix(trimmed, "pack:") {
+			packBase := strings.TrimSpace(strings.TrimPrefix(trimmed, "pack:"))
+			packBase = strings.TrimSuffix(strings.TrimSuffix(packBase, ".pack"), ".idx")
+			if !isValidGitPackBase(packBase) {
+				return nil, nil, fmt.Errorf("invalid retained git pack %q", raw)
+			}
+			if !seenPacks[packBase] {
+				seenPacks[packBase] = true
+				requiredPacks = append(requiredPacks, packBase)
+			}
+			continue
+		}
+		oid := strings.ToLower(trimmed)
+		if !isGitOID(oid) {
+			return nil, nil, fmt.Errorf("invalid retained git object id %q", raw)
+		}
+		addOID(oid)
+	}
+	return requiredOIDs, requiredPacks, nil
 }
 
 func isGitOID(oid string) bool {
@@ -196,6 +233,26 @@ func isGitOID(oid string) bool {
 	return err == nil
 }
 
+func isHexOnly(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidGitPackBase(base string) bool {
+	if !strings.HasPrefix(base, "pack-") || strings.ContainsAny(base, `/\.`) {
+		return false
+	}
+	return isHexOnly(strings.TrimPrefix(base, "pack-"))
+}
+
 func branchProjKey(branchRel string) string {
 	parts := strings.Split(filepath.ToSlash(branchRel), "/")
 	if len(parts) >= 2 && parts[0] == enginepaths.WorkerBranchesDirName && isLowerHex16(parts[1]) {
@@ -204,40 +261,37 @@ func branchProjKey(branchRel string) string {
 	return ""
 }
 
-func gitObjectExistsOnDisk(configDir, branchRel, storeDir, checkpointID, oid string) bool {
-	if len(oid) < 3 {
-		return false
-	}
-	objectDirs := []string{
-		filepath.Join(configDir, enginepaths.WorkerBranchesDirName, ".adapter", "privategit", "retained-store", "objects"),
-		filepath.Join(storeDir, "objects"),
-		filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects"),
+func verifyCheckpointGitClosureOnDisk(ctx context.Context, configDir, branchRel, storeDir, checkpointID string, pg checkpoint.PrivateGitSnapshot) error {
+	const syntheticStorePrefix = "worker-recovery/checkpoints"
+	diskDirs := []struct{ dir, prefix string }{
+		{filepath.Join(configDir, enginepaths.WorkerBranchesDirName, ".adapter", "privategit", "retained-store", "objects"), enginepaths.WorkerBranchesDirName + "/.adapter/privategit/retained-store/objects"},
+		{filepath.Join(storeDir, "objects"), syntheticStorePrefix + "/objects"},
+		{filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects"), syntheticStorePrefix + "/checkpoints/" + checkpointID + "/git-objects"},
 	}
 	if projKey := branchProjKey(branchRel); projKey != "" {
-		objectDirs = append(objectDirs, filepath.Join(configDir, enginepaths.WorkerBranchesDirName, ".adapter", projKey, "retained-git-store", "objects"))
+		diskDirs = append(diskDirs, struct{ dir, prefix string }{
+			filepath.Join(configDir, enginepaths.WorkerBranchesDirName, ".adapter", projKey, "retained-git-store", "objects"),
+			enginepaths.WorkerBranchesDirName + "/.adapter/" + projKey + "/retained-git-store/objects",
+		})
 	}
-	for _, objDir := range objectDirs {
-		loose := filepath.Join(objDir, oid[:2], oid[2:])
-		if info, err := os.Stat(loose); err == nil && info.Mode().IsRegular() {
-			return true
-		}
-		packDir := filepath.Join(objDir, "pack")
-		if entries, err := os.ReadDir(packDir); err == nil {
-			hasPack, hasIdx := false, false
-			for _, e := range entries {
-				if e.IsDir() {
-					continue
-				}
-				if strings.HasSuffix(e.Name(), ".pack") {
-					hasPack = true
-				} else if strings.HasSuffix(e.Name(), ".idx") {
-					hasIdx = true
-				}
+	files := make(map[string]archiveSource)
+	for _, item := range diskDirs {
+		_ = filepath.WalkDir(item.dir, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil || entry.IsDir() {
+				return nil
 			}
-			if hasPack && hasIdx {
-				return true
+			rel, rErr := filepath.Rel(item.dir, path)
+			info, iErr := entry.Info()
+			if rErr != nil || iErr != nil {
+				return nil
 			}
-		}
+			kind := fileKindRegular
+			if info.Mode()&os.ModeSymlink != 0 {
+				kind = fileKindSymlink
+			}
+			files[item.prefix+"/"+filepath.ToSlash(rel)] = archiveSource{path: path, kind: kind, mode: info.Mode().Perm()}
+			return nil
+		})
 	}
-	return false
+	return verifyCheckpointGitClosureInFiles(ctx, branchRel, syntheticStorePrefix, checkpointID, pg, files)
 }

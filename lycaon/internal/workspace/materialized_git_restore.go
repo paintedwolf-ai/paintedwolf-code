@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
@@ -273,10 +274,12 @@ func refreshMaterializedRepoAlternates(ctx context.Context, services *layeredSer
 			}
 		}
 		if strings.TrimSpace(string(rawAlt)) != store.ObjectsDir() {
-			if err := os.MkdirAll(filepath.Dir(altPath), 0o700); err != nil {
-				return fmt.Errorf("%w: prepare alternates dir %s: %w", recovery.ErrIncompleteCheckpoint, altPath, err)
-			}
-			if err := os.WriteFile(altPath, []byte(store.ObjectsDir()+"\n"), 0o644); err != nil {
+			if _, err := fseffect.Replace(fseffect.ReplaceRequest{
+				Location: fseffect.PathLocation(altPath),
+				Source:   strings.NewReader(store.ObjectsDir() + "\n"),
+				Mode:     0o644,
+				DirMode:  0o700,
+			}); err != nil {
 				return fmt.Errorf("%w: update alternates %s: %w", recovery.ErrIncompleteCheckpoint, altPath, err)
 			}
 		}

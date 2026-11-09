@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/bloblifecycle"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
@@ -272,6 +273,9 @@ func publishLayeredCheckpoint(ctx context.Context, branchRoot string, view *bran
 }
 
 func recordBranchCheckpoint(branchRoot string, store *checkpoint.Store, checkpointID string) error {
+	lifecycle := bloblifecycle.ForDevice(branchLifecycleDataDir(branchRoot))
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
 	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
 	meta, err := LoadJobMeta(metaDir)
 	if err != nil {

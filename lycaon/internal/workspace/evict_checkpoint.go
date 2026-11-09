@@ -7,10 +7,26 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lycaon/lycaon/internal/bloblifecycle"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
+
+func branchLifecycleDataDir(branchRoot string) string {
+	clean := filepath.Clean(branchRoot)
+	for cur := clean; ; {
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return clean
+		}
+		if filepath.Base(cur) == enginepaths.WorkerBranchesDirName {
+			return parent
+		}
+		cur = parent
+	}
+}
 
 // ErrBranchRetained reports a branch that holds the only copy of a result or has unsettled
 // runtime. Retention steps aside; it is not a sweep failure.
@@ -54,6 +70,9 @@ func EvictVerifiedCheckpointBranch(ctx context.Context, branchRoot string, coord
 	if err != nil {
 		return nil, err
 	}
+	lifecycle := bloblifecycle.ForDevice(branchLifecycleDataDir(branchRoot))
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
 	releaseUse, err := tryExclusiveBranchUse(branchRoot)
 	if err != nil {
 		return nil, err

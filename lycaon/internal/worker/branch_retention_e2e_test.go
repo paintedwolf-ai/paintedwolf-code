@@ -265,18 +265,22 @@ func (e earlierFormatBranches) CreateWorkerWorkspaceFromSources(_ context.Contex
 }
 
 func TestCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T) {
-	for _, evictBeforeBackup := range []bool{false, true} {
-		name := "present_tree"
-		if evictBeforeBackup {
-			name = "evicted_tree"
-		}
-		t.Run(name, func(t *testing.T) {
-			testCompletedMaterializedWorkerSurvivesRelocatedArchive(t, evictBeforeBackup)
+	for _, tc := range []struct {
+		name               string
+		evictBeforeBackup  bool
+		repackBeforeBackup bool
+	}{
+		{name: "present_tree", evictBeforeBackup: false, repackBeforeBackup: false},
+		{name: "evicted_tree", evictBeforeBackup: true, repackBeforeBackup: false},
+		{name: "evicted_tree_packed_git", evictBeforeBackup: true, repackBeforeBackup: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testCompletedMaterializedWorkerSurvivesRelocatedArchive(t, tc.evictBeforeBackup, tc.repackBeforeBackup)
 		})
 	}
 }
 
-func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evictBeforeBackup bool) {
+func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evictBeforeBackup, repackBeforeBackup bool) {
 	ctx := t.Context()
 	project := t.TempDir()
 	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(project, "main.go"), []byte("package before\n"), 0o644))
@@ -326,6 +330,13 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 		}
 	}
 	testutil.FailErr(t, "close initial private Git", initialGit.Store().Close())
+	if repackBeforeBackup {
+		storeRoot := initialGit.Store().RootDir()
+		gittest.Run(t, storeRoot, "update-ref", "refs/heads/repack-pin", workerCommit)
+		gittest.Run(t, storeRoot, "repack", "-a", "-d")
+		gittest.Run(t, storeRoot, "prune-packed")
+		gittest.Run(t, storeRoot, "update-ref", "-d", "refs/heads/repack-pin")
+	}
 
 	archive := filepath.Join(t.TempDir(), "installation.zip")
 	_, err = backup.Create(ctx, backup.CreateOpts{

@@ -33,7 +33,7 @@ func unsealedBranchTrees(ctx context.Context, configDir string, database db.DBTX
 			return selection, fmt.Errorf("invalid retained worker branch root")
 		}
 		if configDir != "" {
-			if hasVerifiedPublishedCheckpoint(configDir, root) {
+			if hasVerifiedPublishedCheckpoint(ctx, configDir, root) {
 				continue
 			}
 			if !branchTreeExistsOnDisk(configDir, root) && branchDeclaresPublishedCheckpoint(configDir, root) {

@@ -8,8 +8,25 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/bloblifecycle"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fssync"
 )
+
+func storeLifecycleDataDir(rootDir string) string {
+	clean := filepath.Clean(rootDir)
+	for cur := clean; ; {
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return clean
+		}
+		base := filepath.Base(cur)
+		if base == enginepaths.WorkerBranchesDirName || base == enginepaths.WorkerRecoveryDirName {
+			return parent
+		}
+		cur = parent
+	}
+}
 
 // HasObject reports whether oid (40-character hex SHA-1) exists in the retained store
 // either as a loose object or inside a retained packfile.
@@ -38,6 +55,9 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
+	lifecycle := bloblifecycle.ForDevice(storeLifecycleDataDir(s.rootDir))
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
