@@ -154,6 +154,9 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted bool) {
 	if !ok {
 		t.Fatal("restart lost worker")
 	}
+	task, lease, err := queue.EnsureWorkerBranch(t.Context(), fields[0])
+	testutil.FailErr(t, "lease recovered worker branch", err)
+	t.Cleanup(lease.Release)
 	assertFileHolds(t, filepath.Join(task.WorkspaceRoot, "main.go"), "package worker\n")
 	if got := strings.TrimSpace(gittest.Run(t, task.WorkspaceRoot, "rev-parse", "HEAD")); got != fields[1] {
 		t.Fatalf("restart changed worker Git history: got %s want %s", got, fields[1])
@@ -176,6 +179,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted bool) {
 		t.Fatalf("promotion = %+v", result)
 	}
 	assertFileHolds(t, filepath.Join(source, "main.go"), "package worker\n")
+	lease.Release()
 	testutil.FailErr(t, "cleanup worker", manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 	if _, err := os.Stat(task.WorkspaceRoot); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("cleanup retained worker tree: %v", err)
