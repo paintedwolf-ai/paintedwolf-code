@@ -3,7 +3,6 @@ package settings
 import (
 	"context"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -11,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/ingestion"
 	"github.com/lycaon/lycaon/internal/isolation"
-	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/pkg/pathglob"
 )
 
@@ -68,92 +66,18 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 	facts, citation, matchedRules := g.factsForAction(action, cfg, layers)
 	verdict, decision := gate.Evaluate(facts, cfg.Posture)
 	res := &hitl.ApprovalResult{DetectionCitation: citation}
-	if verdict != gate.Ask || currentActionReviewCovers(action, decision, citation, matchedRules) {
+	matches := approvalRuleMatches(matchedRules, commandTextForAction(action))
+	if verdict != gate.Ask || hitl.CurrentActionReviewCovers(action, decision, citation, matches) {
 		return res, nil
 	}
 	res.Decision = decision
 	res.FileAccess = g.currentActionFileAccess(action)
-	res.MatchedRules = approvalRuleMatches(matchedRules, commandTextForAction(action))
+	res.MatchedRules = matches
 	res.HostResourceApproval = hostResourceAskPending(g, cfg, layers, action)
 	if !facts.Leased && g.grants != nil && g.grants.hasExactActionSet(action.Scope.ChatSession()) {
 		res.GrantDelta = "This action was not in the approved action set."
 	}
 	return res, nil
-}
-
-func currentActionReviewCovers(
-	action hitl.ProposedAction,
-	decision *gate.Decision,
-	citation *hitl.DetectionMatch,
-	matchedRules []ApprovalRule,
-) bool {
-	review := action.Invocation.CurrentActionReview
-	if review == nil || decision == nil {
-		return false
-	}
-	if review.SessionID == "" || review.SessionID != action.Scope.SessionID ||
-		review.ActionID != action.Invocation.ActionID {
-		return false
-	}
-	actionKey := hitl.ActionKeyForCurrentReview(action)
-	if actionKey == "" || review.ActionKey != actionKey {
-		return false
-	}
-	gates := decision.Gates()
-	if len(gates) == 0 || len(decision.Cited) == 0 || len(review.Cited) == 0 {
-		return false
-	}
-	for _, g := range gates {
-		if g == api.GateUnobservedChannel || g == api.GateIncompleteFacts {
-			return false
-		}
-	}
-	for _, fact := range decision.Cited {
-		if !slices.Contains(review.Cited, fact) {
-			return false
-		}
-	}
-	segments := decision.ReasonSegments()
-	if strings.TrimSpace(decision.ReasonKey) != "" && len(segments) == 0 {
-		return false
-	}
-	for _, segment := range segments {
-		if !slices.Contains(review.ReasonSegments, segment) {
-			return false
-		}
-	}
-	if slices.Contains(gates, api.GateAgentPolicyChange) {
-		if len(action.Mutations.AgentPolicy) == 0 {
-			return false
-		}
-		for _, target := range action.Mutations.AgentPolicy {
-			if !slices.Contains(review.AgentPolicy, target) {
-				return false
-			}
-		}
-	}
-	if citation != nil || slices.Contains(gates, api.GateAuthorityMisuse) {
-		if review.Detection == nil || citation == nil || !detectionIdentityEqual(*review.Detection, *citation) {
-			return false
-		}
-	}
-	for _, match := range approvalRuleMatches(matchedRules, commandTextForAction(action)) {
-		if !slices.Contains(review.MatchedRules, match) {
-			return false
-		}
-	}
-	return true
-}
-
-func detectionIdentityEqual(a, b hitl.DetectionMatch) bool {
-	return a.PackID == b.PackID &&
-		a.RuleID == b.RuleID &&
-		a.RuleTitle == b.RuleTitle &&
-		a.Level == b.Level &&
-		a.External == b.External &&
-		a.Local == b.Local &&
-		a.Unrecoverable == b.Unrecoverable &&
-		a.Tagged == b.Tagged
 }
 
 // deniedByRules renders an enforcement block with rule citations.
