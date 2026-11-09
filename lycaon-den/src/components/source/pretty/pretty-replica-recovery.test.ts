@@ -278,9 +278,7 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       path: "multi-conflict.jsonl",
     });
     adapters.push(divergedAdapter);
-    divergedReplica.applyLocalChanges([
-      { from: 8, to: 8, insert: ',"w":1' },
-    ]);
+    divergedReplica.replaceLocal('{"z":999,"w":1,"a":1}\n{"b":2}');
     expect(divergedReplica.history.revision).toBeGreaterThan(baseRev);
     expect(
       divergedAdapter.ringBuffer.collectChain(
