@@ -39,91 +39,54 @@ export type DocumentFormatMode =
  * (Decision 005, FMT-AC-04, FMT-AC-20).
  */
 const PASSTHROUGH_CODE_EXTENSIONS = new Set([
-  "go", "py", "pyi", "rs", "sass",
-  "sh", "bash", "zsh", "fish", "ps1", "psm1", "psd1",
-  "yaml", "yml", "toml", "ini", "cfg", "conf", "properties", "env",
-  "sql", "graphql", "gql", "proto",
-  "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "hxx", "cs",
-  "java", "kt", "kts", "scala", "swift", "rb", "php", "hack",
-  "pl", "pm", "perl", "lua", "r", "jl", "zig", "nim",
-  "ex", "exs", "erl", "hrl", "hs", "elm", "ml", "mli", "fs", "fsx",
-  "clj", "cljs", "cljc", "edn", "scm", "ss", "lisp", "cl", "lsp",
-  "dart", "dockerfile", "mk", "cmake", "csv", "tsv", "diff", "patch",
-  "tf", "tfvars", "hcl", "nix", "sol", "move", "cairo", "circom",
-  "cls", "trigger", "ql", "qll", "promql", "groovy", "gradle",
-  "tcl", "cr", "d", "f", "f90", "f95", "f03", "pas", "vim", "el",
+  "go", "py", "pyi", "rs", "sass", "sh", "bash", "zsh", "fish", "ps1", "psm1", "psd1",
+  "yaml", "yml", "toml", "ini", "cfg", "conf", "properties", "env", "sql", "graphql",
+  "gql", "proto", "c", "h", "cc", "cpp", "cxx", "hpp", "hh", "hxx", "cs", "java", "kt",
+  "kts", "scala", "swift", "rb", "php", "hack", "pl", "pm", "perl", "lua", "r", "jl",
+  "zig", "nim", "ex", "exs", "erl", "hrl", "hs", "elm", "ml", "mli", "fs", "fsx", "clj",
+  "cljs", "cljc", "edn", "scm", "ss", "lisp", "cl", "lsp", "dart", "dockerfile", "mk",
+  "cmake", "csv", "tsv", "diff", "patch", "tf", "tfvars", "hcl", "nix", "sol", "move",
+  "cairo", "circom", "cls", "trigger", "ql", "qll", "promql", "groovy", "gradle", "tcl",
+  "cr", "d", "f", "f90", "f95", "f03", "pas", "vim", "el",
 ]);
 
 const PASSTHROUGH_CODE_BASENAMES = new Set([
   "dockerfile", "containerfile", "makefile", "gnumakefile", "cmakelists.txt",
-  "justfile", "procfile", "cargo.lock", "go.mod", "go.sum",
-  ".gitignore", ".gitattributes", ".gitmodules", ".gitconfig",
-  ".editorconfig", ".npmrc", ".env", "gemfile", "rakefile", "vagrantfile",
+  "justfile", "procfile", "cargo.lock", "go.mod", "go.sum", ".gitignore",
+  ".gitattributes", ".gitmodules", ".gitconfig", ".editorconfig", ".npmrc",
+  ".env", "gemfile", "rakefile", "vagrantfile",
 ]);
 
 const PASSTHROUGH_CODE_HINTS = new Set([
   ...PASSTHROUGH_CODE_EXTENSIONS,
-  "golang", "python", "rust", "shell", "csharp", "c_sharp", "kotlin",
-  "ruby", "makefile", "dockerfile", "powershell", "haskell", "erlang",
-  "ocaml", "commonlisp", "scheme", "clojure", "julia", "fortran", "pascal",
-  "solidity", "terraform", "apex", "codeql", "elixir",
+  "golang", "python", "rust", "shell", "csharp", "c_sharp", "kotlin", "ruby",
+  "makefile", "dockerfile", "powershell", "haskell", "erlang", "ocaml",
+  "commonlisp", "scheme", "clojure", "julia", "fortran", "pascal", "solidity",
+  "terraform", "apex", "codeql", "elixir",
 ]);
 
 const JSON_EXTENSIONS = new Set(["json", "webmanifest", "har", "avsc"]);
 const JSON_HINTS = new Set(["json", "application/json"]);
-
 const JSONL_EXTENSIONS = new Set(["jsonl", "ndjson"]);
 const JSONL_HINTS = new Set(["jsonl", "ndjson", "application/x-ndjson"]);
-
 const JSONC_EXTENSIONS = new Set(["jsonc", "json5", "jsonnet", "libsonnet"]);
 const JSONC_HINTS = new Set([
-  "jsonc",
-  "json5",
-  "jsonnet",
-  "libsonnet",
-  "application/jsonc",
-  "application/json5",
+  "jsonc", "json5", "jsonnet", "libsonnet", "application/jsonc", "application/json5",
 ]);
-
 const XML_HTML_EXTENSIONS = new Set([
-  "xml",
-  "svg",
-  "xhtml",
-  "html",
-  "htm",
-  "vue",
-  "svelte",
-  "astro",
+  "xml", "svg", "xhtml", "html", "htm", "vue", "svelte", "astro",
 ]);
 const XML_HTML_HINTS = new Set([
-  ...XML_HTML_EXTENSIONS,
-  "application/xml",
-  "text/xml",
-  "text/html",
-  "image/svg+xml",
+  ...XML_HTML_EXTENSIONS, "application/xml", "text/xml", "text/html", "image/svg+xml",
 ]);
-
 const JAVASCRIPT_EXTENSIONS = new Set([
-  "js",
-  "jsx",
-  "mjs",
-  "cjs",
-  "ts",
-  "tsx",
-  "mts",
-  "cts",
+  "js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts",
 ]);
 const JAVASCRIPT_HINTS = new Set([
-  ...JAVASCRIPT_EXTENSIONS,
-  "javascript",
-  "typescript",
-  "application/javascript",
-  "text/javascript",
+  ...JAVASCRIPT_EXTENSIONS, "javascript", "typescript", "application/javascript", "text/javascript",
 ]);
-
 const CSS_EXTENSIONS = new Set(["css", "scss", "less"]);
 const CSS_HINTS = new Set(["css", "scss", "less", "text/css"]);
-
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
 const MARKDOWN_HINTS = new Set(["md", "markdown", "mdx", "gfm", "text/markdown"]);
 
@@ -139,10 +102,7 @@ const LOG_LEVEL_OR_LABEL_PREFIX_REGEX =
 
 const BRACKET_TAG_CHAIN_REGEX = /^(?:\[[A-Za-z0-9_.:/# -]+\]\s+)+(?=\{|\[)/;
 
-function extractNormalizedExtension(path: string): {
-  basename: string;
-  ext: string;
-} {
+function extractNormalizedExtension(path: string): { basename: string; ext: string } {
   const clean = path.split(/[?#]/)[0] ?? path;
   const slashIdx = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
   const basename = (slashIdx >= 0 ? clean.slice(slashIdx + 1) : clean).toLowerCase();
@@ -151,26 +111,16 @@ function extractNormalizedExtension(path: string): {
   return { basename, ext };
 }
 
-export function isKnownCodeOrMarkupPath(
-  path?: string,
-  languageHint?: string,
-): boolean {
-  const mode = classifyDocumentFormat("", path, languageHint);
-  return mode === "code-passthrough";
+export function isKnownCodeOrMarkupPath(path?: string, languageHint?: string): boolean {
+  return classifyDocumentFormat("", path, languageHint) === "code-passthrough";
 }
 
 function looksLikePassthroughCodeWithoutHint(rawText: string): boolean {
   const trimmed = rawText.trimStart();
-  if (!trimmed) return false;
-  if (/^(?:```|~~~)/m.test(rawText)) return false;
-  if (
-    /^(?:package\s+[a-zA-Z_]|import\s+(?:["({*]|[a-zA-Z_])|export\s+(?:default|const|function|class|type|interface)|func\s+[a-zA-Z_(]|def\s+[a-zA-Z_]|class\s+[a-zA-Z_]|#include\s+[<"])/i.test(
-      trimmed,
-    )
-  ) {
-    return true;
-  }
-  return false;
+  if (!trimmed || /^(?:```|~~~)/m.test(rawText)) return false;
+  return /^(?:package\s+[a-zA-Z_]|import\s+(?:["({*]|[a-zA-Z_])|export\s+(?:default|const|function|class|type|interface)|func\s+[a-zA-Z_(]|def\s+[a-zA-Z_]|class\s+[a-zA-Z_]|#include\s+[<"])/i.test(
+    trimmed,
+  );
 }
 
 export function classifyDocumentFormat(
@@ -203,37 +153,23 @@ export function classifyDocumentFormat(
       if (MARKDOWN_EXTENSIONS.has(ext)) return "markdown";
     }
   }
-  if (looksLikePassthroughCodeWithoutHint(rawText)) {
-    return "code-passthrough";
-  }
+  if (looksLikePassthroughCodeWithoutHint(rawText)) return "code-passthrough";
   return "auto";
 }
 
 function consumeSingleHostMarkerPrefix(rest: string): number {
   const tagMatch = EVIDENCE_TAG_REGEX.exec(rest);
   if (tagMatch) return tagMatch[0].length;
-  if (rest.startsWith(OVERLAY_PROMOTE_EVENT_PREFIX)) {
-    return OVERLAY_PROMOTE_EVENT_PREFIX.length;
-  }
-  if (rest.startsWith(OVERLAY_REJECT_EVENT_PREFIX)) {
-    return OVERLAY_REJECT_EVENT_PREFIX.length;
-  }
+  if (rest.startsWith(OVERLAY_PROMOTE_EVENT_PREFIX)) return OVERLAY_PROMOTE_EVENT_PREFIX.length;
+  if (rest.startsWith(OVERLAY_REJECT_EVENT_PREFIX)) return OVERLAY_REJECT_EVENT_PREFIX.length;
   if (rest.startsWith(COMPACTION_BANNER_OPEN)) {
     const closeIdx = rest.indexOf(COMPACTION_BANNER_CLOSE);
     if (closeIdx >= 0) return closeIdx + COMPACTION_BANNER_CLOSE.length;
   }
-  if (rest.startsWith(VERBATIM_HEAD_TAIL)) {
-    return VERBATIM_HEAD_TAIL.length;
-  }
-  if (rest.startsWith(GUIDANCE_BLOCK_OPEN)) {
-    return GUIDANCE_BLOCK_OPEN.length;
-  }
-  if (rest.startsWith(REJECTED)) {
-    return REJECTED.length;
-  }
-  if (rest.startsWith(CODE_LINE)) {
-    return CODE_LINE.length;
-  }
+  if (rest.startsWith(VERBATIM_HEAD_TAIL)) return VERBATIM_HEAD_TAIL.length;
+  if (rest.startsWith(GUIDANCE_BLOCK_OPEN)) return GUIDANCE_BLOCK_OPEN.length;
+  if (rest.startsWith(REJECTED)) return REJECTED.length;
+  if (rest.startsWith(CODE_LINE)) return CODE_LINE.length;
   return 0;
 }
 
@@ -272,13 +208,10 @@ export function matchEnvelopeOrLogPrefix(lineText: string): number | null {
   const sub = lineText.slice(cursor);
   const tsMatch = LOG_TIMESTAMP_PREFIX_REGEX.exec(sub);
   if (tsMatch) return cursor + tsMatch[0].length;
-
   const levelMatch = LOG_LEVEL_OR_LABEL_PREFIX_REGEX.exec(sub);
   if (levelMatch) return cursor + levelMatch[0].length;
-
   const bracketMatch = BRACKET_TAG_CHAIN_REGEX.exec(sub);
   if (bracketMatch) return cursor + bracketMatch[0].length;
-
   return null;
 }
 
@@ -288,10 +221,7 @@ export function isEnvelopeHeaderLine(lineText: string): boolean {
   if (!trimmed) return false;
   if (consumeSingleHostMarkerPrefix(trimmed) > 0) return true;
   if (trimmed.startsWith("⟦D")) return true;
-  if (/^[A-Za-z][A-Za-z0-9 _-]{0,32}:\s*\S*$/.test(trimmed) && !/[=;`<>]/.test(trimmed)) {
-    return true;
-  }
-  return false;
+  return /^[A-Za-z][A-Za-z0-9 _-]{0,32}:\s*\S*$/.test(trimmed) && !/[=;`<>]/.test(trimmed);
 }
 
 /** True when a line cannot be crossed by a multi-line JSON body in unknown/envelope mode. */
@@ -300,32 +230,7 @@ export function isExcerptBarrierLine(lineText: string): boolean {
   if (!trimmed) return false;
   if (trimmed === "..." || trimmed === "…") return true;
   if (consumeSingleHostMarkerPrefix(trimmed) > 0) return true;
-  if (trimmed.startsWith("⟦D")) return true;
-  return false;
-}
-
-export interface LineSpan {
-  readonly lineFrom: number;
-  readonly lineTo: number;
-  readonly sepFrom: number;
-  readonly sepTo: number;
-}
-
-export function splitLines(text: string, from = 0, to = text.length): LineSpan[] {
-  const lines: LineSpan[] = [];
-  let lineStart = from;
-  for (let i = from; i < to; i++) {
-    if (text.charCodeAt(i) === 0x0a) {
-      const hasCr = i > lineStart && text.charCodeAt(i - 1) === 0x0d;
-      const lineTo = hasCr ? i - 1 : i;
-      lines.push({ lineFrom: lineStart, lineTo, sepFrom: lineTo, sepTo: i + 1 });
-      lineStart = i + 1;
-    }
-  }
-  if (lineStart <= to && (lines.length === 0 || lineStart < to)) {
-    lines.push({ lineFrom: lineStart, lineTo: to, sepFrom: to, sepTo: to });
-  }
-  return lines;
+  return trimmed.startsWith("⟦D");
 }
 
 export function parseOpeningFence(lineText: string): { char: string; len: number; lang: string } | null {
@@ -344,12 +249,6 @@ export function isClosingFence(lineText: string, char: string, minLen: number): 
   if (!m) return false;
   const fence = m[1]!;
   return fence[0] === char && fence.length >= minLen;
-}
-
-export function isJsonFenceLang(lang: string): "json" | "jsonl" | null {
-  if (lang === "json" || lang === "application/json") return "json";
-  if (lang === "jsonl" || lang === "ndjson" || lang === "application/x-ndjson") return "jsonl";
-  return null;
 }
 
 /**
