@@ -658,7 +658,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     // Suffix syntaxSpanSignature invalidation on docChanged even when fallback lexical continuation on Line 2 converges:
     const jsxDoc = [
       "const v = 1 < 2",
-      "? a : b > c;",
+      'id = "x" > c;',
       'const r = /"/; const x = {a: 1, b: 2};',
       "</tag>;",
     ].join("\n");
