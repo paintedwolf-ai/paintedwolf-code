@@ -498,7 +498,13 @@ func denyOutsideRead(t *testing.T, path string) (string, *guidance.Refusal, *hit
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, outsideReadProfiles(t))
 	mgr := &denyingHITL{guidance: "Use the read tool and summarize the current file instead."}
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
-	exec := toolexecution.NewExecutor(policy, tools.NewDefaultRegistry(), "implement")
+	reg := tools.NewDefaultRegistry()
+	if err := reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "ok", nil
+	}); err != nil {
+		contractcheck.FailErr(t, "register read", err)
+	}
+	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	exec.Approvals.SetApprovalOutcomeRenderer(loadOutcomeRenderer(t))
 
@@ -528,7 +534,13 @@ func denyOutsideRead(t *testing.T, path string) (string, *guidance.Refusal, *hit
 // while the human cards differ.
 func TestDeniedMissingOutsidePathMatchesExistingPathByteForByte(t *testing.T) {
 	t.Parallel()
-	base := t.TempDir()
+	// The fixture lives under the user home: a path under the OS temp dir is
+	// ordinary scratch access and would never reach the outside-root gate.
+	home, err := os.UserHomeDir()
+	contractcheck.FailErr(t, "resolve user home", err)
+	base, err := os.MkdirTemp(home, "wr11-contract-fixture-")
+	contractcheck.FailErr(t, "create outside fixture folder", err)
+	t.Cleanup(func() { os.RemoveAll(base) })
 	existing := filepath.Join(base, "release.go")
 	contractcheck.FailErr(t, "create existing target", os.WriteFile(existing, []byte("contents"), 0o644))
 	missing := filepath.Join(base, "missing.go")
