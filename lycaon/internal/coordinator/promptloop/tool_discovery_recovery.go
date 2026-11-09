@@ -1,6 +1,8 @@
 package promptloop
 
 import (
+	"context"
+
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -8,7 +10,7 @@ import (
 )
 
 // addToolDiscovery supplies the same permitted catalog that request_tools pages.
-func (l *toolInvocations) addToolDiscovery(sessionID string, tctx tools.ToolContext, data map[string]any) {
+func (l *toolInvocations) addToolDiscovery(ctx context.Context, sessionID string, tctx tools.ToolContext, data map[string]any) {
 	if l.Context == nil || l.Context.Deps.LoadedTools == nil || tctx.Identity.SessionID == "" || tctx.Identity.SessionID != sessionID || tctx.Identity.Agent == "" {
 		return
 	}
@@ -20,7 +22,7 @@ func (l *toolInvocations) addToolDiscovery(sessionID string, tctx tools.ToolCont
 	for _, card := range cards {
 		entries = append(entries, turnload.DiscoveryEntry(card))
 	}
-	page, err := tools.DiscoveryPage(tctx, "request_tools", "available tools", "", "catalog", "", entries)
+	page, err := tools.DiscoveryPage(ctx, tctx, "request_tools", "available tools", "", "catalog", "", entries)
 	if err != nil {
 		return
 	}
