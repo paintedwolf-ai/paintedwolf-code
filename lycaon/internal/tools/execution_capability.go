@@ -123,8 +123,10 @@ func (tc *ToolContext) RecordCurrentActionReview(
 		return
 	}
 	var cited []gate.Fact
+	var hasExecutionBoundaryFact bool
 	for _, fact := range result.Decision.Cited {
-		if !hitl.CurrentActionReviewAllowsFact(fact) {
+		if fact.Key == "boundary.execution" {
+			hasExecutionBoundaryFact = true
 			continue
 		}
 		if !slices.Contains(cited, fact) {
@@ -133,7 +135,8 @@ func (tc *ToolContext) RecordCurrentActionReview(
 	}
 	var rawSegments []string
 	for _, segment := range result.Decision.ReasonSegments() {
-		if !hitl.CurrentActionReviewAllowsSegment(segment) {
+		if hasExecutionBoundaryFact && len(segment) > len(api.GateUnobservedChannel) &&
+			segment[:len(api.GateUnobservedChannel)+1] == string(api.GateUnobservedChannel)+":" {
 			continue
 		}
 		rawSegments = append(rawSegments, segment)
