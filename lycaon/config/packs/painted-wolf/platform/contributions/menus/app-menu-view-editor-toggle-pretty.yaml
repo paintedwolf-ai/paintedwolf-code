@@ -1,0 +1,6 @@
+id: painted-wolf/platform:app-menu-view-editor-toggle-pretty
+slot: "app_menu.view"
+command: painted-wolf/platform:editor-toggle-pretty
+group: "2"
+order: 7
+label: "Toggle pretty display"

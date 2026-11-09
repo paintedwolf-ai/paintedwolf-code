@@ -73,7 +73,7 @@ export function createFilesEditorMenus(
     activeReaderHandle: options.activeReaderHandle, activeEditorView: options.activeEditorView,
   });
 
-  const { openIndentMenu, openEolMenu, indentMenuItems } = createEditorFormatActions({
+  const { openIndentMenu, openEolMenu, indentMenuItems, prettyToggle } = createEditorFormatActions({
     projectId: options.projectId, buffer: options.buffer, currentView: options.currentView,
     editable: options.editable, indentChipEl: () => indentChipEl, eolChipEl: () => eolChipEl,
     setIndentMenu, setEolMenu,
@@ -97,7 +97,7 @@ export function createFilesEditorMenus(
 
   return {
     toolbarMenu, setToolbarMenu, indentMenu, setIndentMenu, eolMenu, setEolMenu,
-    versionComparisonMenu, setVersionComparisonMenu, toolbarMenus, indentMenuItems, indentChip, eolChip,
+    versionComparisonMenu, setVersionComparisonMenu, toolbarMenus, indentMenuItems, indentChip, eolChip, prettyToggle,
   };
 }
 
