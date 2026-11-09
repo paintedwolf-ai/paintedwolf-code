@@ -103,6 +103,8 @@ description. Skill bodies remain on demand through exact-name `skills_read`.
 The same fallback serves ordinary failures and engine-off collection; it does
 not change permission floors, workflow restrictions, or resource eligibility.
 Standing receipts mark these tools as `fallback`, not predicted or requested.
+A changed continuation writes a `visibility` receipt so restart recovery restores
+the exposed surface without inventing another turn decision.
 Observed tool calls and judge labels still train direct tool selection without
 `request_tools` calls. Retrieval examples from actual described needs remain a
 separate training objective; an empty retrieval sample is not retrieval evidence.
