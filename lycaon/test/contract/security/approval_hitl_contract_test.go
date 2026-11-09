@@ -442,7 +442,7 @@ func (m *denyingHITL) ApprovalReviewSuppressed(context.Context, string, string) 
 	return false, nil
 }
 func (m *denyingHITL) SessionApprovalDenied(context.Context, string) (bool, error) {
-	return true, nil
+	return false, nil
 }
 func (m *denyingHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string) error {
 	return nil
