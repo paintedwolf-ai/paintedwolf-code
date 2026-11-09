@@ -3,7 +3,6 @@ import { StateEffect, StateField, type EditorState, type Extension } from "@code
 import { EditorView, showTooltip, type Tooltip } from "@codemirror/view";
 import { sourceToDisplayOffset } from "./pretty-map.ts";
 import {
-  findRecoveryCopyCandidate,
   formatRecoverySelectionSnapshot,
   type PrettyDocumentRecoveryState,
   type PrettyPendingConflictRecord,

@@ -364,7 +364,7 @@ export class PrettyReplicaEditorAdapter {
 
   private failConflictResolution(
     recovery: PrettyDocumentRecoveryState,
-    status: PrettyConflictResolutionResult["status"],
+    status: Extract<PrettyConflictResolutionResult, { readonly ok: false }>["status"],
     error?: unknown,
   ): PrettyConflictResolutionResult {
     recovery.lastRecoveryFeedback = `Cannot resolve conflict: ${status}`;
