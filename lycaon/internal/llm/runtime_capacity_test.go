@@ -57,6 +57,11 @@ func checkRegistryAliasCapacity(t *testing.T) {
 func TestForegroundCancelsTitleAcrossAliases(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		t.Run(fmt.Sprintf("stream=%v", stream), func(t *testing.T) {
+			// Keep guidance catalog resolution on a private config root: a
+			// render inside the synctest bubble must never contend on the
+			// shared cross-process extension lock, whose real-clock retry
+			// deadline collapses on the bubble's fake clock.
+			t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 			synctest.Test(t, func(t *testing.T) {
 				group := modelcall.NewCapacityGroup()
 				provider := &cancelableCapacityProvider{group: group, started: make(chan struct{}), id: "lite"}
@@ -74,7 +79,11 @@ func TestForegroundCancelsTitleAcrossAliases(t *testing.T) {
 					}
 					done <- err
 				}()
-				<-provider.started
+				select {
+				case <-provider.started:
+				case err := <-done:
+					t.Fatalf("title summarizer returned before starting the provider: %v", err)
+				}
 				release, err := sum.Plane.acquireForeground(t.Context(), foreground)
 				testutil.FailErr(t, "admit foreground during title", err)
 				defer release()

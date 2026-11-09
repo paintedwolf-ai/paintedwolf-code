@@ -14,6 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -174,5 +176,17 @@ func TestNeededForTurnIncludesRecallWhenHistoryHasCompactedContent(t *testing.T)
 
 	if got := neededForTurn(nil, uncompacted, "epoch-1"); !slices.Equal(got, []string{"recall"}) {
 		t.Fatalf("history epoch should mark recall needed: got %v", got)
+	}
+}
+
+func TestToolEventOfferedToolsIncludesDeferredTurnPlanTools(t *testing.T) {
+	t.Parallel()
+	m := &Service{}
+	plan := toolsurface.Compile([]string{"command", "request_tools"}, []string{"terminal_open", "terminal_snapshot"})
+	got := m.toolEventOfferedTools(context.Background(), &api.Session{ID: "s1"}, tools.ToolContext{
+		Turn: tools.InvocationTurn{TurnToolPlan: plan},
+	}, "terminal_open", 1)
+	if !got["terminal_open"] || !got["terminal_snapshot"] {
+		t.Fatalf("expected deferred turn plan tools in toolEventOfferedTools, got %v", got)
 	}
 }
