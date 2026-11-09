@@ -141,7 +141,7 @@ func recordPrimaryMutation(ctx context.Context, tctx tools.ToolContext, resolved
 	if rel == "" {
 		return
 	}
-	tctx.Source.MutationRecorder.RecordPrimaryMutation(ctx, tctx.Identity.SessionID, rel)
+	tctx.Source.MutationRecorder.RecordPrimaryMutation(ctx, tctx.Identity.SessionID, resolved.Root.ID, rel)
 }
 
 // repositoryMetadataClass names the .git content native tools never write;

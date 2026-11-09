@@ -526,6 +526,7 @@ func applyToolResultSidecars(
 	if fileEdit := captures.fileEdit; fileEdit != nil {
 		tr.FileEdit = &api.FileEditSnapshot{
 			Path:   fileEdit.Path,
+			RootID: fileEdit.RootID,
 			Before: fileEdit.Before,
 			After:  fileEdit.After,
 		}

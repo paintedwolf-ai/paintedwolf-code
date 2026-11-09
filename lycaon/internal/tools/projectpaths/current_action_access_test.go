@@ -16,7 +16,7 @@ import (
 
 type mutationRecorder struct{ paths []string }
 
-func (r *mutationRecorder) RecordPrimaryMutation(_ context.Context, _, path string) {
+func (r *mutationRecorder) RecordPrimaryMutation(_ context.Context, _, _ string, path string) {
 	r.paths = append(r.paths, path)
 }
 
