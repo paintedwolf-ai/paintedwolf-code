@@ -53,8 +53,10 @@ func TestPromotionCommitNotifiesRootsChangedObserver(t *testing.T) {
 		t.Fatal("promotion commit did not notify the roots-changed observer")
 	}
 	change := projectroot.DiffRoots(before, after)
-	if len(change.Added) != 0 || len(change.Retired) != 0 {
-		t.Fatalf("promotion change = added %d retired %d, want a pure rename", len(change.Added), len(change.Retired))
+	// Promotion replaces the scratch path and the @Draft label under one root
+	// id: the path move is history-only, the relabel is what kicks.
+	if len(change.Added) != 0 || len(change.Retired) != 1 || change.Retired[0].Reason != projectroot.RootMoved {
+		t.Fatalf("promotion change = added %d retired %+v, want one path move", len(change.Added), change.Retired)
 	}
 	if len(change.Renamed) != 1 || change.Renamed[0].OldLabel != "Draft" || change.Renamed[0].NewLabel != "promoted-app" {
 		t.Fatalf("promotion renames = %+v, want @Draft -> @promoted-app", change.Renamed)
