@@ -2,67 +2,40 @@
 # Evaluator: lycaon/internal/coordinator/turnload
 version: 2
 
-# The engine serves on a device only when it ranks its reference batch of 16
-# code candidates within reference_ms; the fastest such device serves. A turn
-# decision takes about 2 reference batches at p50 and 4 at p95, so at this
-# limit turns finish well within turn.deadline_ms. An Apple M1 Pro takes
-# 265 ms on MLX and a fast desktop CPU about 4 s; on a machine where no device
-# qualifies, every decision falls back at once instead of answering late. A
-# rerank site the serving device cannot finish within its own deadline keeps
-# its lexical order.
+# The fastest device that ranks the 16-candidate reference batch within
+# reference_ms serves; otherwise decisions fall back immediately.
 # Evaluator: lycaon/internal/decide
 engine:
   reference_ms: 1000
 
-# The state every decision reads: the request in the user's words plus host
-# facts. The engine reads a bounded window, so the text is cut at the end.
+# Bounded request text and host state passed to each decision head.
 state:
-  # Sized for worker leg prompts, which often state their goal late.
   user_text_chars: 1600
   recent_tools: 12
-  # Each encoded question reserves this many tokens; the state gets the remainder.
   head_tokens: 512
 
-# Asked once per user turn or worker brief. Independent heads read every tool
-# and every guide on its own row; joint heads read a roster and answer the
-# kind choice too.
+# Evaluated once per user turn or worker brief.
 turn:
-  # Observed decisions take 1.3 to 4.4 s on an Apple M1 Pro.
   deadline_ms: 10000
-  # A loadable schema joins the chat's standing set when P(true) reaches
-  # load_at, on warm and cold turns alike; the set drops tools only at a cold
-  # boundary. Without an answer the standing set stays and the model can ask
-  # through request_tools. option_words bounds each tool's option text.
-  # On validation, 0.6 reaches a needed tool on 76% of the turns that need
-  # one (55% at 0.85), at 1.2 loads a turn, half unneeded. A wrong load costs
-  # one schema on the call; a missed load costs a request_tools round trip.
+  # Loadable schemas join the standing set when P(true) >= load_at and remain
+  # until a cold boundary.
   tools:
     question: Which of these tools will completing this request call?
     independent: true
     option_words: 60
     load_at: 0.6
-  # At most one skill is read before the turn: the top skill at preload_at,
-  # leading the runner-up by margin. Zero preload_at disables the read. The
-  # margin is the precision guard; a request that names its work scores its
-  # skill near 3 with the runner-up near 1.
+  # Preload at most one skill when the top score reaches preload_at and leads
+  # the runner-up by margin.
   skills:
     preload_at: 2.8
     margin: 0.3
-  # A unit leaves the prompt only when its id is in omittable, P(true) is
-  # below omit_below, and confidence reaches confidence_floor; a warm turn
-  # keeps an omission only while every turn since the last cold boundary
-  # agreed. Without an answer every unit renders. omittable is the audited
-  # list for the installed head (scripts/bialy/README.md); omit_below 0
-  # keeps every unit.
-  # Audited on the guide head's held-out repositories at 0.30, omission
-  # precision and share of turns omitted: find 94% / 14%, summarize 95% /
-  # 44%, claim-evidence 96% / 49%, recall 98% / 98%. A unit is never omitted
-  # once the chat called or requested a tool it is needed by, so a wrong
-  # omission ends at the next decision.
+  # Omit a unit when its id is in omittable, P(true) < omit_below, and
+  # confidence >= confidence_floor. Units needed by a called or requested tool
+  # are never omitted.
   guides:
     question: Which of this guidance does completing this request need?
     option_words: 8
-    omittable: [native-summarize-tool, native-recall-tool, claim-evidence]
+    omittable: [native-summarize-tool, native-recall-tool]
     omit_below: 0.3
     confidence_floor: 0.5
   # Joint heads only: a confident answer_only kind can veto tool loading.
@@ -77,29 +50,20 @@ turn:
       run: building, testing, running, or verifying something
       delegate: a broad or multi-part change that parallel workers should split
 
-# request_tools ranks schemas against the stated need.
-# nearest_loads stays 0: in recorded sessions the nearest tool below load_at
-# was wrong, and the model's rephrased need reached the right one.
-# A need that names files scores its tool lower than a bare operation does;
-# 1.8 still loads write for "create the app files: index.html, style.css".
+# request_tools schema ranking thresholds.
 request:
   deadline_ms: 10000
   load_at: 1.8
   max_loads: 4
   nearest_loads: 0
 
-# Asked when the model calls skills_read with a description of the work: the
-# top skill is read at read_at when it leads the runner-up by margin;
-# otherwise the result names the candidates.
+# skills_read ranking thresholds.
 lookup:
   deadline_ms: 10000
   read_at: 2.8
   margin: 0.3
 
-# Asked once per turn, when the turn first calls a loadable tool: the skills
-# are ranked against the request and that tool. The top skill is read at
-# read_at and named in one line at pointer_at, each leading by margin. Tools
-# in skip never ask; editing tools rank skills about writing, not the work.
+# Ranked once per turn on the first non-skipped loadable tool call.
 tool_event:
   deadline_ms: 10000
   read_at: 2.8
@@ -107,42 +71,28 @@ tool_event:
   margin: 0.3
   skip: [write, edit, replace_lines, code_rewrite, restore_version]
 
-# Reranking sites: host ranking seams where the engine rescores the lexical
-# top candidates against the task. Each site keeps its own lexical order and
-# adds weight × the engine's unit relevance to the candidates it scored.
-#   enabled         whether the site asks the engine at all
-#   deadline_ms     budget for the whole call; past it the lexical order stands
-#   max_candidates  lexical top K that reaches the engine
-#   chunk           candidates per engine request
-#   weight          added per unit of engine relevance, on the site's score scale
-# A site ranks only with its head loaded.
+# Lexical reranking sites. Each site adds weight * relevance to the top
+# max_candidates within deadline_ms.
 # Evaluator: lycaon/internal/decide
 rerank:
-  # The bundled engine scores about 12 ms per candidate on an Apple M1 Pro
-  # GPU: 16 candidates in 190 ms, 48 in 560 ms. A CPU-only host answers late
-  # and the lexical order stands.
-  # summarize: files ordered for the structure tier (BM25F over path and head).
   summarize_structure:
     enabled: true
     deadline_ms: 5000
     max_candidates: 48
     chunk: 16
     weight: 2.5
-  # summarize: definitions ordered for the skeleton (BM25F plus kind salience).
   summarize_definitions:
     enabled: true
     deadline_ms: 5000
     max_candidates: 48
     chunk: 16
     weight: 2.0
-  # summarize: the symbol a source window focuses on inside one file.
   summarize_windows:
     enabled: true
     deadline_ms: 1000
     max_candidates: 32
     chunk: 16
     weight: 1.0
-  # summarize: fit-tier neighbor stubs, call sites, and import edges.
   summarize_neighbors:
     enabled: true
     deadline_ms: 1000
@@ -161,31 +111,24 @@ rerank:
     max_candidates: 32
     chunk: 16
     weight: 1.0
-  # summarize: follow-up calls offered as next_actions.
   summarize_next_actions:
     enabled: true
     deadline_ms: 500
     max_candidates: 16
     chunk: 16
     weight: 1.0
-  # repomap: definitions inside one packed tags page, when a task is given.
   repomap_tags:
     enabled: true
     deadline_ms: 5000
     max_candidates: 48
     chunk: 16
     weight: 1.0
-  # project search: the live code leg behind Den search. The leg's own score
-  # is already strong, so a blend reorders it for the worse (MRR 0.78 to 0.62
-  # on the held-out corpus), and a typed query cannot wait on the engine.
   project_search:
     enabled: false
     deadline_ms: 300
     max_candidates: 16
     chunk: 16
     weight: 0.1
-  # web research: verified pages ordered by fetched content. Needs a web-rank
-  # head.
   web_pages:
     enabled: false
     deadline_ms: 5000

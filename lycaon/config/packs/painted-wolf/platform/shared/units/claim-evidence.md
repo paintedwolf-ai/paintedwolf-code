@@ -5,9 +5,8 @@ description: >-
   requires.
 slot: evidence
 order: 10
-# Turns that captured a page, terminal, image, or verification result, or
-# researched the web, made the claims this unit governs.
-needed_with: [capture_page, page_snapshot, page_act, measure_page, render_view, view_image, view_video, terminal_open, terminal_send, terminal_read, terminal_snapshot, verify, web_search, fetch_url]
+# Required whenever execution, capture, inspection, verification, or web tools are active.
+needed_with: [command, capture_page, page_snapshot, page_act, measure_page, render_view, view_image, view_video, terminal_open, terminal_send, terminal_read, terminal_snapshot, verify, web_search, fetch_url]
 hosts: [coordinator, worker]
 ---
 {% set has_claim_evidence_skill = agent_has_skill_mock_before_build or agent_has_skill_craft_icons_and_chrome or agent_has_skill_verify_visual_change or agent_has_skill_verify_terminal_change %}

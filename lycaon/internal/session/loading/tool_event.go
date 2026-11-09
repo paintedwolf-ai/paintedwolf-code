@@ -13,8 +13,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ObserveToolCall records a tool the chat called and, on the turn's first
-// loadable tool, asks the engine which skill that tool's work needs.
+// ObserveToolCall records a tool call and ranks tool-event skills on the
+// turn's first non-skipped loadable tool.
 func (m *Service) ObserveToolCall(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string) {
 	if m == nil || sess == nil {
 		return
@@ -79,14 +79,24 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 }
 
 func (m *Service) toolEventOfferedTools(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string, rootCount int) map[string]bool {
-	floor, _, _ := m.turnToolSets(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, rootCount)
+	floor, loadable, _ := m.turnToolSets(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, rootCount)
 	offered := nameSet(floor)
+	for _, name := range loadable {
+		if name = strings.TrimSpace(name); name != "" {
+			offered[name] = true
+		}
+	}
 	for _, name := range tctx.Turn.TurnOfferedToolNames {
 		if name = strings.TrimSpace(name); name != "" {
 			offered[name] = true
 		}
 	}
 	for _, name := range tctx.Turn.TurnToolPlan.ImmediateNames() {
+		if name = strings.TrimSpace(name); name != "" {
+			offered[name] = true
+		}
+	}
+	for _, name := range tctx.Turn.TurnToolPlan.DeferredNames() {
 		if name = strings.TrimSpace(name); name != "" {
 			offered[name] = true
 		}
@@ -102,8 +112,7 @@ func (m *Service) toolEventOfferedTools(ctx context.Context, sess *api.Session, 
 	return offered
 }
 
-// renderToolEventSkill reads the selected skill's body into the turn; a body
-// that fails to render leaves the turn without a skill.
+// renderToolEventSkill renders the selected skill's body into the turn ledger.
 func (m *Service) renderToolEventSkill(ctx context.Context, sessionID string, tctx tools.ToolContext, tool string, read turnload.SkillRank, roster []skills.Skill) *turnload.SkillPreload {
 	for i := range roster {
 		if roster[i].Name != read.Name {
@@ -130,8 +139,7 @@ func (m *Service) renderToolEventSkill(ctx context.Context, sessionID string, tc
 	return nil
 }
 
-// toolDescription is the bounded description the engine reads for a tool,
-// from the same policy that offers the tool to the prompt.
+// toolDescription returns the policy description for tool on profileID.
 func (m *Service) toolDescription(ctx context.Context, sess *api.Session, profileID, tool string) string {
 	if m == nil || m.policy == nil {
 		return ""
