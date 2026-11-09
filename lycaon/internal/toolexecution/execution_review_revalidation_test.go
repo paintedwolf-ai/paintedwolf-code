@@ -2,6 +2,7 @@ package toolexecution_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -20,8 +21,12 @@ import (
 )
 
 func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
-	for _, denyWhileWaiting := range []bool{false, true} {
-		t.Run(fmt.Sprintf("deny-during-review-%t", denyWhileWaiting), func(t *testing.T) {
+	for _, scenario := range []struct{ deny, cancel bool }{{}, {deny: true}, {cancel: true}} {
+		name := fmt.Sprintf("deny-during-review-%t", scenario.deny)
+		if scenario.cancel {
+			name = "cancel-during-review"
+		}
+		t.Run(name, func(t *testing.T) {
 			stageApprovals(t, settings.ApprovalEffectAsk)
 			root := t.TempDir()
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
@@ -65,13 +70,21 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			if len(entered) != 0 {
 				t.Fatal("handler entered before review")
 			}
-			if denyWhileWaiting {
+			if scenario.deny {
 				config.Rules[0].Effect = settings.ApprovalEffectDeny
 				testutil.FailErr(t, "install deny during human wait", store.PutProject(root, config))
 			}
-			manager.approve()
+			if scenario.cancel {
+				cancel()
+			} else {
+				manager.approve()
+			}
 			err = <-done
-			if denyWhileWaiting {
+			if scenario.cancel {
+				if !errors.Is(err, context.Canceled) || len(entered) != 0 || len(approvals.ListGrants("task")) != 0 {
+					t.Fatalf("canceled review retained authority or reached handler: err=%v entered=%d", err, len(entered))
+				}
+			} else if scenario.deny {
 				reject := toolrejection.AsToolReject(err)
 				if reject == nil || reject.Code != "APPROVAL_RULE_DENIED" || len(entered) != 0 {
 					t.Fatalf("late deny did not stop handler: err=%v entered=%d", err, len(entered))
