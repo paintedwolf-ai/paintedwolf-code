@@ -91,7 +91,7 @@ func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T)
 	if next := kicks.TakePendingKickID("sess-1"); next != "" {
 		t.Fatalf("second roots changed kick queued: %q", next)
 	}
-	for _, want := range []string{"added extra → ", "renamed web → site", "• api", "• site", "• extra"} {
+	for _, want := range []string{"added @extra;", "renamed @web → @site", "• @api", "• @site", "• @extra"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("extended notice missing %q:\n%s", want, text)
 		}
@@ -118,7 +118,7 @@ func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T)
 	}
 	text2, lease2, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
 	testutil.FailErr(t, "render second nudge", err)
-	if !ok || !strings.Contains(text2, "removed extra") || strings.Contains(text2, "renamed web") {
+	if !ok || !strings.Contains(text2, "removed @extra") || strings.Contains(text2, "renamed @web") {
 		t.Fatalf("second turn notice = %q", text2)
 	}
 	kicks.AckPendingNudge("sess-1", lease2)

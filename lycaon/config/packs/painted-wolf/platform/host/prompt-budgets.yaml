@@ -30,6 +30,10 @@ sizes:
             implementer:
                 cap: 36000
                 reason: The worker that implements changes; it alone carries the implement shell archetype and the implement addenda playbook.
+        coordinator_tripartite:
+            implement_overlay_promote_pending_writes:
+                cap: 36400
+                reason: Milestone 9 puts the folder row and multi-root addressing guidance in every coordinator turn; at one folder the render carries both where the old template had a two-line project-folder note.
         kicks:
             coordinator-process-finished:
                 cap: 6000

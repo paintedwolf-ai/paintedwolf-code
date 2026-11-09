@@ -37,12 +37,12 @@ func TestRootsChangedNoticeNamesEachChange(t *testing.T) {
 		before, after []projectroot.RootRef
 		want          []string
 	}{
-		{"added", []projectroot.RootRef{docs}, []projectroot.RootRef{docs, api}, []string{"Folders changed: added api → /abs/api.", "  • api  /abs/api"}},
-		{"removed", []projectroot.RootRef{docs, web}, []projectroot.RootRef{docs}, []string{"Folders changed: removed web (was /abs/web).", "old labels no longer resolve"}},
-		{"moved", []projectroot.RootRef{docs}, []projectroot.RootRef{moved}, []string{"Folders changed: moved docs → /abs/new-docs (was /abs/docs).", "start in docs (/abs/new-docs)"}},
-		{"renamed", []projectroot.RootRef{docs, web}, []projectroot.RootRef{docs, renamed}, []string{"Folders changed: renamed web → site (/abs/web)."}},
-		{"several", []projectroot.RootRef{docs, web}, []projectroot.RootRef{moved, api}, []string{"added api → /abs/api; moved docs → /abs/new-docs (was /abs/docs); removed web (was /abs/web)."}},
-		{"last removed", []projectroot.RootRef{docs}, nil, []string{"removed docs (was /abs/docs).", "No folder is attached now."}},
+		{"added", []projectroot.RootRef{docs}, []projectroot.RootRef{docs, api}, []string{"Folders changed: added @api.", "  • @api"}},
+		{"removed", []projectroot.RootRef{docs, web}, []projectroot.RootRef{docs}, []string{"Folders changed: removed @web.", "labels no longer resolve"}},
+		{"moved", []projectroot.RootRef{docs}, []projectroot.RootRef{moved}, []string{"Folders changed: moved @docs.", "start in @docs (session folder)"}},
+		{"renamed", []projectroot.RootRef{docs, web}, []projectroot.RootRef{docs, renamed}, []string{"Folders changed: renamed @web → @site."}},
+		{"several", []projectroot.RootRef{docs, web}, []projectroot.RootRef{moved, api}, []string{"added @api; moved @docs; removed @web."}},
+		{"last removed", []projectroot.RootRef{docs}, nil, []string{"removed @docs.", "No folder is attached now."}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -62,7 +62,7 @@ func TestRootsChangedNoticeNamesNewPrimary(t *testing.T) {
 	a2, b2 := a, b
 	a2.IsPrimary, b2.IsPrimary = false, true
 	out := renderRootsChanged(t, []projectroot.RootRef{a, b}, []projectroot.RootRef{a2, b2}, "")
-	if !strings.Contains(out, "Folders changed: primary is now web (/abs/web).") || !strings.Contains(out, "start in web (/abs/web)") {
+	if !strings.Contains(out, "Folders changed: primary is now @web.") || !strings.Contains(out, "start in @web (session folder)") {
 		t.Fatalf("primary notice = %q", out)
 	}
 }

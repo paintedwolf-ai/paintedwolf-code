@@ -141,7 +141,7 @@ func boardRootViews(roots []api.BoardOrientationRoot) ([]BoardOrientationRootVie
 	views := make([]BoardOrientationRootView, count)
 	remaining := boardMultiRootDataBudget
 	for i := range views {
-		label := limitBoardText(strings.TrimSpace(roots[i].Label), 16)
+		label := strings.TrimSpace(roots[i].Label)
 		if label == "" {
 			label = "folder"
 		}
@@ -165,20 +165,6 @@ func boardRootViews(roots []api.BoardOrientationRoot) ([]BoardOrientationRootVie
 		}
 	}
 	return views, len(roots) - count
-}
-
-func limitBoardText(text string, max int) string {
-	if len(text) <= max {
-		return text
-	}
-	end := 0
-	for i := range text {
-		if i > max {
-			break
-		}
-		end = i
-	}
-	return strings.TrimSpace(text[:end])
 }
 
 // BoardInjectToMap converts the DTO for pongo2 render.

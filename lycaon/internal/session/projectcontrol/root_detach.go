@@ -52,9 +52,13 @@ func (m *Service) forceCancelDependents(ctx context.Context, projectID, rootID s
 			roots = project.RootRefsFrom(p)
 		}
 	}
-	if rootID != "" && strings.TrimSpace(detachedPath) == "" {
+	detachedLabel := ""
+	if rootID != "" {
 		if detached, ok := projectroot.RootRefByID(roots, rootID); ok {
-			detachedPath = detached.Path
+			if strings.TrimSpace(detachedPath) == "" {
+				detachedPath = detached.Path
+			}
+			detachedLabel = detached.Label
 		}
 	}
 	if m.workerAbort != nil {
@@ -99,7 +103,7 @@ func (m *Service) forceCancelDependents(ctx context.Context, projectID, rootID s
 			return err
 		}
 	}
-	m.enqueueRootDetachCanceledKick(ctx, projectID, rootID, detachedPath, dependents)
+	m.enqueueRootDetachCanceledKick(ctx, projectID, rootID, detachedLabel, dependents)
 	return nil
 }
 
@@ -120,7 +124,7 @@ func (m *Service) projectSessionIDs(ctx context.Context, projectID string) map[s
 	return out
 }
 
-func (m *Service) enqueueRootDetachCanceledKick(ctx context.Context, projectID, rootID, detachedPath string, dependents RootDependents) {
+func (m *Service) enqueueRootDetachCanceledKick(ctx context.Context, projectID, rootID, detachedLabel string, dependents RootDependents) {
 	if m == nil || m.store == nil || (len(dependents.Workers) == 0 && len(dependents.Overlays) == 0 && len(dependents.Sessions) == 0) {
 		return
 	}
@@ -147,7 +151,7 @@ func (m *Service) enqueueRootDetachCanceledKick(ctx context.Context, projectID, 
 	}
 	data := map[string]any{
 		"root_id":  rootID,
-		"path":     detachedPath,
+		"label":    detachedLabel,
 		"workers":  workers,
 		"overlays": overlays,
 		"reason":   rootDetachCancelReason,
