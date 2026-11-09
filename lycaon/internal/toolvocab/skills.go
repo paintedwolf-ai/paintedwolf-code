@@ -184,7 +184,7 @@ func skillRenderVars(held map[string]bool, coordinator bool) map[string]any {
 	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
 	spawn.RefreshSizingHintVars(vars)
 	for name, ok := range held {
-		if ok && name != ReachCommandMutation {
+		if ok && name != ReachCommandMutation && toolschema.ValidToolName(name) {
 			vars["profile_has_"+name] = true
 		}
 	}
