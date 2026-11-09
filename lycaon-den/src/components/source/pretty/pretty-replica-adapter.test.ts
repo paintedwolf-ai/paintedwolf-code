@@ -13,7 +13,7 @@ import {
   prettyRecoveryStorageKey,
   resetPrettyDocumentRecoveryStoreForTests,
   simulatePrettyProcessRestartForTests,
-} from "./pretty-replica-rebase.ts";
+} from "./pretty-replica-recovery.ts";
 
 const identity = vi.hoisted(() => ({ value: "window-pretty-proof" }));
 vi.mock("../../../platform/connection/client-identity.ts", () => ({

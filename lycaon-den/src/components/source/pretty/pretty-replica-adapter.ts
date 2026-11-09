@@ -23,6 +23,12 @@ import { extractCopySelection, mapDisplayEditToSource } from "./pretty-edit-mapp
 import { displayToSourceOffset, sourceToDisplayOffset } from "./pretty-map.ts";
 import {
   advanceProjectionForComposeFrame,
+  PrettyRevisionDeltaRingBuffer,
+  rebaseChangesOverDeltaChain,
+} from "./pretty-replica-rebase.ts";
+import {
+  appendMultiCursorConflictToRecovery,
+  appendStaleEditToRecovery,
   getPrettyDocumentRecoveryState,
   persistPrettyDocumentRecoveryState,
   type PrettyCaretAffinityState,
@@ -30,10 +36,8 @@ import {
   type PrettyPendingConflictIntention,
   type PrettyPendingConflictRecord,
   type PrettyPendingStaleEdit,
-  PrettyRevisionDeltaRingBuffer,
-  rebaseChangesOverDeltaChain,
   recomputeRecoveryRawSegmentRanges,
-} from "./pretty-replica-rebase.ts";
+} from "./pretty-replica-recovery.ts";
 import { formatPrettyProjection } from "./pretty-segmenter.ts";
 import type {
   PrettyCaretAffinity,
@@ -92,8 +96,6 @@ export type PrettyConflictResolutionResult =
       readonly error?: unknown;
     };
 
-let nextRecoveryRecordSequence = 0;
-
 function toEditorSelection(ranges: readonly PrettySelectionRange[], docLength: number): EditorSelection {
   if (ranges.length === 0) return EditorSelection.single(0);
   return EditorSelection.create(
@@ -113,9 +115,7 @@ function computeMinimalTextChange(
   if (fromText === toText) return null;
   let prefix = 0;
   const minLen = Math.min(fromText.length, toText.length);
-  while (prefix < minLen && fromText.charCodeAt(prefix) === toText.charCodeAt(prefix)) {
-    prefix++;
-  }
+  while (prefix < minLen && fromText.charCodeAt(prefix) === toText.charCodeAt(prefix)) prefix++;
   let fromEnd = fromText.length;
   let toEnd = toText.length;
   while (
@@ -126,11 +126,7 @@ function computeMinimalTextChange(
     fromEnd--;
     toEnd--;
   }
-  return {
-    from: prefix,
-    to: fromEnd,
-    insert: toText.slice(prefix, toEnd),
-  };
+  return { from: prefix, to: fromEnd, insert: toText.slice(prefix, toEnd) };
 }
 
 function inferEditIntent(tr: Transaction): PrettyEditIntentKind {
@@ -148,12 +144,8 @@ function inferCaretAffinity(
 ): PrettyCaretAffinityState | null {
   for (const run of map.runs) {
     if (run.kind !== "virtual-layout" || run.dispFrom === run.dispTo) continue;
-    if (dispOffset === run.dispFrom) {
-      return { rawOffset: run.srcFrom, assoc: "before" };
-    }
-    if (dispOffset === run.dispTo) {
-      return { rawOffset: run.srcTo, assoc: "after" };
-    }
+    if (dispOffset === run.dispFrom) return { rawOffset: run.srcFrom, assoc: "before" };
+    if (dispOffset === run.dispTo) return { rawOffset: run.srcTo, assoc: "after" };
   }
   return null;
 }
@@ -214,38 +206,14 @@ export class PrettyReplicaEditorAdapter {
     return getPrettyDocumentRecoveryState(this.replica.accepted.id, this.replica.incarnation);
   }
 
-  get currentProjection(): PrettyProjectionResult {
-    return this.projection;
-  }
-
-  get isPrettyEnabled(): boolean {
-    return this.prettyEnabled;
-  }
-
-  get isComposing(): boolean {
-    return this.composing || Boolean(this.view?.composing);
-  }
-
-  get pendingConflicts(): readonly PrettyPendingConflictRecord[] {
-    return this.recoveryState().pendingConflicts;
-  }
-
-  get pendingConflict(): PrettyPendingConflictRecord | null {
-    return this.recoveryState().pendingConflicts[0] ?? null;
-  }
-
-  get pendingStaleEdits(): readonly PrettyPendingStaleEdit[] {
-    return this.recoveryState().pendingStaleEdits;
-  }
-
-  get pendingStaleEdit(): PrettyPendingStaleEdit | null {
-    return this.recoveryState().pendingStaleEdits[0] ?? null;
-  }
-
-  /** View-local caret affinity; never shared across separate EditorView instances. */
-  get caretAffinity(): PrettyCaretAffinityState | null {
-    return this.viewCaretAffinity;
-  }
+  get currentProjection(): PrettyProjectionResult { return this.projection; }
+  get isPrettyEnabled(): boolean { return this.prettyEnabled; }
+  get isComposing(): boolean { return this.composing || Boolean(this.view?.composing); }
+  get pendingConflicts(): readonly PrettyPendingConflictRecord[] { return this.recoveryState().pendingConflicts; }
+  get pendingConflict(): PrettyPendingConflictRecord | null { return this.recoveryState().pendingConflicts[0] ?? null; }
+  get pendingStaleEdits(): readonly PrettyPendingStaleEdit[] { return this.recoveryState().pendingStaleEdits; }
+  get pendingStaleEdit(): PrettyPendingStaleEdit | null { return this.recoveryState().pendingStaleEdits[0] ?? null; }
+  get caretAffinity(): PrettyCaretAffinityState | null { return this.viewCaretAffinity; }
 
   holdViewProjection(hold: boolean): void {
     this.holdProjection = hold;
@@ -324,7 +292,6 @@ export class PrettyReplicaEditorAdapter {
   }
 
   attach(view: EditorView): void {
-    // Ensure DocumentReplica does not hold a raw editor reference while Pretty adapter is bound.
     this.replica.detachEditor(view);
     this.view = view;
     this.projection = this.computeProjection(this.projectedRawText, this.projectedRevision);
@@ -404,12 +371,6 @@ export class PrettyReplicaEditorAdapter {
     return true;
   }
 
-  /**
-   * Resolves a retained multi-cursor conflict without losing unresolved intentions before admission.
-   * Validates choice, incarnation, epoch, and history revision delta-chain first; rebases across
-   * disjoint changes; refuses on overlap or unavailable chain; and preserves unresolved intentions
-   * across failed admission or single-intention selection unless explicit discard is requested.
-   */
   resolvePendingConflict(
     resolution: PrettyConflictResolutionAction,
   ): PrettyConflictResolutionResult {
@@ -417,9 +378,7 @@ export class PrettyReplicaEditorAdapter {
     const conflict = resolution.conflictId
       ? recovery.pendingConflicts.find((c) => c.conflictId === resolution.conflictId)
       : recovery.pendingConflicts[0];
-    if (!conflict) {
-      return { ok: false, status: "no-pending-conflict" };
-    }
+    if (!conflict) return { ok: false, status: "no-pending-conflict" };
 
     if (resolution.action === "discard-conflict") {
       const idx = recovery.pendingConflicts.indexOf(conflict);
@@ -438,9 +397,7 @@ export class PrettyReplicaEditorAdapter {
 
     if (resolution.action === "discard-intention") {
       const intIdx = conflict.intentions.findIndex((item) => item.order === resolution.order);
-      if (intIdx < 0) {
-        return { ok: false, status: "invalid-choice" };
-      }
+      if (intIdx < 0) return { ok: false, status: "invalid-choice" };
       conflict.intentions.splice(intIdx, 1);
       if (conflict.intentions.length === 0) {
         const cIdx = recovery.pendingConflicts.indexOf(conflict);
@@ -458,19 +415,14 @@ export class PrettyReplicaEditorAdapter {
       };
     }
 
-    // Action: "apply"
     const chosen = conflict.intentions.find((item) => item.order === resolution.order);
-    if (!chosen) {
-      return { ok: false, status: "invalid-choice" };
-    }
-
+    if (!chosen) return { ok: false, status: "invalid-choice" };
     if (
       conflict.documentId !== this.replica.accepted.id ||
       chosen.baseIncarnation !== this.replica.incarnation
     ) {
       return { ok: false, status: "incarnation-mismatch" };
     }
-
     if (chosen.baseEpoch !== this.replica.accepted.epoch) {
       return { ok: false, status: "epoch-mismatch" };
     }
@@ -487,19 +439,12 @@ export class PrettyReplicaEditorAdapter {
       [{ from: chosen.rawFrom, to: chosen.rawTo, insert: chosen.insert }],
       chosen.rawFrom,
     );
-
-    if (rebased.status !== "disjoint") {
-      return { ok: false, status: rebased.status };
-    }
+    if (rebased.status !== "disjoint") return { ok: false, status: rebased.status };
 
     const targetChange = rebased.changes[0]!;
     const prevRev = this.replica.history.revision;
     const rawTx = this.replica.history.state.update({
-      changes: {
-        from: targetChange.from,
-        to: targetChange.to,
-        insert: targetChange.insert,
-      },
+      changes: { from: targetChange.from, to: targetChange.to, insert: targetChange.insert },
       selection: EditorSelection.single(targetChange.from + targetChange.insert.length),
       userEvent: "input.type",
     });
@@ -579,11 +524,6 @@ export class PrettyReplicaEditorAdapter {
     return true;
   }
 
-  /**
-   * Enters IME composition without dispatching any document-replacing transaction to EditorView,
-   * preserving the browser's active composing DOM node regardless of whether `keydown(229)` or
-   * `compositionstart` fires first.
-   */
   startComposition(): void {
     this.composing = true;
     this.holdProjection = true;
@@ -628,9 +568,7 @@ export class PrettyReplicaEditorAdapter {
       if (chain && chain.length > 0) {
         let mappedRaw = this.viewCaretAffinity.rawOffset;
         const assocSide = this.viewCaretAffinity.assoc === "before" ? -1 : 1;
-        for (const step of chain) {
-          mappedRaw = step.changes.mapPos(mappedRaw, assocSide);
-        }
+        for (const step of chain) mappedRaw = step.changes.mapPos(mappedRaw, assocSide);
         this.viewCaretAffinity = { rawOffset: mappedRaw, assoc: this.viewCaretAffinity.assoc };
       }
     }
@@ -651,9 +589,7 @@ export class PrettyReplicaEditorAdapter {
       this.view.state.doc.toString(),
       this.projection.displayText,
     );
-    if (!diff && this.view.state.selection.eq(nextSel, true)) {
-      return;
-    }
+    if (!diff && this.view.state.selection.eq(nextSel, true)) return;
     this.view.dispatch({
       ...(diff ? { changes: diff } : {}),
       selection: nextSel,
@@ -688,9 +624,7 @@ export class PrettyReplicaEditorAdapter {
           selection: rawSel,
           annotations: Transaction.addToHistory.of(false),
         });
-        if (this.view?.hasFocus) {
-          this.replica.publishPresence(rawSel);
-        }
+        if (this.view?.hasFocus) this.replica.publishPresence(rawSel);
       }
       return tr;
     }
@@ -702,9 +636,7 @@ export class PrettyReplicaEditorAdapter {
     const intent = inferEditIntent(tr);
     const isComposeEvent =
       this.composing || Boolean(this.view?.composing) || tr.isUserEvent("input.type.compose");
-    if (isComposeEvent && !this.composing) {
-      this.startComposition();
-    }
+    if (isComposeEvent && !this.composing) this.startComposition();
 
     const mapped = mapDisplayEditToSource({
       map: this.projection.sourceMap,
@@ -724,7 +656,6 @@ export class PrettyReplicaEditorAdapter {
       };
     }
 
-    // Case 3 step 1: Collapsed Backspace/Delete inside virtual layout moves to raw boundary with affinity.
     if (mapped.movedToRawBoundary) {
       const rawHead = mapped.rawSelection[0]?.head ?? 0;
       const assoc: PrettyCaretAffinity = mapped.caretAffinity ?? "after";
@@ -741,31 +672,15 @@ export class PrettyReplicaEditorAdapter {
       };
     }
 
-    // Case 6b: Conflicting multi-cursor intentions append to durable recovery without overwriting prior conflicts.
     if (mapped.conflictRequiresRawFallback && mapped.conflict) {
-      const recovery = this.recoveryState();
-      const record: PrettyPendingConflictRecord = {
-        conflictId: `conflict-${this.replica.accepted.id}-${this.replica.incarnation}-${this.projectedRevision}-${++nextRecoveryRecordSequence}`,
-        documentId: this.replica.accepted.id,
-        baseIncarnation: this.projectedIncarnation,
-        baseEpoch: this.projectedEpoch,
-        baseHistoryRevision: this.projectedRevision,
-        reason: mapped.conflict.reason,
-        affectedRawRanges: mapped.affectedRawRanges.map((r) => ({
-          srcFrom: r.srcFrom,
-          srcTo: r.srcTo,
-        })),
-        intentions: mapped.conflict.intentions.map((item) => ({
-          ...item,
-          baseIncarnation: this.projectedIncarnation,
-          baseEpoch: this.projectedEpoch,
-          baseHistoryRevision: this.projectedRevision,
-        })),
-      };
-      recovery.pendingConflicts.push(record);
-      recomputeRecoveryRawSegmentRanges(recovery);
-      persistPrettyDocumentRecoveryState(recovery);
-
+      appendMultiCursorConflictToRecovery(
+        this.recoveryState(),
+        this.projectedIncarnation,
+        this.projectedEpoch,
+        this.projectedRevision,
+        mapped.conflict,
+        mapped.affectedRawRanges,
+      );
       this.projectedRawText = this.replica.currentText;
       this.projectedRevision = this.replica.history.revision;
       this.projection = this.computeProjection(this.projectedRawText, this.projectedRevision);
@@ -789,12 +704,8 @@ export class PrettyReplicaEditorAdapter {
       };
     }
 
-    // Case 2b: Virtual-only selection deletion deletes zero source tokens.
-    if (mapped.changes.length === 0) {
-      return [];
-    }
+    if (mapped.changes.length === 0) return [];
 
-    // Case 9: Stale projection revision vs current replica revision.
     if (
       this.projectedRevision !== this.replica.history.revision ||
       this.projectedEpoch !== this.replica.accepted.epoch ||
@@ -814,31 +725,19 @@ export class PrettyReplicaEditorAdapter {
         fallbackRawCursor,
       );
       if (rebased.status !== "disjoint") {
-        const recovery = this.recoveryState();
-        const staleRecord: PrettyPendingStaleEdit = {
-          staleEditId: `stale-${this.replica.accepted.id}-${this.replica.incarnation}-${this.projectedRevision}-${++nextRecoveryRecordSequence}`,
-          documentId: this.replica.accepted.id,
-          baseIncarnation: this.projectedIncarnation,
-          baseEpoch: this.projectedEpoch,
-          baseHistoryRevision: this.projectedRevision,
-          currentIncarnation: this.replica.incarnation,
-          currentEpoch: this.replica.accepted.epoch,
-          currentHistoryRevision: this.replica.history.revision,
-          reason: rebased.status,
-          intentions: mapped.changes.map((c, idx) => ({
-            order: idx,
-            dispFrom: displayChanges[idx]?.from ?? 0,
-            dispTo: displayChanges[idx]?.to ?? 0,
-            rawFrom: c.from,
-            rawTo: c.to,
-            insert: c.insert,
-          })),
-          rebasedCursorOffset: rebased.rebasedCursorOffset,
-        };
-        recovery.pendingStaleEdits.push(staleRecord);
-        recomputeRecoveryRawSegmentRanges(recovery);
-        persistPrettyDocumentRecoveryState(recovery);
-
+        appendStaleEditToRecovery(
+          this.recoveryState(),
+          this.projectedIncarnation,
+          this.projectedEpoch,
+          this.projectedRevision,
+          this.replica.incarnation,
+          this.replica.accepted.epoch,
+          this.replica.history.revision,
+          rebased.status,
+          displayChanges,
+          mapped.changes,
+          rebased.rebasedCursorOffset,
+        );
         this.holdProjection = false;
         this.projectedRawText = this.replica.currentText;
         this.projectedRevision = this.replica.history.revision;
@@ -860,7 +759,6 @@ export class PrettyReplicaEditorAdapter {
           annotations: [documentSynchronization.of(true), Transaction.addToHistory.of(false)],
         };
       }
-      // Disjoint remote change: apply rebased raw changes!
       return this.commitRawChanges(
         tr,
         displayChanges,
@@ -923,8 +821,6 @@ export class PrettyReplicaEditorAdapter {
 
     this.viewCaretAffinity = null;
 
-    // During active IME composition, advance the projection sourceMap in-place to match
-    // `tr.newDoc` without replacing the composing DOM node on intermediate frames.
     if (isComposeEvent) {
       this.projectedRawText = this.replica.currentText;
       this.projectedRevision = this.replica.history.revision;
@@ -961,9 +857,7 @@ export class PrettyReplicaEditorAdapter {
       anchor: sourceToDisplayOffset(this.projection.sourceMap, r.anchor, "right"),
       head: sourceToDisplayOffset(this.projection.sourceMap, r.head, "right"),
     }));
-    if (this.view?.hasFocus) {
-      this.replica.publishPresence(rawSel);
-    }
+    if (this.view?.hasFocus) this.replica.publishPresence(rawSel);
     const diff = computeMinimalTextChange(
       tr.startState.doc.toString(),
       this.projection.displayText,
