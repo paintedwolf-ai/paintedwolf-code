@@ -29,7 +29,7 @@ func TestParentLookupFailureCannotBecomeAnOlderMergeBase(t *testing.T) {
 			}},
 			parentLookupProbe{lookup: func(layeredfs.QualifiedPath) (layeredfs.ParentEntry, bool, error) {
 				olderLookups++
-				return layeredfs.ParentEntry{Kind: layeredfs.EntryFile, Mode: 0o644}, true, nil
+				return layeredfs.ParentEntry{Kind: layeredfs.EntryRegular, Mode: 0o644}, true, nil
 			}},
 		},
 	}
