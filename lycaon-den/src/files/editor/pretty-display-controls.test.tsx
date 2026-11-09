@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createSignal } from "solid-js";
 import { cleanup, fireEvent, render } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NATIVE_UI_HANDLER_IDS } from "../../contributions/native-ui-handlers.generated.ts";
 import { STOCK_FRAME } from "../../contributions/stock-frame.generated.ts";
+import { editorWordWrapPref, saveEditorWordWrap } from "../../settings/editor/editor-prefs.ts";
+import { extractCssRuleBlock } from "../../styling/css-contract.ts";
 import { fileBufferKey, type FileBufferKey } from "../components/project-files-model.ts";
 import { resolveEditorIdentity } from "../documents/editor-identity.ts";
 import type { FileBuffer } from "../documents/files-buffer-state.ts";
@@ -253,5 +257,102 @@ describe("Pretty display host contributions and status chrome (FMT-AC-06, FMT-IN
     const icons = tabView.container.querySelectorAll(".den-files-tab-kind-icon");
     expect(icons).toHaveLength(1);
     expect(icons[0]?.getAttribute("data-tip")).toBe("File comparison");
+  });
+
+  it("drives persistent depressed styling for both Pretty and Wrap from aria-pressed while keeping their selection independent (FMT-AC-06)", async () => {
+    const projectId = "proj-independent-toggles";
+    const tabKey = fileBufferKey("root", "both.json");
+    const initialWrap = editorWordWrapPref();
+    await saveEditorWordWrap(false);
+
+    try {
+      const unregister = registerPrettySurfaceCapability(projectId, tabKey, {
+        enabled: () => isPrettyDisplayEnabled(projectId, tabKey),
+        onToggle: () => {
+          togglePrettyDisplayPref(projectId, tabKey);
+        },
+      });
+
+      const view = render(() => (
+        <FilesEditorStatus
+          identity={resolveEditorIdentity({
+            historical: false,
+            workerDraft: false,
+            deleted: false,
+            writable: true,
+            preview: false,
+            editable: true,
+          })}
+          dirtyCount={0}
+          language="JSON"
+          pretty={prettyStatusToggleForTab(projectId, tabKey)}
+        />
+      ));
+
+      const prettyBtn = view.getByTestId("files-editor-pretty-toggle") as HTMLButtonElement;
+      const wrapBtn = view.getByTestId("files-editor-wrap-toggle") as HTMLButtonElement;
+
+      // 1. Both off
+      expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("false");
+
+      // 2. Pretty on, Wrap off
+      fireEvent.click(prettyBtn);
+      expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("false");
+
+      // 3. Both Pretty and Wrap on simultaneously
+      fireEvent.click(wrapBtn);
+      expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+
+      // 4. Pretty off via Alt+P/menu handler while Wrap remains on
+      expect(invokePrettyToggleForTab(projectId, tabKey)).toBe(true);
+      expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+
+      unregister();
+    } finally {
+      await saveEditorWordWrap(initialWrap);
+    }
+
+    const previewDomainCss = readFileSync(
+      join(import.meta.dirname, "../../styling/files/preview-domain.css"),
+      "utf8",
+    );
+    const baseRule = extractCssRuleBlock(previewDomainCss, ".den-files-editor__status-toggle");
+    const hoverRule = extractCssRuleBlock(
+      previewDomainCss,
+      ".den-files-editor__status-toggle:hover:not(:disabled)",
+    );
+    const pressedRule = extractCssRuleBlock(
+      previewDomainCss,
+      '.den-files-editor__status-toggle[aria-pressed="true"]:not(:disabled)',
+    );
+    const pressedHoverRule = extractCssRuleBlock(
+      previewDomainCss,
+      '.den-files-editor__status-toggle[aria-pressed="true"]:hover:not(:disabled)',
+    );
+    const focusRule = extractCssRuleBlock(
+      previewDomainCss,
+      ".den-files-editor__status-toggle:focus-visible",
+    );
+    const disabledRule = extractCssRuleBlock(
+      previewDomainCss,
+      ".den-files-editor__status-toggle:disabled",
+    );
+
+    expect(baseRule).toMatch(/border:\s*1px solid transparent/);
+    expect(baseRule).toMatch(/padding:\s*1px 5px/);
+    expect(hoverRule).toMatch(/border-color:\s*var\(--den-line\)/);
+    expect(hoverRule).toMatch(/background:\s*var\(--den-tint-2\)/);
+    expect(pressedRule).toMatch(/box-shadow:\s*var\(--den-bevel-inset\)/);
+    expect(pressedRule).toMatch(/var\(--den-accent-signal\)/);
+    expect(pressedRule).toMatch(/var\(--den-surface-offset\)/);
+    expect(pressedRule).toMatch(/color:\s*var\(--den-text\)/);
+    expect(pressedHoverRule).toMatch(/box-shadow:\s*var\(--den-bevel-inset\)/);
+    expect(focusRule).toMatch(/outline:\s*1\.5px solid var\(--den-accent-signal\)/);
+    expect(disabledRule).toMatch(/opacity:\s*0\.4/);
+    expect(disabledRule).toMatch(/cursor:\s*not-allowed/);
   });
 });
