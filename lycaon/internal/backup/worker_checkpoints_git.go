@@ -158,6 +158,39 @@ func loadSharedDiskGitObjectFiles(ctx context.Context, configDir, storeDir, proj
 	return sharedFiles, nil
 }
 
+func checkpointGitObjectPrefixesForRoot(branchRel, storePrefix, checkpointID, rootID string, objectCheckpoints []string) []string {
+	seen := make(map[string]bool)
+	var prefixes []string
+	add := func(p string) {
+		if !seen[p] {
+			seen[p] = true
+			prefixes = append(prefixes, p)
+		}
+	}
+	add(enginepaths.WorkerBranchesDirName + "/.adapter/privategit/retained-store/objects")
+	add(storePrefix + "/objects")
+	addCheckpointPrefix := func(cid string) {
+		if !isSafeCheckpointIdentity(cid) {
+			return
+		}
+		if rootID == "" {
+			add(storePrefix + "/checkpoints/" + cid + "/git-objects")
+			return
+		}
+		if isSafeCheckpointIdentity(rootID) {
+			add(storePrefix + "/checkpoints/" + cid + "/git-objects-roots/" + rootID)
+		}
+	}
+	addCheckpointPrefix(checkpointID)
+	for _, objCID := range objectCheckpoints {
+		addCheckpointPrefix(objCID)
+	}
+	if projKey := branchProjKey(branchRel); projKey != "" {
+		add(enginepaths.WorkerBranchesDirName + "/.adapter/" + projKey + "/retained-git-store/objects")
+	}
+	return prefixes
+}
+
 func checkpointGitObjectPrefixes(branchRel, storePrefix, checkpointID string, pg checkpoint.PrivateGitSnapshot) []string {
 	seen := make(map[string]bool)
 	var prefixes []string
@@ -261,20 +294,11 @@ func stageAndVerifyStoreRepo(ctx context.Context, checkpointID string, prefixes 
 	}, nil
 }
 
-func verifyCheckpointGitClosureInFiles(ctx context.Context, branchRel, storePrefix, checkpointID string, pg checkpoint.PrivateGitSnapshot, files map[string]archiveSource) error {
-	ctx, closeClosureSession := ensureGitClosureSession(ctx)
-	defer closeClosureSession()
-	requiredOIDs, requiredPacks, err := collectRequiredGitOIDs(pg)
-	if err != nil {
-		return &InvalidError{Detail: fmt.Sprintf("checkpoint %s has invalid git metadata: %v", checkpointID, err)}
-	}
+func verifyPrefixesGitClosure(ctx context.Context, s *gitClosureSession, branchRel, storePrefix, checkpointID string, prefixes, requiredOIDs, requiredPacks []string, files map[string]archiveSource) error {
 	if len(requiredOIDs) == 0 && len(requiredPacks) == 0 {
 		return nil
 	}
-	prefixes := checkpointGitObjectPrefixes(branchRel, storePrefix, checkpointID, pg)
 	storeDigest, cacheable := computeStorePrefixesDigest(ctx, branchRel, storePrefix, prefixes, files)
-
-	s := gitClosureSessionFromContext(ctx)
 	var repo *verifiedStoreRepo
 	if cacheable && s != nil {
 		s.mu.Lock()
@@ -313,6 +337,56 @@ func verifyCheckpointGitClosureInFiles(ctx context.Context, branchRel, storePref
 		return nil
 	}
 	return verifyReachableOIDsInStoreRepo(ctx, s, repo, checkpointID, requiredOIDs)
+}
+
+func verifyCheckpointGitClosureInFiles(ctx context.Context, branchRel, storePrefix, checkpointID string, pg checkpoint.PrivateGitSnapshot, files map[string]archiveSource) error {
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
+	requiredOIDs, requiredPacks, err := collectRequiredGitOIDs(pg)
+	if err != nil {
+		return &InvalidError{Detail: fmt.Sprintf("checkpoint %s has invalid git metadata: %v", checkpointID, err)}
+	}
+	if len(requiredOIDs) == 0 && len(requiredPacks) == 0 {
+		return nil
+	}
+	s := gitClosureSessionFromContext(ctx)
+	prefixes := checkpointGitObjectPrefixes(branchRel, storePrefix, checkpointID, pg)
+	if err := verifyPrefixesGitClosure(ctx, s, branchRel, storePrefix, checkpointID, prefixes, requiredOIDs, requiredPacks, files); err != nil {
+		return err
+	}
+	if len(pg.Roots) == 0 {
+		return nil
+	}
+	primaryOIDs, err := collectRootGitRefOIDs(pg.HeadRef, pg.Refs)
+	if err != nil {
+		return &InvalidError{Detail: fmt.Sprintf("checkpoint %s has invalid primary git refs: %v", checkpointID, err)}
+	}
+	if len(primaryOIDs) > 0 {
+		primaryPrefixes := checkpointGitObjectPrefixesForRoot(branchRel, storePrefix, checkpointID, "", pg.ObjectCheckpoints)
+		if err := verifyPrefixesGitClosure(ctx, s, branchRel, storePrefix, checkpointID, primaryPrefixes, primaryOIDs, nil, files); err != nil {
+			return err
+		}
+	}
+	rootIDs := make([]string, 0, len(pg.Roots))
+	for rootID := range pg.Roots {
+		rootIDs = append(rootIDs, rootID)
+	}
+	sort.Strings(rootIDs)
+	for _, rootID := range rootIDs {
+		rootSnap := pg.Roots[rootID]
+		rootOIDs, err := collectRootGitRefOIDs(rootSnap.HeadRef, rootSnap.Refs)
+		if err != nil {
+			return &InvalidError{Detail: fmt.Sprintf("checkpoint %s root %s has invalid git refs: %v", checkpointID, rootID, err)}
+		}
+		if len(rootOIDs) == 0 {
+			continue
+		}
+		rootPrefixes := checkpointGitObjectPrefixesForRoot(branchRel, storePrefix, checkpointID, rootID, pg.ObjectCheckpoints)
+		if err := verifyPrefixesGitClosure(ctx, s, branchRel, storePrefix, checkpointID, rootPrefixes, rootOIDs, nil, files); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func verifyReachableOIDsInStoreRepo(ctx context.Context, s *gitClosureSession, repo *verifiedStoreRepo, checkpointID string, requiredOIDs []string) error {

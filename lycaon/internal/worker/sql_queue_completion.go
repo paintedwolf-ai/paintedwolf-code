@@ -74,12 +74,12 @@ func (q *SQLQueue) completeAdmitted(ctx context.Context, claimed *api.WorkerTask
 	}
 	overlayPath := ""
 	// A missing baseline or budget-exceeded overlay leaves the overlay unsealed for review.
-	if mergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(task.WorkspaceOverlayPath) == "" && strings.TrimSpace(task.WorkspaceBaselinePath) != "" {
+	if mergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(task.WorkspaceOverlayPath) == "" {
 		published, err := workspace.PublishBranchCheckpoint(ctx, task.WorkspaceRoot)
 		if err != nil {
 			return false, fmt.Errorf("worker %s: publish checkpoint: %w", task.ID, err)
 		}
-		if !published {
+		if !published && strings.TrimSpace(task.WorkspaceBaselinePath) != "" {
 			captured, err := q.captureOverlay(ctx, task)
 			if err != nil {
 				if errors.Is(err, workspacebaseline.ErrOverlayBudgetExceeded) {

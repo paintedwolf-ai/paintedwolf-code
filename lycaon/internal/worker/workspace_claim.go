@@ -145,19 +145,19 @@ func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTas
 		return ErrWorkerBranchClaimFailed
 	}
 	// A view captured by checkpoint keeps nothing here: hashing the tree is what claiming must not do.
-	walk := workspacebaseline.Branch(layout.Roots, binding.Root)
-	if workspace.BranchUsesCheckpoints(binding.Root) {
-		walk = func(context.Context, func(workspacebaseline.CaptureFile) error) error { return nil }
+	baselinePath := ""
+	if !workspace.BranchUsesCheckpoints(binding.Root) {
+		var err error
+		baselinePath, err = baselines.Capture(ctx, task.ID, workspacebaseline.Branch(layout.Roots, binding.Root))
+		if err != nil {
+			return fmt.Errorf("%w: snapshot workspace: %w", ErrWorkerBranchClaimFailed, err)
+		}
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			_ = baselines.Discard(cleanupCtx, baselinePath)
+		}()
 	}
-	baselinePath, err := baselines.Capture(ctx, task.ID, walk)
-	if err != nil {
-		return fmt.Errorf("%w: snapshot workspace: %w", ErrWorkerBranchClaimFailed, err)
-	}
-	defer func() {
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer cancel()
-		_ = baselines.Discard(cleanupCtx, baselinePath)
-	}()
 	won, err := q.store.SetWorkerWorkspace(ctx, task.ID, binding.Root, baselinePath)
 	if err != nil {
 		return err
