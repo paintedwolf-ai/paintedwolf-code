@@ -4,7 +4,7 @@ import type {
   PrettyLineContinuationState,
   PrettyLineLayoutState,
   PrettyLineRelativeBoundary,
-  PrettyUtf16Range,
+  PrettyProtectedSpan,
 } from "./pretty-types.ts";
 
 export const INITIAL_LINE_CONTINUATION: PrettyLineContinuationState = {
@@ -126,14 +126,14 @@ function extractXmlTagName(lineText: string, nameStart: number, limit: number): 
   return out;
 }
 
-function createProtectedSpanChecker(
-  protectedSpans?: readonly PrettyUtf16Range[],
-): (relPos: number) => boolean {
+function createProtectedSpanLookup(
+  protectedSpans?: readonly PrettyProtectedSpan[],
+): (relPos: number) => PrettyProtectedSpan | undefined {
   if (!protectedSpans || protectedSpans.length === 0) {
-    return () => false;
+    return () => undefined;
   }
   let cursor = 0;
-  return (relPos: number): boolean => {
+  return (relPos: number): PrettyProtectedSpan | undefined => {
     while (
       cursor < protectedSpans.length &&
       protectedSpans[cursor]!.to <= relPos
@@ -141,7 +141,9 @@ function createProtectedSpanChecker(
       cursor += 1;
     }
     const span = protectedSpans[cursor];
-    return span !== undefined && span.from <= relPos && relPos < span.to;
+    return span !== undefined && span.from <= relPos && relPos < span.to
+      ? span
+      : undefined;
   };
 }
 
@@ -157,10 +159,11 @@ function scanXmlHtmlLineBoundaries(
   cont: PrettyLineContinuationState,
   scanStartCol: number,
   budget: PrettyBudgetTracker,
-  protectedSpans?: readonly PrettyUtf16Range[],
+  protectedSpans?: readonly PrettyProtectedSpan[],
   lineUtf8BytesOverride?: number,
   lineSyntaxNodes = 0,
   lineSyntaxVisits = 0,
+  syntaxSpanSignature = "",
 ): PrettyLineLayoutState | "budget" {
   const lineLen = lineText.length;
   let depth = cont.depth;
@@ -169,7 +172,7 @@ function scanXmlHtmlLineBoundaries(
   let rawTag = cont.xmlRawTag;
   let lineMaxDepth = depth;
   const relBoundaries: PrettyLineRelativeBoundary[] = [];
-  const isSyntaxProtected = createProtectedSpanChecker(protectedSpans);
+  const getProtectedSpanAt = createProtectedSpanLookup(protectedSpans);
 
   const visitsBefore = budget.counters.visits;
   const tokensBefore = budget.counters.tokens;
@@ -256,7 +259,7 @@ function scanXmlHtmlLineBoundaries(
       continue;
     }
 
-    if (isSyntaxProtected(i)) {
+    if (getProtectedSpanAt(i) !== undefined) {
       i += 1;
       continue;
     }
@@ -422,6 +425,7 @@ function scanXmlHtmlLineBoundaries(
     family: "xml-html",
     eligible: true,
     scanStartCol,
+    syntaxSpanSignature,
     relBoundaries,
     metrics: {
       lineUtf8Bytes: lineUtf8BytesOverride ?? utf8ByteLength(lineText),
@@ -523,10 +527,11 @@ export function scanLineLexicalBoundaries(
   family: PrettyLayoutFamily = "json",
   startInBlockComment = false,
   startXmlRawTag: string | null = null,
-  protectedSpans?: readonly PrettyUtf16Range[],
+  protectedSpans?: readonly PrettyProtectedSpan[],
   lineUtf8BytesOverride?: number,
   lineSyntaxNodes = 0,
   lineSyntaxVisits = 0,
+  syntaxSpanSignature = "",
 ): PrettyLineLayoutState | "budget" {
   const cont = toContinuationState(
     startDepthOrCont,
@@ -554,6 +559,7 @@ export function scanLineLexicalBoundaries(
       family,
       eligible,
       scanStartCol,
+      syntaxSpanSignature,
       relBoundaries: [],
       metrics: {
         lineUtf8Bytes: computedLineUtf8,
@@ -579,6 +585,7 @@ export function scanLineLexicalBoundaries(
       computedLineUtf8,
       lineSyntaxNodes,
       lineSyntaxVisits,
+      syntaxSpanSignature,
     );
   }
 
@@ -603,7 +610,7 @@ export function scanLineLexicalBoundaries(
   const relBoundaries: PrettyLineRelativeBoundary[] = [];
   const lineLen = lineText.length;
   const hasPrecedingNewline = lineNumber > 1 && scanStartCol === 0;
-  const isSyntaxProtected = createProtectedSpanChecker(protectedSpans);
+  const getProtectedSpanAt = createProtectedSpanLookup(protectedSpans);
 
   const allowSingleQuote =
     family === "jsonc" || family === "javascript" || family === "css";
@@ -626,6 +633,45 @@ export function scanLineLexicalBoundaries(
 
   for (let i = scanStartCol; i < lineLen; i++) {
     if (!budget.recordVisit(1)) return "budget";
+    const protectedSpan = getProtectedSpanAt(i);
+    if (protectedSpan !== undefined) {
+      const spanEnd = Math.min(lineLen, protectedSpan.to);
+      const extraVisits = spanEnd - i - 1;
+      if (extraVisits > 0 && !budget.recordVisit(extraVisits)) return "budget";
+      if (!budget.recordToken()) return "budget";
+      escape = false;
+      regexCharClass = false;
+      const spanKind = protectedSpan.kind;
+      const openAtEnd = Boolean(protectedSpan.openAtLineEnd);
+      if (spanKind === "block-comment") {
+        inBlockComment = openAtEnd;
+        quoteCode = 0;
+      } else if (spanKind === "line-comment") {
+        inBlockComment = false;
+        quoteCode = 0;
+      } else if (spanKind === "template") {
+        inBlockComment = false;
+        quoteCode = openAtEnd ? 0x60 : 0;
+        if (!openAtEnd) {
+          lastSigCode = 0x60;
+        }
+      } else if (spanKind === "regex") {
+        inBlockComment = false;
+        quoteCode = 0;
+        lastSigCode = 0x2f;
+      } else if (spanKind === "string") {
+        inBlockComment = false;
+        quoteCode = openAtEnd ? 0x22 : 0;
+        if (!openAtEnd) {
+          lastSigCode = 0x22;
+        }
+      } else {
+        lastSigCode = lineText.charCodeAt(spanEnd - 1);
+      }
+      i = spanEnd - 1;
+      continue;
+    }
+
     const c = lineText.charCodeAt(i);
 
     if (inBlockComment) {
@@ -649,12 +695,8 @@ export function scanLineLexicalBoundaries(
           lastSigCode = 0x2f;
         }
       } else if (c === quoteCode) {
-        if (quoteCode === 0x60 && isSyntaxProtected(i)) {
-          // Inside an outer Lezer TemplateString interior (e.g. nested `${`...`}`).
-        } else {
-          quoteCode = 0;
-          lastSigCode = c;
-        }
+        quoteCode = 0;
+        lastSigCode = c;
       }
       continue;
     }
@@ -680,11 +722,6 @@ export function scanLineLexicalBoundaries(
     ) {
       if (!budget.recordToken()) return "budget";
       quoteCode = c;
-      continue;
-    }
-
-    if (isSyntaxProtected(i)) {
-      lastSigCode = c;
       continue;
     }
 
@@ -825,6 +862,7 @@ export function scanLineLexicalBoundaries(
     family,
     eligible: true,
     scanStartCol,
+    syntaxSpanSignature,
     relBoundaries,
     metrics: {
       lineUtf8Bytes: computedLineUtf8,

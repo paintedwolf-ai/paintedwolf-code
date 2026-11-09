@@ -42,6 +42,19 @@ export interface PrettyUtf16Range {
   readonly to: number;
 }
 
+export type PrettyProtectedSpanKind =
+  | "string"
+  | "regex"
+  | "template"
+  | "block-comment"
+  | "line-comment"
+  | "xml-protected";
+
+export interface PrettyProtectedSpan extends PrettyUtf16Range {
+  readonly kind?: PrettyProtectedSpanKind;
+  readonly openAtLineEnd?: boolean;
+}
+
 export interface PrettyRuneOffsetTable {
   readonly runeCount: number;
   readonly utf16Length: number;
@@ -115,6 +128,7 @@ export interface PrettyLineLayoutState {
   readonly family: PrettyLayoutFamily;
   readonly eligible: boolean;
   readonly scanStartCol: number;
+  readonly syntaxSpanSignature: string;
   readonly relBoundaries: readonly PrettyLineRelativeBoundary[];
   readonly metrics: PrettyLineResourceMetrics;
 }
