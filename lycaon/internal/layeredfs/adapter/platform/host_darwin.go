@@ -15,6 +15,7 @@ func newHostSelector(cfg Config) *adapter.Selector {
 		nfsCfg.ConfinementCheckFn = func(ctx context.Context, probeCfg adapter.ProbeConfig) error {
 			return cfg.Confinement.Available(ctx, probeCfg)
 		}
+		nfsCfg.ConfinementVerifyFn = cfg.Confinement.VerifyView
 	}
 	return adapter.NewSelector("darwin", nil, nfsdarwin.New(nfsCfg), adapter.NewEagerCopyAdapter(adapter.ReasonNone))
 }

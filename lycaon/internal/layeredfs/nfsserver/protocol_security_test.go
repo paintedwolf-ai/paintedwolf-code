@@ -120,6 +120,45 @@ func TestTwoWorkersAndUnauthorizedLocalClientIsolation(t *testing.T) {
 	if nst, _ := nullAuth.getAttr(secret1FH); nst != nfs.NFSStatusAccess {
 		t.Fatalf("AUTH_NULL direct RPC: got %v, want NFSStatusAccess", nst)
 	}
+
+	// 5. Second loopback connection attempting MOUNTPROC3_MNT with the exact mounted export path
+	// is refused by the single-mount latch (entry.mounted) and poisons the connection against handle replay.
+	replayMountConn := dialRPC(t, env.Server.Addr(), env.UID, env.GID)
+	if st, fh := replayMountConn.mount(cap1.ExportPath); st != nfs.MountStatusErrAcces || len(fh) != 0 {
+		t.Fatalf("second mount of exact export path: got st=%v fh=%x, want MountStatusErrAcces", st, fh)
+	}
+	if nst, _ := replayMountConn.getAttr(root1); nst != nfs.NFSStatusAccess {
+		t.Fatalf("GETATTR after rejected second mount: got %v, want NFSStatusAccess", nst)
+	}
+
+	// 6. Forged/random or HMAC-tampered 64-byte handles are refused on unmounted connections.
+	forgedConn := dialRPC(t, env.Server.Addr(), env.UID, env.GID)
+	randomFH := bytes.Repeat([]byte{0xa5}, nfsserver.HandleSize)
+	if nst, _ := forgedConn.getAttr(randomFH); nst != nfs.NFSStatusAccess {
+		t.Fatalf("GETATTR with random 64B handle: got %v, want NFSStatusAccess", nst)
+	}
+	tamperedFH := append([]byte(nil), root1...)
+	tamperedFH[nfsserver.HandleSize-1] ^= 0xff
+	if nst, _, _ := forgedConn.lookup(tamperedFH, "secret-1.txt"); nst != nfs.NFSStatusAccess {
+		t.Fatalf("LOOKUP with tampered HMAC handle: got %v, want NFSStatusAccess", nst)
+	}
+
+	// 7. Root credentials (UID 0) are refused for GETATTR/WRITE/CREATE on side connections
+	// and refused for mutating WRITE/CREATE even on the mount-bound connection.
+	rootSideConn := dialRPC(t, env.Server.Addr(), 0, 0)
+	if nst, _ := rootSideConn.getAttr(root1); nst != nfs.NFSStatusAccess {
+		t.Fatalf("UID 0 GETATTR on non-mount-bound connection: got %v, want NFSStatusAccess", nst)
+	}
+	if nst, _, _, _ := rootSideConn.write(secret1FH, 0, []byte("x"), nfsserver.FileSync); nst != nfs.NFSStatusAccess {
+		t.Fatalf("UID 0 WRITE on non-mount-bound connection: got %v, want NFSStatusAccess", nst)
+	}
+	w1.uid, w1.gid = 0, 0
+	if nst, _, _, _ := w1.write(secret1FH, 0, []byte("x"), nfsserver.FileSync); nst != nfs.NFSStatusAccess {
+		t.Fatalf("UID 0 WRITE on mount-bound connection: got %v, want NFSStatusAccess", nst)
+	}
+	if nst, _ := w1.create(root1, "root-pwn.txt", 0o644, 0, [8]byte{}); nst != nfs.NFSStatusAccess {
+		t.Fatalf("UID 0 CREATE on mount-bound connection: got %v, want NFSStatusAccess", nst)
+	}
 }
 
 func TestBoundedRPCFramingAndHugeOpaquePrefixRejection(t *testing.T) {

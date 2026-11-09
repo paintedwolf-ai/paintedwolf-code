@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -144,6 +145,10 @@ func helperProbeRunner() func(*exec.Cmd) error {
 func renderProfile(c Confinement) (string, error) {
 	if err := validateSocketRealization(c.SocketGrants, socketref.RetainedObject); err != nil {
 		return "", err
+	}
+	if len(c.View.DeniedLoopbackPorts) > 0 {
+		// A FUSE view has no listener, and the plan cannot express a refused port.
+		return "", &linuxsandbox.Unsupported{Code: linuxsandbox.UnsupportedNetworkGrant, Detail: "denied loopback ports"}
 	}
 	rules, err := filesystemRules(c)
 	if err != nil {
@@ -285,20 +290,32 @@ type planCompiler struct {
 	fs linuxsandbox.Filesystem
 	// grants are the write grants so far, which decide whether a later deny
 	// needs a mount or is already refused by Landlock.
-	grants   []string
-	readOnly map[string]bool
-	hidden   map[string]bool
-	restored map[string]bool
+	grants      []string
+	readOnly    map[string]bool
+	hidden      map[string]bool
+	restored    map[string]bool
+	view        ViewBoundary
+	loaderFiles map[string][]string
+	readDirs    int64
 }
 
+var lastPlanReadDirs atomic.Int64
+
 func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, error) {
-	pc := &planCompiler{readOnly: map[string]bool{}, hidden: map[string]bool{}, restored: map[string]bool{}}
+	pc := &planCompiler{
+		readOnly:    map[string]bool{},
+		hidden:      map[string]bool{},
+		restored:    map[string]bool{},
+		view:        rules.view,
+		loaderFiles: map[string][]string{},
+	}
 	for _, rule := range rules.rules {
 		switch rule.op {
 		case opRead:
 			pc.readRule(rule)
 		case opWrite:
 			if err := pc.writeRule(rule); err != nil {
+				lastPlanReadDirs.Store(pc.readDirs)
 				return linuxsandbox.Filesystem{}, err
 			}
 		case opReadMetadata:
@@ -309,14 +326,33 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 		pc.fs.ReadOnly = append(pc.fs.ReadOnly, p)
 	}
 	for p := range pc.hidden {
-		pc.fs.Hidden = append(pc.fs.Hidden, p)
+		if !pc.insidePlaceholder(p) {
+			pc.fs.Hidden = append(pc.fs.Hidden, p)
+		}
 	}
 	for p := range pc.restored {
 		if coveredBy(pc.hidden, p) || coveredBy(pc.readOnly, p) {
 			pc.fs.Restored = append(pc.fs.Restored, p)
 		}
 	}
+	lastPlanReadDirs.Store(pc.readDirs)
 	return pc.fs, nil
+}
+
+// insidePlaceholder reports a hidden path already gone: its nearest covering rule is a placeholder,
+// which is empty, so the path has no entry to mount over.
+func (pc *planCompiler) insidePlaceholder(path string) bool {
+	nearest, hidden := "", false
+	consider := func(set map[string]bool, isHidden bool) {
+		for candidate := range set {
+			if candidate != path && PathAtOrUnder(path, candidate) && len(candidate) > len(nearest) {
+				nearest, hidden = candidate, isHidden
+			}
+		}
+	}
+	consider(pc.hidden, true)
+	consider(pc.restored, false)
+	return hidden
 }
 
 // readRule turns read denials into hidden placeholders and later read allows
@@ -346,18 +382,32 @@ func (pc *planCompiler) readRule(rule fsRule) {
 }
 
 func (pc *planCompiler) writeRule(rule fsRule) error {
+	loaderNames := ruleLoaderNames(rule.matches)
 	for _, m := range rule.matches {
 		if underCuratedDev(m) {
+			continue
+		}
+		if name := loaderName(m); name != "" {
+			if !rule.allow && !pc.grantOverlaps(m.subpath) {
+				continue
+			}
+			if !rule.allow && coveredByList(pc.grants, m.subpath) {
+				// Files named at any depth are also held by name, so one created
+				// after launch cannot bypass the floor.
+				pc.fs.ReadOnlyNames = append(pc.fs.ReadOnlyNames, linuxsandbox.NamedFloor{Below: m.subpath, Name: name})
+			}
+			for _, path := range pc.loaderPaths(m.subpath, name, loaderNames[m.subpath]) {
+				if rule.allow {
+					pc.allowWrite(path)
+				} else {
+					pc.denyWrite(path, m.except)
+				}
+			}
 			continue
 		}
 		paths, err := writeMatchPaths(m)
 		if err != nil {
 			return err
-		}
-		if name := loaderName(m); name != "" && !rule.allow && coveredByList(pc.grants, m.subpath) {
-			// Files named at any depth are also held by name, so one created
-			// after launch cannot bypass the floor.
-			pc.fs.ReadOnlyNames = append(pc.fs.ReadOnlyNames, linuxsandbox.NamedFloor{Below: m.subpath, Name: name})
 		}
 		for _, path := range paths {
 			if rule.allow {
@@ -368,6 +418,101 @@ func (pc *planCompiler) writeRule(rule fsRule) error {
 		}
 	}
 	return nil
+}
+
+func ruleLoaderNames(matches []fsMatch) map[string][]string {
+	var out map[string][]string
+	for _, m := range matches {
+		if name := loaderName(m); name != "" {
+			if out == nil {
+				out = map[string][]string{}
+			}
+			out[m.subpath] = append(out[m.subpath], name)
+		}
+	}
+	return out
+}
+
+func (pc *planCompiler) grantOverlaps(subpath string) bool {
+	return coveredByList(pc.grants, subpath) || coversAny(subpath, pc.grants)
+}
+
+func (pc *planCompiler) loaderPaths(subpath, name string, batch []string) []string {
+	all, ok := pc.loaderFiles[subpath]
+	if !ok {
+		if len(batch) == 0 {
+			batch = []string{name}
+		}
+		if roots := pc.matchingViewRoots(subpath); len(roots) > 0 {
+			seen := map[string]bool{}
+			for _, vr := range roots {
+				for _, mapped := range pc.viewRootLoaderPaths(vr, batch) {
+					if PathAtOrUnder(mapped, subpath) && !seen[mapped] {
+						seen[mapped] = true
+						all = append(all, mapped)
+					}
+				}
+			}
+		} else {
+			inv := namedFilesBelowInventory(subpath, agentPolicyWalkBudget, batch...)
+			pc.readDirs += inv.ReadDirs
+			all = inv.Files
+		}
+		pc.loaderFiles[subpath] = all
+	}
+	var out []string
+	for _, p := range all {
+		if strings.EqualFold(filepath.Base(p), name) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func (pc *planCompiler) matchingViewRoots(subpath string) []ViewRootBoundary {
+	var out []ViewRootBoundary
+	for _, vr := range pc.view.Roots {
+		if vr.WorkspacePath == "" {
+			continue
+		}
+		if PathAtOrUnder(vr.WorkspacePath, subpath) || PathAtOrUnder(subpath, vr.WorkspacePath) {
+			out = append(out, vr)
+		}
+	}
+	return out
+}
+
+func (pc *planCompiler) viewRootLoaderPaths(vr ViewRootBoundary, batch []string) []string {
+	removed := map[string]bool{}
+	for _, r := range vr.Inventory.Removed {
+		removed[r] = true
+	}
+	seen := map[string]bool{}
+	var out []string
+	addRel := func(rel string) {
+		rel = filepath.ToSlash(rel)
+		if removed[rel] || !foldsToAny(filepath.Base(rel), batch) {
+			return
+		}
+		mapped := filepath.Join(vr.WorkspacePath, filepath.FromSlash(rel))
+		if !seen[mapped] {
+			seen[mapped] = true
+			out = append(out, mapped)
+		}
+	}
+	for _, rel := range vr.Inventory.Files {
+		addRel(rel)
+	}
+	if !vr.Inventory.Complete && vr.Inventory.Generation == 0 && vr.SourcePath != "" {
+		inv := namedFilesBelowInventory(vr.SourcePath, agentPolicyWalkBudget, batch...)
+		pc.readDirs += inv.ReadDirs
+		for _, p := range inv.Files {
+			if rel, err := filepath.Rel(vr.SourcePath, p); err == nil {
+				addRel(rel)
+			}
+		}
+	}
+	return out
 }
 
 // allowWrite grants the path to Landlock and restores it beneath any mask.
@@ -444,25 +589,58 @@ func underCuratedDev(m fsMatch) bool {
 // files named at any depth. A tree past it protects only what was seen.
 const agentPolicyWalkBudget = 200_000
 
-// namedFilesBelow lists the regular files below root whose name folds to name.
-func namedFilesBelow(root, name string) []string {
-	var out []string
-	budget := agentPolicyWalkBudget
+// namedFilesBelow lists the regular files below root, outside .git, whose name
+// folds to any of names.
+func namedFilesBelow(root string, names ...string) []string {
+	return namedFilesBelowInventory(root, agentPolicyWalkBudget, names...).Files
+}
+
+// namedFilesBelowInventory scans root for regular files outside .git whose
+// basename folds to any of names, tracking actual OS directory reads and
+// reporting Complete=false if any directory cannot be read or budget is exhausted.
+func namedFilesBelowInventory(root string, budget int, names ...string) PolicyFileInventory {
+	root = strings.TrimSpace(root)
+	if root == "" || len(names) == 0 {
+		return PolicyFileInventory{Complete: true}
+	}
+	if budget <= 0 {
+		return PolicyFileInventory{Complete: false}
+	}
+	st, err := os.Lstat(root)
+	if err != nil {
+		return PolicyFileInventory{Complete: os.IsNotExist(err)}
+	}
+	if !st.IsDir() {
+		return PolicyFileInventory{Complete: true}
+	}
+	inv := PolicyFileInventory{Complete: true}
+	remaining := budget
 	var walk func(dir string) bool
 	walk = func(dir string) bool {
+		if remaining <= 0 {
+			inv.Complete = false
+			return false
+		}
+		inv.ReadDirs++
 		entries, err := os.ReadDir(dir)
 		if err != nil {
+			inv.Complete = false
 			return true
 		}
 		for _, e := range entries {
-			if budget--; budget < 0 {
+			if remaining--; remaining < 0 {
+				inv.Complete = false
 				return false
 			}
+			name := e.Name()
 			switch {
-			case e.Type().IsRegular() && strings.EqualFold(e.Name(), name):
-				out = append(out, filepath.Join(dir, e.Name()))
+			case e.Type().IsRegular() && foldsToAny(name, names):
+				inv.Files = append(inv.Files, filepath.Join(dir, name))
 			case e.IsDir():
-				if !walk(filepath.Join(dir, e.Name())) {
+				if strings.EqualFold(name, ".git") {
+					continue
+				}
+				if !walk(filepath.Join(dir, name)) {
 					return false
 				}
 			}
@@ -471,9 +649,27 @@ func namedFilesBelow(root, name string) []string {
 	}
 	if !walk(root) {
 		slog.Warn("agent policy write floor covers only part of the tree",
-			"component", "sandbox", "root", root, "entries", agentPolicyWalkBudget)
+			"component", "sandbox", "root", root, "entries", budget)
 	}
-	return out
+	return inv
+}
+
+func foldsToAny(name string, targets []string) bool {
+	for _, target := range targets {
+		if strings.EqualFold(name, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func coversAny(ancestor string, paths []string) bool {
+	for _, p := range paths {
+		if PathAtOrUnder(p, ancestor) {
+			return true
+		}
+	}
+	return false
 }
 
 func coveredBy(set map[string]bool, path string) bool {

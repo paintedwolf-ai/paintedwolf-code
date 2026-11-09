@@ -67,17 +67,18 @@ func HardDenyWriteSpecs(c Confinement) ([]HardDenyWriteSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve control plane for hard-deny: %w", err)
 	}
-	if strings.TrimSpace(userDir) != "" {
-		// Validated workspaces are re-allowed after this tree deny.
-		out = append(out, HardDenyWriteSpec{Layer: FloorBaseline, Subpath: fspath.CanonicalPath(userDir)})
-		exceptions := resolveEach(agentWorkspaceRootsUnderControlPlane())
-		if c.SessionScratchRoot != "" {
-			exceptions = append(exceptions, fspath.CanonicalPath(c.SessionScratchRoot))
+	exceptions := resolveEach(agentWorkspaceRootsUnderControlPlane())
+	if c.SessionScratchRoot != "" {
+		exceptions = append(exceptions, fspath.CanonicalPath(c.SessionScratchRoot))
+	}
+	for _, tree := range append([]string{userDir}, placementFolders()...) {
+		if strings.TrimSpace(tree) == "" {
+			continue
 		}
-		out = append(out, HardDenyWriteSpec{
-			Layer: FloorControlPlane, Subpath: fspath.CanonicalPath(userDir),
-			ExceptSubpaths: exceptions,
-		})
+		// Validated workspaces are re-allowed after this tree deny.
+		out = append(out,
+			HardDenyWriteSpec{Layer: FloorBaseline, Subpath: fspath.CanonicalPath(tree)},
+			HardDenyWriteSpec{Layer: FloorControlPlane, Subpath: fspath.CanonicalPath(tree), ExceptSubpaths: exceptions})
 	}
 
 	out = append(out, agentPolicySpecs(c.Roots)...)

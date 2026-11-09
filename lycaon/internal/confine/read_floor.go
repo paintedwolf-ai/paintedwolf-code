@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/enginepaths"
@@ -131,18 +132,18 @@ func SecretReadAllowBackRoots() []string {
 func agentWorkspaceRootsUnderControlPlane() []string {
 	dir, err := configdir.Root()
 	if err != nil || strings.TrimSpace(dir) == "" {
-		return nil
+		return placementWorkspaceRoots()
 	}
-	return enginepaths.AgentWorkspaceRootsUnder(dir)
+	return append(enginepaths.AgentWorkspaceRootsUnder(dir), placementWorkspaceRoots()...)
 }
 
 // controlPlaneReadDenyRoots returns the host-managed configuration tree.
 func controlPlaneReadDenyRoots() []string {
 	dir, err := configdir.Root()
 	if err != nil || strings.TrimSpace(dir) == "" {
-		return nil
+		return placementFolders()
 	}
-	return []string{dir}
+	return append([]string{dir}, placementFolders()...)
 }
 
 // resolveEach canonicalizes missing paths through their existing ancestor.
@@ -156,4 +157,37 @@ func resolveEach(paths []string) []string {
 		}
 	}
 	return out
+}
+
+var placementRegistry struct {
+	sync.RWMutex
+	folders func() []string
+}
+
+// SetPlacementFolders names the source of engine folders at volume roots that hold worker branches
+// away from the state folder. Each is treated as the state folder is: closed to confined commands,
+// with its worker-branch base left to the worker that owns a branch there.
+func SetPlacementFolders(folders func() []string) {
+	placementRegistry.Lock()
+	defer placementRegistry.Unlock()
+	placementRegistry.folders = folders
+}
+
+func placementFolders() []string {
+	placementRegistry.RLock()
+	folders := placementRegistry.folders
+	placementRegistry.RUnlock()
+	if folders == nil {
+		return nil
+	}
+	return folders()
+}
+
+func placementWorkspaceRoots() []string {
+	folders := placementFolders()
+	roots := make([]string, 0, len(folders))
+	for _, folder := range folders {
+		roots = append(roots, enginepaths.WorkerBranchesRootUnder(folder))
+	}
+	return roots
 }

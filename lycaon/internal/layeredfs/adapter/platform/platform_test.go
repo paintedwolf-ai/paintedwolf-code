@@ -12,10 +12,13 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	lexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -52,6 +55,51 @@ func TestSelectionFallsBackWithTheConfinementReasonWithoutEnforcement(t *testing
 				t.Fatalf("fallback reason = %s, probe reason = %s", chosen.Facts().FallbackReason, probe.ReasonCode)
 			}
 		})
+	}
+}
+
+// The real enforcer selects a mount only after proving denial against one, and a view it verifies
+// stays mounted and usable afterward.
+func TestRealEnforcerSelectsAndVerifiesAMountedView(t *testing.T) {
+	confine.TestingSetAutoConfine(t)
+	if !confine.Available() {
+		t.Skip("this host applies no confinement")
+	}
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve base", err)
+	// A worker's storage sits under the engine's state root, as it does in production.
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(base, "state"))
+	state := enginepaths.WorkerBranchesRootUnder(filepath.Join(base, "state"))
+	testutil.FailErr(t, "mkdir state", os.MkdirAll(state, 0o700))
+	trunk := filepath.Join(base, "trunk")
+	testutil.FailErr(t, "mkdir trunk", os.Mkdir(trunk, 0o755))
+	testutil.FailErr(t, "write trunk", os.WriteFile(filepath.Join(trunk, "file"), []byte("x\n"), 0o644))
+	selector := platform.NewSelector(platform.Config{Confinement: viewconfine.New()})
+	chosen, probe, err := selector.Select(t.Context(), adapter.ProbeConfig{RuntimeDir: filepath.Join(state, "probe")})
+	testutil.FailErr(t, "Select", err)
+	if chosen.Facts().PreparationKind != adapter.PreparationMounted {
+		switch probe.ReasonCode {
+		case adapter.ReasonFUSEDeviceUnavailable, adapter.ReasonFUSEHelperUnavailable, adapter.ReasonUnsupportedPlatform:
+			t.Skipf("this host cannot mount a view: %s", probe.ReasonCode)
+		}
+		t.Fatalf("an enforcing host fell back: %s %s", probe.ReasonCode, probe.Diagnostic)
+	}
+	if !probe.BackingDenialVerified {
+		t.Fatalf("selected without a verified denial: %+v", probe)
+	}
+	view, err := chosen.Prepare(t.Context(), adapter.PrepareRequest{
+		ViewID: "view-enforced", BackingDir: filepath.Join(state, "backing"), RuntimeDir: filepath.Join(state, "runtime"),
+		QuiesceHook: func(context.Context, string) error { return nil }, FlushClientHook: func(context.Context, string) error { return nil },
+		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunk, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "Prepare", err)
+	t.Cleanup(func() { _, _ = chosen.Release(context.Background(), view.ViewID) })
+	testutil.FailErr(t, "VerifyViewConfinement", selector.VerifyViewConfinement(t.Context(), view))
+	if raw, err := os.ReadFile(filepath.Join(view.PrimaryWorkPath, "file")); err != nil || string(raw) != "x\n" {
+		t.Fatalf("view after verification: %q err=%v", raw, err)
+	}
+	if _, err := os.Lstat(filepath.Join(view.PrimaryWorkPath, ".pw-confinement-probe")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("verification left its probe file: %v", err)
 	}
 }
 

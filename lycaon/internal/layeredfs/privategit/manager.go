@@ -58,6 +58,14 @@ type Manager struct {
 }
 
 // NewManager creates a private Git Manager backed by an engine-retained object store.
+func retainedStoreDir(backing string) string { return filepath.Join(backing, "retained-store") }
+
+// RetainedObjectsDir is where a manager's repositories borrow objects from, which a worker's own
+// git reads through its alternates.
+func RetainedObjectsDir(backing string) string {
+	return filepath.Join(retainedStoreDir(backing), "objects")
+}
+
 func NewManager(cfg ManagerConfig) (*Manager, error) {
 	if cfg.BackingDir == "" {
 		return nil, fmt.Errorf("privategit: BackingDir is required")
@@ -71,7 +79,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 	}
 	store := cfg.Store
 	if store == nil {
-		store, err = NewRetainedObjectStore(filepath.Join(absBacking, "retained-store"))
+		store, err = NewRetainedObjectStore(retainedStoreDir(absBacking))
 		if err != nil {
 			return nil, err
 		}

@@ -342,3 +342,23 @@ func TestReleaseDoesNotUnmountUnownedPath(t *testing.T) {
 		t.Fatalf("unowned sentinel disturbed: %q err=%v", string(got), err)
 	}
 }
+
+// Probe proves denial on its real mounted view, and a refusal there keeps its typed reason.
+func TestProbeRefusesAViewTheEnforcerCannotVerify(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("real NFS mount requires darwin")
+	}
+	adp := nfsdarwin.New(nfsdarwin.Config{
+		ConfinementCheckFn: func(context.Context, adapter.ProbeConfig) error { return nil },
+		ConfinementVerifyFn: func(_ context.Context, view *adapter.PreparedView) error {
+			if len(view.ListenerPorts) != 1 || view.ListenerPorts[0] == 0 || len(view.SourcePaths) != 1 {
+				return errors.New("the view does not name its listener and source")
+			}
+			return &adapter.AdapterError{ReasonCode: adapter.ReasonBackingConfinementFailed, Diagnostic: "not refused"}
+		},
+	})
+	res, err := adp.Probe(t.Context(), adapter.ProbeConfig{RuntimeDir: t.TempDir()})
+	if err == nil || res.Supported || res.BackingDenialVerified || res.ReasonCode != adapter.ReasonBackingConfinementFailed {
+		t.Fatalf("res=%+v err=%v", res, err)
+	}
+}

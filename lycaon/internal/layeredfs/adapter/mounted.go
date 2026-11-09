@@ -234,6 +234,7 @@ func (a *MountedAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Prep
 		PrimaryWorkPath: primaryPath,
 		BackingDir:      backingDir,
 		RuntimeViewDir:  runtimeViewDir,
+		SourcePaths:     append([]string(nil), denyPaths...),
 		TaskPathHints:   append([]string(nil), req.TaskPathHints...),
 		Core:            core,
 	}

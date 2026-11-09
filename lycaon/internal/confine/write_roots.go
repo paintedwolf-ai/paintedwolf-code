@@ -95,3 +95,24 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 	}
 	return out, nil
 }
+
+// FilesystemRootForPath returns the narrowest process write root containing path.
+// Callers enforce protected paths and worker isolation separately.
+func FilesystemRootForPath(projectID string, roots, granted []string, sessionScratch, path string) (string, error) {
+	if !filepath.IsAbs(path) {
+		return "", nil
+	}
+	allowed, err := WriteRootsForBoundary(projectID, roots, granted, sessionScratch)
+	if err != nil {
+		return "", err
+	}
+	abs := fspath.CanonicalPath(path)
+	var best string
+	for _, root := range allowed {
+		rel, err := filepath.Rel(root, abs)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && len(root) > len(best) {
+			best = root
+		}
+	}
+	return best, nil
+}

@@ -81,6 +81,77 @@ func floorsOp(op string, args []string) error {
 			_ = unix.Close(fd)
 		}
 		return err
+	case "openat2write":
+		fd, err := unix.Openat2(unix.AT_FDCWD, arg(0), &unix.OpenHow{Flags: unix.O_WRONLY | unix.O_CLOEXEC})
+		if err == nil {
+			_ = unix.Close(fd)
+		}
+		return err
+	case "rdtrunc":
+		return openClose(arg(0), unix.O_RDONLY|unix.O_TRUNC)
+	case "truncate":
+		return unix.Truncate(arg(0), 0)
+	case "unlink":
+		return unix.Unlink(arg(0))
+	case "linkfollow":
+		return unix.Linkat(unix.AT_FDCWD, arg(0), unix.AT_FDCWD, arg(1), unix.AT_SYMLINK_FOLLOW)
+	case "linkempty":
+		fd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(fd) }()
+		return unix.Linkat(fd, "", unix.AT_FDCWD, arg(1), unix.AT_EMPTY_PATH)
+	case "procfd-write":
+		fd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(fd) }()
+		return openClose("/proc/self/fd/"+strconv.Itoa(fd), unix.O_WRONLY)
+	case "mmap-write":
+		fd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(fd) }()
+		data, err := unix.Mmap(fd, 0, 4, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+		if err == nil {
+			_ = unix.Munmap(data)
+		}
+		return err
+	case "dirfd-write":
+		dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(dfd) }()
+		fd, err := unix.Openat(dfd, arg(1), unix.O_WRONLY|unix.O_CLOEXEC, 0)
+		if err == nil {
+			_ = unix.Close(fd)
+		}
+		return err
+	case "dirfd-unlink":
+		dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(dfd) }()
+		return unix.Unlinkat(dfd, arg(1), 0)
+	case "dirfd-rename":
+		dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(dfd) }()
+		return unix.Renameat2(dfd, arg(1), dfd, arg(2), 0)
+	case "dirfd-link":
+		dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(dfd) }()
+		return unix.Linkat(dfd, arg(1), dfd, arg(2), 0)
 	case "mkdir":
 		return unix.Mkdir(arg(0), 0o755)
 	case "mkfifo":
@@ -337,5 +408,136 @@ func TestLinuxAbsentReadDeniedPathCreatedDuringTheCommandIsUnreadable(t *testing
 	joined := strings.Join(out, "\n")
 	if !strings.Contains(joined, "read "+beside+" readable: ok") || !strings.Contains(joined, "waitread "+secret+": EACCES") {
 		t.Fatalf("absent read floor:\n%s", joined)
+	}
+}
+
+// Late live-trunk AGENTS.md creations and renames (not bind-mounted read-only
+// at launch) remain readable inside the installed sandbox while every write,
+// openat2 write, truncate, unlink, rename, relative-dirfd mutation, symlink
+// alias, hardlink alias, /proc/self/fd descriptor escalation, and writable
+// shared mmap is refused at enforcement time, and routine project writes run
+// at full speed.
+func TestLinuxLateTrunkPolicyFilesAreProtectedInsideInstalledSandbox(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	root := t.TempDir()
+	for _, dir := range []string{"mounted", "sub", "renamed", "stage", "build"} {
+		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(filepath.Join(root, dir), 0o755))
+	}
+	testutil.FailErr(t, "write mounted AGENTS.md", os.WriteFile(filepath.Join(root, "mounted", "AGENTS.md"), []byte("mounted-policy"), 0o644))
+	testutil.FailErr(t, "write draft.txt", os.WriteFile(filepath.Join(root, "renamed", "draft.txt"), []byte("renamed-policy"), 0o644))
+
+	c := denyConfinement(root)
+	c.View = confine.ViewBoundary{
+		ReopenedPaths: []string{root},
+		Roots: []confine.ViewRootBoundary{{
+			RootID:        "proj",
+			WorkspacePath: root,
+			SourcePath:    root,
+			Inventory: confine.PolicyFileInventory{
+				Files:      []string{"mounted/AGENTS.md"},
+				Complete:   false,
+				Generation: 1,
+				ReadDirs:   0,
+			},
+		}},
+	}
+
+	steps := []floorStep{
+		{"ready", "ok"},
+		{"waitread sub/AGENTS.md", "ok"},
+		{"waitread renamed/AGENTS.md", "ok"},
+		{"read sub/AGENTS.md live-policy", "ok"},
+		{"read renamed/AGENTS.md renamed-policy", "ok"},
+		// Direct writes, openat2 writes, truncates, unlinks, and renames on late trunk policy files.
+		{"write sub/AGENTS.md", "EACCES"},
+		{"create sub/AGENTS.md", "EACCES"},
+		{"create sub/agents.md", "EACCES"},
+		{"openat2 sub/AGENTS.md", "EACCES"},
+		{"openat2write sub/AGENTS.md", "EACCES"},
+		{"rdtrunc sub/AGENTS.md", "EACCES"},
+		{"truncate sub/AGENTS.md", "EACCES"},
+		{"unlink sub/AGENTS.md", "EACCES"},
+		{"rename sub/AGENTS.md sub/moved.md", "EACCES"},
+		{"write renamed/AGENTS.md", "EACCES"},
+		{"unlink renamed/AGENTS.md", "EACCES"},
+		// Relative dirfd paths.
+		{"dirfd-write sub AGENTS.md", "EACCES"},
+		{"dirfd-unlink sub AGENTS.md", "EACCES"},
+		{"dirfd-rename sub AGENTS.md other.md", "EACCES"},
+		{"dirfd-link sub AGENTS.md hard.md", "EACCES"},
+		// O_RDONLY descriptor escalation via /proc/self/fd and writable shared mmap.
+		{"procfd-write sub/AGENTS.md", "EACCES"},
+		{"mmap-write sub/AGENTS.md", "EACCES"},
+		// Aliases: symlinks and hardlinks (direct, AT_SYMLINK_FOLLOW, and AT_EMPTY_PATH).
+		{"symlink AGENTS.md sub/alias.md", "ok"},
+		{"write sub/alias.md", "EACCES"},
+		{"openat2write sub/alias.md", "EACCES"},
+		{"truncate sub/alias.md", "EACCES"},
+		{"link sub/AGENTS.md sub/hard.md", "EACCES"},
+		{"linkfollow sub/alias.md sub/hard.md", "EACCES"},
+		{"linkempty sub/AGENTS.md sub/hard.md", "EACCES"},
+		// Directory RENAME_EXCHANGE on a directory holding a late trunk policy file.
+		{"exchange sub stage", "EACCES"},
+		// Existing pre-bound floors and absent control-plane floors remain intact.
+		{"write mounted/AGENTS.md", "EROFS"},
+		{"mkdir .paintedwolf", "ok"},
+		{"create .paintedwolf/mcp.yaml", "EACCES"},
+		// Ordinary project tool operations and bulk throughput remain unaffected.
+		{"create sub/main.go", "ok"},
+		{"write sub/main.go", "ok"},
+		{"truncate sub/main.go", "ok"},
+		{"rename sub/main.go sub/app.go", "ok"},
+		{"unlink sub/app.go", "ok"},
+		{"bulk build 200", "ok"},
+	}
+	script := make([]string, len(steps))
+	for i, s := range steps {
+		script[i] = s.line
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, c)
+	testutil.FailErr(t, "confine.Command", err)
+	defer cleanup()
+	cmd.Env = append(probeEnv("floors"), floorsScriptEnv+"="+strings.Join(script, "\n"))
+	cmd.Dir = root
+	stdout, err := cmd.StdoutPipe()
+	testutil.FailErr(t, "stdout pipe", err)
+	testutil.FailErr(t, "start confined probe", cmd.Start())
+
+	results := map[string]string{}
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if i := strings.LastIndex(line, ": "); i > 0 {
+			results[line[:i]] = line[i+2:]
+		}
+		if line == "ready: ok" {
+			// Simulate live-trunk policy file creation and rename after sandbox launch.
+			testutil.FailErr(t, "create late sub/AGENTS.md", os.WriteFile(filepath.Join(root, "sub", "AGENTS.md"), []byte("live-policy"), 0o644))
+			testutil.FailErr(t, "rename draft -> renamed/AGENTS.md", os.Rename(
+				filepath.Join(root, "renamed", "draft.txt"),
+				filepath.Join(root, "renamed", "AGENTS.md"),
+			))
+		}
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("confined probe failed: %v", err)
+	}
+	for _, step := range steps {
+		if results[step.line] != step.want {
+			t.Errorf("%s: got %q, want %q", step.line, results[step.line], step.want)
+		}
+	}
+	for path, want := range map[string]string{
+		"mounted/AGENTS.md": "mounted-policy",
+		"sub/AGENTS.md":     "live-policy",
+		"renamed/AGENTS.md": "renamed-policy",
+	} {
+		raw, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil || string(raw) != want {
+			t.Errorf("%s after probe = %q (%v), want %q", path, raw, err, want)
+		}
 	}
 }

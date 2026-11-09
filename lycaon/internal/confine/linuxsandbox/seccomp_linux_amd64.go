@@ -13,6 +13,7 @@ const (
 // that create, link, or move a name; arm64 has only the *at forms.
 var legacyPathCreators = []uint32{
 	unix.SYS_MKDIR, unix.SYS_MKNOD, unix.SYS_SYMLINK, unix.SYS_LINK, unix.SYS_RENAME, unix.SYS_CREAT,
+	unix.SYS_UNLINK, unix.SYS_RMDIR,
 }
 
 // legacyOpen is open(2), whose flags are its second argument; 0 where absent.
@@ -37,6 +38,11 @@ func legacyPathArgs(nr uint32, a pathArgs) (pathArgs, bool) {
 		a.op, a.path, a.newPath = callLink, 0, 1
 	case unix.SYS_RENAME:
 		a.op, a.path, a.newPath = callRename, 0, 1
+	case unix.SYS_UNLINK:
+		a.op, a.path = callUnlink, 0
+	case unix.SYS_RMDIR:
+		a.op, a.path = callUnlink, 0
+		a.fixedFlags = unix.AT_REMOVEDIR
 	default:
 		return a, false
 	}

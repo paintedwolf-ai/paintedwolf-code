@@ -16,7 +16,9 @@ func writeNetworkRules(b *strings.Builder, c Confinement) error {
 	}
 	// One fact carries local outbound authority and its port limits.
 	if c.Network != NetworkDirectIP && c.LoopbackConnect {
-		writeLoopbackConnectRules(b, c.LoopbackConnectPorts)
+		if ports := withoutViewListeners(c.LoopbackConnectPorts, c.View); len(c.LoopbackConnectPorts) == 0 || len(ports) > 0 {
+			writeLoopbackConnectRules(b, ports)
+		}
 	}
 	switch c.Network {
 	case NetworkDirectIP:

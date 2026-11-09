@@ -137,6 +137,8 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 		Roots:           preparedRoots,
 		BackingDir:      absBacking,
 		RuntimeViewDir:  runtimeViewDir,
+		SourcePaths:     append([]string(nil), denyPaths...),
+		ListenerPorts:   listenerPorts(mounts),
 		TaskPathHints:   append([]string(nil), req.TaskPathHints...),
 	}
 
@@ -295,4 +297,13 @@ func (a *Adapter) mountSingleRoot(
 		capability: capCfg,
 		facts:      facts,
 	}, nil
+}
+
+// listenerPorts names each root's server: a worker's direct connection to any of them is refused.
+func listenerPorts(mounts map[string]*rootMount) []uint16 {
+	ports := make([]uint16, 0, len(mounts))
+	for _, m := range mounts {
+		ports = append(ports, uint16(m.facts.ServerPort)) //nolint:gosec // a port this server bound.
+	}
+	return ports
 }

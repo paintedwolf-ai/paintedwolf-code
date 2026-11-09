@@ -4,8 +4,10 @@ package confine_test
 
 import (
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -28,14 +30,20 @@ func TestHelperAppliesProcessAttributesToTheTarget(t *testing.T) {
 	testutil.FailErr(t, "helper binary", err)
 	probe := []string{"-c", `ulimit -n; kill -HUP $$; echo survived`}
 	for _, tc := range []struct {
-		name       string
-		attributes confine.ProcessAttributes
-		want       string
+		name         string
+		ignoreParent bool
+		attributes   confine.ProcessAttributes
+		want         string
 	}{
-		{"limit and ignored hangup", confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 64, Hard: nofile.Hard}}, IgnoreHangup: true}, "64\nsurvived\n"},
-		{"limit only", confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 48, Hard: nofile.Hard}}}, "48\n"},
+		{"limit and ignored hangup", false, confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 64, Hard: nofile.Hard}}, IgnoreHangup: true}, "64\nsurvived\n"},
+		{"limit only", false, confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 48, Hard: nofile.Hard}}}, "48\n"},
+		{"limit only with inherited ignored hangup", true, confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 48, Hard: nofile.Hard}}}, "48\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.ignoreParent {
+				signal.Ignore(syscall.SIGHUP)
+				defer signal.Reset(syscall.SIGHUP)
+			}
 			boundary := *c
 			boundary.Process = tc.attributes
 			command, cleanup, err := confine.Command(t.Context(), self, "/bin/sh", probe, boundary)

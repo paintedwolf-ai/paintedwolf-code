@@ -66,6 +66,10 @@ func pathArgsOf(nr uint32) (pathArgs, bool) {
 		a.op, a.dir, a.path, a.newDir, a.newPath = callRename, 0, 1, 2, 3
 	case unix.SYS_RENAMEAT2:
 		a.op, a.dir, a.path, a.newDir, a.newPath, a.flags = callRename, 0, 1, 2, 3, 4
+	case unix.SYS_UNLINKAT:
+		a.op, a.dir, a.path, a.flags = callUnlink, 0, 1, 2
+	case unix.SYS_TRUNCATE:
+		a.op, a.path, a.dev = callTruncate, 0, 1
 	default:
 		return legacyPathArgs(nr, a)
 	}
@@ -88,7 +92,7 @@ func (s *supervisor) performPath(target *targetProcess, n seccompNotif) (int64, 
 	if errno != 0 {
 		return 0, errno, true
 	}
-	if call.Op == callOpen && call.Flags&unix.O_CREAT == 0 && !args.how {
+	if call.Op == callOpen && call.Flags&openWriteFlags == 0 && !args.how {
 		return 0, unix.EINVAL, true
 	}
 	if !target.valid() {
@@ -137,7 +141,7 @@ func (s *supervisor) readPathCall(target *targetProcess, n seccompNotif, a pathA
 	if a.flags != noArg {
 		call.Flags = uint64(uint32(arg(a.flags)))
 	}
-	if a.mode != noArg {
+	if a.mode != noArg && (a.op != callOpen || call.Flags&(unix.O_CREAT|unix.O_TMPFILE) != 0) {
 		call.Mode = uint32(arg(a.mode))
 	}
 	if a.dev != noArg {

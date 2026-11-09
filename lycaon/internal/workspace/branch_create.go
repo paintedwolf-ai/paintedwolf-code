@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
@@ -53,6 +55,36 @@ func LookupBranchClaimedView(branchRoot string) (*claim.ClaimedView, bool) {
 		return nil, false
 	}
 	return rec.claimed, true
+}
+
+// BranchViewBoundary reads what a process of this branch must not reach, as of each launch: its own
+// view's boundary, its pristine tree whether or not it has one yet, and every live view's listener,
+// since another view's may start after this worker did.
+func BranchViewBoundary(branchRoot string) func() confine.ViewBoundary {
+	clean := filepath.Clean(branchRoot)
+	return func() confine.ViewBoundary {
+		branchClaimsMu.RLock()
+		defer branchClaimsMu.RUnlock()
+		var ports []uint16
+		var boundary confine.ViewBoundary
+		for root, rec := range branchClaimStates {
+			if rec.claimed == nil || rec.claimed.Prepared == nil {
+				continue
+			}
+			view := viewconfine.Boundary(rec.claimed.Prepared)
+			ports = append(ports, view.DeniedLoopbackPorts...)
+			if root == clean {
+				boundary = view
+				if len(view.ReopenedPaths) > 0 {
+					// A multi-root branch holds its mounts below this directory.
+					boundary.ReopenedPaths = append(boundary.ReopenedPaths, clean)
+				}
+			}
+		}
+		boundary.DeniedLoopbackPorts = ports
+		boundary.WriteDeniedPaths = []string{enginepaths.PristineTreeForBranchRoot(clean)}
+		return boundary
+	}
 }
 
 // BranchWorkspaceState returns the typed WorkspaceStateSnapshot and DispatchWorkspaceReceipt for a branch (#1662).

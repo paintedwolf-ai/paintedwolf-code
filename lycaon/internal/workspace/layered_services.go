@@ -53,7 +53,7 @@ func (r durableRetention) HoldUnresolved(_ context.Context, workerID, viewID str
 
 // OpenPrivateGit opens the private Git manager for a worker branch root.
 func OpenPrivateGit(branchRoot string) (*privategit.Manager, error) {
-	return privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(branchRoot, adapterRuntimeDirName, "privategit")})
+	return privategit.NewManager(privategit.ManagerConfig{BackingDir: enginepaths.PrivateGitDirUnder(branchRoot)})
 }
 
 // WithPrivateGit shares the host's private Git manager, the one the Git tools consult, with this Manager.

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/sandbox"
 
 	"context"
@@ -37,8 +38,13 @@ func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string)
 		// Package actions use only the read access explicitly requested for this invocation.
 		overlayReadPaths = tctx.Files.PackageExecution.ApprovedReadPaths
 	}
+	var view confine.ViewBoundary
+	if tctx.Source.WorkerViewBoundary != nil {
+		view = tctx.Source.WorkerViewBoundary()
+	}
 	return hitl.ActionConfineInputs{
 		ProcessControl: tctx.Execution.ProcessControl, HostExecution: tctx.Execution.HostExecution,
+		View:                 view,
 		ProjectID:            tctx.Identity.ProjectID,
 		Roots:                ConfineRootsForAction(tctx),
 		SessionScratchRoot:   tctx.Host.SessionScratchDir,

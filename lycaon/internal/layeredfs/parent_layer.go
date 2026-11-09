@@ -133,6 +133,23 @@ func (l *MemoryParentLayer) ListDir(dir QualifiedPath) (map[string]ParentEntry, 
 	return out, nil
 }
 
+type parentLayerSnapshotter interface {
+	EntriesForRoot(rootID string) map[string]ParentEntry
+}
+
+// EntriesForRoot returns a snapshot of all non-root entries recorded for rootID in this parent layer.
+func (l *MemoryParentLayer) EntriesForRoot(rootID string) map[string]ParentEntry {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	out := make(map[string]ParentEntry)
+	for qp, entry := range l.entries {
+		if qp.RootID == rootID && qp.Rel != "." && qp.Rel != "" {
+			out[qp.Rel] = cloneParentEntry(entry)
+		}
+	}
+	return out
+}
+
 func cloneParentEntry(e ParentEntry) ParentEntry {
 	if len(e.Xattrs) > 0 {
 		cp := make(map[string][]byte, len(e.Xattrs))

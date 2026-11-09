@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
@@ -102,10 +103,17 @@ type WorkspaceStrategySelection struct {
 	Adapter   adapter.Adapter      `json:"-"`
 }
 
-// DefaultWorkspaceSelector returns this host's selector. No confinement enforcer exists yet, so its
-// mounted adapter reports confinement_unavailable and selection falls back to materialized views.
+// DefaultWorkspaceSelector returns this host's selector. Choosing a mount by cost is not decided yet,
+// so it stays without an enforcer: its mounted adapter reports confinement_unavailable and selection
+// falls back to materialized views.
 func DefaultWorkspaceSelector() *adapter.Selector {
 	return platform.NewSelector(platform.Config{})
+}
+
+// EnforcedWorkspaceSelector is this host's selector with its production enforcer: a mounted adapter
+// passes its probe only where a confined process is actually denied a view's storage.
+func EnforcedWorkspaceSelector() *adapter.Selector {
+	return platform.NewSelector(platform.Config{Confinement: viewconfine.New()})
 }
 
 // StrategyForAdapterFacts derives the ProvisionStrategy from structured AdapterFacts without OS branching.

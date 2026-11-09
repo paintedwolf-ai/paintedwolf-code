@@ -236,14 +236,18 @@ type PreparedRoot struct {
 
 // PreparedView holds the allocated worker view identity, root mappings, Core engine, and facts.
 type PreparedView struct {
-	ViewID          string                       `json:"view_id"`
-	AdapterID       AdapterID                    `json:"adapter_id"`
-	Facts           AdapterFacts                 `json:"facts"`
-	Roots           []PreparedRoot               `json:"roots"`
-	PrimaryRootID   string                       `json:"primary_root_id"`
-	PrimaryWorkPath string                       `json:"primary_work_path"`
-	BackingDir      string                       `json:"backing_dir"`
-	RuntimeViewDir  string                       `json:"runtime_view_dir"`
+	ViewID          string         `json:"view_id"`
+	AdapterID       AdapterID      `json:"adapter_id"`
+	Facts           AdapterFacts   `json:"facts"`
+	Roots           []PreparedRoot `json:"roots"`
+	PrimaryRootID   string         `json:"primary_root_id"`
+	PrimaryWorkPath string         `json:"primary_work_path"`
+	BackingDir      string         `json:"backing_dir"`
+	RuntimeViewDir  string         `json:"runtime_view_dir"`
+	// SourcePaths are the live trees this view serves, which its processes never reach directly.
+	SourcePaths []string `json:"source_paths,omitempty"`
+	// ListenerPorts are the loopback ports the view's server accepts its kernel client on.
+	ListenerPorts   []uint16                     `json:"listener_ports,omitempty"`
 	TaskPathHints   []string                     `json:"task_path_hints,omitempty"`
 	SeededGitRepos  map[string]SeedGitInitResult `json:"seeded_git_repos,omitempty"`
 	ObservedEntries int64                        `json:"observed_entries"`

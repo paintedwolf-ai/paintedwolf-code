@@ -15,6 +15,7 @@ func newHostSelector(cfg Config) *adapter.Selector {
 		fuseCfg.ConfinementCheckFn = func(ctx context.Context, probeCfg adapter.ProbeConfig) error {
 			return cfg.Confinement.Available(ctx, probeCfg)
 		}
+		fuseCfg.ConfinementVerifyFn = cfg.Confinement.VerifyView
 	}
 	return adapter.NewSelector("linux", fuselinux.New(fuseCfg), nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
 }
