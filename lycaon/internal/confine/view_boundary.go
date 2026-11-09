@@ -6,14 +6,35 @@ import (
 	"strings"
 )
 
+// PolicyFileInventory describes a structured policy-file inventory for a
+// confined root with explicit completeness, version/generation, and OS
+// directory-read accounting.
+type PolicyFileInventory struct {
+	// Files are root-relative slash paths of known regular policy files
+	// present in this inventory.
+	Files []string
+	// Removed are root-relative slash paths of policy files explicitly
+	// removed/whiteout-masked in an overlay relative to lower layers.
+	Removed []string
+	// Complete reports whether Files is a complete, authoritative inventory
+	// of the entire root tree (false when only overlay deltas are supplied,
+	// when a directory read failed, or when a walk budget was exhausted).
+	Complete bool
+	// Generation is the monotonic state generation at which the inventory
+	// was captured.
+	Generation uint64
+	// ReadDirs is the count of actual OS directory reads performed to
+	// construct or refresh this inventory.
+	ReadDirs int64
+}
+
 // ViewRootBoundary binds one mounted workspace root to its authoritative host
-// source directory and the effective policy-file inventory of that root.
+// source directory and the policy-file inventory of that root.
 type ViewRootBoundary struct {
-	RootID          string
-	WorkspacePath   string
-	SourcePath      string
-	PolicyFiles     []string
-	PolicyInventory bool
+	RootID        string
+	WorkspacePath string
+	SourcePath    string
+	Inventory     PolicyFileInventory
 }
 
 // ViewBoundary names what the processes of a worker's workspace never reach directly. A mounted
@@ -77,15 +98,15 @@ func normalizeViewRoots(roots []ViewRootBoundary) []ViewRootBoundary {
 	for _, r := range roots {
 		wp := normalizeSinglePath(r.WorkspacePath)
 		sp := normalizeSinglePath(r.SourcePath)
-		if wp == "" && sp == "" && strings.TrimSpace(r.RootID) == "" && len(r.PolicyFiles) == 0 && !r.PolicyInventory {
+		inv := normalizePolicyInventory(r.Inventory)
+		if wp == "" && sp == "" && strings.TrimSpace(r.RootID) == "" && isZeroInventory(inv) {
 			continue
 		}
 		out = append(out, ViewRootBoundary{
-			RootID:          strings.TrimSpace(r.RootID),
-			WorkspacePath:   wp,
-			SourcePath:      sp,
-			PolicyFiles:     normalizePolicyFiles(r.PolicyFiles),
-			PolicyInventory: r.PolicyInventory,
+			RootID:        strings.TrimSpace(r.RootID),
+			WorkspacePath: wp,
+			SourcePath:    sp,
+			Inventory:     inv,
 		})
 	}
 	if len(out) == 0 {
@@ -101,14 +122,27 @@ func resolveViewRoots(roots []ViewRootBoundary) []ViewRootBoundary {
 	out := make([]ViewRootBoundary, 0, len(roots))
 	for _, r := range roots {
 		out = append(out, ViewRootBoundary{
-			RootID:          strings.TrimSpace(r.RootID),
-			WorkspacePath:   resolveSinglePath(r.WorkspacePath),
-			SourcePath:      resolveSinglePath(r.SourcePath),
-			PolicyFiles:     normalizePolicyFiles(r.PolicyFiles),
-			PolicyInventory: r.PolicyInventory,
+			RootID:        strings.TrimSpace(r.RootID),
+			WorkspacePath: resolveSinglePath(r.WorkspacePath),
+			SourcePath:    resolveSinglePath(r.SourcePath),
+			Inventory:     normalizePolicyInventory(r.Inventory),
 		})
 	}
 	return out
+}
+
+func normalizePolicyInventory(inv PolicyFileInventory) PolicyFileInventory {
+	return PolicyFileInventory{
+		Files:      normalizePolicyFiles(inv.Files),
+		Removed:    normalizePolicyFiles(inv.Removed),
+		Complete:   inv.Complete,
+		Generation: inv.Generation,
+		ReadDirs:   inv.ReadDirs,
+	}
+}
+
+func isZeroInventory(inv PolicyFileInventory) bool {
+	return len(inv.Files) == 0 && len(inv.Removed) == 0 && !inv.Complete && inv.Generation == 0 && inv.ReadDirs == 0
 }
 
 func normalizeSinglePath(p string) string {

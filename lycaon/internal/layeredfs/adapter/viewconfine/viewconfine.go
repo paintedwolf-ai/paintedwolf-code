@@ -59,8 +59,14 @@ func Boundary(view *adapter.PreparedView) confine.ViewBoundary {
 			SourcePath:    root.SourcePath,
 		}
 		if view.Core != nil {
-			vr.PolicyFiles = view.Core.PolicyFiles(root.RootID, policyNames...)
-			vr.PolicyInventory = true
+			inv := view.Core.PolicyInventory(root.RootID, policyNames...)
+			vr.Inventory = confine.PolicyFileInventory{
+				Files:      inv.Files,
+				Removed:    inv.Removed,
+				Complete:   inv.Complete,
+				Generation: inv.Generation,
+				ReadDirs:   inv.ReadDirs,
+			}
 		}
 		boundary.Roots = append(boundary.Roots, vr)
 	}

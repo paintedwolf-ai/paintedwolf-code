@@ -34,7 +34,7 @@ func TestSeccompProgramNotifiesLegacyPathCreators(t *testing.T) {
 		return got
 	}
 	notify := int(uint32(unix.SECCOMP_RET_USER_NOTIF))
-	for _, nr := range []uint32{unix.SYS_MKDIR, unix.SYS_MKNOD, unix.SYS_SYMLINK, unix.SYS_LINK, unix.SYS_RENAME, unix.SYS_CREAT} {
+	for _, nr := range []uint32{unix.SYS_MKDIR, unix.SYS_MKNOD, unix.SYS_SYMLINK, unix.SYS_LINK, unix.SYS_RENAME, unix.SYS_CREAT, unix.SYS_UNLINK, unix.SYS_RMDIR, unix.SYS_TRUNCATE} {
 		if got := run(nr); got != notify {
 			t.Errorf("syscall %d: %#x, want notify", nr, got)
 		}
@@ -42,10 +42,13 @@ func TestSeccompProgramNotifiesLegacyPathCreators(t *testing.T) {
 	if got := run(unix.SYS_OPEN, 0, unix.O_CREAT|unix.O_WRONLY); got != notify {
 		t.Errorf("open with O_CREAT: %#x", got)
 	}
-	if got := run(unix.SYS_OPEN, 0, unix.O_RDONLY); got != int(unix.SECCOMP_RET_ALLOW) {
-		t.Errorf("open without O_CREAT: %#x", got)
+	if got := run(unix.SYS_OPEN, 0, unix.O_WRONLY); got != notify {
+		t.Errorf("open with O_WRONLY: %#x", got)
 	}
-	for nr := range map[uint32]bool{unix.SYS_OPEN: true, unix.SYS_CREAT: true, unix.SYS_MKDIR: true, unix.SYS_RENAME: true, unix.SYS_LINK: true, unix.SYS_SYMLINK: true, unix.SYS_MKNOD: true} {
+	if got := run(unix.SYS_OPEN, 0, unix.O_RDONLY); got != int(unix.SECCOMP_RET_ALLOW) {
+		t.Errorf("open with O_RDONLY: %#x", got)
+	}
+	for nr := range map[uint32]bool{unix.SYS_OPEN: true, unix.SYS_CREAT: true, unix.SYS_MKDIR: true, unix.SYS_RENAME: true, unix.SYS_LINK: true, unix.SYS_SYMLINK: true, unix.SYS_MKNOD: true, unix.SYS_UNLINK: true, unix.SYS_RMDIR: true, unix.SYS_TRUNCATE: true} {
 		if _, ok := pathArgsOf(nr); !ok || !isPathCall(int32(nr)) {
 			t.Errorf("syscall %d has no argument layout", nr)
 		}

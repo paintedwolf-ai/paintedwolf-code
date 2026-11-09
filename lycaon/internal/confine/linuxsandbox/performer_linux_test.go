@@ -150,6 +150,34 @@ func TestPerformerCreatesOrdinaryNamesAndRefusesProtectedOnes(t *testing.T) {
 			t.Fatalf("%s was created", absent)
 		}
 	}
+
+	// Late trunk AGENTS.md creation and rename after launch (without a read-only bind mount):
+	// reading is permitted, while writing, truncating, renaming, and unlinking are refused at
+	// enforcement time, and routine project writes to non-policy files succeed.
+	lateAgents := filepath.Join(root, "deep", "AGENTS.md")
+	testutil.FailErr(t, "write late trunk AGENTS.md", os.WriteFile(lateAgents, []byte("policy"), 0o644))
+	result, _ = do(pathCall{Op: callOpen, Path: "deep/AGENTS.md", Flags: unix.O_RDONLY}, dir)
+	expect("read late trunk AGENTS.md", result, 0, false)
+	for _, wf := range []uint64{unix.O_WRONLY, unix.O_RDWR, unix.O_RDONLY | unix.O_TRUNC, unix.O_WRONLY | unix.O_CREAT} {
+		result, _ = do(pathCall{Op: callOpen, Path: "deep/AGENTS.md", Flags: wf, Mode: 0o644}, dir)
+		expect("write open late trunk AGENTS.md", result, unix.EACCES, true)
+	}
+	result, _ = do(pathCall{Op: callTruncate, Path: "deep/AGENTS.md", Dev: 0}, dir)
+	expect("truncate late trunk AGENTS.md", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callUnlink, Path: "deep/AGENTS.md"}, dir)
+	expect("unlink late trunk AGENTS.md", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callRename, Path: "deep/AGENTS.md", NewPath: "deep/other.md"}, dir, dir)
+	expect("rename from late trunk AGENTS.md", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callRename, Path: "moved.txt", NewPath: "deep/AGENTS.md"}, dir, dir)
+	expect("rename onto late trunk AGENTS.md", result, unix.EACCES, true)
+
+	// Routine project writes, truncates, and unlinks on ordinary files remain permitted.
+	result, _ = do(pathCall{Op: callOpen, Path: "moved.txt", Flags: unix.O_WRONLY | unix.O_TRUNC}, dir)
+	expect("write open ordinary file", result, 0, false)
+	result, _ = do(pathCall{Op: callTruncate, Path: "moved.txt", Dev: 0}, dir)
+	expect("truncate ordinary file", result, 0, false)
+	result, _ = do(pathCall{Op: callUnlink, Path: "moved.txt"}, dir)
+	expect("unlink ordinary file", result, 0, false)
 }
 
 func TestPerformerClientStopsAfterALostAnswer(t *testing.T) {
@@ -177,14 +205,16 @@ func TestPathCallArgumentsFollowEachSyscall(t *testing.T) {
 		unix.SYS_LINKAT:    {op: callLink, dir: 0, path: 1, newDir: 2, newPath: 3, content: noArg, flags: 4, mode: noArg, dev: noArg},
 		unix.SYS_RENAMEAT:  {op: callRename, dir: 0, path: 1, newDir: 2, newPath: 3, content: noArg, flags: noArg, mode: noArg, dev: noArg},
 		unix.SYS_RENAMEAT2: {op: callRename, dir: 0, path: 1, newDir: 2, newPath: 3, content: noArg, flags: 4, mode: noArg, dev: noArg},
+		unix.SYS_UNLINKAT:  {op: callUnlink, dir: 0, path: 1, newDir: noArg, newPath: noArg, content: noArg, flags: 2, mode: noArg, dev: noArg},
+		unix.SYS_TRUNCATE:  {op: callTruncate, dir: noArg, path: 0, newDir: noArg, newPath: noArg, content: noArg, flags: noArg, mode: noArg, dev: 1},
 	} {
 		got, ok := pathArgsOf(nr)
 		if !ok || got != want || !isPathCall(int32(nr)) {
 			t.Errorf("syscall %d: %+v %v, want %+v", nr, got, ok, want)
 		}
 	}
-	if _, ok := pathArgsOf(unix.SYS_UNLINKAT); ok || isPathCall(unix.SYS_UNLINKAT) {
-		t.Error("unlinkat is not a name-creating call")
+	if _, ok := pathArgsOf(unix.SYS_READ); ok || isPathCall(unix.SYS_READ) {
+		t.Error("read is not a path call")
 	}
 }
 

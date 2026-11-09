@@ -89,12 +89,14 @@ func bitsSet(v uint8) int {
 
 // Calls the performer serves.
 const (
-	callOpen    = "open"
-	callMkdir   = "mkdir"
-	callMknod   = "mknod"
-	callSymlink = "symlink"
-	callLink    = "link"
-	callRename  = "rename"
+	callOpen     = "open"
+	callMkdir    = "mkdir"
+	callMknod    = "mknod"
+	callSymlink  = "symlink"
+	callLink     = "link"
+	callRename   = "rename"
+	callUnlink   = "unlink"
+	callTruncate = "truncate"
 	// callListener lends the performer the seccomp listener.
 	callListener = "listener"
 )

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -295,7 +296,10 @@ type planCompiler struct {
 	restored    map[string]bool
 	view        ViewBoundary
 	loaderFiles map[string][]string
+	readDirs    int64
 }
+
+var lastPlanReadDirs atomic.Int64
 
 func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, error) {
 	pc := &planCompiler{
@@ -311,6 +315,7 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 			pc.readRule(rule)
 		case opWrite:
 			if err := pc.writeRule(rule); err != nil {
+				lastPlanReadDirs.Store(pc.readDirs)
 				return linuxsandbox.Filesystem{}, err
 			}
 		case opReadMetadata:
@@ -330,6 +335,7 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 			pc.fs.Restored = append(pc.fs.Restored, p)
 		}
 	}
+	lastPlanReadDirs.Store(pc.readDirs)
 	return pc.fs, nil
 }
 
@@ -440,7 +446,7 @@ func (pc *planCompiler) loaderPaths(subpath, name string, batch []string) []stri
 		if roots := pc.matchingViewRoots(subpath); len(roots) > 0 {
 			seen := map[string]bool{}
 			for _, vr := range roots {
-				for _, mapped := range viewRootLoaderPaths(vr, batch) {
+				for _, mapped := range pc.viewRootLoaderPaths(vr, batch) {
 					if PathAtOrUnder(mapped, subpath) && !seen[mapped] {
 						seen[mapped] = true
 						all = append(all, mapped)
@@ -448,7 +454,9 @@ func (pc *planCompiler) loaderPaths(subpath, name string, batch []string) []stri
 				}
 			}
 		} else {
-			all = namedFilesBelow(subpath, batch...)
+			inv := namedFilesBelowInventory(subpath, agentPolicyWalkBudget, batch...)
+			pc.readDirs += inv.ReadDirs
+			all = inv.Files
 		}
 		pc.loaderFiles[subpath] = all
 	}
@@ -474,24 +482,34 @@ func (pc *planCompiler) matchingViewRoots(subpath string) []ViewRootBoundary {
 	return out
 }
 
-func viewRootLoaderPaths(vr ViewRootBoundary, batch []string) []string {
-	if vr.PolicyInventory {
-		out := make([]string, 0, len(vr.PolicyFiles))
-		for _, rel := range vr.PolicyFiles {
-			if foldsToAny(filepath.Base(rel), batch) {
-				out = append(out, filepath.Join(vr.WorkspacePath, filepath.FromSlash(rel)))
-			}
+func (pc *planCompiler) viewRootLoaderPaths(vr ViewRootBoundary, batch []string) []string {
+	removed := map[string]bool{}
+	for _, r := range vr.Inventory.Removed {
+		removed[r] = true
+	}
+	seen := map[string]bool{}
+	var out []string
+	addRel := func(rel string) {
+		rel = filepath.ToSlash(rel)
+		if removed[rel] || !foldsToAny(filepath.Base(rel), batch) {
+			return
 		}
-		return out
+		mapped := filepath.Join(vr.WorkspacePath, filepath.FromSlash(rel))
+		if !seen[mapped] {
+			seen[mapped] = true
+			out = append(out, mapped)
+		}
 	}
-	if vr.SourcePath == "" {
-		return nil
+	for _, rel := range vr.Inventory.Files {
+		addRel(rel)
 	}
-	found := namedFilesBelow(vr.SourcePath, batch...)
-	out := make([]string, 0, len(found))
-	for _, p := range found {
-		if rel, err := filepath.Rel(vr.SourcePath, p); err == nil {
-			out = append(out, filepath.Join(vr.WorkspacePath, rel))
+	if !vr.Inventory.Complete && vr.Inventory.Generation == 0 && vr.SourcePath != "" {
+		inv := namedFilesBelowInventory(vr.SourcePath, agentPolicyWalkBudget, batch...)
+		pc.readDirs += inv.ReadDirs
+		for _, p := range inv.Files {
+			if rel, err := filepath.Rel(vr.SourcePath, p); err == nil {
+				addRel(rel)
+			}
 		}
 	}
 	return out
@@ -574,25 +592,50 @@ const agentPolicyWalkBudget = 200_000
 // namedFilesBelow lists the regular files below root, outside .git, whose name
 // folds to any of names.
 func namedFilesBelow(root string, names ...string) []string {
-	if len(names) == 0 {
-		return nil
+	return namedFilesBelowInventory(root, agentPolicyWalkBudget, names...).Files
+}
+
+// namedFilesBelowInventory scans root for regular files outside .git whose
+// basename folds to any of names, tracking actual OS directory reads and
+// reporting Complete=false if any directory cannot be read or budget is exhausted.
+func namedFilesBelowInventory(root string, budget int, names ...string) PolicyFileInventory {
+	root = strings.TrimSpace(root)
+	if root == "" || len(names) == 0 {
+		return PolicyFileInventory{Complete: true}
 	}
-	var out []string
-	budget := agentPolicyWalkBudget
+	if budget <= 0 {
+		return PolicyFileInventory{Complete: false}
+	}
+	st, err := os.Lstat(root)
+	if err != nil {
+		return PolicyFileInventory{Complete: os.IsNotExist(err)}
+	}
+	if !st.IsDir() {
+		return PolicyFileInventory{Complete: true}
+	}
+	inv := PolicyFileInventory{Complete: true}
+	remaining := budget
 	var walk func(dir string) bool
 	walk = func(dir string) bool {
+		if remaining <= 0 {
+			inv.Complete = false
+			return false
+		}
+		inv.ReadDirs++
 		entries, err := os.ReadDir(dir)
 		if err != nil {
+			inv.Complete = false
 			return true
 		}
 		for _, e := range entries {
-			if budget--; budget < 0 {
+			if remaining--; remaining < 0 {
+				inv.Complete = false
 				return false
 			}
 			name := e.Name()
 			switch {
 			case e.Type().IsRegular() && foldsToAny(name, names):
-				out = append(out, filepath.Join(dir, name))
+				inv.Files = append(inv.Files, filepath.Join(dir, name))
 			case e.IsDir():
 				if strings.EqualFold(name, ".git") {
 					continue
@@ -606,9 +649,9 @@ func namedFilesBelow(root string, names ...string) []string {
 	}
 	if !walk(root) {
 		slog.Warn("agent policy write floor covers only part of the tree",
-			"component", "sandbox", "root", root, "entries", agentPolicyWalkBudget)
+			"component", "sandbox", "root", root, "entries", budget)
 	}
-	return out
+	return inv
 }
 
 func foldsToAny(name string, targets []string) bool {

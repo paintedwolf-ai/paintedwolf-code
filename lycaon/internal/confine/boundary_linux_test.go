@@ -88,6 +88,28 @@ func TestCompileFilesystemPlanNamesLoaderFilesAtAnyDepth(t *testing.T) {
 	if got := namedFilesBelow(proj, protectedpath.AgentsMDFileName, secondName); !reflect.DeepEqual(got, []string{top, second, nested}) {
 		t.Fatalf("namedFilesBelow multi = %v, want %v", got, []string{top, second, nested})
 	}
+	fullInv := namedFilesBelowInventory(proj, maxAgentPolicyWalkEntries, protectedpath.AgentsMDFileName)
+	if !fullInv.Complete || fullInv.ReadDirs == 0 {
+		t.Fatalf("full namedFilesBelowInventory = %+v, want Complete=true and ReadDirs>0", fullInv)
+	}
+	budgetInv := namedFilesBelowInventory(proj, 2, protectedpath.AgentsMDFileName)
+	if budgetInv.Complete || budgetInv.ReadDirs == 0 {
+		t.Fatalf("budget-exhausted namedFilesBelowInventory = %+v, want Complete=false and ReadDirs>0", budgetInv)
+	}
+	if os.Geteuid() != 0 {
+		unreadable := filepath.Join(proj, "locked")
+		testutil.FailErr(t, "mkdir locked", os.Mkdir(unreadable, 0o755))
+		testutil.FailErr(t, "chmod locked", os.Chmod(unreadable, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(unreadable, 0o755) })
+		partialInv := namedFilesBelowInventory(proj, maxAgentPolicyWalkEntries, protectedpath.AgentsMDFileName)
+		if partialInv.Complete || partialInv.ReadDirs == 0 {
+			t.Fatalf("unreadable-dir namedFilesBelowInventory = %+v, want Complete=false and ReadDirs>0", partialInv)
+		}
+		if !reflect.DeepEqual(partialInv.Files, []string{top, nested}) {
+			t.Fatalf("partialInv.Files = %v, want accessible files %v", partialInv.Files, []string{top, nested})
+		}
+		testutil.FailErr(t, "restore chmod locked", os.Chmod(unreadable, 0o755))
+	}
 	var location protectedpath.AgentPolicyLocation
 	for _, l := range protectedpath.AgentPolicyLocations() {
 		if l.Name == protectedpath.AgentsMDFileName {
@@ -233,34 +255,44 @@ func TestCompileFilesystemPlanResolvesMountedViewLoaderFilesFromSourceRoots(t *t
 
 	mountSingle := filepath.Join(branchesBase, "wb-single", "mount")
 	testutil.FailErr(t, "mkdir mountSingle", os.MkdirAll(mountSingle, 0o755))
-	compileWithInventory := func() linuxsandbox.Filesystem {
-		inv := core.PolicyFiles("proj", protectedpath.AgentsMDFileName)
+	compileWithInventory := func() (linuxsandbox.Filesystem, layeredfs.PolicyFileInventory) {
+		inv := core.PolicyInventory("proj", protectedpath.AgentsMDFileName)
+		if inv.ReadDirs != 0 || inv.Complete || inv.Generation == 0 {
+			t.Fatalf("core.PolicyInventory = %+v, want ReadDirs=0, Complete=false, Generation>0", inv)
+		}
 		r, err := filesystemRules(Confinement{
 			Roots: []string{mountSingle},
 			View: ViewBoundary{
 				DeniedPaths:   []string{branchesBase, trunkDir},
 				ReopenedPaths: []string{mountSingle},
 				Roots: []ViewRootBoundary{{
-					RootID:          "proj",
-					WorkspacePath:   mountSingle,
-					SourcePath:      trunkDir,
-					PolicyFiles:     inv,
-					PolicyInventory: true,
+					RootID:        "proj",
+					WorkspacePath: mountSingle,
+					SourcePath:    trunkDir,
+					Inventory: PolicyFileInventory{
+						Files:      inv.Files,
+						Removed:    inv.Removed,
+						Complete:   inv.Complete,
+						Generation: inv.Generation,
+						ReadDirs:   inv.ReadDirs,
+					},
 				}},
 			},
 		})
 		testutil.FailErr(t, "effective filesystemRules", err)
 		p, err := compileFilesystemPlan(r)
 		testutil.FailErr(t, "effective compileFilesystemPlan", err)
-		return p
+		if got := lastPlanReadDirs.Load(); got != 0 {
+			t.Fatalf("compileFilesystemPlan performed %d OS ReadDir calls on mounted view, want 0", got)
+		}
+		return p, inv
 	}
 
-	effPlan := compileWithInventory()
+	effPlan, inv1 := compileWithInventory()
 	if st := core.Stats(); st.LowerDirReads != 0 || st.LowerLookups != 0 {
-		t.Fatalf("PolicyFiles touched lower provider: %+v", st)
+		t.Fatalf("PolicyInventory touched lower provider: %+v", st)
 	}
 	for _, rel := range []string{
-		"trunk-keep/" + protectedpath.AgentsMDFileName,
 		"parent-dir/" + protectedpath.AgentsMDFileName,
 		"private-dir/" + protectedpath.AgentsMDFileName,
 		"renamed/" + protectedpath.AgentsMDFileName,
@@ -274,25 +306,43 @@ func TestCompileFilesystemPlanResolvesMountedViewLoaderFilesFromSourceRoots(t *t
 		"trunk-parent-del/" + protectedpath.AgentsMDFileName,
 		"trunk-priv-unlink/" + protectedpath.AgentsMDFileName,
 	} {
+		if !containsPath(inv1.Removed, rel) {
+			t.Fatalf("inv1.Removed = %v, missing deleted/unlinked %q", inv1.Removed, rel)
+		}
 		unwanted := filepath.Join(mountSingle, filepath.FromSlash(rel))
 		if containsPath(effPlan.ReadOnly, unwanted) {
 			t.Fatalf("effPlan.ReadOnly = %v, still contains deleted/unlinked %q", effPlan.ReadOnly, unwanted)
 		}
 	}
+	wantFloor := linuxsandbox.NamedFloor{Below: mountSingle, Name: protectedpath.AgentsMDFileName}
+	hasFloor := false
+	for _, nf := range effPlan.ReadOnlyNames {
+		if nf == wantFloor {
+			hasFloor = true
+			break
+		}
+	}
+	if !hasFloor {
+		t.Fatalf("effPlan.ReadOnlyNames = %v, missing enforcement-time floor %+v for trunk/future policy files", effPlan.ReadOnlyNames, wantFloor)
+	}
 
-	// 3. Command-launch work bound: trunk is not re-walked on subsequent launches, while new
-	// view-private policy files are immediately included.
+	// 3. First-launch and subsequent-launch bounds: neither preparation nor launch walks the host
+	// trunk (ReadDirs == 0), Generation advances on view-private mutation, and new view-private
+	// policy files are immediately included while late trunk policy files are protected by ReadOnlyNames.
 	lateTrunkFile := filepath.Join(trunkDir, "late-trunk", protectedpath.AgentsMDFileName)
 	testutil.FailErr(t, "mkdir late-trunk", os.MkdirAll(filepath.Dir(lateTrunkFile), 0o755))
 	testutil.FailErr(t, "write late-trunk AGENTS.md", os.WriteFile(lateTrunkFile, []byte("late"), 0o644))
 	testutil.FailErr(t, "WriteFile private-2", core.WriteFile(layeredfs.QualifiedPath{RootID: "proj", Rel: protectedpath.AgentsMDFileName}, []byte("root-priv"), 0o644))
 
-	secondPlan := compileWithInventory()
+	secondPlan, inv2 := compileWithInventory()
+	if inv2.Generation <= inv1.Generation {
+		t.Fatalf("inv2.Generation = %d, want > inv1.Generation (%d)", inv2.Generation, inv1.Generation)
+	}
 	if !containsPath(secondPlan.ReadOnly, filepath.Join(mountSingle, protectedpath.AgentsMDFileName)) {
 		t.Fatalf("secondPlan.ReadOnly = %v, missing new view-private root AGENTS.md", secondPlan.ReadOnly)
 	}
 	if containsPath(secondPlan.ReadOnly, filepath.Join(mountSingle, "late-trunk", protectedpath.AgentsMDFileName)) {
-		t.Fatalf("secondPlan.ReadOnly = %v, unexpectedly re-walked trunk on second launch", secondPlan.ReadOnly)
+		t.Fatalf("secondPlan.ReadOnly = %v, unexpectedly walked trunk on launch", secondPlan.ReadOnly)
 	}
 }
 

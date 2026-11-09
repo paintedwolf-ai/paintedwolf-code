@@ -37,6 +37,10 @@ func (f creationFloors) perform(call pathCall, dirs []int) (pathResult, int) {
 		return f.link(dir(0), dir(1), call), -1
 	case callRename:
 		return f.rename(dir(0), dir(1), call), -1
+	case callUnlink:
+		return f.unlink(dir(0), call), -1
+	case callTruncate:
+		return f.truncate(dir(0), call), -1
 	}
 	return pathResult{Errno: int(unix.ENOSYS)}, -1
 }
@@ -45,7 +49,7 @@ func (f creationFloors) perform(call pathCall, dirs []int) (pathResult, int) {
 // (mayRefuseCreate) directly on the caller's directory, with this copy of its
 // path. An open that would follow a final symlink is attempted without
 // following; a symlink there takes the full decision, since its target is the
-// name that would be created.
+// name that would be created or written.
 func (f creationFloors) createPlainName(dirfd int, call pathCall) (pathResult, int, bool) {
 	base := filepath.Base(strings.TrimRight(call.Path, "/"))
 	if base == "." || base == ".." || base == "/" || f.mayRefuseCreate(base) {
@@ -53,7 +57,7 @@ func (f creationFloors) createPlainName(dirfd int, call pathCall) (pathResult, i
 	}
 	switch call.Op {
 	case callOpen:
-		if call.Flags&unix.O_CREAT == 0 {
+		if call.Flags&openWriteFlags == 0 {
 			return pathResult{}, -1, false
 		}
 		follows := call.Flags&unix.O_NOFOLLOW == 0 && call.Resolve&unix.RESOLVE_NO_SYMLINKS == 0
@@ -69,6 +73,8 @@ func (f creationFloors) createPlainName(dirfd int, call pathCall) (pathResult, i
 		return errnoResult(unix.Mknodat(dirfd, call.Path, call.Mode, int(call.Dev))), -1, true
 	case callSymlink:
 		return errnoResult(unix.Symlinkat(call.Content, dirfd, call.Path)), -1, true
+	case callUnlink:
+		return errnoResult(unix.Unlinkat(dirfd, call.Path, int(call.Flags))), -1, true
 	}
 	return pathResult{}, -1, false
 }
@@ -211,8 +217,9 @@ func errnoResult(err error) pathResult {
 
 func (f creationFloors) open(dirfd int, call pathCall) (pathResult, int) {
 	how := unix.OpenHow{Flags: call.Flags, Mode: uint64(call.Mode), Resolve: call.Resolve}
-	if call.Flags&unix.O_CREAT == 0 {
-		// An openat2 that creates nothing is the caller's own open.
+	writes := call.Flags&unix.O_ACCMODE != unix.O_RDONLY || call.Flags&unix.O_TRUNC != 0
+	if call.Flags&unix.O_CREAT == 0 && !writes {
+		// An openat2 that neither creates nor writes is the caller's own open.
 		fd, err := unix.Openat2(dirfd, call.Path, &how)
 		return errnoResult(err), fd
 	}
@@ -233,12 +240,11 @@ func (f creationFloors) open(dirfd int, call pathCall) (pathResult, int) {
 	defer p.close()
 	var st unix.Stat_t
 	exists := unix.Fstatat(p.fd, p.base, &st, unix.AT_SYMLINK_NOFOLLOW) == nil
-	writes := call.Flags&unix.O_ACCMODE != unix.O_RDONLY || call.Flags&unix.O_TRUNC != 0
 	if (!exists || writes) && f.refuses(createEntry, p.path) {
 		return refusal(refusalCreate, p), -1
 	}
 	// The final component was resolved above; a symlink swapped in since then
-	// fails rather than redirecting the create.
+	// fails rather than redirecting the open.
 	final := unix.OpenHow{Flags: call.Flags | unix.O_NOFOLLOW, Mode: uint64(call.Mode), Resolve: call.Resolve & unix.RESOLVE_NO_XDEV}
 	fd, err := unix.Openat2(p.fd, p.base, &final)
 	return errnoResult(err), fd
@@ -331,4 +337,42 @@ func (f creationFloors) rename(olddir, newdir int, call pathCall) pathResult {
 		return refusal(refusalCreate, target)
 	}
 	return errnoResult(unix.Renameat2(old.fd, old.base, target.fd, target.base, uint(call.Flags)))
+}
+
+func (f creationFloors) unlink(dirfd int, call pathCall) pathResult {
+	p, err := resolveParent(dirfd, call.Path, 0)
+	if errors.Is(err, errPlainName) {
+		return errnoResult(unix.Unlinkat(dirfd, call.Path, int(call.Flags)))
+	}
+	if err != nil {
+		return errnoResult(err)
+	}
+	defer p.close()
+	if f.refuses(renameSource, p.path) {
+		return refusal(refusalUnlink, p)
+	}
+	return errnoResult(unix.Unlinkat(p.fd, p.base, int(call.Flags)))
+}
+
+func (f creationFloors) truncate(dirfd int, call pathCall) pathResult {
+	p, err := resolveParent(dirfd, call.Path, 0)
+	if errors.Is(err, errPlainName) {
+		return pathResult{Errno: int(unix.EISDIR)}
+	}
+	if err != nil {
+		return errnoResult(err)
+	}
+	if p, err = followFinal(p); err != nil {
+		return errnoResult(err)
+	}
+	defer p.close()
+	if f.refuses(createEntry, p.path) {
+		return refusal(refusalCreate, p)
+	}
+	fd, err := unix.Openat(p.fd, p.base, unix.O_WRONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return errnoResult(err)
+	}
+	defer func() { _ = unix.Close(fd) }()
+	return errnoResult(unix.Ftruncate(fd, int64(call.Dev)))
 }
