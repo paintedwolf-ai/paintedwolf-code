@@ -2,9 +2,6 @@ package toolexecution
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"path"
 	"path/filepath"
 	"strconv"
@@ -66,7 +63,7 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 		return decision, nil
 	}
 
-	action := proposedActionFromPolicyWithContext(ctx, eval)
+	action := proposedActionFromPolicy(eval)
 	approval, err := p.gate.Evaluate(ctx, action)
 	if err != nil {
 		return nil, err
@@ -91,59 +88,11 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 	return &platform.PolicyDecision{Allowed: true}, nil
 }
 
-type executionApprovalWitnessKey struct{}
-
-// executionApprovalWitness binds a current-call execution capability permit to
-// the exact session, action, confine boundary, and argument set that preflight
-// reviewed, so proposedActionFromPolicyWithContext subtracts only that covered
-// execution capability before the shared gate evaluates all remaining facts.
-type executionApprovalWitness struct {
-	toolName        string
-	sessionID       string
-	actionID        string
-	boundaryDigest  string
-	argsDigest      string
-	hostExecution   bool
-	processControl  bool
-	credentialStore bool
-}
-
-func withExecutionApprovalWitness(ctx context.Context, witness executionApprovalWitness) context.Context {
-	return context.WithValue(ctx, executionApprovalWitnessKey{}, witness)
-}
-
-func executionApprovalWitnessFromContext(ctx context.Context) (executionApprovalWitness, bool) {
-	if ctx == nil {
-		return executionApprovalWitness{}, false
-	}
-	witness, ok := ctx.Value(executionApprovalWitnessKey{}).(executionApprovalWitness)
-	return witness, ok
-}
-
-func (w executionApprovalWitness) matches(eval platform.PolicyContext) bool {
-	confReq := normalizedPolicyConfineRequest(eval)
+func executionBoundaryDigestForPolicy(confReq confine.Request) string {
 	if !confReq.HostExecution && !confReq.ProcessControl && !confReq.CredentialStore {
-		return false
-	}
-	return w.toolName == eval.ToolName &&
-		w.sessionID == eval.SessionID &&
-		w.actionID == eval.ActionID &&
-		w.boundaryDigest != "" &&
-		w.boundaryDigest == tools.ExecutionBoundaryDigest(confReq) &&
-		w.argsDigest != "" &&
-		w.argsDigest == policyArgumentsDigest(eval.ToolArgs) &&
-		w.hostExecution == confReq.HostExecution &&
-		w.processControl == confReq.ProcessControl &&
-		w.credentialStore == confReq.CredentialStore
-}
-
-func policyArgumentsDigest(args map[string]any) string {
-	raw, err := json.Marshal(args)
-	if err != nil {
 		return ""
 	}
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:])
+	return tools.ExecutionBoundaryDigest(confReq)
 }
 
 func normalizedPolicyConfineRequest(eval platform.PolicyContext) confine.Request {
@@ -303,21 +252,6 @@ func pairFilesFromArgs(args map[string]any) []string {
 	return files
 }
 
-func proposedActionFromPolicyWithContext(ctx context.Context, eval platform.PolicyContext) hitl.ProposedAction {
-	action := proposedActionFromPolicy(eval)
-	confReq := normalizedPolicyConfineRequest(eval)
-	if witness, ok := executionApprovalWitnessFromContext(ctx); ok && witness.matches(eval) {
-		action.Execution.Contained.HostExecution = false
-		action.Execution.Contained.ProcessControl = false
-		action.Execution.Contained.CredentialStore = false
-		action.Execution.Contained.FSJailed = len(confReq.Roots) > 0
-		if writeRoots, err := confine.WriteRootsForBoundary(confReq.ProjectID, confReq.Roots, confReq.GrantedWriteRoots, confReq.SessionScratchRoot); err == nil {
-			action.Execution.Contained.WriteRoots = writeRoots
-		}
-	}
-	return action
-}
-
 // proposedActionFromPolicy builds the gate input, stamping Contained from the
 // same confine request the executor's spawn path will apply.
 func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
@@ -327,15 +261,16 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),
 		},
 		Invocation: hitl.ActionInvocation{
-			NativeInputs:       eval.NativeInputs,
-			Tool:               eval.ToolName,
-			BoundStages:        toolcontract.CloneExecutionStages(eval.BoundStages),
-			Args:               eval.ToolArgs,
-			Files:              append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
-			ResolvedFiles:      append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
-			NativePathTargets:  append([]hitl.NativePathTarget(nil), eval.NativePathTargets...),
-			ApprovedFileAccess: append([]hitl.GrantedPathDelta(nil), eval.ApprovedFileAccess...),
-			ActionID:           eval.ActionID,
+			NativeInputs:        eval.NativeInputs,
+			Tool:                eval.ToolName,
+			BoundStages:         toolcontract.CloneExecutionStages(eval.BoundStages),
+			Args:                eval.ToolArgs,
+			Files:               append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
+			ResolvedFiles:       append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
+			NativePathTargets:   append([]hitl.NativePathTarget(nil), eval.NativePathTargets...),
+			ApprovedFileAccess:  append([]hitl.GrantedPathDelta(nil), eval.ApprovedFileAccess...),
+			CurrentActionReview: eval.CurrentActionReview,
+			ActionID:            eval.ActionID,
 		},
 		Resources: hitl.ActionResources{
 			ApprovalCategory:     eval.ApprovalCategory,
@@ -352,8 +287,10 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			SessionOutputRoot:  confReq.SessionOutputRoot,
 		},
 		Execution: hitl.ActionExecution{
-			Contained:        hitl.ContainedForRequest(confReq),
-			PackageExecution: eval.PackageExecution,
+			Contained:                       hitl.ContainedForRequest(confReq),
+			ExecutionBoundaryDigest:         executionBoundaryDigestForPolicy(confReq),
+			AuthorizedExecutionCapabilities: append([]string(nil), eval.AuthorizedExecutionCapabilities...),
+			PackageExecution:                eval.PackageExecution,
 		},
 		Sockets: hitl.ActionSockets{
 			SocketGrants:            append([]confine.SocketGrant(nil), eval.SocketGrants...),

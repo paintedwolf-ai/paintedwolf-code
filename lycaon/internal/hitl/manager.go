@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -58,7 +59,31 @@ type ActionInvocation struct {
 	NativePathTargets []NativePathTarget
 	// ApprovedFileAccess carries exact authority already approved for this invocation.
 	ApprovedFileAccess []GrantedPathDelta `json:"-"`
-	ActionID           string
+	// CurrentActionReview carries the exact reasons approved by a human checkpoint for this invocation.
+	CurrentActionReview *CurrentActionReview `json:"-"`
+	ActionID            string
+}
+
+// CurrentActionReview records the exact policy reasons and subjects reviewed
+// and approved by a human checkpoint for the current invocation.
+type CurrentActionReview struct {
+	SessionID      string
+	ToolCallID     string
+	InvocationID   string
+	ActionID       string
+	ActionKey      string
+	Cited          []gate.Fact
+	ReasonSegments []string
+	Detection      *DetectionMatch
+	MatchedRules   []ApprovalRuleMatch
+	AgentPolicy    []AgentPolicyTarget
+}
+
+// ActionKeyForCurrentReview returns the action identity for current-call review
+// matching; ExecutionBoundaryDigest is verified separately against confine.Request.
+func ActionKeyForCurrentReview(action ProposedAction) string {
+	action.Execution.ExecutionBoundaryDigest = ""
+	return GrantKey(action)
 }
 
 type NativePathTarget struct {
@@ -92,11 +117,12 @@ func (s ActionScope) HasProjectIdentity() bool {
 
 // ActionExecution captures execution boundaries, process targets, and packages.
 type ActionExecution struct {
-	Contained               Contained
-	ProcessAccess           string
-	ProcessTargets          []ApprovalTarget
-	ExecutionBoundaryDigest string
-	PackageExecution        *packageexec.Execution
+	Contained                       Contained
+	ProcessAccess                   string
+	ProcessTargets                  []ApprovalTarget
+	ExecutionBoundaryDigest         string
+	AuthorizedExecutionCapabilities []string `json:"-"`
+	PackageExecution                *packageexec.Execution
 }
 
 // ActionResources carries host-resolved policy identity and resource targets.

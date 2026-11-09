@@ -27,6 +27,8 @@ type socketCapabilityPreflightResult struct {
 	ActionDigest            string
 	AuthorizationSource     string
 	ApprovalSatisfied       bool
+	ReviewedAction          hitl.ProposedAction
+	ReviewedApproval        *hitl.ApprovalResult
 	SocketScopes            []string
 	SocketGrantStates       []string
 }
@@ -167,6 +169,7 @@ func (e *Capabilities) preflightSocketCapability(
 	}
 	// Existing route authority suppresses only the socket card.
 	approvalSatisfied := false
+	var reviewedApproval *hitl.ApprovalResult
 	missing := make([]confine.SocketGrant, 0, len(requested))
 	for _, grant := range requested {
 		if capabilitygrants.GrantAuthorized(grant, authorized) {
@@ -183,7 +186,7 @@ func (e *Capabilities) preflightSocketCapability(
 		missing = append(missing, grant)
 	}
 	if len(missing) > 0 {
-		source, err := e.authorizeMissingSocketGrants(
+		source, approval, err := e.authorizeMissingSocketGrants(
 			ctx, tool, args, tc, capReq, action, actionDigest, missing, chatByPair,
 			merged, durableGrants, observation,
 		)
@@ -192,6 +195,7 @@ func (e *Capabilities) preflightSocketCapability(
 		}
 		approvalSatisfied = true
 		authSource = source
+		reviewedApproval = approval
 	}
 	if e.socketRuntime != nil {
 		authorized = e.socketRuntime.AuthorizedGrants(chatSession, tc.PermitIdentity(), actionDigest, requested)
@@ -212,6 +216,8 @@ func (e *Capabilities) preflightSocketCapability(
 		ActionDigest:            actionDigest,
 		AuthorizationSource:     authSource,
 		ApprovalSatisfied:       approvalSatisfied || authSource == authzledger.AuthorizationSourceNeverAsk,
+		ReviewedAction:          action,
+		ReviewedApproval:        reviewedApproval,
 		SocketScopes:            observation.scopes,
 		SocketGrantStates:       observation.states,
 	}, nil
@@ -297,13 +303,13 @@ func (e *Capabilities) authorizeMissingSocketGrants(
 	merged []confine.SocketGrant,
 	durableGrants []confine.SocketGrant,
 	observation socketObservation,
-) (authSource string, err error) {
+) (authSource string, reviewedApproval *hitl.ApprovalResult, err error) {
 	approval, evalErr := e.Approvals.evaluatePreSpawn(ctx, action)
 	if evalErr != nil {
-		return "", evalErr
+		return "", nil, evalErr
 	}
 	if approval != nil && approval.Denied {
-		return "", e.Approvals.rejectBoundaryPolicyDeny(ctx, tool, args, tc, approval)
+		return "", nil, e.Approvals.rejectBoundaryPolicyDeny(ctx, tool, args, tc, approval)
 	}
 	var direct *directIPApprovalReview
 	if capReq.DirectIP != nil {
@@ -323,18 +329,18 @@ func (e *Capabilities) authorizeMissingSocketGrants(
 	}
 	if err := e.awaitSocketCapabilities(ctx, action, actionDigest, missing, chatByPair, tc, approval, direct); err != nil {
 		if hitl.IsPreparedApproval(err) {
-			return "", err
+			return "", nil, err
 		}
 		for _, grant := range missing {
 			e.recordCapabilityDecision(ctx, tc, tool, grant, false, authzledger.AuthorizationSourceHuman)
 		}
-		return "", e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
+		return "", nil, e.Approvals.rejectApprovalErr(ctx, tool, tc.Identity.Agent, args, err)
 	}
 	authSource = authzledger.AuthorizationSourceHuman
 	for _, grant := range missing {
 		e.recordCapabilityDecision(ctx, tc, tool, grant, true, authSource)
 	}
-	return authSource, nil
+	return authSource, approval, nil
 }
 
 type socketObservation struct {

@@ -162,7 +162,6 @@ func (e *Executor) applyPreInvokeBoundary(
 		tc.Local.LoopbackConnectGranted = true
 		tc.Local.LoopbackConnectPorts = append([]uint16(nil), connectPreflight.Ports...)
 	}
-	ctx = withExecutionApprovalWitness(ctx, executionApprovalWitness{})
 	if err := e.Process.preflightExecutionCapability(ctx, tool, args, &tc); err != nil {
 		return nil, tc, err
 	}
@@ -172,23 +171,13 @@ func (e *Executor) applyPreInvokeBoundary(
 	// Policy, native path resolution, and execution share one request.
 	confReq := e.Boundary.actionConfineRequest(ctx, tc)
 	tc.Files.GrantedWriteRoots = append([]string(nil), confReq.GrantedWriteRoots...)
-	if request != nil && (request.HostExecution || request.ProcessControl || request.CredentialStore) && tc.HasExecutionApproval() {
-		normalized := normalizedPolicyConfineRequestFromParts(
-			confReq,
-			tc.ActiveRootPath(),
-			tc.Direct.DirectIPRequested,
-			tc.Direct.DirectIPAuthorized,
-		)
-		ctx = withExecutionApprovalWitness(ctx, executionApprovalWitness{
-			toolName:        tool,
-			sessionID:       tc.Identity.SessionID,
-			actionID:        tc.EffectActionID(),
-			boundaryDigest:  tools.ExecutionBoundaryDigest(normalized),
-			argsDigest:      policyArgumentsDigest(args),
-			hostExecution:   confReq.HostExecution,
-			processControl:  confReq.ProcessControl,
-			credentialStore: confReq.CredentialStore,
-		})
+	if socketPreflight != nil && socketPreflight.ReviewedApproval != nil {
+		tc.Files.ApprovedFileAccess = append(tc.Files.ApprovedFileAccess, socketPreflight.ReviewedApproval.FileAccess...)
+		tc.RecordCurrentActionReview(args, confReq, socketPreflight.ReviewedAction, socketPreflight.ReviewedApproval)
+	}
+	if directPreflight != nil && directPreflight.ReviewedApproval != nil {
+		tc.Files.ApprovedFileAccess = append(tc.Files.ApprovedFileAccess, directPreflight.ReviewedApproval.FileAccess...)
+		tc.RecordCurrentActionReview(args, confReq, directPreflight.ReviewedAction, directPreflight.ReviewedApproval)
 	}
 	boundaryApproved := (socketPreflight != nil && socketPreflight.ApprovalSatisfied) ||
 		(directPreflight != nil && directPreflight.ApprovalSatisfied) || tc.HasExecutionApproval()
@@ -232,9 +221,10 @@ func (e *Executor) applyPreInvokePolicy(
 		if decision.RequiresApproval && (e.Approvals.approvalGate == nil || e.Approvals.checkpointMgr == nil) {
 			return nil, fmt.Errorf("file change approval checkpoints not configured")
 		}
-		tc.Files.PreparedFileAccess = nil
 		if decision.Approval != nil {
 			tc.Files.PreparedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
+		} else if !boundaryApprovalSatisfied {
+			tc.Files.PreparedFileAccess = nil
 		}
 		return args, nil
 	}
@@ -253,6 +243,7 @@ func (e *Executor) applyPreInvokePolicy(
 		args = runArgs
 		if decision.Approval != nil {
 			tc.Files.ApprovedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
+			tc.RecordCurrentActionReview(args, confReq, proposedActionFromPolicy(policyEval), decision.Approval)
 		}
 	}
 	return args, nil

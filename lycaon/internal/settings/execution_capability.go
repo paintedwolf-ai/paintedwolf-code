@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/gate"
@@ -11,11 +12,17 @@ import (
 
 func (g *RuleApprovalGate) executionCapabilityCovers(action hitl.ProposedAction) bool {
 	capabilities := hitl.ExecutionCapabilitiesForAction(action)
-	if len(capabilities) == 0 || g.grants == nil {
+	if len(capabilities) == 0 {
 		return false
 	}
-	live := g.grants.live(action.Scope.ChatSession())
+	var live []hitl.ApprovalGrant
+	if g.grants != nil {
+		live = g.grants.live(action.Scope.ChatSession())
+	}
 	for _, capability := range capabilities {
+		if slices.Contains(action.Execution.AuthorizedExecutionCapabilities, capability) {
+			continue
+		}
 		covered := false
 		for _, grant := range live {
 			if grant.Predicate.Category != hitl.ApprovalGrantCategoryExecutionCapability || grant.Predicate.Pattern != capability {
