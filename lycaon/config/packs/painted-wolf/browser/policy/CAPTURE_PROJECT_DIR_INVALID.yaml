@@ -12,10 +12,10 @@ when: paintedwolf.rejection_code == "CAPTURE_PROJECT_DIR_INVALID"
 effect: block
 copy:
   what: The host could not resolve project_dir {{ paintedwolf.path }} to an absolute directory.
-  cause: Directory normalization failed for the active workspace.
-  why: Static serve needs a concrete directory under a project root.
-  fix: Check the supplied project-relative directory and current workspace root; retry with an existing accessible
-    directory.
+  cause: Directory normalization failed for the session folder.
+  why: Static serve needs a concrete directory under an attached folder.
+  fix: Check the supplied directory path — bare relative paths resolve in the session folder, or use @label/path;
+    retry with an existing accessible directory.
   instead: Branch on Code CAPTURE_PROJECT_DIR_INVALID; fix project_dir
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:visual_capture

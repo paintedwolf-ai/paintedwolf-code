@@ -14,12 +14,12 @@ requires:
 when: paintedwolf.rejection_code == "SCAN_COMPARE_PROJECT_MISMATCH"
 effect: block
 copy:
-  what: old_scan_id or new_scan_id is not keyed to the session project root.
+  what: old_scan_id or new_scan_id is not keyed to the session folder.
   cause: Scan tools are host-bound — ids from another checkout or project cannot be compared here.
-  why: Compare enforces same canonical_path as the active session project.
-  fix: Use scans belonging to the active project and the intended comparison. Preserve assigned IDs and report
+  why: Compare enforces same canonical_path as this session.
+  fix: Use scans belonging to this session and the intended comparison. Preserve assigned IDs and report
     the mismatch for bound work; choosing another project or arbitrary new scans would change the task.
-  instead: Branch on Code; use scan ids from the active project only
+  instead: Branch on Code; use scan ids from this session only
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:scan_compare
 x-paintedwolf-message: Scan ids must belong to the active project

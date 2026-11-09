@@ -17,5 +17,5 @@ on_error: fail_closed
 status: stable
 copy:
   title: Write outside the workspace
-  what: The call writes to a path that is not under /workspace/.
-  fix: Write inside the workspace, or move the file there deliberately.
+  what: The call writes to a path that is not under the workspace root (/workspace/).
+  fix: Write inside the workspace root, or move the file there deliberately.

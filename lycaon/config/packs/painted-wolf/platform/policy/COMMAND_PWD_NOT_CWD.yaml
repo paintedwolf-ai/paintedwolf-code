@@ -28,5 +28,5 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     command: go mod tidy
-    cwd: /project
-    pwd: /project/subdir
+    cwd: '@app/src'
+    pwd: '@app/src/subdir'

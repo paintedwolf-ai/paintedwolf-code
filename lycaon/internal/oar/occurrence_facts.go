@@ -366,7 +366,6 @@ var occurrenceFactDecls = []factDecl{
 	{"path", oarcore.TypeString, FactTierHost, ""},
 	{"root_label", oarcore.TypeString, FactTierHost, ""},
 	{"root_status", oarcore.TypeString, FactTierHost, ""},
-	{"former_path", oarcore.TypeString, FactTierHost, ""},
 	{"attached_folders", oarcore.TypeListString, FactTierHost, ""},
 	{"port", oarcore.TypeString, FactTierHost, ""},
 	{"paths", oarcore.TypeListString, FactTierHost, ""},

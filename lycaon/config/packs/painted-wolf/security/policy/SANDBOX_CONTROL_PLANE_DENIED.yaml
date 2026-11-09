@@ -16,7 +16,7 @@ copy:
   cause: File and folder approvals do not cover the app's settings, credentials, tool definitions or policy.
   why: The app uses those files to decide what tools may do.
   fix: >-
-    Choose a working folder outside the app's own state. If needed, ask the person
+    Attach a folder outside the app's own state. If needed, ask the person
     to copy or export content into an attached folder. Changes to the app's
     configuration belong in Settings.
   instead: Continue without this path. Ask the person to export needed content or change the app settings.

@@ -10,11 +10,11 @@ requires:
 when: paintedwolf.rejection_code == "WORKER_WORKSPACE_REQUIRED"
 effect: block
 copy:
-  what: The requested worker type requires an attached workspace.
-  cause: The requested work needs a project root, but this session has none.
-  why: A workspace-bound worker cannot safely resolve scope or persist project changes without a root.
-  fix: Attach or select a project workspace before dispatching this worker.
-  instead: Ask the user to attach a root, then dispatch again
+  what: The requested worker type requires an attached project folder.
+  cause: The requested work needs an attached folder, but this session has none.
+  why: A workspace-bound worker cannot safely resolve scope or persist project changes without an attached folder.
+  fix: Attach a project folder, then dispatch this worker again.
+  instead: Ask the user to attach a folder, then dispatch again
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: Worker type requires a workspace

@@ -15,14 +15,14 @@ when: paintedwolf.rejection_code == "CAPTURE_NAVIGATION_DENIED"
 effect: block
 copy:
   what: '{% if paintedwolf.capture_project_escape %}The project_dir path {{ paintedwolf.path }} could not be
-    accessed in the attached workspace.{% else %}Browser navigation was denied{% if paintedwolf.navigation_url
+    accessed in the attached folders.{% else %}Browser navigation was denied{% if paintedwolf.navigation_url
     %} for {{ paintedwolf.navigation_url }}{% endif %}.{% endif %}'
-  cause: '{% if paintedwolf.capture_project_escape %}The directory did not resolve within the permitted workspace.{%
+  cause: '{% if paintedwolf.capture_project_escape %}The directory did not resolve within the attached folders.{%
     else %}A target, redirect, or action crossed the allowed origin or used a forbidden scheme.{% if paintedwolf.navigation_origin
     %} The allowed origin is {{ paintedwolf.navigation_origin }}.{% endif %}{% endif %}'
-  why: Directory access stays within the attached workspace; browser navigation stays within its bound origin.
-  fix: '{% if paintedwolf.capture_project_escape %}Use an accessible project-relative directory in an attached
-    root.{% else %}Use an HTTP(S) loopback target or the supported project_dir mode; keep subsequent navigation
+  why: Directory access stays within the attached folders; browser navigation stays within its bound origin.
+  fix: '{% if paintedwolf.capture_project_escape %}Use an accessible directory in the session folder or another
+    attached folder (@label/path).{% else %}Use an HTTP(S) loopback target or the supported project_dir mode; keep subsequent navigation
     within the bound origin. Inspect the current page before replaying an action that may have triggered navigation.{%
     endif %}'
   instead: Branch on Code CAPTURE_NAVIGATION_DENIED; stay inside the capture origin

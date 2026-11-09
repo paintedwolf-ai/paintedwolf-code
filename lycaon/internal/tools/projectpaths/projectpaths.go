@@ -318,18 +318,24 @@ func resolveHostDataRead(tctx tools.ToolContext, modelPath string) (Resolved, bo
 
 func mapResolveErr(err error, modelPath string) error {
 	if errors.Is(err, sandbox.ErrPathEscape) {
-		return &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": modelPath, "reason": err.Error()}}
+		return surveyPathEscapeReject(modelPath)
 	}
 	switch {
 	case errors.Is(err, projectroot.ErrNoProjectRoots):
 		return noRootsReject()
 	case errors.Is(err, projectroot.ErrPathEscape):
-		return &toolrejection.ToolReject{
-			Code: "SURVEY_PATH_ESCAPE",
-			Data: map[string]any{"path": modelPath, "reason": err.Error()},
-		}
+		return surveyPathEscapeReject(modelPath)
 	default:
 		return err
+	}
+}
+
+// surveyPathEscapeReject names the boundary in fixed copy: the reason never
+// echoes err.Error(), whose payload can carry host absolute paths.
+func surveyPathEscapeReject(modelPath string) error {
+	return &toolrejection.ToolReject{
+		Code: "SURVEY_PATH_ESCAPE",
+		Data: map[string]any{"path": modelPath, "reason": "path escapes the attached folders"},
 	}
 }
 
