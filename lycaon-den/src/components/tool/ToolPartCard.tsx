@@ -1,3 +1,4 @@
+import { Show } from "solid-js";
 import { CommandActivityCard } from "./CommandActivityCard.tsx";
 import type { WorkerTask } from "../../api/types.ts";
 import type { LycaonClient } from "../../api/client.ts";
@@ -29,7 +30,17 @@ type Props = {
 
 /** Route tool parts to specialized or generic cards. */
 export function ToolPartCard(props: Props) {
-  if (props.part.commandActivity || props.part.commandProgram) return <CommandActivityCard {...props} part={commandActivityPart(props.part)} />;
+  return (
+    <Show
+      when={Boolean(props.part.commandActivity || props.part.commandProgram)}
+      fallback={<NonCommandToolPartCard {...props} />}
+    >
+      <CommandActivityCard {...props} part={commandActivityPart(props.part)} />
+    </Show>
+  );
+}
+
+function NonCommandToolPartCard(props: Props) {
   if (isTaskToolPart(props.part)) {
     return (
       <TaskCard

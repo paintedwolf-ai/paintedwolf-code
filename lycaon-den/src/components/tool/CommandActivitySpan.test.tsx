@@ -7,8 +7,8 @@ import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclo
 import { ToolPartShell } from "./ToolPartShell.tsx";
 import { CommandActivitySpan } from "./CommandActivitySpan.tsx";
 
-function entry(id: string, group: string, state: "running" | "completed" = "running"): ActivitySpanEntry {
-  const fact: CommandActivity = { id, group, label: "Read source", subject: "source.rs", state, outcome: state === "running" ? "Running" : "Completed", execution_ids: [id], spans: [] };
+function entry(id: string, group: string, state: "running" | "completed" = "running", phase?: CommandActivity["phase"]): ActivitySpanEntry {
+  const fact: CommandActivity = { id, group, label: "Read source", subject: "source.rs", state, outcome: state === "running" ? "Running" : "Completed", phase, execution_ids: [id], spans: [] };
   const program = { id, state, activities: [fact] } as CommandProgramReceipt;
   return { kind: "tool", part: { id, toolCallId: id, assistantMessageId: "assistant", messageId: "result", tool: "command", kind: "command", status: state === "running" ? "running" : "completed", commandProgram: program } };
 }
@@ -27,4 +27,15 @@ it("preserves group and row elements and expansion while later work arrives", as
   expect(isDisclosureOpen(row)).toBe(true);
   expect(group.getAttribute("data-status")).toBe("running");
   expect(group.querySelector(".den-activity-span-name")?.textContent).toBe("Exploring project files");
+});
+
+it("advances the span label only on a strict rank increase (AT-ACT-HEAD-01)", () => {
+  const [entries, setEntries] = createSignal([entry("read", "Reading files", "completed", "inspect")]);
+  const view = render(() => <CommandActivitySpan label="Running commands" entries={entries()} layout="chat" entryKey="command-groups-rank" renderToolEntry={part => <ToolPartShell part={part()} layout="chat"><span>Recorded detail</span></ToolPartShell>} />);
+  const label = () => view.container.querySelector(".den-activity-span-name")?.textContent;
+  expect(label()).toBe("Reading files");
+  setEntries([entry("read", "Reading files", "completed", "inspect"), entry("search", "Searching codebase", "completed", "inspect")]);
+  expect(label()).toBe("Reading files");
+  setEntries([entry("read", "Reading files", "completed", "inspect"), entry("search", "Searching codebase", "completed", "inspect"), entry("map", "Mapping codebase", "completed", "inspect")]);
+  expect(label()).toBe("Mapping codebase");
 });
