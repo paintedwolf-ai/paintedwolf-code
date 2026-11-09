@@ -99,17 +99,15 @@ function applyRemotePeerEdit(
   mutate: (text: Y.Text) => void,
 ): void {
   const peer = new Y.Doc();
+  peer.clientID = 9999;
   Y.applyUpdate(peer, Y.encodeStateAsUpdate(replica.doc));
-  const before = Y.encodeStateVector(peer);
-  peer.transact(() => {
-    mutate(peer.getText("text"));
-  });
-  const diff = Y.encodeStateAsUpdate(peer, before);
+  mutate(peer.getText("text"));
+  const deltaUpdate = Y.encodeStateAsUpdate(peer, Y.encodeStateVector(replica.doc));
+  peer.destroy();
   replica.receive({
-    type: "editor_document_updated",
-    document: replica.accepted,
-    crdt_update: encodeUpdate(diff),
-    origin_client_id: "remote-peer-client",
+    ...replica.accepted,
+    revision: replica.accepted.revision + 1,
+    crdt_update: encodeUpdate(deltaUpdate),
   });
 }
 
