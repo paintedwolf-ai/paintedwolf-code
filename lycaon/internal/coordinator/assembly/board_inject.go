@@ -234,7 +234,7 @@ func (b *BoardEngine) WorkerBoard(
 	orientationFP := packboard.OrientationFingerprint(*snap)
 	pulseFP := packboard.PulseFingerprint(*snap, now)
 	st, _ := b.state.Load(sess.ID)
-	block, ok := b.renderWorkerBoardBlock(ctx, sess.ID, *snap, packboard.InjectScopeFull, true, false, now, workspacePath)
+	block, ok := b.renderWorkerBoardBlock(ctx, sess.ID, *snap, packboard.InjectScopeFull, true, false, now)
 	if !ok || strings.TrimSpace(block) == "" {
 		return "", false
 	}
@@ -280,10 +280,9 @@ func (b *BoardEngine) renderWorkerBoardBlock(
 	omitDelegation bool,
 	includeScanLegend bool,
 	now time.Time,
-	workspacePath string,
 ) (string, bool) {
 	if inj := b.injects.Load(); inj != nil {
-		rendered, err := inject.RenderWorkerBoardInject(ctx, inj, sessionID, snap, scope, omitDelegation, includeScanLegend, now, workspacePath)
+		rendered, err := inject.RenderWorkerBoardInject(ctx, inj, sessionID, snap, scope, omitDelegation, includeScanLegend, now)
 		if err != nil {
 			return "", false
 		}

@@ -48,7 +48,7 @@ Canvas bounds are 2048 CSS px wide and 4096 CSS px tall. A content fit past the 
 
 ## Project assets
 
-Files under the project root render offline through the reserved origin `http://lycaon.asset/<root-relative-path>` (forward slashes, no `..`). Reference them with `<img src>`, CSS `url()`, `<link rel="stylesheet" href="…">`, or `@import url(…)`. Allowed types: png, jpeg, webp, gif, svg, css. Byte-capped per file and per render; paths under `.git/` are denied; SVG/CSS with scripts or non-asset external references are refused. The render fails fast on the first bad reference instead of drawing a broken image. The result reports `kit.assets.count` and a sample of served paths. Discovery and restyling recipes: [project assets](references/project-assets.md).
+Files in the session folder render offline through the reserved origin `http://lycaon.asset/<session-folder-relative-path>` (forward slashes, no `..`). Reference them with `<img src>`, CSS `url()`, `<link rel="stylesheet" href="…">`, or `@import url(…)`. Allowed types: png, jpeg, webp, gif, svg, css. Byte-capped per file and per render; paths under `.git/` are denied; SVG/CSS with scripts or non-asset external references are refused. The render fails fast on the first bad reference instead of drawing a broken image. The result reports `kit.assets.count` and a sample of served paths. Discovery and restyling recipes: [project assets](references/project-assets.md).
 
 ## Sandbox and limits
 
@@ -68,7 +68,7 @@ The page renders offline with JavaScript disabled. No `<script>`, `<iframe>`, `<
 | `RENDER_HANDLE_CONFLICT` | The handle changed after this call read it (a concurrent patch) | Re-read the handle's current markup and reapply the patch once |
 | `RENDER_PATCH_NOT_FOUND` | `old_string` was not found in the stored markup | Inspect markup or provide exact matching context |
 | `RENDER_PATCH_AMBIGUOUS` | `old_string` matched multiple locations | Add surrounding context to make it unique or set `replace_all: true` |
-| `RENDER_ASSET_NOT_FOUND` | Referenced asset path missing under the project root | Fix the root-relative path or drop the reference |
+| `RENDER_ASSET_NOT_FOUND` | Referenced asset path missing in the session folder | Fix the session-folder-relative path or drop the reference |
 | `RENDER_ASSET_DENIED` | Path escape, `.git/` path, or active/external content in SVG/CSS | Use an allowed path; keep asset SVG/CSS passive and hermetic |
 | `RENDER_ASSET_TYPE` | File is not png/jpeg/webp/gif/svg/css | Reference an allowed image or stylesheet |
 | `RENDER_ASSET_TOO_LARGE` | File or render total over the asset byte caps | Use a smaller export or fewer large assets |
@@ -77,8 +77,8 @@ The page renders offline with JavaScript disabled. No `<script>`, `<iframe>`, `<
 
 - **`handle`**: Session-scoped name (e.g. `handle: "sidebar-nav"`). Passing `handle` and `markup` saves or updates the canvas in session memory.
 - **`old_string` and `new_string`**: Surgically replaces substrings in the stored handle markup without resending the entire document. Set `replace_all: true` to update multiple identical occurrences.
-- **`dest`**: Optional root-relative path (e.g. `dest: "assets/preview.png"`). When omitted, the view renders in-memory as an artifact visible to the agent and the user, leaving the working tree untouched.
+- **`dest`**: Optional session-folder path (e.g. `dest: "assets/preview.png"`). When omitted, the view renders in-memory as an artifact visible to the agent and the user, leaving the working tree untouched.
 
 ## Project brand overlay
 
-An optional `${overlay_dir}/design-kit.css` at the project root is appended after kit CSS on every render. Override `--kit-*` variables there to restyle all token-based markup at once.
+An optional `${overlay_dir}/design-kit.css` in the session folder is appended after kit CSS on every render. Override `--kit-*` variables there to restyle all token-based markup at once.

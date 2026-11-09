@@ -294,7 +294,7 @@ func (m *Service) sessionTouchedPaths(
 func sourceGitLine(roots []projectroot.RootRef, t sourceledger.GitTransition) inject.SourceGitLine {
 	rootLabel := ""
 	for _, root := range roots {
-		if root.ID == t.RootID && !root.IsPrimary && root.Label != "" {
+		if root.ID == t.RootID && root.Label != "" {
 			rootLabel = "@" + root.Label
 		}
 	}

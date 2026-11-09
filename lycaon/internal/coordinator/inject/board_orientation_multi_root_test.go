@@ -38,7 +38,7 @@ func TestRenderBoardOrientationInject_MultiRootNamesBothRoots(t *testing.T) {
 	}
 	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
 	testutil.FailErr(t, "RenderBoardOrientationInject", err)
-	for _, want := range []string{"## lycaon", "## @den", "spans 2 folders", "@<label>/"} {
+	for _, want := range []string{"## @lycaon", "## @den", "spans 2 folders", "@<label>/"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}

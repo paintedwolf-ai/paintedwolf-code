@@ -32,7 +32,7 @@ Deliberate test fixtures, test canaries, and confirmed false positives are ignor
 version: 1
 findings:
   - id: <unique-id>
-    path: <project-relative-path>
+    path: <session-folder-relative-path>
     kind: secret  # optional: secret, sast, or sca
     reason: <why this finding is an expected test fixture or confirmed noise>
 ```

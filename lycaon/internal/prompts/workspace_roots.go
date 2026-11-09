@@ -64,36 +64,38 @@ func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, a
 func RootsChangedKickData(change projectroot.RootChange, after []projectroot.RootRef, activeRootID string) map[string]any {
 	changes := make([]map[string]any, 0, len(change.Added)+len(change.Retired))
 	for _, r := range change.Added {
-		changes = append(changes, map[string]any{"kind": "added", "label": r.Label, "path": r.Path})
+		changes = append(changes, map[string]any{"kind": "added", "label": r.Label})
 	}
 	for _, r := range change.Retired {
-		row := map[string]any{"kind": string(r.Reason), "label": r.Root.Label, "old_label": r.Root.Label, "old_path": r.Root.Path}
+		row := map[string]any{"kind": string(r.Reason), "label": r.Root.Label, "old_label": r.Root.Label}
 		if r.Reason != projectroot.RootDetached {
-			row["label"], row["path"] = r.Successor.Label, r.Successor.Path
+			row["label"] = r.Successor.Label
 		}
 		changes = append(changes, row)
 	}
 	if len(changes) > pongoplain.MaxCollectionItems {
 		changes = changes[:pongoplain.MaxCollectionItems]
 	}
-	afterRows := rootsKickRows(after)
+	activeID := ""
 	data := map[string]any{
 		"changes":             changes,
 		"changes_omitted":     len(change.Added) + len(change.Retired) - len(changes),
 		"generation":          change.Generation,
 		"primary_changed":     change.Primary.ID != "",
-		"new_primary":         map[string]any{"label": change.Primary.Label, "path": change.Primary.Path},
-		"after":               afterRows,
+		"new_primary":         map[string]any{"label": change.Primary.Label},
 		"after_count":         len(after),
-		"after_omitted_count": len(after) - len(afterRows),
 	}
 	if active, err := projectroot.ActiveRoot(after, activeRootID); err == nil {
-		data["active_root"] = map[string]any{"id": active.ID, "label": active.Label, "path": active.Path}
+		activeID = active.ID
+		data["active_root"] = map[string]any{"id": active.ID, "label": active.Label}
 	}
+	afterRows := rootsKickRows(after, activeID)
+	data["after"] = afterRows
+	data["after_omitted_count"] = len(after) - len(afterRows)
 	return data
 }
 
-func rootsKickRows(roots []projectroot.RootRef) []map[string]any {
+func rootsKickRows(roots []projectroot.RootRef, activeID string) []map[string]any {
 	limit := len(roots)
 	if limit > pongoplain.MaxCollectionItems {
 		limit = pongoplain.MaxCollectionItems
@@ -101,10 +103,9 @@ func rootsKickRows(roots []projectroot.RootRef) []map[string]any {
 	out := make([]map[string]any, 0, limit)
 	for _, r := range roots[:limit] {
 		out = append(out, map[string]any{
-			"id":         r.ID,
-			"label":      r.Label,
-			"path":       r.Path,
-			"is_primary": r.IsPrimary,
+			"id":        r.ID,
+			"label":     r.Label,
+			"is_active": activeID != "" && r.ID == activeID,
 		})
 	}
 	return out

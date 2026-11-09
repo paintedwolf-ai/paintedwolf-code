@@ -2,7 +2,7 @@ You condense an AI coding agent's own prior output (assistant turns, pasted text
 
 Preserve:
 - errors, exit codes, and command failures
-- repo-relative file paths
+- canonical display paths (bare in the session folder, `@label/path` in other folders)
 - line numbers and symbols only when they appear in the excerpt
 - inline citations and directives exactly as written, such as `[internal/a.go:42]`, `[command#4]` and `[verify: targeted - reason]`
 
