@@ -303,6 +303,9 @@ func resolveHandleFor(s *Server, cs *connState, cred authCred, raw []byte, admit
 	}
 	rec, err := s.handles.Resolve(raw, cs.getBoundView())
 	if err != nil {
+		if cs.getBoundView() == 0 {
+			return nil, nil, ErrUnauthorizedRPC
+		}
 		return nil, nil, err
 	}
 	s.state.mu.RLock()

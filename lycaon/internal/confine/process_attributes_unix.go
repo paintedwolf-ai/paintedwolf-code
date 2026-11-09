@@ -53,6 +53,8 @@ func applyProcessAttributes(a ProcessAttributes) error {
 	if a.IgnoreHangup {
 		// An ignored disposition survives exec.
 		signal.Ignore(syscall.SIGHUP)
+	} else {
+		signal.Reset(syscall.SIGHUP)
 	}
 	return nil
 }
