@@ -51,6 +51,13 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 		return "", err
 	}
 	rec.Handle = evidence.FormatHandle(rec.Kind, ordinal)
+	// The mint confirms bytes without workspace context; stamp the durable
+	// (root, scope-relative) identity at write time so delivered source
+	// records key citations the same way as every other rooted record.
+	if id := evidence.ResolvePathIdentity(roots, rec.Path); id.ScopeRel != "" {
+		rec.Path = id.ScopeRel
+		rec.RootID = id.RootID
+	}
 	live, err := loadFileBindings(ctx, q, sessionID, roots, rec)
 	if err != nil {
 		return "", err
