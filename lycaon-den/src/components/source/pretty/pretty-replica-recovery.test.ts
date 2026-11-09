@@ -16,6 +16,7 @@ import {
   configurePrettyRecoveryLimitsForTests,
   configurePrettyRecoveryStorageForTests,
   getHistoryRuntimeId,
+  getHistoryRuntimeSequence,
   prettyRecoveryStorageKey,
   PrettyRecoveryCapacityError,
   type PrettyRecoveryStorage,
@@ -155,11 +156,16 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     });
     expect(adapter.pendingConflicts).toHaveLength(0);
 
+    simulatePrettyProcessRestartForTests();
+
     const jsonlMount = await mountPrettyEditor(
       '{"a":1}\n{"b":2}',
       "multi-conflict.jsonl",
       "incarnation-persist-1",
     );
+    const originalRuntimeSeq = getHistoryRuntimeSequence(jsonlMount.replica.history);
+    const originalRuntimeId = getHistoryRuntimeId(jsonlMount.replica.history);
+    expect(originalRuntimeSeq).toBe(1);
     jsonlMount.view.dispatch({
       changes: [
         { from: 2, to: 2, insert: "C1a" },
@@ -196,6 +202,21 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
 
     simulatePrettyProcessRestartForTests();
 
+    const snapForRestart = jsonlMount.fixture.snapshot();
+    snapForRestart.path = "multi-conflict.jsonl";
+    const recreatedReplica = new DocumentReplica(
+      snapForRestart,
+      () => jsonlMount.client,
+      () => undefined,
+      jsonlMount.outbox,
+    );
+    replicas.push(recreatedReplica);
+    await recreatedReplica.initialize();
+    expect(recreatedReplica.incarnation).toBe("incarnation-persist-1");
+    expect(getHistoryRuntimeSequence(recreatedReplica.history)).toBe(originalRuntimeSeq);
+    expect(getHistoryRuntimeId(recreatedReplica.history)).not.toBe(originalRuntimeId);
+    expect(recreatedReplica.currentText).toBe('{"a":1}\n{"b":2}');
+
     const otherIncReplica = new DocumentReplica(
       jsonlMount.fixture.snapshot(),
       () => jsonlMount.client,
@@ -212,22 +233,6 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     adapters.push(otherIncAdapter);
     expect(otherIncAdapter.pendingConflicts).toHaveLength(0);
 
-    const snapForRestart = jsonlMount.fixture.snapshot();
-    snapForRestart.path = "multi-conflict.jsonl";
-    const recreatedReplica = new DocumentReplica(
-      snapForRestart,
-      () => jsonlMount.client,
-      () => undefined,
-      jsonlMount.outbox,
-    );
-    replicas.push(recreatedReplica);
-    await recreatedReplica.initialize();
-    expect(recreatedReplica.incarnation).toBe("incarnation-persist-1");
-    expect(getHistoryRuntimeId(recreatedReplica.history)).not.toBe(
-      getHistoryRuntimeId(jsonlMount.replica.history),
-    );
-    expect(recreatedReplica.currentText).toBe('{"a":1}\n{"b":2}');
-
     const restoredAdapter = new PrettyReplicaEditorAdapter(recreatedReplica, {
       path: "multi-conflict.jsonl",
     });
@@ -242,6 +247,7 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       "C2b",
     ]);
 
+    simulatePrettyProcessRestartForTests();
     const divergedFixture = new DocumentFixture();
     const divergedOutbox = memoryDocumentOutbox();
     const divergedClient = stubClient({
@@ -264,6 +270,8 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     await divergedReplica.initialize();
     divergedReplica.replaceLocal('{"z":999,"a":1}\n{"b":2}');
     await divergedReplica.flush();
+    expect(getHistoryRuntimeSequence(divergedReplica.history)).toBe(originalRuntimeSeq);
+    expect(getHistoryRuntimeId(divergedReplica.history)).not.toBe(originalRuntimeId);
     expect(divergedReplica.history.revision).toBe(
       restoredAdapter.pendingConflicts[0]!.baseHistoryRevision,
     );
@@ -271,6 +279,12 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       path: "multi-conflict.jsonl",
     });
     adapters.push(divergedAdapter);
+    divergedReplica.applyLocalChanges([
+      { from: 8, to: 8, insert: ',"w":1' },
+    ]);
+    expect(divergedReplica.history.revision).toBe(2);
+    expect(divergedAdapter.ringBuffer.entries).toHaveLength(1);
+    expect(divergedAdapter.ringBuffer.entries[0]!.fromHistoryRevision).toBe(1);
     const refusedCrossProcess = divergedAdapter.resolvePendingConflict({
       action: "apply",
       conflictId: divergedAdapter.pendingConflicts[0]!.conflictId,
@@ -280,7 +294,7 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       ok: false,
       status: "chain-unavailable",
     });
-    expect(divergedReplica.currentText).toBe('{"z":999,"a":1}\n{"b":2}');
+    expect(divergedReplica.currentText).toBe('{"z":999,"w":1,"a":1}\n{"b":2}');
     expect(divergedAdapter.pendingConflicts).toHaveLength(2);
 
     const resC1 = restoredAdapter.resolvePendingConflict({
@@ -474,7 +488,7 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     expect(recreatedQuotaReplica.currentText).toBe('{Q1"a":1,"b":2}');
   });
 
-  it("Case 6e: bounds recovery queue count and retained bytes without dropping unresolved input, holds overflow, promotes on resolution, and refuses conflicting edits when overflow is occupied", async () => {
+  it("Case 6e: bounds recovery queue count and retained bytes without dropping unresolved input, supports oversized first records and capacity overflow via copy/apply/partial-discard/promotion, and preserves accurate restart semantics", async () => {
     configurePrettyRecoveryLimitsForTests({ maxRecords: 2, maxRetainedBytes: 256 * 1024 });
     const mount = await mountPrettyEditor(
       '{"a":1}\n{"b":2}\n{"c":3}\n{"d":4}',
@@ -498,6 +512,7 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     triggerConflictInRecord("b", "K2a", "K2b");
     expect(mount.adapter.pendingConflicts).toHaveLength(2);
     expect(mount.adapter.capacityOverflowRecord).toBeNull();
+    expect(mount.adapter.lastBlockedAtCapacityRecord).toBeNull();
     expect(mount.adapter.retainedRecoveryBytes).toBeGreaterThan(0);
 
     triggerConflictInRecord("c", "K3a", "K3b");
@@ -508,6 +523,7 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
         .intentions[0]!.insert,
     ).toBe("K3a");
     expect(mount.adapter.preservationBlocked).toBe(true);
+    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K3a\nK3b");
 
     triggerConflictInRecord("d", "K4a", "K4b");
     expect(mount.adapter.lastAdmissionError).toBeInstanceOf(PrettyRecoveryCapacityError);
@@ -516,6 +532,16 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       (mount.adapter.capacityOverflowRecord?.record as { intentions: Array<{ insert: string }> })
         .intentions[0]!.insert,
     ).toBe("K3a");
+    expect(mount.adapter.lastBlockedAtCapacityRecord?.kind).toBe("conflict");
+    expect(
+      (
+        mount.adapter.lastBlockedAtCapacityRecord?.record as {
+          intentions: Array<{ insert: string }>;
+        }
+      ).intentions[0]!.insert,
+    ).toBe("K4a");
+    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K4a\nK4b");
+    expect(mount.adapter.copyPendingRecovery()?.displayText).toBe("K4a\nK4b");
 
     const rawKeyA = mount.view.state.doc.toString().indexOf('"a":1');
     expect(rawKeyA).toBeGreaterThanOrEqual(0);
@@ -529,9 +555,23 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       action: "discard-conflict",
       conflictId: mount.adapter.pendingConflicts[0]!.conflictId,
     });
-    expect(mount.adapter.capacityOverflowRecord).toBeNull();
     expect(mount.adapter.pendingConflicts).toHaveLength(2);
     expect(mount.adapter.pendingConflicts[1]!.intentions[0]!.insert).toBe("K3a");
+    expect(
+      (mount.adapter.capacityOverflowRecord?.record as { intentions: Array<{ insert: string }> })
+        .intentions[0]!.insert,
+    ).toBe("K4a");
+    expect(mount.adapter.lastBlockedAtCapacityRecord).toBeNull();
+
+    mount.adapter.resolvePendingConflict({
+      action: "discard-conflict",
+      conflictId: mount.adapter.pendingConflicts[0]!.conflictId,
+    });
+    expect(mount.adapter.capacityOverflowRecord).toBeNull();
+    expect(mount.adapter.pendingConflicts).toHaveLength(2);
+    expect(mount.adapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("K3a");
+    expect(mount.adapter.pendingConflicts[1]!.intentions[0]!.insert).toBe("K4a");
+    expect(mount.adapter.preservationBlocked).toBe(false);
 
     const singleRecordBytes = mount.adapter.pendingConflicts[0]!.byteEstimate ?? 400;
     configurePrettyRecoveryLimitsForTests({
@@ -563,5 +603,146 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     });
     expect(byteMount.adapter.pendingConflicts).toHaveLength(1);
     expect(byteMount.adapter.capacityOverflowRecord?.kind).toBe("conflict");
+
+    // Verify restart behavior for unapplied memory-only overflow vs durable pendingConflicts
+    byteMount.adapter.destroy();
+    await byteMount.replica.flush();
+    await byteMount.replica.close();
+    const byteIdx = replicas.indexOf(byteMount.replica);
+    if (byteIdx >= 0) replicas.splice(byteIdx, 1);
+    simulatePrettyProcessRestartForTests();
+
+    const byteSnap = byteMount.fixture.snapshot();
+    byteSnap.path = "byte-cap.jsonl";
+    const recreatedByteReplica = new DocumentReplica(
+      byteSnap,
+      () => byteMount.client,
+      () => undefined,
+      byteMount.outbox,
+    );
+    replicas.push(recreatedByteReplica);
+    await recreatedByteReplica.initialize();
+    const recreatedByteAdapter = new PrettyReplicaEditorAdapter(recreatedByteReplica, {
+      path: "byte-cap.jsonl",
+    });
+    adapters.push(recreatedByteAdapter);
+    expect(recreatedByteAdapter.pendingConflicts).toHaveLength(1);
+    expect(recreatedByteAdapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("B1a");
+    expect(recreatedByteAdapter.capacityOverflowRecord).toBeNull();
+
+    // Individual oversized first record (byteEstimate > maxRetainedBytes when queue is empty):
+    // 1) Accessible via pendingConflict, copyPendingRecovery(), and resolvePendingConflict
+    // 2) Partial intention discard shrinks it below maxRetainedBytes and promotes it to durable pendingConflicts
+    configurePrettyRecoveryLimitsForTests({
+      maxRecords: 64,
+      maxRetainedBytes: singleRecordBytes + 80,
+    });
+    const oversizedMount = await mountPrettyEditor(
+      '{"a":1,"b":2}',
+      "oversized-first.json",
+      "inc-oversized-1",
+    );
+    const oversizedStorageKey = prettyRecoveryStorageKey(
+      oversizedMount.replica.accepted.id,
+      "inc-oversized-1",
+    );
+    const largeChunk = "L".repeat(450);
+    oversizedMount.view.dispatch({
+      changes: [
+        { from: 2, to: 2, insert: largeChunk },
+        { from: 3, to: 3, insert: "S1" },
+      ],
+      userEvent: "input.type",
+    });
+    expect(oversizedMount.adapter.pendingConflicts).toHaveLength(0);
+    expect(oversizedMount.adapter.capacityOverflowRecord?.kind).toBe("conflict");
+    expect(oversizedMount.adapter.pendingConflict?.intentions).toHaveLength(2);
+    expect(oversizedMount.adapter.preservationBlocked).toBe(true);
+    expect(localStorage.getItem(oversizedStorageKey)).toBeNull();
+    const copiedOversized = oversizedMount.adapter.copyPendingRecovery();
+    expect(copiedOversized?.displayText).toBe(`${largeChunk}\nS1`);
+    expect(oversizedMount.adapter.lastCopiedSelection?.displayText).toBe(`${largeChunk}\nS1`);
+
+    const shrinkRes = oversizedMount.adapter.resolvePendingConflict({
+      action: "discard-intention",
+      order: 0,
+    });
+    expect(shrinkRes.ok).toBe(true);
+    expect(oversizedMount.adapter.capacityOverflowRecord).toBeNull();
+    expect(oversizedMount.adapter.pendingConflicts).toHaveLength(1);
+    expect(oversizedMount.adapter.pendingConflicts[0]!.intentions).toHaveLength(1);
+    expect(oversizedMount.adapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("S1");
+    expect(oversizedMount.adapter.preservationBlocked).toBe(false);
+    expect(localStorage.getItem(oversizedStorageKey)).toBeTruthy();
+
+    // Promoted record survives process restart via durable localStorage
+    oversizedMount.adapter.destroy();
+    await oversizedMount.replica.flush();
+    await oversizedMount.replica.close();
+    const ovIdx = replicas.indexOf(oversizedMount.replica);
+    if (ovIdx >= 0) replicas.splice(ovIdx, 1);
+    simulatePrettyProcessRestartForTests();
+
+    const ovSnap = oversizedMount.fixture.snapshot();
+    ovSnap.path = "oversized-first.json";
+    const recreatedOvReplica = new DocumentReplica(
+      ovSnap,
+      () => oversizedMount.client,
+      () => undefined,
+      oversizedMount.outbox,
+    );
+    replicas.push(recreatedOvReplica);
+    await recreatedOvReplica.initialize();
+    const recreatedOvAdapter = new PrettyReplicaEditorAdapter(recreatedOvReplica, {
+      path: "oversized-first.json",
+    });
+    adapters.push(recreatedOvAdapter);
+    expect(recreatedOvAdapter.pendingConflicts).toHaveLength(1);
+    expect(recreatedOvAdapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("S1");
+
+    // 3) Direct apply of an individual oversized first record from capacityOverflowRecord
+    // persists via DocumentReplica's outbox across process restart
+    const directOversizedMount = await mountPrettyEditor(
+      '{"a":1,"b":2}',
+      "oversized-direct.json",
+      "inc-oversized-direct",
+    );
+    directOversizedMount.view.dispatch({
+      changes: [
+        { from: 2, to: 2, insert: largeChunk },
+        { from: 3, to: 3, insert: "S2" },
+      ],
+      userEvent: "input.type",
+    });
+    expect(directOversizedMount.adapter.pendingConflicts).toHaveLength(0);
+    expect(directOversizedMount.adapter.capacityOverflowRecord?.kind).toBe("conflict");
+    const applyOversizedRes = directOversizedMount.adapter.resolvePendingConflict({
+      action: "apply",
+      order: 0,
+      discardRemainingIntentions: true,
+    });
+    expect(applyOversizedRes.ok).toBe(true);
+    expect(directOversizedMount.adapter.capacityOverflowRecord).toBeNull();
+    expect(directOversizedMount.adapter.preservationBlocked).toBe(false);
+    expect(directOversizedMount.replica.currentText).toBe(`{${largeChunk}"a":1,"b":2}`);
+
+    directOversizedMount.adapter.destroy();
+    await directOversizedMount.replica.flush();
+    await directOversizedMount.replica.close();
+    const dirIdx = replicas.indexOf(directOversizedMount.replica);
+    if (dirIdx >= 0) replicas.splice(dirIdx, 1);
+    simulatePrettyProcessRestartForTests();
+
+    const dirSnap = directOversizedMount.fixture.snapshot();
+    dirSnap.path = "oversized-direct.json";
+    const recreatedDirReplica = new DocumentReplica(
+      dirSnap,
+      () => directOversizedMount.client,
+      () => undefined,
+      directOversizedMount.outbox,
+    );
+    replicas.push(recreatedDirReplica);
+    await recreatedDirReplica.initialize();
+    expect(recreatedDirReplica.currentText).toBe(`{${largeChunk}"a":1,"b":2}`);
   });
 });

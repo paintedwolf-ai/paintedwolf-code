@@ -82,6 +82,7 @@ export interface PrettyDocumentRecoveryState {
   rawSegmentRanges: PrettyRawRange[];
   retainedBytes: number;
   capacityOverflowRecord: PrettyRecoveryOverflowEntry | null;
+  lastBlockedAtCapacityRecord: PrettyRecoveryOverflowEntry | null;
   preservationBlocked: boolean;
   storageReadBlocked: boolean;
   storageFormatBlocked: boolean;
@@ -125,15 +126,18 @@ export type PrettyRecoveryAppendResult<T> =
   | {
       readonly status: "refused-at-capacity";
       readonly error: PrettyRecoveryCapacityError;
+      readonly record: T;
     };
 
 export const PRETTY_RECOVERY_STORAGE_PREFIX = "painted-wolf:pretty-recovery:v1:";
 export const DEFAULT_PRETTY_MAX_RECOVERY_RECORDS = 64;
 export const DEFAULT_PRETTY_MAX_RECOVERY_BYTES = 256 * 1024;
+export const MAX_IN_MEMORY_RECOVERY_RECORD_BYTES = 4 * 1024 * 1024;
 
 let nextRecoveryRecordSequence = 0;
 let nextHistoryRuntimeSequence = 0;
-const historyRuntimeIds = new WeakMap<object, string>();
+let historyRuntimeIds = new WeakMap<object, string>();
+let historyRuntimeSequences = new WeakMap<object, number>();
 const utf8Encoder = new TextEncoder();
 
 let activeLimits: PrettyRecoveryLimits = {
@@ -157,10 +161,37 @@ export function getPrettyRecoveryLimits(): PrettyRecoveryLimits {
 export function getHistoryRuntimeId(historyInstance: object): string {
   let id = historyRuntimeIds.get(historyInstance);
   if (!id) {
-    id = `runtime-${++nextHistoryRuntimeSequence}`;
+    const seq = ++nextHistoryRuntimeSequence;
+    id = `runtime-${seq}-${crypto.randomUUID()}`;
     historyRuntimeIds.set(historyInstance, id);
+    historyRuntimeSequences.set(historyInstance, seq);
   }
   return id;
+}
+
+export function getHistoryRuntimeSequence(historyInstance: object): number {
+  getHistoryRuntimeId(historyInstance);
+  return historyRuntimeSequences.get(historyInstance) ?? 0;
+}
+
+export function formatRecoverySelectionSnapshot(
+  record: PrettyPendingConflictRecord | PrettyPendingStaleEdit,
+): { readonly displayText: string; readonly rawText: string } {
+  const displayText = record.intentions.map((i) => i.insert).join("\n");
+  const rawText = JSON.stringify({
+    id: "conflictId" in record ? record.conflictId : record.staleEditId,
+    documentId: record.documentId,
+    reason: record.reason,
+    intentions: record.intentions.map((i) => ({
+      order: i.order,
+      dispFrom: i.dispFrom,
+      dispTo: i.dispTo,
+      rawFrom: i.rawFrom,
+      rawTo: i.rawTo,
+      insert: i.insert,
+    })),
+  });
+  return { displayText, rawText };
 }
 
 export function computeRawTextFingerprint(rawText: string): string {
@@ -291,6 +322,7 @@ function createEmptyRecoveryState(
     rawSegmentRanges: [],
     retainedBytes: 0,
     capacityOverflowRecord: null,
+    lastBlockedAtCapacityRecord: null,
     preservationBlocked: false,
     storageReadBlocked: false,
     storageFormatBlocked: false,
@@ -405,6 +437,7 @@ function parsePersistedRecoveryState(
       })),
       retainedBytes: 0,
       capacityOverflowRecord: null,
+      lastBlockedAtCapacityRecord: null,
       preservationBlocked: false,
       storageReadBlocked: false,
       storageFormatBlocked: false,
@@ -525,7 +558,8 @@ export function persistPrettyDocumentRecoveryState(
       storage.setItem(storageKey, payload);
       trackedStorageKeys.add(storageKey);
     }
-    state.preservationBlocked = state.capacityOverflowRecord !== null;
+    state.preservationBlocked =
+      state.capacityOverflowRecord !== null || state.lastBlockedAtCapacityRecord !== null;
     state.lastStorageError = null;
     return { ok: true };
   } catch (cause) {
@@ -549,15 +583,19 @@ export function recomputeRecoveryRawSegmentRanges(
   for (const stale of state.pendingStaleEdits) {
     ranges.push({ srcFrom: stale.rebasedCursorOffset, srcTo: stale.rebasedCursorOffset });
   }
-  if (state.capacityOverflowRecord) {
-    if (state.capacityOverflowRecord.kind === "conflict") {
-      for (const r of state.capacityOverflowRecord.record.affectedRawRanges) {
+  for (const overflow of [state.capacityOverflowRecord, state.lastBlockedAtCapacityRecord]) {
+    if (!overflow) continue;
+    if (overflow.kind === "conflict") {
+      for (const r of overflow.record.affectedRawRanges) {
         ranges.push({ srcFrom: r.srcFrom, srcTo: r.srcTo });
       }
     } else {
-      const off = state.capacityOverflowRecord.record.rebasedCursorOffset;
+      const off = overflow.record.rebasedCursorOffset;
       ranges.push({ srcFrom: off, srcTo: off });
     }
+  }
+  if (state.lastBlockedAtCapacityRecord !== null) {
+    ranges.push({ srcFrom: 0, srcTo: Number.MAX_SAFE_INTEGER });
   }
   for (const r of extraRanges) {
     ranges.push({ srcFrom: r.srcFrom, srcTo: r.srcTo });
@@ -568,23 +606,37 @@ export function recomputeRecoveryRawSegmentRanges(
 export function promoteOverflowRecordIfPossible(
   recovery: PrettyDocumentRecoveryState,
 ): boolean {
-  const overflow = recovery.capacityOverflowRecord;
-  if (!overflow) return false;
-  const totalCount = recovery.pendingConflicts.length + recovery.pendingStaleEdits.length;
-  if (
-    totalCount >= activeLimits.maxRecords ||
-    recovery.retainedBytes + overflow.bytes > activeLimits.maxRetainedBytes
-  ) {
-    return false;
+  let promotedAny = false;
+  if (recovery.capacityOverflowRecord === null && recovery.lastBlockedAtCapacityRecord !== null) {
+    recovery.capacityOverflowRecord = recovery.lastBlockedAtCapacityRecord;
+    recovery.lastBlockedAtCapacityRecord = null;
   }
-  recovery.capacityOverflowRecord = null;
-  if (overflow.kind === "conflict") {
-    recovery.pendingConflicts.push(overflow.record);
-  } else {
-    recovery.pendingStaleEdits.push(overflow.record);
+  while (recovery.capacityOverflowRecord !== null) {
+    const overflow = recovery.capacityOverflowRecord;
+    overflow.record.byteEstimate = undefined;
+    const measuredBytes = estimateRecoveryRecordBytes(overflow.record);
+    const totalCount = recovery.pendingConflicts.length + recovery.pendingStaleEdits.length;
+    if (
+      totalCount >= activeLimits.maxRecords ||
+      recovery.retainedBytes + measuredBytes > activeLimits.maxRetainedBytes
+    ) {
+      recovery.capacityOverflowRecord =
+        overflow.kind === "conflict"
+          ? { kind: "conflict", record: overflow.record, bytes: measuredBytes }
+          : { kind: "stale-edit", record: overflow.record, bytes: measuredBytes };
+      break;
+    }
+    recovery.capacityOverflowRecord = recovery.lastBlockedAtCapacityRecord;
+    recovery.lastBlockedAtCapacityRecord = null;
+    if (overflow.kind === "conflict") {
+      recovery.pendingConflicts.push(overflow.record);
+    } else {
+      recovery.pendingStaleEdits.push(overflow.record);
+    }
+    recovery.retainedBytes += measuredBytes;
+    promotedAny = true;
   }
-  recovery.retainedBytes += overflow.bytes;
-  return true;
+  return promotedAny;
 }
 
 export function appendMultiCursorConflictToRecovery(
@@ -597,14 +649,8 @@ export function appendMultiCursorConflictToRecovery(
   conflict: PrettyAmbiguousMultiCursorConflict,
   affectedRawRanges: readonly PrettyRawRange[],
 ): PrettyRecoveryAppendResult<PrettyPendingConflictRecord> {
-  if (recovery.capacityOverflowRecord !== null) {
-    return {
-      status: "refused-at-capacity",
-      error: new PrettyRecoveryCapacityError(),
-    };
-  }
   const record: PrettyPendingConflictRecord = {
-    conflictId: `conflict-${recovery.documentId}-${recovery.incarnation}-${baseHistoryRevision}-${++nextRecoveryRecordSequence}`,
+    conflictId: `conflict-${recovery.documentId}-${recovery.incarnation}-${baseHistoryRevision}-${++nextRecoveryRecordSequence}-${crypto.randomUUID().slice(0, 8)}`,
     documentId: recovery.documentId,
     baseRuntimeId,
     baseIncarnation,
@@ -623,6 +669,22 @@ export function appendMultiCursorConflictToRecovery(
     })),
   };
   const recordBytes = estimateRecoveryRecordBytes(record);
+  if (recovery.capacityOverflowRecord !== null) {
+    if (recordBytes <= MAX_IN_MEMORY_RECOVERY_RECORD_BYTES) {
+      recovery.lastBlockedAtCapacityRecord = {
+        kind: "conflict",
+        record,
+        bytes: recordBytes,
+      };
+    }
+    recovery.preservationBlocked = true;
+    recomputeRecoveryRawSegmentRanges(recovery);
+    return {
+      status: "refused-at-capacity",
+      error: new PrettyRecoveryCapacityError(),
+      record,
+    };
+  }
   const totalCount = recovery.pendingConflicts.length + recovery.pendingStaleEdits.length;
   if (
     totalCount >= activeLimits.maxRecords ||
@@ -660,14 +722,8 @@ export function appendStaleEditToRecovery(
   mappedChanges: readonly PrettyMappedSourceChange[],
   rebasedCursorOffset: number,
 ): PrettyRecoveryAppendResult<PrettyPendingStaleEdit> {
-  if (recovery.capacityOverflowRecord !== null) {
-    return {
-      status: "refused-at-capacity",
-      error: new PrettyRecoveryCapacityError(),
-    };
-  }
   const staleRecord: PrettyPendingStaleEdit = {
-    staleEditId: `stale-${recovery.documentId}-${recovery.incarnation}-${baseHistoryRevision}-${++nextRecoveryRecordSequence}`,
+    staleEditId: `stale-${recovery.documentId}-${recovery.incarnation}-${baseHistoryRevision}-${++nextRecoveryRecordSequence}-${crypto.randomUUID().slice(0, 8)}`,
     documentId: recovery.documentId,
     baseRuntimeId,
     baseIncarnation,
@@ -689,6 +745,22 @@ export function appendStaleEditToRecovery(
     rebasedCursorOffset,
   };
   const recordBytes = estimateRecoveryRecordBytes(staleRecord);
+  if (recovery.capacityOverflowRecord !== null) {
+    if (recordBytes <= MAX_IN_MEMORY_RECOVERY_RECORD_BYTES) {
+      recovery.lastBlockedAtCapacityRecord = {
+        kind: "stale-edit",
+        record: staleRecord,
+        bytes: recordBytes,
+      };
+    }
+    recovery.preservationBlocked = true;
+    recomputeRecoveryRawSegmentRanges(recovery);
+    return {
+      status: "refused-at-capacity",
+      error: new PrettyRecoveryCapacityError(),
+      record: staleRecord,
+    };
+  }
   const totalCount = recovery.pendingConflicts.length + recovery.pendingStaleEdits.length;
   if (
     totalCount >= activeLimits.maxRecords ||
@@ -713,10 +785,81 @@ export function appendStaleEditToRecovery(
 
 export function simulatePrettyProcessRestartForTests(): void {
   recoveryByKey.clear();
+  nextHistoryRuntimeSequence = 0;
+  nextRecoveryRecordSequence = 0;
+  historyRuntimeIds = new WeakMap<object, string>();
+  historyRuntimeSequences = new WeakMap<object, number>();
+}
+
+export function findConflictRecoveryTarget(
+  recovery: PrettyDocumentRecoveryState,
+  conflictId?: string,
+): { readonly conflict: PrettyPendingConflictRecord; readonly remove: () => void } | null {
+  if (conflictId) {
+    const idx = recovery.pendingConflicts.findIndex((c) => c.conflictId === conflictId);
+    if (idx >= 0) {
+      const conflict = recovery.pendingConflicts[idx]!;
+      return { conflict, remove: () => { recovery.pendingConflicts.splice(idx, 1); } };
+    }
+    if (recovery.capacityOverflowRecord?.kind === "conflict" && recovery.capacityOverflowRecord.record.conflictId === conflictId) {
+      return { conflict: recovery.capacityOverflowRecord.record, remove: () => { recovery.capacityOverflowRecord = null; } };
+    }
+    if (recovery.lastBlockedAtCapacityRecord?.kind === "conflict" && recovery.lastBlockedAtCapacityRecord.record.conflictId === conflictId) {
+      return { conflict: recovery.lastBlockedAtCapacityRecord.record, remove: () => { recovery.lastBlockedAtCapacityRecord = null; } };
+    }
+    return null;
+  }
+  if (recovery.pendingConflicts.length > 0) {
+    const conflict = recovery.pendingConflicts[0]!;
+    return { conflict, remove: () => { const i = recovery.pendingConflicts.indexOf(conflict); if (i >= 0) recovery.pendingConflicts.splice(i, 1); } };
+  }
+  if (recovery.capacityOverflowRecord?.kind === "conflict") {
+    return { conflict: recovery.capacityOverflowRecord.record, remove: () => { recovery.capacityOverflowRecord = null; } };
+  }
+  if (recovery.lastBlockedAtCapacityRecord?.kind === "conflict") {
+    return { conflict: recovery.lastBlockedAtCapacityRecord.record, remove: () => { recovery.lastBlockedAtCapacityRecord = null; } };
+  }
+  return null;
+}
+
+export function removeStaleEditRecoveryTarget(
+  recovery: PrettyDocumentRecoveryState,
+  staleEditId?: string,
+): boolean {
+  if (staleEditId) {
+    const idx = recovery.pendingStaleEdits.findIndex((s) => s.staleEditId === staleEditId);
+    if (idx >= 0) { recovery.pendingStaleEdits.splice(idx, 1); return true; }
+    if (recovery.capacityOverflowRecord?.kind === "stale-edit" && recovery.capacityOverflowRecord.record.staleEditId === staleEditId) {
+      recovery.capacityOverflowRecord = null;
+      return true;
+    }
+    if (recovery.lastBlockedAtCapacityRecord?.kind === "stale-edit" && recovery.lastBlockedAtCapacityRecord.record.staleEditId === staleEditId) {
+      recovery.lastBlockedAtCapacityRecord = null;
+      return true;
+    }
+    return false;
+  }
+  if (recovery.pendingStaleEdits.length > 0) { recovery.pendingStaleEdits.splice(0, 1); return true; }
+  if (recovery.capacityOverflowRecord?.kind === "stale-edit") { recovery.capacityOverflowRecord = null; return true; }
+  if (recovery.lastBlockedAtCapacityRecord?.kind === "stale-edit") { recovery.lastBlockedAtCapacityRecord = null; return true; }
+  return false;
+}
+
+export function findRecoveryCopyCandidate(
+  r: PrettyDocumentRecoveryState,
+  targetId?: string,
+): PrettyPendingConflictRecord | PrettyPendingStaleEdit | undefined {
+  const candidates: Array<PrettyPendingConflictRecord | PrettyPendingStaleEdit> = [];
+  if (r.lastBlockedAtCapacityRecord) candidates.push(r.lastBlockedAtCapacityRecord.record);
+  if (r.capacityOverflowRecord) candidates.push(r.capacityOverflowRecord.record);
+  candidates.push(...r.pendingConflicts, ...r.pendingStaleEdits);
+  return targetId
+    ? candidates.find((c) => ("conflictId" in c ? c.conflictId : c.staleEditId) === targetId)
+    : candidates[0];
 }
 
 export function resetPrettyDocumentRecoveryStoreForTests(): void {
-  recoveryByKey.clear();
+  simulatePrettyProcessRestartForTests();
   configurePrettyRecoveryLimitsForTests();
   const storage = activeRecoveryStorage();
   if (storage) {

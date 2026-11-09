@@ -31,6 +31,9 @@ import {
   appendMultiCursorConflictToRecovery,
   appendStaleEditToRecovery,
   computeRawTextFingerprint,
+  findConflictRecoveryTarget,
+  findRecoveryCopyCandidate,
+  formatRecoverySelectionSnapshot,
   getHistoryRuntimeId,
   getPrettyDocumentRecoveryState,
   persistPrettyDocumentRecoveryState,
@@ -43,6 +46,7 @@ import {
   promoteOverflowRecordIfPossible,
   recomputeRecoveryRawSegmentRanges,
   recomputeRecoveryRetainedBytes,
+  removeStaleEditRecoveryTarget,
 } from "./pretty-replica-recovery.ts";
 import { formatPrettyProjection } from "./pretty-segmenter.ts";
 import type {
@@ -201,14 +205,27 @@ export class PrettyReplicaEditorAdapter {
   get isPrettyEnabled(): boolean { return this.prettyEnabled; }
   get isComposing(): boolean { return this.composing || Boolean(this.view?.composing); }
   get pendingConflicts(): readonly PrettyPendingConflictRecord[] { return this.recoveryState().pendingConflicts; }
-  get pendingConflict(): PrettyPendingConflictRecord | null { return this.recoveryState().pendingConflicts[0] ?? null; }
+  get pendingConflict(): PrettyPendingConflictRecord | null {
+    const r = this.recoveryState();
+    if (r.pendingConflicts.length > 0) return r.pendingConflicts[0]!;
+    if (r.capacityOverflowRecord?.kind === "conflict") return r.capacityOverflowRecord.record;
+    if (r.lastBlockedAtCapacityRecord?.kind === "conflict") return r.lastBlockedAtCapacityRecord.record;
+    return null;
+  }
   get pendingStaleEdits(): readonly PrettyPendingStaleEdit[] { return this.recoveryState().pendingStaleEdits; }
-  get pendingStaleEdit(): PrettyPendingStaleEdit | null { return this.recoveryState().pendingStaleEdits[0] ?? null; }
+  get pendingStaleEdit(): PrettyPendingStaleEdit | null {
+    const r = this.recoveryState();
+    if (r.pendingStaleEdits.length > 0) return r.pendingStaleEdits[0]!;
+    if (r.capacityOverflowRecord?.kind === "stale-edit") return r.capacityOverflowRecord.record;
+    if (r.lastBlockedAtCapacityRecord?.kind === "stale-edit") return r.lastBlockedAtCapacityRecord.record;
+    return null;
+  }
   get caretAffinity(): PrettyCaretAffinityState | null { return this.viewCaretAffinity; }
   get preservationBlocked(): boolean { return this.recoveryState().preservationBlocked || this.replica.preservationBlocked; }
   get recoveryStorageError(): DocumentStorageError | null { return this.recoveryState().lastStorageError; }
   get unreadableRecoveryPayload(): string | null { return this.recoveryState().unreadableRawPayload; }
   get capacityOverflowRecord(): PrettyRecoveryOverflowEntry | null { return this.recoveryState().capacityOverflowRecord; }
+  get lastBlockedAtCapacityRecord(): PrettyRecoveryOverflowEntry | null { return this.recoveryState().lastBlockedAtCapacityRecord; }
   get retainedRecoveryBytes(): number { return this.recoveryState().retainedBytes; }
 
   holdViewProjection(hold: boolean): void {
@@ -378,14 +395,12 @@ export class PrettyReplicaEditorAdapter {
 
   resolvePendingConflict(resolution: PrettyConflictResolutionAction): PrettyConflictResolutionResult {
     const recovery = this.recoveryState();
-    const conflict = resolution.conflictId
-      ? recovery.pendingConflicts.find((c) => c.conflictId === resolution.conflictId)
-      : recovery.pendingConflicts[0];
-    if (!conflict) return { ok: false, status: "no-pending-conflict" };
+    const target = findConflictRecoveryTarget(recovery, resolution.conflictId);
+    if (!target) return { ok: false, status: "no-pending-conflict" };
+    const { conflict, remove } = target;
 
     if (resolution.action === "discard-conflict") {
-      const idx = recovery.pendingConflicts.indexOf(conflict);
-      if (idx >= 0) recovery.pendingConflicts.splice(idx, 1);
+      remove();
       const persisted = this.finalizeRecoveryMutation(recovery);
       return {
         ok: true,
@@ -402,10 +417,7 @@ export class PrettyReplicaEditorAdapter {
       const intIdx = conflict.intentions.findIndex((item) => item.order === resolution.order);
       if (intIdx < 0) return { ok: false, status: "invalid-choice" };
       conflict.intentions.splice(intIdx, 1);
-      if (conflict.intentions.length === 0) {
-        const cIdx = recovery.pendingConflicts.indexOf(conflict);
-        if (cIdx >= 0) recovery.pendingConflicts.splice(cIdx, 1);
-      }
+      if (conflict.intentions.length === 0) remove();
       const persisted = this.finalizeRecoveryMutation(recovery);
       return {
         ok: true,
@@ -459,8 +471,7 @@ export class PrettyReplicaEditorAdapter {
 
     const postCommitFingerprint = computeRawTextFingerprint(this.replica.currentText);
     if (resolution.discardRemainingIntentions === true) {
-      const cIdx = recovery.pendingConflicts.indexOf(conflict);
-      if (cIdx >= 0) recovery.pendingConflicts.splice(cIdx, 1);
+      remove();
     } else {
       const remaining: PrettyPendingConflictIntention[] = [];
       for (const sib of conflict.intentions) {
@@ -494,10 +505,7 @@ export class PrettyReplicaEditorAdapter {
         );
       }
       conflict.intentions.splice(0, conflict.intentions.length, ...remaining);
-      if (conflict.intentions.length === 0) {
-        const cIdx = recovery.pendingConflicts.indexOf(conflict);
-        if (cIdx >= 0) recovery.pendingConflicts.splice(cIdx, 1);
-      }
+      if (conflict.intentions.length === 0) remove();
     }
 
     const persisted = this.finalizeRecoveryMutation(recovery);
@@ -514,15 +522,17 @@ export class PrettyReplicaEditorAdapter {
 
   discardPendingStaleEdit(staleEditId?: string): boolean {
     const recovery = this.recoveryState();
-    const idx = staleEditId
-      ? recovery.pendingStaleEdits.findIndex((s) => s.staleEditId === staleEditId)
-      : recovery.pendingStaleEdits.length > 0
-        ? 0
-        : -1;
-    if (idx < 0) return false;
-    recovery.pendingStaleEdits.splice(idx, 1);
+    if (!removeStaleEditRecoveryTarget(recovery, staleEditId)) return false;
     this.finalizeRecoveryMutation(recovery);
     return true;
+  }
+
+  copyPendingRecovery(targetId?: string): { readonly displayText: string; readonly rawText: string } | null {
+    const chosen = findRecoveryCopyCandidate(this.recoveryState(), targetId);
+    if (!chosen) return null;
+    const snap = formatRecoverySelectionSnapshot(chosen);
+    this.lastCopiedSelection = snap;
+    return snap;
   }
 
   startComposition(): void {
@@ -666,9 +676,9 @@ export class PrettyReplicaEditorAdapter {
         this.recoveryState(), baseRuntimeId, this.projectedIncarnation, this.projectedEpoch,
         this.projectedRevision, baseRawFingerprint, mapped.conflict, mapped.affectedRawRanges,
       );
+      this.lastCopiedSelection = formatRecoverySelectionSnapshot(appendRes.record);
       if (appendRes.status === "refused-at-capacity") {
         this.lastAdmissionError = appendRes.error;
-        return [];
       }
       this.projectedRawText = this.replica.currentText;
       this.projectedRevision = this.replica.history.revision;
@@ -706,9 +716,9 @@ export class PrettyReplicaEditorAdapter {
           this.replica.accepted.epoch, this.replica.history.revision,
           rebased.status, displayChanges, mapped.changes, rebased.rebasedCursorOffset,
         );
+        this.lastCopiedSelection = formatRecoverySelectionSnapshot(appendRes.record);
         if (appendRes.status === "refused-at-capacity") {
           this.lastAdmissionError = appendRes.error;
-          return [];
         }
         this.holdProjection = false;
         this.projectedRawText = this.replica.currentText;
