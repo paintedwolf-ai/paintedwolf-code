@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/session"
@@ -66,6 +67,8 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted bool) {
 		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
 	}
 	if mounted {
+		confine.TestingSetAutoConfine(t)
+		t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(branches))
 		selector = workspace.EnforcedWorkspaceSelector()
 		selector.BudgetFor = adapter.ZeroBudget
 	}
