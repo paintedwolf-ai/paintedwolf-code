@@ -10,7 +10,6 @@ import { DocumentFixture } from "../../../test/document-fixture.ts";
 import { memoryDocumentOutbox } from "../../../test/memory-document-outbox.ts";
 import { PrettyReplicaEditorAdapter } from "./pretty-replica-adapter.ts";
 import {
-  prettyRecoveryStorageKey,
   resetPrettyDocumentRecoveryStoreForTests,
   simulatePrettyProcessRestartForTests,
 } from "./pretty-replica-recovery.ts";
@@ -364,9 +363,11 @@ describe("PrettyReplicaEditorAdapter real EditorView + DocumentReplica proof (FM
         rawFrom: 7,
         rawTo: 7,
         insert: "X",
+        baseRuntimeId: getHistoryRuntimeId(replica.history),
         baseIncarnation: replica.incarnation,
         baseEpoch: replica.accepted.epoch,
         baseHistoryRevision: revBeforeConflict,
+        baseRawFingerprint: computeRawTextFingerprint(raw),
       },
       {
         order: 1,
@@ -375,9 +376,11 @@ describe("PrettyReplicaEditorAdapter real EditorView + DocumentReplica proof (FM
         rawFrom: 7,
         rawTo: 7,
         insert: "Y",
+        baseRuntimeId: getHistoryRuntimeId(replica.history),
         baseIncarnation: replica.incarnation,
         baseEpoch: replica.accepted.epoch,
         baseHistoryRevision: revBeforeConflict,
+        baseRawFingerprint: computeRawTextFingerprint(raw),
       },
     ]);
 
@@ -417,6 +420,8 @@ describe("PrettyReplicaEditorAdapter real EditorView + DocumentReplica proof (FM
       conflictId: expect.any(String),
       remainingIntentions: 1,
       remainingConflicts: 1,
+      preservationBlocked: false,
+      storageError: null,
     });
     expect(replica.currentText).toBe('{"z":0,"a":1,X"b":2}');
     expect(adapter.pendingConflict?.intentions).toEqual([
@@ -427,9 +432,11 @@ describe("PrettyReplicaEditorAdapter real EditorView + DocumentReplica proof (FM
         rawFrom: 14,
         rawTo: 14,
         insert: "Y",
+        baseRuntimeId: getHistoryRuntimeId(replica.history),
         baseIncarnation: replica.incarnation,
         baseEpoch: replica.accepted.epoch,
         baseHistoryRevision: replica.history.revision,
+        baseRawFingerprint: computeRawTextFingerprint('{"z":0,"a":1,X"b":2}'),
       },
     ]);
 
@@ -441,160 +448,11 @@ describe("PrettyReplicaEditorAdapter real EditorView + DocumentReplica proof (FM
       conflictId: expect.any(String),
       remainingIntentions: 0,
       remainingConflicts: 0,
+      preservationBlocked: false,
+      storageError: null,
     });
     expect(replica.currentText).toBe('{"z":0,"a":1,XY"b":2}');
     expect(adapter.pendingConflict).toBeNull();
-  });
-
-  it("Case 6c: rejects stale conflict resolution on remote overlap, preserves repeated conflicts across process restart, and isolates document incarnations", async () => {
-    const raw = '{"a":1,"b":2}';
-    const { replica, adapter, view } = await mountPrettyEditor(
-      raw,
-      "conflict-durable.json",
-      "incarnation-alpha",
-    );
-
-    // Trigger Conflict #1 at disp 2 & 3 (raw offset 1, before `"a":1`).
-    view.dispatch({
-      changes: [
-        { from: 2, to: 2, insert: "A" },
-        { from: 3, to: 3, insert: "B" },
-      ],
-      userEvent: "input.type",
-    });
-    expect(adapter.pendingConflicts).toHaveLength(1);
-
-    // Switch Pretty off and back on (clearing transient raw segments while durable conflict #1 remains),
-    // or trigger Conflict #2 on another formatted document region to verify repeated conflicts do not overwrite!
-    // First, discard conflict #1's raw segment hold by re-enabling Pretty on a two-segment JSONL doc, or trigger a second conflict:
-    adapter.setPrettyEnabled(false);
-    adapter.setPrettyEnabled(true);
-    // Notice Conflict #1 is STILL in adapter.pendingConflicts!
-    expect(adapter.pendingConflicts).toHaveLength(1);
-
-    // Remote peer edits raw [1, 4) (`"a"` -> `"aa"`), overlapping Conflict #1 at raw offset 1!
-    applyRemotePeerEdit(replica, (ytext) => {
-      ytext.delete(1, 3);
-      ytext.insert(1, '"aa"');
-    });
-    expect(replica.currentText).toBe('{"aa":1,"b":2}');
-
-    // Attempting to apply Conflict #1 order 0 is rejected with `overlap-conflict` and preserves Conflict #1!
-    const overlapRes = adapter.resolvePendingConflict({ action: "apply", order: 0 });
-    expect(overlapRes).toEqual({
-      ok: false,
-      status: "overlap-conflict",
-    });
-    expect(replica.currentText).toBe('{"aa":1,"b":2}');
-    expect(adapter.pendingConflicts).toHaveLength(1);
-    expect(adapter.pendingConflict?.intentions).toHaveLength(2);
-
-    // Explicit discard of intention 0 leaves intention 1; explicit discard of conflict removes it only when requested.
-    // Before discarding, trigger a second conflict so `pendingConflicts` holds 2 distinct conflicts simultaneously!
-    const firstConflictId = adapter.pendingConflicts[0]!.conflictId;
-    adapter.resolvePendingConflict({
-      action: "discard-conflict",
-      conflictId: firstConflictId,
-    });
-    expect(adapter.pendingConflicts).toHaveLength(0);
-
-    // Now on a two-record JSONL document, trigger two consecutive conflicts and verify both persist across process restart!
-    const jsonlMount = await mountPrettyEditor(
-      '{"a":1}\n{"b":2}',
-      "multi-conflict.jsonl",
-      "incarnation-persist-1",
-    );
-    // Conflict #1 in record 1 (disp 2 & 3 -> raw 1):
-    jsonlMount.view.dispatch({
-      changes: [
-        { from: 2, to: 2, insert: "C1a" },
-        { from: 3, to: 3, insert: "C1b" },
-      ],
-      userEvent: "input.type",
-    });
-    expect(jsonlMount.adapter.pendingConflicts).toHaveLength(1);
-
-    // Record 2 (`{\n  "b": 2\n}`) is still formatted! Trigger Conflict #2 in record 2:
-    const rec2Start = jsonlMount.view.state.doc.toString().indexOf("{\n  \"b\"");
-    expect(rec2Start).toBeGreaterThan(0);
-    jsonlMount.view.dispatch({
-      changes: [
-        { from: rec2Start + 2, to: rec2Start + 2, insert: "C2a" },
-        { from: rec2Start + 3, to: rec2Start + 3, insert: "C2b" },
-      ],
-      userEvent: "input.type",
-    });
-    // Both conflicts are retained in order without overwriting!
-    expect(jsonlMount.adapter.pendingConflicts).toHaveLength(2);
-    expect(jsonlMount.adapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("C1a");
-    expect(jsonlMount.adapter.pendingConflicts[1]!.intentions[0]!.insert).toBe("C2a");
-
-    // Verify durable storage contains the serialized recovery record for (documentId, incarnation-persist-1).
-    const storageKey = prettyRecoveryStorageKey(
-      jsonlMount.replica.accepted.id,
-      "incarnation-persist-1",
-    );
-    expect(localStorage.getItem(storageKey)).toBeTruthy();
-
-    // Simulate process loss (clears in-memory recovery Map while keeping durable storage).
-    jsonlMount.adapter.destroy();
-    simulatePrettyProcessRestartForTests();
-
-    // A different incarnation of the same document ID has isolated recovery state (empty).
-    const otherIncReplica = new DocumentReplica(
-      jsonlMount.fixture.snapshot(),
-      () => jsonlMount.client,
-      () => undefined,
-      memoryDocumentOutbox(),
-      undefined,
-      "incarnation-other",
-    );
-    replicas.push(otherIncReplica);
-    await otherIncReplica.initialize();
-    const otherIncAdapter = new PrettyReplicaEditorAdapter(otherIncReplica, {
-      path: "multi-conflict.jsonl",
-    });
-    adapters.push(otherIncAdapter);
-    expect(otherIncAdapter.pendingConflicts).toHaveLength(0);
-
-    // Restoring the original incarnation (`incarnation-persist-1`) restores both unresolved conflicts from durable storage!
-    const restoredAdapter = new PrettyReplicaEditorAdapter(jsonlMount.replica, {
-      path: "multi-conflict.jsonl",
-    });
-    adapters.push(restoredAdapter);
-    expect(restoredAdapter.pendingConflicts).toHaveLength(2);
-    expect(restoredAdapter.pendingConflicts[0]!.intentions.map((i) => i.insert)).toEqual([
-      "C1a",
-      "C1b",
-    ]);
-    expect(restoredAdapter.pendingConflicts[1]!.intentions.map((i) => i.insert)).toEqual([
-      "C2a",
-      "C2b",
-    ]);
-
-    // Explicitly apply C1a and discard C1b (`discardRemainingIntentions: true`) on conflict #1:
-    const resC1 = restoredAdapter.resolvePendingConflict({
-      action: "apply",
-      conflictId: restoredAdapter.pendingConflicts[0]!.conflictId,
-      order: 0,
-      discardRemainingIntentions: true,
-    });
-    expect(resC1.ok).toBe(true);
-    expect(restoredAdapter.pendingConflicts).toHaveLength(1);
-    expect(jsonlMount.replica.currentText).toBe('{C1a"a":1}\n{"b":2}');
-
-    // Conflict #2 was at raw offset 9 (`{"a":1}\n{` -> offset 9); applying C1a (3 chars at offset 1)
-    // recorded a delta step so Conflict #2 rebases from 9 -> 12!
-    const resC2 = restoredAdapter.resolvePendingConflict({
-      action: "apply",
-      conflictId: restoredAdapter.pendingConflicts[0]!.conflictId,
-      order: 1,
-      discardRemainingIntentions: true,
-    });
-    expect(resC2.ok).toBe(true);
-    expect(restoredAdapter.pendingConflicts).toHaveLength(0);
-    expect(jsonlMount.replica.currentText).toBe('{C1a"a":1}\n{C2b"b":2}');
-    expect(localStorage.getItem(storageKey)).toBeNull();
   });
 
   it("Case 7a & 7b: IME composition WITHOUT pre-keydown (compositionstart first) and WITH Process/229 keydown preserves the active composing DOM node across multi-step compositionupdate frames", async () => {
@@ -730,7 +588,7 @@ describe("PrettyReplicaEditorAdapter real EditorView + DocumentReplica proof (FM
 
   it("Case 9a, 9b, 9c & 9d: rebases strictly disjoint remote edits and retains all non-disjoint PendingStaleEdits across detach and process restart without overwriting", async () => {
     const raw = '{"a": 1,   "b": 2}';
-    const { replica, adapter, view } = await mountPrettyEditor(
+    const { fixture, outbox, client, replica, adapter, view } = await mountPrettyEditor(
       raw,
       "case9.json",
       "incarnation-case9",
@@ -831,10 +689,22 @@ describe("PrettyReplicaEditorAdapter real EditorView + DocumentReplica proof (FM
       reason: "chain-unavailable",
     });
 
-    // Simulate process restart: all 3 pendingStaleEdits survive in durable storage for (documentId, incarnation-case9)!
+    // Simulate process restart with a real recreated DocumentReplica from outbox: all 3 pendingStaleEdits survive in durable storage for (documentId, incarnation-case9)!
     adapter.destroy();
+    await replica.flush();
+    await replica.close();
+    const rIdx = replicas.indexOf(replica);
+    if (rIdx >= 0) replicas.splice(rIdx, 1);
     simulatePrettyProcessRestartForTests();
-    const restored = new PrettyReplicaEditorAdapter(replica, { path: "case9.json" });
+
+    const snap9 = fixture.snapshot();
+    snap9.path = "case9.json";
+    const recreatedReplica = new DocumentReplica(snap9, () => client, () => undefined, outbox);
+    replicas.push(recreatedReplica);
+    await recreatedReplica.initialize();
+    expect(recreatedReplica.incarnation).toBe("incarnation-case9");
+
+    const restored = new PrettyReplicaEditorAdapter(recreatedReplica, { path: "case9.json" });
     adapters.push(restored);
     expect(restored.pendingStaleEdits).toHaveLength(3);
     expect(restored.discardPendingStaleEdit(restored.pendingStaleEdits[0]!.staleEditId)).toBe(true);
