@@ -47,11 +47,18 @@ func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted bool) {
 		return
 	}
 	root := t.TempDir()
+	source := filepath.Join(root, "source")
+	if parent := os.Getenv("PW_M14_LIFECYCLE_SOURCE_PARENT"); parent != "" {
+		var err error
+		source, err = os.MkdirTemp(parent, "m14-lifecycle-source-")
+		testutil.FailErr(t, "create isolated external source", err)
+		t.Cleanup(func() { testutil.FailErr(t, "remove isolated external source", os.RemoveAll(source)) })
+	}
 	executable, err := os.Executable()
 	testutil.FailErr(t, "test executable", err)
 	for _, phase := range []string{"prepare", "recover-promote"} {
 		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^"+t.Name()+"$", "-test.timeout=2m")
-		cmd.Env = append(os.Environ(), "PW_M14_LIFECYCLE_PHASE="+phase, "PW_M14_LIFECYCLE_ROOT="+root)
+		cmd.Env = append(os.Environ(), "PW_M14_LIFECYCLE_PHASE="+phase, "PW_M14_LIFECYCLE_ROOT="+root, "PW_M14_LIFECYCLE_SOURCE="+source)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%s process failed: %v\n%s", phase, err, output)
 		}
@@ -64,7 +71,10 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted bool) {
 		t.Fatal("missing isolated lifecycle root")
 	}
 	database := testdbfixture.OpenPath(t, filepath.Join(root, "store.db"))
-	source := filepath.Join(root, "source")
+	source := os.Getenv("PW_M14_LIFECYCLE_SOURCE")
+	if source == "" {
+		t.Fatal("missing lifecycle source path")
+	}
 	branches := filepath.Join(testbaseline.DataDir(t, database), "worker-branches")
 	gitManager, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
