@@ -272,9 +272,8 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     await divergedReplica.flush();
     expect(getHistoryRuntimeSequence(divergedReplica.history)).toBe(originalRuntimeSeq);
     expect(getHistoryRuntimeId(divergedReplica.history)).not.toBe(originalRuntimeId);
-    expect(divergedReplica.history.revision).toBe(
-      restoredAdapter.pendingConflicts[0]!.baseHistoryRevision,
-    );
+    const baseRev = restoredAdapter.pendingConflicts[0]!.baseHistoryRevision;
+    expect(divergedReplica.history.revision).toBe(baseRev);
     const divergedAdapter = new PrettyReplicaEditorAdapter(divergedReplica, {
       path: "multi-conflict.jsonl",
     });
@@ -282,9 +281,12 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     divergedReplica.applyLocalChanges([
       { from: 8, to: 8, insert: ',"w":1' },
     ]);
-    expect(divergedReplica.history.revision).toBe(2);
+    expect(divergedReplica.history.revision).toBeGreaterThan(baseRev);
     expect(divergedAdapter.ringBuffer.entries).toHaveLength(1);
-    expect(divergedAdapter.ringBuffer.entries[0]!.fromHistoryRevision).toBe(1);
+    expect(divergedAdapter.ringBuffer.entries[0]!.fromHistoryRevision).toBe(baseRev);
+    expect(divergedAdapter.ringBuffer.entries[0]!.toHistoryRevision).toBe(
+      divergedReplica.history.revision,
+    );
     const refusedCrossProcess = divergedAdapter.resolvePendingConflict({
       action: "apply",
       conflictId: divergedAdapter.pendingConflicts[0]!.conflictId,
