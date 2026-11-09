@@ -168,7 +168,7 @@ func (t *WriteTool) writeText(ctx context.Context, tctx tools.ToolContext, resol
 		return WriteResult{}, err
 	}
 	captureFileEdit(tctx, path, finalContent, before)
-	afterSuccessfulMutation(ctx, tctx, path)
+	afterSuccessfulMutationResolved(ctx, tctx, resolved)
 	return WriteResult{Path: path, Appended: input.Append, InputBytes: len(input.Content), ResultBytes: len(finalContent),
 		Accepted: true, Saved: !landed.editor || landed.saved, HeldVersionID: landed.heldVersionID,
 		PublicationError: landed.publicationError, Note: landed.note(),

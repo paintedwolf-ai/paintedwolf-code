@@ -248,7 +248,7 @@ func restoreAbsentVersion(
 		return "", fmt.Errorf("restore absent state for %s: %w", path, err)
 	}
 	captureFileEdit(tctx, path, "", before)
-	afterSuccessfulMutation(ctx, tctx, path)
+	afterSuccessfulMutationResolved(ctx, tctx, resolved)
 	return fmt.Sprintf("Restored %s to absent state (removed file to match version %s)", path, targetVersionID), nil
 }
 
@@ -288,7 +288,7 @@ func (t *RestoreVersionTool) restoreContent(
 			return "", err
 		}
 		captureFileEdit(tctx, path, finalContent, before)
-		afterSuccessfulMutation(ctx, tctx, path)
+		afterSuccessfulMutationResolved(ctx, tctx, resolved)
 		receipt := fmt.Sprintf("Restored %s to version %s (%d bytes)", path, targetVersionID, len(finalContent))
 		if note := landed.note(); note != "" {
 			receipt += "\n" + note

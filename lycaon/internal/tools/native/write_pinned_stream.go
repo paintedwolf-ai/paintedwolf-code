@@ -53,7 +53,7 @@ func (t *WriteTool) applyPinnedStream(ctx context.Context, input WriteInput, tc 
 		}
 		digest = result.SHA256
 	}
-	afterSuccessfulMutation(ctx, tc, resolved.DisplayPath)
+	afterSuccessfulMutationResolved(ctx, tc, resolved)
 	return WriteResult{Path: resolved.DisplayPath, Appended: input.Append, InputBytes: int(input.SourceBytes), ResultBytes: int(resultBytes),
 		Accepted: true, Saved: true, PublishedSHA256: digest}, nil
 }

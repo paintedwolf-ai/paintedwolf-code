@@ -107,7 +107,7 @@ func (t *MkdirTool) Mkdir(ctx context.Context, in MkdirInput, tctx tools.ToolCon
 		if err != nil {
 			return result, fmt.Errorf("mkdir %s: %w", relPath, err)
 		}
-		afterSuccessfulMutation(ctx, tctx, relSlash)
+		afterSuccessfulMutationResolved(ctx, tctx, resolved)
 	}
 	return result, nil
 }

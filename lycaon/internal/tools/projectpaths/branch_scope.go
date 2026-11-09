@@ -65,8 +65,14 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 	}
 	var root projectroot.RootRef
 	if len(tctx.Source.Roots) > 1 {
-		if _, _, resolveErr := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, displayPath); resolveErr != nil {
-			return Resolved{}, rootResolveErr(tctx, resolveErr, modelPath)
+		// Validate root-scoped branch locations structurally against the branch
+		// layout instead of re-resolving the display spelling through the root
+		// grammar. Branch-meta locations (the branch root itself, .git, ...) are
+		// not root-scoped and stay outside this check.
+		if dir, _, _ := strings.Cut(filepath.ToSlash(filepath.Clean(branchRel)), "/"); strings.HasPrefix(dir, "root-") {
+			if _, ok := projectroot.RootForBranchRel(tctx.Source.Roots, branchRel); !ok {
+				return Resolved{}, rootResolveErr(tctx, fmt.Errorf("%w: branch location %q does not match an attached root", projectroot.ErrUnknownRootLabel, modelPath), modelPath)
+			}
 		}
 	}
 	root = projectroot.RootRef{ID: "worker-branch", Path: branch, IsPrimary: true}
