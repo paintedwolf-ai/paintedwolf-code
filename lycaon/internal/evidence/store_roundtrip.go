@@ -7,6 +7,10 @@ type RecordAux struct {
 	URLTitles    map[string]string
 	GrepLines    map[string]map[int]string
 	PathTiers    map[string]string
+	// PathRoots maps a stored path key to its owning root ID for keys whose
+	// root differs from the record's primary RootID; empty values mark
+	// legacy tokens.
+	PathRoots map[string]string
 }
 
 // CloneRecordForStore copies auxiliary index fields for persistence.
@@ -16,6 +20,7 @@ func CloneRecordForStore(rec Record) RecordAux {
 		PathsTouched: append([]string(nil), cloned.pathsTouched...),
 		URLsTouched:  append([]string(nil), cloned.urlsTouched...),
 		URLTitles:    cloned.urlTitles,
+		PathRoots:    cloned.pathRoots,
 	}
 	if cloned.grepLines != nil {
 		out.GrepLines = make(map[string]map[int]string, len(cloned.grepLines))
@@ -61,6 +66,12 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		rec.pathTiers = make(map[string]string, len(aux.PathTiers))
 		for path, tier := range aux.PathTiers {
 			rec.pathTiers[NormalizeLedgerPath(path)] = tier
+		}
+	}
+	if aux.PathRoots != nil {
+		rec.pathRoots = make(map[string]string, len(aux.PathRoots))
+		for path, rootID := range aux.PathRoots {
+			rec.pathRoots[NormalizeLedgerPath(path)] = rootID
 		}
 	}
 }

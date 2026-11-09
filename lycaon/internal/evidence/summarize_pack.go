@@ -54,7 +54,7 @@ type summarizePackCallSiteWire struct {
 // populateSummarizePackRecord indexes summarize pack material on the parent tool
 // record so pack-only responses (empty anchors[]) still admit citable paths and a
 // task line for parent-handle citations.
-func populateSummarizePackRecord(projectDir string, rec *Record, content string) {
+func populateSummarizePackRecord(roots CitationRoots, rec *Record, content string) {
 	if rec == nil {
 		return
 	}
@@ -74,10 +74,10 @@ func populateSummarizePackRecord(projectDir string, rec *Record, content string)
 		if id.Kind == summarizeKindDirectoryMap || id.Kind == summarizeKindDirectoryRollup {
 			rec.Survey = true
 		}
-		addRecordPath(projectDir, rec, path, FidelityStructured)
+		addRecordPath(roots, rec, path, FidelityStructured)
 	}
 	for _, cs := range root.Pack.CallSites {
-		indexSummarizeSpan(projectDir, rec, cs.Path, cs.Line, cs.Excerpt)
+		indexSummarizeSpan(roots, rec, cs.Path, cs.Line, cs.Excerpt)
 	}
 	for _, w := range root.Pack.Substance {
 		path := strings.TrimSpace(w.Path)
@@ -89,9 +89,9 @@ func populateSummarizePackRecord(projectDir string, rec *Record, content string)
 			end = w.StartLine
 		}
 		appendLineRange(rec, w.StartLine, end)
-		addRecordPath(projectDir, rec, path, FidelityStructured)
+		addRecordPath(roots, rec, path, FidelityStructured)
 		for _, line := range substanceBodyLines(w.Body) {
-			rel, ok := NormalizeCitationPath(projectDir, path)
+			rel, ok := resolveScopeRel(roots, path)
 			if !ok || line.line <= 0 {
 				continue
 			}
@@ -103,13 +103,13 @@ func populateSummarizePackRecord(projectDir string, rec *Record, content string)
 			continue
 		}
 		excerpt := summarizeSkeletonExcerpt(s, root.Pack.Substance)
-		indexSummarizeSpan(projectDir, rec, s.Path, s.Line, excerpt)
+		indexSummarizeSpan(roots, rec, s.Path, s.Line, excerpt)
 	}
 }
 
 // SummarizePackHighlightRecords builds child highlight records from pack material
 // when anchors[] is empty — parity with anchor minting at evidence commit.
-func SummarizePackHighlightRecords(projectDir, content string) []Record {
+func SummarizePackHighlightRecords(roots CitationRoots, content string) []Record {
 	root, ok := parseSummarizeWire(content)
 	if !ok {
 		return nil
@@ -135,9 +135,10 @@ func SummarizePackHighlightRecords(projectDir, content string) []Record {
 			Fidelity:   FidelityStructured,
 		}
 		rel := path
-		if norm, ok := NormalizeCitationPath(projectDir, path); ok {
-			rec.Path = norm
-			rel = norm
+		if id := ResolvePathIdentity(roots, path); id.ScopeRel != "" {
+			rec.Path = id.ScopeRel
+			rec.RootID = id.RootID
+			rel = id.ScopeRel
 		}
 		rec.addGrepLine(rel, line, excerpt)
 		out = append(out, rec)
@@ -182,17 +183,17 @@ func parseSummarizeWire(content string) (summarizeWireRoot, bool) {
 	return root, true
 }
 
-func indexSummarizeSpan(projectDir string, rec *Record, path string, line int, excerpt string) {
+func indexSummarizeSpan(roots CitationRoots, rec *Record, path string, line int, excerpt string) {
 	path = strings.TrimSpace(path)
 	excerpt = strings.TrimSpace(excerpt)
 	if path == "" {
 		return
 	}
-	addRecordPath(projectDir, rec, path, FidelityStructured)
+	addRecordPath(roots, rec, path, FidelityStructured)
 	if line <= 0 || excerpt == "" {
 		return
 	}
-	rel, ok := NormalizeCitationPath(projectDir, path)
+	rel, ok := resolveScopeRel(roots, path)
 	if !ok {
 		return
 	}

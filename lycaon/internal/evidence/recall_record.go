@@ -16,7 +16,7 @@ type recallPayload struct {
 }
 
 // populateRecallRecord captures recall text and indexes named paths and URLs.
-func populateRecallRecord(projectDir string, rec *Record, content string) {
+func populateRecallRecord(roots CitationRoots, rec *Record, content string) {
 	if rec == nil {
 		return
 	}
@@ -27,7 +27,7 @@ func populateRecallRecord(projectDir string, rec *Record, content string) {
 	}
 	for _, hit := range payload.Hits {
 		if path := strings.TrimSpace(hit.Path); path != "" {
-			addRecordPath(projectDir, rec, path, FidelityStructured)
+			addRecordPath(roots, rec, path, FidelityStructured)
 		}
 		if url := strings.TrimSpace(hit.URL); url != "" {
 			rec.touchURL(url)
