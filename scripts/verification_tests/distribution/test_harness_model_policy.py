@@ -1,12 +1,31 @@
 """Explicit live harness selections must reach every generation role."""
 
+import contextlib
+import io
+import json
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
-from harness.model_policy import configure, select_model
+from harness.model_policy import configure, main, select_model
 
 
 class HarnessModelPolicyTest(unittest.TestCase):
+    def test_cli_sends_project_patch_with_encoded_model(self):
+        responses = [io.BytesIO(b'{"coordinator":{"provider_id":"saved"}}'), io.BytesIO(b'{}')]
+        output = io.StringIO()
+        with patch.dict("os.environ", {"LYCAON_E2E_API_URL": "http://127.0.0.1:1234", "LYCAON_E2E_TOKEN": "fixture"}), \
+                patch("sys.argv", ["model_policy.py", "project id", "", 'model "quoted"']), \
+                patch("urllib.request.urlopen", side_effect=responses) as send, \
+                contextlib.redirect_stdout(output):
+            main()
+        read, write = (call.args[0] for call in send.call_args_list)
+        self.assertEqual(read.method, "GET")
+        self.assertEqual(write.method, "PATCH")
+        self.assertEqual(write.full_url, "http://127.0.0.1:1234/v1/settings/model-policy?project_id=project+id")
+        self.assertEqual(write.get_header("Authorization"), "Bearer fixture")
+        self.assertEqual(json.loads(write.data)["lite"], {"provider_id": "saved", "model": 'model "quoted"'})
+        self.assertEqual(output.getvalue(), "saved\n")
+
     def test_preserves_pool_policy_and_resolves_provider_without_jq(self):
         current = {"coordinator": {"provider_id": "configured", "model": "old"},
                    "agent_pool": {"selection": "random", "models": [{"model": "old"}]},
