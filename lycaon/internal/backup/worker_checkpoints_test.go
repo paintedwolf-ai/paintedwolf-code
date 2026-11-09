@@ -1,12 +1,21 @@
 package backup_test
 
 import (
+	"bytes"
+	"compress/zlib"
+	"crypto/sha1" //nolint:gosec // Git object and pack index format uses SHA-1
+	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"hash/crc32"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -289,29 +298,21 @@ func TestBackupRejectsIncompleteOrCorruptCheckpointGitClosures(t *testing.T) {
 		deltaBlob := strings.TrimSpace(gittest.Run(t, deltaRepo, "rev-parse", "HEAD:large.txt"))
 
 		// Build a thin pack in deltaRepo containing deltaCommit/deltaTree/deltaBlob delta-compressed against baseBlob,
-		// without including baseBlob/baseCommit in the pack.
+		// without including baseBlob/baseCommit in the pack, and synthesize its matching v2 .idx directly (since
+		// file-mode git index-pack refuses unresolved thin deltas unless --fix-thin appends the missing base).
 		dstPackDir := filepath.Join(retainedObjectsDir, "pack")
 		testutil.FailErr(t, "mkdir dstPackDir", os.MkdirAll(dstPackDir, 0o700))
 		packInput := strings.Join([]string{deltaCommit, deltaTree, deltaBlob, "^" + baseCommit, "^" + baseBlob}, "\n") + "\n"
-		thinPackBytes, code, err := gitexec.Run(t.Context(), deltaRepo, []string{"pack-objects", "--stdout", "--thin", "--delta-base-offset"}, gitexec.Opts{
+		thinPackBytes, code, err := gitexec.Run(t.Context(), deltaRepo, []string{"pack-objects", "--stdout", "--thin"}, gitexec.Opts{
 			Profile: gitexec.ProfileHermetic,
 			Input:   []byte(packInput),
 		})
 		if err != nil || code != 0 {
 			t.Fatalf("git pack-objects --stdout --thin failed (exit %d): %v (%s)", code, err, thinPackBytes)
 		}
-		tmpPack := filepath.Join(deltaRepo, "pack-thin.pack")
-		tmpIdx := filepath.Join(deltaRepo, "pack-thin.idx")
-		testutil.FailErr(t, "write tmpPack", os.WriteFile(tmpPack, thinPackBytes, 0o600))
-		if out, code, err := gitexec.Run(t.Context(), deltaRepo, []string{"index-pack", "-o", tmpIdx, tmpPack}, gitexec.Opts{
-			Profile: gitexec.ProfileHermetic,
-		}); err != nil || code != 0 {
-			t.Fatalf("git index-pack failed (exit %d): %v (%s)", code, err, out)
-		}
+		idxBytes := buildPackIndexV2ForThinPack(t, thinPackBytes, deltaBlob)
 		const packBase = "pack-0123456789abcdef0123456789abcdef01234567"
 		testutil.FailErr(t, "install thin .pack", os.WriteFile(filepath.Join(dstPackDir, packBase+".pack"), thinPackBytes, 0o444))
-		idxBytes, err := os.ReadFile(tmpIdx)
-		testutil.FailErr(t, "read tmpIdx", err)
 		testutil.FailErr(t, "install thin .idx", os.WriteFile(filepath.Join(dstPackDir, packBase+".idx"), idxBytes, 0o444))
 
 		writeCheckpointManifestAndMeta(t, fx, checkpoint.PrivateGitSnapshot{
@@ -416,4 +417,111 @@ func findSinglePackBase(t *testing.T, packDir string) string {
 	}
 	t.Fatalf("no .pack file found in %s", packDir)
 	return ""
+}
+
+func buildPackIndexV2ForThinPack(t *testing.T, packBytes []byte, refDeltaOIDHex string) []byte {
+	t.Helper()
+	if len(packBytes) < 32 || string(packBytes[:4]) != "PACK" || binary.BigEndian.Uint32(packBytes[4:8]) != 2 {
+		t.Fatalf("invalid v2 pack header (len=%d)", len(packBytes))
+	}
+	numObjects := int(binary.BigEndian.Uint32(packBytes[8:12]))
+	end := len(packBytes) - 20
+	pos := 12
+
+	type idxEntry struct {
+		oid    [20]byte
+		crc    uint32
+		offset uint32
+	}
+	entries := make([]idxEntry, 0, numObjects)
+	for i := 0; i < numObjects; i++ {
+		entryStart := pos
+		b := packBytes[pos]
+		pos++
+		objType := (b >> 4) & 0x07
+		for (b & 0x80) != 0 {
+			b = packBytes[pos]
+			pos++
+		}
+		switch objType {
+		case 7: // OBJ_REF_DELTA: 20-byte base SHA-1
+			pos += 20
+		case 6: // OBJ_OFS_DELTA: variable-length negative offset
+			b = packBytes[pos]
+			pos++
+			for (b & 0x80) != 0 {
+				b = packBytes[pos]
+				pos++
+			}
+		}
+		br := bytes.NewReader(packBytes[pos:end])
+		zr, err := zlib.NewReader(br)
+		testutil.FailErr(t, "zlib.NewReader thin pack entry", err)
+		inflated, err := io.ReadAll(zr)
+		testutil.FailErr(t, "io.ReadAll thin pack entry", err)
+		testutil.FailErr(t, "zr.Close", zr.Close())
+		pos += len(packBytes[pos:end]) - br.Len()
+		entryEnd := pos
+
+		var oid [20]byte
+		if objType == 6 || objType == 7 {
+			rawOID, dErr := hex.DecodeString(refDeltaOIDHex)
+			testutil.FailErr(t, "decode refDeltaOIDHex", dErr)
+			copy(oid[:], rawOID)
+		} else {
+			var typeName string
+			switch objType {
+			case 1:
+				typeName = "commit"
+			case 2:
+				typeName = "tree"
+			case 3:
+				typeName = "blob"
+			case 4:
+				typeName = "tag"
+			default:
+				t.Fatalf("unexpected git pack object type %d", objType)
+			}
+			h := sha1.New() //nolint:gosec // Git object ID uses SHA-1
+			_, _ = fmt.Fprintf(h, "%s %d\x00", typeName, len(inflated))
+			_, _ = h.Write(inflated)
+			copy(oid[:], h.Sum(nil))
+		}
+		entries = append(entries, idxEntry{
+			oid:    oid,
+			crc:    crc32.ChecksumIEEE(packBytes[entryStart:entryEnd]),
+			offset: uint32(entryStart),
+		})
+	}
+	if pos != end {
+		t.Fatalf("thin pack parse ended at byte %d, want %d", pos, end)
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return bytes.Compare(entries[i].oid[:], entries[j].oid[:]) < 0
+	})
+
+	var buf bytes.Buffer
+	_, _ = buf.Write([]byte{0xff, 't', 'O', 'c', 0, 0, 0, 2})
+	for b := 0; b < 256; b++ {
+		var count uint32
+		for _, e := range entries {
+			if int(e.oid[0]) <= b {
+				count++
+			}
+		}
+		_ = binary.Write(&buf, binary.BigEndian, count)
+	}
+	for _, e := range entries {
+		_, _ = buf.Write(e.oid[:])
+	}
+	for _, e := range entries {
+		_ = binary.Write(&buf, binary.BigEndian, e.crc)
+	}
+	for _, e := range entries {
+		_ = binary.Write(&buf, binary.BigEndian, e.offset)
+	}
+	_, _ = buf.Write(packBytes[end:])
+	idxSum := sha1.Sum(buf.Bytes()) //nolint:gosec // Git pack index trailer is SHA-1
+	_, _ = buf.Write(idxSum[:])
+	return buf.Bytes()
 }

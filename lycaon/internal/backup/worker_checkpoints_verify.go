@@ -60,6 +60,7 @@ func validateWorkerCheckpoints(ctx context.Context, snapshot db.DBTX, files map[
 		return err
 	}
 
+	visited := make(map[string]bool)
 	for _, root := range roots {
 		metaRel := root + ".meta/state.json"
 		metaSrc, ok := files[metaRel]
@@ -81,7 +82,7 @@ func validateWorkerCheckpoints(ctx context.Context, snapshot db.DBTX, files map[
 			}
 			continue
 		}
-		if err := verifyCheckpointChainInFiles(ctx, root, cid, files, map[string]bool{}); err != nil {
+		if err := verifyCheckpointChainInFiles(ctx, root, cid, files, visited); err != nil {
 			return err
 		}
 	}
@@ -109,10 +110,11 @@ func verifyCheckpointChainInFiles(ctx context.Context, branchRel, checkpointID s
 	if checkpointID == "" {
 		return &InvalidError{Detail: "worker metadata names an empty checkpoint id"}
 	}
-	if visited[checkpointID] {
+	visitKey := branchProjKey(branchRel) + "\x00" + checkpointID
+	if visited[visitKey] {
 		return nil
 	}
-	visited[checkpointID] = true
+	visited[visitKey] = true
 
 	storePrefix, m, err := findCheckpointManifestInFiles(checkpointID, files)
 	if err != nil {

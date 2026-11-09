@@ -276,14 +276,23 @@ func verifyCheckpointGitClosureOnDisk(ctx context.Context, configDir, branchRel,
 	}
 	files := make(map[string]archiveSource)
 	for _, item := range diskDirs {
-		_ = filepath.WalkDir(item.dir, func(path string, entry fs.DirEntry, walkErr error) error {
-			if walkErr != nil || entry.IsDir() {
+		walkErr := filepath.WalkDir(item.dir, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				if path == item.dir && os.IsNotExist(err) {
+					return nil
+				}
+				return err
+			}
+			if entry.IsDir() {
 				return nil
 			}
 			rel, rErr := filepath.Rel(item.dir, path)
+			if rErr != nil {
+				return rErr
+			}
 			info, iErr := entry.Info()
-			if rErr != nil || iErr != nil {
-				return nil
+			if iErr != nil {
+				return iErr
 			}
 			kind := fileKindRegular
 			if info.Mode()&os.ModeSymlink != 0 {
@@ -292,6 +301,9 @@ func verifyCheckpointGitClosureOnDisk(ctx context.Context, configDir, branchRel,
 			files[item.prefix+"/"+filepath.ToSlash(rel)] = archiveSource{path: path, kind: kind, mode: info.Mode().Perm()}
 			return nil
 		})
+		if walkErr != nil {
+			return walkErr
+		}
 	}
 	return verifyCheckpointGitClosureInFiles(ctx, branchRel, syntheticStorePrefix, checkpointID, pg, files)
 }

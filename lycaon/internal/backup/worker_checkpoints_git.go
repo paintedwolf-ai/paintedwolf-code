@@ -3,17 +3,100 @@ package backup
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 )
+
+var (
+	verifiedGitClosureMu    sync.Mutex
+	verifiedGitClosureByKey = make(map[string]string)
+	verifiedGitClosureSet   = make(map[string]struct{})
+)
+
+const maxVerifiedGitClosureCacheEntries = 512
+
+func computeGitClosureCacheFingerprints(branchRel, storePrefix, checkpointID string, requiredOIDs, requiredPacks, prefixes []string, files map[string]archiveSource) (string, string, bool) {
+	var matchingRels []string
+	var storeRoots []string
+	seenRoots := make(map[string]bool)
+	for _, pfx := range prefixes {
+		prefixSlash := pfx + "/"
+		for rel, src := range files {
+			if !strings.HasPrefix(rel, prefixSlash) {
+				continue
+			}
+			matchingRels = append(matchingRels, rel)
+			suffix := filepath.FromSlash(rel)
+			if cleaned := filepath.Clean(src.path); strings.HasSuffix(cleaned, suffix) {
+				root := filepath.Clean(strings.TrimSuffix(cleaned, suffix))
+				if realRoot, err := filepath.EvalSymlinks(root); err == nil {
+					root = realRoot
+				}
+				if !seenRoots[root] {
+					seenRoots[root] = true
+					storeRoots = append(storeRoots, root)
+				}
+			}
+		}
+	}
+	sort.Strings(matchingRels)
+	sort.Strings(storeRoots)
+
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "proj:%s\x00prefix:%s\x00cp:%s\x00", branchProjKey(branchRel), storePrefix, checkpointID)
+	for _, oid := range requiredOIDs {
+		_, _ = fmt.Fprintf(h, "oid:%s\x00", oid)
+	}
+	for _, pack := range requiredPacks {
+		_, _ = fmt.Fprintf(h, "pack:%s\x00", pack)
+	}
+	for _, rel := range matchingRels {
+		src := files[rel]
+		if src.kind != fileKindRegular {
+			return "", "", false
+		}
+		sum, size, err := sha256File(src.path)
+		if err != nil {
+			return "", "", false
+		}
+		_, _ = fmt.Fprintf(h, "file:%s:%d:%s\x00", rel, size, sum)
+	}
+	digest := hex.EncodeToString(h.Sum(nil))
+	storeKey := strings.Join(storeRoots, "|") + "\x00" + branchProjKey(branchRel) + "\x00" + checkpointID
+	return storeKey, digest, true
+}
+
+func checkVerifiedGitClosureCache(storeKey, digest string) bool {
+	verifiedGitClosureMu.Lock()
+	defer verifiedGitClosureMu.Unlock()
+	if prev, ok := verifiedGitClosureByKey[storeKey]; ok && prev == digest {
+		return true
+	}
+	_, ok := verifiedGitClosureSet[digest]
+	return ok
+}
+
+func recordVerifiedGitClosureCache(storeKey, digest string) {
+	verifiedGitClosureMu.Lock()
+	defer verifiedGitClosureMu.Unlock()
+	if len(verifiedGitClosureSet) >= maxVerifiedGitClosureCacheEntries {
+		clear(verifiedGitClosureByKey)
+		clear(verifiedGitClosureSet)
+	}
+	verifiedGitClosureByKey[storeKey] = digest
+	verifiedGitClosureSet[digest] = struct{}{}
+}
 
 func checkpointGitObjectPrefixes(branchRel, storePrefix, checkpointID string) []string {
 	prefixes := []string{
@@ -35,6 +118,11 @@ func verifyCheckpointGitClosureInFiles(ctx context.Context, branchRel, storePref
 	if len(requiredOIDs) == 0 && len(requiredPacks) == 0 {
 		return nil
 	}
+	prefixes := checkpointGitObjectPrefixes(branchRel, storePrefix, checkpointID)
+	storeKey, closureDigest, cacheable := computeGitClosureCacheFingerprints(branchRel, storePrefix, checkpointID, requiredOIDs, requiredPacks, prefixes, files)
+	if cacheable && checkVerifiedGitClosureCache(storeKey, closureDigest) {
+		return nil
+	}
 	tmpRepo, err := os.MkdirTemp("", "pw-backup-git-closure-*")
 	if err != nil {
 		return err
@@ -44,7 +132,7 @@ func verifyCheckpointGitClosureInFiles(ctx context.Context, branchRel, storePref
 	if out, code, err := gitexec.Run(ctx, tmpRepo, []string{"init", "--bare", "-q"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err != nil || code != 0 {
 		return &InvalidError{Detail: fmt.Sprintf("initialize git verification repo: %v (%s)", err, strings.TrimSpace(string(out)))}
 	}
-	installedPacks, err := stageClosureObjectsFromFiles(tmpRepo, checkpointGitObjectPrefixes(branchRel, storePrefix, checkpointID), files)
+	installedPacks, err := stageClosureObjectsFromFiles(tmpRepo, prefixes, files)
 	if err != nil {
 		return err
 	}
@@ -67,6 +155,9 @@ func verifyCheckpointGitClosureInFiles(ctx context.Context, branchRel, storePref
 		return &InvalidError{Detail: fmt.Sprintf("git fsck failed for checkpoint %s: %s", checkpointID, strings.TrimSpace(string(out)))}
 	}
 	if len(requiredOIDs) == 0 {
+		if cacheable {
+			recordVerifiedGitClosureCache(storeKey, closureDigest)
+		}
 		return nil
 	}
 	if err := verifyGitOIDsBatchCheck(ctx, tmpRepo, checkpointID, requiredOIDs); err != nil {
@@ -93,7 +184,13 @@ func verifyCheckpointGitClosureInFiles(ctx context.Context, branchRel, storePref
 			}
 		}
 	}
-	return verifyGitOIDsBatchCheck(ctx, tmpRepo, checkpointID, reachable)
+	if err := verifyGitOIDsBatchCheck(ctx, tmpRepo, checkpointID, reachable); err != nil {
+		return err
+	}
+	if cacheable {
+		recordVerifiedGitClosureCache(storeKey, closureDigest)
+	}
+	return nil
 }
 
 func stageClosureObjectsFromFiles(tmpRepo string, prefixes []string, files map[string]archiveSource) (map[string]string, error) {

@@ -432,6 +432,8 @@ func pruneReadyRecoveries(root string, records []UpgradeRecovery) error {
 
 // ValidateLiveReferences checks retained file availability before upgrade readiness.
 func ValidateLiveReferences(ctx context.Context, database db.DBTX, dataDir string) error {
+	release := retainCaptureBodies(dataDir)
+	defer release()
 	branches, err := unsealedBranchTrees(ctx, dataDir, database)
 	if err != nil {
 		return err
