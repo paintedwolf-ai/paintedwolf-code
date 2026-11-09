@@ -16,10 +16,11 @@ import { advanceProjectionForComposeFrame, PrettyRevisionDeltaRingBuffer, rebase
 import {
   appendMultiCursorConflictToRecovery, appendStaleEditToRecovery, computeRawTextFingerprint, findConflictRecoveryTarget,
   findRecoveryCopyCandidate, formatRecoverySelectionSnapshot, getHistoryRuntimeId, getPrettyDocumentRecoveryState,
-  persistPrettyDocumentRecoveryState, type PrettyCaretAffinityState, type PrettyDocumentRecoveryState,
-  type PrettyPendingConflictIntention, type PrettyPendingConflictRecord, type PrettyPendingStaleEdit,
-  type PrettyRecoveryOverflowEntry, promoteOverflowRecordIfPossible, recomputeRecoveryRawSegmentRanges,
-  recomputeRecoveryRetainedBytes, removeStaleEditRecoveryTarget,
+  hasActivePrettyRecoveryForDocument, hasUnpersistedPrettyRecoveryForDocument, persistPrettyDocumentRecoveryState,
+  type PrettyCaretAffinityState, type PrettyDocumentRecoveryState, type PrettyPendingConflictIntention,
+  type PrettyPendingConflictRecord, type PrettyPendingStaleEdit, type PrettyRecoveryOverflowEntry,
+  promoteOverflowRecordIfPossible, recomputeRecoveryRawSegmentRanges, recomputeRecoveryRetainedBytes,
+  removeStaleEditRecoveryTarget,
 } from "./pretty-replica-recovery.ts";
 import { createPrettyRecoveryUiExtension, refreshPrettyRecoveryUi, syncPrettyRecoveryUiAndDiagnostics, type PrettyRecoveryUiController } from "./pretty-replica-recovery-ui.ts";
 import { formatPrettyProjection } from "./pretty-segmenter.ts";
@@ -202,25 +203,11 @@ export class PrettyReplicaEditorAdapter {
   get retainedRecoveryBytes(): number { return this.recoveryState().retainedBytes; }
 
   hasActiveRecovery(): boolean {
-    const r = this.recoveryState();
-    return (
-      r.pendingConflicts.length > 0 ||
-      r.pendingStaleEdits.length > 0 ||
-      r.capacityOverflowRecord !== null ||
-      r.unreadableRawPayload !== null ||
-      r.lastStorageError !== null
-    );
+    return hasActivePrettyRecoveryForDocument(this.replica.accepted.id, this.replica.incarnation);
   }
 
   hasUnpersistedRecovery(): boolean {
-    const r = this.recoveryState();
-    return (
-      r.preservationBlocked &&
-      (r.capacityOverflowRecord !== null ||
-        r.pendingConflicts.length > 0 ||
-        r.pendingStaleEdits.length > 0 ||
-        r.unreadableRawPayload !== null)
-    );
+    return hasUnpersistedPrettyRecoveryForDocument(this.replica.accepted.id);
   }
 
   mapSourceLineColToDisplay(line: number, col = 1): PrettyLineCol & { readonly srcOffset: number } {
@@ -228,20 +215,15 @@ export class PrettyReplicaEditorAdapter {
   }
 
   mapDisplayOffsetToSourceLineCol(dispOffset: number): PrettyLineCol {
-    return displayOffsetToSourceLineCol(
-      this.projection.sourceMap,
-      this.projectedRawText,
-      dispOffset,
-      this.viewCaretAffinity?.assoc === "before" ? "left" : "right",
-    );
+    const bias = this.viewCaretAffinity?.assoc === "before" ? "left" : "right";
+    return displayOffsetToSourceLineCol(this.projection.sourceMap, this.projectedRawText, dispOffset, bias);
   }
 
   getLineGutterLabel(dispLineNumber: number): { label: string; foldable?: boolean } {
     if (!this.prettyEnabled) return { label: String(dispLineNumber) };
     const info = this.projection.sourceMap.displayLines[dispLineNumber - 1];
     if (!info) return { label: String(dispLineNumber) };
-    if (info.isContinuation) return { label: "", foldable: false };
-    return { label: String(info.sourceLine) };
+    return info.isContinuation ? { label: "", foldable: false } : { label: String(info.sourceLine) };
   }
 
   getGotoLineTarget(view: EditorView): GotoLineTarget | undefined {
@@ -256,8 +238,7 @@ export class PrettyReplicaEditorAdapter {
       currentLine: currentSrc.line,
       focus: () => view.focus(),
       goTo: (line, column) => {
-        const mapped = this.mapSourceLineColToDisplay(line, column);
-        const pos = Math.max(0, Math.min(view.state.doc.length, mapped.offset));
+        const pos = Math.max(0, Math.min(view.state.doc.length, this.mapSourceLineColToDisplay(line, column).offset));
         view.dispatch({
           selection: { anchor: pos },
           effects: EditorView.scrollIntoView(pos, { y: "center" }),
