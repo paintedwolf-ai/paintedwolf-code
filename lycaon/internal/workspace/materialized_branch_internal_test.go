@@ -183,7 +183,9 @@ func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 		},
 	})
 	selector := adapter.NewSelector("linux", denied, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
-	selector.BudgetFor = adapter.ZeroBudget
+	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
+		return adapter.BudgetFact{Class: class, Limit: 100_000, EntryCost: 1000}
+	}
 	mgr := newMaterializedManager(t, t.TempDir()).WithSelector(selector)
 	mgr.cloneAvailable = func(string) adapter.CloneAvailability {
 		return func(context.Context, adapter.RootGrant) (bool, error) { return false, nil }
@@ -210,12 +212,12 @@ func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 		t.Fatalf("declared %d bytes, want %d", declared.Load(), wantBytes)
 	}
 	facts := binding.Selection.Selection
-	if facts.Reason != adapter.SelectionOverBudgetMaterial || facts.MountUnavailable != adapter.ReasonMountDenied || facts.DeclaredCost.Partial {
+	if facts.Reason != adapter.SelectionUnderBudget || facts.MountUnavailable != adapter.ReasonNone || facts.DeclaredCost.Partial {
 		t.Fatalf("facts = %+v", facts)
 	}
 	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(binding.Root))
 	testutil.FailErr(t, "load meta", err)
-	if meta.SelectionReason != facts.Reason || meta.DeclaredCost != facts.DeclaredCost || meta.FallbackReason != adapter.ReasonMountDenied || meta.CopiedBytes != wantBytes {
+	if meta.SelectionReason != facts.Reason || meta.DeclaredCost != facts.DeclaredCost || meta.FallbackReason != adapter.ReasonNone || meta.CopiedBytes != wantBytes {
 		t.Fatalf("recorded facts = %+v", meta.JobMetaPreparation)
 	}
 }

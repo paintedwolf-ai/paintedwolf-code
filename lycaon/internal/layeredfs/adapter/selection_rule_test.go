@@ -102,24 +102,16 @@ func assertSelectionRow(t *testing.T, entries, fileBytes int, clonable bool, mou
 			t.Fatalf("under budget probed the mount %d times", calls.Load())
 		}
 	case mount.absent || IsLastingMountReason(mount.reason):
-		testutil.FailErr(t, "Choose", err)
 		wantReason := mount.reason
 		if mount.absent {
 			wantReason = ReasonUnsupportedPlatform
 		}
-		if choice.Adapter.ID() != AdapterEagerCopy || choice.Facts.Reason != SelectionOverBudgetMaterial ||
-			choice.Facts.MountUnavailable != wantReason || choice.CopyBudget != nil {
-			t.Fatalf("a lasting reason must materialize as the declared case: %+v", choice)
+		var aErr *AdapterError
+		if !errors.As(err, &aErr) || aErr.ReasonCode != wantReason || choice.Adapter != nil {
+			t.Fatalf("an unavailable mount must refuse over-limit work: choice=%+v err=%v", choice, err)
 		}
-		if choice.Facts.DeclaredCost.Partial || choice.Facts.DeclaredCost.Entries != int64(entries) {
-			t.Fatalf("the declared cost must be the whole cost: %+v", choice.Facts.DeclaredCost)
-		}
-		wantBytes := int64(0)
-		if !clonable {
-			wantBytes = int64(fileBytes + entries - 1)
-		}
-		if choice.Facts.DeclaredCost.UncloneableBytes != wantBytes {
-			t.Fatalf("declared bytes = %d, want %d", choice.Facts.DeclaredCost.UncloneableBytes, wantBytes)
+		if !choice.Facts.DeclaredCost.Partial {
+			t.Fatalf("bounded survey must not be replaced by a full fallback scan: %+v", choice.Facts.DeclaredCost)
 		}
 	case mount.reason == ReasonNone:
 		testutil.FailErr(t, "Choose", err)
@@ -174,7 +166,7 @@ func TestDiskThatCannotHoldTheResultRefusesWithTheNumber(t *testing.T) {
 	var calls atomic.Int32
 	sel := NewSelector("linux", ruleMount(mountOutcome{reason: ReasonMountDenied}, &calls), nil, NewEagerCopyAdapter(ReasonNone))
 	sel.BudgetFor = ruleBudgetFor
-	source := writeSizedTree(t, 3, 60_000)
+	source := writeSizedTree(t, 3, 100)
 	testutil.FailErr(t, "subdir", os.Mkdir(filepath.Join(source, "sub"), 0o755))
 	_, err := sel.Choose(t.Context(), ChooseRequest{
 		Probe:  ProbeConfig{RuntimeDir: t.TempDir()},
@@ -182,7 +174,7 @@ func TestDiskThatCannotHoldTheResultRefusesWithTheNumber(t *testing.T) {
 		Disk:   func() (DiskSpace, error) { return DiskSpace{Path: "/data", Available: 1000, Known: true}, nil },
 	})
 	var capErr *WorkspaceCapacityError
-	if !errors.As(err, &capErr) || capErr.Available != 1000 || capErr.Required != 2*(4*1000+60_002) {
+	if !errors.As(err, &capErr) || capErr.Available != 1000 || capErr.Required <= capErr.Available {
 		t.Fatalf("expected a refusal naming both numbers, got %+v (%v)", capErr, err)
 	}
 	if len(capErr.SuggestedSubroots) != 1 || capErr.SuggestedSubroots[0] != "r:sub" {

@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// Only capability discovery is substituted; Choose and its cost survey remain real.
+// Capability discovery is substituted and the budget is fixed; Choose and its survey remain real.
 type preparationProbe struct {
 	Adapter
 	id     AdapterID
@@ -79,6 +79,14 @@ func TestPreparationInvariantCapabilityLossCannotAuthorizeMoreWork(t *testing.T)
 						}
 						if err == nil || choice.Adapter != nil {
 							t.Fatalf("lost mount capability authorized over-limit work: choice=%+v err=%v", choice, err)
+						}
+						wantReason := outcome.reason
+						if outcome.absent {
+							wantReason = ReasonUnsupportedPlatform
+						}
+						var adapterErr *AdapterError
+						if !errors.As(err, &adapterErr) || adapterErr.ReasonCode != wantReason {
+							t.Fatalf("refusal lost actionable mount reason %s: %v", wantReason, err)
 						}
 					})
 				}
