@@ -11,7 +11,7 @@ schema:
     secret_use: {type: object, additionalProperties: false, required: [services], description: "Origins for `{{paintedwolf-secret:…}}`.", properties: {services: {type: array, minItems: 1, maxItems: 8, description: Origin URLs., items: {type: string, maxLength: 1024}}}}
     verification: {type: boolean, default: false, description: Validation check.}
     command: {type: string, description: Bash source.}
-    cwd: {type: string, description: "Working folder for the statement. Empty = the session folder; `@label` or `@label/sub` = any attached folder; `@scratch`/`@output` = session scratch/output; absolute paths are accepted."}
+    cwd: {type: string, description: "Folder for the statement. Empty = the session folder; `@label` or `@label/sub` = any attached folder; `@scratch`/`@output` = session scratch/output; absolute paths are accepted."}
     timeout_ms: {type: integer, minimum: 1000, maximum: 7200000, description: Deadline ms.}
     terminal_capture: {type: object, additionalProperties: false, description: One-shot PTY capture., properties: {winsize: {type: object, additionalProperties: false, description: Dimensions., required: [cols, rows], properties: {cols: {type: integer, minimum: 1, maximum: 240, description: Columns.}, rows: {type: integer, minimum: 1, maximum: 120, description: Rows.}}}, caption: {type: string, maxLength: 240, description: Label.}}}
     snapshot_capture: {type: object, additionalProperties: false, description: "Attach APP_SNAPSHOT on zero exit.", properties: {env_var: {type: string, default: APP_SNAPSHOT, description: Variable.}, view: {type: string, description: View.}, scale: {type: number, default: 2.0, description: Scale.}, caption: {type: string, maxLength: 240, description: Label.}}}

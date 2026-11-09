@@ -30,7 +30,7 @@ schema:
     cwd:
       type: string
       description: >-
-        Working folder for this call. Empty = the session folder; `@label` or
+        Folder for this call. Empty = the session folder; `@label` or
         `@label/sub` = any attached folder; `@scratch`/`@output` = session
         scratch/output; absolute paths are accepted. On a write worker, resolved
         under the private branch (subdir allowed). Must be a directory in read
