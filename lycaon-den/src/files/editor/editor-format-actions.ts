@@ -4,6 +4,7 @@ import { convertIndentationCommand } from "../../components/source/editor/indent
 import { indentChipLabel, type IndentInfo } from "../../components/source/editor/indent-detect.ts";
 import { effectiveIndent } from "./files-editor-display.ts";
 import { settleFilesEditorView } from "./files-editor-host.ts";
+import { prettyStatusToggleForTab } from "./pretty-display-state.ts";
 import { applyFilesBufferDraft, setFilesBufferIndentOverride } from "../documents/project-files-buffers.ts";
 import { type FileBuffer } from "../documents/files-buffer-state.ts";
 import type { FilesEditorScope } from "../components/files-scope.ts";
@@ -78,7 +79,9 @@ export function createEditorFormatActions(options: Pick<FilesEditorScope, "proje
     ];
   };
 
-  return { openIndentMenu, openEolMenu, indentMenuItems };
+  const prettyToggle = () => prettyStatusToggleForTab(options.projectId(), options.buffer().key);
+
+  return { openIndentMenu, openEolMenu, indentMenuItems, prettyToggle };
 }
 
 export function indentChipTip(buf: FileBuffer): string {
