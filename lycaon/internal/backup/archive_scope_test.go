@@ -47,3 +47,8 @@ func TestArchiveVersionsRequireTheirExactReplacementScope(t *testing.T) {
 		t.Fatal("scope upgrade must add worker-recovery without mutating the released manifest")
 	}
 }
+
+type GitClosureStats = gitClosureStats
+
+var WithGitClosureStats = withGitClosureStats
+

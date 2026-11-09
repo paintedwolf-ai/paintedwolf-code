@@ -525,3 +525,150 @@ func buildPackIndexV2ForThinPack(t *testing.T, packBytes []byte, refDeltaOIDHex 
 	_, _ = buf.Write(idxSum[:])
 	return buf.Bytes()
 }
+
+func writeNamedCheckpointManifest(t *testing.T, storeDir, checkpointID string, parents []string, baseSHA, finalSHA string, pg checkpoint.PrivateGitSnapshot) {
+	t.Helper()
+	cpManifest := checkpoint.Manifest{
+		CheckpointID:      checkpointID,
+		FormatVersion:     checkpoint.FormatVersion,
+		WorkerID:          "job-cp",
+		TaskID:            "job-cp",
+		ProjectID:         testdbseed.DefaultProjectID,
+		ParentCheckpoints: parents,
+		Entries: []checkpoint.ManifestEntry{{
+			Path:           layeredfs.QualifiedPath{RootID: "primary", Rel: "main.go"},
+			Kind:           layeredfs.EntryRegular,
+			ContentChanged: true,
+			Final:          layeredfs.ChangeFinalAttr{Mode: 0o644, Size: int64(len("package after\n")), SHA256: finalSHA},
+			Base:           layeredfs.BaseCapture{Kind: layeredfs.EntryRegular, Mode: 0o644, Size: int64(len("package before\n")), SHA256: baseSHA},
+		}},
+		PrivateGit: pg,
+	}
+	cpBytes, err := json.MarshalIndent(cpManifest, "", "  ")
+	testutil.FailErr(t, "marshal checkpoint manifest "+checkpointID, err)
+	cpManifestPath := filepath.Join(storeDir, "checkpoints", checkpointID, "manifest.json")
+	testutil.FailErr(t, "mkdir checkpoint manifest "+checkpointID, os.MkdirAll(filepath.Dir(cpManifestPath), 0o700))
+	_ = os.Chmod(cpManifestPath, 0o600)
+	testutil.FailErr(t, "write checkpoint manifest "+checkpointID, os.WriteFile(cpManifestPath, cpBytes, 0o400))
+}
+
+func writeBranchCheckpointMeta(t *testing.T, root, branchRel, storeDir, lastCheckpointID string) {
+	t.Helper()
+	metaPath := filepath.Join(root, filepath.FromSlash(branchRel+".meta/state.json"))
+	testutil.FailErr(t, "mkdir branch meta", os.MkdirAll(filepath.Dir(metaPath), 0o700))
+	metaJSON := []byte(`{"format_version":2,"roots":[{"id":"primary","path":"/tmp/project","label":"primary","is_primary":true}],"snapshot_complete":true,"last_published_checkpoint_id":"` + lastCheckpointID + `","checkpoint_store_dir":"` + filepath.ToSlash(storeDir) + `"}`)
+	testutil.FailErr(t, "write branch meta", os.WriteFile(metaPath, metaJSON, 0o600))
+}
+
+func TestBackupCheckpointSharedStoreScalingAndCycleDetection(t *testing.T) {
+	t.Run("shared_store_diamond_dag_scales_with_store_once", func(t *testing.T) {
+		fx := setupCheckpointBackupFixture(t)
+		retainedObjectsDir := filepath.Join(fx.root, "worker-branches", ".adapter", "privategit", "retained-store", "objects")
+		testutil.FailErr(t, "clear loose retained objects", os.RemoveAll(retainedObjectsDir))
+
+		srcRepo := t.TempDir()
+		var commits []string
+		for i := 1; i <= 4; i++ {
+			content := fmt.Sprintf("package main\n// revision %d\n", i)
+			testutil.FailErr(t, "write revision", os.WriteFile(filepath.Join(srcRepo, "main.go"), []byte(content), 0o644))
+			if i == 1 {
+				gittest.InitCommit(t, srcRepo, "commit 1")
+			} else {
+				gittest.Run(t, srcRepo, "add", "main.go")
+				gittest.Run(t, srcRepo, "commit", "-m", fmt.Sprintf("commit %d", i))
+			}
+			commits = append(commits, strings.TrimSpace(gittest.Run(t, srcRepo, "rev-parse", "HEAD")))
+		}
+		gittest.Run(t, srcRepo, "repack", "-a", "-d")
+		gittest.Run(t, srcRepo, "prune-packed")
+		packBase := findSinglePackBase(t, filepath.Join(srcRepo, ".git", "objects", "pack"))
+		copyGitObjectsDir(t, filepath.Join(srcRepo, ".git", "objects"), retainedObjectsDir)
+
+		var storeObjectFiles int
+		var storeObjectBytes int64
+		testutil.FailErr(t, "measure store objects", filepath.WalkDir(retainedObjectsDir, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil || entry.IsDir() {
+				return err
+			}
+			info, iErr := entry.Info()
+			if iErr != nil {
+				return iErr
+			}
+			storeObjectFiles++
+			storeObjectBytes += info.Size()
+			return nil
+		}))
+
+		// Build a 5-checkpoint diamond DAG (cp-5 -> [cp-3, cp-4], cp-3 -> cp-2 -> cp-1, cp-4 -> cp-2 -> cp-1)
+		// plus a second worker branch pointing to cp-4.
+		pgFor := func(commitOID string) checkpoint.PrivateGitSnapshot {
+			return checkpoint.PrivateGitSnapshot{
+				HeadRef:         "refs/heads/main",
+				Refs:            map[string]string{"refs/heads/main": commitOID},
+				RetainedObjects: []string{commitOID, "pack:" + packBase},
+			}
+		}
+		writeNamedCheckpointManifest(t, fx.storeDir, "cp-1", nil, fx.baseSHA, fx.finalSHA, pgFor(commits[0]))
+		writeNamedCheckpointManifest(t, fx.storeDir, "cp-2", []string{"cp-1"}, fx.baseSHA, fx.finalSHA, pgFor(commits[1]))
+		writeNamedCheckpointManifest(t, fx.storeDir, "cp-3", []string{"cp-2"}, fx.baseSHA, fx.finalSHA, pgFor(commits[2]))
+		writeNamedCheckpointManifest(t, fx.storeDir, "cp-4", []string{"cp-2"}, fx.baseSHA, fx.finalSHA, pgFor(commits[2]))
+		writeNamedCheckpointManifest(t, fx.storeDir, "cp-5", []string{"cp-3", "cp-4"}, fx.baseSHA, fx.finalSHA, pgFor(commits[3]))
+		writeBranchCheckpointMeta(t, fx.root, fx.branchRel, fx.storeDir, "cp-5")
+
+		branchRel2 := "worker-branches/0123456789abcdef/job-cp-2"
+		_, err := fx.database.ExecContext(t.Context(),
+			`INSERT INTO worker_jobs(id,project_id,agent_type,prompt,brief,workspace_relpath,created_at) VALUES('job-cp-2',?,'implementer','work','work',?,'2026-01-01T00:00:00Z')`,
+			testdbseed.DefaultProjectID, branchRel2)
+		testutil.FailErr(t, "insert second checkpoint worker", err)
+		writeBranchCheckpointMeta(t, fx.root, branchRel2, fx.storeDir, "cp-4")
+
+		ctx, stats, closeStats := backup.WithGitClosureStats(t.Context())
+		defer closeStats()
+
+		opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
+		_, err = backup.Create(ctx, opts, filepath.Join(t.TempDir(), "diamond.zip"))
+		testutil.FailErr(t, "create archive with diamond checkpoint DAG", err)
+
+		if stats.StoreStageCalls != 1 {
+			t.Fatalf("StoreStageCalls = %d, want 1 (shared store staged once across 5 checkpoints and 2 branches)", stats.StoreStageCalls)
+		}
+		blobBytes := int64(len("package before\n") + len("package after\n"))
+		expectedMaxFiles := storeObjectFiles + 2
+		expectedMaxBytes := storeObjectBytes + blobBytes
+		if stats.HashFileCalls != expectedMaxFiles {
+			t.Fatalf("HashFileCalls = %d, want %d (1x store files + 2 checkpoint blobs, not 5x per checkpoint)", stats.HashFileCalls, expectedMaxFiles)
+		}
+		if stats.HashBytesRead != expectedMaxBytes {
+			t.Fatalf("HashBytesRead = %d, want %d (1x store bytes + blob bytes, not O(checkpoints * store_bytes))", stats.HashBytesRead, expectedMaxBytes)
+		}
+	})
+
+	t.Run("cyclic_checkpoint_ancestry_rejected_fail_closed", func(t *testing.T) {
+		fx := setupCheckpointBackupFixture(t)
+		pg := checkpoint.PrivateGitSnapshot{
+			HeadRef:         "refs/heads/main",
+			Refs:            map[string]string{"refs/heads/main": fx.commitOID},
+			RetainedObjects: []string{fx.commitOID, fx.treeOID, fx.blobOID},
+		}
+		// Two-node cycle: cp-a -> cp-b -> cp-a
+		writeNamedCheckpointManifest(t, fx.storeDir, "cp-a", []string{"cp-b"}, fx.baseSHA, fx.finalSHA, pg)
+		writeNamedCheckpointManifest(t, fx.storeDir, "cp-b", []string{"cp-a"}, fx.baseSHA, fx.finalSHA, pg)
+		writeBranchCheckpointMeta(t, fx.root, fx.branchRel, fx.storeDir, "cp-a")
+
+		opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
+		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "cycle-2.zip")); !errors.Is(err, backup.ErrInvalid) {
+			t.Fatalf("Create with 2-node checkpoint cycle err = %v, want ErrInvalid", err)
+		}
+		if err := backup.ValidateLiveReferences(t.Context(), fx.database, fx.root); !errors.Is(err, backup.ErrInvalid) {
+			t.Fatalf("ValidateLiveReferences with 2-node checkpoint cycle err = %v, want ErrInvalid", err)
+		}
+
+		// Self-cycle: cp-self -> cp-self
+		writeNamedCheckpointManifest(t, fx.storeDir, "cp-self", []string{"cp-self"}, fx.baseSHA, fx.finalSHA, pg)
+		writeBranchCheckpointMeta(t, fx.root, fx.branchRel, fx.storeDir, "cp-self")
+		if _, err := backup.Create(t.Context(), opts, filepath.Join(t.TempDir(), "cycle-self.zip")); !errors.Is(err, backup.ErrInvalid) {
+			t.Fatalf("Create with self-cyclic checkpoint err = %v, want ErrInvalid", err)
+		}
+	})
+}
+

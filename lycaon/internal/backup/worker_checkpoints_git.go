@@ -18,84 +18,149 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 )
 
-var (
-	verifiedGitClosureMu    sync.Mutex
-	verifiedGitClosureByKey = make(map[string]string)
-	verifiedGitClosureSet   = make(map[string]struct{})
-)
+type gitClosureSessionKey struct{}
 
-const maxVerifiedGitClosureCacheEntries = 512
-
-func computeGitClosureCacheFingerprints(branchRel, storePrefix, checkpointID string, requiredOIDs, requiredPacks, prefixes []string, files map[string]archiveSource) (string, string, bool) {
-	var matchingRels []string
-	var storeRoots []string
-	seenRoots := make(map[string]bool)
-	for _, pfx := range prefixes {
-		prefixSlash := pfx + "/"
-		for rel, src := range files {
-			if !strings.HasPrefix(rel, prefixSlash) {
-				continue
-			}
-			matchingRels = append(matchingRels, rel)
-			suffix := filepath.FromSlash(rel)
-			if cleaned := filepath.Clean(src.path); strings.HasSuffix(cleaned, suffix) {
-				root := filepath.Clean(strings.TrimSuffix(cleaned, suffix))
-				if realRoot, err := filepath.EvalSymlinks(root); err == nil {
-					root = realRoot
-				}
-				if !seenRoots[root] {
-					seenRoots[root] = true
-					storeRoots = append(storeRoots, root)
-				}
-			}
-		}
-	}
-	sort.Strings(matchingRels)
-	sort.Strings(storeRoots)
-
-	h := sha256.New()
-	_, _ = fmt.Fprintf(h, "proj:%s\x00prefix:%s\x00cp:%s\x00", branchProjKey(branchRel), storePrefix, checkpointID)
-	for _, oid := range requiredOIDs {
-		_, _ = fmt.Fprintf(h, "oid:%s\x00", oid)
-	}
-	for _, pack := range requiredPacks {
-		_, _ = fmt.Fprintf(h, "pack:%s\x00", pack)
-	}
-	for _, rel := range matchingRels {
-		src := files[rel]
-		if src.kind != fileKindRegular {
-			return "", "", false
-		}
-		sum, size, err := sha256File(src.path)
-		if err != nil {
-			return "", "", false
-		}
-		_, _ = fmt.Fprintf(h, "file:%s:%d:%s\x00", rel, size, sum)
-	}
-	digest := hex.EncodeToString(h.Sum(nil))
-	storeKey := strings.Join(storeRoots, "|") + "\x00" + branchProjKey(branchRel) + "\x00" + checkpointID
-	return storeKey, digest, true
+type fileDigestEntry struct {
+	sum  string
+	size int64
 }
 
-func checkVerifiedGitClosureCache(storeKey, digest string) bool {
-	verifiedGitClosureMu.Lock()
-	defer verifiedGitClosureMu.Unlock()
-	if prev, ok := verifiedGitClosureByKey[storeKey]; ok && prev == digest {
-		return true
-	}
-	_, ok := verifiedGitClosureSet[digest]
-	return ok
+type verifiedStoreRepo struct {
+	tmpRepo               string
+	installedPacks        map[string]string
+	verifiedReachableOIDs map[string]bool
 }
 
-func recordVerifiedGitClosureCache(storeKey, digest string) {
-	verifiedGitClosureMu.Lock()
-	defer verifiedGitClosureMu.Unlock()
-	if len(verifiedGitClosureSet) >= maxVerifiedGitClosureCacheEntries {
-		clear(verifiedGitClosureByKey)
-		clear(verifiedGitClosureSet)
+type gitClosureStats struct {
+	HashFileCalls   int
+	HashBytesRead   int64
+	StoreStageCalls int
+}
+
+type gitClosureSession struct {
+	mu              sync.Mutex
+	fileDigests     map[string]fileDigestEntry
+	sharedDiskFiles map[string]map[string]archiveSource
+	verifiedStores  map[string]*verifiedStoreRepo
+	stats           *gitClosureStats
+}
+
+func newGitClosureSession(stats *gitClosureStats) *gitClosureSession {
+	return &gitClosureSession{
+		fileDigests:     make(map[string]fileDigestEntry),
+		sharedDiskFiles: make(map[string]map[string]archiveSource),
+		verifiedStores:  make(map[string]*verifiedStoreRepo),
+		stats:           stats,
 	}
-	verifiedGitClosureByKey[storeKey] = digest
-	verifiedGitClosureSet[digest] = struct{}{}
+}
+
+func gitClosureSessionFromContext(ctx context.Context) *gitClosureSession {
+	if ctx == nil {
+		return nil
+	}
+	s, _ := ctx.Value(gitClosureSessionKey{}).(*gitClosureSession)
+	return s
+}
+
+func ensureGitClosureSession(ctx context.Context) (context.Context, func()) {
+	if gitClosureSessionFromContext(ctx) != nil {
+		return ctx, func() {}
+	}
+	s := newGitClosureSession(nil)
+	return context.WithValue(ctx, gitClosureSessionKey{}, s), s.close
+}
+
+func withGitClosureStats(ctx context.Context) (context.Context, *gitClosureStats, func()) {
+	stats := &gitClosureStats{}
+	s := newGitClosureSession(stats)
+	return context.WithValue(ctx, gitClosureSessionKey{}, s), stats, s.close
+}
+
+func (s *gitClosureSession) close() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k, repo := range s.verifiedStores {
+		if repo != nil && repo.tmpRepo != "" {
+			_ = os.RemoveAll(repo.tmpRepo)
+		}
+		delete(s.verifiedStores, k)
+	}
+}
+
+func sha256FileInSession(ctx context.Context, path string) (string, int64, error) {
+	clean := filepath.Clean(path)
+	s := gitClosureSessionFromContext(ctx)
+	if s != nil {
+		s.mu.Lock()
+		if entry, ok := s.fileDigests[clean]; ok {
+			s.mu.Unlock()
+			return entry.sum, entry.size, nil
+		}
+		s.mu.Unlock()
+	}
+	sum, size, err := sha256File(clean)
+	if err != nil {
+		return "", 0, err
+	}
+	if s != nil {
+		s.mu.Lock()
+		s.fileDigests[clean] = fileDigestEntry{sum: sum, size: size}
+		if s.stats != nil {
+			s.stats.HashFileCalls++
+			s.stats.HashBytesRead += size
+		}
+		s.mu.Unlock()
+	}
+	return sum, size, nil
+}
+
+func aliasFileDigestInSession(ctx context.Context, srcPath, dstPath string) {
+	s := gitClosureSessionFromContext(ctx)
+	if s == nil {
+		return
+	}
+	cleanSrc := filepath.Clean(srcPath)
+	cleanDst := filepath.Clean(dstPath)
+	s.mu.Lock()
+	if entry, ok := s.fileDigests[cleanSrc]; ok {
+		s.fileDigests[cleanDst] = entry
+	}
+	s.mu.Unlock()
+}
+
+func loadSharedDiskGitObjectFiles(ctx context.Context, configDir, storeDir, projKey, syntheticStorePrefix string) (map[string]archiveSource, error) {
+	cacheKey := canonicalStoreIdentityOnDisk(configDir, storeDir) + "\x00" + projKey + "\x00" + syntheticStorePrefix
+	s := gitClosureSessionFromContext(ctx)
+	if s != nil {
+		s.mu.Lock()
+		if cached, ok := s.sharedDiskFiles[cacheKey]; ok {
+			s.mu.Unlock()
+			return cached, nil
+		}
+		s.mu.Unlock()
+	}
+	diskDirs := []struct{ dir, prefix string }{
+		{filepath.Join(configDir, enginepaths.WorkerBranchesDirName, ".adapter", "privategit", "retained-store", "objects"), enginepaths.WorkerBranchesDirName + "/.adapter/privategit/retained-store/objects"},
+		{filepath.Join(storeDir, "objects"), syntheticStorePrefix + "/objects"},
+	}
+	if projKey != "" {
+		diskDirs = append(diskDirs, struct{ dir, prefix string }{
+			filepath.Join(configDir, enginepaths.WorkerBranchesDirName, ".adapter", projKey, "retained-git-store", "objects"),
+			enginepaths.WorkerBranchesDirName + "/.adapter/" + projKey + "/retained-git-store/objects",
+		})
+	}
+	sharedFiles := make(map[string]archiveSource)
+	for _, item := range diskDirs {
+		if err := walkGitObjectsDirIntoFiles(item.dir, item.prefix, sharedFiles); err != nil {
+			return nil, err
+		}
+	}
+	if s != nil {
+		s.mu.Lock()
+		s.sharedDiskFiles[cacheKey] = sharedFiles
+		s.mu.Unlock()
+	}
+	return sharedFiles, nil
 }
 
 func checkpointGitObjectPrefixes(branchRel, storePrefix, checkpointID string) []string {
@@ -110,36 +175,50 @@ func checkpointGitObjectPrefixes(branchRel, storePrefix, checkpointID string) []
 	return prefixes
 }
 
-func verifyCheckpointGitClosureInFiles(ctx context.Context, branchRel, storePrefix, checkpointID string, pg checkpoint.PrivateGitSnapshot, files map[string]archiveSource) error {
-	requiredOIDs, requiredPacks, err := collectRequiredGitOIDs(pg)
-	if err != nil {
-		return &InvalidError{Detail: fmt.Sprintf("checkpoint %s has invalid git metadata: %v", checkpointID, err)}
+func computeStorePrefixesDigest(ctx context.Context, branchRel, storePrefix string, prefixes []string, files map[string]archiveSource) (string, bool) {
+	var matchingRels []string
+	for _, pfx := range prefixes {
+		prefixSlash := pfx + "/"
+		for rel := range files {
+			if strings.HasPrefix(rel, prefixSlash) {
+				matchingRels = append(matchingRels, rel)
+			}
+		}
 	}
-	if len(requiredOIDs) == 0 && len(requiredPacks) == 0 {
-		return nil
+	sort.Strings(matchingRels)
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "proj:%s\x00prefix:%s\x00", branchProjKey(branchRel), storePrefix)
+	for _, rel := range matchingRels {
+		src := files[rel]
+		if src.kind != fileKindRegular {
+			return "", false
+		}
+		sum, size, err := sha256FileInSession(ctx, src.path)
+		if err != nil {
+			return "", false
+		}
+		_, _ = fmt.Fprintf(h, "file:%s:%d:%s\x00", rel, size, sum)
 	}
-	prefixes := checkpointGitObjectPrefixes(branchRel, storePrefix, checkpointID)
-	storeKey, closureDigest, cacheable := computeGitClosureCacheFingerprints(branchRel, storePrefix, checkpointID, requiredOIDs, requiredPacks, prefixes, files)
-	if cacheable && checkVerifiedGitClosureCache(storeKey, closureDigest) {
-		return nil
-	}
+	return hex.EncodeToString(h.Sum(nil)), true
+}
+
+func stageAndVerifyStoreRepo(ctx context.Context, checkpointID string, prefixes []string, files map[string]archiveSource) (*verifiedStoreRepo, error) {
 	tmpRepo, err := os.MkdirTemp("", "pw-backup-git-closure-*")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer func() { _ = os.RemoveAll(tmpRepo) }()
-
+	cleanupOnErr := true
+	defer func() {
+		if cleanupOnErr {
+			_ = os.RemoveAll(tmpRepo)
+		}
+	}()
 	if out, code, err := gitexec.Run(ctx, tmpRepo, []string{"init", "--bare", "-q"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err != nil || code != 0 {
-		return &InvalidError{Detail: fmt.Sprintf("initialize git verification repo: %v (%s)", err, strings.TrimSpace(string(out)))}
+		return nil, &InvalidError{Detail: fmt.Sprintf("initialize git verification repo: %v (%s)", err, strings.TrimSpace(string(out)))}
 	}
 	installedPacks, err := stageClosureObjectsFromFiles(tmpRepo, prefixes, files)
 	if err != nil {
-		return err
-	}
-	for _, reqPack := range requiredPacks {
-		if installedPacks[reqPack] == "" {
-			return &InvalidError{Detail: fmt.Sprintf("retained git pack %s is missing for checkpoint %s", reqPack, checkpointID)}
-		}
+		return nil, err
 	}
 	packBases := make([]string, 0, len(installedPacks))
 	for base := range installedPacks {
@@ -148,47 +227,136 @@ func verifyCheckpointGitClosureInFiles(ctx context.Context, branchRel, storePref
 	sort.Strings(packBases)
 	for _, base := range packBases {
 		if out, code, err := gitexec.Run(ctx, tmpRepo, []string{"verify-pack", "-v", installedPacks[base]}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err != nil || code != 0 {
-			return &InvalidError{Detail: fmt.Sprintf("git pack verification failed for %s (checkpoint %s): %s", base, checkpointID, strings.TrimSpace(string(out)))}
+			return nil, &InvalidError{Detail: fmt.Sprintf("git pack verification failed for %s (checkpoint %s): %s", base, checkpointID, strings.TrimSpace(string(out)))}
 		}
 	}
 	if out, code, err := gitexec.Run(ctx, tmpRepo, []string{"fsck", "--full", "--no-dangling", "--strict"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err != nil || code != 0 {
-		return &InvalidError{Detail: fmt.Sprintf("git fsck failed for checkpoint %s: %s", checkpointID, strings.TrimSpace(string(out)))}
+		return nil, &InvalidError{Detail: fmt.Sprintf("git fsck failed for checkpoint %s: %s", checkpointID, strings.TrimSpace(string(out)))}
 	}
-	if len(requiredOIDs) == 0 {
-		if cacheable {
-			recordVerifiedGitClosureCache(storeKey, closureDigest)
-		}
+	cleanupOnErr = false
+	return &verifiedStoreRepo{
+		tmpRepo:               tmpRepo,
+		installedPacks:        installedPacks,
+		verifiedReachableOIDs: make(map[string]bool),
+	}, nil
+}
+
+func verifyCheckpointGitClosureInFiles(ctx context.Context, branchRel, storePrefix, checkpointID string, pg checkpoint.PrivateGitSnapshot, files map[string]archiveSource) error {
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
+	requiredOIDs, requiredPacks, err := collectRequiredGitOIDs(pg)
+	if err != nil {
+		return &InvalidError{Detail: fmt.Sprintf("checkpoint %s has invalid git metadata: %v", checkpointID, err)}
+	}
+	if len(requiredOIDs) == 0 && len(requiredPacks) == 0 {
 		return nil
 	}
-	if err := verifyGitOIDsBatchCheck(ctx, tmpRepo, checkpointID, requiredOIDs); err != nil {
+	prefixes := checkpointGitObjectPrefixes(branchRel, storePrefix, checkpointID)
+	storeDigest, cacheable := computeStorePrefixesDigest(ctx, branchRel, storePrefix, prefixes, files)
+
+	s := gitClosureSessionFromContext(ctx)
+	var repo *verifiedStoreRepo
+	if cacheable && s != nil {
+		s.mu.Lock()
+		repo = s.verifiedStores[storeDigest]
+		s.mu.Unlock()
+	}
+	if repo == nil {
+		staged, err := stageAndVerifyStoreRepo(ctx, checkpointID, prefixes, files)
+		if err != nil {
+			return err
+		}
+		if cacheable && s != nil {
+			s.mu.Lock()
+			if existing, ok := s.verifiedStores[storeDigest]; ok {
+				_ = os.RemoveAll(staged.tmpRepo)
+				repo = existing
+			} else {
+				s.verifiedStores[storeDigest] = staged
+				if s.stats != nil {
+					s.stats.StoreStageCalls++
+				}
+				repo = staged
+			}
+			s.mu.Unlock()
+		} else {
+			defer func() { _ = os.RemoveAll(staged.tmpRepo) }()
+			repo = staged
+		}
+	}
+	for _, reqPack := range requiredPacks {
+		if repo.installedPacks[reqPack] == "" {
+			return &InvalidError{Detail: fmt.Sprintf("retained git pack %s is missing for checkpoint %s", reqPack, checkpointID)}
+		}
+	}
+	if len(requiredOIDs) == 0 {
+		return nil
+	}
+	return verifyReachableOIDsInStoreRepo(ctx, s, repo, checkpointID, requiredOIDs)
+}
+
+func verifyReachableOIDsInStoreRepo(ctx context.Context, s *gitClosureSession, repo *verifiedStoreRepo, checkpointID string, requiredOIDs []string) error {
+	var unverifiedTips []string
+	if s != nil {
+		s.mu.Lock()
+		for _, oid := range requiredOIDs {
+			if !repo.verifiedReachableOIDs[oid] {
+				unverifiedTips = append(unverifiedTips, oid)
+			}
+		}
+		s.mu.Unlock()
+	} else {
+		unverifiedTips = requiredOIDs
+	}
+	if len(unverifiedTips) == 0 {
+		return nil
+	}
+	if err := verifyGitOIDsBatchCheck(ctx, repo.tmpRepo, checkpointID, unverifiedTips); err != nil {
 		return err
 	}
-	stdinRevs := []byte(strings.Join(requiredOIDs, "\n") + "\n")
-	out, code, err := gitexec.Run(ctx, tmpRepo, []string{"rev-list", "--objects", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: stdinRevs})
+	stdinRevs := []byte(strings.Join(unverifiedTips, "\n") + "\n")
+	out, code, err := gitexec.Run(ctx, repo.tmpRepo, []string{"rev-list", "--objects", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: stdinRevs})
 	if err != nil || code != 0 {
 		return &InvalidError{Detail: fmt.Sprintf("git rev-list closure failed for checkpoint %s: %s", checkpointID, strings.TrimSpace(string(out)))}
 	}
-	seenReachable := make(map[string]bool, len(requiredOIDs))
-	reachable := make([]string, 0, len(requiredOIDs))
-	for _, oid := range requiredOIDs {
+	seenReachable := make(map[string]bool, len(unverifiedTips))
+	var reachable []string
+	addCandidate := func(oid string) {
+		if seenReachable[oid] {
+			return
+		}
+		if s != nil {
+			s.mu.Lock()
+			already := repo.verifiedReachableOIDs[oid]
+			s.mu.Unlock()
+			if already {
+				return
+			}
+		}
 		seenReachable[oid] = true
 		reachable = append(reachable, oid)
+	}
+	for _, oid := range unverifiedTips {
+		addCandidate(oid)
 	}
 	for _, line := range bytes.Split(out, []byte{'\n'}) {
 		fields := bytes.Fields(line)
 		if len(fields) > 0 {
 			oid := strings.ToLower(string(fields[0]))
-			if isGitOID(oid) && !seenReachable[oid] {
-				seenReachable[oid] = true
-				reachable = append(reachable, oid)
+			if isGitOID(oid) {
+				addCandidate(oid)
 			}
 		}
 	}
-	if err := verifyGitOIDsBatchCheck(ctx, tmpRepo, checkpointID, reachable); err != nil {
+	if err := verifyGitOIDsBatchCheck(ctx, repo.tmpRepo, checkpointID, reachable); err != nil {
 		return err
 	}
-	if cacheable {
-		recordVerifiedGitClosureCache(storeKey, closureDigest)
+	if s != nil {
+		s.mu.Lock()
+		for _, oid := range reachable {
+			repo.verifiedReachableOIDs[oid] = true
+		}
+		s.mu.Unlock()
 	}
 	return nil
 }

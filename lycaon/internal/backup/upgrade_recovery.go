@@ -434,6 +434,8 @@ func pruneReadyRecoveries(root string, records []UpgradeRecovery) error {
 func ValidateLiveReferences(ctx context.Context, database db.DBTX, dataDir string) error {
 	release := retainCaptureBodies(dataDir)
 	defer release()
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
 	branches, err := unsealedBranchTrees(ctx, dataDir, database)
 	if err != nil {
 		return err

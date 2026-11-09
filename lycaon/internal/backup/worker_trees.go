@@ -18,12 +18,15 @@ type branchCapture struct {
 }
 
 func unsealedBranchTrees(ctx context.Context, configDir string, database db.DBTX) (branchCapture, error) {
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
 	selection := branchCapture{roots: map[string]bool{}}
 	rows, err := database.QueryContext(ctx, `SELECT DISTINCT workspace_relpath FROM worker_jobs WHERE workspace_relpath IS NOT NULL AND workspace_relpath != '' AND (workspace_overlay_id IS NULL OR workspace_overlay_id = '')`)
 	if err != nil {
 		return selection, err
 	}
 	defer func() { _ = rows.Close() }()
+	visitState := make(map[string]uint8)
 	for rows.Next() {
 		var root string
 		if err := rows.Scan(&root); err != nil {
@@ -33,7 +36,7 @@ func unsealedBranchTrees(ctx context.Context, configDir string, database db.DBTX
 			return selection, fmt.Errorf("invalid retained worker branch root")
 		}
 		if configDir != "" {
-			if hasVerifiedPublishedCheckpoint(ctx, configDir, root) {
+			if hasVerifiedPublishedCheckpointWithState(ctx, configDir, root, visitState) {
 				continue
 			}
 			if !branchTreeExistsOnDisk(configDir, root) && branchDeclaresPublishedCheckpoint(configDir, root) {

@@ -69,60 +69,100 @@ func candidateCheckpointStoreDirsOnDisk(configDir string, declared string) []str
 	return out
 }
 
+const (
+	checkpointVisitUnseen   uint8 = 0
+	checkpointVisitActive   uint8 = 1
+	checkpointVisitVerified uint8 = 2
+)
+
 func hasVerifiedPublishedCheckpoint(ctx context.Context, configDir, branchRel string) bool {
+	return hasVerifiedPublishedCheckpointWithState(ctx, configDir, branchRel, make(map[string]uint8))
+}
+
+func hasVerifiedPublishedCheckpointWithState(ctx context.Context, configDir, branchRel string, visitState map[string]uint8) bool {
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
 	meta, ok := readWorkerCheckpointMetaOnDisk(configDir, branchRel)
 	if !ok || strings.TrimSpace(meta.LastPublishedCheckpointID) == "" {
 		return false
 	}
 	for _, storeDir := range candidateCheckpointStoreDirsOnDisk(configDir, meta.CheckpointStoreDir) {
-		if verifyCheckpointChainOnDisk(ctx, configDir, branchRel, storeDir, meta.LastPublishedCheckpointID, map[string]bool{}) == nil {
+		if verifyCheckpointChainOnDisk(ctx, configDir, branchRel, storeDir, meta.LastPublishedCheckpointID, visitState) == nil {
 			return true
 		}
 	}
 	return false
 }
 
-func verifyCheckpointChainOnDisk(ctx context.Context, configDir, branchRel, storeDir, checkpointID string, visited map[string]bool) error {
+func canonicalStoreIdentityOnDisk(configDir, storeDir string) string {
+	cleanCfg := filepath.Clean(configDir)
+	if realCfg, err := filepath.EvalSymlinks(cleanCfg); err == nil {
+		cleanCfg = realCfg
+	}
+	cleanStore := filepath.Clean(storeDir)
+	if realStore, err := filepath.EvalSymlinks(cleanStore); err == nil {
+		cleanStore = realStore
+	}
+	return cleanCfg + "\x00" + cleanStore
+}
+
+func verifyCheckpointChainOnDisk(ctx context.Context, configDir, branchRel, storeDir, checkpointID string, visitState map[string]uint8) error {
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
 	checkpointID = strings.TrimSpace(checkpointID)
 	if checkpointID == "" {
-		return fmt.Errorf("empty checkpoint id")
+		return &InvalidError{Detail: "empty checkpoint id"}
 	}
-	if visited[checkpointID] {
+	if visitState == nil {
+		visitState = make(map[string]uint8)
+	}
+	visitKey := canonicalStoreIdentityOnDisk(configDir, storeDir) + "\x00" + branchProjKey(branchRel) + "\x00" + checkpointID
+	switch visitState[visitKey] {
+	case checkpointVisitActive:
+		return &InvalidError{Detail: fmt.Sprintf("cyclic checkpoint ancestry detected at %s", checkpointID)}
+	case checkpointVisitVerified:
 		return nil
 	}
-	visited[checkpointID] = true
+	visitState[visitKey] = checkpointVisitActive
 
 	m, err := readCheckpointManifestOnDisk(storeDir, checkpointID)
 	if err != nil {
+		delete(visitState, visitKey)
 		return err
 	}
 	for _, entry := range m.Entries {
 		if !entry.Deleted && entry.Kind == layeredfs.EntryRegular {
-			if err := verifyBlobOnDisk(storeDir, entry.Final.SHA256, entry.Final.Size); err != nil {
+			if err := verifyBlobOnDisk(ctx, storeDir, entry.Final.SHA256, entry.Final.Size); err != nil {
+				delete(visitState, visitKey)
 				return err
 			}
 		}
 		if entry.Base.Kind == layeredfs.EntryRegular && entry.Base.SHA256 != "" {
-			if err := verifyBlobOnDisk(storeDir, entry.Base.SHA256, entry.Base.Size); err != nil {
+			if err := verifyBlobOnDisk(ctx, storeDir, entry.Base.SHA256, entry.Base.Size); err != nil {
+				delete(visitState, visitKey)
 				return err
 			}
 		}
 		for _, cb := range entry.CandidateBases {
 			if cb.Kind == layeredfs.EntryRegular && cb.SHA256 != "" {
-				if err := verifyBlobOnDisk(storeDir, cb.SHA256, cb.Size); err != nil {
+				if err := verifyBlobOnDisk(ctx, storeDir, cb.SHA256, cb.Size); err != nil {
+					delete(visitState, visitKey)
 					return err
 				}
 			}
 		}
 	}
 	if err := verifyCheckpointGitClosureOnDisk(ctx, configDir, branchRel, storeDir, checkpointID, m.PrivateGit); err != nil {
+		delete(visitState, visitKey)
 		return err
 	}
 	for _, parentID := range m.ParentCheckpoints {
-		if err := verifyCheckpointChainOnDisk(ctx, configDir, branchRel, storeDir, parentID, visited); err != nil {
+		if err := verifyCheckpointChainOnDisk(ctx, configDir, branchRel, storeDir, parentID, visitState); err != nil {
+			delete(visitState, visitKey)
 			return err
 		}
 	}
+	visitState[visitKey] = checkpointVisitVerified
 	return nil
 }
 
@@ -148,7 +188,7 @@ func readCheckpointManifestOnDisk(storeDir, checkpointID string) (checkpoint.Man
 	return checkpoint.Manifest{}, fmt.Errorf("checkpoint manifest %s not found", checkpointID)
 }
 
-func verifyBlobOnDisk(storeDir, sha string, expectedSize int64) error {
+func verifyBlobOnDisk(ctx context.Context, storeDir, sha string, expectedSize int64) error {
 	if len(sha) != 64 {
 		return fmt.Errorf("invalid blob sha256 %q", sha)
 	}
@@ -157,7 +197,7 @@ func verifyBlobOnDisk(storeDir, sha string, expectedSize int64) error {
 		filepath.Join(storeDir, "blobs", sha[:2], sha+".blob"),
 	}
 	for _, p := range candidates {
-		actual, size, err := sha256File(p)
+		actual, size, err := sha256FileInSession(ctx, p)
 		if err != nil {
 			continue
 		}
@@ -261,48 +301,56 @@ func branchProjKey(branchRel string) string {
 	return ""
 }
 
-func verifyCheckpointGitClosureOnDisk(ctx context.Context, configDir, branchRel, storeDir, checkpointID string, pg checkpoint.PrivateGitSnapshot) error {
-	const syntheticStorePrefix = "worker-recovery/checkpoints"
-	diskDirs := []struct{ dir, prefix string }{
-		{filepath.Join(configDir, enginepaths.WorkerBranchesDirName, ".adapter", "privategit", "retained-store", "objects"), enginepaths.WorkerBranchesDirName + "/.adapter/privategit/retained-store/objects"},
-		{filepath.Join(storeDir, "objects"), syntheticStorePrefix + "/objects"},
-		{filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects"), syntheticStorePrefix + "/checkpoints/" + checkpointID + "/git-objects"},
-	}
-	if projKey := branchProjKey(branchRel); projKey != "" {
-		diskDirs = append(diskDirs, struct{ dir, prefix string }{
-			filepath.Join(configDir, enginepaths.WorkerBranchesDirName, ".adapter", projKey, "retained-git-store", "objects"),
-			enginepaths.WorkerBranchesDirName + "/.adapter/" + projKey + "/retained-git-store/objects",
-		})
-	}
-	files := make(map[string]archiveSource)
-	for _, item := range diskDirs {
-		walkErr := filepath.WalkDir(item.dir, func(path string, entry fs.DirEntry, err error) error {
-			if err != nil {
-				if path == item.dir && os.IsNotExist(err) {
-					return nil
-				}
-				return err
-			}
-			if entry.IsDir() {
+func walkGitObjectsDirIntoFiles(dir, prefix string, files map[string]archiveSource) error {
+	return filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			if path == dir && os.IsNotExist(err) {
 				return nil
 			}
-			rel, rErr := filepath.Rel(item.dir, path)
-			if rErr != nil {
-				return rErr
-			}
-			info, iErr := entry.Info()
-			if iErr != nil {
-				return iErr
-			}
-			kind := fileKindRegular
-			if info.Mode()&os.ModeSymlink != 0 {
-				kind = fileKindSymlink
-			}
-			files[item.prefix+"/"+filepath.ToSlash(rel)] = archiveSource{path: path, kind: kind, mode: info.Mode().Perm()}
+			return err
+		}
+		if entry.IsDir() {
 			return nil
-		})
-		if walkErr != nil {
-			return walkErr
+		}
+		rel, rErr := filepath.Rel(dir, path)
+		if rErr != nil {
+			return rErr
+		}
+		info, iErr := entry.Info()
+		if iErr != nil {
+			return iErr
+		}
+		kind := fileKindRegular
+		if info.Mode()&os.ModeSymlink != 0 {
+			kind = fileKindSymlink
+		}
+		files[prefix+"/"+filepath.ToSlash(rel)] = archiveSource{path: path, kind: kind, mode: info.Mode().Perm()}
+		return nil
+	})
+}
+
+func verifyCheckpointGitClosureOnDisk(ctx context.Context, configDir, branchRel, storeDir, checkpointID string, pg checkpoint.PrivateGitSnapshot) error {
+	ctx, closeClosureSession := ensureGitClosureSession(ctx)
+	defer closeClosureSession()
+	const syntheticStorePrefix = "worker-recovery/checkpoints"
+	sharedFiles, err := loadSharedDiskGitObjectFiles(ctx, configDir, storeDir, branchProjKey(branchRel), syntheticStorePrefix)
+	if err != nil {
+		return err
+	}
+	cpDir := filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects")
+	cpPrefix := syntheticStorePrefix + "/checkpoints/" + checkpointID + "/git-objects"
+	cpFiles := make(map[string]archiveSource)
+	if err := walkGitObjectsDirIntoFiles(cpDir, cpPrefix, cpFiles); err != nil {
+		return err
+	}
+	files := sharedFiles
+	if len(cpFiles) > 0 {
+		files = make(map[string]archiveSource, len(sharedFiles)+len(cpFiles))
+		for k, v := range sharedFiles {
+			files[k] = v
+		}
+		for k, v := range cpFiles {
+			files[k] = v
 		}
 	}
 	return verifyCheckpointGitClosureInFiles(ctx, branchRel, syntheticStorePrefix, checkpointID, pg, files)
