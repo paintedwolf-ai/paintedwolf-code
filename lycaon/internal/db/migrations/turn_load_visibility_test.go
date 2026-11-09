@@ -9,21 +9,7 @@ import (
 )
 
 func TestTurnLoadVisibilityPreservesReceiptsAndConstraints(t *testing.T) {
-	database, err := sql.Open("sqlite", ":memory:")
-	testutil.FailErr(t, "open receipt fixture", err)
-	defer func() { _ = database.Close() }()
-	database.SetMaxOpenConns(1)
-	_, err = database.Exec(`CREATE TABLE sessions(id TEXT PRIMARY KEY); CREATE TABLE messages(id TEXT PRIMARY KEY);
- CREATE TABLE turn_load_receipts (
- id INTEGER PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
- opening_message_id TEXT REFERENCES messages(id) ON DELETE CASCADE, tool_call_id TEXT NOT NULL,
- trigger TEXT NOT NULL CHECK(trigger IN ('turn','request','lookup','tool_event')), surface_id TEXT NOT NULL,
- engine TEXT NOT NULL, catalog_revision TEXT NOT NULL, state_json TEXT NOT NULL, decisions_json TEXT NOT NULL,
- standing_json TEXT NOT NULL CHECK(json_valid(standing_json)), elapsed_ms INTEGER NOT NULL CHECK(elapsed_ms >= 0),
- abstained INTEGER NOT NULL CHECK(abstained IN (0,1)), reason TEXT NOT NULL, created_at TEXT NOT NULL) STRICT;
- INSERT INTO sessions VALUES('s'); INSERT INTO messages VALUES('u');
- INSERT INTO turn_load_receipts VALUES(7,'s','u','','turn','implement','engine','rev','{}','{}','{"tools":[]}',12,0,'','timestamp');`)
-	testutil.FailErr(t, "seed released receipt", err)
+	database := receiptMigrationFixture(t)
 	tx, err := database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin receipt migration", err)
 	defer func() { _ = tx.Rollback() }()
@@ -50,4 +36,52 @@ func TestTurnLoadVisibilityPreservesReceiptsAndConstraints(t *testing.T) {
 		t.Fatalf("receipt indexes = %d", indexes)
 	}
 	testutil.FailErr(t, "commit receipt migration", tx.Commit())
+}
+
+func receiptMigrationFixture(t *testing.T) *sql.DB {
+	t.Helper()
+	database, err := sql.Open("sqlite", ":memory:")
+	testutil.FailErr(t, "open receipt fixture", err)
+	t.Cleanup(func() { _ = database.Close() })
+	database.SetMaxOpenConns(1)
+	_, err = database.Exec(`CREATE TABLE sessions(id TEXT PRIMARY KEY); CREATE TABLE messages(id TEXT PRIMARY KEY);
+ CREATE TABLE turn_load_receipts (
+ id INTEGER PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+ opening_message_id TEXT REFERENCES messages(id) ON DELETE CASCADE, tool_call_id TEXT NOT NULL,
+ trigger TEXT NOT NULL CHECK(trigger IN ('turn','request','lookup','tool_event')), surface_id TEXT NOT NULL,
+ engine TEXT NOT NULL, catalog_revision TEXT NOT NULL, state_json TEXT NOT NULL, decisions_json TEXT NOT NULL,
+ standing_json TEXT NOT NULL CHECK(json_valid(standing_json)), elapsed_ms INTEGER NOT NULL CHECK(elapsed_ms >= 0),
+ abstained INTEGER NOT NULL CHECK(abstained IN (0,1)), reason TEXT NOT NULL, created_at TEXT NOT NULL) STRICT;
+ INSERT INTO sessions VALUES('s'); INSERT INTO messages VALUES('u');
+ INSERT INTO turn_load_receipts VALUES(7,'s','u','','turn','implement','engine','rev','{}','{}','{"tools":[]}',12,0,'','timestamp');`)
+	testutil.FailErr(t, "seed released receipt", err)
+	return database
+}
+
+func TestTurnLoadVisibilityFailureRollsBack(t *testing.T) {
+	for _, statement := range []string{
+		`CREATE TABLE turn_load_receipts_widened(id INTEGER)`,
+		`CREATE INDEX idx_turn_load_receipts_turn ON sessions(id)`,
+	} {
+		t.Run(statement, func(t *testing.T) {
+			database := receiptMigrationFixture(t)
+			_, err := database.Exec(statement)
+			testutil.FailErr(t, "inject schema conflict", err)
+			tx, err := database.BeginTx(t.Context(), nil)
+			testutil.FailErr(t, "begin conflicting migration", err)
+			defer func() { _ = tx.Rollback() }()
+			if err := TurnLoadVisibility().Apply(t.Context(), tx); err == nil {
+				t.Fatal("conflicting migration succeeded")
+			}
+			testutil.FailErr(t, "roll back conflicting migration", tx.Rollback())
+			var count int
+			testutil.FailErr(t, "read original receipt", database.QueryRow(`SELECT count(*) FROM turn_load_receipts WHERE id=7`).Scan(&count))
+			if count != 1 {
+				t.Fatalf("rollback retained %d receipts, want 1", count)
+			}
+			if _, err := database.Exec(`UPDATE turn_load_receipts SET trigger='visibility' WHERE id=7`); err == nil {
+				t.Fatal("rollback retained widened schema")
+			}
+		})
+	}
 }
