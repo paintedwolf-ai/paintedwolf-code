@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -209,6 +210,9 @@ func TestFileChangeApprovalDeduplicatesPathsAndRetainsIndexPreviews(t *testing.T
 }
 
 func TestCommandInstructionGrantUsesOneOrdinaryApproval(t *testing.T) {
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_SANDBOX", "on")
+	t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
 	stageApprovals(t, settings.ApprovalEffectAsk)
 	root := t.TempDir()
 	path := filepath.Join(root, "AGENTS.md")

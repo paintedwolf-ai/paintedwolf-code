@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -22,9 +23,10 @@ import (
 )
 
 func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
-	for _, scenario := range []struct{ deny, cancel, host, newAsk, missingProducer bool }{
+	for _, scenario := range []struct{ deny, cancel, host, newAsk, missingProducer, sandboxOff bool }{
 		{host: true}, {deny: true, host: true}, {cancel: true, host: true}, {newAsk: true, host: true}, {missingProducer: true, host: true},
 		{}, {deny: true}, {cancel: true}, {newAsk: true}, {missingProducer: true},
+		{sandboxOff: true}, {sandboxOff: true, deny: true}, {sandboxOff: true, cancel: true}, {sandboxOff: true, newAsk: true},
 	} {
 		name := fmt.Sprintf("deny-during-review-%t", scenario.deny)
 		if scenario.cancel {
@@ -36,10 +38,18 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 		if scenario.missingProducer {
 			name = "explicit-review-of-missing-producer"
 		}
-		if !scenario.host {
+		if scenario.sandboxOff {
+			name += "-sandbox-off"
+		} else if !scenario.host {
 			name += "-confined"
 		}
 		t.Run(name, func(t *testing.T) {
+			confine.TestingSetAutoConfine(t)
+			t.Setenv("LYCAON_SANDBOX", "on")
+			t.Setenv("LYCAON_BYPASS_APPROVALS", "0")
+			if scenario.sandboxOff {
+				t.Setenv("LYCAON_SANDBOX", "off")
+			}
 			stageApprovals(t, settings.ApprovalEffectAsk)
 			root := t.TempDir()
 			store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
@@ -84,6 +94,10 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 				t.Fatalf("returned before required review: %v", err)
 			case <-ctx.Done():
 				t.Fatal("required review never arrived")
+			}
+			contained := manager.request.ProposedAction.Execution.Contained
+			if contained.HostExecution != scenario.host || contained.FSJailed != (!scenario.host && !scenario.sandboxOff) {
+				t.Fatalf("review fixture has wrong physical boundary facts: %+v", contained)
 			}
 			expectedGate := api.GateUserRule
 			if scenario.missingProducer {
