@@ -75,9 +75,10 @@ func Discover(scope, need, cursor, status string, failure RankingFailure, entrie
 		offset = next.Offset
 	}
 	end := min(offset+DiscoveryPageSize, len(entries))
-	out := &Discovery{Status: status, Failure: failure, Total: len(entries), Instruction: "Select a relevant entry by calling this tool with its exact name as need. To see more entries, pass next_need unchanged as need. To restart discovery, repeat the original description."}
+	out := &Discovery{Status: status, Failure: failure, Total: len(entries)}
 	for {
 		out.Entries, out.NextNeed = entries[offset:end], ""
+		out.Instruction = discoveryInstruction(len(entries), end < len(entries))
 		if end < len(entries) {
 			raw, err := json.Marshal(discoveryCursor{Need: need, Digest: digest, Offset: end, Order: order})
 			if err != nil {
@@ -98,6 +99,17 @@ func Discover(scope, need, cursor, status string, failure RankingFailure, entrie
 		end--
 	}
 	return out, nil
+}
+
+func discoveryInstruction(total int, more bool) string {
+	if total == 0 {
+		return "No entries are available on this surface. Continue with available capabilities and state any limitation."
+	}
+	instruction := "Load a relevant entry by its exact name as need. "
+	if more {
+		return instruction + "This catalog is unfiltered. Pass next_need unchanged for more entries; rephrasing restarts the same catalog."
+	}
+	return instruction + "This is the final catalog page. If none fits, use available capabilities and state limitations; rephrasing does not add entries."
 }
 
 func sortDiscoveryEntries(entries []DiscoveryEntry, order []string) {
