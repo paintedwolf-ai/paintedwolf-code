@@ -1,6 +1,5 @@
 """Apply an explicit harness model without replacing unrelated routing policy."""
 
-import copy
 import json
 import os
 import sys
@@ -9,22 +8,18 @@ import urllib.request
 
 
 def select_model(current, provider, model):
-    policy = copy.deepcopy(current)
-    provider = provider or policy.get("coordinator", {}).get("provider_id", "")
+    provider = provider or current.get("coordinator", {}).get("provider_id", "")
     if not provider or not model:
         raise ValueError("harness model selection requires a provider and model")
     selection = {"provider_id": provider, "model": model}
-    policy["coordinator"] = selection.copy()
-    policy["lite"] = selection.copy()
-    pool = policy.setdefault("agent_pool", {})
-    pool.setdefault("selection", "first")
-    pool["models"] = [selection.copy()]
-    return policy
+    pool_selection = current.get("agent_pool", {}).get("selection") or "first"
+    return {"coordinator": selection.copy(), "lite": selection.copy(),
+            "agent_pool": {"selection": pool_selection, "models": [selection.copy()]}}
 
 
 def configure(project, provider, model, request):
     path = "/v1/settings/model-policy?" + urllib.parse.urlencode({"project_id": project})
-    policy = select_model(request(path), provider, model)
+    policy = select_model(request(path + "&effective=true"), provider, model)
     request(path, policy)
     return policy["coordinator"]["provider_id"]
 

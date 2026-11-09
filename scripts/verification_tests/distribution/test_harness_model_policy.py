@@ -35,7 +35,7 @@ class HarnessModelPolicyTest(unittest.TestCase):
         self.assertEqual(policy["coordinator"], selection)
         self.assertEqual(policy["lite"], selection)
         self.assertEqual(policy["agent_pool"], {"selection": "random", "models": [selection]})
-        self.assertEqual(policy["thinking"], current["thinking"])
+        self.assertNotIn("thinking", policy)
         self.assertEqual(current["coordinator"]["model"], "old")
 
     def test_missing_pool_uses_supported_selection(self):
@@ -50,7 +50,7 @@ class HarnessModelPolicyTest(unittest.TestCase):
         request = Mock(side_effect=[{"coordinator": {"provider_id": "saved"}}, {}])
         self.assertEqual(configure("project id", "", "chosen", request), "saved")
         path = "/v1/settings/model-policy?project_id=project+id"
-        self.assertEqual(request.call_args_list[0].args, (path,))
+        self.assertEqual(request.call_args_list[0].args, (path + "&effective=true",))
         self.assertEqual(request.call_args_list[1].args[0], path)
         self.assertEqual(request.call_args_list[1].args[1]["lite"]["model"], "chosen")
         for responses in ([RuntimeError("read failed")], [{}, RuntimeError("write failed")]):
