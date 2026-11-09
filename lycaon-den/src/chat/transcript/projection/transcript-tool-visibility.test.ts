@@ -361,7 +361,7 @@ describe("transcript-items", () => {
     expect(display).toHaveLength(1);
     expect(display[0]?.kind).toBe("activity_span");
     if (display[0]?.kind === "activity_span") {
-      expect(display[0].label).toBe("investigating");
+      expect(display[0].label).toBe("reading files");
     }
   });
 

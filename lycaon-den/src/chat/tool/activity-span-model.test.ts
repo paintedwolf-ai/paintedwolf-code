@@ -77,7 +77,7 @@ describe("decision rows in activity spans", () => {
       tool(part("c1", "command", "build")),
     ]);
     expect(span.entries.map((entry) => entry.kind)).toEqual(["turn_load", "turn_load", "tool", "tool"]);
-    expect(span.label).toBe("investigating");
+    expect(span.label).toBe("reading files");
     expect(activitySpanComposition(span.entries).map((p) => `${p.label} ×${p.count}`)).toEqual([
       "Local AI ×2", "read ×1", "command ×1",
     ]);
@@ -109,7 +109,7 @@ describe("activity span membership", () => {
     const span = spanOf([tool(part("r1", "read", "README.md"))]);
 
     expect(span.key).toBe("r1");
-    expect(span.label).toBe("investigating");
+    expect(span.label).toBe("reading files");
     expect(span.entries).toHaveLength(1);
   });
 
@@ -469,7 +469,7 @@ describe("weighted activity headlines", () => {
       tool(part("r3", "grep", "TODO")),
       tool(part("w1", "edit", "a.go", { kind: "write" })),
     ]);
-    expect(span.label).toBe("making changes");
+    expect(span.label).toBe("editing files");
   });
 
   it("changes the headline when accumulated work overtakes the incumbent", () => {
@@ -477,7 +477,7 @@ describe("weighted activity headlines", () => {
       tool(part("w1", "edit", "a.go", { kind: "write" })),
       tool(part("v1", "verify", "unit")),
     ];
-    expect(spanOf(items).label).toBe("making changes");
+    expect(spanOf(items).label).toBe("editing files");
 
     items.push(tool(part("v2", "verify", "integration")));
   });
@@ -487,7 +487,7 @@ describe("weighted activity headlines", () => {
       tool(part("w1", "edit", "a.go", { kind: "write" })),
       tool(part("v1", "verify", "unit")),
     ]);
-    expect(span.label).toBe("making changes");
+    expect(span.label).toBe("editing files");
   });
 
   it("does not let incidental bookkeeping rename substantive work", () => {
@@ -496,7 +496,7 @@ describe("weighted activity headlines", () => {
       tool(part("u1", "update_progress", "step one")),
       tool(part("u2", "state_update", "state")),
     ]);
-    expect(span.label).toBe("investigating");
+    expect(span.label).toBe("reading files");
   });
 
   it("uses the first authored headline when every vote is incidental", () => {
