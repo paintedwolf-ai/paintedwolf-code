@@ -156,7 +156,11 @@ describe("FileVersionPicker", () => {
     const summary = await screen.findByText("124 edits from this turn");
     const details = summary.closest("details")!;
     const [editedRow, createdRow] = screen.getAllByTestId("file-version-title");
-    expect(editedRow!.closest('[role="menuitemradio"]')?.nextElementSibling).toBe(details);
+    const editedOption = editedRow!.closest<HTMLElement>('[role="menuitemradio"]')!;
+    expect(editedOption.nextElementSibling).toBe(details);
+    editedOption.focus();
+    fireEvent.keyDown(editedOption, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(details.querySelector("summary"));
     expect(details.nextElementSibling).toBe(createdRow!.closest('[role="menuitemradio"]'));
     expect(screen.getByTestId("file-version-commit")).toBeTruthy();
     expect(screen.queryAllByRole("button", { name: /^Undo edit/ })).toHaveLength(0);

@@ -48,6 +48,8 @@ type Props = {
   onLoadMore: () => void;
 };
 
+const historyFocusSelector = ".den-file-version__option:not([disabled]), .den-file-version__edits > summary";
+
 function selectedLabel(selected: FileVersionView | null): string {
   if (!selected) return "Current";
   return selected.reviewedThroughOrdinal ? "Reviewed changes" : relativeTimeLabel(selected.ts);
@@ -94,7 +96,7 @@ export function FileVersionPicker(props: Props) {
       event.preventDefault();
       const items = Array.from(
         (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-          ".den-file-version__option:not([disabled])",
+          historyFocusSelector,
         ),
       );
       if (!items.length) return;
@@ -110,13 +112,13 @@ export function FileVersionPicker(props: Props) {
     } else if (event.key === "Home") {
       event.preventDefault();
       const items = (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-        ".den-file-version__option:not([disabled])",
+        historyFocusSelector,
       );
       items[0]?.focus();
     } else if (event.key === "End") {
       event.preventDefault();
       const items = (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-        ".den-file-version__option:not([disabled])",
+        historyFocusSelector,
       );
       items[items.length - 1]?.focus();
     }
@@ -435,7 +437,11 @@ export function FileVersionPicker(props: Props) {
                   rows={rows()}
                   renderRow={historyRow}
                   emptyMessage={emptyHistory() ? emptyMessage() : undefined}
-                  onApplied={() => { dismiss(); source().onApplied(); }}
+                  onApplied={() => {
+                    const onApplied = source().onApplied;
+                    dismiss();
+                    onApplied();
+                  }}
                 />
               )}
             </Show>

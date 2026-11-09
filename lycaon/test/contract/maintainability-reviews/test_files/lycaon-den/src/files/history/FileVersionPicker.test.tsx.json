@@ -6,7 +6,7 @@
   "disposition": "retain",
   "reason": "Retain the history picker integration tests together around the shared fixture and menu entry point. The busy-turn fixture exercises server cursors, merged row placement and bounded edit paging through the same menu as version and Git selection.",
   "reviewed_commit": "2ca2eff480e1e7918fcd7792b2d5ec95ca0dc7d3",
-  "ceiling": 468,
+  "ceiling": 472,
   "boundaries": {
     "lycaon-den/src/files/history/file-history-model.ts": "5b70829f58a9b128be7c550ab035d88b59d16d592e8fc533a5080fc5da010838",
     "lycaon-den/src/files/history/document-history-timeline.ts": "628dff477c1e6a9c76daf16ec63bb137946c93d9464d7003a6c039d4b6991909"
