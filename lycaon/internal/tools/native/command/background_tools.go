@@ -322,7 +322,7 @@ func runCommandBackground(
 				tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
 			}
 		}
-		result.Tail = tail
+		result.Tail = rewriteTailDisplayPaths(tctx, tail)
 	}
 	result.Network = observedNetwork
 	result.Report = CommandConfinementReport(confine.BoundaryOf(confinement),

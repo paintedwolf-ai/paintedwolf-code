@@ -47,6 +47,7 @@ func (c ConfinedForeground) Run(
 		return nil, outcome, err
 	}
 	res := CommandResultFromOutcome(outcome, tools.LocalNetworkGrantOf(tctx), tctx.Files.PackageExecution)
+	res.Tail = rewriteTailDisplayPaths(tctx, res.Tail)
 
 	if err := rejectCommandNotFound(res, args); err != nil && !CaptureInvocation(args) {
 		outcome.IndexWatch.Release()

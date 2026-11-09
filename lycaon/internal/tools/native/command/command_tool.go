@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/packageexec"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -180,6 +181,12 @@ func capOpaqueTail(tail string, maxBytes int) (capped string, truncated bool, or
 	return tooloutput.CapSpillBytes(tail, maxBytes), true, originalBytes
 }
 
+// rewriteTailDisplayPaths renders absolute paths under any attached root in a
+// command tail with their canonical session spelling.
+func rewriteTailDisplayPaths(tctx tools.ToolContext, tail string) string {
+	return projectroot.RewriteAttachedRootPaths(tctx.Source.Roots, tctx.Source.ActiveRootID, tail)
+}
+
 // captureProcessHandle records a live process on the invocation.
 func captureProcessHandle(tctx tools.ToolContext, handle string, running bool) {
 	if tctx.Effects.Out == nil || strings.TrimSpace(handle) == "" {
@@ -211,7 +218,7 @@ func EncodeCommandRunning(tctx tools.ToolContext, outcome RunOutcome, budget tim
 		Running:      true,
 		Handle:       outcome.Handle,
 		Stages:       outcome.Snapshot.Stages,
-		Tail:         outcome.Snapshot.Tail,
+		Tail:         rewriteTailDisplayPaths(tctx, outcome.Snapshot.Tail),
 		WaitedMs:     int(budget.Milliseconds()),
 		Network:      outcome.Network,
 		Report:       report.WithSandboxRefusals(outcome.Refusals),
