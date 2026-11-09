@@ -514,7 +514,7 @@ function toContinuationState(
 export function scanLineLexicalBoundaries(
   lineText: string,
   lineNumber: number,
-  totalLines: number,
+  _totalLines: number,
   _lineFrom: number,
   startDepthOrCont: number | PrettyLineContinuationState,
   eligible: boolean,
@@ -602,7 +602,6 @@ export function scanLineLexicalBoundaries(
   }
   const relBoundaries: PrettyLineRelativeBoundary[] = [];
   const lineLen = lineText.length;
-  const hasFollowingNewline = lineNumber < totalLines;
   const hasPrecedingNewline = lineNumber > 1 && scanStartCol === 0;
   const isSyntaxProtected = createProtectedSpanChecker(protectedSpans);
 
@@ -727,7 +726,7 @@ export function scanLineLexicalBoundaries(
       lastSigCode = c;
       const nextIdx = nextNonSpaceInLine(lineText, i + 1, budget);
       if (nextIdx === "budget") return "budget";
-      if (nextIdx === lineLen && hasFollowingNewline) continue;
+      if (nextIdx === lineLen) continue;
       if (nextIdx < lineLen) {
         const nextCode = lineText.charCodeAt(nextIdx);
         if (nextCode === 0x7d || (family !== "css" && nextCode === 0x5d)) continue;
@@ -781,7 +780,7 @@ export function scanLineLexicalBoundaries(
       if (family === "javascript" && isDirectlyInParen()) continue;
       const nextIdx = nextNonSpaceInLine(lineText, i + 1, budget);
       if (nextIdx === "budget") return "budget";
-      if (nextIdx === lineLen && hasFollowingNewline) continue;
+      if (nextIdx === lineLen) continue;
       if ((family === "jsonc" || family === "javascript") && nextIdx < lineLen) {
         const nextCode = lineText.charCodeAt(nextIdx);
         if (nextCode === 0x7d || nextCode === 0x5d) continue;
@@ -793,7 +792,7 @@ export function scanLineLexicalBoundaries(
       if (isDirectlyInParen()) continue;
       const nextIdx = nextNonSpaceInLine(lineText, i + 1, budget);
       if (nextIdx === "budget") return "budget";
-      if (nextIdx === lineLen && hasFollowingNewline) continue;
+      if (nextIdx === lineLen) continue;
       if (nextIdx < lineLen && lineText.charCodeAt(nextIdx) === 0x7d) continue;
       if (!pushBoundary(i + 1, depth)) return "budget";
     } else {
