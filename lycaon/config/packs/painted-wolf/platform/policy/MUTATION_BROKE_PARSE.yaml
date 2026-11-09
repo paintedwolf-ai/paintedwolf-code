@@ -21,6 +21,7 @@ requires:
     - paintedwolf.parse_error
     - paintedwolf.path
     - paintedwolf.mutation_new_path
+    - paintedwolf.native_operation
 when: paintedwolf.rejection_code == "MUTATION_BROKE_PARSE"
 effect: block
 copy:
@@ -37,11 +38,13 @@ copy:
     the rejected candidate was not created. Correct the candidate and retry a complete
     staged command redirect. If the path has since been created, read its current contents before replacing it.
     {% else %}Read the current file before repairing it; rejected candidate text is not
-    a saved edit base. Correct the candidate with an exact `edit`, a complete staged command redirect,
+    a saved edit base. Correct the candidate with a complete staged command redirect,
     or one `edit --path` or `replace-lines` whose span covers the whole change.{% endif %}
     Resolve this rejected source mutation before running checks that require its proposed contents.
     If the proposed syntax is intentional, intermediate, or the parser diagnostic is inaccurate,
-    supply `syntax_override_reason` on the mutation call to proceed.
+    {% if paintedwolf.native_operation %}only `code-rewrite --syntax-override-reason TEXT` can proceed past
+    this check; `edit`, `replace-lines`, and redirects accept no override, so repair the syntax or split
+    the change.{% else %}supply `syntax_override_reason` on the mutation call to proceed.{% endif %}
   instead: Correct the candidate and retry one atomic mutation
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit
@@ -53,3 +56,14 @@ x-paintedwolf-scenarios:
       path: ntp_check.py
       profile: implement
       tool: replace_lines
+    expect_contains:
+      - 'supply `syntax_override_reason`'
+  - id: command-leg
+    vars:
+      native_operation: replace_lines
+      parse_error: 'line 55: raise ValueError'
+      path: ntp_check.py
+      profile: implement
+      tool: command
+    expect_contains:
+      - 'code-rewrite --syntax-override-reason'

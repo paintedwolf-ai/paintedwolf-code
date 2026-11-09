@@ -83,3 +83,61 @@ func TestPortableVocabularyAccessors(t *testing.T) {
 		t.Fatalf("unexpected portable vocabulary: %#v", profiles)
 	}
 }
+
+func TestCommandFormOfFollowsCatalog(t *testing.T) {
+	for _, tc := range []struct {
+		operation string
+		want      string
+	}{
+		{"survey_repo", "repo-map"},
+		{"replace_lines", "replace-lines"},
+		{"code_rewrite", "code-rewrite"},
+		{"edit", "edit"},
+		{"write", ""},
+		{"grep", ""},
+		{"extract_archive", ""},
+		{"command", ""},
+		{"absent_tool", ""},
+		{"", ""},
+	} {
+		if got := CommandFormOf(tc.operation); got != tc.want {
+			t.Errorf("CommandFormOf(%q) = %q, want %q", tc.operation, got, tc.want)
+		}
+	}
+}
+
+func TestFactsFromDataDerivesCommandForm(t *testing.T) {
+	got := FactsFromData(map[string]any{"native_operation": "survey_repo"})
+	if got["paintedwolf.command_form"] != "repo-map" {
+		t.Fatalf("command leg lost its catalog spelling: %#v", got["paintedwolf.command_form"])
+	}
+	multi := FactsFromData(map[string]any{"native_operation": "write"})
+	if _, present := multi["paintedwolf.command_form"]; present {
+		t.Fatal("multi-form operation invented a canonical command spelling")
+	}
+	plain := FactsFromData(map[string]any{"path": "src"})
+	if _, present := plain["paintedwolf.command_form"]; present {
+		t.Fatal("tool leg invented a command form")
+	}
+}
+
+func TestMissingCapabilityFactsCoverNewestCapabilityFields(t *testing.T) {
+	// capability_request.host_resources and capability_request.direct_ip are
+	// the newest catalog capability fields. Their missing_capability_* facts
+	// must stay published and computed like the older fields; the closed
+	// isolation outcome inventory has no TRY codes for them yet, so their
+	// policy-copy consumers land with the capability copy workstream.
+	facts := map[string]any{}
+	PublishInvocationRecovery(facts, "command", map[string]any{"command": "fixture"}, nil)
+	if facts["paintedwolf.missing_capability_host_resources"] != true || facts["paintedwolf.missing_capability_direct_ip"] != true {
+		t.Fatalf("unrequested capability fields must read missing: host_resources=%v direct_ip=%v",
+			facts["paintedwolf.missing_capability_host_resources"], facts["paintedwolf.missing_capability_direct_ip"])
+	}
+	requested := map[string]any{"command": "fixture", "capability_request": map[string]any{"host_resources": []string{"camera"}, "direct_ip": true}}
+	granted := map[string]any{}
+	PublishInvocationRecovery(granted, "command", requested, nil)
+	if granted["paintedwolf.missing_capability_host_resources"] != false || granted["paintedwolf.missing_capability_direct_ip"] != false {
+		t.Fatalf("requested capability fields must not read missing: host_resources=%v direct_ip=%v",
+			granted["paintedwolf.missing_capability_host_resources"], granted["paintedwolf.missing_capability_direct_ip"])
+	}
+}

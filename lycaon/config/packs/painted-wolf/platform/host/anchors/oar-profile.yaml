@@ -88,6 +88,8 @@ host_facts:
    type: string
  - name: paintedwolf.operation
    type: string
+ - name: paintedwolf.command_form
+   type: string
  - name: paintedwolf.native_command
    type: string
  - name: paintedwolf.json_unescaped_newline
@@ -678,6 +680,8 @@ host_facts:
    type: list<string>
  - name: paintedwolf.missing_summary_job_ids
    type: list<string>
+ - name: paintedwolf.missing_capability_host_resources
+   type: bool
  - name: paintedwolf.missing_capability_socket_paths
    type: bool
  - name: paintedwolf.missing_capability_process_control
@@ -685,6 +689,8 @@ host_facts:
  - name: paintedwolf.missing_capability_credential_store
    type: bool
  - name: paintedwolf.missing_capability_host_execution
+   type: bool
+ - name: paintedwolf.missing_capability_direct_ip
    type: bool
  - name: paintedwolf.missing_capability_local_listen
    type: bool

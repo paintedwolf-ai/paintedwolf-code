@@ -15,14 +15,15 @@ requires:
     - paintedwolf.detail
     - paintedwolf.format
     - paintedwolf.path
+    - paintedwolf.can_command
 when: paintedwolf.rejection_code == "JQ_PARSE"
 effect: block
 copy:
   what: jq could not parse {{ paintedwolf.path }} as {{ paintedwolf.format }} — {{ paintedwolf.detail }}.
   cause: File is not valid for the selected format, or format auto-detection failed.
   why: Queries run on a parsed document tree — malformed configs must be fixed or read raw.
-  fix: Fix the file, set format explicitly (json|yaml|toml), or use read — then retry.
-  instead: Branch on Code; fix format or use read
+  fix: '{% if paintedwolf.can_command %}Fix the file, set format explicitly (json|yaml|toml), or inspect the raw bytes with `cat` or `sed -n` inside command — then retry.{% else %}Fix the file or set format explicitly (json|yaml|toml) with an offered editor — then retry.{% endif %}'
+  instead: Branch on Code; fix format or inspect raw bytes
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:jq
 x-paintedwolf-message: jq could not parse the document
@@ -34,3 +35,13 @@ x-paintedwolf-scenarios:
       path: package.json
       profile: implement
       tool: jq
+  - id: command-leg
+    vars:
+      can_command: true
+      detail: invalid character
+      format: json
+      path: package.json
+      profile: implement
+      tool: jq_edit
+    expect_contains:
+      - '`cat`'

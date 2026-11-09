@@ -151,7 +151,32 @@ func FactsFromData(data map[string]any) map[string]any {
 	if kind, ok := data["kind"].(string); ok && kind == "redirect" {
 		out["paintedwolf.redirect"] = true
 	}
+	if operation, _ := out["paintedwolf.native_operation"].(string); operation != "" {
+		if form := CommandFormOf(operation); form != "" {
+			out["paintedwolf.command_form"] = form
+		}
+	}
 	return out
+}
+
+// CommandFormOf returns the single catalog command spelling for an operation
+// or form-tool id. Operations with several command forms (or none) have no
+// canonical spelling and map to "".
+func CommandFormOf(operation string) string {
+	operation = strings.TrimSpace(operation)
+	if operation == "" {
+		return ""
+	}
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return ""
+	}
+	for _, disposition := range catalog.Tools {
+		if disposition.Tool == operation && len(disposition.CommandForms) == 1 {
+			return disposition.CommandForms[0]
+		}
+	}
+	return ""
 }
 
 func publishKey(key string) string {
