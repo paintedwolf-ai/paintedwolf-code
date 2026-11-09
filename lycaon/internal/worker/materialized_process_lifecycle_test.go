@@ -27,19 +27,27 @@ import (
 )
 
 func TestSmallMaterializedLifecycleAcrossProcessRestart(t *testing.T) {
-	runWorkerLifecycleAcrossProcessRestart(t, false)
+	runWorkerLifecycleAcrossProcessRestart(t, false, false)
 }
 
 func TestSmallMountedLifecycleAcrossProcessRestart(t *testing.T) {
-	runWorkerLifecycleAcrossProcessRestart(t, true)
+	runWorkerLifecycleAcrossProcessRestart(t, true, false)
+}
+
+func TestSmallMaterializedLifecyclePreservesSourceConflict(t *testing.T) {
+	runWorkerLifecycleAcrossProcessRestart(t, false, true)
+}
+
+func TestSmallMountedLifecyclePreservesSourceConflict(t *testing.T) {
+	runWorkerLifecycleAcrossProcessRestart(t, true, true)
 }
 
 // Separate processes prevent registries from substituting for durable recovery.
 // Process restart does not establish power-loss durability.
-func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted bool) {
+func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted, sourceConflict bool) {
 	t.Helper()
 	if phase := os.Getenv("PW_M14_LIFECYCLE_PHASE"); phase != "" {
-		runWorkerLifecyclePhase(t, os.Getenv("PW_M14_LIFECYCLE_ROOT"), phase, mounted)
+		runWorkerLifecyclePhase(t, os.Getenv("PW_M14_LIFECYCLE_ROOT"), phase, mounted, sourceConflict)
 		if phase == "prepare" && !t.Failed() {
 			// End the process with its published view still live; recovery must repair it.
 			os.Exit(0)
@@ -57,6 +65,9 @@ func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted bool) {
 	executable, err := os.Executable()
 	testutil.FailErr(t, "test executable", err)
 	for _, phase := range []string{"prepare", "recover-promote"} {
+		if phase == "recover-promote" && sourceConflict {
+			testutil.FailErr(t, "external source edit after worker exit", os.WriteFile(filepath.Join(source, "main.go"), []byte("package external\n"), 0o644))
+		}
 		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^"+t.Name()+"$", "-test.timeout=2m")
 		cmd.Env = append(os.Environ(), "PW_M14_LIFECYCLE_PHASE="+phase, "PW_M14_LIFECYCLE_ROOT="+root, "PW_M14_LIFECYCLE_SOURCE="+source)
 		if output, err := cmd.CombinedOutput(); err != nil {
@@ -65,7 +76,7 @@ func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted bool) {
 	}
 }
 
-func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted bool) {
+func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceConflict bool) {
 	t.Helper()
 	if root == "" {
 		t.Fatal("missing isolated lifecycle root")
@@ -183,6 +194,9 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted bool) {
 	}
 	service := &MergeService{Queue: queue, Store: queue, DataDir: testbaseline.DataDir(t, database), Workspace: manager}
 	testutil.FailErr(t, "recover merge transactions", service.RecoverOrphanedMergeApplies(t.Context()))
+	if sourceConflict {
+		assertRecoveredSourceConflict(t, service, task, source, manifest.CheckpointID, fields[1])
+	}
 	result, err := service.PromoteOverlay(t.Context(), "", task.ID, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote recovered checkpoint", err)
 	if result.Status != api.WorkerMergeStatusMerged {
