@@ -173,6 +173,7 @@ function sourcePathButtonFromEvent(
 export function onMarkdownProjectPathLinkClick(
   event: MouseEvent | KeyboardEvent,
   projectId?: string,
+  activeRootId?: string,
 ): boolean {
   if (event instanceof KeyboardEvent) {
     if (event.key !== "Enter" && event.key !== " ") return false;
@@ -189,6 +190,7 @@ export function onMarkdownProjectPathLinkClick(
     intent: "permanent",
     projectId: hit.projectId,
     rootId: hit.rootId,
+    activeRootId,
     jobId: hit.jobId,
     path: hit.path,
     entryKind: hit.entryKind,
@@ -204,6 +206,8 @@ export function markdownProjectPathLinkContextMenu(
   opts: {
     projectId?: string;
     rootRefs?: readonly ResolveProjectRoot[];
+    /** Session's active root; bare paths resolve against it when the link pins none. */
+    activeRootId?: string;
     chatDestination?: ChatDestination | null;
     onReferenceAction?: (anchor: Element, referenceId: string, action: SourceNavigationAction) => void;
   },
@@ -231,6 +235,7 @@ export function markdownProjectPathLinkContextMenu(
   const resolved = resolveProjectFile(
     {
       roots: hit.rootId ? refs.filter((ref) => ref.id === hit.rootId) : refs,
+      activeRootId: hit.rootId ? undefined : opts.activeRootId,
     },
     hit.path,
   );
@@ -258,6 +263,7 @@ export function markdownProjectPathLinkContextMenu(
           intent: "permanent",
           projectId: hit.projectId,
           rootId: hit.rootId,
+          activeRootId: hit.rootId ? undefined : opts.activeRootId,
           jobId: hit.jobId,
           path: hit.path,
           entryKind: hit.entryKind,

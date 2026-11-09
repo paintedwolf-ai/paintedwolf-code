@@ -17,6 +17,8 @@ export type OpenSourceLocationArgs = {
   entryKind?: "file" | "folder" | "unknown";
   /** Pinned attached root. */
   rootId?: string;
+  /** Session's active root; bare paths resolve against it when rootId is absent. */
+  activeRootId?: string;
   /** Absolute, root-relative, or root-qualified path. */
   path?: string;
   line?: number;
@@ -99,7 +101,10 @@ function dispatchInApp(req: SourceNavigationRequest, current: () => boolean): vo
 }
 
 export function resolveProjectPath(
-  args: Pick<OpenSourceLocationArgs, "projectId" | "rootId" | "path">,
+  args: Pick<
+    OpenSourceLocationArgs,
+    "projectId" | "rootId" | "path" | "activeRootId"
+  >,
   lookup?: OpenSourceProjectLookup,
 ):
   | {
@@ -117,9 +122,11 @@ export function resolveProjectPath(
   const project = (lookup ?? projectLookup)?.(projectId);
   if (!project) return { status: "noop", reason: "no_project" };
   const requestedRootId = args.rootId?.trim();
+  const activeRootId = args.activeRootId?.trim();
+  // A pinned root wins; bare paths otherwise resolve against the session folder.
   const resolveProject = requestedRootId
     ? { roots: project.roots.filter((root) => root.id === requestedRootId) }
-    : project;
+    : { roots: project.roots, activeRootId };
   const resolved = resolveProjectFile(resolveProject, path);
   if ("error" in resolved) return { status: "noop", reason: "resolve_failed" };
   const root = resolveProject.roots.find((root) => root.id === resolved.rootId);
