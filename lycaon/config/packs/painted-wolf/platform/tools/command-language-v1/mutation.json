@@ -1036,7 +1036,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "tee [-a] [--] [PATH ...]",
+      "argv": "tee [-a] [--] [PATH ...] [--syntax-override-reason TEXT]",
       "forms": [
         {
           "spellings": [
@@ -1048,6 +1048,18 @@
           "fixture_id": "tee-option-a-append",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "--syntax-override-reason"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "tee-option-syntax-override-reason",
+          "consumption": "fixed",
+          "sample_values": [
+            "intentional intermediate state"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tee [-a] [--] [PATH ...]",
@@ -1122,7 +1134,8 @@
       "fixture_ids": [
         "tee-operands-valid",
         "tee-rejection",
-        "tee-option-a-append"
+        "tee-option-a-append",
+        "tee-option-syntax-override-reason"
       ]
     },
     {
@@ -1288,7 +1301,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "edit --path PATH --old-string TEXT --new-string TEXT [--replace-all]",
+      "argv": "edit --path PATH --old-string TEXT --new-string TEXT [--replace-all] [--syntax-override-reason TEXT]",
       "forms": [
         {
           "spellings": [
@@ -1335,6 +1348,18 @@
           "fixture_id": "edit-option-replaceall",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "--syntax-override-reason"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "edit-option-syntax-override-reason",
+          "consumption": "fixed",
+          "sample_values": [
+            "intentional intermediate state"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. edit --path PATH --old-string TEXT --new-string TEXT [--replace-all]",
@@ -1412,7 +1437,8 @@
         "edit-option-path",
         "edit-option-oldstring",
         "edit-option-newstring",
-        "edit-option-replaceall"
+        "edit-option-replaceall",
+        "edit-option-syntax-override-reason"
       ]
     },
     {
@@ -1420,7 +1446,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "replace-lines --path PATH --start N --end N --content TEXT",
+      "argv": "replace-lines --path PATH --start N --end N --content TEXT [--syntax-override-reason TEXT]",
       "forms": [
         {
           "spellings": [
@@ -1468,6 +1494,18 @@
           "consumption": "fixed",
           "sample_values": [
             "alpha"
+          ]
+        },
+        {
+          "spellings": [
+            "--syntax-override-reason"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "replace-lines-option-syntax-override-reason",
+          "consumption": "fixed",
+          "sample_values": [
+            "intentional intermediate state"
           ]
         }
       ],
@@ -1546,7 +1584,8 @@
         "replace-lines-option-path",
         "replace-lines-option-start",
         "replace-lines-option-end",
-        "replace-lines-option-content"
+        "replace-lines-option-content",
+        "replace-lines-option-syntax-override-reason"
       ]
     },
     {

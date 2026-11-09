@@ -141,3 +141,12 @@ func TestMissingCapabilityFactsCoverNewestCapabilityFields(t *testing.T) {
 			granted["paintedwolf.missing_capability_host_resources"], granted["paintedwolf.missing_capability_direct_ip"])
 	}
 }
+
+func TestCommandRecoveryUsesInvocationIdentity(t *testing.T) {
+	for _, tool := range []string{"command", "write", "edit", ""} {
+		facts := FactsFromData(map[string]any{"tool": tool, "command_surface": true})
+		if facts["paintedwolf.command_surface"] != (tool == "command") {
+			t.Fatalf("wrong recovery surface for %q: %v", tool, facts)
+		}
+	}
+}

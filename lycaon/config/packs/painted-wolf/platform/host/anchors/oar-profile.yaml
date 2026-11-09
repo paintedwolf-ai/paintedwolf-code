@@ -88,6 +88,8 @@ host_facts:
    type: string
  - name: paintedwolf.operation
    type: string
+ - name: paintedwolf.command_surface
+   type: bool
  - name: paintedwolf.command_form
    type: string
  - name: paintedwolf.native_command

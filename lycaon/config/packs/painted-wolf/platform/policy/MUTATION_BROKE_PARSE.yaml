@@ -8,6 +8,7 @@ selector:
     - replace_lines
     - code_rewrite
     - write
+    - command
 requires:
   profiles:
     - filesystem
@@ -21,7 +22,7 @@ requires:
     - paintedwolf.parse_error
     - paintedwolf.path
     - paintedwolf.mutation_new_path
-    - paintedwolf.native_operation
+    - paintedwolf.command_surface
 when: paintedwolf.rejection_code == "MUTATION_BROKE_PARSE"
 effect: block
 copy:
@@ -42,9 +43,10 @@ copy:
     or one `edit --path` or `replace-lines` whose span covers the whole change.{% endif %}
     Resolve this rejected source mutation before running checks that require its proposed contents.
     If the proposed syntax is intentional, intermediate, or the parser diagnostic is inaccurate,
-    {% if paintedwolf.native_operation %}only `code-rewrite --syntax-override-reason TEXT` can proceed past
-    this check; `edit`, `replace-lines`, and redirects accept no override, so repair the syntax or split
-    the change.{% else %}supply `syntax_override_reason` on the mutation call to proceed.{% endif %}
+    {% if paintedwolf.command_surface %}use `tee --syntax-override-reason TEXT PATH`
+    with the complete candidate on stdin, or add that option to `edit`, `replace-lines`, or `code-rewrite`.
+    Redirects accept no override. The reason applies only to that operation.
+    {% else %}supply `syntax_override_reason` on the mutation call to proceed.{% endif %}
   instead: Correct the candidate and retry one atomic mutation
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit
@@ -66,4 +68,13 @@ x-paintedwolf-scenarios:
       profile: implement
       tool: command
     expect_contains:
-      - 'code-rewrite --syntax-override-reason'
+      - 'tee --syntax-override-reason'
+
+  - id: command-redirect
+    vars:
+      parse_error: 'missing newline'
+      path: Dockerfile
+      tool: command
+      profile: implement
+    expect_contains:
+      - 'tee --syntax-override-reason'
