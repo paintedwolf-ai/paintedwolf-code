@@ -100,6 +100,7 @@ func (t *FindTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	deeperPathsOmitted := false
 
 	union := projectroot.IsUnionDiscoveryPath(relRoot)
+	receiptRoot := relRoot
 	if union {
 		for _, root := range roots {
 			if err := t.runFindRoot(ctx, tctx, root, root.Path, projectpaths.QualifyAbs(tctx, root, root.Path),
@@ -110,6 +111,10 @@ func (t *FindTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		}
 	} else {
 		resolved, err := safecmd.ResolvePath(ctx, t.Boundary, tctx, relRoot)
+		if err != nil {
+			return "", err
+		}
+		receiptRoot = resolved.DisplayPath
 		if err != nil {
 			return "", err
 		}
@@ -152,7 +157,7 @@ func (t *FindTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	for _, hit := range resp.Highlights {
 		tctx.RecordSourcePath(hit.Path, api.NavigationEntryKindFile)
 	}
-	return t.encodeFindResponse(relRoot, resp)
+	return t.encodeFindResponse(receiptRoot, resp)
 }
 
 // findDepthUnbounded walks every depth below the find root.

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/fileoutline"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/syntaxhealth"
 	"github.com/lycaon/lycaon/internal/tsparse"
@@ -249,6 +250,24 @@ func (g *summarySources) noteSkippedPath(path string) {
 	g.skippedPaths[path] = true
 }
 
+// canonicalDisplayPaths renders request paths with their canonical session
+// spelling; paths that do not resolve keep their raw spelling.
+func (g *summarySources) canonicalDisplayPaths(paths []string) []string {
+	if g.access == nil || len(g.access.roots) == 0 {
+		return paths
+	}
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		abs, root, err := projectroot.ResolveAbs(g.access.roots, g.access.activeRootID, p)
+		if err != nil {
+			out = append(out, p)
+			continue
+		}
+		out = append(out, projectroot.Qualify(g.access.roots, g.access.activeRootID, root, abs))
+	}
+	return out
+}
+
 func (g *summarySources) noMaterialData(req summarize.Request) map[string]any {
 	g.memoMu.Lock()
 	defer g.memoMu.Unlock()
@@ -256,6 +275,7 @@ func (g *summarySources) noMaterialData(req summarize.Request) map[string]any {
 	if len(roots) == 0 && req.Path != "" {
 		roots = []string{req.Path}
 	}
+	roots = g.canonicalDisplayPaths(roots)
 	skipped := make([]string, 0, len(g.skippedPaths))
 	for path := range g.skippedPaths {
 		skipped = append(skipped, path)
