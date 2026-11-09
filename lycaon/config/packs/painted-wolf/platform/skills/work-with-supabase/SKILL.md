@@ -21,6 +21,8 @@ Two commands here are destructive and easy to run by reflex. **`supabase db rese
 6. **Push to a remote only with explicit confirmation**, and say which project. `supabase db push` runs the migrations against the linked project; on a production project that is a schema change to live data with no undo.
 7. **Enable RLS and least-privilege policies on every table exposed through the Data API.** When a migration creates an exposed table, its RLS state and policies belong in the same migration.
 
+Full CLI recipes, the migration workflow, and reset semantics: [supabase-cli-and-rls.md](references/supabase-cli-and-rls.md).
+
 ## Keys and what they mean
 
 Publishable keys serve public clients; secret and legacy `service_role` keys authorize elevated access, bypass RLS, and never belong in client code, a committed file, or the transcript. The full key classes, the legacy `anon` deprecation, exposure reporting, and local-key handling: [supabase-cli-and-rls.md](references/supabase-cli-and-rls.md).
