@@ -109,7 +109,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 			for _, card := range cards {
 				entries = append(entries, turnload.DiscoveryEntry(card))
 			}
-			discovery, err = DiscoveryPage(tctx, "request_tools", need, "", "no_match", "", entries, outcome.Order...)
+			discovery, err = DiscoveryPage(ctx, tctx, "request_tools", need, "", "no_match", "", entries, outcome.Order...)
 			if err != nil {
 				discovery = nil
 			}
@@ -132,7 +132,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 			}
 			entries = append(entries, turnload.DiscoveryEntry(card))
 		}
-		result.Discovery, err = DiscoveryPage(tctx, "request_tools", need, cursor, status, outcome.Failure, entries)
+		result.Discovery, err = DiscoveryPage(ctx, tctx, "request_tools", need, cursor, status, outcome.Failure, entries)
 		if err != nil {
 			return "", err
 		}

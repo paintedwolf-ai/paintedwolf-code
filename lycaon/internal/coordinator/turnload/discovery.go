@@ -38,8 +38,15 @@ type discoveryCursor struct {
 	Order  []string `json:"order,omitempty"`
 }
 
+// DiscoveryInstructions carries rendered copy for each pagination state.
+type DiscoveryInstructions struct {
+	Empty string
+	More  string
+	Final string
+}
+
 // Discover binds pagination to the need, surface scope, and current catalog.
-func Discover(scope, need, cursor, status string, failure RankingFailure, entries []DiscoveryEntry, order ...string) (*Discovery, error) {
+func Discover(scope, need, cursor, status string, failure RankingFailure, entries []DiscoveryEntry, instructions DiscoveryInstructions, order ...string) (*Discovery, error) {
 	entries = append([]DiscoveryEntry{}, entries...)
 	for i := range entries {
 		entries[i].Description = BoundDescription(entries[i].Description)
@@ -78,7 +85,12 @@ func Discover(scope, need, cursor, status string, failure RankingFailure, entrie
 	out := &Discovery{Status: status, Failure: failure, Total: len(entries)}
 	for {
 		out.Entries, out.NextNeed = entries[offset:end], ""
-		out.Instruction = discoveryInstruction(len(entries), end < len(entries))
+		out.Instruction = instructions.Final
+		if len(entries) == 0 {
+			out.Instruction = instructions.Empty
+		} else if end < len(entries) {
+			out.Instruction = instructions.More
+		}
 		if end < len(entries) {
 			raw, err := json.Marshal(discoveryCursor{Need: need, Digest: digest, Offset: end, Order: order})
 			if err != nil {
@@ -99,17 +111,6 @@ func Discover(scope, need, cursor, status string, failure RankingFailure, entrie
 		end--
 	}
 	return out, nil
-}
-
-func discoveryInstruction(total int, more bool) string {
-	if total == 0 {
-		return "No entries are available on this surface. Continue with available capabilities and state any limitation."
-	}
-	instruction := "Load a relevant entry by its exact name as need. "
-	if more {
-		return instruction + "This catalog is unfiltered. Pass next_need unchanged for more entries; rephrasing restarts the same catalog."
-	}
-	return instruction + "This is the final catalog page. If none fits, use available capabilities and state limitations; rephrasing does not add entries."
 }
 
 func sortDiscoveryEntries(entries []DiscoveryEntry, order []string) {
