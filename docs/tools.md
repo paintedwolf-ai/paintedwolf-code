@@ -688,7 +688,7 @@ One assistant response may carry multiple tool calls. Every tool declares one `b
 | `shared` | Two **different** `shared` tools may run in one concurrent group: the bounded read and query surface (`read`, `grep`, `find`, `stat`, `recall`, `survey_repo`, and their peers) |
 | `same_tool` | Concurrent only with further calls to the same name |
 
-On top of the class a tool may declare a boolean opt-in argument, a per-tool ceiling under the global host cap, and an argument whose presence re-serializes the call even after an opt-in. `web_search` and `fetch_url` are `same_tool` behind an explicit `parallel: true`, capped at four; omitting the argument keeps them serial, and `fetch_url` re-serializes whenever `dest` is present, because a landed file is an effect. `summarize` is `same_tool` with no opt-in argument, so its siblings run concurrently by default (capped at four), the only tool that does.
+On top of the class a tool may declare a boolean opt-in argument, a per-tool ceiling under the global host cap, and an argument whose presence re-serializes the call even after an opt-in. `web_search` and `fetch_url` are `same_tool` behind an explicit `parallel: true`, capped at four; omitting the argument keeps them serial. Research fetches are read-only; file downloads run through portable `curl` in `command`. `summarize` is `same_tool` with no opt-in argument, so its siblings run concurrently by default (capped at four), the only tool that does.
 
 Calls keep separate receipts, policy checks, results, and evidence even when their execution overlaps.
 

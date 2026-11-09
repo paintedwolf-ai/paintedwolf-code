@@ -1080,19 +1080,19 @@
       "summary": "fetch_url has used {{ paintedwolf.fetch_budget_used }} session reservations; the cap is {{ paintedwolf.max }} per {{ paintedwolf.window }}."
     },
     "FETCH_URL_DEST_DENIED": {
-      "branch_instruction": "Use the read-only source reader or an authorized raw transfer.",
+      "branch_instruction": "Follow the current schema and access boundaries.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
       "summary": "fetch_url could not write dest {{ paintedwolf.path }} under project write scope."
     },
     "FETCH_URL_DEST_INVALID": {
-      "branch_instruction": "Use the read-only source reader or an authorized raw transfer.",
+      "branch_instruction": "Follow the current schema and access boundaries.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
       "summary": "fetch_url was called with dest while mode was not raw."
     },
     "FETCH_URL_DEST_REQUIRED": {
-      "branch_instruction": "Use the read-only source reader or an authorized raw transfer.",
+      "branch_instruction": "Follow the current schema and access boundaries.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
       "summary": "mode=raw fetched a non-image binary resource ({{ paintedwolf.content_type }}) without dest."
@@ -1104,7 +1104,7 @@
       "summary": "fetch_url rejected the URL input."
     },
     "FETCH_URL_MODE_INVALID": {
-      "branch_instruction": "Use the read-only source reader or an authorized raw transfer.",
+      "branch_instruction": "Follow the current schema and access boundaries.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
       "summary": "The recorded fetch_url request used unsupported mode {{ paintedwolf.mode }}."
@@ -1116,7 +1116,7 @@
       "summary": "fetch_url did not send the fetched image to the model."
     },
     "FETCH_URL_TYPE_UNSUPPORTED": {
-      "branch_instruction": "Choose a readable source or an authorized raw transfer.",
+      "branch_instruction": "Use supported evidence or report the gap.",
       "category": "recoverable",
       "emit": "guard:fetch_url",
       "summary": "fetch_url cannot read Content-Type {{ paintedwolf.content_type }} ({{ paintedwolf.rejection_reason }})."
