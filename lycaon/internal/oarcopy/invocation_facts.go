@@ -2,12 +2,15 @@ package oarcopy
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // PublishInvocationRecovery binds remedies to actual tool identity and arguments.
 func PublishInvocationRecovery(facts map[string]any, tool string, args map[string]any, snapshot *toolcontract.ToolCapabilitySnapshot) {
+	facts["paintedwolf.command_surface"] = tool == "command"
+	facts["paintedwolf.syntax_override_commands"] = strings.Join(syntaxOverrideCommands(tool), "`, `")
 	schemaTool, _ := facts["paintedwolf.argument_schema_tool"].(string)
 	facts["paintedwolf.argument_schema_matches_tool"] = schemaTool != "" && schemaTool == tool
 	contract, known := toolcontract.Lookup(tool)

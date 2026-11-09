@@ -190,8 +190,8 @@ func TestUpdateProgressRequiresObservedRevisionForExistingChecklist(t *testing.T
 	if rejection == nil || rejection.Code != "PROGRESS_REVISION_REQUIRED" {
 		t.Fatalf("missing revision outcome: %v", err)
 	}
-	snapshot, ok := rejection.Data["snapshot"].(progress.Snapshot)
-	if !ok || snapshot.Revision != before.Revision || snapshot.Content != before.Content {
+	snapshot, ok := rejection.Data["snapshot"].(progress.RequestSnapshot)
+	if !ok || snapshot.ScopeSessionID != "session" || snapshot.InitializationRequired || snapshot.Revision != before.Revision || snapshot.Content != before.Content {
 		t.Fatalf("missing recovery snapshot: %+v", rejection.Data)
 	}
 	if store.Get(t.Context(), "session") != before.Content {
