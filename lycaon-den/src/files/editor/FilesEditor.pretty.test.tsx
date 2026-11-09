@@ -22,8 +22,12 @@ import {
   closeFilesBuffer,
   filesBufferText,
 } from "../documents/project-files-buffers.ts";
-import { projectFilesState } from "../documents/files-buffer-state.ts";
 import {
+  projectFilesState,
+  type FileBuffer,
+} from "../documents/files-buffer-state.ts";
+import {
+  configureEditorDocuments,
   evictEditorDocument,
   resolveEditorDocument,
 } from "../documents/editor-document.ts";
@@ -47,12 +51,37 @@ import {
 } from "./files-secret-actions.ts";
 import { createFileConfirmations } from "../commands/file-confirmations.ts";
 import {
-  clearAllPrettyDocumentRecovery,
-  createPrettyDocumentRecoveryController,
+  appendMultiCursorConflictToRecovery,
+  configurePrettyRecoveryStorageForTests,
   hasUnpersistedPrettyRecoveryForDocument,
-  type PrettyRecoveryStorageLike,
+  resetPrettyDocumentRecoveryStoreForTests,
+  type PrettyRecoveryStorage,
 } from "../../components/source/pretty/pretty-replica-recovery.ts";
 import { summarizePreviewText } from "../../components/source/pretty/pretty-replica-recovery-ui.ts";
+
+async function openAndAttachDocumentReplica(
+  buf: FileBuffer,
+): Promise<NonNullable<Awaited<ReturnType<typeof resolveEditorDocument>>>> {
+  const fixture = editorDocumentFixtureFor(PROJECT, buf.rootId, buf.path);
+  const client = stubClient({
+    openEditorDocument: async () => fixture.snapshot(),
+    syncEditorDocument: fixture.sync,
+    submitEditorDocumentUpdate: fixture.submit,
+  });
+  configureEditorDocuments(
+    PROJECT,
+    () => client,
+    () => undefined,
+    {
+      all: () => Object.values(projectFilesState(PROJECT).byKey),
+      byKey: (key: string) => projectFilesState(PROJECT).byKey[key],
+    },
+  );
+  const docState = await resolveEditorDocument(PROJECT, buf);
+  expect(docState).not.toBeNull();
+  applyFilesBufferEditorDocument(PROJECT, buf.key, docState!);
+  return docState!;
+}
 
 describe("FilesEditor Pretty display integration", () => {
   setupFilesEditorTests();
@@ -60,7 +89,7 @@ describe("FilesEditor Pretty display integration", () => {
   afterEach(() => {
     resetPrettyDisplayStateForTests();
     resetGotoLineForTests();
-    clearAllPrettyDocumentRecovery();
+    resetPrettyDocumentRecoveryStoreForTests();
   });
 
   it("toggles Pretty from the status bar and surface command without mutating raw bytes, dirty state, or editor identity (FMT-AC-06, FMT-AC-09)", async () => {
@@ -121,20 +150,7 @@ describe("FilesEditor Pretty display integration", () => {
       path: "records.jsonl",
       content: rawJsonl,
     });
-    const fixture = editorDocumentFixtureFor(PROJECT, "r1", "records.jsonl");
-    const client = stubClient({
-      openEditorDocument: async () => fixture.snapshot(),
-      syncEditorDocument: fixture.sync,
-      submitEditorDocumentUpdate: fixture.submit,
-    });
-    const docState = await resolveEditorDocument(
-      PROJECT,
-      () => client,
-      "r1",
-      "records.jsonl",
-    );
-    expect(docState).not.toBeNull();
-    applyFilesBufferEditorDocument(PROJECT, buf.key, docState!);
+    await openAndAttachDocumentReplica(buf);
 
     const currentBuf = () => projectFilesState(PROJECT).byKey[buf.key]!;
     render(() => <FilesEditor {...editorProps(currentBuf())} />);
@@ -192,19 +208,7 @@ describe("FilesEditor Pretty display integration", () => {
       path: "coords.jsonl",
       content: rawJsonl,
     });
-    const fixture = editorDocumentFixtureFor(PROJECT, "r1", "coords.jsonl");
-    const client = stubClient({
-      openEditorDocument: async () => fixture.snapshot(),
-      syncEditorDocument: fixture.sync,
-      submitEditorDocumentUpdate: fixture.submit,
-    });
-    const docState = await resolveEditorDocument(
-      PROJECT,
-      () => client,
-      "r1",
-      "coords.jsonl",
-    );
-    applyFilesBufferEditorDocument(PROJECT, buf.key, docState!);
+    await openAndAttachDocumentReplica(buf);
 
     const props = editorProps(projectFilesState(PROJECT).byKey[buf.key]!);
     render(() => <FilesEditor {...props} />);
@@ -220,36 +224,30 @@ describe("FilesEditor Pretty display integration", () => {
     // Line 1 of display is start of source line 1 -> "1"; continuation lines of record 1 -> ""
     expect(adapter.getLineGutterLabel(1)).toBe("1");
     expect(adapter.getLineGutterLabel(2)).toBe("");
-    const line2DispOffset = adapter.mapSourceLineColToDisplay(2, 1);
-    const line2DispLine = view.state.doc.lineAt(line2DispOffset).number;
+    const line2Mapped = adapter.mapSourceLineColToDisplay(2, 1);
+    const line2DispLine = view.state.doc.lineAt(line2Mapped.dispOffset).number;
     expect(line2DispLine).toBeGreaterThan(2);
     expect(adapter.getLineGutterLabel(line2DispLine)).toBe("2");
     expect(adapter.getLineGutterLabel(line2DispLine + 1)).toBe("");
 
     // Go to Line uses source line count (3 lines including trailing newline) and navigates by source line:col
     openGotoLine(view);
-    expect(gotoLineController.maxLine()).toBe(3);
-    gotoLineController.setInput("2:8");
-    expect(submitGotoLine()).toBe(true);
+    expect(gotoLineController.state()?.target.lineCount).toBe(3);
+    expect(submitGotoLine("2:8")).toBe(true);
 
-    const expectedDispPos = adapter.mapSourceLineColToDisplay(2, 8);
+    const expectedDispPos = adapter.mapSourceLineColToDisplay(2, 8).dispOffset;
     expect(view.state.selection.main.head).toBe(expectedDispPos);
     expect(props.onCursor).toHaveBeenLastCalledWith({ line: 2, col: 8 });
 
     // applyBufferReveal maps source revealLine/revealColumn to display coordinates
-    const revealBuf = {
-      ...projectFilesState(PROJECT).byKey[buf.key]!,
-      revealNonce: 99,
+    applyBufferReveal(view, {
       revealLine: 2,
       revealColumn: 2,
-    };
-    const applied = applyBufferReveal(view, revealBuf, 0, {
-      projectId: PROJECT,
-      onCursor: props.onCursor,
+      revealEndLine: undefined,
+      revealFocus: false,
     });
-    expect(applied).toBe(99);
     expect(view.state.selection.main.head).toBe(
-      adapter.mapSourceLineColToDisplay(2, 2),
+      adapter.mapSourceLineColToDisplay(2, 2).dispOffset,
     );
   });
 
@@ -261,19 +259,7 @@ describe("FilesEditor Pretty display integration", () => {
       path: "secrets.jsonl",
       content: rawJsonl,
     });
-    const fixture = editorDocumentFixtureFor(PROJECT, "r1", "secrets.jsonl");
-    const client = stubClient({
-      openEditorDocument: async () => fixture.snapshot(),
-      syncEditorDocument: fixture.sync,
-      submitEditorDocumentUpdate: fixture.submit,
-    });
-    const docState = await resolveEditorDocument(
-      PROJECT,
-      () => client,
-      "r1",
-      "secrets.jsonl",
-    );
-    applyFilesBufferEditorDocument(PROJECT, buf.key, docState!);
+    const docState = await openAndAttachDocumentReplica(buf);
 
     render(() => (
       <FilesEditor {...editorProps(projectFilesState(PROJECT).byKey[buf.key]!)} />
@@ -291,7 +277,7 @@ describe("FilesEditor Pretty display integration", () => {
         },
       ],
     };
-    setFilesEditorSecretScreen(view, screenData);
+    setFilesEditorSecretScreen(buf.key, screenData);
 
     // Toggle Pretty ON: secret span is projected to the formatted display position
     fireEvent.click(screen.getByTestId("files-editor-pretty-toggle"));
@@ -317,25 +303,31 @@ describe("FilesEditor Pretty display integration", () => {
       byte_length: 20,
     }));
     const secretClient = stubClient({ previewEditorSecretMark });
-    const anchored = await anchorSecretSelection(
-      secretClient,
+    const anchored = anchorSecretSelection(
       {
         projectId: PROJECT,
-        documentId: docState!.documentId,
+        documentId: docState.documentId,
         view,
-        sync: async () => ({ revision: docState!.revision, text: rawJsonl }),
+        sync: async () => ({
+          revision: docState.revision,
+          text: rawJsonl,
+          eol: "lf",
+        }),
       },
-      { from: dispSecretStart, to: dispSecretStart + 20 },
+      dispSecretStart,
+      dispSecretStart + 20,
     );
-    expect(anchored).toMatchObject({
-      revision: docState!.revision,
-      range: { start: secretStart, end: secretEnd },
+    const preview = await anchored.preview(secretClient, true);
+    expect(preview).toMatchObject({
+      eligible: true,
+      start: secretStart,
+      end: secretEnd,
     });
     expect(previewEditorSecretMark).toHaveBeenCalledWith(
       PROJECT,
-      docState!.documentId,
+      docState.documentId,
       {
-        revision: docState!.revision,
+        revision: docState.revision,
         start: secretStart,
         end: secretEnd,
         trim: true,
@@ -349,19 +341,7 @@ describe("FilesEditor Pretty display integration", () => {
       path: "guarded.jsonl",
       content: rawJsonl,
     });
-    const fixture = editorDocumentFixtureFor(PROJECT, "r1", "guarded.jsonl");
-    const client = stubClient({
-      openEditorDocument: async () => fixture.snapshot(),
-      syncEditorDocument: fixture.sync,
-      submitEditorDocumentUpdate: fixture.submit,
-    });
-    const docState = await resolveEditorDocument(
-      PROJECT,
-      () => client,
-      "r1",
-      "guarded.jsonl",
-    );
-    applyFilesBufferEditorDocument(PROJECT, buf.key, docState!);
+    const docState = await openAndAttachDocumentReplica(buf);
     render(() => (
       <FilesEditor {...editorProps(projectFilesState(PROJECT).byKey[buf.key]!)} />
     ));
@@ -372,65 +352,70 @@ describe("FilesEditor Pretty display integration", () => {
     });
 
     // Simulate a failing recovery storage so a retained record is held in memory only
-    const failingStorage: PrettyRecoveryStorageLike = {
+    const failingStorage: PrettyRecoveryStorage = {
       getItem: () => null,
       setItem: () => {
         throw new Error("QuotaExceededError");
       },
       removeItem: () => {},
     };
-    const controller = createPrettyDocumentRecoveryController({
-      documentId: docState!.documentId,
-      incarnation: 1,
-      storage: failingStorage,
-    });
-    controller.captureRejectedEdit({
-      kind: "conflict",
-      reason: "multi-cursor-raw-conflict",
-      rawRevision: 1,
-      rawBaseText: rawJsonl,
-      displayText: '{\n  "id": 1,\n  "v": "two"\n}\n',
-      displaySelection: { mainIndex: 0, ranges: [{ anchor: 0, head: 0 }] },
-      intentions: [
-        {
-          index: 0,
-          displayFrom: 0,
-          displayTo: 0,
-          rawFrom: 8,
-          rawTo: 17,
-          insertedText: '"v":"two"',
-          mappedStatus: "ok",
-        },
-      ],
-    });
+    configurePrettyRecoveryStorageForTests(failingStorage);
 
-    expect(hasUnpersistedPrettyRecoveryForDocument(docState!.documentId)).toBe(
+    const adapter = getFilesEditorPrettyAdapter(PROJECT, buf.key)!;
+    appendMultiCursorConflictToRecovery(
+      adapter.recoveryState,
+      "runtime-1",
+      adapter.recoveryState.incarnation,
+      1,
+      1,
+      "fp-1",
+      {
+        reason: "overlapping-raw-ranges",
+        intentions: [
+          {
+            order: 0,
+            dispFrom: 0,
+            dispTo: 5,
+            rawFrom: 8,
+            rawTo: 17,
+            insert: '"v":"two"',
+          },
+        ],
+      },
+      [{ srcFrom: 0, srcTo: rawJsonl.length }],
+    );
+
+    expect(hasUnpersistedPrettyRecoveryForDocument(docState.documentId)).toBe(
       true,
     );
 
     // Eviction is blocked while unpersisted recovery exists
-    expect(await evictEditorDocument(docState!.documentId)).toBe(false);
+    expect(await evictEditorDocument(docState.documentId)).toBe(false);
 
     // Close confirmation prompts instead of closing silently even when buffer.dirty is false
-    const performCloseTab = vi.fn();
+    const closeBufferSpy = vi.fn(async () => true);
     const confirmations = createFileConfirmations({
       projectId: () => PROJECT,
-      activeBuffer: () => projectFilesState(PROJECT).byKey[buf.key],
-      performReload: vi.fn(async () => {}),
-      performDiscard: vi.fn(async () => {}),
-      performCloseTab,
+      state: () => projectFilesState(PROJECT),
+      closeBuffer: closeBufferSpy,
+      closeBuffers: () => true,
+      reloadBuffer: () => {},
+      discardBuffer: async () => {},
+      performSave: async () => true,
+      saveable: () => true,
+      setSaveError: () => {},
     });
     confirmations.requestCloseTab(buf.key);
-    expect(performCloseTab).not.toHaveBeenCalled();
-    expect(confirmations.confirming()).toEqual({
-      kind: "close",
+    expect(closeBufferSpy).not.toHaveBeenCalled();
+    expect(confirmations.confirm()).toEqual({
+      intent: "close",
       key: buf.key,
     });
 
     // Confirmed close clears Pretty display state and recovery state for the tab
     closeFilesBuffer(PROJECT, buf.key);
     expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(false);
-    expect(hasUnpersistedPrettyRecoveryForDocument(docState!.documentId)).toBe(
+    expect(hasUnpersistedPrettyRecoveryForDocument(docState.documentId)).toBe(
       false,
     );
   });
@@ -449,19 +434,7 @@ describe("FilesEditor Pretty display integration", () => {
       path: "recovery-ui.jsonl",
       content: rawJsonl,
     });
-    const fixture = editorDocumentFixtureFor(PROJECT, "r1", "recovery-ui.jsonl");
-    const client = stubClient({
-      openEditorDocument: async () => fixture.snapshot(),
-      syncEditorDocument: fixture.sync,
-      submitEditorDocumentUpdate: fixture.submit,
-    });
-    const docState = await resolveEditorDocument(
-      PROJECT,
-      () => client,
-      "r1",
-      "recovery-ui.jsonl",
-    );
-    applyFilesBufferEditorDocument(PROJECT, buf.key, docState!);
+    await openAndAttachDocumentReplica(buf);
     render(() => (
       <FilesEditor {...editorProps(projectFilesState(PROJECT).byKey[buf.key]!)} />
     ));
@@ -473,25 +446,28 @@ describe("FilesEditor Pretty display integration", () => {
     });
 
     const adapter = getFilesEditorPrettyAdapter(PROJECT, buf.key)!;
-    adapter.recoveryController.captureRejectedEdit({
-      kind: "conflict",
-      reason: "multi-cursor-raw-conflict",
-      rawRevision: 1,
-      rawBaseText: rawJsonl,
-      displayText: "{\n  \"a\": 100,\n  \"b\": 200\n}\n",
-      displaySelection: { mainIndex: 0, ranges: [{ anchor: 0, head: 0 }] },
-      intentions: [
-        {
-          index: 0,
-          displayFrom: 0,
-          displayTo: 5,
-          rawFrom: 1,
-          rawTo: 6,
-          insertedText: '"a":100,\n"extra":"very_long_multiline_value_for_button"',
-          mappedStatus: "ok",
-        },
-      ],
-    });
+    appendMultiCursorConflictToRecovery(
+      adapter.recoveryState,
+      "runtime-1",
+      adapter.recoveryState.incarnation,
+      1,
+      1,
+      "fp-1",
+      {
+        reason: "overlapping-raw-ranges",
+        intentions: [
+          {
+            order: 0,
+            dispFrom: 0,
+            dispTo: 5,
+            rawFrom: 1,
+            rawTo: 6,
+            insert: '"a":100,\n"extra":"very_long_multiline_value_for_button"',
+          },
+        ],
+      },
+      [{ srcFrom: 0, srcTo: rawJsonl.length }],
+    );
     adapter.setRecoveryFeedback("Ready");
 
     const tooltip = await waitFor(() => {

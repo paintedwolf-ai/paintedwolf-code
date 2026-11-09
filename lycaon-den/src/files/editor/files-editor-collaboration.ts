@@ -11,7 +11,6 @@ import { EditorView } from "@codemirror/view";
 import type { SecretScreen } from "../../api/types.ts";
 import { lineGutterSource } from "../../components/source/annotations/line-gutter.ts";
 import { diffSourceText } from "../../components/source/diff/source-text-diff.ts";
-import { clearPrettyProjectionCacheForIdentity } from "../../components/source/pretty/pretty-cache.ts";
 import { mapDisplayEditToSource } from "../../components/source/pretty/pretty-edit-mapper.ts";
 import {
   createRuneOffsetTable,
@@ -594,13 +593,11 @@ export function destroyFilesCollaborationPrettySession(
   if (!view) return;
   const session = sessionsByView.get(view);
   if (!session) return;
-  const cacheIdentity =
-    session.adapter?.replica.accepted.id ?? (session.key || session.path);
   session.adapter?.destroy();
   session.adapter = undefined;
   session.adapterAttached = false;
-  sessionsByView.delete(view);
-  if (opts?.clearCache && cacheIdentity) {
-    clearPrettyProjectionCacheForIdentity(cacheIdentity);
+  if (opts?.clearCache) {
+    session.nonReplicaProjection = undefined;
   }
+  sessionsByView.delete(view);
 }
