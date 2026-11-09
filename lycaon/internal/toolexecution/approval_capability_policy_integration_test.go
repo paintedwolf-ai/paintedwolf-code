@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -15,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -72,5 +74,67 @@ func TestTaskCapabilityPreservesLivePolicyAndScope(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+// The real gate owns reviewed-reason coverage; the supplied detection is a
+// structured producer fact, not a simulated gate verdict or an OS-boundary claim.
+type reviewDetectionSource struct{ match hitl.DetectionMatch }
+
+func (s reviewDetectionSource) MatchAction(hitl.ProposedAction, gate.Posture) (hitl.DetectionMatch, bool) {
+	return s.match, true
+}
+
+func TestCurrentReviewTracksDetectionEffectsRatherThanCorrelation(t *testing.T) {
+	stageApprovals(t, settings.ApprovalEffectAsk)
+	root := t.TempDir()
+	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
+	testutil.FailErr(t, "create review policy store", err)
+	match := hitl.DetectionMatch{PackID: "fixture", RuleID: "same-rule", RuleTitle: "Declared local effect", Level: "high", Local: true, Tagged: true, CorrelationID: "first"}
+	sources := settings.NoSources()
+	sources.Detections = func() settings.DetectionSource { return reviewDetectionSource{match: match} }
+	approvals := settings.NewRuleApprovalGate(store, sources)
+	args := map[string]any{"command": "printf fixture"}
+	req := confine.Request{Roots: []string{root}}
+	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "task", ToolCallID: "call"}, Invocation: tools.Invocation{ID: "child"}, Effects: tools.InvocationEffects{CanonicalArgs: args}}
+	action := hitl.ProposedAction{
+		Scope:      hitl.ActionScope{SessionID: "task", ProjectDir: root},
+		Invocation: hitl.ActionInvocation{Tool: "command", Args: args, ActionID: tc.EffectActionID()},
+		Execution:  hitl.ActionExecution{Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy}},
+	}
+	pending, err := approvals.Evaluate(t.Context(), action)
+	testutil.FailErr(t, "evaluate first detection", err)
+	if pending == nil || !pending.Required() || pending.Gate() != api.GateAuthorityMisuse {
+		t.Fatalf("fixture did not require detection review: %+v", pending)
+	}
+	tc.RecordCurrentActionReview(args, req, action, pending)
+	for _, phase := range []struct {
+		name               string
+		changedEffect, ask bool
+	}{
+		{name: "unchanged"}, {name: "correlation-only"}, {name: "same-rule-changed-effect", changedEffect: true, ask: true},
+	} {
+		t.Run(phase.name, func(t *testing.T) {
+			match.CorrelationID = phase.name
+			match.Unrecoverable = phase.changedEffect
+			action.Invocation.CurrentActionReview = tc.CurrentActionReview(args, req)
+			result, err := approvals.Evaluate(t.Context(), action)
+			testutil.FailErr(t, "reevaluate structured detection", err)
+			if result == nil || result.Required() != phase.ask || result.Denied {
+				t.Fatalf("wrong reviewed-effect disposition: %+v", result)
+			}
+			if phase.ask {
+				if result.Gate() != api.GateAuthorityMisuse {
+					t.Fatalf("changed effect lost its review reason: %+v", result)
+				}
+				tc.RecordCurrentActionReview(args, req, action, result)
+			}
+		})
+	}
+	action.Invocation.CurrentActionReview = tc.CurrentActionReview(args, req)
+	result, err := approvals.Evaluate(t.Context(), action)
+	testutil.FailErr(t, "evaluate newly reviewed effect", err)
+	if result == nil || !result.AutoApproved() {
+		t.Fatalf("reviewed new effect asked again: %+v", result)
 	}
 }
