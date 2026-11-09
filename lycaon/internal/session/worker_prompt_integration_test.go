@@ -213,8 +213,9 @@ func TestCoordinatorPromptUnchanged(t *testing.T) {
 }
 
 func TestWorkerPromptExposesApplicableSkillsWithoutBialy(t *testing.T) {
-	mgr, _, rec := setupWorkerPromptFixture(t)
-	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
+	mgr, _, _ := setupWorkerPromptFixture(t)
+	ledger := turnload.NewLedger()
+	mgr.Coordinator.Loading.SetLedger(ledger)
 	wireSkillsCatalogForPromptTest(t, mgr)
 	mgr.SetWorkerContextBuilder(&stubWorkerContext{ctx: inject.WorkerLegContext{Checklist: []string{"survey"}}})
 
@@ -244,16 +245,8 @@ func TestWorkerPromptExposesApplicableSkillsWithoutBialy(t *testing.T) {
 		testutil.FailErr(t, "mgr.Submissions.Prompt", err)
 	}
 
-	var system string
-	for _, msg := range rec.LastRequest().Messages {
-		if msg.Role == api.MessageRoleSystem {
-			system += "\n" + msg.Content
-		}
-	}
-	for name := range curated {
-		if !strings.Contains(system, "`"+name+"`") {
-			t.Fatalf("standing prompt omitted applicable skill %q", name)
-		}
+	if !ledger.FullCatalog(child.ID) {
+		t.Fatal("absent selector did not activate full permitted catalog")
 	}
 }
 

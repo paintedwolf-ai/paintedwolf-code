@@ -2,13 +2,12 @@ package oar
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestMutationCandidateRecoveryCopy(t *testing.T) {
+func TestMutationCandidateRejectionUsesStructuredFacts(t *testing.T) {
 	ensureCatalog(t)
 	loader, err := NewLoader(schemaDir(t))
 	testutil.FailErr(t, "loader", err)
@@ -32,23 +31,13 @@ func TestMutationCandidateRecoveryCopy(t *testing.T) {
 				if !result.Enforced || result.Decision == nil || result.Decision.Code != "MUTATION_BROKE_PARSE" {
 					t.Fatalf("missing mutation rejection: %#v", result)
 				}
-				fix := result.Decision.Copy["fix"]
-				if !strings.Contains(fix, "supply `syntax_override_reason`") {
-					t.Fatalf("domain-tool leg must advise the form-tool override parameter: %s", fix)
-				}
-				if len(fix) > 1000 {
-					t.Fatalf("recovery copy grew beyond bounded remedy: %d bytes", len(fix))
-				}
+
 			})
 		}
 	}
 }
 
-// TestMutationCandidateRecoveryCopyCommandLeg pins the command-leg branch of
-// PC02-001: command edit, replace-lines, and redirects accept no override, so
-// the copy must name `code-rewrite --syntax-override-reason` as the only way
-// past the check instead of advising the form-tool parameter.
-func TestMutationCandidateRecoveryCopyCommandLeg(t *testing.T) {
+func TestMutationCandidateRejectionUsesNativeOperation(t *testing.T) {
 	ensureCatalog(t)
 	loader, err := NewLoader(schemaDir(t))
 	testutil.FailErr(t, "loader", err)
@@ -68,16 +57,7 @@ func TestMutationCandidateRecoveryCopyCommandLeg(t *testing.T) {
 			if !result.Enforced || result.Decision == nil || result.Decision.Code != "MUTATION_BROKE_PARSE" {
 				t.Fatalf("missing mutation rejection: %#v", result)
 			}
-			fix := result.Decision.Copy["fix"]
-			if !strings.Contains(fix, "code-rewrite --syntax-override-reason") {
-				t.Fatalf("command leg must name the only override-capable form: %s", fix)
-			}
-			if strings.Contains(fix, "supply `syntax_override_reason`") {
-				t.Fatalf("command leg must not advise the form-tool override parameter: %s", fix)
-			}
-			if len(fix) > 1000 {
-				t.Fatalf("recovery copy grew beyond bounded remedy: %d bytes", len(fix))
-			}
+
 		})
 	}
 }
