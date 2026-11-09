@@ -8,7 +8,7 @@ Source navigation turns a typed project location into an in-app open, reveal, or
 
 ## Why paths are typed
 
-A string such as `src/main.go:42` is ambiguous without knowing which project and root it belongs to, whether it names the primary tree or a worker branch, whether the line refers to a known revision, whether the target is a file, directory, URL, evidence handle, or display-only path, and whether the caller may reveal it outside the application. The navigation contract carries those facts explicitly. Display text is derived from the location; it is never reparsed as authority.
+A string such as `src/main.go:42` is ambiguous without knowing which project and root it belongs to, whether it names the main tree or a worker branch, whether the line refers to a known revision, whether the target is a file, directory, URL, evidence handle, or display-only path, and whether the caller may reveal it outside the application. The navigation contract carries those facts explicitly. Display text is derived from the location; it is never reparsed as authority.
 
 Project files, worker branches, host artifact storage, and external URLs are different address spaces. Navigation never converts between them by string prefix.
 
@@ -41,7 +41,7 @@ Line and column are hints against a revision. If current bytes differ, the viewe
 
 ### Source reads: host-authoritative
 
-Resolution proceeds from trusted identities: load the project and root by id; select the primary or admitted worker workspace; normalize the relative path without following an escaping segment; resolve symlinks under the root policy; verify the target kind and current revision; return a typed openable or non-openable result.
+Resolution proceeds from trusted identities: load the project and root by id; select the main tree or an admitted worker workspace; normalize the relative path without following an escaping segment; resolve symlinks under the root policy; verify the target kind and current revision; return a typed openable or non-openable result.
 
 The host never searches all attached roots for a textual path and picks the first match. Multi-root ambiguity is represented, not guessed. Assistant prose abbreviations are interpreted only against source locations supplied to the generating model request ([Prose-derived references](#prose-derived-references)).
 
@@ -53,7 +53,7 @@ That check catches a Den bug that computed a path outside the roots it meant to 
 
 ## Worker branches
 
-Worker results can cite paths in isolated branches. The location carries the worker task/workspace identity so opening it reads the worker's bytes, not the primary tree's coincidentally named file. Worker diffs appear in the parent transcript only after successful overlay promotion, positioned at the merge event's ordinal; their links open the merged files in the destination project root. After promotion the host may provide a corresponding primary-tree location, but it does not silently retarget old evidence: the worker reference remains a record of what was inspected. A retired worker workspace resolves to an explicit unavailable/retained-history state.
+Worker results can cite paths in isolated branches. The location carries the worker task/workspace identity so opening it reads the worker's bytes, not the main tree's coincidentally named file. Worker diffs appear in the parent transcript only after successful overlay promotion, positioned at the merge event's ordinal; their links open the merged files in the destination project root. After promotion the host may provide a corresponding main-tree location, but it does not silently retarget old evidence: the worker reference remains a record of what was inspected. A retired worker workspace resolves to an explicit unavailable/retained-history state.
 
 ## Orchestrator: `openSourceLocation`
 
@@ -63,7 +63,7 @@ All UI entry points use one orchestrator: search results, transcript citations, 
 
 Tool path links bind their click, context menu, and selection metadata to the same attached root. A root path such as `.` always selects a folder. For project-tree paths whose kind is unknown, navigation reads that exact parent directory from the host before choosing a file open or folder reveal; a newer navigation supersedes an outstanding lookup. Workflow scaffold paths remain plain text because they do not address project files.
 
-`openSourceLocation` accepts a typed file or folder and an explicit open or tree-reveal action. Resolution converts qualified and absolute input paths to one attached-root-relative address before dispatch. File opens apply the editor preference; folder opens and explicit reveals select their tree target without replacing the editor. Worker locations retain their workspace identity and cannot reveal a coincidentally named primary-tree row.
+`openSourceLocation` accepts a typed file or folder and an explicit open or tree-reveal action. Resolution converts qualified and absolute input paths to one attached-root-relative address before dispatch. File opens apply the editor preference; folder opens and explicit reveals select their tree target without replacing the editor. Worker locations retain their workspace identity and cannot reveal a coincidentally named main-tree row.
 
 Host references and grounded citation paths have different provenance but use the same navigation actions and menu construction. A host reference may offer Open and Reveal in tree before its destination is resolved; both pass through the same resolution controller, including candidate validation, unavailable outcomes, retries, and cancellation. A newer navigation in the window supersedes an earlier unresolved reference.
 
@@ -77,7 +77,7 @@ Automatic and explicit reveals share one preparation and animation lifecycle. An
 
 The Files stage is the baseline source viewer and editor: it opens any supported text representation without external software and manages buffers, revisions, save conflict, selection, symbols, and review marks. Opening an already active buffer focuses it and applies the newest explicit reveal target without duplicating the buffer or discarding unsaved state.
 
-**A reference names its root.** A chat reference to a path is stored with the `root_id` the host resolved it under, and its path is qualified as `@label/rel` when that root is not primary. The chip passes the root back on click, and the client resolver reads the `@label` form by root label. A label no root carries is outside the project, never a folder under the primary root. A chip that resolves to nothing says so with a notice.
+**A reference names its root.** A chat reference to a path is stored with the `root_id` the host resolved it under, and its path is qualified as `@label/rel` when that root is not the session folder. The chip passes the root back on click, and the client resolver reads the `@label` form by root label. A label no root carries is outside the project, never a folder under the session folder. A chip that resolves to nothing says so with a notice.
 
 **A reader's aim outranks a presentation.** Every aim at the editor carries its origin: a reader aims by clicking a file, a link, or a chat chip; a presentation aims on behalf of something else (the walk's current step, a restored session, a conflict). While a reader's open is still arriving, a presentation may open its file beside it but never in front of it. Opening the ordinary file through the orchestrator also leaves an active walk first, because walk state outlives the Files stage and would otherwise re-aim the editor at the walk's own file the moment the stage mounts.
 
@@ -139,7 +139,7 @@ A message's context holds at most 4,096 distinct locations. The host deduplicate
 
 ### Destinations and availability
 
-`read` receipts also expose `source.navigation`, a reusable `source://<root-id>/<escaped-path>` Markdown destination. Worker destinations carry `?job_id=<worker-id>`; line ranges use `#L12` or `#L12-L20`. Complete relative destinations use the primary root; `@label/path` selects an attached root. Absolute destinations under an attached root, its session worktree, or a recorded worker checkout normalize to that root's identity. These direct locations can be validated without any context or catalog coverage.
+`read` receipts also expose `source.navigation`, a reusable `source://<root-id>/<escaped-path>` Markdown destination. Worker destinations carry `?job_id=<worker-id>`; line ranges use `#L12` or `#L12-L20`. Complete relative destinations use the session folder; `@label/path` selects an attached root. Absolute destinations under an attached root, its session worktree, or a recorded worker checkout normalize to that root's identity. These direct locations can be validated without any context or catalog coverage.
 
 `POST /v1/sessions/{id}/navigation` accepts a message identity, content SHA-256, and optional occurrence `reference_id` and `candidate_index`. It resolves only references stored on that message. A full response patches metadata through the transcript mutation clock and outbox; content and prior-reference comparisons prevent stale responses from overwriting newer prose or bindings.
 
@@ -153,7 +153,7 @@ A message's context holds at most 4,096 distinct locations. The host deduplicate
 
 Den leaves inferred pending, missing, and unavailable references as ordinary text; context-supported ambiguity has a distinct choice affordance, and authored Markdown destinations remain deliberate open requests that can report an unavailable location. Visible messages check pending direct paths through Den's shared surface-query store, which coalesces simultaneous reads and rejects obsolete responses; there is no discovery polling. Navigation metadata grants neither file permission nor citation grounding.
 
-Worker candidates keep their individual job identities. Selection uses the normal worker source-open path and its branch lease; constructing an ambiguity chooser does not materialize worker checkouts. Worker folder opens report that the folder cannot be opened in the primary tree. Context-menu actions requiring an absolute worker location remain visible but disabled; Open and Copy relative path preserve worker scope.
+Worker candidates keep their individual job identities. Selection uses the normal worker source-open path and its branch lease; constructing an ambiguity chooser does not materialize worker checkouts. Worker folder opens report that the folder cannot be opened in the main tree. Context-menu actions requiring an absolute worker location remain visible but disabled; Open and Copy relative path preserve worker scope.
 
 ### Repository scale
 

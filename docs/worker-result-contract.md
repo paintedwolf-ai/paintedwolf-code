@@ -177,7 +177,7 @@ Source findings use a semantic citation rather than an ephemeral handle counter:
 
 | Field | Meaning |
 |---|---|
-| `path` | project-relative source identity; what makes the finding resolvable |
+| `path` | session-folder-relative source identity (`@label/rel` in another attached root); what makes the finding resolvable |
 | `line` | optional 1-based location |
 | `excerpt` | source text used to resolve the citation |
 | `note` | worker interpretation |

@@ -14,7 +14,7 @@ A conversation may begin before the human chooses a filesystem location, and one
 |---------|------|
 | Project | Stable UUID, display name, root set, sessions, and project-scoped settings |
 | Project root | Filesystem tree with stable root identity and display label: human-attached, or the host-created draft scratch root |
-| Active root | The root that supplies unqualified path context for the current session |
+| Session folder | The root that supplies unqualified path context for the current session |
 | Project overlay | Commit-worthy configuration under `.paintedwolf/` |
 | Host project data | Non-repository attachments, spills, indexes, and other engine-managed state |
 
@@ -90,7 +90,7 @@ Detach and delete also offer a forced route, which is not a bypass: the API boun
 
 ## Root model
 
-Each root has a stable id, canonical filesystem location, display label, and position. The first root is primary; a session may select another active root for unqualified paths.
+Each root has a stable id, canonical filesystem location, display label, and position. The first root is primary; a session may select another root as the session folder that unqualified paths resolve against.
 
 | Rule | Reason |
 |------|--------|
