@@ -93,6 +93,22 @@ class RuntimeCoverageTests(unittest.TestCase):
             runtime.prepare(args)
         self.assertEqual(run.call_args.args[0][:2], ["cargo", "fetch"])
 
+    def test_install_build_tools_installs_arch_appropriate_vulkan_packages(self):
+        args = argparse.Namespace(backend="native", install_build_tools=True,
+                                  refresh_lock=False, model=None)
+        for machine, expected_extra in (("aarch64", ["glslc"]), ("x86_64", [])):
+            with self.subTest(machine=machine), \
+                    mock.patch.object(runtime.sys, "platform", "linux"), \
+                    mock.patch.object(runtime.platform, "machine", return_value=machine), \
+                    mock.patch.object(runtime.vulkan_tools, "prepare"), \
+                    mock.patch.object(runtime, "ensure_source"), \
+                    mock.patch.object(runtime, "run") as run:
+                runtime.prepare(args)
+            self.assertEqual(run.call_args_list[0].args[0], ["sudo", "-n", "apt-get", "update"])
+            self.assertEqual(run.call_args_list[1].args[0],
+                             ["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends",
+                              "cmake", "ninja-build", "libvulkan-dev", *expected_extra])
+
     def test_build_uses_recorded_native_and_reference_artifacts(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
