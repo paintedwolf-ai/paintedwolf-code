@@ -376,6 +376,7 @@ describe("FilesEditor Pretty display integration", () => {
       "fp-1",
       {
         reason: "overlapping-raw-ranges",
+        sourceRevision: 1,
         intentions: [
           {
             order: 0,
@@ -464,6 +465,7 @@ describe("FilesEditor Pretty display integration", () => {
       "fp-1",
       {
         reason: "overlapping-raw-ranges",
+        sourceRevision: 1,
         intentions: [
           {
             order: 0,
