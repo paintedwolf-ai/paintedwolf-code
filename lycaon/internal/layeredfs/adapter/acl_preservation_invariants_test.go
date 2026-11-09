@@ -22,12 +22,13 @@ func TestSeedNormalizationPreservesACLsThatDifferFromMode(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			raw := encodeACLPermissionFixture(tc.kind, tc.flags, tc.mask, "EVERYONE@")
+			expected := bytes.Clone(raw)
 			input := map[string][]byte{"system.nfs4_acl": raw, "user.content": []byte("retain")}
 			got := normalizeSeedSourceXattrs(tc.mode, input)
-			if !bytes.Equal(got["system.nfs4_acl"], raw) || !bytes.Equal(got["user.content"], []byte("retain")) {
+			if !bytes.Equal(got["system.nfs4_acl"], expected) || !bytes.Equal(got["user.content"], []byte("retain")) {
 				t.Fatal("normalization discarded ACL authority or portable metadata")
 			}
-			if !bytes.Equal(input["system.nfs4_acl"], raw) {
+			if !bytes.Equal(input["system.nfs4_acl"], expected) {
 				t.Fatal("normalization mutated source metadata")
 			}
 		})
