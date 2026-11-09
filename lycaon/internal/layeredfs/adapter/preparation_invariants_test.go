@@ -67,7 +67,7 @@ func TestPreparationInvariantCapabilityLossCannotAuthorizeMoreWork(t *testing.T)
 						}
 						s := preparationSelector(platform, outcome.reason, outcome.absent)
 						choice, err := s.Choose(t.Context(), ChooseRequest{
-							Grants: []RootGrant{grant},
+							Grants:         []RootGrant{grant},
 							CloneAvailable: func(context.Context, RootGrant) (bool, error) { return clone, nil },
 						})
 						if outcome.name == "available" {
@@ -94,7 +94,7 @@ func TestPreparationInvariantOverrunNeverResurveysLowerTree(t *testing.T) {
 			// The overrun already proves materialization exceeds the limit. Reopening
 			// the unavailable lower tree cannot make that decision more authoritative.
 			choice, err := s.Choose(t.Context(), ChooseRequest{
-				Grants: []RootGrant{{RootID: "r", SourcePath: filepath.Join(t.TempDir(), "unavailable")}},
+				Grants:  []RootGrant{{RootID: "r", SourcePath: filepath.Join(t.TempDir(), "unavailable")}},
 				Overrun: &BudgetOverrunError{RootID: "r", Entries: 3, Limit: 4},
 			})
 			if err == nil || choice.Adapter != nil {
@@ -116,7 +116,7 @@ func TestPreparationInvariantBoundaryKeepsCopyBudget(t *testing.T) {
 		t.Run(platform, func(t *testing.T) {
 			s := preparationSelector(platform, ReasonMountDenied, true)
 			choice, err := s.Choose(t.Context(), ChooseRequest{
-				Grants: []RootGrant{{RootID: "r", SourcePath: t.TempDir(), Estimate: &SourceIndexEstimate{EstimatedEntries: 2}}},
+				Grants:         []RootGrant{{RootID: "r", SourcePath: t.TempDir(), Estimate: &SourceIndexEstimate{EstimatedEntries: 2}}},
 				CloneAvailable: func(context.Context, RootGrant) (bool, error) { return true, nil },
 			})
 			testutil.FailErr(t, "choose at limit", err)
