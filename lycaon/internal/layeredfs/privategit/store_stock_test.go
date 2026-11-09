@@ -236,8 +236,8 @@ func TestCheckpointCreatedObjectsUpdateRetainedStockAndReopen(t *testing.T) {
 	// Create a new worker file and commit inside the view, then capture checkpoint Git state.
 	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "checkpoint-stock.txt"}, []byte("new-checkpoint-payload\n"), 0o644)
 	testutil.FailErr(t, "core.WriteFile checkpoint-stock.txt", err)
-	_, err = exec.Add(ctx, "checkpoint-stock.txt")
-	testutil.FailErr(t, "exec.Add", err)
+	_, err = exec.Run(ctx, ".", "add", "checkpoint-stock.txt")
+	testutil.FailErr(t, "exec.Run add", err)
 	_, err = exec.Commit(ctx, "worker checkpoint commit")
 	testutil.FailErr(t, "exec.Commit", err)
 
@@ -553,4 +553,54 @@ func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
 			}
 		})
 	}
+
+	// 4. Re-importing a content-addressed pack after a cancelled GC clears stale tombstones and
+	// preserves the freshly leased pack across InspectStock, CollectGarbage, and store reopen.
+	t.Run("reimport_after_cancelled_gc_preserves_leased_pack", func(t *testing.T) {
+		storeRoot, store := setupTwoPackStore(t, "reimport-after-cancel")
+		cancelCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		hooks := gcTestHooks{
+			beforeStageRename: func(base, ext string) error {
+				if base == baseRetire && ext == ".idx" {
+					cancel()
+					return cancelCtx.Err()
+				}
+				return nil
+			},
+		}
+		_, err := store.CollectGarbage(withGCTestHooks(cancelCtx, hooks))
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected context.Canceled, got %v", err)
+		}
+
+		// Re-import the retired pack on the same open store and lease it.
+		_, _, err = store.ImportRepositoryObjects(ctx, []string{objDirRetire}, []string{oidRetire})
+		testutil.FailErr(t, "re-import retire pack after cancelled GC", err)
+		_, err = store.RetainForCheckpoint("cp-retire-reimported", []string{oidRetire, "pack:" + baseRetire})
+		testutil.FailErr(t, "lease re-imported pack", err)
+
+		inv, err := store.InspectStock(ctx)
+		testutil.FailErr(t, "InspectStock after re-import", err)
+		m := store.Metrics()
+		if !inv.Complete || m.RetainedObjects != inv.LogicalObjects || m.RetainedBytes != inv.StoredBytes {
+			t.Fatalf("stock mismatch after re-import: metrics=%+v inspect=%+v", m, inv)
+		}
+		if !store.HasObject(oidRetire) || !store.HasObject("pack:"+baseRetire) {
+			t.Fatalf("expected re-imported pack %s present after InspectStock", baseRetire)
+		}
+
+		if removed, err := store.CollectGarbage(ctx); err != nil || removed != 0 {
+			t.Fatalf("expected 0 removed when both packs are leased, got removed=%d err=%v", removed, err)
+		}
+		testutil.FailErr(t, "store.Close", store.Close())
+
+		reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+		testutil.FailErr(t, "reopen after re-import", err)
+		defer func() { _ = reopened.Close() }()
+		if !reopened.HasObject(oidKeep) || !reopened.HasObject("pack:"+baseKeep) || !reopened.HasObject(oidRetire) || !reopened.HasObject("pack:"+baseRetire) {
+			t.Fatalf("expected both packs preserved after reopen")
+		}
+	})
 }

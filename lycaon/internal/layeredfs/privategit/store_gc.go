@@ -161,6 +161,15 @@ func removeStoreFile(ctx context.Context, path string) error {
 	return os.Remove(path)
 }
 
+func syncStoreDirectory(dirPath string) error {
+	dir, err := os.Open(dirPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = dir.Close() }()
+	return fssync.File(dir)
+}
+
 func collectUnleasedPacksLocked(
 	ctx context.Context,
 	s *RetainedObjectStore,
@@ -205,6 +214,11 @@ func collectUnleasedPacksLocked(
 				allRestored = false
 			}
 		}
+		if len(staged) > 0 {
+			if err := syncStoreDirectory(packDir); err != nil {
+				allRestored = false
+			}
+		}
 		return allRestored
 	}
 	// Retire each unleased pack in two phases: rename pack-* -> .retiring-pack-* first so no
@@ -218,6 +232,7 @@ func collectUnleasedPacksLocked(
 		for _, ext := range []string{".pack", ".idx", ".rev"} {
 			if err := gcBeforeStageRename(ctx, base, ext); err != nil {
 				if len(staged) > 0 {
+					_ = syncStoreDirectory(packDir)
 					removePackLocked(s, base)
 				}
 				return removed, err
@@ -228,30 +243,45 @@ func collectUnleasedPacksLocked(
 				if os.IsNotExist(err) {
 					continue
 				}
-				if !rollbackStaged(staged) {
-					removePackLocked(s, base)
+				if rollbackStaged(staged) {
+					return removed, fmt.Errorf("privategit: stage pack retirement %s (rolled back cleanly): %w", src, err)
 				}
-				return removed, fmt.Errorf("privategit: stage pack retirement %s: %w", src, err)
+				removePackLocked(s, base)
+				return removed, fmt.Errorf("privategit: stage pack retirement %s (rollback incomplete, marked for retirement): %w", src, err)
 			}
 			if ext == ".pack" {
 				hasPack = true
 			}
 			staged = append(staged, stagedFile{ext: ext, src: src, dst: dst})
 		}
+		if len(staged) > 0 {
+			if err := syncStoreDirectory(packDir); err != nil {
+				removePackLocked(s, base)
+				return removed, fmt.Errorf("privategit: sync staged pack retirement %s: %w", base, err)
+			}
+		}
 		unlinkedAny := false
 		for _, item := range staged {
 			if err := gcBeforeUnlinkRetired(ctx, base, item.ext); err != nil {
+				_ = syncStoreDirectory(packDir)
 				removePackLocked(s, base)
 				return removed, err
 			}
 			if err := removeStoreFile(ctx, item.dst); err != nil && !os.IsNotExist(err) {
 				if !unlinkedAny && rollbackStaged(staged) {
-					return removed, fmt.Errorf("privategit: remove retired pack %s: %w", item.dst, err)
+					return removed, fmt.Errorf("privategit: remove retired pack %s (rolled back cleanly): %w", item.dst, err)
 				}
+				_ = syncStoreDirectory(packDir)
 				removePackLocked(s, base)
-				return removed, fmt.Errorf("privategit: remove retired pack %s: %w", item.dst, err)
+				return removed, fmt.Errorf("privategit: remove retired pack %s (partially retired, marked for reconciliation): %w", item.dst, err)
 			}
 			unlinkedAny = true
+		}
+		if len(staged) > 0 {
+			if err := syncStoreDirectory(packDir); err != nil {
+				removePackLocked(s, base)
+				return removed, fmt.Errorf("privategit: sync retired pack removal %s: %w", base, err)
+			}
 		}
 		removePackLocked(s, base)
 		if hasPack {
@@ -365,6 +395,9 @@ func copyFileAtomicReadOnly(src, dst string) (int64, error) {
 	}
 	if err := os.Rename(tmp, dst); err != nil {
 		_ = os.Remove(tmp)
+		return 0, err
+	}
+	if err := syncStoreDirectory(filepath.Dir(dst)); err != nil {
 		return 0, err
 	}
 	return n, nil

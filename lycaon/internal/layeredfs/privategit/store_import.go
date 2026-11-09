@@ -150,6 +150,9 @@ func importStorePacksFromDir(ctx context.Context, s *RetainedObjectStore, srcDir
 	if err := os.MkdirAll(packDstDir, 0o755); err != nil {
 		return nil, nil, err
 	}
+	if err := finalizeInterruptedPackRetirements(ctx, packDstDir); err != nil {
+		return nil, nil, err
+	}
 	var added []string
 	var packNames []string
 	for _, e := range entries {

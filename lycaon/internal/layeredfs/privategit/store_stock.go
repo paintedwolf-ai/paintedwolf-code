@@ -78,6 +78,9 @@ func removePackLocked(s *RetainedObjectStore, base string) {
 func initStockFromDiskLocked(ctx context.Context, s *RetainedObjectStore) error {
 	start := time.Now()
 	prevStartup := s.stock.startupDuration
+	if err := finalizeInterruptedPackRetirements(ctx, filepath.Join(s.objectsDir, "pack")); err != nil {
+		return err
+	}
 	looseSizes, packSizes, packOIDs, _, err := scanStoreDiskState(ctx, s.rootDir, s.objectsDir)
 	if err != nil {
 		return err
@@ -186,13 +189,11 @@ func scanPackDir(
 	packSizes map[string]int64, packOIDs map[string]map[string]struct{},
 	uniqueOIDs map[string]struct{}, inv *StockInventory,
 ) error {
-	if err := finalizeInterruptedPackRetirements(ctx, packDir); err != nil {
-		return err
-	}
 	pEntries, err := os.ReadDir(packDir)
 	if err != nil {
 		return fmt.Errorf("privategit: read pack dir %s: %w", packDir, err)
 	}
+	retiringBases := collectRetiringPackBases(pEntries)
 	seenBases, hasPack, hasIdx := make(map[string]struct{}), make(map[string]int64), make(map[string]int64)
 	for _, pe := range pEntries {
 		if err := ctx.Err(); err != nil {
@@ -203,6 +204,9 @@ func scanPackDir(
 			continue
 		}
 		base := strings.TrimSuffix(pe.Name(), ext)
+		if _, retiring := retiringBases[base]; retiring {
+			continue
+		}
 		info, iErr := os.Stat(filepath.Join(packDir, pe.Name()))
 		if iErr != nil {
 			return fmt.Errorf("privategit: stat pack file %s: %w", pe.Name(), iErr)
@@ -238,6 +242,21 @@ func scanPackDir(
 	return nil
 }
 
+func collectRetiringPackBases(entries []os.DirEntry) map[string]struct{} {
+	retiringBases := make(map[string]struct{})
+	for _, pe := range entries {
+		if pe.IsDir() || !strings.HasPrefix(pe.Name(), retiringPackPrefix) {
+			continue
+		}
+		trimmed := strings.TrimPrefix(pe.Name(), retiringPackPrefix)
+		ext := filepath.Ext(trimmed)
+		if ext == ".pack" || ext == ".idx" || ext == ".rev" {
+			retiringBases[strings.TrimSuffix(trimmed, ext)] = struct{}{}
+		}
+	}
+	return retiringBases
+}
+
 // finalizeInterruptedPackRetirements reconciles any pack retirement interrupted mid-GC:
 // if a pack's retirement was started (.retiring-pack-<base>.* exists), any remaining live
 // companion files for <base> and the .retiring-pack-<base>.* staging files are removed
@@ -250,17 +269,7 @@ func finalizeInterruptedPackRetirements(ctx context.Context, packDir string) err
 		}
 		return fmt.Errorf("privategit: read pack dir %s: %w", packDir, err)
 	}
-	retiringBases := make(map[string]struct{})
-	for _, pe := range entries {
-		if pe.IsDir() || !strings.HasPrefix(pe.Name(), retiringPackPrefix) {
-			continue
-		}
-		trimmed := strings.TrimPrefix(pe.Name(), retiringPackPrefix)
-		ext := filepath.Ext(trimmed)
-		if ext == ".pack" || ext == ".idx" || ext == ".rev" {
-			retiringBases[strings.TrimSuffix(trimmed, ext)] = struct{}{}
-		}
-	}
+	retiringBases := collectRetiringPackBases(entries)
 	if len(retiringBases) == 0 {
 		return nil
 	}
@@ -275,14 +284,29 @@ func finalizeInterruptedPackRetirements(ctx context.Context, packDir string) err
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		for _, prefix := range []string{"", retiringPackPrefix} {
-			for _, ext := range []string{".pack", ".idx", ".rev"} {
-				p := filepath.Join(packDir, prefix+base+ext)
-				if err := removeStoreFile(ctx, p); err != nil && !os.IsNotExist(err) {
-					return fmt.Errorf("privategit: finalize interrupted pack retirement %s: %w", p, err)
-				}
+		for _, ext := range []string{".pack", ".idx", ".rev"} {
+			p := filepath.Join(packDir, base+ext)
+			if err := removeStoreFile(ctx, p); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("privategit: finalize interrupted pack retirement %s: %w", p, err)
 			}
 		}
+	}
+	if err := syncStoreDirectory(packDir); err != nil {
+		return fmt.Errorf("privategit: sync live companion retirement in %s: %w", packDir, err)
+	}
+	for base := range retiringBases {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		for _, ext := range []string{".pack", ".idx", ".rev"} {
+			p := filepath.Join(packDir, retiringPackPrefix+base+ext)
+			if err := removeStoreFile(ctx, p); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("privategit: finalize interrupted pack retirement %s: %w", p, err)
+			}
+		}
+	}
+	if err := syncStoreDirectory(packDir); err != nil {
+		return fmt.Errorf("privategit: sync tombstone retirement in %s: %w", packDir, err)
 	}
 	return nil
 }
