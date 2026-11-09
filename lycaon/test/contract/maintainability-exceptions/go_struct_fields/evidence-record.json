@@ -1,0 +1,6 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/evidence/evidence.Record",
+  "cap": 36,
+  "reason": "One persisted evidence shape spans delivered-source capture, rooted path identity, survey and gate/inspector rows, and in-memory lookup indexes. The rooted-identity milestone added RootID beside Path with pathRoots/pathDisplay bookkeeping in the same row lifecycle; splitting capture, identity, and gate custody would scatter one JSONL/DB record whose write, load, and citation lookup stay joined."
+}
