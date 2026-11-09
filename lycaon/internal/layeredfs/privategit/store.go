@@ -1,7 +1,6 @@
 package privategit
 
 import (
-	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -72,42 +71,12 @@ func NewRetainedObjectStore(rootDir string) (*RetainedObjectStore, error) {
 		leases:     make(map[string]*leaseRecord),
 		packOIDs:   make(map[string]map[string]struct{}),
 	}
-	if err := loadExistingPacksOnOpen(s); err != nil {
-		return nil, err
-	}
 	// A store with nothing retained has nothing to protect, and read-only directories
 	// would stop its host directory from being removed.
 	if storeHoldsObjects(objectsDir) {
 		lockStoreReadOnlyBoundary(s)
 	}
 	return s, nil
-}
-
-func loadExistingPacksOnOpen(s *RetainedObjectStore) error {
-	packDir := filepath.Join(s.objectsDir, "pack")
-	entries, err := os.ReadDir(packDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), "pack-") || filepath.Ext(e.Name()) != ".pack" {
-			continue
-		}
-		base := strings.TrimSuffix(e.Name(), ".pack")
-		idxPath := filepath.Join(packDir, base+".idx")
-		if _, sErr := os.Stat(idxPath); sErr != nil {
-			return fmt.Errorf("%w: incomplete pack/idx pair for %s", ErrCorruptObjectStore, base)
-		}
-		oids, err := listPackIndexOIDs(context.Background(), s.rootDir, idxPath)
-		if err != nil {
-			return fmt.Errorf("%w: verify pack %s: %v", ErrCorruptObjectStore, base, err)
-		}
-		s.packOIDs[base] = oids
-	}
-	return nil
 }
 
 // RootDir returns the store's top-level directory.
