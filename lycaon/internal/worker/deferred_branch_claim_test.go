@@ -63,8 +63,8 @@ func TestClaimNextDoesNotProvisionBranch(t *testing.T) {
 	if strings.TrimSpace(claimed.WorkspaceRoot) == "" {
 		t.Fatal("ClaimWorkerBranch must set WorkspaceRoot")
 	}
-	if strings.TrimSpace(claimed.WorkspaceBaselinePath) == "" {
-		t.Fatal("ClaimWorkerBranch must bind the branch baseline")
+	if claimed.WorkspaceBaselinePath != "" || !workspace.BranchUsesCheckpoints(claimed.WorkspaceRoot) {
+		t.Fatal("checkpoint worker must not bind a legacy baseline")
 	}
 	if _, err := os.Stat(claimed.WorkspaceRoot); err != nil {
 		testutil.FailErr(t, "branch dir", err)
@@ -82,7 +82,11 @@ func TestClaimNextDoesNotProvisionBranch(t *testing.T) {
 	}
 	again, err := q.ClaimWorkerBranch(context.Background(), id)
 	testutil.FailErr(t, "ClaimWorkerBranch idempotent", err)
-	if again.WorkspaceRoot != claimed.WorkspaceRoot {
+	persisted, ok := q.Get(id)
+	if !ok || persisted.WorkspaceRoot != claimed.WorkspaceRoot || persisted.WorkspaceBaselinePath != "" {
+		t.Fatalf("checkpoint workspace binding did not survive SQL read: %+v", persisted)
+	}
+	if again.WorkspaceRoot != claimed.WorkspaceRoot || again.WorkspaceBaselinePath != "" {
 		t.Fatalf("idempotent root=%q want %q", again.WorkspaceRoot, claimed.WorkspaceRoot)
 	}
 }
@@ -141,8 +145,8 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 	// 2. Retry succeeds in O(selected roots) with 0 lower-directory ReadDir walks.
 	claimed, err := q.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "ClaimWorkerBranch mounted retry", err)
-	if strings.TrimSpace(claimed.WorkspaceRoot) == "" || strings.TrimSpace(claimed.WorkspaceBaselinePath) == "" {
-		t.Fatalf("expected WorkspaceRoot and WorkspaceBaselinePath to be bound, got root=%q baseline=%q", claimed.WorkspaceRoot, claimed.WorkspaceBaselinePath)
+	if claimed.WorkspaceRoot == "" || claimed.WorkspaceBaselinePath != "" {
+		t.Fatalf("mounted checkpoint binding: root=%q baseline=%q", claimed.WorkspaceRoot, claimed.WorkspaceBaselinePath)
 	}
 
 	cv, ok := workspace.LookupBranchClaimedView(claimed.WorkspaceRoot)
