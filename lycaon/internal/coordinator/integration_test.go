@@ -40,16 +40,17 @@ func kickTestRoot(t *testing.T) string {
 }
 
 func stubWorkspaceRootsOne() assembly.WorkspaceRootsLoader {
-	return func(_ context.Context, sess *api.Session) ([]map[string]any, int, string) {
+	return func(_ context.Context, sess *api.Session) ([]map[string]any, int, string, int) {
 		if sess == nil || strings.TrimSpace(sess.WorkspacePath) == "" {
-			return nil, 0, ""
+			return nil, 0, "", 0
 		}
 		path := sess.WorkspacePath
 		return []map[string]any{{
 			"label":      "main",
 			"path":       path,
 			"is_primary": true,
-		}}, 1, path
+			"is_active":  true,
+		}}, 1, path, 0
 	}
 }
 
