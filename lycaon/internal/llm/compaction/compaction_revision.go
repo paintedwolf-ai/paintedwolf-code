@@ -12,7 +12,7 @@ import (
 )
 
 // compactionRevision keys memoized attempts and projections to the current summary and projection semantics.
-const compactionRevision = 4
+const compactionRevision = 5
 
 func (c *SimpleCompactor) summaryRevision(ctx context.Context) (string, error) {
 	if revision, ok := c.summary.(interface {

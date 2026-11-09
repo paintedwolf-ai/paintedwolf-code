@@ -15,7 +15,7 @@ import (
 
 // projectRecordedToolBodies preserves active exchanges while moving large bodies behind recall.
 func projectRecordedToolBodies(ctx context.Context, rows []api.Message, tokens ...int) []api.Message {
-	out := append([]api.Message(nil), rows...)
+	out := projectCompletedCommands(ctx, rows, tokens...)
 	for i, row := range out {
 		if !isOversizedToolBody(row) {
 			continue
