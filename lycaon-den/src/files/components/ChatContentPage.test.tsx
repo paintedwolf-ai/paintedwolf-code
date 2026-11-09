@@ -178,14 +178,15 @@ describe("chat content Files pane", () => {
     expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("view-only");
     expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]");
 
-    // Toggle Pretty ON: formats JSON across multiple lines,
-    // keeps read-only authority and mapped redaction mark,
-    // and blanks continuation line numbers.
+    // Toggle Pretty ON: applies native Break/Indent decorations on the raw document,
+    // keeps read-only authority and raw-offset redaction mark,
+    // and keeps original source line gutter label ("1").
     fireEvent.click(prettyBtn);
     expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
     await waitFor(() =>
-      expect(view.container.querySelectorAll(".cm-line").length).toBeGreaterThan(1),
+      expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(3),
     );
+    expect(view.container.querySelectorAll(".pw-virtual-indent").length).toBe(2);
     expect(view.container.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("false");
     expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("view-only");
     expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]");
@@ -193,7 +194,6 @@ describe("chat content Files pane", () => {
       view.container.querySelectorAll(".files-line-gutter__number[data-line]"),
     ).map((el) => el.textContent);
     expect(gutterNums[0]).toBe("1");
-    expect(gutterNums.slice(1).every((t) => t === "")).toBe(true);
   });
 
   it("formats retained JSON when complete bounded pages and redaction spans match sha256, and keeps protected raw view on late/incomplete responses (FMT-AC-08)", async () => {
@@ -252,7 +252,8 @@ describe("chat content Files pane", () => {
     await waitFor(() =>
       expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]"),
     );
-    expect(view.container.querySelector(".cm-content")?.textContent).toContain('"status": "ok"');
+    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(3);
+    expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"status":"ok","token":"[REDACTED]"}');
   });
 
   it("uses a bounded snapshot with explicit Refresh for live process output in Pretty mode and returns to live output when turned off (FMT-AC-14)", async () => {
@@ -284,7 +285,7 @@ describe("chat content Files pane", () => {
     expect(view.container.querySelector(".cm-content")?.textContent).toBe('{"step":1}');
     expect(view.queryByTestId("chat-process-pretty-snapshot")).toBeNull();
 
-    // Enable Pretty: captures snapshot of `{"step":1}\n`, formats it, and shows Snapshot + Refresh.
+    // Enable Pretty: captures snapshot of `{"step":1}\n`, renders native breaks, and shows Snapshot + Refresh.
     const prettyBtn = assertNamedControl(view.getByTestId("files-editor-pretty-toggle"), "button");
     fireEvent.click(prettyBtn);
     await waitFor(() =>
@@ -294,7 +295,8 @@ describe("chat content Files pane", () => {
       view.getByTestId("chat-process-pretty-refresh"),
       "button",
     );
-    expect(view.container.querySelector(".cm-content")?.textContent).toContain('"step": 1');
+    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(2);
+    expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"step":1}');
 
     // Incoming process chunk does NOT reformat or overwrite the snapshot while Pretty is ON.
     applyBackgroundProcessEvent({
@@ -305,17 +307,19 @@ describe("chat content Files pane", () => {
       text: '{"step":2}\n',
       end_offset: 22,
     });
-    expect(view.container.querySelector(".cm-content")?.textContent).not.toContain('"step": 2');
+    expect(view.container.querySelector(".cm-content")?.textContent).not.toContain('{"step":2}');
 
     // Explicit Refresh incorporates the new chunk into the formatted snapshot.
     fireEvent.click(refreshBtn);
     await waitFor(() =>
-      expect(view.container.querySelector(".cm-content")?.textContent).toContain('"step": 2'),
+      expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"step":2}'),
     );
+    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(4);
 
     // Turning Pretty OFF returns to live output and removes Snapshot/Refresh indicators.
     fireEvent.click(prettyBtn);
     expect(view.queryByTestId("chat-process-pretty-snapshot")).toBeNull();
+    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(0);
     applyBackgroundProcessEvent({
       session_id: "session",
       process_id: "proc-1",

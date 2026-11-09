@@ -30,10 +30,8 @@ import { reportSurfaceFailure } from "../../notices/surface-failure.ts";
 import {
   buildChatPrettyProjectionState,
   buildRawRedactionExtension,
-  displayOffsetToSourceLineCol,
   extractInlineRedactionSpans,
   mapRuneOffsetToDisplay,
-  sourceLineColToDisplay,
   type ChatPrettyProjectionState,
 } from "./chat-content-pretty.ts";
 
@@ -136,20 +134,10 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   const activeEditor = () => (usePagedReader() ? reader()?.reader.view : inlineEditor());
   createEffect(() => {
     const view = activeEditor();
-    const prettyState = activePrettyState();
     if (!view) return;
     const updateStatus = () => {
       const position = view.state.selection.main.head;
-      if (prettyState && view === inlineEditor()) {
-        const srcPos = displayOffsetToSourceLineCol(
-          prettyState.projection.sourceMap,
-          prettyState.rawText,
-          position,
-        );
-        setCursor({ line: srcPos.line, col: srcPos.col });
-        return;
-      }
-      const content = reader()?.reader.document.at(position);
+      const content = usePagedReader() ? reader()?.reader.document.at(position) : undefined;
       const line = view.state.doc.lineAt(position);
       setCursor({ line: content ? content.slot.index + 1 : line.number, col: position - line.from + 1 });
     };
@@ -167,16 +155,17 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   });
   const revealInInlinePretty = (runeOffset: number, runeLength = 0) => {
     const view = inlineEditor(), state = activePrettyState();
-    if (!view || !state) return;
-    const from = mapRuneOffsetToDisplay(state, runeOffset);
-    const to = runeLength > 0 ? mapRuneOffsetToDisplay(state, runeOffset + runeLength) : from;
+    if (!view) return;
+    const raw = view.state.doc.toString();
+    const from = mapRuneOffsetToDisplay(state, runeOffset, raw);
+    const to = runeLength > 0 ? mapRuneOffsetToDisplay(state, runeOffset + runeLength, raw) : from;
     view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
   };
   createEffect(() => {
     const target = props.document.revealOffset, editor = reader();
     if (target === undefined) return;
     if (editor && usePagedReader()) void editor.reveal(target);
-    else if (activePrettyState()) revealInInlinePretty(target);
+    else revealInInlinePretty(target);
   });
   createEffect(() => { const prefs = editorDisplayPrefs(); reader()?.reader.prefs(prefs); });
   createEffect(on(
@@ -204,30 +193,15 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
       if (!active || !findController.isOpen() || !activateFindableViewForEditor(view)) return;
       setFindCaseSensitive(request.caseSensitive);
       openFind();
-      const targetOffset = request.offset !== undefined ? mapRuneOffsetToDisplay(prettyState, request.offset) : 0;
+      const targetOffset = request.offset !== undefined ? mapRuneOffsetToDisplay(prettyState, request.offset, view.state.doc.toString()) : 0;
       view.dispatch({ selection: { anchor: Math.max(0, Math.min(view.state.doc.length, targetOffset)) } });
       setFindQuery(request.query);
     });
   });
   const gotoLine = () => {
-    const editor = reader(), view = activeEditor(), content = access(), prettyState = activePrettyState();
+    const editor = reader(), view = activeEditor(), content = access();
     if (!view) return;
-    if (prettyState && view === inlineEditor()) {
-      const map = prettyState.projection.sourceMap;
-      const sourceLines = Math.max(1, map.displayLines.at(-1)?.sourceLine ?? 1);
-      openGotoLine({
-        lineCount: sourceLines,
-        currentLine: displayOffsetToSourceLineCol(map, prettyState.rawText, view.state.selection.main.head).line,
-        focus: () => view.focus(),
-        goTo: (line, column) => {
-          const disp = sourceLineColToDisplay(map, prettyState.rawText, line, column ?? 1).offset;
-          view.dispatch({ selection: { anchor: disp }, scrollIntoView: true });
-          view.focus();
-        },
-      });
-      return;
-    }
-    if (!editor || !content) { openGotoLine(view); return; }
+    if (!usePagedReader() || !editor || !content) { openGotoLine(view); return; }
     openGotoLine({ lineCount: Math.max(1, content.reference.rows),
       currentLine: (editor.reader.document.at(view.state.selection.main.head)?.slot.index ?? 0) + 1,
       focus: () => view.focus(), goTo: (line, column) => { void editor.revealRow(line - 1, column); },
@@ -312,30 +286,29 @@ function InlineChatContent(props: {
     props.onPrettyState(props.retainedPretty ? null : computedPretty());
     onCleanup(() => props.onPrettyState(null));
   });
-  const displayedText = () => computedPretty()?.displayText ?? rawText();
   const redactionExtension = () => {
     const pretty = computedPretty();
     if (pretty) return pretty.redactionExtension;
     const content = props.document.content;
     return content.kind === "inline" ? buildRawRedactionExtension(rawText(), extractInlineRedactionSpans(content.redaction)) : [];
   };
-  const gutterExtension = () => computedPretty()?.gutterExtension ?? [];
+  const prettyExtension = () => computedPretty()?.prettyExtension ?? [];
   let editor: EditorView | undefined;
   const redactions = new Compartment();
-  const gutterSource = new Compartment();
+  const prettyDecorations = new Compartment();
   createEffect(() => {
     const host = parent(); if (!host) return;
-    const value = untrack(displayedText);
+    const value = untrack(rawText);
     const view = new EditorView({ parent: host, state: createSourceEditorState({ surface: "diff-viewer", doc: value, ...untrack(editorDisplayPrefs), editable: false, scrollPastEnd: false, commandBridge: true,
-      extensions: [redactions.of(untrack(redactionExtension)), gutterSource.of(untrack(gutterExtension))],
+      extensions: [redactions.of(untrack(redactionExtension)), prettyDecorations.of(untrack(prettyExtension))],
     }) });
     editor = view;
     props.onEditor(view);
     onCleanup(() => { view.destroy(); if (editor === view) editor = undefined; props.onEditor(undefined); });
   });
   createEffect(() => {
-    const value = displayedText(), view = editor; if (!view) return;
-    const effects = [redactions.reconfigure(redactionExtension()), gutterSource.reconfigure(gutterExtension())];
+    const value = rawText(), view = editor; if (!view) return;
+    const effects = [redactions.reconfigure(redactionExtension()), prettyDecorations.reconfigure(prettyExtension())];
     const previous = view.state.doc.toString();
     if (previous === value) { view.dispatch({ effects }); return; }
     let from = 0, to = previous.length, end = value.length;
