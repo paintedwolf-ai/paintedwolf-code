@@ -1,6 +1,6 @@
 Summarize the selected code for someone who has not read this file.
 
-File: {{ path }}
+File: {{ path_display }}
 Lines: {{ start_line }}–{{ end_line }}
 
 Write two short paragraphs: what this code is for, and the one thing a reader
