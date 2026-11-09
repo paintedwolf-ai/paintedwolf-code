@@ -2,6 +2,7 @@ package api
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -78,8 +79,10 @@ func UserIntentBoundary(history []Message) int {
 
 // LastUserIntentMessage returns the most recent visible user intent message.
 func LastUserIntentMessage(history []Message) (Message, bool) {
-	if i := UserIntentBoundary(history); i > 0 && i <= len(history) {
-		return history[i-1], true
+	for _, msg := range slices.Backward(history) {
+		if IsUserIntentMessage(msg) {
+			return msg, true
+		}
 	}
 	return Message{}, false
 }

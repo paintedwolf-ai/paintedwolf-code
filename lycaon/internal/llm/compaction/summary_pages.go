@@ -135,7 +135,8 @@ func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.Cont
 		runes := []rune(content)
 		for start := 0; start < len(runes); start += width {
 			segment := row
-			segment.Content = summaryFragment(row, string(runes[start:min(start+width, len(runes))]), start/width+1, (len(runes)+width-1)/width)
+			segment.Content, err = summaryFragment(row, string(runes[start:min(start+width, len(runes))]), start/width+1, (len(runes)+width-1)/width)
+			sourceErr = errors.Join(sourceErr, err)
 			segment.ContentParts = nil
 			segment.ToolCalls = nil
 			segment.ToolName = tool

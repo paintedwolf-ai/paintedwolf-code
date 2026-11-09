@@ -46,7 +46,7 @@ func continuationExecution(result *api.ToolResult) *messageview.ContinuationExec
 }
 
 // Each fragment retains its source identity even across summary pages.
-func summaryFragment(row ContextMessage, content string, part, parts int) string {
+func summaryFragment(row ContextMessage, content string, part, parts int) (string, error) {
 	type callIdentity struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -55,7 +55,7 @@ func summaryFragment(row ContextMessage, content string, part, parts int) string
 	for _, call := range row.ToolCalls {
 		calls = append(calls, callIdentity{ID: call.ID, Name: call.Name})
 	}
-	raw, _ := json.Marshal(struct {
+	raw, err := json.Marshal(struct {
 		MessageID string         `json:"message_id"`
 		Ord       int64          `json:"ordinal"`
 		Part      int            `json:"part"`
@@ -63,5 +63,5 @@ func summaryFragment(row ContextMessage, content string, part, parts int) string
 		Calls     []callIdentity `json:"calls,omitempty"`
 		Fragment  string         `json:"source_fragment"`
 	}{row.ID, row.Ord, part, parts, calls, content})
-	return string(raw)
+	return string(raw), err
 }
