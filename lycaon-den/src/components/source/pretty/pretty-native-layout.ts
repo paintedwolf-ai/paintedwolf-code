@@ -17,28 +17,40 @@ import {
 } from "@codemirror/view";
 import {
   classifyDocumentFormat,
+  determineDocumentLineEligibility,
   type DocumentFormatMode,
-  isClosingFence,
-  isEnvelopeHeaderLine,
-  isExcerptBarrierLine,
-  matchEnvelopeOrLogPrefix,
-  parseOpeningFence,
+  modeToPrimaryFamily,
   type PrettyLayoutFamily,
-  resolveFenceLayoutFamily,
 } from "./pretty-classify.ts";
-import { maxPrettyVisits, PrettyBudgetTracker } from "./pretty-limits.ts";
-import { scanLineLexicalBoundaries } from "./pretty-line-scanners.ts";
+import {
+  maxPrettyVisits,
+  PrettyBudgetTracker,
+  utf8ByteLength,
+} from "./pretty-limits.ts";
+import {
+  continuationEqualsLineStart,
+  continuationFromLineEnd,
+  INITIAL_LINE_CONTINUATION,
+  scanLineLexicalBoundaries,
+} from "./pretty-line-scanners.ts";
 import type {
   PrettyLayoutBoundary,
+  PrettyLineContinuationState,
   PrettyLineLayoutState,
   PrettyNativeLayoutOptions,
   PrettyNativeLayoutResult,
   PrettyProjectionOutcome,
   PrettyResourceCounters,
   PrettyResourceLimits,
+  PrettyUtf16Range,
 } from "./pretty-types.ts";
 
-export { scanLineLexicalBoundaries } from "./pretty-line-scanners.ts";
+export {
+  continuationEqualsLineStart,
+  continuationFromLineEnd,
+  INITIAL_LINE_CONTINUATION,
+  scanLineLexicalBoundaries,
+} from "./pretty-line-scanners.ts";
 
 export class PrettyBreakWidget extends WidgetType {
   override toDOM(): HTMLElement {
@@ -123,11 +135,11 @@ const prettyNativeTheme = EditorView.baseTheme({
 function appendLineDecorations(
   target: Range<Decoration>[],
   lineState: PrettyLineLayoutState,
+  lineFrom: number,
   indentWidthCh: number,
 ): void {
-  const base = lineState.lineFrom;
   for (const b of lineState.relBoundaries) {
-    const pos = base + b.relPos;
+    const pos = lineFrom + b.relPos;
     target.push(SHARED_BREAK_DECORATION.range(pos));
     if (b.depth > 0) {
       target.push(getIndentDecoration(b.depth, indentWidthCh).range(pos));
@@ -135,271 +147,101 @@ function appendLineDecorations(
   }
 }
 
-function looksLikeStructuredJsonCandidate(text: string): boolean {
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i);
-    if (c === 0x7b || c === 0x7d || c === 0x5b || c === 0x5d) return true;
-  }
-  return /"\s*:/.test(text);
-}
+const SYNTAX_INTERIOR_PROTECTED_NODES = new Set([
+  "String",
+  "PropertyName",
+  "TemplateString",
+  "BlockComment",
+  "Comment",
+  "Cdata",
+  "AttributeValue",
+]);
 
-function looksLikeStandaloneXmlCandidate(text: string): boolean {
-  const trimmed = text.trim();
-  return (
-    trimmed.startsWith("<") &&
-    trimmed.endsWith(">") &&
-    /><[A-Za-z/?!]/.test(trimmed)
-  );
-}
+const SYNTAX_FULL_PROTECTED_NODES = new Set([
+  "LineComment",
+  "RegExp",
+  "RawText",
+  "ScriptText",
+  "StyleText",
+]);
 
-interface LineEligibility {
-  readonly eligible: boolean;
-  readonly family: PrettyLayoutFamily;
-  readonly scanStartCol: number;
-  readonly resetDepth: boolean;
-}
-
-function determineDocumentLineEligibility(
-  doc: Text,
-  mode: DocumentFormatMode,
-  rawText: string,
-  budget: PrettyBudgetTracker,
-): readonly LineEligibility[] | "passthrough" | "budget" {
-  const totalLines = doc.lines;
-  if (mode === "code-passthrough") return "passthrough";
-
-  if (
-    mode === "json" ||
-    mode === "jsonc" ||
-    mode === "xml-html" ||
-    mode === "javascript" ||
-    mode === "css"
-  ) {
-    const out: LineEligibility[] = new Array(totalLines);
-    for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
-      out[lineNum - 1] = {
-        eligible: true,
-        family: mode,
-        scanStartCol: 0,
-        resetDepth: lineNum === 1,
-      };
-    }
-    return out;
-  }
-
-  if (mode === "jsonl") {
-    const out: LineEligibility[] = new Array(totalLines);
-    for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
-      out[lineNum - 1] = {
-        eligible: true,
-        family: "jsonl",
-        scanStartCol: 0,
-        resetDepth: true,
-      };
-    }
-    return out;
-  }
-
-  if (mode === "markdown" || /^(?: {0,3}(?:```|~~~))/m.test(rawText)) {
-    const out: LineEligibility[] = new Array(totalLines);
-    for (let i = 0; i < totalLines; i++) {
-      out[i] = {
-        eligible: false,
-        family: "passthrough",
-        scanStartCol: 0,
-        resetDepth: true,
-      };
-    }
-    let lineNum = 1;
-    while (lineNum <= totalLines) {
-      if (!budget.recordVisit(1)) return "budget";
-      const lineText = doc.line(lineNum).text;
-      const fence = parseOpeningFence(lineText);
-      if (!fence) {
-        lineNum += 1;
-        continue;
-      }
-      let closeLineNum = -1;
-      for (let j = lineNum + 1; j <= totalLines; j++) {
-        if (!budget.recordVisit(1)) return "budget";
-        if (isClosingFence(doc.line(j).text, fence.char, fence.len)) {
-          closeLineNum = j;
-          break;
-        }
-      }
-      if (closeLineNum < 0) break;
-      const fenceFamily = resolveFenceLayoutFamily(fence.lang);
-      if (fenceFamily) {
-        for (let bodyLine = lineNum + 1; bodyLine < closeLineNum; bodyLine++) {
-          out[bodyLine - 1] = {
-            eligible: true,
-            family: fenceFamily,
-            scanStartCol: 0,
-            resetDepth: fenceFamily === "jsonl" || bodyLine === lineNum + 1,
-          };
-        }
-      }
-      lineNum = closeLineNum + 1;
-    }
-    return out;
-  }
-
-  if (looksLikeStandaloneXmlCandidate(rawText)) {
-    const out: LineEligibility[] = new Array(totalLines);
-    for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
-      out[lineNum - 1] = {
-        eligible: true,
-        family: "xml-html",
-        scanStartCol: 0,
-        resetDepth: lineNum === 1,
-      };
-    }
-    return out;
-  }
-
-  if (!looksLikeStructuredJsonCandidate(rawText)) return "passthrough";
-
-  let hasBarrier = false;
-  let hasEnvelope = false;
-  for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
-    const lineText = doc.line(lineNum).text;
-    if (isExcerptBarrierLine(lineText)) hasBarrier = true;
-    if (
-      isEnvelopeHeaderLine(lineText) ||
-      matchEnvelopeOrLogPrefix(lineText) !== null
-    ) {
-      hasEnvelope = true;
-    }
-  }
-
-  if (!hasBarrier && !hasEnvelope) {
-    let allLinesStartContainer = totalLines >= 2;
-    for (
-      let lineNum = 1;
-      lineNum <= totalLines && allLinesStartContainer;
-      lineNum++
-    ) {
-      const t = doc.line(lineNum).text.trim();
-      if (t.length === 0) continue;
-      if (!(t.startsWith("{") || t.startsWith("["))) {
-        allLinesStartContainer = false;
-      }
-    }
-    const family: PrettyLayoutFamily = allLinesStartContainer ? "jsonl" : "json";
-    const out: LineEligibility[] = new Array(totalLines);
-    for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
-      out[lineNum - 1] = {
-        eligible: true,
-        family,
-        scanStartCol: 0,
-        resetDepth: allLinesStartContainer || lineNum === 1,
-      };
-    }
-    return out;
-  }
-
-  const out: LineEligibility[] = new Array(totalLines);
-  for (let i = 0; i < totalLines; i++) {
-    out[i] = {
-      eligible: false,
-      family: "passthrough",
-      scanStartCol: 0,
-      resetDepth: true,
-    };
-  }
-
-  for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
-    if (!budget.recordVisit(1)) return "budget";
-    const lineText = doc.line(lineNum).text;
-    if (isExcerptBarrierLine(lineText)) continue;
-    const prefixCol = matchEnvelopeOrLogPrefix(lineText);
-    if (prefixCol !== null) {
-      out[lineNum - 1] = {
-        eligible: true,
-        family: "json",
-        scanStartCol: prefixCol,
-        resetDepth: true,
-      };
-      continue;
-    }
-    if (isEnvelopeHeaderLine(lineText)) continue;
-    const trimmed = lineText.trimStart();
-    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-      let depth = 0;
-      let quote = false;
-      let escape = false;
-      let closedLine = -1;
-      for (let k = lineNum; k <= totalLines; k++) {
-        const kText = doc.line(k).text;
-        if (k > lineNum && isExcerptBarrierLine(kText)) {
-          closedLine = -1;
-          break;
-        }
-        for (let p = 0; p < kText.length; p++) {
-          if (!budget.recordVisit(1)) return "budget";
-          const c = kText.charCodeAt(p);
-          if (quote) {
-            if (escape) escape = false;
-            else if (c === 0x5c) escape = true;
-            else if (c === 0x22) quote = false;
-            continue;
-          }
-          if (c === 0x22) quote = true;
-          else if (c === 0x7b || c === 0x5b) depth += 1;
-          else if (c === 0x7d || c === 0x5d) {
-            depth -= 1;
-            if (depth === 0) {
-              closedLine = k;
-              break;
-            }
-          }
-        }
-        if (closedLine >= 0) break;
-      }
-      if (closedLine >= lineNum) {
-        for (let k = lineNum; k <= closedLine; k++) {
-          out[k - 1] = {
-            eligible: true,
-            family: "json",
-            scanStartCol: 0,
-            resetDepth: k === lineNum,
-          };
-        }
-        lineNum = closedLine;
-      }
-    }
-  }
-  return out;
-}
-
-function modeToPrimaryFamily(mode: DocumentFormatMode): PrettyLayoutFamily {
-  if (mode === "code-passthrough") return "passthrough";
-  if (mode === "auto") return "mixed";
-  return mode;
-}
-
-function accountSyntaxTreeNodesInRange(
-  state: EditorState | undefined,
+function pushMergedSpan(
+  spans: PrettyUtf16Range[],
   from: number,
   to: number,
+): void {
+  if (to <= from) return;
+  const last = spans[spans.length - 1];
+  if (last && from <= last.to) {
+    if (to > last.to) {
+      spans[spans.length - 1] = { from: last.from, to };
+    }
+    return;
+  }
+  spans.push({ from, to });
+}
+
+/**
+ * Inspects CodeMirror's `syntaxTree(state)` over `[lineFrom, lineTo]` to:
+ * 1. Account for every syntax node starting on this line (`lineFrom <= node.from <= lineTo`)
+ *    under `PrettyBudgetTracker`.
+ * 2. Collect line-relative protected spans for literal, comment, regex, CDATA, and raw-text
+ *    nodes so structural formatting never splits inside syntax-tree literals or comments.
+ */
+function collectLineSyntaxProtectedSpans(
+  state: EditorState | undefined,
+  lineFrom: number,
+  lineTo: number,
   budget: PrettyBudgetTracker,
-): boolean {
-  if (!state) return true;
+): {
+  readonly spans: readonly PrettyUtf16Range[];
+  readonly syntaxNodes: number;
+  readonly syntaxVisits: number;
+} | "budget" {
+  if (!state) {
+    return { spans: [], syntaxNodes: 0, syntaxVisits: 0 };
+  }
   const tree = syntaxTree(state);
-  if (tree.length === 0) return true;
+  if (tree.length === 0) {
+    return { spans: [], syntaxNodes: 0, syntaxVisits: 0 };
+  }
+  const spans: PrettyUtf16Range[] = [];
+  const lineLen = lineTo - lineFrom;
+  let syntaxNodes = 0;
+  const visitsBefore = budget.counters.visits;
   let withinBudget = true;
+
   tree.iterate({
-    from,
-    to,
-    enter: () => {
-      if (!budget.recordSyntaxNode(1)) {
-        withinBudget = false;
-        return false;
+    from: lineFrom,
+    to: lineTo,
+    enter: (node) => {
+      if (node.from >= lineFrom && node.from <= lineTo) {
+        if (!budget.recordSyntaxNode(1)) {
+          withinBudget = false;
+          return false;
+        }
+        syntaxNodes += 1;
+      }
+      const name = node.name;
+      if (SYNTAX_INTERIOR_PROTECTED_NODES.has(name)) {
+        const pFrom = Math.max(0, node.from + 1 - lineFrom);
+        const pTo = Math.min(lineLen, node.to - 1 - lineFrom);
+        pushMergedSpan(spans, pFrom, pTo);
+      } else if (SYNTAX_FULL_PROTECTED_NODES.has(name)) {
+        const pFrom = Math.max(0, node.from - lineFrom);
+        const pTo = Math.min(lineLen, node.to - lineFrom);
+        pushMergedSpan(spans, pFrom, pTo);
       }
       return undefined;
     },
   });
-  return withinBudget;
+
+  if (!withinBudget) return "budget";
+  return {
+    spans,
+    syntaxNodes,
+    syntaxVisits: budget.counters.visits - visitsBefore,
+  };
 }
 
 export function computePrettyNativeLayout(
@@ -472,20 +314,6 @@ export function computePrettyNativeLayout(
   budget.counters.outputUtf16Units = doc.length;
   budget.counters.outputUtf8Bytes = budget.counters.inputUtf8Bytes;
 
-  if (!accountSyntaxTreeNodesInRange(editorState, 0, doc.length, budget)) {
-    return {
-      sourceIdentity,
-      sourceRevision,
-      outcome: budget.canceled ? "canceled" : "limit-exceeded",
-      mode,
-      family: primaryFamily,
-      ...(budget.limitReason ? { limitReason: budget.limitReason } : {}),
-      boundaries: [],
-      lineStates: [],
-      counters: budget.counters,
-    };
-  }
-
   const eligibilities = determineDocumentLineEligibility(
     doc,
     mode,
@@ -521,28 +349,49 @@ export function computePrettyNativeLayout(
   const totalLines = doc.lines;
   const lineStates: PrettyLineLayoutState[] = new Array(totalLines);
   const boundaries: PrettyLayoutBoundary[] = [];
-  let runningDepth = 0;
-  let runningBlockComment = false;
-  let runningXmlRawTag: string | null = null;
+  let runningCont: PrettyLineContinuationState = INITIAL_LINE_CONTINUATION;
 
   for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
     const line = doc.line(lineNum);
     const elig = eligibilities[lineNum - 1]!;
-    const startDepth = elig.resetDepth ? 0 : runningDepth;
-    const startInBlockComment = elig.resetDepth ? false : runningBlockComment;
-    const startXmlRawTag = elig.resetDepth ? null : runningXmlRawTag;
+    const startCont = elig.resetDepth ? INITIAL_LINE_CONTINUATION : runningCont;
+
+    const syntaxRes = collectLineSyntaxProtectedSpans(
+      editorState,
+      line.from,
+      line.to,
+      budget,
+    );
+    if (syntaxRes === "budget") {
+      return {
+        sourceIdentity,
+        sourceRevision,
+        outcome: budget.canceled ? "canceled" : "limit-exceeded",
+        mode,
+        family: primaryFamily,
+        ...(budget.limitReason ? { limitReason: budget.limitReason } : {}),
+        boundaries: [],
+        lineStates: [],
+        counters: budget.counters,
+      };
+    }
+
     const scanned = scanLineLexicalBoundaries(
       line.text,
       lineNum,
       totalLines,
       line.from,
-      startDepth,
+      startCont,
       elig.eligible,
       elig.scanStartCol,
       budget,
       elig.family,
-      startInBlockComment,
-      startXmlRawTag,
+      startCont.inBlockComment,
+      startCont.xmlRawTag,
+      syntaxRes.spans,
+      undefined,
+      syntaxRes.syntaxNodes,
+      syntaxRes.syntaxVisits,
     );
     if (scanned === "budget") {
       return {
@@ -558,11 +407,9 @@ export function computePrettyNativeLayout(
       };
     }
     lineStates[lineNum - 1] = scanned;
-    runningDepth = scanned.endDepth;
-    runningBlockComment = scanned.endInBlockComment;
-    runningXmlRawTag = scanned.endXmlRawTag;
+    runningCont = continuationFromLineEnd(scanned);
     for (const b of scanned.relBoundaries) {
-      boundaries.push({ pos: scanned.lineFrom + b.relPos, depth: b.depth });
+      boundaries.push({ pos: line.from + b.relPos, depth: b.depth });
     }
   }
 
@@ -600,6 +447,7 @@ export interface PrettyNativeFieldState {
   readonly decorations: DecorationSet;
   readonly counters: PrettyResourceCounters;
   readonly lastIncrementalLinesScanned: number;
+  readonly lastIncrementalSuffixLinesReused: number;
 }
 
 export const setPrettyNativeConfigEffect =
@@ -638,6 +486,7 @@ function buildFieldStateFromScratch(
         visits: 0,
       },
       lastIncrementalLinesScanned: 0,
+      lastIncrementalSuffixLinesReused: 0,
     };
   }
 
@@ -671,12 +520,16 @@ function buildFieldStateFromScratch(
       decorations: Decoration.none,
       counters: res.counters,
       lastIncrementalLinesScanned: res.lineStates.length,
+      lastIncrementalSuffixLinesReused: 0,
     };
   }
 
   const ranges: Range<Decoration>[] = [];
-  for (const ls of res.lineStates) {
-    appendLineDecorations(ranges, ls, indentWidthCh);
+  for (let lineNum = 1; lineNum <= res.lineStates.length; lineNum++) {
+    const ls = res.lineStates[lineNum - 1]!;
+    if (ls.relBoundaries.length > 0) {
+      appendLineDecorations(ranges, ls, doc.line(lineNum).from, indentWidthCh);
+    }
   }
   return {
     enabled: true,
@@ -693,6 +546,7 @@ function buildFieldStateFromScratch(
     decorations: Decoration.set(ranges, true),
     counters: res.counters,
     lastIncrementalLinesScanned: res.lineStates.length,
+    lastIncrementalSuffixLinesReused: 0,
   };
 }
 
@@ -706,9 +560,10 @@ const INCREMENTAL_CAPABLE_MODES = new Set<DocumentFormatMode>([
 ]);
 
 /**
- * Incrementally updates line layout states and CodeMirror decorations across
- * changed line ranges (`tr.changes.iterChangedRanges`), stopping as soon as
- * `(endDepth, endInBlockComment, endXmlRawTag)` converge with unchanged subsequent lines.
+ * Incrementally updates line layout states, CodeMirror decorations, and whole-document
+ * resource counters across changed line ranges (`tr.changes.iterChangedRanges`),
+ * stopping as soon as all multiline continuation states converge with unchanged suffix lines
+ * and reusing suffix `PrettyLineLayoutState` objects by reference without O(totalLines) loops.
  */
 export function updatePrettyNativeLayoutIncrementally(
   prev: PrettyNativeFieldState,
@@ -727,23 +582,13 @@ export function updatePrettyNativeLayoutIncrementally(
   };
 
   const canIncremental =
+    newDoc.length > 0 &&
     INCREMENTAL_CAPABLE_MODES.has(prev.mode) &&
     prev.lineStates.length === oldDoc.lines &&
     prev.outcome !== "limit-exceeded" &&
     prev.outcome !== "canceled";
 
   if (!canIncremental) {
-    return buildFieldStateFromScratch(newDoc, config, tr.state);
-  }
-
-  const budget = new PrettyBudgetTracker("", {
-    ...prev.limits,
-    maxVisits: prev.limits?.maxVisits ?? maxPrettyVisits(newDoc.length),
-  });
-  if (
-    newDoc.length > budget.limits.maxInputUtf16Units ||
-    newDoc.lines > budget.limits.maxOutputLines
-  ) {
     return buildFieldStateFromScratch(newDoc, config, tr.state);
   }
 
@@ -763,43 +608,88 @@ export function updatePrettyNativeLayoutIncrementally(
 
   if (!hasChange) return prev;
 
-  const oldEndLine = oldDoc.lineAt(Math.min(oldDoc.length, maxToA)).number;
+  const oldStartLine = oldDoc.lineAt(minFromA).number;
   const newStartLine = newDoc.lineAt(minFromB).number;
   const newEndLine = newDoc.lineAt(Math.min(newDoc.length, maxToB)).number;
-
-  const rescanStartLine = Math.max(1, newStartLine - 1);
-  const rescanMinEndLine = Math.min(newDoc.lines, newEndLine + 1);
-  const lineDelta = newEndLine - oldEndLine;
   const totalLines = newDoc.lines;
-  const isJsonl = prev.mode === "jsonl";
-  const lineFamily = prev.mode as PrettyLayoutFamily;
+  const lineDelta = totalLines - oldDoc.lines;
 
-  const nextLineStates: PrettyLineLayoutState[] = new Array(totalLines);
-  for (let l = 1; l < rescanStartLine; l++) {
-    nextLineStates[l - 1] = prev.lineStates[l - 1]!;
+  const rescanStartLine = Math.max(1, Math.min(oldStartLine, newStartLine) - 1);
+  const rescanMinEndLine = Math.min(totalLines, newEndLine + 1);
+  const oldRescanMinEndLine = Math.min(
+    oldDoc.lines,
+    rescanMinEndLine - lineDelta,
+  );
+
+  let inputUtf8Bytes = prev.counters.inputUtf8Bytes + lineDelta;
+  let outputUtf8Delta =
+    prev.counters.outputUtf8Bytes - prev.counters.inputUtf8Bytes;
+  let outputUtf16Delta = prev.counters.outputUtf16Units - oldDoc.length;
+  let outputLinesDelta = prev.counters.outputLines - oldDoc.lines;
+  let tokens = prev.counters.tokens;
+  let mappingRuns = prev.counters.mappingRuns;
+  let syntaxNodesVisited = prev.counters.syntaxNodesVisited;
+  let visits = prev.counters.visits;
+  let oldRemovedHitMaxDepth = false;
+
+  for (let oldL = rescanStartLine; oldL <= oldRescanMinEndLine; oldL++) {
+    const m = prev.lineStates[oldL - 1]!.metrics;
+    inputUtf8Bytes -= m.lineUtf8Bytes;
+    outputUtf8Delta -= m.outputUtf8Delta;
+    outputUtf16Delta -= m.outputUtf16Delta;
+    outputLinesDelta -= m.outputLinesDelta;
+    tokens -= m.tokens;
+    mappingRuns -= m.mappingRuns;
+    syntaxNodesVisited -= m.syntaxNodes;
+    visits -= m.visits;
+    if (m.maxDepth >= prev.counters.maxDepthReached) {
+      oldRemovedHitMaxDepth = true;
+    }
   }
 
-  let runningDepth =
+  const initialSpanLen = rescanMinEndLine - rescanStartLine + 1;
+  const initialLineUtf8: number[] = new Array(initialSpanLen);
+  for (let i = 0; i < initialSpanLen; i++) {
+    const l = rescanStartLine + i;
+    const bytes = utf8ByteLength(newDoc.line(l).text);
+    initialLineUtf8[i] = bytes;
+    inputUtf8Bytes += bytes;
+  }
+
+  const budget = new PrettyBudgetTracker("", {
+    ...prev.limits,
+    maxVisits: prev.limits?.maxVisits ?? maxPrettyVisits(newDoc.length),
+  });
+  budget.counters.inputUtf16Units = newDoc.length;
+  budget.counters.inputUtf8Bytes = inputUtf8Bytes;
+  budget.counters.outputUtf16Units = newDoc.length + outputUtf16Delta;
+  budget.counters.outputUtf8Bytes = inputUtf8Bytes + outputUtf8Delta;
+  budget.counters.outputLines = totalLines + outputLinesDelta;
+  budget.counters.tokens = tokens;
+  budget.counters.mappingRuns = mappingRuns;
+  budget.counters.syntaxNodesVisited = syntaxNodesVisited;
+  budget.counters.visits = visits;
+  budget.counters.maxDepthReached = oldRemovedHitMaxDepth
+    ? 0
+    : prev.counters.maxDepthReached;
+
+  if (!budget.checkInput() || totalLines > budget.limits.maxOutputLines) {
+    return buildFieldStateFromScratch(newDoc, config, tr.state);
+  }
+
+  const isJsonl = prev.mode === "jsonl";
+  const lineFamily = prev.mode as PrettyLayoutFamily;
+  let runningCont: PrettyLineContinuationState =
     rescanStartLine === 1 || isJsonl
-      ? 0
-      : prev.lineStates[rescanStartLine - 2]!.endDepth;
-  let runningBlockComment =
-    rescanStartLine === 1 || isJsonl
-      ? false
-      : prev.lineStates[rescanStartLine - 2]!.endInBlockComment;
-  let runningXmlRawTag =
-    rescanStartLine === 1 || isJsonl
-      ? null
-      : prev.lineStates[rescanStartLine - 2]!.endXmlRawTag;
+      ? INITIAL_LINE_CONTINUATION
+      : continuationFromLineEnd(prev.lineStates[rescanStartLine - 2]!);
 
   let actualRescanEndLine = rescanMinEndLine;
-  let linesScanned = 0;
+  const rescannedStates: PrettyLineLayoutState[] = [];
   const addedDecorations: Range<Decoration>[] = [];
 
   for (let l = rescanStartLine; l <= totalLines; l++) {
-    const startDepth = isJsonl || l === 1 ? 0 : runningDepth;
-    const startInBlockComment = isJsonl || l === 1 ? false : runningBlockComment;
-    const startXmlRawTag = isJsonl || l === 1 ? null : runningXmlRawTag;
+    const startCont = isJsonl || l === 1 ? INITIAL_LINE_CONTINUATION : runningCont;
 
     if (l > rescanMinEndLine) {
       const oldLineNum = l - lineDelta;
@@ -808,65 +698,108 @@ export function updatePrettyNativeLayoutIncrementally(
       const newIsLast = l === totalLines;
       if (
         oldState &&
-        oldState.startDepth === startDepth &&
-        oldState.startInBlockComment === startInBlockComment &&
-        oldState.startXmlRawTag === startXmlRawTag &&
+        continuationEqualsLineStart(startCont, oldState) &&
         oldWasLast === newIsLast
       ) {
-        for (let rem = l; rem <= totalLines; rem++) {
-          const remOld = prev.lineStates[rem - lineDelta - 1]!;
-          const remLine = newDoc.line(rem);
-          nextLineStates[rem - 1] = {
-            lineNumber: rem,
-            lineFrom: remLine.from,
-            lineTo: remLine.to,
-            startDepth: remOld.startDepth,
-            endDepth: remOld.endDepth,
-            startInBlockComment: remOld.startInBlockComment,
-            endInBlockComment: remOld.endInBlockComment,
-            startXmlRawTag: remOld.startXmlRawTag,
-            endXmlRawTag: remOld.endXmlRawTag,
-            family: remOld.family,
-            eligible: remOld.eligible,
-            scanStartCol: remOld.scanStartCol,
-            relBoundaries: remOld.relBoundaries,
-          };
-        }
         actualRescanEndLine = l - 1;
         break;
+      }
+      if (oldState) {
+        const m = oldState.metrics;
+        budget.counters.outputUtf8Bytes -= m.outputUtf8Delta;
+        budget.counters.outputUtf16Units -= m.outputUtf16Delta;
+        budget.counters.outputLines -= m.outputLinesDelta;
+        budget.counters.tokens -= m.tokens;
+        budget.counters.mappingRuns -= m.mappingRuns;
+        budget.counters.syntaxNodesVisited -= m.syntaxNodes;
+        budget.counters.visits -= m.visits;
+        if (m.maxDepth >= prev.counters.maxDepthReached) {
+          oldRemovedHitMaxDepth = true;
+        }
       }
     }
 
     const line = newDoc.line(l);
+    const syntaxRes = collectLineSyntaxProtectedSpans(
+      tr.state,
+      line.from,
+      line.to,
+      budget,
+    );
+    if (syntaxRes === "budget") {
+      return buildFieldStateFromScratch(newDoc, config, tr.state);
+    }
+
+    const lineUtf8 =
+      l <= rescanMinEndLine
+        ? initialLineUtf8[l - rescanStartLine]!
+        : (prev.lineStates[l - lineDelta - 1]?.metrics.lineUtf8Bytes ??
+          utf8ByteLength(line.text));
+
     const scanned = scanLineLexicalBoundaries(
       line.text,
       l,
       totalLines,
       line.from,
-      startDepth,
+      startCont,
       true,
       0,
       budget,
       lineFamily,
-      startInBlockComment,
-      startXmlRawTag,
+      startCont.inBlockComment,
+      startCont.xmlRawTag,
+      syntaxRes.spans,
+      lineUtf8,
+      syntaxRes.syntaxNodes,
+      syntaxRes.syntaxVisits,
     );
     if (scanned === "budget") {
       return buildFieldStateFromScratch(newDoc, config, tr.state);
     }
-    linesScanned += 1;
+
     actualRescanEndLine = l;
-    nextLineStates[l - 1] = scanned;
-    runningDepth = scanned.endDepth;
-    runningBlockComment = scanned.endInBlockComment;
-    runningXmlRawTag = scanned.endXmlRawTag;
-    appendLineDecorations(addedDecorations, scanned, prev.indentWidthCh);
+    rescannedStates.push(scanned);
+    runningCont = continuationFromLineEnd(scanned);
+    appendLineDecorations(
+      addedDecorations,
+      scanned,
+      line.from,
+      prev.indentWidthCh,
+    );
+  }
+
+  if (
+    budget.counters.outputLines > budget.limits.maxOutputLines ||
+    budget.counters.outputUtf16Units > budget.limits.maxOutputUtf16Units ||
+    budget.counters.outputUtf8Bytes > budget.limits.maxOutputUtf8Bytes ||
+    budget.counters.mappingRuns > budget.limits.maxMappingRuns ||
+    budget.counters.tokens > budget.limits.maxTokens ||
+    budget.counters.visits > budget.visitCeiling
+  ) {
+    return buildFieldStateFromScratch(newDoc, config, tr.state);
+  }
+
+  const oldReplacedEndLine = Math.min(
+    oldDoc.lines,
+    actualRescanEndLine - lineDelta,
+  );
+  const nextLineStates = [
+    ...prev.lineStates.slice(0, rescanStartLine - 1),
+    ...rescannedStates,
+    ...prev.lineStates.slice(oldReplacedEndLine),
+  ];
+
+  if (oldRemovedHitMaxDepth) {
+    let maxD = 0;
+    for (let i = 0; i < nextLineStates.length; i++) {
+      const d = nextLineStates[i]!.metrics.maxDepth;
+      if (d > maxD) maxD = d;
+    }
+    budget.counters.maxDepthReached = maxD;
   }
 
   const filterFrom = newDoc.line(rescanStartLine).from;
   const filterTo = newDoc.line(actualRescanEndLine).to;
-  accountSyntaxTreeNodesInRange(tr.state, filterFrom, filterTo, budget);
-
   const mappedDecorations = prev.decorations.map(tr.changes);
   const nextDecorations = mappedDecorations.update({
     filterFrom,
@@ -882,21 +815,9 @@ export function updatePrettyNativeLayoutIncrementally(
     outcome: hasAnyDecorations ? "formatted" : "passthrough",
     lineStates: nextLineStates,
     decorations: nextDecorations,
-    counters: {
-      ...prev.counters,
-      inputUtf16Units: newDoc.length,
-      outputUtf16Units: newDoc.length,
-      outputLines: newDoc.lines,
-      maxDepthReached: Math.max(
-        prev.counters.maxDepthReached,
-        budget.counters.maxDepthReached,
-      ),
-      tokens: budget.counters.tokens,
-      mappingRuns: budget.counters.mappingRuns,
-      syntaxNodesVisited: budget.counters.syntaxNodesVisited,
-      visits: budget.counters.visits,
-    },
-    lastIncrementalLinesScanned: linesScanned,
+    counters: budget.counters,
+    lastIncrementalLinesScanned: rescannedStates.length,
+    lastIncrementalSuffixLinesReused: totalLines - actualRescanEndLine,
   };
 }
 

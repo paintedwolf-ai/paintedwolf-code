@@ -1,3 +1,4 @@
+import type { Text } from "@codemirror/state";
 import {
   CODE_LINE,
   COMPACTION_BANNER_CLOSE,
@@ -10,6 +11,7 @@ import {
   REJECTED,
   VERBATIM_HEAD_TAIL,
 } from "../../../chat/host-markers.generated.ts";
+import type { PrettyBudgetTracker } from "./pretty-limits.ts";
 
 export type PrettyLayoutFamily =
   | "json"
@@ -265,4 +267,247 @@ export function resolveFenceLayoutFamily(lang: string): PrettyLayoutFamily | nul
   if (JAVASCRIPT_HINTS.has(normalized) || JAVASCRIPT_EXTENSIONS.has(normalized)) return "javascript";
   if (CSS_HINTS.has(normalized) || CSS_EXTENSIONS.has(normalized)) return "css";
   return null;
+}
+
+export function modeToPrimaryFamily(mode: DocumentFormatMode): PrettyLayoutFamily {
+  if (mode === "code-passthrough") return "passthrough";
+  if (mode === "auto") return "mixed";
+  return mode;
+}
+
+function looksLikeStructuredJsonCandidate(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c === 0x7b || c === 0x7d || c === 0x5b || c === 0x5d) return true;
+  }
+  return /"\s*:/.test(text);
+}
+
+function looksLikeStandaloneXmlCandidate(text: string): boolean {
+  const trimmed = text.trim();
+  return (
+    trimmed.startsWith("<") &&
+    trimmed.endsWith(">") &&
+    /><[A-Za-z/?!]/.test(trimmed)
+  );
+}
+
+export interface LineEligibility {
+  readonly eligible: boolean;
+  readonly family: PrettyLayoutFamily;
+  readonly scanStartCol: number;
+  readonly resetDepth: boolean;
+}
+
+export function determineDocumentLineEligibility(
+  doc: Text,
+  mode: DocumentFormatMode,
+  rawText: string,
+  budget: PrettyBudgetTracker,
+): readonly LineEligibility[] | "passthrough" | "budget" {
+  const totalLines = doc.lines;
+  if (mode === "code-passthrough") return "passthrough";
+
+  if (
+    mode === "json" ||
+    mode === "jsonc" ||
+    mode === "xml-html" ||
+    mode === "javascript" ||
+    mode === "css"
+  ) {
+    const out: LineEligibility[] = new Array(totalLines);
+    for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
+      out[lineNum - 1] = {
+        eligible: true,
+        family: mode,
+        scanStartCol: 0,
+        resetDepth: lineNum === 1,
+      };
+    }
+    return out;
+  }
+
+  if (mode === "jsonl") {
+    const out: LineEligibility[] = new Array(totalLines);
+    for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
+      out[lineNum - 1] = {
+        eligible: true,
+        family: "jsonl",
+        scanStartCol: 0,
+        resetDepth: true,
+      };
+    }
+    return out;
+  }
+
+  if (mode === "markdown" || /^(?: {0,3}(?:```|~~~))/m.test(rawText)) {
+    const out: LineEligibility[] = new Array(totalLines);
+    for (let i = 0; i < totalLines; i++) {
+      out[i] = {
+        eligible: false,
+        family: "passthrough",
+        scanStartCol: 0,
+        resetDepth: true,
+      };
+    }
+    let lineNum = 1;
+    while (lineNum <= totalLines) {
+      if (!budget.recordVisit(1)) return "budget";
+      const lineText = doc.line(lineNum).text;
+      const fence = parseOpeningFence(lineText);
+      if (!fence) {
+        lineNum += 1;
+        continue;
+      }
+      let closeLineNum = -1;
+      for (let j = lineNum + 1; j <= totalLines; j++) {
+        if (!budget.recordVisit(1)) return "budget";
+        if (isClosingFence(doc.line(j).text, fence.char, fence.len)) {
+          closeLineNum = j;
+          break;
+        }
+      }
+      if (closeLineNum < 0) break;
+      const fenceFamily = resolveFenceLayoutFamily(fence.lang);
+      if (fenceFamily) {
+        for (let bodyLine = lineNum + 1; bodyLine < closeLineNum; bodyLine++) {
+          out[bodyLine - 1] = {
+            eligible: true,
+            family: fenceFamily,
+            scanStartCol: 0,
+            resetDepth: fenceFamily === "jsonl" || bodyLine === lineNum + 1,
+          };
+        }
+      }
+      lineNum = closeLineNum + 1;
+    }
+    return out;
+  }
+
+  if (looksLikeStandaloneXmlCandidate(rawText)) {
+    const out: LineEligibility[] = new Array(totalLines);
+    for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
+      out[lineNum - 1] = {
+        eligible: true,
+        family: "xml-html",
+        scanStartCol: 0,
+        resetDepth: lineNum === 1,
+      };
+    }
+    return out;
+  }
+
+  if (!looksLikeStructuredJsonCandidate(rawText)) return "passthrough";
+
+  let hasBarrier = false;
+  let hasEnvelope = false;
+  for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
+    const lineText = doc.line(lineNum).text;
+    if (isExcerptBarrierLine(lineText)) hasBarrier = true;
+    if (
+      isEnvelopeHeaderLine(lineText) ||
+      matchEnvelopeOrLogPrefix(lineText) !== null
+    ) {
+      hasEnvelope = true;
+    }
+  }
+
+  if (!hasBarrier && !hasEnvelope) {
+    let allLinesStartContainer = totalLines >= 2;
+    for (
+      let lineNum = 1;
+      lineNum <= totalLines && allLinesStartContainer;
+      lineNum++
+    ) {
+      const t = doc.line(lineNum).text.trim();
+      if (t.length === 0) continue;
+      if (!(t.startsWith("{") || t.startsWith("["))) {
+        allLinesStartContainer = false;
+      }
+    }
+    const family: PrettyLayoutFamily = allLinesStartContainer ? "jsonl" : "json";
+    const out: LineEligibility[] = new Array(totalLines);
+    for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
+      out[lineNum - 1] = {
+        eligible: true,
+        family,
+        scanStartCol: 0,
+        resetDepth: allLinesStartContainer || lineNum === 1,
+      };
+    }
+    return out;
+  }
+
+  const out: LineEligibility[] = new Array(totalLines);
+  for (let i = 0; i < totalLines; i++) {
+    out[i] = {
+      eligible: false,
+      family: "passthrough",
+      scanStartCol: 0,
+      resetDepth: true,
+    };
+  }
+
+  for (let lineNum = 1; lineNum <= totalLines; lineNum++) {
+    if (!budget.recordVisit(1)) return "budget";
+    const lineText = doc.line(lineNum).text;
+    if (isExcerptBarrierLine(lineText)) continue;
+    const prefixCol = matchEnvelopeOrLogPrefix(lineText);
+    if (prefixCol !== null) {
+      out[lineNum - 1] = {
+        eligible: true,
+        family: "json",
+        scanStartCol: prefixCol,
+        resetDepth: true,
+      };
+      continue;
+    }
+    if (isEnvelopeHeaderLine(lineText)) continue;
+    const trimmed = lineText.trimStart();
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      let depth = 0;
+      let quote = false;
+      let escape = false;
+      let closedLine = -1;
+      for (let k = lineNum; k <= totalLines; k++) {
+        const kText = doc.line(k).text;
+        if (k > lineNum && isExcerptBarrierLine(kText)) {
+          closedLine = -1;
+          break;
+        }
+        for (let p = 0; p < kText.length; p++) {
+          if (!budget.recordVisit(1)) return "budget";
+          const c = kText.charCodeAt(p);
+          if (quote) {
+            if (escape) escape = false;
+            else if (c === 0x5c) escape = true;
+            else if (c === 0x22) quote = false;
+            continue;
+          }
+          if (c === 0x22) quote = true;
+          else if (c === 0x7b || c === 0x5b) depth += 1;
+          else if (c === 0x7d || c === 0x5d) {
+            depth -= 1;
+            if (depth === 0) {
+              closedLine = k;
+              break;
+            }
+          }
+        }
+        if (closedLine >= 0) break;
+      }
+      if (closedLine >= lineNum) {
+        for (let k = lineNum; k <= closedLine; k++) {
+          out[k - 1] = {
+            eligible: true,
+            family: "json",
+            scanStartCol: 0,
+            resetDepth: k === lineNum,
+          };
+        }
+        lineNum = closedLine;
+      }
+    }
+  }
+  return out;
 }
