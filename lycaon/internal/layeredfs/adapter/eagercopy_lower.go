@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -172,4 +173,100 @@ func (p *pristineLowerProvider) ListXattr(rel string) (map[string][]byte, error)
 		return nil, os.ErrNotExist
 	}
 	return readPathXattrs(filepath.Join(p.pristineDir, filepath.FromSlash(clean)))
+}
+
+func parentEntriesForRoot(pl layeredfs.ParentLayer, rootID string) map[string]layeredfs.ParentEntry {
+	if snap, ok := pl.(interface{ EntriesForRoot(string) map[string]layeredfs.ParentEntry }); ok {
+		return snap.EntriesForRoot(rootID)
+	}
+	out := make(map[string]layeredfs.ParentEntry)
+	var walk func(dir string)
+	walk = func(dir string) {
+		children, err := pl.ListDir(layeredfs.QualifiedPath{RootID: rootID, Rel: dir})
+		if err != nil {
+			return
+		}
+		for name, pe := range children {
+			rel := name
+			if dir != "." && dir != "" {
+				rel = dir + "/" + name
+			}
+			out[rel] = pe
+			if pe.Kind == layeredfs.EntryDirectory {
+				walk(rel)
+			}
+		}
+	}
+	walk(".")
+	return out
+}
+
+func overlayParentLayersOnRoots(roots []PreparedRoot, parents []layeredfs.ParentLayer) error {
+	for i := len(parents) - 1; i >= 0; i-- {
+		pl := parents[i]
+		for _, r := range roots {
+			entries := parentEntriesForRoot(pl, r.RootID)
+			rels := make([]string, 0, len(entries))
+			for rel, pe := range entries {
+				if !pe.Synthetic {
+					rels = append(rels, rel)
+				}
+			}
+			sort.Strings(rels)
+			for _, rel := range rels {
+				if err := applyParentEntryToWorkspace(pl, layeredfs.QualifiedPath{RootID: r.RootID, Rel: rel}, filepath.Join(r.WorkspacePath, filepath.FromSlash(rel)), entries[rel]); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func applyParentEntryToWorkspace(pl layeredfs.ParentLayer, qp layeredfs.QualifiedPath, dstPath string, pe layeredfs.ParentEntry) error {
+	if pe.Kind == layeredfs.EntryAbsent {
+		return os.RemoveAll(dstPath)
+	}
+	if info, err := os.Lstat(dstPath); err == nil && info.IsDir() != (pe.Kind == layeredfs.EntryDirectory) {
+		if err := os.RemoveAll(dstPath); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+		return err
+	}
+	switch pe.Kind {
+	case layeredfs.EntryDirectory:
+		return os.MkdirAll(dstPath, pe.Mode.Perm()|0o700)
+	case layeredfs.EntrySymlink:
+		_ = os.RemoveAll(dstPath)
+		return os.Symlink(pe.LinkTarget, dstPath)
+	case layeredfs.EntryRegular:
+		rc, err := pl.OpenContent(qp)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rc.Close() }()
+		raw, err := io.ReadAll(rc)
+		if err != nil {
+			return err
+		}
+		mode := pe.Mode.Perm()
+		if mode == 0 {
+			mode = 0o644
+		}
+		_ = os.RemoveAll(dstPath)
+		if err := os.WriteFile(dstPath, raw, mode); err != nil {
+			return err
+		}
+	}
+	if len(pe.Xattrs) > 0 {
+		if err := writePathXattrs(dstPath, pe.Xattrs); err != nil {
+			return err
+		}
+	}
+	if pe.Kind != layeredfs.EntrySymlink && !pe.ModTime.IsZero() {
+		_ = os.Chtimes(dstPath, pe.ModTime, pe.ModTime)
+	}
+	return nil
 }

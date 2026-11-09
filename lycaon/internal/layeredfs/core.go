@@ -135,6 +135,7 @@ type openHandle struct {
 	nodeID       NodeID
 	gen          Generation
 	qpath        QualifiedPath
+	layer        LayerSource
 	flags        OpenFlags
 	isDir        bool
 	closed       bool

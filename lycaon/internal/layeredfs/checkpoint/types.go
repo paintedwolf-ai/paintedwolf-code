@@ -176,9 +176,10 @@ func ensureParentDirs(mem *layeredfs.MemoryParentLayer, qpath layeredfs.Qualifie
 		anc := layeredfs.QualifiedPath{RootID: qpath.RootID, Rel: dir}
 		if _, ok, _ := mem.Lookup(anc); !ok {
 			mem.SetEntry(anc, layeredfs.ParentEntry{
-				Kind:    layeredfs.EntryDirectory,
-				Mode:    fs.ModeDir | 0o755,
-				ModTime: modTime,
+				Kind:      layeredfs.EntryDirectory,
+				Mode:      fs.ModeDir | 0o755,
+				ModTime:   modTime,
+				Synthetic: true,
 			})
 		}
 		dir = path.Dir(dir)

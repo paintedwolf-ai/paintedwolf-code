@@ -33,6 +33,8 @@ func readHandleAdmitted(c *Core, hid HandleID, p []byte, offset int64) (int, err
 	nodeID, gen := h.nodeID, h.gen
 	if node != nil {
 		nodeID, gen = node.id, node.gen
+	} else if h.layer != "" {
+		layer = h.layer
 	} else {
 		layer = LayerTrunk
 	}
@@ -161,10 +163,14 @@ func statHandleAdmitted(c *Core, hid HandleID) (EntryAttr, error) {
 			if sErr != nil {
 				return EntryAttr{}, sErr
 			}
+			layer := h.layer
+			if layer == "" {
+				layer = LayerTrunk
+			}
 			return EntryAttr{
 				NodeID:     h.nodeID,
 				Generation: h.gen,
-				Layer:      LayerTrunk,
+				Layer:      layer,
 				Kind:       EntryRegular,
 				Mode:       info.Mode(),
 				Size:       info.Size(),

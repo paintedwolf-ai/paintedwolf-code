@@ -237,8 +237,9 @@ func (m *Manager) adoptRecoveredMountedView(ctx context.Context, branchRoot, job
 		return err
 	}
 	cv, err := services.coordinator.AdoptPreparedView(ctx, claim.ClaimRequest{
-		Identity: claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: view.ViewID, SourceGeneration: 1},
-		Hooks:    claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
+		Identity:            claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: view.ViewID, SourceGeneration: 1},
+		Hooks:               claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
+		ParentCheckpointIDs: recoveredParentCheckpointIDs(services, branchRoot, jobID),
 	}, adp, view)
 	if err != nil {
 		return err

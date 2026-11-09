@@ -76,6 +76,7 @@ type ParentEntry struct {
 	Xattrs     map[string][]byte `json:"xattrs,omitempty"`
 	LinkGroup  string            `json:"link_group,omitempty"`
 	BackingAbs string            `json:"-"`
+	Synthetic  bool              `json:"-"`
 }
 
 type ParentLayer interface {

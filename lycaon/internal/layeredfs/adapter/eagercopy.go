@@ -185,6 +185,10 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		cleanupFailedPrepare(req, runtimeViewDir, pristineDir, manifestPath, outcome, core)
 		return nil, err
 	}
+	if err := overlayParentLayersOnRoots(outcome.preparedRoots, req.ParentLayers); err != nil {
+		cleanupFailedPrepare(req, runtimeViewDir, pristineDir, manifestPath, outcome, core)
+		return nil, err
+	}
 
 	view := &PreparedView{
 		ViewID:          req.ViewID,
@@ -243,6 +247,7 @@ type ReopenRequest struct {
 	// Unset, a view is where its manifest recorded it.
 	WorkspaceDirs   map[string]string
 	PristineDir     string
+	ParentLayers    []layeredfs.ParentLayer
 	ObservationSink layeredfs.ObservationSink
 }
 
@@ -282,7 +287,8 @@ func (a *EagerCopyAdapter) Reopen(ctx context.Context, req ReopenRequest) (*Prep
 		}
 	}
 	core, err := layeredfs.New(layeredfs.Config{
-		ViewID: req.ViewID, BackingDir: backingDir, Roots: specs, ActiveRootID: primaryID, ObservationSink: req.ObservationSink,
+		ViewID: req.ViewID, BackingDir: backingDir, Roots: specs, ActiveRootID: primaryID,
+		ParentLayers: req.ParentLayers, ObservationSink: req.ObservationSink,
 	})
 	if err != nil {
 		return nil, err
@@ -297,7 +303,7 @@ func (a *EagerCopyAdapter) Reopen(ctx context.Context, req ReopenRequest) (*Prep
 		ViewID: req.ViewID, AdapterID: AdapterEagerCopy, Facts: a.facts, Roots: roots, PrimaryRootID: primaryID,
 		PrimaryWorkPath: primaryPath, BackingDir: backingDir, RuntimeViewDir: runtimeViewDir, Core: core,
 	}
-	a.adopt(view, &eagerViewState{view: view, capture: newStatCapture(header.TakenNS, records, roots, nil, backingDir), denySourcePaths: deny})
+	a.adopt(view, &eagerViewState{view: view, capture: newStatCapture(header.TakenNS, records, roots, req.ParentLayers, backingDir), denySourcePaths: deny})
 	return view, nil
 }
 
