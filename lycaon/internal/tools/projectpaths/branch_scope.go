@@ -165,21 +165,30 @@ func commandCwdUnderBranch(ctx context.Context, tctx tools.ToolContext, branch, 
 	if cwdArg == "" {
 		return branch, ".", nil
 	}
+	branchRel, displayPath := "", ""
 	if filepath.IsAbs(cwdArg) {
-		return "", "", &toolrejection.ToolReject{
-			Code: "CWD_OUT_OF_SCOPE",
-			Data: map[string]any{"cwd": cwdArg},
+		// An in-root absolute cwd maps into the worker branch; anything
+		// outside the attached roots stays out of scope.
+		mappedRel, mappedDisplay, mapErr := branchCwdFromAbs(tctx, cwdArg)
+		if mapErr != nil {
+			return "", "", &toolrejection.ToolReject{
+				Code: "CWD_OUT_OF_SCOPE",
+				Data: map[string]any{"cwd": cwdArg},
+			}
 		}
-	}
-	if tctx.Source.BranchWorkspace == nil {
-		return "", "", fmt.Errorf("worker branch workspace not configured")
-	}
-	branchRel, displayPath, mapErr := projectroot.WorkerBranchRelative(tctx.Source.Roots, tctx.Source.ActiveRootID, cwdArg)
-	if mapErr != nil {
-		return "", "", &toolrejection.ToolReject{
-			Code: "CWD_OUT_OF_SCOPE",
-			Data: map[string]any{"cwd": cwdArg},
+		branchRel, displayPath = mappedRel, mappedDisplay
+	} else {
+		if tctx.Source.BranchWorkspace == nil {
+			return "", "", fmt.Errorf("worker branch workspace not configured")
 		}
+		rel, disp, mapErr := projectroot.WorkerBranchRelative(tctx.Source.Roots, tctx.Source.ActiveRootID, cwdArg)
+		if mapErr != nil {
+			return "", "", &toolrejection.ToolReject{
+				Code: "CWD_OUT_OF_SCOPE",
+				Data: map[string]any{"cwd": cwdArg},
+			}
+		}
+		branchRel, displayPath = rel, disp
 	}
 	scopeRel := filepath.ToSlash(filepath.Clean(branchRel))
 	if scopeRel == ".." || strings.HasPrefix(scopeRel, "../") {
@@ -222,4 +231,23 @@ func commandCwdUnderBranch(ctx context.Context, tctx tools.ToolContext, branch, 
 		display = scopeRel
 	}
 	return abs, display, nil
+}
+
+// branchCwdFromAbs maps an absolute cwd under an attached root into the worker
+// branch layout, mirroring WorkerBranchRelative for an already-resolved path.
+func branchCwdFromAbs(tctx tools.ToolContext, cwdArg string) (branchRel, display string, err error) {
+	resolved, root, resolveErr := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, cwdArg)
+	if resolveErr != nil {
+		return "", "", resolveErr
+	}
+	display = projectroot.Qualify(tctx.Source.Roots, tctx.Source.ActiveRootID, root, resolved)
+	scopeRel := projectroot.ScopeRel(root, resolved)
+	if len(tctx.Source.Roots) == 1 {
+		return scopeRel, display, nil
+	}
+	dir, dirErr := projectroot.BranchDirForID(root.ID)
+	if dirErr != nil {
+		return "", "", dirErr
+	}
+	return filepath.ToSlash(filepath.Join(dir, scopeRel)), display, nil
 }
