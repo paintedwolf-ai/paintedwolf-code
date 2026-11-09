@@ -75,16 +75,17 @@ func TestCompileFilesystemPlanNamesLoaderFilesAtAnyDepth(t *testing.T) {
 	proj := t.TempDir()
 	top := filepath.Join(proj, protectedpath.AgentsMDFileName)
 	nested := filepath.Join(proj, "pkg", "agents.md")
-	claude := filepath.Join(proj, "pkg", protectedpath.ClaudeMDFileName)
+	secondName := "SECOND.md"
+	second := filepath.Join(proj, "pkg", secondName)
 	gitIgnored := filepath.Join(proj, ".git", protectedpath.AgentsMDFileName)
 	other := filepath.Join(proj, "pkg", "README.md")
 	testutil.FailErr(t, "mkdir pkg", os.Mkdir(filepath.Dir(nested), 0o755))
 	testutil.FailErr(t, "mkdir .git", os.Mkdir(filepath.Dir(gitIgnored), 0o755))
-	for _, p := range []string{top, nested, claude, gitIgnored, other} {
+	for _, p := range []string{top, nested, second, gitIgnored, other} {
 		testutil.FailErr(t, "write "+p, os.WriteFile(p, []byte("x"), 0o644))
 	}
-	if got := namedFilesBelow(proj, protectedpath.AgentsMDFileName, protectedpath.ClaudeMDFileName); !reflect.DeepEqual(got, []string{top, claude, nested}) {
-		t.Fatalf("namedFilesBelow multi = %v, want %v", got, []string{top, claude, nested})
+	if got := namedFilesBelow(proj, protectedpath.AgentsMDFileName, secondName); !reflect.DeepEqual(got, []string{top, second, nested}) {
+		t.Fatalf("namedFilesBelow multi = %v, want %v", got, []string{top, second, nested})
 	}
 	var location protectedpath.AgentPolicyLocation
 	for _, l := range protectedpath.AgentPolicyLocations() {
@@ -117,7 +118,7 @@ func TestCompileFilesystemPlanResolvesMountedViewLoaderFilesFromSourceRoots(t *t
 	testutil.FailErr(t, "mkdir source pkg", os.MkdirAll(filepath.Join(sourceRoot, "pkg"), 0o755))
 	testutil.FailErr(t, "mkdir source .git", os.MkdirAll(filepath.Join(sourceRoot, ".git"), 0o755))
 	testutil.FailErr(t, "write source AGENTS.md", os.WriteFile(filepath.Join(sourceRoot, protectedpath.AgentsMDFileName), []byte("a"), 0o644))
-	testutil.FailErr(t, "write source CLAUDE.md", os.WriteFile(filepath.Join(sourceRoot, "pkg", protectedpath.ClaudeMDFileName), []byte("c"), 0o644))
+	testutil.FailErr(t, "write source pkg/AGENTS.md", os.WriteFile(filepath.Join(sourceRoot, "pkg", protectedpath.AgentsMDFileName), []byte("c"), 0o644))
 	testutil.FailErr(t, "write source .git/AGENTS.md", os.WriteFile(filepath.Join(sourceRoot, ".git", protectedpath.AgentsMDFileName), []byte("g"), 0o644))
 
 	branchesBase := t.TempDir()
@@ -142,10 +143,10 @@ func TestCompileFilesystemPlanResolvesMountedViewLoaderFilesFromSourceRoots(t *t
 	plan, err := compileFilesystemPlan(rules)
 	testutil.FailErr(t, "compileFilesystemPlan", err)
 
-	wantAgents := filepath.Join(mountRoot, protectedpath.AgentsMDFileName)
-	wantClaude := filepath.Join(mountRoot, "pkg", protectedpath.ClaudeMDFileName)
-	if !containsPath(plan.ReadOnly, wantAgents) || !containsPath(plan.ReadOnly, wantClaude) {
-		t.Fatalf("plan.ReadOnly = %v, missing mapped source loader files %q and %q", plan.ReadOnly, wantAgents, wantClaude)
+	wantTop := filepath.Join(mountRoot, protectedpath.AgentsMDFileName)
+	wantNested := filepath.Join(mountRoot, "pkg", protectedpath.AgentsMDFileName)
+	if !containsPath(plan.ReadOnly, wantTop) || !containsPath(plan.ReadOnly, wantNested) {
+		t.Fatalf("plan.ReadOnly = %v, missing mapped source loader files %q and %q", plan.ReadOnly, wantTop, wantNested)
 	}
 	if containsPath(plan.ReadOnly, decoy) {
 		t.Fatalf("plan.ReadOnly = %v, walked mounted root and discovered decoy %q", plan.ReadOnly, decoy)
