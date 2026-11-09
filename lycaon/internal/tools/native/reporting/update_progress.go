@@ -37,6 +37,9 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey, reconcilia
 		if err != nil {
 			var rejected *progress.AuthorUpdateRejection
 			if errors.As(err, &rejected) {
+				if snapshot, ok := rejected.Data["snapshot"].(progress.Snapshot); ok {
+					rejected.Data["snapshot"] = progress.ForRequest(root, snapshot)
+				}
 				return "", &toolrejection.ToolReject{Code: rejected.Code, Data: rejected.Data}
 			}
 			return "", err
@@ -50,7 +53,7 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey, reconcilia
 			status = "updated"
 		}
 
-		raw, _ := surveyjson.Marshal(map[string]any{"status": status, "document_changed": result.Updated, "state_changed": result.StateChanged, "deliverable_closed": result.DeliverableClosed, "reconciliation_status": result.ReconciliationStatus, "snapshot": result.Snapshot})
+		raw, _ := surveyjson.Marshal(map[string]any{"status": status, "document_changed": result.Updated, "state_changed": result.StateChanged, "deliverable_closed": result.DeliverableClosed, "reconciliation_status": result.ReconciliationStatus, "snapshot": progress.ForRequest(root, result.Snapshot)})
 		return string(raw), nil
 	}
 }
