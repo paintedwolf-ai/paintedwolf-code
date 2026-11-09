@@ -279,9 +279,7 @@ func TestMultiRootResolverQualifyRoundTrip(t *testing.T) {
 	fix := newMultiRootFixture(t)
 	abs, root, err := projectroot.ResolveAbs(fix.roots, fix.activeID, "@lycaon-den/secondary-sentinel.txt")
 	contractcheck.FailErr(t, "ResolveAbs", err)
-	primary, err := projectroot.PrimaryRoot(fix.roots)
-	contractcheck.FailErr(t, "PrimaryRoot", err)
-	display := projectroot.Qualify(primary, root, abs)
+	display := projectroot.Qualify(fix.roots, fix.activeID, root, abs)
 	if display != "@lycaon-den/secondary-sentinel.txt" {
 		t.Fatalf("Qualify = %q", display)
 	}
@@ -289,6 +287,78 @@ func TestMultiRootResolverQualifyRoundTrip(t *testing.T) {
 	contractcheck.FailErr(t, "ResolveAbs round trip", err)
 	if abs2 != abs {
 		t.Fatalf("round trip abs = %q want %q", abs2, abs)
+	}
+}
+
+// AC-WR01-01: display paths key on the session's active folder. With the
+// secondary folder active, its files display bare, other folders keep the
+// @label prefix, and every display round-trips through ResolveAbs.
+func TestMultiRootActiveFolderDisplayContract(t *testing.T) {
+	t.Parallel()
+	fix := newMultiRootFixture(t)
+	fix.activeID = "d"
+
+	// Display → ResolveAbs round trip for both roots, keyed on the active folder.
+	for _, tc := range []struct {
+		rootID  string
+		rel     string
+		display string
+	}{
+		{"d", ".", "."},
+		{"d", "secondary-sentinel.txt", "secondary-sentinel.txt"},
+		{"p", ".", "@lycaon"},
+		{"p", "primary-sentinel.txt", "@lycaon/primary-sentinel.txt"},
+	} {
+		root := projectroot.RootRef{ID: tc.rootID}
+		for _, r := range fix.roots {
+			if r.ID == tc.rootID {
+				root = r
+			}
+		}
+		abs := filepath.Join(root.Path, filepath.FromSlash(tc.rel))
+		display := projectroot.DisplayPath(fix.roots, fix.activeID, tc.rootID, tc.rel)
+		if display != tc.display {
+			t.Fatalf("DisplayPath(active=%q, root=%q, rel=%q) = %q want %q", fix.activeID, tc.rootID, tc.rel, display, tc.display)
+		}
+		gotAbs, gotRoot, err := projectroot.ResolveAbs(fix.roots, fix.activeID, display)
+		contractcheck.FailErr(t, "ResolveAbs round trip", err)
+		if gotAbs != abs || gotRoot.ID != tc.rootID {
+			t.Fatalf("round trip %q -> (%q, %q) want (%q, %q)", display, gotAbs, gotRoot.ID, abs, tc.rootID)
+		}
+	}
+
+	// read_session: the active folder's file displays bare, the primary's keeps @label.
+	resolved, err := projectpaths.ResolveRead(context.Background(), nil, fix.tctx("s1"), "secondary-sentinel.txt")
+	contractcheck.FailErr(t, "ResolveRead active folder", err)
+	if resolved.DisplayPath != "secondary-sentinel.txt" {
+		t.Fatalf("active folder display = %q", resolved.DisplayPath)
+	}
+	resolved, err = projectpaths.ResolveRead(context.Background(), nil, fix.tctx("s1"), "@lycaon/primary-sentinel.txt")
+	contractcheck.FailErr(t, "ResolveRead primary folder", err)
+	if resolved.DisplayPath != "@lycaon/primary-sentinel.txt" {
+		t.Fatalf("primary folder display = %q", resolved.DisplayPath)
+	}
+
+	// Survey tools render the same spellings.
+	out := assertRootProgramSuccess(t, rootProgram(t, "stat -- secondary-sentinel.txt", fix.tctx("s1")))
+	if !strings.Contains(out, "secondary-sentinel.txt") || strings.Contains(out, "@lycaon-den/secondary-sentinel.txt") {
+		t.Fatalf("active folder stat = %q", out)
+	}
+	out = assertRootProgramSuccess(t, rootProgram(t, "stat -- @lycaon/primary-sentinel.txt", fix.tctx("s1")))
+	if !strings.Contains(out, "@lycaon/primary-sentinel.txt") {
+		t.Fatalf("primary folder stat = %q", out)
+	}
+	out = assertRootProgramSuccess(t, rootProgram(t, "ls -1 . @lycaon", fix.tctx("s1")))
+	if !strings.Contains(out, "secondary-sentinel.txt") || !strings.Contains(out, "@lycaon/primary-sentinel.txt") {
+		t.Fatalf("ls = %q", out)
+	}
+	out = assertRootProgramSuccess(t, rootProgram(t, "find . @lycaon -name '*-sentinel.txt'", fix.tctx("s1")))
+	if !strings.Contains(out, "secondary-sentinel.txt") || !strings.Contains(out, "@lycaon/primary-sentinel.txt") {
+		t.Fatalf("find = %q", out)
+	}
+	out = assertRootProgramSuccess(t, rootProgram(t, "rg sentinel . @lycaon", fix.tctx("s1")))
+	if !strings.Contains(out, "secondary-sentinel.txt") || !strings.Contains(out, "@lycaon/primary-sentinel.txt") {
+		t.Fatalf("grep = %q", out)
 	}
 }
 

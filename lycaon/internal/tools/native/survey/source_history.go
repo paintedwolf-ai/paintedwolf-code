@@ -301,7 +301,7 @@ func (t *SourceHistoryTool) runMine(
 			return "", fmt.Errorf("source history mine: %w", err)
 		}
 		for _, rel := range authored {
-			display := projectroot.DisplayPath(tctx.Source.Roots, root.ID, rel)
+			display := projectroot.DisplayPath(tctx.Source.Roots, tctx.Source.ActiveRootID, root.ID, rel)
 			if _, dup := seen[display]; dup {
 				continue
 			}

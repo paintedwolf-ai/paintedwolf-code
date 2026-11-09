@@ -26,15 +26,18 @@ import (
 func (s *References) ReferenceDeps(ctx context.Context, sess *wire.Session) promptattach.ReferenceDeps {
 	sessionID := ""
 	projectID := ""
+	workspaceRootID := ""
 	if sess != nil {
 		sessionID = sess.ID
 		projectID = strings.TrimSpace(sess.ProjectID)
+		workspaceRootID = sess.WorkspaceRootID
 	}
 	return promptattach.ReferenceDeps{
 		SessionProjectID: projectID,
+		WorkspaceRootID:  workspaceRootID,
 		MaxImageBytes:    s.Caps.Transport.MaxImage.Int64(),
 		ResolvePath: func(refProjectID, rootID, path string) (string, wire.NavigationTarget, error) {
-			return s.resolveReferencePath(ctx, refProjectID, rootID, path)
+			return s.resolveReferencePath(ctx, refProjectID, rootID, path, workspaceRootID)
 		},
 		LookupArtifact: func(artifactID string) (string, error) {
 			return s.lookupReferenceArtifact(ctx, sessionID, artifactID)
@@ -143,7 +146,7 @@ func (s *References) readReferenceLines(ctx context.Context, projectID, rootID, 
 
 // resolveReferencePath jails a reference and names the root it landed in, so
 // the stored part carries identity a client can resolve without guessing.
-func (s *References) resolveReferencePath(ctx context.Context, projectID, rootID, path string) (string, wire.NavigationTarget, error) {
+func (s *References) resolveReferencePath(ctx context.Context, projectID, rootID, path, workspaceRootID string) (string, wire.NavigationTarget, error) {
 	p, err := s.Projects.Get(ctx, strings.TrimSpace(projectID))
 	if err != nil || p == nil {
 		return "", wire.NavigationTarget{}, fmt.Errorf("project not found")
@@ -156,8 +159,7 @@ func (s *References) resolveReferencePath(ctx context.Context, projectID, rootID
 	if err != nil {
 		return "", wire.NavigationTarget{}, err
 	}
-	primary, _ := projectroot.PrimaryRoot(roots)
-	rel := projectroot.Qualify(primary, root, abs)
+	rel := projectroot.Qualify(roots, workspaceRootID, root, abs)
 	if strings.TrimSpace(rel) == "" {
 		return "", wire.NavigationTarget{}, projectroot.ErrPathEscape
 	}

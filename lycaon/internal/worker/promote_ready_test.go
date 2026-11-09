@@ -42,11 +42,36 @@ func TestQualifyBranchRelUsesStableRootDirectory(t *testing.T) {
 	testutil.FailErr(t, "secondary branch directory", err)
 
 	var got string
-	qualifyBranchRel(PromoteRoots{Roots: roots}, roots[0], branchDir+"/notes..draft.md", func(path string) {
+	qualifyBranchRel(PromoteRoots{Roots: roots, ActiveRootID: "primary-id"}, branchDir+"/notes..draft.md", func(path string) {
 		got = path
 	})
 	if got != "@docs/notes..draft.md" {
 		t.Fatalf("qualified path = %q", got)
+	}
+}
+
+func TestQualifyBranchRelKeysOnActiveRoot(t *testing.T) {
+	roots := []projectroot.RootRef{
+		{ID: "primary-id", Label: "app", Path: "/project/app", IsPrimary: true},
+		{ID: "secondary-id", Label: "docs", Path: "/project/docs"},
+	}
+	primaryDir, err := projectroot.BranchDirForID(roots[0].ID)
+	testutil.FailErr(t, "primary branch directory", err)
+	secondaryDir, err := projectroot.BranchDirForID(roots[1].ID)
+	testutil.FailErr(t, "secondary branch directory", err)
+
+	var got string
+	qualifyBranchRel(PromoteRoots{Roots: roots, ActiveRootID: "secondary-id"}, secondaryDir+"/notes..draft.md", func(path string) {
+		got = path
+	})
+	if got != "notes..draft.md" {
+		t.Fatalf("active-secondary qualified path = %q", got)
+	}
+	qualifyBranchRel(PromoteRoots{Roots: roots, ActiveRootID: "secondary-id"}, primaryDir+"/notes..draft.md", func(path string) {
+		got = path
+	})
+	if got != "@app/notes..draft.md" {
+		t.Fatalf("active-secondary primary qualified path = %q", got)
 	}
 }
 

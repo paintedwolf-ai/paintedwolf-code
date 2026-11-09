@@ -237,10 +237,6 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		}
 		return Resolved{}, mapResolveErr(err, modelPath)
 	}
-	primary, err := projectroot.PrimaryRoot(tctx.Source.Roots)
-	if err != nil {
-		return Resolved{}, noRootsReject()
-	}
 	if reject := currentRootReject(tctx, root, abs); reject != nil {
 		return Resolved{}, reject
 	}
@@ -269,7 +265,7 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	}
 	return Resolved{
 		Abs:         abs,
-		DisplayPath: projectroot.Qualify(primary, root, abs),
+		DisplayPath: projectroot.Qualify(tctx.Source.Roots, tctx.Source.ActiveRootID, root, abs),
 		ScopeRel:    scopeRel,
 		Root:        root,
 	}, nil
@@ -381,13 +377,13 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 	return []projectroot.RootRef{res.Root}, nil
 }
 
-// QualifyAbs formats an absolute path with multi-root display qualifiers.
+// QualifyAbs formats an absolute path with multi-root display qualifiers
+// keyed on the session's active root.
 func QualifyAbs(tctx tools.ToolContext, root projectroot.RootRef, abs string) string {
-	primary, err := projectroot.PrimaryRoot(tctx.Source.Roots)
-	if err != nil {
+	if len(tctx.Source.Roots) == 0 {
 		return abs
 	}
-	return projectroot.Qualify(primary, root, abs)
+	return projectroot.Qualify(tctx.Source.Roots, tctx.Source.ActiveRootID, root, abs)
 }
 
 // CommandCwd resolves a process directory within its attached root or session scratch.

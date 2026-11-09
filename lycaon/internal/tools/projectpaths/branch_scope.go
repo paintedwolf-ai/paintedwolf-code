@@ -80,17 +80,13 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 			if err := b.AssertPathAllowed(ctx, branch, scopeRel, sandbox.PathOpWrite); err != nil {
 				return Resolved{}, err
 			}
-		default:
-			if err := b.AssertPathAllowed(ctx, branch, scopeRel, op); err != nil {
-				return Resolved{}, err
-			}
 		}
 	}
 	display := displayPath
 	if display == "" {
 		display = scopeRel
 		if primary, err := projectroot.PrimaryRoot(tctx.Source.Roots); err == nil {
-			display = projectroot.Qualify(primary, root, abs)
+			display = projectroot.Qualify(tctx.Source.Roots, primary.ID, root, abs)
 		}
 	}
 	return Resolved{
@@ -106,10 +102,22 @@ func workerBranchDisplayPath(tctx tools.ToolContext, branchRel string) string {
 	if len(tctx.Source.Roots) <= 1 {
 		return rel
 	}
+	activeID := ""
+	if active, err := projectroot.ActiveRoot(tctx.Source.Roots, tctx.Source.ActiveRootID); err == nil {
+		activeID = active.ID
+	} else if primary, err := projectroot.PrimaryRoot(tctx.Source.Roots); err == nil {
+		activeID = primary.ID
+	}
 	branchDir, rest, _ := strings.Cut(rel, "/")
 	for _, root := range tctx.Source.Roots {
 		dir, err := projectroot.BranchDirForID(root.ID)
 		if err == nil && dir == branchDir {
+			if root.ID == activeID {
+				if rest == "" {
+					return "."
+				}
+				return rest
+			}
 			if rest == "" {
 				return "@" + root.Label
 			}

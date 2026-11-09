@@ -97,6 +97,7 @@ func (t *SourceHistoryTool) runOverview(ctx context.Context, tctx tools.ToolCont
 	resp.Files, err = overviewFiles(ctx, ledger.Files, effects, overviewRowFacts{
 		projectID: tctx.Identity.ProjectID, roots: tctx.Source.Roots, sessionID: tctx.Identity.SessionID,
 		statesWindows: ledger.Windows != nil, open: open, namesBranch: !sameBranch,
+		activeRootID:  tctx.Source.ActiveRootID,
 	})
 	if err != nil {
 		return "", fmt.Errorf("source history overview path: %w", err)
@@ -175,6 +176,7 @@ type overviewRowFacts struct {
 	statesWindows bool
 	open          []sourceHistoryOpenWindow
 	namesBranch   bool
+	activeRootID  string
 }
 
 // overviewFiles groups effects per file. Effects arrive newest first, so the
@@ -197,7 +199,7 @@ func overviewFiles(ctx context.Context, files tools.SourceFileHistory, effects [
 			return nil, err
 		}
 		row := sourceHistoryOverviewFile{
-			Path:      projectroot.DisplayPath(facts.roots, rootID, path),
+			Path:      projectroot.DisplayPath(facts.roots, facts.activeRootID, rootID, path),
 			Op:        string(effect.Op),
 			Actor:     string(effect.ActorClassFor(facts.sessionID)),
 			Detail:    effect.ActorDisplay(facts.sessionID),

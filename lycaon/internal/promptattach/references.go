@@ -29,6 +29,9 @@ const (
 type ReferenceDeps struct {
 	// SessionProjectID scopes every reference.
 	SessionProjectID string
+	// WorkspaceRootID is the session's active folder; display paths qualify
+	// against it.
+	WorkspaceRootID string
 	// ResolvePath returns the displayed path and its canonical source address.
 	ResolvePath func(projectID, rootID, path string) (displayPath string, location api.NavigationTarget, err error)
 	// LookupArtifact returns a tree-scoped artifact ID.

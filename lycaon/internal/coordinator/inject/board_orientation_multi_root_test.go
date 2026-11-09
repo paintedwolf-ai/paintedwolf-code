@@ -38,7 +38,7 @@ func TestRenderBoardOrientationInject_MultiRootNamesBothRoots(t *testing.T) {
 	}
 	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
 	testutil.FailErr(t, "RenderBoardOrientationInject", err)
-	for _, want := range []string{"lycaon (primary)", "@den", "spans 2 folders", "@<label>/"} {
+	for _, want := range []string{"## lycaon", "## @den", "spans 2 folders", "@<label>/"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}
@@ -52,7 +52,7 @@ func TestRenderBoardOrientationInject_SingleRootParityNoHeaders(t *testing.T) {
 	}
 	block, err := inject.RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", snap, packboard.InjectScopeFull, false, false, time.Now().UTC())
 	testutil.FailErr(t, "RenderBoardOrientationInject", err)
-	if strings.Contains(block, "spans ") || strings.Contains(block, "(primary)") {
+	if strings.Contains(block, "spans ") || strings.Contains(block, "## @") {
 		t.Fatalf("single-root inject must not include multi-root headers: %q", block)
 	}
 }

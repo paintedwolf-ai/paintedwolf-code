@@ -26,7 +26,7 @@ func SnapshotWorkspaceFromRoots(roots []projectroot.RootRef) (map[string]Workspa
 		}
 		for rel, fp := range snap {
 			abs := filepath.Join(root.Path, filepath.FromSlash(rel))
-			key := projectroot.Qualify(primary, root, abs)
+			key := projectroot.Qualify(roots, primary.ID, root, abs)
 			out[key] = fp
 		}
 	}
@@ -69,7 +69,7 @@ func snapshotBranchWorkspace(roots []projectroot.RootRef, branchRoot string) (ma
 		}
 		for rel, fp := range snap {
 			abs := filepath.Join(root.Path, filepath.FromSlash(rel))
-			key := projectroot.Qualify(primary, root, abs)
+			key := projectroot.Qualify(roots, primary.ID, root, abs)
 			out[key] = fp
 		}
 	}
