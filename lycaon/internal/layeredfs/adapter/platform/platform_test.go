@@ -95,7 +95,7 @@ func TestEngineStartersEnterAMountUnderForcedGC(t *testing.T) {
 	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
 	testutil.FailErr(t, "privategit.NewManager", err)
 	t.Cleanup(func() { _ = mgr.Store().Close() })
-	view, _ := mountedHostView(t, trunk, mgr)
+	view, chosen := mountedHostView(t, trunk, mgr)
 	mount := view.PrimaryWorkPath
 	sub := filepath.Join(mount, "sub", "deep")
 	testutil.FailErr(t, "mkdir on mount", os.MkdirAll(sub, 0o755))
@@ -120,6 +120,20 @@ func TestEngineStartersEnterAMountUnderForcedGC(t *testing.T) {
 		},
 		"launch of a program on the mount": func(ctx context.Context) error {
 			return exitOK(lexec.Run(ctx, filepath.Join(mount, "tool"), nil, lexec.ExecOpts{Launch: lexec.HostLaunch("view starter"), Dir: mount}))
+		},
+		"checkpoint barrier and client flush": func(ctx context.Context) error {
+			rec, release, bErr := chosen.CheckpointBarrier(ctx, view.ViewID)
+			if bErr != nil {
+				return bErr
+			}
+			if !rec.WritersQuiesced || !rec.WritableMappingsFlushed || !rec.OperationsDrained || !rec.DirtyDataFlushed {
+				_ = release()
+				return errors.New("incomplete checkpoint barrier receipt")
+			}
+			if rErr := release(); rErr != nil {
+				return rErr
+			}
+			return chosen.FlushClientData(ctx, view.ViewID)
 		},
 	}
 

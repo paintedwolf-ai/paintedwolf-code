@@ -46,18 +46,18 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 			return InitMetrics{}, nil, err
 		}
 		looseAdded, err := importStoreLooseFromDir(s, srcDir, &metrics, looseAddedSizes)
+		addedPaths = append(addedPaths, looseAdded...)
 		if err != nil {
 			rollback()
 			return InitMetrics{}, nil, err
 		}
-		addedPaths = append(addedPaths, looseAdded...)
 
 		packsAdded, pNames, err := importStorePacksFromDir(ctx, s, srcDir, &metrics)
+		addedPaths = append(addedPaths, packsAdded...)
 		if err != nil {
 			rollback()
 			return InitMetrics{}, nil, err
 		}
-		addedPaths = append(addedPaths, packsAdded...)
 		packNames = append(packNames, pNames...)
 	}
 

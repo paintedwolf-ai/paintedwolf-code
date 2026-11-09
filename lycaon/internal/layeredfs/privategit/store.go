@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type leaseRecord struct {
@@ -27,6 +28,7 @@ type storeStock struct {
 	logicalOIDRefs  map[string]int
 	looseBytesTotal int64
 	packBytesTotal  int64
+	startupDuration time.Duration
 }
 
 // RetainedObjectStore manages the engine-retained content-addressed Git object store (#1671).
@@ -49,6 +51,15 @@ type RetainedObjectStore struct {
 
 // NewRetainedObjectStore initializes or opens an engine-retained Git object store at rootDir.
 func NewRetainedObjectStore(rootDir string) (*RetainedObjectStore, error) {
+	return NewRetainedObjectStoreContext(context.Background(), rootDir)
+}
+
+// NewRetainedObjectStoreContext initializes or opens an engine-retained Git object store at rootDir,
+// honoring ctx cancellation while reconstructing preexisting stock on disk.
+func NewRetainedObjectStoreContext(ctx context.Context, rootDir string) (*RetainedObjectStore, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(rootDir) == "" {
 		return nil, fmt.Errorf("privategit: retained store rootDir is required")
 	}
@@ -86,7 +97,7 @@ func NewRetainedObjectStore(rootDir string) (*RetainedObjectStore, error) {
 			logicalOIDRefs: make(map[string]int),
 		},
 	}
-	if err := initStockFromDiskLocked(context.Background(), s); err != nil {
+	if err := initStockFromDiskLocked(ctx, s); err != nil {
 		return nil, err
 	}
 	// A store with nothing retained has nothing to protect, and read-only directories
@@ -112,15 +123,17 @@ func (s *RetainedObjectStore) Metrics() StoreMetrics {
 	s.mu.Lock()
 	retainedObjects := int64(len(s.stock.logicalOIDRefs))
 	retainedBytes := s.stock.looseBytesTotal + s.stock.packBytesTotal
+	startupDur := s.stock.startupDuration
 	s.mu.Unlock()
 	return StoreMetrics{
-		ObjectsImported:   s.objectsImported.Load(),
-		ObjectsReused:     s.objectsReused.Load(),
-		BytesImported:     s.bytesImported.Load(),
-		BytesReused:       s.bytesReused.Load(),
-		BytesNewlyWritten: s.bytesNewlyWritten.Load(),
-		RetainedObjects:   retainedObjects,
-		RetainedBytes:     retainedBytes,
+		ObjectsImported:     s.objectsImported.Load(),
+		ObjectsReused:       s.objectsReused.Load(),
+		BytesImported:       s.bytesImported.Load(),
+		BytesReused:         s.bytesReused.Load(),
+		BytesNewlyWritten:   s.bytesNewlyWritten.Load(),
+		RetainedObjects:     retainedObjects,
+		RetainedBytes:       retainedBytes,
+		StartupInitDuration: startupDur,
 	}
 }
 

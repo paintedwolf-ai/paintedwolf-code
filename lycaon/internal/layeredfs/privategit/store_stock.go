@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func recordLooseObjectLocked(s *RetainedObjectStore, oid string, size int64) {
@@ -75,15 +76,20 @@ func removePackLocked(s *RetainedObjectStore, base string) {
 }
 
 func initStockFromDiskLocked(ctx context.Context, s *RetainedObjectStore) error {
+	start := time.Now()
+	prevStartup := s.stock.startupDuration
 	looseSizes, packSizes, packOIDs, _, err := scanStoreDiskState(ctx, s.rootDir, s.objectsDir)
 	if err != nil {
 		return err
 	}
+	dur := max(time.Since(start), time.Nanosecond)
+	if prevStartup > 0 {
+		dur = prevStartup
+	}
 	s.stock = storeStock{
-		packOIDs:       make(map[string]map[string]struct{}, len(packOIDs)),
-		packSizes:      make(map[string]int64, len(packSizes)),
-		looseSizes:     make(map[string]int64, len(looseSizes)),
-		logicalOIDRefs: make(map[string]int, len(looseSizes)),
+		packOIDs: make(map[string]map[string]struct{}, len(packOIDs)), packSizes: make(map[string]int64, len(packSizes)),
+		looseSizes: make(map[string]int64, len(looseSizes)), logicalOIDRefs: make(map[string]int, len(looseSizes)),
+		startupDuration: dur,
 	}
 	for oid, sz := range looseSizes {
 		recordLooseObjectLocked(s, oid, sz)
@@ -119,12 +125,9 @@ func scanStoreDiskState(
 	if err != nil {
 		return nil, nil, nil, StockInventory{}, fmt.Errorf("privategit: read store objects dir: %w", err)
 	}
-	looseSizes := make(map[string]int64)
-	packSizes := make(map[string]int64)
-	packOIDs := make(map[string]map[string]struct{})
-	uniqueOIDs := make(map[string]struct{})
+	looseSizes, packSizes := make(map[string]int64), make(map[string]int64)
+	packOIDs, uniqueOIDs := make(map[string]map[string]struct{}), make(map[string]struct{})
 	var inv StockInventory
-
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
 			return nil, nil, nil, StockInventory{}, err
@@ -169,15 +172,12 @@ func scanStoreDiskState(
 			}
 			_ = f.Close()
 			oid := strings.ToLower(name + rest)
-			looseSizes[oid] = info.Size()
-			uniqueOIDs[oid] = struct{}{}
+			looseSizes[oid], uniqueOIDs[oid] = info.Size(), struct{}{}
 			inv.LooseObjects++
 			inv.LooseBytes += info.Size()
 		}
 	}
-	inv.LogicalObjects = int64(len(uniqueOIDs))
-	inv.StoredBytes = inv.LooseBytes + inv.PackBytes
-	inv.Complete = true
+	inv.LogicalObjects, inv.StoredBytes, inv.Complete = int64(len(uniqueOIDs)), inv.LooseBytes+inv.PackBytes, true
 	return looseSizes, packSizes, packOIDs, inv, nil
 }
 

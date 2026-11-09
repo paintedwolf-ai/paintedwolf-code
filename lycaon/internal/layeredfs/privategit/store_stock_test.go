@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
@@ -89,10 +90,13 @@ func TestRetainedObjectStoreIncrementalStockRestartDuplicatesGCAndInspect(t *tes
 
 	// (b) Restart on preexisting store with packs and loose objects:
 	testutil.FailErr(t, "store.Close", store.Close())
-	reopened, err := NewRetainedObjectStore(storeRoot)
-	testutil.FailErr(t, "NewRetainedObjectStore restart", err)
+	reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "NewRetainedObjectStoreContext restart", err)
 
 	mReopen := reopened.Metrics()
+	if mReopen.StartupInitDuration <= 0 {
+		t.Fatalf("expected StartupInitDuration > 0 on store reopen, got %v", mReopen.StartupInitDuration)
+	}
 	if mReopen.RetainedObjects != mDup.RetainedObjects || mReopen.RetainedBytes != mDup.RetainedBytes {
 		t.Fatalf("reopened store Metrics (%+v) did not preserve preexisting stock (%+v)", mReopen, mDup)
 	}
@@ -152,11 +156,14 @@ func TestRetainedObjectStoreInspectStockCancellationAndCorruptionErrors(t *testi
 	_, _, err = store.ImportRepositoryObjects(ctx, []string{filepath.Join(srcRepo, ".git", "objects")}, []string{headOID})
 	testutil.FailErr(t, "ImportRepositoryObjects", err)
 
-	// 1. Canceled context returns Complete=false and context.Canceled.
+	// 1. Canceled context returns Complete=false and context.Canceled for both InspectStock and NewRetainedObjectStoreContext.
 	cancelCtx, cancel := context.WithCancel(ctx)
 	cancel()
 	if inv, cErr := store.InspectStock(cancelCtx); !errors.Is(cErr, context.Canceled) || inv.Complete {
 		t.Fatalf("expected context.Canceled and Complete=false, got inv=%+v err=%v", inv, cErr)
+	}
+	if _, cErr := NewRetainedObjectStoreContext(cancelCtx, storeRoot); !errors.Is(cErr, context.Canceled) {
+		t.Fatalf("expected NewRetainedObjectStoreContext to return context.Canceled, got %v", cErr)
 	}
 
 	// 2. Unreadable loose shard fails InspectStock and NewRetainedObjectStore with Complete=false.
@@ -202,5 +209,63 @@ func TestRetainedObjectStoreInspectStockCancellationAndCorruptionErrors(t *testi
 	}
 	if _, rErr := NewRetainedObjectStore(storeRoot); !errors.Is(rErr, ErrCorruptObjectStore) {
 		t.Fatalf("expected ErrCorruptObjectStore from NewRetainedObjectStore on corrupt .idx, got %v", rErr)
+	}
+}
+
+func TestCheckpointCreatedObjectsUpdateRetainedStockAndReopen(t *testing.T) {
+	t.Parallel()
+	fix := buildRichRepoFixture(t)
+	ctx := t.Context()
+
+	mgr := newTestManager(t, fix.tmpDir)
+	const viewID = "view-checkpoint-stock"
+	core := newMountedViewWithManager(t, mgr, viewID, fix.trunkDir)
+	exec := NewGitExecutor(mgr, viewID, RemotePolicy{})
+
+	// Lazy-init private repository on mounted view and check baseline retained stock.
+	_, err := exec.Status(ctx, "--porcelain")
+	testutil.FailErr(t, "exec.Status init", err)
+
+	mInit := mgr.Store().Metrics()
+	invInit, err := mgr.Store().InspectStock(ctx)
+	testutil.FailErr(t, "InspectStock after lazy init", err)
+	if mInit.RetainedObjects <= 0 || mInit.RetainedObjects != invInit.LogicalObjects || mInit.RetainedBytes != invInit.StoredBytes {
+		t.Fatalf("baseline stock mismatch after lazy init: metrics=%+v inspect=%+v", mInit, invInit)
+	}
+
+	// Create a new worker file and commit inside the view, then capture checkpoint Git state.
+	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "checkpoint-stock.txt"}, []byte("new-checkpoint-payload\n"), 0o644)
+	testutil.FailErr(t, "core.WriteFile checkpoint-stock.txt", err)
+	_, err = exec.Add(ctx, "checkpoint-stock.txt")
+	testutil.FailErr(t, "exec.Add", err)
+	_, err = exec.Commit(ctx, "worker checkpoint commit")
+	testutil.FailErr(t, "exec.Commit", err)
+
+	cpState, err := mgr.CaptureCheckpointGitState(ctx, viewID, "cp-stock-1")
+	testutil.FailErr(t, "CaptureCheckpointGitState", err)
+	if cpState.Artifact.ImportedObjects <= 0 {
+		t.Fatalf("expected checkpoint to import newly created worker objects, got %+v", cpState.Artifact)
+	}
+
+	mAfterCP := mgr.Store().Metrics()
+	invAfterCP, err := mgr.Store().InspectStock(ctx)
+	testutil.FailErr(t, "InspectStock after CaptureCheckpointGitState", err)
+	if mAfterCP.RetainedObjects <= mInit.RetainedObjects || mAfterCP.RetainedBytes <= mInit.RetainedBytes {
+		t.Fatalf("expected RetainedObjects/RetainedBytes to grow after checkpoint capture: before=%+v after=%+v", mInit, mAfterCP)
+	}
+	if mAfterCP.RetainedObjects != invAfterCP.LogicalObjects || mAfterCP.RetainedBytes != invAfterCP.StoredBytes {
+		t.Fatalf("checkpoint-updated Metrics (%+v) mismatched InspectStock (%+v)", mAfterCP, invAfterCP)
+	}
+
+	// Reopen the store at the same root and verify startup duration and reconstructed stock match.
+	storeRoot := mgr.Store().RootDir()
+	testutil.FailErr(t, "store.Close", mgr.Store().Close())
+	reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
+	testutil.FailErr(t, "NewRetainedObjectStoreContext reopen", err)
+	t.Cleanup(func() { _ = reopened.Close() })
+
+	mReopen := reopened.Metrics()
+	if mReopen.StartupInitDuration <= 0 || mReopen.RetainedObjects != mAfterCP.RetainedObjects || mReopen.RetainedBytes != mAfterCP.RetainedBytes {
+		t.Fatalf("reopened store Metrics (%+v) did not match checkpoint stock (%+v)", mReopen, mAfterCP)
 	}
 }

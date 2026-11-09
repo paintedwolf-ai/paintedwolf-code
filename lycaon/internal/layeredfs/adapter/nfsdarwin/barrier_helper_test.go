@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"sync"
 	"testing"
-	"time"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
@@ -60,7 +61,7 @@ func activeHelperPIDsForView(a *Adapter, viewID string) []int {
 	return pids
 }
 
-func TestNFSBarrierFlushHelperFailClosedPIDRegistrationCancellationAndSingleSlot(t *testing.T) {
+func TestNFSBarrierFlushHelperSubprocessRegistrationAndCancellation(t *testing.T) {
 	tmp := t.TempDir()
 	trunkDir := filepath.Join(tmp, "trunk")
 	mountSimDir := filepath.Join(tmp, "mount-sim")
@@ -109,11 +110,7 @@ func TestNFSBarrierFlushHelperFailClosedPIDRegistrationCancellationAndSingleSlot
 	}
 	setExecutablePathFnForTest(adp, nil)
 
-	// 2. Single-slot scheduler completion with real child helper subprocess and PID registration.
-	singleSlot := make(chan struct{}, 1)
-	singleSlot <- struct{}{} // occupy the sole worker scheduler slot
-	defer func() { <-singleSlot }()
-
+	// 2. Real child helper subprocess execution and PID registration/deregistration.
 	if err := adp.syncMountedRootFiles(t.Context(), st, "primary", rm); err != nil {
 		t.Fatalf("syncMountedRootFiles with real helper subprocess failed: %v", err)
 	}
@@ -148,12 +145,7 @@ func TestNFSBarrierFlushHelperFailClosedPIDRegistrationCancellationAndSingleSlot
 		errCh <- adp.syncMountedRootFiles(cancelCtx, st, "primary", rm)
 	}()
 
-	var runningPID int
-	select {
-	case runningPID = <-startedCh:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for NFS barrier flush helper subprocess to start")
-	}
+	runningPID := <-startedCh
 	if runningPID <= 0 || runningPID == os.Getpid() {
 		t.Fatalf("expected valid child helper PID, got %d", runningPID)
 	}
@@ -162,20 +154,16 @@ func TestNFSBarrierFlushHelperFailClosedPIDRegistrationCancellationAndSingleSlot
 	}
 
 	cancel()
-	select {
-	case cErr := <-errCh:
-		if !errors.Is(cErr, context.Canceled) || classifyBarrierReason(cErr) != adapter.ReasonContextCanceled {
-			t.Fatalf("expected context.Canceled / ReasonContextCanceled after helper cancellation, got %v", cErr)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for canceled NFS barrier flush helper subprocess to exit")
+	cErr := <-errCh
+	if !errors.Is(cErr, context.Canceled) || classifyBarrierReason(cErr) != adapter.ReasonContextCanceled {
+		t.Fatalf("expected context.Canceled / ReasonContextCanceled after helper cancellation, got %v", cErr)
 	}
 	if active := activeHelperPIDsForView(adp, "view-nfs-helper-unit"); len(active) != 0 {
 		t.Fatalf("expected active helper PIDs cleared after cancellation, got %v", active)
 	}
 }
 
-func TestMountedNFSCheckpointBarrierSingleSlotAndHelperRegistration(t *testing.T) {
+func TestNFSMountedBarrierFlushCancelAndAbortOrdering(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("nfsdarwin requires darwin")
 	}
@@ -191,7 +179,7 @@ func TestMountedNFSCheckpointBarrierSingleSlotAndHelperRegistration(t *testing.T
 	}
 
 	adp := New(Config{})
-	const viewID = "view-nfs-mounted-slot"
+	const viewID = "view-nfs-mounted-cancel-abort"
 	prep, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
 		ViewID: viewID, BackingDir: backingDir, RuntimeDir: runtimeDir,
 		QuiesceHook: NoopQuiesceHook, FlushClientHook: NoWritableMappingsFlushHook,
@@ -206,18 +194,120 @@ func TestMountedNFSCheckpointBarrierSingleSlotAndHelperRegistration(t *testing.T
 		t.Fatalf("write mounted slot.txt: %v", err)
 	}
 
-	slot := make(chan struct{}, 1)
-	slot <- struct{}{}
-	defer func() { <-slot }()
+	pauseFile := filepath.Join(tmp, "mounted-nfs-helper.pause")
+	t.Setenv(nfsBarrierFlushPauseFileEnv, pauseFile)
+	startedCh := make(chan int, 1)
+	setOnHelperStartForTest(adp, func(_ string, pid int) {
+		select {
+		case startedCh <- pid:
+		default:
+		}
+	})
+	defer setOnHelperStartForTest(adp, nil)
 
-	rec, release, err := adp.CheckpointBarrier(t.Context(), viewID)
-	if err != nil || !rec.DirtyDataFlushed || !rec.OperationsDrained {
-		t.Fatalf("CheckpointBarrier under 1-slot occupancy failed: rec=%+v err=%v", rec, err)
+	cancelCtx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() {
+		_, rel, bErr := adp.CheckpointBarrier(cancelCtx, viewID)
+		if rel != nil {
+			_ = rel()
+		}
+		errCh <- bErr
+	}()
+
+	runningPID := <-startedCh
+	if runningPID <= 0 || runningPID == os.Getpid() {
+		t.Fatalf("expected mounted CheckpointBarrier to spawn child helper PID, got %d", runningPID)
 	}
-	if err := release(); err != nil {
-		t.Fatalf("release barrier: %v", err)
+	if active := activeHelperPIDsForView(adp, viewID); len(active) != 1 || active[0] != runningPID {
+		t.Fatalf("expected active helper PID [%d] on mounted view, got %v", runningPID, active)
 	}
-	if pid := lastHelperPIDForView(adp, viewID); pid <= 0 || pid == os.Getpid() {
-		t.Fatalf("expected mounted CheckpointBarrier to use child helper PID, got %d", pid)
+
+	// Cancel the in-flight barrier helper before stopping the NFS server and releasing the mount.
+	cancel()
+	cErr := <-errCh
+	var aErr *adapter.AdapterError
+	if !errors.As(cErr, &aErr) || aErr.ReasonCode != adapter.ReasonContextCanceled || !errors.Is(cErr, context.Canceled) {
+		t.Fatalf("expected ReasonContextCanceled AdapterError on barrier cancel, got %v", cErr)
+	}
+	if active := activeHelperPIDsForView(adp, viewID); len(active) != 0 {
+		t.Fatalf("expected active helper PIDs cleared before server abort/release, got %v", active)
+	}
+	if err := adp.KillServerForView(viewID); err != nil {
+		t.Fatalf("KillServerForView after helper cancellation: %v", err)
+	}
+	relRec, relErr := adp.Release(context.Background(), viewID)
+	if relErr != nil || !relRec.Settled {
+		t.Fatalf("Release after helper cancellation and server abort failed: rec=%+v err=%v", relRec, relErr)
+	}
+}
+
+func TestNFSMountedOneSchedulerSlotForcedGCBarrier(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("nfsdarwin requires darwin")
+	}
+	tmp := t.TempDir()
+	trunkDir, backingDir, runtimeDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime")
+	for _, d := range []string{trunkDir, backingDir, runtimeDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(trunkDir, "slot.txt"), []byte("v1\n"), 0o644); err != nil {
+		t.Fatalf("seed slot.txt: %v", err)
+	}
+
+	adp := New(Config{})
+	const viewID = "view-nfs-mounted-one-slot-gc"
+	prep, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
+		ViewID: viewID, BackingDir: backingDir, RuntimeDir: runtimeDir,
+		QuiesceHook: NoopQuiesceHook, FlushClientHook: NoWritableMappingsFlushHook,
+		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
+	})
+	if err != nil {
+		t.Fatalf("Prepare: %v", err)
+	}
+	t.Cleanup(func() { _, _ = adp.Release(context.Background(), viewID) })
+
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
+	stop := make(chan struct{})
+	var collector sync.WaitGroup
+	collector.Go(func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				runtime.GC()
+			}
+		}
+	})
+	defer func() {
+		close(stop)
+		collector.Wait()
+	}()
+
+	const rounds = 10
+	for round := range rounds {
+		out, code, wErr := execpkg.Run(t.Context(), "/bin/sh", []string{"-c", "printf 'round\\n' > slot.txt"}, execpkg.ExecOpts{
+			Launch: execpkg.HostLaunch("nfs_one_slot_write"), Dir: prep.PrimaryWorkPath,
+		})
+		if wErr != nil || code != 0 {
+			t.Fatalf("round %d write failed: exit=%d err=%v out=%q", round, code, wErr, string(out))
+		}
+		if fErr := adp.FlushClientData(t.Context(), viewID); fErr != nil {
+			t.Fatalf("round %d FlushClientData under GOMAXPROCS(1)+GC failed: %v", round, fErr)
+		}
+		rec, release, bErr := adp.CheckpointBarrier(t.Context(), viewID)
+		if bErr != nil || !rec.WritersQuiesced || !rec.WritableMappingsFlushed || !rec.OperationsDrained || !rec.DirtyDataFlushed {
+			t.Fatalf("round %d CheckpointBarrier under GOMAXPROCS(1)+GC failed: rec=%+v err=%v", round, rec, bErr)
+		}
+		if rErr := release(); rErr != nil {
+			t.Fatalf("round %d release barrier: %v", round, rErr)
+		}
+		if pid := lastHelperPIDForView(adp, viewID); pid <= 0 || pid == os.Getpid() {
+			t.Fatalf("round %d expected child helper PID, got %d", round, pid)
+		}
 	}
 }
