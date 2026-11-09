@@ -38,7 +38,7 @@ func TestResearchFamilyReachesCoordinatorAndWorkerCalls(t *testing.T) {
 				}
 			}
 			for _, enabled := range []bool{false, true} {
-				loop := NewPromptLoop(PromptLoopDeps{Context: ContextDeps{WebSearchEnabled: func() bool { return enabled }}})
+				loop := NewPromptLoop(PromptLoopDeps{Context: ContextDeps{ContextSurfaceDeps: ContextSurfaceDeps{WebSearchEnabled: func() bool { return enabled }}}})
 				metas := []tools.ToolMeta{{Name: "web_search", Deferred: true}, {Name: "fetch_url", Deferred: true}}
 				sess := &api.Session{ID: "s"}
 				coordinator := loop.Context.compileRuntimeToolPlan(plan, api.CoordinatorRunContext{}, metas, ledger.Active("s"), tools.MCPToolPlan{}, true, sess)
