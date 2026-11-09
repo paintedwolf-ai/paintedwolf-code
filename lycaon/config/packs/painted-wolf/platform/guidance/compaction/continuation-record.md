@@ -31,3 +31,6 @@ Canonical observations through ordinal {{ through_ord }} remain on record. {% if
 {% endif %}{% if reference_only %}Some covered observations have no accepted prose summary. Recover the relevant records before relying on their details.
 {% endif %}
 {% endif %}
+{% for s in compacted_sources %}{% if s.execution %}
+Recorded execution (not current liveness): {{ s.execution }}
+{% endif %}{% endfor %}
