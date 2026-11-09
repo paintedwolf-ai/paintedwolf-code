@@ -8,6 +8,7 @@ import { FilesPathCrumbs } from "./FilesPathCrumbs.tsx";
 
 export function ReadonlyFilesDocument(props: {
   title: string;
+  actions?: JSX.Element;
   onFind: () => void;
   onGotoLine: () => void;
   onCopy: () => void;
@@ -16,6 +17,7 @@ export function ReadonlyFilesDocument(props: {
 }) {
   return <div class="den-files-editor" ref={element => bindLayoutBand(element, LAYOUT_BAND_SCALES.filesEditor)}>
     <FilesEditorToolbar actions={<>
+        {props.actions}
         <button type="button" class="den-files-editor__tool den-inset-icon-btn" data-testid="files-readonly-find" aria-label="Find in file" aria-expanded={findBarDisclosure().expanded} aria-controls={findBarDisclosure().controls} data-tip={`Find (${bindingForHandler("find.inView")})`} data-tip-pos="below" onClick={props.onFind}><FindIcon /></button>
         <button type="button" class="den-files-editor__tool den-inset-icon-btn" data-testid="files-readonly-goto" aria-label="Go to line" aria-expanded={gotoLineBarDisclosure().expanded} aria-controls={gotoLineBarDisclosure().controls} data-tip={`Go to line (${bindingForHandler("editor.goToLine")})`} data-tip-pos="below" onClick={props.onGotoLine}><GotoLineIcon /></button>
         <button type="button" class="den-files-editor__tool den-inset-icon-btn" data-testid="files-readonly-copy" aria-label="Copy contents" data-tip="Copy contents" data-tip-pos="below" onClick={props.onCopy}><CopyIcon /></button>
