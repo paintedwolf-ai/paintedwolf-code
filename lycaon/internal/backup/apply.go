@@ -169,7 +169,9 @@ func (r *pendingRestore) deleteFiles(configDir string) error {
 			return fmt.Errorf("resolve delete %s: %w", rel, err)
 		}
 		_ = os.Chmod(filepath.Dir(dest), 0o700)
-		_ = os.Chmod(dest, 0o600)
+		if info, sErr := os.Lstat(dest); sErr == nil && info.Mode().IsRegular() {
+			_ = os.Chmod(dest, 0o600)
+		}
 		removeErr := os.Remove(dest)
 		if removeErr != nil && !os.IsNotExist(removeErr) {
 			return fmt.Errorf("delete %s: %w", rel, removeErr)
