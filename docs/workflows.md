@@ -235,7 +235,7 @@ Bug-bash, reconnaissance, and security-survey workflows assemble the same primit
 
 ### Blueprints
 
-A Blueprint is a governing Markdown file under `.paintedwolf/blueprints/`. It is project content: inspectable, editable, reviewable, and commit-worthy. Each blueprint carries a stable UUID `id` in its YAML frontmatter (written at creation; a hand-authored file without one has a UUID derived from its project and path until the host next writes it) and is addressed on the wire by that UUID. Its project-relative path is a field, not an address; `GET /v1/projects/{id}/blueprints?path=` filters to the blueprint at a path. All blueprint HTTP operations are project-scoped under `/v1/projects/{id}/blueprints`.
+A Blueprint is a governing Markdown file under `.paintedwolf/blueprints/`. It is project content: inspectable, editable, reviewable, and commit-worthy. Each blueprint carries a stable UUID `id` in its YAML frontmatter (written at creation; a hand-authored file without one has a UUID derived from its project and path until the host next writes it) and is addressed on the wire by that UUID. Its path in the project is a field, not an address; `GET /v1/projects/{id}/blueprints?path=` filters to the blueprint at a path. All blueprint HTTP operations are project-scoped under `/v1/projects/{id}/blueprints`.
 
 A workflow run may bind one `blueprint_path`. Approval binds the reviewed bytes, not merely the path: editing approved content supersedes the approval, and deleting it revokes the grant. A session rewind may restore Blueprint bytes because they are project content, while the authorization record follows its own lifecycle.
 
