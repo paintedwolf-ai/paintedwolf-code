@@ -40,7 +40,7 @@ func mergeCoordinatorTemplateVars(t *testing.T) map[string]any {
 		t.Fatalf("MergeCoordinatorKickPolicyVars: %v", err)
 	}
 	projectDir := "/tmp/fixture-project"
-	prompts.MergeWorkspaceRootsVars(vars, nil, projectDir)
+	prompts.MergeWorkspaceRootsVars(vars, nil, "")
 	if count, _ := vars["root_count"].(int); count == 0 {
 		vars["root_count"] = 1
 		vars["project_dir"] = projectDir
@@ -62,7 +62,7 @@ func mergeCoordinatorPromptVarsForTripartite(
 	if sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
 		projectDir = sess.WorkspacePath
 	}
-	prompts.MergeWorkspaceRootsVars(vars, nil, projectDir)
+	prompts.MergeWorkspaceRootsVars(vars, nil, "")
 	if count, _ := vars["root_count"].(int); count == 0 {
 		vars["root_count"] = 1
 		vars["project_dir"] = projectDir

@@ -86,11 +86,11 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 				Posture:               tc.posture,
 				CommandExternalHidden: tc.externalHidden,
 			})
-			projectDir := ""
+			activeRootID := ""
 			if len(tc.roots) > 0 {
-				projectDir = tc.roots[0].Path
+				activeRootID = tc.roots[0].ID
 			}
-			prompts.MergeWorkspaceRootsVars(vars, tc.roots, projectDir)
+			prompts.MergeWorkspaceRootsVars(vars, tc.roots, activeRootID)
 			if tc.isCoordinator {
 				vars["tool_profile"] = prompts.CoordinatorProfileID
 				contractcheck.FailErr(t, "merge coordinator surface", prompts.MergeCoordinatorSurfacePathVars(tc.scopeID, profiles, vars, prompts.SurfaceTurn{}))

@@ -64,7 +64,7 @@ func (m *Context) Build() promptloop.ContextDeps {
 		},
 		Policy: m.Guards.Policy(),
 		ProjectRootCount: func(ctx context.Context, sess *api.Session) int {
-			_, count, _ := m.Workspace.PromptRootRows(ctx, sess)
+			_, count, _, _ := m.Workspace.PromptRootRows(ctx, sess)
 			return count
 		},
 		LoadedTools: m.Loading.LoadedTools,

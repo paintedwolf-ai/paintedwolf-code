@@ -19,12 +19,8 @@ func (p *promptSurface) renderSystemPrefix(ctx context.Context, sess *api.Sessio
 		return "", err
 	}
 	vars := map[string]any{"project_dir": sess.WorkspacePath}
-	if roots, count, activePath, ok := p.workspaceRootsForTurn(ctx, sess, turn); ok {
-		vars["root_count"] = count
-		vars["workspace_roots"] = roots
-		if activePath != "" {
-			vars["project_dir"] = activePath
-		}
+	if roots, count, activePath, omitted, ok := p.workspaceRootsForTurn(ctx, sess, turn); ok {
+		mergeWorkspaceRootTurnVars(vars, roots, count, activePath, omitted)
 	}
 	coordinator := surface.IsCoordinatorSession(sess)
 	if coordinator {

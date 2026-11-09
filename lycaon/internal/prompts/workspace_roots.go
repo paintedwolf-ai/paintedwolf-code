@@ -6,8 +6,43 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-// MergeWorkspaceRootsVars adds workspace_roots and root_count for workspace-roots.md.
-func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, activePath string) {
+// WorkspaceRootRows builds the prompt rows shared by live assembly and
+// prompt_dump: one row per root with label, path, is_primary, and is_active
+// matched by the active root ID, capped at the prompt collection limit. The
+// second return is the number of rows omitted by the cap.
+func WorkspaceRootRows(roots []projectroot.RootRef, activeRootID string) ([]map[string]any, int) {
+	active, _ := activeWorkspaceRoot(roots, activeRootID)
+	limit := len(roots)
+	if limit > pongoplain.MaxCollectionItems {
+		limit = pongoplain.MaxCollectionItems
+	}
+	rows := make([]map[string]any, 0, limit)
+	for _, r := range roots[:limit] {
+		rows = append(rows, map[string]any{
+			"label":      r.Label,
+			"path":       r.Path,
+			"is_primary": r.IsPrimary,
+			"is_active":  active.ID != "" && r.ID == active.ID,
+		})
+	}
+	return rows, len(roots) - len(rows)
+}
+
+// activeWorkspaceRoot resolves the session's active root by ID, falling back
+// to the primary root when the ID is empty or unknown.
+func activeWorkspaceRoot(roots []projectroot.RootRef, activeRootID string) (projectroot.RootRef, bool) {
+	if r, err := projectroot.ActiveRoot(roots, activeRootID); err == nil {
+		return r, true
+	}
+	if r, err := projectroot.PrimaryRoot(roots); err == nil {
+		return r, true
+	}
+	return projectroot.RootRef{}, false
+}
+
+// MergeWorkspaceRootsVars adds workspace_roots, root_count, project_dir, and
+// workspace_roots_omitted_count for workspace-roots.md.
+func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, activeRootID string) {
 	if vars == nil {
 		return
 	}
@@ -15,29 +50,12 @@ func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, a
 		vars["reviews_confined_writes"] = true
 	}
 	vars["root_count"] = len(roots)
-	if activePath != "" {
-		vars["project_dir"] = activePath
+	rows, omitted := WorkspaceRootRows(roots, activeRootID)
+	vars["workspace_roots"] = rows
+	vars["workspace_roots_omitted_count"] = omitted
+	if active, ok := activeWorkspaceRoot(roots, activeRootID); ok && active.Path != "" {
+		vars["project_dir"] = active.Path
 	}
-	if len(roots) == 0 {
-		vars["workspace_roots"] = []map[string]any{}
-		vars["workspace_roots_omitted_count"] = 0
-		return
-	}
-	limit := len(roots)
-	if limit > pongoplain.MaxCollectionItems {
-		limit = pongoplain.MaxCollectionItems
-	}
-	out := make([]map[string]any, 0, limit)
-	for _, r := range roots[:limit] {
-		out = append(out, map[string]any{
-			"label":      r.Label,
-			"path":       r.Path,
-			"is_primary": r.IsPrimary,
-			"is_active":  activePath != "" && r.Path == activePath,
-		})
-	}
-	vars["workspace_roots"] = out
-	vars["workspace_roots_omitted_count"] = len(roots) - len(out)
 }
 
 // RootsChangedKickData builds the root-change notice context: one row per
