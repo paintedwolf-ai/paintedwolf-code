@@ -21,13 +21,9 @@ import { walkPageTitle } from "../walk/WalkStepPage.tsx";
 import {
   DEFINITION_PICKER_TRUNCATION_FOOTER, definitionPickerExplainer, definitionPickerHeader,
 } from "./definition-jump.ts";
-import {
-  createEditorFormatActions, editorConfigStatusLabel, editorConfigStatusTip,
-  encodingChipTip, eolChipTip, indentChipTip,
-} from "./editor-format-actions.ts";
+import { createEditorFormatActions, editorConfigStatusLabel } from "./editor-format-actions.ts";
 import { FilesSymbolMenu } from "./editor-symbol-navigation.tsx";
 import { effectiveIndent } from "./files-editor-display.ts";
-import { filesEditorSecretScreen } from "./files-editor-secret-screen.ts";
 import { createEditorToolbarMenus } from "./FilesEditorChrome.tsx";
 
 type ToolbarMenuKind = Parameters<ReturnType<typeof createEditorToolbarMenus>["toolbarMenuItems"]>[0];
@@ -82,7 +78,6 @@ export function createFilesEditorMenus(
   const indentChip = (visible: boolean) =>
     visible ? {
       label: indentChipLabel(effectiveIndent(options.buffer())),
-      tip: indentChipTip(options.buffer()),
       onOpen: openIndentMenu,
       ref: (element: HTMLButtonElement) => { indentChipEl = element; },
     } : undefined;
@@ -90,7 +85,6 @@ export function createFilesEditorMenus(
   const eolChip = (visible: boolean) =>
     visible ? {
       label: options.buffer().mixedEol ? "Mixed EOL" : options.buffer().eol.toUpperCase(),
-      tip: eolChipTip(options.buffer()),
       onOpen: openEolMenu,
       ref: (element: HTMLButtonElement) => { eolChipEl = element; },
     } : undefined;
@@ -275,7 +269,6 @@ export { FilesSymbolMenu };
 export function FilesEditorStatusDetails(props: {
   historicalActive: boolean;
   buffer: FileBuffer;
-  version: VersionView | null;
   secretScreenGap: "not_screened" | "truncated" | null;
 }) {
   return (
@@ -285,7 +278,6 @@ export function FilesEditorStatusDetails(props: {
           <span
             class="den-files-editor__status-detail"
             data-testid="files-editor-encoding-chip"
-            data-tip={encodingChipTip(props.buffer)}
           >
             {label}
           </span>
@@ -296,7 +288,6 @@ export function FilesEditorStatusDetails(props: {
           <span
             class="den-files-editor__status-detail"
             data-testid="files-editor-editorconfig-chip"
-            data-tip={editorConfigStatusTip(props.buffer)}
           >
             {label}
           </span>
@@ -307,16 +298,6 @@ export function FilesEditorStatusDetails(props: {
           <span
             class="den-files-editor__status-detail"
             data-testid="files-editor-secret-gap-chip"
-            data-tip={
-              gap === "truncated"
-                ? SECRET_SPAN_COPY.chipTruncatedTip(
-                    (props.historicalActive
-                      ? props.version?.secretScreen
-                      : filesEditorSecretScreen(props.buffer.key)
-                    )?.screened_bytes ?? 0,
-                  )
-                : SECRET_SPAN_COPY.chipNotScreenedTip
-            }
           >
             {gap === "truncated" ? SECRET_SPAN_COPY.chipTruncated : SECRET_SPAN_COPY.chipNotScreened}
           </span>

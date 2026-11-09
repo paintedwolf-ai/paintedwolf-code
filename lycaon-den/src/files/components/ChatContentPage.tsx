@@ -141,7 +141,7 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
       status={{identity:resolveEditorIdentity({historical:false,workerDraft:false,deleted:false,writable:null,preview:false,editable:false,unsupported:true}),
         windows:<DocumentWindows projectId={props.projectId} />,
         dirtyCount:projectFilesState(props.projectId).order.filter(key=>projectFilesState(props.projectId).byKey[key]?.dirty).length,
-        cursor:cursor(),language:"Plain text",indent:{label:indentChipLabel(editorDisplayPrefs().indent),tip:"Editor indentation display"},
+        cursor:cursor(),language:"Plain text",indent:{label:indentChipLabel(editorDisplayPrefs().indent)},
         details:<span class="den-files-editor__status-detail" data-testid="files-editor-encoding-chip">UTF-8</span>,
       }}>
     <Show when={access()} fallback={<InlineChatContent receiptText={receipts().text} document={props.document} client={props.client} onError={reportError} onEditor={setInlineEditor} />}>
