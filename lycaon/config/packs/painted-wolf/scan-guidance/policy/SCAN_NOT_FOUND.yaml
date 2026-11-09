@@ -14,7 +14,7 @@ requires:
 when: paintedwolf.rejection_code == "SCAN_NOT_FOUND"
 effect: block
 copy:
-  what: scan_id does not match a stored scan row for the active project root.
+  what: scan_id does not match a stored scan row for the session folder.
   cause: The supplied id is missing, truncated, stale, or not from the host scan store.
   why: Drill-down reads persisted ingest keyed by the full per-engine scan UUID.
   fix: 'For bound work, report the missing assigned id; do not substitute ambient scans. {{ paintedwolf.next_steps }}'

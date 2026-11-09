@@ -16,7 +16,7 @@ requires:
 when: paintedwolf.rejection_code == "GIT_COMMIT_NO_SESSION_AUTHORSHIP"
 effect: block
 copy:
-  what: git_commit could not establish any paths authored by this session in the active root; {{ paintedwolf.git_changed_path_count
+  what: git_commit could not establish any paths authored by this session in the session folder; {{ paintedwolf.git_changed_path_count
     }} changed paths were observed.
   cause: No session-authored staging set was available from the ledger. This may reflect missing authorship
     evidence or no authored changes.

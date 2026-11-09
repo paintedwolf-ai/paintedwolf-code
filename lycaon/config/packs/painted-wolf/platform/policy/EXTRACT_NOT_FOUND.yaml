@@ -16,7 +16,7 @@ requires:
 when: paintedwolf.rejection_code == "EXTRACT_NOT_FOUND"
 effect: block
 copy:
-  what: extract_archive could not open {{ paintedwolf.path }} — path does not exist under the attached project roots.
+  what: extract_archive could not open {{ paintedwolf.path }} — path does not exist in the attached folders.
   cause: The path must name an existing archive file.
   why: Structured rejects let agents branch without parsing free-form errors.
   fix: Locate the archive with an offered listing or search capability; retry with its observed path.

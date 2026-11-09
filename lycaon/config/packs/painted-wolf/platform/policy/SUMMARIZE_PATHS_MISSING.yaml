@@ -13,7 +13,7 @@ when: paintedwolf.rejection_code == "SUMMARIZE_PATHS_MISSING"
 effect: block
 copy:
   what: 'Some requested summarize inputs do not exist: {{ paintedwolf.missing_paths }}.'
-  cause: Each path or paths entry must be an existing repo-relative file or directory.
+  cause: Each path or paths entry must be an existing file or directory — a bare relative path resolves in the session folder, or use @label/path for another attached folder.
   why: A summary must preserve the requested input scope; silently dropping missing entries would make it incomplete.
   fix: '{{ paintedwolf.next_steps }}'
   instead: Branch on Code; fix paths and retry once

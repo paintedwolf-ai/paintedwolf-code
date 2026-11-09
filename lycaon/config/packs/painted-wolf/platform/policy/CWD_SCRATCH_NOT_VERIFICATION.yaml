@@ -17,10 +17,10 @@ when: paintedwolf.rejection_code == "CWD_SCRATCH_NOT_VERIFICATION"
 effect: block
 copy:
   what: Verification commands cannot run with scratch working directory {{ paintedwolf.cwd }}.
-  cause: Verification checks validate workspace or repository state and must run in a project root.
+  cause: Verification checks validate workspace or repository state and must run in an attached folder.
   why: Session scratch (@scratch) is ephemeral and outside the version-controlled project tree.
-  fix: Run verification commands within the workspace or a project root, not in @scratch.
-  instead: Branch on Code; run verification targets against project root paths
+  fix: Run verification commands within the session folder or another attached folder (@label/path), not in @scratch.
+  instead: Branch on Code; run verification targets against session-folder or @label paths
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool
 x-paintedwolf-message: '`verify` cwd cannot be session scratch'

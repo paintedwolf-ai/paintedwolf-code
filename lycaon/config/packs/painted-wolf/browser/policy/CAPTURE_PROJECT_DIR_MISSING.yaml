@@ -13,10 +13,11 @@ when: paintedwolf.rejection_code == "CAPTURE_PROJECT_DIR_MISSING"
 effect: block
 copy:
   what: The host could not access a directory for project_dir {{ paintedwolf.path }}.
-  cause: No attached root or accessible directory was available at the requested path.
-  why: Static serve requires a real project-relative directory tree.
-  fix: Use an existing directory in an attached project root containing the page to open. If no root is attached,
-    the user must attach one; do not create a substitute tree merely to clear this refusal.
+  cause: No attached folder or accessible directory was available at the requested path.
+  why: Static serve requires a real directory tree in an attached folder.
+  fix: Use an existing directory in the session folder or another attached folder (@label/path) containing the page
+    to open. If no folder is attached, the user must attach one; do not create a substitute tree merely to clear
+    this refusal.
   instead: Branch on Code CAPTURE_PROJECT_DIR_MISSING; fix project_dir
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:visual_capture

@@ -16,8 +16,8 @@ requires:
 when: paintedwolf.rejection_code == "CHMOD_SYMLINK_ESCAPE"
 effect: block
 copy:
-  what: chmod on {{ paintedwolf.path }} was rejected because the symlink target escapes the workspace.
-  cause: The link resolves outside the permitted workspace or write scope.
+  what: chmod on {{ paintedwolf.path }} was rejected because the symlink target escapes the attached folders.
+  cause: The link resolves outside the attached folders or write scope.
   why: The resolved target needs its own write authority.
   fix: Operate on an intended in-scope target only. Do not replace or retarget a link merely to evade the boundary.
   instead: Branch on Code; resolve symlink to an in-boundary path

@@ -17,7 +17,7 @@ when: paintedwolf.rejection_code == "GREP_PATH_NOT_FOUND"
 effect: block
 copy:
   what: grep search root {{ paintedwolf.path }} does not exist.
-  cause: The path argument must name an existing file or directory under the attached project roots.
+  cause: The path argument must name an existing file or directory in the attached folders; `.` or no path searches every attached folder.
   why: Structured rejects let agents branch without parsing free-form stat errors.
   fix: Inspect the intended parent with an offered listing or metadata capability, then retry with an observed search root.
   instead: Branch on Code; pick an existing path before retrying grep

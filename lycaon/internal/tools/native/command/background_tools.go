@@ -215,7 +215,7 @@ func runCommandBackground(
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		return "", err
 	}
-	if tr := rejectPwdEnvMismatch(args, canonicalCommandKey(tctx, args), cwd); tr != nil {
+	if tr := rejectPwdEnvMismatch(tctx, args, canonicalCommandKey(tctx, args), cwd, cwdDisplay); tr != nil {
 		return "", tr
 	}
 	confReq, tr := tools.ConfineRequestForSpawn(ctx, tctx, extraWriteRoots)

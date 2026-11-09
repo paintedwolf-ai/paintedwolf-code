@@ -13,9 +13,9 @@ when: paintedwolf.rejection_code == "GIT_PATH_DENIED"
 effect: block
 copy:
   what: '{{ tool }} refused path {{ paintedwolf.path }} outside the allowed git scope.'
-  cause: Git tools only operate on sandbox-relative paths inside the project.
+  cause: Git tools only operate on paths inside the attached folders.
   why: Structured rejects let agents branch without parsing free-form errors.
-  fix: Use the intended path only within the active repository and its permitted read/write scope. Do not choose
+  fix: Use the intended path only within the attached folders and their permitted read/write scope. Do not choose
     another Git operation to bypass the same path boundary.
   instead: Branch on Code; fix args and retry once
 x-paintedwolf-category: recoverable

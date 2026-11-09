@@ -19,9 +19,9 @@ effect: block
 copy:
   what: 'render_view refused project asset {{ paintedwolf.path }} or its content: {{ paintedwolf.rejection_reason
     }}.'
-  cause: The path escapes the project root or sits under .git/, or the file carries active or external content (SVG
+  cause: The path escapes the attached folders or sits under .git/, or the file carries active or external content (SVG
     scripts/foreignObject, CSS @import or url() beyond http://lycaon.asset/).
-  why: Project assets rasterize offline inside a path jail — nothing outside the project root, no version-control
+  why: Project assets rasterize offline inside a path jail — nothing outside the attached folders, no version-control
     internals, and no content that would script or fetch beyond the hermetic origin.
   fix: Reference permitted regular project files. Keep asset SVGs passive (no scripts, handlers, or foreignObject)
     and CSS hermetic (relative references or {{ paintedwolf.render_asset_origin }} only). Do not modify protected

@@ -14,8 +14,10 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/indexwatch"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -188,7 +190,7 @@ func runCommandForeground(
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		return RunOutcome{}, err
 	}
-	if tr := rejectPwdEnvMismatch(args, canonicalCommandKey(tctx, args), cwd); tr != nil {
+	if tr := rejectPwdEnvMismatch(tctx, args, canonicalCommandKey(tctx, args), cwd, cwdDisplay); tr != nil {
 		return RunOutcome{}, tr
 	}
 	cmdKey := canonicalCommandKey(tctx, args)
@@ -390,7 +392,7 @@ func bindCommandForegroundConfine(
 }
 
 // rejectPwdEnvMismatch rejects conflicting working-directory inputs.
-func rejectPwdEnvMismatch(args map[string]any, canonicalCommand, cwd string) *toolrejection.ToolReject {
+func rejectPwdEnvMismatch(tctx tools.ToolContext, args map[string]any, canonicalCommand, cwd, cwdDisplay string) *toolrejection.ToolReject {
 	env, ok := args["env"].(map[string]any)
 	if !ok {
 		return nil
@@ -414,8 +416,56 @@ func rejectPwdEnvMismatch(args map[string]any, canonicalCommand, cwd string) *to
 		Code: "COMMAND_PWD_NOT_CWD",
 		Data: map[string]any{
 			"command": canonicalCommand,
-			"cwd":     enginepaths.RewriteWorkerBranchPaths(cwd),
-			"pwd":     enginepaths.RewriteWorkerBranchPaths(pwd),
+			"cwd":     commandDirDisplay(tctx, cwdDisplay),
+			"pwd":     commandDirDisplay(tctx, pwd),
 		},
 	}
+}
+
+// commandDirDisplay renders a process directory in canonical display form:
+// worker-branch copies and session areas keep their relative @scratch/@output
+// spelling, attached-root paths qualify by @label off the session folder, and
+// a path no folder answers for stays as spelled. A display that is already
+// relative passes through unchanged.
+func commandDirDisplay(tctx tools.ToolContext, dir string) string {
+	if dir == "" || !filepath.IsAbs(dir) {
+		return dir
+	}
+	if rel := enginepaths.RewriteWorkerBranchPaths(dir); rel != "" && !filepath.IsAbs(rel) {
+		return rel
+	}
+	if display := sessionAreaDisplay(tctx, dir); display != "" {
+		return display
+	}
+	if root, _, ok := projectroot.MatchRoot(tctx.Source.Roots, dir); ok {
+		return projectroot.Qualify(tctx.Source.Roots, tctx.Source.ActiveRootID, root, dir)
+	}
+	return dir
+}
+
+// sessionAreaDisplay renders an absolute path under the session's scratch or
+// output folder as @scratch/... or @output/..., or "" when it belongs to none.
+func sessionAreaDisplay(tctx tools.ToolContext, dir string) string {
+	canonical := fspath.CanonicalPath(dir)
+	if canonical == "" {
+		return ""
+	}
+	for _, area := range []struct{ label, dir string }{
+		{projectroot.VirtualOutputLabel, tctx.Host.SessionOutputDir},
+		{projectroot.VirtualScratchLabel, tctx.Host.SessionScratchDir},
+	} {
+		host := strings.TrimSpace(area.dir)
+		if host == "" {
+			continue
+		}
+		rel, err := filepath.Rel(fspath.CanonicalPath(host), canonical)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if rel == "." {
+			return "@" + area.label
+		}
+		return "@" + area.label + "/" + filepath.ToSlash(rel)
+	}
+	return ""
 }

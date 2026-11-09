@@ -300,7 +300,7 @@
       "branch_instruction": "Branch on Code CAPTURE_NAVIGATION_DENIED; stay inside the capture origin",
       "category": "recoverable",
       "emit": "guard:visual_capture",
-      "summary": "{% if paintedwolf.capture_project_escape %}The project_dir path {{ paintedwolf.path }} could not be accessed in the attached workspace.{% else %}Browser navigation was denied{% if paintedwolf.navigation_url %} for {{ paintedwolf.navigation_url }}{% endif %}.{% endif %}"
+      "summary": "{% if paintedwolf.capture_project_escape %}The project_dir path {{ paintedwolf.path }} could not be accessed in the attached folders.{% else %}Browser navigation was denied{% if paintedwolf.navigation_url %} for {{ paintedwolf.navigation_url }}{% endif %}.{% endif %}"
     },
     "CAPTURE_OUTPUT_OVERSIZED": {
       "branch_instruction": "Branch on Code CAPTURE_OUTPUT_OVERSIZED; reduce the measured output without repeating completed actions",
@@ -414,7 +414,7 @@
       "branch_instruction": "Branch on Code; resolve symlink to an in-boundary path",
       "category": "recoverable",
       "emit": "guard:chmod",
-      "summary": "chmod on {{ paintedwolf.path }} was rejected because the symlink target escapes the workspace."
+      "summary": "chmod on {{ paintedwolf.path }} was rejected because the symlink target escapes the attached folders."
     },
     "CHOWN_BULK_DENIED": {
       "branch_instruction": "Branch on Code CHOWN_BULK_DENIED; reduce the explicit batch",
@@ -835,7 +835,7 @@
       "summary": "The requested working directory {{ paintedwolf.cwd }} is outside this invocation's permitted directory scope."
     },
     "CWD_SCRATCH_NOT_VERIFICATION": {
-      "branch_instruction": "Branch on Code; run verification targets against project root paths",
+      "branch_instruction": "Branch on Code; run verification targets against session-folder or @label paths",
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "Verification commands cannot run with scratch working directory {{ paintedwolf.cwd }}."
@@ -1041,7 +1041,7 @@
       "branch_instruction": "Branch on Code; fix args and retry once",
       "category": "recoverable",
       "emit": "guard:tool",
-      "summary": "extract_archive could not open {{ paintedwolf.path }} — path does not exist under the attached project roots."
+      "summary": "extract_archive could not open {{ paintedwolf.path }} — path does not exist in the attached folders."
     },
     "EXTRACT_PATH_DENIED": {
       "branch_instruction": "Preserve completed entries and the protected-path boundary",
@@ -1168,7 +1168,7 @@
       "branch_instruction": "Branch on Code; pass paths or leave the tree alone",
       "category": "recoverable",
       "emit": "guard:tool",
-      "summary": "git_commit could not establish any paths authored by this session in the active root; {{ paintedwolf.git_changed_path_count }} changed paths were observed."
+      "summary": "git_commit could not establish any paths authored by this session in the session folder; {{ paintedwolf.git_changed_path_count }} changed paths were observed."
     },
     "GIT_COMMIT_PATH_DENIED": {
       "branch_instruction": "Preserve path authority before retrying the intended Git operation",
@@ -2065,7 +2065,7 @@
       "branch_instruction": "Correct the path from observed evidence, or report the missing input",
       "category": "recoverable",
       "emit": "guard:read",
-      "summary": "{{ tool }} could not open {{ paintedwolf.path }} — path does not exist under the attached project roots."
+      "summary": "{{ tool }} could not open {{ paintedwolf.path }} — path does not exist in the attached folders."
     },
     "RECALL_HISTORY_INVALID": {
       "branch_instruction": "Pass a returned record_request as history, or a returned next_request as the complete recall arguments",
@@ -2309,10 +2309,10 @@
       "summary": "Tried to deliver the closing synthesis while the active review_loop phase's evidence gate is still open."
     },
     "ROOT_NOT_ATTACHED": {
-      "branch_instruction": "Address the folder by its current absolute path or @label",
+      "branch_instruction": "Address the folder by its current @label",
       "category": "recoverable",
       "emit": "guard:path",
-      "summary": "{{ paintedwolf.path }} names folder {{ paintedwolf.root_label }}, which was {{ paintedwolf.root_status }}; it was attached at {{ paintedwolf.former_path }}."
+      "summary": "{{ paintedwolf.path }} names folder {{ paintedwolf.root_label }}, which was {{ paintedwolf.root_status }}."
     },
     "SANDBOX_APPROVAL_UNAVAILABLE": {
       "branch_instruction": "Branch on Code; do not report the requested effect as forbidden",
@@ -2550,10 +2550,10 @@
       "summary": "{% if paintedwolf.scan_baseline_missing %}No compatible previous completed baseline exists for this new scan.{% else %}scan_compare could not resolve the requested baseline in this project.{% endif %}"
     },
     "SCAN_COMPARE_PROJECT_MISMATCH": {
-      "branch_instruction": "Branch on Code; use scan ids from the active project only",
+      "branch_instruction": "Branch on Code; use scan ids from this session only",
       "category": "recoverable",
       "emit": "guard:scan_compare",
-      "summary": "old_scan_id or new_scan_id is not keyed to the session project root."
+      "summary": "old_scan_id or new_scan_id is not keyed to the session folder."
     },
     "SCAN_COMPARE_SAME_SCAN": {
       "branch_instruction": "Branch on Code; supply two different complete scan ids",
@@ -2590,7 +2590,7 @@
       "branch_instruction": "Preserve bound scan_ids; resolve unbound ids before drill-down.",
       "category": "recoverable",
       "emit": "guard:scan_drilldown",
-      "summary": "scan_id does not match a stored scan row for the active project root."
+      "summary": "scan_id does not match a stored scan row for the session folder."
     },
     "SCAN_PACK_CATEGORY_INVALID": {
       "branch_instruction": "Branch on Code; fix categories per tool schema — do not invent lint/types/container names",
@@ -2611,10 +2611,10 @@
       "summary": "pass_id does not match a full pass the host recorded."
     },
     "SCAN_PROJECT_DIR_HOST": {
-      "branch_instruction": "Omit project_dir — host binds scan tools to the session root",
+      "branch_instruction": "Omit project_dir — host binds scan tools to the session folder",
       "category": "recoverable",
       "emit": "guard:scan_drilldown",
-      "summary": "Scan tool received project_dir {{ paintedwolf.supplied }} but scans are keyed to the active session project root."
+      "summary": "Scan tool received project_dir {{ paintedwolf.supplied }} but scans are keyed to the session folder."
     },
     "SECRET_GENERATE_INVALID": {
       "branch_instruction": "Keep the value host-generated and use the documented bounds",
@@ -3320,7 +3320,7 @@
       "summary": "The output contains terminal screen-control sequences. A byte stream alone does not establish the rendered screen."
     },
     "UNKNOWN_ROOT_LABEL": {
-      "branch_instruction": "Use a bare relative path for the primary folder, or @\u003clabel\u003e/ for a non-primary folder",
+      "branch_instruction": "Use a bare relative path for the session folder, or @\u003clabel\u003e/ for any attached folder",
       "category": "recoverable",
       "emit": "guard:path",
       "summary": "The @label/ prefix names a folder label that is not attached to this project."
@@ -3602,10 +3602,10 @@
       "summary": "Worker cited {{ paintedwolf.offender_count }} URL(s) not observed in web tool results."
     },
     "WORKER_WORKSPACE_REQUIRED": {
-      "branch_instruction": "Ask the user to attach a root, then dispatch again",
+      "branch_instruction": "Ask the user to attach a folder, then dispatch again",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "The requested worker type requires an attached workspace."
+      "summary": "The requested worker type requires an attached project folder."
     },
     "WORKER_WRITE_WITHOUT_BRANCH": {
       "branch_instruction": "Report the missing worker write workspace",
