@@ -77,7 +77,7 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 			Approval:    approval,
 		}, nil
 	}
-	if approval.Required() {
+	if approval.Required() && !hitl.CurrentActionReviewCovers(action, approval.Decision, approval.DetectionCitation, approval.MatchedRules) {
 		return &platform.PolicyDecision{
 			Allowed:            false,
 			RequiresApproval:   true,
