@@ -44,12 +44,12 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
     if (index >= 0) setCallPage(Math.floor(index / CALL_PAGE));
   });
   const calls = createMemo(() => activity().calls.slice(callPage() * CALL_PAGE, (callPage() + 1) * CALL_PAGE));
-  // Command calls and members fold in order; output-read calls carry no member.
+  // Program calls (command and FormTool) and members fold in order; output-read calls carry no member.
   const memberByCall = createMemo(() => {
     const map = new Map<ToolPartView, CommandActivity>();
     let index = 0;
     for (const call of activity().calls) {
-      if (call.tool !== "command") continue;
+      if (!call.commandProgram) continue;
       const member = activity().members[index++];
       if (member) map.set(call, member);
     }

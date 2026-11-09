@@ -15,7 +15,31 @@ export type CommandActivityView = {
 type Assignment = { program: string; key: string; label: string; group: string; subject: string };
 type CallAssignment = { row: string; program: string };
 
-const ACTIVITY_PHASE_RANK: Readonly<Record<string, number>> = { inspect: 1, execute: 2, mutate: 3 };
+/** Tools whose calls run host command programs and take part in activity projection. */
+const FORM_PROGRAM_TOOLS = new Set(["command", "summarize", "survey_repo", "code_rewrite"]);
+
+/** Wire phase base rank (mechanics §3.1); group sub-tiers offset 0..2 within the phase. */
+const ACTIVITY_PHASE_RANK: Readonly<Record<string, number>> = { inspect: 10, execute: 20, mutate: 30 };
+const ACTIVITY_GROUP_TIER: Readonly<Record<string, number>> = {
+ "Processing output": 0, "Inspecting environment": 0, "Inspecting processes": 0, "Checking file metadata": 0,
+ "Searching codebase": 1, "Reading files": 1, "Comparing files": 1, "Inspecting Git": 1, "Exploring project files": 1, "Inspecting version history": 1,
+ "Mapping codebase": 2, "Summarizing source": 2,
+ "Running commands": 0, "Controlling processes": 0, "Accessing the network": 0, "Syncing Git remote": 0,
+ "Running programs": 1, "Following a running program": 1, "Running tests": 1,
+ "Managing files": 0, "Archiving files": 0, "Managing Git branches": 0,
+ "Editing files": 1, "Recording Git changes": 1, "Changing files": 1, "Recording changes": 1,
+};
+
+/**
+ * Two-level monotonic rank: phase base plus the group sub-tier. Unknown groups
+ * default to the inspect discovery tier and the execute/mutate base; unknown
+ * phases rank 0 and never advance a headline.
+ */
+export function commandActivityRank(fact: CommandActivity): number {
+ const base = ACTIVITY_PHASE_RANK[fact.phase ?? ""] ?? 0;
+ if (base === 0) return 0;
+ return base + (ACTIVITY_GROUP_TIER[fact.group] ?? (fact.phase === "inspect" ? 1 : 0));
+}
 
 function activityFacts(entries: readonly ActivitySpanEntry[]): CommandActivity[] {
   return entries.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity ? [entry.part.commandActivity.fact] : []);
@@ -43,7 +67,7 @@ export function createCommandActivityProjection() {
     for (const entry of entries) {
       if (entry.kind === "turn_load") { decisions.push(entry); lastRow = undefined; continue; }
       if (entry.kind !== "tool") { result.push(entry); continue; }
-      if (entry.part.tool !== "command") lastRow = undefined;
+      if (!FORM_PROGRAM_TOOLS.has(entry.part.tool) || !entry.part.commandProgram) lastRow = undefined;
       const canonical = entry.part.commandProgram;
       const observed = live(entry.part);
       let program = observed && (!canonical || (observed.activity_revision ?? 0) >= (canonical.activity_revision ?? 0)) ? observed : canonical;
@@ -87,7 +111,7 @@ export function createCommandActivityProjection() {
       }
 
       if (!program || !facts?.length) {
-        if (program?.activities?.length === 0 || (entry.part.tool === "command" && entry.part.status === "running")) continue;
+        if (program?.activities?.length === 0 || (FORM_PROGRAM_TOOLS.has(entry.part.tool) && entry.part.status === "running")) continue;
         result.push(entry); continue;
       }
       for (const [index, fact] of facts.entries()) {
@@ -148,14 +172,14 @@ export function createCommandActivityProjection() {
   };
 }
 
-/** The highest present phase anchors the group title; entries only grow, so it never oscillates. */
+/** The highest present (phase, group) rank anchors the group title; entries only grow, so it never oscillates. */
 export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], fallback: string): string {
  const activities = activityFacts(entries);
  if (!activities.length) return fallback;
  let headline = activities[0]!.group;
- let rank = ACTIVITY_PHASE_RANK[activities[0]!.phase ?? ""] ?? 0;
+ let rank = commandActivityRank(activities[0]!);
  for (const fact of activities) {
-  const candidate = ACTIVITY_PHASE_RANK[fact.phase ?? ""] ?? 0;
+  const candidate = commandActivityRank(fact);
   if (candidate > rank) { headline = fact.group; rank = candidate; }
  }
  return headline;
