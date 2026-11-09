@@ -215,7 +215,7 @@ func prepareManagedViewOperation(
 	}
 	if !view.materialized && view.kernelMounted {
 		if privGitDir, gErr := readyPrivateGitDir(mgr, view.viewID, "."); gErr == nil && privGitDir != "" {
-			_, _, _ = gitexec.Run(ctx, view.worktreeDir, []string{"--git-dir=" + privGitDir, "--work-tree=" + view.worktreeDir, "update-index", "-q", "--refresh"}, gitexec.Opts{
+			_, _, _ = gitexec.Run(ctx, filepath.Dir(privGitDir), []string{"-C", view.worktreeDir, "--git-dir=" + privGitDir, "--work-tree=" + view.worktreeDir, "update-index", "-q", "--refresh"}, gitexec.Opts{
 				Profile: gitexec.ProfileHermetic,
 			})
 		}

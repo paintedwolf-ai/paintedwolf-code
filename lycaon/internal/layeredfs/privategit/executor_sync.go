@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-func prepareAndAuthorizeGitArgs(ctx context.Context, view *managedView, targetWT string, policy RemotePolicy, args []string) ([]string, error) {
+func prepareAndAuthorizeGitArgs(ctx context.Context, view *managedView, targetWT, privGitDir string, policy RemotePolicy, args []string) ([]string, error) {
 	sub := args[0]
 	switch sub {
 	case "fetch", "pull", "ls-remote", "push":
@@ -20,7 +20,7 @@ func prepareAndAuthorizeGitArgs(ctx context.Context, view *managedView, targetWT
 		if (isPush && !policy.AllowPush) || (!isPush && !policy.AllowFetch) {
 			return nil, fmt.Errorf("%w: %s is disabled", ErrRemoteOperationRefused, sub)
 		}
-		remote, remoteURL := resolveTargetRemote(ctx, targetWT, args[1:])
+		remote, remoteURL := resolveTargetRemote(ctx, targetWT, privGitDir, args[1:])
 		if isPush && canonicalCleanPath(remoteURL) == canonicalCleanPath(view.trunkDir) && !policy.ApprovedRemotes[view.trunkDir] {
 			return nil, fmt.Errorf("%w: pushing directly to trunk is forbidden", ErrRemoteOperationRefused)
 		}
@@ -43,7 +43,7 @@ func prepareAndAuthorizeGitArgs(ctx context.Context, view *managedView, targetWT
 	return args, nil
 }
 
-func resolveTargetRemote(ctx context.Context, targetWT string, restArgs []string) (string, string) {
+func resolveTargetRemote(ctx context.Context, targetWT, privGitDir string, restArgs []string) (string, string) {
 	remote := "origin"
 	for _, a := range restArgs {
 		if !strings.HasPrefix(a, "-") && a != "" {
@@ -51,7 +51,13 @@ func resolveTargetRemote(ctx context.Context, targetWT string, restArgs []string
 			break
 		}
 	}
-	if out, code, err := gitexec.Run(ctx, targetWT, []string{"config", "--get", "remote." + remote + ".url"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err == nil && code == 0 {
+	cfgDir := targetWT
+	cfgArgs := []string{"config", "--get", "remote." + remote + ".url"}
+	if privGitDir != "" && privGitDir != filepath.Join(targetWT, ".git") {
+		cfgDir = filepath.Dir(privGitDir)
+		cfgArgs = []string{"--git-dir=" + privGitDir, "config", "--get", "remote." + remote + ".url"}
+	}
+	if out, code, err := gitexec.Run(ctx, cfgDir, cfgArgs, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err == nil && code == 0 {
 		if url := strings.TrimSpace(string(out)); url != "" {
 			return remote, url
 		}

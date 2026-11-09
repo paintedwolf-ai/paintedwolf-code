@@ -1,6 +1,7 @@
 package privategit
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -19,6 +20,15 @@ type leaseRecord struct {
 	packs  map[string]struct{}
 }
 
+type storeStock struct {
+	packOIDs        map[string]map[string]struct{}
+	packSizes       map[string]int64
+	looseSizes      map[string]int64
+	logicalOIDRefs  map[string]int
+	looseBytesTotal int64
+	packBytesTotal  int64
+}
+
 // RetainedObjectStore manages the engine-retained content-addressed Git object store (#1671).
 type RetainedObjectStore struct {
 	rootDir    string
@@ -28,7 +38,7 @@ type RetainedObjectStore struct {
 	mu        sync.Mutex
 	nextLease uint64
 	leases    map[string]*leaseRecord
-	packOIDs  map[string]map[string]struct{}
+	stock     storeStock
 
 	objectsImported   atomic.Int64
 	objectsReused     atomic.Int64
@@ -69,7 +79,15 @@ func NewRetainedObjectStore(rootDir string) (*RetainedObjectStore, error) {
 		objectsDir: objectsDir,
 		importsDir: importsDir,
 		leases:     make(map[string]*leaseRecord),
-		packOIDs:   make(map[string]map[string]struct{}),
+		stock: storeStock{
+			packOIDs:       make(map[string]map[string]struct{}),
+			packSizes:      make(map[string]int64),
+			looseSizes:     make(map[string]int64),
+			logicalOIDRefs: make(map[string]int),
+		},
+	}
+	if err := initStockFromDiskLocked(context.Background(), s); err != nil {
+		return nil, err
 	}
 	// A store with nothing retained has nothing to protect, and read-only directories
 	// would stop its host directory from being removed.
@@ -89,10 +107,11 @@ func (s *RetainedObjectStore) ObjectsDir() string {
 	return s.objectsDir
 }
 
-// Metrics returns a snapshot of the store's object and byte counters.
+// Metrics returns an O(1) snapshot of the store's cumulative and retained stock counters.
 func (s *RetainedObjectStore) Metrics() StoreMetrics {
 	s.mu.Lock()
-	retainedObjects, retainedBytes := s.computeRetainedStockLocked()
+	retainedObjects := int64(len(s.stock.logicalOIDRefs))
+	retainedBytes := s.stock.looseBytesTotal + s.stock.packBytesTotal
 	s.mu.Unlock()
 	return StoreMetrics{
 		ObjectsImported:   s.objectsImported.Load(),
@@ -103,81 +122,6 @@ func (s *RetainedObjectStore) Metrics() StoreMetrics {
 		RetainedObjects:   retainedObjects,
 		RetainedBytes:     retainedBytes,
 	}
-}
-
-func (s *RetainedObjectStore) computeRetainedStockLocked() (int64, int64) {
-	if s.objectsDir == "" {
-		return 0, 0
-	}
-	seenOIDs := make(map[string]struct{})
-	var totalBytes int64
-	entries, err := os.ReadDir(s.objectsDir)
-	if err != nil {
-		return 0, 0
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if !entry.IsDir() {
-			continue
-		}
-		if name == "pack" {
-			packDir := filepath.Join(s.objectsDir, "pack")
-			pEntries, pErr := os.ReadDir(packDir)
-			if pErr != nil {
-				continue
-			}
-			for _, pe := range pEntries {
-				if pe.IsDir() {
-					continue
-				}
-				pName := pe.Name()
-				if strings.HasSuffix(pName, ".pack") || strings.HasSuffix(pName, ".idx") {
-					if info, iErr := pe.Info(); iErr == nil {
-						totalBytes += info.Size()
-					}
-				}
-				if strings.HasSuffix(pName, ".pack") {
-					if members, ok := s.packOIDs[pName]; ok {
-						for oid := range members {
-							seenOIDs[oid] = struct{}{}
-						}
-					}
-				}
-			}
-			continue
-		}
-		if len(name) != 2 || !isHexString(name) {
-			continue
-		}
-		shardDir := filepath.Join(s.objectsDir, name)
-		sEntries, sErr := os.ReadDir(shardDir)
-		if sErr != nil {
-			continue
-		}
-		for _, se := range sEntries {
-			if se.IsDir() {
-				continue
-			}
-			rest := se.Name()
-			if len(rest) == 38 && isHexString(rest) {
-				seenOIDs[strings.ToLower(name+rest)] = struct{}{}
-				if info, iErr := se.Info(); iErr == nil {
-					totalBytes += info.Size()
-				}
-			}
-		}
-	}
-	return int64(len(seenOIDs)), totalBytes
-}
-
-func isHexString(v string) bool {
-	for i := 0; i < len(v); i++ {
-		c := v[i]
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return false
-		}
-	}
-	return len(v) > 0
 }
 
 // RecordPrivateWriteBytes adds newly written private object bytes to the store metrics.
@@ -227,14 +171,14 @@ func createStoreLease(s *RetainedObjectStore, kind LeaseKind, holder string, oid
 			continue
 		}
 		oidSet[oid] = struct{}{}
-		for packName, members := range s.packOIDs {
+		for packName, members := range s.stock.packOIDs {
 			if _, ok := members[oid]; ok {
 				packSet[packName] = struct{}{}
 			}
 		}
 	}
-	for packName := range s.packOIDs {
-		if len(s.packOIDs[packName]) == 0 {
+	for packName := range s.stock.packOIDs {
+		if len(s.stock.packOIDs[packName]) == 0 {
 			packSet[packName] = struct{}{}
 		}
 	}

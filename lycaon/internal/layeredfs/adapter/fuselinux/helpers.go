@@ -4,11 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"path"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -16,48 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
-
-const fuseBarrierFlushHelperEnv = "PW_FUSE_BARRIER_FLUSH_HELPER"
-
-func init() {
-	if os.Getenv(fuseBarrierFlushHelperEnv) == "1" {
-		runFuseBarrierFlushHelperMain()
-	}
-}
-
-func runFuseBarrierFlushHelperMain() {
-	raw, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-	parts := strings.Split(string(raw), "\x00")
-	if len(parts) < 1 || parts[0] == "" {
-		os.Exit(2)
-	}
-	mountRoot := parts[0]
-	var filesSynced, dirsSynced int
-	adp := &Adapter{}
-	for _, p := range parts[1:] {
-		if p == "" {
-			continue
-		}
-		isDir, synced, sErr := adp.syncClientPath(context.Background(), mountRoot, p)
-		if sErr != nil {
-			_, _ = fmt.Fprintln(os.Stderr, sErr.Error())
-			os.Exit(1)
-		}
-		if synced {
-			if isDir {
-				dirsSynced++
-			} else {
-				filesSynced++
-			}
-		}
-	}
-	_, _ = fmt.Fprintf(os.Stdout, "%d %d\n", filesSynced, dirsSynced)
-	os.Exit(0)
-}
 
 // InvalidatePath sends an explicit FUSE kernel cache invalidation for qpath on viewID.
 func (a *Adapter) InvalidatePath(viewID string, qpath layeredfs.QualifiedPath) error {
@@ -193,64 +148,6 @@ func (a *Adapter) syncClientPath(ctx context.Context, mountRoot, targetPath stri
 	return mode.IsDir(), true, nil
 }
 
-func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) ([]string, error) {
-	relSet := map[string]struct{}{".": {}}
-	addRel := func(rel string) {
-		cur := cleanFuseRel(rel)
-		for cur != "" && cur != "." {
-			relSet[cur] = struct{}{}
-			parent := path.Dir(cur)
-			if parent == cur {
-				break
-			}
-			cur = cleanFuseRel(parent)
-		}
-		relSet["."] = struct{}{}
-	}
-	if st.core != nil {
-		changes, err := st.core.EnumerateChanges(false)
-		if err != nil {
-			return nil, err
-		}
-		for _, ce := range changes {
-			if ce.Path.RootID != rootID {
-				continue
-			}
-			if ce.Deleted || ce.Kind == layeredfs.EntryAbsent {
-				addRel(path.Dir(cleanFuseRel(ce.Path.Rel)))
-				continue
-			}
-			if ce.Kind != layeredfs.EntrySymlink {
-				addRel(ce.Path.Rel)
-			}
-		}
-	}
-	if m.server != nil {
-		for _, r := range m.server.nodes.dirtyCandidatePaths() {
-			addRel(r)
-		}
-	}
-	st.dirtyMu.Lock()
-	for r := range st.dirtyPaths[rootID] {
-		addRel(r)
-	}
-	st.dirtyMu.Unlock()
-
-	rels := make([]string, 0, len(relSet))
-	for r := range relSet {
-		if r != "." {
-			rels = append(rels, r)
-		}
-	}
-	sort.Strings(rels)
-	out := make([]string, 0, len(rels)+1)
-	for _, r := range rels {
-		out = append(out, filepath.Join(m.mountPath, filepath.FromSlash(r)))
-	}
-	out = append(out, m.mountPath)
-	return out, nil
-}
-
 func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootID string, m *rootMount) (filesSynced, dirsSynced int, err error) {
 	paths, err := collectBoundedFlushPaths(st, rootID, m)
 	if err != nil {
@@ -260,26 +157,7 @@ func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootI
 	fn := a.cfg.ClientSyncFn
 	a.mu.RUnlock()
 	if fn == nil {
-		if exePath, exeErr := os.Executable(); exeErr == nil && exePath != "" {
-			payload := strings.Join(append([]string{m.mountPath}, paths...), "\x00")
-			stdout, stderr, exitCode, runErr := execpkg.RunSeparate(ctx, exePath, nil, execpkg.ExecOpts{
-				Launch:    execpkg.HostLaunch("fuse_barrier_flush"),
-				InlineEnv: map[string]string{fuseBarrierFlushHelperEnv: "1"},
-				Stdin:     &execpkg.StdinSpec{Literal: []byte(payload)},
-			})
-			if runErr != nil || exitCode != 0 {
-				if runErr != nil {
-					return 0, 0, runErr
-				}
-				msg := strings.TrimSpace(string(stderr))
-				if msg == "" {
-					msg = fmt.Sprintf("fuse_barrier_flush helper exited with code %d", exitCode)
-				}
-				return 0, 0, errors.New(msg)
-			}
-			_, _ = fmt.Sscanf(strings.TrimSpace(string(stdout)), "%d %d", &filesSynced, &dirsSynced)
-			return filesSynced, dirsSynced, nil
-		}
+		return runFuseBarrierFlushSubprocess(ctx, a, st, m.mountPath, paths)
 	}
 	for _, p := range paths {
 		isDir, synced, sErr := a.syncClientPath(ctx, m.mountPath, p)

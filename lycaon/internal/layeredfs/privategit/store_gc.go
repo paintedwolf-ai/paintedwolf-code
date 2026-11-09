@@ -18,18 +18,21 @@ func (s *RetainedObjectStore) HasObject(oid string) bool {
 	if len(oid) != 40 || !isHexString(oid) {
 		return false
 	}
-	loosePath := filepath.Join(s.objectsDir, oid[:2], oid[2:])
-	if _, err := os.Stat(loosePath); err == nil {
+	s.mu.Lock()
+	if s.stock.logicalOIDRefs[oid] > 0 {
+		s.mu.Unlock()
 		return true
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, members := range s.packOIDs {
+	for _, members := range s.stock.packOIDs {
 		if _, ok := members[oid]; ok {
+			s.mu.Unlock()
 			return true
 		}
 	}
-	return false
+	s.mu.Unlock()
+	loosePath := filepath.Join(s.objectsDir, oid[:2], oid[2:])
+	_, err := os.Stat(loosePath)
+	return err == nil
 }
 
 // CollectGarbage removes unreferenced loose objects and packfiles from the retained store
@@ -54,7 +57,7 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 	for _, l := range s.leases {
 		for oid := range l.oids {
 			leasedOIDs[oid] = struct{}{}
-			for packName, members := range s.packOIDs {
+			for packName, members := range s.stock.packOIDs {
 				if _, ok := members[oid]; ok {
 					leasedPacks[packName] = struct{}{}
 				}
@@ -71,6 +74,9 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	for _, fanout := range entries {
+		if err := ctx.Err(); err != nil {
+			return removed, err
+		}
 		name := fanout.Name()
 		if !fanout.IsDir() || len(name) != 2 || !isHexString(name) {
 			continue
@@ -89,6 +95,7 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 				continue
 			}
 			if err := os.Remove(filepath.Join(subDir, f.Name())); err == nil {
+				removeLooseObjectLocked(s, oid)
 				removed++
 			}
 		}
@@ -100,6 +107,9 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 		return removed, err
 	}
 	for _, pe := range packEntries {
+		if err := ctx.Err(); err != nil {
+			return removed, err
+		}
 		if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") {
 			continue
 		}
@@ -109,7 +119,7 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 			continue
 		}
 		if err := os.Remove(filepath.Join(packDir, pe.Name())); err == nil && ext == ".pack" {
-			delete(s.packOIDs, base)
+			removePackLocked(s, base)
 			removed++
 		}
 	}
