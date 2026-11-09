@@ -45,26 +45,28 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 	for base := range s.stock.packOIDs {
 		preexistingPackBases[base] = struct{}{}
 	}
-	if pEntries, rErr := os.ReadDir(packDstDir); rErr == nil {
-		hasPrePack := make(map[string]bool)
-		hasPreIdx := make(map[string]bool)
-		for _, pe := range pEntries {
-			if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") {
-				continue
-			}
-			ext := filepath.Ext(pe.Name())
-			base := strings.TrimSuffix(pe.Name(), ext)
-			switch ext {
-			case ".pack":
-				hasPrePack[base] = true
-			case ".idx":
-				hasPreIdx[base] = true
-			}
+	pEntries, rErr := os.ReadDir(packDstDir)
+	if rErr != nil {
+		return InitMetrics{}, nil, fmt.Errorf("privategit: read store pack dir %s for pre-import provenance: %w", packDstDir, rErr)
+	}
+	hasPrePack := make(map[string]bool)
+	hasPreIdx := make(map[string]bool)
+	for _, pe := range pEntries {
+		if pe.IsDir() || !strings.HasPrefix(pe.Name(), "pack-") {
+			continue
 		}
-		for base := range hasPrePack {
-			if hasPreIdx[base] {
-				preexistingPackBases[base] = struct{}{}
-			}
+		ext := filepath.Ext(pe.Name())
+		base := strings.TrimSuffix(pe.Name(), ext)
+		switch ext {
+		case ".pack":
+			hasPrePack[base] = true
+		case ".idx":
+			hasPreIdx[base] = true
+		}
+	}
+	for base := range hasPrePack {
+		if hasPreIdx[base] {
+			preexistingPackBases[base] = struct{}{}
 		}
 	}
 
