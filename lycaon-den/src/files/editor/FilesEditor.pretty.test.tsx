@@ -156,7 +156,7 @@ describe("FilesEditor Pretty display integration", () => {
     });
     await openAndAttachDocumentReplica(buf);
 
-    const currentBuf = () => projectFilesState(PROJECT).byKey[buf.key]!;
+    const currentBuf = () => projectFilesState(PROJECT).byKey[buf.key] ?? buf;
     render(() => <FilesEditor {...editorProps(currentBuf())} />);
 
     const view = getFilesEditorView(PROJECT, buf.key)!;
@@ -266,7 +266,9 @@ describe("FilesEditor Pretty display integration", () => {
     const docState = await openAndAttachDocumentReplica(buf);
 
     render(() => (
-      <FilesEditor {...editorProps(projectFilesState(PROJECT).byKey[buf.key]!)} />
+      <FilesEditor
+        {...editorProps(projectFilesState(PROJECT).byKey[buf.key] ?? buf)}
+      />
     ));
     const view = getFilesEditorView(PROJECT, buf.key)!;
 
@@ -347,7 +349,9 @@ describe("FilesEditor Pretty display integration", () => {
     });
     const docState = await openAndAttachDocumentReplica(buf);
     render(() => (
-      <FilesEditor {...editorProps(projectFilesState(PROJECT).byKey[buf.key]!)} />
+      <FilesEditor
+        {...editorProps(projectFilesState(PROJECT).byKey[buf.key] ?? buf)}
+      />
     ));
 
     fireEvent.click(screen.getByTestId("files-editor-pretty-toggle"));
@@ -456,7 +460,9 @@ describe("FilesEditor Pretty display integration", () => {
     });
     await openAndAttachDocumentReplica(buf);
     render(() => (
-      <FilesEditor {...editorProps(projectFilesState(PROJECT).byKey[buf.key]!)} />
+      <FilesEditor
+        {...editorProps(projectFilesState(PROJECT).byKey[buf.key] ?? buf)}
+      />
     ));
 
     const view = getFilesEditorView(PROJECT, buf.key)!;
