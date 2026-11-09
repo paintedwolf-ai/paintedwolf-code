@@ -123,12 +123,25 @@ func (tc *ToolContext) RecordCurrentActionReview(
 		return
 	}
 	var cited []gate.Fact
+	var hasExecutionBoundaryFact bool
 	for _, fact := range result.Decision.Cited {
-		if fact.Gate != api.GateUnobservedChannel && !slices.Contains(cited, fact) {
+		if fact.Key == "boundary.execution" {
+			hasExecutionBoundaryFact = true
+			continue
+		}
+		if !slices.Contains(cited, fact) {
 			cited = append(cited, fact)
 		}
 	}
-	segments := uniqueCompactSlice(nil, result.Decision.ReasonSegments())
+	var rawSegments []string
+	for _, segment := range result.Decision.ReasonSegments() {
+		if hasExecutionBoundaryFact && len(segment) > len(api.GateUnobservedChannel) &&
+			segment[:len(api.GateUnobservedChannel)+1] == string(api.GateUnobservedChannel)+":" {
+			continue
+		}
+		rawSegments = append(rawSegments, segment)
+	}
+	segments := uniqueCompactSlice(nil, rawSegments)
 	var detection *hitl.DetectionMatch
 	if result.DetectionCitation != nil {
 		cp := *result.DetectionCitation

@@ -111,13 +111,8 @@ func CurrentActionReviewCovers(
 	if len(gates) == 0 || len(decision.Cited) == 0 || len(review.Cited) == 0 {
 		return false
 	}
-	for _, g := range gates {
-		if g == api.GateUnobservedChannel {
-			return false
-		}
-	}
 	for _, fact := range decision.Cited {
-		if !slices.Contains(review.Cited, fact) {
+		if fact.Key == "boundary.execution" || !slices.Contains(review.Cited, fact) {
 			return false
 		}
 	}
