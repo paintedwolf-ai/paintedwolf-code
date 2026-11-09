@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"strings"
@@ -31,5 +33,15 @@ func TestDiscoveryGuidanceFollowsAvailableContinuation(t *testing.T) {
 	testutil.FailErr(t, "discover empty catalog", err)
 	if empty.NextNeed != "" || strings.Contains(empty.Instruction, "Load") || !strings.Contains(empty.Instruction, "No entries") {
 		t.Fatalf("empty catalog guidance: %+v", empty)
+	}
+}
+
+func TestDiscoveryRenderingPreservesCancellation(t *testing.T) {
+	wireFixtureGuidanceRenderer(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := DiscoveryPage(ctx, ToolContext{}, "skills", "review", "", "catalog", "", nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("render cancellation = %v", err)
 	}
 }
