@@ -40,9 +40,10 @@ import type {
   PrettyNativeLayoutOptions,
   PrettyNativeLayoutResult,
   PrettyProjectionOutcome,
+  PrettyProtectedSpan,
+  PrettyProtectedSpanKind,
   PrettyResourceCounters,
   PrettyResourceLimits,
-  PrettyUtf16Range,
 } from "./pretty-types.ts";
 
 export {
@@ -147,38 +148,80 @@ function appendLineDecorations(
   }
 }
 
-const SYNTAX_INTERIOR_PROTECTED_NODES = new Set([
-  "String",
-  "PropertyName",
-  "TemplateString",
-  "BlockComment",
+const SYNTAX_XML_INTERIOR_NODES = new Set([
   "Comment",
   "Cdata",
   "AttributeValue",
 ]);
 
-const SYNTAX_FULL_PROTECTED_NODES = new Set([
-  "LineComment",
-  "RegExp",
+const SYNTAX_XML_FULL_NODES = new Set([
   "RawText",
   "ScriptText",
   "StyleText",
 ]);
 
+function classifySyntaxProtectedNode(
+  name: string,
+): { readonly kind: PrettyProtectedSpanKind; readonly interiorOnly: boolean } | null {
+  if (name === "String" || name === "PropertyName") {
+    return { kind: "string", interiorOnly: false };
+  }
+  if (name === "RegExp") {
+    return { kind: "regex", interiorOnly: false };
+  }
+  if (name === "TemplateString") {
+    return { kind: "template", interiorOnly: false };
+  }
+  if (name === "BlockComment") {
+    return { kind: "block-comment", interiorOnly: false };
+  }
+  if (name === "LineComment") {
+    return { kind: "line-comment", interiorOnly: false };
+  }
+  if (SYNTAX_XML_INTERIOR_NODES.has(name)) {
+    return { kind: "xml-protected", interiorOnly: true };
+  }
+  if (SYNTAX_XML_FULL_NODES.has(name)) {
+    return { kind: "xml-protected", interiorOnly: false };
+  }
+  return null;
+}
+
 function pushMergedSpan(
-  spans: PrettyUtf16Range[],
+  spans: PrettyProtectedSpan[],
   from: number,
   to: number,
+  kind: PrettyProtectedSpanKind,
+  openAtLineEnd: boolean,
 ): void {
   if (to <= from) return;
   const last = spans[spans.length - 1];
-  if (last && from <= last.to) {
+  if (last && from < last.to) {
     if (to > last.to) {
-      spans[spans.length - 1] = { from: last.from, to };
+      spans[spans.length - 1] = {
+        from: last.from,
+        to,
+        ...(last.kind !== undefined ? { kind: last.kind } : {}),
+        openAtLineEnd,
+      };
     }
     return;
   }
-  spans.push({ from, to });
+  spans.push({ from, to, kind, openAtLineEnd });
+}
+
+function formatSyntaxSpanSignature(
+  syntaxNodes: number,
+  spans: readonly PrettyProtectedSpan[],
+): string {
+  if (syntaxNodes === 0 && spans.length === 0) return "";
+  let out = `${syntaxNodes}|`;
+  for (let i = 0; i < spans.length; i++) {
+    const s = spans[i]!;
+    if (i > 0) out += ",";
+    out += `${s.from}:${s.to}:${s.kind ?? ""}:${s.openAtLineEnd ? 1 : 0}`;
+  }
+  return out;
 }
 
 /**
@@ -186,7 +229,8 @@ function pushMergedSpan(
  * 1. Account for every syntax node starting on this line (`lineFrom <= node.from <= lineTo`)
  *    under `PrettyBudgetTracker`.
  * 2. Collect line-relative protected spans for literal, comment, regex, CDATA, and raw-text
- *    nodes so structural formatting never splits inside syntax-tree literals or comments.
+ *    nodes so structural formatting never splits inside syntax-tree literals or comments,
+ *    and interior characters of protected spans never mutate fallback lexical state.
  */
 function collectLineSyntaxProtectedSpans(
   state: EditorState | undefined,
@@ -194,18 +238,29 @@ function collectLineSyntaxProtectedSpans(
   lineTo: number,
   budget: PrettyBudgetTracker,
 ): {
-  readonly spans: readonly PrettyUtf16Range[];
+  readonly spans: readonly PrettyProtectedSpan[];
   readonly syntaxNodes: number;
   readonly syntaxVisits: number;
+  readonly syntaxSpanSignature: string;
 } | "budget" {
   if (!state) {
-    return { spans: [], syntaxNodes: 0, syntaxVisits: 0 };
+    return {
+      spans: [],
+      syntaxNodes: 0,
+      syntaxVisits: 0,
+      syntaxSpanSignature: "",
+    };
   }
   const tree = syntaxTree(state);
   if (tree.length === 0) {
-    return { spans: [], syntaxNodes: 0, syntaxVisits: 0 };
+    return {
+      spans: [],
+      syntaxNodes: 0,
+      syntaxVisits: 0,
+      syntaxSpanSignature: "",
+    };
   }
-  const spans: PrettyUtf16Range[] = [];
+  const spans: PrettyProtectedSpan[] = [];
   const lineLen = lineTo - lineFrom;
   let syntaxNodes = 0;
   const visitsBefore = budget.counters.visits;
@@ -222,15 +277,18 @@ function collectLineSyntaxProtectedSpans(
         }
         syntaxNodes += 1;
       }
-      const name = node.name;
-      if (SYNTAX_INTERIOR_PROTECTED_NODES.has(name)) {
-        const pFrom = Math.max(0, node.from + 1 - lineFrom);
-        const pTo = Math.min(lineLen, node.to - 1 - lineFrom);
-        pushMergedSpan(spans, pFrom, pTo);
-      } else if (SYNTAX_FULL_PROTECTED_NODES.has(name)) {
-        const pFrom = Math.max(0, node.from - lineFrom);
-        const pTo = Math.min(lineLen, node.to - lineFrom);
-        pushMergedSpan(spans, pFrom, pTo);
+      const classified = classifySyntaxProtectedNode(node.name);
+      if (classified !== null) {
+        const pFrom = Math.max(
+          0,
+          (classified.interiorOnly ? node.from + 1 : node.from) - lineFrom,
+        );
+        const pTo = Math.min(
+          lineLen,
+          (classified.interiorOnly ? node.to - 1 : node.to) - lineFrom,
+        );
+        const openAtLineEnd = node.to > lineTo;
+        pushMergedSpan(spans, pFrom, pTo, classified.kind, openAtLineEnd);
       }
       return undefined;
     },
@@ -241,6 +299,7 @@ function collectLineSyntaxProtectedSpans(
     spans,
     syntaxNodes,
     syntaxVisits: budget.counters.visits - visitsBefore,
+    syntaxSpanSignature: formatSyntaxSpanSignature(syntaxNodes, spans),
   };
 }
 
@@ -392,6 +451,7 @@ export function computePrettyNativeLayout(
       undefined,
       syntaxRes.syntaxNodes,
       syntaxRes.syntaxVisits,
+      syntaxRes.syntaxSpanSignature,
     );
     if (scanned === "budget") {
       return {
@@ -562,8 +622,12 @@ const INCREMENTAL_CAPABLE_MODES = new Set<DocumentFormatMode>([
 /**
  * Incrementally updates line layout states, CodeMirror decorations, and whole-document
  * resource counters across changed line ranges (`tr.changes.iterChangedRanges`),
- * stopping as soon as all multiline continuation states converge with unchanged suffix lines
- * and reusing suffix `PrettyLineLayoutState` objects by reference without O(totalLines) loops.
+ * stopping as soon as multiline continuation state and `syntaxSpanSignature` converge
+ * with unchanged suffix lines. Reuses unchanged prefix/suffix `PrettyLineLayoutState`
+ * objects by reference (avoiding per-line `doc.line()` lookups, syntax-tree walks,
+ * character scans, and object allocations on unchanged suffix lines) while performing
+ * bounded O(totalLines) array-reference copying (`slice` + spread) and, only when a
+ * replaced line previously held `maxDepthReached`, a bounded O(totalLines) max-depth scan.
  */
 export function updatePrettyNativeLayoutIncrementally(
   prev: PrettyNativeFieldState,
@@ -606,7 +670,12 @@ export function updatePrettyNativeLayoutIncrementally(
     if (toB > maxToB) maxToB = toB;
   });
 
-  if (!hasChange) return prev;
+  if (!hasChange) {
+    if (syntaxTree(tr.state) !== syntaxTree(tr.startState)) {
+      return buildFieldStateFromScratch(newDoc, config, tr.state);
+    }
+    return prev;
+  }
 
   const oldStartLine = oldDoc.lineAt(minFromA).number;
   const newStartLine = newDoc.lineAt(minFromB).number;
@@ -690,6 +759,19 @@ export function updatePrettyNativeLayoutIncrementally(
 
   for (let l = rescanStartLine; l <= totalLines; l++) {
     const startCont = isJsonl || l === 1 ? INITIAL_LINE_CONTINUATION : runningCont;
+    const line = newDoc.line(l);
+    const savedSyntaxNodes = budget.counters.syntaxNodesVisited;
+    const savedVisits = budget.counters.visits;
+
+    const syntaxRes = collectLineSyntaxProtectedSpans(
+      tr.state,
+      line.from,
+      line.to,
+      budget,
+    );
+    if (syntaxRes === "budget") {
+      return buildFieldStateFromScratch(newDoc, config, tr.state);
+    }
 
     if (l > rescanMinEndLine) {
       const oldLineNum = l - lineDelta;
@@ -699,8 +781,11 @@ export function updatePrettyNativeLayoutIncrementally(
       if (
         oldState &&
         continuationEqualsLineStart(startCont, oldState) &&
+        oldState.syntaxSpanSignature === syntaxRes.syntaxSpanSignature &&
         oldWasLast === newIsLast
       ) {
+        budget.counters.syntaxNodesVisited = savedSyntaxNodes;
+        budget.counters.visits = savedVisits;
         actualRescanEndLine = l - 1;
         break;
       }
@@ -717,17 +802,6 @@ export function updatePrettyNativeLayoutIncrementally(
           oldRemovedHitMaxDepth = true;
         }
       }
-    }
-
-    const line = newDoc.line(l);
-    const syntaxRes = collectLineSyntaxProtectedSpans(
-      tr.state,
-      line.from,
-      line.to,
-      budget,
-    );
-    if (syntaxRes === "budget") {
-      return buildFieldStateFromScratch(newDoc, config, tr.state);
     }
 
     const lineUtf8 =
@@ -752,6 +826,7 @@ export function updatePrettyNativeLayoutIncrementally(
       lineUtf8,
       syntaxRes.syntaxNodes,
       syntaxRes.syntaxVisits,
+      syntaxRes.syntaxSpanSignature,
     );
     if (scanned === "budget") {
       return buildFieldStateFromScratch(newDoc, config, tr.state);
@@ -832,6 +907,7 @@ export const prettyNativeStateField = StateField.define<PrettyNativeFieldState>(
         nextConfig = effect.value;
       }
     }
+    const treeChanged = syntaxTree(tr.state) !== syntaxTree(tr.startState);
     if (nextConfig !== null) {
       const sameConfig =
         prev.enabled === nextConfig.enabled &&
@@ -839,13 +915,15 @@ export const prettyNativeStateField = StateField.define<PrettyNativeFieldState>(
         prev.languageHint === nextConfig.languageHint &&
         prev.indentWidthCh === (nextConfig.indentWidthCh ?? 2) &&
         prev.limits === nextConfig.limits;
-      if (sameConfig && !tr.docChanged) {
+      if (sameConfig && !tr.docChanged && !treeChanged) {
         return prev;
       }
       return buildFieldStateFromScratch(tr.state.doc, nextConfig, tr.state);
     }
     if (!prev.enabled) return prev;
-    if (tr.docChanged) return updatePrettyNativeLayoutIncrementally(prev, tr);
+    if (tr.docChanged || treeChanged) {
+      return updatePrettyNativeLayoutIncrementally(prev, tr);
+    }
     return prev;
   },
   provide: (field) =>
