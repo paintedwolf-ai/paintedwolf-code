@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
-	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
@@ -295,7 +294,7 @@ func TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction(t *testing.T) {
 	}
 	t.Run("fixture view", func(t *testing.T) { testStackedWorkerPromotion(t, fixtureMountedSelector(), writeCore) })
 	t.Run("real mount", func(t *testing.T) {
-		selector := platform.NewSelector(platform.Config{Confinement: kernelMountCheck{}})
+		selector := workspace.EnforcedWorkspaceSelector()
 		testStackedWorkerPromotion(t, selector, func(t *testing.T, task *api.WorkerTask, rel, content string) {
 			testutil.FailErr(t, "write through the mount", os.WriteFile(filepath.Join(task.WorkspaceRoot, rel), []byte(content), 0o644))
 		})
@@ -318,7 +317,7 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	privateGit, err := workspace.OpenPrivateGit(filepath.Join(base, "branches"))
 	testutil.FailErr(t, "open private Git", err)
 	t.Cleanup(func() { _ = privateGit.Store().Close() })
-	selector := platform.NewSelector(platform.Config{Confinement: kernelMountCheck{}})
+	selector := workspace.EnforcedWorkspaceSelector()
 	manager := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds")).WithPrivateGit(privateGit).WithSelector(selector)
 	binding, _, err := manager.CreateWorkerBranch(workspace.WithWorkspaceProject(t.Context(), testdbseed.DefaultProjectID), roots, "p", "job-roots")
 	testutil.FailErr(t, "create branch", err)
