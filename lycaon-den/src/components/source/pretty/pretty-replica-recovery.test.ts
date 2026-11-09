@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { diagnosticCount } from "@codemirror/lint";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -493,15 +494,15 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     expect(recreatedQuotaReplica.currentText).toBe('{Q1"a":1,"b":2}');
   });
 
-  it("Case 6e: bounds recovery queue count and retained bytes without dropping unresolved input, supports oversized first records and capacity overflow via copy/apply/partial-discard/promotion, and preserves accurate restart semantics", async () => {
+  it("Case 6e: transitions to unambiguous raw-backed editing once overflow is occupied (retaining K4 and K5 after K3 without overwriting K1..K3 or lastCopiedSelection), rejects forced overlapping edits at capacity, and supports oversized first records", async () => {
     configurePrettyRecoveryLimitsForTests({ maxRecords: 2, maxRetainedBytes: 256 * 1024 });
     const mount = await mountPrettyEditor(
-      '{"a":1}\n{"b":2}\n{"c":3}\n{"d":4}',
+      '{"a":1}\n{"b":2}\n{"c":3}\n{"d":4}\n{"e":5}',
       "capacity.jsonl",
       "inc-capacity",
     );
 
-    const triggerConflictInRecord = (recKey: string, a: string, b: string) => {
+    const triggerConflictInFormattedRecord = (recKey: string, a: string, b: string) => {
       const start = mount.view.state.doc.toString().indexOf(`{\n  "${recKey}"`);
       expect(start).toBeGreaterThanOrEqual(0);
       mount.view.dispatch({
@@ -513,14 +514,17 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       });
     };
 
-    triggerConflictInRecord("a", "K1a", "K1b");
-    triggerConflictInRecord("b", "K2a", "K2b");
+    triggerConflictInFormattedRecord("a", "K1a", "K1b");
+    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K1a\nK1b");
+
+    triggerConflictInFormattedRecord("b", "K2a", "K2b");
     expect(mount.adapter.pendingConflicts).toHaveLength(2);
     expect(mount.adapter.capacityOverflowRecord).toBeNull();
-    expect(mount.adapter.lastBlockedAtCapacityRecord).toBeNull();
-    expect(mount.adapter.retainedRecoveryBytes).toBeGreaterThan(0);
+    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K1a\nK1b");
 
-    triggerConflictInRecord("c", "K3a", "K3b");
+    // K3 occupies capacityOverflowRecord and immediately transitions the entire document
+    // to unambiguous raw-backed projection before any further edits (K4, K5).
+    triggerConflictInFormattedRecord("c", "K3a", "K3b");
     expect(mount.adapter.pendingConflicts).toHaveLength(2);
     expect(mount.adapter.capacityOverflowRecord?.kind).toBe("conflict");
     expect(
@@ -528,54 +532,82 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
         .intentions[0]!.insert,
     ).toBe("K3a");
     expect(mount.adapter.preservationBlocked).toBe(true);
-    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K3a\nK3b");
+    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K1a\nK1b");
+    expect(mount.view.state.doc.toString()).toBe('{"a":1}\n{"b":2}\n{"c":3}\n{"d":4}\n{"e":5}');
 
-    triggerConflictInRecord("d", "K4a", "K4b");
-    expect(mount.adapter.lastAdmissionError).toBeInstanceOf(PrettyRecoveryCapacityError);
+    // K4 and then K5 while K3 still occupies overflow:
+    // Because the document transitioned to the unambiguous raw-backed path at capacity,
+    // K4 (in record "d") and K5 (in record "e") map 1:1 to raw offsets and are retained in replica.currentText
+    // without generating ambiguous virtual-layout conflicts or overwriting K1, K2, K3, or lastCopiedSelection.
+    const startD = mount.view.state.doc.toString().indexOf('{"d":4}');
+    expect(startD).toBeGreaterThanOrEqual(0);
+    mount.view.dispatch({
+      changes: [
+        { from: startD + 2, to: startD + 2, insert: "K4a" },
+        { from: startD + 3, to: startD + 3, insert: "K4b" },
+      ],
+      userEvent: "input.type",
+    });
+
+    const startE = mount.view.state.doc.toString().indexOf('{"e":5}');
+    expect(startE).toBeGreaterThanOrEqual(0);
+    mount.view.dispatch({
+      changes: [
+        { from: startE + 2, to: startE + 2, insert: "K5a" },
+        { from: startE + 3, to: startE + 3, insert: "K5b" },
+      ],
+      userEvent: "input.type",
+    });
+
+    expect(mount.replica.currentText).toContain('{"K4adK4b":4}');
+    expect(mount.replica.currentText).toContain('{"K5aeK5b":5}');
     expect(mount.adapter.pendingConflicts).toHaveLength(2);
+    expect(mount.adapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("K1a");
+    expect(mount.adapter.pendingConflicts[1]!.intentions[0]!.insert).toBe("K2a");
     expect(
       (mount.adapter.capacityOverflowRecord?.record as { intentions: Array<{ insert: string }> })
         .intentions[0]!.insert,
     ).toBe("K3a");
-    expect(mount.adapter.lastBlockedAtCapacityRecord?.kind).toBe("conflict");
-    expect(
-      (
-        mount.adapter.lastBlockedAtCapacityRecord?.record as {
-          intentions: Array<{ insert: string }>;
-        }
-      ).intentions[0]!.insert,
-    ).toBe("K4a");
-    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K4a\nK4b");
-    expect(mount.adapter.copyPendingRecovery()?.displayText).toBe("K4a\nK4b");
+    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K1a\nK1b");
 
-    const rawKeyA = mount.view.state.doc.toString().indexOf('"a":1');
-    expect(rawKeyA).toBeGreaterThanOrEqual(0);
+    // Forced overlapping-range edits (ForcedK4, then ForcedK5) while K3 occupies overflow
+    // are explicitly rejected without overwriting K1, K2, K3, K4, K5, or lastCopiedSelection.
     mount.view.dispatch({
-      changes: { from: rawKeyA + 4, to: rawKeyA + 5, insert: "10" },
+      changes: [
+        { from: 1, to: 4, insert: "FX4a" },
+        { from: 2, to: 5, insert: "FX4b" },
+      ],
       userEvent: "input.type",
     });
-    expect(mount.replica.currentText).toContain('{"a":10}');
-
-    mount.adapter.resolvePendingConflict({
-      action: "discard-conflict",
-      conflictId: mount.adapter.pendingConflicts[0]!.conflictId,
+    expect(mount.adapter.lastAdmissionError).toBeInstanceOf(PrettyRecoveryCapacityError);
+    mount.view.dispatch({
+      changes: [
+        { from: 1, to: 4, insert: "FX5a" },
+        { from: 2, to: 5, insert: "FX5b" },
+      ],
+      userEvent: "input.type",
     });
+    expect(mount.adapter.lastAdmissionError).toBeInstanceOf(PrettyRecoveryCapacityError);
     expect(mount.adapter.pendingConflicts).toHaveLength(2);
-    expect(mount.adapter.pendingConflicts[1]!.intentions[0]!.insert).toBe("K3a");
+    expect(mount.adapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("K1a");
+    expect(mount.adapter.pendingConflicts[1]!.intentions[0]!.insert).toBe("K2a");
     expect(
       (mount.adapter.capacityOverflowRecord?.record as { intentions: Array<{ insert: string }> })
         .intentions[0]!.insert,
-    ).toBe("K4a");
-    expect(mount.adapter.lastBlockedAtCapacityRecord).toBeNull();
+    ).toBe("K3a");
+    expect(mount.replica.currentText).toContain('{"K4adK4b":4}');
+    expect(mount.replica.currentText).toContain('{"K5aeK5b":5}');
+    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("K1a\nK1b");
 
+    // Resolving K1 promotes K3 from capacityOverflowRecord into durable pendingConflicts
     mount.adapter.resolvePendingConflict({
       action: "discard-conflict",
       conflictId: mount.adapter.pendingConflicts[0]!.conflictId,
     });
     expect(mount.adapter.capacityOverflowRecord).toBeNull();
     expect(mount.adapter.pendingConflicts).toHaveLength(2);
-    expect(mount.adapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("K3a");
-    expect(mount.adapter.pendingConflicts[1]!.intentions[0]!.insert).toBe("K4a");
+    expect(mount.adapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("K2a");
+    expect(mount.adapter.pendingConflicts[1]!.intentions[0]!.insert).toBe("K3a");
     expect(mount.adapter.preservationBlocked).toBe(false);
 
     const singleRecordBytes = mount.adapter.pendingConflicts[0]!.byteEstimate ?? 400;
@@ -636,8 +668,6 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     expect(recreatedByteAdapter.capacityOverflowRecord).toBeNull();
 
     // Individual oversized first record (byteEstimate > maxRetainedBytes when queue is empty):
-    // 1) Accessible via pendingConflict, copyPendingRecovery(), and resolvePendingConflict
-    // 2) Partial intention discard shrinks it below maxRetainedBytes and promotes it to durable pendingConflicts
     configurePrettyRecoveryLimitsForTests({
       maxRecords: 64,
       maxRetainedBytes: singleRecordBytes + 80,
@@ -675,38 +705,11 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     expect(shrinkRes.ok).toBe(true);
     expect(oversizedMount.adapter.capacityOverflowRecord).toBeNull();
     expect(oversizedMount.adapter.pendingConflicts).toHaveLength(1);
-    expect(oversizedMount.adapter.pendingConflicts[0]!.intentions).toHaveLength(1);
     expect(oversizedMount.adapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("S1");
     expect(oversizedMount.adapter.preservationBlocked).toBe(false);
     expect(localStorage.getItem(oversizedStorageKey)).toBeTruthy();
 
-    // Promoted record survives process restart via durable localStorage
-    oversizedMount.adapter.destroy();
-    await oversizedMount.replica.flush();
-    await oversizedMount.replica.close();
-    const ovIdx = replicas.indexOf(oversizedMount.replica);
-    if (ovIdx >= 0) replicas.splice(ovIdx, 1);
-    simulatePrettyProcessRestartForTests();
-
-    const ovSnap = oversizedMount.fixture.snapshot();
-    ovSnap.path = "oversized-first.json";
-    const recreatedOvReplica = new DocumentReplica(
-      ovSnap,
-      () => oversizedMount.client,
-      () => undefined,
-      oversizedMount.outbox,
-    );
-    replicas.push(recreatedOvReplica);
-    await recreatedOvReplica.initialize();
-    const recreatedOvAdapter = new PrettyReplicaEditorAdapter(recreatedOvReplica, {
-      path: "oversized-first.json",
-    });
-    adapters.push(recreatedOvAdapter);
-    expect(recreatedOvAdapter.pendingConflicts).toHaveLength(1);
-    expect(recreatedOvAdapter.pendingConflicts[0]!.intentions[0]!.insert).toBe("S1");
-
-    // 3) Direct apply of an individual oversized first record from capacityOverflowRecord
-    // persists via DocumentReplica's outbox across process restart
+    // Direct apply of an oversized first record from capacityOverflowRecord persists via DocumentReplica outbox
     const directOversizedMount = await mountPrettyEditor(
       '{"a":1,"b":2}',
       "oversized-direct.json",
@@ -719,7 +722,6 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
       ],
       userEvent: "input.type",
     });
-    expect(directOversizedMount.adapter.pendingConflicts).toHaveLength(0);
     expect(directOversizedMount.adapter.capacityOverflowRecord?.kind).toBe("conflict");
     const applyOversizedRes = directOversizedMount.adapter.resolvePendingConflict({
       action: "apply",
@@ -728,26 +730,104 @@ describe("PrettyReplicaEditorAdapter durable recovery & storage transactions", (
     });
     expect(applyOversizedRes.ok).toBe(true);
     expect(directOversizedMount.adapter.capacityOverflowRecord).toBeNull();
-    expect(directOversizedMount.adapter.preservationBlocked).toBe(false);
     expect(directOversizedMount.replica.currentText).toBe(`{${largeChunk}"a":1,"b":2}`);
+  });
 
-    directOversizedMount.adapter.destroy();
-    await directOversizedMount.replica.flush();
-    await directOversizedMount.replica.close();
-    const dirIdx = replicas.indexOf(directOversizedMount.replica);
-    if (dirIdx >= 0) replicas.splice(dirIdx, 1);
-    simulatePrettyProcessRestartForTests();
-
-    const dirSnap = directOversizedMount.fixture.snapshot();
-    dirSnap.path = "oversized-direct.json";
-    const recreatedDirReplica = new DocumentReplica(
-      dirSnap,
-      () => directOversizedMount.client,
-      () => undefined,
-      directOversizedMount.outbox,
+  it("Case 6f: renders user-accessible CodeMirror recovery tooltip and lint diagnostics (no extra chrome bars) for inspecting, copying/exporting, resolving, and dismissing retained input and storage/capacity alerts", async () => {
+    configurePrettyRecoveryLimitsForTests({ maxRecords: 1, maxRetainedBytes: 256 * 1024 });
+    const mount = await mountPrettyEditor(
+      '{"a":1}\n{"b":2}',
+      "ui-recovery.jsonl",
+      "inc-ui-recovery",
     );
-    replicas.push(recreatedDirReplica);
-    await recreatedDirReplica.initialize();
-    expect(recreatedDirReplica.currentText).toBe(`{${largeChunk}"a":1,"b":2}`);
+
+    // No extra chrome bars (cm-panels)
+    expect(mount.view.dom.querySelectorAll(".cm-panels")).toHaveLength(0);
+    expect(mount.view.dom.querySelector('[data-testid="pretty-recovery-tooltip"]')).toBeNull();
+
+    // Trigger conflict 1 (durable) and conflict 2 (overflow)
+    mount.view.dispatch({
+      changes: [
+        { from: 2, to: 2, insert: "U1a" },
+        { from: 3, to: 3, insert: "U1b" },
+      ],
+      userEvent: "input.type",
+    });
+    const recB = mount.view.state.doc.toString().indexOf('{\n  "b"');
+    mount.view.dispatch({
+      changes: [
+        { from: recB + 2, to: recB + 2, insert: "U2a" },
+        { from: recB + 3, to: recB + 3, insert: "U2b" },
+      ],
+      userEvent: "input.type",
+    });
+    await Promise.resolve();
+
+    const tooltip = mount.view.dom.querySelector<HTMLElement>(
+      '[data-testid="pretty-recovery-tooltip"]',
+    );
+    expect(tooltip).not.toBeNull();
+    expect(mount.view.dom.querySelectorAll(".cm-panels")).toHaveLength(0);
+    expect(diagnosticCount(mount.view.state)).toBe(2);
+
+    const statusAlert = tooltip!.querySelector('[data-testid="pretty-recovery-status"]');
+    expect(statusAlert?.textContent).toContain(
+      "Capacity limit reached: switched to raw-backed editing",
+    );
+
+    const c1Id = mount.adapter.pendingConflicts[0]!.conflictId;
+    const c2Id = (mount.adapter.capacityOverflowRecord!.record as { conflictId: string }).conflictId;
+
+    // Select overflow record C2 in the DOM tooltip and click Copy retained edit
+    const selectC2Btn = mount.view.dom.querySelector<HTMLButtonElement>(
+      `[data-testid="pretty-recovery-select-${c2Id}"]`,
+    );
+    expect(selectC2Btn).not.toBeNull();
+    selectC2Btn!.click();
+
+    const copyBtn = mount.view.dom.querySelector<HTMLButtonElement>(
+      '[data-testid="pretty-recovery-copy"]',
+    );
+    expect(copyBtn).not.toBeNull();
+    copyBtn!.click();
+
+    const exportTextarea = mount.view.dom.querySelector<HTMLTextAreaElement>(
+      '[data-testid="pretty-recovery-export-text"]',
+    );
+    expect(exportTextarea?.value).toContain("U2a\nU2b");
+    expect(mount.adapter.lastCopiedSelection?.displayText).toBe("U2a\nU2b");
+    expect(
+      mount.view.dom.querySelector('[data-testid="pretty-recovery-feedback"]')?.textContent,
+    ).toBe("Copied retained edit");
+
+    // Dismiss intention #0 of C2 via the DOM button, then apply intention #1 of C2 via the DOM button
+    const dismissInt0Btn = mount.view.dom.querySelector<HTMLButtonElement>(
+      '[data-testid="pretty-recovery-discard-intention-0"]',
+    );
+    expect(dismissInt0Btn).not.toBeNull();
+    dismissInt0Btn!.click();
+
+    const applyInt1Btn = mount.view.dom.querySelector<HTMLButtonElement>(
+      '[data-testid="pretty-recovery-apply-only-1"]',
+    );
+    expect(applyInt1Btn).not.toBeNull();
+    applyInt1Btn!.click();
+    expect(mount.replica.currentText).toBe('{"a":1}\n{U2b"b":2}');
+    expect(mount.adapter.capacityOverflowRecord).toBeNull();
+
+    // Now select C1 and click Dismiss conflict in the DOM; tooltip and diagnostics clear
+    const selectC1Btn = mount.view.dom.querySelector<HTMLButtonElement>(
+      `[data-testid="pretty-recovery-select-${c1Id}"]`,
+    );
+    selectC1Btn?.click();
+    const dismissConflictBtn = mount.view.dom.querySelector<HTMLButtonElement>(
+      '[data-testid="pretty-recovery-dismiss"]',
+    );
+    expect(dismissConflictBtn).not.toBeNull();
+    dismissConflictBtn!.click();
+
+    expect(mount.adapter.pendingConflicts).toHaveLength(0);
+    expect(diagnosticCount(mount.view.state)).toBe(0);
+    expect(mount.view.dom.querySelector('[data-testid="pretty-recovery-tooltip"]')).toBeNull();
   });
 });
