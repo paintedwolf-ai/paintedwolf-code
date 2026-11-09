@@ -2668,6 +2668,10 @@ CREATE TABLE IF NOT EXISTS evidence_records (
     truncated INTEGER NOT NULL DEFAULT 0,
     survey INTEGER NOT NULL DEFAULT 0,
     superseded_by TEXT,
+    -- Owning workspace root ID for path (scope-relative); '' marks legacy
+    -- rows whose path is a normalized token under no attached root. Declared
+    -- last so the shipped-store ALTER backfill yields the same column order.
+    root_id TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (session_id, handle)
 ) STRICT, WITHOUT ROWID;
 
