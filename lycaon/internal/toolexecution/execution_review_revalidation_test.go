@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -71,7 +72,8 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			manager.approve()
 			err = <-done
 			if denyWhileWaiting {
-				if err == nil || len(entered) != 0 {
+				reject := toolrejection.AsToolReject(err)
+				if reject == nil || reject.Code != "APPROVAL_RULE_DENIED" || len(entered) != 0 {
 					t.Fatalf("late deny did not stop handler: err=%v entered=%d", err, len(entered))
 				}
 			} else {
