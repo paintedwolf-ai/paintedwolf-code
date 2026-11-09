@@ -314,3 +314,74 @@
 }
 
 
+
+.den-file-version__edits {
+  margin-inline: 28px 8px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--den-line);
+}
+
+.den-file-version__edits > summary,
+.den-file-version__edit-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.den-file-version__edits > summary {
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--den-radius-sm);
+}
+
+.den-file-version__edits > summary .den-disclosure-caret {
+  margin-inline: 2px;
+}
+
+.den-file-version__edits > summary::-webkit-details-marker {
+  display: none;
+}
+
+.den-file-version__edits > summary:hover {
+  background: var(--den-tint-2);
+}
+
+.den-file-version__edit-items {
+  padding-inline-start: 15px;
+}
+
+.den-file-version__edit-item + .den-file-version__edit-item {
+  border-top: 1px solid var(--den-line-quiet);
+}
+
+.den-file-version__edit-pager.den-table-pager {
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+  gap: 4px;
+  padding-inline: 0;
+  background: transparent;
+}
+
+.den-file-version__edit-pager .den-table-pager-actions {
+  display: contents;
+}
+
+.den-file-version__edit-pager .den-table-pager-range {
+  grid-area: 2 / 1 / auto / -1;
+  justify-self: center;
+}
+
+.den-file-version__edit-pager .den-table-pager-page {
+  grid-area: 1 / 2;
+}
+
+.den-file-version__edit-pager .den-table-pager-actions > :first-child {
+  grid-area: 1 / 1;
+  justify-self: start;
+}
+
+.den-file-version__edit-pager .den-table-pager-actions > :last-child {
+  grid-area: 1 / 3;
+  justify-self: end;
+}

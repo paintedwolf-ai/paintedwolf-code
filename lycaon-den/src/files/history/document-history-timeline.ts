@@ -1,7 +1,7 @@
 import type { EditorDocumentChange } from "../../api/types.ts";
 import type { FileHistoryRow } from "./file-history-model.ts";
 
-type EditGroup = { kind: "edits"; changes: EditorDocumentChange[] };
+type EditGroup = { kind: "edits"; changes: EditorDocumentChange[]; related?: boolean };
 type TimelineRow = FileHistoryRow | EditGroup;
 
 function turnKey(sessionId: string | undefined, turn: number): string | undefined {
@@ -36,6 +36,7 @@ export function documentHistoryTimeline(rows: readonly FileHistoryRow[], changes
     const key = change.actor_kind === "agent" && turnKey(change.session_id, change.turn);
     const versionId = key && versionsByTurn.get(key);
     if (versionId) {
+      group.related = true;
       const existing = editsByVersion.get(versionId);
       if (existing) existing.push(group);
       else editsByVersion.set(versionId, [group]);

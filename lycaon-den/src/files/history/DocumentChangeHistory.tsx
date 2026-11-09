@@ -1,12 +1,14 @@
 import { documentCommand } from "../documents/document-command.ts";
-import { For, Show, createSignal, createEffect, on, onCleanup } from "solid-js";
+import { For, Show, createSignal, createEffect, on, onCleanup, createMemo, type JSX } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import type { EditorDocumentChange } from "../../api/types.ts";
 import { clientIdentity } from "../../platform/connection/client-identity.ts";
 import { createPresentationWaiting } from "../../ui/presentation.ts";
 import { createSurfaceQuery } from "../../ui/surface-query.ts";
 import { DenButton } from "../../components/primitives/DenButton.tsx";
-import { personLabel } from "../../components/source/annotations/source-contributor-label.ts";
+import { documentHistoryTimeline } from "./document-history-timeline.ts";
+import type { FileHistoryRow } from "./file-history-model.ts";
+import { DocumentEditGroup } from "./DocumentEditGroup.tsx";
 import { editorReplica } from "../documents/editor-document.ts";
 import { observeSurfaceFailure, reportSurfaceFailure } from "../../notices/surface-failure.ts";
 
@@ -21,15 +23,18 @@ const undoFailure = {
   suggestedAction: "Check that the document is still open and connected, then undo the edit again.",
 };
 
-function changeAuthorLabel(change: EditorDocumentChange): string {
-  switch (change.actor_kind) {
-    case "agent": return `From ${change.session_title || "agent"}${change.turn ? ` · turn ${change.turn}` : ""}`;
-    case "user": return personLabel(change.person_id);
-    case "restore": return "Restored content";
-  }
-}
+export type DocumentHistorySource = {
+  client: LycaonClient;
+  projectId: string;
+  documentId: string;
+  onApplied: () => void;
+};
 
-export function DocumentChangeHistory(props: { client: LycaonClient; projectId: string; documentId: string; onApplied: () => void }) {
+export function DocumentChangeHistory(props: DocumentHistorySource & {
+  rows: readonly FileHistoryRow[];
+  renderRow: (row: FileHistoryRow) => JSX.Element;
+  emptyMessage?: JSX.Element;
+}) {
   const history = createSurfaceQuery({
     name: "document-change-history",
     required: false,
@@ -81,19 +86,28 @@ export function DocumentChangeHistory(props: { client: LycaonClient; projectId: 
     setWorking(false);
   }));
 
-  return <Show when={changes().length > 0 || waiting()}><div class="flex flex-col gap-2 p-3 text-den-caption" role="group" aria-label="Recent edits">
-    <For each={changes()}>{(change) => <div class="flex items-center gap-3">
-      <span data-testid="document-change-author">{changeAuthorLabel(change)}</span>
-      <time dateTime={change.created_at}>{new Date(change.created_at).toLocaleTimeString()}</time>
-      <DenButton variant="ghost" compact disabled={busy() || !!change.reverted_by || change.epoch !== editorReplica(props.documentId)?.accepted.epoch}
-        onClick={() => void revert(change)}>{change.reverted_by ? "Undone" : "Undo"}</DenButton>
-    </div>}</For>
-    <Show when={!!cursor()}><DenButton data-testid="earlier-edits" variant="ghost" compact disabled={busy()} onClick={() => void loadEarlier()}>Earlier edits</DenButton></Show>
+  const rows = createMemo(() => documentHistoryTimeline(props.rows, changes()));
+  return <>
+    <Show when={!history.loading() && rows().length === 0}>{props.emptyMessage}</Show>
+    <For each={rows()}>{(row) => row.kind === "edits" ? (
+      <DocumentEditGroup
+        changes={row.changes}
+        related={row.related}
+        canUndo={(change) => !busy() && !change.reverted_by &&
+          change.epoch === editorReplica(props.documentId)?.accepted.epoch}
+        onUndo={(change) => void revert(change)}
+      />
+    ) : props.renderRow(row)}</For>
+    <Show when={!!cursor()}>
+      <DenButton data-testid="earlier-edits" variant="ghost" compact disabled={busy()} onClick={() => void loadEarlier()}>
+        Load earlier document edits
+      </DenButton>
+    </Show>
     <Show when={waiting()}>
-      <span class="flex items-center justify-center gap-2 text-den-text-muted" role="status">
+      <div class="den-file-version__git-loading" role="status">
         <span class="den-file-version__spinner" aria-hidden="true" />
         <span>Loading edits…</span>
-      </span>
+      </div>
     </Show>
-  </div></Show>;
+  </>;
 }

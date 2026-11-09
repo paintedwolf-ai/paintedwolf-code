@@ -1,4 +1,5 @@
-import { For, Show, createMemo, createSignal, type JSX } from "solid-js";
+import { DocumentChangeHistory, type DocumentHistorySource } from "./DocumentChangeHistory.tsx";
+import { For, Show, createMemo, createSignal } from "solid-js";
 import type { SourceFileVersion } from "../../api/types.ts";
 import { relativeTimeLabel } from "../../time/time-copy.ts";
 import { createPresentationWaiting } from "../../ui/presentation.ts";
@@ -27,7 +28,7 @@ import {
 import { gitChangeAction, gitChangeRefs } from "../source/source-git-change.ts";
 
 type Props = {
-  editHistory?: (dismiss: () => void) => JSX.Element;
+  documentHistory?: DocumentHistorySource;
   selected: FileVersionView | null;
   /** The working file is gone; Current presents its last deletion. */
   currentAbsent?: boolean;
@@ -82,6 +83,10 @@ export function FileVersionPicker(props: Props) {
   const dismiss = () => setOpen(false);
   const history = createMemo(() => buildFileHistoryRows(props.history));
   const rows = () => history().rows;
+  const emptyHistory = () => props.history.status === "ready" &&
+    props.history.gitStatus === "ready" && gitLaneSettled(props.history.gitHistoryState) &&
+    rows().length === 0;
+  const emptyMessage = () => <div class="den-file-version__empty" data-testid="file-version-empty">No earlier versions</div>;
   const currentCommit = () => history().currentCommits[0];
 
   const handleSurfaceKeyDown = (event: KeyboardEvent) => {
@@ -371,7 +376,6 @@ export function FileVersionPicker(props: Props) {
           onDismiss={dismiss}
           onKeyDown={handleSurfaceKeyDown}
         >
-          {props.editHistory?.(dismiss)}
           <div class="den-file-version__head">
             <div class="den-file-version__heading">Version history</div>
             <button
@@ -419,18 +423,22 @@ export function FileVersionPicker(props: Props) {
                 Loading history…
               </div>
             </Show>
-            {/* Empty history requires a definitive Git result. */}
-            <Show
-              when={
-                props.history.status === "ready" &&
-                props.history.gitStatus === "ready" &&
-                gitLaneSettled(props.history.gitHistoryState) &&
-                rows().length === 0
-              }
-            >
-              <div class="den-file-version__empty" data-testid="file-version-empty">No earlier versions</div>
+            <Show when={props.documentHistory} fallback={
+              <>
+                <Show when={emptyHistory()}>{emptyMessage()}</Show>
+                <For each={rows()}>{historyRow}</For>
+              </>
+            }>
+              {(source) => (
+                <DocumentChangeHistory
+                  {...source()}
+                  rows={rows()}
+                  renderRow={historyRow}
+                  emptyMessage={emptyHistory() ? emptyMessage() : undefined}
+                  onApplied={() => { dismiss(); source().onApplied(); }}
+                />
+              )}
             </Show>
-            <For each={rows()}>{historyRow}</For>
             <Show
               when={
                 props.history.status === "ready" &&
