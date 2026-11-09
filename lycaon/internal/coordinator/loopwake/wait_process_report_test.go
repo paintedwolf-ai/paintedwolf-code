@@ -90,7 +90,7 @@ func TestReconciliationWaitsForThePublishedCompletion(t *testing.T) {
 	loop.SetDeps(deps)
 	delivered := recordDeliveries(loop)
 
-	lease, err := store.Arm(t.Context(), awaitstore.Lease{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID, UntilComplete: true,
+	lease, err := store.Arm(t.Context(), awaitstore.Lease{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID,
 		Conditions: []awaitstore.Condition{{Kind: "process_done", Handles: []string{"command-1"}}}})
 	testutil.FailErr(t, "arm process wait", err)
 	if done := reconcileWaitConditions(t.Context(), loop.Subscriptions, store, lease); done {
