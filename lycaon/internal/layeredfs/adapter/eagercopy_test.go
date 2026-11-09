@@ -14,7 +14,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func TestForcedProbeFailureFullMaterializedWorkerPrivateGitAndCheckpointSuite(t *testing.T) {
+func TestUnderLimitMaterializedWorkerPrivateGitAndCheckpointSuite(t *testing.T) {
 	ctx := context.Background()
 	tmp := t.TempDir()
 	srcRoot := createFixtureRepoWithSubmodule(t, filepath.Join(tmp, "source"))
@@ -27,7 +27,7 @@ func TestForcedProbeFailureFullMaterializedWorkerPrivateGitAndCheckpointSuite(t 
 		},
 	})
 	sel := NewSelector("darwin", nil, forcedFailPrimary, NewEagerCopyAdapter(ReasonNone))
-	sel.BudgetFor = ZeroBudget
+	sel.BudgetFor = ruleBudgetFor
 
 	grants := []RootGrant{{RootID: "repo", Label: "repo", SourcePath: srcRoot, IsPrimary: true}}
 	choice, err := sel.Choose(ctx, ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: grants})
@@ -35,12 +35,13 @@ func TestForcedProbeFailureFullMaterializedWorkerPrivateGitAndCheckpointSuite(t 
 		t.Fatalf("Choose failed: %v", err)
 	}
 	adp, probeRes := choice.Adapter, choice.Probe
-	if probeRes.Supported || adp.ID() != AdapterEagerCopy || choice.CopyBudget != nil || choice.Facts.Reason != SelectionOverBudgetMaterial {
-		t.Fatalf("expected the declared cannot-mount case on eagercopy, got %+v", choice)
+	if probeRes.Supported || adp.ID() != AdapterEagerCopy || choice.CopyBudget == nil || choice.Facts.Reason != SelectionUnderBudget {
+		t.Fatalf("expected bounded materialization without requiring a mount, got %+v", choice)
 	}
 	var progressUpdates []MaterializeProgress
 	view, err := adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "mat-worker-1",
+		CopyBudget: choice.CopyBudget,
 		RuntimeDir: filepath.Join(tmp, "runtime"),
 		Grants:     grants,
 		ProgressFn: func(p MaterializeProgress) { progressUpdates = append(progressUpdates, p) },
@@ -48,7 +49,7 @@ func TestForcedProbeFailureFullMaterializedWorkerPrivateGitAndCheckpointSuite(t 
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
-	if view.Facts.PreparationKind != PreparationMaterialized || view.Facts.UntouchedSourceVisibility != VisibilityFixed || view.Facts.FallbackReason != ReasonMountDenied {
+	if view.Facts.PreparationKind != PreparationMaterialized || view.Facts.UntouchedSourceVisibility != VisibilityFixed || view.Facts.FallbackReason != ReasonNone {
 		t.Fatalf("unexpected materialized facts: %+v", view.Facts)
 	}
 	if len(progressUpdates) == 0 {
