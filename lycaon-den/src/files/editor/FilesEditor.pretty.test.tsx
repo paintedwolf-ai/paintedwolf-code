@@ -53,6 +53,7 @@ import { createFileConfirmations } from "../commands/file-confirmations.ts";
 import {
   appendMultiCursorConflictToRecovery,
   configurePrettyRecoveryStorageForTests,
+  getPrettyDocumentRecoveryState,
   hasUnpersistedPrettyRecoveryForDocument,
   resetPrettyDocumentRecoveryStoreForTests,
   type PrettyRecoveryStorage,
@@ -74,7 +75,7 @@ async function openAndAttachDocumentReplica(
     () => undefined,
     {
       all: () => Object.values(projectFilesState(PROJECT).byKey),
-      byKey: (key: string) => projectFilesState(PROJECT).byKey[key],
+      get: (key: string) => projectFilesState(PROJECT).byKey[key],
     },
   );
   const docState = await resolveEditorDocument(PROJECT, buf);
@@ -225,7 +226,7 @@ describe("FilesEditor Pretty display integration", () => {
     expect(adapter.getLineGutterLabel(1)).toBe("1");
     expect(adapter.getLineGutterLabel(2)).toBe("");
     const line2Mapped = adapter.mapSourceLineColToDisplay(2, 1);
-    const line2DispLine = view.state.doc.lineAt(line2Mapped.dispOffset).number;
+    const line2DispLine = view.state.doc.lineAt(line2Mapped.offset).number;
     expect(line2DispLine).toBeGreaterThan(2);
     expect(adapter.getLineGutterLabel(line2DispLine)).toBe("2");
     expect(adapter.getLineGutterLabel(line2DispLine + 1)).toBe("");
@@ -235,7 +236,7 @@ describe("FilesEditor Pretty display integration", () => {
     expect(gotoLineController.state()?.target.lineCount).toBe(3);
     expect(submitGotoLine("2:8")).toBe(true);
 
-    const expectedDispPos = adapter.mapSourceLineColToDisplay(2, 8).dispOffset;
+    const expectedDispPos = adapter.mapSourceLineColToDisplay(2, 8).offset;
     expect(view.state.selection.main.head).toBe(expectedDispPos);
     expect(props.onCursor).toHaveBeenLastCalledWith({ line: 2, col: 8 });
 
@@ -247,7 +248,7 @@ describe("FilesEditor Pretty display integration", () => {
       revealFocus: false,
     });
     expect(view.state.selection.main.head).toBe(
-      adapter.mapSourceLineColToDisplay(2, 2).dispOffset,
+      adapter.mapSourceLineColToDisplay(2, 2).offset,
     );
   });
 
@@ -362,10 +363,14 @@ describe("FilesEditor Pretty display integration", () => {
     configurePrettyRecoveryStorageForTests(failingStorage);
 
     const adapter = getFilesEditorPrettyAdapter(PROJECT, buf.key)!;
+    const recovery = getPrettyDocumentRecoveryState(
+      adapter.replica.accepted.id,
+      adapter.replica.incarnation,
+    );
     appendMultiCursorConflictToRecovery(
-      adapter.recoveryState,
+      recovery,
       "runtime-1",
-      adapter.recoveryState.incarnation,
+      recovery.incarnation,
       1,
       1,
       "fp-1",
@@ -393,7 +398,7 @@ describe("FilesEditor Pretty display integration", () => {
     expect(await evictEditorDocument(docState.documentId)).toBe(false);
 
     // Close confirmation prompts instead of closing silently even when buffer.dirty is false
-    const closeBufferSpy = vi.fn(async () => true);
+    const closeBufferSpy = vi.fn(() => null);
     const confirmations = createFileConfirmations({
       projectId: () => PROJECT,
       state: () => projectFilesState(PROJECT),
@@ -446,10 +451,14 @@ describe("FilesEditor Pretty display integration", () => {
     });
 
     const adapter = getFilesEditorPrettyAdapter(PROJECT, buf.key)!;
+    const recovery = getPrettyDocumentRecoveryState(
+      adapter.replica.accepted.id,
+      adapter.replica.incarnation,
+    );
     appendMultiCursorConflictToRecovery(
-      adapter.recoveryState,
+      recovery,
       "runtime-1",
-      adapter.recoveryState.incarnation,
+      recovery.incarnation,
       1,
       1,
       "fp-1",
