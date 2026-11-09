@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io/fs"
+	"os"
 	"sort"
 	"strings"
 	"syscall"
@@ -113,6 +114,14 @@ func applyAttrChangesLocked(c *Core, node *privateNode, qpath QualifiedPath, req
 		}
 	}
 	if changed {
+		if node.flags.gitHostPath != "" && node.kind != EntrySymlink {
+			if req.Mode != nil {
+				_ = os.Chmod(node.flags.gitHostPath, node.mode.Perm())
+			}
+			if req.ATime != nil || req.MTime != nil {
+				_ = os.Chtimes(node.flags.gitHostPath, node.atime, node.mtime)
+			}
+		}
 		node.ctime = now
 		node.flags.metadataChanged = !metadataMatchesInitialLocked(node)
 		recordJournalLocked(c, JournalOpSetAttr, qpath, nil, node, 0)

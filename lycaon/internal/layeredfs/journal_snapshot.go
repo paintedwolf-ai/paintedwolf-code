@@ -236,7 +236,7 @@ func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
 		if cloneErr == nil && cloned {
 			c.mu.Lock()
 			if !c.state.released {
-				c.state.dirtyBackingFiles[workPath] = struct{}{}
+				markDirtyBackingFileLocked(c, workPath)
 			}
 			c.mu.Unlock()
 			return workName, workPath, nil
@@ -259,7 +259,7 @@ func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
 		}
 		c.mu.Lock()
 		if !c.state.released {
-			c.state.dirtyBackingFiles[workPath] = struct{}{}
+			markDirtyBackingFileLocked(c, workPath)
 		}
 		c.mu.Unlock()
 		return workName, workPath, nil
@@ -275,7 +275,7 @@ func initWorkingFromBase(c *Core, base BaseCapture) (string, string, error) {
 	}
 	c.mu.Lock()
 	if !c.state.released {
-		c.state.dirtyBackingFiles[workPath] = struct{}{}
+		markDirtyBackingFileLocked(c, workPath)
 	}
 	c.mu.Unlock()
 	return workName, workPath, nil

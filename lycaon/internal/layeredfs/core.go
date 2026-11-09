@@ -63,6 +63,7 @@ type idAllocator struct {
 type viewState struct {
 	released          bool
 	nsGen             uint64
+	dirtySeq          uint64
 	seq               idAllocator
 	nodesByID         map[NodeID]*privateNode
 	originIndex       map[NodeID]NodeID
@@ -73,7 +74,7 @@ type viewState struct {
 	basesByPath       map[QualifiedPath]BaseCapture
 	handles           map[HandleID]*openHandle
 	dirCookies        map[uint64]dirCookieState
-	dirtyBackingFiles map[string]struct{}
+	dirtyBackingFiles map[string]uint64
 	journal           []JournalOperation
 }
 
@@ -86,7 +87,16 @@ type nodeFlags struct {
 	namespaceAdded  bool
 	backingName     string
 	backingPath     string
+	gitHostPath     string
 	linkTarget      string
+}
+
+func markDirtyBackingFileLocked(c *Core, path string) {
+	if path == "" || c.state == nil {
+		return
+	}
+	c.state.dirtySeq++
+	c.state.dirtyBackingFiles[path] = c.state.dirtySeq
 }
 
 type nodeInitialState struct {
@@ -171,7 +181,7 @@ func New(cfg Config) (*Core, error) {
 			basesByPath:       make(map[QualifiedPath]BaseCapture),
 			handles:           make(map[HandleID]*openHandle),
 			dirCookies:        make(map[uint64]dirCookieState),
-			dirtyBackingFiles: make(map[string]struct{}),
+			dirtyBackingFiles: make(map[string]uint64),
 		},
 		barrier: newBarrierCoordinator(cfg.ViewID),
 	}, nil

@@ -407,3 +407,109 @@ func TestCoreGitOverlaySyncPrimaryAndSecondaryRootsToCheckpointAndExport(t *test
 	exportSecond := filepath.Join(tmp, "export-second")
 	testutil.FailErr(t, "ExportCheckpointObjects second", mgr.ExportCheckpointObjects(t.Context(), SecondaryViewID(viewID, "second"), secState, exportSecond))
 }
+
+func TestMountedDirectMutableGitCoherenceLockContentionAndStoreStockMetrics(t *testing.T) {
+	t.Parallel()
+	fix := buildRichRepoFixture(t)
+	mgr := newTestManager(t, fix.tmpDir)
+	const viewID = "view-direct-git"
+	core := newMountedViewWithManager(t, mgr, viewID, fix.trunkDir)
+
+	v, err := getManagedView(mgr, viewID)
+	testutil.FailErr(t, "getManagedView", err)
+	v.kernelMounted = true
+
+	repo, err := mgr.InitRepo(t.Context(), viewID, ".")
+	testutil.FailErr(t, "InitRepo", err)
+
+	// Verify #1667 StoreMetrics RetainedObjects and RetainedBytes stock metrics.
+	metrics := mgr.Store().Metrics()
+	if metrics.RetainedObjects <= 0 || metrics.RetainedBytes <= 0 {
+		t.Fatalf("expected positive RetainedObjects and RetainedBytes in StoreMetrics, got %+v", metrics)
+	}
+
+	q := func(rel string) layeredfs.QualifiedPath {
+		return layeredfs.QualifiedPath{RootID: "primary", Rel: rel}
+	}
+
+	// 1. Concurrent .lock (O_CREAT|O_EXCL) contention between privateGitDir and Core.
+	lockHostPath := filepath.Join(repo.privateGitDir, "index.lock")
+	testutil.FailErr(t, "host create index.lock", os.WriteFile(lockHostPath, []byte("host-lock"), 0o600))
+	if _, _, err := core.CreateFile(q(".git/index.lock"), 0o600, true); !errors.Is(err, os.ErrExist) {
+		t.Fatalf("expected os.ErrExist when host holds index.lock, got %v", err)
+	}
+	testutil.FailErr(t, "unlink index.lock via Core", core.Unlink(q(".git/index.lock"), false))
+	if _, sErr := os.Lstat(lockHostPath); !errors.Is(sErr, os.ErrNotExist) {
+		t.Fatalf("expected Core.Unlink to remove host index.lock immediately, got %v", sErr)
+	}
+
+	hLock, _, err := core.CreateFile(q(".git/index.lock"), 0o600, true)
+	testutil.FailErr(t, "Core CreateFile index.lock exclusive", err)
+	if _, oErr := os.OpenFile(lockHostPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600); !errors.Is(oErr, os.ErrExist) {
+		t.Fatalf("expected host O_CREAT|O_EXCL on index.lock to fail with os.ErrExist while Core holds it, got %v", oErr)
+	}
+	testutil.FailErr(t, "CloseHandle index.lock", core.CloseHandle(hLock))
+	testutil.FailErr(t, "cleanup index.lock", core.Unlink(q(".git/index.lock"), false))
+
+	// 2. Open-handle read/write across .git rename (HEAD.lock -> HEAD).
+	hHeadLock, _, err := core.CreateFile(q(".git/HEAD.lock"), 0o644, true)
+	testutil.FailErr(t, "CreateFile HEAD.lock", err)
+	initialHeadPayload := []byte("ref: refs/heads/from-lock\n")
+	_, err = core.WriteHandle(hHeadLock, initialHeadPayload, 0)
+	testutil.FailErr(t, "WriteHandle HEAD.lock", err)
+	testutil.FailErr(t, "Rename HEAD.lock -> HEAD", core.Rename(q(".git/HEAD.lock"), q(".git/HEAD")))
+
+	// Write updated ref via the still-open handle after rename and read back via handle and host.
+	updatedHeadPayload := []byte("ref: refs/heads/main\n")
+	testutil.FailErr(t, "Truncate HEAD", func() error { _, e := core.Truncate(q(".git/HEAD"), 0); return e }())
+	_, err = core.WriteHandle(hHeadLock, updatedHeadPayload, 0)
+	testutil.FailErr(t, "WriteHandle after rename", err)
+	buf := make([]byte, len(updatedHeadPayload))
+	n, err := core.ReadHandle(hHeadLock, buf, 0)
+	testutil.FailErr(t, "ReadHandle after rename", err)
+	if string(buf[:n]) != string(updatedHeadPayload) {
+		t.Fatalf("ReadHandle after rename=%q, want %q", string(buf[:n]), string(updatedHeadPayload))
+	}
+	testutil.FailErr(t, "CloseHandle hHeadLock", core.CloseHandle(hHeadLock))
+	hostHead, err := os.ReadFile(filepath.Join(repo.privateGitDir, "HEAD"))
+	testutil.FailErr(t, "os.ReadFile host HEAD", err)
+	if string(hostHead) != string(updatedHeadPayload) {
+		t.Fatalf("host HEAD=%q, want %q", string(hostHead), string(updatedHeadPayload))
+	}
+
+	// 3. Direct shell .git ref creation via Core visible immediately to GitExecutor, and
+	// GitExecutor update/deletion visible immediately back through Core.
+	headOID := strings.TrimSpace(gittest.Run(t, fix.trunkDir, "rev-parse", "HEAD"))
+	_, err = core.WriteFile(q(".git/refs/heads/live-branch"), []byte(headOID+"\n"), 0o644)
+	testutil.FailErr(t, "WriteFile live-branch via Core", err)
+
+	exec := NewGitExecutor(mgr, RemotePolicy{})
+	res, err := exec.Run(t.Context(), GitCommandRequest{
+		ViewID:   viewID,
+		WorkerID: "worker-" + viewID,
+		Args:     []string{"rev-parse", "refs/heads/live-branch"},
+	})
+	testutil.FailErr(t, "GitExecutor rev-parse live-branch", err)
+	if strings.TrimSpace(res.Stdout) != headOID {
+		t.Fatalf("GitExecutor rev-parse live-branch=%q, want %q", strings.TrimSpace(res.Stdout), headOID)
+	}
+
+	// Delete refs/heads/live-branch via GitExecutor and verify Core.Stat & Core.ReadDir reflect deletion immediately.
+	_, err = exec.Run(t.Context(), GitCommandRequest{
+		ViewID:   viewID,
+		WorkerID: "worker-" + viewID,
+		Args:     []string{"update-ref", "-d", "refs/heads/live-branch"},
+	})
+	testutil.FailErr(t, "GitExecutor update-ref -d live-branch", err)
+
+	if _, err := core.Stat(q(".git/refs/heads/live-branch")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("expected Core.Stat on deleted ref to return os.ErrNotExist, got %v", err)
+	}
+	entries, err := core.ReadDir(q(".git/refs/heads"))
+	testutil.FailErr(t, "Core.ReadDir .git/refs/heads", err)
+	for _, e := range entries {
+		if e.Name == "live-branch" {
+			t.Fatalf("expected deleted ref live-branch to be absent from Core.ReadDir")
+		}
+	}
+}

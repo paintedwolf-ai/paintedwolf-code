@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -128,7 +129,7 @@ func truncatePathAdmitted(c *Core, qpath QualifiedPath, size int64) (EntryAttr, 
 	node.ctime = now
 	node.flags.contentChanged = true
 	if node.flags.backingPath != "" {
-		c.state.dirtyBackingFiles[node.flags.backingPath] = struct{}{}
+		markDirtyBackingFileLocked(c, node.flags.backingPath)
 	}
 	recordJournalLocked(c, JournalOpTruncate, res.qpath, nil, node, size)
 	return nodeToAttrLocked(node), nil
@@ -193,6 +194,19 @@ func mkdirPath(c *Core, qpath QualifiedPath, mode fs.FileMode) (EntryAttr, error
 		if cleanMode.Perm() == 0 {
 			cleanMode = fs.ModeDir | 0o755
 		}
+		nsAdded := true
+		var gitHost string
+		if hostPath, isRepoRoot, isMutableGit, gitErr := resolveMutableGitTarget(c, targetPath); gitErr != nil {
+			c.mu.Unlock()
+			return EntryAttr{}, gitErr
+		} else if isMutableGit && !isRepoRoot {
+			if err := os.MkdirAll(hostPath, cleanMode.Perm()); err != nil {
+				c.mu.Unlock()
+				return EntryAttr{}, err
+			}
+			gitHost = hostPath
+			nsAdded = false
+		}
 		node := &privateNode{
 			id:    nid,
 			gen:   gen,
@@ -202,7 +216,10 @@ func mkdirPath(c *Core, qpath QualifiedPath, mode fs.FileMode) (EntryAttr, error
 			mtime: now,
 			ctime: now,
 			paths: map[QualifiedPath]struct{}{targetPath: {}},
-			flags: nodeFlags{namespaceAdded: true},
+			flags: nodeFlags{
+				namespaceAdded: nsAdded,
+				gitHostPath:    gitHost,
+			},
 		}
 		_, wasReplaced := c.state.deletedPaths[targetPath]
 		delete(c.state.deletedPaths, targetPath)
@@ -277,6 +294,22 @@ func symlinkPath(c *Core, target string, linkPath QualifiedPath) (EntryAttr, err
 		}
 		now := time.Now()
 		nid, gen := c.state.allocNodeID()
+		var gitHost string
+		if hostPath, isRepoRoot, isMutableGit, gitErr := resolveMutableGitTarget(c, targetPath); gitErr != nil {
+			c.mu.Unlock()
+			return EntryAttr{}, gitErr
+		} else if isMutableGit && !isRepoRoot {
+			_ = os.RemoveAll(hostPath)
+			if err := os.MkdirAll(filepath.Dir(hostPath), 0o755); err != nil {
+				c.mu.Unlock()
+				return EntryAttr{}, err
+			}
+			if err := os.Symlink(target, hostPath); err != nil {
+				c.mu.Unlock()
+				return EntryAttr{}, err
+			}
+			gitHost = hostPath
+		}
 		node := &privateNode{
 			id:    nid,
 			gen:   gen,
@@ -290,6 +323,7 @@ func symlinkPath(c *Core, target string, linkPath QualifiedPath) (EntryAttr, err
 			flags: nodeFlags{
 				contentChanged: true,
 				namespaceAdded: true,
+				gitHostPath:    gitHost,
 				linkTarget:     target,
 			},
 		}

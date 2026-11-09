@@ -40,6 +40,22 @@ func (p *gitAwareLowerProvider) resolveBackingTarget(rel string) (string, bool, 
 	return filepath.Join(p.trunkDir, filepath.FromSlash(rel)), false, nil
 }
 
+func (p *gitAwareLowerProvider) ResolveMutableGitTarget(rel string) (string, bool, bool, error) {
+	rel = cleanSlashRel(rel)
+	repoRel, subRel, isGit := splitGitRelPath(rel)
+	if !isGit {
+		return "", false, false, nil
+	}
+	gitDir, err := readyPrivateGitDir(p.mgr, p.viewID, repoRel)
+	if err != nil {
+		return "", false, true, err
+	}
+	if subRel == "." || subRel == "" {
+		return gitDir, true, true, nil
+	}
+	return filepath.Join(gitDir, filepath.FromSlash(subRel)), false, true, nil
+}
+
 func (p *gitAwareLowerProvider) Lstat(rel string) (layeredfs.LowerEntry, error) {
 	target, _, err := p.resolveBackingTarget(rel)
 	if err != nil {

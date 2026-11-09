@@ -104,7 +104,7 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 		}
 	}
 
-	c.mu.RLock()
+	c.mu.Lock()
 	prefix := ""
 	if dirPath.Rel != "." {
 		prefix = dirPath.Rel + "/"
@@ -112,6 +112,21 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 	for delPath := range c.state.deletedPaths {
 		if name, ok := immediateChildName(dirPath.RootID, prefix, delPath); ok {
 			delete(merged, name)
+		}
+	}
+	var gitChildren []QualifiedPath
+	for privPath, nid := range c.state.pathIndex {
+		if _, ok := immediateChildName(dirPath.RootID, prefix, privPath); ok {
+			if node := c.state.nodesByID[nid]; node != nil && !node.flags.unlinked && node.flags.gitHostPath != "" {
+				gitChildren = append(gitChildren, privPath)
+			}
+		}
+	}
+	for _, privPath := range gitChildren {
+		if nid, ok := c.state.pathIndex[privPath]; ok {
+			if node := c.state.nodesByID[nid]; node != nil && !node.flags.unlinked {
+				refreshMutableGitNodeLocked(c, privPath, node)
+			}
 		}
 	}
 	for privPath, nid := range c.state.pathIndex {
@@ -135,7 +150,7 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 			Layer:      LayerPrivate,
 		}
 	}
-	c.mu.RUnlock()
+	c.mu.Unlock()
 
 	names := sortedNames(merged)
 	out := make([]DirEntry, 0, len(names))

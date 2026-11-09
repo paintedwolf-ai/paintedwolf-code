@@ -285,19 +285,29 @@ func flushBackingState(c *Core) error {
 		c.mu.Unlock()
 		return ErrViewReleased
 	}
-	var held []*openHandle
+	dirtyGenSnap := make(map[string]uint64, len(c.state.dirtyBackingFiles))
+	for p, gen := range c.state.dirtyBackingFiles {
+		dirtyGenSnap[p] = gen
+	}
+	type heldFlushItem struct {
+		h           *openHandle
+		backingPath string
+	}
+	var held []heldFlushItem
 	flushedPaths := make(map[string]struct{}, len(c.state.handles))
 	for _, h := range c.state.handles {
 		if !h.closed && h.file != nil {
 			h.refs++
-			held = append(held, h)
+			var bPath string
 			if node := c.state.nodesByID[h.nodeID]; node != nil && node.flags.backingPath != "" {
-				flushedPaths[node.flags.backingPath] = struct{}{}
+				bPath = node.flags.backingPath
+				flushedPaths[bPath] = struct{}{}
 			}
+			held = append(held, heldFlushItem{h: h, backingPath: bPath})
 		}
 	}
 	var dirtyPaths []string
-	for p := range c.state.dirtyBackingFiles {
+	for p := range dirtyGenSnap {
 		if _, already := flushedPaths[p]; !already {
 			dirtyPaths = append(dirtyPaths, p)
 		}
@@ -309,27 +319,49 @@ func flushBackingState(c *Core) error {
 	c.mu.Unlock()
 
 	var flushErr error
-	for _, h := range held {
-		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "handle_sync"), flushFD(c, int(h.file.Fd())))
-		flushErr = errors.Join(flushErr, releaseHandleRef(c, h))
+	flushedOK := make(map[string]uint64, len(dirtyGenSnap))
+	for _, item := range held {
+		hookErr := runJournalSyncHook(c, "handle_sync")
+		syncErr := flushFD(c, int(item.h.file.Fd()))
+		relErr := releaseHandleRef(c, item.h)
+		flushErr = errors.Join(flushErr, hookErr, syncErr, relErr)
+		if hookErr == nil && syncErr == nil && relErr == nil && item.backingPath != "" {
+			if gen, ok := dirtyGenSnap[item.backingPath]; ok {
+				flushedOK[item.backingPath] = gen
+			}
+		}
 	}
 	for _, p := range dirtyPaths {
-		f, err := os.Open(p)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
+		hookErr := runJournalSyncHook(c, "dirty_backing:"+p)
+		f, openErr := os.Open(p)
+		if openErr != nil {
+			if errors.Is(openErr, os.ErrNotExist) {
+				flushErr = errors.Join(flushErr, hookErr)
+				if hookErr == nil {
+					flushedOK[p] = dirtyGenSnap[p]
+				}
 				continue
 			}
-			flushErr = errors.Join(flushErr, err)
+			flushErr = errors.Join(flushErr, hookErr, openErr)
 			continue
 		}
-		flushErr = errors.Join(flushErr, flushFD(c, int(f.Fd())), f.Close())
+		syncErr := flushFD(c, int(f.Fd()))
+		closeErr := f.Close()
+		flushErr = errors.Join(flushErr, hookErr, syncErr, closeErr)
+		if hookErr == nil && syncErr == nil && closeErr == nil {
+			flushedOK[p] = dirtyGenSnap[p]
+		}
 	}
+	c.mu.Lock()
+	for p, gen := range flushedOK {
+		if cur, ok := c.state.dirtyBackingFiles[p]; ok && cur == gen {
+			delete(c.state.dirtyBackingFiles, p)
+		}
+	}
+	c.mu.Unlock()
 	if flushErr != nil {
 		return flushErr
 	}
-	c.mu.Lock()
-	clear(c.state.dirtyBackingFiles)
-	c.mu.Unlock()
 	if workFile != nil {
 		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "work_dir_sync"), flushFD(c, int(workFile.Fd())))
 	}

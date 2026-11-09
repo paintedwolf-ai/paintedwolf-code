@@ -91,13 +91,93 @@ func (s *RetainedObjectStore) ObjectsDir() string {
 
 // Metrics returns a snapshot of the store's object and byte counters.
 func (s *RetainedObjectStore) Metrics() StoreMetrics {
+	s.mu.Lock()
+	retainedObjects, retainedBytes := s.computeRetainedStockLocked()
+	s.mu.Unlock()
 	return StoreMetrics{
 		ObjectsImported:   s.objectsImported.Load(),
 		ObjectsReused:     s.objectsReused.Load(),
 		BytesImported:     s.bytesImported.Load(),
 		BytesReused:       s.bytesReused.Load(),
 		BytesNewlyWritten: s.bytesNewlyWritten.Load(),
+		RetainedObjects:   retainedObjects,
+		RetainedBytes:     retainedBytes,
 	}
+}
+
+func (s *RetainedObjectStore) computeRetainedStockLocked() (int64, int64) {
+	if s.objectsDir == "" {
+		return 0, 0
+	}
+	seenOIDs := make(map[string]struct{})
+	var totalBytes int64
+	entries, err := os.ReadDir(s.objectsDir)
+	if err != nil {
+		return 0, 0
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() {
+			continue
+		}
+		if name == "pack" {
+			packDir := filepath.Join(s.objectsDir, "pack")
+			pEntries, pErr := os.ReadDir(packDir)
+			if pErr != nil {
+				continue
+			}
+			for _, pe := range pEntries {
+				if pe.IsDir() {
+					continue
+				}
+				pName := pe.Name()
+				if strings.HasSuffix(pName, ".pack") || strings.HasSuffix(pName, ".idx") {
+					if info, iErr := pe.Info(); iErr == nil {
+						totalBytes += info.Size()
+					}
+				}
+				if strings.HasSuffix(pName, ".pack") {
+					if members, ok := s.packOIDs[pName]; ok {
+						for oid := range members {
+							seenOIDs[oid] = struct{}{}
+						}
+					}
+				}
+			}
+			continue
+		}
+		if len(name) != 2 || !isHexString(name) {
+			continue
+		}
+		shardDir := filepath.Join(s.objectsDir, name)
+		sEntries, sErr := os.ReadDir(shardDir)
+		if sErr != nil {
+			continue
+		}
+		for _, se := range sEntries {
+			if se.IsDir() {
+				continue
+			}
+			rest := se.Name()
+			if len(rest) == 38 && isHexString(rest) {
+				seenOIDs[strings.ToLower(name+rest)] = struct{}{}
+				if info, iErr := se.Info(); iErr == nil {
+					totalBytes += info.Size()
+				}
+			}
+		}
+	}
+	return int64(len(seenOIDs)), totalBytes
+}
+
+func isHexString(v string) bool {
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return len(v) > 0
 }
 
 // RecordPrivateWriteBytes adds newly written private object bytes to the store metrics.

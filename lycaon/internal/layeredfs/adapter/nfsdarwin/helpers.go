@@ -4,16 +4,66 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
+
+const nfsBarrierFlushHelperEnv = "PW_NFS_BARRIER_FLUSH_HELPER"
+
+func init() {
+	if os.Getenv(nfsBarrierFlushHelperEnv) == "1" {
+		runNFSBarrierFlushHelperMain()
+	}
+}
+
+func runNFSBarrierFlushHelperMain() {
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
+	parts := strings.Split(string(raw), "\x00")
+	if len(parts) < 1 || parts[0] == "" {
+		os.Exit(2)
+	}
+	mountRoot := parts[0]
+	if err := syncVolume(mountRoot); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "sync volume %s: %v\n", mountRoot, err)
+		os.Exit(1)
+	}
+	var filesSynced, dirsSynced int64
+	adp := &Adapter{}
+	for _, rel := range parts[1:] {
+		if rel == "" {
+			continue
+		}
+		target := mountRoot
+		if rel != "." {
+			target = filepath.Join(mountRoot, rel)
+		}
+		isFile, isDir, sErr := adp.syncClientPath(context.Background(), target)
+		if sErr != nil {
+			_, _ = fmt.Fprintln(os.Stderr, sErr.Error())
+			os.Exit(1)
+		}
+		if isFile {
+			filesSynced++
+		} else if isDir {
+			dirsSynced++
+		}
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "%d %d\n", filesSynced, dirsSynced)
+	os.Exit(0)
+}
 
 // DisownMountForTest mutates the recorded mount ownership metadata for viewID so tests can
 // verify that Release and unmountOwnedRoot refuse to unmount an unowned or mismatched path.
@@ -139,11 +189,6 @@ func addCandidateWithAncestors(candidates map[string]struct{}, rel string) {
 }
 
 func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootID string, m *rootMount) error {
-	// The volume sync reaches dirty buffers of files the server has never heard of; the per-path
-	// fsyncs that follow report write errors, which the volume sync does not return.
-	if err := syncVolume(m.mountPath); err != nil {
-		return fmt.Errorf("sync volume %s: %w", m.mountPath, err)
-	}
 	candidates := map[string]struct{}{".": {}}
 	if st.core != nil {
 		changes, err := st.core.EnumerateChanges(false)
@@ -175,6 +220,41 @@ func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootI
 	}
 	sort.Strings(rels)
 	rels = append(rels, ".")
+
+	a.mu.RLock()
+	fn := a.cfg.ClientSyncFn
+	a.mu.RUnlock()
+	if fn == nil {
+		if exePath, exeErr := os.Executable(); exeErr == nil && exePath != "" {
+			payload := strings.Join(append([]string{m.mountPath}, rels...), "\x00")
+			stdout, stderr, exitCode, runErr := execpkg.RunSeparate(ctx, exePath, nil, execpkg.ExecOpts{
+				Launch:    execpkg.HostLaunch("nfs_barrier_flush"),
+				InlineEnv: map[string]string{nfsBarrierFlushHelperEnv: "1"},
+				Stdin:     &execpkg.StdinSpec{Literal: []byte(payload)},
+			})
+			if runErr != nil || exitCode != 0 {
+				if runErr != nil {
+					return runErr
+				}
+				msg := strings.TrimSpace(string(stderr))
+				if msg == "" {
+					msg = fmt.Sprintf("nfs_barrier_flush helper exited with code %d", exitCode)
+				}
+				return errors.New(msg)
+			}
+			var fSync, dSync int64
+			_, _ = fmt.Sscanf(strings.TrimSpace(string(stdout)), "%d %d", &fSync, &dSync)
+			st.lastFilesSynced.Add(fSync)
+			st.lastDirsSynced.Add(dSync)
+			return nil
+		}
+	}
+
+	// The volume sync reaches dirty buffers of files the server has never heard of; the per-path
+	// fsyncs that follow report write errors, which the volume sync does not return.
+	if err := syncVolume(m.mountPath); err != nil {
+		return fmt.Errorf("sync volume %s: %w", m.mountPath, err)
+	}
 
 	var filesSynced, dirsSynced int64
 	for _, rel := range rels {

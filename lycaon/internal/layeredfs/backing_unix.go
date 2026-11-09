@@ -56,6 +56,15 @@ func createExclusiveBackingFile(dirFD int, name, fullPath string, mode fs.FileMo
 }
 
 func openBackingFileRW(dirFD int, name, fullPath string) (*os.File, error) {
+	if name == "" && fullPath != "" {
+		f, err := os.OpenFile(fullPath, os.O_RDWR, 0)
+		if err != nil && os.IsPermission(err) {
+			if cErr := os.Chmod(fullPath, 0o600); cErr == nil {
+				return os.OpenFile(fullPath, os.O_RDWR, 0)
+			}
+		}
+		return f, err
+	}
 	fd, err := unix.Openat(dirFD, name, unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, err
@@ -64,6 +73,9 @@ func openBackingFileRW(dirFD int, name, fullPath string) (*os.File, error) {
 }
 
 func openBackingFileRO(dirFD int, name, fullPath string) (*os.File, error) {
+	if name == "" && fullPath != "" {
+		return os.Open(fullPath)
+	}
 	fd, err := unix.Openat(dirFD, name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, err

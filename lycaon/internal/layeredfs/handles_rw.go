@@ -121,7 +121,7 @@ func writeHandleAdmitted(c *Core, hid HandleID, data []byte, offset int64) (int,
 		node.ctime = now
 		node.flags.contentChanged = true
 		if node.flags.backingPath != "" {
-			c.state.dirtyBackingFiles[node.flags.backingPath] = struct{}{}
+			markDirtyBackingFileLocked(c, node.flags.backingPath)
 		}
 		recordJournalLocked(c, JournalOpWrite, h.qpath, nil, node, int64(n))
 		c.mu.Unlock()

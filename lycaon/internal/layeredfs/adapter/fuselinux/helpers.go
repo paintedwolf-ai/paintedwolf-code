@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,6 +16,48 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
+
+const fuseBarrierFlushHelperEnv = "PW_FUSE_BARRIER_FLUSH_HELPER"
+
+func init() {
+	if os.Getenv(fuseBarrierFlushHelperEnv) == "1" {
+		runFuseBarrierFlushHelperMain()
+	}
+}
+
+func runFuseBarrierFlushHelperMain() {
+	raw, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
+	parts := strings.Split(string(raw), "\x00")
+	if len(parts) < 1 || parts[0] == "" {
+		os.Exit(2)
+	}
+	mountRoot := parts[0]
+	var filesSynced, dirsSynced int
+	adp := &Adapter{}
+	for _, p := range parts[1:] {
+		if p == "" {
+			continue
+		}
+		isDir, synced, sErr := adp.syncClientPath(context.Background(), mountRoot, p)
+		if sErr != nil {
+			_, _ = fmt.Fprintln(os.Stderr, sErr.Error())
+			os.Exit(1)
+		}
+		if synced {
+			if isDir {
+				dirsSynced++
+			} else {
+				filesSynced++
+			}
+		}
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "%d %d\n", filesSynced, dirsSynced)
+	os.Exit(0)
+}
 
 // InvalidatePath sends an explicit FUSE kernel cache invalidation for qpath on viewID.
 func (a *Adapter) InvalidatePath(viewID string, qpath layeredfs.QualifiedPath) error {
@@ -212,6 +255,31 @@ func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootI
 	paths, err := collectBoundedFlushPaths(st, rootID, m)
 	if err != nil {
 		return 0, 0, err
+	}
+	a.mu.RLock()
+	fn := a.cfg.ClientSyncFn
+	a.mu.RUnlock()
+	if fn == nil {
+		if exePath, exeErr := os.Executable(); exeErr == nil && exePath != "" {
+			payload := strings.Join(append([]string{m.mountPath}, paths...), "\x00")
+			stdout, stderr, exitCode, runErr := execpkg.RunSeparate(ctx, exePath, nil, execpkg.ExecOpts{
+				Launch:    execpkg.HostLaunch("fuse_barrier_flush"),
+				InlineEnv: map[string]string{fuseBarrierFlushHelperEnv: "1"},
+				Stdin:     &execpkg.StdinSpec{Literal: []byte(payload)},
+			})
+			if runErr != nil || exitCode != 0 {
+				if runErr != nil {
+					return 0, 0, runErr
+				}
+				msg := strings.TrimSpace(string(stderr))
+				if msg == "" {
+					msg = fmt.Sprintf("fuse_barrier_flush helper exited with code %d", exitCode)
+				}
+				return 0, 0, errors.New(msg)
+			}
+			_, _ = fmt.Sscanf(strings.TrimSpace(string(stdout)), "%d %d", &filesSynced, &dirsSynced)
+			return filesSynced, dirsSynced, nil
+		}
 	}
 	for _, p := range paths {
 		isDir, synced, sErr := a.syncClientPath(ctx, m.mountPath, p)

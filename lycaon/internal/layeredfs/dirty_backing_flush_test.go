@@ -1,8 +1,10 @@
 package layeredfs
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -86,5 +88,124 @@ func TestDirtyBackingFilesFlushedAtCheckpointBarrierWithZeroPerOpFlushes(t *test
 
 	if delta := core.Stats().Flushes - afterFirstBarrier; delta != 4 {
 		t.Fatalf("expected 4 flushes on second barrier (1 open handle + 3 dirs), got %d", delta)
+	}
+}
+
+func TestDirtyBackingFlushRetainsFailedFileAndRetiresSucceeded(t *testing.T) {
+	tmp := t.TempDir()
+	trunk := filepath.Join(tmp, "trunk")
+	backing := filepath.Join(tmp, "backing")
+	testutil.FailErr(t, "mkdir trunk", os.MkdirAll(trunk, 0o755))
+	testutil.FailErr(t, "mkdir backing", os.MkdirAll(backing, 0o700))
+
+	var failTarget string
+	core, err := New(Config{
+		ViewID:     "view-ruling8-partial-fail",
+		BackingDir: backing,
+		Roots:      []RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true}},
+		FaultHooks: &FaultHooks{
+			JournalSyncHook: func(phase string) error {
+				if failTarget != "" && phase == "dirty_backing:"+failTarget {
+					return errors.New("injected dirty backing sync failure")
+				}
+				return nil
+			},
+		},
+	})
+	testutil.FailErr(t, "New Core", err)
+	t.Cleanup(func() { _ = core.ReleaseView() })
+
+	q := func(rel string) QualifiedPath { return QualifiedPath{RootID: "primary", Rel: rel} }
+	_, err = core.WriteFile(q("alpha.txt"), []byte("alpha\n"), 0o644)
+	testutil.FailErr(t, "WriteFile alpha.txt", err)
+	_, err = core.WriteFile(q("beta.txt"), []byte("beta\n"), 0o644)
+	testutil.FailErr(t, "WriteFile beta.txt", err)
+
+	core.mu.RLock()
+	alphaNode := core.state.nodesByID[core.state.pathIndex[q("alpha.txt")]]
+	betaNode := core.state.nodesByID[core.state.pathIndex[q("beta.txt")]]
+	alphaBacking := alphaNode.flags.backingPath
+	betaBacking := betaNode.flags.backingPath
+	core.mu.RUnlock()
+
+	failTarget = betaBacking
+	if err := flushBackingState(core); err == nil {
+		t.Fatalf("expected flushBackingState to return injected error for %s", betaBacking)
+	}
+
+	core.mu.RLock()
+	_, alphaStillDirty := core.state.dirtyBackingFiles[alphaBacking]
+	_, betaStillDirty := core.state.dirtyBackingFiles[betaBacking]
+	core.mu.RUnlock()
+	if alphaStillDirty {
+		t.Fatalf("expected succeeded file %s to be retired from dirtyBackingFiles", alphaBacking)
+	}
+	if !betaStillDirty {
+		t.Fatalf("expected failed file %s to remain in dirtyBackingFiles", betaBacking)
+	}
+
+	// Clearing the fault and flushing again retires the remaining failed file.
+	failTarget = ""
+	testutil.FailErr(t, "retry flushBackingState", flushBackingState(core))
+	core.mu.RLock()
+	remaining := len(core.state.dirtyBackingFiles)
+	core.mu.RUnlock()
+	if remaining != 0 {
+		t.Fatalf("expected 0 remaining dirtyBackingFiles after retry, got %d", remaining)
+	}
+}
+
+func TestDirtyBackingFlushPreservesNewerGenerationDuringInFlightFlush(t *testing.T) {
+	tmp := t.TempDir()
+	trunk := filepath.Join(tmp, "trunk")
+	backing := filepath.Join(tmp, "backing")
+	testutil.FailErr(t, "mkdir trunk", os.MkdirAll(trunk, 0o755))
+	testutil.FailErr(t, "mkdir backing", os.MkdirAll(backing, 0o700))
+
+	var core *Core
+	var targetBacking string
+	var bumpedGen uint64
+	core, err := New(Config{
+		ViewID:     "view-ruling8-generation-race",
+		BackingDir: backing,
+		Roots:      []RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true}},
+		FaultHooks: &FaultHooks{
+			JournalSyncHook: func(phase string) error {
+				if targetBacking != "" && strings.HasPrefix(phase, "dirty_backing:") && phase == "dirty_backing:"+targetBacking {
+					// Simulate a concurrent write dirtying the same backing file with a newer generation
+					// while flushBackingState is in flight outside c.mu.
+					core.mu.Lock()
+					markDirtyBackingFileLocked(core, targetBacking)
+					bumpedGen = core.state.dirtyBackingFiles[targetBacking]
+					core.mu.Unlock()
+				}
+				return nil
+			},
+		},
+	})
+	testutil.FailErr(t, "New Core", err)
+	t.Cleanup(func() { _ = core.ReleaseView() })
+
+	q := func(rel string) QualifiedPath { return QualifiedPath{RootID: "primary", Rel: rel} }
+	_, err = core.WriteFile(q("concurrent.txt"), []byte("v1\n"), 0o644)
+	testutil.FailErr(t, "WriteFile concurrent.txt", err)
+
+	core.mu.RLock()
+	node := core.state.nodesByID[core.state.pathIndex[q("concurrent.txt")]]
+	targetBacking = node.flags.backingPath
+	initialGen := core.state.dirtyBackingFiles[targetBacking]
+	core.mu.RUnlock()
+
+	testutil.FailErr(t, "flushBackingState", flushBackingState(core))
+	if bumpedGen <= initialGen {
+		t.Fatalf("expected bumped generation > initial generation (%d <= %d)", bumpedGen, initialGen)
+	}
+
+	core.mu.RLock()
+	gotGen, stillDirty := core.state.dirtyBackingFiles[targetBacking]
+	core.mu.RUnlock()
+	if !stillDirty || gotGen != bumpedGen {
+		t.Fatalf("expected newer generation %d to be preserved in dirtyBackingFiles, got stillDirty=%v gen=%d",
+			bumpedGen, stillDirty, gotGen)
 	}
 }

@@ -63,6 +63,8 @@ type StoreMetrics struct {
 	BytesImported     int64 `json:"bytes_imported"`
 	BytesReused       int64 `json:"bytes_reused"`
 	BytesNewlyWritten int64 `json:"bytes_newly_written"`
+	RetainedObjects   int64 `json:"retained_objects"`
+	RetainedBytes     int64 `json:"retained_bytes"`
 }
 
 // InitState represents the lifecycle state of a private repository in a view.

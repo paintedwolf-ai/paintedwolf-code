@@ -213,6 +213,10 @@ func ensurePrivateDirNodeLocked(c *Core, qpath QualifiedPath, attr EntryAttr) *p
 			return n
 		}
 	}
+	var gitHost string
+	if hostPath, isRepoRoot, ok, _ := resolveMutableGitTarget(c, qpath); ok && !isRepoRoot {
+		gitHost = hostPath
+	}
 	nid, gen := c.state.allocNodeID()
 	node := &privateNode{
 		id:     nid,
@@ -224,6 +228,9 @@ func ensurePrivateDirNodeLocked(c *Core, qpath QualifiedPath, attr EntryAttr) *p
 		ctime:  attr.CTime,
 		xattrs: cloneXattrs(attr.Xattrs),
 		paths:  map[QualifiedPath]struct{}{qpath: {}},
+		flags: nodeFlags{
+			gitHostPath: gitHost,
+		},
 	}
 	c.state.nodesByID[nid] = node
 	c.state.pathIndex[qpath] = nid
@@ -252,7 +259,9 @@ func ensureCopiedUpNode(c *Core, qpath QualifiedPath, expectedGen uint64) (*priv
 	}
 	if nid, ok := c.state.pathIndex[qpath]; ok {
 		if n := c.state.nodesByID[nid]; n != nil && !n.flags.unlinked {
-			return n, nil
+			if refreshMutableGitNodeLocked(c, qpath, n) {
+				return n, nil
+			}
 		}
 	}
 	switch res.attr.Kind {
@@ -261,6 +270,10 @@ func ensureCopiedUpNode(c *Core, qpath QualifiedPath, expectedGen uint64) (*priv
 	case EntryDirectory:
 		return ensurePrivateDirNodeLocked(c, qpath, res.attr), nil
 	case EntrySymlink:
+		var gitHost string
+		if hostPath, isRepoRoot, ok, _ := resolveMutableGitTarget(c, qpath); ok && !isRepoRoot {
+			gitHost = hostPath
+		}
 		nid, gen := c.state.allocNodeID()
 		originCopy := qpath
 		node := &privateNode{
@@ -276,6 +289,7 @@ func ensureCopiedUpNode(c *Core, qpath QualifiedPath, expectedGen uint64) (*priv
 			paths:  map[QualifiedPath]struct{}{qpath: {}},
 			flags: nodeFlags{
 				physicalCopyUp: true,
+				gitHostPath:    gitHost,
 				linkTarget:     res.attr.LinkTarget,
 			},
 			initial: nodeInitialState{

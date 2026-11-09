@@ -148,7 +148,7 @@ func (c *Core) SetAttrNode(nodeID NodeID, gen Generation, req SetAttrRequest) (E
 		node.size, node.mtime, node.ctime = *req.Size, now, now
 		node.flags.contentChanged = true
 		if node.flags.backingPath != "" {
-			c.state.dirtyBackingFiles[node.flags.backingPath] = struct{}{}
+			markDirtyBackingFileLocked(c, node.flags.backingPath)
 		}
 		recordJournalLocked(c, JournalOpTruncate, qpath, nil, node, *req.Size)
 	}

@@ -106,7 +106,7 @@ func ensureBaseCaptured(c *Core, qpath QualifiedPath) (BaseCapture, error) {
 	}
 	c.state.basesByPath[qpath] = captured
 	if captured.BackingFile != "" {
-		c.state.dirtyBackingFiles[captured.BackingFile] = struct{}{}
+		markDirtyBackingFileLocked(c, captured.BackingFile)
 	}
 	if captured.Kind == EntryRegular && captured.Size > 0 {
 		c.counters.capturedBaseBytes.Add(captured.Size)

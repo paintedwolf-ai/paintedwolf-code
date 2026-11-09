@@ -7,11 +7,77 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 )
 
 type gitOverlayItem struct {
 	qp   QualifiedPath
 	node *privateNode
+}
+
+func resolveMutableGitTarget(c *Core, qpath QualifiedPath) (hostPath string, isRepoRoot bool, ok bool, err error) {
+	if c == nil {
+		return "", false, false, nil
+	}
+	rootID := qpath.RootID
+	if rootID == "" {
+		rootID = c.roots.activeRootID
+	}
+	prov, exists := c.roots.providers[rootID]
+	if !exists || prov == nil {
+		return "", false, false, nil
+	}
+	mgp, isMutable := prov.(MutableGitProvider)
+	if !isMutable {
+		return "", false, false, nil
+	}
+	return mgp.ResolveMutableGitTarget(qpath.Rel)
+}
+
+func fileInfoIno(info fs.FileInfo) uint64 {
+	if info == nil {
+		return 0
+	}
+	if st, ok := info.Sys().(*syscall.Stat_t); ok && st != nil {
+		return uint64(st.Ino)
+	}
+	return 0
+}
+
+// refreshMutableGitNodeLocked refreshes or retires a privateNode backed directly by privateGitDir
+// so mutations made directly in privateGitDir (e.g. by GitExecutor) are immediately coherent through Core.
+func refreshMutableGitNodeLocked(c *Core, qpath QualifiedPath, node *privateNode) bool {
+	if node == nil || node.flags.gitHostPath == "" {
+		return true
+	}
+	info, err := os.Lstat(node.flags.gitHostPath)
+	if err != nil {
+		if os.IsNotExist(err) && !hasOpenHandlesForNodeLocked(c, node.id) {
+			delete(c.state.pathIndex, qpath)
+			delete(c.state.deletedPaths, qpath)
+			delete(c.state.transient, qpath)
+			delete(node.paths, qpath)
+			if len(node.paths) == 0 {
+				node.flags.unlinked = true
+				reclaimNodeLocked(c, node)
+			}
+			return false
+		}
+		return true
+	}
+	if !hasOpenHandlesForNodeLocked(c, node.id) {
+		node.size = info.Size()
+		node.mode = info.Mode()
+		node.mtime = info.ModTime()
+		node.ctime = info.ModTime()
+		if info.Mode()&fs.ModeSymlink != 0 {
+			if target, lErr := os.Readlink(node.flags.gitHostPath); lErr == nil {
+				node.flags.linkTarget = target
+				node.size = int64(len(target))
+			}
+		}
+	}
+	return true
 }
 
 func matchRepoGitMetadataRel(rel, repoRel string) (subRel string, isRepoRoot, ok bool) {
@@ -161,7 +227,7 @@ func (c *Core) SyncGitOverlayTo(rootID, repoRel, privGitDir string) error {
 			if !hasOpenHandlesForNodeLocked(c, node.id) {
 				if node.flags.backingName != "" && c.backing.workDirFile != nil {
 					_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), node.flags.backingName)
-				} else if node.flags.backingPath != "" {
+				} else if node.flags.backingPath != "" && node.flags.gitHostPath == "" && filepath.Clean(node.flags.backingPath) != filepath.Clean(target) {
 					_ = os.Remove(node.flags.backingPath)
 				}
 				if node.flags.backingPath != "" {

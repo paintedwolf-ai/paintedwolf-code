@@ -3,6 +3,7 @@ package layeredfs
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -97,6 +98,20 @@ func linkPath(c *Core, oldPath, newPath QualifiedPath) (EntryAttr, error) {
 			c.mu.Unlock()
 			return EntryAttr{}, os.ErrExist
 		}
+		if newHostPath, isRepoRoot, isMutableGit, gitErr := resolveMutableGitTarget(c, newTarget); gitErr != nil {
+			c.mu.Unlock()
+			return EntryAttr{}, gitErr
+		} else if isMutableGit && !isRepoRoot && node.flags.gitHostPath != "" {
+			_ = os.RemoveAll(newHostPath)
+			if err := os.MkdirAll(filepath.Dir(newHostPath), 0o755); err != nil {
+				c.mu.Unlock()
+				return EntryAttr{}, err
+			}
+			if err := os.Link(node.flags.gitHostPath, newHostPath); err != nil {
+				c.mu.Unlock()
+				return EntryAttr{}, err
+			}
+		}
 		node.paths[newTarget] = struct{}{}
 		node.ctime = time.Now()
 		node.flags.metadataChanged = true
@@ -179,6 +194,21 @@ func unlinkPathAdmitted(c *Core, qpath QualifiedPath, removeDir bool) error {
 			c.mu.Unlock()
 			continue
 		}
+		gitHostPath, isGitRepoRoot, isMutableGit, gitErr := resolveMutableGitTarget(c, targetPath)
+		if gitErr != nil {
+			c.mu.Unlock()
+			return gitErr
+		}
+		if isMutableGit {
+			if isGitRepoRoot {
+				c.mu.Unlock()
+				return syscall.EPERM
+			}
+			if rErr := os.Remove(gitHostPath); rErr != nil && !os.IsNotExist(rErr) {
+				c.mu.Unlock()
+				return rErr
+			}
+		}
 		var removedNode *privateNode
 		var orphanBacking string
 		if nid, ok := c.state.pathIndex[targetPath]; ok {
@@ -197,9 +227,13 @@ func unlinkPathAdmitted(c *Core, qpath QualifiedPath, removeDir bool) error {
 			}
 		}
 		delete(c.state.transient, targetPath)
-		c.state.deletedPaths[targetPath] = deletedState{
-			ReplacedKind: res.attr.Kind,
-			Timestamp:    time.Now(),
+		if isMutableGit {
+			delete(c.state.deletedPaths, targetPath)
+		} else {
+			c.state.deletedPaths[targetPath] = deletedState{
+				ReplacedKind: res.attr.Kind,
+				Timestamp:    time.Now(),
+			}
 		}
 		bumpParentDirGenLocked(c, targetPath)
 		recordJournalLocked(c, JournalOpUnlink, targetPath, nil, removedNode, 0)

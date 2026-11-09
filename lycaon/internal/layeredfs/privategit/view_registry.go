@@ -263,6 +263,9 @@ func ViewPathExists(projectOrWorktreeDir, relPath string) bool {
 			if st, err := v.core.Stat(layeredfs.QualifiedPath{RootID: v.rootID, Rel: cleanRel}); err == nil && st.Kind != layeredfs.EntryAbsent {
 				return true
 			}
+			if !v.materialized {
+				continue
+			}
 		}
 		if _, err := os.Lstat(filepath.Join(v.worktreeDir, filepath.FromSlash(cleanRel))); err == nil {
 			return true
