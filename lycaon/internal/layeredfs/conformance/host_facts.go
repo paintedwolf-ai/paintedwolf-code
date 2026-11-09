@@ -14,21 +14,33 @@ import (
 )
 
 // CollectHostFacts gathers host OS, architecture, kernel, installation shape, and mount facts (#1667).
-func CollectHostFacts(adapterName adapter.AdapterID, mountCacheSettings, workloadFixture string) HostFacts {
-	kernel := detectKernelVersion()
-	fsKind := "apfs"
+// BackingFilesystem is probed from the real backing directory via statfs(2) — never guessed from
+// the platform (the Linux test host /mnt/data1 is ZFS, not ext4/xfs). MountCacheSettings comes
+// from the caller or the adapter's declared CacheRevalidation — never a fabricated zero-timeout
+// string. When a fact cannot be probed it is reported as "unknown" (Lead A B01 review defect 4).
+func CollectHostFacts(
+	adapterName adapter.AdapterID,
+	mountCacheSettings, workloadFixture, backingDir string,
+	cacheReval *adapter.CacheRevalidation,
+) HostFacts {
 	installShape := "macos_builtin_nfs_client_no_extension"
 	if runtime.GOOS == "linux" {
-		fsKind = "ext4_or_xfs"
-		installShape = "linux_package_fuse3_unprivileged_user"
+		if _, err := exec.LookPath("fusermount3"); err == nil {
+			installShape = "linux_package_fuse3_unprivileged_user"
+		} else {
+			installShape = "linux_fuse3_unavailable"
+		}
+	}
+	fsKind := "unknown"
+	if name, ok := statfsFilesystemType(backingDir); ok && name != "" {
+		fsKind = name
 	}
 	if mountCacheSettings == "" {
-		if adapterName == adapter.AdapterNFSDarwin {
-			mountCacheSettings = "nfsv3,tcp,locallocks,acregmin=0,acregmax=0,acdirmin=0,acdirmax=0"
-		} else if adapterName == adapter.AdapterFUSELinux {
-			mountCacheSettings = "fuse3,attr_timeout=0,entry_timeout=0,explicit_invalidation=true"
+		if cacheReval != nil {
+			mountCacheSettings = fmt.Sprintf("mode=%s,explicit_invalidation=%t,attribute_ttl=%s",
+				cacheReval.Mode, cacheReval.ExplicitInvalidation, cacheReval.AttributeTTL)
 		} else {
-			mountCacheSettings = "materialized_seed_snapshot"
+			mountCacheSettings = "unknown"
 		}
 	}
 	if workloadFixture == "" {
@@ -38,7 +50,7 @@ func CollectHostFacts(adapterName adapter.AdapterID, mountCacheSettings, workloa
 		SourceCommit:            detectSourceCommit(),
 		OS:                      runtime.GOOS,
 		Arch:                    runtime.GOARCH,
-		KernelVersion:           kernel,
+		KernelVersion:           detectKernelVersion(),
 		InstallationShape:       installShape,
 		BackingFilesystem:       fsKind,
 		AdapterName:             adapterName,
@@ -113,9 +125,30 @@ func QualifyMountedAdapter(facts HostFacts, diag PreparationDiagnostics) error {
 	return nil
 }
 
-// CompareMountedVsEagerCopy runs the same logical fixture on a mounted adapter and on eagercopy,
-// reporting eagercopy's distinct O(tree) preparation and fixed-seed visibility behavior (#1667).
-func CompareMountedVsEagerCopy(ctx context.Context, workRoot string) (PreparationDiagnostics, MaterializedComparisonReport, error) {
+// MountedSideMeasurement carries values MEASURED against a real mounted adapter
+// (fuselinux on Linux, nfsdarwin on macOS) by the external qualification harness.
+// In-process mock adapters and hardcoded constants are not conformance evidence
+// (#1667; Lead A B01 review defect 3): CompareMountedVsEagerCopy refuses to run
+// unless Available is true, and every mounted-side field in the resulting report
+// comes from these measured inputs.
+type MountedSideMeasurement struct {
+	Available   bool
+	Stats       layeredfs.Stats // Core.Stats() sampled at claim time on the real mount
+	RootOpsAt1K int64           // measured root-level ops with the 1K-entry fixture
+	RootOpsAt2M int64           // measured root-level ops with the 2M-entry fixture
+}
+
+// CompareMountedVsEagerCopy measures eagercopy's O(tree) preparation and
+// fixed-seed visibility behavior against a real eager adapter, and combines it
+// with mounted-side values measured externally on a real mount. The mounted
+// side is never simulated here: callers must supply a MountedSideMeasurement
+// from a real fuselinux/nfsdarwin harness, or the function returns an error
+// rather than fabricating report fields (#1667; Lead A B01 review defect 3).
+func CompareMountedVsEagerCopy(ctx context.Context, workRoot string, mounted MountedSideMeasurement) (PreparationDiagnostics, MaterializedComparisonReport, error) {
+	if !mounted.Available {
+		return PreparationDiagnostics{}, MaterializedComparisonReport{},
+			fmt.Errorf("mounted side must be measured against a real mounted adapter (fuselinux/nfsdarwin); in-process mocks and hardcoded constants are not conformance evidence (#1667)")
+	}
 	srcDir := filepath.Join(workRoot, "cmp-src")
 	if err := os.MkdirAll(filepath.Join(srcDir, "sub"), 0o755); err != nil {
 		return PreparationDiagnostics{}, MaterializedComparisonReport{}, err
@@ -126,20 +159,6 @@ func CompareMountedVsEagerCopy(ctx context.Context, workRoot string) (Preparatio
 	if err := os.WriteFile(filepath.Join(srcDir, "sub", "item.txt"), []byte("item-data\n"), 0o644); err != nil {
 		return PreparationDiagnostics{}, MaterializedComparisonReport{}, err
 	}
-
-	mountedID := expectedMountedAdapterForOS()
-	mountedAdp := newInProcessMountedAdapter(mountedID)
-	mPrep, err := mountedAdp.Prepare(ctx, adapter.PrepareRequest{
-		ViewID:     "view-cmp-mounted",
-		BackingDir: filepath.Join(workRoot, "mounted-backing"),
-		RuntimeDir: filepath.Join(workRoot, "mounted-runtime"),
-		Grants:     []adapter.RootGrant{{RootID: "r0", Label: "primary", SourcePath: srcDir, IsPrimary: true}},
-	})
-	if err != nil {
-		return PreparationDiagnostics{}, MaterializedComparisonReport{}, err
-	}
-	defer func() { _, _ = mountedAdp.Release(ctx, "view-cmp-mounted") }()
-	mountedStatsAtClaim := mPrep.Core.Stats()
 
 	eagerAdp := adapter.NewEagerCopyAdapter(adapter.ReasonMountDenied)
 	ePrep, err := eagerAdp.Prepare(ctx, adapter.PrepareRequest{
@@ -153,37 +172,31 @@ func CompareMountedVsEagerCopy(ctx context.Context, workRoot string) (Preparatio
 	}
 	defer func() { _, _ = eagerAdp.Release(ctx, "view-cmp-eager") }()
 
-	// Mutate untouched.txt in live trunk after both views are prepared.
+	// Mutate untouched.txt in live trunk after the view is prepared; the eager
+	// view must keep showing the seeded content. Mounted-side live-edit
+	// visibility is asserted by the real-mount harness, not here.
 	if err := os.WriteFile(filepath.Join(srcDir, "untouched.txt"), []byte("v2-live-trunk\n"), 0o644); err != nil {
 		return PreparationDiagnostics{}, MaterializedComparisonReport{}, err
 	}
 	qpUntouched := layeredfs.QualifiedPath{RootID: "r0", Rel: "untouched.txt"}
-	mountedBytes, err := mPrep.Core.ReadFile(qpUntouched)
-	if err != nil {
-		return PreparationDiagnostics{}, MaterializedComparisonReport{}, err
-	}
 	eagerBytes, err := ePrep.Core.ReadFile(qpUntouched)
 	if err != nil {
 		return PreparationDiagnostics{}, MaterializedComparisonReport{}, err
 	}
-	if string(mountedBytes) != "v2-live-trunk\n" {
-		return PreparationDiagnostics{}, MaterializedComparisonReport{}, fmt.Errorf("mounted view did not see live trunk edit: %q", string(mountedBytes))
-	}
 
-	mDiag := BuildPreparationDiagnostics(mountedID, []string{"r0"}, adapter.ReasonNone, mountedStatsAtClaim, "cp-cmp-1", "committed", RepoInitCost{}, nil)
+	mDiag := BuildPreparationDiagnostics(expectedMountedAdapterForOS(), []string{"r0"}, adapter.ReasonNone, mounted.Stats, "cp-cmp-1", "committed", RepoInitCost{}, nil)
 	eDiag := BuildPreparationDiagnostics(adapter.AdapterEagerCopy, []string{"r0"}, ePrep.Facts.FallbackReason, ePrep.Core.Stats(), "", "", RepoInitCost{}, nil)
-	eStats := ePrep.Core.Stats()
 	report := MaterializedComparisonReport{
 		AdapterName:          ePrep.AdapterID,
 		PreparationKind:      ePrep.Facts.PreparationKind,
 		UntouchedVisibility:  ePrep.Facts.UntouchedSourceVisibility,
-		LowerDirReadsAtClaim: mountedStatsAtClaim.LowerDirReads,
-		SeededEntries:        2,
-		SeededBytes:          eStats.CapturedBaseBytes,
+		LowerDirReadsAtClaim: mounted.Stats.LowerDirReads,
+		SeededEntries:        ePrep.ObservedEntries,
+		SeededBytes:          ePrep.ObservedBytes,
 		FallbackReason:       ePrep.Facts.FallbackReason,
 		LiveTrunkEditVisible: string(eagerBytes) == "v2-live-trunk\n",
-		MountedRootOpsAt1K:   3,
-		MountedRootOpsAt2M:   3,
+		MountedRootOpsAt1K:   mounted.RootOpsAt1K,
+		MountedRootOpsAt2M:   mounted.RootOpsAt2M,
 		UserWarningEmitted:   len(eDiag.UserFacingWarnings) > 0,
 	}
 	return mDiag, report, nil
@@ -194,19 +207,6 @@ func expectedMountedAdapterForOS() adapter.AdapterID {
 		return adapter.AdapterFUSELinux
 	}
 	return adapter.AdapterNFSDarwin
-}
-
-func newInProcessMountedAdapter(id adapter.AdapterID) *adapter.MountedAdapter {
-	return adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
-		AdapterID: id,
-		TargetOS:  runtime.GOOS,
-		MountProbeFn: func(_ context.Context, _, _ string) (adapter.ReasonCode, string, error) {
-			return adapter.ReasonNone, "", nil
-		},
-		VerifyBackingDenialFn: func(_ context.Context, _ string) (bool, error) {
-			return true, nil
-		},
-	})
 }
 
 func detectKernelVersion() string {
