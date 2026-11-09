@@ -30,7 +30,11 @@ const ACTIVITY_GROUP_TIER: Readonly<Record<string, number>> = {
  "Editing files": 1, "Recording Git changes": 1, "Changing files": 1, "Recording changes": 1,
 };
 
-/** Two-level monotonic rank: phase base plus the group sub-tier. Unknown groups default to the inspect discovery tier and the execute/mutate base; unknown phases rank 0 and never advance a headline. */
+/**
+ * Two-level monotonic rank: phase base plus the group sub-tier. Unknown groups
+ * default to the inspect discovery tier and the execute/mutate base; unknown
+ * phases rank 0 and never advance a headline.
+ */
 export function commandActivityRank(fact: CommandActivity): number {
  const base = ACTIVITY_PHASE_RANK[fact.phase ?? ""] ?? 0;
  if (base === 0) return 0;
