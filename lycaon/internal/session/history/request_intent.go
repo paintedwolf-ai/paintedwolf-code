@@ -7,47 +7,31 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // prepareRequestHistory restores the active instruction before reserving its tokens.
-func prepareRequestHistory(ctx context.Context, store Store, sess *api.Session, history []api.Message, req modelcall.CompletionRequest, recall func(context.Context, *api.Session) bool) ([]api.Message, modelcall.CompletionRequest, error) {
-	if store != nil && sess != nil {
+func prepareRequestHistory(ctx context.Context, service *Service, sess *api.Session, history []api.Message, req modelcall.CompletionRequest) ([]api.Message, modelcall.CompletionRequest, error) {
+	var recall func(context.Context, *api.Session) bool
+	if service != nil {
+		recall = service.recallAvailable
+	}
+	if service != nil && service.store != nil && sess != nil {
 		var err error
-		history, err = withCurrentRequest(ctx, store, sess, history)
+		history, err = withCurrentRequest(ctx, service.store, sess, history)
 		if err != nil {
 			return nil, req, err
 		}
 	}
 	projection := projectRequest(req.Messages, history)
-	rows := retainRequestIntent(projection.history, history)
+	rows := messageview.PreserveRequestIntent(projection.history, history)
 	rows, err := restoreRequestOmissions(ctx, sess, history, rows, recall)
 	if err != nil {
 		return nil, req, err
 	}
 	req.Messages = projection.replace(rows)
 	return history, req, nil
-}
-
-// retainRequestIntent preserves the original instruction through view replacement.
-func retainRequestIntent(rows, source []api.Message) []api.Message {
-	intent, ok := api.LastUserIntentMessage(source)
-	if !ok {
-		return rows
-	}
-	intent.ContextPinned = true
-	for i, row := range rows {
-		if row.ID == intent.ID {
-			out := slices.Clone(rows)
-			out[i].ContextPinned = true
-			return out
-		}
-	}
-	at := 0
-	for at < len(rows) && rows[at].Ord <= 0 {
-		at++
-	}
-	return slices.Insert(slices.Clone(rows), at, intent)
 }
 
 func validateRequestIntent(source, messages []api.Message) error {

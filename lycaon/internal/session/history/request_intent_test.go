@@ -2,6 +2,7 @@ package history
 
 import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
@@ -12,7 +13,7 @@ func TestRequestRestoresInstructionMissingFromAssembledMessages(t *testing.T) {
 	capture := api.Message{ID: "capture", Ord: 11, Role: api.MessageRoleTool}
 	history := []api.Message{opener, capture}
 	req := modelcall.CompletionRequest{Messages: []api.Message{{ID: "system", Role: api.MessageRoleSystem}, capture, {ID: "procedure", Role: api.MessageRoleSystem}}}
-	_, restored, err := prepareRequestHistory(t.Context(), nil, &api.Session{}, history, req, nil)
+	_, restored, err := prepareRequestHistory(t.Context(), nil, &api.Session{}, history, req)
 	testutil.FailErr(t, "restore active request", err)
 	if len(restored.Messages) != 4 || restored.Messages[1].ID != opener.ID || !restored.Messages[1].ContextPinned {
 		t.Fatalf("active request not restored in history slot: %+v", restored.Messages)
@@ -31,15 +32,15 @@ func TestRequestIntentSurvivesViewReplacementWithoutDuplication(t *testing.T) {
 	source := []api.Message{opener}
 	rows := []api.Message{{ID: "summary", Role: api.MessageRoleAssistant}, opener}
 	for range 3 {
-		rows = retainRequestIntent(rows, source)
+		rows = messageview.PreserveRequestIntent(rows, source)
 	}
 	if len(rows) != 2 || !rows[1].ContextPinned {
 		t.Fatalf("repeated projection = %+v", rows)
 	}
-	if got := retainRequestIntent(nil, source); len(got) != 1 || got[0].Content != opener.Content {
+	if got := messageview.PreserveRequestIntent(nil, source); len(got) != 1 || got[0].Content != opener.Content {
 		t.Fatalf("empty projection = %+v", got)
 	}
-	if got := retainRequestIntent(rows, nil); len(got) != 2 {
+	if got := messageview.PreserveRequestIntent(rows, nil); len(got) != 2 {
 		t.Fatal("missing source changed history")
 	}
 	testutil.FailErr(t, "validate host-only request", validateRequestIntent(nil, nil))

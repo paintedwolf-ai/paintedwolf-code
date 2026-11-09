@@ -277,5 +277,5 @@ func withCurrentRequest(ctx context.Context, store Store, sess *api.Session, tai
 	if opener.ID == "" || !api.IsUserIntentMessage(opener) {
 		return tail, nil
 	}
-	return retainRequestIntent(tail, []api.Message{opener}), nil
+	return messageview.PreserveRequestIntent(tail, []api.Message{opener}), nil
 }

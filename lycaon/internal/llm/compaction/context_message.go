@@ -30,7 +30,7 @@ type ContextMessage struct {
 // ContextMessageProvenance holds origin, trust, and replay metadata for a context row.
 type ContextMessageProvenance struct {
 	CommandResult       *transcript.CommandResultProvenance `json:"-"`
-	Execution           *messageview.ContinuationExecution  `json:"-"`
+	Execution           *messageview.ContinuationExecution  `json:"recorded_execution,omitempty"`
 	Seq                 int64
 	Origin              api.MessageOrigin
 	Authority           api.ContentAuthority

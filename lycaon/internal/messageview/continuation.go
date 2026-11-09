@@ -80,6 +80,7 @@ type ContinuationExecution struct {
 	SourceVerdict  string `json:"source_verdict,omitempty"`
 	ProcessHandle  string `json:"process_handle,omitempty"`
 	ProgramID      string `json:"program_id,omitempty"`
+	ProgramSource  string `json:"program_source,omitempty"`
 	ProgramState   string `json:"program_state,omitempty"`
 	ExitCode       *int   `json:"exit_code,omitempty"`
 	StopCode       string `json:"stop_code,omitempty"`

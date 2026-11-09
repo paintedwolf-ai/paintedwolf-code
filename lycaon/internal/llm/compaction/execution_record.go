@@ -2,6 +2,7 @@ package compaction
 
 import (
 	"encoding/json"
+
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,7 +23,7 @@ func continuationExecution(result *api.ToolResult) *messageview.ContinuationExec
 		out.ProcessHandle = process.Handle
 	}
 	if program := result.CommandProgram; program != nil && out.ReceiptID != "" && program.ParentReceiptID == out.ReceiptID {
-		out.ProgramID, out.ProgramState = program.ID, program.State
+		out.ProgramID, out.ProgramState, out.ProgramSource = program.ID, program.State, program.SourceRef
 		if program.StatusCode != nil {
 			code := *program.StatusCode
 			out.ExitCode = &code
