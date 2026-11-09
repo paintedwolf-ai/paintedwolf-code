@@ -422,6 +422,7 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"primary_changed":              true,
 	"changes":                      true, // projectroot.DiffRoots rows in RootsChangedKickData
 	"active_root":                  true, // projectroot.ActiveRoot in RootsChangedKickData
+	"label":                        true, // detached root label in enqueueRootDetachCanceledKick
 	"reviews_confined_writes":      true, // gate.Posture.ReviewsConfinedWrites in PostureChangedKickData
 	"evidence_digest":              true,
 	"command_completion":           true,
