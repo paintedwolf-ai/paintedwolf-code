@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
@@ -267,7 +268,7 @@ func (s *Execution) executeCommand(
 	case contribution.ActionWorkflowStart:
 		return s.executeWorkflowStart(w, r, scope, req, in)
 	case contribution.ActionEditorAction:
-		return s.ExecuteEditorAction(w, r, scope.sess, req, in)
+		return s.ExecuteEditorAction(w, r, scope.sess, scope.project, req, in)
 	case contribution.ActionMCPTool:
 		return s.executeMCPTool(w, r, scope, in)
 	default:
@@ -313,7 +314,7 @@ func (s *Execution) executeWorkflowStart(
 // ExecuteEditorAction admits a prompt under its preset boundary.
 func (s *Execution) ExecuteEditorAction(
 	w http.ResponseWriter, r *http.Request,
-	sess *wire.Session, req wire.CommandInvokeRequest, in commandinvoke.Input,
+	sess *wire.Session, proj *project.Project, req wire.CommandInvokeRequest, in commandinvoke.Input,
 ) (int, wire.CommandInvokeResponse, bool) {
 	ref, err := contribution.ParseID(in.Resolved.Action.Ref)
 	if err != nil {
@@ -340,8 +341,14 @@ func (s *Execution) ExecuteEditorAction(
 		return 0, wire.CommandInvokeResponse{}, false
 	}
 
-	// The preset fixes the tool profile and write pin.
-	text, err := renderEditorPrompt(r.Context(), prompt, in.Context)
+	// The preset fixes the tool profile and write pin; the prompt names the
+	// target in the same session-folder spelling the attachment fence uses.
+	roots := project.RootRefsFrom(proj)
+	activeRootID := ""
+	if sess != nil {
+		activeRootID = sess.WorkspaceRootID
+	}
+	text, err := renderEditorPrompt(r.Context(), prompt, in.Context, roots, activeRootID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return 0, wire.CommandInvokeResponse{}, false
@@ -435,9 +442,10 @@ func OperationOutputFailure() (int, wire.CommandInvokeResponse, bool) {
 }
 
 // editorPromptVars is the closed prompt variable set.
-func editorPromptVars(ctx wire.CommandInvokeContext) map[string]any {
+func editorPromptVars(ctx wire.CommandInvokeContext, roots []projectroot.RootRef, activeRootID string) map[string]any {
 	return map[string]any{
 		"path":        strings.TrimSpace(ctx.Path),
+		"path_display": editorPathDisplay(roots, activeRootID, ctx),
 		"root_id":     strings.TrimSpace(ctx.RootID),
 		"start_line":  ctx.StartLine,
 		"end_line":    ctx.EndLine,
@@ -447,13 +455,28 @@ func editorPromptVars(ctx wire.CommandInvokeContext) map[string]any {
 	}
 }
 
+// editorPathDisplay renders the structured target in the canonical
+// session-folder spelling, matching the attachment fence for the same
+// reference; an unresolvable target falls back to the raw path.
+func editorPathDisplay(roots []projectroot.RootRef, activeRootID string, ctx wire.CommandInvokeContext) string {
+	path := strings.TrimSpace(ctx.Path)
+	if path == "" {
+		return ""
+	}
+	abs, root, err := projectroot.ResolveAbs(roots, ctx.RootID, path)
+	if err != nil {
+		return path
+	}
+	return projectroot.DisplayPath(roots, activeRootID, root.ID, projectroot.ScopeRel(root, abs))
+}
+
 // renderEditorPrompt renders captured prompt bytes.
-func renderEditorPrompt(renderCtx context.Context, body []byte, ctx wire.CommandInvokeContext) (string, error) {
+func renderEditorPrompt(renderCtx context.Context, body []byte, ctx wire.CommandInvokeContext, roots []projectroot.RootRef, activeRootID string) (string, error) {
 	tmpl, err := pongoplain.Compile(string(body))
 	if err != nil {
 		return "", fmt.Errorf("editor action prompt: %w", err)
 	}
-	out, err := pongoplain.Execute(renderCtx, tmpl, editorPromptVars(ctx))
+	out, err := pongoplain.Execute(renderCtx, tmpl, editorPromptVars(ctx, roots, activeRootID))
 	if err != nil {
 		return "", fmt.Errorf("editor action prompt: %w", err)
 	}

@@ -204,7 +204,7 @@ This is intake hygiene for a single-user desktop sidecar. It does not try to sto
 
 | `kind` | Required | Also allowed | Host emits |
 |--------|----------|--------------|------------|
-| `path-file` | `project_id`, `path` | `root_id`, `start_line`, `end_line` | `[User attached file: {rel}]` read-hint fence; `{rel}:{start}` or `{rel}:{start}-{end}` when a 1-based inclusive selection range is attached. The agent reads in place |
+| `path-file` | `project_id`, `path` | `root_id`, `start_line`, `end_line` | `[User attached file: {display}]` read-hint fence; `{display}:{start}` or `{display}:{start}-{end}` when a 1-based inclusive selection range is attached. `{display}` is the canonical session-folder spelling: bare off the session's active root, `@label/rel` off any other attached root. Editor action prompts receive the same spelling as `path_display`. The agent reads in place |
 | `path-folder` | `project_id`, `path` | `root_id` | `[User attached folder: {rel}]` walk-hint fence; folder contents are never enumerate-uploaded |
 | `external-file` | `project_id`, absolute `path` | `start_line`, `end_line` | Canonical path and a bounded text preview, or native image perception for a raster; exact-path write grant for the chat |
 | `external-folder` | `project_id`, absolute `path` | — | Canonical folder hint and a tree write grant for the chat; no recursive upload |
