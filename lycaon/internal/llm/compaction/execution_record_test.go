@@ -17,7 +17,7 @@ func TestContinuationRetainsFailedExecutionWithoutSummary(t *testing.T) {
 	code := 1
 	result := &api.ToolResult{Tool: "command", ToolCallID: "call", Outcome: api.ToolResultOutcomeCompleted,
 		Invocation:     &api.InvocationReceipt{ID: "receipt", ToolCallID: "call", Invoked: true, Status: "completed", SourceRevision: "revision", SourceVerdict: "failed"},
-		CommandProgram: &api.CommandProgramReceipt{ID: "program", ParentReceiptID: "receipt", State: "completed", StatusCode: &code},
+		CommandProgram: &api.CommandProgramReceipt{ID: "program", ParentReceiptID: "receipt", State: "completed", StatusCode: &code, Activities: []api.CommandActivity{{CompletedEffects: 2, UncertainEffects: 1, JobHandle: "job"}}},
 		Process:        &api.ToolProcessHandle{Handle: "process"}}
 	row := ContextMessageFromAPI(api.Message{ID: "result", Ord: 5, Role: api.MessageRoleTool, Content: "failed build", ToolResult: result})
 	sources, _, err := continuationSegments([]ContextMessage{row}, 64)
@@ -28,12 +28,14 @@ func TestContinuationRetainsFailedExecutionWithoutSummary(t *testing.T) {
 	record := &messageview.Continuation{Format: messageview.ContinuationFormat, Window: 32768, ThroughOrd: 5, Sources: sources}
 	clone := messageview.CloneContinuation(record)
 	*clone.Sources[0].Execution.ExitCode = 0
-	if *record.Sources[0].Execution.ExitCode != 1 {
+	clone.Sources[0].Execution.Effects.Completed = 0
+	clone.Sources[0].Execution.BackgroundHandles[0] = "changed"
+	if *record.Sources[0].Execution.ExitCode != 1 || record.Sources[0].Execution.Effects.Completed != 2 || record.Sources[0].Execution.BackgroundHandles[0] != "job" {
 		t.Fatal("cloning changed recorded exit")
 	}
 	rendered, err := RenderContinuation(t.Context(), record, true, 0)
 	testutil.FailErr(t, "render execution without prose", err)
-	for _, want := range []string{`"exit_code":1`, `"receipt_id":"receipt"`, `"process_handle":"process"`, `"source_verdict":"failed"`} {
+	for _, want := range []string{`"exit_code":1`, `"completed":2`, `"uncertain":1`, `"background_handles":["job"]`, `"receipt_id":"receipt"`, `"process_handle":"process"`, `"source_verdict":"failed"`} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("missing %s in %s", want, rendered)
 		}

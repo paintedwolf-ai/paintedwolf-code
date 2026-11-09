@@ -63,6 +63,11 @@ func CloneContinuation(record *Continuation) *Continuation {
 				code := *execution.ExitCode
 				execution.ExitCode = &code
 			}
+			execution.BackgroundHandles = append([]string(nil), execution.BackgroundHandles...)
+			if execution.Effects != nil {
+				effects := *execution.Effects
+				execution.Effects = &effects
+			}
 			copy.Sources[i].Execution = &execution
 		}
 	}
@@ -70,18 +75,25 @@ func CloneContinuation(record *Continuation) *Continuation {
 }
 
 // ContinuationExecution preserves recorded outcomes independently of summary prose.
+type ContinuationEffects struct {
+	Completed int `json:"completed"`
+	Uncertain int `json:"uncertain"`
+}
+
 type ContinuationExecution struct {
-	CallID         string `json:"call_id"`
-	ReceiptID      string `json:"receipt_id,omitempty"`
-	Outcome        string `json:"outcome,omitempty"`
-	Status         string `json:"status,omitempty"`
-	Invoked        bool   `json:"invoked"`
-	SourceRevision string `json:"source_revision,omitempty"`
-	SourceVerdict  string `json:"source_verdict,omitempty"`
-	ProcessHandle  string `json:"process_handle,omitempty"`
-	ProgramID      string `json:"program_id,omitempty"`
-	ProgramSource  string `json:"program_source,omitempty"`
-	ProgramState   string `json:"program_state,omitempty"`
-	ExitCode       *int   `json:"exit_code,omitempty"`
-	StopCode       string `json:"stop_code,omitempty"`
+	Effects           *ContinuationEffects `json:"effects,omitempty"`
+	BackgroundHandles []string             `json:"background_handles,omitempty"`
+	CallID            string               `json:"call_id"`
+	ReceiptID         string               `json:"receipt_id,omitempty"`
+	Outcome           string               `json:"outcome,omitempty"`
+	Status            string               `json:"status,omitempty"`
+	Invoked           bool                 `json:"invoked"`
+	SourceRevision    string               `json:"source_revision,omitempty"`
+	SourceVerdict     string               `json:"source_verdict,omitempty"`
+	ProcessHandle     string               `json:"process_handle,omitempty"`
+	ProgramID         string               `json:"program_id,omitempty"`
+	ProgramSource     string               `json:"program_source,omitempty"`
+	ProgramState      string               `json:"program_state,omitempty"`
+	ExitCode          *int                 `json:"exit_code,omitempty"`
+	StopCode          string               `json:"stop_code,omitempty"`
 }

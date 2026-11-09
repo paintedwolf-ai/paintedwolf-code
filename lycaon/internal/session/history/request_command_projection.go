@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/recall"
+	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +32,7 @@ func projectCompletedCommands(ctx context.Context, rows []api.Message, tokens ..
 		raw, _ := json.Marshal(request)     //nolint:errchkjson // History coordinates are plain values.
 		encoded, _ := json.Marshal(records) //nolint:errchkjson // Records contain typed execution facts and coordinates.
 		content, err := guidance.RenderGuidance(ctx, "compaction/command-exchange-reference", map[string]any{"history_json": string(raw), "records_json": string(encoded)})
-		if err != nil || content == "" {
+		if err != nil || content == "" || tokenest.EstimateDefault(content) >= compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(rows[i:end])) {
 			out = append(out, rows[i])
 			continue
 		}

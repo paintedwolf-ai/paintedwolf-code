@@ -24,6 +24,16 @@ func continuationExecution(result *api.ToolResult) *messageview.ContinuationExec
 	}
 	if program := result.CommandProgram; program != nil && out.ReceiptID != "" && program.ParentReceiptID == out.ReceiptID {
 		out.ProgramID, out.ProgramState, out.ProgramSource = program.ID, program.State, program.SourceRef
+		if len(program.Activities) > 0 {
+			out.Effects = &messageview.ContinuationEffects{}
+		}
+		for _, activity := range program.Activities {
+			out.Effects.Completed += activity.CompletedEffects
+			out.Effects.Uncertain += activity.UncertainEffects
+			if activity.JobHandle != "" {
+				out.BackgroundHandles = append(out.BackgroundHandles, activity.JobHandle)
+			}
+		}
 		if program.StatusCode != nil {
 			code := *program.StatusCode
 			out.ExitCode = &code
