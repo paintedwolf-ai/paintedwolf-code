@@ -103,7 +103,7 @@ func TestBaselineKeepsRootQualifiedPaths(t *testing.T) {
 
 func TestReaderRejectsUnknownFormatAndIncompleteShape(t *testing.T) {
 	for name, schema := range map[string]string{
-		"unknown format":  `CREATE TABLE manifest(version INTEGER); INSERT INTO manifest VALUES(2);`,
+		"unknown format":  `CREATE TABLE manifest(version INTEGER); INSERT INTO manifest VALUES(3);`,
 		"missing files":   `CREATE TABLE manifest(version INTEGER); INSERT INTO manifest VALUES(1);`,
 		"missing columns": `CREATE TABLE manifest(version INTEGER); INSERT INTO manifest VALUES(1); CREATE TABLE files(path TEXT);`,
 	} {

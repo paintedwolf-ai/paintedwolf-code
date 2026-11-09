@@ -13,10 +13,18 @@ import (
 
 // Branch walks the prepared workspace with the worker's file inclusion policy.
 // Git ignore rules and scanner admission do not participate.
+//
+// Each captured file carries its structured identity: the root it lives under
+// and the path relative to that root. Single-root workspaces keep the legacy
+// spelling where the identity is the display path itself.
 func Branch(roots []projectroot.RootRef, branch string) Walk {
 	return func(ctx context.Context, visit func(CaptureFile) error) error {
 		if len(roots) <= 1 {
-			return walkRoot(ctx, branch, func(path string) string { return path }, visit)
+			rootID := ""
+			if len(roots) == 1 {
+				rootID = roots[0].ID
+			}
+			return walkRoot(ctx, branch, rootID, func(rel string) string { return rel }, visit)
 		}
 		primary, err := projectroot.PrimaryRoot(roots)
 		if err != nil {
@@ -27,12 +35,12 @@ func Branch(roots []projectroot.RootRef, branch string) Walk {
 			if err != nil {
 				return err
 			}
-			// Baseline keys stay primary-relative: readers parse them with
+			// Display paths stay primary-relative: readers parse them with
 			// primary-relative semantics.
 			qualify := func(path string) string {
 				return projectroot.Qualify(roots, primary.ID, root, filepath.Join(root.Path, filepath.FromSlash(path)))
 			}
-			if err := walkRoot(ctx, filepath.Join(branch, dir), qualify, visit); err != nil {
+			if err := walkRoot(ctx, filepath.Join(branch, dir), root.ID, qualify, visit); err != nil {
 				return err
 			}
 		}
@@ -40,13 +48,13 @@ func Branch(roots []projectroot.RootRef, branch string) Walk {
 	}
 }
 
-func walkRoot(ctx context.Context, root string, qualify func(string) string, visit func(CaptureFile) error) error {
+func walkRoot(ctx context.Context, root string, rootID string, qualify func(string) string, visit func(CaptureFile) error) error {
 	opened, err := os.OpenRoot(root)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = opened.Close() }()
-	walker := branchWalker{ctx: ctx, root: opened, abs: root, qualify: qualify, visit: visit}
+	walker := branchWalker{ctx: ctx, root: opened, abs: root, rootID: rootID, qualify: qualify, visit: visit}
 	return walker.directory(".")
 }
 
@@ -54,6 +62,7 @@ type branchWalker struct {
 	ctx     context.Context
 	root    *os.Root
 	abs     string
+	rootID  string
 	qualify func(string) string
 	visit   func(CaptureFile) error
 }
@@ -91,7 +100,7 @@ func (w branchWalker) directory(rel string) error {
 			if err != nil {
 				return err
 			}
-			if err := w.visit(CaptureFile{Path: w.qualify(path), Abs: abs, Info: info}); err != nil {
+			if err := w.visit(CaptureFile{RootID: w.rootID, ScopeRel: path, Path: w.qualify(path), Abs: abs, Info: info}); err != nil {
 				return err
 			}
 		}
