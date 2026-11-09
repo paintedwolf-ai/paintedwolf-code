@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -175,16 +176,19 @@ func (p *pristineLowerProvider) ListXattr(rel string) (map[string][]byte, error)
 	return readPathXattrs(filepath.Join(p.pristineDir, filepath.FromSlash(clean)))
 }
 
-func parentEntriesForRoot(pl layeredfs.ParentLayer, rootID string) map[string]layeredfs.ParentEntry {
+func parentEntriesForRoot(pl layeredfs.ParentLayer, rootID string) (map[string]layeredfs.ParentEntry, error) {
 	if snap, ok := pl.(interface{ EntriesForRoot(string) map[string]layeredfs.ParentEntry }); ok {
-		return snap.EntriesForRoot(rootID)
+		return snap.EntriesForRoot(rootID), nil
 	}
 	out := make(map[string]layeredfs.ParentEntry)
-	var walk func(dir string)
-	walk = func(dir string) {
+	var walk func(dir string) error
+	walk = func(dir string) error {
 		children, err := pl.ListDir(layeredfs.QualifiedPath{RootID: rootID, Rel: dir})
 		if err != nil {
-			return
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
+			return err
 		}
 		for name, pe := range children {
 			rel := name
@@ -193,19 +197,27 @@ func parentEntriesForRoot(pl layeredfs.ParentLayer, rootID string) map[string]la
 			}
 			out[rel] = pe
 			if pe.Kind == layeredfs.EntryDirectory {
-				walk(rel)
+				if err := walk(rel); err != nil {
+					return err
+				}
 			}
 		}
+		return nil
 	}
-	walk(".")
-	return out
+	if err := walk("."); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func overlayParentLayersOnRoots(roots []PreparedRoot, parents []layeredfs.ParentLayer) error {
 	for i := len(parents) - 1; i >= 0; i-- {
 		pl := parents[i]
 		for _, r := range roots {
-			entries := parentEntriesForRoot(pl, r.RootID)
+			entries, err := parentEntriesForRoot(pl, r.RootID)
+			if err != nil {
+				return err
+			}
 			rels := make([]string, 0, len(entries))
 			for rel, pe := range entries {
 				if !pe.Synthetic {
@@ -267,6 +279,68 @@ func applyParentEntryToWorkspace(pl layeredfs.ParentLayer, qp layeredfs.Qualifie
 	}
 	if pe.Kind != layeredfs.EntrySymlink && !pe.ModTime.IsZero() {
 		_ = os.Chtimes(dstPath, pe.ModTime, pe.ModTime)
+	}
+	return nil
+}
+
+func (s *statCapture) parentEntry(qp layeredfs.QualifiedPath) (layeredfs.ParentEntry, bool, error) {
+	var synthetic layeredfs.ParentEntry
+	var hasSynthetic bool
+	for _, parent := range s.parents {
+		pe, ok, err := parent.Lookup(qp)
+		if err != nil {
+			return layeredfs.ParentEntry{}, false, err
+		}
+		if !ok {
+			continue
+		}
+		if pe.Synthetic {
+			if !hasSynthetic {
+				synthetic, hasSynthetic = pe, true
+			}
+			continue
+		}
+		return pe, true, nil
+	}
+	if hasSynthetic {
+		if _, inManifest := s.manifest[qp]; !inManifest {
+			return synthetic, true, nil
+		}
+	}
+	return layeredfs.ParentEntry{}, false, nil
+}
+
+func (s *statCapture) hasEffectiveBase(qp layeredfs.QualifiedPath) (bool, error) {
+	pe, ok, err := s.parentEntry(qp)
+	if err != nil || ok {
+		return ok && pe.Kind != layeredfs.EntryAbsent, err
+	}
+	_, inManifest := s.manifest[qp]
+	return inManifest, nil
+}
+
+func (s *statCapture) seedParentCurrent(rootID string) error {
+	for _, parent := range s.parents {
+		entries, err := parentEntriesForRoot(parent, rootID)
+		if err != nil {
+			return err
+		}
+		for rel := range entries {
+			qp := layeredfs.QualifiedPath{RootID: rootID, Rel: rel}
+			if _, seen := s.current[qp]; seen {
+				continue
+			}
+			resolved, ok, err := s.parentEntry(qp)
+			if err != nil {
+				return err
+			}
+			if ok && resolved.Kind != layeredfs.EntryAbsent && !resolved.Synthetic {
+				s.current[qp] = statRecord{
+					Root: rootID, Rel: rel, Kind: resolved.Kind, Mode: uint32(resolved.Mode),
+					Size: resolved.Size, MtimeNS: resolved.ModTime.UnixNano(), LinkTarget: resolved.LinkTarget,
+				}
+			}
+		}
 	}
 	return nil
 }

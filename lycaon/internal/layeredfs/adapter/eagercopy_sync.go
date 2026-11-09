@@ -46,26 +46,28 @@ type statCapture struct {
 	stats    CaptureStats
 }
 
-func newStatCapture(takenNS int64, records []statRecord, roots []PreparedRoot, parents []layeredfs.ParentLayer, backingDir string) *statCapture {
+func newStatCapture(takenNS int64, records []statRecord, roots []PreparedRoot, parents []layeredfs.ParentLayer, backingDir string) (*statCapture, error) {
 	basesDir := filepath.Join(backingDir, "bases")
 	if resolved, err := filepath.EvalSymlinks(basesDir); err == nil {
 		basesDir = resolved
 	}
 	s := &statCapture{
-		basesDir:   basesDir,
-		manifestNS: takenNS,
-		manifest:   make(map[layeredfs.QualifiedPath]statRecord, len(records)),
-		current:    make(map[layeredfs.QualifiedPath]statRecord, len(records)),
-		bases:      make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture),
-		synced:     make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture),
-		refreshed:  make(map[layeredfs.QualifiedPath]struct{}),
-		pristine:   make(map[string]string, len(roots)),
-		parents:    parents,
+		basesDir: basesDir, manifestNS: takenNS, parents: parents,
+		manifest:  make(map[layeredfs.QualifiedPath]statRecord, len(records)),
+		current:   make(map[layeredfs.QualifiedPath]statRecord, len(records)),
+		bases:     make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture),
+		synced:    make(map[layeredfs.QualifiedPath]layeredfs.BaseCapture),
+		refreshed: make(map[layeredfs.QualifiedPath]struct{}),
+		pristine:  make(map[string]string, len(roots)),
 	}
 	for _, rec := range records {
 		qp := rec.qualified()
 		s.manifest[qp] = rec
-		if pe, ok := s.parentEntry(qp); ok {
+		pe, ok, err := s.parentEntry(qp)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
 			if pe.Kind == layeredfs.EntryAbsent {
 				continue
 			}
@@ -76,23 +78,11 @@ func newStatCapture(takenNS int64, records []statRecord, roots []PreparedRoot, p
 	}
 	for _, r := range roots {
 		s.pristine[r.RootID] = r.PristinePath
-		for _, parent := range parents {
-			for rel, pe := range parentEntriesForRoot(parent, r.RootID) {
-				qp := layeredfs.QualifiedPath{RootID: r.RootID, Rel: rel}
-				if _, seen := s.current[qp]; seen {
-					continue
-				}
-				if resolved, ok := s.parentEntry(qp); ok && resolved.Kind != layeredfs.EntryAbsent && !resolved.Synthetic {
-					s.current[qp] = statRecord{
-						Root: r.RootID, Rel: rel, Kind: resolved.Kind, Mode: uint32(resolved.Mode),
-						Size: resolved.Size, MtimeNS: resolved.ModTime.UnixNano(), LinkTarget: resolved.LinkTarget,
-					}
-				}
-				_ = pe
-			}
+		if err := s.seedParentCurrent(r.RootID); err != nil {
+			return nil, err
 		}
 	}
-	return s
+	return s, nil
 }
 
 // statVisit is a walked entry whose stat no longer proves it unchanged.
@@ -247,11 +237,19 @@ func (s *statCapture) baseFor(ctx context.Context, core *layeredfs.Core, qp laye
 	if base, ok := s.bases[qp]; ok {
 		return base, nil
 	}
-	if pe, ok := s.parentEntry(qp); ok {
+	pe, ok, err := s.parentEntry(qp)
+	if err != nil {
+		return layeredfs.BaseCapture{}, err
+	}
+	if ok {
 		if pe.Kind == layeredfs.EntryAbsent {
-			_ = core.RegisterSeedBase(layeredfs.BaseCapture{
-				Path: qp, Layer: layeredfs.LayerParent, Kind: layeredfs.EntryAbsent, CapturedAt: time.Now(),
-			})
+			if core != nil {
+				if err := core.RegisterSeedBase(layeredfs.BaseCapture{
+					Path: qp, Layer: layeredfs.LayerParent, Kind: layeredfs.EntryAbsent, CapturedAt: time.Now(),
+				}); err != nil {
+					return layeredfs.BaseCapture{}, err
+				}
+			}
 			return layeredfs.BaseCapture{}, nil
 		}
 		base := layeredfs.BaseCapture{
@@ -266,7 +264,7 @@ func (s *statCapture) baseFor(ctx context.Context, core *layeredfs.Core, qp laye
 			}
 			base.BackingFile = held
 		}
-		if pe.Kind != layeredfs.EntryRegular || base.BackingFile != "" {
+		if core != nil && (pe.Kind != layeredfs.EntryRegular || base.BackingFile != "") {
 			if err := core.RegisterSeedBase(base); err != nil {
 				return layeredfs.BaseCapture{}, err
 			}
@@ -285,46 +283,16 @@ func (s *statCapture) baseFor(ctx context.Context, core *layeredfs.Core, qp laye
 	if err != nil {
 		return layeredfs.BaseCapture{}, err
 	}
-	if err := core.RegisterSeedBase(base); err != nil {
-		return layeredfs.BaseCapture{}, err
+	if core != nil {
+		if err := core.RegisterSeedBase(base); err != nil {
+			return layeredfs.BaseCapture{}, err
+		}
 	}
 	s.bases[qp] = base
 	if _, known := s.synced[qp]; !known {
 		s.synced[qp] = cloneBaseCaptureRecord(base)
 	}
 	return base, nil
-}
-
-func (s *statCapture) parentEntry(qp layeredfs.QualifiedPath) (layeredfs.ParentEntry, bool) {
-	var synthetic layeredfs.ParentEntry
-	var hasSynthetic bool
-	for _, parent := range s.parents {
-		pe, ok, err := parent.Lookup(qp)
-		if err != nil || !ok {
-			continue
-		}
-		if pe.Synthetic {
-			if !hasSynthetic {
-				synthetic, hasSynthetic = pe, true
-			}
-			continue
-		}
-		return pe, true
-	}
-	if hasSynthetic {
-		if _, inManifest := s.manifest[qp]; !inManifest {
-			return synthetic, true
-		}
-	}
-	return layeredfs.ParentEntry{}, false
-}
-
-func (s *statCapture) hasEffectiveBase(qp layeredfs.QualifiedPath) bool {
-	if pe, ok := s.parentEntry(qp); ok {
-		return pe.Kind != layeredfs.EntryAbsent
-	}
-	_, inManifest := s.manifest[qp]
-	return inManifest
 }
 
 func (s *statCapture) readPristineBase(ctx context.Context, rec statRecord) (layeredfs.BaseCapture, error) {
@@ -381,7 +349,11 @@ func (s *statCapture) changedPaths(ctx context.Context, roots []PreparedRoot) ([
 			return nil, err
 		}
 		for _, rec := range gone {
-			if s.hasEffectiveBase(rec.qualified()) {
+			hasBase, err := s.hasEffectiveBase(rec.qualified())
+			if err != nil {
+				return nil, err
+			}
+			if hasBase {
 				out = append(out, rec.qualified())
 			}
 		}
@@ -429,27 +401,44 @@ func (s *statCapture) capturedDifferences(ctx context.Context, r PreparedRoot, v
 			out = append(out, qp)
 		}
 	}
-	checkRemoved := func(qp layeredfs.QualifiedPath) {
-		if _, tracked := s.current[qp]; tracked || qp.RootID != r.RootID || !s.hasEffectiveBase(qp) {
-			return
+	checkRemoved := func(qp layeredfs.QualifiedPath) error {
+		if _, tracked := s.current[qp]; tracked || qp.RootID != r.RootID {
+			return nil
+		}
+		hasBase, err := s.hasEffectiveBase(qp)
+		if err != nil || !hasBase {
+			return err
 		}
 		if _, err := os.Lstat(filepath.Join(r.WorkspacePath, filepath.FromSlash(qp.Rel))); err != nil {
 			out = append(out, qp)
 		}
+		return nil
 	}
 	for qp := range s.manifest {
-		checkRemoved(qp)
+		if err := checkRemoved(qp); err != nil {
+			return nil, err
+		}
 	}
 	for _, parent := range s.parents {
-		for rel := range parentEntriesForRoot(parent, r.RootID) {
-			checkRemoved(layeredfs.QualifiedPath{RootID: r.RootID, Rel: rel})
+		entries, err := parentEntriesForRoot(parent, r.RootID)
+		if err != nil {
+			return nil, err
+		}
+		for rel := range entries {
+			if err := checkRemoved(layeredfs.QualifiedPath{RootID: r.RootID, Rel: rel}); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return out, nil
 }
 
 func (s *statCapture) differsFromBase(ctx context.Context, v statVisit) (bool, error) {
-	if pe, ok := s.parentEntry(v.qp); ok {
+	pe, ok, err := s.parentEntry(v.qp)
+	if err != nil {
+		return false, err
+	}
+	if ok {
 		if pe.Kind == layeredfs.EntryAbsent || !entryKindMatchesMode(pe.Kind, v.info.Mode()) {
 			return true, nil
 		}

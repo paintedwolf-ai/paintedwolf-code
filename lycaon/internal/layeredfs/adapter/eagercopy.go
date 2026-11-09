@@ -189,6 +189,11 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		cleanupFailedPrepare(req, runtimeViewDir, pristineDir, manifestPath, outcome, core)
 		return nil, err
 	}
+	capture, err := newStatCapture(takenNS, outcome.records, outcome.preparedRoots, req.ParentLayers, backingDir)
+	if err != nil {
+		cleanupFailedPrepare(req, runtimeViewDir, pristineDir, manifestPath, outcome, core)
+		return nil, err
+	}
 
 	view := &PreparedView{
 		ViewID:          req.ViewID,
@@ -209,7 +214,7 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 	}
 	a.adopt(view, &eagerViewState{
 		view:            view,
-		capture:         newStatCapture(takenNS, outcome.records, outcome.preparedRoots, req.ParentLayers, backingDir),
+		capture:         capture,
 		denySourcePaths: outcome.denyPaths,
 		gitStore:        outcome.gitStore,
 		gitLeases:       outcome.gitLeases,
@@ -299,11 +304,16 @@ func (a *EagerCopyAdapter) Reopen(ctx context.Context, req ReopenRequest) (*Prep
 			return nil, err
 		}
 	}
+	capture, err := newStatCapture(header.TakenNS, records, roots, req.ParentLayers, backingDir)
+	if err != nil {
+		_ = core.ReleaseView()
+		return nil, err
+	}
 	view := &PreparedView{
 		ViewID: req.ViewID, AdapterID: AdapterEagerCopy, Facts: a.facts, Roots: roots, PrimaryRootID: primaryID,
 		PrimaryWorkPath: primaryPath, BackingDir: backingDir, RuntimeViewDir: runtimeViewDir, Core: core,
 	}
-	a.adopt(view, &eagerViewState{view: view, capture: newStatCapture(header.TakenNS, records, roots, req.ParentLayers, backingDir), denySourcePaths: deny})
+	a.adopt(view, &eagerViewState{view: view, capture: capture, denySourcePaths: deny})
 	return view, nil
 }
 

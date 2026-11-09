@@ -162,7 +162,7 @@ func captureFromLowerOrParent(c *Core, qpath QualifiedPath) (BaseCapture, error)
 		if provider == nil {
 			return captureParentEntry(c, qpath, syntheticLayer, syntheticEntry)
 		}
-		if le, err := provider.Lstat(qpath.Rel); err != nil || le.Kind == EntryAbsent {
+		if le, err := provider.Lstat(qpath.Rel); (err != nil && errors.Is(err, fs.ErrNotExist)) || (err == nil && le.Kind == EntryAbsent) {
 			return captureParentEntry(c, qpath, syntheticLayer, syntheticEntry)
 		}
 	}
