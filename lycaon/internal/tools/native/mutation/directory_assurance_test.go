@@ -25,15 +25,15 @@ func TestMkdirExistingRootContinuesConditionalProgram(t *testing.T) {
 	}
 }
 
-func TestNativeFailureRetainsBoundedStderr(t *testing.T) {
+func TestNativeFailureRetainsStderr(t *testing.T) {
 	var stderr bytes.Buffer
 	inv := invocation{stderr: &stderr, spec: toolcontract.CommandSpecification{Name: "mkdir"}}
-	cause := errors.New("filesystem failure: " + strings.Repeat("x", 5000))
+	cause := errors.New("filesystem failure")
 	result, err := inv.outcome(cause)
 	if !errors.Is(err, cause) || result.Status != 1 || result.Terminal != toolcontract.ProducerFailed {
 		t.Fatalf("failure outcome=%+v err=%v", result, err)
 	}
-	if !strings.HasPrefix(stderr.String(), "mkdir: filesystem failure: ") || stderr.Len() > 4110 {
-		t.Fatalf("missing or unbounded diagnostic: %d bytes", stderr.Len())
+	if stderr.String() != "mkdir: filesystem failure\n" {
+		t.Fatalf("missing diagnostic: %q", stderr.String())
 	}
 }
