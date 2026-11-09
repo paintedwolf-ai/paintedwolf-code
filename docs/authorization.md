@@ -384,3 +384,9 @@ A human may attach explicit guidance when rejecting an action. The guidance is u
 - Human checkpoint outcomes fail closed if they cannot be recorded.
 - A decision names the person whose request made it, or it is refused.
 - Authorization chains live and die with their session.
+
+Socket recovery distinguishes a missing invocation permit
+(`SANDBOX_SOCKET_PERMIT_REQUIRED`) from an unusable recipient binding
+(`SANDBOX_SOCKET_PATH_CHANGED`). Each call declares its socket; reusable approval
+and client endpoint selection remain separate. Spawn applies the write roots
+frozen at admission, plus host-managed output roots, without rereading session grants.

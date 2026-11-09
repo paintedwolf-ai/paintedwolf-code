@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/oarcopy"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -53,6 +54,13 @@ func TestEveryRejectCodeHasScenario(t *testing.T) {
 				vars := guidance.ScenarioVars(entry, sc)
 				raw, err := f.Format(code, vars)
 				testutil.FailErr(t, "Format "+code, err)
+				// Bound endpoint references are literal command syntax.
+				facts := oarcopy.FactsFromData(vars)
+				for _, key := range []string{"paintedwolf.socket_path_references", "paintedwolf.socket_url_references"} {
+					if refs, ok := facts[key].(string); ok && refs != "" {
+						raw = strings.ReplaceAll(raw, refs, "socket-reference")
+					}
+				}
 				// Rendered guidance must not leak template syntax or escaped HTML.
 				for _, leak := range []string{"{%", "{{", "&quot;", "&amp;", "&#39;", "&gt;", "&lt;"} {
 					exposure.Absent(t, raw, leak)

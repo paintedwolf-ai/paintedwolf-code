@@ -2450,6 +2450,12 @@
       "emit": "guard:sandbox_socket",
       "summary": "The host could not resolve, inspect or retain socket path {{ paintedwolf.path }}."
     },
+    "SANDBOX_SOCKET_PERMIT_REQUIRED": {
+      "branch_instruction": "Declare and bind the socket on the current call",
+      "category": "recoverable",
+      "emit": "guard:sandbox_socket",
+      "summary": "This invocation has no usable permit for the selected socket."
+    },
     "SANDBOX_SOCKS_PROXY_INVALID": {
       "branch_instruction": "Branch on Code; correct or remove socks_proxy",
       "category": "recoverable",

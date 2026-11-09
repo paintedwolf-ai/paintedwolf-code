@@ -139,7 +139,7 @@ func newCapabilityReviewFixture(t *testing.T, approve bool) *capabilityReviewFix
 	registry := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register fixture command", registry.Register("command", func(ctx context.Context, _ map[string]any, tc tools.ToolContext) (string, error) {
 		f.invocations++
-		request, reject := tools.ConfineRequestForSpawn(ctx, tc, broker.SessionWriteRoots(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID))
+		request, reject := tools.ConfineRequestForSpawn(ctx, tc, nil)
 		if reject != nil {
 			return "", reject
 		}
