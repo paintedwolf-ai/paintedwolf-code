@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,11 +24,12 @@ func sourceData(msg ContextMessage) (string, error) {
 		return content, nil
 	}
 	data := struct {
-		Content    string            `json:"content,omitempty"`
-		Calls      []summaryToolCall `json:"tool_calls,omitempty"`
-		ResultID   string            `json:"result_call_id,omitempty"`
-		ResultTool string            `json:"result_tool,omitempty"`
-	}{Content: content, ResultID: msg.ToolCallID, ResultTool: msg.ToolName}
+		Content    string                             `json:"content,omitempty"`
+		Calls      []summaryToolCall                  `json:"tool_calls,omitempty"`
+		ResultID   string                             `json:"result_call_id,omitempty"`
+		ResultTool string                             `json:"result_tool,omitempty"`
+		Execution  *messageview.ContinuationExecution `json:"recorded_execution,omitempty"`
+	}{Content: content, ResultID: msg.ToolCallID, ResultTool: msg.ToolName, Execution: msg.Execution}
 	for _, call := range msg.ToolCalls {
 		data.Calls = append(data.Calls, summaryToolCall{ID: call.ID, Name: call.Name, Args: call.Args,
 			ArgsRef: call.ArgsRef, Truncated: call.ArgsTruncated, Malformed: call.ArgsMalformed})
