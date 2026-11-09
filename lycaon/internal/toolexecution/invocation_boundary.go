@@ -232,18 +232,34 @@ func (e *Executor) applyPreInvokePolicy(
 	if tool == "process_list" || tool == "process_signal" {
 		return args, nil
 	}
-	if decision.RequiresApproval {
+	for decision.RequiresApproval {
 		if e.Approvals.checkpointMgr == nil {
 			return nil, fmt.Errorf("tool approval checkpoints not configured")
 		}
-		runArgs, err := e.Approvals.awaitApproval(ctx, tool, args, *tc, decision.Approval, confReq)
+		reviewedApproval := decision.Approval
+		runArgs, err := e.Approvals.awaitApproval(ctx, tool, args, *tc, reviewedApproval, confReq)
 		if err != nil {
 			return nil, err
 		}
 		args = runArgs
-		if decision.Approval != nil {
-			tc.Files.ApprovedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
-			tc.RecordCurrentActionReview(args, confReq, proposedActionFromPolicy(policyEval), decision.Approval)
+		if reviewedApproval == nil {
+			break
+		}
+		tc.Files.ApprovedFileAccess = append([]hitl.GrantedPathDelta(nil), reviewedApproval.FileAccess...)
+		policyEval = e.Boundary.preInvokePolicyContext(tool, profileID, args, *tc, confReq)
+		tc.RecordCurrentActionReview(args, confReq, proposedActionFromPolicy(policyEval), reviewedApproval)
+		policyEval.CurrentActionReview = tc.CurrentActionReview(args, confReq)
+		policyEval.BoundaryApprovalSatisfied = boundaryApprovalSatisfied
+		policyEval.PolicyWritesReviewed = boundaryApprovalSatisfied &&
+			tc.HasExecutionApproval() &&
+			(confReq.HostExecution || confReq.ProcessControl || confReq.CredentialStore)
+		decision, err = e.Metadata.policy.Evaluate(ctx, policyEval)
+		if err != nil {
+			return nil, err
+		}
+		if decision.Blocked {
+			e.Approvals.recordToolDenied(ctx, policyEval, decision, decision.Approval)
+			return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, toolprofiles.PolicyBlockReject(decision, tool, profileID))
 		}
 	}
 	return args, nil

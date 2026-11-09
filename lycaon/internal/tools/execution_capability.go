@@ -41,9 +41,6 @@ func invocationMatchesReview(
 	tc ToolContext, args map[string]any, req confine.Request,
 	session, call, action, boundary, arguments string,
 ) bool {
-	if args == nil && tc.Effects.CanonicalArgs != nil {
-		args = tc.Effects.CanonicalArgs
-	}
 	if arguments != executionArgumentsDigest(args) {
 		return false
 	}
@@ -88,10 +85,6 @@ func finalizeExecutionCapability(tc ToolContext, req confine.Request) *toolrejec
 // AuthorizedExecutionCapabilities returns the execution capabilities covered by
 // an unconsumed current-call permit matching this invocation and boundary.
 func (tc ToolContext) AuthorizedExecutionCapabilities(args map[string]any, req confine.Request) []string {
-	return authorizedExecutionCapabilities(tc, args, req)
-}
-
-func authorizedExecutionCapabilities(tc ToolContext, args map[string]any, req confine.Request) []string {
 	if !req.HostExecution && !req.ProcessControl && !req.CredentialStore {
 		return nil
 	}
@@ -122,12 +115,6 @@ func authorizedExecutionCapabilities(tc ToolContext, args map[string]any, req co
 func (tc *ToolContext) RecordCurrentActionReview(
 	args map[string]any, req confine.Request, action hitl.ProposedAction, result *hitl.ApprovalResult,
 ) {
-	recordCurrentActionReview(tc, args, req, action, result)
-}
-
-func recordCurrentActionReview(
-	tc *ToolContext, args map[string]any, req confine.Request, action hitl.ProposedAction, result *hitl.ApprovalResult,
-) {
 	if tc == nil || result == nil || result.Decision == nil {
 		return
 	}
@@ -137,7 +124,7 @@ func recordCurrentActionReview(
 	}
 	var cited []gate.Fact
 	for _, fact := range result.Decision.Cited {
-		if fact.Gate != api.GateUnobservedChannel && fact.Gate != api.GateIncompleteFacts && !slices.Contains(cited, fact) {
+		if fact.Gate != api.GateUnobservedChannel && !slices.Contains(cited, fact) {
 			cited = append(cited, fact)
 		}
 	}
@@ -195,10 +182,6 @@ func uniqueCompactSlice[T comparable](dst, src []T) []T {
 // CurrentActionReview returns the current-call human review receipt when it
 // matches this invocation's identity, arguments, and confine boundary.
 func (tc ToolContext) CurrentActionReview(args map[string]any, req confine.Request) *hitl.CurrentActionReview {
-	return currentActionReviewFor(tc, args, req)
-}
-
-func currentActionReviewFor(tc ToolContext, args map[string]any, req confine.Request) *hitl.CurrentActionReview {
 	r := tc.Execution.currentActionReview
 	if r == nil {
 		return nil
