@@ -437,21 +437,13 @@ func (pc *planCompiler) loaderPaths(subpath, name string, batch []string) []stri
 		if len(batch) == 0 {
 			batch = []string{name}
 		}
-		if sources := pc.viewLoaderRoots(subpath); len(sources) > 0 {
-			targets := pc.viewMountTargets(subpath)
+		if roots := pc.matchingViewRoots(subpath); len(roots) > 0 {
 			seen := map[string]bool{}
-			for _, src := range sources {
-				for _, p := range namedFilesBelow(src, batch...) {
-					rel, err := filepath.Rel(src, p)
-					if err != nil {
-						continue
-					}
-					for _, target := range targets {
-						mapped := filepath.Join(target, rel)
-						if !seen[mapped] {
-							seen[mapped] = true
-							all = append(all, mapped)
-						}
+			for _, vr := range roots {
+				for _, mapped := range viewRootLoaderPaths(vr, batch) {
+					if PathAtOrUnder(mapped, subpath) && !seen[mapped] {
+						seen[mapped] = true
+						all = append(all, mapped)
 					}
 				}
 			}
@@ -469,40 +461,40 @@ func (pc *planCompiler) loaderPaths(subpath, name string, batch []string) []stri
 	return out
 }
 
-// viewLoaderRoots returns the host source directories backing a mounted view root
-// so launch compilation never walks the engine's own FUSE mount.
-func (pc *planCompiler) viewLoaderRoots(subpath string) []string {
-	var sources []string
-	for _, d := range pc.view.DeniedPaths {
-		if d == "" || PathAtOrUnder(subpath, d) || PathAtOrUnder(d, subpath) {
+func (pc *planCompiler) matchingViewRoots(subpath string) []ViewRootBoundary {
+	var out []ViewRootBoundary
+	for _, vr := range pc.view.Roots {
+		if vr.WorkspacePath == "" {
 			continue
 		}
-		if coversAny(d, pc.view.ReopenedPaths) || coversAny(d, pc.view.ReopenedReadPaths) || isViewBackingDir(d) {
-			continue
-		}
-		sources = append(sources, d)
-	}
-	return sources
-}
-
-func (pc *planCompiler) viewMountTargets(subpath string) []string {
-	targets := []string{subpath}
-	for _, r := range pc.view.ReopenedPaths {
-		if !PathEqual(r, subpath) && PathAtOrUnder(r, subpath) {
-			targets = append(targets, r)
+		if PathAtOrUnder(vr.WorkspacePath, subpath) || PathAtOrUnder(subpath, vr.WorkspacePath) {
+			out = append(out, vr)
 		}
 	}
-	return targets
+	return out
 }
 
-func isViewBackingDir(dir string) bool {
-	if strings.HasSuffix(filepath.ToSlash(dir), "/.meta/backing") {
-		return true
+func viewRootLoaderPaths(vr ViewRootBoundary, batch []string) []string {
+	if vr.PolicyInventory {
+		out := make([]string, 0, len(vr.PolicyFiles))
+		for _, rel := range vr.PolicyFiles {
+			if foldsToAny(filepath.Base(rel), batch) {
+				out = append(out, filepath.Join(vr.WorkspacePath, filepath.FromSlash(rel)))
+			}
+		}
+		return out
 	}
-	_, errJ := os.Stat(filepath.Join(dir, "journal"))
-	_, errW := os.Stat(filepath.Join(dir, "work"))
-	_, errB := os.Stat(filepath.Join(dir, "base"))
-	return errJ == nil && errW == nil && errB == nil
+	if vr.SourcePath == "" {
+		return nil
+	}
+	found := namedFilesBelow(vr.SourcePath, batch...)
+	out := make([]string, 0, len(found))
+	for _, p := range found {
+		if rel, err := filepath.Rel(vr.SourcePath, p); err == nil {
+			out = append(out, filepath.Join(vr.WorkspacePath, rel))
+		}
+	}
+	return out
 }
 
 // allowWrite grants the path to Landlock and restores it beneath any mask.

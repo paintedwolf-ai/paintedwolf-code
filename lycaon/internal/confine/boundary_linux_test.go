@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
+	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -112,44 +113,186 @@ func TestCompileFilesystemPlanNamesLoaderFilesAtAnyDepth(t *testing.T) {
 	}
 }
 
-// A mounted view resolves loader files from its host source roots instead of walking its FUSE mount.
+// Mounted views resolve per-root policy files without cross-mapping between roots,
+// misclassifying sources containing journal/work/base, or missing parent/private mutations.
 func TestCompileFilesystemPlanResolvesMountedViewLoaderFilesFromSourceRoots(t *testing.T) {
-	sourceRoot := t.TempDir()
-	testutil.FailErr(t, "mkdir source pkg", os.MkdirAll(filepath.Join(sourceRoot, "pkg"), 0o755))
-	testutil.FailErr(t, "mkdir source .git", os.MkdirAll(filepath.Join(sourceRoot, ".git"), 0o755))
-	testutil.FailErr(t, "write source AGENTS.md", os.WriteFile(filepath.Join(sourceRoot, protectedpath.AgentsMDFileName), []byte("a"), 0o644))
-	testutil.FailErr(t, "write source pkg/AGENTS.md", os.WriteFile(filepath.Join(sourceRoot, "pkg", protectedpath.AgentsMDFileName), []byte("c"), 0o644))
-	testutil.FailErr(t, "write source .git/AGENTS.md", os.WriteFile(filepath.Join(sourceRoot, ".git", protectedpath.AgentsMDFileName), []byte("g"), 0o644))
+	// 1. Multi-root mounted view with shared and root-specific relative paths and a legitimate
+	// source tree containing journal/, work/, and base/ subdirectories.
+	srcA := t.TempDir()
+	srcB := t.TempDir()
+	for _, dir := range []string{
+		filepath.Join(srcA, "shared"),
+		filepath.Join(srcA, "only-a"),
+		filepath.Join(srcA, "journal"),
+		filepath.Join(srcA, "work"),
+		filepath.Join(srcA, "base"),
+		filepath.Join(srcA, ".git"),
+		filepath.Join(srcB, "shared"),
+		filepath.Join(srcB, "only-b"),
+	} {
+		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(dir, 0o755))
+	}
+	for _, f := range []string{
+		filepath.Join(srcA, "shared", protectedpath.AgentsMDFileName),
+		filepath.Join(srcA, "only-a", protectedpath.AgentsMDFileName),
+		filepath.Join(srcA, "work", protectedpath.AgentsMDFileName),
+		filepath.Join(srcA, ".git", protectedpath.AgentsMDFileName),
+		filepath.Join(srcB, "shared", protectedpath.AgentsMDFileName),
+		filepath.Join(srcB, "only-b", protectedpath.AgentsMDFileName),
+	} {
+		testutil.FailErr(t, "write "+f, os.WriteFile(f, []byte("policy"), 0o644))
+	}
 
 	branchesBase := t.TempDir()
-	branchRoot := filepath.Join(branchesBase, "wb-1")
-	mountRoot := filepath.Join(branchRoot, "mount")
+	branchRoot := filepath.Join(branchesBase, "wb-multi")
+	mountA := filepath.Join(branchRoot, "mounts", "root-a")
+	mountB := filepath.Join(branchRoot, "mounts", "root-b")
 	backingDir := filepath.Join(branchRoot, ".meta", "backing")
-	testutil.FailErr(t, "mkdir mount", os.MkdirAll(filepath.Join(mountRoot, "mount-only"), 0o755))
+	testutil.FailErr(t, "mkdir mountA", os.MkdirAll(filepath.Join(mountA, "mount-only"), 0o755))
+	testutil.FailErr(t, "mkdir mountB", os.MkdirAll(mountB, 0o755))
 	testutil.FailErr(t, "mkdir backing", os.MkdirAll(backingDir, 0o755))
-	// A decoy present only under mountRoot proves compileFilesystemPlan never walked mountRoot.
-	decoy := filepath.Join(mountRoot, "mount-only", protectedpath.AgentsMDFileName)
+	decoy := filepath.Join(mountA, "mount-only", protectedpath.AgentsMDFileName)
 	testutil.FailErr(t, "write mount decoy", os.WriteFile(decoy, []byte("decoy"), 0o644))
-	testutil.FailErr(t, "write backing decoy", os.WriteFile(filepath.Join(backingDir, protectedpath.AgentsMDFileName), []byte("backing"), 0o644))
 
 	rules, err := filesystemRules(Confinement{
-		Roots: []string{mountRoot},
+		Roots: []string{branchRoot},
 		View: ViewBoundary{
-			DeniedPaths:   []string{branchesBase, sourceRoot, backingDir},
-			ReopenedPaths: []string{mountRoot},
+			DeniedPaths:   []string{branchesBase, srcA, srcB, backingDir},
+			ReopenedPaths: []string{mountA, mountB, branchRoot},
+			Roots: []ViewRootBoundary{
+				{RootID: "root-a", WorkspacePath: mountA, SourcePath: srcA},
+				{RootID: "root-b", WorkspacePath: mountB, SourcePath: srcB},
+			},
 		},
 	})
-	testutil.FailErr(t, "filesystemRules", err)
+	testutil.FailErr(t, "multi-root filesystemRules", err)
 	plan, err := compileFilesystemPlan(rules)
-	testutil.FailErr(t, "compileFilesystemPlan", err)
+	testutil.FailErr(t, "multi-root compileFilesystemPlan", err)
 
-	wantTop := filepath.Join(mountRoot, protectedpath.AgentsMDFileName)
-	wantNested := filepath.Join(mountRoot, "pkg", protectedpath.AgentsMDFileName)
-	if !containsPath(plan.ReadOnly, wantTop) || !containsPath(plan.ReadOnly, wantNested) {
-		t.Fatalf("plan.ReadOnly = %v, missing mapped source loader files %q and %q", plan.ReadOnly, wantTop, wantNested)
+	for _, want := range []string{
+		filepath.Join(mountA, "shared", protectedpath.AgentsMDFileName),
+		filepath.Join(mountA, "only-a", protectedpath.AgentsMDFileName),
+		filepath.Join(mountA, "work", protectedpath.AgentsMDFileName),
+		filepath.Join(mountB, "shared", protectedpath.AgentsMDFileName),
+		filepath.Join(mountB, "only-b", protectedpath.AgentsMDFileName),
+	} {
+		if !containsPath(plan.ReadOnly, want) {
+			t.Fatalf("plan.ReadOnly = %v, missing expected policy file %q", plan.ReadOnly, want)
+		}
 	}
-	if containsPath(plan.ReadOnly, decoy) {
-		t.Fatalf("plan.ReadOnly = %v, walked mounted root and discovered decoy %q", plan.ReadOnly, decoy)
+	for _, unwanted := range []string{
+		filepath.Join(mountB, "only-a", protectedpath.AgentsMDFileName),
+		filepath.Join(mountA, "only-b", protectedpath.AgentsMDFileName),
+		filepath.Join(mountA, ".git", protectedpath.AgentsMDFileName),
+		decoy,
+	} {
+		if containsPath(plan.ReadOnly, unwanted) {
+			t.Fatalf("plan.ReadOnly = %v, unexpectedly contains %q", plan.ReadOnly, unwanted)
+		}
+	}
+
+	// 2. Effective view inventory via layeredfs.Core: parent layer additions/deletions,
+	// view-private creations/renames/unlinks, and single trunk scan bound across launches.
+	trunkDir := t.TempDir()
+	for _, d := range []string{"trunk-keep", "trunk-parent-del", "trunk-priv-unlink", "renamed"} {
+		testutil.FailErr(t, "mkdir "+d, os.MkdirAll(filepath.Join(trunkDir, d), 0o755))
+	}
+	testutil.FailErr(t, "write trunk-keep", os.WriteFile(filepath.Join(trunkDir, "trunk-keep", protectedpath.AgentsMDFileName), []byte("keep"), 0o644))
+	testutil.FailErr(t, "write trunk-parent-del", os.WriteFile(filepath.Join(trunkDir, "trunk-parent-del", protectedpath.AgentsMDFileName), []byte("del"), 0o644))
+	testutil.FailErr(t, "write trunk-priv-unlink", os.WriteFile(filepath.Join(trunkDir, "trunk-priv-unlink", protectedpath.AgentsMDFileName), []byte("unlink"), 0o644))
+	testutil.FailErr(t, "write draft.txt", os.WriteFile(filepath.Join(trunkDir, "draft.txt"), []byte("draft"), 0o644))
+
+	parentLayer := layeredfs.NewMemoryParentLayer("parent-1")
+	parentBacking := filepath.Join(t.TempDir(), "parent-agents.md")
+	testutil.FailErr(t, "write parent backing", os.WriteFile(parentBacking, []byte("parent"), 0o644))
+	parentLayer.SetEntry(layeredfs.QualifiedPath{RootID: "proj", Rel: "parent-dir"}, layeredfs.ParentEntry{Kind: layeredfs.EntryDirectory, Mode: 0o755})
+	parentLayer.SetEntry(layeredfs.QualifiedPath{RootID: "proj", Rel: "parent-dir/" + protectedpath.AgentsMDFileName}, layeredfs.ParentEntry{
+		Kind: layeredfs.EntryRegular, Mode: 0o644, Size: 6, BackingAbs: parentBacking,
+	})
+	parentLayer.SetEntry(layeredfs.QualifiedPath{RootID: "proj", Rel: "trunk-parent-del/" + protectedpath.AgentsMDFileName}, layeredfs.ParentEntry{
+		Kind: layeredfs.EntryAbsent,
+	})
+
+	core, err := layeredfs.New(layeredfs.Config{
+		ViewID:       "view-effective-policy",
+		BackingDir:   t.TempDir(),
+		Roots:        []layeredfs.RootSpec{{ID: "proj", Label: "proj", TrunkPath: trunkDir, IsPrimary: true}},
+		ParentLayers: []layeredfs.ParentLayer{parentLayer},
+	})
+	testutil.FailErr(t, "layeredfs.New", err)
+	defer func() { _ = core.ReleaseView() }()
+
+	testutil.FailErr(t, "Mkdir private-dir", core.Mkdir(layeredfs.QualifiedPath{RootID: "proj", Rel: "private-dir"}, 0o755))
+	testutil.FailErr(t, "WriteFile private AGENTS.md", core.WriteFile(layeredfs.QualifiedPath{RootID: "proj", Rel: "private-dir/" + protectedpath.AgentsMDFileName}, []byte("priv"), 0o644))
+	testutil.FailErr(t, "Rename draft -> renamed/AGENTS.md", core.Rename(
+		layeredfs.QualifiedPath{RootID: "proj", Rel: "draft.txt"},
+		layeredfs.QualifiedPath{RootID: "proj", Rel: "renamed/" + protectedpath.AgentsMDFileName},
+	))
+	testutil.FailErr(t, "Unlink trunk-priv-unlink/AGENTS.md", core.Unlink(layeredfs.QualifiedPath{RootID: "proj", Rel: "trunk-priv-unlink/" + protectedpath.AgentsMDFileName}))
+	core.ResetStepStats()
+
+	mountSingle := filepath.Join(branchesBase, "wb-single", "mount")
+	testutil.FailErr(t, "mkdir mountSingle", os.MkdirAll(mountSingle, 0o755))
+	compileWithInventory := func() linuxsandbox.Filesystem {
+		inv := core.PolicyFiles("proj", protectedpath.AgentsMDFileName)
+		r, err := filesystemRules(Confinement{
+			Roots: []string{mountSingle},
+			View: ViewBoundary{
+				DeniedPaths:   []string{branchesBase, trunkDir},
+				ReopenedPaths: []string{mountSingle},
+				Roots: []ViewRootBoundary{{
+					RootID:          "proj",
+					WorkspacePath:   mountSingle,
+					SourcePath:      trunkDir,
+					PolicyFiles:     inv,
+					PolicyInventory: true,
+				}},
+			},
+		})
+		testutil.FailErr(t, "effective filesystemRules", err)
+		p, err := compileFilesystemPlan(r)
+		testutil.FailErr(t, "effective compileFilesystemPlan", err)
+		return p
+	}
+
+	effPlan := compileWithInventory()
+	if st := core.Stats(); st.LowerDirReads != 0 || st.LowerLookups != 0 {
+		t.Fatalf("PolicyFiles touched lower provider: %+v", st)
+	}
+	for _, rel := range []string{
+		"trunk-keep/" + protectedpath.AgentsMDFileName,
+		"parent-dir/" + protectedpath.AgentsMDFileName,
+		"private-dir/" + protectedpath.AgentsMDFileName,
+		"renamed/" + protectedpath.AgentsMDFileName,
+	} {
+		want := filepath.Join(mountSingle, filepath.FromSlash(rel))
+		if !containsPath(effPlan.ReadOnly, want) {
+			t.Fatalf("effPlan.ReadOnly = %v, missing %q", effPlan.ReadOnly, want)
+		}
+	}
+	for _, rel := range []string{
+		"trunk-parent-del/" + protectedpath.AgentsMDFileName,
+		"trunk-priv-unlink/" + protectedpath.AgentsMDFileName,
+	} {
+		unwanted := filepath.Join(mountSingle, filepath.FromSlash(rel))
+		if containsPath(effPlan.ReadOnly, unwanted) {
+			t.Fatalf("effPlan.ReadOnly = %v, still contains deleted/unlinked %q", effPlan.ReadOnly, unwanted)
+		}
+	}
+
+	// 3. Command-launch work bound: trunk is not re-walked on subsequent launches, while new
+	// view-private policy files are immediately included.
+	lateTrunkFile := filepath.Join(trunkDir, "late-trunk", protectedpath.AgentsMDFileName)
+	testutil.FailErr(t, "mkdir late-trunk", os.MkdirAll(filepath.Dir(lateTrunkFile), 0o755))
+	testutil.FailErr(t, "write late-trunk AGENTS.md", os.WriteFile(lateTrunkFile, []byte("late"), 0o644))
+	testutil.FailErr(t, "WriteFile private-2", core.WriteFile(layeredfs.QualifiedPath{RootID: "proj", Rel: protectedpath.AgentsMDFileName}, []byte("root-priv"), 0o644))
+
+	secondPlan := compileWithInventory()
+	if !containsPath(secondPlan.ReadOnly, filepath.Join(mountSingle, protectedpath.AgentsMDFileName)) {
+		t.Fatalf("secondPlan.ReadOnly = %v, missing new view-private root AGENTS.md", secondPlan.ReadOnly)
+	}
+	if containsPath(secondPlan.ReadOnly, filepath.Join(mountSingle, "late-trunk", protectedpath.AgentsMDFileName)) {
+		t.Fatalf("secondPlan.ReadOnly = %v, unexpectedly re-walked trunk on second launch", secondPlan.ReadOnly)
 	}
 }
 

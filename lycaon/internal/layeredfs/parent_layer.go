@@ -3,6 +3,7 @@ package layeredfs
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -133,6 +134,23 @@ func (l *MemoryParentLayer) ListDir(dir QualifiedPath) (map[string]ParentEntry, 
 	return out, nil
 }
 
+type parentLayerSnapshotter interface {
+	EntriesForRoot(rootID string) map[string]ParentEntry
+}
+
+// EntriesForRoot returns a snapshot of all non-root entries recorded for rootID in this parent layer.
+func (l *MemoryParentLayer) EntriesForRoot(rootID string) map[string]ParentEntry {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	out := make(map[string]ParentEntry)
+	for qp, entry := range l.entries {
+		if qp.RootID == rootID && qp.Rel != "." && qp.Rel != "" {
+			out[qp.Rel] = cloneParentEntry(entry)
+		}
+	}
+	return out
+}
+
 func cloneParentEntry(e ParentEntry) ParentEntry {
 	if len(e.Xattrs) > 0 {
 		cp := make(map[string][]byte, len(e.Xattrs))
@@ -204,6 +222,183 @@ func (c *Core) Stats() Stats {
 func (c *Core) ResetStepStats() {
 	c.counters.lowerDirReads.Store(0)
 	c.counters.lowerLookups.Store(0)
+}
+
+const trunkPolicyWalkBudget = 200_000
+
+// PolicyFiles returns the sorted root-relative paths of regular files in the
+// effective view of rootID whose basename folds to any of names. The lower trunk
+// directory is scanned at most once per (rootID, names) for the lifetime of the
+// view; parent-layer and view-private mutations are overlaid in memory without
+// touching the mounted filesystem.
+func (c *Core) PolicyFiles(rootID string, names ...string) []string {
+	if c == nil || rootID == "" {
+		return nil
+	}
+	targets := canonicalPolicyNames(names)
+	if len(targets) == 0 {
+		return nil
+	}
+	c.mu.RLock()
+	if c.state.released {
+		c.mu.RUnlock()
+		return nil
+	}
+	spec, ok := c.roots.byID[rootID]
+	parentLayers := c.cfg.ParentLayers
+	c.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+
+	active := make(map[string]bool)
+	for _, rel := range c.cachedTrunkPolicyFiles(rootID, spec.TrunkPath, targets) {
+		active[rel] = true
+	}
+
+	for i := len(parentLayers) - 1; i >= 0; i-- {
+		snap, ok := parentLayers[i].(parentLayerSnapshotter)
+		if !ok {
+			continue
+		}
+		entries := snap.EntriesForRoot(rootID)
+		for rel, entry := range entries {
+			if entry.Kind == EntryAbsent || entry.Kind != EntryDirectory {
+				deleteActiveUnder(active, rel)
+			}
+			if entry.Kind != EntryRegular || !foldsToAnyPolicyName(path.Base(rel), targets) {
+				delete(active, rel)
+			}
+		}
+		for rel, entry := range entries {
+			if entry.Kind == EntryRegular && foldsToAnyPolicyName(path.Base(rel), targets) {
+				active[rel] = true
+			}
+		}
+	}
+
+	c.mu.RLock()
+	for qp := range c.state.deletedPaths {
+		if qp.RootID != rootID {
+			continue
+		}
+		delete(active, qp.Rel)
+		if qp.Rel != "." && qp.Rel != "" {
+			deleteActiveUnder(active, qp.Rel)
+		}
+	}
+	for qp, nid := range c.state.pathIndex {
+		if qp.RootID != rootID || qp.Rel == "." || qp.Rel == "" {
+			continue
+		}
+		node := c.state.nodesByID[nid]
+		if node == nil || node.flags.unlinked {
+			delete(active, qp.Rel)
+			continue
+		}
+		if node.kind != EntryDirectory {
+			deleteActiveUnder(active, qp.Rel)
+		}
+		if node.kind != EntryRegular || !foldsToAnyPolicyName(path.Base(qp.Rel), targets) {
+			delete(active, qp.Rel)
+		}
+	}
+	for qp, nid := range c.state.pathIndex {
+		if qp.RootID != rootID || qp.Rel == "." || qp.Rel == "" {
+			continue
+		}
+		node := c.state.nodesByID[nid]
+		if node != nil && !node.flags.unlinked && node.kind == EntryRegular && foldsToAnyPolicyName(path.Base(qp.Rel), targets) {
+			active[qp.Rel] = true
+		}
+	}
+	c.mu.RUnlock()
+
+	return sortedNames(active)
+}
+
+func (c *Core) cachedTrunkPolicyFiles(rootID, trunkPath string, targets []string) []string {
+	if strings.TrimSpace(trunkPath) == "" {
+		return nil
+	}
+	key := rootID + "\x00" + strings.Join(targets, "\x00")
+	c.policyCacheMu.Lock()
+	defer c.policyCacheMu.Unlock()
+	if cached, ok := c.trunkPolicyFiles[key]; ok {
+		return cached
+	}
+	found := scanTrunkPolicyFiles(trunkPath, targets)
+	c.trunkPolicyFiles[key] = found
+	return found
+}
+
+func scanTrunkPolicyFiles(root string, targets []string) []string {
+	var out []string
+	budget := trunkPolicyWalkBudget
+	var walk func(dir, relPrefix string) bool
+	walk = func(dir, relPrefix string) bool {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return true
+		}
+		for _, e := range entries {
+			if budget--; budget < 0 {
+				return false
+			}
+			name := e.Name()
+			rel := name
+			if relPrefix != "" {
+				rel = relPrefix + "/" + name
+			}
+			switch {
+			case e.Type().IsRegular() && foldsToAnyPolicyName(name, targets):
+				out = append(out, rel)
+			case e.IsDir():
+				if strings.EqualFold(name, ".git") {
+					continue
+				}
+				if !walk(filepath.Join(dir, name), rel) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+	walk(root, "")
+	sort.Strings(out)
+	return out
+}
+
+func canonicalPolicyNames(names []string) []string {
+	seen := make(map[string]bool, len(names))
+	var out []string
+	for _, n := range names {
+		n = strings.ToLower(strings.TrimSpace(n))
+		if n != "" && !seen[n] {
+			seen[n] = true
+			out = append(out, n)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func foldsToAnyPolicyName(name string, targets []string) bool {
+	for _, target := range targets {
+		if strings.EqualFold(name, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func deleteActiveUnder(active map[string]bool, dirRel string) {
+	prefix := dirRel + "/"
+	for p := range active {
+		if strings.HasPrefix(p, prefix) {
+			delete(active, p)
+		}
+	}
 }
 
 func ensurePrivateDirNodeLocked(c *Core, qpath QualifiedPath, attr EntryAttr) *privateNode {

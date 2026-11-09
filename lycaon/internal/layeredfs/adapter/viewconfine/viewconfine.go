@@ -22,6 +22,7 @@ import (
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/protectedpath"
 )
 
 // probeBound ends a probe stuck on a mount. Running out proves nothing, so it counts as unavailable.
@@ -50,6 +51,19 @@ func Boundary(view *adapter.PreparedView) confine.ViewBoundary {
 	if view.BackingDir != "" {
 		boundary.DeniedPaths = append(boundary.DeniedPaths, view.BackingDir)
 	}
+	policyNames := agentPolicyNames()
+	for _, root := range view.Roots {
+		vr := confine.ViewRootBoundary{
+			RootID:        root.RootID,
+			WorkspacePath: root.WorkspacePath,
+			SourcePath:    root.SourcePath,
+		}
+		if view.Core != nil {
+			vr.PolicyFiles = view.Core.PolicyFiles(root.RootID, policyNames...)
+			vr.PolicyInventory = true
+		}
+		boundary.Roots = append(boundary.Roots, vr)
+	}
 	if base := enginepaths.WorkerBranchesRootOf(view.PrimaryWorkPath); base != "" {
 		boundary.DeniedPaths = append(boundary.DeniedPaths, base)
 		boundary.ReopenedReadPaths = []string{privategit.RetainedObjectsDir(enginepaths.PrivateGitDirUnder(base))}
@@ -58,6 +72,16 @@ func Boundary(view *adapter.PreparedView) confine.ViewBoundary {
 		}
 	}
 	return boundary
+}
+
+func agentPolicyNames() []string {
+	var names []string
+	for _, loc := range protectedpath.AgentPolicyLocations() {
+		if loc.Name != "" {
+			names = append(names, loc.Name)
+		}
+	}
+	return names
 }
 
 // Available proves, in a private scratch directory, that a confined process reaches a write root

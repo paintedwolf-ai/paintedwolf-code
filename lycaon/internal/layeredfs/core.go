@@ -20,6 +20,9 @@ type Core struct {
 	mu      sync.RWMutex
 	state   *viewState
 	barrier *barrierCoordinator
+
+	policyCacheMu    sync.Mutex
+	trunkPolicyFiles map[string][]string
 }
 
 type backingWorkspace struct {
@@ -170,7 +173,8 @@ func New(cfg Config) (*Core, error) {
 			handles:      make(map[HandleID]*openHandle),
 			dirCookies:   make(map[uint64]dirCookieState),
 		},
-		barrier: newBarrierCoordinator(cfg.ViewID),
+		barrier:          newBarrierCoordinator(cfg.ViewID),
+		trunkPolicyFiles: make(map[string][]string),
 	}, nil
 }
 
