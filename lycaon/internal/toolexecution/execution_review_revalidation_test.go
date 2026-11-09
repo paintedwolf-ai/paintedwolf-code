@@ -105,7 +105,7 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 				case <-ctx.Done():
 					t.Fatal("new requirement never reached review")
 				}
-				if len(entered) != 0 || !slices.ContainsFunc(manager.request.MatchedRules, func(rule hitl.ApprovalRuleMatch) bool {
+				if len(entered) != 0 || !slices.ContainsFunc(manager.request.ApprovalMatches, func(rule hitl.ApprovalRuleMatch) bool {
 					return rule.Category == "command" && rule.Pattern == "printf *"
 				}) {
 					t.Fatal("new requirement was omitted or dispatched before review")
