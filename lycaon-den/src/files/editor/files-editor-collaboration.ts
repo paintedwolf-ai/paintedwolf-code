@@ -9,7 +9,6 @@ import {
 } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { SecretScreen } from "../../api/types.ts";
-import { lineGutterSource } from "../../components/source/annotations/line-gutter.ts";
 import { diffSourceText } from "../../components/source/diff/source-text-diff.ts";
 import { mapDisplayEditToSource } from "../../components/source/pretty/pretty-edit-mapper.ts";
 import {
@@ -20,7 +19,10 @@ import {
   sourceLineColToDisplay,
   sourceToDisplayOffset,
 } from "../../components/source/pretty/pretty-map.ts";
-import { PrettyReplicaEditorAdapter } from "../../components/source/pretty/pretty-replica-adapter.ts";
+import {
+  PrettyReplicaEditorAdapter,
+  type PrettyLineGutterSourceFacet,
+} from "../../components/source/pretty/pretty-replica-adapter.ts";
 import { hasActivePrettyRecoveryForDocument } from "../../components/source/pretty/pretty-replica-recovery.ts";
 import { refreshPrettyRecoveryUi } from "../../components/source/pretty/pretty-replica-recovery-ui.ts";
 import { formatPrettyProjection } from "../../components/source/pretty/pretty-segmenter.ts";
@@ -68,6 +70,13 @@ type FilesViewPrettySession = {
 };
 
 const sessionsByView = new WeakMap<EditorView, FilesViewPrettySession>();
+let registeredLineGutterSourceFacet: PrettyLineGutterSourceFacet | undefined;
+
+export function registerFilesCollaborationLineGutterSource(
+  facet: PrettyLineGutterSourceFacet,
+): void {
+  registeredLineGutterSourceFacet = facet;
+}
 
 function ensureSession(
   view: EditorView,
@@ -104,26 +113,29 @@ function ensureSession(
 }
 
 function buildNonReplicaPrettyExtensions(session: FilesViewPrettySession): Extension {
-  const gutterStampField = StateField.define<number>({
-    create: () => 0,
-    update: (val, tr) => {
-      if (tr.docChanged) return val + 1;
-      for (const e of tr.effects) {
-        if (e.is(refreshPrettyRecoveryUi)) return val + 1;
-      }
-      return val;
-    },
-    provide: (field) =>
-      lineGutterSource.compute([field], () => (_state, dispLineNumber) => {
-        if (!session.prettyEnabled || !session.nonReplicaProjection) {
-          return { label: String(dispLineNumber) };
-        }
-        const info = session.nonReplicaProjection.sourceMap.displayLines[dispLineNumber - 1];
-        if (!info) return { label: String(dispLineNumber) };
-        if (info.isContinuation) return { label: "", foldable: false };
-        return { label: String(info.sourceLine) };
-      }),
-  });
+  const gutterFacet = registeredLineGutterSourceFacet;
+  const gutterStampField = gutterFacet
+    ? StateField.define<number>({
+        create: () => 0,
+        update: (val, tr) => {
+          if (tr.docChanged) return val + 1;
+          for (const e of tr.effects) {
+            if (e.is(refreshPrettyRecoveryUi)) return val + 1;
+          }
+          return val;
+        },
+        provide: (field) =>
+          gutterFacet.compute([field], () => (_state, dispLineNumber) => {
+            if (!session.prettyEnabled || !session.nonReplicaProjection) {
+              return { label: String(dispLineNumber) };
+            }
+            const info = session.nonReplicaProjection.sourceMap.displayLines[dispLineNumber - 1];
+            if (!info) return { label: String(dispLineNumber) };
+            if (info.isContinuation) return { label: "", foldable: false };
+            return { label: String(info.sourceLine) };
+          }),
+      })
+    : [];
 
   const gotoExt = gotoLineTargetFacet.of((view): GotoLineTarget | undefined => {
     if (!session.prettyEnabled || !session.nonReplicaProjection) return undefined;
@@ -263,6 +275,7 @@ export function syncFilesCollaborationPrettyMode(
         onAuthoritativeDocChange: (rawText, userEvent) => {
           session.onAuthoritativeDocChange?.(rawText, userEvent);
         },
+        lineGutterSourceFacet: registeredLineGutterSourceFacet,
       });
       session.adapter.setPrettyEnabled(wantPretty);
     }

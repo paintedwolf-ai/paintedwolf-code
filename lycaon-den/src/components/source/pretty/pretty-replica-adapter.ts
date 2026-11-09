@@ -1,8 +1,7 @@
 import { isolateHistory } from "@codemirror/commands";
-import { EditorSelection, EditorState, Prec, StateField, Transaction, type Extension, type TransactionSpec } from "@codemirror/state";
+import { EditorSelection, EditorState, type Facet, Prec, StateField, Transaction, type Extension, type TransactionSpec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import type * as Y from "yjs";
-import { lineGutterSource } from "../annotations/line-gutter.ts";
 import { editorHistory } from "../editor/editor-history.ts";
 import { documentDeltaChanges, documentHistoryKey, documentRemoteChange, documentSynchronization } from "../../../files/documents/document-editor-binding.ts";
 import type { DocumentStorageError } from "../../../files/documents/document-outbox.ts";
@@ -29,12 +28,14 @@ import type {
   PrettyMappedSourceChange, PrettyProjectionResult, PrettyRawRange, PrettySelectionRange, PrettySourceMap,
 } from "./pretty-types.ts";
 
+export type PrettyLineGutterSourceFacet = Facet<
+  (state: EditorState, line: number) => { label: string; kind?: "insert" | "delete"; foldable?: boolean },
+  ((state: EditorState, line: number) => { label: string; kind?: "insert" | "delete"; foldable?: boolean }) | undefined
+>;
 export interface PrettyReplicaAdapterOptions {
-  readonly path?: string;
-  readonly languageHint?: string;
-  readonly indentUnit?: string;
-  readonly ringBufferCapacity?: number;
+  readonly path?: string; readonly languageHint?: string; readonly indentUnit?: string; readonly ringBufferCapacity?: number;
   readonly onAuthoritativeDocChange?: (rawText: string, userEvent: string | undefined) => void;
+  readonly lineGutterSourceFacet?: PrettyLineGutterSourceFacet;
 }
 
 export type PrettyConflictResolutionAction =
@@ -905,20 +906,14 @@ export class PrettyReplicaEditorAdapter {
 
   get extension(): Extension {
     const command = (direction: "undo" | "redo") => () => this.stepHistory(direction);
-    const gutterStampField = StateField.define<number>({
-      create: () => 0,
-      update: (val, tr) => {
-        if (tr.docChanged) return val + 1;
-        for (const e of tr.effects) {
-          if (e.is(refreshPrettyRecoveryUi)) return val + 1;
-        }
-        return val;
-      },
-      provide: (field) =>
-        lineGutterSource.compute([field], () => (_state, dispLineNumber) =>
-          this.getLineGutterLabel(dispLineNumber),
-        ),
-    });
+    const gutterFacet = this.options.lineGutterSourceFacet;
+    const gutterStampField = gutterFacet
+      ? StateField.define<number>({
+          create: () => 0,
+          update: (val, tr) => (tr.docChanged || tr.effects.some((e) => e.is(refreshPrettyRecoveryUi)) ? val + 1 : val),
+          provide: (field) => gutterFacet.compute([field], () => (_state, dispLine) => this.getLineGutterLabel(dispLine)),
+        })
+      : [];
     return [
       gutterStampField,
       gotoLineTargetFacet.of((view) => this.getGotoLineTarget(view)),

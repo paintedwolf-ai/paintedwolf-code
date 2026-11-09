@@ -8,6 +8,7 @@ import {
   getFilesCollaborationAuthoritativeDoc,
   mapFilesCollaborationDisplayOffsetToSourceLineCol,
   projectSecretScreenForFilesView,
+  registerFilesCollaborationLineGutterSource,
   syncFilesCollaborationPrettyMode,
 } from "./files-editor-collaboration.ts";
 import { editorReplica } from "../documents/editor-document.ts";
@@ -26,7 +27,10 @@ import {
 import { setSecretScreen } from "../../components/source/secrets/secret-span-decorations.ts";
 import { applyBufferReveal, hasPendingReveal } from "./files-editor-reveal.ts";
 import { restoreEditorScrollTop } from "../../components/source/editor/editor-view-state.ts";
-import { lineGutterExtension } from "../../components/source/annotations/line-gutter.ts";
+import {
+  lineGutterExtension,
+  lineGutterSource,
+} from "../../components/source/annotations/line-gutter.ts";
 import { noteBufferTyped } from "../documents/buffer-typing.ts";
 import { scheduleEditorDocumentDraft } from "../documents/editor-document.ts";
 import { captureBufferViewState, tryRestoreBufferViewState } from "./editor-session-fidelity.ts";
@@ -60,6 +64,7 @@ import { projectFilesState } from "../documents/files-buffer-state.ts";
 import type { FilesEditorScope } from "../components/files-scope.ts";
 
 const filesHostExtensions = new Compartment();
+registerFilesCollaborationLineGutterSource(lineGutterSource);
 
 type ViewportDependencies = Pick<FilesEditorScope, "projectId" | "buffer" | "live" | "currentView" | "editorView" |
   "historicalActive"> & {
