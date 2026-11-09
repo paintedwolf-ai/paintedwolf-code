@@ -50,7 +50,7 @@ export type FilesEditorStatusProps = {
 
 function StatusChipView(props: { chip: StatusChip; testId: string; class?: string }) {
   return <Show when={props.chip.onOpen} fallback={<span class="den-files-editor__status-detail" data-testid={props.testId} data-tip={props.chip.tip}>{props.chip.label}</span>}>
-    <button type="button" ref={element=>props.chip.ref?.(element)} class={`den-files-editor__status-toggle ${props.class ?? ""}`} data-testid={props.testId}
+    <button type="button" ref={element=>props.chip.ref?.(element)} class={`den-files-editor__status-toggle den-inset-icon-btn ${props.class ?? ""}`} data-testid={props.testId}
       aria-haspopup="menu" data-tip={props.chip.tip} onClick={()=>props.chip.onOpen?.()}>{props.chip.label}</button>
   </Show>;
 }
@@ -72,11 +72,11 @@ export function FilesEditorStatus(props: FilesEditorStatusProps) {
     <Show when={props.simplified}><span class="den-files-editor__status-detail" data-testid="files-editor-simplified-chip"
       data-tip="This file is very large or has very long lines. Wrapping, indent guides, and syntax highlighting stay off here so the editor keeps up.">Simplified</span></Show>
     <span class="den-files-editor__status-spacer" />
-    <button type="button" class="den-files-editor__status-toggle den-files-editor__status-pretty"
+    <button type="button" class="den-files-editor__status-toggle den-inset-icon-btn den-files-editor__status-pretty"
       data-testid="files-editor-pretty-toggle" aria-pressed={props.pretty?.available !== false ? Boolean(props.pretty?.enabled) : false}
       disabled={!props.pretty || props.pretty.available === false} data-tip={props.pretty?.tip}
       onClick={() => { if (props.pretty && props.pretty.available !== false) props.pretty.onToggle(); }}>Pretty</button>
-    <button type="button" class="den-files-editor__status-toggle den-files-editor__status-wrap"
+    <button type="button" class="den-files-editor__status-toggle den-inset-icon-btn den-files-editor__status-wrap"
       data-testid="files-editor-wrap-toggle" aria-pressed={editorWordWrapPref()}
       onClick={() => void saveEditorWordWrap(!editorWordWrapPref())}>Wrap</button>
   </div>;

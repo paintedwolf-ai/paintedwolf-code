@@ -320,39 +320,34 @@ describe("Pretty display host contributions and status chrome (FMT-AC-06, FMT-IN
       join(import.meta.dirname, "../../styling/files/preview-domain.css"),
       "utf8",
     );
-    const baseRule = extractCssRuleBlock(previewDomainCss, ".den-files-editor__status-toggle");
-    const hoverRule = extractCssRuleBlock(
-      previewDomainCss,
-      ".den-files-editor__status-toggle:hover:not(:disabled)",
+    const shellUtilitiesCss = readFileSync(
+      join(import.meta.dirname, "../../shell-utilities.css"),
+      "utf8",
     );
-    const pressedRule = extractCssRuleBlock(
+    const baseRule = extractCssRuleBlock(
       previewDomainCss,
-      '.den-files-editor__status-toggle[aria-pressed="true"]:not(:disabled)',
+      ".den-files-editor__status-toggle",
     );
-    const pressedHoverRule = extractCssRuleBlock(
-      previewDomainCss,
-      '.den-files-editor__status-toggle[aria-pressed="true"]:hover:not(:disabled)',
-    );
-    const focusRule = extractCssRuleBlock(
-      previewDomainCss,
-      ".den-files-editor__status-toggle:focus-visible",
-    );
-    const disabledRule = extractCssRuleBlock(
-      previewDomainCss,
-      ".den-files-editor__status-toggle:disabled",
-    );
+    const sharedInsetRecipe = shellUtilitiesCss.match(
+      /@utility\s+den-inset-icon-btn\s*\{([\s\S]*?)\n\}/,
+    )?.[1] ?? "";
 
-    expect(baseRule).toMatch(/border:\s*1px solid transparent/);
-    expect(baseRule).toMatch(/padding:\s*1px 5px/);
-    expect(hoverRule).toMatch(/border-color:\s*var\(--den-line\)/);
-    expect(hoverRule).toMatch(/background:\s*var\(--den-tint-2\)/);
-    expect(pressedRule).toMatch(/box-shadow:\s*var\(--den-bevel-inset\)/);
-    expect(pressedRule).toMatch(/var\(--den-accent-signal\)/);
-    expect(pressedRule).toMatch(/var\(--den-surface-offset\)/);
-    expect(pressedRule).toMatch(/color:\s*var\(--den-text\)/);
-    expect(pressedHoverRule).toMatch(/box-shadow:\s*var\(--den-bevel-inset\)/);
-    expect(focusRule).toMatch(/outline:\s*1\.5px solid var\(--den-accent-signal\)/);
-    expect(disabledRule).toMatch(/opacity:\s*0\.4/);
-    expect(disabledRule).toMatch(/cursor:\s*not-allowed/);
+    // Status toggles reuse shared den-inset-icon-btn chrome and only override compact sizing in preview-domain.css:
+    expect(baseRule).toMatch(/width:\s*auto/);
+    expect(baseRule).toMatch(/height:\s*auto/);
+    expect(baseRule).toMatch(/padding:\s*2px 6px/);
+    expect(baseRule).toMatch(/font-size:\s*var\(--text-den-caption\)/);
+    expect(baseRule).not.toMatch(/--den-accent-signal/);
+
+    // Shared den-inset-icon-btn recipe defines neutral-gray pressed/hover/focus/disabled states without accent-signal tint:
+    expect(sharedInsetRecipe).toMatch(
+      /&\[aria-pressed="true"\]:not\(:disabled\):not\([^)]+\)\s*\{[\s\S]*?background:\s*var\(--den-surface-offset\)[\s\S]*?box-shadow:\s*var\(--den-bevel-inset\)[\s\S]*?color:\s*var\(--den-text\)/,
+    );
+    expect(sharedInsetRecipe).toMatch(
+      /&\[aria-pressed="true"\]:hover:not\(:disabled\):not\([^)]+\)\s*\{[\s\S]*?background:\s*var\(--den-tint-2\)[\s\S]*?box-shadow:\s*var\(--den-bevel-inset\)[\s\S]*?color:\s*var\(--den-text\)/,
+    );
+    expect(sharedInsetRecipe).not.toMatch(/--den-accent-signal/);
+    expect(sharedInsetRecipe).toMatch(/&:focus-visible\s*\{[\s\S]*?box-shadow:/);
+    expect(sharedInsetRecipe).toMatch(/&:disabled\s*\{[\s\S]*?opacity:\s*0\.4/);
   });
 });

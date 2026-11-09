@@ -191,6 +191,19 @@ display: inline-flex;
     box-shadow: var(--den-bevel-inset);
     color: var(--den-text);
   }
+  /* Persistent neutral-gray depressed state for toggle controls. */
+  &[aria-pressed="true"]:not(:disabled):not(.project-list-row__star, .project-card__star, .den-row-action, .den-transcript-visual-timeline__play) {
+    background: var(--den-surface-offset);
+    --den-plane: var(--den-surface-offset);
+    box-shadow: var(--den-bevel-inset);
+    color: var(--den-text);
+  }
+  &[aria-pressed="true"]:hover:not(:disabled):not(.project-list-row__star, .project-card__star, .den-row-action, .den-transcript-visual-timeline__play) {
+    background: var(--den-tint-2);
+    --den-plane: var(--den-tint-2);
+    box-shadow: var(--den-bevel-inset);
+    color: var(--den-text);
+  }
   /* Icons carry the weight change as a heavier stroke. */
   &:active:not(:disabled) {
     background: var(--den-tint-1);
