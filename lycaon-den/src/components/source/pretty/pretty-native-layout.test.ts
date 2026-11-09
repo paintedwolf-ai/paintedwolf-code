@@ -657,9 +657,10 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
 
     // Suffix syntaxSpanSignature invalidation on docChanged even when fallback lexical continuation on Line 2 converges:
     const jsxDoc = [
-      "const v = 1;",
-      'id = "x";',
+      "const v = 1 < 2",
+      "? a : b > c;",
       'const r = /"/; const x = {a: 1, b: 2};',
+      "</tag>;",
     ].join("\n");
     let jsxState = EditorState.create({
       doc: jsxDoc,
@@ -674,9 +675,13 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     const sigBefore =
       jsxState.field(prettyNativeStateField).lineStates[2]?.syntaxSpanSignature;
 
-    // Edit only Line 1 (`rescanMinEndLine = 2`) so Line 3's syntax tree changes while Line 2's lexical continuation is identical:
+    // Edit only Line 1 (`rescanMinEndLine = 2`) so Line 3 becomes JSXText inside <tag>...</tag> while Line 2's lexical continuation is identical:
     jsxState = jsxState.update({
-      changes: { from: 0, to: "const v = 1;".length, insert: "const v = <div" },
+      changes: {
+        from: 0,
+        to: "const v = 1 < 2".length,
+        insert: "const v = <tag",
+      },
     }).state;
     const jsxAfter = jsxState.field(prettyNativeStateField);
     const jsxFresh = computePrettyNativeLayout(
