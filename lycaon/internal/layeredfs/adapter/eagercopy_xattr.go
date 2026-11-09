@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -100,6 +101,144 @@ func isIgnorableXattrErr(err error) bool {
 		errors.Is(err, unix.ENOSYS) ||
 		errors.Is(err, unix.ENODATA) ||
 		errors.Is(err, syscall.Errno(93))
+}
+
+const (
+	systemNFS4ACLXattr        = "system.nfs4_acl"
+	systemPOSIXACLAccessXattr = "system.posix_acl_access"
+
+	nfs4ACETypeAccessAllowed = 0
+	nfs4ACETypeAccessDenied  = 1
+
+	nfs4ACEFileInherit          = 0x00000001
+	nfs4ACEDirectoryInherit     = 0x00000002
+	nfs4ACENoPropagateInherit   = 0x00000004
+	nfs4ACEInheritOnly          = 0x00000008
+	nfs4ACESuccessfulAccessFlag = 0x00000010
+	nfs4ACEFailedAccessFlag     = 0x00000020
+	nfs4ACEIdentifierGroup      = 0x00000040
+
+	nfs4ACEUnsupportedModeFlags = nfs4ACEFileInherit | nfs4ACEDirectoryInherit |
+		nfs4ACENoPropagateInherit | nfs4ACEInheritOnly |
+		nfs4ACESuccessfulAccessFlag | nfs4ACEFailedAccessFlag | nfs4ACEIdentifierGroup
+
+	posixACLTagUserObj  = 0x01
+	posixACLTagGroupObj = 0x04
+	posixACLTagOther    = 0x20
+)
+
+// normalizeSeedSourceXattrs distinguishes transport-synthesized mode-equivalent ACL representations
+// (whose access semantics are already carried by mode.Perm()) from non-trivial ACLs and portable
+// extended attributes. Non-trivial transport ACLs that cannot be represented on the target workspace
+// filesystem fail closed during writePathXattrs.
+func normalizeSeedSourceXattrs(mode fs.FileMode, xattrs map[string][]byte) map[string][]byte {
+	if len(xattrs) == 0 {
+		return nil
+	}
+	var out map[string][]byte
+	for k, v := range xattrs {
+		if isModeEquivalentTransportACL(k, v, mode) {
+			continue
+		}
+		if out == nil {
+			out = make(map[string][]byte, len(xattrs))
+		}
+		out[k] = v
+	}
+	return out
+}
+
+func isModeEquivalentTransportACL(name string, raw []byte, mode fs.FileMode) bool {
+	if mode&os.ModeSymlink != 0 {
+		return false
+	}
+	switch name {
+	case systemNFS4ACLXattr:
+		return isModeEquivalentNFS4ACL(raw, mode)
+	case systemPOSIXACLAccessXattr:
+		return isModeEquivalentPOSIXAccessACL(raw, mode)
+	default:
+		return false
+	}
+}
+
+func isModeEquivalentNFS4ACL(raw []byte, mode fs.FileMode) bool {
+	if len(raw) < 4 {
+		return false
+	}
+	count := binary.BigEndian.Uint32(raw[:4])
+	if count == 0 || count > 6 {
+		return false
+	}
+	off := 4
+	for i := uint32(0); i < count; i++ {
+		if off+16 > len(raw) {
+			return false
+		}
+		aceType := binary.BigEndian.Uint32(raw[off : off+4])
+		aceFlag := binary.BigEndian.Uint32(raw[off+4 : off+8])
+		whoLen := int(binary.BigEndian.Uint32(raw[off+12 : off+16]))
+		off += 16
+		if whoLen <= 0 || whoLen > len(raw)-off {
+			return false
+		}
+		who := string(raw[off : off+whoLen])
+		padded := (whoLen + 3) & ^3
+		if padded > len(raw)-off {
+			return false
+		}
+		off += padded
+		if aceType != nfs4ACETypeAccessAllowed && aceType != nfs4ACETypeAccessDenied {
+			return false
+		}
+		if aceFlag&nfs4ACEUnsupportedModeFlags != 0 {
+			return false
+		}
+		switch who {
+		case "OWNER@", "GROUP@", "EVERYONE@":
+		default:
+			return false
+		}
+	}
+	return off == len(raw)
+}
+
+func isModeEquivalentPOSIXAccessACL(raw []byte, mode fs.FileMode) bool {
+	// Linux posix_acl_xattr_header (4-byte version = 2) + 3 * posix_acl_xattr_entry (8 bytes each) = 28 bytes.
+	if len(raw) != 28 {
+		return false
+	}
+	if binary.LittleEndian.Uint32(raw[0:4]) != 2 {
+		return false
+	}
+	perm := mode.Perm()
+	var seenMask uint16
+	for off := 4; off < 28; off += 8 {
+		tag := binary.LittleEndian.Uint16(raw[off : off+2])
+		ePerm := binary.LittleEndian.Uint16(raw[off+2 : off+4])
+		id := binary.LittleEndian.Uint32(raw[off+4 : off+8])
+		if id != 0xffffffff {
+			return false
+		}
+		switch tag {
+		case posixACLTagUserObj:
+			if fs.FileMode(ePerm&0o7) != (perm>>6)&0o7 {
+				return false
+			}
+		case posixACLTagGroupObj:
+			if fs.FileMode(ePerm&0o7) != (perm>>3)&0o7 {
+				return false
+			}
+		case posixACLTagOther:
+			if fs.FileMode(ePerm&0o7) != perm&0o7 {
+				return false
+			}
+		default:
+			return false
+		}
+		seenMask |= tag
+	}
+	return seenMask == (posixACLTagUserObj | posixACLTagGroupObj | posixACLTagOther)
 }
 
 func writePathXattrs(p string, xattrs map[string][]byte) error {

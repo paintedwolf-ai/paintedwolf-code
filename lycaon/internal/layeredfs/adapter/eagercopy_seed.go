@@ -227,10 +227,11 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath, pr
 		return err
 	}
 	mode := info.Mode()
-	xattrs, err := readPathXattrs(srcPath)
+	rawXattrs, err := readPathXattrs(srcPath)
 	if err != nil {
 		return err
 	}
+	xattrs := normalizeSeedSourceXattrs(mode, rawXattrs)
 	switch {
 	case mode.IsDir():
 		return a.seedDirectory(g.RootID, rel, dstPath, pristinePath, info, xattrs)
