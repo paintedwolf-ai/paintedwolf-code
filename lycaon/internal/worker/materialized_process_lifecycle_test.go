@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -94,8 +95,21 @@ func runMaterializedLifecyclePhase(t *testing.T, root, phase string) {
 		t.Fatalf("invalid phase receipt: %q", raw)
 	}
 	manager.WithRecovery(openFixtureRecovery(t, branches))
-	_, err = manager.RecoverWorkerViews(t.Context())
+	reports, err := manager.RecoverWorkerViews(t.Context())
 	testutil.FailErr(t, "recover worker views in fresh process", err)
+	recoveredCheckpoint := ""
+	for _, report := range reports {
+		if report.WorkerID != fields[0] {
+			continue
+		}
+		if report.Err != nil || report.Disposition != recovery.RuntimeSettled {
+			t.Fatalf("worker recovery did not settle: %+v", report)
+		}
+		recoveredCheckpoint = report.CheckpointID
+	}
+	if recoveredCheckpoint == "" {
+		t.Fatalf("recovery did not report the recorded worker checkpoint: %+v", reports)
+	}
 	task, ok := queue.Get(fields[0])
 	if !ok {
 		t.Fatal("restart lost worker")
@@ -106,7 +120,7 @@ func runMaterializedLifecyclePhase(t *testing.T, root, phase string) {
 	}
 	store, manifest, published, err := session.OpenTaskCheckpointStore(task)
 	testutil.FailErr(t, "reopen checkpoint", err)
-	if !published || len(manifest.Entries) != 1 {
+	if !published || manifest.CheckpointID != recoveredCheckpoint || len(manifest.Entries) != 1 {
 		t.Fatalf("restart lost checkpoint: %+v", manifest)
 	}
 	base, err := store.ReadBlob(manifest.Entries[0].Base.SHA256)
