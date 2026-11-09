@@ -59,31 +59,37 @@ func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, a
 }
 
 // RootsChangedKickData builds the root-change notice context: one row per
-// added, removed, moved or renamed root in the change, then the root set the
-// next turn resolves against.
+// added, removed, or renamed root in the change, then the root set the next
+// turn resolves against. Rows carry labels only: a host path move under an
+// unchanged ID and label is not announced, and no row ever names a host
+// path.
 func RootsChangedKickData(change projectroot.RootChange, after []projectroot.RootRef, activeRootID string) map[string]any {
-	changes := make([]map[string]any, 0, len(change.Added)+len(change.Retired))
+	rows := make([]map[string]any, 0, len(change.Added)+len(change.Retired)+len(change.Renamed))
 	for _, r := range change.Added {
-		changes = append(changes, map[string]any{"kind": "added", "label": r.Label})
+		rows = append(rows, map[string]any{"kind": "added", "label": r.Label})
 	}
 	for _, r := range change.Retired {
-		row := map[string]any{"kind": string(r.Reason), "label": r.Root.Label, "old_label": r.Root.Label}
 		if r.Reason != projectroot.RootDetached {
-			row["label"] = r.Successor.Label
+			continue
 		}
-		changes = append(changes, row)
+		rows = append(rows, map[string]any{"kind": "removed", "label": r.Root.Label})
 	}
-	if len(changes) > pongoplain.MaxCollectionItems {
-		changes = changes[:pongoplain.MaxCollectionItems]
+	for _, r := range change.Renamed {
+		rows = append(rows, map[string]any{"kind": "renamed", "label": r.NewLabel, "old_label": r.OldLabel})
+	}
+	omitted := 0
+	if len(rows) > pongoplain.MaxCollectionItems {
+		omitted = len(rows) - pongoplain.MaxCollectionItems
+		rows = rows[:pongoplain.MaxCollectionItems]
 	}
 	activeID := ""
 	data := map[string]any{
-		"changes":             changes,
-		"changes_omitted":     len(change.Added) + len(change.Retired) - len(changes),
-		"generation":          change.Generation,
-		"primary_changed":     change.Primary.ID != "",
-		"new_primary":         map[string]any{"label": change.Primary.Label},
-		"after_count":         len(after),
+		"changes":         rows,
+		"changes_omitted": omitted,
+		"generation":      change.Generation,
+		"primary_changed": change.Primary.ID != "",
+		"new_primary":     map[string]any{"label": change.Primary.Label},
+		"after_count":     len(after),
 	}
 	if active, err := projectroot.ActiveRoot(after, activeRootID); err == nil {
 		activeID = active.ID
