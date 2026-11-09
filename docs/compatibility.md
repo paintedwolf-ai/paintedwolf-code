@@ -359,7 +359,9 @@ issue and retained-document variables instead of `drafted_synthesis`.
 
 ## Agent-public vocabulary
 
-Structured tool names, `Code:` meanings, rule effects, theme tokens, and other model- or extension-authored ids are contracts because external text or content can name them. Virtual root prefixes such as `@scratch` are likewise agent-public path vocabulary, and no attached root may carry a virtual root's label.
+Structured tool names, `Code:` meanings, rule effects, theme tokens, and other model- or extension-authored ids are contracts because external text or content can name them.
+
+Path addressing is agent-public vocabulary. Every attached root carries a label — draft projects label their scratch root `Draft`, and single-root projects still carry a mandatory label — and the model addresses folders with it: a bare relative path resolves in the session folder (the root the session currently addresses unqualified paths against), and `@<label>/relative/path` addresses any other attached folder. The virtual labels `@scratch` and `@output` are host-owned prefixes in the same grammar, and no attached root may carry a virtual root's label.
 
 - do not reuse a retired id for a different meaning;
 - mark it deprecated and name a successor;

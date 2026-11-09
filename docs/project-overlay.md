@@ -24,7 +24,7 @@ Human edits in an editor or a review flow are ordinary; the host expects out-of-
 
 ## Merge order
 
-For primary root **P** and active root **R**, effective project content resolves in this order:
+For primary root **P** and session folder **R**, effective project content resolves in this order:
 
 ```text
 1. Bundled and admitted device content
@@ -118,7 +118,7 @@ A `findings` entry is a conjunction of the predicates it names, and a finding is
 version: 1
 findings:
   - id: 6f1c…                    # host-assigned, stable, so a client can withdraw this entry
-    path: test/**                # repo-relative glob; a bare directory covers what is under it
+    path: test/**                # session-folder-relative glob; a bare directory covers what is under it
     kind: sast                   # host finding classification
     scanner: opengrep-sast       # empty spans every engine, which is the point of the file
     rule: opengrep:go.lang.xss   # engine vocabulary, matched as a glob
@@ -182,7 +182,7 @@ Detection logic changes which execution events raise an additional ask, so rule 
 
 ## Resolver and warm paths
 
-The resolver receives the ordered root identities and produces one effective content view per artifact family. Cache identity includes the root generation, active root, admitted extension frame, trust switches, source revisions, and relevant device configuration. Callers consume the resolved view rather than walking overlay directories themselves, so prompt assembly, tool policy, Den settings, and validation cannot apply different precedence to the same files. A cache validates against current stamps and generations or rebuilds; it never treats a prior read as durable authority.
+The resolver receives the ordered root identities and produces one effective content view per artifact family. Cache identity includes the root generation, session folder, admitted extension frame, trust switches, source revisions, and relevant device configuration. Callers consume the resolved view rather than walking overlay directories themselves, so prompt assembly, tool policy, Den settings, and validation cannot apply different precedence to the same files. A cache validates against current stamps and generations or rebuilds; it never treats a prior read as durable authority.
 
 Project open may warm catalogs and validation results in the background. Until a complete generation exists, callers report warming or unknown rather than an authoritative empty overlay. Turn compilation captures one immutable contribution frame; mid-turn filesystem changes affect the next frame, not half of the current request.
 

@@ -346,7 +346,7 @@ Approval-decision detail also retains the checkpoint, immutable plan, action dig
 
 ### Redaction
 
-Authorization detail is redacted by default. Tool name, reject code, effect class, and project-relative paths remain; raw argv and environment require explicit audit opt-in. The ledger and transcript are separate planes: transcript tool output follows commit-boundary secret redaction and local retention; authorization detail follows the audit capture policy.
+Authorization detail is redacted by default. Tool name, reject code, effect class, and canonical display paths remain; raw argv and environment require explicit audit opt-in. The ledger and transcript are separate planes: transcript tool output follows commit-boundary secret redaction and local retention; authorization detail follows the audit capture policy.
 
 ### Retention
 
