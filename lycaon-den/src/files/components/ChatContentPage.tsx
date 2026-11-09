@@ -106,7 +106,6 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
     const contentAccess = access();
     const enabled = prettyEnabled();
     const key = tabKey();
-    const title = props.document.title;
     const gen = ++retainedGen;
     setRetainedPretty(null);
     if (!contentAccess || !enabled) return;
@@ -120,7 +119,6 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
         const state = buildChatPrettyProjectionState(snap.text, snap.spans, {
           sourceIdentity: `${key}:${snap.sha256}`,
           sourceRevision: 1,
-          title,
         });
         if (!abort.signal.aborted && gen === retainedGen && state) {
           setRetainedPretty(state);
@@ -302,7 +300,6 @@ function InlineChatContent(props: {
     return buildChatPrettyProjectionState(raw, spans, {
       sourceIdentity: chatContentDocumentKey(props.document),
       sourceRevision: rev,
-      title: props.document.title,
     });
   });
   createEffect(() => {

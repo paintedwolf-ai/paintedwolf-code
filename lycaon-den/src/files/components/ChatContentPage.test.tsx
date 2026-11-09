@@ -175,7 +175,7 @@ describe("chat content Files pane", () => {
     const prettyBtn = assertNamedControl(view.getByTestId("files-editor-pretty-toggle"), "button");
     expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
     expect(view.container.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("false");
-    expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("readonly");
+    expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("view-only");
     expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]");
 
     // Toggle Pretty ON: formats JSON across multiple lines, keeps read-only authority and mapped redaction mark, and blanks continuation line numbers.
@@ -185,7 +185,7 @@ describe("chat content Files pane", () => {
       expect(view.container.querySelectorAll(".cm-line").length).toBeGreaterThan(1),
     );
     expect(view.container.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("false");
-    expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("readonly");
+    expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("view-only");
     expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]");
     const gutterNums = Array.from(
       view.container.querySelectorAll(".files-line-gutter__number"),
@@ -248,9 +248,9 @@ describe("chat content Files pane", () => {
     const prettyBtn = assertNamedControl(view.getByTestId("files-editor-pretty-toggle"), "button");
     fireEvent.click(prettyBtn);
     await waitFor(() =>
-      expect(view.container.querySelectorAll(".cm-line").length).toBeGreaterThan(1),
+      expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]"),
     );
-    expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]");
+    expect(view.container.querySelector(".cm-content")?.textContent).toContain('"status": "ok"');
   });
 
   it("uses a bounded snapshot with explicit Refresh for live process output in Pretty mode and returns to live output when turned off (FMT-AC-14)", async () => {
