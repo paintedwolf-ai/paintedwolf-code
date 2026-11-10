@@ -5,7 +5,6 @@ package launchguard
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -139,10 +138,11 @@ func diagGlycinParent(t *testing.T) {
 		diagGlycinRun(t, "sudo-hop", hop)
 	}
 
-	// Restricted: the protected execution policy grants execute only on the
-	// named paths. With the loader granted the exec must succeed; without the
-	// grant bwrap must die with EACCES (exit 1), reproducing the failure.
-	for _, mode := range []string{"restricted-grant", "restricted-nogrant", "restricted-direct", "restricted-sudo-hop"} {
+	// Restricted: the protected execution closure with NNP on all threads
+	// (matching SealEntry), isolating which grant shape allows the exec.
+	// restricted-file grants bwrap by name, restricted-dir grants it through
+	// the install-root subtree, restricted-none is the negative control.
+	for _, mode := range []string{"restricted-file", "restricted-dir", "restricted-none", "restricted-direct"} {
 		command := exec.Command(os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
 		command.Env = append(os.Environ(), diagGlycinModeEnv+"="+mode)
 		diagGlycinRun(t, mode, command)
@@ -152,13 +152,31 @@ func diagGlycinParent(t *testing.T) {
 	// namespace while inheriting the root-owned stage mount namespace. Run the
 	// same bwrap command from that context to capture bwrap's die message.
 	if uid := os.Getuid(); uid != 0 {
-		stage := exec.Command("sudo", "-n", os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
-		stage.Env = append(os.Environ(), diagGlycinModeEnv+"=namespace-stage")
+		stage := exec.Command("sudo", "-n", diagGlycinModeEnv+"=namespace-stage", os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
+		stage.Env = nil
 		diagGlycinRun(t, "namespace-stage", stage)
 	}
+	// A fresh user namespace nested directly under the initial one, with the
+	// caller's own mount namespace, isolates namespace nesting from the
+	// root-owned stage mount namespace. The clone must happen in the forked
+	// child: Go threads share CLONE_FS, so an in-process unshare fails EINVAL.
+	uid, gid := os.Getuid(), os.Getgid()
 	useronly := exec.Command(os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
 	useronly.Env = append(os.Environ(), diagGlycinModeEnv+"=namespace-useronly")
+	useronly.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags:  unix.CLONE_NEWUSER,
+		UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: uid, Size: 1}},
+		GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: gid, Size: 1}},
+		Credential:  &syscall.Credential{Uid: 0, Gid: 0},
+	}
 	diagGlycinRun(t, "namespace-useronly", useronly)
+
+	// Label probe: exec a shell inside the same sandbox to reveal which
+	// AppArmor profile the bwrap-exec'd process carries.
+	label := diagGlycinBwrapCommand(t, loader)
+	label.Args = label.Args[:len(label.Args)-1]
+	label.Args = append(label.Args, "/bin/sh", "-c", "cat /proc/self/attr/current; id")
+	diagGlycinRun(t, "label", label)
 
 	// Environment facts: userns sysctls, bwrap apparmor attachments, and any
 	// recent apparmor denials from the kernel log.
@@ -179,61 +197,54 @@ func diagGlycinParent(t *testing.T) {
 
 func diagGlycinChild(t *testing.T, mode string) {
 	loader := diagGlycinLoaderPath(t)
-	// The real bootstrap sets no_new_privs before restrictExecution
-	// (namespace_linux.go); without it LANDLOCK_RESTRICT_SELF fails EPERM.
-	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
-		t.Fatalf("no_new_privs: %v", err)
-	}
-	exe, err := os.Open("/proc/self/exe")
-	testutil.FailErr(t, "open self as image", err)
-	defer func() { _ = exe.Close() }()
-	// Mirror the real closure shape: the fixture install root grants the
-	// desktop subtree, /usr/bin grants bwrap, the loader is named explicitly,
-	// and the static CGO_ENABLED=0 desktop grants no ELF interpreter.
-	policy := GenerationPolicy{LogicalInstallRoot: "/usr/bin"}
-	if mode != "restricted-nogrant" {
-		policy.SystemExecutables = []string{loader}
-	}
-	if err := restrictExecution(policy, exe); err != nil {
-		t.Fatalf("restrict: %v", err)
+	// The real SealEntry sets no_new_privs on every thread before
+	// restrictExecution; AllThreadsSyscall6 requires uniform results, so a
+	// single-thread prctl would crash the runtime instead.
+	if _, _, errno := syscall.AllThreadsSyscall6(unix.SYS_PRCTL, unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0, 0); errno != 0 {
+		t.Fatalf("no_new_privs: %v", errno)
 	}
 	if profile, err := os.ReadFile("/proc/self/attr/current"); err == nil {
 		t.Logf("%s: apparmor profile: %s", mode, strings.TrimSpace(string(profile)))
 	}
-	if mode == "restricted-direct" {
-		// Exec the loader without bwrap: isolates whether the Landlock
-		// closure itself blocks the loader exec (interpreter included).
-		direct := exec.Command(loader)
-		direct.Env = nil
-		diagGlycinRun(t, mode, direct)
-		return
-	}
-	if mode == "restricted-sudo-hop" {
-		// Exec bwrap from a truly unconfined AppArmor context while the
-		// Landlock closure stays inherited, isolating profile transition
-		// from confinement.
-		if user := os.Getenv("USER"); user != "" {
-			hop := exec.Command("sudo", "-u", user, "bwrap")
-			base := diagGlycinBwrapCommand(t, loader)
-			hop.Args = append(hop.Args, base.Args[1:]...)
-			hop.Env = nil
-			diagGlycinRun(t, mode, hop)
-			return
-		}
-	}
-	if mode == "namespace-stage" {
-		diagGlycinNamespaceStage(t, loader)
-		return
-	}
-	if mode == "namespace-desktop" {
+	switch mode {
+	case "restricted-file", "restricted-dir", "restricted-none", "restricted-direct":
+		diagGlycinRestricted(t, mode, loader)
+	case "namespace-desktop":
 		diagGlycinNamespaceDesktop(t, loader, mode)
-		return
-	}
-	if mode == "namespace-useronly" {
+	case "namespace-useronly":
 		diagGlycinNamespaceUserOnly(t, loader, mode)
-		return
+	default:
+		t.Fatalf("unknown child mode %s", mode)
 	}
-	diagGlycinRun(t, mode, diagGlycinBwrapCommand(t, loader))
+}
+
+// diagGlycinRestricted applies the execution closure with one grant shape and
+// execs the target, isolating whether the closure allows granted execs.
+func diagGlycinRestricted(t *testing.T, mode, loader string) {
+	policy := GenerationPolicy{LogicalInstallRoot: "/opt"}
+	switch mode {
+	case "restricted-file":
+		policy.SystemExecutables = []string{"/usr/bin/bwrap", loader}
+	case "restricted-dir":
+		policy.LogicalInstallRoot = "/usr/bin"
+	case "restricted-direct":
+		policy.SystemExecutables = []string{loader}
+	}
+	exe, err := os.Open("/proc/self/exe")
+	testutil.FailErr(t, "open self as image", err)
+	defer func() { _ = exe.Close() }()
+	if err := restrictExecution(policy, exe); err != nil {
+		t.Fatalf("restrict: %v", err)
+	}
+	target := "/usr/bin/bwrap"
+	command := diagGlycinBwrapCommand(t, loader)
+	if mode == "restricted-direct" {
+		target = loader
+		command = exec.Command(loader)
+		command.Env = nil
+	}
+	t.Logf("%s: exec target %s", mode, target)
+	diagGlycinRun(t, mode, command)
 }
 
 // diagGlycinNamespaceStage mirrors the protected bootstrap stage: root, in a
@@ -267,42 +278,30 @@ func diagGlycinNamespaceStage(t *testing.T, loader string) {
 // under the protected execution closure.
 func diagGlycinNamespaceDesktop(t *testing.T, loader, mode string) {
 	diagGlycinNamespaceFacts(t, mode)
-	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
-		t.Fatalf("no_new_privs: %v", err)
-	}
 	exe, err := os.Open("/proc/self/exe")
 	testutil.FailErr(t, "open self as image", err)
 	defer func() { _ = exe.Close() }()
-	policy := GenerationPolicy{LogicalInstallRoot: "/usr/bin", SystemExecutables: []string{loader}}
+	policy := GenerationPolicy{LogicalInstallRoot: "/usr/bin", SystemExecutables: []string{"/usr/bin/bwrap", loader}}
 	if err := restrictExecution(policy, exe); err != nil {
 		t.Fatalf("restrict: %v", err)
 	}
 	diagGlycinRun(t, mode, diagGlycinBwrapCommand(t, loader))
+	label := diagGlycinBwrapCommand(t, loader)
+	label.Args = label.Args[:len(label.Args)-1]
+	label.Args = append(label.Args, "/bin/sh", "-c", "cat /proc/self/attr/current; id")
+	diagGlycinRun(t, mode+"-label", label)
 }
 
-// diagGlycinNamespaceUserOnly isolates user namespace nesting: the same
-// closure and bwrap command from a fresh user namespace whose mount
-// namespace is the caller's own.
+// diagGlycinNamespaceUserOnly isolates user namespace nesting: the same bwrap
+// command from a fresh user namespace nested under the initial one, with the
+// caller's own mount namespace and no execution closure.
 func diagGlycinNamespaceUserOnly(t *testing.T, loader, mode string) {
 	diagGlycinNamespaceFacts(t, mode)
-	if err := unix.Unshare(unix.CLONE_NEWUSER); err != nil {
-		t.Fatalf("useronly unshare user namespace: %v", err)
-	}
-	uid, gid := os.Getuid(), os.Getgid()
-	testutil.FailErr(t, "deny setgroups", os.WriteFile("/proc/self/setgroups", []byte("deny"), 0o644))
-	testutil.FailErr(t, "write uid map", os.WriteFile("/proc/self/uid_map", []byte(fmt.Sprintf("0 %d 1\n", uid)), 0o644))
-	testutil.FailErr(t, "write gid map", os.WriteFile("/proc/self/gid_map", []byte(fmt.Sprintf("0 %d 1\n", gid)), 0o644))
-	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
-		t.Fatalf("no_new_privs: %v", err)
-	}
-	exe, err := os.Open("/proc/self/exe")
-	testutil.FailErr(t, "open self as image", err)
-	defer func() { _ = exe.Close() }()
-	policy := GenerationPolicy{LogicalInstallRoot: "/usr/bin", SystemExecutables: []string{loader}}
-	if err := restrictExecution(policy, exe); err != nil {
-		t.Fatalf("restrict: %v", err)
-	}
 	diagGlycinRun(t, mode, diagGlycinBwrapCommand(t, loader))
+	label := diagGlycinBwrapCommand(t, loader)
+	label.Args = label.Args[:len(label.Args)-1]
+	label.Args = append(label.Args, "/bin/sh", "-c", "cat /proc/self/attr/current; id")
+	diagGlycinRun(t, mode+"-label", label)
 }
 
 func diagGlycinNamespaceFacts(t *testing.T, mode string) {
