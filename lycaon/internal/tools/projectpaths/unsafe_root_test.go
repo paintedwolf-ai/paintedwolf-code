@@ -356,8 +356,8 @@ func TestCommandCwdAndProgramPathsControlPlaneRootFallbackAndRefusal(t *testing.
 			t.Fatalf("CommandCwd verification(%q) = (%q, %q, %v), want (%q, %q, nil)", usable.raw, gotAbs, gotDisp, err, usable.wantAbs, usable.wantDisp)
 		}
 		prog, err := projectpaths.NewProgramPaths(t.Context(), nil, verifyCtx, usable.raw)
-		if err != nil || prog.WorkingDir != usable.wantAbs {
-			t.Fatalf("NewProgramPaths verification(%q) = (%+v, %v), want WorkingDir=%q", usable.raw, prog, err, usable.wantAbs)
+		if err != nil || prog.Cwd().Abs != usable.wantAbs {
+			t.Fatalf("NewProgramPaths verification(%q) = (%+v, %v), want Cwd().Abs=%q", usable.raw, prog, err, usable.wantAbs)
 		}
 	}
 
