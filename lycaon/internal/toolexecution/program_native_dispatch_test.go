@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -147,6 +148,15 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath, modelTool string) {
 }
 
 func TestNativeOwnerRevalidatesLiveDenyAfterStartRecorder(t *testing.T) {
+	testNativeOwnerPolicyAfterRecorder(t, []string{"allowed", "late-deny", "recovery"})
+}
+
+func TestNativeOwnerReviewsNewRequirementAfterStartRecorder(t *testing.T) {
+	testNativeOwnerPolicyAfterRecorder(t, []string{"late-ask", "deny-during-review", "recovery"})
+}
+
+func testNativeOwnerPolicyAfterRecorder(t *testing.T, phases []string) {
+	t.Helper()
 	parent, tc := frameFixture(t)
 	root := tc.ActiveRootPath()
 	testutil.FailErr(t, "seed read target", os.WriteFile(filepath.Join(root, "input"), []byte("authorized bytes"), 0600))
@@ -157,7 +167,8 @@ func TestNativeOwnerRevalidatesLiveDenyAfterStartRecorder(t *testing.T) {
 	testutil.FailErr(t, "configure quiet policy", store.PutGlobal(settings.ApprovalConfig{NeverAsk: &neverAsk}))
 	classes, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
-	executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), settings.NewRuleApprovalGate(store, settings.NoSources())), tools.NewDefaultRegistry(), "fixture")
+	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), tools.NewDefaultRegistry(), "fixture")
 	definition := nativeDefinition(t, "read")
 	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
 	testutil.FailErr(t, "freeze native surface", err)
@@ -166,15 +177,39 @@ func TestNativeOwnerRevalidatesLiveDenyAfterStartRecorder(t *testing.T) {
 	t.Cleanup(frame.Close)
 	progressStore := progress.NewMemoryStore()
 	testutil.FailErr(t, "set current progress", progressStore.Set(parent.SessionID, "- [ ] Inspect"))
-	for _, phase := range []string{"allowed", "late-deny", "recovery"} {
+	for _, phase := range phases {
 		t.Run(phase, func(t *testing.T) {
 			testutil.FailErr(t, "clear only fixture policy", store.PutProject(root, settings.ApprovalConfig{}))
+			testutil.FailErr(t, "reset quiet policy", store.PutGlobal(settings.ApprovalConfig{NeverAsk: &neverAsk}))
 			child := parent
 			child.Identity.ExecutionID, child.Identity.ParentExecutionID = phase, parent.Identity.ExecutionID
 			bound, err := toolcontract.BindOperation(definition, child, "cat", definition.Facts().Commands[0].Effects[0].Mode, nil)
 			testutil.FailErr(t, "bind fresh native read", err)
 			var output bytes.Buffer
-			entered, recorded := false, false
+			entered, recorded := false, 0
+			asks := 0
+			needsReview := phase == "late-ask" || phase == "deny-during-review"
+			manager := &nativeRecorderReviewManager{invariantCheckpointMgr: invariantCheckpointMgr{status: hitl.DecisionStatusApproved, result: &hitl.DecisionResult{Approved: true}}}
+			manager.onRequest = func(req hitl.CheckpointRequest) {
+				asks++
+				if !needsReview || asks != 1 || recorded != 1 || entered || output.Len() != 0 {
+					t.Fatalf("review was repeated, misplaced, or followed an effect: phase=%s asks=%d recorded=%d entered=%t", phase, asks, recorded, entered)
+				}
+				matched := false
+				for _, rule := range req.ApprovalMatches {
+					matched = matched || (rule.Category == "tool" && rule.Pattern == "read")
+				}
+				if !matched {
+					t.Fatal("new read requirement was absent from actual review")
+				}
+				if phase == "deny-during-review" {
+					testutil.FailErr(t, "install deny during approval", store.PutProject(root, settings.ApprovalConfig{Rules: []settings.ApprovalRule{{Category: settings.ApprovalCategoryTool, Pattern: "read", Effect: settings.ApprovalEffectDeny}}}))
+				}
+			}
+			executor.Approvals.SetCheckpointManager(t.Context(), manager, gate)
+			t.Cleanup(func() {
+				testutil.FailErr(t, "release fixture egress resolver", executor.Approvals.ReleaseEgressResolver(context.Background()))
+			})
 			effect := NativeEffect{Operation: bound, Stage: toolcontract.ExecutionStage{ExecutionID: phase, OperationID: "read", Argv: []string{"cat", "input"}}, Arguments: map[string]any{"path": "input"}, Streams: commandprogram.Streams{Output: &output}}
 			effect.PrepareReviewed = func(ctx context.Context, args map[string]any, actual tools.ToolContext) (PreparedNativeEffect, error) {
 				paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, ".")
@@ -197,18 +232,25 @@ func TestNativeOwnerRevalidatesLiveDenyAfterStartRecorder(t *testing.T) {
 				}}, nil
 			}
 			observer := nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
-				recorded = true
+				recorded++
 				if phase == "late-deny" {
 					return store.PutProject(root, settings.ApprovalConfig{Rules: []settings.ApprovalRule{{Category: settings.ApprovalCategoryTool, Pattern: "read", Effect: settings.ApprovalEffectDeny}}})
+				}
+				if needsReview {
+					askEnabled := false
+					return store.PutProject(root, settings.ApprovalConfig{NeverAsk: &askEnabled, Rules: []settings.ApprovalRule{{Category: settings.ApprovalCategoryTool, Pattern: "read", Effect: settings.ApprovalEffectAsk}}})
 				}
 				return nil
 			})
 			memory := stageMemory(t, 64<<20)
 			result, err := executor.InvokeNative(t.Context(), frame, surface, memory, nativeProgressFixture{progressStore}, observer, effect, tc)
-			if !recorded || memory.InUse().State != 0 {
-				t.Fatalf("fixture missed recorder or retained invocation state: recorded=%t state=%d", recorded, memory.InUse().State)
+			if recorded != 1 || memory.InUse().State != 0 {
+				t.Fatalf("fixture missed recorder or retained invocation state: recorded=%d state=%d", recorded, memory.InUse().State)
 			}
-			if phase == "late-deny" {
+			if needsReview && asks != 1 {
+				t.Fatalf("new requirement did not receive exactly one review: %d", asks)
+			}
+			if phase == "late-deny" || phase == "deny-during-review" {
 				reject := toolrejection.AsToolReject(err)
 				if reject == nil || reject.Code != "APPROVAL_RULE_DENIED" || entered || result.OwnerInvoked || result.OutputPublishable || output.Len() != 0 {
 					t.Fatalf("late deny reached native owner: err=%v entered=%t result=%+v output=%q", err, entered, result, output.String())
@@ -221,4 +263,16 @@ func TestNativeOwnerRevalidatesLiveDenyAfterStartRecorder(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The callback models a policy change while a human card is outstanding. The
+// existing fixture supplies its explicit reply; every card is observed separately.
+type nativeRecorderReviewManager struct {
+	invariantCheckpointMgr
+	onRequest func(hitl.CheckpointRequest)
+}
+
+func (m *nativeRecorderReviewManager) RequestCheckpoint(ctx context.Context, req hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
+	m.onRequest(req)
+	return m.invariantCheckpointMgr.RequestCheckpoint(ctx, req)
 }
