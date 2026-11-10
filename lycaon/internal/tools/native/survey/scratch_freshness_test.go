@@ -98,26 +98,38 @@ func TestAttachedControlPlaneRootSurveyWithWarmCatalogDeniesStateAndAdmitsScratc
 
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv(configdir.EnvConfigDir, cfgDir)
 
 	tc := nativefixture.Context(cfgDir)
 	tc.Host.SessionScratchDir = ownScratch
 	tc.Host.SessionOutputDir = ownOutput
-
-	// Pre-warm the catalog as the human/UI observer (which crawls with IncludeEngineOverlay: true).
-	catalog := sourcecatalog.New()
 	primaryRoot := tc.Source.Roots[0]
-	snap, err := catalog.Observe(t.Context(), tc.Identity.ProjectID, []sourcecatalog.Root{{ID: primaryRoot.ID, Path: cfgDir}})
-	testutil.FailErr(t, "warm catalog on control-plane root", err)
-	if children, ok := snap.Listing(primaryRoot.ID, "."); !ok || len(children) == 0 {
-		t.Fatalf("warm catalog did not index control-plane root: ok=%v children=%d", ok, len(children))
+
+	// Pre-populate warmCatalog before activating LYCAON_CONFIG_DIR so the snapshot
+	// holds indexed entries for api.token, settings.yaml, store.db, and scratch/other,
+	// proving that listRootCatalog, list_dir, find, and grep still deny control-plane
+	// state even against an already-populated snapshot.
+	warmCatalog := sourcecatalog.New()
+	warmSnap, err := warmCatalog.Observe(t.Context(), tc.Identity.ProjectID, []sourcecatalog.Root{{ID: primaryRoot.ID, Path: cfgDir}})
+	testutil.FailErr(t, "pre-populate warm catalog", err)
+	if children, ok := warmSnap.Listing(primaryRoot.ID, "."); !ok || len(children) == 0 {
+		t.Fatalf("pre-populated warm catalog did not index root: ok=%v children=%d", ok, len(children))
+	}
+
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
+
+	// Observing a fresh catalog after LYCAON_CONFIG_DIR is active prunes control-plane entries at SurveyWalk.
+	liveCatalog := sourcecatalog.New()
+	liveSnap, err := liveCatalog.Observe(t.Context(), tc.Identity.ProjectID, []sourcecatalog.Root{{ID: primaryRoot.ID, Path: cfgDir}})
+	testutil.FailErr(t, "observe live catalog on control-plane root", err)
+	if children, _ := liveSnap.Listing(primaryRoot.ID, "."); len(children) != 0 {
+		t.Fatalf("live catalog indexed control-plane root entries: %+v, want 0", children)
 	}
 
 	boundary := nativefixture.Boundary(t)
 	sessionCtx := sandbox.WithSessionDirs(t.Context(), ownScratch, ownOutput)
 
-	// 1. Direct listRootCatalog against the warm snapshot must refuse control-plane root and other-session scratch.
-	listing := &ListDirTool{Boundary: boundary, Catalog: catalog}
+	// 1. Direct listRootCatalog against the pre-populated warmCatalog must refuse control-plane root and other-session scratch.
+	listing := &ListDirTool{Boundary: boundary, Catalog: warmCatalog}
 	if entries, ok := listing.listRootCatalog(sessionCtx, tc, primaryRoot, cfgDir, 1, true); ok || len(entries) != 0 {
 		t.Fatalf("listRootCatalog on attached configdir.Root() = (%+v, %v), want (nil, false)", entries, ok)
 	}
@@ -139,13 +151,13 @@ func TestAttachedControlPlaneRootSurveyWithWarmCatalogDeniesStateAndAdmitsScratc
 	}
 
 	// 3. Agent find and grep on "." (union discovery) must return 0 control-plane results even with the warm catalog.
-	finder := &FindTool{Boundary: boundary, Catalog: catalog}
+	finder := &FindTool{Boundary: boundary, Catalog: warmCatalog}
 	findOut, err := finder.Run(t.Context(), map[string]any{"path": ".", "name_glob": "*"}, tc)
 	testutil.FailErr(t, "find on .", err)
 	if found := parseFindResponse(t, findOut); len(found.Results) != 0 {
 		t.Fatalf("find(.) on attached configdir.Root() leaked entries: %s", findOut)
 	}
-	grepper := &GrepTool{Boundary: boundary, Catalog: catalog}
+	grepper := &GrepTool{Boundary: boundary, Catalog: warmCatalog}
 	grepOut, err := grepper.Run(t.Context(), map[string]any{"path": ".", "pattern": "needle"}, tc)
 	testutil.FailErr(t, "grep on .", err)
 	if matches := nativefixture.GrepMatches(t, grepOut); len(matches) != 0 {
