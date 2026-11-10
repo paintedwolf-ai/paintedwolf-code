@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -301,7 +302,7 @@ func TestAncestorsOfCredentialStoresSplitByLane(t *testing.T) {
 		}
 		boundaryRoots, err := WriteRootsForBoundary("", []string{p}, nil, "")
 		testutil.FailErr(t, "write roots for boundary", err)
-		if PathWithinWriteRoots(p, boundaryRoots) {
+		if slices.Contains(boundaryRoots, fspath.CanonicalPath(p)) {
 			t.Errorf("WriteRootsForBoundary admitted attached credential store %q as writable: %v", p, boundaryRoots)
 		}
 	}
@@ -343,10 +344,10 @@ func TestDraftWorkspaceGrantableOnBothLanes(t *testing.T) {
 	}
 	boundaryRoots, err := WriteRootsForBoundary("", []string{cfg, draft}, nil, "")
 	testutil.FailErr(t, "write roots for boundary", err)
-	if PathWithinWriteRoots(filepath.Join(cfg, "api.token"), boundaryRoots) {
+	if slices.Contains(boundaryRoots, fspath.CanonicalPath(cfg)) {
 		t.Fatalf("WriteRootsForBoundary admitted configdir control plane as writable: %v", boundaryRoots)
 	}
-	if !PathWithinWriteRoots(draft, boundaryRoots) {
+	if !slices.Contains(boundaryRoots, fspath.CanonicalPath(draft)) {
 		t.Fatalf("WriteRootsForBoundary dropped draft workspace %q: %v", draft, boundaryRoots)
 	}
 }

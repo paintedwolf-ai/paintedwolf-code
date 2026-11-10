@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"

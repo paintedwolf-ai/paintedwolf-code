@@ -105,7 +105,7 @@ func TestAttachedBroadAndControlPlaneRootsEnforcePerTargetFloors(t *testing.T) {
 			Roots:        []projectroot.RootRef{{ID: "home", Label: "home", Path: home, IsPrimary: true}},
 			ActiveRootID: "home",
 		},
-		Host: tools.HostStorageContext{
+		Host: tools.InvocationHost{
 			SessionScratchDir: scratchDir,
 			SessionOutputDir:  outputDir,
 		},
@@ -116,7 +116,7 @@ func TestAttachedBroadAndControlPlaneRootsEnforcePerTargetFloors(t *testing.T) {
 		t.Fatalf("ResolveRead sibling under attached $HOME failed: %v", err)
 	}
 	sess := projectpaths.NewReadSession(nil, homeCtx)
-	t.Cleanup(func() { _ = sess.Close() })
+	t.Cleanup(func() { sess.Close() })
 	if _, err := sess.Resolve(t.Context(), "workspace/notes.txt"); err != nil {
 		t.Fatalf("ReadSession.Resolve sibling under attached $HOME failed: %v", err)
 	}
@@ -207,7 +207,7 @@ func TestCommandCwdAndProgramPathsControlPlaneRootFallbackAndRefusal(t *testing.
 			Roots:        []projectroot.RootRef{{ID: "cfg", Label: "cfg", Path: cfgDir, IsPrimary: true}},
 			ActiveRootID: "cfg",
 		},
-		Host: tools.HostStorageContext{
+		Host: tools.InvocationHost{
 			SessionScratchDir: scratchDir,
 		},
 	}

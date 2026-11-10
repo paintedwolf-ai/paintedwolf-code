@@ -13,12 +13,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -325,7 +327,7 @@ func TestConfinementIntegrityCompositeChain(t *testing.T) {
 		testutil.FailErr(t, "write token", os.WriteFile(tokenPath, []byte("composite-bearer"), 0o600))
 		writeRoots, err := confine.WriteRootsForBoundary("", []string{cfg}, nil, "")
 		testutil.FailErr(t, "write roots for boundary", err)
-		if confine.PathWithinWriteRoots(tokenPath, writeRoots) {
+		if slices.Contains(writeRoots, fspath.CanonicalPath(cfg)) {
 			t.Fatalf("composite (b): control-plane root %q admitted into executable write roots %v", cfg, writeRoots)
 		}
 		c := confine.Confinement{Roots: writeRoots}

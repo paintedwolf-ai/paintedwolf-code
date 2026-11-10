@@ -3,11 +3,13 @@ package contract
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/detectionpack"
+	"github.com/lycaon/lycaon/internal/fspath"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -27,7 +29,7 @@ func TestWriteRootRefusalCoversEveryCredentialStore(t *testing.T) {
 		}
 		roots, err := confine.WriteRootsForBoundary("", []string{abs}, nil, "")
 		contractcheck.FailErr(t, "WriteRootsForBoundary", err)
-		if confine.PathWithinWriteRoots(abs, roots) {
+		if slices.Contains(roots, fspath.CanonicalPath(abs)) {
 			t.Errorf("key material %q is admitted as an executable boundary write root when attached", rel)
 		}
 	}
@@ -40,7 +42,7 @@ func TestWriteRootRefusalCoversEveryCredentialStore(t *testing.T) {
 		}
 		roots, err := confine.WriteRootsForBoundary("", []string{abs}, nil, "")
 		contractcheck.FailErr(t, "WriteRootsForBoundary", err)
-		if confine.PathWithinWriteRoots(abs, roots) {
+		if slices.Contains(roots, fspath.CanonicalPath(abs)) {
 			t.Errorf("credential store %q is admitted as an executable boundary write root when attached", rel)
 		}
 	}

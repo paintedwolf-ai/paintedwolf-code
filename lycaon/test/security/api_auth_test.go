@@ -6,12 +6,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -228,7 +230,7 @@ func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(
 			}
 			writeRoots, err := confine.WriteRootsForBoundary("", []string{tc.path}, nil, "")
 			testutil.FailErr(t, "write roots for boundary", err)
-			if tc.expectWriteExcluded && confine.PathWithinWriteRoots(filepath.Join(tc.path, "probe"), writeRoots) {
+			if tc.expectWriteExcluded && slices.Contains(writeRoots, fspath.CanonicalPath(tc.path)) {
 				t.Fatalf("%s (%s): protected/control-plane root admitted into executable write roots: %v", tc.name, tc.path, writeRoots)
 			}
 		})
