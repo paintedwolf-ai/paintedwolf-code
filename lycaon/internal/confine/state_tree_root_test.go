@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -302,20 +303,22 @@ func TestStateTreeSymlinkedAncestorSpineProtected(t *testing.T) {
 func TestStateTreeAncestorsExcludedFromDefaultRoots(t *testing.T) {
 	for _, source := range []string{"temporary", "cache"} {
 		t.Run(source, func(t *testing.T) {
-			base := "/opt/paintedwolf-default-root-fixture"
+			proj := t.TempDir()
+			base := fspath.CanonicalPath(t.TempDir())
 			state := filepath.Join(base, "state")
+			insideState := filepath.Join(state, "cache")
 			t.Setenv(configdir.EnvConfigDir, state)
 			if source == "cache" {
 				t.Setenv("XDG_CACHE_HOME", base)
 			} else {
 				t.Setenv("TMPDIR", base)
 			}
-			roots, err := confine.WriteRootsForBoundary("", []string{t.TempDir()}, nil, "")
+			roots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
 			testutil.FailErr(t, "admit roots with ancestor default", err)
-			if !confine.PathWithinWriteRoots(base, roots) {
+			if !slices.Contains(roots, base) {
 				t.Fatalf("default root containing state was dropped instead of protected by floors: %v", roots)
 			}
-			c := confine.Confinement{Roots: []string{t.TempDir()}}
+			c := confine.Confinement{Roots: []string{proj}}
 			fs := confine.BoundaryOf(&c).Filesystem
 			if v := fs.Verdict(confine.AccessWrite, filepath.Join(state, "approvals.yaml")); v.Allowed || v.Layer != confine.FloorControlPlane {
 				t.Fatalf("state write verdict under default root = %+v", v)
@@ -325,15 +328,14 @@ func TestStateTreeAncestorsExcludedFromDefaultRoots(t *testing.T) {
 			}
 
 			// A default root inside the state folder itself is dropped.
-			insideState := filepath.Join(state, "cache")
 			if source == "cache" {
 				t.Setenv("XDG_CACHE_HOME", insideState)
 			} else {
 				t.Setenv("TMPDIR", insideState)
 			}
-			rootsInside, err := confine.WriteRootsForBoundary("", []string{t.TempDir()}, nil, "")
+			rootsInside, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
 			testutil.FailErr(t, "admit roots excluding inside-state default", err)
-			if confine.PathWithinWriteRoots(insideState, rootsInside) {
+			if slices.Contains(rootsInside, insideState) {
 				t.Fatalf("default root inside state was admitted: %v", rootsInside)
 			}
 		})
