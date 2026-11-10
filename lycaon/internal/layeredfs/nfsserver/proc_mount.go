@@ -80,7 +80,7 @@ func (s *Server) BeginBarrierDrain(ctx context.Context, viewID ViewID) (func(), 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	vHash, g := computeViewHash(viewID), s.gate
+	vHash, g := s.handles.ViewHash(viewID), s.gate
 	g.mu.Lock()
 	if g.gatedVH[vHash] {
 		g.mu.Unlock()
@@ -350,7 +350,7 @@ func joinChildPath(parent layeredfs.QualifiedPath, name string) (layeredfs.Quali
 func PendingUnstableStats(s *Server, viewID ViewID) (viewBytes, viewChunks, totalBytes int) {
 	s.stability.mu.Lock()
 	defer s.stability.mu.Unlock()
-	return pendingStatsLocked(s.stability, computeViewHash(viewID))
+	return pendingStatsLocked(s.stability, s.handles.ViewHash(viewID))
 }
 
 func compactAndInsertChunk(chunks []unstableChunk, added unstableChunk, flushingSeq uint64) []unstableChunk {

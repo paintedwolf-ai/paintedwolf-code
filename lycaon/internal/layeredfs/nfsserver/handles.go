@@ -56,6 +56,8 @@ type handleTable struct {
 	mu          sync.RWMutex
 	secret      [32]byte
 	maxHandles  int
+	epochSeq    uint64
+	viewHashes  map[ViewID]uint64
 	activeViews map[uint64]ViewID
 	byKey       map[handleKey]*handleRecord
 	byPath      map[pathKey]*handleRecord
@@ -71,6 +73,7 @@ func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, cor
 	}
 	return &handleTable{
 		secret: secret, maxHandles: maxHandles,
+		viewHashes:  make(map[ViewID]uint64),
 		activeViews: make(map[uint64]ViewID),
 		byKey:       make(map[handleKey]*handleRecord),
 		byPath:      make(map[pathKey]*handleRecord),
@@ -81,23 +84,54 @@ func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, cor
 	}
 }
 
-func computeViewHash(viewID ViewID) uint64 {
-	sum := sha256.Sum256([]byte(viewID))
+func computeEpochViewHash(viewID ViewID, epoch uint64) uint64 {
+	h := sha256.New()
+	_, _ = h.Write([]byte(viewID))
+	var buf [9]byte
+	binary.BigEndian.PutUint64(buf[1:], epoch)
+	_, _ = h.Write(buf[:])
+	sum := h.Sum(nil)
 	if v := binary.BigEndian.Uint64(sum[:8]); v != 0 {
 		return v
 	}
 	return 1
 }
 
-func (t *handleTable) RegisterView(viewID ViewID) {
+func (t *handleTable) ensureViewLocked(viewID ViewID) uint64 {
+	if vHash, ok := t.viewHashes[viewID]; ok {
+		return vHash
+	}
+	t.epochSeq++
+	vHash := computeEpochViewHash(viewID, t.epochSeq)
+	t.viewHashes[viewID] = vHash
+	t.activeViews[vHash] = viewID
+	return vHash
+}
+
+func (t *handleTable) RegisterView(viewID ViewID) uint64 {
 	t.mu.Lock()
-	t.activeViews[computeViewHash(viewID)] = viewID
-	t.mu.Unlock()
+	defer t.mu.Unlock()
+	return t.ensureViewLocked(viewID)
+}
+
+func (t *handleTable) ViewHash(viewID ViewID) uint64 {
+	t.mu.RLock()
+	vHash, ok := t.viewHashes[viewID]
+	t.mu.RUnlock()
+	if ok {
+		return vHash
+	}
+	return computeEpochViewHash(viewID, 0)
 }
 
 func (t *handleTable) ReleaseView(core *layeredfs.Core, viewID ViewID) {
 	t.mu.Lock()
-	vHash := computeViewHash(viewID)
+	vHash, ok := t.viewHashes[viewID]
+	if !ok {
+		t.mu.Unlock()
+		return
+	}
+	delete(t.viewHashes, viewID)
 	delete(t.activeViews, vHash)
 	var toClose []layeredfs.HandleID
 	for k, rec := range t.byKey {
@@ -162,8 +196,7 @@ func (t *handleTable) Ensure(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	qpath.Rel = cleanRel(qpath.Rel)
-	vHash := computeViewHash(viewID)
-	t.activeViews[vHash] = viewID
+	vHash := t.ensureViewLocked(viewID)
 	hk := handleKey{viewHash: vHash, nodeID: meta.StableID()}
 	wire := encodeWireHandle(t.secret, vHash, qpath.RootID, hk.nodeID, parentID, uint64(meta.Generation))
 	return t.insertLocked(hk, viewID, qpath, meta, isRoot, wire).wire

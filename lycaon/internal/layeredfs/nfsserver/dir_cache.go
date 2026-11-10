@@ -96,10 +96,9 @@ func (c *dirCache) InvalidateDir(hk handleKey) {
 }
 
 // ReleaseView purges all listing passes of a view.
-func (c *dirCache) ReleaseView(viewID ViewID) {
+func (c *dirCache) ReleaseView(vHash uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	vHash := computeViewHash(viewID)
 	for k, snap := range c.byKey {
 		if k.hk.viewHash == vHash {
 			c.removeLocked(snap)
