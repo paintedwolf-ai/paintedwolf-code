@@ -13,17 +13,17 @@ func TestIsObservedStateExcluded_StrictAncestorExcludesActiveControlDirAndPlacem
 	home := t.TempDir()
 	cfgDir := filepath.Join(home, ".config", "paintedwolf")
 	if err := os.MkdirAll(filepath.Join(cfgDir, "packs"), 0o755); err != nil {
-		t.Fatal(err)
+		t.Fatalf("mkdir packs: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(cfgDir, "worktrees", "wt-1"), 0o755); err != nil {
-		t.Fatal(err)
+		t.Fatalf("mkdir worktrees: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(cfgDir, "drafts", "draft-1"), 0o755); err != nil {
-		t.Fatal(err)
+		t.Fatalf("mkdir drafts: %v", err)
 	}
 	placementDir := filepath.Join(home, ".paintedwolf-placement-vol1")
 	if err := os.MkdirAll(filepath.Join(placementDir, "worker-branches", "proj-1", "job-1"), 0o755); err != nil {
-		t.Fatal(err)
+		t.Fatalf("mkdir placement: %v", err)
 	}
 	t.Setenv(configdir.EnvVar, cfgDir)
 
@@ -79,10 +79,10 @@ func TestIsObservedStateExcluded_DirectAndChildControlDirAttachment(t *testing.T
 	base := t.TempDir()
 	cfgDir := filepath.Join(base, "paintedwolf-state")
 	if err := os.MkdirAll(filepath.Join(cfgDir, "packs", "sub"), 0o755); err != nil {
-		t.Fatal(err)
+		t.Fatalf("mkdir packs/sub: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(cfgDir, "cache", "nested"), 0o755); err != nil {
-		t.Fatal(err)
+		t.Fatalf("mkdir cache/nested: %v", err)
 	}
 	t.Setenv(configdir.EnvVar, cfgDir)
 
@@ -183,7 +183,7 @@ func TestIsObservedStateExcluded_CanonicalAliasesSymlinksAndCase(t *testing.T) {
 
 	cfgReal := filepath.Join(realBase, ".paintedwolf")
 	if err := os.MkdirAll(filepath.Join(cfgReal, "packs"), 0o755); err != nil {
-		t.Fatal(err)
+		t.Fatalf("mkdir cfgReal/packs: %v", err)
 	}
 	// Configure configdir via the symlinked alias path.
 	cfgViaAlias := filepath.Join(aliasBase, ".paintedwolf")
@@ -200,7 +200,7 @@ func TestIsObservedStateExcluded_CanonicalAliasesSymlinksAndCase(t *testing.T) {
 	// Symlink inside a project directory pointing into configdir.Root() must be excluded.
 	projDir := filepath.Join(realBase, "project")
 	if err := os.MkdirAll(projDir, 0o755); err != nil {
-		t.Fatal(err)
+		t.Fatalf("mkdir projDir: %v", err)
 	}
 	escapeLink := filepath.Join(projDir, "linked-control")
 	if err := os.Symlink(cfgReal, escapeLink); err != nil {
@@ -224,7 +224,7 @@ func TestCompileAgentReadFloor(t *testing.T) {
 	wtDir := filepath.Join(cfgDir, "worktrees", "wt-1")
 	for _, dir := range []string{cfgDir, sshDir, wtDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
+			t.Fatalf("mkdir %s: %v", dir, err)
 		}
 	}
 	t.Setenv("HOME", home)
