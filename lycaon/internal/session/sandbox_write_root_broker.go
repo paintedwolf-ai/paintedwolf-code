@@ -92,7 +92,7 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.Sa
 		return out, err
 	}
 	writeRoots = append(writeRoots, b.Runtime.SessionWriteRoots(rootSessionID)...)
-	inRoots := confine.PathWithinWriteRoots(proposed, writeRoots)
+	inRoots := confine.PathWithinRoots(proposed, writeRoots)
 	if subject.Kind == confine.WriteSubjectOrdinary {
 		// Ordinary paths can use a covering chat grant.
 		if covering := sessionOverlayCovering(b.Runtime, rootSessionID, proposed); covering != "" {
@@ -399,7 +399,7 @@ func sessionOverlayCovering(rt *approvalstate.SandboxPathGrantRuntime, chatSessi
 		return ""
 	}
 	for _, root := range rt.SessionWriteRoots(chatSessionID) {
-		if confine.PathWithinWriteRoots(blocked, []string{root}) {
+		if confine.PathWithinRoots(blocked, []string{root}) {
 			return root
 		}
 	}

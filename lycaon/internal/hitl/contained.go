@@ -44,6 +44,8 @@ type Contained struct {
 	Roots []string
 	// WriteRoots includes roots, system scratch, and approved grants.
 	WriteRoots []string
+	// ReadRoots are read-only capabilities from the applied boundary.
+	ReadRoots []string
 	// SocketPathsDigest identifies applied AF_UNIX grants.
 	SocketPathsDigest string
 	// SocketCount is the number of applied socket grants.
@@ -179,6 +181,7 @@ func ContainedFromConfinement(c *confine.Confinement, ok bool) Contained {
 		Egress:            ContainedEgressLabel(c.Network),
 		Roots:             append([]string(nil), c.Roots...),
 		WriteRoots:        writeRoots,
+		ReadRoots:         append([]string(nil), c.ReadRoots...),
 		SocketPathsDigest: confine.SocketPathsDigest(c.SocketGrants),
 		SocketCount:       len(c.SocketGrants),
 		DirectIP:          c.Network == confine.NetworkDirectIP,

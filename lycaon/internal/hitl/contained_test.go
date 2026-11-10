@@ -106,10 +106,10 @@ func TestContainedWriteRootsCarryDurableGrants(t *testing.T) {
 	if !got.FSJailed {
 		t.Skip("confinement unavailable on this platform")
 	}
-	if !confine.PathWithinWriteRoots(granted, got.WriteRoots) {
+	if !confine.PathWithinRoots(granted, got.WriteRoots) {
 		t.Fatalf("granted root missing from WriteRoots: %v", got.WriteRoots)
 	}
-	if !confine.PathWithinWriteRoots(project, got.WriteRoots) {
+	if !confine.PathWithinRoots(project, got.WriteRoots) {
 		t.Fatalf("project root missing from WriteRoots: %v", got.WriteRoots)
 	}
 	for _, root := range got.Roots {
@@ -130,7 +130,7 @@ func TestContainedTaskOverlayStaysOutOfRoots(t *testing.T) {
 	if !got.FSJailed {
 		t.Skip("confinement unavailable on this platform")
 	}
-	if !confine.PathWithinWriteRoots(overlay, got.WriteRoots) {
+	if !confine.PathWithinRoots(overlay, got.WriteRoots) {
 		t.Fatalf("task overlay missing from WriteRoots: %v", got.WriteRoots)
 	}
 	for _, root := range got.Roots {
@@ -168,5 +168,27 @@ func TestContainedProjectionRefusesInvalidStateAncestor(t *testing.T) {
 	got := hitl.ContainedFromConfinement(&confine.Confinement{Roots: []string{ancestor}}, true)
 	if !reflect.DeepEqual(got, hitl.Contained{}) {
 		t.Fatalf("invalid roots claimed applied confinement: %+v", got)
+	}
+}
+
+func TestContainedPreservesReadOnlyRootAuthority(t *testing.T) {
+	confine.TestingSetAutoConfine(t)
+	state, project := t.TempDir(), t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	output := filepath.Join(state, "session-output", "chat")
+	c, ok := confine.DefaultConfinement(confine.Request{Roots: []string{project}, SessionOutputRoot: output})
+	if !ok || c == nil {
+		t.Fatal("confinement unavailable")
+	}
+	got := hitl.ContainedFromConfinement(c, ok)
+	if !reflect.DeepEqual(got.ReadRoots, c.ReadRoots) || confine.PathWithinRoots(output, got.WriteRoots) {
+		t.Fatalf("read-only authority projection = %+v", got)
+	}
+	c.ReadRoots[0] = project
+	if !confine.PathWithinRoots(output, got.ReadRoots) {
+		t.Fatal("projection shares mutable read roots")
+	}
+	if unavailable := hitl.ContainedFromConfinement(c, false); len(unavailable.ReadRoots) != 0 {
+		t.Fatal("unapplied boundary exposed read authority")
 	}
 }
