@@ -50,7 +50,6 @@ func (c *Core) RegisterSeedBase(base BaseCapture) error {
 		return ErrViewReleased
 	}
 	base.Path.Rel = cleanRelPath(base.Path.Rel)
-	base.BackingFile = ""
 	if _, exists := c.state.basesByPath[base.Path]; !exists {
 		c.state.basesByPath[base.Path] = cloneBaseCapture(base)
 		if base.Kind == EntryRegular && base.Size > 0 {

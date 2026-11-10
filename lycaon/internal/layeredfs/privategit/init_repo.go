@@ -72,6 +72,9 @@ func writeDurableRepoRecord(mgr *Manager, viewID string, rec durableRepoRecord) 
 	if p == "" {
 		return
 	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return
+	}
 	raw, err := json.Marshal(rec)
 	if err != nil {
 		return
