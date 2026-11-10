@@ -200,7 +200,6 @@ display: inline-flex;
   }
   &[aria-pressed="true"]:hover:not(:disabled):not(.project-list-row__star, .project-card__star, .den-row-action, .den-transcript-visual-timeline__play) {
     background: var(--den-tint-2);
-    --den-plane: var(--den-tint-2);
     box-shadow: var(--den-bevel-inset);
     color: var(--den-text);
   }
