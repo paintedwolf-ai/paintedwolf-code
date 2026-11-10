@@ -89,12 +89,8 @@ func WriteAPIToken(token string) (string, error) {
 	if err := store.Set(DaemonTokenKey, token); err != nil {
 		return "", fmt.Errorf("write daemon token to vault: %w", err)
 	}
-	verified, err := credentialstore.Open(slot, validateDaemonTokenID)
-	if err != nil {
+	if err := credentialstore.VerifyDurable(slot, DaemonTokenKey, token); err != nil {
 		return "", fmt.Errorf("verify daemon token vault: %w", err)
-	}
-	if got, ok := verified.Get(DaemonTokenKey); !ok || got.Value() != token {
-		return "", errors.New("verify daemon token vault: persisted value mismatch")
 	}
 	legacyPath := filepath.Join(dir, LegacyTokenFileName)
 	if err := os.Remove(legacyPath); err != nil && !errors.Is(err, os.ErrNotExist) {

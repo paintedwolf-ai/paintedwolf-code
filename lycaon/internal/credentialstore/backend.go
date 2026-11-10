@@ -229,6 +229,25 @@ func (v *vaultFile) purge() error {
 	})
 }
 
+func (v *vaultFile) verifyDurableLocked(provider identityProvider, namespace, id, want string) error {
+	fresh := &vaultFile{path: v.path, provider: provider}
+	doc, err := fresh.read()
+	if err != nil {
+		return err
+	}
+	values := doc.Namespaces[namespace]
+	if values == nil || values[id] != want {
+		return fmt.Errorf("durable credential verification failed for %s/%s", namespace, id)
+	}
+	return nil
+}
+
+func (v *vaultFile) verifyDurable(provider identityProvider, namespace, id, want string) error {
+	return v.withExclusiveLock(func() error {
+		return v.verifyDurableLocked(provider, namespace, id, want)
+	})
+}
+
 func (v *vaultFile) withExclusiveLock(fn func() error) error {
 	pathMu := vaultPathMutex(v.path)
 	pathMu.Lock()
