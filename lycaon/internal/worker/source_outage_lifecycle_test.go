@@ -27,8 +27,8 @@ func requireWorkerOutageFixture(t *testing.T) {
 	if os.Getenv("PW_M14_WORKER_OUTAGE_CONTROL") == "" {
 		t.Skip("requires explicitly provisioned worker source-outage fixture")
 	}
-	if os.Getenv("PW_M14_LIFECYCLE_SOURCE_PARENT") == "" {
-		t.Fatal("network source parent required for worker outage lifecycle")
+	if os.Getenv("PW_M14_LIFECYCLE_SOURCE_PARENT") == "" && os.Getenv("PW_M14_LIFECYCLE_PREPARED_SOURCE") == "" {
+		t.Fatal("network source parent or prepared source required for worker outage lifecycle")
 	}
 }
 

@@ -59,10 +59,19 @@ func TestDiagnosticSmallMaterializedLifecycleCompletion10m(t *testing.T) {
 // Process restart does not establish power-loss durability.
 func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted, sourceConflict bool) {
 	t.Helper()
-	runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t, mounted, sourceConflict, "2m", false)
+	childTimeout := "2m"
+	wanProfile := false
+	if os.Getenv("PW_M14_WAN_NOAC_PROFILE") == "1" {
+		childTimeout = "10m"
+		wanProfile = true
+		if os.Getenv("PW_M14_LIFECYCLE_PHASE") == "" {
+			t.Logf("lifecycle qualification profile: PW_M14_WAN_NOAC_PROFILE=1 (childTimeout=%s, ordinary default=2m)", childTimeout)
+		}
+	}
+	runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t, mounted, sourceConflict, childTimeout, wanProfile)
 }
 
-func runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t *testing.T, mounted, sourceConflict bool, childTimeout string, diagnostic bool) {
+func runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t *testing.T, mounted, sourceConflict bool, childTimeout string, logChildOutput bool) {
 	t.Helper()
 	if phase := os.Getenv("PW_M14_LIFECYCLE_PHASE"); phase != "" {
 		runWorkerLifecyclePhase(t, os.Getenv("PW_M14_LIFECYCLE_ROOT"), phase, mounted, sourceConflict)
@@ -95,8 +104,8 @@ func runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t *testing.T, mounte
 		if err != nil {
 			t.Fatalf("%s process failed (elapsed=%s): %v\n%s", phase, time.Since(phaseStart), err, output)
 		}
-		if diagnostic {
-			t.Logf("diagnostic %s child completed in %s:\n%s", phase, time.Since(phaseStart), output)
+		if logChildOutput {
+			t.Logf("profile %s child completed in %s (childTimeout=%s):\n%s", phase, time.Since(phaseStart), childTimeout, output)
 		}
 	}
 }

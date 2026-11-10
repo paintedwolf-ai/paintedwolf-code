@@ -117,3 +117,57 @@ func TestPromotionFaultAtEachStepRestoresEveryPath(t *testing.T) {
 		}
 	}
 }
+
+func TestCaptureTargetSinglePassPreservesHeldIdentityLinksXattrsAndOriginals(t *testing.T) {
+	primary := t.TempDir()
+	pathA := filepath.Join(primary, "a.txt")
+	pathB := filepath.Join(primary, "b.txt")
+	linkPath := filepath.Join(primary, "sym")
+	dirPath := filepath.Join(primary, "sub")
+	testutil.FailErr(t, "seed a.txt", os.WriteFile(pathA, []byte("hello-single-pass\n"), 0o640))
+	testutil.FailErr(t, "hardlink b.txt", os.Link(pathA, pathB))
+	testutil.FailErr(t, "symlink", os.Symlink("a.txt", linkPath))
+	testutil.FailErr(t, "mkdir sub", os.MkdirAll(dirPath, 0o750))
+
+	txDir := filepath.Join(t.TempDir(), "tx-capture")
+	txn, err := BeginTransaction(TransactionConfig{Dir: txDir, ID: "capture"})
+	testutil.FailErr(t, "begin", err)
+	testutil.FailErr(t, "add roots", txn.addRoots(map[string]string{"primary": primary}))
+	txn.keepOriginals = true
+	t.Cleanup(func() { txn.keepOriginals = false })
+
+	qp := func(rel string) layeredfs.QualifiedPath { return layeredfs.QualifiedPath{RootID: "primary", Rel: rel} }
+	imgA, err := txn.captureTarget(qp("a.txt"))
+	testutil.FailErr(t, "capture a.txt", err)
+	imgB, err := txn.captureTarget(qp("b.txt"))
+	testutil.FailErr(t, "capture b.txt", err)
+	if imgA.Kind != layeredfs.EntryRegular || imgA.Mode != 0o640 || imgA.links != 2 || imgA.identity == "" {
+		t.Fatalf("unexpected regular target image: %+v", imgA)
+	}
+	if imgA.identity != imgB.identity || imgA.HardLinkGroup != imgB.HardLinkGroup || imgA.SHA256 != imgB.SHA256 {
+		t.Fatalf("hardlink peers diverged: a=%+v b=%+v", imgA, imgB)
+	}
+	origBytes, err := txn.readOriginal(imgA.SHA256)
+	testutil.FailErr(t, "read retained original bytes", err)
+	if string(origBytes) != "hello-single-pass\n" {
+		t.Fatalf("retained original = %q", origBytes)
+	}
+
+	imgSym, err := txn.captureTarget(qp("sym"))
+	testutil.FailErr(t, "capture symlink", err)
+	if imgSym.Kind != layeredfs.EntrySymlink || imgSym.LinkTarget != "a.txt" || imgSym.Mode != 0 || imgSym.Size != 0 {
+		t.Fatalf("unexpected symlink target image: %+v", imgSym)
+	}
+
+	imgDir, err := txn.captureTarget(qp("sub"))
+	testutil.FailErr(t, "capture dir", err)
+	if imgDir.Kind != layeredfs.EntryDirectory || imgDir.Mode != 0o750 || imgDir.Size != 0 {
+		t.Fatalf("unexpected directory target image: %+v", imgDir)
+	}
+
+	imgAbsent, err := txn.captureTarget(qp("missing/nested.txt"))
+	testutil.FailErr(t, "capture absent", err)
+	if imgAbsent.Kind != layeredfs.EntryAbsent {
+		t.Fatalf("unexpected absent target image: %+v", imgAbsent)
+	}
+}
