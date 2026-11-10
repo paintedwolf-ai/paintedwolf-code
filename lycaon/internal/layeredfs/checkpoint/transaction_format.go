@@ -20,32 +20,12 @@ type rootIdentity struct {
 }
 
 func (txn *Transaction) rootIdentities() (map[string]rootIdentity, error) {
-	return identifyRootsCached(txn.targets, txn.journal.Roots)
+	return identifyRoots(txn.targets)
 }
 
 func identifyRoots(targets *promotionTargets) (map[string]rootIdentity, error) {
-	return identifyRootsCached(targets, nil)
-}
-
-func identifyRootsCached(targets *promotionTargets, prior map[string]rootIdentity) (map[string]rootIdentity, error) {
 	roots := make(map[string]rootIdentity, len(targets.roots))
-	byPath := make(map[string]rootIdentity, len(targets.roots)+len(prior))
-	for _, r := range prior {
-		if r.Path != "" && r.Identity != "" {
-			byPath[r.Path] = r
-		}
-	}
 	for id, path := range targets.roots {
-		if cached, ok := byPath[path]; ok {
-			roots[id] = cached
-			continue
-		}
-		if absolute, aErr := filepath.Abs(path); aErr == nil {
-			if cached, ok := byPath[absolute]; ok {
-				roots[id] = cached
-				continue
-			}
-		}
 		root, err := targets.openTargetRoot(id)
 		if err != nil {
 			return nil, err
@@ -71,9 +51,7 @@ func identifyRootsCached(targets *promotionTargets, prior map[string]rootIdentit
 		if !os.SameFile(held, current) {
 			return nil, ErrStalePreviewTargetChanged
 		}
-		ident := rootIdentity{Path: absolute, Identity: identity}
-		byPath[path] = ident
-		roots[id] = ident
+		roots[id] = rootIdentity{Path: absolute, Identity: identity}
 	}
 	return roots, nil
 }

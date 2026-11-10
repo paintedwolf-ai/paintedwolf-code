@@ -134,6 +134,9 @@ func verifyAndPublishReachableGitGraph(ctx context.Context, source *candidateGit
 	if err := verifyDestinationFrontierBatch(ctx, source, frontierVerifyOIDs, frontier, seen); err != nil {
 		return err
 	}
+	if err := source.publishStagedLoose(ctx); err != nil {
+		return err
+	}
 	return source.publishSelectedPack(ctx)
 }
 

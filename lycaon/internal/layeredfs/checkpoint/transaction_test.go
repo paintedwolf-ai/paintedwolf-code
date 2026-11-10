@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -432,5 +433,116 @@ func TestTransactionStagingIsInvisibleToObservers(t *testing.T) {
 	testutil.FailErr(t, "write", txn.targets.writeTargetRegular(root, change))
 	if seen != 1 {
 		t.Fatalf("staged %d times", seen)
+	}
+}
+
+func TestTransactionRollbackPackedRefDelete(t *testing.T) {
+	primary := t.TempDir()
+	runGitTestCmd(t, primary, "init", "-q")
+	testutil.FailErr(t, "seed base.txt", os.WriteFile(filepath.Join(primary, "base.txt"), []byte("base\n"), 0o640))
+	runGitTestCmd(t, primary, "add", "base.txt")
+	runGitTestCmd(t, primary, "commit", "-qm", "base")
+
+	core, err := layeredfs.New(layeredfs.Config{
+		ViewID:     "packed-ref-rollback",
+		BackingDir: t.TempDir(),
+		Roots:      []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "create view", err)
+	defer func() { _ = core.ReleaseView() }()
+
+	qp := func(rel string) layeredfs.QualifiedPath { return layeredfs.QualifiedPath{RootID: "primary", Rel: rel} }
+	_, err = core.WriteFile(qp("base.txt"), []byte("worker\n"), 0o640)
+	testutil.FailErr(t, "worker write", err)
+
+	store, err := NewStore(t.TempDir())
+	testutil.FailErr(t, "store", err)
+	blobOID, err := WriteLooseGitObject(CheckpointGitObjectsDir(store.RootDir(), "cp-packed", ""), "blob", []byte("packed-ref-blob\n"))
+	testutil.FailErr(t, "write loose blob", err)
+
+	pub, err := NewPublisher(PublisherConfig{Core: core, Store: store, WorkerID: "w-packed", TaskID: "t-packed", ProjectID: "p-packed"})
+	testutil.FailErr(t, "publisher", err)
+	_, err = pub.Publish(t.Context(), PublishRequest{
+		CheckpointID: "cp-packed",
+		Trigger:      TriggerWorkerCompletion,
+		PrivateGit:   PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feature": blobOID}},
+	})
+	testutil.FailErr(t, "publish", err)
+
+	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}})
+	testutil.FailErr(t, "promoter", err)
+	preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-packed"})
+	testutil.FailErr(t, "preview", err)
+
+	txDir := filepath.Join(t.TempDir(), "tx-packed")
+	txn, err := BeginTransaction(TransactionConfig{Dir: txDir, ID: "tx-packed"})
+	testutil.FailErr(t, "begin", err)
+	_, err = txn.ApplyCheckpoint(t.Context(), promoter, ApplyRequest{Preview: preview, ImportGitRefs: true})
+	testutil.FailErr(t, "apply checkpoint", err)
+
+	// Pack all refs and prune loose refs in target repository before rollback.
+	runGitTestCmd(t, primary, "pack-refs", "--all", "--prune")
+	for _, ref := range []string{
+		"refs/lycaon/workers/w-packed/heads/feature",
+		"refs/lycaon/checkpoints/cp-packed/heads/feature",
+	} {
+		if got := runGitTestCmd(t, primary, "rev-parse", "--verify", ref); got != blobOID {
+			t.Fatalf("expected packed ref %s = %s before rollback, got %s", ref, blobOID, got)
+		}
+	}
+
+	testutil.FailErr(t, "recover packed-ref transaction", recoverDir(t, txDir))
+
+	for _, ref := range []string{
+		"refs/lycaon/workers/w-packed/heads/feature",
+		"refs/lycaon/checkpoints/cp-packed/heads/feature",
+	} {
+		if _, code, err := gitexec.Run(t.Context(), primary, []string{"rev-parse", "--verify", "--quiet", ref}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err != nil || code == 0 {
+			t.Fatalf("expected rolled-back packed ref %s to be deleted, exit=%d err=%v", ref, code, err)
+		}
+		if out, code, err := gitexec.Run(t.Context(), primary, []string{"show-ref", "--verify", "--quiet", ref}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err != nil || code == 0 {
+			t.Fatalf("expected show-ref for rolled-back packed ref %s to fail, exit=%d out=%s err=%v", ref, code, out, err)
+		}
+	}
+}
+
+func TestTransactionRejectsConcurrentMutationAfterCaptureOnProductionPath(t *testing.T) {
+	primary := t.TempDir()
+	pathA := filepath.Join(primary, "a.txt")
+	pathB := filepath.Join(primary, "b.txt")
+	testutil.FailErr(t, "seed a.txt", os.WriteFile(pathA, []byte("before-a\n"), 0o640))
+	testutil.FailErr(t, "seed b.txt", os.WriteFile(pathB, []byte("before-b\n"), 0o640))
+
+	txDir := filepath.Join(t.TempDir(), "tx-concurrent")
+	mutatedDuringCaptureToApply := false
+	txn, err := BeginTransaction(TransactionConfig{
+		Dir: txDir,
+		ID:  "concurrent",
+		RetainLink: func(req fseffect.HardLinkRequest) error {
+			if err := fseffect.HardLink(req); err != nil {
+				return err
+			}
+			// Simulate an external writer mutating b.txt after captureTree recorded before-images
+			// and before mutateTargets runs, with Reached == nil and FaultInjector == nil.
+			if !mutatedDuringCaptureToApply && filepath.Base(req.Source.Rel) == "b.txt" {
+				mutatedDuringCaptureToApply = true
+				return os.WriteFile(pathB, []byte("external-concurrent-write\n"), 0o640)
+			}
+			return nil
+		},
+	})
+	testutil.FailErr(t, "begin", err)
+
+	err = txn.ApplyChanges(t.Context(), map[string]string{"primary": primary}, []PlannedChange{
+		{Path: layeredfs.QualifiedPath{RootID: "primary", Rel: "a.txt"}, Action: ActionWriteRegular, Mode: 0o640, MergedBytes: []byte("after-a\n")},
+		{Path: layeredfs.QualifiedPath{RootID: "primary", Rel: "b.txt"}, Action: ActionWriteRegular, Mode: 0o640, MergedBytes: []byte("after-b\n")},
+	})
+	if !errors.Is(err, ErrStalePreviewTargetChanged) {
+		t.Fatalf("expected ErrStalePreviewTargetChanged when target changed between capture and apply on production path, got %v", err)
+	}
+	gotB, rErr := os.ReadFile(pathB)
+	testutil.FailErr(t, "read b.txt", rErr)
+	if string(gotB) != "external-concurrent-write\n" {
+		t.Fatalf("expected external write on b.txt to be preserved, got %q", gotB)
 	}
 }

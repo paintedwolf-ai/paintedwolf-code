@@ -61,9 +61,6 @@ type Transaction struct {
 	origins       map[string]layeredfs.QualifiedPath
 	slots         map[string]string
 	locations     map[string]string
-	resolvedPaths map[string]string
-	appliedInTxn  map[layeredfs.QualifiedPath]targetImage
-	freshCaptures map[layeredfs.QualifiedPath]targetImage
 	keepOriginals bool
 	closed        bool
 }
@@ -164,7 +161,6 @@ func newTransaction(cfg TransactionConfig, journal transactionJournal) *Transact
 		cfg: cfg, dir: cfg.Dir, journal: journal, index: index,
 		targets: &promotionTargets{roots: roots},
 		origins: map[string]layeredfs.QualifiedPath{}, slots: map[string]string{}, locations: map[string]string{},
-		resolvedPaths: map[string]string{}, appliedInTxn: map[layeredfs.QualifiedPath]targetImage{},
 	}
 }
 
@@ -246,27 +242,16 @@ func (txn *Transaction) mutateTargets(ctx context.Context, changes []PlannedChan
 		return err
 	}
 	txn.targets.recordPostimage = txn.recordPostimage
-	defer func() {
-		txn.targets.recordPostimage = nil
-		txn.freshCaptures = nil
-	}()
+	defer func() { txn.targets.recordPostimage = nil }()
 	for _, change := range changes {
 		if err := context.Cause(ctx); err != nil {
 			return err
 		}
-		alreadyApplied, err := txn.verifyRecorded(change, fault != nil)
-		if err != nil {
+		if err := txn.verifyRecorded(change); err != nil {
 			return err
 		}
-		if !alreadyApplied {
-			if err := txn.targets.applyPlannedChange(change); err != nil {
-				return err
-			}
-			if txn.cfg.Reached == nil && fault == nil && change.Action == ActionWriteRegular {
-				if idx, ok := txn.index[change.Path]; ok {
-					txn.appliedInTxn[change.Path] = txn.journal.Targets[idx].After
-				}
-			}
+		if err := txn.targets.applyPlannedChange(change); err != nil {
+			return err
 		}
 		if err := txn.reach(StepTargetMutated, pathKey(change.Path)); err != nil {
 			return err
@@ -282,37 +267,22 @@ func (txn *Transaction) mutateTargets(ctx context.Context, changes []PlannedChan
 
 // verifyRecorded refuses a target another program changed after it was recorded. A directory an
 // earlier change made implicitly has no meaningful recorded state until its own change runs.
-func (txn *Transaction) verifyRecorded(change PlannedChange, hasFault bool) (bool, error) {
+func (txn *Transaction) verifyRecorded(change PlannedChange) error {
 	if change.Action == ActionNoop || change.Action == ActionMkdir {
-		return false, nil
+		return nil
 	}
-	if idx, known := txn.index[change.Path]; known && txn.cfg.Reached == nil && !hasFault && change.Action == ActionWriteRegular {
-		if prevAfter, ok := txn.appliedInTxn[change.Path]; ok && sameTarget(prevAfter, txn.journal.Targets[idx].After) {
-			return true, nil
-		}
-	}
-	current, cached := txn.freshCaptures[change.Path]
-	if cached && txn.cfg.Reached == nil && !hasFault {
-		delete(txn.freshCaptures, change.Path)
-	} else {
-		var err error
-		current, err = txn.captureTarget(change.Path)
-		if err != nil {
-			return false, err
-		}
+	current, err := txn.captureTarget(change.Path)
+	if err != nil {
+		return err
 	}
 	idx, known := txn.index[change.Path]
 	if !known {
-		return false, fmt.Errorf("checkpoint: unrecorded target %s", pathKey(change.Path))
+		return fmt.Errorf("checkpoint: unrecorded target %s", pathKey(change.Path))
 	}
-	target := txn.journal.Targets[idx]
-	if !target.holds(current) {
-		return false, fmt.Errorf("%w: path %s changed during promotion", ErrStalePreviewTargetChanged, pathKey(change.Path))
+	if !txn.journal.Targets[idx].holds(current) {
+		return fmt.Errorf("%w: path %s changed during promotion", ErrStalePreviewTargetChanged, pathKey(change.Path))
 	}
-	alreadyApplied := !hasFault && change.Action == ActionWriteRegular &&
-		sameTarget(current, target.After) && current.links <= 1 &&
-		(target.Before.Kind != layeredfs.EntryRegular || (current.identity != "" && current.identity != target.Before.identity))
-	return alreadyApplied, nil
+	return nil
 }
 
 func (target targetUndo) holds(current targetImage) bool {
@@ -480,14 +450,9 @@ func mergeRoots(current, added map[string]string) map[string]string {
 func (txn *Transaction) canonicalChanges(changes []PlannedChange) []PlannedChange {
 	canonical := map[string]string{}
 	for _, id := range slices.Sorted(maps.Keys(txn.targets.roots)) {
-		rawPath := txn.targets.roots[id]
-		location, ok := txn.resolvedPaths[rawPath]
-		if !ok {
-			location = rawPath
-			if resolved, err := filepath.EvalSymlinks(rawPath); err == nil {
-				location = resolved
-			}
-			txn.resolvedPaths[rawPath] = location
+		location := txn.targets.roots[id]
+		if resolved, err := filepath.EvalSymlinks(location); err == nil {
+			location = resolved
 		}
 		if _, seen := txn.locations[location]; !seen {
 			txn.locations[location] = id

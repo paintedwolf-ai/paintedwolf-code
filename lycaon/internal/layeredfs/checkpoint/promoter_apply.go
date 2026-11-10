@@ -45,11 +45,10 @@ type PromotionJournalRecord struct {
 
 // ApplyRequest specifies a validated PromotionPreview to apply.
 type ApplyRequest struct {
-	TransactionID        string
-	Preview              *PromotionPreview
-	ImportGitRefs        bool
-	SkipTargetRevalidate bool
-	FaultInjector        func(stage ApplyFaultStage) error
+	TransactionID string
+	Preview       *PromotionPreview
+	ImportGitRefs bool
+	FaultInjector func(stage ApplyFaultStage) error
 }
 
 // ApplyCheckpoint revalidates the preview's target observations and applies its file and ref effects.
@@ -86,10 +85,8 @@ func (txn *Transaction) applyCheckpoint(ctx context.Context, pr *Promoter, req A
 	if found && existing.State == PromotionStateApplied {
 		return &existing, nil
 	}
-	if !req.SkipTargetRevalidate {
-		if err := pr.RevalidatePreviewTargets(req.Preview); err != nil {
-			return nil, err
-		}
+	if err := pr.RevalidatePreviewTargets(req.Preview); err != nil {
+		return nil, err
 	}
 	if err := txn.addRoots(pr.cfg.TargetRoots); err != nil {
 		return nil, err

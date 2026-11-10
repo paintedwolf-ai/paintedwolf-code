@@ -1,61 +1,45 @@
 package checkpoint
 
 import (
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"maps"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
 func (txn *Transaction) captureTarget(path layeredfs.QualifiedPath) (targetImage, error) {
+	obs, err := txn.targets.observeTarget(path)
+	if err != nil {
+		return targetImage{}, err
+	}
+	image := targetImage{Kind: obs.Kind, Mode: obs.Mode.Perm(), SHA256: obs.SHA256, Size: obs.Size, LinkTarget: obs.LinkTarget}
+	if obs.Kind == layeredfs.EntryAbsent || obs.Kind == layeredfs.EntrySymlink {
+		image.Mode = 0
+		image.Size = 0
+		return image, nil
+	}
 	root, err := txn.targets.openTargetRoot(path.RootID)
 	if err != nil {
-		return targetImage{}, err
+		return image, err
 	}
 	defer func() { _ = root.Close() }()
-	info, err := root.Lstat(path.Rel)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
-			return targetImage{Kind: layeredfs.EntryAbsent}, nil
-		}
-		return targetImage{}, err
-	}
-	if info.Mode()&fs.ModeSymlink != 0 {
-		linkTarget, lErr := root.Readlink(path.Rel)
-		if lErr != nil {
-			return targetImage{}, lErr
-		}
-		return targetImage{Kind: layeredfs.EntrySymlink, LinkTarget: linkTarget}, nil
-	}
-	if !info.Mode().IsRegular() && !info.IsDir() {
-		return targetImage{}, fmt.Errorf("checkpoint: unsupported target entry type %s", info.Mode())
-	}
 	file, err := root.Open(path.Rel)
 	if err != nil {
-		return targetImage{}, err
+		return image, err
 	}
 	defer func() { _ = file.Close() }()
 	held, err := file.Stat()
 	if err != nil {
-		return targetImage{}, err
+		return image, err
 	}
-	if !os.SameFile(info, held) || held.Mode().Perm() != info.Mode().Perm() || (info.Mode().IsRegular() && held.Size() != info.Size()) {
-		return targetImage{}, ErrStalePreviewTargetChanged
+	if held.Mode().Perm() != obs.Mode.Perm() || held.Size() != obs.Size {
+		return image, ErrStalePreviewTargetChanged
 	}
-	image := targetImage{Mode: held.Mode().Perm()}
-	if held.IsDir() {
-		image.Kind = layeredfs.EntryDirectory
-	} else {
-		image.Kind = layeredfs.EntryRegular
-		image.Size = held.Size()
+	if obs.Kind == layeredfs.EntryRegular {
 		image.identity, image.links, err = targetFileIdentityAndLinks(file, held)
 		if err != nil {
 			return image, err
@@ -66,20 +50,21 @@ func (txn *Transaction) captureTarget(path layeredfs.QualifiedPath) (targetImage
 	if err != nil {
 		return image, err
 	}
-	if image.Kind == layeredfs.EntryRegular {
+	if obs.Kind == layeredfs.EntryRegular {
 		body, err := io.ReadAll(file)
 		if err != nil {
 			return image, err
 		}
-		if int64(len(body)) != image.Size {
+		if sha256Hex(body) != obs.SHA256 {
 			return image, ErrStalePreviewTargetChanged
 		}
-		image.SHA256 = sha256Hex(body)
 		if txn.keepOriginals {
-			if err := writeAtomicJSONOrText(txn.dir, filepath.Join("originals", image.SHA256), body, 0o600); err != nil {
+			if err := writeAtomicJSONOrText(txn.dir, filepath.Join("originals", obs.SHA256), body, 0o600); err != nil {
 				return image, err
 			}
 		}
+	} else {
+		image.Size = 0
 	}
 	return image, nil
 }
@@ -93,9 +78,6 @@ func (txn *Transaction) captureTree(path layeredfs.QualifiedPath, images map[lay
 		return err
 	}
 	images[path] = image
-	if txn.freshCaptures != nil {
-		txn.freshCaptures[path] = image
-	}
 	if image.Kind != layeredfs.EntryDirectory {
 		return nil
 	}
@@ -127,7 +109,6 @@ func (txn *Transaction) captureTree(path layeredfs.QualifiedPath, images map[lay
 // A path an earlier stage recorded keeps its first before-image, which is what rollback restores.
 func (txn *Transaction) addTargets(changes []PlannedChange) error {
 	txn.keepOriginals = true
-	txn.freshCaptures = make(map[layeredfs.QualifiedPath]targetImage, len(changes))
 	defer func() { txn.keepOriginals = false }()
 	before := make(map[layeredfs.QualifiedPath]targetImage, len(txn.journal.Targets))
 	after := make(map[layeredfs.QualifiedPath]targetImage, len(txn.journal.Targets))

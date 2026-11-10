@@ -1,8 +1,12 @@
 package checkpoint
 
 import (
+	"bytes"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -175,7 +179,10 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 	deepBlobPath := filepath.Join(target, ".git", "objects", deepBlobOID[:2], deepBlobOID[2:])
 	savedDeepBlobBytes, err := os.ReadFile(deepBlobPath)
 	testutil.FailErr(t, "read deepBlobOID", err)
-	testutil.FailErr(t, "remove c0", os.Remove(filepath.Join(target, ".git", "objects", c0[:2], c0[2:])))
+	c0Path := filepath.Join(target, ".git", "objects", c0[:2], c0[2:])
+	savedC0Bytes, err := os.ReadFile(c0Path)
+	testutil.FailErr(t, "read c0", err)
+	testutil.FailErr(t, "remove c0", os.Remove(c0Path))
 	testutil.FailErr(t, "remove deepBlobOID", os.Remove(deepBlobPath))
 	for _, absentOID := range []string{c0, deepBlobOID} {
 		_, code, probeErr := gitexec.Run(t.Context(), target, []string{"cat-file", "-e", absentOID}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
@@ -209,21 +216,25 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 	assertTargetRefsPreserved("missing-boundary-subtree")
 
 	// 2. Supplying the missing boundary subtree in candidates while its child blob (deepBlobOID) is still
-	// unavailable must recursively traverse the candidate-repaired subtree and fail closed.
+	// unavailable must recursively traverse the candidate-repaired subtree, fail closed without publishing
+	// the unverified boundary subtree into target, and fail again on an immediate identical retry.
 	candTreePath := filepath.Join(cpObjs, unchangedTreeOID[:2], unchangedTreeOID[2:])
 	testutil.FailErr(t, "stage unchangedTree in candidates", os.MkdirAll(filepath.Dir(candTreePath), 0o755))
 	testutil.FailErr(t, "write unchangedTree in candidates", os.WriteFile(candTreePath, savedTreeBytes, 0o444))
-	if _, err := ImportAndValidateCheckpointGitRefs(
-		t.Context(), store.RootDir(), "chk-frontier-incomplete-repair", "worker",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work": c2}, ObjectCheckpoints: []string{"chk-frontier"}},
-		map[string]string{"primary": target},
-	); err == nil {
-		t.Fatal("expected candidate-repaired boundary subtree with missing child blob to fail verification")
+	for attempt := 1; attempt <= 2; attempt++ {
+		if _, err := ImportAndValidateCheckpointGitRefs(
+			t.Context(), store.RootDir(), "chk-frontier-incomplete-repair", "worker",
+			PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work": c2}, ObjectCheckpoints: []string{"chk-frontier"}},
+			map[string]string{"primary": target},
+		); err == nil {
+			t.Fatalf("attempt %d: expected candidate-repaired boundary subtree with missing child blob to fail verification", attempt)
+		}
+		if _, statErr := os.Stat(unchangedTreePath); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("attempt %d: failed import prematurely published unverified boundary subtree to target: %v", attempt, statErr)
+		}
+		assertTargetRefsPreserved("incomplete-candidate-subtree-repair")
 	}
-	assertTargetRefsPreserved("incomplete-candidate-subtree-repair")
-	// Remove unchangedTree from candidates and target again before testing missing frontier commit root tree.
 	testutil.FailErr(t, "remove candTreePath", os.Remove(candTreePath))
-	_ = os.Remove(unchangedTreePath)
 
 	// 3. Restoring unchangedTree in target while removing the frontier commit c1's root tree (c1Tree)
 	// must prevent c1 from being admitted to the established frontier and fail closed.
@@ -255,7 +266,107 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 	if got := runGitTestCmd(t, target, "show", c2+":edited.txt"); got != "v2" {
 		t.Fatalf("imported commit edited.txt = %q, want v2", got)
 	}
-	_ = savedDeepBlobBytes
+
+	// 5. When unchangedTree is absent from target and repaired from candidates alongside its child deepBlobOID,
+	// candidate repair succeeds and the repository passes git fsck --full once c0 is restored.
+	testutil.FailErr(t, "remove unchangedTree for full candidate repair", os.Remove(unchangedTreePath))
+	candBlobPath := filepath.Join(cpObjs, deepBlobOID[:2], deepBlobOID[2:])
+	testutil.FailErr(t, "mkdir candBlobPath", os.MkdirAll(filepath.Dir(candBlobPath), 0o755))
+	testutil.FailErr(t, "write candTreePath", os.WriteFile(candTreePath, savedTreeBytes, 0o444))
+	testutil.FailErr(t, "write candBlobPath", os.WriteFile(candBlobPath, savedDeepBlobBytes, 0o444))
+	_, err = ImportAndValidateCheckpointGitRefs(
+		t.Context(), store.RootDir(), "chk-frontier-repaired", "worker",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work": c2}, ObjectCheckpoints: []string{"chk-frontier"}},
+		map[string]string{"primary": target},
+	)
+	testutil.FailErr(t, "complete candidate boundary subtree repair", err)
+	testutil.FailErr(t, "restore c0 for full fsck", os.WriteFile(c0Path, savedC0Bytes, 0o444))
+	runGitTestCmd(t, target, "fsck", "--full")
+}
+
+func TestGitImportStreamingVerificationRejectsMidStreamCorruption(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStore(filepath.Join(root, "recovery", "checkpoints"))
+	testutil.FailErr(t, "checkpoint store", err)
+	cpObjs := CheckpointGitObjectsDir(store.RootDir(), "chk-stream", "")
+	payload := bytes.Repeat([]byte("streaming-verification-line\n"), 4096)
+	blobOID, err := WriteLooseGitObject(cpObjs, "blob", payload)
+	testutil.FailErr(t, "write loose blob", err)
+
+	target := filepath.Join(root, "target")
+	testutil.FailErr(t, "mkdir target", os.MkdirAll(target, 0o755))
+	runGitTestCmd(t, target, "init", "-q")
+
+	origWrap := wrapObjectCopyReaderFn
+	t.Cleanup(func() { wrapObjectCopyReaderFn = origWrap })
+	wrapObjectCopyReaderFn = func(_ string, r io.Reader) io.Reader {
+		raw, rErr := io.ReadAll(r)
+		if rErr != nil || len(raw) == 0 {
+			return bytes.NewReader(raw)
+		}
+		raw[len(raw)/2] ^= 0xff
+		return bytes.NewReader(raw)
+	}
+
+	if _, err := ImportAndValidateCheckpointGitRefs(
+		t.Context(), store.RootDir(), "chk-stream", "worker",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/tags/blob": blobOID}},
+		map[string]string{"primary": target},
+	); err == nil {
+		t.Fatal("expected mid-stream loose object corruption to fail verification")
+	}
+	dstLoose := filepath.Join(target, ".git", "objects", blobOID[:2], blobOID[2:])
+	if _, statErr := os.Stat(dstLoose); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected corrupted loose object not to be published at destination, got %v", statErr)
+	}
+
+	// Also verify mid-stream pack asset corruption is rejected before destination publication.
+	packSource := t.TempDir()
+	runGitTestCmd(t, packSource, "init", "-q")
+	testutil.FailErr(t, "write pack file", os.WriteFile(filepath.Join(packSource, "packed.txt"), payload, 0o644))
+	runGitTestCmd(t, packSource, "add", "packed.txt")
+	runGitTestCmd(t, packSource, "commit", "-qm", "packed")
+	packedCommit := runGitTestCmd(t, packSource, "rev-parse", "HEAD")
+	runGitTestCmd(t, packSource, "repack", "-a", "-d", "-q")
+	runGitTestCmd(t, packSource, "prune-packed", "-q")
+
+	cpPackDir := filepath.Join(CheckpointGitObjectsDir(store.RootDir(), "chk-pack-stream", ""), "pack")
+	testutil.FailErr(t, "mkdir cpPackDir", os.MkdirAll(cpPackDir, 0o755))
+	entries, err := os.ReadDir(filepath.Join(packSource, ".git", "objects", "pack"))
+	testutil.FailErr(t, "read packSource packs", err)
+	for _, d := range entries {
+		if !d.IsDir() {
+			raw, rErr := os.ReadFile(filepath.Join(packSource, ".git", "objects", "pack", d.Name()))
+			testutil.FailErr(t, "read pack asset", rErr)
+			testutil.FailErr(t, "write pack asset", os.WriteFile(filepath.Join(cpPackDir, d.Name()), raw, 0o444))
+		}
+	}
+	wrapObjectCopyReaderFn = func(srcPath string, r io.Reader) io.Reader {
+		if !strings.HasSuffix(srcPath, ".pack") {
+			return r
+		}
+		raw, _ := io.ReadAll(r)
+		if len(raw) > 16 {
+			raw[len(raw)/2] ^= 0xff
+		}
+		return bytes.NewReader(raw)
+	}
+	if _, err := ImportAndValidateCheckpointGitRefs(
+		t.Context(), store.RootDir(), "chk-pack-stream", "worker",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/packed": packedCommit}},
+		map[string]string{"primary": target},
+	); err == nil {
+		t.Fatal("expected mid-stream pack corruption to fail digest verification")
+	}
+
+	wrapObjectCopyReaderFn = origWrap
+	_, err = ImportAndValidateCheckpointGitRefs(
+		t.Context(), store.RootDir(), "chk-pack-stream", "worker",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/packed": packedCommit}},
+		map[string]string{"primary": target},
+	)
+	testutil.FailErr(t, "import valid pack stream", err)
+	runGitTestCmd(t, target, "fsck", "--full")
 }
 
 func TestCheckpointGitImportRejectsAlternatesInCandidateAndTargetStores(t *testing.T) {

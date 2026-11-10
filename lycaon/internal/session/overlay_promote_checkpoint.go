@@ -374,6 +374,6 @@ func ApplyTaskCheckpoint(ctx context.Context, txn *checkpoint.Transaction, task 
 	if err != nil {
 		return errors.Join(err, txn.Rollback(context.WithoutCancel(ctx)))
 	}
-	_, err = txn.ApplyCheckpoint(ctx, promoter, checkpoint.ApplyRequest{TransactionID: txID, Preview: cpPreview, ImportGitRefs: true, SkipTargetRevalidate: true})
+	_, err = txn.ApplyCheckpoint(ctx, promoter, checkpoint.ApplyRequest{TransactionID: txID, Preview: cpPreview, ImportGitRefs: true})
 	return err
 }

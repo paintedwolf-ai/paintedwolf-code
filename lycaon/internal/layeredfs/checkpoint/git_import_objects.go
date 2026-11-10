@@ -45,47 +45,12 @@ func WriteLooseGitObject(objectsDir, objType string, payload []byte) (string, er
 	return oid, writeAtomicJSONOrText(filepath.Join(objectsDir, oid[:2]), oid[2:], compressed.Bytes(), 0o444)
 }
 
-func ensureMinimalGitDirLayout(gitDir, commonGitDir string) error {
-	existing := make(map[string]bool, 8)
-	if entries, err := os.ReadDir(commonGitDir); err == nil {
-		for _, d := range entries {
-			existing[d.Name()] = true
-		}
-	}
-	for _, name := range []string{"objects", "refs"} {
-		if !existing[name] {
-			if err := os.MkdirAll(filepath.Join(commonGitDir, name), 0o750); err != nil {
-				return err
-			}
-		}
-	}
-	ensureFile := func(dir, name, content string) error {
-		if _, err := os.Lstat(filepath.Join(dir, name)); errors.Is(err, os.ErrNotExist) {
-			return writeAtomicJSONOrText(dir, name, []byte(content), 0o644)
-		}
-		return nil
-	}
-	if !existing["config"] {
-		if err := ensureFile(commonGitDir, "config", "[core]\n\trepositoryformatversion = 0\n"); err != nil {
-			return err
-		}
-	}
-	if !existing["HEAD"] {
-		if err := ensureFile(commonGitDir, "HEAD", "ref: refs/heads/main\n"); err != nil {
-			return err
-		}
-	}
-	if filepath.Clean(gitDir) != filepath.Clean(commonGitDir) {
-		return ensureFile(gitDir, "HEAD", "ref: refs/heads/main\n")
-	}
-	return nil
-}
-
 type candidateGitObjectSource struct {
 	storeDir, repoRoot, gitDir, commonGitDir, targetObjectsDir, packReaderDir string
 	candidateDirs, packCandidateDirs                                          []string
 	targetHasPacks                                                            bool
 	targetFanoutDirs, selectedPackedOIDs                                      map[string]bool
+	stagedLoose                                                               map[string]string
 }
 
 func (s *candidateGitObjectSource) hasTargetFanout(oid string) bool {
@@ -101,7 +66,8 @@ func openCandidateGitObjectSource(
 	}
 	src := &candidateGitObjectSource{
 		storeDir: strings.TrimSpace(storeDir), repoRoot: repoRoot, gitDir: gitDir,
-		commonGitDir: commonGitDir, targetObjectsDir: targetObjectsDir, selectedPackedOIDs: make(map[string]bool),
+		commonGitDir: commonGitDir, targetObjectsDir: targetObjectsDir,
+		selectedPackedOIDs: make(map[string]bool), stagedLoose: make(map[string]string),
 	}
 	hasTargetInfo, hasTargetPack := true, true
 	if entries, err := os.ReadDir(targetObjectsDir); err == nil {
@@ -289,7 +255,7 @@ func (s *candidateGitObjectSource) resolveWave(ctx context.Context, oids []strin
 		if _, ok := resolved[oid]; ok {
 			continue
 		}
-		objType, body, found, err := s.resolveAndPublishCandidateLoose(ctx, oid)
+		objType, body, found, err := s.resolveCandidateLoose(ctx, oid)
 		if err != nil {
 			return nil, err
 		}
@@ -309,8 +275,7 @@ func (s *candidateGitObjectSource) resolveWave(ctx context.Context, oids []strin
 	return resolved, nil
 }
 
-func (s *candidateGitObjectSource) resolveAndPublishCandidateLoose(ctx context.Context, oid string) (string, []byte, bool, error) {
-	dstLoose := filepath.Join(s.targetObjectsDir, oid[:2], oid[2:])
+func (s *candidateGitObjectSource) resolveCandidateLoose(ctx context.Context, oid string) (string, []byte, bool, error) {
 	for _, candDir := range s.candidateDirs {
 		if err := ctx.Err(); err != nil {
 			return "", nil, false, err
@@ -331,14 +296,37 @@ func (s *candidateGitObjectSource) resolveAndPublishCandidateLoose(ctx context.C
 			return "", nil, false, fmt.Errorf("checkpoint: symlink prohibited in retained git objects: %s", srcLoose)
 		}
 		if st.Mode().IsRegular() {
-			objType, body, err := copyFileStreamingAtomicWithVerify(srcLoose, dstLoose, 0o444)
-			if err == nil && s.targetFanoutDirs != nil && len(oid) >= 2 {
-				s.targetFanoutDirs[oid[:2]] = true
+			f, openErr := os.Open(srcLoose)
+			if openErr != nil {
+				return "", nil, true, openErr
 			}
-			return objType, body, true, err
+			objType, body, vErr := readAndVerifyLooseGitObject(f, oid)
+			_ = f.Close()
+			if vErr != nil {
+				return "", nil, true, vErr
+			}
+			s.stagedLoose[oid] = srcLoose
+			return objType, body, true, nil
 		}
 	}
 	return "", nil, false, nil
+}
+
+func (s *candidateGitObjectSource) publishStagedLoose(ctx context.Context) error {
+	for _, oid := range slices.Sorted(maps.Keys(s.stagedLoose)) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		srcLoose := s.stagedLoose[oid]
+		dstLoose := filepath.Join(s.targetObjectsDir, oid[:2], oid[2:])
+		if _, _, err := copyFileStreamingAtomicWithVerify(srcLoose, dstLoose, 0o444); err != nil {
+			return err
+		}
+		if s.targetFanoutDirs != nil && len(oid) >= 2 {
+			s.targetFanoutDirs[oid[:2]] = true
+		}
+	}
+	return nil
 }
 
 func (s *candidateGitObjectSource) ensurePackReaderDir() (string, error) {
@@ -475,13 +463,35 @@ func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensu
 			_ = os.Remove(tmpPath)
 		}
 	}()
-	var copied bytes.Buffer
-	if _, err := io.Copy(io.MultiWriter(tmpFile, &copied), wrapObjectCopyReaderFn(srcPath, in)); err != nil {
-		return "", nil, err
-	}
-	objType, body, err := verifyStreamedGitAsset(srcPath, dstPath, copied.Bytes())
-	if err != nil {
-		return "", nil, err
+	wrappedIn := wrapObjectCopyReaderFn(srcPath, in)
+	var (
+		objType string
+		body    []byte
+	)
+	if oid, isLoose := looseObjectOIDForPath(dstPath); isLoose {
+		objType, body, err = readAndVerifyLooseGitObject(io.TeeReader(wrappedIn, tmpFile), oid)
+		if err != nil {
+			return "", nil, err
+		}
+		if extra, cErr := io.Copy(tmpFile, wrappedIn); cErr != nil || extra != 0 {
+			return "", nil, fmt.Errorf("checkpoint: trailing bytes or copy error for loose object %s: %w", oid, cErr)
+		}
+	} else {
+		srcSHA, sErr := fileDigestSHA256(srcPath)
+		if sErr != nil {
+			return "", nil, sErr
+		}
+		dstHash := sha256.New()
+		written, cErr := io.Copy(io.MultiWriter(tmpFile, dstHash), wrappedIn)
+		if cErr != nil {
+			return "", nil, cErr
+		}
+		if written == 0 {
+			return "", nil, fmt.Errorf("checkpoint: empty staged git asset for %s", dstPath)
+		}
+		if srcSHA == "" || srcSHA != hex.EncodeToString(dstHash.Sum(nil)) {
+			return "", nil, fmt.Errorf("checkpoint: staged git asset digest mismatch for %s", dstPath)
+		}
 	}
 	if err := tmpFile.Chmod(mode); err != nil {
 		return "", nil, err
@@ -497,24 +507,6 @@ func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensu
 		return objType, body, syncDir(filepath.Dir(dstPath))
 	}
 	return objType, body, nil
-}
-
-func verifyStreamedGitAsset(srcPath, dstPath string, staged []byte) (string, []byte, error) {
-	if oid, ok := looseObjectOIDForPath(dstPath); ok {
-		return readAndVerifyLooseGitObject(bytes.NewReader(staged), oid)
-	}
-	if len(staged) == 0 {
-		return "", nil, fmt.Errorf("checkpoint: empty staged git asset for %s", dstPath)
-	}
-	srcSHA, err := fileDigestSHA256(srcPath)
-	if err != nil {
-		return "", nil, err
-	}
-	sum := sha256.Sum256(staged)
-	if srcSHA == "" || srcSHA != hex.EncodeToString(sum[:]) {
-		return "", nil, fmt.Errorf("checkpoint: staged git asset digest mismatch for %s", dstPath)
-	}
-	return "", nil, nil
 }
 
 func isValidDestinationGitAsset(srcPath, dstPath string) bool {

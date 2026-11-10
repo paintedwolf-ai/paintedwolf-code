@@ -11,6 +11,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
 // GitRefImportRecord durably records checkpoint ref import intent and expected prior OIDs before ref mutation.
@@ -230,6 +232,42 @@ func repositoryPresent(dir string) bool {
 	return !errors.Is(err, os.ErrNotExist)
 }
 
+func ensureMinimalGitDirLayout(gitDir, commonGitDir string) error {
+	existing := make(map[string]bool, 8)
+	if entries, err := os.ReadDir(commonGitDir); err == nil {
+		for _, d := range entries {
+			existing[d.Name()] = true
+		}
+	}
+	for _, name := range []string{"objects", "refs"} {
+		if !existing[name] {
+			if err := os.MkdirAll(filepath.Join(commonGitDir, name), 0o750); err != nil {
+				return err
+			}
+		}
+	}
+	ensureFile := func(dir, name, content string) error {
+		if _, err := os.Lstat(filepath.Join(dir, name)); errors.Is(err, os.ErrNotExist) {
+			return writeAtomicJSONOrText(dir, name, []byte(content), 0o644)
+		}
+		return nil
+	}
+	if !existing["config"] {
+		if err := ensureFile(commonGitDir, "config", "[core]\n\trepositoryformatversion = 0\n"); err != nil {
+			return err
+		}
+	}
+	if !existing["HEAD"] {
+		if err := ensureFile(commonGitDir, "HEAD", "ref: refs/heads/main\n"); err != nil {
+			return err
+		}
+	}
+	if filepath.Clean(gitDir) != filepath.Clean(commonGitDir) {
+		return ensureFile(gitDir, "HEAD", "ref: refs/heads/main\n")
+	}
+	return nil
+}
+
 type rootRefImport struct {
 	storeDir, checkpointID, workerID string
 	repoRoot, rootID                 string
@@ -292,7 +330,7 @@ func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, 
 }
 
 func applyCheckpointRefTransaction(
-	ctx context.Context, _, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker, rootID string, writes []plannedRefWrite,
+	ctx context.Context, primaryDir, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker, rootID string, writes []plannedRefWrite,
 ) (map[string]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -313,128 +351,31 @@ func applyCheckpointRefTransaction(
 			}
 		}
 	}
-	_, lycaonErr := os.Lstat(filepath.Join(commonGitDir, "refs", "lycaon"))
-	noLooseLycaon := errors.Is(lycaonErr, os.ErrNotExist) && filepath.Clean(gitDir) == filepath.Clean(commonGitDir)
 	packed := loadPackedRefsMap(commonGitDir, gitDir)
 	expectedOld := make(map[string]string, len(writes))
+	var stdinBuf strings.Builder
 	for _, w := range writes {
-		curOID := packed[w.dstRef]
-		if !noLooseLycaon {
-			curOID = resolveExistingGitRefWithPacked(commonGitDir, gitDir, w.dstRef, packed)
-		}
+		curOID := resolveExistingGitRefWithPacked(commonGitDir, gitDir, w.dstRef, packed)
 		if curOID != "" && curOID != w.oid {
 			return nil, fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, w.dstRef, curOID, w.oid)
 		}
 		expectedOld[w.dstRef] = curOID
+		op := "create"
+		if curOID == w.oid {
+			op = "verify"
+		}
+		_, _ = fmt.Fprintf(&stdinBuf, "%s %s %s\n", op, w.dstRef, w.oid)
 	}
 	rec := GitRefImportRecord{CheckpointID: cleanCheckpoint, WorkerID: cleanWorker, PlannedRefs: planned, ExpectedOld: expectedOld}
 	if err := saveGitRefImportRecord(storeDir, intentName, rec); err != nil {
 		return nil, err
 	}
-	if err := applyLooseGitRefCAS(ctx, commonGitDir, gitDir, writes, expectedOld, packed, noLooseLycaon); err != nil {
-		return nil, err
+	out, code, err := gitexec.Run(ctx, primaryDir, []string{"--git-dir=" + commonGitDir, "update-ref", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(stdinBuf.String())})
+	if err != nil || code != 0 {
+		return nil, errors.Join(err, fmt.Errorf("%w: update-ref failed (exit %d): %s", ErrCheckpointRefConflict, code, strings.TrimSpace(string(out))))
 	}
 	rec.Completed = true
 	return planned, saveGitRefImportRecord(storeDir, intentName, rec)
-}
-
-func applyLooseGitRefCAS(ctx context.Context, commonGitDir, gitDir string, writes []plannedRefWrite, expectedOld, packed map[string]string, noLooseLycaon bool) error {
-	sorted := slices.Clone(writes)
-	slices.SortFunc(sorted, func(a, b plannedRefWrite) int { return strings.Compare(a.dstRef, b.dstRef) })
-	type refLock struct {
-		w        plannedRefWrite
-		refPath  string
-		lockPath string
-		file     *os.File
-	}
-	locks := make([]refLock, 0, len(sorted))
-	cleanup := func() {
-		for _, lk := range locks {
-			if lk.file != nil {
-				_ = lk.file.Close()
-			}
-			if lk.lockPath != "" {
-				_ = os.Remove(lk.lockPath)
-			}
-		}
-	}
-	madeDirs := make(map[string]bool, len(sorted)*4)
-	for _, w := range sorted {
-		if err := ctx.Err(); err != nil {
-			cleanup()
-			return err
-		}
-		refPath := filepath.Join(commonGitDir, filepath.FromSlash(w.dstRef))
-		if err := ensureRefParentDirs(commonGitDir, w.dstRef, madeDirs); err != nil {
-			cleanup()
-			return err
-		}
-		lockPath := refPath + ".lock"
-		f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-		if err != nil {
-			cleanup()
-			if errors.Is(err, os.ErrExist) {
-				return fmt.Errorf("%w: ref lock busy for %s", ErrCheckpointRefConflict, w.dstRef)
-			}
-			return err
-		}
-		locks = append(locks, refLock{w: w, refPath: refPath, lockPath: lockPath, file: f})
-	}
-	if !noLooseLycaon {
-		for _, lk := range locks {
-			curOID := resolveExistingGitRefWithPacked(commonGitDir, gitDir, lk.w.dstRef, packed)
-			if curOID != expectedOld[lk.w.dstRef] && curOID != lk.w.oid {
-				cleanup()
-				return fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, lk.w.dstRef, curOID, lk.w.oid)
-			}
-		}
-	}
-	syncedDirs := make(map[string]bool, len(locks))
-	for i := range locks {
-		lk := &locks[i]
-		if _, err := lk.file.WriteString(lk.w.oid + "\n"); err != nil {
-			cleanup()
-			return err
-		}
-		if err := errors.Join(syncObjectFileFn(lk.file), closeObjectFileFn(lk.file)); err != nil {
-			lk.file = nil
-			cleanup()
-			return err
-		}
-		lk.file = nil
-		dir := filepath.Dir(lk.refPath)
-		if err := os.Rename(lk.lockPath, lk.refPath); err != nil {
-			cleanup()
-			return err
-		}
-		lk.lockPath = ""
-		if !syncedDirs[dir] {
-			syncedDirs[dir] = true
-			if err := syncDir(dir); err != nil {
-				cleanup()
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func ensureRefParentDirs(commonGitDir, dstRef string, madeDirs map[string]bool) error {
-	parts := strings.Split(strings.TrimPrefix(dstRef, "/"), "/")
-	cur := commonGitDir
-	for _, seg := range parts[:len(parts)-1] {
-		cur = filepath.Join(cur, seg)
-		if madeDirs[cur] {
-			continue
-		}
-		if seg != "refs" {
-			if err := os.Mkdir(cur, 0o750); err != nil && !errors.Is(err, os.ErrExist) {
-				return err
-			}
-		}
-		madeDirs[cur] = true
-	}
-	return nil
 }
 
 func gitImportRecordName(workerID, checkpointID, rootID string) string {
