@@ -15,6 +15,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/packagegeneration"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 const diagGlycinModeEnv = "PW_DIAG_GLYCIN_MODE"
@@ -139,7 +140,7 @@ func diagGlycinParent(t *testing.T) {
 	// Restricted: the protected execution policy grants execute only on the
 	// named paths. With the loader granted the exec must succeed; without the
 	// grant bwrap must die with EACCES (exit 1), reproducing the failure.
-	for _, mode := range []string{"restricted-grant", "restricted-nogrant"} {
+	for _, mode := range []string{"restricted-grant", "restricted-nogrant", "restricted-direct", "restricted-sudo-hop"} {
 		command := exec.Command(os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
 		command.Env = append(os.Environ(), diagGlycinModeEnv+"="+mode)
 		diagGlycinRun(t, mode, command)
@@ -151,6 +152,10 @@ func diagGlycinParent(t *testing.T) {
 		{"restrict_unprivileged_userns", "cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns"},
 		{"unprivileged_userns_clone", "cat /proc/sys/kernel/unprivileged_userns_clone"},
 		{"apparmor bwrap profiles", "ls /etc/apparmor.d/ | grep -i bwrap"},
+		{"apparmor glycin profile", "cat /etc/apparmor.d/glycin.bwrap 2>/dev/null || echo absent"},
+		{"apparmor bwrap-userns-restrict profile", "cat /etc/apparmor.d/bwrap-userns-restrict 2>/dev/null || echo absent"},
+		{"self apparmor profile", "cat /proc/self/attr/current"},
+		{"aa-status", "sudo aa-status 2>/dev/null | head -30 || echo unavailable"},
 		{"apparmor denials", "sudo dmesg 2>/dev/null | grep -i 'apparmor.*denied' | tail -20"},
 	} {
 		output, err := exec.Command("bash", "-c", probe.command).CombinedOutput()
@@ -160,15 +165,47 @@ func diagGlycinParent(t *testing.T) {
 
 func diagGlycinChild(t *testing.T, mode string) {
 	loader := diagGlycinLoaderPath(t)
+	// The real bootstrap sets no_new_privs before restrictExecution
+	// (namespace_linux.go); without it LANDLOCK_RESTRICT_SELF fails EPERM.
+	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		t.Fatalf("no_new_privs: %v", err)
+	}
 	exe, err := os.Open("/proc/self/exe")
 	testutil.FailErr(t, "open self as image", err)
 	defer func() { _ = exe.Close() }()
+	// Mirror the real closure shape: the fixture install root grants the
+	// desktop subtree, /usr/bin grants bwrap, the loader is named explicitly,
+	// and the static CGO_ENABLED=0 desktop grants no ELF interpreter.
 	policy := GenerationPolicy{LogicalInstallRoot: "/usr/bin"}
-	if mode == "restricted-grant" {
+	if mode != "restricted-nogrant" {
 		policy.SystemExecutables = []string{loader}
 	}
 	if err := restrictExecution(policy, exe); err != nil {
 		t.Fatalf("restrict: %v", err)
+	}
+	if profile, err := os.ReadFile("/proc/self/attr/current"); err == nil {
+		t.Logf("%s: apparmor profile: %s", mode, strings.TrimSpace(string(profile)))
+	}
+	if mode == "restricted-direct" {
+		// Exec the loader without bwrap: isolates whether the Landlock
+		// closure itself blocks the loader exec (interpreter included).
+		direct := exec.Command(loader)
+		direct.Env = nil
+		diagGlycinRun(t, mode, direct)
+		return
+	}
+	if mode == "restricted-sudo-hop" {
+		// Exec bwrap from a truly unconfined AppArmor context while the
+		// Landlock closure stays inherited, isolating profile transition
+		// from confinement.
+		if user := os.Getenv("USER"); user != "" {
+			hop := exec.Command("sudo", "-u", user, "bwrap")
+			base := diagGlycinBwrapCommand(t, loader)
+			hop.Args = append(hop.Args, base.Args[1:]...)
+			hop.Env = nil
+			diagGlycinRun(t, mode, hop)
+			return
+		}
 	}
 	diagGlycinRun(t, mode, diagGlycinBwrapCommand(t, loader))
 }
