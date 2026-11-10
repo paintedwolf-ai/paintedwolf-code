@@ -147,10 +147,10 @@ func TestAttachedControlPlaneRootSubprocessScratchFallbackAndDenial(t *testing.T
 }
 
 // When ~/.ssh is attached as the project root, WriteRootsForBoundary drops ~/.ssh
-// and keeps SessionScratchRoot. A real confined subprocess can read public keys
-// (*.pub) and write to @scratch, cannot read private keys or write inside ~/.ssh
-// without approval, gains exact per-file read/write access when ProtectedReadGrants
-// or ProtectedWriteGrants are present, and loses access again once revoked.
+// and keeps SessionScratchRoot. A real confined subprocess can write and read back
+// inside @scratch, cannot read or write inside ~/.ssh without approval, gains exact
+// per-file read/write access when ProtectedReadGrants or ProtectedWriteGrants are
+// present, and loses access again once revoked.
 func TestAttachedProtectedRootSubprocessGrantAndRevokeLifecycle(t *testing.T) {
 	self := requireLiveBoundary(t)
 	home := fspath.CanonicalPath(t.TempDir())
@@ -166,12 +166,10 @@ func TestAttachedProtectedRootSubprocessGrantAndRevokeLifecycle(t *testing.T) {
 	}
 	idEd25519 := filepath.Join(sshDir, "id_ed25519")
 	idRSA := filepath.Join(sshDir, "id_rsa")
-	idPub := filepath.Join(sshDir, "id_ed25519.pub")
 	authKeys := filepath.Join(sshDir, "authorized_keys")
 	evilFile := filepath.Join(sshDir, "evil.txt")
 	testutil.FailErr(t, "write id_ed25519", os.WriteFile(idEd25519, []byte("private-ed25519\n"), 0o600))
 	testutil.FailErr(t, "write id_rsa", os.WriteFile(idRSA, []byte("private-rsa\n"), 0o600))
-	testutil.FailErr(t, "write id_ed25519.pub", os.WriteFile(idPub, []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA\n"), 0o644))
 	testutil.FailErr(t, "write authorized_keys", os.WriteFile(authKeys, []byte("initial-key\n"), 0o600))
 
 	writeRoots, err := confine.WriteRootsForBoundary("", []string{sshDir}, nil, ownScratch)
@@ -190,17 +188,17 @@ func TestAttachedProtectedRootSubprocessGrantAndRevokeLifecycle(t *testing.T) {
 		EgressOff:          confine.EgressOffOverride,
 	}
 
-	// 1. Unapproved baseline: public key and @scratch work; private keys and ~/.ssh writes are denied.
-	if code, out := confinedRun(t, self, base, "/bin/cat", idPub); code != 0 || !strings.Contains(out, "ssh-ed25519") {
-		t.Fatalf("unapproved public key read exit=%d out=%q, want 0", code, out)
-	}
+	// 1. Unapproved baseline: @scratch works; ~/.ssh reads and writes are denied by FloorReadKeyMaterial / FloorProtected.
 	scratchNote := filepath.Join(ownScratch, "note.txt")
 	if code := confinedExit(t, self, base, "/bin/sh", "-c", `echo scratch-ok > "$1"`, "sh", scratchNote); code != 0 {
 		t.Fatalf("unapproved @scratch write exit=%d, want 0", code)
 	}
-	for _, secret := range []string{idEd25519, idRSA} {
+	if code, out := confinedRun(t, self, base, "/bin/cat", scratchNote); code != 0 || out != "scratch-ok\n" {
+		t.Fatalf("unapproved @scratch read exit=%d out=%q, want 0 and \"scratch-ok\\n\"", code, out)
+	}
+	for _, secret := range []string{idEd25519, idRSA, authKeys} {
 		if code := confinedExit(t, self, base, "/bin/cat", secret); code == 0 {
-			t.Fatalf("unapproved confined subprocess read private key %s", secret)
+			t.Fatalf("unapproved confined subprocess read key-material file %s", secret)
 		}
 	}
 	for _, target := range []string{authKeys, idEd25519, evilFile} {
