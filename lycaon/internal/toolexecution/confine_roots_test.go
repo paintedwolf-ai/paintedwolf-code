@@ -220,6 +220,9 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
 
+	cfgRoot, err := configdir.Root()
+	testutil.FailErr(t, "resolve configdir root", err)
+
 	cases := []struct {
 		name       string
 		dir        string
@@ -246,7 +249,7 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		},
 		{
 			name:       "configdir-root",
-			dir:        configdir.Root(),
+			dir:        cfgRoot,
 			wantCode:   "SANDBOX_CAPABILITY_REQUEST_INVALID",
 			wantReason: confine.WriteRootCodeSecretStore,
 		},

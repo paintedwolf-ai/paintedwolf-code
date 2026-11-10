@@ -80,13 +80,16 @@ func TestResolveExistingDirAdmitsAnyExistingDirectory(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
 
+	cfgRoot, err := configdir.Root()
+	testutil.FailErr(t, "resolve configdir root", err)
+
 	candidates := []string{
 		home,
 		filepath.Join(home, ".config"),
 		filepath.Join(home, ".ssh"),
 		filepath.Join(home, ".aws"),
 		filepath.Join(home, "Library", "Keychains"),
-		configdir.Root(),
+		cfgRoot,
 		filepath.Join(home, "work", "repo"),
 	}
 	for _, dir := range candidates {

@@ -142,12 +142,15 @@ func TestRegistriesAllowAnyExistingDirectoryAndPreserveStructuralChecks(t *testi
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
 
+	cfgRoot, err := configdir.Root()
+	testutil.FailErr(t, "resolve configdir root", err)
+
 	dirs := []string{
 		home,
 		filepath.Join(home, ".config"),
 		filepath.Join(home, ".ssh"),
 		filepath.Join(home, "Library", "Keychains"),
-		configdir.Root(),
+		cfgRoot,
 		filepath.Join(home, "ordinary-project"),
 	}
 	for _, dir := range dirs {

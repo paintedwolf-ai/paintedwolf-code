@@ -188,7 +188,9 @@ func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(
 		testutil.FailErr(t, "create fixture directory", os.MkdirAll(path, 0o700))
 	}
 	srv := wiring.BuildForTest(t).Server
-	testutil.FailErr(t, "create configdir root", os.MkdirAll(configdir.Root(), 0o700))
+	cfgRoot, err := configdir.Root()
+	testutil.FailErr(t, "resolve configdir root", err)
+	testutil.FailErr(t, "create configdir root", os.MkdirAll(cfgRoot, 0o700))
 
 	attach := func(t *testing.T, path string) (int, string) {
 		t.Helper()
@@ -211,7 +213,7 @@ func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(
 		{"dot-config directory", filepath.Join(home, ".config"), false},
 		{"ssh directory", filepath.Join(home, ".ssh"), true},
 		{"credential store", filepath.Join(home, "Library", "Keychains"), true},
-		{"device config root", configdir.Root(), true},
+		{"device config root", cfgRoot, true},
 		{"ordinary folder", t.TempDir(), false},
 	}
 	for _, tc := range cases {
