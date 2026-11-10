@@ -1146,11 +1146,11 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatalf("CustodySeq after superseded Seq=20 row = %d, want 21", gotSeq)
 	}
 
-	// 6. Deterministic zero-scan & fail-closed oracle: poison live custody row write#1's line_ranges JSON with an unsupported version ({"v":99}).
+	// 6. Deterministic zero-scan & fail-closed oracle: poison live custody row h4's line_ranges JSON with an unsupported version ({"v":99}).
 	// Ordinary non-custody writes must still succeed (0 custody scans/decodes), whereas custody reads and
 	// custody-replacing commits must fail closed on the corrupt custody row.
-	_, err = sqlDB.ExecContext(ctx, `UPDATE evidence_records SET line_ranges = '{"v":99}' WHERE session_id = ? AND handle = ?`, sess.ID, w1)
-	testutil.FailErr(t, "poison write#1 line_ranges", err)
+	_, err = sqlDB.ExecContext(ctx, `UPDATE evidence_records SET line_ranges = '{"v":99}' WHERE session_id = ? AND handle = ?`, sess.ID, h4)
+	testutil.FailErr(t, "poison h4 line_ranges", err)
 
 	if _, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "command", map[string]any{"command": "true"}, "ok\n"); err != nil {
 		t.Fatalf("non-custody command commit must not scan/decode custody rows, got err: %v", err)
