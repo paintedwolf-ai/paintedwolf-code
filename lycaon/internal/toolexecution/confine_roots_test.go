@@ -259,8 +259,8 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		{
 			name:       "configdir-root",
 			dir:        cfgRoot,
-			wantCode:   "SANDBOX_CONTROL_PLANE_DENIED",
-			wantReason: confine.WriteRootCodeContainsState,
+			wantCode:   "SANDBOX_CAPABILITY_REQUEST_INVALID",
+			wantReason: confine.WriteRootCodeSecretStore,
 		},
 	}
 
@@ -278,5 +278,13 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		if reject.Code != tc.wantCode || reject.Data["reason"] != tc.wantReason {
 			t.Fatalf("%s: reject = %+v, want code=%q reason=%q", tc.name, reject, tc.wantCode, tc.wantReason)
 		}
+	}
+
+	if _, err := project.CreateWithRoot(t.Context(), reg, string(filepath.Separator)); err != nil {
+		t.Fatalf("filesystem root project registration should succeed, got %v", err)
+	}
+	if reject := tools.ValidateAttachedRootsForAction([]string{string(filepath.Separator)}); reject == nil ||
+		reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" || reject.Data["reason"] != confine.WriteRootCodeContainsState {
+		t.Fatalf("filesystem root reject = %+v, want code=%q reason=%q", reject, "SANDBOX_CONTROL_PLANE_DENIED", confine.WriteRootCodeContainsState)
 	}
 }
