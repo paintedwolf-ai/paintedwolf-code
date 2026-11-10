@@ -71,7 +71,7 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 		if confine.IsAgentControlStateReadDenied(branch, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) || !HasExactReadGrant(tctx, abs) {
 			return Resolved{}, &sandbox.ScopeError{Path: modelPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
 		}
-		ctx = sandbox.WithApprovedReadPaths(ctx, []string{abs})
+		ctx = sandbox.WithApprovedReadPaths(ctx, []string{canonicalClean(abs)})
 	}
 	var root projectroot.RootRef
 	if len(tctx.Source.Roots) > 1 {

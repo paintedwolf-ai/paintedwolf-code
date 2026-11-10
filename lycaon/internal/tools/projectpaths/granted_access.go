@@ -55,19 +55,24 @@ func resolveGranted(tctx tools.ToolContext, modelPath string, op sandbox.PathOp)
 		return Resolved{}, false
 	}
 	// Canonical paths keep aliases within the granted tree.
-	abs = filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
-	rootSession := strings.TrimSpace(tctx.Identity.ParentSessionID)
-	if rootSession == "" {
-		rootSession = strings.TrimSpace(tctx.Identity.SessionID)
+	abs = canonicalClean(abs)
+	if abs == "" {
+		return Resolved{}, false
 	}
+	rootSession := effectiveRootSession(tctx)
 	access, ok := approvedAccess(tctx, rootSession, abs, op != sandbox.PathOpRead)
 	if !ok {
 		return Resolved{}, false
 	}
-	anchor := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(access.Path)))
-	if !access.Tree {
+	anchor := frozenClean(access.Path)
+	if access.Tree {
+		anchor = canonicalClean(access.Path)
+	} else {
 		// Missing parents need an existing effect anchor; authority stays on the leaf.
 		anchor = existingEffectAnchor(filepath.Dir(anchor))
+	}
+	if anchor == "" {
+		return Resolved{}, false
 	}
 	scopeRel, err := filepath.Rel(anchor, abs)
 	if err != nil || scopeRel == ".." || strings.HasPrefix(scopeRel, ".."+string(filepath.Separator)) {
@@ -86,14 +91,31 @@ func resolveGranted(tctx tools.ToolContext, modelPath string, op sandbox.PathOp)
 }
 
 func canonicalClean(path string) string {
+	path = strings.TrimSpace(path)
 	if path == "" || !filepath.IsAbs(path) {
 		return ""
 	}
 	canon := fspath.CanonicalPath(path)
 	if canon == "" {
-		canon = path
+		return ""
 	}
-	return filepath.Clean(filepath.FromSlash(canon))
+	clean := filepath.Clean(filepath.FromSlash(canon))
+	if clean == "" || clean == "." || !filepath.IsAbs(clean) {
+		return ""
+	}
+	return clean
+}
+
+func frozenClean(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" || !filepath.IsAbs(path) {
+		return ""
+	}
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if clean == "" || clean == "." || !filepath.IsAbs(clean) {
+		return ""
+	}
+	return clean
 }
 
 func effectiveRootSession(tctx tools.ToolContext) string {
@@ -112,7 +134,7 @@ func HasExactReadGrant(tctx tools.ToolContext, absPath string) bool {
 	if abs == "" {
 		return false
 	}
-	if info, err := os.Stat(abs); err == nil && info.IsDir() {
+	if info, err := os.Lstat(abs); err == nil && (info.IsDir() || info.Mode()&os.ModeSymlink != 0) {
 		return false
 	}
 	if confine.ControlPlanePathDenied(absPath, false, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) ||
@@ -121,19 +143,21 @@ func HasExactReadGrant(tctx tools.ToolContext, absPath string) bool {
 		return false
 	}
 	for _, access := range tctx.Files.ApprovedFileAccess {
-		if !access.Tree && !access.Write && canonicalClean(access.Path) == abs {
+		// The frozen canonical path prevents symlink retargeting from redirecting approval.
+		if !access.Tree && !access.Write && access.Path == abs {
 			return true
 		}
 	}
 	if tctx.Files.FileChangeReview != nil {
 		for _, access := range tctx.Files.PreparedFileAccess {
-			if !access.Tree && !access.Write && canonicalClean(access.Path) == abs {
+			// The frozen canonical path prevents symlink retargeting from redirecting approval.
+			if !access.Tree && !access.Write && access.Path == abs {
 				return true
 			}
 		}
 	}
 	for _, p := range tctx.Files.SessionReadPaths {
-		if canonicalClean(p) == abs {
+		if frozenClean(p) == abs {
 			return true
 		}
 	}
@@ -145,7 +169,7 @@ func HasExactReadGrant(tctx tools.ToolContext, absPath string) bool {
 	grantedAccessMu.RUnlock()
 	if source != nil {
 		if access, ok := source(effectiveRootSession(tctx), tctx.Identity.ProjectID, abs, false); ok {
-			if !access.Tree && canonicalClean(access.Path) == abs {
+			if !access.Tree && frozenClean(access.Path) == abs {
 				return true
 			}
 		}
@@ -166,21 +190,22 @@ func approvedAccess(tctx tools.ToolContext, rootSession, abs string, write bool)
 	}
 	for _, access := range tctx.Files.ApprovedFileAccess {
 		// The frozen canonical path prevents symlink retargeting from redirecting approval.
-		if !access.Tree && canonicalClean(access.Path) == abs && access.Write == write {
+		if !access.Tree && access.Path == abs && access.Write == write {
 			return Access{Path: abs}, true
 		}
 	}
 	if tctx.Files.FileChangeReview != nil {
 		for _, access := range tctx.Files.PreparedFileAccess {
-			if !access.Tree && canonicalClean(access.Path) == abs && (!write || access.Write) {
+			// The frozen canonical path prevents symlink retargeting from redirecting approval.
+			if !access.Tree && access.Path == abs && (!write || access.Write) {
 				return Access{Path: abs}, true
 			}
 		}
 	}
 	if !write {
-		if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+		if info, err := os.Lstat(abs); err != nil || (!info.IsDir() && info.Mode()&os.ModeSymlink == 0) {
 			for _, p := range tctx.Files.SessionReadPaths {
-				if canonicalClean(p) == abs {
+				if frozenClean(p) == abs {
 					return Access{Path: abs}, true
 				}
 			}
@@ -193,7 +218,14 @@ func approvedAccess(tctx tools.ToolContext, rootSession, abs string, write bool)
 	}
 	grantedAccessMu.RUnlock()
 	if source != nil {
-		return source(rootSession, tctx.Identity.ProjectID, abs, write)
+		access, ok := source(rootSession, tctx.Identity.ProjectID, abs, write)
+		if !ok {
+			return Access{}, false
+		}
+		if !access.Tree && frozenClean(access.Path) != abs {
+			return Access{}, false
+		}
+		return access, true
 	}
 	return Access{}, false
 }

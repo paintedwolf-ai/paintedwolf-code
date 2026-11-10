@@ -370,9 +370,9 @@ func TestReadToolExactApprovedNativeReadsAndProtectedFloor(t *testing.T) {
 		}
 		confine.SetKeyMaterialPathsSource(func() []string { return previousKeyMaterial })
 	})
-	home := t.TempDir()
-	cfgDir := t.TempDir()
-	proj := t.TempDir()
+	home := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(t.TempDir())))
+	cfgDir := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(t.TempDir())))
+	proj := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(t.TempDir())))
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv(configdir.EnvConfigDir, cfgDir)
@@ -461,7 +461,7 @@ func TestReadToolExactApprovedNativeReadsAndProtectedFloor(t *testing.T) {
 	expectDenied(t, "unapproved abs in home", homeTC, idEd25519)
 	expectDenied(t, "unapproved external from proj", projTC, idEd25519)
 
-	// 2. Exact one-shot read approval (ApprovedFileAccess with Write: false, Tree: false) succeeds.
+	// 2. Exact one-shot read approval (ApprovedFileAccess and PreparedFileAccess with Write: false, Tree: false) succeeds.
 	oneShotHome := homeTC
 	oneShotHome.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: idEd25519, Write: false}}
 	expectAllowed(t, "one-shot relative in home", oneShotHome, ".ssh/id_ed25519", "ssh-ed25519-private-needle")
@@ -470,6 +470,18 @@ func TestReadToolExactApprovedNativeReadsAndProtectedFloor(t *testing.T) {
 	oneShotProj := projTC
 	oneShotProj.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: idEd25519, Write: false}}
 	expectAllowed(t, "one-shot external from proj", oneShotProj, idEd25519, "ssh-ed25519-private-needle")
+
+	preparedHome := homeTC
+	preparedHome.Files.PreparedFileAccess = []hitl.GrantedPathDelta{{Path: idEd25519, Write: false}}
+	expectDenied(t, "prepared without FileChangeReview in home", preparedHome, ".ssh/id_ed25519")
+	preparedHome.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
+	expectAllowed(t, "prepared with FileChangeReview relative in home", preparedHome, ".ssh/id_ed25519", "ssh-ed25519-private-needle")
+	expectAllowed(t, "prepared with FileChangeReview abs in home", preparedHome, idEd25519, "ssh-ed25519-private-needle")
+
+	preparedProj := projTC
+	preparedProj.Files.PreparedFileAccess = []hitl.GrantedPathDelta{{Path: idEd25519, Write: false}}
+	preparedProj.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
+	expectAllowed(t, "prepared with FileChangeReview external from proj", preparedProj, idEd25519, "ssh-ed25519-private-needle")
 
 	// 3a. Exact session read approval via SessionReadPaths succeeds.
 	sessHome := homeTC
@@ -492,6 +504,39 @@ func TestReadToolExactApprovedNativeReadsAndProtectedFloor(t *testing.T) {
 	expectAllowed(t, "granted access source relative in home", homeTC, ".ssh/id_ed25519", "ssh-ed25519-private-needle")
 	expectAllowed(t, "granted access source external from proj", projTC, idEd25519, "ssh-ed25519-private-needle")
 	release()
+
+	// 3c. Positive alias-to-unchanged-approved-target succeeds across approval sources while sibling alias remains denied.
+	aliasKeyInSSH := filepath.Join(sshDir, "alias_id_ed25519")
+	aliasSSHDir := filepath.Join(home, "alias_ssh_dir")
+	testutil.FailErr(t, "create leaf alias to unchanged id_ed25519", os.Symlink(idEd25519, aliasKeyInSSH))
+	testutil.FailErr(t, "create dir alias to unchanged .ssh", os.Symlink(sshDir, aliasSSHDir))
+	t.Cleanup(func() {
+		_ = os.Remove(aliasKeyInSSH)
+		_ = os.Remove(aliasSSHDir)
+	})
+	for _, aliasTarget := range []string{".ssh/alias_id_ed25519", aliasKeyInSSH, "alias_ssh_dir/id_ed25519", filepath.Join(aliasSSHDir, "id_ed25519")} {
+		expectAllowed(t, "alias to unchanged target (ApprovedFileAccess in home)", oneShotHome, aliasTarget, "ssh-ed25519-private-needle")
+		expectAllowed(t, "alias to unchanged target (PreparedFileAccess in home)", preparedHome, aliasTarget, "ssh-ed25519-private-needle")
+		expectAllowed(t, "alias to unchanged target (SessionReadPaths in home)", sessHome, aliasTarget, "ssh-ed25519-private-needle")
+	}
+	for _, extAliasTarget := range []string{aliasKeyInSSH, filepath.Join(aliasSSHDir, "id_ed25519")} {
+		expectAllowed(t, "alias to unchanged target (ApprovedFileAccess from proj)", oneShotProj, extAliasTarget, "ssh-ed25519-private-needle")
+		expectAllowed(t, "alias to unchanged target (PreparedFileAccess from proj)", preparedProj, extAliasTarget, "ssh-ed25519-private-needle")
+		expectAllowed(t, "alias to unchanged target (SessionReadPaths from proj)", sessProj, extAliasTarget, "ssh-ed25519-private-needle")
+	}
+	releaseAliasSource := projectpaths.SetGrantedAccessSource(func(_, _, abs string, write bool) (projectpaths.Access, bool) {
+		if !write && abs == canonEd25519 {
+			return projectpaths.Access{Path: canonEd25519, Tree: false}, true
+		}
+		return projectpaths.Access{}, false
+	})
+	expectAllowed(t, "alias to unchanged target (GrantedAccessSource in home)", homeTC, ".ssh/alias_id_ed25519", "ssh-ed25519-private-needle")
+	expectAllowed(t, "alias to unchanged target (GrantedAccessSource dir alias in home)", homeTC, "alias_ssh_dir/id_ed25519", "ssh-ed25519-private-needle")
+	expectAllowed(t, "alias to unchanged target (GrantedAccessSource from proj)", projTC, aliasKeyInSSH, "ssh-ed25519-private-needle")
+	releaseAliasSource()
+	expectDenied(t, "unapproved sibling through dir alias", oneShotHome, "alias_ssh_dir/id_rsa")
+	_ = os.Remove(aliasKeyInSSH)
+	_ = os.Remove(aliasSSHDir)
 
 	// 8. Revoked grant refused again.
 	expectDenied(t, "revoked granted access source in home", homeTC, ".ssh/id_ed25519")
@@ -611,4 +656,137 @@ func TestReadToolExactApprovedNativeReadsAndProtectedFloor(t *testing.T) {
 		}
 		releaseCP()
 	}
+
+	assertAllReadPathsDenied := func(t *testing.T, desc, frozenApprovedPath string, relTargets, absTargets []string) {
+		t.Helper()
+		makeVariants := func(base tools.ToolContext) []struct {
+			name    string
+			tc      tools.ToolContext
+			install func() func()
+		} {
+			vApproved := base
+			vApproved.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: frozenApprovedPath, Write: false}}
+
+			vPrepared := base
+			vPrepared.Files.PreparedFileAccess = []hitl.GrantedPathDelta{{Path: frozenApprovedPath, Write: false}}
+			vPrepared.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
+
+			vSession := base
+			vSession.Files.SessionReadPaths = []string{frozenApprovedPath}
+
+			vSource := base
+			return []struct {
+				name    string
+				tc      tools.ToolContext
+				install func() func()
+			}{
+				{name: "ApprovedFileAccess", tc: vApproved},
+				{name: "PreparedFileAccess", tc: vPrepared},
+				{name: "SessionReadPaths", tc: vSession},
+				{
+					name: "GrantedAccessSource",
+					tc:   vSource,
+					install: func() func() {
+						return projectpaths.SetGrantedAccessSource(func(_, _, _ string, write bool) (projectpaths.Access, bool) {
+							if write {
+								return projectpaths.Access{}, false
+							}
+							return projectpaths.Access{Path: frozenApprovedPath, Tree: false}, true
+						})
+					},
+				},
+			}
+		}
+
+		for _, v := range makeVariants(homeTC) {
+			var relFn func()
+			if v.install != nil {
+				relFn = v.install()
+			}
+			scopeCtx := tools.SandboxScopeContext(t.Context(), v.tc)
+			for _, relTarget := range relTargets {
+				expectDenied(t, desc+" homeTC/"+v.name+" rel "+relTarget, v.tc, relTarget)
+				if _, err := projectpaths.ResolveRead(scopeCtx, boundary, v.tc, relTarget); err == nil {
+					t.Fatalf("%s homeTC/%s: ResolveRead(%q) unexpectedly succeeded", desc, v.name, relTarget)
+				}
+				rs := projectpaths.NewReadSession(boundary, v.tc)
+				_, rsErr := rs.Resolve(scopeCtx, relTarget)
+				rs.Close()
+				if rsErr == nil {
+					t.Fatalf("%s homeTC/%s: ReadSession.Resolve(%q) unexpectedly succeeded", desc, v.name, relTarget)
+				}
+				if err := boundary.AssertReadScope(scopeCtx, home, relTarget, v.tc.ProfileID()); err == nil {
+					t.Fatalf("%s homeTC/%s: Boundary.AssertReadScope(%q) unexpectedly succeeded", desc, v.name, relTarget)
+				}
+			}
+			for _, absTarget := range absTargets {
+				expectDenied(t, desc+" homeTC/"+v.name+" abs "+absTarget, v.tc, absTarget)
+				if _, err := projectpaths.ResolveRead(scopeCtx, boundary, v.tc, absTarget); err == nil {
+					t.Fatalf("%s homeTC/%s: ResolveRead(%q) unexpectedly succeeded", desc, v.name, absTarget)
+				}
+			}
+			if relFn != nil {
+				relFn()
+			}
+		}
+
+		for _, v := range makeVariants(projTC) {
+			var relFn func()
+			if v.install != nil {
+				relFn = v.install()
+			}
+			scopeCtx := tools.SandboxScopeContext(t.Context(), v.tc)
+			for _, absTarget := range absTargets {
+				expectDenied(t, desc+" projTC/"+v.name+" abs "+absTarget, v.tc, absTarget)
+				if _, err := projectpaths.ResolveRead(scopeCtx, boundary, v.tc, absTarget); err == nil {
+					t.Fatalf("%s projTC/%s: ResolveRead(%q) unexpectedly succeeded", desc, v.name, absTarget)
+				}
+			}
+			if relFn != nil {
+				relFn()
+			}
+		}
+	}
+
+	// 10. Approved-leaf replacement: approve regular protected file leafA, then replace leafA
+	// with a symlink to distinct protected file leafB before the read.
+	leafA := filepath.Join(sshDir, "leaf_a_ed25519")
+	leafB := filepath.Join(sshDir, "leaf_b_rsa")
+	testutil.FailErr(t, "write leafA", os.WriteFile(leafA, []byte("leaf-a-private-needle\n"), 0o600))
+	testutil.FailErr(t, "write leafB", os.WriteFile(leafB, []byte("leaf-b-private-needle\n"), 0o600))
+	frozenLeafA := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(leafA)))
+
+	leafApprovedHome := homeTC
+	leafApprovedHome.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: frozenLeafA, Write: false}}
+	expectAllowed(t, "leafA before replacement in home", leafApprovedHome, ".ssh/leaf_a_ed25519", "leaf-a-private-needle")
+
+	testutil.FailErr(t, "remove leafA", os.Remove(leafA))
+	testutil.FailErr(t, "replace leafA with symlink to leafB", os.Symlink(leafB, leafA))
+	assertAllReadPathsDenied(t, "approved-leaf-replaced-by-symlink", frozenLeafA,
+		[]string{".ssh/leaf_a_ed25519", ".ssh/leaf_b_rsa"},
+		[]string{leafA, leafB},
+	)
+
+	// 11. Approved-ancestor replacement: approve regular protected file ancA under .ssh/sub_a,
+	// then replace ancestor directory .ssh/sub_a with a symlink to .ssh/sub_b before the read.
+	subA := filepath.Join(sshDir, "sub_a")
+	subB := filepath.Join(sshDir, "sub_b")
+	testutil.FailErr(t, "mkdir sub_a", os.MkdirAll(subA, 0o700))
+	testutil.FailErr(t, "mkdir sub_b", os.MkdirAll(subB, 0o700))
+	ancA := filepath.Join(subA, "id_ed25519")
+	ancB := filepath.Join(subB, "id_ed25519")
+	testutil.FailErr(t, "write ancA", os.WriteFile(ancA, []byte("anc-a-private-needle\n"), 0o600))
+	testutil.FailErr(t, "write ancB", os.WriteFile(ancB, []byte("anc-b-private-needle\n"), 0o600))
+	frozenAncA := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(ancA)))
+
+	ancApprovedHome := homeTC
+	ancApprovedHome.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: frozenAncA, Write: false}}
+	expectAllowed(t, "ancA before ancestor replacement in home", ancApprovedHome, ".ssh/sub_a/id_ed25519", "anc-a-private-needle")
+
+	testutil.FailErr(t, "remove sub_a", os.RemoveAll(subA))
+	testutil.FailErr(t, "replace sub_a with symlink to sub_b", os.Symlink(subB, subA))
+	assertAllReadPathsDenied(t, "approved-ancestor-replaced-by-symlink", frozenAncA,
+		[]string{".ssh/sub_a/id_ed25519", ".ssh/sub_b/id_ed25519"},
+		[]string{ancA, ancB},
+	)
 }

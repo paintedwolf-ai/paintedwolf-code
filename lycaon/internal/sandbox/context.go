@@ -143,14 +143,26 @@ func SessionDirsFromContext(ctx context.Context) (scratchDir, outputDir string) 
 
 type approvedReadPathsKey struct{}
 
-func normalizeApprovedReadPath(path string) string {
+func frozenApprovedReadPath(path string) string {
 	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
+	if trimmed == "" || !filepath.IsAbs(trimmed) {
+		return ""
+	}
+	clean := filepath.Clean(filepath.FromSlash(trimmed))
+	if clean == "" || clean == "." || !filepath.IsAbs(clean) {
+		return ""
+	}
+	return clean
+}
+
+func canonicalApprovedReadPath(path string) string {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" || !filepath.IsAbs(trimmed) {
 		return ""
 	}
 	canon := fspath.CanonicalPath(trimmed)
 	if canon == "" {
-		canon = trimmed
+		return ""
 	}
 	clean := filepath.Clean(filepath.FromSlash(canon))
 	if clean == "" || clean == "." || !filepath.IsAbs(clean) {
@@ -175,7 +187,8 @@ func WithApprovedReadPaths(ctx context.Context, paths []string) context.Context 
 		}
 	}
 	for _, p := range paths {
-		if norm := normalizeApprovedReadPath(p); norm != "" {
+		// Preserve the frozen approval subject without re-evaluating filesystem symlinks at use time.
+		if norm := frozenApprovedReadPath(p); norm != "" {
 			merged[norm] = struct{}{}
 		}
 	}
@@ -195,11 +208,11 @@ func IsApprovedReadPathFromContext(ctx context.Context, absPath string) bool {
 	if !ok || len(set) == 0 {
 		return false
 	}
-	norm := normalizeApprovedReadPath(absPath)
+	norm := canonicalApprovedReadPath(absPath)
 	if norm == "" {
 		return false
 	}
-	if info, err := os.Stat(norm); err == nil && info.IsDir() {
+	if info, err := os.Lstat(norm); err == nil && (info.IsDir() || info.Mode()&os.ModeSymlink != 0) {
 		return false
 	}
 	_, exists := set[norm]
