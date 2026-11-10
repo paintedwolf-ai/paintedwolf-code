@@ -21,10 +21,12 @@ func TestScratchSurveySeesWritesAfterEmptyInventory(t *testing.T) {
 	root := t.TempDir()
 	cfgDir := t.TempDir()
 	t.Setenv(configdir.EnvConfigDir, cfgDir)
-	scratchDir, err := scratch.New(cfgDir).Ensure("sess-1")
+	dirs, err := scratch.New(cfgDir).Ensure("sess-1")
 	testutil.FailErr(t, "ensure session scratch under configdir", err)
+	scratchDir := dirs.Scratch
 	tc := nativefixture.Context(root)
 	tc.Host.SessionScratchDir = scratchDir
+	tc.Host.SessionOutputDir = dirs.Output
 	catalog := sourcecatalog.New()
 	_, err = catalog.Observe(t.Context(), tc.Identity.ProjectID, []sourcecatalog.Root{{ID: projectroot.VirtualScratchLabel, Path: scratchDir}})
 	testutil.FailErr(t, "observe empty scratch", err)
@@ -60,24 +62,28 @@ func TestDirectControlRootAttachmentWithHumanWarmedCatalogCannotExposeStateToAge
 	testutil.FailErr(t, "write api.token", os.WriteFile(filepath.Join(cfgDir, "api.token"), []byte("token-secret-control-plane\n"), 0o600))
 	testutil.FailErr(t, "write paintedwolf.db", os.WriteFile(filepath.Join(cfgDir, "paintedwolf.db"), []byte("sqlite-bytes"), 0o600))
 
-	scratchDir, err := scratch.New(cfgDir).Ensure("sess-1")
+	dirs, err := scratch.New(cfgDir).Ensure("sess-1")
 	testutil.FailErr(t, "ensure scratch", err)
+	scratchDir := dirs.Scratch
 	testutil.FailErr(t, "write scratch note", os.WriteFile(filepath.Join(scratchDir, "scratch-note.txt"), []byte("scratch-ok-needle\n"), 0o600))
 
 	tc := nativefixture.Context(cfgDir)
 	tc.Host.SessionScratchDir = scratchDir
+	tc.Host.SessionOutputDir = dirs.Output
 	rootID := tc.Source.Roots[0].ID
 
 	catalog := sourcecatalog.New()
-	humanSnap, err := catalog.ObserveAudience(
+	catRoot := sourcecatalog.Root{ID: rootID, Path: cfgDir}
+	humanSnap, err := catalog.Observe(
 		t.Context(),
 		tc.Identity.ProjectID,
-		[]sourcecatalog.Root{{ID: rootID, Path: cfgDir}},
-		sourcecatalog.HumanAudience,
+		[]sourcecatalog.Root{catRoot},
 	)
 	testutil.FailErr(t, "warm human catalog on cfgDir", err)
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), tc.Identity.ProjectID, catRoot, ".", sourcecatalog.DirectoryRead{})
+	testutil.FailErr(t, "warm human directory index on cfgDir", err)
 	var humanRel []string
-	for _, e := range humanSnap.Entries(rootID) {
+	for _, e := range humanSnap.Entries {
 		humanRel = append(humanRel, e.Path)
 	}
 	wantHuman := []string{"packs", "packs/custom.yaml", "settings.yaml"}
