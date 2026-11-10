@@ -14,6 +14,50 @@ import (
 	"time"
 )
 
+const compactPackThreshold = 100_000
+
+type compactPackIndex struct {
+	fanout [256]uint32
+	oids   []byte
+}
+
+func (c *compactPackIndex) count() int64 {
+	if c == nil {
+		return 0
+	}
+	return int64(c.fanout[255])
+}
+
+func (c *compactPackIndex) containsHex(oidHex string) bool {
+	if c == nil || len(oidHex) != 40 {
+		return false
+	}
+	var raw [20]byte
+	if _, err := hex.Decode(raw[:], []byte(oidHex)); err != nil {
+		return false
+	}
+	first := raw[0]
+	var lo uint32
+	if first > 0 {
+		lo = c.fanout[first-1]
+	}
+	hi := c.fanout[first]
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		off := int(mid) * 20
+		cmp := bytes.Compare(c.oids[off:off+20], raw[:])
+		if cmp == 0 {
+			return true
+		}
+		if cmp < 0 {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	return false
+}
+
 func recordLooseObjectLocked(s *RetainedObjectStore, oid string, size int64) {
 	oid = strings.ToLower(strings.TrimSpace(oid))
 	if len(oid) != 40 {
@@ -44,22 +88,34 @@ func removeLooseObjectLocked(s *RetainedObjectStore, oid string) {
 	}
 }
 
-func recordPackLocked(s *RetainedObjectStore, base string, packAndIdxBytes int64, oids map[string]struct{}) {
+func recordPackLocked(s *RetainedObjectStore, base string, packAndIdxBytes int64, oids map[string]struct{}, comp *compactPackIndex) {
 	removePackLocked(s, base)
-	cloned := make(map[string]struct{}, len(oids))
-	for oid := range oids {
-		norm := strings.ToLower(strings.TrimSpace(oid))
-		if len(norm) == 40 {
-			cloned[norm] = struct{}{}
-			s.stock.logicalOIDRefs[norm]++
-		}
+	if s.stock.compactPacks == nil {
+		s.stock.compactPacks = make(map[string]*compactPackIndex)
 	}
-	s.stock.packOIDs[base] = cloned
+	if comp != nil {
+		s.stock.compactPacks[base] = comp
+		s.stock.compactObjectsTotal += comp.count()
+	} else {
+		cloned := make(map[string]struct{}, len(oids))
+		for oid := range oids {
+			norm := strings.ToLower(strings.TrimSpace(oid))
+			if len(norm) == 40 {
+				cloned[norm] = struct{}{}
+				s.stock.logicalOIDRefs[norm]++
+			}
+		}
+		s.stock.packOIDs[base] = cloned
+	}
 	s.stock.packSizes[base] = packAndIdxBytes
 	s.stock.packBytesTotal += packAndIdxBytes
 }
 
 func removePackLocked(s *RetainedObjectStore, base string) {
+	if comp, exists := s.stock.compactPacks[base]; exists {
+		s.stock.compactObjectsTotal -= comp.count()
+		delete(s.stock.compactPacks, base)
+	}
 	if members, exists := s.stock.packOIDs[base]; exists {
 		for oid := range members {
 			if s.stock.logicalOIDRefs[oid] <= 1 {
@@ -82,7 +138,7 @@ func initStockFromDiskLocked(ctx context.Context, s *RetainedObjectStore) error 
 	if err := finalizeInterruptedPackRetirements(ctx, filepath.Join(s.objectsDir, "pack")); err != nil {
 		return err
 	}
-	looseSizes, packSizes, packOIDs, _, err := scanStoreDiskState(ctx, s.rootDir, s.objectsDir)
+	looseSizes, packSizes, packOIDs, compactPacks, _, err := scanStoreDiskState(ctx, s.rootDir, s.objectsDir)
 	if err != nil {
 		return err
 	}
@@ -91,15 +147,15 @@ func initStockFromDiskLocked(ctx context.Context, s *RetainedObjectStore) error 
 		dur = prevStartup
 	}
 	s.stock = storeStock{
-		packOIDs: make(map[string]map[string]struct{}, len(packOIDs)), packSizes: make(map[string]int64, len(packSizes)),
-		looseSizes: make(map[string]int64, len(looseSizes)), logicalOIDRefs: make(map[string]int, len(looseSizes)),
-		startupDuration: dur,
+		packOIDs: make(map[string]map[string]struct{}, len(packOIDs)), compactPacks: make(map[string]*compactPackIndex, len(compactPacks)),
+		packSizes: make(map[string]int64, len(packSizes)), looseSizes: make(map[string]int64, len(looseSizes)),
+		logicalOIDRefs: make(map[string]int, len(looseSizes)), startupDuration: dur,
 	}
 	for oid, sz := range looseSizes {
 		recordLooseObjectLocked(s, oid, sz)
 	}
 	for base, sz := range packSizes {
-		recordPackLocked(s, base, sz, packOIDs[base])
+		recordPackLocked(s, base, sz, packOIDs[base], compactPacks[base])
 	}
 	return nil
 }
@@ -112,7 +168,7 @@ func (s *RetainedObjectStore) InspectStock(ctx context.Context) (StockInventory,
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, _, _, inv, err := scanStoreDiskState(ctx, s.rootDir, s.objectsDir)
+	_, _, _, _, inv, err := scanStoreDiskState(ctx, s.rootDir, s.objectsDir)
 	if err != nil {
 		return StockInventory{Complete: false}, err
 	}
@@ -121,28 +177,30 @@ func (s *RetainedObjectStore) InspectStock(ctx context.Context) (StockInventory,
 
 func scanStoreDiskState(
 	ctx context.Context, rootDir, objectsDir string,
-) (map[string]int64, map[string]int64, map[string]map[string]struct{}, StockInventory, error) {
+) (map[string]int64, map[string]int64, map[string]map[string]struct{}, map[string]*compactPackIndex, StockInventory, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, nil, nil, StockInventory{}, err
+		return nil, nil, nil, nil, StockInventory{}, err
 	}
 	entries, err := os.ReadDir(objectsDir)
 	if err != nil {
-		return nil, nil, nil, StockInventory{}, fmt.Errorf("privategit: read store objects dir: %w", err)
+		return nil, nil, nil, nil, StockInventory{}, fmt.Errorf("privategit: read store objects dir: %w", err)
 	}
 	looseSizes, packSizes := make(map[string]int64), make(map[string]int64)
 	packOIDs, uniqueOIDs := make(map[string]map[string]struct{}), make(map[string]struct{})
+	compactPacks := make(map[string]*compactPackIndex)
+	var compactTotal int64
 	var inv StockInventory
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
-			return nil, nil, nil, StockInventory{}, err
+			return nil, nil, nil, nil, StockInventory{}, err
 		}
 		name := entry.Name()
 		if !entry.IsDir() || name == "info" {
 			continue
 		}
 		if name == "pack" {
-			if err := scanPackDir(ctx, rootDir, filepath.Join(objectsDir, "pack"), packSizes, packOIDs, uniqueOIDs, &inv); err != nil {
-				return nil, nil, nil, StockInventory{}, err
+			if err := scanPackDir(ctx, rootDir, filepath.Join(objectsDir, "pack"), packSizes, packOIDs, compactPacks, uniqueOIDs, &compactTotal, &inv); err != nil {
+				return nil, nil, nil, nil, StockInventory{}, err
 			}
 			continue
 		}
@@ -152,11 +210,11 @@ func scanStoreDiskState(
 		shardDir := filepath.Join(objectsDir, name)
 		sEntries, sErr := os.ReadDir(shardDir)
 		if sErr != nil {
-			return nil, nil, nil, StockInventory{}, fmt.Errorf("privategit: read loose shard %s: %w", shardDir, sErr)
+			return nil, nil, nil, nil, StockInventory{}, fmt.Errorf("privategit: read loose shard %s: %w", shardDir, sErr)
 		}
 		for _, se := range sEntries {
 			if err := ctx.Err(); err != nil {
-				return nil, nil, nil, StockInventory{}, err
+				return nil, nil, nil, nil, StockInventory{}, err
 			}
 			rest := se.Name()
 			if se.IsDir() || len(rest) != 38 || !isHexString(rest) {
@@ -165,14 +223,14 @@ func scanStoreDiskState(
 			loosePath := filepath.Join(shardDir, rest)
 			info, iErr := os.Stat(loosePath)
 			if iErr != nil {
-				return nil, nil, nil, StockInventory{}, fmt.Errorf("privategit: stat loose object %s: %w", loosePath, iErr)
+				return nil, nil, nil, nil, StockInventory{}, fmt.Errorf("privategit: stat loose object %s: %w", loosePath, iErr)
 			}
 			if !info.Mode().IsRegular() || info.Size() <= 0 {
-				return nil, nil, nil, StockInventory{}, fmt.Errorf("%w: invalid loose object %s", ErrCorruptObjectStore, loosePath)
+				return nil, nil, nil, nil, StockInventory{}, fmt.Errorf("%w: invalid loose object %s", ErrCorruptObjectStore, loosePath)
 			}
 			f, oErr := os.Open(loosePath)
 			if oErr != nil {
-				return nil, nil, nil, StockInventory{}, fmt.Errorf("privategit: open loose object %s: %w", loosePath, oErr)
+				return nil, nil, nil, nil, StockInventory{}, fmt.Errorf("privategit: open loose object %s: %w", loosePath, oErr)
 			}
 			_ = f.Close()
 			oid := strings.ToLower(name + rest)
@@ -181,14 +239,15 @@ func scanStoreDiskState(
 			inv.LooseBytes += info.Size()
 		}
 	}
-	inv.LogicalObjects, inv.StoredBytes, inv.Complete = int64(len(uniqueOIDs)), inv.LooseBytes+inv.PackBytes, true
-	return looseSizes, packSizes, packOIDs, inv, nil
+	inv.LogicalObjects, inv.StoredBytes, inv.Complete = int64(len(uniqueOIDs))+compactTotal, inv.LooseBytes+inv.PackBytes, true
+	return looseSizes, packSizes, packOIDs, compactPacks, inv, nil
 }
 
 func scanPackDir(
 	ctx context.Context, rootDir, packDir string,
 	packSizes map[string]int64, packOIDs map[string]map[string]struct{},
-	uniqueOIDs map[string]struct{}, inv *StockInventory,
+	compactPacks map[string]*compactPackIndex,
+	uniqueOIDs map[string]struct{}, compactTotal *int64, inv *StockInventory,
 ) error {
 	pEntries, err := os.ReadDir(packDir)
 	if err != nil {
@@ -228,16 +287,22 @@ func scanPackDir(
 		if !okP || !okI {
 			return fmt.Errorf("%w: incomplete pack/idx pair for %s", ErrCorruptObjectStore, base)
 		}
-		oids, err := parsePackAndIndexOIDs(ctx, rootDir, filepath.Join(packDir, base+".pack"), filepath.Join(packDir, base+".idx"), pSize)
+		oids, comp, err := parsePackAndIndexOIDs(ctx, rootDir, filepath.Join(packDir, base+".pack"), filepath.Join(packDir, base+".idx"), pSize)
 		if err != nil {
 			return err
 		}
 		packSizes[base] = pSize + iSize
-		packOIDs[base] = oids
 		inv.PackBytes += pSize + iSize
-		inv.PackedObjects += int64(len(oids))
-		for oid := range oids {
-			uniqueOIDs[oid] = struct{}{}
+		if comp != nil {
+			compactPacks[base] = comp
+			inv.PackedObjects += comp.count()
+			*compactTotal += comp.count()
+		} else {
+			packOIDs[base] = oids
+			inv.PackedObjects += int64(len(oids))
+			for oid := range oids {
+				uniqueOIDs[oid] = struct{}{}
+			}
 		}
 	}
 	return nil
@@ -318,64 +383,78 @@ func finalizeInterruptedPackRetirements(ctx context.Context, packDir string) err
 	return nil
 }
 
-func parsePackAndIndexOIDs(ctx context.Context, workDir, packPath, idxPath string, packSize int64) (map[string]struct{}, error) {
+func parsePackAndIndexOIDs(ctx context.Context, workDir, packPath, idxPath string, packSize int64) (map[string]struct{}, *compactPackIndex, error) {
 	if packSize < 32 {
-		return nil, fmt.Errorf("%w: truncated packfile %s (size %d)", ErrCorruptObjectStore, packPath, packSize)
+		return nil, nil, fmt.Errorf("%w: truncated packfile %s (size %d)", ErrCorruptObjectStore, packPath, packSize)
 	}
 	pf, err := os.Open(packPath)
 	if err != nil {
-		return nil, fmt.Errorf("privategit: open packfile %s: %w", packPath, err)
+		return nil, nil, fmt.Errorf("privategit: open packfile %s: %w", packPath, err)
 	}
 	var hdr [12]byte
 	_, rErr := pf.Read(hdr[:])
 	_ = pf.Close()
 	if rErr != nil || string(hdr[:4]) != "PACK" {
-		return nil, fmt.Errorf("%w: invalid pack header in %s", ErrCorruptObjectStore, packPath)
+		return nil, nil, fmt.Errorf("%w: invalid pack header in %s", ErrCorruptObjectStore, packPath)
 	}
-	oids, err := parsePackIndexOIDs(ctx, workDir, idxPath)
+	oids, comp, err := parsePackIndexOIDs(ctx, workDir, idxPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if uint32(len(oids)) != binary.BigEndian.Uint32(hdr[8:12]) {
-		return nil, fmt.Errorf("%w: pack %s object count mismatches index count %d", ErrCorruptObjectStore, packPath, len(oids))
+	idxCount := uint32(len(oids))
+	if comp != nil {
+		idxCount = uint32(comp.count())
 	}
-	return oids, nil
+	if idxCount != binary.BigEndian.Uint32(hdr[8:12]) {
+		return nil, nil, fmt.Errorf("%w: pack %s object count mismatches index count %d", ErrCorruptObjectStore, packPath, idxCount)
+	}
+	return oids, comp, nil
 }
 
-func parsePackIndexOIDs(ctx context.Context, workDir, idxPath string) (map[string]struct{}, error) {
+func parsePackIndexOIDs(ctx context.Context, workDir, idxPath string) (map[string]struct{}, *compactPackIndex, error) {
 	raw, err := os.ReadFile(idxPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if len(raw) < 8 {
-		return nil, fmt.Errorf("%w: truncated pack index %s", ErrCorruptObjectStore, idxPath)
+		return nil, nil, fmt.Errorf("%w: truncated pack index %s", ErrCorruptObjectStore, idxPath)
 	}
 	if raw[0] == 0xff && raw[1] == 't' && raw[2] == 'O' && raw[3] == 'c' && binary.BigEndian.Uint32(raw[4:8]) == 2 {
 		if len(raw) < 8+256*4+40 {
-			return nil, fmt.Errorf("%w: truncated v2 pack index %s", ErrCorruptObjectStore, idxPath)
+			return nil, nil, fmt.Errorf("%w: truncated v2 pack index %s", ErrCorruptObjectStore, idxPath)
 		}
+		var fanout [256]uint32
 		var prev uint32
 		for i := 0; i < 256; i++ {
 			cur := binary.BigEndian.Uint32(raw[8+i*4 : 12+i*4])
 			if cur < prev {
-				return nil, fmt.Errorf("%w: corrupt fanout table in %s", ErrCorruptObjectStore, idxPath)
+				return nil, nil, fmt.Errorf("%w: corrupt fanout table in %s", ErrCorruptObjectStore, idxPath)
 			}
+			fanout[i] = cur
 			prev = cur
 		}
 		count := int64(prev)
 		if int64(len(raw)) < int64(8+256*4)+count*28+40 {
-			return nil, fmt.Errorf("%w: truncated v2 pack index %s", ErrCorruptObjectStore, idxPath)
+			return nil, nil, fmt.Errorf("%w: truncated v2 pack index %s", ErrCorruptObjectStore, idxPath)
 		}
 		sum := sha1.Sum(raw[:len(raw)-20]) //nolint:gosec // Git pack index trailer is SHA-1
 		if !bytes.Equal(sum[:], raw[len(raw)-20:]) {
-			return nil, fmt.Errorf("%w: pack index checksum mismatch in %s", ErrCorruptObjectStore, idxPath)
+			return nil, nil, fmt.Errorf("%w: pack index checksum mismatch in %s", ErrCorruptObjectStore, idxPath)
+		}
+		if count > compactPackThreshold {
+			oidStart := 8 + 256*4
+			oidEnd := oidStart + int(count*20)
+			oidBytes := make([]byte, int(count*20))
+			copy(oidBytes, raw[oidStart:oidEnd])
+			return nil, &compactPackIndex{fanout: fanout, oids: oidBytes}, nil
 		}
 		oids := make(map[string]struct{}, int(count))
 		for i := int64(0); i < count; i++ {
 			off := 8 + 256*4 + int(i*20)
 			oids[hex.EncodeToString(raw[off:off+20])] = struct{}{}
 		}
-		return oids, nil
+		return oids, nil, nil
 	}
-	return listPackIndexOIDs(ctx, workDir, idxPath)
+	oids, err := listPackIndexOIDs(ctx, workDir, idxPath)
+	return oids, nil, err
 }

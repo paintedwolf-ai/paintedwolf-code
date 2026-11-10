@@ -129,8 +129,15 @@ func agentPolicySpecs(roots []string) []HardDenyWriteSpec {
 	if len(resolved) == 0 {
 		return nil
 	}
-	canon := make(map[string]string, len(resolved)*16)
+	memo := make(map[string]string, len(resolved)*16)
+	dirCanon := make(map[string]string, len(resolved)*4)
 	absent := make(map[string]bool, len(resolved)*16)
+	for _, root := range resolved {
+		memo[root] = root
+		if info, err := os.Lstat(root); err == nil && info.IsDir() {
+			dirCanon[root] = root
+		}
+	}
 	var out []HardDenyWriteSpec
 	for _, location := range protectedpath.AgentPolicyLocations() {
 		for _, root := range resolved {
@@ -138,45 +145,57 @@ func agentPolicySpecs(roots []string) []HardDenyWriteSpec {
 			case location.Name != "":
 				out = append(out, HardDenyWriteSpec{Layer: FloorAgentPolicy, Subpath: root, Regex: location.NameRegex()})
 			case location.File != "":
-				out = append(out, HardDenyWriteSpec{Layer: FloorAgentPolicy, Literal: resolveUnderCanonicalRoot(root, location.Path(root), canon, absent)})
+				out = append(out, HardDenyWriteSpec{Layer: FloorAgentPolicy, Literal: resolveUnderCanonicalRoot(root, location.Path(root), memo, dirCanon, absent)})
 			default:
-				out = append(out, HardDenyWriteSpec{Layer: FloorAgentPolicy, Subpath: resolveUnderCanonicalRoot(root, location.Path(root), canon, absent)})
+				out = append(out, HardDenyWriteSpec{Layer: FloorAgentPolicy, Subpath: resolveUnderCanonicalRoot(root, location.Path(root), memo, dirCanon, absent)})
 			}
 		}
 	}
 	return out
 }
 
-func resolveUnderCanonicalRoot(root, full string, canon map[string]string, absent map[string]bool) string {
-	if full == root {
-		return root
-	}
-	if c, ok := canon[full]; ok {
+func resolveUnderCanonicalRoot(root, full string, memo, dirCanon map[string]string, absent map[string]bool) string {
+	if c, ok := memo[full]; ok {
 		return c
 	}
 	parent, base := filepath.Dir(full), filepath.Base(full)
 	if parent == full {
-		return fspath.CanonicalPath(full)
+		c := fspath.CanonicalPath(full)
+		memo[full] = c
+		return c
 	}
-	parentCanon := resolveUnderCanonicalRoot(root, parent, canon, absent)
-	if parentCanon == "" {
-		canon[full] = ""
-		return ""
+	if parent != root {
+		_ = resolveUnderCanonicalRoot(root, parent, memo, dirCanon, absent)
 	}
-	candidate := filepath.Join(parentCanon, base)
 	if absent[parent] {
 		absent[full] = true
-		c := filepath.ToSlash(filepath.Clean(candidate))
-		canon[full] = c
+		c := filepath.ToSlash(filepath.Clean(full))
+		memo[full] = c
 		return c
 	}
-	if _, err := os.Lstat(candidate); os.IsNotExist(err) {
-		absent[full] = true
-		c := filepath.ToSlash(filepath.Clean(candidate))
-		canon[full] = c
+	parentCanon, ok := dirCanon[parent]
+	if !ok || parentCanon == "" {
+		c := fspath.CanonicalPath(full)
+		memo[full] = c
 		return c
 	}
-	c := fspath.CanonicalPath(candidate)
-	canon[full] = c
+	candidate := filepath.Join(parentCanon, base)
+	info, err := os.Lstat(candidate)
+	if err != nil {
+		if os.IsNotExist(err) {
+			absent[full] = true
+			c := filepath.ToSlash(filepath.Clean(candidate))
+			memo[full] = c
+			return c
+		}
+		c := fspath.CanonicalPath(full)
+		memo[full] = c
+		return c
+	}
+	c := fspath.CanonicalPath(full)
+	memo[full] = c
+	if info.IsDir() && c != "" {
+		dirCanon[full] = filepath.FromSlash(c)
+	}
 	return c
 }

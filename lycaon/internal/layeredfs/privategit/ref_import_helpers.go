@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -154,25 +155,138 @@ func saveImportJournalRecord(journalPath string, rec ImportJournalRecord) error 
 	return err
 }
 
-func verifyImportedTipsInTrunk(ctx context.Context, trunkDir string, planned map[string]string) error {
+func verifyImportedTipsInTrunk(ctx context.Context, store *RetainedObjectStore, trunkDir string, planned, initialRefs map[string]string) error {
 	if len(planned) == 0 {
 		return nil
 	}
-	args := []string{"rev-list", "--objects"}
+	var stdinBuf bytes.Buffer
 	seen := make(map[string]struct{})
 	for _, oid := range planned {
 		if _, ok := seen[oid]; !ok {
 			seen[oid] = struct{}{}
-			args = append(args, oid)
+			stdinBuf.WriteString(oid)
+			stdinBuf.WriteByte('\n')
 		}
 	}
-	out, code, err := gitexec.Run(ctx, trunkDir, args, gitexec.Opts{
+	if store != nil {
+		store.mu.Lock()
+		hasCompact := store.stock.compactObjectsTotal > 0
+		if hasCompact {
+			for _, baseOID := range initialRefs {
+				norm := strings.ToLower(strings.TrimSpace(baseOID))
+				if len(norm) == 40 && inCompactPackLocked(store, norm) {
+					if _, ok := seen[norm]; !ok {
+						stdinBuf.WriteString("^" + norm + "\n")
+					}
+				}
+			}
+		}
+		store.mu.Unlock()
+	}
+	out, code, err := gitexec.RunTo(ctx, trunkDir, []string{"rev-list", "--objects", "--stdin"}, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
-	})
+		Input:   stdinBuf.Bytes(),
+	}, io.Discard)
 	if err != nil || code != 0 {
 		return fmt.Errorf("%w: trunk object verification failed (exit %d): %v (%s)", ErrCorruptObjectStore, code, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+func findCompactStopCommitsLocked(ctx context.Context, s *RetainedObjectStore, tmpRepo string, tips []string) ([]string, error) {
+	var checkIn bytes.Buffer
+	for _, t := range tips {
+		checkIn.WriteString(t)
+		checkIn.WriteByte('\n')
+	}
+	out, code, err := gitexec.Run(ctx, tmpRepo, []string{"cat-file", "--batch-check"}, gitexec.Opts{
+		Profile: gitexec.ProfileHermetic,
+		Input:   checkIn.Bytes(),
+	})
+	if err != nil || code != 0 {
+		return nil, fmt.Errorf("cat-file --batch-check failed (exit %d): %v: %s", code, err, strings.TrimSpace(string(out)))
+	}
+	var commitTips []string
+	for _, line := range bytes.Split(out, []byte{'\n'}) {
+		fields := bytes.Fields(line)
+		if len(fields) >= 2 {
+			if string(fields[1]) == "missing" {
+				return nil, fmt.Errorf("missing object %s", string(fields[0]))
+			}
+			if string(fields[1]) == "commit" {
+				commitTips = append(commitTips, string(fields[0]))
+			}
+		}
+	}
+	if len(commitTips) == 0 {
+		return nil, nil
+	}
+	var revIn bytes.Buffer
+	for _, c := range commitTips {
+		revIn.WriteString(c)
+		revIn.WriteByte('\n')
+	}
+	pOut, pCode, pErr := gitexec.Run(ctx, tmpRepo, []string{"rev-list", "--parents", "-n", "64", "--stdin"}, gitexec.Opts{
+		Profile: gitexec.ProfileHermetic,
+		Input:   revIn.Bytes(),
+	})
+	if pErr != nil || pCode != 0 {
+		return nil, nil
+	}
+	seenStop := make(map[string]struct{})
+	var stops []string
+	for _, line := range bytes.Split(pOut, []byte{'\n'}) {
+		fields := bytes.Fields(line)
+		for i := 1; i < len(fields); i++ {
+			parent := strings.ToLower(string(fields[i]))
+			if len(parent) == 40 && inCompactPackLocked(s, parent) {
+				if _, ok := seenStop[parent]; !ok {
+					seenStop[parent] = struct{}{}
+					stops = append(stops, "^"+parent)
+				}
+			}
+		}
+	}
+	return stops, nil
+}
+
+type revListObjectSink struct {
+	rem  []byte
+	seen map[string]struct{}
+	oids []string
+}
+
+func (s *revListObjectSink) Write(p []byte) (int, error) {
+	s.rem = append(s.rem, p...)
+	for {
+		nl := bytes.IndexByte(s.rem, '\n')
+		if nl < 0 {
+			break
+		}
+		s.parseLine(s.rem[:nl])
+		s.rem = s.rem[nl+1:]
+	}
+	return len(p), nil
+}
+
+func (s *revListObjectSink) flush() {
+	if len(s.rem) > 0 {
+		s.parseLine(s.rem)
+		s.rem = nil
+	}
+}
+
+func (s *revListObjectSink) parseLine(line []byte) {
+	fields := bytes.Fields(line)
+	if len(fields) > 0 && len(fields[0]) == 40 {
+		oid := strings.ToLower(string(fields[0]))
+		if isHexString(oid) {
+			if _, ok := s.seen[oid]; !ok {
+				s.seen[oid] = struct{}{}
+				s.oids = append(s.oids, oid)
+			}
+		}
+	}
 }
 
 func cloneStringMap(m map[string]string) map[string]string {

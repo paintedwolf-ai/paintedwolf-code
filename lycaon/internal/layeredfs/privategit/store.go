@@ -22,13 +22,15 @@ type leaseRecord struct {
 }
 
 type storeStock struct {
-	packOIDs        map[string]map[string]struct{}
-	packSizes       map[string]int64
-	looseSizes      map[string]int64
-	logicalOIDRefs  map[string]int
-	looseBytesTotal int64
-	packBytesTotal  int64
-	startupDuration time.Duration
+	packOIDs            map[string]map[string]struct{}
+	compactPacks        map[string]*compactPackIndex
+	packSizes           map[string]int64
+	looseSizes          map[string]int64
+	logicalOIDRefs      map[string]int
+	compactObjectsTotal int64
+	looseBytesTotal     int64
+	packBytesTotal      int64
+	startupDuration     time.Duration
 }
 
 // RetainedObjectStore manages the engine-retained content-addressed Git object store (#1671).
@@ -92,6 +94,7 @@ func NewRetainedObjectStoreContext(ctx context.Context, rootDir string) (*Retain
 		leases:     make(map[string]*leaseRecord),
 		stock: storeStock{
 			packOIDs:       make(map[string]map[string]struct{}),
+			compactPacks:   make(map[string]*compactPackIndex),
 			packSizes:      make(map[string]int64),
 			looseSizes:     make(map[string]int64),
 			logicalOIDRefs: make(map[string]int),
@@ -121,7 +124,7 @@ func (s *RetainedObjectStore) ObjectsDir() string {
 // Metrics returns an O(1) snapshot of the store's cumulative and retained stock counters.
 func (s *RetainedObjectStore) Metrics() StoreMetrics {
 	s.mu.Lock()
-	retainedObjects := int64(len(s.stock.logicalOIDRefs))
+	retainedObjects := int64(len(s.stock.logicalOIDRefs)) + s.stock.compactObjectsTotal
 	retainedBytes := s.stock.looseBytesTotal + s.stock.packBytesTotal
 	startupDur := s.stock.startupDuration
 	s.mu.Unlock()
@@ -189,9 +192,19 @@ func createStoreLease(s *RetainedObjectStore, kind LeaseKind, holder string, oid
 				packSet[packName] = struct{}{}
 			}
 		}
+		for packName, comp := range s.stock.compactPacks {
+			if comp.containsHex(oid) {
+				packSet[packName] = struct{}{}
+			}
+		}
 	}
 	for packName := range s.stock.packOIDs {
 		if len(s.stock.packOIDs[packName]) == 0 {
+			packSet[packName] = struct{}{}
+		}
+	}
+	for packName, comp := range s.stock.compactPacks {
+		if comp.count() == 0 {
 			packSet[packName] = struct{}{}
 		}
 	}

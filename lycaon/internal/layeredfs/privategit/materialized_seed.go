@@ -90,11 +90,10 @@ func ensureViewRepoInitialized(
 	view.repos[repoRel] = repo
 
 	if repoRel == "." {
-		gitmodulesPath := filepath.Join(targetWT, ".gitmodules")
-		if !view.materialized {
-			gitmodulesPath = filepath.Join(view.trunkDir, ".gitmodules")
+		subRels := repo.submoduleRels
+		if view.materialized && len(subRels) == 0 {
+			subRels = parseSubmodulePaths(filepath.Join(targetWT, ".gitmodules"))
 		}
-		subRels := parseSubmodulePaths(gitmodulesPath)
 		for _, subRel := range subRels {
 			subWT := filepath.Join(view.worktreeDir, filepath.FromSlash(subRel))
 			subRepo, sErr := initializePrivateRepo(ctx, mgr, view, subRel, subWT)

@@ -19,6 +19,7 @@ type initializedRepo struct {
 	leaseID        string
 	initialHeadOID string
 	initialRefs    map[string]string
+	submoduleRels  []string
 	metrics        InitMetrics
 }
 
@@ -154,17 +155,19 @@ func initializePrivateRepo(
 		}
 	}
 
-	var initHeadOID string
-	revDir := targetWorktreeDir
-	revArgs := []string{"rev-parse", "--verify", "HEAD"}
-	if kernelMounted {
-		revDir = filepath.Dir(finalGitDir)
-		revArgs = []string{"--git-dir=" + finalGitDir, "rev-parse", "--verify", "HEAD"}
-	}
-	if hOut, hCode, hErr := gitexec.Run(ctx, revDir, revArgs, gitexec.Opts{
-		Profile: gitexec.ProfileHermetic,
-	}); hErr == nil && hCode == 0 {
-		initHeadOID = strings.TrimSpace(string(hOut))
+	_, initHeadOID, _, _ := resolveHeadState(finalGitDir)
+	if initHeadOID == "" {
+		revDir := targetWorktreeDir
+		revArgs := []string{"rev-parse", "--verify", "HEAD"}
+		if kernelMounted {
+			revDir = filepath.Dir(finalGitDir)
+			revArgs = []string{"--git-dir=" + finalGitDir, "rev-parse", "--verify", "HEAD"}
+		}
+		if hOut, hCode, hErr := gitexec.Run(ctx, revDir, revArgs, gitexec.Opts{
+			Profile: gitexec.ProfileHermetic,
+		}); hErr == nil && hCode == 0 {
+			initHeadOID = strings.TrimSpace(string(hOut))
+		}
 	}
 
 	importMetrics.Attempts = attempts
@@ -177,6 +180,7 @@ func initializePrivateRepo(
 		leaseID:        leaseID,
 		initialHeadOID: initHeadOID,
 		initialRefs:    initRefs,
+		submoduleRels:  layout.submoduleRels,
 		metrics:        importMetrics,
 	}, nil
 }

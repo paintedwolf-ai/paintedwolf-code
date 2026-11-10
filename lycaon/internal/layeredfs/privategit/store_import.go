@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -41,8 +42,11 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 	if err := finalizeInterruptedPackRetirements(ctx, packDstDir); err != nil {
 		return InitMetrics{}, nil, err
 	}
-	preexistingPackBases := make(map[string]struct{}, len(s.stock.packOIDs))
+	preexistingPackBases := make(map[string]struct{}, len(s.stock.packOIDs)+len(s.stock.compactPacks))
 	for base := range s.stock.packOIDs {
+		preexistingPackBases[base] = struct{}{}
+	}
+	for base := range s.stock.compactPacks {
 		preexistingPackBases[base] = struct{}{}
 	}
 	pEntries, rErr := os.ReadDir(packDstDir)
@@ -193,7 +197,7 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 		packNames = append(packNames, pNames...)
 	}
 
-	reachable, err := verifyStoreConnectivity(ctx, s.objectsDir, tipOIDs)
+	reachable, err := verifyStoreConnectivityForStore(ctx, s, s.objectsDir, tipOIDs)
 	if err != nil {
 		return InitMetrics{}, nil, errors.Join(fmt.Errorf("%w: %v", ErrCorruptObjectStore, err), rollback())
 	}
@@ -221,53 +225,122 @@ func importStoreLooseFromDir(ctx context.Context, s *RetainedObjectStore, srcDir
 		}
 		return nil, err
 	}
-	var added []string
+	var fanouts []string
 	for _, fanout := range entries {
 		name := fanout.Name()
-		if !fanout.IsDir() || len(name) != 2 || !isHexString(name) {
-			continue
+		if fanout.IsDir() && len(name) == 2 && isHexString(name) {
+			fanouts = append(fanouts, name)
 		}
-		subSrc := filepath.Join(srcDir, name)
-		subDst := filepath.Join(s.objectsDir, strings.ToLower(name))
-		files, err := os.ReadDir(subSrc)
-		if err != nil {
-			return added, err
-		}
-		for _, f := range files {
-			if f.IsDir() || len(f.Name()) != 38 || !isHexString(f.Name()) {
-				continue
+	}
+	if len(fanouts) == 0 {
+		return nil, nil
+	}
+	type looseCand struct {
+		oid, srcFile, subDst, dstFile string
+	}
+	shardFiles := make([][]looseCand, len(fanouts))
+	var readErr error
+	var errMu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	for i, name := range fanouts {
+		wg.Add(1)
+		go func(idx int, shard string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			subSrc := filepath.Join(srcDir, shard)
+			subDst := filepath.Join(s.objectsDir, strings.ToLower(shard))
+			files, rErr := os.ReadDir(subSrc)
+			if rErr != nil {
+				errMu.Lock()
+				if readErr == nil {
+					readErr = rErr
+				}
+				errMu.Unlock()
+				return
 			}
-			oid := strings.ToLower(name + f.Name())
-			srcFile := filepath.Join(subSrc, f.Name())
-			dstFile := filepath.Join(subDst, strings.ToLower(f.Name()))
-			info, sErr := os.Stat(srcFile)
-			if sErr != nil {
-				return added, sErr
+			var list []looseCand
+			for _, f := range files {
+				if !f.IsDir() && len(f.Name()) == 38 && isHexString(f.Name()) {
+					list = append(list, looseCand{
+						oid:     strings.ToLower(shard + f.Name()),
+						srcFile: filepath.Join(subSrc, f.Name()),
+						subDst:  subDst,
+						dstFile: filepath.Join(subDst, strings.ToLower(f.Name())),
+					})
+				}
 			}
-			if dInfo, dErr := os.Stat(dstFile); dErr == nil {
+			shardFiles[idx] = list
+		}(i, name)
+	}
+	wg.Wait()
+	if readErr != nil {
+		return nil, readErr
+	}
+	var toCopy []looseCand
+	for _, list := range shardFiles {
+		for _, c := range list {
+			if dInfo, dErr := os.Stat(c.dstFile); dErr == nil {
 				m.ObjectsReused++
-				m.BytesReused += info.Size()
-				if _, known := s.stock.looseSizes[oid]; !known {
-					looseAddedSizes[oid] = dInfo.Size()
+				m.BytesReused += dInfo.Size()
+				if _, known := s.stock.looseSizes[c.oid]; !known {
+					looseAddedSizes[c.oid] = dInfo.Size()
 				}
 				continue
 			}
-			if err := os.MkdirAll(subDst, 0o755); err != nil {
-				return added, err
+			if err := os.MkdirAll(c.subDst, 0o755); err != nil {
+				return nil, err
 			}
-			n, published, cErr := copyFileAtomicReadOnly(ctx, srcFile, dstFile)
+			toCopy = append(toCopy, c)
+		}
+	}
+	if len(toCopy) == 0 {
+		return nil, nil
+	}
+	if ctx.Value(gcTestHooksKey{}) != nil || len(toCopy) == 1 {
+		var added []string
+		for _, c := range toCopy {
+			n, published, cErr := copyFileAtomicReadOnly(ctx, c.srcFile, c.dstFile)
 			if published {
-				added = append(added, dstFile)
+				added = append(added, c.dstFile)
 			}
 			if cErr != nil {
 				return added, cErr
 			}
-			looseAddedSizes[oid] = n
+			looseAddedSizes[c.oid] = n
 			m.ObjectsImported++
 			m.BytesImported += n
 		}
+		return added, nil
 	}
-	return added, nil
+	var added []string
+	var copyErr error
+	for _, c := range toCopy {
+		wg.Add(1)
+		go func(cand looseCand) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			n, published, cErr := copyFileAtomicReadOnly(ctx, cand.srcFile, cand.dstFile)
+			errMu.Lock()
+			defer errMu.Unlock()
+			if published {
+				added = append(added, cand.dstFile)
+			}
+			if cErr != nil {
+				if copyErr == nil {
+					copyErr = cErr
+				}
+				return
+			}
+			looseAddedSizes[cand.oid] = n
+			m.ObjectsImported++
+			m.BytesImported += n
+		}(c)
+	}
+	wg.Wait()
+	return added, copyErr
 }
 
 func importStorePacksFromDir(ctx context.Context, s *RetainedObjectStore, srcDir string, m *InitMetrics) ([]string, []string, []string, error) {
@@ -327,7 +400,9 @@ func importStorePacksFromDir(ctx context.Context, s *RetainedObjectStore, srcDir
 		m.BytesImported += n
 	}
 	for _, base := range packNames {
-		if _, exists := s.stock.packOIDs[base]; !exists {
+		_, hasFull := s.stock.packOIDs[base]
+		_, hasCompact := s.stock.compactPacks[base]
+		if !hasFull && !hasCompact {
 			packPath := filepath.Join(packDstDir, base+".pack")
 			idxPath := filepath.Join(packDstDir, base+".idx")
 			pInfo, pErr := os.Stat(packPath)
@@ -335,12 +410,12 @@ func importStorePacksFromDir(ctx context.Context, s *RetainedObjectStore, srcDir
 			if pErr != nil || iErr != nil {
 				return added, packNames, addedPackBases, fmt.Errorf("%w: missing pack or index for %s", ErrCorruptObjectStore, base)
 			}
-			oids, err := parsePackAndIndexOIDs(ctx, s.rootDir, packPath, idxPath, pInfo.Size())
+			oids, comp, err := parsePackAndIndexOIDs(ctx, s.rootDir, packPath, idxPath, pInfo.Size())
 			if err != nil {
 				return added, packNames, addedPackBases, fmt.Errorf("%w: verify pack %s: %v", ErrCorruptObjectStore, base, err)
 			}
 			addedPackBases = append(addedPackBases, base)
-			recordPackLocked(s, base, pInfo.Size()+iInfo.Size(), oids)
+			recordPackLocked(s, base, pInfo.Size()+iInfo.Size(), oids, comp)
 		}
 	}
 	return added, packNames, addedPackBases, nil
@@ -368,22 +443,25 @@ func listPackIndexOIDs(ctx context.Context, workDir, idxPath string) (map[string
 	return res, nil
 }
 
+func inCompactPackLocked(s *RetainedObjectStore, oid string) bool {
+	if s == nil {
+		return false
+	}
+	for _, comp := range s.stock.compactPacks {
+		if comp.containsHex(oid) {
+			return true
+		}
+	}
+	return false
+}
+
 func verifyStoreConnectivity(ctx context.Context, objectsDir string, tipOIDs []string) ([]string, error) {
+	return verifyStoreConnectivityForStore(ctx, nil, objectsDir, tipOIDs)
+}
+
+func verifyStoreConnectivityForStore(ctx context.Context, s *RetainedObjectStore, objectsDir string, tipOIDs []string) ([]string, error) {
 	if len(tipOIDs) == 0 {
 		return nil, nil
-	}
-	tmpRepo, err := os.MkdirTemp(filepath.Dir(objectsDir), "verify-repo-*")
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = os.RemoveAll(tmpRepo) }()
-
-	if _, code, err := gitexec.Run(ctx, tmpRepo, []string{"init", "--bare", "-q"}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); err != nil || code != 0 {
-		return nil, fmt.Errorf("init bare verify repo: %v", err)
-	}
-	altFile := filepath.Join(tmpRepo, "objects", "info", "alternates")
-	if err := os.WriteFile(altFile, []byte(objectsDir+"\n"), 0o600); err != nil {
-		return nil, err
 	}
 	var uniqueTips []string
 	seenTip := make(map[string]struct{}, len(tipOIDs))
@@ -399,27 +477,68 @@ func verifyStoreConnectivity(ctx context.Context, objectsDir string, tipOIDs []s
 	if len(uniqueTips) == 0 {
 		return nil, nil
 	}
-	args := append([]string{"rev-list", "--objects"}, uniqueTips...)
-	out, code, err := gitexec.Run(ctx, tmpRepo, args, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+	tmpRepo, err := os.MkdirTemp(filepath.Dir(objectsDir), "verify-repo-*")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = os.RemoveAll(tmpRepo) }()
+
+	for _, sub := range []string{"objects/info", "objects/pack", "refs"} {
+		if err := os.MkdirAll(filepath.Join(tmpRepo, sub), 0o755); err != nil {
+			return nil, err
+		}
+	}
+	if err := os.WriteFile(filepath.Join(tmpRepo, "HEAD"), []byte("ref: refs/heads/main\n"), 0o600); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(tmpRepo, "config"), []byte("[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = true\n"), 0o600); err != nil {
+		return nil, err
+	}
+	altFile := filepath.Join(tmpRepo, "objects", "info", "alternates")
+	if err := os.WriteFile(altFile, []byte(objectsDir+"\n"), 0o600); err != nil {
+		return nil, err
+	}
+
+	revsToWalk := uniqueTips
+	if s != nil && s.stock.compactObjectsTotal > 0 {
+		var notInCompact []string
+		for _, oid := range uniqueTips {
+			if !inCompactPackLocked(s, oid) {
+				notInCompact = append(notInCompact, oid)
+			}
+		}
+		if len(notInCompact) == 0 {
+			if out, code, cErr := gitexec.Run(ctx, tmpRepo, []string{"cat-file", "-e", uniqueTips[0]}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); cErr != nil || code != 0 {
+				return nil, fmt.Errorf("cat-file verify failed (exit %d): %v: %s", code, cErr, strings.TrimSpace(string(out)))
+			}
+			return uniqueTips, nil
+		}
+		stops, sErr := findCompactStopCommitsLocked(ctx, s, tmpRepo, notInCompact)
+		if sErr != nil {
+			return nil, sErr
+		}
+		revsToWalk = append(append([]string(nil), notInCompact...), stops...)
+	}
+
+	var stdinBuf bytes.Buffer
+	for _, rev := range revsToWalk {
+		stdinBuf.WriteString(rev)
+		stdinBuf.WriteByte('\n')
+	}
+	revSink := &revListObjectSink{
+		seen: make(map[string]struct{}, len(uniqueTips)),
+		oids: append([]string(nil), uniqueTips...),
+	}
+	for _, t := range uniqueTips {
+		revSink.seen[t] = struct{}{}
+	}
+	out, code, err := gitexec.RunTo(ctx, tmpRepo, []string{"rev-list", "--objects", "--stdin"}, gitexec.Opts{
+		Profile: gitexec.ProfileHermetic,
+		Input:   stdinBuf.Bytes(),
+	}, revSink)
+	revSink.flush()
 	if err != nil || code != 0 {
 		return nil, fmt.Errorf("rev-list connectivity failed (exit %d): %v: %s", code, err, strings.TrimSpace(string(out)))
 	}
-	var reachable []string
-	seen := make(map[string]struct{})
-	for _, line := range bytes.Split(out, []byte{'\n'}) {
-		fields := bytes.Fields(line)
-		if len(fields) > 0 && len(fields[0]) == 40 {
-			oid := strings.ToLower(string(fields[0]))
-			if _, ok := seen[oid]; !ok {
-				seen[oid] = struct{}{}
-				reachable = append(reachable, oid)
-			}
-		}
-	}
-	for _, tip := range uniqueTips {
-		if _, ok := seen[tip]; !ok {
-			reachable = append(reachable, tip)
-		}
-	}
-	return reachable, nil
+	return revSink.oids, nil
 }

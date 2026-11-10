@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 type sourceRepoLayout struct {
@@ -47,6 +48,9 @@ func resolveSourceRepoLayout(
 	allowed := make([]string, 0, len(authorizedDirs)+1)
 	allowed = append(allowed, canonicalRoot)
 	for _, a := range authorizedDirs {
+		if a == rootTrunkPath || a == canonicalRoot {
+			continue
+		}
 		if c := canonicalCleanPath(a); c != "" {
 			allowed = append(allowed, c)
 		}
@@ -57,7 +61,11 @@ func resolveSourceRepoLayout(
 	var wtName string
 
 	if linfo.IsDir() {
-		gitDir = canonicalCleanPath(dotGit)
+		if repoRel == "." || repoRel == "" {
+			gitDir = dotGit
+		} else {
+			gitDir = canonicalCleanPath(dotGit)
+		}
 		commonDir = gitDir
 	} else if linfo.Mode().IsRegular() {
 		raw, rErr := os.ReadFile(dotGit)
@@ -91,11 +99,23 @@ func resolveSourceRepoLayout(
 		return sourceRepoLayout{}, ErrUnauthorizedGitTarget
 	}
 
-	objDirs, err := collectAuthorizedObjectDirs(commonDir, gitDir, allowed, forbiddenDirs)
-	if err != nil {
-		return sourceRepoLayout{}, err
+	var objDirs []string
+	var objErr error
+	var subRels []string
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		objDirs, objErr = collectAuthorizedObjectDirs(commonDir, gitDir, allowed, forbiddenDirs)
+	}()
+	go func() {
+		defer wg.Done()
+		subRels = parseSubmodulePaths(filepath.Join(worktreeDir, ".gitmodules"))
+	}()
+	wg.Wait()
+	if objErr != nil {
+		return sourceRepoLayout{}, objErr
 	}
-	subRels := parseSubmodulePaths(filepath.Join(worktreeDir, ".gitmodules"))
 	return sourceRepoLayout{
 		worktreeDir:   worktreeDir,
 		gitDir:        gitDir,

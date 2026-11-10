@@ -3,11 +3,13 @@ package confine_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -116,13 +118,22 @@ func TestAgentPolicySourceReleasePreservesCurrentFloor(t *testing.T) {
 
 func TestAgentPolicySpecsResolveSymlinkAndDanglingSymlinkPolicyDirs(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	root := t.TempDir()
+	rootSymlink := t.TempDir()
 	extDir := t.TempDir()
 	danglingTarget := filepath.Join(t.TempDir(), "missing-agents-target")
-	testutil.FailErr(t, "symlink .paintedwolf", os.Symlink(extDir, filepath.Join(root, ".paintedwolf")))
-	testutil.FailErr(t, "dangling symlink .agents", os.Symlink(danglingTarget, filepath.Join(root, ".agents")))
+	testutil.FailErr(t, "symlink .paintedwolf", os.Symlink(extDir, filepath.Join(rootSymlink, ".paintedwolf")))
+	testutil.FailErr(t, "dangling symlink .agents", os.Symlink(danglingTarget, filepath.Join(rootSymlink, ".agents")))
 
-	c := confine.Confinement{Roots: []string{root, extDir}, Network: confine.NetworkDeny}
+	rootNested := t.TempDir()
+	testutil.FailErr(t, "mkdir .paintedwolf", os.MkdirAll(filepath.Join(rootNested, ".paintedwolf"), 0o700))
+	nestedHooksTarget := filepath.Join(t.TempDir(), "missing-hooks-target")
+	testutil.FailErr(t, "dangling symlink hooks", os.Symlink(nestedHooksTarget, filepath.Join(rootNested, ".paintedwolf", "hooks")))
+	testutil.FailErr(t, "regular file .agents collision", os.WriteFile(filepath.Join(rootNested, ".agents"), []byte("not-a-dir"), 0o600))
+
+	rootAbsent := t.TempDir()
+
+	roots := []string{rootSymlink, extDir, rootNested, rootAbsent}
+	c := confine.Confinement{Roots: roots, Network: confine.NetworkDeny}
 	_, err := confine.BuildSeatbeltProfile(c)
 	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	boundary := confine.BoundaryOf(&c)
@@ -134,5 +145,32 @@ func TestAgentPolicySpecsResolveSymlinkAndDanglingSymlinkPolicyDirs(t *testing.T
 	resolvedDanglingSkills := filepath.Join(fspath.CanonicalPath(danglingTarget), "skills", "SKILL.md")
 	if got := boundary.Filesystem.Verdict(confine.AccessWrite, resolvedDanglingSkills); got.Allowed || got.Layer != confine.FloorAgentPolicy {
 		t.Fatalf("dangling .agents/skills write verdict = %+v, want FloorAgentPolicy", got)
+	}
+
+	var gotFloor []confine.HardDenyWriteSpec
+	for _, spec := range c.HardDenyWriteSpecs() {
+		if spec.Layer == confine.FloorAgentPolicy {
+			gotFloor = append(gotFloor, spec)
+		}
+	}
+	canonRoots := make([]string, 0, len(roots))
+	for _, r := range roots {
+		canonRoots = append(canonRoots, fspath.CanonicalPath(r))
+	}
+	var wantFloor []confine.HardDenyWriteSpec
+	for _, location := range protectedpath.AgentPolicyLocations() {
+		for _, r := range canonRoots {
+			switch {
+			case location.Name != "":
+				wantFloor = append(wantFloor, confine.HardDenyWriteSpec{Layer: confine.FloorAgentPolicy, Subpath: r, Regex: location.NameRegex()})
+			case location.File != "":
+				wantFloor = append(wantFloor, confine.HardDenyWriteSpec{Layer: confine.FloorAgentPolicy, Literal: fspath.CanonicalPath(location.Path(r))})
+			default:
+				wantFloor = append(wantFloor, confine.HardDenyWriteSpec{Layer: confine.FloorAgentPolicy, Subpath: fspath.CanonicalPath(location.Path(r))})
+			}
+		}
+	}
+	if !reflect.DeepEqual(gotFloor, wantFloor) {
+		t.Fatalf("FloorAgentPolicy specs mismatch direct fspath.CanonicalPath:\ngot:  %+v\nwant: %+v", gotFloor, wantFloor)
 	}
 }

@@ -37,6 +37,9 @@ func (s *RetainedObjectStore) HasObject(oid string) bool {
 		base = strings.TrimSuffix(strings.TrimSuffix(base, ".pack"), ".idx")
 		s.mu.Lock()
 		_, ok := s.stock.packOIDs[base]
+		if !ok {
+			_, ok = s.stock.compactPacks[base]
+		}
 		s.mu.Unlock()
 		return ok
 	}
@@ -50,6 +53,12 @@ func (s *RetainedObjectStore) HasObject(oid string) bool {
 	}
 	for _, members := range s.stock.packOIDs {
 		if _, ok := members[oid]; ok {
+			s.mu.Unlock()
+			return true
+		}
+	}
+	for _, comp := range s.stock.compactPacks {
+		if comp.containsHex(oid) {
 			s.mu.Unlock()
 			return true
 		}
@@ -87,6 +96,11 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 			leasedOIDs[oid] = struct{}{}
 			for packName, members := range s.stock.packOIDs {
 				if _, ok := members[oid]; ok {
+					leasedPacks[packName] = struct{}{}
+				}
+			}
+			for packName, comp := range s.stock.compactPacks {
+				if comp.containsHex(oid) {
 					leasedPacks[packName] = struct{}{}
 				}
 			}
@@ -431,14 +445,26 @@ func copyWritableObjectFile(src, dst string) error {
 }
 
 func copyFileAtomicReadOnly(ctx context.Context, src, dst string) (int64, bool, error) {
+	tmp := fmt.Sprintf("%s.tmp.%d", dst, os.Getpid())
+	_ = os.Remove(tmp)
+	if info, sErr := os.Lstat(src); sErr == nil && info.Mode().IsRegular() && info.Mode().Perm() == 0o444 && info.Size() >= 64<<20 {
+		if lErr := os.Link(src, tmp); lErr == nil {
+			if rErr := os.Rename(tmp, dst); rErr == nil {
+				if syncErr := syncStoreDirectoryCtx(ctx, filepath.Dir(dst)); syncErr != nil {
+					return 0, true, syncErr
+				}
+				return info.Size(), true, nil
+			}
+			_ = os.Remove(tmp)
+		}
+	}
+
 	in, err := os.Open(src)
 	if err != nil {
 		return 0, false, err
 	}
 	defer func() { _ = in.Close() }()
 
-	tmp := fmt.Sprintf("%s.tmp.%d", dst, os.Getpid())
-	_ = os.Remove(tmp)
 	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return 0, false, err

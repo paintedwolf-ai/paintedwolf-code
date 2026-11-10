@@ -138,16 +138,12 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 		if raw == "" {
 			continue
 		}
-		branchRel := raw
+		branchRel, displayPath, err := promote.BranchRel(primary.ID, raw)
+		if err != nil {
+			continue
+		}
 		abs := filepath.Join(promote.BranchRoot, filepath.FromSlash(branchRel))
 		info, err := os.Stat(abs)
-		if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
-			if mapped, _, mErr := promote.BranchRel(primary.ID, raw); mErr == nil {
-				branchRel = mapped
-				abs = filepath.Join(promote.BranchRoot, filepath.FromSlash(branchRel))
-				info, err = os.Stat(abs)
-			}
-		}
 		if err != nil {
 			if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 				continue
@@ -155,7 +151,7 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 			return nil, err
 		}
 		if !info.IsDir() {
-			qualifyBranchRel(promote, primary, branchRel, add)
+			add(displayPath)
 			continue
 		}
 		err = filepath.WalkDir(abs, func(walked string, d fs.DirEntry, walkErr error) error {

@@ -131,7 +131,7 @@ func importRefsToTrunk(ctx context.Context, m *Manager, req RefImportRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	if err := verifyImportedTipsInTrunk(ctx, req.TrunkDir, planned); err != nil {
+	if err := verifyImportedTipsInTrunk(ctx, m.store, req.TrunkDir, planned, cp.InitialRefs); err != nil {
 		return nil, err
 	}
 
