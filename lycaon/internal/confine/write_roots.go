@@ -10,24 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
-// PathWithinWriteRoots matches existing and not-yet-created paths.
-func PathWithinWriteRoots(path string, writeRoots []string) bool {
-	p := fspath.CanonicalPath(path)
-	if p == "" {
-		return false
-	}
-	for _, root := range writeRoots {
-		r := fspath.CanonicalPath(root)
-		if r == "" {
-			continue
-		}
-		if PathAtOrUnder(p, r) {
-			return true
-		}
-	}
-	return false
-}
-
 func isWindowsAbsPath(path string) bool {
 	if len(path) < 2 {
 		return false

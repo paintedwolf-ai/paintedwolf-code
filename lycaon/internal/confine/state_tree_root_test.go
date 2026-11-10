@@ -65,7 +65,7 @@ func TestStateTreeAncestorsExcludedFromDefaultRoots(t *testing.T) {
 			t.Setenv(configdir.EnvConfigDir, state)
 			roots, err := confine.WriteRootsForBoundary("", []string{t.TempDir()}, nil, "")
 			testutil.FailErr(t, "admit roots without unsafe defaults", err)
-			if confine.PathWithinWriteRoots(state, roots) {
+			if confine.PathWithinRoots(state, roots) {
 				t.Fatalf("default root still covers state: %v", roots)
 			}
 			if _, err := os.Stat(state); !errors.Is(err, os.ErrNotExist) {

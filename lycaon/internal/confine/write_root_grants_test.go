@@ -21,7 +21,7 @@ func TestGrantedWriteRootsSourceUnionedIntoWriteRoots(t *testing.T) {
 
 	roots, err := WriteRootsForBoundary("", nil, nil, "")
 	testutil.FailErr(t, "admit write roots", err)
-	if !PathWithinWriteRoots(granted, roots) {
+	if !PathWithinRoots(granted, roots) {
 		t.Fatalf("durable write_root grant %q not unioned into write roots: %v", granted, roots)
 	}
 }
@@ -39,13 +39,13 @@ func TestGrantedWriteRootsSourceReadLive(t *testing.T) {
 
 	roots, err := WriteRootsForBoundary("", nil, nil, "")
 	testutil.FailErr(t, "admit initial roots", err)
-	if PathWithinWriteRoots(granted, roots) {
+	if PathWithinRoots(granted, roots) {
 		t.Fatal("grant must not be present before it is enabled")
 	}
 	enabled = true
 	roots, err = WriteRootsForBoundary("", nil, nil, "")
 	testutil.FailErr(t, "admit updated roots", err)
-	if !PathWithinWriteRoots(granted, roots) {
+	if !PathWithinRoots(granted, roots) {
 		t.Fatal("grant must be picked up live on the next resolve (Revoke drops it likewise)")
 	}
 }
@@ -491,7 +491,7 @@ func TestWriteRootsForBoundaryIncludesSessionScratch(t *testing.T) {
 	scratchDir := filepath.Join(t.TempDir(), "scratch", "sess-123")
 	roots, err := WriteRootsForBoundary("", nil, nil, scratchDir)
 	testutil.FailErr(t, "admit write roots", err)
-	if !PathWithinWriteRoots(scratchDir, roots) {
+	if !PathWithinRoots(scratchDir, roots) {
 		t.Fatalf("session scratch root %q not unioned into write roots: %v", scratchDir, roots)
 	}
 }
@@ -509,7 +509,7 @@ func TestWriteRootsForBoundaryIncludesDarwinConfstrRootsWithOverriddenTMPDIR(t *
 	testutil.FailErr(t, "admit write roots", err)
 	for _, root := range userRoots {
 		probe := filepath.Join(root, "xcrun_db-probe")
-		if !PathWithinWriteRoots(probe, roots) {
+		if !PathWithinRoots(probe, roots) {
 			t.Fatalf("darwin confstr root child %q not within WriteRootsForBoundary when TMPDIR is overridden: %v", probe, roots)
 		}
 	}
