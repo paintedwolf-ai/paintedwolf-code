@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
@@ -80,6 +81,9 @@ func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted, sourceConflic
 
 func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceConflict bool) {
 	t.Helper()
+	started := time.Now()
+	trace := func(step string) { t.Logf("lifecycle phase=%s step=%s elapsed=%s", phase, step, time.Since(started)) }
+	trace("start")
 	if root == "" {
 		t.Fatal("missing isolated lifecycle root")
 	}
@@ -132,7 +136,9 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 			testutil.FailErr(t, "prepared source Git fixture", err)
 		}
 		testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", source)
+		trace("claim-start")
 		task := fixture.claim(t)
+		trace("claim-complete")
 		snap, _, ok := WorkerClaimWorkspaceState(task.ID)
 		expected := adapter.PreparationMaterialized
 		if mounted {
@@ -145,7 +151,9 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		gittest.Run(t, task.WorkspaceRoot, "add", "main.go")
 		gittest.Run(t, task.WorkspaceRoot, "commit", "-m", "worker commit")
 		commit := strings.TrimSpace(gittest.Run(t, task.WorkspaceRoot, "rev-parse", "HEAD"))
+		trace("git-commit-complete")
 		completed := fixture.completeWithChange(t, task, func() {})
+		trace("checkpoint-complete")
 		_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
 		testutil.FailErr(t, "checkpoint", err)
 		if !published || manifest.WorkerID != task.ID {
@@ -164,7 +172,9 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if len(fields) != 2 {
 		t.Fatalf("invalid phase receipt: %q", raw)
 	}
+	trace("recovery-start")
 	reports, err := manager.RecoverWorkerViews(t.Context())
+	trace("recovery-returned")
 	testutil.FailErr(t, "recover worker views in fresh process", err)
 	recoveredCheckpoint := ""
 	for _, report := range reports {
@@ -211,8 +221,11 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if sourceConflict {
 		assertRecoveredSourceConflict(t, service, task, source, manifest.CheckpointID, fields[1])
 	}
+	trace("source-outage-start")
 	assertWorkerSourceOutageRetry(t, service, task, source)
+	trace("source-ready-promotion-start")
 	result, err := service.PromoteOverlay(t.Context(), "", task.ID, api.PromoteOverlayInput{})
+	trace("promotion-returned")
 	testutil.FailErr(t, "promote recovered checkpoint", err)
 	if result.Status != api.WorkerMergeStatusMerged {
 		t.Fatalf("promotion = %+v", result)
