@@ -203,6 +203,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	if sourceConflict {
 		assertRecoveredSourceConflict(t, service, task, source, manifest.CheckpointID, fields[1])
 	}
+	assertWorkerSourceOutageRetry(t, service, task, source)
 	result, err := service.PromoteOverlay(t.Context(), "", task.ID, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote recovered checkpoint", err)
 	if result.Status != api.WorkerMergeStatusMerged {
