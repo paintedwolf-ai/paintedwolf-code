@@ -75,7 +75,7 @@ func (t *WcTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCo
 		}
 		fullPath := resolved.Abs
 		if enginepaths.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
-			return "", fmt.Errorf("%w: %q", sandbox.ErrOutsideReadScope, relPath)
+			return "", &sandbox.ScopeError{Path: relPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
 		}
 		relSlash := filepath.ToSlash(resolved.DisplayPath)
 		info, err := os.Stat(fullPath)

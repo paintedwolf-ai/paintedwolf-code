@@ -112,8 +112,9 @@ func TestCompileAndAssertReadScopeControlPlaneAndSessionScratch(t *testing.T) {
 		if cfgScope.Filter(rel, false) {
 			t.Fatalf("CompileReadScope on control dir allowed %q", rel)
 		}
-		if err := boundary.AssertReadScope(ctx, cfgDir, rel, "implement"); !errors.Is(err, ErrOutsideReadScope) {
-			t.Fatalf("AssertReadScope(cfgDir, %q) = %v, want ErrOutsideReadScope", rel, err)
+		var scopeErr *ScopeError
+		if err := boundary.AssertReadScope(ctx, cfgDir, rel, "implement"); !errors.As(err, &scopeErr) || scopeErr.Kind != ScopeRead {
+			t.Fatalf("AssertReadScope(cfgDir, %q) = %v, want ScopeError(ScopeRead)", rel, err)
 		}
 	}
 

@@ -227,7 +227,7 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	}
 	fullPath := resolved.Abs
 	if enginepaths.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
-		return "", fmt.Errorf("%w: %q", sandbox.ErrOutsideReadScope, path)
+		return "", &sandbox.ScopeError{Path: path, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
 	}
 	path = resolved.DisplayPath
 	target, isTarget := sourceview.ReportTarget(tctx, resolved, api.AgentActivityKindReading)
