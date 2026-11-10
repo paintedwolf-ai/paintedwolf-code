@@ -27,7 +27,7 @@ export function DocumentEditGroup(props: {
   const shown = () => props.changes.slice(page() * pageSize, (page() + 1) * pageSize);
   return (
     <details class="den-file-version__edits" onToggle={(event) => setExpanded(event.currentTarget.open)}>
-      <summary data-tip={props.related ? changeAuthorLabel(first()) : undefined}>
+      <summary class="den-file-version-edit-row" data-tip={props.related ? changeAuthorLabel(first()) : undefined}>
         <span class="den-file-version__copy">
           <strong>
             {props.changes.length} {props.changes.length === 1 ? "edit" : "edits"}{props.related ? " from this turn" : " in the editor"}
@@ -46,7 +46,7 @@ export function DocumentEditGroup(props: {
           <For each={shown()}>{(change, index) => {
             const revision = () => props.changes.length - page() * pageSize - index();
             return (
-              <div class="den-file-version__edit-item">
+              <div class="den-file-version__edit-item den-file-version-edit-row">
                 <span class="den-file-version__copy">
                   <strong>{props.changes.length > 1 ? `Edit ${revision()}` : "Document edit"}</strong>
                   <small><time dateTime={change.created_at}>{new Date(change.created_at).toLocaleString()}</time></small>
@@ -65,7 +65,7 @@ export function DocumentEditGroup(props: {
           }}</For>
           <TablePager
             compact
-            class="den-file-version__edit-pager"
+            class="den-file-version-edit-pager"
             ariaLabel="Edit pagination"
             page={page()}
             pageSize={pageSize}
