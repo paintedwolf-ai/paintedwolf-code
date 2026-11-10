@@ -186,7 +186,9 @@ func inspectDeleteTree(ctx context.Context, b *sandbox.Boundary, tctx tools.Tool
 		childRel := filepath.ToSlash(filepath.Join(selected.ScopeRel, rel))
 		_, policy := classifyPolicy(full)
 		_, deniedGit := tools.IsGitInternalsWritePath(childRel)
-		if checkPins || policy || deniedGit || tools.IsSensitivePath(childRel) {
+		controlDenied := confine.ControlPlanePathDenied(full, true, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
+		blockedSubject := confine.ClassifyBlockedWrite(full).Kind != confine.WriteSubjectOrdinary
+		if checkPins || policy || deniedGit || controlDenied || blockedSubject || tools.IsSensitivePath(childRel) {
 			target, err := assertDeleteWritePath(ctx, b, tctx, full, prof)
 			if err != nil {
 				return err

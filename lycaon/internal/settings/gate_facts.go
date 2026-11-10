@@ -254,6 +254,26 @@ func declaredFileWrites(action hitl.ProposedAction) (write, declared bool) {
 	return IsPathMutatingTool(action.Invocation.Tool), true
 }
 
+// resolvedActionFilePath resolves a declared file target to its concrete
+// absolute path when resolved files or a non-escaping project root are present.
+func resolvedActionFilePath(action hitl.ProposedAction, index int, raw string) string {
+	path := strings.TrimSpace(raw)
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	if action.Invocation.NativePathTargets == nil && index >= 0 && index < len(action.Invocation.ResolvedFiles) {
+		if resolved := strings.TrimSpace(action.Invocation.ResolvedFiles[index]); filepath.IsAbs(resolved) {
+			return resolved
+		}
+	}
+	if !strings.HasPrefix(path, "@") && !relPathEscapes(path) {
+		if proj := strings.TrimSpace(action.Scope.ProjectDir); filepath.IsAbs(proj) {
+			return filepath.Join(proj, path)
+		}
+	}
+	return path
+}
+
 // declaredFileTargets returns every declared path crossing.
 func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*gate.FileTarget {
 	write, declared := declaredFileWrites(action)
@@ -274,8 +294,9 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 	}
 	for i, raw := range paths {
 		path := strings.TrimSpace(raw)
+		resolvedPath := resolvedActionFilePath(action, i, raw)
 		// Worker-branch paths are an OAR reject.
-		if path == "" || enginepaths.IsWorkerBranchPath(path) {
+		if path == "" || enginepaths.IsWorkerBranchPath(path) || enginepaths.IsWorkerBranchPath(resolvedPath) {
 			continue
 		}
 		mode := gate.ModeRead
@@ -293,26 +314,29 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 		}
 		// Scratch and cache authority comes from the subprocess filesystem boundary.
 		if len(action.Execution.Contained.WriteRoots) > 0 {
-			target.WithinConfinement = confine.PathWithinWriteRoots(path, action.Execution.Contained.WriteRoots)
-		} else if root, err := confine.FilesystemRootForPath(action.Scope.ProjectID, roots, nil, action.Scope.SessionScratchRoot, path); err == nil {
+			target.WithinConfinement = confine.PathWithinWriteRoots(resolvedPath, action.Execution.Contained.WriteRoots)
+		} else if root, err := confine.FilesystemRootForPath(action.Scope.ProjectID, roots, nil, action.Scope.SessionScratchRoot, resolvedPath); err == nil {
 			target.WithinConfinement = root != ""
 		}
 		// ClassifyResolved covers sensitive descendants and path aliases.
-		if m, ok := g.sources.Locations.ClassifyResolved(path, catalogMode); ok {
+		if m, ok := g.sources.Locations.ClassifyResolved(resolvedPath, catalogMode); ok {
 			target.Sensitive = true
 			target.CatalogID = m.ID
 			target.CatalogTitle = m.Title
 			target.ProtectedSubject = m.Protected
 		}
 		// Credential files ask on write inside roots too; overlays cannot remove the class.
-		if mode == gate.ModeWrite && protectedpath.IsCredentialFile(path) {
+		if mode == gate.ModeWrite && (protectedpath.IsCredentialFile(path) || protectedpath.IsCredentialFile(resolvedPath)) {
 			target.ProtectedSubject = true
 		}
 		// Protected writes and key material remain reviewable inside roots.
-		subject := confine.ClassifyBlockedWrite(path)
+		subject := confine.ClassifyBlockedWrite(resolvedPath)
 		if subject.Kind == confine.WriteSubjectKeyMaterial ||
 			(subject.Kind != confine.WriteSubjectOrdinary && mode == gate.ModeWrite) {
 			target.ProtectedSubject = true
+		}
+		if !target.OutsideRoots && (target.ProtectedSubject || target.Sensitive) && filepath.IsAbs(resolvedPath) {
+			target.Path = resolvedPath
 		}
 		if target.OutsideRoots || target.ProtectedSubject {
 			targets = append(targets, target)

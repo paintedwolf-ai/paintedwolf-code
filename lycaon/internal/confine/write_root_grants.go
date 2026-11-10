@@ -57,7 +57,7 @@ func ControlPlaneTree(path string) bool {
 // sessionScratch is the invocation's own scratch root; like the confinement floor,
 // the verdict leaves it to the invocation and still denies every other session's.
 func ControlPlanePathDenied(path string, write bool, sessionScratch, sessionOutput string) bool {
-	if write && writeRootContainsStateTree(fspath.CanonicalPath(path)) {
+	if write && (writeRootContainsStateTree(path) || writeRootContainsStateTree(fspath.CanonicalPath(path))) {
 		return true
 	}
 	if WithinSessionDirectory(path, sessionScratch) || (!write && WithinSessionDirectory(path, sessionOutput)) {
@@ -103,19 +103,15 @@ func ControlPlaneWriteDenied(root string) bool {
 	return err == nil && PathEqual(p, fspath.CanonicalPath(exe))
 }
 
-// AttachedWriteRootRefused validates standing write roots.
+// AttachedWriteRootRefused validates standing write roots structurally;
+// per-path confinement floors govern protected descendants and the control plane.
 func AttachedWriteRootRefused(root string) (refused bool, code string) {
 	p, structuralCode := writeRootStructuralRefusal(root)
 	if structuralCode != "" {
 		return true, structuralCode
 	}
-	// Resolve aliases before comparing protected roots.
-	resolved := fspath.CanonicalPath(p)
-	if attachedWriteRootForbidden(resolved) {
-		return true, WriteRootCodeSecretStore
-	}
-	if writeRootContainsStateTree(resolved) {
-		return true, WriteRootCodeContainsState
+	if fspath.CanonicalPath(p) == "" {
+		return true, WriteRootCodeNotAbsolute
 	}
 	return false, ""
 }
@@ -127,6 +123,9 @@ func GrantedWriteRootRefused(root string) (refused bool, code string) {
 		return true, structuralCode
 	}
 	resolved := fspath.CanonicalPath(p)
+	if resolved == "" {
+		return true, WriteRootCodeNotAbsolute
+	}
 	if ControlPlaneWriteDenied(resolved) {
 		return true, WriteRootCodeControlPlane
 	}

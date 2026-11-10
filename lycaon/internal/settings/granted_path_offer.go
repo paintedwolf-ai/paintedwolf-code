@@ -152,7 +152,7 @@ func grantedPathAccess(target gate.FileTarget, locations *sensitivepath.Catalog)
 	if folder == "" || folder == "." {
 		return exact
 	}
-	if refused, code := confine.AttachedWriteRootRefused(folder); refused && code != confine.WriteRootCodeContainsState {
+	if refused, _ := confine.GrantedWriteRootRefused(folder); refused {
 		return exact
 	}
 	if locations != nil {
@@ -200,7 +200,7 @@ func grantedPathCandidates(target gate.FileTarget, locations *sensitivepath.Cata
 		return out
 	}
 	for dir := filepath.Dir(access.Path); dir != access.Path; dir = filepath.Dir(dir) {
-		if refused, code := confine.AttachedWriteRootRefused(dir); refused && code != confine.WriteRootCodeContainsState {
+		if refused, _ := confine.GrantedWriteRootRefused(dir); refused {
 			break
 		}
 		if locations != nil {

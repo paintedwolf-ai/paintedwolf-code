@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
@@ -46,6 +47,7 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 		return CompiledReadScope{}, fmt.Errorf("unknown tool profile %q", profileID)
 	}
 	globs := SubstituteScopeGlobs(prof.ReadGlobs, ScopeTokensFromContext(ctx))
+	rootInControlPlane := confine.ControlPlaneReadDenied(root)
 	filter := func(relSlash string, isDir bool) bool {
 		if strings.ContainsRune(relSlash, 0) {
 			return false
@@ -55,6 +57,12 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 		}
 		if !inventoryPathWithinRoot(root, relSlash) {
 			return false
+		}
+		if !rootInControlPlane {
+			clean := strings.TrimPrefix(filepath.Clean(filepath.FromSlash(strings.TrimSpace(relSlash))), "."+string(filepath.Separator))
+			if confine.ControlPlaneReadDenied(filepath.Join(root, clean)) {
+				return false
+			}
 		}
 		if len(globs) == 0 || matchAnyGlob(globs, relSlash) {
 			return true

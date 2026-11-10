@@ -154,7 +154,15 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
 	p := &ProgramPaths{boundary: boundary, context: tc, specs: facts.specs, argumentLimit: facts.argumentLimit, outputLimit: facts.outputLimit, rootParents: rootParentChains(actionRootPaths(tc))}
 	if cwd == "" {
-		cwd = "."
+		if strings.TrimSpace(tc.Source.WorkerBranchRoot) == "" && commandCwdControlPlaneDenied(tc, tc.ActiveRootPath()) {
+			if !tc.Execution.VerificationCheck && strings.TrimSpace(tc.Host.SessionScratchDir) != "" {
+				cwd = "@scratch"
+			} else {
+				return nil, controlPlaneCwdReject(tc.ActiveRootPath())
+			}
+		} else {
+			cwd = "."
+		}
 	}
 	bound, err := p.Bind(ctx, cwd, false)
 	if err != nil {
@@ -299,6 +307,9 @@ func (p *ProgramPaths) bindAuthority(ctx context.Context, bound BoundPath, write
 		}
 		if scope == "." || scope == "" {
 			return bound.admitRead(actual)
+		}
+		if reject := controlPlaneReject(p.context, actual, sandbox.PathOpRead); reject != nil {
+			return reject
 		}
 		if p.boundary == nil {
 			return nil

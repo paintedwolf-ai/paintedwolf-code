@@ -11,8 +11,8 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// The execution-boundary write-root refusal predicate covers every key-material
-// and catalogued credential store path under $HOME.
+// The execution-boundary granted-root refusal predicate and boundary write-root
+// derivation cover every key-material and catalogued credential store path under $HOME.
 func TestWriteRootRefusalCoversEveryCredentialStore(t *testing.T) {
 	t.Parallel()
 	home, err := os.UserHomeDir()
@@ -22,16 +22,26 @@ func TestWriteRootRefusalCoversEveryCredentialStore(t *testing.T) {
 
 	for _, rel := range confine.KeyMaterialHomeRelPaths() {
 		abs := filepath.Join(home, rel)
-		if refused, _ := confine.AttachedWriteRootRefused(abs); !refused {
-			t.Errorf("key material %q is not refused by AttachedWriteRootRefused", rel)
+		if refused, _ := confine.GrantedWriteRootRefused(abs); !refused {
+			t.Errorf("key material %q is not refused by GrantedWriteRootRefused", rel)
+		}
+		roots, err := confine.WriteRootsForBoundary("", []string{abs}, nil, "")
+		contractcheck.FailErr(t, "WriteRootsForBoundary", err)
+		if confine.PathWithinWriteRoots(abs, roots) {
+			t.Errorf("key material %q is admitted as an executable boundary write root when attached", rel)
 		}
 	}
 	stores, err := detectionpack.BundledCredentialStorePaths()
 	contractcheck.FailErr(t, "BundledCredentialStorePaths", err)
 	for _, rel := range stores {
 		abs := filepath.Join(home, strings.TrimPrefix(strings.TrimPrefix(rel, "~/"), "/"))
-		if refused, _ := confine.AttachedWriteRootRefused(abs); !refused {
-			t.Errorf("credential store %q is catalogued but not refused by AttachedWriteRootRefused", rel)
+		if refused, _ := confine.GrantedWriteRootRefused(abs); !refused {
+			t.Errorf("credential store %q is catalogued but not refused by GrantedWriteRootRefused", rel)
+		}
+		roots, err := confine.WriteRootsForBoundary("", []string{abs}, nil, "")
+		contractcheck.FailErr(t, "WriteRootsForBoundary", err)
+		if confine.PathWithinWriteRoots(abs, roots) {
+			t.Errorf("credential store %q is admitted as an executable boundary write root when attached", rel)
 		}
 	}
 }

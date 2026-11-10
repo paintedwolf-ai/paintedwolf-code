@@ -65,6 +65,10 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 		}
 	}
 	for _, r := range projectRoots {
+		cp := fspath.CanonicalPath(r)
+		if cp == "" || attachedWriteRootForbidden(cp) {
+			continue
+		}
 		add(r)
 	}
 	if sessionScratchRoot != "" {

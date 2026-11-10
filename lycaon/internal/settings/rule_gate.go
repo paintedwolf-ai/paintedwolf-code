@@ -436,7 +436,7 @@ func controlPlaneDenyResult(action hitl.ProposedAction) *hitl.ApprovalResult {
 		if action.Invocation.NativePathTargets != nil && i < len(action.Invocation.NativePathTargets) {
 			pathWrite = action.Invocation.NativePathTargets[i].Write
 		}
-		path := strings.TrimSpace(f)
+		path := resolvedActionFilePath(action, i, f)
 		if !filepath.IsAbs(path) {
 			continue
 		}

@@ -38,14 +38,10 @@ func ValidateGrantedWriteRoots(roots []string) *WriteRootRefusalError {
 	return validateWriteRootList(roots, GrantedWriteRootRefused)
 }
 
-// validateWriteRootList applies one refusal rule to canonical roots.
+// validateWriteRootList applies one refusal rule to normalized roots.
 func validateWriteRootList(roots []string, refusal func(string) (bool, string)) *WriteRootRefusalError {
 	for _, root := range normalizePathList(roots) {
-		canonical := fspath.CanonicalPath(root)
-		if canonical == "" {
-			continue
-		}
-		if refused, code := refusal(canonical); refused {
+		if refused, code := refusal(root); refused {
 			return &WriteRootRefusalError{Path: root, Code: code}
 		}
 	}

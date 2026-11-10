@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 
+	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -22,6 +24,9 @@ func (p *ProgramPaths) directoryBinding(ctx context.Context, bound BoundPath) (B
 	}
 	if !info.IsDir() {
 		return BoundPath{}, nil, &PathError{Code: "COMMAND_OPERAND_INVALID", Operand: bound.Resolved.DisplayPath, Cause: errNotDirectory}
+	}
+	if bound.Resolved.Root.ID != projectroot.VirtualScratchLabel && commandCwdControlPlaneDenied(p.context, bound.Resolved.Abs) {
+		return BoundPath{}, nil, controlPlaneCwdReject(bound.Resolved.Abs)
 	}
 	authority, err := authorityAddress(bound.Resolved.Root.Path, file.Name())
 	if err != nil {
@@ -70,7 +75,7 @@ func callCwdReject(ctx context.Context, code, cwd string, cause error) error {
 	data := map[string]any{"cwd": cwd}
 	var binding *toolrejection.ToolReject
 	if errors.As(cause, &binding) {
-		if binding.Code == "PROJECT_HAS_NO_ROOTS" {
+		if binding.Code == "PROJECT_HAS_NO_ROOTS" || binding.Code == isolation.CodeControlPlaneDenied {
 			return binding
 		}
 		data["binding_code"] = binding.Code

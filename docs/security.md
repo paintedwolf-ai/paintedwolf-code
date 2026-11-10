@@ -182,7 +182,7 @@ Third-party processes the host executes on the person's behalf (a local MCP serv
 
 | Direction | Default |
 |-----------|---------|
-| Writes | Attached project roots, approved exact/tree grants, bounded temp/dev/cache locations, and declared host-managed scratch |
+| Writes | Attached project roots (with secret stores, key material, and the host control plane held behind per-path floors), approved exact/tree grants, bounded temp/dev/cache locations, and declared host-managed scratch |
 | Reads | Broad enough for toolchains, with the app config tree and protected/sensitive locations separately controlled |
 | Symlinks | Followed only while descriptor-relative resolution remains inside the admitted root |
 | Signals | Same-boundary descendants, or the session's own processes through host-mediated process control |

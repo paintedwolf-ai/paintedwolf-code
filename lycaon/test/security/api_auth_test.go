@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -205,9 +206,9 @@ func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(
 	}
 
 	cases := []struct {
-		name              string
-		path              string
-		expectActionBlock bool
+		name               string
+		path               string
+		expectWriteExcluded bool
 	}{
 		{"home directory", home, false},
 		{"dot-config directory", filepath.Join(home, ".config"), false},
@@ -222,9 +223,13 @@ func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(
 			if status != http.StatusCreated {
 				t.Fatalf("%s (%s): status = %d code = %q, want 201 Created", tc.name, tc.path, status, code)
 			}
-			reject := tools.ValidateAttachedRootsForAction([]string{tc.path})
-			if tc.expectActionBlock && reject == nil {
-				t.Fatalf("%s (%s): expected ValidateAttachedRootsForAction to refuse execution root", tc.name, tc.path)
+			if reject := tools.ValidateAttachedRootsForAction([]string{tc.path}); reject != nil {
+				t.Fatalf("%s (%s): ValidateAttachedRootsForAction refused valid directory: %+v", tc.name, tc.path, reject)
+			}
+			writeRoots, err := confine.WriteRootsForBoundary("", []string{tc.path}, nil, "")
+			testutil.FailErr(t, "write roots for boundary", err)
+			if tc.expectWriteExcluded && confine.PathWithinWriteRoots(filepath.Join(tc.path, "probe"), writeRoots) {
+				t.Fatalf("%s (%s): protected/control-plane root admitted into executable write roots: %v", tc.name, tc.path, writeRoots)
 			}
 		})
 	}

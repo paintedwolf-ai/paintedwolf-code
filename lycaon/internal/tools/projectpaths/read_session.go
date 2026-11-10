@@ -66,6 +66,15 @@ func (s *ReadSession) resolveBeneathRoot(ctx context.Context, modelPath string) 
 	if !placed {
 		return Resolved{}, false, nil
 	}
+	if _, _, _, ok := sessionRel(s.tctx, abs); ok {
+		return Resolved{}, false, nil
+	}
+	if reject := controlPlaneReject(s.tctx, abs, sandbox.PathOpRead); reject != nil {
+		return Resolved{}, true, reject
+	}
+	if reject := currentRootReject(s.tctx, root, abs); reject != nil {
+		return Resolved{}, true, reject
+	}
 	scopeRel := projectroot.ScopeRel(root, abs)
 	if s.boundary != nil {
 		if err := s.boundary.AssertReadGlobs(ctx, scopeRel, s.tctx.ProfileID()); err != nil {

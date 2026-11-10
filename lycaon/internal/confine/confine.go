@@ -538,21 +538,32 @@ func workspaceAllowBacks(c Confinement) []string {
 	}
 	sep := string(filepath.Separator)
 	var backs []string
-	candidates := append(append([]string(nil), c.Roots...), c.GrantedWriteRoots...)
-	if c.SessionScratchRoot != "" {
-		candidates = append(candidates, c.SessionScratchRoot)
-	}
-	for _, r := range candidates {
+	addCandidate := func(r string, scratch bool) {
 		if r = strings.TrimSpace(r); r == "" {
-			continue
+			return
 		}
 		p := fspath.CanonicalPath(r)
+		if p == "" {
+			return
+		}
+		if !scratch && ControlPlaneWriteDenied(p) {
+			return
+		}
 		for _, control := range controls {
 			if strings.HasPrefix(p, control+sep) {
 				backs = append(backs, p)
 				break
 			}
 		}
+	}
+	for _, r := range c.Roots {
+		addCandidate(r, false)
+	}
+	for _, r := range c.GrantedWriteRoots {
+		addCandidate(r, false)
+	}
+	if c.SessionScratchRoot != "" {
+		addCandidate(c.SessionScratchRoot, true)
 	}
 	sort.Strings(backs)
 	return backs

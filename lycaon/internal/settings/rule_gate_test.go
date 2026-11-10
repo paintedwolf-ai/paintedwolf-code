@@ -765,4 +765,104 @@ func TestRuleApprovalGateControlPlanePathDeniesWithoutCard(t *testing.T) {
 	if res.Denied {
 		t.Fatalf("a relative path belongs to the attached roots, not the control plane: %+v", res)
 	}
+
+	// When configdir.Root() itself is attached as ProjectDir, a relative path into the state tree is denied.
+	res, err = approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{
+			Tool:  "read",
+			Files: []string{"debug/sessions"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: cfg,
+		},
+	})
+	testutil.FailErr(t, "gate.Evaluate relative read under attached cfg", err)
+	if !res.Denied || res.DenyCode != isolation.CodeControlPlaneDenied {
+		t.Fatalf("relative path under attached control-plane root must deny with %s, got %+v", isolation.CodeControlPlaneDenied, res)
+	}
+}
+
+func TestRuleApprovalGateAttachedSecretStoreAndHomeEnforcePerTargetGrants(t *testing.T) {
+	home := t.TempDir()
+	sshDir := filepath.Join(home, ".ssh")
+	keyFile := filepath.Join(sshDir, "id_ed25519")
+	otherFile := filepath.Join(sshDir, "known_hosts")
+	siblingFile := filepath.Join(home, "notes.txt")
+	testutil.FailErr(t, "mkdir .ssh", os.MkdirAll(sshDir, 0o700))
+	testutil.FailErr(t, "write key", os.WriteFile(keyFile, []byte("private"), 0o600))
+	testutil.FailErr(t, "write known_hosts", os.WriteFile(otherFile, []byte("host"), 0o600))
+	testutil.FailErr(t, "write sibling", os.WriteFile(siblingFile, []byte("hello"), 0o600))
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	previousKeys := confine.KeyMaterialHomeRelPaths()
+	confine.SetKeyMaterialPathsSource(func() []string { return []string{"~/.ssh/"} })
+	t.Cleanup(func() {
+		if len(previousKeys) == 0 {
+			confine.SetKeyMaterialPathsSource(nil)
+			return
+		}
+		confine.SetKeyMaterialPathsSource(func() []string { return previousKeys })
+	})
+
+	stageBundledApprovals(t, nil)
+	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
+	testutil.FailErr(t, "settings.NewApprovalStoreAt", err)
+	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+
+	// 1. Ordinary sibling file under attached $HOME does not require a secret-store grant.
+	res, err := approvalGate.Evaluate(t.Context(), hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"notes.txt"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: home,
+		},
+	})
+	testutil.FailErr(t, "evaluate sibling write", err)
+	if res.Denied || res.Required() {
+		t.Fatalf("ordinary sibling write under attached $HOME should be quiet, got %+v", res)
+	}
+
+	// 2. Unapproved write to ~/.ssh/id_ed25519 via relative path under attached ~/.ssh asks.
+	unapproved := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{
+			Tool:  "write",
+			Files: []string{"id_ed25519"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: sshDir,
+		},
+	}
+	res, err = approvalGate.Evaluate(t.Context(), unapproved)
+	testutil.FailErr(t, "evaluate unapproved ssh write", err)
+	if !res.Required() {
+		t.Fatalf("unapproved write to relative id_ed25519 under attached ~/.ssh must ask, got %+v", res)
+	}
+
+	// 3. Wrong-target grant (for known_hosts) still asks for id_ed25519.
+	wrongGrant := unapproved
+	wrongGrant.Files.GrantedPaths = []hitl.GrantedPath{{Path: otherFile, Write: true}}
+	res, err = approvalGate.Evaluate(t.Context(), wrongGrant)
+	testutil.FailErr(t, "evaluate wrong-target grant", err)
+	if !res.Required() {
+		t.Fatalf("wrong-target grant must not authorize id_ed25519, got %+v", res)
+	}
+
+	// 4. Exact grant for keyFile authorizes the write.
+	approved := unapproved
+	approved.Files.GrantedPaths = []hitl.GrantedPath{{Path: keyFile, Write: true}}
+	res, err = approvalGate.Evaluate(t.Context(), approved)
+	testutil.FailErr(t, "evaluate approved ssh write", err)
+	if res.Denied || res.Required() {
+		t.Fatalf("exact grant for %q should authorize relative write under attached ~/.ssh, got %+v", keyFile, res)
+	}
+
+	// 5. After grant revocation (empty GrantedPaths again), access asks again.
+	res, err = approvalGate.Evaluate(t.Context(), unapproved)
+	testutil.FailErr(t, "evaluate post-revocation ssh write", err)
+	if !res.Required() {
+		t.Fatalf("after grant revocation, write to id_ed25519 must ask again, got %+v", res)
+	}
 }

@@ -271,8 +271,11 @@ func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("filesystem root project registration failed: status=%d body=%s", w.Code, w.Body.String())
 	}
-	if err := confine.ValidateAttachedWriteRoots([]string{"/"}); err == nil || err.Code != confine.WriteRootCodeContainsState {
-		t.Fatalf("execution boundary admitted state ancestor root /: %v", err)
+	if err := confine.ValidateAttachedWriteRoots([]string{"/"}); err != nil {
+		t.Fatalf("execution boundary refused structurally valid root /: %v", err)
+	}
+	if !confine.ControlPlanePathDenied("/", true, "", "") {
+		t.Fatal("destructive write targeting state ancestor / must remain control-plane denied")
 	}
 
 	okDir := t.TempDir()
@@ -302,7 +305,8 @@ func TestConfinementIntegrityCompositeChain(t *testing.T) {
 		assertInProjectWriteOK(t, self, c, proj)
 	})
 
-	t.Run("b_token_in_hand_still_refuses_control_plane_root", func(t *testing.T) {
+	t.Run("b_token_in_hand_still_protects_control_plane_root", func(t *testing.T) {
+		self := requireLiveBoundary(t)
 		srv := wiring.BuildForTest(t).Server
 		cfg := os.Getenv("LYCAON_CONFIG_DIR")
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects",
@@ -314,8 +318,19 @@ func TestConfinementIntegrityCompositeChain(t *testing.T) {
 		if w.Code != http.StatusCreated {
 			t.Fatalf("composite (b): project registration status=%d want 201", w.Code)
 		}
-		if err := confine.ValidateAttachedWriteRoots([]string{cfg}); err == nil || err.Code != confine.WriteRootCodeSecretStore {
-			t.Fatalf("composite (b): execution boundary err=%v want code %q", err, confine.WriteRootCodeSecretStore)
+		if err := confine.ValidateAttachedWriteRoots([]string{cfg}); err != nil {
+			t.Fatalf("composite (b): structural root validation err=%v want nil", err)
+		}
+		tokenPath := filepath.Join(cfg, "api.token")
+		testutil.FailErr(t, "write token", os.WriteFile(tokenPath, []byte("composite-bearer"), 0o600))
+		writeRoots, err := confine.WriteRootsForBoundary("", []string{cfg}, nil, "")
+		testutil.FailErr(t, "write roots for boundary", err)
+		if confine.PathWithinWriteRoots(tokenPath, writeRoots) {
+			t.Fatalf("composite (b): control-plane root %q admitted into executable write roots %v", cfg, writeRoots)
+		}
+		c := confine.Confinement{Roots: writeRoots}
+		if code := confinedEscapeExit(t, self, c, "/bin/cat", tokenPath); code == 0 {
+			t.Fatal("composite (b): confined command must not read api.token even when control-plane root is attached")
 		}
 	})
 }

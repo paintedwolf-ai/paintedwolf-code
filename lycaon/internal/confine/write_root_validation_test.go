@@ -9,28 +9,43 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestValidateAttachedWriteRootsRefusesStateAncestorWithoutMutation(t *testing.T) {
+func TestValidateAttachedWriteRootsAdmitsStateAncestorAndRefusesRelativeWithoutMutation(t *testing.T) {
 	safe := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(safe, "state"))
 	roots := []string{safe, string(filepath.Separator)}
-	err := ValidateAttachedWriteRoots(roots)
-	if err == nil || err.Code != WriteRootCodeContainsState {
-		t.Fatalf("state ancestor root was admitted: %v", err)
+	if err := ValidateAttachedWriteRoots(roots); err != nil {
+		t.Fatalf("state ancestor root was refused: %v", err)
 	}
 	if roots[0] != safe || roots[1] != string(filepath.Separator) {
 		t.Fatalf("ValidateAttachedWriteRoots mutated roots: %v", roots)
 	}
+	bad := []string{safe, "relative/root"}
+	err := ValidateAttachedWriteRoots(bad)
+	if err == nil || err.Code != WriteRootCodeNotAbsolute {
+		t.Fatalf("relative root was admitted: %v", err)
+	}
+	if bad[0] != safe || bad[1] != "relative/root" {
+		t.Fatalf("ValidateAttachedWriteRoots mutated bad roots: %v", bad)
+	}
 }
 
-func TestValidateAttachedWriteRootsRefusesAliasOfStateAncestor(t *testing.T) {
+func TestValidateAttachedWriteRootsAdmitsAliasOfStateAncestorAndRefusesSymlinkLoop(t *testing.T) {
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "resolve home", err)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "fixture-state"))
 	link := filepath.Join(t.TempDir(), "root")
 	testutil.FailErr(t, "create symlink", os.Symlink(home, link))
 
-	if err := ValidateAttachedWriteRoots([]string{link}); err == nil || err.Code != WriteRootCodeContainsState {
-		t.Fatalf("state ancestor alias admitted: %v", err)
+	if err := ValidateAttachedWriteRoots([]string{link}); err != nil {
+		t.Fatalf("state ancestor alias refused: %v", err)
+	}
+
+	loopA := filepath.Join(t.TempDir(), "loop-a")
+	loopB := filepath.Join(t.TempDir(), "loop-b")
+	testutil.FailErr(t, "create loop a", os.Symlink(loopB, loopA))
+	testutil.FailErr(t, "create loop b", os.Symlink(loopA, loopB))
+	if err := ValidateAttachedWriteRoots([]string{loopA}); err == nil || err.Code != WriteRootCodeNotAbsolute {
+		t.Fatalf("unresolvable symlink loop admitted: %v", err)
 	}
 }
 

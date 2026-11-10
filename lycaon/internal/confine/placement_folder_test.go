@@ -67,8 +67,22 @@ func TestPlacementFolderIsCoveredLikeTheStateFolder(t *testing.T) {
 	if confine.ControlPlanePathDenied(filepath.Join(f.branch, "a.go"), true, "", "") {
 		t.Fatal("a write in the branch is refused")
 	}
-	if refused, code := confine.AttachedWriteRootRefused(f.parent); !refused || code != confine.WriteRootCodeContainsState {
-		t.Fatalf("attached root above the folder: refused=%v code=%s", refused, code)
+	if refused, code := confine.AttachedWriteRootRefused(f.parent); refused {
+		t.Fatalf("attached root above the folder refused: code=%s", code)
+	}
+	if refused, code := confine.AttachedWriteRootRefused(f.folder); refused {
+		t.Fatalf("attached root at the folder refused structurally: code=%s", code)
+	}
+	if !confine.ControlPlanePathDenied(f.parent, true, "", "") {
+		t.Fatal("destructive write targeting the placement folder parent must remain control-plane denied")
+	}
+	boundaryRoots, err := confine.WriteRootsForBoundary("", []string{f.folder, f.branch}, nil, "")
+	testutil.FailErr(t, "write roots for boundary", err)
+	if slices.Contains(boundaryRoots, f.folder) {
+		t.Fatalf("placement folder admitted as executable boundary write root: %v", boundaryRoots)
+	}
+	if !slices.Contains(boundaryRoots, f.branch) {
+		t.Fatalf("branch workspace excluded from executable boundary write roots: %v", boundaryRoots)
 	}
 	if refused, code := confine.GrantedWriteRootRefused(f.parent); refused {
 		t.Fatalf("granted root above the folder refused: code=%s", code)

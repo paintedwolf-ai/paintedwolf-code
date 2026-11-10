@@ -21,9 +21,9 @@ func underSecretReadAllowBack(path string) bool {
 	return underAny(path, SecretReadAllowBackRoots())
 }
 
-// Store descendants stay protected within an admitted standing root.
+// Store and control-plane descendants stay protected within an admitted standing root.
 func attachedWriteRootForbidden(path string) bool {
-	return underSecretReadDeny(path) || underAny(path, KeyMaterialWritePaths()) || underAny(path, CredentialStorePaths())
+	return ControlPlaneWriteDenied(path) || underSecretReadDeny(path) || underAny(path, KeyMaterialWritePaths()) || underAny(path, CredentialStorePaths())
 }
 
 // NormalizeWriteRootKey returns a stable deny-set / pending-map key for a write root.
@@ -130,8 +130,17 @@ func darwinAliasPath(p string) string {
 
 // writeRootContainsStateTree prevents an ancestor rename from moving host state.
 func writeRootContainsStateTree(path string) bool {
+	cleaned := filepath.Clean(strings.TrimSpace(path))
+	if cleaned == "" || cleaned == "." {
+		return false
+	}
 	for _, state := range resolveEach(controlPlaneReadDenyRoots()) {
-		if PathAtOrUnder(state, path) {
+		if PathAtOrUnder(state, cleaned) {
+			return true
+		}
+	}
+	for _, anc := range ControlPlaneStrictAncestors() {
+		if PathEqual(cleaned, anc) || PathEqual(cleaned, fspath.CanonicalPath(anc)) {
 			return true
 		}
 	}

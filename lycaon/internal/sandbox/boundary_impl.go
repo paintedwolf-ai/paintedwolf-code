@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
@@ -143,6 +144,12 @@ func (b *Boundary) AssertPathAllowed(_ context.Context, projectDir, relPath stri
 func (b *Boundary) AssertReadScope(ctx context.Context, projectDir, relPath, profileID string) error {
 	if err := b.AssertPathAllowed(ctx, projectDir, relPath, PathOpRead); err != nil {
 		return err
+	}
+	if !confine.ControlPlaneReadDenied(projectDir) {
+		clean := strings.TrimPrefix(filepath.Clean(filepath.FromSlash(strings.TrimSpace(relPath))), "."+string(filepath.Separator))
+		if confine.ControlPlaneReadDenied(filepath.Join(projectDir, clean)) {
+			return newOutsideReadScope(relPath, profileID)
+		}
 	}
 	return b.AssertReadGlobs(ctx, relPath, profileID)
 }

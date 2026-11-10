@@ -42,12 +42,13 @@ func (r Resolved) EffectLocation() fseffect.Location {
 // controlPlaneReject refuses an absolute path inside the host's own state tree
 // with the approval gate's code. Relative paths are answered by root resolution.
 func controlPlaneReject(tctx tools.ToolContext, modelPath string, op sandbox.PathOp) *toolrejection.ToolReject {
-	abs := modelPath
-	if abs == "" || !filepath.IsAbs(abs) {
+	raw := filepath.Clean(filepath.FromSlash(strings.TrimSpace(modelPath)))
+	if raw == "" || !filepath.IsAbs(raw) {
 		return nil
 	}
-	abs = filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
-	if !confine.ControlPlanePathDenied(abs, op != sandbox.PathOpRead, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
+	abs := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(raw)))
+	if !confine.ControlPlanePathDenied(raw, op != sandbox.PathOpRead, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) &&
+		!confine.ControlPlanePathDenied(abs, op != sandbox.PathOpRead, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 		return nil
 	}
 	mode := "read"
@@ -241,6 +242,9 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	if err != nil {
 		return Resolved{}, noRootsReject()
 	}
+	if reject := controlPlaneReject(tctx, abs, op); reject != nil {
+		return Resolved{}, reject
+	}
 	if reject := currentRootReject(tctx, root, abs); reject != nil {
 		return Resolved{}, reject
 	}
@@ -372,7 +376,21 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 			}
 			return []projectroot.RootRef{{ID: "worker-branch", Path: branch, IsPrimary: true}}, nil
 		}
-		return tctx.Source.Roots, nil
+		admitted := make([]projectroot.RootRef, 0, len(tctx.Source.Roots))
+		var firstReject *toolrejection.ToolReject
+		for _, r := range tctx.Source.Roots {
+			if reject := controlPlaneReject(tctx, r.Path, sandbox.PathOpRead); reject != nil {
+				if firstReject == nil {
+					firstReject = reject
+				}
+				continue
+			}
+			admitted = append(admitted, r)
+		}
+		if len(admitted) == 0 && firstReject != nil {
+			return nil, firstReject
+		}
+		return admitted, nil
 	}
 	res, err := ResolveRead(ctx, nil, tctx, modelPath)
 	if err != nil {
@@ -388,6 +406,24 @@ func QualifyAbs(tctx tools.ToolContext, root projectroot.RootRef, abs string) st
 		return abs
 	}
 	return projectroot.Qualify(primary, root, abs)
+}
+
+func commandCwdControlPlaneDenied(tctx tools.ToolContext, abs string) bool {
+	if abs == "" || !filepath.IsAbs(abs) {
+		return false
+	}
+	if confine.WithinSessionDirectory(abs, tctx.Host.SessionScratchDir) {
+		return false
+	}
+	return confine.ControlPlaneReadDenied(abs) || confine.ControlPlaneWriteDenied(abs)
+}
+
+func controlPlaneCwdReject(abs string) *toolrejection.ToolReject {
+	p := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
+	return &toolrejection.ToolReject{
+		Code: isolation.CodeControlPlaneDenied,
+		Data: map[string]any{"path": filepath.ToSlash(p), "mode": "read"},
+	}
 }
 
 // CommandCwd resolves a process directory within its attached root or session scratch.
@@ -406,7 +442,14 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 		return "", "", noRootsReject()
 	}
 	if cwdClean == "" {
-		return tctx.ActiveRootPath(), ".", nil
+		active := tctx.ActiveRootPath()
+		if commandCwdControlPlaneDenied(tctx, active) {
+			if !tctx.Execution.VerificationCheck && strings.TrimSpace(tctx.Host.SessionScratchDir) != "" {
+				return commandCwdInScratch(ctx, tctx, "@scratch")
+			}
+			return "", "", controlPlaneCwdReject(active)
+		}
+		return active, ".", nil
 	}
 	resolved, _, resolveErr := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, cwdClean)
 	if resolveErr != nil {
@@ -414,6 +457,9 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 			Code: "CWD_OUT_OF_SCOPE",
 			Data: map[string]any{"cwd": cwdArg},
 		}
+	}
+	if commandCwdControlPlaneDenied(tctx, resolved) {
+		return "", "", controlPlaneCwdReject(resolved)
 	}
 	info, statErr := os.Stat(resolved)
 	if statErr != nil || !info.IsDir() {

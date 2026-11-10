@@ -50,33 +50,43 @@ func TestGrantedWriteRootsSourceReadLive(t *testing.T) {
 	}
 }
 
-// Standing roots distinguish protected stores from the host state tree.
+// Standing roots are validated structurally; per-path floors govern protected
+// descendants and the control plane.
 func TestAttachedWriteRootRefused(t *testing.T) {
 	withShippedCredentialStores(t)
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		t.Skip("no home dir")
 	}
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "fixture-state"))
+	cfgDir := filepath.Join(home, ".config", "fixture-state")
+	t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
+	loopA := filepath.Join(t.TempDir(), "loop-a")
+	loopB := filepath.Join(t.TempDir(), "loop-b")
+	testutil.FailErr(t, "symlink loop a", os.Symlink(loopB, loopA))
+	testutil.FailErr(t, "symlink loop b", os.Symlink(loopA, loopB))
 	cases := []struct {
 		name string
 		root string
 		code string // empty => allowed
 	}{
-		{"home", home, WriteRootCodeContainsState},
-		{"fs-root", string(filepath.Separator), WriteRootCodeContainsState},
+		{"home", home, ""},
+		{"fs-root", string(filepath.Separator), ""},
+		{"config-parent", filepath.Join(home, ".config"), ""},
+		{"config-root", cfgDir, ""},
 		{"relative", "relative/path", WriteRootCodeNotAbsolute},
+		{"dot", ".", WriteRootCodeNotAbsolute},
 		{"empty", "  ", WriteRootCodeNotAbsolute},
-		{"ssh-secret", filepath.Join(home, ".ssh"), WriteRootCodeSecretStore},
-		{"kube-secret", filepath.Join(home, ".kube"), WriteRootCodeSecretStore},
-		{"gcloud-secret", filepath.Join(home, ".config", "gcloud"), WriteRootCodeSecretStore},
-		{"azure-secret", filepath.Join(home, ".azure"), WriteRootCodeSecretStore},
-		{"keychains-secret", filepath.Join(home, "Library", "Keychains"), WriteRootCodeSecretStore},
+		{"symlink-loop", loopA, WriteRootCodeNotAbsolute},
+		{"ssh-secret", filepath.Join(home, ".ssh"), ""},
+		{"aws-secret", filepath.Join(home, ".aws"), ""},
+		{"kube-secret", filepath.Join(home, ".kube"), ""},
+		{"gcloud-secret", filepath.Join(home, ".config", "gcloud"), ""},
+		{"azure-secret", filepath.Join(home, ".azure"), ""},
+		{"keychains-secret", filepath.Join(home, "Library", "Keychains"), ""},
 		{"keychains-parent", filepath.Join(home, "Library"), ""},
-		{"docker-config-secret", filepath.Join(home, ".docker", "config.json"), WriteRootCodeSecretStore},
+		{"docker-config-secret", filepath.Join(home, ".docker", "config.json"), ""},
 		{"docker-parent", filepath.Join(home, ".docker"), ""},
-		{"docker-contexts-secret", filepath.Join(home, ".docker", "contexts"), WriteRootCodeSecretStore},
-		// Runtime state beside denied files remains grantable.
+		{"docker-contexts-secret", filepath.Join(home, ".docker", "contexts"), ""},
 		{"docker-buildx-state-ok", filepath.Join(home, ".docker", "buildx", "activity"), ""},
 		{"under-home-ok", filepath.Join(home, "go", "pkg", "mod"), ""},
 		{"opt-ok", "/opt/shared-cache", ""},
@@ -283,11 +293,16 @@ func TestAncestorsOfCredentialStoresSplitByLane(t *testing.T) {
 		filepath.Join(home, ".aws", "cli"),
 	}
 	for _, p := range descendants {
-		if ok, _ := AttachedWriteRootRefused(p); !ok {
-			t.Errorf("AttachedWriteRootRefused(%q) = false, want refused", p)
+		if ok, code := AttachedWriteRootRefused(p); ok {
+			t.Errorf("AttachedWriteRootRefused(%q) = true (%s), want structurally allowed", p, code)
 		}
 		if ok, _ := GrantedWriteRootRefused(p); !ok {
 			t.Errorf("GrantedWriteRootRefused(%q) = false, want refused — store descendants travel as protected grants", p)
+		}
+		boundaryRoots, err := WriteRootsForBoundary("", []string{p}, nil, "")
+		testutil.FailErr(t, "write roots for boundary", err)
+		if PathWithinWriteRoots(p, boundaryRoots) {
+			t.Errorf("WriteRootsForBoundary admitted attached credential store %q as writable: %v", p, boundaryRoots)
 		}
 	}
 
@@ -320,11 +335,19 @@ func TestDraftWorkspaceGrantableOnBothLanes(t *testing.T) {
 	if refused, code := GrantedWriteRootRefused(draft); refused {
 		t.Fatalf("GrantedWriteRootRefused(draft scratch)=(%v,%q) want allowed", refused, code)
 	}
-	if refused, code := AttachedWriteRootRefused(cfg); !refused || code != WriteRootCodeSecretStore {
-		t.Fatalf("AttachedWriteRootRefused(configdir)=(%v,%q) want refused secret store", refused, code)
+	if refused, code := AttachedWriteRootRefused(cfg); refused {
+		t.Fatalf("AttachedWriteRootRefused(configdir)=(%v,%q) want structurally allowed", refused, code)
 	}
 	if refused, code := GrantedWriteRootRefused(cfg); !refused || code != WriteRootCodeControlPlane {
 		t.Fatalf("GrantedWriteRootRefused(configdir)=(%v,%q) want refused control plane", refused, code)
+	}
+	boundaryRoots, err := WriteRootsForBoundary("", []string{cfg, draft}, nil, "")
+	testutil.FailErr(t, "write roots for boundary", err)
+	if PathWithinWriteRoots(filepath.Join(cfg, "api.token"), boundaryRoots) {
+		t.Fatalf("WriteRootsForBoundary admitted configdir control plane as writable: %v", boundaryRoots)
+	}
+	if !PathWithinWriteRoots(draft, boundaryRoots) {
+		t.Fatalf("WriteRootsForBoundary dropped draft workspace %q: %v", draft, boundaryRoots)
 	}
 }
 

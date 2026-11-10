@@ -553,8 +553,13 @@ func TestProtectedPathCannotBeGrantedAsWriteRoot(t *testing.T) {
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "read home directory", err)
 	path := filepath.Join(home, ".ssh", "authorized_keys")
-	if refused, code := confine.AttachedWriteRootRefused(path); !refused {
-		t.Fatalf("protected path accepted as write root, code=%q", code)
+	if refused, code := confine.GrantedWriteRootRefused(path); !refused {
+		t.Fatalf("protected path accepted as granted write root, code=%q", code)
+	}
+	roots, err := confine.WriteRootsForBoundary("", []string{path}, nil, "")
+	testutil.FailErr(t, "write roots for boundary", err)
+	if slices.Contains(roots, fspath.CanonicalPath(path)) {
+		t.Fatalf("protected path admitted as executable boundary write root: %v", roots)
 	}
 }
 

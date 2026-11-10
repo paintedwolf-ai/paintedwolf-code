@@ -213,7 +213,7 @@ func TestValidateRootsForActionPublishRegisteredCode(t *testing.T) {
 	}
 }
 
-func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots(t *testing.T) {
+func TestValidateAttachedRootsForActionAdmitsBroadAndProtectedRootsWhileFilteringWriteRoots(t *testing.T) {
 	home := t.TempDir()
 	cfgDir := filepath.Join(home, ".config", "paintedwolf")
 	t.Setenv("HOME", home)
@@ -233,34 +233,44 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 	})
 
 	cases := []struct {
-		name       string
-		dir        string
-		wantCode   string
-		wantReason string
+		name           string
+		dir            string
+		wantExecutable bool
 	}{
 		{
-			name:       "home",
-			dir:        home,
-			wantCode:   "SANDBOX_CONTROL_PLANE_DENIED",
-			wantReason: confine.WriteRootCodeContainsState,
+			name:           "home",
+			dir:            home,
+			wantExecutable: true,
 		},
 		{
-			name:       "dot-config",
-			dir:        filepath.Join(home, ".config"),
-			wantCode:   "SANDBOX_CONTROL_PLANE_DENIED",
-			wantReason: confine.WriteRootCodeContainsState,
+			name:           "dot-config",
+			dir:            filepath.Join(home, ".config"),
+			wantExecutable: true,
 		},
 		{
-			name:       "dot-ssh",
-			dir:        filepath.Join(home, ".ssh"),
-			wantCode:   "SANDBOX_CAPABILITY_REQUEST_INVALID",
-			wantReason: confine.WriteRootCodeSecretStore,
+			name:           "dot-ssh",
+			dir:            filepath.Join(home, ".ssh"),
+			wantExecutable: false,
 		},
 		{
-			name:       "configdir-root",
-			dir:        cfgRoot,
-			wantCode:   "SANDBOX_CAPABILITY_REQUEST_INVALID",
-			wantReason: confine.WriteRootCodeSecretStore,
+			name:           "configdir-root",
+			dir:            cfgRoot,
+			wantExecutable: false,
+		},
+		{
+			name:           "managed-draft",
+			dir:            filepath.Join(cfgRoot, "drafts", "draft-1"),
+			wantExecutable: true,
+		},
+		{
+			name:           "managed-worktree",
+			dir:            filepath.Join(cfgRoot, "worktrees", "wt-1"),
+			wantExecutable: true,
+		},
+		{
+			name:           "managed-worker-branch",
+			dir:            filepath.Join(cfgRoot, "worker-branches", "wb-1"),
+			wantExecutable: true,
 		},
 	}
 
@@ -271,20 +281,29 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		if err != nil {
 			t.Fatalf("%s: project registration should succeed, got %v", tc.name, err)
 		}
-		reject := tools.ValidateAttachedRootsForAction(project.RootPaths(p))
-		if reject == nil {
-			t.Fatalf("%s: expected ValidateAttachedRootsForAction to refuse %q", tc.name, tc.dir)
+		if reject := tools.ValidateAttachedRootsForAction(project.RootPaths(p)); reject != nil {
+			t.Fatalf("%s: expected ValidateAttachedRootsForAction to admit %q, got %+v", tc.name, tc.dir, reject)
 		}
-		if reject.Code != tc.wantCode || reject.Data["reason"] != tc.wantReason {
-			t.Fatalf("%s: reject = %+v, want code=%q reason=%q", tc.name, reject, tc.wantCode, tc.wantReason)
+		scratchDir := filepath.Join(cfgRoot, "sessions", "s1", "scratch")
+		testutil.FailErr(t, "mkdir scratch", os.MkdirAll(scratchDir, 0o700))
+		writeRoots, err := confine.WriteRootsForBoundary(p.ID, project.RootPaths(p), nil, scratchDir)
+		testutil.FailErr(t, "WriteRootsForBoundary "+tc.name, err)
+		canonDir, err := filepath.EvalSymlinks(tc.dir)
+		testutil.FailErr(t, "eval "+tc.name, err)
+		if got := slices.Contains(writeRoots, canonDir); got != tc.wantExecutable {
+			t.Fatalf("%s: WriteRootsForBoundary contains %q = %v, want %v (roots=%v)", tc.name, canonDir, got, tc.wantExecutable, writeRoots)
+		}
+		canonScratch, err := filepath.EvalSymlinks(scratchDir)
+		testutil.FailErr(t, "eval scratch", err)
+		if !slices.Contains(writeRoots, canonScratch) {
+			t.Fatalf("%s: WriteRootsForBoundary dropped session scratch %q: %v", tc.name, canonScratch, writeRoots)
 		}
 	}
 
 	if _, err := project.CreateWithRoot(t.Context(), reg, string(filepath.Separator)); err != nil {
 		t.Fatalf("filesystem root project registration should succeed, got %v", err)
 	}
-	if reject := tools.ValidateAttachedRootsForAction([]string{string(filepath.Separator)}); reject == nil ||
-		reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" || reject.Data["reason"] != confine.WriteRootCodeContainsState {
-		t.Fatalf("filesystem root reject = %+v, want code=%q reason=%q", reject, "SANDBOX_CONTROL_PLANE_DENIED", confine.WriteRootCodeContainsState)
+	if reject := tools.ValidateAttachedRootsForAction([]string{string(filepath.Separator)}); reject != nil {
+		t.Fatalf("filesystem root reject = %+v, want nil", reject)
 	}
 }

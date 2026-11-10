@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -131,7 +132,13 @@ func SurveyWalk(ctx context.Context, root string, opts SurveyOptions, visit func
 	if opts.Stream && opts.Budgets.Bounded() {
 		return os.ErrInvalid
 	}
-	w := &surveyWalker{ctx: ctx, opts: opts, visit: visit, budget: NewWalkBudget(opts.Budgets)}
+	w := &surveyWalker{
+		ctx:                ctx,
+		opts:               opts,
+		visit:              visit,
+		budget:             NewWalkBudget(opts.Budgets),
+		rootInControlPlane: confine.ControlPlaneReadDenied(root),
+	}
 	if _, err := os.Lstat(root); err != nil {
 		return err
 	}
@@ -145,10 +152,11 @@ func SurveyWalk(ctx context.Context, root string, opts SurveyOptions, visit func
 var errSurveyBudgetSpent = errors.New("sandbox: survey walk budget spent")
 
 type surveyWalker struct {
-	ctx    context.Context
-	opts   SurveyOptions
-	visit  func(SurveyEntry) (SurveyAction, error)
-	budget *WalkBudget
+	ctx                context.Context
+	opts               SurveyOptions
+	visit              func(SurveyEntry) (SurveyAction, error)
+	budget             *WalkBudget
+	rootInControlPlane bool
 }
 
 // subtreeCut unwinds the recursion to the ancestor whose cap fell.
@@ -200,6 +208,9 @@ func (w *surveyWalker) visitEntries(rel, abs string, depth, dirDepth int, entrie
 			childRel = rel + "/" + name
 		}
 		childAbs := filepath.Join(abs, name)
+		if !w.rootInControlPlane && confine.ControlPlaneReadDenied(childAbs) {
+			continue
+		}
 		isDir := d.IsDir()
 		isSymlink := d.Type()&fs.ModeSymlink != 0
 		if isDir {
@@ -368,6 +379,7 @@ func SurveyReadDir(dir, relDir string, opts SurveyOptions) ([]SurveyEntry, error
 
 func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts SurveyOptions) []SurveyEntry {
 	out := make([]SurveyEntry, 0, len(entries))
+	dirInControlPlane := confine.ControlPlaneReadDenied(dir)
 	for _, e := range entries {
 		name := e.Name()
 		if !opts.IncludeHidden && IsHiddenName(name) {
@@ -381,6 +393,9 @@ func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts Surv
 			continue
 		}
 		abs := filepath.Join(dir, name)
+		if !dirInControlPlane && confine.ControlPlaneReadDenied(abs) {
+			continue
+		}
 		if e.IsDir() {
 			if surveySkipsDirName(name, opts) || settingsoverlay.IsRecoveryOnlyDir(abs) {
 				continue
