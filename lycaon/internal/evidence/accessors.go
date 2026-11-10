@@ -131,10 +131,10 @@ func (rec *Record) touchPath(projectDir, token, tier string) {
 	} else {
 		rec.Fidelity = mergePathFidelity(rec.Fidelity, tier)
 	}
-	if rec.pathTiers == nil {
-		rec.pathTiers = make(map[string]string)
+	if rec.aux.pathTiers == nil {
+		rec.aux.pathTiers = make(map[string]string)
 	}
-	rec.pathTiers[rel] = mergePathFidelity(rec.pathTiers[rel], tier)
+	rec.aux.pathTiers[rel] = mergePathFidelity(rec.aux.pathTiers[rel], tier)
 	for _, existing := range rec.pathsTouched {
 		if existing == rel {
 			return
@@ -157,12 +157,12 @@ func (rec *Record) touchURL(rawURL string) {
 	if rec.URL == "" {
 		rec.URL = url
 	}
-	for _, existing := range rec.urlsTouched {
+	for _, existing := range rec.aux.urlsTouched {
 		if existing == url {
 			return
 		}
 	}
-	rec.urlsTouched = append(rec.urlsTouched, url)
+	rec.aux.urlsTouched = append(rec.aux.urlsTouched, url)
 }
 
 // ObservedURLsForRecord returns distinct URLs observed on a record.
@@ -181,7 +181,7 @@ func ObservedURLsForRecord(rec Record) []string {
 		out = append(out, u)
 	}
 	add(rec.URL)
-	for _, u := range rec.urlsTouched {
+	for _, u := range rec.aux.urlsTouched {
 		add(u)
 	}
 	return out
@@ -196,19 +196,19 @@ func (rec *Record) touchURLTitle(rawURL, title string) {
 	if rawURL == "" || title == "" {
 		return
 	}
-	if rec.urlTitles == nil {
-		rec.urlTitles = make(map[string]string)
+	if rec.aux.urlTitles == nil {
+		rec.aux.urlTitles = make(map[string]string)
 	}
-	rec.urlTitles[rawURL] = title
+	rec.aux.urlTitles[rawURL] = title
 }
 
 // URLTitles returns the page titles this record observed, keyed by URL.
 func (rec Record) URLTitles() map[string]string {
-	if len(rec.urlTitles) == 0 {
+	if len(rec.aux.urlTitles) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(rec.urlTitles))
-	for u, t := range rec.urlTitles {
+	out := make(map[string]string, len(rec.aux.urlTitles))
+	for u, t := range rec.aux.urlTitles {
 		out[u] = t
 	}
 	return out
@@ -229,8 +229,8 @@ func GrepMatchStats(rec Record) (lines, paths int) {
 
 func pathTrustOnRecord(rec Record, path string) string {
 	path = NormalizeLedgerPath(path)
-	if rec.pathTiers != nil {
-		if t, ok := rec.pathTiers[path]; ok && t != "" {
+	if rec.aux.pathTiers != nil {
+		if t, ok := rec.aux.pathTiers[path]; ok && t != "" {
 			return t
 		}
 	}

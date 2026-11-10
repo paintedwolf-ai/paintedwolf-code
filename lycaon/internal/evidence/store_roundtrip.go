@@ -17,11 +17,11 @@ func CloneRecordForStore(rec Record) RecordAux {
 	cloned := cloneRecord(rec)
 	out := RecordAux{
 		PathsTouched:     append([]string(nil), cloned.pathsTouched...),
-		URLsTouched:      append([]string(nil), cloned.urlsTouched...),
-		URLTitles:        cloned.urlTitles,
+		URLsTouched:      append([]string(nil), cloned.aux.urlsTouched...),
+		URLTitles:        cloned.aux.urlTitles,
 		UntrustedContent: cloned.UntrustedContent,
 		ExternalCustody:  cloned.ExternalCustody,
-		Seq:              cloned.seq,
+		Seq:              cloned.aux.seq,
 	}
 	if cloned.grepLines != nil {
 		out.GrepLines = make(map[string]map[int]string, len(cloned.grepLines))
@@ -33,9 +33,9 @@ func CloneRecordForStore(rec Record) RecordAux {
 			out.GrepLines[path] = lineCopy
 		}
 	}
-	if cloned.pathTiers != nil {
-		out.PathTiers = make(map[string]string, len(cloned.pathTiers))
-		for path, tier := range cloned.pathTiers {
+	if cloned.aux.pathTiers != nil {
+		out.PathTiers = make(map[string]string, len(cloned.aux.pathTiers))
+		for path, tier := range cloned.aux.pathTiers {
 			out.PathTiers[path] = tier
 		}
 	}
@@ -48,8 +48,8 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		return
 	}
 	rec.pathsTouched = append([]string(nil), aux.PathsTouched...)
-	rec.urlsTouched = append([]string(nil), aux.URLsTouched...)
-	rec.urlTitles = nil
+	rec.aux.urlsTouched = append([]string(nil), aux.URLsTouched...)
+	rec.aux.urlTitles = nil
 	for u, t := range aux.URLTitles {
 		rec.touchURLTitle(u, t)
 	}
@@ -64,9 +64,9 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		}
 	}
 	if aux.PathTiers != nil {
-		rec.pathTiers = make(map[string]string, len(aux.PathTiers))
+		rec.aux.pathTiers = make(map[string]string, len(aux.PathTiers))
 		for path, tier := range aux.PathTiers {
-			rec.pathTiers[NormalizeLedgerPath(path)] = tier
+			rec.aux.pathTiers[NormalizeLedgerPath(path)] = tier
 		}
 	}
 	if aux.UntrustedContent {
@@ -76,6 +76,6 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		rec.ExternalCustody = true
 	}
 	if aux.Seq > 0 {
-		rec.seq = aux.Seq
+		rec.aux.seq = aux.Seq
 	}
 }

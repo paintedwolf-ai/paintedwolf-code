@@ -160,13 +160,13 @@ func cloneRecord(rec Record) Record {
 	if len(rec.pathsTouched) > 0 {
 		out.pathsTouched = append([]string(nil), rec.pathsTouched...)
 	}
-	if len(rec.urlsTouched) > 0 {
-		out.urlsTouched = append([]string(nil), rec.urlsTouched...)
+	if len(rec.aux.urlsTouched) > 0 {
+		out.aux.urlsTouched = append([]string(nil), rec.aux.urlsTouched...)
 	}
-	if rec.urlTitles != nil {
-		out.urlTitles = make(map[string]string, len(rec.urlTitles))
-		for u, t := range rec.urlTitles {
-			out.urlTitles[u] = t
+	if rec.aux.urlTitles != nil {
+		out.aux.urlTitles = make(map[string]string, len(rec.aux.urlTitles))
+		for u, t := range rec.aux.urlTitles {
+			out.aux.urlTitles[u] = t
 		}
 	}
 	if len(rec.LineRanges) > 0 {
@@ -185,10 +185,10 @@ func cloneRecord(rec Record) Record {
 			out.grepLines[path] = cloned
 		}
 	}
-	if rec.pathTiers != nil {
-		out.pathTiers = make(map[string]string, len(rec.pathTiers))
-		for path, tier := range rec.pathTiers {
-			out.pathTiers[path] = tier
+	if rec.aux.pathTiers != nil {
+		out.aux.pathTiers = make(map[string]string, len(rec.aux.pathTiers))
+		for path, tier := range rec.aux.pathTiers {
+			out.aux.pathTiers[path] = tier
 		}
 	}
 	return out

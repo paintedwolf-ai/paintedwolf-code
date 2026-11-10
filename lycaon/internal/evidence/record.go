@@ -33,10 +33,7 @@ type Record struct {
 
 	grepLines    map[string]map[int]string // grep kind: path → line → content
 	pathsTouched []string                  // additional normalized paths for ByPath index
-	pathTiers    map[string]string         // normalized path → trust tier at capture
-	urlsTouched  []string                  // every URL named by the result
-	urlTitles    map[string]string         // URL → page title the tool reported
-	seq          int                       // monotonic per-session commit sequence for cross-kind chronology
+	aux          recordIndex               // unexported URL/trust/chronology index fields
 
 	// Gate/inspector fields — populated when GateType != "" (scan verify/security rows).
 	GateType       string         `json:"type,omitempty"`
@@ -58,16 +55,23 @@ func (r Record) ShowedLineNumbers() bool {
 	return r.SourceDelivery == nil || r.SourceDelivery.LineNumbered
 }
 
+type recordIndex struct {
+	pathTiers   map[string]string // normalized path → trust tier at capture
+	urlsTouched []string          // every URL named by the result
+	urlTitles   map[string]string // URL → page title the tool reported
+	seq         int               // monotonic per-session commit sequence for cross-kind chronology
+}
+
 // IsGate reports whether rec is an inspector gate row.
 func (r Record) IsGate() bool { return r.GateType != "" }
 
 // Seq returns the monotonic per-session commit sequence number for cross-kind ordering.
-func (r Record) Seq() int { return r.seq }
+func (r Record) Seq() int { return r.aux.seq }
 
 // SetSeq stamps the monotonic per-session commit sequence number on r.
 func (r *Record) SetSeq(seq int) {
 	if r != nil && seq > 0 {
-		r.seq = seq
+		r.aux.seq = seq
 	}
 }
 
