@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -65,10 +66,14 @@ func NewRuntime(opts RuntimeOptions) (*Runtime, error) {
 	}
 	statePath := strings.TrimSpace(opts.StatePath)
 	if statePath == "" {
-		var err error
-		statePath, err = configdir.UserConfigDir()
-		if err != nil {
-			return nil, fmt.Errorf("mcp config directory: %w", err)
+		if strings.TrimSpace(opts.GlobalOverridePath) != "" {
+			statePath = filepath.Dir(opts.GlobalOverridePath)
+		} else {
+			var err error
+			statePath, err = configdir.UserConfigDir()
+			if err != nil {
+				return nil, fmt.Errorf("mcp config directory: %w", err)
+			}
 		}
 	}
 	globalPath := filepath.Join(statePath, settingsoverlay.BasenameMCP)
@@ -196,6 +201,17 @@ func (r *ConnectionPool) deviceProbeRoots() []string {
 // Load reads distro + user overlays into the device catalog and re-syncs tools.
 // An unreadable user overlay is dropped as a rejected row; an unreadable distro catalog is fatal.
 func (r *ProviderCatalog) Load(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if strings.TrimSpace(r.globalPath) != "" && !overlayLockAlreadyHeld(ctx, r.globalPath) {
+		return catalogruntime.WithLock(ctx, r.statePath, r.globalPath, func() error {
+			lockedCtx := withOverlayLockHeld(ctx, r.globalPath)
+			r.Tools.syncMu.Lock()
+			defer r.Tools.syncMu.Unlock()
+			return r.loadLocked(lockedCtx)
+		})
+	}
 	r.Tools.syncMu.Lock()
 	defer r.Tools.syncMu.Unlock()
 	return r.loadLocked(ctx)
@@ -218,6 +234,12 @@ func (r *ProviderCatalog) loadLocked(ctx context.Context) error {
 			Class:  ProviderClassWeb,
 		})
 		user = &UserMCPConfig{}
+	} else {
+		hydrated, migErr := migrateAndHydrateUserOverlay(r.statePath, r.globalPath, user)
+		if migErr != nil {
+			return fmt.Errorf("mcp static credentials: %w", migErr)
+		}
+		user = hydrated
 	}
 
 	catalog, rejected, err := MergeMCPCatalog(distro, user, nil)

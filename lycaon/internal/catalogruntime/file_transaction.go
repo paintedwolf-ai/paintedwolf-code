@@ -124,24 +124,39 @@ func cleanTransactionPaths(target, lockRoot string) (string, string, error) {
 // reader can never observe a write mid-apply or a row about to be rolled
 // back. existed is false when target does not exist (data is nil then).
 func ReadFile(ctx context.Context, lockRoot, target string) (data []byte, existed bool, err error) {
-	if ctx == nil {
-		return nil, false, fmt.Errorf("catalog transaction context is required")
+	cleanTarget, _, cleanErr := cleanTransactionPaths(target, lockRoot)
+	if cleanErr != nil {
+		return nil, false, cleanErr
 	}
-	target, lockRoot, err = cleanTransactionPaths(target, lockRoot)
+	err = WithLock(ctx, lockRoot, cleanTarget, func() error {
+		var readErr error
+		data, existed, readErr = readCatalogFile(cleanTarget)
+		return readErr
+	})
+	return data, existed, err
+}
+
+// WithLock executes fn while holding the same process and cross-process locks
+// UpdateFile holds for target under lockRoot.
+func WithLock(ctx context.Context, lockRoot, target string, fn func() error) error {
+	if ctx == nil {
+		return fmt.Errorf("catalog transaction context is required")
+	}
+	target, lockRoot, err := cleanTransactionPaths(target, lockRoot)
 	if err != nil {
-		return nil, false, err
+		return err
 	}
 	releaseProcess, err := acquireCatalogProcessLock(ctx, target)
 	if err != nil {
-		return nil, false, err
+		return err
 	}
 	defer releaseProcess()
 	releaseFile, err := acquireCatalogFileLock(ctx, lockRoot, target)
 	if err != nil {
-		return nil, false, err
+		return err
 	}
 	defer releaseFile()
-	return readCatalogFile(target)
+	return fn()
 }
 
 func acquireCatalogProcessLock(ctx context.Context, target string) (func(), error) {

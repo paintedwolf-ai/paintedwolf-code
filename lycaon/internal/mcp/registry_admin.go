@@ -226,11 +226,34 @@ func (r *ProviderAdministration) ListRecipes(ctx context.Context, scope CallScop
 
 func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope CallScope, id string, ov MCPProviderOverlay, scopeProjectDir string) (api.McpProvider, error) {
 	var created api.McpProvider
+	isUserScope := strings.TrimSpace(scopeProjectDir) == ""
+	creds := extractOverlayCredentials(ov)
+	var prevCreds StaticCredentialRecord
+	var hadPrev bool
+	wroteVault := false
+	var store *StaticCredentialStore
+
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
 		if r.Catalog.projectView(txCtx, scope.ProjectDir).known(id) {
 			return AdminErrID(RejectDuplicateID, id)
 		}
-		return upsertProviderOverlay(path, ov)
+		ovToSave := ov
+		if isUserScope {
+			var openErr error
+			store, openErr = NewStaticCredentialStoreForDir(r.Catalog.statePath)
+			if openErr != nil {
+				return openErr
+			}
+			prevCreds, hadPrev = store.Get(id)
+			if creds.HasSecrets() || hadPrev {
+				if putErr := store.PutVerified(id, creds); putErr != nil {
+					return putErr
+				}
+				wroteVault = true
+			}
+			ovToSave = scrubOverlayCredentials(ov)
+		}
+		return upsertProviderOverlay(path, ovToSave)
 	}, func(txCtx context.Context) error {
 		row, ok := r.Catalog.GetProvider(txCtx, scope, id)
 		if ok && row.Status != api.McpStatusRejected {
@@ -244,6 +267,14 @@ func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope Ca
 		return AdminErrID(reason, id)
 	})
 	if err != nil {
+		if wroteVault && store != nil {
+			if hadPrev {
+				_ = store.PutVerified(id, prevCreds)
+			} else {
+				_ = store.RemoveRecord(id)
+			}
+			_ = r.Catalog.Load(ctx)
+		}
 		return api.McpProvider{}, persistErr(err)
 	}
 	return created, nil
@@ -324,13 +355,47 @@ func (r *ProviderAdministration) UpdateProvider(ctx context.Context, scope CallS
 	}
 
 	var updated api.McpProvider
+	isUserScope := strings.TrimSpace(scopeProjectDir) == ""
+	var prevCreds StaticCredentialRecord
+	var hadPrev bool
+	wroteVault := false
+	var store *StaticCredentialStore
+
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
 		if !r.Catalog.projectView(txCtx, scope.ProjectDir).known(providerID) {
 			return ErrUnknownMCPProvider(providerID)
 		}
-		return patchProviderOverlay(path, providerID, func(ov *MCPProviderOverlay) {
+		var patchVaultErr error
+		err := patchProviderOverlay(path, providerID, func(ov *MCPProviderOverlay) {
+			if isUserScope {
+				store, patchVaultErr = NewStaticCredentialStoreForDir(r.Catalog.statePath)
+				if patchVaultErr != nil {
+					return
+				}
+				prevCreds, hadPrev = store.Get(providerID)
+				baseCreds := prevCreds
+				hadInline := overlayHasInlineCredentials(*ov)
+				if !hadPrev && hadInline {
+					baseCreds = extractOverlayCredentials(*ov)
+				}
+				nextCreds, changed := applyUpdateToCredentials(baseCreds, req)
+				if changed || (!hadPrev && hadInline) {
+					if putErr := store.PutVerified(providerID, nextCreds); putErr != nil {
+						patchVaultErr = putErr
+						return
+					}
+					wroteVault = true
+				}
+			}
 			applyUpdateToOverlay(ov, req)
+			if isUserScope {
+				*ov = scrubOverlayCredentials(*ov)
+			}
 		})
+		if patchVaultErr != nil {
+			return patchVaultErr
+		}
+		return err
 	}, func(txCtx context.Context) error {
 		row, ok := r.Catalog.GetProvider(txCtx, scope, providerID)
 		if !ok {
@@ -340,9 +405,74 @@ func (r *ProviderAdministration) UpdateProvider(ctx context.Context, scope CallS
 		return nil
 	})
 	if err != nil {
+		if wroteVault && store != nil {
+			if hadPrev {
+				_ = store.PutVerified(providerID, prevCreds)
+			} else {
+				_ = store.RemoveRecord(providerID)
+			}
+			_ = r.Catalog.Load(ctx)
+		}
 		return api.McpProvider{}, persistErr(err)
 	}
 	return updated, nil
+}
+
+func applyUpdateToCredentials(prev StaticCredentialRecord, req api.UpdateMcpProviderRequest) (StaticCredentialRecord, bool) {
+	next := StaticCredentialRecord{
+		Token:          prev.Token,
+		Headers:        cloneStringMap(prev.Headers),
+		Env:            cloneStringMap(prev.Env),
+		Migrated:       true,
+		TokenCleared:   prev.TokenCleared,
+		HeadersCleared: prev.HeadersCleared,
+		EnvCleared:     prev.EnvCleared,
+	}
+	changed := false
+	if req.URL != nil && strings.TrimSpace(*req.URL) != "" && req.Env == nil && (len(next.Env) > 0 || next.EnvCleared) {
+		next.Env = nil
+		next.EnvCleared = false
+		changed = true
+	}
+	if req.Command != nil && strings.TrimSpace(*req.Command) != "" {
+		if req.Token == nil && (next.Token != "" || next.TokenCleared) {
+			next.Token = ""
+			next.TokenCleared = false
+			changed = true
+		}
+		if req.Headers == nil && (len(next.Headers) > 0 || next.HeadersCleared) {
+			next.Headers = nil
+			next.HeadersCleared = false
+			changed = true
+		}
+	}
+	if req.Token != nil {
+		tok := strings.TrimSpace(*req.Token)
+		next.Token = tok
+		next.TokenCleared = tok == ""
+		changed = true
+	}
+	if req.Headers != nil {
+		next.Headers = cloneStringMap(*req.Headers)
+		if len(next.Headers) == 0 {
+			next.Headers = nil
+			next.HeadersCleared = true
+		} else {
+			next.HeadersCleared = false
+		}
+		changed = true
+	}
+	if req.Env != nil {
+		next.Env = cloneStringMap(*req.Env)
+		if len(next.Env) == 0 {
+			next.Env = nil
+			next.EnvCleared = true
+		} else {
+			next.EnvCleared = false
+		}
+		changed = true
+	}
+	return normalizeRecord(next), changed
 }
 
 func updateNamesAField(req api.UpdateMcpProviderRequest) bool {
@@ -454,11 +584,22 @@ func recipeCredentialWire(rec Recipe) api.McpCredentialWire {
 
 // DeleteOverlay removes a user or project overlay row for providerID.
 func (r *ProviderAdministration) DeleteOverlay(ctx context.Context, providerID, scopeProjectDir string) error {
+	isUserScope := strings.TrimSpace(scopeProjectDir) == ""
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
 		if !r.Catalog.projectView(txCtx, scopeProjectDir).known(providerID) {
 			return ErrUnknownMCPProvider(providerID)
 		}
+		if isUserScope {
+			store, openErr := NewStaticCredentialStoreForDir(r.Catalog.statePath)
+			if openErr != nil {
+				return openErr
+			}
+			if delErr := store.PutVerified(providerID, StaticCredentialRecord{Migrated: true, Deleted: true}); delErr != nil {
+				return delErr
+			}
+		}
 		return clearProviderOverride(path, providerID)
+	}, nil)
 	}, nil)
 	if err != nil {
 		return persistErr(err)
