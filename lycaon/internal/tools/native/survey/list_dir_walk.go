@@ -194,20 +194,20 @@ func (t *ListDirTool) listRootCatalog(
 	includeHidden bool,
 ) ([]listDirEntry, bool) {
 	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
+	scopeRel := projectroot.ScopeRel(root, fullPath)
 	if confine.IsAgentSourceReadDenied(root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
-		return nil, true
+		return nil, false
 	}
-	if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, fullPath), tctx.ProfileID()) != nil {
-		return nil, true
+	if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, scopeRel, tctx.ProfileID()) != nil {
+		return nil, false
 	}
-	if catalogOrProcess(t.Catalog).BoundaryPath(ctx, root.Path, projectroot.ScopeRel(root, fullPath), true) != "" {
+	if catalogOrProcess(t.Catalog).BoundaryPath(ctx, root.Path, scopeRel, true) != "" {
 		return nil, false
 	}
 	current := catalogOrProcess(t.Catalog).Current(ctx, tctx.Identity.ProjectID, []sourcecatalog.Root{{ID: root.ID, Path: root.Path}})
 	if current.State != sourcecatalog.StateReady {
 		return nil, false
 	}
-	scopeRel := projectroot.ScopeRel(root, fullPath)
 	if maxDepth == 1 {
 		children, ok := current.Listing(root.ID, scopeRel)
 		if !ok {
