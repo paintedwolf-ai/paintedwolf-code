@@ -97,3 +97,72 @@ func waitOutageMarker(t *testing.T, control, name string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// Hard mounts may wait inside the kernel despite a canceled Go context. The
+// independent fixture watchdog bounds the outage even if this test exits.
+func TestHardSourceTransportResumesWithoutLosingCheckpoint(t *testing.T) {
+	parent, control := os.Getenv("PW_M14_HARD_SOURCE_PARENT"), os.Getenv("PW_M14_OUTAGE_CONTROL")
+	if parent == "" {
+		t.Skip("requires explicitly provisioned hard network mount")
+	}
+	if control == "" {
+		t.Fatal("outage control path required")
+	}
+	waitOutageMarker(t, control, "armed.json")
+	source, err := os.MkdirTemp(parent, "checkpoint-hard-")
+	testutil.FailErr(t, "create hard-mounted source", err)
+	t.Cleanup(func() { _ = os.RemoveAll(source) })
+	t.Cleanup(func() {
+		testutil.FailErr(t, "request fixture restoration", os.WriteFile(filepath.Join(control, "restore.request"), nil, 0600))
+		waitOutageMarker(t, control, "restored.json")
+	})
+	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(source, "f00.txt"), []byte("base\n"), 0640))
+	store, promoter, _ := publishManyChanges(t, source, 1)
+	before, err := store.LoadManifest("cp-scale")
+	testutil.FailErr(t, "load checkpoint before outage", err)
+	testutil.FailErr(t, "request transport stop", os.WriteFile(filepath.Join(control, "stop.request"), nil, 0600))
+	waitOutageMarker(t, control, "stopped.json")
+	type outcome struct {
+		preview *PromotionPreview
+		err     error
+	}
+	result := make(chan outcome, 1)
+	entered := make(chan struct{})
+	go func() {
+		close(entered)
+		preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-scale"})
+		result <- outcome{preview, err}
+	}()
+	<-entered
+	select {
+	case outcome := <-result:
+		t.Fatalf("hard-mounted preview completed while transport was stopped: %v", outcome.err)
+	case <-time.After(500 * time.Millisecond):
+	}
+	after, err := store.LoadManifest("cp-scale")
+	testutil.FailErr(t, "read retained local checkpoint while source waits", err)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("waiting preview changed checkpoint")
+	}
+	testutil.FailErr(t, "restore transport", os.WriteFile(filepath.Join(control, "restore.request"), nil, 0600))
+	waitOutageMarker(t, control, "restored.json")
+	var recovered outcome
+	select {
+	case recovered = <-result:
+	case <-time.After(120 * time.Second):
+		t.Fatal("preview did not recover after source transport returned")
+	}
+	testutil.FailErr(t, "resume blocked preview", recovered.err)
+	body, err := os.ReadFile(filepath.Join(source, "f00.txt"))
+	testutil.FailErr(t, "read original source", err)
+	if string(body) != "base\n" {
+		t.Fatalf("preview mutated source: %q", body)
+	}
+	_, err = promoteAndCommit(t, promoter, ApplyRequest{Preview: recovered.preview})
+	testutil.FailErr(t, "promote after hard-mount recovery", err)
+	body, err = os.ReadFile(filepath.Join(source, "f00.txt"))
+	testutil.FailErr(t, "read promoted source", err)
+	if string(body) != "worker\n" {
+		t.Fatalf("recovery lost checkpoint bytes: %q", body)
+	}
+}
