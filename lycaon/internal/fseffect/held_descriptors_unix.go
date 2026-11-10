@@ -47,7 +47,7 @@ func (s *sharedParentDir) release() {
 var (
 	rootCache struct {
 		mu      sync.RWMutex
-		entries [128]rootCacheEntry
+		entries [8]rootCacheEntry
 		next    int
 	}
 	sharedParentCache struct {
@@ -55,16 +55,6 @@ var (
 		dir *sharedParentDir
 	}
 )
-
-func init() {
-	for _, dir := range []string{"/tmp", os.TempDir()} {
-		if clean := filepath.Clean(dir); filepath.IsAbs(clean) {
-			if r, err := openRootFlags(clean, unix.O_RDONLY); err == nil {
-				r.close()
-			}
-		}
-	}
-}
 
 type openedRoot struct {
 	readOpens      atomic.Int64
@@ -97,53 +87,27 @@ func openRoot(path string) (*openedRoot, error) {
 func openRootFlags(path string, accessFlags int) (*openedRoot, error) {
 	clean := filepath.Clean(path)
 	if filepath.IsAbs(clean) {
-		rootCache.mu.RLock()
-		hasExact := false
-		var best rootCacheEntry
-		bestSuffix, bestLen := "", 0
-		sep := string(filepath.Separator)
-		for i := range rootCache.entries {
-			e := rootCache.entries[i]
-			if e.canonical == "" {
-				continue
-			}
-			if e.rawPath == clean || e.canonical == clean {
-				hasExact = true
-				break
-			}
-			if strings.HasPrefix(clean, e.rawPath+sep) && len(e.rawPath) > bestLen {
-				best, bestLen = e, len(e.rawPath)
-				bestSuffix = strings.TrimPrefix(clean, e.rawPath+sep)
-			} else if strings.HasPrefix(clean, e.canonical+sep) && len(e.canonical) > bestLen {
-				best, bestLen = e, len(e.canonical)
-				bestSuffix = strings.TrimPrefix(clean, e.canonical+sep)
-			}
-		}
-		rootCache.mu.RUnlock()
-		if hasExact {
-			if fd, err := unix.Open(clean, accessFlags|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0); err == nil {
-				var st unix.Stat_t
-				if unix.Fstat(fd, &st) == nil {
-					rootCache.mu.RLock()
-					var canonical string
-					for i := range rootCache.entries {
-						e := &rootCache.entries[i]
-						if (e.rawPath == clean || e.canonical == clean) && e.dev == deviceID(&st) && e.ino == st.Ino {
-							canonical = e.canonical
-							break
-						}
+		if fd, err := unix.Open(clean, accessFlags|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0); err == nil {
+			var st unix.Stat_t
+			if unix.Fstat(fd, &st) == nil {
+				rootCache.mu.RLock()
+				var canonical string
+				for i := range rootCache.entries {
+					e := &rootCache.entries[i]
+					if (e.rawPath == clean || e.canonical == clean) && e.dev == deviceID(&st) && e.ino == st.Ino {
+						canonical = e.canonical
+						break
 					}
-					rootCache.mu.RUnlock()
-					if canonical != "" {
+				}
+				rootCache.mu.RUnlock()
+				if canonical != "" {
+					var canonSt unix.Stat_t
+					if canonical == clean || (unix.Fstatat(unix.AT_FDCWD, canonical, &canonSt, unix.AT_SYMLINK_NOFOLLOW) == nil && deviceID(&canonSt) == deviceID(&st) && canonSt.Ino == st.Ino) {
 						return &openedRoot{path: canonical, fd: fd, dev: deviceID(&st), ino: st.Ino}, nil
 					}
 				}
-				_ = unix.Close(fd)
 			}
-		} else if best.canonical != "" && bestSuffix != "" {
-			if root, err := walkFromCachedAncestor(clean, best, bestSuffix, accessFlags); err == nil {
-				return root, nil
-			}
+			_ = unix.Close(fd)
 		}
 		if root, err := walkRootNoFollow(clean, clean, accessFlags); err == nil {
 			return root, nil
@@ -154,49 +118,6 @@ func openRootFlags(path string, accessFlags int) (*openedRoot, error) {
 		return nil, fmt.Errorf("resolve effect root: %w", err)
 	}
 	return walkRootNoFollow(clean, canonical, accessFlags)
-}
-
-func walkFromCachedAncestor(rawPath string, ancestor rootCacheEntry, suffix string, accessFlags int) (*openedRoot, error) {
-	fd, err := unix.Open(ancestor.canonical, accessFlags|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-	if err != nil {
-		return nil, err
-	}
-	var st unix.Stat_t
-	if err := unix.Fstat(fd, &st); err != nil || deviceID(&st) != ancestor.dev || st.Ino != ancestor.ino {
-		_ = unix.Close(fd)
-		return nil, fmt.Errorf("cached ancestor changed")
-	}
-	for _, component := range strings.Split(suffix, string(filepath.Separator)) {
-		if component == "" {
-			continue
-		}
-		next, openErr := unix.Openat(fd, component, accessFlags|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-		_ = unix.Close(fd)
-		if openErr != nil {
-			return nil, openErr
-		}
-		fd = next
-	}
-	if err := unix.Fstat(fd, &st); err != nil {
-		_ = unix.Close(fd)
-		return nil, err
-	}
-	canonical := filepath.Join(ancestor.canonical, suffix)
-	storeRootCacheEntry(rawPath, canonical, deviceID(&st), st.Ino)
-	return &openedRoot{path: canonical, fd: fd, dev: deviceID(&st), ino: st.Ino}, nil
-}
-
-func storeRootCacheEntry(rawPath, canonical string, dev, ino uint64) {
-	rootCache.mu.Lock()
-	defer rootCache.mu.Unlock()
-	for i := range rootCache.entries {
-		if (rootCache.entries[i].rawPath == rawPath && rootCache.entries[i].canonical == canonical) || rootCache.entries[i].canonical == "" {
-			rootCache.entries[i] = rootCacheEntry{rawPath: rawPath, canonical: canonical, dev: dev, ino: ino}
-			return
-		}
-	}
-	rootCache.entries[rootCache.next] = rootCacheEntry{rawPath: rawPath, canonical: canonical, dev: dev, ino: ino}
-	rootCache.next = (rootCache.next + 1) % len(rootCache.entries)
 }
 
 func walkRootNoFollow(rawPath, canonical string, accessFlags int) (*openedRoot, error) {
@@ -221,7 +142,20 @@ func walkRootNoFollow(rawPath, canonical string, accessFlags int) (*openedRoot, 
 	}
 	var st unix.Stat_t
 	if unix.Fstat(fd, &st) == nil {
-		storeRootCacheEntry(rawPath, canonical, deviceID(&st), st.Ino)
+		rootCache.mu.Lock()
+		stored := false
+		for i := range rootCache.entries {
+			if (rootCache.entries[i].rawPath == rawPath && rootCache.entries[i].canonical == canonical) || rootCache.entries[i].canonical == "" {
+				rootCache.entries[i] = rootCacheEntry{rawPath: rawPath, canonical: canonical, dev: deviceID(&st), ino: st.Ino}
+				stored = true
+				break
+			}
+		}
+		if !stored {
+			rootCache.entries[rootCache.next] = rootCacheEntry{rawPath: rawPath, canonical: canonical, dev: deviceID(&st), ino: st.Ino}
+			rootCache.next = (rootCache.next + 1) % len(rootCache.entries)
+		}
+		rootCache.mu.Unlock()
 	}
 	return &openedRoot{path: canonical, fd: fd, dev: deviceID(&st), ino: st.Ino}, nil
 }
