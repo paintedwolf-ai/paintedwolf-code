@@ -83,7 +83,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"tool": qualifiedName, "reason": parseErr.Error()}))
 	}
 	ctx = withSecretUse(ctx, secretUse)
-	args, tc, err = e.applyPreInvokeBoundary(ctx, qualifiedName, profileID, args, tc)
+	args, tc, _, err = e.applyPreInvokeBoundary(ctx, qualifiedName, profileID, args, tc)
 	if err != nil {
 		return "", err
 	}

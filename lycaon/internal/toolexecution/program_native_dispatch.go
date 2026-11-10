@@ -188,7 +188,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	ctx = withSecretUse(ctx, secretUse)
 	defer func() { tc.Effects.Secrets.Finish(ctx) }()
 	boundaryStarted = true
-	canonical, tc, err := e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, arguments.values, tc)
+	canonical, tc, boundaryApproved, err := e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, arguments.values, tc)
 	if err != nil {
 		return result, err
 	}
@@ -238,7 +238,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		if err := validateNativeArguments(facts, disclosed, nextArguments.values, tc); err != nil {
 			return result, err
 		}
-		canonical, tc, err = e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, nextArguments.values, tc)
+		canonical, tc, boundaryApproved, err = e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, nextArguments.values, tc)
 		if err != nil {
 			return result, err
 		}
@@ -285,7 +285,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 		return result, err
 	}
-	canonical, err = e.applyPreInvokePolicy(ctx, facts.Identity, surface.profile, canonical, &tc, e.Boundary.actionConfineRequest(ctx, tc), contextBoundaryApprovalSatisfied(tc))
+	canonical, err = e.applyPreInvokePolicy(ctx, facts.Identity, surface.profile, canonical, &tc, e.Boundary.actionConfineRequest(ctx, tc), boundaryApproved)
 	if err != nil {
 		return result, err
 	}
