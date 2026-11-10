@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,20 +16,32 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
 const (
-	maxVisitedGitObjects, maxMetadataObjectBytes, maxLooseBlobBytes = 65536, 16 << 20, 512 << 20
+	maxVisitedGitObjects, maxMetadataObjectBytes, maxLooseBlobBytes          = 65536, 16 << 20, 512 << 20
+	pendingPublishFormatVersion, maxPendingPublishRecordBytes, maxPendingRec = 1, 4 << 20, 4096
 )
 
 var (
 	wrapObjectCopyReaderFn = func(_ string, r io.Reader) io.Reader { return r }
 	syncObjectFileFn       = syncFile
 	closeObjectFileFn      = func(f *os.File) error { return f.Close() }
+	pendingPublishSeq      atomic.Uint64
 )
+
+type pendingPublishRecord struct {
+	FormatVersion int      `json:"format_version"`
+	OIDs          []string `json:"oids"`
+}
+
+func pendingPublishDir(commonGitDir string) string {
+	return filepath.Join(commonGitDir, "lycaon-pending-publish")
+}
 
 // WriteLooseGitObject writes a standard zlib-compressed loose Git object into objectsDir and returns its SHA-1 hex OID.
 func WriteLooseGitObject(objectsDir, objType string, payload []byte) (string, error) {
@@ -50,6 +64,7 @@ type candidateGitObjectSource struct {
 	candidateDirs, packCandidateDirs                                          []string
 	targetHasPacks                                                            bool
 	targetFanoutDirs, selectedPackedOIDs, incompleteTargetOIDs                map[string]bool
+	priorPendingRecords                                                       map[string][]string
 	stagedLoose                                                               map[string]string
 	stagedLooseOrder                                                          []string
 }
@@ -69,14 +84,10 @@ func openCandidateGitObjectSource(
 		storeDir: strings.TrimSpace(storeDir), repoRoot: repoRoot, gitDir: gitDir,
 		commonGitDir: commonGitDir, targetObjectsDir: targetObjectsDir,
 		selectedPackedOIDs: make(map[string]bool), incompleteTargetOIDs: make(map[string]bool),
-		stagedLoose: make(map[string]string),
+		priorPendingRecords: make(map[string][]string), stagedLoose: make(map[string]string),
 	}
-	if raw, err := readBoundedFile(filepath.Join(commonGitDir, "lycaon-pending-publish"), 4<<20); err == nil {
-		for _, line := range strings.Split(string(raw), "\n") {
-			if oid := strings.ToLower(strings.TrimSpace(line)); isHexOID(oid) && !isAllZeroOID(oid) {
-				src.incompleteTargetOIDs[oid] = true
-			}
-		}
+	if err := src.reloadPendingPublishOIDs(true); err != nil {
+		return nil, func() {}, err
 	}
 	hasTargetInfo, hasTargetPack := true, true
 	if entries, err := os.ReadDir(targetObjectsDir); err == nil {
@@ -158,56 +169,73 @@ func openCandidateGitObjectSource(
 	return src, cleanup, nil
 }
 
-func rejectGitAlternates(objectsDir string) error {
-	infoDir := filepath.Join(objectsDir, "info")
-	if st, err := os.Lstat(infoDir); err == nil && st.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("checkpoint: symlink prohibited in git objects info: %s", infoDir)
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+func readPendingPublishRecord(path string) ([]string, error) {
+	st, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
 	}
-	altPath := filepath.Join(infoDir, "alternates")
-	if _, err := os.Lstat(altPath); err == nil {
-		return fmt.Errorf("checkpoint: git alternates prohibited in %s", altPath)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
+	if st.Mode()&os.ModeSymlink != 0 || !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("checkpoint: invalid pending publish entry %s", path)
 	}
-	return nil
+	raw, err := readBoundedFile(path, maxPendingPublishRecordBytes)
+	if err != nil {
+		return nil, err
+	}
+	var rec pendingPublishRecord
+	if err := decodeStrict(raw, &rec); err != nil || rec.FormatVersion != pendingPublishFormatVersion || len(rec.OIDs) == 0 {
+		return nil, fmt.Errorf("checkpoint: invalid pending publish record %s: %w", path, err)
+	}
+	for _, oid := range rec.OIDs {
+		if oid != strings.ToLower(strings.TrimSpace(oid)) || !isHexOID(oid) || isAllZeroOID(oid) {
+			return nil, fmt.Errorf("checkpoint: invalid oid %q in pending publish record %s", oid, path)
+		}
+	}
+	return rec.OIDs, nil
 }
 
-func inspectCandidatePackDir(packDir string, rejectSymlinks bool) (bool, error) {
-	st, err := os.Lstat(packDir)
+func (s *candidateGitObjectSource) reloadPendingPublishOIDs(recordPrior bool) error {
+	dir := pendingPublishDir(s.commonGitDir)
+	st, err := os.Lstat(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
+			return nil
 		}
-		return false, err
+		return err
 	}
-	if st.Mode()&os.ModeSymlink != 0 {
-		if rejectSymlinks {
-			return false, fmt.Errorf("checkpoint: symlink prohibited in retained git objects: %s", packDir)
-		}
-		return false, nil
+	if st.Mode()&os.ModeSymlink != 0 || !st.IsDir() {
+		return fmt.Errorf("checkpoint: invalid pending publish state at %s", dir)
 	}
-	if !st.IsDir() {
-		return false, nil
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) > maxPendingRec {
+		return errors.Join(err, fmt.Errorf("checkpoint: invalid or oversized pending publish dir %s", dir))
 	}
-	entries, err := os.ReadDir(packDir)
-	if err != nil {
-		return false, err
-	}
-	hasPack := false
 	for _, d := range entries {
-		if d.Type()&os.ModeSymlink != 0 {
-			if rejectSymlinks {
-				return false, fmt.Errorf("checkpoint: symlink prohibited in retained git objects: %s", filepath.Join(packDir, d.Name()))
+		name, entryPath := d.Name(), filepath.Join(dir, d.Name())
+		if fseffect.IsStaging(name) {
+			if est, lErr := os.Lstat(entryPath); lErr != nil && !errors.Is(lErr, os.ErrNotExist) {
+				return lErr
+			} else if lErr == nil && (est.Mode()&os.ModeSymlink != 0 || !est.Mode().IsRegular()) {
+				return fmt.Errorf("checkpoint: invalid pending publish staging entry %s", entryPath)
 			}
 			continue
 		}
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ".pack") {
-			hasPack = true
+		if !strings.HasSuffix(name, ".json") {
+			return fmt.Errorf("checkpoint: unexpected pending publish file %s", entryPath)
+		}
+		oids, rErr := readPendingPublishRecord(entryPath)
+		if errors.Is(rErr, os.ErrNotExist) {
+			continue
+		} else if rErr != nil {
+			return rErr
+		}
+		if recordPrior {
+			s.priorPendingRecords[name] = oids
+		}
+		for _, oid := range oids {
+			s.incompleteTargetOIDs[oid] = true
 		}
 	}
-	return hasPack, nil
+	return nil
 }
 
 func (s *candidateGitObjectSource) resolveWave(ctx context.Context, oids []string) (map[string]batchObjectData, error) {
@@ -325,16 +353,32 @@ func (s *candidateGitObjectSource) resolveCandidateLoose(ctx context.Context, oi
 }
 
 func (s *candidateGitObjectSource) publishVerifiedObjects(ctx context.Context, seen map[string]bool) error {
+	dir := pendingPublishDir(s.commonGitDir)
+	var ownRecord string
 	if len(s.stagedLoose) > 0 || len(s.selectedPackedOIDs) > 0 {
+		pubSet := make(map[string]bool, len(s.stagedLoose)+len(s.selectedPackedOIDs))
 		for oid := range s.stagedLoose {
-			s.incompleteTargetOIDs[oid] = true
+			pubSet[oid], s.incompleteTargetOIDs[oid] = true, true
 		}
 		for oid := range s.selectedPackedOIDs {
-			s.incompleteTargetOIDs[oid] = true
+			pubSet[oid], s.incompleteTargetOIDs[oid] = true, true
 		}
-		pending := slices.Sorted(maps.Keys(s.incompleteTargetOIDs))
-		if err := writeAtomicJSONOrText(s.commonGitDir, "lycaon-pending-publish", []byte(strings.Join(pending, "\n")+"\n"), 0o600); err != nil {
+		_, statErr := os.Lstat(dir)
+		createdDir := errors.Is(statErr, os.ErrNotExist)
+		raw, err := json.Marshal(pendingPublishRecord{FormatVersion: pendingPublishFormatVersion, OIDs: slices.Sorted(maps.Keys(pubSet))})
+		if err != nil {
 			return err
+		}
+		var rnd [8]byte
+		_, _ = rand.Read(rnd[:])
+		ownRecord = fmt.Sprintf("pending-%d-%s-%d.json", os.Getpid(), hex.EncodeToString(rnd[:]), pendingPublishSeq.Add(1))
+		if err := writeAtomicJSONOrText(dir, ownRecord, raw, 0o600); err != nil {
+			return err
+		}
+		if createdDir {
+			if err := syncDir(s.commonGitDir); err != nil {
+				return err
+			}
 		}
 	}
 	if err := s.publishSelectedPack(ctx); err != nil {
@@ -353,18 +397,32 @@ func (s *candidateGitObjectSource) publishVerifiedObjects(ctx context.Context, s
 			s.targetFanoutDirs[oid[:2]] = true
 		}
 	}
-	for oid := range seen {
-		delete(s.incompleteTargetOIDs, oid)
-	}
-	pendingPath := filepath.Join(s.commonGitDir, "lycaon-pending-publish")
-	if len(s.incompleteTargetOIDs) == 0 {
-		if err := os.Remove(pendingPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
+	return s.completePendingPublish(dir, ownRecord, seen)
+}
+
+func (s *candidateGitObjectSource) completePendingPublish(dir, ownRecord string, seen map[string]bool) error {
+	if ownRecord == "" && len(s.priorPendingRecords) == 0 {
 		return nil
 	}
-	rem := slices.Sorted(maps.Keys(s.incompleteTargetOIDs))
-	return writeAtomicJSONOrText(s.commonGitDir, "lycaon-pending-publish", []byte(strings.Join(rem, "\n")+"\n"), 0o600)
+	if ownRecord != "" {
+		if err := os.Remove(filepath.Join(dir, ownRecord)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	for name, oids := range s.priorPendingRecords {
+		if slices.ContainsFunc(oids, func(oid string) bool { return !seen[oid] }) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	if entries, err := os.ReadDir(dir); err == nil && len(entries) == 0 {
+		if rmErr := os.Remove(dir); rmErr == nil {
+			return syncDir(s.commonGitDir)
+		}
+	}
+	return syncDirIfPresent(dir)
 }
 
 func (s *candidateGitObjectSource) ensurePackReaderDir() (string, error) {
@@ -470,7 +528,7 @@ func (s *candidateGitObjectSource) publishSelectedPack(ctx context.Context) erro
 }
 
 func copyFileStreamingAtomic(srcPath, dstPath string, mode os.FileMode) error {
-	_, _, err := copyFileStreamingAtomicWithVerify(srcPath, dstPath, mode)
+	_, _, err := copyFileStreamingAtomicOpts(srcPath, dstPath, mode, true, true)
 	return err
 }
 
@@ -493,8 +551,7 @@ func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensu
 	if err != nil {
 		return "", nil, err
 	}
-	tmpPath := tmpFile.Name()
-	published := false
+	tmpPath, published := tmpFile.Name(), false
 	defer func() {
 		_ = tmpFile.Close()
 		if !published {
@@ -502,13 +559,10 @@ func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensu
 		}
 	}()
 	wrappedIn := wrapObjectCopyReaderFn(srcPath, in)
-	var (
-		objType string
-		body    []byte
-	)
+	var objType string
+	var body []byte
 	if oid, isLoose := looseObjectOIDForPath(dstPath); isLoose {
-		objType, body, err = readAndVerifyLooseGitObject(io.TeeReader(wrappedIn, tmpFile), oid)
-		if err != nil {
+		if objType, body, err = readAndVerifyLooseGitObject(io.TeeReader(wrappedIn, tmpFile), oid); err != nil {
 			return "", nil, err
 		}
 		if extra, cErr := io.Copy(tmpFile, wrappedIn); cErr != nil || extra != 0 {
@@ -521,20 +575,11 @@ func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensu
 		}
 		dstHash := sha256.New()
 		written, cErr := io.Copy(io.MultiWriter(tmpFile, dstHash), wrappedIn)
-		if cErr != nil {
-			return "", nil, cErr
-		}
-		if written == 0 {
-			return "", nil, fmt.Errorf("checkpoint: empty staged git asset for %s", dstPath)
-		}
-		if srcSHA == "" || srcSHA != hex.EncodeToString(dstHash.Sum(nil)) {
-			return "", nil, fmt.Errorf("checkpoint: staged git asset digest mismatch for %s", dstPath)
+		if cErr != nil || written == 0 || srcSHA == "" || srcSHA != hex.EncodeToString(dstHash.Sum(nil)) {
+			return "", nil, fmt.Errorf("checkpoint: staged git asset copy/digest failure for %s: %w", dstPath, cErr)
 		}
 	}
-	if err := tmpFile.Chmod(mode); err != nil {
-		return "", nil, err
-	}
-	if err := errors.Join(syncObjectFileFn(tmpFile), closeObjectFileFn(tmpFile)); err != nil {
+	if err := errors.Join(tmpFile.Chmod(mode), syncObjectFileFn(tmpFile), closeObjectFileFn(tmpFile)); err != nil {
 		return "", nil, err
 	}
 	if err := fseffect.Rename(filepath.Dir(dstPath), filepath.Base(tmpPath), filepath.Base(dstPath)); err != nil {
@@ -547,42 +592,3 @@ func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensu
 	return objType, body, nil
 }
 
-func isValidDestinationGitAsset(srcPath, dstPath string) bool {
-	dstSt, err := os.Lstat(dstPath)
-	if err != nil || !dstSt.Mode().IsRegular() || dstSt.Size() <= 0 {
-		return false
-	}
-	if oid, ok := looseObjectOIDForPath(dstPath); ok {
-		f, openErr := os.Open(dstPath)
-		if openErr != nil {
-			return false
-		}
-		_, _, vErr := readAndVerifyLooseGitObject(f, oid)
-		_ = f.Close()
-		return vErr == nil
-	}
-	srcSt, err := os.Lstat(srcPath)
-	if err != nil || !srcSt.Mode().IsRegular() || srcSt.Size() != dstSt.Size() {
-		return false
-	}
-	srcSHA, sErr := fileDigestSHA256(srcPath)
-	dstSHA, dErr := fileDigestSHA256(dstPath)
-	return sErr == nil && dErr == nil && srcSHA != "" && srcSHA == dstSHA
-}
-
-func looseObjectOIDForPath(p string) (string, bool) {
-	prefix, suffix := filepath.Base(filepath.Dir(p)), filepath.Base(p)
-	oid := strings.ToLower(prefix + suffix)
-	return oid, len(prefix) == 2 && isHexOID(oid) && !isAllZeroOID(oid)
-}
-
-func fileDigestSHA256(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	_, cErr := io.Copy(h, f)
-	return hex.EncodeToString(h.Sum(nil)), cErr
-}

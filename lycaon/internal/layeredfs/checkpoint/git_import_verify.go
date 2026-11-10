@@ -34,7 +34,10 @@ func verifyAndPublishReachableGitGraph(ctx context.Context, source *candidateGit
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	frontier := buildEstablishedTargetFrontier(ctx, source, tipOIDs)
+	frontier, err := buildEstablishedTargetFrontier(ctx, source, tipOIDs)
+	if err != nil {
+		return err
+	}
 	seen, frontierVerifyOIDs := make(map[string]bool, len(tipOIDs)*4), make(map[string]bool)
 	pairedBaseTree := make(map[string]string)
 	wave := make([]string, 0, len(tipOIDs))
@@ -137,7 +140,7 @@ func verifyAndPublishReachableGitGraph(ctx context.Context, source *candidateGit
 	return source.publishVerifiedObjects(ctx, seen)
 }
 
-func buildEstablishedTargetFrontier(ctx context.Context, source *candidateGitObjectSource, excludeTipOIDs []string) *establishedTargetFrontier {
+func buildEstablishedTargetFrontier(ctx context.Context, source *candidateGitObjectSource, excludeTipOIDs []string) (*establishedTargetFrontier, error) {
 	f := &establishedTargetFrontier{commits: make(map[string]string), trees: make(map[string]map[treeEntryKey]string)}
 	excluded := make(map[string]bool, len(excludeTipOIDs))
 	for _, oid := range excludeTipOIDs {
@@ -148,20 +151,23 @@ func buildEstablishedTargetFrontier(ctx context.Context, source *candidateGitObj
 	}
 	tips := collectDestinationBaseRefTips(source.commonGitDir, source.gitDir, excluded)
 	if len(tips) == 0 {
-		return f
+		return f, nil
 	}
 	resolved, err := readDestinationObjectsOnly(ctx, source, tips)
 	if err != nil {
-		return f
+		return f, nil
+	}
+	if err := source.reloadPendingPublishOIDs(false); err != nil {
+		return nil, err
 	}
 	for _, oid := range tips {
 		if data, ok := resolved[oid]; ok && data.objType == "commit" {
-			if treeOID, _, pErr := parseCommitOrTagTargets(data.body, true); pErr == nil && !excluded[oid] && !source.incompleteTargetOIDs[treeOID] && f.loadEstablishedTree(ctx, source, treeOID) != nil {
+			if treeOID, _, pErr := parseCommitOrTagTargets(data.body, true); pErr == nil && !excluded[oid] && !source.incompleteTargetOIDs[oid] && !source.incompleteTargetOIDs[treeOID] && f.loadEstablishedTree(ctx, source, treeOID) != nil {
 				f.commits[oid] = treeOID
 			}
 		}
 	}
-	return f
+	return f, nil
 }
 
 func (f *establishedTargetFrontier) loadEstablishedTree(ctx context.Context, source *candidateGitObjectSource, treeOID string) map[treeEntryKey]string {
@@ -189,8 +195,7 @@ func readDestinationObjectsOnly(ctx context.Context, source *candidateGitObjectS
 	var packed []string
 	for _, oid := range oids {
 		if source.hasTargetFanout(oid) {
-			dstLoose := filepath.Join(source.targetObjectsDir, oid[:2], oid[2:])
-			if f, err := os.Open(dstLoose); err == nil {
+			if f, err := os.Open(filepath.Join(source.targetObjectsDir, oid[:2], oid[2:])); err == nil {
 				objType, body, vErr := readAndVerifyLooseGitObject(f, oid)
 				_ = f.Close()
 				if vErr == nil {
@@ -211,10 +216,8 @@ func collectDestinationBaseRefTips(commonGitDir, gitDir string, excluded map[str
 	seen := make(map[string]bool)
 	var tips []string
 	addOID := func(oid string) {
-		oid = strings.ToLower(strings.TrimSpace(oid))
-		if isHexOID(oid) && !isAllZeroOID(oid) && !excluded[oid] && !seen[oid] && len(tips) < 64 {
-			seen[oid] = true
-			tips = append(tips, oid)
+		if oid = strings.ToLower(strings.TrimSpace(oid)); isHexOID(oid) && !isAllZeroOID(oid) && !excluded[oid] && !seen[oid] && len(tips) < 64 {
+			seen[oid], tips = true, append(tips, oid)
 		}
 	}
 	packed := loadPackedRefsMap(commonGitDir, gitDir)
@@ -233,8 +236,7 @@ func collectDestinationBaseRefTips(commonGitDir, gitDir string, excluded map[str
 			}
 		}
 		if raw, err := readBoundedFile(filepath.Join(dir, "HEAD"), 512); err == nil {
-			head := strings.TrimSpace(string(raw))
-			if strings.HasPrefix(head, "ref:") {
+			if head := strings.TrimSpace(string(raw)); strings.HasPrefix(head, "ref:") {
 				refName := strings.TrimSpace(strings.TrimPrefix(head, "ref:"))
 				if strings.HasPrefix(refName, "refs/tags/") || (strings.HasPrefix(refName, "refs/heads/") && strings.Count(strings.TrimPrefix(refName, "refs/heads/"), "/") > 0) {
 					addOID(resolveExistingGitRefWithPacked(commonGitDir, gitDir, refName, packed))
@@ -256,10 +258,7 @@ func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObj
 	if len(frontierOIDs) == 0 {
 		return nil
 	}
-	var (
-		needPacked []string
-		wave       []string
-	)
+	var needPacked, wave []string
 	for _, oid := range slices.Sorted(maps.Keys(frontierOIDs)) {
 		if seen[oid] {
 			continue
@@ -276,8 +275,7 @@ func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObj
 			return err
 		}
 		if source.hasTargetFanout(oid) {
-			dstLoose := filepath.Join(source.targetObjectsDir, oid[:2], oid[2:])
-			if f, err := os.Open(dstLoose); err == nil {
+			if f, err := os.Open(filepath.Join(source.targetObjectsDir, oid[:2], oid[2:])); err == nil {
 				_, _, vErr := readAndVerifyLooseGitObject(f, oid)
 				_ = f.Close()
 				if vErr == nil {
@@ -288,25 +286,29 @@ func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObj
 		}
 		needPacked = append(needPacked, oid)
 	}
-	if len(needPacked) > 0 {
-		if source.targetHasPacks {
-			meta, err := batchCheckObjects(ctx, source.repoRoot, source.commonGitDir, needPacked)
-			if err != nil {
-				return err
-			}
-			for _, oid := range needPacked {
-				if _, ok := meta[oid]; ok {
-					seen[oid] = true
-				} else {
-					wave = append(wave, oid)
-				}
-			}
-		} else {
-			wave = append(wave, needPacked...)
+	if len(needPacked) > 0 && source.targetHasPacks {
+		meta, err := batchCheckObjects(ctx, source.repoRoot, source.commonGitDir, needPacked)
+		if err != nil {
+			return err
 		}
+		for _, oid := range needPacked {
+			if _, ok := meta[oid]; ok {
+				seen[oid] = true
+			} else {
+				wave = append(wave, oid)
+			}
+		}
+	} else if len(needPacked) > 0 {
+		wave = append(wave, needPacked...)
 	}
-	if len(wave) == 0 {
-		return nil
+	if err := source.reloadPendingPublishOIDs(false); err != nil {
+		return err
+	}
+	for _, oid := range slices.Sorted(maps.Keys(frontierOIDs)) {
+		if source.incompleteTargetOIDs[oid] && seen[oid] {
+			delete(seen, oid)
+			wave = append(wave, oid)
+		}
 	}
 	for len(wave) > 0 {
 		if len(seen)+len(wave) > maxVisitedGitObjects {
@@ -320,8 +322,7 @@ func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObj
 		inNext := make(map[string]bool)
 		addNext := func(oid string) {
 			if !seen[oid] && !inNext[oid] {
-				inNext[oid] = true
-				nextWave = append(nextWave, oid)
+				inNext[oid], nextWave = true, append(nextWave, oid)
 			}
 		}
 		for _, oid := range wave {
@@ -553,4 +554,44 @@ func readAndVerifyPackedGitObject(ctx context.Context, repoRoot, commonGitDir, o
 		return "", nil, fmt.Errorf("corrupt packed %s %s: %w", objType, oid, cErr)
 	}
 	return objType, body, nil
+}
+
+func isValidDestinationGitAsset(srcPath, dstPath string) bool {
+	if dstSt, err := os.Lstat(dstPath); err != nil || !dstSt.Mode().IsRegular() || dstSt.Size() <= 0 {
+		return false
+	}
+	if oid, ok := looseObjectOIDForPath(dstPath); ok {
+		f, openErr := os.Open(dstPath)
+		if openErr != nil {
+			return false
+		}
+		_, _, vErr := readAndVerifyLooseGitObject(f, oid)
+		_ = f.Close()
+		return vErr == nil
+	}
+	srcSt, err := os.Lstat(srcPath)
+	dstSt, dStErr := os.Lstat(dstPath)
+	if err != nil || dStErr != nil || !srcSt.Mode().IsRegular() || srcSt.Size() != dstSt.Size() {
+		return false
+	}
+	srcSHA, sErr := fileDigestSHA256(srcPath)
+	dstSHA, dErr := fileDigestSHA256(dstPath)
+	return sErr == nil && dErr == nil && srcSHA != "" && srcSHA == dstSHA
+}
+
+func looseObjectOIDForPath(p string) (string, bool) {
+	prefix, suffix := filepath.Base(filepath.Dir(p)), filepath.Base(p)
+	oid := strings.ToLower(prefix + suffix)
+	return oid, len(prefix) == 2 && isHexOID(oid) && !isAllZeroOID(oid)
+}
+
+func fileDigestSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	_, cErr := io.Copy(h, f)
+	return hex.EncodeToString(h.Sum(nil)), cErr
 }

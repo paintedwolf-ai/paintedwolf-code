@@ -488,6 +488,58 @@ func isHexOID(s string) bool {
 }
 func isAllZeroOID(s string) bool { return strings.Trim(s, "0") == "" }
 
+func rejectGitAlternates(objectsDir string) error {
+	infoDir := filepath.Join(objectsDir, "info")
+	if st, err := os.Lstat(infoDir); err == nil && st.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("checkpoint: symlink prohibited in git objects info: %s", infoDir)
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	altPath := filepath.Join(infoDir, "alternates")
+	if _, err := os.Lstat(altPath); err == nil {
+		return fmt.Errorf("checkpoint: git alternates prohibited in %s", altPath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func inspectCandidatePackDir(packDir string, rejectSymlinks bool) (bool, error) {
+	st, err := os.Lstat(packDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, err
+	}
+	if st.Mode()&os.ModeSymlink != 0 {
+		if rejectSymlinks {
+			return false, fmt.Errorf("checkpoint: symlink prohibited in retained git objects: %s", packDir)
+		}
+		return false, nil
+	}
+	if !st.IsDir() {
+		return false, nil
+	}
+	entries, err := os.ReadDir(packDir)
+	if err != nil {
+		return false, err
+	}
+	hasPack := false
+	for _, d := range entries {
+		if d.Type()&os.ModeSymlink != 0 {
+			if rejectSymlinks {
+				return false, fmt.Errorf("checkpoint: symlink prohibited in retained git objects: %s", filepath.Join(packDir, d.Name()))
+			}
+			continue
+		}
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ".pack") {
+			hasPack = true
+		}
+	}
+	return hasPack, nil
+}
+
 func parseCommitOrTagTargets(body []byte, isCommit bool) (string, []string, error) {
 	var primaryOID string
 	var parents []string

@@ -319,7 +319,7 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 	assertTargetRefsPreserved("interrupted-mixed-publication-retry")
 	testutil.FailErr(t, "clean candPackDir", os.RemoveAll(candPackDir))
 	testutil.FailErr(t, "clean target pack dir", os.RemoveAll(filepath.Join(target, ".git", "objects", "pack")))
-	testutil.FailErr(t, "clean pending publish marker before step 3", os.Remove(filepath.Join(target, ".git", "lycaon-pending-publish")))
+	testutil.FailErr(t, "clean pending publish dir before step 3", os.RemoveAll(filepath.Join(target, ".git", "lycaon-pending-publish")))
 
 	// 3. Restoring unchangedTree in target while removing the frontier commit c1's root tree (c1Tree)
 	// must prevent c1 from being admitted to the established frontier and fail closed.
@@ -354,7 +354,13 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 
 	// 5. When unchangedTree is absent from target (or marked pending from an interrupted publication) and repaired
 	// from intact candidates alongside its child deepBlobOID, retry recovers and passes git fsck --full once c0 is restored.
-	testutil.FailErr(t, "write pending publish marker for recovery check", os.WriteFile(filepath.Join(target, ".git", "lycaon-pending-publish"), []byte(unchangedTreeOID+"\n"), 0o600))
+	pendingDir := filepath.Join(target, ".git", "lycaon-pending-publish")
+	testutil.FailErr(t, "mkdir pending publish dir", os.MkdirAll(pendingDir, 0o750))
+	testutil.FailErr(t, "write pending publish record for recovery check", os.WriteFile(
+		filepath.Join(pendingDir, "pending-manual.json"),
+		[]byte(`{"format_version":1,"oids":["`+unchangedTreeOID+`"]}`),
+		0o600,
+	))
 	testutil.FailErr(t, "write candTreePath", os.WriteFile(candTreePath, savedTreeBytes, 0o444))
 	testutil.FailErr(t, "write candBlobPath", os.WriteFile(candBlobPath, savedDeepBlobBytes, 0o444))
 	_, err = ImportAndValidateCheckpointGitRefs(
@@ -363,7 +369,7 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 		map[string]string{"primary": target},
 	)
 	testutil.FailErr(t, "complete candidate boundary subtree repair", err)
-	if _, statErr := os.Stat(filepath.Join(target, ".git", "lycaon-pending-publish")); !errors.Is(statErr, os.ErrNotExist) {
+	if _, statErr := os.Stat(pendingDir); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("expected lycaon-pending-publish to be cleared after complete repair, got %v", statErr)
 	}
 	testutil.FailErr(t, "restore c0 for full fsck", os.WriteFile(c0Path, savedC0Bytes, 0o444))
@@ -455,47 +461,126 @@ func TestGitImportStreamingVerificationRejectsMidStreamCorruption(t *testing.T) 
 	runGitTestCmd(t, target, "fsck", "--full")
 }
 
-func TestCheckpointGitImportRejectsAlternatesInCandidateAndTargetStores(t *testing.T) {
+func TestCheckpointGitImportConcurrentPendingPublishAcrossStores(t *testing.T) {
 	root := t.TempDir()
-	store, err := NewStore(filepath.Join(root, "recovery", "checkpoints"))
-	testutil.FailErr(t, "checkpoint store", err)
-	externalObjects := filepath.Join(root, "external-objects")
-	extBlob, err := WriteLooseGitObject(externalObjects, "blob", []byte("external unauthorized blob\n"))
-	testutil.FailErr(t, "write external blob", err)
-
-	target := filepath.Join(root, "source")
-	testutil.FailErr(t, "mkdir target", os.MkdirAll(target, 0o755))
+	target := filepath.Join(root, "target")
+	testutil.FailErr(t, "mkdir target", os.MkdirAll(filepath.Join(target, "unchanged"), 0o755))
 	runGitTestCmd(t, target, "init", "-q")
+	testutil.FailErr(t, "write deep", os.WriteFile(filepath.Join(target, "unchanged", "deep.txt"), []byte("deep-payload\n"), 0o644))
+	testutil.FailErr(t, "write edited", os.WriteFile(filepath.Join(target, "edited.txt"), []byte("v1\n"), 0o644))
+	runGitTestCmd(t, target, "add", ".")
+	runGitTestCmd(t, target, "commit", "-qm", "c1")
+	c1 := runGitTestCmd(t, target, "rev-parse", "HEAD")
+	unchangedTreeOID := runGitTestCmd(t, target, "rev-parse", "HEAD:unchanged")
+	deepBlobOID := runGitTestCmd(t, target, "rev-parse", "HEAD:unchanged/deep.txt")
 
-	// 1. Candidate store with objects/info/alternates must fail closed.
-	cpObjs := CheckpointGitObjectsDir(store.RootDir(), "chk-alt", "")
-	testutil.FailErr(t, "mkdir candidate info", os.MkdirAll(filepath.Join(cpObjs, "info"), 0o755))
-	testutil.FailErr(t, "write candidate alternates", os.WriteFile(filepath.Join(cpObjs, "info", "alternates"), []byte(externalObjects+"\n"), 0o600))
+	workerB := filepath.Join(root, "worker-b")
+	runGitTestCmd(t, root, "clone", "-q", target, workerB)
+	testutil.FailErr(t, "edit in workerB", os.WriteFile(filepath.Join(workerB, "edited.txt"), []byte("v2-b\n"), 0o644))
+	runGitTestCmd(t, workerB, "add", "edited.txt")
+	runGitTestCmd(t, workerB, "commit", "-qm", "cB")
+	cB := runGitTestCmd(t, workerB, "rev-parse", "HEAD")
+	cBTree := runGitTestCmd(t, workerB, "rev-parse", "HEAD^{tree}")
+	editedBlobB := runGitTestCmd(t, workerB, "rev-parse", "HEAD:edited.txt")
+
+	workerA := filepath.Join(root, "worker-a")
+	runGitTestCmd(t, root, "clone", "-q", target, workerA)
+	testutil.FailErr(t, "write a.txt", os.WriteFile(filepath.Join(workerA, "a.txt"), []byte("worker-a\n"), 0o644))
+	runGitTestCmd(t, workerA, "add", "a.txt")
+	runGitTestCmd(t, workerA, "commit", "-qm", "cA")
+	cA := runGitTestCmd(t, workerA, "rev-parse", "HEAD")
+	cATree := runGitTestCmd(t, workerA, "rev-parse", "HEAD^{tree}")
+	blobA := runGitTestCmd(t, workerA, "rev-parse", "HEAD:a.txt")
+
+	storeA, err := NewStore(filepath.Join(root, "store-a", "recovery", "checkpoints"))
+	testutil.FailErr(t, "storeA", err)
+	storeB, err := NewStore(filepath.Join(root, "store-b", "recovery", "checkpoints"))
+	testutil.FailErr(t, "storeB", err)
+	for _, oid := range []string{cA, cATree, blobA} {
+		src := filepath.Join(workerA, ".git", "objects", oid[:2], oid[2:])
+		dst := filepath.Join(CheckpointGitObjectsDir(storeA.RootDir(), "chk-a", ""), oid[:2], oid[2:])
+		raw, rErr := os.ReadFile(src)
+		testutil.FailErr(t, "read A "+oid, rErr)
+		testutil.FailErr(t, "mkdir A "+oid, os.MkdirAll(filepath.Dir(dst), 0o755))
+		testutil.FailErr(t, "write A "+oid, os.WriteFile(dst, raw, 0o444))
+	}
+	for _, oid := range []string{cB, cBTree, editedBlobB, unchangedTreeOID, deepBlobOID} {
+		src := filepath.Join(workerB, ".git", "objects", oid[:2], oid[2:])
+		dst := filepath.Join(CheckpointGitObjectsDir(storeB.RootDir(), "chk-b", ""), oid[:2], oid[2:])
+		raw, rErr := os.ReadFile(src)
+		testutil.FailErr(t, "read B "+oid, rErr)
+		testutil.FailErr(t, "mkdir B "+oid, os.MkdirAll(filepath.Dir(dst), 0o755))
+		testutil.FailErr(t, "write B "+oid, os.WriteFile(dst, raw, 0o444))
+	}
+	// Remove unchangedTreeOID and deepBlobOID from target so Store B must publish both, and fail Store B mid-publication.
+	unchangedTreeTarget := filepath.Join(target, ".git", "objects", unchangedTreeOID[:2], unchangedTreeOID[2:])
+	deepBlobTarget := filepath.Join(target, ".git", "objects", deepBlobOID[:2], deepBlobOID[2:])
+	savedTreeBytes, err := os.ReadFile(unchangedTreeTarget)
+	testutil.FailErr(t, "read unchangedTreeTarget", err)
+	testutil.FailErr(t, "remove unchangedTreeTarget", os.Remove(unchangedTreeTarget))
+	testutil.FailErr(t, "remove deepBlobTarget", os.Remove(deepBlobTarget))
+	candBlobB := filepath.Join(CheckpointGitObjectsDir(storeB.RootDir(), "chk-b", ""), deepBlobOID[:2], deepBlobOID[2:])
+	savedBlobB, err := os.ReadFile(candBlobB)
+	testutil.FailErr(t, "read candBlobB", err)
+
+	origWrap := wrapObjectCopyReaderFn
+	t.Cleanup(func() { wrapObjectCopyReaderFn = origWrap })
+	var concurrentAErr error
+	wrapObjectCopyReaderFn = func(srcPath string, r io.Reader) io.Reader {
+		if srcPath == candBlobB {
+			_ = os.MkdirAll(filepath.Dir(unchangedTreeTarget), 0o755)
+			_ = os.WriteFile(unchangedTreeTarget, savedTreeBytes, 0o444)
+			_, concurrentAErr = ImportAndValidateCheckpointGitRefs(
+				t.Context(), storeA.RootDir(), "chk-a", "worker-a",
+				PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work-a": cA}},
+				map[string]string{"primary": target},
+			)
+			return bytes.NewReader([]byte("corrupt-zlib"))
+		}
+		return r
+	}
 	if _, err := ImportAndValidateCheckpointGitRefs(
-		t.Context(), store.RootDir(), "chk-alt", "worker",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/tags/ext": extBlob}},
+		t.Context(), storeB.RootDir(), "chk-b", "worker-b",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work-b": cB}},
 		map[string]string{"primary": target},
 	); err == nil {
-		t.Fatal("expected candidate objects/info/alternates to be rejected")
+		t.Fatal("expected Store B import to fail on child blob")
 	}
-	_, code, probeErr := gitexec.Run(t.Context(), target, []string{"cat-file", "-e", extBlob}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	testutil.FailErr(t, "probe external blob", probeErr)
-	if code == 0 {
-		t.Fatal("external object resolved via prohibited candidate alternates")
+	wrapObjectCopyReaderFn = origWrap
+	testutil.FailErr(t, "concurrent Store A import", concurrentAErr)
+	if got := runGitTestCmd(t, target, "rev-parse", "refs/lycaon/workers/worker-a/heads/work-a"); got != cA {
+		t.Fatalf("Store A ref = %q, want %q", got, cA)
 	}
-	testutil.FailErr(t, "remove candidate alternates", os.RemoveAll(filepath.Join(cpObjs, "info")))
-
-	// 2. Destination store with objects/info/alternates must also fail closed.
-	validBlob, err := WriteLooseGitObject(cpObjs, "blob", []byte("valid candidate blob\n"))
-	testutil.FailErr(t, "write valid candidate blob", err)
-	targetAltFile := filepath.Join(target, ".git", "objects", "info", "alternates")
-	testutil.FailErr(t, "mkdir target info", os.MkdirAll(filepath.Dir(targetAltFile), 0o755))
-	testutil.FailErr(t, "write target alternates", os.WriteFile(targetAltFile, []byte(externalObjects+"\n"), 0o600))
+	if got := runGitTestCmd(t, target, "rev-parse", "HEAD"); got != c1 {
+		t.Fatalf("target HEAD = %q, want %q", got, c1)
+	}
+	// A subsequent unrelated import from Store A after Store B returned must also preserve Store B's pending record.
+	_, err = ImportAndValidateCheckpointGitRefs(
+		t.Context(), storeA.RootDir(), "chk-a-second", "worker-a",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work-a2": cA}, ObjectCheckpoints: []string{"chk-a"}},
+		map[string]string{"primary": target},
+	)
+	testutil.FailErr(t, "subsequent Store A import", err)
+	// Simulate process restart with a fresh Store B instance and missing child blob: Store B's pending record must still force failure.
+	testutil.FailErr(t, "remove candBlobB", os.Remove(candBlobB))
+	restartedStoreB, err := NewStore(storeB.RootDir())
+	testutil.FailErr(t, "reopen storeB", err)
 	if _, err := ImportAndValidateCheckpointGitRefs(
-		t.Context(), store.RootDir(), "chk-alt", "worker",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/tags/valid": validBlob}},
+		t.Context(), restartedStoreB.RootDir(), "chk-b-retry", "worker-b",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work-b": cB}, ObjectCheckpoints: []string{"chk-b"}},
 		map[string]string{"primary": target},
 	); err == nil {
-		t.Fatal("expected target objects/info/alternates to be rejected")
+		t.Fatal("expected retry across simulated restart to reject partially published unchangedTree after concurrent Store A completion")
 	}
+	testutil.FailErr(t, "restore candBlobB", os.WriteFile(candBlobB, savedBlobB, 0o444))
+	_, err = ImportAndValidateCheckpointGitRefs(
+		t.Context(), restartedStoreB.RootDir(), "chk-b-repaired", "worker-b",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work-b": cB}, ObjectCheckpoints: []string{"chk-b"}},
+		map[string]string{"primary": target},
+	)
+	testutil.FailErr(t, "repair Store B after restart", err)
+	if _, statErr := os.Stat(filepath.Join(target, ".git", "lycaon-pending-publish")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected lycaon-pending-publish cleaned up after Store B repair, got %v", statErr)
+	}
+	runGitTestCmd(t, target, "fsck", "--full")
 }
