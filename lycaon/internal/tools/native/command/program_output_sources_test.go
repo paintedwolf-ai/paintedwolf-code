@@ -17,7 +17,7 @@ func TestOptionalSourceCaptureAdmitsAndReleasesMemory(t *testing.T) {
 	for _, limit := range []int64{1024, 1 << 20} {
 		memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: limit, State: 1 << 20})
 		testutil.FailErr(t, "memory owner", err)
-		run := &programRun{memory: memory, tc: tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: root}}}}}
+		run := &programRun{memory: memory, tc: tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: root, IsPrimary: true}}}}}
 		pin := toolcontract.SourcePin{SourceID: "disk:r1/file", Representation: toolcontract.OriginalEncodedBytes, EndByte: 7}
 		path, captured, release, ok := (&ProgramRuntime{}).loadCapturedSourceForPin(t.Context(), run, pin, 7)
 		if limit == 1024 {
@@ -38,5 +38,25 @@ func TestOptionalSourceCaptureAdmitsAndReleasesMemory(t *testing.T) {
 		if _, _, _, ok := (&ProgramRuntime{}).loadCapturedSourceForPin(t.Context(), run, pin, 1); ok || memory.InUse().Working != 0 {
 			t.Fatal("failed decoding retained capture memory or granted credit")
 		}
+	}
+}
+
+func TestOptionalSourceCaptureReadsWorkerBytes(t *testing.T) {
+	root, branch := t.TempDir(), t.TempDir()
+	testutil.FailErr(t, "seed project source", os.WriteFile(filepath.Join(root, "file"), []byte("project\n"), 0600))
+	testutil.FailErr(t, "seed worker source", os.WriteFile(filepath.Join(branch, "file"), []byte("worker\n"), 0600))
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1 << 20})
+	testutil.FailErr(t, "memory owner", err)
+	run := &programRun{memory: memory, tc: tools.ToolContext{Source: tools.InvocationSource{
+		Roots: []projectroot.RootRef{{ID: "r1", Path: root, IsPrimary: true}}, WorkerBranchRoot: branch,
+	}}}
+	pin := toolcontract.SourcePin{SourceID: "disk:worker-branch/file", Representation: toolcontract.OriginalEncodedBytes, EndByte: 7}
+	path, captured, release, ok := (&ProgramRuntime{}).loadCapturedSourceForPin(t.Context(), run, pin, 7)
+	if !ok {
+		t.Fatal("worker source capture unavailable")
+	}
+	release()
+	if path != "file" || string(captured) != "worker\n" || memory.InUse().Working != 0 {
+		t.Fatalf("worker capture = %q %q, memory = %+v", path, captured, memory.InUse())
 	}
 }
