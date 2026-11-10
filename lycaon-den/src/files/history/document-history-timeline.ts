@@ -1,7 +1,7 @@
 import type { EditorDocumentChange } from "../../api/types.ts";
 import type { FileHistoryRow } from "./file-history-model.ts";
 
-type EditGroup = { kind: "edits"; changes: EditorDocumentChange[]; related?: boolean };
+type EditGroup = { kind: "edits"; changes: [EditorDocumentChange, ...EditorDocumentChange[]]; related?: boolean };
 type TimelineRow = FileHistoryRow | EditGroup;
 
 function turnKey(sessionId: string | undefined, turn: number): string | undefined {
@@ -32,7 +32,7 @@ export function documentHistoryTimeline(rows: readonly FileHistoryRow[], changes
   const editsByVersion = new Map<string, EditGroup[]>();
   const standalone: EditGroup[] = [];
   for (const group of groups) {
-    const change = group.changes[0]!;
+    const change = group.changes[0];
     const key = change.actor_kind === "agent" && turnKey(change.session_id, change.turn);
     const versionId = key && versionsByTurn.get(key);
     if (versionId) {
@@ -52,7 +52,7 @@ export function documentHistoryTimeline(rows: readonly FileHistoryRow[], changes
     const observedAt = row.kind === "version" ? row.version.created_at
       : row.kind === "arrival" ? row.change.observed_at : undefined;
     while (index < standalone.length && (!observedAt ||
-      Date.parse(standalone[index]!.changes[0]!.created_at) >= Date.parse(observedAt))) {
+      Date.parse(standalone[index]!.changes[0].created_at) >= Date.parse(observedAt))) {
       timeline.push(standalone[index++]!);
     }
     timeline.push(row);

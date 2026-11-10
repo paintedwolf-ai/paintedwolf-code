@@ -16,14 +16,14 @@ function changeAuthorLabel(change: EditorDocumentChange): string {
 }
 
 export function DocumentEditGroup(props: {
-  changes: readonly EditorDocumentChange[];
+  changes: readonly [EditorDocumentChange, ...EditorDocumentChange[]];
   related?: boolean;
   canUndo: (change: EditorDocumentChange) => boolean;
   onUndo: (change: EditorDocumentChange) => void;
 }) {
   const [expanded, setExpanded] = createSignal(false);
   const [page, setPage] = createSignal(0);
-  const first = () => props.changes[0]!;
+  const first = () => props.changes[0];
   const shown = () => props.changes.slice(page() * pageSize, (page() + 1) * pageSize);
   return (
     <details class="den-file-version__edits" onToggle={(event) => setExpanded(event.currentTarget.open)}>

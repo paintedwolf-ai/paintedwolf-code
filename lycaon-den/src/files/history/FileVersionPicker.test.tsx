@@ -138,7 +138,7 @@ describe("FileVersionPicker", () => {
       reverted_by: "", created_at: edited.created_at,
     }));
     const client = stubClient({
-      listEditorDocumentChanges: async (_project, _document, cursor) => {
+      listEditorDocumentChanges: async (_project: string, _document: string, cursor?: string) => {
         const start = Number(cursor ?? 0);
         const end = start + 50;
         return { changes: changes.slice(start, end), next_cursor: end < changes.length ? String(end) : undefined };

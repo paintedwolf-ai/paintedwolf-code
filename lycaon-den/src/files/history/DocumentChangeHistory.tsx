@@ -89,15 +89,23 @@ export function DocumentChangeHistory(props: DocumentHistorySource & {
   const rows = createMemo(() => documentHistoryTimeline(props.rows, changes()));
   return <>
     <Show when={!history.loading() && rows().length === 0}>{props.emptyMessage}</Show>
-    <For each={rows()}>{(row) => row.kind === "edits" ? (
-      <DocumentEditGroup
-        changes={row.changes}
-        related={row.related}
-        canUndo={(change) => !busy() && !change.reverted_by &&
-          change.epoch === editorReplica(props.documentId)?.accepted.epoch}
-        onUndo={(change) => void revert(change)}
-      />
-    ) : props.renderRow(row)}</For>
+    <For each={rows()}>{(row) => (
+      <Show
+        when={row.kind === "edits" ? row : undefined}
+        keyed
+        fallback={row.kind === "edits" ? undefined : props.renderRow(row)}
+      >
+        {(editRow) => (
+          <DocumentEditGroup
+            changes={editRow.changes}
+            related={editRow.related}
+            canUndo={(change) => !busy() && !change.reverted_by &&
+              change.epoch === editorReplica(props.documentId)?.accepted.epoch}
+            onUndo={(change) => void revert(change)}
+          />
+        )}
+      </Show>
+    )}</For>
     <Show when={!!cursor()}>
       <DenButton data-testid="earlier-edits" variant="ghost" compact disabled={busy()} onClick={() => void loadEarlier()}>
         Load earlier document edits
