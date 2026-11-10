@@ -206,13 +206,21 @@ func enrichAssessmentPromoteOrders(
 		assessment.PathOrders = append(assessment.PathOrders, order)
 	}
 
-	promote := PromoteRootsForTask(task, svc.taskRootRefs(ctx, task))
+	var promote PromoteRootSet
+	hasPromote := false
 	for _, rel := range assessment.CleanPaths {
-		verdict := assessPromotePath3Way(ctx, promote, task, rel, baseline)
 		var siblings []string
 		if svc != nil {
 			siblings = svc.overlapJobsForPath(ctx, sessionID, rel, task.ID)
 		}
+		if len(siblings) == 0 {
+			continue
+		}
+		if !hasPromote {
+			promote = PromoteRootsForTask(task, svc.taskRootRefs(ctx, task))
+			hasPromote = true
+		}
+		verdict := assessPromotePath3Way(ctx, promote, task, rel, baseline)
 		addOrder(rel, verdict, siblings)
 	}
 	for _, c := range assessment.Conflicts {

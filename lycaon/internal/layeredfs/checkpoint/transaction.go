@@ -247,11 +247,14 @@ func (txn *Transaction) mutateTargets(ctx context.Context, changes []PlannedChan
 		if err := context.Cause(ctx); err != nil {
 			return err
 		}
-		if err := txn.verifyRecorded(change); err != nil {
+		alreadyApplied, err := txn.verifyRecorded(change, fault != nil)
+		if err != nil {
 			return err
 		}
-		if err := txn.targets.applyPlannedChange(change); err != nil {
-			return err
+		if !alreadyApplied {
+			if err := txn.targets.applyPlannedChange(change); err != nil {
+				return err
+			}
 		}
 		if err := txn.reach(StepTargetMutated, pathKey(change.Path)); err != nil {
 			return err
@@ -267,22 +270,26 @@ func (txn *Transaction) mutateTargets(ctx context.Context, changes []PlannedChan
 
 // verifyRecorded refuses a target another program changed after it was recorded. A directory an
 // earlier change made implicitly has no meaningful recorded state until its own change runs.
-func (txn *Transaction) verifyRecorded(change PlannedChange) error {
+func (txn *Transaction) verifyRecorded(change PlannedChange, hasFault bool) (bool, error) {
 	if change.Action == ActionNoop || change.Action == ActionMkdir {
-		return nil
+		return false, nil
 	}
 	current, err := txn.captureTarget(change.Path)
 	if err != nil {
-		return err
+		return false, err
 	}
 	idx, known := txn.index[change.Path]
 	if !known {
-		return fmt.Errorf("checkpoint: unrecorded target %s", pathKey(change.Path))
+		return false, fmt.Errorf("checkpoint: unrecorded target %s", pathKey(change.Path))
 	}
-	if !txn.journal.Targets[idx].holds(current) {
-		return fmt.Errorf("%w: path %s changed during promotion", ErrStalePreviewTargetChanged, pathKey(change.Path))
+	target := txn.journal.Targets[idx]
+	if !target.holds(current) {
+		return false, fmt.Errorf("%w: path %s changed during promotion", ErrStalePreviewTargetChanged, pathKey(change.Path))
 	}
-	return nil
+	alreadyApplied := !hasFault && change.Action == ActionWriteRegular &&
+		sameTarget(current, target.After) && current.links <= 1 &&
+		(target.Before.Kind != layeredfs.EntryRegular || (current.identity != "" && current.identity != target.Before.identity))
+	return alreadyApplied, nil
 }
 
 func (target targetUndo) holds(current targetImage) bool {

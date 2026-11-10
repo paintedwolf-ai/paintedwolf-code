@@ -23,24 +23,13 @@ type batchObjectMeta struct {
 	objType string
 	size    int64
 }
-
 type batchObjectData struct {
 	objType string
 	size    int64
 	body    []byte
 }
-
-type treeEntryKey struct {
-	mode string
-	name string
-}
-
-type parsedTreeEntry struct {
-	mode string
-	name string
-	oid  string
-}
-
+type treeEntryKey struct{ mode, name string }
+type parsedTreeEntry struct{ mode, name, oid string }
 type establishedTargetFrontier struct {
 	commits map[string]string
 	trees   map[string]map[treeEntryKey]string
@@ -157,10 +146,7 @@ func verifyAndPublishReachableGitGraph(ctx context.Context, source *candidateGit
 }
 
 func buildEstablishedTargetFrontier(ctx context.Context, source *candidateGitObjectSource, excludeTipOIDs []string) *establishedTargetFrontier {
-	f := &establishedTargetFrontier{
-		commits: make(map[string]string),
-		trees:   make(map[string]map[treeEntryKey]string),
-	}
+	f := &establishedTargetFrontier{commits: make(map[string]string), trees: make(map[string]map[treeEntryKey]string)}
 	excluded := make(map[string]bool, len(excludeTipOIDs))
 	for _, oid := range excludeTipOIDs {
 		excluded[strings.ToLower(strings.TrimSpace(oid))] = true
@@ -173,20 +159,12 @@ func buildEstablishedTargetFrontier(ctx context.Context, source *candidateGitObj
 	if err != nil {
 		return f
 	}
-	var rootTrees []string
 	for _, oid := range tips {
-		data, ok := resolved[oid]
-		if !ok || data.objType != "commit" {
-			continue
+		if data, ok := resolved[oid]; ok && data.objType == "commit" {
+			if treeOID, _, pErr := parseCommitOrTagTargets(data.body, true); pErr == nil && !excluded[oid] && f.loadEstablishedTree(ctx, source, treeOID) != nil {
+				f.commits[oid] = treeOID
+			}
 		}
-		treeOID, _, pErr := parseCommitOrTagTargets(data.body, true)
-		if pErr == nil && !excluded[oid] {
-			f.commits[oid] = treeOID
-			rootTrees = append(rootTrees, treeOID)
-		}
-	}
-	for _, treeOID := range rootTrees {
-		_ = f.loadEstablishedTree(ctx, source, treeOID)
 	}
 	return f
 }
@@ -196,14 +174,10 @@ func (f *establishedTargetFrontier) loadEstablishedTree(ctx context.Context, sou
 		return existing
 	}
 	resolved, err := readDestinationObjectsOnly(ctx, source, []string{treeOID})
-	if err != nil {
+	if err != nil || resolved[treeOID].objType != "tree" {
 		return nil
 	}
-	data, ok := resolved[treeOID]
-	if !ok || data.objType != "tree" {
-		return nil
-	}
-	entries, err := parseTreeTargets(data.body, len(treeOID)/2)
+	entries, err := parseTreeTargets(resolved[treeOID].body, len(treeOID)/2)
 	if err != nil {
 		return nil
 	}
@@ -246,7 +220,11 @@ func collectDestinationBaseRefTips(commonGitDir, gitDir string, excluded map[str
 			tips = append(tips, oid)
 		}
 	}
-	for _, dir := range []string{gitDir, commonGitDir} {
+	dirs := []string{commonGitDir}
+	if filepath.Clean(gitDir) != filepath.Clean(commonGitDir) {
+		dirs = []string{gitDir, commonGitDir}
+	}
+	for _, dir := range dirs {
 		if raw, err := readBoundedFile(filepath.Join(dir, "HEAD"), 512); err == nil {
 			head := strings.TrimSpace(string(raw))
 			if strings.HasPrefix(head, "ref:") {
@@ -258,8 +236,6 @@ func collectDestinationBaseRefTips(commonGitDir, gitDir string, excluded map[str
 				addOID(head)
 			}
 		}
-	}
-	for _, dir := range []string{commonGitDir, gitDir} {
 		if entries, err := os.ReadDir(filepath.Join(dir, "refs", "heads")); err == nil {
 			for _, d := range entries {
 				if !d.IsDir() && len(tips) < 64 {
@@ -307,7 +283,7 @@ func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObj
 	if len(needPacked) == 0 {
 		return nil
 	}
-	var missing []string
+	var wave []string
 	if source.targetHasPacks {
 		meta, err := batchCheckObjects(ctx, source.repoRoot, source.commonGitDir, needPacked)
 		if err != nil {
@@ -317,15 +293,57 @@ func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObj
 			if _, ok := meta[oid]; ok {
 				seen[oid] = true
 			} else {
-				missing = append(missing, oid)
+				wave = append(wave, oid)
 			}
 		}
 	} else {
-		missing = needPacked
+		wave = needPacked
 	}
-	if len(missing) > 0 {
-		_, err := source.resolveWave(ctx, missing)
-		return err
+	for len(wave) > 0 {
+		if len(seen)+len(wave) > maxVisitedGitObjects {
+			return fmt.Errorf("checkpoint: git object traversal exceeded %d objects", maxVisitedGitObjects)
+		}
+		resolved, err := source.resolveWave(ctx, wave)
+		if err != nil {
+			return err
+		}
+		var nextWave []string
+		inNext := make(map[string]bool)
+		addNext := func(oid string) {
+			if !seen[oid] && !inNext[oid] {
+				inNext[oid] = true
+				nextWave = append(nextWave, oid)
+			}
+		}
+		for _, oid := range wave {
+			data := resolved[oid]
+			seen[oid] = true
+			switch data.objType {
+			case "blob":
+			case "commit", "tag":
+				primaryOID, parents, pErr := parseCommitOrTagTargets(data.body, data.objType == "commit")
+				if pErr != nil {
+					return pErr
+				}
+				addNext(primaryOID)
+				for _, p := range parents {
+					addNext(p)
+				}
+			case "tree":
+				entries, tErr := parseTreeTargets(data.body, len(oid)/2)
+				if tErr != nil {
+					return tErr
+				}
+				for _, entry := range entries {
+					if entry.mode != "160000" {
+						addNext(entry.oid)
+					}
+				}
+			default:
+				return fmt.Errorf("checkpoint: unsupported git object type %q", data.objType)
+			}
+		}
+		wave = nextWave
 	}
 	return nil
 }

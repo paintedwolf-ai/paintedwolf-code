@@ -351,14 +351,18 @@ func saveGitRefImportRecord(storeDir, intentName string, rec GitRefImportRecord)
 }
 
 func resolveExistingGitRef(commonGitDir, gitDir, dstRef string) string {
-	for _, baseDir := range []string{commonGitDir, gitDir} {
+	dirs := []string{commonGitDir}
+	if filepath.Clean(gitDir) != filepath.Clean(commonGitDir) {
+		dirs = []string{commonGitDir, gitDir}
+	}
+	for _, baseDir := range dirs {
 		if raw, err := readBoundedFile(filepath.Join(baseDir, filepath.FromSlash(dstRef)), 256); err == nil {
 			if oid := strings.ToLower(strings.TrimSpace(string(raw))); isHexOID(oid) {
 				return oid
 			}
 		}
 	}
-	for _, baseDir := range []string{commonGitDir, gitDir} {
+	for _, baseDir := range dirs {
 		if raw, err := readBoundedFile(filepath.Join(baseDir, "packed-refs"), 8<<20); err == nil {
 			for _, line := range strings.Split(string(raw), "\n") {
 				f := strings.Fields(strings.TrimSpace(line))

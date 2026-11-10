@@ -95,6 +95,9 @@ func openCandidateGitObjectSource(
 		targetObjectsDir:   targetObjectsDir,
 		selectedPackedOIDs: make(map[string]bool),
 	}
+	if err := rejectGitAlternates(targetObjectsDir); err != nil {
+		return nil, func() {}, err
+	}
 	if hasPacks, err := inspectCandidatePackDir(filepath.Join(targetObjectsDir, "pack"), false); err == nil {
 		src.targetHasPacks = hasPacks
 	}
@@ -119,8 +122,20 @@ func openCandidateGitObjectSource(
 				continue
 			}
 			st, err := os.Lstat(cleanCand)
-			if err != nil || !st.IsDir() || st.Mode()&os.ModeSymlink != 0 {
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					continue
+				}
+				return nil, func() {}, err
+			}
+			if st.Mode()&os.ModeSymlink != 0 {
+				return nil, func() {}, fmt.Errorf("checkpoint: symlink prohibited in retained git objects: %s", cleanCand)
+			}
+			if !st.IsDir() {
 				continue
+			}
+			if err := rejectGitAlternates(cleanCand); err != nil {
+				return nil, func() {}, err
 			}
 			hasPacks, pErr := inspectCandidatePackDir(filepath.Join(cleanCand, "pack"), true)
 			if pErr != nil {
@@ -139,6 +154,22 @@ func openCandidateGitObjectSource(
 		}
 	}
 	return src, cleanup, nil
+}
+
+func rejectGitAlternates(objectsDir string) error {
+	infoDir := filepath.Join(objectsDir, "info")
+	if st, err := os.Lstat(infoDir); err == nil && st.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("checkpoint: symlink prohibited in git objects info: %s", infoDir)
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	altPath := filepath.Join(infoDir, "alternates")
+	if _, err := os.Lstat(altPath); err == nil {
+		return fmt.Errorf("checkpoint: git alternates prohibited in %s", altPath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func inspectCandidatePackDir(packDir string, rejectSymlinks bool) (bool, error) {
@@ -295,7 +326,7 @@ func (s *candidateGitObjectSource) ensurePackReaderDir() (string, error) {
 		_ = os.RemoveAll(tmpDir)
 		return "", err
 	}
-	altDirs := append(slices.Clone(s.packCandidateDirs), s.targetObjectsDir)
+	altDirs := slices.Clone(s.candidateDirs)
 	if err := os.WriteFile(filepath.Join(infoDir, "alternates"), []byte(strings.Join(altDirs, "\n")+"\n"), 0o600); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return "", err
