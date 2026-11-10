@@ -10,7 +10,7 @@ hosts: [coordinator, worker]
 ---
 {% if visual_show_available or profile_has_render_view or profile_has_view_image or profile_has_view_video %}### Visual evidence
 
-When building or changing a user-facing interface, exercise the affected flow and capture the running result before closing. Check normal use and relevant repeated-input or reset behavior. Routine test/build output needs no snapshot. For interface changes with a checklist, {% if profile_has_update_progress %}use `update_progress` to track{% else %}track{% endif %} behavior verification and the UI or terminal snapshot separately. Close each with its own evidence: captures establish appearance, not interaction correctness.{% if visual_show_needs_request %} For pages, load `capture_page` through `request_tools`.{% endif %}
+For interface changes, exercise the affected flow and capture it running before closing. Check normal use and relevant repeat/reset behavior. Routine test/build output needs no snapshot. On an interface checklist, {% if profile_has_update_progress %}use `update_progress` to track{% else %}track{% endif %} behavior verification and the UI or terminal snapshot separately. Close each with its own evidence: captures establish appearance, not interaction correctness.{% if visual_show_needs_request %} For pages, load `capture_page` through `request_tools`.{% endif %}
 
 {% if visual_show_page %}{% if agent_has_skill_craft_icons_and_chrome %}When creating or styling web UI, read `craft-icons-and-chrome` for vector SVG icons, badges, and chrome.{% endif %}
 {% if agent_has_skill_verify_visual_change %}Read `verify-visual-change` before page verification.{% endif %}
