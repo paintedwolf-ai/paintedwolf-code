@@ -15,12 +15,15 @@ import { FilesTab } from "../tabs/FilesTab.tsx";
 import { fileTabKind } from "../tabs/files-tab-kind.ts";
 import { FilesEditorStatus } from "./FilesEditorChrome.tsx";
 import {
+  clearPrettyDisplayProject,
   clearPrettyDisplayTab,
+  getPrettySurfaceCapability,
   invokePrettyToggleForTab,
   isPrettyDisplayEnabled,
   prettyStatusToggleForTab,
   registerPrettySurfaceCapability,
   resetPrettyDisplayStateForTests,
+  setPrettyDisplayEnabled,
   togglePrettyDisplayPref,
 } from "./pretty-display-state.ts";
 
@@ -349,5 +352,93 @@ describe("Pretty display host contributions and status chrome (FMT-AC-06, FMT-IN
     expect(sharedInsetRecipe).not.toMatch(/--den-accent-signal/);
     expect(sharedInsetRecipe).toMatch(/&:focus-visible\s*\{[\s\S]*?box-shadow:/);
     expect(sharedInsetRecipe).toMatch(/&:disabled\s*\{[\s\S]*?opacity:\s*0\.4/);
+  });
+});
+
+describe("Pretty display state module guards, idempotence, and project scoping (FMT-INV-07)", () => {
+  it("ignores empty project or tab keys across preference and capability accessors", () => {
+    expect(isPrettyDisplayEnabled("", "tab.json")).toBe(false);
+    expect(isPrettyDisplayEnabled("proj", null)).toBe(false);
+    expect(isPrettyDisplayEnabled("proj", undefined)).toBe(false);
+
+    setPrettyDisplayEnabled("", "tab.json", true);
+    setPrettyDisplayEnabled("proj", null, true);
+    expect(togglePrettyDisplayPref("", "tab.json")).toBe(false);
+    expect(togglePrettyDisplayPref("proj", null)).toBe(false);
+    clearPrettyDisplayTab("", "tab.json");
+    clearPrettyDisplayTab("proj", null);
+    clearPrettyDisplayProject("");
+
+    const unregister = registerPrettySurfaceCapability("", "tab.json", {
+      enabled: () => true,
+      onToggle: () => {},
+    });
+    expect(typeof unregister).toBe("function");
+    expect(() => unregister()).not.toThrow();
+    expect(getPrettySurfaceCapability("", "tab.json")).toBeUndefined();
+    expect(getPrettySurfaceCapability("proj", null)).toBeUndefined();
+    expect(invokePrettyToggleForTab("proj", null)).toBe(false);
+    expect(isPrettyDisplayEnabled("proj", "tab.json")).toBe(false);
+  });
+
+  it("treats re-setting the same preference as a no-op and toggling as a flip", () => {
+    const projectId = "proj-idempotent";
+    const tabKey = fileBufferKey("root", "idempotent.json");
+    setPrettyDisplayEnabled(projectId, tabKey, true);
+    setPrettyDisplayEnabled(projectId, tabKey, true);
+    expect(isPrettyDisplayEnabled(projectId, tabKey)).toBe(true);
+    expect(togglePrettyDisplayPref(projectId, tabKey)).toBe(false);
+    expect(isPrettyDisplayEnabled(projectId, tabKey)).toBe(false);
+    expect(togglePrettyDisplayPref(projectId, tabKey)).toBe(true);
+    expect(isPrettyDisplayEnabled(projectId, tabKey)).toBe(true);
+  });
+
+  it("clears per-project preferences and capabilities without touching other projects", () => {
+    const projectA = "proj-clear-a";
+    const projectB = "proj-clear-b";
+    const tabA1 = fileBufferKey("root", "a1.json");
+    const tabA2 = fileBufferKey("root", "a2.json");
+    const tabB = fileBufferKey("root", "b.json");
+
+    setPrettyDisplayEnabled(projectA, tabA1, true);
+    setPrettyDisplayEnabled(projectA, tabA2, true);
+    setPrettyDisplayEnabled(projectB, tabB, true);
+    const unregisterA1 = registerPrettySurfaceCapability(projectA, tabA1, {
+      enabled: () => true,
+      onToggle: () => {},
+    });
+    registerPrettySurfaceCapability(projectB, tabB, {
+      enabled: () => true,
+      onToggle: () => {},
+    });
+
+    clearPrettyDisplayProject(projectA);
+
+    expect(isPrettyDisplayEnabled(projectA, tabA1)).toBe(false);
+    expect(isPrettyDisplayEnabled(projectA, tabA2)).toBe(false);
+    expect(getPrettySurfaceCapability(projectA, tabA1)).toBeUndefined();
+    expect(isPrettyDisplayEnabled(projectB, tabB)).toBe(true);
+    expect(getPrettySurfaceCapability(projectB, tabB)).toBeDefined();
+
+    // Unregister callbacks captured before the clear stay safe no-ops.
+    expect(() => unregisterA1()).not.toThrow();
+    expect(() => clearPrettyDisplayProject("proj-unknown")).not.toThrow();
+  });
+
+  it("reports unavailable capabilities as not toggleable", () => {
+    const projectId = "proj-unavailable";
+    const tabKey = fileBufferKey("root", "unavailable.json");
+    const onToggle = vi.fn();
+    registerPrettySurfaceCapability(projectId, tabKey, {
+      enabled: () => true,
+      available: () => false,
+      onToggle,
+    });
+
+    const status = prettyStatusToggleForTab(projectId, tabKey);
+    expect(status.available).toBe(false);
+    expect(status.enabled).toBe(false);
+    expect(invokePrettyToggleForTab(projectId, tabKey)).toBe(false);
+    expect(onToggle).not.toHaveBeenCalled();
   });
 });

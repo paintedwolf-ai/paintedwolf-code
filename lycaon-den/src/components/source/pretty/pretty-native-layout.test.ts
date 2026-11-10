@@ -11,15 +11,31 @@ import { html } from "@codemirror/lang-html";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
 import { forceParsing, syntaxTreeAvailable } from "@codemirror/language";
-import { Compartment, EditorState } from "@codemirror/state";
+import { Compartment, EditorState, Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
+import {
+  classifyDocumentFormat,
+  determineDocumentLineEligibility,
+  type LineEligibility,
+  isEnvelopeHeaderLine,
+  isExcerptBarrierLine,
+  isKnownCodeOrMarkupPath,
+  matchEnvelopeOrLogPrefix,
+  parseOpeningFence,
+  resolveFenceLayoutFamily,
+} from "./pretty-classify.ts";
+import { PrettyBudgetTracker } from "./pretty-limits.ts";
 import {
   applyPrettyNativeConfig,
   computePrettyNativeLayout,
   createPrettyNativeDecorationsExtension,
   prettyNativeStateField,
 } from "./pretty-native-layout.ts";
+
+function docOf(text: string): Text {
+  return Text.of(text.split("\n"));
+}
 
 describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
   it("FMT-AC-01, FMT-AC-05: computes exact raw-offset lexical boundaries while keeping raw text and token spelling untouched", () => {
@@ -814,5 +830,273 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     } finally {
       view.destroy();
     }
+  });
+});
+
+describe("pretty-classify document modes, envelope prefixes, and line eligibility (FMT01, FMT05)", () => {
+  it("classifies paths, language hints, and bare content into document modes (FMT-AC-04, FMT-AC-20)", () => {
+    // Path extensions and passthrough basenames
+    expect(classifyDocumentFormat("", "main.go")).toBe("code-passthrough");
+    expect(classifyDocumentFormat("", "Makefile")).toBe("code-passthrough");
+    expect(classifyDocumentFormat("", "config/.gitignore")).toBe("code-passthrough");
+    expect(classifyDocumentFormat("", "data.json")).toBe("json");
+    expect(classifyDocumentFormat("", "stream.ndjson")).toBe("jsonl");
+    expect(classifyDocumentFormat("", "config.json5")).toBe("jsonc");
+    expect(classifyDocumentFormat("", "page.svg")).toBe("xml-html");
+    expect(classifyDocumentFormat("", "app.tsx")).toBe("javascript");
+    expect(classifyDocumentFormat("", "theme.scss")).toBe("css");
+    expect(classifyDocumentFormat("", "README.md")).toBe("markdown");
+    expect(classifyDocumentFormat("", "notes.txt")).toBe("auto");
+
+    // Language hints are trimmed, lowercased, and win over content
+    expect(classifyDocumentFormat("{}", undefined, " Python ")).toBe("code-passthrough");
+    expect(classifyDocumentFormat("", undefined, "json")).toBe("json");
+    expect(classifyDocumentFormat("", undefined, "jsonl")).toBe("jsonl");
+    expect(classifyDocumentFormat("", undefined, "jsonc")).toBe("jsonc");
+    expect(classifyDocumentFormat("", undefined, "text/html")).toBe("xml-html");
+    expect(classifyDocumentFormat("", undefined, "TypeScript")).toBe("javascript");
+    expect(classifyDocumentFormat("", undefined, "text/css")).toBe("css");
+    expect(classifyDocumentFormat("", undefined, "gfm")).toBe("markdown");
+
+    // Bare content heuristics without path or hint
+    expect(classifyDocumentFormat("package main\n\nfunc main() {}\n")).toBe("code-passthrough");
+    expect(classifyDocumentFormat('import { readFile } from "node:fs";\n')).toBe("code-passthrough");
+    expect(classifyDocumentFormat("def greet(name):\n    return name\n")).toBe("code-passthrough");
+    // Fenced or empty content never claims bare passthrough code
+    expect(classifyDocumentFormat("```go\npackage main\n```\n")).toBe("auto");
+    expect(classifyDocumentFormat("")).toBe("auto");
+
+    // isKnownCodeOrMarkupPath mirrors the passthrough classification
+    expect(isKnownCodeOrMarkupPath("main.go")).toBe(true);
+    expect(isKnownCodeOrMarkupPath(undefined, "rust")).toBe(true);
+    expect(isKnownCodeOrMarkupPath("data.json")).toBe(false);
+    expect(isKnownCodeOrMarkupPath()).toBe(false);
+  });
+
+  it("matches host-marker, compaction, and log prefixes ahead of JSON bodies", () => {
+    // Evidence tags, overlay events, compaction banners, and receipt markers
+    expect(matchEnvelopeOrLogPrefix('[repo#12] {"a":1}')).toBe(10);
+    expect(matchEnvelopeOrLogPrefix('[repo#12 "src/app.ts":1-40] {"a":1}')).toBe(28);
+    expect(matchEnvelopeOrLogPrefix('[host:overlay-promote-event] {"a":1}')).toBe(29);
+    expect(matchEnvelopeOrLogPrefix('[host:overlay-reject-event] {"a":1}')).toBe(28);
+    expect(matchEnvelopeOrLogPrefix('[compacted 1200 chars] {"a":1}')).toBe(23);
+    expect(matchEnvelopeOrLogPrefix('verbatim head/tail: {"a":1}')).toBe(20);
+    expect(matchEnvelopeOrLogPrefix('>>> {"a":1}')).toBe(4);
+    expect(matchEnvelopeOrLogPrefix('Rejected: {"a":1}')).toBe(10);
+    expect(matchEnvelopeOrLogPrefix('Code: {"a":1}')).toBe(6);
+
+    // Leading whitespace is skipped and markers may chain
+    expect(matchEnvelopeOrLogPrefix('  \t[repo#12] {"a":1}')).toBe(13);
+    expect(matchEnvelopeOrLogPrefix('[repo#12] [host:overlay-promote-event] {"a":1}')).toBe(39);
+
+    // A marker not followed by a container is not an envelope prefix
+    expect(matchEnvelopeOrLogPrefix("[repo#12] plain text")).toBeNull();
+    expect(matchEnvelopeOrLogPrefix("[repo#12] [1,2]")).toBe(10);
+
+    // Log timestamps, levels, labels, and bracket tag chains
+    expect(matchEnvelopeOrLogPrefix('2026-11-10T16:12:43Z request {"a":1}')).toBe(29);
+    expect(matchEnvelopeOrLogPrefix('INFO request {"a":1}')).toBe(13);
+    expect(matchEnvelopeOrLogPrefix('worker: {"a":1}')).toBe(8);
+    expect(matchEnvelopeOrLogPrefix('[tag one] [tag two] {"a":1}')).toBe(20);
+    expect(matchEnvelopeOrLogPrefix('{"a":1}')).toBeNull();
+    expect(matchEnvelopeOrLogPrefix("no prefix here")).toBeNull();
+  });
+
+  it("identifies envelope header lines and excerpt barriers", () => {
+    expect(isEnvelopeHeaderLine("[repo#12]")).toBe(true);
+    expect(isEnvelopeHeaderLine("[compacted 1200 chars]")).toBe(true);
+    expect(isEnvelopeHeaderLine("⟦D7:receipt⟧")).toBe(true);
+    expect(isEnvelopeHeaderLine("Receipt: demo")).toBe(true);
+    expect(isEnvelopeHeaderLine('{"a":1}')).toBe(false);
+    expect(isEnvelopeHeaderLine("   ")).toBe(false);
+
+    expect(isExcerptBarrierLine("...")).toBe(true);
+    expect(isExcerptBarrierLine("…")).toBe(true);
+    expect(isExcerptBarrierLine("[repo#12]")).toBe(true);
+    expect(isExcerptBarrierLine("⟦D1⟧")).toBe(true);
+    expect(isExcerptBarrierLine('{"a":1}')).toBe(false);
+    expect(isExcerptBarrierLine("")).toBe(false);
+  });
+
+  it("parses fences and resolves fence languages to layout families", () => {
+    expect(parseOpeningFence("```json")).toEqual({ char: "`", len: 3, lang: "json" });
+    expect(parseOpeningFence("~~~~md extra")).toEqual({ char: "~", len: 4, lang: "md" });
+    // A backtick inside the info string disqualifies a backtick fence
+    expect(parseOpeningFence("```json `x`")).toBeNull();
+    expect(parseOpeningFence("plain text")).toBeNull();
+
+    expect(resolveFenceLayoutFamily("json")).toBe("json");
+    expect(resolveFenceLayoutFamily(".jsonl")).toBe("jsonl");
+    expect(resolveFenceLayoutFamily("jsonc")).toBe("jsonc");
+    expect(resolveFenceLayoutFamily("xml")).toBe("xml-html");
+    expect(resolveFenceLayoutFamily("js")).toBe("javascript");
+    expect(resolveFenceLayoutFamily("css")).toBe("css");
+    expect(resolveFenceLayoutFamily("")).toBeNull();
+    expect(resolveFenceLayoutFamily("go")).toBeNull();
+  });
+
+  it("short-circuits passthrough mode and marks fixed-family modes fully eligible", () => {
+    const raw = '{"a":1}\n{"b":2}';
+    const doc = docOf(raw);
+    expect(
+      determineDocumentLineEligibility(doc, "code-passthrough", raw, new PrettyBudgetTracker(raw)),
+    ).toBe("passthrough");
+
+    const jsonlElig = determineDocumentLineEligibility(
+      doc,
+      "jsonl",
+      raw,
+      new PrettyBudgetTracker(raw),
+    ) as readonly LineEligibility[];
+    expect(jsonlElig).toEqual([
+      { eligible: true, family: "jsonl", scanStartCol: 0, resetDepth: true },
+      { eligible: true, family: "jsonl", scanStartCol: 0, resetDepth: true },
+    ]);
+  });
+
+  it("keeps markdown prose raw and prettifies only supported fenced blocks", () => {
+    const raw = 'intro\n```json\n{"a":1}\n```\n```go\npackage main\n```\ntail';
+    const elig = determineDocumentLineEligibility(
+      docOf(raw),
+      "markdown",
+      raw,
+      new PrettyBudgetTracker(raw),
+    ) as readonly LineEligibility[];
+    expect(elig).toHaveLength(8);
+    expect(elig[0]).toMatchObject({ eligible: false, family: "passthrough" });
+    expect(elig[1]).toMatchObject({ eligible: false, family: "passthrough" });
+    expect(elig[2]).toMatchObject({ eligible: true, family: "json", resetDepth: true });
+    expect(elig[3]).toMatchObject({ eligible: false, family: "passthrough" });
+    expect(elig[4]).toMatchObject({ eligible: false, family: "passthrough" });
+    expect(elig[5]).toMatchObject({ eligible: false, family: "passthrough" });
+    expect(elig[6]).toMatchObject({ eligible: false, family: "passthrough" });
+    expect(elig[7]).toMatchObject({ eligible: false, family: "passthrough" });
+
+    // An unclosed fence keeps the remainder raw
+    const unclosed = 'intro\n```json\n{"a":1}\nnever closed';
+    const unclosedElig = determineDocumentLineEligibility(
+      docOf(unclosed),
+      "markdown",
+      unclosed,
+      new PrettyBudgetTracker(unclosed),
+    ) as readonly LineEligibility[];
+    expect(unclosedElig[2]).toMatchObject({ eligible: false, family: "passthrough" });
+    expect(unclosedElig[3]).toMatchObject({ eligible: false, family: "passthrough" });
+  });
+
+  it("reports budget exhaustion from the markdown and envelope scans", () => {
+    const fenced = '```json\n{"a":1}\n```';
+    expect(
+      determineDocumentLineEligibility(
+        docOf(fenced),
+        "markdown",
+        fenced,
+        new PrettyBudgetTracker(fenced, { maxVisits: 0 }),
+      ),
+    ).toBe("budget");
+    expect(
+      determineDocumentLineEligibility(
+        docOf(fenced),
+        "markdown",
+        fenced,
+        new PrettyBudgetTracker(fenced, { maxVisits: 1 }),
+      ),
+    ).toBe("budget");
+
+    const envelope = 'Receipt: demo\n{"a":1}';
+    expect(
+      determineDocumentLineEligibility(
+        docOf(envelope),
+        "auto",
+        envelope,
+        new PrettyBudgetTracker(envelope, { maxVisits: 0 }),
+      ),
+    ).toBe("budget");
+  });
+
+  it("treats standalone XML documents as fully eligible xml-html", () => {
+    const raw = "<root>\n<a><b>deep</b></a>\n</root>";
+    const elig = determineDocumentLineEligibility(
+      docOf(raw),
+      "auto",
+      raw,
+      new PrettyBudgetTracker(raw),
+    ) as readonly LineEligibility[];
+    expect(elig).toEqual([
+      { eligible: true, family: "xml-html", scanStartCol: 0, resetDepth: true },
+      { eligible: true, family: "xml-html", scanStartCol: 0, resetDepth: false },
+      { eligible: true, family: "xml-html", scanStartCol: 0, resetDepth: false },
+    ]);
+  });
+
+  it("prefers jsonl only when every non-blank line opens a container", () => {
+    const jsonlRaw = '{"a":1}\n{"b":2}';
+    const jsonlElig = determineDocumentLineEligibility(
+      docOf(jsonlRaw),
+      "auto",
+      jsonlRaw,
+      new PrettyBudgetTracker(jsonlRaw),
+    ) as readonly LineEligibility[];
+    expect(jsonlElig).toEqual([
+      { eligible: true, family: "jsonl", scanStartCol: 0, resetDepth: true },
+      { eligible: true, family: "jsonl", scanStartCol: 0, resetDepth: true },
+    ]);
+
+    const jsonRaw = '{"a":1}\ntrailing text';
+    const jsonElig = determineDocumentLineEligibility(
+      docOf(jsonRaw),
+      "auto",
+      jsonRaw,
+      new PrettyBudgetTracker(jsonRaw),
+    ) as readonly LineEligibility[];
+    expect(jsonElig).toEqual([
+      { eligible: true, family: "json", scanStartCol: 0, resetDepth: true },
+      { eligible: true, family: "json", scanStartCol: 0, resetDepth: false },
+    ]);
+  });
+
+  it("prettifies JSON bodies under envelope prefixes while honoring barriers and quotes", () => {
+    const raw = [
+      "Receipt: demo",
+      '{"a": [',
+      "  1,",
+      "  2",
+      "]}",
+      "...",
+      '{"s": "a\\"}", "t": "{"}',
+      "plain text",
+    ].join("\n");
+    const elig = determineDocumentLineEligibility(
+      docOf(raw),
+      "auto",
+      raw,
+      new PrettyBudgetTracker(raw),
+    ) as readonly LineEligibility[];
+    expect(elig).toEqual([
+      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
+      { eligible: true, family: "json", scanStartCol: 0, resetDepth: true },
+      { eligible: true, family: "json", scanStartCol: 0, resetDepth: false },
+      { eligible: true, family: "json", scanStartCol: 0, resetDepth: false },
+      { eligible: true, family: "json", scanStartCol: 0, resetDepth: false },
+      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
+      { eligible: true, family: "json", scanStartCol: 0, resetDepth: true },
+      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
+    ]);
+  });
+
+  it("keeps JSON bodies raw when an excerpt barrier interrupts the container", () => {
+    const raw = 'Receipt: demo\n{"a": [\n...\n1]}';
+    const elig = determineDocumentLineEligibility(
+      docOf(raw),
+      "auto",
+      raw,
+      new PrettyBudgetTracker(raw),
+    ) as readonly LineEligibility[];
+    expect(elig).toEqual([
+      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
+      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
+      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
+      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
+    ]);
   });
 });
