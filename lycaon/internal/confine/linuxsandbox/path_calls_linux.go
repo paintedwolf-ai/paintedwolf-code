@@ -88,10 +88,8 @@ func (s *supervisor) performPath(target *targetProcess, n seccompNotif) (int64, 
 		}
 	}()
 	if errno != 0 {
-		diagNotifyf("path nr=%d op=%s read-errno=%d", n.Nr, args.op, errno)
 		return 0, errno, true
 	}
-	diagNotifyf("path nr=%d notif=%d op=%s path=%q new=%q flags=%#x mode=%#o", n.Nr, n.ID, call.Op, call.Path, call.NewPath, call.Flags, call.Mode)
 	if call.Op == callOpen && call.Flags&unix.O_CREAT == 0 && !args.how {
 		return 0, unix.EINVAL, true
 	}

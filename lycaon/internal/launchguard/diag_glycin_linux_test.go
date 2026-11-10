@@ -3,34 +3,67 @@
 package launchguard
 
 import (
-	"encoding/json"
-	"errors"
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
-	"strings"
-	"syscall"
 	"testing"
+	"time"
 
-	"github.com/lycaon/lycaon/internal/packagegeneration"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
 
-const diagGlycinModeEnv = "PW_DIAG_GLYCIN_MODE"
-
-// TestDiagGlycinLoaderExec reproduces the glycin-svg loader spawn with visible
-// stderr to diagnose the amd64 platform launchguard failure. Temporary
-// diagnostic; remove before the fix lands.
-func TestDiagGlycinLoaderExec(t *testing.T) {
-	mode := os.Getenv(diagGlycinModeEnv)
-	if mode == "" {
-		diagGlycinParent(t)
-		return
+// TestDiagGlycinLoaderBwrap reproduces the exact bwrap command the glycin
+// client spawns for the SVG loader and captures the loader's stderr, which
+// the client drops on PrematureExit. Temporary diagnostic; remove before the
+// fix lands.
+func TestDiagGlycinLoaderBwrap(t *testing.T) {
+	loader := diagGlycinLoaderPath(t)
+	if _, err := exec.LookPath("bwrap"); err != nil {
+		t.Skipf("bwrap absent: %v", err)
 	}
-	diagGlycinChild(t, mode)
+
+	// Stage 1: the loader directly with no arguments. Expected: exit 2 with
+	// "FD that facilitates the D-Bus connection not specified via --dbus-fd"
+	// on stderr, proving the binary starts and env_logger reaches stderr.
+	noargs := exec.Command(loader)
+	noargs.Env = diagGlycinPayloadEnv(t, "")
+	diagGlycinSpawnWait(t, "direct-noargs", noargs, 6*time.Second)
+
+	// Stage 2: the loader directly with a held dbus peer. Expected: alive,
+	// blocked in the zbus handshake. Exit 1 here means the loader itself
+	// fails outside bwrap.
+	direct := exec.Command(loader, "--dbus-fd", "3")
+	peer, child := diagGlycinSocketPair(t)
+	direct.Env = diagGlycinPayloadEnv(t, "")
+	direct.ExtraFiles = []*os.File{child}
+	diagGlycinSpawnWait(t, "direct-dbus-fd3", direct, 6*time.Second)
+	_ = peer
+
+	// Stage 3: the exact bwrap command from the failing run, with the dbus
+	// socket at fd 21 and no seccomp filter. Expected: alive. Exit 1 here
+	// reproduces the failure and the stderr names the cause.
+	bwrapCmd := diagGlycinBwrapCommand(t, loader)
+	peer3, child3 := diagGlycinSocketPair(t)
+	bwrapCmd.ExtraFiles = diagGlycinFillFiles(t, 18)
+	bwrapCmd.ExtraFiles = append(bwrapCmd.ExtraFiles, child3)
+	bwrapCmd.Args = append(bwrapCmd.Args, "--dbus-fd", "21")
+	diagGlycinSpawnWait(t, "bwrap-dbus-fd21-noseccomp", bwrapCmd, 8*time.Second)
+	_ = peer3
+
+	// Stage 4: the same command with an allow-all seccomp filter at fd 22,
+	// exercising bwrap's seccomp application path without glycin's filter.
+	bwrapSeccomp := diagGlycinBwrapCommand(t, loader)
+	peer4, child4 := diagGlycinSocketPair(t)
+	bwrapSeccomp.ExtraFiles = diagGlycinFillFiles(t, 18)
+	bwrapSeccomp.ExtraFiles = append(bwrapSeccomp.ExtraFiles, child4)
+	bwrapSeccomp.Args = append(bwrapSeccomp.Args, "--dbus-fd", "21")
+	filter := diagGlycinSeccompAllowAll(t)
+	bwrapSeccomp.ExtraFiles = append(bwrapSeccomp.ExtraFiles, filter)
+	bwrapSeccomp.Args = append(bwrapSeccomp.Args, "--seccomp", strconv.Itoa(3+len(bwrapSeccomp.ExtraFiles)-1))
+	diagGlycinSpawnWait(t, "bwrap-dbus-fd21-seccomp-allowall", bwrapSeccomp, 8*time.Second)
+	_ = peer4
 }
 
 func diagGlycinLoaderPath(t *testing.T) string {
@@ -41,10 +74,14 @@ func diagGlycinLoaderPath(t *testing.T) string {
 	return loader
 }
 
+// diagGlycinBwrapCommand mirrors the exact bwrap command glycin builds on the
+// failing runner, including the fontconfig cache dir the client creates and
+// binds onto itself.
 func diagGlycinBwrapCommand(t *testing.T, loader string) *exec.Cmd {
-	cache := t.TempDir()
-	// Mirrors the exact bwrap command glycin builds on the failing runner
-	// (minus --dbus-fd, which the loader reports as exit 2).
+	cache := filepath.Join(t.TempDir(), ".cache", "glycin", "usr", "libexec", "glycin-loaders", "2+", "glycin-svg")
+	if err := os.MkdirAll(filepath.Join(cache, "fontconfig"), 0o755); err != nil {
+		t.Fatalf("create glycin cache dir: %v", err)
+	}
 	command := exec.Command("bwrap",
 		"--unshare-all", "--die-with-parent", "--chdir", "/",
 		"--ro-bind", "/usr", "/usr",
@@ -70,265 +107,62 @@ func diagGlycinBwrapCommand(t *testing.T, loader string) *exec.Cmd {
 	return command
 }
 
-func diagGlycinRun(t *testing.T, label string, command *exec.Cmd) int {
-	output, err := command.CombinedOutput()
-	code := 0
+// diagGlycinPayloadEnv mirrors the payload environment after --clearenv plus
+// glycin's --setenv entries.
+func diagGlycinPayloadEnv(t *testing.T, cache string) []string {
+	if cache == "" {
+		cache = "/tmp-home"
+	}
+	return []string{
+		"HOME=/tmp-home",
+		"XDG_RUNTIME_DIR=/tmp-run",
+		"XDG_CACHE_HOME=" + cache,
+	}
+}
+
+// diagGlycinSocketPair returns a connected Unix socket pair; the child end is
+// handed to the spawned process, the peer end stays open in the test so the
+// loader's zbus handshake blocks instead of failing.
+func diagGlycinSocketPair(t *testing.T) (*os.File, *os.File) {
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			code = exitErr.ExitCode()
-		} else {
-			t.Logf("%s: spawn failure: %v", label, err)
-			return -1
+		t.Fatalf("socketpair: %v", err)
+	}
+	peer := os.NewFile(uintptr(fds[0]), "diag-glycin-peer")
+	child := os.NewFile(uintptr(fds[1]), "diag-glycin-child")
+	if peer == nil || child == nil {
+		t.Fatal("wrap socketpair fds")
+	}
+	t.Cleanup(func() {
+		_ = peer.Close()
+		_ = child.Close()
+	})
+	return peer, child
+}
+
+// diagGlycinFillFiles pads ExtraFiles with /dev/null so the next appended
+// file lands on the wanted descriptor number (child fd = 3 + index).
+func diagGlycinFillFiles(t *testing.T, count int) []*os.File {
+	files := make([]*os.File, 0, count)
+	for i := 0; i < count; i++ {
+		null, err := os.Open(os.DevNull)
+		if err != nil {
+			t.Fatalf("open devnull: %v", err)
 		}
+		t.Cleanup(func() { _ = null.Close() })
+		files = append(files, null)
 	}
-	t.Logf("%s: exit %d output:\n%s", label, code, output)
-	return code
+	return files
 }
 
-func diagGlycinParent(t *testing.T) {
-	loader := diagGlycinLoaderPath(t)
-	if _, err := exec.LookPath("bwrap"); err != nil {
-		t.Skipf("bwrap absent: %v", err)
-	}
-
-	// Report which catalog executables resolve on this host: the fixture
-	// staging silently skips paths that resolve to os.ErrNotExist.
-	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "packaging", "linux", "protected-launch.json"))
-	testutil.FailErr(t, "read protected launch catalog", err)
-	var catalog struct {
-		Architectures map[string]struct {
-			Multiarch string `json:"multiarch"`
-		} `json:"architectures"`
-		Families map[string]struct {
-			Executables []string `json:"system_executables"`
-		} `json:"families"`
-	}
-	testutil.FailErr(t, "parse protected launch catalog", json.Unmarshal(raw, &catalog))
-	for _, template := range catalog.Families["deb"].Executables {
-		path := strings.ReplaceAll(template, "{multiarch}", catalog.Architectures[runtime.GOARCH].Multiarch)
-		resolved, err := packagegeneration.ResolveSystemExecutable(path)
-		switch {
-		case errors.Is(err, os.ErrNotExist):
-			t.Logf("catalog %s: SKIPPED (ErrNotExist)", path)
-		case err != nil:
-			t.Logf("catalog %s: resolve error: %v", path, err)
-		default:
-			t.Logf("catalog %s: resolved %s", path, resolved)
-		}
-	}
-
-	// Plain: no Landlock, no seccomp. The loader exits 2 on its own when the
-	// exec succeeds (missing --dbus-fd); bwrap exits 1 with a die message when
-	// sandbox setup or the exec fails.
-	diagGlycinRun(t, "plain", diagGlycinBwrapCommand(t, loader))
-
-	// Plain with an allow-all seccomp filter to exercise bwrap's --seccomp
-	// application path.
-	diagGlycinRun(t, "plain-seccomp", diagGlycinSeccompAllowAll(t, diagGlycinBwrapCommand(t, loader)))
-
-	// Through a setuid exec hop: the real spawn reaches bwrap through the
-	// setuid bootstrap and the desktop binary. If AppArmor drops the
-	// inherited userns permission across the setuid hop, bwrap's user
-	// namespace creation fails and bwrap exits 1.
-	if user := os.Getenv("USER"); user != "" {
-		hop := exec.Command("sudo", "-u", user, "bwrap")
-		base := diagGlycinBwrapCommand(t, loader)
-		hop.Args = append(hop.Args, base.Args[1:]...)
-		hop.Env = nil
-		diagGlycinRun(t, "sudo-hop", hop)
-	}
-
-	// Restricted: the protected execution closure with NNP on all threads
-	// (matching SealEntry), isolating which grant shape allows the exec.
-	// restricted-file grants bwrap by name, restricted-dir grants it through
-	// the install-root subtree, restricted-none is the negative control.
-	for _, mode := range []string{"restricted-file", "restricted-dir", "restricted-none", "restricted-direct"} {
-		command := exec.Command(os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
-		command.Env = append(os.Environ(), diagGlycinModeEnv+"="+mode)
-		diagGlycinRun(t, mode, command)
-	}
-
-	// Namespace replication: the real desktop entry is cloned into a new user
-	// namespace while inheriting the root-owned stage mount namespace. Run the
-	// same bwrap command from that context to capture bwrap's die message.
-	if uid := os.Getuid(); uid != 0 {
-		stage := exec.Command("sudo", "-n", diagGlycinModeEnv+"=namespace-stage", os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
-		stage.Env = nil
-		diagGlycinRun(t, "namespace-stage", stage)
-	}
-	// A fresh user namespace nested directly under the initial one, with the
-	// caller's own mount namespace, isolates namespace nesting from the
-	// root-owned stage mount namespace. The clone must happen in the forked
-	// child: Go threads share CLONE_FS, so an in-process unshare fails EINVAL.
-	uid, gid := os.Getuid(), os.Getgid()
-	useronly := exec.Command(os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
-	useronly.Env = append(os.Environ(), diagGlycinModeEnv+"=namespace-useronly")
-	useronly.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags:  unix.CLONE_NEWUSER,
-		UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: uid, Size: 1}},
-		GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: gid, Size: 1}},
-		Credential:  &syscall.Credential{Uid: 0, Gid: 0},
-	}
-	diagGlycinRun(t, "namespace-useronly", useronly)
-
-	// Label probe: exec a shell inside the same sandbox to reveal which
-	// AppArmor profile the bwrap-exec'd process carries.
-	label := diagGlycinBwrapCommand(t, loader)
-	label.Args = label.Args[:len(label.Args)-1]
-	label.Args = append(label.Args, "/bin/sh", "-c", "cat /proc/self/attr/current; id")
-	diagGlycinRun(t, "label", label)
-
-	// Environment facts: userns sysctls, bwrap apparmor attachments, and any
-	// recent apparmor denials from the kernel log.
-	for _, probe := range []struct{ label, command string }{
-		{"restrict_unprivileged_userns", "cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns"},
-		{"unprivileged_userns_clone", "cat /proc/sys/kernel/unprivileged_userns_clone"},
-		{"apparmor bwrap profiles", "ls /etc/apparmor.d/ | grep -i bwrap"},
-		{"apparmor glycin profile", "cat /etc/apparmor.d/glycin.bwrap 2>/dev/null || echo absent"},
-		{"apparmor bwrap-userns-restrict profile", "cat /etc/apparmor.d/bwrap-userns-restrict 2>/dev/null || echo absent"},
-		{"self apparmor profile", "cat /proc/self/attr/current"},
-		{"aa-status", "sudo aa-status 2>/dev/null | head -30 || echo unavailable"},
-		{"apparmor denials", "sudo dmesg 2>/dev/null | grep -i 'apparmor.*denied' | tail -20"},
-	} {
-		output, err := exec.Command("bash", "-c", probe.command).CombinedOutput()
-		t.Logf("%s: err=%v output:\n%s", probe.label, err, output)
-	}
-}
-
-func diagGlycinChild(t *testing.T, mode string) {
-	loader := diagGlycinLoaderPath(t)
-	// The real SealEntry sets no_new_privs on every thread before
-	// restrictExecution; AllThreadsSyscall6 requires uniform results, so a
-	// single-thread prctl would crash the runtime instead.
-	if _, _, errno := syscall.AllThreadsSyscall6(unix.SYS_PRCTL, unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0, 0); errno != 0 {
-		t.Fatalf("no_new_privs: %v", errno)
-	}
-	if profile, err := os.ReadFile("/proc/self/attr/current"); err == nil {
-		t.Logf("%s: apparmor profile: %s", mode, strings.TrimSpace(string(profile)))
-	}
-	switch mode {
-	case "restricted-file", "restricted-dir", "restricted-none", "restricted-direct":
-		diagGlycinRestricted(t, mode, loader)
-	case "namespace-desktop":
-		diagGlycinNamespaceDesktop(t, loader, mode)
-	case "namespace-useronly":
-		diagGlycinNamespaceUserOnly(t, loader, mode)
-	default:
-		t.Fatalf("unknown child mode %s", mode)
-	}
-}
-
-// diagGlycinRestricted applies the execution closure with one grant shape and
-// execs the target, isolating whether the closure allows granted execs.
-func diagGlycinRestricted(t *testing.T, mode, loader string) {
-	policy := GenerationPolicy{LogicalInstallRoot: "/opt"}
-	switch mode {
-	case "restricted-file":
-		policy.SystemExecutables = []string{"/usr/bin/bwrap", loader}
-	case "restricted-dir":
-		policy.LogicalInstallRoot = "/usr/bin"
-	case "restricted-direct":
-		policy.SystemExecutables = []string{loader}
-	}
-	exe, err := os.Open("/proc/self/exe")
-	testutil.FailErr(t, "open self as image", err)
-	defer func() { _ = exe.Close() }()
-	if err := restrictExecution(policy, exe); err != nil {
-		t.Fatalf("restrict: %v", err)
-	}
-	target := "/usr/bin/bwrap"
-	command := diagGlycinBwrapCommand(t, loader)
-	if mode == "restricted-direct" {
-		target = loader
-		command = exec.Command(loader)
-		command.Env = nil
-	}
-	t.Logf("%s: exec target %s", mode, target)
-	diagGlycinRun(t, mode, command)
-}
-
-// diagGlycinNamespaceStage mirrors the protected bootstrap stage: root, in a
-// private mount namespace, cloning the desktop entry into a new user
-// namespace with full identity mappings as the login user.
-func diagGlycinNamespaceStage(t *testing.T, loader string) {
-	if os.Getuid() != 0 {
-		t.Skip("namespace stage needs root")
-	}
-	if err := unix.Unshare(unix.CLONE_NEWNS); err != nil {
-		t.Fatalf("stage unshare mount namespace: %v", err)
-	}
-	uid, err := strconv.Atoi(os.Getenv("SUDO_UID"))
-	testutil.FailErr(t, "read SUDO_UID", err)
-	gid, err := strconv.Atoi(os.Getenv("SUDO_GID"))
-	testutil.FailErr(t, "read SUDO_GID", err)
-	desktop := exec.Command(os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
-	desktop.Env = append(os.Environ(), diagGlycinModeEnv+"=namespace-desktop")
-	desktop.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags:                 unix.CLONE_NEWUSER,
-		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
-		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
-		GidMappingsEnableSetgroups: true,
-		Credential:                 &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
-	}
-	diagGlycinRun(t, "namespace-desktop", desktop)
-}
-
-// diagGlycinNamespaceDesktop is the replicated desktop entry context: login
-// user in a fresh user namespace, inheriting the root-owned mount namespace,
-// under the protected execution closure.
-func diagGlycinNamespaceDesktop(t *testing.T, loader, mode string) {
-	diagGlycinNamespaceFacts(t, mode)
-	exe, err := os.Open("/proc/self/exe")
-	testutil.FailErr(t, "open self as image", err)
-	defer func() { _ = exe.Close() }()
-	policy := GenerationPolicy{LogicalInstallRoot: "/usr/bin", SystemExecutables: []string{"/usr/bin/bwrap", loader}}
-	if err := restrictExecution(policy, exe); err != nil {
-		t.Fatalf("restrict: %v", err)
-	}
-	diagGlycinRun(t, mode, diagGlycinBwrapCommand(t, loader))
-	label := diagGlycinBwrapCommand(t, loader)
-	label.Args = label.Args[:len(label.Args)-1]
-	label.Args = append(label.Args, "/bin/sh", "-c", "cat /proc/self/attr/current; id")
-	diagGlycinRun(t, mode+"-label", label)
-}
-
-// diagGlycinNamespaceUserOnly isolates user namespace nesting: the same bwrap
-// command from a fresh user namespace nested under the initial one, with the
-// caller's own mount namespace and no execution closure.
-func diagGlycinNamespaceUserOnly(t *testing.T, loader, mode string) {
-	diagGlycinNamespaceFacts(t, mode)
-	diagGlycinRun(t, mode, diagGlycinBwrapCommand(t, loader))
-	label := diagGlycinBwrapCommand(t, loader)
-	label.Args = label.Args[:len(label.Args)-1]
-	label.Args = append(label.Args, "/bin/sh", "-c", "cat /proc/self/attr/current; id")
-	diagGlycinRun(t, mode+"-label", label)
-}
-
-func diagGlycinNamespaceFacts(t *testing.T, mode string) {
-	for _, probe := range []struct{ label, path string }{
-		{"uid_map", "/proc/self/uid_map"},
-		{"ns_mnt", "/proc/self/ns/mnt"},
-		{"ns_user", "/proc/self/ns/user"},
-	} {
-		if raw, err := os.ReadFile(probe.path); err == nil {
-			t.Logf("%s %s: %s", mode, probe.label, strings.TrimSpace(string(raw)))
-		}
-	}
-	if raw, err := os.ReadFile("/proc/self/status"); err == nil {
-		for _, line := range strings.Split(string(raw), "\n") {
-			if strings.HasPrefix(line, "CapEff:") || strings.HasPrefix(line, "NoNewPrivs:") {
-				t.Logf("%s status: %s", mode, line)
-			}
-		}
-	}
-}
-
-// diagGlycinSeccompAllowAll writes a one-instruction allow-all BPF filter and
-// wires it as bwrap's --seccomp fd, exercising bwrap's seccomp application
-// path without glycin's real filter.
-func diagGlycinSeccompAllowAll(t *testing.T, command *exec.Cmd) *exec.Cmd {
+// diagGlycinSeccompAllowAll writes a one-instruction allow-all BPF filter for
+// bwrap's --seccomp fd, exercising bwrap's seccomp application path without
+// glycin's real filter.
+func diagGlycinSeccompAllowAll(t *testing.T) *os.File {
 	filterFile, err := os.CreateTemp(t.TempDir(), "diag-seccomp")
-	testutil.FailErr(t, "create seccomp filter file", err)
+	if err != nil {
+		t.Fatalf("create seccomp filter file: %v", err)
+	}
 	// BPF_RET|BPF_K with SECCOMP_RET_ALLOW: code 0x06, k 0x7fff0000.
 	insn := []byte{0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x7f}
 	if _, err := filterFile.Write(insn); err != nil {
@@ -337,9 +171,38 @@ func diagGlycinSeccompAllowAll(t *testing.T, command *exec.Cmd) *exec.Cmd {
 	if _, err := filterFile.Seek(0, 0); err != nil {
 		t.Fatalf("seek seccomp filter: %v", err)
 	}
-	command.ExtraFiles = append(command.ExtraFiles, filterFile)
-	seccompFD := strconv.Itoa(3 + len(command.ExtraFiles) - 1)
-	loader := command.Args[len(command.Args)-1]
-	command.Args = append(command.Args[:len(command.Args)-1], "--seccomp", seccompFD, loader)
-	return command
+	t.Cleanup(func() {
+		_ = filterFile.Close()
+		_ = os.Remove(filterFile.Name())
+	})
+	return filterFile
+}
+
+// diagGlycinSpawnWait runs the command and reports either its exit status
+// with captured stderr and stdout, or that it stayed alive for the hold
+// duration (startup OK) before killing it.
+func diagGlycinSpawnWait(t *testing.T, label string, command *exec.Cmd, hold time.Duration) {
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	if err := command.Start(); err != nil {
+		t.Logf("%s: spawn failure: %v", label, err)
+		return
+	}
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	select {
+	case err := <-done:
+		code := 0
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			code = exitErr.ExitCode()
+		} else if err != nil {
+			t.Logf("%s: wait error: %v", label, err)
+		}
+		t.Logf("%s: EXITED code=%d\nstderr:\n%s\nstdout:\n%s", label, code, stderr.String(), stdout.String())
+	case <-time.After(hold):
+		_ = command.Process.Kill()
+		<-done
+		t.Logf("%s: ALIVE after %v (startup OK); killed.\nstderr:\n%s\nstdout:\n%s", label, hold, stderr.String(), stdout.String())
+	}
 }

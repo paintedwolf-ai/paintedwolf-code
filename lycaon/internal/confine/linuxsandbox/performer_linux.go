@@ -449,7 +449,6 @@ func (c *performerClient) readResults(report func(pathResult)) {
 		c.mu.Lock()
 		delete(c.pending, result.Notification)
 		c.mu.Unlock()
-		diagNotifyf("performed nr-notif=%d errno=%d refused=%v", result.Notification, result.Errno, result.Refusal != nil)
 		if result.Refusal != nil {
 			report(result)
 		}
