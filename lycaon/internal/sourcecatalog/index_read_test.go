@@ -198,7 +198,7 @@ func TestHumanWarmedSharedCatalogNeverLeaksControlPlaneOrKeyMaterialToAgent(t *t
 	cfgDir := filepath.Join(home, ".paintedwolf")
 	wtDir := filepath.Join(cfgDir, "worktrees", "wt-1")
 	t.Setenv("HOME", home)
-	t.Setenv(configdir.EnvVar, cfgDir)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
 
 	writeIndexFile(t, home, "project/main.go", "package main // SecretNeedle")
 	writeIndexFile(t, home, ".ssh/id_ed25519", "PRIVATE KEY SecretNeedle")

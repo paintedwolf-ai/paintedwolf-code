@@ -459,7 +459,7 @@ func TestProjectWatchExcludesControlDirAndRuntimeChurn(t *testing.T) {
 	testutil.FailErr(t, "mkdir cache", os.MkdirAll(filepath.Join(cfgDir, "cache"), 0o755))
 	testutil.FailErr(t, "write user file", os.WriteFile(filepath.Join(home, "main.go"), []byte("package main"), 0o644))
 	testutil.FailErr(t, "write settings", os.WriteFile(filepath.Join(cfgDir, "settings.yaml"), []byte("theme: dark"), 0o644))
-	t.Setenv(configdir.EnvVar, cfgDir)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
 
 	// 1. Strict ancestor ($HOME) watched: control-plane churn produces zero sourcefeed events.
 	wHome := &projectWatch{

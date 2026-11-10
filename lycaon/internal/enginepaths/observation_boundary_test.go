@@ -25,7 +25,7 @@ func TestIsObservedStateExcluded_StrictAncestorExcludesActiveControlDirAndPlacem
 	if err := os.MkdirAll(filepath.Join(placementDir, "worker-branches", "proj-1", "job-1"), 0o755); err != nil {
 		t.Fatalf("mkdir placement: %v", err)
 	}
-	t.Setenv(configdir.EnvVar, cfgDir)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
 
 	// When strict ancestor ($HOME or ~/.config) is attached:
 	// - Entire configdir.Root() (including settings.yaml, packs/, and nested worktrees/) is excluded from parent walk.
@@ -84,7 +84,7 @@ func TestIsObservedStateExcluded_DirectAndChildControlDirAttachment(t *testing.T
 	if err := os.MkdirAll(filepath.Join(cfgDir, "cache", "nested"), 0o755); err != nil {
 		t.Fatalf("mkdir cache/nested: %v", err)
 	}
-	t.Setenv(configdir.EnvVar, cfgDir)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
 
 	// Runtime/DB/WAL/SHM/cache/session/secret paths under configdir.Root() must be excluded.
 	runtimePaths := []string{
@@ -187,7 +187,7 @@ func TestIsObservedStateExcluded_CanonicalAliasesSymlinksAndCase(t *testing.T) {
 	}
 	// Configure configdir via the symlinked alias path.
 	cfgViaAlias := filepath.Join(aliasBase, ".paintedwolf")
-	t.Setenv(configdir.EnvVar, cfgViaAlias)
+	t.Setenv(configdir.EnvConfigDir, cfgViaAlias)
 
 	// Attaching realBase must still exclude cfgReal (and vice versa).
 	if !IsObservedStateExcluded(realBase, filepath.Join(cfgReal, "settings.yaml")) {
@@ -228,7 +228,7 @@ func TestCompileAgentReadFloor(t *testing.T) {
 		}
 	}
 	t.Setenv("HOME", home)
-	t.Setenv(configdir.EnvVar, cfgDir)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
 
 	// 1. Direct configdir.Root() attachment is wholly denied to AgentAudience.
 	cfgFloor := CompileAgentReadFloor(cfgDir, nil)

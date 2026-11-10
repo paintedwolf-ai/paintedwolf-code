@@ -100,7 +100,7 @@ func TestLiveWatcherExcludesControlDirAndRuntimeChurnWithoutSelfObservationLoops
 	cfgDir := filepath.Join(home, ".paintedwolf")
 	testutil.FailErr(t, "mkdir packs", os.MkdirAll(filepath.Join(cfgDir, "packs"), 0o755))
 	testutil.FailErr(t, "mkdir cache", os.MkdirAll(filepath.Join(cfgDir, "cache"), 0o755))
-	t.Setenv(configdir.EnvVar, cfgDir)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
 
 	writeLiteralFixture(t, home, "app/main.go", "package main")
 	writeLiteralFixture(t, cfgDir, "settings.yaml", "theme: dark")

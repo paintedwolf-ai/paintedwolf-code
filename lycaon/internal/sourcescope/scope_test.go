@@ -257,7 +257,7 @@ func TestControlDirObservationBoundariesInSourceScope(t *testing.T) {
 	writeFile(t, cfgDir, "store.db-wal", "wal")
 	writeFile(t, cfgDir, "cache/blob.bin", "cache")
 	writeFile(t, cfgDir, "worktrees/wt-1/wt.go", "package wt\n")
-	t.Setenv(configdir.EnvVar, cfgDir)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
 
 	// 1. Ancestor $HOME scope excludes all of .paintedwolf.
 	homeScope := New(home, Options{Plane: Plane{Budgets: capturePlane().Budgets}})

@@ -136,7 +136,7 @@ func TestControlDirWatcherExclusion_AncestorAndDirectAttachments(t *testing.T) {
 	testutil.FailErr(t, "mkdir cache", os.MkdirAll(filepath.Join(cfgDir, "cache"), 0o755))
 	wtDir := filepath.Join(cfgDir, "worktrees", "wt-1")
 	testutil.FailErr(t, "mkdir worktree", os.MkdirAll(wtDir, 0o755))
-	t.Setenv(configdir.EnvVar, cfgDir)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
 
 	var got []string
 	unbind := RegisterObserver(func(_ context.Context, event Event) {
