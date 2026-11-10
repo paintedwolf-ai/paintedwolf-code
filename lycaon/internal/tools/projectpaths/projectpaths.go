@@ -419,6 +419,22 @@ func commandCwdControlPlaneDenied(tctx tools.ToolContext, abs string) bool {
 	return confine.ControlPlaneReadDenied(abs) || confine.ControlPlaneWriteDenied(abs)
 }
 
+func commandCwdSecretFloorDenied(abs string) bool {
+	if abs == "" || !filepath.IsAbs(abs) {
+		return false
+	}
+	clean := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
+	if confine.ClassifyBlockedWrite(clean).Kind != confine.WriteSubjectOrdinary {
+		return true
+	}
+	for _, deny := range confine.SecretReadDenyRoots() {
+		if confine.PathAtOrUnder(clean, filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(deny)))) {
+			return true
+		}
+	}
+	return false
+}
+
 func controlPlaneCwdReject(abs string) *toolrejection.ToolReject {
 	p := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
 	return &toolrejection.ToolReject{
@@ -444,11 +460,13 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 	}
 	if cwdClean == "" {
 		active := tctx.ActiveRootPath()
-		if commandCwdControlPlaneDenied(tctx, active) {
+		if commandCwdControlPlaneDenied(tctx, active) || commandCwdSecretFloorDenied(active) {
 			if !tctx.Execution.VerificationCheck && strings.TrimSpace(tctx.Host.SessionScratchDir) != "" {
 				return commandCwdInScratch(ctx, tctx, "@scratch")
 			}
-			return "", "", controlPlaneCwdReject(active)
+			if commandCwdControlPlaneDenied(tctx, active) {
+				return "", "", controlPlaneCwdReject(active)
+			}
 		}
 		return active, ".", nil
 	}

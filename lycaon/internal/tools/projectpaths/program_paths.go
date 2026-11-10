@@ -154,11 +154,14 @@ func NewProgramPaths(ctx context.Context, boundary *sandbox.Boundary, tc tools.T
 	tc.Source.Roots = append([]projectroot.RootRef(nil), tc.Source.Roots...)
 	p := &ProgramPaths{boundary: boundary, context: tc, specs: facts.specs, argumentLimit: facts.argumentLimit, outputLimit: facts.outputLimit, rootParents: rootParentChains(actionRootPaths(tc))}
 	if cwd == "" {
-		if strings.TrimSpace(tc.Source.WorkerBranchRoot) == "" && commandCwdControlPlaneDenied(tc, tc.ActiveRootPath()) {
+		active := tc.ActiveRootPath()
+		if strings.TrimSpace(tc.Source.WorkerBranchRoot) == "" && (commandCwdControlPlaneDenied(tc, active) || commandCwdSecretFloorDenied(active)) {
 			if !tc.Execution.VerificationCheck && strings.TrimSpace(tc.Host.SessionScratchDir) != "" {
 				cwd = "@scratch"
+			} else if commandCwdControlPlaneDenied(tc, active) {
+				return nil, controlPlaneCwdReject(active)
 			} else {
-				return nil, controlPlaneCwdReject(tc.ActiveRootPath())
+				cwd = "."
 			}
 		} else {
 			cwd = "."
