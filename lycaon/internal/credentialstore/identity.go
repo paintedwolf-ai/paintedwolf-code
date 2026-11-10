@@ -8,6 +8,36 @@ import (
 	"github.com/google/uuid"
 )
 
+type identityDocument struct {
+	Format   int    `json:"format"`
+	VaultID  string `json:"vault_id"`
+	Identity string `json:"identity"`
+}
+
+type providerCustodyKey struct {
+	mode    CustodyMode
+	account string
+	path    string
+}
+
+func (k providerCustodyKey) canShare() bool {
+	switch k.mode {
+	case CustodyDevelopment:
+		return k.path != ""
+	case CustodyKeychain, CustodyIdentityService:
+		return k.account != ""
+	default:
+		return false
+	}
+}
+
+type identityProvider interface {
+	LoadOrCreate(vaultExists bool) (identityDocument, error)
+	Purge() error
+	Describe() string
+	custodyKey() providerCustodyKey
+}
+
 func generateIdentityDocument() (identityDocument, error) {
 	identity, err := age.GenerateX25519Identity()
 	if err != nil {

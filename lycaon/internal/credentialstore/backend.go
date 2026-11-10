@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"filippo.io/age"
@@ -43,45 +42,10 @@ type Backend interface {
 	Describe() string
 }
 
-type identityDocument struct {
-	Format   int    `json:"format"`
-	VaultID  string `json:"vault_id"`
-	Identity string `json:"identity"`
-}
-
 type vaultDocument struct {
 	Format     int                          `json:"format"`
 	VaultID    string                       `json:"vault_id"`
 	Namespaces map[string]map[string]string `json:"namespaces"`
-}
-
-type providerCustodyKey struct {
-	mode    CustodyMode
-	account string
-	path    string
-}
-
-func (k providerCustodyKey) canShare() bool {
-	switch k.mode {
-	case CustodyDevelopment:
-		return k.path != ""
-	case CustodyKeychain, CustodyIdentityService:
-		return k.account != ""
-	default:
-		return false
-	}
-}
-
-type identityProvider interface {
-	LoadOrCreate(vaultExists bool) (identityDocument, error)
-	Purge() error
-	Describe() string
-	custodyKey() providerCustodyKey
-}
-
-type vaultCacheKey struct {
-	path    string
-	custody providerCustodyKey
 }
 
 type vaultFile struct {
@@ -94,65 +58,6 @@ type vaultFile struct {
 type namespaceBackend struct {
 	vault     *vaultFile
 	namespace string
-}
-
-var vaultPathLocks = struct {
-	sync.Mutex
-	byPath map[string]*sync.Mutex
-}{byPath: make(map[string]*sync.Mutex)}
-
-func vaultPathMutex(path string) *sync.Mutex {
-	clean := filepath.Clean(path)
-	vaultPathLocks.Lock()
-	defer vaultPathLocks.Unlock()
-	mu := vaultPathLocks.byPath[clean]
-	if mu == nil {
-		mu = &sync.Mutex{}
-		vaultPathLocks.byPath[clean] = mu
-	}
-	return mu
-}
-
-var vaults = struct {
-	sync.Mutex
-	byKey map[vaultCacheKey]*vaultFile
-}{byKey: make(map[vaultCacheKey]*vaultFile)}
-
-func sharedVault(path string, provider identityProvider) *vaultFile {
-	clean := filepath.Clean(path)
-	if provider == nil {
-		return &vaultFile{path: clean}
-	}
-	custody := provider.custodyKey()
-	if !custody.canShare() {
-		return &vaultFile{path: clean, provider: provider}
-	}
-	key := vaultCacheKey{path: clean, custody: custody}
-	vaults.Lock()
-	defer vaults.Unlock()
-	if existing := vaults.byKey[key]; existing != nil {
-		return existing
-	}
-	created := &vaultFile{path: clean, provider: provider}
-	vaults.byKey[key] = created
-	return created
-}
-
-// clearCachedVaultIdentities resets cached identities for path. Callers must
-// hold vaultPathMutex(path) via withExclusiveLock.
-func clearCachedVaultIdentities(path string) {
-	clean := filepath.Clean(path)
-	vaults.Lock()
-	var matched []*vaultFile
-	for key, v := range vaults.byKey {
-		if key.path == clean {
-			matched = append(matched, v)
-		}
-	}
-	vaults.Unlock()
-	for _, v := range matched {
-		v.identity, v.vaultID = nil, ""
-	}
 }
 
 func newNamespaceBackend(path, namespace string, provider identityProvider) Backend {
@@ -322,119 +227,6 @@ func (v *vaultFile) purge() error {
 		clearCachedVaultIdentities(v.path)
 		return nil
 	})
-}
-
-func (v *vaultFile) verifyDurableLocked(provider identityProvider, namespace, id, want string) error {
-	fresh := &vaultFile{path: v.path, provider: provider}
-	doc, err := fresh.read()
-	if err != nil {
-		return err
-	}
-	values := doc.Namespaces[namespace]
-	if values == nil || values[id] != want {
-		return fmt.Errorf("durable credential verification failed for %s/%s", namespace, id)
-	}
-	return nil
-}
-
-func (v *vaultFile) verifyDurable(provider identityProvider, namespace, id, want string) error {
-	return v.withExclusiveLock(func() error {
-		return v.verifyDurableLocked(provider, namespace, id, want)
-	})
-}
-
-func (v *vaultFile) loadOrInit(
-	provider identityProvider,
-	namespace, id string,
-	validate func(string) error,
-	init func() (string, error),
-	afterVerified func() error,
-) (string, error) {
-	var result string
-	err := v.withExclusiveLock(func() error {
-		_, statErr := os.Stat(v.path)
-		if statErr != nil && !os.IsNotExist(statErr) {
-			return fmt.Errorf("read credential vault: %w", statErr)
-		}
-		vaultExists := statErr == nil
-		var doc vaultDocument
-		if vaultExists {
-			var err error
-			doc, err = v.read()
-			if err != nil {
-				return err
-			}
-			if values := doc.Namespaces[namespace]; values != nil {
-				if existing := values[id]; existing != "" {
-					if validate != nil {
-						if err := validate(existing); err != nil {
-							return err
-						}
-					}
-					if err := v.verifyDurableLocked(provider, namespace, id, existing); err != nil {
-						return err
-					}
-					if afterVerified != nil {
-						if err := afterVerified(); err != nil {
-							return err
-						}
-					}
-					result = existing
-					return nil
-				}
-			}
-		}
-		secret, err := init()
-		if err != nil {
-			return err
-		}
-		if validate != nil {
-			if err := validate(secret); err != nil {
-				return err
-			}
-		}
-		if !vaultExists {
-			doc, err = v.read()
-			if err != nil {
-				return err
-			}
-		}
-		values := doc.Namespaces[namespace]
-		if values == nil {
-			values = make(map[string]string)
-			doc.Namespaces[namespace] = values
-		}
-		values[id] = secret
-		if err := v.commit(doc); err != nil {
-			return err
-		}
-		if err := v.verifyDurableLocked(provider, namespace, id, secret); err != nil {
-			delete(values, id)
-			if len(values) == 0 {
-				delete(doc.Namespaces, namespace)
-			}
-			var restoreErr error
-			if vaultExists {
-				restoreErr = v.commit(doc)
-			} else {
-				if rmErr := os.Remove(v.path); rmErr != nil && !os.IsNotExist(rmErr) {
-					restoreErr = rmErr
-				}
-			}
-			if restoreErr != nil {
-				return errors.Join(err, fmt.Errorf("restore credential vault after verification failure: %w", restoreErr))
-			}
-			return err
-		}
-		if afterVerified != nil {
-			if err := afterVerified(); err != nil {
-				return err
-			}
-		}
-		result = secret
-		return nil
-	})
-	return result, err
 }
 
 func (v *vaultFile) withExclusiveLock(fn func() error) error {
