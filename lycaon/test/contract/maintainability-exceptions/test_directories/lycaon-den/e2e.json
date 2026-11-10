@@ -1,0 +1,6 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon-den/e2e",
+  "cap": 177,
+  "reason": "Den browser scenarios are one Playwright spec per user-facing flow, with shared fixtures and helpers beside them; the file-per-scenario layout keeps scenarios independently runnable and failures attributable."
+}
