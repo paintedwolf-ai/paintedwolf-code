@@ -6,9 +6,11 @@ import (
 	"errors"
 	"sort"
 	"sync"
+	"time"
 )
 
-// PreparedDelivery binds an effect to the unlock checked at its commit boundary.
+// PreparedDelivery binds an outbound or local-sink effect to the capability
+// and unlock state verified at its preparation boundary.
 type PreparedDelivery struct {
 	once       sync.Once
 	resolution *Resolution
@@ -75,7 +77,9 @@ func (s *Service) checkCapabilityActive(ctx context.Context, id string, access R
 	if s == nil || s.queries == nil {
 		return nil
 	}
-	row, err := s.queries.GetManagedSecret(ctx, id)
+	queryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+	defer cancel()
+	row, err := s.queries.GetManagedSecret(queryCtx, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -94,7 +98,12 @@ func (s *Service) checkCapabilityActive(ctx context.Context, id string, access R
 	return nil
 }
 
-// Commit records only an effect that reached its recipient.
+// Commit settles the prepared secrets as DeliveryHandedOff and consumes the
+// bound unlock once the host hands the material off to the target transport
+// or local sink (the value left or may have left host vault custody). For
+// network transports, Commit records conservative host-side transport dispatch
+// rather than proof of remote peer receipt; uncertain remote effects are
+// tracked separately by the transport/exchange outcome.
 func (d *PreparedDelivery) Commit(ctx context.Context) {
 	if d == nil {
 		return

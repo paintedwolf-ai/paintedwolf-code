@@ -500,6 +500,9 @@ func send(
 		}
 		if !firstHopSeen {
 			firstHopSeen = true
+			if err := hopCtx.Err(); err != nil {
+				return err
+			}
 			if deps.SecretMatcher != nil {
 				if err := deps.SecretMatcher.CheckClassification(hopCtx, outbound.classification); err != nil {
 					return screenFaultReject(secretmatch.FaultStageRaise)

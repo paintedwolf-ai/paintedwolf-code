@@ -1,7 +1,6 @@
 package outboundhttp
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"io"
@@ -150,14 +149,14 @@ func (t *hopTracer) observation(begun, resolved time.Time, method, target string
 	return o
 }
 
+// firstHopWriteObserver observes conservative Hop 0 transport dispatch at
+// existing connection-write and request-body-read boundaries without parsing
+// HTTP framing or TLS records.
 type firstHopWriteObserver struct {
 	mu             sync.Mutex
-	cleartext      bool
 	readyForHTTP   bool
 	hasBody        bool
-	headerTail     []byte
-	headersDone    bool
-	bodyReadBytes  int64
+	bodyRead       bool
 	headersWritten bool
 	bodyWritten    bool
 	onHeaders      func()
@@ -166,7 +165,6 @@ type firstHopWriteObserver struct {
 
 func observeFirstHopWrites(transport *http.Transport, cleartext, hasBody bool, onHeaders, onBody func()) *firstHopWriteObserver {
 	obs := &firstHopWriteObserver{
-		cleartext:    cleartext,
 		readyForHTTP: cleartext,
 		hasBody:      hasBody,
 		onHeaders:    onHeaders,
@@ -201,12 +199,12 @@ func (o *firstHopWriteObserver) recordBodyRead(n int) {
 		return
 	}
 	o.mu.Lock()
-	o.bodyReadBytes += int64(n)
+	o.bodyRead = true
 	o.mu.Unlock()
 }
 
-func (o *firstHopWriteObserver) recordConnWrite(written []byte) {
-	if o == nil || len(written) == 0 {
+func (o *firstHopWriteObserver) recordConnWrite(n int) {
+	if o == nil || n <= 0 {
 		return
 	}
 	var fireHeaders, fireBody func()
@@ -219,30 +217,9 @@ func (o *firstHopWriteObserver) recordConnWrite(written []byte) {
 		o.headersWritten = true
 		fireHeaders = o.onHeaders
 	}
-	if o.hasBody && !o.bodyWritten {
-		if o.cleartext {
-			if o.headersDone {
-				o.bodyWritten = true
-				fireBody = o.onBody
-			} else {
-				combined := append(append([]byte(nil), o.headerTail...), written...)
-				if idx := bytes.Index(combined, []byte("\r\n\r\n")); idx >= 0 {
-					o.headersDone = true
-					o.headerTail = nil
-					if len(combined)-(idx+4) > 0 {
-						o.bodyWritten = true
-						fireBody = o.onBody
-					}
-				} else if len(combined) > 3 {
-					o.headerTail = append(o.headerTail[:0], combined[len(combined)-3:]...)
-				} else {
-					o.headerTail = append(o.headerTail[:0], combined...)
-				}
-			}
-		} else if o.bodyReadBytes > 0 {
-			o.bodyWritten = true
-			fireBody = o.onBody
-		}
+	if o.hasBody && o.bodyRead && !o.bodyWritten {
+		o.bodyWritten = true
+		fireBody = o.onBody
 	}
 	o.mu.Unlock()
 	if fireHeaders != nil {
@@ -261,7 +238,7 @@ type firstHopWriteConn struct {
 func (c *firstHopWriteConn) Write(p []byte) (int, error) {
 	n, err := c.Conn.Write(p)
 	if n > 0 {
-		c.obs.recordConnWrite(p[:n])
+		c.obs.recordConnWrite(n)
 	}
 	return n, err
 }
