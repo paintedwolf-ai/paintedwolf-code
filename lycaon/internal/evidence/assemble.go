@@ -13,6 +13,9 @@ func MergeLedger(dst *Ledger, src Ledger) {
 	if dst.ByPath == nil {
 		dst.ByPath = make(map[string][]string)
 	}
+	if dst.byPathOrder == nil {
+		dst.byPathOrder = make(map[string][]string)
+	}
 	if dst.PathFidelity == nil {
 		dst.PathFidelity = make(map[string]string)
 	}
@@ -22,6 +25,9 @@ func MergeLedger(dst *Ledger, src Ledger) {
 	dst.handleOrder = append(dst.handleOrder, src.handleOrder...)
 	for path, handles := range src.ByPath {
 		dst.ByPath[path] = append(dst.ByPath[path], handles...)
+	}
+	for path, handles := range src.byPathOrder {
+		dst.byPathOrder[path] = append(dst.byPathOrder[path], handles...)
 	}
 	for path, tier := range src.PathFidelity {
 		dst.PathFidelity[path] = mergePathFidelity(dst.PathFidelity[path], tier)
@@ -33,6 +39,17 @@ func AssembleLedger(records []Record) Ledger {
 	ev := InitLedger()
 	if len(records) == 0 {
 		return ev
+	}
+	for _, rec := range records {
+		if rec.Handle == "" || rec.SupersededBy != "" {
+			continue
+		}
+		for _, path := range IndexedPathsForRecord(rec) {
+			relPath := NormalizeLedgerPath(path)
+			if relPath != "" {
+				ev.byPathOrder[relPath] = append(ev.byPathOrder[relPath], rec.Handle)
+			}
+		}
 	}
 	sorted := append([]Record(nil), records...)
 	sort.Slice(sorted, func(i, j int) bool {

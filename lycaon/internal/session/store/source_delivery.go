@@ -47,9 +47,14 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 		return "", err
 	}
 	rec.Handle = evidence.FormatHandle(rec.Kind, ordinal)
-	live, err := loadFileBindings(ctx, q, sessionID, rec)
+	live, metaLedger, err := loadCommitLedgers(ctx, q, sessionID, rec, rec.Path != "")
 	if err != nil {
 		return "", err
+	}
+	if rec.Path != "" {
+		if urls := evidence.ExternalCustodyURLs(metaLedger, []string{rec.Path}); len(urls) > 0 {
+			evidence.ApplyExternalCustody(&rec, urls)
+		}
 	}
 	if err := supersedePathsForRecord(ctx, q, sessionID, rec.Handle, rec, live); err != nil {
 		return "", err
@@ -67,3 +72,63 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 	}
 	return rec.Handle, nil
 }
+
+// CommitDeliveredSource records a confirmed exact delivered page in memory.
+func (ev *memoryEvidence) CommitDeliveredSource(ctx context.Context, sessionID string, observation evidence.DeliveredSourceObservation) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	rec := observation.Record()
+	if rec.SourceDelivery == nil {
+		return "", fmt.Errorf("confirmed source delivery required")
+	}
+	s := ev.core
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.sessions[sessionID]; !ok {
+		return "", ErrSessionNotFound
+	}
+	fact := rec.SourceDelivery
+	liveRows := ensureEvidenceSession(s, sessionID)
+	for handle, row := range liveRows {
+		if existing := row.rec.SourceDelivery; existing != nil &&
+			existing.ResponseID == fact.ResponseID &&
+			existing.DeliveryID == fact.DeliveryID &&
+			existing.Source.SHA256 == fact.Source.SHA256 &&
+			existing.Source.SourceID == fact.Source.SourceID &&
+			existing.Source.Revision == fact.Source.Revision &&
+			existing.SourceStartByte == fact.SourceStartByte &&
+			existing.SourceEndByte == fact.SourceEndByte {
+			return handle, nil
+		}
+	}
+	liveRecords := collectMemoryEvidenceRecordsLocked(liveRows, true)
+	live := evidence.AssembleLedger(liveRecords)
+	if rec.Path != "" {
+		if urls := evidence.ExternalCustodyURLs(live, []string{rec.Path}); len(urls) > 0 {
+			evidence.ApplyExternalCustody(&rec, urls)
+		}
+	}
+	rec.Handle = evidence.FormatHandle(rec.Kind, nextEvidenceOrdinalLocked(s, sessionID, rec.Kind))
+	for _, path := range evidence.IndexedPathsForRecord(rec) {
+		for _, oldHandle := range live.ByPath[path] {
+			if oldHandle == rec.Handle {
+				continue
+			}
+			row, ok := liveRows[oldHandle]
+			if !ok || row.supersededBy != "" {
+				continue
+			}
+			if !evidence.SupersedesPathHandle(rec, row.rec) {
+				continue
+			}
+			row.supersededBy = rec.Handle
+			liveRows[oldHandle] = row
+		}
+	}
+	putMemoryEvidenceRowLocked(s, sessionID, rec.Handle, rec)
+	bumpUntrustedLocked(s, sessionID, rec)
+	bumpSecretExposureLocked(s, sessionID, rec)
+	return rec.Handle, nil
+}
+

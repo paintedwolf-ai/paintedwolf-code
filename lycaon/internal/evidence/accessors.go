@@ -22,6 +22,7 @@ func InitLedger() Ledger {
 	return Ledger{
 		Handles:      make(map[string]Record),
 		ByPath:       make(map[string][]string),
+		byPathOrder:  make(map[string][]string),
 		PathFidelity: make(map[string]string),
 	}
 }
@@ -104,6 +105,11 @@ func ObservedURLsSorted(ev Ledger) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// NormalizeEvidencePath normalizes token relative to projectDir for evidence indexing.
+func NormalizeEvidencePath(projectDir, token string) string {
+	return normalizedEvidencePath(projectDir, token)
 }
 
 func (rec *Record) touchPath(projectDir, token, tier string) {
@@ -270,6 +276,123 @@ func IndexedPathsForRecord(rec Record) []string {
 		add(p)
 	}
 	return out
+}
+
+// ContentPathsForRecord returns normalized paths whose file contents were
+// exposed in rec (as opposed to directory listings or zero-match searches).
+func ContentPathsForRecord(rec Record) []string {
+	switch rec.Kind {
+	case "read":
+		if len(rec.Body) > 0 || len(rec.LineRanges) > 0 || rec.SourceDelivery != nil {
+			return IndexedPathsForRecord(rec)
+		}
+		return nil
+	case "grep", "summary":
+		seen := map[string]struct{}{}
+		var out []string
+		for p, byLine := range rec.grepLines {
+			if len(byLine) == 0 {
+				continue
+			}
+			p = NormalizeLedgerPath(p)
+			if p == "" {
+				continue
+			}
+			if _, ok := seen[p]; !ok {
+				seen[p] = struct{}{}
+				out = append(out, p)
+			}
+		}
+		sort.Strings(out)
+		return out
+	default:
+		return nil
+	}
+}
+
+// ExternalCustodyURLs returns external URLs recorded on the latest external-custody
+// record for any of paths, unless replaced by a later whole-file local write or delete.
+// Partial local mutations (edit, replace_lines, jq_edit, code_rewrite) preserve
+// existing external custody on the remaining file content, while a whole-file
+// replacement (write, restore_version, delete, or a newer external download)
+// supersedes older custody for that path.
+func ExternalCustodyURLs(ev Ledger, paths []string) []string {
+	if len(paths) == 0 || len(ev.ByPath) == 0 {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	var out []string
+	addURL := func(raw string) {
+		u := strings.TrimSpace(raw)
+		if u == "" || isSyntacticLoopbackURL(u) {
+			return
+		}
+		if _, ok := seen[u]; ok {
+			return
+		}
+		seen[u] = struct{}{}
+		out = append(out, u)
+	}
+	for _, rawPath := range paths {
+		p := NormalizeLedgerPath(rawPath)
+		if p == "" {
+			continue
+		}
+		handles := ev.byPathOrder[p]
+		if len(handles) == 0 {
+			handles = ev.ByPath[p]
+		}
+		for i := len(handles) - 1; i >= 0; i-- {
+			rec, ok := ev.Handles[handles[i]]
+			if !ok || rec.SupersededBy != "" {
+				continue
+			}
+			if rec.ExternalCustody {
+				for _, u := range ObservedURLsForRecord(rec) {
+					addURL(u)
+				}
+				if replacesWholeFileCustody(rec) {
+					break
+				}
+				continue
+			}
+			if replacesWholeFileCustody(rec) {
+				break
+			}
+		}
+	}
+	return out
+}
+
+func replacesWholeFileCustody(rec Record) bool {
+	switch strings.ToLower(strings.TrimSpace(rec.Kind)) {
+	case "delete":
+		return true
+	case "write":
+		switch strings.ToLower(strings.TrimSpace(rec.SourceTool)) {
+		case "edit", "replace_lines", "jq_edit", "code_rewrite":
+			return false
+		default:
+			return len(rec.LineRanges) == 0
+		}
+	case "http_response", "web":
+		return rec.ExternalCustody
+	default:
+		return false
+	}
+}
+
+// ApplyExternalCustody marks rec as having ingested content from external-custody files
+// and attaches the originating external URLs.
+func ApplyExternalCustody(rec *Record, urls []string) {
+	if rec == nil || len(urls) == 0 {
+		return
+	}
+	rec.UntrustedContent = true
+	rec.ExternalCustody = true
+	for _, u := range urls {
+		rec.touchURL(u)
+	}
 }
 
 func (rec *Record) addGrepLine(relPath string, line int, content string) {

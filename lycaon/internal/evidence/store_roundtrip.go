@@ -2,20 +2,24 @@ package evidence
 
 // RecordAux carries unexported index fields for durable store round-trip.
 type RecordAux struct {
-	PathsTouched []string
-	URLsTouched  []string
-	URLTitles    map[string]string
-	GrepLines    map[string]map[int]string
-	PathTiers    map[string]string
+	PathsTouched     []string
+	URLsTouched      []string
+	URLTitles        map[string]string
+	GrepLines        map[string]map[int]string
+	PathTiers        map[string]string
+	UntrustedContent bool
+	ExternalCustody  bool
 }
 
 // CloneRecordForStore copies auxiliary index fields for persistence.
 func CloneRecordForStore(rec Record) RecordAux {
 	cloned := cloneRecord(rec)
 	out := RecordAux{
-		PathsTouched: append([]string(nil), cloned.pathsTouched...),
-		URLsTouched:  append([]string(nil), cloned.urlsTouched...),
-		URLTitles:    cloned.urlTitles,
+		PathsTouched:     append([]string(nil), cloned.pathsTouched...),
+		URLsTouched:      append([]string(nil), cloned.urlsTouched...),
+		URLTitles:        cloned.urlTitles,
+		UntrustedContent: cloned.UntrustedContent,
+		ExternalCustody:  cloned.ExternalCustody,
 	}
 	if cloned.grepLines != nil {
 		out.GrepLines = make(map[string]map[int]string, len(cloned.grepLines))
@@ -62,5 +66,11 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		for path, tier := range aux.PathTiers {
 			rec.pathTiers[NormalizeLedgerPath(path)] = tier
 		}
+	}
+	if aux.UntrustedContent {
+		rec.UntrustedContent = true
+	}
+	if aux.ExternalCustody {
+		rec.ExternalCustody = true
 	}
 }

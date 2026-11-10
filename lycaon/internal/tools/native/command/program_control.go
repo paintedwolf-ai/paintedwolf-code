@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -152,15 +153,23 @@ func (d *ProgramDispatcher) runProducer(ctx context.Context, request commandprog
 		result.EffectCertainty, result.Evidence = toolcontract.NoEffect, toolcontract.OperationEvidence{}
 		return result, err
 	}
+	tracker := d.run.beginOpTracker()
+	ctx = withOpTracker(ctx, tracker)
+	ctx = evidence.WithExchangeProvenanceObserver(ctx, tracker.addExchange)
 	if request.StreamPreparation != nil {
 		var err error
 		streams, err = request.StreamPreparation.PrepareStreams(ctx)
 		if err != nil {
+			d.run.finishOpTracker(ctx, tracker, outputStreamClass{}, false, outputStreamClass{}, false)
 			return ownerFailure(err), err
 		}
 	}
+	outClass := classifyOutputStream(streams.Output)
+	errClass := classifyOutputStream(streams.Error)
 	streams, retain := d.run.childOutputs(request, streams)
 	defer func() { retain(ctx, result, err) }()
+	streams, finishProvenance := d.run.wrapProducerStreams(ctx, tracker, outClass, errClass, streams)
+	defer finishProvenance()
 	return body(ctx, streams)
 }
 

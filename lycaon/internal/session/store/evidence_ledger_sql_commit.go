@@ -43,30 +43,87 @@ func supersedePathsForRecord(ctx context.Context, q *db.Queries, sessionID, newH
 	return nil
 }
 
-// loadFileBindings reads live path metadata without loading body blobs.
-func loadFileBindings(ctx context.Context, q *db.Queries, sessionID string, incoming evidence.Record) (evidence.Ledger, error) {
-	if !evidence.UpdatesFileBindings(incoming) {
-		return evidence.InitLedger(), nil
+// recordCanAffectExternalCustody reports whether a row of kind can establish or
+// replace external file custody in ExternalCustodyURLs.
+func recordCanAffectExternalCustody(kind string) bool {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case "write", "delete", "http_response", "web", "command":
+		return true
+	default:
+		return false
 	}
+}
+
+// loadMetadataLedger reads live custody-relevant record metadata (without body blobs).
+func loadMetadataLedger(ctx context.Context, q *db.Queries, sessionID string) (evidence.Ledger, error) {
 	rows, err := q.ListEvidenceRecords(ctx, sessionID)
 	if err != nil {
 		return evidence.Ledger{}, err
 	}
+	return buildMetadataLedgerFromRows(rows)
+}
+
+func buildMetadataLedgerFromRows(rows []db.ListEvidenceRecordsRow) (evidence.Ledger, error) {
 	var records []evidence.Record
-	for _, row := range rows {
-		if row.SupersededBy.Valid {
+	for _, r := range rows {
+		if r.SupersededBy.Valid || !recordCanAffectExternalCustody(r.Kind) {
 			continue
 		}
-		rec := evidence.Record{Handle: row.Handle, Kind: row.Kind, Shape: row.Shape, Path: row.Path, Survey: row.Survey != 0}
-		if err := unmarshalEvidenceLineRanges(row.LineRanges, &rec); err != nil {
-			return evidence.Ledger{}, fmt.Errorf("decode path binding %s: %w", rec.Handle, err)
+		rec := evidence.Record{
+			Handle:     r.Handle,
+			Kind:       r.Kind,
+			Shape:      r.Shape,
+			Fidelity:   r.Fidelity,
+			SourceTool: r.SourceTool,
+			Path:       r.Path,
+			URL:        r.Url,
+			Truncated:  r.Truncated != 0,
+			Survey:     r.Survey != 0,
 		}
-		if !evidence.SupersedesPathHandle(incoming, rec) {
-			continue
+		if err := unmarshalEvidenceLineRanges(r.LineRanges, &rec); err != nil {
+			return evidence.Ledger{}, fmt.Errorf("decode metadata for %s: %w", rec.Handle, err)
 		}
 		records = append(records, rec)
 	}
 	return evidence.AssembleLedger(records), nil
+}
+
+// loadCommitLedgers reads live path bindings and custody metadata in a single query pass.
+func loadCommitLedgers(ctx context.Context, q *db.Queries, sessionID string, incoming evidence.Record, needCustody bool) (evidence.Ledger, evidence.Ledger, error) {
+	needBindings := evidence.UpdatesFileBindings(incoming)
+	if !needBindings && !needCustody {
+		return evidence.InitLedger(), evidence.InitLedger(), nil
+	}
+	rows, err := q.ListEvidenceRecords(ctx, sessionID)
+	if err != nil {
+		return evidence.Ledger{}, evidence.Ledger{}, err
+	}
+	bindings := evidence.InitLedger()
+	if needBindings {
+		var bindingRecs []evidence.Record
+		for _, row := range rows {
+			if row.SupersededBy.Valid {
+				continue
+			}
+			rec := evidence.Record{Handle: row.Handle, Kind: row.Kind, Shape: row.Shape, Path: row.Path, Survey: row.Survey != 0}
+			if err := unmarshalEvidenceLineRanges(row.LineRanges, &rec); err != nil {
+				return evidence.Ledger{}, evidence.Ledger{}, fmt.Errorf("decode path binding %s: %w", rec.Handle, err)
+			}
+			if !evidence.SupersedesPathHandle(incoming, rec) {
+				continue
+			}
+			bindingRecs = append(bindingRecs, rec)
+		}
+		bindings = evidence.AssembleLedger(bindingRecs)
+	}
+	custody := evidence.InitLedger()
+	if needCustody {
+		custody, err = buildMetadataLedgerFromRows(rows)
+		if err != nil {
+			return evidence.Ledger{}, evidence.Ledger{}, err
+		}
+	}
+	return bindings, custody, nil
 }
 
 // CommitEvidenceToolResult persists the observation and updates file bindings.
@@ -107,9 +164,17 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 		return "", content, fmt.Errorf("resolve evidence record project: %w", err)
 	}
 
-	live, err := loadFileBindings(ctx, qtx, sessionID, rec)
+	contentPaths := evidence.ContentPathsForRecord(rec)
+	needCustody := len(contentPaths) > 0
+	live, metaLedger, err := loadCommitLedgers(ctx, qtx, sessionID, rec, needCustody)
 	if err != nil {
 		return "", content, err
+	}
+	metaLoaded := needCustody
+	if needCustody {
+		if urls := evidence.ExternalCustodyURLs(metaLedger, contentPaths); len(urls) > 0 {
+			evidence.ApplyExternalCustody(&rec, urls)
+		}
 	}
 	ordinal, err := nextEvidenceOrdinal(ctx, qtx, sessionID, rec.Kind)
 	if err != nil {
@@ -136,6 +201,23 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 		}
 	}
 	rec.Handle = handle
+	if len(highlightRecs) > 0 {
+		if !metaLoaded {
+			metaLedger, err = loadMetadataLedger(ctx, qtx, sessionID)
+			if err != nil {
+				return "", content, err
+			}
+		}
+		for i := range highlightRecs {
+			hPaths := evidence.ContentPathsForRecord(highlightRecs[i])
+			if len(hPaths) == 0 && highlightRecs[i].Path != "" {
+				hPaths = []string{highlightRecs[i].Path}
+			}
+			if urls := evidence.ExternalCustodyURLs(metaLedger, hPaths); len(urls) > 0 {
+				evidence.ApplyExternalCustody(&highlightRecs[i], urls)
+			}
+		}
+	}
 
 	if err := supersedePathsForRecord(ctx, qtx, sessionID, handle, rec, live); err != nil {
 		return "", content, err

@@ -19,6 +19,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -126,7 +127,7 @@ func (o *Owners) Prepare(program mutation.Program, request commandprogram.Operat
 	}
 	review := bound.Review(o.operation)
 	review.PathTargets = curlPathTargets(opts)
-	return Prepared{Mode: mode, Operation: o.operation, Argv: bound, Review: review, LoopbackPorts: loopbackPorts(opts.url), owners: o, program: program, request: request, options: opts, transfer: &Transfer{}}, nil
+	return Prepared{Mode: mode, Operation: o.operation, Argv: bound, Review: review, LoopbackPorts: loopbackPorts(opts.url, opts.dial), owners: o, program: program, request: request, options: opts, transfer: &Transfer{}}, nil
 }
 
 func curlPathTargets(opts options) []commandprogram.PathTarget {
@@ -159,42 +160,62 @@ func curlPathTargets(opts options) []commandprogram.PathTarget {
 	return targets
 }
 
-func loopbackPorts(raw string) []uint16 {
+func loopbackPorts(raw string, dial []outboundhttp.ResolveMapping) []uint16 {
+	var ports []uint16
+	addPort := func(p int) {
+		if p < 1 || p > 65535 {
+			return
+		}
+		u := uint16(p)
+		for _, existing := range ports {
+			if existing == u {
+				return
+			}
+		}
+		ports = append(ports, u)
+	}
+	for _, m := range dial {
+		if m.Address.IsValid() && m.Address.Unmap().IsLoopback() {
+			addPort(int(m.Port))
+		}
+	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return nil
+		return ports
 	}
 	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
 	addr, addrErr := netip.ParseAddr(host)
 	if host != "localhost" && (addrErr != nil || !addr.IsLoopback()) {
-		return nil
+		return ports
 	}
 	port := 0
 	if parsed.Port() != "" {
 		port, err = strconv.Atoi(parsed.Port())
 		if err != nil || port < 1 || port > 65535 {
-			return nil
+			return ports
 		}
 	} else if parsed.Scheme == "https" {
 		port = 443
 	} else if parsed.Scheme == "http" {
 		port = 80
 	}
-	if port == 0 {
-		return nil
-	}
-	return []uint16{uint16(port)}
+	addPort(port)
+	return ports
 }
 
 // InvokeOwner performs the request once and settles curl's exit status.
 func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 	inv := newInvocation(ctx, p, tc, streams)
 	err := inv.run()
-	if p.transfer != nil {
-		*p.transfer = inv.transfer
-	}
 	if streams.Input != nil {
 		_ = streams.Input.Close()
 	}
-	return inv.settle(err)
+	res, settleErr := inv.settle(err)
+	if p.transfer != nil {
+		*p.transfer = inv.transfer
+	}
+	if inv.exchange != nil {
+		httpaction.ReportExchangeProvenance(ctx, inv.provenance)
+	}
+	return res, settleErr
 }

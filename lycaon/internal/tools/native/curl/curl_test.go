@@ -484,3 +484,65 @@ func TestCurlDirectIPHonorsDeclaredDestinationPolicy(t *testing.T) {
 		t.Fatalf("link-local metadata under direct_ip = %v (reject=%+v), want HTTP_REQUEST_HOST_DENIED", metadata.err, reject)
 	}
 }
+
+func TestCurlExchangeProvenanceReporting(t *testing.T) {
+	proxyServer := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		stamp(w, "text/plain")
+		if strings.HasSuffix(r.URL.Path, "/fail") {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = io.WriteString(w, "remote error body\n")
+			return
+		}
+		_, _ = io.WriteString(w, "remote payload\n")
+	})
+	port := strconv.Itoa(int(serverPort(t, proxyServer.URL)))
+	resolveArg := "api.external.example:" + port + ":127.0.0.1"
+	extBase := "http://api.external.example:" + port
+	h := newHarness(t)
+
+	runObserved := func(args ...string) (run, []httpaction.ExchangeProvenance) {
+		var observed []httpaction.ExchangeProvenance
+		ctx := httpaction.WithExchangeProvenanceObserver(t.Context(), func(prov httpaction.ExchangeProvenance) {
+			observed = append(observed, prov)
+		})
+		res := h.curl(ctx, args...)
+		return res, observed
+	}
+
+	// 1. External stdout body reports External=true, WroteStdout=true.
+	_, obs := runObserved("-s", "--resolve", resolveArg, extBase+"/data")
+	if len(obs) != 1 || !obs[0].External || !obs[0].WroteStdout || obs[0].WroteStderr || len(obs[0].WrittenFiles) != 0 {
+		t.Fatalf("external stdout provenance = %+v", obs)
+	}
+
+	// 2. External -o file without stdout headers reports WrittenFiles=["saved.txt"] and WroteStdout=false.
+	_, obs = runObserved("-s", "--resolve", resolveArg, "-o", "saved.txt", extBase+"/data")
+	if len(obs) != 1 || !obs[0].External || obs[0].WroteStdout || obs[0].WroteStderr || len(obs[0].WrittenFiles) != 1 || obs[0].WrittenFiles[0] != "saved.txt" {
+		t.Fatalf("external -o provenance = %+v", obs)
+	}
+
+	// 3. External --fail -D - on 500 still reports WroteStdout=true even though exit status is 22.
+	res, obs := runObserved("-s", "--resolve", resolveArg, "--fail", "-D", "-", extBase+"/fail")
+	if res.result.Status != 22 || len(obs) != 1 || !obs[0].External || !obs[0].WroteStdout {
+		t.Fatalf("external --fail -D - status=%d provenance=%+v", res.result.Status, obs)
+	}
+
+	// 4. External --fail -v on 500 still reports WroteStderr=true even though exit status is 22.
+	res, obs = runObserved("-s", "--resolve", resolveArg, "--fail", "-v", extBase+"/fail")
+	if res.result.Status != 22 || len(obs) != 1 || !obs[0].External || !obs[0].WroteStderr {
+		t.Fatalf("external --fail -v status=%d provenance=%+v", res.result.Status, obs)
+	}
+
+	// 5. External --fail -w '%{http_code}' on 500 reports WroteStdout=true.
+	res, obs = runObserved("-s", "--resolve", resolveArg, "--fail", "-w", "%{http_code}", extBase+"/fail")
+	if res.result.Status != 22 || len(obs) != 1 || !obs[0].External || !obs[0].WroteStdout {
+		t.Fatalf("external --fail -w status=%d provenance=%+v", res.result.Status, obs)
+	}
+
+	// 6. Pure loopback request reports External=false.
+	_, obs = runObserved("-s", proxyServer.URL+"/local")
+	if len(obs) != 1 || obs[0].External || len(obs[0].ObservedURLs) != 0 {
+		t.Fatalf("loopback provenance = %+v, want External=false", obs)
+	}
+}
+

@@ -134,6 +134,19 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		out.Cookies = ex.cookies
 		reportWebPage(tctx, ex.spec, resp, placement, ex.finalURL)
 		reportLoopbackListener(tctx, ex.listener)
+		extURLs := externalObservedURLs(tctx.Effects.Secrets, ex.spec, ex.finalURL, ex.redirects)
+		var writtenFiles []string
+		if out.Written && out.ResponsePath != "" {
+			writtenFiles = []string{out.ResponsePath}
+		} else if out.BodySpillPath != "" {
+			writtenFiles = []string{out.BodySpillPath}
+		}
+		ReportExchangeProvenance(ctx, ExchangeProvenance{
+			External:     len(extURLs) > 0,
+			ObservedURLs: extURLs,
+			WroteStdout:  out.ResponsePath == "" && !ex.spec.disposition.discard && !out.BodyUnavailable,
+			WrittenFiles: writtenFiles,
+		})
 		if tctx.Effects.Out != nil {
 			tctx.Effects.Out.RetrievedFrom = retrievedFrom(ex.spec, resp.FinalURL)
 		}
@@ -171,6 +184,8 @@ type Exchange struct {
 	SentHeaders    []outboundhttp.Header
 	SentBodyBytes  int64
 	SentBodySHA256 string
+	External       bool
+	ObservedURLs   []string
 }
 
 // Perform runs one request with the same screening, approval, secret,
@@ -194,8 +209,17 @@ func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.Too
 		return Exchange{}, err
 	}
 	sum := sha256.Sum256(ex.outbound.body)
-	return Exchange{Response: ex.resp, FinalURL: ex.finalURL, Redirects: ex.redirects, SentHeaders: ex.sentHeaders,
-		SentBodyBytes: int64(len(ex.outbound.body)), SentBodySHA256: hex.EncodeToString(sum[:])}, nil
+	extURLs := externalObservedURLs(tctx.Effects.Secrets, ex.spec, ex.finalURL, ex.redirects)
+	return Exchange{
+		Response:       ex.resp,
+		FinalURL:       ex.finalURL,
+		Redirects:      ex.redirects,
+		SentHeaders:    ex.sentHeaders,
+		SentBodyBytes:  int64(len(ex.outbound.body)),
+		SentBodySHA256: hex.EncodeToString(sum[:]),
+		External:       len(extURLs) > 0,
+		ObservedURLs:   extURLs,
+	}, nil
 }
 
 // TransportFailure is a request the owner started that failed in transport.

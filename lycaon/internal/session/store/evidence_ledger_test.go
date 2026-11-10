@@ -421,3 +421,123 @@ func TestCommitEvidenceToolResult_grepDoesNotRetireReadOnPartialOverlap(t *testi
 		t.Fatalf("read body lost citeable content: %+v", got.Body)
 	}
 }
+
+func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testing.T) {
+	dir := t.TempDir()
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "ledger.db"))
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
+
+	store := NewSQL(sqlDB)
+	ctx := context.Background()
+	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "Create", err)
+
+	// 1. External http_request with response_path records external custody on saved.txt without marking model ingestion.
+	_, _, err = store.CommitEvidenceToolResult(
+		ctx,
+		sess.ID,
+		dir,
+		"http_request",
+		map[string]any{"url": "https://api.external.example/v1/payload.txt", "response_path": "saved.txt"},
+		`{"status":200,"url":"https://api.external.example/v1/payload.txt","response_path":"`+filepath.ToSlash(filepath.Join(dir, "saved.txt"))+`"}`,
+	)
+	testutil.FailErr(t, "http_request response_path", err)
+
+	untrusted, err := store.SessionUntrustedContentResult(ctx, sess.ID)
+	testutil.FailErr(t, "SessionUntrustedContentResult after download", err)
+	if untrusted {
+		t.Fatal("response_path download must not mark model ingestion before saved.txt is read into model context")
+	}
+
+	// 2. Subsequent read of saved.txt marks untrusted ingestion and propagates the observed URL.
+	readJSON := `{"path":"saved.txt","content":"1|remote payload\n","offset":1,"end_line":1}`
+	readHandle, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "read", map[string]any{"path": "saved.txt"}, readJSON)
+	testutil.FailErr(t, "read saved.txt", err)
+
+	untrusted, err = store.SessionUntrustedContentResult(ctx, sess.ID)
+	testutil.FailErr(t, "SessionUntrustedContentResult after read", err)
+	if !untrusted {
+		t.Fatal("reading external custody file into model context must mark untrusted ingestion")
+	}
+
+	ev, err := store.LoadLedger(ctx, sess.ID)
+	testutil.FailErr(t, "LoadLedger", err)
+	gotRead, ok := evidence.ResolveHandle(ev, readHandle)
+	gotURLs := evidence.ObservedURLsForRecord(gotRead)
+	if !ok || !gotRead.UntrustedContent || len(gotURLs) != 1 || gotURLs[0] != "https://api.external.example/v1/payload.txt" {
+		t.Fatalf("read record = %+v urls=%v, want UntrustedContent=true and propagated ObservedURLs", gotRead, gotURLs)
+	}
+
+	// 3. Partial mutation (edit) preserves external custody on a subsequent read, whereas full replacement (write) clears it; verify SQL and Memory parity.
+	for _, backend := range []struct {
+		name string
+		s    interface {
+			Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
+			CommitEvidenceToolResult(context.Context, string, string, string, map[string]any, string) (string, string, error)
+			LoadLedger(context.Context, string) (evidence.Ledger, error)
+		}
+	}{
+		{"sql", store},
+		{"memory", NewMemory()},
+	} {
+		t.Run(backend.name+"_partial_vs_full_replacement", func(t *testing.T) {
+			s2, err := backend.s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			testutil.FailErr(t, "Create", err)
+			_, _, err = backend.s.CommitEvidenceToolResult(
+				ctx, s2.ID, dir, "http_request",
+				map[string]any{"url": "https://api.external.example/v1/item.txt", "response_path": "item.txt"},
+				`{"status":200,"url":"https://api.external.example/v1/item.txt","response_path":"item.txt","written":true}`,
+			)
+			testutil.FailErr(t, "download item.txt", err)
+
+			// Partial edit preserves external custody.
+			_, _, err = backend.s.CommitEvidenceToolResult(
+				ctx, s2.ID, dir, "edit",
+				map[string]any{"path": "item.txt"},
+				`{"path":"item.txt","applied":true}`,
+			)
+			testutil.FailErr(t, "edit item.txt", err)
+			r1Handle, _, err := backend.s.CommitEvidenceToolResult(
+				ctx, s2.ID, dir, "read",
+				map[string]any{"path": "item.txt"},
+				`{"path":"item.txt","content":"1|edited payload\n","offset":1,"end_line":1}`,
+			)
+			testutil.FailErr(t, "read after edit", err)
+
+			// Full write replaces external custody so a later read of the replaced file does not inherit stale external provenance.
+			_, _, err = backend.s.CommitEvidenceToolResult(
+				ctx, s2.ID, dir, "write",
+				map[string]any{"path": "item.txt"},
+				`{"path":"item.txt","bytes_written":10}`,
+			)
+			testutil.FailErr(t, "full write item.txt", err)
+			r2Handle, _, err := backend.s.CommitEvidenceToolResult(
+				ctx, s2.ID, dir, "read",
+				map[string]any{"path": "item.txt"},
+				`{"path":"item.txt","content":"1|clean local\n","offset":1,"end_line":1}`,
+			)
+			testutil.FailErr(t, "read after full write", err)
+
+			ev2, err := backend.s.LoadLedger(ctx, s2.ID)
+			testutil.FailErr(t, "LoadLedger", err)
+			rec1, ok1 := evidence.ResolveHandle(ev2, r1Handle)
+			rec2, ok2 := evidence.ResolveHandle(ev2, r2Handle)
+			if !ok1 || !rec1.UntrustedContent {
+				t.Fatalf("%s: read after partial edit must retain UntrustedContent: %+v", backend.name, rec1)
+			}
+			if !ok2 || rec2.UntrustedContent || rec2.ExternalCustody {
+				t.Fatalf("%s: read after full local write must not inherit stale external custody: %+v", backend.name, rec2)
+			}
+		})
+	}
+
+	// 4. Bounded metadata ledger filtering: non-custody read/grep rows are skipped without retention in buildMetadataLedgerFromRows.
+	rows, err := store.queries.ListEvidenceRecords(ctx, sess.ID)
+	testutil.FailErr(t, "ListEvidenceRecords", err)
+	metaLedger, err := buildMetadataLedgerFromRows(rows)
+	testutil.FailErr(t, "buildMetadataLedgerFromRows", err)
+	if _, hasRead := metaLedger.Handles[readHandle]; hasRead {
+		t.Fatalf("buildMetadataLedgerFromRows retained non-custody read record %s", readHandle)
+	}
+}
+

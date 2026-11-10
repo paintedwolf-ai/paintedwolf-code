@@ -25,9 +25,11 @@ type Record struct {
 	Body         []string // result lines for excerpt verification
 	URL          string   // primary observed URL
 
-	Surface    string // dom | tui | http
-	ArtifactID string
-	FrameIndex int // positive values identify temporal frames
+	Surface          string // dom | tui | http
+	ArtifactID       string
+	FrameIndex       int  // positive values identify temporal frames
+	UntrustedContent bool // true when this record delivered untrusted external content to the model
+	ExternalCustody  bool // true when this record placed or read external content in a workspace path
 
 	grepLines    map[string]map[int]string // grep kind: path → line → content
 	pathsTouched []string                  // additional normalized paths for ByPath index
@@ -62,6 +64,7 @@ func (r Record) IsGate() bool { return r.GateType != "" }
 type Ledger struct {
 	Handles      map[string]Record   // handle → record (single store)
 	ByPath       map[string][]string // normalized path → handles (newest last)
+	byPathOrder  map[string][]string // normalized path → handles in chronological assembly order
 	PathFidelity map[string]string   // normalized path → trust tier (structured wins)
 	handleOrder  []string            // observation order for stable HandlesSorted
 }

@@ -97,6 +97,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 	if run.tc.Effects.Out != nil && run.tc.Effects.Out.CommandProgram != nil {
 		run.tc.Effects.Out.CommandProgram.Outputs = append([]api.CommandProgramOutputWindow(nil), out.Outputs...)
 	}
+	r.commitProgramHTTPProvenance(ctx, run, out.Stdout != "" || out.Stderr != "")
 	return out, nil
 }
 

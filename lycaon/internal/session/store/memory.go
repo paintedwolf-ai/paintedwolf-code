@@ -35,6 +35,7 @@ type memoryCompactionState struct {
 
 type memoryEvidenceState struct {
 	evidence              map[string]map[string]memoryEvidenceRow
+	evidenceSeq           int64
 	artifactHandles       visual.HandleBinder
 	untrustedRecords      map[string]int
 	secretExposureRecords map[string]int
@@ -116,6 +117,7 @@ type Memory struct {
 type memoryEvidenceRow struct {
 	rec          evidence.Record
 	supersededBy string
+	seq          int64
 }
 
 type memoryPromptAttachmentBlob struct {

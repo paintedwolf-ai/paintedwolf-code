@@ -17,33 +17,37 @@ import (
 )
 
 type storedLineRangesPayload struct {
-	Version        int                       `json:"v"`
-	SourceDelivery *evidence.SourceDelivery  `json:"source_delivery,omitempty"`
-	Ranges         []evidence.LineRange      `json:"ranges,omitempty"`
-	PathsTouched   []string                  `json:"paths_touched,omitempty"`
-	URLsTouched    []string                  `json:"urls_touched,omitempty"`
-	URLTitles      map[string]string         `json:"url_titles,omitempty"`
-	GrepLines      map[string]map[int]string `json:"grep_lines,omitempty"`
-	PathTiers      map[string]string         `json:"path_tiers,omitempty"`
-	Surface        string                    `json:"surface,omitempty"`
-	ArtifactID     string                    `json:"artifact_id,omitempty"`
-	FrameIndex     int                       `json:"frame_index,omitempty"`
+	Version          int                       `json:"v"`
+	SourceDelivery   *evidence.SourceDelivery  `json:"source_delivery,omitempty"`
+	Ranges           []evidence.LineRange      `json:"ranges,omitempty"`
+	PathsTouched     []string                  `json:"paths_touched,omitempty"`
+	URLsTouched      []string                  `json:"urls_touched,omitempty"`
+	URLTitles        map[string]string         `json:"url_titles,omitempty"`
+	GrepLines        map[string]map[int]string `json:"grep_lines,omitempty"`
+	PathTiers        map[string]string         `json:"path_tiers,omitempty"`
+	Surface          string                    `json:"surface,omitempty"`
+	ArtifactID       string                    `json:"artifact_id,omitempty"`
+	FrameIndex       int                       `json:"frame_index,omitempty"`
+	UntrustedContent bool                      `json:"untrusted_content,omitempty"`
+	ExternalCustody  bool                      `json:"external_custody,omitempty"`
 }
 
 func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
 	aux := evidence.CloneRecordForStore(rec)
 	payload := storedLineRangesPayload{
-		Version:        1,
-		SourceDelivery: rec.SourceDelivery,
-		Ranges:         rec.LineRanges,
-		PathsTouched:   aux.PathsTouched,
-		URLsTouched:    aux.URLsTouched,
-		URLTitles:      aux.URLTitles,
-		GrepLines:      aux.GrepLines,
-		PathTiers:      aux.PathTiers,
-		Surface:        rec.Surface,
-		ArtifactID:     rec.ArtifactID,
-		FrameIndex:     rec.FrameIndex,
+		Version:          1,
+		SourceDelivery:   rec.SourceDelivery,
+		Ranges:           rec.LineRanges,
+		PathsTouched:     aux.PathsTouched,
+		URLsTouched:      aux.URLsTouched,
+		URLTitles:        aux.URLTitles,
+		GrepLines:        aux.GrepLines,
+		PathTiers:        aux.PathTiers,
+		Surface:          rec.Surface,
+		ArtifactID:       rec.ArtifactID,
+		FrameIndex:       rec.FrameIndex,
+		UntrustedContent: aux.UntrustedContent,
+		ExternalCustody:  aux.ExternalCustody,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -67,11 +71,13 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 	rec.LineRanges = payload.Ranges
 	rec.SourceDelivery = payload.SourceDelivery
 	evidence.ApplyRecordAux(rec, evidence.RecordAux{
-		PathsTouched: payload.PathsTouched,
-		URLsTouched:  payload.URLsTouched,
-		URLTitles:    payload.URLTitles,
-		GrepLines:    payload.GrepLines,
-		PathTiers:    payload.PathTiers,
+		PathsTouched:     payload.PathsTouched,
+		URLsTouched:      payload.URLsTouched,
+		URLTitles:        payload.URLTitles,
+		GrepLines:        payload.GrepLines,
+		PathTiers:        payload.PathTiers,
+		UntrustedContent: payload.UntrustedContent,
+		ExternalCustody:  payload.ExternalCustody,
 	})
 	rec.Surface = payload.Surface
 	rec.ArtifactID = payload.ArtifactID

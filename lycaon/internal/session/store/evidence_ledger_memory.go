@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -14,6 +15,39 @@ func ensureEvidenceSession(s *memoryCore, sessionID string) map[string]memoryEvi
 		s.evidence[sessionID] = make(map[string]memoryEvidenceRow)
 	}
 	return s.evidence[sessionID]
+}
+
+func putMemoryEvidenceRowLocked(s *memoryCore, sessionID, handle string, rec evidence.Record) {
+	s.evidenceSeq++
+	ensureEvidenceSession(s, sessionID)[handle] = memoryEvidenceRow{rec: rec, seq: s.evidenceSeq}
+}
+
+func collectMemoryEvidenceRecordsLocked(rows map[string]memoryEvidenceRow, skipSuperseded bool) []evidence.Record {
+	type indexedRow struct {
+		handle string
+		row    memoryEvidenceRow
+	}
+	items := make([]indexedRow, 0, len(rows))
+	for handle, row := range rows {
+		if skipSuperseded && row.supersededBy != "" {
+			continue
+		}
+		items = append(items, indexedRow{handle: handle, row: row})
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].row.seq != items[j].row.seq {
+			return items[i].row.seq < items[j].row.seq
+		}
+		return items[i].handle < items[j].handle
+	})
+	records := make([]evidence.Record, 0, len(items))
+	for _, it := range items {
+		rec := it.row.rec
+		rec.SupersededBy = it.row.supersededBy
+		rec.Handle = it.handle
+		records = append(records, rec)
+	}
+	return records
 }
 
 func (ev *memoryEvidence) LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error) {
@@ -33,14 +67,7 @@ func loadLedgerMemory(ctx context.Context, s *memoryCore, sessionID string) (evi
 	if _, ok := s.sessions[sessionID]; !ok {
 		return evidence.Ledger{}, ErrSessionNotFound
 	}
-	rows := s.evidence[sessionID]
-	var records []evidence.Record
-	for handle, row := range rows {
-		rec := row.rec
-		rec.SupersededBy = row.supersededBy
-		rec.Handle = handle
-		records = append(records, rec)
-	}
+	records := collectMemoryEvidenceRecordsLocked(s.evidence[sessionID], false)
 	return evidence.AssembleLedger(records), nil
 }
 
@@ -65,7 +92,7 @@ func upsertEvidenceRecordMemory(ctx context.Context, s *memoryCore, sessionID st
 	if _, exists := ledger[handle]; exists {
 		return nil
 	}
-	ledger[handle] = memoryEvidenceRow{rec: rec}
+	putMemoryEvidenceRowLocked(s, sessionID, handle, rec)
 	bumpUntrustedLocked(s, sessionID, rec)
 	bumpSecretExposureLocked(s, sessionID, rec)
 	return nil
@@ -138,16 +165,13 @@ func commitEvidenceToolResultMemory(ctx context.Context, s *memoryCore, sessionI
 		return "", "", ErrSessionNotFound
 	}
 	liveRows := ensureEvidenceSession(s, sessionID)
-	var liveRecords []evidence.Record
-	for handle, row := range liveRows {
-		if row.supersededBy != "" {
-			continue
-		}
-		recCopy := row.rec
-		recCopy.Handle = handle
-		liveRecords = append(liveRecords, recCopy)
-	}
+	liveRecords := collectMemoryEvidenceRecordsLocked(liveRows, true)
 	live := evidence.AssembleLedger(liveRecords)
+	if contentPaths := evidence.ContentPathsForRecord(rec); len(contentPaths) > 0 {
+		if urls := evidence.ExternalCustodyURLs(live, contentPaths); len(urls) > 0 {
+			evidence.ApplyExternalCustody(&rec, urls)
+		}
+	}
 
 	ordinal := nextEvidenceOrdinalLocked(s, sessionID, rec.Kind)
 
@@ -171,6 +195,15 @@ func commitEvidenceToolResultMemory(ctx context.Context, s *memoryCore, sessionI
 		}
 	}
 	rec.Handle = handle
+	for i := range highlightRecs {
+		hPaths := evidence.ContentPathsForRecord(highlightRecs[i])
+		if len(hPaths) == 0 && highlightRecs[i].Path != "" {
+			hPaths = []string{highlightRecs[i].Path}
+		}
+		if urls := evidence.ExternalCustodyURLs(live, hPaths); len(urls) > 0 {
+			evidence.ApplyExternalCustody(&highlightRecs[i], urls)
+		}
+	}
 	if artifactID != "" {
 		if s.artifactHandles == nil {
 			return "", content, fmt.Errorf("bind %s evidence to artifact %s: artifact handle binder not configured", toolName, artifactID)
@@ -196,19 +229,19 @@ func commitEvidenceToolResultMemory(ctx context.Context, s *memoryCore, sessionI
 			liveRows[oldHandle] = row
 		}
 	}
-	liveRows[handle] = memoryEvidenceRow{rec: rec}
+	putMemoryEvidenceRowLocked(s, sessionID, handle, rec)
 	bumpUntrustedLocked(s, sessionID, rec)
 	bumpSecretExposureLocked(s, sessionID, rec)
 
 	for _, hrec := range highlightRecs {
-		liveRows[hrec.Handle] = memoryEvidenceRow{rec: hrec}
+		putMemoryEvidenceRowLocked(s, sessionID, hrec.Handle, hrec)
 		bumpUntrustedLocked(s, sessionID, hrec)
 		bumpSecretExposureLocked(s, sessionID, hrec)
 	}
 	if strings.EqualFold(toolName, "read") {
 		if marker, ok := secretExposureReadRecord(evidencePathArg(args)); ok {
 			if _, exists := liveRows[marker.Handle]; !exists {
-				liveRows[marker.Handle] = memoryEvidenceRow{rec: marker}
+				putMemoryEvidenceRowLocked(s, sessionID, marker.Handle, marker)
 				bumpSecretExposureLocked(s, sessionID, marker)
 			}
 		}
