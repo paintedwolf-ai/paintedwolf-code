@@ -447,17 +447,6 @@ func copyWritableObjectFile(src, dst string) error {
 func copyFileAtomicReadOnly(ctx context.Context, src, dst string) (int64, bool, error) {
 	tmp := fmt.Sprintf("%s.tmp.%d", dst, os.Getpid())
 	_ = os.Remove(tmp)
-	if info, sErr := os.Lstat(src); sErr == nil && info.Mode().IsRegular() && info.Mode().Perm() == 0o444 && info.Size() >= 64<<20 {
-		if lErr := os.Link(src, tmp); lErr == nil {
-			if rErr := os.Rename(tmp, dst); rErr == nil {
-				if syncErr := syncStoreDirectoryCtx(ctx, filepath.Dir(dst)); syncErr != nil {
-					return 0, true, syncErr
-				}
-				return info.Size(), true, nil
-			}
-			_ = os.Remove(tmp)
-		}
-	}
 
 	in, err := os.Open(src)
 	if err != nil {

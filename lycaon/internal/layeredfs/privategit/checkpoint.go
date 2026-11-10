@@ -207,9 +207,7 @@ func (m *Manager) VerifyCheckpointHistory(ctx context.Context, cp *CheckpointGit
 	for _, st := range cp.Stashes {
 		tips = append(tips, st.OID)
 	}
-	m.store.mu.Lock()
-	_, err := verifyStoreConnectivityForStore(ctx, m.store, m.store.ObjectsDir(), tips)
-	m.store.mu.Unlock()
+	_, err := verifyStoreConnectivity(ctx, m.store.ObjectsDir(), tips)
 	return err
 }
 

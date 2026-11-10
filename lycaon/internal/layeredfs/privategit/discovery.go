@@ -39,6 +39,9 @@ func resolveSourceRepoLayout(
 	dotGit := filepath.Join(worktreeDir, ".git")
 	linfo, err := os.Lstat(dotGit)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return sourceRepoLayout{}, ErrNoSourceRepository
+		}
 		return sourceRepoLayout{}, err
 	}
 	if linfo.Mode()&fs.ModeSymlink != 0 {

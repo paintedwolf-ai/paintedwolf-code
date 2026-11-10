@@ -3,13 +3,16 @@ package privategit
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
 func TestOperationSuiteMountedAndMaterialized(t *testing.T) {
@@ -273,4 +276,200 @@ func TestSecurityConfinementGitlinksConfigAndNativeTools(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected context.Canceled on canceled seed, got %v", err)
 	}
+}
+
+func TestSnapshotMetadataDigestsConcurrentAbsentAndPresentFiles(t *testing.T) {
+	t.Parallel()
+	repoDir := t.TempDir()
+	gittest.Init(t, repoDir)
+	testutil.FailErr(t, "write a.txt", os.WriteFile(filepath.Join(repoDir, "a.txt"), []byte("hello\n"), 0o644))
+	gittest.CommitAll(t, repoDir, "initial")
+	// Remove index and packed-refs so HEAD and refs/ are present while index and packed-refs are absent.
+	_ = os.Remove(filepath.Join(repoDir, ".git", "index"))
+	_ = os.Remove(filepath.Join(repoDir, ".git", "packed-refs"))
+
+	layout, err := resolveSourceRepoLayout(repoDir, ".", nil, nil)
+	testutil.FailErr(t, "resolveSourceRepoLayout", err)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 10; j++ {
+				digests, hasLock, sErr := snapshotMetadataDigests(layout)
+				if sErr != nil || hasLock {
+					t.Errorf("snapshotMetadataDigests failed (hasLock=%v): %v", hasLock, sErr)
+					return
+				}
+				if digests["index"] != "absent" || digests["packed-refs"] != "absent" || digests["HEAD"] == "" || digests["HEAD"] == "absent" {
+					t.Errorf("unexpected digests: %+v", digests)
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestUnifiedCaptureProductionPathMutationLockAndCleanup(t *testing.T) {
+	t.Parallel()
+	repoDir := t.TempDir()
+	gittest.Init(t, repoDir)
+	testutil.FailErr(t, "write f.txt", os.WriteFile(filepath.Join(repoDir, "f.txt"), []byte("v1\n"), 0o644))
+	gittest.CommitAll(t, repoDir, "c1")
+
+	layout, err := resolveSourceRepoLayout(repoDir, ".", nil, nil)
+	testutil.FailErr(t, "resolveSourceRepoLayout", err)
+
+	// 1. Direct tryCaptureSourceMetadataOnce: mutation during hook must return false and clean stageGitDir.
+	stage1 := filepath.Join(t.TempDir(), "stage-mutate")
+	testutil.FailErr(t, "mkdir stage1", os.MkdirAll(stage1, 0o755))
+	origConfig, err := os.ReadFile(filepath.Join(repoDir, ".git", "config"))
+	testutil.FailErr(t, "read config", err)
+	coherent, err := tryCaptureSourceMetadataOnce(layout, stage1, 0, func(wt string, _ int) {
+		_ = os.WriteFile(filepath.Join(wt, ".git", "config"), append(origConfig, []byte("\n# mutated\n")...), 0o644)
+	})
+	testutil.FailErr(t, "restore config", os.WriteFile(filepath.Join(repoDir, ".git", "config"), origConfig, 0o644))
+	if err != nil || coherent {
+		t.Fatalf("expected coherent=false, err=nil on config mutation during capture, got coherent=%v err=%v", coherent, err)
+	}
+	if _, statErr := os.Stat(stage1); !errors.Is(statErr, fs.ErrNotExist) {
+		t.Fatalf("expected failed capture stage1 to be cleaned up, stat err=%v", statErr)
+	}
+
+	// 2. Direct tryCaptureSourceMetadataOnce: lock file appearing during hook must return false and clean stageGitDir.
+	stage2 := filepath.Join(t.TempDir(), "stage-lock")
+	testutil.FailErr(t, "mkdir stage2", os.MkdirAll(stage2, 0o755))
+	lockFile := filepath.Join(repoDir, ".git", "refs", "heads", "main.lock")
+	coherent, err = tryCaptureSourceMetadataOnce(layout, stage2, 0, func(_ string, _ int) {
+		_ = os.WriteFile(lockFile, []byte("lock"), 0o644)
+	})
+	_ = os.Remove(lockFile)
+	if err != nil || coherent {
+		t.Fatalf("expected coherent=false, err=nil on ref lock during capture, got coherent=%v err=%v", coherent, err)
+	}
+	if _, statErr := os.Stat(stage2); !errors.Is(statErr, fs.ErrNotExist) {
+		t.Fatalf("expected failed capture stage2 to be cleaned up, stat err=%v", statErr)
+	}
+
+	// 3. Manager capture retry and exhausted-retry staging cleanup.
+	backing := filepath.Join(t.TempDir(), "mgr-backing")
+	mgr, err := NewManager(ManagerConfig{
+		BackingDir:        backing,
+		MaxCaptureRetries: 2,
+		CaptureAttemptHook: func(wt string, _ int) {
+			_ = os.WriteFile(filepath.Join(wt, ".git", "index.lock"), []byte("locked"), 0o644)
+		},
+	})
+	testutil.FailErr(t, "NewManager", err)
+	t.Cleanup(func() { _ = mgr.Store().Close() })
+
+	core := newMountedViewWithManager(t, mgr, "view-exhausted", repoDir)
+	_, err = core.Stat(layeredfs.QualifiedPath{RootID: "primary", Rel: ".git/HEAD"})
+	_ = os.Remove(filepath.Join(repoDir, ".git", "index.lock"))
+	if !errors.Is(err, layeredfs.ErrGitPending) {
+		t.Fatalf("expected ErrGitPending when capture retries exhausted by index.lock, got %v", err)
+	}
+	stageBase := filepath.Join(backing, "views", "view-exhausted", "git-staging")
+	if entries, rErr := os.ReadDir(stageBase); rErr == nil && len(entries) != 0 {
+		t.Fatalf("expected 0 leftover staging directories in %s, got %d", stageBase, len(entries))
+	}
+}
+
+func TestPrivateGitFallbackDistinguishesNoSourceRepoFromEstablishedAndFailed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("genuine_non_repository", func(t *testing.T) {
+		t.Parallel()
+		fix := buildRichRepoFixture(t)
+		mgr := newTestManager(t, fix.tmpDir)
+		core := newMountedViewWithManager(t, mgr, "view-nonrepo", fix.trunkDir)
+
+		testutil.FailErr(t, "mkdir nested", core.Mkdir(layeredfs.QualifiedPath{RootID: "primary", Rel: "nested"}, 0o755))
+		testutil.FailErr(t, "mkdir nested/.git", core.Mkdir(layeredfs.QualifiedPath{RootID: "primary", Rel: "nested/.git"}, 0o755))
+		_, err := core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "nested/.git/HEAD"}, []byte("ref: refs/heads/main\n"), 0o644)
+		testutil.FailErr(t, "write nested/.git/HEAD", err)
+
+		rec := readDurableRepoRecord(mgr, "view-nonrepo", "nested")
+		if rec.Status != repoStatusNoSourceRepo {
+			t.Fatalf("expected durable status %q for nested, got %+v", repoStatusNoSourceRepo, rec)
+		}
+		if _, gErr := readyPrivateGitDir(mgr, "view-nonrepo", "nested"); !errors.Is(gErr, ErrNoSourceRepository) {
+			t.Fatalf("expected ErrNoSourceRepository from readyPrivateGitDir, got %v", gErr)
+		}
+	})
+
+	t.Run("established_private_history_with_source_git_removed_and_store_failure", func(t *testing.T) {
+		t.Parallel()
+		srcDir := t.TempDir()
+		gittest.Init(t, srcDir)
+		testutil.FailErr(t, "write p.txt", os.WriteFile(filepath.Join(srcDir, "p.txt"), []byte("committed\n"), 0o644))
+		gittest.CommitAll(t, srcDir, "initial")
+
+		mgr := newTestManager(t, t.TempDir())
+		core := newMountedViewWithManager(t, mgr, "view-est", srcDir)
+		qp := func(rel string) layeredfs.QualifiedPath {
+			return layeredfs.QualifiedPath{RootID: "primary", Rel: rel}
+		}
+
+		// Establish private repository.
+		_, err := core.ReadFile(qp(".git/HEAD"))
+		testutil.FailErr(t, "initial ReadFile(.git/HEAD)", err)
+		rec := readDurableRepoRecord(mgr, "view-est", ".")
+		if rec.Status != repoStatusEstablished {
+			t.Fatalf("expected durable status %q, got %+v", repoStatusEstablished, rec)
+		}
+
+		// Remove source .git after private repository is established.
+		testutil.FailErr(t, "remove source .git", os.RemoveAll(filepath.Join(srcDir, ".git")))
+
+		// Induce a private-store failure by removing the retained store objects directory.
+		mgr.Store().mu.Lock()
+		unlockStoreWriteBoundary(mgr.Store())
+		mgr.Store().mu.Unlock()
+		testutil.FailErr(t, "remove store objectsDir", os.RemoveAll(mgr.Store().ObjectsDir()))
+
+		// Both read and write paths must fail closed with ErrGitPending, never falling back to mutable backing.
+		if _, err := core.Stat(qp(".git/HEAD")); !errors.Is(err, layeredfs.ErrGitPending) {
+			t.Fatalf("expected ErrGitPending on Stat(.git/HEAD) after store failure, got %v", err)
+		}
+		if _, err := core.WriteFile(qp(".git/config"), []byte("[core]\n"), 0o644); !errors.Is(err, layeredfs.ErrGitPending) {
+			t.Fatalf("expected ErrGitPending on WriteFile(.git/config) after store failure, got %v", err)
+		}
+		if err := core.Mkdir(qp(".git/refs/heads/newdir"), 0o755); !errors.Is(err, layeredfs.ErrGitPending) {
+			t.Fatalf("expected ErrGitPending on Mkdir inside .git after store failure, got %v", err)
+		}
+	})
+
+	t.Run("failed_initialization_with_source_git_removed", func(t *testing.T) {
+		t.Parallel()
+		srcDir := t.TempDir()
+		gittest.Init(t, srcDir)
+		testutil.FailErr(t, "write p.txt", os.WriteFile(filepath.Join(srcDir, "p.txt"), []byte("committed\n"), 0o644))
+		gittest.CommitAll(t, srcDir, "initial")
+
+		mgr := newTestManager(t, t.TempDir())
+		mgr.cfg.FailObjectImportHook = func(_, _ string) error {
+			return errors.New("injected import failure")
+		}
+		core := newMountedViewWithManager(t, mgr, "view-failed-init", srcDir)
+		qp := func(rel string) layeredfs.QualifiedPath {
+			return layeredfs.QualifiedPath{RootID: "primary", Rel: rel}
+		}
+
+		if _, err := core.Stat(qp(".git/HEAD")); !errors.Is(err, layeredfs.ErrGitPending) {
+			t.Fatalf("expected initial ErrGitPending, got %v", err)
+		}
+		// Now remove source .git and clear hook: prior failure must not downgrade to ErrNoSourceRepository.
+		testutil.FailErr(t, "remove source .git", os.RemoveAll(filepath.Join(srcDir, ".git")))
+		mgr.cfg.FailObjectImportHook = nil
+
+		if _, err := core.Stat(qp(".git/HEAD")); !errors.Is(err, layeredfs.ErrGitPending) {
+			t.Fatalf("expected ErrGitPending after source .git removed following failed init, got %v", err)
+		}
+		if err := core.Mkdir(qp(".git"), 0o755); !errors.Is(err, layeredfs.ErrGitPending) {
+			t.Fatalf("expected ErrGitPending on Mkdir(.git) after failed init, got %v", err)
+		}
+	})
 }

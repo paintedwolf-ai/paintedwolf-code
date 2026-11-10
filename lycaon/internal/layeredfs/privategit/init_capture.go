@@ -17,41 +17,29 @@ import (
 )
 
 func tryCaptureSourceMetadataOnce(layout sourceRepoLayout, stageGitDir string, attempt int, hook func(worktreeDir string, attempt int)) (bool, error) {
-	var before map[string]string
-	if hook != nil {
-		var hasLock bool
-		var err error
-		before, hasLock, err = snapshotMetadataDigests(layout)
-		if err != nil || hasLock {
-			return false, err
-		}
-		if err := copyCapturedMetadataToStage(layout, stageGitDir); err != nil {
-			if os.IsNotExist(err) {
-				return false, nil
-			}
-			return false, err
-		}
-		hook(layout.worktreeDir, attempt)
-	} else {
-		var hasLock bool
-		var err error
-		before, hasLock, err = copyAndDigestCapturedMetadataToStage(layout, stageGitDir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return false, nil
-			}
-			return false, err
-		}
-		if hasLock {
+	before, hasLock, err := copyAndDigestCapturedMetadataToStage(layout, stageGitDir)
+	if err != nil {
+		_ = os.RemoveAll(stageGitDir)
+		if os.IsNotExist(err) {
 			return false, nil
 		}
+		return false, err
+	}
+	if hasLock {
+		_ = os.RemoveAll(stageGitDir)
+		return false, nil
+	}
+	if hook != nil {
+		hook(layout.worktreeDir, attempt)
 	}
 	after, hasLockAfter, err := snapshotMetadataDigests(layout)
 	if err != nil || hasLockAfter || len(before) != len(after) {
+		_ = os.RemoveAll(stageGitDir)
 		return false, err
 	}
 	for k, v := range before {
 		if after[k] != v {
+			_ = os.RemoveAll(stageGitDir)
 			return false, nil
 		}
 	}
@@ -111,29 +99,34 @@ func snapshotMetadataDigests(layout sourceRepoLayout) (map[string]string, bool, 
 		}
 		mu.Unlock()
 	}
-	var wg sync.WaitGroup
+	setDigest := func(k, v string) {
+		mu.Lock()
+		digests[k] = v
+		mu.Unlock()
+	}
 	for _, f := range files {
 		if !f.present {
 			digests[f.key] = "absent"
+		}
+	}
+	var wg sync.WaitGroup
+	for _, f := range files {
+		if !f.present {
 			continue
 		}
 		wg.Add(1)
 		go func(key, dir, name string) {
 			defer wg.Done()
 			sum, _, hErr := hashFileBytes(filepath.Join(dir, name))
-			mu.Lock()
-			defer mu.Unlock()
 			if hErr != nil {
 				if os.IsNotExist(hErr) {
-					digests[key] = "absent"
+					setDigest(key, "absent")
 					return
 				}
-				if firstErr == nil {
-					firstErr = hErr
-				}
+				setErr(hErr)
 				return
 			}
-			digests[key] = sum
+			setDigest(key, sum)
 		}(f.key, f.dir, f.name)
 	}
 	if commonNames["refs"] {
@@ -359,11 +352,6 @@ func copyOptionalStageFile(src, dst string) error {
 		return err
 	}
 	return os.WriteFile(dst, raw, 0o644)
-}
-
-func copyCapturedMetadataToStage(layout sourceRepoLayout, stageGitDir string) error {
-	_, _, err := copyAndDigestCapturedMetadataToStage(layout, stageGitDir)
-	return err
 }
 
 func copyMetadataTree(srcDir, dstDir string) error {

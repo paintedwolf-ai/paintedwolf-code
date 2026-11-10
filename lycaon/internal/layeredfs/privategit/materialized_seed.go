@@ -2,6 +2,7 @@ package privategit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -68,10 +69,35 @@ func ensureViewRepoInitialized(
 	view.mu.Lock()
 	defer view.mu.Unlock()
 
-	if existing, ok := view.repos[repoRel]; ok && existing != nil && existing.privateGitDir != "" {
+	existing := view.repos[repoRel]
+	durable := readDurableRepoRecord(mgr, view.viewID, repoRel)
+
+	if (existing != nil && existing.privateGitDir != "") || durable.Status == repoStatusEstablished {
+		gitDir, vErr := verifyEstablishedPrivateRepo(mgr, existing, durable)
+		if vErr != nil {
+			view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
+			return vErr
+		}
+		if existing == nil || existing.privateGitDir == "" {
+			view.repos[repoRel] = &initializedRepo{
+				repoRel:        repoRel,
+				worktreeDir:    view.worktreeDir,
+				privateGitDir:  gitDir,
+				leaseID:        durable.LeaseID,
+				initialHeadOID: durable.InitialHeadOID,
+				metrics:        InitMetrics{State: StateReady},
+			}
+		}
 		return nil
 	}
-	view.repos[repoRel] = &initializedRepo{metrics: InitMetrics{State: StatePending}}
+
+	if (existing != nil && existing.noSourceRepo) || durable.Status == repoStatusNoSourceRepo {
+		view.repos[repoRel] = &initializedRepo{repoRel: repoRel, noSourceRepo: true}
+		return ErrNoSourceRepository
+	}
+
+	hadPriorFailure := (existing != nil && existing.metrics.State == StateFailed) || durable.Status == repoStatusFailed
+	view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StatePending}}
 
 	targetWT := view.worktreeDir
 	if repoRel != "." {
@@ -80,14 +106,32 @@ func ensureViewRepoInitialized(
 
 	repo, err := initializePrivateRepo(ctx, mgr, view, repoRel, targetWT)
 	if err != nil {
-		if os.IsNotExist(err) {
-			delete(view.repos, repoRel)
-		} else {
-			view.repos[repoRel] = &initializedRepo{metrics: InitMetrics{State: StateFailed}}
+		if errors.Is(err, ErrNoSourceRepository) && !hadPriorFailure {
+			view.repos[repoRel] = &initializedRepo{repoRel: repoRel, noSourceRepo: true}
+			writeDurableRepoRecord(mgr, view.viewID, durableRepoRecord{
+				RepoRel: repoRel,
+				Status:  repoStatusNoSourceRepo,
+			})
+			return ErrNoSourceRepository
+		}
+		view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
+		writeDurableRepoRecord(mgr, view.viewID, durableRepoRecord{
+			RepoRel: repoRel,
+			Status:  repoStatusFailed,
+		})
+		if errors.Is(err, ErrNoSourceRepository) {
+			return fmt.Errorf("%w: source repository missing after failed private git initialization for %q", layeredfs.ErrGitPending, repoRel)
 		}
 		return err
 	}
 	view.repos[repoRel] = repo
+	writeDurableRepoRecord(mgr, view.viewID, durableRepoRecord{
+		RepoRel:        repoRel,
+		Status:         repoStatusEstablished,
+		PrivateGitDir:  repo.privateGitDir,
+		LeaseID:        repo.leaseID,
+		InitialHeadOID: repo.initialHeadOID,
+	})
 
 	if repoRel == "." {
 		subRels := repo.submoduleRels
@@ -99,6 +143,13 @@ func ensureViewRepoInitialized(
 			subRepo, sErr := initializePrivateRepo(ctx, mgr, view, subRel, subWT)
 			if sErr == nil {
 				view.repos[subRel] = subRepo
+				writeDurableRepoRecord(mgr, view.viewID, durableRepoRecord{
+					RepoRel:        subRel,
+					Status:         repoStatusEstablished,
+					PrivateGitDir:  subRepo.privateGitDir,
+					LeaseID:        subRepo.leaseID,
+					InitialHeadOID: subRepo.initialHeadOID,
+				})
 				modDst := filepath.Join(repo.privateGitDir, "modules", filepath.FromSlash(subRel))
 				_ = copyMetadataTree(subRepo.privateGitDir, modDst)
 			}
@@ -159,6 +210,12 @@ func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewB
 			repoRel: repoRel, worktreeDir: target, privateGitDir: finalGitDir,
 			initialHeadOID: initialHead, initialRefs: initialRefs, metrics: metrics,
 		}
+		writeDurableRepoRecord(m, b.ViewID, durableRepoRecord{
+			RepoRel:        repoRel,
+			Status:         repoStatusEstablished,
+			PrivateGitDir:  finalGitDir,
+			InitialHeadOID: initialHead,
+		})
 	}
 	for _, at := range b.Installed {
 		repoRel := cleanSlashRel(at.RepoRel)
@@ -166,10 +223,17 @@ func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewB
 		if repoRel != "." {
 			target = filepath.Join(absWorktree, filepath.FromSlash(repoRel))
 		}
+		finalGitDir := filepath.Join(target, ".git")
 		view.repos[repoRel] = &initializedRepo{
-			repoRel: repoRel, worktreeDir: target, privateGitDir: filepath.Join(target, ".git"),
+			repoRel: repoRel, worktreeDir: target, privateGitDir: finalGitDir,
 			initialHeadOID: at.InitialHead, initialRefs: at.InitialRefs, metrics: at.Metrics,
 		}
+		writeDurableRepoRecord(m, b.ViewID, durableRepoRecord{
+			RepoRel:        repoRel,
+			Status:         repoStatusEstablished,
+			PrivateGitDir:  finalGitDir,
+			InitialHeadOID: at.InitialHead,
+		})
 	}
 	registerManagedView(m, view)
 	return nil

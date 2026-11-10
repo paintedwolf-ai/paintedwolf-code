@@ -163,10 +163,13 @@ func (m *Manager) InterceptGitAccess(
 		return layeredfs.GitInterceptOutcome{}, layeredfs.ErrGitPending
 	}
 	outcome, err := interceptViewAccess(m, view, qpath, writeIntent)
-	if writeIntent && errors.Is(err, fs.ErrNotExist) {
-		// No source repository lives here, so what the worker creates is its own: private nodes in
-		// Core, which reach neither the source nor a checkpoint's promotable changes.
-		return layeredfs.GitInterceptOutcome{Intercepted: true}, nil
+	if errors.Is(err, ErrNoSourceRepository) {
+		if writeIntent {
+			// Genuinely no source repository ever lived here, so what the worker creates is its own:
+			// private nodes in Core, which reach neither the source nor a checkpoint's promotable changes.
+			return layeredfs.GitInterceptOutcome{Intercepted: true}, nil
+		}
+		return layeredfs.GitInterceptOutcome{}, fs.ErrNotExist
 	}
 	return outcome, err
 }
@@ -305,11 +308,19 @@ func readyPrivateGitDir(m *Manager, viewID, repoRel string) (string, error) {
 	repoRel = cleanSlashRel(repoRel)
 	view.mu.Lock()
 	defer view.mu.Unlock()
-	repo, ok := view.repos[repoRel]
-	if !ok || repo == nil || repo.privateGitDir == "" {
-		return "", layeredfs.ErrGitPending
+	repo := view.repos[repoRel]
+	durable := readDurableRepoRecord(m, viewID, repoRel)
+	if (repo != nil && repo.privateGitDir != "") || durable.Status == repoStatusEstablished {
+		gitDir, vErr := verifyEstablishedPrivateRepo(m, repo, durable)
+		if vErr != nil {
+			return "", vErr
+		}
+		return gitDir, nil
 	}
-	return repo.privateGitDir, nil
+	if (repo != nil && repo.noSourceRepo) || durable.Status == repoStatusNoSourceRepo {
+		return "", ErrNoSourceRepository
+	}
+	return "", layeredfs.ErrGitPending
 }
 
 func forbiddenTargetDirs(m *Manager, excludeViewID string) []string {

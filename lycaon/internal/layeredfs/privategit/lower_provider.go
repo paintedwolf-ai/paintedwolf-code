@@ -22,24 +22,12 @@ type gitAwareLowerProvider struct {
 	trunkDir string
 }
 
-func noSourceRepositoryAt(trunkDir, repoRel string) bool {
-	if strings.TrimSpace(trunkDir) == "" {
-		return false
-	}
-	worktreeDir := trunkDir
-	if repoRel != "." && repoRel != "" {
-		worktreeDir = filepath.Join(trunkDir, filepath.FromSlash(repoRel))
-	}
-	_, err := os.Lstat(filepath.Join(worktreeDir, ".git"))
-	return errors.Is(err, fs.ErrNotExist)
-}
-
 func (p *gitAwareLowerProvider) resolveBackingTarget(rel string) (string, bool, error) {
 	rel = cleanSlashRel(rel)
 	if repoRel, subRel, isGit := splitGitRelPath(rel); isGit {
 		gitDir, err := readyPrivateGitDir(p.mgr, p.viewID, repoRel)
 		if err != nil {
-			if noSourceRepositoryAt(p.trunkDir, repoRel) {
+			if errors.Is(err, ErrNoSourceRepository) {
 				return "", true, fs.ErrNotExist
 			}
 			return "", true, err
@@ -64,7 +52,7 @@ func (p *gitAwareLowerProvider) ResolveMutableGitTarget(rel string) (string, boo
 	}
 	gitDir, err := readyPrivateGitDir(p.mgr, p.viewID, repoRel)
 	if err != nil {
-		if noSourceRepositoryAt(p.trunkDir, repoRel) {
+		if errors.Is(err, ErrNoSourceRepository) {
 			return "", false, false, nil
 		}
 		return "", false, true, err

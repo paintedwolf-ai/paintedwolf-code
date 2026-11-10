@@ -44,6 +44,10 @@ var (
 	// ErrMountedWorktreeUnavailable is returned when a mounted view has no bound
 	// host-owned FUSE/NFS mounted workspace path or when the mounted path is not active.
 	ErrMountedWorktreeUnavailable = errors.New("privategit: mounted workspace worktree path is unavailable or not mounted")
+
+	// ErrNoSourceRepository is returned when a path genuinely has never had a source
+	// Git repository (nor an established or failed private repository in the view).
+	ErrNoSourceRepository = errors.New("privategit: no source git repository at path")
 )
 
 // LeaseKind classifies an active object retention lease in the engine-retained store.

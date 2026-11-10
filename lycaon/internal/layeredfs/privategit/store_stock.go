@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const compactPackThreshold = 100_000
+var compactPackThreshold int64 = 100_000
 
 type compactPackIndex struct {
 	fanout [256]uint32
@@ -28,12 +28,8 @@ func (c *compactPackIndex) count() int64 {
 	return int64(c.fanout[255])
 }
 
-func (c *compactPackIndex) containsHex(oidHex string) bool {
-	if c == nil || len(oidHex) != 40 {
-		return false
-	}
-	var raw [20]byte
-	if _, err := hex.Decode(raw[:], []byte(oidHex)); err != nil {
+func (c *compactPackIndex) containsRaw(raw [20]byte) bool {
+	if c == nil || len(c.oids) == 0 {
 		return false
 	}
 	first := raw[0]
@@ -58,6 +54,101 @@ func (c *compactPackIndex) containsHex(oidHex string) bool {
 	return false
 }
 
+func (c *compactPackIndex) containsHex(oidHex string) bool {
+	if c == nil || len(oidHex) != 40 {
+		return false
+	}
+	var raw [20]byte
+	if _, err := hex.Decode(raw[:], []byte(oidHex)); err != nil {
+		return false
+	}
+	return c.containsRaw(raw)
+}
+
+func inAnyCompactPackMap(compactPacks map[string]*compactPackIndex, oidHex string) bool {
+	if len(compactPacks) == 0 || len(oidHex) != 40 {
+		return false
+	}
+	var raw [20]byte
+	if _, err := hex.Decode(raw[:], []byte(oidHex)); err != nil {
+		return false
+	}
+	for _, comp := range compactPacks {
+		if comp.containsRaw(raw) {
+			return true
+		}
+	}
+	return false
+}
+
+func computeCompactUnionCount(compactPacks map[string]*compactPackIndex) int64 {
+	if len(compactPacks) == 0 {
+		return 0
+	}
+	packs := make([]*compactPackIndex, 0, len(compactPacks))
+	for _, comp := range compactPacks {
+		if comp != nil && comp.count() > 0 {
+			packs = append(packs, comp)
+		}
+	}
+	if len(packs) == 0 {
+		return 0
+	}
+	if len(packs) == 1 {
+		return packs[0].count()
+	}
+	cursors := make([]int, len(packs))
+	counts := make([]int, len(packs))
+	for i, p := range packs {
+		counts[i] = int(p.count())
+	}
+	var unionCount int64
+	for {
+		minIdx := -1
+		var minOID []byte
+		for i, p := range packs {
+			if cursors[i] >= counts[i] {
+				continue
+			}
+			off := cursors[i] * 20
+			cand := p.oids[off : off+20]
+			if minIdx < 0 || bytes.Compare(cand, minOID) < 0 {
+				minIdx = i
+				minOID = cand
+			}
+		}
+		if minIdx < 0 {
+			break
+		}
+		unionCount++
+		for i, p := range packs {
+			if cursors[i] >= counts[i] {
+				continue
+			}
+			off := cursors[i] * 20
+			if bytes.Equal(p.oids[off:off+20], minOID) {
+				cursors[i]++
+			}
+		}
+	}
+	return unionCount
+}
+
+func recomputeStockLogicalCountsLocked(s *RetainedObjectStore) {
+	s.stock.compactObjectsTotal = computeCompactUnionCount(s.stock.compactPacks)
+	if len(s.stock.compactPacks) == 0 {
+		s.stock.nonCompactOnlyObjects = int64(len(s.stock.logicalOIDRefs))
+		return
+	}
+	var nonCompact int64
+	for oid := range s.stock.logicalOIDRefs {
+		if !inAnyCompactPackMap(s.stock.compactPacks, oid) {
+			nonCompact++
+		}
+	}
+	s.stock.nonCompactOnlyObjects = nonCompact
+}
+
 func recordLooseObjectLocked(s *RetainedObjectStore, oid string, size int64) {
 	oid = strings.ToLower(strings.TrimSpace(oid))
 	if len(oid) != 40 {
@@ -70,6 +161,9 @@ func recordLooseObjectLocked(s *RetainedObjectStore, oid string, size int64) {
 	}
 	s.stock.looseSizes[oid] = size
 	s.stock.looseBytesTotal += size
+	if s.stock.logicalOIDRefs[oid] == 0 && !inAnyCompactPackMap(s.stock.compactPacks, oid) {
+		s.stock.nonCompactOnlyObjects++
+	}
 	s.stock.logicalOIDRefs[oid]++
 }
 
@@ -83,6 +177,9 @@ func removeLooseObjectLocked(s *RetainedObjectStore, oid string) {
 	s.stock.looseBytesTotal -= size
 	if s.stock.logicalOIDRefs[oid] <= 1 {
 		delete(s.stock.logicalOIDRefs, oid)
+		if !inAnyCompactPackMap(s.stock.compactPacks, oid) {
+			s.stock.nonCompactOnlyObjects--
+		}
 	} else {
 		s.stock.logicalOIDRefs[oid]--
 	}
@@ -95,13 +192,16 @@ func recordPackLocked(s *RetainedObjectStore, base string, packAndIdxBytes int64
 	}
 	if comp != nil {
 		s.stock.compactPacks[base] = comp
-		s.stock.compactObjectsTotal += comp.count()
+		recomputeStockLogicalCountsLocked(s)
 	} else {
 		cloned := make(map[string]struct{}, len(oids))
 		for oid := range oids {
 			norm := strings.ToLower(strings.TrimSpace(oid))
 			if len(norm) == 40 {
 				cloned[norm] = struct{}{}
+				if s.stock.logicalOIDRefs[norm] == 0 && !inAnyCompactPackMap(s.stock.compactPacks, norm) {
+					s.stock.nonCompactOnlyObjects++
+				}
 				s.stock.logicalOIDRefs[norm]++
 			}
 		}
@@ -112,14 +212,17 @@ func recordPackLocked(s *RetainedObjectStore, base string, packAndIdxBytes int64
 }
 
 func removePackLocked(s *RetainedObjectStore, base string) {
-	if comp, exists := s.stock.compactPacks[base]; exists {
-		s.stock.compactObjectsTotal -= comp.count()
+	if _, exists := s.stock.compactPacks[base]; exists {
 		delete(s.stock.compactPacks, base)
+		recomputeStockLogicalCountsLocked(s)
 	}
 	if members, exists := s.stock.packOIDs[base]; exists {
 		for oid := range members {
 			if s.stock.logicalOIDRefs[oid] <= 1 {
 				delete(s.stock.logicalOIDRefs, oid)
+				if !inAnyCompactPackMap(s.stock.compactPacks, oid) {
+					s.stock.nonCompactOnlyObjects--
+				}
 			} else {
 				s.stock.logicalOIDRefs[oid]--
 			}
@@ -188,7 +291,6 @@ func scanStoreDiskState(
 	looseSizes, packSizes := make(map[string]int64), make(map[string]int64)
 	packOIDs, uniqueOIDs := make(map[string]map[string]struct{}), make(map[string]struct{})
 	compactPacks := make(map[string]*compactPackIndex)
-	var compactTotal int64
 	var inv StockInventory
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
@@ -199,7 +301,7 @@ func scanStoreDiskState(
 			continue
 		}
 		if name == "pack" {
-			if err := scanPackDir(ctx, rootDir, filepath.Join(objectsDir, "pack"), packSizes, packOIDs, compactPacks, uniqueOIDs, &compactTotal, &inv); err != nil {
+			if err := scanPackDir(ctx, rootDir, filepath.Join(objectsDir, "pack"), packSizes, packOIDs, compactPacks, uniqueOIDs, &inv); err != nil {
 				return nil, nil, nil, nil, StockInventory{}, err
 			}
 			continue
@@ -239,7 +341,18 @@ func scanStoreDiskState(
 			inv.LooseBytes += info.Size()
 		}
 	}
-	inv.LogicalObjects, inv.StoredBytes, inv.Complete = int64(len(uniqueOIDs))+compactTotal, inv.LooseBytes+inv.PackBytes, true
+	compactUnion := computeCompactUnionCount(compactPacks)
+	var nonCompactUnique int64
+	if len(compactPacks) == 0 {
+		nonCompactUnique = int64(len(uniqueOIDs))
+	} else {
+		for oid := range uniqueOIDs {
+			if !inAnyCompactPackMap(compactPacks, oid) {
+				nonCompactUnique++
+			}
+		}
+	}
+	inv.LogicalObjects, inv.StoredBytes, inv.Complete = compactUnion+nonCompactUnique, inv.LooseBytes+inv.PackBytes, true
 	return looseSizes, packSizes, packOIDs, compactPacks, inv, nil
 }
 
@@ -247,7 +360,7 @@ func scanPackDir(
 	ctx context.Context, rootDir, packDir string,
 	packSizes map[string]int64, packOIDs map[string]map[string]struct{},
 	compactPacks map[string]*compactPackIndex,
-	uniqueOIDs map[string]struct{}, compactTotal *int64, inv *StockInventory,
+	uniqueOIDs map[string]struct{}, inv *StockInventory,
 ) error {
 	pEntries, err := os.ReadDir(packDir)
 	if err != nil {
@@ -296,7 +409,6 @@ func scanPackDir(
 		if comp != nil {
 			compactPacks[base] = comp
 			inv.PackedObjects += comp.count()
-			*compactTotal += comp.count()
 		} else {
 			packOIDs[base] = oids
 			inv.PackedObjects += int64(len(oids))
@@ -440,6 +552,15 @@ func parsePackIndexOIDs(ctx context.Context, workDir, idxPath string) (map[strin
 		sum := sha1.Sum(raw[:len(raw)-20]) //nolint:gosec // Git pack index trailer is SHA-1
 		if !bytes.Equal(sum[:], raw[len(raw)-20:]) {
 			return nil, nil, fmt.Errorf("%w: pack index checksum mismatch in %s", ErrCorruptObjectStore, idxPath)
+		}
+		for i := int64(0); i < count; i++ {
+			off := 8 + 256*4 + int(i*20)
+			if i > 0 {
+				prevOff := off - 20
+				if bytes.Compare(raw[prevOff:prevOff+20], raw[off:off+20]) >= 0 {
+					return nil, nil, fmt.Errorf("%w: unsorted or duplicate OID table in %s", ErrCorruptObjectStore, idxPath)
+				}
+			}
 		}
 		if count > compactPackThreshold {
 			oidStart := 8 + 256*4

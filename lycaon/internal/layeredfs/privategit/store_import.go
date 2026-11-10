@@ -197,7 +197,7 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 		packNames = append(packNames, pNames...)
 	}
 
-	reachable, err := verifyStoreConnectivityForStore(ctx, s, s.objectsDir, tipOIDs)
+	reachable, err := verifyStoreConnectivity(ctx, s.objectsDir, tipOIDs)
 	if err != nil {
 		return InitMetrics{}, nil, errors.Join(fmt.Errorf("%w: %v", ErrCorruptObjectStore, err), rollback())
 	}
@@ -443,23 +443,7 @@ func listPackIndexOIDs(ctx context.Context, workDir, idxPath string) (map[string
 	return res, nil
 }
 
-func inCompactPackLocked(s *RetainedObjectStore, oid string) bool {
-	if s == nil {
-		return false
-	}
-	for _, comp := range s.stock.compactPacks {
-		if comp.containsHex(oid) {
-			return true
-		}
-	}
-	return false
-}
-
 func verifyStoreConnectivity(ctx context.Context, objectsDir string, tipOIDs []string) ([]string, error) {
-	return verifyStoreConnectivityForStore(ctx, nil, objectsDir, tipOIDs)
-}
-
-func verifyStoreConnectivityForStore(ctx context.Context, s *RetainedObjectStore, objectsDir string, tipOIDs []string) ([]string, error) {
 	if len(tipOIDs) == 0 {
 		return nil, nil
 	}
@@ -499,29 +483,8 @@ func verifyStoreConnectivityForStore(ctx context.Context, s *RetainedObjectStore
 		return nil, err
 	}
 
-	revsToWalk := uniqueTips
-	if s != nil && s.stock.compactObjectsTotal > 0 {
-		var notInCompact []string
-		for _, oid := range uniqueTips {
-			if !inCompactPackLocked(s, oid) {
-				notInCompact = append(notInCompact, oid)
-			}
-		}
-		if len(notInCompact) == 0 {
-			if out, code, cErr := gitexec.Run(ctx, tmpRepo, []string{"cat-file", "-e", uniqueTips[0]}, gitexec.Opts{Profile: gitexec.ProfileHermetic}); cErr != nil || code != 0 {
-				return nil, fmt.Errorf("cat-file verify failed (exit %d): %v: %s", code, cErr, strings.TrimSpace(string(out)))
-			}
-			return uniqueTips, nil
-		}
-		stops, sErr := findCompactStopCommitsLocked(ctx, s, tmpRepo, notInCompact)
-		if sErr != nil {
-			return nil, sErr
-		}
-		revsToWalk = append(append([]string(nil), notInCompact...), stops...)
-	}
-
 	var stdinBuf bytes.Buffer
-	for _, rev := range revsToWalk {
+	for _, rev := range uniqueTips {
 		stdinBuf.WriteString(rev)
 		stdinBuf.WriteByte('\n')
 	}

@@ -22,15 +22,16 @@ type leaseRecord struct {
 }
 
 type storeStock struct {
-	packOIDs            map[string]map[string]struct{}
-	compactPacks        map[string]*compactPackIndex
-	packSizes           map[string]int64
-	looseSizes          map[string]int64
-	logicalOIDRefs      map[string]int
-	compactObjectsTotal int64
-	looseBytesTotal     int64
-	packBytesTotal      int64
-	startupDuration     time.Duration
+	packOIDs              map[string]map[string]struct{}
+	compactPacks          map[string]*compactPackIndex
+	packSizes             map[string]int64
+	looseSizes            map[string]int64
+	logicalOIDRefs        map[string]int
+	compactObjectsTotal   int64
+	nonCompactOnlyObjects int64
+	looseBytesTotal       int64
+	packBytesTotal        int64
+	startupDuration       time.Duration
 }
 
 // RetainedObjectStore manages the engine-retained content-addressed Git object store (#1671).
@@ -124,7 +125,7 @@ func (s *RetainedObjectStore) ObjectsDir() string {
 // Metrics returns an O(1) snapshot of the store's cumulative and retained stock counters.
 func (s *RetainedObjectStore) Metrics() StoreMetrics {
 	s.mu.Lock()
-	retainedObjects := int64(len(s.stock.logicalOIDRefs)) + s.stock.compactObjectsTotal
+	retainedObjects := s.stock.compactObjectsTotal + s.stock.nonCompactOnlyObjects
 	retainedBytes := s.stock.looseBytesTotal + s.stock.packBytesTotal
 	startupDur := s.stock.startupDuration
 	s.mu.Unlock()
@@ -183,7 +184,11 @@ func createStoreLease(s *RetainedObjectStore, kind LeaseKind, holder string, oid
 			continue
 		}
 		if strings.HasPrefix(oid, "pack:") {
-			packSet[strings.TrimPrefix(oid, "pack:")] = struct{}{}
+			base := strings.TrimPrefix(oid, "pack:")
+			base = strings.TrimSuffix(strings.TrimSuffix(base, ".pack"), ".idx")
+			if base != "" {
+				packSet[base] = struct{}{}
+			}
 			continue
 		}
 		oidSet[oid] = struct{}{}
@@ -300,4 +305,63 @@ func lockStoreReadOnlyBoundary(s *RetainedObjectStore) {
 	for _, dir := range dirs {
 		_ = os.Chmod(dir, 0o555)
 	}
+}
+
+func storeHasLeasedObjectsOnDisk(s *RetainedObjectStore, leaseID, headOID string) bool {
+	if s == nil || s.objectsDir == "" {
+		return false
+	}
+	if _, err := os.Stat(s.objectsDir); err != nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if leaseID != "" {
+		if l, ok := s.leases[leaseID]; ok && l != nil {
+			for p := range l.packs {
+				if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".pack")); err != nil {
+					return false
+				}
+				if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".idx")); err != nil {
+					return false
+				}
+			}
+			for oid := range l.oids {
+				if _, isLoose := s.stock.looseSizes[oid]; isLoose {
+					if _, err := os.Stat(filepath.Join(s.objectsDir, oid[:2], oid[2:])); err != nil {
+						return false
+					}
+				}
+			}
+		}
+	}
+	if len(headOID) == 40 && isHexString(headOID) {
+		if _, isLoose := s.stock.looseSizes[headOID]; isLoose {
+			if _, err := os.Stat(filepath.Join(s.objectsDir, headOID[:2], headOID[2:])); err != nil {
+				return false
+			}
+		} else {
+			for base, members := range s.stock.packOIDs {
+				if _, ok := members[headOID]; ok {
+					if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".pack")); err != nil {
+						return false
+					}
+					if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".idx")); err != nil {
+						return false
+					}
+				}
+			}
+			for base, comp := range s.stock.compactPacks {
+				if comp.containsHex(headOID) {
+					if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".pack")); err != nil {
+						return false
+					}
+					if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".idx")); err != nil {
+						return false
+					}
+				}
+			}
+		}
+	}
+	return true
 }
