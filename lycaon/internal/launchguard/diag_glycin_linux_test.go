@@ -41,17 +41,26 @@ func diagGlycinLoaderPath(t *testing.T) string {
 
 func diagGlycinBwrapCommand(t *testing.T, loader string) *exec.Cmd {
 	cache := t.TempDir()
+	// Mirrors the exact bwrap command glycin builds on the failing runner
+	// (minus --dbus-fd, which the loader reports as exit 2).
 	command := exec.Command("bwrap",
 		"--unshare-all", "--die-with-parent", "--chdir", "/",
 		"--ro-bind", "/usr", "/usr",
 		"--dev", "/dev",
 		"--ro-bind-try", "/etc/ld.so.cache", "/etc/ld.so.cache",
-		"--bind-try", cache, cache,
+		"--ro-bind-try", "/nix/store", "/nix/store",
 		"--tmpfs", "/tmp-home",
 		"--tmpfs", "/tmp-run",
 		"--clearenv",
 		"--setenv", "HOME", "/tmp-home",
 		"--setenv", "XDG_RUNTIME_DIR", "/tmp-run",
+		"--symlink", "/usr/lib", "/lib",
+		"--symlink", "/usr/lib32", "/lib32",
+		"--symlink", "/usr/lib64", "/lib64",
+		"--ro-bind-try", "/etc/fonts/conf.d", "/etc/fonts/conf.d",
+		"--ro-bind-try", "/etc/fonts/fonts.conf", "/etc/fonts/fonts.conf",
+		"--ro-bind-try", "/var/cache/fontconfig", "/var/cache/fontconfig",
+		"--bind-try", cache, cache,
 		"--setenv", "XDG_CACHE_HOME", cache,
 		loader,
 	)
@@ -115,6 +124,18 @@ func diagGlycinParent(t *testing.T) {
 	// application path.
 	diagGlycinRun(t, "plain-seccomp", diagGlycinSeccompAllowAll(t, diagGlycinBwrapCommand(t, loader)))
 
+	// Through a setuid exec hop: the real spawn reaches bwrap through the
+	// setuid bootstrap and the desktop binary. If AppArmor drops the
+	// inherited userns permission across the setuid hop, bwrap's user
+	// namespace creation fails and bwrap exits 1.
+	if user := os.Getenv("USER"); user != "" {
+		hop := exec.Command("sudo", "-u", user, "bwrap")
+		base := diagGlycinBwrapCommand(t, loader)
+		hop.Args = append(hop.Args, base.Args[1:]...)
+		hop.Env = nil
+		diagGlycinRun(t, "sudo-hop", hop)
+	}
+
 	// Restricted: the protected execution policy grants execute only on the
 	// named paths. With the loader granted the exec must succeed; without the
 	// grant bwrap must die with EACCES (exit 1), reproducing the failure.
@@ -122,6 +143,18 @@ func diagGlycinParent(t *testing.T) {
 		command := exec.Command(os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
 		command.Env = append(os.Environ(), diagGlycinModeEnv+"="+mode)
 		diagGlycinRun(t, mode, command)
+	}
+
+	// Environment facts: userns sysctls, bwrap apparmor attachments, and any
+	// recent apparmor denials from the kernel log.
+	for _, probe := range []struct{ label, command string }{
+		{"restrict_unprivileged_userns", "cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns"},
+		{"unprivileged_userns_clone", "cat /proc/sys/kernel/unprivileged_userns_clone"},
+		{"apparmor bwrap profiles", "ls /etc/apparmor.d/ | grep -i bwrap"},
+		{"apparmor denials", "sudo dmesg 2>/dev/null | grep -i 'apparmor.*denied' | tail -20"},
+	} {
+		output, err := exec.Command("bash", "-c", probe.command).CombinedOutput()
+		t.Logf("%s: err=%v output:\n%s", probe.label, err, output)
 	}
 }
 
