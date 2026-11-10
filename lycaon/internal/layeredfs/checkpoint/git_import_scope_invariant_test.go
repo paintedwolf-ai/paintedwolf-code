@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
+
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -41,4 +43,52 @@ func TestCheckpointGitImportDoesNotPublishUnreferencedObjects(t *testing.T) {
 	}
 	_, err = os.Stat(filepath.Join(objects, unrelated[:2], unrelated[2:]))
 	testutil.FailErr(t, "unrelated retained object preserved", err)
+}
+
+// A pack can contain both selected history and later unpublished work. Copying
+// its container wholesale must not widen the checkpoint's publication scope.
+func TestCheckpointGitImportFiltersUnselectedPackedHistory(t *testing.T) {
+	source := t.TempDir()
+	runGitTestCmd(t, source, "init", "-q")
+	testutil.FailErr(t, "selected file", os.WriteFile(filepath.Join(source, "file.txt"), []byte("selected\n"), 0o644))
+	runGitTestCmd(t, source, "add", "file.txt")
+	runGitTestCmd(t, source, "commit", "-qm", "selected")
+	selected := runGitTestCmd(t, source, "rev-parse", "HEAD")
+	testutil.FailErr(t, "later file", os.WriteFile(filepath.Join(source, "file.txt"), []byte("unpublished later content\n"), 0o644))
+	runGitTestCmd(t, source, "commit", "-qam", "unpublished")
+	unselected := runGitTestCmd(t, source, "rev-parse", "HEAD")
+	runGitTestCmd(t, source, "repack", "-a", "-d", "-q")
+	runGitTestCmd(t, source, "prune-packed", "-q")
+	store, err := NewStore(t.TempDir())
+	testutil.FailErr(t, "checkpoint store", err)
+	packDir := filepath.Join(CheckpointGitObjectsDir(store.RootDir(), "packed", ""), "pack")
+	testutil.FailErr(t, "checkpoint pack directory", os.MkdirAll(packDir, 0o755))
+	entries, err := os.ReadDir(filepath.Join(source, ".git", "objects", "pack"))
+	testutil.FailErr(t, "source pack", err)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(source, ".git", "objects", "pack", entry.Name()))
+		testutil.FailErr(t, "read pack asset", err)
+		testutil.FailErr(t, "retain pack asset", os.WriteFile(filepath.Join(packDir, entry.Name()), data, 0o444))
+	}
+	target := t.TempDir()
+	runGitTestCmd(t, target, "init", "-q")
+	_, err = ImportAndValidateCheckpointGitRefs(t.Context(), store.RootDir(), "packed", "worker",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/selected": selected}}, map[string]string{"primary": target})
+	testutil.FailErr(t, "publish selected packed history", err)
+	if got := runGitTestCmd(t, target, "show", selected+":file.txt"); got != "selected" {
+		t.Fatalf("selected commit tree was not imported: %q", got)
+	}
+	_, code, err := gitexec.Run(t.Context(), target, []string{"cat-file", "-e", unselected}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+	if err != nil {
+		t.Fatalf("probe unselected object: %v", err)
+	}
+	if code == 0 {
+		t.Fatal("unselected packed commit escaped retained store")
+	}
+	if got := runGitTestCmd(t, source, "rev-parse", "HEAD"); got != unselected {
+		t.Fatal("publication changed retained source history")
+	}
 }
