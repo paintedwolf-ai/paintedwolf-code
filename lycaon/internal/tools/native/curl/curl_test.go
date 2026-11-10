@@ -971,7 +971,8 @@ func TestCurlCookieJarSelectedSecretAuthorityAndRedirectDenial(t *testing.T) {
 	}
 	h.owners.HTTP.SecretAsk = askFn
 
-	// 2. Withhold on Hop 0 withholds only the secret cookie (sid) while preserving the benign cookie (theme=light) and continuing HTTP.
+	// 2. Withhold on Hop 0 withholds only the secret cookie (sid) while preserving the benign cookie
+	// (theme=light) and continuing HTTP.
 	r = h.curl(t.Context(), "-s", "-b", "cookies.txt", origin.URL+"/public")
 	if r.err != nil || r.stdout != "origin-ok\n" || originHits.Load() != 1 {
 		t.Fatalf("withheld Hop 0 should continue without secret cookie: result=%+v err=%v stdout=%q", r.result, r.err, r.stdout)
@@ -1049,6 +1050,3 @@ func TestCurlCookieJarSelectedSecretAuthorityAndRedirectDenial(t *testing.T) {
 	}
 	mu.Unlock()
 }
-
-
-

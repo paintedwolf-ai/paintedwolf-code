@@ -724,7 +724,8 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		return card, done
 	}
 
-	// 1. Selected cookie in cookies.txt raises a secret approval card naming originHost; approving with RecommendedOptionID installs a persistent secret grant in s.h.Settings.Approvals.
+	// 1. Selected cookie in cookies.txt raises a secret approval card naming originHost; approving with
+	// RecommendedOptionID installs a persistent secret grant in s.h.Settings.Approvals.
 	card1, done1 := waitCheckpoint("step 1 approve origin cookie")
 	if originHits.Load() != 0 {
 		t.Fatalf("step 1 hit origin before checkpoint resolution: %d", originHits.Load())
@@ -760,7 +761,9 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 2 quiet repeat outcome = %+v originHits=%d cookie=%q", out2, originHits.Load(), lastOriginCookie.Load())
 	}
 
-	// 3. Redirect (-L) from covered origin to uncovered target.cookie.example completes Hop 0 with the secret cookie and then raises a secret approval card for target.cookie.example before Hop 1; rejecting withholds only the secret cookie on Hop 1 while preserving benign cookies and completing the redirect.
+	// 3. Redirect (-L) from covered origin to uncovered target.cookie.example completes Hop 0 with the secret
+	// cookie and then raises a secret approval card for target.cookie.example before Hop 1; rejecting withholds
+	// only the secret cookie on Hop 1 while preserving benign cookies and completing the redirect.
 	originHits.Store(0)
 	targetHits.Store(0)
 	lastOriginCookie.Store("")
@@ -788,7 +791,9 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 3 final hits/cookies: origin=%d target=%d targetCookie=%q, want 1/1 and \"theme=dark\" without secret", originHits.Load(), targetHits.Load(), lastTargetCookie.Load())
 	}
 
-	// 4. Changing recipient override (--connect-to localhost instead of 127.0.0.1) is not covered by the existing grant and asks before Hop 0 dials; rejecting withholds only the secret cookie on Hop 0 while preserving benign cookies.
+	// 4. Changing recipient override (--connect-to localhost instead of 127.0.0.1) is not covered by the
+	// existing grant and asks before Hop 0 dials; rejecting withholds only the secret cookie on Hop 0 while
+	// preserving benign cookies.
 	originHits.Store(0)
 	lastOriginCookie.Store("")
 	card4, done4 := waitCheckpoint("step 4 connect-to uncovered recipient")
@@ -803,7 +808,10 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 4 connect-to secret withhold outcome = %+v / refusal=%+v originHits=%d originCookie=%q", out4, out4.Refusal, originHits.Load(), lastOriginCookie.Load())
 	}
 
-	// 5. Standing grant revocation mid-redirect in the real approval store: install a standing grant for target.cookie.example, then revoke it while Hop 0 (/redirect) is served; Hop 1 must query the live approval store, raise a checkpoint before targetHits increments, and withhold the secret cookie on rejection while completing the redirect.
+	// 5. Standing grant revocation mid-redirect in the real approval store: install a standing grant for
+	// target.cookie.example, then revoke it while Hop 0 (/redirect) is served; Hop 1 must query the live
+	// approval store, raise a checkpoint before targetHits increments, and withhold the secret cookie on
+	// rejection while completing the redirect.
 	targetHits.Store(0)
 	lastTargetCookie.Store("")
 	card5a, done5a := waitCheckpoint("step 5a install target standing grant")
@@ -847,7 +855,8 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 5b outcome = %+v origin=%d target=%d targetCookie=%q, want completed 1/1 and \"theme=dark\"", out5b, originHits.Load(), targetHits.Load(), lastTargetCookie.Load())
 	}
 
-	// 6. Revoke origin.cookie.example's standing grant in the real approval store: explicit "once" approval covers only that single admitted operation and does not persist to the next operation.
+	// 6. Revoke origin.cookie.example's standing grant in the real approval store: explicit "once" approval
+	// covers only that single admitted operation and does not persist to the next operation.
 	for _, id := range originGrantIDs {
 		removed, revokeErr := s.h.Server.Admin.Capabilities.Access.Gate.RevokeGrant(id)
 		testutil.FailErr(t, "revoke origin standing grant", revokeErr)
@@ -886,6 +895,3 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 6b withhold after once expiry outcome = %+v originHits=%d cookie=%q, want 1 and \"theme=dark\"", out6b, originHits.Load(), lastOriginCookie.Load())
 	}
 }
-
-
-
