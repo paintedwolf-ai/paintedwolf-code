@@ -1,3 +1,4 @@
+# Deprecated rejection identity; raw transfers use portable curl.
 oar: '1.0'
 id: FETCH_URL_DEST_INVALID
 kind: schema
@@ -6,20 +7,20 @@ selector:
   tool:
     - fetch_url
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
   profiles:
     - tool
 when: paintedwolf.rejection_code == "FETCH_URL_DEST_INVALID"
 effect: block
 copy:
   what: fetch_url was called with dest while mode was not raw.
-  cause: Project writes belong to the raw asset path; text mode is research extract only.
-  why: Mixing dest with text mode would mutate the tree while claiming a read-only page extract.
-  fix: Pass mode=raw with dest, or drop dest for a text extract.
-  instead: Branch on Code FETCH_URL_DEST_INVALID; use mode=raw or omit dest
+  cause: That invocation combined a text extraction with a file destination.
+  why: The current source reader has no destination argument.
+  fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
+  instead: Follow the current schema and access boundaries.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
-x-paintedwolf-message: fetch_url dest is only valid with mode=raw
+x-paintedwolf-message: recorded fetch_url destination was invalid
 x-paintedwolf-scenarios:
   - id: default
     vars:

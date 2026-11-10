@@ -37,9 +37,7 @@ func TestFetchURLImageWithoutDest(t *testing.T) {
 
 	tempDir := t.TempDir()
 	reg := tools.NewDefaultRegistry()
-	boundary := rawTestBoundary(t)
 	deps := ToolDeps{
-		Boundary:     boundary,
 		VisualScreen: visualscreen.NewGate(visualscreen.NewScanner(nil), nil, nil),
 	}
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))
@@ -109,7 +107,7 @@ func TestFetchURLTextModeImageKeepsRawBytes(t *testing.T) {
 	defer srv.Close()
 
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{Boundary: rawTestBoundary(t)}, nil))
+	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{}, nil))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "s1",
 			ToolCallID: "call1"},
@@ -142,7 +140,7 @@ func insertPNGText(t *testing.T, raw []byte, text string) []byte {
 	return out.Bytes()
 }
 
-func TestFetchURLNonImageBinaryRequiresDest(t *testing.T) {
+func TestFetchURLNonImageBinaryUnsupported(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	allowLoopbackFetch(t)
 
@@ -154,7 +152,7 @@ func TestFetchURLNonImageBinaryRequiresDest(t *testing.T) {
 
 	tempDir := t.TempDir()
 	reg := tools.NewDefaultRegistry()
-	deps := ToolDeps{Boundary: rawTestBoundary(t)}
+	deps := ToolDeps{}
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))
 
 	tctx := tools.ToolContext{
@@ -168,15 +166,14 @@ func TestFetchURLNonImageBinaryRequiresDest(t *testing.T) {
 	}
 
 	_, err := reg.Run(context.Background(), "fetch_url", map[string]any{
-		"url":  srv.URL,
-		"mode": "raw",
+		"url": srv.URL,
 	}, tctx)
 	if err == nil {
-		t.Fatal("expected FETCH_URL_DEST_REQUIRED error")
+		t.Fatal("expected FETCH_URL_TYPE_UNSUPPORTED error")
 	}
 	var rej *toolrejection.ToolReject
-	if !errors.As(err, &rej) || rej.Code != "FETCH_URL_DEST_REQUIRED" {
-		t.Fatalf("expected FETCH_URL_DEST_REQUIRED, got: %#v", err)
+	if !errors.As(err, &rej) || rej.Code != "FETCH_URL_TYPE_UNSUPPORTED" {
+		t.Fatalf("expected FETCH_URL_TYPE_UNSUPPORTED, got: %#v", err)
 	}
 }
 
@@ -201,7 +198,6 @@ func TestFetchURLImageSecretScreeningWithheld(t *testing.T) {
 	})
 
 	deps := ToolDeps{
-		Boundary:     rawTestBoundary(t),
 		VisualScreen: gate,
 	}
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))

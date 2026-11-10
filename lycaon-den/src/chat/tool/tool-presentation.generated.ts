@@ -72,7 +72,7 @@ export const TOOL_CHICKLET_TITLE_KEYS: Readonly<
   extend_worker_budget: [],
   extract_archive: ["path", "dest"],
   fanout_plan: ["rationale"],
-  fetch_url: ["url", "dest"],
+  fetch_url: ["url"],
   find: ["name_glob", "path"],
   git_blame: ["path"],
   git_branches: [],

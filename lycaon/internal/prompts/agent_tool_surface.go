@@ -162,7 +162,7 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 		return AgentToolSurfaceData{}, fmt.Errorf("tool profile %q not found", profileID)
 	}
 
-	toolNames := visibleToolNames(profile, visibleTools)
+	toolNames := turn.available(visibleToolNames(profile, visibleTools))
 	toolViews := make([]AgentToolArgView, 0, len(toolNames))
 	var requestable []string
 	for _, name := range toolNames {

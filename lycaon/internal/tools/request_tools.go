@@ -142,7 +142,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 		return "", err
 	}
 	if !browsing && len(result.Loaded)+len(result.AlreadyLoaded) > 0 {
-		t.deps.Activation.Activate(tctx.Identity.SessionID, result.Loaded, need)
+		t.deps.Activation.Activate(tctx.Identity.SessionID, append(slices.Clone(result.Loaded), result.AlreadyLoaded...), need)
 		result.Note = "Loaded schemas are on the next model call; this turn continues automatically."
 	}
 	if t.deps.Record != nil {
@@ -174,28 +174,14 @@ func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, pr
 	names = append(names, turnload.ExactNames(outcome.Need, registered)...)
 	active := t.deps.Activation.Active(tctx.Identity.SessionID)
 	result := turnload.RequestToolsResult{Need: outcome.Need}
-	seen := make(map[string]bool, len(names))
-	for _, name := range names {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		if _, registered := t.reg.Meta(name); !registered {
-			continue
-		}
-		switch {
-		case plan.Deferred(name) && !active[name]:
+	availability := func(name string) toolsurface.Availability {
+		return t.availability(ctx, tctx, profileID, plan, constrained, name)
+	}
+	for _, name := range toolcontract.LoadFamilies(names, func(name string) bool { return availability(name) != toolsurface.Unavailable }) {
+		if availability(name) == toolsurface.Immediate || active[name] {
+			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
+		} else {
 			result.Loaded = append(result.Loaded, name)
-		case plan.Immediate(name) || (plan.Deferred(name) && active[name]):
-			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
-		case constrained && (plan.Compiled() || toolcontract.IsCatalog(name)):
-			continue
-		case active[name]:
-			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
-		case t.deps.Boundary.ToolDeferred(profileID, name, tctx.Turn.ToolAccess):
-			result.Loaded = append(result.Loaded, name)
-		case t.deps.Boundary.AssertToolAllowed(ctx, profileID, name, tctx.Turn.ToolAccess) == nil:
-			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
 		}
 	}
 	sort.Strings(result.Loaded)

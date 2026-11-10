@@ -19,7 +19,7 @@ const (
 	SourceRequested Source = "requested"
 	// SourceFallback exposes a permitted tool when selection cannot run.
 	SourceFallback Source = "fallback"
-	// SourceCompanion is read from standing surfaces recorded before companions retired.
+	// SourceCompanion loaded with another member of its catalog family.
 	SourceCompanion Source = "companion"
 )
 
@@ -30,7 +30,7 @@ type Load struct {
 	P      float64 `json:"p,omitempty"`
 	// Need is the request_tools text that loaded the tool.
 	Need string `json:"need,omitempty"`
-	// With is the predicted tool a recorded companion loaded with.
+	// With identifies the family member that caused this load.
 	With string `json:"with,omitempty"`
 	// Turn is the message that opened the turn the tool joined on.
 	Turn string `json:"turn,omitempty"`
@@ -235,6 +235,7 @@ func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decis
 			standing[tool] = Load{Tool: tool, Source: SourcePredicted, P: p, Turn: s.openingMessageID}
 		}
 	}
+	completeFamilies(standing, s.loadable, s.openingMessageID)
 	s.standing = standing
 	omitted := make(map[string]bool, len(decision.Omitted))
 	if !decision.Abstained {
@@ -268,6 +269,7 @@ func (l *Ledger) BeginUndecidedTurn(sessionID string, opening TurnOpening) {
 			standing[name] = load
 		}
 	}
+	completeFamilies(standing, s.loadable, s.openingMessageID)
 	s.standing = standing
 	s.omitted = map[string]bool{}
 	s.kind = ""
