@@ -47,6 +47,7 @@ func TestShippedPromptCachePolicyPerKind(t *testing.T) {
 		{"cloudflare-workers-ai", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"scaleway", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"cerebras", providerprofile.PromptCacheAutomaticPrefix, 0},
+		{"doubleword", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"litellm-proxy", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"bedrock", providerprofile.PromptCacheAutomaticPrefix, 0},
 		{"ollama", providerprofile.PromptCacheLocalKV, 0},

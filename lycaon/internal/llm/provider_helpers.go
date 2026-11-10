@@ -216,6 +216,7 @@ func azureV1Base(raw string) string {
 var providerKindSpecs = map[string]ProviderKindSpec{
 	"nativegen":             {Kind: "nativegen", Protocol: ProtocolNativeGeneration, ChatBaseURL: func(string) string { return "" }},
 	"cerebras":              {Kind: "cerebras", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
+	"doubleword":            {Kind: "doubleword", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"mistral":               {Kind: "mistral", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"scaleway":              {Kind: "scaleway", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
 	"openai":                {Kind: "openai", Protocol: ProtocolOpenAICompat, ChatBaseURL: identityProviderBase},
