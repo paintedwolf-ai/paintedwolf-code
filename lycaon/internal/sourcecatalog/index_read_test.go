@@ -232,7 +232,7 @@ func TestHumanWarmedSharedCatalogNeverLeaksControlPlaneOrKeyMaterialToAgent(t *t
 	// Simulate a pre-existing cached row in SQLite nodes for .paintedwolf/settings.yaml
 	// (with agent_metadata=0 to prove we do not rely solely on agent_metadata=1).
 	_ = homeReader.Close()
-	sHome, err := c.Trees.indexStore(t.Context(), "proj", homeRoot)
+	sHome, err := c.Trees.indexStore(t.Context(), "p", homeRoot)
 	testutil.FailErr(t, "open home indexStore", err)
 	rawDB, err := openTreeDB(t.Context(), sHome.file)
 	testutil.FailErr(t, "open raw home db", err)
@@ -242,7 +242,7 @@ func TestHumanWarmedSharedCatalogNeverLeaksControlPlaneOrKeyMaterialToAgent(t *t
 	testutil.FailErr(t, "inject pre-existing cached control-plane row", err)
 	_ = rawDB.Close()
 
-	homeReader, _, err = c.Trees.OpenIndex(t.Context(), "proj", homeRoot, time.Second)
+	homeReader, _, err = c.Trees.OpenIndex(t.Context(), "p", homeRoot, time.Second)
 	testutil.FailErr(t, "reopen home index", err)
 	t.Cleanup(func() { _ = homeReader.Close() })
 
