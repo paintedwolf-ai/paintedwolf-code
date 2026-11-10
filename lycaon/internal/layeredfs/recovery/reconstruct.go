@@ -157,7 +157,9 @@ func applyCheckpointToView(ctx context.Context, c *Coordinator, view *adapter.Pr
 	}
 	for _, e := range m.Entries {
 		if e.Base.Path.RootID != "" && e.Base.Path.Rel != "" {
-			if err := view.Core.RegisterSeedBase(e.Base); err != nil {
+			base := e.Base
+			base.BackingFile = ""
+			if err := view.Core.RegisterSeedBase(base); err != nil {
 				return err
 			}
 		}

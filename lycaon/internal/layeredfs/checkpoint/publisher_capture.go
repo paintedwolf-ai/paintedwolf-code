@@ -136,6 +136,7 @@ func (p *Publisher) persistChangeBlobs(
 			return ManifestEntry{}, 0, 0, nil, err
 		}
 		ce.Base.SHA256 = bSHA
+		ce.Base.BackingFile = ""
 		bBytes = ce.Base.Size
 		refs = append(refs, bSHA)
 	}
@@ -148,6 +149,7 @@ func (p *Publisher) persistChangeBlobs(
 				return ManifestEntry{}, 0, 0, nil, err
 			}
 			cand.SHA256 = cSHA
+			cand.BackingFile = ""
 			refs = append(refs, cSHA)
 		}
 		storedCandidates = append(storedCandidates, cand)
