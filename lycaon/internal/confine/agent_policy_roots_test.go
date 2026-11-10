@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -147,8 +148,10 @@ func TestAgentPolicySpecsResolveSymlinkAndDanglingSymlinkPolicyDirs(t *testing.T
 		t.Fatalf("dangling .agents/skills write verdict = %+v, want FloorAgentPolicy", got)
 	}
 
+	allSpecs, err := confine.HardDenyWriteSpecs(c)
+	testutil.FailErr(t, "HardDenyWriteSpecs", err)
 	var gotFloor []confine.HardDenyWriteSpec
-	for _, spec := range c.HardDenyWriteSpecs() {
+	for _, spec := range allSpecs {
 		if spec.Layer == confine.FloorAgentPolicy {
 			gotFloor = append(gotFloor, spec)
 		}
@@ -170,6 +173,15 @@ func TestAgentPolicySpecsResolveSymlinkAndDanglingSymlinkPolicyDirs(t *testing.T
 			}
 		}
 	}
+	sort.SliceStable(wantFloor, func(i, j int) bool {
+		if wantFloor[i].Regex != wantFloor[j].Regex {
+			return wantFloor[i].Regex < wantFloor[j].Regex
+		}
+		if wantFloor[i].Subpath != wantFloor[j].Subpath {
+			return wantFloor[i].Subpath < wantFloor[j].Subpath
+		}
+		return wantFloor[i].Literal < wantFloor[j].Literal
+	})
 	if !reflect.DeepEqual(gotFloor, wantFloor) {
 		t.Fatalf("FloorAgentPolicy specs mismatch direct fspath.CanonicalPath:\ngot:  %+v\nwant: %+v", gotFloor, wantFloor)
 	}

@@ -233,6 +233,10 @@ func TestUnsealedWorkerEditsSurviveRelocatedArchive(t *testing.T) {
 // names no selection, whose result its baseline and sealed overlay carry. Retained jobs keep that path.
 type earlierFormatBranches struct{ *workspace.Manager }
 
+func (e earlierFormatBranches) CreateWorkerBranch(ctx context.Context, roots []projectroot.RootRef, activeRootID, jobID string) (*workspace.Binding, workspace.SandboxLayout, error) {
+	return e.CreateWorkerWorkspaceFromSources(ctx, roots, roots, activeRootID, jobID)
+}
+
 func (e earlierFormatBranches) CreateWorkerWorkspaceFromSources(_ context.Context, roots, sources []projectroot.RootRef, _, jobID string) (*workspace.Binding, workspace.SandboxLayout, error) {
 	root := filepath.Join(e.BranchBase(), enginepaths.ProjectKey(sources[0].Path), jobID)
 	if err := os.MkdirAll(root, 0o750); err != nil {
@@ -437,10 +441,14 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	if string(mergedMain) != "package after\n" {
 		t.Fatalf("promoted main.go = %q", mergedMain)
 	}
-	importedRef := "refs/paintedwolf/workers/" + id + "/" + origCheckpointID + "/heads/feature/worker-branch"
-	gotOID := strings.TrimSpace(gittest.Run(t, project, "rev-parse", importedRef))
-	if gotOID != workerCommit {
-		t.Fatalf("promoted git ref %s = %q, want %q", importedRef, gotOID, workerCommit)
+	for _, importedRef := range []string{
+		"refs/lycaon/workers/" + id + "/heads/feature/worker-branch",
+		"refs/lycaon/checkpoints/" + origCheckpointID + "/heads/feature/worker-branch",
+	} {
+		gotOID := strings.TrimSpace(gittest.Run(t, project, "rev-parse", importedRef))
+		if gotOID != workerCommit {
+			t.Fatalf("promoted git ref %s = %q, want %q", importedRef, gotOID, workerCommit)
+		}
 	}
 	gittest.Run(t, project, "rev-list", "--objects", "-n", "1", workerCommit)
 	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(&workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
