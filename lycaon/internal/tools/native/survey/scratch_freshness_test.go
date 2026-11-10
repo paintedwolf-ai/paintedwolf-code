@@ -15,6 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func TestScratchSurveySeesWritesAfterEmptyInventory(t *testing.T) {
@@ -98,37 +100,99 @@ func TestDirectControlRootAttachmentWithHumanWarmedCatalogCannotExposeStateToAge
 	reader := &ReadTool{Boundary: boundary, Catalog: catalog}
 	wcTool := &WcTool{Boundary: boundary, Catalog: catalog}
 	statTool := &StatTool{Boundary: boundary, Catalog: catalog}
+	rootRef := tc.Source.Roots[0]
 
-	// 1. Agent find on "." with human-warmed catalog must return 0 entries.
-	findOut, err := finder.Run(t.Context(), map[string]any{"path": "."}, tc)
-	testutil.FailErr(t, "agent find on cfgDir", err)
-	if found := parseFindResponse(t, findOut); len(found.Results) != 0 {
-		t.Fatalf("agent find on directly attached control dir exposed entries: %+v", found.Results)
+	// 1. Direct survey/catalog inventory & file-stream checks on human-warmed cfgDir:
+	// Even when sourcecatalog holds a ready human snapshot for cfgDir, agent source
+	// inventory, catalog file reader, find walk, listRoot, wcRecursiveDir, and
+	// countDirEntries must expose 0 control-plane entries.
+	inv, err := sourceInventoryForScope(t.Context(), catalog, tc.Identity.ProjectID, rootRef, cfgDir)
+	testutil.FailErr(t, "sourceInventoryForScope on human-warmed cfgDir", err)
+	if got := inventoryPaths(t, inv); len(got) != 0 {
+		t.Fatalf("agent sourceInventoryForScope on human-warmed cfgDir leaked: %v", got)
+	}
+	if rc, ok := openCatalogFile(t.Context(), catalog, tc.Identity.ProjectID, rootRef, filepath.Join(cfgDir, "settings.yaml")); ok {
+		_ = rc.Close()
+		t.Fatal("openCatalogFile leaked settings.yaml from human-warmed catalog")
 	}
 
-	// 2. Agent list_dir literal listing (max_depth=1) on "." must return 0 entries.
-	listOut, err := listing.Run(t.Context(), map[string]any{"path": ".", "max_depth": 1, "include_hidden": true}, tc)
-	testutil.FailErr(t, "agent list_dir max_depth=1 on cfgDir", err)
-	if listed := decodeListDirOut(t, listOut); len(listed.Entries) != 0 {
-		t.Fatalf("agent list_dir on directly attached control dir exposed entries: %+v", listed.Entries)
+	readFilter, err := boundary.CompileReadFilter(t.Context(), cfgDir, tc.ProfileID())
+	testutil.FailErr(t, "CompileReadFilter on cfgDir", err)
+	for _, surveyOnly := range []bool{false, true} {
+		var resp findResponse
+		var skipped, matchedTotal int
+		var truncated, deeper bool
+		p := findWalkParams{
+			ctx:                t.Context(),
+			tctx:               tc,
+			root:               rootRef,
+			fullRoot:           cfgDir,
+			maxDepth:           8,
+			maxResults:         100,
+			entryType:          findTypeAny,
+			resp:               &resp,
+			skipped:            &skipped,
+			matchedTotal:       &matchedTotal,
+			truncated:          &truncated,
+			deeperPathsOmitted: &deeper,
+			catalog:            catalog,
+			readFilter:         readFilter,
+		}
+		if surveyOnly {
+			testutil.FailErr(t, "walkFindTreeSurvey on cfgDir", finder.walkFindTreeSurvey(p))
+		} else {
+			testutil.FailErr(t, "walkFindTree on cfgDir", finder.walkFindTree(p))
+		}
+		if len(resp.Results) != 0 || matchedTotal != 0 {
+			t.Fatalf("find walk (surveyOnly=%v) on cfgDir leaked: %+v", surveyOnly, resp.Results)
+		}
 	}
-	// Agent list_dir zoomed map on "." must fail read scope.
+
+	for _, depth := range []int{1, 2} {
+		entries, err := listing.listRoot(t.Context(), tc, rootRef, cfgDir, ".", depth, true)
+		testutil.FailErr(t, "listRoot on cfgDir", err)
+		if len(entries) != 0 {
+			t.Fatalf("listRoot(depth=%d) on human-warmed cfgDir leaked: %+v", depth, entries)
+		}
+	}
+
+	reads := projectpaths.NewReadSession(boundary, tc)
+	defer reads.Close()
+	wcRes, err := wcTool.wcRecursiveDir(t.Context(), reads, tc, rootRef, cfgDir, ".", true, sourceview.DraftOverlay{})
+	testutil.FailErr(t, "wcRecursiveDir on cfgDir", err)
+	if wcRes.Files != nil && *wcRes.Files != 0 {
+		t.Fatalf("wcRecursiveDir on human-warmed cfgDir counted %d files, want 0", *wcRes.Files)
+	}
+	wcSurveyRes, err := wcTool.wcRecursiveDirSurvey(t.Context(), reads, tc, rootRef, cfgDir, ".", true)
+	testutil.FailErr(t, "wcRecursiveDirSurvey on cfgDir", err)
+	if wcSurveyRes.Files != nil && *wcSurveyRes.Files != 0 {
+		t.Fatalf("wcRecursiveDirSurvey on cfgDir counted %d files, want 0", *wcSurveyRes.Files)
+	}
+	if cnt, err := countDirEntries(t.Context(), boundary, tc, rootRef, cfgDir, true, "."); err != nil || cnt != 0 {
+		t.Fatalf("countDirEntries on cfgDir = (%d, %v), want (0, nil)", cnt, err)
+	}
+
+	// 2. Top-level tool Run calls on attached cfgDir (must either reject or return 0 items, never leaking state):
+	if findOut, err := finder.Run(t.Context(), map[string]any{"path": "."}, tc); err == nil {
+		if found := parseFindResponse(t, findOut); len(found.Results) != 0 {
+			t.Fatalf("agent find on directly attached control dir exposed entries: %+v", found.Results)
+		}
+	}
+	if listOut, err := listing.Run(t.Context(), map[string]any{"path": ".", "max_depth": 1, "include_hidden": true}, tc); err == nil {
+		if listed := decodeListDirOut(t, listOut); len(listed.Entries) != 0 {
+			t.Fatalf("agent list_dir on directly attached control dir exposed entries: %+v", listed.Entries)
+		}
+	}
 	if _, err := listing.Run(t.Context(), map[string]any{"path": "."}, tc); err == nil {
 		t.Fatal("expected agent zoomed map list_dir on directly attached control dir to be denied")
 	}
-
-	// 3. Agent grep on "." for control-plane content must return 0 matches.
-	grepOut, err := grepper.Run(t.Context(), map[string]any{"path": ".", "pattern": "secret-control-plane"}, tc)
-	testutil.FailErr(t, "agent grep on cfgDir", err)
-	if matches := nativefixture.GrepMatches(t, grepOut); len(matches) != 0 {
-		t.Fatalf("agent grep on directly attached control dir exposed matches: %+v", matches)
+	if grepOut, err := grepper.Run(t.Context(), map[string]any{"path": ".", "pattern": "secret-control-plane"}, tc); err == nil {
+		if matches := nativefixture.GrepMatches(t, grepOut); len(matches) != 0 {
+			t.Fatalf("agent grep on directly attached control dir exposed matches: %+v", matches)
+		}
 	}
-
-	// 4. Agent read, wc, and stat on control-plane files must all be denied.
 	for _, target := range []string{"settings.yaml", "packs/custom.yaml", "api.token"} {
-		if out, err := reader.Run(t.Context(), map[string]any{"path": target}, tc); err == nil && strings.Contains(out, "secret-control-plane") {
-			t.Fatalf("agent read(%q) exposed control-plane content: %s", target, out)
-		} else if err == nil {
+		if out, err := reader.Run(t.Context(), map[string]any{"path": target}, tc); err == nil {
 			t.Fatalf("agent read(%q) unexpectedly succeeded: %s", target, out)
 		}
 		if out, err := wcTool.Run(t.Context(), map[string]any{"paths": []any{target}}, tc); err == nil {
@@ -139,13 +203,21 @@ func TestDirectControlRootAttachmentWithHumanWarmedCatalogCannotExposeStateToAge
 		}
 	}
 
-	// 5. Meanwhile, @scratch at <cfgDir>/scratch/sess-1 remains discoverable and readable!
-	scratchFindOut, err := finder.Run(t.Context(), map[string]any{"path": "@scratch"}, tc)
+	// 3. Meanwhile, @scratch at <cfgDir>/scratch/sess-1 remains discoverable and readable!
+	projTC := nativefixture.Context(t.TempDir())
+	projTC.Host.SessionScratchDir = scratchDir
+	projTC.Host.SessionOutputDir = dirs.Output
+	scratchFindOut, err := finder.Run(t.Context(), map[string]any{"path": "@scratch"}, projTC)
 	testutil.FailErr(t, "find @scratch under cfgDir", err)
 	if found := parseFindResponse(t, scratchFindOut); len(found.Results) != 1 || found.Results[0].Path != "@scratch/scratch-note.txt" {
 		t.Fatalf("find @scratch = %+v, want [@scratch/scratch-note.txt]", found.Results)
 	}
-	scratchReadOut, err := reader.Run(t.Context(), map[string]any{"path": "@scratch/scratch-note.txt"}, tc)
+	scratchListOut, err := listing.Run(t.Context(), map[string]any{"path": "@scratch"}, projTC)
+	testutil.FailErr(t, "list_dir @scratch under cfgDir", err)
+	if listed := decodeListDirOut(t, scratchListOut); len(listed.Entries) != 1 || listed.Entries[0].Name != "scratch-note.txt" {
+		t.Fatalf("list_dir @scratch = %+v, want [scratch-note.txt]", listed.Entries)
+	}
+	scratchReadOut, err := reader.Run(t.Context(), map[string]any{"path": "@scratch/scratch-note.txt"}, projTC)
 	testutil.FailErr(t, "read @scratch/scratch-note.txt", err)
 	if !strings.Contains(scratchReadOut, "scratch-ok-needle") {
 		t.Fatalf("read @scratch/scratch-note.txt missing expected content: %s", scratchReadOut)

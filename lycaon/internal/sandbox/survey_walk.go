@@ -381,6 +381,13 @@ func SurveyReadDir(dir, relDir string, opts SurveyOptions) ([]SurveyEntry, error
 func surveyRootFromRel(dir, relDir string) string {
 	cleanDir := filepath.Clean(dir)
 	cleanRel := filepath.ToSlash(filepath.Clean(relDir))
+	if strings.HasPrefix(cleanRel, "@") {
+		if _, after, ok := strings.Cut(cleanRel, "/"); ok {
+			cleanRel = after
+		} else {
+			cleanRel = "."
+		}
+	}
 	if cleanRel == "" || cleanRel == "." {
 		return cleanDir
 	}
