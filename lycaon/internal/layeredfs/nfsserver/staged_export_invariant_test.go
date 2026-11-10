@@ -61,6 +61,10 @@ func TestStagedExportActivationDoesNotGrantSiblingAuthority(t *testing.T) {
 	if status, _, _ := fresh.lookup(root, "denied-before-activation"); status != nfs.NFSStatusNoEnt {
 		t.Errorf("denied mutation left a directory: %v", status)
 	}
+	// The second handle must be denied before namespace operations inspect it.
+	if status := fresh.rename(root, "README.md", otherRoot, "stolen"); status != nfs.NFSStatusAccess {
+		t.Errorf("rename into staged root did not deny authority: %v", status)
+	}
 	if status, _ := other.mkdir(otherRoot, "denied-sibling"); status == nfs.NFSStatusOk {
 		t.Error("primary activation granted sibling write authority")
 	}
