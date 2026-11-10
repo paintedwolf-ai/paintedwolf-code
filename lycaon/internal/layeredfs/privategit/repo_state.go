@@ -52,14 +52,14 @@ func expectedPrivateGitLocations(mgr *Manager, view *managedView, viewID, repoRe
 	}
 	repoRel = cleanSlashRel(repoRel)
 	backingGitDir := filepath.Join(mgr.cfg.BackingDir, "views", viewID, "private-git", sanitizeRepoKey(repoRel), ".git")
-	locs := []string{canonicalCleanPath(backingGitDir), filepath.Clean(backingGitDir)}
-	if view != nil && view.worktreeDir != "" && canonicalCleanPath(view.worktreeDir) != canonicalCleanPath(view.trunkDir) {
+	locs := []string{filepath.Clean(backingGitDir)}
+	if view != nil && !view.kernelMounted && view.worktreeDir != "" && filepath.Clean(view.worktreeDir) != filepath.Clean(view.trunkDir) {
 		targetWT := view.worktreeDir
 		if repoRel != "." {
 			targetWT = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
 		}
 		wtGitDir := filepath.Join(targetWT, ".git")
-		locs = append(locs, canonicalCleanPath(wtGitDir), filepath.Clean(wtGitDir))
+		locs = append(locs, filepath.Clean(wtGitDir))
 	}
 	return locs
 }
@@ -69,9 +69,8 @@ func isAllowedPrivateGitLocation(mgr *Manager, view *managedView, viewID, repoRe
 		return false
 	}
 	cleanCand := filepath.Clean(candidate)
-	canonCand := canonicalCleanPath(candidate)
 	for _, allowed := range expectedPrivateGitLocations(mgr, view, viewID, repoRel) {
-		if allowed != "" && (cleanCand == allowed || canonCand == allowed) {
+		if allowed != "" && cleanCand == allowed {
 			return true
 		}
 	}
@@ -185,7 +184,7 @@ func discoverPriorPrivateStateEvidence(mgr *Manager, view *managedView, viewID, 
 	if info, err := os.Lstat(backingGitDir); err == nil && info.IsDir() {
 		return backingGitDir, true
 	}
-	if view != nil && !view.kernelMounted && view.worktreeDir != "" && canonicalCleanPath(view.worktreeDir) != canonicalCleanPath(view.trunkDir) {
+	if view != nil && !view.kernelMounted && view.worktreeDir != "" && filepath.Clean(view.worktreeDir) != filepath.Clean(view.trunkDir) {
 		targetWT := view.worktreeDir
 		if repoRel != "." {
 			targetWT = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
