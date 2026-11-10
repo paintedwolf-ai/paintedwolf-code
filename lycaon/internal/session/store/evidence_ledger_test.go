@@ -754,7 +754,17 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	// 4. Converse sensitivity check: if a live custody-candidate row (path-bearing http_response or whole-file write) has poisoned LineRanges,
 	// buildMetadataLedgerFromRows DOES decode it and returns a decode error.
 	poisonedCustodyRows := append([]db.ListEvidenceRecordsRow(nil), rows...)
-	poisonedCustodyRows[len(poisonedCustodyRows)-1].LineRanges = poisonedNonCustodyJSON
+	foundWrite := false
+	for i := range poisonedCustodyRows {
+		if poisonedCustodyRows[i].Handle == "write#2" {
+			poisonedCustodyRows[i].LineRanges = poisonedNonCustodyJSON
+			foundWrite = true
+			break
+		}
+	}
+	if !foundWrite {
+		t.Fatal("missing write#2 in rows")
+	}
 	if _, err := buildMetadataLedgerFromRows(poisonedCustodyRows); err == nil {
 		t.Fatal("expected buildMetadataLedgerFromRows to decode live whole-file write row and fail on poisoned JSON")
 	}
