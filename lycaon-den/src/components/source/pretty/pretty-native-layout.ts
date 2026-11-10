@@ -65,7 +65,7 @@ export class PrettyBreakWidget extends WidgetType {
     return 1;
   }
 
-  override get isHidden(): boolean {
+  get isHidden(): boolean {
     return true;
   }
 
@@ -84,7 +84,7 @@ export class PrettyIndentWidget extends WidgetType {
     this.indentWidthCh = indentWidthCh;
   }
 
-  override get isHidden(): boolean {
+  get isHidden(): boolean {
     return true;
   }
 
