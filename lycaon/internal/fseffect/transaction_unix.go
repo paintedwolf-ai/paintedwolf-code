@@ -429,11 +429,20 @@ func relocateEntry(source, destination Location, replace bool, expected string) 
 		return err
 	}
 	defer from.close()
-	to, err := openParent(destination, true, 0o755)
-	if err != nil {
-		return err
+	var to *openedParent
+	cleanSrc, srcErr := cleanLocation(source)
+	cleanDst, dstErr := cleanLocation(destination)
+	if srcErr == nil && dstErr == nil && cleanSrc.Root == cleanDst.Root && filepath.Dir(cleanSrc.Rel) == filepath.Dir(cleanDst.Rel) {
+		cp := *from
+		cp.name = filepath.Base(cleanDst.Rel)
+		to = &cp
+	} else {
+		to, err = openParent(destination, true, 0o755)
+		if err != nil {
+			return err
+		}
+		defer to.close()
 	}
-	defer to.close()
 	var sourceStat unix.Stat_t
 	if err := unix.Fstatat(from.fd, from.name, &sourceStat, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err

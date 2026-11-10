@@ -449,10 +449,16 @@ func mergeRoots(current, added map[string]string) map[string]string {
 // whatever alias a later stage uses, so a file reached under two IDs has one before-image.
 func (txn *Transaction) canonicalChanges(changes []PlannedChange) []PlannedChange {
 	canonical := map[string]string{}
+	resolvedByRaw := make(map[string]string, len(txn.targets.roots))
 	for _, id := range slices.Sorted(maps.Keys(txn.targets.roots)) {
-		location := txn.targets.roots[id]
-		if resolved, err := filepath.EvalSymlinks(location); err == nil {
-			location = resolved
+		raw := txn.targets.roots[id]
+		location, ok := resolvedByRaw[raw]
+		if !ok {
+			location = raw
+			if resolved, err := filepath.EvalSymlinks(raw); err == nil {
+				location = resolved
+			}
+			resolvedByRaw[raw] = location
 		}
 		if _, seen := txn.locations[location]; !seen {
 			txn.locations[location] = id

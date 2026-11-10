@@ -497,7 +497,6 @@ func (s *candidateGitObjectSource) publishSelectedPack(ctx context.Context) erro
 	if err := os.MkdirAll(dstPackDir, 0o750); err != nil {
 		return err
 	}
-	wroteAny := false
 	for _, assetPath := range append(packs, idxs...) {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -509,24 +508,18 @@ func (s *candidateGitObjectSource) publishSelectedPack(ctx context.Context) erro
 		if _, _, err := copyFileStreamingAtomicOpts(assetPath, dstPath, 0o444, false, false); err != nil {
 			return err
 		}
-		wroteAny = true
-	}
-	if wroteAny {
-		if err := syncDir(dstPackDir); err != nil {
-			return err
-		}
 	}
 	s.targetHasPacks = true
 	return nil
 }
 
 func copyFileStreamingAtomic(srcPath, dstPath string, mode os.FileMode) error {
-	_, _, err := copyFileStreamingAtomicOpts(srcPath, dstPath, mode, true, true)
+	_, _, err := copyFileStreamingAtomicOpts(srcPath, dstPath, mode, true, false)
 	return err
 }
 
 func copyFileStreamingAtomicWithVerify(srcPath, dstPath string, mode os.FileMode) (string, []byte, error) {
-	return copyFileStreamingAtomicOpts(srcPath, dstPath, mode, true, true)
+	return copyFileStreamingAtomicOpts(srcPath, dstPath, mode, true, false)
 }
 
 func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensureDir, syncParent bool) (string, []byte, error) {

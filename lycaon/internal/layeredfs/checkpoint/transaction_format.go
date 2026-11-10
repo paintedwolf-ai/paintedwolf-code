@@ -25,7 +25,12 @@ func (txn *Transaction) rootIdentities() (map[string]rootIdentity, error) {
 
 func identifyRoots(targets *promotionTargets) (map[string]rootIdentity, error) {
 	roots := make(map[string]rootIdentity, len(targets.roots))
+	byPath := make(map[string]rootIdentity, len(targets.roots))
 	for id, path := range targets.roots {
+		if cached, ok := byPath[path]; ok {
+			roots[id] = cached
+			continue
+		}
 		root, err := targets.openTargetRoot(id)
 		if err != nil {
 			return nil, err
@@ -51,7 +56,9 @@ func identifyRoots(targets *promotionTargets) (map[string]rootIdentity, error) {
 		if !os.SameFile(held, current) {
 			return nil, ErrStalePreviewTargetChanged
 		}
-		roots[id] = rootIdentity{Path: absolute, Identity: identity}
+		ident := rootIdentity{Path: absolute, Identity: identity}
+		byPath[path] = ident
+		roots[id] = ident
 	}
 	return roots, nil
 }
