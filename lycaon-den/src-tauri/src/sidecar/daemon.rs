@@ -47,6 +47,41 @@ fn terminate_helper_process_group(child: &mut std::process::Child) {
     let _ = child.wait();
 }
 
+struct HelperProcessGuard(std::process::Child);
+
+impl Drop for HelperProcessGuard {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        terminate_helper_process_group(&mut self.0);
+        #[cfg(not(unix))]
+        {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+}
+
+#[cfg(unix)]
+pub(super) fn set_fd_nonblocking(fd: std::os::fd::RawFd) -> Result<(), String> {
+    // SAFETY: fcntl F_GETFL/F_SETFL on an integer fd is memory-safe and returns -1 on error.
+    unsafe {
+        let flags = libc::fcntl(fd, libc::F_GETFL);
+        if flags < 0 {
+            return Err(format!(
+                "fcntl F_GETFL on daemon token print stdout failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        if libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) < 0 {
+            return Err(format!(
+                "fcntl F_SETFL O_NONBLOCK on daemon token print stdout failed: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(unix)]
 fn drain_nonblocking_stdout(
     stdout: &mut std::process::ChildStdout,
@@ -71,100 +106,78 @@ fn drain_nonblocking_stdout(
 }
 
 pub(super) fn run_token_print_command(
-    mut command: Command,
+    command: Command,
     timeout: Duration,
 ) -> Result<String, String> {
+    #[cfg(unix)]
+    {
+        use std::os::fd::AsRawFd;
+        run_token_print_command_with(
+            command,
+            timeout,
+            |stdout| set_fd_nonblocking(stdout.as_raw_fd()),
+            drain_nonblocking_stdout,
+        )
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (command, timeout);
+        Err("daemon token print is only supported on Unix platforms".to_string())
+    }
+}
+
+#[cfg(unix)]
+pub(super) fn run_token_print_command_with<S, D>(
+    mut command: Command,
+    timeout: Duration,
+    setup_nonblocking: S,
+    mut drain_stdout: D,
+) -> Result<String, String>
+where
+    S: FnOnce(&std::process::ChildStdout) -> Result<(), String>,
+    D: FnMut(&mut std::process::ChildStdout, &mut Vec<u8>, usize) -> Result<bool, String>,
+{
+    use std::os::unix::process::CommandExt;
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
-    let mut child = command
-        .spawn()
-        .map_err(|e| format!("run daemon token print: {e}"))?;
-    let mut stdout = child
+        .stderr(Stdio::null())
+        .process_group(0);
+    let mut guard = HelperProcessGuard(
+        command
+            .spawn()
+            .map_err(|e| format!("run daemon token print: {e}"))?,
+    );
+    let mut stdout = guard
+        .0
         .stdout
         .take()
         .ok_or_else(|| "daemon token print stdout unavailable".to_string())?;
-    let max_capture = API_TOKEN_MAX_BYTES + 64;
+    setup_nonblocking(&stdout)?;
 
-    #[cfg(unix)]
-    let (status, stdout_bytes) = {
-        use std::os::fd::AsRawFd;
-        // SAFETY: stdout is a valid open pipe file descriptor owned by this scope.
-        unsafe {
-            let fd = stdout.as_raw_fd();
-            let flags = libc::fcntl(fd, libc::F_GETFL);
-            if flags >= 0 {
-                let _ = libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+    let max_capture = API_TOKEN_MAX_BYTES + 64;
+    let mut stdout_bytes = Vec::with_capacity(128);
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        let _ = drain_stdout(&mut stdout, &mut stdout_bytes, max_capture)?;
+        match guard.0.try_wait() {
+            Ok(Some(status)) => {
+                let _ = drain_stdout(&mut stdout, &mut stdout_bytes, max_capture)?;
+                break status;
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    return Err("daemon token print timed out".to_string());
+                }
+                std::thread::sleep(GRACEFUL_STOP_POLL);
+            }
+            Err(e) => {
+                return Err(format!("wait daemon token print: {e}"));
             }
         }
-        let mut buf = Vec::with_capacity(128);
-        let deadline = Instant::now() + timeout;
-        let status = loop {
-            let _ = drain_nonblocking_stdout(&mut stdout, &mut buf, max_capture)?;
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    let _ = drain_nonblocking_stdout(&mut stdout, &mut buf, max_capture);
-                    break status;
-                }
-                Ok(None) => {
-                    if Instant::now() >= deadline {
-                        drop(stdout);
-                        terminate_helper_process_group(&mut child);
-                        return Err("daemon token print timed out".to_string());
-                    }
-                    std::thread::sleep(GRACEFUL_STOP_POLL);
-                }
-                Err(e) => {
-                    drop(stdout);
-                    terminate_helper_process_group(&mut child);
-                    return Err(format!("wait daemon token print: {e}"));
-                }
-            }
-        };
-        drop(stdout);
-        terminate_helper_process_group(&mut child);
-        (status, buf)
     };
-
-    #[cfg(not(unix))]
-    let (status, stdout_bytes) = {
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = stdout.take(max_capture as u64).read_to_end(&mut buf);
-            let _ = tx.send(buf);
-        });
-        let deadline = Instant::now() + timeout;
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break status,
-                Ok(None) => {
-                    if Instant::now() >= deadline {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        return Err("daemon token print timed out".to_string());
-                    }
-                    std::thread::sleep(GRACEFUL_STOP_POLL);
-                }
-                Err(e) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(format!("wait daemon token print: {e}"));
-                }
-            }
-        };
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        let buf = rx
-            .recv_timeout(remaining.max(Duration::from_millis(50)))
-            .unwrap_or_default();
-        (status, buf)
-    };
+    drop(stdout);
+    drop(guard);
 
     if !status.success() {
         return Err(match status.code() {
