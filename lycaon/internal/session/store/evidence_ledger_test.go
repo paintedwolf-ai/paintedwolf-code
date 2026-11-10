@@ -638,9 +638,9 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	testutil.FailErr(t, "Create", err)
 
 	// 1. Seed 120 historical read/grep rows plus command, partial edit, and pathless inline http_response rows
-	// with missing content_blob_sha256 values and poisoned LineRanges JSON in the database, alongside 1 live
-	// external-custody http_response row (saved.txt) and 1 live whole-file write row (replaced.txt).
-	const poisonedNonCustodyJSON = `{poisoned-non-custody-row-must-not-be-decoded`
+	// with missing content_blob_sha256 values and an unsupported LineRanges version ({"v":99}) in the database,
+	// alongside 1 live external-custody http_response row (saved.txt) and 1 live whole-file write row (replaced.txt).
+	const poisonedNonCustodyJSON = `{"v":99}`
 	for i := 1; i <= 60; i++ {
 		readHandle := fmt.Sprintf("read#%d", i)
 		grepHandle := fmt.Sprintf("grep#%d", i)
