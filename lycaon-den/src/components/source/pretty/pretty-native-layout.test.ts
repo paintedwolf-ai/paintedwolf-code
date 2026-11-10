@@ -663,7 +663,8 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     // Line 5: "" (blank intervening line)
     // Line 6: 'if (cond) /; const x = {a: 1, b: 2};/i;' (affected JSX body line)
     // Line 7: "</tag>; // /"
-    // Line 8: "const suffix = {m: 1, n: 2};" (unaffected suffix line after </tag>;)
+    // Line 8: "const mid = 1;" (normalizes lastSigCode to `;` after Line 7)
+    // Line 9: "const suffix = {m: 1, n: 2};" (unaffected suffix line reused by reference)
     const jsxDoc = [
       "const v = 1 < 2",
       'id = "x" > c;',
@@ -672,6 +673,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       "",
       "if (cond) /; const x = {a: 1, b: 2};/i;",
       "</tag>; // /",
+      "const mid = 1;",
       "const suffix = {m: 1, n: 2};",
     ].join("\n");
     let jsxState = EditorState.create({
@@ -686,7 +688,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     });
     const beforeField = jsxState.field(prettyNativeStateField);
     const sigLine6Before = beforeField.lineStates[5]?.syntaxSpanSignature;
-    const suffixRefBefore = beforeField.lineStates[7];
+    const suffixRefBefore = beforeField.lineStates[8];
     expect(beforeField.lineStates[5]?.relBoundaries.length).toBe(0);
 
     // Direction 1: Edit Line 1 ("const v = 1 < 2" -> "const v = <tag") across blank/unchanged Lines 3-5:
@@ -710,7 +712,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(jsxAfterToTag.lineStates).toEqual(jsxFreshToTag.lineStates);
     expect(jsxAfterToTag.counters).toEqual(jsxFreshToTag.counters);
     expect(jsxAfterToTag.lastIncrementalSuffixLinesReused).toBe(1);
-    expect(jsxAfterToTag.lineStates[7]).toBe(suffixRefBefore);
+    expect(jsxAfterToTag.lineStates[8]).toBe(suffixRefBefore);
 
     // Direction 2: Edit Line 1 back ("const v = <tag" -> "const v = 1 < 2") across blank/unchanged Lines 3-5:
     jsxState = jsxState.update({
@@ -733,7 +735,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(jsxAfterToExpr.lineStates).toEqual(jsxFreshToExpr.lineStates);
     expect(jsxAfterToExpr.counters).toEqual(jsxFreshToExpr.counters);
     expect(jsxAfterToExpr.lastIncrementalSuffixLinesReused).toBe(1);
-    expect(jsxAfterToExpr.lineStates[7]).toBe(suffixRefBefore);
+    expect(jsxAfterToExpr.lineStates[8]).toBe(suffixRefBefore);
   });
 
   it("FMT-AC-09, FMT-AC-10: updates layout when CodeMirror partial initial parse (doc.length > 3000) advances to full syntaxTree completion without docChanged", () => {
