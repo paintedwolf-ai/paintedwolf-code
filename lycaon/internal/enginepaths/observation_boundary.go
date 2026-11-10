@@ -289,7 +289,7 @@ func explicitConfigSessionPrefix(relSlash string) (string, bool) {
 	switch first {
 	case ScratchDirName, SessionOutputDirName:
 		return segs[0] + "/" + segs[1], true
-	case SessionsDirName:
+	case "sessions":
 		if len(segs) >= 3 && segs[2] != "" {
 			third := strings.ToLower(segs[2])
 			if third == ScratchDirName || third == "output" || third == SessionOutputDirName {
