@@ -10,6 +10,7 @@ import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
+import { forceParsing, syntaxTreeAvailable } from "@codemirror/language";
 import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
@@ -614,9 +615,8 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     }
   });
 
-  it("FMT-AC-09, FMT-AC-10: invalidates and updates layout when syntaxTree changes without docChanged (background parse / language reconfiguration) or when suffix syntaxSpanSignature changes", () => {
+  it("FMT-AC-09, FMT-AC-10: invalidates and updates layout across intervening blank/unchanged lines when an earlier edit changes later syntax context and on language-compartment reconfiguration", () => {
     const langCompartment = new Compartment();
-    // In CSS/JS, a construct whose syntax-tree spans differ once the language parser attaches:
     const raw = [
       'const a=1 / 2;const b="/* not a comment */";const c={x:1,y:2};',
       'const d=/"/;const e={m:3,n:4};',
@@ -637,7 +637,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(beforeParse.counters.syntaxNodesVisited).toBe(0);
     expect(beforeParse.lineStates[0]?.syntaxSpanSignature).toBe("");
 
-    // Reconfigure language compartment without docChanged (simulates background Lezer parse completion):
+    // Reconfigure language compartment without docChanged (exercises treeChanged invalidation path):
     state = state.update({
       effects: langCompartment.reconfigure(javascript()),
     }).state;
@@ -655,12 +655,24 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(afterParse.lineStates).toEqual(freshAfterParse.lineStates);
     expect(afterParse.counters).toEqual(freshAfterParse.counters);
 
-    // Suffix syntaxSpanSignature invalidation on docChanged even when fallback lexical continuation on Line 2 converges:
+    // Multi-line syntax invalidation across intervening blank and unchanged lines:
+    // Line 1: "const v = 1 < 2"
+    // Line 2: 'id = "x" > c;'
+    // Line 3: "" (blank intervening line)
+    // Line 4: "const unchanged = 42;" (unchanged intervening line)
+    // Line 5: "" (blank intervening line)
+    // Line 6: 'const r = /"/; const x = {a: 1, b: 2};' (affected JSX body line)
+    // Line 7: "</tag>;"
+    // Line 8: "const suffix = {m: 1, n: 2};" (unaffected suffix line after </tag>;)
     const jsxDoc = [
       "const v = 1 < 2",
       'id = "x" > c;',
+      "",
+      "const unchanged = 42;",
+      "",
       'const r = /"/; const x = {a: 1, b: 2};',
       "</tag>;",
+      "const suffix = {m: 1, n: 2};",
     ].join("\n");
     let jsxState = EditorState.create({
       doc: jsxDoc,
@@ -672,10 +684,11 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
         }),
       ],
     });
-    const sigBefore =
-      jsxState.field(prettyNativeStateField).lineStates[2]?.syntaxSpanSignature;
+    const beforeField = jsxState.field(prettyNativeStateField);
+    const sigLine6Before = beforeField.lineStates[5]?.syntaxSpanSignature;
+    const suffixRefBefore = beforeField.lineStates[7];
 
-    // Edit only Line 1 (`rescanMinEndLine = 2`) so Line 3 becomes JSXText inside <tag>...</tag> while Line 2's lexical continuation is identical:
+    // Direction 1: Edit Line 1 ("const v = 1 < 2" -> "const v = <tag") across blank/unchanged Lines 3-5:
     jsxState = jsxState.update({
       changes: {
         from: 0,
@@ -683,14 +696,114 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
         insert: "const v = <tag",
       },
     }).state;
-    const jsxAfter = jsxState.field(prettyNativeStateField);
-    const jsxFresh = computePrettyNativeLayout(
+    const jsxAfterToTag = jsxState.field(prettyNativeStateField);
+    const jsxFreshToTag = computePrettyNativeLayout(
       jsxState.doc,
       { path: "comp.jsx" },
       jsxState,
     );
-    expect(jsxAfter.lineStates[2]?.syntaxSpanSignature).not.toBe(sigBefore);
-    expect(jsxAfter.lineStates).toEqual(jsxFresh.lineStates);
-    expect(jsxAfter.counters).toEqual(jsxFresh.counters);
+    expect(jsxAfterToTag.lineStates[5]?.syntaxSpanSignature).not.toBe(
+      sigLine6Before,
+    );
+    expect(jsxAfterToTag.lineStates).toEqual(jsxFreshToTag.lineStates);
+    expect(jsxAfterToTag.counters).toEqual(jsxFreshToTag.counters);
+    expect(jsxAfterToTag.lastIncrementalSuffixLinesReused).toBe(1);
+    expect(jsxAfterToTag.lineStates[7]).toBe(suffixRefBefore);
+
+    // Direction 2: Edit Line 1 back ("const v = <tag" -> "const v = 1 < 2") across blank/unchanged Lines 3-5:
+    jsxState = jsxState.update({
+      changes: {
+        from: 0,
+        to: "const v = <tag".length,
+        insert: "const v = 1 < 2",
+      },
+    }).state;
+    const jsxAfterToExpr = jsxState.field(prettyNativeStateField);
+    const jsxFreshToExpr = computePrettyNativeLayout(
+      jsxState.doc,
+      { path: "comp.jsx" },
+      jsxState,
+    );
+    expect(jsxAfterToExpr.lineStates[5]?.syntaxSpanSignature).toBe(
+      sigLine6Before,
+    );
+    expect(jsxAfterToExpr.lineStates).toEqual(jsxFreshToExpr.lineStates);
+    expect(jsxAfterToExpr.counters).toEqual(jsxFreshToExpr.counters);
+    expect(jsxAfterToExpr.lastIncrementalSuffixLinesReused).toBe(1);
+    expect(jsxAfterToExpr.lineStates[7]).toBe(suffixRefBefore);
+  });
+
+  it("FMT-AC-09, FMT-AC-10: updates layout when CodeMirror partial initial parse (doc.length > 3000) advances to full syntaxTree completion without docChanged", () => {
+    // CodeMirror's LanguageState.init stops initial synchronous parsing at Work.InitViewport (3000 chars).
+    // Build a >3,500-char JS document so the tail line after offset 3,000 is initially unparsed by Lezer:
+    const prefixLines = Array.from(
+      { length: 70 },
+      (_, i) => `const padLine_${i} = {alpha: ${i}, beta: ${i + 1}, gamma: "padding_value_${i}"};`,
+    );
+    const tailLine = 'const tailRegex = /"/; const tailObj = {a: 1, b: 2};';
+    const largeDoc = [...prefixLines, tailLine].join("\n");
+    expect(largeDoc.length).toBeGreaterThan(3200);
+
+    const parent = document.createElement("div");
+    const view = new EditorView({
+      parent,
+      state: EditorState.create({
+        doc: largeDoc,
+        extensions: [
+          javascript(),
+          createPrettyNativeDecorationsExtension({
+            enabled: true,
+            path: "partial-parse.js",
+          }),
+        ],
+      }),
+    });
+
+    try {
+      const tailIndex = view.state.doc.lines - 1;
+      const initialFullParseAvailable = syntaxTreeAvailable(
+        view.state,
+        view.state.doc.length,
+      );
+      expect(initialFullParseAvailable).toBe(false);
+
+      const fieldBeforeFullParse = view.state.field(prettyNativeStateField);
+      // Before Lezer parses past offset 3,000, the tail line has no syntax-tree protected spans (`/"/` is seen by fallback lexical scan as an unclosed quote):
+      expect(
+        fieldBeforeFullParse.lineStates[tailIndex]?.syntaxSpanSignature,
+      ).toBe("");
+      expect(
+        fieldBeforeFullParse.lineStates[tailIndex]?.relBoundaries.length,
+      ).toBe(1);
+
+      // Advance CodeMirror's Lezer parser to the end of the document without changing the document:
+      const parsed = forceParsing(view, view.state.doc.length, 500);
+      expect(parsed).toBe(true);
+      expect(syntaxTreeAvailable(view.state, view.state.doc.length)).toBe(true);
+
+      // Dispatch a non-docChanged transaction (just as ParseWorker's setState effect does) if forceParsing did not already dispatch:
+      view.dispatch({});
+
+      const fieldAfterFullParse = view.state.field(prettyNativeStateField);
+      const freshAfterFullParse = computePrettyNativeLayout(
+        view.state.doc,
+        { path: "partial-parse.js" },
+        view.state,
+      );
+      expect(
+        fieldAfterFullParse.lineStates[tailIndex]?.syntaxSpanSignature,
+      ).not.toBe("");
+      expect(
+        fieldAfterFullParse.lineStates[tailIndex]?.relBoundaries.length,
+      ).toBe(4);
+      expect(fieldAfterFullParse.lineStates).toEqual(
+        freshAfterFullParse.lineStates,
+      );
+      expect(fieldAfterFullParse.counters).toEqual(
+        freshAfterFullParse.counters,
+      );
+    } finally {
+      view.destroy();
+    }
   });
 });
