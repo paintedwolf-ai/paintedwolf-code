@@ -224,7 +224,6 @@ func TestCommandCompletionWakesWorkerProcessWait(t *testing.T) {
 func TestAutoNameProjectIdempotentOnReplay(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})

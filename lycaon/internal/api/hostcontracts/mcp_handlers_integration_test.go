@@ -123,7 +123,6 @@ func TestMCPSettingsSSEOnToggle(t *testing.T) {
 
 func TestHandlePatchMCPProviderProjectCannotEnableStdio(t *testing.T) {
 	srv, reg := contractfixture.NewMCPProviderWithDistro(t, contractfixture.StdioMCPDistroBody, true)
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	proj, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 
@@ -152,7 +151,6 @@ func TestHandleDeleteMCPProviderProjectOverlayInherits(t *testing.T) {
 	// The project MCP layer rides project_mcp; a fresh project is untrusted, so
 	// the fixture opens the layer.
 	srv, _ := contractfixture.NewLoopbackMCPProvider(t)
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := t.TempDir()
 	proj, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "CreateWithRoot", err)
@@ -412,7 +410,6 @@ func TestHandleMcpRecipesListAndAdd(t *testing.T) {
 		t.Fatalf("oauth code = %q body=%s", oauthErr.Code, oauthW.Body.String())
 	}
 
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	proj, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, t.TempDir())
 	testutil.FailErr(t, "CreateWithRoot", err)
 	projectW := contractfixture.AddMcpRecipe(t, srv, "github", proj.ID)

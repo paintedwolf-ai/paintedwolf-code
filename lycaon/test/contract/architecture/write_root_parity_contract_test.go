@@ -51,10 +51,9 @@ func TestWriteRootProducerParity(t *testing.T) {
 
 	for _, gate := range []string{
 		filepath.Join("lycaon", "internal", "confine"),
-		filepath.Join("lycaon", "internal", "project"),
 	} {
 		if !consulted[gate] {
-			t.Errorf("package %s must call AttachedWriteRootRefused — attach doors share one predicate", gate)
+			t.Errorf("package %s must call AttachedWriteRootRefused — execution boundaries share one predicate", gate)
 		}
 	}
 
@@ -74,7 +73,8 @@ func TestWriteRootChokePointsPinned(t *testing.T) {
 		rel  string
 		want string
 	}{
-		{filepath.Join("lycaon", "internal", "project", "roots.go"), "AttachedWriteRootRefused"},
+		{filepath.Join("lycaon", "internal", "confine", "write_root_validation.go"), "AttachedWriteRootRefused"},
+		{filepath.Join("lycaon", "internal", "tools", "confine_roots.go"), "ValidateAttachedWriteRoots"},
 		{filepath.Join("lycaon", "internal", "session", "sandbox_write_root_broker.go"), "ControlPlanePathDenied"},
 		// The grant door and the boundary read one granted-lane predicate: what
 		// the broker grants as a plain root, prepareRequest applies.

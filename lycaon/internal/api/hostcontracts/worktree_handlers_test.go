@@ -197,7 +197,6 @@ func TestGitWorktreeBindLeavesConfigUntouched(t *testing.T) {
 }
 
 func TestGitWorktreeBindRollsBack(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := contractfixture.InitCommittedRepoDir(t)
 	mem := store.NewMemory()
 	failing := &contractfixture.PutFailStore{Store: mem, FailPut: true}

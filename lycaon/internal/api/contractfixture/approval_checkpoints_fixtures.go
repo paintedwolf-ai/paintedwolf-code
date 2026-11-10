@@ -49,7 +49,6 @@ func AssertCheckpointReadSurfaces(t *testing.T, server http.Handler, sessionID, 
 
 func NewCheckpointHandlerFixture(t *testing.T) (*api.Server, *hitl.Checkpoints, *wire.Session) {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "chk-api.db")
 
 	reg := project.NewSQLRegistry(sqlDB)

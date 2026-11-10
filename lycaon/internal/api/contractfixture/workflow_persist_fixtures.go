@@ -21,7 +21,6 @@ import (
 
 func NewPersistTestServer(t *testing.T) (*api.Server, wire.Session, workflowdrafts.Store) {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	projectDir := t.TempDir()
 	projReg := project.NewMemoryRegistry()

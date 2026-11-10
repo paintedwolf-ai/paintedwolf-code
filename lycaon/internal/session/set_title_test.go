@@ -27,7 +27,6 @@ import (
 func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
@@ -80,7 +79,6 @@ func TestSetTitleOverwritesAndPublishes(t *testing.T) {
 func TestUpdateTitleIfUnsetNoOpsAfterManualSet(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
@@ -116,7 +114,6 @@ func TestUpdateTitleIfUnsetNoOpsAfterManualSet(t *testing.T) {
 
 func TestSetTitleWinsRaceVsIfUnset(t *testing.T) {
 	ctx := context.Background()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})

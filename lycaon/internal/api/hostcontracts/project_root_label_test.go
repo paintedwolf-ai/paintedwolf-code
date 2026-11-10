@@ -16,7 +16,6 @@ import (
 )
 
 func TestPatchProjectRootLabelRename(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	dir := t.TempDir()
 	p, err := reg.Create(t.Context(), project.CreateParams{

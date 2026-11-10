@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"os"
@@ -156,9 +155,6 @@ func ResolveExistingDir(path string) (string, error) {
 	}
 	if !info.IsDir() {
 		return "", fmt.Errorf("%w: %s", ErrNotDirectory, resolved)
-	}
-	if refused, code := confine.AttachedWriteRootRefused(resolved); refused {
-		return "", &RootRefusedError{Code: code, Path: resolved}
 	}
 	return resolved, nil
 }
