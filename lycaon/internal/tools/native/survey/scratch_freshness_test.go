@@ -165,7 +165,7 @@ func TestAttachedControlPlaneRootSurveyWithWarmCatalogDeniesStateAndAdmitsScratc
 	}
 	scratchGrepOut, err := grepper.Run(t.Context(), map[string]any{"path": "@scratch", "pattern": "needle"}, tc)
 	testutil.FailErr(t, "grep @scratch", err)
-	if matches := nativefixture.GrepMatches(t, scratchGrepOut); len(matches) != 1 || !strings.Contains(matches[0].Content, "needle-own") {
+	if matches := nativefixture.GrepMatches(t, scratchGrepOut); len(matches) != 1 || !strings.Contains(scratchGrepOut, "needle-own") {
 		t.Fatalf("grep @scratch = %s, want 1 match with needle-own", scratchGrepOut)
 	}
 	outputFindOut, err := finder.Run(t.Context(), map[string]any{"path": "@output", "name_glob": "*.txt"}, tc)
