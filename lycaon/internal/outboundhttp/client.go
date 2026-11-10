@@ -265,8 +265,8 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 				return Response{}, err
 			}
 		}
-		if !cookiesFrozen && in.Jar != nil {
-			hopCookies = in.Jar.Cookies(current)
+		if in.Jar != nil && !cookiesFrozen {
+			return Response{}, invalidRequest("cookie jar requires BeforeHopRequest to call FreezeCookies")
 		}
 		remaining := timeout - ioElapsed
 		if remaining <= 0 {

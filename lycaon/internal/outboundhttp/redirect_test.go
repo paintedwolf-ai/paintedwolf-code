@@ -297,7 +297,9 @@ func (j *recordingCookieJar) SetCookies(_ *url.URL, cookies []*http.Cookie) {
 
 func TestOutboundCookiesFreezeAfterBeforeHopRequestAndPersistAcrossRedirects(t *testing.T) {
 	var hop0Cookie, hop1Cookie string
+	var serverHits int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverHits++
 		switch r.URL.Path {
 		case "/start":
 			hop0Cookie = r.Header.Get("Cookie")
@@ -310,6 +312,33 @@ func TestOutboundCookiesFreezeAfterBeforeHopRequestAndPersistAcrossRedirects(t *
 	}))
 	t.Cleanup(server.Close)
 
+	// 1. A Request with Jar != nil that omits BeforeHopRequest or returns nil without calling
+	// hop.FreezeCookies must fail closed before dialing rather than falling back to Jar.Cookies.
+	unfrozenJar := &recordingCookieJar{cookies: []*http.Cookie{{Name: "auth", Value: "unreviewed"}}}
+	if _, err := Do(t.Context(), Request{
+		Method:       http.MethodGet,
+		URL:          server.URL + "/start",
+		AllowAddress: allowLoopback,
+		Jar:          unfrozenJar,
+	}); err == nil {
+		t.Fatal("Do with Jar and nil BeforeHopRequest succeeded, want error")
+	}
+	if _, err := Do(t.Context(), Request{
+		Method:           http.MethodGet,
+		URL:              server.URL + "/start",
+		AllowAddress:     allowLoopback,
+		Jar:              unfrozenJar,
+		BeforeHopRequest: func(context.Context, HopRequest) error { return nil },
+	}); err == nil {
+		t.Fatal("Do with Jar and callback that omits FreezeCookies succeeded, want error")
+	}
+	if serverHits != 0 || unfrozenJar.cookiesCalls != 0 {
+		t.Fatalf("unfrozen Jar fallback state: serverHits=%d cookiesCalls=%d, want 0/0", serverHits, unfrozenJar.cookiesCalls)
+	}
+
+	// 2. When BeforeHopRequest freezes the reviewed snapshot via hop.FreezeCookies, late jar
+	// mutations after BeforeHopRequest do not affect the hop's wire cookies, and Set-Cookie
+	// responses are persisted into Jar before the next redirect hop's BeforeHopRequest runs.
 	jar := &recordingCookieJar{}
 	var beforeHopCalls int
 	resp, err := Do(t.Context(), Request{
@@ -335,6 +364,9 @@ func TestOutboundCookiesFreezeAfterBeforeHopRequestAndPersistAcrossRedirects(t *
 					t.Errorf("hop 1 BeforeHopRequest did not see hop 0 Set-Cookie: %+v", jar.stored)
 				}
 			}
+			if !hop.FreezeCookies(jar.Cookies(hop.URL)) {
+				t.Errorf("hop %d FreezeCookies returned false", beforeHopCalls-1)
+			}
 			return nil
 		},
 	})
@@ -345,7 +377,7 @@ func TestOutboundCookiesFreezeAfterBeforeHopRequestAndPersistAcrossRedirects(t *
 		t.Fatalf("body = %q, want ok", string(resp.Body))
 	}
 	if jar.cookiesCalls != 2 {
-		t.Fatalf("Jar.Cookies called %d times across 2 hops, want 2 (frozen once per hop)", jar.cookiesCalls)
+		t.Fatalf("Jar.Cookies called %d times across 2 hops, want 2 (frozen once per hop by callback)", jar.cookiesCalls)
 	}
 	if hop0Cookie != "auth=reviewed-hop0" {
 		t.Fatalf("hop 0 sent Cookie %q, want frozen %q", hop0Cookie, "auth=reviewed-hop0")

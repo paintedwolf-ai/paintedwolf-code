@@ -283,5 +283,39 @@ func TestManagedCookieJarAndGrantFreshnessAcrossReviewWait(t *testing.T) {
 			t.Fatalf("server received %d requests after jar revocation during wait, want 0", requests.Load())
 		}
 	})
+
+	t.Run("unbacked_frontend_cookie_jar_fails_closed_before_delivery", func(t *testing.T) {
+		var requests atomic.Int64
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			requests.Add(1)
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		t.Cleanup(server.Close)
+
+		deps := Deps{
+			Boundary:      testBoundary(),
+			SecretMatcher: testSecretMatcher(t),
+		}
+		_, err := Perform(t.Context(), deps, map[string]any{
+			"url":                server.URL + "/api",
+			"capability_request": loopbackCapability(t, server.URL),
+		}, sessionContext(t.TempDir(), "unbacked-jar"), ExchangeOptions{
+			Jar: unbackedCookieJar{},
+		})
+		var reject *toolrejection.ToolReject
+		if !errors.As(err, &reject) || reject.Code != toolrejection.OutboundSecretScreenFailedCode {
+			t.Fatalf("Perform with unbacked Jar err = %v, want %s", err, toolrejection.OutboundSecretScreenFailedCode)
+		}
+		if requests.Load() != 0 {
+			t.Fatalf("server received %d requests with unbacked Jar, want 0", requests.Load())
+		}
+	})
+}
+
+type unbackedCookieJar struct{}
+
+func (unbackedCookieJar) SetCookies(*url.URL, []*http.Cookie) {}
+func (unbackedCookieJar) Cookies(*url.URL) []*http.Cookie {
+	return []*http.Cookie{{Name: "session", Value: "unreviewed"}}
 }
 

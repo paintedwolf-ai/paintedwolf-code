@@ -231,13 +231,16 @@ func prepareRequestCookieDelivery(
 		}
 		return beforeHop, nil
 	}
+	if frontendJar == nil {
+		return nil, nil
+	}
 	provider, ok := frontendJar.(cookieStoreProvider)
 	if !ok || provider == nil {
-		return nil, nil
+		return nil, screenFaultReject(secretmatch.FaultStageScreenUnwired)
 	}
 	store := provider.CookieStore()
 	if store == nil {
-		return nil, nil
+		return nil, screenFaultReject(secretmatch.FaultStageScreenUnwired)
 	}
 	reviewed := make(map[httpcookies.Cookie]map[string]bool)
 	current := make(map[httpcookies.Cookie]bool)
