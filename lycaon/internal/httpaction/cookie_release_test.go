@@ -369,7 +369,7 @@ func TestManagedCookieJarAndGrantFreshnessAcrossReviewWait(t *testing.T) {
 		}
 
 		makeJar := func() http.CookieJar {
-			s := httpcookies.NewStore()
+			s := httpcookies.New(nil)
 			for _, rawURL := range []string{originServer.URL, targetServer.URL} {
 				u, parseErr := url.Parse(rawURL)
 				testutil.FailErr(t, "parse server URL", parseErr)
@@ -380,6 +380,12 @@ func TestManagedCookieJarAndGrantFreshnessAcrossReviewWait(t *testing.T) {
 			}
 			return &storeBackedCookieJar{store: s}
 		}
+
+		originCap := loopbackCapability(t, originServer.URL)
+		targetCap := loopbackCapability(t, targetServer.URL)
+		bothPorts := append([]any(nil), originCap["loopback_connect"].(map[string]any)["ports"].([]any)...)
+		bothPorts = append(bothPorts, targetCap["loopback_connect"].(map[string]any)["ports"].([]any)...)
+		bothLoopbackCap := map[string]any{"loopback_connect": map[string]any{"ports": bothPorts}}
 
 		runWithJar := func(callID, rawURL, redirects string) {
 			t.Helper()
@@ -394,8 +400,8 @@ func TestManagedCookieJarAndGrantFreshnessAcrossReviewWait(t *testing.T) {
 			ctx = secretcap.WithResolution(ctx, tc.Effects.Secrets)
 			_, performErr := Perform(ctx, deps, map[string]any{
 				"url":                rawURL,
-				"follow_redirects":   redirects,
-				"capability_request": loopbackCapability(t, originServer.URL, targetServer.URL),
+				"redirects":          redirects,
+				"capability_request": bothLoopbackCap,
 			}, tc, ExchangeOptions{Jar: makeJar()})
 			testutil.FailErr(t, callID, performErr)
 		}
@@ -431,7 +437,7 @@ func TestManagedCookieJarAndGrantFreshnessAcrossReviewWait(t *testing.T) {
 		targetCookie.Store("")
 		revokeTargetOnRedirect.Store(true)
 		review.mode = "withhold"
-		runWithJar("call-3-redirect-revoke", originServer.URL+"/redirect", "follow")
+		runWithJar("call-3-redirect-revoke", originServer.URL+"/redirect", "safe")
 		if review.cards != 3 {
 			t.Fatalf("step 3 redirect after mid-flight target grant revocation cards=%d, want 3", review.cards)
 		}
