@@ -17,9 +17,9 @@ func TestReleasedExportHandlesNeverRegainAuthority(t *testing.T) {
 		if status != nfs.MountStatusOk {
 			t.Fatalf("cycle %d mount: %v", cycle, status)
 		}
-		status, child, _ := current.lookup(root, "README.md")
-		if status != nfs.NFSStatusOk {
-			t.Fatalf("cycle %d child lookup: %v", cycle, status)
+		lookupStatus, child, _ := current.lookup(root, "README.md")
+		if lookupStatus != nfs.NFSStatusOk {
+			t.Fatalf("cycle %d child lookup: %v", cycle, lookupStatus)
 		}
 		// Adding another root to this active view must not rotate its capabilities.
 		other, err := env.Server.RegisterExport("reused-view", nfsserver.WorktreeRoot, "")
