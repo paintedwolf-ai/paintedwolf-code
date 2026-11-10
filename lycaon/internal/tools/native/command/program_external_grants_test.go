@@ -25,12 +25,12 @@ import (
 )
 
 type oneShotFileAccessPolicy struct {
-	base     platform.PolicyEngine
+	*toolprofiles.ProfilePolicyEngine
 	approved func() []hitl.GrantedPathDelta
 }
 
 func (p oneShotFileAccessPolicy) Evaluate(ctx context.Context, eval platform.PolicyContext) (*platform.PolicyDecision, error) {
-	decision, err := p.base.Evaluate(ctx, eval)
+	decision, err := p.ProfilePolicyEngine.Evaluate(ctx, eval)
 	if err != nil || decision == nil || decision.Blocked {
 		return decision, err
 	}
@@ -332,8 +332,8 @@ func TestExternalSpawnAttachedProtectedRootGrantAndRevokeLifecycle(t *testing.T)
 
 	var oneShotApproved []hitl.GrantedPathDelta
 	f.Runtime.Executor = toolexecution.NewExecutor(oneShotFileAccessPolicy{
-		base:     toolprofiles.NewProfilePolicyEngine(f.Boundary),
-		approved: func() []hitl.GrantedPathDelta { return append([]hitl.GrantedPathDelta(nil), oneShotApproved...) },
+		ProfilePolicyEngine: toolprofiles.NewProfilePolicyEngine(f.Boundary),
+		approved:            func() []hitl.GrantedPathDelta { return append([]hitl.GrantedPathDelta(nil), oneShotApproved...) },
 	}, f.Runtime.Registry, "fixture")
 	f.Runtime.Executor.Approvals.SetCheckpointManager(t.Context(), autoApproveCheckpoints{}, nil)
 	callWithApprovedAccess := func(approved []hitl.GrantedPathDelta, command string) (string, error) {
