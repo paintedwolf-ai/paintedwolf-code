@@ -13,18 +13,21 @@ import (
 // OAR owns dispositions and copy; workflow owners supply outstanding obligations.
 // Static counts never predict future loop or function invocations.
 type ProgramProjection struct {
-	Progress         *api.CommandProgramProgressReceipt
-	ParentToolCallID string
-	ParentTool       string
-	ParentSessionID  string
-	RootSourceUnitID string
-	Program          api.CommandProgramReceipt
-	Effects          []ExecutionProjection
-	Unknown          []ExecutionProjection
-	Stopped          *ExecutionProjection
-	CompletedEffects int
-	UncertainEffects int
-	ExecutedChildren int
+	Progress          *api.CommandProgramProgressReceipt
+	ParentToolCallID  string
+	ParentTool        string
+	ParentSessionID   string
+	RootSourceUnitID  string
+	Program           api.CommandProgramReceipt
+	Effects           []ExecutionProjection
+	Unknown           []ExecutionProjection
+	Stopped           *ExecutionProjection
+	Nonzero           []ExecutionProjection
+	NonzeroExecutions int
+	OmittedNonzero    int
+	CompletedEffects  int
+	UncertainEffects  int
+	ExecutedChildren  int
 	// NativeGaps counts native names this program ran as installed programs.
 	NativeGaps                int
 	ExecutedReads             int
@@ -82,7 +85,7 @@ func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string
 		return out, err
 	}
 	var reached, unsettled int
-	err = tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE effect_certainty='completed'),count(*) FILTER (WHERE effect_certainty IN ('unknown','attempted')),count(*) FILTER (WHERE owner_invoked=1),count(*) FILTER (WHERE owner_invoked=1 AND lifecycle='read_only'),count(*) FILTER (WHERE owner_started=1 OR owner_invoked=1),count(*) FILTER (WHERE state IN ('prepared','waiting','running')),count(*) FILTER (WHERE native_gap_json != '') FROM invocation_program_executions WHERE program_id=?`, programID).Scan(&out.CompletedEffects, &out.UncertainEffects, &out.ExecutedChildren, &out.ExecutedReads, &reached, &unsettled, &out.NativeGaps)
+	err = tx.QueryRowContext(ctx, `SELECT count(*) FILTER (WHERE effect_certainty='completed'),count(*) FILTER (WHERE effect_certainty IN ('unknown','attempted')),count(*) FILTER (WHERE owner_invoked=1),count(*) FILTER (WHERE owner_invoked=1 AND lifecycle='read_only'),count(*) FILTER (WHERE owner_started=1 OR owner_invoked=1),count(*) FILTER (WHERE state IN ('prepared','waiting','running')),count(*) FILTER (WHERE native_gap_json != ''),count(*) FILTER (WHERE status_code <> 0) FROM invocation_program_executions WHERE program_id=?`, programID).Scan(&out.CompletedEffects, &out.UncertainEffects, &out.ExecutedChildren, &out.ExecutedReads, &reached, &unsettled, &out.NativeGaps, &out.NonzeroExecutions)
 	if err != nil {
 		return out, err
 	}
@@ -105,6 +108,11 @@ func projectProgram(ctx context.Context, tx *sql.Tx, sessionID, programID string
 	if len(stopped) > 0 {
 		out.Stopped = &stopped[0]
 	}
+	out.Nonzero, err = selectExecutionProjection(ctx, tx, programID, "nonzero", maximum)
+	if err != nil {
+		return out, err
+	}
+	out.OmittedNonzero = out.NonzeroExecutions - len(out.Nonzero)
 	out.OmittedEffects = out.CompletedEffects - len(out.Effects)
 	out.OmittedUnknown = out.UncertainEffects - len(out.Unknown)
 	var exact bool
@@ -130,7 +138,7 @@ func selectExecutionProjection(ctx context.Context, tx *sql.Tx, program, kind st
 	if err := validateExecutionProjectionKind(kind); err != nil {
 		return nil, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT e.ordinal,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND `+executionProjectionSelection+` ORDER BY e.ordinal DESC LIMIT ?`, program, kind, kind, kind, maximum)
+	rows, err := tx.QueryContext(ctx, `SELECT e.ordinal,n.source_unit_id,n.start_byte,n.end_byte,n.line,n.column_number FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND `+executionProjectionSelection+` ORDER BY e.ordinal DESC LIMIT ?`, program, kind, kind, kind, kind, maximum)
 	if err != nil {
 		return nil, err
 	}
@@ -176,11 +184,11 @@ func selectExecutionProjection(ctx context.Context, tx *sql.Tx, program, kind st
 	return out, nil
 }
 
-const executionProjectionSelection = `((?='completed' AND e.effect_certainty='completed') OR (?='uncertain' AND e.effect_certainty IN ('unknown','attempted')) OR (?='stopped' AND (e.host_stop_code<>'' OR e.stop_code<>'' OR e.state IN ('refused','failed','interrupted'))))`
+const executionProjectionSelection = `((?='completed' AND e.effect_certainty='completed') OR (?='uncertain' AND e.effect_certainty IN ('unknown','attempted')) OR (?='stopped' AND (e.host_stop_code<>'' OR e.stop_code<>'' OR e.state IN ('refused','failed','interrupted'))) OR (?='nonzero' AND e.status_code <> 0))`
 
 func validateExecutionProjectionKind(kind string) error {
 	switch kind {
-	case "completed", "uncertain", "stopped":
+	case "completed", "uncertain", "stopped", "nonzero":
 		return nil
 	default:
 		return fmt.Errorf("unknown execution projection selector")

@@ -21,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -146,45 +145,6 @@ type programRun struct {
 	window     *programWindow
 	sessions   SessionOwners
 	provenance programProvenanceState
-}
-
-// ProgramOutcome is the command tool's result for a settled program.
-type ProgramOutcome struct {
-	ResultVersion    int                              `json:"result_version,omitempty"`
-	Outcome          string                           `json:"outcome,omitempty"`
-	ProgramID        string                           `json:"program_id"`
-	State            string                           `json:"state"`
-	Status           int                              `json:"status"`
-	StopCode         string                           `json:"stop_code,omitempty"`
-	Stdout           string                           `json:"stdout"`
-	Stderr           string                           `json:"stderr"`
-	StdoutRef        string                           `json:"stdout_ref,omitempty"`
-	StderrRef        string                           `json:"stderr_ref,omitempty"`
-	Outputs          []api.CommandProgramOutputWindow `json:"outputs,omitempty"`
-	Truncated        bool                             `json:"truncated,omitempty"`
-	ExecutedChildren int                              `json:"executed_children"`
-	CompletedEffects int                              `json:"completed_effects"`
-	UncertainEffects int                              `json:"uncertain_effects"`
-	NativeGaps       int                              `json:"native_gaps,omitempty"`
-	// CPUTimeUnmeasured marks a time report whose user and sys count native
-	// operations as zero.
-	CPUTimeUnmeasured bool `json:"cpu_time_unmeasured,omitempty"`
-	ReplayAvailable   bool `json:"replay_available"`
-	// Refusal is the host decision that stopped the program; the output and
-	// status of every child that ran before it stay in this outcome.
-	Refusal *ProgramRefusal `json:"refusal,omitempty"`
-	// SourceWindow is the observation window of a program that launched an
-	// external process.
-	SourceWindow *hostcmd.SourceWindow `json:"source_window,omitempty"`
-}
-
-// ProgramRefusal is a typed host refusal at the program's stop point with its
-// rendered feedback.
-type ProgramRefusal struct {
-	Code            string                                       `json:"code"`
-	Feedback        string                                       `json:"feedback"`
-	Details         map[string]any                               `json:"details,omitempty"`
-	DeliveryFailure *toolexecution.ProgramRefusalDeliveryFailure `json:"delivery_failure,omitempty"`
 }
 
 // Run parses and validates the whole submitted program before any effect,

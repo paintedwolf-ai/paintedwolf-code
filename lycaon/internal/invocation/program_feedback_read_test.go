@@ -101,3 +101,43 @@ func TestProgramFeedbackTargetsRequestedIterationNotLastStoppedChild(t *testing.
 		t.Fatalf("feedback substituted later loop child: %+v", lease.Execution)
 	}
 }
+
+func TestProgramFeedbackBoundsNonzeroExecutions(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	var executions []string
+	for _, status := range []int{1, 0, 7, 2} {
+		child := f.child(t)
+		f.start(t, child)
+		id := child.Invocation().Identity.ExecutionID
+		executions = append(executions, id)
+		testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), id, toolcontract.ProgramChildSettlement{
+			Result: toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, OwnerInvoked: true,
+		}))
+	}
+	held := int64(0)
+	admission := feedbackAdmissionFunc(func(_ context.Context, n int64) (func(), error) {
+		held += n
+		return func() { held -= n }, nil
+	})
+	lease, err := f.recorder.ReadProgramOutcomeFeedback(t.Context(), f.session, f.program, 2, admission)
+	testutil.FailErr(t, "project bounded nonzero children", err)
+	p := lease.Projection
+	if p.NonzeroExecutions != 3 || p.OmittedNonzero != 1 || len(p.Nonzero) != 2 {
+		t.Fatalf("nonzero accounting = %+v", p)
+	}
+	for i, child := range p.Nonzero {
+		if child.Receipt.ID != executions[3-i] || child.Receipt.StatusCode == nil || *child.Receipt.StatusCode == 0 || !child.Receipt.OwnerInvoked || child.SourceUnitID != "submitted" || child.Span != f.span {
+			t.Fatalf("lost child identity or status: %+v", child)
+		}
+	}
+	if held != lease.RequiredStateBytes {
+		t.Fatalf("state admission = %d want %d", held, lease.RequiredStateBytes)
+	}
+	lease.Close()
+	if held != 0 {
+		t.Fatalf("leaked state admission: %d", held)
+	}
+	if _, err := f.recorder.ProjectProgram(t.Context(), "other-session", f.program, 2); err == nil {
+		t.Fatal("projection crossed session boundary")
+	}
+}

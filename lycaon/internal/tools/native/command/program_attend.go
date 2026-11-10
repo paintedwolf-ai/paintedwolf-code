@@ -306,6 +306,7 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
 		if run.tc.Execution.VerificationCheck && run.tc.Effects.Out.SourceRun != nil {
 			outcome.Outcome = run.tc.Effects.Out.SourceRun.Verdict
+			outcome.Verification = &ProgramVerification{Scope: "program", ProgramID: outcome.ProgramID, SourceRef: "output:program-source:" + outcome.ProgramID, Verdict: outcome.Outcome}
 		}
 	}
 	if run.tool == "verify" {
@@ -360,7 +361,7 @@ func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resol
 	case outcome.Status != 0:
 		verdict = api.SourceVerdictFailed
 	}
-	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
+	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, ProgramID: outcome.ProgramID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
 	if tc.Execution.VerificationCheck && verification != nil {
 		identity := verification()
 		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root
