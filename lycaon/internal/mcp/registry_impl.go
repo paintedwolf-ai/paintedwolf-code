@@ -235,7 +235,7 @@ func (r *ProviderCatalog) loadLocked(ctx context.Context, reconcilePending bool)
 		})
 		user = &UserMCPConfig{}
 	} else {
-		hydrated, migErr := migrateAndHydrateUserOverlay(r.statePath, r.globalPath, user, reconcilePending)
+		hydrated, migErr := migrateAndHydrateUserOverlay(r.statePath, r.globalPath, user, reconcilePending, r.recoveryHook)
 		if migErr != nil {
 			return fmt.Errorf("mcp static credentials: %w", migErr)
 		}

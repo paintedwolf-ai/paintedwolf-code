@@ -262,7 +262,7 @@ func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope Ca
 		}); err != nil {
 			return err
 		}
-		return saveUserMCPConfig(path, *cfg)
+		return tx.saveConfig(path, *cfg)
 	}, func(txCtx context.Context) error {
 		row, ok := r.Catalog.GetProvider(txCtx, scope, id)
 		if !ok || row.Status == api.McpStatusRejected {
@@ -270,7 +270,7 @@ func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope Ca
 			if ok && row.LastError != "" {
 				reason = row.LastError
 			}
-			return AdminErrID(reason, id)
+			return tx.onValidateReject(AdminErrID(reason, id))
 		}
 		if err := tx.commit(); err != nil {
 			return err
@@ -278,7 +278,7 @@ func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope Ca
 		created = row
 		return nil
 	}, tx.rollback)
-	if err = tx.finish(r.overlayPathFor(scopeProjectDir), err); err != nil {
+	if err != nil {
 		return api.McpProvider{}, persistErr(err)
 	}
 	return created, nil
@@ -393,18 +393,18 @@ func (r *ProviderAdministration) UpdateProvider(ctx context.Context, scope CallS
 		}); err != nil {
 			return err
 		}
-		return saveUserMCPConfig(path, *cfg)
+		return tx.saveConfig(path, *cfg)
 	}, func(txCtx context.Context) error {
 		row, ok := r.Catalog.GetProvider(txCtx, scope, providerID)
 		if !ok {
-			return ErrUnknownMCPProvider(providerID)
+			return tx.onValidateReject(ErrUnknownMCPProvider(providerID))
 		}
 		if row.Status == api.McpStatusRejected {
 			reason := RejectInvalidEntry
 			if row.LastError != "" {
 				reason = row.LastError
 			}
-			return AdminErrID(reason, providerID)
+			return tx.onValidateReject(AdminErrID(reason, providerID))
 		}
 		if err := tx.commit(); err != nil {
 			return err
@@ -412,7 +412,7 @@ func (r *ProviderAdministration) UpdateProvider(ctx context.Context, scope CallS
 		updated = row
 		return nil
 	}, tx.rollback)
-	if err = tx.finish(r.overlayPathFor(scopeProjectDir), err); err != nil {
+	if err != nil {
 		return api.McpProvider{}, persistErr(err)
 	}
 	return updated, nil
@@ -544,11 +544,11 @@ func (r *ProviderAdministration) DeleteOverlay(ctx context.Context, providerID, 
 		}); err != nil {
 			return err
 		}
-		return writeOrRemoveUserMCPConfig(path, *cfg)
+		return tx.writeOrRemoveConfig(path, *cfg)
 	}, func(context.Context) error {
 		return tx.commit()
 	}, tx.rollback)
-	if err = tx.finish(r.overlayPathFor(scopeProjectDir), err); err != nil {
+	if err != nil {
 		return persistErr(err)
 	}
 	r.Connections.closeProviderSessions(providerID)

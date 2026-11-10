@@ -17,6 +17,11 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
+// ErrSimulatedCrash aborts UpdateFile immediately at the persistent-prefix
+// boundary where it is returned, without running post-failure file or
+// companion rollback.
+var ErrSimulatedCrash = errors.New("simulated process crash")
+
 // FileUpdate changes one durable catalog generation and its runtime projection.
 // Publication or validation failure restores both.
 type FileUpdate struct {
@@ -65,27 +70,39 @@ func UpdateFile(ctx context.Context, update FileUpdate) error {
 		return fmt.Errorf("catalog transaction snapshot: %w", err)
 	}
 	if err := update.Apply(); err != nil {
-		var sideRollbackErr error
-		if update.Rollback != nil {
-			sideRollbackErr = update.Rollback()
+		if errors.Is(err, ErrSimulatedCrash) {
+			return err
 		}
 		fileRollbackErr := restoreCatalogFile(target, before, existed, update.Mode, update.DirMode)
+		var sideRollbackErr error
+		if fileRollbackErr == nil && update.Rollback != nil {
+			sideRollbackErr = update.Rollback()
+			if errors.Is(sideRollbackErr, ErrSimulatedCrash) {
+				return errors.Join(err, sideRollbackErr)
+			}
+		}
 		if sideRollbackErr != nil || fileRollbackErr != nil {
 			return errors.Join(
 				err,
-				wrapRollbackError("catalog transaction companion rollback after write failure", sideRollbackErr),
 				wrapRollbackError("catalog transaction rollback after write failure", fileRollbackErr),
+				wrapRollbackError("catalog transaction companion rollback after write failure", sideRollbackErr),
 			)
 		}
 		return err
 	}
 	if update.Publish != nil {
 		if err := update.Publish(); err != nil {
+			if errors.Is(err, ErrSimulatedCrash) {
+				return err
+			}
 			return rollbackPublishedUpdate(err, update, target, before, existed)
 		}
 	}
 	if update.Validate != nil {
 		if err := update.Validate(); err != nil {
+			if errors.Is(err, ErrSimulatedCrash) {
+				return err
+			}
 			return rollbackPublishedUpdate(err, update, target, before, existed)
 		}
 	}
@@ -93,11 +110,14 @@ func UpdateFile(ctx context.Context, update FileUpdate) error {
 }
 
 func rollbackPublishedUpdate(cause error, update FileUpdate, target string, before []byte, existed bool) error {
-	var sideRollbackErr error
-	if update.Rollback != nil {
-		sideRollbackErr = update.Rollback()
-	}
 	fileRollbackErr := restoreCatalogFile(target, before, existed, update.Mode, update.DirMode)
+	var sideRollbackErr error
+	if fileRollbackErr == nil && update.Rollback != nil {
+		sideRollbackErr = update.Rollback()
+		if errors.Is(sideRollbackErr, ErrSimulatedCrash) {
+			return errors.Join(cause, sideRollbackErr)
+		}
+	}
 	var publishRollbackErr error
 	if fileRollbackErr == nil && update.Publish != nil {
 		publishRollbackErr = update.Publish()
@@ -105,8 +125,8 @@ func rollbackPublishedUpdate(cause error, update FileUpdate, target string, befo
 	if sideRollbackErr != nil || fileRollbackErr != nil || publishRollbackErr != nil {
 		return errors.Join(
 			cause,
-			wrapRollbackError("catalog transaction companion rollback", sideRollbackErr),
 			wrapRollbackError("catalog transaction file rollback", fileRollbackErr),
+			wrapRollbackError("catalog transaction companion rollback", sideRollbackErr),
 			wrapRollbackError("catalog transaction rollback publication", publishRollbackErr),
 		)
 	}

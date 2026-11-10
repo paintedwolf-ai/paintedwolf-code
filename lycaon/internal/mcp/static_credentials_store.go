@@ -152,7 +152,12 @@ func (s *StaticCredentialStore) RemoveRecord(providerID string) error {
 // reconcilePending is true), migrates and scrubs any inline credentials in
 // user mcp.yaml (Vault-First, Scrub-Second), and hydrates stored credentials
 // into the returned in-memory UserMCPConfig.
-func migrateAndHydrateUserOverlay(statePath, globalPath string, user *UserMCPConfig, reconcilePending bool) (*UserMCPConfig, error) {
+func migrateAndHydrateUserOverlay(
+	statePath, globalPath string,
+	user *UserMCPConfig,
+	reconcilePending bool,
+	recoveryHook func(stage, providerID string) error,
+) (*UserMCPConfig, error) {
 	if user == nil {
 		return &UserMCPConfig{}, nil
 	}
@@ -197,25 +202,17 @@ func migrateAndHydrateUserOverlay(statePath, globalPath string, user *UserMCPCon
 	}
 
 	// Pass 2: Reconcile interrupted PendingCommit records only outside an active
-	// in-process overlay transaction.
+	// in-process overlay transaction. Restore mcp.yaml on disk FIRST while
+	// uncommitted PendingCommit records remain durably in the vault, then clear
+	// or restore vault records so any interruption during recovery is idempotent.
 	if reconcilePending {
 		configChanged := false
 		for _, id := range ids {
 			rec, ok := records[id]
-			if !ok || rec.PendingCommit == nil {
+			if !ok || rec.PendingCommit == nil || rec.PendingCommit.Committed {
 				continue
 			}
 			pending := rec.PendingCommit
-			if pending.Committed {
-				rec.PendingCommit = nil
-				if err := store.PutVerified(id, rec); err != nil {
-					return nil, fmt.Errorf("finalize mcp credential commit for %q: %w", id, err)
-				}
-				continue
-			}
-			if err := store.RestoreSnapshot(id, pending.Previous); err != nil {
-				return nil, fmt.Errorf("recover uncommitted mcp credential for %q: %w", id, err)
-			}
 			curOv, hasCurOv := findProviderOverlayRow(user, id)
 			if pending.HadPreviousOverlay && pending.PreviousOverlay != nil {
 				wantOv := cloneProviderOverlay(*pending.PreviousOverlay)
@@ -229,8 +226,40 @@ func migrateAndHydrateUserOverlay(statePath, globalPath string, user *UserMCPCon
 			}
 		}
 		if configChanged && strings.TrimSpace(globalPath) != "" {
+			if recoveryHook != nil {
+				if err := recoveryHook("before_recovery_config_write", ""); err != nil {
+					return nil, fmt.Errorf("restore uncommitted mcp.yaml overlay: %w", err)
+				}
+			}
 			if err := writeOrRemoveUserMCPConfig(globalPath, *user); err != nil {
 				return nil, fmt.Errorf("restore uncommitted mcp.yaml overlay: %w", err)
+			}
+			if recoveryHook != nil {
+				if err := recoveryHook("after_recovery_config_write_before_vault_restore", ""); err != nil {
+					return nil, err
+				}
+			}
+		}
+		for _, id := range ids {
+			rec, ok := records[id]
+			if !ok || rec.PendingCommit == nil {
+				continue
+			}
+			pending := rec.PendingCommit
+			if pending.Committed {
+				rec.PendingCommit = nil
+				if err := store.PutVerified(id, rec); err != nil {
+					return nil, fmt.Errorf("finalize mcp credential commit for %q: %w", id, err)
+				}
+				continue
+			}
+			if recoveryHook != nil {
+				if err := recoveryHook("before_recovery_vault_restore", id); err != nil {
+					return nil, err
+				}
+			}
+			if err := store.RestoreSnapshot(id, pending.Previous); err != nil {
+				return nil, fmt.Errorf("recover uncommitted mcp credential for %q: %w", id, err)
 			}
 		}
 		needsMigration = hasInlineOverlayCredentials(user.Providers)
