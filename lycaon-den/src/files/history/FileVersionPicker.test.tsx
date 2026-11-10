@@ -4,10 +4,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { PRESENTATION_LOADING_GRACE_MS } from "../../ui/presentation.ts";
 import type {
+  EditorDocumentChange,
   SourceFileCommit,
   SourceFileVersion,
   SourceGitChange,
 } from "../../api/types.ts";
+import { stubClient } from "../../test/client-fixture.ts";
 import { FileVersionPicker } from "./FileVersionPicker.tsx";
 import {
   fileVersionTitle,
@@ -126,6 +128,54 @@ function mount(props: Partial<Parameters<typeof FileVersionPicker>[0]> = {}) {
 
 describe("FileVersionPicker", () => {
   afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+  it("places a busy turn's edits inline and shows five undo rows per page", async () => {
+    const edited = { ...version("edited"), session_id: "turn-session" };
+    const created = version("created", "create");
+    const changes: EditorDocumentChange[] = Array.from({ length: 124 }, (_, index) => ({
+      actor_kind: "agent", session_id: "turn-session", session_title: "Fix the game", turn: 1,
+      revision: 124 - index, epoch: 1, operation_id: `edit-${index}`, person_id: "", client_id: "",
+      reverted_by: "", created_at: edited.created_at,
+    }));
+    const client = stubClient({
+      listEditorDocumentChanges: async (_project: string, _document: string, cursor?: string) => {
+        const start = Number(cursor ?? 0);
+        const end = start + 50;
+        return { changes: changes.slice(start, end), next_cursor: end < changes.length ? String(end) : undefined };
+      },
+    });
+    mount({
+      history: history({ versions: [edited, created], commits: [commit()] }),
+      documentHistory: { client, projectId: "project", documentId: "game", onApplied: vi.fn() },
+    });
+    fireEvent.click(screen.getByTestId("file-version-trigger"));
+    await screen.findByText("50 edits from this turn");
+    fireEvent.click(screen.getByRole("button", { name: "Load earlier document edits" }));
+    await screen.findByText("100 edits from this turn");
+    fireEvent.click(screen.getByRole("button", { name: "Load earlier document edits" }));
+    const summary = await screen.findByText("124 edits from this turn");
+    const details = summary.closest("details")!;
+    const [editedRow, createdRow] = screen.getAllByTestId("file-version-title");
+    const editedOption = editedRow!.closest<HTMLElement>('[role="menuitemradio"]')!;
+    expect(editedOption.nextElementSibling).toBe(details);
+    editedOption.focus();
+    fireEvent.keyDown(editedOption, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(details.querySelector("summary"));
+    expect(details.nextElementSibling).toBe(createdRow!.closest('[role="menuitemradio"]'));
+    expect(screen.getByTestId("file-version-commit")).toBeTruthy();
+    expect(screen.queryAllByRole("button", { name: /^Undo edit/ })).toHaveLength(0);
+
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    expect(screen.getAllByRole("button", { name: /^Undo edit/ })).toHaveLength(5);
+    expect(screen.getByText("Page 1 of 25")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getAllByRole("button", { name: /^Undo edit/ })).toHaveLength(5);
+    expect(screen.getByText("Page 2 of 25")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undo edit 119" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+    expect(screen.getByText("Page 1 of 25")).toBeTruthy();
+  });
 
   it("marks an AI edit the working file never received", () => {
     mount({ history: history({ versions: [heldVersion("c9")] }) });

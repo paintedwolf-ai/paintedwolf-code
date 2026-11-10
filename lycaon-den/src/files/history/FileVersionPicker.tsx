@@ -1,4 +1,5 @@
-import { For, Show, createMemo, createSignal, type JSX } from "solid-js";
+import { DocumentChangeHistory, type DocumentHistorySource } from "./DocumentChangeHistory.tsx";
+import { For, Show, createMemo, createSignal } from "solid-js";
 import type { SourceFileVersion } from "../../api/types.ts";
 import { relativeTimeLabel } from "../../time/time-copy.ts";
 import { createPresentationWaiting } from "../../ui/presentation.ts";
@@ -6,6 +7,7 @@ import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
 import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
 import { AnchoredSurface } from "../../components/primitives/AnchoredSurface.tsx";
 import { Scrollport } from "../../components/primitives/Scrollport.tsx";
+import { ShowLatest } from "../../components/primitives/ShowLatest.tsx";
 import { revealElementInScrollport } from "../../platform/scrolling/scrollport-motion.ts";
 import {
   buildFileHistoryRows,
@@ -27,7 +29,7 @@ import {
 import { gitChangeAction, gitChangeRefs } from "../source/source-git-change.ts";
 
 type Props = {
-  editHistory?: (dismiss: () => void) => JSX.Element;
+  documentHistory?: DocumentHistorySource;
   selected: FileVersionView | null;
   /** The working file is gone; Current presents its last deletion. */
   currentAbsent?: boolean;
@@ -46,6 +48,8 @@ type Props = {
   onOpen: () => void;
   onLoadMore: () => void;
 };
+
+const historyFocusSelector = ".den-file-version__option:not([disabled]), .den-file-version__edits > summary";
 
 function selectedLabel(selected: FileVersionView | null): string {
   if (!selected) return "Current";
@@ -82,6 +86,10 @@ export function FileVersionPicker(props: Props) {
   const dismiss = () => setOpen(false);
   const history = createMemo(() => buildFileHistoryRows(props.history));
   const rows = () => history().rows;
+  const emptyHistory = () => props.history.status === "ready" &&
+    props.history.gitStatus === "ready" && gitLaneSettled(props.history.gitHistoryState) &&
+    rows().length === 0;
+  const emptyMessage = () => <div class="den-file-version__empty" data-testid="file-version-empty">No earlier versions</div>;
   const currentCommit = () => history().currentCommits[0];
 
   const handleSurfaceKeyDown = (event: KeyboardEvent) => {
@@ -89,7 +97,7 @@ export function FileVersionPicker(props: Props) {
       event.preventDefault();
       const items = Array.from(
         (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-          ".den-file-version__option:not([disabled])",
+          historyFocusSelector,
         ),
       );
       if (!items.length) return;
@@ -105,13 +113,13 @@ export function FileVersionPicker(props: Props) {
     } else if (event.key === "Home") {
       event.preventDefault();
       const items = (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-        ".den-file-version__option:not([disabled])",
+        historyFocusSelector,
       );
       items[0]?.focus();
     } else if (event.key === "End") {
       event.preventDefault();
       const items = (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-        ".den-file-version__option:not([disabled])",
+        historyFocusSelector,
       );
       items[items.length - 1]?.focus();
     }
@@ -340,8 +348,8 @@ export function FileVersionPicker(props: Props) {
         data-testid="file-version-trigger"
         data-tip={
           bindingForHandler("files.openVersionHistory")
-            ? `Version history (${bindingForHandler("files.openVersionHistory")})`
-            : "Version history"
+            ? `File history (${bindingForHandler("files.openVersionHistory")})`
+            : "File history"
         }
         data-tip-pos="below"
         aria-label={`File version: ${selectedLabel(props.selected)}`}
@@ -364,16 +372,15 @@ export function FileVersionPicker(props: Props) {
         <AnchoredSurface
           class="den-file-version__menu"
           role="menu"
-          ariaLabel="Version history"
+          ariaLabel="File history"
           anchor={() => triggerEl}
           preferredSide="bottom"
           align="end"
           onDismiss={dismiss}
           onKeyDown={handleSurfaceKeyDown}
         >
-          {props.editHistory?.(dismiss)}
           <div class="den-file-version__head">
-            <div class="den-file-version__heading">Version history</div>
+            <div class="den-file-version__heading">File history</div>
             <button
               type="button"
               class="den-file-version__option"
@@ -419,18 +426,26 @@ export function FileVersionPicker(props: Props) {
                 Loading history…
               </div>
             </Show>
-            {/* Empty history requires a definitive Git result. */}
-            <Show
-              when={
-                props.history.status === "ready" &&
-                props.history.gitStatus === "ready" &&
-                gitLaneSettled(props.history.gitHistoryState) &&
-                rows().length === 0
-              }
-            >
-              <div class="den-file-version__empty" data-testid="file-version-empty">No earlier versions</div>
-            </Show>
-            <For each={rows()}>{historyRow}</For>
+            <ShowLatest when={props.documentHistory} fallback={
+              <>
+                <Show when={emptyHistory()}>{emptyMessage()}</Show>
+                <For each={rows()}>{historyRow}</For>
+              </>
+            }>
+              {(source) => (
+                <DocumentChangeHistory
+                  {...source()}
+                  rows={rows()}
+                  renderRow={historyRow}
+                  emptyMessage={emptyHistory() ? emptyMessage() : undefined}
+                  onApplied={() => {
+                    const onApplied = source().onApplied;
+                    dismiss();
+                    onApplied();
+                  }}
+                />
+              )}
+            </ShowLatest>
             <Show
               when={
                 props.history.status === "ready" &&

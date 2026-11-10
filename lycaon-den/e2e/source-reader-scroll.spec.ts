@@ -41,7 +41,7 @@ modelIndependentWebE2e("historical CodeMirror reserves unloaded ranges and reach
     if (/\/source\/views\/[^/]+\/presentations\/[^/]+\/rows$/.test(url.pathname)) offsets.push(Number(url.searchParams.get("offset") ?? 0));
   });
   await page.getByTestId("file-version-trigger").click();
-  const historyMenu = page.getByRole("menu", { name: "Version history" });
+  const historyMenu = page.getByRole("menu", { name: "File history" });
   await expect.poll(() => historyMenu.getByRole("menuitemradio").count()).toBeGreaterThan(1);
   await historyMenu.getByRole("menuitemradio").last().click();
   const reader = page.getByTestId("source-reader").filter({ visible: true });
@@ -117,7 +117,7 @@ modelIndependentWebE2e("switching summarized historical diffs never paints the f
   for (const version of [1, 2]) await saveRetainedFixture(request, source, options, text(version));
   await treeFile(page, "switch.txt").click();
   await page.getByTestId("file-version-trigger").click();
-  const menu = page.getByRole("menu", { name: "Version history" });
+  const menu = page.getByRole("menu", { name: "File history" });
   await expect.poll(() => menu.getByRole("menuitemradio").count()).toBeGreaterThan(2);
   await menu.getByRole("menuitemradio").last().click();
   const history = page.getByTestId("file-version-file").filter({ visible: true });
