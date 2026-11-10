@@ -13,6 +13,7 @@ import {
   Decoration,
   type DecorationSet,
   EditorView,
+  type Rect,
   WidgetType,
 } from "@codemirror/view";
 import {
@@ -53,6 +54,40 @@ export {
   scanLineLexicalBoundaries,
 } from "./pretty-line-scanners.ts";
 
+function measureRightEdgeBeforeBreak(dom: HTMLElement): Rect | null {
+  let cur: Node | null = dom.previousSibling;
+  while (
+    cur &&
+    cur instanceof HTMLElement &&
+    (cur.classList.contains("pw-virtual-indent") ||
+      cur.classList.contains("pw-virtual-break") ||
+      cur.classList.contains("cm-widgetBuffer"))
+  ) {
+    cur = cur.previousSibling;
+  }
+  if (!cur) return null;
+  if (cur.nodeType === Node.TEXT_NODE) {
+    const text = cur.nodeValue ?? "";
+    const doc = dom.ownerDocument;
+    if (typeof doc.createRange !== "function") return null;
+    const range = doc.createRange();
+    range.setStart(cur, Math.max(0, text.length - 1));
+    range.setEnd(cur, text.length);
+    const rects = range.getClientRects();
+    const r = rects[rects.length - 1];
+    if (r && r.height > 0) {
+      return { left: r.right, right: r.right, top: r.top, bottom: r.bottom };
+    }
+  } else if (cur instanceof HTMLElement) {
+    const rects = cur.getClientRects();
+    const r = rects[rects.length - 1];
+    if (r && r.height > 0) {
+      return { left: r.right, right: r.right, top: r.top, bottom: r.bottom };
+    }
+  }
+  return null;
+}
+
 export class PrettyBreakWidget extends WidgetType {
   override toDOM(): HTMLElement {
     const el = document.createElement("br");
@@ -65,8 +100,8 @@ export class PrettyBreakWidget extends WidgetType {
     return 1;
   }
 
-  get isHidden(): boolean {
-    return true;
+  override coordsAt(dom: HTMLElement, _pos: number, _side: number): Rect | null {
+    return measureRightEdgeBeforeBreak(dom);
   }
 
   override eq(other: WidgetType): boolean {
@@ -84,8 +119,8 @@ export class PrettyIndentWidget extends WidgetType {
     this.indentWidthCh = indentWidthCh;
   }
 
-  get isHidden(): boolean {
-    return true;
+  override coordsAt(dom: HTMLElement, _pos: number, _side: number): Rect | null {
+    return measureRightEdgeBeforeBreak(dom);
   }
 
   override eq(other: WidgetType): boolean {

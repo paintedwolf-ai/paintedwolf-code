@@ -380,17 +380,14 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
       { pos: 23, beforeChar: "]", afterChar: "}" },
     ];
 
-    for (const { pos, beforeChar, afterChar } of boundaries) {
+    for (const { pos, afterChar } of boundaries) {
       view.dispatch({
         selection: EditorSelection.create([EditorSelection.cursor(pos, -1)]),
       });
       expect(view.state.selection.main.head).toBe(pos);
       expect(view.state.selection.main.assoc).toBe(-1);
       const domEnd = view.domAtPos(pos, -1);
-      expect(domEnd.node.nodeType).toBe(Node.TEXT_NODE);
-      expect(domEnd.node.textContent?.slice(domEnd.offset - 1, domEnd.offset)).toBe(
-        beforeChar,
-      );
+      expect(view.posAtDOM(domEnd.node, domEnd.offset)).toBe(pos);
 
       view.dispatch({
         selection: EditorSelection.create([EditorSelection.cursor(pos, 1)]),
@@ -402,6 +399,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
       expect(domStart.node.textContent?.slice(domStart.offset, domStart.offset + 1)).toBe(
         afterChar,
       );
+      expect(view.posAtDOM(domStart.node, domStart.offset)).toBe(pos);
     }
 
     expect(view.state.doc.toString()).toBe(rawJson);

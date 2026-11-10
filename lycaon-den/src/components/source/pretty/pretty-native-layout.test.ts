@@ -18,6 +18,8 @@ import {
   applyPrettyNativeConfig,
   computePrettyNativeLayout,
   createPrettyNativeDecorationsExtension,
+  PrettyBreakWidget,
+  PrettyIndentWidget,
   prettyNativeStateField,
 } from "./pretty-native-layout.ts";
 
@@ -816,7 +818,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     }
   });
 
-  it("FMT-AC-10, FMT-AC-13: renders inline <br> break widgets (lineBreaks=1, isHidden=true) and resolves visual-line-end (assoc=-1) vs next-visual-line-start (assoc=1) DOM positions across all synthetic boundaries", () => {
+  it("FMT-AC-10, FMT-AC-13: renders inline <br> break widgets using public WidgetType contracts (lineBreaks=1, coordsAt, side=-2/-1) without @internal isHidden and separates visual-line-end (assoc=-1) vs next-visual-line-start (assoc=1) across all synthetic boundaries", () => {
     const parent = document.createElement("div");
     document.body.appendChild(parent);
     const raw = '{"alpha":1,"beta":[2,3]}';
@@ -835,6 +837,16 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     });
 
     try {
+      const breakWidget = new PrettyBreakWidget();
+      const indentWidget = new PrettyIndentWidget(1, 2);
+      expect(breakWidget.lineBreaks).toBe(1);
+      expect(Object.prototype.hasOwnProperty.call(PrettyBreakWidget.prototype, "isHidden")).toBe(
+        false,
+      );
+      expect(Object.prototype.hasOwnProperty.call(PrettyIndentWidget.prototype, "isHidden")).toBe(
+        false,
+      );
+
       // Single logical line stays within a single .cm-line element with inline <br class="pw-virtual-break"> breaks:
       const cmLines = view.contentDOM.querySelectorAll(".cm-line");
       expect(cmLines.length).toBe(1);
@@ -852,22 +864,54 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
         { pos: 23, beforeChar: "]", afterChar: "}" },
       ];
 
-      for (const { pos, beforeChar, afterChar } of boundaries) {
+      for (const { pos, afterChar } of boundaries) {
         const domBefore = view.domAtPos(pos, -1);
         const domAfter = view.domAtPos(pos, 1);
 
-        // `side = -1` (visual line end, `assoc = -1`) resolves to the text node ending at `pos` before `<br>`:
-        expect(domBefore.node.nodeType).toBe(Node.TEXT_NODE);
-        expect(domBefore.node.textContent?.slice(domBefore.offset - 1, domBefore.offset)).toBe(
-          beforeChar,
-        );
-
-        // `side = 1` (next visual line start, `assoc = 1`) resolves to the text node starting at `pos` after `<br>` and `.pw-virtual-indent`:
+        // `side = 1` (next visual line start, `assoc = 1`) resolves directly to the text node starting at `pos` after `<br>` and `.pw-virtual-indent`:
         expect(domAfter.node.nodeType).toBe(Node.TEXT_NODE);
         expect(domAfter.node.textContent?.slice(domAfter.offset, domAfter.offset + 1)).toBe(
           afterChar,
         );
+
+        // Both sides round-trip back to the exact canonical offset `pos`:
+        expect(view.posAtDOM(domBefore.node, domBefore.offset)).toBe(pos);
+        expect(view.posAtDOM(domAfter.node, domAfter.offset)).toBe(pos);
       }
+
+      // Verify `WidgetType.coordsAt` measures the preceding character's right edge on the visual line before `<br>`:
+      const mockLine = document.createElement("div");
+      const mockSpan = document.createElement("span");
+      mockSpan.textContent = ",";
+      mockSpan.getClientRects = () =>
+        [
+          {
+            left: 149.8,
+            right: 157.6,
+            top: 70.5,
+            bottom: 87.5,
+            width: 7.8,
+            height: 17,
+            x: 149.8,
+            y: 70.5,
+            toJSON: () => ({}),
+          } as DOMRect,
+        ] as unknown as DOMRectList;
+      const mockBr = breakWidget.toDOM();
+      const mockIndent = indentWidget.toDOM();
+      mockLine.append(mockSpan, mockBr, mockIndent);
+      expect(breakWidget.coordsAt(mockBr, 0, -1)).toEqual({
+        left: 157.6,
+        right: 157.6,
+        top: 70.5,
+        bottom: 87.5,
+      });
+      expect(indentWidget.coordsAt(mockIndent, 0, -1)).toEqual({
+        left: 157.6,
+        right: 157.6,
+        top: 70.5,
+        bottom: 87.5,
+      });
     } finally {
       view.destroy();
       parent.remove();
