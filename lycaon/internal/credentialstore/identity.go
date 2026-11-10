@@ -37,6 +37,10 @@ func decodeIdentityDocument(data []byte) (identityDocument, error) {
 // unavailableIdentityProvider refuses access without an operating-system custodian.
 type unavailableIdentityProvider struct{ refusal error }
 
+func (unavailableIdentityProvider) custodyKey() providerCustodyKey {
+	return providerCustodyKey{mode: CustodyUnavailable}
+}
+
 func (unavailableIdentityProvider) Describe() string {
 	return "native credential custodian unavailable"
 }

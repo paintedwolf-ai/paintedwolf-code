@@ -171,12 +171,87 @@ func TestLegacyHostIdentityUnlinkErrorIsSurfaced(t *testing.T) {
 	_, err := LoadOrCreate(dir)
 	testutil.FailErr(t, "create vault identity", err)
 
-	// Place a non-empty directory at host-identity.pem so os.Remove fails with non-ErrNotExist.
+	// Place a non-empty directory at host-identity.pem so inspecting/removing it fails with non-ErrNotExist.
 	legacyPath := filepath.Join(dir, FileName)
 	testutil.FailErr(t, "mkdir at legacy path", os.MkdirAll(filepath.Join(legacyPath, "child"), 0o700))
 	if _, err := LoadOrCreate(dir); err == nil {
-		t.Fatal("expected non-ErrNotExist unlink failure to be surfaced")
+		t.Fatal("expected non-ErrNotExist legacy inspection/unlink failure to be surfaced")
 	}
+}
+
+func TestVaultIdentityPreservesCorruptOrMismatchedCoexistingLegacyFile(t *testing.T) {
+	t.Run("corrupt legacy file alongside valid vault identity", func(t *testing.T) {
+		dir := t.TempDir()
+		vaultID, err := LoadOrCreate(dir)
+		testutil.FailErr(t, "create vault identity", err)
+
+		legacyPath := filepath.Join(dir, FileName)
+		corruptBytes := []byte("corrupt-coexisting-legacy-artifact")
+		testutil.FailErr(t, "write corrupt legacy file", os.WriteFile(legacyPath, corruptBytes, 0o600))
+
+		if _, err := LoadOrCreate(dir); err == nil {
+			t.Fatal("expected error when corrupt legacy file coexists with vault identity")
+		}
+		gotLegacy, err := os.ReadFile(legacyPath)
+		testutil.FailErr(t, "read preserved corrupt legacy file", err)
+		if string(gotLegacy) != string(corruptBytes) {
+			t.Fatal("corrupt legacy file was deleted or modified")
+		}
+		testutil.FailErr(t, "remove corrupt legacy file", os.Remove(legacyPath))
+		reloaded, err := LoadOrCreate(dir)
+		testutil.FailErr(t, "reload vault identity after cleanup", err)
+		if reloaded.HostID != vaultID.HostID {
+			t.Fatalf("vault identity changed: got %s, want %s", reloaded.HostID, vaultID.HostID)
+		}
+	})
+
+	t.Run("mismatched valid legacy key alongside valid vault identity", func(t *testing.T) {
+		dir := t.TempDir()
+		vaultID, err := LoadOrCreate(dir)
+		testutil.FailErr(t, "create vault identity", err)
+
+		otherPEM, err := generatePEM()
+		testutil.FailErr(t, "generate second pem", err)
+		legacyPath := filepath.Join(dir, FileName)
+		testutil.FailErr(t, "write mismatched legacy pem", os.WriteFile(legacyPath, []byte(otherPEM), 0o600))
+
+		if _, err := LoadOrCreate(dir); err == nil {
+			t.Fatal("expected conflict error when mismatched legacy key coexists with vault identity")
+		}
+		gotLegacy, err := os.ReadFile(legacyPath)
+		testutil.FailErr(t, "read preserved mismatched legacy file", err)
+		if string(gotLegacy) != otherPEM {
+			t.Fatal("mismatched legacy file was deleted or modified")
+		}
+		testutil.FailErr(t, "remove mismatched legacy file", os.Remove(legacyPath))
+		reloaded, err := LoadOrCreate(dir)
+		testutil.FailErr(t, "reload vault identity after cleanup", err)
+		if reloaded.HostID != vaultID.HostID {
+			t.Fatalf("vault identity was overwritten: got %s, want %s", reloaded.HostID, vaultID.HostID)
+		}
+	})
+
+	t.Run("matching coexisting legacy key from interrupted import is cleaned up", func(t *testing.T) {
+		dir := t.TempDir()
+		matchingPEM, err := generatePEM()
+		testutil.FailErr(t, "generate pem", err)
+		legacyPath := filepath.Join(dir, FileName)
+		testutil.FailErr(t, "write legacy pem", os.WriteFile(legacyPath, []byte(matchingPEM), 0o600))
+
+		first, err := LoadOrCreate(dir)
+		testutil.FailErr(t, "initial import", err)
+
+		// Simulate interrupted unlink by writing the identical PEM back to legacyPath.
+		testutil.FailErr(t, "recreate matching legacy pem", os.WriteFile(legacyPath, []byte(matchingPEM), 0o600))
+		second, err := LoadOrCreate(dir)
+		testutil.FailErr(t, "resume interrupted import cleanup", err)
+		if second.HostID != first.HostID {
+			t.Fatalf("host id = %s, want %s", second.HostID, first.HostID)
+		}
+		if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("matching legacy file was not removed: %v", err)
+		}
+	})
 }
 
 func TestConcurrentLoadOrCreateConverges(t *testing.T) {

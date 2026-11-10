@@ -65,6 +65,7 @@ func LoadOrCreate(configDir string) (Identity, error) {
 	slot := SlotForDir(configDir)
 	legacyPath := filepath.Join(configDir, FileName)
 	var resolved Identity
+	importedLegacy := false
 	_, err := credentialstore.LoadOrInit(
 		slot,
 		hostIdentitySlotID,
@@ -82,6 +83,7 @@ func LoadOrCreate(configDir string) (Identity, error) {
 				if _, err := parsePEM(legacyPath, data); err != nil {
 					return "", err
 				}
+				importedLegacy = true
 				return string(data), nil
 			}
 			if !errors.Is(err, os.ErrNotExist) {
@@ -90,6 +92,22 @@ func LoadOrCreate(configDir string) (Identity, error) {
 			return generatePEM()
 		},
 		func() error {
+			if !importedLegacy {
+				data, err := os.ReadFile(legacyPath) // #nosec G304 -- fixed name under the engine config directory
+				if errors.Is(err, os.ErrNotExist) {
+					return nil
+				}
+				if err != nil {
+					return fmt.Errorf("inspect legacy %s: %w", legacyPath, err)
+				}
+				legacyID, err := parsePEM(legacyPath, data)
+				if err != nil {
+					return err
+				}
+				if legacyID.HostID != resolved.HostID || !legacyID.PublicKey.Equal(resolved.PublicKey) {
+					return fmt.Errorf("%s: host identity %s conflicts with vault host identity %s", legacyPath, legacyID.HostID, resolved.HostID)
+				}
+			}
 			if err := os.Remove(legacyPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 				return fmt.Errorf("remove legacy %s: %w", legacyPath, err)
 			}

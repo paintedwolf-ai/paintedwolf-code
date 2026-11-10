@@ -25,6 +25,7 @@ type identityItems interface {
 // itemsIdentityProvider keeps one vault's identity with a custodian under an
 // account bound to the configuration root.
 type itemsIdentityProvider struct {
+	mode        CustodyMode
 	account     string
 	description string
 	items       identityItems
@@ -34,6 +35,10 @@ func identityAccount(vaultPath string) string {
 	// Configuration roots have separate identity accounts.
 	digest := sha256.Sum256([]byte(filepath.Clean(vaultPath)))
 	return fmt.Sprintf("age-x25519-identity-v1:%x", digest)
+}
+
+func (p *itemsIdentityProvider) custodyKey() providerCustodyKey {
+	return providerCustodyKey{mode: p.mode, account: p.account}
 }
 
 func (p *itemsIdentityProvider) Describe() string { return p.description }

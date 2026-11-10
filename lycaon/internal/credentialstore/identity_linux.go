@@ -57,9 +57,12 @@ func probeCustody(client *vaultidentity.Client) custody {
 func (c custody) provider(path string) identityProvider {
 	switch c.mode {
 	case custodyService:
-		return &itemsIdentityProvider{account: identityAccount(path),
+		return &itemsIdentityProvider{
+			mode:        CustodyIdentityService,
+			account:     identityAccount(path),
 			description: "identity held by the Painted Wolf Code vault identity service",
-			items:       serviceItems{client: c.client}}
+			items:       serviceItems{client: c.client},
+		}
 	case custodyRefused:
 		return refusedIdentityProvider{refusal: c.refusal}
 	default:
@@ -122,6 +125,10 @@ func (s serviceItems) remove(account string) error {
 // holds the identity and must verify the installed launcher.
 type refusedIdentityProvider struct {
 	refusal error
+}
+
+func (refusedIdentityProvider) custodyKey() providerCustodyKey {
+	return providerCustodyKey{mode: CustodyRefused}
 }
 
 func (refusedIdentityProvider) Describe() string {
