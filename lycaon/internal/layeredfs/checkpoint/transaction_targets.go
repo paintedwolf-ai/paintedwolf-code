@@ -93,6 +93,9 @@ func (txn *Transaction) captureTree(path layeredfs.QualifiedPath, images map[lay
 		return err
 	}
 	images[path] = image
+	if txn.freshCaptures != nil {
+		txn.freshCaptures[path] = image
+	}
 	if image.Kind != layeredfs.EntryDirectory {
 		return nil
 	}
@@ -124,6 +127,7 @@ func (txn *Transaction) captureTree(path layeredfs.QualifiedPath, images map[lay
 // A path an earlier stage recorded keeps its first before-image, which is what rollback restores.
 func (txn *Transaction) addTargets(changes []PlannedChange) error {
 	txn.keepOriginals = true
+	txn.freshCaptures = make(map[layeredfs.QualifiedPath]targetImage, len(changes))
 	defer func() { txn.keepOriginals = false }()
 	before := make(map[layeredfs.QualifiedPath]targetImage, len(txn.journal.Targets))
 	after := make(map[layeredfs.QualifiedPath]targetImage, len(txn.journal.Targets))

@@ -61,6 +61,7 @@ type Transaction struct {
 	origins       map[string]layeredfs.QualifiedPath
 	slots         map[string]string
 	locations     map[string]string
+	freshCaptures map[layeredfs.QualifiedPath]targetImage
 	keepOriginals bool
 	closed        bool
 }
@@ -242,7 +243,10 @@ func (txn *Transaction) mutateTargets(ctx context.Context, changes []PlannedChan
 		return err
 	}
 	txn.targets.recordPostimage = txn.recordPostimage
-	defer func() { txn.targets.recordPostimage = nil }()
+	defer func() {
+		txn.targets.recordPostimage = nil
+		txn.freshCaptures = nil
+	}()
 	for _, change := range changes {
 		if err := context.Cause(ctx); err != nil {
 			return err
@@ -274,9 +278,15 @@ func (txn *Transaction) verifyRecorded(change PlannedChange, hasFault bool) (boo
 	if change.Action == ActionNoop || change.Action == ActionMkdir {
 		return false, nil
 	}
-	current, err := txn.captureTarget(change.Path)
-	if err != nil {
-		return false, err
+	current, cached := txn.freshCaptures[change.Path]
+	if cached && txn.cfg.Reached == nil && !hasFault {
+		delete(txn.freshCaptures, change.Path)
+	} else {
+		var err error
+		current, err = txn.captureTarget(change.Path)
+		if err != nil {
+			return false, err
+		}
 	}
 	idx, known := txn.index[change.Path]
 	if !known {

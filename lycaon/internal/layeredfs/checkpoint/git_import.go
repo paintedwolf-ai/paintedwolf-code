@@ -309,10 +309,15 @@ func applyCheckpointRefTransaction(
 			}
 		}
 	}
+	_, lycaonErr := os.Lstat(filepath.Join(commonGitDir, "refs", "lycaon"))
+	noLooseLycaon := errors.Is(lycaonErr, os.ErrNotExist) && filepath.Clean(gitDir) == filepath.Clean(commonGitDir)
 	packed := loadPackedRefsMap(commonGitDir, gitDir)
 	expectedOld := make(map[string]string, len(writes))
 	for _, w := range writes {
-		curOID := resolveExistingGitRefWithPacked(commonGitDir, gitDir, w.dstRef, packed)
+		curOID := packed[w.dstRef]
+		if !noLooseLycaon {
+			curOID = resolveExistingGitRefWithPacked(commonGitDir, gitDir, w.dstRef, packed)
+		}
 		if curOID != "" && curOID != w.oid {
 			return nil, fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, w.dstRef, curOID, w.oid)
 		}
@@ -322,14 +327,14 @@ func applyCheckpointRefTransaction(
 	if err := saveGitRefImportRecord(storeDir, intentName, rec); err != nil {
 		return nil, err
 	}
-	if err := applyLooseGitRefCAS(ctx, commonGitDir, gitDir, writes, expectedOld); err != nil {
+	if err := applyLooseGitRefCAS(ctx, commonGitDir, gitDir, writes, expectedOld, packed, noLooseLycaon); err != nil {
 		return nil, err
 	}
 	rec.Completed = true
 	return planned, saveGitRefImportRecord(storeDir, intentName, rec)
 }
 
-func applyLooseGitRefCAS(ctx context.Context, commonGitDir, gitDir string, writes []plannedRefWrite, expectedOld map[string]string) error {
+func applyLooseGitRefCAS(ctx context.Context, commonGitDir, gitDir string, writes []plannedRefWrite, expectedOld, packed map[string]string, noLooseLycaon bool) error {
 	sorted := slices.Clone(writes)
 	slices.SortFunc(sorted, func(a, b plannedRefWrite) int { return strings.Compare(a.dstRef, b.dstRef) })
 	type refLock struct {
@@ -349,15 +354,20 @@ func applyLooseGitRefCAS(ctx context.Context, commonGitDir, gitDir string, write
 			}
 		}
 	}
+	madeDirs := make(map[string]bool, len(sorted))
 	for _, w := range sorted {
 		if err := ctx.Err(); err != nil {
 			cleanup()
 			return err
 		}
 		refPath := filepath.Join(commonGitDir, filepath.FromSlash(w.dstRef))
-		if err := os.MkdirAll(filepath.Dir(refPath), 0o750); err != nil {
-			cleanup()
-			return err
+		dir := filepath.Dir(refPath)
+		if !madeDirs[dir] {
+			if err := os.MkdirAll(dir, 0o750); err != nil {
+				cleanup()
+				return err
+			}
+			madeDirs[dir] = true
 		}
 		lockPath := refPath + ".lock"
 		f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
@@ -370,12 +380,13 @@ func applyLooseGitRefCAS(ctx context.Context, commonGitDir, gitDir string, write
 		}
 		locks = append(locks, refLock{w: w, refPath: refPath, lockPath: lockPath, file: f})
 	}
-	packed := loadPackedRefsMap(commonGitDir, gitDir)
-	for _, lk := range locks {
-		curOID := resolveExistingGitRefWithPacked(commonGitDir, gitDir, lk.w.dstRef, packed)
-		if curOID != expectedOld[lk.w.dstRef] && curOID != lk.w.oid {
-			cleanup()
-			return fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, lk.w.dstRef, curOID, lk.w.oid)
+	if !noLooseLycaon {
+		for _, lk := range locks {
+			curOID := resolveExistingGitRefWithPacked(commonGitDir, gitDir, lk.w.dstRef, packed)
+			if curOID != expectedOld[lk.w.dstRef] && curOID != lk.w.oid {
+				cleanup()
+				return fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, lk.w.dstRef, curOID, lk.w.oid)
+			}
 		}
 	}
 	syncedDirs := make(map[string]bool, len(locks))
@@ -462,4 +473,31 @@ func resolveExistingGitRefWithPacked(commonGitDir, gitDir, dstRef string, packed
 
 func resolveExistingGitRef(commonGitDir, gitDir, dstRef string) string {
 	return resolveExistingGitRefWithPacked(commonGitDir, gitDir, dstRef, loadPackedRefsMap(commonGitDir, gitDir))
+}
+
+// CheckpointGitObjectsDir is where a checkpoint keeps the objects its refs add for one root; an empty
+// root ID is the primary root.
+func CheckpointGitObjectsDir(storeDir, checkpointID, rootID string) string {
+	if rootID == "" {
+		return filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects")
+	}
+	return filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects-roots", rootID)
+}
+
+func selectPrimaryRootDir(targetRoots map[string]string) string {
+	return strings.TrimSpace(targetRoots[selectPrimaryRootID(targetRoots)])
+}
+
+func selectPrimaryRootID(targetRoots map[string]string) string {
+	for _, k := range []string{"primary", "root-0", ""} {
+		if strings.TrimSpace(targetRoots[k]) != "" {
+			return k
+		}
+	}
+	for _, id := range slices.Sorted(maps.Keys(targetRoots)) {
+		if strings.TrimSpace(targetRoots[id]) != "" {
+			return id
+		}
+	}
+	return ""
 }

@@ -19,31 +19,24 @@ import (
 	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
-type batchObjectMeta struct {
-	objType string
-	size    int64
-}
-type batchObjectData struct {
-	objType string
-	size    int64
-	body    []byte
-}
-type treeEntryKey struct{ mode, name string }
-type parsedTreeEntry struct{ mode, name, oid string }
-type establishedTargetFrontier struct {
-	commits map[string]string
-	trees   map[string]map[treeEntryKey]string
-}
+type (
+	batchObjectMeta           struct{ objType string; size int64 }
+	batchObjectData           struct{ objType string; size int64; body []byte }
+	treeEntryKey              struct{ mode, name string }
+	parsedTreeEntry           struct{ mode, name, oid string }
+	establishedTargetFrontier struct {
+		commits map[string]string
+		trees   map[string]map[treeEntryKey]string
+	}
+)
 
 func verifyAndPublishReachableGitGraph(ctx context.Context, source *candidateGitObjectSource, tipOIDs []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	frontier := buildEstablishedTargetFrontier(ctx, source, tipOIDs)
-	seen := make(map[string]bool, len(tipOIDs)*4)
+	seen, frontierVerifyOIDs := make(map[string]bool, len(tipOIDs)*4), make(map[string]bool)
 	pairedBaseTree := make(map[string]string)
-	frontierVerifyOIDs := make(map[string]bool)
-
 	wave := make([]string, 0, len(tipOIDs))
 	for _, raw := range tipOIDs {
 		oid := strings.ToLower(strings.TrimSpace(raw))
@@ -52,7 +45,6 @@ func verifyAndPublishReachableGitGraph(ctx context.Context, source *candidateGit
 		}
 		wave = append(wave, oid)
 	}
-
 	for len(wave) > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -139,7 +131,7 @@ func verifyAndPublishReachableGitGraph(ctx context.Context, source *candidateGit
 		wave = nextWave
 	}
 
-	if err := verifyDestinationFrontierBatch(ctx, source, frontierVerifyOIDs, seen); err != nil {
+	if err := verifyDestinationFrontierBatch(ctx, source, frontierVerifyOIDs, frontier, seen); err != nil {
 		return err
 	}
 	return source.publishSelectedPack(ctx)
@@ -228,17 +220,6 @@ func collectDestinationBaseRefTips(commonGitDir, gitDir string, excluded map[str
 		dirs = []string{gitDir, commonGitDir}
 	}
 	for _, dir := range dirs {
-		if raw, err := readBoundedFile(filepath.Join(dir, "HEAD"), 512); err == nil {
-			head := strings.TrimSpace(string(raw))
-			if strings.HasPrefix(head, "ref:") {
-				refName := strings.TrimSpace(strings.TrimPrefix(head, "ref:"))
-				if strings.HasPrefix(refName, "refs/heads/") || strings.HasPrefix(refName, "refs/tags/") {
-					addOID(resolveExistingGitRefWithPacked(commonGitDir, gitDir, refName, packed))
-				}
-			} else {
-				addOID(head)
-			}
-		}
 		if entries, err := os.ReadDir(filepath.Join(dir, "refs", "heads")); err == nil {
 			for _, d := range entries {
 				if !d.IsDir() && len(tips) < 64 {
@@ -246,6 +227,17 @@ func collectDestinationBaseRefTips(commonGitDir, gitDir string, excluded map[str
 						addOID(string(raw))
 					}
 				}
+			}
+		}
+		if raw, err := readBoundedFile(filepath.Join(dir, "HEAD"), 512); err == nil {
+			head := strings.TrimSpace(string(raw))
+			if strings.HasPrefix(head, "ref:") {
+				refName := strings.TrimSpace(strings.TrimPrefix(head, "ref:"))
+				if strings.HasPrefix(refName, "refs/tags/") || (strings.HasPrefix(refName, "refs/heads/") && strings.Count(strings.TrimPrefix(refName, "refs/heads/"), "/") > 0) {
+					addOID(resolveExistingGitRefWithPacked(commonGitDir, gitDir, refName, packed))
+				}
+			} else {
+				addOID(head)
 			}
 		}
 	}
@@ -257,13 +249,17 @@ func collectDestinationBaseRefTips(commonGitDir, gitDir string, excluded map[str
 	return tips
 }
 
-func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObjectSource, frontierOIDs map[string]bool, seen map[string]bool) error {
+func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObjectSource, frontierOIDs map[string]bool, frontier *establishedTargetFrontier, seen map[string]bool) error {
 	if len(frontierOIDs) == 0 {
 		return nil
 	}
 	var needPacked []string
 	for _, oid := range slices.Sorted(maps.Keys(frontierOIDs)) {
 		if seen[oid] {
+			continue
+		}
+		if frontier != nil && (frontier.commits[oid] != "" || frontier.trees[oid] != nil) {
+			seen[oid] = true
 			continue
 		}
 		if err := ctx.Err(); err != nil {

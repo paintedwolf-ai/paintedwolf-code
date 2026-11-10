@@ -47,38 +47,46 @@ func WriteLooseGitObject(objectsDir, objType string, payload []byte) (string, er
 }
 
 func ensureMinimalGitDirLayout(gitDir, commonGitDir string) error {
-	for _, d := range []string{filepath.Join(commonGitDir, "objects"), filepath.Join(commonGitDir, "refs")} {
-		if err := os.MkdirAll(d, 0o750); err != nil {
+	existing := make(map[string]bool, 8)
+	if entries, err := os.ReadDir(commonGitDir); err == nil {
+		for _, d := range entries {
+			existing[d.Name()] = true
+		}
+	}
+	for _, name := range []string{"objects", "refs"} {
+		if !existing[name] {
+			if err := os.MkdirAll(filepath.Join(commonGitDir, name), 0o750); err != nil {
+				return err
+			}
+		}
+	}
+	ensureFile := func(dir, name, content string) error {
+		if _, err := os.Lstat(filepath.Join(dir, name)); errors.Is(err, os.ErrNotExist) {
+			return writeAtomicJSONOrText(dir, name, []byte(content), 0o644)
+		}
+		return nil
+	}
+	if !existing["config"] {
+		if err := ensureFile(commonGitDir, "config", "[core]\n\trepositoryformatversion = 0\n"); err != nil {
 			return err
 		}
 	}
-	if _, err := os.Lstat(filepath.Join(commonGitDir, "config")); errors.Is(err, os.ErrNotExist) {
-		if wErr := writeAtomicJSONOrText(commonGitDir, "config", []byte("[core]\n\trepositoryformatversion = 0\n"), 0o644); wErr != nil {
-			return wErr
+	if !existing["HEAD"] {
+		if err := ensureFile(commonGitDir, "HEAD", "ref: refs/heads/main\n"); err != nil {
+			return err
 		}
 	}
-	for _, d := range []string{commonGitDir, gitDir} {
-		if _, err := os.Lstat(filepath.Join(d, "HEAD")); errors.Is(err, os.ErrNotExist) {
-			if wErr := writeAtomicJSONOrText(d, "HEAD", []byte("ref: refs/heads/main\n"), 0o644); wErr != nil {
-				return wErr
-			}
-		}
+	if filepath.Clean(gitDir) != filepath.Clean(commonGitDir) {
+		return ensureFile(gitDir, "HEAD", "ref: refs/heads/main\n")
 	}
 	return nil
 }
 
 type candidateGitObjectSource struct {
-	storeDir           string
-	repoRoot           string
-	gitDir             string
-	commonGitDir       string
-	targetObjectsDir   string
-	candidateDirs      []string
-	packCandidateDirs  []string
-	targetHasPacks     bool
-	targetFanoutDirs   map[string]bool
-	packReaderDir      string
-	selectedPackedOIDs map[string]bool
+	storeDir, repoRoot, gitDir, commonGitDir, targetObjectsDir, packReaderDir string
+	candidateDirs, packCandidateDirs                                          []string
+	targetHasPacks                                                            bool
+	targetFanoutDirs, selectedPackedOIDs                                      map[string]bool
 }
 
 func (s *candidateGitObjectSource) hasTargetFanout(oid string) bool {
@@ -93,26 +101,33 @@ func openCandidateGitObjectSource(
 		return nil, func() {}, err
 	}
 	src := &candidateGitObjectSource{
-		storeDir:           strings.TrimSpace(storeDir),
-		repoRoot:           repoRoot,
-		gitDir:             gitDir,
-		commonGitDir:       commonGitDir,
-		targetObjectsDir:   targetObjectsDir,
-		selectedPackedOIDs: make(map[string]bool),
+		storeDir: strings.TrimSpace(storeDir), repoRoot: repoRoot, gitDir: gitDir,
+		commonGitDir: commonGitDir, targetObjectsDir: targetObjectsDir, selectedPackedOIDs: make(map[string]bool),
 	}
-	if err := rejectGitAlternates(targetObjectsDir); err != nil {
-		return nil, func() {}, err
-	}
+	hasTargetInfo, hasTargetPack := true, true
 	if entries, err := os.ReadDir(targetObjectsDir); err == nil {
+		hasTargetInfo, hasTargetPack = false, false
 		src.targetFanoutDirs = make(map[string]bool, len(entries))
 		for _, d := range entries {
-			if len(d.Name()) == 2 {
-				src.targetFanoutDirs[strings.ToLower(d.Name())] = true
+			switch name := d.Name(); {
+			case len(name) == 2:
+				src.targetFanoutDirs[strings.ToLower(name)] = true
+			case name == "info":
+				hasTargetInfo = true
+			case name == "pack":
+				hasTargetPack = true
 			}
 		}
 	}
-	if hasPacks, err := inspectCandidatePackDir(filepath.Join(targetObjectsDir, "pack"), false); err == nil {
-		src.targetHasPacks = hasPacks
+	if hasTargetInfo {
+		if err := rejectGitAlternates(targetObjectsDir); err != nil {
+			return nil, func() {}, err
+		}
+	}
+	if hasTargetPack {
+		if hasPacks, err := inspectCandidatePackDir(filepath.Join(targetObjectsDir, "pack"), false); err == nil {
+			src.targetHasPacks = hasPacks
+		}
 	}
 	if src.storeDir != "" {
 		parent2 := filepath.Dir(filepath.Dir(src.storeDir))
@@ -403,15 +418,25 @@ func (s *candidateGitObjectSource) publishSelectedPack(ctx context.Context) erro
 		}
 	}
 	dstPackDir := filepath.Join(s.targetObjectsDir, "pack")
+	if err := os.MkdirAll(dstPackDir, 0o750); err != nil {
+		return err
+	}
+	wroteAny := false
 	for _, assetPath := range append(packs, idxs...) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		dstPath := filepath.Join(dstPackDir, filepath.Base(assetPath))
-		if isValidDestinationGitAsset(assetPath, dstPath) {
+		if s.targetHasPacks && isValidDestinationGitAsset(assetPath, dstPath) {
 			continue
 		}
-		if err := copyFileStreamingAtomic(assetPath, dstPath, 0o444); err != nil {
+		if _, _, err := copyFileStreamingAtomicOpts(assetPath, dstPath, 0o444, false, false); err != nil {
+			return err
+		}
+		wroteAny = true
+	}
+	if wroteAny {
+		if err := syncDir(dstPackDir); err != nil {
 			return err
 		}
 	}
@@ -419,14 +444,15 @@ func (s *candidateGitObjectSource) publishSelectedPack(ctx context.Context) erro
 	return nil
 }
 
-func copyFileStreamingAtomic(srcPath, dstPath string, mode os.FileMode) error {
-	_, _, err := copyFileStreamingAtomicWithVerify(srcPath, dstPath, mode)
-	return err
+func copyFileStreamingAtomicWithVerify(srcPath, dstPath string, mode os.FileMode) (string, []byte, error) {
+	return copyFileStreamingAtomicOpts(srcPath, dstPath, mode, true, true)
 }
 
-func copyFileStreamingAtomicWithVerify(srcPath, dstPath string, mode os.FileMode) (string, []byte, error) {
-	if err := os.MkdirAll(filepath.Dir(dstPath), 0o750); err != nil {
-		return "", nil, err
+func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensureDir, syncParent bool) (string, []byte, error) {
+	if ensureDir {
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0o750); err != nil {
+			return "", nil, err
+		}
 	}
 	in, err := os.Open(srcPath)
 	if err != nil {
@@ -445,7 +471,12 @@ func copyFileStreamingAtomicWithVerify(srcPath, dstPath string, mode os.FileMode
 			_ = os.Remove(tmpPath)
 		}
 	}()
-	if _, err := io.Copy(tmpFile, wrapObjectCopyReaderFn(srcPath, in)); err != nil {
+	var copied bytes.Buffer
+	if _, err := io.Copy(io.MultiWriter(tmpFile, &copied), wrapObjectCopyReaderFn(srcPath, in)); err != nil {
+		return "", nil, err
+	}
+	objType, body, err := verifyStreamedGitAsset(srcPath, dstPath, copied.Bytes())
+	if err != nil {
 		return "", nil, err
 	}
 	if err := tmpFile.Chmod(mode); err != nil {
@@ -454,50 +485,32 @@ func copyFileStreamingAtomicWithVerify(srcPath, dstPath string, mode os.FileMode
 	if err := errors.Join(syncObjectFileFn(tmpFile), closeObjectFileFn(tmpFile)); err != nil {
 		return "", nil, err
 	}
-	objType, body, err := publishStagedGitAssetWithVerify(srcPath, tmpPath, dstPath)
-	if err != nil {
+	if err := fseffect.Rename(filepath.Dir(dstPath), filepath.Base(tmpPath), filepath.Base(dstPath)); err != nil {
 		return "", nil, err
 	}
 	published = true
-	return objType, body, syncDir(filepath.Dir(dstPath))
+	if syncParent {
+		return objType, body, syncDir(filepath.Dir(dstPath))
+	}
+	return objType, body, nil
 }
 
-func publishStagedGitAsset(srcPath, tmpPath, dstPath string) error {
-	_, _, err := publishStagedGitAssetWithVerify(srcPath, tmpPath, dstPath)
-	return err
-}
-
-func publishStagedGitAssetWithVerify(srcPath, tmpPath, dstPath string) (string, []byte, error) {
-	var (
-		objType string
-		body    []byte
-	)
+func verifyStreamedGitAsset(srcPath, dstPath string, staged []byte) (string, []byte, error) {
 	if oid, ok := looseObjectOIDForPath(dstPath); ok {
-		f, err := os.Open(tmpPath)
-		if err != nil {
-			return "", nil, err
-		}
-		var vErr error
-		objType, body, vErr = readAndVerifyLooseGitObject(f, oid)
-		_ = f.Close()
-		if vErr != nil {
-			return "", nil, vErr
-		}
-	} else if !isValidDestinationGitAsset(srcPath, tmpPath) {
+		return readAndVerifyLooseGitObject(bytes.NewReader(staged), oid)
+	}
+	if len(staged) == 0 {
+		return "", nil, fmt.Errorf("checkpoint: empty staged git asset for %s", dstPath)
+	}
+	srcSHA, err := fileDigestSHA256(srcPath)
+	if err != nil {
+		return "", nil, err
+	}
+	sum := sha256.Sum256(staged)
+	if srcSHA == "" || srcSHA != hex.EncodeToString(sum[:]) {
 		return "", nil, fmt.Errorf("checkpoint: staged git asset digest mismatch for %s", dstPath)
 	}
-	if linkErr := os.Link(tmpPath, dstPath); linkErr == nil {
-		if rmErr := os.Remove(tmpPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
-			return "", nil, rmErr
-		}
-		return objType, body, nil
-	} else if errors.Is(linkErr, os.ErrExist) && isValidDestinationGitAsset(srcPath, dstPath) {
-		if rmErr := os.Remove(tmpPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
-			return "", nil, rmErr
-		}
-		return objType, body, nil
-	}
-	return objType, body, fseffect.Rename(filepath.Dir(dstPath), filepath.Base(tmpPath), filepath.Base(dstPath))
+	return "", nil, nil
 }
 
 func isValidDestinationGitAsset(srcPath, dstPath string) bool {
@@ -562,30 +575,3 @@ func isHexOID(s string) bool {
 	return err == nil && (len(s) == 40 || len(s) == 64)
 }
 func isAllZeroOID(s string) bool { return strings.Trim(s, "0") == "" }
-
-// CheckpointGitObjectsDir is where a checkpoint keeps the objects its refs add for one root; an empty
-// root ID is the primary root.
-func CheckpointGitObjectsDir(storeDir, checkpointID, rootID string) string {
-	if rootID == "" {
-		return filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects")
-	}
-	return filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects-roots", rootID)
-}
-
-func selectPrimaryRootDir(targetRoots map[string]string) string {
-	return strings.TrimSpace(targetRoots[selectPrimaryRootID(targetRoots)])
-}
-
-func selectPrimaryRootID(targetRoots map[string]string) string {
-	for _, k := range []string{"primary", "root-0", ""} {
-		if strings.TrimSpace(targetRoots[k]) != "" {
-			return k
-		}
-	}
-	for _, id := range slices.Sorted(maps.Keys(targetRoots)) {
-		if strings.TrimSpace(targetRoots[id]) != "" {
-			return id
-		}
-	}
-	return ""
-}

@@ -56,6 +56,8 @@ func (txn *Transaction) rootRefUndo(m Manifest, rootID, dir string, named map[st
 	if err != nil {
 		return nil, err
 	}
+	_, lycaonErr := os.Lstat(filepath.Join(common, "refs", "lycaon"))
+	noLooseLycaon := errors.Is(lycaonErr, os.ErrNotExist) && filepath.Clean(gitDir) == filepath.Clean(common)
 	packed := loadPackedRefsMap(common, gitDir)
 	var refs []refUndo
 	for _, name := range slices.Sorted(maps.Keys(named)) {
@@ -68,7 +70,10 @@ func (txn *Transaction) rootRefUndo(m Manifest, rootID, dir string, named map[st
 			return nil, fmt.Errorf("checkpoint: invalid ref object")
 		}
 		for _, ref := range []string{"refs/lycaon/workers/" + m.WorkerID + "/" + suffix, "refs/lycaon/checkpoints/" + m.CheckpointID + "/" + suffix} {
-			old := resolveExistingGitRefWithPacked(common, gitDir, ref, packed)
+			old := packed[ref]
+			if !noLooseLycaon {
+				old = resolveExistingGitRefWithPacked(common, gitDir, ref, packed)
+			}
 			if old != "" && old != oid {
 				return nil, ErrCheckpointRefConflict
 			}
