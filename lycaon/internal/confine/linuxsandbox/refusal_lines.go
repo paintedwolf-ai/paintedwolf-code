@@ -15,6 +15,9 @@ type refusalLines struct {
 }
 
 func (r *refusalLines) report(x Refusal) {
+	if line, err := json.Marshal(x); err == nil {
+		diagNotifyf("refusal %s", line)
+	}
 	if r == nil || r.w == nil {
 		return
 	}
