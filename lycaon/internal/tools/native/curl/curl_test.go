@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -774,5 +775,238 @@ func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
 }
+
+func TestCurlCookieJarNetworkValidationAndImportSemantics(t *testing.T) {
+	var seenCookies []string
+	var mu sync.Mutex
+	server := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seenCookies = append(seenCookies, r.Header.Get("Cookie"))
+		mu.Unlock()
+		stamp(w, "text/plain")
+		switch r.URL.Path {
+		case "/set-mixed":
+			// Valid host-only IP cookies.
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: "valid-ip-host", Path: "/", HttpOnly: true})
+			http.SetCookie(w, &http.Cookie{Name: "temp", Value: "to-be-deleted", Path: "/"})
+			// Invalid network Set-Cookie headers that RFC 6265 must ignore.
+			w.Header().Add("Set-Cookie", "psl=bad; Domain=com; Path=/")
+			w.Header().Add("Set-Cookie", "foreign=bad; Domain=other.example; Path=/")
+			w.Header().Add("Set-Cookie", "ip_domain=bad; Domain=127.0.0.1; Path=/")
+			w.Header().Add("Set-Cookie", "__Host-insecure=bad; Path=/")
+			http.Redirect(w, r, "/delete-temp", http.StatusFound)
+		case "/delete-temp":
+			http.SetCookie(w, &http.Cookie{Name: "temp", Value: "", Path: "/", MaxAge: -1})
+			http.Redirect(w, r, "/final", http.StatusFound)
+		case "/final":
+			_, _ = io.WriteString(w, "done\n")
+		case "/echo-cookie":
+			_, _ = io.WriteString(w, r.Header.Get("Cookie")+"\n")
+		}
+	})
+
+	h := newHarness(t)
+	r := h.curl(t.Context(), "-s", "-L", "-c", "jar.txt", server.URL+"/set-mixed")
+	if r.err != nil || r.stdout != "done\n" {
+		t.Fatalf("set-mixed failed: %v %q", r.err, r.stdout)
+	}
+	jar := h.read("jar.txt")
+	if !contains(jar, "#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t0\tsession\tvalid-ip-host") {
+		t.Fatalf("jar missing valid host-only IP cookie: %q", jar)
+	}
+	for _, forbidden := range []string{"psl", "foreign", "ip_domain", "__Host-insecure", "temp"} {
+		if contains(jar, forbidden) {
+			t.Fatalf("jar persisted rejected or deleted cookie %q: %q", forbidden, jar)
+		}
+	}
+	mu.Lock()
+	gotCookies := append([]string(nil), seenCookies...)
+	mu.Unlock()
+	if len(gotCookies) != 3 || gotCookies[1] != "session=valid-ip-host; temp=to-be-deleted" || gotCookies[2] != "session=valid-ip-host" {
+		t.Fatalf("per-hop cookies across Set-Cookie and Max-Age=-1 deletion = %v", gotCookies)
+	}
+
+	// User-supplied Netscape jar import preserves host-only IP cookies, path/Secure scoping,
+	// and expired-line deletion, while ignoring public-suffix wildcard domain lines.
+	importedJar := strings.Join([]string{
+		"# Netscape HTTP Cookie File",
+		"#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t0\tsession\timported-ip",
+		"127.0.0.1\tFALSE\t/\tFALSE\t2000000000\tstale\told-val",
+		"127.0.0.1\tFALSE\t/\tFALSE\t1\tstale\texpired-val",
+		"127.0.0.1\tFALSE\t/admin\tFALSE\t0\tadmin_only\tsecret-admin",
+		"127.0.0.1\tFALSE\t/\tTRUE\t0\tsecure_only\thttps-only",
+		".com\tTRUE\t/\tFALSE\t0\tsupercookie\tpublic-suffix",
+		"",
+	}, "\n")
+	h.write("imported.txt", importedJar)
+	r = h.curl(t.Context(), "-s", "-b", "imported.txt", server.URL+"/echo-cookie")
+	if r.err != nil || r.stdout != "session=imported-ip\n" {
+		t.Fatalf("imported jar sent %q (err=%v), want %q", r.stdout, r.err, "session=imported-ip\n")
+	}
+}
+
+func TestCurlCookieJarSelectedSecretAuthorityAndRedirectDenial(t *testing.T) {
+	const (
+		hop0Secret       = "protected-cookie-hop0-secret-7711"
+		unselectedSecret = "protected-cookie-unselected-8822"
+		targetSecret     = "protected-cookie-target-9933"
+	)
+	var originCookies, targetCookies []string
+	var originHits, targetHits atomic.Int32
+	var mu sync.Mutex
+
+	target := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		targetHits.Add(1)
+		mu.Lock()
+		targetCookies = append(targetCookies, r.Header.Get("Cookie"))
+		mu.Unlock()
+		stamp(w, "text/plain")
+		_, _ = io.WriteString(w, "target-ok\n")
+	})
+	origin := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		originHits.Add(1)
+		mu.Lock()
+		originCookies = append(originCookies, r.Header.Get("Cookie"))
+		mu.Unlock()
+		stamp(w, "text/plain")
+		if r.URL.Path == "/redirect" {
+			http.Redirect(w, r, target.URL+"/land", http.StatusFound)
+			return
+		}
+		_, _ = io.WriteString(w, "origin-ok\n")
+	})
+
+	h := newHarness(t)
+	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
+	testutil.FailErr(t, "build matcher", err)
+	fp, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("c", 32)))
+	testutil.FailErr(t, "build fingerprinter", err)
+	matcher.SetFingerprinter(fp)
+	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
+		return []secretmatch.HarvestedValue{
+			{Name: "HOP0_COOKIE", Secret: hop0Secret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true},
+			{Name: "UNSELECTED_COOKIE", Secret: unselectedSecret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true},
+			{Name: "TARGET_COOKIE", Secret: targetSecret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true},
+		}
+	})
+	h.owners.HTTP.SecretMatcher = matcher
+
+	var askedAlerts []secretmatch.Alert
+	allowDest := map[string]bool{}
+	faultDest := map[string]bool{}
+	askFn := func(_ context.Context, a secretmatch.Alert) (secretmatch.Resolution, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		askedAlerts = append(askedAlerts, a)
+		if faultDest[a.DestinationLabel] {
+			return secretmatch.Resolution{}, secretmatch.NewAskFault(secretmatch.FaultStageRaise, nil)
+		}
+		if allowDest[a.DestinationLabel] {
+			return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
+		}
+		return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
+	}
+
+	originLabel := "http://" + strings.TrimPrefix(origin.URL, "http://")
+	targetLabel := "http://" + strings.TrimPrefix(target.URL, "http://")
+
+	// Jar contains a benign cookie (theme=light), a selected secret cookie for /public (hop0Secret),
+	// an unselected path cookie (/admin -> unselectedSecret), and a path cookie for /land on target (targetSecret).
+	h.write("cookies.txt", strings.Join([]string{
+		"# Netscape HTTP Cookie File",
+		"127.0.0.1\tFALSE\t/\tFALSE\t0\ttheme\tlight",
+		"127.0.0.1\tFALSE\t/public\tFALSE\t0\tsid\t" + hop0Secret,
+		"127.0.0.1\tFALSE\t/admin\tFALSE\t0\tadmin_sid\t" + unselectedSecret,
+		"127.0.0.1\tFALSE\t/land\tFALSE\t0\ttarget_sid\t" + targetSecret,
+		"",
+	}, "\n"))
+
+	// 1. Unwired SecretAsk on Hop 0 stops before dialing origin.
+	h.owners.HTTP.SecretAsk = nil
+	r := h.curl(t.Context(), "-s", "-b", "cookies.txt", origin.URL+"/public")
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != toolrejection.OutboundSecretScreenFailedCode || r.result.EffectCertainty != toolcontract.NoEffect || originHits.Load() != 0 {
+		t.Fatalf("unwired Hop 0 cookie reached server: result=%+v err=%v hits=%d", r.result, r.err, originHits.Load())
+	}
+	h.owners.HTTP.SecretAsk = askFn
+
+	// 2. Withhold on Hop 0 withholds only the secret cookie (sid) while preserving the benign cookie (theme=light) and continuing HTTP.
+	r = h.curl(t.Context(), "-s", "-b", "cookies.txt", origin.URL+"/public")
+	if r.err != nil || r.stdout != "origin-ok\n" || originHits.Load() != 1 {
+		t.Fatalf("withheld Hop 0 should continue without secret cookie: result=%+v err=%v stdout=%q", r.result, r.err, r.stdout)
+	}
+	mu.Lock()
+	if len(askedAlerts) != 1 || askedAlerts[0].DestinationLabel != originLabel || strings.Join(askedAlerts[0].SecretNames, ",") != "HOP0_COOKIE" {
+		t.Fatalf("Hop 0 alerts = %+v, want only selected HOP0_COOKIE for %s", askedAlerts, originLabel)
+	}
+	if len(originCookies) != 1 || originCookies[0] != "theme=light" {
+		t.Fatalf("withheld Hop 0 cookies = %v, want only benign [theme=light]", originCookies)
+	}
+	askedAlerts = nil
+	originCookies = nil
+	allowDest[originLabel] = true
+	mu.Unlock()
+
+	// 3. Approved on Hop 0 delivers the selected secret cookie alongside the benign cookie.
+	originHits.Store(0)
+	r = h.curl(t.Context(), "-s", "-b", "cookies.txt", origin.URL+"/public")
+	if r.err != nil || r.stdout != "origin-ok\n" || originHits.Load() != 1 {
+		t.Fatalf("approved Hop 0 failed: result=%+v err=%v stdout=%q", r.result, r.err, r.stdout)
+	}
+	mu.Lock()
+	if len(originCookies) != 1 || originCookies[0] != "sid="+hop0Secret+"; theme=light" {
+		t.Fatalf("origin received cookies %v, want [sid=%s; theme=light]", originCookies, hop0Secret)
+	}
+	askedAlerts = nil
+	originCookies = nil
+	mu.Unlock()
+
+	// 4. Redirect from origin (/redirect) to target (/land) when target is Withhold:
+	// Hop 0 completes and Hop 1 proceeds with target_sid withheld (sending only theme=light).
+	originHits.Store(0)
+	targetHits.Store(0)
+	r = h.curl(t.Context(), "-s", "-L", "-b", "cookies.txt", origin.URL+"/redirect")
+	if r.err != nil || r.stdout != "target-ok\n" || originHits.Load() != 1 || targetHits.Load() != 1 {
+		t.Fatalf("redirect with withheld cookie failed: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, originHits.Load(), targetHits.Load())
+	}
+	mu.Lock()
+	if len(askedAlerts) != 1 || askedAlerts[0].DestinationLabel != targetLabel || strings.Join(askedAlerts[0].SecretNames, ",") != "TARGET_COOKIE" {
+		t.Fatalf("redirect alerts = %+v, want TARGET_COOKIE for %s", askedAlerts, targetLabel)
+	}
+	if len(targetCookies) != 1 || targetCookies[0] != "theme=light" {
+		t.Fatalf("target received cookies %v on Withhold, want only [theme=light]", targetCookies)
+	}
+	askedAlerts = nil
+	targetCookies = nil
+	faultDest[targetLabel] = true
+	mu.Unlock()
+
+	// 5. Screen fault on Hop 1 after Hop 0 completed stops before dialing target and settles with EffectCompleted.
+	originHits.Store(0)
+	targetHits.Store(0)
+	r = h.curl(t.Context(), "-s", "-L", "-b", "cookies.txt", origin.URL+"/redirect")
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != toolrejection.OutboundSecretScreenFailedCode || r.result.EffectCertainty != toolcontract.EffectCompleted || originHits.Load() != 1 || targetHits.Load() != 0 {
+		t.Fatalf("redirect screen fault on Hop 1: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, originHits.Load(), targetHits.Load())
+	}
+	mu.Lock()
+	delete(faultDest, targetLabel)
+	allowDest[targetLabel] = true
+	askedAlerts = nil
+	targetCookies = nil
+	mu.Unlock()
+
+	// 6. Approving target allows the redirect hop to deliver target_sid.
+	originHits.Store(0)
+	targetHits.Store(0)
+	r = h.curl(t.Context(), "-s", "-L", "-b", "cookies.txt", origin.URL+"/redirect")
+	if r.err != nil || r.stdout != "target-ok\n" || targetHits.Load() != 1 {
+		t.Fatalf("approved redirect failed: result=%+v err=%v stdout=%q", r.result, r.err, r.stdout)
+	}
+	mu.Lock()
+	if len(targetCookies) != 1 || targetCookies[0] != "target_sid="+targetSecret+"; theme=light" {
+		t.Fatalf("target received cookies %v, want [target_sid=%s; theme=light]", targetCookies, targetSecret)
+	}
+	mu.Unlock()
+}
+
 
 

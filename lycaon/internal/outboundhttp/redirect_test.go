@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -269,4 +270,89 @@ func TestCrossOriginRedirectClearsHostHeaderOverrideWhileSameOriginPreservesIt(t
 		t.Fatalf("cross-origin hop retained origin HostHeader override: got %q, want %q", crossOriginHost, elsewhereURL.Host)
 	}
 }
+
+type recordingCookieJar struct {
+	cookiesCalls int
+	cookies      []*http.Cookie
+	stored       []*http.Cookie
+}
+
+func (j *recordingCookieJar) Cookies(_ *url.URL) []*http.Cookie {
+	j.cookiesCalls++
+	out := make([]*http.Cookie, len(j.cookies))
+	for i, c := range j.cookies {
+		cp := *c
+		out[i] = &cp
+	}
+	return out
+}
+
+func (j *recordingCookieJar) SetCookies(_ *url.URL, cookies []*http.Cookie) {
+	for _, c := range cookies {
+		cp := *c
+		j.stored = append(j.stored, &cp)
+		j.cookies = append(j.cookies, &cp)
+	}
+}
+
+func TestOutboundCookiesFreezeAfterBeforeHopRequestAndPersistAcrossRedirects(t *testing.T) {
+	var hop0Cookie, hop1Cookie string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			hop0Cookie = r.Header.Get("Cookie")
+			http.SetCookie(w, &http.Cookie{Name: "issued", Value: "from-hop0", Path: "/"})
+			http.Redirect(w, r, "/next", http.StatusFound)
+		case "/next":
+			hop1Cookie = r.Header.Get("Cookie")
+			_, _ = w.Write([]byte("ok"))
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	jar := &recordingCookieJar{}
+	var beforeHopCalls int
+	resp, err := Do(t.Context(), Request{
+		Method:    http.MethodGet,
+		URL:       server.URL + "/start",
+		Redirects: RedirectSafe,
+		AllowAddress: func(addr netip.Addr, port uint16) bool {
+			if beforeHopCalls == 1 {
+				// Mutating the jar after BeforeHopRequest (during transport setup/AllowAddress)
+				// must not change the already-frozen Hop 0 outbound cookies.
+				jar.cookies = []*http.Cookie{{Name: "auth", Value: "unreviewed-late-mutation"}}
+			}
+			return allowLoopback(addr, port)
+		},
+		Jar: jar,
+		BeforeHopRequest: func(_ context.Context, hop HopRequest) error {
+			beforeHopCalls++
+			if beforeHopCalls == 1 {
+				jar.cookies = []*http.Cookie{{Name: "auth", Value: "reviewed-hop0"}}
+			} else {
+				// Hop 0's Set-Cookie must already be persisted before Hop 1's review runs.
+				if len(jar.stored) != 1 || jar.stored[0].Name != "issued" || jar.stored[0].Value != "from-hop0" {
+					t.Errorf("hop 1 BeforeHopRequest did not see hop 0 Set-Cookie: %+v", jar.stored)
+				}
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if string(resp.Body) != "ok" {
+		t.Fatalf("body = %q, want ok", string(resp.Body))
+	}
+	if jar.cookiesCalls != 2 {
+		t.Fatalf("Jar.Cookies called %d times across 2 hops, want 2 (frozen once per hop)", jar.cookiesCalls)
+	}
+	if hop0Cookie != "auth=reviewed-hop0" {
+		t.Fatalf("hop 0 sent Cookie %q, want frozen %q", hop0Cookie, "auth=reviewed-hop0")
+	}
+	if hop1Cookie != "auth=unreviewed-late-mutation; issued=from-hop0" {
+		t.Fatalf("hop 1 sent Cookie %q, want %q", hop1Cookie, "auth=unreviewed-late-mutation; issued=from-hop0")
+	}
+}
+
 

@@ -118,6 +118,24 @@ type HopRequest struct {
 	URL        *url.URL
 	Method     string
 	HostHeader string
+	setCookies func([]*http.Cookie)
+}
+
+// FreezeCookies binds the exact owned cookie snapshot authorized for this hop
+// so Do transmits those exact cookies without another Jar.Cookies lookup.
+func (h HopRequest) FreezeCookies(cookies []*http.Cookie) bool {
+	if h.setCookies == nil {
+		return false
+	}
+	cp := make([]*http.Cookie, 0, len(cookies))
+	for _, c := range cookies {
+		if c != nil {
+			clone := *c
+			cp = append(cp, &clone)
+		}
+	}
+	h.setCookies(cp)
+	return true
 }
 
 // Hop records a followed redirect and its destination.
@@ -231,10 +249,24 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 				return Response{}, err
 			}
 		}
+		var hopCookies []*http.Cookie
+		var cookiesFrozen bool
 		if in.BeforeHopRequest != nil {
-			if err := in.BeforeHopRequest(ctx, HopRequest{URL: current, Method: method, HostHeader: hostHeader}); err != nil {
+			hopReq := HopRequest{
+				URL:        current,
+				Method:     method,
+				HostHeader: hostHeader,
+				setCookies: func(c []*http.Cookie) {
+					hopCookies = c
+					cookiesFrozen = true
+				},
+			}
+			if err := in.BeforeHopRequest(ctx, hopReq); err != nil {
 				return Response{}, err
 			}
+		}
+		if !cookiesFrozen && in.Jar != nil {
+			hopCookies = in.Jar.Cookies(current)
 		}
 		remaining := timeout - ioElapsed
 		if remaining <= 0 {
@@ -282,6 +314,11 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		for _, h := range originHeaders {
 			req.Header.Add(h.Name, h.Value)
 		}
+		for _, c := range hopCookies {
+			if c != nil {
+				req.AddCookie(c)
+			}
+		}
 		progress.RequestsStarted++
 		resp, err := client.Do(req)
 		if resp != nil {
@@ -295,6 +332,11 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			transport.CloseIdleConnections()
 			ioCancel()
 			return Response{}, err
+		}
+		if in.Jar != nil {
+			if rc := resp.Cookies(); len(rc) > 0 {
+				in.Jar.SetCookies(req.URL, rc)
+			}
 		}
 		hopTiming := tracer.timing(ioStarted, dnsElapsed)
 		observed := tracer.observation(begun, resolved, method, req.URL.RequestURI())
@@ -466,7 +508,6 @@ func (in Request) clientForHop(remaining time.Duration, transport *http.Transpor
 		client = httpclient.WithTransport(httpclient.Streaming(class), transport)
 	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	client.Jar = in.Jar
 	return client
 }
 

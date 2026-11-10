@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -589,5 +590,185 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 		t.Fatalf("step 4 quiet repeat re-prompted = %v, want empty", askedSecond)
 	}
 }
+
+func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter(t *testing.T) {
+	const cookieSecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
+	const unrelatedSecret = "AKIAQYJK5TXV4NZR7SGB"
+
+	var originHits, targetHits atomic.Int32
+	var lastOriginCookie, lastTargetCookie atomic.Value
+	lastOriginCookie.Store("")
+	lastTargetCookie.Store("")
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.Host, "origin.cookie.example") && r.URL.Path == "/redirect":
+			originHits.Add(1)
+			lastOriginCookie.Store(r.Header.Get("Cookie"))
+			http.Redirect(w, r, "http://"+r.URL.Query().Get("target")+"/landed", http.StatusFound)
+		case strings.HasPrefix(r.Host, "origin.cookie.example"):
+			originHits.Add(1)
+			lastOriginCookie.Store(r.Header.Get("Cookie"))
+			_, _ = io.WriteString(w, "origin-cookie-ok\n")
+		default:
+			targetHits.Add(1)
+			lastTargetCookie.Store(r.Header.Get("Cookie"))
+			_, _ = io.WriteString(w, "target-cookie-ok\n")
+		}
+	}))
+	defer proxy.Close()
+
+	proxyURL, err := url.Parse(proxy.URL)
+	testutil.FailErr(t, "parse proxy listener", err)
+	portStr := proxyURL.Port()
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	testutil.FailErr(t, "proxy port", err)
+	originHost := "origin.cookie.example:" + portStr
+	targetHost := "target.cookie.example:" + portStr
+	originResolve := originHost + ":127.0.0.1"
+	targetResolve := targetHost + ":127.0.0.1"
+
+	cmdOrigin := "curl -s -b cookies.txt --resolve '" + originResolve + "' 'http://" + originHost + "/ok'"
+	cmdRedirect := "curl -s -L -b cookies.txt --resolve '" + originResolve + "' --resolve '" + targetResolve + "' 'http://" + originHost + "/redirect?target=" + targetHost + "'"
+	cmdConnectTo := "curl -s -b cookies.txt --connect-to '" + originHost + ":localhost:" + portStr + "' 'http://" + originHost + "/ok'"
+
+	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
+		{
+			Pattern:      "step 1 approve origin cookie",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: map[string]any{"command": cmdOrigin}}},
+			FollowUpText: "Approved origin.",
+		},
+		{
+			Pattern:      "step 2 quiet repeat origin cookie",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-2", Name: "command", Args: map[string]any{"command": cmdOrigin}}},
+			FollowUpText: "Repeated origin.",
+		},
+		{
+			Pattern:      "step 3 redirect cookie to uncovered target",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-3", Name: "command", Args: map[string]any{"command": cmdRedirect}}},
+			FollowUpText: "Redirect withheld secret cookie.",
+		},
+		{
+			Pattern:      "step 4 connect-to uncovered recipient",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-4", Name: "command", Args: map[string]any{"command": cmdConnectTo}}},
+			FollowUpText: "Connect-to withheld secret cookie.",
+		},
+	}})
+
+	approvals := "  - category: tool\n    pattern: http_request\n    effect: allow\n  - category: network_recipient\n    pattern: '*'\n    effect: allow\n  - category: file\n    pattern: '*'\n    effect: allow\n"
+	s := startSessionWithClient(t, mock, wire.CreateSessionRequest{}, approvals, gate.PostureBalanced)
+	s.h.SeedProgress(t, t.Context(), s.session)
+	if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "curl-cookie-real", "curl-fixture", nil) {
+		t.Fatal("listener grant failed")
+	}
+
+	cookieJarText := strings.Join([]string{
+		".cookie.example\tTRUE\t/\tFALSE\t0\tsession\t" + cookieSecret,
+		".cookie.example\tTRUE\t/\tFALSE\t0\ttheme\tdark",
+		"other.unselected.example\tFALSE\t/\tFALSE\t0\tunrelated\t" + unrelatedSecret,
+	}, "\n") + "\n"
+	testutil.FailErr(t, "write cookies.txt", os.WriteFile(filepath.Join(s.dir, "cookies.txt"), []byte(cookieJarText), 0o600))
+
+	waitCheckpoint := func(promptText string) (wire.CheckpointEvent, <-chan error) {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() {
+			_, err := s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, promptText)
+			done <- err
+		}()
+		kind := wire.CheckpointKindToolApproval
+		var card wire.CheckpointEvent
+		testutil.WaitFor(t, func() bool {
+			select {
+			case err := <-done:
+				testutil.FailErr(t, promptText, err)
+				t.Fatalf("prompt %q ended without raising a tool_approval checkpoint", promptText)
+			default:
+			}
+			pending, err := s.h.Sessions.Checkpoints.ListPending(t.Context(), s.session, &kind)
+			if err != nil || len(pending) == 0 {
+				return false
+			}
+			card = pending[0]
+			return true
+		})
+		return card, done
+	}
+
+	// 1. Selected cookie in cookies.txt raises a secret approval card naming originHost; approving with RecommendedOptionID installs a persistent secret grant in s.h.Settings.Approvals.
+	card1, done1 := waitCheckpoint("step 1 approve origin cookie")
+	if originHits.Load() != 0 {
+		t.Fatalf("step 1 hit origin before checkpoint resolution: %d", originHits.Load())
+	}
+	encoded1, err := json.Marshal(card1)
+	testutil.FailErr(t, "marshal card1", err)
+	if !strings.Contains(string(encoded1), "origin.cookie.example") || strings.Contains(string(encoded1), cookieSecret) {
+		t.Fatalf("step 1 card must name origin.cookie.example without leaking secret value: %s", encoded1)
+	}
+	owner := s.h.OwnerCtx(t, t.Context())
+	_, err = s.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(owner, s.session, card1.ID, card1.ToolApproval.Plan.RecommendedOptionID)
+	testutil.FailErr(t, "resolve card1 with RecommendedOptionID", err)
+	testutil.FailErr(t, "step 1 prompt", <-done1)
+	out1 := s.outcome(t, "program-1")
+	if out1.State != "completed" || out1.Status != 0 || strings.TrimSpace(out1.Stdout) != "origin-cookie-ok" {
+		t.Fatalf("step 1 outcome = %+v", out1)
+	}
+	if originHits.Load() != 1 || !strings.Contains(lastOriginCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 1 originHits=%d cookie=%q, want 1 with session secret", originHits.Load(), lastOriginCookie.Load())
+	}
+
+	// 2. Quiet repeat to the same covered origin + dial override succeeds without raising a new checkpoint.
+	originHits.Store(0)
+	lastOriginCookie.Store("")
+	_, err = s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 2 quiet repeat origin cookie")
+	testutil.FailErr(t, "step 2 quiet repeat", err)
+	out2 := s.outcome(t, "program-2")
+	if out2.State != "completed" || out2.Status != 0 || strings.TrimSpace(out2.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || !strings.Contains(lastOriginCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 2 quiet repeat outcome = %+v originHits=%d cookie=%q", out2, originHits.Load(), lastOriginCookie.Load())
+	}
+
+	// 3. Redirect (-L) from covered origin to uncovered target.cookie.example completes Hop 0 with the secret cookie and then raises a secret approval card for target.cookie.example before Hop 1; rejecting withholds only the secret cookie on Hop 1 while preserving benign cookies and completing the redirect.
+	originHits.Store(0)
+	targetHits.Store(0)
+	lastOriginCookie.Store("")
+	lastTargetCookie.Store("")
+	card3, done3 := waitCheckpoint("step 3 redirect cookie to uncovered target")
+	if originHits.Load() != 1 || targetHits.Load() != 0 {
+		t.Fatalf("step 3 hits while waiting on redirect secret card: origin=%d target=%d, want 1/0", originHits.Load(), targetHits.Load())
+	}
+	if !strings.Contains(lastOriginCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 3 hop 0 cookie = %q, want session secret", lastOriginCookie.Load())
+	}
+	encoded3, err := json.Marshal(card3)
+	testutil.FailErr(t, "marshal card3", err)
+	if !strings.Contains(string(encoded3), "target.cookie.example") {
+		t.Fatalf("step 3 redirect card must name target.cookie.example: %s", encoded3)
+	}
+	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card3.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
+	testutil.FailErr(t, "reject card3", err)
+	testutil.FailErr(t, "step 3 prompt", <-done3)
+	out3 := s.outcome(t, "program-3")
+	if out3.State != "completed" || out3.Status != 0 || strings.TrimSpace(out3.Stdout) != "target-cookie-ok" {
+		t.Fatalf("step 3 redirect secret withhold outcome = %+v / refusal=%+v", out3, out3.Refusal)
+	}
+	if originHits.Load() != 1 || targetHits.Load() != 1 || lastTargetCookie.Load().(string) != "theme=dark" {
+		t.Fatalf("step 3 final hits/cookies: origin=%d target=%d targetCookie=%q, want 1/1 and \"theme=dark\" without secret", originHits.Load(), targetHits.Load(), lastTargetCookie.Load())
+	}
+
+	// 4. Changing recipient override (--connect-to localhost instead of 127.0.0.1) is not covered by the existing grant and asks before Hop 0 dials; rejecting withholds only the secret cookie on Hop 0 while preserving benign cookies.
+	originHits.Store(0)
+	lastOriginCookie.Store("")
+	card4, done4 := waitCheckpoint("step 4 connect-to uncovered recipient")
+	if originHits.Load() != 0 {
+		t.Fatalf("step 4 hit origin before connect-to secret card resolution: %d", originHits.Load())
+	}
+	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card4.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
+	testutil.FailErr(t, "reject card4", err)
+	testutil.FailErr(t, "step 4 prompt", <-done4)
+	out4 := s.outcome(t, "program-4")
+	if out4.State != "completed" || out4.Status != 0 || strings.TrimSpace(out4.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || lastOriginCookie.Load().(string) != "theme=dark" {
+		t.Fatalf("step 4 connect-to secret withhold outcome = %+v / refusal=%+v originHits=%d originCookie=%q", out4, out4.Refusal, originHits.Load(), lastOriginCookie.Load())
+	}
+}
+
 
 
