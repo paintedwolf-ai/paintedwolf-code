@@ -211,7 +211,7 @@ func (s *candidateGitObjectSource) reloadPendingPublishOIDs(recordPrior bool) er
 	}
 	for _, d := range entries {
 		name, entryPath := d.Name(), filepath.Join(dir, d.Name())
-		if fseffect.IsStaging(name) {
+		if fseffect.IsStaging(dir, name) {
 			if est, lErr := os.Lstat(entryPath); lErr != nil && !errors.Is(lErr, os.ErrNotExist) {
 				return lErr
 			} else if lErr == nil && (est.Mode()&os.ModeSymlink != 0 || !est.Mode().IsRegular()) {
