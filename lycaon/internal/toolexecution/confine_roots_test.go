@@ -222,6 +222,15 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 
 	cfgRoot, err := configdir.Root()
 	testutil.FailErr(t, "resolve configdir root", err)
+	previousKeys := confine.KeyMaterialHomeRelPaths()
+	confine.SetKeyMaterialPathsSource(func() []string { return []string{"~/.ssh/"} })
+	t.Cleanup(func() {
+		if len(previousKeys) == 0 {
+			confine.SetKeyMaterialPathsSource(nil)
+			return
+		}
+		confine.SetKeyMaterialPathsSource(func() []string { return previousKeys })
+	})
 
 	cases := []struct {
 		name       string
@@ -250,8 +259,8 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		{
 			name:       "configdir-root",
 			dir:        cfgRoot,
-			wantCode:   "SANDBOX_CAPABILITY_REQUEST_INVALID",
-			wantReason: confine.WriteRootCodeSecretStore,
+			wantCode:   "SANDBOX_CONTROL_PLANE_DENIED",
+			wantReason: confine.WriteRootCodeContainsState,
 		},
 	}
 
