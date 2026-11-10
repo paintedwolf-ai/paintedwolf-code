@@ -153,7 +153,7 @@ func secretReadDenyDisabled() bool {
 // requireReadFloorResolvable checks inputs before emitting the read floor.
 func requireReadFloorResolvable() error {
 	if !secretReadDenyDisabled() {
-		if _, err := configdir.UserConfigDir(); err != nil {
+		if _, err := configdir.Root(); err != nil {
 			return fmt.Errorf("confine: control-plane read floor unresolvable: %w", err)
 		}
 	}

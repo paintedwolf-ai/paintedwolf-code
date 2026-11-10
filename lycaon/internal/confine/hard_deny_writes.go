@@ -67,7 +67,7 @@ func HardDenyWriteSpecs(c Confinement) ([]HardDenyWriteSpec, error) {
 	}
 
 	// Config discovery is required to protect the active control plane.
-	userDir, err := configdir.UserConfigDir()
+	userDir, err := configdir.Root()
 	if err != nil {
 		return nil, fmt.Errorf("resolve control plane for hard-deny: %w", err)
 	}

@@ -302,7 +302,7 @@ func TestStateTreeSymlinkedAncestorSpineProtected(t *testing.T) {
 func TestStateTreeAncestorsExcludedFromDefaultRoots(t *testing.T) {
 	for _, source := range []string{"temporary", "cache"} {
 		t.Run(source, func(t *testing.T) {
-			base := fspath.CanonicalPath(t.TempDir())
+			base := "/opt/paintedwolf-default-root-fixture"
 			state := filepath.Join(base, "state")
 			t.Setenv(configdir.EnvConfigDir, state)
 			if source == "cache" {
