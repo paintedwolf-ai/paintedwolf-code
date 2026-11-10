@@ -155,6 +155,10 @@ func TestNativeOwnerReviewsNewRequirementAfterStartRecorder(t *testing.T) {
 	testNativeOwnerPolicyAfterRecorder(t, []string{"late-ask", "deny-during-review", "recovery"})
 }
 
+func TestNativeOwnerRechecksFrameAfterNewRecorderReview(t *testing.T) {
+	testNativeOwnerPolicyAfterRecorder(t, []string{"frame-close-during-review"})
+}
+
 func testNativeOwnerPolicyAfterRecorder(t *testing.T, phases []string) {
 	t.Helper()
 	parent, tc := frameFixture(t)
@@ -188,7 +192,7 @@ func testNativeOwnerPolicyAfterRecorder(t *testing.T, phases []string) {
 			var output bytes.Buffer
 			entered, recorded := false, 0
 			asks := 0
-			needsReview := phase == "late-ask" || phase == "deny-during-review"
+			needsReview := phase == "late-ask" || phase == "deny-during-review" || phase == "frame-close-during-review"
 			manager := &nativeRecorderReviewManager{invariantCheckpointMgr: invariantCheckpointMgr{status: hitl.DecisionStatusApproved, result: &hitl.DecisionResult{Approved: true}}}
 			manager.onRequest = func(req hitl.CheckpointRequest) {
 				asks++
@@ -201,6 +205,9 @@ func testNativeOwnerPolicyAfterRecorder(t *testing.T, phases []string) {
 				}
 				if !matched {
 					t.Fatal("new read requirement was absent from actual review")
+				}
+				if phase == "frame-close-during-review" {
+					frame.Close()
 				}
 				if phase == "deny-during-review" {
 					testutil.FailErr(t, "install deny during approval", store.PutProject(root, settings.ApprovalConfig{Rules: []settings.ApprovalRule{{Category: settings.ApprovalCategoryTool, Pattern: "read", Effect: settings.ApprovalEffectDeny}}}))
@@ -249,6 +256,12 @@ func testNativeOwnerPolicyAfterRecorder(t *testing.T, phases []string) {
 			}
 			if needsReview && asks != 1 {
 				t.Fatalf("new requirement did not receive exactly one review: %d", asks)
+			}
+			if phase == "frame-close-during-review" {
+				if err == nil || entered || result.OwnerInvoked || result.OutputPublishable || output.Len() != 0 {
+					t.Fatalf("closed frame resumed through approved card: err=%v entered=%t result=%+v output=%q", err, entered, result, output.String())
+				}
+				return
 			}
 			if phase == "late-deny" || phase == "deny-during-review" {
 				reject := toolrejection.AsToolReject(err)
