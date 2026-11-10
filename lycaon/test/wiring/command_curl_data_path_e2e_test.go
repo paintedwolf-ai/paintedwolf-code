@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +15,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -402,4 +405,189 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 		}
 	})
 }
+
+func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *testing.T) {
+	var originHits, targetHits atomic.Int32
+	dropHop1AfterRequest := atomic.Bool{}
+
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/seed":
+			_, _ = io.WriteString(w, "external-seed\n")
+		case strings.HasPrefix(r.Host, "origin.redirect.example"):
+			originHits.Add(1)
+			http.Redirect(w, r, "http://"+r.URL.Query().Get("target")+"/landed", http.StatusFound)
+		default:
+			targetHits.Add(1)
+			if dropHop1AfterRequest.Load() {
+				hj, ok := w.(http.Hijacker)
+				if !ok {
+					t.Error("target response writer does not support hijacking")
+					return
+				}
+				conn, _, err := hj.Hijack()
+				if err == nil {
+					_ = conn.Close()
+				}
+				return
+			}
+			_, _ = io.WriteString(w, "landed-real-adapter\n")
+		}
+	}))
+	defer proxy.Close()
+
+	proxyURL, err := url.Parse(proxy.URL)
+	testutil.FailErr(t, "parse proxy listener", err)
+	portStr := proxyURL.Port()
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	testutil.FailErr(t, "proxy port", err)
+	originHost := "origin.redirect.example:" + portStr
+	targetHost := "target.redirect.example:" + portStr
+	originResolve := originHost + ":127.0.0.1"
+	targetResolve := targetHost + ":127.0.0.1"
+
+	var mu sync.Mutex
+	var asked []string
+	allow := map[string]bool{
+		"127.0.0.1:" + portStr: true,
+		originHost:             true,
+	}
+	// fixtureSessionGrants simulates per-session grant reuse inside the test resolver;
+	// durable persistent grant store lifecycle is qualified separately.
+	fixtureSessionGrants := map[string]bool{}
+	cmdText := "curl -s -L --resolve '" + originResolve + "' --resolve '" + targetResolve + "' 'http://" + originHost + "/start?target=" + targetHost + "'"
+	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
+		{
+			Pattern:      "step 1 deny hop 1",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: map[string]any{"command": cmdText}}},
+			FollowUpText: "Denied hop 1.",
+		},
+		{
+			Pattern:      "step 2 unknown hop 1",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-2", Name: "command", Args: map[string]any{"command": cmdText}}},
+			FollowUpText: "Unknown hop 1.",
+		},
+		{
+			Pattern:      "step 3 authorized recovery",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-3", Name: "command", Args: map[string]any{"command": cmdText}}},
+			FollowUpText: "Recovered.",
+		},
+		{
+			Pattern:      "step 4 quiet repeat",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-4", Name: "command", Args: map[string]any{"command": cmdText}}},
+			FollowUpText: "Repeated.",
+		},
+	}})
+
+	approvals := "  - category: tool\n    pattern: http_request\n    effect: allow\n"
+	s := startSessionWithClient(t, mock, wire.CreateSessionRequest{}, approvals, gate.PostureBalanced)
+	s.h.SeedProgress(t, t.Context(), s.session)
+	if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "curl-redirect-real", "curl-fixture", nil) {
+		t.Fatal("listener grant failed")
+	}
+
+	// wireEgressPolicy in startSessionWithClient installs an EgressPostureResolver and EgressApprovals
+	// resolver for the harness; override both after session creation so this test exercises per-hop
+	// confine.PostureAsk admission directly through the real native curl adapter.
+	confine.SetApprovalsDisabledSource(func(confine.EgressCommand) bool { return false })
+	confine.SetEgressPostureResolver(func(confine.EgressCommand) confine.EgressPosture { return confine.PostureAsk })
+	release := confine.SetEgressResolver(func(_ context.Context, cmd confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		endpoint := net.JoinHostPort(ep.Host, strconv.Itoa(int(ep.Port)))
+		grantKey := cmd.SessionID + "|" + endpoint
+		if fixtureSessionGrants[grantKey] {
+			return true
+		}
+		asked = append(asked, endpoint)
+		if allow[endpoint] {
+			fixtureSessionGrants[grantKey] = true
+			return true
+		}
+		return false
+	})
+	defer func() {
+		confine.SetEgressPostureResolver(nil)
+		confine.SetApprovalsDisabledSource(nil)
+		_ = release(context.Background())
+	}()
+
+	// 1. Redirect denial after completed Hop 0 through the real registered native curl adapter and command runtime.
+	_, err = s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 1 deny hop 1")
+	testutil.FailErr(t, "step 1 deny hop 1", err)
+	outDeny := s.outcome(t, "program-1")
+	if outDeny.State != "rejected" || outDeny.CompletedEffects != 1 || outDeny.ReplayAvailable || outDeny.Refusal == nil || outDeny.Refusal.Code != "HTTP_REQUEST_HOST_DENIED" {
+		t.Fatalf("step 1 real adapter denied redirect hop outcome = %+v / refusal=%+v", outDeny, outDeny.Refusal)
+	}
+	if originHits.Load() != 1 || targetHits.Load() != 0 {
+		t.Fatalf("step 1 hits: origin=%d target=%d, want 1/0", originHits.Load(), targetHits.Load())
+	}
+	details := outDeny.Refusal.Details
+	if details["command_execution"] != "observed" || details["program_completed_effects"] != float64(1) || details["program_replay_available"] != false ||
+		details["http_requests_started"] != float64(1) || details["http_responses_received"] != float64(1) {
+		t.Fatalf("step 1 refusal details lost completed initial hop state: %#v", details)
+	}
+	if !strings.Contains(outDeny.Refusal.Feedback, "Earlier exchange attempts have already started (1 attempts, 1 responses).") ||
+		strings.Contains(outDeny.Refusal.Feedback, "No command operation ran") {
+		t.Fatalf("step 1 refusal feedback misrepresented completed initial hop: %q", outDeny.Refusal.Feedback)
+	}
+
+	// 2. Unknown post-send outcome on Hop 1 through the real native curl adapter settles with UncertainEffects==1 and ReplayAvailable==false, without auto-replaying Hop 0 or Hop 1.
+	originHits.Store(0)
+	targetHits.Store(0)
+	dropHop1AfterRequest.Store(true)
+	mu.Lock()
+	allow[targetHost] = true
+	asked = nil
+	fixtureSessionGrants = map[string]bool{}
+	mu.Unlock()
+
+	_, err = s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 2 unknown hop 1")
+	testutil.FailErr(t, "step 2 unknown hop 1", err)
+	outUnknown := s.outcome(t, "program-2")
+	if outUnknown.UncertainEffects != 1 || outUnknown.ReplayAvailable || originHits.Load() != 1 || targetHits.Load() != 1 {
+		t.Fatalf("step 2 real adapter unknown Hop 1 outcome = %+v originHits=%d targetHits=%d, want UncertainEffects=1 ReplayAvailable=false and 1/1 hits (no auto-replay)",
+			outUnknown, originHits.Load(), targetHits.Load())
+	}
+
+	// 3. Explicit caller retry after Hop 1 is healthy and authorized succeeds cleanly and quiet-repeats under the fixture session grant resolver.
+	originHits.Store(0)
+	targetHits.Store(0)
+	dropHop1AfterRequest.Store(false)
+	mu.Lock()
+	asked = nil
+	fixtureSessionGrants = map[string]bool{}
+	mu.Unlock()
+
+	_, err = s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 3 authorized recovery")
+	testutil.FailErr(t, "step 3 authorized recovery", err)
+	outRecover := s.outcome(t, "program-3")
+	if outRecover.State != "completed" || outRecover.Status != 0 || outRecover.CompletedEffects != 1 || strings.TrimSpace(outRecover.Stdout) != "landed-real-adapter" {
+		t.Fatalf("step 3 real adapter authorized recovery outcome = %+v", outRecover)
+	}
+	if originHits.Load() != 1 || targetHits.Load() != 1 {
+		t.Fatalf("step 3 hits: origin=%d target=%d, want 1/1", originHits.Load(), targetHits.Load())
+	}
+	mu.Lock()
+	askedFirst := append([]string(nil), asked...)
+	asked = nil
+	mu.Unlock()
+	if !slices.Contains(askedFirst, targetHost) {
+		t.Fatalf("step 3 asked = %v, want to include %s", askedFirst, targetHost)
+	}
+
+	_, err = s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 4 quiet repeat")
+	testutil.FailErr(t, "step 4 quiet repeat", err)
+	outRepeat := s.outcome(t, "program-4")
+	if outRepeat.State != "completed" || outRepeat.Status != 0 || strings.TrimSpace(outRepeat.Stdout) != "landed-real-adapter" {
+		t.Fatalf("step 4 real adapter quiet repeat outcome = %+v", outRepeat)
+	}
+	mu.Lock()
+	askedSecond := append([]string(nil), asked...)
+	mu.Unlock()
+	if len(askedSecond) != 0 {
+		t.Fatalf("step 4 quiet repeat re-prompted = %v, want empty", askedSecond)
+	}
+}
+
 
