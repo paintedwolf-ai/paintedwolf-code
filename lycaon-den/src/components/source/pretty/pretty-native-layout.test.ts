@@ -815,4 +815,62 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       view.destroy();
     }
   });
+
+  it("FMT-AC-10, FMT-AC-13: renders inline <br> break widgets (lineBreaks=1, isHidden=true) and resolves visual-line-end (assoc=-1) vs next-visual-line-start (assoc=1) DOM positions across all synthetic boundaries", () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const raw = '{"alpha":1,"beta":[2,3]}';
+    const view = new EditorView({
+      parent,
+      state: EditorState.create({
+        doc: raw,
+        extensions: [
+          json(),
+          createPrettyNativeDecorationsExtension({
+            enabled: true,
+            path: "config.json",
+          }),
+        ],
+      }),
+    });
+
+    try {
+      // Single logical line stays within a single .cm-line element with inline <br class="pw-virtual-break"> breaks:
+      const cmLines = view.contentDOM.querySelectorAll(".cm-line");
+      expect(cmLines.length).toBe(1);
+      const breakEls = view.contentDOM.querySelectorAll("br.pw-virtual-break");
+      expect(breakEls.length).toBe(6);
+
+      // Synthetic break boundaries for `{"alpha":1,"beta":[2,3]}`:
+      // 1 (after `{`), 11 (after `"alpha":1,`), 19 (after `"beta":[`), 21 (after `2,`), 22 (after `3`), 23 (after `]`)
+      const boundaries = [
+        { pos: 1, beforeChar: "{", afterChar: '"' },
+        { pos: 11, beforeChar: ",", afterChar: '"' },
+        { pos: 19, beforeChar: "[", afterChar: "2" },
+        { pos: 21, beforeChar: ",", afterChar: "3" },
+        { pos: 22, beforeChar: "3", afterChar: "]" },
+        { pos: 23, beforeChar: "]", afterChar: "}" },
+      ];
+
+      for (const { pos, beforeChar, afterChar } of boundaries) {
+        const domBefore = view.domAtPos(pos, -1);
+        const domAfter = view.domAtPos(pos, 1);
+
+        // `side = -1` (visual line end, `assoc = -1`) resolves to the text node ending at `pos` before `<br>`:
+        expect(domBefore.node.nodeType).toBe(Node.TEXT_NODE);
+        expect(domBefore.node.textContent?.slice(domBefore.offset - 1, domBefore.offset)).toBe(
+          beforeChar,
+        );
+
+        // `side = 1` (next visual line start, `assoc = 1`) resolves to the text node starting at `pos` after `<br>` and `.pw-virtual-indent`:
+        expect(domAfter.node.nodeType).toBe(Node.TEXT_NODE);
+        expect(domAfter.node.textContent?.slice(domAfter.offset, domAfter.offset + 1)).toBe(
+          afterChar,
+        );
+      }
+    } finally {
+      view.destroy();
+      parent.remove();
+    }
+  });
 });

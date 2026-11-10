@@ -55,14 +55,18 @@ export {
 
 export class PrettyBreakWidget extends WidgetType {
   override toDOM(): HTMLElement {
-    const el = document.createElement("div");
+    const el = document.createElement("br");
     el.className = "pw-virtual-break";
     el.setAttribute("aria-hidden", "true");
     return el;
   }
 
-  override get estimatedHeight(): number {
-    return 0;
+  override get lineBreaks(): number {
+    return 1;
+  }
+
+  override get isHidden(): boolean {
+    return true;
   }
 
   override eq(other: WidgetType): boolean {
@@ -78,6 +82,10 @@ export class PrettyIndentWidget extends WidgetType {
     super();
     this.depth = depth;
     this.indentWidthCh = indentWidthCh;
+  }
+
+  override get isHidden(): boolean {
+    return true;
   }
 
   override eq(other: WidgetType): boolean {
@@ -100,8 +108,7 @@ export class PrettyIndentWidget extends WidgetType {
 const SHARED_BREAK_WIDGET = new PrettyBreakWidget();
 const SHARED_BREAK_DECORATION = Decoration.widget({
   widget: SHARED_BREAK_WIDGET,
-  block: true,
-  side: -1,
+  side: -2,
 });
 
 const INDENT_DECORATION_CACHE = new Map<string, Decoration>();
@@ -112,7 +119,7 @@ function getIndentDecoration(depth: number, indentWidthCh: number): Decoration {
   if (!cached) {
     cached = Decoration.widget({
       widget: new PrettyIndentWidget(depth, indentWidthCh),
-      side: 2,
+      side: -1,
     });
     INDENT_DECORATION_CACHE.set(key, cached);
   }

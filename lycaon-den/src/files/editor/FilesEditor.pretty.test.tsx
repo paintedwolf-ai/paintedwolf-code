@@ -355,4 +355,51 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     void closeFilesBuffer(PROJECT, buf.key);
     expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(false);
   });
+
+  it("resolves visual-line-end (assoc=-1) and next-visual-line-start (assoc=1) selection and DOM positions across all Pretty boundaries in FilesEditor (FMT-AC-10, FMT-AC-13)", () => {
+    const rawJson = '{"alpha":1,"beta":[2,3]}';
+    const buf = loadedBuffer({
+      path: "boundaries.json",
+      content: rawJson,
+    });
+    const props = editorProps(buf);
+    render(() => <FilesEditor {...props} />);
+    const view = getFilesEditorView(PROJECT, buf.key)!;
+
+    invokePrettyToggleForTab(PROJECT, buf.key);
+    expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(true);
+    expect(view.contentDOM.querySelectorAll("br.pw-virtual-break").length).toBe(6);
+    expect(view.contentDOM.querySelectorAll(".cm-line").length).toBe(1);
+
+    const boundaries = [
+      { pos: 1, beforeChar: "{", afterChar: '"' },
+      { pos: 11, beforeChar: ",", afterChar: '"' },
+      { pos: 19, beforeChar: "[", afterChar: "2" },
+      { pos: 21, beforeChar: ",", afterChar: "3" },
+      { pos: 22, beforeChar: "3", afterChar: "]" },
+      { pos: 23, beforeChar: "]", afterChar: "}" },
+    ];
+
+    for (const { pos, beforeChar, afterChar } of boundaries) {
+      view.dispatch({ selection: EditorSelection.cursor(pos, -1) });
+      expect(view.state.selection.main.head).toBe(pos);
+      expect(view.state.selection.main.assoc).toBe(-1);
+      const domEnd = view.domAtPos(pos, -1);
+      expect(domEnd.node.nodeType).toBe(Node.TEXT_NODE);
+      expect(domEnd.node.textContent?.slice(domEnd.offset - 1, domEnd.offset)).toBe(
+        beforeChar,
+      );
+
+      view.dispatch({ selection: EditorSelection.cursor(pos, 1) });
+      expect(view.state.selection.main.head).toBe(pos);
+      expect(view.state.selection.main.assoc).toBe(1);
+      const domStart = view.domAtPos(pos, 1);
+      expect(domStart.node.nodeType).toBe(Node.TEXT_NODE);
+      expect(domStart.node.textContent?.slice(domStart.offset, domStart.offset + 1)).toBe(
+        afterChar,
+      );
+    }
+
+    expect(view.state.doc.toString()).toBe(rawJson);
+  });
 });
