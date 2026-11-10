@@ -15,7 +15,8 @@ for definition in "${IMAGES}"/*.Containerfile; do
   ENGINES+=("$(basename "${definition}" .Containerfile)")
 done
 
-# --prepare builds the missing images and runs nothing, for a lane that later runs offline.
+# --prepare builds the missing images and provisions the managed browser cache, running
+# nothing, for a lane that later runs offline.
 PREPARE=0
 if [[ "${1:-}" == "--prepare" ]]; then
   PREPARE=1
@@ -71,6 +72,14 @@ if ((PREPARE)); then
       status=2
     fi
   done
+  # The lane builds its sidecar offline, so warm the managed browser cache its
+  # browser ensure resolves from while the runner still has a network.
+  if "${DIR}/../task" browser:ensure; then
+    echo "den:webkit:atspi: managed browser cache ready"
+  else
+    echo "den:webkit:atspi: unverified: could not provision the managed browser cache" >&2
+    status=2
+  fi
   exit "${status}"
 fi
 
