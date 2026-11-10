@@ -3,6 +3,7 @@ package toolexecution
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -22,15 +23,18 @@ import (
 )
 
 // Preparation can read source bytes before the final producer is invoked.
-// A human reply cannot preserve an operation removed during that wait.
-func TestNativePreparationRechecksProfileAfterApproval(t *testing.T) {
-	for _, withdraw := range []bool{false, true} {
-		name := "unchanged"
-		if withdraw {
-			name = "withdrawn"
-		}
+// A human reply cannot preserve an operation or branch removed during that wait.
+func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
+	for _, name := range []string{"unchanged", "profile-withdrawn", "branch-unchanged", "branch-withdrawn"} {
 		t.Run(name, func(t *testing.T) {
 			parent, tc := frameFixture(t)
+			withdraw := name == "profile-withdrawn" || name == "branch-withdrawn"
+			branch := &preparationBranch{}
+			retired := errors.New("fixture branch retired")
+			if name == "branch-unchanged" || name == "branch-withdrawn" {
+				tc.Source.WorkerBranchRoot = tc.ActiveRootPath()
+				tc.Source.BranchWorkspace = branch
+			}
 			ctx := sandbox.WithSessionID(t.Context(), parent.SessionID)
 			testutil.FailErr(t, "seed preparation source", os.WriteFile(filepath.Join(tc.ActiveRootPath(), "input"), []byte("source bytes"), 0600))
 			classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
@@ -69,8 +73,11 @@ func TestNativePreparationRechecksProfileAfterApproval(t *testing.T) {
 				if !matched {
 					t.Fatal("read requirement absent from review")
 				}
-				if withdraw {
+				if name == "profile-withdrawn" {
 					profile.DenyTools = []string{"read"}
+				}
+				if name == "branch-withdrawn" {
+					branch.err = retired
 				}
 			}
 			executor.Approvals.SetCheckpointManager(ctx, manager, gate)
@@ -111,6 +118,12 @@ func TestNativePreparationRechecksProfileAfterApproval(t *testing.T) {
 			if asks != 1 || memory.InUse().State != 0 || frameMemory.InUse().State != 0 {
 				t.Fatal("review or retention contract failed")
 			}
+			if name == "branch-withdrawn" && !errors.Is(err, retired) {
+				t.Fatalf("lost branch retirement refusal: %v", err)
+			}
+			if (name == "branch-unchanged" || name == "branch-withdrawn") && branch.checked == 0 {
+				t.Fatal("worker branch authority was not consulted")
+			}
 			if withdraw {
 				if err == nil || preparedBytes.Len() != 0 || output.Len() != 0 || records != 0 || result.OwnerInvoked {
 					t.Fatalf("withdrawn operation read source: err=%v prepared=%q output=%q records=%d owner=%t", err, preparedBytes.String(), output.String(), records, result.OwnerInvoked)
@@ -124,3 +137,13 @@ func TestNativePreparationRechecksProfileAfterApproval(t *testing.T) {
 		})
 	}
 }
+
+// The branch owner supplies live metadata validation; the dispatch and file
+// doors remain real, so this port changes authority without deleting the file.
+type preparationBranch struct {
+	err     error
+	checked int
+}
+
+func (b *preparationBranch) ValidateMeta(context.Context) error        { b.checked++; return b.err }
+func (*preparationBranch) EnsureParents(context.Context, string) error { return nil }
