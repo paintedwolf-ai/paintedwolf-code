@@ -107,6 +107,27 @@ func parentCanonicalPath(p string) string {
 	return filepath.Join(parent, filepath.Base(cleaned))
 }
 
+func darwinAliasPath(p string) string {
+	for _, pair := range [][2]string{
+		{"/private/var", "/var"},
+		{"/private/tmp", "/tmp"},
+		{"/private/etc", "/etc"},
+	} {
+		priv, link := pair[0], pair[1]
+		switch {
+		case p == priv:
+			return link
+		case strings.HasPrefix(p, priv+"/"):
+			return link + strings.TrimPrefix(p, priv)
+		case p == link:
+			return priv
+		case strings.HasPrefix(p, link+"/"):
+			return priv + strings.TrimPrefix(p, link)
+		}
+	}
+	return ""
+}
+
 // writeRootContainsStateTree prevents an ancestor rename from moving host state.
 func writeRootContainsStateTree(path string) bool {
 	for _, state := range resolveEach(controlPlaneReadDenyRoots()) {
