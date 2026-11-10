@@ -384,7 +384,7 @@ func (s *candidateGitObjectSource) ensurePackReaderDir() (string, error) {
 		_ = os.RemoveAll(tmpDir)
 		return "", err
 	}
-	altDirs := slices.Clone(s.candidateDirs)
+	altDirs := slices.Clone(s.packCandidateDirs)
 	if err := os.WriteFile(filepath.Join(infoDir, "alternates"), []byte(strings.Join(altDirs, "\n")+"\n"), 0o600); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return "", err

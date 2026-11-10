@@ -279,7 +279,7 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 	// via publishSelectedPack before loose child blob fails in publishStagedLoose.
 	testutil.FailErr(t, "remove unchangedTreePath for 2c", os.Remove(unchangedTreePath))
 	testutil.FailErr(t, "remove candTreePath for 2c", os.Remove(candTreePath))
-	candPackDir := filepath.Join(cpObjs, "pack")
+	candPackDir := filepath.Join(store.RootDir(), "objects", "pack")
 	testutil.FailErr(t, "mkdir candPackDir", os.MkdirAll(candPackDir, 0o755))
 	_, packCode, packErr := gitexec.Run(
 		t.Context(), workerRepo,
