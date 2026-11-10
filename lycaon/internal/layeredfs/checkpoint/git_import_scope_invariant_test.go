@@ -236,6 +236,91 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 	}
 	testutil.FailErr(t, "remove candTreePath", os.Remove(candTreePath))
 
+	// 2b. Interrupted publication AFTER boundary subtree is visible in target and BEFORE child blob is durable:
+	// both loose and mixed pack+loose retries must not trust the partially published boundary subtree.
+	candBlobPath := filepath.Join(cpObjs, deepBlobOID[:2], deepBlobOID[2:])
+	testutil.FailErr(t, "mkdir candBlobPath", os.MkdirAll(filepath.Dir(candBlobPath), 0o755))
+	testutil.FailErr(t, "write candTreePath for 2b", os.WriteFile(candTreePath, savedTreeBytes, 0o444))
+	testutil.FailErr(t, "write candBlobPath for 2b", os.WriteFile(candBlobPath, savedDeepBlobBytes, 0o444))
+	origWrap := wrapObjectCopyReaderFn
+	t.Cleanup(func() { wrapObjectCopyReaderFn = origWrap })
+	wrapObjectCopyReaderFn = func(srcPath string, r io.Reader) io.Reader {
+		if srcPath == candBlobPath {
+			// Ensure boundary subtree is visible in target before child blob publication fails.
+			_ = os.MkdirAll(filepath.Dir(unchangedTreePath), 0o755)
+			_ = os.WriteFile(unchangedTreePath, savedTreeBytes, 0o444)
+			return bytes.NewReader([]byte("corrupt-zlib"))
+		}
+		return r
+	}
+	if _, err := ImportAndValidateCheckpointGitRefs(
+		t.Context(), store.RootDir(), "chk-frontier-interrupted-loose", "worker",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work": c2}, ObjectCheckpoints: []string{"chk-frontier"}},
+		map[string]string{"primary": target},
+	); err == nil {
+		t.Fatal("expected interrupted loose publication on child blob to fail")
+	}
+	if _, statErr := os.Stat(unchangedTreePath); statErr != nil {
+		t.Fatalf("expected boundary subtree to be visible in target after partial publication: %v", statErr)
+	}
+	assertTargetRefsPreserved("interrupted-loose-publication")
+	wrapObjectCopyReaderFn = origWrap
+	testutil.FailErr(t, "remove candBlobPath before retry", os.Remove(candBlobPath))
+	if _, err := ImportAndValidateCheckpointGitRefs(
+		t.Context(), store.RootDir(), "chk-frontier-interrupted-loose", "worker",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work": c2}, ObjectCheckpoints: []string{"chk-frontier"}},
+		map[string]string{"primary": target},
+	); err == nil {
+		t.Fatal("expected immediate retry after interrupted loose publication to still fail while child blob is missing")
+	}
+	assertTargetRefsPreserved("interrupted-loose-publication-retry")
+
+	// 2c. Mixed pack+loose interrupted publication: boundary subtree in candidate pack reaches target/objects/pack
+	// via publishSelectedPack before loose child blob fails in publishStagedLoose.
+	testutil.FailErr(t, "remove unchangedTreePath for 2c", os.Remove(unchangedTreePath))
+	testutil.FailErr(t, "remove candTreePath for 2c", os.Remove(candTreePath))
+	candPackDir := filepath.Join(cpObjs, "pack")
+	testutil.FailErr(t, "mkdir candPackDir", os.MkdirAll(candPackDir, 0o755))
+	_, packCode, packErr := gitexec.Run(
+		t.Context(), workerRepo,
+		[]string{"pack-objects", "--quiet", filepath.Join(candPackDir, "pack")},
+		gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(unchangedTreeOID + "\n")},
+	)
+	if packErr != nil || packCode != 0 {
+		t.Fatalf("pack unchangedTreeOID into candidate pack (exit %d): %v", packCode, packErr)
+	}
+	testutil.FailErr(t, "restore candBlobPath for 2c", os.WriteFile(candBlobPath, savedDeepBlobBytes, 0o444))
+	wrapObjectCopyReaderFn = func(srcPath string, r io.Reader) io.Reader {
+		if srcPath == candBlobPath {
+			return bytes.NewReader([]byte("corrupt-zlib"))
+		}
+		return r
+	}
+	if _, err := ImportAndValidateCheckpointGitRefs(
+		t.Context(), store.RootDir(), "chk-frontier-interrupted-mixed", "worker",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work": c2}, ObjectCheckpoints: []string{"chk-frontier"}},
+		map[string]string{"primary": target},
+	); err == nil {
+		t.Fatal("expected interrupted mixed pack+loose publication to fail on loose child blob")
+	}
+	if gotType := runGitTestCmd(t, target, "cat-file", "-t", unchangedTreeOID); gotType != "tree" {
+		t.Fatalf("expected packed boundary subtree to be visible in target after publishSelectedPack, got %q", gotType)
+	}
+	assertTargetRefsPreserved("interrupted-mixed-publication")
+	wrapObjectCopyReaderFn = origWrap
+	testutil.FailErr(t, "remove candBlobPath before mixed retry", os.Remove(candBlobPath))
+	if _, err := ImportAndValidateCheckpointGitRefs(
+		t.Context(), store.RootDir(), "chk-frontier-interrupted-mixed", "worker",
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work": c2}, ObjectCheckpoints: []string{"chk-frontier"}},
+		map[string]string{"primary": target},
+	); err == nil {
+		t.Fatal("expected immediate retry after interrupted mixed pack+loose publication to fail while child blob is missing")
+	}
+	assertTargetRefsPreserved("interrupted-mixed-publication-retry")
+	testutil.FailErr(t, "clean candPackDir", os.RemoveAll(candPackDir))
+	testutil.FailErr(t, "clean target pack dir", os.RemoveAll(filepath.Join(target, ".git", "objects", "pack")))
+	testutil.FailErr(t, "clean pending publish marker before step 3", os.Remove(filepath.Join(target, ".git", "lycaon-pending-publish")))
+
 	// 3. Restoring unchangedTree in target while removing the frontier commit c1's root tree (c1Tree)
 	// must prevent c1 from being admitted to the established frontier and fail closed.
 	testutil.FailErr(t, "restore unchangedTree for root-tree check", os.WriteFile(unchangedTreePath, savedTreeBytes, 0o444))
@@ -267,11 +352,9 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 		t.Fatalf("imported commit edited.txt = %q, want v2", got)
 	}
 
-	// 5. When unchangedTree is absent from target and repaired from candidates alongside its child deepBlobOID,
-	// candidate repair succeeds and the repository passes git fsck --full once c0 is restored.
-	testutil.FailErr(t, "remove unchangedTree for full candidate repair", os.Remove(unchangedTreePath))
-	candBlobPath := filepath.Join(cpObjs, deepBlobOID[:2], deepBlobOID[2:])
-	testutil.FailErr(t, "mkdir candBlobPath", os.MkdirAll(filepath.Dir(candBlobPath), 0o755))
+	// 5. When unchangedTree is absent from target (or marked pending from an interrupted publication) and repaired
+	// from intact candidates alongside its child deepBlobOID, retry recovers and passes git fsck --full once c0 is restored.
+	testutil.FailErr(t, "write pending publish marker for recovery check", os.WriteFile(filepath.Join(target, ".git", "lycaon-pending-publish"), []byte(unchangedTreeOID+"\n"), 0o600))
 	testutil.FailErr(t, "write candTreePath", os.WriteFile(candTreePath, savedTreeBytes, 0o444))
 	testutil.FailErr(t, "write candBlobPath", os.WriteFile(candBlobPath, savedDeepBlobBytes, 0o444))
 	_, err = ImportAndValidateCheckpointGitRefs(
@@ -280,6 +363,9 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 		map[string]string{"primary": target},
 	)
 	testutil.FailErr(t, "complete candidate boundary subtree repair", err)
+	if _, statErr := os.Stat(filepath.Join(target, ".git", "lycaon-pending-publish")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected lycaon-pending-publish to be cleared after complete repair, got %v", statErr)
+	}
 	testutil.FailErr(t, "restore c0 for full fsck", os.WriteFile(c0Path, savedC0Bytes, 0o444))
 	runGitTestCmd(t, target, "fsck", "--full")
 }

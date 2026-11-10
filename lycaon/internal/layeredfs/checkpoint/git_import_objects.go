@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
-	"crypto/sha1" // #nosec G505 -- SHA-1 is the object identifier in the admitted Git repository format.
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -16,6 +15,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
@@ -49,8 +49,9 @@ type candidateGitObjectSource struct {
 	storeDir, repoRoot, gitDir, commonGitDir, targetObjectsDir, packReaderDir string
 	candidateDirs, packCandidateDirs                                          []string
 	targetHasPacks                                                            bool
-	targetFanoutDirs, selectedPackedOIDs                                      map[string]bool
+	targetFanoutDirs, selectedPackedOIDs, incompleteTargetOIDs                map[string]bool
 	stagedLoose                                                               map[string]string
+	stagedLooseOrder                                                          []string
 }
 
 func (s *candidateGitObjectSource) hasTargetFanout(oid string) bool {
@@ -67,7 +68,15 @@ func openCandidateGitObjectSource(
 	src := &candidateGitObjectSource{
 		storeDir: strings.TrimSpace(storeDir), repoRoot: repoRoot, gitDir: gitDir,
 		commonGitDir: commonGitDir, targetObjectsDir: targetObjectsDir,
-		selectedPackedOIDs: make(map[string]bool), stagedLoose: make(map[string]string),
+		selectedPackedOIDs: make(map[string]bool), incompleteTargetOIDs: make(map[string]bool),
+		stagedLoose: make(map[string]string),
+	}
+	if raw, err := readBoundedFile(filepath.Join(commonGitDir, "lycaon-pending-publish"), 4<<20); err == nil {
+		for _, line := range strings.Split(string(raw), "\n") {
+			if oid := strings.ToLower(strings.TrimSpace(line)); isHexOID(oid) && !isAllZeroOID(oid) {
+				src.incompleteTargetOIDs[oid] = true
+			}
+		}
 	}
 	hasTargetInfo, hasTargetPack := true, true
 	if entries, err := os.ReadDir(targetObjectsDir); err == nil {
@@ -305,6 +314,9 @@ func (s *candidateGitObjectSource) resolveCandidateLoose(ctx context.Context, oi
 			if vErr != nil {
 				return "", nil, true, vErr
 			}
+			if _, exists := s.stagedLoose[oid]; !exists {
+				s.stagedLooseOrder = append(s.stagedLooseOrder, oid)
+			}
 			s.stagedLoose[oid] = srcLoose
 			return objType, body, true, nil
 		}
@@ -312,21 +324,47 @@ func (s *candidateGitObjectSource) resolveCandidateLoose(ctx context.Context, oi
 	return "", nil, false, nil
 }
 
-func (s *candidateGitObjectSource) publishStagedLoose(ctx context.Context) error {
-	for _, oid := range slices.Sorted(maps.Keys(s.stagedLoose)) {
+func (s *candidateGitObjectSource) publishVerifiedObjects(ctx context.Context, seen map[string]bool) error {
+	if len(s.stagedLoose) > 0 || len(s.selectedPackedOIDs) > 0 {
+		for oid := range s.stagedLoose {
+			s.incompleteTargetOIDs[oid] = true
+		}
+		for oid := range s.selectedPackedOIDs {
+			s.incompleteTargetOIDs[oid] = true
+		}
+		pending := slices.Sorted(maps.Keys(s.incompleteTargetOIDs))
+		if err := writeAtomicJSONOrText(s.commonGitDir, "lycaon-pending-publish", []byte(strings.Join(pending, "\n")+"\n"), 0o600); err != nil {
+			return err
+		}
+	}
+	if err := s.publishSelectedPack(ctx); err != nil {
+		return err
+	}
+	for i := len(s.stagedLooseOrder) - 1; i >= 0; i-- {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		srcLoose := s.stagedLoose[oid]
+		oid := s.stagedLooseOrder[i]
 		dstLoose := filepath.Join(s.targetObjectsDir, oid[:2], oid[2:])
-		if _, _, err := copyFileStreamingAtomicWithVerify(srcLoose, dstLoose, 0o444); err != nil {
+		if _, _, err := copyFileStreamingAtomicWithVerify(s.stagedLoose[oid], dstLoose, 0o444); err != nil {
 			return err
 		}
 		if s.targetFanoutDirs != nil && len(oid) >= 2 {
 			s.targetFanoutDirs[oid[:2]] = true
 		}
 	}
-	return nil
+	for oid := range seen {
+		delete(s.incompleteTargetOIDs, oid)
+	}
+	pendingPath := filepath.Join(s.commonGitDir, "lycaon-pending-publish")
+	if len(s.incompleteTargetOIDs) == 0 {
+		if err := os.Remove(pendingPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	rem := slices.Sorted(maps.Keys(s.incompleteTargetOIDs))
+	return writeAtomicJSONOrText(s.commonGitDir, "lycaon-pending-publish", []byte(strings.Join(rem, "\n")+"\n"), 0o600)
 }
 
 func (s *candidateGitObjectSource) ensurePackReaderDir() (string, error) {
@@ -499,7 +537,7 @@ func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensu
 	if err := errors.Join(syncObjectFileFn(tmpFile), closeObjectFileFn(tmpFile)); err != nil {
 		return "", nil, err
 	}
-	if err := os.Rename(tmpPath, dstPath); err != nil {
+	if err := fseffect.Rename(filepath.Dir(dstPath), filepath.Base(tmpPath), filepath.Base(dstPath)); err != nil {
 		return "", nil, err
 	}
 	published = true
@@ -548,26 +586,3 @@ func fileDigestSHA256(path string) (string, error) {
 	_, cErr := io.Copy(h, f)
 	return hex.EncodeToString(h.Sum(nil)), cErr
 }
-
-func readBoundedFile(path string, maxBytes int64) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-	data, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
-	if err != nil || int64(len(data)) > maxBytes {
-		return nil, fmt.Errorf("checkpoint: read %s failed or exceeded limit: %w", path, err)
-	}
-	return data, nil
-}
-
-func hexObjSHA1(b []byte) string {
-	s := sha1.Sum(b) /* #nosec G401 -- Standard Git object identifier. */
-	return hex.EncodeToString(s[:])
-}
-func isHexOID(s string) bool {
-	_, err := hex.DecodeString(s)
-	return err == nil && (len(s) == 40 || len(s) == 64)
-}
-func isAllZeroOID(s string) bool { return strings.Trim(s, "0") == "" }

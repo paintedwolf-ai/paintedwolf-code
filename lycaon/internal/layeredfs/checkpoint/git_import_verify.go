@@ -134,10 +134,7 @@ func verifyAndPublishReachableGitGraph(ctx context.Context, source *candidateGit
 	if err := verifyDestinationFrontierBatch(ctx, source, frontierVerifyOIDs, frontier, seen); err != nil {
 		return err
 	}
-	if err := source.publishStagedLoose(ctx); err != nil {
-		return err
-	}
-	return source.publishSelectedPack(ctx)
+	return source.publishVerifiedObjects(ctx, seen)
 }
 
 func buildEstablishedTargetFrontier(ctx context.Context, source *candidateGitObjectSource, excludeTipOIDs []string) *establishedTargetFrontier {
@@ -145,6 +142,9 @@ func buildEstablishedTargetFrontier(ctx context.Context, source *candidateGitObj
 	excluded := make(map[string]bool, len(excludeTipOIDs))
 	for _, oid := range excludeTipOIDs {
 		excluded[strings.ToLower(strings.TrimSpace(oid))] = true
+	}
+	for oid := range source.incompleteTargetOIDs {
+		excluded[oid] = true
 	}
 	tips := collectDestinationBaseRefTips(source.commonGitDir, source.gitDir, excluded)
 	if len(tips) == 0 {
@@ -156,7 +156,7 @@ func buildEstablishedTargetFrontier(ctx context.Context, source *candidateGitObj
 	}
 	for _, oid := range tips {
 		if data, ok := resolved[oid]; ok && data.objType == "commit" {
-			if treeOID, _, pErr := parseCommitOrTagTargets(data.body, true); pErr == nil && !excluded[oid] && f.loadEstablishedTree(ctx, source, treeOID) != nil {
+			if treeOID, _, pErr := parseCommitOrTagTargets(data.body, true); pErr == nil && !excluded[oid] && !source.incompleteTargetOIDs[treeOID] && f.loadEstablishedTree(ctx, source, treeOID) != nil {
 				f.commits[oid] = treeOID
 			}
 		}
@@ -256,9 +256,16 @@ func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObj
 	if len(frontierOIDs) == 0 {
 		return nil
 	}
-	var needPacked []string
+	var (
+		needPacked []string
+		wave       []string
+	)
 	for _, oid := range slices.Sorted(maps.Keys(frontierOIDs)) {
 		if seen[oid] {
+			continue
+		}
+		if source.incompleteTargetOIDs[oid] {
+			wave = append(wave, oid)
 			continue
 		}
 		if frontier != nil && (frontier.commits[oid] != "" || frontier.trees[oid] != nil) {
@@ -281,24 +288,25 @@ func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObj
 		}
 		needPacked = append(needPacked, oid)
 	}
-	if len(needPacked) == 0 {
-		return nil
-	}
-	var wave []string
-	if source.targetHasPacks {
-		meta, err := batchCheckObjects(ctx, source.repoRoot, source.commonGitDir, needPacked)
-		if err != nil {
-			return err
-		}
-		for _, oid := range needPacked {
-			if _, ok := meta[oid]; ok {
-				seen[oid] = true
-			} else {
-				wave = append(wave, oid)
+	if len(needPacked) > 0 {
+		if source.targetHasPacks {
+			meta, err := batchCheckObjects(ctx, source.repoRoot, source.commonGitDir, needPacked)
+			if err != nil {
+				return err
 			}
+			for _, oid := range needPacked {
+				if _, ok := meta[oid]; ok {
+					seen[oid] = true
+				} else {
+					wave = append(wave, oid)
+				}
+			}
+		} else {
+			wave = append(wave, needPacked...)
 		}
-	} else {
-		wave = needPacked
+	}
+	if len(wave) == 0 {
+		return nil
 	}
 	for len(wave) > 0 {
 		if len(seen)+len(wave) > maxVisitedGitObjects {
@@ -545,53 +553,4 @@ func readAndVerifyPackedGitObject(ctx context.Context, repoRoot, commonGitDir, o
 		return "", nil, fmt.Errorf("corrupt packed %s %s: %w", objType, oid, cErr)
 	}
 	return objType, body, nil
-}
-
-func parseCommitOrTagTargets(body []byte, isCommit bool) (string, []string, error) {
-	var primaryOID string
-	var parents []string
-	for _, line := range strings.Split(string(body), "\n") {
-		if line == "" {
-			break
-		}
-		f := strings.Fields(line)
-		if len(f) == 0 || !((isCommit && (f[0] == "tree" || f[0] == "parent")) || (!isCommit && f[0] == "object")) {
-			continue
-		}
-		target := strings.ToLower(strings.TrimSpace(f[min(1, len(f)-1)]))
-		if len(f) != 2 || !isHexOID(target) || isAllZeroOID(target) {
-			return "", nil, fmt.Errorf("checkpoint: invalid %s target oid %q", f[0], line)
-		}
-		if f[0] == "tree" || f[0] == "object" {
-			primaryOID = target
-		} else {
-			parents = append(parents, target)
-		}
-	}
-	if primaryOID == "" {
-		return "", nil, fmt.Errorf("checkpoint: missing required target object header")
-	}
-	return primaryOID, parents, nil
-}
-
-func parseTreeTargets(body []byte, hashBytes int) ([]parsedTreeEntry, error) {
-	var entries []parsedTreeEntry
-	for len(body) > 0 {
-		n := bytes.IndexByte(body, 0)
-		if n <= 0 || n+1+hashBytes > len(body) {
-			return nil, fmt.Errorf("checkpoint: malformed tree entry")
-		}
-		hdr := string(body[:n])
-		mode, name, ok := strings.Cut(hdr, " ")
-		if !ok || mode == "" || name == "" || name == "." || name == ".." || strings.Contains(name, "/") {
-			return nil, fmt.Errorf("checkpoint: invalid tree entry header %q", hdr)
-		}
-		entryOID := hex.EncodeToString(body[n+1 : n+1+hashBytes])
-		body = body[n+1+hashBytes:]
-		if !isHexOID(entryOID) || isAllZeroOID(entryOID) {
-			return nil, fmt.Errorf("checkpoint: invalid tree entry oid %q", entryOID)
-		}
-		entries = append(entries, parsedTreeEntry{mode: mode, name: name, oid: entryOID})
-	}
-	return entries, nil
 }
