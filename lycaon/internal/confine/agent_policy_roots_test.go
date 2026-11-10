@@ -127,9 +127,9 @@ func TestAgentPolicySpecsResolveSymlinkAndDanglingSymlinkPolicyDirs(t *testing.T
 	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	boundary := confine.BoundaryOf(&c)
 
-	resolvedSettings := filepath.Join(fspath.CanonicalPath(extDir), "settings.json")
+	resolvedSettings := filepath.Join(fspath.CanonicalPath(extDir), "approvals.yaml")
 	if got := boundary.Filesystem.Verdict(confine.AccessWrite, resolvedSettings); got.Allowed || got.Layer != confine.FloorAgentPolicy {
-		t.Fatalf("symlinked .paintedwolf/settings.json write verdict = %+v, want FloorAgentPolicy", got)
+		t.Fatalf("symlinked .paintedwolf/approvals.yaml write verdict = %+v, want FloorAgentPolicy", got)
 	}
 	resolvedDanglingSkills := filepath.Join(fspath.CanonicalPath(danglingTarget), "skills", "SKILL.md")
 	if got := boundary.Filesystem.Verdict(confine.AccessWrite, resolvedDanglingSkills); got.Allowed || got.Layer != confine.FloorAgentPolicy {
