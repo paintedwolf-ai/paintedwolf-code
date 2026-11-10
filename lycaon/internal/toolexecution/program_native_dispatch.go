@@ -210,6 +210,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err != nil {
 		return result, err
 	}
+	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
+		return result, err
+	}
 	prepared, err := effect.PrepareReviewed(ctx, resolved, tc)
 	if err != nil {
 		return result, err
@@ -238,6 +241,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		if err := validateNativeArguments(facts, disclosed, nextArguments.values, tc); err != nil {
 			return result, err
 		}
+		tc.Effects.CanonicalArgs = nextArguments.values
 		canonical, tc, boundaryApproved, err = e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, nextArguments.values, tc)
 		if err != nil {
 			return result, err
@@ -259,6 +263,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		tc.Invocation.ArgsDigest = nextReviewed.ArgumentsDigest()
 		ctx, resolved, err = e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc, observation)
 		if err != nil {
+			return result, err
+		}
+		if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 			return result, err
 		}
 		prepared, err = effect.PrepareReviewed(ctx, resolved, tc)
