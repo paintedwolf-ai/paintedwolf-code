@@ -83,12 +83,12 @@ func TestVaultFirstScrubSecondMigrationAndHydration(t *testing.T) {
 	testutil.FailErr(t, "Catalog.Load restart", restarted.Catalog.Load(ctx))
 
 	httpRow, ok := restarted.Catalog.GetProvider(ctx, CallScope{}, "remote-http")
-	if !ok || !httpRow.HasCredential {
-		t.Fatalf("restarted remote-http missing credential flag: ok=%v row=%+v", ok, httpRow)
+	if !ok || !httpRow.TokenPresent || !httpRow.HeadersPresent {
+		t.Fatalf("restarted remote-http missing credential flags: ok=%v row=%+v", ok, httpRow)
 	}
 	stdioRow, ok := restarted.Catalog.GetProvider(ctx, CallScope{}, "local-stdio")
-	if !ok || stdioRow.Env == nil || (*stdioRow.Env)["MCP_API_KEY"] == "" {
-		t.Fatalf("restarted local-stdio missing hydrated env mask: ok=%v row=%+v", ok, stdioRow)
+	if !ok || !stdioRow.EnvPresent {
+		t.Fatalf("restarted local-stdio missing hydrated env flag: ok=%v row=%+v", ok, stdioRow)
 	}
 }
 
@@ -180,11 +180,11 @@ func TestStaleYAMLRetryAfterClearDeleteAndRestart(t *testing.T) {
 	testutil.FailErr(t, "Load after clear with stale YAML", restarted.Catalog.Load(ctx))
 
 	httpRow, ok := restarted.Catalog.GetProvider(ctx, CallScope{}, "http-prov")
-	if !ok || httpRow.HasCredential {
+	if !ok || httpRow.TokenPresent || httpRow.HeadersPresent {
 		t.Fatalf("stale YAML resurrected cleared HTTP credentials: ok=%v row=%+v", ok, httpRow)
 	}
 	stdioRow, ok := restarted.Catalog.GetProvider(ctx, CallScope{}, "stdio-prov")
-	if !ok || (stdioRow.Env != nil && len(*stdioRow.Env) > 0) {
+	if !ok || stdioRow.EnvPresent {
 		t.Fatalf("stale YAML resurrected cleared stdio env: ok=%v row=%+v", ok, stdioRow)
 	}
 
@@ -217,7 +217,7 @@ func TestStaleYAMLRetryAfterClearDeleteAndRestart(t *testing.T) {
 	testutil.FailErr(t, "Load after delete with stale YAML", restartedAfterDel.Catalog.Load(ctx))
 
 	httpRowAfterDel, ok := restartedAfterDel.Catalog.GetProvider(ctx, CallScope{}, "http-prov")
-	if !ok || httpRowAfterDel.HasCredential {
+	if !ok || httpRowAfterDel.TokenPresent || httpRowAfterDel.HeadersPresent {
 		t.Fatalf("stale YAML resurrected deleted provider credentials: ok=%v row=%+v", ok, httpRowAfterDel)
 	}
 }
@@ -501,7 +501,7 @@ func TestAdminRollbackIsSerializedInsideCatalogTransactionAndSurfacesErrors(t *t
 	testutil.FailErr(t, "NewRuntime restart", err)
 	testutil.FailErr(t, "Load restart", restarted.Catalog.Load(ctx))
 	row, ok := restarted.Catalog.GetProvider(ctx, CallScope{}, "p-serial")
-	if !ok || !row.HasCredential {
+	if !ok || !row.TokenPresent {
 		t.Fatalf("restarted row = %+v, ok=%v", row, ok)
 	}
 }
@@ -620,7 +620,7 @@ func TestCommittedButVerificationFailedBoundaryForCreateUpdateDelete(t *testing.
 	testutil.FailErr(t, "NewRuntime after failed delete", err)
 	testutil.FailErr(t, "Load after failed delete", restarted.Catalog.Load(ctx))
 	row, ok := restarted.Catalog.GetProvider(ctx, CallScope{}, "existing-prov")
-	if !ok || !row.HasCredential {
+	if !ok || !row.TokenPresent {
 		t.Fatalf("restarted existing-prov lost credential: ok=%v row=%+v", ok, row)
 	}
 }
@@ -723,7 +723,7 @@ func TestCrashBetweenVaultStageAndConfigWriteRecoversOnRestart(t *testing.T) {
 		t.Fatalf("crashed delete lost committed-token-before-crash: ok=%v rec=%+v", ok, recoveredDel)
 	}
 	row, ok := restarted2.Catalog.GetProvider(ctx, CallScope{}, "crash-survive")
-	if !ok || !row.HasCredential {
+	if !ok || !row.TokenPresent {
 		t.Fatalf("restarted2 crash-survive lost credential after crashed delete recovery: ok=%v row=%+v", ok, row)
 	}
 }
