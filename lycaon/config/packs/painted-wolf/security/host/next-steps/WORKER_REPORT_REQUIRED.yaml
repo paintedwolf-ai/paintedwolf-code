@@ -1,0 +1,4 @@
+steps:
+  - tool: complete_leg
+    say: 'Submit {{ call }} with observed evidence and the actual leg status.'
+    otherwise: 'Retain the observations and report what remains incomplete.'

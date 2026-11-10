@@ -8902,10 +8902,12 @@ type WorkerChangeReport struct {
 
 // WorkerCompletionFinding
 type WorkerCompletionFinding struct {
-	Path         string `json:"path"`
-	Evidence     string `json:"evidence,omitempty"`
-	Line         int    `json:"line,omitempty"`
-	Excerpt      string `json:"excerpt,omitempty"`
+	Path     string `json:"path"`
+	Evidence string `json:"evidence,omitempty"`
+	Line     int    `json:"line,omitempty"`
+	Excerpt  string `json:"excerpt,omitempty"`
+	// Host-resolved citation the parent can use.
+	Cite         string `json:"cite,omitempty"`
 	Note         string `json:"note,omitempty"`
 	Claim        string `json:"claim,omitempty"`
 	Adversary    string `json:"adversary,omitempty"`
@@ -8915,8 +8917,9 @@ type WorkerCompletionFinding struct {
 
 // WorkerCompletionReport
 type WorkerCompletionReport struct {
-	CoverageGaps   []WorkerCoverageGap `json:"coverage_gaps,omitempty"`
-	CoverageReview *CoverageReview     `json:"coverage_review,omitempty"`
+	CoverageGaps   []WorkerCoverageGap   `json:"coverage_gaps,omitempty"`
+	CoverageReview *CoverageReview       `json:"coverage_review,omitempty"`
+	Verification   *CitationVerification `json:"verification,omitempty"`
 	// Leg status the worker declared; leg_status is the host-graded status.
 	DeclaredLegStatus string `json:"declared_leg_status,omitempty"`
 	// Host-graded leg status.

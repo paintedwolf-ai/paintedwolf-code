@@ -10890,11 +10890,19 @@ export interface components {
             revision: string;
             assessments: components["schemas"]["CoverageAssessment"][];
         };
+        /** @description The validation scope the closeout declared. Retained on the grounding audit because the projected prose omits the trailer. */
+        CitationVerification: {
+            /** @enum {string} */
+            method: "inspection" | "targeted" | "project" | "blocked";
+            reason: string;
+        };
         WorkerCompletionFinding: {
             path: string;
             evidence?: string;
             line?: number;
             excerpt?: string;
+            /** @description Host-resolved citation the parent can use. */
+            cite?: string;
             note?: string;
             claim?: string;
             adversary?: string;
@@ -10910,6 +10918,7 @@ export interface components {
         WorkerCompletionReport: {
             coverage_gaps?: components["schemas"]["WorkerCoverageGap"][];
             coverage_review?: components["schemas"]["CoverageReview"];
+            verification?: components["schemas"]["CitationVerification"];
             /**
              * @description Leg status the worker declared; leg_status is the host-graded status.
              * @enum {string}
@@ -10944,12 +10953,6 @@ export interface components {
             note?: string;
             /** @description True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false. */
             openable?: boolean;
-        };
-        /** @description The validation scope the closeout declared. Retained on the grounding audit because the projected prose omits the trailer. */
-        CitationVerification: {
-            /** @enum {string} */
-            method: "inspection" | "targeted" | "project" | "blocked";
-            reason: string;
         };
         /** @description Host-accepted worker report retained with its successful submitting invocation. */
         WorkerReportAcceptance: {
@@ -30498,12 +30501,12 @@ export type WorkerCoverageGap = components["schemas"]["WorkerCoverageGap"];
 export type CitationGroundingCitedEvidence = components["schemas"]["CitationGroundingCitedEvidence"];
 export type CoverageAssessment = components["schemas"]["CoverageAssessment"];
 export type CoverageReview = components["schemas"]["CoverageReview"];
+export type CitationVerification = components["schemas"]["CitationVerification"];
 export type WorkerCompletionFinding = components["schemas"]["WorkerCompletionFinding"];
 export type WorkerEvidenceObligation = components["schemas"]["WorkerEvidenceObligation"];
 export type WorkerCompletionReport = components["schemas"]["WorkerCompletionReport"];
 export type CitationGroundingCheckStatus = components["schemas"]["CitationGroundingCheckStatus"];
 export type CitationGroundingFinding = components["schemas"]["CitationGroundingFinding"];
-export type CitationVerification = components["schemas"]["CitationVerification"];
 export type WorkerReportAcceptance = components["schemas"]["WorkerReportAcceptance"];
 export type FileEditReference = components["schemas"]["FileEditReference"];
 export type FileEditPreview = components["schemas"]["FileEditPreview"];

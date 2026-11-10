@@ -1,0 +1,27 @@
+oar: '1.0'
+id: WORKER_REPORT_REQUIRED
+kind: invariant
+anchor: worker.report_check
+requires:
+  facts: [paintedwolf.reject_observation, paintedwolf.next_steps]
+when: paintedwolf.reject_observation == "worker_report_required"
+effect: block
+copy:
+  what: 'This worker job has no accepted completion report.'
+  cause: 'A prose response does not submit a structured report.'
+  why: 'The assignment remains active within its existing tool budget.'
+  fix: 'Continue any unfinished work. {{ paintedwolf.next_steps }}'
+  instead: 'Reuse completed work and its evidence.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
+x-paintedwolf-message: Worker report required
+x-paintedwolf-scenarios:
+  - id: tools_available
+    vars:
+      profile: worker
+      tool: complete_leg
+      can_complete_leg: true
+  - id: tools_unavailable
+    vars:
+      profile: worker
+      can_complete_leg: false

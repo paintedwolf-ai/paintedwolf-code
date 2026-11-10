@@ -88,17 +88,19 @@ func TestLastCompleteLegReportReadsLatestSuccess(t *testing.T) {
 		{
 			Role: api.MessageRoleTool,
 			ToolResult: &api.ToolResult{
-				Tool:     "complete_leg",
-				ToolArgs: map[string]any{"leg_status": "partial", "brief": "first"},
-				Outcome:  api.ToolResultOutcomeCompleted,
+				Tool:         "complete_leg",
+				ToolArgs:     map[string]any{"leg_status": "partial", "brief": "model input"},
+				WorkerReport: &api.WorkerReportAcceptance{WorkerJobID: "job", Report: &api.WorkerCompletionReport{LegStatus: "partial", Brief: "first"}, Grounding: &api.CitationGrounding{}},
+				Outcome:      api.ToolResultOutcomeCompleted,
 			},
 		},
 		{
 			Role: api.MessageRoleTool,
 			ToolResult: &api.ToolResult{
-				Tool:     "complete_leg",
-				ToolArgs: map[string]any{"leg_status": "complete", "brief": "second"},
-				Outcome:  api.ToolResultOutcomeCompleted,
+				Tool:         "complete_leg",
+				ToolArgs:     map[string]any{"leg_status": "complete", "brief": "model input"},
+				WorkerReport: &api.WorkerReportAcceptance{WorkerJobID: "job", Report: &api.WorkerCompletionReport{LegStatus: "complete", Brief: "second"}, Grounding: &api.CitationGrounding{}},
+				Outcome:      api.ToolResultOutcomeCompleted,
 			},
 		},
 	})
@@ -126,8 +128,9 @@ func TestLastCompleteLegReportSurvivesCompactedResultBody(t *testing.T) {
 		Role:    api.MessageRoleTool,
 		Content: compacted,
 		ToolResult: &api.ToolResult{
-			Tool:    "complete_leg",
-			Content: compacted,
+			Tool:         "complete_leg",
+			Content:      compacted,
+			WorkerReport: &api.WorkerReportAcceptance{WorkerJobID: "job", Report: workercompletion.ReportWire(workercompletion.WorkerCompletionReport{LegStatus: "complete", Brief: "Triaged the three security scans.", Findings: []workercompletion.WorkerFinding{{Path: "src/coropa/mcp/primitives.py", Line: 113, Excerpt: "exec(src, ns)"}}}), Grounding: &api.CitationGrounding{}},
 			ToolArgs: map[string]any{
 				"leg_status": "complete",
 				"brief":      "Triaged the three security scans.",

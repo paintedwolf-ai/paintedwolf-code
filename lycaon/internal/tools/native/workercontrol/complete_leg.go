@@ -13,15 +13,8 @@ import (
 // CompleteLegTool is the worker closeout tool name.
 const CompleteLegTool = "complete_leg"
 
-// CompleteLegRecord is the accepted-report view the closeout ack states.
-type CompleteLegRecord struct {
-	Acceptance *api.WorkerReportAcceptance
-	LegStatus  string
-	Findings   int
-}
-
-// CompleteLegDecoder validates the report stored with an accepted call.
-type CompleteLegDecoder func(context.Context, map[string]any, tools.ToolContext) (CompleteLegRecord, error)
+// CompleteLegDecoder accepts a report against the live worker context.
+type CompleteLegDecoder func(context.Context, map[string]any, tools.ToolContext) (*api.WorkerReportAcceptance, error)
 
 func CompleteLegHandler(decode CompleteLegDecoder) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
@@ -31,22 +24,27 @@ func CompleteLegHandler(decode CompleteLegDecoder) tools.ToolHandler {
 				Data: map[string]any{"tool": CompleteLegTool},
 			}
 		}
-		record, err := decode(ctx, args, tctx)
+		accepted, err := decode(ctx, args, tctx)
 		if err != nil {
 			return "", err
 		}
 
+		if accepted == nil || accepted.Report == nil || accepted.Grounding == nil || accepted.WorkerJobID == "" || accepted.WorkerJobID != tctx.Identity.WorkerJobID {
+			return "", fmt.Errorf("complete_leg acceptance does not match worker job")
+		}
+		if tctx.Effects.Out == nil {
+			return "", fmt.Errorf("complete_leg acceptance capture unavailable")
+		}
+
 		raw, err := surveyjson.Marshal(map[string]any{
 			"recorded":          true,
-			"leg_status":        record.LegStatus,
-			"findings_recorded": record.Findings,
+			"leg_status":        accepted.Report.LegStatus,
+			"findings_recorded": len(accepted.Report.Findings),
 		})
 		if err != nil {
 			return "", fmt.Errorf("encode complete_leg ack: %w", err)
 		}
-		if tctx.Effects.Out != nil {
-			tctx.Effects.Out.WorkerReport = record.Acceptance
-		}
+		tctx.Effects.Out.WorkerReport = accepted
 		return string(raw), nil
 	}
 }

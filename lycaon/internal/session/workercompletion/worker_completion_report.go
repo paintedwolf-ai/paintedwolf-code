@@ -1,7 +1,6 @@
 package workercompletion
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -12,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/jsonfence"
 	"github.com/lycaon/lycaon/internal/runeclamp"
-	"github.com/lycaon/lycaon/internal/tools"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/verification"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -90,22 +88,30 @@ type WorkerFinding struct {
 
 // LastCompleteLegReport reads the latest host-accepted report.
 func LastCompleteLegReport(msgs []api.Message) (WorkerCompletionReport, string, bool) {
+	accepted, id, ok := AcceptedWorkerReport(msgs, "")
+	if !ok {
+		return WorkerCompletionReport{}, "", false
+	}
+	return ReportFromWire(accepted.Report), id, true
+}
+
+// AcceptedWorkerReport excludes rejected calls and other worker jobs.
+func AcceptedWorkerReport(msgs []api.Message, jobID string) (*api.WorkerReportAcceptance, string, bool) {
 	for i := len(msgs) - 1; i >= 0; i-- {
 		tr := msgs[i].ToolResult
-		if msgs[i].Role != api.MessageRoleTool || tr == nil {
+		if msgs[i].Role != api.MessageRoleTool || tr == nil || tr.Tool != workertools.CompleteLegTool || tr.Outcome != api.ToolResultOutcomeCompleted {
 			continue
 		}
-		if strings.TrimSpace(tr.Tool) != workertools.CompleteLegTool {
+		accepted := tr.WorkerReport
+		if accepted == nil || accepted.WorkerJobID == "" || accepted.Report == nil || accepted.Grounding == nil {
 			continue
 		}
-		if tr.Outcome != api.ToolResultOutcomeCompleted {
+		if jobID != "" && accepted.WorkerJobID != jobID {
 			continue
 		}
-		if accepted := tr.WorkerReport; accepted != nil && accepted.WorkerJobID != "" && accepted.Report != nil && accepted.Grounding != nil {
-			return ReportFromWire(accepted.Report), msgs[i].ID, true
-		}
+		return accepted, msgs[i].ID, true
 	}
-	return WorkerCompletionReport{}, "", false
+	return nil, "", false
 }
 
 // ReportFromCompleteLegArgs decodes a complete_leg argument snapshot.
@@ -120,20 +126,20 @@ func ReportFromCompleteLegArgs(args map[string]any) (WorkerCompletionReport, boo
 	return decodeWorkerCompletionReport(string(raw))
 }
 
-// CompleteLegDecoder validates complete_leg arguments.
-func CompleteLegDecoder(_ context.Context, args map[string]any, _ tools.ToolContext) (workertools.CompleteLegRecord, error) {
+// DecodeCompleteLegArgs validates the submission shape.
+func DecodeCompleteLegArgs(args map[string]any) (WorkerCompletionReport, error) {
 	report, ok := ReportFromCompleteLegArgs(args)
 	if !ok {
-		return workertools.CompleteLegRecord{}, &toolrejection.ToolReject{Code: "COMPLETE_LEG_STATUS_REQUIRED", Data: map[string]any{"tool": workertools.CompleteLegTool}}
+		return WorkerCompletionReport{}, &toolrejection.ToolReject{Code: "COMPLETE_LEG_STATUS_REQUIRED", Data: map[string]any{"tool": workertools.CompleteLegTool}}
 	}
 	seen := map[string]bool{}
 	for i, gap := range report.CoverageGaps {
 		if strings.TrimSpace(gap.ID) == "" || strings.TrimSpace(gap.Subject) == "" || strings.TrimSpace(gap.Reason) == "" || seen[gap.ID] {
-			return workertools.CompleteLegRecord{}, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": workertools.CompleteLegTool, "field": fmt.Sprintf("coverage_gaps[%d]", i), "reason": "unique_gap_id_subject_and_reason_required"}}
+			return WorkerCompletionReport{}, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": workertools.CompleteLegTool, "field": fmt.Sprintf("coverage_gaps[%d]", i), "reason": "unique_gap_id_subject_and_reason_required"}}
 		}
 		seen[gap.ID] = true
 	}
-	return workertools.CompleteLegRecord{LegStatus: report.LegStatus, Findings: len(report.Findings)}, nil
+	return report, nil
 }
 
 // ParseWorkerCompletionReport extracts envelope-only completion JSON from assistant content.

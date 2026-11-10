@@ -28090,6 +28090,24 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CoverageAssessment'
+    CitationVerification:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - method
+        - reason
+      description: The validation scope the closeout declared. Retained on the grounding audit because the projected prose omits the trailer.
+      properties:
+        method:
+          type: string
+          enum:
+            - inspection
+            - targeted
+            - project
+            - blocked
+        reason:
+          type: string
     WorkerCompletionFinding:
       x-go-generate: true
       type: object
@@ -28105,6 +28123,9 @@ components:
           type: integer
         excerpt:
           type: string
+        cite:
+          type: string
+          description: Host-resolved citation the parent can use.
         note:
           type: string
         claim:
@@ -28147,6 +28168,9 @@ components:
         coverage_review:
           x-go-pointer: true
           $ref: '#/components/schemas/CoverageReview'
+        verification:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CitationVerification'
         declared_leg_status:
           type: string
           enum:
@@ -28219,24 +28243,6 @@ components:
           x-go-pointer: true
           type: boolean
           description: True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false.
-    CitationVerification:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - method
-        - reason
-      description: The validation scope the closeout declared. Retained on the grounding audit because the projected prose omits the trailer.
-      properties:
-        method:
-          type: string
-          enum:
-            - inspection
-            - targeted
-            - project
-            - blocked
-        reason:
-          type: string
     WorkerReportAcceptance:
       type: object
       x-go-generate: true

@@ -4,59 +4,46 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (r *Runtime) DecodeCompleteLeg(ctx context.Context, args map[string]any, tctx tools.ToolContext, validateCoverage func(context.Context, *wire.WorkerTask, *wire.CoverageReview) error) (workertools.CompleteLegRecord, error) {
-	record, err := workercompletion.CompleteLegDecoder(ctx, args, tctx)
+func (r *Runtime) DecodeCompleteLeg(ctx context.Context, args map[string]any, tctx tools.ToolContext, validateCoverage func(context.Context, *wire.WorkerTask, *wire.CoverageReview) error) (*wire.WorkerReportAcceptance, error) {
+	report, err := workercompletion.DecodeCompleteLegArgs(args)
 	if err != nil {
-		return record, err
+		return nil, err
 	}
 	task, ok := r.Queue.Lookup(ctx, tctx.Identity.WorkerJobID)
 	if !ok {
-		return record, fmt.Errorf("worker job %q unavailable", tctx.Identity.WorkerJobID)
+		return nil, fmt.Errorf("worker job %q unavailable", tctx.Identity.WorkerJobID)
 	}
-	report, _ := workercompletion.ReportFromCompleteLegArgs(args)
-	if record.LegStatus == "complete" && validateCoverage != nil {
+	if report.LegStatus == "complete" && validateCoverage != nil {
 		if err := validateCoverage(ctx, task, report.CoverageReview); err != nil {
-			return record, err
+			return nil, err
 		}
 	}
 	input, err := r.workerReportInput(ctx, task, tctx, report)
 	if err != nil {
-		return record, err
+		return nil, err
 	}
-	evaluated, err := workercompletion.EvaluateWorkerSummary(ctx, input)
-	if err != nil {
-		return record, err
-	}
-	if evaluated.HintCode != "" {
-		text, err := evaluated.FormatFeedback(ctx, input.Hints)
-		if err != nil {
-			return record, err
-		}
-		cause := &toolrejection.ToolReject{Code: evaluated.HintCode, Data: evaluated.HintData}
-		return record, guidance.NewRefusal(evaluated.HintCode, text).WithPolicyCopy(evaluated.HintCopy).WithDetails(evaluated.HintData, nil).WithCause(cause)
-	}
-	record.LegStatus = evaluated.Report.LegStatus
-	record.Findings = len(evaluated.Report.Findings)
-	record.Acceptance = &wire.WorkerReportAcceptance{WorkerJobID: task.ID, Report: workercompletion.ReportWire(evaluated.Report), Grounding: &evaluated.Grounding}
-	return record, nil
+	return workercompletion.AcceptWorkerReport(ctx, task.ID, input)
 }
 
 func (r *Runtime) workerReportInput(ctx context.Context, task *wire.WorkerTask, tctx tools.ToolContext, report workercompletion.WorkerCompletionReport) (workercompletion.WorkerSummaryEvalInput, error) {
+	if r.deps.Storage.Sessions == nil || r.deps.Sessions == nil || r.deps.Sessions.Manager == nil {
+		return workercompletion.WorkerSummaryEvalInput{}, fmt.Errorf("worker report services unavailable")
+	}
 	child, err := r.deps.Storage.Sessions.Get(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return workercompletion.WorkerSummaryEvalInput{}, err
 	}
 	if child == nil {
 		return workercompletion.WorkerSummaryEvalInput{}, fmt.Errorf("worker session %q unavailable", tctx.Identity.SessionID)
+	}
+	if task.ChildSessionID != child.ID || task.ProjectID != child.ProjectID {
+		return workercompletion.WorkerSummaryEvalInput{}, fmt.Errorf("worker report identity does not match job %q", task.ID)
 	}
 	manager := r.deps.Sessions.Manager
 	messages, err := manager.Runner.Transcript.GetWorkerJobMessages(ctx, child.ID, task.ID)
