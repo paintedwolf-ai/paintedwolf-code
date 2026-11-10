@@ -75,8 +75,8 @@ func runSpineProbeOp(op string, args []string) error {
 }
 
 func runSpineProbe(t *testing.T, helper, self string, c confine.Confinement, dir string, steps []struct {
-	cmd     string
-	wantOK  bool
+	cmd    string
+	wantOK bool
 }) {
 	t.Helper()
 	lines := make([]string, len(steps))
