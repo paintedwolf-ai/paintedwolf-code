@@ -25,7 +25,7 @@ class BrowserArtifactTests(unittest.TestCase):
         source.mkdir()
         self.env = dict(os.environ, LYCAON_E2E_STATE_DIR=str(self.state), LYCAON_CONFIG_DIR=str(source),
                         LYCAON_HARNESS_MODE="real", LYCAON_LLM_MOCK="1", LYCAON_BROWSER_BIN="")
-        self.script = Path(__file__).resolve().parents[1] / "e2e-sidecar-serve.sh"
+        self.script = Path(__file__).resolve().parents[2] / "e2e-sidecar-serve.sh"
 
     def make_browser(self, name):
         directory = self.root / name
