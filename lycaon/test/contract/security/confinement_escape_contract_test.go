@@ -263,21 +263,30 @@ func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
 }
 
 func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
+	stateAncestor := t.TempDir()
+	cfg := filepath.Join(stateAncestor, ".config", "paintedwolf")
+	testutil.FailErr(t, "create state dir", os.MkdirAll(cfg, 0o700))
+	t.Setenv("HOME", stateAncestor)
+	t.Setenv("USERPROFILE", stateAncestor)
+	t.Setenv("LYCAON_CONFIG_DIR", cfg)
+
 	srv := wiring.BuildForTest(t).Server
-	body := `{"roots":[{"path":"/"}]}`
+	body := `{"roots":[{"path":` + jsonQuote(stateAncestor) + `}]}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(body))
 	req.Header.Set("Authorization", api.TestAuthHeader())
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusCreated {
-		t.Fatalf("filesystem root project registration failed: status=%d body=%s", w.Code, w.Body.String())
+		t.Fatalf("state-ancestor project registration failed: status=%d body=%s", w.Code, w.Body.String())
 	}
-	if err := confine.ValidateAttachedWriteRoots([]string{"/"}); err != nil {
-		t.Fatalf("execution boundary refused structurally valid root /: %v", err)
+	if err := confine.ValidateAttachedWriteRoots([]string{"/", stateAncestor}); err != nil {
+		t.Fatalf("execution boundary refused structurally valid state ancestor: %v", err)
 	}
-	if !confine.ControlPlanePathDenied("/", true, "", "") {
-		t.Fatal("destructive write targeting state ancestor / must remain control-plane denied")
+	for _, target := range []string{"/", stateAncestor, cfg} {
+		if !confine.ControlPlanePathDenied(target, true, "", "") {
+			t.Fatalf("destructive write targeting state ancestor %q must remain control-plane denied", target)
+		}
 	}
 
 	okDir := t.TempDir()
