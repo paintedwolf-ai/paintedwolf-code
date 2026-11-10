@@ -381,7 +381,9 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     ];
 
     for (const { pos, beforeChar, afterChar } of boundaries) {
-      view.dispatch({ selection: EditorSelection.cursor(pos, -1) });
+      view.dispatch({
+        selection: EditorSelection.create([EditorSelection.cursor(pos, -1)]),
+      });
       expect(view.state.selection.main.head).toBe(pos);
       expect(view.state.selection.main.assoc).toBe(-1);
       const domEnd = view.domAtPos(pos, -1);
@@ -390,7 +392,9 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
         beforeChar,
       );
 
-      view.dispatch({ selection: EditorSelection.cursor(pos, 1) });
+      view.dispatch({
+        selection: EditorSelection.create([EditorSelection.cursor(pos, 1)]),
+      });
       expect(view.state.selection.main.head).toBe(pos);
       expect(view.state.selection.main.assoc).toBe(1);
       const domStart = view.domAtPos(pos, 1);
