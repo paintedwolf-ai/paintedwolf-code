@@ -82,13 +82,22 @@ var vaults = struct {
 func sharedVault(path string, provider identityProvider) *vaultFile {
 	clean := filepath.Clean(path)
 	vaults.Lock()
-	defer vaults.Unlock()
-	if existing := vaults.byPath[clean]; existing != nil {
-		return existing
+	existing := vaults.byPath[clean]
+	if existing == nil {
+		created := &vaultFile{path: clean, provider: provider}
+		vaults.byPath[clean] = created
+		vaults.Unlock()
+		return created
 	}
-	created := &vaultFile{path: clean, provider: provider}
-	vaults.byPath[clean] = created
-	return created
+	vaults.Unlock()
+	existing.mu.Lock()
+	if existing.provider != nil && provider != nil && existing.provider.Describe() != provider.Describe() {
+		existing.provider = provider
+		existing.identity = nil
+		existing.vaultID = ""
+	}
+	existing.mu.Unlock()
+	return existing
 }
 
 func newNamespaceBackend(path, namespace string, provider identityProvider) Backend {
@@ -257,6 +266,104 @@ func (v *vaultFile) purge() error {
 		v.identity, v.vaultID = nil, ""
 		return nil
 	})
+}
+
+func (v *vaultFile) verifyDurableLocked(provider identityProvider, namespace, id, want string) error {
+	fresh := &vaultFile{path: v.path, provider: provider}
+	doc, err := fresh.read()
+	if err != nil {
+		return err
+	}
+	values := doc.Namespaces[namespace]
+	if values == nil || values[id] != want {
+		return fmt.Errorf("durable credential verification failed for %s/%s", namespace, id)
+	}
+	return nil
+}
+
+func (v *vaultFile) verifyDurable(provider identityProvider, namespace, id, want string) error {
+	return v.withExclusiveLock(func() error {
+		return v.verifyDurableLocked(provider, namespace, id, want)
+	})
+}
+
+func (v *vaultFile) loadOrInit(
+	provider identityProvider,
+	namespace, id string,
+	validate func(string) error,
+	init func() (string, error),
+	afterVerified func() error,
+) (string, error) {
+	var result string
+	err := v.withExclusiveLock(func() error {
+		_, statErr := os.Stat(v.path)
+		if statErr != nil && !os.IsNotExist(statErr) {
+			return fmt.Errorf("read credential vault: %w", statErr)
+		}
+		vaultExists := statErr == nil
+		var doc vaultDocument
+		if vaultExists {
+			var err error
+			doc, err = v.read()
+			if err != nil {
+				return err
+			}
+			if values := doc.Namespaces[namespace]; values != nil {
+				if existing := values[id]; existing != "" {
+					if validate != nil {
+						if err := validate(existing); err != nil {
+							return err
+						}
+					}
+					if err := v.verifyDurableLocked(provider, namespace, id, existing); err != nil {
+						return err
+					}
+					if afterVerified != nil {
+						if err := afterVerified(); err != nil {
+							return err
+						}
+					}
+					result = existing
+					return nil
+				}
+			}
+		}
+		secret, err := init()
+		if err != nil {
+			return err
+		}
+		if validate != nil {
+			if err := validate(secret); err != nil {
+				return err
+			}
+		}
+		if !vaultExists {
+			doc, err = v.read()
+			if err != nil {
+				return err
+			}
+		}
+		values := doc.Namespaces[namespace]
+		if values == nil {
+			values = make(map[string]string)
+			doc.Namespaces[namespace] = values
+		}
+		values[id] = secret
+		if err := v.commit(doc); err != nil {
+			return err
+		}
+		if err := v.verifyDurableLocked(provider, namespace, id, secret); err != nil {
+			return err
+		}
+		if afterVerified != nil {
+			if err := afterVerified(); err != nil {
+				return err
+			}
+		}
+		result = secret
+		return nil
+	})
+	return result, err
 }
 
 func (v *vaultFile) withExclusiveLock(fn func() error) error {

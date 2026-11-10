@@ -182,3 +182,55 @@ func DescribeSlot(slot Slot) (string, error) {
 	}
 	return backend.Describe(), nil
 }
+
+// VerifyDurable re-reads the encrypted vault from disk and reloads its identity
+// from the platform identity provider (bypassing in-memory sharedVault identity
+// and provider caches) to confirm that id == want is durably persisted.
+func VerifyDurable(slot Slot, id, want string) error {
+	path := strings.TrimSpace(slot.Path)
+	namespace := strings.TrimSpace(slot.Namespace)
+	if path == "" {
+		return fmt.Errorf("credential vault path required for %s", slot.Context)
+	}
+	if namespace == "" {
+		return fmt.Errorf("credential namespace required for %s", slot.Context)
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return fmt.Errorf("credential id required for %s", slot.Context)
+	}
+	provider := selectIdentityProvider(path, isolatedProcess(), releaseBuild())
+	vault := sharedVault(path, provider)
+	return vault.verifyDurable(provider, namespace, id, want)
+}
+
+// LoadOrInit atomically loads id from slot's namespace or initializes it via
+// init under the vault's exclusive lock, verifying durable custody readback
+// before running afterVerified.
+func LoadOrInit(
+	slot Slot,
+	id string,
+	validate func(string) error,
+	init func() (string, error),
+	afterVerified func() error,
+) (SecretValue, error) {
+	path := strings.TrimSpace(slot.Path)
+	namespace := strings.TrimSpace(slot.Namespace)
+	if path == "" {
+		return "", fmt.Errorf("credential vault path required for %s", slot.Context)
+	}
+	if namespace == "" {
+		return "", fmt.Errorf("credential namespace required for %s", slot.Context)
+	}
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return "", fmt.Errorf("credential id required for %s", slot.Context)
+	}
+	provider := selectIdentityProvider(path, isolatedProcess(), releaseBuild())
+	vault := sharedVault(path, provider)
+	secret, err := vault.loadOrInit(provider, namespace, id, validate, init, afterVerified)
+	if err != nil {
+		return "", err
+	}
+	return SecretValue(secret), nil
+}
