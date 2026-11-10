@@ -4,12 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -540,4 +543,221 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 		t.Fatalf("buildMetadataLedgerFromRows retained non-custody read record %s", readHandle)
 	}
 }
+
+func TestStoredLineRangesPayload_LegacyDecodeAndVersionGate(t *testing.T) {
+	// 1. Legacy v=1 JSON payload written before untrusted_content/external_custody existed decodes with false flags and intact metadata.
+	const legacyRaw = `{"v":1,"ranges":[{"Start":1,"End":5}],"paths_touched":["saved.txt"],"urls_touched":["https://api.external.example/v1/item"],"surface":"http"}`
+	var legacyRec evidence.Record
+	testutil.FailErr(t, "unmarshal legacy v=1 payload", unmarshalEvidenceLineRanges(legacyRaw, &legacyRec))
+	if legacyRec.UntrustedContent || legacyRec.ExternalCustody {
+		t.Fatalf("legacy v=1 payload must default provenance flags to false: %+v", legacyRec)
+	}
+	if legacyRec.Surface != "http" || len(legacyRec.LineRanges) != 1 || legacyRec.LineRanges[0].End != 5 {
+		t.Fatalf("legacy v=1 payload lost existing fields: %+v", legacyRec)
+	}
+	if !slices.Equal(evidence.IndexedPathsForRecord(legacyRec), []string{"saved.txt"}) ||
+		!slices.Equal(evidence.ObservedURLsForRecord(legacyRec), []string{"https://api.external.example/v1/item"}) {
+		t.Fatalf("legacy v=1 payload lost paths/urls: paths=%v urls=%v",
+			evidence.IndexedPathsForRecord(legacyRec), evidence.ObservedURLsForRecord(legacyRec))
+	}
+
+	// 2. Clean records omit untrusted_content and external_custody keys (omitempty), while provenance records persist and round-trip them under v=1.
+	cleanRaw, err := marshalEvidenceLineRanges(legacyRec)
+	testutil.FailErr(t, "marshal clean record", err)
+	if strings.Contains(cleanRaw, "untrusted_content") || strings.Contains(cleanRaw, "external_custody") {
+		t.Fatalf("clean record must omit false provenance keys, got %s", cleanRaw)
+	}
+
+	provRec := legacyRec
+	provRec.UntrustedContent = true
+	provRec.ExternalCustody = true
+	provRaw, err := marshalEvidenceLineRanges(provRec)
+	testutil.FailErr(t, "marshal provenance record", err)
+	if !strings.Contains(provRaw, `"v":1`) || !strings.Contains(provRaw, `"untrusted_content":true`) || !strings.Contains(provRaw, `"external_custody":true`) {
+		t.Fatalf("provenance record JSON missing expected v=1 additive keys: %s", provRaw)
+	}
+	var roundTripped evidence.Record
+	testutil.FailErr(t, "unmarshal provenance record", unmarshalEvidenceLineRanges(provRaw, &roundTripped))
+	if !roundTripped.UntrustedContent || !roundTripped.ExternalCustody {
+		t.Fatalf("provenance flags failed JSON round-trip: %+v", roundTripped)
+	}
+
+	// 3. Version gate refuses empty payloads, missing v (v=0), unsupported future versions (v=2), and malformed JSON.
+	for _, tc := range []struct {
+		name    string
+		raw     string
+		wantErr string
+	}{
+		{"empty", "", "missing evidence record payload"},
+		{"missing_version_v0", `{"paths_touched":["saved.txt"]}`, "unsupported evidence record payload version 0"},
+		{"unsupported_version_v2", `{"v":2,"paths_touched":["saved.txt"],"external_custody":true}`, "unsupported evidence record payload version 2"},
+		{"malformed_json", `{"v":1,`, "unexpected end of JSON input"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var dst evidence.Record
+			err := unmarshalEvidenceLineRanges(tc.raw, &dst)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("unmarshalEvidenceLineRanges(%q) err = %v, want substring %q", tc.raw, err, tc.wantErr)
+			}
+		})
+	}
+
+	// 4. Persisted legacy SQLite row loads cleanly through store.LoadLedger.
+	dir := t.TempDir()
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "ledger.db"))
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
+	store := NewSQL(sqlDB)
+	ctx := context.Background()
+	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "Create", err)
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO evidence_records (
+			session_id, project_id, handle, ordinal, kind, shape, fidelity, source_tool, marks_untrusted,
+			path, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
+		) VALUES (?, ?, 'http_response#1', 1, 'http_response', 'surface_snapshot', 'structured', 'http_request', 0,
+			'saved.txt', 'https://api.external.example/v1/item', ?, '', 0, 0, NULL)
+	`, sess.ID, testdbseed.DefaultProjectID, legacyRaw)
+	testutil.FailErr(t, "insert legacy row", err)
+
+	ev, err := store.LoadLedger(ctx, sess.ID)
+	testutil.FailErr(t, "LoadLedger legacy row", err)
+	got, ok := evidence.ResolveHandle(ev, "http_response#1")
+	if !ok || got.UntrustedContent || got.ExternalCustody || got.Path != "saved.txt" {
+		t.Fatalf("LoadLedger legacy row = %+v (ok=%v)", got, ok)
+	}
+}
+
+func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *testing.T) {
+	dir := t.TempDir()
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "ledger.db"))
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
+
+	store := NewSQL(sqlDB)
+	ctx := context.Background()
+	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "Create", err)
+
+	// 1. Seed 120 historical read/grep rows plus command, partial edit, and pathless inline http_response rows
+	// with missing content_blob_sha256 values and poisoned LineRanges JSON in the database, alongside 1 live
+	// external-custody http_response row (saved.txt) and 1 live whole-file write row (replaced.txt).
+	const poisonedNonCustodyJSON = `{poisoned-non-custody-row-must-not-be-decoded`
+	for i := 1; i <= 60; i++ {
+		readHandle := fmt.Sprintf("read#%d", i)
+		grepHandle := fmt.Sprintf("grep#%d", i)
+		missingReadSHA := fmt.Sprintf("%064x", i)
+		missingGrepSHA := fmt.Sprintf("%064x", 1000+i)
+		_, err := sqlDB.ExecContext(ctx, `
+			INSERT INTO evidence_records (
+				session_id, project_id, handle, ordinal, kind, shape, fidelity, source_tool, marks_untrusted,
+				path, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
+			) VALUES
+				(?, ?, ?, ?, 'read', 'file_region', 'structured', 'read', 0, 'other.go', '', ?, ?, 0, 0, NULL),
+				(?, ?, ?, ?, 'grep', 'file_region', 'structured', 'grep', 0, 'other.go', '', ?, ?, 0, 1, NULL)
+		`,
+			sess.ID, testdbseed.DefaultProjectID, readHandle, i, poisonedNonCustodyJSON, missingReadSHA,
+			sess.ID, testdbseed.DefaultProjectID, grepHandle, i, poisonedNonCustodyJSON, missingGrepSHA,
+		)
+		testutil.FailErr(t, "insert read/grep rows", err)
+	}
+	// Also insert non-custody command, partial edit (write with source_tool=edit), and inline pathless http_response rows with poisoned LineRanges.
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO evidence_records (
+			session_id, project_id, handle, ordinal, kind, shape, fidelity, source_tool, marks_untrusted,
+			path, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
+		) VALUES
+			(?, ?, 'command#1', 1, 'command', 'command', 'scraped', 'command', 0, '', '', ?, ?, 0, 0, NULL),
+			(?, ?, 'write#1', 1, 'write', 'structured_event', 'structured', 'edit', 0, 'saved.txt', '', ?, ?, 0, 0, NULL),
+			(?, ?, 'http_response#1', 1, 'http_response', 'surface_snapshot', 'structured', 'http_request', 1, '', 'https://inline.external.example/v1', ?, ?, 0, 0, NULL)
+	`,
+		sess.ID, testdbseed.DefaultProjectID, poisonedNonCustodyJSON, fmt.Sprintf("%064x", 2001),
+		sess.ID, testdbseed.DefaultProjectID, poisonedNonCustodyJSON, fmt.Sprintf("%064x", 2002),
+		sess.ID, testdbseed.DefaultProjectID, poisonedNonCustodyJSON, fmt.Sprintf("%064x", 2003),
+	)
+	testutil.FailErr(t, "insert non-custody command/edit/inline-http rows", err)
+
+	// Insert the 2 custody-affecting rows with valid v=1 LineRanges and missing content_blob_sha256 (proving 0 blob reads).
+	custodyDownloadRec := evidence.BuildEvidenceRecord(
+		dir,
+		"http_request",
+		map[string]any{"url": "https://api.external.example/v1/payload.txt", "response_path": "saved.txt"},
+		`{"status":200,"url":"https://api.external.example/v1/payload.txt","response_path":"saved.txt","written":true}`,
+	)
+	custodyDownloadJSON, err := marshalEvidenceLineRanges(custodyDownloadRec)
+	testutil.FailErr(t, "marshal custodyDownloadRec", err)
+
+	wholeWriteRec := evidence.BuildEvidenceRecord(
+		dir,
+		"write",
+		map[string]any{"path": "replaced.txt"},
+		`{"path":"replaced.txt","bytes_written":12}`,
+	)
+	wholeWriteJSON, err := marshalEvidenceLineRanges(wholeWriteRec)
+	testutil.FailErr(t, "marshal wholeWriteRec", err)
+
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO evidence_records (
+			session_id, project_id, handle, ordinal, kind, shape, fidelity, source_tool, marks_untrusted,
+			path, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
+		) VALUES
+			(?, ?, 'http_response#2', 2, 'http_response', 'surface_snapshot', 'structured', 'http_request', 0, 'saved.txt', 'https://api.external.example/v1/payload.txt', ?, ?, 0, 0, NULL),
+			(?, ?, 'write#2', 2, 'write', 'structured_event', 'structured', 'write', 0, 'replaced.txt', '', ?, ?, 0, 0, NULL)
+	`,
+		sess.ID, testdbseed.DefaultProjectID, custodyDownloadJSON, fmt.Sprintf("%064x", 3001),
+		sess.ID, testdbseed.DefaultProjectID, wholeWriteJSON, fmt.Sprintf("%064x", 3002),
+	)
+	testutil.FailErr(t, "insert custody rows", err)
+
+	// 2. Verify ListEvidenceRecords returns all 125 session rows, while buildMetadataLedgerFromRows decodes only the 2 custody-candidate rows
+	// (succeeding despite poisoned LineRanges on all 123 non-custody rows and missing content blobs on all 125 rows) and retains only those 2 handles.
+	rows, err := store.queries.ListEvidenceRecords(ctx, sess.ID)
+	testutil.FailErr(t, "ListEvidenceRecords", err)
+	if len(rows) != 125 {
+		t.Fatalf("len(rows) = %d, want 125", len(rows))
+	}
+	metaLedger, err := buildMetadataLedgerFromRows(rows)
+	testutil.FailErr(t, "buildMetadataLedgerFromRows", err)
+	if len(metaLedger.Handles) != 2 {
+		t.Fatalf("len(metaLedger.Handles) = %d, want 2 (handles=%v)", len(metaLedger.Handles), evidence.HandlesSorted(metaLedger))
+	}
+	if _, ok := metaLedger.Handles["http_response#2"]; !ok {
+		t.Fatalf("missing http_response#2 in metaLedger: %v", evidence.HandlesSorted(metaLedger))
+	}
+	if _, ok := metaLedger.Handles["write#2"]; !ok {
+		t.Fatalf("missing write#2 in metaLedger: %v", evidence.HandlesSorted(metaLedger))
+	}
+
+	// 3. Verify ExternalCustodyURLsForPaths and custody-only loadCommitLedgers (e.g., grep on saved.txt) succeed without decoding non-custody rows or reading blobs.
+	urls, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"saved.txt"})
+	testutil.FailErr(t, "ExternalCustodyURLsForPaths", err)
+	if !slices.Equal(urls, []string{"https://api.external.example/v1/payload.txt"}) {
+		t.Fatalf("ExternalCustodyURLsForPaths(saved.txt) = %v, want [https://api.external.example/v1/payload.txt]", urls)
+	}
+
+	grepHandle, _, err := store.CommitEvidenceToolResult(
+		ctx,
+		sess.ID,
+		dir,
+		"grep",
+		map[string]any{"pattern": "remote", "path": "saved.txt"},
+		`{"matches":[{"path":"saved.txt","line":1,"content":"remote payload"}]}`,
+	)
+	testutil.FailErr(t, "CommitEvidenceToolResult grep on saved.txt", err)
+	if grepHandle != "grep#61" {
+		t.Fatalf("grepHandle = %q, want grep#61", grepHandle)
+	}
+	untrusted, err := store.SessionUntrustedContentResult(ctx, sess.ID)
+	testutil.FailErr(t, "SessionUntrustedContentResult after grep", err)
+	if !untrusted {
+		t.Fatal("grep exposing lines from external-custody saved.txt must mark untrusted content")
+	}
+
+	// 4. Converse sensitivity check: if a live custody-candidate row (path-bearing http_response or whole-file write) has poisoned LineRanges,
+	// buildMetadataLedgerFromRows DOES decode it and returns a decode error.
+	poisonedCustodyRows := append([]db.ListEvidenceRecordsRow(nil), rows...)
+	poisonedCustodyRows[len(poisonedCustodyRows)-1].LineRanges = poisonedNonCustodyJSON
+	if _, err := buildMetadataLedgerFromRows(poisonedCustodyRows); err == nil {
+		t.Fatal("expected buildMetadataLedgerFromRows to decode live whole-file write row and fail on poisoned JSON")
+	}
+}
+
 

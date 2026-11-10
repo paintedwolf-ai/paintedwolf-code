@@ -351,12 +351,12 @@ func ExternalCustodyURLs(ev Ledger, paths []string) []string {
 				for _, u := range ObservedURLsForRecord(rec) {
 					addURL(u)
 				}
-				if replacesWholeFileCustody(rec) {
+				if ReplacesWholeFileCustody(rec) {
 					break
 				}
 				continue
 			}
-			if replacesWholeFileCustody(rec) {
+			if ReplacesWholeFileCustody(rec) {
 				break
 			}
 		}
@@ -364,7 +364,8 @@ func ExternalCustodyURLs(ev Ledger, paths []string) []string {
 	return out
 }
 
-func replacesWholeFileCustody(rec Record) bool {
+// ReplacesWholeFileCustody reports whether rec replaces whole-file custody on its indexed paths.
+func ReplacesWholeFileCustody(rec Record) bool {
 	switch strings.ToLower(strings.TrimSpace(rec.Kind)) {
 	case "delete":
 		return true

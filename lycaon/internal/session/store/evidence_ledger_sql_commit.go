@@ -43,12 +43,22 @@ func supersedePathsForRecord(ctx context.Context, q *db.Queries, sessionID, newH
 	return nil
 }
 
-// recordCanAffectExternalCustody reports whether a row of kind can establish or
-// replace external file custody in ExternalCustodyURLs.
-func recordCanAffectExternalCustody(kind string) bool {
+// recordCanAffectExternalCustody reports whether a row with (kind, sourceTool, path)
+// can establish or replace external file custody in ExternalCustodyURLs.
+func recordCanAffectExternalCustody(kind, sourceTool, path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
 	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "write", "delete", "http_response", "web", "command":
+	case "delete", "http_response", "web":
 		return true
+	case "write":
+		switch strings.ToLower(strings.TrimSpace(sourceTool)) {
+		case "edit", "replace_lines", "jq_edit", "code_rewrite":
+			return false
+		default:
+			return true
+		}
 	default:
 		return false
 	}
@@ -66,7 +76,7 @@ func loadMetadataLedger(ctx context.Context, q *db.Queries, sessionID string) (e
 func buildMetadataLedgerFromRows(rows []db.ListEvidenceRecordsRow) (evidence.Ledger, error) {
 	var records []evidence.Record
 	for _, r := range rows {
-		if r.SupersededBy.Valid || !recordCanAffectExternalCustody(r.Kind) {
+		if r.SupersededBy.Valid || !recordCanAffectExternalCustody(r.Kind, r.SourceTool, r.Path) {
 			continue
 		}
 		rec := evidence.Record{
@@ -83,6 +93,9 @@ func buildMetadataLedgerFromRows(rows []db.ListEvidenceRecordsRow) (evidence.Led
 		if err := unmarshalEvidenceLineRanges(r.LineRanges, &rec); err != nil {
 			return evidence.Ledger{}, fmt.Errorf("decode metadata for %s: %w", rec.Handle, err)
 		}
+		if !rec.ExternalCustody && !evidence.ReplacesWholeFileCustody(rec) {
+			continue
+		}
 		records = append(records, rec)
 	}
 	return evidence.AssembleLedger(records), nil
@@ -98,30 +111,46 @@ func loadCommitLedgers(ctx context.Context, q *db.Queries, sessionID string, inc
 	if err != nil {
 		return evidence.Ledger{}, evidence.Ledger{}, err
 	}
-	bindings := evidence.InitLedger()
-	if needBindings {
-		var bindingRecs []evidence.Record
-		for _, row := range rows {
-			if row.SupersededBy.Valid {
-				continue
-			}
-			rec := evidence.Record{Handle: row.Handle, Kind: row.Kind, Shape: row.Shape, Path: row.Path, Survey: row.Survey != 0}
-			if err := unmarshalEvidenceLineRanges(row.LineRanges, &rec); err != nil {
-				return evidence.Ledger{}, evidence.Ledger{}, fmt.Errorf("decode path binding %s: %w", rec.Handle, err)
-			}
-			if !evidence.SupersedesPathHandle(incoming, rec) {
-				continue
-			}
+	binding := evidence.ActiveBinding()
+	var bindingRecs []evidence.Record
+	var custodyRecs []evidence.Record
+	for _, r := range rows {
+		if r.SupersededBy.Valid {
+			continue
+		}
+		wantBinding := needBindings && binding.KindShape(r.Kind) == evidence.ShapeFileRegion
+		wantCustody := needCustody && recordCanAffectExternalCustody(r.Kind, r.SourceTool, r.Path)
+		if !wantBinding && !wantCustody {
+			continue
+		}
+		rec := evidence.Record{
+			Handle:     r.Handle,
+			Kind:       r.Kind,
+			Shape:      r.Shape,
+			Fidelity:   r.Fidelity,
+			SourceTool: r.SourceTool,
+			Path:       r.Path,
+			URL:        r.Url,
+			Truncated:  r.Truncated != 0,
+			Survey:     r.Survey != 0,
+		}
+		if err := unmarshalEvidenceLineRanges(r.LineRanges, &rec); err != nil {
+			return evidence.Ledger{}, evidence.Ledger{}, fmt.Errorf("decode metadata for %s: %w", rec.Handle, err)
+		}
+		if wantBinding && evidence.SupersedesPathHandle(incoming, rec) {
 			bindingRecs = append(bindingRecs, rec)
 		}
+		if wantCustody && (rec.ExternalCustody || evidence.ReplacesWholeFileCustody(rec)) {
+			custodyRecs = append(custodyRecs, rec)
+		}
+	}
+	bindings := evidence.InitLedger()
+	if needBindings {
 		bindings = evidence.AssembleLedger(bindingRecs)
 	}
 	custody := evidence.InitLedger()
 	if needCustody {
-		custody, err = buildMetadataLedgerFromRows(rows)
-		if err != nil {
-			return evidence.Ledger{}, evidence.Ledger{}, err
-		}
+		custody = evidence.AssembleLedger(custodyRecs)
 	}
 	return bindings, custody, nil
 }
