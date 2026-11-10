@@ -311,7 +311,7 @@ func resolveHandleFor(s *Server, cs *connState, cred authCred, raw []byte, admit
 	s.state.mu.RLock()
 	defer s.state.mu.RUnlock()
 	for _, e := range s.state.exportsByVH[rec.key.viewHash] {
-		if !e.mounted || !admits(e) {
+		if !e.mounted || (e.cap.Root != "" && rec.qpath.RootID != "" && e.cap.Root != rec.qpath.RootID) || (!e.activated && !rec.isRoot) || !admits(e) {
 			continue
 		}
 		if !cs.bindView(rec.key.viewHash) {

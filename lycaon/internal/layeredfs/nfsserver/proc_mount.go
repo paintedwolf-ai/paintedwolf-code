@@ -248,6 +248,38 @@ func isMutatingNFSProc(proc nfs.NFSProcedure) bool {
 	return false
 }
 
+func isBootstrapRootNFSProc(proc nfs.NFSProcedure) bool {
+	switch proc {
+	case nfs.NFSProcedureNull, nfs.NFSProcedureGetAttr, nfs.NFSProcedureFSInfo,
+		nfs.NFSProcedurePathConf, nfs.NFSProcedureFSStat, nfs.NFSProcedureAccess:
+		return true
+	}
+	return false
+}
+
+func isCallExportActivated(s *Server, call rpcCallHeader) bool {
+	if call.Body == nil {
+		return true
+	}
+	dup := *call.Body
+	rawFH, err := readFileHandle(&dup)
+	if err != nil {
+		return true
+	}
+	rec, err := s.handles.Resolve(rawFH, 0)
+	if err != nil {
+		return true
+	}
+	s.state.mu.RLock()
+	defer s.state.mu.RUnlock()
+	for _, e := range s.state.exportsByVH[rec.key.viewHash] {
+		if e.mounted && (e.cap.Root == "" || rec.qpath.RootID == "" || e.cap.Root == rec.qpath.RootID) && e.activated {
+			return true
+		}
+	}
+	return false
+}
+
 func peekCallViewHash(s *Server, cs *connState, call rpcCallHeader) uint64 {
 	if vh := cs.getBoundView(); vh != 0 {
 		return vh
@@ -271,6 +303,9 @@ func dispatchNFS(s *Server, cs *connState, call rpcCallHeader) []byte {
 	fn, ok := nfsHandlers[proc]
 	if !ok {
 		return encodeAcceptedReply(call.XID, nfs.ResponseCodeProcUnavailable, nil)
+	}
+	if !isBootstrapRootNFSProc(proc) && !isCallExportActivated(s, call) {
+		return encodeNFSError(call.XID, proc, nfs.NFSStatusAccess)
 	}
 	if isMutatingNFSProc(proc) {
 		vh, g := peekCallViewHash(s, cs, call), s.gate

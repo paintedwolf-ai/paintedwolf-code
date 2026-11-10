@@ -18,10 +18,11 @@ import (
 const acceptRetryDelay = 50 * time.Millisecond
 
 type exportEntry struct {
-	cap      ExportCapability
-	core     *layeredfs.Core
-	viewHash uint64
-	mounted  bool
+	cap       ExportCapability
+	core      *layeredfs.Core
+	viewHash  uint64
+	mounted   bool
+	activated bool
 }
 
 type serverState struct {
@@ -127,15 +128,47 @@ func coreForView(s *Server, viewID ViewID) *layeredfs.Core {
 	return s.core
 }
 
-// RegisterExport registers a per-mount capability export for viewID and root using
-// the server's configured ExpectedUID and ExpectedGID.
+// RegisterExport registers an immediately activated per-mount capability export for viewID and root
+// using the server's configured ExpectedUID and ExpectedGID.
 func (s *Server) RegisterExport(viewID ViewID, root RootID, token string) (ExportCapability, error) {
 	return s.RegisterExportWithUID(viewID, root, token, s.cfg.ExpectedUID, s.cfg.ExpectedGID)
 }
 
-// RegisterExportWithUID registers a per-mount capability export bound to a specific caller UID/GID.
+// RegisterExportWithUID registers an immediately activated per-mount capability export bound to allowedUID/allowedGID.
 func (s *Server) RegisterExportWithUID(
 	viewID ViewID, root RootID, token string, allowedUID, allowedGID uint32,
+) (ExportCapability, error) {
+	return s.registerExport(viewID, root, token, allowedUID, allowedGID, true)
+}
+
+// RegisterStagedExport registers a staged per-mount capability export that permits only root-bootstrap
+// RPCs until ActivateExport is called after verified OS mount completion.
+func (s *Server) RegisterStagedExport(viewID ViewID, root RootID, token string) (ExportCapability, error) {
+	return s.RegisterStagedExportWithUID(viewID, root, token, s.cfg.ExpectedUID, s.cfg.ExpectedGID)
+}
+
+// RegisterStagedExportWithUID registers a staged per-mount capability export bound to allowedUID/allowedGID.
+func (s *Server) RegisterStagedExportWithUID(
+	viewID ViewID, root RootID, token string, allowedUID, allowedGID uint32,
+) (ExportCapability, error) {
+	return s.registerExport(viewID, root, token, allowedUID, allowedGID, false)
+}
+
+// ActivateExport transitions a mounted staged export into full active state after verified mount completion.
+func (s *Server) ActivateExport(exportPath string) error {
+	exportPath = "/" + strings.Trim(exportPath, "/")
+	s.state.mu.Lock()
+	defer s.state.mu.Unlock()
+	entry, ok := s.state.exportsByID[exportPath]
+	if !ok || !entry.mounted {
+		return ErrUnauthorizedRPC
+	}
+	entry.activated = true
+	return nil
+}
+
+func (s *Server) registerExport(
+	viewID ViewID, root RootID, token string, allowedUID, allowedGID uint32, activated bool,
 ) (ExportCapability, error) {
 	if viewID == "" {
 		return ExportCapability{}, layeredfs.ErrInvalidRoot
@@ -166,7 +199,7 @@ func (s *Server) RegisterExportWithUID(
 	}
 	vHash := s.handles.RegisterView(viewID)
 	s.handles.Ensure(viewID, rootQPath, meta, 0, true)
-	entry := &exportEntry{cap: capCfg, core: viewCore, viewHash: vHash}
+	entry := &exportEntry{cap: capCfg, core: viewCore, viewHash: vHash, activated: activated}
 	s.state.mu.Lock()
 	s.state.exportsByID[exportPath] = entry
 	s.state.exportsByVH[vHash] = append(s.state.exportsByVH[vHash], entry)
