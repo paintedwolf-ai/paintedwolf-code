@@ -84,7 +84,11 @@ func prepareMergeMutations(ctx context.Context, task *api.WorkerTask, roots []pr
 		target, err := textfile.EncodeBounded(result.Content, result.Encoding,
 			textfile.LimitsForRaw(promoteConflictMaxFileBytes))
 		if err != nil {
-			return nil, err
+			if assessment.checkpointID != "" && (errors.Is(err, textfile.ErrBinary) || errors.Is(err, textfile.ErrUnsupported)) {
+				target = []byte(result.Content)
+			} else {
+				return nil, err
+			}
 		}
 		plan.target = target
 		plan.targetExists = true

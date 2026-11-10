@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
@@ -172,8 +173,8 @@ func TestCheckpointPromotionSingleStageCleanAndStage1Resolutions(t *testing.T) {
 	}
 	_, err = sqlDB.ExecContext(ctx, `CREATE TRIGGER reject_dedup_completion BEFORE UPDATE OF merge_status ON worker_jobs WHEN NEW.merge_status='merged' BEGIN SELECT RAISE(ABORT,'reject dedup completion'); END`)
 	testutil.FailErr(t, "install trigger", err)
-	if _, err := svc.PromoteOverlay(ctx, "parent-dedup", jobID, resInput); err == nil {
-		t.Fatal("expected SQL completion trigger to fail PromoteOverlay")
+	if _, err := svc.PromoteOverlay(ctx, "parent-dedup", jobID, resInput); err == nil || !strings.Contains(err.Error(), "reject dedup completion") {
+		t.Fatalf("PromoteOverlay with SQL trigger = %v, want reject dedup completion", err)
 	}
 	// Verify full rollback of both Stage-1 resolution and Stage-2 checkpoint effects.
 	if got, _ := os.ReadFile(filepath.Join(primary, "conflict.txt")); string(got) != "trunk-v2\n" {
