@@ -61,12 +61,12 @@ func TestOutsideWriteRefusalNamesTheEnclosingWorkTree(t *testing.T) {
 	}
 }
 
-// A home repository offers its canonical repository root when state lives outside it,
-// and falls back to the containing directory when home contains the state tree.
+// A home repository offers its canonical repository root even when the state tree
+// lives under home, because the control-plane and ancestor-spine floors protect it.
 func TestOutsideWriteGrantOffersHomeRepository(t *testing.T) {
 	home := fspath.CanonicalPath(t.TempDir())
 	t.Setenv("HOME", home)
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(fspath.CanonicalPath(t.TempDir()), "paintedwolf"))
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
 	mkdirFixture(t, filepath.Join(home, ".git"))
 	dir := filepath.Join(home, "scratch")
 	mkdirFixture(t, dir)
@@ -74,19 +74,15 @@ func TestOutsideWriteGrantOffersHomeRepository(t *testing.T) {
 	if got := outsideWriteGrant(filepath.Join(dir, "a.txt")); got != home {
 		t.Fatalf("grant = %s, want %s", got, home)
 	}
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
-	if got := outsideWriteGrant(filepath.Join(dir, "a.txt")); got != dir {
-		t.Fatalf("state ancestor home grant = %s, want containing dir %s", got, dir)
-	}
 }
 
-// A broad reviewed root such as ~/.config is grantable when state is outside it;
-// the control plane and credential stores stay refused by their floors.
+// A broad reviewed root such as ~/.config is grantable; the control plane, its
+// ancestor spine, and credential stores stay refused by their floors.
 func TestBroadWriteGrantKeepsInnerFloors(t *testing.T) {
 	home := fspath.CanonicalPath(t.TempDir())
 	t.Setenv("HOME", home)
 	config := filepath.Join(home, ".config")
-	control := filepath.Join(fspath.CanonicalPath(t.TempDir()), "paintedwolf")
+	control := filepath.Join(config, "paintedwolf")
 	t.Setenv("LYCAON_CONFIG_DIR", control)
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")
 	mkdirFixture(t, control)
@@ -107,6 +103,7 @@ func TestBroadWriteGrantKeepsInnerFloors(t *testing.T) {
 	for _, probe := range []boundaryProbe{
 		{name: "tool settings under the grant", access: confine.AccessWrite, path: filepath.Join(config, "tool", "settings.json"), want: allowed},
 		{name: "control plane under the grant", access: confine.AccessWrite, path: filepath.Join(control, "approvals.yaml"), want: confine.FloorVerdict{Layer: confine.FloorControlPlane}},
+		{name: "control plane ancestor unlink denied", access: confine.AccessWriteUnlink, path: config, want: confine.FloorVerdict{Layer: confine.FloorControlPlane}},
 		{name: "credential store under the grant", access: confine.AccessWrite, path: filepath.Join(config, "gh", "hosts.yml"), want: confine.FloorVerdict{Layer: confine.FloorProtected}},
 		{name: "build output in a granted checkout", access: confine.AccessWrite, path: filepath.Join(repo, "site", "index.html"), want: allowed},
 		// Agent policy guards the attached project's instruction files, not another checkout's.

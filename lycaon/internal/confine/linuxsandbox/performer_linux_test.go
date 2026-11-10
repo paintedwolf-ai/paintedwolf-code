@@ -58,6 +58,7 @@ func TestPerformerCreatesOrdinaryNamesAndRefusesProtectedOnes(t *testing.T) {
 		WriteRoots:    []string{root},
 		ReadOnly:      []string{filepath.Join(root, ".paintedwolf", "mcp.yaml"), filepath.Join(root, ".agents", "skills")},
 		ReadOnlyNames: []NamedFloor{{Below: root, Name: "AGENTS.md"}},
+		NoUnlink:      []string{filepath.Join(root, ".config")},
 	})
 	dir := openDirFD(t, root)
 	do := func(call pathCall, dirs ...int) (pathResult, int) {
@@ -132,6 +133,15 @@ func TestPerformerCreatesOrdinaryNamesAndRefusesProtectedOnes(t *testing.T) {
 	result, _ = do(pathCall{Op: callRename, Path: "stage", NewPath: ".agents", Flags: unix.RENAME_EXCHANGE}, dir, dir)
 	expect("exchange onto an ancestor of a floor", result, unix.EACCES, true)
 
+	testutil.FailErr(t, "fixture config dir", os.Mkdir(filepath.Join(root, ".config"), 0o755))
+	testutil.FailErr(t, "fixture config sibling", os.WriteFile(filepath.Join(root, ".config", "sibling.txt"), []byte("ok"), 0o644))
+	result, _ = do(pathCall{Op: callUnlink, Path: ".config", Flags: unix.AT_REMOVEDIR}, dir)
+	expect("rmdir noUnlink ancestor", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callRename, Path: ".config", NewPath: ".config.bak"}, dir, dir)
+	expect("rename noUnlink ancestor", result, unix.EACCES, true)
+	result, _ = do(pathCall{Op: callUnlink, Path: ".config/sibling.txt"}, dir)
+	expect("unlink sibling under noUnlink ancestor", result, 0, false)
+
 	raw, err := encodePathCall(pathCall{Op: callMkdir, Path: "x", Notification: 9})
 	testutil.FailErr(t, "frame", err)
 	raw[3] = 1
@@ -175,6 +185,7 @@ func TestPathCallArgumentsFollowEachSyscall(t *testing.T) {
 		unix.SYS_MKNODAT:   {op: callMknod, dir: 0, path: 1, newDir: noArg, newPath: noArg, content: noArg, flags: noArg, mode: 2, dev: 3},
 		unix.SYS_SYMLINKAT: {op: callSymlink, dir: 1, path: 2, newDir: noArg, newPath: noArg, content: 0, flags: noArg, mode: noArg, dev: noArg},
 		unix.SYS_LINKAT:    {op: callLink, dir: 0, path: 1, newDir: 2, newPath: 3, content: noArg, flags: 4, mode: noArg, dev: noArg},
+		unix.SYS_UNLINKAT:  {op: callUnlink, dir: 0, path: 1, newDir: noArg, newPath: noArg, content: noArg, flags: 2, mode: noArg, dev: noArg},
 		unix.SYS_RENAMEAT:  {op: callRename, dir: 0, path: 1, newDir: 2, newPath: 3, content: noArg, flags: noArg, mode: noArg, dev: noArg},
 		unix.SYS_RENAMEAT2: {op: callRename, dir: 0, path: 1, newDir: 2, newPath: 3, content: noArg, flags: 4, mode: noArg, dev: noArg},
 	} {
@@ -183,8 +194,8 @@ func TestPathCallArgumentsFollowEachSyscall(t *testing.T) {
 			t.Errorf("syscall %d: %+v %v, want %+v", nr, got, ok, want)
 		}
 	}
-	if _, ok := pathArgsOf(unix.SYS_UNLINKAT); ok || isPathCall(unix.SYS_UNLINKAT) {
-		t.Error("unlinkat is not a name-creating call")
+	if _, ok := pathArgsOf(unix.SYS_FCHMODAT); ok || isPathCall(unix.SYS_FCHMODAT) {
+		t.Error("fchmodat is not a mediated path call")
 	}
 }
 

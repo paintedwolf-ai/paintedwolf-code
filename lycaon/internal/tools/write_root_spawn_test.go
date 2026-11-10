@@ -18,18 +18,20 @@ func TestConfineRequestForSpawnRefusesUnsafeRoot(t *testing.T) {
 	}
 }
 
-func TestConfineRequestForSpawnRefusesStateAncestorAndKeepsOrdinaryRoot(t *testing.T) {
-	_, reject := ConfineRequestForSpawn(t.Context(), ToolContext{}, []string{string(filepath.Separator)})
+func TestConfineRequestForSpawnRefusesControlPlaneAndKeepsBroadAndOrdinaryRoots(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "state")
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	_, reject := ConfineRequestForSpawn(t.Context(), ToolContext{}, []string{state})
 	if reject == nil || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
 		t.Fatalf("reject = %+v, want SANDBOX_CONTROL_PLANE_DENIED", reject)
 	}
-	if reject.Data["reason"] != confine.WriteRootCodeContainsState {
-		t.Fatalf("reject data = %+v, want reason %q", reject.Data, confine.WriteRootCodeContainsState)
+	if reject.Data["reason"] != confine.WriteRootCodeControlPlane {
+		t.Fatalf("reject data = %+v, want reason %q", reject.Data, confine.WriteRootCodeControlPlane)
 	}
 	ordinary := t.TempDir()
-	req, reject := ConfineRequestForSpawn(t.Context(), ToolContext{}, []string{ordinary})
-	if reject != nil || !slices.Contains(req.GrantedWriteRoots, ordinary) {
-		t.Fatalf("ordinary root request=%+v rejection=%+v", req, reject)
+	req, reject := ConfineRequestForSpawn(t.Context(), ToolContext{}, []string{ordinary, filepath.Dir(state)})
+	if reject != nil || !slices.Contains(req.GrantedWriteRoots, ordinary) || !slices.Contains(req.GrantedWriteRoots, filepath.Dir(state)) {
+		t.Fatalf("ordinary/broad root request=%+v rejection=%+v", req, reject)
 	}
 }
 

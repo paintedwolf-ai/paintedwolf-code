@@ -227,3 +227,33 @@ func TestBuildProfileOmitsPrivateVarFoldersWriteRoot(t *testing.T) {
 	denyWrite, _ := profileBlockContaining(t, p, blockDenyWrite, exe)
 	assertBlockMentions(t, denyWrite, exe, "write hard-deny (launcher)")
 }
+
+func TestBuildProfileProtectsControlPlaneAncestorSpineFromUnlinkAndRename(t *testing.T) {
+	base := t.TempDir()
+	parent := filepath.Join(base, "config-parent")
+	cfg := filepath.Join(parent, "paintedwolf")
+	t.Setenv("LYCAON_CONFIG_DIR", cfg)
+
+	c := confine.Confinement{
+		Roots:             []string{"/proj"},
+		GrantedWriteRoots: []string{base},
+	}
+	p, err := confine.BuildSeatbeltProfile(c)
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
+
+	parentResolved := parent
+	if rp, err := filepath.EvalSymlinks(base); err == nil {
+		parentResolved = filepath.Join(rp, "config-parent")
+	}
+	if !strings.Contains(p, "(deny file-write-unlink") || !strings.Contains(p, `(literal "`+parentResolved+`")`) {
+		t.Fatalf("profile missing file-write-unlink literal for control-plane ancestor %q:\n%s", parentResolved, p)
+	}
+
+	fs := confine.BoundaryOf(&c).Filesystem
+	if got := fs.Verdict(confine.AccessWriteUnlink, parentResolved); got.Allowed || got.Layer != confine.FloorControlPlane {
+		t.Fatalf("Verdict(AccessWriteUnlink, %q) = %+v, want FloorControlPlane deny", parentResolved, got)
+	}
+	if got := fs.Verdict(confine.AccessWrite, filepath.Join(parentResolved, "sibling.txt")); !got.Allowed {
+		t.Fatalf("Verdict(AccessWrite, sibling) = %+v, want allowed", got)
+	}
+}

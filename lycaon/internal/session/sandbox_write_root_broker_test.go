@@ -530,12 +530,10 @@ func TestWriteRootBrokerRefusesInvalidScratchContainingState(t *testing.T) {
 }
 
 func TestWriteRootBrokerRejectsInvalidAttachedAuthority(t *testing.T) {
-	ancestor := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(ancestor, "state"))
 	broker := &WriteRootCheckpointBroker{Checkpoints: unusedWriteRootCheckpoints{t: t}, Runtime: approvalstate.NewSandboxPathGrantRuntime()}
-	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{SessionID: "session", ProjectDir: ancestor, ProposedWriteRoot: t.TempDir()})
+	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{SessionID: "session", ProjectDir: "relative", ProposedWriteRoot: t.TempDir()})
 	var refusal *confine.WriteRootRefusalError
-	if !errors.As(err, &refusal) || refusal.Code != confine.WriteRootCodeContainsState || result.Authorized || result.Raised {
+	if !errors.As(err, &refusal) || refusal.Code != confine.WriteRootCodeNotAbsolute || result.Authorized || result.Raised {
 		t.Fatalf("invalid attached authority reached approval: result=%+v error=%v", result, err)
 	}
 }

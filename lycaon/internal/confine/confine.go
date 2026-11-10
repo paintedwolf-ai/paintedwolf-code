@@ -470,6 +470,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 	rules.add(denySpecRule(specs, FloorAgentPolicy))
 	rules.add(protectedGrantRule(c.PolicyWriteGrants))
 	rules.add(denySpecRule(specs, FloorControlPlane))
+	rules.add(fsRule{op: opWriteUnlink, matches: literalMatches(ControlPlaneStrictAncestors(), FloorControlPlane)})
 	// Raw disk devices stay unwritable under every grant.
 	rules.add(fsRule{op: opWrite, matches: []fsMatch{
 		{regex: "^/dev/disk", layer: FloorControlPlane},

@@ -55,9 +55,13 @@ func TestValidateGrantedWriteRootsLane(t *testing.T) {
 	if err := ValidateAttachedWriteRoots([]string{dockerParent}); err != nil {
 		t.Fatalf("attached store ancestor refused: %v", err)
 	}
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "fixture-state"))
-	if err := ValidateGrantedWriteRoots([]string{home}); err == nil || err.Code != WriteRootCodeContainsState {
-		t.Fatalf("state ancestor grant admitted: %v", err)
+	state := filepath.Join(home, ".config", "fixture-state")
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	if err := ValidateGrantedWriteRoots([]string{home}); err != nil {
+		t.Fatalf("state ancestor grant refused: %v", err)
+	}
+	if err := ValidateGrantedWriteRoots([]string{state}); err == nil || err.Code != WriteRootCodeControlPlane {
+		t.Fatalf("direct control-plane grant admitted: %v", err)
 	}
 
 	link := filepath.Join(t.TempDir(), "store")
@@ -67,13 +71,13 @@ func TestValidateGrantedWriteRootsLane(t *testing.T) {
 	}
 }
 
-func TestValidateEffectiveWriteRootsRefusesStateAncestors(t *testing.T) {
+func TestValidateEffectiveWriteRootsAllowsStateAncestorsAndRefusesRelative(t *testing.T) {
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "resolve home", err)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "fixture-state"))
 	for _, root := range []string{home, string(filepath.Separator)} {
-		if err := validateEffectiveWriteRoots([]string{root}); err == nil || err.Code != WriteRootCodeContainsState {
-			t.Fatalf("state ancestor %s admitted: %v", root, err)
+		if err := validateEffectiveWriteRoots([]string{root}); err != nil {
+			t.Fatalf("state ancestor %s refused: %v", root, err)
 		}
 	}
 	if err := validateEffectiveWriteRoots([]string{"relative"}); err == nil {

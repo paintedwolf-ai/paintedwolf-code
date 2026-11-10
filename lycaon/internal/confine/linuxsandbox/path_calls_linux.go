@@ -62,6 +62,8 @@ func pathArgsOf(nr uint32) (pathArgs, bool) {
 		a.op, a.content, a.dir, a.path = callSymlink, 0, 1, 2
 	case unix.SYS_LINKAT:
 		a.op, a.dir, a.path, a.newDir, a.newPath, a.flags = callLink, 0, 1, 2, 3, 4
+	case unix.SYS_UNLINKAT:
+		a.op, a.dir, a.path, a.flags = callUnlink, 0, 1, 2
 	case unix.SYS_RENAMEAT:
 		a.op, a.dir, a.path, a.newDir, a.newPath = callRename, 0, 1, 2, 3
 	case unix.SYS_RENAMEAT2:

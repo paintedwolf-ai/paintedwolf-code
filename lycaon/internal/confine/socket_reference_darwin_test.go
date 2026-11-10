@@ -3,7 +3,6 @@
 package confine_test
 
 import (
-	"context"
 	"errors"
 	"net"
 	"os"
@@ -50,33 +49,27 @@ func TestSocketReferenceAliasCannotBeMutatedFromBroadWriteRoot(t *testing.T) {
 			case "rename-ancestor":
 				source = ancestor
 			}
-			unsafe := confine.Confinement{Roots: []string{broad}, Network: confine.NetworkDeny}
-			cmd, cleanup, err := confine.Command(context.Background(), self, "/bin/rm", []string{alias}, unsafe)
-			cleanup()
-			var refused *confine.WriteRootRefusalError
-			if cmd != nil || !errors.As(err, &refused) || refused.Code != confine.WriteRootCodeContainsState {
-				t.Fatalf("broad root entered control plane: cmd=%v, error=%v", cmd, err)
-			}
-			project := filepath.Join(broad, "project")
-			if err := os.Mkdir(project, 0700); err != nil {
-				testutil.FailErr(t, "create fixture directory", err)
-			}
-			c := confine.Confinement{Roots: []string{project}, Network: confine.NetworkDeny}
-			var code int
-			var output string
-			if mutation == "unlink-alias" {
-				code, output = confinedRun(t, self, c, "/bin/rm", alias)
-			} else {
-				destination := filepath.Join(broad, "relocated")
-				code, output = confinedRun(t, self, c, "/bin/mv", source, destination)
-				if code == 0 {
-					if err := os.Rename(destination, source); err != nil {
-						t.Fatalf("restore owned fixture: %v", err)
+			for _, root := range []string{broad, filepath.Join(broad, "project")} {
+				if root != broad {
+					testutil.FailErr(t, "create fixture directory", os.MkdirAll(root, 0700))
+				}
+				c := confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny}
+				var code int
+				var output string
+				if mutation == "unlink-alias" {
+					code, output = confinedRun(t, self, c, "/bin/rm", alias)
+				} else {
+					destination := filepath.Join(broad, "relocated")
+					code, output = confinedRun(t, self, c, "/bin/mv", source, destination)
+					if code == 0 {
+						if err := os.Rename(destination, source); err != nil {
+							t.Fatalf("restore owned fixture: %v", err)
+						}
 					}
 				}
-			}
-			if code == 0 {
-				t.Fatalf("confined alias mutation succeeded: %s", output)
+				if code == 0 {
+					t.Fatalf("confined alias mutation succeeded under %s: %s", root, output)
+				}
 			}
 			client, err := lease.DialContext(t.Context())
 			if err != nil {

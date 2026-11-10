@@ -45,9 +45,20 @@ func TestPathWithinWriteRootsSymlinkParity(t *testing.T) {
 	}
 }
 
-func TestFilesystemRootCannotBecomeWriteAuthority(t *testing.T) {
+func TestFilesystemRootRemainsInBoundaryAndKeepsControlPlaneFloor(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "state")
+	t.Setenv("LYCAON_CONFIG_DIR", state)
 	roots, err := confine.WriteRootsForBoundary("", []string{"/"}, nil, "")
-	if err == nil || roots != nil {
-		t.Fatalf("filesystem root admitted: roots=%v error=%v", roots, err)
+	testutil.FailErr(t, "admit filesystem root with floor protection", err)
+	if !confine.PathWithinWriteRoots("/etc/hosts", roots) {
+		t.Fatalf("filesystem root missing from write roots: %v", roots)
+	}
+	c := confine.Confinement{Roots: []string{"/"}}
+	fs := confine.BoundaryOf(&c).Filesystem
+	if verdict := fs.Verdict(confine.AccessWrite, filepath.Join(state, "approvals.yaml")); verdict.Allowed || verdict.Layer != confine.FloorControlPlane {
+		t.Fatalf("control-plane write verdict under / = %+v", verdict)
+	}
+	if verdict := fs.Verdict(confine.AccessWriteUnlink, filepath.Dir(state)); verdict.Allowed || verdict.Layer != confine.FloorControlPlane {
+		t.Fatalf("control-plane ancestor unlink verdict under / = %+v", verdict)
 	}
 }
