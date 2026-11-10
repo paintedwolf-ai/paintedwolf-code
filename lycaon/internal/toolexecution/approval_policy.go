@@ -95,15 +95,6 @@ func executionBoundaryDigestForPolicy(confReq confine.Request) string {
 	return tools.ExecutionBoundaryDigest(confReq)
 }
 
-func normalizedPolicyConfineRequest(eval platform.PolicyContext) confine.Request {
-	return normalizedPolicyConfineRequestFromParts(
-		eval.ConfineRequest,
-		eval.ProjectDir,
-		eval.DirectIPRequested,
-		eval.AuthorizedDirectIP,
-	)
-}
-
 func normalizedPolicyConfineRequestFromParts(
 	confReq confine.Request,
 	projectDir string,
@@ -255,7 +246,14 @@ func pairFilesFromArgs(args map[string]any) []string {
 // proposedActionFromPolicy builds the gate input, stamping Contained from the
 // same confine request the executor's spawn path will apply.
 func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
-	confReq := normalizedPolicyConfineRequest(eval)
+	confReq := eval.ConfineRequest
+	if len(confReq.Roots) == 0 && strings.TrimSpace(eval.ProjectDir) != "" {
+		confReq.Roots = []string{eval.ProjectDir}
+	}
+	if (eval.DirectIPRequested || eval.AuthorizedDirectIP) && confReq.Egress != confine.EgressDirectIP {
+		confReq.Egress = confine.EgressDirectIP
+		confReq.SocksProxyEnv = false
+	}
 	return hitl.ProposedAction{
 		Mutations: hitl.ActionMutations{
 			AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),
