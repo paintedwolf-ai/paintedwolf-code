@@ -165,6 +165,9 @@ func ImportAndValidateCheckpointGitRefs(
 	ctx context.Context, storeDir, checkpointID, workerID string, git PrivateGitSnapshot,
 	targetRoots map[string]string, authorizedGitDirs ...string,
 ) (map[string]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if !git.HasRefs() {
 		return nil, nil
 	}
@@ -194,6 +197,9 @@ func ImportAndValidateCheckpointGitRefs(
 		}
 	}
 	for _, rootID := range slices.Sorted(maps.Keys(git.Roots)) {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		dir := strings.TrimSpace(targetRoots[rootID])
 		if dir == "" || !safeComponent(rootID) {
 			return nil, fmt.Errorf("checkpoint: git refs name unknown root %q", rootID)
@@ -229,6 +235,9 @@ type rootRefImport struct {
 }
 
 func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	gitDir, commonGitDir, err := ResolveGitDirs(req.repoRoot, req.authorizedGitDirs...)
 	if err != nil {
 		return nil, err
@@ -237,17 +246,27 @@ func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, 
 	if err := ensureMinimalGitDirLayout(gitDir, commonGitDir); err != nil {
 		return nil, err
 	}
-	if err := copyCandidateGitObjects(req.storeDir, req.checkpointID, req.rootID, req.objectCheckpoints, targetObjectsDir); err != nil {
+	source, cleanupSource, err := openCandidateGitObjectSource(
+		ctx, req.storeDir, req.checkpointID, req.rootID, req.objectCheckpoints,
+		req.repoRoot, gitDir, commonGitDir, targetObjectsDir,
+	)
+	if err != nil {
 		return nil, err
 	}
+	defer cleanupSource()
 	refNames := make([]string, 0, len(req.refs))
 	for name := range req.refs {
 		refNames = append(refNames, name)
 	}
 	sort.Strings(refNames)
-	verifiedOIDs := make(map[string]bool, len(refNames)*4)
-	var writes []plannedRefWrite
+	var (
+		tipOIDs []string
+		writes  []plannedRefWrite
+	)
 	for _, refName := range refNames {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		cleanRel, nameErr := ValidateGitRefName(refName)
 		if nameErr != nil {
 			return nil, nameErr
@@ -256,13 +275,14 @@ func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, 
 		if !isHexOID(oid) || isAllZeroOID(oid) {
 			return nil, fmt.Errorf("checkpoint: invalid git oid %q for ref %q", oid, refName)
 		}
-		if err := verifyReachableGitObject(ctx, req.repoRoot, commonGitDir, targetObjectsDir, oid, verifiedOIDs); err != nil {
-			return nil, fmt.Errorf("checkpoint: unreachable or corrupt git object for ref %s (%s): %w", refName, oid, err)
-		}
+		tipOIDs = append(tipOIDs, oid)
 		writes = append(writes, plannedRefWrite{dstRef: "refs/lycaon/workers/" + req.workerID + "/" + cleanRel, oid: oid})
 		if req.checkpointID != "" {
 			writes = append(writes, plannedRefWrite{dstRef: "refs/lycaon/checkpoints/" + req.checkpointID + "/" + cleanRel, oid: oid})
 		}
+	}
+	if err := verifyAndPublishReachableGitGraph(ctx, source, tipOIDs); err != nil {
+		return nil, fmt.Errorf("checkpoint: unreachable or corrupt git object: %w", err)
 	}
 	return applyCheckpointRefTransaction(ctx, req.repoRoot, gitDir, commonGitDir, req.storeDir, req.checkpointID, req.workerID, req.rootID, writes)
 }
