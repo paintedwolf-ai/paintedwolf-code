@@ -85,7 +85,6 @@ type vaultCacheKey struct {
 }
 
 type vaultFile struct {
-	mu       sync.Mutex
 	path     string
 	provider identityProvider
 	identity *age.X25519Identity
@@ -139,6 +138,8 @@ func sharedVault(path string, provider identityProvider) *vaultFile {
 	return created
 }
 
+// clearCachedVaultIdentities resets cached identities for path. Callers must
+// hold vaultPathMutex(path) via withExclusiveLock.
 func clearCachedVaultIdentities(path string) {
 	clean := filepath.Clean(path)
 	vaults.Lock()
@@ -150,9 +151,7 @@ func clearCachedVaultIdentities(path string) {
 	}
 	vaults.Unlock()
 	for _, v := range matched {
-		v.mu.Lock()
 		v.identity, v.vaultID = nil, ""
-		v.mu.Unlock()
 	}
 }
 
@@ -442,8 +441,6 @@ func (v *vaultFile) withExclusiveLock(fn func() error) error {
 	pathMu := vaultPathMutex(v.path)
 	pathMu.Lock()
 	defer pathMu.Unlock()
-	v.mu.Lock()
-	defer v.mu.Unlock()
 	lock, err := filelock.Open(v.path + ".lock")
 	if err != nil {
 		return err
