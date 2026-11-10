@@ -26,3 +26,17 @@ func TestBrowserEnsureReportsResolvedArtifact(t *testing.T) {
 		t.Fatalf("resolved artifact = %v", artifact)
 	}
 }
+
+func TestBrowserEnsureRejectsInvalidArguments(t *testing.T) {
+	for _, args := range [][]string{{"--cache-dir"}, {"--json", "--cache-dir"}, {"--unknown"}} {
+		t.Run(args[len(args)-1], func(t *testing.T) {
+			var out bytes.Buffer
+			if err := runBrowserEnsure(t.Context(), args, &out); err == nil {
+				t.Fatalf("invalid arguments accepted: %v", args)
+			}
+			if out.Len() != 0 {
+				t.Fatal("invalid arguments produced a browser artifact")
+			}
+		})
+	}
+}
