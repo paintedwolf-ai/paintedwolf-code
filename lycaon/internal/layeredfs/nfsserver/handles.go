@@ -2,8 +2,6 @@ package nfsserver
 
 import (
 	"container/list"
-	"crypto/sha256"
-	"encoding/binary"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -84,44 +82,27 @@ func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, cor
 	}
 }
 
-func computeEpochViewHash(viewID ViewID, epoch uint64) uint64 {
-	h := sha256.New()
-	_, _ = h.Write([]byte(viewID))
-	var buf [9]byte
-	binary.BigEndian.PutUint64(buf[1:], epoch)
-	_, _ = h.Write(buf[:])
-	sum := h.Sum(nil)
-	if v := binary.BigEndian.Uint64(sum[:8]); v != 0 {
-		return v
-	}
-	return 1
-}
-
-func (t *handleTable) ensureViewLocked(viewID ViewID) uint64 {
-	if vHash, ok := t.viewHashes[viewID]; ok {
-		return vHash
-	}
-	t.epochSeq++
-	vHash := computeEpochViewHash(viewID, t.epochSeq)
-	t.viewHashes[viewID] = vHash
-	t.activeViews[vHash] = viewID
-	return vHash
-}
-
-func (t *handleTable) RegisterView(viewID ViewID) uint64 {
+func (t *handleTable) RegisterView(viewID ViewID) (uint64, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.ensureViewLocked(viewID)
+	if vHash, ok := t.viewHashes[viewID]; ok {
+		return vHash, nil
+	}
+	if t.epochSeq == ^uint64(0) {
+		return 0, ErrIncarnationExhausted
+	}
+	t.epochSeq++
+	vHash := t.epochSeq
+	t.viewHashes[viewID] = vHash
+	t.activeViews[vHash] = viewID
+	return vHash, nil
 }
 
 func (t *handleTable) ViewHash(viewID ViewID) uint64 {
 	t.mu.RLock()
-	vHash, ok := t.viewHashes[viewID]
+	vHash := t.viewHashes[viewID]
 	t.mu.RUnlock()
-	if ok {
-		return vHash
-	}
-	return computeEpochViewHash(viewID, 0)
+	return vHash
 }
 
 func (t *handleTable) ReleaseView(vHash uint64, viewID ViewID) []layeredfs.HandleID {

@@ -74,15 +74,18 @@ var (
 	ErrCrossViewHandle    = errors.New("layeredfs/nfsserver: cross-view file handle rejected")
 	ErrFrameTooLarge      = errors.New("layeredfs/nfsserver: RPC frame exceeds maximum size")
 	ErrQueueFull          = errors.New("layeredfs/nfsserver: RPC request queue is full")
-	ErrBadCookie          = errors.New("layeredfs/nfsserver: invalid or stale directory cookie")
-	ErrReadOnlyExport     = errors.New("layeredfs/nfsserver: export is read-only")
+	ErrBadCookie            = errors.New("layeredfs/nfsserver: invalid or stale directory cookie")
+	ErrReadOnlyExport       = errors.New("layeredfs/nfsserver: export is read-only")
+	ErrIncarnationExhausted = errors.New("layeredfs/nfsserver: view incarnation sequence exhausted")
 )
 
-// FaultInjector provides deterministic fault hooks for write, sync, and COMMIT testing.
+// FaultInjector provides deterministic fault hooks for write, sync, COMMIT, LOOKUP, and MOUNT testing.
 type FaultInjector struct {
 	OnWrite  func(viewID ViewID, path layeredfs.QualifiedPath, offset uint64, count int, stability WriteStability) error
 	OnSync   func(viewID ViewID, path layeredfs.QualifiedPath) error
 	OnCommit func(viewID ViewID, path layeredfs.QualifiedPath, offset uint64, count uint32) error
+	OnLookup func(viewID ViewID, path layeredfs.QualifiedPath) error
+	OnMount  func(viewID ViewID, root RootID) error
 }
 
 // Config configures the loopback NFSv3 and MOUNTv3 server.
