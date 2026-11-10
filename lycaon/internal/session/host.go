@@ -229,7 +229,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	workerResults.SetSummaries(workerSummaries)
 	m.Coordinator.Guidance = guidancedelivery.New(store, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
 	m.Processes = processcontrol.New(store, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)
-	m.Workers = workerexecution.New(store, m.Workspace, gate, m.Coordinator.Guidance, m.Limits, turnHistory, router, workerexecution.PeerServices{Cancel: workerCancel, Cards: workerCards, Cancellations: workerCancellations, Delivery: workerDelivery, Summaries: workerSummaries, Results: workerResults, Digests: workerDigests, State: workerState, Notes: workerNotes, Workspaces: workerworkspace.New(store, m.Workspace, newBranchWorkspace)})
+	m.Workers = workerexecution.New(store, m.Workspace, gate, m.Coordinator.Guidance, m.Limits, router, workerexecution.PeerServices{Cancel: workerCancel, Cards: workerCards, Cancellations: workerCancellations, Delivery: workerDelivery, Summaries: workerSummaries, Results: workerResults, Digests: workerDigests, State: workerState, Notes: workerNotes, Workspaces: workerworkspace.New(store, m.Workspace, newBranchWorkspace)})
 	turnPreparation := preparation.New(turnHistory, m.Coordinator.Loading, m.Profiles, m.SourceBriefs, m.ToolContext, m.Workers.Workspaces, m.Workers.State)
 	turnPostTurn := postturn.New(store, m.Coordinator.Guidance)
 	m.Coordinator.Batch = batchcontrol.New(store, workerState, m.Verification, m.Coordinator.Guidance)

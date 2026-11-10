@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
@@ -14,21 +15,27 @@ import (
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 )
 
-// invokeCompleteLeg registers with the production decoder so these tests
-// exercise the same decode the closeout extractor runs.
 func invokeCompleteLeg(t *testing.T, args map[string]any, tctx tools.ToolContext) (string, error) {
 	t.Helper()
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register", native.RegisterCompleteLegTool(reg, workercompletion.CompleteLegDecoder))
+	testutil.FailErr(t, "register", native.RegisterCompleteLegTool(reg, func(_ context.Context, args map[string]any, tc tools.ToolContext) (*api.WorkerReportAcceptance, error) {
+		report, err := workercompletion.DecodeCompleteLegArgs(args)
+		if err != nil {
+			return nil, err
+		}
+		return &api.WorkerReportAcceptance{WorkerID: tc.Identity.WorkerJobID, Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{}}, nil
+	}))
 	def, ok := reg.Definition(workertools.CompleteLegTool)
 	if !ok {
 		t.Fatal("complete_leg missing")
 	}
+	tctx.Identity.WorkerJobID = "job"
+	if tctx.Effects.Out == nil {
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
+	}
 	return def.Handler(context.Background(), args, tctx)
 }
 
-// A session the user addressed has no leg to close. The refusal carries a Code
-// so the model can branch to its ordinary closeout instead of retrying.
 func TestCompleteLegRejectsAddressedSession(t *testing.T) {
 	_, err := invokeCompleteLeg(t, map[string]any{
 		"leg_status": "complete",
@@ -74,8 +81,7 @@ func TestCompleteLegAcksWithoutEchoingReport(t *testing.T) {
 	if !ack.Recorded || ack.LegStatus != "complete" || ack.FindingsRecorded != 1 {
 		t.Fatalf("ack = %s", out)
 	}
-	// An echoed report would make the body large enough to compact; the
-	// record is the ToolArgs snapshot.
+	// The accepted report is retained separately from the acknowledgement.
 	if ack.Brief != "" {
 		t.Fatalf("ack must not echo the report, got %s", out)
 	}
@@ -133,11 +139,11 @@ func TestCompleteLegRejectsAliasStatus(t *testing.T) {
 
 func TestCompleteLegPreservesHostContractRejection(t *testing.T) {
 	rejection := &toolrejection.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": "missing assessment"}}
-	handler := workertools.CompleteLegHandler(func(_ context.Context, _ map[string]any, tc tools.ToolContext) (workertools.CompleteLegRecord, error) {
+	handler := workertools.CompleteLegHandler(func(_ context.Context, _ map[string]any, tc tools.ToolContext) (*api.WorkerReportAcceptance, error) {
 		if tc.Identity.WorkerJobID != "job" {
 			t.Fatal("lost worker identity")
 		}
-		return workertools.CompleteLegRecord{}, rejection
+		return nil, rejection
 	})
 	body, err := handler(t.Context(), map[string]any{"leg_status": "complete"}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "child",
@@ -146,5 +152,49 @@ func TestCompleteLegPreservesHostContractRejection(t *testing.T) {
 	})
 	if body != "" || !errors.Is(err, rejection) {
 		t.Fatalf("host rejection became ack: %q, %v", body, err)
+	}
+}
+
+func TestCompleteLegRequiresCapturableJobAcceptance(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		job           string
+		capture       bool
+		omitReport    bool
+		omitGrounding bool
+		wantAccepted  bool
+	}{
+		{name: "accepted", job: "job", capture: true, wantAccepted: true},
+		{name: "wrong job", job: "other", capture: true},
+		{name: "no job", capture: true},
+		{name: "no capture", job: "job"},
+		{name: "no report", job: "job", capture: true, omitReport: true},
+		{name: "no grounding", job: "job", capture: true, omitGrounding: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			receipt := &api.WorkerReportAcceptance{WorkerID: tc.job, Report: &api.WorkerCompletionReport{LegStatus: "partial", Brief: "Accepted"}, Grounding: &api.CitationGrounding{}}
+			if tc.omitReport {
+				receipt.Report = nil
+			}
+			if tc.omitGrounding {
+				receipt.Grounding = nil
+			}
+			handler := workertools.CompleteLegHandler(func(context.Context, map[string]any, tools.ToolContext) (*api.WorkerReportAcceptance, error) {
+				return receipt, nil
+			})
+			tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "child", ParentSessionID: "parent", WorkerJobID: "job"}}
+			if tc.capture {
+				tctx.Effects.Out = &tools.ToolInvocationOut{}
+			}
+			body, err := handler(t.Context(), map[string]any{"leg_status": "complete", "brief": "Unvalidated input"}, tctx)
+			if tc.wantAccepted {
+				testutil.FailErr(t, "capture accepted report", err)
+				if body == "" || tctx.Effects.Out.WorkerReport != receipt {
+					t.Fatal("lost host acceptance")
+				}
+			} else if err == nil || body != "" || (tctx.Effects.Out != nil && tctx.Effects.Out.WorkerReport != nil) {
+				t.Fatalf("uncapturable acceptance acknowledged: body=%q err=%v", body, err)
+			}
+		})
 	}
 }

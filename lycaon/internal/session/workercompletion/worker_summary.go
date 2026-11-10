@@ -27,7 +27,7 @@ const (
 // WorkerSummaryNoProseCode marks a missing parent survey.
 const WorkerSummaryNoProseCode = "WORKER_TURN_NO_PROSE"
 
-// WorkerSummaryEvalInput is input for post-worker summary validation.
+// WorkerSummaryEvalInput binds a report to its worker evidence.
 type WorkerSummaryEvalInput struct {
 	AgentType      string
 	MissingReport  bool
@@ -163,7 +163,7 @@ func EvaluateWorkerSummary(ctx context.Context, in WorkerSummaryEvalInput) (Work
 		audit.passVacuous("url_citations", "URL citations", "No URL citations in report")
 	}
 
-	if isImplementerAgent(in.AgentType) {
+	if isImplementerAgent(in.AgentType) && report.LegStatus != "partial" && report.LegStatus != "blocked" {
 		proof := childHadImplementerArtifact(ctx, in.ProjectDir, in.ChildMessages, in.WorkspaceCheck, in.WorkspaceChanges)
 		if !audit.recordImplementerArtifactCheck(proof) {
 			obs.NoArtifact = true

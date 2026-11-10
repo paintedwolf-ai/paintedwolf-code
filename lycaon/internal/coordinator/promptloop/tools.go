@@ -53,6 +53,7 @@ type toolCaptures struct {
 	sourceRun        *tools.SourceRunCapture
 	listener         *api.LoopbackListenerFact
 	dispatch         *api.WorkerDispatch
+	workerReport     *api.WorkerReportAcceptance
 	completion       *api.ToolCompletion
 	// retrievedFrom is the handler-observed retrieval host.
 	retrievedFrom string
@@ -418,6 +419,7 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		return toolCaptures{}
 	}
 	return toolCaptures{
+		workerReport:     out.WorkerReport,
 		displaySubject:   out.DisplaySubject,
 		overlayPromotion: out.OverlayPromotion,
 		sourceContext:    out.SourceContext,
@@ -517,6 +519,7 @@ func applyToolResultSidecars(
 	captures toolCaptures,
 ) string {
 	guidance.ApplyTaskDispatchMetadata(toolName, tr, captures.dispatch)
+	tr.WorkerReport = captures.workerReport
 	tr.DisplaySubject = captures.displaySubject
 	tr.OverlayPromotion = captures.overlayPromotion
 	if captures.completion != nil {
