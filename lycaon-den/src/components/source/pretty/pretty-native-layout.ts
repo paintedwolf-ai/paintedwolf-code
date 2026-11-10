@@ -140,7 +140,13 @@ function appendLineDecorations(
 }
 
 const SYNTAX_XML_INTERIOR_NODES = new Set(["Comment", "Cdata", "AttributeValue"]);
-const SYNTAX_XML_FULL_NODES = new Set(["RawText", "ScriptText", "StyleText"]);
+const SYNTAX_XML_FULL_NODES = new Set([
+  "RawText",
+  "ScriptText",
+  "StyleText",
+  "JSXEndTag",
+  "JSXCloseTag",
+]);
 
 function classifySyntaxProtectedNode(
   name: string,
