@@ -56,7 +56,9 @@ func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted, sourceConflic
 	}
 	root := t.TempDir()
 	source := filepath.Join(root, "source")
-	if parent := os.Getenv("PW_M14_LIFECYCLE_SOURCE_PARENT"); parent != "" {
+	if prepared := os.Getenv("PW_M14_LIFECYCLE_PREPARED_SOURCE"); prepared != "" {
+		source = prepared
+	} else if parent := os.Getenv("PW_M14_LIFECYCLE_SOURCE_PARENT"); parent != "" {
 		var err error
 		source, err = os.MkdirTemp(parent, "m14-lifecycle-source-")
 		testutil.FailErr(t, "create isolated external source", err)
@@ -120,9 +122,15 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	queue.SetWorkerWorkspaceManager(manager)
 	fixture := &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
 	if phase == "prepare" {
-		testutil.FailErr(t, "source directory", os.MkdirAll(source, 0o755))
-		testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(source, "main.go"), []byte("package main\n"), 0o644))
-		gittest.InitCommit(t, source, "initial")
+		if os.Getenv("PW_M14_LIFECYCLE_PREPARED_SOURCE") == "" {
+			testutil.FailErr(t, "source directory", os.MkdirAll(source, 0o755))
+			testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(source, "main.go"), []byte("package main\n"), 0o644))
+			gittest.InitCommit(t, source, "initial")
+		} else {
+			assertFileHolds(t, filepath.Join(source, "main.go"), "package main\n")
+			_, err := os.Stat(filepath.Join(source, ".git"))
+			testutil.FailErr(t, "prepared source Git fixture", err)
+		}
 		testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", source)
 		task := fixture.claim(t)
 		snap, _, ok := WorkerClaimWorkspaceState(task.ID)
