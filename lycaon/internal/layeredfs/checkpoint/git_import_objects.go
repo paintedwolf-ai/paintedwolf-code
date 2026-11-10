@@ -444,6 +444,11 @@ func (s *candidateGitObjectSource) publishSelectedPack(ctx context.Context) erro
 	return nil
 }
 
+func copyFileStreamingAtomic(srcPath, dstPath string, mode os.FileMode) error {
+	_, _, err := copyFileStreamingAtomicWithVerify(srcPath, dstPath, mode)
+	return err
+}
+
 func copyFileStreamingAtomicWithVerify(srcPath, dstPath string, mode os.FileMode) (string, []byte, error) {
 	return copyFileStreamingAtomicOpts(srcPath, dstPath, mode, true, true)
 }

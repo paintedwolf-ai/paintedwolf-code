@@ -477,7 +477,7 @@ func batchReadMetadataObjects(ctx context.Context, repoRoot, gitDir string, oids
 	return res, nil
 }
 
-func readAndVerifyLooseGitObject(f *os.File, oid string) (string, []byte, error) {
+func readAndVerifyLooseGitObject(f io.Reader, oid string) (string, []byte, error) {
 	zr, err := zlib.NewReader(f)
 	if err != nil {
 		return "", nil, err
