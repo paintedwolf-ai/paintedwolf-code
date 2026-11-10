@@ -2,6 +2,7 @@ package httpaction
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egress"
+	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -57,8 +59,8 @@ func TestExplicitRouteDenialPrecedesConnectionAndAllowsRecovery(t *testing.T) {
 			})
 			denied := true
 			t.Cleanup(confine.SetEgressRuleEvaluator(func(_ context.Context, _ confine.EgressCommand, host string) confine.EgressRuleResult {
-				if host == routeHost && denied {
-					return confine.EgressRuleResult{Effect: confine.EgressRuleDeny, Pattern: routeHost}
+				if host == "unused.example.com" || host == routeHost && denied {
+					return confine.EgressRuleResult{Effect: confine.EgressRuleDeny, Pattern: host}
 				}
 				return confine.EgressRuleResult{}
 			}))
@@ -69,9 +71,14 @@ func TestExplicitRouteDenialPrecedesConnectionAndAllowsRecovery(t *testing.T) {
 				Local: tools.InvocationLocal{LoopbackConnectGranted: true, LoopbackConnectPorts: []uint16{endpoint.Port()}},
 			}
 			args := map[string]any{"url": "http://nominal.example.com/route?value=fixture"}
-			opts := ExchangeOptions{Dial: []outboundhttp.ResolveMapping{dial}}
+			// A rule on an inapplicable mapping must not poison the selected route.
+			opts := ExchangeOptions{Dial: []outboundhttp.ResolveMapping{
+				{Host: "unrelated.example.com", Port: 80, TargetHost: "unused.example.com", TargetPort: endpoint.Port()},
+				dial,
+			}}
 			_, err := Perform(t.Context(), Deps{Boundary: testBoundary()}, args, tc, opts)
-			if err == nil || connections.Load() != 0 || requests.Load() != 0 || lookups.Load() != 0 {
+			var refusal *egressgate.HostDeniedError
+			if !errors.As(err, &refusal) || refusal.Host != routeHost || connections.Load() != 0 || requests.Load() != 0 || lookups.Load() != 0 {
 				t.Errorf("denied explicit route: err=%v connections=%d requests=%d DNS=%d; want refusal before resolution or connection", err, connections.Load(), requests.Load(), lookups.Load())
 			}
 			before := requests.Load()
