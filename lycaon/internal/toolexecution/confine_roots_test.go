@@ -232,13 +232,13 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		{
 			name:       "home",
 			dir:        home,
-			wantCode:   "CONTROL_PLANE_PATH_DENIED",
+			wantCode:   "SANDBOX_CONTROL_PLANE_DENIED",
 			wantReason: confine.WriteRootCodeContainsState,
 		},
 		{
 			name:       "dot-config",
 			dir:        filepath.Join(home, ".config"),
-			wantCode:   "CONTROL_PLANE_PATH_DENIED",
+			wantCode:   "SANDBOX_CONTROL_PLANE_DENIED",
 			wantReason: confine.WriteRootCodeContainsState,
 		},
 		{
