@@ -12,6 +12,8 @@ const (
 	TurnLoadTriggerLookup TurnLoadTrigger = "lookup"
 	// TurnLoadTriggerToolEvent is the skill read a turn's first loadable tool call asked for.
 	TurnLoadTriggerToolEvent TurnLoadTrigger = "tool_event"
+	// TurnLoadTriggerVisibility records a changed continuation surface.
+	TurnLoadTriggerVisibility TurnLoadTrigger = "visibility"
 )
 
 // TurnLoadMatchBy names how a request or lookup resolved its text.
@@ -34,6 +36,8 @@ const (
 	TurnLoadToolSourcePredicted TurnLoadToolSource = "predicted"
 	// TurnLoadToolSourceRequested means the model asked for it through request_tools.
 	TurnLoadToolSourceRequested TurnLoadToolSource = "requested"
+	// TurnLoadToolSourceFallback exposes a permitted tool after selection failure.
+	TurnLoadToolSourceFallback TurnLoadToolSource = "fallback"
 	// TurnLoadToolSourceCompanion means it loaded with a predicted tool that declares it.
 	TurnLoadToolSourceCompanion TurnLoadToolSource = "companion"
 )

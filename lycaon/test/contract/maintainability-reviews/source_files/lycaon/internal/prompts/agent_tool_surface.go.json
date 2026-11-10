@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/prompts/agent_tool_surface.go",
+  "kind": "projection",
+  "workstream": "optional-tool-selection",
+  "disposition": "retain",
+  "reason": "This projection assembles tool, skill and resource views from the effective profile for prompt rendering. Full-catalog visibility adds a presentation fact without moving selection or permission authority into prompts. Retain at 413 measured lines. Profile-surface contracts and exact skill-membership rendering tests protect the projection boundary.",
+  "reviewed_commit": "9427c689de14f0930ec792f7e0b2c02a622faedf",
+  "ceiling": 413,
+  "boundaries": {
+    "lycaon/internal/prompts/agent_tool_surface_test.go": "3209598e217d297b89ca06a14e3b3b1f785ffff9c02d56c5acc3f824780fc2c6",
+    "lycaon/internal/prompts/agent_skills_surface_test.go": "591a809d426202af7c3a36ffc6ce15feb208e5a2043b2fbb25daa3c350940de4"
+  }
+}

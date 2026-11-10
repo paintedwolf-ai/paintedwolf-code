@@ -2,13 +2,14 @@
   "category": "source_files",
   "artifact": "lycaon/internal/coordinator/turnload/ledger.go",
   "kind": "runtime_service",
-  "workstream": "web-research-flow",
+  "workstream": "optional-tool-selection",
   "disposition": "retain",
-  "reason": "Retain the 19-method, 407-line standing-surface ledger. Family completion is a pure catalog operation within the existing turn transaction; request lifetime, cold boundaries, restore, and locking remain in the ledger. Focused lifetime and family contracts bound this responsibility.",
-  "reviewed_commit": "655e22133e9396805819a601fbd788f77270eecb",
-  "ceiling": 407,
+  "reason": "The ledger owns the session standing surface, fallback provenance, catalog family completion, restore and cold-boundary activation under one lock. Keep these transitions together within the existing 419-line ceiling; focused visibility, lifetime and family contracts bound the responsibility.",
+  "reviewed_commit": "9427c689de14f0930ec792f7e0b2c02a622faedf",
+  "ceiling": 419,
   "boundaries": {
-    "lycaon/internal/coordinator/turnload/families_test.go": "1a6625af96d6d943bc7ec9190e9e8ca3b8cd0e98a5c144ee29f887102019311f",
-    "lycaon/internal/coordinator/turnload/ledger_test.go": "c72faa320b91a4fc73c9315bfdaafcff8b84ed60a6f461bd0ab4c64fc7c44db4"
+    "lycaon/internal/coordinator/turnload/visibility_test.go": "88ecd32189008d66197f0ef22d4d6ce950b1b9072b55131bee1b1a537f192d7d",
+    "lycaon/internal/coordinator/turnload/ledger_test.go": "c72faa320b91a4fc73c9315bfdaafcff8b84ed60a6f461bd0ab4c64fc7c44db4",
+    "lycaon/internal/coordinator/turnload/families_test.go": "1a6625af96d6d943bc7ec9190e9e8ca3b8cd0e98a5c144ee29f887102019311f"
   }
 }

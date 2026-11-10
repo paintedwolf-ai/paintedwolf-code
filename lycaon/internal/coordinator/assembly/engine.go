@@ -78,6 +78,13 @@ type AgentsMDIndexInjector func(ctx context.Context, sess *api.Session) (block a
 // AgentsMDPoliciesInjector renders current guidance for resolved working scopes.
 type AgentsMDPoliciesInjector func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error)
 
+// SelectionSource exposes the session ledger's current prompt selection.
+type SelectionSource interface {
+	LoadedTools(string) map[string]bool
+	OmittedUnits(string) map[string]bool
+	FullCatalog(string) bool
+}
+
 // AssemblyDeps wires prompt message assembly for coordinator and worker turns.
 type AssemblyDeps struct {
 	Prompts                 prompts.PromptTemplateEngine
@@ -106,11 +113,8 @@ type AssemblyDeps struct {
 	PromptToolLister PromptToolLister
 	// ReadMessageWindow reads canonical rows for projections that must not vary
 	// with compaction. Unwired, they read the supplied history.
-	ReadMessageWindow inject.MessageWindowReader
-	// LoadedTools returns the tools the turn ledger loaded beyond the surface floor.
-	LoadedTools func(sessionID string) map[string]bool
-	// OmittedUnits returns the instruction units the turn ledger left out.
-	OmittedUnits          func(sessionID string) map[string]bool
+	ReadMessageWindow     inject.MessageWindowReader
+	Selection             SelectionSource
 	SkillPreload          func(sessionID string) *turnload.SkillPreload
 	SkillPointer          func(sessionID string) *turnload.SkillRank
 	ModelVision           func(context.Context, *api.Session) bool

@@ -2,8 +2,10 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"os"
 	"path/filepath"
 	"slices"
@@ -193,5 +195,22 @@ func TestDecideExportDistinguishesMissingCandidatesFromCorruptDecisions(t *testi
 	testutil.FailErr(t, "export receipt without candidates", err)
 	if exporter.noCandidates != 1 {
 		t.Fatalf("receipts without candidates=%d, want 1", exporter.noCandidates)
+	}
+}
+
+func TestFallbackToolUseExportsWithoutSyntheticRequests(t *testing.T) {
+	decision := turnload.Decision{Abstained: true, Failure: turnload.RankingUnavailable}
+	engine := receiptEngine(db.ListTurnReceiptContextsRow{Abstained: 1}, &decision)
+	if engine.State != "abstained" || len(engine.Preloaded) != 0 {
+		t.Fatalf("engine = %+v", engine)
+	}
+	calls, err := json.Marshal([]api.ToolCall{{ID: "call", Name: "task", Args: map[string]any{}}})
+	testutil.FailErr(t, "encode calls", err)
+	labels, found := observedLabels([]db.ListSessionMessagesRow{
+		{ID: "u", Role: "user"},
+		{ID: "a", Role: "assistant", ToolCallsJson: sql.NullString{String: string(calls), Valid: true}},
+	}, "u", []string{"task", "web_search"})
+	if !found || !slices.Equal(labels.Tools, []string{"task"}) || len(labels.Requests) != 0 || len(labels.RequestedNames) != 0 {
+		t.Fatalf("direct tool observations = %+v, found=%v", labels, found)
 	}
 }

@@ -13,11 +13,14 @@ components:
         resolves request_tools text; a lookup resolves skills_read text; a
         tool_event ranks the skills against the request and the first
         loadable tool the turn called, and reads or points to the best one.
+        A visibility receipt records a changed continuation surface without
+        asking the decision engine.
       enum:
         - turn
         - request
         - lookup
         - tool_event
+        - visibility
 
     TurnLoadMatchBy:
       type: string
@@ -70,12 +73,13 @@ components:
       type: string
       description: >-
         Why a tool stands loaded: a turn decision predicted it, the model asked
-        for it through request_tools, or it is a declared companion of a
-        predicted tool.
+        for it through request_tools, selection failed and exposed it, or it
+        was recorded as a companion of a predicted tool.
       enum:
         - predicted
         - requested
         - companion
+        - fallback
 
     TurnLoadTool:
       x-go-generate: true

@@ -105,6 +105,17 @@ class BialyCorpusAdmissionTests(unittest.TestCase):
             self.assertEqual(path.read_text(), content)
             self.assertEqual(rows.load(path), [self.row])
 
+    def test_tool_selection_labels_do_not_require_requests(self):
+        self.row["labels"]["requests"] = []
+        self.row["labels"]["requested_names"] = []
+        self.row["labels"]["second_scores"]["requests"] = []
+        self.row["engine"] = {"state": "abstained", "preloaded": [], "omitted": []}
+        self.corpus.validate_row(self.row)
+        self.assertFalse(rows.engine_answered(self.row))
+        self.assertEqual(rows.tool_targets(self.row), {"capture_page": 1})
+        self.row["labels"]["tools"] = []
+        self.assertEqual(rows.tool_targets(self.row), {"capture_page": 1})
+
     def test_retention_rows_keep_their_separate_contract(self):
         row = {"schema": rows.RETENTION_SCHEMA, "candidates": []}
         with tempfile.TemporaryDirectory() as directory:
