@@ -1,7 +1,6 @@
 package checkpoint
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,7 +30,8 @@ func TestCheckpointGitImportDoesNotPublishUnreferencedObjects(t *testing.T) {
 			unrelated, err := WriteLooseGitObject(objects, "blob", []byte("another worker's unpublished content\n"))
 			testutil.FailErr(t, "unrelated object", err)
 			target := filepath.Join(root, "source")
-			testutil.FailErr(t, "target repository", os.MkdirAll(filepath.Join(target, ".git", "objects"), 0o755))
+			testutil.FailErr(t, "target repository", os.MkdirAll(target, 0o755))
+			runGitTestCmd(t, target, "init", "-q")
 			imported, err := ImportAndValidateCheckpointGitRefs(t.Context(), store.RootDir(), "selected-checkpoint", "selected-worker",
 				PrivateGitSnapshot{Refs: map[string]string{"refs/tags/selected": selected}}, map[string]string{"primary": target})
 			testutil.FailErr(t, "import selected checkpoint", err)
@@ -43,11 +43,13 @@ func TestCheckpointGitImportDoesNotPublishUnreferencedObjects(t *testing.T) {
 					t.Fatalf("published an unselected ref: %s", oid)
 				}
 			}
-			targetObjects := filepath.Join(target, ".git", "objects")
-			_, err = os.Stat(filepath.Join(targetObjects, selected[:2], selected[2:]))
-			testutil.FailErr(t, "selected object retained in target", err)
-			if _, err := os.Stat(filepath.Join(targetObjects, unrelated[:2], unrelated[2:])); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("unreferenced object escaped retained store: %v", err)
+			if got := runGitTestCmd(t, target, "cat-file", "blob", selected); got != "selected checkpoint content" {
+				t.Fatalf("selected object content differs: %q", got)
+			}
+			_, code, probeErr := gitexec.Run(t.Context(), target, []string{"cat-file", "-e", unrelated}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+			testutil.FailErr(t, "probe unselected object", probeErr)
+			if code == 0 {
+				t.Fatal("unreferenced object escaped retained store")
 			}
 			_, err = os.Stat(filepath.Join(objects, unrelated[:2], unrelated[2:]))
 			testutil.FailErr(t, "unrelated retained object preserved", err)
