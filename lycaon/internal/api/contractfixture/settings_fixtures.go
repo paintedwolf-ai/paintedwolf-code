@@ -82,7 +82,6 @@ func NewSettingsTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, str
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: svc.Limits})
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	hub := events.NewMemoryHub()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: reg, Sessions: mgr, Settings: svc}, Host: hostapi.HostDependencies{Events: hub}}

@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -57,7 +56,6 @@ func TestAPIErrorContractsMatrix(t *testing.T) {
 
 	secretHome := t.TempDir()
 	t.Setenv("HOME", secretHome)
-	testutil.FailErr(t, "mkdir denied", os.MkdirAll(filepath.Join(secretHome, ".gnupg", "idem"), 0o755))
 
 	fixture := apiErrorMatrixFixture{
 		sessionID:            sess.ID,
@@ -149,12 +147,12 @@ func apiErrorUnknownResourceRows(f apiErrorMatrixFixture) []apiErrorMatrixRow {
 			wantCode:   "session_not_found",
 		},
 		{
-			name:       "project create under a denied secret store",
+			name:       "project create with missing folder",
 			method:     http.MethodPost,
 			path:       "/v1/projects",
-			body:       `{"roots":[{"path":"` + filepath.Join(secretHome, ".gnupg", "idem") + `"}]}`,
-			wantStatus: http.StatusBadRequest,
-			wantCode:   "write_root_under_secret_store",
+			body:       `{"roots":[{"path":"` + filepath.Join(secretHome, ".gnupg", "missing-idem") + `"}]}`,
+			wantStatus: http.StatusNotFound,
+			wantCode:   "path_not_found",
 		},
 		{
 			name:        "backup restore with malformed archive",

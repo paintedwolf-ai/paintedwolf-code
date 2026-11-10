@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -208,5 +210,81 @@ func TestValidateRootsForActionPublishRegisteredCode(t *testing.T) {
 		if reject.Data["reason"] != confine.WriteRootCodeNotAbsolute {
 			t.Fatalf("%s reject data = %+v, want reason %q", name, reject.Data, confine.WriteRootCodeNotAbsolute)
 		}
+	}
+}
+
+func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots(t *testing.T) {
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".config", "paintedwolf")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
+
+	cfgRoot, err := configdir.Root()
+	testutil.FailErr(t, "resolve configdir root", err)
+	previousKeys := confine.KeyMaterialHomeRelPaths()
+	confine.SetKeyMaterialPathsSource(func() []string { return []string{"~/.ssh/"} })
+	t.Cleanup(func() {
+		if len(previousKeys) == 0 {
+			confine.SetKeyMaterialPathsSource(nil)
+			return
+		}
+		confine.SetKeyMaterialPathsSource(func() []string { return previousKeys })
+	})
+
+	cases := []struct {
+		name       string
+		dir        string
+		wantCode   string
+		wantReason string
+	}{
+		{
+			name:       "home",
+			dir:        home,
+			wantCode:   "SANDBOX_CONTROL_PLANE_DENIED",
+			wantReason: confine.WriteRootCodeContainsState,
+		},
+		{
+			name:       "dot-config",
+			dir:        filepath.Join(home, ".config"),
+			wantCode:   "SANDBOX_CONTROL_PLANE_DENIED",
+			wantReason: confine.WriteRootCodeContainsState,
+		},
+		{
+			name:       "dot-ssh",
+			dir:        filepath.Join(home, ".ssh"),
+			wantCode:   "SANDBOX_CAPABILITY_REQUEST_INVALID",
+			wantReason: confine.WriteRootCodeSecretStore,
+		},
+		{
+			name:       "configdir-root",
+			dir:        cfgRoot,
+			wantCode:   "SANDBOX_CAPABILITY_REQUEST_INVALID",
+			wantReason: confine.WriteRootCodeSecretStore,
+		},
+	}
+
+	reg := project.NewMemoryRegistry()
+	for _, tc := range cases {
+		testutil.FailErr(t, "mkdir "+tc.name, os.MkdirAll(tc.dir, 0o700))
+		p, err := project.CreateWithRoot(t.Context(), reg, tc.dir)
+		if err != nil {
+			t.Fatalf("%s: project registration should succeed, got %v", tc.name, err)
+		}
+		reject := tools.ValidateAttachedRootsForAction(project.RootPaths(p))
+		if reject == nil {
+			t.Fatalf("%s: expected ValidateAttachedRootsForAction to refuse %q", tc.name, tc.dir)
+		}
+		if reject.Code != tc.wantCode || reject.Data["reason"] != tc.wantReason {
+			t.Fatalf("%s: reject = %+v, want code=%q reason=%q", tc.name, reject, tc.wantCode, tc.wantReason)
+		}
+	}
+
+	if _, err := project.CreateWithRoot(t.Context(), reg, string(filepath.Separator)); err != nil {
+		t.Fatalf("filesystem root project registration should succeed, got %v", err)
+	}
+	if reject := tools.ValidateAttachedRootsForAction([]string{string(filepath.Separator)}); reject == nil ||
+		reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" || reject.Data["reason"] != confine.WriteRootCodeContainsState {
+		t.Fatalf("filesystem root reject = %+v, want code=%q reason=%q", reject, "SANDBOX_CONTROL_PLANE_DENIED", confine.WriteRootCodeContainsState)
 	}
 }

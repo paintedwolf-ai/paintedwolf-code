@@ -30,7 +30,6 @@ import (
 )
 
 func TestHandleSearchGlobalAndOriginRanking(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	dirA := t.TempDir()
@@ -68,7 +67,6 @@ func TestHandleSearchGlobalAndOriginRanking(t *testing.T) {
 }
 
 func TestHandleSearchReplaceApplyExactReplay(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 	rootPath := t.TempDir()
 	rootID := testdbseed.InsertProjectRoot(t, sqlDB, "proj-replace", rootPath)
@@ -110,7 +108,6 @@ func TestHandleSearchReplaceApplyExactReplay(t *testing.T) {
 }
 
 func TestHandleSearchFacetValuesNeverNull(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	dirA := t.TempDir()
@@ -147,7 +144,6 @@ func TestHandleSearchFacetValuesNeverNull(t *testing.T) {
 }
 
 func TestHandleSearchResolvesWorkerContext(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	dirA := t.TempDir()
@@ -193,7 +189,6 @@ func TestHandleSearchResolvesWorkerContext(t *testing.T) {
 }
 
 func TestHandleSearchProjectCurrentAloneListsScopedEvidence(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	dirA := t.TempDir()
@@ -231,7 +226,6 @@ func TestHandleSearchProjectCurrentAloneListsScopedEvidence(t *testing.T) {
 }
 
 func TestHandleSearchProjectCurrentNarrows(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	dirA := t.TempDir()
@@ -268,7 +262,6 @@ func TestHandleSearchProjectCurrentNarrows(t *testing.T) {
 }
 
 func TestHandleSearchKindCodeFansOut(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	dir := t.TempDir()
@@ -302,7 +295,6 @@ func TestHandleSearchKindCodeFansOut(t *testing.T) {
 }
 
 func TestHandleSearchInvalidQuery(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	st := store.NewSQL(sqlDB)
@@ -324,7 +316,6 @@ func TestHandleSearchInvalidQuery(t *testing.T) {
 }
 
 func TestHandleSearchLargeStoreLatency(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	const rowCount = 200
@@ -361,7 +352,6 @@ func TestHandleSearchLargeStoreLatency(t *testing.T) {
 }
 
 func TestHandleSearchRejectsUnknownOriginProject(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 	st := store.NewSQL(sqlDB)
 	reg := project.NewSQLRegistry(sqlDB)
@@ -382,7 +372,6 @@ func TestHandleSearchRejectsUnknownOriginProject(t *testing.T) {
 }
 
 func TestHandleSearchQueryErrorCarriesDetails(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 	st := store.NewSQL(sqlDB)
 	reg := project.NewSQLRegistry(sqlDB)

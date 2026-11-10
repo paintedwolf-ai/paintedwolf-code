@@ -525,9 +525,6 @@ func (r *MemoryRegistry) attachRootLocked(ctx context.Context, p *Project, param
 	if err != nil {
 		return Root{}, err
 	}
-	if err := defaultOpenPolicy.ValidateOpenPath(abs); err != nil {
-		return Root{}, err
-	}
 	for _, existing := range p.Roots {
 		if existing.Path == abs {
 			return Root{}, fmt.Errorf("%w: %s", ErrDuplicateRoot, abs)

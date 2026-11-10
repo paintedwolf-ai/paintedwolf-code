@@ -66,7 +66,6 @@ const (
 	AgentToolProfiles   = PlatformHost + "/agent-tool-profiles.yaml"
 	DisclosurePolicy    = PlatformHost + "/disclosure-policy.yaml"
 	ModelContextWindow  = PlatformHost + "/model-context-windows.yaml"
-	ProjectPolicy       = PlatformHost + "/project-policy.yaml"
 	Review              = PlatformHost + "/review.yaml"
 	FileBriefing        = PlatformHost + "/file-briefing.yaml"
 	Summarize           = PlatformHost + "/summarize.yaml"
@@ -199,7 +198,6 @@ var consumedPackYAMLFiles = map[Rel]struct{}{
 	AgentToolProfiles:        {},
 	DisclosurePolicy:         {},
 	ModelContextWindow:       {},
-	ProjectPolicy:            {},
 	Review:                   {},
 	FileBriefing:             {},
 	Summarize:                {},

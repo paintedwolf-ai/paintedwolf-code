@@ -26049,7 +26049,6 @@ components:
         - source_inventory_pending
         - source_trash_failed
         - source_unavailable
-        - project_policy_denied
         - provider_not_found
         - provider_in_use
         - provider_not_configured

@@ -31,7 +31,6 @@ import (
 )
 
 func TestOpenAPIScansRealServer(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	root := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(root, "store.db"))
 

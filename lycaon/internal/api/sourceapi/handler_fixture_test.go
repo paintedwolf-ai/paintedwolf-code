@@ -50,7 +50,6 @@ func readSourceViewResponse(t *testing.T, response *httptest.ResponseRecorder, s
 
 func newSourceHandlerFixture(t *testing.T, opts ...func(*Deps)) *Handler {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	group := &taskgroup.Group{}
 	deps := Deps{
 		SessionStore:    store.NewMemory(),

@@ -19,7 +19,6 @@ import (
 
 func NewComposeTestServer(t *testing.T) (*api.Server, wire.Session, *workflowcomposition.Composer) {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	projReg := project.NewMemoryRegistry()
 	dir := t.TempDir()

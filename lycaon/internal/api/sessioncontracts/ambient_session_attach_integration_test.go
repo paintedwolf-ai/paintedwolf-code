@@ -28,7 +28,6 @@ import (
 )
 
 func TestCreateSessionAttachesAmbientImplementRun(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller failed")
@@ -93,7 +92,6 @@ func TestCreateSessionAttachesAmbientImplementRun(t *testing.T) {
 }
 
 func TestCreateSessionCatalogOmitsImplement(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := contractfixture.MustOpenWorkflowTestDB(t)
 	store := store.NewSQL(sqlDB)
 	wfReg, err := workflowdef.RegistryFromDirs("")
@@ -142,7 +140,6 @@ func TestCreateSessionCatalogOmitsImplement(t *testing.T) {
 }
 
 func TestCreateSessionWithInvalidProjectWorkflowAttachesAmbientImplement(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller failed")
@@ -198,7 +195,6 @@ attach:
 }
 
 func TestAbortSessionWithInvalidProjectWorkflowSucceeds(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := contractfixture.MustOpenWorkflowTestDB(t)
 	store := store.NewSQL(sqlDB)
 	wfReg, err := workflowdef.RegistryFromDirs("")

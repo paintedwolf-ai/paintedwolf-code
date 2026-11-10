@@ -228,7 +228,6 @@ func TestCatalogViewCacheBoundAndFingerprintKey(t *testing.T) {
 func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 	ctx := context.Background()
 	root := configlayout.FindModuleRoot()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	cases := []struct {
 		name      string

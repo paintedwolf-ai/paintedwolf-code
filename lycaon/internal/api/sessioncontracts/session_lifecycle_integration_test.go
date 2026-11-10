@@ -268,7 +268,6 @@ func TestDeleteSessionRemovesRow(t *testing.T) {
 
 func TestSessionCreateDeletePublishLifecycleActions(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(ctx, project.CreateParams{})

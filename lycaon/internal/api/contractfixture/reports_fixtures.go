@@ -59,7 +59,6 @@ func AssertPDFOK(t *testing.T, rec *httptest.ResponseRecorder) {
 
 func NewReportTestHarness(t *testing.T, opts ...TestDeps) *ReportTestHarness {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	root := configlayout.FindModuleRoot()
 
 	sqlDB := testdbfixture.Open(t, "report.db")
