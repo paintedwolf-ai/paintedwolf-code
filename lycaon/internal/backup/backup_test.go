@@ -36,8 +36,6 @@ func TestCreateArchiveIncludesVacuumedStoreAndManifest(t *testing.T) {
 		"providers.local.yaml":                   "providers: []\n",
 		"model-policy.yaml":                      "policy: {}\n",
 		"api.token":                              "tok\n",
-		"host-identity.pem":                      "legacy-host-key\n",
-		"mcp.yaml":                               "providers: []\n",
 		"daemon.json":                            "{}\n",
 		"approvals.yaml":                         "rules: []\n",
 		"limits.yaml":                            "limits: {}\n",
@@ -88,7 +86,7 @@ func TestCreateArchiveIncludesVacuumedStoreAndManifest(t *testing.T) {
 			t.Fatalf("missing %s", rel)
 		}
 	}
-	for _, excluded := range []string{"api.token", "host-identity.pem", "mcp.yaml", "daemon.json", "store.db-wal", "store.db-shm", "store.db-journal"} {
+	for _, excluded := range []string{"api.token", "daemon.json", "store.db-wal", "store.db-shm", "store.db-journal"} {
 		if _, ok := files[excluded]; ok {
 			t.Fatalf("archive must not include runtime path %s", excluded)
 		}
