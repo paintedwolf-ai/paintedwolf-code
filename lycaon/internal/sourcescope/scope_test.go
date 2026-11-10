@@ -7,6 +7,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -242,5 +243,51 @@ func TestDefaultHostDiscoveryHasNoRepositorySizeCeiling(t *testing.T) {
 	testutil.FailErr(t, "read host discovery policy", err)
 	if cfg.Capture.Budgets.Bounded() || cfg.Catalog.Budgets.Bounded() {
 		t.Fatal("default discovery excludes files because a repository is large")
+	}
+}
+
+func TestControlDirObservationBoundariesInSourceScope(t *testing.T) {
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".paintedwolf")
+	writeFile(t, home, "app/main.go", "package main\n")
+	writeFile(t, cfgDir, "settings.yaml", "theme: dark\n")
+	writeFile(t, cfgDir, "packs/custom.yaml", "rules: []\n")
+	writeFile(t, cfgDir, "paintedwolf.db", "sqlite")
+	writeFile(t, cfgDir, "paintedwolf.db-wal", "wal")
+	writeFile(t, cfgDir, "store.db-wal", "wal")
+	writeFile(t, cfgDir, "cache/blob.bin", "cache")
+	writeFile(t, cfgDir, "worktrees/wt-1/wt.go", "package wt\n")
+	t.Setenv(configdir.EnvVar, cfgDir)
+
+	// 1. Ancestor $HOME scope excludes all of .paintedwolf.
+	homeScope := New(home, Options{Plane: Plane{Budgets: capturePlane().Budgets}})
+	homeFiles, _ := surveyed(t, home, homeScope)
+	if len(homeFiles) != 1 || homeFiles[0] != "app/main.go" {
+		t.Fatalf("ancestor home surveyed files = %v, want [app/main.go]", homeFiles)
+	}
+	if homeScope.AdmitPath(".paintedwolf/settings.yaml", false) {
+		t.Fatal("ancestor home scope must not admit .paintedwolf/settings.yaml")
+	}
+
+	// 2. Direct configdir.Root() scope excludes runtime state while admitting human config.
+	cfgScope := New(cfgDir, Options{Plane: Plane{Budgets: capturePlane().Budgets}})
+	cfgFiles, _ := surveyed(t, cfgDir, cfgScope)
+	wantCfg := []string{"packs/custom.yaml", "settings.yaml"}
+	if len(cfgFiles) != len(wantCfg) || cfgFiles[0] != wantCfg[0] || cfgFiles[1] != wantCfg[1] {
+		t.Fatalf("direct control dir surveyed files = %v, want %v", cfgFiles, wantCfg)
+	}
+	if cfgScope.AdmitPath("paintedwolf.db-wal", false) || cfgScope.AdmitPath("cache/blob.bin", false) {
+		t.Fatal("direct control dir scope must not admit runtime DB/cache files")
+	}
+	if !cfgScope.AdmitPath("settings.yaml", false) || !cfgScope.AdmitPath("packs/custom.yaml", false) {
+		t.Fatal("direct control dir scope must admit human config files")
+	}
+
+	// 3. Explicit managed workspace (<configdir>/worktrees/wt-1) scope admits workspace files.
+	wtRoot := filepath.Join(cfgDir, "worktrees", "wt-1")
+	wtScope := New(wtRoot, Options{Plane: Plane{Budgets: capturePlane().Budgets}})
+	wtFiles, _ := surveyed(t, wtRoot, wtScope)
+	if len(wtFiles) != 1 || wtFiles[0] != "wt.go" {
+		t.Fatalf("managed worktree surveyed files = %v, want [wt.go]", wtFiles)
 	}
 }

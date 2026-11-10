@@ -300,7 +300,7 @@ func buildSnapshot(ctx context.Context, roots []Root, policy walkPolicy) (Snapsh
 			slog.DebugContext(ctx, "catalog walk boundary", "root", root.Path, "path", b.Rel, "reason", string(b.Reason), "entries", b.Entries)
 		}
 		err := sandbox.SurveyWalk(ctx, root.Path, opts, func(item sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
-			if repochange.IsPrivatePath(item.Abs) {
+			if repochange.IsPrivatePathForRoot(root.watchRoot(), item.Abs) {
 				return sandbox.SurveySkipDir, nil
 			}
 			if err := nextMetadataEntry(ctx); err != nil {

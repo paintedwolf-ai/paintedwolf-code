@@ -13,6 +13,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -60,8 +62,9 @@ func runLayoutProbe(
 		return nil, 0, ProbeCoverage{}, err
 	}
 	root := resolved.Root
+	floor := enginepaths.CompileAgentReadFloor(root.Path, confine.KeyMaterialReadDenyPaths())
 	readFilter := scope.ReadFilter
-	if readFilter == nil && scope.Boundary != nil {
+	if readFilter == nil {
 		profileID := strings.TrimSpace(scope.ToolCtx.Identity.Agent)
 		if profileID == "" {
 			profileID = toolprofiles.DefaultToolProfileID
@@ -70,6 +73,13 @@ func runLayoutProbe(
 		if err != nil {
 			return nil, 0, ProbeCoverage{}, err
 		}
+	}
+	baseFilter := readFilter
+	readFilter = func(relSlash string, isDir bool) bool {
+		if floor.IsDeniedRel(relSlash) {
+			return false
+		}
+		return baseFilter == nil || baseFilter(relSlash, isDir)
 	}
 	base := normalizeLayoutPath(resolved.ScopeRel)
 	displayBase := normalizeLayoutPath(resolved.DisplayPath)

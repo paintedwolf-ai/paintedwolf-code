@@ -9,10 +9,15 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/pagedview"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
@@ -202,13 +207,76 @@ func (c *TreeStores) indexStore(ctx context.Context, projectID string, root Root
 
 // IndexReader pins one read transaction over a published file index generation.
 type IndexReader struct {
-	db     *sql.DB
-	tx     *sql.Tx
-	Status TreeStatus
+	db         *sql.DB
+	tx         *sql.Tx
+	Status     TreeStatus
 	// RowsRead counts rows this reader returned across its queries.
-	RowsRead int
-	cleanup  func() error
-	store    *indexStore
+	RowsRead   int
+	cleanup    func() error
+	store      *indexStore
+	floorOnce  sync.Once
+	agentFloor enginepaths.AgentReadFloor
+}
+
+func (r *IndexReader) floor() enginepaths.AgentReadFloor {
+	r.floorOnce.Do(func() {
+		if r.store != nil {
+			r.agentFloor = enginepaths.CompileAgentReadFloor(r.store.root.watchRoot(), confine.KeyMaterialReadDenyPaths())
+		}
+	})
+	return r.agentFloor
+}
+
+func (r *IndexReader) isRootDeniedForScope(scope FileScope) bool {
+	if r.store == nil {
+		return false
+	}
+	if repochange.IsPrivatePathForRoot(r.store.root.watchRoot(), r.store.root.Path) {
+		return true
+	}
+	if scope.Audience != HumanAudience && r.floor().WhollyDenied() {
+		return true
+	}
+	return false
+}
+
+func (r *IndexReader) isDeniedForScope(scope FileScope, rel string) bool {
+	if r.store == nil {
+		return false
+	}
+	if scope.Audience != HumanAudience {
+		if r.floor().IsDeniedRel(rel) {
+			return true
+		}
+	}
+	abs := filepath.Join(r.store.root.Path, filepath.FromSlash(rel))
+	return repochange.IsPrivatePathForRoot(r.store.root.watchRoot(), abs)
+}
+
+func (r *IndexReader) collapsedDeniedPrefixes(scope FileScope) []string {
+	if scope.Audience == HumanAudience {
+		return nil
+	}
+	raw := r.floor().DeniedRelPrefixes()
+	if len(raw) == 0 {
+		return nil
+	}
+	sorted := append([]string(nil), raw...)
+	sort.Strings(sorted)
+	collapsed := make([]string, 0, len(sorted))
+	for _, p := range sorted {
+		if p == "" || p == "." {
+			continue
+		}
+		if len(collapsed) > 0 {
+			prev := collapsed[len(collapsed)-1]
+			if p == prev || strings.HasPrefix(p, prev+"/") {
+				continue
+			}
+		}
+		collapsed = append(collapsed, p)
+	}
+	return collapsed
 }
 
 // Close releases the pinned generation.
@@ -338,26 +406,49 @@ func (r *IndexReader) FilePage(ctx context.Context, scope FileScope, after strin
 	if limit <= 0 || limit > TreeFilePageLimit {
 		return nil, errors.New("catalog file page limit is outside its bounds")
 	}
-	// #nosec G202 -- Scope selects fixed SQL predicates and indexes; values are bound.
-	rows, err := r.tx.QueryContext(ctx,
-		"SELECT "+indexFileColumns+" FROM nodes INDEXED BY "+scope.pathIndex()+" WHERE "+scope.clause()+" AND path>? ORDER BY path LIMIT ?", after, limit)
-	if err != nil {
-		return nil, err
+	if r.isRootDeniedForScope(scope) {
+		return nil, nil
 	}
-	defer func() { _ = rows.Close() }()
 	entries := make([]Entry, 0, limit)
-	for rows.Next() {
-		var e Entry
-		var modified int64
-		if err := rows.Scan(&e.Path, &e.Parent, &e.Name, &e.Depth, &e.IsDir, &e.IsSymlink, &e.Size, &e.Mode, &modified); err != nil {
+	cursor := after
+	for len(entries) < limit {
+		batchLimit := limit - len(entries)
+		// #nosec G202 -- Scope selects fixed SQL predicates and indexes; values are bound.
+		rows, err := r.tx.QueryContext(ctx,
+			"SELECT "+indexFileColumns+" FROM nodes INDEXED BY "+scope.pathIndex()+" WHERE "+scope.clause()+" AND path>? ORDER BY path LIMIT ?", cursor, batchLimit)
+		if err != nil {
 			return nil, err
 		}
-		e.Modified = time.Unix(0, modified).UTC()
-		e.RootID = r.store.root.ID
-		entries = append(entries, e)
-		r.RowsRead++
+		scanned := 0
+		for rows.Next() {
+			var e Entry
+			var modified int64
+			if err := rows.Scan(&e.Path, &e.Parent, &e.Name, &e.Depth, &e.IsDir, &e.IsSymlink, &e.Size, &e.Mode, &modified); err != nil {
+				_ = rows.Close()
+				return nil, err
+			}
+			scanned++
+			cursor = e.Path
+			r.RowsRead++
+			if r.isDeniedForScope(scope, e.Path) {
+				continue
+			}
+			e.Modified = time.Unix(0, modified).UTC()
+			if r.store != nil {
+				e.RootID = r.store.root.ID
+			}
+			entries = append(entries, e)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		_ = rows.Close()
+		if scanned < batchLimit {
+			break
+		}
 	}
-	return entries, rows.Err()
+	return entries, nil
 }
 
 // FilePathsPage omits the metadata that path ranking does not consume.
@@ -365,7 +456,7 @@ func (r *IndexReader) FilePathsPage(ctx context.Context, scope FileScope, after 
 	if limit <= 0 || limit > TreeFilePageLimit {
 		return nil, errors.New("catalog file page limit is outside its bounds")
 	}
-	return r.filePaths(ctx, scope, scope.pathIndex(), "path>? ORDER BY path LIMIT ?", after, limit)
+	return r.pagedFilePaths(ctx, scope, scope.pathIndex(), "path>? ORDER BY path LIMIT ?", after, limit)
 }
 
 // LiteralFilePathsPage narrows path candidates with required substrings. The
@@ -379,16 +470,15 @@ func (r *IndexReader) LiteralFilePathsPage(ctx context.Context, scope FileScope,
 		column = "search_path"
 	}
 	clause := "path>?"
-	args := []any{after}
+	var extraArgs []any
 	for _, literal := range literals {
 		if !caseSensitive {
 			literal = strings.ToLower(literal)
 		}
 		clause += " AND instr(" + column + ",?)>0"
-		args = append(args, literal)
+		extraArgs = append(extraArgs, literal)
 	}
-	args = append(args, limit)
-	return r.filePaths(ctx, scope, scope.pathIndex(), clause+" ORDER BY path LIMIT ?", args...)
+	return r.pagedFilePaths(ctx, scope, scope.pathIndex(), clause+" ORDER BY path LIMIT ?", after, limit, extraArgs...)
 }
 
 // FileAddressPage serves the empty file-picker query in its ranking order.
@@ -396,8 +486,29 @@ func (r *IndexReader) FileAddressPage(ctx context.Context, scope FileScope, afte
 	if limit <= 0 || limit > TreeFilePageLimit {
 		return nil, errors.New("catalog file page limit is outside its bounds")
 	}
-	return r.filePaths(ctx, scope, "",
-		"(length(CAST(path AS BLOB)),path)>(?,?) ORDER BY length(CAST(path AS BLOB)),path LIMIT ?", afterLength, afterPath, limit)
+	if r.isRootDeniedForScope(scope) {
+		return nil, nil
+	}
+	var out []string
+	curLen, curPath := afterLength, afterPath
+	for len(out) < limit {
+		batchLimit := limit - len(out)
+		raw, err := r.rawFilePaths(ctx, scope, "",
+			"(length(CAST(path AS BLOB)),path)>(?,?) ORDER BY length(CAST(path AS BLOB)),path LIMIT ?", curLen, curPath, batchLimit)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range raw {
+			curLen, curPath = len(p), p
+			if !r.isDeniedForScope(scope, p) {
+				out = append(out, p)
+			}
+		}
+		if len(raw) < batchLimit {
+			break
+		}
+	}
+	return out, nil
 }
 
 type FilePathMatch int
@@ -417,9 +528,9 @@ func (r *IndexReader) MatchingFilePathsPage(ctx context.Context, scope FileScope
 	query = strings.ToLower(query)
 	switch match {
 	case FileBasenamePrefix:
-		return r.filePaths(ctx, scope, "file_name", "path>? AND search_name GLOB ? ORDER BY path LIMIT ?", after, pathGlobLiteral(query)+"*", limit)
+		return r.pagedFilePaths(ctx, scope, "file_name", "path>? AND search_name GLOB ? ORDER BY path LIMIT ?", after, limit, pathGlobLiteral(query)+"*")
 	case FileBasenameContains:
-		return r.filePaths(ctx, scope, scope.pathIndex(), "path>? AND instr(search_name,?)>1 ORDER BY path LIMIT ?", after, query, limit)
+		return r.pagedFilePaths(ctx, scope, scope.pathIndex(), "path>? AND instr(search_name,?)>1 ORDER BY path LIMIT ?", after, limit, query)
 	case FilePathSubsequence:
 		var pattern strings.Builder
 		pattern.WriteByte('*')
@@ -427,7 +538,7 @@ func (r *IndexReader) MatchingFilePathsPage(ctx context.Context, scope FileScope
 			pattern.WriteString(pathGlobLiteral(string(char)))
 			pattern.WriteByte('*')
 		}
-		return r.filePaths(ctx, scope, scope.pathIndex(), "path>? AND instr(search_name,?)=0 AND search_path GLOB ? ORDER BY path LIMIT ?", after, query, pattern.String(), limit)
+		return r.pagedFilePaths(ctx, scope, scope.pathIndex(), "path>? AND instr(search_name,?)=0 AND search_path GLOB ? ORDER BY path LIMIT ?", after, limit, query, pattern.String())
 	default:
 		return nil, errors.New("unknown path match tier")
 	}
@@ -453,15 +564,57 @@ func (r *IndexReader) NamedFiles(ctx context.Context, scope FileScope, names []s
 	if len(names) == 0 || len(names) > TreeFilePageLimit {
 		return nil, errors.New("catalog named file query is outside its bounds")
 	}
+	if r.isRootDeniedForScope(scope) {
+		return nil, nil
+	}
 	args := make([]any, len(names))
 	for i, name := range names {
 		args[i] = strings.ToLower(name)
 	}
-	return r.filePaths(ctx, scope, "",
+	raw, err := r.rawFilePaths(ctx, scope, "",
 		"lower(path) IN ("+strings.TrimSuffix(strings.Repeat("?,", len(names)), ",")+") ORDER BY path", args...)
+	if err != nil {
+		return nil, err
+	}
+	out := raw[:0]
+	for _, p := range raw {
+		if !r.isDeniedForScope(scope, p) {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
-func (r *IndexReader) filePaths(ctx context.Context, scope FileScope, index, clause string, args ...any) ([]string, error) {
+func (r *IndexReader) pagedFilePaths(ctx context.Context, scope FileScope, index, clause, after string, limit int, midArgs ...any) ([]string, error) {
+	if r.isRootDeniedForScope(scope) {
+		return nil, nil
+	}
+	var out []string
+	cursor := after
+	for len(out) < limit {
+		batchLimit := limit - len(out)
+		args := make([]any, 0, len(midArgs)+2)
+		args = append(args, cursor)
+		args = append(args, midArgs...)
+		args = append(args, batchLimit)
+		raw, err := r.rawFilePaths(ctx, scope, index, clause, args...)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range raw {
+			cursor = p
+			if !r.isDeniedForScope(scope, p) {
+				out = append(out, p)
+			}
+		}
+		if len(raw) < batchLimit {
+			break
+		}
+	}
+	return out, nil
+}
+
+func (r *IndexReader) rawFilePaths(ctx context.Context, scope FileScope, index, clause string, args ...any) ([]string, error) {
 	from := "nodes"
 	if index != "" {
 		from += " INDEXED BY " + index
@@ -487,8 +640,28 @@ func (r *IndexReader) filePaths(ctx context.Context, scope FileScope, index, cla
 // FileCount is the regular files the published generation holds, which is
 // fewer than the tree holds when directories were refused.
 func (r *IndexReader) FileCount(ctx context.Context, scope FileScope) (int, error) {
+	if r.isRootDeniedForScope(scope) {
+		return 0, nil
+	}
 	var count int
 	err := r.tx.QueryRowContext(ctx, "SELECT "+scope.countColumn()+" FROM totals WHERE id=1").Scan(&count)
 	r.RowsRead++
-	return count, err
+	if err != nil || count <= 0 {
+		return count, err
+	}
+	for _, prefix := range r.collapsedDeniedPrefixes(scope) {
+		var denied int
+		// #nosec G202 -- scope.clause() selects fixed SQL predicates; prefix bounds are parameters.
+		if err := r.tx.QueryRowContext(ctx,
+			"SELECT COUNT(*) FROM nodes INDEXED BY folded_path WHERE "+scope.clause()+" AND (lower(path)=? OR (lower(path)>=? AND lower(path)<?))",
+			prefix, prefix+"/", prefix+"0").Scan(&denied); err != nil {
+			return 0, err
+		}
+		r.RowsRead++
+		count -= denied
+	}
+	if count < 0 {
+		count = 0
+	}
+	return count, nil
 }

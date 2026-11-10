@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/textrank"
@@ -34,6 +36,7 @@ type summaryWriter struct {
 	root  *os.Root
 	tx    *sql.Tx
 	store *summaryStore
+	floor enginepaths.AgentReadFloor
 	// budget accounts this reconciliation against the store's policy.
 	budget *sandbox.WalkBudget
 	get    *sql.Stmt
@@ -89,7 +92,12 @@ func (s *summaryStore) reconcile(ctx context.Context, epoch repochange.Epoch) er
 }
 
 func newSummaryWriter(ctx context.Context, tx *sql.Tx, s *summaryStore) (*summaryWriter, error) {
-	w := &summaryWriter{tx: tx, store: s, budget: sandbox.NewWalkBudget(s.policy.budgets)}
+	w := &summaryWriter{
+		tx:     tx,
+		store:  s,
+		floor:  enginepaths.CompileAgentReadFloor(s.root.watchRoot(), confine.KeyMaterialReadDenyPaths()),
+		budget: sandbox.NewWalkBudget(s.policy.budgets),
+	}
 	var err error
 	w.root, err = os.OpenRoot(s.root.Path)
 	if err != nil {
@@ -188,7 +196,11 @@ func (w *summaryWriter) sweep(ctx context.Context, rel string) error {
 
 // scan traverses directories under the walk and subtree budgets.
 func (w *summaryWriter) scan(ctx context.Context, rel string) (TreeNode, error) {
-	if repochange.IsPrivatePath(filepath.Join(w.root.Name(), filepath.FromSlash(rel))) {
+	abs := filepath.Join(w.root.Name(), filepath.FromSlash(rel))
+	if rel != "." && repochange.IsPrivatePathForRoot(w.store.root.watchRoot(), abs) {
+		return TreeNode{}, nil
+	}
+	if rel != "." && w.floor.IsDeniedRel(rel) {
 		return TreeNode{}, nil
 	}
 	if err := nextMetadataEntry(ctx); err != nil {
@@ -204,8 +216,11 @@ func (w *summaryWriter) scan(ctx context.Context, rel string) (TreeNode, error) 
 	n := TreeNode{Entry: w.entry(rel, info)}
 	if rel == "." {
 		n.Parent = ""
+		if w.floor.WhollyDenied() || repochange.IsPrivatePathForRoot(w.store.root.watchRoot(), abs) || (n.IsSymlink && w.floor.IsDeniedAbs(rel, abs, nil)) {
+			return n, w.write(ctx, n)
+		}
 	}
-	if rel != "." && (sandbox.ShouldSkipDir(rel, n.Name) || (w.store.scope.Filter != nil && !w.store.scope.Filter(rel, n.IsDir))) {
+	if rel != "." && (sandbox.ShouldSkipDir(rel, n.Name) || (w.store.scope.Filter != nil && !w.store.scope.Filter(rel, n.IsDir)) || (n.IsSymlink && w.floor.IsDeniedAbs(rel, abs, nil))) {
 		return TreeNode{}, nil
 	}
 	if rel != "." && w.store.scope.PruneNestedVCS && n.IsVCSRoot {

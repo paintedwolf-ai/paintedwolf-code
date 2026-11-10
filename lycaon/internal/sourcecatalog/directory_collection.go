@@ -90,7 +90,7 @@ func openObservationDirectory(ctx context.Context, store *indexStore, root *os.R
 	if err != nil {
 		return nil, err
 	}
-	return &observationDirectory{entries: entries, resolved: dir, stamp: directoryStampOf(info), privateFilter: repochange.NewPrivateDirectoryFilter(filepath.Join(root.Name(), filepath.FromSlash(dir)))}, nil
+	return &observationDirectory{entries: entries, resolved: dir, stamp: directoryStampOf(info), privateFilter: repochange.NewPrivateDirectoryFilterForRoot(store.root.watchRoot(), filepath.Join(root.Name(), filepath.FromSlash(dir)))}, nil
 }
 
 func acquireObservationRoot(ctx context.Context, store *indexStore) (*os.Root, func(), error) {

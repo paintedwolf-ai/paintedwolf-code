@@ -312,6 +312,8 @@ func IsControlRootRuntimeEntry(name string) bool {
 		"verify-detect.json",
 		// Daemon, IPC, locks, tokens, Tauri, and process state
 		"locks",
+		"daemon.lock",
+		"runtime.json",
 		"cli.sock",
 		"cli-projects.cache",
 		"daemon.json",
@@ -323,6 +325,12 @@ func IsControlRootRuntimeEntry(name string) bool {
 		"updates.log",
 		"window-backdrop.json",
 		"conversation-preparation",
+		"logs",
+		"sessions",
+		"staging",
+		"blobs",
+		"tls",
+		"work",
 		// Durable internal state & managed workspace containers
 		"app-state-v1",
 		"document-outbox",
@@ -338,6 +346,9 @@ func IsControlRootRuntimeEntry(name string) bool {
 		"session-output",
 		"drafts",
 		// Host secret / vault material
+		"auth.json",
+		"secrets",
+		"master.key",
 		"credential-vault.age",
 		"credential-vault-identity.age",
 		"credential-vault-dev.key",
@@ -351,11 +362,63 @@ func IsControlRootRuntimeEntry(name string) bool {
 // control-plane state and read-floor-denied paths (such as key material)
 // for AgentAudience views without per-path syscalls.
 type AgentReadFloor struct {
-	rootClean          string
-	rootCanon          string
-	whollyDenied       bool
-	deniedRelPrefixes  []string
-	inPlacementBranch  bool
+	rootClean         string
+	rootCanon         string
+	whollyDenied      bool
+	deniedRelPrefixes []string
+	extraDenyRoots    []string
+	inPlacementBranch bool
+}
+
+var defaultHomeKeyMaterialRelPaths = []string{
+	".ssh",
+	".gnupg",
+	".age",
+	".config/sops/age",
+	".docker/trust",
+	"Library/Keychains",
+	".password-store",
+	".local/share/keyrings",
+	".local/share/kwalletd",
+	"AppData/Roaming/Microsoft/Credentials",
+	"AppData/Local/Microsoft/Credentials",
+	"AppData/Local/Microsoft/Vault",
+}
+
+func effectiveAgentExtraDenyRoots(extraDenyRoots []string) []string {
+	var out []string
+	home, _ := os.UserHomeDir()
+	home = strings.TrimSpace(home)
+	if len(extraDenyRoots) > 0 {
+		out = append(out, extraDenyRoots...)
+	} else if home != "" {
+		for _, rel := range defaultHomeKeyMaterialRelPaths {
+			out = append(out, filepath.Join(home, filepath.FromSlash(rel)))
+		}
+	}
+	if envDeny := strings.TrimSpace(os.Getenv("LYCAON_SANDBOX_DENY_READ")); envDeny != "" {
+		for _, token := range splitEnvPathList(envDeny) {
+			if strings.HasPrefix(token, "~/") || strings.HasPrefix(token, `~\`) {
+				if home != "" {
+					token = filepath.Join(home, token[2:])
+				}
+			}
+			out = append(out, token)
+		}
+	}
+	return out
+}
+
+func splitEnvPathList(raw string) []string {
+	var out []string
+	for _, part := range filepath.SplitList(raw) {
+		for _, sub := range strings.Split(part, ",") {
+			if trimmed := strings.TrimSpace(sub); trimmed != "" {
+				out = append(out, trimmed)
+			}
+		}
+	}
+	return out
 }
 
 // CompileAgentReadFloor compiles the agent read floor for rootPath given
@@ -369,9 +432,11 @@ func CompileAgentReadFloor(rootPath string, extraDenyRoots []string) AgentReadFl
 	if canon == "" || canon == "." {
 		canon = clean
 	}
+	effExtra := effectiveAgentExtraDenyRoots(extraDenyRoots)
 	floor := AgentReadFloor{
-		rootClean: clean,
-		rootCanon: canon,
+		rootClean:      clean,
+		rootCanon:      canon,
+		extraDenyRoots: effExtra,
 	}
 
 	if isPlacementExcludedLexical(clean, clean) || isPlacementExcludedLexical(canon, canon) {
@@ -396,7 +461,7 @@ func CompileAgentReadFloor(rootPath string, extraDenyRoots []string) AgentReadFl
 		}
 	}
 
-	for _, extra := range extraDenyRoots {
+	for _, extra := range effExtra {
 		trimmed := strings.TrimSpace(extra)
 		if trimmed == "" {
 			continue
@@ -480,7 +545,11 @@ func (f AgentReadFloor) IsDeniedAbs(relSlash, absPath string, extraDenyRoots []s
 	if f.IsDeniedRel(relSlash) {
 		return true
 	}
-	return IsAgentSourceReadDenied(f.rootClean, absPath, extraDenyRoots)
+	roots := extraDenyRoots
+	if len(roots) == 0 {
+		roots = f.extraDenyRoots
+	}
+	return isAgentSourceReadDeniedWithRoots(f.rootClean, absPath, roots)
 }
 
 // IsAgentSourceReadDenied reports whether absPath under rootPath is denied to
@@ -488,6 +557,10 @@ func (f AgentReadFloor) IsDeniedAbs(relSlash, absPath string, extraDenyRoots []s
 // the control-plane state tree outside an attached managed workspace, or lies
 // inside any of extraDenyRoots).
 func IsAgentSourceReadDenied(rootPath, absPath string, extraDenyRoots []string) bool {
+	return isAgentSourceReadDeniedWithRoots(rootPath, absPath, effectiveAgentExtraDenyRoots(extraDenyRoots))
+}
+
+func isAgentSourceReadDeniedWithRoots(rootPath, absPath string, extraDenyRoots []string) bool {
 	if IsObservedStateExcluded(rootPath, absPath) {
 		return true
 	}

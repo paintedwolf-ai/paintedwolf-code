@@ -430,7 +430,7 @@ func reconcilePaths(ctx context.Context, root Root, base Snapshot, changed []str
 		if err := nextMetadataEntry(ctx); err != nil {
 			return Snapshot{}, err
 		}
-		if sandbox.ShouldSkipDir(rel, path.Base(rel)) || repochange.IsPrivatePath(filepath.Join(root.Path, filepath.FromSlash(rel))) {
+		if sandbox.ShouldSkipDir(rel, path.Base(rel)) || repochange.IsPrivatePathForRoot(root.watchRoot(), filepath.Join(root.Path, filepath.FromSlash(rel))) {
 			continue
 		}
 		// Ancestor checks reject replacements before descendant access.
@@ -471,14 +471,14 @@ func reconcilePaths(ctx context.Context, root Root, base Snapshot, changed []str
 		if err != nil {
 			return Snapshot{}, err
 		}
-		if sandbox.ShouldSkipDir(rel, path.Base(rel)) {
+		if sandbox.ShouldSkipDir(rel, path.Base(rel)) || repochange.IsPrivatePathForRoot(root.watchRoot(), abs) {
 			continue
 		}
 		entries[rel] = catalogEntry(root.ID, rel, info, root.Path)
 		if !info.IsDir() {
 			continue
 		}
-		subtree, err := buildSnapshot(ctx, []Root{{ID: root.ID, Path: abs}}, policy.under(rel))
+		subtree, err := buildSnapshot(ctx, []Root{{ID: root.ID, Path: abs, Within: root.watchRoot()}}, policy.under(rel))
 		if err != nil {
 			return Snapshot{}, err
 		}

@@ -142,16 +142,21 @@ func readObservationNodes(root *os.Root, directory *observationDirectory, dir st
 	nodes := make([]indexNode, 0, len(batch))
 	for _, entry := range batch {
 		rel := path.Join(dir, entry.Name())
-		if directory.privateFilter.Contains(entry.Name()) {
+		isSymlink := entry.Type()&os.ModeSymlink != 0
+		if directory.privateFilter.ContainsEntry(entry.Name(), isSymlink) {
 			continue
 		}
 		physical := path.Join(directory.resolved, entry.Name())
 		node := indexNode{path: rel, parent: dir, name: entry.Name(), depth: pathDepth(rel),
-			isDir: entry.IsDir(), isSymlink: entry.Type()&os.ModeSymlink != 0,
+			isDir: entry.IsDir(), isSymlink: isSymlink,
 			regular: entry.Type().IsRegular(), hidden: hiddenIndexPath(rel)}
 		if node.isSymlink {
 			targetPath, targetErr := observationPath(root, physical)
-			if targetErr == nil {
+			if targetErr != nil {
+				if errors.Is(targetErr, os.ErrPermission) && repochange.IsPrivatePathForRoot(root.Name(), filepath.Join(root.Name(), filepath.FromSlash(physical))) {
+					continue
+				}
+			} else {
 				target, statErr := root.Stat(filepath.FromSlash(targetPath))
 				if errors.Is(statErr, os.ErrNotExist) {
 					continue
@@ -170,7 +175,7 @@ func validateObservationDirectory(root Root, dir string) error {
 	if filepath.IsAbs(dir) || sandbox.HasParentTraversal(dir) {
 		return os.ErrPermission
 	}
-	if repochange.IsPrivatePath(filepath.Join(root.Path, filepath.FromSlash(dir))) {
+	if normalizeDir(dir) != "." && repochange.IsPrivatePathForRoot(root.watchRoot(), filepath.Join(root.Path, filepath.FromSlash(dir))) {
 		return os.ErrPermission
 	}
 	return nil
@@ -201,7 +206,7 @@ func (c *Directories) ObserveDirectories(ctx context.Context, project string, ro
 func observationPath(root *os.Root, rel string) (string, error) {
 	base := fspath.CanonicalPath(root.Name())
 	target := fspath.CanonicalPath(filepath.Join(root.Name(), filepath.FromSlash(rel)))
-	if base == "" || target == "" || repochange.IsPrivatePath(target) {
+	if base == "" || target == "" || (normalizeDir(rel) != "." && repochange.IsPrivatePathForRoot(root.Name(), target)) {
 		return "", os.ErrPermission
 	}
 	resolved, err := filepath.Rel(filepath.FromSlash(base), filepath.FromSlash(target))
@@ -252,7 +257,7 @@ func openConfinedDirectory(root *os.Root, dir string) (*observationDirectory, er
 	return &observationDirectory{
 		entries:       entries,
 		resolved:      resolved,
-		privateFilter: repochange.NewPrivateDirectoryFilter(filepath.Join(root.Name(), filepath.FromSlash(resolved))),
+		privateFilter: repochange.NewPrivateDirectoryFilterForRoot(root.Name(), filepath.Join(root.Name(), filepath.FromSlash(resolved))),
 		stamp:         directoryStampOf(info),
 	}, nil
 }

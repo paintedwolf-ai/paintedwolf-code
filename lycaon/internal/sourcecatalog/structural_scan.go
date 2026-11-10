@@ -285,7 +285,7 @@ func openStructuralScanDirectoryUnadmitted(root *os.Root, dir string, cache *str
 		handle:        file,
 		entries:       entries,
 		resolved:      resolved,
-		privateFilter: repochange.NewPrivateDirectoryFilter(filepath.Join(root.Name(), filepath.FromSlash(resolved))),
+		privateFilter: repochange.NewPrivateDirectoryFilterForRoot(root.Name(), filepath.Join(root.Name(), filepath.FromSlash(resolved))),
 		stamp:         directoryStampOf(info),
 	}, nil
 }
@@ -294,7 +294,7 @@ func validateStructuralScanDirectory(root *os.Root, dir string) error {
 	if filepath.IsAbs(dir) || sandbox.HasParentTraversal(dir) {
 		return os.ErrPermission
 	}
-	if repochange.IsPrivatePath(filepath.Join(root.Name(), filepath.FromSlash(dir))) {
+	if normalizeDir(dir) != "." && repochange.IsPrivatePathForRoot(root.Name(), filepath.Join(root.Name(), filepath.FromSlash(dir))) {
 		return os.ErrPermission
 	}
 	return nil

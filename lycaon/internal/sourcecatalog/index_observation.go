@@ -11,11 +11,15 @@ import (
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/pagedview"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
 // Filesystem waits release the writer transaction.
 func (w *indexWalk) visitDir(ctx context.Context, dir string) error {
+	if dir != "." && repochange.IsPrivatePathForRoot(w.store.root.watchRoot(), filepath.Join(w.store.root.Path, filepath.FromSlash(dir))) {
+		return nil
+	}
 	if reason := w.store.policy.boundaryPath(dir, true); reason != "" {
 		if err := w.begin(ctx); err != nil {
 			return err
@@ -209,6 +213,9 @@ func (w *indexWalk) admitObservedNodes(ctx context.Context, nodes []indexNode, s
 	var directoryValues []string
 	for _, node := range nodes {
 		if !w.store.policy.selects(node.path, node.isDir) {
+			continue
+		}
+		if repochange.IsPrivatePathForRoot(w.store.root.watchRoot(), filepath.Join(w.store.root.Path, filepath.FromSlash(node.path))) {
 			continue
 		}
 		if node.isDir && w.store.policy.boundaryDir(node.path) != "" {

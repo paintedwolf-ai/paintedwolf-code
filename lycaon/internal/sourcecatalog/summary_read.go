@@ -352,7 +352,7 @@ func (s *summaryStore) scopeChanges(changed []string) ([]string, bool) {
 		}
 		allowed := true
 		for ancestor := rel; ancestor != "."; ancestor = path.Dir(ancestor) {
-			if sandbox.ShouldSkipDir(ancestor, path.Base(ancestor)) {
+			if sandbox.ShouldSkipDir(ancestor, path.Base(ancestor)) || repochange.IsPrivatePathForRoot(s.root.watchRoot(), filepath.Join(s.root.Path, filepath.FromSlash(ancestor))) {
 				allowed = false
 				break
 			}

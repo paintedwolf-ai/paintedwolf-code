@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -186,6 +189,199 @@ func TestIndexScopesKeepHumanSearchSeparateFromAgentMetadata(t *testing.T) {
 		testutil.FailErr(t, "read scoped count", err)
 		if !slices.Equal(got, tc.want) || count != len(tc.want) {
 			t.Fatalf("scope %+v: paths=%v count=%d want %v", tc.scope, got, count, tc.want)
+		}
+	}
+}
+
+func TestHumanWarmedSharedCatalogNeverLeaksControlPlaneOrKeyMaterialToAgent(t *testing.T) {
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".paintedwolf")
+	wtDir := filepath.Join(cfgDir, "worktrees", "wt-1")
+	t.Setenv("HOME", home)
+	t.Setenv(configdir.EnvVar, cfgDir)
+
+	writeIndexFile(t, home, "project/main.go", "package main // SecretNeedle")
+	writeIndexFile(t, home, ".ssh/id_ed25519", "PRIVATE KEY SecretNeedle")
+	writeIndexFile(t, cfgDir, "settings.yaml", "api_key: SecretNeedle")
+	writeIndexFile(t, cfgDir, "packs/custom.yaml", "rules: [SecretNeedle]")
+	writeIndexFile(t, cfgDir, "paintedwolf.db", "sqlite-db")
+	writeIndexFile(t, cfgDir, "paintedwolf.db-wal", "sqlite-wal")
+	writeIndexFile(t, cfgDir, "paintedwolf.db-shm", "sqlite-shm")
+	writeIndexFile(t, cfgDir, "source-catalog.db-wal", "catalog-wal")
+	writeIndexFile(t, cfgDir, "store.db-wal", "store-wal")
+	writeIndexFile(t, cfgDir, "runtime.json", "{}")
+	writeIndexFile(t, cfgDir, "daemon.lock", "lock")
+	writeIndexFile(t, cfgDir, "cache/index.bin", "cache-bytes")
+	writeIndexFile(t, cfgDir, "sessions/s1.json", "{}")
+	writeIndexFile(t, wtDir, "work.go", "package work")
+
+	c := treeTestCatalog(t)
+
+	// 1. Human warms shared catalog on $HOME (strict ancestor of configdir.Root() and ~/.ssh).
+	homeRoot := Root{ID: "home", Path: home}
+	homeReader := waitIndex(t, c, homeRoot)
+
+	// HumanAudience (IncludeHidden: true) sees ~/.ssh/id_ed25519 and project/main.go,
+	// while .paintedwolf (the active control directory) is excluded from parent observation.
+	humanHomePaths, err := homeReader.FilePathsPage(t.Context(), FileScope{Audience: HumanAudience, IncludeHidden: true}, "", 20)
+	testutil.FailErr(t, "human home paths", err)
+	if !slices.Equal(humanHomePaths, []string{".ssh/id_ed25519", "project/main.go"}) {
+		t.Fatalf("human home paths = %v, want [.ssh/id_ed25519 project/main.go]", humanHomePaths)
+	}
+
+	// Simulate a pre-existing cached row in SQLite nodes for .paintedwolf/settings.yaml
+	// (with agent_metadata=0 to prove we do not rely solely on agent_metadata=1).
+	_ = homeReader.Close()
+	sHome, err := c.Trees.indexStore(t.Context(), "proj", homeRoot)
+	testutil.FailErr(t, "open home indexStore", err)
+	rawDB, err := openTreeDB(t.Context(), sHome.file)
+	testutil.FailErr(t, "open raw home db", err)
+	_, err = rawDB.ExecContext(t.Context(),
+		`INSERT OR REPLACE INTO nodes(path,search_path,search_name,parent,name,depth,indexed,agent_metadata,first_listed,is_dir,symlink,regular,hidden,size,mode,modified,refused)
+		 VALUES('.paintedwolf/settings.yaml','.paintedwolf/settings.yaml','settings.yaml','.paintedwolf','settings.yaml',2,1,0,1,0,0,1,1,24,420,1,'')`)
+	testutil.FailErr(t, "inject pre-existing cached control-plane row", err)
+	_ = rawDB.Close()
+
+	homeReader, _, err = c.Trees.OpenIndex(t.Context(), "proj", homeRoot, time.Second)
+	testutil.FailErr(t, "reopen home index", err)
+	t.Cleanup(func() { _ = homeReader.Close() })
+
+	// AgentAudience (both IncludeHidden: true and false) must see ONLY project/main.go:
+	// zero .ssh/id_ed25519 and zero .paintedwolf/settings.yaml across counts, pages, search, and named files.
+	for _, agentScope := range []FileScope{
+		{Audience: AgentAudience, IncludeHidden: true},
+		{Audience: AgentAudience, IncludeHidden: false},
+	} {
+		count, err := homeReader.FileCount(t.Context(), agentScope)
+		testutil.FailErr(t, "agent home count", err)
+		if count != 1 {
+			t.Fatalf("scope %+v: agent home count = %d, want 1", agentScope, count)
+		}
+		page, err := homeReader.FilePage(t.Context(), agentScope, "", 20)
+		testutil.FailErr(t, "agent home FilePage", err)
+		if len(page) != 1 || page[0].Path != "project/main.go" {
+			t.Fatalf("scope %+v: agent home FilePage = %+v, want [project/main.go]", agentScope, page)
+		}
+		paths, err := homeReader.FilePathsPage(t.Context(), agentScope, "", 20)
+		testutil.FailErr(t, "agent home FilePathsPage", err)
+		if !slices.Equal(paths, []string{"project/main.go"}) {
+			t.Fatalf("scope %+v: agent home FilePathsPage = %v, want [project/main.go]", agentScope, paths)
+		}
+		litSSH, err := homeReader.LiteralFilePathsPage(t.Context(), agentScope, []string{"id_ed25519"}, false, "", 20)
+		testutil.FailErr(t, "agent home LiteralFilePathsPage ssh", err)
+		if len(litSSH) != 0 {
+			t.Fatalf("scope %+v: agent leaked .ssh via LiteralFilePathsPage: %v", agentScope, litSSH)
+		}
+		litCfg, err := homeReader.LiteralFilePathsPage(t.Context(), agentScope, []string{"settings.yaml"}, false, "", 20)
+		testutil.FailErr(t, "agent home LiteralFilePathsPage cfg", err)
+		if len(litCfg) != 0 {
+			t.Fatalf("scope %+v: agent leaked control-plane row via LiteralFilePathsPage: %v", agentScope, litCfg)
+		}
+		addr, err := homeReader.FileAddressPage(t.Context(), agentScope, 0, "", 20)
+		testutil.FailErr(t, "agent home FileAddressPage", err)
+		if !slices.Equal(addr, []string{"project/main.go"}) {
+			t.Fatalf("scope %+v: agent home FileAddressPage = %v, want [project/main.go]", agentScope, addr)
+		}
+		for _, q := range []string{"id_ed25519", "settings"} {
+			for _, tier := range []FilePathMatch{FileBasenamePrefix, FileBasenameContains, FilePathSubsequence} {
+				matched, err := homeReader.MatchingFilePathsPage(t.Context(), agentScope, q, tier, "", 20)
+				testutil.FailErr(t, "agent home MatchingFilePathsPage", err)
+				if len(matched) != 0 {
+					t.Fatalf("scope %+v query=%q tier=%v: agent leaked %v", agentScope, q, tier, matched)
+				}
+			}
+		}
+		named, err := homeReader.NamedFiles(t.Context(), agentScope, []string{".ssh/id_ed25519", ".paintedwolf/settings.yaml", "project/main.go"})
+		testutil.FailErr(t, "agent home NamedFiles", err)
+		if !slices.Equal(named, []string{"project/main.go"}) {
+			t.Fatalf("scope %+v: agent home NamedFiles = %v, want [project/main.go]", agentScope, named)
+		}
+	}
+
+	// Orientation summary on $HOME must also exclude .ssh and .paintedwolf.
+	homeSummary, status, err := c.Trees.OpenSummary(t.Context(), "proj", homeRoot, TreeScope{Key: "agent-default"}, 5*time.Second)
+	testutil.FailErr(t, "open home summary", err)
+	if status.State != StateReady || homeSummary == nil {
+		t.Fatalf("home summary state=%v reader=%v", status, homeSummary)
+	}
+	t.Cleanup(func() { _ = homeSummary.Close() })
+	rootNode, err := homeSummary.Node(t.Context(), ".")
+	testutil.FailErr(t, "read home summary root", err)
+	if rootNode.Files != 1 {
+		t.Fatalf("home summary root Files = %d, want 1 (project/main.go only)", rootNode.Files)
+	}
+
+	// 2. Human warms shared catalog on directly attached configdir.Root() (cfgDir).
+	cfgRoot := Root{ID: "cfg", Path: cfgDir}
+	cfgReader := waitIndex(t, c, cfgRoot)
+
+	// HumanAudience on directly attached configdir.Root() sees human-authored config (packs/custom.yaml, settings.yaml)
+	// and ZERO runtime DB/WAL/SHM/cache/session/worktree files.
+	humanCfgPaths, err := cfgReader.FilePathsPage(t.Context(), FileScope{Audience: HumanAudience, IncludeHidden: true}, "", 20)
+	testutil.FailErr(t, "human cfg paths", err)
+	if !slices.Equal(humanCfgPaths, []string{"packs/custom.yaml", "settings.yaml"}) {
+		t.Fatalf("human cfg paths = %v, want [packs/custom.yaml settings.yaml]", humanCfgPaths)
+	}
+	humanCfgCount, err := cfgReader.FileCount(t.Context(), FileScope{Audience: HumanAudience, IncludeHidden: true})
+	testutil.FailErr(t, "human cfg count", err)
+	if humanCfgCount != 2 {
+		t.Fatalf("human cfg count = %d, want 2", humanCfgCount)
+	}
+
+	// AgentAudience on the same human-warmed cfgReader must get 0 files and empty pages/search/named results.
+	for _, agentScope := range []FileScope{
+		{Audience: AgentAudience, IncludeHidden: true},
+		{Audience: AgentAudience, IncludeHidden: false},
+	} {
+		count, err := cfgReader.FileCount(t.Context(), agentScope)
+		testutil.FailErr(t, "agent cfg count", err)
+		if count != 0 {
+			t.Fatalf("scope %+v: agent cfg count = %d, want 0", agentScope, count)
+		}
+		page, err := cfgReader.FilePage(t.Context(), agentScope, "", 20)
+		testutil.FailErr(t, "agent cfg FilePage", err)
+		if len(page) != 0 {
+			t.Fatalf("scope %+v: agent cfg FilePage = %+v, want empty", agentScope, page)
+		}
+		paths, err := cfgReader.FilePathsPage(t.Context(), agentScope, "", 20)
+		testutil.FailErr(t, "agent cfg FilePathsPage", err)
+		if len(paths) != 0 {
+			t.Fatalf("scope %+v: agent cfg FilePathsPage = %v, want empty", agentScope, paths)
+		}
+		named, err := cfgReader.NamedFiles(t.Context(), agentScope, []string{"settings.yaml", "packs/custom.yaml"})
+		testutil.FailErr(t, "agent cfg NamedFiles", err)
+		if len(named) != 0 {
+			t.Fatalf("scope %+v: agent cfg NamedFiles = %v, want empty", agentScope, named)
+		}
+	}
+
+	// Orientation summary on directly attached configdir.Root() has 0 files for AgentAudience.
+	cfgSummary, cfgSumStatus, err := c.Trees.OpenSummary(t.Context(), "proj", cfgRoot, TreeScope{Key: "agent-default"}, 5*time.Second)
+	testutil.FailErr(t, "open cfg summary", err)
+	if cfgSumStatus.State != StateReady || cfgSummary == nil {
+		t.Fatalf("cfg summary state=%v reader=%v", cfgSumStatus, cfgSummary)
+	}
+	t.Cleanup(func() { _ = cfgSummary.Close() })
+	cfgRootNode, err := cfgSummary.Node(t.Context(), ".")
+	testutil.FailErr(t, "read cfg summary root", err)
+	if cfgRootNode.Files != 0 || cfgRootNode.Children != 0 {
+		t.Fatalf("cfg summary root = %+v, want 0 files and 0 children", cfgRootNode)
+	}
+
+	// 3. Explicit managed workspace (<configdir>/worktrees/wt-1) remains accessible to both HumanAudience and AgentAudience.
+	wtRoot := Root{ID: "wt", Path: wtDir}
+	wtReader := waitIndex(t, c, wtRoot)
+	for _, scope := range []FileScope{
+		{Audience: HumanAudience, IncludeHidden: true},
+		{Audience: AgentAudience, IncludeHidden: true},
+		{Audience: AgentAudience, IncludeHidden: false},
+	} {
+		paths, err := wtReader.FilePathsPage(t.Context(), scope, "", 20)
+		testutil.FailErr(t, "wt FilePathsPage", err)
+		count, err := wtReader.FileCount(t.Context(), scope)
+		testutil.FailErr(t, "wt FileCount", err)
+		if !slices.Equal(paths, []string{"work.go"}) || count != 1 {
+			t.Fatalf("scope %+v: managed worktree paths=%v count=%d, want [work.go] and 1", scope, paths, count)
 		}
 	}
 }

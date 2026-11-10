@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -50,15 +52,28 @@ type sourceInventory struct {
 // walk visits the scope depth-first. A skipped directory costs one visit, so
 // pruning keeps a walk proportional to what it admits.
 func (inv sourceInventory) walk(ctx context.Context, visit func(sourcecatalog.Entry) sourcecatalog.WalkStep) error {
+	floor := enginepaths.CompileAgentReadFloor(inv.rootPath, confine.KeyMaterialReadDenyPaths())
+	if floor.WhollyDenied() {
+		return nil
+	}
+	guardedVisit := func(entry sourcecatalog.Entry) sourcecatalog.WalkStep {
+		if floor.IsDeniedRel(entry.Path) {
+			return sourcecatalog.WalkSkip
+		}
+		if entry.IsSymlink && floor.IsDeniedAbs(entry.Path, filepath.Join(inv.rootPath, filepath.FromSlash(entry.Path)), nil) {
+			return sourcecatalog.WalkSkip
+		}
+		return visit(entry)
+	}
 	if inv.live {
-		err := inv.walkLive(ctx, inv.base, visit)
+		err := inv.walkLive(ctx, inv.base, guardedVisit)
 		if errors.Is(err, errInventoryStop) {
 			return nil
 		}
 		return err
 	}
 	if inv.stale || inv.snapshot.RootBoundary || !repochange.Coverage(inv.rootPath).Complete {
-		err := inv.walkMerged(ctx, inv.base, visit)
+		err := inv.walkMerged(ctx, inv.base, guardedVisit)
 		if errors.Is(err, errInventoryStop) {
 			return nil
 		}
@@ -73,9 +88,9 @@ func (inv sourceInventory) walk(ctx context.Context, visit func(sourcecatalog.En
 			entry.Parent = normalizeCatalogPath(path.Dir(entry.Path))
 			entry.Depth = catalogPathDepth(entry.Path)
 		}
-		action := visit(entry)
+		action := guardedVisit(entry)
 		if action == sourcecatalog.WalkContinue && entry.Boundary {
-			expansionErr = inv.walkLive(ctx, entry.Path, visit)
+			expansionErr = inv.walkLive(ctx, entry.Path, guardedVisit)
 			if expansionErr != nil {
 				return sourcecatalog.WalkStop
 			}
@@ -96,7 +111,7 @@ func (inv sourceInventory) walk(ctx context.Context, visit func(sourcecatalog.En
 			child.Path = path.Join(entry.Path, child.Path)
 			child.Parent = normalizeCatalogPath(path.Dir(child.Path))
 			child.Depth = catalogPathDepth(child.Path)
-			step := visit(child)
+			step := guardedVisit(child)
 			stopped = step == sourcecatalog.WalkStop
 			return step
 		})

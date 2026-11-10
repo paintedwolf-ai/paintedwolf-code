@@ -82,20 +82,20 @@ func browseProjectSourceAt(root sourceBrowseRoot, dir string) (SourceDirListing,
 	if err != nil {
 		return SourceDirListing{}, "", err
 	}
-	if settingsoverlay.IsRecoveryOnlyDir(dirAbs) {
+	if settingsoverlay.IsRecoveryOnlyDir(dirAbs) || repochange.IsPrivatePathForRoot(root.path, dirAbs) {
 		return SourceDirListing{}, "", ErrSourceNotFound
 	}
 	children, err := sandbox.SurveyReadDir(dirAbs, relDir, sandbox.HumanFilesSurveyOptions())
 	if err != nil {
 		return SourceDirListing{}, "", fmt.Errorf("browse source dir: %w", err)
 	}
-	return SourceDirListing{RootID: root.root.ID, Dir: relDir, Entries: sourceListingEntries(children)}, resolved, nil
+	return SourceDirListing{RootID: root.root.ID, Dir: relDir, Entries: sourceListingEntries(root.path, children)}, resolved, nil
 }
 
-func sourceListingEntries(children []sandbox.SurveyEntry) []SourceDirEntry {
+func sourceListingEntries(rootPath string, children []sandbox.SurveyEntry) []SourceDirEntry {
 	entries := make([]SourceDirEntry, 0, len(children))
 	for _, child := range children {
-		if repochange.IsPrivatePath(child.Abs) {
+		if repochange.IsPrivatePathForRoot(rootPath, child.Abs) {
 			continue
 		}
 		isDir := child.IsDir

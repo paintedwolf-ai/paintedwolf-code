@@ -64,7 +64,7 @@ func (o *TreeOverlay) Add(ctx context.Context, nodes []OverlayNode) error {
 		if node.Path == "" || node.Path != path.Clean(node.Path) || strings.HasPrefix(node.Path, "/") || node.Path == ".." || strings.HasPrefix(node.Path, "../") || node.Weight < 0 {
 			return pagedview.ErrRange
 		}
-		if repochange.IsPrivatePath(filepath.Join(o.rows.store.root.Path, filepath.FromSlash(node.Path))) {
+		if repochange.IsPrivatePathForRoot(o.rows.store.root.watchRoot(), filepath.Join(o.rows.store.root.Path, filepath.FromSlash(node.Path))) {
 			return pagedview.ErrRange
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO tree_overlay_nodes(projection,path,parent,depth,directory) VALUES(?,?,?,?,?)`, o.rows.id, node.Path, node.Parent, node.Depth, node.Directory); err != nil {

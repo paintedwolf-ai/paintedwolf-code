@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/watchfd"
@@ -447,4 +448,79 @@ func TestWatchLifetimeStopDrainsWholeFlushPublication(t *testing.T) {
 	<-done
 	testutil.FailErr(t, "drain publication", lifetime.Wait(t.Context()))
 	watch.flushExternalChanges(t.Context(), pendingExternalBatch{resync: true})
+}
+
+func TestProjectWatchExcludesControlDirAndRuntimeChurn(t *testing.T) {
+	cap := &capturePub{}
+	t.Cleanup(Bind(cap))
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".paintedwolf")
+	testutil.FailErr(t, "mkdir packs", os.MkdirAll(filepath.Join(cfgDir, "packs"), 0o755))
+	testutil.FailErr(t, "mkdir cache", os.MkdirAll(filepath.Join(cfgDir, "cache"), 0o755))
+	testutil.FailErr(t, "write user file", os.WriteFile(filepath.Join(home, "main.go"), []byte("package main"), 0o644))
+	testutil.FailErr(t, "write settings", os.WriteFile(filepath.Join(cfgDir, "settings.yaml"), []byte("theme: dark"), 0o644))
+	t.Setenv(configdir.EnvVar, cfgDir)
+
+	// 1. Strict ancestor ($HOME) watched: control-plane churn produces zero sourcefeed events.
+	wHome := &projectWatch{
+		callbacks: &workscope.Group{},
+		projectID: "watch-home-control-exclusion",
+		roots:     []RootSpec{{ID: "r1", WorkspaceID: "ws-home", Path: home}},
+	}
+	wHome.changes = newChangeConverger(time.Hour, time.Hour, wHome.flushExternalChanges)
+	wHome.observe(t.Context(), repochange.Event{
+		ProjectDir: home,
+		Kind:       repochange.WorktreeChanged,
+		Source:     repochange.SourceWatcher,
+		Paths: []string{
+			".paintedwolf/paintedwolf.db",
+			".paintedwolf/paintedwolf.db-wal",
+			".paintedwolf/paintedwolf.db-shm",
+			".paintedwolf/settings.yaml",
+			".paintedwolf-placement-1/worker-branches/p1/j1/file.go",
+			"main.go",
+		},
+	})
+	wHome.changes.close(t.Context())
+	var homePaths []string
+	for _, ev := range cap.events() {
+		homePaths = append(homePaths, ev.Path)
+	}
+	if !slices.Equal(homePaths, []string{"main.go"}) {
+		t.Fatalf("ancestor watch sourcefeed events = %v, want [main.go]", homePaths)
+	}
+
+	// 2. Direct configdir.Root() watched: runtime DB/WAL/SHM/cache churn produces zero events, while human settings.yaml publishes.
+	cap2 := &capturePub{}
+	t.Cleanup(Bind(cap2))
+	wCfg := &projectWatch{
+		callbacks: &workscope.Group{},
+		projectID: "watch-cfg-runtime-exclusion",
+		roots:     []RootSpec{{ID: "r2", WorkspaceID: "ws-cfg", Path: cfgDir}},
+	}
+	wCfg.changes = newChangeConverger(time.Hour, time.Hour, wCfg.flushExternalChanges)
+	wCfg.observe(t.Context(), repochange.Event{
+		ProjectDir: cfgDir,
+		Kind:       repochange.WorktreeChanged,
+		Source:     repochange.SourceWatcher,
+		Paths: []string{
+			"paintedwolf.db",
+			"paintedwolf.db-wal",
+			"paintedwolf.db-shm",
+			"source-catalog.db-wal",
+			"store.db-wal",
+			"cache/index.bin",
+			"runtime.json",
+			"daemon.lock",
+			"settings.yaml",
+		},
+	})
+	wCfg.changes.close(t.Context())
+	var cfgPaths []string
+	for _, ev := range cap2.events() {
+		cfgPaths = append(cfgPaths, ev.Path)
+	}
+	if !slices.Equal(cfgPaths, []string{"settings.yaml"}) {
+		t.Fatalf("direct control root sourcefeed events = %v, want [settings.yaml]", cfgPaths)
+	}
 }

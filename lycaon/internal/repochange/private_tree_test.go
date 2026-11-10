@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -125,5 +126,78 @@ func BenchmarkPrivateDirectoryFilterNoPrivateTrees(b *testing.B) {
 		if filter.Contains("entry") {
 			b.Fatal("unregistered path reported private")
 		}
+	}
+}
+
+func TestControlDirWatcherExclusion_AncestorAndDirectAttachments(t *testing.T) {
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".paintedwolf")
+	testutil.FailErr(t, "mkdir packs", os.MkdirAll(filepath.Join(cfgDir, "packs"), 0o755))
+	testutil.FailErr(t, "mkdir cache", os.MkdirAll(filepath.Join(cfgDir, "cache"), 0o755))
+	wtDir := filepath.Join(cfgDir, "worktrees", "wt-1")
+	testutil.FailErr(t, "mkdir worktree", os.MkdirAll(wtDir, 0o755))
+	t.Setenv(configdir.EnvVar, cfgDir)
+
+	var got []string
+	unbind := RegisterObserver(func(_ context.Context, event Event) {
+		got = append(got, event.Paths...)
+	})
+	defer unbind()
+
+	// 1. Strict ancestor ($HOME) watched: all of configdir.Root() and placements are suppressed.
+	Notify(t.Context(), Event{
+		ProjectDir: home,
+		Kind:       WorktreeChanged,
+		Source:     SourceWatcher,
+		Paths: []string{
+			".paintedwolf",
+			".paintedwolf/paintedwolf.db",
+			".paintedwolf/paintedwolf.db-wal",
+			".paintedwolf/paintedwolf.db-shm",
+			".paintedwolf/store.db-wal",
+			".paintedwolf/settings.yaml",
+			".paintedwolf-placement-1/worker-branches/p1/j1/main.go",
+			"src/main.go",
+		},
+	})
+	if !slices.Equal(got, []string{"src/main.go"}) {
+		t.Fatalf("strict ancestor watcher paths = %v, want [src/main.go]", got)
+	}
+
+	// 2. Direct configdir.Root() watched: runtime DB/WAL/SHM/cache/session state suppressed, human config admitted.
+	got = nil
+	Notify(t.Context(), Event{
+		ProjectDir: cfgDir,
+		Kind:       WorktreeChanged,
+		Source:     SourceWatcher,
+		Paths: []string{
+			"paintedwolf.db",
+			"paintedwolf.db-wal",
+			"paintedwolf.db-shm",
+			"source-catalog.db",
+			"source-catalog.db-wal",
+			"store.db-wal",
+			"runtime.json",
+			"daemon.lock",
+			"cache/index.bin",
+			"sessions/s1.json",
+			"settings.yaml",
+			"packs/custom.yaml",
+		},
+	})
+	if !slices.Equal(got, []string{"settings.yaml", "packs/custom.yaml"}) {
+		t.Fatalf("direct control dir watcher paths = %v, want [settings.yaml packs/custom.yaml]", got)
+	}
+
+	// 3. Explicit managed workspace (<configdir>/worktrees/wt-1) watched directly: workspace files admitted.
+	got = nil
+	Notify(t.Context(), Event{
+		ProjectDir: wtDir,
+		Kind:       WorktreeChanged,
+		Source:     SourceWatcher,
+		Paths:      []string{"pkg/service.go"},
+	})
+	if !slices.Equal(got, []string{"pkg/service.go"}) {
+		t.Fatalf("managed worktree watcher paths = %v, want [pkg/service.go]", got)
 	}
 }

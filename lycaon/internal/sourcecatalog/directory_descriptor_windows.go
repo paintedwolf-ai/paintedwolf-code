@@ -92,7 +92,7 @@ func verifyStructuralScanDirectoryHandle(root *os.Root, clean string, file *os.F
 	rootPath = normalizeStructuralScanWindowsPath(rootPath)
 	expected := normalizeStructuralScanWindowsPath(filepath.Join(rootPath, filepath.FromSlash(clean)))
 	finalPath = normalizeStructuralScanWindowsPath(finalPath)
-	if repochange.IsPrivatePath(finalPath) {
+	if repochange.IsPrivatePathForRoot(rootPath, finalPath) {
 		return os.ErrPermission
 	}
 	if !strings.EqualFold(finalPath, expected) {
