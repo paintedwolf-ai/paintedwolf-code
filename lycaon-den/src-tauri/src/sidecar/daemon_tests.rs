@@ -181,3 +181,121 @@ fn external_daemon_token_print_pipe_inheriting_descendant_does_not_hang_and_pres
     let _ = bystander.kill();
     let _ = bystander.wait();
 }
+
+#[cfg(unix)]
+#[test]
+fn external_daemon_token_print_nonblocking_and_read_errors_clean_up_process_group() {
+    use std::os::fd::AsRawFd;
+
+    let bad_fd_err = set_fd_nonblocking(-1).expect_err("invalid fd must fail fcntl");
+    assert!(
+        bad_fd_err.contains("fcntl F_GETFL"),
+        "unexpected error for invalid fd: {bad_fd_err}"
+    );
+
+    let dir = TempDir::new("token-print-err-cleanup");
+
+    // 1. Nonblocking setup failure after spawning helper + pipe-inheriting grandchild.
+    let setup_pid_file = dir.path().join("setup-fail-bg.pid");
+    let mut setup_cmd = Command::new("sh");
+    setup_cmd.args([
+        "-c",
+        &format!(
+            "sleep 30 & echo $! > '{}'; while [ ! -s '{}' ]; do :; done; sleep 30",
+            setup_pid_file.display(),
+            setup_pid_file.display()
+        ),
+    ]);
+    let setup_err = run_token_print_command_with(
+        setup_cmd,
+        Duration::from_secs(2),
+        |_stdout| {
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < deadline {
+                if fs::read_to_string(&setup_pid_file)
+                    .map(|s| !s.trim().is_empty())
+                    .unwrap_or(false)
+                {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err("injected nonblocking setup failure".to_string())
+        },
+        drain_nonblocking_stdout,
+    )
+    .expect_err("nonblocking setup error must abort");
+    assert!(setup_err.contains("injected nonblocking setup failure"));
+    let setup_bg_pid: i32 = fs::read_to_string(&setup_pid_file)
+        .expect("read setup bg pid")
+        .trim()
+        .parse()
+        .expect("parse setup bg pid");
+    assert!(
+        wait_until_pid_exits(setup_bg_pid, Duration::from_secs(1)),
+        "pipe-inheriting grandchild {setup_bg_pid} survived nonblocking setup error"
+    );
+
+    // 2. Real stdout read failure (EBADF on write-only fd via dup2) cleans up helper + grandchild.
+    let read_pid_file = dir.path().join("read-fail-bg.pid");
+    let mut read_cmd = Command::new("sh");
+    read_cmd.args([
+        "-c",
+        &format!(
+            "sleep 30 & echo $! > '{}'; sleep 30",
+            read_pid_file.display()
+        ),
+    ]);
+    let read_err = run_token_print_command_with(
+        read_cmd,
+        Duration::from_secs(2),
+        set_fd_nonblocking_and_wait_for_pid(&read_pid_file),
+        |stdout, buf, max_bytes| {
+            // Replace stdout's file description with a write-only /dev/null fd so
+            // read() returns EBADF without double-closing ChildStdout on Drop.
+            let devnull = std::fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/null")
+                .expect("open /dev/null write-only");
+            unsafe {
+                let _ = libc::dup2(devnull.as_raw_fd(), stdout.as_raw_fd());
+            }
+            drain_nonblocking_stdout(stdout, buf, max_bytes)
+        },
+    )
+    .expect_err("stdout read failure must abort");
+    assert!(
+        read_err.contains("read daemon token print stdout"),
+        "unexpected read error: {read_err}"
+    );
+    let read_bg_pid: i32 = fs::read_to_string(&read_pid_file)
+        .expect("read bg pid")
+        .trim()
+        .parse()
+        .expect("parse bg pid");
+    assert!(
+        wait_until_pid_exits(read_bg_pid, Duration::from_secs(1)),
+        "pipe-inheriting grandchild {read_bg_pid} survived stdout read error"
+    );
+}
+
+#[cfg(unix)]
+fn set_fd_nonblocking_and_wait_for_pid(
+    pid_file: &Path,
+) -> impl FnOnce(&std::process::ChildStdout) -> Result<(), String> + '_ {
+    use std::os::fd::AsRawFd;
+    move |stdout| {
+        set_fd_nonblocking(stdout.as_raw_fd())?;
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            if fs::read_to_string(pid_file)
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false)
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        Ok(())
+    }
+}
