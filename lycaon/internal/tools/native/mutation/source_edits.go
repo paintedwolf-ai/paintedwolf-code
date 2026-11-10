@@ -1,7 +1,6 @@
 package mutation
 
 import (
-	"github.com/lycaon/lycaon/internal/tools"
 	"os"
 	"strconv"
 	"strings"
@@ -164,13 +163,6 @@ func runCodeRewrite(inv *invocation) error {
 	dryRun := inv.flag("--dry-run")
 	recursive := inv.flag("--recursive")
 	ctx := inv.ctx
-	if reason, ok := inv.value("--syntax-override-reason"); ok && !dryRun {
-		overridden, err := tools.WithSyntaxOverride(ctx, map[string]any{"syntax_override_reason": reason})
-		if err != nil {
-			return err
-		}
-		ctx = overridden
-	}
 	var targets []string
 	for _, path := range paths {
 		bound, err := inv.bind(path, !dryRun)

@@ -352,7 +352,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     expect(filesBufferText(buf)).toBe(rawJsonl);
 
     // 5. Closing the buffer disposes the tab's Pretty state:
-    closeFilesBuffer(PROJECT, buf.key);
+    void closeFilesBuffer(PROJECT, buf.key);
     expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(false);
   });
 });

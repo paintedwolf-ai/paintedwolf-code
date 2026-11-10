@@ -12,11 +12,13 @@ import (
 )
 
 // compactionRevision keys memoized attempts and projections to the current summary and projection semantics.
-const compactionRevision = 4
+const compactionRevision = 5
 
-func (c *SimpleCompactor) summaryRevision() (string, error) {
-	if revision, ok := c.summary.(interface{ SummaryRevision() (string, error) }); ok {
-		return revision.SummaryRevision()
+func (c *SimpleCompactor) summaryRevision(ctx context.Context) (string, error) {
+	if revision, ok := c.summary.(interface {
+		SummaryRevision(context.Context) (string, error)
+	}); ok {
+		return revision.SummaryRevision(ctx)
 	}
 	return "local", nil
 }
@@ -30,7 +32,7 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 	if err != nil {
 		return "", err
 	}
-	model, err := c.summaryRevision()
+	model, err := c.summaryRevision(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -49,12 +51,13 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 
 // AttemptRevision identifies the policy and summarizer that decide an automatic
 // attempt's outcome, without any source rows.
-func AttemptRevision(ctx context.Context, c *SimpleCompactor) (string, error) {
+func AttemptRevision(ctx context.Context, c *SimpleCompactor, info SessionInfo) (string, error) {
+	ctx = withCompactionSession(ctx, info)
 	prompt, err := guidance.RenderCompactionSystemPrompt(ctx, guidance.CompactionSessionSummarySystemRef)
 	if err != nil {
 		return "", err
 	}
-	model, err := c.summaryRevision()
+	model, err := c.summaryRevision(ctx)
 	if err != nil {
 		return "", err
 	}

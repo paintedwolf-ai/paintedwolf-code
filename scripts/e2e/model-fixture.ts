@@ -14,7 +14,10 @@ const server = Bun.serve({
       return Response.json({ models: [{ name: "mock-model" }] });
     }
     if (request.method === "POST" && path === "/api/show") {
-      return Response.json({ capabilities: ["completion", "tools"] });
+      return Response.json({
+        capabilities: ["completion", "tools"],
+        model_info: { "mock.context_length": 131072 },
+      });
     }
     return new Response("not found", { status: 404 });
   },

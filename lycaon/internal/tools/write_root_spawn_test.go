@@ -32,3 +32,23 @@ func TestConfineRequestForSpawnRefusesStateAncestorAndKeepsOrdinaryRoot(t *testi
 		t.Fatalf("ordinary root request=%+v rejection=%+v", req, reject)
 	}
 }
+
+func TestSpawnPreservesAdmittedWriteRoots(t *testing.T) {
+	approved, output := t.TempDir(), t.TempDir()
+	tc := ToolContext{Files: InvocationFiles{GrantedWriteRoots: []string{approved}}}
+	req, reject := ConfineRequestForSpawn(t.Context(), tc, []string{output, approved})
+	if reject != nil || !slices.Equal(req.GrantedWriteRoots, []string{approved, output}) {
+		t.Fatalf("spawn roots = %v, rejection = %v", req.GrantedWriteRoots, reject)
+	}
+	if !slices.Equal(tc.Files.GrantedWriteRoots, []string{approved}) {
+		t.Fatalf("admitted roots changed: %v", tc.Files.GrantedWriteRoots)
+	}
+}
+
+func TestSpawnRevalidatesAdmittedWriteRoots(t *testing.T) {
+	tc := ToolContext{Files: InvocationFiles{GrantedWriteRoots: []string{"relative"}}}
+	_, reject := ConfineRequestForSpawn(t.Context(), tc, nil)
+	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
+		t.Fatalf("unsafe admitted root rejection = %v", reject)
+	}
+}

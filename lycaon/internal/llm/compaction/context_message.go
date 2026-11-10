@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -29,6 +30,7 @@ type ContextMessage struct {
 // ContextMessageProvenance holds origin, trust, and replay metadata for a context row.
 type ContextMessageProvenance struct {
 	CommandResult       *transcript.CommandResultProvenance `json:"-"`
+	Execution           *messageview.ContinuationExecution  `json:"recorded_execution,omitempty"`
 	Seq                 int64
 	Origin              api.MessageOrigin
 	Authority           api.ContentAuthority
@@ -96,6 +98,7 @@ func ContextMessageFromAPI(m api.Message) ContextMessage {
 	}
 	if m.ToolResult != nil {
 		out.CommandResult = transcript.CommandProvenance(m.ToolResult)
+		out.Execution = continuationExecution(m.ToolResult)
 		if out.Content == "" {
 			out.Content = m.ToolResult.Content
 		}

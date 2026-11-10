@@ -44,6 +44,7 @@ const (
 	CodeLoopbackConnectRequestInvalid      = "SANDBOX_LOOPBACK_CONNECT_REQUEST_INVALID"
 	CodeReadPathDenied                     = "SANDBOX_READ_PATH_DENIED"
 	CodeSocketPathDenied                   = "SANDBOX_SOCKET_PATH_DENIED"
+	CodeSocketPermitRequired               = "SANDBOX_SOCKET_PERMIT_REQUIRED"
 	CodeSocketPathChanged                  = "SANDBOX_SOCKET_PATH_CHANGED"
 	CodeSocketPathInvalid                  = "SANDBOX_SOCKET_PATH_INVALID"
 	CodeSocketPathLimit                    = "SANDBOX_SOCKET_PATH_LIMIT"
@@ -86,6 +87,7 @@ var outcomes = [...]Outcome{
 	{CodeReadPathDenied, DispositionHumanDecision},
 	{CodeSocketPathDenied, DispositionHumanDecision},
 	{CodeSocketPathChanged, DispositionRetry},
+	{CodeSocketPermitRequired, DispositionRetry},
 	{CodeSocketPathInvalid, DispositionRetry},
 	{CodeSocketPathLimit, DispositionRetry},
 	{CodeSocketPathNotFound, DispositionRetry},

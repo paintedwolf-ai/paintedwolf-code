@@ -424,7 +424,6 @@ export function FilesEditor(props: FilesEditorProps) {
           <FilesEditorStatusDetails
             historicalActive={historicalActive()}
             buffer={props.buffer}
-            version={props.version}
             secretScreenGap={annotations.secretScreenGap()}
           />
         }

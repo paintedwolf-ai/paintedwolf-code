@@ -44,10 +44,7 @@ func TestMutationCandidateRecoveryCopy(t *testing.T) {
 	}
 }
 
-// TestMutationCandidateRecoveryCopyCommandLeg pins the command-leg branch of
-// PC02-001: command edit, replace-lines, and redirects accept no override, so
-// the copy must name `code-rewrite --syntax-override-reason` as the only way
-// past the check instead of advising the form-tool parameter.
+// Command recovery names forms from the active language catalog.
 func TestMutationCandidateRecoveryCopyCommandLeg(t *testing.T) {
 	ensureCatalog(t)
 	loader, err := NewLoader(schemaDir(t))
@@ -69,8 +66,8 @@ func TestMutationCandidateRecoveryCopyCommandLeg(t *testing.T) {
 				t.Fatalf("missing mutation rejection: %#v", result)
 			}
 			fix := result.Decision.Copy["fix"]
-			if !strings.Contains(fix, "code-rewrite --syntax-override-reason") {
-				t.Fatalf("command leg must name the only override-capable form: %s", fix)
+			if !strings.Contains(fix, "tee --syntax-override-reason") {
+				t.Fatalf("command leg must name an available override form: %s", fix)
 			}
 			if strings.Contains(fix, "supply `syntax_override_reason`") {
 				t.Fatalf("command leg must not advise the form-tool override parameter: %s", fix)

@@ -3,14 +3,12 @@ import { createSignal } from "solid-js";
 export type PrettySurfaceCapability = {
   enabled: () => boolean;
   available?: () => boolean;
-  tip?: () => string | undefined;
   onToggle: () => boolean | void;
 };
 
 export type PrettyStatusToggle = {
   enabled: boolean;
   available: boolean;
-  tip?: string;
   onToggle: () => void;
 };
 
@@ -123,11 +121,9 @@ export function prettyStatusToggleForTab(
   const capability = getPrettySurfaceCapability(projectId, tabKey);
   const available = Boolean(capability && (!capability.available || capability.available()));
   const enabled = available && capability ? capability.enabled() : false;
-  const tip = capability?.tip?.();
   return {
     enabled,
     available,
-    tip,
     onToggle: () => {
       invokePrettyToggleForTab(projectId, tabKey);
     },
