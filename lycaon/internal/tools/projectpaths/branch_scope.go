@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -62,6 +63,15 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 	}
 	if op == sandbox.PathOpRead && settingsoverlay.IsRecoveryOnlyDir(abs) {
 		return Resolved{}, &os.PathError{Op: "stat", Path: modelPath, Err: os.ErrNotExist}
+	}
+	if reject := controlPlaneRejectInRoot(tctx, branch, abs, op); reject != nil {
+		return Resolved{}, reject
+	}
+	if op == sandbox.PathOpRead && confine.IsAgentSourceReadDenied(branch, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
+		if confine.IsAgentControlStateReadDenied(branch, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) || !HasExactReadGrant(tctx, abs) {
+			return Resolved{}, &sandbox.ScopeError{Path: modelPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
+		}
+		ctx = sandbox.WithApprovedReadPaths(ctx, []string{abs})
 	}
 	var root projectroot.RootRef
 	if len(tctx.Source.Roots) > 1 {

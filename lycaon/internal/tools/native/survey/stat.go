@@ -62,9 +62,6 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			return "", err
 		}
 		fullPath := resolved.Abs
-		if confine.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
-			return "", &sandbox.ScopeError{Path: relPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
-		}
 		relSlash := filepath.ToSlash(resolved.DisplayPath)
 		info, err := os.Lstat(fullPath)
 		if err != nil {
@@ -72,6 +69,9 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		}
 		entry := statEntryFromInfo(relSlash, info)
 		if info.IsDir() {
+			if confine.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
+				return "", &sandbox.ScopeError{Path: relPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
+			}
 			counted := false
 			if t.Catalog != nil {
 				current := catalogOrProcess(t.Catalog).Current(ctx, tctx.Identity.ProjectID, []sourcecatalog.Root{{ID: resolved.Root.ID, Path: resolved.Root.Path}})

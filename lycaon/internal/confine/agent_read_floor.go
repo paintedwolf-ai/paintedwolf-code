@@ -217,6 +217,16 @@ func IsAgentSourceReadDenied(rootPath, absPath string, sessionDirs ...string) bo
 	return isAgentSourceReadDeniedWith(rootPath, absPath, effScratch, effOutput, unconditionalAgentDenyRoots())
 }
 
+// IsAgentControlStateReadDenied reports whether absPath under rootPath is
+// denied by control-plane state, observed engine state exclusions, or
+// configured LYCAON_SANDBOX_DENY_READ roots (independent of key-material
+// paths, which may be opened for an exact approved single-file read).
+func IsAgentControlStateReadDenied(rootPath, absPath string, sessionDirs ...string) bool {
+	rawScratch, rawOutput := parseSessionDirs(sessionDirs)
+	effScratch, effOutput := EffectiveSessionDirsForRoot(rootPath, rawScratch, rawOutput)
+	return isAgentSourceReadDeniedWith(rootPath, absPath, effScratch, effOutput, configuredReadDenyRoots())
+}
+
 func isAgentSourceReadDeniedWith(rootPath, absPath, effScratch, effOutput string, unconditionalDenyRoots []string) bool {
 	p := filepath.Clean(strings.TrimSpace(absPath))
 	if p == "" || p == "." {

@@ -46,10 +46,38 @@ func controlPlaneReject(tctx tools.ToolContext, modelPath string, op sandbox.Pat
 	if abs == "" || !filepath.IsAbs(abs) {
 		return nil
 	}
-	abs = filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(abs)))
-	if !confine.ControlPlanePathDenied(abs, op != sandbox.PathOpRead, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
+	clean := filepath.Clean(abs)
+	canon := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(clean)))
+	if canon == "" || canon == "." {
+		canon = clean
+	}
+	write := op != sandbox.PathOpRead
+	if !confine.ControlPlanePathDenied(clean, write, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) &&
+		!confine.ControlPlanePathDenied(canon, write, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 		return nil
 	}
+	return newControlPlaneReject(canon, op)
+}
+
+func controlPlaneRejectInRoot(tctx tools.ToolContext, rootPath, abs string, op sandbox.PathOp) *toolrejection.ToolReject {
+	if abs == "" || !filepath.IsAbs(abs) {
+		return nil
+	}
+	clean := filepath.Clean(abs)
+	canon := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(clean)))
+	if canon == "" || canon == "." {
+		canon = clean
+	}
+	write := op != sandbox.PathOpRead
+	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(rootPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
+	if !confine.ControlPlanePathDenied(clean, write, effScratch, effOutput) &&
+		!confine.ControlPlanePathDenied(canon, write, effScratch, effOutput) {
+		return nil
+	}
+	return newControlPlaneReject(canon, op)
+}
+
+func newControlPlaneReject(abs string, op sandbox.PathOp) *toolrejection.ToolReject {
 	mode := "read"
 	if op != sandbox.PathOpRead {
 		mode = "write"
@@ -245,12 +273,21 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	if reject := currentRootReject(tctx, root, abs); reject != nil {
 		return Resolved{}, reject
 	}
+	if reject := controlPlaneRejectInRoot(tctx, root.Path, abs, op); reject != nil {
+		return Resolved{}, reject
+	}
 	scopeRel := projectroot.ScopeRel(root, abs)
 	if settingsoverlay.IsRecoveryRelPath(scopeRel) || settingsoverlay.HasRecoverySegment(abs) {
 		return Resolved{}, mapResolveErr(fmt.Errorf("%w: %q", projectroot.ErrPathEscape, modelPath), modelPath)
 	}
 	if op == sandbox.PathOpRead && settingsoverlay.IsRecoveryOnlyDir(abs) {
 		return Resolved{}, &os.PathError{Op: "stat", Path: modelPath, Err: os.ErrNotExist}
+	}
+	if op == sandbox.PathOpRead && confine.IsAgentSourceReadDenied(root.Path, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
+		if confine.IsAgentControlStateReadDenied(root.Path, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) || !HasExactReadGrant(tctx, abs) {
+			return Resolved{}, &sandbox.ScopeError{Path: modelPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
+		}
+		ctx = sandbox.WithApprovedReadPaths(ctx, []string{abs})
 	}
 	if b != nil {
 		switch op {

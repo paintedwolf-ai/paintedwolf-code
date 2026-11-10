@@ -9,7 +9,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -226,9 +225,6 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		return "", err
 	}
 	fullPath := resolved.Abs
-	if confine.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
-		return "", &sandbox.ScopeError{Path: path, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
-	}
 	path = resolved.DisplayPath
 	target, isTarget := sourceview.ReportTarget(tctx, resolved, api.AgentActivityKindReading)
 	var st sourceview.Text

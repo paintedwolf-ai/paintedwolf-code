@@ -149,7 +149,9 @@ func (b *Boundary) AssertReadScope(ctx context.Context, projectDir, relPath, pro
 		scratchDir, outputDir := SessionDirsFromContext(ctx)
 		if resolved, err := b.resolveAbs(projectDir, relPath, b.cfg.RejectSymlinkEscape); err == nil {
 			if confine.IsAgentSourceReadDenied(projectDir, resolved, scratchDir, outputDir) {
-				return newOutsideReadScope(relPath, profileID)
+				if confine.IsAgentControlStateReadDenied(projectDir, resolved, scratchDir, outputDir) || !IsApprovedReadPathFromContext(ctx, resolved) {
+					return newOutsideReadScope(relPath, profileID)
+				}
 			}
 		}
 	}

@@ -74,15 +74,15 @@ func (t *WcTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCo
 			return "", err
 		}
 		fullPath := resolved.Abs
-		if confine.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
-			return "", &sandbox.ScopeError{Path: relPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
-		}
 		relSlash := filepath.ToSlash(resolved.DisplayPath)
 		info, err := os.Stat(fullPath)
 		if err != nil {
 			return "", fmt.Errorf("wc %s: %w", relPath, err)
 		}
 		if info.IsDir() {
+			if confine.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
+				return "", &sandbox.ScopeError{Path: relPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
+			}
 			if !recursive {
 				return "", fmt.Errorf("wc %s: is a directory (set recursive: true to aggregate)", relPath)
 			}

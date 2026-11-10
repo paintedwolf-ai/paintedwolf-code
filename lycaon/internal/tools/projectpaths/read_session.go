@@ -2,13 +2,16 @@ package projectpaths
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -62,11 +65,32 @@ func (s *ReadSession) resolveBeneathRoot(ctx context.Context, modelPath string) 
 	if !s.admitted || s.hostAddressed(modelPath) {
 		return Resolved{}, false, nil
 	}
+	if reject := controlPlaneReject(s.tctx, modelPath, sandbox.PathOpRead); reject != nil {
+		return Resolved{}, true, reject
+	}
 	abs, root, primary, placed := s.placeBeneathRoot(modelPath)
 	if !placed {
 		return Resolved{}, false, nil
 	}
+	if reject := currentRootReject(s.tctx, root, abs); reject != nil {
+		return Resolved{}, true, reject
+	}
+	if reject := controlPlaneRejectInRoot(s.tctx, root.Path, abs, sandbox.PathOpRead); reject != nil {
+		return Resolved{}, true, reject
+	}
 	scopeRel := projectroot.ScopeRel(root, abs)
+	if settingsoverlay.IsRecoveryRelPath(scopeRel) || settingsoverlay.HasRecoverySegment(abs) {
+		return Resolved{}, true, mapResolveErr(fmt.Errorf("%w: %q", projectroot.ErrPathEscape, modelPath), modelPath)
+	}
+	if settingsoverlay.IsRecoveryOnlyDir(abs) {
+		return Resolved{}, true, &os.PathError{Op: "stat", Path: modelPath, Err: os.ErrNotExist}
+	}
+	if confine.IsAgentSourceReadDenied(root.Path, abs, s.tctx.Host.SessionScratchDir, s.tctx.Host.SessionOutputDir) {
+		if confine.IsAgentControlStateReadDenied(root.Path, abs, s.tctx.Host.SessionScratchDir, s.tctx.Host.SessionOutputDir) || !HasExactReadGrant(s.tctx, abs) {
+			return Resolved{}, true, &sandbox.ScopeError{Path: modelPath, Profile: s.tctx.ProfileID(), Kind: sandbox.ScopeRead}
+		}
+		ctx = sandbox.WithApprovedReadPaths(ctx, []string{abs})
+	}
 	if s.boundary != nil {
 		if err := s.boundary.AssertReadGlobs(ctx, scopeRel, s.tctx.ProfileID()); err != nil {
 			return Resolved{}, true, err
