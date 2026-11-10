@@ -177,6 +177,17 @@ func splitWorkerPlacementPath(absPath string) (placementRoot, relSlash string, o
 	return "", "", false
 }
 
+// HasWorkerPlacementSegment reports whether relSlash contains a path segment
+// matching WorkerPlacementDirPrefix.
+func HasWorkerPlacementSegment(relSlash string) bool {
+	for _, seg := range strings.Split(strings.ReplaceAll(relSlash, "\\", "/"), "/") {
+		if IsWorkerPlacementDirName(seg) {
+			return true
+		}
+	}
+	return false
+}
+
 func managedPlacementWorkspaceRel(relSlash string) (string, bool) {
 	if relSlash == "" || relSlash == "." {
 		return "", false
