@@ -53,17 +53,20 @@ func ResolveGitDirs(repoRoot string, authorizedDirs ...string) (gitDir, commonGi
 			gitDir = filepath.Join(repoRoot, gitDir)
 		}
 		gitDir = filepath.Clean(gitDir)
+		if err := validateResolvedGitDir(gitDir); err != nil {
+			return "", "", err
+		}
 	} else {
 		return "", "", fmt.Errorf("checkpoint: unsupported .git entry at %s", dotGit)
-	}
-	if err := validateResolvedGitDir(gitDir); err != nil {
-		return "", "", err
 	}
 	if commonGitDir, err = resolveCommonGitDir(gitDir); err != nil {
 		return "", "", err
 	}
+	if gitDir == dotGit && commonGitDir == gitDir {
+		return gitDir, commonGitDir, nil
+	}
 	allowed := append([]string{repoRoot}, authorizedDirs...)
-	if !isPathWithinAuthorized(gitDir, allowed) || !isPathWithinAuthorized(commonGitDir, allowed) {
+	if !isPathWithinAuthorized(gitDir, allowed) || (commonGitDir != gitDir && !isPathWithinAuthorized(commonGitDir, allowed)) {
 		return "", "", fmt.Errorf("%w: gitdir=%s commondir=%s", ErrUnauthorizedGitDir, gitDir, commonGitDir)
 	}
 	return gitDir, commonGitDir, nil
@@ -90,6 +93,9 @@ func resolveCommonGitDir(gitDir string) (string, error) {
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", err
+	}
+	if commonGitDir == gitDir {
+		return commonGitDir, nil
 	}
 	return commonGitDir, validateResolvedGitDir(commonGitDir)
 }
@@ -354,20 +360,16 @@ func applyLooseGitRefCAS(ctx context.Context, commonGitDir, gitDir string, write
 			}
 		}
 	}
-	madeDirs := make(map[string]bool, len(sorted))
+	madeDirs := make(map[string]bool, len(sorted)*4)
 	for _, w := range sorted {
 		if err := ctx.Err(); err != nil {
 			cleanup()
 			return err
 		}
 		refPath := filepath.Join(commonGitDir, filepath.FromSlash(w.dstRef))
-		dir := filepath.Dir(refPath)
-		if !madeDirs[dir] {
-			if err := os.MkdirAll(dir, 0o750); err != nil {
-				cleanup()
-				return err
-			}
-			madeDirs[dir] = true
+		if err := ensureRefParentDirs(commonGitDir, w.dstRef, madeDirs); err != nil {
+			cleanup()
+			return err
 		}
 		lockPath := refPath + ".lock"
 		f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
@@ -415,6 +417,24 @@ func applyLooseGitRefCAS(ctx context.Context, commonGitDir, gitDir string, write
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func ensureRefParentDirs(commonGitDir, dstRef string, madeDirs map[string]bool) error {
+	parts := strings.Split(strings.TrimPrefix(dstRef, "/"), "/")
+	cur := commonGitDir
+	for _, seg := range parts[:len(parts)-1] {
+		cur = filepath.Join(cur, seg)
+		if madeDirs[cur] {
+			continue
+		}
+		if seg != "refs" {
+			if err := os.Mkdir(cur, 0o750); err != nil && !errors.Is(err, os.ErrExist) {
+				return err
+			}
+		}
+		madeDirs[cur] = true
 	}
 	return nil
 }

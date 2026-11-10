@@ -115,13 +115,27 @@ func (pr *Promoter) Preview(_ context.Context, req PreviewRequest) (*PromotionPr
 	}
 
 	targetObs := make(map[string]TargetObservation, len(m.Entries))
+	observedByTarget := make(map[string]TargetObservation, len(m.SourceObservations)+len(m.Entries))
+	observeCached := func(qpath layeredfs.QualifiedPath) (TargetObservation, error) {
+		cacheKey := pr.cfg.TargetRoots[qpath.RootID] + "\x00" + qpath.Rel
+		if cur, ok := observedByTarget[cacheKey]; ok {
+			cur.Path = qpath
+			return cur, nil
+		}
+		cur, err := pr.targets.observeTarget(qpath)
+		if err != nil {
+			return TargetObservation{}, err
+		}
+		observedByTarget[cacheKey] = cur
+		return cur, nil
+	}
 	var warnings []string
 	var planned []PlannedChange
 	var conflicts []PromotionConflict
 	requiresVerify := false
 
 	for _, obs := range m.SourceObservations {
-		cur, err := pr.targets.observeTarget(obs.Path)
+		cur, err := observeCached(obs.Path)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +147,7 @@ func (pr *Promoter) Preview(_ context.Context, req PreviewRequest) (*PromotionPr
 
 	groupPrimary := make(map[string]layeredfs.QualifiedPath)
 	for _, entry := range m.Entries {
-		cur, err := pr.targets.observeTarget(entry.Path)
+		cur, err := observeCached(entry.Path)
 		if err != nil {
 			return nil, err
 		}

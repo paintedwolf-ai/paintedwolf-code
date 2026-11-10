@@ -61,6 +61,8 @@ type Transaction struct {
 	origins       map[string]layeredfs.QualifiedPath
 	slots         map[string]string
 	locations     map[string]string
+	resolvedPaths map[string]string
+	appliedInTxn  map[layeredfs.QualifiedPath]targetImage
 	freshCaptures map[layeredfs.QualifiedPath]targetImage
 	keepOriginals bool
 	closed        bool
@@ -162,6 +164,7 @@ func newTransaction(cfg TransactionConfig, journal transactionJournal) *Transact
 		cfg: cfg, dir: cfg.Dir, journal: journal, index: index,
 		targets: &promotionTargets{roots: roots},
 		origins: map[string]layeredfs.QualifiedPath{}, slots: map[string]string{}, locations: map[string]string{},
+		resolvedPaths: map[string]string{}, appliedInTxn: map[layeredfs.QualifiedPath]targetImage{},
 	}
 }
 
@@ -259,6 +262,11 @@ func (txn *Transaction) mutateTargets(ctx context.Context, changes []PlannedChan
 			if err := txn.targets.applyPlannedChange(change); err != nil {
 				return err
 			}
+			if txn.cfg.Reached == nil && fault == nil && change.Action == ActionWriteRegular {
+				if idx, ok := txn.index[change.Path]; ok {
+					txn.appliedInTxn[change.Path] = txn.journal.Targets[idx].After
+				}
+			}
 		}
 		if err := txn.reach(StepTargetMutated, pathKey(change.Path)); err != nil {
 			return err
@@ -277,6 +285,11 @@ func (txn *Transaction) mutateTargets(ctx context.Context, changes []PlannedChan
 func (txn *Transaction) verifyRecorded(change PlannedChange, hasFault bool) (bool, error) {
 	if change.Action == ActionNoop || change.Action == ActionMkdir {
 		return false, nil
+	}
+	if idx, known := txn.index[change.Path]; known && txn.cfg.Reached == nil && !hasFault && change.Action == ActionWriteRegular {
+		if prevAfter, ok := txn.appliedInTxn[change.Path]; ok && sameTarget(prevAfter, txn.journal.Targets[idx].After) {
+			return true, nil
+		}
 	}
 	current, cached := txn.freshCaptures[change.Path]
 	if cached && txn.cfg.Reached == nil && !hasFault {
@@ -466,16 +479,15 @@ func mergeRoots(current, added map[string]string) map[string]string {
 // whatever alias a later stage uses, so a file reached under two IDs has one before-image.
 func (txn *Transaction) canonicalChanges(changes []PlannedChange) []PlannedChange {
 	canonical := map[string]string{}
-	resolvedByPath := map[string]string{}
 	for _, id := range slices.Sorted(maps.Keys(txn.targets.roots)) {
 		rawPath := txn.targets.roots[id]
-		location, ok := resolvedByPath[rawPath]
+		location, ok := txn.resolvedPaths[rawPath]
 		if !ok {
 			location = rawPath
 			if resolved, err := filepath.EvalSymlinks(rawPath); err == nil {
 				location = resolved
 			}
-			resolvedByPath[rawPath] = location
+			txn.resolvedPaths[rawPath] = location
 		}
 		if _, seen := txn.locations[location]; !seen {
 			txn.locations[location] = id
