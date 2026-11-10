@@ -17,6 +17,9 @@ func Command(
 	args []string,
 	c Confinement,
 ) (*exec.Cmd, func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, func() {}, err
+	}
 	if IsHelperInvocation(os.Args) {
 		return nil, func() {}, ErrNestedHelper
 	}
@@ -33,6 +36,9 @@ func Command(
 		}
 		profile, err = renderProfile(c)
 		if err != nil {
+			return nil, func() {}, err
+		}
+		if err := ctx.Err(); err != nil {
 			return nil, func() {}, err
 		}
 	}

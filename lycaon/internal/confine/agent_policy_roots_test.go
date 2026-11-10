@@ -113,3 +113,26 @@ func TestAgentPolicySourceReleasePreservesCurrentFloor(t *testing.T) {
 	}
 	releaseCurrent()
 }
+
+func TestAgentPolicySpecsResolveSymlinkAndDanglingSymlinkPolicyDirs(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	root := t.TempDir()
+	extDir := t.TempDir()
+	danglingTarget := filepath.Join(t.TempDir(), "missing-agents-target")
+	testutil.FailErr(t, "symlink .paintedwolf", os.Symlink(extDir, filepath.Join(root, ".paintedwolf")))
+	testutil.FailErr(t, "dangling symlink .agents", os.Symlink(danglingTarget, filepath.Join(root, ".agents")))
+
+	c := confine.Confinement{Roots: []string{root, extDir}, Network: confine.NetworkDeny}
+	_, err := confine.BuildSeatbeltProfile(c)
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
+	boundary := confine.BoundaryOf(&c)
+
+	resolvedSettings := filepath.Join(fspath.CanonicalPath(extDir), "settings.json")
+	if got := boundary.Filesystem.Verdict(confine.AccessWrite, resolvedSettings); got.Allowed || got.Layer != confine.FloorAgentPolicy {
+		t.Fatalf("symlinked .paintedwolf/settings.json write verdict = %+v, want FloorAgentPolicy", got)
+	}
+	resolvedDanglingSkills := filepath.Join(fspath.CanonicalPath(danglingTarget), "skills", "SKILL.md")
+	if got := boundary.Filesystem.Verdict(confine.AccessWrite, resolvedDanglingSkills); got.Allowed || got.Layer != confine.FloorAgentPolicy {
+		t.Fatalf("dangling .agents/skills write verdict = %+v, want FloorAgentPolicy", got)
+	}
+}

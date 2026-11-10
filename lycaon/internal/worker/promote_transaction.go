@@ -53,6 +53,9 @@ func jobIDFromPromoteTransactionID(id string) (string, bool) {
 }
 
 func (tx *promoteTransaction) apply(ctx context.Context, promote PromoteRoots, task *api.WorkerTask) error {
+	if len(tx.plans) == 0 {
+		return nil
+	}
 	for _, plan := range tx.plans {
 		if err := context.Cause(ctx); err != nil {
 			return errors.Join(err, tx.txn.Rollback(context.WithoutCancel(ctx)))

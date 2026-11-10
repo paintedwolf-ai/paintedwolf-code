@@ -142,7 +142,11 @@ func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID 
 		s.Captures.RecordPromotedPrimaryPaths(ctx, sessionID, promoteMutationPaths(plans))
 	}
 	promote := PromoteRootsForTask(task, roots)
-	tx, err := beginPromoteTransaction(s.hostDataDirFor(task), overlayID, plans)
+	stage1Plans := plans
+	if assessment.checkpointID != "" {
+		stage1Plans = resolutionPlans
+	}
+	tx, err := beginPromoteTransaction(s.hostDataDirFor(task), overlayID, stage1Plans)
 	if err != nil {
 		return api.WorkerMergeResult{}, errors.Join(err, revertPending())
 	}

@@ -125,6 +125,7 @@ func TestCaptureTargetSinglePassPreservesHeldIdentityLinksXattrsAndOriginals(t *
 	linkPath := filepath.Join(primary, "sym")
 	dirPath := filepath.Join(primary, "sub")
 	testutil.FailErr(t, "seed a.txt", os.WriteFile(pathA, []byte("hello-single-pass\n"), 0o640))
+	testutil.FailErr(t, "set xattr a.txt", ApplyPathXattrs(pathA, map[string][]byte{"user.capture": []byte("xattr-val")}))
 	testutil.FailErr(t, "hardlink b.txt", os.Link(pathA, pathB))
 	testutil.FailErr(t, "symlink", os.Symlink("a.txt", linkPath))
 	testutil.FailErr(t, "mkdir sub", os.MkdirAll(dirPath, 0o750))
@@ -143,6 +144,9 @@ func TestCaptureTargetSinglePassPreservesHeldIdentityLinksXattrsAndOriginals(t *
 	testutil.FailErr(t, "capture b.txt", err)
 	if imgA.Kind != layeredfs.EntryRegular || imgA.Mode != 0o640 || imgA.links != 2 || imgA.identity == "" {
 		t.Fatalf("unexpected regular target image: %+v", imgA)
+	}
+	if string(imgA.Xattrs["user.capture"]) != "xattr-val" || string(imgB.Xattrs["user.capture"]) != "xattr-val" {
+		t.Fatalf("expected user.capture xattr preserved on hardlink peers: a=%+v b=%+v", imgA.Xattrs, imgB.Xattrs)
 	}
 	if imgA.identity != imgB.identity || imgA.HardLinkGroup != imgB.HardLinkGroup || imgA.SHA256 != imgB.SHA256 {
 		t.Fatalf("hardlink peers diverged: a=%+v b=%+v", imgA, imgB)
@@ -169,5 +173,15 @@ func TestCaptureTargetSinglePassPreservesHeldIdentityLinksXattrsAndOriginals(t *
 	testutil.FailErr(t, "capture absent", err)
 	if imgAbsent.Kind != layeredfs.EntryAbsent {
 		t.Fatalf("unexpected absent target image: %+v", imgAbsent)
+	}
+
+	// Verify single-pass captureTarget detects stale preview target drift before mutation.
+	stalePrimary := t.TempDir()
+	_, promoter, preview := publishManyChanges(t, stalePrimary, 2)
+	testutil.FailErr(t, "mutate f00.txt after preview", os.WriteFile(filepath.Join(stalePrimary, "f00.txt"), []byte("drifted\n"), 0o640))
+	staleTxn, err := BeginTransaction(TransactionConfig{Dir: filepath.Join(t.TempDir(), "tx-stale"), ID: "stale"})
+	testutil.FailErr(t, "begin stale txn", err)
+	if _, err := staleTxn.ApplyCheckpoint(t.Context(), promoter, ApplyRequest{Preview: preview}); !errors.Is(err, ErrStalePreviewTargetChanged) {
+		t.Fatalf("ApplyCheckpoint with drifted target = %v, want ErrStalePreviewTargetChanged", err)
 	}
 }
