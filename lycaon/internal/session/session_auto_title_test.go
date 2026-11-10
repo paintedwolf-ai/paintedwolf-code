@@ -22,7 +22,6 @@ import (
 func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
@@ -83,7 +82,6 @@ func TestAutoTitleSessionIdempotentOnReplay(t *testing.T) {
 func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
@@ -136,7 +134,6 @@ func TestPublishSessionTitleUsesStoreStatus(t *testing.T) {
 func TestAutoNameProjectSkipsNonDraft(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	ctx := context.Background()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(ctx, project.CreateParams{
@@ -200,7 +197,6 @@ func (*blockingNamingLLM) Profile() providerprofile.Profile { return providerpro
 func TestKickPromptCurationDoesNotBlockOnNaming(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "")
 	ctx := context.Background()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
@@ -352,7 +348,6 @@ func TestAcceptedWorkflowRequestCurationSurvivesInitiatingTurnCancellation(t *te
 func TestEngineShutdownCancelsAndDrainsDetachedNaming(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "")
 	ctx := t.Context()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(ctx, project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create project", err)

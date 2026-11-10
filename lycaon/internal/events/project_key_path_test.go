@@ -12,7 +12,6 @@ import (
 
 // TestScopeLookupResolvesRootPath covers root-path event scopes.
 func TestScopeLookupResolvesRootPath(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
@@ -37,7 +36,6 @@ func TestScopeLookupResolvesRootPath(t *testing.T) {
 
 // TestPathKeyedPublishReachesProjectSubscriber covers path-to-ID routing.
 func TestPathKeyedPublishReachesProjectSubscriber(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
@@ -65,7 +63,6 @@ func TestPathKeyedPublishReachesProjectSubscriber(t *testing.T) {
 
 // TestPathKeyedPublishStaysOutOfOtherProjects covers project isolation.
 func TestPathKeyedPublishStaysOutOfOtherProjects(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	mine, err := project.CreateWithRoot(ctx, reg, t.TempDir())
@@ -91,7 +88,6 @@ func TestPathKeyedPublishStaysOutOfOtherProjects(t *testing.T) {
 
 // TestResolveProjectDirAcceptsPath covers path-to-root resolution.
 func TestResolveProjectDirAcceptsPath(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())

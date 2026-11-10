@@ -8,42 +8,30 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/detectionpack"
-	"github.com/lycaon/lycaon/internal/project"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// The project-open deny prefixes refuse a directory as a project root; the confine
-// credential-store list refuses a confined command's reads and writes. On drift, a
-// store refused as a root stays readable once $HOME is attached. Confine is the
-// source of truth: it is the list the sandbox enforces per action.
-func TestProjectOpenPolicyCoversEveryCredentialStore(t *testing.T) {
+// The execution-boundary write-root refusal predicate covers every key-material
+// and catalogued credential store path under $HOME.
+func TestWriteRootRefusalCoversEveryCredentialStore(t *testing.T) {
 	t.Parallel()
 	home, err := os.UserHomeDir()
 	if err != nil || strings.TrimSpace(home) == "" {
 		t.Skip("no home directory; both lists are home-relative")
 	}
 
-	// The loader expands "~/" to an absolute path, so compare in that space.
-	policy := project.DefaultOpenPolicy()
-	denied := make(map[string]bool, len(policy.DenyPathPrefixes))
-	for _, p := range policy.DenyPathPrefixes {
-		denied[filepath.Clean(strings.TrimSpace(p))] = true
-	}
-
 	for _, rel := range confine.KeyMaterialHomeRelPaths() {
-		if !denied[filepath.Join(home, rel)] {
-			t.Errorf("key material %q is denied to confined commands but is not a project-open deny prefix; add %q to config/packs/painted-wolf/platform/host/project-policy.yaml", rel, "~/"+rel)
+		abs := filepath.Join(home, rel)
+		if refused, _ := confine.AttachedWriteRootRefused(abs); !refused {
+			t.Errorf("key material %q is not refused by AttachedWriteRootRefused", rel)
 		}
 	}
-	// Catalogued credential stores answer the same question from the pack. Root
-	// attach has no ladder behind it, so a store the pack names has to be refused as
-	// a project root exactly like the floor is.
 	stores, err := detectionpack.BundledCredentialStorePaths()
 	contractcheck.FailErr(t, "BundledCredentialStorePaths", err)
 	for _, rel := range stores {
 		abs := filepath.Join(home, strings.TrimPrefix(strings.TrimPrefix(rel, "~/"), "/"))
 		if refused, _ := confine.AttachedWriteRootRefused(abs); !refused {
-			t.Errorf("credential store %q is catalogued but attachable as a project root; nothing asks behind that door", rel)
+			t.Errorf("credential store %q is catalogued but not refused by AttachedWriteRootRefused", rel)
 		}
 	}
 }

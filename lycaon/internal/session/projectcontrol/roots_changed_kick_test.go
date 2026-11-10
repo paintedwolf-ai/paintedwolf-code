@@ -22,7 +22,6 @@ import (
 )
 
 func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	reg := project.NewMemoryRegistry()
 	apiDir, webDir, docsDir := t.TempDir(), t.TempDir(), t.TempDir()
@@ -203,7 +202,6 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 }
 
 func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	reg := project.NewMemoryRegistry()
 	projectDir := t.TempDir()

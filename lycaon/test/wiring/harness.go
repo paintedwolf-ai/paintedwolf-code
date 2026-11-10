@@ -60,7 +60,6 @@ type Harness struct {
 // BuildForTest constructs a production-parity server via app.Build with test defaults.
 func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	t.Setenv("LYCAON_API_TOKEN", api.TestAPIToken)
 	t.Setenv("LYCAON_TEST", "1")
@@ -149,7 +148,6 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 		testutil.FailErr(t, "close test app", sa.Close())
 		_ = db.RemoveStore(dbPath)
 	})
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	if o.replaceManifests != nil {
 		sa.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)

@@ -27,7 +27,6 @@ func elevatedTestHandler(t *testing.T) (*Handler, *wire.Session) {
 	approvals, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "create approvals", err)
 	sessions := store.NewMemory()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	projects := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), projects, t.TempDir())
 	testutil.FailErr(t, "create project", err)

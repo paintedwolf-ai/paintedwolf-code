@@ -64,7 +64,6 @@ func TestHandleCostSummarySessionBreakdown(t *testing.T) {
 }
 
 func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	tracker := costtest.NewTracker(t, nil)
 	store := store.NewMemory()
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: tracker}, tools.NewStubRegistry())
@@ -107,7 +106,6 @@ func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
 }
 
 func TestHandleProjectCostReportIncludesSessionBreakdownAndArchivedChats(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "cost-report.db")
 	tracker := &contractfixture.ProjectReportCountingTracker{CostTracker: cost.NewSQLTracker(sqlDB, nil)}
 	memStore := store.NewSQL(sqlDB)
