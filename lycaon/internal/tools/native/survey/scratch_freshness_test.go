@@ -9,14 +9,19 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 func TestScratchSurveySeesWritesAfterEmptyInventory(t *testing.T) {
@@ -218,4 +223,257 @@ func TestAttachedControlPlaneRootSurveyWithWarmCatalogDeniesStateAndAdmitsScratc
 func isSurveyControlPlaneReject(err error) bool {
 	var reject *toolrejection.ToolReject
 	return errors.As(err, &reject) && reject.Code == isolation.CodeControlPlaneDenied
+}
+
+func TestReadToolExactApprovedNativeReadsAndProtectedFloor(t *testing.T) {
+	previousKeyMaterial := confine.KeyMaterialWritePaths()
+	confine.SetKeyMaterialPathsSource(func() []string {
+		return []string{"~/.ssh/", "~/.gnupg/", "~/.age/"}
+	})
+	t.Cleanup(func() {
+		if len(previousKeyMaterial) == 0 {
+			confine.SetKeyMaterialPathsSource(nil)
+			return
+		}
+		confine.SetKeyMaterialPathsSource(func() []string { return previousKeyMaterial })
+	})
+	home := t.TempDir()
+	cfgDir := t.TempDir()
+	proj := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
+	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")
+
+	sshDir := filepath.Join(home, ".ssh")
+	testutil.FailErr(t, "mkdir .ssh", os.MkdirAll(sshDir, 0o700))
+	idEd25519 := filepath.Join(sshDir, "id_ed25519")
+	idEd25519Pub := filepath.Join(sshDir, "id_ed25519.pub")
+	idRSA := filepath.Join(sshDir, "id_rsa")
+	readme := filepath.Join(home, "README.md")
+	testutil.FailErr(t, "write id_ed25519", os.WriteFile(idEd25519, []byte("ssh-ed25519-private-needle\n"), 0o600))
+	testutil.FailErr(t, "write id_ed25519.pub", os.WriteFile(idEd25519Pub, []byte("ssh-ed25519-public-needle\n"), 0o600))
+	testutil.FailErr(t, "write id_rsa", os.WriteFile(idRSA, []byte("ssh-rsa-private-needle\n"), 0o600))
+	testutil.FailErr(t, "write README.md", os.WriteFile(readme, []byte("# home readme\n"), 0o600))
+
+	apiToken := filepath.Join(cfgDir, "api.token")
+	settingsYAML := filepath.Join(cfgDir, "settings.yaml")
+	testutil.FailErr(t, "write api.token", os.WriteFile(apiToken, []byte("control-plane-token-needle\n"), 0o600))
+	testutil.FailErr(t, "write settings.yaml", os.WriteFile(settingsYAML, []byte("model: control-plane-needle\n"), 0o600))
+
+	dirs, err := scratch.New(cfgDir).Ensure("sess-1")
+	testutil.FailErr(t, "ensure sess-1 scratch", err)
+	otherDirs, err := scratch.New(cfgDir).Ensure("other-sess")
+	testutil.FailErr(t, "ensure other-sess scratch", err)
+	otherSecret := filepath.Join(otherDirs.Scratch, "secret.txt")
+	testutil.FailErr(t, "write other-sess secret", os.WriteFile(otherSecret, []byte("other-scratch-secret\n"), 0o600))
+
+	baseTC := func(root string) tools.ToolContext {
+		tc := nativefixture.Context(root)
+		tc.Host.SessionScratchDir = dirs.Scratch
+		tc.Host.SessionOutputDir = dirs.Output
+		return tc
+	}
+	homeTC := baseTC(home)
+	projTC := baseTC(proj)
+	cfgTC := baseTC(cfgDir)
+
+	catalog := sourcecatalog.New()
+	homeCatRoot := sourcecatalog.Root{ID: homeTC.Source.Roots[0].ID, Path: home}
+	_, err = catalog.Observe(t.Context(), homeTC.Identity.ProjectID, []sourcecatalog.Root{homeCatRoot})
+	testutil.FailErr(t, "warm human catalog on home", err)
+
+	boundary := nativefixture.Boundary(t)
+	reader := &ReadTool{Boundary: boundary, Catalog: catalog}
+	wcTool := &WcTool{Boundary: boundary, Catalog: catalog}
+	statTool := &StatTool{Boundary: boundary, Catalog: catalog}
+	finder := &FindTool{Boundary: boundary, Catalog: catalog}
+	listing := &ListDirTool{Boundary: boundary, Catalog: catalog}
+	grepper := &GrepTool{Boundary: boundary, Catalog: catalog}
+
+	expectDenied := func(t *testing.T, desc string, tc tools.ToolContext, target string) {
+		t.Helper()
+		if out, err := reader.Run(t.Context(), map[string]any{"path": target}, tc); err == nil {
+			t.Fatalf("%s: read(%q) unexpectedly succeeded: %s", desc, target, out)
+		}
+		if out, err := wcTool.Run(t.Context(), map[string]any{"paths": []any{target}}, tc); err == nil {
+			t.Fatalf("%s: wc(%q) unexpectedly succeeded: %s", desc, target, out)
+		}
+		if out, err := statTool.Run(t.Context(), map[string]any{"paths": []any{target}}, tc); err == nil {
+			t.Fatalf("%s: stat(%q) unexpectedly succeeded: %s", desc, target, out)
+		}
+	}
+
+	expectAllowed := func(t *testing.T, desc string, tc tools.ToolContext, target, wantSubstr string) {
+		t.Helper()
+		out, err := reader.Run(t.Context(), map[string]any{"path": target}, tc)
+		if err != nil {
+			t.Fatalf("%s: read(%q) failed: %v", desc, target, err)
+		}
+		if !strings.Contains(out, wantSubstr) {
+			t.Fatalf("%s: read(%q) = %s, missing %q", desc, target, out, wantSubstr)
+		}
+		if _, err := wcTool.Run(t.Context(), map[string]any{"paths": []any{target}}, tc); err != nil {
+			t.Fatalf("%s: wc(%q) failed: %v", desc, target, err)
+		}
+		if _, err := statTool.Run(t.Context(), map[string]any{"paths": []any{target}}, tc); err != nil {
+			t.Fatalf("%s: stat(%q) failed: %v", desc, target, err)
+		}
+	}
+
+	// 1. Unapproved reads refused (both in attached home root and external from proj root).
+	expectDenied(t, "unapproved relative in home", homeTC, ".ssh/id_ed25519")
+	expectDenied(t, "unapproved abs in home", homeTC, idEd25519)
+	expectDenied(t, "unapproved external from proj", projTC, idEd25519)
+
+	// 2. Exact one-shot read approval (ApprovedFileAccess with Write: false, Tree: false) succeeds.
+	oneShotHome := homeTC
+	oneShotHome.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: idEd25519, Write: false}}
+	expectAllowed(t, "one-shot relative in home", oneShotHome, ".ssh/id_ed25519", "ssh-ed25519-private-needle")
+	expectAllowed(t, "one-shot abs in home", oneShotHome, idEd25519, "ssh-ed25519-private-needle")
+
+	oneShotProj := projTC
+	oneShotProj.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: idEd25519, Write: false}}
+	expectAllowed(t, "one-shot external from proj", oneShotProj, idEd25519, "ssh-ed25519-private-needle")
+
+	// 3a. Exact session read approval via SessionReadPaths succeeds.
+	sessHome := homeTC
+	sessHome.Files.SessionReadPaths = []string{idEd25519}
+	expectAllowed(t, "session read path relative in home", sessHome, ".ssh/id_ed25519", "ssh-ed25519-private-needle")
+	expectAllowed(t, "session read path abs in home", sessHome, idEd25519, "ssh-ed25519-private-needle")
+
+	sessProj := projTC
+	sessProj.Files.SessionReadPaths = []string{idEd25519}
+	expectAllowed(t, "session read path external from proj", sessProj, idEd25519, "ssh-ed25519-private-needle")
+
+	// 3b. Exact session read approval via SetGrantedAccessSource succeeds, and revocation refuses again.
+	canonEd25519 := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(idEd25519)))
+	release := projectpaths.SetGrantedAccessSource(func(_, _, abs string, write bool) (projectpaths.Access, bool) {
+		if !write && abs == canonEd25519 {
+			return projectpaths.Access{Path: canonEd25519, Tree: false}, true
+		}
+		return projectpaths.Access{}, false
+	})
+	expectAllowed(t, "granted access source relative in home", homeTC, ".ssh/id_ed25519", "ssh-ed25519-private-needle")
+	expectAllowed(t, "granted access source external from proj", projTC, idEd25519, "ssh-ed25519-private-needle")
+	release()
+
+	// 8. Revoked grant refused again.
+	expectDenied(t, "revoked granted access source in home", homeTC, ".ssh/id_ed25519")
+	expectDenied(t, "revoked granted access source from proj", projTC, idEd25519)
+
+	// 4. Sibling files and whole-tree discovery (list_dir, find, grep, recursive wc, directory stat)
+	// remain denied even while id_ed25519 is approved!
+	approvedTC := homeTC
+	approvedTC.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: idEd25519, Write: false}}
+	approvedTC.Files.SessionReadPaths = []string{idEd25519}
+	for _, sibling := range []string{".ssh/id_rsa", idRSA, ".ssh/id_ed25519.pub", idEd25519Pub} {
+		expectDenied(t, "sibling denied while id_ed25519 approved", approvedTC, sibling)
+	}
+	for _, dirTarget := range []string{".ssh", sshDir} {
+		expectDenied(t, "directory read/wc/stat denied while id_ed25519 approved", approvedTC, dirTarget)
+		if _, err := listing.Run(t.Context(), map[string]any{"path": dirTarget, "max_depth": 1, "include_hidden": true}, approvedTC); err == nil {
+			t.Fatalf("list_dir(%q) unexpectedly succeeded while only id_ed25519 was approved", dirTarget)
+		}
+		if _, err := finder.Run(t.Context(), map[string]any{"path": dirTarget, "include_hidden": true}, approvedTC); err == nil {
+			t.Fatalf("find(%q) unexpectedly succeeded while only id_ed25519 was approved", dirTarget)
+		}
+		if _, err := grepper.Run(t.Context(), map[string]any{"path": dirTarget, "pattern": "needle", "include_hidden": true}, approvedTC); err == nil {
+			t.Fatalf("grep(%q) unexpectedly succeeded while only id_ed25519 was approved", dirTarget)
+		}
+	}
+	findOut, err := finder.Run(t.Context(), map[string]any{"path": ".", "include_hidden": true}, approvedTC)
+	testutil.FailErr(t, "find(.) on homeTC with id_ed25519 approved", err)
+	if found := parseFindResponse(t, findOut); len(found.Results) != 1 || found.Results[0].Path != "README.md" {
+		t.Fatalf("find(.) on homeTC with id_ed25519 approved = %+v, want [README.md]", found.Results)
+	}
+	listOut, err := listing.Run(t.Context(), map[string]any{"path": ".", "max_depth": 2, "include_hidden": true}, approvedTC)
+	testutil.FailErr(t, "list_dir(.) on homeTC with id_ed25519 approved", err)
+	if listed := decodeListDirOut(t, listOut); len(listed.Entries) != 1 || listed.Entries[0].Name != "README.md" {
+		t.Fatalf("list_dir(.) on homeTC with id_ed25519 approved = %+v, want [README.md]", listed.Entries)
+	}
+	grepOut, err := grepper.Run(t.Context(), map[string]any{"path": ".", "pattern": "needle", "include_hidden": true}, approvedTC)
+	testutil.FailErr(t, "grep(.) on homeTC with id_ed25519 approved", err)
+	if matches := nativefixture.GrepMatches(t, grepOut); len(matches) != 0 {
+		t.Fatalf("grep(.) on homeTC with id_ed25519 approved leaked key-material matches: %+v", matches)
+	}
+
+	// 5. Wrong-target grant refused.
+	wrongGrantTC := homeTC
+	wrongGrantTC.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: idRSA, Write: false}}
+	wrongGrantTC.Files.SessionReadPaths = []string{idRSA}
+	expectDenied(t, "wrong-target grant in home", wrongGrantTC, ".ssh/id_ed25519")
+	expectDenied(t, "wrong-target grant abs in home", wrongGrantTC, idEd25519)
+
+	// 6. Write-only grant refused.
+	writeOnlyHome := homeTC
+	writeOnlyHome.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: idEd25519, Write: true}}
+	expectDenied(t, "write-only grant in home", writeOnlyHome, ".ssh/id_ed25519")
+	expectDenied(t, "write-only grant abs in home", writeOnlyHome, idEd25519)
+
+	writeOnlyProj := projTC
+	writeOnlyProj.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: idEd25519, Write: true}}
+	expectDenied(t, "write-only grant external from proj", writeOnlyProj, idEd25519)
+
+	// 7. Tree grant on protected directory or file refused.
+	canonSSHDir := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(sshDir)))
+	treeGrantHome := homeTC
+	treeGrantHome.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{
+		{Path: sshDir, Write: false, Tree: true},
+		{Path: idEd25519, Write: false, Tree: true},
+	}
+	treeGrantHome.Files.SessionReadPaths = []string{sshDir}
+	releaseTree := projectpaths.SetGrantedAccessSource(func(_, _, _ string, _ bool) (projectpaths.Access, bool) {
+		return projectpaths.Access{Path: canonSSHDir, Tree: true}, true
+	})
+	expectDenied(t, "tree grant in home (.ssh/id_ed25519)", treeGrantHome, ".ssh/id_ed25519")
+	expectDenied(t, "tree grant in home (abs id_ed25519)", treeGrantHome, idEd25519)
+	expectDenied(t, "tree grant in home (.ssh dir)", treeGrantHome, ".ssh")
+	expectDenied(t, "tree grant external from proj", projTC, idEd25519)
+	releaseTree()
+
+	// 9. Control-plane state remains unconditionally denied with SANDBOX_CONTROL_PLANE_DENIED even with grants.
+	for _, cpTarget := range []string{apiToken, settingsYAML, otherSecret} {
+		canonCP := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(cpTarget)))
+		releaseCP := projectpaths.SetGrantedAccessSource(func(_, _, _ string, _ bool) (projectpaths.Access, bool) {
+			return projectpaths.Access{Path: canonCP, Tree: false}, true
+		})
+		for _, base := range []struct {
+			name       string
+			tc         tools.ToolContext
+			allowInval bool
+		}{
+			{name: "projTC", tc: projTC},
+			{name: "homeTC", tc: homeTC},
+			{name: "cfgTC", tc: cfgTC, allowInval: true},
+		} {
+			tc := base.tc
+			tc.Files.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: cpTarget, Write: false}}
+			tc.Files.SessionReadPaths = []string{cpTarget}
+			for _, check := range []func() error{
+				func() error {
+					_, err := reader.Run(t.Context(), map[string]any{"path": cpTarget}, tc)
+					return err
+				},
+				func() error {
+					_, err := wcTool.Run(t.Context(), map[string]any{"paths": []any{cpTarget}}, tc)
+					return err
+				},
+				func() error {
+					_, err := statTool.Run(t.Context(), map[string]any{"paths": []any{cpTarget}}, tc)
+					return err
+				},
+			} {
+				err := check()
+				var reject *toolrejection.ToolReject
+				if err == nil || !errors.As(err, &reject) {
+					t.Fatalf("%s: control-plane read %q with grant returned err=%v, want ToolReject", base.name, cpTarget, err)
+				}
+				if reject.Code != isolation.CodeControlPlaneDenied && !(base.allowInval && reject.Code == "SANDBOX_CAPABILITY_REQUEST_INVALID") {
+					t.Fatalf("%s: control-plane read %q with grant returned code=%s, want %s", base.name, cpTarget, reject.Code, isolation.CodeControlPlaneDenied)
+				}
+			}
+		}
+		releaseCP()
+	}
 }

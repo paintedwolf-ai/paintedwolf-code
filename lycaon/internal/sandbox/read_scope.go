@@ -60,11 +60,13 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 		if !inventoryPathWithinRoot(root, relSlash) {
 			return false
 		}
-		if overlapsFloor {
-			clean := strings.TrimPrefix(filepath.Clean(filepath.FromSlash(strings.TrimSpace(relSlash))), "."+string(filepath.Separator))
-			if confine.ControlPlanePathDenied(filepath.Join(root, clean), false, effScratch, effOutput) {
-				return false
-			}
+		clean := strings.TrimPrefix(filepath.Clean(filepath.FromSlash(strings.TrimSpace(relSlash))), "."+string(filepath.Separator))
+		targetAbs := filepath.Join(root, clean)
+		if overlapsFloor && confine.ControlPlanePathDenied(targetAbs, false, effScratch, effOutput) {
+			return false
+		}
+		if confine.IsAgentSourceReadDenied(root, targetAbs, effScratch, effOutput) {
+			return false
 		}
 		if len(globs) == 0 || matchAnyGlob(globs, relSlash) {
 			return true

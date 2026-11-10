@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -36,6 +37,10 @@ type findWalkParams struct {
 }
 
 func (t *FindTool) walkFindTree(p findWalkParams) error {
+	p.ctx = sandbox.WithSessionDirs(p.ctx, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir)
+	if confine.IsAgentSourceReadDenied(p.root.Path, p.fullRoot, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir) {
+		return nil
+	}
 	if strings.TrimSpace(p.tctx.Source.WorkerBranchRoot) != "" {
 		return t.walkFindTreeSurvey(p)
 	}
@@ -44,6 +49,10 @@ func (t *FindTool) walkFindTree(p findWalkParams) error {
 		return err
 	}
 	return inventory.walk(p.ctx, func(entry sourcecatalog.Entry) sourcecatalog.WalkStep {
+		abs := filepath.Join(p.root.Path, filepath.FromSlash(entry.Path))
+		if confine.IsAgentSourceReadDenied(p.root.Path, abs, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir) {
+			return sourcecatalog.WalkSkip
+		}
 		if p.readFilter != nil && !p.readFilter(entry.Path, entry.IsDir) {
 			if entry.IsDir {
 				return sourcecatalog.WalkSkip
@@ -62,7 +71,6 @@ func (t *FindTool) walkFindTree(p findWalkParams) error {
 		}
 		info := catalogFileInfo{entry: entry}
 		if t.matchesEntry(entry.Path, p.nameFilter, p.entryType, info) {
-			abs := filepath.Join(p.root.Path, filepath.FromSlash(entry.Path))
 			p.collect(makeFindResult(projectpaths.QualifyAbs(p.tctx, p.root, abs), info))
 		}
 		return sourcecatalog.WalkContinue
@@ -70,8 +78,15 @@ func (t *FindTool) walkFindTree(p findWalkParams) error {
 }
 
 func (t *FindTool) walkFindTreeSurvey(p findWalkParams) error {
+	p.ctx = sandbox.WithSessionDirs(p.ctx, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir)
+	if confine.IsAgentSourceReadDenied(p.root.Path, p.fullRoot, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir) {
+		return nil
+	}
 	// Read globs prune directories, not file names.
 	admit := func(_, abs string, isDir bool) bool {
+		if confine.IsAgentSourceReadDenied(p.root.Path, abs, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir) {
+			return false
+		}
 		if !isDir {
 			return true
 		}

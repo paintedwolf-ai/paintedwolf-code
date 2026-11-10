@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -79,6 +80,9 @@ func (t *WcTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCo
 			return "", fmt.Errorf("wc %s: %w", relPath, err)
 		}
 		if info.IsDir() {
+			if confine.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
+				return "", &sandbox.ScopeError{Path: relPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
+			}
 			if !recursive {
 				return "", fmt.Errorf("wc %s: is a directory (set recursive: true to aggregate)", relPath)
 			}
@@ -157,6 +161,7 @@ func wcFileEntry(ctx context.Context, reads *projectpaths.ReadSession, relSlash,
 }
 
 func (t *WcTool) wcRecursiveDir(ctx context.Context, reads *projectpaths.ReadSession, tctx tools.ToolContext, root projectroot.RootRef, fullRoot, relRoot string, includeWords bool, drafts sourceview.DraftOverlay) (wcResult, error) {
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return t.wcRecursiveDirSurvey(ctx, reads, tctx, root, fullRoot, relRoot, includeWords)
 	}
@@ -174,6 +179,12 @@ func (t *WcTool) wcRecursiveDir(ctx context.Context, reads *projectpaths.ReadSes
 			return sourcecatalog.WalkContinue
 		}
 		abs := filepath.Join(root.Path, filepath.FromSlash(entry.Path))
+		if confine.IsAgentSourceReadDenied(root.Path, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
+			return sourcecatalog.WalkContinue
+		}
+		if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, entry.Path, tctx.ProfileID()) != nil {
+			return sourcecatalog.WalkContinue
+		}
 		if _, err := reads.Resolve(ctx, abs); err != nil {
 			return sourcecatalog.WalkContinue
 		}
@@ -239,8 +250,12 @@ func (t *WcTool) wcRecursiveDir(ctx context.Context, reads *projectpaths.ReadSes
 }
 
 func (t *WcTool) wcRecursiveDirSurvey(ctx context.Context, reads *projectpaths.ReadSession, tctx tools.ToolContext, root projectroot.RootRef, fullRoot, relRoot string, includeWords bool) (wcResult, error) {
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	var totals wcDirTotals
 	admit := func(_, abs string, isDir bool) bool {
+		if confine.IsAgentSourceReadDenied(root.Path, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
+			return false
+		}
 		if isDir {
 			return true
 		}

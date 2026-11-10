@@ -108,7 +108,7 @@ func TestExactReadGrantUnderAttachedProtectedRootPreservesFloorForSiblingsAndCon
 		confine.SetKeyMaterialPathsSource(func() []string { return prevKeys })
 	})
 
-	b := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "default"}})
+	b := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "default"}, {ID: "implement"}})
 	baseTC := tools.ToolContext{
 		Source: tools.InvocationSource{
 			Roots:        []projectroot.RootRef{{ID: "home", Label: "home", Path: home, IsPrimary: true}},
