@@ -5,7 +5,6 @@ package session_test
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
