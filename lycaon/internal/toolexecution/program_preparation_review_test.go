@@ -23,12 +23,12 @@ import (
 )
 
 // Preparation can read source bytes before the final producer is invoked.
-// A human reply cannot preserve an operation or branch removed during that wait.
+// A human reply cannot preserve authority withdrawn during that wait.
 func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
-	for _, name := range []string{"unchanged", "profile-withdrawn", "branch-unchanged", "branch-withdrawn"} {
+	for _, name := range []string{"unchanged", "profile-withdrawn", "branch-unchanged", "branch-withdrawn", "frame-closed"} {
 		t.Run(name, func(t *testing.T) {
 			parent, tc := frameFixture(t)
-			withdraw := name == "profile-withdrawn" || name == "branch-withdrawn"
+			withdraw := name == "profile-withdrawn" || name == "branch-withdrawn" || name == "frame-closed"
 			readRoot := tc.ActiveRootPath()
 			branch := &preparationBranch{}
 			retired := errors.New("fixture branch retired")
@@ -74,6 +74,9 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 				}
 				if !matched {
 					t.Fatal("read requirement absent from review")
+				}
+				if name == "frame-closed" {
+					frame.Close()
 				}
 				if name == "profile-withdrawn" {
 					profile.DenyTools = []string{"read"}
