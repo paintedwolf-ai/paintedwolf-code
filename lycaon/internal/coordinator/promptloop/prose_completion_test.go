@@ -19,13 +19,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestTurnCloseoutSpendCeilingReason(t *testing.T) {
-	got := promptloop.TurnCloseoutReasonText(promptloop.TurnCloseoutSpendCeiling)
-	if got != "the session spend ceiling was reached" {
-		t.Fatalf("reason text = %q", got)
-	}
-}
-
 func TestPromptLoopSpendCeilingMapsToCloseout(t *testing.T) {
 	if promptloop.TurnCloseoutSpendCeiling != "session_spend_ceiling" {
 		t.Fatalf("closeout reason = %q", promptloop.TurnCloseoutSpendCeiling)

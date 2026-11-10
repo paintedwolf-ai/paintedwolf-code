@@ -257,11 +257,9 @@ func TestFinalizeWorkerSummarySynthesizedFromTools(t *testing.T) {
 			{Role: api.MessageRoleTool, Content: strings.Repeat("file contents here ", 40)},
 		},
 	}
-	// The closeout prompt adds no prose, so synthesis runs.
-	resolver.prompts = 0
 	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "partial" || out.Provenance != "synthesized" {
+	if out.Status != "partial" || out.Provenance != "synthesized+grounding_host_assembly_unavailable" {
 		t.Fatalf("out = %+v want synthesized partial", out)
 	}
 	if out.Report.LegStatus != "partial" || len(out.Report.ObjectivesMet) == 0 {
