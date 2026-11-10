@@ -306,7 +306,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 	}, "")
 	testutil.FailErr(t, "CreateProvider p-survive", err)
 
-	// 1. Credential-only UpdateProvider crashing at "after_pending_write" (before mcp.yaml write).
+	// 1. Credential-only UpdateProvider crashing at "after_pending_write".
 	reg.Administration.crashHook = func(stage, op, id string) error {
 		if stage == "after_pending_write" && op == "update" && id == "p-survive" {
 			return errors.New("simulated crash after pending write")
@@ -322,9 +322,8 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 	reg = newReg()
 	assertProviderAndToken("p-survive", baseURL, "committed-token-v1")
 
-	// 2. Combined URL + token UpdateProvider crashing at "after_config_write" (after mcp.yaml is
-	// durably written with newURL, before Publish/Validate/commit), followed by recovery faults
-	// before and after writeOrRemoveUserMCPConfig during startup recovery.
+	// 2. Combined URL + token UpdateProvider crashing at "after_config_write",
+	// followed by recovery faults before and after writeOrRemoveUserMCPConfig.
 	reg.Administration.crashHook = func(stage, op, id string) error {
 		if stage == "after_config_write" && op == "update" && id == "p-survive" {
 			return errors.New("simulated crash after config write")
@@ -345,7 +344,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 		t.Fatalf("expected after_config_write crash to leave %q on disk:\n%s", uncommittedURL, string(midCrashYAML))
 	}
 
-	// 2a. Recovery fails at "before_recovery_config_write": PendingCommit must remain intact in vault.
+	// 2a. Recovery fails at "before_recovery_config_write": PendingCommit stays intact.
 	rFail1, err := NewRuntime(RuntimeOptions{StatePath: stateDir, GlobalOverridePath: globalPath, Connector: &MockConnector{}})
 	testutil.FailErr(t, "NewRuntime rFail1", err)
 	rFail1.Catalog.recoveryHook = func(stage, _ string) error {
@@ -358,7 +357,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 		t.Fatal("expected Catalog.Load to fail when before_recovery_config_write fails")
 	}
 
-	// 2b. Recovery writes restored mcp.yaml then crashes at "after_recovery_config_write_before_vault_restore".
+	// 2b. Recovery writes restored mcp.yaml then crashes before RestoreSnapshot.
 	rFail2, err := NewRuntime(RuntimeOptions{StatePath: stateDir, GlobalOverridePath: globalPath, Connector: &MockConnector{}})
 	testutil.FailErr(t, "NewRuntime rFail2", err)
 	rFail2.Catalog.recoveryHook = func(stage, _ string) error {
@@ -371,11 +370,11 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 		t.Fatal("expected Catalog.Load to fail at after_recovery_config_write_before_vault_restore")
 	}
 
-	// 2c. Subsequent restart completes vault restoration coherently (old URL + old token).
+	// 2c. Subsequent restart completes vault restoration coherently.
 	reg = newReg()
 	assertProviderAndToken("p-survive", baseURL, "committed-token-v1")
 
-	// 3. Invalid create and invalid update crashing at "before_file_rollback" and "after_file_rollback_before_cred_rollback".
+	// 3. Invalid create and invalid update crashing during rollback boundaries.
 	reg.Administration.crashHook = func(stage, _, _ string) error {
 		if stage == "before_file_rollback" {
 			return errors.New("simulated crash before file rollback")
@@ -421,7 +420,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 	reg = newReg()
 	assertProviderAndToken("p-survive", baseURL, "committed-token-v1")
 
-	// 4. Crash after config publication and Committed=true mark ("after_commit_mark") and "after_finalize".
+	// 4. Crash after Committed=true mark ("after_commit_mark") and "after_finalize".
 	reg.Administration.crashHook = func(stage, op, id string) error {
 		if stage == "after_commit_mark" && op == "update" && id == "p-survive" {
 			return errors.New("simulated crash after commit mark")
