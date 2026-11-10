@@ -1,11 +1,13 @@
 package worker
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/oswalk"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -82,7 +84,7 @@ func expandOverlayPromoteFilesFlat(workspaceRoot string, roots []string) ([]stri
 		abs := filepath.Join(workspaceRoot, filepath.FromSlash(raw))
 		info, err := os.Stat(abs)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 				continue
 			}
 			return nil, err
@@ -139,7 +141,7 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 		branchRel := raw
 		abs := filepath.Join(promote.BranchRoot, filepath.FromSlash(branchRel))
 		info, err := os.Stat(abs)
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 			if mapped, _, mErr := promote.BranchRel(primary.ID, raw); mErr == nil {
 				branchRel = mapped
 				abs = filepath.Join(promote.BranchRoot, filepath.FromSlash(branchRel))
@@ -147,7 +149,7 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 			}
 		}
 		if err != nil {
-			if os.IsNotExist(err) {
+			if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 				continue
 			}
 			return nil, err

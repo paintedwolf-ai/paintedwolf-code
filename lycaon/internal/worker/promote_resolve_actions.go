@@ -1,12 +1,14 @@
 package worker
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -134,7 +136,7 @@ func applyHunkResolutionsToBytes(data []byte, path string, hunks []api.WorkerPro
 func readOptionalPromoteFile(path string) ([]byte, bool, os.FileMode, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 			return nil, false, 0, nil
 		}
 		return nil, false, 0, err
