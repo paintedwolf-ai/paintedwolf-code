@@ -27,6 +27,7 @@ type FileUpdate struct {
 	Apply    func() error
 	Publish  func() error
 	Validate func() error
+	Rollback func() error
 }
 
 type fileLockEntry struct {
@@ -64,8 +65,17 @@ func UpdateFile(ctx context.Context, update FileUpdate) error {
 		return fmt.Errorf("catalog transaction snapshot: %w", err)
 	}
 	if err := update.Apply(); err != nil {
-		if rollbackErr := restoreCatalogFile(target, before, existed, update.Mode, update.DirMode); rollbackErr != nil {
-			return errors.Join(err, fmt.Errorf("catalog transaction rollback after write failure: %w", rollbackErr))
+		var sideRollbackErr error
+		if update.Rollback != nil {
+			sideRollbackErr = update.Rollback()
+		}
+		fileRollbackErr := restoreCatalogFile(target, before, existed, update.Mode, update.DirMode)
+		if sideRollbackErr != nil || fileRollbackErr != nil {
+			return errors.Join(
+				err,
+				wrapRollbackError("catalog transaction companion rollback after write failure", sideRollbackErr),
+				wrapRollbackError("catalog transaction rollback after write failure", fileRollbackErr),
+			)
 		}
 		return err
 	}
@@ -83,14 +93,31 @@ func UpdateFile(ctx context.Context, update FileUpdate) error {
 }
 
 func rollbackPublishedUpdate(cause error, update FileUpdate, target string, before []byte, existed bool) error {
-	rollbackErr := restoreCatalogFile(target, before, existed, update.Mode, update.DirMode)
-	if rollbackErr == nil && update.Publish != nil {
-		rollbackErr = update.Publish()
+	var sideRollbackErr error
+	if update.Rollback != nil {
+		sideRollbackErr = update.Rollback()
 	}
-	if rollbackErr != nil {
-		return errors.Join(cause, fmt.Errorf("catalog transaction rollback publication: %w", rollbackErr))
+	fileRollbackErr := restoreCatalogFile(target, before, existed, update.Mode, update.DirMode)
+	var publishRollbackErr error
+	if fileRollbackErr == nil && update.Publish != nil {
+		publishRollbackErr = update.Publish()
+	}
+	if sideRollbackErr != nil || fileRollbackErr != nil || publishRollbackErr != nil {
+		return errors.Join(
+			cause,
+			wrapRollbackError("catalog transaction companion rollback", sideRollbackErr),
+			wrapRollbackError("catalog transaction file rollback", fileRollbackErr),
+			wrapRollbackError("catalog transaction rollback publication", publishRollbackErr),
+		)
 	}
 	return cause
+}
+
+func wrapRollbackError(prefix string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", prefix, err)
 }
 
 func validateFileUpdate(update FileUpdate) (target, lockRoot string, err error) {

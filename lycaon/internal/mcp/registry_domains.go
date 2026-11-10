@@ -26,13 +26,15 @@ type ProviderCatalog struct {
 
 // ProviderAdministration owns provider overlay transactions.
 type ProviderAdministration struct {
-	mu          *sync.RWMutex
-	Calls       *ToolCalls
-	Catalog     *ProviderCatalog
-	Connections *ConnectionPool
-	Credentials *ProviderCredentials
-	Tools       *ToolDiscovery
-	onSettings  func()
+	mu                    *sync.RWMutex
+	Calls                 *ToolCalls
+	Catalog               *ProviderCatalog
+	Connections           *ConnectionPool
+	Credentials           *ProviderCredentials
+	Tools                 *ToolDiscovery
+	onSettings            func()
+	openStaticCredentials func(dir string) (*StaticCredentialStore, error)
+	beforeConfigWrite     func(op, providerID string) error
 }
 
 // ProviderCredentials owns provider credential and OAuth state.

@@ -35,11 +35,19 @@ func overlayLockAlreadyHeld(ctx context.Context, target string) bool {
 	return held != "" && held == filepath.Clean(target)
 }
 
+func (r *ProviderAdministration) openCredentialStore() (*StaticCredentialStore, error) {
+	if r.openStaticCredentials != nil {
+		return r.openStaticCredentials(r.Catalog.statePath)
+	}
+	return NewStaticCredentialStoreForDir(r.Catalog.statePath)
+}
+
 func (r *ProviderAdministration) updateOverlay(
 	ctx context.Context,
 	scopeProjectDir string,
 	apply func(ctx context.Context, path string) error,
 	validate func(ctx context.Context) error,
+	rollback func(ctx context.Context) error,
 ) error {
 	path := r.overlayPathFor(scopeProjectDir)
 	// Callbacks share the transaction lock for this overlay.
@@ -63,6 +71,12 @@ func (r *ProviderAdministration) updateOverlay(
 				return nil
 			}
 			return validate(lockedCtx)
+		},
+		Rollback: func() error {
+			if rollback == nil {
+				return nil
+			}
+			return rollback(lockedCtx)
 		},
 	}); err != nil {
 		return err
@@ -134,7 +148,7 @@ func (r *ProviderAdministration) SetProviderEnabled(ctx context.Context, scope C
 			return ErrUnknownMCPProvider(providerID)
 		}
 		return setProviderEnabled(path, providerID, enabled)
-	}, nil)
+	}, nil, nil)
 	return persistErr(err)
 }
 
@@ -228,32 +242,56 @@ func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope Ca
 	var created api.McpProvider
 	isUserScope := strings.TrimSpace(scopeProjectDir) == ""
 	creds := extractOverlayCredentials(ov)
-	var prevCreds StaticCredentialRecord
-	var hadPrev bool
-	wroteVault := false
+	var prevSnapshot *StaticCredentialSnapshot
+	vaultTouched := false
 	var store *StaticCredentialStore
 
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
 		if r.Catalog.projectView(txCtx, scope.ProjectDir).known(id) {
 			return AdminErrID(RejectDuplicateID, id)
 		}
+		cfg, err := LoadUserMCPConfig(path)
+		if err != nil {
+			return err
+		}
 		ovToSave := ov
 		if isUserScope {
+			ovToSave = scrubOverlayCredentials(ov)
+		}
+		upsertProviderOverlayRow(cfg, ovToSave)
+		if isUserScope {
 			var openErr error
-			store, openErr = NewStaticCredentialStoreForDir(r.Catalog.statePath)
+			store, openErr = r.openCredentialStore()
 			if openErr != nil {
 				return openErr
 			}
-			prevCreds, hadPrev = store.Get(id)
+			prevCreds, hadPrev, getErr := store.Get(id)
+			if getErr != nil {
+				return getErr
+			}
+			prevSnapshot = snapshotFromRecord(prevCreds, hadPrev)
 			if creds.HasSecrets() || hadPrev {
-				if putErr := store.PutVerified(id, creds); putErr != nil {
+				targetDigest, digestErr := userOverlayConfigDigest(*cfg)
+				if digestErr != nil {
+					return digestErr
+				}
+				staged := creds
+				staged.PendingCommit = &PendingCredentialCommit{
+					TargetConfigSHA256: targetDigest,
+					Previous:           prevSnapshot,
+				}
+				vaultTouched = true
+				if putErr := store.PutVerified(id, staged); putErr != nil {
 					return putErr
 				}
-				wroteVault = true
 			}
-			ovToSave = scrubOverlayCredentials(ov)
+			if r.beforeConfigWrite != nil {
+				if hookErr := r.beforeConfigWrite("create", id); hookErr != nil {
+					return hookErr
+				}
+			}
 		}
-		return upsertProviderOverlay(path, ovToSave)
+		return saveUserMCPConfig(path, *cfg)
 	}, func(txCtx context.Context) error {
 		row, ok := r.Catalog.GetProvider(txCtx, scope, id)
 		if ok && row.Status != api.McpStatusRejected {
@@ -265,16 +303,13 @@ func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope Ca
 			reason = row.LastError
 		}
 		return AdminErrID(reason, id)
+	}, func(context.Context) error {
+		if !vaultTouched || store == nil {
+			return nil
+		}
+		return store.RestoreSnapshot(id, prevSnapshot)
 	})
 	if err != nil {
-		if wroteVault && store != nil {
-			if hadPrev {
-				_ = store.PutVerified(id, prevCreds)
-			} else {
-				_ = store.RemoveRecord(id)
-			}
-			_ = r.Catalog.Load(ctx)
-		}
 		return api.McpProvider{}, persistErr(err)
 	}
 	return created, nil
@@ -356,46 +391,80 @@ func (r *ProviderAdministration) UpdateProvider(ctx context.Context, scope CallS
 
 	var updated api.McpProvider
 	isUserScope := strings.TrimSpace(scopeProjectDir) == ""
-	var prevCreds StaticCredentialRecord
-	var hadPrev bool
-	wroteVault := false
+	var prevSnapshot *StaticCredentialSnapshot
+	vaultTouched := false
 	var store *StaticCredentialStore
 
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
 		if !r.Catalog.projectView(txCtx, scope.ProjectDir).known(providerID) {
 			return ErrUnknownMCPProvider(providerID)
 		}
-		var patchVaultErr error
-		err := patchProviderOverlay(path, providerID, func(ov *MCPProviderOverlay) {
-			if isUserScope {
-				store, patchVaultErr = NewStaticCredentialStoreForDir(r.Catalog.statePath)
-				if patchVaultErr != nil {
-					return
-				}
-				prevCreds, hadPrev = store.Get(providerID)
-				baseCreds := prevCreds
-				hadInline := overlayHasInlineCredentials(*ov)
-				if !hadPrev && hadInline {
-					baseCreds = extractOverlayCredentials(*ov)
-				}
-				nextCreds, changed := applyUpdateToCredentials(baseCreds, req)
-				if changed || (!hadPrev && hadInline) {
-					if putErr := store.PutVerified(providerID, nextCreds); putErr != nil {
-						patchVaultErr = putErr
-						return
-					}
-					wroteVault = true
-				}
-			}
-			applyUpdateToOverlay(ov, req)
-			if isUserScope {
-				*ov = scrubOverlayCredentials(*ov)
-			}
-		})
-		if patchVaultErr != nil {
-			return patchVaultErr
+		cfg, err := LoadUserMCPConfig(path)
+		if err != nil {
+			return err
 		}
-		return err
+		targetIdx := -1
+		var currentOv MCPProviderOverlay
+		for i, s := range cfg.Providers {
+			if s.ID == providerID {
+				targetIdx = i
+				currentOv = s
+				break
+			}
+		}
+		if targetIdx < 0 {
+			currentOv = MCPProviderOverlay{ID: providerID}
+		}
+		hadInline := overlayHasInlineCredentials(currentOv)
+		inlineCreds := extractOverlayCredentials(currentOv)
+		applyUpdateToOverlay(&currentOv, req)
+		if isUserScope {
+			currentOv = scrubOverlayCredentials(currentOv)
+		}
+		if targetIdx >= 0 {
+			cfg.Providers[targetIdx] = currentOv
+		} else {
+			cfg.Providers = append(cfg.Providers, currentOv)
+		}
+
+		if isUserScope {
+			var openErr error
+			store, openErr = r.openCredentialStore()
+			if openErr != nil {
+				return openErr
+			}
+			prevCreds, hadPrev, getErr := store.Get(providerID)
+			if getErr != nil {
+				return getErr
+			}
+			prevSnapshot = snapshotFromRecord(prevCreds, hadPrev)
+			baseCreds := prevCreds
+			if !hadPrev && hadInline {
+				baseCreds = inlineCreds
+			}
+			nextCreds, changed := applyUpdateToCredentials(baseCreds, req)
+			if changed || (!hadPrev && hadInline) {
+				targetDigest, digestErr := userOverlayConfigDigest(*cfg)
+				if digestErr != nil {
+					return digestErr
+				}
+				staged := nextCreds
+				staged.PendingCommit = &PendingCredentialCommit{
+					TargetConfigSHA256: targetDigest,
+					Previous:           prevSnapshot,
+				}
+				vaultTouched = true
+				if putErr := store.PutVerified(providerID, staged); putErr != nil {
+					return putErr
+				}
+			}
+			if r.beforeConfigWrite != nil {
+				if hookErr := r.beforeConfigWrite("update", providerID); hookErr != nil {
+					return hookErr
+				}
+			}
+		}
+		return saveUserMCPConfig(path, *cfg)
 	}, func(txCtx context.Context) error {
 		row, ok := r.Catalog.GetProvider(txCtx, scope, providerID)
 		if !ok {
@@ -403,16 +472,13 @@ func (r *ProviderAdministration) UpdateProvider(ctx context.Context, scope CallS
 		}
 		updated = row
 		return nil
+	}, func(context.Context) error {
+		if !vaultTouched || store == nil {
+			return nil
+		}
+		return store.RestoreSnapshot(providerID, prevSnapshot)
 	})
 	if err != nil {
-		if wroteVault && store != nil {
-			if hadPrev {
-				_ = store.PutVerified(providerID, prevCreds)
-			} else {
-				_ = store.RemoveRecord(providerID)
-			}
-			_ = r.Catalog.Load(ctx)
-		}
 		return api.McpProvider{}, persistErr(err)
 	}
 	return updated, nil
@@ -585,22 +651,59 @@ func recipeCredentialWire(rec Recipe) api.McpCredentialWire {
 // DeleteOverlay removes a user or project overlay row for providerID.
 func (r *ProviderAdministration) DeleteOverlay(ctx context.Context, providerID, scopeProjectDir string) error {
 	isUserScope := strings.TrimSpace(scopeProjectDir) == ""
+	var prevSnapshot *StaticCredentialSnapshot
+	vaultTouched := false
+	var store *StaticCredentialStore
+
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
 		if !r.Catalog.projectView(txCtx, scopeProjectDir).known(providerID) {
 			return ErrUnknownMCPProvider(providerID)
 		}
+		cfg, err := LoadUserMCPConfig(path)
+		if err != nil {
+			return err
+		}
+		removeProviderOverlayRow(cfg, providerID)
 		if isUserScope {
-			store, openErr := NewStaticCredentialStoreForDir(r.Catalog.statePath)
+			var openErr error
+			store, openErr = r.openCredentialStore()
 			if openErr != nil {
 				return openErr
 			}
-			if delErr := store.PutVerified(providerID, StaticCredentialRecord{Migrated: true, Deleted: true}); delErr != nil {
+			prevCreds, hadPrev, getErr := store.Get(providerID)
+			if getErr != nil {
+				return getErr
+			}
+			prevSnapshot = snapshotFromRecord(prevCreds, hadPrev)
+			targetDigest, digestErr := userOverlayConfigDigest(*cfg)
+			if digestErr != nil {
+				return digestErr
+			}
+			staged := StaticCredentialRecord{
+				Migrated: true,
+				Deleted:  true,
+				PendingCommit: &PendingCredentialCommit{
+					TargetConfigSHA256: targetDigest,
+					Previous:           prevSnapshot,
+				},
+			}
+			vaultTouched = true
+			if delErr := store.PutVerified(providerID, staged); delErr != nil {
 				return delErr
 			}
+			if r.beforeConfigWrite != nil {
+				if hookErr := r.beforeConfigWrite("delete", providerID); hookErr != nil {
+					return hookErr
+				}
+			}
 		}
-		return clearProviderOverride(path, providerID)
-	}, nil)
-	}, nil)
+		return writeOrRemoveUserMCPConfig(path, *cfg)
+	}, nil, func(context.Context) error {
+		if !vaultTouched || store == nil {
+			return nil
+		}
+		return store.RestoreSnapshot(providerID, prevSnapshot)
+	})
 	if err != nil {
 		return persistErr(err)
 	}

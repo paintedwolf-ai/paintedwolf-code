@@ -232,6 +232,21 @@ func clearProviderOverride(path, providerID string) error {
 	if err != nil {
 		return err
 	}
+	removeProviderOverlayRow(cfg, providerID)
+	return writeOrRemoveUserMCPConfig(path, *cfg)
+}
+
+func upsertProviderOverlayRow(cfg *UserMCPConfig, ov MCPProviderOverlay) {
+	for i, s := range cfg.Providers {
+		if s.ID == ov.ID {
+			cfg.Providers[i] = ov
+			return
+		}
+	}
+	cfg.Providers = append(cfg.Providers, ov)
+}
+
+func removeProviderOverlayRow(cfg *UserMCPConfig, providerID string) {
 	next := make([]MCPProviderOverlay, 0, len(cfg.Providers))
 	for _, s := range cfg.Providers {
 		if s.ID == providerID {
@@ -240,13 +255,16 @@ func clearProviderOverride(path, providerID string) error {
 		next = append(next, s)
 	}
 	cfg.Providers = next
+}
+
+func writeOrRemoveUserMCPConfig(path string, cfg UserMCPConfig) error {
 	if len(cfg.Providers) == 0 {
 		if err := fseffect.Remove(fseffect.RemoveRequest{Location: fseffect.PathLocation(path)}); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 		return nil
 	}
-	return saveUserMCPConfig(path, *cfg)
+	return saveUserMCPConfig(path, cfg)
 }
 
 // OverrideIDs returns provider ids present in an overlay file.
