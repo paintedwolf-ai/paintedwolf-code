@@ -73,7 +73,7 @@ func TestAuthorUpdatePublishesOnlySettledStoreOutcomes(t *testing.T) {
 			if !errors.Is(err, sentinel) {
 				t.Fatalf("unsettled result error: %v", err)
 			}
-			if result.Updated || result.StateChanged || result.DeliverableClosed || result.Snapshot.Revision != "" || result.Snapshot.Content != "" || result.ReconciliationStatus != "not_requested" {
+			if result.Updated || result.StateChanged || len(result.ClosedItemIDs) != 0 || result.Snapshot.Revision != "" || result.Snapshot.Content != "" || result.ReconciliationStatus != "not_requested" {
 				t.Fatalf("uncommitted proposal escaped as outcome: %+v", result)
 			}
 			if publications != 0 || reconciliation.acknowledgements != 0 {
