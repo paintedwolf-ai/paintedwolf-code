@@ -279,22 +279,11 @@ func (r *ProgramRuntime) loadCapturedSourceForPin(ctx context.Context, run *prog
 	if !strings.HasPrefix(pin.SourceID, "disk:") || deliveredBytes < 1 || int64(deliveredBytes) > (math.MaxInt64-(64<<10))/32 || run.memory == nil {
 		return "", nil, nil, false
 	}
-	rest := strings.TrimPrefix(pin.SourceID, "disk:")
-	var rootPath, relPath string
-	for _, root := range run.tc.Source.Roots {
-		prefix := root.ID + "/"
-		if !strings.HasPrefix(rest, prefix) {
-			continue
-		}
-		if candidate := strings.TrimPrefix(rest, prefix); candidate != "" {
-			rootPath, relPath = root.Path, candidate
-			break
-		}
-	}
-	if relPath == "" {
+	location, ok := run.tc.ResolveSourceCapture(pin.SourceID)
+	if !ok {
 		return "", nil, nil, false
 	}
-	file, err := fseffect.OpenRead(fseffect.Location{Root: rootPath, Rel: filepath.FromSlash(relPath)})
+	file, err := fseffect.OpenRead(location.Disk)
 	if err != nil {
 		return "", nil, nil, false
 	}
@@ -323,12 +312,12 @@ func (r *ProgramRuntime) loadCapturedSourceForPin(ctx context.Context, run *prog
 	raw = raw[:n]
 	if pin.Representation == toolcontract.OriginalEncodedBytes {
 		keep = true
-		return relPath, raw, release, true
+		return location.DisplayPath, raw, release, true
 	}
 	text, _, err := textfile.Decode(raw, textfile.LimitsForRaw(max(size, 1)))
 	if err != nil {
 		return "", nil, nil, false
 	}
 	keep = true
-	return relPath, []byte(text), release, true
+	return location.DisplayPath, []byte(text), release, true
 }
