@@ -661,8 +661,8 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     // Line 3: "" (blank intervening line)
     // Line 4: "const unchanged = 42;" (unchanged intervening line)
     // Line 5: "" (blank intervening line)
-    // Line 6: 'const r = /"/; const x = {a: 1, b: 2};' (affected JSX body line)
-    // Line 7: "</tag>;"
+    // Line 6: 'if (cond) /; const x = {a: 1, b: 2};/i;' (affected JSX body line)
+    // Line 7: "</tag>; // /"
     // Line 8: "const suffix = {m: 1, n: 2};" (unaffected suffix line after </tag>;)
     const jsxDoc = [
       "const v = 1 < 2",
@@ -670,8 +670,8 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       "",
       "const unchanged = 42;",
       "",
-      'const r = /"/; const x = {a: 1, b: 2};',
-      "</tag>;",
+      "if (cond) /; const x = {a: 1, b: 2};/i;",
+      "</tag>; // /",
       "const suffix = {m: 1, n: 2};",
     ].join("\n");
     let jsxState = EditorState.create({
@@ -687,6 +687,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     const beforeField = jsxState.field(prettyNativeStateField);
     const sigLine6Before = beforeField.lineStates[5]?.syntaxSpanSignature;
     const suffixRefBefore = beforeField.lineStates[7];
+    expect(beforeField.lineStates[5]?.relBoundaries.length).toBe(0);
 
     // Direction 1: Edit Line 1 ("const v = 1 < 2" -> "const v = <tag") across blank/unchanged Lines 3-5:
     jsxState = jsxState.update({
@@ -705,6 +706,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(jsxAfterToTag.lineStates[5]?.syntaxSpanSignature).not.toBe(
       sigLine6Before,
     );
+    expect(jsxAfterToTag.lineStates[5]?.relBoundaries.length).toBe(4);
     expect(jsxAfterToTag.lineStates).toEqual(jsxFreshToTag.lineStates);
     expect(jsxAfterToTag.counters).toEqual(jsxFreshToTag.counters);
     expect(jsxAfterToTag.lastIncrementalSuffixLinesReused).toBe(1);
@@ -727,6 +729,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(jsxAfterToExpr.lineStates[5]?.syntaxSpanSignature).toBe(
       sigLine6Before,
     );
+    expect(jsxAfterToExpr.lineStates[5]?.relBoundaries.length).toBe(0);
     expect(jsxAfterToExpr.lineStates).toEqual(jsxFreshToExpr.lineStates);
     expect(jsxAfterToExpr.counters).toEqual(jsxFreshToExpr.counters);
     expect(jsxAfterToExpr.lastIncrementalSuffixLinesReused).toBe(1);
@@ -740,7 +743,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       { length: 70 },
       (_, i) => `const padLine_${i} = {alpha: ${i}, beta: ${i + 1}, gamma: "padding_value_${i}"};`,
     );
-    const tailLine = 'const tailRegex = /"/; const tailObj = {a: 1, b: 2};';
+    const tailLine = 'if (cond) /"/; const tailObj = {a: 1, b: 2};';
     const largeDoc = [...prefixLines, tailLine].join("\n");
     expect(largeDoc.length).toBeGreaterThan(3200);
 
@@ -768,13 +771,13 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       expect(initialFullParseAvailable).toBe(false);
 
       const fieldBeforeFullParse = view.state.field(prettyNativeStateField);
-      // Before Lezer parses past offset 3,000, the tail line has no syntax-tree protected spans (`/"/` is seen by fallback lexical scan as an unclosed quote):
+      // Before Lezer parses past offset 3,000, the tail line has no syntax-tree protected spans (`/"/` after `if (cond)` is seen by fallback lexical scan as division followed by an unclosed quote):
       expect(
         fieldBeforeFullParse.lineStates[tailIndex]?.syntaxSpanSignature,
       ).toBe("");
       expect(
         fieldBeforeFullParse.lineStates[tailIndex]?.relBoundaries.length,
-      ).toBe(1);
+      ).toBe(0);
 
       // Advance CodeMirror's Lezer parser to the end of the document without changing the document:
       const parsed = forceParsing(view, view.state.doc.length, 500);
