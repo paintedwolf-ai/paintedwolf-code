@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -224,6 +226,9 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		return "", err
 	}
 	fullPath := resolved.Abs
+	if enginepaths.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
+		return "", fmt.Errorf("%w: %q", sandbox.ErrOutsideReadScope, path)
+	}
 	path = resolved.DisplayPath
 	target, isTarget := sourceview.ReportTarget(tctx, resolved, api.AgentActivityKindReading)
 	var st sourceview.Text

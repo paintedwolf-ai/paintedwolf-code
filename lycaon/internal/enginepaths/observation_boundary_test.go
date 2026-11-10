@@ -57,21 +57,39 @@ func TestIsObservedStateExcluded_StrictAncestorExcludesActiveControlDirAndPlacem
 		t.Fatal("expected sibling user project file to remain observable under home root")
 	}
 
-	// Explicit managed-workspace attachments remain observable when attached directly.
+	// Explicit managed-workspace and concrete session scratch/output attachments remain observable when attached directly.
 	for _, wsRoot := range []string{
 		filepath.Join(cfgDir, "worktrees", "wt-1"),
 		filepath.Join(cfgDir, "drafts", "draft-1"),
 		filepath.Join(cfgDir, "session-worktrees", "proj-1", "sess-1"),
 		filepath.Join(cfgDir, "worker-branches", "proj-1", "job-1"),
 		filepath.Join(placementDir, "worker-branches", "proj-1", "job-1"),
+		filepath.Join(cfgDir, "scratch", "sess-1"),
+		filepath.Join(cfgDir, "session-output", "sess-1"),
+		filepath.Join(cfgDir, "sessions", "sess-1", "scratch"),
+		filepath.Join(cfgDir, "sessions", "sess-1", "output"),
 	} {
 		if IsObservedStateExcluded(wsRoot, wsRoot) || IsObservedStateExcluded(wsRoot, filepath.Join(wsRoot, "src", "main.go")) {
-			t.Errorf("managed workspace root %q should be observable when explicitly attached", wsRoot)
+			t.Errorf("scoped root %q should be observable when explicitly attached", wsRoot)
 		}
-		// Escaping from one managed workspace into another or into configdir.Root() is still excluded.
+		// Escaping from one scoped root into another session or into configdir.Root() is still excluded.
 		if !IsObservedStateExcluded(wsRoot, filepath.Join(cfgDir, "settings.yaml")) {
-			t.Errorf("managed workspace root %q must exclude control-plane sibling settings.yaml", wsRoot)
+			t.Errorf("scoped root %q must exclude control-plane sibling settings.yaml", wsRoot)
 		}
+		if !IsObservedStateExcluded(wsRoot, filepath.Join(cfgDir, "scratch", "sess-2", "note.txt")) {
+			t.Errorf("scoped root %q must exclude another session's scratch directory", wsRoot)
+		}
+	}
+	// Parent container <cfgDir>/scratch or <cfgDir>/session-output without a concrete session ID remains excluded.
+	scratchParent := filepath.Join(cfgDir, "scratch")
+	if !IsObservedStateExcluded(scratchParent, scratchParent) ||
+		!IsObservedStateExcluded(scratchParent, filepath.Join(scratchParent, "sess-1", "note.txt")) {
+		t.Fatal("parent container <cfgDir>/scratch must remain excluded")
+	}
+	// Worker branch .meta directory under <cfgDir>/worker-branches/<proj>/.meta remains excluded.
+	metaDir := filepath.Join(cfgDir, "worker-branches", "proj-1", ".meta")
+	if !IsObservedStateExcluded(metaDir, metaDir) || !IsObservedStateExcluded(metaDir, filepath.Join(metaDir, "job-1.json")) {
+		t.Fatal("worker-branches .meta directory must remain excluded")
 	}
 }
 
@@ -257,9 +275,31 @@ func TestCompileAgentReadFloor(t *testing.T) {
 		t.Fatal("expected normal project file under $HOME to be allowed")
 	}
 
-	// 4. Explicit managed workspace (<configdir>/worktrees/wt-1) is allowed to AgentAudience.
+	// 4. Explicit managed workspace (<configdir>/worktrees/wt-1) and concrete session scratch/output are allowed to AgentAudience.
 	wtFloor := CompileAgentReadFloor(wtDir, nil)
 	if wtFloor.WhollyDenied() || wtFloor.IsDeniedRel("src/main.go") {
 		t.Fatal("expected explicit managed workspace to be allowed to AgentAudience")
+	}
+	scratchSessionDir := filepath.Join(cfgDir, "scratch", "sess-1")
+	outputSessionDir := filepath.Join(cfgDir, "session-output", "sess-1")
+	for _, dir := range []string{scratchSessionDir, outputSessionDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+		floor := CompileAgentReadFloor(dir, nil)
+		if floor.WhollyDenied() || floor.IsDeniedRel("note.txt") || floor.IsDeniedAbs("note.txt", filepath.Join(dir, "note.txt"), nil) {
+			t.Fatalf("expected concrete session dir %s to be allowed to AgentAudience", dir)
+		}
+		if IsAgentSourceReadDenied(dir, filepath.Join(dir, "note.txt"), nil) {
+			t.Fatalf("expected target inside concrete session dir %s to be allowed", dir)
+		}
+		if !IsAgentSourceReadDenied(dir, filepath.Join(cfgDir, "settings.yaml"), nil) ||
+			!IsAgentSourceReadDenied(dir, filepath.Join(cfgDir, "scratch", "sess-2", "note.txt"), nil) {
+			t.Fatalf("expected target outside concrete session dir %s to be denied", dir)
+		}
+	}
+	// Parent <cfgDir>/scratch container remains wholly denied.
+	if !CompileAgentReadFloor(filepath.Join(cfgDir, "scratch"), nil).WhollyDenied() {
+		t.Fatal("expected parent <cfgDir>/scratch container to be wholly denied")
 	}
 }

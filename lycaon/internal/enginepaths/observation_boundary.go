@@ -225,12 +225,13 @@ func checkConfigRootObservation(cfgBase string, rootVariants []string, targetPat
 		}
 	}
 
-	if _, ok := managedConfigWorkspacePrefix(rel); ok {
+	if _, ok := allowedConfigScopedRootPrefix(rel); ok {
 		if !hasRoot {
-			return false, true
+			_, isWS := managedConfigWorkspacePrefix(rel)
+			return !isWS, true
 		}
 		if rootUnderCfg {
-			if _, rootIsWS := managedConfigWorkspacePrefix(rootRel); rootIsWS && sameManagedWorkspace(rel, rootRel) {
+			if _, rootIsScoped := allowedConfigScopedRootPrefix(rootRel); rootIsScoped && sameConfigScopedRoot(rel, rootRel) {
 				return false, true
 			}
 		}
@@ -242,9 +243,9 @@ func checkConfigRootObservation(cfgBase string, rootVariants []string, targetPat
 			// Strict ancestor or external root with symlink into configdir.Root().
 			return true, true
 		}
-		if _, rootIsWS := managedConfigWorkspacePrefix(rootRel); rootIsWS {
-			// Attached root is a managed workspace, but targetPath escaped into
-			// another part of configdir.Root().
+		if _, rootIsScoped := allowedConfigScopedRootPrefix(rootRel); rootIsScoped {
+			// Attached root is a managed workspace or concrete session directory,
+			// but targetPath escaped into another part of configdir.Root().
 			return true, true
 		}
 	}
@@ -261,20 +262,63 @@ func managedConfigWorkspacePrefix(relSlash string) (string, bool) {
 		return "", false
 	}
 	segs := strings.Split(relSlash, "/")
-	if len(segs) < 2 || segs[1] == "" {
+	if len(segs) < 2 || segs[1] == "" || segs[1] == "." || segs[1] == ".." {
 		return "", false
 	}
 	first := strings.ToLower(segs[0])
 	switch first {
 	case DraftsDirName, "worktrees", SessionWorktreesDirName, WorkerBranchesDirName:
+		if first == WorkerBranchesDirName && len(segs) >= 3 && IsJobMetaDirName(segs[2]) {
+			return "", false
+		}
 		return segs[0] + "/" + segs[1], true
 	default:
 		return "", false
 	}
 }
 
-func sameManagedWorkspace(targetRel, rootRel string) bool {
+func explicitConfigSessionPrefix(relSlash string) (string, bool) {
+	if relSlash == "" || relSlash == "." {
+		return "", false
+	}
+	segs := strings.Split(relSlash, "/")
+	if len(segs) < 2 || segs[1] == "" || segs[1] == "." || segs[1] == ".." {
+		return "", false
+	}
+	first := strings.ToLower(segs[0])
+	switch first {
+	case ScratchDirName, SessionOutputDirName:
+		return segs[0] + "/" + segs[1], true
+	case SessionsDirName:
+		if len(segs) >= 3 && segs[2] != "" {
+			third := strings.ToLower(segs[2])
+			if third == ScratchDirName || third == "output" || third == SessionOutputDirName {
+				return segs[0] + "/" + segs[1] + "/" + segs[2], true
+			}
+		}
+		return "", false
+	default:
+		return "", false
+	}
+}
+
+func allowedConfigScopedRootPrefix(relSlash string) (string, bool) {
+	if ws, ok := managedConfigWorkspacePrefix(relSlash); ok {
+		return ws, true
+	}
+	if sess, ok := explicitConfigSessionPrefix(relSlash); ok {
+		return sess, true
+	}
+	return "", false
+}
+
+func sameConfigScopedRoot(targetRel, rootRel string) bool {
 	if targetRel == "" || targetRel == "." || rootRel == "" || rootRel == "." {
+		return false
+	}
+	targetPrefix, okTarget := allowedConfigScopedRootPrefix(targetRel)
+	rootPrefix, okRoot := allowedConfigScopedRootPrefix(rootRel)
+	if !okTarget || !okRoot || !strings.EqualFold(targetPrefix, rootPrefix) {
 		return false
 	}
 	targetLower := strings.ToLower(targetRel)
@@ -641,8 +685,8 @@ func isRootDeniedByConfigTree(cfgBase, rootPath string) bool {
 	if !under {
 		return false
 	}
-	_, isWS := managedConfigWorkspacePrefix(rel)
-	return !isWS
+	_, isScoped := allowedConfigScopedRootPrefix(rel)
+	return !isScoped
 }
 
 func isManagedWorkspaceRoot(clean, canon string) bool {
@@ -651,12 +695,12 @@ func isManagedWorkspaceRoot(clean, canon string) bool {
 		return false
 	}
 	if rel, under := relUnderFold(cfgClean, clean); under {
-		if _, isWS := managedConfigWorkspacePrefix(rel); isWS {
+		if _, isScoped := allowedConfigScopedRootPrefix(rel); isScoped {
 			return true
 		}
 	}
 	if rel, under := relUnderFold(cfgCanon, canon); under {
-		if _, isWS := managedConfigWorkspacePrefix(rel); isWS {
+		if _, isScoped := allowedConfigScopedRootPrefix(rel); isScoped {
 			return true
 		}
 	}
@@ -671,9 +715,10 @@ func isPathDeniedInConfigTreeForAgent(cfgBase string, rootVariants []string, tar
 	if !underCfg {
 		return false
 	}
-	if _, isWS := managedConfigWorkspacePrefix(rel); !isWS {
-		// All of configdir.Root() outside explicit managed workspaces (including
-		// settings.yaml, packs/, etc.) is denied to AgentAudience!
+	if _, isScoped := allowedConfigScopedRootPrefix(rel); !isScoped {
+		// All of configdir.Root() outside explicit managed workspaces and
+		// concrete session scratch/output directories (including settings.yaml,
+		// packs/, etc.) is denied to AgentAudience!
 		return true
 	}
 	hasRoot := false
@@ -691,12 +736,13 @@ func isPathDeniedInConfigTreeForAgent(cfgBase string, rootVariants []string, tar
 		}
 	}
 	if !hasRoot {
-		return false
+		_, isWS := managedConfigWorkspacePrefix(rel)
+		return !isWS
 	}
 	if !rootUnderCfg {
 		return true
 	}
-	return !sameManagedWorkspace(rel, rootRel)
+	return !sameConfigScopedRoot(rel, rootRel)
 }
 
 func relUnderFold(base, target string) (string, bool) {

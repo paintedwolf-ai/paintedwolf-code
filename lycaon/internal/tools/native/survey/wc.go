@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -72,6 +74,9 @@ func (t *WcTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCo
 			return "", err
 		}
 		fullPath := resolved.Abs
+		if enginepaths.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
+			return "", fmt.Errorf("%w: %q", sandbox.ErrOutsideReadScope, relPath)
+		}
 		relSlash := filepath.ToSlash(resolved.DisplayPath)
 		info, err := os.Stat(fullPath)
 		if err != nil {
@@ -173,6 +178,12 @@ func (t *WcTool) wcRecursiveDir(ctx context.Context, reads *projectpaths.ReadSes
 			return sourcecatalog.WalkContinue
 		}
 		abs := filepath.Join(root.Path, filepath.FromSlash(entry.Path))
+		if enginepaths.IsAgentSourceReadDenied(root.Path, abs, confine.KeyMaterialReadDenyPaths()) {
+			return sourcecatalog.WalkContinue
+		}
+		if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, entry.Path, tctx.ProfileID()) != nil {
+			return sourcecatalog.WalkContinue
+		}
 		if _, err := reads.Resolve(ctx, abs); err != nil {
 			return sourcecatalog.WalkContinue
 		}
@@ -240,6 +251,9 @@ func (t *WcTool) wcRecursiveDir(ctx context.Context, reads *projectpaths.ReadSes
 func (t *WcTool) wcRecursiveDirSurvey(ctx context.Context, reads *projectpaths.ReadSession, tctx tools.ToolContext, root projectroot.RootRef, fullRoot, relRoot string, includeWords bool) (wcResult, error) {
 	var totals wcDirTotals
 	admit := func(_, abs string, isDir bool) bool {
+		if enginepaths.IsAgentSourceReadDenied(root.Path, abs, confine.KeyMaterialReadDenyPaths()) {
+			return false
+		}
 		if isDir {
 			return true
 		}

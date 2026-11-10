@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -25,7 +27,21 @@ func listDirSingleLevel(
 	fullPath, relPath string,
 	includeHidden bool,
 ) ([]listDirEntry, error) {
-	opts := sandbox.SurveyOptions{IncludeHidden: includeHidden}
+	if enginepaths.IsAgentSourceReadDenied(root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
+		return nil, nil
+	}
+	if boundary != nil && boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, fullPath), tctx.ProfileID()) != nil {
+		return nil, nil
+	}
+	admit := func(_, abs string, _ bool) bool {
+		if enginepaths.IsAgentSourceReadDenied(root.Path, abs, confine.KeyMaterialReadDenyPaths()) {
+			return false
+		}
+		return boundary == nil || boundary.AssertReadScope(
+			ctx, root.Path, projectroot.ScopeRel(root, abs), tctx.ProfileID(),
+		) == nil
+	}
+	opts := sandbox.SurveyOptions{IncludeHidden: includeHidden, Admit: admit}
 	entries, ok, err := workerBranchReadDir(ctx, tctx, fullPath, opts)
 	if err != nil {
 		return nil, err
@@ -38,6 +54,9 @@ func listDirSingleLevel(
 	}
 	all := make([]listDirEntry, 0, len(entries))
 	for _, entry := range entries {
+		if !admit(entry.Rel, entry.Abs, entry.IsDir) {
+			continue
+		}
 		info, infoErr := entry.DirEntry.Info()
 		if infoErr != nil {
 			continue
@@ -57,8 +76,17 @@ func listDirWalk(
 	maxDepth int,
 	includeHidden bool,
 ) ([]listDirEntry, error) {
+	if enginepaths.IsAgentSourceReadDenied(root.Path, fullRoot, confine.KeyMaterialReadDenyPaths()) {
+		return nil, nil
+	}
+	if boundary != nil && boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, fullRoot), tctx.ProfileID()) != nil {
+		return nil, nil
+	}
 	var all []listDirEntry
 	admit := func(_, abs string, _ bool) bool {
+		if enginepaths.IsAgentSourceReadDenied(root.Path, abs, confine.KeyMaterialReadDenyPaths()) {
+			return false
+		}
 		return boundary == nil || boundary.AssertReadScope(
 			ctx, root.Path, projectroot.ScopeRel(root, abs), tctx.ProfileID(),
 		) == nil
@@ -157,6 +185,12 @@ func (t *ListDirTool) listRootCatalog(
 	maxDepth int,
 	includeHidden bool,
 ) ([]listDirEntry, bool) {
+	if enginepaths.IsAgentSourceReadDenied(root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
+		return nil, true
+	}
+	if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, fullPath), tctx.ProfileID()) != nil {
+		return nil, true
+	}
 	if catalogOrProcess(t.Catalog).BoundaryPath(ctx, root.Path, projectroot.ScopeRel(root, fullPath), true) != "" {
 		return nil, false
 	}
@@ -182,6 +216,9 @@ func (t *ListDirTool) listRootCatalog(
 			out := make([]listDirEntry, 0, len(live))
 			for _, child := range live {
 				absPath := child.Abs
+				if enginepaths.IsAgentSourceReadDenied(root.Path, absPath, confine.KeyMaterialReadDenyPaths()) {
+					continue
+				}
 				if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, absPath), tctx.ProfileID()) != nil {
 					continue
 				}
@@ -203,10 +240,13 @@ func (t *ListDirTool) listRootCatalog(
 			if !includeHidden && strings.HasPrefix(child.Name, ".") {
 				continue
 			}
+			absPath := filepath.Join(root.Path, filepath.FromSlash(child.Path))
+			if enginepaths.IsAgentSourceReadDenied(root.Path, absPath, confine.KeyMaterialReadDenyPaths()) {
+				continue
+			}
 			if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, child.Path, tctx.ProfileID()) != nil {
 				continue
 			}
-			absPath := filepath.Join(root.Path, filepath.FromSlash(child.Path))
 			displayPath := projectpaths.QualifyAbs(tctx, root, absPath)
 			out = append(out, makeListDirCatalogEntry(ctx, t.Boundary, tctx, root, child.Name, displayPath, absPath, child))
 		}

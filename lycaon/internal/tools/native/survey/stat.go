@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -60,6 +62,9 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			return "", err
 		}
 		fullPath := resolved.Abs
+		if enginepaths.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
+			return "", fmt.Errorf("%w: %q", sandbox.ErrOutsideReadScope, relPath)
+		}
 		relSlash := filepath.ToSlash(resolved.DisplayPath)
 		info, err := os.Lstat(fullPath)
 		if err != nil {
@@ -75,9 +80,17 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 					if children, ok := current.Listing(resolved.Root.ID, rel); ok {
 						count := 0
 						for _, child := range children {
-							if !strings.HasPrefix(child.Name, ".") {
-								count++
+							if strings.HasPrefix(child.Name, ".") {
+								continue
 							}
+							childAbs := filepath.Join(resolved.Root.Path, filepath.FromSlash(child.Path))
+							if enginepaths.IsAgentSourceReadDenied(resolved.Root.Path, childAbs, confine.KeyMaterialReadDenyPaths()) {
+								continue
+							}
+							if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, resolved.Root.Path, child.Path, tctx.ProfileID()) != nil {
+								continue
+							}
+							count++
 						}
 						entry.EntryCount = &count
 						counted = true
@@ -85,7 +98,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 				}
 			}
 			if !counted {
-				if count, err := countDirEntries(fullPath, false, relSlash); err == nil {
+				if count, err := countDirEntries(ctx, t.Boundary, tctx, resolved.Root, fullPath, false, relSlash); err == nil {
 					entry.EntryCount = &count
 				}
 			}
@@ -134,8 +147,14 @@ func statEntryFromInfo(relSlash string, info os.FileInfo) statResult {
 	}
 }
 
-func countDirEntries(fullPath string, includeHidden bool, relSlash string) (int, error) {
-	entries, err := sandbox.SurveyReadDir(fullPath, relSlash, sandbox.SurveyOptions{IncludeHidden: includeHidden})
+func countDirEntries(ctx context.Context, boundary *sandbox.Boundary, tctx tools.ToolContext, root projectroot.RootRef, fullPath string, includeHidden bool, relSlash string) (int, error) {
+	admit := func(_, abs string, _ bool) bool {
+		if enginepaths.IsAgentSourceReadDenied(root.Path, abs, confine.KeyMaterialReadDenyPaths()) {
+			return false
+		}
+		return boundary == nil || boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, abs), tctx.ProfileID()) == nil
+	}
+	entries, err := sandbox.SurveyReadDir(fullPath, relSlash, sandbox.SurveyOptions{IncludeHidden: includeHidden, Admit: admit})
 	if err != nil {
 		return 0, err
 	}
