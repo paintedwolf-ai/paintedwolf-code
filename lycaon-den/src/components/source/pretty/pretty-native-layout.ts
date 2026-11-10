@@ -120,17 +120,8 @@ function getIndentDecoration(depth: number, indentWidthCh: number): Decoration {
 }
 
 const prettyNativeTheme = EditorView.baseTheme({
-  ".pw-virtual-break": {
-    height: "0",
-    margin: "0",
-    padding: "0",
-    overflow: "hidden",
-  },
-  ".pw-virtual-indent": {
-    display: "inline-block",
-    height: "1em",
-    pointerEvents: "none",
-  },
+  ".pw-virtual-break": { height: "0", margin: "0", padding: "0", overflow: "hidden" },
+  ".pw-virtual-indent": { display: "inline-block", height: "1em", pointerEvents: "none" },
 });
 
 function appendLineDecorations(
@@ -148,42 +139,19 @@ function appendLineDecorations(
   }
 }
 
-const SYNTAX_XML_INTERIOR_NODES = new Set([
-  "Comment",
-  "Cdata",
-  "AttributeValue",
-]);
-
-const SYNTAX_XML_FULL_NODES = new Set([
-  "RawText",
-  "ScriptText",
-  "StyleText",
-]);
+const SYNTAX_XML_INTERIOR_NODES = new Set(["Comment", "Cdata", "AttributeValue"]);
+const SYNTAX_XML_FULL_NODES = new Set(["RawText", "ScriptText", "StyleText"]);
 
 function classifySyntaxProtectedNode(
   name: string,
 ): { readonly kind: PrettyProtectedSpanKind; readonly interiorOnly: boolean } | null {
-  if (name === "String" || name === "PropertyName") {
-    return { kind: "string", interiorOnly: false };
-  }
-  if (name === "RegExp") {
-    return { kind: "regex", interiorOnly: false };
-  }
-  if (name === "TemplateString") {
-    return { kind: "template", interiorOnly: false };
-  }
-  if (name === "BlockComment") {
-    return { kind: "block-comment", interiorOnly: false };
-  }
-  if (name === "LineComment") {
-    return { kind: "line-comment", interiorOnly: false };
-  }
-  if (SYNTAX_XML_INTERIOR_NODES.has(name)) {
-    return { kind: "xml-protected", interiorOnly: true };
-  }
-  if (SYNTAX_XML_FULL_NODES.has(name)) {
-    return { kind: "xml-protected", interiorOnly: false };
-  }
+  if (name === "String" || name === "PropertyName") return { kind: "string", interiorOnly: false };
+  if (name === "RegExp") return { kind: "regex", interiorOnly: false };
+  if (name === "TemplateString") return { kind: "template", interiorOnly: false };
+  if (name === "BlockComment") return { kind: "block-comment", interiorOnly: false };
+  if (name === "LineComment") return { kind: "line-comment", interiorOnly: false };
+  if (SYNTAX_XML_INTERIOR_NODES.has(name)) return { kind: "xml-protected", interiorOnly: true };
+  if (SYNTAX_XML_FULL_NODES.has(name)) return { kind: "xml-protected", interiorOnly: false };
   return null;
 }
 
@@ -213,24 +181,54 @@ function pushMergedSpan(
 function formatSyntaxSpanSignature(
   syntaxNodes: number,
   spans: readonly PrettyProtectedSpan[],
+  boundaryCrossings: readonly string[],
 ): string {
-  if (syntaxNodes === 0 && spans.length === 0) return "";
+  if (syntaxNodes === 0 && spans.length === 0 && boundaryCrossings.length === 0) {
+    return "";
+  }
   let out = `${syntaxNodes}|`;
   for (let i = 0; i < spans.length; i++) {
     const s = spans[i]!;
     if (i > 0) out += ",";
     out += `${s.from}:${s.to}:${s.kind ?? ""}:${s.openAtLineEnd ? 1 : 0}`;
   }
+  if (boundaryCrossings.length > 0) {
+    out += `|${boundaryCrossings.join(",")}`;
+  }
   return out;
+}
+
+function maxAffectedSyntaxLine(
+  doc: Text,
+  state: EditorState,
+  from: number,
+  to: number,
+  mapEndPos?: (pos: number) => number,
+): number {
+  const tree = syntaxTree(state);
+  if (tree.length === 0) return 1;
+  let maxEndPos = 0;
+  tree.iterate({
+    from,
+    to,
+    enter: (node) => {
+      if (!node.type.isTop) {
+        const endPos = mapEndPos ? mapEndPos(node.to) : node.to;
+        if (endPos > maxEndPos) maxEndPos = endPos;
+      }
+      return undefined;
+    },
+  });
+  return maxEndPos > 0 ? doc.lineAt(Math.min(doc.length, maxEndPos)).number : 1;
 }
 
 /**
  * Inspects CodeMirror's `syntaxTree(state)` over `[lineFrom, lineTo]` to:
  * 1. Account for every syntax node starting on this line (`lineFrom <= node.from <= lineTo`)
  *    under `PrettyBudgetTracker`.
- * 2. Collect line-relative protected spans for literal, comment, regex, CDATA, and raw-text
- *    nodes so structural formatting never splits inside syntax-tree literals or comments,
- *    and interior characters of protected spans never mutate fallback lexical state.
+ * 2. Collect line-relative protected spans and boundary-crossing syntax ancestors so
+ *    structural formatting never splits inside syntax-tree literals/comments and suffix
+ *    convergence detects multi-line syntax changes across intervening blank/unchanged lines.
  */
 function collectLineSyntaxProtectedSpans(
   state: EditorState | undefined,
@@ -242,27 +240,20 @@ function collectLineSyntaxProtectedSpans(
   readonly syntaxNodes: number;
   readonly syntaxVisits: number;
   readonly syntaxSpanSignature: string;
+  readonly maxNodeEndPos: number;
 } | "budget" {
   if (!state) {
-    return {
-      spans: [],
-      syntaxNodes: 0,
-      syntaxVisits: 0,
-      syntaxSpanSignature: "",
-    };
+    return { spans: [], syntaxNodes: 0, syntaxVisits: 0, syntaxSpanSignature: "", maxNodeEndPos: lineTo };
   }
   const tree = syntaxTree(state);
   if (tree.length === 0) {
-    return {
-      spans: [],
-      syntaxNodes: 0,
-      syntaxVisits: 0,
-      syntaxSpanSignature: "",
-    };
+    return { spans: [], syntaxNodes: 0, syntaxVisits: 0, syntaxSpanSignature: "", maxNodeEndPos: lineTo };
   }
   const spans: PrettyProtectedSpan[] = [];
+  const boundaryCrossings: string[] = [];
   const lineLen = lineTo - lineFrom;
   let syntaxNodes = 0;
+  let maxNodeEndPos = lineTo;
   const visitsBefore = budget.counters.visits;
   let withinBudget = true;
 
@@ -270,6 +261,14 @@ function collectLineSyntaxProtectedSpans(
     from: lineFrom,
     to: lineTo,
     enter: (node) => {
+      if (!node.type.isTop) {
+        if (node.to > maxNodeEndPos) maxNodeEndPos = node.to;
+        if (node.from < lineFrom || node.to > lineTo) {
+          boundaryCrossings.push(
+            `${node.name}:${node.from < lineFrom ? 1 : 0}:${node.to > lineTo ? 1 : 0}`,
+          );
+        }
+      }
       if (node.from >= lineFrom && node.from <= lineTo) {
         if (!budget.recordSyntaxNode(1)) {
           withinBudget = false;
@@ -299,7 +298,8 @@ function collectLineSyntaxProtectedSpans(
     spans,
     syntaxNodes,
     syntaxVisits: budget.counters.visits - visitsBefore,
-    syntaxSpanSignature: formatSyntaxSpanSignature(syntaxNodes, spans),
+    syntaxSpanSignature: formatSyntaxSpanSignature(syntaxNodes, spans, boundaryCrossings),
+    maxNodeEndPos,
   };
 }
 
@@ -321,88 +321,44 @@ export function computePrettyNativeLayout(
     options.signal,
     options.shouldCancel,
   );
-  const mode = classifyDocumentFormat(
-    rawText,
-    options.path,
-    options.languageHint,
-  );
+  const mode = classifyDocumentFormat(rawText, options.path, options.languageHint);
   const primaryFamily = modeToPrimaryFamily(mode);
+  const makeEarlyResult = (
+    outcome: PrettyProjectionOutcome,
+    family: PrettyLayoutFamily = primaryFamily,
+    limitReason = budget.limitReason,
+  ): PrettyNativeLayoutResult => ({
+    sourceIdentity,
+    sourceRevision,
+    outcome,
+    mode,
+    family,
+    ...(limitReason ? { limitReason } : {}),
+    boundaries: [],
+    lineStates: [],
+    counters: budget.counters,
+  });
 
   if (!budget.checkInput()) {
-    return {
-      sourceIdentity,
-      sourceRevision,
-      outcome: budget.canceled ? "canceled" : "limit-exceeded",
-      mode,
-      family: primaryFamily,
-      ...(budget.limitReason ? { limitReason: budget.limitReason } : {}),
-      boundaries: [],
-      lineStates: [],
-      counters: budget.counters,
-    };
+    return makeEarlyResult(budget.canceled ? "canceled" : "limit-exceeded");
   }
-
   if (doc.length === 0 || mode === "code-passthrough") {
-    return {
-      sourceIdentity,
-      sourceRevision,
-      outcome: "passthrough",
-      mode,
-      family: "passthrough",
-      boundaries: [],
-      lineStates: [],
-      counters: budget.counters,
-    };
+    return makeEarlyResult("passthrough", "passthrough", undefined);
   }
-
   if (doc.lines > budget.limits.maxOutputLines) {
     budget.limitReason = "maxOutputLines";
-    return {
-      sourceIdentity,
-      sourceRevision,
-      outcome: "limit-exceeded",
-      mode,
-      family: primaryFamily,
-      limitReason: "maxOutputLines",
-      boundaries: [],
-      lineStates: [],
-      counters: budget.counters,
-    };
+    return makeEarlyResult("limit-exceeded", primaryFamily, "maxOutputLines");
   }
   budget.counters.outputLines = doc.lines;
   budget.counters.outputUtf16Units = doc.length;
   budget.counters.outputUtf8Bytes = budget.counters.inputUtf8Bytes;
 
-  const eligibilities = determineDocumentLineEligibility(
-    doc,
-    mode,
-    rawText,
-    budget,
-  );
+  const eligibilities = determineDocumentLineEligibility(doc, mode, rawText, budget);
   if (eligibilities === "passthrough") {
-    return {
-      sourceIdentity,
-      sourceRevision,
-      outcome: "passthrough",
-      mode,
-      family: "passthrough",
-      boundaries: [],
-      lineStates: [],
-      counters: budget.counters,
-    };
+    return makeEarlyResult("passthrough", "passthrough", undefined);
   }
   if (eligibilities === "budget") {
-    return {
-      sourceIdentity,
-      sourceRevision,
-      outcome: budget.canceled ? "canceled" : "limit-exceeded",
-      mode,
-      family: primaryFamily,
-      ...(budget.limitReason ? { limitReason: budget.limitReason } : {}),
-      boundaries: [],
-      lineStates: [],
-      counters: budget.counters,
-    };
+    return makeEarlyResult(budget.canceled ? "canceled" : "limit-exceeded");
   }
 
   const totalLines = doc.lines;
@@ -415,24 +371,9 @@ export function computePrettyNativeLayout(
     const elig = eligibilities[lineNum - 1]!;
     const startCont = elig.resetDepth ? INITIAL_LINE_CONTINUATION : runningCont;
 
-    const syntaxRes = collectLineSyntaxProtectedSpans(
-      editorState,
-      line.from,
-      line.to,
-      budget,
-    );
+    const syntaxRes = collectLineSyntaxProtectedSpans(editorState, line.from, line.to, budget);
     if (syntaxRes === "budget") {
-      return {
-        sourceIdentity,
-        sourceRevision,
-        outcome: budget.canceled ? "canceled" : "limit-exceeded",
-        mode,
-        family: primaryFamily,
-        ...(budget.limitReason ? { limitReason: budget.limitReason } : {}),
-        boundaries: [],
-        lineStates: [],
-        counters: budget.counters,
-      };
+      return makeEarlyResult(budget.canceled ? "canceled" : "limit-exceeded");
     }
 
     const scanned = scanLineLexicalBoundaries(
@@ -454,17 +395,7 @@ export function computePrettyNativeLayout(
       syntaxRes.syntaxSpanSignature,
     );
     if (scanned === "budget") {
-      return {
-        sourceIdentity,
-        sourceRevision,
-        outcome: budget.canceled ? "canceled" : "limit-exceeded",
-        mode,
-        family: primaryFamily,
-        ...(budget.limitReason ? { limitReason: budget.limitReason } : {}),
-        boundaries: [],
-        lineStates: [],
-        counters: budget.counters,
-      };
+      return makeEarlyResult(budget.canceled ? "canceled" : "limit-exceeded");
     }
     lineStates[lineNum - 1] = scanned;
     runningCont = continuationFromLineEnd(scanned);
@@ -519,15 +450,16 @@ function buildFieldStateFromScratch(
   editorState?: EditorState,
 ): PrettyNativeFieldState {
   const indentWidthCh = config.indentWidthCh ?? 2;
+  const baseProps = {
+    ...(config.path !== undefined ? { path: config.path } : {}),
+    ...(config.languageHint !== undefined ? { languageHint: config.languageHint } : {}),
+    indentWidthCh,
+    ...(config.limits !== undefined ? { limits: config.limits } : {}),
+  };
   if (!config.enabled) {
     return {
       enabled: false,
-      ...(config.path !== undefined ? { path: config.path } : {}),
-      ...(config.languageHint !== undefined
-        ? { languageHint: config.languageHint }
-        : {}),
-      indentWidthCh,
-      ...(config.limits !== undefined ? { limits: config.limits } : {}),
+      ...baseProps,
       outcome: "passthrough",
       mode: "auto",
       family: "passthrough",
@@ -550,28 +482,11 @@ function buildFieldStateFromScratch(
     };
   }
 
-  const res = computePrettyNativeLayout(
-    doc,
-    {
-      ...(config.path !== undefined ? { path: config.path } : {}),
-      ...(config.languageHint !== undefined
-        ? { languageHint: config.languageHint }
-        : {}),
-      indentWidthCh,
-      ...(config.limits !== undefined ? { limits: config.limits } : {}),
-    },
-    editorState,
-  );
-
+  const res = computePrettyNativeLayout(doc, baseProps, editorState);
   if (res.outcome !== "formatted" || res.boundaries.length === 0) {
     return {
       enabled: true,
-      ...(config.path !== undefined ? { path: config.path } : {}),
-      ...(config.languageHint !== undefined
-        ? { languageHint: config.languageHint }
-        : {}),
-      indentWidthCh,
-      ...(config.limits !== undefined ? { limits: config.limits } : {}),
+      ...baseProps,
       outcome: res.outcome,
       mode: res.mode,
       family: res.family,
@@ -593,12 +508,7 @@ function buildFieldStateFromScratch(
   }
   return {
     enabled: true,
-    ...(config.path !== undefined ? { path: config.path } : {}),
-    ...(config.languageHint !== undefined
-      ? { languageHint: config.languageHint }
-      : {}),
-    indentWidthCh,
-    ...(config.limits !== undefined ? { limits: config.limits } : {}),
+    ...baseProps,
     outcome: "formatted",
     mode: res.mode,
     family: res.family,
@@ -754,6 +664,14 @@ export function updatePrettyNativeLayoutIncrementally(
       : continuationFromLineEnd(prev.lineStates[rescanStartLine - 2]!);
 
   let actualRescanEndLine = rescanMinEndLine;
+  let syntaxAffectedEndLine = Math.min(
+    totalLines,
+    Math.max(
+      rescanMinEndLine,
+      maxAffectedSyntaxLine(newDoc, tr.state, minFromB, maxToB),
+      maxAffectedSyntaxLine(newDoc, tr.startState, minFromA, maxToA, (p) => tr.changes.mapPos(p, 1)),
+    ),
+  );
   const rescannedStates: PrettyLineLayoutState[] = [];
   const addedDecorations: Range<Decoration>[] = [];
 
@@ -763,12 +681,7 @@ export function updatePrettyNativeLayoutIncrementally(
     const savedSyntaxNodes = budget.counters.syntaxNodesVisited;
     const savedVisits = budget.counters.visits;
 
-    const syntaxRes = collectLineSyntaxProtectedSpans(
-      tr.state,
-      line.from,
-      line.to,
-      budget,
-    );
+    const syntaxRes = collectLineSyntaxProtectedSpans(tr.state, line.from, line.to, budget);
     if (syntaxRes === "budget") {
       return buildFieldStateFromScratch(newDoc, config, tr.state);
     }
@@ -779,6 +692,7 @@ export function updatePrettyNativeLayoutIncrementally(
       const oldWasLast = oldLineNum === oldDoc.lines;
       const newIsLast = l === totalLines;
       if (
+        l > syntaxAffectedEndLine &&
         oldState &&
         continuationEqualsLineStart(startCont, oldState) &&
         oldState.syntaxSpanSignature === syntaxRes.syntaxSpanSignature &&
@@ -802,6 +716,12 @@ export function updatePrettyNativeLayoutIncrementally(
           oldRemovedHitMaxDepth = true;
         }
       }
+    }
+    if (syntaxRes.maxNodeEndPos > line.to) {
+      syntaxAffectedEndLine = Math.min(
+        totalLines,
+        Math.max(syntaxAffectedEndLine, newDoc.lineAt(Math.min(newDoc.length, syntaxRes.maxNodeEndPos)).number),
+      );
     }
 
     const lineUtf8 =
