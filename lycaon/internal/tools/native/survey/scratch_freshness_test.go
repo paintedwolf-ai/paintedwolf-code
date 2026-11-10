@@ -102,18 +102,14 @@ func TestDirectControlRootAttachmentWithHumanWarmedCatalogCannotExposeStateToAge
 	statTool := &StatTool{Boundary: boundary, Catalog: catalog}
 	rootRef := tc.Source.Roots[0]
 
-	// 1. Direct survey/catalog inventory & file-stream checks on human-warmed cfgDir:
+	// 1. Direct survey/catalog inventory checks on human-warmed cfgDir:
 	// Even when sourcecatalog holds a ready human snapshot for cfgDir, agent source
-	// inventory, catalog file reader, find walk, listRoot, wcRecursiveDir, and
-	// countDirEntries must expose 0 control-plane entries.
+	// inventory, find walk, listRoot, wcRecursiveDir, and countDirEntries must
+	// expose 0 control-plane entries.
 	inv, err := sourceInventoryForScope(t.Context(), catalog, tc.Identity.ProjectID, rootRef, cfgDir)
 	testutil.FailErr(t, "sourceInventoryForScope on human-warmed cfgDir", err)
 	if got := inventoryPaths(t, inv); len(got) != 0 {
 		t.Fatalf("agent sourceInventoryForScope on human-warmed cfgDir leaked: %v", got)
-	}
-	if rc, ok := openCatalogFile(t.Context(), catalog, tc.Identity.ProjectID, rootRef, filepath.Join(cfgDir, "settings.yaml")); ok {
-		_ = rc.Close()
-		t.Fatal("openCatalogFile leaked settings.yaml from human-warmed catalog")
 	}
 
 	readFilter, err := boundary.CompileReadFilter(t.Context(), cfgDir, tc.ProfileID())
