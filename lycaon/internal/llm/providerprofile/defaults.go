@@ -123,6 +123,10 @@ func Mistral() Profile {
 	return profile
 }
 
+func Doubleword() Profile {
+	return OpenAIVendor()
+}
+
 func Openrouter() Profile {
 	profile := OpenAI()
 	profile.DiscoveryProfile = discovery.OpenRouterProfile()

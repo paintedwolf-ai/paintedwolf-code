@@ -43,6 +43,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 		{"vertex express native", "vertex-express", "*vertexexpress.Provider", providerprofile.DiscoveryVertexExpress, modelinfo.ThinkStyleBudgetTokens},
 		{"openai official", "openai", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 		{"cerebras profile discovery", "cerebras", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
+		{"doubleword discovery", "doubleword", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 		{"openai-compatible default", "openai-compatible", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 		{"unknown kind falls back to openai", "totally-new", "*openaicompat.Provider", providerprofile.DiscoveryConfigured, modelinfo.ThinkStyleEffortLevels},
 	}
