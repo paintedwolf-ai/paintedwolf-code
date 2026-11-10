@@ -163,7 +163,7 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 	testutil.FailErr(t, "remove unchangedTree", os.Remove(unchangedTreePath))
 	if _, err := ImportAndValidateCheckpointGitRefs(
 		t.Context(), store.RootDir(), "chk-frontier-missing-boundary", "worker",
-		PrivateGitSnapshot{BaseCommit: c1, Refs: map[string]string{"refs/heads/work": c2}},
+		PrivateGitSnapshot{CheckpointGitHash: c2, Refs: map[string]string{"refs/heads/work": c2}},
 		map[string]string{"primary": target},
 	); err == nil {
 		t.Fatal("expected missing direct frontier subtree object to fail verification")
@@ -173,7 +173,7 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 	testutil.FailErr(t, "restore unchangedTree", os.WriteFile(unchangedTreePath, savedTreeBytes, 0o444))
 	imported, err := ImportAndValidateCheckpointGitRefs(
 		t.Context(), store.RootDir(), "chk-frontier", "worker",
-		PrivateGitSnapshot{BaseCommit: c1, Refs: map[string]string{"refs/heads/work": c2}},
+		PrivateGitSnapshot{CheckpointGitHash: c2, Refs: map[string]string{"refs/heads/work": c2}},
 		map[string]string{"primary": target},
 	)
 	testutil.FailErr(t, "bounded incremental import", err)
