@@ -363,8 +363,6 @@ func (s *candidateGitObjectSource) publishVerifiedObjects(ctx context.Context, s
 		for oid := range s.selectedPackedOIDs {
 			pubSet[oid], s.incompleteTargetOIDs[oid] = true, true
 		}
-		_, statErr := os.Lstat(dir)
-		createdDir := errors.Is(statErr, os.ErrNotExist)
 		raw, err := json.Marshal(pendingPublishRecord{FormatVersion: pendingPublishFormatVersion, OIDs: slices.Sorted(maps.Keys(pubSet))})
 		if err != nil {
 			return err
@@ -372,13 +370,8 @@ func (s *candidateGitObjectSource) publishVerifiedObjects(ctx context.Context, s
 		var rnd [8]byte
 		_, _ = rand.Read(rnd[:])
 		ownRecord = fmt.Sprintf("pending-%d-%s-%d.json", os.Getpid(), hex.EncodeToString(rnd[:]), pendingPublishSeq.Add(1))
-		if err := writeAtomicJSONOrText(dir, ownRecord, raw, 0o600); err != nil {
+		if err := writeAtomicJSONOrText(s.commonGitDir, filepath.Join("lycaon-pending-publish", ownRecord), raw, 0o600); err != nil {
 			return err
-		}
-		if createdDir {
-			if err := syncDir(s.commonGitDir); err != nil {
-				return err
-			}
 		}
 	}
 	if err := s.publishSelectedPack(ctx); err != nil {
