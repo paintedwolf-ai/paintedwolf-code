@@ -80,9 +80,17 @@ class HarnessRuntimeTest(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source / name, target)
         (self.scripts / "e2e/env.sh").write_text(":\n")
+        browser = self.root / "browser" / "chrome-headless-shell"
+        browser.parent.mkdir()
+        browser.write_text("fixture")
+        browser.chmod(0o700)
+        (browser.parent / "icudtl.dat").write_bytes(b"fixture")
+        browser_record = self.root / "browser.json"
+        browser_record.write_text(json.dumps({"path": str(browser)}))
         (self.scripts / "e2e-sidecar-build.sh").write_text(
             'set -eu\nmkdir -p "$LYCAON_E2E_STATE_DIR/runtime"\n'
             'cp "$FIXTURE_BINARY" "$LYCAON_E2E_STATE_DIR/runtime/sidecar"\n'
+            'cp "$FIXTURE_BROWSER_RECORD" "$LYCAON_E2E_STATE_DIR/runtime/browser.json"\n'
             'echo build >> "$LYCAON_E2E_STATE_DIR/builds"\n')
         (self.scripts / "e2e-wait-health.sh").write_text(
             'set -eu\nfor _ in $(seq 1 100); do\n'
@@ -93,7 +101,8 @@ class HarnessRuntimeTest(unittest.TestCase):
         self.env = {k: v for k, v in os.environ.items()
                     if not k.startswith(("LYCAON_", "VITE_LYCAON_"))}
         self.env.update(LYCAON_HARNESS_MODE="mock", LYCAON_LLM_MOCK="1",
-                        LYCAON_E2E_TOKEN="fixture", FIXTURE_BINARY=str(self.binary))
+                        LYCAON_E2E_TOKEN="fixture", FIXTURE_BINARY=str(self.binary),
+                        FIXTURE_BROWSER_RECORD=str(browser_record))
         self.states = []
         self.addCleanup(self.stop_states)
 
