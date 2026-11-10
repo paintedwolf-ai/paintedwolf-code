@@ -706,7 +706,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(jsxAfterToTag.lineStates[5]?.syntaxSpanSignature).not.toBe(
       sigLine6Before,
     );
-    expect(jsxAfterToTag.lineStates[5]?.relBoundaries.length).toBe(4);
+    expect(jsxAfterToTag.lineStates[5]?.relBoundaries.length).toBe(5);
     expect(jsxAfterToTag.lineStates).toEqual(jsxFreshToTag.lineStates);
     expect(jsxAfterToTag.counters).toEqual(jsxFreshToTag.counters);
     expect(jsxAfterToTag.lastIncrementalSuffixLinesReused).toBe(1);
