@@ -118,7 +118,7 @@ func TestPreInvokeBoundaryCarriesExecutableAlternates(t *testing.T) {
 		"command":            "runtime --version",
 		"capability_request": map[string]any{"host_resources": []any{"runtime"}},
 	}
-	_, tc, err := executor.applyPreInvokeBoundary(context.Background(), "command", "coordinator", args, tools.ToolContext{})
+	_, tc, _, err := executor.applyPreInvokeBoundary(context.Background(), "command", "coordinator", args, tools.ToolContext{})
 	if err == nil {
 		t.Fatal("an unavailable host resource catalog must reject before invocation")
 	}
