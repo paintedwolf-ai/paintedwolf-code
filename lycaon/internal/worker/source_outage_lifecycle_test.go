@@ -78,7 +78,7 @@ func assertWorkerSourceOutageRetry(t *testing.T, service *MergeService, task *ap
 	}
 	testutil.FailErr(t, "restore source for worker retry", os.WriteFile(filepath.Join(control, "restore.request"), nil, 0600))
 	workerOutageMarker(t, control, "restored.json")
-	assertFileHolds(t, filepath.Join(source, "main.go"), "package main\n")
+	awaitWorkerSourceReconnect(t, filepath.Join(source, "main.go"))
 }
 
 func workerOutageMarker(t *testing.T, control, name string) {
@@ -96,5 +96,25 @@ func workerOutageMarker(t *testing.T, control, name string) {
 			t.Fatalf("worker outage marker %s not received", name)
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// A restored transport listener does not mean the kernel has reconnected yet.
+// Retry native reads before retrying promotion; never retry unexpected content.
+func awaitWorkerSourceReconnect(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			if string(data) != "package main\n" {
+				t.Fatalf("source changed during failed promotion: %q", data)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("source did not reconnect within retry window: %v", err)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }
