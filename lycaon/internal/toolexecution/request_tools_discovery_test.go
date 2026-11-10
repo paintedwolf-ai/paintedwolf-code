@@ -148,6 +148,7 @@ func TestRequestDiscoveryCursorSurvivesPartialActivation(t *testing.T) {
 		names = append(names, fmt.Sprintf("mcp_fixture_tool_%02d", i))
 	}
 	registerRequestFixtureTools(t, reg, names...)
+	enlargeDiscoveryFixtureCards(t, reg, names)
 	testutil.FailErr(t, "register discovery", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: activation, Boundary: fakeRequestBoundary{}}))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "partial-page"},
@@ -161,11 +162,12 @@ func TestRequestDiscoveryCursorSurvivesPartialActivation(t *testing.T) {
 	if result.Discovery == nil || result.Discovery.Total != 43 || result.Discovery.Entries[0].Name != names[1] || result.Discovery.NextNeed == "" {
 		t.Fatalf("partial page=%s", raw)
 	}
+	nextIndex := 1 + len(result.Discovery.Entries)
 	tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools", names[0]}, names[1:])
 	next, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": result.Discovery.NextNeed}, tctx)
 	testutil.FailErr(t, "continue after activation", err)
 	testutil.FailErr(t, "decode continuation", json.Unmarshal([]byte(next), &result))
-	if result.Discovery.Entries[0].Name != names[21] || len(activation.Active(tctx.Identity.SessionID)) != 1 {
+	if result.Discovery.Entries[0].Name != names[nextIndex] || len(activation.Active(tctx.Identity.SessionID)) != 1 {
 		t.Fatalf("continuation=%s", next)
 	}
 }
@@ -224,6 +226,7 @@ func TestRequestNoMatchDiscoveryReachesDeferredTask(t *testing.T) {
 	}
 	names = append(names, "task")
 	registerRequestFixtureTools(t, reg, append(names, "write")...)
+	enlargeDiscoveryFixtureCards(t, reg, names)
 	taskContract, ok := toolcontract.Lookup("task")
 	if !ok {
 		t.Fatal("task contract missing")
@@ -370,5 +373,17 @@ func TestRequestFailureReportsExpandedSchemasWithoutDiscoveryLoop(t *testing.T) 
 	testutil.FailErr(t, "decode result", json.Unmarshal([]byte(raw), &result))
 	if !result.FullCatalog || result.Discovery != nil || !ledger.Active("s")[name] || len(ledger.Needed("s")) != 0 {
 		t.Fatalf("fallback result = %+v; standing = %+v", result, ledger.Standing("s"))
+	}
+}
+
+func enlargeDiscoveryFixtureCards(t *testing.T, reg *tools.DefaultRegistry, names []string) {
+	t.Helper()
+	for _, name := range names {
+		definition, ok := reg.Definition(name)
+		if !ok {
+			t.Fatalf("missing fixture tool %s", name)
+		}
+		definition.Meta.Description = strings.Repeat("界", turnload.CardMaxRunes)
+		testutil.FailErr(t, "describe fixture tool", reg.RegisterDefinition(definition))
 	}
 }

@@ -129,8 +129,8 @@ lookups keep their existing no-match behavior. Discovery never loads a tool or
 reads a skill body. A mixed tool request can load its
 explicit names and return discovery for the unanswered portion.
 
-Each page contains up to 20 available names and bounded descriptions, in name
-order, within a 16 KiB serialized-page budget. Byte-limited pages continue after
+Catalogs that fit appear in full. Larger catalogs page available names and bounded
+descriptions in name order within a 16 KiB serialized-page budget. Byte-limited pages continue after
 the last entry actually returned. The model selects an entry by retrying its exact name. Passing
 `discovery.next_need` unchanged as `need` retrieves another fallback page without
 ranking. These continuation values and selection instructions appear only in

@@ -282,7 +282,7 @@ func (m *State) ForSession(ctx context.Context, sess *api.Session) surface.Imple
 				snapshot.Reconciliation = m.reconciliation.Reconciliation(rootID)
 			}
 			progressContent = snapshot.Content
-			encoded, _ := json.Marshal(snapshot) //nolint:errchkjson // Progress snapshots hold plain text, numbers and times.
+			encoded, _ := json.Marshal(progress.ForRequest(rootID, snapshot)) //nolint:errchkjson // Progress snapshots hold plain text, numbers and times.
 			state.ProgressSnapshot = string(encoded)
 		}
 	}
