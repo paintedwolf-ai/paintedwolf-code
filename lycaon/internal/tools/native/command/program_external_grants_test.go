@@ -409,11 +409,11 @@ func TestExternalSpawnAttachedProtectedRootGrantAndRevokeLifecycle(t *testing.T)
 			t.Fatalf("phase 2b one-shot write grant leaked to sibling %s", deniedWrite)
 		}
 	}
-	for _, deniedRead := range []string{privKey, authKeys} {
+	for _, deniedRead := range []string{privKey, pubKey, otherKey} {
 		out, err = callWithApprovedAccess(oneShotWriteGrant, "external -- /bin/cat "+strconv.Quote(deniedRead))
 		testutil.FailErr(t, "phase 2b one-shot write grant read attempt", err)
 		if decodeOutcome(t, out).Status == 0 {
-			t.Fatalf("phase 2b write-only one-shot grant allowed reading %s", deniedRead)
+			t.Fatalf("phase 2b write-only one-shot grant allowed reading sibling %s", deniedRead)
 		}
 	}
 	testutil.FailErr(t, "restore authorized_keys", os.WriteFile(authKeys, []byte("ssh-ed25519 INITIAL\n"), 0o600))
