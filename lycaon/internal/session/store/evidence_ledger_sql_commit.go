@@ -93,7 +93,7 @@ func buildMetadataLedgerFromRows(rows []db.ListEvidenceRecordsRow) (evidence.Led
 		if err := unmarshalEvidenceLineRanges(r.LineRanges, &rec); err != nil {
 			return evidence.Ledger{}, fmt.Errorf("decode metadata for %s: %w", rec.Handle, err)
 		}
-		if !rec.ExternalCustody && !evidence.ReplacesWholeFileCustody(rec) {
+		if !rec.HasExternalCustody() && !evidence.ReplacesWholeFileCustody(rec) {
 			continue
 		}
 		records = append(records, rec)
@@ -101,26 +101,66 @@ func buildMetadataLedgerFromRows(rows []db.ListEvidenceRecordsRow) (evidence.Led
 	return evidence.AssembleLedger(records), nil
 }
 
-// loadCommitLedgers reads live path bindings and custody metadata in a single query pass.
-func loadCommitLedgers(ctx context.Context, q *db.Queries, sessionID string, incoming evidence.Record, needCustody bool) (evidence.Ledger, evidence.Ledger, error) {
+// nextCustodySeq allocates the next monotonic per-session CustodySeq across all
+// custody-candidate rows, failing closed if any custody-candidate row has corrupt metadata.
+func nextCustodySeq(ctx context.Context, q *db.Queries, sessionID string) (int, error) {
+	rows, err := q.ListEvidenceRecords(ctx, sessionID)
+	if err != nil {
+		return 0, fmt.Errorf("next custody seq: %w", err)
+	}
+	custodyCount := 0
+	maxSeq := 0
+	for _, r := range rows {
+		if !recordCanAffectExternalCustody(r.Kind, r.SourceTool, r.Path) {
+			continue
+		}
+		custodyCount++
+		var rec evidence.Record
+		if err := unmarshalEvidenceLineRanges(r.LineRanges, &rec); err != nil {
+			return 0, fmt.Errorf("decode custody metadata for %s: %w", r.Handle, err)
+		}
+		if s := rec.CustodySeq(); s > maxSeq {
+			maxSeq = s
+		}
+	}
+	return max(custodyCount+1, maxSeq+1), nil
+}
+
+// loadCommitLedgers reads live path bindings, custody metadata, and nextCustodySeq in a single query pass.
+func loadCommitLedgers(ctx context.Context, q *db.Queries, sessionID string, incoming evidence.Record, needCustody bool) (evidence.Ledger, evidence.Ledger, int, error) {
 	needBindings := evidence.UpdatesFileBindings(incoming)
-	if !needBindings && !needCustody {
-		return evidence.InitLedger(), evidence.InitLedger(), nil
+	needCustodySeq := evidence.ReplacesWholeFileCustody(incoming) && incoming.CustodySeq() == 0
+	if !needBindings && !needCustody && !needCustodySeq {
+		return evidence.InitLedger(), evidence.InitLedger(), 0, nil
 	}
 	rows, err := q.ListEvidenceRecords(ctx, sessionID)
 	if err != nil {
-		return evidence.Ledger{}, evidence.Ledger{}, err
+		return evidence.Ledger{}, evidence.Ledger{}, 0, err
 	}
 	binding := evidence.ActiveBinding()
 	var bindingRecs []evidence.Record
 	var custodyRecs []evidence.Record
+	custodyCount := 0
+	maxSeq := 0
 	for _, r := range rows {
+		isCustodyCandidate := recordCanAffectExternalCustody(r.Kind, r.SourceTool, r.Path)
 		if r.SupersededBy.Valid {
+			if needCustodySeq && isCustodyCandidate {
+				custodyCount++
+				var supRec evidence.Record
+				if err := unmarshalEvidenceLineRanges(r.LineRanges, &supRec); err != nil {
+					return evidence.Ledger{}, evidence.Ledger{}, 0, fmt.Errorf("decode metadata for %s: %w", r.Handle, err)
+				}
+				if s := supRec.CustodySeq(); s > maxSeq {
+					maxSeq = s
+				}
+			}
 			continue
 		}
 		wantBinding := needBindings && binding.KindShape(r.Kind) == evidence.ShapeFileRegion
-		wantCustody := needCustody && recordCanAffectExternalCustody(r.Kind, r.SourceTool, r.Path)
-		if !wantBinding && !wantCustody {
+		wantCustody := needCustody && isCustodyCandidate
+		wantSeq := needCustodySeq && isCustodyCandidate
+		if !wantBinding && !wantCustody && !wantSeq {
 			continue
 		}
 		rec := evidence.Record{
@@ -135,12 +175,18 @@ func loadCommitLedgers(ctx context.Context, q *db.Queries, sessionID string, inc
 			Survey:     r.Survey != 0,
 		}
 		if err := unmarshalEvidenceLineRanges(r.LineRanges, &rec); err != nil {
-			return evidence.Ledger{}, evidence.Ledger{}, fmt.Errorf("decode metadata for %s: %w", rec.Handle, err)
+			return evidence.Ledger{}, evidence.Ledger{}, 0, fmt.Errorf("decode metadata for %s: %w", rec.Handle, err)
+		}
+		if wantSeq {
+			custodyCount++
+			if s := rec.CustodySeq(); s > maxSeq {
+				maxSeq = s
+			}
 		}
 		if wantBinding && evidence.SupersedesPathHandle(incoming, rec) {
 			bindingRecs = append(bindingRecs, rec)
 		}
-		if wantCustody && (rec.ExternalCustody || evidence.ReplacesWholeFileCustody(rec)) {
+		if wantCustody && (rec.HasExternalCustody() || evidence.ReplacesWholeFileCustody(rec)) {
 			custodyRecs = append(custodyRecs, rec)
 		}
 	}
@@ -152,7 +198,11 @@ func loadCommitLedgers(ctx context.Context, q *db.Queries, sessionID string, inc
 	if needCustody {
 		custody = evidence.AssembleLedger(custodyRecs)
 	}
-	return bindings, custody, nil
+	nextSeq := 0
+	if needCustodySeq {
+		nextSeq = max(custodyCount+1, maxSeq+1)
+	}
+	return bindings, custody, nextSeq, nil
 }
 
 // CommitEvidenceToolResult persists the observation and updates file bindings.
@@ -180,6 +230,8 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 		return "", content, fmt.Errorf("bind %s evidence to artifact %s: artifact records not configured", toolName, artifactID)
 	}
 
+	unlock := s.lockMutation(sessionID)
+	defer unlock()
 	release := bloblifecycle.AcquirePublication(s.dataDir)
 	defer release()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -195,9 +247,12 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 
 	contentPaths := evidence.ContentPathsForRecord(rec)
 	needCustody := len(contentPaths) > 0
-	live, metaLedger, err := loadCommitLedgers(ctx, qtx, sessionID, rec, needCustody)
+	live, metaLedger, nextSeq, err := loadCommitLedgers(ctx, qtx, sessionID, rec, needCustody)
 	if err != nil {
 		return "", content, err
+	}
+	if nextSeq > 0 {
+		rec.SetCustodySeq(nextSeq)
 	}
 	metaLoaded := needCustody
 	if needCustody {

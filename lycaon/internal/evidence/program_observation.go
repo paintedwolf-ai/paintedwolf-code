@@ -87,7 +87,7 @@ func BuildProgramHTTPRecord(projectDir string, prov ProgramHTTPProvenance) Recor
 		Surface:          SurfaceHTTP,
 		SourceTool:       "command",
 		UntrustedContent: prov.UntrustedContent,
-		ExternalCustody:  len(prov.CustodyPaths) > 0,
+		Custody:          FileCustody{External: len(prov.CustodyPaths) > 0},
 	}
 	for _, u := range prov.ObservedURLs {
 		rec.touchURL(u)

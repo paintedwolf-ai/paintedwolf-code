@@ -22,13 +22,6 @@ func writeEvidenceRecord(ctx context.Context, q *db.Queries, dataDir, sessionID,
 	if sessionID == "" || handle == "" {
 		return false, fmt.Errorf("session: upsert evidence requires session_id and handle")
 	}
-	if rec.Seq() == 0 {
-		seq, err := nextEvidenceSeq(ctx, q, sessionID)
-		if err != nil {
-			return false, err
-		}
-		rec.SetSeq(seq)
-	}
 	lineRanges, err := marshalEvidenceLineRanges(rec)
 	if err != nil {
 		return false, err
@@ -67,26 +60,6 @@ func writeEvidenceRecord(ctx context.Context, q *db.Queries, dataDir, sessionID,
 		return false, fmt.Errorf("upsert evidence record: %w", err)
 	}
 	return n > 0, nil
-}
-
-func nextEvidenceSeq(ctx context.Context, q *db.Queries, sessionID string) (int, error) {
-	rows, err := q.ListEvidenceRecords(ctx, sessionID)
-	if err != nil {
-		return 0, fmt.Errorf("next evidence seq: %w", err)
-	}
-	next := len(rows) + 1
-	for _, r := range rows {
-		if !recordCanAffectExternalCustody(r.Kind, r.SourceTool, r.Path) {
-			continue
-		}
-		var rec evidence.Record
-		if err := unmarshalEvidenceLineRanges(r.LineRanges, &rec); err == nil {
-			if s := rec.Seq(); s >= next {
-				next = s + 1
-			}
-		}
-	}
-	return next, nil
 }
 
 // marshalEvidenceBody stores captured bodies by digest in the caller's transaction.

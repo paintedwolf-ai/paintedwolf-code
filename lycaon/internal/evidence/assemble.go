@@ -42,7 +42,7 @@ func AssembleLedger(records []Record) Ledger {
 	}
 	chronological := append([]Record(nil), records...)
 	sort.SliceStable(chronological, func(i, j int) bool {
-		return chronological[i].aux.seq < chronological[j].aux.seq
+		return chronological[i].CustodySeq() < chronological[j].CustodySeq()
 	})
 	for _, rec := range chronological {
 		if rec.Handle == "" || rec.SupersededBy != "" {

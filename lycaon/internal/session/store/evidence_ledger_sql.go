@@ -30,7 +30,7 @@ type storedLineRangesPayload struct {
 	FrameIndex       int                       `json:"frame_index,omitempty"`
 	UntrustedContent bool                      `json:"untrusted_content,omitempty"`
 	ExternalCustody  bool                      `json:"external_custody,omitempty"`
-	Seq              int                       `json:"seq,omitempty"`
+	CustodySeq       int                       `json:"custody_seq,omitempty"`
 }
 
 func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
@@ -49,7 +49,7 @@ func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
 		FrameIndex:       rec.FrameIndex,
 		UntrustedContent: aux.UntrustedContent,
 		ExternalCustody:  aux.ExternalCustody,
-		Seq:              aux.Seq,
+		CustodySeq:       aux.CustodySeq,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -80,7 +80,7 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 		PathTiers:        payload.PathTiers,
 		UntrustedContent: payload.UntrustedContent,
 		ExternalCustody:  payload.ExternalCustody,
-		Seq:              payload.Seq,
+		CustodySeq:       payload.CustodySeq,
 	})
 	rec.Surface = payload.Surface
 	rec.ArtifactID = payload.ArtifactID
@@ -161,6 +161,8 @@ func (ev *sqlEvidence) UpsertEvidenceRecord(ctx context.Context, sessionID strin
 }
 
 func upsertEvidenceRecordSQL(ctx context.Context, s *sqlCore, sessionID string, rec evidence.Record) error {
+	unlock := s.lockMutation(sessionID)
+	defer unlock()
 	release := bloblifecycle.AcquirePublication(s.dataDir)
 	defer release()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -172,6 +174,13 @@ func upsertEvidenceRecordSQL(ctx context.Context, s *sqlCore, sessionID string, 
 	projectID, err := qtx.GetSessionProjectID(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("resolve evidence record project: %w", err)
+	}
+	if evidence.ReplacesWholeFileCustody(rec) && rec.CustodySeq() == 0 {
+		seq, err := nextCustodySeq(ctx, qtx, sessionID)
+		if err != nil {
+			return err
+		}
+		rec.SetCustodySeq(seq)
 	}
 	inserted, err := writeEvidenceRecord(ctx, qtx, s.dataDir, sessionID, projectID, rec)
 	if err != nil {

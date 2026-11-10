@@ -877,10 +877,18 @@ func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T
 			ledgerA, err := s.LoadLedger(ctx, sessA.ID)
 			testutil.FailErr(t, "LoadLedger sessA", err)
 			readAlphaRec, ok := evidence.ResolveHandle(ledgerA, readAlphaHandle)
-			if !ok || !readAlphaRec.UntrustedContent || !readAlphaRec.ExternalCustody ||
+			if !ok || !readAlphaRec.UntrustedContent || !readAlphaRec.HasExternalCustody() ||
 				!slices.Equal(evidence.ObservedURLsForRecord(readAlphaRec), []string{"https://fresh-alpha.external.example/v1/fresh.txt"}) {
 				t.Fatalf("readAlphaRec = %+v urls=%v, want UntrustedContent=true and only fresh URL",
 					readAlphaRec, evidence.ObservedURLsForRecord(readAlphaRec))
+			}
+			if readAlphaRec.CustodySeq() != 0 {
+				t.Fatalf("readAlphaRec.CustodySeq() = %d, want 0 on non-replacing read record", readAlphaRec.CustodySeq())
+			}
+			w4Rec, ok := evidence.ResolveHandle(ledgerA, w4)
+			h2Rec, ok2 := evidence.ResolveHandle(ledgerA, h2)
+			if !ok || !ok2 || w4Rec.CustodySeq() <= 0 || h2Rec.CustodySeq() <= w4Rec.CustodySeq() {
+				t.Fatalf("expected 0 < w4.CustodySeq (%d) < h2.CustodySeq (%d)", w4Rec.CustodySeq(), h2Rec.CustodySeq())
 			}
 
 			// Case B: High download ordinals (http_response#3 on beta.txt, http_response#4 on gamma.txt) followed by
@@ -971,7 +979,7 @@ func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T
 			testutil.FailErr(t, "LoadLedger sessB", err)
 			for _, h := range []string{readBetaHandle, readGammaHandle} {
 				rec, ok := evidence.ResolveHandle(ledgerB, h)
-				if !ok || rec.UntrustedContent || rec.ExternalCustody || len(evidence.ObservedURLsForRecord(rec)) != 0 {
+				if !ok || rec.UntrustedContent || rec.HasExternalCustody() || len(evidence.ObservedURLsForRecord(rec)) != 0 {
 					t.Fatalf("clean read record %s = %+v urls=%v, want clean", h, rec, evidence.ObservedURLsForRecord(rec))
 				}
 			}
@@ -996,12 +1004,174 @@ func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T
 			ledgerB2, err := s.LoadLedger(ctx, sessB.ID)
 			testutil.FailErr(t, "LoadLedger sessB after re-download", err)
 			readGamma2Rec, ok := evidence.ResolveHandle(ledgerB2, readGamma2Handle)
-			if !ok || !readGamma2Rec.UntrustedContent || !readGamma2Rec.ExternalCustody ||
+			if !ok || !readGamma2Rec.UntrustedContent || !readGamma2Rec.HasExternalCustody() ||
 				!slices.Equal(evidence.ObservedURLsForRecord(readGamma2Rec), []string{"https://gamma.external.example/v2/redownload.txt"}) {
 				t.Fatalf("readGamma2Rec = %+v urls=%v, want only v2 redownload URL",
 					readGamma2Rec, evidence.ObservedURLsForRecord(readGamma2Rec))
 			}
 		})
+	}
+}
+
+func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "custody_seq_semantics.db"))
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
+	store := NewSQL(sqlDB)
+
+	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "Create", err)
+
+	// 1. Seed a legacy external-custody row WITHOUT custody_seq (CustodySeq == 0) via raw SQL.
+	legacyCustodyJSON := `{"v":1,"external_custody":true,"urls_touched":["https://legacy.external.example/v0/seed.txt"]}`
+	_, err = sqlDB.ExecContext(ctx, `
+		INSERT INTO evidence_records (
+			session_id, project_id, handle, ordinal, kind, shape, fidelity, source_tool, marks_untrusted,
+			path, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
+		) VALUES (?, ?, 'http_response#1', 1, 'http_response', 'surface_snapshot', 'structured', 'http_request', 0, 'legacy.txt', 'https://legacy.external.example/v0/seed.txt', ?, '', 0, 0, NULL)
+	`, sess.ID, testdbseed.DefaultProjectID, legacyCustodyJSON)
+	testutil.FailErr(t, "insert legacy custody row", err)
+
+	if urls, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"legacy.txt"}); err != nil ||
+		!slices.Equal(urls, []string{"https://legacy.external.example/v0/seed.txt"}) {
+		t.Fatalf("ExternalCustodyURLsForPaths(legacy.txt) = %v, err=%v, want legacy URL", urls, err)
+	}
+
+	// 2. Commit a whole-file local write on legacy.txt (write#1). Because the session has 1 existing custody-candidate row,
+	// write#1 receives CustodySeq == 2 (> 0) and supersedes legacy http_response#1 (CustodySeq == 0) across reopen.
+	w1, _, err := store.CommitEvidenceToolResult(
+		ctx, sess.ID, dir, "write",
+		map[string]any{"path": "legacy.txt"},
+		`{"path":"legacy.txt","bytes_written":10}`,
+	)
+	testutil.FailErr(t, "write legacy.txt", err)
+	if w1 != "write#1" {
+		t.Fatalf("w1 = %q, want write#1", w1)
+	}
+	store = NewSQL(sqlDB)
+	if urls, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"legacy.txt"}); err != nil || len(urls) != 0 {
+		t.Fatalf("ExternalCustodyURLsForPaths(legacy.txt) after write#1 = %v, err=%v, want empty", urls, err)
+	}
+
+	// 3. Commit multiple non-custody tool results (command, list_dir, find, inline http_request, read, grep, partial edit,
+	// CommitProgramObservation, inline CommitProgramHTTPProvenance) and verify none allocate CustodySeq or advance nextCustodySeq.
+	for _, nc := range []struct {
+		tool    string
+		args    map[string]any
+		content string
+	}{
+		{"command", map[string]any{"command": "echo hi"}, "hi\n"},
+		{"list_dir", map[string]any{"path": "."}, "legacy.txt\n"},
+		{"find", map[string]any{"pattern": "*.txt"}, "legacy.txt\n"},
+		{"http_request", map[string]any{"url": "https://inline.external.example/v1/ping"}, `{"status":200,"url":"https://inline.external.example/v1/ping","body":"pong"}`},
+		{"read", map[string]any{"path": "legacy.txt"}, `{"path":"legacy.txt","content":"1|clean\n","offset":1,"end_line":1}`},
+		{"grep", map[string]any{"pattern": "clean", "path": "legacy.txt"}, `{"matches":[{"path":"legacy.txt","line":1,"content":"clean"}]}`},
+		{"edit", map[string]any{"path": "legacy.txt"}, `{"path":"legacy.txt","start_line":1,"end_line":1}`},
+	} {
+		_, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, nc.tool, nc.args, nc.content)
+		testutil.FailErr(t, "non-custody "+nc.tool, err)
+	}
+	_, err = store.CommitProgramObservation(ctx, sess.ID, "command", &api.CommandProgramReceipt{Summary: "echo ok"}, "ok\n")
+	testutil.FailErr(t, "CommitProgramObservation", err)
+	_, err = store.CommitProgramHTTPProvenance(ctx, sess.ID, dir, evidence.ProgramHTTPProvenance{
+		UntrustedContent: true,
+		ObservedURLs:     []string{"https://inline-curl.external.example/v1/stdout"},
+	})
+	testutil.FailErr(t, "inline CommitProgramHTTPProvenance", err)
+
+	// Next custody-replacing download (http_response#4) must receive CustodySeq == 3 (immediately after write#1's CustodySeq == 2,
+	// unaffected by the 9 non-custody / partial-edit commits above).
+	h4, _, err := store.CommitEvidenceToolResult(
+		ctx, sess.ID, dir, "http_request",
+		map[string]any{"url": "https://reseeded.external.example/v1/new.txt", "response_path": "legacy.txt"},
+		`{"status":200,"url":"https://reseeded.external.example/v1/new.txt","response_path":"legacy.txt","written":true}`,
+	)
+	testutil.FailErr(t, "re-download legacy.txt", err)
+	ledger, err := store.LoadLedger(ctx, sess.ID)
+	testutil.FailErr(t, "LoadLedger", err)
+	w1Rec := ledger.Handles[w1]
+	h4Rec := ledger.Handles[h4]
+	if w1Rec.CustodySeq() != 2 || h4Rec.CustodySeq() != 3 {
+		t.Fatalf("CustodySeq(w1=%d, h4=%d), want (2, 3)", w1Rec.CustodySeq(), h4Rec.CustodySeq())
+	}
+	for handle, rec := range ledger.Handles {
+		if handle == "http_response#1" || handle == w1 || handle == h4 {
+			continue
+		}
+		if rec.CustodySeq() != 0 {
+			t.Fatalf("non-custody record %s unexpectedly assigned CustodySeq=%d: %+v", handle, rec.CustodySeq(), rec)
+		}
+	}
+
+	// 4. Duplicate-handle UpsertEvidenceRecord (ON CONFLICT DO NOTHING) preserves original CustodySeq and URLs.
+	dup := evidence.Record{
+		Handle:     h4,
+		Kind:       "http_response",
+		Shape:      evidence.ShapeSurfaceSnapshot,
+		Fidelity:   evidence.FidelityStructured,
+		SourceTool: "http_request",
+		Path:       "legacy.txt",
+		URL:        "https://attacker-overwrite.external.example/ignored",
+		Custody:    evidence.FileCustody{External: true, Seq: 99},
+	}
+	testutil.FailErr(t, "duplicate UpsertEvidenceRecord", store.UpsertEvidenceRecord(ctx, sess.ID, dup))
+	ledgerAfterDup, err := store.LoadLedger(ctx, sess.ID)
+	testutil.FailErr(t, "LoadLedger after dup", err)
+	if got := ledgerAfterDup.Handles[h4]; got.CustodySeq() != 3 || got.URL != "https://reseeded.external.example/v1/new.txt" {
+		t.Fatalf("duplicate UpsertEvidenceRecord mutated existing record: %+v", got)
+	}
+
+	// 5. Superseded custody row with high CustodySeq (e.g. 20) still bounds subsequent CustodySeq allocation monotonically.
+	highWrite := evidence.Record{
+		Handle:     "write#10",
+		Kind:       "write",
+		Shape:      evidence.ShapeStructuredEvent,
+		Fidelity:   evidence.FidelityStructured,
+		SourceTool: "write",
+		Path:       "legacy.txt",
+		Custody:    evidence.FileCustody{Seq: 20},
+	}
+	testutil.FailErr(t, "upsert write#10", store.UpsertEvidenceRecord(ctx, sess.ID, highWrite))
+	testutil.FailErr(t, "mark write#10 superseded", store.MarkSuperseded(ctx, sess.ID, "write#10", "write#11"))
+	delHandle, _, err := store.CommitEvidenceToolResult(
+		ctx, sess.ID, dir, "delete",
+		map[string]any{"path": "legacy.txt"},
+		`{"path":"legacy.txt","deleted":true}`,
+	)
+	testutil.FailErr(t, "delete legacy.txt", err)
+	ledgerAfterDel, err := store.LoadLedger(ctx, sess.ID)
+	testutil.FailErr(t, "LoadLedger after delete", err)
+	if gotSeq := ledgerAfterDel.Handles[delHandle].CustodySeq(); gotSeq != 21 {
+		t.Fatalf("CustodySeq after superseded Seq=20 row = %d, want 21", gotSeq)
+	}
+
+	// 6. Deterministic zero-scan & fail-closed oracle: poison live custody row write#1's line_ranges JSON.
+	// Ordinary non-custody writes must still succeed (0 custody scans/decodes), whereas custody reads and
+	// custody-replacing commits must fail closed on the corrupt custody row.
+	_, err = sqlDB.ExecContext(ctx, `UPDATE evidence_records SET line_ranges = '{corrupt-custody-json' WHERE session_id = ? AND handle = ?`, sess.ID, w1)
+	testutil.FailErr(t, "poison write#1 line_ranges", err)
+
+	if _, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "command", map[string]any{"command": "true"}, "ok\n"); err != nil {
+		t.Fatalf("non-custody command commit must not scan/decode custody rows, got err: %v", err)
+	}
+	if _, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "list_dir", map[string]any{"path": "."}, "legacy.txt\n"); err != nil {
+		t.Fatalf("non-custody list_dir commit must not scan/decode custody rows, got err: %v", err)
+	}
+	if _, err := store.CommitProgramObservation(ctx, sess.ID, "command", &api.CommandProgramReceipt{Summary: "true"}, "ok\n"); err != nil {
+		t.Fatalf("CommitProgramObservation must not scan/decode custody rows, got err: %v", err)
+	}
+	if _, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"legacy.txt"}); err == nil {
+		t.Fatal("ExternalCustodyURLsForPaths must fail closed when a live custody-candidate row has corrupt metadata")
+	}
+	if _, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "write", map[string]any{"path": "legacy.txt"}, `{"path":"legacy.txt","bytes_written":4}`); err == nil {
+		t.Fatal("whole-file write commit must fail closed when allocating CustodySeq over corrupt custody metadata")
+	}
+	if _, err := store.CommitProgramHTTPProvenance(ctx, sess.ID, dir, evidence.ProgramHTTPProvenance{
+		ObservedURLs: []string{"https://blocked.external.example/v1/file.txt"},
+		CustodyPaths: []string{"legacy.txt"},
+	}); err == nil {
+		t.Fatal("file-saving CommitProgramHTTPProvenance must fail closed when allocating CustodySeq over corrupt custody metadata")
 	}
 }
 

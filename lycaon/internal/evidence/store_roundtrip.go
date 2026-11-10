@@ -9,7 +9,7 @@ type RecordAux struct {
 	PathTiers        map[string]string
 	UntrustedContent bool
 	ExternalCustody  bool
-	Seq              int
+	CustodySeq       int
 }
 
 // CloneRecordForStore copies auxiliary index fields for persistence.
@@ -17,11 +17,11 @@ func CloneRecordForStore(rec Record) RecordAux {
 	cloned := cloneRecord(rec)
 	out := RecordAux{
 		PathsTouched:     append([]string(nil), cloned.pathsTouched...),
-		URLsTouched:      append([]string(nil), cloned.aux.urlsTouched...),
-		URLTitles:        cloned.aux.urlTitles,
+		URLsTouched:      append([]string(nil), cloned.urlsTouched...),
+		URLTitles:        cloned.urlTitles,
 		UntrustedContent: cloned.UntrustedContent,
-		ExternalCustody:  cloned.ExternalCustody,
-		Seq:              cloned.aux.seq,
+		ExternalCustody:  cloned.Custody.External,
+		CustodySeq:       cloned.Custody.Seq,
 	}
 	if cloned.grepLines != nil {
 		out.GrepLines = make(map[string]map[int]string, len(cloned.grepLines))
@@ -33,9 +33,9 @@ func CloneRecordForStore(rec Record) RecordAux {
 			out.GrepLines[path] = lineCopy
 		}
 	}
-	if cloned.aux.pathTiers != nil {
-		out.PathTiers = make(map[string]string, len(cloned.aux.pathTiers))
-		for path, tier := range cloned.aux.pathTiers {
+	if cloned.pathTiers != nil {
+		out.PathTiers = make(map[string]string, len(cloned.pathTiers))
+		for path, tier := range cloned.pathTiers {
 			out.PathTiers[path] = tier
 		}
 	}
@@ -48,8 +48,8 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		return
 	}
 	rec.pathsTouched = append([]string(nil), aux.PathsTouched...)
-	rec.aux.urlsTouched = append([]string(nil), aux.URLsTouched...)
-	rec.aux.urlTitles = nil
+	rec.urlsTouched = append([]string(nil), aux.URLsTouched...)
+	rec.urlTitles = nil
 	for u, t := range aux.URLTitles {
 		rec.touchURLTitle(u, t)
 	}
@@ -64,18 +64,18 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		}
 	}
 	if aux.PathTiers != nil {
-		rec.aux.pathTiers = make(map[string]string, len(aux.PathTiers))
+		rec.pathTiers = make(map[string]string, len(aux.PathTiers))
 		for path, tier := range aux.PathTiers {
-			rec.aux.pathTiers[NormalizeLedgerPath(path)] = tier
+			rec.pathTiers[NormalizeLedgerPath(path)] = tier
 		}
 	}
 	if aux.UntrustedContent {
 		rec.UntrustedContent = true
 	}
 	if aux.ExternalCustody {
-		rec.ExternalCustody = true
+		rec.Custody.External = true
 	}
-	if aux.Seq > 0 {
-		rec.aux.seq = aux.Seq
+	if aux.CustodySeq > 0 {
+		rec.Custody.Seq = aux.CustodySeq
 	}
 }

@@ -18,6 +18,8 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 	if rec.SourceDelivery == nil {
 		return "", fmt.Errorf("confirmed source delivery required")
 	}
+	unlock := s.lockMutation(sessionID)
+	defer unlock()
 	release := bloblifecycle.AcquirePublication(s.dataDir)
 	defer release()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -47,9 +49,12 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 		return "", err
 	}
 	rec.Handle = evidence.FormatHandle(rec.Kind, ordinal)
-	live, metaLedger, err := loadCommitLedgers(ctx, q, sessionID, rec, rec.Path != "")
+	live, metaLedger, nextSeq, err := loadCommitLedgers(ctx, q, sessionID, rec, rec.Path != "")
 	if err != nil {
 		return "", err
+	}
+	if nextSeq > 0 {
+		rec.SetCustodySeq(nextSeq)
 	}
 	if rec.Path != "" {
 		if urls := evidence.ExternalCustodyURLs(metaLedger, []string{rec.Path}); len(urls) > 0 {

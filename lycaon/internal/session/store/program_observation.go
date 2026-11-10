@@ -14,6 +14,8 @@ func (ev *sqlEvidence) CommitProgramObservation(ctx context.Context, sessionID, 
 		return "", nil
 	}
 	s := ev.core
+	unlock := s.lockMutation(sessionID)
+	defer unlock()
 	release := bloblifecycle.AcquirePublication(s.dataDir)
 	defer release()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -76,6 +78,8 @@ func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionI
 		return "", nil
 	}
 	s := ev.core
+	unlock := s.lockMutation(sessionID)
+	defer unlock()
 	release := bloblifecycle.AcquirePublication(s.dataDir)
 	defer release()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -88,6 +92,15 @@ func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionI
 	if err != nil {
 		return "", err
 	}
+	needHTTPSeq := httpRec.Kind != "" && evidence.ReplacesWholeFileCustody(httpRec) && httpRec.CustodySeq() == 0
+	needClearSeq := clearRec.Kind != "" && evidence.ReplacesWholeFileCustody(clearRec) && clearRec.CustodySeq() == 0
+	nextSeq := 0
+	if needHTTPSeq || needClearSeq {
+		nextSeq, err = nextCustodySeq(ctx, q, sessionID)
+		if err != nil {
+			return "", err
+		}
+	}
 	var retHandle string
 	var httpInserted bool
 	if httpRec.Kind != "" {
@@ -96,6 +109,10 @@ func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionI
 			return "", err
 		}
 		httpRec.Handle = evidence.FormatHandle(httpRec.Kind, ordinal)
+		if needHTTPSeq {
+			httpRec.SetCustodySeq(nextSeq)
+			nextSeq++
+		}
 		httpInserted, err = writeEvidenceRecord(ctx, q, s.dataDir, sessionID, projectID, httpRec)
 		if err != nil {
 			return "", err
@@ -108,6 +125,9 @@ func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionI
 			return "", err
 		}
 		clearRec.Handle = evidence.FormatHandle(clearRec.Kind, ordinal)
+		if needClearSeq {
+			clearRec.SetCustodySeq(nextSeq)
+		}
 		if _, err := writeEvidenceRecord(ctx, q, s.dataDir, sessionID, projectID, clearRec); err != nil {
 			return "", err
 		}

@@ -21,7 +21,7 @@ func TestRecordMarksUntrustedContent(t *testing.T) {
 		{"read", Record{SourceTool: "read"}, false},
 		{"read with untrusted content", Record{SourceTool: "read", UntrustedContent: true}, true},
 		{"http_request inline external", Record{SourceTool: "http_request", UntrustedContent: true}, true},
-		{"http_request file custody only", Record{SourceTool: "http_request", ExternalCustody: true}, false},
+		{"http_request file custody only", Record{SourceTool: "http_request", Custody: FileCustody{External: true}}, false},
 		{"command external output", Record{SourceTool: "command", UntrustedContent: true}, true},
 		{"empty", Record{}, false},
 		{"trust ignored", Record{SourceTool: "web_search", Fidelity: FidelityStructured}, true},
@@ -62,7 +62,7 @@ func TestBuildEvidenceRecordHTTPRequestProvenance(t *testing.T) {
 	if RecordMarksUntrustedContent(fileRec) {
 		t.Fatalf("expected response_path http_request not to mark model ingestion on download: %+v", fileRec)
 	}
-	if !fileRec.ExternalCustody || fileRec.Path != "saved.txt" {
+	if !fileRec.HasExternalCustody() || fileRec.Path != "saved.txt" {
 		t.Fatalf("expected ExternalCustody on saved.txt, got %+v", fileRec)
 	}
 
@@ -84,7 +84,7 @@ func TestBuildEvidenceRecordHTTPRequestProvenance(t *testing.T) {
 		map[string]any{"url": "http://127.0.0.1:8080/health"},
 		`{"status":200,"url":"http://127.0.0.1:8080/health","body":"ok"}`,
 	)
-	if RecordMarksUntrustedContent(loopbackRec) || loopbackRec.ExternalCustody {
+	if RecordMarksUntrustedContent(loopbackRec) || loopbackRec.HasExternalCustody() {
 		t.Fatalf("expected loopback http_request to stay clean, got %+v", loopbackRec)
 	}
 
@@ -103,7 +103,7 @@ func TestRecordAuxRoundTripCompatibilityAndExternalCustodySupersession(t *testin
 	// 1. Old persisted records without untrusted_content/external_custody fields round-trip cleanly.
 	var legacyRec Record
 	ApplyRecordAux(&legacyRec, RecordAux{PathsTouched: []string{"saved.txt"}})
-	if legacyRec.UntrustedContent || legacyRec.ExternalCustody || !slices.Equal(IndexedPathsForRecord(legacyRec), []string{"saved.txt"}) {
+	if legacyRec.UntrustedContent || legacyRec.HasExternalCustody() || !slices.Equal(IndexedPathsForRecord(legacyRec), []string{"saved.txt"}) {
 		t.Fatalf("unexpected legacy decode: %+v", legacyRec)
 	}
 
@@ -114,19 +114,19 @@ func TestRecordAuxRoundTripCompatibilityAndExternalCustodySupersession(t *testin
 		SourceTool:       "http_request",
 		Path:             "saved.txt",
 		UntrustedContent: true,
-		ExternalCustody:  true,
+		Custody:          FileCustody{External: true},
 	}
 	orig.touchURL("https://api.external.example/v1/data")
-	orig.SetSeq(12)
+	orig.SetCustodySeq(12)
 	aux := CloneRecordForStore(orig)
 	var decoded Record
 	ApplyRecordAux(&decoded, aux)
-	if !decoded.UntrustedContent || !decoded.ExternalCustody || decoded.Seq() != 12 || !slices.Contains(ObservedURLsForRecord(decoded), "https://api.external.example/v1/data") {
-		t.Fatalf("round-trip lost provenance or seq: %+v (seq=%d)", decoded, decoded.Seq())
+	if !decoded.UntrustedContent || !decoded.HasExternalCustody() || decoded.CustodySeq() != 12 || !slices.Contains(ObservedURLsForRecord(decoded), "https://api.external.example/v1/data") {
+		t.Fatalf("round-trip lost provenance or custody seq: %+v (seq=%d)", decoded, decoded.CustodySeq())
 	}
 
 	// 3. Partial local mutation (edit) preserves external custody, whereas full local replacement (write/delete) supersedes it.
-	dl1 := Record{Handle: "http_response#1", Kind: "http_response", Shape: ShapeSurfaceSnapshot, SourceTool: "http_request", Path: "saved.txt", ExternalCustody: true}
+	dl1 := Record{Handle: "http_response#1", Kind: "http_response", Shape: ShapeSurfaceSnapshot, SourceTool: "http_request", Path: "saved.txt", Custody: FileCustody{External: true}}
 	dl1.touchURL("https://first.external.example/a")
 	partialEdit := Record{Handle: "write#1", Kind: "write", Shape: ShapeStructuredEvent, SourceTool: "edit", Path: "saved.txt"}
 	ledgerAfterEdit := AssembleLedger([]Record{dl1, partialEdit})
@@ -141,7 +141,7 @@ func TestRecordAuxRoundTripCompatibilityAndExternalCustodySupersession(t *testin
 	}
 
 	// 4. A subsequent external download after a full local write attaches only the new URL, not stale prior URLs.
-	dl2 := Record{Handle: "http_response#2", Kind: "http_response", Shape: ShapeSurfaceSnapshot, SourceTool: "http_request", Path: "saved.txt", ExternalCustody: true}
+	dl2 := Record{Handle: "http_response#2", Kind: "http_response", Shape: ShapeSurfaceSnapshot, SourceTool: "http_request", Path: "saved.txt", Custody: FileCustody{External: true}}
 	dl2.touchURL("https://second.external.example/b")
 	ledgerAfterRedownload := AssembleLedger([]Record{dl1, partialEdit, fullWrite, dl2})
 	if urls := ExternalCustodyURLs(ledgerAfterRedownload, []string{"saved.txt"}); !slices.Equal(urls, []string{"https://second.external.example/b"}) {

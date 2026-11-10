@@ -130,7 +130,7 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		populateFetchTitle(&rec, stringArg(args, "url"), content)
 		if dest := stringArg(args, "dest"); dest != "" {
 			addRecordPath(projectDir, &rec, dest, FidelityStructured)
-			rec.ExternalCustody = true
+			rec.Custody.External = true
 		}
 	case "diff":
 		// Diff evidence binds both inputs to the captured body.
@@ -374,7 +374,7 @@ func populateHTTPRequestRecord(projectDir string, rec *Record, args map[string]a
 		if responsePath != "" {
 			if written, ok := obj["written"].(bool); !ok || written {
 				addRecordPath(projectDir, rec, responsePath, FidelityStructured)
-				rec.ExternalCustody = true
+				rec.Custody.External = true
 			}
 		} else if responseBodyMode != "discard" && !bodyUnavailable {
 			rec.UntrustedContent = true

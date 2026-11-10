@@ -25,15 +25,17 @@ type Record struct {
 	Body         []string // result lines for excerpt verification
 	URL          string   // primary observed URL
 
-	Surface          string // dom | tui | http
+	Surface          string      // dom | tui | http
 	ArtifactID       string
-	FrameIndex       int  // positive values identify temporal frames
-	UntrustedContent bool // true when this record delivered untrusted external content to the model
-	ExternalCustody  bool // true when this record placed or read external content in a workspace path
+	FrameIndex       int         // positive values identify temporal frames
+	UntrustedContent bool        // true when this record delivered untrusted external content to the model
+	Custody          FileCustody // workspace file custody state and cross-kind replacement sequence
 
 	grepLines    map[string]map[int]string // grep kind: path → line → content
 	pathsTouched []string                  // additional normalized paths for ByPath index
-	aux          recordIndex               // unexported URL/trust/chronology index fields
+	pathTiers    map[string]string         // normalized path → trust tier at capture
+	urlsTouched  []string                  // every URL named by the result
+	urlTitles    map[string]string         // URL → page title the tool reported
 
 	// Gate/inspector fields — populated when GateType != "" (scan verify/security rows).
 	GateType       string         `json:"type,omitempty"`
@@ -49,29 +51,32 @@ type Record struct {
 	RecordedAt     string         `json:"at,omitempty"` // RFC3339 in gate JSONL
 }
 
+// FileCustody tracks workspace file custody provenance and the per-session
+// monotonic sequence number for whole-file custody replacement records.
+type FileCustody struct {
+	External bool // true when this record placed or read external content in a workspace path
+	Seq      int  // positive monotonic per-session sequence when ReplacesWholeFileCustody is true
+}
+
 // ShowedLineNumbers reports whether the output behind this record let its reader
 // see line numbers. Only program output can have hidden them.
 func (r Record) ShowedLineNumbers() bool {
 	return r.SourceDelivery == nil || r.SourceDelivery.LineNumbered
 }
 
-type recordIndex struct {
-	pathTiers   map[string]string // normalized path → trust tier at capture
-	urlsTouched []string          // every URL named by the result
-	urlTitles   map[string]string // URL → page title the tool reported
-	seq         int               // monotonic per-session commit sequence for cross-kind chronology
-}
-
 // IsGate reports whether rec is an inspector gate row.
 func (r Record) IsGate() bool { return r.GateType != "" }
 
-// Seq returns the monotonic per-session commit sequence number for cross-kind ordering.
-func (r Record) Seq() int { return r.aux.seq }
+// HasExternalCustody reports whether r placed or read external content in a workspace path.
+func (r Record) HasExternalCustody() bool { return r.Custody.External }
 
-// SetSeq stamps the monotonic per-session commit sequence number on r.
-func (r *Record) SetSeq(seq int) {
+// CustodySeq returns the monotonic per-session sequence number for whole-file custody replacement.
+func (r Record) CustodySeq() int { return r.Custody.Seq }
+
+// SetCustodySeq stamps the monotonic per-session whole-file custody replacement sequence on r.
+func (r *Record) SetCustodySeq(seq int) {
 	if r != nil && seq > 0 {
-		r.aux.seq = seq
+		r.Custody.Seq = seq
 	}
 }
 
