@@ -136,4 +136,3 @@ func (ev *memoryEvidence) CommitDeliveredSource(ctx context.Context, sessionID s
 	bumpSecretExposureLocked(s, sessionID, rec)
 	return rec.Handle, nil
 }
-

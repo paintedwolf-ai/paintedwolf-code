@@ -269,4 +269,3 @@ func TestCrossOriginRedirectClearsHostHeaderOverrideWhileSameOriginPreservesIt(t
 		t.Fatalf("cross-origin hop retained origin HostHeader override: got %q, want %q", crossOriginHost, elsewhereURL.Host)
 	}
 }
-

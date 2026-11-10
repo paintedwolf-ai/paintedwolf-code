@@ -315,7 +315,8 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 	t.Run("downstream_egress_policy_contrast_after_curl_ingestion", func(t *testing.T) {
 		balancedRules := "  - category: tool\n    pattern: http_request\n    effect: allow\n"
 
-		// 1. Clean local session: echo local -> outbound curl to sink.external.example short-circuits under Balanced/Observe without calling the egress resolver.
+		// 1. Clean local session: echo local -> outbound curl to sink.external.example short-circuits under
+		// Balanced/Observe without calling the egress resolver.
 		cleanMock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 			{
 				Pattern:      "clean step 1",
@@ -351,7 +352,8 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 			t.Fatalf("clean Balanced session must not invoke egress resolver, got %v", cleanResolverHosts)
 		}
 
-		// 2. Ingested session: curl external body -> outbound curl to sink.external.example stops short-circuiting and routes through the egress resolver (denied when rejected, allowed on recovery when approved).
+		// 2. Ingested session: curl external body -> outbound curl to sink.external.example stops short-circuiting
+		// and routes through the egress resolver (denied when rejected, allowed on recovery when approved).
 		ingestedMock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 			{
 				Pattern:      "ingested step 1",
@@ -532,7 +534,8 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 		t.Fatalf("step 1 refusal feedback misrepresented completed initial hop: %q", outDeny.Refusal.Feedback)
 	}
 
-	// 2. Unknown post-send outcome on Hop 1 through the real native curl adapter settles with UncertainEffects==1 and ReplayAvailable==false, without auto-replaying Hop 0 or Hop 1.
+	// 2. Unknown post-send outcome on Hop 1 through the real native curl adapter settles with
+	// UncertainEffects==1 and ReplayAvailable==false, without auto-replaying Hop 0 or Hop 1.
 	originHits.Store(0)
 	targetHits.Store(0)
 	dropHop1AfterRequest.Store(true)
@@ -550,7 +553,8 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 			outUnknown, originHits.Load(), targetHits.Load())
 	}
 
-	// 3. Explicit caller retry after Hop 1 is healthy and authorized succeeds cleanly and quiet-repeats under the fixture session grant resolver.
+	// 3. Explicit caller retry after Hop 1 is healthy and authorized succeeds cleanly and quiet-repeats under
+	// the fixture session grant resolver.
 	originHits.Store(0)
 	targetHits.Store(0)
 	dropHop1AfterRequest.Store(false)
@@ -589,5 +593,3 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 		t.Fatalf("step 4 quiet repeat re-prompted = %v, want empty", askedSecond)
 	}
 }
-
-
