@@ -80,6 +80,14 @@ export LYCAON_RATE_SESSIONS_PER_MIN="${LYCAON_RATE_SESSIONS_PER_MIN:-600}"
 export LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${ROOT}/lycaon-den/src-tauri/engine-root}"
 
 BIN="${STATE_DIR}/runtime/sidecar"
+if [[ -z "${LYCAON_BROWSER_BIN:-}" ]]; then
+  LYCAON_BROWSER_BIN="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["path"])' "${STATE_DIR}/runtime/browser.json")"
+  export LYCAON_BROWSER_BIN
+fi
+if [[ ! -x "${LYCAON_BROWSER_BIN}" || ! -f "$(dirname "${LYCAON_BROWSER_BIN}")/icudtl.dat" ]]; then
+  echo "error: prepared browser is unavailable; run ./task den:harness -- --prepare" >&2
+  exit 1
+fi
 echo "e2e-sidecar: ${LYCAON_E2E_API_URL} db=${DB_PATH}" >&2
 cd "${ROOT}"
 exec "${BIN}" serve --db "${DB_PATH}"

@@ -27,3 +27,11 @@ trap - EXIT
 # The engine runs its native document core from beside its own executable.
 bash "${ROOT}/scripts/build-document-core.sh" --output "${BIN_DIR}/pw-document-core" >/dev/null
 bash "${ROOT}/scripts/sign-dev-binary.sh" "${BIN_DIR}/pw-document-core"
+
+# Provision once in the device cache; retain the resolved artifact for isolated runs.
+BROWSER_MANIFEST="${BIN_DIR}/browser.json"
+BROWSER_PENDING="$(mktemp "${BIN_DIR}/browser.XXXXXX")"
+trap 'rm -f "${BROWSER_PENDING}"' EXIT
+LYCAON_DEV=1 "${BIN}" browser ensure --json >"${BROWSER_PENDING}"
+mv -f "${BROWSER_PENDING}" "${BROWSER_MANIFEST}"
+trap - EXIT
