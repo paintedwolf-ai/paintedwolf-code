@@ -73,10 +73,7 @@ func writeRootContainsStateTree(path string) bool {
 // sessionOutput directories.
 func IsAgentSourceReadDenied(rootPath, absPath string, sessionDirs ...string) bool {
 	rawScratch, rawOutput := parseSessionDirs(sessionDirs)
-	effScratch, effOutput := rawScratch, rawOutput
-	if strings.TrimSpace(rootPath) != "" {
-		effScratch, effOutput = EffectiveSessionDirsForRoot(rootPath, rawScratch, rawOutput)
-	}
+	effScratch, effOutput := EffectiveSessionDirsForRoot(rootPath, rawScratch, rawOutput)
 	return isAgentSourceReadDeniedWith(rootPath, absPath, effScratch, effOutput, unconditionalAgentDenyRoots())
 }
 
@@ -86,10 +83,7 @@ func IsAgentSourceReadDenied(rootPath, absPath string, sessionDirs ...string) bo
 // paths, which may be opened for an exact approved single-file read).
 func IsAgentControlStateReadDenied(rootPath, absPath string, sessionDirs ...string) bool {
 	rawScratch, rawOutput := parseSessionDirs(sessionDirs)
-	effScratch, effOutput := rawScratch, rawOutput
-	if strings.TrimSpace(rootPath) != "" {
-		effScratch, effOutput = EffectiveSessionDirsForRoot(rootPath, rawScratch, rawOutput)
-	}
+	effScratch, effOutput := EffectiveSessionDirsForRoot(rootPath, rawScratch, rawOutput)
 	return isAgentSourceReadDeniedWith(rootPath, absPath, effScratch, effOutput, configuredReadDenyRoots())
 }
 
@@ -142,10 +136,6 @@ func isAgentSourceReadDeniedWith(rootPath, absPath, effScratch, effOutput string
 	}
 
 	if !secretReadDenyDisabled() {
-		if ControlPlanePathDenied(p, false, effScratch, effOutput) ||
-			ControlPlanePathDenied(pCanon, false, effScratch, effOutput) {
-			return true
-		}
 		if cfgClean, cfgCanon, ok := enginepaths.CurrentConfigRoot(true); ok {
 			rootVariants := []string{rootClean}
 			if rootCanon != "" && rootCanon != "." && rootCanon != rootClean {
