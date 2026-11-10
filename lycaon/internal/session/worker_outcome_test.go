@@ -259,7 +259,7 @@ func TestFinalizeWorkerSummarySynthesizedFromTools(t *testing.T) {
 	}
 	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "partial" || out.Provenance != "synthesized+grounding_host_assembly_unavailable" {
+	if out.Status != "partial" || out.Provenance != "synthesized+grounding_host_assembled" || !out.HostAssembled {
 		t.Fatalf("out = %+v want synthesized partial", out)
 	}
 	if out.Report.LegStatus != "partial" || len(out.Report.ObjectivesMet) == 0 {
