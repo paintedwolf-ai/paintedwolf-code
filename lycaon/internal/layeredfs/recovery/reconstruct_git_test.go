@@ -134,7 +134,7 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 	if err := fx.mountedAdp.BindPrivateGit(viewRec.ViewID, workerID+"-rec", fx.gitMgr); err != nil {
 		t.Fatalf("BindPrivateGit viewRec: %v", err)
 	}
-	if err := fx.coord.ApplyCheckpointToView(ctx, viewRec, manifest); err != nil {
+	if err := fx.coord.ApplyCheckpointToView(ctx, viewRec, manifest.Manifest); err != nil {
 		t.Fatalf("ApplyCheckpointToView: %v", err)
 	}
 
@@ -187,7 +187,7 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 	}); err != nil {
 		t.Fatalf("AdoptMaterializedView second: %v", err)
 	}
-	if err := fx.coord.ApplyCheckpointToView(ctx, viewMat, manifest); err != nil {
+	if err := fx.coord.ApplyCheckpointToView(ctx, viewMat, manifest.Manifest); err != nil {
 		t.Fatalf("ApplyCheckpointToView materialized: %v", err)
 	}
 	matPrimaryExec := privategit.NewGitExecutor(fx.gitMgr, viewMat.ViewID, privategit.RemotePolicy{})
