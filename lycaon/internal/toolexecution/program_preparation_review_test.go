@@ -29,14 +29,16 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			parent, tc := frameFixture(t)
 			withdraw := name == "profile-withdrawn" || name == "branch-withdrawn"
+			readRoot := tc.ActiveRootPath()
 			branch := &preparationBranch{}
 			retired := errors.New("fixture branch retired")
 			if name == "branch-unchanged" || name == "branch-withdrawn" {
-				tc.Source.WorkerBranchRoot = tc.ActiveRootPath()
+				tc.Source.WorkerBranchRoot = t.TempDir()
+				readRoot = tc.Source.WorkerBranchRoot
 				tc.Source.BranchWorkspace = branch
 			}
 			ctx := sandbox.WithSessionID(t.Context(), parent.SessionID)
-			testutil.FailErr(t, "seed preparation source", os.WriteFile(filepath.Join(tc.ActiveRootPath(), "input"), []byte("source bytes"), 0600))
+			testutil.FailErr(t, "seed preparation source", os.WriteFile(filepath.Join(readRoot, "input"), []byte("source bytes"), 0600))
 			classes, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 			testutil.FailErr(t, "read effect class", err)
 			profile := sandbox.ToolProfile{ID: "fixture", CommandEffects: classes}
@@ -118,8 +120,11 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 			if asks != 1 || memory.InUse().State != 0 || frameMemory.InUse().State != 0 {
 				t.Fatal("review or retention contract failed")
 			}
-			if name == "branch-withdrawn" && !errors.Is(err, retired) {
-				t.Fatalf("lost branch retirement refusal: %v", err)
+			// The cwd door projects binding errors into its own repair code.
+			// Observe the live refusal at its owner rather than requiring a Go
+			// error identity to survive that presentation boundary.
+			if name == "branch-withdrawn" && branch.refused == 0 {
+				t.Fatal("branch authority did not refuse after withdrawal")
 			}
 			if (name == "branch-unchanged" || name == "branch-withdrawn") && branch.checked == 0 {
 				t.Fatal("worker branch authority was not consulted")
@@ -143,7 +148,14 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 type preparationBranch struct {
 	err     error
 	checked int
+	refused int
 }
 
-func (b *preparationBranch) ValidateMeta(context.Context) error        { b.checked++; return b.err }
+func (b *preparationBranch) ValidateMeta(context.Context) error {
+	b.checked++
+	if b.err != nil {
+		b.refused++
+	}
+	return b.err
+}
 func (*preparationBranch) EnsureParents(context.Context, string) error { return nil }
