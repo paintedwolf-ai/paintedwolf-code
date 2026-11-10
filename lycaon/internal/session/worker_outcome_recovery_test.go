@@ -2,7 +2,6 @@ package session_test
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
@@ -54,16 +53,4 @@ func TestFinalizeWorkerSummaryBudgetCountsUnicodeCharacters(t *testing.T) {
 	if resolver.prompts != 0 || out.Summary != brief || out.Status != "complete" {
 		t.Fatalf("in-budget Unicode report was trimmed or lost: prompts=%d outcome=%+v", resolver.prompts, out)
 	}
-}
-
-func completeLegNamedRow(id string, args map[string]any) api.Message {
-	message := completeLegToolRow(args)
-	message.ID = id
-	return message
-}
-func completeLegJSONRow(t *testing.T, id, raw string) api.Message {
-	t.Helper()
-	var args map[string]any
-	testutil.FailErr(t, "decode complete_leg fixture", json.Unmarshal([]byte(raw), &args))
-	return completeLegNamedRow(id, args)
 }
