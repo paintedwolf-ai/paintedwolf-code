@@ -180,6 +180,11 @@ func onLookup(s *Server, cs *connState, call rpcCallHeader) []byte {
 			return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
 		}
 	}
+	if s.cfg.FaultInjector != nil && s.cfg.FaultInjector.OnLookup != nil {
+		if err := s.cfg.FaultInjector.OnLookup(dirRec.viewID, childQPath); err != nil {
+			return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
+		}
+	}
 	childFH, ok := s.handles.Ensure(dirRec.key.viewHash, dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, cleanRel(childQPath.Rel) == ".")
 	if !ok {
 		return encodeNFSError(call.XID, nfs.NFSProcedureLookup, nfs.NFSStatusStale)

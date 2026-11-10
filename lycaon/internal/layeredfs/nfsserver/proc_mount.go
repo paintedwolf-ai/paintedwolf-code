@@ -189,6 +189,11 @@ func onMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeMountStatus(call.XID, nfs.MountStatusErrNoEnt)
 	}
+	if s.cfg.FaultInjector != nil && s.cfg.FaultInjector.OnMount != nil {
+		if err := s.cfg.FaultInjector.OnMount(capCfg.ViewID, capCfg.Root); err != nil {
+			return encodeMountStatus(call.XID, nfs.MountStatusErrAcces)
+		}
+	}
 	fh, ok := s.handles.Ensure(vHash, capCfg.ViewID, rootQPath, meta, 0, true)
 	if !ok {
 		return encodeMountStatus(call.XID, nfs.MountStatusErrAcces)

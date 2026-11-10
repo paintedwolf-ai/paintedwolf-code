@@ -211,7 +211,11 @@ func (s *Server) registerExport(
 		ViewID: viewID, Root: root, Token: token,
 		ExportPath: exportPath, AllowedUID: allowedUID, AllowedGID: allowedGID, ReadOnly: ro,
 	}
-	vHash := s.handles.RegisterView(viewID)
+	vHash, err := s.handles.RegisterView(viewID)
+	if err != nil {
+		s.state.mu.Unlock()
+		return ExportCapability{}, err
+	}
 	_, _ = s.handles.Ensure(vHash, viewID, rootQPath, meta, 0, true)
 	entry := &exportEntry{cap: capCfg, core: viewCore, viewHash: vHash, activated: activated}
 	s.state.exportsByID[exportPath] = entry
@@ -278,6 +282,9 @@ func (s *Server) ResolveHandleForView(raw []byte, expectedView ViewID) (layeredf
 	var expHash uint64
 	if expectedView != "" {
 		expHash = s.handles.ViewHash(expectedView)
+		if expHash == 0 {
+			return layeredfs.QualifiedPath{}, ErrStaleHandle
+		}
 	}
 	rec, err := s.handles.Resolve(raw, expHash)
 	if err != nil {
