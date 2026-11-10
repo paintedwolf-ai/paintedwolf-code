@@ -44,8 +44,7 @@ func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string)
 		}
 		if access.Write {
 			protectedWrites = append(protectedWrites, confine.NewProtectedPathGrant(path))
-		}
-		if tctx.Files.PackageExecution == nil {
+		} else if tctx.Files.PackageExecution == nil {
 			overlayReadPaths = append(overlayReadPaths, path)
 		}
 	}
