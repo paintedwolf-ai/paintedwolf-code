@@ -14,7 +14,7 @@ import { createFilesTreeReveal } from "../tree/files-tree-reveal.ts";
 import type { EditorView } from "@codemirror/view";
 import { createEffect, onCleanup, onMount } from "solid-js";
 import { editorIndentStylePref, editorIndentWidthPref } from "../../settings/editor/editor-prefs.ts";
-import { attachDispatcher, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
+import { attachDispatcher, declinable, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
 import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { useResidentPresence } from "../../ui/resident-presence-context.tsx";
@@ -25,7 +25,7 @@ import { goToNextFinding, goToPreviousFinding } from "../../components/source/an
 import { convertIndentationCommand } from "../../components/source/editor/indent-convert.ts";
 import { beginInlineEditPanel, beginRenameCard } from "../../components/source/inline-edit/run-editor-action.ts";
 import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
-import { getFilesEditorView } from "../editor/files-editor-host.ts";
+import { getFilesEditorView, invokePrettyToggleForTab } from "../editor/files-editor-host.ts";
 import { filesTreeCollapsed } from "../tree/files-tree-window-state.ts";
 import { selectedFileVersion, toggleVersionComparison } from "../history/files-version-selection.ts";
 import { versionRestoreOffered } from "../history/file-version-restore.ts";
@@ -78,7 +78,7 @@ export function bindFilesCommands(options: CommandBindings): void {
   const presence = useResidentPresence();
   createEffect(() => {
     if (presence() !== "active") return;
-    const on = (id: string, run: () => void) => onCleanup(registerCommandHandler(id, run));
+    const on = (id: string, run: Parameters<typeof registerCommandHandler>[1]) => onCleanup(registerCommandHandler(id, run));
     // Editor commands act on the active text editor; edits also need it writable.
     const withEditor = (run: (view: EditorView) => unknown, edits = false) => () => {
       const buf = activeBuffer();
@@ -106,6 +106,7 @@ export function bindFilesCommands(options: CommandBindings): void {
       applyFilesBufferDraft(scope.projectId(), buf.key, view.state.doc.toString());
     }, true);
     for (const [id, command] of Object.entries(EDITOR_STANDARD_COMMANDS)) on(id, withEditor(command));
+    on("editor.togglePretty", declinable(() => invokePrettyToggleForTab(scope.projectId(), activeBuffer()?.key)));
     on("editor.toggleWrap", () => { void saveEditorWordWrap(!editorWordWrapPref()); });
     on("editor.toggleLineNumbers", () => { void saveEditorLineNumbers(!editorLineNumbersPref()); });
     on("editor.toggleTabFocus", () => { void saveEditorTabMovesFocus(!editorTabMovesFocusPref()); });

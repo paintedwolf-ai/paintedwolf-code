@@ -9,8 +9,16 @@ import { createNoticeStore, registerNoticePublisher } from "../../notices/notice
 import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { findController, resetFindControllerForTests, setFindQuery } from "../../find/find-controller.ts";
 import { FIND_BAR_ID } from "../../find/command-bar-disclosure.ts";
+import { applyBackgroundProcessEvent, resetBackgroundProcessStoreForTests } from "../../chat/tool/background-process-store.ts";
+import { clearChatContentCache } from "../../chat/transcript/content/chat-content-reader.ts";
+import { resetPrettyDisplayStateForTests } from "../editor/pretty-display-state.ts";
 
-afterEach(resetFindControllerForTests);
+afterEach(() => {
+  resetFindControllerForTests();
+  resetBackgroundProcessStoreForTests();
+  clearChatContentCache();
+  resetPrettyDisplayStateForTests();
+});
 
 describe("chat content Files pane", () => {
   it("loads complete execution records in Files without paging controls", async () => {
@@ -131,4 +139,197 @@ describe("chat content Files pane", () => {
     expect(findController.activeViewId()).toContain("second");
   });
 
+  it("formats inline JSON/JSONL in Pretty mode while preserving read-only authority, mapped redaction marks, and original line gutter labels (FMT-AC-07, FMT-AC-13)", async () => {
+    const raw = '{"emoji":"🌲","secret":"[REDACTED]"}';
+    // Rune index of `[REDACTED]`: `{"emoji":"🌲","secret":"` is 23 runes (`🌲` is 1 rune, 2 UTF-16 code units).
+    const view = render(() => (
+      <ChatContentPage
+        projectId="project"
+        client={null}
+        document={{
+          kind: "tool",
+          sessionId: "session",
+          messageId: "message",
+          toolCallId: "call-inline",
+          pane: "output",
+          title: "Inline JSON",
+          content: {
+            kind: "inline",
+            text: raw,
+            redaction: {
+              spans: [
+                {
+                  field: "tool_result.content",
+                  start: 23,
+                  length: 10,
+                  kind: "secret",
+                  rule_title: "Secret Token",
+                },
+              ],
+            },
+          },
+        }}
+      />
+    ));
+
+    const prettyBtn = assertNamedControl(view.getByTestId("files-editor-pretty-toggle"), "button");
+    expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
+    expect(view.container.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("false");
+    expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("view-only");
+    expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]");
+
+    // Toggle Pretty ON: applies native Break/Indent decorations on the raw document,
+    // keeps read-only authority and raw-offset redaction mark,
+    // and keeps original source line gutter label ("1").
+    fireEvent.click(prettyBtn);
+    expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
+    await waitFor(() =>
+      expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(3),
+    );
+    expect(view.container.querySelectorAll(".pw-virtual-indent").length).toBe(2);
+    expect(view.container.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("false");
+    expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("view-only");
+    expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]");
+    const gutterNums = Array.from(
+      view.container.querySelectorAll(".files-line-gutter__number[data-line]"),
+    ).map((el) => el.textContent);
+    expect(gutterNums[0]).toBe("1");
+  });
+
+  it("formats retained JSON when complete bounded pages and redaction spans match sha256, and keeps protected raw view on late/incomplete responses (FMT-AC-08)", async () => {
+    const raw = '{"status":"ok","token":"[REDACTED]"}';
+    const runes = Array.from(raw);
+    const getChatContent = vi.fn().mockResolvedValue({
+      reference: {
+        field: "tool_output",
+        sha256: "retained-sha",
+        rows: 1,
+        total_runes: runes.length,
+        size_bytes: raw.length,
+      },
+      offset: 0,
+      end_offset: runes.length,
+      text: raw,
+      complete: true,
+      spans: [
+        {
+          field: "tool_result.content",
+          start: raw.indexOf("[REDACTED]"),
+          length: 10,
+          kind: "secret",
+          rule_title: "Token",
+        },
+      ],
+    });
+    const view = render(() => (
+      <ChatContentPage
+        projectId="project"
+        client={stubClient({ getChatContent })}
+        document={{
+          kind: "tool",
+          sessionId: "session",
+          messageId: "message",
+          toolCallId: "call-retained",
+          pane: "output",
+          title: "Retained JSON",
+          content: {
+            kind: "retained",
+            reference: {
+              field: "tool_output",
+              sha256: "retained-sha",
+              rows: 1,
+              total_runes: runes.length,
+              size_bytes: raw.length,
+              preview_rows: [{ index: 0, offset: 0, text: raw, spans: [] }],
+            },
+          },
+        }}
+      />
+    ));
+
+    const prettyBtn = assertNamedControl(view.getByTestId("files-editor-pretty-toggle"), "button");
+    fireEvent.click(prettyBtn);
+    await waitFor(() =>
+      expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]"),
+    );
+    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(3);
+    expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"status":"ok","token":"[REDACTED]"}');
+  });
+
+  it("uses a bounded snapshot with explicit Refresh for live process output in Pretty mode and returns to live output when turned off (FMT-AC-14)", async () => {
+    applyBackgroundProcessEvent({
+      session_id: "session",
+      process_id: "proc-1",
+      running: true,
+      stream: "stdout",
+      text: '{"step":1}\n',
+      end_offset: 11,
+    });
+
+    const view = render(() => (
+      <ChatContentPage
+        projectId="project"
+        client={null}
+        document={{
+          kind: "tool",
+          sessionId: "session",
+          messageId: "message",
+          toolCallId: "call-proc",
+          pane: "output",
+          title: "Process Output",
+          content: { kind: "process", handle: "proc-1" },
+        }}
+      />
+    ));
+
+    expect(view.container.querySelector(".cm-content")?.textContent).toBe('{"step":1}');
+    expect(view.queryByTestId("chat-process-pretty-snapshot")).toBeNull();
+
+    // Enable Pretty: captures snapshot of `{"step":1}\n`, renders native breaks, and shows Snapshot + Refresh.
+    const prettyBtn = assertNamedControl(view.getByTestId("files-editor-pretty-toggle"), "button");
+    fireEvent.click(prettyBtn);
+    await waitFor(() =>
+      expect(view.getByTestId("chat-process-pretty-snapshot").textContent).toBe("Snapshot"),
+    );
+    const refreshBtn = assertNamedControl(
+      view.getByTestId("chat-process-pretty-refresh"),
+      "button",
+    );
+    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(2);
+    expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"step":1}');
+
+    // Incoming process chunk does NOT reformat or overwrite the snapshot while Pretty is ON.
+    applyBackgroundProcessEvent({
+      session_id: "session",
+      process_id: "proc-1",
+      running: true,
+      stream: "stdout",
+      text: '{"step":2}\n',
+      end_offset: 22,
+    });
+    expect(view.container.querySelector(".cm-content")?.textContent).not.toContain('{"step":2}');
+
+    // Explicit Refresh incorporates the new chunk into the formatted snapshot.
+    fireEvent.click(refreshBtn);
+    await waitFor(() =>
+      expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"step":2}'),
+    );
+    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(4);
+
+    // Turning Pretty OFF returns to live output and removes Snapshot/Refresh indicators.
+    fireEvent.click(prettyBtn);
+    expect(view.queryByTestId("chat-process-pretty-snapshot")).toBeNull();
+    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(0);
+    applyBackgroundProcessEvent({
+      session_id: "session",
+      process_id: "proc-1",
+      running: true,
+      stream: "stdout",
+      text: '{"step":3}\n',
+      end_offset: 33,
+    });
+    await waitFor(() =>
+      expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"step":3}'),
+    );
+  });
 });
