@@ -42,6 +42,8 @@ func buildTestBundle(t *testing.T) (map[string]string, []byte) {
 	write(configDir, "credential-vault.age", "encrypted "+fakeKey+"\n")
 	write(configDir, "credential-vault-identity.age", "wrapped "+fakeToken+"\n")
 	write(configDir, "api.token", fakeToken)
+	write(configDir, "host-identity.pem", fakeKey+"\n")
+	write(configDir, "mcp.yaml", "providers:\n  - id: p1\n    token: "+fakeToken+"\n")
 	// Ordinary config that may still carry an inline secret.
 	write(configDir, "settings.yaml", "posture: balanced\nmcp:\n  authorization: Bearer "+fakeToken+"\n")
 	// Logs that captured a key.
@@ -88,6 +90,11 @@ func TestBundleContainsTheExpectedShape(t *testing.T) {
 	for _, want := range []string{"manifest.json", "health.json", "preflight.json", "config/settings.yaml", "logs/sidecar.log"} {
 		if _, ok := entries[want]; !ok {
 			t.Fatalf("bundle is missing %s (entries: %v)", want, keys(entries))
+		}
+	}
+	for _, forbidden := range []string{"config/credential-vault.age", "config/credential-vault-identity.age", "config/api.token", "config/host-identity.pem", "config/mcp.yaml"} {
+		if _, ok := entries[forbidden]; ok {
+			t.Fatalf("bundle must not include excluded secret/legacy file %s", forbidden)
 		}
 	}
 }

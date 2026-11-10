@@ -7,9 +7,15 @@ import (
 	"strings"
 	"testing"
 
+	hostapi "github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/hostidentity"
+	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -20,10 +26,10 @@ var secretFileDefinitions = []struct {
 	file     string
 	modeDecl string
 }{
-	// Provider, web-research, and MCP OAuth secrets all persist through
-	// internal/credentialstore, so one mode declaration covers all three.
+	// Provider, web-research, MCP OAuth, MCP static credentials, host identity,
+	// and daemon token secrets all persist through internal/credentialstore.
 	{"every credentialstore namespace", "internal/credentialstore/backend.go", "fileMode = 0o600"},
-	{"sidecar bearer token (api.token)", "internal/api/daemon.go", "daemonManifestMode = 0o600"},
+	{"sidecar daemon manifest (daemon.json)", "internal/api/daemon.go", "daemonManifestMode = 0o600"},
 	{"settings YAML", "internal/settings/paths.go", "settingsFileMode = 0o600"},
 }
 
@@ -50,11 +56,52 @@ func TestSecretStoresResolveUnderUserConfigDir(t *testing.T) {
 	for _, rel := range []string{
 		"internal/llm/credentials/credentials.go",
 		"internal/mcp/oauth_token_store.go",
+		"internal/mcp/static_credentials_store.go",
 		"internal/webresearch/credentials.go",
+		"internal/hostidentity/identity.go",
+		"internal/api/daemon.go",
 	} {
 		content := contractcheck.ReadRepoFile(t, root, rel)
 		if strings.Contains(content, "ProjectDir") || strings.Contains(content, settingsoverlay.DirName()+"/") {
 			t.Fatalf("%s references a project-scoped path: secret stores resolve under the user config dir only", rel)
+		}
+	}
+}
+
+func TestAllManagedSecretNamespacesPersistInVaultAndRegisterSlots(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "xdg"))
+
+	type slotSpec struct {
+		fn        func() (credentialstore.Slot, error)
+		namespace string
+		callExpr  string
+	}
+	specs := []slotSpec{
+		{providercredentials.DefaultSlot, credentialstore.NamespaceProviders, "providercredentials.DefaultSlot()"},
+		{webresearch.DefaultSlot, credentialstore.NamespaceWebResearch, "webresearch.DefaultSlot()"},
+		{mcp.DefaultSlot, credentialstore.NamespaceMCPOAuth, "mcp.DefaultSlot()"},
+		{mcp.DefaultCredentialsSlot, credentialstore.NamespaceMCPCredentials, "mcp.DefaultCredentialsSlot()"},
+		{hostidentity.DefaultSlot, credentialstore.NamespaceHostIdentity, "hostidentity.DefaultSlot()"},
+		{hostapi.DefaultDaemonTokenSlot, credentialstore.NamespaceDaemonToken, "api.DefaultDaemonTokenSlot()"},
+	}
+
+	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
+	cliSource := contractcheck.ReadRepoFile(t, root, "cmd/lycaon/credentials.go")
+
+	for _, spec := range specs {
+		slot, err := spec.fn()
+		if err != nil {
+			t.Fatalf("%s failed: %v", spec.callExpr, err)
+		}
+		if filepath.Base(slot.Path) != credentialstore.VaultBasename {
+			t.Fatalf("%s path = %q, want basename %q", spec.callExpr, slot.Path, credentialstore.VaultBasename)
+		}
+		if slot.Namespace != spec.namespace {
+			t.Fatalf("%s namespace = %q, want %q", spec.callExpr, slot.Namespace, spec.namespace)
+		}
+		if !strings.Contains(cliSource, spec.callExpr) {
+			t.Fatalf("cmd/lycaon/credentials.go no longer registers %s in allCredentialSlots()", spec.callExpr)
 		}
 	}
 }
