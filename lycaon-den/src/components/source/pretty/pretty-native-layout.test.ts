@@ -195,7 +195,8 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
   });
 
   it("FMT-AC-04, FMT-AC-11: preserves multiline template literals, multiline parenthesized calls, multiline XML CDATA/comments, and regexes across lines and incremental edits", () => {
-    // 1. Multiline JS template literal with `{`, `,`, `}` and nested `${`inner`}` + multiline parenthesized call + return regex:
+    // 1. Multiline JS template literal with `{`, `,`, `}` and nested `${`inner`}` +
+    // multiline parenthesized call + return regex:
     const jsDoc = [
       "const tpl = `header ${`inner`} start",
       '{"literal":1,"ignored":2}',
@@ -353,7 +354,8 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
     expect(step1Field.outcome).toBe("formatted");
     expect(step1Field.counters).toEqual(step1Fresh.counters);
 
-    // Insert another "🎉" (4 UTF-8 bytes -> 49 + 4 = 53 > 52) on line 2 -> must transition to limit-exceeded (maxInputUtf8Bytes):
+    // Insert another "🎉" (4 UTF-8 bytes -> 49 + 4 = 53 > 52) on line 2 ->
+    // must transition to limit-exceeded (maxInputUtf8Bytes):
     const pos2 = utf8State.doc.line(2).from + 17;
     utf8State = utf8State.update({
       changes: { from: pos2, to: pos2, insert: "🎉" },
@@ -773,7 +775,8 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       expect(initialFullParseAvailable).toBe(false);
 
       const fieldBeforeFullParse = view.state.field(prettyNativeStateField);
-      // Before Lezer parses past offset 3,000, the tail line has no syntax-tree protected spans (`/"/` after `if (cond)` is seen by fallback lexical scan as division followed by an unclosed quote):
+      // Before Lezer parses past offset 3,000, the tail line has no syntax-tree protected spans
+      // (`/"/` after `if (cond)` is seen by fallback lexical scan as division followed by an unclosed quote):
       expect(
         fieldBeforeFullParse.lineStates[tailIndex]?.syntaxSpanSignature,
       ).toBe("");
@@ -786,7 +789,8 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       expect(parsed).toBe(true);
       expect(syntaxTreeAvailable(view.state, view.state.doc.length)).toBe(true);
 
-      // Dispatch a non-docChanged transaction (just as ParseWorker's setState effect does) if forceParsing did not already dispatch:
+      // Dispatch a non-docChanged transaction (just as ParseWorker's setState effect does)
+      // if forceParsing did not already dispatch:
       view.dispatch({});
 
       const fieldAfterFullParse = view.state.field(prettyNativeStateField);
