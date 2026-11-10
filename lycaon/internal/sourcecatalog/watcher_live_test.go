@@ -127,6 +127,13 @@ func TestLiveWatcherExcludesControlDirAndRuntimeChurnWithoutSelfObservationLoops
 	}
 
 	initialHomeRev := assertSnapshotPaths(homeCatalog, home, []string{"app", "app/main.go"})
+	repochange.SeedWatch(t.Context(), home, []repochange.WatchDirectory{
+		{Path: filepath.Join(home, "app"), EntryCount: 1},
+		{Path: cfgDir, EntryCount: 4},
+	})
+	if repochange.DirWatched(home, ".paintedwolf") {
+		t.Fatal("expected SeedWatch on $HOME to refuse watching .paintedwolf")
+	}
 	// Mutating SQLite DB/WAL/SHM and settings inside .paintedwolf while $HOME is watched
 	// must NOT emit watcher events or add .paintedwolf entries, while sibling edits emit immediately.
 	writeLiteralFixture(t, cfgDir, "paintedwolf.db-wal", "wal-v2-churn")
@@ -142,6 +149,13 @@ func TestLiveWatcherExcludesControlDirAndRuntimeChurnWithoutSelfObservationLoops
 	// 2. Live watcher on directly attached configdir.Root() (cfgDir)
 	cfgCatalog := liveTestCatalog(t, cfgDir)
 	assertSnapshotPaths(cfgCatalog, cfgDir, []string{"packs", "settings.yaml"})
+	repochange.SeedWatch(t.Context(), cfgDir, []repochange.WatchDirectory{
+		{Path: filepath.Join(cfgDir, "packs"), EntryCount: 1},
+		{Path: filepath.Join(cfgDir, "cache"), EntryCount: 1},
+	})
+	if repochange.DirWatched(cfgDir, "cache") {
+		t.Fatal("expected SeedWatch on configdir.Root() to refuse watching runtime cache dir")
+	}
 	// Mutate runtime DB/WAL/SHM/cache/lock files and then a human config file (packs/rule.yaml).
 	writeLiteralFixture(t, cfgDir, "paintedwolf.db", "db-v3-churn")
 	writeLiteralFixture(t, cfgDir, "paintedwolf.db-wal", "wal-v3-churn")

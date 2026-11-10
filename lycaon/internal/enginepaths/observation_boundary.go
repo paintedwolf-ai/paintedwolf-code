@@ -3,6 +3,7 @@ package enginepaths
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 
@@ -88,24 +89,25 @@ func isObservedStateExcluded(rootPath, absPath string, resolveCanon bool) bool {
 		return false
 	}
 
-	if excluded, matched := checkConfigRootObservation(cfgClean, rootClean, p); matched && excluded {
+	rootVariants := []string{rootClean}
+	if rootCanon != "" && rootCanon != "." && rootCanon != rootClean {
+		rootVariants = append(rootVariants, rootCanon)
+	}
+
+	if excluded, matched := checkConfigRootObservation(cfgClean, rootVariants, p); matched && excluded {
 		return true
 	}
 	if cfgCanon != cfgClean {
-		if excluded, matched := checkConfigRootObservation(cfgCanon, rootClean, p); matched && excluded {
+		if excluded, matched := checkConfigRootObservation(cfgCanon, rootVariants, p); matched && excluded {
 			return true
 		}
 	}
 	if resolveCanon && pCanon != "" && pCanon != "." {
-		effRoot := rootCanon
-		if effRoot == "" {
-			effRoot = rootClean
-		}
-		if excluded, matched := checkConfigRootObservation(cfgCanon, effRoot, pCanon); matched && excluded {
+		if excluded, matched := checkConfigRootObservation(cfgCanon, rootVariants, pCanon); matched && excluded {
 			return true
 		}
 		if cfgClean != cfgCanon {
-			if excluded, matched := checkConfigRootObservation(cfgClean, effRoot, pCanon); matched && excluded {
+			if excluded, matched := checkConfigRootObservation(cfgClean, rootVariants, pCanon); matched && excluded {
 				return true
 			}
 		}
@@ -202,20 +204,29 @@ func managedPlacementWorkspaceRel(relSlash string) (string, bool) {
 	return segs[0] + "/" + segs[1], true
 }
 
-func checkConfigRootObservation(cfgBase, rootPath, targetPath string) (excluded, matched bool) {
+func checkConfigRootObservation(cfgBase string, rootVariants []string, targetPath string) (excluded, matched bool) {
 	rel, underCfg := relUnderFold(cfgBase, targetPath)
 	if !underCfg {
 		return false, false
 	}
 
+	hasRoot := false
 	var rootRel string
 	var rootUnderCfg bool
-	if rootPath != "" {
-		rootRel, rootUnderCfg = relUnderFold(cfgBase, rootPath)
+	for _, r := range rootVariants {
+		if r == "" || r == "." {
+			continue
+		}
+		hasRoot = true
+		if rr, ok := relUnderFold(cfgBase, r); ok {
+			rootRel = rr
+			rootUnderCfg = true
+			break
+		}
 	}
 
 	if _, ok := managedConfigWorkspacePrefix(rel); ok {
-		if rootPath == "" {
+		if !hasRoot {
 			return false, true
 		}
 		if rootUnderCfg {
@@ -226,7 +237,7 @@ func checkConfigRootObservation(cfgBase, rootPath, targetPath string) (excluded,
 		return true, true
 	}
 
-	if rootPath != "" {
+	if hasRoot {
 		if !rootUnderCfg {
 			// Strict ancestor or external root with symlink into configdir.Root().
 			return true, true
@@ -590,9 +601,13 @@ func isAgentSourceReadDeniedWithRoots(rootPath, absPath string, extraDenyRoots [
 	}
 
 	if cfgClean, cfgCanon, ok := currentConfigRoot(true); ok {
-		if isPathDeniedInConfigTreeForAgent(cfgClean, rootClean, p) ||
-			isPathDeniedInConfigTreeForAgent(cfgCanon, rootCanon, pCanon) ||
-			isPathDeniedInConfigTreeForAgent(cfgCanon, rootClean, pCanon) {
+		rootVariants := []string{rootClean}
+		if rootCanon != "" && rootCanon != "." && rootCanon != rootClean {
+			rootVariants = append(rootVariants, rootCanon)
+		}
+		if isPathDeniedInConfigTreeForAgent(cfgClean, rootVariants, p) ||
+			isPathDeniedInConfigTreeForAgent(cfgCanon, rootVariants, pCanon) ||
+			isPathDeniedInConfigTreeForAgent(cfgCanon, rootVariants, p) {
 			return true
 		}
 	}
@@ -648,7 +663,7 @@ func isManagedWorkspaceRoot(clean, canon string) bool {
 	return false
 }
 
-func isPathDeniedInConfigTreeForAgent(cfgBase, rootPath, targetPath string) bool {
+func isPathDeniedInConfigTreeForAgent(cfgBase string, rootVariants []string, targetPath string) bool {
 	if cfgBase == "" || targetPath == "" {
 		return false
 	}
@@ -661,10 +676,23 @@ func isPathDeniedInConfigTreeForAgent(cfgBase, rootPath, targetPath string) bool
 		// settings.yaml, packs/, etc.) is denied to AgentAudience!
 		return true
 	}
-	if rootPath == "" || rootPath == "." {
+	hasRoot := false
+	var rootRel string
+	var rootUnderCfg bool
+	for _, r := range rootVariants {
+		if r == "" || r == "." {
+			continue
+		}
+		hasRoot = true
+		if rr, ok := relUnderFold(cfgBase, r); ok {
+			rootRel = rr
+			rootUnderCfg = true
+			break
+		}
+	}
+	if !hasRoot {
 		return false
 	}
-	rootRel, rootUnderCfg := relUnderFold(cfgBase, rootPath)
 	if !rootUnderCfg {
 		return true
 	}
@@ -677,6 +705,20 @@ func relUnderFold(base, target string) (string, bool) {
 	}
 	baseSlash := strings.TrimSuffix(filepath.ToSlash(filepath.Clean(base)), "/")
 	targetSlash := strings.TrimSuffix(filepath.ToSlash(filepath.Clean(target)), "/")
+	if rel, ok := relUnderFoldSlash(baseSlash, targetSlash); ok {
+		return rel, true
+	}
+	if runtime.GOOS == "darwin" {
+		if altBase := darwinPrivateToggle(baseSlash); altBase != "" {
+			if rel, ok := relUnderFoldSlash(altBase, targetSlash); ok {
+				return rel, true
+			}
+		}
+	}
+	return "", false
+}
+
+func relUnderFoldSlash(baseSlash, targetSlash string) (string, bool) {
 	if baseSlash == "" {
 		if strings.HasPrefix(targetSlash, "/") {
 			rel := strings.TrimPrefix(targetSlash, "/")
@@ -694,4 +736,17 @@ func relUnderFold(base, target string) (string, bool) {
 		return targetSlash[len(baseSlash)+1:], true
 	}
 	return "", false
+}
+
+func darwinPrivateToggle(slash string) string {
+	for _, sys := range []string{"/var", "/tmp", "/etc"} {
+		if strings.EqualFold(slash, sys) || (len(slash) > len(sys) && slash[len(sys)] == '/' && strings.EqualFold(slash[:len(sys)], sys)) {
+			return "/private" + slash
+		}
+		priv := "/private" + sys
+		if strings.EqualFold(slash, priv) || (len(slash) > len(priv) && slash[len(priv)] == '/' && strings.EqualFold(slash[:len(priv)], priv)) {
+			return slash[len("/private"):]
+		}
+	}
+	return ""
 }

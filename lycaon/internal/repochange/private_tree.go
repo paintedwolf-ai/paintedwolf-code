@@ -82,6 +82,7 @@ type PrivateDirectoryFilter struct {
 	root       string
 	directory  string
 	dirOnce    sync.Once
+	canonRoot  string
 	canonDir   string
 	excludeAll bool
 	once       sync.Once
@@ -121,6 +122,11 @@ func (f *PrivateDirectoryFilter) ContainsEntry(name string, isSymlink bool) bool
 				f.excludeAll = true
 				return
 			}
+			if rc := fspath.CanonicalPath(f.root); rc != "" {
+				f.canonRoot = filepath.FromSlash(rc)
+			} else {
+				f.canonRoot = f.root
+			}
 			if c := fspath.CanonicalPath(f.directory); c != "" {
 				f.canonDir = filepath.FromSlash(c)
 			}
@@ -132,7 +138,7 @@ func (f *PrivateDirectoryFilter) ContainsEntry(name string, isSymlink bool) bool
 	if enginepaths.IsObservedDirChildExcluded(f.root, f.directory, name, false) {
 		return true
 	}
-	if f.canonDir != "" && f.canonDir != f.directory && enginepaths.IsObservedDirChildExcluded(f.root, f.canonDir, name, false) {
+	if f.canonDir != "" && f.canonDir != f.directory && enginepaths.IsObservedDirChildExcluded(f.canonRoot, f.canonDir, name, false) {
 		return true
 	}
 	if isSymlink && enginepaths.IsObservedStateExcluded(f.root, candidate) {
