@@ -7,6 +7,7 @@ import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
 import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
 import { AnchoredSurface } from "../../components/primitives/AnchoredSurface.tsx";
 import { Scrollport } from "../../components/primitives/Scrollport.tsx";
+import { ShowLatest } from "../../components/primitives/ShowLatest.tsx";
 import { revealElementInScrollport } from "../../platform/scrolling/scrollport-motion.ts";
 import {
   buildFileHistoryRows,
@@ -425,7 +426,7 @@ export function FileVersionPicker(props: Props) {
                 Loading history…
               </div>
             </Show>
-            <Show when={props.documentHistory} fallback={
+            <ShowLatest when={props.documentHistory} fallback={
               <>
                 <Show when={emptyHistory()}>{emptyMessage()}</Show>
                 <For each={rows()}>{historyRow}</For>
@@ -444,7 +445,7 @@ export function FileVersionPicker(props: Props) {
                   }}
                 />
               )}
-            </Show>
+            </ShowLatest>
             <Show
               when={
                 props.history.status === "ready" &&
