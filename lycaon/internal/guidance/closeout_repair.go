@@ -274,6 +274,9 @@ func workerCitationRepairObservation(res evidence.Resolution, ev evidence.Ledger
 			observation = fmt.Sprintf("%s shape %s", res.Handle, evidence.RecordShape(rec))
 		}
 	}
+	if res.Reason != "" {
+		observation = strings.TrimSpace(observation + " reason=" + res.Reason)
+	}
 	if handle := matchingSourceObservation(res, ev); handle != "" {
 		match := fmt.Sprintf("%s:%d excerpt matches %s; use that handle in evidence for this source citation", res.Path, res.Line, handle)
 		if observation != "" {

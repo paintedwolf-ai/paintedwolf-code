@@ -280,15 +280,19 @@ func TestVerifiedExcerptSupportsACoordinateOnUnnumberedOutput(t *testing.T) {
 		{"matching text at the line", `[a.go:3 "line 3 of the file"]`, CitationGrounded},
 		{"matching text in the range", `[a.go:2-4 "line 3 of the file"]`, CitationGrounded},
 		{"a handle", `[read#1:3 "line 3 of the file"]`, CitationGrounded},
-		{"text from another line", `[a.go:3 "line 4 of the file"]`, CitationUnverifiable},
+		{"text from another line", `[a.go:3 "line 4 of the file"]`, CitationGrounded},
 		{"text observed nowhere", `[a.go:3 "something else entirely"]`, CitationUnverifiable},
 		{"no excerpt inside the delivery", `[a.go:3]`, CitationGrounded},
 		{"no excerpt past the delivery", `[a.go:9]`, CitationUnverifiable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := lineNumberOutcome(t, tc.source, ev); got.Outcome != tc.want {
+			got := lineNumberOutcome(t, tc.source, ev)
+			if got.Outcome != tc.want {
 				t.Fatalf("outcome = %+v, want %s", got, tc.want)
+			}
+			if tc.name == "text from another line" && (got.Resolution.Line != 4 || got.Resolution.LineCorrectedFrom != 3) {
+				t.Fatalf("coordinate correction = %+v", got.Resolution)
 			}
 		})
 	}
