@@ -132,6 +132,16 @@ func FinalizeWorkerSummaryForCanceled(
 	opts = scopeWorkerFinalizeLedger(resolver, opts)
 
 	if resolver != nil {
+		messages, err := loadChildMessages(ctx, resolver, childSessionID)
+		if err != nil {
+			return WorkerSummaryOutcome{}, fmt.Errorf("load canceled worker transcript: %w", err)
+		}
+		if accepted, _, ok := workercompletion.AcceptedWorkerReport(messages, opts.WorkerJobID); ok {
+			return canceledWorkerOutcome(acceptedWorkerOutcome(accepted), cancelReason), nil
+		}
+	}
+
+	if resolver != nil {
 		kickData := map[string]any{"cancel_reason": cancelReason}
 		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCancelCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
 		if closeout != "" {
@@ -141,17 +151,7 @@ func FinalizeWorkerSummaryForCanceled(
 					return WorkerSummaryOutcome{}, err
 				} else if ok {
 					outcome, err := finalizeBoundedReport(ctx, resolver, childSessionID, agentType, "cancel_complete_leg", report, opts)
-					outcome.Status = "partial"
-					if outcome.Report.DeclaredLegStatus == "" {
-						outcome.Report.DeclaredLegStatus = outcome.Report.LegStatus
-					}
-					if outcome.Report.LegStatus == "" || outcome.Report.LegStatus == "complete" {
-						outcome.Report.LegStatus = "partial"
-					}
-					if cancelReason != "" {
-						outcome.Report.RemainingRisk = AppendRemainingRisk(outcome.Report.RemainingRisk, cancelReason)
-					}
-					return outcome, err
+					return canceledWorkerOutcome(outcome, cancelReason), err
 				}
 
 			}
@@ -168,14 +168,22 @@ func FinalizeWorkerSummaryForCanceled(
 	}
 	if report, ok := workercompletion.SynthesizeCompletionReport(msgs, agentType, workercompletion.WorkerCompletionProof{}); ok {
 		out, err := finalizeBoundedReport(ctx, resolver, childSessionID, agentType, "cancel_synthesized", report, opts)
-		out.Status = "partial"
-		if cancelReason != "" {
-			out.Report.RemainingRisk = AppendRemainingRisk(out.Report.RemainingRisk, cancelReason)
-		}
-		return out, err
+		return canceledWorkerOutcome(out, cancelReason), err
 	}
 
 	return missingWorkerReportOutcome(ctx, childSessionID, agentType, "cancel_none", msgs, opts)
+}
+
+func canceledWorkerOutcome(outcome WorkerSummaryOutcome, reason string) WorkerSummaryOutcome {
+	outcome.Status = "partial"
+	if outcome.Report.DeclaredLegStatus == "" {
+		outcome.Report.DeclaredLegStatus = outcome.Report.LegStatus
+	}
+	if outcome.Report.LegStatus == "" || outcome.Report.LegStatus == "complete" {
+		outcome.Report.LegStatus = "partial"
+	}
+	outcome.Report.RemainingRisk = AppendRemainingRisk(outcome.Report.RemainingRisk, reason)
+	return outcome
 }
 
 func scopeWorkerFinalizeLedger(resolver WorkerSummaryResolver, opts WorkerSummaryFinalizeOpts) WorkerSummaryFinalizeOpts {

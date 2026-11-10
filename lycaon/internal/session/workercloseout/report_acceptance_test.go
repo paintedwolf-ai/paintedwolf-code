@@ -47,6 +47,12 @@ func TestFinalizationUsesAcceptedReportWithoutReevaluation(t *testing.T) {
 			if out.Status != workercloseout.StateFromLegStatus(status) || out.Report.Brief != "Observed result" || out.Report.Findings[0].Line != 4 || !reflect.DeepEqual(out.Grounding, accepted.Grounding) || history.prompts != 0 || out.Report.Verification == nil || out.Report.Verification.Method != verification.Inspection || out.Report.Findings[0].Cite != "[source.go:4](source.go#L4)" {
 				t.Fatalf("accepted outcome changed: %+v, prompts=%d", out, history.prompts)
 			}
+
+			canceled, err := workercloseout.FinalizeWorkerSummaryForCanceled(t.Context(), history, history, "child", "repo-researcher", "User stopped the job", workercloseout.WorkerSummaryFinalizeOpts{WorkerJobID: "job", Ledger: history})
+			testutil.FailErr(t, "retain accepted report after cancellation", err)
+			if canceled.Status != "partial" || canceled.Report.DeclaredLegStatus != status || canceled.Summary != "Observed result" || len(canceled.Report.RemainingRisk) != 1 || history.prompts != 0 {
+				t.Fatalf("cancellation lost accepted report: %+v prompts=%d", canceled, history.prompts)
+			}
 		})
 	}
 }
