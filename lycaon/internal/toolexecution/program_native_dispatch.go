@@ -280,8 +280,23 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := observer.BeforeNativeOwner(ctx, bound, tc.Identity.ToolCallID, reviewed); err != nil {
 		return result, err
 	}
-	// Recorder calls may yield. Recheck current admission after the marker;
-	// the marker does not grant permission or keep a closed frame executable.
+	// Recorder calls may yield. Re-evaluate current policy and admission after
+	// the marker; the marker does not grant permission or keep a closed frame executable.
+	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
+		return result, err
+	}
+	canonical, err = e.applyPreInvokePolicy(ctx, facts.Identity, surface.profile, canonical, &tc, e.Boundary.actionConfineRequest(ctx, tc), contextBoundaryApprovalSatisfied(tc))
+	if err != nil {
+		return result, err
+	}
+	postReview, postReviewed, err := admitReviewedOperationInputs(ctx, admission, canonical)
+	if err != nil {
+		return result, err
+	}
+	postReview.close()
+	if postReviewed != reviewed {
+		return result, fmt.Errorf("native reviewed inputs changed after approval boundary")
+	}
 	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 		return result, err
 	}
