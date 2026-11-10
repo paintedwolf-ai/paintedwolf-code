@@ -307,8 +307,40 @@ func lockStoreReadOnlyBoundary(s *RetainedObjectStore) {
 	}
 }
 
-func storeHasLeasedObjectsOnDisk(s *RetainedObjectStore, leaseID, headOID string) bool {
+func storeLeaseIntactOnDisk(s *RetainedObjectStore, leaseID string) bool {
 	if s == nil || s.objectsDir == "" {
+		return false
+	}
+	if _, err := os.Stat(s.objectsDir); err != nil {
+		return false
+	}
+	if leaseID == "" {
+		return true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if l, ok := s.leases[leaseID]; ok && l != nil {
+		for p := range l.packs {
+			if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".pack")); err != nil {
+				return false
+			}
+			if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".idx")); err != nil {
+				return false
+			}
+		}
+		for oid := range l.oids {
+			if _, isLoose := s.stock.looseSizes[oid]; isLoose {
+				if _, err := os.Stat(filepath.Join(s.objectsDir, oid[:2], oid[2:])); err != nil {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+func storeHasObjectOnDisk(s *RetainedObjectStore, oid string) bool {
+	if s == nil || s.objectsDir == "" || len(oid) != 40 || !isHexString(oid) {
 		return false
 	}
 	if _, err := os.Stat(s.objectsDir); err != nil {
@@ -316,52 +348,29 @@ func storeHasLeasedObjectsOnDisk(s *RetainedObjectStore, leaseID, headOID string
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if leaseID != "" {
-		if l, ok := s.leases[leaseID]; ok && l != nil {
-			for p := range l.packs {
-				if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".pack")); err != nil {
-					return false
-				}
-				if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".idx")); err != nil {
-					return false
-				}
-			}
-			for oid := range l.oids {
-				if _, isLoose := s.stock.looseSizes[oid]; isLoose {
-					if _, err := os.Stat(filepath.Join(s.objectsDir, oid[:2], oid[2:])); err != nil {
-						return false
-					}
+	if _, err := os.Stat(filepath.Join(s.objectsDir, oid[:2], oid[2:])); err == nil {
+		return true
+	}
+	if _, isLoose := s.stock.looseSizes[oid]; isLoose {
+		return false
+	}
+	for base, members := range s.stock.packOIDs {
+		if _, ok := members[oid]; ok {
+			if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".pack")); err == nil {
+				if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".idx")); err == nil {
+					return true
 				}
 			}
 		}
 	}
-	if len(headOID) == 40 && isHexString(headOID) {
-		if _, isLoose := s.stock.looseSizes[headOID]; isLoose {
-			if _, err := os.Stat(filepath.Join(s.objectsDir, headOID[:2], headOID[2:])); err != nil {
-				return false
-			}
-		} else {
-			for base, members := range s.stock.packOIDs {
-				if _, ok := members[headOID]; ok {
-					if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".pack")); err != nil {
-						return false
-					}
-					if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".idx")); err != nil {
-						return false
-					}
-				}
-			}
-			for base, comp := range s.stock.compactPacks {
-				if comp.containsHex(headOID) {
-					if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".pack")); err != nil {
-						return false
-					}
-					if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".idx")); err != nil {
-						return false
-					}
+	for base, comp := range s.stock.compactPacks {
+		if comp.containsHex(oid) {
+			if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".pack")); err == nil {
+				if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".idx")); err == nil {
+					return true
 				}
 			}
 		}
 	}
-	return true
+	return false
 }

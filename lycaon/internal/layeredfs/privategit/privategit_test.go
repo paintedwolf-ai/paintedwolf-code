@@ -393,9 +393,11 @@ func TestPrivateGitFallbackDistinguishesNoSourceRepoFromEstablishedAndFailed(t *
 		_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "nested/.git/HEAD"}, []byte("ref: refs/heads/main\n"), 0o644)
 		testutil.FailErr(t, "write nested/.git/HEAD", err)
 
-		rec := readDurableRepoRecord(mgr, "view-nonrepo", "nested")
-		if rec.Status != repoStatusNoSourceRepo {
-			t.Fatalf("expected durable status %q for nested, got %+v", repoStatusNoSourceRepo, rec)
+		view, vErr := getManagedView(mgr, "view-nonrepo")
+		testutil.FailErr(t, "getManagedView", vErr)
+		rec, ok, rErr := readDurableRepoRecord(mgr, view, "view-nonrepo", "nested")
+		if rErr != nil || !ok || rec.Status != repoStatusNoSourceRepo {
+			t.Fatalf("expected durable status %q for nested, got rec=%+v ok=%v err=%v", repoStatusNoSourceRepo, rec, ok, rErr)
 		}
 		if _, gErr := readyPrivateGitDir(mgr, "view-nonrepo", "nested"); !errors.Is(gErr, ErrNoSourceRepository) {
 			t.Fatalf("expected ErrNoSourceRepository from readyPrivateGitDir, got %v", gErr)
@@ -418,9 +420,11 @@ func TestPrivateGitFallbackDistinguishesNoSourceRepoFromEstablishedAndFailed(t *
 		// Establish private repository.
 		_, err := core.ReadFile(qp(".git/HEAD"))
 		testutil.FailErr(t, "initial ReadFile(.git/HEAD)", err)
-		rec := readDurableRepoRecord(mgr, "view-est", ".")
-		if rec.Status != repoStatusEstablished {
-			t.Fatalf("expected durable status %q, got %+v", repoStatusEstablished, rec)
+		view, vErr := getManagedView(mgr, "view-est")
+		testutil.FailErr(t, "getManagedView", vErr)
+		rec, ok, rErr := readDurableRepoRecord(mgr, view, "view-est", ".")
+		if rErr != nil || !ok || rec.Status != repoStatusEstablished {
+			t.Fatalf("expected durable status %q, got rec=%+v ok=%v err=%v", repoStatusEstablished, rec, ok, rErr)
 		}
 
 		// Remove source .git after private repository is established.

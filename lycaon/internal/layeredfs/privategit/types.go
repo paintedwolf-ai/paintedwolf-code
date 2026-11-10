@@ -48,6 +48,10 @@ var (
 	// ErrNoSourceRepository is returned when a path genuinely has never had a source
 	// Git repository (nor an established or failed private repository in the view).
 	ErrNoSourceRepository = errors.New("privategit: no source git repository at path")
+
+	// ErrInvalidRepoStateRecord is returned when a persisted per-view repository state
+	// record cannot be read, parsed, or validated.
+	ErrInvalidRepoStateRecord = errors.New("privategit: invalid or unreadable repository state record")
 )
 
 // LeaseKind classifies an active object retention lease in the engine-retained store.

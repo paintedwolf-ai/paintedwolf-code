@@ -1,16 +1,13 @@
 package privategit
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
@@ -25,96 +22,6 @@ type initializedRepo struct {
 	submoduleRels  []string
 	metrics        InitMetrics
 	noSourceRepo   bool
-}
-
-type durableRepoStatus string
-
-const (
-	repoStatusUnknown      durableRepoStatus = ""
-	repoStatusNoSourceRepo durableRepoStatus = "no_source_repo"
-	repoStatusEstablished  durableRepoStatus = "established"
-	repoStatusFailed       durableRepoStatus = "failed"
-)
-
-type durableRepoRecord struct {
-	RepoRel        string            `json:"repo_rel"`
-	Status         durableRepoStatus `json:"status"`
-	PrivateGitDir  string            `json:"private_git_dir,omitempty"`
-	LeaseID        string            `json:"lease_id,omitempty"`
-	InitialHeadOID string            `json:"initial_head_oid,omitempty"`
-}
-
-func durableRepoStatePath(mgr *Manager, viewID, repoRel string) string {
-	if mgr == nil || strings.TrimSpace(mgr.cfg.BackingDir) == "" || strings.TrimSpace(viewID) == "" {
-		return ""
-	}
-	return filepath.Join(mgr.cfg.BackingDir, "views", viewID, "repo-state", sanitizeRepoKey(repoRel)+".json")
-}
-
-func readDurableRepoRecord(mgr *Manager, viewID, repoRel string) durableRepoRecord {
-	p := durableRepoStatePath(mgr, viewID, repoRel)
-	if p == "" {
-		return durableRepoRecord{}
-	}
-	raw, err := os.ReadFile(p)
-	if err != nil {
-		return durableRepoRecord{}
-	}
-	var rec durableRepoRecord
-	if err := json.Unmarshal(raw, &rec); err != nil {
-		return durableRepoRecord{}
-	}
-	return rec
-}
-
-func writeDurableRepoRecord(mgr *Manager, viewID string, rec durableRepoRecord) {
-	p := durableRepoStatePath(mgr, viewID, rec.RepoRel)
-	if p == "" {
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return
-	}
-	raw, err := json.Marshal(rec)
-	if err != nil {
-		return
-	}
-	_, _ = fseffect.Replace(fseffect.ReplaceRequest{
-		Location: fseffect.PathLocation(p),
-		Source:   bytes.NewReader(raw),
-		Mode:     0o600,
-		DirMode:  0o755,
-	})
-}
-
-func verifyEstablishedPrivateRepo(mgr *Manager, repo *initializedRepo, durable durableRepoRecord) (string, error) {
-	gitDir := ""
-	leaseID := durable.LeaseID
-	headOID := durable.InitialHeadOID
-	if repo != nil {
-		if repo.privateGitDir != "" {
-			gitDir = repo.privateGitDir
-		}
-		if repo.leaseID != "" {
-			leaseID = repo.leaseID
-		}
-		if repo.initialHeadOID != "" {
-			headOID = repo.initialHeadOID
-		}
-	}
-	if gitDir == "" {
-		gitDir = durable.PrivateGitDir
-	}
-	if gitDir == "" {
-		return "", fmt.Errorf("%w: established private repository path missing", layeredfs.ErrGitPending)
-	}
-	if _, err := os.Stat(filepath.Join(gitDir, "HEAD")); err != nil {
-		return "", fmt.Errorf("%w: established private repository HEAD unavailable: %w", layeredfs.ErrGitPending, err)
-	}
-	if mgr == nil || mgr.store == nil || !storeHasLeasedObjectsOnDisk(mgr.store, leaseID, headOID) {
-		return "", fmt.Errorf("%w: %w: retained object store unavailable for established private repository", layeredfs.ErrGitPending, ErrCorruptObjectStore)
-	}
-	return gitDir, nil
 }
 
 func initializePrivateRepo(

@@ -70,33 +70,64 @@ func ensureViewRepoInitialized(
 	defer view.mu.Unlock()
 
 	existing := view.repos[repoRel]
-	durable := readDurableRepoRecord(mgr, view.viewID, repoRel)
+	durable, hasDurable, dErr := readDurableRepoRecord(mgr, view, view.viewID, repoRel)
+	if dErr != nil {
+		view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
+		return dErr
+	}
 
-	if (existing != nil && existing.privateGitDir != "") || durable.Status == repoStatusEstablished {
-		gitDir, vErr := verifyEstablishedPrivateRepo(mgr, existing, durable)
+	var priorGitDir string
+	var hasPriorEvidence bool
+	if !hasDurable {
+		priorGitDir, hasPriorEvidence = discoverPriorPrivateStateEvidence(mgr, view, view.viewID, repoRel)
+	}
+
+	if (existing != nil && existing.privateGitDir != "") || (hasDurable && durable.Status == repoStatusEstablished) || priorGitDir != "" {
+		gitDir, headOID, vErr := verifyEstablishedPrivateRepo(mgr, view, view.viewID, repoRel, existing, durable, priorGitDir)
 		if vErr != nil {
 			view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
 			return vErr
+		}
+		leaseID := durable.LeaseID
+		if existing != nil && existing.leaseID != "" {
+			leaseID = existing.leaseID
+		}
+		if !hasDurable {
+			if leaseID == "" && mgr.store != nil && headOID != "" {
+				if lid, lErr := mgr.store.RetainForView(view.viewID+":"+repoRel, []string{headOID}); lErr == nil {
+					leaseID = lid
+				}
+			}
+			if wErr := writeDurableRepoRecord(mgr, view, view.viewID, durableRepoRecord{
+				RepoRel:        repoRel,
+				Status:         repoStatusEstablished,
+				PrivateGitDir:  gitDir,
+				LeaseID:        leaseID,
+				InitialHeadOID: headOID,
+			}); wErr != nil {
+				view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
+				return wErr
+			}
 		}
 		if existing == nil || existing.privateGitDir == "" {
 			view.repos[repoRel] = &initializedRepo{
 				repoRel:        repoRel,
 				worktreeDir:    view.worktreeDir,
 				privateGitDir:  gitDir,
-				leaseID:        durable.LeaseID,
-				initialHeadOID: durable.InitialHeadOID,
+				leaseID:        leaseID,
+				initialHeadOID: headOID,
 				metrics:        InitMetrics{State: StateReady},
 			}
 		}
 		return nil
 	}
 
-	if (existing != nil && existing.noSourceRepo) || durable.Status == repoStatusNoSourceRepo {
+	if (existing != nil && existing.noSourceRepo) || (hasDurable && durable.Status == repoStatusNoSourceRepo) {
 		view.repos[repoRel] = &initializedRepo{repoRel: repoRel, noSourceRepo: true}
 		return ErrNoSourceRepository
 	}
 
-	hadPriorFailure := (existing != nil && existing.metrics.State == StateFailed) || durable.Status == repoStatusFailed
+	hadPriorFailure := (existing != nil && existing.metrics.State == StateFailed) || (hasDurable && durable.Status == repoStatusFailed) || hasPriorEvidence
 	view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StatePending}}
 
 	targetWT := view.worktreeDir
@@ -107,31 +138,41 @@ func ensureViewRepoInitialized(
 	repo, err := initializePrivateRepo(ctx, mgr, view, repoRel, targetWT)
 	if err != nil {
 		if errors.Is(err, ErrNoSourceRepository) && !hadPriorFailure {
-			view.repos[repoRel] = &initializedRepo{repoRel: repoRel, noSourceRepo: true}
-			writeDurableRepoRecord(mgr, view.viewID, durableRepoRecord{
+			if wErr := writeDurableRepoRecord(mgr, view, view.viewID, durableRepoRecord{
 				RepoRel: repoRel,
 				Status:  repoStatusNoSourceRepo,
-			})
+			}); wErr != nil {
+				view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
+				return wErr
+			}
+			view.repos[repoRel] = &initializedRepo{repoRel: repoRel, noSourceRepo: true}
 			return ErrNoSourceRepository
 		}
 		view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
-		writeDurableRepoRecord(mgr, view.viewID, durableRepoRecord{
+		if wErr := writeDurableRepoRecord(mgr, view, view.viewID, durableRepoRecord{
 			RepoRel: repoRel,
 			Status:  repoStatusFailed,
-		})
+		}); wErr != nil {
+			return errors.Join(err, wErr)
+		}
 		if errors.Is(err, ErrNoSourceRepository) {
 			return fmt.Errorf("%w: source repository missing after failed private git initialization for %q", layeredfs.ErrGitPending, repoRel)
 		}
 		return err
 	}
-	view.repos[repoRel] = repo
-	writeDurableRepoRecord(mgr, view.viewID, durableRepoRecord{
+	if wErr := writeDurableRepoRecord(mgr, view, view.viewID, durableRepoRecord{
 		RepoRel:        repoRel,
 		Status:         repoStatusEstablished,
 		PrivateGitDir:  repo.privateGitDir,
 		LeaseID:        repo.leaseID,
 		InitialHeadOID: repo.initialHeadOID,
-	})
+	}); wErr != nil {
+		_ = mgr.store.ReleaseLease(repo.leaseID)
+		_ = os.RemoveAll(repo.privateGitDir)
+		view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
+		return wErr
+	}
+	view.repos[repoRel] = repo
 
 	if repoRel == "." {
 		subRels := repo.submoduleRels
@@ -142,14 +183,18 @@ func ensureViewRepoInitialized(
 			subWT := filepath.Join(view.worktreeDir, filepath.FromSlash(subRel))
 			subRepo, sErr := initializePrivateRepo(ctx, mgr, view, subRel, subWT)
 			if sErr == nil {
-				view.repos[subRel] = subRepo
-				writeDurableRepoRecord(mgr, view.viewID, durableRepoRecord{
+				if wErr := writeDurableRepoRecord(mgr, view, view.viewID, durableRepoRecord{
 					RepoRel:        subRel,
 					Status:         repoStatusEstablished,
 					PrivateGitDir:  subRepo.privateGitDir,
 					LeaseID:        subRepo.leaseID,
 					InitialHeadOID: subRepo.initialHeadOID,
-				})
+				}); wErr != nil {
+					_ = mgr.store.ReleaseLease(subRepo.leaseID)
+					_ = os.RemoveAll(subRepo.privateGitDir)
+					return wErr
+				}
+				view.repos[subRel] = subRepo
 				modDst := filepath.Join(repo.privateGitDir, "modules", filepath.FromSlash(subRel))
 				_ = copyMetadataTree(subRepo.privateGitDir, modDst)
 			}
@@ -206,16 +251,18 @@ func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewB
 		}
 		metrics := seeded.Metrics
 		metrics.State = StateReady
-		view.repos[repoRel] = &initializedRepo{
-			repoRel: repoRel, worktreeDir: target, privateGitDir: finalGitDir,
-			initialHeadOID: initialHead, initialRefs: initialRefs, metrics: metrics,
-		}
-		writeDurableRepoRecord(m, b.ViewID, durableRepoRecord{
+		if err := writeDurableRepoRecord(m, view, b.ViewID, durableRepoRecord{
 			RepoRel:        repoRel,
 			Status:         repoStatusEstablished,
 			PrivateGitDir:  finalGitDir,
 			InitialHeadOID: initialHead,
-		})
+		}); err != nil {
+			return err
+		}
+		view.repos[repoRel] = &initializedRepo{
+			repoRel: repoRel, worktreeDir: target, privateGitDir: finalGitDir,
+			initialHeadOID: initialHead, initialRefs: initialRefs, metrics: metrics,
+		}
 	}
 	for _, at := range b.Installed {
 		repoRel := cleanSlashRel(at.RepoRel)
@@ -224,16 +271,18 @@ func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewB
 			target = filepath.Join(absWorktree, filepath.FromSlash(repoRel))
 		}
 		finalGitDir := filepath.Join(target, ".git")
-		view.repos[repoRel] = &initializedRepo{
-			repoRel: repoRel, worktreeDir: target, privateGitDir: finalGitDir,
-			initialHeadOID: at.InitialHead, initialRefs: at.InitialRefs, metrics: at.Metrics,
-		}
-		writeDurableRepoRecord(m, b.ViewID, durableRepoRecord{
+		if err := writeDurableRepoRecord(m, view, b.ViewID, durableRepoRecord{
 			RepoRel:        repoRel,
 			Status:         repoStatusEstablished,
 			PrivateGitDir:  finalGitDir,
 			InitialHeadOID: at.InitialHead,
-		})
+		}); err != nil {
+			return err
+		}
+		view.repos[repoRel] = &initializedRepo{
+			repoRel: repoRel, worktreeDir: target, privateGitDir: finalGitDir,
+			initialHeadOID: at.InitialHead, initialRefs: at.InitialRefs, metrics: at.Metrics,
+		}
 	}
 	registerManagedView(m, view)
 	return nil

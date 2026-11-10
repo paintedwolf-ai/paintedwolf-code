@@ -21,6 +21,7 @@ type ManagerConfig struct {
 	CaptureAttemptHook      func(worktreeDir string, attempt int)
 	FailObjectImportHook    func(viewID, repoRel string) error
 	FailObjectRetentionHook func(viewID, repoRel string) error
+	FailRepoStateWriteHook  func(viewID, repoRel, status string) error
 }
 
 type gitOverlaySyncer interface {
@@ -309,15 +310,22 @@ func readyPrivateGitDir(m *Manager, viewID, repoRel string) (string, error) {
 	view.mu.Lock()
 	defer view.mu.Unlock()
 	repo := view.repos[repoRel]
-	durable := readDurableRepoRecord(m, viewID, repoRel)
-	if (repo != nil && repo.privateGitDir != "") || durable.Status == repoStatusEstablished {
-		gitDir, vErr := verifyEstablishedPrivateRepo(m, repo, durable)
+	durable, hasDurable, dErr := readDurableRepoRecord(m, view, viewID, repoRel)
+	if dErr != nil {
+		return "", dErr
+	}
+	var priorGitDir string
+	if !hasDurable {
+		priorGitDir, _ = discoverPriorPrivateStateEvidence(m, view, viewID, repoRel)
+	}
+	if (repo != nil && repo.privateGitDir != "") || (hasDurable && durable.Status == repoStatusEstablished) || priorGitDir != "" {
+		gitDir, _, vErr := verifyEstablishedPrivateRepo(m, view, viewID, repoRel, repo, durable, priorGitDir)
 		if vErr != nil {
 			return "", vErr
 		}
 		return gitDir, nil
 	}
-	if (repo != nil && repo.noSourceRepo) || durable.Status == repoStatusNoSourceRepo {
+	if (repo != nil && repo.noSourceRepo) || (hasDurable && durable.Status == repoStatusNoSourceRepo) {
 		return "", ErrNoSourceRepository
 	}
 	return "", layeredfs.ErrGitPending
