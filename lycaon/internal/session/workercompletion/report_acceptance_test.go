@@ -59,3 +59,24 @@ func TestWorkerReportSubmissionPreservesOperationalFailure(t *testing.T) {
 		t.Fatalf("accepted unidentified report: %+v %v", receipt, err)
 	}
 }
+
+func TestPartialWorkerReportDoesNotRequireCompletedImplementation(t *testing.T) {
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	for _, status := range []string{"partial", "blocked", "complete"} {
+		t.Run(status, func(t *testing.T) {
+			input := workerSummaryEval(t, workercompletion.WorkerSummaryEvalInput{AgentType: "implementer", ChildSessionID: t.Name(), Report: workercompletion.WorkerCompletionReport{LegStatus: status, Brief: "No implementation was applied", RemainingRisk: []string{"Assigned change remains incomplete"}}})
+			receipt, err := workercompletion.AcceptWorkerReport(t.Context(), "job", input)
+			if status == "complete" {
+				rejection := toolrejection.AsToolReject(err)
+				if receipt != nil || rejection == nil || rejection.Code != "WORKER_SUMMARY_NO_ARTIFACT" {
+					t.Fatalf("unsupported completion accepted: receipt=%+v err=%v", receipt, err)
+				}
+				return
+			}
+			testutil.FailErr(t, "accept incomplete worker result", err)
+			if receipt == nil || receipt.Report.LegStatus != status {
+				t.Fatalf("lost incomplete disposition: %+v", receipt)
+			}
+		})
+	}
+}
