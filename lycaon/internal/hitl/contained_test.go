@@ -106,10 +106,10 @@ func TestContainedWriteRootsCarryDurableGrants(t *testing.T) {
 	if !got.FSJailed {
 		t.Skip("confinement unavailable on this platform")
 	}
-	if !confine.PathWithinWriteRoots(granted, got.WriteRoots) {
+	if !confine.PathWithinRoots(granted, got.WriteRoots) {
 		t.Fatalf("granted root missing from WriteRoots: %v", got.WriteRoots)
 	}
-	if !confine.PathWithinWriteRoots(project, got.WriteRoots) {
+	if !confine.PathWithinRoots(project, got.WriteRoots) {
 		t.Fatalf("project root missing from WriteRoots: %v", got.WriteRoots)
 	}
 	for _, root := range got.Roots {
@@ -130,7 +130,7 @@ func TestContainedTaskOverlayStaysOutOfRoots(t *testing.T) {
 	if !got.FSJailed {
 		t.Skip("confinement unavailable on this platform")
 	}
-	if !confine.PathWithinWriteRoots(overlay, got.WriteRoots) {
+	if !confine.PathWithinRoots(overlay, got.WriteRoots) {
 		t.Fatalf("task overlay missing from WriteRoots: %v", got.WriteRoots)
 	}
 	for _, root := range got.Roots {
@@ -166,11 +166,38 @@ func TestContainedProjectionAllowsStateAncestorAndRefusesRelativeRoot(t *testing
 	ancestor := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(ancestor, "state"))
 	got := hitl.ContainedFromConfinement(&confine.Confinement{Roots: []string{ancestor}}, true)
-	if !got.FSJailed || !confine.PathWithinWriteRoots(ancestor, got.WriteRoots) {
+	if !got.FSJailed || !confine.PathWithinRoots(ancestor, got.WriteRoots) {
 		t.Fatalf("state ancestor did not project applied confinement: %+v", got)
 	}
 	invalid := hitl.ContainedFromConfinement(&confine.Confinement{Roots: []string{"relative"}}, true)
 	if !reflect.DeepEqual(invalid, hitl.Contained{}) {
 		t.Fatalf("invalid relative root claimed applied confinement: %+v", invalid)
+	}
+}
+
+func TestContainedPreservesReadOnlyRootAuthority(t *testing.T) {
+	confine.TestingSetAutoConfine(t)
+	state, project := t.TempDir(), t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	output := filepath.Join(state, "session-output", "chat")
+	c, ok := confine.DefaultConfinement(confine.Request{Roots: []string{project}, SessionOutputRoot: output})
+	if !ok || c == nil {
+		t.Fatal("confinement unavailable")
+	}
+	got := hitl.ContainedFromConfinement(c, ok)
+	if !reflect.DeepEqual(got.ReadRoots, c.ReadRoots) {
+		t.Fatalf("read-only authority projection = %+v", got)
+	}
+	// The state tree stays inside an OS default write root, but the
+	// control-plane floor denies writes to the read-only session output.
+	if v := confine.BoundaryOf(c).Filesystem.Verdict(confine.AccessWrite, output); v.Allowed || v.Layer != confine.FloorControlPlane {
+		t.Fatalf("session output write verdict = %+v", v)
+	}
+	c.ReadRoots[0] = project
+	if !confine.PathWithinRoots(output, got.ReadRoots) {
+		t.Fatal("projection shares mutable read roots")
+	}
+	if unavailable := hitl.ContainedFromConfinement(c, false); len(unavailable.ReadRoots) != 0 {
+		t.Fatal("unapplied boundary exposed read authority")
 	}
 }

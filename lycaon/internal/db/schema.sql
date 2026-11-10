@@ -1388,7 +1388,7 @@ CREATE TABLE IF NOT EXISTS turn_load_receipts (
     session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     opening_message_id TEXT REFERENCES messages(id) ON DELETE CASCADE,
     tool_call_id TEXT NOT NULL,
-    trigger TEXT NOT NULL CHECK (trigger IN ('turn', 'request', 'lookup', 'tool_event')),
+    trigger TEXT NOT NULL CHECK (trigger IN ('turn', 'request', 'lookup', 'tool_event', 'visibility')),
     surface_id TEXT NOT NULL,
     engine TEXT NOT NULL,
     catalog_revision TEXT NOT NULL,

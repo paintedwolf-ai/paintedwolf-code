@@ -23,11 +23,11 @@ func TestInvariantWriteRootSSOTSharedByGateAndConfine(t *testing.T) {
 	}
 
 	// /tmp survives EvalSymlinks (→ /private/tmp on darwin) and is in the union.
-	if !confine.PathWithinWriteRoots("/tmp/scratch", writeRoots) {
+	if !confine.PathWithinRoots("/tmp/scratch", writeRoots) {
 		t.Fatalf("/tmp/scratch must be within write roots: %v", writeRoots)
 	}
 	// A path outside every write root is not.
-	if confine.PathWithinWriteRoots("/etc/lycaon-probe", writeRoots) {
+	if confine.PathWithinRoots("/etc/lycaon-probe", writeRoots) {
 		t.Fatalf("/etc must not be within write roots: %v", writeRoots)
 	}
 

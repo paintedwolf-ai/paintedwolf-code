@@ -97,8 +97,9 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 			return "", err
 		}
 		result = t.activationResult(ctx, tctx, profileID, plan, constrained, outcome)
+		result.FullCatalog = outcome.FullCatalog
 	}
-	if !browsing && len(result.Loaded)+len(result.AlreadyLoaded) == 0 && (outcome.Failure == "" || len(cards) == 0) {
+	if !browsing && !result.FullCatalog && len(result.Loaded)+len(result.AlreadyLoaded) == 0 && (outcome.Failure == "" || len(cards) == 0) {
 		available := make([]string, 0, len(requestable))
 		for _, meta := range requestable {
 			available = append(available, meta.Name)
@@ -120,7 +121,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 		}
 		return "", FormatRequestToolsReject(t.deps, profileID, need, available, discovery)
 	}
-	if browsing || outcome.Failure != "" {
+	if !result.FullCatalog && (browsing || outcome.Failure != "") {
 		status := "ranking_unavailable"
 		if browsing {
 			status = "catalog"

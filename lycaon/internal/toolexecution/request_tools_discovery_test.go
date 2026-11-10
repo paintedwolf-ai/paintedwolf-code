@@ -351,6 +351,31 @@ func TestRequestNoMatchLongNeedPreservesProviderDiscovery(t *testing.T) {
 	t.Fatal("provider projection lost the tool result")
 }
 
+func TestRequestFailureReportsExpandedSchemasWithoutDiscoveryLoop(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	ledger := turnload.NewLedger()
+	const name = "mcp_fixture_review"
+	testutil.FailErr(t, "register fixture", reg.RegisterDefinition(tools.Definition{
+		Meta:     tools.ToolMeta{Name: name, Description: "Review a change", Source: tools.ToolSourceMCP, SourceID: "fixture", ArgsSchema: map[string]any{"type": "object"}},
+		Contract: toolcontract.External("mcp:fixture"), Handler: func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil },
+	}))
+	ledger.BeginTurn("s", turnload.TurnOpening{Loadable: []string{name}}, turnload.Decision{})
+	testutil.FailErr(t, "register request", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
+		Activation: ledger, Boundary: fakeRequestBoundary{},
+		Resolve: func(_ context.Context, _ tools.ToolContext, need string, _ []turnload.ToolCard) turnload.RequestOutcome {
+			ledger.ExposeCatalog("s", turnload.RankingTimeout)
+			return turnload.RequestOutcome{Need: need, Abstained: true, Failure: turnload.RankingTimeout, FullCatalog: ledger.FullCatalog("s")}
+		},
+	}))
+	raw, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "review a change"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s"}, Turn: tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{name})}})
+	testutil.FailErr(t, "request after failure", err)
+	var result turnload.RequestToolsResult
+	testutil.FailErr(t, "decode result", json.Unmarshal([]byte(raw), &result))
+	if !result.FullCatalog || result.Discovery != nil || !ledger.Active("s")[name] || len(ledger.Needed("s")) != 0 {
+		t.Fatalf("fallback result = %+v; standing = %+v", result, ledger.Standing("s"))
+	}
+}
+
 func enlargeDiscoveryFixtureCards(t *testing.T, reg *tools.DefaultRegistry, names []string) {
 	t.Helper()
 	for _, name := range names {

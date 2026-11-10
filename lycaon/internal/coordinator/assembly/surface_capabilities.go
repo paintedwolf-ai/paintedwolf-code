@@ -69,6 +69,10 @@ func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *a
 	default:
 		return
 	}
+	if e.deps.Selection != nil {
+		surface.FullCatalog = e.deps.Selection.FullCatalog(sess.ID)
+		surface.Fingerprint = surface.CacheFingerprint()
+	}
 	for key, value := range prompts.AgentPromptSurfaceTemplateVars(surface) {
 		switch value := value.(type) {
 		case []map[string]any:

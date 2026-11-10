@@ -201,6 +201,7 @@ func (inv *invocation) outcome(err error) (toolcontract.ProducerResult, error) {
 	if certainty == toolcontract.NoEffect && !errors.Is(err, commandprogram.ErrConsumerClosed) {
 		certainty = toolcontract.EffectUnknown
 	}
+	_, _ = fmt.Fprintf(inv.stderr, "%s: %s\n", inv.name(), err.Error())
 	return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: certainty}, err
 }
 

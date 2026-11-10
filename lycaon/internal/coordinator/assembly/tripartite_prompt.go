@@ -189,10 +189,10 @@ func rootCountFromVars(vars map[string]any) int {
 
 // loadedTools returns the turn ledger's loaded set for the session.
 func (e *promptSurface) loadedTools(sess *api.Session) map[string]bool {
-	if e == nil || sess == nil || e.deps.LoadedTools == nil {
+	if e == nil || sess == nil || e.deps.Selection == nil {
 		return nil
 	}
-	return e.deps.LoadedTools(sess.ID)
+	return e.deps.Selection.LoadedTools(sess.ID)
 }
 
 func sortedLoadedSet(loaded map[string]bool) []string {

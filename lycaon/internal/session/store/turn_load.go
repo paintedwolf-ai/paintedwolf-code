@@ -21,9 +21,11 @@ const (
 	TurnLoadTriggerLookup = "lookup"
 	// TurnLoadTriggerToolEvent is the skill read a turn's first loadable tool call asked for.
 	TurnLoadTriggerToolEvent = "tool_event"
+	// TurnLoadTriggerVisibility records a changed continuation surface.
+	TurnLoadTriggerVisibility = "visibility"
 )
 
-// TurnLoadReceipt records one decision the local decision model was asked.
+// TurnLoadReceipt records selection and visibility changes.
 type TurnLoadReceipt struct {
 	ID        int64
 	SessionID string

@@ -124,7 +124,7 @@ func TestAuthorUpdateRequiresAndPreservesStableItemIDs(t *testing.T) {
 		"item_ids": []any{id2, nil, id1},
 	}).Apply(t.Context(), store, "session", nil)
 	testutil.FailErr(t, "apply reordered replacement", err)
-	if !updated.Updated || !updated.StateChanged || !updated.DeliverableClosed {
+	if !updated.Updated || !updated.StateChanged || len(updated.ClosedItemIDs) == 0 {
 		t.Fatalf("reordered replacement outcome = %+v", updated)
 	}
 	if len(updated.Snapshot.ItemIDs) != 3 || updated.Snapshot.ItemIDs[0] != id2 || updated.Snapshot.ItemIDs[2] != id1 {
