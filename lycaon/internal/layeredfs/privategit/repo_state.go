@@ -2,6 +2,7 @@ package privategit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -221,8 +222,14 @@ func objectExistsInObjectsDir(objDir, oid string) bool {
 		if _, err := os.Stat(filepath.Join(packDir, base+".pack")); err != nil {
 			continue
 		}
-		comp, err := parsePackIndexOIDs(filepath.Join(packDir, de.Name()))
-		if err == nil && comp.containsHex(oid) {
+		members, comp, err := parsePackIndexOIDs(context.Background(), objDir, filepath.Join(packDir, de.Name()))
+		if err != nil {
+			continue
+		}
+		if comp != nil && comp.containsHex(oid) {
+			return true
+		}
+		if _, ok := members[oid]; ok {
 			return true
 		}
 	}
