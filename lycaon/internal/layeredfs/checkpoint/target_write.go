@@ -29,7 +29,7 @@ func (tree *promotionTargets) applyPlannedChangeInRoot(root *os.Root, ch Planned
 	case ActionNoop:
 		return nil
 	case ActionDelete:
-		if err := root.RemoveAll(ch.Path.Rel); err != nil {
+		if err := root.RemoveAll(ch.Path.Rel); err != nil && !errors.Is(err, syscall.ENOTDIR) {
 			return err
 		}
 		return syncTargetParent(root, ch.Path.Rel)
@@ -157,12 +157,15 @@ func (tree *promotionTargets) writeTargetRegular(root *os.Root, ch PlannedChange
 // syncTargetParent makes a removal durable when its parent still exists.
 func syncTargetParent(root *os.Root, rel string) error {
 	dir, err := root.Open(filepath.Dir(rel))
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 	defer func() { _ = dir.Close() }()
+	if info, sErr := dir.Stat(); sErr == nil && !info.IsDir() {
+		return nil
+	}
 	return fssync.File(dir)
 }
