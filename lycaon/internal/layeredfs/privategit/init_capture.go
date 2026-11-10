@@ -474,49 +474,32 @@ func collectCapturedRefAndIndexOIDs(ctx context.Context, stageGitDir string) ([]
 		return nil, nil, fmt.Errorf("%w: invalid HEAD %q", ErrCorruptObjectStore, headStr)
 	}
 	idxPath := filepath.Join(stageGitDir, "index")
-	if idxBytes, err := os.ReadFile(idxPath); err == nil {
-		idxDigest := sha256HexBytes(idxBytes)
-		if cached, ok := parsedIndexOIDCache.Load(idxDigest); ok {
-			seen := make(map[string]struct{}, len(oids))
-			for _, oid := range oids {
+	if _, err := os.Stat(idxPath); err == nil {
+		sink := &lsFilesStageSink{seen: make(map[string]struct{})}
+		out, code, gErr := gitexec.RunTo(ctx, filepath.Dir(stageGitDir), []string{"--git-dir=" + stageGitDir, "ls-files", "--stage"}, gitexec.Opts{
+			Profile:   gitexec.ProfileHermetic,
+			IndexFile: idxPath,
+		}, sink)
+		sink.flush()
+		if gErr != nil || code != 0 {
+			return nil, nil, fmt.Errorf("%w: invalid git index (exit %d): %v: %s", ErrCorruptObjectStore, code, gErr, strings.TrimSpace(string(out)))
+		}
+		seen := make(map[string]struct{}, len(oids)+len(sink.oids))
+		for _, oid := range oids {
+			seen[oid] = struct{}{}
+		}
+		for _, oid := range sink.oids {
+			if _, exists := seen[oid]; !exists {
 				seen[oid] = struct{}{}
-			}
-			for _, oid := range cached.([]string) {
-				if _, exists := seen[oid]; !exists {
-					seen[oid] = struct{}{}
-					oids = append(oids, oid)
-				}
-			}
-		} else {
-			sink := &lsFilesStageSink{seen: make(map[string]struct{})}
-			out, code, gErr := gitexec.RunTo(ctx, filepath.Dir(stageGitDir), []string{"--git-dir=" + stageGitDir, "ls-files", "--stage"}, gitexec.Opts{
-				Profile:   gitexec.ProfileHermetic,
-				IndexFile: idxPath,
-			}, sink)
-			sink.flush()
-			if gErr != nil || code != 0 {
-				return nil, nil, fmt.Errorf("%w: invalid git index (exit %d): %v: %s", ErrCorruptObjectStore, code, gErr, strings.TrimSpace(string(out)))
-			}
-			parsedIndexOIDCache.Store(idxDigest, append([]string(nil), sink.oids...))
-			seen := make(map[string]struct{}, len(oids)+len(sink.oids))
-			for _, oid := range oids {
-				seen[oid] = struct{}{}
-			}
-			for _, oid := range sink.oids {
-				if _, exists := seen[oid]; !exists {
-					seen[oid] = struct{}{}
-					oids = append(oids, oid)
-				}
+				oids = append(oids, oid)
 			}
 		}
 	} else if !os.IsNotExist(err) {
-		return nil, nil, fmt.Errorf("%w: read git index %s: %v", ErrCorruptObjectStore, idxPath, err)
+		return nil, nil, fmt.Errorf("%w: stat git index %s: %v", ErrCorruptObjectStore, idxPath, err)
 	}
 	sort.Strings(oids)
 	return oids, refs, nil
 }
-
-var parsedIndexOIDCache sync.Map
 
 type lsFilesStageSink struct {
 	rem  []byte

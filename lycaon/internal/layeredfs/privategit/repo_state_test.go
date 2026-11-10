@@ -596,15 +596,16 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 
 		// Verify invalid/malformed lease files in <storeRoot>/leases cause both CollectGarbage and store open to fail closed.
 		leasesDir := filepath.Join(mgr2.Store().RootDir(), "leases")
-		badLeasePath := filepath.Join(leasesDir, "lease-view-9999.json")
+		badLeasePath := filepath.Join(leasesDir, "lease-view-999999.json")
 		for _, badPayload := range []string{
-			`{"format_version":1,"id":"lease-view-9999"`,
-			`{"format_version":99,"id":"lease-view-9999","kind":"view","holder":"v","oids":["` + headA + `"]}`,
-			`{"format_version":1,"id":"lease-view-9999","kind":"view","holder":"v","oids":["` + headA + `"],"unknown":1}`,
-			`{"format_version":1,"id":"lease-view-9999","kind":"view","holder":"v","oids":["` + headA + `"]}{"extra":1}`,
+			`{"format_version":1,"id":"lease-view-999999"`,
+			`{"format_version":99,"id":"lease-view-999999","kind":"view","holder":"v","oids":["` + headA + `"]}`,
+			`{"format_version":1,"id":"lease-view-999999","kind":"view","holder":"v","oids":["` + headA + `"],"unknown":1}`,
+			`{"format_version":1,"id":"lease-view-999999","kind":"view","holder":"v","oids":["` + headA + `"]}{"extra":1}`,
 			`{"format_version":1,"id":"../escape","kind":"view","holder":"v","oids":["` + headA + `"]}`,
-			`{"format_version":1,"id":"lease-view-9999","kind":"view","holder":"v","oids":["not-a-hex-oid"]}`,
-			`{"format_version":1,"id":"lease-view-9999","kind":"view","holder":"v","packs":["../evil"]}`,
+			`{"format_version":1,"id":"lease-view-9999","kind":"view","holder":"v","oids":["` + headA + `"]}`,
+			`{"format_version":1,"id":"lease-view-999999","kind":"view","holder":"v","oids":["not-a-hex-oid"]}`,
+			`{"format_version":1,"id":"lease-view-999999","kind":"view","holder":"v","packs":["../evil"]}`,
 		} {
 			testutil.FailErr(t, "write bad lease file", os.WriteFile(badLeasePath, []byte(badPayload), 0o600))
 			if _, gcErr := mgr2.Store().CollectGarbage(ctx); !errors.Is(gcErr, ErrCorruptObjectStore) {

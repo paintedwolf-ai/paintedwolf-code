@@ -15,19 +15,11 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
-func effectiveMountTimeouts() (retrans, timeo int) {
-	if os.Getenv("PW_M14_WAN_NOAC_PROFILE") == "1" {
-		return 4, 600
-	}
-	return DefaultRetrans, DefaultTimeo
-}
-
 // FormatMountOptions returns the explicit macOS /sbin/mount_nfs options for port.
 func FormatMountOptions(port int) string {
-	retrans, timeo := effectiveMountTimeouts()
 	return fmt.Sprintf(
 		"vers=3,tcp,port=%d,mountport=%d,locallocks,nodev,nosuid,nobrowse,%s,retrans=%d,timeo=%d,soft,rsize=%d,wsize=%d",
-		port, port, DefaultCachePolicy, retrans, timeo, DefaultRSize, DefaultWSize,
+		port, port, DefaultCachePolicy, DefaultRetrans, DefaultTimeo, DefaultRSize, DefaultWSize,
 	)
 }
 
@@ -274,7 +266,6 @@ func (a *Adapter) mountSingleRoot(
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "prepare", ReasonCode: adapter.ReasonMountDenied, Diagnostic: aErr.Error(), Cause: aErr}
 	}
 
-	retrans, timeo := effectiveMountTimeouts()
 	obs, _ := srv.LastMountHandshake(capCfg.ExportPath)
 	facts := MountFacts{
 		ViewID:         viewID,
@@ -287,8 +278,8 @@ func (a *Adapter) mountSingleRoot(
 		ServerPort:     port,
 		MountPort:      port,
 		CachePolicy:    DefaultCachePolicy,
-		RetryPolicy:    fmt.Sprintf("retrans=%d,soft", retrans),
-		Timeout:        fmt.Sprintf("timeo=%d", timeo),
+		RetryPolicy:    fmt.Sprintf("retrans=%d,soft", DefaultRetrans),
+		Timeout:        fmt.Sprintf("timeo=%d", DefaultTimeo),
 		RSize:          DefaultRSize,
 		WSize:          DefaultWSize,
 		MountOptions:   mountOpts,
