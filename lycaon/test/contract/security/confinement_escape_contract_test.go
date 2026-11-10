@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -263,14 +264,12 @@ func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
 }
 
 func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
-	stateAncestor := t.TempDir()
-	cfg := filepath.Join(stateAncestor, ".config", "paintedwolf")
-	testutil.FailErr(t, "create state dir", os.MkdirAll(cfg, 0o700))
-	t.Setenv("HOME", stateAncestor)
-	t.Setenv("USERPROFILE", stateAncestor)
-	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-
 	srv := wiring.BuildForTest(t).Server
+	cfg, err := configdir.Root()
+	testutil.FailErr(t, "resolve state dir", err)
+	testutil.FailErr(t, "create state dir", os.MkdirAll(cfg, 0o700))
+	stateAncestor := filepath.Dir(cfg)
+
 	body := `{"roots":[{"path":` + jsonQuote(stateAncestor) + `}]}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(body))
 	req.Header.Set("Authorization", api.TestAuthHeader())
