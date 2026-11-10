@@ -32,20 +32,20 @@ describe("recent edits presentation", () => {
     vi.useFakeTimers();
     const read = deferred<EditorDocumentChanges>();
     const client = stubClient({ listEditorDocumentChanges: () => read.promise });
-    render(() => <DocumentChangeHistory client={client} projectId="project" documentId="document" onApplied={() => {}} />);
-    expect(screen.queryByRole("group")).toBeNull();
+    render(() => <DocumentChangeHistory client={client} projectId="project" documentId="document" onApplied={() => {}} rows={[]} renderRow={() => null} />);
+    expect(screen.queryByTestId("document-change-author")).toBeNull();
     await vi.advanceTimersByTimeAsync(PRESENTATION_LOADING_GRACE_MS - 1);
     expect(screen.queryByRole("status")).toBeNull();
     read.resolve({ changes: [], next_cursor: undefined });
     await vi.advanceTimersByTimeAsync(PRESENTATION_LOADING_GRACE_MS);
-    expect(screen.queryByRole("group")).toBeNull();
+    expect(screen.queryByTestId("document-change-author")).toBeNull();
   });
 
   it("shows waiting feedback only after the shared grace period, then publishes edits", async () => {
     vi.useFakeTimers();
     const read = deferred<EditorDocumentChanges>();
     const client = stubClient({ listEditorDocumentChanges: () => read.promise });
-    render(() => <DocumentChangeHistory client={client} projectId="project" documentId="document" onApplied={() => {}} />);
+    render(() => <DocumentChangeHistory client={client} projectId="project" documentId="document" onApplied={() => {}} rows={[]} renderRow={() => null} />);
     await vi.advanceTimersByTimeAsync(PRESENTATION_LOADING_GRACE_MS);
     read.resolve(page());
     await vi.advanceTimersByTimeAsync(0);
@@ -60,7 +60,7 @@ describe("recent edits presentation", () => {
     const refresh = deferred<EditorDocumentChanges>();
     const list = vi.fn().mockResolvedValueOnce(page()).mockReturnValueOnce(refresh.promise);
     const client = stubClient({ listEditorDocumentChanges: list });
-    const mount = () => render(() => <DocumentChangeHistory client={client} projectId="project" documentId="document" onApplied={() => {}} />);
+    const mount = () => render(() => <DocumentChangeHistory client={client} projectId="project" documentId="document" onApplied={() => {}} rows={[]} renderRow={() => null} />);
     const first = mount();
     await vi.advanceTimersByTimeAsync(0);
     first.unmount();
@@ -82,7 +82,7 @@ describe("recent edits presentation", () => {
     const list = vi.fn().mockResolvedValueOnce(page("First edit", "cursor-2")).mockReturnValueOnce(earlier.promise).mockResolvedValueOnce(page("Other document"));
     const client = stubClient({ listEditorDocumentChanges: list });
     const [documentId, setDocumentId] = createSignal("first");
-    render(() => <DocumentChangeHistory client={client} projectId="project" documentId={documentId()} onApplied={() => {}} />);
+    render(() => <DocumentChangeHistory client={client} projectId="project" documentId={documentId()} onApplied={() => {}} rows={[]} renderRow={() => null} />);
     await vi.advanceTimersByTimeAsync(0);
     fireEvent.click(assertNamedControl(screen.getByTestId("earlier-edits"), "button"));
     setDocumentId("other");

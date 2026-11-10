@@ -11,7 +11,6 @@ import type { EditorWindow } from "../../platform/windows/editor-windows.ts";
 import { DocumentWindows } from "../components/DocumentWindows.tsx";
 import type { FileBuffer } from "../documents/files-buffer-state.ts";
 import { filesBufferText } from "../documents/project-files-buffers.ts";
-import { DocumentChangeHistory } from "../history/DocumentChangeHistory.tsx";
 import type { FileHistoryCommit } from "../history/file-history-model.ts";
 import type { FileVersionHistory, FileVersionView } from "../history/file-version.ts";
 import { FileVersionDocument } from "../history/FileVersionDocument.tsx";
@@ -174,21 +173,12 @@ export function FilesEditor(props: FilesEditorProps) {
             <FileVersionPicker
               selected={props.version}
               currentAbsent={history.currentTipAbsent()}
-              editHistory={(dismiss) => (
-                <Show
-                  keyed
-                  when={props.client && props.buffer.documentId ? { client: props.client, documentId: props.buffer.documentId } : undefined}
-                >
-                  {(document) => (
-                    <DocumentChangeHistory
-                      client={document.client}
-                      projectId={props.projectId}
-                      documentId={document.documentId}
-                      onApplied={() => { dismiss(); queueMicrotask(() => activeEditorView()?.focus()); }}
-                    />
-                  )}
-                </Show>
-              )}
+              documentHistory={props.client && props.buffer.documentId ? {
+                client: props.client,
+                projectId: props.projectId,
+                documentId: props.buffer.documentId,
+                onApplied: () => queueMicrotask(() => activeEditorView()?.focus()),
+              } : undefined}
               history={props.versionHistory}
               onCurrent={props.onSelectCurrent}
               onSelect={props.onSelectVersion}
