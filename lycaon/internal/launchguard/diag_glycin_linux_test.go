@@ -5,12 +5,14 @@ package launchguard
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/packagegeneration"
@@ -146,6 +148,18 @@ func diagGlycinParent(t *testing.T) {
 		diagGlycinRun(t, mode, command)
 	}
 
+	// Namespace replication: the real desktop entry is cloned into a new user
+	// namespace while inheriting the root-owned stage mount namespace. Run the
+	// same bwrap command from that context to capture bwrap's die message.
+	if uid := os.Getuid(); uid != 0 {
+		stage := exec.Command("sudo", "-n", os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
+		stage.Env = append(os.Environ(), diagGlycinModeEnv+"=namespace-stage")
+		diagGlycinRun(t, "namespace-stage", stage)
+	}
+	useronly := exec.Command(os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
+	useronly.Env = append(os.Environ(), diagGlycinModeEnv+"=namespace-useronly")
+	diagGlycinRun(t, "namespace-useronly", useronly)
+
 	// Environment facts: userns sysctls, bwrap apparmor attachments, and any
 	// recent apparmor denials from the kernel log.
 	for _, probe := range []struct{ label, command string }{
@@ -207,7 +221,107 @@ func diagGlycinChild(t *testing.T, mode string) {
 			return
 		}
 	}
+	if mode == "namespace-stage" {
+		diagGlycinNamespaceStage(t, loader)
+		return
+	}
+	if mode == "namespace-desktop" {
+		diagGlycinNamespaceDesktop(t, loader, mode)
+		return
+	}
+	if mode == "namespace-useronly" {
+		diagGlycinNamespaceUserOnly(t, loader, mode)
+		return
+	}
 	diagGlycinRun(t, mode, diagGlycinBwrapCommand(t, loader))
+}
+
+// diagGlycinNamespaceStage mirrors the protected bootstrap stage: root, in a
+// private mount namespace, cloning the desktop entry into a new user
+// namespace with full identity mappings as the login user.
+func diagGlycinNamespaceStage(t *testing.T, loader string) {
+	if os.Getuid() != 0 {
+		t.Skip("namespace stage needs root")
+	}
+	if err := unix.Unshare(unix.CLONE_NEWNS); err != nil {
+		t.Fatalf("stage unshare mount namespace: %v", err)
+	}
+	uid, err := strconv.Atoi(os.Getenv("SUDO_UID"))
+	testutil.FailErr(t, "read SUDO_UID", err)
+	gid, err := strconv.Atoi(os.Getenv("SUDO_GID"))
+	testutil.FailErr(t, "read SUDO_GID", err)
+	desktop := exec.Command(os.Args[0], "-test.run", "^TestDiagGlycinLoaderExec$", "-test.v")
+	desktop.Env = append(os.Environ(), diagGlycinModeEnv+"=namespace-desktop")
+	desktop.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags:                 unix.CLONE_NEWUSER,
+		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: 0, Size: int(^uint32(0))}},
+		GidMappingsEnableSetgroups: true,
+		Credential:                 &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)},
+	}
+	diagGlycinRun(t, "namespace-desktop", desktop)
+}
+
+// diagGlycinNamespaceDesktop is the replicated desktop entry context: login
+// user in a fresh user namespace, inheriting the root-owned mount namespace,
+// under the protected execution closure.
+func diagGlycinNamespaceDesktop(t *testing.T, loader, mode string) {
+	diagGlycinNamespaceFacts(t, mode)
+	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		t.Fatalf("no_new_privs: %v", err)
+	}
+	exe, err := os.Open("/proc/self/exe")
+	testutil.FailErr(t, "open self as image", err)
+	defer func() { _ = exe.Close() }()
+	policy := GenerationPolicy{LogicalInstallRoot: "/usr/bin", SystemExecutables: []string{loader}}
+	if err := restrictExecution(policy, exe); err != nil {
+		t.Fatalf("restrict: %v", err)
+	}
+	diagGlycinRun(t, mode, diagGlycinBwrapCommand(t, loader))
+}
+
+// diagGlycinNamespaceUserOnly isolates user namespace nesting: the same
+// closure and bwrap command from a fresh user namespace whose mount
+// namespace is the caller's own.
+func diagGlycinNamespaceUserOnly(t *testing.T, loader, mode string) {
+	diagGlycinNamespaceFacts(t, mode)
+	if err := unix.Unshare(unix.CLONE_NEWUSER); err != nil {
+		t.Fatalf("useronly unshare user namespace: %v", err)
+	}
+	uid, gid := os.Getuid(), os.Getgid()
+	testutil.FailErr(t, "deny setgroups", os.WriteFile("/proc/self/setgroups", []byte("deny"), 0o644))
+	testutil.FailErr(t, "write uid map", os.WriteFile("/proc/self/uid_map", []byte(fmt.Sprintf("0 %d 1\n", uid)), 0o644))
+	testutil.FailErr(t, "write gid map", os.WriteFile("/proc/self/gid_map", []byte(fmt.Sprintf("0 %d 1\n", gid)), 0o644))
+	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		t.Fatalf("no_new_privs: %v", err)
+	}
+	exe, err := os.Open("/proc/self/exe")
+	testutil.FailErr(t, "open self as image", err)
+	defer func() { _ = exe.Close() }()
+	policy := GenerationPolicy{LogicalInstallRoot: "/usr/bin", SystemExecutables: []string{loader}}
+	if err := restrictExecution(policy, exe); err != nil {
+		t.Fatalf("restrict: %v", err)
+	}
+	diagGlycinRun(t, mode, diagGlycinBwrapCommand(t, loader))
+}
+
+func diagGlycinNamespaceFacts(t *testing.T, mode string) {
+	for _, probe := range []struct{ label, path string }{
+		{"uid_map", "/proc/self/uid_map"},
+		{"ns_mnt", "/proc/self/ns/mnt"},
+		{"ns_user", "/proc/self/ns/user"},
+	} {
+		if raw, err := os.ReadFile(probe.path); err == nil {
+			t.Logf("%s %s: %s", mode, probe.label, strings.TrimSpace(string(raw)))
+		}
+	}
+	if raw, err := os.ReadFile("/proc/self/status"); err == nil {
+		for _, line := range strings.Split(string(raw), "\n") {
+			if strings.HasPrefix(line, "CapEff:") || strings.HasPrefix(line, "NoNewPrivs:") {
+				t.Logf("%s status: %s", mode, line)
+			}
+		}
+	}
 }
 
 // diagGlycinSeccompAllowAll writes a one-instruction allow-all BPF filter and
