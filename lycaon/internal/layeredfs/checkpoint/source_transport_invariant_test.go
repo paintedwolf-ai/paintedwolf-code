@@ -144,6 +144,9 @@ func TestHardSourceTransportResumesWithoutLosingCheckpoint(t *testing.T) {
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("waiting preview changed checkpoint")
 	}
+	if _, err := os.Stat(filepath.Join(control, "restored.json")); !os.IsNotExist(err) {
+		t.Fatalf("transport restored before blocked-preview observation completed: %v", err)
+	}
 	testutil.FailErr(t, "restore transport", os.WriteFile(filepath.Join(control, "restore.request"), nil, 0600))
 	waitOutageMarker(t, control, "restored.json")
 	var recovered outcome
