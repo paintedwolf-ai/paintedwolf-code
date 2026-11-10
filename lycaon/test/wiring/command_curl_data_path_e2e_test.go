@@ -857,8 +857,11 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	if originHits.Load() != 0 {
 		t.Fatalf("step 6a hit origin before checkpoint resolution: %d", originHits.Load())
 	}
-	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card6a.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: true}, nil)
+	resp6a, err := s.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(owner, s.session, card6a.ID, "send_unchanged")
 	testutil.FailErr(t, "approve card6a once", err)
+	if resp6a == nil || resp6a.Result == nil || len(resp6a.Result.GrantIDs) != 0 {
+		t.Fatalf("step 6a send_unchanged must not install a standing grant, got %+v", resp6a)
+	}
 	testutil.FailErr(t, "step 6a prompt", <-done6a)
 	out6a := s.outcome(t, "program-6a")
 	if out6a.State != "completed" || out6a.Status != 0 || strings.TrimSpace(out6a.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || !strings.Contains(lastOriginCookie.Load().(string), "session="+cookieSecret) {
