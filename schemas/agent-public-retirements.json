@@ -652,7 +652,11 @@
       ]
     },
     "workflow_terms": {},
-    "anchors": {},
+    "anchors": {
+      "worker.summary.trim": [
+        "worker.report_check"
+      ]
+    },
     "themes": {}
   }
 }
