@@ -267,7 +267,7 @@ func TestHydrationBeforeTrustMergeBlocksProjectRepoint(t *testing.T) {
 	rows := reg.Catalog.ListProviders(ctx, CallScope{ProjectDir: projectDir})
 	foundRejected := false
 	for _, r := range rows {
-		if r.ID == "authed-user-prov" && r.Status == api.McpStatusRejected && r.LastError == RejectProjectEnableForbidden {
+		if r.ID == "authed-user-prov" && r.Status == api.McpStatusRejected && r.LastError == RejectProjectHeadersForbidden {
 			foundRejected = true
 		}
 		if r.ID == "authed-user-prov" && r.URL != "" && strings.Contains(r.URL, "127.0.0.1:9999") && r.Status != api.McpStatusRejected {
@@ -275,7 +275,7 @@ func TestHydrationBeforeTrustMergeBlocksProjectRepoint(t *testing.T) {
 		}
 	}
 	if !foundRejected {
-		t.Fatalf("expected project repoint to be rejected with %q, got rows=%+v", RejectProjectEnableForbidden, rows)
+		t.Fatalf("expected project repoint to be rejected with %q, got rows=%+v", RejectProjectHeadersForbidden, rows)
 	}
 }
 
