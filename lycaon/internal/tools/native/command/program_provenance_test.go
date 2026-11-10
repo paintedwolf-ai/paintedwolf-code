@@ -59,6 +59,7 @@ func (f *fakeProvenanceStore) ExternalCustodyURLsForPaths(_ context.Context, ses
 }
 
 func TestOpTrackerContextAndNilSafety(t *testing.T) {
+	//nolint:staticcheck // SA1012: nil Context is the case under test.
 	if got := opTrackerFromContext(nil); got != nil {
 		t.Fatalf("opTrackerFromContext(nil) = %v, want nil", got)
 	}
