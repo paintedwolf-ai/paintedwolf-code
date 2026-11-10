@@ -7,7 +7,6 @@ import (
 	"crypto/sha1" // #nosec G505 -- SHA-1 is the object identifier in the admitted Git repository format.
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 	"maps"
