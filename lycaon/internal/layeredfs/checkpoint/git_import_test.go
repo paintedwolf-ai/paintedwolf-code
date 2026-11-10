@@ -212,12 +212,13 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 	}
 
 	// 5. Concurrent conflicting imports racing on the same destination ref.
-	_, _ = ImportAndValidateCheckpointGitRefs(
-		t.Context(), "", "chk-seed-b", "w-seed",
+	_, err = ImportAndValidateCheckpointGitRefs(
+		t.Context(), storeDir, "chk-seed-b", "w-seed",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/seed": oidB}},
 		map[string]string{"primary": primary},
 		worktreeGit, commonGit,
 	)
+	testutil.FailErr(t, "seed oidB", err)
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
 	oids := []string{oidA, oidB}
