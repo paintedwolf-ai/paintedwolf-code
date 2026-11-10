@@ -4,13 +4,17 @@ package launchguard
 
 import (
 	"bytes"
+	"context"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/godbus/dbus/v5"
 	"golang.org/x/sys/unix"
 )
 
@@ -64,6 +68,190 @@ func TestDiagGlycinLoaderBwrap(t *testing.T) {
 	bwrapSeccomp.Args = append(bwrapSeccomp.Args, "--seccomp", strconv.Itoa(3+len(bwrapSeccomp.ExtraFiles)-1))
 	diagGlycinSpawnWait(t, "bwrap-dbus-fd21-seccomp-allowall", bwrapSeccomp, 8*time.Second)
 	_ = peer4
+
+	// Stage 5: strace the exact bwrap command so a startup exit 1 names its
+	// failing syscall in the trace.
+	if strace, err := exec.LookPath("strace"); err == nil {
+		tracePath := filepath.Join(t.TempDir(), "startup.trace")
+		bwrapTrace := diagGlycinBwrapCommand(t, loader)
+		peer5, child5 := diagGlycinSocketPair(t)
+		bwrapTrace.ExtraFiles = diagGlycinFillFiles(t, 18)
+		bwrapTrace.ExtraFiles = append(bwrapTrace.ExtraFiles, child5)
+		bwrapTrace.Args = append(bwrapTrace.Args, "--dbus-fd", "21")
+		traced := exec.Command(strace, "-f", "-s", "300", "-e", "trace=%file,%process", "-o", tracePath)
+		traced.Args = append(traced.Args, bwrapTrace.Args...)
+		traced.Env = bwrapTrace.Env
+		diagGlycinSpawnWait(t, "bwrap-strace-startup", traced, 8*time.Second)
+		diagGlycinLogTrace(t, "startup", tracePath)
+		_ = peer5
+	} else {
+		t.Logf("stage5: strace absent: %v", err)
+	}
+
+	// Stage 6: drive a real Init request over the loader's dbus socket so a
+	// load-time failure reproduces with the loader's stderr captured. The
+	// listener/dial pair gives godbus a unix transport with fd passing.
+	diagGlycinDriveInit(t, loader)
+}
+
+// diagGlycinDriveInit spawns the loader under the exact failing bwrap command
+// with RUST_LOG=debug, authenticates ANONYMOUS over its dbus socket, and sends
+// a real Init request for the SVG GTK fails to load. A load-time failure then
+// reproduces with the loader's stderr and exit status captured.
+func diagGlycinDriveInit(t *testing.T, loader string) {
+	sockDir, err := os.MkdirTemp("", "diag-glycin-sock-")
+	if err != nil {
+		t.Logf("stage6: temp dir: %v", err)
+		return
+	}
+	sockPath := filepath.Join(sockDir, "dbus")
+	listener, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Logf("stage6: listen: %v", err)
+		_ = os.RemoveAll(sockDir)
+		return
+	}
+	t.Cleanup(func() {
+		_ = listener.Close()
+		_ = os.RemoveAll(sockDir)
+	})
+	client, err := dbus.Dial("unix:path="+sockPath, dbus.WithAuth(dbus.AuthAnonymous()))
+	if err != nil {
+		t.Logf("stage6: dial: %v", err)
+		return
+	}
+	t.Cleanup(func() { _ = client.Close() })
+	accepted, err := listener.Accept()
+	if err != nil {
+		t.Logf("stage6: accept: %v", err)
+		return
+	}
+	unixConn, ok := accepted.(*net.UnixConn)
+	if !ok {
+		t.Logf("stage6: accepted conn is %T", accepted)
+		return
+	}
+	childFile, err := unixConn.File()
+	if err != nil {
+		t.Logf("stage6: conn file: %v", err)
+		return
+	}
+	t.Cleanup(func() { _ = childFile.Close() })
+
+	bwrapLoad := diagGlycinBwrapCommand(t, loader)
+	bwrapLoad.Args = append(bwrapLoad.Args, "--setenv", "RUST_LOG", "debug")
+	bwrapLoad.ExtraFiles = diagGlycinFillFiles(t, 18)
+	bwrapLoad.ExtraFiles = append(bwrapLoad.ExtraFiles, childFile)
+	bwrapLoad.Args = append(bwrapLoad.Args, "--dbus-fd", "21")
+
+	var stdout6, stderr6 bytes.Buffer
+	bwrapLoad.Stdout = &stdout6
+	bwrapLoad.Stderr = &stderr6
+	if err := bwrapLoad.Start(); err != nil {
+		t.Logf("stage6: spawn failure: %v", err)
+		return
+	}
+	waitCh := make(chan error, 1)
+	go func() { waitCh <- bwrapLoad.Wait() }()
+
+	authOK := false
+	authCh := make(chan error, 1)
+	go func() { authCh <- client.Auth([]dbus.Auth{dbus.AuthAnonymous()}) }()
+	select {
+	case err := <-authCh:
+		if err == nil {
+			authOK = true
+			t.Logf("stage6: auth OK")
+		} else {
+			t.Logf("stage6: auth failed: %v", err)
+		}
+	case <-time.After(6 * time.Second):
+		t.Logf("stage6: auth timeout (loader likely died before handshake)")
+	}
+
+	if authOK {
+		svgData := []byte(`<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#000"/></svg>`)
+		if raw, err := os.ReadFile("/usr/share/icons/Adwaita/scalable/status/image-missing.svg"); err == nil {
+			svgData = raw
+		}
+		reader, writer, err := os.Pipe()
+		if err != nil {
+			t.Logf("stage6: pipe: %v", err)
+		} else {
+			if _, err := writer.Write(svgData); err != nil {
+				t.Logf("stage6: svg write: %v", err)
+			}
+			_ = writer.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			call := client.Object("org.gnome.glycin", "/org/gnome/glycin").CallWithContext(ctx,
+				"org.gnome.glycin.Loader.Init", 0, diagInitRequest{
+					Fd:       dbus.UnixFD(int(reader.Fd())),
+					MimeType: "image/svg+xml",
+					Details:  map[string]dbus.Variant{},
+				})
+			cancel()
+			if call.Err != nil {
+				t.Logf("stage6: init call error: %v", call.Err)
+			} else {
+				t.Logf("stage6: init reply body: %v", call.Body)
+			}
+		}
+	}
+
+	select {
+	case err := <-waitCh:
+		code := 0
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			code = exitErr.ExitCode()
+		}
+		t.Logf("stage6: EXITED code=%d\nstderr:\n%s\nstdout:\n%s", code, stderr6.String(), stdout6.String())
+	case <-time.After(6 * time.Second):
+		_ = bwrapLoad.Process.Kill()
+		<-waitCh
+		t.Logf("stage6: ALIVE after init (load path OK); killed.\nstderr:\n%s\nstdout:\n%s", stderr6.String(), stdout6.String())
+	}
+}
+
+// diagInitRequest mirrors glycin's InitRequest wire struct (h s a{sv}); the
+// details dict is left empty so base_dir deserializes as None.
+type diagInitRequest struct {
+	Fd       dbus.UnixFD
+	MimeType string
+	Details  map[string]dbus.Variant
+}
+
+// diagGlycinLogTrace logs a strace capture: error-returning lines first, then
+// the tail where a death would appear.
+func diagGlycinLogTrace(t *testing.T, label string, path string) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Logf("%s trace: unreadable: %v", label, err)
+		return
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	t.Logf("%s trace: %d lines total", label, len(lines))
+	shown := 0
+	for _, line := range lines {
+		if shown >= 60 {
+			break
+		}
+		if strings.Contains(line, "ENOENT") || strings.Contains(line, "EACCES") ||
+			strings.Contains(line, "EPERM") || strings.Contains(line, "ELOOP") {
+			t.Logf("%s-err| %s", label, line)
+			shown++
+		}
+	}
+	const tail = 120
+	if len(lines) > tail {
+		t.Logf("%s| ... tail ...", label)
+		for _, line := range lines[len(lines)-tail:] {
+			t.Logf("%s| %s", label, line)
+		}
+		return
+	}
+	for _, line := range lines {
+		t.Logf("%s| %s", label, line)
+	}
 }
 
 func diagGlycinLoaderPath(t *testing.T) string {
