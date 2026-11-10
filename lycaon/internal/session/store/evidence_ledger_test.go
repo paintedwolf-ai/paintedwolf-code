@@ -528,7 +528,7 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 			if !ok1 || !rec1.UntrustedContent {
 				t.Fatalf("%s: read after partial edit must retain UntrustedContent: %+v", backend.name, rec1)
 			}
-			if !ok2 || rec2.UntrustedContent || rec2.ExternalCustody {
+			if !ok2 || rec2.UntrustedContent || rec2.HasExternalCustody() {
 				t.Fatalf("%s: read after full local write must not inherit stale external custody: %+v", backend.name, rec2)
 			}
 		})
@@ -549,7 +549,7 @@ func TestStoredLineRangesPayload_LegacyDecodeAndVersionGate(t *testing.T) {
 	const legacyRaw = `{"v":1,"ranges":[{"Start":1,"End":5}],"paths_touched":["saved.txt"],"urls_touched":["https://api.external.example/v1/item"],"surface":"http"}`
 	var legacyRec evidence.Record
 	testutil.FailErr(t, "unmarshal legacy v=1 payload", unmarshalEvidenceLineRanges(legacyRaw, &legacyRec))
-	if legacyRec.UntrustedContent || legacyRec.ExternalCustody {
+	if legacyRec.UntrustedContent || legacyRec.HasExternalCustody() {
 		t.Fatalf("legacy v=1 payload must default provenance flags to false: %+v", legacyRec)
 	}
 	if legacyRec.Surface != "http" || len(legacyRec.LineRanges) != 1 || legacyRec.LineRanges[0].End != 5 {
@@ -561,27 +561,27 @@ func TestStoredLineRangesPayload_LegacyDecodeAndVersionGate(t *testing.T) {
 			evidence.IndexedPathsForRecord(legacyRec), evidence.ObservedURLsForRecord(legacyRec))
 	}
 
-	// 2. Clean records omit untrusted_content, external_custody, and seq keys (omitempty), while provenance/sequenced records persist and round-trip them under v=1.
+	// 2. Clean records omit untrusted_content, external_custody, and custody_seq keys (omitempty), while provenance/sequenced records persist and round-trip them under v=1.
 	cleanRaw, err := marshalEvidenceLineRanges(legacyRec)
 	testutil.FailErr(t, "marshal clean record", err)
-	if strings.Contains(cleanRaw, "untrusted_content") || strings.Contains(cleanRaw, "external_custody") || strings.Contains(cleanRaw, `"seq"`) {
-		t.Fatalf("clean record must omit false provenance and zero seq keys, got %s", cleanRaw)
+	if strings.Contains(cleanRaw, "untrusted_content") || strings.Contains(cleanRaw, "external_custody") || strings.Contains(cleanRaw, `"custody_seq"`) {
+		t.Fatalf("clean record must omit false provenance and zero custody_seq keys, got %s", cleanRaw)
 	}
 
 	provRec := legacyRec
 	provRec.UntrustedContent = true
-	provRec.ExternalCustody = true
-	provRec.SetSeq(7)
+	provRec.Custody = evidence.FileCustody{External: true}
+	provRec.SetCustodySeq(7)
 	provRaw, err := marshalEvidenceLineRanges(provRec)
 	testutil.FailErr(t, "marshal provenance record", err)
 	if !strings.Contains(provRaw, `"v":1`) || !strings.Contains(provRaw, `"untrusted_content":true`) ||
-		!strings.Contains(provRaw, `"external_custody":true`) || !strings.Contains(provRaw, `"seq":7`) {
+		!strings.Contains(provRaw, `"external_custody":true`) || !strings.Contains(provRaw, `"custody_seq":7`) {
 		t.Fatalf("provenance record JSON missing expected v=1 additive keys: %s", provRaw)
 	}
 	var roundTripped evidence.Record
 	testutil.FailErr(t, "unmarshal provenance record", unmarshalEvidenceLineRanges(provRaw, &roundTripped))
-	if !roundTripped.UntrustedContent || !roundTripped.ExternalCustody || roundTripped.Seq() != 7 {
-		t.Fatalf("provenance/seq fields failed JSON round-trip: %+v (seq=%d)", roundTripped, roundTripped.Seq())
+	if !roundTripped.UntrustedContent || !roundTripped.HasExternalCustody() || roundTripped.CustodySeq() != 7 {
+		t.Fatalf("provenance/custody_seq fields failed JSON round-trip: %+v (seq=%d)", roundTripped, roundTripped.CustodySeq())
 	}
 
 	// 3. Version gate refuses empty payloads, missing v (v=0), unsupported future versions (v=2), and malformed JSON.
@@ -624,7 +624,7 @@ func TestStoredLineRangesPayload_LegacyDecodeAndVersionGate(t *testing.T) {
 	ev, err := store.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger legacy row", err)
 	got, ok := evidence.ResolveHandle(ev, "http_response#1")
-	if !ok || got.UntrustedContent || got.ExternalCustody || got.Path != "saved.txt" {
+	if !ok || got.UntrustedContent || got.HasExternalCustody() || got.Path != "saved.txt" {
 		t.Fatalf("LoadLedger legacy row = %+v (ok=%v)", got, ok)
 	}
 }
@@ -1072,7 +1072,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		_, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, nc.tool, nc.args, nc.content)
 		testutil.FailErr(t, "non-custody "+nc.tool, err)
 	}
-	_, err = store.CommitProgramObservation(ctx, sess.ID, "command", &api.CommandProgramReceipt{Summary: "echo ok"}, "ok\n")
+	_, err = store.CommitProgramObservation(ctx, sess.ID, "command_output", &api.CommandProgramReceipt{ID: "prog_1", ParentReceiptID: "rcpt_1", State: "exited"}, "ok\n")
 	testutil.FailErr(t, "CommitProgramObservation", err)
 	_, err = store.CommitProgramHTTPProvenance(ctx, sess.ID, dir, evidence.ProgramHTTPProvenance{
 		UntrustedContent: true,
@@ -1158,7 +1158,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 	if _, _, err := store.CommitEvidenceToolResult(ctx, sess.ID, dir, "list_dir", map[string]any{"path": "."}, "legacy.txt\n"); err != nil {
 		t.Fatalf("non-custody list_dir commit must not scan/decode custody rows, got err: %v", err)
 	}
-	if _, err := store.CommitProgramObservation(ctx, sess.ID, "command", &api.CommandProgramReceipt{Summary: "true"}, "ok\n"); err != nil {
+	if _, err := store.CommitProgramObservation(ctx, sess.ID, "command_output", &api.CommandProgramReceipt{ID: "prog_2", ParentReceiptID: "rcpt_2", State: "exited"}, "ok\n"); err != nil {
 		t.Fatalf("CommitProgramObservation must not scan/decode custody rows, got err: %v", err)
 	}
 	if _, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"legacy.txt"}); err == nil {
