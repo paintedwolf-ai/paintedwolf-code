@@ -113,7 +113,7 @@ func TestHostIssuedRevisionRecoversAnExhaustedTerminalBucket(t *testing.T) {
 			}
 			result, err := update.ExpectRevision(current.Revision).ExpectItemIDs(current.ItemIDs...).Apply(t.Context(), store, "session", nil)
 			testutil.FailErr(t, "retry real progress update", err)
-			if !result.StateChanged || !result.DeliverableClosed {
+			if !result.StateChanged || len(result.ClosedItemIDs) == 0 {
 				t.Fatalf("progress retry lost transition: %+v", result)
 			}
 			if guard.CodeRejectResponses("session", "update_progress", code) != DoomLoopMaxCodeRepeats {

@@ -67,19 +67,19 @@ func TestAuthorUpdateSeparatesDocumentAndDeliverableChanges(t *testing.T) {
 		return result
 	}
 	first := apply("- [ ] Write code\n- [ ] Verify code")
-	if !first.Updated || first.StateChanged || first.DeliverableClosed {
+	if !first.Updated || first.StateChanged || len(first.ClosedItemIDs) != 0 {
 		t.Fatalf("establishment outcome: %+v", first)
 	}
 	noop := apply(first.Snapshot.Content)
-	if noop.Updated || noop.StateChanged || noop.DeliverableClosed || noop.Snapshot.Revision != first.Snapshot.Revision {
+	if noop.Updated || noop.StateChanged || len(noop.ClosedItemIDs) != 0 || noop.Snapshot.Revision != first.Snapshot.Revision {
 		t.Fatalf("no-op outcome: %+v", noop)
 	}
 	label := apply("- [ ] Implement code\n- [ ] Verify code")
-	if !label.Updated || label.StateChanged || label.DeliverableClosed {
+	if !label.Updated || label.StateChanged || len(label.ClosedItemIDs) != 0 {
 		t.Fatalf("label change outcome: %+v", label)
 	}
 	closed := apply("- [x] Implement code\n- [ ] Verify code")
-	if !closed.Updated || !closed.StateChanged || !closed.DeliverableClosed {
+	if !closed.Updated || !closed.StateChanged || len(closed.ClosedItemIDs) != 1 || closed.ClosedItemIDs[0] != first.Snapshot.ItemIDs[0] {
 		t.Fatalf("terminal transition outcome: %+v", closed)
 	}
 }
@@ -111,17 +111,17 @@ func TestAuthorUpdateRejectsOversizeWithoutTruncatingState(t *testing.T) {
 func TestDeliverableTransitionsAreInvariantUnderRowPermutation(t *testing.T) {
 	initial := NewSnapshot("run", "- [ ] Same label\n- [x] Same label\n- [ ] Other", "id-1", "id-2", "id-3")
 	permuted := NewSnapshot("run", "- [ ] Other\n- [x] Same label\n- [ ] Same label", "id-3", "id-2", "id-1")
-	if result := ClassifyTransitions(initial, permuted); result.Changed || result.Closed {
+	if result := ClassifyTransitions(initial, permuted); result.Changed || len(result.ClosedItemIDs) != 0 {
 		t.Fatalf("permutation invented a transition: %+v", result)
 	}
 	for _, extra := range []string{"- [ ] Same label", "- [x] Same label", "- [ ] New scope"} {
 		withExtra := NewSnapshot("run", permuted.Content+"\n"+extra, "id-3", "id-2", "id-1", "id-4")
-		if result := ClassifyTransitions(initial, withExtra); result.Changed || result.Closed {
+		if result := ClassifyTransitions(initial, withExtra); result.Changed || len(result.ClosedItemIDs) != 0 {
 			t.Fatalf("new row invented a transition: %+v", result)
 		}
 	}
 	completed := NewSnapshot("run", "- [x] Same label\n- [ ] Other\n- [x] Same label", "id-1", "id-3", "id-2")
-	if result := ClassifyTransitions(initial, completed); !result.Changed || !result.Closed {
+	if result := ClassifyTransitions(initial, completed); !result.Changed || len(result.ClosedItemIDs) != 1 || result.ClosedItemIDs[0] != "id-1" {
 		t.Fatalf("terminal transition lost: %+v", result)
 	}
 }
@@ -144,5 +144,30 @@ func TestSnapshotMaxLegalChecklistAndItemIDsBudget(t *testing.T) {
 	const maxSnapshotPromptBytes = 12288
 	if len(raw) > maxSnapshotPromptBytes {
 		t.Fatalf("serialized snapshot size = %d, exceeds prompt budget %d", len(raw), maxSnapshotPromptBytes)
+	}
+}
+
+func TestProgressSummarySeparatesTerminalAndCompleted(t *testing.T) {
+	for _, tc := range []struct {
+		name, content string
+		want          Summary
+	}{
+		{"empty", "", Summary{}},
+		{"partial", "- [x] Build\n- [ ] Verify", Summary{Pending: 1, Completed: 1}},
+		{"complete", "- [x] Build\n- [x] Verify", Summary{Completed: 2, AllRequiredItemsTerminal: true, AllRequiredItemsCompleted: true}},
+		{"not pursued", "- [x] Build\n- [~] Verify", Summary{Completed: 1, NotPursued: 1, AllRequiredItemsTerminal: true}},
+		{"optional only", "- [>] Later", Summary{Optional: 1, AllRequiredItemsTerminal: true}},
+		{"optional remaining", "- [x] Build\n- [>] Later", Summary{Completed: 1, Optional: 1, AllRequiredItemsTerminal: true, AllRequiredItemsCompleted: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			view := ForRequest("session", NewSnapshot("run", tc.content))
+			if view.Summary != tc.want || AllTerminal(tc.content) != tc.want.AllRequiredItemsTerminal {
+				t.Fatalf("summary = %+v, want %+v", view.Summary, tc.want)
+			}
+			done, pending, na := CloseCounts(tc.content)
+			if done != tc.want.Completed || pending != tc.want.Pending || na != tc.want.NotPursued {
+				t.Fatalf("closure counts = %d/%d/%d", done, pending, na)
+			}
+		})
 	}
 }
