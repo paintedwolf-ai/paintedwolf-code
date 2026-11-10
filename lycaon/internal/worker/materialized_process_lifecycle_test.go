@@ -1,7 +1,9 @@
 package worker
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	osexec "os/exec"
@@ -43,9 +45,24 @@ func TestSmallMountedLifecyclePreservesSourceConflict(t *testing.T) {
 	runWorkerLifecycleAcrossProcessRestart(t, true, true)
 }
 
+// TestDiagnosticSmallMaterializedLifecycleCompletion10m is an opt-in diagnostic harness variant
+// that retains all lifecycle assertions and production safeguards while allowing up to 10 minutes
+// per child subprocess to measure full completion and phase timings. Not an acceptance gate.
+func TestDiagnosticSmallMaterializedLifecycleCompletion10m(t *testing.T) {
+	if os.Getenv("PW_M14_DIAGNOSTIC_COMPLETION_10M") != "1" {
+		t.Skip("diagnostic 10m completion harness requires PW_M14_DIAGNOSTIC_COMPLETION_10M=1")
+	}
+	runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t, false, false, "10m", true)
+}
+
 // Separate processes prevent registries from substituting for durable recovery.
 // Process restart does not establish power-loss durability.
 func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted, sourceConflict bool) {
+	t.Helper()
+	runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t, mounted, sourceConflict, "2m", false)
+}
+
+func runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t *testing.T, mounted, sourceConflict bool, childTimeout string, diagnostic bool) {
 	t.Helper()
 	if phase := os.Getenv("PW_M14_LIFECYCLE_PHASE"); phase != "" {
 		runWorkerLifecyclePhase(t, os.Getenv("PW_M14_LIFECYCLE_ROOT"), phase, mounted, sourceConflict)
@@ -71,10 +88,15 @@ func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted, sourceConflic
 		if phase == "recover-promote" && sourceConflict {
 			testutil.FailErr(t, "external source edit after worker exit", os.WriteFile(filepath.Join(source, "main.go"), []byte("package external\n"), 0o644))
 		}
-		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^"+t.Name()+"$", "-test.timeout=2m", "-test.v=true")
+		phaseStart := time.Now()
+		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^"+t.Name()+"$", "-test.timeout="+childTimeout, "-test.v=true")
 		cmd.Env = append(os.Environ(), "PW_M14_LIFECYCLE_PHASE="+phase, "PW_M14_LIFECYCLE_ROOT="+root, "PW_M14_LIFECYCLE_SOURCE="+source)
-		if output, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("%s process failed: %v\n%s", phase, err, output)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("%s process failed (elapsed=%s): %v\n%s", phase, time.Since(phaseStart), err, output)
+		}
+		if diagnostic {
+			t.Logf("diagnostic %s child completed in %s:\n%s", phase, time.Since(phaseStart), output)
 		}
 	}
 }
@@ -224,18 +246,81 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	trace("source-outage-start")
 	assertWorkerSourceOutageRetry(t, service, task, source)
 	trace("source-ready-promotion-start")
+	stopObserver := startDiagnosticPromoteObserver(promoteTransactionDir(service.DataDir, task.ID), filepath.Join(recoveryRoot, "checkpoints", "promotions"), trace)
 	result, err := service.PromoteOverlay(t.Context(), "", task.ID, api.PromoteOverlayInput{})
+	stopObserver()
 	trace("promotion-returned")
 	testutil.FailErr(t, "promote recovered checkpoint", err)
 	if result.Status != api.WorkerMergeStatusMerged {
 		t.Fatalf("promotion = %+v", result)
 	}
 	assertFileHolds(t, filepath.Join(source, "main.go"), "package worker\n")
+	trace("post-promote-source-verified")
 	lease.Release()
+	trace("cleanup-destroy-start")
 	testutil.FailErr(t, "cleanup worker", manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
+	trace("cleanup-destroy-returned")
 	cleaned = true
 	if _, err := os.Stat(task.WorkspaceRoot); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("cleanup retained worker tree: %v", err)
 	}
 	assertFileHolds(t, filepath.Join(source, "main.go"), "package worker\n")
+	trace("complete")
+}
+
+func startDiagnosticPromoteObserver(txDir, promotionsDir string, trace func(string)) func() {
+	if os.Getenv("PW_M14_DIAGNOSTIC_COMPLETION_10M") != "1" {
+		return func() {}
+	}
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		last := ""
+		sample := func() {
+			state := observeLocalPromoteState(txDir, promotionsDir)
+			if state != last {
+				last = state
+				trace("local-journal:" + state)
+			}
+		}
+		sample()
+		ticker := time.NewTicker(25 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				sample()
+				return
+			case <-ticker.C:
+				sample()
+			}
+		}
+	}()
+	return func() {
+		close(stop)
+		<-done
+	}
+}
+
+func observeLocalPromoteState(txDir, promotionsDir string) string {
+	var parsed struct {
+		Phase      string          `json:"phase"`
+		Roots      map[string]any  `json:"roots"`
+		Checkpoint json.RawMessage `json:"checkpoint"`
+		Records    []string        `json:"records"`
+		Targets    []any           `json:"targets"`
+		Refs       []any           `json:"refs"`
+	}
+	txSummary := "tx=absent"
+	if raw, err := os.ReadFile(filepath.Join(txDir, "transaction.json")); err == nil {
+		if json.Unmarshal(raw, &parsed) == nil {
+			postEntries, _ := os.ReadDir(filepath.Join(txDir, "postimages"))
+			cpSet := len(parsed.Checkpoint) > 0 && string(parsed.Checkpoint) != "null"
+			txSummary = fmt.Sprintf("tx=%s/roots=%d/targets=%d/refs=%d/rec=%d/cp=%t/post=%d",
+				parsed.Phase, len(parsed.Roots), len(parsed.Targets), len(parsed.Refs), len(parsed.Records), cpSet, len(postEntries))
+		}
+	}
+	promoEntries, _ := os.ReadDir(promotionsDir)
+	return fmt.Sprintf("%s/promo_files=%d", txSummary, len(promoEntries))
 }
