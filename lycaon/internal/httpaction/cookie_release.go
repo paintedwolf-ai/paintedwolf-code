@@ -352,10 +352,5 @@ func prepareRequestCookieDelivery(
 		}
 		return nil
 	}
-	if preRunHop0 {
-		if err := beforeHop(ctx, outboundhttp.HopRequest{URL: spec.target, Method: spec.method, HostHeader: spec.hostHeader}); err != nil {
-			return nil, err
-		}
-	}
 	return beforeHop, nil
 }

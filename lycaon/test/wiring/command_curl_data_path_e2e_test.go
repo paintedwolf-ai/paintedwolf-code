@@ -599,11 +599,16 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	var lastOriginCookie, lastTargetCookie atomic.Value
 	lastOriginCookie.Store("")
 	lastTargetCookie.Store("")
+	var revokeTargetOnRedirect atomic.Bool
+	var onRedirectRevoke func()
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.Host, "origin.cookie.example") && r.URL.Path == "/redirect":
 			originHits.Add(1)
 			lastOriginCookie.Store(r.Header.Get("Cookie"))
+			if revokeTargetOnRedirect.Load() && onRedirectRevoke != nil {
+				onRedirectRevoke()
+			}
 			http.Redirect(w, r, "http://"+r.URL.Query().Get("target")+"/landed", http.StatusFound)
 		case strings.HasPrefix(r.Host, "origin.cookie.example"):
 			originHits.Add(1)
@@ -628,6 +633,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	targetResolve := targetHost + ":127.0.0.1"
 
 	cmdOrigin := "curl -s -b cookies.txt --resolve '" + originResolve + "' 'http://" + originHost + "/ok'"
+	cmdTarget := "curl -s -b cookies.txt --resolve '" + targetResolve + "' 'http://" + targetHost + "/landed'"
 	cmdRedirect := "curl -s -L -b cookies.txt --resolve '" + originResolve + "' --resolve '" + targetResolve + "' 'http://" + originHost + "/redirect?target=" + targetHost + "'"
 	cmdConnectTo := "curl -s -b cookies.txt --connect-to '" + originHost + ":localhost:" + portStr + "' 'http://" + originHost + "/ok'"
 
@@ -651,6 +657,26 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 			Pattern:      "step 4 connect-to uncovered recipient",
 			ToolCalls:    []llm.MockToolCall{{ID: "program-4", Name: "command", Args: map[string]any{"command": cmdConnectTo}}},
 			FollowUpText: "Connect-to withheld secret cookie.",
+		},
+		{
+			Pattern:      "step 5a install target standing grant",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-5a", Name: "command", Args: map[string]any{"command": cmdTarget}}},
+			FollowUpText: "Approved target.",
+		},
+		{
+			Pattern:      "step 5b redirect after mid-flight target grant revocation",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-5b", Name: "command", Args: map[string]any{"command": cmdRedirect}}},
+			FollowUpText: "Redirect re-asked after mid-flight target grant revocation.",
+		},
+		{
+			Pattern:      "step 6a approve once after origin grant revocation",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-6a", Name: "command", Args: map[string]any{"command": cmdOrigin}}},
+			FollowUpText: "Approved origin once.",
+		},
+		{
+			Pattern:      "step 6b re-ask after once permit expires",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-6b", Name: "command", Args: map[string]any{"command": cmdOrigin}}},
+			FollowUpText: "Withheld after once permit expired.",
 		},
 	}})
 
@@ -705,8 +731,12 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 1 card must name origin.cookie.example without leaking secret value: %s", encoded1)
 	}
 	owner := s.h.OwnerCtx(t, t.Context())
-	_, err = s.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(owner, s.session, card1.ID, card1.ToolApproval.Plan.RecommendedOptionID)
+	resp1, err := s.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(owner, s.session, card1.ID, card1.ToolApproval.Plan.RecommendedOptionID)
 	testutil.FailErr(t, "resolve card1 with RecommendedOptionID", err)
+	if resp1 == nil || resp1.Result == nil || len(resp1.Result.GrantIDs) == 0 {
+		t.Fatalf("step 1 expected installed standing grant IDs, got %+v", resp1)
+	}
+	originGrantIDs := append([]string(nil), resp1.Result.GrantIDs...)
 	testutil.FailErr(t, "step 1 prompt", <-done1)
 	out1 := s.outcome(t, "program-1")
 	if out1.State != "completed" || out1.Status != 0 || strings.TrimSpace(out1.Stdout) != "origin-cookie-ok" {
@@ -767,6 +797,86 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	out4 := s.outcome(t, "program-4")
 	if out4.State != "completed" || out4.Status != 0 || strings.TrimSpace(out4.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || lastOriginCookie.Load().(string) != "theme=dark" {
 		t.Fatalf("step 4 connect-to secret withhold outcome = %+v / refusal=%+v originHits=%d originCookie=%q", out4, out4.Refusal, originHits.Load(), lastOriginCookie.Load())
+	}
+
+	// 5. Standing grant revocation mid-redirect in the real approval store: install a standing grant for target.cookie.example, then revoke it while Hop 0 (/redirect) is served; Hop 1 must query the live approval store, raise a checkpoint before targetHits increments, and withhold the secret cookie on rejection while completing the redirect.
+	targetHits.Store(0)
+	lastTargetCookie.Store("")
+	card5a, done5a := waitCheckpoint("step 5a install target standing grant")
+	resp5a, err := s.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(owner, s.session, card5a.ID, card5a.ToolApproval.Plan.RecommendedOptionID)
+	testutil.FailErr(t, "resolve card5a with RecommendedOptionID", err)
+	if resp5a == nil || resp5a.Result == nil || len(resp5a.Result.GrantIDs) == 0 {
+		t.Fatalf("step 5a expected target standing grant IDs, got %+v", resp5a)
+	}
+	targetGrantIDs := append([]string(nil), resp5a.Result.GrantIDs...)
+	testutil.FailErr(t, "step 5a prompt", <-done5a)
+	if targetHits.Load() != 1 || !strings.Contains(lastTargetCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 5a targetHits=%d cookie=%q, want 1 with session secret", targetHits.Load(), lastTargetCookie.Load())
+	}
+
+	onRedirectRevoke = func() {
+		for _, id := range targetGrantIDs {
+			removed, revokeErr := s.h.Server.Admin.Capabilities.Access.Gate.RevokeGrant(id)
+			testutil.FailErr(t, "revoke target standing grant mid-redirect", revokeErr)
+			if !removed {
+				t.Errorf("expected target standing grant %q to be removed mid-redirect", id)
+			}
+		}
+	}
+	revokeTargetOnRedirect.Store(true)
+	originHits.Store(0)
+	targetHits.Store(0)
+	lastOriginCookie.Store("")
+	lastTargetCookie.Store("")
+	card5b, done5b := waitCheckpoint("step 5b redirect after mid-flight target grant revocation")
+	if originHits.Load() != 1 || targetHits.Load() != 0 {
+		t.Fatalf("step 5b hits while waiting on redirect secret card after mid-flight revocation: origin=%d target=%d, want 1/0", originHits.Load(), targetHits.Load())
+	}
+	if !strings.Contains(lastOriginCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 5b hop 0 cookie = %q, want session secret", lastOriginCookie.Load())
+	}
+	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card5b.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
+	testutil.FailErr(t, "reject card5b", err)
+	testutil.FailErr(t, "step 5b prompt", <-done5b)
+	out5b := s.outcome(t, "program-5b")
+	if out5b.State != "completed" || out5b.Status != 0 || strings.TrimSpace(out5b.Stdout) != "target-cookie-ok" || originHits.Load() != 1 || targetHits.Load() != 1 || lastTargetCookie.Load().(string) != "theme=dark" {
+		t.Fatalf("step 5b outcome = %+v origin=%d target=%d targetCookie=%q, want completed 1/1 and \"theme=dark\"", out5b, originHits.Load(), targetHits.Load(), lastTargetCookie.Load())
+	}
+
+	// 6. Revoke origin.cookie.example's standing grant in the real approval store: explicit "once" approval covers only that single admitted operation and does not persist to the next operation.
+	for _, id := range originGrantIDs {
+		removed, revokeErr := s.h.Server.Admin.Capabilities.Access.Gate.RevokeGrant(id)
+		testutil.FailErr(t, "revoke origin standing grant", revokeErr)
+		if !removed {
+			t.Fatalf("expected origin standing grant %q to be removed", id)
+		}
+	}
+	originHits.Store(0)
+	lastOriginCookie.Store("")
+	card6a, done6a := waitCheckpoint("step 6a approve once after origin grant revocation")
+	if originHits.Load() != 0 {
+		t.Fatalf("step 6a hit origin before checkpoint resolution: %d", originHits.Load())
+	}
+	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card6a.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: true}, nil)
+	testutil.FailErr(t, "approve card6a once", err)
+	testutil.FailErr(t, "step 6a prompt", <-done6a)
+	out6a := s.outcome(t, "program-6a")
+	if out6a.State != "completed" || out6a.Status != 0 || strings.TrimSpace(out6a.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || !strings.Contains(lastOriginCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 6a once-approved outcome = %+v originHits=%d cookie=%q", out6a, originHits.Load(), lastOriginCookie.Load())
+	}
+
+	originHits.Store(0)
+	lastOriginCookie.Store("")
+	card6b, done6b := waitCheckpoint("step 6b re-ask after once permit expires")
+	if originHits.Load() != 0 {
+		t.Fatalf("step 6b hit origin before checkpoint resolution: %d", originHits.Load())
+	}
+	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card6b.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
+	testutil.FailErr(t, "reject card6b", err)
+	testutil.FailErr(t, "step 6b prompt", <-done6b)
+	out6b := s.outcome(t, "program-6b")
+	if out6b.State != "completed" || out6b.Status != 0 || strings.TrimSpace(out6b.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || lastOriginCookie.Load().(string) != "theme=dark" {
+		t.Fatalf("step 6b withhold after once expiry outcome = %+v originHits=%d cookie=%q, want 1 and \"theme=dark\"", out6b, originHits.Load(), lastOriginCookie.Load())
 	}
 }
 
