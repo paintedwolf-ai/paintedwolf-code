@@ -181,7 +181,7 @@ func onMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 		return encodeMountStatus(call.XID, nfs.MountStatusErrAcces)
 	}
 	entry.mounted = true
-	capCfg, viewCore := entry.cap, entry.core
+	vHash, capCfg, viewCore := entry.viewHash, entry.cap, entry.core
 	s.state.mu.Unlock()
 	recordHandshake(s, dirPath, capCfg, call.Cred, true)
 	rootQPath := layeredfs.QualifiedPath{RootID: capCfg.Root, Rel: "."}
@@ -189,7 +189,10 @@ func onMount(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeMountStatus(call.XID, nfs.MountStatusErrNoEnt)
 	}
-	fh := s.handles.Ensure(capCfg.ViewID, rootQPath, meta, 0, true)
+	fh, ok := s.handles.Ensure(vHash, capCfg.ViewID, rootQPath, meta, 0, true)
+	if !ok {
+		return encodeMountStatus(call.XID, nfs.MountStatusErrAcces)
+	}
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.MountStatusOk))
 	writeOpaque(&body, fh[:])
@@ -257,15 +260,7 @@ func isBootstrapRootNFSProc(proc nfs.NFSProcedure) bool {
 	return false
 }
 
-func isCallExportActivated(s *Server, call rpcCallHeader) bool {
-	if call.Body == nil {
-		return true
-	}
-	dup := *call.Body
-	rawFH, err := readFileHandle(&dup)
-	if err != nil {
-		return true
-	}
+func isHandleExportActivated(s *Server, rawFH []byte) bool {
 	rec, err := s.handles.Resolve(rawFH, 0)
 	if err != nil {
 		return true
@@ -273,11 +268,46 @@ func isCallExportActivated(s *Server, call rpcCallHeader) bool {
 	s.state.mu.RLock()
 	defer s.state.mu.RUnlock()
 	for _, e := range s.state.exportsByVH[rec.key.viewHash] {
-		if e.mounted && (e.cap.Root == "" || rec.qpath.RootID == "" || e.cap.Root == rec.qpath.RootID) && e.activated {
+		if e.mounted && e.cap.Root == rec.qpath.RootID && e.activated {
 			return true
 		}
 	}
 	return false
+}
+
+func isCallExportActivated(s *Server, proc nfs.NFSProcedure, call rpcCallHeader) bool {
+	if call.Body == nil {
+		return true
+	}
+	dup := *call.Body
+	switch proc {
+	case nfs.NFSProcedureRename:
+		fromFH, _, err1 := readDirOpArg(&dup)
+		if err1 == nil && !isHandleExportActivated(s, fromFH) {
+			return false
+		}
+		toFH, _, err2 := readDirOpArg(&dup)
+		if err2 == nil && !isHandleExportActivated(s, toFH) {
+			return false
+		}
+		return true
+	case nfs.NFSProcedureLink:
+		targetFH, err1 := readFileHandle(&dup)
+		if err1 == nil && !isHandleExportActivated(s, targetFH) {
+			return false
+		}
+		dirFH, _, err2 := readDirOpArg(&dup)
+		if err2 == nil && !isHandleExportActivated(s, dirFH) {
+			return false
+		}
+		return true
+	default:
+		rawFH, err := readFileHandle(&dup)
+		if err != nil {
+			return true
+		}
+		return isHandleExportActivated(s, rawFH)
+	}
 }
 
 func peekCallViewHash(s *Server, cs *connState, call rpcCallHeader) uint64 {
@@ -304,7 +334,7 @@ func dispatchNFS(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if !ok {
 		return encodeAcceptedReply(call.XID, nfs.ResponseCodeProcUnavailable, nil)
 	}
-	if !isBootstrapRootNFSProc(proc) && !isCallExportActivated(s, call) {
+	if !isBootstrapRootNFSProc(proc) && !isCallExportActivated(s, proc, call) {
 		return encodeNFSError(call.XID, proc, nfs.NFSStatusAccess)
 	}
 	if isMutatingNFSProc(proc) {

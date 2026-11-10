@@ -92,7 +92,7 @@ func executeCreate(
 			return zeroFH, layeredfs.EntryAttr{}, os.ErrExist
 		}
 		if how == createExclusive {
-			if rec, ok := s.handles.LookupByPath(dirRec.viewID, childQPath); ok && rec.createVerf != nil && *rec.createVerf == createVerf {
+			if rec, ok := s.handles.LookupByPath(dirRec.key.viewHash, childQPath); ok && rec.createVerf != nil && *rec.createVerf == createVerf {
 				return rec.wire, existingMeta, nil
 			}
 			return zeroFH, layeredfs.EntryAttr{}, os.ErrExist
@@ -131,14 +131,17 @@ func executeCreate(
 			_, _ = viewCore.Chtimes(childQPath, at, mt, true)
 		}
 	}
-	s.stability.absorbAtName(viewCore, s.handles, dirRec.viewID, childQPath)
+	s.stability.absorbAtName(viewCore, s.handles, dirRec.key.viewHash, childQPath)
 	meta, err := viewCore.Lstat(childQPath)
 	if err != nil {
 		return zeroFH, layeredfs.EntryAttr{}, err
 	}
-	fh := s.handles.Ensure(dirRec.viewID, childQPath, meta, dirRec.key.nodeID, false)
+	fh, ok := s.handles.Ensure(dirRec.key.viewHash, dirRec.viewID, childQPath, meta, dirRec.key.nodeID, false)
+	if !ok {
+		return zeroFH, layeredfs.EntryAttr{}, ErrStaleHandle
+	}
 	if how == createExclusive {
-		if rec, ok := s.handles.LookupByPath(dirRec.viewID, childQPath); ok {
+		if rec, ok := s.handles.LookupByPath(dirRec.key.viewHash, childQPath); ok {
 			s.handles.SetCreateVerifier(rec.key, createVerf)
 		}
 	}
@@ -194,7 +197,10 @@ func onMkdir(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &postDir, exp)
 	}
-	fh := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, false)
+	fh, ok := s.handles.Ensure(dirRec.key.viewHash, dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, false)
+	if !ok {
+		return encodeWccError(call.XID, nfs.NFSStatusStale, &preDir, &postDir, exp)
+	}
 
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
@@ -241,7 +247,10 @@ func onSymlink(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &postDir, exp)
 	}
-	fh := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, false)
+	fh, ok := s.handles.Ensure(dirRec.key.viewHash, dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, false)
+	if !ok {
+		return encodeWccError(call.XID, nfs.NFSStatusStale, &preDir, &postDir, exp)
+	}
 
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
@@ -304,7 +313,10 @@ func onMknod(s *Server, cs *connState, call rpcCallHeader) []byte {
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &postDir, exp)
 	}
 	s.dirs.InvalidateDir(dirRec.key)
-	fh := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, false)
+	fh, ok := s.handles.Ensure(dirRec.key.viewHash, dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, false)
+	if !ok {
+		return encodeWccError(call.XID, nfs.NFSStatusStale, &preDir, &postDir, exp)
+	}
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
 	writePostOpFH3(&body, fh[:])

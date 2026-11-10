@@ -46,7 +46,7 @@ func onRemove(s *Server, cs *connState, call rpcCallHeader) []byte {
 // private object through its backing file, an untouched one through a read descriptor. Nothing is
 // copied up just to be deleted, and the held set is bounded, so rm -rf costs no per-file state.
 func executeRemove(s *Server, viewCore *layeredfs.Core, dirRec *handleRecord, childQPath layeredfs.QualifiedPath) error {
-	childRec, hasHandle := s.handles.LookupByPath(dirRec.viewID, childQPath)
+	childRec, hasHandle := s.handles.LookupByPath(dirRec.key.viewHash, childQPath)
 	var openFD layeredfs.HandleID
 	var childMeta layeredfs.EntryAttr
 	if hasHandle {
@@ -75,10 +75,10 @@ func executeRemove(s *Server, viewCore *layeredfs.Core, dirRec *handleRecord, ch
 		s.stability.sidecars.clearPresented(viewCore, childQPath)
 	}
 	if openFD != 0 {
-		closeCoreHandles(viewCore, s.handles.MarkUnlinked(dirRec.viewID, childQPath, openFD, childMeta))
+		closeCoreHandles(viewCore, s.handles.MarkUnlinked(dirRec.key.viewHash, childQPath, openFD, childMeta))
 		return nil
 	}
-	s.handles.InvalidatePath(viewCore, dirRec.viewID, childQPath)
+	s.handles.InvalidatePath(viewCore, dirRec.key.viewHash, childQPath)
 	return nil
 }
 
@@ -108,7 +108,7 @@ func onRmdir(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeWccError(call.XID, MapErrorToNFSStatus(err), &preDir, &postDir, exp)
 	}
-	s.handles.InvalidatePath(exp.core, dirRec.viewID, childQPath)
+	s.handles.InvalidatePath(exp.core, dirRec.key.viewHash, childQPath)
 	s.dirs.InvalidateDir(dirRec.key)
 
 	var body bytes.Buffer
@@ -159,13 +159,13 @@ func onRename(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeRenameError(call.XID, MapErrorToNFSStatus(err), &preFrom, &postFrom, &preTo, &postTo, exp)
 	}
-	s.handles.UpdateOnRename(exp.core, fromDirRec.viewID, fromQPath, toQPath)
+	s.handles.UpdateOnRename(exp.core, fromDirRec.key.viewHash, fromQPath, toQPath)
 	if isClientPlaceholderName(toName) {
 		exp.core.MarkTransientName(toQPath)
 		s.stability.sidecars.notePlaceholder(exp.core, sidecarPathOf(fromQPath), toQPath)
-		s.stability.absorbAtName(exp.core, s.handles, toDirRec.viewID, fromQPath)
+		s.stability.absorbAtName(exp.core, s.handles, toDirRec.key.viewHash, fromQPath)
 	}
-	s.stability.absorbAtName(exp.core, s.handles, toDirRec.viewID, toQPath)
+	s.stability.absorbAtName(exp.core, s.handles, toDirRec.key.viewHash, toQPath)
 	s.dirs.InvalidateDir(fromDirRec.key)
 	if toDirRec.key != fromDirRec.key {
 		s.dirs.InvalidateDir(toDirRec.key)
@@ -251,7 +251,9 @@ func onLink(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeLinkError(call.XID, MapErrorToNFSStatus(err), &preTarget, &preDir, &postDir, exp)
 	}
-	_ = s.handles.Ensure(dirRec.viewID, linkQPath, postTarget, dirRec.key.nodeID, false)
+	if _, ok := s.handles.Ensure(dirRec.key.viewHash, dirRec.viewID, linkQPath, postTarget, dirRec.key.nodeID, false); !ok {
+		return encodeLinkError(call.XID, nfs.NFSStatusStale, &preTarget, &preDir, &postDir, exp)
+	}
 	postTarget = wireMeta(s, dirRec.key.viewHash, postTarget)
 	s.dirs.InvalidateDir(dirRec.key)
 	var body bytes.Buffer
@@ -277,15 +279,19 @@ func rebindRecordPathLocked(t *handleTable, rec *handleRecord, oldPK pathKey, ne
 	if rec.paths == nil {
 		rec.paths = make(map[pathKey]layeredfs.QualifiedPath)
 	}
-	newPK := makePathKey(rec.viewID, newQP)
+	newPK := makePathKey(rec.key.viewHash, newQP)
 	rec.paths[newPK], rec.qpath = newQP, newQP
 	t.byPath[newPK] = rec
 }
 
-func (t *handleTable) UpdateOnRename(core *layeredfs.Core, viewID ViewID, from, to layeredfs.QualifiedPath) {
+func (t *handleTable) UpdateOnRename(core *layeredfs.Core, vHash uint64, from, to layeredfs.QualifiedPath) {
 	t.mu.Lock()
+	if _, active := t.activeViews[vHash]; !active {
+		t.mu.Unlock()
+		return
+	}
 	from.Rel, to.Rel = cleanRel(from.Rel), cleanRel(to.Rel)
-	fromPK, toPK := makePathKey(viewID, from), makePathKey(viewID, to)
+	fromPK, toPK := makePathKey(vHash, from), makePathKey(vHash, to)
 	srcRec := t.byPath[fromPK]
 	var toClose layeredfs.HandleID
 	if dstRec, ok := t.byPath[toPK]; ok && dstRec != srcRec {
@@ -293,7 +299,7 @@ func (t *handleTable) UpdateOnRename(core *layeredfs.Core, viewID ViewID, from, 
 	}
 	prefix := from.Rel + "/"
 	for pk, rec := range t.byPath {
-		if pk.viewID != viewID || pk.root != from.RootID {
+		if pk.viewHash != vHash || pk.root != from.RootID {
 			continue
 		}
 		if pk.relPath == from.Rel {

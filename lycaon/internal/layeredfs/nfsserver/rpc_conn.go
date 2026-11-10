@@ -279,7 +279,13 @@ func encodeRPCMismatchReply(xid, low, high uint32) []byte {
 }
 
 func resolveAndAuthHandle(s *Server, cs *connState, cred authCred, raw []byte) (*handleRecord, *exportEntry, error) {
-	return resolveHandleFor(s, cs, cred, raw, func(e *exportEntry) bool {
+	return resolveHandleFor(s, cs, cred, raw, true, func(e *exportEntry) bool {
+		return e.cap.AllowedUID == cred.UID && e.cap.AllowedGID == cred.GID
+	})
+}
+
+func resolveBootstrapHandle(s *Server, cs *connState, cred authCred, raw []byte) (*handleRecord, *exportEntry, error) {
+	return resolveHandleFor(s, cs, cred, raw, false, func(e *exportEntry) bool {
 		return e.cap.AllowedUID == cred.UID && e.cap.AllowedGID == cred.GID
 	})
 }
@@ -289,7 +295,7 @@ func resolveAndAuthHandle(s *Server, cs *connState, cred authCred, raw []byte) (
 // operation in progress. Only a connection already serving this view with the export's identity gets
 // this, and only attributes: that is the mount's own connection, and a new one is refused as before.
 func resolveForAttributes(s *Server, cs *connState, cred authCred, raw []byte) (*handleRecord, *exportEntry, error) {
-	return resolveHandleFor(s, cs, cred, raw, func(e *exportEntry) bool {
+	return resolveHandleFor(s, cs, cred, raw, false, func(e *exportEntry) bool {
 		if e.cap.AllowedUID == cred.UID && e.cap.AllowedGID == cred.GID {
 			return true
 		}
@@ -297,7 +303,7 @@ func resolveForAttributes(s *Server, cs *connState, cred authCred, raw []byte) (
 	})
 }
 
-func resolveHandleFor(s *Server, cs *connState, cred authCred, raw []byte, admits func(*exportEntry) bool) (*handleRecord, *exportEntry, error) {
+func resolveHandleFor(s *Server, cs *connState, cred authCred, raw []byte, requireActivated bool, admits func(*exportEntry) bool) (*handleRecord, *exportEntry, error) {
 	if cred.Flavor != nfs.AuthFlavorUnix || cs.isMountDenied() {
 		return nil, nil, ErrUnauthorizedRPC
 	}
@@ -311,7 +317,7 @@ func resolveHandleFor(s *Server, cs *connState, cred authCred, raw []byte, admit
 	s.state.mu.RLock()
 	defer s.state.mu.RUnlock()
 	for _, e := range s.state.exportsByVH[rec.key.viewHash] {
-		if !e.mounted || (e.cap.Root != "" && rec.qpath.RootID != "" && e.cap.Root != rec.qpath.RootID) || (!e.activated && !rec.isRoot) || !admits(e) {
+		if !e.mounted || e.cap.Root != rec.qpath.RootID || (requireActivated && !e.activated) || (!e.activated && !rec.isRoot) || !admits(e) {
 			continue
 		}
 		if !cs.bindView(rec.key.viewHash) {
