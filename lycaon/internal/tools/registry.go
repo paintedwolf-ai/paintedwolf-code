@@ -312,12 +312,13 @@ type InvocationDirect struct {
 // InvocationExecution carries process authority.
 type InvocationExecution struct {
 	// VerificationCheck is host-resolved check intent for command execution.
-	VerificationCheck bool
-	ProcessReview     ProcessReviewer
-	ProcessControl    bool
-	CredentialStore   bool
-	HostExecution     bool
-	executionPermit   *executionPermit
+	VerificationCheck   bool
+	ProcessReview       ProcessReviewer
+	ProcessControl      bool
+	CredentialStore     bool
+	HostExecution       bool
+	executionPermit     *executionPermit
+	currentActionReview *currentActionReview
 }
 
 // InvocationLocal carries local network grants and audit.

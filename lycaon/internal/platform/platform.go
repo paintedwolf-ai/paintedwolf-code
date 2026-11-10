@@ -47,6 +47,10 @@ type PolicyContext struct {
 	SocketGrantStates []string
 	// AuthorizedSocketDigests are per-grant digests already authorized for this invocation.
 	AuthorizedSocketDigests []string
+	// AuthorizedExecutionCapabilities are execution capabilities covered by a current-call permit.
+	AuthorizedExecutionCapabilities []string
+	// CurrentActionReview carries the exact reasons approved by a human checkpoint for this invocation.
+	CurrentActionReview *hitl.CurrentActionReview
 	// AuthorizedDirectIP is true when a current-call direct-IP permit covers this invocation.
 	AuthorizedDirectIP bool
 	// DirectIPRequested is true when the would-be confinement selects NetworkDirectIP.

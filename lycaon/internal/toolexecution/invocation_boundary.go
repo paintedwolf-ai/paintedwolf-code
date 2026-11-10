@@ -23,11 +23,11 @@ func (e *Executor) applyPreInvokeBoundary(
 	tool, profileID string,
 	args map[string]any,
 	tc tools.ToolContext,
-) (map[string]any, tools.ToolContext, error) {
+) (map[string]any, tools.ToolContext, bool, error) {
 	var err error
 	// Stamp SOCKS injection before building confinement requests.
 	if socks, reject := capabilityrequest.ParseSocksProxyArg(args); reject != nil {
-		return nil, tc, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
+		return nil, tc, false, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, reject)
 	} else if socks {
 		tc.Local.SocksProxyEnv = true
 	}
@@ -35,7 +35,7 @@ func (e *Executor) applyPreInvokeBoundary(
 	var hostResourceResolution *hostresources.ActionResolution
 	args, hostResourceResolution, err = e.Network.expandHostResourceConnections(ctx, tool, args, tc)
 	if err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	if hostResourceResolution != nil {
 		tc.Host.HostResources = sortedHostResourceIDs(hostResourceResolution.States)
@@ -46,70 +46,71 @@ func (e *Executor) applyPreInvokeBoundary(
 		tc.Host.RealizationSockets = realizationSocketTargets(hostResourceResolution)
 	}
 	if err := e.Boundary.preflightPackageExecution(ctx, tool, profileID, args, &tc); err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	if err := e.Boundary.rejectPackageBoundaryWidening(ctx, tool, profileID, args, tc); err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	// A call that runs on the worker's private branch claims it before anything
 	// reads the tree, so expansion and every review see where it runs.
 	tc, err = e.prepareWorkerBranch(ctx, tool, profileID, args, tc)
 	if err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	// Scratch addresses and globs expand once, before secret resolution and
 	// every card, so each card and the executed argv carry the same arguments.
 	if tc.Invocation.NativeOperation == nil {
 		args, err = e.Boundary.expandCommandOperands(ctx, tool, profileID, args, &tc)
 		if err != nil {
-			return nil, tc, err
+			return nil, tc, false, err
 		}
 	}
 	if tc.Invocation.NativeOperation != nil && tc.Invocation.NativeReview == nil {
-		return nil, tc, fmt.Errorf("native operation requires retained exact review lifetime")
+		return nil, tc, false, fmt.Errorf("native operation requires retained exact review lifetime")
 	}
 	if tc.Invocation.NativeReview != nil {
 		args, tc.Invocation.NativeInputs, err = tc.Invocation.NativeReview.Freeze(ctx, tool, args)
 		if err != nil {
-			return nil, tc, err
+			return nil, tc, false, err
 		}
 	}
 	// Capture one immutable version for both review and execution; cards retain references.
 	secrets, resolveErr := e.Secrets.resolveSecretReferences(ctx, tool, args, tc)
 	if resolveErr != nil {
-		return nil, tc, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, secretReferenceReject(resolveErr))
+		return nil, tc, false, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, secretReferenceReject(resolveErr))
 	}
 	tc.Effects.Secrets = secrets
 	ctx = secretcap.WithResolution(ctx, secrets)
 	if tc.Invocation.Contract.SecretReferenceSurface.IsFile() && tool != "jq_edit" && secrets != nil && secrets.HasUnsafeFileBytes() {
-		return nil, tc, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, &toolrejection.ToolReject{
+		return nil, tc, false, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, &toolrejection.ToolReject{
 			Code: "SECRET_REFERENCE_VALUE_UNSAFE",
 			Data: map[string]any{"tool": tool},
 		})
 	}
 	request, reject := capabilityrequest.ParseCapabilityRequest(args)
 	if reject != nil {
-		return nil, tc, reject
+		return nil, tc, false, reject
 	}
+	tc.Execution.ProcessControl, tc.Execution.CredentialStore, tc.Execution.HostExecution = false, false, false
 	if request != nil {
 		tc.Execution.ProcessControl, tc.Execution.CredentialStore, tc.Execution.HostExecution = request.ProcessControl, request.CredentialStore, request.HostExecution
 	}
 	ctx, err = e.reviewInvocationCapabilities(ctx, tool, args, tc)
 	if err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	if err := e.Boundary.preflightWriteRoot(ctx, tool, args, &tc); err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	if err := e.Boundary.preflightReadPath(ctx, tool, args, &tc); err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	if e.Boundary.sessionReadOverlay != nil {
 		tc.Files.SessionReadPaths = append([]string(nil), e.Boundary.sessionReadOverlay(ctx, tc.Identity.SessionID, tc.Identity.ParentSessionID)...)
 	}
 	socketPreflight, err := e.Capabilities.preflightSocketCapability(ctx, tool, args, tc)
 	if err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	if socketPreflight != nil {
 		tc.Socket.SocketGrants = append([]confine.SocketGrant(nil), socketPreflight.SocketGrants...)
@@ -130,7 +131,7 @@ func (e *Executor) applyPreInvokeBoundary(
 		socketPreflight != nil && socketPreflight.ApprovalSatisfied,
 	)
 	if err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	if directPreflight != nil {
 		tc.Direct.DirectIPRequested = directPreflight.Requested
@@ -148,7 +149,7 @@ func (e *Executor) applyPreInvokeBoundary(
 	e.Boundary.applySessionLoopbackGrant(ctx, &tc)
 	listenPreflight, connectPreflight, err := e.Capabilities.preflightLocalNetworkCapability(ctx, tool, args, tc)
 	if err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	if listenPreflight != nil && listenPreflight.Authorized {
 		tc.Local.LocalListenGranted = true
@@ -162,7 +163,7 @@ func (e *Executor) applyPreInvokeBoundary(
 		tc.Local.LoopbackConnectPorts = append([]uint16(nil), connectPreflight.Ports...)
 	}
 	if err := e.Process.preflightExecutionCapability(ctx, tool, args, &tc); err != nil {
-		return nil, tc, err
+		return nil, tc, false, err
 	}
 	if permission, ok := ctx.Value(capabilityReviewSecretKey{}).(*hitl.SecretPermission); ok {
 		approveSecretPermission(tc.Effects.Secrets, permission)
@@ -170,14 +171,22 @@ func (e *Executor) applyPreInvokeBoundary(
 	// Policy, native path resolution, and execution share one request.
 	confReq := e.Boundary.actionConfineRequest(ctx, tc)
 	tc.Files.GrantedWriteRoots = append([]string(nil), confReq.GrantedWriteRoots...)
+	if socketPreflight != nil && socketPreflight.ReviewedApproval != nil {
+		tc.Files.ApprovedFileAccess = append(tc.Files.ApprovedFileAccess, socketPreflight.ReviewedApproval.FileAccess...)
+		tc.RecordCurrentActionReview(args, confReq, socketPreflight.ReviewedAction, socketPreflight.ReviewedApproval)
+	}
+	if directPreflight != nil && directPreflight.ReviewedApproval != nil {
+		tc.Files.ApprovedFileAccess = append(tc.Files.ApprovedFileAccess, directPreflight.ReviewedApproval.FileAccess...)
+		tc.RecordCurrentActionReview(args, confReq, directPreflight.ReviewedAction, directPreflight.ReviewedApproval)
+	}
 	boundaryApproved := (socketPreflight != nil && socketPreflight.ApprovalSatisfied) ||
 		(directPreflight != nil && directPreflight.ApprovalSatisfied) || tc.HasExecutionApproval()
 	// Socket/direct outer actions reach profile policy.Evaluate with BoundaryApprovalSatisfied via applyPreInvokePolicy.
 	args, err = e.applyPreInvokePolicy(ctx, tool, profileID, args, &tc, confReq, boundaryApproved)
 	if err != nil {
-		return nil, tc, err
+		return nil, tc, boundaryApproved, err
 	}
-	return args, tc, nil
+	return args, tc, boundaryApproved, nil
 }
 
 // applyPreInvokePolicy evaluates policy constraints, file access checkpoints, and human approval.
@@ -194,7 +203,9 @@ func (e *Executor) applyPreInvokePolicy(
 	}
 	policyEval := e.Boundary.preInvokePolicyContext(tool, profileID, args, *tc, confReq)
 	policyEval.BoundaryApprovalSatisfied = boundaryApprovalSatisfied
-	policyEval.PolicyWritesReviewed = tc.HasExecutionApproval()
+	policyEval.PolicyWritesReviewed = boundaryApprovalSatisfied &&
+		tc.HasExecutionApproval() &&
+		(confReq.HostExecution || confReq.ProcessControl || confReq.CredentialStore)
 	decision, err := e.Metadata.policy.Evaluate(ctx, policyEval)
 	if err != nil {
 		return nil, err
@@ -212,6 +223,8 @@ func (e *Executor) applyPreInvokePolicy(
 		}
 		if decision.Approval != nil {
 			tc.Files.PreparedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
+		} else if !boundaryApprovalSatisfied {
+			tc.Files.PreparedFileAccess = nil
 		}
 		return args, nil
 	}
@@ -219,17 +232,34 @@ func (e *Executor) applyPreInvokePolicy(
 	if tool == "process_list" || tool == "process_signal" {
 		return args, nil
 	}
-	if decision.RequiresApproval {
+	for decision.RequiresApproval {
 		if e.Approvals.checkpointMgr == nil {
 			return nil, fmt.Errorf("tool approval checkpoints not configured")
 		}
-		runArgs, err := e.Approvals.awaitApproval(ctx, tool, args, *tc, decision.Approval, confReq)
+		reviewedApproval := decision.Approval
+		runArgs, err := e.Approvals.awaitApproval(ctx, tool, args, *tc, reviewedApproval, confReq)
 		if err != nil {
 			return nil, err
 		}
 		args = runArgs
-		if decision.Approval != nil {
-			tc.Files.ApprovedFileAccess = append([]hitl.GrantedPathDelta(nil), decision.Approval.FileAccess...)
+		if reviewedApproval == nil {
+			break
+		}
+		tc.Files.ApprovedFileAccess = append([]hitl.GrantedPathDelta(nil), reviewedApproval.FileAccess...)
+		policyEval = e.Boundary.preInvokePolicyContext(tool, profileID, args, *tc, confReq)
+		tc.RecordCurrentActionReview(args, confReq, proposedActionFromPolicy(policyEval), reviewedApproval)
+		policyEval.CurrentActionReview = tc.CurrentActionReview(args, confReq)
+		policyEval.BoundaryApprovalSatisfied = boundaryApprovalSatisfied
+		policyEval.PolicyWritesReviewed = boundaryApprovalSatisfied &&
+			tc.HasExecutionApproval() &&
+			(confReq.HostExecution || confReq.ProcessControl || confReq.CredentialStore)
+		decision, err = e.Metadata.policy.Evaluate(ctx, policyEval)
+		if err != nil {
+			return nil, err
+		}
+		if decision.Blocked {
+			e.Approvals.recordToolDenied(ctx, policyEval, decision, decision.Approval)
+			return nil, e.Rejections.rejectBeforeInvoke(ctx, tool, profileID, args, toolprofiles.PolicyBlockReject(decision, tool, profileID))
 		}
 	}
 	return args, nil

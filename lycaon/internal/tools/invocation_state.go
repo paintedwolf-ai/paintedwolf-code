@@ -4,6 +4,7 @@ package tools
 func (tc *ToolContext) BeginInvocation() {
 	tc.Execution.ProcessControl, tc.Execution.CredentialStore, tc.Execution.HostExecution = false, false, false
 	tc.Execution.executionPermit = nil
+	tc.Execution.currentActionReview = nil
 	tc.Effects.Secrets = nil
 	tc.Files.ApprovedFileAccess = nil
 	tc.Files.PreparedFileAccess = nil

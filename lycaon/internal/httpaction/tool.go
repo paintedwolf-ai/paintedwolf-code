@@ -453,7 +453,7 @@ func send(
 			if reject := checkHopLoopbackAuthority(hopURL, spec.resolve, allowAddress); reject != nil {
 				return reject
 			}
-			if err := egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method); err != nil {
+			if err := admitHopRoute(hopCtx, hopURL, spec.method, spec.resolve); err != nil {
 				return err
 			}
 		}

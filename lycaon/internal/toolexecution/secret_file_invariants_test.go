@@ -487,7 +487,7 @@ func TestInvariant4_UnsafeRawValueRejection(t *testing.T) {
 			tc := tools.ToolContext{
 				Invocation: tools.Invocation{Contract: contract},
 			}
-			_, _, err := exec.applyPreInvokeBoundary(context.Background(), tool, "implement", args, tc)
+			_, _, _, err := exec.applyPreInvokeBoundary(context.Background(), tool, "implement", args, tc)
 			if err == nil {
 				t.Fatalf("%s accepted unsafe value %q", tool, unsafeVal)
 			}
