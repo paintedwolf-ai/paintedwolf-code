@@ -18,7 +18,6 @@ func TestPublishKeyForWithoutLookup(t *testing.T) {
 }
 
 func TestScopeLookupProjectID(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
@@ -36,7 +35,6 @@ func TestScopeLookupProjectID(t *testing.T) {
 }
 
 func TestResolveProjectDir(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
@@ -70,7 +68,6 @@ func (s *stubBoardSource) BuildView(_ context.Context, projectID, workspacePath,
 }
 
 func TestPublishBoardUsesResolvedProjectDir(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
@@ -90,7 +87,6 @@ func TestPublishBoardUsesResolvedProjectDir(t *testing.T) {
 }
 
 func TestPublishBoardFollowsSessionActiveRoot(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	primary := t.TempDir()
@@ -120,7 +116,6 @@ func TestPublishBoardFollowsSessionActiveRoot(t *testing.T) {
 }
 
 func TestPublishBoardFallsBackWhenSessionRootsUnresolved(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())

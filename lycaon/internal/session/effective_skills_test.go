@@ -63,7 +63,6 @@ func TestEffectiveSkillsGateMatrix(t *testing.T) {
 			if err := surfaces.PutEnabled(map[string]bool{projectcontrib.SurfaceSkills: tc.deviceOn}); err != nil {
 				testutil.FailErr(t, "PutEnabled", err)
 			}
-			project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 			reg := project.NewMemoryRegistry()
 			p, err := project.CreateWithRoot(ctx, reg, root)
 			testutil.FailErr(t, "CreateWithRoot", err)
@@ -122,7 +121,6 @@ func TestEffectiveSkillsGateOffReadsNothing(t *testing.T) {
 	if err := surfaces.PutEnabled(map[string]bool{projectcontrib.SurfaceSkills: false}); err != nil {
 		testutil.FailErr(t, "PutEnabled", err)
 	}
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
@@ -165,7 +163,6 @@ func TestEffectiveSkillsShadowsStock(t *testing.T) {
 	m := newSkillsTestManager(t)
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 	testutil.FailErr(t, "surfaces", err)
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, root)
 	testutil.FailErr(t, "CreateWithRoot", err)
@@ -214,7 +211,6 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 	m := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	surfaces, err := settings.NewTrustSurfacesStoreAt(filepath.Join(t.TempDir(), "cs.yaml"))
 	testutil.FailErr(t, "surfaces", err)
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, root)
 	testutil.FailErr(t, "CreateWithRoot", err)

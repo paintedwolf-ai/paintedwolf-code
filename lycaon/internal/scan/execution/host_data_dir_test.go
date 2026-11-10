@@ -13,7 +13,6 @@ import (
 )
 
 func TestHostDataDirUsesProjectIDWhenKnown(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(ctx, reg, t.TempDir())
@@ -37,7 +36,6 @@ func TestHostDataDirUsesProjectIDWhenKnown(t *testing.T) {
 }
 
 func TestHostDataDirFallsBackToPathKey(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 

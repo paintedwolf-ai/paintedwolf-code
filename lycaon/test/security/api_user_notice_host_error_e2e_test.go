@@ -13,8 +13,6 @@ import (
 )
 
 func TestPromptWithoutProviderPublishesRenderedHostError(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
-	t.Cleanup(func() { project.SetDefaultOpenPolicy(project.DefaultOpenPolicy()) })
 
 	_, projectDir := noMockServeEnv(t)
 	serveApp := buildNoMockServeApp(t)

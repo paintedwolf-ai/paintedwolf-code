@@ -1,12 +1,14 @@
 package project
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -68,5 +70,60 @@ func TestDerivedRootLabelSanitizesAddressingDelimiters(t *testing.T) {
 		if got := deriveUniqueRootLabel(nil, filepath.Join(dir, tc.name)); got != tc.want {
 			t.Fatalf("deriveUniqueRootLabel(%q) = %q want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestResolveExistingDirAdmitsAnyExistingDirectory(t *testing.T) {
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".config", "paintedwolf")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
+
+	candidates := []string{
+		home,
+		filepath.Join(home, ".config"),
+		filepath.Join(home, ".ssh"),
+		filepath.Join(home, ".aws"),
+		filepath.Join(home, "Library", "Keychains"),
+		configdir.Root(),
+		filepath.Join(home, "work", "repo"),
+	}
+	for _, dir := range candidates {
+		testutil.FailErr(t, "mkdir candidate", os.MkdirAll(dir, 0o700))
+		got, err := ResolveExistingDir(dir)
+		if err != nil {
+			t.Fatalf("ResolveExistingDir(%q) unexpected error: %v", dir, err)
+		}
+		want, err := filepath.EvalSymlinks(dir)
+		testutil.FailErr(t, "eval symlinks", err)
+		if got != want {
+			t.Fatalf("ResolveExistingDir(%q) = %q, want %q", dir, got, want)
+		}
+	}
+
+	rootResolved, err := ResolveExistingDir(string(filepath.Separator))
+	if err != nil {
+		t.Fatalf("ResolveExistingDir(root) unexpected error: %v", err)
+	}
+	if rootResolved == "" {
+		t.Fatal("ResolveExistingDir(root) returned empty path")
+	}
+}
+
+func TestResolveExistingDirRejectsInvalidMissingAndFilePaths(t *testing.T) {
+	if _, err := ResolveExistingDir("   "); !errors.Is(err, ErrInvalidPath) {
+		t.Fatalf("empty path err = %v, want ErrInvalidPath", err)
+	}
+
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	if _, err := ResolveExistingDir(missing); !errors.Is(err, ErrPathNotFound) {
+		t.Fatalf("missing path err = %v, want ErrPathNotFound", err)
+	}
+
+	file := filepath.Join(t.TempDir(), "file.txt")
+	testutil.FailErr(t, "write file", os.WriteFile(file, []byte("x"), 0o600))
+	if _, err := ResolveExistingDir(file); !errors.Is(err, ErrNotDirectory) {
+		t.Fatalf("file path err = %v, want ErrNotDirectory", err)
 	}
 }

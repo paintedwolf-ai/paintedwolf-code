@@ -767,10 +767,6 @@ values:
     status: 503
     comment: >-
       a source root cannot be read right now
-  - id: project_policy_denied
-    status: 403
-    comment: >-
-      project open policy denied path
   - id: provider_not_found
     status: 404
     comment: >-

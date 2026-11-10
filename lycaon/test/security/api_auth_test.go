@@ -10,8 +10,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
@@ -164,10 +165,6 @@ func TestCreateSessionRejectsProjectDir(t *testing.T) {
 
 func TestCreateProjectAllowsUserSelectedPath(t *testing.T) {
 	dir := t.TempDir()
-	project.SetDefaultOpenPolicy(project.DefaultOpenPolicy())
-	t.Cleanup(func() {
-		project.SetDefaultOpenPolicy(project.TestOpenPolicy())
-	})
 
 	srv := wiring.BuildForTest(t).Server
 	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(`{"roots":[{"path":"`+dir+`"}]}`))
@@ -179,16 +176,19 @@ func TestCreateProjectAllowsUserSelectedPath(t *testing.T) {
 	}
 }
 
-func TestCreateProjectDeniesSSH(t *testing.T) {
+func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	for _, path := range []string{filepath.Join(home, ".ssh"), filepath.Join(home, "Library", "Keychains")} {
-		testutil.FailErr(t, "create protected store fixture", os.MkdirAll(path, 0o700))
+	t.Setenv("USERPROFILE", home)
+	for _, path := range []string{
+		filepath.Join(home, ".config"),
+		filepath.Join(home, ".ssh"),
+		filepath.Join(home, "Library", "Keychains"),
+	} {
+		testutil.FailErr(t, "create fixture directory", os.MkdirAll(path, 0o700))
 	}
 	srv := wiring.BuildForTest(t).Server
-	// Use production-style deny rules for this case.
-	project.SetDefaultOpenPolicy(project.DefaultOpenPolicy())
-	t.Cleanup(func() { project.SetDefaultOpenPolicy(project.TestOpenPolicy()) })
+	testutil.FailErr(t, "create configdir root", os.MkdirAll(configdir.Root(), 0o700))
 
 	attach := func(t *testing.T, path string) (int, string) {
 		t.Helper()
@@ -202,42 +202,28 @@ func TestCreateProjectDeniesSSH(t *testing.T) {
 		return w.Code, string(decodeAPIError(t, w).Code)
 	}
 
-	// Existing catalogued stores are refused without relying on machine contents.
 	cases := []struct {
-		name string
-		path string
-		why  string
+		name              string
+		path              string
+		expectActionBlock bool
 	}{
-		{"the store itself", filepath.Join(home, ".ssh"), "private keys"},
-		{"credential store", filepath.Join(home, "Library", "Keychains"), "credential store"},
+		{"home directory", home, false},
+		{"dot-config directory", filepath.Join(home, ".config"), false},
+		{"ssh directory", filepath.Join(home, ".ssh"), true},
+		{"credential store", filepath.Join(home, "Library", "Keychains"), true},
+		{"device config root", configdir.Root(), true},
+		{"ordinary folder", t.TempDir(), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			status, code := attach(t, tc.path)
-			if status != http.StatusBadRequest || code != "write_root_under_secret_store" {
-				t.Fatalf("%s (%s): status = %d code = %q, want 400 write_root_under_secret_store",
-					tc.path, tc.why, status, code)
+			if status != http.StatusCreated {
+				t.Fatalf("%s (%s): status = %d code = %q, want 201 Created", tc.name, tc.path, status, code)
+			}
+			reject := tools.ValidateAttachedRootsForAction([]string{tc.path})
+			if tc.expectActionBlock && reject == nil {
+				t.Fatalf("%s (%s): expected ValidateAttachedRootsForAction to refuse execution root", tc.name, tc.path)
 			}
 		})
 	}
-
-	t.Run("store ancestor still attaches", func(t *testing.T) {
-		status, code := attach(t, filepath.Join(home, "Library"))
-		if status != http.StatusCreated {
-			t.Fatalf("store ancestor: status = %d code = %q, want 201", status, code)
-		}
-		status, code = attach(t, filepath.Join(home, "Library", "Keychains"))
-		if status != http.StatusBadRequest || code != "write_root_under_secret_store" {
-			t.Fatalf("protected descendant after ancestor attach: status = %d code = %q", status, code)
-		}
-	})
-
-	// Positive control. A suite that passes because every attach is refused has
-	// proved nothing about the predicate.
-	t.Run("ordinary folder still attaches", func(t *testing.T) {
-		status, code := attach(t, t.TempDir())
-		if status != http.StatusCreated {
-			t.Fatalf("ordinary folder: status = %d code = %q, want 201", status, code)
-		}
-	})
 }

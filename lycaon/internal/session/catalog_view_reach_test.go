@@ -64,7 +64,6 @@ func TestW10ReachMatrix(t *testing.T) {
 	}
 
 	m, _ := newViewManager(t, root, surfaces)
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	m.SetProjectRegistry(reg)
 
@@ -112,7 +111,6 @@ func TestW10ReachMatrix(t *testing.T) {
 func TestW11GateMatrix(t *testing.T) {
 	ctx := context.Background()
 	root := configlayout.FindModuleRoot()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	cases := []struct {
 		name      string
@@ -225,7 +223,6 @@ func TestW13NoSharedMutation(t *testing.T) {
 		testutil.FailErr(t, "PutEnabled", err)
 	}
 	m, _ := newViewManager(t, root, surfaces)
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	m.SetProjectRegistry(reg)
 
@@ -308,7 +305,6 @@ func TestW14FailureDegradesToDevice(t *testing.T) {
 		t.Fatalf("fallback fingerprint %s want %s", got.Catalog.Revision, device.Catalog.Revision)
 	}
 	// Later valid projects still build.
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	m.SetProjectRegistry(reg)
 	dir := t.TempDir()

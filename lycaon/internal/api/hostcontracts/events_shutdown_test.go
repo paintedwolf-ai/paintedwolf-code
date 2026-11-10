@@ -21,7 +21,6 @@ import (
 )
 
 func TestShutdownReleasesOpenEventStream(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	hub := events.NewMemoryHub()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())

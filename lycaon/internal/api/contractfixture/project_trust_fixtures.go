@@ -25,7 +25,6 @@ import (
 func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *project.MemoryRegistry) {
 	t.Helper()
 
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sessionStore := store.NewMemory()
 	projects := project.NewMemoryRegistry()
 	mock := llm.NewMockProvider(&llm.MockConfig{
@@ -83,7 +82,6 @@ func TrustSettingsServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	svc, err := settings.NewService()
 	testutil.FailErr(t, "settings.NewService", err)

@@ -160,7 +160,6 @@ func NewProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 		Mock:        llm.NewMockProvider(TestMockConfig(t)),
 	}
 
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)

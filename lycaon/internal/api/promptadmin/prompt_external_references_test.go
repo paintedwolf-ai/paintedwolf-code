@@ -152,7 +152,6 @@ func TestPromptGrantRollbackPreservesAnotherSubmission(t *testing.T) {
 }
 
 func TestReadReferenceImageValidatesProjectRootFile(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	var deps apitestdeps.Deps
 	apitestdeps.Fill(t, &deps)
 	rootDir := canonPath(t, t.TempDir())

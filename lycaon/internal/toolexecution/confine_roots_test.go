@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -207,6 +209,62 @@ func TestValidateRootsForActionPublishRegisteredCode(t *testing.T) {
 		}
 		if reject.Data["reason"] != confine.WriteRootCodeNotAbsolute {
 			t.Fatalf("%s reject data = %+v, want reason %q", name, reject.Data, confine.WriteRootCodeNotAbsolute)
+		}
+	}
+}
+
+func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots(t *testing.T) {
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".config", "paintedwolf")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
+
+	cases := []struct {
+		name       string
+		dir        string
+		wantCode   string
+		wantReason string
+	}{
+		{
+			name:       "home",
+			dir:        home,
+			wantCode:   "CONTROL_PLANE_PATH_DENIED",
+			wantReason: confine.WriteRootCodeContainsState,
+		},
+		{
+			name:       "dot-config",
+			dir:        filepath.Join(home, ".config"),
+			wantCode:   "CONTROL_PLANE_PATH_DENIED",
+			wantReason: confine.WriteRootCodeContainsState,
+		},
+		{
+			name:       "dot-ssh",
+			dir:        filepath.Join(home, ".ssh"),
+			wantCode:   "SANDBOX_CAPABILITY_REQUEST_INVALID",
+			wantReason: confine.WriteRootCodeSecretStore,
+		},
+		{
+			name:       "configdir-root",
+			dir:        configdir.Root(),
+			wantCode:   "SANDBOX_CAPABILITY_REQUEST_INVALID",
+			wantReason: confine.WriteRootCodeSecretStore,
+		},
+	}
+
+	reg := project.NewMemoryRegistry()
+	for _, tc := range cases {
+		testutil.FailErr(t, "mkdir "+tc.name, os.MkdirAll(tc.dir, 0o700))
+		p, err := project.CreateWithRoot(t.Context(), reg, tc.dir)
+		if err != nil {
+			t.Fatalf("%s: project registration should succeed, got %v", tc.name, err)
+		}
+		reject := tools.ValidateAttachedRootsForAction(project.RootPaths(p))
+		if reject == nil {
+			t.Fatalf("%s: expected ValidateAttachedRootsForAction to refuse %q", tc.name, tc.dir)
+		}
+		if reject.Code != tc.wantCode || reject.Data["reason"] != tc.wantReason {
+			t.Fatalf("%s: reject = %+v, want code=%q reason=%q", tc.name, reject, tc.wantCode, tc.wantReason)
 		}
 	}
 }
