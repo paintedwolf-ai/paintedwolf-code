@@ -161,6 +161,9 @@ func runNFSBarrierFlushSubprocess(ctx context.Context, a *Adapter, st *viewState
 		},
 	})
 	if runErr != nil || exitCode != 0 {
+		if cErr := ctx.Err(); cErr != nil {
+			return cErr
+		}
 		if runErr != nil {
 			return runErr
 		}

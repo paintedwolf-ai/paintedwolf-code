@@ -81,6 +81,10 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := loadPersistedLeasesFromDiskLocked(ctx, s); err != nil {
+		return 0, err
+	}
+
 	unlockStoreWriteBoundary(s)
 	// A store left with nothing retained has nothing to protect, as at open.
 	defer func() {

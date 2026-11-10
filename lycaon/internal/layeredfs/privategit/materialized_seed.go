@@ -232,7 +232,8 @@ func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewB
 	}
 	view := &managedView{
 		viewID: b.ViewID, workerID: b.WorkerID, rootID: b.RootID, coreViewID: b.CoreViewID,
-		trunkDir: absTrunk, worktreeDir: absWorktree, materialized: true, core: b.Core, syncer: b.Core,
+		trunkDir: absTrunk, worktreeDir: absWorktree, canonWorktreeDir: canonicalCleanPath(absWorktree),
+		materialized: true, core: b.Core, syncer: b.Core,
 		accessOrigin: OriginFilesystem, repos: make(map[string]*initializedRepo, len(b.Repos)),
 	}
 	for _, seeded := range b.Repos {
@@ -438,6 +439,7 @@ func initializeMaterializedSeed(
 		rootID:            "primary",
 		trunkDir:          absTrunk,
 		worktreeDir:       absTarget,
+		canonWorktreeDir:  canonicalCleanPath(absTarget),
 		materialized:      true,
 		core:              cfg.Core,
 		syncer:            cfg.Core,

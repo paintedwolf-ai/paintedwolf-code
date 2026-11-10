@@ -426,7 +426,7 @@ func collectCapturedRefAndIndexOIDs(ctx context.Context, stageGitDir string) ([]
 			}
 			return err
 		}
-		if d.IsDir() {
+		if d.IsDir() || strings.HasSuffix(d.Name(), ".lock") {
 			return nil
 		}
 		rel, rErr := filepath.Rel(stageGitDir, path)
@@ -436,6 +436,9 @@ func collectCapturedRefAndIndexOIDs(ctx context.Context, stageGitDir string) ([]
 		refName := filepath.ToSlash(rel)
 		raw, rErr := os.ReadFile(path)
 		if rErr != nil {
+			if os.IsNotExist(rErr) {
+				return nil
+			}
 			return rErr
 		}
 		val := strings.TrimSpace(string(raw))
@@ -471,27 +474,49 @@ func collectCapturedRefAndIndexOIDs(ctx context.Context, stageGitDir string) ([]
 		return nil, nil, fmt.Errorf("%w: invalid HEAD %q", ErrCorruptObjectStore, headStr)
 	}
 	idxPath := filepath.Join(stageGitDir, "index")
-	if _, err := os.Stat(idxPath); err == nil {
-		sink := &lsFilesStageSink{seen: make(map[string]struct{}, len(oids))}
-		for _, oid := range oids {
-			sink.seen[oid] = struct{}{}
+	if idxBytes, err := os.ReadFile(idxPath); err == nil {
+		idxDigest := sha256HexBytes(idxBytes)
+		if cached, ok := parsedIndexOIDCache.Load(idxDigest); ok {
+			seen := make(map[string]struct{}, len(oids))
+			for _, oid := range oids {
+				seen[oid] = struct{}{}
+			}
+			for _, oid := range cached.([]string) {
+				if _, exists := seen[oid]; !exists {
+					seen[oid] = struct{}{}
+					oids = append(oids, oid)
+				}
+			}
+		} else {
+			sink := &lsFilesStageSink{seen: make(map[string]struct{})}
+			out, code, gErr := gitexec.RunTo(ctx, filepath.Dir(stageGitDir), []string{"--git-dir=" + stageGitDir, "ls-files", "--stage"}, gitexec.Opts{
+				Profile:   gitexec.ProfileHermetic,
+				IndexFile: idxPath,
+			}, sink)
+			sink.flush()
+			if gErr != nil || code != 0 {
+				return nil, nil, fmt.Errorf("%w: invalid git index (exit %d): %v: %s", ErrCorruptObjectStore, code, gErr, strings.TrimSpace(string(out)))
+			}
+			parsedIndexOIDCache.Store(idxDigest, append([]string(nil), sink.oids...))
+			seen := make(map[string]struct{}, len(oids)+len(sink.oids))
+			for _, oid := range oids {
+				seen[oid] = struct{}{}
+			}
+			for _, oid := range sink.oids {
+				if _, exists := seen[oid]; !exists {
+					seen[oid] = struct{}{}
+					oids = append(oids, oid)
+				}
+			}
 		}
-		sink.oids = oids
-		out, code, gErr := gitexec.RunTo(ctx, filepath.Dir(stageGitDir), []string{"--git-dir=" + stageGitDir, "ls-files", "--stage"}, gitexec.Opts{
-			Profile:   gitexec.ProfileHermetic,
-			IndexFile: idxPath,
-		}, sink)
-		sink.flush()
-		if gErr != nil || code != 0 {
-			return nil, nil, fmt.Errorf("%w: invalid git index (exit %d): %v: %s", ErrCorruptObjectStore, code, gErr, strings.TrimSpace(string(out)))
-		}
-		oids = sink.oids
 	} else if !os.IsNotExist(err) {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("%w: read git index %s: %v", ErrCorruptObjectStore, idxPath, err)
 	}
 	sort.Strings(oids)
 	return oids, refs, nil
 }
+
+var parsedIndexOIDCache sync.Map
 
 type lsFilesStageSink struct {
 	rem  []byte

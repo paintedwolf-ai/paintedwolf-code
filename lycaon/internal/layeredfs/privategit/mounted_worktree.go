@@ -163,12 +163,17 @@ func (m *Manager) BindMountedView(binding MountedViewBinding) error {
 	}
 	binding.MountPath = absWT
 	kernelMounted := isKernelMountedWorktree(absWT)
+	canonWT := ""
+	if !kernelMounted && absWT != "" {
+		canonWT = canonicalCleanPath(absWT)
+	}
 	unregisterActiveView(view)
 	m.mu.Lock()
 	if oldWT := canonicalCleanPath(view.worktreeDir); oldWT != "" {
 		delete(m.viewsByWorktree, oldWT)
 	}
 	view.worktreeDir = absWT
+	view.canonWorktreeDir = canonWT
 	view.kernelMounted = kernelMounted
 	if newWT := canonicalCleanPath(absWT); newWT != "" {
 		m.viewsByWorktree[newWT] = view
@@ -246,10 +251,15 @@ func registerMountedClaim(
 	if workerID == "" {
 		workerID = viewID
 	}
+	kernelMounted := isKernelMountedWorktree(absWT)
+	canonWT := ""
+	if !kernelMounted && absWT != "" {
+		canonWT = canonicalCleanPath(absWT)
+	}
 	view := &managedView{
 		viewID: viewID, workerID: workerID, rootID: rootID,
-		trunkDir: absTrunk, worktreeDir: absWT, materialized: false,
-		kernelMounted: isKernelMountedWorktree(absWT),
+		trunkDir: absTrunk, worktreeDir: absWT, canonWorktreeDir: canonWT, materialized: false,
+		kernelMounted: kernelMounted,
 		core:          core, syncer: core, authorizedGitDirs: append([]string(nil), authorizedGitDirs...),
 		accessOrigin: OriginFilesystem, repos: make(map[string]*initializedRepo),
 	}

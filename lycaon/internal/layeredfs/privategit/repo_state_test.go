@@ -1,6 +1,7 @@
 package privategit
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -464,14 +465,14 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 		}
 	})
 
-	t.Run("materialized_and_macos_path_aliases_accepted_while_mounted_worktree_excluded", func(t *testing.T) {
+	t.Run("materialized_and_canonical_symlink_aliases_accepted_while_lookalikes_and_mounted_worktree_rejected", func(t *testing.T) {
 		t.Parallel()
 		srcDir := t.TempDir()
 		gittest.Init(t, srcDir)
 		testutil.FailErr(t, "write p.txt", os.WriteFile(filepath.Join(srcDir, "p.txt"), []byte("v1\n"), 0o644))
 		gittest.CommitAll(t, srcDir, "initial")
 
-		baseDir := t.TempDir()
+		baseDir := canonicalCleanPath(t.TempDir())
 		realBacking := filepath.Join(baseDir, "real-backing")
 		aliasBacking := filepath.Join(baseDir, "alias-backing")
 		testutil.FailErr(t, "mkdir realBacking", os.MkdirAll(realBacking, 0o755))
@@ -484,11 +485,12 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 
 		mgr := newTestManager(t, aliasBacking)
 		matView := &managedView{
-			viewID:        "view-mat-alias",
-			trunkDir:      srcDir,
-			worktreeDir:   aliasWT,
-			materialized:  true,
-			kernelMounted: false,
+			viewID:           "view-mat-alias",
+			trunkDir:         srcDir,
+			worktreeDir:      aliasWT,
+			canonWorktreeDir: canonicalCleanPath(aliasWT),
+			materialized:     true,
+			kernelMounted:    false,
 		}
 		if !isAllowedPrivateGitLocation(mgr, matView, "view-mat-alias", ".", filepath.Join(realWT, ".git")) {
 			t.Fatalf("expected canonical materialized worktree .git to be accepted for symlinked worktreeDir")
@@ -496,9 +498,21 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 		if !isAllowedPrivateGitLocation(mgr, matView, "view-mat-alias", ".", filepath.Join(aliasWT, ".git")) {
 			t.Fatalf("expected lexical materialized worktree .git to be accepted")
 		}
-		if !isAllowedPrivateGitLocation(mgr, matView, "view-mat-alias", ".", "/tmp/views/view-mat-alias/private-git/root/.git") &&
-			isAllowedPrivateGitLocation(mgr, matView, "view-mat-alias", ".", "/private/tmp/views/view-mat-alias/private-git/root/.git") {
-			t.Fatalf("expected /tmp and /private/tmp lexical variants to be treated identically")
+
+		// Prove that distinct lookalike /tmp vs /private/tmp paths without symlink identity are rejected.
+		lookalikeView := &managedView{
+			viewID:           "view-lookalike",
+			trunkDir:         srcDir,
+			worktreeDir:      "/private/tmp/m14-distinct-lookalike-wt",
+			canonWorktreeDir: "/private/tmp/m14-distinct-lookalike-wt",
+			materialized:     true,
+			kernelMounted:    false,
+		}
+		if !isAllowedPrivateGitLocation(mgr, lookalikeView, "view-lookalike", ".", "/private/tmp/m14-distinct-lookalike-wt/.git") {
+			t.Fatalf("expected configured worktree .git to be accepted")
+		}
+		if isAllowedPrivateGitLocation(mgr, lookalikeView, "view-lookalike", ".", "/tmp/m14-distinct-lookalike-wt/.git") {
+			t.Fatalf("expected unverified /tmp lookalike path to be rejected when canonWorktreeDir is /private/tmp/...")
 		}
 
 		// For a kernel-mounted view, the mounted worktree's .git is excluded from allowed durable locations.
@@ -512,11 +526,243 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 		if isAllowedPrivateGitLocation(mgr, mntView, "view-mnt-excl", ".", filepath.Join(realWT, ".git")) {
 			t.Fatalf("expected kernel-mounted worktree .git to be excluded from allowed durable locations")
 		}
-		if !isAllowedPrivateGitLocation(mgr, mntView, "view-mnt-excl", ".", filepath.Join(realBacking, "privategit-mgr", "views", "view-mnt-excl", "private-git", "root", ".git")) {
+		if !isAllowedPrivateGitLocation(mgr, mntView, "view-mnt-excl", ".", filepath.Join(canonicalCleanPath(realBacking), "privategit-mgr", "views", "view-mnt-excl", "private-git", "root", ".git")) {
 			t.Fatalf("expected canonical backing private-git location to be accepted for kernel-mounted view")
 		}
 		if !isAllowedPrivateGitLocation(mgr, mntView, "view-mnt-excl", ".", filepath.Join(aliasBacking, "privategit-mgr", "views", "view-mnt-excl", "private-git", "root", ".git")) {
 			t.Fatalf("expected lexical backing private-git location to be accepted for kernel-mounted view")
+		}
+	})
+
+	t.Run("persisted_leases_participate_in_gc_before_view_reattachment_and_fail_closed_on_invalid_lease_files", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		srcA := t.TempDir()
+		gittest.Init(t, srcA)
+		testutil.FailErr(t, "write a.txt", os.WriteFile(filepath.Join(srcA, "a.txt"), []byte("unique-view-a-blob\n"), 0o644))
+		gittest.CommitAll(t, srcA, "commit A")
+		headA := strings.TrimSpace(gittest.Run(t, srcA, "rev-parse", "HEAD"))
+
+		srcB := t.TempDir()
+		gittest.Init(t, srcB)
+		testutil.FailErr(t, "write b.txt", os.WriteFile(filepath.Join(srcB, "b.txt"), []byte("unique-view-b-blob\n"), 0o644))
+		gittest.CommitAll(t, srcB, "commit B")
+		headB := strings.TrimSpace(gittest.Run(t, srcB, "rev-parse", "HEAD"))
+
+		backingRoot := t.TempDir()
+		mgr1 := newTestManager(t, backingRoot)
+		core1A := newMountedViewWithManager(t, mgr1, "view-gc-a", srcA)
+		core1B := newMountedViewWithManager(t, mgr1, "view-gc-b", srcB)
+		qp := func(rel string) layeredfs.QualifiedPath {
+			return layeredfs.QualifiedPath{RootID: "primary", Rel: rel}
+		}
+		_, err := core1A.ReadFile(qp(".git/HEAD"))
+		testutil.FailErr(t, "establish view-gc-a", err)
+		_, err = core1B.ReadFile(qp(".git/HEAD"))
+		testutil.FailErr(t, "establish view-gc-b", err)
+
+		// Remove source .git directories so recovery relies strictly on retained store + private git.
+		testutil.FailErr(t, "remove srcA .git", os.RemoveAll(filepath.Join(srcA, ".git")))
+		testutil.FailErr(t, "remove srcB .git", os.RemoveAll(filepath.Join(srcB, ".git")))
+
+		// Reopen store via a fresh Manager BEFORE reattaching any view, and run GC immediately.
+		mgr2 := newTestManager(t, backingRoot)
+		prunedBeforeAttach, err := mgr2.Store().CollectGarbage(ctx)
+		testutil.FailErr(t, "CollectGarbage before view reattachment", err)
+		if prunedBeforeAttach != 0 {
+			t.Fatalf("expected 0 pruned objects before view reattachment, got %d", prunedBeforeAttach)
+		}
+
+		// Reattach ONLY view-gc-a while view-gc-b remains unattached, then run GC again.
+		core2A := newMountedViewWithManager(t, mgr2, "view-gc-a", srcA)
+		if _, err := core2A.ReadFile(qp(".git/HEAD")); err != nil {
+			t.Fatalf("expected view-gc-a to recover after pre-attachment GC, got %v", err)
+		}
+		prunedPartialAttach, err := mgr2.Store().CollectGarbage(ctx)
+		testutil.FailErr(t, "CollectGarbage with only view-gc-a reattached", err)
+		if prunedPartialAttach != 0 {
+			t.Fatalf("expected 0 pruned objects while view-gc-b lease is persisted on disk, got %d", prunedPartialAttach)
+		}
+
+		// Now reattach view-gc-b and verify its history is still intact.
+		core2B := newMountedViewWithManager(t, mgr2, "view-gc-b", srcB)
+		if _, err := core2B.ReadFile(qp(".git/HEAD")); err != nil {
+			t.Fatalf("expected view-gc-b to recover after partial-attachment GC, got %v", err)
+		}
+		if !mgr2.Store().HasObject(headA) || !mgr2.Store().HasObject(headB) {
+			t.Fatalf("expected both headA (%s) and headB (%s) to remain in store", headA, headB)
+		}
+
+		// Verify invalid/malformed lease files in <storeRoot>/leases cause both CollectGarbage and store open to fail closed.
+		leasesDir := filepath.Join(mgr2.Store().RootDir(), "leases")
+		badLeasePath := filepath.Join(leasesDir, "lease-view-9999.json")
+		for _, badPayload := range []string{
+			`{"format_version":1,"id":"lease-view-9999"`,
+			`{"format_version":99,"id":"lease-view-9999","kind":"view","holder":"v","oids":["` + headA + `"]}`,
+			`{"format_version":1,"id":"lease-view-9999","kind":"view","holder":"v","oids":["` + headA + `"],"unknown":1}`,
+			`{"format_version":1,"id":"lease-view-9999","kind":"view","holder":"v","oids":["` + headA + `"]}{"extra":1}`,
+			`{"format_version":1,"id":"../escape","kind":"view","holder":"v","oids":["` + headA + `"]}`,
+			`{"format_version":1,"id":"lease-view-9999","kind":"view","holder":"v","oids":["not-a-hex-oid"]}`,
+			`{"format_version":1,"id":"lease-view-9999","kind":"view","holder":"v","packs":["../evil"]}`,
+		} {
+			testutil.FailErr(t, "write bad lease file", os.WriteFile(badLeasePath, []byte(badPayload), 0o600))
+			if _, gcErr := mgr2.Store().CollectGarbage(ctx); !errors.Is(gcErr, ErrCorruptObjectStore) {
+				t.Fatalf("expected ErrCorruptObjectStore from CollectGarbage on bad lease payload %q, got %v", badPayload, gcErr)
+			}
+			if _, openErr := NewRetainedObjectStore(mgr2.Store().RootDir()); !errors.Is(openErr, ErrCorruptObjectStore) {
+				t.Fatalf("expected ErrCorruptObjectStore from NewRetainedObjectStore on bad lease payload %q, got %v", badPayload, openErr)
+			}
+			testutil.FailErr(t, "remove bad lease file", os.Remove(badLeasePath))
+		}
+	})
+
+	t.Run("release_lease_propagates_remove_error_and_preserves_retention_across_restart", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		srcDir := t.TempDir()
+		gittest.Init(t, srcDir)
+		testutil.FailErr(t, "write rel.txt", os.WriteFile(filepath.Join(srcDir, "rel.txt"), []byte("release-error-test-blob\n"), 0o644))
+		gittest.CommitAll(t, srcDir, "initial")
+		headOID := strings.TrimSpace(gittest.Run(t, srcDir, "rev-parse", "HEAD"))
+
+		backingRoot := t.TempDir()
+		mgr1 := newTestManager(t, backingRoot)
+		core1 := newMountedViewWithManager(t, mgr1, "view-rel-err", srcDir)
+		qp := layeredfs.QualifiedPath{RootID: "primary", Rel: ".git/HEAD"}
+		_, err := core1.ReadFile(qp)
+		testutil.FailErr(t, "establish view-rel-err", err)
+
+		view1, err := getManagedView(mgr1, "view-rel-err")
+		testutil.FailErr(t, "getManagedView", err)
+		rec, ok, err := readDurableRepoRecord(mgr1, view1, "view-rel-err", ".")
+		if err != nil || !ok {
+			t.Fatalf("readDurableRepoRecord: ok=%v err=%v", ok, err)
+		}
+
+		// Inject a persistence failure when removing the lease file.
+		mgr1.Store().mu.Lock()
+		mgr1.Store().removeLeaseRecordFn = func(_ string) error {
+			return errors.New("injected lease file remove failure")
+		}
+		mgr1.Store().mu.Unlock()
+
+		if rErr := mgr1.Store().ReleaseLease(rec.LeaseID); rErr == nil {
+			t.Fatalf("expected ReleaseLease to propagate remove error, got nil")
+		}
+		if vErr := mgr1.ReleaseView("view-rel-err"); vErr == nil {
+			t.Fatalf("expected ReleaseView to propagate ReleaseLease error, got nil")
+		}
+
+		// Because removal failed, the lease must remain active both in memory and across store reopen.
+		prunedInMem, err := mgr1.Store().CollectGarbage(ctx)
+		testutil.FailErr(t, "CollectGarbage after failed ReleaseLease", err)
+		if prunedInMem != 0 || !mgr1.Store().HasObject(headOID) {
+			t.Fatalf("expected objects to remain retained after failed ReleaseLease, pruned=%d hasHead=%v", prunedInMem, mgr1.Store().HasObject(headOID))
+		}
+
+		reopenedStore, err := NewRetainedObjectStore(mgr1.Store().RootDir())
+		testutil.FailErr(t, "reopen store after failed ReleaseLease", err)
+		prunedReopen, err := reopenedStore.CollectGarbage(ctx)
+		testutil.FailErr(t, "CollectGarbage on reopened store", err)
+		if prunedReopen != 0 || !reopenedStore.HasObject(headOID) {
+			t.Fatalf("expected objects to remain retained across restart after failed ReleaseLease, pruned=%d hasHead=%v", prunedReopen, reopenedStore.HasObject(headOID))
+		}
+
+		// Restore removal function and release cleanly; objects should now be eligible for GC.
+		mgr1.Store().mu.Lock()
+		mgr1.Store().removeLeaseRecordFn = nil
+		mgr1.Store().mu.Unlock()
+		testutil.FailErr(t, "ReleaseLease after restoring removeFn", mgr1.Store().ReleaseLease(rec.LeaseID))
+		prunedAfterRelease, err := mgr1.Store().CollectGarbage(ctx)
+		testutil.FailErr(t, "CollectGarbage after successful ReleaseLease", err)
+		if prunedAfterRelease == 0 {
+			t.Fatalf("expected objects to be pruned after successful ReleaseLease")
+		}
+	})
+
+	t.Run("established_repo_with_malformed_or_unreadable_refs_or_index_fails_closed", func(t *testing.T) {
+		t.Parallel()
+		qp := func(rel string) layeredfs.QualifiedPath {
+			return layeredfs.QualifiedPath{RootID: "primary", Rel: rel}
+		}
+
+		// Case 1: Malformed .git/index in established private repository fails closed and preserves evidence.
+		{
+			srcDir := t.TempDir()
+			gittest.Init(t, srcDir)
+			testutil.FailErr(t, "write p.txt", os.WriteFile(filepath.Join(srcDir, "p.txt"), []byte("v1\n"), 0o644))
+			gittest.CommitAll(t, srcDir, "initial")
+
+			backingRoot := t.TempDir()
+			mgr1 := newTestManager(t, backingRoot)
+			core1 := newMountedViewWithManager(t, mgr1, "view-corrupt-index", srcDir)
+			_, err := core1.ReadFile(qp(".git/HEAD"))
+			testutil.FailErr(t, "establish view-corrupt-index", err)
+
+			view1, err := getManagedView(mgr1, "view-corrupt-index")
+			testutil.FailErr(t, "getManagedView", err)
+			rec, ok, err := readDurableRepoRecord(mgr1, view1, "view-corrupt-index", ".")
+			if err != nil || !ok {
+				t.Fatalf("readDurableRepoRecord: ok=%v err=%v", ok, err)
+			}
+			testutil.FailErr(t, "remove source .git", os.RemoveAll(filepath.Join(srcDir, ".git")))
+
+			idxPath := filepath.Join(rec.PrivateGitDir, "index")
+			corruptIdx := []byte("DIRC-corrupt-index-payload")
+			testutil.FailErr(t, "write corrupt index", os.WriteFile(idxPath, corruptIdx, 0o644))
+
+			if _, sErr := core1.Stat(qp(".git/HEAD")); !errors.Is(sErr, layeredfs.ErrGitPending) || !errors.Is(sErr, ErrCorruptObjectStore) {
+				t.Fatalf("in-process corrupt index Stat: expected ErrGitPending + ErrCorruptObjectStore, got %v", sErr)
+			}
+			mgr2 := newTestManager(t, backingRoot)
+			core2 := newMountedViewWithManager(t, mgr2, "view-corrupt-index", srcDir)
+			if _, sErr := core2.Stat(qp(".git/HEAD")); !errors.Is(sErr, layeredfs.ErrGitPending) || !errors.Is(sErr, ErrCorruptObjectStore) {
+				t.Fatalf("restart corrupt index Stat: expected ErrGitPending + ErrCorruptObjectStore, got %v", sErr)
+			}
+			if _, wErr := core2.WriteFile(qp(".git/config"), []byte("[core]\n"), 0o644); !errors.Is(wErr, layeredfs.ErrGitPending) || !errors.Is(wErr, ErrCorruptObjectStore) {
+				t.Fatalf("restart corrupt index WriteFile: expected ErrGitPending + ErrCorruptObjectStore, got %v", wErr)
+			}
+			gotIdx, rErr := os.ReadFile(idxPath)
+			testutil.FailErr(t, "read preserved corrupt index", rErr)
+			if string(gotIdx) != string(corruptIdx) {
+				t.Fatalf("expected corrupt index evidence to be preserved, got %q", string(gotIdx))
+			}
+		}
+
+		// Case 2: Malformed ref file under .git/refs/heads in established private repository fails closed.
+		{
+			srcDir := t.TempDir()
+			gittest.Init(t, srcDir)
+			testutil.FailErr(t, "write p.txt", os.WriteFile(filepath.Join(srcDir, "p.txt"), []byte("v1\n"), 0o644))
+			gittest.CommitAll(t, srcDir, "initial")
+
+			backingRoot := t.TempDir()
+			mgr1 := newTestManager(t, backingRoot)
+			core1 := newMountedViewWithManager(t, mgr1, "view-corrupt-ref", srcDir)
+			_, err := core1.ReadFile(qp(".git/HEAD"))
+			testutil.FailErr(t, "establish view-corrupt-ref", err)
+
+			view1, err := getManagedView(mgr1, "view-corrupt-ref")
+			testutil.FailErr(t, "getManagedView", err)
+			rec, ok, err := readDurableRepoRecord(mgr1, view1, "view-corrupt-ref", ".")
+			if err != nil || !ok {
+				t.Fatalf("readDurableRepoRecord: ok=%v err=%v", ok, err)
+			}
+			testutil.FailErr(t, "remove source .git", os.RemoveAll(filepath.Join(srcDir, ".git")))
+
+			badRefPath := filepath.Join(rec.PrivateGitDir, "refs", "heads", "corrupt-branch")
+			testutil.FailErr(t, "write corrupt ref", os.WriteFile(badRefPath, []byte("not-a-valid-oid\n"), 0o644))
+
+			if _, sErr := core1.Stat(qp(".git/HEAD")); !errors.Is(sErr, layeredfs.ErrGitPending) || !errors.Is(sErr, ErrCorruptObjectStore) {
+				t.Fatalf("in-process corrupt ref Stat: expected ErrGitPending + ErrCorruptObjectStore, got %v", sErr)
+			}
+			mgr2 := newTestManager(t, backingRoot)
+			core2 := newMountedViewWithManager(t, mgr2, "view-corrupt-ref", srcDir)
+			if _, wErr := core2.WriteFile(qp(".git/config"), []byte("[core]\n"), 0o644); !errors.Is(wErr, layeredfs.ErrGitPending) || !errors.Is(wErr, ErrCorruptObjectStore) {
+				t.Fatalf("restart corrupt ref WriteFile: expected ErrGitPending + ErrCorruptObjectStore, got %v", wErr)
+			}
 		}
 	})
 }

@@ -54,51 +54,34 @@ func expectedPrivateGitLocations(mgr *Manager, view *managedView, viewID, repoRe
 	key := sanitizeRepoKey(repoRel)
 	backingGitDir := filepath.Join(mgr.cfg.BackingDir, "views", viewID, "private-git", key, ".git")
 	locs := []string{filepath.Clean(backingGitDir)}
-	if canonBacking := canonicalCleanPath(mgr.cfg.BackingDir); canonBacking != "" {
-		locs = append(locs, filepath.Join(canonBacking, "views", viewID, "private-git", key, ".git"))
+	if mgr.canonBackingDir != "" {
+		locs = append(locs, filepath.Clean(filepath.Join(mgr.canonBackingDir, "views", viewID, "private-git", key, ".git")))
 	}
 	if view != nil && !view.kernelMounted && view.worktreeDir != "" && filepath.Clean(view.worktreeDir) != filepath.Clean(view.trunkDir) {
 		targetWT := view.worktreeDir
 		if repoRel != "." {
 			targetWT = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
 		}
-		wtGitDir := filepath.Join(targetWT, ".git")
-		locs = append(locs, filepath.Clean(wtGitDir))
-		if canonWT := canonicalCleanPath(targetWT); canonWT != "" {
-			locs = append(locs, filepath.Join(canonWT, ".git"))
+		locs = append(locs, filepath.Clean(filepath.Join(targetWT, ".git")))
+		if view.canonWorktreeDir != "" {
+			canonTargetWT := view.canonWorktreeDir
+			if repoRel != "." {
+				canonTargetWT = filepath.Join(view.canonWorktreeDir, filepath.FromSlash(repoRel))
+			}
+			locs = append(locs, filepath.Clean(filepath.Join(canonTargetWT, ".git")))
 		}
 	}
 	return locs
-}
-
-func lexicalDarwinPathVariants(p string) []string {
-	clean := filepath.Clean(p)
-	out := []string{clean}
-	for _, prefix := range []string{"/tmp/", "/var/"} {
-		if strings.HasPrefix(clean, prefix) {
-			out = append(out, "/private"+clean)
-		} else if strings.HasPrefix(clean, "/private"+prefix) {
-			out = append(out, strings.TrimPrefix(clean, "/private"))
-		}
-	}
-	return out
 }
 
 func isAllowedPrivateGitLocation(mgr *Manager, view *managedView, viewID, repoRel, candidate string) bool {
 	if strings.TrimSpace(candidate) == "" || !filepath.IsAbs(candidate) {
 		return false
 	}
-	candVariants := lexicalDarwinPathVariants(candidate)
+	cleanCand := filepath.Clean(candidate)
 	for _, allowed := range expectedPrivateGitLocations(mgr, view, viewID, repoRel) {
-		if allowed == "" {
-			continue
-		}
-		for _, allowedVar := range lexicalDarwinPathVariants(allowed) {
-			for _, candVar := range candVariants {
-				if candVar == allowedVar {
-					return true
-				}
-			}
+		if allowed != "" && cleanCand == filepath.Clean(allowed) {
+			return true
 		}
 	}
 	return false
@@ -408,14 +391,16 @@ func verifyEstablishedPrivateRepo(
 			return "", "", "", fmt.Errorf("%w: %w: initial HEAD object %s missing from retained and private object stores", layeredfs.ErrGitPending, ErrCorruptObjectStore, headOID)
 		}
 	}
-	if tipOIDs, _, rErr := collectCapturedRefAndIndexOIDs(context.Background(), gitDir); rErr == nil {
-		for _, refOID := range tipOIDs {
-			if len(refOID) == 40 && isHexString(refOID) {
-				if !storeHasObjectOnDisk(mgr.store, refOID) &&
-					!objectExistsInObjectsDir(filepath.Join(gitDir, "objects"), refOID) &&
-					!objectExistsInAlternates(gitDir, refOID) {
-					return "", "", "", fmt.Errorf("%w: %w: ref object %s missing from retained and private object stores", layeredfs.ErrGitPending, ErrCorruptObjectStore, refOID)
-				}
+	tipOIDs, _, rErr := collectCapturedRefAndIndexOIDs(context.Background(), gitDir)
+	if rErr != nil {
+		return "", "", "", fmt.Errorf("%w: %w: inspect established private repository refs/index: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, rErr)
+	}
+	for _, refOID := range tipOIDs {
+		if len(refOID) == 40 && isHexString(refOID) {
+			if !storeHasObjectOnDisk(mgr.store, refOID) &&
+				!objectExistsInObjectsDir(filepath.Join(gitDir, "objects"), refOID) &&
+				!objectExistsInAlternates(gitDir, refOID) {
+				return "", "", "", fmt.Errorf("%w: %w: ref object %s missing from retained and private object stores", layeredfs.ErrGitPending, ErrCorruptObjectStore, refOID)
 			}
 		}
 	}

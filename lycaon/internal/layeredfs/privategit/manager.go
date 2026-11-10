@@ -29,11 +29,12 @@ type gitOverlaySyncer interface {
 }
 
 type managedView struct {
-	viewID      string
-	workerID    string
-	rootID      string
-	trunkDir    string
-	worktreeDir string
+	viewID           string
+	workerID         string
+	rootID           string
+	trunkDir         string
+	worktreeDir      string
+	canonWorktreeDir string
 	// branchDir is the worker branch holding this root's worktree when the two differ.
 	branchDir string
 	// coreViewID is set on a non-primary root of a mounted view, whose Core that view holds.
@@ -52,8 +53,9 @@ type managedView struct {
 // Manager coordinates lazy mounted repository initialization, materialized seed
 // repository preparation, checkpoints, and trunk ref imports (#1671).
 type Manager struct {
-	cfg   ManagerConfig
-	store *RetainedObjectStore
+	cfg             ManagerConfig
+	canonBackingDir string
+	store           *RetainedObjectStore
 
 	mu              sync.RWMutex
 	views           map[string]*managedView
@@ -94,6 +96,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 	cfg.Store = store
 	return &Manager{
 		cfg:             cfg,
+		canonBackingDir: canonicalCleanPath(absBacking),
 		store:           store,
 		views:           make(map[string]*managedView),
 		viewsByWorker:   make(map[string]*managedView),
@@ -127,12 +130,19 @@ func (m *Manager) MountedClaim(
 }
 
 func registerManagedView(m *Manager, view *managedView) {
+	if !view.kernelMounted && view.worktreeDir != "" && view.canonWorktreeDir == "" {
+		view.canonWorktreeDir = canonicalCleanPath(view.worktreeDir)
+	}
 	m.mu.Lock()
 	m.views[view.viewID] = view
 	if view.workerID != "" {
 		m.viewsByWorker[view.workerID] = view
 	}
-	if wt := canonicalCleanPath(view.worktreeDir); wt != "" {
+	wt := view.canonWorktreeDir
+	if wt == "" && view.worktreeDir != "" {
+		wt = canonicalCleanPath(view.worktreeDir)
+	}
+	if wt != "" {
 		m.viewsByWorktree[wt] = view
 	}
 	m.mu.Unlock()
@@ -277,18 +287,30 @@ func (m *Manager) ReleaseView(viewID string) error {
 	}
 	unregisterActiveView(view)
 	view.mu.Lock()
-	var leases []string
+	type repoLease struct {
+		repo    *initializedRepo
+		leaseID string
+	}
+	var leases []repoLease
 	for _, r := range view.repos {
-		if r.leaseID != "" {
-			leases = append(leases, r.leaseID)
-			r.leaseID = ""
+		if r != nil && r.leaseID != "" {
+			leases = append(leases, repoLease{repo: r, leaseID: r.leaseID})
 		}
 	}
 	view.mu.Unlock()
-	for _, lid := range leases {
-		_ = m.store.ReleaseLease(lid)
+	var releaseErrs []error
+	for _, rl := range leases {
+		if err := m.store.ReleaseLease(rl.leaseID); err != nil {
+			releaseErrs = append(releaseErrs, err)
+			continue
+		}
+		view.mu.Lock()
+		if rl.repo.leaseID == rl.leaseID {
+			rl.repo.leaseID = ""
+		}
+		view.mu.Unlock()
 	}
-	return nil
+	return errors.Join(releaseErrs...)
 }
 
 func getManagedView(m *Manager, viewID string) (*managedView, error) {
