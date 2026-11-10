@@ -26,7 +26,7 @@ import (
 
 // This explicitly exercises the mounted lane, not production budget selection.
 // Restart, broad traversal and concurrent-worker scale are separate scenarios.
-func TestFirefoxMountedSparseWorkerLifecycle(t *testing.T) {
+func TestStressFirefoxMountedSparseWorkerLifecycle(t *testing.T) {
 	source := os.Getenv("PW_M14_FIREFOX_SOURCE")
 	if source == "" {
 		t.Skip("requires explicitly transferred pinned Firefox fixture")

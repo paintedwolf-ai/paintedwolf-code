@@ -141,7 +141,8 @@
         "./internal/session/store",
         "./internal/sourcecomparison",
         "./internal/tools/native/command",
-        "./internal/toolhost"
+        "./internal/toolhost",
+        "./internal/worker"
       ],
       "flags": [
         "-p=1",
@@ -1293,7 +1294,8 @@
         "./internal/sourcecatalog",
         "./internal/sourceledger",
         "./internal/session/store",
-        "./internal/sourcecomparison"
+        "./internal/sourcecomparison",
+        "./internal/worker"
       ]
     },
     "go-coverage": {
