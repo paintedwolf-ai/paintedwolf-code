@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 // prepareRefs records each root's ref undo. Only the built-in namespaced importer runs, because its
@@ -192,7 +190,7 @@ func (txn *Transaction) rollbackRootRefs(ctx context.Context, rootID string, ref
 				return err
 			}
 			lk.file = nil
-			if err := fseffect.Rename(dir, filepath.Base(lk.lockPath), filepath.Base(lk.refPath)); err != nil {
+			if err := os.Rename(lk.lockPath, lk.refPath); err != nil {
 				cleanup()
 				return err
 			}

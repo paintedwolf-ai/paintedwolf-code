@@ -11,8 +11,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 // GitRefImportRecord durably records checkpoint ref import intent and expected prior OIDs before ref mutation.
@@ -405,7 +403,7 @@ func applyLooseGitRefCAS(ctx context.Context, commonGitDir, gitDir string, write
 		}
 		lk.file = nil
 		dir := filepath.Dir(lk.refPath)
-		if err := fseffect.Rename(dir, filepath.Base(lk.lockPath), filepath.Base(lk.refPath)); err != nil {
+		if err := os.Rename(lk.lockPath, lk.refPath); err != nil {
 			cleanup()
 			return err
 		}

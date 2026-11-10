@@ -16,7 +16,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
@@ -490,7 +489,7 @@ func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensu
 	if err := errors.Join(syncObjectFileFn(tmpFile), closeObjectFileFn(tmpFile)); err != nil {
 		return "", nil, err
 	}
-	if err := fseffect.Rename(filepath.Dir(dstPath), filepath.Base(tmpPath), filepath.Base(dstPath)); err != nil {
+	if err := os.Rename(tmpPath, dstPath); err != nil {
 		return "", nil, err
 	}
 	published = true
