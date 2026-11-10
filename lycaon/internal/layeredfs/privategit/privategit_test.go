@@ -386,9 +386,11 @@ func TestPrivateGitFallbackDistinguishesNoSourceRepoFromEstablishedAndFailed(t *
 		mgr := newTestManager(t, fix.tmpDir)
 		core := newMountedViewWithManager(t, mgr, "view-nonrepo", fix.trunkDir)
 
-		testutil.FailErr(t, "mkdir nested", core.Mkdir(layeredfs.QualifiedPath{RootID: "primary", Rel: "nested"}, 0o755))
-		testutil.FailErr(t, "mkdir nested/.git", core.Mkdir(layeredfs.QualifiedPath{RootID: "primary", Rel: "nested/.git"}, 0o755))
-		_, err := core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "nested/.git/HEAD"}, []byte("ref: refs/heads/main\n"), 0o644)
+		_, err := core.Mkdir(layeredfs.QualifiedPath{RootID: "primary", Rel: "nested"}, 0o755)
+		testutil.FailErr(t, "mkdir nested", err)
+		_, err = core.Mkdir(layeredfs.QualifiedPath{RootID: "primary", Rel: "nested/.git"}, 0o755)
+		testutil.FailErr(t, "mkdir nested/.git", err)
+		_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "nested/.git/HEAD"}, []byte("ref: refs/heads/main\n"), 0o644)
 		testutil.FailErr(t, "write nested/.git/HEAD", err)
 
 		rec := readDurableRepoRecord(mgr, "view-nonrepo", "nested")
@@ -437,7 +439,7 @@ func TestPrivateGitFallbackDistinguishesNoSourceRepoFromEstablishedAndFailed(t *
 		if _, err := core.WriteFile(qp(".git/config"), []byte("[core]\n"), 0o644); !errors.Is(err, layeredfs.ErrGitPending) {
 			t.Fatalf("expected ErrGitPending on WriteFile(.git/config) after store failure, got %v", err)
 		}
-		if err := core.Mkdir(qp(".git/refs/heads/newdir"), 0o755); !errors.Is(err, layeredfs.ErrGitPending) {
+		if _, err := core.Mkdir(qp(".git/refs/heads/newdir"), 0o755); !errors.Is(err, layeredfs.ErrGitPending) {
 			t.Fatalf("expected ErrGitPending on Mkdir inside .git after store failure, got %v", err)
 		}
 	})
@@ -468,7 +470,7 @@ func TestPrivateGitFallbackDistinguishesNoSourceRepoFromEstablishedAndFailed(t *
 		if _, err := core.Stat(qp(".git/HEAD")); !errors.Is(err, layeredfs.ErrGitPending) {
 			t.Fatalf("expected ErrGitPending after source .git removed following failed init, got %v", err)
 		}
-		if err := core.Mkdir(qp(".git"), 0o755); !errors.Is(err, layeredfs.ErrGitPending) {
+		if _, err := core.Mkdir(qp(".git"), 0o755); !errors.Is(err, layeredfs.ErrGitPending) {
 			t.Fatalf("expected ErrGitPending on Mkdir(.git) after failed init, got %v", err)
 		}
 	})

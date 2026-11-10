@@ -86,7 +86,6 @@ func TestCompactPackOverlappingAndMixedInventoryAccountingAndGC(t *testing.T) {
 	gittest.Init(t, repoA)
 	testutil.FailErr(t, "write a1", os.WriteFile(filepath.Join(repoA, "a.txt"), []byte("a1\n"), 0o644))
 	gittest.CommitAll(t, repoA, "commit a1")
-	c1 := strings.TrimSpace(gittest.Run(t, repoA, "rev-parse", "HEAD"))
 	testutil.FailErr(t, "write a2", os.WriteFile(filepath.Join(repoA, "a.txt"), []byte("a2\n"), 0o644))
 	gittest.CommitAll(t, repoA, "commit a2")
 	c2 := strings.TrimSpace(gittest.Run(t, repoA, "rev-parse", "HEAD"))
