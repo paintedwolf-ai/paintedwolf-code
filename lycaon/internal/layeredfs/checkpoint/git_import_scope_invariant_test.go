@@ -50,6 +50,9 @@ func TestCheckpointGitImportDoesNotPublishUnreferencedObjects(t *testing.T) {
 func TestCheckpointGitImportFiltersUnselectedPackedHistory(t *testing.T) {
 	source := t.TempDir()
 	runGitTestCmd(t, source, "init", "-q")
+	testutil.FailErr(t, "ancestor file", os.WriteFile(filepath.Join(source, "file.txt"), []byte("ancestor\n"), 0o644))
+	runGitTestCmd(t, source, "add", "file.txt")
+	runGitTestCmd(t, source, "commit", "-qm", "ancestor")
 	testutil.FailErr(t, "selected file", os.WriteFile(filepath.Join(source, "file.txt"), []byte("selected\n"), 0o644))
 	runGitTestCmd(t, source, "add", "file.txt")
 	runGitTestCmd(t, source, "commit", "-qm", "selected")
@@ -57,6 +60,7 @@ func TestCheckpointGitImportFiltersUnselectedPackedHistory(t *testing.T) {
 	testutil.FailErr(t, "later file", os.WriteFile(filepath.Join(source, "file.txt"), []byte("unpublished later content\n"), 0o644))
 	runGitTestCmd(t, source, "commit", "-qam", "unpublished")
 	unselected := runGitTestCmd(t, source, "rev-parse", "HEAD")
+	unselectedBlob := runGitTestCmd(t, source, "rev-parse", "HEAD:file.txt")
 	runGitTestCmd(t, source, "repack", "-a", "-d", "-q")
 	runGitTestCmd(t, source, "prune-packed", "-q")
 	store, err := NewStore(t.TempDir())
@@ -81,12 +85,17 @@ func TestCheckpointGitImportFiltersUnselectedPackedHistory(t *testing.T) {
 	if got := runGitTestCmd(t, target, "show", selected+":file.txt"); got != "selected" {
 		t.Fatalf("selected commit tree was not imported: %q", got)
 	}
-	_, code, err := gitexec.Run(t.Context(), target, []string{"cat-file", "-e", unselected}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	if err != nil {
-		t.Fatalf("probe unselected object: %v", err)
+	if got := runGitTestCmd(t, target, "show", selected+"^:file.txt"); got != "ancestor" {
+		t.Fatalf("selected history ancestor was not imported: %q", got)
 	}
-	if code == 0 {
-		t.Fatal("unselected packed commit escaped retained store")
+	for _, oid := range []string{unselected, unselectedBlob} {
+		_, code, err := gitexec.Run(t.Context(), target, []string{"cat-file", "-e", oid}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+		if err != nil {
+			t.Fatalf("probe unselected object: %v", err)
+		}
+		if code == 0 {
+			t.Fatalf("unselected packed object escaped retained store: %s", oid)
+		}
 	}
 	if got := runGitTestCmd(t, source, "rev-parse", "HEAD"); got != unselected {
 		t.Fatal("publication changed retained source history")
