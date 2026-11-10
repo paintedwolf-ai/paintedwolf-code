@@ -206,8 +206,7 @@ func enrichAssessmentPromoteOrders(
 		assessment.PathOrders = append(assessment.PathOrders, order)
 	}
 
-	var promote PromoteRootSet
-	hasPromote := false
+	promote := PromoteRootsForTask(task, svc.taskRootRefs(ctx, task))
 	for _, rel := range assessment.CleanPaths {
 		var siblings []string
 		if svc != nil {
@@ -215,10 +214,6 @@ func enrichAssessmentPromoteOrders(
 		}
 		if len(siblings) == 0 {
 			continue
-		}
-		if !hasPromote {
-			promote = PromoteRootsForTask(task, svc.taskRootRefs(ctx, task))
-			hasPromote = true
 		}
 		verdict := assessPromotePath3Way(ctx, promote, task, rel, baseline)
 		addOrder(rel, verdict, siblings)
