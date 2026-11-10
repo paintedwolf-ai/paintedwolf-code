@@ -347,18 +347,15 @@ func ExternalCustodyURLs(ev Ledger, paths []string) []string {
 			if !ok || rec.SupersededBy != "" {
 				continue
 			}
+			if !ReplacesWholeFileCustody(rec) {
+				continue
+			}
 			if rec.ExternalCustody {
 				for _, u := range ObservedURLsForRecord(rec) {
 					addURL(u)
 				}
-				if ReplacesWholeFileCustody(rec) {
-					break
-				}
-				continue
 			}
-			if ReplacesWholeFileCustody(rec) {
-				break
-			}
+			break
 		}
 	}
 	return out

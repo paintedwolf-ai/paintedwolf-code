@@ -117,11 +117,12 @@ func TestRecordAuxRoundTripCompatibilityAndExternalCustodySupersession(t *testin
 		ExternalCustody:  true,
 	}
 	orig.touchURL("https://api.external.example/v1/data")
+	orig.SetSeq(12)
 	aux := CloneRecordForStore(orig)
 	var decoded Record
 	ApplyRecordAux(&decoded, aux)
-	if !decoded.UntrustedContent || !decoded.ExternalCustody || !slices.Contains(ObservedURLsForRecord(decoded), "https://api.external.example/v1/data") {
-		t.Fatalf("round-trip lost provenance: %+v", decoded)
+	if !decoded.UntrustedContent || !decoded.ExternalCustody || decoded.Seq() != 12 || !slices.Contains(ObservedURLsForRecord(decoded), "https://api.external.example/v1/data") {
+		t.Fatalf("round-trip lost provenance or seq: %+v (seq=%d)", decoded, decoded.Seq())
 	}
 
 	// 3. Partial local mutation (edit) preserves external custody, whereas full local replacement (write/delete) supersedes it.

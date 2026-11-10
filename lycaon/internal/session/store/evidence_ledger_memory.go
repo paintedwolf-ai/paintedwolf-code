@@ -19,6 +19,9 @@ func ensureEvidenceSession(s *memoryCore, sessionID string) map[string]memoryEvi
 
 func putMemoryEvidenceRowLocked(s *memoryCore, sessionID, handle string, rec evidence.Record) {
 	s.evidenceSeq++
+	if rec.Seq() == 0 {
+		rec.SetSeq(int(s.evidenceSeq))
+	}
 	ensureEvidenceSession(s, sessionID)[handle] = memoryEvidenceRow{rec: rec, seq: s.evidenceSeq}
 }
 

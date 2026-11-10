@@ -138,6 +138,13 @@ func NamespaceLedger(ev Ledger, legID string) Ledger {
 			}
 		}
 	}
+	for path, handles := range ev.byPathOrder {
+		for _, handle := range handles {
+			if prefixed, ok := handleMap[handle]; ok {
+				out.byPathOrder[path] = append(out.byPathOrder[path], prefixed)
+			}
+		}
+	}
 	for path, tier := range ev.PathFidelity {
 		out.PathFidelity[path] = mergePathFidelity(out.PathFidelity[path], tier)
 	}

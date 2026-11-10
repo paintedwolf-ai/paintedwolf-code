@@ -9,6 +9,7 @@ type RecordAux struct {
 	PathTiers        map[string]string
 	UntrustedContent bool
 	ExternalCustody  bool
+	Seq              int
 }
 
 // CloneRecordForStore copies auxiliary index fields for persistence.
@@ -20,6 +21,7 @@ func CloneRecordForStore(rec Record) RecordAux {
 		URLTitles:        cloned.urlTitles,
 		UntrustedContent: cloned.UntrustedContent,
 		ExternalCustody:  cloned.ExternalCustody,
+		Seq:              cloned.seq,
 	}
 	if cloned.grepLines != nil {
 		out.GrepLines = make(map[string]map[int]string, len(cloned.grepLines))
@@ -72,5 +74,8 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 	}
 	if aux.ExternalCustody {
 		rec.ExternalCustody = true
+	}
+	if aux.Seq > 0 {
+		rec.seq = aux.Seq
 	}
 }

@@ -30,6 +30,7 @@ type storedLineRangesPayload struct {
 	FrameIndex       int                       `json:"frame_index,omitempty"`
 	UntrustedContent bool                      `json:"untrusted_content,omitempty"`
 	ExternalCustody  bool                      `json:"external_custody,omitempty"`
+	Seq              int                       `json:"seq,omitempty"`
 }
 
 func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
@@ -48,6 +49,7 @@ func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
 		FrameIndex:       rec.FrameIndex,
 		UntrustedContent: aux.UntrustedContent,
 		ExternalCustody:  aux.ExternalCustody,
+		Seq:              aux.Seq,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -78,6 +80,7 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 		PathTiers:        payload.PathTiers,
 		UntrustedContent: payload.UntrustedContent,
 		ExternalCustody:  payload.ExternalCustody,
+		Seq:              payload.Seq,
 	})
 	rec.Surface = payload.Surface
 	rec.ArtifactID = payload.ArtifactID

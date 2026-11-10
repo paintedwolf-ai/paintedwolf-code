@@ -36,6 +36,7 @@ type Record struct {
 	pathTiers    map[string]string         // normalized path → trust tier at capture
 	urlsTouched  []string                  // every URL named by the result
 	urlTitles    map[string]string         // URL → page title the tool reported
+	seq          int                       // monotonic per-session commit sequence for cross-kind chronology
 
 	// Gate/inspector fields — populated when GateType != "" (scan verify/security rows).
 	GateType       string         `json:"type,omitempty"`
@@ -59,6 +60,16 @@ func (r Record) ShowedLineNumbers() bool {
 
 // IsGate reports whether rec is an inspector gate row.
 func (r Record) IsGate() bool { return r.GateType != "" }
+
+// Seq returns the monotonic per-session commit sequence number for cross-kind ordering.
+func (r Record) Seq() int { return r.seq }
+
+// SetSeq stamps the monotonic per-session commit sequence number on r.
+func (r *Record) SetSeq(seq int) {
+	if r != nil && seq > 0 {
+		r.seq = seq
+	}
+}
 
 // Ledger is the handle-keyed evidence ledger for citation grounding.
 type Ledger struct {
