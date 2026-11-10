@@ -189,12 +189,6 @@ func (e *Executor) applyPreInvokeBoundary(
 	return args, tc, boundaryApproved, nil
 }
 
-func contextBoundaryApprovalSatisfied(tc tools.ToolContext) bool {
-	return tc.HasExecutionApproval() ||
-		tc.Direct.DirectIPAuthorized ||
-		(tc.Socket.SocketAuthorizationSource != "" && tc.Socket.SocketAuthorizationSource != "lease")
-}
-
 // applyPreInvokePolicy evaluates policy constraints, file access checkpoints, and human approval.
 func (e *Executor) applyPreInvokePolicy(
 	ctx context.Context,
