@@ -242,11 +242,17 @@ func TestAttachedBroadAndControlPlaneRootsEnforcePerTargetFloors(t *testing.T) {
 			t.Fatalf("CompileReadScope on configdir.Root() admitted %q", deniedRel)
 		}
 	}
+	if !cfgScope.Filter("drafts/d1/draft.txt", false) {
+		t.Fatal("CompileReadScope on configdir.Root() filtered out managed draft workspace")
+	}
 	if err := b.AssertReadScope(sessionCtx, cfgDir, "api.token", "default"); err == nil {
 		t.Fatal("AssertReadScope on configdir.Root()/api.token succeeded, want denied")
 	}
 	if err := b.AssertReadScope(sessionCtx, cfgDir, ".", "default"); err == nil {
 		t.Fatal("AssertReadScope on configdir.Root()/. succeeded, want denied")
+	}
+	if err := b.AssertReadScope(sessionCtx, cfgDir, "drafts/d1/draft.txt", "default"); err != nil {
+		t.Fatalf("AssertReadScope on configdir.Root()/drafts/d1/draft.txt failed: %v", err)
 	}
 	if err := b.AssertReadScope(sessionCtx, scratchDir, "scratch.txt", "default"); err != nil {
 		t.Fatalf("AssertReadScope on own scratchDir failed: %v", err)

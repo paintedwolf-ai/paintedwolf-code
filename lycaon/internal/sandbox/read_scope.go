@@ -49,12 +49,8 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 	globs := SubstituteScopeGlobs(prof.ReadGlobs, ScopeTokensFromContext(ctx))
 	scratchDir, outputDir := SessionDirsFromContext(ctx)
 	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(root, scratchDir, outputDir)
-	rootDenied := confine.ControlPlanePathDenied(root, false, effScratch, effOutput)
-	overlapsFloor := rootDenied || confine.RootOverlapsControlPlaneReadFloor(root)
+	overlapsFloor := confine.ControlPlanePathDenied(root, false, effScratch, effOutput) || confine.RootOverlapsControlPlaneReadFloor(root)
 	filter := func(relSlash string, isDir bool) bool {
-		if rootDenied {
-			return false
-		}
 		if strings.ContainsRune(relSlash, 0) {
 			return false
 		}
@@ -75,16 +71,16 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 		}
 		return isDir && directoryMayContainReadMatch(globs, relSlash)
 	}
-	return CompiledReadScope{Filter: filter, Key: readScopeKey(profileID, globs, b.cfg, rootDenied, effScratch, effOutput)}, nil
+	return CompiledReadScope{Filter: filter, Key: readScopeKey(profileID, globs, b.cfg, overlapsFloor, effScratch, effOutput)}, nil
 }
 
-func readScopeKey(profileID string, globs []string, cfg Config, rootDenied bool, effScratch, effOutput string) string {
+func readScopeKey(profileID string, globs []string, cfg Config, overlapsFloor bool, effScratch, effOutput string) string {
 	parts := append([]string(nil), globs...)
 	sort.Strings(parts)
 	raw := strings.Join([]string{
 		strings.TrimSpace(profileID),
 		strings.Join(parts, "\x00"),
-		fmt.Sprintf("%t:%t:%t:%s:%s", cfg.ProjectRootRequired, cfg.RejectSymlinkEscape, rootDenied, effScratch, effOutput),
+		fmt.Sprintf("%t:%t:%t:%s:%s", cfg.ProjectRootRequired, cfg.RejectSymlinkEscape, overlapsFloor, effScratch, effOutput),
 	}, "\x01")
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])

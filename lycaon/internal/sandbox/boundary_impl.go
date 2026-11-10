@@ -148,8 +148,7 @@ func (b *Boundary) AssertReadScope(ctx context.Context, projectDir, relPath, pro
 	scratchDir, outputDir := SessionDirsFromContext(ctx)
 	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(projectDir, scratchDir, outputDir)
 	clean := strings.TrimPrefix(filepath.Clean(filepath.FromSlash(strings.TrimSpace(relPath))), "."+string(filepath.Separator))
-	if confine.ControlPlanePathDenied(projectDir, false, effScratch, effOutput) ||
-		confine.ControlPlanePathDenied(filepath.Join(projectDir, clean), false, effScratch, effOutput) {
+	if confine.ControlPlanePathDenied(filepath.Join(projectDir, clean), false, effScratch, effOutput) {
 		return newOutsideReadScope(relPath, profileID)
 	}
 	return b.AssertReadGlobs(ctx, relPath, profileID)
