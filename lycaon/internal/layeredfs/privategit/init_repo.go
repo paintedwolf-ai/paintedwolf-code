@@ -43,6 +43,9 @@ func initializePrivateRepo(
 		}
 	}
 
+	if err := writeRepoInitIntent(mgr, view.viewID, repoRel); err != nil {
+		return nil, fmt.Errorf("%w: %v", layeredfs.ErrGitPending, err)
+	}
 	stageBase := filepath.Join(mgr.cfg.BackingDir, "views", view.viewID, "git-staging")
 	if err := os.MkdirAll(stageBase, 0o755); err != nil {
 		return nil, err
@@ -241,6 +244,16 @@ func retainNewPrivateObjects(ctx context.Context, mgr *Manager, view *managedVie
 	}
 	newLeaseID, err := mgr.store.RetainForView(view.viewID+":"+repoRel, reachable)
 	if err != nil {
+		return err
+	}
+	if err := writeDurableRepoRecord(mgr, view, view.viewID, durableRepoRecord{
+		RepoRel:        repoRel,
+		Status:         repoStatusEstablished,
+		PrivateGitDir:  repo.privateGitDir,
+		LeaseID:        newLeaseID,
+		InitialHeadOID: repo.initialHeadOID,
+	}); err != nil {
+		_ = mgr.store.ReleaseLease(newLeaseID)
 		return err
 	}
 	view.mu.Lock()

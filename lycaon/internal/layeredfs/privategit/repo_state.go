@@ -51,8 +51,12 @@ func expectedPrivateGitLocations(mgr *Manager, view *managedView, viewID, repoRe
 		return nil
 	}
 	repoRel = cleanSlashRel(repoRel)
-	backingGitDir := filepath.Join(mgr.cfg.BackingDir, "views", viewID, "private-git", sanitizeRepoKey(repoRel), ".git")
+	key := sanitizeRepoKey(repoRel)
+	backingGitDir := filepath.Join(mgr.cfg.BackingDir, "views", viewID, "private-git", key, ".git")
 	locs := []string{filepath.Clean(backingGitDir)}
+	if canonBacking := canonicalCleanPath(mgr.cfg.BackingDir); canonBacking != "" {
+		locs = append(locs, filepath.Join(canonBacking, "views", viewID, "private-git", key, ".git"))
+	}
 	if view != nil && !view.kernelMounted && view.worktreeDir != "" && filepath.Clean(view.worktreeDir) != filepath.Clean(view.trunkDir) {
 		targetWT := view.worktreeDir
 		if repoRel != "." {
@@ -60,18 +64,41 @@ func expectedPrivateGitLocations(mgr *Manager, view *managedView, viewID, repoRe
 		}
 		wtGitDir := filepath.Join(targetWT, ".git")
 		locs = append(locs, filepath.Clean(wtGitDir))
+		if canonWT := canonicalCleanPath(targetWT); canonWT != "" {
+			locs = append(locs, filepath.Join(canonWT, ".git"))
+		}
 	}
 	return locs
+}
+
+func lexicalDarwinPathVariants(p string) []string {
+	clean := filepath.Clean(p)
+	out := []string{clean}
+	for _, prefix := range []string{"/tmp/", "/var/"} {
+		if strings.HasPrefix(clean, prefix) {
+			out = append(out, "/private"+clean)
+		} else if strings.HasPrefix(clean, "/private"+prefix) {
+			out = append(out, strings.TrimPrefix(clean, "/private"))
+		}
+	}
+	return out
 }
 
 func isAllowedPrivateGitLocation(mgr *Manager, view *managedView, viewID, repoRel, candidate string) bool {
 	if strings.TrimSpace(candidate) == "" || !filepath.IsAbs(candidate) {
 		return false
 	}
-	cleanCand := filepath.Clean(candidate)
+	candVariants := lexicalDarwinPathVariants(candidate)
 	for _, allowed := range expectedPrivateGitLocations(mgr, view, viewID, repoRel) {
-		if allowed != "" && cleanCand == allowed {
-			return true
+		if allowed == "" {
+			continue
+		}
+		for _, allowedVar := range lexicalDarwinPathVariants(allowed) {
+			for _, candVar := range candVariants {
+				if candVar == allowedVar {
+					return true
+				}
+			}
 		}
 	}
 	return false
@@ -93,8 +120,8 @@ func validateDurableRepoRecord(mgr *Manager, view *managedView, viewID, expected
 		if rec.InitialHeadOID != "" && (len(rec.InitialHeadOID) != 40 || !isHexString(rec.InitialHeadOID)) {
 			return fmt.Errorf("%w: %w: invalid initial_head_oid %q", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, rec.InitialHeadOID)
 		}
-		if strings.TrimSpace(rec.LeaseID) == "" && (view == nil || !view.materialized) {
-			return fmt.Errorf("%w: %w: established mounted repository record missing lease_id", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord)
+		if strings.TrimSpace(rec.LeaseID) == "" {
+			return fmt.Errorf("%w: %w: established repository record missing lease_id", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord)
 		}
 	case repoStatusNoSourceRepo:
 		if rec.PrivateGitDir != "" || rec.LeaseID != "" || rec.InitialHeadOID != "" {
@@ -175,6 +202,36 @@ func writeDurableRepoRecord(mgr *Manager, view *managedView, viewID string, rec 
 	return nil
 }
 
+func repoInitIntentPath(mgr *Manager, viewID, repoRel string) string {
+	if mgr == nil || strings.TrimSpace(mgr.cfg.BackingDir) == "" || strings.TrimSpace(viewID) == "" {
+		return ""
+	}
+	return filepath.Join(mgr.cfg.BackingDir, "views", viewID, "repo-intent", sanitizeRepoKey(repoRel)+".intent")
+}
+
+func writeRepoInitIntent(mgr *Manager, viewID, repoRel string) error {
+	p := repoInitIntentPath(mgr, viewID, repoRel)
+	if p == "" {
+		return fmt.Errorf("empty repo init intent path")
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	_, err := fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.PathLocation(p),
+		Source:   bytes.NewReader([]byte("1\n")),
+		Mode:     0o600,
+		DirMode:  0o755,
+	})
+	return err
+}
+
+func removeRepoInitIntent(mgr *Manager, viewID, repoRel string) {
+	if p := repoInitIntentPath(mgr, viewID, repoRel); p != "" {
+		_ = os.Remove(p)
+	}
+}
+
 func discoverPriorPrivateStateEvidence(mgr *Manager, view *managedView, viewID, repoRel string) (string, bool) {
 	if mgr == nil || strings.TrimSpace(mgr.cfg.BackingDir) == "" || strings.TrimSpace(viewID) == "" {
 		return "", false
@@ -192,6 +249,11 @@ func discoverPriorPrivateStateEvidence(mgr *Manager, view *managedView, viewID, 
 		wtGitDir := filepath.Join(targetWT, ".git")
 		if info, err := os.Lstat(wtGitDir); err == nil && info.IsDir() {
 			return wtGitDir, true
+		}
+	}
+	if intentPath := repoInitIntentPath(mgr, viewID, repoRel); intentPath != "" {
+		if _, err := os.Lstat(intentPath); err == nil {
+			return "", true
 		}
 	}
 	stageBase := filepath.Join(mgr.cfg.BackingDir, "views", viewID, "git-staging")
@@ -236,10 +298,20 @@ func objectExistsInObjectsDir(objDir, oid string) bool {
 }
 
 func objectExistsInAlternates(gitDir, oid string) bool {
+	for _, alt := range alternateObjectDirs(gitDir) {
+		if objectExistsInObjectsDir(alt, oid) {
+			return true
+		}
+	}
+	return false
+}
+
+func alternateObjectDirs(gitDir string) []string {
 	raw, err := os.ReadFile(filepath.Join(gitDir, "objects", "info", "alternates"))
 	if err != nil {
-		return false
+		return nil
 	}
+	var dirs []string
 	for _, line := range strings.Split(string(raw), "\n") {
 		alt := strings.TrimSpace(line)
 		if alt == "" || strings.HasPrefix(alt, "#") {
@@ -248,11 +320,18 @@ func objectExistsInAlternates(gitDir, oid string) bool {
 		if !filepath.IsAbs(alt) {
 			alt = filepath.Join(gitDir, "objects", alt)
 		}
-		if objectExistsInObjectsDir(alt, oid) {
-			return true
-		}
+		dirs = append(dirs, filepath.Clean(alt))
 	}
-	return false
+	return dirs
+}
+
+func objectDirsForPrivateGitDir(gitDir, storeObjectsDir string) []string {
+	dirs := []string{filepath.Join(gitDir, "objects")}
+	dirs = append(dirs, alternateObjectDirs(gitDir)...)
+	if storeObjectsDir != "" {
+		dirs = append(dirs, storeObjectsDir)
+	}
+	return dirs
 }
 
 func verifyEstablishedPrivateRepo(
@@ -261,8 +340,10 @@ func verifyEstablishedPrivateRepo(
 	viewID, repoRel string,
 	repo *initializedRepo,
 	durable durableRepoRecord,
+	hasDurable bool,
 	fallbackGitDir string,
-) (string, string, error) {
+) (string, string, string, error) {
+	repoRel = cleanSlashRel(repoRel)
 	gitDir := ""
 	leaseID := durable.LeaseID
 	headOID := durable.InitialHeadOID
@@ -284,23 +365,59 @@ func verifyEstablishedPrivateRepo(
 		gitDir = fallbackGitDir
 	}
 	if !isAllowedPrivateGitLocation(mgr, view, viewID, repoRel, gitDir) {
-		return "", "", fmt.Errorf("%w: %w: invalid established private repository path %q", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, gitDir)
+		return "", "", "", fmt.Errorf("%w: %w: invalid established private repository path %q", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, gitDir)
 	}
 	if _, err := os.Stat(filepath.Join(gitDir, "HEAD")); err != nil {
-		return "", "", fmt.Errorf("%w: established private repository HEAD unavailable: %w", layeredfs.ErrGitPending, err)
+		return "", "", "", fmt.Errorf("%w: established private repository HEAD unavailable: %w", layeredfs.ErrGitPending, err)
+	}
+	if mgr == nil || mgr.store == nil {
+		return "", "", "", fmt.Errorf("%w: %w: retained object store unavailable for established private repository", layeredfs.ErrGitPending, ErrCorruptObjectStore)
+	}
+	holder := viewID + ":" + repoRel
+	if hasDurable && repo != nil && repo.leaseID != "" && durable.LeaseID != "" && durable.LeaseID != repo.leaseID {
+		return "", "", "", fmt.Errorf("%w: %w: durable lease_id %q does not match active lease %q", layeredfs.ErrGitPending, ErrCorruptObjectStore, durable.LeaseID, repo.leaseID)
+	}
+	if !hasDurable && strings.TrimSpace(leaseID) == "" {
+		tipOIDs, _, err := collectCapturedRefAndIndexOIDs(context.Background(), gitDir)
+		if err != nil || len(tipOIDs) == 0 {
+			return "", "", "", fmt.Errorf("%w: %w: recover private repository refs for %q: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, repoRel, err)
+		}
+		_, reachable, err := mgr.store.ImportRepositoryObjects(context.Background(), objectDirsForPrivateGitDir(gitDir, mgr.store.ObjectsDir()), tipOIDs)
+		if err != nil {
+			return "", "", "", fmt.Errorf("%w: %w: recover private repository objects for %q: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, repoRel, err)
+		}
+		leaseID, err = mgr.store.RetainForView(holder, reachable)
+		if err != nil {
+			return "", "", "", fmt.Errorf("%w: %w: reacquire private repository lease for %q: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, repoRel, err)
+		}
+	} else if repo == nil || repo.leaseID == "" {
+		if err := reacquirePersistedStoreLease(mgr.store, holder, leaseID); err != nil {
+			return "", "", "", fmt.Errorf("%w: %w: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, err)
+		}
+	}
+	if !storeLeaseBoundAndIntactOnDisk(mgr.store, holder, leaseID) {
+		return "", "", "", fmt.Errorf("%w: %w: retained object store lease %q unavailable for established private repository", layeredfs.ErrGitPending, ErrCorruptObjectStore, leaseID)
 	}
 	if headOID == "" {
 		_, headOID, _, _ = resolveHeadState(gitDir)
-	}
-	if mgr == nil || mgr.store == nil || !storeLeaseIntactOnDisk(mgr.store, leaseID) {
-		return "", "", fmt.Errorf("%w: %w: retained object store unavailable for established private repository", layeredfs.ErrGitPending, ErrCorruptObjectStore)
 	}
 	if len(headOID) == 40 && isHexString(headOID) {
 		if !storeHasObjectOnDisk(mgr.store, headOID) &&
 			!objectExistsInObjectsDir(filepath.Join(gitDir, "objects"), headOID) &&
 			!objectExistsInAlternates(gitDir, headOID) {
-			return "", "", fmt.Errorf("%w: %w: initial HEAD object %s missing from retained and private object stores", layeredfs.ErrGitPending, ErrCorruptObjectStore, headOID)
+			return "", "", "", fmt.Errorf("%w: %w: initial HEAD object %s missing from retained and private object stores", layeredfs.ErrGitPending, ErrCorruptObjectStore, headOID)
 		}
 	}
-	return gitDir, headOID, nil
+	if tipOIDs, _, rErr := collectCapturedRefAndIndexOIDs(context.Background(), gitDir); rErr == nil {
+		for _, refOID := range tipOIDs {
+			if len(refOID) == 40 && isHexString(refOID) {
+				if !storeHasObjectOnDisk(mgr.store, refOID) &&
+					!objectExistsInObjectsDir(filepath.Join(gitDir, "objects"), refOID) &&
+					!objectExistsInAlternates(gitDir, refOID) {
+					return "", "", "", fmt.Errorf("%w: %w: ref object %s missing from retained and private object stores", layeredfs.ErrGitPending, ErrCorruptObjectStore, refOID)
+				}
+			}
+		}
+	}
+	return gitDir, leaseID, headOID, nil
 }

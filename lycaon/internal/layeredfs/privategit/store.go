@@ -1,16 +1,21 @@
 package privategit
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 type leaseRecord struct {
@@ -19,6 +24,15 @@ type leaseRecord struct {
 	holder string
 	oids   map[string]struct{}
 	packs  map[string]struct{}
+}
+
+type persistedLeaseRecord struct {
+	FormatVersion int       `json:"format_version"`
+	ID            string    `json:"id"`
+	Kind          LeaseKind `json:"kind"`
+	Holder        string    `json:"holder"`
+	OIDs          []string  `json:"oids,omitempty"`
+	Packs         []string  `json:"packs,omitempty"`
 }
 
 type storeStock struct {
@@ -40,10 +54,11 @@ type RetainedObjectStore struct {
 	objectsDir string
 	importsDir string
 
-	mu        sync.Mutex
-	nextLease uint64
-	leases    map[string]*leaseRecord
-	stock     storeStock
+	mu             sync.Mutex
+	nextLease      uint64
+	leases         map[string]*leaseRecord
+	releasedLeases map[string]struct{}
+	stock          storeStock
 
 	objectsImported   atomic.Int64
 	objectsReused     atomic.Int64
@@ -78,6 +93,7 @@ func NewRetainedObjectStoreContext(ctx context.Context, rootDir string) (*Retain
 		filepath.Join(objectsDir, "info"),
 		filepath.Join(objectsDir, "pack"),
 		filepath.Join(absRoot, "refs"),
+		filepath.Join(absRoot, "leases"),
 		importsDir,
 	} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -89,10 +105,11 @@ func NewRetainedObjectStoreContext(ctx context.Context, rootDir string) (*Retain
 		_ = os.WriteFile(headPath, []byte("ref: refs/heads/main\n"), 0o644)
 	}
 	s := &RetainedObjectStore{
-		rootDir:    absRoot,
-		objectsDir: objectsDir,
-		importsDir: importsDir,
-		leases:     make(map[string]*leaseRecord),
+		rootDir:        absRoot,
+		objectsDir:     objectsDir,
+		importsDir:     importsDir,
+		leases:         make(map[string]*leaseRecord),
+		releasedLeases: make(map[string]struct{}),
 		stock: storeStock{
 			packOIDs:       make(map[string]map[string]struct{}),
 			compactPacks:   make(map[string]*compactPackIndex),
@@ -104,6 +121,7 @@ func NewRetainedObjectStoreContext(ctx context.Context, rootDir string) (*Retain
 	if err := initStockFromDiskLocked(ctx, s); err != nil {
 		return nil, err
 	}
+	advanceNextLeaseFromDiskLocked(s)
 	// A store with nothing retained has nothing to protect, and read-only directories
 	// would stop its host directory from being removed.
 	if storeHoldsObjects(objectsDir) {
@@ -213,13 +231,18 @@ func createStoreLease(s *RetainedObjectStore, kind LeaseKind, holder string, oid
 			packSet[packName] = struct{}{}
 		}
 	}
-	s.leases[id] = &leaseRecord{
+	rec := &leaseRecord{
 		id:     id,
 		kind:   kind,
 		holder: holder,
 		oids:   oidSet,
 		packs:  packSet,
 	}
+	if err := persistStoreLeaseRecordLocked(s, rec); err != nil {
+		return "", err
+	}
+	s.leases[id] = rec
+	delete(s.releasedLeases, id)
 	return id, nil
 }
 
@@ -227,10 +250,118 @@ func createStoreLease(s *RetainedObjectStore, kind LeaseKind, holder string, oid
 func (s *RetainedObjectStore) ReleaseLease(leaseID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.leases[leaseID]; !ok {
+	if strings.TrimSpace(leaseID) == "" {
 		return fmt.Errorf("privategit: unknown or already released lease %q", leaseID)
 	}
+	_, inMem := s.leases[leaseID]
 	delete(s.leases, leaseID)
+	s.releasedLeases[leaseID] = struct{}{}
+	diskErr := os.Remove(storeLeaseRecordPath(s, leaseID))
+	if !inMem && diskErr != nil {
+		return fmt.Errorf("privategit: unknown or already released lease %q", leaseID)
+	}
+	return nil
+}
+
+func storeLeaseRecordPath(s *RetainedObjectStore, leaseID string) string {
+	return filepath.Join(s.rootDir, "leases", filepath.Base(leaseID)+".json")
+}
+
+func advanceNextLeaseFromDiskLocked(s *RetainedObjectStore) {
+	entries, err := os.ReadDir(filepath.Join(s.rootDir, "leases"))
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		name := strings.TrimSuffix(entry.Name(), ".json")
+		if idx := strings.LastIndexByte(name, '-'); idx >= 0 {
+			if n, err := strconv.ParseUint(name[idx+1:], 10, 64); err == nil && n > s.nextLease {
+				s.nextLease = n
+			}
+		}
+	}
+}
+
+func persistStoreLeaseRecordLocked(s *RetainedObjectStore, rec *leaseRecord) error {
+	if s == nil || s.rootDir == "" || rec == nil {
+		return nil
+	}
+	oids := make([]string, 0, len(rec.oids))
+	for oid := range rec.oids {
+		oids = append(oids, oid)
+	}
+	sort.Strings(oids)
+	packs := make([]string, 0, len(rec.packs))
+	for p := range rec.packs {
+		packs = append(packs, p)
+	}
+	sort.Strings(packs)
+	payload, err := json.Marshal(persistedLeaseRecord{
+		FormatVersion: 1,
+		ID:            rec.id,
+		Kind:          rec.kind,
+		Holder:        rec.holder,
+		OIDs:          oids,
+		Packs:         packs,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.PathLocation(storeLeaseRecordPath(s, rec.id)),
+		Source:   bytes.NewReader(payload),
+		Mode:     0o600,
+		DirMode:  0o755,
+	})
+	return err
+}
+
+func reacquirePersistedStoreLease(s *RetainedObjectStore, holder, leaseID string) error {
+	if s == nil || s.rootDir == "" || strings.TrimSpace(leaseID) == "" {
+		return fmt.Errorf("privategit: lease id is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, released := s.releasedLeases[leaseID]; released {
+		return fmt.Errorf("privategit: lease %q was released", leaseID)
+	}
+	if l, ok := s.leases[leaseID]; ok && l != nil {
+		if holder != "" && l.holder != holder {
+			return fmt.Errorf("privategit: lease %q holder mismatch (%q != %q)", leaseID, l.holder, holder)
+		}
+		return nil
+	}
+	raw, err := os.ReadFile(storeLeaseRecordPath(s, leaseID))
+	if err != nil {
+		return fmt.Errorf("privategit: read lease record %q: %w", leaseID, err)
+	}
+	var p persistedLeaseRecord
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&p); err != nil {
+		return fmt.Errorf("privategit: decode lease record %q: %w", leaseID, err)
+	}
+	if p.FormatVersion != 1 || p.ID != leaseID || (holder != "" && p.Holder != holder) {
+		return fmt.Errorf("privategit: invalid lease record %q", leaseID)
+	}
+	if len(p.OIDs) == 0 && len(p.Packs) == 0 {
+		return fmt.Errorf("privategit: empty lease record %q", leaseID)
+	}
+	oidSet := make(map[string]struct{}, len(p.OIDs))
+	for _, oid := range p.OIDs {
+		oidSet[oid] = struct{}{}
+	}
+	packSet := make(map[string]struct{}, len(p.Packs))
+	for _, pk := range p.Packs {
+		packSet[pk] = struct{}{}
+	}
+	s.leases[leaseID] = &leaseRecord{
+		id:     p.ID,
+		kind:   p.Kind,
+		holder: p.Holder,
+		oids:   oidSet,
+		packs:  packSet,
+	}
 	return nil
 }
 
@@ -308,32 +439,39 @@ func lockStoreReadOnlyBoundary(s *RetainedObjectStore) {
 }
 
 func storeLeaseIntactOnDisk(s *RetainedObjectStore, leaseID string) bool {
-	if s == nil || s.objectsDir == "" {
+	return storeLeaseBoundAndIntactOnDisk(s, "", leaseID)
+}
+
+func storeLeaseBoundAndIntactOnDisk(s *RetainedObjectStore, holder, leaseID string) bool {
+	if s == nil || s.objectsDir == "" || strings.TrimSpace(leaseID) == "" {
 		return false
 	}
 	if _, err := os.Stat(s.objectsDir); err != nil {
 		return false
 	}
-	if leaseID == "" {
-		return true
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if l, ok := s.leases[leaseID]; ok && l != nil {
-		for p := range l.packs {
-			if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".pack")); err != nil {
-				return false
-			}
-			if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".idx")); err != nil {
-				return false
-			}
+	l, ok := s.leases[leaseID]
+	if !ok || l == nil {
+		return false
+	}
+	if holder != "" && l.holder != holder {
+		return false
+	}
+	if len(l.oids) == 0 && len(l.packs) == 0 {
+		return false
+	}
+	for p := range l.packs {
+		if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".pack")); err != nil {
+			return false
 		}
-		for oid := range l.oids {
-			if _, isLoose := s.stock.looseSizes[oid]; isLoose {
-				if _, err := os.Stat(filepath.Join(s.objectsDir, oid[:2], oid[2:])); err != nil {
-					return false
-				}
-			}
+		if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".idx")); err != nil {
+			return false
+		}
+	}
+	for oid := range l.oids {
+		if !storeHasObjectLockedOnDisk(s, oid) {
+			return false
 		}
 	}
 	return true
@@ -348,11 +486,15 @@ func storeHasObjectOnDisk(s *RetainedObjectStore, oid string) bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return storeHasObjectLockedOnDisk(s, oid)
+}
+
+func storeHasObjectLockedOnDisk(s *RetainedObjectStore, oid string) bool {
+	if len(oid) != 40 || !isHexString(oid) {
+		return false
+	}
 	if _, err := os.Stat(filepath.Join(s.objectsDir, oid[:2], oid[2:])); err == nil {
 		return true
-	}
-	if _, isLoose := s.stock.looseSizes[oid]; isLoose {
-		return false
 	}
 	for base, members := range s.stock.packOIDs {
 		if _, ok := members[oid]; ok {

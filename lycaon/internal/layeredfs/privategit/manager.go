@@ -319,9 +319,31 @@ func readyPrivateGitDir(m *Manager, viewID, repoRel string) (string, error) {
 		priorGitDir, _ = discoverPriorPrivateStateEvidence(m, view, viewID, repoRel)
 	}
 	if (repo != nil && repo.privateGitDir != "") || (hasDurable && durable.Status == repoStatusEstablished) || priorGitDir != "" {
-		gitDir, _, vErr := verifyEstablishedPrivateRepo(m, view, viewID, repoRel, repo, durable, priorGitDir)
+		gitDir, leaseID, headOID, vErr := verifyEstablishedPrivateRepo(m, view, viewID, repoRel, repo, durable, hasDurable, priorGitDir)
 		if vErr != nil {
 			return "", vErr
+		}
+		if !hasDurable {
+			if wErr := writeDurableRepoRecord(m, view, viewID, durableRepoRecord{
+				RepoRel:        repoRel,
+				Status:         repoStatusEstablished,
+				PrivateGitDir:  gitDir,
+				LeaseID:        leaseID,
+				InitialHeadOID: headOID,
+			}); wErr != nil {
+				return "", wErr
+			}
+			removeRepoInitIntent(m, viewID, repoRel)
+		}
+		if repo == nil || repo.privateGitDir == "" {
+			view.repos[repoRel] = &initializedRepo{
+				repoRel:        repoRel,
+				worktreeDir:    view.worktreeDir,
+				privateGitDir:  gitDir,
+				leaseID:        leaseID,
+				initialHeadOID: headOID,
+				metrics:        InitMetrics{State: StateReady},
+			}
 		}
 		return gitDir, nil
 	}
