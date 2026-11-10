@@ -210,12 +210,13 @@ func redirectMethod(status int, method string) (next string, keepBody bool) {
 	}
 }
 
-// ExchangeError retains request attempts and received headers on failure.
+// ExchangeError retains request attempts, received headers, and completed redirect hops on failure.
 type ExchangeError struct {
 	Method            string
 	RequestsStarted   int
 	ResponsesReceived int
 	LastStatus        int
+	Redirects         []Hop
 	Err               error
 }
 

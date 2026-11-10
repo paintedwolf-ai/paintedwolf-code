@@ -223,3 +223,50 @@ func TestExchangeFailureRetainsHeadersBeforeSinkFailure(t *testing.T) {
 		t.Fatalf("storage failure hid completed HTTP exchange: %v", err)
 	}
 }
+
+func TestCrossOriginRedirectClearsHostHeaderOverrideWhileSameOriginPreservesIt(t *testing.T) {
+	var originHosts []string
+	var crossOriginHost string
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		crossOriginHost = r.Host
+		_, _ = w.Write([]byte("landed"))
+	}))
+	t.Cleanup(elsewhere.Close)
+	elsewhereURL, err := url.Parse(elsewhere.URL)
+	if err != nil {
+		t.Fatalf("parse elsewhere URL: %v", err)
+	}
+
+	origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originHosts = append(originHosts, r.Host)
+		switch r.URL.Path {
+		case "/start":
+			w.Header().Set("Location", "/same-origin")
+			w.WriteHeader(http.StatusFound)
+		case "/same-origin":
+			w.Header().Set("Location", elsewhere.URL+"/cross-origin")
+			w.WriteHeader(http.StatusFound)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(origin.Close)
+
+	resp, err := Do(t.Context(), Request{
+		Method:       http.MethodGet,
+		URL:          origin.URL + "/start",
+		HostHeader:   "virtual.origin.example",
+		Redirects:    RedirectSafe,
+		AllowAddress: allowLoopback,
+	})
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	if string(resp.Body) != "landed" || len(originHosts) != 2 || originHosts[0] != "virtual.origin.example" || originHosts[1] != "virtual.origin.example" {
+		t.Fatalf("same-origin hops lost HostHeader override: body=%q originHosts=%v", string(resp.Body), originHosts)
+	}
+	if crossOriginHost != elsewhereURL.Host {
+		t.Fatalf("cross-origin hop retained origin HostHeader override: got %q, want %q", crossOriginHost, elsewhereURL.Host)
+	}
+}
+

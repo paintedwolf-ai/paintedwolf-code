@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -255,3 +256,223 @@ func TestExplicitRouteAskPostureRequiresSelectedRouteAndPreservesOrdinaryDNS(t *
 		})
 	}
 }
+
+func TestPerHopRedirectRouteAdmissionCancellationAndPartialFacts(t *testing.T) {
+	t.Setenv("NO_PROXY", "*")
+	var originConnections, originRequests, originBytes atomic.Int32
+	var targetConnections, targetRequests, targetBytes atomic.Int32
+	var originLookups, targetLookups atomic.Int32
+
+	target := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetRequests.Add(1)
+		body, _ := io.ReadAll(r.Body)
+		targetBytes.Add(int32(len(body)))
+		if r.Method != http.MethodGet || r.Host != "redirected.example.com" {
+			t.Errorf("redirected hop wire request: method=%s host=%q", r.Method, r.Host)
+		}
+		if r.URL.Path == "/hop1" {
+			w.Header().Set("Location", "http://redirected.example.com/landed")
+			w.WriteHeader(http.StatusFound)
+			return
+		}
+		_, _ = io.WriteString(w, "redirect-target-ok")
+	}))
+	target.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			targetConnections.Add(1)
+		}
+	}
+	target.Start()
+	t.Cleanup(target.Close)
+	targetEndpoint := target.Listener.Addr().(*net.TCPAddr).AddrPort()
+
+	origin := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originRequests.Add(1)
+		body, _ := io.ReadAll(r.Body)
+		originBytes.Add(int32(len(body)))
+		w.Header().Set("Location", "http://redirected.example.com/hop1")
+		w.WriteHeader(http.StatusFound)
+	}))
+	origin.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			originConnections.Add(1)
+		}
+	}
+	origin.Start()
+	t.Cleanup(origin.Close)
+	originEndpoint := origin.Listener.Addr().(*net.TCPAddr).AddrPort()
+
+	egress.TestingResolve(t, func(_ context.Context, _, host string) ([]netip.Addr, error) {
+		switch host {
+		case "nominal.example.com":
+			originLookups.Add(1)
+			return []netip.Addr{originEndpoint.Addr()}, nil
+		case "redirected.example.com", "route2.example.com":
+			targetLookups.Add(1)
+			return []netip.Addr{targetEndpoint.Addr()}, nil
+		default:
+			return nil, fmt.Errorf("unexpected DNS lookup for %q", host)
+		}
+	})
+
+	confine.SetEgressPosture(confine.PostureAsk)
+	t.Cleanup(func() {
+		confine.SetEgressPosture(confine.PostureObserve)
+		confine.SetEgressResolver(nil)
+	})
+
+	var mu sync.Mutex
+	var observed []string
+	allowTarget := false
+	cancelOnTarget := false
+	var cancelFunc context.CancelFunc
+	confine.SetEgressResolver(func(ctx context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+		mu.Lock()
+		observed = append(observed, fmt.Sprintf("%s %s", ep.RequestMethod, ep.DialAddr()))
+		shouldCancel := cancelOnTarget && ep.Host == "redirected.example.com"
+		allow := ep.Host == "nominal.example.com" || allowTarget
+		mu.Unlock()
+		if shouldCancel && cancelFunc != nil {
+			cancelFunc()
+			<-ctx.Done()
+			return false
+		}
+		return allow
+	})
+
+	opts := ExchangeOptions{Dial: []outboundhttp.ResolveMapping{
+		{Host: "nominal.example.com", Port: 80, TargetPort: originEndpoint.Port()},
+		{Host: "redirected.example.com", Port: 80, TargetHost: "route2.example.com", TargetPort: targetEndpoint.Port()},
+	}}
+	args := map[string]any{
+		"method":    "POST",
+		"url":       "http://nominal.example.com/start",
+		"body_text": "hop0-body",
+		"redirects": "safe",
+	}
+
+	// 1. Cancellation while awaiting Hop 1 approval returns context.Canceled (not HostDeniedError),
+	// leaves Hop 1 unsent, and does not poison session or confine verdict caches.
+	sessionID := t.Name()
+	tc := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID, ToolCallID: "hop1-canceled"},
+		Local:    tools.InvocationLocal{LoopbackConnectGranted: true, LoopbackConnectPorts: []uint16{originEndpoint.Port(), targetEndpoint.Port()}},
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	mu.Lock()
+	cancelOnTarget = true
+	cancelFunc = cancel
+	mu.Unlock()
+	_, err := Perform(ctx, Deps{Boundary: testBoundary()}, args, tc, opts)
+	var hostDenied *egressgate.HostDeniedError
+	if !errors.Is(err, context.Canceled) || errors.As(err, &hostDenied) {
+		t.Fatalf("canceled Hop 1 wait error = %v (hostDenied=%v), want context.Canceled without HostDeniedError", err, hostDenied)
+	}
+	if originConnections.Load() != 1 || originRequests.Load() != 1 || originBytes.Load() != int32(len("hop0-body")) || originLookups.Load() != 1 {
+		t.Fatalf("canceled Hop 1 initial hop accounting = conn:%d req:%d bytes:%d dns:%d", originConnections.Load(), originRequests.Load(), originBytes.Load(), originLookups.Load())
+	}
+	if targetConnections.Load() != 0 || targetRequests.Load() != 0 || targetBytes.Load() != 0 || targetLookups.Load() != 0 {
+		t.Fatalf("canceled Hop 1 received effects: conn:%d req:%d bytes:%d dns:%d", targetConnections.Load(), targetRequests.Load(), targetBytes.Load(), targetLookups.Load())
+	}
+
+	// 2. Retrying in the SAME session with un-canceled context while policy still denies Hop 1:
+	// proves cancellation did not create a false quiet grant, rewritten GET method is passed to Hop 1
+	// admission, Hop 1 receives zero resolver/connection/request effects, and reject retains Hop 0 progress + redirects.
+	mu.Lock()
+	cancelOnTarget = false
+	cancelFunc = nil
+	observed = nil
+	mu.Unlock()
+	tc.Identity.ToolCallID = "hop1-denied"
+	_, err = Perform(t.Context(), Deps{Boundary: testBoundary()}, args, tc, opts)
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != "HTTP_REQUEST_HOST_DENIED" {
+		t.Fatalf("denied redirect hop error = %v (reject=%+v), want HTTP_REQUEST_HOST_DENIED", err, reject)
+	}
+	if originRequests.Load() != 2 || originBytes.Load() != int32(2*len("hop0-body")) {
+		t.Fatalf("initial hop accounting after second attempt = req:%d bytes:%d", originRequests.Load(), originBytes.Load())
+	}
+	if targetConnections.Load() != 0 || targetRequests.Load() != 0 || targetBytes.Load() != 0 || targetLookups.Load() != 0 {
+		t.Fatalf("denied redirect hop received effects: conn:%d req:%d bytes:%d dns:%d", targetConnections.Load(), targetRequests.Load(), targetBytes.Load(), targetLookups.Load())
+	}
+	if reject.Data["http_requests_started"] != 1 || reject.Data["http_responses_received"] != 1 || reject.Data["http_last_status"] != http.StatusFound {
+		t.Fatalf("reject lost initial hop progress: %+v", reject.Data)
+	}
+	redirects, ok := reject.Data["redirects"].([]any)
+	if !ok || len(redirects) != 1 {
+		t.Fatalf("reject lost completed redirect hop chain: %#v", reject.Data["redirects"])
+	}
+	hop0, _ := redirects[0].(map[string]any)
+	if hop0["status"] != http.StatusFound || hop0["method"] != http.MethodGet {
+		t.Fatalf("reject redirect hop0 = %#v, want 302 GET", hop0)
+	}
+	mu.Lock()
+	gotObserved := slices.Clone(observed)
+	observed = nil
+	mu.Unlock()
+	wantObserved := []string{
+		"POST nominal.example.com:80",
+		fmt.Sprintf("POST nominal.example.com:%d", originEndpoint.Port()),
+		"GET redirected.example.com:80",
+	}
+	if !slices.Equal(gotObserved, wantObserved) {
+		t.Fatalf("per-hop admission commands/endpoints = %v, want %v", gotObserved, wantObserved)
+	}
+
+	// 3. Authorizing Hop 1 in the SAME session after cancellation and denial succeeds across a multi-hop
+	// redirect chain (Hop 0 -> Hop 1 /hop1 -> Hop 2 /landed on redirected.example.com) and reuses
+	// the action's route approval across same-host hops without re-prompting.
+	mu.Lock()
+	allowTarget = true
+	observed = nil
+	mu.Unlock()
+	tc.Identity.ToolCallID = "hop1-approved-1"
+	got, err := Perform(t.Context(), Deps{Boundary: testBoundary()}, args, tc, opts)
+	testutil.FailErr(t, "perform after canceled wait", err)
+	if string(got.Response.Body) != "redirect-target-ok" || len(got.Redirects) != 2 || targetConnections.Load() != 2 || targetRequests.Load() != 2 || targetLookups.Load() != 2 {
+		t.Fatalf("approved redirect exchange = %q redirects=%d conn:%d req:%d dns:%d", string(got.Response.Body), len(got.Redirects), targetConnections.Load(), targetRequests.Load(), targetLookups.Load())
+	}
+	mu.Lock()
+	observedAfterFirstApprove := slices.Clone(observed)
+	observed = nil
+	mu.Unlock()
+	wantApproved := []string{
+		"POST nominal.example.com:80",
+		fmt.Sprintf("POST nominal.example.com:%d", originEndpoint.Port()),
+		"GET redirected.example.com:80",
+		fmt.Sprintf("GET route2.example.com:%d", targetEndpoint.Port()),
+	}
+	if !slices.Equal(observedAfterFirstApprove, wantApproved) {
+		t.Fatalf("multi-hop redirect chain endpoints = %v, want %v (same-host Hop 2 must reuse Hop 1 coverage without re-prompting)", observedAfterFirstApprove, wantApproved)
+	}
+
+	// 4. Explicit host_header across redirects: preserved on same-origin hops, cleared when redirecting
+	// cross-origin to redirected.example.com, while cross-origin hop admission still gates redirected.example.com.
+	allowRedirected := false
+	confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+		if ep.Host == "redirected.example.com" || ep.Host == "route2.example.com" {
+			return allowRedirected
+		}
+		return true
+	})
+	vhostArgs := map[string]any{
+		"method":      "GET",
+		"url":         "http://nominal.example.com/start",
+		"host_header": "vhost.example.com",
+		"redirects":   "safe",
+	}
+	beforeTargetReqs := targetRequests.Load()
+	tc.Identity.ToolCallID = "vhost-cross-origin-denied"
+	_, err = Perform(t.Context(), Deps{Boundary: testBoundary()}, vhostArgs, tc, opts)
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "HTTP_REQUEST_HOST_DENIED" || reject.Data["host"] != "redirected.example.com" || targetRequests.Load() != beforeTargetReqs {
+		t.Fatalf("denied cross-origin redirect with host_header: err=%v reject=%+v targetReqsDelta=%d", err, reject, targetRequests.Load()-beforeTargetReqs)
+	}
+	allowRedirected = true
+	tc.Identity.ToolCallID = "vhost-cross-origin-approved"
+	got, err = Perform(t.Context(), Deps{Boundary: testBoundary()}, vhostArgs, tc, opts)
+	testutil.FailErr(t, "approved host_header across redirect", err)
+	if string(got.Response.Body) != "redirect-target-ok" || len(got.Redirects) != 2 {
+		t.Fatalf("approved host_header redirect response = %q redirects=%d", string(got.Response.Body), len(got.Redirects))
+	}
+}
+

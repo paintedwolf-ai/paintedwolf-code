@@ -19,9 +19,17 @@ func (inv *invocation) requestArgs(cookieHeader string) (map[string]any, error) 
 	method := o.method
 	headers := make([]any, 0, len(o.headers)+2)
 	set := map[string]bool{}
+	var hostHeader string
 	for _, h := range o.headers {
+		if strings.EqualFold(h[0], "Host") {
+			hostHeader = h[1]
+			continue
+		}
 		set[strings.ToLower(h[0])] = true
 		headers = append(headers, map[string]any{"name": h[0], "value": h[1]})
+	}
+	if hostHeader != "" {
+		args["host_header"] = hostHeader
 	}
 	addDefault := func(name, value string) {
 		if !set[strings.ToLower(name)] {

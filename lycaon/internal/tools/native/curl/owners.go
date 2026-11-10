@@ -174,20 +174,19 @@ func loopbackPorts(raw string, dial []outboundhttp.ResolveMapping) []uint16 {
 		}
 		ports = append(ports, u)
 	}
-	for _, m := range dial {
-		if m.Address.IsValid() && m.Address.Unmap().IsLoopback() {
-			addPort(int(m.Port))
+	isLoopbackHost := func(h string) bool {
+		h = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(h)), ".")
+		if h == "localhost" {
+			return true
 		}
+		addr, err := netip.ParseAddr(h)
+		return err == nil && addr.Unmap().IsLoopback()
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
 		return ports
 	}
 	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
-	addr, addrErr := netip.ParseAddr(host)
-	if host != "localhost" && (addrErr != nil || !addr.IsLoopback()) {
-		return ports
-	}
 	port := 0
 	if parsed.Port() != "" {
 		port, err = strconv.Atoi(parsed.Port())
@@ -199,7 +198,16 @@ func loopbackPorts(raw string, dial []outboundhttp.ResolveMapping) []uint16 {
 	} else if parsed.Scheme == "http" {
 		port = 80
 	}
-	addPort(port)
+	if port > 0 {
+		if mapped, ok := outboundhttp.MappedDial(dial, host, uint16(port)); ok {
+			if (mapped.Address.IsValid() && mapped.Address.Unmap().IsLoopback()) || isLoopbackHost(mapped.Host) {
+				addPort(int(mapped.Port))
+			}
+		}
+	}
+	if isLoopbackHost(host) {
+		addPort(port)
+	}
 	return ports
 }
 
