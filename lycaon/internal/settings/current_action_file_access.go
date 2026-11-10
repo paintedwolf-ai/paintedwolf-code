@@ -12,7 +12,7 @@ func (g *RuleApprovalGate) currentActionFileAccess(action hitl.ProposedAction) [
 	var access []hitl.GrantedPathDelta
 	for _, target := range g.declaredFileTargets(action) {
 		// Relative escapes remain invalid tool arguments, not grant subjects.
-		if !target.OutsideRoots || !filepath.IsAbs(target.Path) {
+		if (!target.OutsideRoots && !target.ProtectedSubject && !target.Sensitive) || !filepath.IsAbs(target.Path) {
 			continue
 		}
 		access = append(access, hitl.GrantedPathDelta{
@@ -27,7 +27,7 @@ func (g *RuleApprovalGate) currentActionFileAccess(action hitl.ProposedAction) [
 func currentActionCoversTarget(action hitl.ProposedAction, target *gate.FileTarget) bool {
 	path := grantedpath.Normalize(target.Path)
 	for _, access := range action.Invocation.ApprovedFileAccess {
-		if access.Path == path && (!access.Tree) && (target.Mode != gate.ModeWrite || access.Write) {
+		if grantedpath.Normalize(access.Path) == path && (!access.Tree) && (target.Mode != gate.ModeWrite || access.Write) {
 			return true
 		}
 	}
