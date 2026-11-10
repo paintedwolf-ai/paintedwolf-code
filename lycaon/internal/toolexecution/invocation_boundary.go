@@ -170,6 +170,7 @@ func (e *Executor) applyPreInvokeBoundary(
 	// Policy, native path resolution, and execution share one request.
 	confReq := e.Boundary.actionConfineRequest(ctx, tc)
 	tc.Files.GrantedWriteRoots = append([]string(nil), confReq.GrantedWriteRoots...)
+	tc.Files.ProtectedWriteGrants = append([]confine.ProtectedPathGrant(nil), confReq.ProtectedWriteGrants...)
 	boundaryApproved := (socketPreflight != nil && socketPreflight.ApprovalSatisfied) ||
 		(directPreflight != nil && directPreflight.ApprovalSatisfied) || tc.HasExecutionApproval()
 	// Socket/direct outer actions reach profile policy.Evaluate with BoundaryApprovalSatisfied via applyPreInvokePolicy.

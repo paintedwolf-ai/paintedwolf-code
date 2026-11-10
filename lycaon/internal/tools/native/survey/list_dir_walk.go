@@ -25,7 +25,11 @@ func listDirSingleLevel(
 	fullPath, relPath string,
 	includeHidden bool,
 ) ([]listDirEntry, error) {
-	opts := sandbox.SurveyOptions{IncludeHidden: includeHidden}
+	opts := sandbox.SurveyOptions{
+		IncludeHidden:     includeHidden,
+		SessionScratchDir: tctx.Host.SessionScratchDir,
+		SessionOutputDir:  tctx.Host.SessionOutputDir,
+	}
 	entries, ok, err := workerBranchReadDir(ctx, tctx, fullPath, opts)
 	if err != nil {
 		return nil, err
@@ -174,7 +178,11 @@ func (t *ListDirTool) listRootCatalog(
 			return nil, false
 		}
 		if current.RootBoundary || current.Moving || current.Refreshing || !repochange.Coverage(root.Path).Complete {
-			live, err := sandbox.SurveyReadDir(fullPath, scopeRel, sandbox.SurveyOptions{IncludeHidden: includeHidden})
+			live, err := sandbox.SurveyReadDir(fullPath, scopeRel, sandbox.SurveyOptions{
+				IncludeHidden:     includeHidden,
+				SessionScratchDir: tctx.Host.SessionScratchDir,
+				SessionOutputDir:  tctx.Host.SessionOutputDir,
+			})
 			if err != nil {
 				return nil, false
 			}

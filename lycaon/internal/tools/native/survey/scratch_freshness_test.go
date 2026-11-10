@@ -24,7 +24,8 @@ func TestScratchSurveySeesWritesAfterEmptyInventory(t *testing.T) {
 	tc := nativefixture.Context(root)
 	tc.Host.SessionScratchDir = scratch
 	catalog := sourcecatalog.New()
-	_, err := catalog.Observe(t.Context(), tc.Identity.ProjectID, []sourcecatalog.Root{{ID: projectroot.VirtualScratchLabel, Path: scratch}})
+	obsCtx := sandbox.WithSessionDirs(t.Context(), scratch, tc.Host.SessionOutputDir)
+	_, err := catalog.Observe(obsCtx, tc.Identity.ProjectID, []sourcecatalog.Root{{ID: projectroot.VirtualScratchLabel, Path: scratch}})
 	testutil.FailErr(t, "observe empty scratch", err)
 	testutil.FailErr(t, "write scratch script", os.WriteFile(filepath.Join(scratch, "test-app.mjs"), []byte("console.log('needle');\n"), 0o600))
 	boundary := nativefixture.Boundary(t)
@@ -191,6 +192,26 @@ func TestAttachedControlPlaneRootSurveyWithWarmCatalogDeniesStateAndAdmitsScratc
 	testutil.FailErr(t, "find @output", err)
 	if got := parseFindResponse(t, outputFindOut); len(got.Results) != 1 || got.Results[0].Path != "@output/report.txt" {
 		t.Fatalf("find @output = %s, want [@output/report.txt]", outputFindOut)
+	}
+
+	// 5. Directly attaching another session's scratch directory (<config>/scratch/other)
+	// as the project root cannot confer read or survey authority when the invocation
+	// owns "own" (or has no session context).
+	otherRootTC := nativefixture.Context(otherScratch)
+	otherRootTC.Host.SessionScratchDir = ownScratch
+	otherRootTC.Host.SessionOutputDir = ownOutput
+	otherPrimary := otherRootTC.Source.Roots[0]
+	if entries, ok := listing.listRootCatalog(sessionCtx, otherRootTC, otherPrimary, otherScratch, 1, true); ok || len(entries) != 0 {
+		t.Fatalf("listRootCatalog on directly attached other-session scratch = (%+v, %v), want (nil, false)", entries, ok)
+	}
+	if _, listOtherErr := listing.Run(t.Context(), map[string]any{"path": ".", "include_hidden": true}, otherRootTC); !isSurveyControlPlaneReject(listOtherErr) {
+		t.Fatalf("list_dir(.) on directly attached other-session scratch err = %v, want %s", listOtherErr, isolation.CodeControlPlaneDenied)
+	}
+	if _, findOtherErr := finder.Run(t.Context(), map[string]any{"path": ".", "name_glob": "*"}, otherRootTC); !isSurveyControlPlaneReject(findOtherErr) {
+		t.Fatalf("find(.) on directly attached other-session scratch err = %v, want %s", findOtherErr, isolation.CodeControlPlaneDenied)
+	}
+	if _, grepOtherErr := grepper.Run(t.Context(), map[string]any{"path": ".", "pattern": "needle"}, otherRootTC); !isSurveyControlPlaneReject(grepOtherErr) {
+		t.Fatalf("grep(.) on directly attached other-session scratch err = %v, want %s", grepOtherErr, isolation.CodeControlPlaneDenied)
 	}
 }
 

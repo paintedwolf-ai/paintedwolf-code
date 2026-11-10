@@ -7,6 +7,7 @@ func (tc *ToolContext) BeginInvocation() {
 	tc.Effects.Secrets = nil
 	tc.Files.ApprovedFileAccess = nil
 	tc.Files.PreparedFileAccess = nil
+	tc.Files.ProtectedWriteGrants = nil
 	tc.Files.PolicyWriteGrants = nil
 	tc.Execution.ProcessReview = nil
 	tc.Files.FileChangeReview = nil

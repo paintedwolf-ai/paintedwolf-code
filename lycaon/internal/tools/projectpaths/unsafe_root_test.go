@@ -272,15 +272,61 @@ func TestAttachedBroadAndControlPlaneRootsEnforcePerTargetFloors(t *testing.T) {
 	if len(walkedCfg) != 0 {
 		t.Fatalf("SurveyWalk on configdir.Root() visited %v, want empty", walkedCfg)
 	}
-	dirEntries, err := sandbox.SurveyReadDir(cfgDir, ".", sandbox.SurveyOptions{IncludeHidden: true})
+	dirEntries, err := sandbox.SurveyReadDir(cfgDir, ".", sandbox.SurveyOptions{IncludeHidden: true, SessionScratchDir: scratchDir, SessionOutputDir: outputDir})
 	testutil.FailErr(t, "SurveyReadDir cfgDir", err)
 	if len(dirEntries) != 0 {
 		t.Fatalf("SurveyReadDir on configdir.Root() returned %d entries, want 0", len(dirEntries))
 	}
-	scratchEntries, err := sandbox.SurveyReadDir(scratchDir, "@scratch", sandbox.SurveyOptions{IncludeHidden: true})
+	scratchEntries, err := sandbox.SurveyReadDir(scratchDir, "@scratch", sandbox.SurveyOptions{IncludeHidden: true, SessionScratchDir: scratchDir, SessionOutputDir: outputDir})
 	testutil.FailErr(t, "SurveyReadDir scratchDir", err)
 	if len(scratchEntries) != 1 || scratchEntries[0].DirEntry.Name() != "scratch.txt" {
 		t.Fatalf("SurveyReadDir on own scratchDir = %+v, want [scratch.txt]", scratchEntries)
+	}
+
+	// Concrete session path shape (<config>/scratch/s2) does not confer read authority
+	// when attached directly as a root or queried without matching invocation ownership.
+	otherScratchScope, err := b.CompileReadScope(sessionCtx, otherScratchDir, "default")
+	testutil.FailErr(t, "CompileReadScope on otherScratchDir", err)
+	if otherScratchScope.Filter(".", false) || otherScratchScope.Filter("other.txt", false) {
+		t.Fatal("CompileReadScope admitted entries under other session's scratch root")
+	}
+	noCtxScope, err := b.CompileReadScope(t.Context(), otherScratchDir, "default")
+	testutil.FailErr(t, "CompileReadScope on otherScratchDir without session context", err)
+	if noCtxScope.Filter(".", false) || noCtxScope.Filter("other.txt", false) {
+		t.Fatal("CompileReadScope without session context admitted entries under session path shape")
+	}
+	if err := b.AssertReadScope(t.Context(), otherScratchDir, "other.txt", "default"); err == nil {
+		t.Fatal("AssertReadScope without session context on otherScratchDir succeeded, want denied")
+	}
+	var walkedOther []string
+	testutil.FailErr(t, "SurveyWalk otherScratchDir", sandbox.SurveyWalk(sessionCtx, otherScratchDir, sandbox.SurveyOptions{IncludeHidden: true}, func(e sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
+		walkedOther = append(walkedOther, e.Rel)
+		return sandbox.SurveyContinue, nil
+	}))
+	if len(walkedOther) != 0 {
+		t.Fatalf("SurveyWalk on otherScratchDir visited %v, want empty", walkedOther)
+	}
+	otherDirEntries, err := sandbox.SurveyReadDir(otherScratchDir, ".", sandbox.SurveyOptions{IncludeHidden: true, SessionScratchDir: scratchDir, SessionOutputDir: outputDir})
+	testutil.FailErr(t, "SurveyReadDir otherScratchDir", err)
+	if len(otherDirEntries) != 0 {
+		t.Fatalf("SurveyReadDir on otherScratchDir returned %d entries, want 0", len(otherDirEntries))
+	}
+	otherRootCtx := tools.ToolContext{
+		Source: tools.InvocationSource{
+			Roots:        []projectroot.RootRef{{ID: "other", Label: "other", Path: otherScratchDir, IsPrimary: true}},
+			ActiveRootID: "other",
+		},
+		Host: tools.InvocationHost{
+			SessionScratchDir: scratchDir,
+			SessionOutputDir:  outputDir,
+		},
+	}
+	if _, err := projectpaths.ResolveRead(sessionCtx, b, otherRootCtx, "other.txt"); !isControlPlaneReject(err) {
+		t.Fatalf("ResolveRead on directly attached other-session scratch = %v, want %s", err, isolation.CodeControlPlaneDenied)
+	}
+	otherSess := projectpaths.NewReadSession(b, otherRootCtx)
+	if _, err := otherSess.Resolve(sessionCtx, "other.txt"); !isControlPlaneReject(err) {
+		t.Fatalf("ReadSession.Resolve on directly attached other-session scratch = %v, want %s", err, isolation.CodeControlPlaneDenied)
 	}
 }
 

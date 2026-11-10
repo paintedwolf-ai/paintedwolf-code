@@ -171,6 +171,7 @@ func freshProgramOwnerContext(name string, contract toolcontract.Contract, execu
 	tc.Socket = tools.InvocationSocket{}
 	tc.Direct = tools.InvocationDirect{}
 	tc.Files.GrantedWriteRoots = nil
+	tc.Files.ProtectedWriteGrants = nil
 	tc.Effects.Out = nil
 	tc.Effects.CanonicalArgs = nil
 	tc.Effects.RequestedArgs = nil

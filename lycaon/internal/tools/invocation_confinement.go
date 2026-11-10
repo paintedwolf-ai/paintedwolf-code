@@ -35,7 +35,23 @@ func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string)
 	if writeLeg {
 		readDenyPaths = append(readDenyPaths, tctx.Source.WorkerSourceRoots...)
 	}
-	overlayReadPaths := tctx.Files.SessionReadPaths
+	overlayReadPaths := append([]string(nil), tctx.Files.SessionReadPaths...)
+	protectedWrites := append([]confine.ProtectedPathGrant(nil), tctx.Files.ProtectedWriteGrants...)
+	for _, access := range tctx.Files.ApprovedFileAccess {
+		path := strings.TrimSpace(access.Path)
+		if path == "" {
+			continue
+		}
+		if access.Write {
+			protectedWrites = append(protectedWrites, confine.NewProtectedPathGrant(path))
+		}
+		if tctx.Files.PackageExecution == nil {
+			overlayReadPaths = append(overlayReadPaths, path)
+		}
+	}
+	if len(overlayReadPaths) > 0 {
+		overlayReadPaths = UniqueRoots(overlayReadPaths)
+	}
 	if tctx.Files.PackageExecution != nil {
 		readDenyPaths = append(readDenyPaths, tctx.Files.PackageExecution.SensitiveReads...)
 		// Package actions use only the read access explicitly requested for this invocation.
@@ -48,6 +64,7 @@ func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string)
 		SessionScratchRoot:   tctx.Host.SessionScratchDir,
 		SessionOutputRoot:    tctx.Host.SessionOutputDir,
 		OverlayWriteRoots:    overlayWriteRoots,
+		ProtectedWriteGrants: protectedWrites,
 		PolicyWriteGrants:    tctx.Files.PolicyWriteGrants,
 		OverlayReadPaths:     overlayReadPaths,
 		ReadDenyPaths:        readDenyPaths,

@@ -86,7 +86,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 				}
 			}
 			if !counted {
-				if count, err := countDirEntries(fullPath, false, relSlash); err == nil {
+				if count, err := countDirEntries(fullPath, false, relSlash, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir); err == nil {
 					entry.EntryCount = &count
 				}
 			}
@@ -135,8 +135,12 @@ func statEntryFromInfo(relSlash string, info os.FileInfo) statResult {
 	}
 }
 
-func countDirEntries(fullPath string, includeHidden bool, relSlash string) (int, error) {
-	entries, err := sandbox.SurveyReadDir(fullPath, relSlash, sandbox.SurveyOptions{IncludeHidden: includeHidden})
+func countDirEntries(fullPath string, includeHidden bool, relSlash, sessionScratch, sessionOutput string) (int, error) {
+	entries, err := sandbox.SurveyReadDir(fullPath, relSlash, sandbox.SurveyOptions{
+		IncludeHidden:     includeHidden,
+		SessionScratchDir: sessionScratch,
+		SessionOutputDir:  sessionOutput,
+	})
 	if err != nil {
 		return 0, err
 	}

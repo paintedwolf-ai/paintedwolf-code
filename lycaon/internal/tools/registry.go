@@ -229,8 +229,9 @@ type InvocationFiles struct {
 	// PreparedFileAccess permits staging; FileChangeReview authorizes the mutation.
 	PreparedFileAccess []hitl.GrantedPathDelta
 	// GrantedWriteRoots holds this invocation’s reviewed write roots.
-	GrantedWriteRoots []string
-	PolicyWriteGrants []confine.ProtectedPathGrant
+	GrantedWriteRoots    []string
+	ProtectedWriteGrants []confine.ProtectedPathGrant
+	PolicyWriteGrants    []confine.ProtectedPathGrant
 	FileChangeReview  FileChangeReviewer
 	contentReviews    *contentReviews
 	// SessionReadPaths are exact protected-read grants.

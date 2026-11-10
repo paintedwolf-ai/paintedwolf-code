@@ -84,13 +84,16 @@ func TestBoundaryLetsSessionReadBackItsOwnScratch(t *testing.T) {
 	}
 }
 
-// When configdir.Root() is attached as the project root, WriteRootsForBoundary
-// drops configdir.Root() and keeps SessionScratchRoot. A real confined
-// subprocess launched with cmd.Dir set to SessionScratchRoot (the omitted-cwd
-// @scratch fallback) executes in @scratch, can write and read back inside
-// @scratch, and cannot read or write control-plane state or other sessions' scratch.
+// When configdir.Root() is attached as the project root, DefaultConfinement
+// builds an applied boundary whose WriteRootsForBoundary drops configdir.Root()
+// and keeps SessionScratchRoot. A real confined subprocess launched with cmd.Dir
+// set to SessionScratchRoot executes in @scratch, can write and read back inside
+// @scratch, and cannot read, write, rmdir, or mv control-plane state or other
+// sessions' scratch.
 func TestAttachedControlPlaneRootSubprocessScratchFallbackAndDenial(t *testing.T) {
 	self := requireLiveBoundary(t)
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	_, configDir, own, other := sessionScratchFixture(t)
 	configDir = fspath.CanonicalPath(configDir)
 	own = fspath.CanonicalPath(own)
@@ -98,30 +101,35 @@ func TestAttachedControlPlaneRootSubprocessScratchFallbackAndDenial(t *testing.T
 
 	stateToken := filepath.Join(configDir, "api.token")
 	stateSettings := filepath.Join(configDir, "settings.yaml")
+	stateStore := filepath.Join(configDir, "store.db")
 	otherFile := filepath.Join(other, "flow.sh")
-	writeFixtureFile(t, stateToken)
-	writeFixtureFile(t, stateSettings)
-	writeFixtureFile(t, otherFile)
-
-	writeRoots, err := confine.WriteRootsForBoundary("", []string{configDir}, nil, own)
-	testutil.FailErr(t, "WriteRootsForBoundary with attached configdir.Root()", err)
-	if slices.Contains(writeRoots, configDir) {
-		t.Fatalf("WriteRootsForBoundary admitted attached configdir.Root(): %v", writeRoots)
-	}
-	if !confine.PathWithinWriteRoots(own, writeRoots) {
-		t.Fatalf("WriteRootsForBoundary omitted SessionScratchRoot %q: %v", own, writeRoots)
+	for _, f := range []string{stateToken, stateSettings, stateStore, otherFile} {
+		writeFixtureFile(t, f)
 	}
 
-	c := confine.Confinement{
+	c, applied := confine.DefaultConfinement(confine.Request{
 		Roots:              liveBoundaryRoots(configDir),
 		SessionScratchRoot: own,
-		Network:            confine.NetworkDeny,
-		EgressOff:          confine.EgressOffOverride,
+		Egress:             confine.EgressDeny,
+	})
+	if !applied || c == nil {
+		t.Fatalf("DefaultConfinement with attached configdir.Root() not applied: applied=%v c=%+v", applied, c)
 	}
+	boundary := confine.BoundaryOf(c)
+	if !boundary.Applied {
+		t.Fatal("BoundaryOf did not report Applied=true")
+	}
+	if slices.Contains(boundary.WriteRoots, configDir) {
+		t.Fatalf("BoundaryOf.WriteRoots admitted attached configdir.Root(): %v", boundary.WriteRoots)
+	}
+	if !confine.PathWithinWriteRoots(own, boundary.WriteRoots) {
+		t.Fatalf("BoundaryOf.WriteRoots omitted SessionScratchRoot %q: %v", own, boundary.WriteRoots)
+	}
+
 	cmd, cleanup, err := confine.Command(t.Context(), self, "/bin/sh", []string{
 		"-c",
 		`pwd && echo scratch-ok > ./scratch-artifact.txt && cat ./scratch-artifact.txt`,
-	}, c)
+	}, *c)
 	testutil.FailErr(t, "confine.Command in @scratch fallback cwd", err)
 	cmd.Dir = own
 	out, runErr := cmd.CombinedOutput()
@@ -134,25 +142,35 @@ func TestAttachedControlPlaneRootSubprocessScratchFallbackAndDenial(t *testing.T
 		t.Fatalf("confined @scratch output = %q, want pwd=%q and \"scratch-ok\"", string(out), own)
 	}
 
-	for _, deniedRead := range []string{stateToken, stateSettings, otherFile} {
-		if code := confinedExit(t, self, c, "/bin/cat", deniedRead); code == 0 {
+	for _, deniedRead := range []string{stateToken, stateSettings, stateStore, otherFile} {
+		if code := confinedExit(t, self, *c, "/bin/cat", deniedRead); code == 0 {
 			t.Fatalf("confined subprocess read protected control-plane path %s", deniedRead)
 		}
 	}
-	for _, deniedWrite := range []string{stateToken, filepath.Join(configDir, "injected.txt"), otherFile} {
-		if code := confinedExit(t, self, c, "/bin/sh", "-c", `echo pwn > "$1"`, "sh", deniedWrite); code == 0 {
+	for _, deniedWrite := range []string{stateToken, stateSettings, stateStore, filepath.Join(configDir, "injected.txt"), otherFile} {
+		if code := confinedExit(t, self, *c, "/bin/sh", "-c", `echo pwn > "$1"`, "sh", deniedWrite); code == 0 {
 			t.Fatalf("confined subprocess wrote protected control-plane path %s", deniedWrite)
 		}
 	}
+	if code := confinedExit(t, self, *c, "/bin/rmdir", configDir); code == 0 {
+		t.Fatal("confined subprocess rmdir configdir.Root() succeeded")
+	}
+	if code := confinedExit(t, self, *c, "/bin/mv", configDir, configDir+".moved"); code == 0 {
+		t.Fatal("confined subprocess mv configdir.Root() succeeded")
+	}
 }
 
-// When ~/.ssh is attached as the project root, WriteRootsForBoundary drops ~/.ssh
-// and keeps SessionScratchRoot. A real confined subprocess can write and read back
-// inside @scratch, cannot read or write inside ~/.ssh without approval, gains exact
-// per-file read/write access when ProtectedReadGrants or ProtectedWriteGrants are
-// present, and loses access again once revoked.
+// When ~/.ssh is attached alongside an ordinary directory, DefaultConfinement
+// builds an applied boundary whose WriteRootsForBoundary drops ~/.ssh while
+// retaining the ordinary directory and SessionScratchRoot. A real confined
+// subprocess can read ordinary files outside the ~/.ssh floor and read/write
+// inside @scratch, cannot read or write inside ~/.ssh (including .pub) without
+// approval, gains exact per-file read/write access when ProtectedReadGrants or
+// ProtectedWriteGrants are present, and loses access again once revoked.
 func TestAttachedProtectedRootSubprocessGrantAndRevokeLifecycle(t *testing.T) {
 	self := requireLiveBoundary(t)
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "deny")
 	home := fspath.CanonicalPath(t.TempDir())
 	t.Setenv("HOME", home)
 	configDir := filepath.Join(home, ".config", "paintedwolf")
@@ -160,35 +178,60 @@ func TestAttachedProtectedRootSubprocessGrantAndRevokeLifecycle(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")
 
 	sshDir := filepath.Join(home, ".ssh")
+	ordinaryDir := filepath.Join(home, "workspace")
 	ownScratch := enginepaths.SessionScratchUnder(configDir, "chat-ssh")
-	for _, dir := range []string{sshDir, ownScratch} {
+	for _, dir := range []string{sshDir, ordinaryDir, ownScratch} {
 		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(dir, 0o700))
 	}
+	ordinaryReadme := filepath.Join(ordinaryDir, "readme.txt")
 	idEd25519 := filepath.Join(sshDir, "id_ed25519")
+	idEd25519Pub := filepath.Join(sshDir, "id_ed25519.pub")
 	idRSA := filepath.Join(sshDir, "id_rsa")
 	authKeys := filepath.Join(sshDir, "authorized_keys")
+	authKeysTest := filepath.Join(sshDir, "authorized_keys_test")
 	evilFile := filepath.Join(sshDir, "evil.txt")
+	testutil.FailErr(t, "write readme.txt", os.WriteFile(ordinaryReadme, []byte("ordinary-readme\n"), 0o600))
 	testutil.FailErr(t, "write id_ed25519", os.WriteFile(idEd25519, []byte("private-ed25519\n"), 0o600))
+	testutil.FailErr(t, "write id_ed25519.pub", os.WriteFile(idEd25519Pub, []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI test\n"), 0o644))
 	testutil.FailErr(t, "write id_rsa", os.WriteFile(idRSA, []byte("private-rsa\n"), 0o600))
 	testutil.FailErr(t, "write authorized_keys", os.WriteFile(authKeys, []byte("initial-key\n"), 0o600))
+	testutil.FailErr(t, "write authorized_keys_test", os.WriteFile(authKeysTest, []byte("initial-test-key\n"), 0o600))
 
-	writeRoots, err := confine.WriteRootsForBoundary("", []string{sshDir}, nil, ownScratch)
-	testutil.FailErr(t, "WriteRootsForBoundary with attached ~/.ssh", err)
-	if slices.Contains(writeRoots, sshDir) {
-		t.Fatalf("WriteRootsForBoundary admitted attached ~/.ssh: %v", writeRoots)
-	}
-	if !confine.PathWithinWriteRoots(ownScratch, writeRoots) {
-		t.Fatalf("WriteRootsForBoundary omitted SessionScratchRoot %q: %v", ownScratch, writeRoots)
+	buildConf := func(readGrants, writeGrants []confine.ProtectedPathGrant) confine.Confinement {
+		t.Helper()
+		c, applied := confine.DefaultConfinement(confine.Request{
+			Roots:                liveBoundaryRoots(sshDir, ordinaryDir),
+			SessionScratchRoot:   ownScratch,
+			ProtectedReadGrants:  readGrants,
+			ProtectedWriteGrants: writeGrants,
+			Egress:               confine.EgressDeny,
+		})
+		if !applied || c == nil {
+			t.Fatalf("DefaultConfinement with attached ~/.ssh not applied: applied=%v c=%+v", applied, c)
+		}
+		boundary := confine.BoundaryOf(c)
+		if !boundary.Applied {
+			t.Fatal("BoundaryOf did not report Applied=true")
+		}
+		if slices.Contains(boundary.WriteRoots, sshDir) {
+			t.Fatalf("BoundaryOf.WriteRoots admitted attached ~/.ssh: %v", boundary.WriteRoots)
+		}
+		if !slices.Contains(boundary.WriteRoots, ordinaryDir) {
+			t.Fatalf("BoundaryOf.WriteRoots omitted ordinary root %q: %v", ordinaryDir, boundary.WriteRoots)
+		}
+		if !confine.PathWithinWriteRoots(ownScratch, boundary.WriteRoots) {
+			t.Fatalf("BoundaryOf.WriteRoots omitted SessionScratchRoot %q: %v", ownScratch, boundary.WriteRoots)
+		}
+		return *c
 	}
 
-	base := confine.Confinement{
-		Roots:              []string{sshDir},
-		SessionScratchRoot: ownScratch,
-		Network:            confine.NetworkDeny,
-		EgressOff:          confine.EgressOffOverride,
-	}
+	base := buildConf(nil, nil)
 
-	// 1. Unapproved baseline: @scratch works; ~/.ssh reads and writes are denied by FloorReadKeyMaterial / FloorProtected.
+	// 1. Unapproved baseline: ordinary readable files outside ~/.ssh and @scratch work;
+	// ~/.ssh reads (including .pub under the catalogued .ssh floor) and writes are denied.
+	if code, out := confinedRun(t, self, base, "/bin/cat", ordinaryReadme); code != 0 || out != "ordinary-readme\n" {
+		t.Fatalf("unapproved ordinary file read exit=%d out=%q, want 0 and \"ordinary-readme\\n\"", code, out)
+	}
 	scratchNote := filepath.Join(ownScratch, "note.txt")
 	if code := confinedExit(t, self, base, "/bin/sh", "-c", `echo scratch-ok > "$1"`, "sh", scratchNote); code != 0 {
 		t.Fatalf("unapproved @scratch write exit=%d, want 0", code)
@@ -196,53 +239,61 @@ func TestAttachedProtectedRootSubprocessGrantAndRevokeLifecycle(t *testing.T) {
 	if code, out := confinedRun(t, self, base, "/bin/cat", scratchNote); code != 0 || out != "scratch-ok\n" {
 		t.Fatalf("unapproved @scratch read exit=%d out=%q, want 0 and \"scratch-ok\\n\"", code, out)
 	}
-	for _, secret := range []string{idEd25519, idRSA, authKeys} {
+	for _, secret := range []string{idEd25519, idEd25519Pub, idRSA, authKeys} {
 		if code := confinedExit(t, self, base, "/bin/cat", secret); code == 0 {
 			t.Fatalf("unapproved confined subprocess read key-material file %s", secret)
 		}
 	}
-	for _, target := range []string{authKeys, idEd25519, evilFile} {
+	for _, target := range []string{authKeys, authKeysTest, idEd25519, evilFile} {
 		if code := confinedExit(t, self, base, "/bin/sh", "-c", `echo pwn > "$1"`, "sh", target); code == 0 {
 			t.Fatalf("unapproved confined subprocess wrote %s inside ~/.ssh", target)
 		}
 	}
 
-	// 2. Exact read grant on id_ed25519: reading id_ed25519 succeeds; sibling id_rsa and writes remain denied.
-	withReadGrant := base
-	withReadGrant.ProtectedReadGrants = []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(idEd25519)}
+	// 2. Exact read grant on id_ed25519: reading id_ed25519 succeeds; sibling files (id_rsa, id_ed25519.pub) and writes remain denied.
+	withReadGrant := buildConf([]confine.ProtectedPathGrant{confine.NewProtectedPathGrant(idEd25519)}, nil)
 	if code, out := confinedRun(t, self, withReadGrant, "/bin/cat", idEd25519); code != 0 || out != "private-ed25519\n" {
 		t.Fatalf("approved id_ed25519 read exit=%d out=%q, want 0 and \"private-ed25519\\n\"", code, out)
 	}
-	if code := confinedExit(t, self, withReadGrant, "/bin/cat", idRSA); code == 0 {
-		t.Fatal("exact read grant on id_ed25519 leaked sibling id_rsa")
+	for _, unapprovedRead := range []string{idRSA, idEd25519Pub, authKeys} {
+		if code := confinedExit(t, self, withReadGrant, "/bin/cat", unapprovedRead); code == 0 {
+			t.Fatalf("exact read grant on id_ed25519 leaked sibling %s", unapprovedRead)
+		}
 	}
 	if code := confinedExit(t, self, withReadGrant, "/bin/sh", "-c", `echo pwn > "$1"`, "sh", idEd25519); code == 0 {
 		t.Fatal("exact read grant on id_ed25519 permitted writing id_ed25519")
 	}
 
-	// 3. Exact write grant on authorized_keys: writing authorized_keys succeeds; sibling files remain write-denied.
-	withWriteGrant := base
-	withWriteGrant.ProtectedWriteGrants = []confine.ProtectedPathGrant{confine.NewProtectedPathGrant(authKeys)}
-	if code := confinedExit(t, self, withWriteGrant, "/bin/sh", "-c", `printf "approved-key\n" > "$1"`, "sh", authKeys); code != 0 {
-		t.Fatalf("approved authorized_keys write exit=%d, want 0", code)
-	}
-	if got, err := os.ReadFile(authKeys); err != nil || string(got) != "approved-key\n" {
-		t.Fatalf("authorized_keys content = %q (%v), want \"approved-key\\n\"", got, err)
+	// 3. Exact write grant on authorized_keys and authorized_keys_test: writing them succeeds; sibling files remain write-denied.
+	withWriteGrant := buildConf(nil, []confine.ProtectedPathGrant{
+		confine.NewProtectedPathGrant(authKeys),
+		confine.NewProtectedPathGrant(authKeysTest),
+	})
+	for _, grantedTarget := range []string{authKeys, authKeysTest} {
+		if code := confinedExit(t, self, withWriteGrant, "/bin/sh", "-c", `printf "approved-key\n" > "$1"`, "sh", grantedTarget); code != 0 {
+			t.Fatalf("approved %s write exit=%d, want 0", grantedTarget, code)
+		}
+		if got, err := os.ReadFile(grantedTarget); err != nil || string(got) != "approved-key\n" {
+			t.Fatalf("%s content = %q (%v), want \"approved-key\\n\"", grantedTarget, got, err)
+		}
 	}
 	for _, unapprovedTarget := range []string{idEd25519, evilFile} {
 		if code := confinedExit(t, self, withWriteGrant, "/bin/sh", "-c", `echo pwn > "$1"`, "sh", unapprovedTarget); code == 0 {
-			t.Fatalf("exact write grant on authorized_keys permitted writing %s", unapprovedTarget)
+			t.Fatalf("exact write grant permitted writing unapproved %s", unapprovedTarget)
 		}
 	}
 
-	// 4. Revocation: running again with base confinement denies reading id_ed25519 and writing authorized_keys.
-	if code := confinedExit(t, self, base, "/bin/cat", idEd25519); code == 0 {
+	// 4. Revocation: rebuilding confinement without grants denies reading id_ed25519 and writing authorized_keys / authorized_keys_test.
+	revoked := buildConf(nil, nil)
+	if code := confinedExit(t, self, revoked, "/bin/cat", idEd25519); code == 0 {
 		t.Fatal("revoked read grant still allowed reading id_ed25519")
 	}
-	if code := confinedExit(t, self, base, "/bin/sh", "-c", `printf "tampered\n" > "$1"`, "sh", authKeys); code == 0 {
-		t.Fatal("revoked write grant still allowed writing authorized_keys")
-	}
-	if got, err := os.ReadFile(authKeys); err != nil || string(got) != "approved-key\n" {
-		t.Fatalf("authorized_keys content after revoked write attempt = %q (%v), want \"approved-key\\n\"", got, err)
+	for _, revokedTarget := range []string{authKeys, authKeysTest} {
+		if code := confinedExit(t, self, revoked, "/bin/sh", "-c", `printf "tampered\n" > "$1"`, "sh", revokedTarget); code == 0 {
+			t.Fatalf("revoked write grant still allowed writing %s", revokedTarget)
+		}
+		if got, err := os.ReadFile(revokedTarget); err != nil || string(got) != "approved-key\n" {
+			t.Fatalf("%s content after revoked write attempt = %q (%v), want \"approved-key\\n\"", revokedTarget, got, err)
+		}
 	}
 }

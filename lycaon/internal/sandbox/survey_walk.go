@@ -66,6 +66,10 @@ type SurveyOptions struct {
 	OnBoundary func(SurveyBoundary)
 	// A nil Scope imposes no additional admission rules.
 	Scope SurveyScope
+	// SessionScratchDir and SessionOutputDir identify the invocation's own
+	// session directories for read-floor carve-outs when ctx does not carry them.
+	SessionScratchDir string
+	SessionOutputDir  string
 }
 
 // SurveyScope checks directories before opening them; rejected subtrees cost one entry.
@@ -136,6 +140,12 @@ func SurveyWalk(ctx context.Context, root string, opts SurveyOptions, visit func
 		return err
 	}
 	scratchDir, outputDir := SessionDirsFromContext(ctx)
+	if scratchDir == "" {
+		scratchDir = opts.SessionScratchDir
+	}
+	if outputDir == "" {
+		outputDir = opts.SessionOutputDir
+	}
 	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(root, scratchDir, outputDir)
 	if !opts.IncludeEngineOverlay && confine.ControlPlanePathDenied(root, false, effScratch, effOutput) {
 		return nil
@@ -387,7 +397,7 @@ func SurveyReadDir(dir, relDir string, opts SurveyOptions) ([]SurveyEntry, error
 }
 
 func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts SurveyOptions) []SurveyEntry {
-	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(dir, "", "")
+	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(dir, opts.SessionScratchDir, opts.SessionOutputDir)
 	if !opts.IncludeEngineOverlay && confine.ControlPlanePathDenied(dir, false, effScratch, effOutput) {
 		return nil
 	}

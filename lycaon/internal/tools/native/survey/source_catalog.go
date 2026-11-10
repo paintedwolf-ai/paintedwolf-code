@@ -119,7 +119,12 @@ var errInventoryStop = errors.New("inventory walk stopped")
 // deleted indexed entries before a query can present them.
 func (inv sourceInventory) walkMerged(ctx context.Context, dir string, visit func(sourcecatalog.Entry) sourcecatalog.WalkStep) error {
 	full := filepath.Join(inv.rootPath, filepath.FromSlash(dir))
-	live, err := sandbox.SurveyReadDir(full, dir, sandbox.SurveyOptions{IncludeHidden: true})
+	scratchDir, outputDir := sandbox.SessionDirsFromContext(ctx)
+	live, err := sandbox.SurveyReadDir(full, dir, sandbox.SurveyOptions{
+		IncludeHidden:     true,
+		SessionScratchDir: scratchDir,
+		SessionOutputDir:  outputDir,
+	})
 	if err != nil {
 		return err
 	}

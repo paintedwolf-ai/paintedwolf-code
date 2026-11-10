@@ -92,8 +92,9 @@ type ActionConfineInputs struct {
 	SessionScratchRoot string
 	SessionOutputRoot  string
 	// OverlayWriteRoots contains chat-scoped write grants.
-	OverlayWriteRoots []string
-	PolicyWriteGrants []confine.ProtectedPathGrant
+	OverlayWriteRoots    []string
+	ProtectedWriteGrants []confine.ProtectedPathGrant
+	PolicyWriteGrants    []confine.ProtectedPathGrant
 	// OverlayReadPaths contains chat-scoped protected read grants.
 	OverlayReadPaths []string
 	// ReadDenyPaths are host-selected read exclusions.
@@ -114,6 +115,18 @@ type ActionConfineInputs struct {
 // ActionConfineRequest builds the request shared by approval and execution.
 func ActionConfineRequest(in ActionConfineInputs) confine.Request {
 	overlayRoots, protected := confine.SplitChatOverlay(in.OverlayWriteRoots)
+	if len(in.ProtectedWriteGrants) > 0 {
+		merged := make([]confine.ProtectedPathGrant, 0, len(in.ProtectedWriteGrants)+len(protected))
+		seen := make(map[confine.ProtectedPathGrant]struct{}, len(in.ProtectedWriteGrants)+len(protected))
+		for _, g := range append(append([]confine.ProtectedPathGrant(nil), in.ProtectedWriteGrants...), protected...) {
+			if _, ok := seen[g]; ok {
+				continue
+			}
+			seen[g] = struct{}{}
+			merged = append(merged, g)
+		}
+		protected = merged
+	}
 	reads := make([]confine.ProtectedPathGrant, 0, len(in.OverlayReadPaths))
 	for _, p := range in.OverlayReadPaths {
 		reads = append(reads, confine.NewProtectedPathGrant(p))
