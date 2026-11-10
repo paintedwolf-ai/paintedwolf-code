@@ -43,7 +43,7 @@ func allocateWriteResource(request WriteResourceRequest, base string, writeRoots
 	}
 	resource = WriteResource{ID: uuid.NewString(), Capture: request.Capture}
 	resource.Path = filepath.Join(base, resource.ID)
-	if confine.PathWithinWriteRoots(resource.Path, writeRoots) {
+	if confine.PathWithinRoots(resource.Path, writeRoots) {
 		return resource, fmt.Errorf("external output lies within a default write root")
 	}
 	if err := os.MkdirAll(base, 0o700); err != nil {

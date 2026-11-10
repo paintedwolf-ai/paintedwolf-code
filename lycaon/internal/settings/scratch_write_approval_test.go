@@ -1,7 +1,10 @@
 package settings_test
 
 import (
+	"os"
 	"path/filepath"
+
+	"github.com/lycaon/lycaon/internal/confine"
 	"slices"
 	"testing"
 
@@ -86,5 +89,42 @@ func TestScratchCommandStaysSilentAtStrict(t *testing.T) {
 	testutil.FailErr(t, "evaluate", err)
 	if asksOutsideRoots(result) {
 		t.Fatalf("command scratch write asked on the file gate: %+v", result)
+	}
+}
+
+func TestSessionOutputReadUsesAppliedReadOnlyAuthority(t *testing.T) {
+	confine.TestingSetAutoConfine(t)
+	state := t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	t.Setenv("LYCAON_SANDBOX_DENY_READ", "")
+	approvalGate, project := scratchGate(t, gate.PostureStrict)
+	output := filepath.Join(state, "session-output", "chat")
+	testutil.FailErr(t, "create output directory", os.MkdirAll(output, 0700))
+	foreign := filepath.Join(state, "session-output", "other", "program.stdout")
+	testutil.FailErr(t, "create foreign output directory", os.MkdirAll(filepath.Dir(foreign), 0700))
+	testutil.FailErr(t, "create foreign output", os.WriteFile(foreign, []byte("foreign"), 0600))
+	alias := filepath.Join(output, "alias.stdout")
+	testutil.FailErr(t, "plant foreign output alias", os.Symlink(foreign, alias))
+	contained := hitl.ContainedForRequest(confine.Request{Roots: []string{project}, SessionOutputRoot: output})
+	for _, tc := range []struct {
+		name, tool, path string
+		denied           bool
+	}{
+		{"aggregate", "read", filepath.Join(output, "program.stdout"), false},
+		{"child", "read", filepath.Join(output, "program", "child.stdout"), false},
+		{"write", "write", filepath.Join(output, "program.stdout"), true},
+		{"foreign", "read", foreign, true},
+		{"escape", "read", alias, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			action := scratchAction(tc.tool, project, tc.path)
+			action.Scope.SessionOutputRoot = output
+			action.Execution.Contained = contained
+			result, err := approvalGate.Evaluate(t.Context(), action)
+			testutil.FailErr(t, "evaluate output authority", err)
+			if result.Denied != tc.denied || result.Required() {
+				t.Fatalf("output authority = %+v, denied=%v", result, tc.denied)
+			}
+		})
 	}
 }

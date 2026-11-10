@@ -16,10 +16,10 @@ func TestWriteResourceOwnershipAndBoundary(t *testing.T) {
 	resource, err := allocateWriteResource(WriteResourceRequest{Capture: capture, Project: project}, t.TempDir(), roots)
 	testutil.FailErr(t, "allocate external output", err)
 	t.Cleanup(func() { _ = os.RemoveAll(resource.Path) })
-	if confine.PathWithinWriteRoots(resource.Path, roots) {
+	if confine.PathWithinRoots(resource.Path, roots) {
 		t.Fatal("output can be written without a grant")
 	}
-	if confine.PathWithinWriteRoots(resource.Path, []string{capture}) {
+	if confine.PathWithinRoots(resource.Path, []string{capture}) {
 		t.Fatal("output exposes the capture directory")
 	}
 	info, err := os.Stat(resource.Path)
