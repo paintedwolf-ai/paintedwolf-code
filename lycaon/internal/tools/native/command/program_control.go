@@ -174,7 +174,11 @@ func (d *ProgramDispatcher) runProducer(ctx context.Context, request commandprog
 		d.run.finishOpTracker(ctx, tracker, outClass, false, errClass, false)
 		return ownerFailure(captureErr), captureErr
 	}
-	defer func() { err = errors.Join(err, retain(ctx, result, err)) }()
+	defer func() {
+		if retainErr := retain(ctx, result, err); retainErr != nil {
+			err = errors.Join(err, retainErr)
+		}
+	}()
 	streams, finishProvenance := d.run.wrapProducerStreams(ctx, tracker, outClass, errClass, streams)
 	defer finishProvenance()
 	return body(ctx, streams)

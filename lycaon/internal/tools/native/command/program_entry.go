@@ -352,7 +352,13 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 	}
 	scope := captureprojection.Scope{ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(), SessionID: tc.Identity.SessionID}
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: invocation.MaximumProgramInputBytes, OutputBytes: invocation.MaximumProgramInputBytes, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
+	var retainSerial sync.Mutex
 	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
+		// Retentions serialize per run: each pass leases the zstd stream
+		// reader's 32 MiB working window, and concurrent leases overflow the
+		// program's working account before either publication finishes.
+		retainSerial.Lock()
+		defer retainSerial.Unlock()
 		outputScreening := screening
 		outputScreening.Policy = secretmatch.StreamPolicy{ManagedEchoes: true}
 		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, outputScreening)
