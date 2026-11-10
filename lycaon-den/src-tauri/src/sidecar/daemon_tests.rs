@@ -236,7 +236,7 @@ fn external_daemon_token_print_nonblocking_and_read_errors_clean_up_process_grou
         "pipe-inheriting grandchild {setup_bg_pid} survived nonblocking setup error"
     );
 
-    // 2. Real stdout read failure (EBADF on write-only fd via dup2) cleans up helper + grandchild.
+    // 2. Real stdout read failure (EBADF via dup2) cleans up helper + grandchild.
     let read_pid_file = dir.path().join("read-fail-bg.pid");
     let mut read_cmd = Command::new("sh");
     read_cmd.args([

@@ -63,7 +63,7 @@ impl Drop for HelperProcessGuard {
 
 #[cfg(unix)]
 pub(super) fn set_fd_nonblocking(fd: std::os::fd::RawFd) -> Result<(), String> {
-    // SAFETY: fcntl F_GETFL/F_SETFL on an integer fd is memory-safe and returns -1 on error.
+    // SAFETY: fcntl F_GETFL/F_SETFL on an integer fd returns -1 on error.
     unsafe {
         let flags = libc::fcntl(fd, libc::F_GETFL);
         if flags < 0 {
