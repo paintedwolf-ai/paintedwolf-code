@@ -71,7 +71,7 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 			manager.onRequest = func(req hitl.CheckpointRequest) {
 				asks++
 				if asks > wantAsks || preparedBytes.Len() != 0 || records != 0 {
-					t.Fatal("review repeated or followed preparation")
+					t.Fatalf("review repeated or followed preparation: asks=%d want=%d preparations=%d bytes=%q records=%d", asks, wantAsks, preparations, preparedBytes.String(), records)
 				}
 				matched := false
 				for _, rule := range req.ApprovalMatches {
