@@ -43,7 +43,7 @@ func TurnLoadWire(r store.TurnLoadReceipt) api.TurnLoad {
 	_ = json.Unmarshal([]byte(r.Decisions), &decisions)
 	out.Engine = wireEngine(decisions)
 	switch r.Trigger {
-	case store.TurnLoadTriggerTurn:
+	case store.TurnLoadTriggerTurn, store.TurnLoadTriggerVisibility:
 		if p := decisions.PreloadedSkill; p != nil {
 			out.PreloadedSkill = &api.TurnLoadSkill{Name: p.Name, Score: p.Score}
 		}

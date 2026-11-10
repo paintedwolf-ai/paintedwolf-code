@@ -2,9 +2,6 @@ package profiles
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -130,7 +127,7 @@ func (m *Service) promptSurface(ctx context.Context, sess *api.Session, loaded [
 			m.externalObserver(ctx, sess.ID, out.Posture, out.CommandExternalHidden)
 		}
 	}
-	out.Fingerprint = promptSurfaceFingerprint(out)
+	out.Fingerprint = out.CacheFingerprint()
 	return out
 }
 
@@ -176,30 +173,4 @@ func hostResourceViews(plan hostresources.AmbientPlan) []prompts.AgentHostResour
 		})
 	}
 	return out
-}
-
-// promptSurfaceFingerprint keys the stable prompt on what it renders: whether
-// skills are available and the host resources. Skill identifiers and cards
-// stay out of the prompt.
-func promptSurfaceFingerprint(surface prompts.AgentPromptSurface) string {
-	payload, err := json.Marshal(struct {
-		HasSkills             bool
-		HostResources         []prompts.AgentHostResourceView
-		HostResourcesOmitted  int
-		SessionScratchDir     string
-		ReviewsConfinedWrites bool
-		CommandExternalHidden bool
-	}{
-		len(surface.Skills) > 0,
-		surface.HostResources,
-		surface.HostResourcesOmitted,
-		surface.SessionScratchDir,
-		surface.Posture.ReviewsConfinedWrites(),
-		surface.CommandExternalHidden,
-	})
-	if err != nil {
-		return surface.Fingerprint
-	}
-	sum := sha256.Sum256(payload)
-	return base64.RawURLEncoding.EncodeToString(sum[:])
 }

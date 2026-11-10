@@ -97,6 +97,25 @@ keep their own ranking threshold and result limit.
 
 ## Discovery without ranking
 
+When selection is unavailable, disabled, timed out, or faulted, the host offers
+all permitted deferred tool schemas and lists the applicable skills by name and
+description. Skill bodies remain on demand through exact-name `skills_read`.
+The same fallback serves ordinary failures and engine-off collection; it does
+not change permission floors, workflow restrictions, or resource eligibility.
+Standing receipts mark these tools as `fallback`, not predicted or requested.
+A changed continuation writes a `visibility` receipt so restart recovery restores
+the exposed surface without inventing another turn decision.
+Observed tool calls and judge labels still train direct tool selection without
+`request_tools` calls. Retrieval examples from actual described needs remain a
+separate training objective; an empty retrieval sample is not retrieval evidence.
+
+The visibility state expands immediately after an observed selection failure.
+A warm prefix retains the expanded catalog; a successful cold turn can resume
+selection. Continuations reapply current permission filtering, and caller
+cancellation does not expand visibility. Prompt identity includes the rendered
+skill cards, including changes after the turn's machine snapshot was compiled.
+
+
 `request_tools` and `skills_read` keep exact-name access independent of Bialy.
 A request containing only one exact tool name bypasses ranking; an unambiguous
 skill identifier does too. Described needs use the local ranker. When it is

@@ -245,6 +245,23 @@ describe("thinking-activity-label", () => {
     ).toBe("Local AI is matching tools...");
   });
 
+  it("labels visibility without attributing a model decision", () => {
+    expect(
+      resolveThinkingActivityLabel({
+        activities: [
+          {
+            activity_id: "visibility",
+            session_id: "s1",
+            kind: "deciding",
+            status: "active",
+            started_at: "2026-01-01T00:00:00Z",
+            decision_trigger: "visibility",
+          },
+        ],
+      }),
+    ).toBe("Updating available tools and skills...");
+  });
+
   it("labels the workflow-start boot window from its host lease", () => {
     expect(
       resolveThinkingActivityLabel({

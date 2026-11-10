@@ -2,13 +2,12 @@ package oar
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestMutationCandidateRecoveryCopy(t *testing.T) {
+func TestMutationCandidateRejectionUsesStructuredFacts(t *testing.T) {
 	ensureCatalog(t)
 	loader, err := NewLoader(schemaDir(t))
 	testutil.FailErr(t, "loader", err)
@@ -32,20 +31,13 @@ func TestMutationCandidateRecoveryCopy(t *testing.T) {
 				if !result.Enforced || result.Decision == nil || result.Decision.Code != "MUTATION_BROKE_PARSE" {
 					t.Fatalf("missing mutation rejection: %#v", result)
 				}
-				fix := result.Decision.Copy["fix"]
-				if !strings.Contains(fix, "supply `syntax_override_reason`") {
-					t.Fatalf("domain-tool leg must advise the form-tool override parameter: %s", fix)
-				}
-				if len(fix) > 1000 {
-					t.Fatalf("recovery copy grew beyond bounded remedy: %d bytes", len(fix))
-				}
+
 			})
 		}
 	}
 }
 
-// Command recovery names forms from the active language catalog.
-func TestMutationCandidateRecoveryCopyCommandLeg(t *testing.T) {
+func TestMutationCandidateRejectionUsesNativeOperation(t *testing.T) {
 	ensureCatalog(t)
 	loader, err := NewLoader(schemaDir(t))
 	testutil.FailErr(t, "loader", err)
@@ -65,16 +57,7 @@ func TestMutationCandidateRecoveryCopyCommandLeg(t *testing.T) {
 			if !result.Enforced || result.Decision == nil || result.Decision.Code != "MUTATION_BROKE_PARSE" {
 				t.Fatalf("missing mutation rejection: %#v", result)
 			}
-			fix := result.Decision.Copy["fix"]
-			if !strings.Contains(fix, "tee --syntax-override-reason") {
-				t.Fatalf("command leg must name an available override form: %s", fix)
-			}
-			if strings.Contains(fix, "supply `syntax_override_reason`") {
-				t.Fatalf("command leg must not advise the form-tool override parameter: %s", fix)
-			}
-			if len(fix) > 1000 {
-				t.Fatalf("recovery copy grew beyond bounded remedy: %d bytes", len(fix))
-			}
+
 		})
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 // RequestOutcome is what one request_tools call established.
 type RequestOutcome struct {
+	FullCatalog bool `json:"full_catalog,omitempty"`
 	// Need is the text the model wrote.
 	Need string `json:"need"`
 	// Exact names loadable tools the text named outright.

@@ -39,10 +39,8 @@ func TestReviewEvidenceUnitsUseCapabilitiesAndRespectOmissions(t *testing.T) {
 			pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)})
 			engine := &AssemblyEngine{}
 			engine.SetDeps(AssemblyDeps{
-				Prompts: pe,
-				OmittedUnits: func(string) map[string]bool {
-					return map[string]bool{"claim-evidence": omitted, "native-recall-tool": true}
-				},
+				Prompts:   pe,
+				Selection: &selectionFixture{omitted: map[string]bool{"claim-evidence": omitted, "native-recall-tool": true}},
 			})
 			sess := &api.Session{ID: "review", AgentType: "coordinator", Posture: api.SessionPostureVet, WorkspacePath: t.TempDir()}
 			frame := inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{
@@ -66,9 +64,7 @@ func TestCoordinatorUnitsKeepLoadedToolsAndWebGate(t *testing.T) {
 		engine.SetDeps(AssemblyDeps{
 			Prompts:          pe,
 			WebSearchEnabled: func() bool { return webEnabled },
-			LoadedTools: func(string) map[string]bool {
-				return map[string]bool{"secret_generate": true, "fetch_url": true}
-			},
+			Selection:        &selectionFixture{loaded: map[string]bool{"secret_generate": true, "fetch_url": true}},
 		})
 		sess := &api.Session{ID: "loaded", AgentType: "coordinator", Posture: api.SessionPostureBuild, WorkspacePath: t.TempDir()}
 		frame := inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{PhaseCoordinatorSurface: "implement_investigate"}}
