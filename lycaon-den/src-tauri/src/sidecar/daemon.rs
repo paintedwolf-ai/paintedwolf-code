@@ -26,76 +26,151 @@ pub(super) fn token_print_command(bin: &Path, config_dir: &Path) -> Command {
         .env_remove("LYCAON_API_TOKEN")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::null());
     if let Some(layout) = bundled_engine_layout() {
         command.env("LYCAON_ENGINE_ROOT", layout.engine_root);
     }
     command
 }
 
+#[cfg(unix)]
+fn terminate_helper_process_group(child: &mut std::process::Child) {
+    let pgid = child.id() as i32;
+    if pgid > 0 {
+        // SAFETY: child was spawned with process_group(0), so pgid is the
+        // helper's dedicated process group and never affects unrelated processes.
+        unsafe {
+            let _ = libc::kill(-pgid, libc::SIGKILL);
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[cfg(unix)]
+fn drain_nonblocking_stdout(
+    stdout: &mut std::process::ChildStdout,
+    buf: &mut Vec<u8>,
+    max_bytes: usize,
+) -> Result<bool, String> {
+    let mut chunk = [0u8; 256];
+    loop {
+        let remaining = max_bytes.saturating_sub(buf.len());
+        if remaining == 0 {
+            return Ok(true);
+        }
+        let limit = remaining.min(chunk.len());
+        match stdout.read(&mut chunk[..limit]) {
+            Ok(0) => return Ok(true),
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(false),
+            Err(e) => return Err(format!("read daemon token print stdout: {e}")),
+        }
+    }
+}
+
 pub(super) fn run_token_print_command(
     mut command: Command,
     timeout: Duration,
 ) -> Result<String, String> {
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     let mut child = command
         .spawn()
         .map_err(|e| format!("run daemon token print: {e}"))?;
-    let stdout = child
+    let mut stdout = child
         .stdout
         .take()
         .ok_or_else(|| "daemon token print stdout unavailable".to_string())?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| "daemon token print stderr unavailable".to_string())?;
-    let stdout_reader = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = stdout
-            .take((API_TOKEN_MAX_BYTES + 64) as u64)
-            .read_to_end(&mut buf);
-        buf
-    });
-    let stderr_reader = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = stderr.take(512).read_to_end(&mut buf);
-        buf
-    });
-    let deadline = Instant::now() + timeout;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) => {
-                if Instant::now() >= deadline {
+    let max_capture = API_TOKEN_MAX_BYTES + 64;
+
+    #[cfg(unix)]
+    let (status, stdout_bytes) = {
+        use std::os::fd::AsRawFd;
+        // SAFETY: stdout is a valid open pipe file descriptor owned by this scope.
+        unsafe {
+            let fd = stdout.as_raw_fd();
+            let flags = libc::fcntl(fd, libc::F_GETFL);
+            if flags >= 0 {
+                let _ = libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+            }
+        }
+        let mut buf = Vec::with_capacity(128);
+        let deadline = Instant::now() + timeout;
+        let status = loop {
+            let _ = drain_nonblocking_stdout(&mut stdout, &mut buf, max_capture)?;
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    let _ = drain_nonblocking_stdout(&mut stdout, &mut buf, max_capture);
+                    break status;
+                }
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        drop(stdout);
+                        terminate_helper_process_group(&mut child);
+                        return Err("daemon token print timed out".to_string());
+                    }
+                    std::thread::sleep(GRACEFUL_STOP_POLL);
+                }
+                Err(e) => {
+                    drop(stdout);
+                    terminate_helper_process_group(&mut child);
+                    return Err(format!("wait daemon token print: {e}"));
+                }
+            }
+        };
+        drop(stdout);
+        terminate_helper_process_group(&mut child);
+        (status, buf)
+    };
+
+    #[cfg(not(unix))]
+    let (status, stdout_bytes) = {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = stdout.take(max_capture as u64).read_to_end(&mut buf);
+            let _ = tx.send(buf);
+        });
+        let deadline = Instant::now() + timeout;
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return Err("daemon token print timed out".to_string());
+                    }
+                    std::thread::sleep(GRACEFUL_STOP_POLL);
+                }
+                Err(e) => {
                     let _ = child.kill();
                     let _ = child.wait();
-                    let _ = stdout_reader.join();
-                    let _ = stderr_reader.join();
-                    return Err("daemon token print timed out".to_string());
+                    return Err(format!("wait daemon token print: {e}"));
                 }
-                std::thread::sleep(GRACEFUL_STOP_POLL);
             }
-            Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = stdout_reader.join();
-                let _ = stderr_reader.join();
-                return Err(format!("wait daemon token print: {e}"));
-            }
-        }
+        };
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let buf = rx
+            .recv_timeout(remaining.max(Duration::from_millis(50)))
+            .unwrap_or_default();
+        (status, buf)
     };
-    let stdout_bytes = stdout_reader
-        .join()
-        .map_err(|_| "daemon token print stdout reader panicked".to_string())?;
-    let stderr_bytes = stderr_reader
-        .join()
-        .map_err(|_| "daemon token print stderr reader panicked".to_string())?;
+
     if !status.success() {
-        let code = status.code().unwrap_or(-1);
-        let detail = String::from_utf8_lossy(&stderr_bytes).trim().to_string();
-        if detail.is_empty() {
-            return Err(format!("daemon token print failed (exit {code})"));
-        }
-        return Err(format!("daemon token print failed (exit {code}): {detail}"));
+        return Err(match status.code() {
+            Some(code) => format!("daemon token print failed (exit {code})"),
+            None => "daemon token print terminated by signal".to_string(),
+        });
     }
     let raw = String::from_utf8(stdout_bytes)
         .map_err(|_| "daemon token print returned non-UTF-8 output".to_string())?;
@@ -224,3 +299,7 @@ pub(super) fn poll_health_on_host(host: &str, port: u16) -> Result<(), String> {
     }
     Err(format!("daemon health failed for {host}:{port}"))
 }
+
+#[cfg(test)]
+#[path = "daemon_tests.rs"]
+mod daemon_tests;
