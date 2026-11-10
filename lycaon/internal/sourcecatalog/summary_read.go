@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/textrank"
@@ -375,7 +376,8 @@ func (c *TreeStores) summaryStore(ctx context.Context, projectID string, root Ro
 		return nil, err
 	}
 	root = cleaned[0]
-	key := "summary\x00" + rootKey(projectID, root) + "\x00" + scope.Key + fmt.Sprint(scope.PruneNestedVCS)
+	floorKey := confine.CompileAgentReadFloor(root.watchRoot()).CacheKey()
+	key := "summary\x00" + rootKey(projectID, root) + "\x00" + scope.Key + "\x00" + floorKey + fmt.Sprint(scope.PruneNestedVCS)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.trees == nil {

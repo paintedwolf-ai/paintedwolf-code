@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -27,21 +26,27 @@ func listDirSingleLevel(
 	fullPath, relPath string,
 	includeHidden bool,
 ) ([]listDirEntry, error) {
-	if enginepaths.IsAgentSourceReadDenied(root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
+	if confine.IsAgentSourceReadDenied(root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 		return nil, nil
 	}
 	if boundary != nil && boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, fullPath), tctx.ProfileID()) != nil {
 		return nil, nil
 	}
 	admit := func(_, abs string, _ bool) bool {
-		if enginepaths.IsAgentSourceReadDenied(root.Path, abs, confine.KeyMaterialReadDenyPaths()) {
+		if confine.IsAgentSourceReadDenied(root.Path, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 			return false
 		}
 		return boundary == nil || boundary.AssertReadScope(
 			ctx, root.Path, projectroot.ScopeRel(root, abs), tctx.ProfileID(),
 		) == nil
 	}
-	opts := sandbox.SurveyOptions{IncludeHidden: includeHidden, Admit: admit}
+	opts := sandbox.SurveyOptions{
+		IncludeHidden:     includeHidden,
+		Admit:             admit,
+		SessionScratchDir: tctx.Host.SessionScratchDir,
+		SessionOutputDir:  tctx.Host.SessionOutputDir,
+	}
 	entries, ok, err := workerBranchReadDir(ctx, tctx, fullPath, opts)
 	if err != nil {
 		return nil, err
@@ -76,7 +81,8 @@ func listDirWalk(
 	maxDepth int,
 	includeHidden bool,
 ) ([]listDirEntry, error) {
-	if enginepaths.IsAgentSourceReadDenied(root.Path, fullRoot, confine.KeyMaterialReadDenyPaths()) {
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
+	if confine.IsAgentSourceReadDenied(root.Path, fullRoot, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 		return nil, nil
 	}
 	if boundary != nil && boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, fullRoot), tctx.ProfileID()) != nil {
@@ -84,7 +90,7 @@ func listDirWalk(
 	}
 	var all []listDirEntry
 	admit := func(_, abs string, _ bool) bool {
-		if enginepaths.IsAgentSourceReadDenied(root.Path, abs, confine.KeyMaterialReadDenyPaths()) {
+		if confine.IsAgentSourceReadDenied(root.Path, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 			return false
 		}
 		return boundary == nil || boundary.AssertReadScope(
@@ -92,9 +98,11 @@ func listDirWalk(
 		) == nil
 	}
 	opts := sandbox.SurveyOptions{
-		IncludeHidden: includeHidden,
-		MaxDepth:      maxDepth,
-		Admit:         admit,
+		IncludeHidden:     includeHidden,
+		MaxDepth:          maxDepth,
+		Admit:             admit,
+		SessionScratchDir: tctx.Host.SessionScratchDir,
+		SessionOutputDir:  tctx.Host.SessionOutputDir,
 	}
 	visit := func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
 		info, infoErr := entry.DirEntry.Info()
@@ -185,7 +193,8 @@ func (t *ListDirTool) listRootCatalog(
 	maxDepth int,
 	includeHidden bool,
 ) ([]listDirEntry, bool) {
-	if enginepaths.IsAgentSourceReadDenied(root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
+	if confine.IsAgentSourceReadDenied(root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 		return nil, true
 	}
 	if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, fullPath), tctx.ProfileID()) != nil {
@@ -205,7 +214,11 @@ func (t *ListDirTool) listRootCatalog(
 			return nil, false
 		}
 		if current.RootBoundary || current.Moving || current.Refreshing || !repochange.Coverage(root.Path).Complete {
-			live, err := sandbox.SurveyReadDir(fullPath, scopeRel, sandbox.SurveyOptions{IncludeHidden: includeHidden})
+			live, err := sandbox.SurveyReadDir(fullPath, scopeRel, sandbox.SurveyOptions{
+				IncludeHidden:     includeHidden,
+				SessionScratchDir: tctx.Host.SessionScratchDir,
+				SessionOutputDir:  tctx.Host.SessionOutputDir,
+			})
 			if err != nil {
 				return nil, false
 			}
@@ -216,7 +229,7 @@ func (t *ListDirTool) listRootCatalog(
 			out := make([]listDirEntry, 0, len(live))
 			for _, child := range live {
 				absPath := child.Abs
-				if enginepaths.IsAgentSourceReadDenied(root.Path, absPath, confine.KeyMaterialReadDenyPaths()) {
+				if confine.IsAgentSourceReadDenied(root.Path, absPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 					continue
 				}
 				if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, absPath), tctx.ProfileID()) != nil {
@@ -241,7 +254,7 @@ func (t *ListDirTool) listRootCatalog(
 				continue
 			}
 			absPath := filepath.Join(root.Path, filepath.FromSlash(child.Path))
-			if enginepaths.IsAgentSourceReadDenied(root.Path, absPath, confine.KeyMaterialReadDenyPaths()) {
+			if confine.IsAgentSourceReadDenied(root.Path, absPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 				continue
 			}
 			if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, root.Path, child.Path, tctx.ProfileID()) != nil {

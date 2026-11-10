@@ -159,6 +159,7 @@ func (t *SummarizeTool) Summarize(ctx context.Context, in SummarizeRequest, tctx
 	if err := ctx.Err(); err != nil {
 		return SummarizeResponse{}, nil, err
 	}
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	if t == nil || t.Boundary == nil {
 		return SummarizeResponse{}, nil, fmt.Errorf("summarize: not configured")
 	}

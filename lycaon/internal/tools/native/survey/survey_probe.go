@@ -59,6 +59,7 @@ func scanLiteralMatches(
 	if sandbox.HasParentTraversal(relPath) {
 		return toolkit.PathEscapeReject(relPath)
 	}
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	literals = literalSearchTerms(literals)
 	if len(literals) == 0 {
 		return nil
@@ -377,6 +378,7 @@ func probeFind(ctx context.Context, boundary *sandbox.Boundary, catalog *sourcec
 	if sandbox.HasParentTraversal(relPath) {
 		return nil, 0, toolkit.PathEscapeReject(relPath)
 	}
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	tool := &FindTool{Boundary: boundary, Catalog: catalog}
 	roots, err := projectpaths.UnionDiscoveryRoots(ctx, tctx, relPath)
 	if err != nil {

@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/textrank"
@@ -36,7 +35,7 @@ type summaryWriter struct {
 	root  *os.Root
 	tx    *sql.Tx
 	store *summaryStore
-	floor enginepaths.AgentReadFloor
+	floor confine.AgentReadFloor
 	// budget accounts this reconciliation against the store's policy.
 	budget *sandbox.WalkBudget
 	get    *sql.Stmt
@@ -95,7 +94,7 @@ func newSummaryWriter(ctx context.Context, tx *sql.Tx, s *summaryStore) (*summar
 	w := &summaryWriter{
 		tx:     tx,
 		store:  s,
-		floor:  enginepaths.CompileAgentReadFloor(s.root.watchRoot(), confine.KeyMaterialReadDenyPaths()),
+		floor:  confine.CompileAgentReadFloor(s.root.watchRoot()),
 		budget: sandbox.NewWalkBudget(s.policy.budgets),
 	}
 	var err error
@@ -216,11 +215,11 @@ func (w *summaryWriter) scan(ctx context.Context, rel string) (TreeNode, error) 
 	n := TreeNode{Entry: w.entry(rel, info)}
 	if rel == "." {
 		n.Parent = ""
-		if w.floor.WhollyDenied() || repochange.IsPrivatePathForRoot(w.store.root.watchRoot(), abs) || (n.IsSymlink && w.floor.IsDeniedAbs(rel, abs, nil)) {
+		if w.floor.WhollyDenied() || repochange.IsPrivatePathForRoot(w.store.root.watchRoot(), abs) || (n.IsSymlink && w.floor.IsDeniedAbs(rel, abs)) {
 			return n, w.write(ctx, n)
 		}
 	}
-	if rel != "." && (sandbox.ShouldSkipDir(rel, n.Name) || (w.store.scope.Filter != nil && !w.store.scope.Filter(rel, n.IsDir)) || (n.IsSymlink && w.floor.IsDeniedAbs(rel, abs, nil))) {
+	if rel != "." && (sandbox.ShouldSkipDir(rel, n.Name) || (w.store.scope.Filter != nil && !w.store.scope.Filter(rel, n.IsDir)) || (n.IsSymlink && w.floor.IsDeniedAbs(rel, abs))) {
 		return TreeNode{}, nil
 	}
 	if rel != "." && w.store.scope.PruneNestedVCS && n.IsVCSRoot {

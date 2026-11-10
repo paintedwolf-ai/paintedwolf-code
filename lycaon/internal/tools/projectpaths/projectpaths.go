@@ -187,6 +187,7 @@ func resolve(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, m
 // resolveUnderAdmittedRoots applies the per-path rules once the call's
 // attached roots are known to be admissible.
 func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, modelPath string, op sandbox.PathOp) (Resolved, error) {
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	if op == sandbox.PathOpRead {
 		if hostResolved, ok, err := resolveHostDataRead(tctx, modelPath); ok || err != nil {
 			return hostResolved, err

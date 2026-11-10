@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -52,7 +51,8 @@ type sourceInventory struct {
 // walk visits the scope depth-first. A skipped directory costs one visit, so
 // pruning keeps a walk proportional to what it admits.
 func (inv sourceInventory) walk(ctx context.Context, visit func(sourcecatalog.Entry) sourcecatalog.WalkStep) error {
-	floor := enginepaths.CompileAgentReadFloor(inv.rootPath, confine.KeyMaterialReadDenyPaths())
+	scratchDir, outputDir := sandbox.SessionDirsFromContext(ctx)
+	floor := confine.CompileAgentReadFloor(inv.rootPath, scratchDir, outputDir)
 	if floor.WhollyDenied() {
 		return nil
 	}
@@ -60,7 +60,7 @@ func (inv sourceInventory) walk(ctx context.Context, visit func(sourcecatalog.En
 		if floor.IsDeniedRel(entry.Path) {
 			return sourcecatalog.WalkSkip
 		}
-		if entry.IsSymlink && floor.IsDeniedAbs(entry.Path, filepath.Join(inv.rootPath, filepath.FromSlash(entry.Path)), nil) {
+		if entry.IsSymlink && floor.IsDeniedAbs(entry.Path, filepath.Join(inv.rootPath, filepath.FromSlash(entry.Path))) {
 			return sourcecatalog.WalkSkip
 		}
 		return visit(entry)
@@ -134,7 +134,12 @@ var errInventoryStop = errors.New("inventory walk stopped")
 // deleted indexed entries before a query can present them.
 func (inv sourceInventory) walkMerged(ctx context.Context, dir string, visit func(sourcecatalog.Entry) sourcecatalog.WalkStep) error {
 	full := filepath.Join(inv.rootPath, filepath.FromSlash(dir))
-	live, err := sandbox.SurveyReadDir(full, dir, sandbox.SurveyOptions{IncludeHidden: true})
+	scratchDir, outputDir := sandbox.SessionDirsFromContext(ctx)
+	live, err := sandbox.SurveyReadDir(full, dir, sandbox.SurveyOptions{
+		IncludeHidden:     true,
+		SessionScratchDir: scratchDir,
+		SessionOutputDir:  outputDir,
+	})
 	if err != nil {
 		return err
 	}
@@ -240,7 +245,7 @@ func sourceInventoryForScope(
 	}
 	whole := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID, catalogDir: base, rootID: root.ID, base: base}
 	// Scratch writes have no project watcher; explicitly scoped trees need a fresh walk.
-	if root.ID == projectroot.VirtualScratchLabel || (base != "." && svc.BoundaryPath(ctx, root.Path, base, true) != "") {
+	if root.ID == projectroot.VirtualScratchLabel || root.ID == projectroot.VirtualOutputLabel || (base != "." && svc.BoundaryPath(ctx, root.Path, base, true) != "") {
 		scoped := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID + "\x00" + base, catalogDir: ".", rootID: root.ID, base: base, rebased: true}
 		snapshot, err := svc.ObserveDependencyScope(ctx, sourcecatalog.Root{ID: scoped.catalogRoot, Path: fullRoot, Within: root.Path})
 		if err != nil {

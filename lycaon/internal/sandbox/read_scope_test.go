@@ -93,7 +93,9 @@ func TestCompileAndAssertReadScopeControlPlaneAndSessionScratch(t *testing.T) {
 	t.Setenv(configdir.EnvConfigDir, cfgDir)
 	scratchSessionDir := filepath.Join(cfgDir, "scratch", "sess-1")
 	outputSessionDir := filepath.Join(cfgDir, "session-output", "sess-1")
-	for _, dir := range []string{filepath.Join(cfgDir, "packs"), scratchSessionDir, outputSessionDir} {
+	otherScratchDir := filepath.Join(cfgDir, "scratch", "other-session")
+	wtDir := filepath.Join(cfgDir, "worktrees", "wt-1")
+	for _, dir := range []string{filepath.Join(cfgDir, "packs"), scratchSessionDir, outputSessionDir, otherScratchDir, wtDir} {
 		testutil.FailErr(t, "mkdir", os.MkdirAll(dir, 0o755))
 	}
 	testutil.FailErr(t, "write settings.yaml", os.WriteFile(filepath.Join(cfgDir, "settings.yaml"), []byte("model: test\n"), 0o600))
@@ -101,11 +103,13 @@ func TestCompileAndAssertReadScopeControlPlaneAndSessionScratch(t *testing.T) {
 	testutil.FailErr(t, "write api.token", os.WriteFile(filepath.Join(cfgDir, "api.token"), []byte("secret-token\n"), 0o600))
 	testutil.FailErr(t, "write scratch note", os.WriteFile(filepath.Join(scratchSessionDir, "note.txt"), []byte("scratch\n"), 0o600))
 	testutil.FailErr(t, "write output log", os.WriteFile(filepath.Join(outputSessionDir, "out.txt"), []byte("output\n"), 0o600))
+	testutil.FailErr(t, "write other scratch note", os.WriteFile(filepath.Join(otherScratchDir, "secret.txt"), []byte("other-session-secret\n"), 0o600))
+	testutil.FailErr(t, "write wt file", os.WriteFile(filepath.Join(wtDir, "main.go"), []byte("package main\n"), 0o600))
 
 	boundary := testBoundary(t)
-	ctx := context.Background()
+	ctx := WithSessionDirs(context.Background(), scratchSessionDir, outputSessionDir)
 
-	// Directly attached control directory is wholly denied by both CompileReadScope and AssertReadScope.
+	// 1. Directly attached control directory is wholly denied by both CompileReadScope and AssertReadScope.
 	cfgScope, err := boundary.CompileReadScope(ctx, cfgDir, "implement")
 	testutil.FailErr(t, "compile cfgDir read scope", err)
 	for _, rel := range []string{".", "settings.yaml", "packs/custom.yaml", "api.token", "scratch/sess-1/note.txt"} {
@@ -118,7 +122,7 @@ func TestCompileAndAssertReadScopeControlPlaneAndSessionScratch(t *testing.T) {
 		}
 	}
 
-	// Concrete session scratch and session output roots are allowed for their own session files.
+	// 2. Invocation-owned session scratch and session output roots are allowed for their own session files.
 	for _, tc := range []struct {
 		dir  string
 		file string
@@ -134,5 +138,39 @@ func TestCompileAndAssertReadScopeControlPlaneAndSessionScratch(t *testing.T) {
 		if err := boundary.AssertReadScope(ctx, tc.dir, tc.file, "implement"); err != nil {
 			t.Fatalf("AssertReadScope(%s, %q) failed: %v", tc.dir, tc.file, err)
 		}
+	}
+
+	// 3. Another session's scratch root (<cfgDir>/scratch/other-session) or an unowned scratch root
+	// is denied by both CompileReadScope and AssertReadScope.
+	for _, tc := range []struct {
+		ctx  context.Context
+		dir  string
+		file string
+	}{
+		{ctx: ctx, dir: otherScratchDir, file: "secret.txt"},
+		{ctx: context.Background(), dir: scratchSessionDir, file: "note.txt"},
+	} {
+		scope, err := boundary.CompileReadScope(tc.ctx, tc.dir, "implement")
+		testutil.FailErr(t, "compile unowned session dir read scope", err)
+		if scope.Filter(tc.file, false) {
+			t.Fatalf("CompileReadScope on unowned session dir %s allowed %q", tc.dir, tc.file)
+		}
+		var scopeErr *ScopeError
+		if err := boundary.AssertReadScope(tc.ctx, tc.dir, tc.file, "implement"); !errors.As(err, &scopeErr) || scopeErr.Kind != ScopeRead {
+			t.Fatalf("AssertReadScope(%s, %q) = %v, want ScopeError(ScopeRead)", tc.dir, tc.file, err)
+		}
+	}
+
+	// 4. Managed workspace (<cfgDir>/worktrees/wt-1) explicitly covered by LYCAON_SANDBOX_DENY_READ
+	// is denied by both CompileReadScope and AssertReadScope.
+	t.Setenv("LYCAON_SANDBOX_DENY_READ", wtDir)
+	wtScope, err := boundary.CompileReadScope(ctx, wtDir, "implement")
+	testutil.FailErr(t, "compile denied wtDir read scope", err)
+	if wtScope.Filter("main.go", false) {
+		t.Fatal("CompileReadScope on LYCAON_SANDBOX_DENY_READ-covered managed workspace allowed main.go")
+	}
+	var scopeErr *ScopeError
+	if err := boundary.AssertReadScope(ctx, wtDir, "main.go", "implement"); !errors.As(err, &scopeErr) || scopeErr.Kind != ScopeRead {
+		t.Fatalf("AssertReadScope(wtDir, main.go) = %v, want ScopeError(ScopeRead)", err)
 	}
 }

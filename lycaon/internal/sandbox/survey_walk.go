@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -66,6 +67,10 @@ type SurveyOptions struct {
 	OnBoundary func(SurveyBoundary)
 	// A nil Scope imposes no additional admission rules.
 	Scope SurveyScope
+	// SessionScratchDir and SessionOutputDir scope explicit invocation-owned
+	// session directories for control-plane read-floor evaluation.
+	SessionScratchDir string
+	SessionOutputDir  string
 }
 
 // SurveyScope checks directories before opening them; rejected subtrees cost one entry.
@@ -132,12 +137,27 @@ func SurveyWalk(ctx context.Context, root string, opts SurveyOptions, visit func
 	if opts.Stream && opts.Budgets.Bounded() {
 		return os.ErrInvalid
 	}
-	w := &surveyWalker{ctx: ctx, root: root, opts: opts, visit: visit, budget: NewWalkBudget(opts.Budgets)}
 	if _, err := os.Lstat(root); err != nil {
 		return err
 	}
-	if enginepaths.IsObservedStateExcluded(root, root) {
+	if opts.SessionScratchDir == "" && opts.SessionOutputDir == "" {
+		opts.SessionScratchDir, opts.SessionOutputDir = SessionDirsFromContext(ctx)
+	}
+	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(root, opts.SessionScratchDir, opts.SessionOutputDir)
+	inOwnedSession := (effScratch != "" && confine.WithinSessionDirectory(root, effScratch)) ||
+		(effOutput != "" && confine.WithinSessionDirectory(root, effOutput))
+	if !inOwnedSession && enginepaths.IsObservedStateExcluded(root, root) {
 		return nil
+	}
+	w := &surveyWalker{
+		ctx:            ctx,
+		root:           root,
+		opts:           opts,
+		visit:          visit,
+		budget:         NewWalkBudget(opts.Budgets),
+		effScratch:     effScratch,
+		effOutput:      effOutput,
+		inOwnedSession: inOwnedSession,
 	}
 	err := w.walkDir(".", root, 0)
 	if errors.Is(err, errSurveyStop) || errors.Is(err, errSurveyBudgetSpent) {
@@ -149,11 +169,14 @@ func SurveyWalk(ctx context.Context, root string, opts SurveyOptions, visit func
 var errSurveyBudgetSpent = errors.New("sandbox: survey walk budget spent")
 
 type surveyWalker struct {
-	ctx    context.Context
-	root   string
-	opts   SurveyOptions
-	visit  func(SurveyEntry) (SurveyAction, error)
-	budget *WalkBudget
+	ctx            context.Context
+	root           string
+	opts           SurveyOptions
+	visit          func(SurveyEntry) (SurveyAction, error)
+	budget         *WalkBudget
+	effScratch     string
+	effOutput      string
+	inOwnedSession bool
 }
 
 // subtreeCut unwinds the recursion to the ancestor whose cap fell.
@@ -207,7 +230,10 @@ func (w *surveyWalker) visitEntries(rel, abs string, depth, dirDepth int, entrie
 		childAbs := filepath.Join(abs, name)
 		isDir := d.IsDir()
 		isSymlink := d.Type()&fs.ModeSymlink != 0
-		if enginepaths.IsObservedDirChildExcluded(w.root, abs, name, isSymlink) {
+		if !w.inOwnedSession && enginepaths.IsObservedDirChildExcluded(w.root, abs, name, isSymlink) {
+			continue
+		}
+		if w.inOwnedSession && confine.IsAgentSourceReadDenied(w.root, childAbs, w.effScratch, w.effOutput) {
 			continue
 		}
 		if isDir {
@@ -372,7 +398,10 @@ func SurveyReadDir(dir, relDir string, opts SurveyOptions) ([]SurveyEntry, error
 		return nil, err
 	}
 	root := surveyRootFromRel(dir, relDir)
-	if enginepaths.IsObservedStateExcluded(root, dir) {
+	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(root, opts.SessionScratchDir, opts.SessionOutputDir)
+	inOwnedSession := (effScratch != "" && confine.WithinSessionDirectory(dir, effScratch)) ||
+		(effOutput != "" && confine.WithinSessionDirectory(dir, effOutput))
+	if !inOwnedSession && enginepaths.IsObservedStateExcluded(root, dir) {
 		return nil, nil
 	}
 	return surveyDirectoryEntries(dir, relDir, entries, opts), nil
@@ -404,6 +433,12 @@ func surveyRootFromRel(dir, relDir string) string {
 
 func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts SurveyOptions) []SurveyEntry {
 	root := surveyRootFromRel(dir, relDir)
+	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(root, opts.SessionScratchDir, opts.SessionOutputDir)
+	inOwnedSession := (effScratch != "" && confine.WithinSessionDirectory(dir, effScratch)) ||
+		(effOutput != "" && confine.WithinSessionDirectory(dir, effOutput))
+	if !inOwnedSession && enginepaths.IsObservedStateExcluded(root, dir) {
+		return nil
+	}
 	out := make([]SurveyEntry, 0, len(entries))
 	for _, e := range entries {
 		name := e.Name()
@@ -417,10 +452,14 @@ func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts Surv
 		if settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel) {
 			continue
 		}
-		if enginepaths.IsObservedDirChildExcluded(root, dir, name, e.Type()&fs.ModeSymlink != 0) {
+		isSymlink := e.Type()&fs.ModeSymlink != 0
+		if !inOwnedSession && enginepaths.IsObservedDirChildExcluded(root, dir, name, isSymlink) {
 			continue
 		}
 		abs := filepath.Join(dir, name)
+		if inOwnedSession && confine.IsAgentSourceReadDenied(root, abs, effScratch, effOutput) {
+			continue
+		}
 		if e.IsDir() {
 			if surveySkipsDirName(name, opts) || settingsoverlay.IsRecoveryOnlyDir(abs) {
 				continue

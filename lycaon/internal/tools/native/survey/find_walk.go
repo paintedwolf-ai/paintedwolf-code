@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -38,7 +37,8 @@ type findWalkParams struct {
 }
 
 func (t *FindTool) walkFindTree(p findWalkParams) error {
-	if enginepaths.IsAgentSourceReadDenied(p.root.Path, p.fullRoot, confine.KeyMaterialReadDenyPaths()) {
+	p.ctx = sandbox.WithSessionDirs(p.ctx, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir)
+	if confine.IsAgentSourceReadDenied(p.root.Path, p.fullRoot, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir) {
 		return nil
 	}
 	if strings.TrimSpace(p.tctx.Source.WorkerBranchRoot) != "" {
@@ -50,11 +50,14 @@ func (t *FindTool) walkFindTree(p findWalkParams) error {
 	}
 	return inventory.walk(p.ctx, func(entry sourcecatalog.Entry) sourcecatalog.WalkStep {
 		abs := filepath.Join(p.root.Path, filepath.FromSlash(entry.Path))
-		if enginepaths.IsAgentSourceReadDenied(p.root.Path, abs, confine.KeyMaterialReadDenyPaths()) {
+		if confine.IsAgentSourceReadDenied(p.root.Path, abs, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir) {
 			return sourcecatalog.WalkSkip
 		}
-		if entry.IsDir && p.readFilter != nil && !p.readFilter(entry.Path, true) {
-			return sourcecatalog.WalkSkip
+		if p.readFilter != nil && !p.readFilter(entry.Path, entry.IsDir) {
+			if entry.IsDir {
+				return sourcecatalog.WalkSkip
+			}
+			return sourcecatalog.WalkContinue
 		}
 		if !admitsCatalogEntry(p.ignore, catalogRelativePath(entry.Path, inventory.base), entry.IsDir) {
 			return sourcecatalog.WalkSkip
@@ -75,12 +78,13 @@ func (t *FindTool) walkFindTree(p findWalkParams) error {
 }
 
 func (t *FindTool) walkFindTreeSurvey(p findWalkParams) error {
-	if enginepaths.IsAgentSourceReadDenied(p.root.Path, p.fullRoot, confine.KeyMaterialReadDenyPaths()) {
+	p.ctx = sandbox.WithSessionDirs(p.ctx, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir)
+	if confine.IsAgentSourceReadDenied(p.root.Path, p.fullRoot, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir) {
 		return nil
 	}
 	// Read globs prune directories, not file names.
 	admit := func(_, abs string, isDir bool) bool {
-		if enginepaths.IsAgentSourceReadDenied(p.root.Path, abs, confine.KeyMaterialReadDenyPaths()) {
+		if confine.IsAgentSourceReadDenied(p.root.Path, abs, p.tctx.Host.SessionScratchDir, p.tctx.Host.SessionOutputDir) {
 			return false
 		}
 		if !isDir {

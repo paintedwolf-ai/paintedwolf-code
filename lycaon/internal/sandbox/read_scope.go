@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
@@ -33,12 +32,13 @@ func (b *Boundary) CompileReadFilter(ctx context.Context, projectDir, profileID 
 // CompileReadScope builds one root-scoped inventory predicate and stable cache
 // identity from the pinned effective profile and boundary configuration.
 func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID string) (CompiledReadScope, error) {
+	scratchDir, outputDir := SessionDirsFromContext(ctx)
 	if b == nil {
 		if strings.TrimSpace(projectDir) == "" {
 			return CompiledReadScope{Key: "unrestricted"}, nil
 		}
-		floor := enginepaths.CompileAgentReadFloor(projectDir, confine.KeyMaterialReadDenyPaths())
-		if !floor.WhollyDenied() && len(floor.DeniedRelPrefixes()) == 0 {
+		floor := confine.CompileAgentReadFloor(projectDir, scratchDir, outputDir)
+		if floor.CacheKey() == "" {
 			return CompiledReadScope{Key: "unrestricted"}, nil
 		}
 		filter := func(relSlash string, isDir bool) bool {
@@ -58,7 +58,7 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 		return CompiledReadScope{}, fmt.Errorf("unknown tool profile %q", profileID)
 	}
 	globs := SubstituteScopeGlobs(prof.ReadGlobs, ScopeTokensFromContext(ctx))
-	floor := enginepaths.CompileAgentReadFloor(root, confine.KeyMaterialReadDenyPaths())
+	floor := confine.CompileAgentReadFloor(root, scratchDir, outputDir)
 	filter := func(relSlash string, isDir bool) bool {
 		if strings.ContainsRune(relSlash, 0) {
 			return false
@@ -80,13 +80,12 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 	return CompiledReadScope{Filter: filter, Key: readScopeFloorKey(readScopeKey(profileID, globs, b.cfg), floor)}, nil
 }
 
-func readScopeFloorKey(baseKey string, floor enginepaths.AgentReadFloor) string {
-	if !floor.WhollyDenied() && len(floor.DeniedRelPrefixes()) == 0 {
+func readScopeFloorKey(baseKey string, floor confine.AgentReadFloor) string {
+	fk := floor.CacheKey()
+	if fk == "" {
 		return baseKey
 	}
-	prefixes := append([]string(nil), floor.DeniedRelPrefixes()...)
-	sort.Strings(prefixes)
-	raw := fmt.Sprintf("%s\x01%t\x01%s", baseKey, floor.WhollyDenied(), strings.Join(prefixes, "\x00"))
+	raw := fmt.Sprintf("%s\x01%s", baseKey, fk)
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
 }

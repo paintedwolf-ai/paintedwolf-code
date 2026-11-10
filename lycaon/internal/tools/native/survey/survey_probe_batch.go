@@ -52,6 +52,7 @@ func ProbeGrepBatchRecords(
 	maxMatches int,
 ) ([]SurveyGrepBatchResult, SurveyGrepBatchStats, error) {
 	stats := SurveyGrepBatchStats{}
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	reads := projectpaths.NewReadSession(boundary, tctx)
 	defer reads.Close()
 	searches := make([]*grepSearch, len(specs))

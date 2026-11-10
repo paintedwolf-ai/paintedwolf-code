@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -48,6 +47,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	paths, err := toolkit.ParseStringSliceArg(args, "paths", safecmd.StatCaps().ResultCount)
 	if err != nil {
 		return "", err
@@ -62,7 +62,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			return "", err
 		}
 		fullPath := resolved.Abs
-		if enginepaths.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
+		if confine.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 			return "", &sandbox.ScopeError{Path: relPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
 		}
 		relSlash := filepath.ToSlash(resolved.DisplayPath)
@@ -84,7 +84,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 								continue
 							}
 							childAbs := filepath.Join(resolved.Root.Path, filepath.FromSlash(child.Path))
-							if enginepaths.IsAgentSourceReadDenied(resolved.Root.Path, childAbs, confine.KeyMaterialReadDenyPaths()) {
+							if confine.IsAgentSourceReadDenied(resolved.Root.Path, childAbs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 								continue
 							}
 							if t.Boundary != nil && t.Boundary.AssertReadScope(ctx, resolved.Root.Path, child.Path, tctx.ProfileID()) != nil {
@@ -148,13 +148,19 @@ func statEntryFromInfo(relSlash string, info os.FileInfo) statResult {
 }
 
 func countDirEntries(ctx context.Context, boundary *sandbox.Boundary, tctx tools.ToolContext, root projectroot.RootRef, fullPath string, includeHidden bool, relSlash string) (int, error) {
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	admit := func(_, abs string, _ bool) bool {
-		if enginepaths.IsAgentSourceReadDenied(root.Path, abs, confine.KeyMaterialReadDenyPaths()) {
+		if confine.IsAgentSourceReadDenied(root.Path, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 			return false
 		}
 		return boundary == nil || boundary.AssertReadScope(ctx, root.Path, projectroot.ScopeRel(root, abs), tctx.ProfileID()) == nil
 	}
-	entries, err := sandbox.SurveyReadDir(fullPath, relSlash, sandbox.SurveyOptions{IncludeHidden: includeHidden, Admit: admit})
+	entries, err := sandbox.SurveyReadDir(fullPath, relSlash, sandbox.SurveyOptions{
+		IncludeHidden:     includeHidden,
+		Admit:             admit,
+		SessionScratchDir: tctx.Host.SessionScratchDir,
+		SessionOutputDir:  tctx.Host.SessionOutputDir,
+	})
 	if err != nil {
 		return 0, err
 	}

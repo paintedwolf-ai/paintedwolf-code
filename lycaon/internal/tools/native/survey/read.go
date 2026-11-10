@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -217,6 +216,7 @@ func readLineLimit(args map[string]any) readLineLimitResult {
 }
 
 func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (out string, err error) {
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	path, ok := args["path"].(string)
 	if !ok || path == "" {
 		return "", toolkit.MissingArg("path")
@@ -226,7 +226,7 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		return "", err
 	}
 	fullPath := resolved.Abs
-	if enginepaths.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, confine.KeyMaterialReadDenyPaths()) {
+	if confine.IsAgentSourceReadDenied(resolved.Root.Path, fullPath, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
 		return "", &sandbox.ScopeError{Path: path, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
 	}
 	path = resolved.DisplayPath

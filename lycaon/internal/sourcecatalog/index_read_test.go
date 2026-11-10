@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -194,6 +195,12 @@ func TestIndexScopesKeepHumanSearchSeparateFromAgentMetadata(t *testing.T) {
 }
 
 func TestHumanWarmedSharedCatalogNeverLeaksControlPlaneOrKeyMaterialToAgent(t *testing.T) {
+	confine.SetKeyMaterialPathsSource(func() []string {
+		return []string{"~/.ssh/", "~/.gnupg/", "~/.age/"}
+	})
+	t.Cleanup(func() {
+		confine.SetKeyMaterialPathsSource(nil)
+	})
 	home := t.TempDir()
 	cfgDir := filepath.Join(home, ".paintedwolf")
 	wtDir := filepath.Join(cfgDir, "worktrees", "wt-1")
@@ -214,6 +221,7 @@ func TestHumanWarmedSharedCatalogNeverLeaksControlPlaneOrKeyMaterialToAgent(t *t
 	writeIndexFile(t, cfgDir, "cache/index.bin", "cache-bytes")
 	writeIndexFile(t, cfgDir, "sessions/s1.json", "{}")
 	writeIndexFile(t, wtDir, "work.go", "package work")
+	writeIndexFile(t, wtDir, "private/secret.go", "package private // SecretNeedle")
 
 	c := treeTestCatalog(t)
 
@@ -368,7 +376,8 @@ func TestHumanWarmedSharedCatalogNeverLeaksControlPlaneOrKeyMaterialToAgent(t *t
 		t.Fatalf("cfg summary root = %+v, want 0 files and 0 children", cfgRootNode)
 	}
 
-	// 3. Explicit managed workspace (<configdir>/worktrees/wt-1) remains accessible to both HumanAudience and AgentAudience.
+	// 3. Explicit managed workspace (<configdir>/worktrees/wt-1) remains accessible by default,
+	// and enforces explicit LYCAON_SANDBOX_DENY_READ (both subtree and whole-root) even on a human-warmed catalog.
 	wtRoot := Root{ID: "wt", Path: wtDir}
 	wtReader := waitIndex(t, c, wtRoot)
 	for _, scope := range []FileScope{
@@ -380,8 +389,72 @@ func TestHumanWarmedSharedCatalogNeverLeaksControlPlaneOrKeyMaterialToAgent(t *t
 		testutil.FailErr(t, "wt FilePathsPage", err)
 		count, err := wtReader.FileCount(t.Context(), scope)
 		testutil.FailErr(t, "wt FileCount", err)
-		if !slices.Equal(paths, []string{"work.go"}) || count != 1 {
-			t.Fatalf("scope %+v: managed worktree paths=%v count=%d, want [work.go] and 1", scope, paths, count)
+		if !slices.Equal(paths, []string{"private/secret.go", "work.go"}) || count != 2 {
+			t.Fatalf("scope %+v: managed worktree paths=%v count=%d, want [private/secret.go work.go] and 2", scope, paths, count)
 		}
+	}
+
+	// 3a. Subtree deny inside managed workspace via LYCAON_SANDBOX_DENY_READ:
+	t.Setenv("LYCAON_SANDBOX_DENY_READ", filepath.Join(wtDir, "private"))
+	for _, agentScope := range []FileScope{
+		{Audience: AgentAudience, IncludeHidden: true},
+		{Audience: AgentAudience, IncludeHidden: false},
+	} {
+		count, err := wtReader.FileCount(t.Context(), agentScope)
+		testutil.FailErr(t, "wt subtree-deny FileCount", err)
+		paths, err := wtReader.FilePathsPage(t.Context(), agentScope, "", 20)
+		testutil.FailErr(t, "wt subtree-deny FilePathsPage", err)
+		if count != 1 || !slices.Equal(paths, []string{"work.go"}) {
+			t.Fatalf("scope %+v: subtree-denied managed worktree paths=%v count=%d, want [work.go] and 1", agentScope, paths, count)
+		}
+		litPriv, err := wtReader.LiteralFilePathsPage(t.Context(), agentScope, []string{"secret.go"}, false, "", 20)
+		testutil.FailErr(t, "wt subtree-deny LiteralFilePathsPage", err)
+		if len(litPriv) != 0 {
+			t.Fatalf("scope %+v: subtree-denied managed worktree leaked via LiteralFilePathsPage: %v", agentScope, litPriv)
+		}
+		named, err := wtReader.NamedFiles(t.Context(), agentScope, []string{"private/secret.go", "work.go"})
+		testutil.FailErr(t, "wt subtree-deny NamedFiles", err)
+		if !slices.Equal(named, []string{"work.go"}) {
+			t.Fatalf("scope %+v: subtree-denied managed worktree NamedFiles=%v, want [work.go]", agentScope, named)
+		}
+	}
+	wtSubSummary, wtSubStatus, err := c.Trees.OpenSummary(t.Context(), "proj", wtRoot, TreeScope{Key: "agent-default"}, 5*time.Second)
+	testutil.FailErr(t, "open wt subtree-deny summary", err)
+	if wtSubStatus.State != StateReady || wtSubSummary == nil {
+		t.Fatalf("wt subtree-deny summary state=%v reader=%v", wtSubStatus, wtSubSummary)
+	}
+	t.Cleanup(func() { _ = wtSubSummary.Close() })
+	wtSubNode, err := wtSubSummary.Node(t.Context(), ".")
+	testutil.FailErr(t, "read wt subtree-deny summary root", err)
+	if wtSubNode.Files != 1 {
+		t.Fatalf("wt subtree-deny summary root Files = %d, want 1 (work.go only)", wtSubNode.Files)
+	}
+
+	// 3b. Whole-root deny on managed workspace via LYCAON_SANDBOX_DENY_READ:
+	t.Setenv("LYCAON_SANDBOX_DENY_READ", wtDir)
+	for _, agentScope := range []FileScope{
+		{Audience: AgentAudience, IncludeHidden: true},
+		{Audience: AgentAudience, IncludeHidden: false},
+	} {
+		count, err := wtReader.FileCount(t.Context(), agentScope)
+		testutil.FailErr(t, "wt whole-deny FileCount", err)
+		paths, err := wtReader.FilePathsPage(t.Context(), agentScope, "", 20)
+		testutil.FailErr(t, "wt whole-deny FilePathsPage", err)
+		named, err := wtReader.NamedFiles(t.Context(), agentScope, []string{"private/secret.go", "work.go"})
+		testutil.FailErr(t, "wt whole-deny NamedFiles", err)
+		if count != 0 || len(paths) != 0 || len(named) != 0 {
+			t.Fatalf("scope %+v: whole-denied managed worktree count=%d paths=%v named=%v, want all empty", agentScope, count, paths, named)
+		}
+	}
+	wtWholeSummary, wtWholeStatus, err := c.Trees.OpenSummary(t.Context(), "proj", wtRoot, TreeScope{Key: "agent-default"}, 5*time.Second)
+	testutil.FailErr(t, "open wt whole-deny summary", err)
+	if wtWholeStatus.State != StateReady || wtWholeSummary == nil {
+		t.Fatalf("wt whole-deny summary state=%v reader=%v", wtWholeStatus, wtWholeSummary)
+	}
+	t.Cleanup(func() { _ = wtWholeSummary.Close() })
+	wtWholeNode, err := wtWholeSummary.Node(t.Context(), ".")
+	testutil.FailErr(t, "read wt whole-deny summary root", err)
+	if wtWholeNode.Files != 0 || wtWholeNode.Children != 0 {
+		t.Fatalf("wt whole-deny summary root = %+v, want 0 files and 0 children", wtWholeNode)
 	}
 }

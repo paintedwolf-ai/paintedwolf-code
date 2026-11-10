@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
@@ -147,8 +146,9 @@ func (b *Boundary) AssertReadScope(ctx context.Context, projectDir, relPath, pro
 		return err
 	}
 	if strings.TrimSpace(projectDir) != "" {
+		scratchDir, outputDir := SessionDirsFromContext(ctx)
 		if resolved, err := b.resolveAbs(projectDir, relPath, b.cfg.RejectSymlinkEscape); err == nil {
-			if enginepaths.IsAgentSourceReadDenied(projectDir, resolved, confine.KeyMaterialReadDenyPaths()) {
+			if confine.IsAgentSourceReadDenied(projectDir, resolved, scratchDir, outputDir) {
 				return newOutsideReadScope(relPath, profileID)
 			}
 		}

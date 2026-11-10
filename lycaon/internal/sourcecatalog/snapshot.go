@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -299,8 +300,15 @@ func buildSnapshot(ctx context.Context, roots []Root, policy walkPolicy) (Snapsh
 			boundaries[b.Rel] = struct{}{}
 			slog.DebugContext(ctx, "catalog walk boundary", "root", root.Path, "path", b.Rel, "reason", string(b.Reason), "entries", b.Entries)
 		}
+		scratchDir, outputDir := sandbox.SessionDirsFromContext(ctx)
+		effScratch, effOutput := confine.EffectiveSessionDirsForRoot(root.watchRoot(), scratchDir, outputDir)
+		inOwnedSession := (effScratch != "" && confine.WithinSessionDirectory(root.Path, effScratch)) ||
+			(effOutput != "" && confine.WithinSessionDirectory(root.Path, effOutput))
 		err := sandbox.SurveyWalk(ctx, root.Path, opts, func(item sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
-			if repochange.IsPrivatePathForRoot(root.watchRoot(), item.Abs) {
+			if !inOwnedSession && repochange.IsPrivatePathForRoot(root.watchRoot(), item.Abs) {
+				return sandbox.SurveySkipDir, nil
+			}
+			if inOwnedSession && confine.IsAgentSourceReadDenied(root.watchRoot(), item.Abs, effScratch, effOutput) {
 				return sandbox.SurveySkipDir, nil
 			}
 			if err := nextMetadataEntry(ctx); err != nil {

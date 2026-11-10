@@ -9,15 +9,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/pagedview"
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
@@ -207,76 +202,14 @@ func (c *TreeStores) indexStore(ctx context.Context, projectID string, root Root
 
 // IndexReader pins one read transaction over a published file index generation.
 type IndexReader struct {
-	db         *sql.DB
-	tx         *sql.Tx
-	Status     TreeStatus
+	db       *sql.DB
+	tx       *sql.Tx
+	Status   TreeStatus
 	// RowsRead counts rows this reader returned across its queries.
-	RowsRead   int
-	cleanup    func() error
-	store      *indexStore
-	floorOnce  sync.Once
-	agentFloor enginepaths.AgentReadFloor
-}
-
-func (r *IndexReader) floor() enginepaths.AgentReadFloor {
-	r.floorOnce.Do(func() {
-		if r.store != nil {
-			r.agentFloor = enginepaths.CompileAgentReadFloor(r.store.root.watchRoot(), confine.KeyMaterialReadDenyPaths())
-		}
-	})
-	return r.agentFloor
-}
-
-func (r *IndexReader) isRootDeniedForScope(scope FileScope) bool {
-	if r.store == nil {
-		return false
-	}
-	if repochange.IsPrivatePathForRoot(r.store.root.watchRoot(), r.store.root.Path) {
-		return true
-	}
-	if scope.Audience != HumanAudience && r.floor().WhollyDenied() {
-		return true
-	}
-	return false
-}
-
-func (r *IndexReader) isDeniedForScope(scope FileScope, rel string) bool {
-	if r.store == nil {
-		return false
-	}
-	if scope.Audience != HumanAudience {
-		if r.floor().IsDeniedRel(rel) {
-			return true
-		}
-	}
-	abs := filepath.Join(r.store.root.Path, filepath.FromSlash(rel))
-	return repochange.IsPrivatePathForRoot(r.store.root.watchRoot(), abs)
-}
-
-func (r *IndexReader) collapsedDeniedPrefixes(scope FileScope) []string {
-	if scope.Audience == HumanAudience {
-		return nil
-	}
-	raw := r.floor().DeniedRelPrefixes()
-	if len(raw) == 0 {
-		return nil
-	}
-	sorted := append([]string(nil), raw...)
-	sort.Strings(sorted)
-	collapsed := make([]string, 0, len(sorted))
-	for _, p := range sorted {
-		if p == "" || p == "." {
-			continue
-		}
-		if len(collapsed) > 0 {
-			prev := collapsed[len(collapsed)-1]
-			if p == prev || strings.HasPrefix(p, prev+"/") {
-				continue
-			}
-		}
-		collapsed = append(collapsed, p)
-	}
-	return collapsed
+	RowsRead int
+	cleanup  func() error
+	store    *indexStore
+	floor    indexReaderFloor
 }
 
 // Close releases the pinned generation.
@@ -344,7 +277,7 @@ func (c *TreeStores) OpenIndex(ctx context.Context, projectID string, root Root,
 	if err != nil {
 		return nil, status, err
 	}
-	return &IndexReader{db: db, tx: tx, Status: status, store: s}, status, nil
+	return &IndexReader{db: db, tx: tx, Status: status, store: s, floor: newIndexReaderFloor(ctx)}, status, nil
 }
 
 // TreeFilePageLimit bounds one page of file rows.
@@ -649,19 +582,5 @@ func (r *IndexReader) FileCount(ctx context.Context, scope FileScope) (int, erro
 	if err != nil || count <= 0 {
 		return count, err
 	}
-	for _, prefix := range r.collapsedDeniedPrefixes(scope) {
-		var denied int
-		// #nosec G202 -- scope.clause() selects fixed SQL predicates; prefix bounds are parameters.
-		if err := r.tx.QueryRowContext(ctx,
-			"SELECT COUNT(*) FROM nodes INDEXED BY folded_path WHERE "+scope.clause()+" AND (lower(path)=? OR (lower(path)>=? AND lower(path)<?))",
-			prefix, prefix+"/", prefix+"0").Scan(&denied); err != nil {
-			return 0, err
-		}
-		r.RowsRead++
-		count -= denied
-	}
-	if count < 0 {
-		count = 0
-	}
-	return count, nil
+	return r.subtractDeniedFileCount(ctx, scope, count)
 }

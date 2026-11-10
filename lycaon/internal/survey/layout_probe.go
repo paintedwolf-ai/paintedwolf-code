@@ -14,7 +14,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -57,12 +56,13 @@ func runLayoutProbe(
 	scope Scope,
 	groupCap int,
 ) ([]evidence.Record, int, ProbeCoverage, error) {
+	ctx = sandbox.WithSessionDirs(ctx, scope.ToolCtx.Host.SessionScratchDir, scope.ToolCtx.Host.SessionOutputDir)
 	resolved, err := projectpaths.ResolveRead(ctx, scope.Boundary, scope.ToolCtx, relPath)
 	if err != nil {
 		return nil, 0, ProbeCoverage{}, err
 	}
 	root := resolved.Root
-	floor := enginepaths.CompileAgentReadFloor(root.Path, confine.KeyMaterialReadDenyPaths())
+	floor := confine.CompileAgentReadFloor(root.Path, scope.ToolCtx.Host.SessionScratchDir, scope.ToolCtx.Host.SessionOutputDir)
 	readFilter := scope.ReadFilter
 	if readFilter == nil {
 		profileID := strings.TrimSpace(scope.ToolCtx.Identity.Agent)

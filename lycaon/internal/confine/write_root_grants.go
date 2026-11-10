@@ -57,7 +57,10 @@ func ControlPlaneTree(path string) bool {
 // sessionScratch is the invocation's own scratch root; like the confinement floor,
 // the verdict leaves it to the invocation and still denies every other session's.
 func ControlPlanePathDenied(path string, write bool, sessionScratch, sessionOutput string) bool {
-	if write && writeRootContainsStateTree(fspath.CanonicalPath(path)) {
+	if write && (writeRootContainsStateTree(path) || writeRootContainsStateTree(fspath.CanonicalPath(path))) {
+		return true
+	}
+	if !write && underAny(fspath.CanonicalPath(path), configuredReadDenyRoots()) {
 		return true
 	}
 	if WithinSessionDirectory(path, sessionScratch) || (!write && WithinSessionDirectory(path, sessionOutput)) {
@@ -77,6 +80,50 @@ func WithinSessionDirectory(path, directory string) bool {
 		return false
 	}
 	return PathAtOrUnder(fspath.CanonicalPath(p), fspath.CanonicalPath(root))
+}
+
+// EffectiveSessionDirsForRoot resolves the session scratch and output
+// directories that apply when evaluating read-floor access under root.
+// Explicit session directories on the invocation only carve out a root
+// that is itself within that session directory (never configdir.Root(), $HOME,
+// or another session's folder).
+func EffectiveSessionDirsForRoot(root, sessionScratch, sessionOutput string) (string, string) {
+	p := filepath.Clean(strings.TrimSpace(root))
+	if p == "" || p == "." || !filepath.IsAbs(p) {
+		return "", ""
+	}
+	var effScratch, effOutput string
+	if scratch := strings.TrimSpace(sessionScratch); scratch != "" && WithinSessionDirectory(p, scratch) {
+		effScratch = scratch
+	}
+	if output := strings.TrimSpace(sessionOutput); output != "" && WithinSessionDirectory(p, output) {
+		effOutput = output
+	}
+	return effScratch, effOutput
+}
+
+// RootOverlapsControlPlaneReadFloor reports whether root lies within or is an
+// ancestor of any control-plane read-deny root, so callers can skip per-entry
+// canonicalization when walking ordinary roots that neither overlap nor contain
+// the control plane.
+func RootOverlapsControlPlaneReadFloor(root string) bool {
+	p := filepath.Clean(strings.TrimSpace(root))
+	if p == "" || p == "." {
+		return false
+	}
+	pCanon := fspath.CanonicalPath(p)
+	if pCanon == "" {
+		pCanon = p
+	}
+	for _, deny := range SecretReadDenyRoots() {
+		if PathAtOrUnder(pCanon, deny) || PathAtOrUnder(deny, pCanon) {
+			return true
+		}
+		if PathAtOrUnder(p, deny) || PathAtOrUnder(deny, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // ControlPlaneReadDenied refuses active host reads outside managed workspaces.

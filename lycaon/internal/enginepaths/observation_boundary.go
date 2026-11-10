@@ -19,7 +19,9 @@ type cachedCfgRoot struct {
 
 var lastCfgRoot atomic.Pointer[cachedCfgRoot]
 
-func currentConfigRoot(resolveCanon bool) (clean, canon string, ok bool) {
+// CurrentConfigRoot returns the cleaned lexical and canonical paths of the
+// active configdir.Root().
+func CurrentConfigRoot(resolveCanon bool) (clean, canon string, ok bool) {
 	cfgRoot, err := configdir.Root()
 	if err != nil || strings.TrimSpace(cfgRoot) == "" {
 		return "", "", false
@@ -70,7 +72,7 @@ func isObservedStateExcluded(rootPath, absPath string, resolveCanon bool) bool {
 		rootClean = ""
 	}
 
-	if isPlacementExcludedLexical(rootClean, p) {
+	if IsPlacementExcludedLexical(rootClean, p) {
 		return true
 	}
 	var rootCanon, pCanon string
@@ -79,12 +81,12 @@ func isObservedStateExcluded(rootPath, absPath string, resolveCanon bool) bool {
 		if rootClean != "" {
 			rootCanon = filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(rootClean)))
 		}
-		if pCanon != "" && pCanon != "." && isPlacementExcludedLexical(rootCanon, pCanon) {
+		if pCanon != "" && pCanon != "." && IsPlacementExcludedLexical(rootCanon, pCanon) {
 			return true
 		}
 	}
 
-	cfgClean, cfgCanon, ok := currentConfigRoot(resolveCanon)
+	cfgClean, cfgCanon, ok := CurrentConfigRoot(resolveCanon)
 	if !ok {
 		return false
 	}
@@ -142,12 +144,14 @@ func IsObservedDirChildExcluded(rootPath, dirPath, childName string, resolveCano
 	return false
 }
 
-func isPlacementExcludedLexical(rootPath, absPath string) bool {
-	placementRoot, rel, ok := splitWorkerPlacementPath(absPath)
+// IsPlacementExcludedLexical reports whether absPath lies inside a worker
+// placement folder outside an explicitly attached placement branch root.
+func IsPlacementExcludedLexical(rootPath, absPath string) bool {
+	placementRoot, rel, ok := SplitWorkerPlacementPath(absPath)
 	if !ok {
 		return false
 	}
-	wsRel, ok := managedPlacementWorkspaceRel(rel)
+	wsRel, ok := ManagedPlacementWorkspaceRel(rel)
 	if !ok {
 		return true
 	}
@@ -155,11 +159,12 @@ func isPlacementExcludedLexical(rootPath, absPath string) bool {
 		return false
 	}
 	wsAbs := filepath.Join(placementRoot, filepath.FromSlash(wsRel))
-	_, underWS := relUnderFold(wsAbs, rootPath)
+	_, underWS := RelUnderFold(wsAbs, rootPath)
 	return !underWS
 }
 
-func splitWorkerPlacementPath(absPath string) (placementRoot, relSlash string, ok bool) {
+// SplitWorkerPlacementPath splits absPath at a worker placement folder segment.
+func SplitWorkerPlacementPath(absPath string) (placementRoot, relSlash string, ok bool) {
 	clean := filepath.Clean(absPath)
 	slash := filepath.ToSlash(clean)
 	parts := strings.Split(slash, "/")
@@ -190,7 +195,9 @@ func HasWorkerPlacementSegment(relSlash string) bool {
 	return false
 }
 
-func managedPlacementWorkspaceRel(relSlash string) (string, bool) {
+// ManagedPlacementWorkspaceRel returns the concrete worker-branch workspace
+// prefix under a placement folder when relSlash lies inside one.
+func ManagedPlacementWorkspaceRel(relSlash string) (string, bool) {
 	if relSlash == "" || relSlash == "." {
 		return "", false
 	}
@@ -199,13 +206,16 @@ func managedPlacementWorkspaceRel(relSlash string) (string, bool) {
 		return "", false
 	}
 	if len(segs) >= 3 && segs[2] != "" {
+		if IsJobMetaDirName(segs[2]) {
+			return "", false
+		}
 		return segs[0] + "/" + segs[1] + "/" + segs[2], true
 	}
 	return segs[0] + "/" + segs[1], true
 }
 
 func checkConfigRootObservation(cfgBase string, rootVariants []string, targetPath string) (excluded, matched bool) {
-	rel, underCfg := relUnderFold(cfgBase, targetPath)
+	rel, underCfg := RelUnderFold(cfgBase, targetPath)
 	if !underCfg {
 		return false, false
 	}
@@ -218,20 +228,19 @@ func checkConfigRootObservation(cfgBase string, rootVariants []string, targetPat
 			continue
 		}
 		hasRoot = true
-		if rr, ok := relUnderFold(cfgBase, r); ok {
+		if rr, ok := RelUnderFold(cfgBase, r); ok {
 			rootRel = rr
 			rootUnderCfg = true
 			break
 		}
 	}
 
-	if _, ok := allowedConfigScopedRootPrefix(rel); ok {
+	if _, ok := ManagedConfigWorkspacePrefix(rel); ok {
 		if !hasRoot {
-			_, isWS := managedConfigWorkspacePrefix(rel)
-			return !isWS, true
+			return false, true
 		}
 		if rootUnderCfg {
-			if _, rootIsScoped := allowedConfigScopedRootPrefix(rootRel); rootIsScoped && sameConfigScopedRoot(rel, rootRel) {
+			if _, rootIsWS := ManagedConfigWorkspacePrefix(rootRel); rootIsWS && SameManagedConfigWorkspace(rel, rootRel) {
 				return false, true
 			}
 		}
@@ -243,9 +252,9 @@ func checkConfigRootObservation(cfgBase string, rootVariants []string, targetPat
 			// Strict ancestor or external root with symlink into configdir.Root().
 			return true, true
 		}
-		if _, rootIsScoped := allowedConfigScopedRootPrefix(rootRel); rootIsScoped {
-			// Attached root is a managed workspace or concrete session directory,
-			// but targetPath escaped into another part of configdir.Root().
+		if _, rootIsWS := ManagedConfigWorkspacePrefix(rootRel); rootIsWS {
+			// Attached root is a managed workspace, but targetPath escaped into
+			// another part of configdir.Root().
 			return true, true
 		}
 	}
@@ -257,7 +266,11 @@ func checkConfigRootObservation(cfgBase string, rootVariants []string, targetPat
 	return IsControlRootRuntimeEntry(firstSeg), true
 }
 
-func managedConfigWorkspacePrefix(relSlash string) (string, bool) {
+// ManagedConfigWorkspacePrefix returns the concrete managed workspace prefix
+// under configdir.Root() (drafts/<id>, worktrees/<id>,
+// session-worktrees/<proj>/<sess>, or worker-branches/<proj>/<job>, excluding
+// .meta directories) when relSlash lies inside one.
+func ManagedConfigWorkspacePrefix(relSlash string) (string, bool) {
 	if relSlash == "" || relSlash == "." {
 		return "", false
 	}
@@ -277,47 +290,15 @@ func managedConfigWorkspacePrefix(relSlash string) (string, bool) {
 	}
 }
 
-func explicitConfigSessionPrefix(relSlash string) (string, bool) {
-	if relSlash == "" || relSlash == "." {
-		return "", false
-	}
-	segs := strings.Split(relSlash, "/")
-	if len(segs) < 2 || segs[1] == "" || segs[1] == "." || segs[1] == ".." {
-		return "", false
-	}
-	first := strings.ToLower(segs[0])
-	switch first {
-	case ScratchDirName, SessionOutputDirName:
-		return segs[0] + "/" + segs[1], true
-	case "sessions":
-		if len(segs) >= 3 && segs[2] != "" {
-			third := strings.ToLower(segs[2])
-			if third == ScratchDirName || third == "output" || third == SessionOutputDirName {
-				return segs[0] + "/" + segs[1] + "/" + segs[2], true
-			}
-		}
-		return "", false
-	default:
-		return "", false
-	}
-}
-
-func allowedConfigScopedRootPrefix(relSlash string) (string, bool) {
-	if ws, ok := managedConfigWorkspacePrefix(relSlash); ok {
-		return ws, true
-	}
-	if sess, ok := explicitConfigSessionPrefix(relSlash); ok {
-		return sess, true
-	}
-	return "", false
-}
-
-func sameConfigScopedRoot(targetRel, rootRel string) bool {
+// SameManagedConfigWorkspace reports whether targetRel lies inside the same
+// concrete managed workspace under configdir.Root() as rootRel and is at or
+// under rootRel.
+func SameManagedConfigWorkspace(targetRel, rootRel string) bool {
 	if targetRel == "" || targetRel == "." || rootRel == "" || rootRel == "." {
 		return false
 	}
-	targetPrefix, okTarget := allowedConfigScopedRootPrefix(targetRel)
-	rootPrefix, okRoot := allowedConfigScopedRootPrefix(rootRel)
+	targetPrefix, okTarget := ManagedConfigWorkspacePrefix(targetRel)
+	rootPrefix, okRoot := ManagedConfigWorkspacePrefix(rootRel)
 	if !okTarget || !okRoot || !strings.EqualFold(targetPrefix, rootPrefix) {
 		return false
 	}
@@ -424,328 +405,9 @@ func IsControlRootRuntimeEntry(name string) bool {
 	return false
 }
 
-// AgentReadFloor is a precompiled per-root predicate that filters out
-// control-plane state and read-floor-denied paths (such as key material)
-// for AgentAudience views without per-path syscalls.
-type AgentReadFloor struct {
-	rootClean         string
-	rootCanon         string
-	whollyDenied      bool
-	deniedRelPrefixes []string
-	extraDenyRoots    []string
-	inPlacementBranch bool
-}
-
-var defaultHomeKeyMaterialRelPaths = []string{
-	".ssh",
-	".gnupg",
-	".age",
-	".config/sops/age",
-	".docker/trust",
-	"Library/Keychains",
-	".password-store",
-	".local/share/keyrings",
-	".local/share/kwalletd",
-	"AppData/Roaming/Microsoft/Credentials",
-	"AppData/Local/Microsoft/Credentials",
-	"AppData/Local/Microsoft/Vault",
-}
-
-func effectiveAgentExtraDenyRoots(extraDenyRoots []string) []string {
-	var out []string
-	home, _ := os.UserHomeDir()
-	home = strings.TrimSpace(home)
-	if len(extraDenyRoots) > 0 {
-		out = append(out, extraDenyRoots...)
-	} else if home != "" {
-		for _, rel := range defaultHomeKeyMaterialRelPaths {
-			out = append(out, filepath.Join(home, filepath.FromSlash(rel)))
-		}
-	}
-	if envDeny := strings.TrimSpace(os.Getenv("LYCAON_SANDBOX_DENY_READ")); envDeny != "" {
-		for _, token := range splitEnvPathList(envDeny) {
-			if strings.HasPrefix(token, "~/") || strings.HasPrefix(token, `~\`) {
-				if home != "" {
-					token = filepath.Join(home, token[2:])
-				}
-			}
-			out = append(out, token)
-		}
-	}
-	return out
-}
-
-func splitEnvPathList(raw string) []string {
-	var out []string
-	for _, part := range filepath.SplitList(raw) {
-		for _, sub := range strings.Split(part, ",") {
-			if trimmed := strings.TrimSpace(sub); trimmed != "" {
-				out = append(out, trimmed)
-			}
-		}
-	}
-	return out
-}
-
-// CompileAgentReadFloor compiles the agent read floor for rootPath given
-// additional read-denied directory roots (such as key-material store paths).
-func CompileAgentReadFloor(rootPath string, extraDenyRoots []string) AgentReadFloor {
-	clean := filepath.Clean(strings.TrimSpace(rootPath))
-	if clean == "" || clean == "." {
-		return AgentReadFloor{}
-	}
-	canon := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(clean)))
-	if canon == "" || canon == "." {
-		canon = clean
-	}
-	effExtra := effectiveAgentExtraDenyRoots(extraDenyRoots)
-	floor := AgentReadFloor{
-		rootClean:      clean,
-		rootCanon:      canon,
-		extraDenyRoots: effExtra,
-	}
-
-	if isPlacementExcludedLexical(clean, clean) || isPlacementExcludedLexical(canon, canon) {
-		floor.whollyDenied = true
-		return floor
-	}
-	if _, _, ok := splitWorkerPlacementPath(clean); ok {
-		floor.inPlacementBranch = true
-	} else if _, _, ok := splitWorkerPlacementPath(canon); ok {
-		floor.inPlacementBranch = true
-	}
-
-	var denyRoots []string
-	if cfgClean, cfgCanon, ok := currentConfigRoot(true); ok {
-		if isRootDeniedByConfigTree(cfgClean, clean) || isRootDeniedByConfigTree(cfgCanon, canon) {
-			floor.whollyDenied = true
-			return floor
-		}
-		denyRoots = append(denyRoots, cfgClean)
-		if cfgCanon != cfgClean {
-			denyRoots = append(denyRoots, cfgCanon)
-		}
-	}
-
-	for _, extra := range effExtra {
-		trimmed := strings.TrimSpace(extra)
-		if trimmed == "" {
-			continue
-		}
-		extraClean := filepath.Clean(trimmed)
-		denyRoots = append(denyRoots, extraClean)
-		if extraCanon := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(extraClean))); extraCanon != "" && extraCanon != "." && extraCanon != extraClean {
-			denyRoots = append(denyRoots, extraCanon)
-		}
-	}
-
-	seen := make(map[string]struct{})
-	for _, deny := range denyRoots {
-		if _, underDeny := relUnderFold(deny, clean); underDeny {
-			// If root is inside configdir.Root(), isRootDeniedByConfigTree already
-			// allowed only explicit managed workspaces; do not mark a managed
-			// workspace wholly denied because its ancestor is configdir.Root().
-			if !isManagedWorkspaceRoot(clean, canon) {
-				floor.whollyDenied = true
-				return floor
-			}
-			continue
-		}
-		if _, underDeny := relUnderFold(deny, canon); underDeny {
-			if !isManagedWorkspaceRoot(clean, canon) {
-				floor.whollyDenied = true
-				return floor
-			}
-			continue
-		}
-		for _, base := range []string{clean, canon} {
-			if rel, ok := relUnderFold(base, deny); ok && rel != "." {
-				lower := strings.ToLower(rel)
-				if _, exists := seen[lower]; !exists {
-					seen[lower] = struct{}{}
-					floor.deniedRelPrefixes = append(floor.deniedRelPrefixes, lower)
-				}
-			}
-		}
-	}
-	return floor
-}
-
-// WhollyDenied reports whether the entire root is denied to AgentAudience.
-func (f AgentReadFloor) WhollyDenied() bool {
-	return f.whollyDenied
-}
-
-// DeniedRelPrefixes returns the lowercased slash-separated relative path
-// prefixes under rootPath that are denied to AgentAudience.
-func (f AgentReadFloor) DeniedRelPrefixes() []string {
-	return f.deniedRelPrefixes
-}
-
-// IsDeniedRel reports whether relSlash under the compiled root is denied to
-// AgentAudience.
-func (f AgentReadFloor) IsDeniedRel(relSlash string) bool {
-	if f.whollyDenied {
-		return true
-	}
-	clean := strings.Trim(strings.TrimSpace(strings.ReplaceAll(relSlash, "\\", "/")), "/")
-	clean = strings.TrimPrefix(clean, "./")
-	if clean == "" || clean == "." {
-		return false
-	}
-	if !f.inPlacementBranch && HasWorkerPlacementSegment(clean) {
-		return true
-	}
-	lower := strings.ToLower(clean)
-	for _, prefix := range f.deniedRelPrefixes {
-		if lower == prefix || strings.HasPrefix(lower, prefix+"/") {
-			return true
-		}
-	}
-	return false
-}
-
-// IsDeniedAbs reports whether absPath (including symlink resolution) under the
-// compiled root is denied to AgentAudience.
-func (f AgentReadFloor) IsDeniedAbs(relSlash, absPath string, extraDenyRoots []string) bool {
-	if f.IsDeniedRel(relSlash) {
-		return true
-	}
-	roots := extraDenyRoots
-	if len(roots) == 0 {
-		roots = f.extraDenyRoots
-	}
-	return isAgentSourceReadDeniedWithRoots(f.rootClean, absPath, roots)
-}
-
-// IsAgentSourceReadDenied reports whether absPath under rootPath is denied to
-// AgentAudience (either because it is excluded from observation, lies inside
-// the control-plane state tree outside an attached managed workspace, or lies
-// inside any of extraDenyRoots).
-func IsAgentSourceReadDenied(rootPath, absPath string, extraDenyRoots []string) bool {
-	return isAgentSourceReadDeniedWithRoots(rootPath, absPath, effectiveAgentExtraDenyRoots(extraDenyRoots))
-}
-
-func isAgentSourceReadDeniedWithRoots(rootPath, absPath string, extraDenyRoots []string) bool {
-	if IsObservedStateExcluded(rootPath, absPath) {
-		return true
-	}
-	p := filepath.Clean(strings.TrimSpace(absPath))
-	if p == "" || p == "." {
-		return false
-	}
-	pCanon := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(p)))
-	if pCanon == "" || pCanon == "." {
-		pCanon = p
-	}
-	rootClean := filepath.Clean(strings.TrimSpace(rootPath))
-	var rootCanon string
-	if rootClean != "" && rootClean != "." {
-		rootCanon = filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(rootClean)))
-	}
-
-	if cfgClean, cfgCanon, ok := currentConfigRoot(true); ok {
-		rootVariants := []string{rootClean}
-		if rootCanon != "" && rootCanon != "." && rootCanon != rootClean {
-			rootVariants = append(rootVariants, rootCanon)
-		}
-		if isPathDeniedInConfigTreeForAgent(cfgClean, rootVariants, p) ||
-			isPathDeniedInConfigTreeForAgent(cfgCanon, rootVariants, pCanon) ||
-			isPathDeniedInConfigTreeForAgent(cfgCanon, rootVariants, p) {
-			return true
-		}
-	}
-
-	for _, extra := range extraDenyRoots {
-		trimmed := strings.TrimSpace(extra)
-		if trimmed == "" {
-			continue
-		}
-		extraClean := filepath.Clean(trimmed)
-		if _, under := relUnderFold(extraClean, p); under {
-			return true
-		}
-		if _, under := relUnderFold(extraClean, pCanon); under {
-			return true
-		}
-		if extraCanon := filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(extraClean))); extraCanon != "" && extraCanon != "." {
-			if _, under := relUnderFold(extraCanon, p); under {
-				return true
-			}
-			if _, under := relUnderFold(extraCanon, pCanon); under {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func isRootDeniedByConfigTree(cfgBase, rootPath string) bool {
-	rel, under := relUnderFold(cfgBase, rootPath)
-	if !under {
-		return false
-	}
-	_, isScoped := allowedConfigScopedRootPrefix(rel)
-	return !isScoped
-}
-
-func isManagedWorkspaceRoot(clean, canon string) bool {
-	cfgClean, cfgCanon, ok := currentConfigRoot(true)
-	if !ok {
-		return false
-	}
-	if rel, under := relUnderFold(cfgClean, clean); under {
-		if _, isScoped := allowedConfigScopedRootPrefix(rel); isScoped {
-			return true
-		}
-	}
-	if rel, under := relUnderFold(cfgCanon, canon); under {
-		if _, isScoped := allowedConfigScopedRootPrefix(rel); isScoped {
-			return true
-		}
-	}
-	return false
-}
-
-func isPathDeniedInConfigTreeForAgent(cfgBase string, rootVariants []string, targetPath string) bool {
-	if cfgBase == "" || targetPath == "" {
-		return false
-	}
-	rel, underCfg := relUnderFold(cfgBase, targetPath)
-	if !underCfg {
-		return false
-	}
-	if _, isScoped := allowedConfigScopedRootPrefix(rel); !isScoped {
-		// All of configdir.Root() outside explicit managed workspaces and
-		// concrete session scratch/output directories (including settings.yaml,
-		// packs/, etc.) is denied to AgentAudience!
-		return true
-	}
-	hasRoot := false
-	var rootRel string
-	var rootUnderCfg bool
-	for _, r := range rootVariants {
-		if r == "" || r == "." {
-			continue
-		}
-		hasRoot = true
-		if rr, ok := relUnderFold(cfgBase, r); ok {
-			rootRel = rr
-			rootUnderCfg = true
-			break
-		}
-	}
-	if !hasRoot {
-		_, isWS := managedConfigWorkspacePrefix(rel)
-		return !isWS
-	}
-	if !rootUnderCfg {
-		return true
-	}
-	return !sameConfigScopedRoot(rel, rootRel)
-}
-
-func relUnderFold(base, target string) (string, bool) {
+// RelUnderFold returns the slash-separated path of target relative to base
+// using case-insensitive component matching and Darwin /private alias handling.
+func RelUnderFold(base, target string) (string, bool) {
 	if base == "" || target == "" {
 		return "", false
 	}

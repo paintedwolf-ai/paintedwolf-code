@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -30,7 +31,8 @@ func TestScratchSurveySeesWritesAfterEmptyInventory(t *testing.T) {
 	tc.Host.SessionScratchDir = scratchDir
 	tc.Host.SessionOutputDir = dirs.Output
 	catalog := sourcecatalog.New()
-	_, err = catalog.Observe(t.Context(), tc.Identity.ProjectID, []sourcecatalog.Root{{ID: projectroot.VirtualScratchLabel, Path: scratchDir}})
+	obsCtx := sandbox.WithSessionDirs(t.Context(), scratchDir, dirs.Output)
+	_, err = catalog.Observe(obsCtx, tc.Identity.ProjectID, []sourcecatalog.Root{{ID: projectroot.VirtualScratchLabel, Path: scratchDir}})
 	testutil.FailErr(t, "observe empty scratch", err)
 	testutil.FailErr(t, "write scratch script", os.WriteFile(filepath.Join(scratchDir, "test-app.mjs"), []byte("console.log('needle');\n"), 0o600))
 	boundary := nativefixture.Boundary(t)
@@ -217,6 +219,104 @@ func TestDirectControlRootAttachmentWithHumanWarmedCatalogCannotExposeStateToAge
 	testutil.FailErr(t, "read @scratch/scratch-note.txt", err)
 	if !strings.Contains(scratchReadOut, "scratch-ok-needle") {
 		t.Fatalf("read @scratch/scratch-note.txt missing expected content: %s", scratchReadOut)
+	}
+
+	// 4. Directly attaching another session's scratch directory (<cfgDir>/scratch/other-session)
+	// as a project root while invocation owns sess-1 MUST NOT expose other-session files!
+	otherDirs, err := scratch.New(cfgDir).Ensure("other-session")
+	testutil.FailErr(t, "ensure other-session scratch", err)
+	testutil.FailErr(t, "write other-session note", os.WriteFile(filepath.Join(otherDirs.Scratch, "other-secret.txt"), []byte("other-session-secret-needle\n"), 0o600))
+	otherTC := nativefixture.Context(otherDirs.Scratch)
+	otherTC.Host.SessionScratchDir = scratchDir
+	otherTC.Host.SessionOutputDir = dirs.Output
+	if findOut, err := finder.Run(t.Context(), map[string]any{"path": "."}, otherTC); err == nil {
+		if found := parseFindResponse(t, findOut); len(found.Results) != 0 {
+			t.Fatalf("agent find on other-session scratch root exposed entries: %+v", found.Results)
+		}
+	}
+	if listOut, err := listing.Run(t.Context(), map[string]any{"path": ".", "max_depth": 1, "include_hidden": true}, otherTC); err == nil {
+		if listed := decodeListDirOut(t, listOut); len(listed.Entries) != 0 {
+			t.Fatalf("agent list_dir on other-session scratch root exposed entries: %+v", listed.Entries)
+		}
+	}
+	if grepOut, err := grepper.Run(t.Context(), map[string]any{"path": ".", "pattern": "other-session-secret-needle"}, otherTC); err == nil {
+		if matches := nativefixture.GrepMatches(t, grepOut); len(matches) != 0 {
+			t.Fatalf("agent grep on other-session scratch root exposed matches: %+v", matches)
+		}
+	}
+	if out, err := reader.Run(t.Context(), map[string]any{"path": "other-secret.txt"}, otherTC); err == nil {
+		t.Fatalf("agent read on other-session scratch root unexpectedly succeeded: %s", out)
+	}
+	if out, err := wcTool.Run(t.Context(), map[string]any{"paths": []any{"other-secret.txt"}}, otherTC); err == nil {
+		t.Fatalf("agent wc on other-session scratch root unexpectedly succeeded: %s", out)
+	}
+	if out, err := statTool.Run(t.Context(), map[string]any{"paths": []any{"other-secret.txt"}}, otherTC); err == nil {
+		t.Fatalf("agent stat on other-session scratch root unexpectedly succeeded: %s", out)
+	}
+
+	// 5. Managed workspace (<cfgDir>/session-worktrees/proj-1/sess-1) with human-warmed catalog explicitly covered
+	// by LYCAON_SANDBOX_DENY_READ (both subtree and whole-root) must be denied across discovery and read tools.
+	wtDir := filepath.Join(cfgDir, "session-worktrees", "proj-1", "sess-1")
+	testutil.FailErr(t, "mkdir wt/private", os.MkdirAll(filepath.Join(wtDir, "private"), 0o755))
+	testutil.FailErr(t, "write wt/public.go", os.WriteFile(filepath.Join(wtDir, "public.go"), []byte("package main // wt-public-needle\n"), 0o600))
+	testutil.FailErr(t, "write wt/private/secret.go", os.WriteFile(filepath.Join(wtDir, "private", "secret.go"), []byte("package private // wt-secret-needle\n"), 0o600))
+	wtTC := nativefixture.Context(wtDir)
+	wtTC.Host.SessionScratchDir = scratchDir
+	wtTC.Host.SessionOutputDir = dirs.Output
+	wtCatRoot := sourcecatalog.Root{ID: wtTC.Source.Roots[0].ID, Path: wtDir}
+	_, err = catalog.Observe(t.Context(), wtTC.Identity.ProjectID, []sourcecatalog.Root{wtCatRoot})
+	testutil.FailErr(t, "warm human catalog on wtDir", err)
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), wtTC.Identity.ProjectID, wtCatRoot, ".", sourcecatalog.DirectoryRead{})
+	testutil.FailErr(t, "warm human directory index on wtDir", err)
+
+	// 5a. Subtree deny on wt-1/private:
+	t.Setenv("LYCAON_SANDBOX_DENY_READ", filepath.Join(wtDir, "private"))
+	wtFindSub, err := finder.Run(t.Context(), map[string]any{"path": "."}, wtTC)
+	testutil.FailErr(t, "find on subtree-denied wtDir", err)
+	if found := parseFindResponse(t, wtFindSub); len(found.Results) != 1 || found.Results[0].Path != "public.go" {
+		t.Fatalf("find on subtree-denied wtDir = %+v, want [public.go]", found.Results)
+	}
+	wtListSub, err := listing.Run(t.Context(), map[string]any{"path": ".", "max_depth": 1, "include_hidden": true}, wtTC)
+	testutil.FailErr(t, "list_dir on subtree-denied wtDir", err)
+	if listed := decodeListDirOut(t, wtListSub); len(listed.Entries) != 1 || listed.Entries[0].Name != "public.go" {
+		t.Fatalf("list_dir on subtree-denied wtDir = %+v, want [public.go]", listed.Entries)
+	}
+	if grepOut, err := grepper.Run(t.Context(), map[string]any{"path": ".", "pattern": "wt-secret-needle"}, wtTC); err == nil {
+		if matches := nativefixture.GrepMatches(t, grepOut); len(matches) != 0 {
+			t.Fatalf("grep on subtree-denied wtDir leaked private/secret.go: %+v", matches)
+		}
+	}
+	if out, err := reader.Run(t.Context(), map[string]any{"path": "private/secret.go"}, wtTC); err == nil {
+		t.Fatalf("read(private/secret.go) on subtree-denied wtDir unexpectedly succeeded: %s", out)
+	}
+
+	// 5b. Whole-root deny on wt-1:
+	t.Setenv("LYCAON_SANDBOX_DENY_READ", wtDir)
+	if findOut, err := finder.Run(t.Context(), map[string]any{"path": "."}, wtTC); err == nil {
+		if found := parseFindResponse(t, findOut); len(found.Results) != 0 {
+			t.Fatalf("find on whole-denied wtDir exposed entries: %+v", found.Results)
+		}
+	}
+	if listOut, err := listing.Run(t.Context(), map[string]any{"path": ".", "max_depth": 1, "include_hidden": true}, wtTC); err == nil {
+		if listed := decodeListDirOut(t, listOut); len(listed.Entries) != 0 {
+			t.Fatalf("list_dir on whole-denied wtDir exposed entries: %+v", listed.Entries)
+		}
+	}
+	if grepOut, err := grepper.Run(t.Context(), map[string]any{"path": ".", "pattern": "wt-public-needle"}, wtTC); err == nil {
+		if matches := nativefixture.GrepMatches(t, grepOut); len(matches) != 0 {
+			t.Fatalf("grep on whole-denied wtDir exposed matches: %+v", matches)
+		}
+	}
+	for _, target := range []string{"public.go", "private/secret.go"} {
+		if out, err := reader.Run(t.Context(), map[string]any{"path": target}, wtTC); err == nil {
+			t.Fatalf("read(%q) on whole-denied wtDir unexpectedly succeeded: %s", target, out)
+		}
+		if out, err := wcTool.Run(t.Context(), map[string]any{"paths": []any{target}}, wtTC); err == nil {
+			t.Fatalf("wc(%q) on whole-denied wtDir unexpectedly succeeded: %s", target, out)
+		}
+		if out, err := statTool.Run(t.Context(), map[string]any{"paths": []any{target}}, wtTC); err == nil {
+			t.Fatalf("stat(%q) on whole-denied wtDir unexpectedly succeeded: %s", target, out)
+		}
 	}
 }
 
