@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
 func validateWorkerOwnership(j WorkerLifecycleJournal, expectedTaskID, expectedProjectID string) error {
@@ -134,6 +135,9 @@ func reconstructViewFromManifest(
 	if c.cfg.GitManager != nil && prepReq.GitInterceptor == nil {
 		prepReq.GitInterceptor = c.cfg.GitManager
 	}
+	if c.cfg.GitStore != nil && prepReq.GitObjectStore == nil {
+		prepReq.GitObjectStore = c.cfg.GitStore
+	}
 
 	view, err := adp.Prepare(ctx, prepReq)
 	if err != nil {
@@ -141,6 +145,11 @@ func reconstructViewFromManifest(
 	}
 	if binder, ok := adp.(PrivateGitBinder); ok && c.cfg.GitManager != nil {
 		if bErr := binder.BindPrivateGit(view.ViewID, workerID, c.cfg.GitManager); bErr != nil {
+			_, _ = adp.Release(ctx, view.ViewID)
+			return nil, bErr
+		}
+	} else if c.cfg.GitManager != nil && view.Facts.PreparationKind == adapter.PreparationMaterialized {
+		if bErr := bindMaterializedViewToGitManager(ctx, c.cfg.GitManager, workerID, view); bErr != nil {
 			_, _ = adp.Release(ctx, view.ViewID)
 			return nil, bErr
 		}
@@ -155,6 +164,39 @@ func reconstructViewFromManifest(
 		return nil, err
 	}
 	return view, nil
+}
+
+func bindMaterializedViewToGitManager(ctx context.Context, mgr *privategit.Manager, workerID string, view *adapter.PreparedView) error {
+	for _, r := range view.Roots {
+		vid, wid, coreVID := view.ViewID, workerID, ""
+		if r.RootID != view.PrimaryRootID {
+			vid = privategit.SecondaryViewID(view.ViewID, r.RootID)
+			wid = vid
+			coreVID = view.ViewID
+		}
+		var repos []privategit.SeededRepo
+		for key, seeded := range view.SeededGitRepos {
+			rootID, repoRel, _ := strings.Cut(key, ":")
+			if rootID == r.RootID && seeded.PrivateMetaDir != "" {
+				repos = append(repos, privategit.SeededRepo{
+					RepoRel:       repoRel,
+					PrivateGitDir: seeded.PrivateMetaDir,
+					Metrics: privategit.InitMetrics{
+						ObjectsReused: seeded.ObjectsReused,
+						BytesImported: seeded.BytesImported,
+						BytesReused:   seeded.BytesReused,
+					},
+				})
+			}
+		}
+		if err := mgr.AdoptMaterializedView(ctx, privategit.MaterializedViewBinding{
+			ViewID: vid, WorkerID: wid, RootID: r.RootID, CoreViewID: coreVID,
+			TrunkDir: r.SourcePath, WorktreeDir: r.WorkspacePath, Core: view.Core, Repos: repos,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // recordPreparedViewIdentity fails rather than expose a view recovery could not later settle.
