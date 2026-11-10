@@ -169,7 +169,7 @@ func TestVerifyWholeProgramVerdictPreservesEarlierNonzeroExecution(t *testing.T)
 		t.Fatalf("nonzero executions = %+v", result.NonzeroExecutions)
 	}
 	child := result.NonzeroExecutions[0]
-	if child.StatusCode == nil || *child.StatusCode != 7 || !child.OwnerInvoked || child.ExecutionID == "" || child.SourceUnitID != "submitted" || len(child.OutputRefs) == 0 {
+	if child.StatusCode == nil || *child.StatusCode != 7 || !child.OwnerInvoked || child.ExecutionID == "" || child.SourceUnitID != "submitted" || len(child.Outputs) == 0 {
 		t.Fatalf("earlier execution evidence = %+v", child)
 	}
 }

@@ -158,7 +158,7 @@ func TestFailedProducerPreservesDestinationAndRetainsDiagnostic(t *testing.T) {
 			}
 		}
 		if child.StatusCode != nil && *child.StatusCode == 7 && child.OwnerInvoked {
-			ran = len(child.OutputRefs) > 0
+			ran = len(child.Outputs) > 0
 		}
 	}
 	if !withheld || !ran {

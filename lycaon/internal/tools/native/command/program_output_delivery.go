@@ -81,7 +81,11 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 			State: receipt.State, StatusCode: receipt.StatusCode, OwnerStarted: receipt.OwnerStarted, OwnerInvoked: receipt.OwnerInvoked,
 			OutputPublishable: receipt.OutputPublishable, DetailRef: receipt.DetailRef}
 		for _, output := range receipt.Outputs {
-			observed.OutputRefs = append(observed.OutputRefs, output.Ref)
+			path, err := (scratch.CommandOutput{ProgramID: programID, ExecutionID: receipt.ID, Stream: output.Stream}).Path()
+			if err != nil {
+				return ProgramOutcome{}, err
+			}
+			observed.Outputs = append(observed.Outputs, ProgramExecutionOutput{Stream: output.Stream, Ref: output.Ref, OutputPath: "@output/" + path, SizeBytes: output.SizeBytes, Complete: output.Complete})
 		}
 		out.NonzeroExecutions = append(out.NonzeroExecutions, observed)
 	}
@@ -167,7 +171,7 @@ func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programR
 	if err != nil {
 		return "", api.CommandProgramOutputWindow{}, err
 	}
-	err = scratch.PublishCommandOutput(run.tc.Host.SessionOutputDir, program, name, body)
+	err = scratch.PublishCommandOutput(run.tc.Host.SessionOutputDir, scratch.CommandOutput{ProgramID: program, Stream: name}, body)
 	closeErr := body.Close()
 	if err != nil || closeErr != nil {
 		return "", api.CommandProgramOutputWindow{}, errors.Join(err, closeErr)

@@ -60,15 +60,24 @@ type ProgramVerification struct {
 
 // ProgramExecutionOutcome identifies a child without repeating its output body.
 type ProgramExecutionOutcome struct {
-	EvidenceKind      string                  `json:"evidence_kind,omitempty"`
-	ExecutionID       string                  `json:"execution_id"`
-	SourceUnitID      string                  `json:"source_unit_id"`
-	Span              toolcontract.SourceSpan `json:"span"`
-	State             string                  `json:"state"`
-	StatusCode        *int                    `json:"status_code,omitempty"`
-	OwnerStarted      bool                    `json:"owner_started"`
-	OwnerInvoked      bool                    `json:"owner_invoked"`
-	OutputPublishable bool                    `json:"output_publishable"`
-	DetailRef         string                  `json:"detail_ref"`
-	OutputRefs        []string                `json:"output_refs,omitempty"`
+	EvidenceKind      string                   `json:"evidence_kind,omitempty"`
+	ExecutionID       string                   `json:"execution_id"`
+	SourceUnitID      string                   `json:"source_unit_id"`
+	Span              toolcontract.SourceSpan  `json:"span"`
+	State             string                   `json:"state"`
+	StatusCode        *int                     `json:"status_code,omitempty"`
+	OwnerStarted      bool                     `json:"owner_started"`
+	OwnerInvoked      bool                     `json:"owner_invoked"`
+	OutputPublishable bool                     `json:"output_publishable"`
+	DetailRef         string                   `json:"detail_ref"`
+	Outputs           []ProgramExecutionOutput `json:"outputs,omitempty"`
+}
+
+// ProgramExecutionOutput exposes retained diagnostics without copying their body.
+type ProgramExecutionOutput struct {
+	Stream     string `json:"stream"`
+	Ref        string `json:"ref"`
+	OutputPath string `json:"output_path"`
+	SizeBytes  int64  `json:"size_bytes"`
+	Complete   bool   `json:"complete"`
 }

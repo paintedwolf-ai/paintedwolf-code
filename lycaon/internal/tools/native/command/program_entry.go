@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -362,7 +363,12 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 		if _, err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
 			return errors.Join(err, spill.Close())
 		}
-		return nil
+		body, err := outputs.Open(ctx, tc.Identity.SessionID, root.Identity.ProgramID, output.Reference)
+		if err != nil {
+			return err
+		}
+		err = scratch.PublishCommandOutput(tc.Host.SessionOutputDir, scratch.CommandOutput{ProgramID: root.Identity.ProgramID, ExecutionID: executionID, Stream: stream}, body.Reader)
+		return errors.Join(err, body.Reader.Close())
 	}
 	maximumNodes := 0
 	for _, limit := range run.catalog.Language.Limits {
