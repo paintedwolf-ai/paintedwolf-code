@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -41,13 +42,23 @@ func HoldPrivateTree(path string) func() {
 	}
 }
 
-// IsPrivatePath reports whether path lies in a held private tree or is an
-// entry the durable-write door is staging.
+// IsPrivatePath reports whether path lies in a held private tree, is excluded
+// by the host control-plane observation boundary, or is an entry the
+// durable-write door is staging.
 func IsPrivatePath(path string) bool {
+	return IsPrivatePathForRoot("", path)
+}
+
+// IsPrivatePathForRoot reports whether path is private or excluded from
+// observation when observed under rootPath.
+func IsPrivatePathForRoot(rootPath, path string) bool {
 	if fseffect.IsStaging(filepath.Dir(path), filepath.Base(path)) {
 		return true
 	}
 	if settingsoverlay.HasRecoverySegment(path) || settingsoverlay.IsRecoveryOnlyDir(path) {
+		return true
+	}
+	if enginepaths.IsObservedStateExcluded(rootPath, path) {
 		return true
 	}
 	privateTrees.RLock()
@@ -65,26 +76,66 @@ func IsPrivatePath(path string) bool {
 }
 
 // PrivateDirectoryFilter lazily canonicalizes a listed directory once while
-// checking every child against the current private-tree registrations.
+// checking every child against the current private-tree registrations and
+// control-plane observation boundaries.
 type PrivateDirectoryFilter struct {
-	directory string
-	once      sync.Once
-	canonical string
+	root       string
+	directory  string
+	dirOnce    sync.Once
+	canonDir   string
+	excludeAll bool
+	once       sync.Once
+	canonical  string
 }
 
 // NewPrivateDirectoryFilter prepares a directory whose direct entries will be
-// checked repeatedly. Resolution is deferred until a private tree exists.
+// checked repeatedly. Resolution is deferred until needed.
 func NewPrivateDirectoryFilter(directory string) *PrivateDirectoryFilter {
 	return &PrivateDirectoryFilter{directory: directory}
 }
 
+// NewPrivateDirectoryFilterForRoot prepares a directory filter scoped to an
+// attached rootPath.
+func NewPrivateDirectoryFilterForRoot(rootPath, directory string) *PrivateDirectoryFilter {
+	return &PrivateDirectoryFilter{root: rootPath, directory: directory}
+}
+
 // Contains reports whether the named direct child is currently private.
 func (f *PrivateDirectoryFilter) Contains(name string) bool {
+	return f.ContainsEntry(name, false)
+}
+
+// ContainsEntry reports whether the named direct child is currently private,
+// resolving symlink targets when isSymlink is true.
+func (f *PrivateDirectoryFilter) ContainsEntry(name string, isSymlink bool) bool {
 	if fseffect.IsStaging(f.directory, name) {
 		return true
 	}
 	candidate := filepath.Join(f.directory, name)
 	if settingsoverlay.HasRecoverySegment(candidate) || settingsoverlay.IsRecoveryOnlyDir(candidate) {
+		return true
+	}
+	if f.root != "" {
+		f.dirOnce.Do(func() {
+			if enginepaths.IsObservedStateExcluded(f.root, f.directory) {
+				f.excludeAll = true
+				return
+			}
+			if c := fspath.CanonicalPath(f.directory); c != "" {
+				f.canonDir = filepath.FromSlash(c)
+			}
+		})
+		if f.excludeAll {
+			return true
+		}
+	}
+	if enginepaths.IsObservedDirChildExcluded(f.root, f.directory, name, false) {
+		return true
+	}
+	if f.canonDir != "" && f.canonDir != f.directory && enginepaths.IsObservedDirChildExcluded(f.root, f.canonDir, name, false) {
+		return true
+	}
+	if isSymlink && enginepaths.IsObservedStateExcluded(f.root, candidate) {
 		return true
 	}
 	privateTrees.RLock()

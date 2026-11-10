@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/gitrepo"
@@ -131,9 +132,12 @@ func SurveyWalk(ctx context.Context, root string, opts SurveyOptions, visit func
 	if opts.Stream && opts.Budgets.Bounded() {
 		return os.ErrInvalid
 	}
-	w := &surveyWalker{ctx: ctx, opts: opts, visit: visit, budget: NewWalkBudget(opts.Budgets)}
+	w := &surveyWalker{ctx: ctx, root: root, opts: opts, visit: visit, budget: NewWalkBudget(opts.Budgets)}
 	if _, err := os.Lstat(root); err != nil {
 		return err
+	}
+	if enginepaths.IsObservedStateExcluded(root, root) {
+		return nil
 	}
 	err := w.walkDir(".", root, 0)
 	if errors.Is(err, errSurveyStop) || errors.Is(err, errSurveyBudgetSpent) {
@@ -146,6 +150,7 @@ var errSurveyBudgetSpent = errors.New("sandbox: survey walk budget spent")
 
 type surveyWalker struct {
 	ctx    context.Context
+	root   string
 	opts   SurveyOptions
 	visit  func(SurveyEntry) (SurveyAction, error)
 	budget *WalkBudget
@@ -202,6 +207,9 @@ func (w *surveyWalker) visitEntries(rel, abs string, depth, dirDepth int, entrie
 		childAbs := filepath.Join(abs, name)
 		isDir := d.IsDir()
 		isSymlink := d.Type()&fs.ModeSymlink != 0
+		if enginepaths.IsObservedDirChildExcluded(w.root, abs, name, isSymlink) {
+			continue
+		}
 		if isDir {
 			if surveySkipsDir(childRel, name, w.opts) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
 				continue
@@ -363,10 +371,32 @@ func SurveyReadDir(dir, relDir string, opts SurveyOptions) ([]SurveyEntry, error
 	if err != nil {
 		return nil, err
 	}
+	root := surveyRootFromRel(dir, relDir)
+	if enginepaths.IsObservedStateExcluded(root, dir) {
+		return nil, nil
+	}
 	return surveyDirectoryEntries(dir, relDir, entries, opts), nil
 }
 
+func surveyRootFromRel(dir, relDir string) string {
+	cleanDir := filepath.Clean(dir)
+	cleanRel := filepath.ToSlash(filepath.Clean(relDir))
+	if cleanRel == "" || cleanRel == "." {
+		return cleanDir
+	}
+	root := cleanDir
+	for range strings.Split(cleanRel, "/") {
+		parent := filepath.Dir(root)
+		if parent == root {
+			break
+		}
+		root = parent
+	}
+	return root
+}
+
 func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts SurveyOptions) []SurveyEntry {
+	root := surveyRootFromRel(dir, relDir)
 	out := make([]SurveyEntry, 0, len(entries))
 	for _, e := range entries {
 		name := e.Name()
@@ -378,6 +408,9 @@ func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts Surv
 			rel = relDir + "/" + name
 		}
 		if settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel) {
+			continue
+		}
+		if enginepaths.IsObservedDirChildExcluded(root, dir, name, e.Type()&fs.ModeSymlink != 0) {
 			continue
 		}
 		abs := filepath.Join(dir, name)

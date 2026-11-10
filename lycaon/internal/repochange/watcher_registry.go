@@ -190,6 +190,9 @@ func (r *WatcherRegistry) Seed(ctx context.Context, root string, directories []W
 	policyUnwatched := 0
 	filtered := make([]WatchDirectory, 0, len(directories))
 	for _, directory := range directories {
+		if IsPrivatePathForRoot(key, directory.Path) {
+			continue
+		}
 		rel, err := filepath.Rel(key, directory.Path)
 		if err == nil && w.scope.BoundaryPath(filepath.ToSlash(rel), true) != "" {
 			if w.scope.BoundaryDir(filepath.ToSlash(rel)) != "" {
@@ -202,6 +205,10 @@ func (r *WatcherRegistry) Seed(ctx context.Context, root string, directories []W
 	w.mu.Lock()
 	w.policyUnwatched = policyUnwatched
 	w.mu.Unlock()
+	if IsPrivatePathForRoot(key, key) {
+		w.setTruncated(0)
+		return
+	}
 	eligible := watchOrder(key, filtered)
 	// An empty catalog cannot resolve an existing coverage shortfall.
 	if len(eligible) == 0 {

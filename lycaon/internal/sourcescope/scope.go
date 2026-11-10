@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -189,6 +191,9 @@ func (s *Scope) decideDirLocked(rel string) (string, bool) {
 // The floor takes precedence over project declarations and ignore files.
 func (s *Scope) decideLocked(rel string, isDir bool) (string, bool) {
 	if settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel) {
+		return ReasonFloor, true
+	}
+	if s.root != "" && enginepaths.IsObservedStateExcluded(s.root, filepath.Join(s.root, filepath.FromSlash(rel))) {
 		return ReasonFloor, true
 	}
 	segments := strings.Split(rel, "/")

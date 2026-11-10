@@ -70,10 +70,12 @@ func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *w
 		watched:   map[string]int{},
 		refs:      refObserver{root: root, physicalRoot: physicalRoot},
 	}
-	if w.addMeasuredDir(root) != addRegistered {
-		w.setTruncated(1)
+	if !IsPrivatePathForRoot(root, root) {
+		if w.addMeasuredDir(root) != addRegistered {
+			w.setTruncated(1)
+		}
+		w.refs.arm(w.addMeasuredDir)
 	}
-	w.refs.arm(w.addMeasuredDir)
 	return w, nil
 }
 
@@ -229,6 +231,9 @@ func (w *worktreeWatcher) watchesDir(path string) bool {
 	if w == nil {
 		return false
 	}
+	if IsPrivatePathForRoot(w.root, path) {
+		return false
+	}
 	if w.scope != nil {
 		rel, err := filepath.Rel(w.root, path)
 		if err == nil && w.scope.BoundaryPath(filepath.ToSlash(rel), true) != "" {
@@ -315,6 +320,9 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			}
 			rel, err := filepath.Rel(w.root, ev.Name)
 			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+				continue
+			}
+			if IsPrivatePathForRoot(w.root, ev.Name) {
 				continue
 			}
 			relSlash := filepath.ToSlash(rel)

@@ -162,6 +162,9 @@ func (w *projectWatch) observe(ctx context.Context, event repochange.Event) {
 		if slices.Contains(strings.Split(rel, "/"), ".git") {
 			continue
 		}
+		if repochange.IsPrivatePathForRoot(root.Path, filepath.Join(root.Path, filepath.FromSlash(rel))) {
+			continue
+		}
 		w.changes.queue(ctx, root, rel)
 	}
 }
@@ -218,7 +221,7 @@ func (w *projectWatch) externalChanges(pending []pendingExternalChange) []Change
 	batch := make([]Change, 0, len(pending))
 	for _, change := range pending {
 		abs := filepath.Join(change.root.Path, filepath.FromSlash(change.rel))
-		if isRecentHostWrite(abs) {
+		if isRecentHostWrite(abs) || repochange.IsPrivatePathForRoot(change.root.Path, abs) {
 			continue
 		}
 		op := api.SourceChangeOpWrite
@@ -285,6 +288,9 @@ func cleanWatchRoots(roots []RootSpec) []RootSpec {
 // cleanSeedDirectories keeps directories inside the root, the root itself
 // first, each at most once.
 func cleanSeedDirectories(rootPath string, directories []DirectorySpec) []repochange.WatchDirectory {
+	if repochange.IsPrivatePathForRoot(rootPath, rootPath) {
+		return nil
+	}
 	out := make([]repochange.WatchDirectory, 0, len(directories)+1)
 	out = append(out, repochange.WatchDirectory{Path: rootPath})
 	seen := map[string]struct{}{rootPath: {}}
@@ -295,6 +301,9 @@ func cleanSeedDirectories(rootPath string, directories []DirectorySpec) []repoch
 			continue
 		}
 		path = filepath.Clean(path)
+		if repochange.IsPrivatePathForRoot(rootPath, path) {
+			continue
+		}
 		if _, exists := seen[path]; exists {
 			if path == rootPath {
 				out[0].EntryCount = max(0, directory.EntryCount)

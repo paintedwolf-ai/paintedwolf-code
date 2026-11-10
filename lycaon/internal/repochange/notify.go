@@ -136,7 +136,7 @@ func Notify(ctx context.Context, ev Event) {
 	if ev.Kind == WorktreeChanged && ev.Source == SourceWatcher && len(ev.Changes) > 0 {
 		changes := ev.Changes[:0]
 		for _, change := range ev.Changes {
-			if !IsPrivatePath(filepath.Join(dir, change.Path)) {
+			if !IsPrivatePathForRoot(dir, filepath.Join(dir, change.Path)) {
 				changes = append(changes, change)
 			}
 		}
