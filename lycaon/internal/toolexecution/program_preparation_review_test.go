@@ -25,10 +25,15 @@ import (
 // Preparation can read source bytes before the final producer is invoked.
 // A human reply cannot preserve authority withdrawn during that wait.
 func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
-	for _, name := range []string{"unchanged", "profile-withdrawn", "branch-unchanged", "branch-withdrawn", "frame-closed"} {
+	for _, name := range []string{"unchanged", "profile-withdrawn", "branch-unchanged", "branch-withdrawn", "frame-closed", "disclosure-unchanged", "disclosure-frame-closed"} {
 		t.Run(name, func(t *testing.T) {
 			parent, tc := frameFixture(t)
-			withdraw := name == "profile-withdrawn" || name == "branch-withdrawn" || name == "frame-closed"
+			disclose := name == "disclosure-unchanged" || name == "disclosure-frame-closed"
+			withdraw := name == "profile-withdrawn" || name == "branch-withdrawn" || name == "frame-closed" || name == "disclosure-frame-closed"
+			wantAsks := 1
+			if disclose {
+				wantAsks = 2
+			}
 			readRoot := tc.ActiveRootPath()
 			branch := &preparationBranch{}
 			retired := errors.New("fixture branch retired")
@@ -61,11 +66,11 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 			bound, err := toolcontract.BindOperation(definition, child, "cat", definition.Facts().Commands[0].Effects[0].Mode, nil)
 			testutil.FailErr(t, "bind read", err)
 			var preparedBytes, output bytes.Buffer
-			asks, records := 0, 0
+			asks, records, preparations := 0, 0, 0
 			manager := &nativeRecorderReviewManager{invariantCheckpointMgr: invariantCheckpointMgr{status: hitl.DecisionStatusApproved, result: &hitl.DecisionResult{Approved: true}}}
 			manager.onRequest = func(req hitl.CheckpointRequest) {
 				asks++
-				if asks != 1 || preparedBytes.Len() != 0 || records != 0 {
+				if asks > wantAsks || preparedBytes.Len() != 0 || records != 0 {
 					t.Fatal("review repeated or followed preparation")
 				}
 				matched := false
@@ -75,7 +80,7 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 				if !matched {
 					t.Fatal("read requirement absent from review")
 				}
-				if name == "frame-closed" {
+				if name == "frame-closed" || name == "disclosure-frame-closed" && asks == 2 {
 					frame.Close()
 				}
 				if name == "profile-withdrawn" {
@@ -91,6 +96,10 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 			})
 			effect := NativeEffect{Operation: bound, Stage: toolcontract.ExecutionStage{ExecutionID: "child", OperationID: "read", Argv: []string{"cat", "input"}}, Arguments: map[string]any{"path": "input"}, Streams: commandprogram.Streams{Output: &output}}
 			effect.PrepareReviewed = func(ctx context.Context, args map[string]any, actual tools.ToolContext) (PreparedNativeEffect, error) {
+				preparations++
+				if disclose && preparations == 1 {
+					return PreparedNativeEffect{Operation: bound, DisclosedArgv: &commandprogram.ArgvReview{OperationID: "read", Command: "cat", Operands: []string{"input"}, PathTargets: []commandprogram.PathTarget{{Path: "input"}}}}, nil
+				}
 				paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, ".")
 				if err != nil {
 					return PreparedNativeEffect{}, err
@@ -120,7 +129,7 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 				return nil
 			}), effect, tc)
 			frame.Close()
-			if asks != 1 || memory.InUse().State != 0 || frameMemory.InUse().State != 0 {
+			if asks != wantAsks || memory.InUse().State != 0 || frameMemory.InUse().State != 0 {
 				t.Fatal("review or retention contract failed")
 			}
 			// The cwd door projects binding errors into its own repair code.
@@ -138,6 +147,9 @@ func TestNativePreparationRechecksAuthorityAfterApproval(t *testing.T) {
 				}
 			} else {
 				testutil.FailErr(t, "resume approved preparation", err)
+				if preparations != wantAsks {
+					t.Fatalf("preparation passes=%d want=%d", preparations, wantAsks)
+				}
 				if preparedBytes.String() != "source bytes" || output.String() != "source bytes" || records != 1 || !result.OwnerInvoked || !result.OutputPublishable {
 					t.Fatalf("authorized preparation failed: prepared=%q output=%q records=%d result=%+v", preparedBytes.String(), output.String(), records, result)
 				}
