@@ -129,7 +129,6 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 
 	testutil.FailErr(t, "write edited v1", os.WriteFile(filepath.Join(target, "edited.txt"), []byte("v1\n"), 0o644))
 	runGitTestCmd(t, target, "commit", "-qam", "c1")
-	c1 := runGitTestCmd(t, target, "rev-parse", "HEAD")
 	unchangedTreeOID := runGitTestCmd(t, target, "rev-parse", "HEAD:unchanged")
 	deepBlobOID := runGitTestCmd(t, target, "rev-parse", "HEAD:unchanged/deep.txt")
 
@@ -163,7 +162,7 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 	testutil.FailErr(t, "remove unchangedTree", os.Remove(unchangedTreePath))
 	if _, err := ImportAndValidateCheckpointGitRefs(
 		t.Context(), store.RootDir(), "chk-frontier-missing-boundary", "worker",
-		PrivateGitSnapshot{CheckpointGitHash: c2, Refs: map[string]string{"refs/heads/work": c2}},
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work": c2}, ObjectCheckpoints: []string{"chk-frontier"}},
 		map[string]string{"primary": target},
 	); err == nil {
 		t.Fatal("expected missing direct frontier subtree object to fail verification")
@@ -173,7 +172,7 @@ func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testi
 	testutil.FailErr(t, "restore unchangedTree", os.WriteFile(unchangedTreePath, savedTreeBytes, 0o444))
 	imported, err := ImportAndValidateCheckpointGitRefs(
 		t.Context(), store.RootDir(), "chk-frontier", "worker",
-		PrivateGitSnapshot{CheckpointGitHash: c2, Refs: map[string]string{"refs/heads/work": c2}},
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/work": c2}},
 		map[string]string{"primary": target},
 	)
 	testutil.FailErr(t, "bounded incremental import", err)
