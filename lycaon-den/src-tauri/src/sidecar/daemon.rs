@@ -1,6 +1,5 @@
 use super::layout::{bundled_engine_layout, resolve_lycaon_binary};
-use super::process::GRACEFUL_STOP_POLL;
-use super::startup::API_TOKEN_MAX_BYTES;
+use super::process::{API_TOKEN_MAX_BYTES, GRACEFUL_STOP_POLL};
 use super::{attach_only_requested, SidecarInfo};
 use serde::Deserialize;
 use std::fs;
