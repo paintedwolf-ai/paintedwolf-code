@@ -178,7 +178,7 @@ func TestAttachedBroadAndControlPlaneRootsEnforcePerTargetFloors(t *testing.T) {
 	}
 
 	// CompileReadScope and SurveyWalk prune control-plane subtree under attached $HOME.
-	b := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "default"}})
+	b := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "default"}, {ID: "implement"}})
 	sessionCtx := sandbox.WithSessionDirs(t.Context(), scratchDir, outputDir)
 	scope, err := b.CompileReadScope(sessionCtx, home, "default")
 	testutil.FailErr(t, "CompileReadScope", err)
@@ -221,10 +221,18 @@ func TestAttachedBroadAndControlPlaneRootsEnforcePerTargetFloors(t *testing.T) {
 	if _, err := projectpaths.ResolveRead(sessionCtx, b, cfgCtx, "drafts/d1/draft.txt"); err != nil {
 		t.Fatalf("ResolveRead managed draft under attached configdir.Root() failed: %v", err)
 	}
-	unionRoots, err := projectpaths.UnionDiscoveryRoots(sessionCtx, cfgCtx, ".")
-	testutil.FailErr(t, "UnionDiscoveryRoots on attached configdir.Root()", err)
-	if len(unionRoots) != 0 {
-		t.Fatalf("UnionDiscoveryRoots(.) on attached configdir.Root() = %+v, want empty", unionRoots)
+	if _, err := projectpaths.UnionDiscoveryRoots(sessionCtx, cfgCtx, "."); !isControlPlaneReject(err) {
+		t.Fatalf("UnionDiscoveryRoots(.) on sole attached configdir.Root() err = %v, want %s", err, isolation.CodeControlPlaneDenied)
+	}
+	multiCfgCtx := cfgCtx
+	multiCfgCtx.Source.Roots = []projectroot.RootRef{
+		{ID: "cfg", Label: "cfg", Path: cfgDir, IsPrimary: true},
+		{ID: "sibling", Label: "sibling", Path: siblingDir},
+	}
+	unionRoots, err := projectpaths.UnionDiscoveryRoots(sessionCtx, multiCfgCtx, ".")
+	testutil.FailErr(t, "UnionDiscoveryRoots on [cfg, sibling]", err)
+	if len(unionRoots) != 1 || unionRoots[0].ID != "sibling" {
+		t.Fatalf("UnionDiscoveryRoots(.) on [cfg, sibling] = %+v, want [sibling]", unionRoots)
 	}
 
 	cfgScope, err := b.CompileReadScope(sessionCtx, cfgDir, "default")

@@ -150,18 +150,25 @@ func TestAttachedControlPlaneRootSurveyWithWarmCatalogDeniesStateAndAdmitsScratc
 		}
 	}
 
-	// 3. Agent find and grep on "." (union discovery) must return 0 control-plane results even with the warm catalog.
+	// 3. Agent find and grep on "." when configdir.Root() is the sole root refuse with SANDBOX_CONTROL_PLANE_DENIED,
+	// and direct runFindRoot against the pre-populated warmCatalog collects 0 control-plane entries.
 	finder := &FindTool{Boundary: boundary, Catalog: warmCatalog}
-	findOut, err := finder.Run(t.Context(), map[string]any{"path": ".", "name_glob": "*"}, tc)
-	testutil.FailErr(t, "find on .", err)
-	if found := parseFindResponse(t, findOut); len(found.Results) != 0 {
-		t.Fatalf("find(.) on attached configdir.Root() leaked entries: %s", findOut)
+	if _, findErr := finder.Run(t.Context(), map[string]any{"path": ".", "name_glob": "*"}, tc); !isSurveyControlPlaneReject(findErr) {
+		t.Fatalf("find(.) on sole attached configdir.Root() err = %v, want %s", findErr, isolation.CodeControlPlaneDenied)
+	}
+	var directResp findResponse
+	var skipped, matchedTotal int
+	var truncated, deeperOmitted bool
+	testutil.FailErr(t, "direct runFindRoot on warmCatalog", finder.runFindRoot(
+		sessionCtx, tc, primaryRoot, cfgDir, ".", 0, 100, 0, "*", findTypeAny, true, nil,
+		&directResp, &skipped, &matchedTotal, &truncated, &deeperOmitted,
+	))
+	if len(directResp.Results) != 0 || matchedTotal != 0 {
+		t.Fatalf("direct runFindRoot on warmCatalog leaked results: %+v (matchedTotal=%d)", directResp.Results, matchedTotal)
 	}
 	grepper := &GrepTool{Boundary: boundary, Catalog: warmCatalog}
-	grepOut, err := grepper.Run(t.Context(), map[string]any{"path": ".", "pattern": "needle"}, tc)
-	testutil.FailErr(t, "grep on .", err)
-	if matches := nativefixture.GrepMatches(t, grepOut); len(matches) != 0 {
-		t.Fatalf("grep(.) on attached configdir.Root() leaked matches: %s", grepOut)
+	if _, grepErr := grepper.Run(t.Context(), map[string]any{"path": ".", "pattern": "needle"}, tc); !isSurveyControlPlaneReject(grepErr) {
+		t.Fatalf("grep(.) on sole attached configdir.Root() err = %v, want %s", grepErr, isolation.CodeControlPlaneDenied)
 	}
 
 	// 4. Meanwhile, @scratch and @output remain discoverable and searchable by the owning session.
@@ -185,4 +192,9 @@ func TestAttachedControlPlaneRootSurveyWithWarmCatalogDeniesStateAndAdmitsScratc
 	if got := parseFindResponse(t, outputFindOut); len(got.Results) != 1 || got.Results[0].Path != "@output/report.txt" {
 		t.Fatalf("find @output = %s, want [@output/report.txt]", outputFindOut)
 	}
+}
+
+func isSurveyControlPlaneReject(err error) bool {
+	var reject *toolrejection.ToolReject
+	return errors.As(err, &reject) && reject.Code == isolation.CodeControlPlaneDenied
 }
