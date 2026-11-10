@@ -209,15 +209,15 @@ func (r *ProviderCatalog) Load(ctx context.Context) error {
 			lockedCtx := withOverlayLockHeld(ctx, r.globalPath)
 			r.Tools.syncMu.Lock()
 			defer r.Tools.syncMu.Unlock()
-			return r.loadLocked(lockedCtx)
+			return r.loadLocked(lockedCtx, true)
 		})
 	}
 	r.Tools.syncMu.Lock()
 	defer r.Tools.syncMu.Unlock()
-	return r.loadLocked(ctx)
+	return r.loadLocked(ctx, !overlayLockAlreadyHeld(ctx, r.globalPath))
 }
 
-func (r *ProviderCatalog) loadLocked(ctx context.Context) error {
+func (r *ProviderCatalog) loadLocked(ctx context.Context, reconcilePending bool) error {
 	distro, err := LoadDistroMCPConfig()
 	if err != nil {
 		return fmt.Errorf("mcp distro catalog: %w", err)
@@ -235,7 +235,7 @@ func (r *ProviderCatalog) loadLocked(ctx context.Context) error {
 		})
 		user = &UserMCPConfig{}
 	} else {
-		hydrated, migErr := migrateAndHydrateUserOverlay(r.statePath, r.globalPath, user)
+		hydrated, migErr := migrateAndHydrateUserOverlay(r.statePath, r.globalPath, user, reconcilePending)
 		if migErr != nil {
 			return fmt.Errorf("mcp static credentials: %w", migErr)
 		}

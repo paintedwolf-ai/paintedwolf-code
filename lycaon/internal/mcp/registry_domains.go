@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -35,6 +36,145 @@ type ProviderAdministration struct {
 	onSettings            func()
 	openStaticCredentials func(dir string) (*StaticCredentialStore, error)
 	beforeConfigWrite     func(op, providerID string) error
+	crashHook             func(stage, op, providerID string) error
+}
+
+type credentialOverlayTx struct {
+	admin        *ProviderAdministration
+	op           string
+	providerID   string
+	isUserScope  bool
+	store        *StaticCredentialStore
+	staged       StaticCredentialRecord
+	prevSnapshot *StaticCredentialSnapshot
+	targetCfg    UserMCPConfig
+	vaultTouched bool
+	skipRollback bool
+	leaveTarget  bool
+}
+
+func newCredentialOverlayTx(admin *ProviderAdministration, op, providerID, scopeProjectDir string) *credentialOverlayTx {
+	return &credentialOverlayTx{
+		admin:       admin,
+		op:          op,
+		providerID:  providerID,
+		isUserScope: strings.TrimSpace(scopeProjectDir) == "",
+	}
+}
+
+func (tx *credentialOverlayTx) stage(
+	cfg UserMCPConfig,
+	prevOv MCPProviderOverlay,
+	hadPrevOv bool,
+	decide func(prevCreds StaticCredentialRecord, hadPrev bool) (StaticCredentialRecord, bool),
+) error {
+	tx.targetCfg = UserMCPConfig{Providers: make([]MCPProviderOverlay, len(cfg.Providers))}
+	for i, ov := range cfg.Providers {
+		tx.targetCfg.Providers[i] = cloneProviderOverlay(ov)
+	}
+	if !tx.isUserScope {
+		return nil
+	}
+	var err error
+	tx.store, err = tx.admin.openCredentialStore()
+	if err != nil {
+		return err
+	}
+	prevCreds, hadPrev, err := tx.store.Get(tx.providerID)
+	if err != nil {
+		return err
+	}
+	tx.prevSnapshot = snapshotFromRecord(prevCreds, hadPrev)
+	nextCreds, touch := decide(prevCreds, hadPrev)
+	if touch {
+		targetDigest, err := userOverlayConfigDigest(cfg)
+		if err != nil {
+			return err
+		}
+		var prevOvPtr *MCPProviderOverlay
+		if hadPrevOv {
+			scrubbed := scrubOverlayCredentials(cloneProviderOverlay(prevOv))
+			prevOvPtr = &scrubbed
+		}
+		nextCreds.PendingCommit = &PendingCredentialCommit{
+			TargetConfigSHA256: targetDigest,
+			Committed:          false,
+			Previous:           tx.prevSnapshot,
+			HadPreviousOverlay: hadPrevOv,
+			PreviousOverlay:    prevOvPtr,
+		}
+		tx.staged = nextCreds
+		tx.vaultTouched = true
+		if err := tx.store.PutVerified(tx.providerID, nextCreds); err != nil {
+			return err
+		}
+		if tx.admin.crashHook != nil {
+			if err := tx.admin.crashHook("after_pending_write", tx.op, tx.providerID); err != nil {
+				tx.skipRollback = true
+				return err
+			}
+		}
+	}
+	if tx.admin.beforeConfigWrite != nil {
+		if err := tx.admin.beforeConfigWrite(tx.op, tx.providerID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (tx *credentialOverlayTx) commit() error {
+	if !tx.isUserScope || !tx.vaultTouched || tx.store == nil {
+		return nil
+	}
+	committed := tx.staged
+	cp := *tx.staged.PendingCommit
+	cp.Committed = true
+	committed.PendingCommit = &cp
+	if err := tx.store.PutVerified(tx.providerID, committed); err != nil {
+		return err
+	}
+	if tx.admin.crashHook != nil {
+		if err := tx.admin.crashHook("after_commit_mark", tx.op, tx.providerID); err != nil {
+			tx.skipRollback = true
+			tx.leaveTarget = true
+			return err
+		}
+	}
+	finalized := committed
+	finalized.PendingCommit = nil
+	if err := tx.store.PutVerified(tx.providerID, finalized); err != nil {
+		return err
+	}
+	if tx.admin.crashHook != nil {
+		if err := tx.admin.crashHook("after_finalize", tx.op, tx.providerID); err != nil {
+			tx.skipRollback = true
+			tx.leaveTarget = true
+			return err
+		}
+	}
+	return nil
+}
+
+func (tx *credentialOverlayTx) rollback(context.Context) error {
+	if tx.isUserScope && tx.admin.crashHook != nil && !tx.skipRollback {
+		if err := tx.admin.crashHook("before_rollback", tx.op, tx.providerID); err != nil {
+			tx.skipRollback = true
+			tx.leaveTarget = true
+			return err
+		}
+	}
+	if tx.skipRollback || !tx.vaultTouched || tx.store == nil {
+		return nil
+	}
+	return tx.store.RestoreSnapshot(tx.providerID, tx.prevSnapshot)
+}
+
+func (tx *credentialOverlayTx) finish(path string, err error) error {
+	if err != nil && tx.leaveTarget {
+		_ = writeOrRemoveUserMCPConfig(path, tx.targetCfg)
+	}
+	return err
 }
 
 // ProviderCredentials owns provider credential and OAuth state.
