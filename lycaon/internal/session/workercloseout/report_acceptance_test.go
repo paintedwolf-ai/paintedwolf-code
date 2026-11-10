@@ -36,7 +36,7 @@ func (h *acceptedReportHistory) LoadLedger(context.Context, string) (evidence.Le
 func TestFinalizationUsesAcceptedReportWithoutReevaluation(t *testing.T) {
 	for _, status := range []string{"complete", "partial", "blocked"} {
 		t.Run(status, func(t *testing.T) {
-			accepted := &api.WorkerReportAcceptance{WorkerJobID: "job", Report: workercompletion.ReportWire(workercompletion.WorkerCompletionReport{LegStatus: status, Brief: "Observed result", Verification: &verification.Assessment{Method: verification.Inspection, Reason: "Inspected the assigned source"}, Findings: []workercompletion.WorkerFinding{{Path: "source.go", Line: 4, Excerpt: "exact accepted excerpt", Cite: "[source.go:4](source.go#L4)"}}}), Grounding: &api.CitationGrounding{Traced: true}}
+			accepted := &api.WorkerReportAcceptance{WorkerID: "job", Report: workercompletion.ReportWire(workercompletion.WorkerCompletionReport{LegStatus: status, Brief: "Observed result", Verification: &verification.Assessment{Method: verification.Inspection, Reason: "Inspected the assigned source"}, Findings: []workercompletion.WorkerFinding{{Path: "source.go", Line: 4, Excerpt: "exact accepted excerpt", Cite: "[source.go:4](source.go#L4)"}}}), Grounding: &api.CitationGrounding{Traced: true}}
 			history := &acceptedReportHistory{messages: []api.Message{{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "complete_leg", Outcome: api.ToolResultOutcomeCompleted, WorkerReport: accepted, ToolArgs: map[string]any{"brief": "different model input"}}}}}
 			raw, err := json.Marshal(history.messages)
 			testutil.FailErr(t, "persist acceptance", err)
@@ -58,12 +58,12 @@ func TestFinalizationUsesAcceptedReportWithoutReevaluation(t *testing.T) {
 }
 
 func TestAcceptedReportRejectsUncommittedAndOtherJobClaims(t *testing.T) {
-	receipt := &api.WorkerReportAcceptance{WorkerJobID: "other", Report: &api.WorkerCompletionReport{LegStatus: "complete", Brief: "Other job"}, Grounding: &api.CitationGrounding{}}
+	receipt := &api.WorkerReportAcceptance{WorkerID: "other", Report: &api.WorkerCompletionReport{LegStatus: "complete", Brief: "Other job"}, Grounding: &api.CitationGrounding{}}
 	messages := []api.Message{{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "complete_leg", Outcome: api.ToolResultOutcomeCompleted, WorkerReport: receipt}}, {Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "complete_leg", Outcome: api.ToolResultOutcomeCompleted, ToolArgs: map[string]any{"leg_status": "complete", "brief": "Unvalidated"}}}}
 	if _, _, ok := workercompletion.AcceptedWorkerReport(messages, "job"); ok {
 		t.Fatal("accepted another job or model arguments")
 	}
-	receipt.WorkerJobID = "job"
+	receipt.WorkerID = "job"
 	messages[0].ToolResult.Outcome = api.ToolResultOutcomeRejected
 	if _, _, ok := workercompletion.AcceptedWorkerReport(messages, "job"); ok {
 		t.Fatal("accepted a rejected invocation")

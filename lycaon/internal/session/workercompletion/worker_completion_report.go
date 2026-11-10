@@ -102,10 +102,10 @@ func AcceptedWorkerReport(msgs []api.Message, jobID string) (*api.WorkerReportAc
 			continue
 		}
 		accepted := tr.WorkerReport
-		if accepted == nil || accepted.WorkerJobID == "" || accepted.Report == nil || accepted.Grounding == nil {
+		if accepted == nil || accepted.WorkerID == "" || accepted.Report == nil || accepted.Grounding == nil {
 			continue
 		}
-		if jobID != "" && accepted.WorkerJobID != jobID {
+		if jobID != "" && accepted.WorkerID != jobID {
 			continue
 		}
 		return accepted, msgs[i].ID, true

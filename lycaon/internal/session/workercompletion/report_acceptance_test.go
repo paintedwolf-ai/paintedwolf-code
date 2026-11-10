@@ -27,7 +27,7 @@ func TestWorkerReportSubmissionAcceptsOnlyValidatedReports(t *testing.T) {
 			receipt, err := workercompletion.AcceptWorkerReport(t.Context(), "job", input)
 			if tc.code == "" {
 				testutil.FailErr(t, "accept worker report", err)
-				if receipt == nil || receipt.WorkerJobID != "job" || receipt.Report.Brief != tc.brief || receipt.Grounding == nil {
+				if receipt == nil || receipt.WorkerID != "job" || receipt.Report.Brief != tc.brief || receipt.Grounding == nil {
 					t.Fatalf("acceptance = %+v", receipt)
 				}
 				return

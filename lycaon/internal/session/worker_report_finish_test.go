@@ -27,7 +27,7 @@ func TestWorkerFinishRequiresCurrentJobAcceptanceWhileToolsRemain(t *testing.T) 
 			if tc.acceptedJob != "" {
 				history = append(history, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
 					Tool: "complete_leg", Outcome: tc.outcome,
-					WorkerReport: &api.WorkerReportAcceptance{WorkerJobID: tc.acceptedJob, Report: &api.WorkerCompletionReport{LegStatus: "partial", Brief: "Observed result"}, Grounding: &api.CitationGrounding{}},
+					WorkerReport: &api.WorkerReportAcceptance{WorkerID: tc.acceptedJob, Report: &api.WorkerCompletionReport{LegStatus: "partial", Brief: "Observed result"}, Grounding: &api.CitationGrounding{}},
 				}})
 			}
 			reject, blocked := mgr.Coordinator.Guards.BeforeFinish(workercontext.WithJob(t.Context(), task.ID), child, history, "", "Worker prose", guidance.CloseoutDraft{}, "", true, nil, tc.invoke)

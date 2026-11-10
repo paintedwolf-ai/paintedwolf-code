@@ -10956,8 +10956,11 @@ export interface components {
         };
         /** @description Host-accepted worker report retained with its successful submitting invocation. */
         WorkerReportAcceptance: {
-            /** @description Worker job whose observations and coverage were validated. */
-            worker_job_id: string;
+            /**
+             * Format: uuid
+             * @description Worker job whose observations and coverage were validated.
+             */
+            worker_id: string;
             report: components["schemas"]["WorkerCompletionReport"];
             grounding: components["schemas"]["CitationGrounding"];
         };

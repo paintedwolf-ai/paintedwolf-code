@@ -130,7 +130,7 @@ func completeLegToolRow(args map[string]any) api.Message {
 			Tool:         "complete_leg",
 			Content:      `{"recorded":true}`,
 			ToolArgs:     args,
-			WorkerReport: &api.WorkerReportAcceptance{WorkerJobID: "job-test", Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{Traced: true}},
+			WorkerReport: &api.WorkerReportAcceptance{WorkerID: "job-test", Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{Traced: true}},
 			Outcome:      api.ToolResultOutcomeCompleted,
 		},
 	}
@@ -160,7 +160,7 @@ func TestFinalizeWorkerSummaryScopesReusedChildToWorkerJob(t *testing.T) {
 		"brief":      "previous run",
 	})
 	oldReport.WorkerID = "job-old"
-	oldReport.ToolResult.WorkerReport.WorkerJobID = "job-old"
+	oldReport.ToolResult.WorkerReport.WorkerID = "job-old"
 	currentMessages := scoutSurveyFixtureMessages()
 	for i := range currentMessages {
 		currentMessages[i].WorkerID = "job-current"
@@ -170,7 +170,7 @@ func TestFinalizeWorkerSummaryScopesReusedChildToWorkerJob(t *testing.T) {
 		"brief":      "current run",
 	})
 	currentReport.WorkerID = "job-current"
-	currentReport.ToolResult.WorkerReport.WorkerJobID = "job-current"
+	currentReport.ToolResult.WorkerReport.WorkerID = "job-current"
 	resolver := &stubSummaryResolver{msgs: append([]api.Message{oldReport}, append(currentMessages, currentReport)...)}
 	opts := finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{WorkerJobID: "job-current"})
 

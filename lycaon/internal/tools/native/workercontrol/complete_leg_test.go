@@ -23,7 +23,7 @@ func invokeCompleteLeg(t *testing.T, args map[string]any, tctx tools.ToolContext
 		if err != nil {
 			return nil, err
 		}
-		return &api.WorkerReportAcceptance{WorkerJobID: tc.Identity.WorkerJobID, Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{}}, nil
+		return &api.WorkerReportAcceptance{WorkerID: tc.Identity.WorkerJobID, Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{}}, nil
 	}))
 	def, ok := reg.Definition(workertools.CompleteLegTool)
 	if !ok {
@@ -172,7 +172,7 @@ func TestCompleteLegRequiresCapturableJobAcceptance(t *testing.T) {
 		{name: "no grounding", job: "job", capture: true, omitGrounding: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			receipt := &api.WorkerReportAcceptance{WorkerJobID: tc.job, Report: &api.WorkerCompletionReport{LegStatus: "partial", Brief: "Accepted"}, Grounding: &api.CitationGrounding{}}
+			receipt := &api.WorkerReportAcceptance{WorkerID: tc.job, Report: &api.WorkerCompletionReport{LegStatus: "partial", Brief: "Accepted"}, Grounding: &api.CitationGrounding{}}
 			if tc.omitReport {
 				receipt.Report = nil
 			}

@@ -4,10 +4,11 @@ components:
       type: object
       x-go-generate: true
       additionalProperties: false
-      required: [worker_job_id, report, grounding]
+      required: [worker_id, report, grounding]
       properties:
-        worker_job_id:
+        worker_id:
           type: string
+          format: uuid
           description: Worker job whose observations and coverage were validated.
         report:
           x-go-pointer: true

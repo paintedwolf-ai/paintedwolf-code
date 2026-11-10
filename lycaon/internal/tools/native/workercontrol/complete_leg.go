@@ -29,7 +29,7 @@ func CompleteLegHandler(decode CompleteLegDecoder) tools.ToolHandler {
 			return "", err
 		}
 
-		if accepted == nil || accepted.Report == nil || accepted.Grounding == nil || accepted.WorkerJobID == "" || accepted.WorkerJobID != tctx.Identity.WorkerJobID {
+		if accepted == nil || accepted.Report == nil || accepted.Grounding == nil || accepted.WorkerID == "" || accepted.WorkerID != tctx.Identity.WorkerJobID {
 			return "", fmt.Errorf("complete_leg acceptance does not match worker job")
 		}
 		if tctx.Effects.Out == nil {

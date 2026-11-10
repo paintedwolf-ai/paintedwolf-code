@@ -6,23 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-func loadWorkerSummaryTestFinalizeOpts(t *testing.T) workercloseout.WorkerSummaryFinalizeOpts {
-	t.Helper()
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	cfg, err := guidance.LoadHintConfigStock()
-	testutil.FailErr(t, "LoadHintConfigStock", err)
-	return workercloseout.WorkerSummaryFinalizeOpts{
-		WorkflowHints: cfg,
-		Pipeline:      sessionTestOARPipeline(t),
-	}
-}
 
 func TestFinalizeWorkerSummaryParksOnAPendingDecision(t *testing.T) {
 	resolver := &stubSummaryResolver{msgs: scoutSurveyFixtureMessages()}

@@ -380,15 +380,6 @@ anchors:
     envelope:
       vars: {}
 
-  - id: worker.summary.trim
-    title: Worker summary trim
-    description: Worker survey exceeds parent character budget.
-    trigger_class: host_api
-    surface: worker
-    planes: [inform]
-    envelope:
-      vars: {}
-
   - id: worker.citation.grounding
     title: Worker citation grounding
     description: Worker completion JSON fails evidence grounding.

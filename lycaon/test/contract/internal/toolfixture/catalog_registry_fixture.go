@@ -103,7 +103,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 		if err != nil {
 			return nil, err
 		}
-		return &api.WorkerReportAcceptance{WorkerJobID: tc.Identity.WorkerJobID, Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{}}, nil
+		return &api.WorkerReportAcceptance{WorkerID: tc.Identity.WorkerJobID, Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{}}, nil
 	}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterCompleteLegTool failed", err)
 	}

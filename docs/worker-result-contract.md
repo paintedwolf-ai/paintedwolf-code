@@ -156,7 +156,9 @@ The acceptance receipt is additive `bundle` wire retained in the existing `durab
 
 Before acknowledging a submission, the host resolves citations and evidence claims against evidence delivered to the current worker job. Typical structured failures include an unknown evidence handle, an unobserved URL, or a survey result with no survey evidence. The rejection carries the relevant measured facts and available recovery tools.
 
-The accepted receipt preserves the normalized report, verification rationale, resolved citations, and grounding decision together. If the run ends without an accepted report, the host may assemble a bounded partial summary from observed evidence; that result is labeled host-assembled and does not claim traced worker wording.
+The accepted receipt preserves the normalized report, verification rationale, resolved citations, and grounding decision together. Its `worker_id` binds acceptance to the exact worker job. This additive, unreleased receipt is stored with the tool result; the OpenAPI schema and generated consumers define its wire shape. If the run ends without an accepted report, the host may assemble a bounded partial summary from observed evidence; that result is labeled host-assembled and does not claim traced worker wording.
+
+The `worker.summary.trim` anchor is retired; `WORKER_SUMMARY_TOO_LONG` rejects an oversized report during submission. The retired anchor name must not be reused.
 
 ## Typed findings
 

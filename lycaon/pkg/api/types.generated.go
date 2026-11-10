@@ -9088,9 +9088,9 @@ type WorkerPromotePathStatus struct {
 // WorkerReportAcceptance Host-accepted worker report retained with its successful submitting invocation.
 type WorkerReportAcceptance struct {
 	// Worker job whose observations and coverage were validated.
-	WorkerJobID string                  `json:"worker_job_id"`
-	Report      *WorkerCompletionReport `json:"report"`
-	Grounding   *CitationGrounding      `json:"grounding"`
+	WorkerID  string                  `json:"worker_id"`
+	Report    *WorkerCompletionReport `json:"report"`
+	Grounding *CitationGrounding      `json:"grounding"`
 }
 
 // WorkerResult

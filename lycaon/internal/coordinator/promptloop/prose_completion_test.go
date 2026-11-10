@@ -50,7 +50,7 @@ func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T)
 				if err != nil {
 					return nil, err
 				}
-				return &api.WorkerReportAcceptance{WorkerJobID: "job", Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{}}, nil
+				return &api.WorkerReportAcceptance{WorkerID: "job", Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{}}, nil
 			}))
 			def, ok := production.Definition(workertools.CompleteLegTool)
 			if !ok {

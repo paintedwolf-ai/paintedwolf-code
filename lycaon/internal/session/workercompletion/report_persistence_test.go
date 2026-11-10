@@ -19,9 +19,9 @@ func TestAcceptedWorkerReportSurvivesStoreReload(t *testing.T) {
 	sess, err := writer.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create report session", err)
 	receipt := &api.WorkerReportAcceptance{
-		WorkerJobID: "job",
-		Report:      &api.WorkerCompletionReport{LegStatus: "partial", Brief: "Bounded inspection", Verification: &api.CitationVerification{Method: "inspection", Reason: "Read the assigned source"}, Findings: []api.WorkerCompletionFinding{{Path: "main.go", Line: 7, Excerpt: "return nil", Cite: "[main.go:7](main.go#L7)"}}},
-		Grounding:   &api.CitationGrounding{Traced: true},
+		WorkerID:  "job",
+		Report:    &api.WorkerCompletionReport{LegStatus: "partial", Brief: "Bounded inspection", Verification: &api.CitationVerification{Method: "inspection", Reason: "Read the assigned source"}, Findings: []api.WorkerCompletionFinding{{Path: "main.go", Line: 7, Excerpt: "return nil", Cite: "[main.go:7](main.go#L7)"}}},
+		Grounding: &api.CitationGrounding{Traced: true},
 	}
 	testutil.FailErr(t, "persist accepted report", writer.AppendMessages(t.Context(), sess.ID, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "complete_leg", Outcome: api.ToolResultOutcomeCompleted, WorkerReport: receipt, Content: "compacted acknowledgement"}}))
 	messages, err := store.NewSQL(database).GetMessages(t.Context(), sess.ID)

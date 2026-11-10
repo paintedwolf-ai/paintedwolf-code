@@ -26,5 +26,5 @@ func AcceptWorkerReport(ctx context.Context, jobID string, input WorkerSummaryEv
 		cause := &toolrejection.ToolReject{Code: evaluated.HintCode, Data: evaluated.HintData}
 		return nil, guidance.NewRefusal(evaluated.HintCode, text).WithPolicyCopy(evaluated.HintCopy).WithDetails(evaluated.HintData, nil).WithCause(cause)
 	}
-	return &api.WorkerReportAcceptance{WorkerJobID: jobID, Report: ReportWire(evaluated.Report), Grounding: &evaluated.Grounding}, nil
+	return &api.WorkerReportAcceptance{WorkerID: jobID, Report: ReportWire(evaluated.Report), Grounding: &evaluated.Grounding}, nil
 }
