@@ -460,10 +460,13 @@ func (pc *planCompiler) denyWrite(path string, except []string, subtree bool) {
 	if pc.concealed(path) || !coveredByList(pc.grants, path) {
 		return
 	}
+	alreadyReadOnly := coveredBy(pc.readOnly, path)
 	pc.readOnly[path] = true
-	for _, e := range except {
-		if strings.TrimSpace(e) != "" {
-			pc.restored[e] = true
+	if !alreadyReadOnly {
+		for _, e := range except {
+			if strings.TrimSpace(e) != "" {
+				pc.restored[e] = true
+			}
 		}
 	}
 }

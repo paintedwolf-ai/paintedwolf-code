@@ -35,7 +35,12 @@ func newCreationFloors(fs Filesystem) creationFloors {
 	f := creationFloors{names: fs.ReadOnlyNames, sensitive: map[string]bool{}}
 	f.protected = append(append(f.protected, fs.ReadOnly...), fs.Hidden...)
 	f.noUnlink = append(f.noUnlink, fs.NoUnlink...)
-	f.grants = append(append(append(f.grants, fs.Restored...), fs.WriteFiles...), fs.WriteRoots...)
+	for _, r := range fs.Restored {
+		if !underAnyFold(r, fs.Hidden) {
+			f.grants = append(f.grants, r)
+		}
+	}
+	f.grants = append(append(f.grants, fs.WriteFiles...), fs.WriteRoots...)
 	for _, p := range append(append([]string(nil), f.protected...), f.noUnlink...) {
 		for _, component := range strings.Split(filepath.Clean(p), "/") {
 			if component != "" {
@@ -153,4 +158,13 @@ func atOrUnderFold(path, root string) bool {
 		return false
 	}
 	return len(path) == len(root) || root == "/" || path[len(root)] == '/'
+}
+
+func underAnyFold(path string, roots []string) bool {
+	for _, r := range roots {
+		if atOrUnderFold(path, r) {
+			return true
+		}
+	}
+	return false
 }
