@@ -113,3 +113,74 @@ func TestCheckpointGitImportFiltersUnselectedPackedHistory(t *testing.T) {
 		t.Fatal("publication changed retained source history")
 	}
 }
+
+// Established destination branch tips (HEAD / refs/heads/*) bound incremental
+// verification so unmodified subtrees and deep ancestor commits are not re-walked
+// object-by-object, while missing direct frontier boundary objects fail closed.
+func TestCheckpointGitImportEstablishedTargetFrontierAndBoundaryFailure(t *testing.T) {
+	target := t.TempDir()
+	runGitTestCmd(t, target, "init", "-q")
+	testutil.FailErr(t, "mkdir unchanged", os.MkdirAll(filepath.Join(target, "unchanged"), 0o755))
+	testutil.FailErr(t, "write deep.txt", os.WriteFile(filepath.Join(target, "unchanged", "deep.txt"), []byte("deep unchanged payload\n"), 0o644))
+	testutil.FailErr(t, "write edited.txt", os.WriteFile(filepath.Join(target, "edited.txt"), []byte("v0\n"), 0o644))
+	runGitTestCmd(t, target, "add", ".")
+	runGitTestCmd(t, target, "commit", "-qm", "c0")
+	c0 := runGitTestCmd(t, target, "rev-parse", "HEAD")
+
+	testutil.FailErr(t, "write edited v1", os.WriteFile(filepath.Join(target, "edited.txt"), []byte("v1\n"), 0o644))
+	runGitTestCmd(t, target, "commit", "-qam", "c1")
+	c1 := runGitTestCmd(t, target, "rev-parse", "HEAD")
+	unchangedTreeOID := runGitTestCmd(t, target, "rev-parse", "HEAD:unchanged")
+	deepBlobOID := runGitTestCmd(t, target, "rev-parse", "HEAD:unchanged/deep.txt")
+
+	// Author incremental commit c2 in a separate clone/worktree and export only the c1..c2 delta objects into store.
+	workerRepo := t.TempDir()
+	runGitTestCmd(t, workerRepo, "clone", "-q", target, ".")
+	testutil.FailErr(t, "write edited v2", os.WriteFile(filepath.Join(workerRepo, "edited.txt"), []byte("v2\n"), 0o644))
+	runGitTestCmd(t, workerRepo, "commit", "-qam", "c2")
+	c2 := runGitTestCmd(t, workerRepo, "rev-parse", "HEAD")
+	c2Tree := runGitTestCmd(t, workerRepo, "rev-parse", "HEAD^{tree}")
+	v2Blob := runGitTestCmd(t, workerRepo, "rev-parse", "HEAD:edited.txt")
+
+	store, err := NewStore(t.TempDir())
+	testutil.FailErr(t, "checkpoint store", err)
+	cpObjs := CheckpointGitObjectsDir(store.RootDir(), "chk-frontier", "")
+	for _, oid := range []string{c2, c2Tree, v2Blob} {
+		srcObj := filepath.Join(workerRepo, ".git", "objects", oid[:2], oid[2:])
+		dstObj := filepath.Join(cpObjs, oid[:2], oid[2:])
+		testutil.FailErr(t, "copy delta object "+oid, copyFileStreamingAtomic(srcObj, dstObj, 0o444))
+	}
+
+	// Remove deep ancestor c0 and deepunchanged blob inside target to prove incremental verification
+	// stops at established frontier commit c1 and unmodified subtree entry unchangedTreeOID.
+	_ = os.Remove(filepath.Join(target, ".git", "objects", c0[:2], c0[2:]))
+	_ = os.Remove(filepath.Join(target, ".git", "objects", deepBlobOID[:2], deepBlobOID[2:]))
+
+	// 1. Corrupting or removing the direct frontier boundary subtree (unchangedTreeOID) must fail closed.
+	unchangedTreePath := filepath.Join(target, ".git", "objects", unchangedTreeOID[:2], unchangedTreeOID[2:])
+	savedTreeBytes, err := os.ReadFile(unchangedTreePath)
+	testutil.FailErr(t, "read unchangedTree", err)
+	testutil.FailErr(t, "remove unchangedTree", os.Remove(unchangedTreePath))
+	if _, err := ImportAndValidateCheckpointGitRefs(
+		t.Context(), store.RootDir(), "chk-frontier-missing-boundary", "worker",
+		PrivateGitSnapshot{BaseCommit: c1, Refs: map[string]string{"refs/heads/work": c2}},
+		map[string]string{"primary": target},
+	); err == nil {
+		t.Fatal("expected missing direct frontier subtree object to fail verification")
+	}
+
+	// 2. Restoring the direct frontier subtree allows bounded incremental import to succeed without walking c0 or deepBlobOID.
+	testutil.FailErr(t, "restore unchangedTree", os.WriteFile(unchangedTreePath, savedTreeBytes, 0o444))
+	imported, err := ImportAndValidateCheckpointGitRefs(
+		t.Context(), store.RootDir(), "chk-frontier", "worker",
+		PrivateGitSnapshot{BaseCommit: c1, Refs: map[string]string{"refs/heads/work": c2}},
+		map[string]string{"primary": target},
+	)
+	testutil.FailErr(t, "bounded incremental import", err)
+	if imported["refs/lycaon/workers/worker/heads/work"] != c2 {
+		t.Fatalf("unexpected imported ref: %v", imported)
+	}
+	if got := runGitTestCmd(t, target, "show", c2+":edited.txt"); got != "v2" {
+		t.Fatalf("imported commit edited.txt = %q, want v2", got)
+	}
+}
