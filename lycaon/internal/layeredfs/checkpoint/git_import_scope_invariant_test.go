@@ -485,6 +485,7 @@ func TestCheckpointGitImportConcurrentPendingPublishAcrossStores(t *testing.T) {
 
 	workerA := filepath.Join(root, "worker-a")
 	runGitTestCmd(t, root, "clone", "-q", target, workerA)
+	runGitTestCmd(t, workerA, "rm", "-rfq", "unchanged")
 	testutil.FailErr(t, "write a.txt", os.WriteFile(filepath.Join(workerA, "a.txt"), []byte("worker-a\n"), 0o644))
 	runGitTestCmd(t, workerA, "add", "a.txt")
 	runGitTestCmd(t, workerA, "commit", "-qm", "cA")

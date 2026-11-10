@@ -450,7 +450,8 @@ func TestCheckpointGitImportRejectsInvalidPendingPublishRecords(t *testing.T) {
 
 	// 6. Unreadable record (0o000) must fail closed when running as non-root.
 	if os.Geteuid() != 0 {
-		testutil.FailErr(t, "write valid rec before chmod 0", os.WriteFile(recPath, []byte(`{"format_version":1,"oids":["`+oid+`"]}`), 0o000))
+		testutil.FailErr(t, "write valid rec before chmod 0", os.WriteFile(recPath, []byte(`{"format_version":1,"oids":["`+oid+`"]}`), 0o600))
+		testutil.FailErr(t, "chmod 0 recPath", os.Chmod(recPath, 0o000))
 		t.Cleanup(func() { _ = os.Chmod(recPath, 0o600) })
 		if err := runImport(); err == nil {
 			t.Fatal("expected unreadable pending publish record to fail closed")
