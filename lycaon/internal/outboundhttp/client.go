@@ -105,11 +105,13 @@ type Request struct {
 	// retains the received block in Response.Wire; TLS headers are normalized.
 	WireHeaders bool
 	// TLS adds this request's trust and client identity to every TLS hop.
-	TLS              *ClientTLS
-	AllowAddress     func(netip.Addr, uint16) bool
-	BeforeHop        func(context.Context, *url.URL) error
-	BeforeHopRequest func(context.Context, HopRequest) error
-	OnFirstHopConn   func(local, remote netip.AddrPort)
+	TLS                      *ClientTLS
+	AllowAddress             func(netip.Addr, uint16) bool
+	BeforeHop                func(context.Context, *url.URL) error
+	BeforeHopRequest         func(context.Context, HopRequest) error
+	OnFirstHopConn           func(local, remote netip.AddrPort)
+	OnFirstHopHeadersWritten func()
+	OnFirstHopBodyWritten    func()
 }
 
 // HopRequest describes one HTTP hop presented to BeforeHopRequest before
@@ -284,12 +286,16 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		in.TLS.apply(transport)
 		boundConnect(transport, in.ConnectTimeout)
 		var wire *wireCapture
-		if in.WireHeaders && (current.Scheme == "http" || in.UnixSocket != "") {
+		cleartext := current.Scheme == "http" || in.UnixSocket != ""
+		if in.WireHeaders && cleartext {
 			wire = captureWire(transport)
 		}
-		client := in.clientForHop(remaining, transport)
+		var writeObs *firstHopWriteObserver
 		var onConn func(local, remote netip.AddrPort)
 		if hop == 0 {
+			if in.OnFirstHopHeadersWritten != nil || in.OnFirstHopBodyWritten != nil {
+				writeObs = observeFirstHopWrites(transport, cleartext, len(body) > 0, in.OnFirstHopHeadersWritten, in.OnFirstHopBodyWritten)
+			}
 			onConn = func(local, remote netip.AddrPort) {
 				firstHopLocal = local
 				firstHopPeer = remote
@@ -298,12 +304,16 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 				}
 			}
 		}
-		tracer, trace := newHopTracer(onConn)
+		client := in.clientForHop(remaining, transport)
+		tracer, trace := newHopTracer(onConn, writeObs.markReadyForHTTP)
 		req, err := http.NewRequestWithContext(httptrace.WithClientTrace(ioCtx, trace), method, current.String(), bytes.NewReader(body))
 		if err != nil {
 			transport.CloseIdleConnections()
 			ioCancel()
 			return Response{}, err
+		}
+		if writeObs != nil && len(body) > 0 && req.Body != nil {
+			req.Body = &firstHopBodyReadCloser{ReadCloser: req.Body, obs: writeObs}
 		}
 		if hostHeader != "" {
 			req.Host = hostHeader

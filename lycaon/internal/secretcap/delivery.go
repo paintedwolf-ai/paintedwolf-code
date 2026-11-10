@@ -54,26 +54,11 @@ func (r *Resolution) Redacted(included func(string) bool) {
 
 // HandOff records transport dispatch under the active release and unlock.
 func (r *Resolution) HandOff(ctx context.Context, included func(string) bool) error {
-	if r == nil {
-		return nil
+	delivery, err := r.PrepareDelivery(ctx, included)
+	if err != nil {
+		return err
 	}
-	r.mu.Lock()
-	unreleased, held := r.heldWithoutRelease(included)
-	r.mu.Unlock()
-	if len(unreleased) > 0 {
-		r.recordDelivery(ctx, DeliveryWithheld, included, "")
-		return &HeldUnreleasedError{Names: unreleased}
-	}
-	unlockID := ""
-	if held {
-		unlock, open := r.unlocks.Use(r.access.ChatSessionID)
-		if !open {
-			r.recordDelivery(ctx, DeliveryWithheld, included, "")
-			return ErrVaultLocked
-		}
-		unlockID = unlock.ID
-	}
-	r.recordDelivery(ctx, DeliveryHandedOff, included, unlockID)
+	delivery.Commit(ctx)
 	return nil
 }
 

@@ -1,8 +1,12 @@
 package outboundhttp
 
 import (
+	"bytes"
+	"context"
 	"crypto/tls"
+	"io"
 	"net"
+	"net/http"
 	"net/http/httptrace"
 	"net/netip"
 	"strings"
@@ -37,7 +41,7 @@ type hopTracer struct {
 	sent              []Header
 }
 
-func newHopTracer(onConn func(local, remote netip.AddrPort)) (*hopTracer, *httptrace.ClientTrace) {
+func newHopTracer(onConn func(local, remote netip.AddrPort), onReady ...func()) (*hopTracer, *httptrace.ClientTrace) {
 	t := &hopTracer{}
 	first := func(at *time.Time) {
 		t.mu.Lock()
@@ -46,16 +50,29 @@ func newHopTracer(onConn func(local, remote netip.AddrPort)) (*hopTracer, *httpt
 			*at = time.Now()
 		}
 	}
+	notifyReady := func() {
+		for _, fn := range onReady {
+			if fn != nil {
+				fn()
+			}
+		}
+	}
 	trace := &httptrace.ClientTrace{
 		ConnectStart:      func(string, string) { first(&t.tcpStart) },
 		ConnectDone:       func(string, string, error) { first(&t.tcpDone) },
 		TLSHandshakeStart: func() { first(&t.tlsStart) },
-		TLSHandshakeDone:  func(tls.ConnectionState, error) { first(&t.tlsDone) },
-		WroteRequest:      func(httptrace.WroteRequestInfo) { first(&t.reqSent) },
+		TLSHandshakeDone: func(_ tls.ConnectionState, err error) {
+			first(&t.tlsDone)
+			if err == nil {
+				notifyReady()
+			}
+		},
+		WroteRequest: func(httptrace.WroteRequestInfo) { first(&t.reqSent) },
 		GotFirstResponseByte: func() {
 			first(&t.ttfbTime)
 		},
 		GotConn: func(info httptrace.GotConnInfo) {
+			notifyReady()
 			if local, ok := info.Conn.LocalAddr().(*net.TCPAddr); ok && onConn != nil {
 				if remote, ok := info.Conn.RemoteAddr().(*net.TCPAddr); ok {
 					onConn(local.AddrPort(), remote.AddrPort())
@@ -132,3 +149,133 @@ func (t *hopTracer) observation(begun, resolved time.Time, method, target string
 	o.StartTransfer = since(t.ttfbTime, max(o.Connect, o.AppConnect))
 	return o
 }
+
+type firstHopWriteObserver struct {
+	mu             sync.Mutex
+	cleartext      bool
+	readyForHTTP   bool
+	hasBody        bool
+	headerTail     []byte
+	headersDone    bool
+	bodyReadBytes  int64
+	headersWritten bool
+	bodyWritten    bool
+	onHeaders      func()
+	onBody         func()
+}
+
+func observeFirstHopWrites(transport *http.Transport, cleartext, hasBody bool, onHeaders, onBody func()) *firstHopWriteObserver {
+	obs := &firstHopWriteObserver{
+		cleartext:    cleartext,
+		readyForHTTP: cleartext,
+		hasBody:      hasBody,
+		onHeaders:    onHeaders,
+		onBody:       onBody,
+	}
+	dial := transport.DialContext
+	if dial == nil {
+		var d net.Dialer
+		dial = d.DialContext
+	}
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		conn, err := dial(ctx, network, address)
+		if err != nil {
+			return nil, err
+		}
+		return &firstHopWriteConn{Conn: conn, obs: obs}, nil
+	}
+	return obs
+}
+
+func (o *firstHopWriteObserver) markReadyForHTTP() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	o.readyForHTTP = true
+	o.mu.Unlock()
+}
+
+func (o *firstHopWriteObserver) recordBodyRead(n int) {
+	if o == nil || n <= 0 {
+		return
+	}
+	o.mu.Lock()
+	o.bodyReadBytes += int64(n)
+	o.mu.Unlock()
+}
+
+func (o *firstHopWriteObserver) recordConnWrite(written []byte) {
+	if o == nil || len(written) == 0 {
+		return
+	}
+	var fireHeaders, fireBody func()
+	o.mu.Lock()
+	if !o.readyForHTTP {
+		o.mu.Unlock()
+		return
+	}
+	if !o.headersWritten {
+		o.headersWritten = true
+		fireHeaders = o.onHeaders
+	}
+	if o.hasBody && !o.bodyWritten {
+		if o.cleartext {
+			if o.headersDone {
+				o.bodyWritten = true
+				fireBody = o.onBody
+			} else {
+				combined := append(append([]byte(nil), o.headerTail...), written...)
+				if idx := bytes.Index(combined, []byte("\r\n\r\n")); idx >= 0 {
+					o.headersDone = true
+					o.headerTail = nil
+					if len(combined)-(idx+4) > 0 {
+						o.bodyWritten = true
+						fireBody = o.onBody
+					}
+				} else if len(combined) > 3 {
+					o.headerTail = append(o.headerTail[:0], combined[len(combined)-3:]...)
+				} else {
+					o.headerTail = append(o.headerTail[:0], combined...)
+				}
+			}
+		} else if o.bodyReadBytes > 0 {
+			o.bodyWritten = true
+			fireBody = o.onBody
+		}
+	}
+	o.mu.Unlock()
+	if fireHeaders != nil {
+		fireHeaders()
+	}
+	if fireBody != nil {
+		fireBody()
+	}
+}
+
+type firstHopWriteConn struct {
+	net.Conn
+	obs *firstHopWriteObserver
+}
+
+func (c *firstHopWriteConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	if n > 0 {
+		c.obs.recordConnWrite(p[:n])
+	}
+	return n, err
+}
+
+type firstHopBodyReadCloser struct {
+	io.ReadCloser
+	obs *firstHopWriteObserver
+}
+
+func (b *firstHopBodyReadCloser) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if n > 0 {
+		b.obs.recordBodyRead(n)
+	}
+	return n, err
+}
+

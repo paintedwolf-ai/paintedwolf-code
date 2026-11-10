@@ -336,9 +336,6 @@ func prepareRequestCookieDelivery(
 		}
 		// Withhold/redaction on a cookie jar withholds only the denied cookie bytes
 		// so the HTTP hop can proceed credential-free.
-		if resolution.Decision.Blocks() {
-			tctx.Effects.Secrets.Withhold(hopCtx)
-		}
 		allowed := resolution.Decision == secretmatch.SendUnchanged
 		for _, cookie := range matchedCookies {
 			if reviewed[cookie] == nil {

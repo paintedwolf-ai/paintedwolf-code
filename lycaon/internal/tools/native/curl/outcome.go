@@ -173,7 +173,7 @@ func (inv *invocation) failure(err error) (toolcontract.ProducerResult, error) {
 		}
 	}
 	var dns *net.DNSError
-	if transport != nil && transport.Reject != nil && (transport.Reject.Code == "HTTP_REQUEST_HOST_DENIED" || transport.Reject.Code == isolation.CodeTryLoopbackConnect || transport.Reject.Code == toolrejection.OutboundSecretDeniedCode || transport.Reject.Code == toolrejection.OutboundSecretScreenFailedCode || transport.Reject.Code == httpaction.CookieJarFailedCode) && !errors.As(err, &dns) {
+	if transport != nil && transport.Reject != nil && (transport.Reject.Code == "HTTP_REQUEST_HOST_DENIED" || transport.Reject.Code == isolation.CodeTryLoopbackConnect || transport.Reject.Code == toolrejection.OutboundSecretDeniedCode || transport.Reject.Code == toolrejection.OutboundSecretScreenFailedCode || transport.Reject.Code == httpaction.CookieJarFailedCode || transport.Reject.Code == httpaction.TokenJarFailedCode || strings.HasPrefix(transport.Reject.Code, "SECRET_REFERENCE_")) && !errors.As(err, &dns) {
 		return inv.refused(err, 7)
 	}
 	code, result := TransportOutcome(err)
