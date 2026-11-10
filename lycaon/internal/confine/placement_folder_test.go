@@ -67,16 +67,21 @@ func TestPlacementFolderIsCoveredLikeTheStateFolder(t *testing.T) {
 	if confine.ControlPlanePathDenied(filepath.Join(f.branch, "a.go"), true, "", "") {
 		t.Fatal("a write in the branch is refused")
 	}
-	for name, refusal := range map[string]func(string) (bool, string){
-		"attached": confine.AttachedWriteRootRefused,
-		"granted":  confine.GrantedWriteRootRefused,
-	} {
-		if refused, code := refusal(f.parent); !refused || code != confine.WriteRootCodeContainsState {
-			t.Fatalf("%s root above the folder: refused=%v code=%s", name, refused, code)
-		}
-		if refused, code := refusal(f.branch); refused && name == "attached" {
-			t.Fatalf("attached root at the branch: code=%s", code)
-		}
+	if refused, code := confine.AttachedWriteRootRefused(f.parent); !refused || code != confine.WriteRootCodeContainsState {
+		t.Fatalf("attached root above the folder: refused=%v code=%s", refused, code)
+	}
+	if refused, code := confine.GrantedWriteRootRefused(f.parent); refused {
+		t.Fatalf("granted root above the folder refused: code=%s", code)
+	}
+	if refused, code := confine.GrantedWriteRootRefused(f.folder); !refused || code != confine.WriteRootCodeControlPlane {
+		t.Fatalf("granted root at the folder: refused=%v code=%s", refused, code)
+	}
+	if refused, code := confine.AttachedWriteRootRefused(f.branch); refused {
+		t.Fatalf("attached root at the branch: code=%s", code)
+	}
+	c := confine.Confinement{Roots: []string{f.branch}, GrantedWriteRoots: []string{f.parent}}
+	if verdict := confine.BoundaryOf(&c).Filesystem.Verdict(confine.AccessWriteUnlink, f.parent); verdict.Allowed || verdict.Layer != confine.FloorControlPlane {
+		t.Fatalf("placement folder parent unlink verdict = %+v", verdict)
 	}
 }
 

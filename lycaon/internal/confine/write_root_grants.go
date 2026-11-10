@@ -133,9 +133,6 @@ func GrantedWriteRootRefused(root string) (refused bool, code string) {
 	if ClassifyBlockedWrite(resolved).Kind != WriteSubjectOrdinary {
 		return true, WriteRootCodeSecretStore
 	}
-	if writeRootContainsStateTree(resolved) {
-		return true, WriteRootCodeContainsState
-	}
 	return false, ""
 }
 

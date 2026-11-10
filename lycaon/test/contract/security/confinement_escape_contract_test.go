@@ -224,21 +224,36 @@ func TestConfinementIntegrityUnattributedProxy(t *testing.T) {
 }
 
 // foreignTemporaryTree is a directory beside the write roots: another user's
-// /private/var/folders subtree on macOS, and on Linux, whose temporary roots are
-// shared by name, a directory in the runtime or home tree outside them.
-func foreignTemporaryTree(t *testing.T) string {
+// /private/var/folders subtree on macOS, and on Linux a temporary tree the
+// boundary does not grant — the home tree while it sits outside the granted
+// write roots, otherwise /dev/shm, which no default root covers even where a
+// runtime leases the home tree under a temporary root.
+func foreignTemporaryTree(t *testing.T, roots []string) string {
 	t.Helper()
-	parent, err := os.UserHomeDir()
-	testutil.FailErr(t, "resolve home", err)
-	if runtime.GOOS == "darwin" {
-		systemTmp, err := exec.Command("/usr/bin/getconf", "DARWIN_USER_TEMP_DIR").Output()
-		testutil.FailErr(t, "resolve system temporary directory", err)
-		parent = filepath.Dir(filepath.Dir(strings.TrimSpace(string(systemTmp))))
-	}
-	foreign, err := os.MkdirTemp(parent, "paintedwolf-escape-foreign-") //nolint:usetesting // Probe must be outside this process's temporary subtree.
+	foreign, err := os.MkdirTemp(foreignTemporaryParent(t, roots), "paintedwolf-escape-foreign-") //nolint:usetesting // Probe must be outside this process's temporary subtree.
 	testutil.FailErr(t, "create foreign temporary subtree", err)
 	t.Cleanup(func() { _ = os.RemoveAll(foreign) })
 	return foreign
+}
+
+// foreignTemporaryParent resolves the parent of the foreign temporary subtree:
+// another user's /private/var/folders subtree on macOS, and on Linux the home
+// tree while it sits outside the granted write roots, else /dev/shm — no
+// default root covers it, even where a runtime leases the home tree under a
+// temporary root.
+func foreignTemporaryParent(t *testing.T, roots []string) string {
+	t.Helper()
+	if runtime.GOOS == "darwin" {
+		systemTmp, err := exec.Command("/usr/bin/getconf", "DARWIN_USER_TEMP_DIR").Output()
+		testutil.FailErr(t, "resolve system temporary directory", err)
+		return filepath.Dir(filepath.Dir(strings.TrimSpace(string(systemTmp))))
+	}
+	home, err := os.UserHomeDir()
+	testutil.FailErr(t, "resolve home", err)
+	if !confine.PathWithinRoots(home, roots) {
+		return home
+	}
+	return "/dev/shm"
 }
 
 func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
@@ -247,7 +262,9 @@ func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
 	c := confine.Confinement{Roots: []string{proj}}
 
 	tmp := os.TempDir()
-	probe := filepath.Join(foreignTemporaryTree(t), "escape.txt")
+	roots, err := confine.WriteRootsForBoundary("", c.Roots, nil, "")
+	testutil.FailErr(t, "resolve write roots", err)
+	probe := filepath.Join(foreignTemporaryTree(t, roots), "escape.txt")
 	if code := confinedEscapeExit(t, self, c, "/usr/bin/touch", probe); code == 0 {
 		t.Fatal("write under a foreign temporary subtree must be denied")
 	}

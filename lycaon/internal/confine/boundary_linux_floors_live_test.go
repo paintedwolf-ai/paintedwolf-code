@@ -91,8 +91,16 @@ func floorsOp(op string, args []string) error {
 		return unix.Link(arg(0), arg(1))
 	case "rename":
 		return unix.Rename(arg(0), arg(1))
+	case "noreplace":
+		return unix.Renameat2(unix.AT_FDCWD, arg(0), unix.AT_FDCWD, arg(1), unix.RENAME_NOREPLACE)
 	case "exchange":
 		return unix.Renameat2(unix.AT_FDCWD, arg(0), unix.AT_FDCWD, arg(1), unix.RENAME_EXCHANGE)
+	case "unlink":
+		return unix.Unlink(arg(0))
+	case "rmdir":
+		return unix.Rmdir(arg(0))
+	case "unlinkat_dir":
+		return unix.Unlinkat(unix.AT_FDCWD, arg(0), unix.AT_REMOVEDIR)
 	case "tmpfile":
 		// An unnamed file gets its name only when it is linked in.
 		fd, err := unix.Open(arg(0), unix.O_TMPFILE|unix.O_WRONLY|unix.O_CLOEXEC, 0o644)
@@ -337,5 +345,51 @@ func TestLinuxAbsentReadDeniedPathCreatedDuringTheCommandIsUnreadable(t *testing
 	joined := strings.Join(out, "\n")
 	if !strings.Contains(joined, "read "+beside+" readable: ok") || !strings.Contains(joined, "waitread "+secret+": EACCES") {
 		t.Fatalf("absent read floor:\n%s", joined)
+	}
+}
+
+func TestLinuxControlPlaneAncestorSpineProtectedWhetherPresentOrAbsent(t *testing.T) {
+	for _, stateExists := range []bool{false, true} {
+		name := "absent"
+		if stateExists {
+			name = "present"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			parent := filepath.Join(root, ".config")
+			state := filepath.Join(parent, "paintedwolf")
+			testutil.FailErr(t, "create parent", os.MkdirAll(parent, 0o755))
+			if stateExists {
+				testutil.FailErr(t, "create state", os.MkdirAll(state, 0o700))
+				testutil.FailErr(t, "write state file", os.WriteFile(filepath.Join(state, "approvals.yaml"), []byte("x\n"), 0o600))
+			}
+			t.Setenv("LYCAON_CONFIG_DIR", state)
+			expectFloorTable(t, denyConfinement(root), root, []floorStep{
+				{"rmdir .config", "EACCES"},
+				{"unlinkat_dir .config", "EACCES"},
+				{"rename .config .config-moved", "EACCES"},
+				{"noreplace .config .config-nr", "EACCES"},
+				{"mkdir stage", "ok"},
+				{"rename stage .config", "EACCES"},
+				{"exchange stage .config", "EACCES"},
+				{"exchange .config stage", "EACCES"},
+				{"create .config/sibling.txt", "ok"},
+				{"rename .config/sibling.txt .config/sibling-renamed.txt", "ok"},
+				{"unlink .config/sibling-renamed.txt", "ok"},
+				{"mkdir .config/sub", "ok"},
+				{"rmdir .config/sub", "ok"},
+				{"mkdir .config/sub2", "ok"},
+				{"unlinkat_dir .config/sub2", "ok"},
+				{"rmdir stage", "ok"},
+			})
+			if _, err := os.Stat(parent); err != nil {
+				t.Fatalf("ancestor removed or moved: %v", err)
+			}
+			if stateExists {
+				if raw, err := os.ReadFile(filepath.Join(state, "approvals.yaml")); err != nil || string(raw) != "x\n" {
+					t.Fatalf("state altered: %q %v", raw, err)
+				}
+			}
+		})
 	}
 }

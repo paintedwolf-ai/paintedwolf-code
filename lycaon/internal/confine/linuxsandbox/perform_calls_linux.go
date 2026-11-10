@@ -35,6 +35,8 @@ func (f creationFloors) perform(call pathCall, dirs []int) (pathResult, int) {
 		return f.create(dir(0), call), -1
 	case callLink:
 		return f.link(dir(0), dir(1), call), -1
+	case callUnlink:
+		return f.unlink(dir(0), call), -1
 	case callRename:
 		return f.rename(dir(0), dir(1), call), -1
 	}
@@ -69,6 +71,8 @@ func (f creationFloors) createPlainName(dirfd int, call pathCall) (pathResult, i
 		return errnoResult(unix.Mknodat(dirfd, call.Path, call.Mode, int(call.Dev))), -1, true
 	case callSymlink:
 		return errnoResult(unix.Symlinkat(call.Content, dirfd, call.Path)), -1, true
+	case callUnlink:
+		return errnoResult(unix.Unlinkat(dirfd, call.Path, int(call.Flags))), -1, true
 	}
 	return pathResult{}, -1, false
 }
@@ -306,6 +310,25 @@ func (f creationFloors) link(olddir, newdir int, call pathCall) pathResult {
 	return errnoResult(unix.Linkat(olddir, call.Path, p.fd, p.base, int(call.Flags)))
 }
 
+func (f creationFloors) unlink(dirfd int, call pathCall) pathResult {
+	p, err := resolveParent(dirfd, call.Path, 0)
+	if errors.Is(err, errPlainName) {
+		return errnoResult(unix.Unlinkat(dirfd, call.Path, int(call.Flags)))
+	}
+	if err != nil {
+		return errnoResult(err)
+	}
+	defer p.close()
+	if f.refuses(unlinkEntry, p.path) {
+		return refusal(refusalUnlink, p)
+	}
+	base := p.base
+	if strings.HasSuffix(call.Path, "/") {
+		base += "/"
+	}
+	return errnoResult(unix.Unlinkat(p.fd, base, int(call.Flags)))
+}
+
 func (f creationFloors) rename(olddir, newdir int, call pathCall) pathResult {
 	old, err := resolveParent(olddir, call.Path, 0)
 	if errors.Is(err, errPlainName) {
@@ -325,10 +348,14 @@ func (f creationFloors) rename(olddir, newdir int, call pathCall) pathResult {
 	defer target.close()
 	exchange := call.Flags&unix.RENAME_EXCHANGE != 0
 	switch {
-	case f.refuses(renameSource, old.path), exchange && f.refuses(renameSource, target.path):
+	case f.refuses(renameSource, old.path):
 		return refusal(refusalUnlink, old)
-	case f.refuses(renameTarget, target.path), exchange && f.refuses(renameTarget, old.path):
+	case exchange && f.refuses(renameSource, target.path):
+		return refusal(refusalUnlink, target)
+	case f.refuses(renameTarget, target.path):
 		return refusal(refusalCreate, target)
+	case exchange && f.refuses(renameTarget, old.path):
+		return refusal(refusalCreate, old)
 	}
 	return errnoResult(unix.Renameat2(old.fd, old.base, target.fd, target.base, uint(call.Flags)))
 }

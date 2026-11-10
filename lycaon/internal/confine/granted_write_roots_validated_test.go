@@ -24,12 +24,17 @@ func TestDefaultConfinementValidatesGrantedWriteRoots(t *testing.T) {
 		t.Fatal("a plain attached root must confine")
 	}
 
-	// A reviewed ancestor cannot move the host state tree.
+	// A reviewed ancestor confines while the control-plane and ancestor-spine floors protect host state;
+	// a direct control-plane grant still refuses confinement.
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "home dir", err)
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "fixture-state"))
-	if _, on := confine.DefaultConfinement(confine.Request{Roots: []string{"/proj"}, GrantedWriteRoots: []string{home}}); on {
-		t.Fatal("state ancestor grant admitted")
+	state := filepath.Join(home, ".config", "fixture-state")
+	t.Setenv("LYCAON_CONFIG_DIR", state)
+	if _, on := confine.DefaultConfinement(confine.Request{Roots: []string{"/proj"}, GrantedWriteRoots: []string{home}}); !on {
+		t.Fatal("state ancestor grant must confine with floor protection")
+	}
+	if _, on := confine.DefaultConfinement(confine.Request{Roots: []string{"/proj"}, GrantedWriteRoots: []string{state}}); on {
+		t.Fatal("direct control-plane grant admitted")
 	}
 
 	if _, on := confine.DefaultConfinement(confine.Request{

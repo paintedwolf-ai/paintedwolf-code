@@ -110,7 +110,7 @@ func TestGrantedWriteRootRefused(t *testing.T) {
 		root string
 		code string // empty => allowed
 	}{
-		{"fs-root", string(filepath.Separator), WriteRootCodeContainsState},
+		{"fs-root-ok", string(filepath.Separator), ""},
 		{"relative", "relative/path", WriteRootCodeNotAbsolute},
 		{"empty", "  ", WriteRootCodeNotAbsolute},
 		{"ssh-key-material", filepath.Join(home, ".ssh"), WriteRootCodeSecretStore},
@@ -120,11 +120,12 @@ func TestGrantedWriteRootRefused(t *testing.T) {
 		{"docker-contexts-secret", filepath.Join(home, ".docker", "contexts"), WriteRootCodeSecretStore},
 		{"docker-trust-key-material", filepath.Join(home, ".docker", "trust"), WriteRootCodeSecretStore},
 		{"inside-store", filepath.Join(home, ".config", "gcloud", "logs"), WriteRootCodeSecretStore},
+		{"control-plane", filepath.Join(home, ".config", "fixture-state"), WriteRootCodeControlPlane},
 		// The ask adjudicated these; the floor protects what sits inside.
 		{"docker-parent-ok", filepath.Join(home, ".docker"), ""},
-		{"config-parent", filepath.Join(home, ".config"), WriteRootCodeContainsState},
+		{"config-parent-ok", filepath.Join(home, ".config"), ""},
 		{"library-parent-ok", filepath.Join(home, "Library"), ""},
-		{"home", home, WriteRootCodeContainsState},
+		{"home-ok", home, ""},
 		{"docker-buildx-state-ok", filepath.Join(home, ".docker", "buildx", "activity"), ""},
 		{"under-home-ok", filepath.Join(home, "go", "pkg", "mod"), ""},
 		{"opt-ok", "/opt/shared-cache", ""},

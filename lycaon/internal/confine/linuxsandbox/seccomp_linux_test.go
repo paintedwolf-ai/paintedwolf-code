@@ -164,7 +164,7 @@ func TestSeccompProgramDecides(t *testing.T) {
 		{"openat with O_CREAT", argsRecord(unix.SYS_OPENAT, 3, 0, unix.O_CREAT|unix.O_WRONLY), notify},
 		{"openat without O_CREAT", argsRecord(unix.SYS_OPENAT, 3, 0, unix.O_RDWR|unix.O_TRUNC), allow},
 		{"openat O_TMPFILE names nothing", argsRecord(unix.SYS_OPENAT, 3, 0, unix.O_TMPFILE|unix.O_RDWR), allow},
-		{"unlinkat", record(unix.SYS_UNLINKAT, 3, 0, 0), allow},
+		{"unlinkat", record(unix.SYS_UNLINKAT, 3, 0, 0), notify},
 		{"inet6 stream socket", record(unix.SYS_SOCKET, unix.AF_INET6, unix.SOCK_STREAM, 0), allow},
 		{"netlink route socket", record(unix.SYS_SOCKET, unix.AF_NETLINK, unix.SOCK_RAW|unix.SOCK_CLOEXEC, 0), allow},
 		{"vsock stream socket", record(unix.SYS_SOCKET, unix.AF_VSOCK, unix.SOCK_STREAM, 0), eafnosupport},

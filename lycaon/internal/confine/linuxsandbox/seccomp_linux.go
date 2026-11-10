@@ -68,7 +68,7 @@ var notifiedSyscalls = []uint32{unix.SYS_CONNECT, unix.SYS_BIND, unix.SYS_LISTEN
 // when they would create.
 var pathCreators = []uint32{
 	unix.SYS_OPENAT2, unix.SYS_MKDIRAT, unix.SYS_MKNODAT, unix.SYS_SYMLINKAT,
-	unix.SYS_LINKAT, unix.SYS_RENAMEAT, unix.SYS_RENAMEAT2,
+	unix.SYS_LINKAT, unix.SYS_UNLINKAT, unix.SYS_RENAMEAT, unix.SYS_RENAMEAT2,
 }
 
 // fastOpenSends are the send calls that could start a connection through

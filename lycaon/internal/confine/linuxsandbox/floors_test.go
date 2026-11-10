@@ -8,9 +8,10 @@ func TestCreationFloorsHoldProtectedLocationsByName(t *testing.T) {
 		WriteRoots:    []string{"/p", "/p/.paintedwolf/rules/granted"},
 		WriteFiles:    []string{"/p/sub/AGENTS.md"},
 		ReadOnly:      []string{"/p/.paintedwolf/mcp.yaml", "/p/.paintedwolf/rules", "/p/.agents/skills"},
-		Hidden:        []string{"/p/.secrets"},
+		Hidden:        []string{"/p/.secrets", "/home/u/.config/paintedwolf"},
 		Restored:      []string{"/p/.paintedwolf/rules/granted"},
 		ReadOnlyNames: []NamedFloor{{Below: "/p", Name: "AGENTS.md"}},
+		NoUnlink:      []string{"/home", "/home/u", "/home/u/.config"},
 	})
 	for _, tc := range []struct {
 		kind creation
@@ -41,6 +42,14 @@ func TestCreationFloorsHoldProtectedLocationsByName(t *testing.T) {
 		{renameTarget, "/p", true},
 		{renameTarget, "/p/src2", false},
 		{renameTarget, "/p/x/AGENTS.md", true},
+		{unlinkEntry, "/home/u/.config", true},
+		{unlinkEntry, "/home/u", true},
+		{unlinkEntry, "/home/u/.config/paintedwolf", true},
+		{unlinkEntry, "/home/u/.config/other", false},
+		{renameSource, "/home/u/.config", true},
+		{renameSource, "/home/u", true},
+		{renameSource, "/home/u/.config/other", false},
+		{renameTarget, "/home/u/.config", true},
 	} {
 		if got := f.refuses(tc.kind, tc.path); got != tc.want {
 			t.Errorf("refuses(%d, %q) = %v, want %v", tc.kind, tc.path, got, tc.want)
