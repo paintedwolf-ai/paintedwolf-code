@@ -83,10 +83,9 @@ func (e *stabilityEngine) ResetUnstableState() [8]byte {
 	return rotateVerifierLocked(e)
 }
 
-func (e *stabilityEngine) ReleaseView(viewID ViewID) {
+func (e *stabilityEngine) ReleaseView(vHash uint64) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	vHash := computeViewHash(viewID)
 	for hk := range e.pending {
 		if hk.viewHash == vHash {
 			delete(e.pending, hk)
@@ -281,7 +280,7 @@ func (e *stabilityEngine) FlushKey(core *layeredfs.Core, handles *handleTable, f
 func (e *stabilityEngine) FlushView(
 	ctx context.Context, core *layeredfs.Core, handles *handleTable, fault *FaultInjector, viewID ViewID,
 ) error {
-	vHash := computeViewHash(viewID)
+	vHash := handles.ViewHash(viewID)
 	e.mu.Lock()
 	var keys []handleKey
 	for hk, st := range e.pending {

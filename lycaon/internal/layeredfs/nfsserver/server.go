@@ -164,9 +164,8 @@ func (s *Server) RegisterExportWithUID(
 		ViewID: viewID, Root: root, Token: token,
 		ExportPath: exportPath, AllowedUID: allowedUID, AllowedGID: allowedGID, ReadOnly: ro,
 	}
-	s.handles.RegisterView(viewID)
+	vHash := s.handles.RegisterView(viewID)
 	s.handles.Ensure(viewID, rootQPath, meta, 0, true)
-	vHash := computeViewHash(viewID)
 	entry := &exportEntry{cap: capCfg, core: viewCore, viewHash: vHash}
 	s.state.mu.Lock()
 	s.state.exportsByID[exportPath] = entry
@@ -177,7 +176,7 @@ func (s *Server) RegisterExportWithUID(
 
 // ReleaseExport revokes all capability exports for viewID and invalidates all handles and cached listings.
 func (s *Server) ReleaseExport(viewID ViewID) {
-	vHash, viewCore := computeViewHash(viewID), coreForView(s, viewID)
+	vHash, viewCore := s.handles.ViewHash(viewID), coreForView(s, viewID)
 	s.state.mu.Lock()
 	entries := s.state.exportsByVH[vHash]
 	delete(s.state.exportsByVH, vHash)
@@ -186,9 +185,9 @@ func (s *Server) ReleaseExport(viewID ViewID) {
 	}
 	s.state.mu.Unlock()
 	s.gate.releaseView(vHash, entries)
-	s.stability.ReleaseView(viewID)
+	s.stability.ReleaseView(vHash)
 	s.stability.sidecars.releaseCore(viewCore)
-	s.dirs.ReleaseView(viewID)
+	s.dirs.ReleaseView(vHash)
 	s.handles.ReleaseView(viewCore, viewID)
 }
 
@@ -227,7 +226,7 @@ func (s *Server) ActiveConnections() int {
 func (s *Server) ResolveHandleForView(raw []byte, expectedView ViewID) (layeredfs.QualifiedPath, error) {
 	var expHash uint64
 	if expectedView != "" {
-		expHash = computeViewHash(expectedView)
+		expHash = s.handles.ViewHash(expectedView)
 	}
 	rec, err := s.handles.Resolve(raw, expHash)
 	if err != nil {
