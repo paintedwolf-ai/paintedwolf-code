@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 // GitRefImportRecord durably records checkpoint ref import intent and expected prior OIDs before ref mutation.
@@ -288,8 +288,11 @@ func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, 
 }
 
 func applyCheckpointRefTransaction(
-	ctx context.Context, primaryDir, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker, rootID string, writes []plannedRefWrite,
+	ctx context.Context, _, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker, rootID string, writes []plannedRefWrite,
 ) (map[string]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	planned := make(map[string]string, len(writes))
 	for _, w := range writes {
 		planned[w.dstRef] = w.oid
@@ -306,30 +309,103 @@ func applyCheckpointRefTransaction(
 			}
 		}
 	}
+	packed := loadPackedRefsMap(commonGitDir, gitDir)
 	expectedOld := make(map[string]string, len(writes))
-	var stdinBuf strings.Builder
 	for _, w := range writes {
-		curOID := resolveExistingGitRef(commonGitDir, gitDir, w.dstRef)
+		curOID := resolveExistingGitRefWithPacked(commonGitDir, gitDir, w.dstRef, packed)
 		if curOID != "" && curOID != w.oid {
 			return nil, fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, w.dstRef, curOID, w.oid)
 		}
 		expectedOld[w.dstRef] = curOID
-		op := "create"
-		if curOID == w.oid {
-			op = "verify"
-		}
-		_, _ = fmt.Fprintf(&stdinBuf, "%s %s %s\n", op, w.dstRef, w.oid)
 	}
 	rec := GitRefImportRecord{CheckpointID: cleanCheckpoint, WorkerID: cleanWorker, PlannedRefs: planned, ExpectedOld: expectedOld}
 	if err := saveGitRefImportRecord(storeDir, intentName, rec); err != nil {
 		return nil, err
 	}
-	out, code, err := gitexec.Run(ctx, primaryDir, []string{"--git-dir=" + commonGitDir, "update-ref", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(stdinBuf.String())})
-	if err != nil || code != 0 {
-		return nil, errors.Join(err, fmt.Errorf("%w: update-ref failed (exit %d): %s", ErrCheckpointRefConflict, code, strings.TrimSpace(string(out))))
+	if err := applyLooseGitRefCAS(ctx, commonGitDir, gitDir, writes, expectedOld); err != nil {
+		return nil, err
 	}
 	rec.Completed = true
 	return planned, saveGitRefImportRecord(storeDir, intentName, rec)
+}
+
+func applyLooseGitRefCAS(ctx context.Context, commonGitDir, gitDir string, writes []plannedRefWrite, expectedOld map[string]string) error {
+	sorted := slices.Clone(writes)
+	slices.SortFunc(sorted, func(a, b plannedRefWrite) int { return strings.Compare(a.dstRef, b.dstRef) })
+	type refLock struct {
+		w        plannedRefWrite
+		refPath  string
+		lockPath string
+		file     *os.File
+	}
+	locks := make([]refLock, 0, len(sorted))
+	cleanup := func() {
+		for _, lk := range locks {
+			if lk.file != nil {
+				_ = lk.file.Close()
+			}
+			if lk.lockPath != "" {
+				_ = os.Remove(lk.lockPath)
+			}
+		}
+	}
+	for _, w := range sorted {
+		if err := ctx.Err(); err != nil {
+			cleanup()
+			return err
+		}
+		refPath := filepath.Join(commonGitDir, filepath.FromSlash(w.dstRef))
+		if err := os.MkdirAll(filepath.Dir(refPath), 0o750); err != nil {
+			cleanup()
+			return err
+		}
+		lockPath := refPath + ".lock"
+		f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			cleanup()
+			if errors.Is(err, os.ErrExist) {
+				return fmt.Errorf("%w: ref lock busy for %s", ErrCheckpointRefConflict, w.dstRef)
+			}
+			return err
+		}
+		locks = append(locks, refLock{w: w, refPath: refPath, lockPath: lockPath, file: f})
+	}
+	packed := loadPackedRefsMap(commonGitDir, gitDir)
+	for _, lk := range locks {
+		curOID := resolveExistingGitRefWithPacked(commonGitDir, gitDir, lk.w.dstRef, packed)
+		if curOID != expectedOld[lk.w.dstRef] && curOID != lk.w.oid {
+			cleanup()
+			return fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, lk.w.dstRef, curOID, lk.w.oid)
+		}
+	}
+	syncedDirs := make(map[string]bool, len(locks))
+	for i := range locks {
+		lk := &locks[i]
+		if _, err := lk.file.WriteString(lk.w.oid + "\n"); err != nil {
+			cleanup()
+			return err
+		}
+		if err := errors.Join(syncObjectFileFn(lk.file), closeObjectFileFn(lk.file)); err != nil {
+			lk.file = nil
+			cleanup()
+			return err
+		}
+		lk.file = nil
+		dir := filepath.Dir(lk.refPath)
+		if err := fseffect.Rename(dir, filepath.Base(lk.lockPath), filepath.Base(lk.refPath)); err != nil {
+			cleanup()
+			return err
+		}
+		lk.lockPath = ""
+		if !syncedDirs[dir] {
+			syncedDirs[dir] = true
+			if err := syncDir(dir); err != nil {
+				cleanup()
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func gitImportRecordName(workerID, checkpointID, rootID string) string {
@@ -350,7 +426,26 @@ func saveGitRefImportRecord(storeDir, intentName string, rec GitRefImportRecord)
 	return writeAtomicJSONOrText(filepath.Join(storeDir, "promotions"), intentName, raw, 0o600)
 }
 
-func resolveExistingGitRef(commonGitDir, gitDir, dstRef string) string {
+func loadPackedRefsMap(commonGitDir, gitDir string) map[string]string {
+	dirs := []string{commonGitDir}
+	if filepath.Clean(gitDir) != filepath.Clean(commonGitDir) {
+		dirs = []string{gitDir, commonGitDir}
+	}
+	out := make(map[string]string)
+	for _, baseDir := range dirs {
+		if raw, err := readBoundedFile(filepath.Join(baseDir, "packed-refs"), 8<<20); err == nil {
+			for _, line := range strings.Split(string(raw), "\n") {
+				f := strings.Fields(strings.TrimSpace(line))
+				if len(f) >= 2 && !strings.HasPrefix(f[0], "#") && !strings.HasPrefix(f[0], "^") && isHexOID(strings.ToLower(f[0])) {
+					out[f[1]] = strings.ToLower(f[0])
+				}
+			}
+		}
+	}
+	return out
+}
+
+func resolveExistingGitRefWithPacked(commonGitDir, gitDir, dstRef string, packed map[string]string) string {
 	dirs := []string{commonGitDir}
 	if filepath.Clean(gitDir) != filepath.Clean(commonGitDir) {
 		dirs = []string{commonGitDir, gitDir}
@@ -362,15 +457,9 @@ func resolveExistingGitRef(commonGitDir, gitDir, dstRef string) string {
 			}
 		}
 	}
-	for _, baseDir := range dirs {
-		if raw, err := readBoundedFile(filepath.Join(baseDir, "packed-refs"), 8<<20); err == nil {
-			for _, line := range strings.Split(string(raw), "\n") {
-				f := strings.Fields(strings.TrimSpace(line))
-				if len(f) >= 2 && !strings.HasPrefix(f[0], "#") && !strings.HasPrefix(f[0], "^") && f[1] == dstRef && isHexOID(strings.ToLower(f[0])) {
-					return strings.ToLower(f[0])
-				}
-			}
-		}
-	}
-	return ""
+	return packed[dstRef]
+}
+
+func resolveExistingGitRef(commonGitDir, gitDir, dstRef string) string {
+	return resolveExistingGitRefWithPacked(commonGitDir, gitDir, dstRef, loadPackedRefsMap(commonGitDir, gitDir))
 }

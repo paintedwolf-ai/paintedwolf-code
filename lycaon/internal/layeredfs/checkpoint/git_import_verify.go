@@ -193,13 +193,15 @@ func readDestinationObjectsOnly(ctx context.Context, source *candidateGitObjectS
 	resolved := make(map[string]batchObjectData, len(oids))
 	var packed []string
 	for _, oid := range oids {
-		dstLoose := filepath.Join(source.targetObjectsDir, oid[:2], oid[2:])
-		if f, err := os.Open(dstLoose); err == nil {
-			objType, body, vErr := readAndVerifyLooseGitObject(f, oid)
-			_ = f.Close()
-			if vErr == nil {
-				resolved[oid] = batchObjectData{objType: objType, body: body}
-				continue
+		if source.hasTargetFanout(oid) {
+			dstLoose := filepath.Join(source.targetObjectsDir, oid[:2], oid[2:])
+			if f, err := os.Open(dstLoose); err == nil {
+				objType, body, vErr := readAndVerifyLooseGitObject(f, oid)
+				_ = f.Close()
+				if vErr == nil {
+					resolved[oid] = batchObjectData{objType: objType, body: body}
+					continue
+				}
 			}
 		}
 		packed = append(packed, oid)
@@ -220,6 +222,7 @@ func collectDestinationBaseRefTips(commonGitDir, gitDir string, excluded map[str
 			tips = append(tips, oid)
 		}
 	}
+	packed := loadPackedRefsMap(commonGitDir, gitDir)
 	dirs := []string{commonGitDir}
 	if filepath.Clean(gitDir) != filepath.Clean(commonGitDir) {
 		dirs = []string{gitDir, commonGitDir}
@@ -230,7 +233,7 @@ func collectDestinationBaseRefTips(commonGitDir, gitDir string, excluded map[str
 			if strings.HasPrefix(head, "ref:") {
 				refName := strings.TrimSpace(strings.TrimPrefix(head, "ref:"))
 				if strings.HasPrefix(refName, "refs/heads/") || strings.HasPrefix(refName, "refs/tags/") {
-					addOID(resolveExistingGitRef(commonGitDir, gitDir, refName))
+					addOID(resolveExistingGitRefWithPacked(commonGitDir, gitDir, refName, packed))
 				}
 			} else {
 				addOID(head)
@@ -245,13 +248,10 @@ func collectDestinationBaseRefTips(commonGitDir, gitDir string, excluded map[str
 				}
 			}
 		}
-		if raw, err := readBoundedFile(filepath.Join(dir, "packed-refs"), 8<<20); err == nil {
-			for _, line := range strings.Split(string(raw), "\n") {
-				f := strings.Fields(strings.TrimSpace(line))
-				if len(f) >= 2 && strings.HasPrefix(f[1], "refs/heads/") {
-					addOID(f[0])
-				}
-			}
+	}
+	for ref, oid := range packed {
+		if strings.HasPrefix(ref, "refs/heads/") {
+			addOID(oid)
 		}
 	}
 	return tips
@@ -269,13 +269,15 @@ func verifyDestinationFrontierBatch(ctx context.Context, source *candidateGitObj
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		dstLoose := filepath.Join(source.targetObjectsDir, oid[:2], oid[2:])
-		if f, err := os.Open(dstLoose); err == nil {
-			_, _, vErr := readAndVerifyLooseGitObject(f, oid)
-			_ = f.Close()
-			if vErr == nil {
-				seen[oid] = true
-				continue
+		if source.hasTargetFanout(oid) {
+			dstLoose := filepath.Join(source.targetObjectsDir, oid[:2], oid[2:])
+			if f, err := os.Open(dstLoose); err == nil {
+				_, _, vErr := readAndVerifyLooseGitObject(f, oid)
+				_ = f.Close()
+				if vErr == nil {
+					seen[oid] = true
+					continue
+				}
 			}
 		}
 		needPacked = append(needPacked, oid)

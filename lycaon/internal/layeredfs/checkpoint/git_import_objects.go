@@ -76,8 +76,13 @@ type candidateGitObjectSource struct {
 	candidateDirs      []string
 	packCandidateDirs  []string
 	targetHasPacks     bool
+	targetFanoutDirs   map[string]bool
 	packReaderDir      string
 	selectedPackedOIDs map[string]bool
+}
+
+func (s *candidateGitObjectSource) hasTargetFanout(oid string) bool {
+	return len(oid) >= 2 && (s.targetFanoutDirs == nil || s.targetFanoutDirs[oid[:2]])
 }
 
 func openCandidateGitObjectSource(
@@ -97,6 +102,14 @@ func openCandidateGitObjectSource(
 	}
 	if err := rejectGitAlternates(targetObjectsDir); err != nil {
 		return nil, func() {}, err
+	}
+	if entries, err := os.ReadDir(targetObjectsDir); err == nil {
+		src.targetFanoutDirs = make(map[string]bool, len(entries))
+		for _, d := range entries {
+			if len(d.Name()) == 2 {
+				src.targetFanoutDirs[strings.ToLower(d.Name())] = true
+			}
+		}
 	}
 	if hasPacks, err := inspectCandidatePackDir(filepath.Join(targetObjectsDir, "pack"), false); err == nil {
 		src.targetHasPacks = hasPacks
@@ -216,17 +229,19 @@ func (s *candidateGitObjectSource) resolveWave(ctx context.Context, oids []strin
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		dstLoose := filepath.Join(s.targetObjectsDir, oid[:2], oid[2:])
-		if f, openErr := os.Open(dstLoose); openErr == nil {
-			objType, body, vErr := readAndVerifyLooseGitObject(f, oid)
-			_ = f.Close()
-			if vErr == nil {
-				resolved[oid] = batchObjectData{objType: objType, body: body}
-				continue
+		if s.hasTargetFanout(oid) {
+			dstLoose := filepath.Join(s.targetObjectsDir, oid[:2], oid[2:])
+			if f, openErr := os.Open(dstLoose); openErr == nil {
+				objType, body, vErr := readAndVerifyLooseGitObject(f, oid)
+				_ = f.Close()
+				if vErr == nil {
+					resolved[oid] = batchObjectData{objType: objType, body: body}
+					continue
+				}
+				dstCorrupt[oid] = vErr
+			} else if !errors.Is(openErr, os.ErrNotExist) {
+				return nil, openErr
 			}
-			dstCorrupt[oid] = vErr
-		} else if !errors.Is(openErr, os.ErrNotExist) {
-			return nil, openErr
 		}
 		afterDstLoose = append(afterDstLoose, oid)
 	}
@@ -303,6 +318,9 @@ func (s *candidateGitObjectSource) resolveAndPublishCandidateLoose(ctx context.C
 		}
 		if st.Mode().IsRegular() {
 			objType, body, err := copyFileStreamingAtomicWithVerify(srcLoose, dstLoose, 0o444)
+			if err == nil && s.targetFanoutDirs != nil && len(oid) >= 2 {
+				s.targetFanoutDirs[oid[:2]] = true
+			}
 			return objType, body, true, err
 		}
 	}

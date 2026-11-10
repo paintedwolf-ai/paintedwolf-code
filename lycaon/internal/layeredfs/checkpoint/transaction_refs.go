@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 // prepareRefs records each root's ref undo. Only the built-in namespaced importer runs, because its
@@ -54,6 +56,7 @@ func (txn *Transaction) rootRefUndo(m Manifest, rootID, dir string, named map[st
 	if err != nil {
 		return nil, err
 	}
+	packed := loadPackedRefsMap(common, gitDir)
 	var refs []refUndo
 	for _, name := range slices.Sorted(maps.Keys(named)) {
 		suffix, err := ValidateGitRefName(name)
@@ -65,7 +68,7 @@ func (txn *Transaction) rootRefUndo(m Manifest, rootID, dir string, named map[st
 			return nil, fmt.Errorf("checkpoint: invalid ref object")
 		}
 		for _, ref := range []string{"refs/lycaon/workers/" + m.WorkerID + "/" + suffix, "refs/lycaon/checkpoints/" + m.CheckpointID + "/" + suffix} {
-			old := resolveExistingGitRef(common, gitDir, ref)
+			old := resolveExistingGitRefWithPacked(common, gitDir, ref, packed)
 			if old != "" && old != oid {
 				return nil, ErrCheckpointRefConflict
 			}
@@ -96,33 +99,107 @@ func (txn *Transaction) rollbackRootRefs(ctx context.Context, rootID string, ref
 	if err != nil {
 		return err
 	}
-	var input strings.Builder
-	for _, ref := range refs {
+	sorted := slices.Clone(refs)
+	slices.SortFunc(sorted, func(a, b refUndo) int { return strings.Compare(a.Name, b.Name) })
+	type rollbackLock struct {
+		ref      refUndo
+		refPath  string
+		lockPath string
+		file     *os.File
+	}
+	locks := make([]rollbackLock, 0, len(sorted))
+	cleanup := func() {
+		for _, lk := range locks {
+			if lk.file != nil {
+				_ = lk.file.Close()
+			}
+			if lk.lockPath != "" {
+				_ = os.Remove(lk.lockPath)
+			}
+		}
+	}
+	for _, ref := range sorted {
+		if err := ctx.Err(); err != nil {
+			cleanup()
+			return err
+		}
 		if _, err := ValidateGitRefName(ref.Name); err != nil {
+			cleanup()
 			return err
 		}
 		if !strings.HasPrefix(ref.Name, "refs/lycaon/") || !isHexOID(ref.After) || (ref.Before != "" && !isHexOID(ref.Before)) {
+			cleanup()
 			return ErrInvalidManifest
 		}
-		current := resolveExistingGitRef(common, gitDir, ref.Name)
-		if current == ref.Before {
+		refPath := filepath.Join(common, filepath.FromSlash(ref.Name))
+		if err := os.MkdirAll(filepath.Dir(refPath), 0o750); err != nil {
+			cleanup()
+			return err
+		}
+		lockPath := refPath + ".lock"
+		f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			cleanup()
+			if errors.Is(err, os.ErrExist) {
+				return fmt.Errorf("%w: ref lock busy for %s", ErrCheckpointRefConflict, ref.Name)
+			}
+			return err
+		}
+		locks = append(locks, rollbackLock{ref: ref, refPath: refPath, lockPath: lockPath, file: f})
+	}
+	packed := loadPackedRefsMap(common, gitDir)
+	for _, lk := range locks {
+		current := resolveExistingGitRefWithPacked(common, gitDir, lk.ref.Name, packed)
+		if current != lk.ref.Before && current != lk.ref.After {
+			cleanup()
+			return fmt.Errorf("%w: imported ref %s diverged", ErrCheckpointRefConflict, lk.ref.Name)
+		}
+	}
+	syncedDirs := make(map[string]bool, len(locks))
+	for i := range locks {
+		lk := &locks[i]
+		current := resolveExistingGitRefWithPacked(common, gitDir, lk.ref.Name, packed)
+		if current == lk.ref.Before {
+			_ = lk.file.Close()
+			lk.file = nil
+			_ = os.Remove(lk.lockPath)
+			lk.lockPath = ""
 			continue
 		}
-		if current != ref.After {
-			return fmt.Errorf("%w: imported ref %s diverged", ErrCheckpointRefConflict, ref.Name)
-		}
-		if ref.Before == "" {
-			fmt.Fprintf(&input, "delete %s %s\n", ref.Name, ref.After)
+		dir := filepath.Dir(lk.refPath)
+		if lk.ref.Before == "" {
+			_ = lk.file.Close()
+			lk.file = nil
+			if err := os.Remove(lk.refPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				cleanup()
+				return err
+			}
+			_ = os.Remove(lk.lockPath)
+			lk.lockPath = ""
 		} else {
-			fmt.Fprintf(&input, "update %s %s %s\n", ref.Name, ref.Before, ref.After)
+			if _, err := lk.file.WriteString(lk.ref.Before + "\n"); err != nil {
+				cleanup()
+				return err
+			}
+			if err := errors.Join(syncObjectFileFn(lk.file), closeObjectFileFn(lk.file)); err != nil {
+				lk.file = nil
+				cleanup()
+				return err
+			}
+			lk.file = nil
+			if err := fseffect.Rename(dir, filepath.Base(lk.lockPath), filepath.Base(lk.refPath)); err != nil {
+				cleanup()
+				return err
+			}
+			lk.lockPath = ""
 		}
-	}
-	if input.Len() == 0 {
-		return nil
-	}
-	output, code, err := gitexec.Run(ctx, primary, []string{"--git-dir=" + common, "update-ref", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(input.String())})
-	if err != nil || code != 0 {
-		return errors.Join(err, fmt.Errorf("%w: rollback refs failed (exit %d): %s", ErrCheckpointRefConflict, code, strings.TrimSpace(string(output))))
+		if !syncedDirs[dir] {
+			syncedDirs[dir] = true
+			if err := syncDirIfPresent(dir); err != nil {
+				cleanup()
+				return err
+			}
+		}
 	}
 	return nil
 }
