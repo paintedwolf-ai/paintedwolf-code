@@ -161,7 +161,10 @@ func onReaddirPlus(s *Server, cs *connState, call rpcCallHeader) []byte {
 		// Attributes come from the object as it is now. An entry that has since gone still takes its
 		// place in the listing, without attributes or a handle, as RFC 1813 permits.
 		if meta, statErr := exp.core.Lstat(ent.QPath); statErr == nil {
-			fh := s.handles.Ensure(dirRec.viewID, ent.QPath, meta, dirRec.key.nodeID, cleanRel(ent.QPath.Rel) == ".")
+			fh, ok := s.handles.Ensure(dirRec.key.viewHash, dirRec.viewID, ent.QPath, meta, dirRec.key.nodeID, cleanRel(ent.QPath.Rel) == ".")
+			if !ok {
+				return encodeNFSError(call.XID, nfs.NFSProcedureReadDirPlus, nfs.NFSStatusStale)
+			}
 			meta = wireMeta(s, dirRec.key.viewHash, meta)
 			writePostOpAttr(&entBuf, &meta, exp.cap.AllowedUID, exp.cap.AllowedGID)
 			writePostOpFH3(&entBuf, fh[:])
@@ -191,7 +194,7 @@ func onFSStat(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureFSStat, nfs.NFSStatusInval)
 	}
-	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
+	rec, exp, err := resolveBootstrapHandle(s, cs, call.Cred, rawFH)
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureFSStat, MapErrorToNFSStatus(err))
 	}
@@ -219,7 +222,7 @@ func onFSInfo(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureFSInfo, nfs.NFSStatusInval)
 	}
-	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
+	rec, exp, err := resolveBootstrapHandle(s, cs, call.Cred, rawFH)
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureFSInfo, MapErrorToNFSStatus(err))
 	}
@@ -247,7 +250,7 @@ func onPathConf(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedurePathConf, nfs.NFSStatusInval)
 	}
-	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
+	rec, exp, err := resolveBootstrapHandle(s, cs, call.Cred, rawFH)
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedurePathConf, MapErrorToNFSStatus(err))
 	}

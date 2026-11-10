@@ -20,9 +20,9 @@ type handleKey struct {
 	nodeID   layeredfs.NodeID
 }
 type pathKey struct {
-	viewID  ViewID
-	root    RootID
-	relPath string
+	viewHash uint64
+	root     RootID
+	relPath  string
 }
 type wireHeader struct {
 	root                 RootID
@@ -63,11 +63,11 @@ type handleTable struct {
 	byPath      map[pathKey]*handleRecord
 	lru         *list.List
 	unlinked    *list.List
-	coreFor     func(ViewID) *layeredfs.Core
+	coreFor     func(uint64, ViewID) *layeredfs.Core
 	sidecars    *sidecarTable
 }
 
-func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, coreFor func(ViewID) *layeredfs.Core) *handleTable {
+func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, coreFor func(uint64, ViewID) *layeredfs.Core) *handleTable {
 	if maxHandles <= 0 {
 		maxHandles = DefaultMaxHandles
 	}
@@ -124,14 +124,18 @@ func (t *handleTable) ViewHash(viewID ViewID) uint64 {
 	return computeEpochViewHash(viewID, 0)
 }
 
-func (t *handleTable) ReleaseView(core *layeredfs.Core, viewID ViewID) {
+func (t *handleTable) ReleaseView(vHash uint64, viewID ViewID) []layeredfs.HandleID {
 	t.mu.Lock()
-	vHash, ok := t.viewHashes[viewID]
-	if !ok {
-		t.mu.Unlock()
-		return
+	defer t.mu.Unlock()
+	if vHash == 0 {
+		var ok bool
+		if vHash, ok = t.viewHashes[viewID]; !ok {
+			return nil
+		}
 	}
-	delete(t.viewHashes, viewID)
+	if cur, ok := t.viewHashes[viewID]; ok && cur == vHash {
+		delete(t.viewHashes, viewID)
+	}
 	delete(t.activeViews, vHash)
 	var toClose []layeredfs.HandleID
 	for k, rec := range t.byKey {
@@ -148,8 +152,7 @@ func (t *handleTable) ReleaseView(core *layeredfs.Core, viewID ViewID) {
 		}
 		delete(t.byKey, k)
 	}
-	t.mu.Unlock()
-	closeCoreHandles(core, toClose)
+	return toClose
 }
 
 func closeCoreHandles(core *layeredfs.Core, fds []layeredfs.HandleID) {
@@ -184,28 +187,30 @@ func cleanRel(rel string) string {
 	return rel
 }
 
-func makePathKey(viewID ViewID, qpath layeredfs.QualifiedPath) pathKey {
-	return pathKey{viewID: viewID, root: qpath.RootID, relPath: cleanRel(qpath.Rel)}
+func makePathKey(vHash uint64, qpath layeredfs.QualifiedPath) pathKey {
+	return pathKey{viewHash: vHash, root: qpath.RootID, relPath: cleanRel(qpath.Rel)}
 }
 
-// Ensure returns the handle for the object now at qpath. The wire form never changes once issued,
-// including across copy-up, because the identity it carries is the stable one.
+// Ensure returns the handle for the object now at qpath under the caller's active vHash incarnation.
+// It never allocates or reactivates a view incarnation if vHash has been released.
 func (t *handleTable) Ensure(
-	viewID ViewID, qpath layeredfs.QualifiedPath, meta layeredfs.EntryAttr, parentID layeredfs.NodeID, isRoot bool,
-) [HandleSize]byte {
+	vHash uint64, viewID ViewID, qpath layeredfs.QualifiedPath, meta layeredfs.EntryAttr, parentID layeredfs.NodeID, isRoot bool,
+) ([HandleSize]byte, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if activeView, ok := t.activeViews[vHash]; !ok || activeView != viewID {
+		return [HandleSize]byte{}, false
+	}
 	qpath.Rel = cleanRel(qpath.Rel)
-	vHash := t.ensureViewLocked(viewID)
 	hk := handleKey{viewHash: vHash, nodeID: meta.StableID()}
 	wire := encodeWireHandle(t.secret, vHash, qpath.RootID, hk.nodeID, parentID, uint64(meta.Generation))
-	return t.insertLocked(hk, viewID, qpath, meta, isRoot, wire).wire
+	return t.insertLocked(hk, viewID, qpath, meta, isRoot, wire).wire, true
 }
 
 func (t *handleTable) insertLocked(
 	hk handleKey, viewID ViewID, qpath layeredfs.QualifiedPath, meta layeredfs.EntryAttr, isRoot bool, wire [HandleSize]byte,
 ) *handleRecord {
-	pk := makePathKey(viewID, qpath)
+	pk := makePathKey(hk.viewHash, qpath)
 	existing := t.byKey[hk]
 	if occupant, ok := t.byPath[pk]; ok && occupant != existing {
 		// The name now holds a different object; the old record keeps only its other names.
@@ -298,7 +303,7 @@ func (t *handleTable) Resolve(raw []byte, expectedViewHash uint64) (*handleRecor
 func (t *handleTable) locate(
 	viewID ViewID, hdr wireHeader, parentPath layeredfs.QualifiedPath, hasParent bool,
 ) (layeredfs.QualifiedPath, layeredfs.EntryAttr, error) {
-	core := t.coreFor(viewID)
+	core := t.coreFor(hdr.viewHash, viewID)
 	if core == nil {
 		return layeredfs.QualifiedPath{}, layeredfs.EntryAttr{}, ErrStaleHandle
 	}
@@ -329,10 +334,13 @@ func locatedChild(core *layeredfs.Core, parentPath layeredfs.QualifiedPath, name
 	return qpath, meta, nil
 }
 
-func (t *handleTable) LookupByPath(viewID ViewID, qpath layeredfs.QualifiedPath) (*handleRecord, bool) {
+func (t *handleTable) LookupByPath(vHash uint64, qpath layeredfs.QualifiedPath) (*handleRecord, bool) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
-	if rec, ok := t.byPath[makePathKey(viewID, qpath)]; ok {
+	if _, active := t.activeViews[vHash]; !active {
+		return nil, false
+	}
+	if rec, ok := t.byPath[makePathKey(vHash, qpath)]; ok {
 		clone := *rec
 		return &clone, true
 	}
@@ -355,10 +363,13 @@ func (t *handleTable) Count() int {
 
 // MarkUnlinked keeps the object at qpath reachable through openFD, returning a descriptor that fell
 // off the bound for the caller to close. A handle whose object is no longer held turns stale.
-func (t *handleTable) MarkUnlinked(viewID ViewID, qpath layeredfs.QualifiedPath, openFD layeredfs.HandleID, meta layeredfs.EntryAttr) []layeredfs.HandleID {
+func (t *handleTable) MarkUnlinked(vHash uint64, qpath layeredfs.QualifiedPath, openFD layeredfs.HandleID, meta layeredfs.EntryAttr) []layeredfs.HandleID {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	pk := makePathKey(viewID, qpath)
+	if _, active := t.activeViews[vHash]; !active {
+		return []layeredfs.HandleID{openFD}
+	}
+	pk := makePathKey(vHash, qpath)
 	rec, ok := t.byPath[pk]
 	if !ok {
 		return []layeredfs.HandleID{openFD}
@@ -414,12 +425,14 @@ func (t *handleTable) dropRecordPathLocked(rec *handleRecord, pk pathKey, qpath 
 	return 0
 }
 
-func (t *handleTable) InvalidatePath(core *layeredfs.Core, viewID ViewID, qpath layeredfs.QualifiedPath) {
+func (t *handleTable) InvalidatePath(core *layeredfs.Core, vHash uint64, qpath layeredfs.QualifiedPath) {
 	t.mu.Lock()
-	pk := makePathKey(viewID, qpath)
 	var toClose layeredfs.HandleID
-	if rec, ok := t.byPath[pk]; ok {
-		toClose = t.dropRecordPathLocked(rec, pk, qpath)
+	if _, active := t.activeViews[vHash]; active {
+		pk := makePathKey(vHash, qpath)
+		if rec, ok := t.byPath[pk]; ok {
+			toClose = t.dropRecordPathLocked(rec, pk, qpath)
+		}
 	}
 	t.mu.Unlock()
 	if core != nil && toClose != 0 {

@@ -180,7 +180,10 @@ func onLookup(s *Server, cs *connState, call rpcCallHeader) []byte {
 			return encodePostOpError(call.XID, MapErrorToNFSStatus(err), &dirMeta, exp)
 		}
 	}
-	childFH := s.handles.Ensure(dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, cleanRel(childQPath.Rel) == ".")
+	childFH, ok := s.handles.Ensure(dirRec.key.viewHash, dirRec.viewID, childQPath, childMeta, dirRec.key.nodeID, cleanRel(childQPath.Rel) == ".")
+	if !ok {
+		return encodeNFSError(call.XID, nfs.NFSProcedureLookup, nfs.NFSStatusStale)
+	}
 	childMeta = wireMeta(s, dirRec.key.viewHash, childMeta)
 
 	var body bytes.Buffer
@@ -200,7 +203,7 @@ func onAccess(s *Server, cs *connState, call rpcCallHeader) []byte {
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureAccess, nfs.NFSStatusInval)
 	}
-	rec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, rawFH)
+	rec, exp, err := resolveBootstrapHandle(s, cs, call.Cred, rawFH)
 	if err != nil {
 		return encodeNFSError(call.XID, nfs.NFSProcedureAccess, MapErrorToNFSStatus(err))
 	}

@@ -380,12 +380,12 @@ func (e *stabilityEngine) absorbFlushed(core *layeredfs.Core, rec *handleRecord)
 
 // absorbAtName reconsiders the ._ file at or for qpath after a name appeared: a sidecar with no target
 // waits as a file until the target arrives, and a file renamed onto a sidecar name may now qualify.
-func (e *stabilityEngine) absorbAtName(core *layeredfs.Core, handles *handleTable, viewID ViewID, qpath layeredfs.QualifiedPath) {
+func (e *stabilityEngine) absorbAtName(core *layeredfs.Core, handles *handleTable, vHash uint64, qpath layeredfs.QualifiedPath) {
 	sidecar := qpath
 	if _, ok := isAppleDoublePath(qpath.Rel); !ok {
 		sidecar = sidecarPathOf(qpath)
 	}
-	rec, known := handles.LookupByPath(viewID, sidecar)
+	rec, known := handles.LookupByPath(vHash, sidecar)
 	if !known {
 		e.sidecars.absorb(core, sidecar)
 		return

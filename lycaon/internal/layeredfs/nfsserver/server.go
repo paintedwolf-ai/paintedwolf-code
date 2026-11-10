@@ -84,7 +84,7 @@ func New(core *layeredfs.Core, cfg Config) (*Server, error) {
 			conns: make(map[net.Conn]struct{}),
 		},
 	}
-	s.handles = newHandleTable(secret, cfg.MaxHandles, s.stability.sidecars, func(viewID ViewID) *layeredfs.Core { return coreForView(s, viewID) })
+	s.handles = newHandleTable(secret, cfg.MaxHandles, s.stability.sidecars, func(vHash uint64, viewID ViewID) *layeredfs.Core { return coreForIncarnation(s, vHash, viewID) })
 	s.state.wg.Add(2)
 	go runDispatchLoop(s)
 	go runAcceptLoop(s)
@@ -126,6 +126,21 @@ func coreForView(s *Server, viewID ViewID) *layeredfs.Core {
 		return c
 	}
 	return s.core
+}
+
+func coreForIncarnation(s *Server, vHash uint64, viewID ViewID) *layeredfs.Core {
+	s.state.mu.RLock()
+	defer s.state.mu.RUnlock()
+	if entries := s.state.exportsByVH[vHash]; len(entries) > 0 && entries[0].core != nil {
+		return entries[0].core
+	}
+	if vHash == 0 {
+		if c := s.state.cores[viewID]; c != nil {
+			return c
+		}
+		return s.core
+	}
+	return nil
 }
 
 // RegisterExport registers an immediately activated per-mount capability export for viewID and root
@@ -189,18 +204,16 @@ func (s *Server) registerExport(
 	if err != nil {
 		return ExportCapability{}, err
 	}
-	s.state.mu.RLock()
+	s.state.mu.Lock()
 	ro := s.state.readOnly[viewID]
-	s.state.mu.RUnlock()
 	exportPath := fmt.Sprintf("/views/%s/%s/%s", viewID, root, token)
 	capCfg := ExportCapability{
 		ViewID: viewID, Root: root, Token: token,
 		ExportPath: exportPath, AllowedUID: allowedUID, AllowedGID: allowedGID, ReadOnly: ro,
 	}
 	vHash := s.handles.RegisterView(viewID)
-	s.handles.Ensure(viewID, rootQPath, meta, 0, true)
+	_, _ = s.handles.Ensure(vHash, viewID, rootQPath, meta, 0, true)
 	entry := &exportEntry{cap: capCfg, core: viewCore, viewHash: vHash, activated: activated}
-	s.state.mu.Lock()
 	s.state.exportsByID[exportPath] = entry
 	s.state.exportsByVH[vHash] = append(s.state.exportsByVH[vHash], entry)
 	s.state.mu.Unlock()
@@ -209,19 +222,24 @@ func (s *Server) registerExport(
 
 // ReleaseExport revokes all capability exports for viewID and invalidates all handles and cached listings.
 func (s *Server) ReleaseExport(viewID ViewID) {
-	vHash, viewCore := s.handles.ViewHash(viewID), coreForView(s, viewID)
 	s.state.mu.Lock()
+	vHash := s.handles.ViewHash(viewID)
+	viewCore := s.state.cores[viewID]
+	if viewCore == nil {
+		viewCore = s.core
+	}
 	entries := s.state.exportsByVH[vHash]
 	delete(s.state.exportsByVH, vHash)
 	for _, e := range entries {
 		delete(s.state.exportsByID, e.cap.ExportPath)
 	}
-	s.state.mu.Unlock()
 	s.gate.releaseView(vHash, entries)
 	s.stability.ReleaseView(vHash)
 	s.stability.sidecars.releaseCore(viewCore)
 	s.dirs.ReleaseView(vHash)
-	s.handles.ReleaseView(viewCore, viewID)
+	toClose := s.handles.ReleaseView(vHash, viewID)
+	s.state.mu.Unlock()
+	closeCoreHandles(viewCore, toClose)
 }
 
 // FlushForCheckpoint flushes and syncs all pending UNSTABLE writes for viewID and
@@ -288,7 +306,7 @@ func (s *Server) Close() error {
 	close(s.stopped)
 	s.state.wg.Wait()
 	for _, v := range views {
-		s.handles.ReleaseView(coreForView(s, v), v)
+		closeCoreHandles(coreForView(s, v), s.handles.ReleaseView(0, v))
 	}
 	s.gate.closeAll()
 	return err
