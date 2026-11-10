@@ -62,6 +62,7 @@ func (t *ListDirTool) Run(ctx context.Context, args map[string]any, tctx tools.T
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	relPath, _ := args["path"].(string)
 	relPath = strings.TrimSpace(relPath)
 	if relPath == "" {
@@ -188,7 +189,7 @@ func (t *ListDirTool) listRoot(
 	maxDepth int,
 	includeHidden bool,
 ) ([]listDirEntry, error) {
-	if root.ID != projectroot.VirtualScratchLabel && strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" && t.Catalog != nil {
+	if root.ID != projectroot.VirtualScratchLabel && root.ID != projectroot.VirtualOutputLabel && strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" && t.Catalog != nil {
 		if entries, ok := t.listRootCatalog(ctx, tctx, root, fullPath, maxDepth, includeHidden); ok {
 			return entries, nil
 		}

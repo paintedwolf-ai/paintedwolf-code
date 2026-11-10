@@ -145,6 +145,7 @@ func (t *GrepTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	ctx, _ = withInventoryReport(ctx)
 	opts, err := parseGrepArgs(args)
 	if err != nil {

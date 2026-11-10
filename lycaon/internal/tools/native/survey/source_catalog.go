@@ -225,7 +225,7 @@ func sourceInventoryForScope(
 	}
 	whole := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID, catalogDir: base, rootID: root.ID, base: base}
 	// Scratch writes have no project watcher; explicitly scoped trees need a fresh walk.
-	if root.ID == projectroot.VirtualScratchLabel || (base != "." && svc.BoundaryPath(ctx, root.Path, base, true) != "") {
+	if root.ID == projectroot.VirtualScratchLabel || root.ID == projectroot.VirtualOutputLabel || (base != "." && svc.BoundaryPath(ctx, root.Path, base, true) != "") {
 		scoped := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID + "\x00" + base, catalogDir: ".", rootID: root.ID, base: base, rebased: true}
 		snapshot, err := svc.ObserveDependencyScope(ctx, sourcecatalog.Root{ID: scoped.catalogRoot, Path: fullRoot, Within: root.Path})
 		if err != nil {

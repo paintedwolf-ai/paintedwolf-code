@@ -81,16 +81,18 @@ func TestAttachedBroadAndControlPlaneRootsEnforcePerTargetFloors(t *testing.T) {
 	siblingDir := filepath.Join(home, "workspace")
 	siblingFile := filepath.Join(siblingDir, "notes.txt")
 	stateFile := filepath.Join(cfgDir, "api.token")
-	scratchDir := filepath.Join(cfgDir, "sessions", "s1", "scratch")
-	outputDir := filepath.Join(cfgDir, "sessions", "s1", "output")
+	scratchDir := filepath.Join(cfgDir, "scratch", "s1")
+	otherScratchDir := filepath.Join(cfgDir, "scratch", "s2")
+	outputDir := filepath.Join(cfgDir, "session-output", "s1")
 	draftDir := filepath.Join(cfgDir, "drafts", "d1")
-	for _, dir := range []string{cfgDir, siblingDir, scratchDir, outputDir, draftDir} {
+	for _, dir := range []string{cfgDir, siblingDir, scratchDir, otherScratchDir, outputDir, draftDir} {
 		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(dir, 0o700))
 	}
 	testutil.FailErr(t, "write sibling", os.WriteFile(siblingFile, []byte("ok"), 0o600))
 	testutil.FailErr(t, "write token", os.WriteFile(stateFile, []byte("secret"), 0o600))
 	testutil.FailErr(t, "write draft", os.WriteFile(filepath.Join(draftDir, "draft.txt"), []byte("draft"), 0o600))
 	testutil.FailErr(t, "write scratch", os.WriteFile(filepath.Join(scratchDir, "scratch.txt"), []byte("scratch"), 0o600))
+	testutil.FailErr(t, "write other scratch", os.WriteFile(filepath.Join(otherScratchDir, "other.txt"), []byte("other"), 0o600))
 	testutil.FailErr(t, "write output", os.WriteFile(filepath.Join(outputDir, "out.txt"), []byte("out"), 0o600))
 
 	aliasToConfig := filepath.Join(home, "config-link")
@@ -177,7 +179,8 @@ func TestAttachedBroadAndControlPlaneRootsEnforcePerTargetFloors(t *testing.T) {
 
 	// CompileReadScope and SurveyWalk prune control-plane subtree under attached $HOME.
 	b := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "default"}})
-	scope, err := b.CompileReadScope(t.Context(), home, "default")
+	sessionCtx := sandbox.WithSessionDirs(t.Context(), scratchDir, outputDir)
+	scope, err := b.CompileReadScope(sessionCtx, home, "default")
 	testutil.FailErr(t, "CompileReadScope", err)
 	if !scope.Filter("workspace/notes.txt", false) {
 		t.Fatal("CompileReadScope filtered out ordinary sibling under attached $HOME")
@@ -185,8 +188,85 @@ func TestAttachedBroadAndControlPlaneRootsEnforcePerTargetFloors(t *testing.T) {
 	if scope.Filter(".config/paintedwolf-state/api.token", false) {
 		t.Fatal("CompileReadScope admitted control-plane file under attached $HOME")
 	}
+	if scope.Filter(".config/paintedwolf-state/scratch/s2/other.txt", false) {
+		t.Fatal("CompileReadScope admitted another session's scratch under attached $HOME")
+	}
 	if !scope.Filter(".config/paintedwolf-state/drafts/d1/draft.txt", false) {
 		t.Fatal("CompileReadScope filtered out managed draft workspace under attached $HOME")
+	}
+
+	// Attaching configdir.Root() directly still enforces per-target read/write/survey floors.
+	cfgCtx := tools.ToolContext{
+		Source: tools.InvocationSource{
+			Roots:        []projectroot.RootRef{{ID: "cfg", Label: "cfg", Path: cfgDir, IsPrimary: true}},
+			ActiveRootID: "cfg",
+		},
+		Host: tools.InvocationHost{
+			SessionScratchDir: scratchDir,
+			SessionOutputDir:  outputDir,
+		},
+	}
+	if _, err := projectpaths.ResolveRead(sessionCtx, b, cfgCtx, "api.token"); !isControlPlaneReject(err) {
+		t.Fatalf("ResolveRead api.token under attached configdir.Root() = %v, want %s", err, isolation.CodeControlPlaneDenied)
+	}
+	if _, err := projectpaths.ResolveRead(sessionCtx, b, cfgCtx, "scratch/s2/other.txt"); !isControlPlaneReject(err) {
+		t.Fatalf("ResolveRead other session scratch under attached configdir.Root() = %v, want %s", err, isolation.CodeControlPlaneDenied)
+	}
+	if _, err := projectpaths.ResolveRead(sessionCtx, b, cfgCtx, "@scratch/scratch.txt"); err != nil {
+		t.Fatalf("ResolveRead @scratch under attached configdir.Root() failed: %v", err)
+	}
+	if _, err := projectpaths.ResolveRead(sessionCtx, b, cfgCtx, "@output/out.txt"); err != nil {
+		t.Fatalf("ResolveRead @output under attached configdir.Root() failed: %v", err)
+	}
+	if _, err := projectpaths.ResolveRead(sessionCtx, b, cfgCtx, "drafts/d1/draft.txt"); err != nil {
+		t.Fatalf("ResolveRead managed draft under attached configdir.Root() failed: %v", err)
+	}
+	unionRoots, err := projectpaths.UnionDiscoveryRoots(sessionCtx, cfgCtx, ".")
+	testutil.FailErr(t, "UnionDiscoveryRoots on attached configdir.Root()", err)
+	if len(unionRoots) != 0 {
+		t.Fatalf("UnionDiscoveryRoots(.) on attached configdir.Root() = %+v, want empty", unionRoots)
+	}
+
+	cfgScope, err := b.CompileReadScope(sessionCtx, cfgDir, "default")
+	testutil.FailErr(t, "CompileReadScope on configdir.Root()", err)
+	for _, deniedRel := range []string{".", "api.token", "scratch/s1/scratch.txt", "scratch/s2/other.txt"} {
+		if cfgScope.Filter(deniedRel, false) {
+			t.Fatalf("CompileReadScope on configdir.Root() admitted %q", deniedRel)
+		}
+	}
+	if err := b.AssertReadScope(sessionCtx, cfgDir, "api.token", "default"); err == nil {
+		t.Fatal("AssertReadScope on configdir.Root()/api.token succeeded, want denied")
+	}
+	if err := b.AssertReadScope(sessionCtx, cfgDir, ".", "default"); err == nil {
+		t.Fatal("AssertReadScope on configdir.Root()/. succeeded, want denied")
+	}
+	if err := b.AssertReadScope(sessionCtx, scratchDir, "scratch.txt", "default"); err != nil {
+		t.Fatalf("AssertReadScope on own scratchDir failed: %v", err)
+	}
+	if err := b.AssertReadScope(sessionCtx, otherScratchDir, "other.txt", "default"); err == nil {
+		t.Fatal("AssertReadScope on other session's scratchDir succeeded, want denied")
+	}
+	if err := b.AssertReadScope(sessionCtx, draftDir, "draft.txt", "default"); err != nil {
+		t.Fatalf("AssertReadScope on managed draftDir failed: %v", err)
+	}
+
+	var walkedCfg []string
+	testutil.FailErr(t, "SurveyWalk cfgDir", sandbox.SurveyWalk(sessionCtx, cfgDir, sandbox.SurveyOptions{IncludeHidden: true}, func(e sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
+		walkedCfg = append(walkedCfg, e.Rel)
+		return sandbox.SurveyContinue, nil
+	}))
+	if len(walkedCfg) != 0 {
+		t.Fatalf("SurveyWalk on configdir.Root() visited %v, want empty", walkedCfg)
+	}
+	dirEntries, err := sandbox.SurveyReadDir(cfgDir, ".", sandbox.SurveyOptions{IncludeHidden: true})
+	testutil.FailErr(t, "SurveyReadDir cfgDir", err)
+	if len(dirEntries) != 0 {
+		t.Fatalf("SurveyReadDir on configdir.Root() returned %d entries, want 0", len(dirEntries))
+	}
+	scratchEntries, err := sandbox.SurveyReadDir(scratchDir, "@scratch", sandbox.SurveyOptions{IncludeHidden: true})
+	testutil.FailErr(t, "SurveyReadDir scratchDir", err)
+	if len(scratchEntries) != 1 || scratchEntries[0].DirEntry.Name() != "scratch.txt" {
+		t.Fatalf("SurveyReadDir on own scratchDir = %+v, want [scratch.txt]", scratchEntries)
 	}
 }
 
@@ -245,14 +325,40 @@ func TestCommandCwdAndProgramPathsControlPlaneRootFallbackAndRefusal(t *testing.
 		t.Fatalf("NewProgramPaths without scratch err = %v, want %s", err, isolation.CodeControlPlaneDenied)
 	}
 
-	// 3. VerificationCheck refuses honestly with SANDBOX_CONTROL_PLANE_DENIED (never rewrites to @scratch).
+	// 3. VerificationCheck refuses honestly with SANDBOX_CONTROL_PLANE_DENIED (never rewrites to @scratch),
+	// while an explicit usable workspace cwd (e.g. a secondary attached workspace or managed draft) succeeds.
+	repoDir := filepath.Join(home, "repo")
+	draftWorkDir := filepath.Join(cfgDir, "drafts", "d1")
+	for _, dir := range []string{repoDir, draftWorkDir} {
+		testutil.FailErr(t, "mkdir "+dir, os.MkdirAll(dir, 0o700))
+	}
 	verifyCtx := cfgCtx
 	verifyCtx.Execution.VerificationCheck = true
+	verifyCtx.Source.Roots = append( append([]projectroot.RootRef(nil), cfgCtx.Source.Roots...),
+		projectroot.RootRef{ID: "repo", Label: "repo", Path: repoDir},
+	)
 	if _, _, err := projectpaths.CommandCwd(t.Context(), verifyCtx, ""); !isControlPlaneReject(err) {
-		t.Fatalf("CommandCwd verification err = %v, want %s", err, isolation.CodeControlPlaneDenied)
+		t.Fatalf("CommandCwd verification omitted cwd err = %v, want %s", err, isolation.CodeControlPlaneDenied)
 	}
 	if _, err := projectpaths.NewProgramPaths(t.Context(), nil, verifyCtx, ""); !isControlPlaneReject(err) {
-		t.Fatalf("NewProgramPaths verification err = %v, want %s", err, isolation.CodeControlPlaneDenied)
+		t.Fatalf("NewProgramPaths verification omitted cwd err = %v, want %s", err, isolation.CodeControlPlaneDenied)
+	}
+	for _, usable := range []struct {
+		raw      string
+		wantAbs  string
+		wantDisp string
+	}{
+		{"@repo", repoDir, "@repo"},
+		{"drafts/d1", draftWorkDir, "drafts/d1"},
+	} {
+		gotAbs, gotDisp, err := projectpaths.CommandCwd(t.Context(), verifyCtx, usable.raw)
+		if err != nil || gotAbs != usable.wantAbs || gotDisp != usable.wantDisp {
+			t.Fatalf("CommandCwd verification(%q) = (%q, %q, %v), want (%q, %q, nil)", usable.raw, gotAbs, gotDisp, err, usable.wantAbs, usable.wantDisp)
+		}
+		prog, err := projectpaths.NewProgramPaths(t.Context(), nil, verifyCtx, usable.raw)
+		if err != nil || prog.WorkingDir != usable.wantAbs {
+			t.Fatalf("NewProgramPaths verification(%q) = (%+v, %v), want WorkingDir=%q", usable.raw, prog, err, usable.wantAbs)
+		}
 	}
 
 	// 4. Explicit cwd into control plane refuses with SANDBOX_CONTROL_PLANE_DENIED even when LYCAON_SANDBOX_DENY_READ=off.

@@ -44,8 +44,11 @@ func (t *FindTool) walkFindTree(p findWalkParams) error {
 		return err
 	}
 	return inventory.walk(p.ctx, func(entry sourcecatalog.Entry) sourcecatalog.WalkStep {
-		if entry.IsDir && p.readFilter != nil && !p.readFilter(entry.Path, true) {
-			return sourcecatalog.WalkSkip
+		if p.readFilter != nil && !p.readFilter(entry.Path, entry.IsDir) {
+			if entry.IsDir {
+				return sourcecatalog.WalkSkip
+			}
+			return sourcecatalog.WalkContinue
 		}
 		if !admitsCatalogEntry(p.ignore, catalogRelativePath(entry.Path, inventory.base), entry.IsDir) {
 			return sourcecatalog.WalkSkip

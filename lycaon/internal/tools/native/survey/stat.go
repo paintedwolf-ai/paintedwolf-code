@@ -46,6 +46,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	paths, err := toolkit.ParseStringSliceArg(args, "paths", safecmd.StatCaps().ResultCount)
 	if err != nil {
 		return "", err

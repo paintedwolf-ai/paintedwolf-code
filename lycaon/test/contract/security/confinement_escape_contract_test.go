@@ -237,6 +237,8 @@ func foreignTemporaryTree(t *testing.T) string {
 		systemTmp, err := exec.Command("/usr/bin/getconf", "DARWIN_USER_TEMP_DIR").Output()
 		testutil.FailErr(t, "resolve system temporary directory", err)
 		parent = filepath.Dir(filepath.Dir(strings.TrimSpace(string(systemTmp))))
+	} else if hostHome := strings.TrimSpace(os.Getenv("PW_TEST_HOST_HOME")); hostHome != "" && confine.PathAtOrUnder(parent, "/tmp") {
+		parent = hostHome
 	}
 	foreign, err := os.MkdirTemp(parent, "paintedwolf-escape-foreign-") //nolint:usetesting // Probe must be outside this process's temporary subtree.
 	testutil.FailErr(t, "create foreign temporary subtree", err)

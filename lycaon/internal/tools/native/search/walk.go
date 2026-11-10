@@ -262,7 +262,8 @@ func (w *walker) filter(bound projectpaths.BoundPath) (sandbox.ReadFilter, error
 	if f, ok := w.filters[root]; ok {
 		return f, nil
 	}
-	f, err := boundary.CompileReadFilter(w.inv.ctx, root, w.inv.tc.ProfileID())
+	ctx := sandbox.WithSessionDirs(w.inv.ctx, w.inv.tc.Host.SessionScratchDir, w.inv.tc.Host.SessionOutputDir)
+	f, err := boundary.CompileReadFilter(ctx, root, w.inv.tc.ProfileID())
 	if err != nil {
 		return nil, err
 	}

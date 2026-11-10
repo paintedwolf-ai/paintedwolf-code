@@ -106,3 +106,33 @@ func SessionIDFromContext(ctx context.Context) string {
 	}
 	return ""
 }
+
+type sessionDirsKey struct{}
+
+type sessionDirs struct {
+	scratchDir string
+	outputDir  string
+}
+
+// WithSessionDirs attaches the active session's scratch and output directories
+// for control-plane read-floor evaluation.
+func WithSessionDirs(ctx context.Context, scratchDir, outputDir string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, sessionDirsKey{}, sessionDirs{
+		scratchDir: scratchDir,
+		outputDir:  outputDir,
+	})
+}
+
+// SessionDirsFromContext returns the active session's scratch and output directories when present.
+func SessionDirsFromContext(ctx context.Context) (scratchDir, outputDir string) {
+	if ctx == nil {
+		return "", ""
+	}
+	if v, ok := ctx.Value(sessionDirsKey{}).(sessionDirs); ok {
+		return v.scratchDir, v.outputDir
+	}
+	return "", ""
+}

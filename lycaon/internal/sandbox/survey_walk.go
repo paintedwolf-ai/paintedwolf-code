@@ -132,15 +132,22 @@ func SurveyWalk(ctx context.Context, root string, opts SurveyOptions, visit func
 	if opts.Stream && opts.Budgets.Bounded() {
 		return os.ErrInvalid
 	}
-	w := &surveyWalker{
-		ctx:                ctx,
-		opts:               opts,
-		visit:              visit,
-		budget:             NewWalkBudget(opts.Budgets),
-		rootInControlPlane: confine.ControlPlaneReadDenied(root),
-	}
 	if _, err := os.Lstat(root); err != nil {
 		return err
+	}
+	scratchDir, outputDir := SessionDirsFromContext(ctx)
+	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(root, scratchDir, outputDir)
+	if !opts.IncludeEngineOverlay && confine.ControlPlanePathDenied(root, false, effScratch, effOutput) {
+		return nil
+	}
+	w := &surveyWalker{
+		ctx:               ctx,
+		opts:              opts,
+		visit:             visit,
+		budget:            NewWalkBudget(opts.Budgets),
+		effScratch:        effScratch,
+		effOutput:         effOutput,
+		checkControlPlane: !opts.IncludeEngineOverlay && confine.RootOverlapsControlPlaneReadFloor(root),
 	}
 	err := w.walkDir(".", root, 0)
 	if errors.Is(err, errSurveyStop) || errors.Is(err, errSurveyBudgetSpent) {
@@ -152,11 +159,13 @@ func SurveyWalk(ctx context.Context, root string, opts SurveyOptions, visit func
 var errSurveyBudgetSpent = errors.New("sandbox: survey walk budget spent")
 
 type surveyWalker struct {
-	ctx                context.Context
-	opts               SurveyOptions
-	visit              func(SurveyEntry) (SurveyAction, error)
-	budget             *WalkBudget
-	rootInControlPlane bool
+	ctx               context.Context
+	opts              SurveyOptions
+	visit             func(SurveyEntry) (SurveyAction, error)
+	budget            *WalkBudget
+	effScratch        string
+	effOutput         string
+	checkControlPlane bool
 }
 
 // subtreeCut unwinds the recursion to the ancestor whose cap fell.
@@ -208,11 +217,11 @@ func (w *surveyWalker) visitEntries(rel, abs string, depth, dirDepth int, entrie
 			childRel = rel + "/" + name
 		}
 		childAbs := filepath.Join(abs, name)
-		if !w.rootInControlPlane && confine.ControlPlaneReadDenied(childAbs) {
-			continue
-		}
 		isDir := d.IsDir()
 		isSymlink := d.Type()&fs.ModeSymlink != 0
+		if !w.opts.IncludeEngineOverlay && (w.checkControlPlane || isSymlink) && confine.ControlPlanePathDenied(childAbs, false, w.effScratch, w.effOutput) {
+			continue
+		}
 		if isDir {
 			if surveySkipsDir(childRel, name, w.opts) || settingsoverlay.IsRecoveryOnlyDir(childAbs) {
 				continue
@@ -378,8 +387,12 @@ func SurveyReadDir(dir, relDir string, opts SurveyOptions) ([]SurveyEntry, error
 }
 
 func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts SurveyOptions) []SurveyEntry {
+	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(dir, "", "")
+	if !opts.IncludeEngineOverlay && confine.ControlPlanePathDenied(dir, false, effScratch, effOutput) {
+		return nil
+	}
+	checkControlPlane := !opts.IncludeEngineOverlay && confine.RootOverlapsControlPlaneReadFloor(dir)
 	out := make([]SurveyEntry, 0, len(entries))
-	dirInControlPlane := confine.ControlPlaneReadDenied(dir)
 	for _, e := range entries {
 		name := e.Name()
 		if !opts.IncludeHidden && IsHiddenName(name) {
@@ -393,7 +406,8 @@ func surveyDirectoryEntries(dir, relDir string, entries []os.DirEntry, opts Surv
 			continue
 		}
 		abs := filepath.Join(dir, name)
-		if !dirInControlPlane && confine.ControlPlaneReadDenied(abs) {
+		isSymlink := e.Type()&fs.ModeSymlink != 0
+		if !opts.IncludeEngineOverlay && (checkControlPlane || isSymlink) && confine.ControlPlanePathDenied(abs, false, effScratch, effOutput) {
 			continue
 		}
 		if e.IsDir() {

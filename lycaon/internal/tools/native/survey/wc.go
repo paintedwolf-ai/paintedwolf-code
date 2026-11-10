@@ -51,6 +51,7 @@ func (t *WcTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCo
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
+	ctx = sandbox.WithSessionDirs(ctx, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir)
 	ctx, _ = withInventoryReport(ctx)
 	paths, err := toolkit.ParseStringSliceArg(args, "paths", safecmd.WCCaps().ResultCount)
 	if err != nil {

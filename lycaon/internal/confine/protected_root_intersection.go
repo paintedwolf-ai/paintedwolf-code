@@ -31,11 +31,11 @@ func NormalizeWriteRootKey(root string) string {
 	return filepath.Clean(strings.TrimSpace(root))
 }
 
-// defaultRootContainsStateFolder drops an unattached OS default root that
-// overlaps or contains the state tree so ambient temp/cache defaults never
-// widen writable authority around the state folder unless explicitly attached.
+// defaultRootContainsStateFolder drops an OS default root inside the state tree.
+// Cache/temp roots that happen to contain state remain usable because the
+// control-plane and ancestor-spine floors protect the state tree inside them.
 func defaultRootContainsStateFolder(path string) bool {
-	return writeRootContainsStateTree(path)
+	return ControlPlaneWriteDenied(path)
 }
 
 // ControlPlaneStrictAncestors returns the strict ancestor directories (above "/")

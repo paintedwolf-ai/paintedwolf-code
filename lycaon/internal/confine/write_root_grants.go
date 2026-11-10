@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
@@ -77,6 +79,96 @@ func WithinSessionDirectory(path, directory string) bool {
 		return false
 	}
 	return PathAtOrUnder(fspath.CanonicalPath(p), fspath.CanonicalPath(root))
+}
+
+// EffectiveSessionDirsForRoot resolves the session scratch and output
+// directories that apply when evaluating read-floor access under root.
+// Explicit session directories on the invocation context only carve out a root
+// that is itself within that session directory (never configdir.Root(), $HOME,
+// or another session's folder). When no session directories are present on the
+// context, a root that is an explicit per-session child under
+// <configdir>/scratch/<sessionID> or <configdir>/session-output/<sessionID>
+// carves out only that single session's subtree.
+func EffectiveSessionDirsForRoot(root, sessionScratch, sessionOutput string) (string, string) {
+	p := filepath.Clean(strings.TrimSpace(root))
+	if p == "" || p == "." || !filepath.IsAbs(p) {
+		return "", ""
+	}
+	scratch := strings.TrimSpace(sessionScratch)
+	output := strings.TrimSpace(sessionOutput)
+	if scratch != "" || output != "" {
+		var effScratch, effOutput string
+		if scratch != "" && WithinSessionDirectory(p, scratch) {
+			effScratch = scratch
+		}
+		if output != "" && WithinSessionDirectory(p, output) {
+			effOutput = output
+		}
+		return effScratch, effOutput
+	}
+	cfgDir, err := configdir.Root()
+	if err != nil || strings.TrimSpace(cfgDir) == "" {
+		return "", ""
+	}
+	pCanon := fspath.CanonicalPath(p)
+	cfgCanon := fspath.CanonicalPath(cfgDir)
+	if pCanon == "" || cfgCanon == "" {
+		return "", ""
+	}
+	if sid := singleSessionSubdirID(pCanon, enginepaths.ScratchRootUnder(cfgCanon)); sid != "" {
+		return enginepaths.SessionScratchUnder(cfgCanon, sid), ""
+	}
+	if sid := singleSessionSubdirID(pCanon, enginepaths.SessionOutputRootUnder(cfgCanon)); sid != "" {
+		return "", enginepaths.SessionOutputUnder(cfgCanon, sid)
+	}
+	return "", ""
+}
+
+func singleSessionSubdirID(targetCanon, containerCanon string) string {
+	containerCanon = filepath.Clean(strings.TrimSpace(containerCanon))
+	if containerCanon == "" || containerCanon == "." {
+		return ""
+	}
+	if !PathAtOrUnder(targetCanon, containerCanon) || PathEqual(targetCanon, containerCanon) {
+		return ""
+	}
+	rel, err := filepath.Rel(containerCanon, targetCanon)
+	if err != nil {
+		return ""
+	}
+	slash := strings.Trim(filepath.ToSlash(filepath.Clean(rel)), "/")
+	if slash == "" || slash == "." || slash == ".." || strings.HasPrefix(slash, "../") {
+		return ""
+	}
+	seg := strings.SplitN(slash, "/", 2)[0]
+	if seg == "" || seg == "." || seg == ".." {
+		return ""
+	}
+	return seg
+}
+
+// RootOverlapsControlPlaneReadFloor reports whether root lies within or is an
+// ancestor of any control-plane read-deny root, so callers can skip per-entry
+// canonicalization when walking ordinary roots that neither overlap nor contain
+// the control plane.
+func RootOverlapsControlPlaneReadFloor(root string) bool {
+	p := filepath.Clean(strings.TrimSpace(root))
+	if p == "" || p == "." {
+		return false
+	}
+	pCanon := fspath.CanonicalPath(p)
+	if pCanon == "" {
+		pCanon = p
+	}
+	for _, deny := range SecretReadDenyRoots() {
+		if PathAtOrUnder(pCanon, deny) || PathAtOrUnder(deny, pCanon) {
+			return true
+		}
+		if PathAtOrUnder(p, deny) || PathAtOrUnder(deny, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // ControlPlaneReadDenied refuses active host reads outside managed workspaces.

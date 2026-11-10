@@ -47,8 +47,14 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 		return CompiledReadScope{}, fmt.Errorf("unknown tool profile %q", profileID)
 	}
 	globs := SubstituteScopeGlobs(prof.ReadGlobs, ScopeTokensFromContext(ctx))
-	rootInControlPlane := confine.ControlPlaneReadDenied(root)
+	scratchDir, outputDir := SessionDirsFromContext(ctx)
+	effScratch, effOutput := confine.EffectiveSessionDirsForRoot(root, scratchDir, outputDir)
+	rootDenied := confine.ControlPlanePathDenied(root, false, effScratch, effOutput)
+	overlapsFloor := rootDenied || confine.RootOverlapsControlPlaneReadFloor(root)
 	filter := func(relSlash string, isDir bool) bool {
+		if rootDenied {
+			return false
+		}
 		if strings.ContainsRune(relSlash, 0) {
 			return false
 		}
@@ -58,9 +64,9 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 		if !inventoryPathWithinRoot(root, relSlash) {
 			return false
 		}
-		if !rootInControlPlane {
+		if overlapsFloor {
 			clean := strings.TrimPrefix(filepath.Clean(filepath.FromSlash(strings.TrimSpace(relSlash))), "."+string(filepath.Separator))
-			if confine.ControlPlaneReadDenied(filepath.Join(root, clean)) {
+			if confine.ControlPlanePathDenied(filepath.Join(root, clean), false, effScratch, effOutput) {
 				return false
 			}
 		}
@@ -69,16 +75,16 @@ func (b *Boundary) CompileReadScope(ctx context.Context, projectDir, profileID s
 		}
 		return isDir && directoryMayContainReadMatch(globs, relSlash)
 	}
-	return CompiledReadScope{Filter: filter, Key: readScopeKey(profileID, globs, b.cfg)}, nil
+	return CompiledReadScope{Filter: filter, Key: readScopeKey(profileID, globs, b.cfg, rootDenied, effScratch, effOutput)}, nil
 }
 
-func readScopeKey(profileID string, globs []string, cfg Config) string {
+func readScopeKey(profileID string, globs []string, cfg Config, rootDenied bool, effScratch, effOutput string) string {
 	parts := append([]string(nil), globs...)
 	sort.Strings(parts)
 	raw := strings.Join([]string{
 		strings.TrimSpace(profileID),
 		strings.Join(parts, "\x00"),
-		fmt.Sprintf("%t:%t", cfg.ProjectRootRequired, cfg.RejectSymlinkEscape),
+		fmt.Sprintf("%t:%t:%t:%s:%s", cfg.ProjectRootRequired, cfg.RejectSymlinkEscape, rootDenied, effScratch, effOutput),
 	}, "\x01")
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])

@@ -69,6 +69,7 @@ type SessionLoopbackGrant func(ctx context.Context, sessionID, parentSessionID s
 // SandboxScopeContext attaches session id and scope template tokens for path-scope checks.
 func SandboxScopeContext(ctx context.Context, tc ToolContext) context.Context {
 	ctx = sandbox.WithSessionID(ctx, tc.Identity.SessionID)
+	ctx = sandbox.WithSessionDirs(ctx, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)
 	ctx = sandbox.WithScopeTokens(ctx, sandbox.ScopeTokens{
 		Self: tc.Identity.Agent,
 		Job:  tc.Identity.WorkerJobID,
