@@ -14,10 +14,12 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -141,5 +143,82 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath, modelTool string) {
 	}), effect, tc)
 	if err == nil || result.OwnerInvoked || invoked {
 		t.Fatalf("owner dispatched after frame closed at marker: %+v %v", result, err)
+	}
+}
+
+func TestNativeOwnerRevalidatesLiveDenyAfterStartRecorder(t *testing.T) {
+	parent, tc := frameFixture(t)
+	root := tc.ActiveRootPath()
+	testutil.FailErr(t, "seed read target", os.WriteFile(filepath.Join(root, "input"), []byte("authorized bytes"), 0600))
+	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
+	testutil.FailErr(t, "create live policy store", err)
+	// Quiet discretionary policy must still enforce an explicit user deny.
+	neverAsk := true
+	testutil.FailErr(t, "configure quiet policy", store.PutGlobal(settings.ApprovalConfig{NeverAsk: &neverAsk}))
+	classes, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "fixture", CommandEffects: classes}})
+	executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), settings.NewRuleApprovalGate(store, settings.NoSources())), tools.NewDefaultRegistry(), "fixture")
+	definition := nativeDefinition(t, "read")
+	surface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{ProfileID: "fixture"}, []toolcontract.OperationDefinition{definition})
+	testutil.FailErr(t, "freeze native surface", err)
+	frame, err := FreezeProgramFrame(t.Context(), parent, tc, ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "cat input"}}, stageMemory(t, 64<<20))
+	testutil.FailErr(t, "capture native frame", err)
+	t.Cleanup(frame.Close)
+	progressStore := progress.NewMemoryStore()
+	testutil.FailErr(t, "set current progress", progressStore.Set(parent.SessionID, "- [ ] Inspect"))
+	for _, phase := range []string{"allowed", "late-deny", "recovery"} {
+		t.Run(phase, func(t *testing.T) {
+			testutil.FailErr(t, "clear only fixture policy", store.PutProject(root, settings.ApprovalConfig{}))
+			child := parent
+			child.Identity.ExecutionID, child.Identity.ParentExecutionID = phase, parent.Identity.ExecutionID
+			bound, err := toolcontract.BindOperation(definition, child, "cat", definition.Facts().Commands[0].Effects[0].Mode, nil)
+			testutil.FailErr(t, "bind fresh native read", err)
+			var output bytes.Buffer
+			entered, recorded := false, false
+			effect := NativeEffect{Operation: bound, Stage: toolcontract.ExecutionStage{ExecutionID: phase, OperationID: "read", Argv: []string{"cat", "input"}}, Arguments: map[string]any{"path": "input"}, Streams: commandprogram.Streams{Output: &output}}
+			effect.PrepareReviewed = func(ctx context.Context, args map[string]any, actual tools.ToolContext) (PreparedNativeEffect, error) {
+				paths, err := projectpaths.NewProgramPaths(ctx, boundary, actual, ".")
+				if err != nil {
+					return PreparedNativeEffect{}, err
+				}
+				path, err := paths.Bind(ctx, args["path"].(string), false)
+				if err != nil {
+					return PreparedNativeEffect{}, err
+				}
+				return PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, actual tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+					entered = true
+					file, err := path.Open()
+					if err != nil {
+						return toolcontract.ProducerResult{}, err
+					}
+					defer file.Close()
+					_, err = io.Copy(streams.Output, file)
+					return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, err
+				}}, nil
+			}
+			observer := nativeStartFunc(func(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
+				recorded = true
+				if phase == "late-deny" {
+					return store.PutProject(root, settings.ApprovalConfig{Rules: []settings.ApprovalRule{{Category: settings.ApprovalCategoryTool, Pattern: "read", Effect: settings.ApprovalEffectDeny}}})
+				}
+				return nil
+			})
+			memory := stageMemory(t, 64<<20)
+			result, err := executor.InvokeNative(t.Context(), frame, surface, memory, nativeProgressFixture{progressStore}, observer, effect, tc)
+			if !recorded || memory.InUse().State != 0 {
+				t.Fatalf("fixture missed recorder or retained invocation state: recorded=%t state=%d", recorded, memory.InUse().State)
+			}
+			if phase == "late-deny" {
+				reject := toolrejection.AsToolReject(err)
+				if reject == nil || reject.Code != "APPROVAL_RULE_DENIED" || entered || result.OwnerInvoked || result.OutputPublishable || output.Len() != 0 {
+					t.Fatalf("late deny reached native owner: err=%v entered=%t result=%+v output=%q", err, entered, result, output.String())
+				}
+				return
+			}
+			testutil.FailErr(t, "invoke authorized native read", err)
+			if !entered || !result.OwnerInvoked || !result.OutputPublishable || output.String() != "authorized bytes" {
+				t.Fatalf("authorized workflow failed: entered=%t result=%+v output=%q", entered, result, output.String())
+			}
+		})
 	}
 }
