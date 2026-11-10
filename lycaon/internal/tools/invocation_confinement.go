@@ -86,6 +86,7 @@ type SessionLoopbackGrant func(ctx context.Context, sessionID, parentSessionID s
 func SandboxScopeContext(ctx context.Context, tc ToolContext) context.Context {
 	ctx = sandbox.WithSessionID(ctx, tc.Identity.SessionID)
 	ctx = sandbox.WithSessionDirs(ctx, tc.Host.SessionScratchDir, tc.Host.SessionOutputDir)
+	ctx = sandbox.WithApprovedReadPaths(ctx, approvedReadPathsForScope(tc))
 	ctx = sandbox.WithScopeTokens(ctx, sandbox.ScopeTokens{
 		Self: tc.Identity.Agent,
 		Job:  tc.Identity.WorkerJobID,
@@ -102,4 +103,26 @@ func SandboxScopeContext(ctx context.Context, tc ToolContext) context.Context {
 		ctx = sandbox.WithTurnWritePin(ctx, pin)
 	}
 	return ctx
+}
+
+func approvedReadPathsForScope(tc ToolContext) []string {
+	var out []string
+	for _, access := range tc.Files.ApprovedFileAccess {
+		if !access.Tree && !access.Write && strings.TrimSpace(access.Path) != "" {
+			out = append(out, access.Path)
+		}
+	}
+	if tc.Files.FileChangeReview != nil {
+		for _, access := range tc.Files.PreparedFileAccess {
+			if !access.Tree && !access.Write && strings.TrimSpace(access.Path) != "" {
+				out = append(out, access.Path)
+			}
+		}
+	}
+	for _, p := range tc.Files.SessionReadPaths {
+		if strings.TrimSpace(p) != "" {
+			out = append(out, p)
+		}
+	}
+	return UniqueRoots(out)
 }

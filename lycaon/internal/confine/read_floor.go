@@ -181,18 +181,34 @@ func homeRelPathsResolvable(paths []string) bool {
 	return err == nil && strings.TrimSpace(home) != ""
 }
 
-func SecretReadDenyRoots() []string {
+// configuredReadDenyRoots returns the explicit extra read-deny roots from
+// LYCAON_SANDBOX_DENY_READ when the read floor is enabled.
+func configuredReadDenyRoots() []string {
 	if secretReadDenyDisabled() {
 		return nil
 	}
 	env := strings.TrimSpace(os.Getenv("LYCAON_SANDBOX_DENY_READ"))
-	raw := controlPlaneReadDenyRoots()
+	home, _ := os.UserHomeDir()
+	home = strings.TrimSpace(home)
+	var raw []string
 	for _, e := range filepath.SplitList(env) {
-		if strings.TrimSpace(e) != "" {
-			raw = append(raw, e)
+		trimmed := strings.TrimSpace(e)
+		if trimmed == "" {
+			continue
 		}
+		if (strings.HasPrefix(trimmed, "~/") || strings.HasPrefix(trimmed, `~\`)) && home != "" {
+			trimmed = filepath.Join(home, trimmed[2:])
+		}
+		raw = append(raw, trimmed)
 	}
 	return resolveEach(raw)
+}
+
+func SecretReadDenyRoots() []string {
+	if secretReadDenyDisabled() {
+		return nil
+	}
+	return append(resolveEach(controlPlaneReadDenyRoots()), configuredReadDenyRoots()...)
 }
 
 // traversalAncestors returns denied parents needed for path traversal.

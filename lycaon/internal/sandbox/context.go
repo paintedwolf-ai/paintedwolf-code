@@ -2,7 +2,11 @@ package sandbox
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 type scopeTokensKey struct{}
@@ -121,8 +125,8 @@ func WithSessionDirs(ctx context.Context, scratchDir, outputDir string) context.
 		ctx = context.Background()
 	}
 	return context.WithValue(ctx, sessionDirsKey{}, sessionDirs{
-		scratchDir: scratchDir,
-		outputDir:  outputDir,
+		scratchDir: strings.TrimSpace(scratchDir),
+		outputDir:  strings.TrimSpace(outputDir),
 	})
 }
 
@@ -135,4 +139,69 @@ func SessionDirsFromContext(ctx context.Context) (scratchDir, outputDir string) 
 		return v.scratchDir, v.outputDir
 	}
 	return "", ""
+}
+
+type approvedReadPathsKey struct{}
+
+func normalizeApprovedReadPath(path string) string {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return ""
+	}
+	canon := fspath.CanonicalPath(trimmed)
+	if canon == "" {
+		canon = trimmed
+	}
+	clean := filepath.Clean(filepath.FromSlash(canon))
+	if clean == "" || clean == "." || !filepath.IsAbs(clean) {
+		return ""
+	}
+	return clean
+}
+
+// WithApprovedReadPaths attaches exact single-file read approvals for
+// AssertReadScope on protected key-material targets.
+func WithApprovedReadPaths(ctx context.Context, paths []string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if len(paths) == 0 {
+		return ctx
+	}
+	merged := make(map[string]struct{}, len(paths))
+	if existing, ok := ctx.Value(approvedReadPathsKey{}).(map[string]struct{}); ok {
+		for k := range existing {
+			merged[k] = struct{}{}
+		}
+	}
+	for _, p := range paths {
+		if norm := normalizeApprovedReadPath(p); norm != "" {
+			merged[norm] = struct{}{}
+		}
+	}
+	if len(merged) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, approvedReadPathsKey{}, merged)
+}
+
+// IsApprovedReadPathFromContext reports whether absPath is an exact non-directory
+// file read approved on ctx.
+func IsApprovedReadPathFromContext(ctx context.Context, absPath string) bool {
+	if ctx == nil {
+		return false
+	}
+	set, ok := ctx.Value(approvedReadPathsKey{}).(map[string]struct{})
+	if !ok || len(set) == 0 {
+		return false
+	}
+	norm := normalizeApprovedReadPath(absPath)
+	if norm == "" {
+		return false
+	}
+	if info, err := os.Stat(norm); err == nil && info.IsDir() {
+		return false
+	}
+	_, exists := set[norm]
+	return exists
 }

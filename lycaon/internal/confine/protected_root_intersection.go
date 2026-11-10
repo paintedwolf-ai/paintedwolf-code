@@ -11,6 +11,9 @@ import (
 // underSecretReadDeny reports whether path sits in the control-plane read floor.
 // Comparison folds case where the filesystem does — see path_case.go.
 func underSecretReadDeny(path string) bool {
+	if underAny(path, configuredReadDenyRoots()) {
+		return true
+	}
 	if underSecretReadAllowBack(path) {
 		return false
 	}

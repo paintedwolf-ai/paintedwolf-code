@@ -36,6 +36,12 @@ func resolveFilesystemPath(ctx context.Context, b *sandbox.Boundary, tctx tools.
 	if rel == "." {
 		rel = ""
 	}
+	if op == sandbox.PathOpRead && confine.IsAgentSourceReadDenied(anchor, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) {
+		if confine.IsAgentControlStateReadDenied(anchor, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) || !HasExactReadGrant(tctx, abs) {
+			return Resolved{}, false, &sandbox.ScopeError{Path: modelPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
+		}
+		ctx = sandbox.WithApprovedReadPaths(ctx, []string{abs})
+	}
 	if b != nil {
 		if op == sandbox.PathOpRead {
 			err = b.AssertReadScope(ctx, anchor, rel, tctx.ProfileID())

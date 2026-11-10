@@ -60,6 +60,9 @@ func ControlPlanePathDenied(path string, write bool, sessionScratch, sessionOutp
 	if write && (writeRootContainsStateTree(path) || writeRootContainsStateTree(fspath.CanonicalPath(path))) {
 		return true
 	}
+	if !write && underAny(fspath.CanonicalPath(path), configuredReadDenyRoots()) {
+		return true
+	}
 	if WithinSessionDirectory(path, sessionScratch) || (!write && WithinSessionDirectory(path, sessionOutput)) {
 		return false
 	}
@@ -133,6 +136,53 @@ func ControlPlaneReadDenied(root string) bool {
 		return false
 	}
 	return underSecretReadDeny(fspath.CanonicalPath(p))
+}
+
+func parseSessionDirs(sessionDirs []string) (scratch, output string) {
+	if len(sessionDirs) > 0 {
+		scratch = strings.TrimSpace(sessionDirs[0])
+	}
+	if len(sessionDirs) > 1 {
+		output = strings.TrimSpace(sessionDirs[1])
+	}
+	return scratch, output
+}
+
+// IsAgentControlStateReadDenied reports whether absPath under rootPath is
+// denied by control-plane state or configured LYCAON_SANDBOX_DENY_READ roots
+// (independent of key-material paths, which may be opened for an exact approved
+// single-file read).
+func IsAgentControlStateReadDenied(rootPath, absPath string, sessionDirs ...string) bool {
+	rawScratch, rawOutput := parseSessionDirs(sessionDirs)
+	effScratch, effOutput := rawScratch, rawOutput
+	if strings.TrimSpace(rootPath) != "" {
+		effScratch, effOutput = EffectiveSessionDirsForRoot(rootPath, rawScratch, rawOutput)
+	}
+	return ControlPlanePathDenied(absPath, false, effScratch, effOutput) ||
+		ControlPlanePathDenied(fspath.CanonicalPath(absPath), false, effScratch, effOutput)
+}
+
+// IsAgentSourceReadDenied reports whether absPath under rootPath is denied to
+// agent reads without an exact single-file read grant, optionally scoped with
+// the invocation's own sessionScratch and sessionOutput directories.
+func IsAgentSourceReadDenied(rootPath, absPath string, sessionDirs ...string) bool {
+	if IsAgentControlStateReadDenied(rootPath, absPath, sessionDirs...) {
+		return true
+	}
+	p := filepath.Clean(strings.TrimSpace(absPath))
+	if p == "" || p == "." {
+		return false
+	}
+	deny := KeyMaterialReadDenyPaths()
+	if underAny(p, deny) || underAny(fspath.CanonicalPath(p), deny) {
+		return true
+	}
+	if r := filepath.Clean(strings.TrimSpace(rootPath)); r != "" && r != "." {
+		if underAny(r, deny) || underAny(fspath.CanonicalPath(r), deny) {
+			return true
+		}
+	}
+	return false
 }
 
 // ControlPlaneWriteDenied refuses writes to active host inputs. The state tree

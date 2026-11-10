@@ -13,11 +13,83 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
+	"time"
 )
+
+type oneShotFileAccessPolicy struct {
+	base     platform.PolicyEngine
+	approved func() []hitl.GrantedPathDelta
+}
+
+func (p oneShotFileAccessPolicy) Evaluate(ctx context.Context, eval platform.PolicyContext) (*platform.PolicyDecision, error) {
+	decision, err := p.base.Evaluate(ctx, eval)
+	if err != nil || decision == nil || decision.Blocked {
+		return decision, err
+	}
+	if p.approved != nil {
+		if deltas := p.approved(); len(deltas) > 0 {
+			return &platform.PolicyDecision{
+				Allowed:            false,
+				RequiresApproval:   true,
+				ApprovalActionType: eval.ToolName,
+				Approval: &hitl.ApprovalResult{
+					FileAccess: append([]hitl.GrantedPathDelta(nil), deltas...),
+				},
+			}, nil
+		}
+	}
+	return decision, nil
+}
+
+type autoApproveCheckpoints struct{}
+
+func (autoApproveCheckpoints) RequestCheckpoint(_ context.Context, _ hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
+	return &hitl.CheckpointResponse{CheckpointID: "chk-oneshot", Status: hitl.DecisionStatusPending}, nil
+}
+
+func (autoApproveCheckpoints) PollCheckpoint(_ context.Context, checkpointID string) (*hitl.CheckpointResponse, error) {
+	return &hitl.CheckpointResponse{
+		CheckpointID: checkpointID,
+		Status:       hitl.DecisionStatusApproved,
+		Result:       &hitl.DecisionResult{Approved: true},
+	}, nil
+}
+
+func (autoApproveCheckpoints) ResolveCheckpoint(context.Context, string, string, api.CheckpointKind, *hitl.DecisionResult, *hitl.ContentApplyResolve) (*hitl.CheckpointResponse, error) {
+	return nil, nil
+}
+func (autoApproveCheckpoints) ListPendingForParent(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
+	return nil, nil
+}
+func (autoApproveCheckpoints) ListPending(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
+	return nil, nil
+}
+func (autoApproveCheckpoints) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
+	return nil, nil
+}
+func (autoApproveCheckpoints) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+func (autoApproveCheckpoints) SessionApprovalDenied(context.Context, string) (bool, error) {
+	return false, nil
+}
+func (autoApproveCheckpoints) PatchPendingToolApprovalAIRationale(context.Context, string, string) error {
+	return nil
+}
+func (autoApproveCheckpoints) ClearPendingToolApprovalAIRationale(context.Context, string) error {
+	return nil
+}
+func (autoApproveCheckpoints) PatchPendingToolApprovalJoined(context.Context, string, int, []string, string, string) error {
+	return nil
+}
 
 func TestExternalSpawnUsesOnlyAdmittedWriteRoots(t *testing.T) {
 	requireAppliedBoundary(t)
@@ -258,6 +330,18 @@ func TestExternalSpawnAttachedProtectedRootGrantAndRevokeLifecycle(t *testing.T)
 		t.Fatalf("BoundaryOf(c).WriteRoots = %v; want %q excluded and %q, %q included", writeRoots, sshDir, ownScratch, ordinaryDir)
 	}
 
+	var oneShotApproved []hitl.GrantedPathDelta
+	f.Runtime.Executor = toolexecution.NewExecutor(oneShotFileAccessPolicy{
+		base:     toolprofiles.NewProfilePolicyEngine(f.Boundary),
+		approved: func() []hitl.GrantedPathDelta { return append([]hitl.GrantedPathDelta(nil), oneShotApproved...) },
+	}, f.Runtime.Registry, "fixture")
+	f.Runtime.Executor.Approvals.SetCheckpointManager(t.Context(), autoApproveCheckpoints{}, nil)
+	callWithApprovedAccess := func(approved []hitl.GrantedPathDelta, command string) (string, error) {
+		oneShotApproved = append([]hitl.GrantedPathDelta(nil), approved...)
+		defer func() { oneShotApproved = nil }()
+		return f.call(t, t.Context(), command)
+	}
+
 	var readOverlay, writeOverlay []string
 	f.Runtime.Executor.Boundary.SetSessionReadPathOverlay(func(context.Context, string, string) []string {
 		return append([]string(nil), readOverlay...)
@@ -288,61 +372,119 @@ func TestExternalSpawnAttachedProtectedRootGrantAndRevokeLifecycle(t *testing.T)
 		}
 	}
 
-	// Phase 2: Exact read grant on id_ed25519 — only id_ed25519 is readable; id_rsa, id_ed25519.pub, authorized_keys and writes stay denied.
+	// Phase 2a: Live one-shot ApprovedFileAccess read grant (Write: false) on id_ed25519 with no session overlay.
+	oneShotReadGrant := []hitl.GrantedPathDelta{{Path: privKey, Write: false}}
+	out, err = callWithApprovedAccess(oneShotReadGrant, "external -- /bin/cat "+strconv.Quote(privKey))
+	testutil.FailErr(t, "phase 2a one-shot approved read", err)
+	if got = decodeOutcome(t, out); got.Status != 0 || !strings.Contains(got.Stdout, "PRIVATE-ED25519") {
+		t.Fatalf("phase 2a one-shot approved read of id_ed25519 failed: %+v", got)
+	}
+	for _, deniedRead := range []string{pubKey, otherKey, authKeys} {
+		out, err = callWithApprovedAccess(oneShotReadGrant, "external -- /bin/cat "+strconv.Quote(deniedRead))
+		testutil.FailErr(t, "phase 2a one-shot sibling read", err)
+		if decodeOutcome(t, out).Status == 0 {
+			t.Fatalf("phase 2a one-shot read grant leaked to sibling %s", deniedRead)
+		}
+	}
+	out, err = callWithApprovedAccess(oneShotReadGrant, "external -- /bin/sh -c 'printf pwned > \"$1\"' sh "+strconv.Quote(authKeys))
+	testutil.FailErr(t, "phase 2a one-shot read grant write attempt", err)
+	if decodeOutcome(t, out).Status == 0 {
+		t.Fatal("phase 2a one-shot read grant allowed writing authorized_keys")
+	}
+
+	// Phase 2b: Live one-shot ApprovedFileAccess write grant (Write: true) on authorized_keys with no session overlay.
+	oneShotWriteGrant := []hitl.GrantedPathDelta{{Path: authKeys, Write: true}}
+	out, err = callWithApprovedAccess(oneShotWriteGrant, "external -- /bin/sh -c 'printf one-shot-key > \"$1\"' sh "+strconv.Quote(authKeys))
+	testutil.FailErr(t, "phase 2b one-shot approved write", err)
+	if got = decodeOutcome(t, out); got.Status != 0 {
+		t.Fatalf("phase 2b one-shot approved write to authorized_keys failed: %+v", got)
+	}
+	if data, err := os.ReadFile(authKeys); err != nil || string(data) != "one-shot-key" {
+		t.Fatalf("phase 2b authorized_keys after one-shot write = %q, %v; want \"one-shot-key\"", data, err)
+	}
+	for _, deniedWrite := range []string{privKey, authKeysTest, filepath.Join(sshDir, "evil.txt")} {
+		out, err = callWithApprovedAccess(oneShotWriteGrant, "external -- /bin/sh -c 'printf pwned > \"$1\"' sh "+strconv.Quote(deniedWrite))
+		testutil.FailErr(t, "phase 2b one-shot sibling write", err)
+		if decodeOutcome(t, out).Status == 0 {
+			t.Fatalf("phase 2b one-shot write grant leaked to sibling %s", deniedWrite)
+		}
+	}
+	for _, deniedRead := range []string{privKey, authKeys} {
+		out, err = callWithApprovedAccess(oneShotWriteGrant, "external -- /bin/cat "+strconv.Quote(deniedRead))
+		testutil.FailErr(t, "phase 2b one-shot write grant read attempt", err)
+		if decodeOutcome(t, out).Status == 0 {
+			t.Fatalf("phase 2b write-only one-shot grant allowed reading %s", deniedRead)
+		}
+	}
+	testutil.FailErr(t, "restore authorized_keys", os.WriteFile(authKeys, []byte("ssh-ed25519 INITIAL\n"), 0o600))
+
+	// Phase 2c: Subsequent unapproved invocation after one-shot ApprovedFileAccess — one-shot grant does not persist.
+	out, err = f.call(t, t.Context(), "external -- /bin/cat "+strconv.Quote(privKey))
+	testutil.FailErr(t, "phase 2c unapproved read after one-shot", err)
+	if decodeOutcome(t, out).Status == 0 {
+		t.Fatal("phase 2c one-shot read grant persisted to subsequent unapproved call")
+	}
+	out, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf after-oneshot > \"$1\"' sh "+strconv.Quote(authKeys))
+	testutil.FailErr(t, "phase 2c unapproved write after one-shot", err)
+	if decodeOutcome(t, out).Status == 0 {
+		t.Fatal("phase 2c one-shot write grant persisted to subsequent unapproved call")
+	}
+
+	// Phase 3: Chat-scoped exact read overlay on id_ed25519 — only id_ed25519 is readable; id_rsa, id_ed25519.pub, authorized_keys and writes stay denied.
 	readOverlay = []string{privKey}
 	out, err = f.call(t, t.Context(), "external -- /bin/cat "+strconv.Quote(privKey))
-	testutil.FailErr(t, "phase 2 granted read", err)
+	testutil.FailErr(t, "phase 3 overlay granted read", err)
 	got = decodeOutcome(t, out)
 	if got.Status != 0 || !strings.Contains(got.Stdout, "PRIVATE-ED25519") {
-		t.Fatalf("phase 2 granted read of id_ed25519 failed: %+v", got)
+		t.Fatalf("phase 3 overlay granted read of id_ed25519 failed: %+v", got)
 	}
 	for _, deniedRead := range []string{otherKey, pubKey, authKeys} {
 		out, err = f.call(t, t.Context(), "external -- /bin/cat "+strconv.Quote(deniedRead))
-		testutil.FailErr(t, "phase 2 sibling read", err)
+		testutil.FailErr(t, "phase 3 overlay sibling read", err)
 		if decodeOutcome(t, out).Status == 0 {
-			t.Fatalf("phase 2 read grant leaked to sibling %s", deniedRead)
+			t.Fatalf("phase 3 overlay read grant leaked to sibling %s", deniedRead)
 		}
 	}
 	out, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf pwned > \"$1\"' sh "+strconv.Quote(authKeys))
-	testutil.FailErr(t, "phase 2 write without write grant", err)
+	testutil.FailErr(t, "phase 3 overlay write without write grant", err)
 	if decodeOutcome(t, out).Status == 0 {
-		t.Fatal("phase 2 read grant allowed writing authorized_keys")
+		t.Fatal("phase 3 overlay read grant allowed writing authorized_keys")
 	}
 
-	// Phase 3: Exact write grant on authorized_keys and authorized_keys_test — only those targets are writable; id_ed25519/evil.txt writes and id_rsa reads fail.
+	// Phase 4: Chat-scoped exact write overlay on authorized_keys and authorized_keys_test — only those targets are writable; id_ed25519/evil.txt writes and id_rsa reads fail.
 	readOverlay = nil
 	writeOverlay = []string{authKeys, authKeysTest}
 	out, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf approved-key > \"$1\" && printf approved-test > \"$2\"' sh "+strconv.Quote(authKeys)+" "+strconv.Quote(authKeysTest))
-	testutil.FailErr(t, "phase 3 granted write", err)
+	testutil.FailErr(t, "phase 4 overlay granted write", err)
 	if got = decodeOutcome(t, out); got.Status != 0 {
-		t.Fatalf("phase 3 granted write to authorized_keys/authorized_keys_test failed: %+v", got)
+		t.Fatalf("phase 4 overlay granted write to authorized_keys/authorized_keys_test failed: %+v", got)
 	}
 	for _, deniedWrite := range []string{privKey, filepath.Join(sshDir, "evil.txt")} {
 		out, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf pwned > \"$1\"' sh "+strconv.Quote(deniedWrite))
-		testutil.FailErr(t, "phase 3 sibling write", err)
+		testutil.FailErr(t, "phase 4 overlay sibling write", err)
 		if decodeOutcome(t, out).Status == 0 {
-			t.Fatalf("phase 3 write grant leaked to sibling %s", deniedWrite)
+			t.Fatalf("phase 4 overlay write grant leaked to sibling %s", deniedWrite)
 		}
 	}
 	out, err = f.call(t, t.Context(), "external -- /bin/cat "+strconv.Quote(otherKey))
-	testutil.FailErr(t, "phase 3 ungranted read", err)
+	testutil.FailErr(t, "phase 4 overlay ungranted read", err)
 	if decodeOutcome(t, out).Status == 0 {
-		t.Fatal("phase 3 write grant allowed reading id_rsa")
+		t.Fatal("phase 4 overlay write grant allowed reading id_rsa")
 	}
 
-	// Phase 4: Revoked — reading id_ed25519 and writing authorized_keys/authorized_keys_test fail again while @scratch stays writable.
+	// Phase 5: Revoked — reading id_ed25519 and writing authorized_keys/authorized_keys_test fail again while @scratch stays writable.
 	readOverlay = nil
 	writeOverlay = nil
 	out, err = f.call(t, t.Context(), "external -- /bin/cat "+strconv.Quote(privKey))
-	testutil.FailErr(t, "phase 4 revoked read", err)
+	testutil.FailErr(t, "phase 5 revoked read", err)
 	if decodeOutcome(t, out).Status == 0 {
-		t.Fatal("phase 4 revoked read grant still allowed reading id_ed25519")
+		t.Fatal("phase 5 revoked read grant still allowed reading id_ed25519")
 	}
 	for _, revokedWrite := range []string{authKeys, authKeysTest} {
 		out, err = f.call(t, t.Context(), "external -- /bin/sh -c 'printf after-revoke > \"$1\"' sh "+strconv.Quote(revokedWrite))
-		testutil.FailErr(t, "phase 4 revoked write", err)
+		testutil.FailErr(t, "phase 5 revoked write", err)
 		if decodeOutcome(t, out).Status == 0 {
-			t.Fatalf("phase 4 revoked write grant still allowed writing %s", revokedWrite)
+			t.Fatalf("phase 5 revoked write grant still allowed writing %s", revokedWrite)
 		}
 	}
 	if data, err := os.ReadFile(authKeys); err != nil || string(data) != "approved-key" {
