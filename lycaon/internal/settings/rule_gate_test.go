@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -843,7 +844,7 @@ func TestRuleApprovalGateAttachedSecretStoreAndHomeEnforcePerTargetGrants(t *tes
 
 	// 3. Wrong-target grant (for known_hosts) still asks for id_ed25519.
 	wrongGrant := unapproved
-	wrongGrant.Files.GrantedPaths = []hitl.GrantedPath{{Path: otherFile, Write: true}}
+	wrongGrant.Invocation.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: otherFile, Write: true}}
 	res, err = approvalGate.Evaluate(t.Context(), wrongGrant)
 	testutil.FailErr(t, "evaluate wrong-target grant", err)
 	if !res.Required() {
@@ -852,7 +853,7 @@ func TestRuleApprovalGateAttachedSecretStoreAndHomeEnforcePerTargetGrants(t *tes
 
 	// 4. Exact grant for keyFile authorizes the write.
 	approved := unapproved
-	approved.Files.GrantedPaths = []hitl.GrantedPath{{Path: keyFile, Write: true}}
+	approved.Invocation.ApprovedFileAccess = []hitl.GrantedPathDelta{{Path: keyFile, Write: true}}
 	res, err = approvalGate.Evaluate(t.Context(), approved)
 	testutil.FailErr(t, "evaluate approved ssh write", err)
 	if res.Denied || res.Required() {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -259,17 +260,17 @@ func TestValidateAttachedRootsForActionAdmitsBroadAndProtectedRootsWhileFilterin
 		},
 		{
 			name:           "managed-draft",
-			dir:            filepath.Join(cfgRoot, "drafts", "draft-1"),
+			dir:            filepath.Join(enginepaths.DraftsRootUnder(cfgRoot), "draft-1"),
 			wantExecutable: true,
 		},
 		{
 			name:           "managed-worktree",
-			dir:            filepath.Join(cfgRoot, "worktrees", "wt-1"),
+			dir:            filepath.Join(enginepaths.SessionWorktreesRootUnder(cfgRoot), "wt-1"),
 			wantExecutable: true,
 		},
 		{
 			name:           "managed-worker-branch",
-			dir:            filepath.Join(cfgRoot, "worker-branches", "wb-1"),
+			dir:            filepath.Join(enginepaths.WorkerBranchesRootUnder(cfgRoot), "wb-1"),
 			wantExecutable: true,
 		},
 	}
