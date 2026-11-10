@@ -195,7 +195,7 @@ func (a *Adapter) mountSingleRoot(
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "prepare", ReasonCode: adapter.ReasonTransientStartupFailure, Diagnostic: err.Error(), Cause: err}
 	}
 	nfsserver.BindViewCore(srv, viewID, core, false)
-	capCfg, err := srv.RegisterExportWithUID(viewID, grant.RootID, "", uid, gid)
+	capCfg, err := srv.RegisterStagedExportWithUID(viewID, grant.RootID, "", uid, gid)
 	if err != nil {
 		_ = srv.Close()
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "prepare", ReasonCode: adapter.ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
@@ -243,7 +243,8 @@ func (a *Adapter) mountSingleRoot(
 	}
 
 	mountedDev, dErr := statDeviceID(mountDir)
-	if dErr != nil || mountedDev == 0 || mountedDev == parentDev {
+	found, matchesSource := checkKernelMountTable(canonMount, exportSource)
+	if dErr != nil || mountedDev == 0 || mountedDev == parentDev || !found || !matchesSource {
 		fCtx, fCancel := context.WithTimeout(context.Background(), unmountWaitBound)
 		_, _ = runBoundedHelper(fCtx, "nfs_unmount", a.cfg.UmountBin, "-f", mountDir)
 		fCancel()
@@ -253,8 +254,16 @@ func (a *Adapter) mountSingleRoot(
 			AdapterID:  adapter.AdapterNFSDarwin,
 			Op:         "prepare",
 			ReasonCode: adapter.ReasonMountDenied,
-			Diagnostic: fmt.Sprintf("mount_nfs did not change st_dev on %s (parent=%d mounted=%d err=%v)", mountDir, parentDev, mountedDev, dErr),
+			Diagnostic: fmt.Sprintf("mount_nfs verification failed on %s (parent=%d mounted=%d found=%v matches=%v err=%v)", mountDir, parentDev, mountedDev, found, matchesSource, dErr),
 		}
+	}
+	if aErr := srv.ActivateExport(capCfg.ExportPath); aErr != nil {
+		fCtx, fCancel := context.WithTimeout(context.Background(), unmountWaitBound)
+		_, _ = runBoundedHelper(fCtx, "nfs_unmount", a.cfg.UmountBin, "-f", mountDir)
+		fCancel()
+		srv.ReleaseExport(viewID)
+		_ = srv.Close()
+		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "prepare", ReasonCode: adapter.ReasonMountDenied, Diagnostic: aErr.Error(), Cause: aErr}
 	}
 
 	obs, _ := srv.LastMountHandshake(capCfg.ExportPath)
@@ -262,7 +271,7 @@ func (a *Adapter) mountSingleRoot(
 		ViewID:         viewID,
 		RootID:         grant.RootID,
 		MountID:        fmt.Sprintf("nfsdarwin:%s:%s:%d", viewID, grant.RootID, port),
-		ConnectionID:   fmt.Sprintf("127.0.0.1:%d%s", port, capCfg.ExportPath),
+		ConnectionID:   exportConnectionID(port, viewID, grant.RootID, exportSource),
 		MountPath:      canonMount,
 		ExportPath:     capCfg.ExportPath,
 		ExportSource:   exportSource,

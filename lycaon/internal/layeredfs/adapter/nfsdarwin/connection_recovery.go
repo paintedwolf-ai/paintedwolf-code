@@ -2,6 +2,8 @@ package nfsdarwin
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -100,12 +102,29 @@ func findRecordedMount(rec adapter.RecordedConnection) (recordedMountState, stri
 		if filepath.Clean(entry.onName) != mountPath {
 			continue
 		}
-		if entry.fsType != "nfs" || entry.fromName != rec.FSName || entry.owner != rec.OwnerUID || !deviceMatches(rec.DevMajorMinor, entry.device) {
+		if entry.fsType != "nfs" || !matchesRecordedExportSource(rec, entry.fromName) || entry.owner != rec.OwnerUID || !deviceMatches(rec.DevMajorMinor, entry.device) {
 			return recordedMountForeign, fmt.Sprintf("mount at %s has source %q type %q owner %d, recorded %q owner %d", mountPath, entry.fromName, entry.fsType, entry.owner, rec.FSName, rec.OwnerUID), nil
 		}
 		state = recordedMountMatches
 	}
 	return state, "", nil
+}
+
+func matchesRecordedExportSource(rec adapter.RecordedConnection, fromName string) bool {
+	if rec.FSName == "" || fromName == "" {
+		return false
+	}
+	return rec.FSName == exportSourceDigestURI(rec.ViewID, rec.RootID, fromName)
+}
+
+func exportSourceDigestURI(viewID, rootID, exportSource string) string {
+	sum := sha256.Sum256([]byte(exportSource))
+	return fmt.Sprintf("127.0.0.1:/views/%s/%s/sha256:%s", viewID, rootID, hex.EncodeToString(sum[:]))
+}
+
+func exportConnectionID(port int, viewID, rootID, exportSource string) string {
+	sum := sha256.Sum256([]byte(exportSource))
+	return fmt.Sprintf("127.0.0.1:%d/views/%s/%s/sha256:%s", port, viewID, rootID, hex.EncodeToString(sum[:]))
 }
 
 func deviceMatches(recorded string, device int32) bool {
@@ -123,6 +142,6 @@ func newConnectionRecord(viewID, rootID, mountPath, exportSource string) (adapte
 	}
 	return adapter.RecordedConnection{
 		AdapterID: adapter.AdapterNFSDarwin, ViewID: viewID, RootID: rootID,
-		MountPath: mountPath, FSName: exportSource, OwnerUID: uint32(os.Getuid()), Server: server,
+		MountPath: mountPath, FSName: exportSourceDigestURI(viewID, rootID, exportSource), OwnerUID: uint32(os.Getuid()), Server: server,
 	}, nil
 }
