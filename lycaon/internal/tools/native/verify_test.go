@@ -149,3 +149,27 @@ func TestVerifySchemaRefusesSeparatePipelineBeforeExecution(t *testing.T) {
 		t.Fatalf("schema bypassed: programs=%v error=%v", f.Programs(t), err)
 	}
 }
+
+func TestVerifyWholeProgramVerdictPreservesEarlierNonzeroExecution(t *testing.T) {
+	f := programtest.New(t, programtest.Options{Tools: []string{"verify"}})
+	out := &tools.ToolInvocationOut{}
+	f.Configure = func(tc *tools.ToolContext) { tc.Effects.Out = out }
+	source := "external -- /bin/sh -c 'printf diagnostic; exit 7'; printf reported"
+	raw, err := f.Invoke(t, t.Context(), "verify", map[string]any{"command": source}, (&native.VerifyTool{Programs: f.Runtime}).Run)
+	testutil.FailErr(t, "run composed check", err)
+	var result command.ProgramOutcome
+	testutil.FailErr(t, "decode composed check", json.Unmarshal([]byte(raw), &result))
+	if result.Status != 0 || result.Outcome != "passed" || result.Verification == nil || result.Verification.Scope != "program" || result.Verification.ProgramID != result.ProgramID || result.Verification.Verdict != "passed" {
+		t.Fatalf("whole-program verdict = %s", raw)
+	}
+	if out.SourceRun == nil || out.SourceRun.ProgramID != result.ProgramID || out.SourceRun.Command != source {
+		t.Fatalf("verification lost submitted source: %+v", out.SourceRun)
+	}
+	if len(result.NonzeroExecutions) != 1 {
+		t.Fatalf("nonzero executions = %+v", result.NonzeroExecutions)
+	}
+	child := result.NonzeroExecutions[0]
+	if child.StatusCode == nil || *child.StatusCode != 7 || !child.OwnerInvoked || child.ExecutionID == "" || child.SourceUnitID != "submitted" || len(child.OutputRefs) == 0 {
+		t.Fatalf("earlier execution evidence = %+v", child)
+	}
+}

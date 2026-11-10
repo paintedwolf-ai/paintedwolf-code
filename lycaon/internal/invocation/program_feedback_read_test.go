@@ -6,9 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 )
 
 type feedbackAdmissionFunc func(context.Context, int64) (func(), error)
@@ -111,7 +113,7 @@ func TestProgramFeedbackBoundsNonzeroExecutions(t *testing.T) {
 		id := child.Invocation().Identity.ExecutionID
 		executions = append(executions, id)
 		testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), id, toolcontract.ProgramChildSettlement{
-			Result: toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, OwnerInvoked: true,
+			Result: toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, OwnerInvoked: true, DetailReference: "output:child-detail",
 		}))
 	}
 	held := int64(0)
@@ -139,5 +141,33 @@ func TestProgramFeedbackBoundsNonzeroExecutions(t *testing.T) {
 	}
 	if _, err := f.recorder.ProjectProgram(t.Context(), "other-session", f.program, 2); err == nil {
 		t.Fatal("projection crossed session boundary")
+	}
+}
+
+func TestProgramFeedbackAdmitsRetainedOutputPreviews(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	child := f.child(t)
+	f.start(t, child)
+	id := child.Invocation().Identity.ExecutionID
+	testutil.FailErr(t, "settle nonzero child", f.recorder.SettleChild(t.Context(), id, toolcontract.ProgramChildSettlement{
+		Result: toolcontract.ProducerResult{Status: 7, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, OwnerInvoked: true, DetailReference: "output:child-detail",
+	}))
+	admission := feedbackAdmissionFunc(func(context.Context, int64) (func(), error) { return func() {}, nil })
+	before, err := f.recorder.ReadProgramOutcomeFeedback(t.Context(), f.session, f.program, 1, admission)
+	testutil.FailErr(t, "measure without output", err)
+	baseline := before.RequiredStateBytes
+	before.Close()
+	quota := &outputQuota{}
+	store := f.recorder.ProgramBlobStore(t.Context(), blobstore.Store{Root: t.TempDir(), Dir: tooloutput.ToolOutputSpillDir})
+	lifetime, err := invocation.NewProgramOutputRetention(t.Context(), f.recorder, store, f.session, quota)
+	testutil.FailErr(t, "admit output lifetime", err)
+	testutil.FailErr(t, "restore output lifetime", lifetime.Restore(t.Context()))
+	preview := strings.Repeat("diagnostic ", 128)
+	attachStream(t, f, lifetime, store, quota, id, "stdout", "output:diagnostic", preview, len(preview))
+	after, err := f.recorder.ReadProgramOutcomeFeedback(t.Context(), f.session, f.program, 1, admission)
+	testutil.FailErr(t, "measure retained output", err)
+	defer after.Close()
+	if after.RequiredStateBytes < baseline+int64(len(preview)) || len(after.Projection.Nonzero[0].Receipt.Outputs) != 1 || after.Projection.Nonzero[0].Receipt.Outputs[0].Preview != preview {
+		t.Fatalf("preview hydration escaped admission: baseline=%d bytes=%d", baseline, after.RequiredStateBytes)
 	}
 }

@@ -133,3 +133,46 @@ func TestProgramMktempMoveKeepsPrivateMode(t *testing.T) {
 		t.Fatalf("moved file = %q, %v", body, err)
 	}
 }
+
+func TestFailedProducerPreservesDestinationAndRetainsDiagnostic(t *testing.T) {
+	f := mutationProgramFixture(t)
+	path := filepath.Join(f.Dir, "report.txt")
+	testutil.FailErr(t, "create existing destination", os.WriteFile(path, []byte("original"), 0o600))
+	raw, err := f.Call(t, t.Context(), "external -- /bin/sh -c 'printf diagnostic; exit 7' > report.txt; printf reported")
+	testutil.FailErr(t, "run failed producer with redirect", err)
+	outcome := decodeMutationOutcome(t, raw)
+	if outcome.Status != 0 || outcome.Stdout != "reported" || outcome.DetailRef == "" {
+		t.Fatalf("program outcome = %s", raw)
+	}
+	data, err := os.ReadFile(path)
+	testutil.FailErr(t, "read destination", err)
+	if string(data) != "original" {
+		t.Fatalf("destination = %q", data)
+	}
+	withheld, ran := false, false
+	for _, child := range outcome.NonzeroExecutions {
+		if child.EvidenceKind == toolcontract.OutputWithheld {
+			withheld = true
+			if child.OwnerInvoked || child.OutputPublishable {
+				t.Fatalf("withheld write ran: %+v", child)
+			}
+		}
+		if child.StatusCode != nil && *child.StatusCode == 7 && child.OwnerInvoked {
+			ran = len(child.OutputRefs) > 0
+		}
+	}
+	if !withheld || !ran {
+		t.Fatalf("missing publication or producer evidence: %s", raw)
+	}
+	page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 20)
+	testutil.FailErr(t, "read retained child diagnostics", err)
+	for _, child := range page.Executions {
+		if child.StatusCode != nil && *child.StatusCode == 7 {
+			if len(child.Outputs) != 1 || child.Outputs[0].Preview != "diagnostic" || !child.Outputs[0].Complete {
+				t.Fatalf("retained outputs = %+v", child.Outputs)
+			}
+			return
+		}
+	}
+	t.Fatal("failed producer absent from durable receipt")
+}

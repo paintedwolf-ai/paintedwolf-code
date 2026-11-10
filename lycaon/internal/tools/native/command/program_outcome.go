@@ -12,6 +12,7 @@ type ProgramOutcome struct {
 	ResultVersion            int                              `json:"result_version,omitempty"`
 	Outcome                  string                           `json:"outcome,omitempty"`
 	ProgramID                string                           `json:"program_id"`
+	DetailRef                string                           `json:"detail_ref"`
 	State                    string                           `json:"state"`
 	Verification             *ProgramVerification             `json:"verification,omitempty"`
 	NonzeroExecutions        []ProgramExecutionOutcome        `json:"nonzero_executions,omitempty"`
@@ -59,6 +60,7 @@ type ProgramVerification struct {
 
 // ProgramExecutionOutcome identifies a child without repeating its output body.
 type ProgramExecutionOutcome struct {
+	EvidenceKind      string                  `json:"evidence_kind,omitempty"`
 	ExecutionID       string                  `json:"execution_id"`
 	SourceUnitID      string                  `json:"source_unit_id"`
 	Span              toolcontract.SourceSpan `json:"span"`

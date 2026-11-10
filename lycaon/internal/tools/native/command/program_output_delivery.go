@@ -64,6 +64,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 	programID := run.root.Identity.ProgramID
 	out := ProgramOutcome{
 		ProgramID:                programID,
+		DetailRef:                projection.DetailReference,
 		State:                    projection.Program.State,
 		Status:                   result.Status,
 		StopCode:                 result.StopCode,
@@ -76,7 +77,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 
 	for _, child := range projection.Nonzero {
 		receipt := child.Receipt
-		observed := ProgramExecutionOutcome{ExecutionID: receipt.ID, SourceUnitID: child.SourceUnitID, Span: child.Span,
+		observed := ProgramExecutionOutcome{EvidenceKind: receipt.EvidenceKind, ExecutionID: receipt.ID, SourceUnitID: child.SourceUnitID, Span: child.Span,
 			State: receipt.State, StatusCode: receipt.StatusCode, OwnerStarted: receipt.OwnerStarted, OwnerInvoked: receipt.OwnerInvoked,
 			OutputPublishable: receipt.OutputPublishable, DetailRef: receipt.DetailRef}
 		for _, output := range receipt.Outputs {
