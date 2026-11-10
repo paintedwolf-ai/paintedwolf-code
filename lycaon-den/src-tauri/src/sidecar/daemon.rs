@@ -1,10 +1,16 @@
+use super::layout::{bundled_engine_layout, resolve_lycaon_binary};
+use super::process::GRACEFUL_STOP_POLL;
+use super::startup::API_TOKEN_MAX_BYTES;
 use super::{attach_only_requested, SidecarInfo};
 use serde::Deserialize;
 use std::fs;
+use std::io::Read;
 use std::path::Path;
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 pub(super) const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(100);
+pub(super) const TOKEN_PRINT_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Deserialize)]
 pub(super) struct DaemonManifest {
@@ -13,13 +19,121 @@ pub(super) struct DaemonManifest {
     pub(super) pid: i32,
 }
 
-pub(super) fn read_api_token_file(dir: &Path) -> Result<String, String> {
-    let raw = fs::read_to_string(dir.join("api.token")).map_err(|e| e.to_string())?;
+pub(super) fn token_print_command(bin: &Path, config_dir: &Path) -> Command {
+    let mut command = Command::new(bin);
+    command
+        .args(["token", "print"])
+        .env("LYCAON_CONFIG_DIR", config_dir)
+        .env_remove("LYCAON_API_TOKEN")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    if let Some(layout) = bundled_engine_layout() {
+        command.env("LYCAON_ENGINE_ROOT", layout.engine_root);
+    }
+    command
+}
+
+pub(super) fn run_token_print_command(
+    mut command: Command,
+    timeout: Duration,
+) -> Result<String, String> {
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("run daemon token print: {e}"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "daemon token print stdout unavailable".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "daemon token print stderr unavailable".to_string())?;
+    let stdout_reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stdout
+            .take((API_TOKEN_MAX_BYTES + 64) as u64)
+            .read_to_end(&mut buf);
+        buf
+    });
+    let stderr_reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stderr.take(512).read_to_end(&mut buf);
+        buf
+    });
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = stdout_reader.join();
+                    let _ = stderr_reader.join();
+                    return Err("daemon token print timed out".to_string());
+                }
+                std::thread::sleep(GRACEFUL_STOP_POLL);
+            }
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout_reader.join();
+                let _ = stderr_reader.join();
+                return Err(format!("wait daemon token print: {e}"));
+            }
+        }
+    };
+    let stdout_bytes = stdout_reader
+        .join()
+        .map_err(|_| "daemon token print stdout reader panicked".to_string())?;
+    let stderr_bytes = stderr_reader
+        .join()
+        .map_err(|_| "daemon token print stderr reader panicked".to_string())?;
+    if !status.success() {
+        let code = status.code().unwrap_or(-1);
+        let detail = String::from_utf8_lossy(&stderr_bytes).trim().to_string();
+        if detail.is_empty() {
+            return Err(format!("daemon token print failed (exit {code})"));
+        }
+        return Err(format!("daemon token print failed (exit {code}): {detail}"));
+    }
+    let raw = String::from_utf8(stdout_bytes)
+        .map_err(|_| "daemon token print returned non-UTF-8 output".to_string())?;
     let token = raw.trim().to_string();
     if token.is_empty() {
-        return Err("empty api.token".into());
+        return Err("empty daemon token from token print".into());
+    }
+    if token.len() > API_TOKEN_MAX_BYTES || token.chars().any(char::is_whitespace) {
+        return Err("invalid daemon token from token print".into());
     }
     Ok(token)
+}
+
+pub(super) fn resolve_external_daemon_token_with<F>(
+    env_token: Option<&str>,
+    fallback: F,
+) -> Result<String, String>
+where
+    F: FnOnce() -> Result<String, String>,
+{
+    if let Some(raw) = env_token {
+        let token = raw.trim();
+        if !token.is_empty() {
+            return Ok(token.to_string());
+        }
+    }
+    fallback()
+}
+
+pub(super) fn resolve_external_daemon_token(dir: &Path) -> Result<String, String> {
+    let env_token = std::env::var("LYCAON_API_TOKEN").ok();
+    resolve_external_daemon_token_with(env_token.as_deref(), || {
+        let bin = resolve_lycaon_binary()?;
+        let image = crate::linux_generation::capture_helper(&bin)?;
+        let command = token_print_command(&image.path, dir);
+        run_token_print_command(command, TOKEN_PRINT_TIMEOUT)
+    })
 }
 
 pub(super) fn is_pid_alive(pid: i32) -> bool {
@@ -71,7 +185,7 @@ pub(super) fn attach_existing_daemon_in(dir: &Path) -> Result<Option<SidecarInfo
                 manifest.host.clone()
             };
             if poll_health_on_host(&host, manifest.port).is_ok() {
-                let api_token = read_api_token_file(dir)?;
+                let api_token = resolve_external_daemon_token(dir)?;
                 return Ok(Some(SidecarInfo {
                     port: manifest.port,
                     api_token,
@@ -90,7 +204,7 @@ pub(super) fn attach_existing_daemon_in(dir: &Path) -> Result<Option<SidecarInfo
         manifest.host
     };
     poll_health_on_host(&host, manifest.port)?;
-    let api_token = read_api_token_file(dir)?;
+    let api_token = resolve_external_daemon_token(dir)?;
     Ok(Some(SidecarInfo {
         port: manifest.port,
         api_token,
