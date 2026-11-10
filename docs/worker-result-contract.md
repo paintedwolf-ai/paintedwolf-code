@@ -148,7 +148,7 @@ With no decision outstanding, finalization resolves a report in this order:
 2. bounded, partial synthesis from the child's observed tool transcript;
 3. a partial result with `WORKER_COMPLETION_REPORT_MISSING` when no report can be assembled.
 
-Finalization consumes an accepted report without reevaluating its evidence or requesting another repair turn. Cancellation permits one graceful closeout interaction and preserves the canceled result's partial status. Fallback summaries cannot fabricate findings or passing verification receipts.
+Finalization consumes an accepted report without reevaluating its evidence or requesting another repair turn. Cancellation retains an existing acceptance receipt without another model turn. Otherwise it permits one graceful closeout interaction and preserves the canceled result's partial status. Fallback summaries cannot fabricate findings or passing verification receipts.
 
 The acceptance receipt is additive `bundle` wire retained in the existing `durable-db` tool-result JSON. Existing messages remain readable without a receipt, but their argument snapshots do not establish host acceptance. No SQL shape changes. The bundled worker-only grounding retry limit is removed; repairs use the ordinary run budget and rejection controls.
 
@@ -160,11 +160,12 @@ The accepted receipt preserves the normalized report, verification rationale, re
 
 ## Typed findings
 
-Source findings use a semantic citation rather than an ephemeral handle counter:
+Source findings identify an observed source span and may include its leg-scoped evidence handle:
 
 ```json
 {
   "path": "internal/foo/bar.go",
+  "evidence": "read#1",
   "line": 42,
   "excerpt": "return nil",
   "note": "Why this matters",
@@ -178,6 +179,7 @@ Source findings use a semantic citation rather than an ephemeral handle counter:
 | Field | Meaning |
 |---|---|
 | `path` | project-relative source identity; what makes the finding resolvable |
+| `evidence` | observed leg-scoped handle; source claims require source evidence |
 | `line` | optional 1-based location |
 | `excerpt` | source text used to resolve the citation |
 | `note` | worker interpretation |
@@ -185,9 +187,9 @@ Source findings use a semantic citation rather than an ephemeral handle counter:
 | `adversary` / `precondition` | threat-model context where applicable |
 | `severity` | retained only for vulnerability claims |
 
-A finding is dropped only when it carries neither a path nor a note. That is permissive by design, not an invitation: a finding without a path is an assertion the host cannot resolve, so a worker that wants its observation to survive grounding supplies one. The finding schema is closed; the `evidence` handle is host-minted on the way out, and a report that supplies it is rejected.
+A finding is dropped only when it carries neither a path nor a note. That is permissive by design, not an invitation: a finding without a path is an assertion the host cannot resolve, so a worker that wants its observation to survive grounding supplies one. The finding schema is closed. The worker may reference an observed `evidence` handle; the host validates it and supplies the resolved `cite` for the coordinator.
 
-The host resolves the path, line, and excerpt against observed evidence. An unobserved path is unverifiable and blocks the finding. A paraphrased excerpt may remain traced rather than exact; the result states that weaker currency. Unknown optional claim vocabulary gains no special security meaning.
+The host resolves the path, line, and excerpt against observed evidence. An unobserved path is unverifiable and blocks the finding. Source excerpts must match the delivered source span; mismatches reject the submission for repair. Unknown optional claim vocabulary gains no special security meaning.
 
 ## Delegation grounding
 

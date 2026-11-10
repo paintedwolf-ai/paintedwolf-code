@@ -27,7 +27,7 @@ const (
 )
 
 // WorkerCompletionReport is structured worker finish metadata.
-// The host supplies file and evidence fields.
+// The host supplies changed files and resolved citations.
 type WorkerCompletionReport struct {
 	CoverageGaps        []api.WorkerCoverageGap  `json:"coverage_gaps,omitempty"`
 	CoverageReview      *api.CoverageReview      `json:"coverage_review,omitempty"`
@@ -73,7 +73,7 @@ const (
 // WorkerFinding is one path-keyed citation in the completion report.
 type WorkerFinding struct {
 	Path         string `json:"path"`
-	Evidence     string `json:"evidence,omitempty"` // host-minted handle hint
+	Evidence     string `json:"evidence,omitempty"` // observed leg-scoped handle
 	Line         int    `json:"line,omitempty"`
 	Excerpt      string `json:"excerpt,omitempty"`
 	Note         string `json:"note,omitempty"`
@@ -81,8 +81,7 @@ type WorkerFinding struct {
 	Adversary    string `json:"adversary,omitempty"`
 	Precondition string `json:"precondition,omitempty"`
 	Severity     string `json:"severity,omitempty"`
-	// Cite is the citation a coordinator can copy, written by the host. A worker's
-	// handle means nothing outside its leg.
+	// Cite is the host-resolved citation for the coordinator.
 	Cite string `json:"cite,omitempty"`
 }
 
