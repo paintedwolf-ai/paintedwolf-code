@@ -287,7 +287,7 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		if confine.IsAgentControlStateReadDenied(root.Path, abs, tctx.Host.SessionScratchDir, tctx.Host.SessionOutputDir) || !HasExactReadGrant(tctx, abs) {
 			return Resolved{}, &sandbox.ScopeError{Path: modelPath, Profile: tctx.ProfileID(), Kind: sandbox.ScopeRead}
 		}
-		ctx = sandbox.WithApprovedReadPaths(ctx, []string{abs})
+		ctx = sandbox.WithApprovedReadPaths(ctx, []string{canonicalClean(abs)})
 	}
 	if b != nil {
 		switch op {

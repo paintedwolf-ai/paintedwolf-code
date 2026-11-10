@@ -147,9 +147,13 @@ func (b *Boundary) AssertReadScope(ctx context.Context, projectDir, relPath, pro
 	}
 	if strings.TrimSpace(projectDir) != "" {
 		scratchDir, outputDir := SessionDirsFromContext(ctx)
+		lexical := filepath.Join(projectDir, filepath.FromSlash(relPath))
 		if resolved, err := b.resolveAbs(projectDir, relPath, b.cfg.RejectSymlinkEscape); err == nil {
-			if confine.IsAgentSourceReadDenied(projectDir, resolved, scratchDir, outputDir) {
-				if confine.IsAgentControlStateReadDenied(projectDir, resolved, scratchDir, outputDir) || !IsApprovedReadPathFromContext(ctx, resolved) {
+			if confine.IsAgentSourceReadDenied(projectDir, lexical, scratchDir, outputDir) ||
+				confine.IsAgentSourceReadDenied(projectDir, resolved, scratchDir, outputDir) {
+				if confine.IsAgentControlStateReadDenied(projectDir, lexical, scratchDir, outputDir) ||
+					confine.IsAgentControlStateReadDenied(projectDir, resolved, scratchDir, outputDir) ||
+					!IsApprovedReadPathFromContext(ctx, resolved) {
 					return newOutsideReadScope(relPath, profileID)
 				}
 			}

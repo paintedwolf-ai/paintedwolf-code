@@ -89,7 +89,7 @@ func (s *ReadSession) resolveBeneathRoot(ctx context.Context, modelPath string) 
 		if confine.IsAgentControlStateReadDenied(root.Path, abs, s.tctx.Host.SessionScratchDir, s.tctx.Host.SessionOutputDir) || !HasExactReadGrant(s.tctx, abs) {
 			return Resolved{}, true, &sandbox.ScopeError{Path: modelPath, Profile: s.tctx.ProfileID(), Kind: sandbox.ScopeRead}
 		}
-		ctx = sandbox.WithApprovedReadPaths(ctx, []string{abs})
+		ctx = sandbox.WithApprovedReadPaths(ctx, []string{canonicalClean(abs)})
 	}
 	if s.boundary != nil {
 		if err := s.boundary.AssertReadGlobs(ctx, scopeRel, s.tctx.ProfileID()); err != nil {
