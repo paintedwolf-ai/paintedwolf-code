@@ -71,7 +71,7 @@ func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted, sourceConflic
 		if phase == "recover-promote" && sourceConflict {
 			testutil.FailErr(t, "external source edit after worker exit", os.WriteFile(filepath.Join(source, "main.go"), []byte("package external\n"), 0o644))
 		}
-		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^"+t.Name()+"$", "-test.timeout=2m")
+		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^"+t.Name()+"$", "-test.timeout=2m", "-test.v=true")
 		cmd.Env = append(os.Environ(), "PW_M14_LIFECYCLE_PHASE="+phase, "PW_M14_LIFECYCLE_ROOT="+root, "PW_M14_LIFECYCLE_SOURCE="+source)
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%s process failed: %v\n%s", phase, err, output)
