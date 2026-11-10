@@ -20872,6 +20872,10 @@ components:
           x-go-pointer: true
           $ref: '#/components/schemas/ToolCompletion'
           description: Producer-stated asynchronous or lifecycle completion fact.
+        worker_report:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WorkerReportAcceptance'
+          description: Report accepted against this worker job's observations and policy.
         file_edit_preview:
           x-go-pointer: true
           $ref: '#/components/schemas/FileEditPreview'
@@ -27997,6 +28001,270 @@ components:
         reason:
           type: string
           description: 'What a parked call waits on: the wait''s stated reason, or the statement a parked command''s program waits at (`sleep 30`, `wait %1`). Present only with state parked.'
+    WorkerCoverageGap:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - subject
+        - reason
+      properties:
+        id:
+          type: string
+          pattern: ^[A-Za-z0-9_.-]+$
+          description: Worker-local gap id; the host scopes it to the task.
+        subject:
+          type: string
+          minLength: 1
+        reason:
+          type: string
+          minLength: 1
+        paths:
+          type: array
+          items:
+            type: string
+    CitationGroundingCitedEvidence:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        handle:
+          type: string
+          description: Host-minted evidence handle resolved from the session ledger.
+        path:
+          type: string
+        line:
+          type: integer
+        end_line:
+          type: integer
+          description: Last line of an inclusive range starting at line. Absent for a single line.
+        excerpt:
+          type: string
+        verdict:
+          $ref: '#/components/schemas/CitationVerdict'
+        openable:
+          x-go-pointer: true
+          type: boolean
+          description: True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false.
+    CoverageAssessment:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - disposition
+        - reason
+        - cited_evidence
+      properties:
+        id:
+          type: string
+          pattern: ^[a-zA-Z0-9_.-]+$
+        disposition:
+          type: string
+          enum:
+            - satisfied
+            - covered
+            - immaterial
+            - material_open
+            - essential_open
+        reason:
+          type: string
+        obligations:
+          type: array
+          items:
+            type: string
+        cited_evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/CitationGroundingCitedEvidence'
+    CoverageReview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - assessments
+      properties:
+        revision:
+          type: string
+        assessments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CoverageAssessment'
+    CitationVerification:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - method
+        - reason
+      description: The validation scope the closeout declared. Retained on the grounding audit because the projected prose omits the trailer.
+      properties:
+        method:
+          type: string
+          enum:
+            - inspection
+            - targeted
+            - project
+            - blocked
+        reason:
+          type: string
+    WorkerCompletionFinding:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - path
+      properties:
+        path:
+          type: string
+        evidence:
+          type: string
+        line:
+          type: integer
+        excerpt:
+          type: string
+        cite:
+          type: string
+          description: Host-resolved citation the parent can use.
+        note:
+          type: string
+        claim:
+          type: string
+        adversary:
+          type: string
+        precondition:
+          type: string
+        severity:
+          type: string
+    WorkerEvidenceObligation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - status
+      properties:
+        kind:
+          type: string
+        status:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        reason:
+          type: string
+    WorkerCompletionReport:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - leg_status
+      properties:
+        coverage_gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerCoverageGap'
+        coverage_review:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CoverageReview'
+        verification:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CitationVerification'
+        declared_leg_status:
+          type: string
+          enum:
+            - complete
+            - partial
+            - blocked
+          description: Leg status the worker declared; leg_status is the host-graded status.
+        leg_status:
+          type: string
+          enum:
+            - complete
+            - partial
+            - blocked
+          description: Host-graded leg status.
+        files_modified:
+          type: array
+          items:
+            type: string
+        objectives_met:
+          type: array
+          items:
+            type: string
+        remaining_risk:
+          type: array
+          items:
+            type: string
+        suggested_next_task:
+          type: string
+        brief:
+          type: string
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerCompletionFinding'
+        cited_urls:
+          x-go-name: CitedURLs
+          type: array
+          items:
+            type: string
+        evidence_obligations:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerEvidenceObligation'
+    CitationGroundingCheckStatus:
+      type: string
+      description: Host-authored semantic outcome of a grounding check. Advisory checks landed but require review; they are neither passes nor failures.
+      enum:
+        - passed
+        - failed
+        - advisory
+    CitationGroundingFinding:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      properties:
+        handle:
+          type: string
+          description: Host-minted evidence handle resolved from the session ledger.
+        path:
+          type: string
+        line:
+          type: integer
+        excerpt:
+          type: string
+        verdict:
+          $ref: '#/components/schemas/CitationVerdict'
+        note:
+          type: string
+        openable:
+          x-go-pointer: true
+          type: boolean
+          description: True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false.
+    WorkerReportAcceptance:
+      type: object
+      x-go-generate: true
+      additionalProperties: false
+      required:
+        - worker_id
+        - report
+        - grounding
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+          description: Worker job whose observations and coverage were validated.
+        report:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WorkerCompletionReport'
+        grounding:
+          x-go-pointer: true
+          $ref: '#/components/schemas/CitationGrounding'
+      description: Host-accepted worker report retained with its successful submitting invocation.
     FileEditReference:
       x-go-generate: true
       type: object
@@ -28273,76 +28541,6 @@ components:
             The host's view when the result was written. It never flips on exit; the session process mirror reports that.
         termination_reason:
           $ref: '#/components/schemas/BackgroundProcessTerminationReason'
-    CitationGroundingCheckStatus:
-      type: string
-      description: Host-authored semantic outcome of a grounding check. Advisory checks landed but require review; they are neither passes nor failures.
-      enum:
-        - passed
-        - failed
-        - advisory
-    CitationGroundingFinding:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      properties:
-        handle:
-          type: string
-          description: Host-minted evidence handle resolved from the session ledger.
-        path:
-          type: string
-        line:
-          type: integer
-        excerpt:
-          type: string
-        verdict:
-          $ref: '#/components/schemas/CitationVerdict'
-        note:
-          type: string
-        openable:
-          x-go-pointer: true
-          type: boolean
-          description: True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false.
-    CitationGroundingCitedEvidence:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      properties:
-        handle:
-          type: string
-          description: Host-minted evidence handle resolved from the session ledger.
-        path:
-          type: string
-        line:
-          type: integer
-        end_line:
-          type: integer
-          description: Last line of an inclusive range starting at line. Absent for a single line.
-        excerpt:
-          type: string
-        verdict:
-          $ref: '#/components/schemas/CitationVerdict'
-        openable:
-          x-go-pointer: true
-          type: boolean
-          description: True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false.
-    CitationVerification:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - method
-        - reason
-      description: The validation scope the closeout declared. Retained on the grounding audit because the projected prose omits the trailer.
-      properties:
-        method:
-          type: string
-          enum:
-            - inspection
-            - targeted
-            - project
-            - blocked
-        reason:
-          type: string
     VerdictOutcome:
       x-go-generate: true
       type: object
@@ -28893,174 +29091,6 @@ components:
             Empty means "based on primary." Must be a non-terminal overlay
             (pending, applying, rebasing) on the same parent session, else
             spawn rejects with OVERLAY_BASE_MISSING or OVERLAY_BASE_NOT_PENDING.
-    WorkerCoverageGap:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - subject
-        - reason
-      properties:
-        id:
-          type: string
-          pattern: ^[A-Za-z0-9_.-]+$
-          description: Worker-local gap id; the host scopes it to the task.
-        subject:
-          type: string
-          minLength: 1
-        reason:
-          type: string
-          minLength: 1
-        paths:
-          type: array
-          items:
-            type: string
-    CoverageAssessment:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - disposition
-        - reason
-        - cited_evidence
-      properties:
-        id:
-          type: string
-          pattern: ^[a-zA-Z0-9_.-]+$
-        disposition:
-          type: string
-          enum:
-            - satisfied
-            - covered
-            - immaterial
-            - material_open
-            - essential_open
-        reason:
-          type: string
-        obligations:
-          type: array
-          items:
-            type: string
-        cited_evidence:
-          type: array
-          items:
-            $ref: '#/components/schemas/CitationGroundingCitedEvidence'
-    CoverageReview:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - revision
-        - assessments
-      properties:
-        revision:
-          type: string
-        assessments:
-          type: array
-          items:
-            $ref: '#/components/schemas/CoverageAssessment'
-    WorkerCompletionFinding:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - path
-      properties:
-        path:
-          type: string
-        evidence:
-          type: string
-        line:
-          type: integer
-        excerpt:
-          type: string
-        note:
-          type: string
-        claim:
-          type: string
-        adversary:
-          type: string
-        precondition:
-          type: string
-        severity:
-          type: string
-    WorkerEvidenceObligation:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - kind
-        - status
-      properties:
-        kind:
-          type: string
-        status:
-          type: string
-        evidence_refs:
-          type: array
-          items:
-            type: string
-        reason:
-          type: string
-    WorkerCompletionReport:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - leg_status
-      properties:
-        coverage_gaps:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkerCoverageGap'
-        coverage_review:
-          x-go-pointer: true
-          $ref: '#/components/schemas/CoverageReview'
-        declared_leg_status:
-          type: string
-          enum:
-            - complete
-            - partial
-            - blocked
-          description: Leg status the worker declared; leg_status is the host-graded status.
-        leg_status:
-          type: string
-          enum:
-            - complete
-            - partial
-            - blocked
-          description: Host-graded leg status.
-        files_modified:
-          type: array
-          items:
-            type: string
-        objectives_met:
-          type: array
-          items:
-            type: string
-        remaining_risk:
-          type: array
-          items:
-            type: string
-        suggested_next_task:
-          type: string
-        brief:
-          type: string
-        findings:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkerCompletionFinding'
-        cited_urls:
-          x-go-name: CitedURLs
-          type: array
-          items:
-            type: string
-        evidence_obligations:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkerEvidenceObligation'
     WorkerDiffStat:
       x-go-generate: true
       type: object

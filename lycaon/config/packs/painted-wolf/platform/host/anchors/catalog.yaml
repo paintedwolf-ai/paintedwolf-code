@@ -1,7 +1,7 @@
 # Anchor catalog SSOT, validated by schemas/anchors.schema.json.
 # Host code emits catalog ids only. Spec: docs/agent-prompt-template.md
 
-schema_version: "2.2"
+schema_version: "3.0"
 
 anchors:
   # ── Inform plane ────────────────────────────────────────────────────────────
@@ -374,15 +374,6 @@ anchors:
   - id: worker.cancel.closeout
     title: Worker cancel closeout
     description: Canceled worker leg finish turn offers only complete_leg.
-    trigger_class: host_api
-    surface: worker
-    planes: [inform]
-    envelope:
-      vars: {}
-
-  - id: worker.summary.trim
-    title: Worker summary trim
-    description: Worker survey exceeds parent character budget.
     trigger_class: host_api
     surface: worker
     planes: [inform]

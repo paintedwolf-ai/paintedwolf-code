@@ -1,7 +1,6 @@
 package workercompletion
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -12,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/jsonfence"
 	"github.com/lycaon/lycaon/internal/runeclamp"
-	"github.com/lycaon/lycaon/internal/tools"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/verification"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -29,7 +27,7 @@ const (
 )
 
 // WorkerCompletionReport is structured worker finish metadata.
-// The host supplies file and evidence fields.
+// The host supplies changed files and resolved citations.
 type WorkerCompletionReport struct {
 	CoverageGaps        []api.WorkerCoverageGap  `json:"coverage_gaps,omitempty"`
 	CoverageReview      *api.CoverageReview      `json:"coverage_review,omitempty"`
@@ -75,7 +73,7 @@ const (
 // WorkerFinding is one path-keyed citation in the completion report.
 type WorkerFinding struct {
 	Path         string `json:"path"`
-	Evidence     string `json:"evidence,omitempty"` // host-minted handle hint
+	Evidence     string `json:"evidence,omitempty"` // observed leg-scoped handle
 	Line         int    `json:"line,omitempty"`
 	Excerpt      string `json:"excerpt,omitempty"`
 	Note         string `json:"note,omitempty"`
@@ -83,29 +81,36 @@ type WorkerFinding struct {
 	Adversary    string `json:"adversary,omitempty"`
 	Precondition string `json:"precondition,omitempty"`
 	Severity     string `json:"severity,omitempty"`
-	// Cite is the citation a coordinator can copy, written by the host. A worker's
-	// handle means nothing outside its leg.
+	// Cite is the host-resolved citation for the coordinator.
 	Cite string `json:"cite,omitempty"`
 }
 
-// LastCompleteLegReport decodes the latest accepted report arguments.
+// LastCompleteLegReport reads the latest host-accepted report.
 func LastCompleteLegReport(msgs []api.Message) (WorkerCompletionReport, string, bool) {
+	accepted, id, ok := AcceptedWorkerReport(msgs, "")
+	if !ok {
+		return WorkerCompletionReport{}, "", false
+	}
+	return ReportFromWire(accepted.Report), id, true
+}
+
+// AcceptedWorkerReport excludes rejected calls and other worker jobs.
+func AcceptedWorkerReport(msgs []api.Message, jobID string) (*api.WorkerReportAcceptance, string, bool) {
 	for i := len(msgs) - 1; i >= 0; i-- {
 		tr := msgs[i].ToolResult
-		if msgs[i].Role != api.MessageRoleTool || tr == nil {
+		if msgs[i].Role != api.MessageRoleTool || tr == nil || tr.Tool != workertools.CompleteLegTool || tr.Outcome != api.ToolResultOutcomeCompleted {
 			continue
 		}
-		if strings.TrimSpace(tr.Tool) != workertools.CompleteLegTool {
+		accepted := tr.WorkerReport
+		if accepted == nil || accepted.WorkerID == "" || accepted.Report == nil || accepted.Grounding == nil {
 			continue
 		}
-		if tr.Outcome != api.ToolResultOutcomeCompleted {
+		if jobID != "" && accepted.WorkerID != jobID {
 			continue
 		}
-		if report, ok := ReportFromCompleteLegArgs(tr.ToolArgs); ok {
-			return report, msgs[i].ID, true
-		}
+		return accepted, msgs[i].ID, true
 	}
-	return WorkerCompletionReport{}, "", false
+	return nil, "", false
 }
 
 // ReportFromCompleteLegArgs decodes a complete_leg argument snapshot.
@@ -120,20 +125,20 @@ func ReportFromCompleteLegArgs(args map[string]any) (WorkerCompletionReport, boo
 	return decodeWorkerCompletionReport(string(raw))
 }
 
-// CompleteLegDecoder validates complete_leg arguments.
-func CompleteLegDecoder(_ context.Context, args map[string]any, _ tools.ToolContext) (workertools.CompleteLegRecord, error) {
+// DecodeCompleteLegArgs validates the submission shape.
+func DecodeCompleteLegArgs(args map[string]any) (WorkerCompletionReport, error) {
 	report, ok := ReportFromCompleteLegArgs(args)
 	if !ok {
-		return workertools.CompleteLegRecord{}, &toolrejection.ToolReject{Code: "COMPLETE_LEG_STATUS_REQUIRED", Data: map[string]any{"tool": workertools.CompleteLegTool}}
+		return WorkerCompletionReport{}, &toolrejection.ToolReject{Code: "COMPLETE_LEG_STATUS_REQUIRED", Data: map[string]any{"tool": workertools.CompleteLegTool}}
 	}
 	seen := map[string]bool{}
 	for i, gap := range report.CoverageGaps {
 		if strings.TrimSpace(gap.ID) == "" || strings.TrimSpace(gap.Subject) == "" || strings.TrimSpace(gap.Reason) == "" || seen[gap.ID] {
-			return workertools.CompleteLegRecord{}, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": workertools.CompleteLegTool, "field": fmt.Sprintf("coverage_gaps[%d]", i), "reason": "unique_gap_id_subject_and_reason_required"}}
+			return WorkerCompletionReport{}, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": workertools.CompleteLegTool, "field": fmt.Sprintf("coverage_gaps[%d]", i), "reason": "unique_gap_id_subject_and_reason_required"}}
 		}
 		seen[gap.ID] = true
 	}
-	return workertools.CompleteLegRecord{LegStatus: report.LegStatus, Findings: len(report.Findings)}, nil
+	return report, nil
 }
 
 // ParseWorkerCompletionReport extracts envelope-only completion JSON from assistant content.

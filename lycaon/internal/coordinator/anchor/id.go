@@ -44,7 +44,6 @@ const (
 	WorkerCloseout                ID = "worker.closeout"
 	WorkerIterationsLow           ID = "worker.iterations.low"
 	WorkerCancelCloseout          ID = "worker.cancel.closeout"
-	WorkerSummaryTrim             ID = "worker.summary.trim"
 	WorkerCitationGrounding       ID = "worker.citation.grounding"
 	ProgressMissing               ID = "progress.missing"
 	ProgressStale                 ID = "progress.stale"

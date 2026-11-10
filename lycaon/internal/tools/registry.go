@@ -78,6 +78,7 @@ type ToolInvocationOut struct {
 	// Dispatch is a producer-stated worker enqueue outcome.
 	Dispatch *api.WorkerDispatch
 	// Completion is a producer-stated lifecycle completion outcome.
+	WorkerReport     *api.WorkerReportAcceptance
 	Completion       *api.ToolCompletion
 	OverlayPromotion *api.OverlayPromotion
 	FileEdit         *FileEditCapture

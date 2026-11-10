@@ -121,6 +121,10 @@ components:
           x-go-pointer: true
           $ref: "#/components/schemas/ToolCompletion"
           description: Producer-stated asynchronous or lifecycle completion fact.
+        worker_report:
+          x-go-pointer: true
+          $ref: worker-report-acceptance.yaml#/components/schemas/WorkerReportAcceptance
+          description: Report accepted against this worker job's observations and policy.
         file_edit_preview:
           x-go-pointer: true
           $ref: ../source-reader.yaml#/components/schemas/FileEditPreview

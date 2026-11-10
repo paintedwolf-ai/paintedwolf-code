@@ -98,7 +98,13 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}, nil); err != nil {
 		contractcheck.FailErr(t, "native.RegisterUpdateProgressTool failed", err)
 	}
-	if err := native.RegisterCompleteLegTool(reg, workercompletion.CompleteLegDecoder); err != nil {
+	if err := native.RegisterCompleteLegTool(reg, func(_ context.Context, args map[string]any, tc tools.ToolContext) (*api.WorkerReportAcceptance, error) {
+		report, err := workercompletion.DecodeCompleteLegArgs(args)
+		if err != nil {
+			return nil, err
+		}
+		return &api.WorkerReportAcceptance{WorkerID: tc.Identity.WorkerJobID, Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{}}, nil
+	}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterCompleteLegTool failed", err)
 	}
 	if err := native.RegisterRequestDecisionTool(reg, workertools.RequestDecisionDeps{}); err != nil {

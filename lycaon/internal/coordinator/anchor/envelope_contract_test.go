@@ -78,7 +78,7 @@ func TestCatalogContainsKickMappedAnchors(t *testing.T) {
 		anchor.WorkerBudgetRequested, anchor.WorkerBudgetRaised, anchor.WorkerBudgetDeclined, anchor.EditFollowUpRepeat, anchor.CoordinatorCloseout,
 		anchor.CoordinatorCitationGrounding, anchor.CoordinatorReportDocument, anchor.ProjectRootsChanged, anchor.ProjectPostureChanged, anchor.ProjectRootDetachCanceled,
 		anchor.WorkerCloseout, anchor.WorkerIterationsLow, anchor.WorkerCancelCloseout,
-		anchor.WorkerSummaryTrim, anchor.WorkerCitationGrounding, anchor.LoopWake, anchor.BoardChanged,
+		anchor.WorkerCitationGrounding, anchor.LoopWake, anchor.BoardChanged,
 		anchor.ProgressMissing, anchor.ProgressStale, anchor.PhaseExitRequired,
 		anchor.AuthzSealFailed, anchor.TurnCloseout, anchor.TurnIterationsLow,
 		anchor.TurnSpendRunwayLow, anchor.TurnSpendSoftStop, anchor.OutboundSecretWithheld,

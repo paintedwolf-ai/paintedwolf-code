@@ -6,10 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
 	"github.com/lycaon/lycaon/internal/promptresult"
-	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/stream"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
@@ -19,20 +18,15 @@ import (
 )
 
 type stubSummaryResolver struct {
-	prompts                        int
-	promptErr                      error
-	closeoutAddsLegTool            bool
-	trimAddsProse                  bool
-	trimAddsLegTool                bool
-	citationGroundingFixOnRetry    bool
-	citationGroundingFixViaLegTool bool
-	msgs                           []api.Message
-	streamByMsg                    map[string]string
-	supersededReports              []string
-	fullTranscriptReads            int
-	workerJobTranscriptReads       int
-	promptFunc                     func(ctx context.Context, sessionID, text string) (*promptresult.Result, error)
-	projectDir                     string
+	prompts                  int
+	promptErr                error
+	closeoutAddsLegTool      bool
+	msgs                     []api.Message
+	streamByMsg              map[string]string
+	fullTranscriptReads      int
+	workerJobTranscriptReads int
+	promptFunc               func(ctx context.Context, sessionID, text string) (*promptresult.Result, error)
+	projectDir               string
 }
 
 func (s *stubSummaryResolver) stampEvidenceHandles() {
@@ -57,78 +51,19 @@ func (s *stubSummaryResolver) Prompt(ctx context.Context, sessionID, text string
 	if s.promptErr != nil {
 		return nil, s.promptErr
 	}
-	if s.closeoutAddsLegTool && strings.Contains(text, "[host:worker-closeout]") {
-		s.msgs = append(s.msgs, completeLegToolRow(map[string]any{"leg_status": "complete", "objectives_met": []string{"surveyed layout"}, "brief": "Survey complete"}))
-	}
-	if s.closeoutAddsLegTool && strings.Contains(text, "[host:worker-cancel-closeout]") {
-		s.msgs = append(s.msgs, completeLegToolRow(map[string]any{"leg_status": "partial", "objectives_met": []string{"mapped partial layout"}, "remaining_risk": []string{"canceled mid-survey"}, "brief": "Partial survey before cancel"}))
-	}
-	if s.trimAddsProse && strings.Contains(text, "[host:worker-summary-trim]") {
-		s.msgs = append(s.msgs, api.Message{
-			Role:    api.MessageRoleAssistant,
-			Content: `{"leg_status":"complete","objectives_met":["ok"],"remaining_risk":[],"suggested_next_task":"","brief":"short survey"}`,
-		})
-	}
-	if s.trimAddsLegTool && strings.Contains(text, "[host:worker-summary-trim]") {
-		s.msgs = append(s.msgs,
-			api.Message{
-				Role:      api.MessageRoleAssistant,
-				ToolCalls: []api.ToolCall{{ID: "leg-trim", Name: "complete_leg"}},
-			},
-			completeLegToolRow(map[string]any{
-				"leg_status": "complete",
-				"brief":      "short survey via tool",
-			}),
-		)
-	}
-	if s.citationGroundingFixOnRetry && strings.Contains(text, "[host:worker-citation-grounding]") {
-		readJSON := `{"path":"src/x.go","content":"1|package x\n","offset":1,"end_line":1,"limit":10}`
-		s.msgs = append(s.msgs,
-			api.Message{
-				Role: api.MessageRoleAssistant,
-				ToolCalls: []api.ToolCall{
-					{ID: "read-x", Name: "read", Args: map[string]any{"path": "src/x.go", "offset": 1, "limit": 10}},
-				},
-			},
-			api.Message{Role: api.MessageRoleTool, Content: readJSON, ToolResult: &api.ToolResult{Content: readJSON, Outcome: api.ToolResultOutcomeCompleted}},
-		)
-		if s.citationGroundingFixViaLegTool {
-			s.msgs = append(s.msgs,
-				api.Message{
-					Role:      api.MessageRoleAssistant,
-					ToolCalls: []api.ToolCall{{ID: "leg-retry", Name: "complete_leg"}},
-				},
-				completeLegNamedRow("grounded-report", map[string]any{
-					"leg_status": "complete",
-					"findings":   []any{map[string]any{"path": "src/x.go", "line": 1, "excerpt": "package x"}},
-					"brief":      "Surveyed handler at src/x.go",
-				}),
-			)
-		} else {
-			s.msgs = append(s.msgs, api.Message{
-				ID:      "grounded-report",
-				Role:    api.MessageRoleAssistant,
-				Content: `{"leg_status":"complete","findings":[{"path":"src/x.go","line":1,"excerpt":"package x"}],"brief":"Surveyed handler at src/x.go"}`,
-			})
-		}
-		s.stampEvidenceHandles()
-	}
 	return &promptresult.Result{MessageID: "closeout-1"}, nil
+}
+
+func (s *stubSummaryResolver) PromptHostTurn(ctx context.Context, sessionID string, origin store.PromptSubmissionOrigin, text string) (*promptresult.Result, error) {
+	result, err := s.Prompt(ctx, sessionID, text)
+	if err == nil && origin == store.PromptSubmissionOriginWorkerCloseout && s.closeoutAddsLegTool {
+		s.msgs = append(s.msgs, completeLegToolRow(map[string]any{"leg_status": "partial", "brief": "Partial survey before cancel", "remaining_risk": []string{"canceled mid-survey"}}))
+	}
+	return result, err
 }
 
 func (s *stubSummaryResolver) PromptWorker(ctx context.Context, sessionID, _ string, text string) (*promptresult.Result, error) {
 	return s.Prompt(ctx, sessionID, text)
-}
-
-func (s *stubSummaryResolver) SupersedeWorkerReport(ctx context.Context, sessionID, messageID string) error {
-	s.supersededReports = append(s.supersededReports, messageID)
-	for i := range s.msgs {
-		if s.msgs[i].ID == messageID {
-			s.msgs[i].Kind = api.MessageKindSuperseded
-			break
-		}
-	}
-	return nil
 }
 
 func (s *stubSummaryResolver) SpawnChild(ctx context.Context, parentID string, req api.SpawnChildRequest) (*api.Session, error) {
@@ -188,13 +123,15 @@ func scoutSurveyFixtureMessages() []api.Message {
 }
 
 func completeLegToolRow(args map[string]any) api.Message {
+	report, _ := workercompletion.ReportFromCompleteLegArgs(args)
 	return api.Message{
 		Role: api.MessageRoleTool,
 		ToolResult: &api.ToolResult{
-			Tool:     "complete_leg",
-			Content:  `{"recorded":true}`,
-			ToolArgs: args,
-			Outcome:  api.ToolResultOutcomeCompleted,
+			Tool:         "complete_leg",
+			Content:      `{"recorded":true}`,
+			ToolArgs:     args,
+			WorkerReport: &api.WorkerReportAcceptance{WorkerID: "job-test", Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{Traced: true}},
+			Outcome:      api.ToolResultOutcomeCompleted,
 		},
 	}
 }
@@ -223,6 +160,7 @@ func TestFinalizeWorkerSummaryScopesReusedChildToWorkerJob(t *testing.T) {
 		"brief":      "previous run",
 	})
 	oldReport.WorkerID = "job-old"
+	oldReport.ToolResult.WorkerReport.WorkerID = "job-old"
 	currentMessages := scoutSurveyFixtureMessages()
 	for i := range currentMessages {
 		currentMessages[i].WorkerID = "job-current"
@@ -232,6 +170,7 @@ func TestFinalizeWorkerSummaryScopesReusedChildToWorkerJob(t *testing.T) {
 		"brief":      "current run",
 	})
 	currentReport.WorkerID = "job-current"
+	currentReport.ToolResult.WorkerReport.WorkerID = "job-current"
 	resolver := &stubSummaryResolver{msgs: append([]api.Message{oldReport}, append(currentMessages, currentReport)...)}
 	opts := finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{WorkerJobID: "job-current"})
 
@@ -246,8 +185,7 @@ func TestFinalizeWorkerSummaryScopesReusedChildToWorkerJob(t *testing.T) {
 }
 
 func TestFinalizeWorkerSummaryCompleteLegSurvivesCompactedBody(t *testing.T) {
-	// A compacted result body keeps the report without a closeout turn: the
-	// report decodes from ToolArgs.
+	// Compaction preserves the host acceptance receipt.
 	row := completeLegToolRow(map[string]any{
 		"leg_status": "complete",
 		"brief":      "Triaged all three scans.",
@@ -285,21 +223,12 @@ func TestFinalizeWorkerSummaryBlockedLegMapsToPartialStatus(t *testing.T) {
 	}
 }
 
-func TestFinalizeWorkerSummaryCloseoutRecordsCompleteLeg(t *testing.T) {
-	resolver := &stubSummaryResolver{
-		closeoutAddsLegTool: true,
-		msgs:                scoutSurveyFixtureMessages(),
-	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
-	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "complete" || out.Provenance != "closeout_complete_leg" {
-		t.Fatalf("out = %+v want closeout complete", out)
-	}
-	if out.Report.LegStatus != "complete" || out.Summary != "Survey complete" {
-		t.Fatalf("report = %+v summary=%q", out.Report, out.Summary)
-	}
-	if resolver.prompts != 1 {
-		t.Fatalf("prompts = %d want 1 closeout", resolver.prompts)
+func TestFinalizationDoesNotAddAToolDisabledRepairTurn(t *testing.T) {
+	resolver := &stubSummaryResolver{msgs: scoutSurveyFixtureMessages()}
+	out, err := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
+	testutil.FailErr(t, "finalize missing report", err)
+	if out.Status != "partial" || resolver.prompts != 0 {
+		t.Fatalf("outcome=%+v prompts=%d", out, resolver.prompts)
 	}
 }
 
@@ -328,11 +257,9 @@ func TestFinalizeWorkerSummarySynthesizedFromTools(t *testing.T) {
 			{Role: api.MessageRoleTool, Content: strings.Repeat("file contents here ", 40)},
 		},
 	}
-	// The closeout prompt adds no prose, so synthesis runs.
-	resolver.prompts = 0
 	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "partial" || out.Provenance != "synthesized" {
+	if out.Status != "partial" || out.Provenance != "synthesized+grounding_host_assembled" || !out.HostAssembled {
 		t.Fatalf("out = %+v want synthesized partial", out)
 	}
 	if out.Report.LegStatus != "partial" || len(out.Report.ObjectivesMet) == 0 {
@@ -356,94 +283,11 @@ func TestFinalizeWorkerSummaryNoProsePartial(t *testing.T) {
 	}
 }
 
-func TestFinalizeWorkerSummaryTrimRejectsProseOnlyAnswer(t *testing.T) {
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-
-	longBrief := strings.Repeat("x", 200)
-	resolver := &stubSummaryResolver{
-		trimAddsProse: true,
-		msgs:          append(scoutSurveyFixtureMessages(), completeLegToolRow(map[string]any{"leg_status": "complete", "brief": longBrief})),
-	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
-		MaxChars: 50,
-		Pipeline: sessionTestOARPipeline(t),
-	}))
-	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "partial" || out.HintCode != workercloseout.WorkerSummaryTooLongCode || out.PolicyFeedback == nil {
-		t.Fatalf("prose bypassed complete_leg closeout: %+v", out)
-	}
-	if resolver.prompts != 1 {
-		t.Fatalf("prompts = %d want 1 trim retry", resolver.prompts)
-	}
-}
-
-func TestFinalizeWorkerSummaryTooLongTrimRetryAcceptsCompleteLegAnswer(t *testing.T) {
-	// The trim kick teaches complete_leg; only the retry turn's call counts —
-	// the pre-retry call is the report that was over budget.
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-
-	resolver := &stubSummaryResolver{
-		trimAddsLegTool: true,
-		msgs: append(scoutSurveyFixtureMessages(), completeLegToolRow(map[string]any{
-			"leg_status": "complete",
-			"brief":      strings.Repeat("x", 200),
-		})),
-	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
-		MaxChars: 50,
-		Pipeline: sessionTestOARPipeline(t),
-	}))
-	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "complete" || out.Summary != "short survey via tool" {
-		t.Fatalf("out = %+v", out)
-	}
-	if !strings.Contains(out.Provenance, "trimmed") {
-		t.Fatalf("provenance = %q want trimmed", out.Provenance)
-	}
-	if resolver.prompts != 1 {
-		t.Fatalf("prompts = %d want 1 trim retry", resolver.prompts)
-	}
-}
-
-func TestFinalizeWorkerSummaryTooLongPartialWhenTrimFails(t *testing.T) {
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-
-	longBrief := strings.Repeat("x", 200)
-	longJSON := `{"leg_status":"complete","objectives_met":["ok"],"remaining_risk":[],"suggested_next_task":"","brief":"` + longBrief + `"}`
-	resolver := &stubSummaryResolver{
-		msgs: append(scoutSurveyFixtureMessages(), completeLegJSONRow(t, "", longJSON)),
-	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
-		MaxChars: 50,
-		Pipeline: sessionTestOARPipeline(t),
-	}))
-	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "partial" || out.HintCode != workercloseout.WorkerSummaryTooLongCode {
-		t.Fatalf("out = %+v", out)
-	}
-	if out.Report.Brief != longBrief || out.PolicyFeedback == nil {
-		t.Fatalf("summary = %q want retained report and frozen feedback", out.Summary)
-	}
-}
-
-func TestFinalizeWorkerSummaryMidRunProseTriggersCloseout(t *testing.T) {
-	resolver := &stubSummaryResolver{
-		closeoutAddsLegTool: true,
-		msgs: []api.Message{
-			{Role: api.MessageRoleAssistant, Content: "Now let me run parallel discovery and targeted searches.", ToolCalls: []api.ToolCall{{Name: "find"}}},
-			{Role: api.MessageRoleTool, Content: `{"results":[]}`},
-			{ID: "empty-terminal", Role: api.MessageRoleAssistant, Content: ""},
-		},
-	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "security-reviewer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
-	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "complete" || out.Provenance != "closeout_complete_leg" {
-		t.Fatalf("out = %+v want closeout complete (mid-run prose must not satisfy survey)", out)
-	}
-	if strings.Contains(out.Summary, "Now let me run parallel") {
-		t.Fatalf("summary must not reuse mid-run intent prose: %q", out.Summary)
-	}
-	if resolver.prompts != 1 {
-		t.Fatalf("prompts = %d want 1 closeout", resolver.prompts)
+func TestFinalizationDoesNotTreatMidRunProseAsAnAcceptedReport(t *testing.T) {
+	resolver := &stubSummaryResolver{msgs: []api.Message{{Role: api.MessageRoleAssistant, Content: "Work remains", ToolCalls: []api.ToolCall{{Name: "find"}}}, {Role: api.MessageRoleTool, Content: `{"results":[]}`}}}
+	out, err := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, resolver, "child", "security-reviewer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
+	testutil.FailErr(t, "finalize mid-run prose", err)
+	if out.Status != "partial" || resolver.prompts != 0 {
+		t.Fatalf("outcome=%+v prompts=%d", out, resolver.prompts)
 	}
 }
