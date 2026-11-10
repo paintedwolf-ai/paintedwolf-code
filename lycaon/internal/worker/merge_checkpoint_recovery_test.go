@@ -151,10 +151,9 @@ func TestCheckpointPromotionSingleStageCleanAndStage1Resolutions(t *testing.T) {
 			{ID: "primary", Label: "primary", Path: primary, IsPrimary: true},
 			{ID: "docs", Label: "docs", Path: secondary},
 		},
-		SnapshotComplete:          true,
-		LastPublishedCheckpointID: "chk-dedup-1",
-		CheckpointStoreDir:        cpStore.RootDir(),
+		SnapshotComplete: true,
 	}
+	meta.LastPublishedCheckpointID, meta.CheckpointStoreDir = "chk-dedup-1", cpStore.RootDir()
 	testutil.FailErr(t, "write job meta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(filepath.Clean(overlay)), meta))
 	_, err = store.SetWorkerWorkspace(ctx, jobID, overlay, baseline)
 	testutil.FailErr(t, "bind worker", err)
@@ -169,7 +168,7 @@ func TestCheckpointPromotionSingleStageCleanAndStage1Resolutions(t *testing.T) {
 	testutil.FailErr(t, "PreviewForSession", err)
 
 	resInput := api.PromoteOverlayInput{
-		Resolutions: []api.WorkerPromoteResolution{{Path: "conflict.txt", Action: api.WorkerPromoteResolutionActionTakeBranch}},
+		Resolutions: []api.WorkerPromoteResolution{{Path: "conflict.txt", Action: api.WorkerPromoteResolutionActionKeepTheirs}},
 	}
 	_, err = sqlDB.ExecContext(ctx, `CREATE TRIGGER reject_dedup_completion BEFORE UPDATE OF merge_status ON worker_jobs WHEN NEW.merge_status='merged' BEGIN SELECT RAISE(ABORT,'reject dedup completion'); END`)
 	testutil.FailErr(t, "install trigger", err)
