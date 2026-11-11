@@ -37,6 +37,7 @@ func newGitProgramFixture(t *testing.T, workerBranch bool) *gitProgramFixture {
 	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
 	f := &gitProgramFixture{out: &tools.ToolInvocationOut{}}
+
 	f.Fixture = programtest.New(t, programtest.Options{Natives: func(string) map[string]command.NativeOperation {
 		return map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 			prepared, err := owners.PrepareGit(frame, nil, nestedCommand(dispatch), request)
@@ -46,6 +47,9 @@ func newGitProgramFixture(t *testing.T, workerBranch bool) *gitProgramFixture {
 			return command.NativePrepared{Command: prepared.Command, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
 		}}}
 	}})
+	if workerBranch {
+		owners.PrivateGit = gitcmd.AdoptPlainWorkerView(t, f.Dir, "job-1")
+	}
 	f.Configure = func(tc *tools.ToolContext) {
 		tc.Effects.Out = f.out
 		if workerBranch {
