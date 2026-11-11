@@ -161,7 +161,7 @@ export function KeyboardSettingsPanel() {
   const groupsForScope = (scope: CommandScope) => {
     const q = query();
     const plat = platform();
-    return commandDisplaySections(shortcutDisplayEntries(contributionFrame()))
+    return commandDisplaySections(shortcutDisplayEntries(contributionFrame(), plat))
       .filter((section) => sectionScope(section) === scope)
       .map((section) => {
         const entries = section.entries.filter((entry) => {
