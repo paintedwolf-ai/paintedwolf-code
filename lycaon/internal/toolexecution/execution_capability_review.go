@@ -30,6 +30,7 @@ func (e *ProcessAuthority) reviewExecutionCapabilities(ctx context.Context, tool
 		return nil
 	}
 	tc.Execution.ProcessControl, tc.Execution.CredentialStore, tc.Execution.HostExecution = request.ProcessControl, request.CredentialStore, request.HostExecution
+	fullReq := e.Boundary.actionConfineRequest(ctx, *tc)
 	fullAction := e.executionCapabilityAction(ctx, tool, args, *tc)
 	if (request.ProcessControl || request.CredentialStore) && !fullAction.Execution.Contained.FSJailed {
 		return []error{&toolrejection.ToolReject{Code: isolation.CodeExecutionBoundaryUnavailable}}
@@ -55,6 +56,7 @@ func (e *ProcessAuthority) reviewExecutionCapabilities(ctx context.Context, tool
 		subTC.Execution.ProcessControl = mode == "process_control"
 		subTC.Execution.CredentialStore = mode == "credential_store"
 		action := e.executionCapabilityAction(ctx, tool, args, subTC)
+		action.Execution.ExecutionBoundaryDigest = fullAction.Execution.ExecutionBoundaryDigest
 		result, err := e.Approvals.evaluatePreSpawn(ctx, action)
 		if err != nil {
 			return []error{err}
@@ -71,7 +73,10 @@ func (e *ProcessAuthority) reviewExecutionCapabilities(ctx context.Context, tool
 				if !hitl.IsPreparedApproval(err) {
 					return errs
 				}
+				continue
 			}
+			tc.Files.ApprovedFileAccess = append(tc.Files.ApprovedFileAccess, result.FileAccess...)
+			tc.RecordCurrentActionReview(args, fullReq, fullAction, result)
 		}
 	}
 	if len(errs) > 0 {
