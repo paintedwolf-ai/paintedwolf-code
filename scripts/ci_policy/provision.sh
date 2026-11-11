@@ -25,8 +25,8 @@ if [[ "${1:-}" == repository-tools ]]; then
   [[ $# -eq 1 ]] || { echo "error: expected repository-tools [--signer DIRECTORY | --python DIRECTORY]" >&2; exit 2; }
   case "$(uname -s)" in
     Linux)
-      sudo apt-get update -qq
-      sudo apt-get install -y --no-install-recommends apt-utils createrepo-c gnupg libarchive-tools makepkg minisign pacman-package-manager rpm
+      python3 "$ROOT/scripts/ci_policy/apt_origins.py" install --no-recommends -- \
+        apt-utils createrepo-c gnupg libarchive-tools makepkg minisign pacman-package-manager rpm
       ;;
     Darwin) HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign ;;
     *) echo "error: repository tools require macOS or apt-based Linux" >&2; exit 2 ;;
