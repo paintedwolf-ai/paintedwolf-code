@@ -72,11 +72,10 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 		t.Fatalf("first promotion: %+v", landed)
 	}
 	second := evidence.Overlays[1].JobID
-	task, _ := queue.Get(second)
-	assessment, err := worker.AssessPromotePaths3Way(t.Context(), service, parent.ID, task, []string{"catalog.py"})
-	testutil.FailErr(t, "assess second overlay", err)
-	if len(assessment.Conflicts) != 1 {
-		t.Fatalf("expected actual conflict: %+v", assessment)
+	preview, err := service.PreviewForSession(t.Context(), parent.ID, second, "", []string{"catalog.py"})
+	testutil.FailErr(t, "preview second overlay", err)
+	if len(preview.Conflicts) != 1 {
+		t.Fatalf("expected actual conflict: %+v", preview)
 	}
 	resolved, err := service.PromoteOverlay(t.Context(), parent.ID, second, api.PromoteOverlayInput{
 		Resolutions: []api.WorkerPromoteResolution{{Path: "catalog.py", Content: "value = 'filter-then-page'\n"}},
