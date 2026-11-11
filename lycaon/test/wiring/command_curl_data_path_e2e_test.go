@@ -775,6 +775,36 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		})
 		return card, done
 	}
+	// finish waits for a prompt whose disclosure card was answered, approving
+	// any connection card the request raises after it.
+	finish := func(promptText string, done <-chan error) {
+		t.Helper()
+		kind := wire.CheckpointKindToolApproval
+		approved := map[string]bool{}
+		var runErr error
+		testutil.WaitFor(t, func() bool {
+			select {
+			case runErr = <-done:
+				return true
+			default:
+			}
+			pending, err := s.h.Sessions.Checkpoints.ListPending(t.Context(), s.session, &kind)
+			if err != nil {
+				return false
+			}
+			for _, candidate := range pending {
+				if candidate.ToolApproval.Plan.Subject.Kind == wire.ApprovalSubjectKindSecret {
+					t.Fatalf("%s raised a second disclosure card: %s", promptText, cardText(t, candidate))
+				}
+				if !approved[candidate.ID] {
+					approved[candidate.ID] = true
+					answerCard(t, s, candidate, "approve_current_action")
+				}
+			}
+			return false
+		})
+		testutil.FailErr(t, promptText, runErr)
+	}
 
 	// 1. Selected cookie in cookies.txt raises a secret approval card naming originHost; approving with
 	// RecommendedOptionID installs a persistent secret grant in s.h.Settings.Approvals.
@@ -794,7 +824,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 1 expected installed standing grant IDs, got %+v", resp1)
 	}
 	originGrantIDs := append([]string(nil), resp1.Result.GrantIDs...)
-	testutil.FailErr(t, "step 1 prompt", <-done1)
+	finish("step 1 prompt", done1)
 	out1 := s.outcome(t, "program-1")
 	if out1.State != "completed" || out1.Status != 0 || strings.TrimSpace(out1.Stdout) != "origin-cookie-ok" {
 		t.Fatalf("step 1 outcome = %+v", out1)
@@ -834,7 +864,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	}
 	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card3.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
 	testutil.FailErr(t, "reject card3", err)
-	testutil.FailErr(t, "step 3 prompt", <-done3)
+	finish("step 3 prompt", done3)
 	out3 := s.outcome(t, "program-3")
 	if out3.State != "completed" || out3.Status != 0 || strings.TrimSpace(out3.Stdout) != "target-cookie-ok" {
 		t.Fatalf("step 3 redirect secret withhold outcome = %+v / refusal=%+v", out3, out3.Refusal)
@@ -854,7 +884,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	}
 	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card4.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
 	testutil.FailErr(t, "reject card4", err)
-	testutil.FailErr(t, "step 4 prompt", <-done4)
+	finish("step 4 prompt", done4)
 	out4 := s.outcome(t, "program-4")
 	if out4.State != "completed" || out4.Status != 0 || strings.TrimSpace(out4.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || lastOriginCookie.Load().(string) != "theme=dark" {
 		t.Fatalf("step 4 connect-to secret withhold outcome = %+v / refusal=%+v originHits=%d originCookie=%q", out4, out4.Refusal, originHits.Load(), lastOriginCookie.Load())
@@ -873,7 +903,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 5a expected target standing grant IDs, got %+v", resp5a)
 	}
 	targetGrantIDs := append([]string(nil), resp5a.Result.GrantIDs...)
-	testutil.FailErr(t, "step 5a prompt", <-done5a)
+	finish("step 5a prompt", done5a)
 	if targetHits.Load() != 1 || !strings.Contains(lastTargetCookie.Load().(string), "session="+cookieSecret) {
 		t.Fatalf("step 5a targetHits=%d cookie=%q, want 1 with session secret", targetHits.Load(), lastTargetCookie.Load())
 	}
@@ -901,7 +931,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	}
 	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card5b.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
 	testutil.FailErr(t, "reject card5b", err)
-	testutil.FailErr(t, "step 5b prompt", <-done5b)
+	finish("step 5b prompt", done5b)
 	out5b := s.outcome(t, "program-5b")
 	if out5b.State != "completed" || out5b.Status != 0 || strings.TrimSpace(out5b.Stdout) != "target-cookie-ok" || originHits.Load() != 1 || targetHits.Load() != 1 || lastTargetCookie.Load().(string) != "theme=dark" {
 		t.Fatalf("step 5b outcome = %+v origin=%d target=%d targetCookie=%q, want completed 1/1 and \"theme=dark\"", out5b, originHits.Load(), targetHits.Load(), lastTargetCookie.Load())
@@ -927,7 +957,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	if resp6a == nil || resp6a.Result == nil || len(resp6a.Result.GrantIDs) != 0 {
 		t.Fatalf("step 6a send_unchanged must not install a standing grant, got %+v", resp6a)
 	}
-	testutil.FailErr(t, "step 6a prompt", <-done6a)
+	finish("step 6a prompt", done6a)
 	out6a := s.outcome(t, "program-6a")
 	if out6a.State != "completed" || out6a.Status != 0 || strings.TrimSpace(out6a.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || !strings.Contains(lastOriginCookie.Load().(string), "session="+cookieSecret) {
 		t.Fatalf("step 6a once-approved outcome = %+v originHits=%d cookie=%q", out6a, originHits.Load(), lastOriginCookie.Load())
@@ -941,7 +971,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	}
 	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card6b.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
 	testutil.FailErr(t, "reject card6b", err)
-	testutil.FailErr(t, "step 6b prompt", <-done6b)
+	finish("step 6b prompt", done6b)
 	out6b := s.outcome(t, "program-6b")
 	if out6b.State != "completed" || out6b.Status != 0 || strings.TrimSpace(out6b.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || lastOriginCookie.Load().(string) != "theme=dark" {
 		t.Fatalf("step 6b withhold after once expiry outcome = %+v originHits=%d cookie=%q, want 1 and \"theme=dark\"", out6b, originHits.Load(), lastOriginCookie.Load())
