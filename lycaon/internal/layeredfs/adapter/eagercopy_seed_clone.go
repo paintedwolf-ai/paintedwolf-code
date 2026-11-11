@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -168,11 +167,10 @@ func (a *seedAccumulator) repairEntry(srcPath, dstPath, pristinePath string, inf
 			return err
 		}
 	}
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || !info.Mode().IsRegular() || st.Nlink < 2 {
+	id, shared := sharedFileID(info)
+	if !shared || !info.Mode().IsRegular() {
 		return nil
 	}
-	id := seedFileID{dev: uint64(st.Dev), ino: uint64(st.Ino)}
 	first, seen := a.links[id]
 	if !seen {
 		a.links[id] = seededLink{seed: dstPath, pristine: pristinePath}
