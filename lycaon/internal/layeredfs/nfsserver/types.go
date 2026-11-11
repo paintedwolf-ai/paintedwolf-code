@@ -66,14 +66,14 @@ const (
 
 // Sentinel errors returned by the NFSv3 server and protocol guards.
 var (
-	ErrNonLoopbackAddress = errors.New("layeredfs/nfsserver: listen address must be loopback")
-	ErrUnauthorizedMount  = errors.New("layeredfs/nfsserver: unauthorized mount request")
-	ErrUnauthorizedRPC    = errors.New("layeredfs/nfsserver: unauthorized RPC caller")
-	ErrStaleHandle        = errors.New("layeredfs/nfsserver: stale file handle")
-	ErrForgedHandle       = errors.New("layeredfs/nfsserver: forged or corrupted file handle")
-	ErrCrossViewHandle    = errors.New("layeredfs/nfsserver: cross-view file handle rejected")
-	ErrFrameTooLarge      = errors.New("layeredfs/nfsserver: RPC frame exceeds maximum size")
-	ErrQueueFull          = errors.New("layeredfs/nfsserver: RPC request queue is full")
+	ErrNonLoopbackAddress   = errors.New("layeredfs/nfsserver: listen address must be loopback")
+	ErrUnauthorizedMount    = errors.New("layeredfs/nfsserver: unauthorized mount request")
+	ErrUnauthorizedRPC      = errors.New("layeredfs/nfsserver: unauthorized RPC caller")
+	ErrStaleHandle          = errors.New("layeredfs/nfsserver: stale file handle")
+	ErrForgedHandle         = errors.New("layeredfs/nfsserver: forged or corrupted file handle")
+	ErrCrossViewHandle      = errors.New("layeredfs/nfsserver: cross-view file handle rejected")
+	ErrFrameTooLarge        = errors.New("layeredfs/nfsserver: RPC frame exceeds maximum size")
+	ErrQueueFull            = errors.New("layeredfs/nfsserver: RPC request queue is full")
 	ErrBadCookie            = errors.New("layeredfs/nfsserver: invalid or stale directory cookie")
 	ErrReadOnlyExport       = errors.New("layeredfs/nfsserver: export is read-only")
 	ErrIncarnationExhausted = errors.New("layeredfs/nfsserver: view incarnation sequence exhausted")

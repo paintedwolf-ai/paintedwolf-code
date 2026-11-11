@@ -63,6 +63,7 @@ type handleTable struct {
 	unlinked    *list.List
 	coreFor     func(uint64, ViewID) *layeredfs.Core
 	sidecars    *sidecarTable
+	listings    *listingIndex
 }
 
 func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, coreFor func(uint64, ViewID) *layeredfs.Core) *handleTable {
@@ -79,6 +80,7 @@ func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, cor
 		unlinked:    list.New(),
 		coreFor:     coreFor,
 		sidecars:    sidecars,
+		listings:    newListingIndex(maxHandles),
 	}
 }
 
@@ -117,6 +119,7 @@ func (t *handleTable) ReleaseView(vHash uint64, viewID ViewID) []layeredfs.Handl
 	if cur, ok := t.viewHashes[viewID]; ok && cur == vHash {
 		delete(t.viewHashes, viewID)
 	}
+	t.listings.dropView(vHash)
 	delete(t.activeViews, vHash)
 	var toClose []layeredfs.HandleID
 	for k, rec := range t.byKey {
@@ -292,9 +295,17 @@ func (t *handleTable) locate(
 		return qpath, meta, nil
 	}
 	if hasParent {
-		name, found, err := core.FindChildByIdentity(parentPath, hdr.nodeID)
-		if err == nil && found {
-			return locatedChild(core, parentPath, name, hdr.nodeID)
+		key := handleKey{viewHash: hdr.viewHash, nodeID: hdr.parentID}
+		if name, ok := t.listings.name(key, hdr.nodeID); ok {
+			if qpath, meta, err := locatedChild(core, parentPath, name, hdr.nodeID); err == nil {
+				return qpath, meta, nil
+			}
+		}
+		if names, err := core.ChildIdentities(parentPath); err == nil {
+			t.listings.put(key, names)
+			if name, found := names[hdr.nodeID]; found {
+				return locatedChild(core, parentPath, name, hdr.nodeID)
+			}
 		}
 	}
 	if qpath, meta, ok := t.sidecars.locate(core, hdr.nodeID, parentPath, hasParent); ok {
@@ -308,7 +319,7 @@ func locatedChild(core *layeredfs.Core, parentPath layeredfs.QualifiedPath, name
 	if err != nil {
 		return layeredfs.QualifiedPath{}, layeredfs.EntryAttr{}, ErrStaleHandle
 	}
-	meta, err := core.Lstat(qpath)
+	meta, err := core.LstatAttrs(qpath)
 	if err != nil || meta.StableID() != id {
 		return layeredfs.QualifiedPath{}, layeredfs.EntryAttr{}, ErrStaleHandle
 	}

@@ -172,7 +172,7 @@ func onLookup(s *Server, cs *connState, call rpcCallHeader) []byte {
 		}
 	}
 	defer s.stability.sidecars.settled(childQPath)()
-	childMeta, err := exp.core.Lstat(childQPath)
+	childMeta, err := exp.core.LstatAttrs(childQPath)
 	if err != nil {
 		if adMeta, _, ok := s.stability.sidecars.synth(exp.core, childQPath); ok {
 			childMeta = adMeta

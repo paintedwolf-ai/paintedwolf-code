@@ -19,7 +19,7 @@ func entryFileID(core *layeredfs.Core, dirMeta layeredfs.EntryAttr, ent dirSnaps
 	if ent.StableID != 0 {
 		return ent.StableID
 	}
-	if meta, err := core.Lstat(ent.QPath); err == nil {
+	if meta, err := core.LstatAttrs(ent.QPath); err == nil {
 		return meta.StableID()
 	}
 	return dirMeta.NodeID
@@ -160,7 +160,7 @@ func onReaddirPlus(s *Server, cs *connState, call rpcCallHeader) []byte {
 		dirStep := uint32(entBuf.Len())
 		// Attributes come from the object as it is now. An entry that has since gone still takes its
 		// place in the listing, without attributes or a handle, as RFC 1813 permits.
-		if meta, statErr := exp.core.Lstat(ent.QPath); statErr == nil {
+		if meta, statErr := exp.core.LstatAttrs(ent.QPath); statErr == nil {
 			fh, ok := s.handles.Ensure(dirRec.key.viewHash, dirRec.viewID, ent.QPath, meta, dirRec.key.nodeID, cleanRel(ent.QPath.Rel) == ".")
 			if !ok {
 				return encodeNFSError(call.XID, nfs.NFSProcedureReadDirPlus, nfs.NFSStatusStale)

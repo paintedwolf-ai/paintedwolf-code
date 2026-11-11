@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/fuselinux"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
 
@@ -86,8 +85,8 @@ func TestAdapterFactsAndFailureClassifications(t *testing.T) {
 	}
 }
 
-// A missing FUSE dependency reaches selection as its own reason, not a generic mount failure.
-func TestSelectionFallsBackWithTheMissingDependencyReason(t *testing.T) {
+// A missing FUSE dependency reaches an over-limit selection as its own reason, not a generic mount failure.
+func TestOverLimitSelectionReportsTheMissingDependency(t *testing.T) {
 	cfgs := map[adapter.ReasonCode]fuselinux.Config{
 		adapter.ReasonFUSEDeviceUnavailable: {HostOS: "linux", ConfinementCheckFn: confinementVerified, FuseDevicePath: "/nonexistent/dev/fuse"},
 	}
@@ -95,11 +94,12 @@ func TestSelectionFallsBackWithTheMissingDependencyReason(t *testing.T) {
 		cfgs[adapter.ReasonFUSEHelperUnavailable] = fuselinux.Config{HostOS: "linux", ConfinementCheckFn: confinementVerified, FusermountBin: "/nonexistent/bin/fusermount3"}
 	}
 	for want, cfg := range cfgs {
-		selector := adapter.NewSelector("linux", fuselinux.New(cfg), nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
-		chosen, probe, err := selector.Select(t.Context(), adapter.ProbeConfig{})
-		testutil.FailErr(t, "Select", err)
-		if chosen.Facts().PreparationKind != adapter.PreparationMaterialized || chosen.Facts().FallbackReason != want || probe.ReasonCode != want {
-			t.Fatalf("want %s: facts=%+v probe=%+v", want, chosen.Facts(), probe)
+		selector := adapter.NewSelector("linux", fuselinux.New(cfg), nil, nil)
+		selector.BudgetFor = adapter.ZeroBudget
+		choice, err := selector.Choose(t.Context(), adapter.ChooseRequest{})
+		var adapterErr *adapter.AdapterError
+		if !errors.As(err, &adapterErr) || adapterErr.ReasonCode != want || choice.Facts.MountUnavailable != want {
+			t.Fatalf("want %s: err=%v facts=%+v", want, err, choice.Facts)
 		}
 	}
 }

@@ -171,7 +171,7 @@ func (s *Server) opLookup(nodeID uint64, body []byte) ([]byte, int32) {
 		return encodeEntryOut(s, pollProbeNodeID, pollProbeNodeID, pollProbeAttr()), 0
 	}
 	childRel := joinRel(parentRel, name)
-	attr, err := s.core.Lstat(s.qpath(childRel))
+	attr, err := s.core.LstatAttrs(s.qpath(childRel))
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
@@ -184,7 +184,7 @@ func (s *Server) opGetattr(nodeID uint64, body []byte) ([]byte, int32) {
 		return encodeAttrOut(s, pollProbeNodeID, pollProbeAttr()), 0
 	}
 	if rel, ok := s.nodes.resolveNodeRel(nodeID); ok {
-		attr, err := s.core.Lstat(s.qpath(rel))
+		attr, err := s.core.LstatAttrs(s.qpath(rel))
 		if err != nil {
 			return nil, mapFUSEErrno(err)
 		}
@@ -287,8 +287,8 @@ func (s *Server) opReadlink(nodeID uint64) ([]byte, int32) {
 	return []byte(target), 0
 }
 
-// opFsync acknowledges only what backing storage established. fsync on any descriptor covers the
-// file, so a read-only descriptor syncs the same private content a writable one would.
+// opFsync reports what SyncHandle establishes: the bytes are in the backing file and any held
+// write error has surfaced. fsync on any descriptor covers the file.
 func (s *Server) opFsync(body []byte) ([]byte, int32) {
 	if len(body) < 8 {
 		return nil, -int32(syscall.EINVAL)
@@ -303,11 +303,9 @@ func (s *Server) opFsync(body []byte) ([]byte, int32) {
 	return nil, 0
 }
 
-// opFsyncdir persists the journal, which is where the private namespace is durably recorded.
+// opFsyncdir has nothing to do between checkpoints: the journal reaches storage at the barrier, and
+// writing it here would cost hashing every private file for each directory a program syncs.
 func (s *Server) opFsyncdir() ([]byte, int32) {
-	if _, err := s.core.SnapshotJournal(); err != nil {
-		return nil, mapFUSEErrno(err)
-	}
 	return nil, 0
 }
 
