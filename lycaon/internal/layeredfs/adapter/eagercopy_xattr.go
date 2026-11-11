@@ -184,7 +184,7 @@ func isModeEquivalentNFS4ACL(raw []byte, mode fs.FileMode) bool {
 	}
 	expected, expectedCount := canonicalLinuxNFS4ModeACL(mode)
 	count := binary.BigEndian.Uint32(raw[:4])
-	if count != uint32(expectedCount) {
+	if count != uint32(expectedCount) { //nolint:gosec // A canonical mode ACL has at most a few entries.
 		return false
 	}
 	off := 4

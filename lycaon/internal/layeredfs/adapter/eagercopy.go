@@ -226,10 +226,7 @@ func (a *EagerCopyAdapter) adopt(view *PreparedView, st *eagerViewState) {
 func manifestRootsOf(roots []PreparedRoot) []manifestRoot {
 	out := make([]manifestRoot, 0, len(roots))
 	for _, r := range roots {
-		out = append(out, manifestRoot{
-			RootID: r.RootID, Label: r.Label, SourcePath: r.SourcePath, Subroot: r.Subroot,
-			WorkspacePath: r.WorkspacePath, PristinePath: r.PristinePath, IsPrimary: r.IsPrimary,
-		})
+		out = append(out, manifestRoot(r))
 	}
 	return out
 }
@@ -273,10 +270,7 @@ func (a *EagerCopyAdapter) Reopen(ctx context.Context, req ReopenRequest) (*Prep
 		if req.PristineDir != "" {
 			r.PristinePath = filepath.Join(req.PristineDir, r.RootID)
 		}
-		roots = append(roots, PreparedRoot{
-			RootID: r.RootID, Label: r.Label, SourcePath: r.SourcePath, Subroot: r.Subroot,
-			WorkspacePath: r.WorkspacePath, PristinePath: r.PristinePath, IsPrimary: r.IsPrimary,
-		})
+		roots = append(roots, PreparedRoot(r))
 		specs = append(specs, layeredfs.RootSpec{ID: r.RootID, Label: r.Label, TrunkPath: r.WorkspacePath, Subroot: r.Subroot, IsPrimary: r.IsPrimary})
 		deny = append(deny, r.SourcePath)
 		if r.IsPrimary {

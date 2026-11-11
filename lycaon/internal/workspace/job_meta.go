@@ -164,10 +164,12 @@ func normalizeLoadedJobMeta(meta *JobMeta) error {
 			meta.VisibilityMode = adapter.VisibilityFixed
 		}
 	} else if meta.VisibilityMode == "" {
-		if meta.PreparationKind == adapter.PreparationMounted {
+		switch meta.PreparationKind {
+		case adapter.PreparationMounted:
 			meta.VisibilityMode = adapter.VisibilityLive
-		} else if meta.PreparationKind == adapter.PreparationMaterialized {
+		case adapter.PreparationMaterialized:
 			meta.VisibilityMode = adapter.VisibilityFixed
+		default:
 		}
 	}
 	if len(meta.SelectedRootIDs) == 0 {

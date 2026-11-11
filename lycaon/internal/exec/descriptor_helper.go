@@ -15,7 +15,7 @@ func StartDescriptorHelper(ctx context.Context, launch LaunchPlan, path string, 
 	if err := launch.validate(); err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, path, args...)
+	cmd := exec.CommandContext(ctx, path, args...) //nolint:gosec // The helper is a system program the caller names, run without a shell.
 	cmd.Env = append([]string{"PATH=" + EffectivePathValue()}, appendEnv...)
 	cmd.ExtraFiles = []*os.File{inherited}
 	cmd.Stderr = stderr

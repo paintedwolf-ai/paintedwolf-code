@@ -14,7 +14,7 @@ import (
 
 // contentOpen is the one door through which a materialized path reads file content, so a clone
 // preparation and an unchanged file at capture can be shown to read nothing.
-var contentOpen = func(path string) (*os.File, error) { return os.Open(path) }
+var contentOpen = os.Open
 
 // contentMeter counts content bytes read through the door.
 type contentMeter struct{ read atomic.Int64 }

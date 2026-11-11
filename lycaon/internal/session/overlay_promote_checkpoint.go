@@ -169,7 +169,7 @@ func SyncTaskCheckpointToWorkspace(task *api.WorkerTask, roots []projectroot.Roo
 	if strings.TrimSpace(task.WorkspaceRoot) == "" {
 		return nil
 	}
-	if err := os.MkdirAll(task.WorkspaceRoot, 0o755); err != nil {
+	if err := os.MkdirAll(task.WorkspaceRoot, 0o755); err != nil { //nolint:gosec // A worker tree's directories take the ordinary mode its source has.
 		return err
 	}
 	replaced := checkpointNonDirectoryEntries(manifest)
@@ -181,7 +181,7 @@ func SyncTaskCheckpointToWorkspace(task *api.WorkerTask, roots []projectroot.Roo
 		if err != nil {
 			return err
 		}
-		if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		if err := os.MkdirAll(targetDir, 0o755); err != nil { //nolint:gosec // A worker tree's directories take the ordinary mode its source has.
 			return err
 		}
 		if err := applyManifestEntryToRoot(store, targetDir, entry); err != nil {

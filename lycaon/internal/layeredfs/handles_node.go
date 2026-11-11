@@ -19,114 +19,41 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		}
 	}
 
-	if hostPath, isRepoRoot, isMutableGit, gitErr := resolveMutableGitTarget(c, qpath); gitErr != nil {
+	hostPath, isRepoRoot, isMutableGit, gitErr := resolveMutableGitTarget(c, qpath)
+	if gitErr != nil {
 		return nil, gitErr
-	} else if isMutableGit && !isRepoRoot {
-		if !isParentDirValidLocked(c, qpath) {
-			return nil, errNamespaceRetry
-		}
-		if err := os.MkdirAll(filepath.Dir(hostPath), 0o755); err != nil {
-			return nil, err
-		}
-		cleanMode := createMode.Perm() | (createMode & (os.ModeSetuid | os.ModeSetgid | os.ModeSticky))
-		if cleanMode == 0 {
-			cleanMode = 0o644
-		}
-		if flags&OpenCreate != 0 && flags&OpenExclusive != 0 {
-			f, err := os.OpenFile(hostPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, cleanMode.Perm())
-			if err != nil {
-				return nil, err
-			}
-			info, _ := f.Stat()
-			_ = f.Close()
-			now := time.Now()
-			if info != nil {
-				now = info.ModTime()
-			}
-			nid, gen := c.state.allocNodeID()
-			node := &privateNode{
-				id:    nid,
-				gen:   gen,
-				kind:  EntryRegular,
-				mode:  cleanMode,
-				atime: now,
-				mtime: now,
-				ctime: now,
-				paths: map[QualifiedPath]struct{}{qpath: {}},
-				flags: nodeFlags{
-					contentChanged: true,
-					namespaceAdded: true,
-					backingPath:    hostPath,
-					gitHostPath:    hostPath,
-				},
-			}
-			c.unmarkDeleted(qpath)
-			c.state.nodesByID[nid] = node
-			c.noteNode(nid)
-			c.setPrivatePath(qpath, nid)
-			markDirtyBackingFileLocked(c, hostPath)
-			if ino := fileInfoIno(info); ino != 0 {
-				recordOriginLocked(c, node, syntheticNodeID(qpath, ino))
-			}
-			bumpParentDirGenLocked(c, qpath)
-			recordJournalLocked(c, JournalOpCreate, qpath, nil, node, 0)
-			return node, nil
-		}
+	}
+	if isMutableGit && !isRepoRoot {
+		return ensureGitHostNodeLocked(c, qpath, hostPath, base, flags, createMode)
+	}
+	if _, wasDeleted := c.state.deletedPaths[qpath]; !wasDeleted && base.Kind == EntryRegular {
+		return copyUpBaseNodeLocked(c, qpath, base, expectedGen)
+	}
+	return createPrivateNodeLocked(c, qpath, flags, createMode)
+}
 
-		info, statErr := os.Lstat(hostPath)
-		if statErr == nil && info.Mode().IsRegular() {
-			nid, gen := c.state.allocNodeID()
-			originCopy := qpath
-			node := &privateNode{
-				id:     nid,
-				gen:    gen,
-				kind:   EntryRegular,
-				mode:   info.Mode(),
-				size:   info.Size(),
-				atime:  info.ModTime(),
-				mtime:  info.ModTime(),
-				ctime:  info.ModTime(),
-				xattrs: cloneXattrs(base.Xattrs),
-				paths:  map[QualifiedPath]struct{}{qpath: {}},
-				flags: nodeFlags{
-					physicalCopyUp: true,
-					backingPath:    hostPath,
-					gitHostPath:    hostPath,
-				},
-				initial: nodeInitialState{
-					sha256:     base.SHA256,
-					size:       info.Size(),
-					mode:       info.Mode(),
-					mtime:      info.ModTime(),
-					xattrs:     cloneXattrs(base.Xattrs),
-					originPath: &originCopy,
-				},
-			}
-			c.unmarkDeleted(qpath)
-			c.state.nodesByID[nid] = node
-			c.noteNode(nid)
-			c.setPrivatePath(qpath, nid)
-			markDirtyBackingFileLocked(c, hostPath)
-			ino := fileInfoIno(info)
-			if ino == 0 {
-				ino = base.Ino
-			}
-			recordOriginLocked(c, node, syntheticNodeID(qpath, ino))
-			c.counters.physicalCopyUps.Add(1)
-			return node, nil
-		}
-		if flags&OpenCreate == 0 {
-			return nil, os.ErrNotExist
-		}
-		f, err := os.OpenFile(hostPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, cleanMode.Perm())
+// ensureGitHostNodeLocked makes a private Git metadata file writable where it lives on the host.
+func ensureGitHostNodeLocked(c *Core, qpath QualifiedPath, hostPath string, base BaseCapture, flags OpenFlags, createMode os.FileMode) (*privateNode, error) {
+	if !isParentDirValidLocked(c, qpath) {
+		return nil, errNamespaceRetry
+	}
+	if err := os.MkdirAll(filepath.Dir(hostPath), 0o755); err != nil {
+		return nil, err
+	}
+	cleanMode := createMode.Perm() | (createMode & (os.ModeSetuid | os.ModeSetgid | os.ModeSticky))
+	if cleanMode == 0 {
+		cleanMode = 0o644
+	}
+	if flags&OpenCreate != 0 && flags&OpenExclusive != 0 {
+		f, err := os.OpenFile(hostPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, cleanMode.Perm())
 		if err != nil {
 			return nil, err
 		}
-		cInfo, _ := f.Stat()
+		info, _ := f.Stat()
 		_ = f.Close()
 		now := time.Now()
-		if cInfo != nil {
-			now = cInfo.ModTime()
+		if info != nil {
+			now = info.ModTime()
 		}
 		nid, gen := c.state.allocNodeID()
 		node := &privateNode{
@@ -150,7 +77,7 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		c.noteNode(nid)
 		c.setPrivatePath(qpath, nid)
 		markDirtyBackingFileLocked(c, hostPath)
-		if ino := fileInfoIno(cInfo); ino != 0 {
+		if ino := fileInfoIno(info); ino != 0 {
 			recordOriginLocked(c, node, syntheticNodeID(qpath, ino))
 		}
 		bumpParentDirGenLocked(c, qpath)
@@ -158,64 +85,151 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		return node, nil
 	}
 
-	_, wasDeleted := c.state.deletedPaths[qpath]
-	if !wasDeleted && base.Kind == EntryRegular {
-		c.mu.Unlock()
-		workName, workPath, err := initWorkingFromBase(c, base)
-		c.mu.Lock()
-		if err != nil {
-			return nil, err
-		}
-		if c.state.released {
-			_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
-			return nil, ErrViewReleased
-		}
-		if c.state.nsGen != expectedGen {
-			_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
-			return nil, errNamespaceRetry
-		}
-		if existingID, ok := c.state.pathIndex[qpath]; ok {
-			if existing := c.state.nodesByID[existingID]; existing != nil && !existing.flags.unlinked {
-				_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
-				return existing, nil
-			}
-		}
+	info, statErr := os.Lstat(hostPath)
+	if statErr == nil && info.Mode().IsRegular() {
 		nid, gen := c.state.allocNodeID()
 		originCopy := qpath
 		node := &privateNode{
 			id:     nid,
 			gen:    gen,
 			kind:   EntryRegular,
-			mode:   base.Mode,
-			size:   base.Size,
-			atime:  base.ModTime,
-			mtime:  base.ModTime,
-			ctime:  base.ModTime,
+			mode:   info.Mode(),
+			size:   info.Size(),
+			atime:  info.ModTime(),
+			mtime:  info.ModTime(),
+			ctime:  info.ModTime(),
 			xattrs: cloneXattrs(base.Xattrs),
 			paths:  map[QualifiedPath]struct{}{qpath: {}},
 			flags: nodeFlags{
 				physicalCopyUp: true,
-				backingName:    workName,
-				backingPath:    workPath,
+				backingPath:    hostPath,
+				gitHostPath:    hostPath,
 			},
 			initial: nodeInitialState{
 				sha256:     base.SHA256,
-				size:       base.Size,
-				mode:       base.Mode,
-				mtime:      base.ModTime,
+				size:       info.Size(),
+				mode:       info.Mode(),
+				mtime:      info.ModTime(),
 				xattrs:     cloneXattrs(base.Xattrs),
 				originPath: &originCopy,
 			},
 		}
+		c.unmarkDeleted(qpath)
 		c.state.nodesByID[nid] = node
 		c.noteNode(nid)
 		c.setPrivatePath(qpath, nid)
-		markDirtyBackingFileLocked(c, workPath)
-		recordOriginLocked(c, node, originNodeID(qpath, base))
+		markDirtyBackingFileLocked(c, hostPath)
+		ino := fileInfoIno(info)
+		if ino == 0 {
+			ino = base.Ino
+		}
+		recordOriginLocked(c, node, syntheticNodeID(qpath, ino))
 		c.counters.physicalCopyUps.Add(1)
 		return node, nil
 	}
+	if flags&OpenCreate == 0 {
+		return nil, os.ErrNotExist
+	}
+	f, err := os.OpenFile(hostPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, cleanMode.Perm())
+	if err != nil {
+		return nil, err
+	}
+	cInfo, _ := f.Stat()
+	_ = f.Close()
+	now := time.Now()
+	if cInfo != nil {
+		now = cInfo.ModTime()
+	}
+	nid, gen := c.state.allocNodeID()
+	node := &privateNode{
+		id:    nid,
+		gen:   gen,
+		kind:  EntryRegular,
+		mode:  cleanMode,
+		atime: now,
+		mtime: now,
+		ctime: now,
+		paths: map[QualifiedPath]struct{}{qpath: {}},
+		flags: nodeFlags{
+			contentChanged: true,
+			namespaceAdded: true,
+			backingPath:    hostPath,
+			gitHostPath:    hostPath,
+		},
+	}
+	c.unmarkDeleted(qpath)
+	c.state.nodesByID[nid] = node
+	c.noteNode(nid)
+	c.setPrivatePath(qpath, nid)
+	markDirtyBackingFileLocked(c, hostPath)
+	if ino := fileInfoIno(cInfo); ino != 0 {
+		recordOriginLocked(c, node, syntheticNodeID(qpath, ino))
+	}
+	bumpParentDirGenLocked(c, qpath)
+	recordJournalLocked(c, JournalOpCreate, qpath, nil, node, 0)
+	return node, nil
+}
 
+// copyUpBaseNodeLocked copies a base regular file into working storage, so writes reach the copy.
+func copyUpBaseNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, expectedGen uint64) (*privateNode, error) {
+	c.mu.Unlock()
+	workName, workPath, err := initWorkingFromBase(c, base)
+	c.mu.Lock()
+	if err != nil {
+		return nil, err
+	}
+	if c.state.released {
+		_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
+		return nil, ErrViewReleased
+	}
+	if c.state.nsGen != expectedGen {
+		_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
+		return nil, errNamespaceRetry
+	}
+	if existingID, ok := c.state.pathIndex[qpath]; ok {
+		if existing := c.state.nodesByID[existingID]; existing != nil && !existing.flags.unlinked {
+			_ = unlinkBackingFile(int(c.backing.workDirFile.Fd()), workName)
+			return existing, nil
+		}
+	}
+	nid, gen := c.state.allocNodeID()
+	originCopy := qpath
+	node := &privateNode{
+		id:     nid,
+		gen:    gen,
+		kind:   EntryRegular,
+		mode:   base.Mode,
+		size:   base.Size,
+		atime:  base.ModTime,
+		mtime:  base.ModTime,
+		ctime:  base.ModTime,
+		xattrs: cloneXattrs(base.Xattrs),
+		paths:  map[QualifiedPath]struct{}{qpath: {}},
+		flags: nodeFlags{
+			physicalCopyUp: true,
+			backingName:    workName,
+			backingPath:    workPath,
+		},
+		initial: nodeInitialState{
+			sha256:     base.SHA256,
+			size:       base.Size,
+			mode:       base.Mode,
+			mtime:      base.ModTime,
+			xattrs:     cloneXattrs(base.Xattrs),
+			originPath: &originCopy,
+		},
+	}
+	c.state.nodesByID[nid] = node
+	c.noteNode(nid)
+	c.setPrivatePath(qpath, nid)
+	markDirtyBackingFileLocked(c, workPath)
+	recordOriginLocked(c, node, originNodeID(qpath, base))
+	c.counters.physicalCopyUps.Add(1)
+	return node, nil
+}
+
+// createPrivateNodeLocked creates a new private regular file.
+func createPrivateNodeLocked(c *Core, qpath QualifiedPath, flags OpenFlags, createMode os.FileMode) (*privateNode, error) {
 	if flags&OpenCreate == 0 {
 		return nil, os.ErrNotExist
 	}

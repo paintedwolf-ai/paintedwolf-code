@@ -58,7 +58,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.Executor.SetPhaseTouchPaths(deps.Workflows.Manager.Ambient)
 	r.BranchRoot = enginepaths.WorkerBranchesRootUnder(deps.Storage.Directory)
 	if err := localdata.ClearRetiredWorkerSeeds(deps.Storage.Directory); err != nil {
-		slog.Warn("clear retired worker seeds", "err", err)
+		slog.WarnContext(ctx, "clear retired worker seeds", "err", err)
 	}
 	coordinator, err := newWorkerRecovery(deps.Storage.Directory, deps.Execution.PrivateGit)
 	if err != nil {

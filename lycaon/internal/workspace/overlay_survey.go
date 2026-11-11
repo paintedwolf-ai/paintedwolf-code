@@ -46,10 +46,12 @@ func OverlayWorkspaceDivergencePaths(ctx context.Context, branchRoot string) ([]
 func inventoryItemToSurveyEntry(branchRoot, childRel string, item consumer.InventoryEntry) sandbox.SurveyEntry {
 	name := filepath.Base(filepath.FromSlash(childRel))
 	mode := item.Mode
-	if item.Kind == layeredfs.EntryDirectory {
+	switch item.Kind {
+	case layeredfs.EntryDirectory:
 		mode |= fs.ModeDir
-	} else if item.Kind == layeredfs.EntrySymlink {
+	case layeredfs.EntrySymlink:
 		mode |= fs.ModeSymlink
+	default:
 	}
 	return sandbox.SurveyEntry{
 		Rel: childRel, Abs: filepath.Join(branchRoot, filepath.FromSlash(childRel)),

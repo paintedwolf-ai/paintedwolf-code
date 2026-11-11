@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/osprocess"
+	"slices"
 	"syscall"
 	"time"
 
@@ -188,7 +189,7 @@ func (c *Coordinator) RecordWorkerProcess(workerID, viewID string, process adapt
 			live = append(live, recorded)
 		}
 	}
-	ident.RecordedProcesses = append(live, process)
+	ident.RecordedProcesses = slices.Concat(live, []adapter.ProcessIdentity{process})
 	return c.RecordMountIdentity(ident)
 }
 

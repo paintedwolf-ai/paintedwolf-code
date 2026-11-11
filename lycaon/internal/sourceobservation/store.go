@@ -226,8 +226,8 @@ func scanFile(row *sql.Row) (File, bool, error) {
 	file.Completeness = observation.AttributionCompleteness(comp)
 	file.Layer = layeredfs.LayerSource(layer)
 	file.Uncertain = uncertain != 0
-	file.SourceGeneration = uint64(gen)
-	file.Ino = uint64(ino)
+	file.SourceGeneration = uint64(gen) //nolint:gosec // SQLite holds 64-bit values signed; they round-trip bit for bit.
+	file.Ino = uint64(ino) //nolint:gosec // SQLite holds 64-bit values signed; they round-trip bit for bit.
 	_ = dev
 	return file, true, nil
 }
@@ -286,7 +286,7 @@ uncertain=excluded.uncertain, source_generation=excluded.source_generation, ino=
 WHERE observed_files.layer != 'private' OR excluded.layer = 'private'`,
 			rootPath, norm.Path, norm.SHA256, norm.GitOID, norm.Size, norm.Mode, norm.ModifiedNS,
 			string(norm.Provenance), string(norm.Completeness), string(norm.Layer),
-			uncertainInt, int64(norm.SourceGeneration), int64(norm.Ino), int64(0)); err != nil {
+			uncertainInt, int64(norm.SourceGeneration), int64(norm.Ino), int64(0)); err != nil { //nolint:gosec // SQLite holds 64-bit values signed; they round-trip bit for bit.
 			return err
 		}
 	}

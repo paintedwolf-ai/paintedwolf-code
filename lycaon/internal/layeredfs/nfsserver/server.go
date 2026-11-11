@@ -64,7 +64,7 @@ func New(core *layeredfs.Core, cfg Config) (*Server, error) {
 	if _, err := rand.Read(secret[:]); err != nil {
 		return nil, fmt.Errorf("layeredfs/nfsserver: generate handle secret: %w", err)
 	}
-	ln, err := net.Listen("tcp", cfg.ListenAddr)
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", cfg.ListenAddr)
 	if err != nil {
 		return nil, err
 	}

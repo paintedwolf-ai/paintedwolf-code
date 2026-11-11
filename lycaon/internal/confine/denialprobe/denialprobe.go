@@ -4,6 +4,7 @@
 package denialprobe
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -53,7 +54,7 @@ func (r Result) Succeeded() bool { return r.Errno == 0 }
 // Denied reports the answers a boundary gives. A masked path answers as absent or read-only, and
 // anything else, such as an I/O error, says nothing about enforcement.
 func (r Result) Denied() bool {
-	switch syscall.Errno(r.Errno) { //nolint:gosec // an errno the kernel returned, or -1, which matches nothing.
+	switch syscall.Errno(r.Errno) {
 	case syscall.EPERM, syscall.EACCES, syscall.ENOENT, syscall.EROFS:
 		return r.Errno > 0
 	default:
@@ -114,7 +115,7 @@ func attempt(step Step) error {
 		}
 		return file.Close()
 	case Connect:
-		conn, err := net.Dial("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(int(step.Port))))
+		conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(int(step.Port))))
 		if err != nil {
 			return err
 		}

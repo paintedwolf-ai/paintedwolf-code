@@ -59,32 +59,10 @@ func initializePrivateRepo(
 	}
 	cleanupStage := func() { _ = os.RemoveAll(stageGitDir) }
 
-	maxRetries := mgr.cfg.MaxCaptureRetries
-	if maxRetries <= 0 {
-		maxRetries = 4
-	}
-	var captured bool
-	var attempts int
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		attempts = attempt + 1
-		_ = os.RemoveAll(stageGitDir)
-		if err := os.MkdirAll(stageGitDir, 0o755); err != nil {
-			cleanupStage()
-			return nil, err
-		}
-		coherent, cErr := tryCaptureSourceMetadataOnce(layout, stageGitDir, attempt, mgr.cfg.CaptureAttemptHook)
-		if cErr != nil {
-			cleanupStage()
-			return nil, cErr
-		}
-		if coherent {
-			captured = true
-			break
-		}
-	}
-	if !captured {
+	attempts, err := captureSourceMetadata(mgr, layout, stageGitDir)
+	if err != nil {
 		cleanupStage()
-		return nil, fmt.Errorf("%w: source git metadata changed during capture", layeredfs.ErrGitPending)
+		return nil, err
 	}
 
 	tipOIDs, initRefs, err := collectCapturedRefAndIndexOIDs(ctx, stageGitDir)
@@ -162,20 +140,7 @@ func initializePrivateRepo(
 		}
 	}
 
-	_, initHeadOID, _, _ := resolveHeadState(finalGitDir)
-	if initHeadOID == "" {
-		revDir := targetWorktreeDir
-		revArgs := []string{"rev-parse", "--verify", "HEAD"}
-		if kernelMounted {
-			revDir = filepath.Dir(finalGitDir)
-			revArgs = []string{"--git-dir=" + finalGitDir, "rev-parse", "--verify", "HEAD"}
-		}
-		if hOut, hCode, hErr := gitexec.Run(ctx, revDir, revArgs, gitexec.Opts{
-			Profile: gitexec.ProfileHermetic,
-		}); hErr == nil && hCode == 0 {
-			initHeadOID = strings.TrimSpace(string(hOut))
-		}
-	}
+	initHeadOID := initialHeadOID(ctx, finalGitDir, targetWorktreeDir, kernelMounted)
 
 	importMetrics.Attempts = attempts
 	importMetrics.Duration = time.Since(start)
@@ -268,4 +233,44 @@ func retainNewPrivateObjects(ctx context.Context, mgr *Manager, view *managedVie
 		_ = mgr.store.ReleaseLease(oldLease)
 	}
 	return nil
+}
+
+// captureSourceMetadata copies the source repository's metadata into stageGitDir until one copy is
+// coherent, and reports how many attempts that took.
+func captureSourceMetadata(mgr *Manager, layout sourceRepoLayout, stageGitDir string) (int, error) {
+	maxRetries := mgr.cfg.MaxCaptureRetries
+	if maxRetries <= 0 {
+		maxRetries = 4
+	}
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		_ = os.RemoveAll(stageGitDir)
+		if err := os.MkdirAll(stageGitDir, 0o755); err != nil {
+			return attempt + 1, err
+		}
+		coherent, err := tryCaptureSourceMetadataOnce(layout, stageGitDir, attempt, mgr.cfg.CaptureAttemptHook)
+		if err != nil {
+			return attempt + 1, err
+		}
+		if coherent {
+			return attempt + 1, nil
+		}
+	}
+	return maxRetries, fmt.Errorf("%w: source git metadata changed during capture", layeredfs.ErrGitPending)
+}
+
+// initialHeadOID is the commit the private repository starts at, read from its HEAD file or, for a
+// symbolic HEAD, from Git.
+func initialHeadOID(ctx context.Context, gitDir, worktreeDir string, kernelMounted bool) string {
+	if _, oid, _, _ := resolveHeadState(gitDir); oid != "" {
+		return oid
+	}
+	revDir, revArgs := worktreeDir, []string{"rev-parse", "--verify", "HEAD"}
+	if kernelMounted {
+		revDir, revArgs = filepath.Dir(gitDir), []string{"--git-dir=" + gitDir, "rev-parse", "--verify", "HEAD"}
+	}
+	out, code, err := gitexec.Run(ctx, revDir, revArgs, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+	if err != nil || code != 0 {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }

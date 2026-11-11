@@ -506,9 +506,9 @@ func parsePackAndIndexOIDs(ctx context.Context, workDir, packPath, idxPath strin
 	if err != nil {
 		return nil, nil, err
 	}
-	idxCount := uint32(len(oids))
+	idxCount := uint32(len(oids)) //nolint:gosec // A pack index counts its objects in 32 bits.
 	if comp != nil {
-		idxCount = uint32(comp.count())
+		idxCount = uint32(comp.count()) //nolint:gosec // A pack index counts its objects in 32 bits.
 	}
 	if idxCount != binary.BigEndian.Uint32(hdr[8:12]) {
 		return nil, nil, fmt.Errorf("%w: pack %s object count mismatches index count %d", ErrCorruptObjectStore, packPath, idxCount)

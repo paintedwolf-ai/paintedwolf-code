@@ -4,6 +4,7 @@ package fuselinux
 
 import (
 	"encoding/binary"
+	"slices"
 	"sort"
 	"syscall"
 )
@@ -219,7 +220,7 @@ func (l *lockTable) applyChangeLocked(nodeID uint64, req fileLockEntry) {
 		owned = append(owned, req)
 	}
 	coalesced := coalescePOSIXRanges(owned)
-	combined := append(others, coalesced...)
+	combined := slices.Concat(others, coalesced)
 	if len(combined) == 0 {
 		delete(l.files, nodeID)
 	} else {

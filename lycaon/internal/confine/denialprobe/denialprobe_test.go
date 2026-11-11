@@ -37,7 +37,7 @@ func TestServeReportsTheKernelsAnswerForEachStep(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "listen", err)
 	defer func() { _ = listener.Close() }()
-	port := uint16(listener.Addr().(*net.TCPAddr).Port) //nolint:gosec // a listener's own port.
+	port := uint16(listener.Addr().(*net.TCPAddr).Port)
 
 	created := filepath.Join(dir, "created")
 	results := serve(t,

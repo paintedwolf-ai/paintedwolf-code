@@ -24,7 +24,7 @@ func ProbeNameFolding(dir string) NameFolding {
 	}
 	var st unix.Statfs_t
 	if err := unix.Statfs(dir, &st); err == nil {
-		switch uint32(st.Type) {
+		switch uint32(st.Type) { //nolint:gosec // Filesystem magic numbers are 32-bit values.
 		case msdosSuperMagic, exfatSuperMagic:
 			folding.Case = true
 		}

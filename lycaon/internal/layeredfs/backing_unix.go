@@ -305,7 +305,7 @@ func statToLowerEntry(st unix.Stat_t) LowerEntry {
 		CtimeNsec: ctimeNsec,
 		UID:       st.Uid,
 		GID:       st.Gid,
-		Nlink:     uint32(st.Nlink),
+		Nlink:     uint32(st.Nlink), //nolint:gosec // Link counts the core serves fit in 32 bits.
 	}
 }
 

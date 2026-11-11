@@ -15,6 +15,6 @@ func fillLowerIdentity(le *layeredfs.LowerEntry, info fs.FileInfo) {
 		le.Ino = st.Ino
 		le.UID = st.Uid
 		le.GID = st.Gid
-		le.Nlink = uint32(st.Nlink) //nolint:unconvert // Nlink is uint16 on darwin
+		le.Nlink = uint32(st.Nlink) //nolint:unconvert,gosec // Nlink is uint16 on darwin and fits 32 bits everywhere.
 	}
 }

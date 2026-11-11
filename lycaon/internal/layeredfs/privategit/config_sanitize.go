@@ -35,7 +35,7 @@ func SanitizeGitConfig(raw []byte) []byte {
 	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
 
 	curSection := ""
-	curSub := ""
+	var curSub string
 	skipSection := false
 
 	for _, line := range lines {

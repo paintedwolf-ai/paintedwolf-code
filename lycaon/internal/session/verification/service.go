@@ -62,7 +62,7 @@ type Service struct {
 
 func New(store Store, workspace *sessionscope.Service, transcript *transcript.Service) *Service {
 	s := &Service{store: store, workspace: workspace, transcript: transcript}
-	s.ObservationBindings.svc = s
+	s.svc = s
 	return s
 }
 func (m *Service) SetDataDir(dir string)         { m.dataDir = strings.TrimSpace(dir) }

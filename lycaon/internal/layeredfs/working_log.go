@@ -295,7 +295,7 @@ func (c *Core) appendRecordWAL(rec workingRecord) error {
 		return err
 	}
 	frame := make([]byte, workingRecordHeader+len(payload))
-	binary.BigEndian.PutUint32(frame[0:4], uint32(len(payload)))
+	binary.BigEndian.PutUint32(frame[0:4], uint32(len(payload))) //nolint:gosec // One mutation's record is far below 4 GiB.
 	binary.BigEndian.PutUint32(frame[4:8], crc32.Checksum(payload, workingLogCRC))
 	copy(frame[workingRecordHeader:], payload)
 	n, err := file.Write(frame)

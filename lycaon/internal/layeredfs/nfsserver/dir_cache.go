@@ -165,4 +165,3 @@ func buildDirEntries(core *layeredfs.Core, dirRec *handleRecord) ([]dirSnapshotE
 	}
 	return out, nil
 }
-

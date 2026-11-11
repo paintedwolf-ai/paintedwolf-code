@@ -164,7 +164,7 @@ func checkGitAccess(c *Core, qpath QualifiedPath, writeIntent bool) (QualifiedPa
 }
 
 func nodeToAttrLocked(n *privateNode) EntryAttr {
-	nlink := uint32(len(n.paths))
+	nlink := uint32(len(n.paths)) //nolint:gosec // A node has a handful of names.
 	if n.kind == EntryDirectory && nlink < 2 {
 		nlink = 2
 	}

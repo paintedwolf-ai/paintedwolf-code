@@ -3,7 +3,7 @@ package backup_test
 import (
 	"bytes"
 	"compress/zlib"
-	"crypto/sha1" //nolint:gosec // Git object and pack index format uses SHA-1
+	"crypto/sha1"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -483,7 +483,7 @@ func buildPackIndexV2ForThinPack(t *testing.T, packBytes []byte, refDeltaOIDHex 
 			default:
 				t.Fatalf("unexpected git pack object type %d", objType)
 			}
-			h := sha1.New() //nolint:gosec // Git object ID uses SHA-1
+			h := sha1.New()
 			_, _ = fmt.Fprintf(h, "%s %d\x00", typeName, len(inflated))
 			_, _ = h.Write(inflated)
 			copy(oid[:], h.Sum(nil))
@@ -522,7 +522,7 @@ func buildPackIndexV2ForThinPack(t *testing.T, packBytes []byte, refDeltaOIDHex 
 		_ = binary.Write(&buf, binary.BigEndian, e.offset)
 	}
 	_, _ = buf.Write(packBytes[end:])
-	idxSum := sha1.Sum(buf.Bytes()) //nolint:gosec // Git pack index trailer is SHA-1
+	idxSum := sha1.Sum(buf.Bytes())
 	_, _ = buf.Write(idxSum[:])
 	return buf.Bytes()
 }

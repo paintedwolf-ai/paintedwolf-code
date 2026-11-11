@@ -32,4 +32,4 @@ func readSymlinkXattrAt(parentFD int, name string, stBefore unix.Stat_t) (map[st
 	return out, nil
 }
 
-func statfsBlockSize(st *unix.Statfs_t) uint64 { return uint64(st.Bsize) }
+func statfsBlockSize(st *unix.Statfs_t) uint64 { return uint64(st.Bsize) } //nolint:gosec // A block size is positive.
