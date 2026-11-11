@@ -1,3 +1,4 @@
+import { WalkPageLede, useWalkStepBriefing } from "./walk-briefing.tsx";
 import { For, Show, createMemo, createSignal } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import { WalkGitReview, type OpenGitReviewFile } from "./WalkGitReview.tsx";
@@ -128,6 +129,7 @@ export function WalkStepPage(props: Props) {
       step: held && held.kind !== "effect" ? held : snapshot ?? null,
     };
   });
+  const briefing = useWalkStepBriefing(() => props.projectId, () => live().step?.key, () => walkState(props.projectId).walk.briefingTargets);
   const files = createMemo(() => {
     const step = live().step;
     return step ? walkStepFiles(step) : [];
@@ -192,9 +194,7 @@ export function WalkStepPage(props: Props) {
                 </div>
               </header>
 
-              <p class="den-walk-page__lede" data-testid="walk-page-lede">
-                {pageLede(step())}
-              </p>
+              <WalkPageLede caveat={pageLede(step())} briefing={briefing} />
               <Show when={commandNote()}>
                 {(note) => (
                   <p class="den-walk-page__note" data-testid="walk-page-state">

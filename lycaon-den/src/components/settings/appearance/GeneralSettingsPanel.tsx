@@ -228,7 +228,7 @@ export function GeneralSettingsPanel(props: Props) {
               <div class="den-settings-pref-copy">
                 <span class="den-settings-pref-label">{settingLabel("file-summaries")}</span>
                 <p class="den-settings-hint">
-                  Show AI-written summaries of files and of activities you open.
+                  Show AI-written summaries of files, Walk steps and activities you open.
                   Turning this off stops summary work and deletes stored summaries.
                   Approval explanations have their own setting.
                 </p>
