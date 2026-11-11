@@ -19,3 +19,7 @@ func ServiceDirectory() (string, error) {
 	}
 	return os.MkdirTemp(root, "pw-service-")
 }
+
+// IsServicePath reports false: no confinement here admits a host service by
+// its path.
+func IsServicePath(string) bool { return false }
