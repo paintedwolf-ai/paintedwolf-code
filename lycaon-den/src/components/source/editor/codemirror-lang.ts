@@ -48,6 +48,21 @@ import type { Extension } from "@codemirror/state";
 import { wordLanguage, type WordLangSpec } from "./codemirror-word-lang.ts";
 import { indentFoldService } from "./indent-fold.ts";
 import { formatSentenceCase } from "../../../format/format-sentence-case.ts";
+import {
+  BRACKET,
+  BRACKET_STATEMENTS,
+  CLAUSE,
+  DATA,
+  DATA_RECORDS,
+  DATA_WITH_COMMENTS,
+  FENCED,
+  MARKUP,
+  NO_LAYOUT,
+  type PrettyLayout,
+  SCRIPT,
+  STYLE,
+  STYLE_WITH_LINE_COMMENTS,
+} from "../pretty/pretty-outcome.ts";
 
 // Languages without bundled grammars use reference keyword lists and a shared tokenizer.
 const WORD_LANG_SPECS = {
@@ -264,243 +279,145 @@ const WORD_LANG_SPECS = {
   },
 } satisfies Record<string, WordLangSpec>;
 
-const EXT_TO_LANG: Record<string, () => LanguageSupport | Language> = {
-  ts: () => javascript({ typescript: true }),
-  tsx: () => javascript({ typescript: true, jsx: true }),
-  js: () => javascript(),
-  jsx: () => javascript({ jsx: true }),
-  mjs: () => javascript(),
-  cjs: () => javascript(),
-  go: () => go(),
-  rs: () => rust(),
-  py: () => python(),
-  pyi: () => python(),
-  json: () => json(),
-  jsonc: () => json(),
-  yaml: () => yaml(),
-  yml: () => yaml(),
-  md: () => markdown({ codeLanguages: languageForInfoString }),
-  mdx: () => markdown({ codeLanguages: languageForInfoString }),
-  sh: () => StreamLanguage.define(shell),
-  bash: () => StreamLanguage.define(shell),
-  zsh: () => StreamLanguage.define(shell),
-  c: () => StreamLanguage.define(c),
-  h: () => StreamLanguage.define(c),
-  cc: () => StreamLanguage.define(cpp),
-  cpp: () => StreamLanguage.define(cpp),
-  cxx: () => StreamLanguage.define(cpp),
-  hpp: () => StreamLanguage.define(cpp),
-  hh: () => StreamLanguage.define(cpp),
-  hxx: () => StreamLanguage.define(cpp),
-  java: () => StreamLanguage.define(java),
-  cs: () => StreamLanguage.define(csharp),
-  scala: () => StreamLanguage.define(scala),
-  kt: () => StreamLanguage.define(kotlin),
-  kts: () => StreamLanguage.define(kotlin),
-  rb: () => StreamLanguage.define(ruby),
-  swift: () => StreamLanguage.define(swift),
-  lua: () => StreamLanguage.define(lua),
-  r: () => StreamLanguage.define(r),
-  jl: () => StreamLanguage.define(julia),
-  clj: () => StreamLanguage.define(clojure),
-  cljs: () => StreamLanguage.define(clojure),
-  cljc: () => StreamLanguage.define(clojure),
-  edn: () => StreamLanguage.define(clojure),
-  scm: () => StreamLanguage.define(scheme),
-  ss: () => StreamLanguage.define(scheme),
-  lisp: () => StreamLanguage.define(commonLisp),
-  cl: () => StreamLanguage.define(commonLisp),
-  lsp: () => StreamLanguage.define(commonLisp),
-  ml: () => StreamLanguage.define(oCaml),
-  mli: () => StreamLanguage.define(oCaml),
-  proto: () => StreamLanguage.define(protobuf),
-  dockerfile: () => StreamLanguage.define(dockerFile),
-  xml: () => StreamLanguage.define(xml),
-  svg: () => StreamLanguage.define(xml),
+/** Each catalog entry: its grammar (null for plain text), its label, and how Pretty lays it out. */
+interface CatalogEntry {
+  readonly grammar: (() => LanguageSupport | Language) | null;
+  readonly label: string;
+  readonly pretty: PrettyLayout;
+}
+
+const CATALOG = {
+  ts: { grammar: () => javascript({ typescript: true }), label: "TypeScript", pretty: SCRIPT },
+  tsx: { grammar: () => javascript({ typescript: true, jsx: true }), label: "TSX", pretty: SCRIPT },
+  js: { grammar: () => javascript(), label: "JavaScript", pretty: SCRIPT },
+  jsx: { grammar: () => javascript({ jsx: true }), label: "JSX", pretty: SCRIPT },
+  mjs: { grammar: () => javascript(), label: "JavaScript", pretty: SCRIPT },
+  cjs: { grammar: () => javascript(), label: "JavaScript", pretty: SCRIPT },
+  go: { grammar: () => go(), label: "Go", pretty: BRACKET },
+  rs: { grammar: () => rust(), label: "Rust", pretty: BRACKET_STATEMENTS },
+  py: { grammar: () => python(), label: "Python", pretty: BRACKET },
+  pyi: { grammar: () => python(), label: "Python", pretty: BRACKET },
+  json: { grammar: () => json(), label: "JSON", pretty: DATA },
+  jsonc: { grammar: () => json(), label: "JSON", pretty: DATA_WITH_COMMENTS },
+  json5: { grammar: () => json(), label: "JSON5", pretty: DATA_WITH_COMMENTS },
+  jsonl: { grammar: () => json(), label: "JSON Lines", pretty: DATA_RECORDS },
+  ndjson: { grammar: () => json(), label: "NDJSON", pretty: DATA_RECORDS },
+  webmanifest: { grammar: () => json(), label: "Web app manifest", pretty: DATA },
+  har: { grammar: () => json(), label: "HAR", pretty: DATA },
+  avsc: { grammar: () => json(), label: "Avro schema", pretty: DATA },
+  yaml: { grammar: () => yaml(), label: "YAML", pretty: BRACKET },
+  yml: { grammar: () => yaml(), label: "YAML", pretty: BRACKET },
+  md: { grammar: () => markdown({ codeLanguages: languageForInfoString }), label: "Markdown", pretty: FENCED },
+  mdx: { grammar: () => markdown({ codeLanguages: languageForInfoString }), label: "Markdown", pretty: FENCED },
+  sh: { grammar: () => StreamLanguage.define(shell), label: "Shell", pretty: NO_LAYOUT },
+  bash: { grammar: () => StreamLanguage.define(shell), label: "Shell", pretty: NO_LAYOUT },
+  zsh: { grammar: () => StreamLanguage.define(shell), label: "Shell", pretty: NO_LAYOUT },
+  c: { grammar: () => StreamLanguage.define(c), label: "C", pretty: BRACKET_STATEMENTS },
+  h: { grammar: () => StreamLanguage.define(c), label: "C", pretty: BRACKET_STATEMENTS },
+  cc: { grammar: () => StreamLanguage.define(cpp), label: "C++", pretty: BRACKET_STATEMENTS },
+  cpp: { grammar: () => StreamLanguage.define(cpp), label: "C++", pretty: BRACKET_STATEMENTS },
+  cxx: { grammar: () => StreamLanguage.define(cpp), label: "C++", pretty: BRACKET_STATEMENTS },
+  hpp: { grammar: () => StreamLanguage.define(cpp), label: "C++", pretty: BRACKET_STATEMENTS },
+  hh: { grammar: () => StreamLanguage.define(cpp), label: "C++", pretty: BRACKET_STATEMENTS },
+  hxx: { grammar: () => StreamLanguage.define(cpp), label: "C++", pretty: BRACKET_STATEMENTS },
+  java: { grammar: () => StreamLanguage.define(java), label: "Java", pretty: BRACKET_STATEMENTS },
+  cs: { grammar: () => StreamLanguage.define(csharp), label: "C#", pretty: BRACKET_STATEMENTS },
+  scala: { grammar: () => StreamLanguage.define(scala), label: "Scala", pretty: BRACKET_STATEMENTS },
+  kt: { grammar: () => StreamLanguage.define(kotlin), label: "Kotlin", pretty: BRACKET_STATEMENTS },
+  kts: { grammar: () => StreamLanguage.define(kotlin), label: "Kotlin", pretty: BRACKET_STATEMENTS },
+  rb: { grammar: () => StreamLanguage.define(ruby), label: "Ruby", pretty: BRACKET },
+  swift: { grammar: () => StreamLanguage.define(swift), label: "Swift", pretty: BRACKET_STATEMENTS },
+  lua: { grammar: () => StreamLanguage.define(lua), label: "Lua", pretty: BRACKET },
+  r: { grammar: () => StreamLanguage.define(r), label: "R", pretty: BRACKET },
+  jl: { grammar: () => StreamLanguage.define(julia), label: "Julia", pretty: BRACKET },
+  clj: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT },
+  cljs: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT },
+  cljc: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT },
+  edn: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT },
+  scm: { grammar: () => StreamLanguage.define(scheme), label: "Scheme", pretty: NO_LAYOUT },
+  ss: { grammar: () => StreamLanguage.define(scheme), label: "Scheme", pretty: NO_LAYOUT },
+  lisp: { grammar: () => StreamLanguage.define(commonLisp), label: "Common Lisp", pretty: NO_LAYOUT },
+  cl: { grammar: () => StreamLanguage.define(commonLisp), label: "Common Lisp", pretty: NO_LAYOUT },
+  lsp: { grammar: () => StreamLanguage.define(commonLisp), label: "Common Lisp", pretty: NO_LAYOUT },
+  ml: { grammar: () => StreamLanguage.define(oCaml), label: "OCaml", pretty: BRACKET },
+  mli: { grammar: () => StreamLanguage.define(oCaml), label: "OCaml", pretty: BRACKET },
+  proto: { grammar: () => StreamLanguage.define(protobuf), label: "Protobuf", pretty: BRACKET_STATEMENTS },
+  dockerfile: { grammar: () => StreamLanguage.define(dockerFile), label: "Dockerfile", pretty: NO_LAYOUT },
+  xml: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP },
+  svg: { grammar: () => StreamLanguage.define(xml), label: "SVG", pretty: MARKUP },
   // The HTML parser applies embedded JavaScript and CSS grammars to component files.
-  html: () => html(),
-  htm: () => html(),
-  vue: () => html(),
-  svelte: () => html(),
-  astro: () => html(),
-  sql: () => StreamLanguage.define(standardSQL),
-  css: () => cssLang(),
+  html: { grammar: () => html(), label: "HTML", pretty: MARKUP },
+  htm: { grammar: () => html(), label: "HTML", pretty: MARKUP },
+  vue: { grammar: () => html(), label: "Vue", pretty: MARKUP },
+  svelte: { grammar: () => html(), label: "Svelte", pretty: MARKUP },
+  astro: { grammar: () => html(), label: "Astro", pretty: MARKUP },
+  sql: { grammar: () => StreamLanguage.define(standardSQL), label: "SQL", pretty: CLAUSE },
+  css: { grammar: () => cssLang(), label: "CSS", pretty: STYLE },
   // SCSS and Less nest rules and carry their own directives; `lang-css` parses
   // plain CSS only, so the preprocessor dialects stay on the stream modes.
-  scss: () => StreamLanguage.define(sCSS),
-  less: () => StreamLanguage.define(less),
-  toml: () => StreamLanguage.define(toml),
-  al: () => StreamLanguage.define(perl),
-  perl: () => StreamLanguage.define(perl),
-  ph: () => StreamLanguage.define(perl),
-  pl: () => StreamLanguage.define(perl),
-  plx: () => StreamLanguage.define(perl),
-  pm: () => StreamLanguage.define(perl),
-  psgi: () => StreamLanguage.define(perl),
-  t: () => StreamLanguage.define(perl),
-  ps1: () => StreamLanguage.define(powerShell),
-  psm1: () => StreamLanguage.define(powerShell),
-  psd1: () => StreamLanguage.define(powerShell),
-  hs: () => StreamLanguage.define(haskell),
-  erl: () => StreamLanguage.define(erlang),
-  hrl: () => StreamLanguage.define(erlang),
-  elm: () => StreamLanguage.define(elm),
-  groovy: () => StreamLanguage.define(groovy),
-  gradle: () => StreamLanguage.define(groovy),
-  diff: () => StreamLanguage.define(diff),
-  patch: () => StreamLanguage.define(diff),
-  properties: () => StreamLanguage.define(properties),
-  ini: () => StreamLanguage.define(properties),
-  env: () => StreamLanguage.define(properties),
-  cfg: () => StreamLanguage.define(properties),
-  cmake: () => StreamLanguage.define(cmake),
-  tcl: () => StreamLanguage.define(tcl),
-  cr: () => StreamLanguage.define(crystal),
-  d: () => StreamLanguage.define(d),
-  f: () => StreamLanguage.define(fortran),
-  f90: () => StreamLanguage.define(fortran),
-  f95: () => StreamLanguage.define(fortran),
-  f03: () => StreamLanguage.define(fortran),
-  pas: () => StreamLanguage.define(pascal),
-  dart: () => StreamLanguage.define(dart),
-  sass: () => StreamLanguage.define(sass),
-  php: () => wordLanguage(WORD_LANG_SPECS.php),
-  hack: () => wordLanguage(WORD_LANG_SPECS.hack),
-  ex: () => wordLanguage(WORD_LANG_SPECS.elixir),
-  exs: () => wordLanguage(WORD_LANG_SPECS.elixir),
-  hcl: () => wordLanguage(WORD_LANG_SPECS.hcl),
-  tf: () => wordLanguage(WORD_LANG_SPECS.hcl),
-  tfvars: () => wordLanguage(WORD_LANG_SPECS.hcl),
-  sol: () => wordLanguage(WORD_LANG_SPECS.solidity),
-  move: () => wordLanguage(WORD_LANG_SPECS.move),
-  cairo: () => wordLanguage(WORD_LANG_SPECS.cairo),
-  circom: () => wordLanguage(WORD_LANG_SPECS.circom),
-  cls: () => wordLanguage(WORD_LANG_SPECS.apex),
-  trigger: () => wordLanguage(WORD_LANG_SPECS.apex),
-  ql: () => wordLanguage(WORD_LANG_SPECS.ql),
-  qll: () => wordLanguage(WORD_LANG_SPECS.ql),
-  jsonnet: () => wordLanguage(WORD_LANG_SPECS.jsonnet),
-  libsonnet: () => wordLanguage(WORD_LANG_SPECS.jsonnet),
-  promql: () => wordLanguage(WORD_LANG_SPECS.promql),
-};
+  scss: { grammar: () => StreamLanguage.define(sCSS), label: "SCSS", pretty: STYLE_WITH_LINE_COMMENTS },
+  less: { grammar: () => StreamLanguage.define(less), label: "Less", pretty: STYLE_WITH_LINE_COMMENTS },
+  toml: { grammar: () => StreamLanguage.define(toml), label: "TOML", pretty: BRACKET },
+  al: { grammar: () => StreamLanguage.define(perl), label: "Perl", pretty: BRACKET },
+  perl: { grammar: () => StreamLanguage.define(perl), label: "Perl", pretty: BRACKET },
+  ph: { grammar: () => StreamLanguage.define(perl), label: "Perl", pretty: BRACKET },
+  pl: { grammar: () => StreamLanguage.define(perl), label: "Perl", pretty: BRACKET },
+  plx: { grammar: () => StreamLanguage.define(perl), label: "Perl", pretty: BRACKET },
+  pm: { grammar: () => StreamLanguage.define(perl), label: "Perl", pretty: BRACKET },
+  psgi: { grammar: () => StreamLanguage.define(perl), label: "Perl", pretty: BRACKET },
+  t: { grammar: () => StreamLanguage.define(perl), label: "Perl", pretty: BRACKET },
+  ps1: { grammar: () => StreamLanguage.define(powerShell), label: "PowerShell", pretty: NO_LAYOUT },
+  psm1: { grammar: () => StreamLanguage.define(powerShell), label: "PowerShell", pretty: NO_LAYOUT },
+  psd1: { grammar: () => StreamLanguage.define(powerShell), label: "PowerShell", pretty: NO_LAYOUT },
+  hs: { grammar: () => StreamLanguage.define(haskell), label: "Haskell", pretty: BRACKET },
+  erl: { grammar: () => StreamLanguage.define(erlang), label: "Erlang", pretty: BRACKET },
+  hrl: { grammar: () => StreamLanguage.define(erlang), label: "Erlang", pretty: BRACKET },
+  elm: { grammar: () => StreamLanguage.define(elm), label: "Elm", pretty: BRACKET },
+  groovy: { grammar: () => StreamLanguage.define(groovy), label: "Groovy", pretty: BRACKET_STATEMENTS },
+  gradle: { grammar: () => StreamLanguage.define(groovy), label: "Gradle", pretty: BRACKET_STATEMENTS },
+  diff: { grammar: () => StreamLanguage.define(diff), label: "Diff", pretty: NO_LAYOUT },
+  patch: { grammar: () => StreamLanguage.define(diff), label: "Diff", pretty: NO_LAYOUT },
+  properties: { grammar: () => StreamLanguage.define(properties), label: "Properties", pretty: NO_LAYOUT },
+  ini: { grammar: () => StreamLanguage.define(properties), label: "INI", pretty: NO_LAYOUT },
+  env: { grammar: () => StreamLanguage.define(properties), label: "Dotenv", pretty: NO_LAYOUT },
+  cfg: { grammar: () => StreamLanguage.define(properties), label: "Config", pretty: NO_LAYOUT },
+  cmake: { grammar: () => StreamLanguage.define(cmake), label: "CMake", pretty: NO_LAYOUT },
+  tcl: { grammar: () => StreamLanguage.define(tcl), label: "Tcl", pretty: NO_LAYOUT },
+  cr: { grammar: () => StreamLanguage.define(crystal), label: "Crystal", pretty: BRACKET },
+  d: { grammar: () => StreamLanguage.define(d), label: "D", pretty: BRACKET_STATEMENTS },
+  f: { grammar: () => StreamLanguage.define(fortran), label: "Fortran", pretty: NO_LAYOUT },
+  f90: { grammar: () => StreamLanguage.define(fortran), label: "Fortran", pretty: NO_LAYOUT },
+  f95: { grammar: () => StreamLanguage.define(fortran), label: "Fortran", pretty: NO_LAYOUT },
+  f03: { grammar: () => StreamLanguage.define(fortran), label: "Fortran", pretty: NO_LAYOUT },
+  pas: { grammar: () => StreamLanguage.define(pascal), label: "Pascal", pretty: NO_LAYOUT },
+  dart: { grammar: () => StreamLanguage.define(dart), label: "Dart", pretty: BRACKET_STATEMENTS },
+  sass: { grammar: () => StreamLanguage.define(sass), label: "Sass", pretty: BRACKET },
+  php: { grammar: () => wordLanguage(WORD_LANG_SPECS.php), label: "PHP", pretty: BRACKET_STATEMENTS },
+  hack: { grammar: () => wordLanguage(WORD_LANG_SPECS.hack), label: "Hack", pretty: BRACKET_STATEMENTS },
+  ex: { grammar: () => wordLanguage(WORD_LANG_SPECS.elixir), label: "Elixir", pretty: BRACKET },
+  exs: { grammar: () => wordLanguage(WORD_LANG_SPECS.elixir), label: "Elixir", pretty: BRACKET },
+  hcl: { grammar: () => wordLanguage(WORD_LANG_SPECS.hcl), label: "HCL", pretty: BRACKET_STATEMENTS },
+  tf: { grammar: () => wordLanguage(WORD_LANG_SPECS.hcl), label: "Terraform", pretty: BRACKET_STATEMENTS },
+  tfvars: { grammar: () => wordLanguage(WORD_LANG_SPECS.hcl), label: "Terraform", pretty: BRACKET_STATEMENTS },
+  sol: { grammar: () => wordLanguage(WORD_LANG_SPECS.solidity), label: "Solidity", pretty: BRACKET_STATEMENTS },
+  move: { grammar: () => wordLanguage(WORD_LANG_SPECS.move), label: "Move", pretty: BRACKET_STATEMENTS },
+  cairo: { grammar: () => wordLanguage(WORD_LANG_SPECS.cairo), label: "Cairo", pretty: BRACKET_STATEMENTS },
+  circom: { grammar: () => wordLanguage(WORD_LANG_SPECS.circom), label: "Circom", pretty: BRACKET_STATEMENTS },
+  cls: { grammar: () => wordLanguage(WORD_LANG_SPECS.apex), label: "Apex", pretty: BRACKET_STATEMENTS },
+  trigger: { grammar: () => wordLanguage(WORD_LANG_SPECS.apex), label: "Apex", pretty: BRACKET_STATEMENTS },
+  ql: { grammar: () => wordLanguage(WORD_LANG_SPECS.ql), label: "CodeQL", pretty: BRACKET_STATEMENTS },
+  qll: { grammar: () => wordLanguage(WORD_LANG_SPECS.ql), label: "CodeQL", pretty: BRACKET_STATEMENTS },
+  jsonnet: { grammar: () => wordLanguage(WORD_LANG_SPECS.jsonnet), label: "Jsonnet", pretty: DATA_WITH_COMMENTS },
+  libsonnet: { grammar: () => wordLanguage(WORD_LANG_SPECS.jsonnet), label: "Jsonnet", pretty: DATA_WITH_COMMENTS },
+  promql: { grammar: () => wordLanguage(WORD_LANG_SPECS.promql), label: "PromQL", pretty: BRACKET },
+  txt: { grammar: null, label: "Plain text", pretty: NO_LAYOUT },
+} satisfies Record<string, CatalogEntry>;
 
-const EXT_TO_LABEL: Record<string, string> = {
-  ts: "TypeScript",
-  tsx: "TSX",
-  js: "JavaScript",
-  jsx: "JSX",
-  mjs: "JavaScript",
-  cjs: "JavaScript",
-  go: "Go",
-  rs: "Rust",
-  py: "Python",
-  pyi: "Python",
-  json: "JSON",
-  jsonc: "JSON",
-  yaml: "YAML",
-  yml: "YAML",
-  txt: "Plain text",
-  md: "Markdown",
-  mdx: "Markdown",
-  sh: "Shell",
-  bash: "Shell",
-  zsh: "Shell",
-  c: "C",
-  h: "C",
-  cc: "C++",
-  cpp: "C++",
-  cxx: "C++",
-  hpp: "C++",
-  hh: "C++",
-  hxx: "C++",
-  java: "Java",
-  cs: "C#",
-  scala: "Scala",
-  kt: "Kotlin",
-  kts: "Kotlin",
-  rb: "Ruby",
-  swift: "Swift",
-  lua: "Lua",
-  r: "R",
-  jl: "Julia",
-  clj: "Clojure",
-  cljs: "Clojure",
-  cljc: "Clojure",
-  edn: "Clojure",
-  scm: "Scheme",
-  ss: "Scheme",
-  lisp: "Common Lisp",
-  cl: "Common Lisp",
-  lsp: "Common Lisp",
-  ml: "OCaml",
-  mli: "OCaml",
-  proto: "Protobuf",
-  dockerfile: "Dockerfile",
-  xml: "XML",
-  svg: "SVG",
-  html: "HTML",
-  htm: "HTML",
-  vue: "Vue",
-  svelte: "Svelte",
-  astro: "Astro",
-  sql: "SQL",
-  css: "CSS",
-  scss: "SCSS",
-  less: "Less",
-  toml: "TOML",
-  al: "Perl",
-  perl: "Perl",
-  ph: "Perl",
-  pl: "Perl",
-  plx: "Perl",
-  pm: "Perl",
-  psgi: "Perl",
-  t: "Perl",
-  ps1: "PowerShell",
-  psm1: "PowerShell",
-  psd1: "PowerShell",
-  hs: "Haskell",
-  erl: "Erlang",
-  hrl: "Erlang",
-  elm: "Elm",
-  groovy: "Groovy",
-  gradle: "Gradle",
-  diff: "Diff",
-  patch: "Diff",
-  properties: "Properties",
-  ini: "INI",
-  env: "Dotenv",
-  cfg: "Config",
-  cmake: "CMake",
-  tcl: "Tcl",
-  cr: "Crystal",
-  d: "D",
-  f: "Fortran",
-  f90: "Fortran",
-  f95: "Fortran",
-  f03: "Fortran",
-  pas: "Pascal",
-  php: "PHP",
-  dart: "Dart",
-  ex: "Elixir",
-  exs: "Elixir",
-  sass: "Sass",
-  sol: "Solidity",
-  hcl: "HCL",
-  tf: "Terraform",
-  tfvars: "Terraform",
-  cls: "Apex",
-  trigger: "Apex",
-  cairo: "Cairo",
-  circom: "Circom",
-  move: "Move",
-  promql: "PromQL",
-  ql: "CodeQL",
-  qll: "CodeQL",
-  jsonnet: "Jsonnet",
-  libsonnet: "Jsonnet",
-  hack: "Hack",
-};
+type CatalogKey = keyof typeof CATALOG;
+
+function catalogEntry(ext: string): CatalogEntry | undefined {
+  return Object.hasOwn(CATALOG, ext) ? CATALOG[ext as CatalogKey] : undefined;
+}
 
 /** Well-known extensionless, dot-prefixed, or extension-ambiguous filenames. */
 const BASENAME_TO_EXT: Record<string, string> = {
@@ -564,7 +481,8 @@ export function languageLabelForPath(path: string): string {
   const ext = extensionOf(base);
   const byName = BASENAME_TO_LABEL[base];
   if (byName) return byName;
-  if (ext && EXT_TO_LABEL[ext]) return EXT_TO_LABEL[ext];
+  const entry = ext ? catalogEntry(ext) : undefined;
+  if (entry) return entry.label;
   return ext || "text";
 }
 
@@ -578,7 +496,7 @@ export function languageLabelForDetectedLanguage(
   if (key === "vimdoc" && extensionOf(basenameOf(path)) === "txt") {
     return "Plain text";
   }
-  const known = DETECTED_LANGUAGE_TO_LABEL[key] ?? EXT_TO_LABEL[key];
+  const known = DETECTED_LANGUAGE_TO_LABEL[key] ?? catalogEntry(key)?.label;
   if (known) return known;
   return formatSentenceCase(key);
 }
@@ -586,10 +504,10 @@ export function languageLabelForDetectedLanguage(
 /** Maps fenced-code labels to the viewer's language grammars. */
 const INFO_TO_EXT: ReadonlyMap<string, string> = (() => {
   const map = new Map<string, string>();
-  for (const ext of Object.keys(EXT_TO_LANG)) map.set(ext, ext);
-  for (const [ext, label] of Object.entries(EXT_TO_LABEL)) {
-    const key = label.toLowerCase();
-    if (!map.has(key) && EXT_TO_LANG[ext]) map.set(key, ext);
+  for (const ext of Object.keys(CATALOG)) map.set(ext, ext);
+  for (const [ext, entry] of Object.entries(CATALOG) as [string, CatalogEntry][]) {
+    const key = entry.label.toLowerCase();
+    if (!map.has(key) && entry.grammar) map.set(key, ext);
   }
   return map;
 })();
@@ -602,22 +520,43 @@ export function languageForInfoString(info: string): Language | null {
   const name = token.replace(/^\./, "").toLowerCase();
   if (!name) return null;
   const ext = INFO_TO_EXT.get(name);
-  const factory = ext ? EXT_TO_LANG[ext] : undefined;
+  const factory = ext ? catalogEntry(ext)?.grammar : undefined;
   if (!factory) return null;
   const value = factory();
   return value instanceof LanguageSupport ? value.language : value;
 }
 
 export function languageExtensionForPath(path: string): Extension | null {
-  const base = basenameOf(path);
-  const ext = extensionOf(base);
-  const factory =
-    (ext ? EXT_TO_LANG[ext] : undefined) ??
-    (BASENAME_TO_EXT[base] ? EXT_TO_LANG[BASENAME_TO_EXT[base]] : undefined);
+  const factory = catalogEntryForPath(path)?.grammar;
   if (!factory) return null;
   const value = factory();
   // Stream languages use indentation because they provide no syntax fold ranges.
   return value instanceof StreamLanguage ? [value, indentFoldService] : value;
+}
+
+function catalogEntryForPath(path: string): CatalogEntry | undefined {
+  const base = basenameOf(path);
+  const ext = extensionOf(base);
+  // Well-known names win over their extension, as `CMakeLists.txt` does over `.txt`.
+  const named = BASENAME_TO_EXT[base];
+  return named ? catalogEntry(named) : ext ? catalogEntry(ext) : undefined;
+}
+
+/** How Pretty lays out a file; a file outside the catalog has no layout. */
+export function prettyLayoutForPath(path: string): PrettyLayout {
+  return catalogEntryForPath(path)?.pretty ?? NO_LAYOUT;
+}
+
+/** How Pretty lays out text named by a language, label or fence info string. */
+export function prettyLayoutForLanguage(name: string): PrettyLayout {
+  const token = (name.trim().split(/\s+/, 1)[0] ?? "").replace(/^\./, "").toLowerCase();
+  const ext = INFO_TO_EXT.get(token);
+  return (ext ? catalogEntry(ext)?.pretty : undefined) ?? NO_LAYOUT;
+}
+
+/** Every catalog extension with its label and Pretty layout. */
+export function prettyLayoutCatalog(): ReadonlyArray<{ readonly ext: string; readonly label: string; readonly pretty: PrettyLayout }> {
+  return (Object.entries(CATALOG) as [string, CatalogEntry][]).map(([ext, entry]) => ({ ext, label: entry.label, pretty: entry.pretty }));
 }
 
 function basenameOf(path: string): string {

@@ -11,17 +11,16 @@ import {
   REJECTED,
   VERBATIM_HEAD_TAIL,
 } from "../../../chat/host-markers.generated.ts";
+import { prettyLayoutForLanguage, prettyLayoutForPath } from "../editor/codemirror-lang.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
+import type { PrettyLayout } from "./pretty-outcome.ts";
 import type { BracketRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan.ts";
-
-const plainData = { singleQuotes: false, comments: false };
-const commentedData = { singleQuotes: true, comments: true };
 
 export const DATA_RULE: BracketRule = {
   kind: "bracket", data: true, statements: false, afterBlock: null, records: false,
-  lexer: () => new DataLexer(plainData),
+  lexer: () => new DataLexer({ singleQuotes: false, comments: false }),
 };
-const COMMENTED_DATA_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer(commentedData) };
+const COMMENTED_DATA_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer({ singleQuotes: true, comments: true }) };
 const RECORDS_RULE: BracketRule = { ...DATA_RULE, records: true };
 export const SCRIPT_RULE: BracketRule = {
   kind: "bracket", data: false, statements: true, afterBlock: "script", records: false,
@@ -31,32 +30,25 @@ export const STYLE_RULE: BracketRule = {
   kind: "bracket", data: false, statements: true, afterBlock: "style", records: false,
   lexer: () => new StyleLexer(false),
 };
-const PREPROCESSED_STYLE_RULE: BracketRule = { ...STYLE_RULE, lexer: () => new StyleLexer(true) };
+const LINE_COMMENT_STYLE_RULE: BracketRule = { ...STYLE_RULE, lexer: () => new StyleLexer(true) };
 export const MARKUP_RULE: MarkupRule = { kind: "markup" };
 
-const RULES_BY_NAME = new Map<string, PrettyRule>([
-  ...["json", "webmanifest", "har", "avsc", "application/json"].map((name) => [name, DATA_RULE] as const),
-  ...["jsonc", "json5", "jsonnet", "libsonnet", "application/jsonc", "application/json5"].map((name) => [name, COMMENTED_DATA_RULE] as const),
-  ...["jsonl", "ndjson", "application/x-ndjson"].map((name) => [name, RECORDS_RULE] as const),
-  ...["js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts", "javascript", "typescript", "application/javascript", "text/javascript"]
-    .map((name) => [name, SCRIPT_RULE] as const),
-  ...["css", "text/css"].map((name) => [name, STYLE_RULE] as const),
-  ...["scss", "less"].map((name) => [name, PREPROCESSED_STYLE_RULE] as const),
-  ...["xml", "svg", "xhtml", "html", "htm", "vue", "svelte", "astro", "application/xml", "text/xml", "text/html", "image/svg+xml"]
-    .map((name) => [name, MARKUP_RULE] as const),
-]);
-const MARKDOWN_NAMES = new Set(["md", "markdown", "mdx", "gfm", "text/markdown"]);
-
-function extensionOf(path: string): string {
-  const clean = path.split(/[?#]/)[0] ?? path;
-  const slash = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
-  const base = (slash >= 0 ? clean.slice(slash + 1) : clean).toLowerCase();
-  const dot = base.lastIndexOf(".");
-  return dot > 0 ? base.slice(dot + 1) : "";
+/** The rule that applies a declared layout, or null where no rule exists. */
+function ruleFor(layout: PrettyLayout): PrettyRule | null {
+  switch (layout.kind) {
+    case "data": return layout.records ? RECORDS_RULE : layout.comments ? COMMENTED_DATA_RULE : DATA_RULE;
+    case "markup": return MARKUP_RULE;
+    case "code": return layout.dialect === "script" ? SCRIPT_RULE : layout.dialect === "style" ? STYLE_RULE : LINE_COMMENT_STYLE_RULE;
+    case "bracket":
+    case "clause":
+    case "fenced":
+    case "none":
+      return null;
+  }
 }
 
 function fenceRule(info: string): PrettyRule | null {
-  return RULES_BY_NAME.get(info.replace(/^\./, "")) ?? null;
+  return ruleFor(prettyLayoutForLanguage(info));
 }
 
 /** What decides a document's layout: its language, Markdown fences, or recognition of unknown text. */
@@ -74,13 +66,12 @@ const UNKNOWN: PrettyTarget = { kind: "unknown" };
  * language without a layout.
  */
 export function prettyTargetFor(path?: string, languageHint?: string): PrettyTarget | null {
-  const name = languageHint?.trim().toLowerCase() || (path ? extensionOf(path) : "");
-  if (name) {
-    if (MARKDOWN_NAMES.has(name)) return FENCED;
-    const rule = RULES_BY_NAME.get(name);
-    return rule ? { kind: "document", rule } : null;
-  }
-  return path ? null : UNKNOWN;
+  const hint = languageHint?.trim();
+  if (!hint && !path) return UNKNOWN;
+  const layout = hint ? prettyLayoutForLanguage(hint) : prettyLayoutForPath(path!);
+  if (layout.kind === "fenced") return FENCED;
+  const rule = ruleFor(layout);
+  return rule ? { kind: "document", rule } : null;
 }
 
 export function prettyPlanFor(doc: Text, target: PrettyTarget): PrettyPlan {
