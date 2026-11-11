@@ -14,7 +14,7 @@ import {
 import { prettyLayoutForLanguage, prettyLayoutForPath } from "../editor/codemirror-lang.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
 import type { PrettyLayout } from "./pretty-outcome.ts";
-import type { BracketRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan.ts";
+import type { BracketRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan-state.ts";
 
 export const DATA_RULE: BracketRule = {
   kind: "bracket", data: true, statements: false, afterBlock: null, records: false,
