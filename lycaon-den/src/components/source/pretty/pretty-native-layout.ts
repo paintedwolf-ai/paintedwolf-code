@@ -840,7 +840,7 @@ export function applyPrettyNativeConfig(
   view.dispatch({
     effects: [
       setPrettyNativeConfigEffect.of(config),
-      ...(toggled ? [EditorView.scrollIntoView(head(view.state))] : []),
+      ...(toggled ? [EditorView.scrollIntoView(head(view.state), { y: "nearest" })] : []),
     ],
     ...(annotations ? { annotations: [...annotations] } : {}),
   });
