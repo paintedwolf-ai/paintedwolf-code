@@ -326,13 +326,14 @@ esac
 `, argvLog, envLog, h.bin, bareDir, h.bin, bareDir)
 	testutil.FailErr(t, "write ssh shim", os.WriteFile(sshShim, []byte(shimBody), 0o755))
 
-	// Confinement supplies an agent launch's SSH transport; the shim stands in
-	// for it, and the host's own SSH command must not apply.
+	// Confinement supplies an agent launch's SSH transport; an ssh shim first
+	// on the launch's PATH stands in for it, and the host's own SSH command
+	// must not apply.
 	gitexec.SetHostConfig(sshTestHostConfig{sshCmd: "/bin/false"})
 	t.Cleanup(func() { gitexec.SetHostConfig(nil) })
 	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string, sockets []confine.SocketGrant) (lycexec.LaunchPlan, func(context.Context), error) {
 		plan, release, err := UnconfinedLaunch(ctx, tc, subject, line, sockets)
-		return plan.WithReducedEnvironment().WithExtraEnv("GIT_SSH_COMMAND=" + sshShim), release, err
+		return plan.WithReducedEnvironment().WithExtraEnv("PATH=" + bareParent + string(os.PathListSeparator) + os.Getenv("PATH")), release, err
 	}
 	// The user's SSH agent reaches agent Git only through a socket capability.
 	grant, err := confine.ResolveSocketRequest(sockPath)
@@ -469,7 +470,7 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 		"SSH_AUTH_SOCK=" + sockPath,
 		"SSH_ASKPASS=",
 		"GIT_TERMINAL_PROMPT=0",
-		"GIT_SSH_COMMAND=" + filepath.Join(bareParent, "ssh"),
+		"GIT_SSH_COMMAND=",
 	} {
 		if !strings.Contains(envText, want+"\n") {
 			t.Fatalf("ssh transport env missing %q:\n%s", want, envText)
