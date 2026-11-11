@@ -91,7 +91,7 @@ func recoverWorkerView(ctx context.Context, c *Coordinator, req RecoverRequest) 
 		return nil, err
 	}
 	if prevBacking == "" {
-		// Startup settled the mount already and left its storage here for this rebuild.
+		// Startup settled the mount already, so only the journal still names its storage.
 		prevBacking = j.BackingDir
 	}
 
