@@ -314,8 +314,8 @@ function blockFact(cursor: ScanCursor, openPos: number): boolean {
     if (isOpener(c)) {
       stack.push({ kind: c, open: pos, semicolon: false });
     } else if (isCloser(c) && stack[stack.length - 1]!.kind === openerOf(c)) {
-      const frame = stack.pop()!;
-      if (frame.kind === OPEN_BRACE) facts.set(frame.open, pos + 1, frame.semicolon);
+      const frame = stack.pop();
+      if (frame?.kind === OPEN_BRACE) facts.set(frame.open, pos + 1, frame.semicolon);
     } else if (c === SEMICOLON) {
       stack[stack.length - 1]!.semicolon = true;
     }
