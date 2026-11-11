@@ -1,6 +1,7 @@
 package evidence
 
 import (
+	"path"
 	"sort"
 	"strings"
 
@@ -338,27 +339,37 @@ func ExternalCustodyURLs(ev Ledger, paths []string) []string {
 		if p == "" {
 			continue
 		}
-		handles := ev.byPathOrder[p]
-		if len(handles) == 0 {
-			handles = ev.ByPath[p]
+		decisive, found := ev.latestCustody(p, false)
+		// A tree covers the directory itself (its listing names what arrived) and every path below it.
+		for dir := p; dir != "." && dir != "/"; dir = path.Dir(dir) {
+			if tree, ok := ev.latestCustody(dir, true); ok && (!found || tree.Custody.Seq > decisive.Custody.Seq) {
+				decisive, found = tree, true
+			}
 		}
-		for i := len(handles) - 1; i >= 0; i-- {
-			rec, ok := ev.Handles[handles[i]]
-			if !ok || rec.SupersededBy != "" {
-				continue
+		if found && decisive.Custody.External {
+			for _, u := range ObservedURLsForRecord(decisive) {
+				addURL(u)
 			}
-			if !ReplacesWholeFileCustody(rec) {
-				continue
-			}
-			if rec.Custody.External {
-				for _, u := range ObservedURLsForRecord(rec) {
-					addURL(u)
-				}
-			}
-			break
 		}
 	}
 	return out
+}
+
+// latestCustody is the newest live record that sets whole-file custody on p:
+// a file record when tree is false, a directory's tree record when true.
+func (ev Ledger) latestCustody(p string, tree bool) (Record, bool) {
+	handles := ev.byPathOrder[p]
+	if len(handles) == 0 {
+		handles = ev.ByPath[p]
+	}
+	for i := len(handles) - 1; i >= 0; i-- {
+		rec, ok := ev.Handles[handles[i]]
+		if !ok || rec.SupersededBy != "" || !ReplacesWholeFileCustody(rec) || rec.Custody.Tree != tree {
+			continue
+		}
+		return rec, true
+	}
+	return Record{}, false
 }
 
 // ReplacesWholeFileCustody reports whether rec replaces whole-file custody on its indexed paths.

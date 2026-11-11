@@ -34,6 +34,7 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 	}
 	defer done()
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, p.command.args, out)
+	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0})
 	if out.err != nil {
 		return settleMutationError(out.err, certainty)
 	}
@@ -65,6 +66,7 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	}
 	fetchArgs = append(fetchArgs, p.Argv.Operands().Values()...)
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, fetchArgs, out)
+	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0})
 	if out.err != nil {
 		return settleMutationError(out.err, toolcontract.EffectUnknown)
 	}
@@ -85,7 +87,11 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	}
 	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
 	res, opErr := mut.Operate(ctx, tc, req)
-	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), opErr)
+	result, err := settleOperate(p, res, out, stderr, has(p.Argv, "-q"), opErr)
+	// The merge or rebase places fetched content in the files it changed, and
+	// its summary names them.
+	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, files: mergedPaths(repo.Root, res.Paths)})
+	return result, err
 }
 
 func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
@@ -139,6 +145,7 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	}
 	resolvedURL := resolveLocalCloneSource(dir, rawURL)
 	diagnostics, code, err := git.CloneCommand(ctx, resolvedURL, boundDest.Resolved.Abs, flags, out)
+	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0, trees: []string{boundDest.Resolved.Abs}})
 	if out.err != nil {
 		return settleMutationError(out.err, toolcontract.EffectUnknown)
 	}

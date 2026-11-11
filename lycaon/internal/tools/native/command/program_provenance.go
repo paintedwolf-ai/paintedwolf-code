@@ -2,6 +2,7 @@ package command
 
 import (
 	"context"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -23,6 +24,7 @@ type programProvenanceState struct {
 	pipedExternalOutput  bool
 	externalURLs         []string
 	custodyFiles         map[string][]string
+	custodyTrees         map[string][]string
 	clearedFiles         map[string]bool
 	activeTrackers       []*opProvenanceTracker
 }
@@ -190,6 +192,9 @@ func (r *programRun) finishOpTracker(ctx context.Context, tracker *opProvenanceT
 		for _, f := range ex.WrittenFiles {
 			r.addCustodyFile(r.normalizeProvenancePath("", f), ex.ObservedURLs)
 		}
+		for _, dir := range ex.WrittenTrees {
+			r.addCustodyTree(r.normalizeProvenancePath("", dir), ex.ObservedURLs)
+		}
 		if ex.WroteStdout {
 			r.routeExternalStream(outClass, ex.ObservedURLs)
 		}
@@ -272,6 +277,30 @@ func (r *programRun) addCustodyFile(normPath string, urls []string) {
 	r.provenance.custodyFiles[normPath] = appendUniqueProvenanceStrings(r.provenance.custodyFiles[normPath], urls...)
 }
 
+// addCustodyTree records a directory the program filled from the network.
+func (r *programRun) addCustodyTree(normPath string, urls []string) {
+	if normPath == "" || len(urls) == 0 {
+		return
+	}
+	r.provenance.mu.Lock()
+	defer r.provenance.mu.Unlock()
+	if r.provenance.custodyTrees == nil {
+		r.provenance.custodyTrees = make(map[string][]string)
+	}
+	r.provenance.custodyTrees[normPath] = appendUniqueProvenanceStrings(r.provenance.custodyTrees[normPath], urls...)
+}
+
+// treeCustodyLocked is the custody of the nearest tree this program filled
+// that holds normPath. Callers hold r.provenance.mu.
+func (r *programRun) treeCustodyLocked(normPath string) []string {
+	for dir := normPath; dir != "." && dir != "/" && dir != ""; dir = path.Dir(dir) {
+		if urls := r.provenance.custodyTrees[dir]; len(urls) > 0 {
+			return urls
+		}
+	}
+	return nil
+}
+
 func (r *programRun) clearCustodyFile(normPath string) {
 	if normPath == "" {
 		return
@@ -297,6 +326,8 @@ func (r *programRun) lookupCustodyURLs(ctx context.Context, normPaths []string) 
 		}
 		if inProg, ok := r.provenance.custodyFiles[p]; ok && len(inProg) > 0 {
 			urls = appendUniqueProvenanceStrings(urls, inProg...)
+		} else if !r.provenance.clearedFiles[p] {
+			urls = appendUniqueProvenanceStrings(urls, r.treeCustodyLocked(p)...)
 		}
 		if r.provenance.clearedFiles == nil || !r.provenance.clearedFiles[p] {
 			storeQueryPaths = appendUniqueProvenanceStrings(storeQueryPaths, p)
@@ -398,6 +429,12 @@ func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *p
 		observedURLs = appendUniqueProvenanceStrings(observedURLs, urls...)
 	}
 	sort.Strings(custodyPaths)
+	var custodyTrees []string
+	for p, urls := range run.provenance.custodyTrees {
+		custodyTrees = append(custodyTrees, p)
+		observedURLs = appendUniqueProvenanceStrings(observedURLs, urls...)
+	}
+	sort.Strings(custodyTrees)
 	var clearedCandidates []string
 	for p, cleared := range run.provenance.clearedFiles {
 		if cleared && p != "" {
@@ -422,7 +459,7 @@ func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *p
 		}
 	}
 
-	if !ingested && len(custodyPaths) == 0 && len(clearedPaths) == 0 {
+	if !ingested && len(custodyPaths) == 0 && len(custodyTrees) == 0 && len(clearedPaths) == 0 {
 		return
 	}
 	prov := evidence.ProgramHTTPProvenance{
@@ -430,15 +467,17 @@ func (r *ProgramRuntime) commitProgramHTTPProvenance(ctx context.Context, run *p
 		UntrustedContent: ingested,
 		ObservedURLs:     observedURLs,
 		CustodyPaths:     custodyPaths,
+		CustodyTrees:     custodyTrees,
 		ClearedPaths:     clearedPaths,
 	}
 	_, _ = store.CommitProgramHTTPProvenance(commitCtx, run.tc.Identity.SessionID, projDir, prov)
-	if chatID := run.tc.ChatSessionID(); chatID != "" && chatID != run.tc.Identity.SessionID && (len(custodyPaths) > 0 || len(clearedPaths) > 0) {
+	if chatID := run.tc.ChatSessionID(); chatID != "" && chatID != run.tc.Identity.SessionID && (len(custodyPaths) > 0 || len(custodyTrees) > 0 || len(clearedPaths) > 0) {
 		_, _ = store.CommitProgramHTTPProvenance(commitCtx, chatID, projDir, evidence.ProgramHTTPProvenance{
 			ProgramID:        run.root.Identity.ProgramID,
 			UntrustedContent: false,
 			ObservedURLs:     observedURLs,
 			CustodyPaths:     custodyPaths,
+			CustodyTrees:     custodyTrees,
 			ClearedPaths:     clearedPaths,
 		})
 	}
