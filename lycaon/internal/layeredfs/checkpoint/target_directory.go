@@ -144,6 +144,7 @@ type promotionTargets struct {
 	recordPostimage func(layeredfs.QualifiedPath, *os.File) error
 	ops             *SourceOps
 
-	mu   sync.Mutex
-	held map[string]*targetRoot
+	mu    sync.Mutex
+	held  map[string]*targetRoot
+	holds int
 }

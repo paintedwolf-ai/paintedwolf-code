@@ -107,6 +107,8 @@ func NewPromoter(cfg PromoterConfig) (*Promoter, error) {
 
 // Preview computes a deterministic three-way promotion preview solely from the immutable checkpoint.
 func (pr *Promoter) Preview(_ context.Context, req PreviewRequest) (*PromotionPreview, error) {
+	pr.targets.holdRoots()
+	defer pr.targets.releaseRoots()
 	m, err := pr.cfg.Store.LoadManifest(req.CheckpointID)
 	if err != nil {
 		return nil, err

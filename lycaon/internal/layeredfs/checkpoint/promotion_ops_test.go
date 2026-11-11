@@ -64,8 +64,9 @@ func TestPromotionOperationsScaleWithChangedFilesOnly(t *testing.T) {
 			t.Fatalf("%s: preview %d/%d, apply %d/%d over 10 and 2000 other files", kind, smallPreview[kind], largePreview[kind], smallApply[kind], largeApply[kind])
 		}
 	}
-	if smallApply["open_root"] != 1 {
-		t.Fatalf("the transaction opened its target root %d times: %v", smallApply["open_root"], smallApply)
+	// The preview opens the root once; the apply opens it once for its checks and once for its writes.
+	if smallPreview["open_root"] != 1 || smallApply["open_root"] != 2 {
+		t.Fatalf("target root opened %d times by the preview and %d by the apply: %v %v", smallPreview["open_root"], smallApply["open_root"], smallPreview, smallApply)
 	}
 	// Doubling the changed files at most doubles the work: nothing is quadratic in the change set.
 	_, doubled := promotionOps(t, 16, 10)

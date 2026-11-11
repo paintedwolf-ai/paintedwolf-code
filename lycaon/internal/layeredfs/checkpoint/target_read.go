@@ -53,18 +53,26 @@ func (tree *promotionTargets) openTargetRoot(id string) (*targetRoot, error) {
 	return opened, nil
 }
 
-// holdRoots keeps each target root open from its first use until releaseRoots.
+// holdRoots keeps each target root open from its first use until the matching releaseRoots. Holds
+// nest, so overlapping passes share the roots and the last release closes them.
 func (tree *promotionTargets) holdRoots() {
 	tree.mu.Lock()
 	defer tree.mu.Unlock()
-	if tree.held == nil {
+	if tree.holds == 0 {
 		tree.held = map[string]*targetRoot{}
 	}
+	tree.holds++
 }
 
 func (tree *promotionTargets) releaseRoots() {
 	tree.mu.Lock()
 	defer tree.mu.Unlock()
+	if tree.holds == 0 {
+		return
+	}
+	if tree.holds--; tree.holds > 0 {
+		return
+	}
 	for _, root := range tree.held {
 		_ = root.root.Close()
 	}
