@@ -2,11 +2,15 @@
 
 // diagnoexec replicates the protected launch's NOEXEC mount posture around
 // the exact glycin bwrap command inside a throwaway user and mount
-// namespace. The noexec mode sets MOUNT_ATTR_NOEXEC on "/" recursively,
-// restores exec on the bwrap and loader files through the same file-typed
-// projection mounts the protected launch builds, and then runs the exact
-// bwrap command; the control mode skips the posture. Temporary diagnostic
-// for the upgrade-corpus launchguard failure; remove with the diag test.
+// namespace. The noexec mode makes the namespace's mounts private, sets
+// MOUNT_ATTR_NOEXEC on "/" recursively, restores exec on the bwrap and
+// loader files through the same file-typed projection mounts the protected
+// launch builds, and then runs the exact bwrap command; the control mode
+// skips the posture. The test grants ambient CAP_SYS_ADMIN for the setup
+// and this helper drops every capability before spawning bwrap so the
+// sandbox sees the same unprivileged identity as the failing launch.
+// Temporary diagnostic for the upgrade-corpus launchguard failure; remove
+// with the diag test.
 package main
 
 import (
@@ -15,7 +19,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -28,33 +31,17 @@ const (
 
 func main() {
 	mode := "control"
-	parentUID, parentGID := -1, -1
 	args := os.Args[1:]
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "-mode":
-			if i+1 < len(args) {
-				i++
-				mode = args[i]
-			}
-		case "-parent-uid":
-			if i+1 < len(args) {
-				i++
-				parentUID, _ = strconv.Atoi(args[i])
-			}
-		case "-parent-gid":
-			if i+1 < len(args) {
-				i++
-				parentGID, _ = strconv.Atoi(args[i])
-			}
+		if args[i] == "-mode" && i+1 < len(args) {
+			i++
+			mode = args[i]
 		}
 	}
-	if parentUID < 0 || parentGID < 0 {
-		fmt.Printf("DIAGNOEXEC mode=%s fatal=missing-parent-ids\n", mode)
-		os.Exit(1)
-	}
-	if err := mapIdentity(parentUID, parentGID); err != nil {
-		fmt.Printf("DIAGNOEXEC mode=%s fatal=map-identity err=%v\n", mode, err)
+	// Contain every later mount change inside this namespace before
+	// touching anything; the copied mounts keep shared propagation.
+	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
+		fmt.Printf("DIAGNOEXEC mode=%s fatal=isolate err=%v\n", mode, err)
 		os.Exit(1)
 	}
 	if mode == "noexec" {
@@ -75,20 +62,17 @@ func main() {
 			fmt.Printf("DIAGNOEXEC mode=%s outside-loader-exit=%d stderr=%q\n", mode, code, stderr)
 		}
 	}
+	if info, err := os.Stat(bwrapPath); err != nil {
+		fmt.Printf("DIAGNOEXEC mode=%s bwrap-stat err=%v\n", mode, err)
+	} else {
+		fmt.Printf("DIAGNOEXEC mode=%s bwrap-mode=%s\n", mode, info.Mode())
+	}
+	if err := dropCapabilities(); err != nil {
+		fmt.Printf("DIAGNOEXEC mode=%s fatal=drop-caps err=%v\n", mode, err)
+		os.Exit(1)
+	}
 	verdict, code, detail := runBwrap()
 	fmt.Printf("DIAGNOEXEC mode=%s verdict=%s code=%d detail=%q\n", mode, verdict, code, detail)
-}
-
-// mapIdentity maps the creating user's own ids into the new namespace so
-// bwrap sees the same unprivileged uid it sees in the failing launch.
-func mapIdentity(parentUID, parentGID int) error {
-	if err := os.WriteFile("/proc/self/setgroups", []byte("deny"), 0o600); err != nil {
-		return err
-	}
-	if err := os.WriteFile("/proc/self/gid_map", []byte(fmt.Sprintf("%d %d 1", parentGID, parentGID)), 0o600); err != nil {
-		return err
-	}
-	return os.WriteFile("/proc/self/uid_map", []byte(fmt.Sprintf("%d %d 1", parentUID, parentUID)), 0o600)
 }
 
 // projectExecutableFile replicates the protected launch's file-root
@@ -123,6 +107,16 @@ func projectExecutableFile(path string) error {
 		return fmt.Errorf("attach: %w", err)
 	}
 	return nil
+}
+
+// dropCapabilities clears the ambient set and every capability so bwrap's
+// copied mounts lock exactly as they do for the unprivileged desktop.
+func dropCapabilities() error {
+	if err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0); err != nil {
+		return err
+	}
+	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
+	return unix.Capset(&header, &unix.CapUserData{})
 }
 
 // runDirect execs the loader outside bwrap; exit 2 (missing --dbus-fd)

@@ -100,14 +100,20 @@ func TestDiagGlycinLoaderBwrap(t *testing.T) {
 	// paths through file-typed projection mounts; glycin's single-mount
 	// "--ro-bind /usr /usr" cannot carry those stacked projections into the
 	// sandbox, so the loader's execve should fail EACCES there and bwrap
-	// should exit 1.
+	// should exit 1. The helper needs ambient CAP_SYS_ADMIN for the setup
+	// and drops every capability before running bwrap.
 	helper := filepath.Join(t.TempDir(), "diag-noexec-helper")
 	if err := buildBinary(helper, "./testdata/diagnoexec", ""); err != nil {
 		t.Fatalf("build diag noexec helper: %v", err)
 	}
 	for _, mode := range []string{"control", "noexec"} {
-		child := exec.Command(helper, "-mode", mode, "-parent-uid", strconv.Itoa(os.Getuid()), "-parent-gid", strconv.Itoa(os.Getgid()))
-		child.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS}
+		child := exec.Command(helper, "-mode", mode)
+		child.SysProcAttr = &syscall.SysProcAttr{
+			Cloneflags:  unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
+			UidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}},
+			GidMappings: []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}},
+			AmbientCaps: []uintptr{unix.CAP_SYS_ADMIN},
+		}
 		output, err := child.CombinedOutput()
 		if err != nil {
 			t.Logf("stage7-%s: helper failed: %v\n%s", mode, err, output)
