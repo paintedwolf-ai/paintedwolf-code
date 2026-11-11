@@ -102,9 +102,23 @@ func (b *Runtime) Open(ctx context.Context, dbPath string, startup startupprotoc
 	b.resources.Track("agent-policy-roots", 160, func(context.Context) error { releasePolicyRoots(); return nil })
 	b.SourceLedger = sourceledger.New(b.Database, filepath.Join(b.Directory, enginepaths.SourceContentDirName))
 	b.SourceLedger.Content.SetGuard(b)
+	b.SourceLedger.SetContentWithheld(floorCatalogContent(db.New(b.Database)))
 	b.SourceLedger.Git.SetGitReader(gitStateReader{mgr: git.NewManager()})
 	b.trackSourceStorage()
 	return nil
+}
+
+// floorCatalogContent withholds the bytes of files the key-material and
+// credential-store floors protect, so history keeps their identity only.
+func floorCatalogContent(queries *db.Queries) func(context.Context, string, string, string) bool {
+	return func(ctx context.Context, projectID, rootID, rel string) bool {
+		root, err := queries.GetProjectRootByID(ctx, db.GetProjectRootByIDParams{ID: rootID, ProjectID: projectID})
+		if err != nil {
+			return false
+		}
+		abs := filepath.Join(root.Path, filepath.FromSlash(rel))
+		return confine.ClassifyBlockedWrite(abs).Kind != confine.WriteSubjectOrdinary
+	}
 }
 
 func (b *Runtime) trackSourceStorage() {

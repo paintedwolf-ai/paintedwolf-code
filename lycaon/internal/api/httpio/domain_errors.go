@@ -42,8 +42,6 @@ func (s *Responder) ProjectRegistryError(w http.ResponseWriter, r *http.Request,
 		s.Fail(w, wire.ApiErrorCodePromotionNotFound, "project has no active save to folder")
 	case errors.Is(err, project.ErrInvalidName), errors.Is(err, project.ErrInvalidRootLabel):
 		s.FailReason(w, wire.ApiErrorCodeInvalidRequest, "the name or label is not valid")
-	case errors.Is(err, project.ErrRootRefused):
-		s.RootRefused(w, err)
 	case errors.Is(err, project.ErrInvalidPath), errors.Is(err, project.ErrPathNotFound), errors.Is(err, project.ErrNotDirectory):
 		s.PathError(w, r, err)
 	default:
@@ -54,8 +52,6 @@ func (s *Responder) ProjectRegistryError(w http.ResponseWriter, r *http.Request,
 // PathError maps project path refusals to typed responses.
 func (s *Responder) PathError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, project.ErrRootRefused):
-		s.RootRefused(w, err)
 	case errors.Is(err, project.ErrInvalidPath),
 		errors.Is(err, project.ErrNotDirectory):
 		s.Fail(w, wire.ApiErrorCodeInvalidPath, "the path is not a usable folder")
@@ -63,23 +59,6 @@ func (s *Responder) PathError(w http.ResponseWriter, r *http.Request, err error)
 		s.Fail(w, wire.ApiErrorCodePathNotFound, "project path not found")
 	default:
 		s.InternalError(w, r, err)
-	}
-}
-
-// RootRefused maps structured root refusals to typed responses.
-func (s *Responder) RootRefused(w http.ResponseWriter, err error) {
-	code, _ := project.RootRefusedCode(err)
-	switch code {
-	case "write_root_is_filesystem_root":
-		s.Fail(w, wire.ApiErrorCodeWriteRootIsFilesystemRoot, "the filesystem root cannot be a project folder")
-	case "write_root_is_home":
-		s.Fail(w, wire.ApiErrorCodeWriteRootIsHome, "the home folder cannot be a project folder")
-	case "write_root_not_absolute":
-		s.Fail(w, wire.ApiErrorCodeWriteRootNotAbsolute, "the folder path must be absolute")
-	case "write_root_under_secret_store":
-		s.Fail(w, wire.ApiErrorCodeWriteRootUnderSecretStore, "the folder is inside a credential store")
-	default:
-		s.Fail(w, wire.ApiErrorCodeInvalidPath, "the path is not a usable folder")
 	}
 }
 
