@@ -354,6 +354,17 @@ func (b commandForegroundConfine) close(ctx context.Context) []confine.EgressHos
 	return b.lease.Close(ctx)
 }
 
+// BindAgentLaunch admits the confined launch for an agent-chosen host program
+// such as the bundled Git. release closes its action lease.
+func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, commandLine string) (exec.LaunchPlan, func(context.Context), error) {
+	bound, err := bindCommandForegroundConfine(ctx, tctx, nil, commandLine, subject, true)
+	if err != nil {
+		return exec.LaunchPlan{}, nil, err
+	}
+	release := func(ctx context.Context) { bound.close(ctx) }
+	return agentCommandLaunch(tctx, subject, bound.confinement, bound.lease, commandLine), release, nil
+}
+
 func bindCommandForegroundConfine(
 	ctx context.Context,
 	tctx tools.ToolContext,

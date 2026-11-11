@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -49,6 +50,9 @@ var readForms = map[string]operandRule{
 type Owners struct {
 	Git      Backend
 	Boundary *sandbox.Boundary
+	// Launch admits the confined launch every Git process of one command runs
+	// under. Without it no Git command runs.
+	Launch AgentLaunch
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -59,6 +63,10 @@ type Owners struct {
 	mu     sync.Mutex
 	staged map[string]map[string]bool
 }
+
+// AgentLaunch admits one agent Git command's confined launch; release closes
+// its action lease.
+type AgentLaunch func(ctx context.Context, tc tools.ToolContext, subject, commandLine string) (plan exec.LaunchPlan, release func(context.Context), err error)
 
 // NewOwners binds the frozen catalog's Git command specifications. A command
 // whose structured tool row exists keeps that operation identity; the rest
@@ -203,6 +211,15 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if streams.Input != nil {
 		defer func() { _ = streams.Input.Close() }()
 	}
+	if p.owners.Launch == nil {
+		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, gitexec.ErrLaunchAuthorityRequired
+	}
+	plan, release, err := p.owners.Launch(ctx, tc, "git", strings.Join(append([]string{"git"}, p.command.args...), " "))
+	if err != nil {
+		return settle(0, err, p.command.spec.Name)
+	}
+	defer release(context.WithoutCancel(ctx))
+	ctx = gitexec.WithAgentLaunch(ctx, plan)
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)
 	}
