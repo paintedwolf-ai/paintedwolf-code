@@ -4,6 +4,7 @@ package layeredfs
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -11,9 +12,12 @@ import (
 )
 
 type osLowerProvider struct {
+	rootPath  string
 	rootFile  *os.File
 	hook      func(rel, comp string)
 	xattrHook func(rel string) error
+	// parkedAs is the root a parked provider must find again.
+	parkedAs os.FileInfo
 }
 
 func newOSLowerProvider(rootPath string, hook func(rel, comp string), xattrHook func(rel string) error) (*osLowerProvider, error) {
@@ -22,6 +26,7 @@ func newOSLowerProvider(rootPath string, hook func(rel, comp string), xattrHook 
 		return nil, err
 	}
 	return &osLowerProvider{
+		rootPath:  rootPath,
 		rootFile:  f,
 		hook:      hook,
 		xattrHook: xattrHook,
@@ -33,6 +38,36 @@ func (p *osLowerProvider) close() error {
 		return nil
 	}
 	return p.rootFile.Close()
+}
+
+// park closes the root while the view is idle.
+func (p *osLowerProvider) park() {
+	if p == nil || p.rootFile == nil {
+		return
+	}
+	if info, err := p.rootFile.Stat(); err == nil {
+		p.parkedAs = info
+	}
+	_ = p.rootFile.Close()
+	p.rootFile = nil
+}
+
+// unpark reopens a parked root, refusing one that is no longer the directory it was.
+func (p *osLowerProvider) unpark() error {
+	if p == nil || p.rootFile != nil {
+		return nil
+	}
+	f, err := openDirNoFollow(p.rootPath)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrBackingUnavailable, err)
+	}
+	info, err := f.Stat()
+	if err != nil || p.parkedAs == nil || !os.SameFile(info, p.parkedAs) {
+		_ = f.Close()
+		return fmt.Errorf("%w: %s is no longer the view's root", ErrBackingUnavailable, p.rootPath)
+	}
+	p.rootFile = f
+	return nil
 }
 
 func (p *osLowerProvider) openParentAndName(rel string) (*os.File, string, error) {

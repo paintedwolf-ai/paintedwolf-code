@@ -471,7 +471,16 @@ func (m *Manager) reopenMaterializedBranch(ctx context.Context, branchRoot, jobI
 		Selection: adapter.SelectionFacts{Provider: eager.ID(), Reason: meta.SelectionReason, DeclaredCost: meta.DeclaredCost},
 	}, view)
 	recordBranchClaimState(branchRoot, cv, cv.State, layered)
+	parkIdleView(view)
 	return layered, nil
+}
+
+// parkIdleView lets the volume holding a materialized branch go while no core operation runs on it.
+// A worker writes that branch directly, so its core is touched only to capture and promote.
+func parkIdleView(view *adapter.PreparedView) {
+	if view != nil && view.Core != nil && view.Facts.PreparationKind == adapter.PreparationMaterialized {
+		view.Core.ParkBacking()
+	}
 }
 
 // adoptRecoveredMaterializedView gives a view recovery rebuilt on the materialized adapter what a

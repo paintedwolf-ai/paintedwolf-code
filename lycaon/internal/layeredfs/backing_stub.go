@@ -63,6 +63,10 @@ func (p *osLowerProvider) close() error {
 	return nil
 }
 
+func (p *osLowerProvider) park() {}
+
+func (p *osLowerProvider) unpark() error { return nil }
+
 func (p *osLowerProvider) Lstat(_ string) (LowerEntry, error) {
 	return LowerEntry{}, ErrUnsupportedOperation
 }

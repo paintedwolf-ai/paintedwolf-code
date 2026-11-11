@@ -200,6 +200,8 @@ func (a *EagerCopyAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Pr
 		Materialize:     outcome.stats,
 		Core:            core,
 	}
+	// A materialized view's workers never reach its core, so its backing stays closed until used.
+	core.ParkBacking()
 	a.adopt(view, &eagerViewState{
 		view:            view,
 		capture:         capture,
@@ -301,6 +303,7 @@ func (a *EagerCopyAdapter) Reopen(ctx context.Context, req ReopenRequest) (*Prep
 		ViewID: req.ViewID, AdapterID: AdapterEagerCopy, Facts: a.facts, Roots: roots, PrimaryRootID: primaryID,
 		PrimaryWorkPath: primaryPath, BackingDir: backingDir, RuntimeViewDir: runtimeViewDir, Core: core,
 	}
+	core.ParkBacking()
 	a.adopt(view, &eagerViewState{view: view, capture: capture, denySourcePaths: deny})
 	return view, nil
 }
@@ -323,6 +326,7 @@ func (a *EagerCopyAdapter) ChangedPaths(ctx context.Context, viewID string) ([]l
 	st.syncMu.Lock()
 	defer st.syncMu.Unlock()
 	paths, err := st.capture.changedPaths(ctx, st.view.Roots)
+	st.view.Core.ParkBacking()
 	return paths, st.capture.stats, err
 }
 
@@ -402,7 +406,15 @@ func (a *EagerCopyAdapter) CheckpointBarrier(ctx context.Context, viewID string)
 		defer st.syncMu.Unlock()
 		return st.capture.capture(cCtx, st.view)
 	}
-	return executeCheckpointBarrier(ctx, AdapterEagerCopy, st.view.Core, quiesceAndSync, st.flushHook)
+	receipt, release, err := executeCheckpointBarrier(ctx, AdapterEagerCopy, st.view.Core, quiesceAndSync, st.flushHook)
+	if err != nil || release == nil {
+		return receipt, release, err
+	}
+	return receipt, func() error {
+		err := release()
+		st.view.Core.ParkBacking()
+		return err
+	}, nil
 }
 
 // Release retires handles and cleans up the materialized view's runtime resources.

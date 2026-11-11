@@ -32,6 +32,64 @@ type backingWorkspace struct {
 	workDirFile    *os.File
 	baseDirFile    *os.File
 	journalDirFile *os.File
+	// parked means the directories are closed while the view is idle, so the volume holding them
+	// can be ejected. parkedAs is what reopening them must find again.
+	parked   bool
+	parkedAs [3]os.FileInfo
+}
+
+// park syncs and closes the backing directories.
+func (b *backingWorkspace) park() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.parked {
+		return
+	}
+	for i, f := range []*os.File{b.workDirFile, b.baseDirFile, b.journalDirFile} {
+		if f == nil {
+			continue
+		}
+		_ = f.Sync()
+		if info, err := f.Stat(); err == nil {
+			b.parkedAs[i] = info
+		}
+		_ = f.Close()
+	}
+	b.workDirFile, b.baseDirFile, b.journalDirFile = nil, nil, nil
+	b.parked = true
+}
+
+// unpark reopens parked directories, refusing any that is no longer the directory it was.
+func (b *backingWorkspace) unpark() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.parked {
+		return nil
+	}
+	var files [3]*os.File
+	closeAll := func() {
+		for _, f := range files {
+			if f != nil {
+				_ = f.Close()
+			}
+		}
+	}
+	for i, dir := range []string{b.workDir, b.baseDir, b.journalDir} {
+		f, err := openDirNoFollow(dir)
+		if err != nil {
+			closeAll()
+			return fmt.Errorf("%w: %w", ErrBackingUnavailable, err)
+		}
+		files[i] = f
+		info, err := f.Stat()
+		if err != nil || b.parkedAs[i] == nil || !os.SameFile(info, b.parkedAs[i]) {
+			closeAll()
+			return fmt.Errorf("%w: %s is no longer the view's backing", ErrBackingUnavailable, dir)
+		}
+	}
+	b.workDirFile, b.baseDirFile, b.journalDirFile = files[0], files[1], files[2]
+	b.parked = false
+	return nil
 }
 
 type rootTable struct {
@@ -169,6 +227,18 @@ func New(cfg Config) (*Core, error) {
 		backing.close()
 		return nil, err
 	}
+	barrier := newBarrierCoordinator(cfg.ViewID)
+	barrier.resume = func() error {
+		if err := backing.unpark(); err != nil {
+			return err
+		}
+		for _, provider := range roots.ownedOS {
+			if err := provider.unpark(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	return &Core{
 		cfg:      cfg,
 		backing:  backing,
@@ -187,7 +257,7 @@ func New(cfg Config) (*Core, error) {
 			dirCookies:        make(map[uint64]dirCookieState),
 			dirtyBackingFiles: make(map[string]uint64),
 		},
-		barrier: newBarrierCoordinator(cfg.ViewID),
+		barrier: barrier,
 	}, nil
 }
 
