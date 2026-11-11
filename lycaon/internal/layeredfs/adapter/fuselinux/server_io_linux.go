@@ -242,6 +242,67 @@ func (s *Server) opReaddir(nodeID uint64, body []byte) ([]byte, int32) {
 	return out, 0
 }
 
+// opReaddirplus is opReaddir with each entry's attributes. Every entry it returns with a node
+// gives the kernel a reference, which the kernel later returns by FORGET; an entry is acquired only
+// once its record fits in the reply.
+func (s *Server) opReaddirplus(nodeID uint64, body []byte) ([]byte, int32) {
+	if len(body) < 24 {
+		return nil, -int32(syscall.EINVAL)
+	}
+	fh := binary.LittleEndian.Uint64(body[0:8])
+	offset := int(binary.LittleEndian.Uint64(body[8:16]))
+	maxSize := int(binary.LittleEndian.Uint32(body[16:20]))
+	s.nodes.mu.RLock()
+	all, cached := s.nodes.dirSnapshots[fh]
+	s.nodes.mu.RUnlock()
+	if offset == 0 || !cached {
+		var errno int32
+		all, errno = s.snapshotDirectory(nodeID, fh)
+		if errno != 0 {
+			return nil, errno
+		}
+	}
+	if offset < 0 || offset >= len(all) {
+		return nil, 0
+	}
+	parentRel, ok := s.nodes.resolveNodeRel(nodeID)
+	if !ok {
+		h, hok := s.nodes.lookupHandle(fh)
+		if !hok {
+			return nil, -int32(syscall.ENOENT)
+		}
+		parentRel = h.rel
+	}
+	var out []byte
+	for idx := offset; idx < len(all); idx++ {
+		d := all[idx]
+		recLen := 128 + ((24 + len(d.name) + 7) &^ 7)
+		if len(out)+recLen > maxSize {
+			break
+		}
+		rec := make([]byte, recLen)
+		ino := d.ino
+		if d.name != "." && d.name != ".." {
+			childRel := joinRel(parentRel, d.name)
+			// An entry gone since the snapshot keeps its place without a node, as for a plain listing.
+			if attr, err := s.core.LstatAttrs(s.qpath(childRel)); err == nil {
+				fn := s.nodes.acquireNode(childRel, attr)
+				copy(rec[:128], encodeEntryOut(s, fn.fuseID, fn.ino, attr))
+				ino = fn.ino
+			}
+		}
+		dirent := rec[128:]
+		binary.LittleEndian.PutUint64(dirent[0:8], ino)
+		binary.LittleEndian.PutUint64(dirent[8:16], uint64(idx+1))
+		binary.LittleEndian.PutUint32(dirent[16:20], uint32(len(d.name)))
+		binary.LittleEndian.PutUint32(dirent[20:24], d.typ)
+		copy(dirent[24:], d.name)
+		out = append(out, rec...)
+	}
+	s.wakeEvictor()
+	return out, 0
+}
+
 func (s *Server) snapshotDirectory(nodeID, fh uint64) ([]rawDirent, int32) {
 	rel, ok := s.nodes.resolveNodeRel(nodeID)
 	if !ok {

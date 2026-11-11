@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/workspace"
 )
 
 type serviceContextKey struct{}
@@ -41,6 +42,8 @@ type WorkspaceObservationState struct {
 	Bindings                                                       map[string]observation.VerificationBinding
 	LatestBinding                                                  observation.VerificationBinding
 	HasBinding                                                     bool
+	// invalidating records that the branch's mounted view hears this tracker's trunk invalidations.
+	invalidating bool
 }
 
 // WorkspaceTrackerRegistry owns scoped *observation.Tracker instances per worker workspace.
@@ -120,6 +123,13 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 	}
 	if branchRoot != "" {
 		st.BranchRoot = branchRoot
+	}
+	if st.BranchRoot != "" && st.Tracker != nil && !st.invalidating {
+		invalidate := workspace.BranchPathInvalidator(st.BranchRoot)
+		st.Tracker.RegisterInvalidationSink(observation.InvalidationFunc(func(ev observation.InvalidationEvent) {
+			invalidate(ev.Path)
+		}))
+		st.invalidating = true
 	}
 	if len(roots) > 0 {
 		st.Roots = append([]projectroot.RootRef(nil), roots...)

@@ -44,6 +44,7 @@ const (
 	fuseOpInterrupt   = 36
 	fuseOpDestroy     = 38
 	fuseOpBatchForget = 42
+	fuseOpReaddirplus = 44
 	fuseOpRename2     = 45
 	fuseOpLseek       = 46
 )
