@@ -40,11 +40,12 @@ func TestTargetsKeyStepsAsTheRailDoes(t *testing.T) {
 			effect("in-command", 3, func(e *wire.SourceWalkEffect) { e.CommandID = ptr("c1") }),
 			effect("single", 1),
 			effect("out-a", 10, outside), effect("out-b", 11, outside),
+			effect("between", 15),
 			effect("lone-outside", 20, outside),
 		}}},
 	}
 	targets := Targets(page)
-	want := []string{"command:c1", "git:g1", "lone-outside", "outside:out-a", "single"}
+	want := []string{"between", "command:c1", "git:g1", "lone-outside", "outside:out-a", "single"}
 	if got := keys(targets); !slices.Equal(got, want) {
 		t.Fatalf("keys %v; want %v", got, want)
 	}
