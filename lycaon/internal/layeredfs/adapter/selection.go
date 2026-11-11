@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -218,9 +219,11 @@ type Choice struct {
 func (s *Selector) Choose(ctx context.Context, req ChooseRequest) (Choice, error) {
 	if req.KeepMounted {
 		if primary := s.primaryForOS(); primary != nil {
-			if reason, probe, err := s.probeMount(ctx, primary, req.Probe); err == nil && reason == ReasonNone {
+			reason, probe, err := s.probeMount(ctx, primary, req.Probe)
+			if err == nil && reason == ReasonNone {
 				return Choice{Adapter: primary, Probe: probe, Facts: SelectionFacts{Provider: primary.ID(), Reason: SelectionKeptMounted}}, nil
 			}
+			slog.InfoContext(ctx, "mounted worker cannot keep its mount", "adapter_id", primary.ID(), "reason", reason, "diagnostic", probe.Diagnostic, "error", err)
 		}
 	}
 	roots, anyCopyOnly, err := classifyRootClones(ctx, req)
