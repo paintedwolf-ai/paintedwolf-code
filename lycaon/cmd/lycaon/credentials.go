@@ -84,6 +84,10 @@ func allCredentialSlots() ([]credentialstore.Slot, error) {
 	if err != nil {
 		return nil, err
 	}
+	mcpStatic, err := mcp.DefaultCredentialsSlot()
+	if err != nil {
+		return nil, err
+	}
 	fingerprint, err := secretmatch.DefaultFingerprintSlot()
 	if err != nil {
 		return nil, err
@@ -100,7 +104,7 @@ func allCredentialSlots() ([]credentialstore.Slot, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []credentialstore.Slot{provider, research, oauth, fingerprint, managed, git, hostID}, nil
+	return []credentialstore.Slot{provider, research, oauth, mcpStatic, fingerprint, managed, git, hostID}, nil
 }
 
 func describeCredentials(slots []credentialstore.Slot) error {

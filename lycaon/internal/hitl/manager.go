@@ -2,10 +2,12 @@
 package hitl
 
 import (
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -58,7 +60,103 @@ type ActionInvocation struct {
 	NativePathTargets []NativePathTarget
 	// ApprovedFileAccess carries exact authority already approved for this invocation.
 	ApprovedFileAccess []GrantedPathDelta `json:"-"`
-	ActionID           string
+	// CurrentActionReview carries the exact reasons approved by a human checkpoint for this invocation.
+	CurrentActionReview *CurrentActionReview `json:"-"`
+	ActionID            string
+}
+
+// CurrentActionReview records the exact policy reasons and subjects reviewed
+// and approved by a human checkpoint for the current invocation.
+type CurrentActionReview struct {
+	SessionID      string
+	ToolCallID     string
+	InvocationID   string
+	ActionID       string
+	ActionKey      string
+	Cited          []gate.Fact
+	ReasonSegments []string
+	Detection      *DetectionMatch
+	MatchedRules   []ApprovalRuleMatch
+	AgentPolicy    []AgentPolicyTarget
+}
+
+// ActionKeyForCurrentReview returns the action identity for current-call review
+// matching; ExecutionBoundaryDigest is verified separately against confine.Request.
+func ActionKeyForCurrentReview(action ProposedAction) string {
+	action.Execution.ExecutionBoundaryDigest = ""
+	return GrantKey(action)
+}
+
+// CurrentActionReviewCovers reports whether the current invocation's human
+// review already covers the evaluated decision, detection, and rule matches.
+func CurrentActionReviewCovers(
+	action ProposedAction,
+	decision *gate.Decision,
+	citation *DetectionMatch,
+	matchedRules []ApprovalRuleMatch,
+) bool {
+	review := action.Invocation.CurrentActionReview
+	if review == nil || decision == nil {
+		return false
+	}
+	if review.SessionID == "" || review.SessionID != action.Scope.SessionID ||
+		review.ActionID != action.Invocation.ActionID {
+		return false
+	}
+	actionKey := ActionKeyForCurrentReview(action)
+	if actionKey == "" || review.ActionKey != actionKey {
+		return false
+	}
+	gates := decision.Gates()
+	if len(gates) == 0 || len(decision.Cited) == 0 || len(review.Cited) == 0 {
+		return false
+	}
+	for _, fact := range decision.Cited {
+		if fact.Key == "boundary.execution" || !slices.Contains(review.Cited, fact) {
+			return false
+		}
+	}
+	segments := decision.ReasonSegments()
+	if strings.TrimSpace(decision.ReasonKey) != "" && len(segments) == 0 {
+		return false
+	}
+	for _, segment := range segments {
+		if !slices.Contains(review.ReasonSegments, segment) {
+			return false
+		}
+	}
+	if slices.Contains(gates, api.GateAgentPolicyChange) {
+		if len(action.Mutations.AgentPolicy) == 0 {
+			return false
+		}
+		for _, target := range action.Mutations.AgentPolicy {
+			if !slices.Contains(review.AgentPolicy, target) {
+				return false
+			}
+		}
+	}
+	if citation != nil || slices.Contains(gates, api.GateAuthorityMisuse) {
+		if review.Detection == nil || citation == nil || !detectionIdentityEqual(*review.Detection, *citation) {
+			return false
+		}
+	}
+	for _, match := range matchedRules {
+		if !slices.Contains(review.MatchedRules, match) {
+			return false
+		}
+	}
+	return true
+}
+
+func detectionIdentityEqual(a, b DetectionMatch) bool {
+	return a.PackID == b.PackID &&
+		a.RuleID == b.RuleID &&
+		a.RuleTitle == b.RuleTitle &&
+		a.Level == b.Level &&
+		a.External == b.External &&
+		a.Local == b.Local &&
+		a.Unrecoverable == b.Unrecoverable &&
+		a.Tagged == b.Tagged
 }
 
 type NativePathTarget struct {
@@ -92,11 +190,12 @@ func (s ActionScope) HasProjectIdentity() bool {
 
 // ActionExecution captures execution boundaries, process targets, and packages.
 type ActionExecution struct {
-	Contained               Contained
-	ProcessAccess           string
-	ProcessTargets          []ApprovalTarget
-	ExecutionBoundaryDigest string
-	PackageExecution        *packageexec.Execution
+	Contained                       Contained
+	ProcessAccess                   string
+	ProcessTargets                  []ApprovalTarget
+	ExecutionBoundaryDigest         string
+	AuthorizedExecutionCapabilities []string `json:"-"`
+	PackageExecution                *packageexec.Execution
 }
 
 // ActionResources carries host-resolved policy identity and resource targets.

@@ -67,7 +67,7 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	}
 	ctx = withSecretUse(ctx, use)
 	defer func() { tc.Effects.Secrets.Finish(ctx) }()
-	canonical, tc, err := e.applyPreInvokeBoundary(ctx, "update_progress", tc.Identity.Agent, arguments.values, tc)
+	canonical, tc, boundaryApproved, err := e.applyPreInvokeBoundary(ctx, "update_progress", tc.Identity.Agent, arguments.values, tc)
 	if err != nil {
 		return result, err
 	}
@@ -83,7 +83,7 @@ func (e *Executor) ApplyProgramProgress(ctx context.Context, p *PreparedProgramE
 	}
 	// The final review may have waited. Re-enter the existing policy boundary
 	// against current facts; a changed reviewed object requires fresh preparation.
-	rechecked, err := e.applyPreInvokePolicy(ctx, "update_progress", tc.Identity.Agent, canonical, &tc, e.Boundary.actionConfineRequest(ctx, tc), tc.HasExecutionApproval())
+	rechecked, err := e.applyPreInvokePolicy(ctx, "update_progress", tc.Identity.Agent, canonical, &tc, e.Boundary.actionConfineRequest(ctx, tc), boundaryApproved)
 	if err != nil {
 		return result, err
 	}
