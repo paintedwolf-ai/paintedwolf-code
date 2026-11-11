@@ -380,11 +380,11 @@ func TestWorkerSnapshotExcludesLinkedWorktreeAndSubmoduleGitlinks(t *testing.T) 
 	}
 
 	// OverlaySurveyReadDir also skips gitlink .git files if one is present on disk.
-	testutil.FailErr(t, "plant branch gitlink", os.WriteFile(filepath.Join(binding.Root, "worktree", ".git"), []byte("gitdir: "+filepath.Join(backingRepo, ".git")+"\n"), 0o644))
-	overlayEntries, err := workspace.OverlaySurveyReadDir(binding.Root, "worktree", sandbox.SurveyOptions{IncludeHidden: true})
-	testutil.FailErr(t, "OverlaySurveyReadDir worktree", err)
+	testutil.FailErr(t, "plant branch gitlink", os.WriteFile(filepath.Join(binding.Root, "submodule", ".git"), []byte("gitdir: "+filepath.Join(backingRepo, ".git")+"\n"), 0o644))
+	overlayEntries, err := workspace.OverlaySurveyReadDir(binding.Root, "submodule", sandbox.SurveyOptions{IncludeHidden: true})
+	testutil.FailErr(t, "OverlaySurveyReadDir submodule", err)
 	for _, e := range overlayEntries {
-		if e.Rel == "worktree/.git" {
+		if e.Rel == "submodule/.git" {
 			t.Fatalf("OverlaySurveyReadDir must omit gitlink .git file: %+v", overlayEntries)
 		}
 	}

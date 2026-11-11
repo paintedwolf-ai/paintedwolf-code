@@ -174,10 +174,11 @@ func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) 
 	testutil.FailErr(t, "stage relocated worker archive", err)
 	testutil.FailErr(t, "apply relocated worker archive", backup.ApplyPending(t.Context(), newRoot))
 	restored := testdbfixture.OpenPath(t, filepath.Join(newRoot, "store.db"))
-	var baselineID, branchRel string
-	var overlayID sql.NullString
+	// A branch backed by checkpoints has no baseline.
+	var branchRel string
+	var baselineID, overlayID sql.NullString
 	testutil.FailErr(t, "read durable identities", restored.QueryRowContext(ctx, `SELECT workspace_baseline_id,workspace_overlay_id,workspace_relpath FROM worker_jobs WHERE id=?`, jobID).Scan(&baselineID, &overlayID, &branchRel))
-	if filepath.IsAbs(baselineID) || filepath.IsAbs(overlayID.String) || !filepath.IsLocal(branchRel) {
+	if filepath.IsAbs(baselineID.String) || filepath.IsAbs(overlayID.String) || !filepath.IsLocal(branchRel) {
 		t.Fatal("worker persisted installation paths")
 	}
 	queue := NewSQLQueue(restored, 4)

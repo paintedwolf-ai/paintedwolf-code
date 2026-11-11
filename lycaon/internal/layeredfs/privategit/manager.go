@@ -332,44 +332,14 @@ func readyPrivateGitDir(m *Manager, viewID, repoRel string) (string, error) {
 	view.mu.Lock()
 	defer view.mu.Unlock()
 	repo := view.repos[repoRel]
-	durable, hasDurable, dErr := readDurableRepoRecord(m, view, viewID, repoRel)
-	if dErr != nil {
-		return "", dErr
+	lookup, err := establishedRepoLocked(m, view, repoRel)
+	if err != nil {
+		return "", err
 	}
-	var priorGitDir string
-	if !hasDurable {
-		priorGitDir, _ = discoverPriorPrivateStateEvidence(m, view, viewID, repoRel)
+	if lookup.established {
+		return lookup.gitDir, nil
 	}
-	if (repo != nil && repo.privateGitDir != "") || (hasDurable && durable.Status == repoStatusEstablished) || priorGitDir != "" {
-		gitDir, leaseID, headOID, vErr := verifyEstablishedPrivateRepo(m, view, viewID, repoRel, repo, durable, hasDurable, priorGitDir)
-		if vErr != nil {
-			return "", vErr
-		}
-		if !hasDurable {
-			if wErr := writeDurableRepoRecord(m, view, viewID, durableRepoRecord{
-				RepoRel:        repoRel,
-				Status:         repoStatusEstablished,
-				PrivateGitDir:  gitDir,
-				LeaseID:        leaseID,
-				InitialHeadOID: headOID,
-			}); wErr != nil {
-				return "", wErr
-			}
-			removeRepoInitIntent(m, viewID, repoRel)
-		}
-		if repo == nil || repo.privateGitDir == "" {
-			view.repos[repoRel] = &initializedRepo{
-				repoRel:        repoRel,
-				worktreeDir:    view.worktreeDir,
-				privateGitDir:  gitDir,
-				leaseID:        leaseID,
-				initialHeadOID: headOID,
-				metrics:        InitMetrics{State: StateReady},
-			}
-		}
-		return gitDir, nil
-	}
-	if (repo != nil && repo.noSourceRepo) || (hasDurable && durable.Status == repoStatusNoSourceRepo) {
+	if (repo != nil && repo.noSourceRepo) || (lookup.hasDurable && lookup.durable.Status == repoStatusNoSourceRepo) {
 		return "", ErrNoSourceRepository
 	}
 	return "", layeredfs.ErrGitPending

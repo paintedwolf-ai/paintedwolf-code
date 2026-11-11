@@ -234,7 +234,7 @@ func (p Prepared) enterWorkerView(ctx context.Context, tc tools.ToolContext) (fu
 		return noop, nil
 	}
 	_, finish, managed, err := privategit.PrepareManagerViewOperation(ctx, p.owners.PrivateGit, tools.HostWriteRoot(tc), tc.Identity.WorkerJobID)
-	if errors.Is(err, fs.ErrNotExist) {
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, privategit.ErrNoSourceRepository) {
 		// The view's sources hold no repository, which Git itself reports to the form.
 		return noop, nil
 	}

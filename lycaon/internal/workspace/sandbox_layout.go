@@ -305,7 +305,9 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 			UnreadableEntries: view.Materialize.UnreadableEntries, NotClonableReason: decision.Reason,
 		})
 		m.recordBranchViews(binding.Root, choice, view)
-		return markSnapshotCompleteWithClaim(binding.Root, choice, view, cv, hints)
+		err = markSnapshotCompleteWithClaim(binding.Root, choice, view, cv, hints)
+		parkIdleView(view)
+		return err
 	}
 }
 
