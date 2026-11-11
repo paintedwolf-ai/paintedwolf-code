@@ -111,9 +111,14 @@ function hostMarkerLength(rest: string): number {
   return 0;
 }
 
+function skipBlanks(text: string, from: number): number {
+  while (from < text.length && (text.charCodeAt(from) === 0x20 || text.charCodeAt(from) === 0x09)) from += 1;
+  return from;
+}
+
 /** Where a container may start on a line: at its start, or after host markers or a log prefix. */
 export function containerStartColumn(lineText: string): number | null {
-  let cursor = /^[ \t]*/.exec(lineText)![0].length;
+  let cursor = skipBlanks(lineText, 0);
   const first = lineText.charCodeAt(cursor);
   if (first === 0x7b || first === 0x5b) return cursor;
   let marked = false;
@@ -122,7 +127,7 @@ export function containerStartColumn(lineText: string): number | null {
     if (length === 0) break;
     marked = true;
     cursor += length;
-    cursor += /^[ \t]*/.exec(lineText.slice(cursor))![0].length;
+    cursor = skipBlanks(lineText, cursor);
   }
   if (marked) {
     const c = lineText.charCodeAt(cursor);
