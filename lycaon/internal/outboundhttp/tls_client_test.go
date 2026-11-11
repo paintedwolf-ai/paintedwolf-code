@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/egressclass"
@@ -129,6 +130,67 @@ func TestDoAppliesRequestTLSAndObservesTheHop(t *testing.T) {
 	var fault *TLSFault
 	if _, err := Do(t.Context(), request); !errors.As(err, &fault) || fault.Type != "unknown_authority" && fault.Type != "untrusted" {
 		t.Fatalf("the test CA was trusted without the request naming it: %v", err)
+	}
+}
+
+// A client identity belongs to the reviewed origin. Same-origin redirects
+// keep presenting it; another origin gets the request's trust but no
+// certificate, even when it asks for one.
+func TestClientIdentityStaysWithItsOrigin(t *testing.T) {
+	serverCA, clientCA := tlstest.NewCA(t, "Server CA"), tlstest.NewCA(t, "Client CA")
+	client := clientCA.Client(t, "deploy-bot")
+	presented := func(r *http.Request) string {
+		if len(r.TLS.PeerCertificates) == 0 {
+			return "none"
+		}
+		return r.TLS.PeerCertificates[0].Subject.CommonName
+	}
+	var seen sync.Map
+	other := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen.Store("other"+r.URL.Path, presented(r))
+		_, _ = io.WriteString(w, "other")
+	}))
+	other.TLS = &tls.Config{Certificates: []tls.Certificate{serverCA.Server(t, "other.example.test").TLS}, ClientAuth: tls.RequestClientCert}
+	other.StartTLS()
+	t.Cleanup(other.Close)
+	app := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen.Store("app"+r.URL.Path, presented(r))
+		switch r.URL.Path {
+		case "/start":
+			http.Redirect(w, r, "/again", http.StatusFound)
+		case "/again":
+			http.Redirect(w, r, "https://other.example.test/away", http.StatusFound)
+		}
+	}))
+	app.TLS = &tls.Config{Certificates: []tls.Certificate{serverCA.Server(t, "app.example.test").TLS}, ClientAuth: tls.RequestClientCert}
+	app.StartTLS()
+	t.Cleanup(app.Close)
+	appPort := netip.MustParseAddrPort(app.Listener.Addr().String()).Port()
+	otherPort := netip.MustParseAddrPort(other.Listener.Addr().String()).Port()
+	roots, err := TrustPool(serverCA.PEM)
+	testutil.FailErr(t, "trust pool", err)
+	pair, err := ClientCertificate(client.CertPEM, client.KeyPEM, "")
+	testutil.FailErr(t, "client identity", err)
+	request := Request{
+		Class: egressclass.AgentHTTPRequest, URL: "https://app.example.test/start", Redirects: RedirectSafe,
+		Resolve: []ResolveMapping{
+			{Host: "app.example.test", Port: 443, TargetHost: "127.0.0.1", TargetPort: appPort},
+			{Host: "other.example.test", Port: 443, TargetHost: "127.0.0.1", TargetPort: otherPort},
+		},
+		TLS: &ClientTLS{Roots: roots, Certificates: []tls.Certificate{pair}},
+		AllowAddress: func(addr netip.Addr, p uint16) bool {
+			return addr.IsLoopback() && (p == appPort || p == otherPort)
+		},
+	}
+	resp, err := Do(t.Context(), request)
+	testutil.FailErr(t, "redirected exchange", err)
+	if string(resp.Body) != "other" {
+		t.Fatalf("final body %q", resp.Body)
+	}
+	for key, want := range map[string]string{"app/start": "deploy-bot", "app/again": "deploy-bot", "other/away": "none"} {
+		if got, _ := seen.Load(key); got != want {
+			t.Fatalf("%s presented %v, want %s", key, got, want)
+		}
 	}
 }
 

@@ -244,6 +244,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 	originHeaders := prepared.OriginHeaders
 	hopHeaders := prepared.HopHeaders
 	hostHeader := in.HostHeader
+	clientTLS := in.TLS
 	var ioElapsed time.Duration
 	begun := time.Now()
 	var firstHopLocal, firstHopPeer netip.AddrPort
@@ -285,7 +286,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			return Response{}, err
 		}
 		resolved := time.Now()
-		in.TLS.apply(transport)
+		clientTLS.apply(transport)
 		boundConnect(transport, in.ConnectTimeout)
 		var wire *wireCapture
 		if in.WireHeaders && (current.Scheme == "http" || in.UnixSocket != "") {
@@ -387,6 +388,9 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			adv.record.Wire = wire.headers(resp.StatusCode)
 		}
 		hops = append(hops, adv.record)
+		if !sameOrigin(current, adv.next) {
+			clientTLS = clientTLS.trustOnly()
+		}
 		method = adv.method
 		current = adv.next
 		body = adv.body
