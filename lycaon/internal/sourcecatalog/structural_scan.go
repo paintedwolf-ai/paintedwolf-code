@@ -339,7 +339,7 @@ func structuralScanObservation(dir string, options structuralScanOptions) Direct
 }
 
 func structuralScanDescend(options structuralScanOptions, dir string) (bool, error) {
-	if options.store != nil && (!options.store.policy.selects(dir, true) || dir != options.explicitRoot && (options.store.policy.boundaryDir(dir) != "" || options.store.policy.boundaryDir(".") != "")) {
+	if options.store != nil && (!options.store.policy.selects(dir, true) || dir != options.explicitRoot && (options.store.policy.boundaryDir(dir) != "" || options.store.policy.rootOnDemand())) {
 		return false, nil
 	}
 	if options.descend == nil {
