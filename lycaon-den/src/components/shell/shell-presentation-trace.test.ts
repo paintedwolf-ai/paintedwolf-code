@@ -69,9 +69,12 @@ describe("shell presentation trace", () => {
     dispose();
   }));
 
-  it("records when the window empties and how long it stayed empty", () => createRoot((dispose) => {
+  it("records when the window empties and how long it stayed empty", () => {
     const view = shell();
-    traceShellPresentation(view.facts);
+    const dispose = createRoot((dispose) => {
+      traceShellPresentation(view.facts);
+      return dispose;
+    });
     expect(capture.record).not.toHaveBeenCalled();
     view.setStageShown(null);
     view.setChatShown(null);
@@ -89,14 +92,18 @@ describe("shell presentation trace", () => {
     expect(capture.record.mock.calls[1]?.[1]).toMatchObject({ stage_displayed: "project:p1:files" });
     expect(capture.record.mock.calls[1]?.[1]?.duration_ms).toEqual(expect.any(Number));
     dispose();
-  }));
+  });
 
-  it("records nothing while capture is off", () => createRoot((dispose) => {
+  it("records nothing while capture is off", () => {
     capture.enabled = false;
     const view = shell();
-    traceShellPresentation(view.facts);
+    const dispose = createRoot((dispose) => {
+      traceShellPresentation(view.facts);
+      return dispose;
+    });
     view.setStageShown(null);
+    view.setChatShown(null);
     expect(capture.record).not.toHaveBeenCalled();
     dispose();
-  }));
+  });
 });
