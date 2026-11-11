@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -27,7 +28,7 @@ func psBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) comman
 		if err != nil {
 			return ownerFailure(err), err
 		}
-		visible, err := hostprocess.VisibleProcesses(ctx)
+		visible, err := sessionProcesses(ctx, jobs, statuses)
 		if err != nil {
 			return ownerFailure(err), err
 		}
@@ -82,7 +83,7 @@ func psBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) comman
 						continue
 					}
 				}
-				_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "ps: %s: no matching process\n", target)
+				_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "ps: %s: no matching process this session started\n", target)
 			}
 			filteredJobs := statuses[:0]
 			for _, job := range statuses {
@@ -132,6 +133,36 @@ func psBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) comman
 	})
 }
 
+// sessionProcesses is the host's process view narrowed to this session's own:
+// its jobs and every process descending from a launch it made. Other
+// processes, and their arguments, are the person's; process_list inspects
+// them after review.
+func sessionProcesses(ctx context.Context, jobs *SessionJobs, statuses []jobStatus) ([]hostprocess.VisibleProcess, error) {
+	visible, err := hostprocess.VisibleProcesses(ctx)
+	if err != nil {
+		return nil, err
+	}
+	members, err := lineage.SessionMembers(jobs.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	jobInstance := map[int]string{}
+	for _, job := range statuses {
+		if job.PID > 0 {
+			jobInstance[job.PID] = job.Process.Instance
+		}
+	}
+	own := visible[:0]
+	for _, proc := range visible {
+		_, member := members[proc.PID]
+		instance, job := jobInstance[proc.PID]
+		if member || (job && instance == proc.Instance) {
+			own = append(own, proc)
+		}
+	}
+	return own, nil
+}
+
 type procCandidate struct {
 	id      string
 	pid     int
@@ -155,7 +186,7 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 	if err != nil {
 		return nil, err
 	}
-	visible, err := hostprocess.VisibleProcesses(ctx)
+	visible, err := sessionProcesses(ctx, jobs, statuses)
 	if err != nil {
 		return nil, err
 	}
