@@ -20,7 +20,8 @@ class WorkflowCommandTests(unittest.TestCase):
         build = next(step for step in steps if step.get('name') == 'Build, sign, and notarize')
         self.assertEqual(build['env']['PACKAGE_EXTENSIONS'], "${{ join(matrix.package_extensions, ',') }}")
         dependencies = next(step for step in steps if step.get('name') == 'Install Linux bundle dependencies')
-        self.assertIn('libarchive-tools', dependencies['run'].split())
+        self.assertEqual(dependencies['uses'], './.github/actions/setup-apt')
+        self.assertIn('libarchive-tools', dependencies['with']['packages'].split())
         catalog = json.loads((ROOT / 'packaging/release-platforms.json').read_text())
         cases = [(row['goos'], ','.join(row['package_extensions']), 0) for row in catalog['platforms']]
         cases += [('linux', 'deb,rpm', 0), ('linux', 'deb', 0), ('linux', 'deb,rpm,pkg.tar.zst', 37)]
