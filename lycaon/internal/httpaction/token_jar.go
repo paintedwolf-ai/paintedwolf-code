@@ -145,6 +145,33 @@ func openTokenJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args m
 	return jar, req, nil
 }
 
+func checkTokenJarState(ctx context.Context, deps Deps, req secretcap.TokenJarRequest, jar *secretcap.TokenJar) error {
+	if deps.Secrets == nil || jar == nil || jar.Reference == "" || req.ProjectID == "" || req.ChatSessionID == "" {
+		return nil
+	}
+	meta, err := deps.Secrets.Describe(ctx, req.ProjectID, req.ChatSessionID, jar.Reference)
+	if err != nil {
+		return &toolrejection.ToolReject{
+			Code: TokenJarFailedCode, Data: map[string]any{"jar": jar.Name, "token_jar_name": jar.Name, "reason": err.Error()},
+		}
+	}
+	switch meta.State {
+	case secretcap.StateRevoked:
+		return &toolrejection.ToolReject{
+			Code: TokenJarFailedCode, Data: map[string]any{"jar": jar.Name, "token_jar_name": jar.Name, "reason": secretcap.ErrRevoked.Error()},
+		}
+	case secretcap.StateAgentUseExpired:
+		return &toolrejection.ToolReject{
+			Code: TokenJarFailedCode, Data: map[string]any{"jar": jar.Name, "token_jar_name": jar.Name, "reason": secretcap.ErrAgentUseExpired.Error()},
+		}
+	case secretcap.StateUnavailable:
+		return &toolrejection.ToolReject{
+			Code: TokenJarFailedCode, Data: map[string]any{"jar": jar.Name, "token_jar_name": jar.Name, "reason": secretcap.ErrValueMissing.Error()},
+		}
+	}
+	return nil
+}
+
 func extractTokens(resp outboundhttp.Response, rules []captureTokenRule) (map[string]string, []string) {
 	if len(rules) == 0 {
 		return nil, nil

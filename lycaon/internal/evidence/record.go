@@ -25,9 +25,11 @@ type Record struct {
 	Body         []string // result lines for excerpt verification
 	URL          string   // primary observed URL
 
-	Surface    string // dom | tui | http
-	ArtifactID string
-	FrameIndex int // positive values identify temporal frames
+	Surface          string      // dom | tui | http
+	ArtifactID       string
+	FrameIndex       int         // positive values identify temporal frames
+	UntrustedContent bool        // true when this record delivered untrusted external content to the model
+	Custody          FileCustody // workspace file custody state and cross-kind replacement sequence
 
 	grepLines    map[string]map[int]string // grep kind: path → line → content
 	pathsTouched []string                  // additional normalized paths for ByPath index
@@ -49,6 +51,13 @@ type Record struct {
 	RecordedAt     string         `json:"at,omitempty"` // RFC3339 in gate JSONL
 }
 
+// FileCustody tracks workspace file custody provenance and the per-session
+// monotonic sequence number for whole-file custody replacement records.
+type FileCustody struct {
+	External bool // true when this record placed or read external content in a workspace path
+	Seq      int  // positive monotonic per-session sequence when ReplacesWholeFileCustody is true
+}
+
 // ShowedLineNumbers reports whether the output behind this record let its reader
 // see line numbers. Only program output can have hidden them.
 func (r Record) ShowedLineNumbers() bool {
@@ -58,10 +67,24 @@ func (r Record) ShowedLineNumbers() bool {
 // IsGate reports whether rec is an inspector gate row.
 func (r Record) IsGate() bool { return r.GateType != "" }
 
+// HasExternalCustody reports whether r placed or read external content in a workspace path.
+func (r Record) HasExternalCustody() bool { return r.Custody.External }
+
+// CustodySeq returns the monotonic per-session sequence number for whole-file custody replacement.
+func (r Record) CustodySeq() int { return r.Custody.Seq }
+
+// SetCustodySeq stamps the monotonic per-session whole-file custody replacement sequence on r.
+func (r *Record) SetCustodySeq(seq int) {
+	if r != nil && seq > 0 {
+		r.Custody.Seq = seq
+	}
+}
+
 // Ledger is the handle-keyed evidence ledger for citation grounding.
 type Ledger struct {
 	Handles      map[string]Record   // handle → record (single store)
 	ByPath       map[string][]string // normalized path → handles (newest last)
+	byPathOrder  map[string][]string // normalized path → handles in chronological assembly order
 	PathFidelity map[string]string   // normalized path → trust tier (structured wins)
 	handleOrder  []string            // observation order for stable HandlesSorted
 }

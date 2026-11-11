@@ -46,3 +46,23 @@ func HTTPArgumentConsumed(args map[string]any, path string) bool {
 		return false
 	}
 }
+
+// HTTPBodyArgumentConsumed reports whether path names request body data.
+func HTTPBodyArgumentConsumed(args map[string]any, path string) bool {
+	if !HTTPArgumentConsumed(args, path) {
+		return false
+	}
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	switch parts[0] {
+	case "body_text", "body_json", "body_form", "form":
+		return true
+	default:
+		return false
+	}
+}
+
+// HTTPHeaderArgumentConsumed reports whether path names request URL or header data.
+func HTTPHeaderArgumentConsumed(args map[string]any, path string) bool {
+	return HTTPArgumentConsumed(args, path) && !HTTPBodyArgumentConsumed(args, path)
+}
+

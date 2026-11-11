@@ -233,7 +233,9 @@ func (d *ProgramDispatcher) Redirections() (commandprogram.InputRedirection, com
 	if d.redirections == nil {
 		return nil, nil
 	}
-	return d.redirections(d.paths.Fork(), d.beginOutput)
+	forkPaths := d.paths.Fork()
+	in, out := d.redirections(forkPaths, d.beginOutput)
+	return d.wrapInputRedirection(in, forkPaths), d.wrapOutputPublication(out, forkPaths)
 }
 
 // NativeBindings reports whether a program binds a name to a native owner.

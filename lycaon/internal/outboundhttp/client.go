@@ -105,10 +105,41 @@ type Request struct {
 	// retains the received block in Response.Wire; TLS headers are normalized.
 	WireHeaders bool
 	// TLS adds this request's trust and client identity to every TLS hop.
-	TLS            *ClientTLS
-	AllowAddress   func(netip.Addr, uint16) bool
-	BeforeHop      func(context.Context, *url.URL) error
-	OnFirstHopConn func(local, remote netip.AddrPort)
+	TLS              *ClientTLS
+	AllowAddress     func(netip.Addr, uint16) bool
+	BeforeHop        func(context.Context, *url.URL) error
+	BeforeHopRequest func(context.Context, HopRequest) error
+	OnFirstHopConn   func(local, remote netip.AddrPort)
+	// OnFirstHopHeadersDispatched and OnFirstHopBodyDispatched fire once when
+	// that part of the first hop's request leaves host custody.
+	OnFirstHopHeadersDispatched func()
+	OnFirstHopBodyDispatched    func()
+}
+
+// HopRequest describes one HTTP hop presented to BeforeHopRequest before
+// resolution or dialing.
+type HopRequest struct {
+	URL        *url.URL
+	Method     string
+	HostHeader string
+	setCookies func([]*http.Cookie)
+}
+
+// FreezeCookies binds the exact owned cookie snapshot authorized for this hop
+// so Do transmits those exact cookies without another Jar.Cookies lookup.
+func (h HopRequest) FreezeCookies(cookies []*http.Cookie) bool {
+	if h.setCookies == nil {
+		return false
+	}
+	cp := make([]*http.Cookie, 0, len(cookies))
+	for _, c := range cookies {
+		if c != nil {
+			clone := *c
+			cp = append(cp, &clone)
+		}
+	}
+	h.setCookies(cp)
+	return true
 }
 
 // Hop records a followed redirect and its destination.
@@ -187,8 +218,10 @@ func NormalizeURL(raw string) (*url.URL, error) {
 
 func Do(ctx context.Context, in Request) (out Response, err error) {
 	progress := ExchangeError{}
+	var hops []Hop
 	defer func() {
 		if err != nil {
+			progress.Redirects = slices.Clone(hops)
 			progress.Err = err
 			err = &progress
 		}
@@ -210,7 +243,8 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 	body := prepared.Body
 	originHeaders := prepared.OriginHeaders
 	hopHeaders := prepared.HopHeaders
-	var hops []Hop
+	hostHeader := in.HostHeader
+	clientTLS := in.TLS
 	var ioElapsed time.Duration
 	begun := time.Now()
 	var firstHopLocal, firstHopPeer netip.AddrPort
@@ -219,6 +253,25 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			if err := in.BeforeHop(ctx, current); err != nil {
 				return Response{}, err
 			}
+		}
+		var hopCookies []*http.Cookie
+		var cookiesFrozen bool
+		if in.BeforeHopRequest != nil {
+			hopReq := HopRequest{
+				URL:        current,
+				Method:     method,
+				HostHeader: hostHeader,
+				setCookies: func(c []*http.Cookie) {
+					hopCookies = c
+					cookiesFrozen = true
+				},
+			}
+			if err := in.BeforeHopRequest(ctx, hopReq); err != nil {
+				return Response{}, err
+			}
+		}
+		if in.Jar != nil && !cookiesFrozen {
+			return Response{}, invalidRequest("cookie jar requires BeforeHopRequest to call FreezeCookies")
 		}
 		remaining := timeout - ioElapsed
 		if remaining <= 0 {
@@ -233,15 +286,18 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			return Response{}, err
 		}
 		resolved := time.Now()
-		in.TLS.apply(transport)
+		clientTLS.apply(transport)
 		boundConnect(transport, in.ConnectTimeout)
 		var wire *wireCapture
 		if in.WireHeaders && (current.Scheme == "http" || in.UnixSocket != "") {
 			wire = captureWire(transport)
 		}
-		client := in.clientForHop(remaining, transport)
+		var dispatch *dispatchObserver
 		var onConn func(local, remote netip.AddrPort)
 		if hop == 0 {
+			if in.OnFirstHopHeadersDispatched != nil || in.OnFirstHopBodyDispatched != nil {
+				dispatch = observeDispatch(transport, in.OnFirstHopHeadersDispatched, in.OnFirstHopBodyDispatched)
+			}
 			onConn = func(local, remote netip.AddrPort) {
 				firstHopLocal = local
 				firstHopPeer = remote
@@ -250,21 +306,30 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 				}
 			}
 		}
-		tracer, trace := newHopTracer(onConn)
+		client := in.clientForHop(remaining, transport)
+		tracer, trace := newHopTracer(onConn, dispatch.gotConn)
 		req, err := http.NewRequestWithContext(httptrace.WithClientTrace(ioCtx, trace), method, current.String(), bytes.NewReader(body))
 		if err != nil {
 			transport.CloseIdleConnections()
 			ioCancel()
 			return Response{}, err
 		}
-		if in.HostHeader != "" {
-			req.Host = in.HostHeader
+		if dispatch != nil && req.Body != nil && req.Body != http.NoBody {
+			req.Body = &dispatchBody{ReadCloser: req.Body, obs: dispatch}
+		}
+		if hostHeader != "" {
+			req.Host = hostHeader
 		}
 		for _, h := range hopHeaders {
 			req.Header.Add(h.Name, h.Value)
 		}
 		for _, h := range originHeaders {
 			req.Header.Add(h.Name, h.Value)
+		}
+		for _, c := range hopCookies {
+			if c != nil {
+				req.AddCookie(c)
+			}
 		}
 		progress.RequestsStarted++
 		resp, err := client.Do(req)
@@ -279,6 +344,11 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			transport.CloseIdleConnections()
 			ioCancel()
 			return Response{}, err
+		}
+		if in.Jar != nil {
+			if rc := resp.Cookies(); len(rc) > 0 {
+				in.Jar.SetCookies(req.URL, rc)
+			}
 		}
 		hopTiming := tracer.timing(ioStarted, dnsElapsed)
 		observed := tracer.observation(begun, resolved, method, req.URL.RequestURI())
@@ -308,7 +378,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		hopTiming.Total = time.Since(ioStarted).Milliseconds()
 		transport.CloseIdleConnections()
 		ioCancel()
-		adv, err := in.processRedirect(resp, current, method, body, originHeaders, hop, redirectLimit, hops, hopTiming)
+		adv, err := in.processRedirect(resp, current, method, body, originHeaders, hostHeader, hop, redirectLimit, hops, hopTiming)
 		if err != nil {
 			return Response{}, err
 		}
@@ -318,10 +388,14 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			adv.record.Wire = wire.headers(resp.StatusCode)
 		}
 		hops = append(hops, adv.record)
+		if !sameOrigin(current, adv.next) {
+			clientTLS = clientTLS.trustOnly()
+		}
 		method = adv.method
 		current = adv.next
 		body = adv.body
 		originHeaders = adv.originHeaders
+		hostHeader = adv.hostHeader
 	}
 }
 
@@ -330,6 +404,7 @@ type redirectAdvance struct {
 	method        string
 	body          []byte
 	originHeaders []Header
+	hostHeader    string
 	record        Hop
 }
 
@@ -339,6 +414,7 @@ func (in Request) processRedirect(
 	method string,
 	body []byte,
 	originHeaders []Header,
+	hostHeader string,
 	hop, redirectLimit int,
 	hops []Hop,
 	timing *HopTiming,
@@ -381,8 +457,9 @@ func (in Request) processRedirect(
 				Hops:   newHops,
 			}
 		}
-		// Cross-origin redirects drop caller headers.
+		// Cross-origin redirects drop caller headers and any origin Host override.
 		originHeaders = nil
+		hostHeader = ""
 	}
 	if !keepBody {
 		body = nil
@@ -393,6 +470,7 @@ func (in Request) processRedirect(
 		method:        nextMethod,
 		body:          body,
 		originHeaders: originHeaders,
+		hostHeader:    hostHeader,
 		record:        record,
 	}, nil
 }
@@ -445,7 +523,6 @@ func (in Request) clientForHop(remaining time.Duration, transport *http.Transpor
 		client = httpclient.WithTransport(httpclient.Streaming(class), transport)
 	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	client.Jar = in.Jar
 	return client
 }
 

@@ -1,8 +1,11 @@
 package outboundhttp
 
 import (
+	"context"
 	"crypto/tls"
+	"io"
 	"net"
+	"net/http"
 	"net/http/httptrace"
 	"net/netip"
 	"strings"
@@ -37,7 +40,7 @@ type hopTracer struct {
 	sent              []Header
 }
 
-func newHopTracer(onConn func(local, remote netip.AddrPort)) (*hopTracer, *httptrace.ClientTrace) {
+func newHopTracer(onConn func(local, remote netip.AddrPort), onGotConn func()) (*hopTracer, *httptrace.ClientTrace) {
 	t := &hopTracer{}
 	first := func(at *time.Time) {
 		t.mu.Lock()
@@ -56,6 +59,9 @@ func newHopTracer(onConn func(local, remote netip.AddrPort)) (*hopTracer, *httpt
 			first(&t.ttfbTime)
 		},
 		GotConn: func(info httptrace.GotConnInfo) {
+			if onGotConn != nil {
+				onGotConn()
+			}
 			if local, ok := info.Conn.LocalAddr().(*net.TCPAddr); ok && onConn != nil {
 				if remote, ok := info.Conn.RemoteAddr().(*net.TCPAddr); ok {
 					onConn(local.AddrPort(), remote.AddrPort())
@@ -131,4 +137,92 @@ func (t *hopTracer) observation(begun, resolved time.Time, method, target string
 	}
 	o.StartTransfer = since(t.ttfbTime, max(o.Connect, o.AppConnect))
 	return o
+}
+
+// dispatchObserver reports when request material leaves host custody on the
+// first hop. Headers leave on the first connection write after the transport
+// hands over a ready connection, so dial, proxy and TLS handshake bytes never
+// count. Body bytes leave when the transport first reads the body. Neither
+// event claims the recipient received anything.
+type dispatchObserver struct {
+	mu         sync.Mutex
+	connReady  bool
+	onHeaders  func()
+	onBody     func()
+	headersOut bool
+	bodyOut    bool
+}
+
+func observeDispatch(transport *http.Transport, onHeaders, onBody func()) *dispatchObserver {
+	obs := &dispatchObserver{onHeaders: onHeaders, onBody: onBody}
+	dial := transport.DialContext
+	if dial == nil {
+		var d net.Dialer
+		dial = d.DialContext
+	}
+	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		conn, err := dial(ctx, network, address)
+		if err != nil {
+			return nil, err
+		}
+		return &dispatchConn{Conn: conn, obs: obs}, nil
+	}
+	return obs
+}
+
+func (o *dispatchObserver) gotConn() {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	o.connReady = true
+	o.mu.Unlock()
+}
+
+func (o *dispatchObserver) wrote() {
+	o.mu.Lock()
+	fire := o.connReady && !o.headersOut
+	if fire {
+		o.headersOut = true
+	}
+	o.mu.Unlock()
+	if fire && o.onHeaders != nil {
+		o.onHeaders()
+	}
+}
+
+func (o *dispatchObserver) bodyRead() {
+	o.mu.Lock()
+	fire := !o.bodyOut
+	o.bodyOut = true
+	o.mu.Unlock()
+	if fire && o.onBody != nil {
+		o.onBody()
+	}
+}
+
+type dispatchConn struct {
+	net.Conn
+	obs *dispatchObserver
+}
+
+func (c *dispatchConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	if n > 0 {
+		c.obs.wrote()
+	}
+	return n, err
+}
+
+type dispatchBody struct {
+	io.ReadCloser
+	obs *dispatchObserver
+}
+
+func (b *dispatchBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if n > 0 {
+		b.obs.bodyRead()
+	}
+	return n, err
 }

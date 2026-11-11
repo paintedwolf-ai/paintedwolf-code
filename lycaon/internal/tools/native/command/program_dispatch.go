@@ -535,7 +535,11 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 					tracker.w = nonNilWriter(streams.Error)
 					streams.Error = tracker
 					noteJobNative(ctx, request.Argv.Values())
-					return actual.Invoke(ctx, tc, streams)
+					res, invokeErr := actual.Invoke(ctx, tc, streams)
+					if invokeErr == nil && res.Status == 0 {
+						d.run.noteNativeFileMutation(ctx, spec.Name, actual.Review.PathTargets)
+					}
+					return res, invokeErr
 				})
 			}}, nil
 		},
@@ -573,7 +577,11 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 			return ownerFailure(err), err
 		}
 		noteJobNative(ctx, request.Argv.Values())
-		return prepared.Invoke(ctx, tc, streams)
+		res, invokeErr := prepared.Invoke(ctx, tc, streams)
+		if invokeErr == nil && res.Status == 0 {
+			d.run.noteNativeFileMutation(ctx, spec.Name, prepared.Review.PathTargets)
+		}
+		return res, invokeErr
 	})
 }
 

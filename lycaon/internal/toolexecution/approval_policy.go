@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // ApprovalPolicyEngine evaluates sandbox profiles then user approval rules.
@@ -58,9 +59,6 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 	if decision.Blocked {
 		return decision, nil
 	}
-	if eval.BoundaryApprovalSatisfied && (len(eval.ConfineRequest.PolicyWriteGrants) == 0 || eval.PolicyWritesReviewed) {
-		return decision, nil
-	}
 	if p.gate == nil {
 		return decision, nil
 	}
@@ -79,7 +77,7 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 			Approval:    approval,
 		}, nil
 	}
-	if approval.Required() {
+	if approval.Required() && !hitl.CurrentActionReviewCovers(action, approval.Decision, approval.DetectionCitation, approval.MatchedRules) {
 		return &platform.PolicyDecision{
 			Allowed:            false,
 			RequiresApproval:   true,
@@ -88,6 +86,28 @@ func (p *ApprovalPolicyEngine) Evaluate(ctx context.Context, eval platform.Polic
 		}, nil
 	}
 	return &platform.PolicyDecision{Allowed: true}, nil
+}
+
+func executionBoundaryDigestForPolicy(confReq confine.Request) string {
+	if !confReq.HostExecution && !confReq.ProcessControl && !confReq.CredentialStore {
+		return ""
+	}
+	return tools.ExecutionBoundaryDigest(confReq)
+}
+
+func normalizedPolicyConfineRequestFromParts(
+	confReq confine.Request,
+	projectDir string,
+	directIPRequested, authorizedDirectIP bool,
+) confine.Request {
+	if len(confReq.Roots) == 0 && strings.TrimSpace(projectDir) != "" {
+		confReq.Roots = []string{projectDir}
+	}
+	if (directIPRequested || authorizedDirectIP) && confReq.Egress != confine.EgressDirectIP {
+		confReq.Egress = confine.EgressDirectIP
+		confReq.SocksProxyEnv = false
+	}
+	return confReq
 }
 
 // pathArgKeys are the scalar/list argument names that name a file a tool will touch.
@@ -239,15 +259,16 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			AgentPolicy: policyWriteTargets(confReq, eval.ProjectDir),
 		},
 		Invocation: hitl.ActionInvocation{
-			NativeInputs:       eval.NativeInputs,
-			Tool:               eval.ToolName,
-			BoundStages:        toolcontract.CloneExecutionStages(eval.BoundStages),
-			Args:               eval.ToolArgs,
-			Files:              append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
-			ResolvedFiles:      append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
-			NativePathTargets:  append([]hitl.NativePathTarget(nil), eval.NativePathTargets...),
-			ApprovedFileAccess: append([]hitl.GrantedPathDelta(nil), eval.ApprovedFileAccess...),
-			ActionID:           eval.ActionID,
+			NativeInputs:        eval.NativeInputs,
+			Tool:                eval.ToolName,
+			BoundStages:         toolcontract.CloneExecutionStages(eval.BoundStages),
+			Args:                eval.ToolArgs,
+			Files:               append(filesFromArgs(eval.ToolName, eval.ToolArgs), policyWritePaths(confReq)...),
+			ResolvedFiles:       append(append([]string(nil), eval.ResolvedFiles...), policyWritePaths(confReq)...),
+			NativePathTargets:   append([]hitl.NativePathTarget(nil), eval.NativePathTargets...),
+			ApprovedFileAccess:  append([]hitl.GrantedPathDelta(nil), eval.ApprovedFileAccess...),
+			CurrentActionReview: eval.CurrentActionReview,
+			ActionID:            eval.ActionID,
 		},
 		Resources: hitl.ActionResources{
 			ApprovalCategory:     eval.ApprovalCategory,
@@ -264,8 +285,10 @@ func proposedActionFromPolicy(eval platform.PolicyContext) hitl.ProposedAction {
 			SessionOutputRoot:  confReq.SessionOutputRoot,
 		},
 		Execution: hitl.ActionExecution{
-			Contained:        hitl.ContainedForRequest(confReq),
-			PackageExecution: eval.PackageExecution,
+			Contained:                       hitl.ContainedForRequest(confReq),
+			ExecutionBoundaryDigest:         executionBoundaryDigestForPolicy(confReq),
+			AuthorizedExecutionCapabilities: append([]string(nil), eval.AuthorizedExecutionCapabilities...),
+			PackageExecution:                eval.PackageExecution,
 		},
 		Sockets: hitl.ActionSockets{
 			SocketGrants:            append([]confine.SocketGrant(nil), eval.SocketGrants...),
