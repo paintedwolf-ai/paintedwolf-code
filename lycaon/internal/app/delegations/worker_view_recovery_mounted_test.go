@@ -152,8 +152,9 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	testutil.FailErr(t, "startup recovery", next.RecoverWorkerViews(t.Context()))
 
 	for i, w := range workers {
-		if err := workspace.RefuseMountedBranch(w.Root); err != nil {
-			t.Fatalf("mount remains after recovery: %v", err)
+		// Each worker is rebuilt on a live mount of its own; the dead one would not answer.
+		if _, err := os.ReadDir(w.Root); err != nil {
+			t.Fatalf("branch does not answer after recovery: %v", err)
 		}
 		if resumed, ok := next.Queue.Get(w.Task); !ok || resumed.Status.IsTerminal() {
 			t.Fatalf("worker did not resume: %+v", resumed)
