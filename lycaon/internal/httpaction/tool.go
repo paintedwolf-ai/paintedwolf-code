@@ -521,6 +521,20 @@ func send(
 				return toolrejection.HeldHandOffReject("http_request", err)
 			}
 			loopbackObs.beforeFirstHop(hopCtx, tctx, spec)
+			return nil
+		}
+		// A redirect carries the request's material again: a same-origin hop
+		// keeps its headers and a 307 or 308 keeps its body. A release revoked
+		// while an earlier hop ran is not replayed.
+		if secretmatch.HTTPOrigin(hop.URL) == secretmatch.HTTPOrigin(spec.target) {
+			if err := tctx.Effects.Secrets.Precheck(hopCtx, spec.outgoingHeaders); err != nil {
+				return toolrejection.HeldHandOffReject("http_request", err)
+			}
+		}
+		if strings.EqualFold(hop.Method, spec.method) {
+			if err := tctx.Effects.Secrets.Precheck(hopCtx, spec.outgoingBody); err != nil {
+				return toolrejection.HeldHandOffReject("http_request", err)
+			}
 		}
 		return nil
 	}
