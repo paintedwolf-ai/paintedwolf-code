@@ -1,12 +1,13 @@
 package confine
 
 import (
-	"github.com/lycaon/lycaon/internal/fspath"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync/atomic"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 // keyMaterialPathsSource supplies the catalogued key-material floor, installed
@@ -296,4 +297,35 @@ func mergeSortedStrings(a, b []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// sourceFloorMemo holds a pack-source floor resolved for one installed source
+// and home directory; a new source or home re-resolves. Config-dir floors are
+// never memoized: the config dir may be retargeted at runtime.
+type sourceFloorMemo struct {
+	current atomic.Pointer[sourceResolvedFloor]
+}
+
+type sourceResolvedFloor struct {
+	src   *func() []string
+	home  string
+	paths []string
+}
+
+func (m *sourceFloorMemo) get(src *func() []string, resolve func() []string) []string {
+	home := homeDir()
+	if c := m.current.Load(); c != nil && c.src == src && c.home == home {
+		return c.paths
+	}
+	paths := resolve()
+	m.current.Store(&sourceResolvedFloor{src: src, home: home, paths: paths})
+	return paths
+}
+
+func homeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
 }
