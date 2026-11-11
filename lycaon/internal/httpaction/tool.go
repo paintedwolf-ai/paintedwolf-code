@@ -338,6 +338,9 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	if reject != nil {
 		return exchanged{}, reject
 	}
+	if reject := reviewClientIdentity(ctx, deps, spec, tctx, opts.TLS); reject != nil {
+		return exchanged{}, reject
+	}
 	ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
 		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
 		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
