@@ -118,7 +118,7 @@ func tmpfsVolume(t *testing.T, kind Kind) *Volume {
 	}
 	options := "size=32m"
 	if kind == Folding {
-		options += ",casefold=utf8"
+		options += ",casefold"
 	}
 	if err := unix.Mount("tmpfs", store, "tmpfs", 0, options); err != nil {
 		t.Skipf("cannot mount tmpfs with %s: %v", options, err)
