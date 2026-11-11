@@ -144,7 +144,7 @@ export function SkillCard(props: Props) {
                 <div class="den-tool-part-card-section">
                   <p class="den-tool-part-card-section-label">{resource() ? "Resource content" : "Instructions"}</p>
                   <ToolContentLink pane="skill-instructions" label={resource() ? "Resource content" : "Instructions"} projectId={props.projectId}
-                    content={{ kind: "inline", text: instructions }} />
+                    language={resource() ? undefined : "markdown"} content={{ kind: "inline", text: instructions }} />
                 </div>
               )}
             </Show>
