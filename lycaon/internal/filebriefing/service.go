@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -44,29 +45,29 @@ type Dependencies struct {
 	Events    EventPublisher
 	Settings  Enablement
 	Logger    *slog.Logger
+	// Scheduler is shared with other briefing kinds; nil gives the service
+	// its own.
+	Scheduler *briefing.Scheduler
 }
 
 // Service coordinates briefing admission, generation, retention, and shutdown.
 type Service struct {
-	store     Store
-	config    Config
-	generator Generator
-	events    EventPublisher
-	settings  Enablement
-	logger    *slog.Logger
-	gate      sync.RWMutex
-	stopped   bool
-	jobs      sync.Map
-	automatic sync.Map
-	ctx       context.Context
-	cancel    context.CancelFunc
-	workers   sync.WaitGroup
+	store         Store
+	config        Config
+	generator     Generator
+	events        EventPublisher
+	settings      Enablement
+	logger        *slog.Logger
+	gate          sync.RWMutex
+	stopped       bool
+	scheduler     *briefing.Scheduler
+	ownsScheduler bool
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
-type generationJob struct {
-	context context.Context
-	cancel  context.CancelFunc
-}
+// fileJobPrefix marks this kind's jobs on a shared scheduler.
+const fileJobPrefix = "file\x00"
 
 func NewService(ctx context.Context, deps Dependencies) *Service {
 	ctx, cancel := context.WithCancel(ctx)
@@ -74,8 +75,12 @@ func NewService(ctx context.Context, deps Dependencies) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	scheduler, owns := deps.Scheduler, false
+	if scheduler == nil {
+		scheduler, owns = briefing.NewScheduler(ctx), true
+	}
 	return &Service{store: deps.Store, config: deps.Config, generator: deps.Generator,
-		events: deps.Events, settings: deps.Settings, logger: logger, ctx: ctx, cancel: cancel}
+		events: deps.Events, settings: deps.Settings, logger: logger, scheduler: scheduler, ownsScheduler: owns, ctx: ctx, cancel: cancel}
 }
 
 func (s *Service) Enabled() bool { return s.settings == nil || s.settings.Enabled() }
@@ -160,7 +165,7 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 		return errors.New("file summaries settings are unavailable")
 	}
 	if !enabled {
-		s.jobs.Range(func(_, value any) bool { value.(*generationJob).cancel(); return true })
+		s.scheduler.Cancel(func(job briefing.Job) bool { return strings.HasPrefix(job.Key, fileJobPrefix) })
 		if err := s.store.Clear(ctx); err != nil {
 			return err
 		}
@@ -168,62 +173,43 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 	return s.settings.PutEnabled(enabled)
 }
 
-func (s *Service) ensureJob(ctx context.Context, target Target, briefing Briefing, prompt string) {
-	if briefing.Status != StatusPending {
+// ensureJob runs pending work once per attempt. A newer automatic request
+// supersedes the project's earlier automatic work; manual work is never
+// superseded.
+func (s *Service) ensureJob(ctx context.Context, target Target, b Briefing, prompt string) {
+	if b.Status != StatusPending {
 		return
 	}
-	key := fileBriefingJobKey(briefing)
-	jobCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	job := &generationJob{context: jobCtx, cancel: cancel}
-	for {
-		prior, running := s.jobs.LoadOrStore(key, job)
-		if !running {
-			break
-		}
-		previous := prior.(*generationJob)
-		if previous.context.Err() == nil {
-			cancel()
-			return
-		}
-		// A returning view may resume before its canceled generator has unwound.
-		if s.jobs.CompareAndSwap(key, previous, job) {
-			break
-		}
+	group := ""
+	if b.Trigger == "automatic" {
+		group = fileJobPrefix + b.ProjectID
 	}
-	s.publishFileBriefingEvent(ctx, fileBriefingEvent(briefing, "pending"))
-	if briefing.Trigger == "automatic" {
-		if prior, loaded := s.automatic.Swap(briefing.ProjectID, job); loaded {
-			prior.(*generationJob).cancel()
-		}
+	joined, err := s.scheduler.Submit(briefing.Job{
+		Key: fileJobPrefix + fileBriefingJobKey(b), Project: b.ProjectID, Group: group, Manual: b.Trigger == "manual",
+		Policy: briefing.Policy{Admission: briefing.Superseding}, Values: ctx,
+		Run: func(jobCtx context.Context) { s.completeFileBriefing(jobCtx, b, prompt, target.ProjectDir) },
+	})
+	if err != nil || joined {
+		return
 	}
-	stop := context.AfterFunc(s.ctx, cancel) //nolint:contextcheck // Service shutdown also cancels detached request work.
-	s.workers.Add(1)
-	go func() {
-		defer s.workers.Done()
-		defer observability.GuardPanic("filebriefing.generation")
-		defer stop()
-		defer cancel()
-		defer s.jobs.CompareAndDelete(key, job)
-		if briefing.Trigger == "automatic" {
-			defer s.automatic.CompareAndDelete(briefing.ProjectID, job)
-		}
-		s.completeFileBriefing(jobCtx, briefing, prompt, target.ProjectDir)
-	}()
+	s.publishFileBriefingEvent(ctx, fileBriefingEvent(b, "pending"))
 }
 
-// Stop closes admission before cancellation so Wait cannot race a new worker.
+// Stop closes admission before cancelling, so Wait cannot race new work.
 func (s *Service) Stop() {
 	s.gate.Lock()
 	s.stopped = true
 	s.cancel()
+	if s.ownsScheduler {
+		s.scheduler.Stop()
+	} else {
+		s.scheduler.Cancel(func(job briefing.Job) bool { return strings.HasPrefix(job.Key, fileJobPrefix) })
+	}
 	s.gate.Unlock()
 }
 
 func (s *Service) Wait(ctx context.Context) {
-	done := make(chan struct{})
-	go func() { s.workers.Wait(); close(done) }()
-	select {
-	case <-done:
-	case <-ctx.Done():
+	if s.ownsScheduler {
+		s.scheduler.Wait(ctx)
 	}
 }
