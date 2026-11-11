@@ -28,7 +28,7 @@ func copyData(ctx context.Context, in, out *os.File, limit int64) (int64, error)
 			break
 		}
 		if err != nil {
-			if offset == 0 && (errors.Is(err, unix.EINVAL) || errors.Is(err, unix.ENOTSUP)) {
+			if offset == 0 && (errors.Is(err, unix.EINVAL) || errors.Is(err, unix.ENOTSUP) || errors.Is(err, unix.EOPNOTSUPP) || errors.Is(err, unix.ENOTTY)) {
 				return copyWhole(ctx, in, out, limit)
 			}
 			return read, err
