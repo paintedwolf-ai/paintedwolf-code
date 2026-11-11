@@ -343,7 +343,7 @@ func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string
 	}
 	var overrun *adapter.BudgetOverrunError
 	for {
-		choice, err := m.chooseWorkspaceAdapter(ctx, root, grants, journal.ProjectID, decision, overrun)
+		choice, err := m.chooseWorkspaceAdapter(ctx, root, grants, journal.ProjectID, decision, overrun, meta.PreparationKind == adapter.PreparationMounted && overrun == nil)
 		if err != nil {
 			return false, err
 		}

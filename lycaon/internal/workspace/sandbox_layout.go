@@ -254,7 +254,7 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 	var overrun *adapter.BudgetOverrunError
 	for {
 		reportPreparation(ctx, PreparationProgress{Stage: "probing"})
-		choice, err := m.chooseWorkspaceAdapter(ctx, binding.Root, grants, projectID, decision, overrun)
+		choice, err := m.chooseWorkspaceAdapter(ctx, binding.Root, grants, projectID, decision, overrun, false)
 		if err != nil {
 			return classifyProvisionError(err)
 		}

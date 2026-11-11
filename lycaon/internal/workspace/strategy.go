@@ -69,6 +69,7 @@ func (m *Manager) chooseWorkspaceAdapter(
 	projectID string,
 	decision workerplacement.Decision,
 	overrun *adapter.BudgetOverrunError,
+	keepMounted bool,
 ) (WorkspaceStrategySelection, error) {
 	selector := m.selector
 	if selector == nil {
@@ -87,6 +88,7 @@ func (m *Manager) chooseWorkspaceAdapter(
 		},
 		Overrun:     overrun,
 		HiddenPaths: m.hiddenEnginePaths(),
+		KeepMounted: keepMounted,
 	})
 	if err != nil {
 		return WorkspaceStrategySelection{Probe: choice.Probe}, err

@@ -232,3 +232,27 @@ func TestRecordedBudgetsAreOneProvisionalFactPerClass(t *testing.T) {
 		}
 	}
 }
+
+// A worker created mounted keeps its mount when it is rebuilt, even under the preparation limit, and
+// follows the rule when the mount is unavailable.
+func TestRebuildKeepsAMountedWorkerMounted(t *testing.T) {
+	for _, mount := range []mountOutcome{{reason: ReasonNone}, {reason: ReasonFUSEDeviceUnavailable}} {
+		var calls atomic.Int32
+		sel := NewSelector("linux", ruleMount(mount, &calls), nil, NewEagerCopyAdapter())
+		sel.BudgetFor = ruleBudgetFor
+		choice, err := sel.Choose(t.Context(), ChooseRequest{
+			Probe:          ProbeConfig{RuntimeDir: t.TempDir()},
+			Grants:         []RootGrant{{RootID: "r", SourcePath: writeSizedTree(t, 2, 10), IsPrimary: true}},
+			CloneAvailable: func(context.Context, RootGrant) (bool, error) { return true, nil },
+			KeepMounted:    true,
+		})
+		testutil.FailErr(t, "Choose", err)
+		want, reason := AdapterFUSELinux, SelectionKeptMounted
+		if mount.reason != ReasonNone {
+			want, reason = AdapterEagerCopy, SelectionUnderBudget
+		}
+		if choice.Adapter.ID() != want || choice.Facts.Reason != reason {
+			t.Fatalf("mount %q: chose %s for %s", mount.reason, choice.Adapter.ID(), choice.Facts.Reason)
+		}
+	}
+}
