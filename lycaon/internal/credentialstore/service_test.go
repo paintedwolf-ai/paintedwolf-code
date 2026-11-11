@@ -134,10 +134,48 @@ func TestLoadOrInitRefusesAVaultPathHeldByADirectory(t *testing.T) {
 	}
 }
 
-// The one loadOrInit branch these tests cannot reach is the joined error when
-// the restore commit itself fails: both commits run inside one locked
-// operation on the same file, and the vault exposes no fault seam between
-// them, so a successful first commit cannot be followed by a failing restore.
+// The loadOrInit branches these tests cannot reach are the rollback removal
+// failure and the joined error when the restore commit itself fails: both
+// need a filesystem fault between two operations inside one locked section,
+// and the vault exposes no fault seam for that.
+func TestLoadOrInitReportsDurableFailuresWithoutMutatingTheVault(t *testing.T) {
+	t.Run("existing credential fails durable re-verification", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), VaultBasename)
+		good := newDevelopmentIdentityProvider(path)
+		seed := &vaultFile{path: path, provider: good}
+		doc, err := seed.read()
+		testutil.FailErr(t, "create empty vault", err)
+		doc.Namespaces["ns"] = map[string]string{"id": "stored"}
+		testutil.FailErr(t, "seed vault", seed.commit(doc))
+
+		provider := &readbackFailureProvider{inner: good}
+		vault := &vaultFile{path: path, provider: provider}
+		if _, err := vault.loadOrInit(provider, "ns", "id", nil,
+			func() (string, error) { return "", errors.New("init ran for a stored credential") }, nil); err == nil ||
+			!strings.Contains(err.Error(), "durable readback") {
+			t.Fatalf("durable re-verification failure = %v", err)
+		}
+		after, err := (&vaultFile{path: path, provider: good}).read()
+		testutil.FailErr(t, "reload vault", err)
+		if kept := after.Namespaces["ns"]; len(kept) != 1 || kept["id"] != "stored" {
+			t.Fatalf("stored credential changed: %+v", after.Namespaces)
+		}
+	})
+
+	t.Run("custodian read fails before the vault is written", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), VaultBasename)
+		provider := unavailableIdentityProvider{refusal: ErrCustodianUnavailable}
+		vault := &vaultFile{path: path, provider: provider}
+		if _, err := vault.loadOrInit(provider, "ns", "id", nil,
+			func() (string, error) { return "secret", nil }, nil); !errors.Is(err, ErrCustodianUnavailable) {
+			t.Fatalf("custodian failure = %v", err)
+		}
+		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("vault was written despite the custodian failure: %v", statErr)
+		}
+	})
+}
+
 func TestLoadOrInitRollsBackWhenDurableReadbackFails(t *testing.T) {
 	t.Run("removes a vault that never verified", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), VaultBasename)
