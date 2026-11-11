@@ -91,7 +91,7 @@ func recoverWorkerView(ctx context.Context, c *Coordinator, req RecoverRequest) 
 		return nil, err
 	}
 
-	if view, resumed, err := resumeWorkingView(ctx, c, req, j, prevBacking); err != nil {
+	if view, resumed, err := resumeWorkingView(ctx, c, req, j, prevViewID, prevBacking); err != nil {
 		return nil, err
 	} else if resumed {
 		result, err := finishRecovery(c, req, j, view, checkpoint.Manifest{}, nil, procReceipt, mountReceipt)

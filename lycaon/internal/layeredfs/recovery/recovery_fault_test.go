@@ -383,6 +383,8 @@ func TestSameBootEngineExitResumesUnsealedWork(t *testing.T) {
 	testutil.FailErr(t, "unsealed edit", err)
 	testutil.FailErr(t, "unsealed rename", viewA.Core.Rename(qp("keep.txt"), qp("kept.txt")))
 	testutil.FailErr(t, "unsealed delete", viewA.Core.Unlink(qp("sub/dir.txt"), false))
+	// The engine exits: its view is gone from this adapter and its storage stays where it was.
+	_, _ = fx.mountedAdp.Release(ctx, viewA.ViewID)
 
 	rec, err := fx.coord.RecoverWorkerView(ctx, recovery.RecoverRequest{
 		WorkerID: workerID, ExpectedTaskID: "task-a", ExpectedProjectID: "proj-a", NewViewID: "view-resumed",
@@ -391,7 +393,7 @@ func TestSameBootEngineExitResumesUnsealedWork(t *testing.T) {
 	})
 	testutil.FailErr(t, "recover", err)
 	defer func() { _, _ = fx.mountedAdp.Release(ctx, rec.ViewID) }()
-	if rec.ResumedWorkingState == nil || rec.QuarantinedWork != nil || rec.PreparedView.BackingDir != viewA.BackingDir {
+	if rec.ResumedWorkingState == nil || rec.QuarantinedWork != nil || rec.ViewID != viewA.ViewID || rec.PreparedView.BackingDir != viewA.BackingDir {
 		t.Fatalf("recovery did not resume: %+v", rec)
 	}
 	core := rec.PreparedView.Core

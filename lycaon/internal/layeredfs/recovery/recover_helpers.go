@@ -260,13 +260,14 @@ func containsString(list []string, target string) bool {
 }
 
 // resumeWorkingView reopens a mounted worker's working storage after its engine exited in this
-// boot, keeping every name and byte the view held. It reports false when the storage cannot be
-// resumed: after a reboot, during another lifecycle operation, or when its log is unusable.
-func resumeWorkingView(ctx context.Context, c *Coordinator, req RecoverRequest, j WorkerLifecycleJournal, prevBacking string) (*adapter.PreparedView, bool, error) {
+// boot, keeping every name and byte the view held. The view keeps its ID, which names its private
+// Git as well. It reports false when the storage cannot be resumed: after a reboot, during another
+// lifecycle operation, or when its log is unusable.
+func resumeWorkingView(ctx context.Context, c *Coordinator, req RecoverRequest, j WorkerLifecycleJournal, prevViewID, prevBacking string) (*adapter.PreparedView, bool, error) {
 	if prevBacking == "" {
 		prevBacking = j.BackingDir
 	}
-	if prevBacking == "" || req.Adapter == nil || j.BootID != c.cfg.CurrentBootID ||
+	if prevViewID == "" || prevBacking == "" || req.Adapter == nil || j.BootID != c.cfg.CurrentBootID ||
 		(j.ActivePhase != "" && j.ActivePhase != PhaseActiveMutation) ||
 		req.Adapter.Facts().PreparationKind != adapter.PreparationMounted {
 		return nil, false, nil
@@ -280,7 +281,7 @@ func resumeWorkingView(ctx context.Context, c *Coordinator, req RecoverRequest, 
 		}
 		prepReq.ParentLayers = layers
 	}
-	view, err := prepareRecoveredView(ctx, c, req.WorkerID, req.NewViewID, req.Adapter, prepReq, nil)
+	view, err := prepareRecoveredView(ctx, c, req.WorkerID, prevViewID, req.Adapter, prepReq, nil)
 	if errors.Is(err, layeredfs.ErrWorkingStateUnusable) {
 		return nil, false, nil
 	}
