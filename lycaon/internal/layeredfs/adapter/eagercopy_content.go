@@ -56,11 +56,7 @@ func (m *contentMeter) copyFile(ctx context.Context, src, dst string, mode os.Fi
 	if err != nil {
 		return 0, err
 	}
-	var reader io.Reader = contextio.Reader{Context: ctx, Source: in}
-	if limit > 0 {
-		reader = io.LimitReader(reader, limit)
-	}
-	n, copyErr := io.Copy(out, reader)
+	n, copyErr := copyData(ctx, in, out, limit)
 	m.read.Add(n)
 	return n, errors.Join(copyErr, out.Close())
 }

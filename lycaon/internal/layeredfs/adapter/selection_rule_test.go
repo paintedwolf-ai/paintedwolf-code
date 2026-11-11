@@ -222,11 +222,13 @@ func TestAStaleEstimateOverrunsAndMovesOnToTheMount(t *testing.T) {
 	}
 }
 
-func TestRecordedBudgetsAreOneProvisionalFactPerClass(t *testing.T) {
+// Every class has one fact. Only measured classes drop the provisional mark: APFS clones so far.
+func TestRecordedBudgetsAreOneFactPerClass(t *testing.T) {
 	for _, platform := range []string{"darwin", "linux", "elsewhere"} {
 		for _, fs := range []FilesystemClass{FilesystemClonable, FilesystemCopyOnly} {
 			fact := RecordedBudget(BudgetClass{Platform: platform, Filesystem: fs})
-			if fact.Limit <= 0 || fact.EntryCost <= 0 || !fact.Provisional {
+			measured := platform == "darwin" && fs == FilesystemClonable
+			if fact.Limit <= 0 || fact.EntryCost <= 0 || fact.Provisional == measured {
 				t.Fatalf("%s/%s: %+v", platform, fs, fact)
 			}
 		}

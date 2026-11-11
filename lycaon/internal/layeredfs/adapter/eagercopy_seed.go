@@ -48,6 +48,9 @@ type seedAccumulator struct {
 	gitReposBuilt  int
 	seededDirs     []seededDirMode
 	clone          FileCloner
+	dirClone       DirectoryCloner
+	cloned         map[string]bool
+	links          map[seedFileID]seededLink
 	meter          contentMeter
 	out            *seedOutcome
 }
@@ -63,13 +66,16 @@ func seedSelectedRoots(
 		seededRepos:     make(map[string]SeedGitInitResult),
 		gitInterceptMap: make(map[layeredfs.QualifiedPath]layeredfs.QualifiedPath),
 	}
-	clone := req.CloneFile
+	clone, dirClone := req.CloneFile, req.CloneDirectory
 	if clone == nil {
 		clone = fileclone.Clone
+		if dirClone == nil {
+			dirClone = fileclone.CloneDirectory
+		}
 	}
 	acc := &seedAccumulator{
 		ctx: ctx, req: req, runtimeViewDir: runtimeViewDir,
-		narrowed: narrowed, gitStores: gitStores, clone: clone, out: out,
+		narrowed: narrowed, gitStores: gitStores, clone: clone, dirClone: dirClone, out: out,
 	}
 	defer func() { out.stats.ContentBytesRead = acc.meter.read.Load() }()
 
@@ -110,6 +116,20 @@ func seedSelectedRoots(
 func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir, pristineDir string) error {
 	srcRoot := filepath.Clean(g.SourcePath)
 	a.seededDirs = a.seededDirs[:0]
+	a.links = map[seedFileID]seededLink{}
+	cloned, err := a.cloneChildren(srcRoot, seedDir, pristineDir)
+	if err != nil {
+		return err
+	}
+	a.cloned = cloned
+	// leave takes an entry out of the view: a clone made it, and per-file seeding never does.
+	leave := func(srcPath string) error {
+		relOS, err := filepath.Rel(srcRoot, srcPath)
+		if err != nil || !a.clonedChild(filepath.ToSlash(relOS)) {
+			return err
+		}
+		return a.dropCloned(filepath.Join(seedDir, relOS), filepath.Join(pristineDir, relOS))
+	}
 	walkErr := filepath.WalkDir(srcRoot, func(srcPath string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			if srcPath != srcRoot && errors.Is(walkErr, fs.ErrPermission) {
@@ -118,6 +138,9 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir, pristineDir stri
 					// A directory that cannot be listed was already seeded empty; it leaves the view
 					// whole, as a file that cannot be read does.
 					a.unseedDirectory(seedDir, pristineDir, srcRoot, srcPath)
+					if err := leave(srcPath); err != nil {
+						return err
+					}
 					return filepath.SkipDir
 				}
 				return nil
@@ -125,10 +148,16 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir, pristineDir stri
 			return walkErr
 		}
 		if d.IsDir() && srcPath != srcRoot && a.hidden(srcPath) {
+			if err := leave(srcPath); err != nil {
+				return err
+			}
 			return filepath.SkipDir
 		}
 		if d.IsDir() && srcPath != srcRoot && unlistable(d) {
 			a.out.stats.UnreadableEntries++
+			if err := leave(srcPath); err != nil {
+				return err
+			}
 			return filepath.SkipDir
 		}
 		if err := a.ctx.Err(); err != nil {
@@ -140,9 +169,15 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir, pristineDir stri
 		}
 		rel := filepath.ToSlash(relOS)
 		if d.Name() == ".lycaon" && d.IsDir() {
+			if err := leave(srcPath); err != nil {
+				return err
+			}
 			return filepath.SkipDir
 		}
 		if d.Name() == ".git" {
+			if err := leave(srcPath); err != nil {
+				return err
+			}
 			if err := a.handleDiscoveredGit(g, rel, srcPath, d); err != nil {
 				return err
 			}
@@ -150,6 +185,9 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir, pristineDir stri
 				return filepath.SkipDir
 			}
 			return nil
+		}
+		if a.clonedChild(rel) {
+			return a.adoptClonedEntry(g.RootID, rel, srcPath, filepath.Join(seedDir, relOS), filepath.Join(pristineDir, relOS))
 		}
 		return a.seedSingleEntry(g, rel, srcPath, filepath.Join(seedDir, relOS), filepath.Join(pristineDir, relOS))
 	})
@@ -268,7 +306,10 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath, pr
 	xattrs := normalizeSeedSourceXattrs(mode, rawXattrs)
 	switch {
 	case mode.IsDir():
-		return a.seedDirectory(g.RootID, rel, dstPath, pristinePath, info, xattrs)
+		if err := a.seedDirectory(g.RootID, rel, dstPath, pristinePath, info, xattrs); err != nil {
+			return err
+		}
+		return a.repairEntry(srcPath, dstPath, pristinePath, info)
 	case mode&os.ModeSymlink != 0:
 		return a.seedSymlink(g.RootID, rel, srcPath, dstPath, pristinePath, xattrs)
 	case mode.IsRegular():
@@ -342,6 +383,13 @@ func (a *seedAccumulator) seedSymlink(rootID, rel, srcPath, dstPath, pristinePat
 			return err
 		}
 	}
+	srcInfo, err := os.Lstat(srcPath)
+	if err != nil {
+		return err
+	}
+	if err := a.repairEntry(srcPath, dstPath, pristinePath, srcInfo); err != nil {
+		return err
+	}
 	info, err := os.Lstat(dstPath)
 	if err != nil {
 		return err
@@ -379,6 +427,9 @@ func (a *seedAccumulator) seedRegularFile(rootID, rel, srcPath, dstPath, pristin
 		return err
 	}
 	if err := a.seedPristineFile(rootID, dstPath, pristinePath, info, xattrs); err != nil {
+		return err
+	}
+	if err := a.repairEntry(srcPath, dstPath, pristinePath, info); err != nil {
 		return err
 	}
 	final, err := os.Lstat(dstPath)

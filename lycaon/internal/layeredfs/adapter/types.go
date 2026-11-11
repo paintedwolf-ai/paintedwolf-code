@@ -182,6 +182,8 @@ type MaterializeStats struct {
 	CopiedFiles      int64 `json:"copied_files"`
 	CopiedBytes      int64 `json:"copied_bytes"`
 	ContentBytesRead int64 `json:"content_bytes_read"`
+	// ClonedDirectories are top-level trees cloned in one call each.
+	ClonedDirectories int64 `json:"cloned_directories,omitempty"`
 	// UnreadableEntries could not be read as this user. The worker could not read them either, so
 	// they are absent from its trees rather than a failed preparation.
 	UnreadableEntries int64 `json:"unreadable_entries,omitempty"`
@@ -250,8 +252,10 @@ type PrepareRequest struct {
 	HiddenPaths []string
 	// HiddenNames are names of engine storage no view shows at any depth.
 	HiddenNames []string
-	// CloneFile replaces the host clone primitive for a fixture.
+	// CloneFile replaces the host clone primitive for a fixture. CloneDirectory replaces the host
+	// directory clone; a fixture that replaces CloneFile alone clones no directories.
 	CloneFile       FileCloner
+	CloneDirectory  DirectoryCloner
 	QuiesceHook     func(ctx context.Context, viewID string) error
 	FlushClientHook func(ctx context.Context, viewID string) error
 	// ResumeWorkingState reopens the view whose working storage is at BackingDir instead of starting
