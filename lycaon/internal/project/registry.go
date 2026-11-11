@@ -182,7 +182,7 @@ func AttachedPrimaryPath(p *Project) string {
 
 // PrimaryRootPath returns the agents' primary root path.
 func PrimaryRootPath(p *Project) string {
-	if roots := AdmittedRoots(p); len(roots) > 0 {
+	if roots := AdmittedRoots(p); len(roots) > 0 && roots[0].IsPrimary {
 		return roots[0].Path
 	}
 	return ""

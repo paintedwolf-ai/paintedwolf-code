@@ -26,6 +26,9 @@ func ResolveWorkspaceRoot(p *Project, workspaceRootID string) (rootID, workspace
 	}
 	want := strings.TrimSpace(workspaceRootID)
 	if want == "" {
+		if !roots[0].IsPrimary {
+			return "", "", ErrRootNotFound
+		}
 		return roots[0].ID, roots[0].Path, nil
 	}
 	for _, root := range roots {

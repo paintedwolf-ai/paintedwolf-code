@@ -50,12 +50,15 @@ func AdmittedRoots(p *Project) []Root {
 		return nil
 	}
 	out := make([]Root, 0, len(p.Roots))
+	primaryRefused := false
 	for _, r := range primaryFirst(p.Roots) {
 		if admitted, _ := r.Admission(); admitted {
 			out = append(out, r)
+		} else if r.IsPrimary {
+			primaryRefused = true
 		}
 	}
-	if len(out) > 0 && !out[0].IsPrimary {
+	if primaryRefused && len(out) > 0 {
 		out[0].IsPrimary = true
 	}
 	return out
