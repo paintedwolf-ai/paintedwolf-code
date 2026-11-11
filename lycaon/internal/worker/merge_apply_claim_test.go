@@ -131,6 +131,8 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			_, err = svc.PreviewForSession(ctx, "parent-cp", jobID, "summary", nil)
 			testutil.FailErr(t, "PreviewForSession refresh", err)
 			if publishLater {
+				_, err = checkpoint.WriteLooseGitObject(checkpoint.CheckpointGitObjectsDir(fixture.store.RootDir(), "chk-promote-later", ""), "blob", []byte("feature-snapshot\n"))
+				testutil.FailErr(t, "export later checkpoint objects", err)
 				laterContent := strings.Replace(workerContent, "return 22", "return 33", 1)
 				_, err = core.WriteFile(lp, []byte(laterContent), 0o644)
 				testutil.FailErr(t, "write later checkpoint content", err)
@@ -322,7 +324,7 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 	testutil.FailErr(t, "Symlink link.txt", err)
 
 	testutil.FailErr(t, "MkdirAll primary .git/objects", os.MkdirAll(filepath.Join(primary, ".git", "objects"), 0o755))
-	featureOID, err := checkpoint.WriteLooseGitObject(filepath.Join(cpStoreDir, "objects"), "blob", []byte("feature-snapshot\n"))
+	featureOID, err := checkpoint.WriteLooseGitObject(checkpoint.CheckpointGitObjectsDir(cpStoreDir, "chk-promote-1", ""), "blob", []byte("feature-snapshot\n"))
 	testutil.FailErr(t, "WriteLooseGitObject", err)
 
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{

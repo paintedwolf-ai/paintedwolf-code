@@ -1,7 +1,6 @@
 package checkpoint
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha1" // #nosec G505 -- SHA-1 is the object identifier in the admitted Git repository format.
 	"encoding/hex"
@@ -166,13 +165,13 @@ func ValidateGitRefName(ref string) (string, error) {
 
 type plannedRefWrite struct{ dstRef, oid string }
 
-// ImportAndValidateCheckpointGitRefs imports each root's retained Git objects from the checkpoint
-// store into that root's repository, validates reachable object closure, records durable import
-// intent, and updates refs via git update-ref CAS. A non-primary root's imported refs are keyed
+// ImportAndValidateCheckpointGitRefs publishes each root's new Git objects from the checkpoint store
+// into that root's repository over its established history, records durable import intent, and
+// updates refs in one update-ref transaction. A non-primary root's imported refs are keyed
 // "<root ID>:<ref>". A root with no repository has nothing to import them into; its objects stay
 // retained with the checkpoint.
 func ImportAndValidateCheckpointGitRefs(
-	ctx context.Context, storeDir, checkpointID, workerID string, git PrivateGitSnapshot,
+	ctx context.Context, sources GitObjectSources, checkpointID, workerID string, git PrivateGitSnapshot,
 	targetRoots map[string]string, authorizedGitDirs ...string,
 ) (map[string]string, error) {
 	if err := ctx.Err(); err != nil {
@@ -191,7 +190,7 @@ func ImportAndValidateCheckpointGitRefs(
 		}
 	}
 	request := rootRefImport{
-		storeDir: storeDir, checkpointID: cleanCheckpoint, workerID: cleanWorker,
+		storeDir: sources.StoreDir, retained: sources.Retained, checkpointID: cleanCheckpoint, workerID: cleanWorker,
 		objectCheckpoints: git.ObjectCheckpoints, authorizedGitDirs: authorizedGitDirs,
 	}
 	imported := map[string]string{}
@@ -272,8 +271,17 @@ func ensureMinimalGitDirLayout(gitDir, commonGitDir string) error {
 	return nil
 }
 
+// GitObjectSources are where a checkpoint's objects may come from: the objects it and its stacked
+// parents exported into the store, and the engine's retained stores holding the history they build
+// on. Only objects the worker's tips reach over the destination's boundary are taken from either.
+type GitObjectSources struct {
+	StoreDir string
+	Retained []string
+}
+
 type rootRefImport struct {
 	storeDir, checkpointID, workerID string
+	retained                         []string
 	repoRoot, rootID                 string
 	refs                             map[string]string
 	objectCheckpoints                []string
@@ -288,18 +296,9 @@ func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, 
 	if err != nil {
 		return nil, err
 	}
-	targetObjectsDir := filepath.Join(commonGitDir, "objects")
 	if err := ensureMinimalGitDirLayout(gitDir, commonGitDir); err != nil {
 		return nil, err
 	}
-	source, cleanupSource, err := openCandidateGitObjectSource(
-		ctx, req.storeDir, req.checkpointID, req.rootID, req.objectCheckpoints,
-		req.repoRoot, gitDir, commonGitDir, targetObjectsDir,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer cleanupSource()
 	refNames := make([]string, 0, len(req.refs))
 	for name := range req.refs {
 		refNames = append(refNames, name)
@@ -327,18 +326,33 @@ func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, 
 			writes = append(writes, plannedRefWrite{dstRef: "refs/lycaon/checkpoints/" + req.checkpointID + "/" + cleanRel, oid: oid})
 		}
 	}
-	if err := verifyAndPublishReachableGitGraph(ctx, source, tipOIDs); err != nil {
-		return nil, fmt.Errorf("checkpoint: unreachable or corrupt git object: %w", err)
+	pub := gitPublication{repoRoot: req.repoRoot, commonGitDir: commonGitDir, tips: tipOIDs}
+	for _, id := range append([]string{req.checkpointID}, req.objectCheckpoints...) {
+		if id != "" && strings.TrimSpace(req.storeDir) != "" {
+			pub.sourceObjectDirs = append(pub.sourceObjectDirs, CheckpointGitObjectsDir(req.storeDir, id, req.rootID))
+		}
 	}
-	return applyCheckpointRefTransaction(ctx, req.repoRoot, gitDir, commonGitDir, req.storeDir, req.checkpointID, req.workerID, req.rootID, writes)
-}
-
-func applyCheckpointRefTransaction(
-	ctx context.Context, primaryDir, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker, rootID string, writes []plannedRefWrite,
-) (map[string]string, error) {
-	if err := ctx.Err(); err != nil {
+	pub.sourceObjectDirs = append(pub.sourceObjectDirs, req.retained...)
+	tx, err := planCheckpointRefTransaction(req.storeDir, gitDir, commonGitDir, req.checkpointID, req.workerID, req.rootID, writes)
+	if err != nil {
 		return nil, err
 	}
+	if _, err := publishGitObjects(ctx, pub); err != nil {
+		return nil, err
+	}
+	return tx.apply(ctx, req.repoRoot, commonGitDir, req.storeDir)
+}
+
+// refTransaction is a checked set of ref writes: each target is absent or already at its object.
+type refTransaction struct {
+	intentName string
+	record     GitRefImportRecord
+	commands   string
+}
+
+// planCheckpointRefTransaction refuses a write that conflicts with a ref or with a recorded intent before
+// any object moves.
+func planCheckpointRefTransaction(storeDir, gitDir, commonGitDir, cleanCheckpoint, cleanWorker, rootID string, writes []plannedRefWrite) (refTransaction, error) {
 	planned := make(map[string]string, len(writes))
 	for _, w := range writes {
 		planned[w.dstRef] = w.oid
@@ -348,38 +362,51 @@ func applyCheckpointRefTransaction(
 		if raw, err := os.ReadFile(filepath.Join(storeDir, "promotions", intentName)); err == nil {
 			var existing GitRefImportRecord
 			if uErr := json.Unmarshal(raw, &existing); uErr != nil {
-				return nil, uErr
+				return refTransaction{}, uErr
 			}
 			if existing.WorkerID != cleanWorker || !maps.Equal(existing.PlannedRefs, planned) {
-				return nil, fmt.Errorf("%w: conflicting durable ref import intent", ErrCheckpointRefConflict)
+				return refTransaction{}, fmt.Errorf("%w: conflicting durable ref import intent", ErrCheckpointRefConflict)
 			}
 		}
 	}
 	packed := loadPackedRefsMap(commonGitDir, gitDir)
 	expectedOld := make(map[string]string, len(writes))
-	var stdinBuf strings.Builder
+	var commands strings.Builder
 	for _, w := range writes {
 		curOID := resolveExistingGitRefWithPacked(commonGitDir, gitDir, w.dstRef, packed)
 		if curOID != "" && curOID != w.oid {
-			return nil, fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, w.dstRef, curOID, w.oid)
+			return refTransaction{}, fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, w.dstRef, curOID, w.oid)
 		}
 		expectedOld[w.dstRef] = curOID
 		op := "create"
 		if curOID == w.oid {
 			op = "verify"
 		}
-		_, _ = fmt.Fprintf(&stdinBuf, "%s %s %s\n", op, w.dstRef, w.oid)
+		_, _ = fmt.Fprintf(&commands, "%s %s %s\n", op, w.dstRef, w.oid)
 	}
-	rec := GitRefImportRecord{CheckpointID: cleanCheckpoint, WorkerID: cleanWorker, PlannedRefs: planned, ExpectedOld: expectedOld}
-	if err := saveGitRefImportRecord(storeDir, intentName, rec); err != nil {
+	return refTransaction{
+		intentName: intentName,
+		record:     GitRefImportRecord{CheckpointID: cleanCheckpoint, WorkerID: cleanWorker, PlannedRefs: planned, ExpectedOld: expectedOld},
+		commands:   commands.String(),
+	}, nil
+}
+
+// apply records the intent, then writes every ref in one update-ref transaction, which refuses a ref
+// that moved since the plan.
+func (tx refTransaction) apply(ctx context.Context, primaryDir, commonGitDir, storeDir string) (map[string]string, error) {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	out, code, err := gitexec.Run(ctx, primaryDir, []string{"--git-dir=" + commonGitDir, "update-ref", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(stdinBuf.String())})
+	rec := tx.record
+	if err := saveGitRefImportRecord(storeDir, tx.intentName, rec); err != nil {
+		return nil, err
+	}
+	out, code, err := gitexec.Run(ctx, primaryDir, []string{"--git-dir=" + commonGitDir, "update-ref", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(tx.commands)})
 	if err != nil || code != 0 {
 		return nil, errors.Join(err, fmt.Errorf("%w: update-ref failed (exit %d): %s", ErrCheckpointRefConflict, code, strings.TrimSpace(string(out))))
 	}
 	rec.Completed = true
-	return planned, saveGitRefImportRecord(storeDir, intentName, rec)
+	return rec.PlannedRefs, saveGitRefImportRecord(storeDir, tx.intentName, rec)
 }
 
 func gitImportRecordName(workerID, checkpointID, rootID string) string {
@@ -487,104 +514,3 @@ func isHexOID(s string) bool {
 	return err == nil && (len(s) == 40 || len(s) == 64)
 }
 func isAllZeroOID(s string) bool { return strings.Trim(s, "0") == "" }
-
-func rejectGitAlternates(objectsDir string) error {
-	infoDir := filepath.Join(objectsDir, "info")
-	if st, err := os.Lstat(infoDir); err == nil && st.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("checkpoint: symlink prohibited in git objects info: %s", infoDir)
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	altPath := filepath.Join(infoDir, "alternates")
-	if _, err := os.Lstat(altPath); err == nil {
-		return fmt.Errorf("checkpoint: git alternates prohibited in %s", altPath)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return nil
-}
-
-func inspectCandidatePackDir(packDir string, rejectSymlinks bool) (bool, error) {
-	st, err := os.Lstat(packDir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, err
-	}
-	if st.Mode()&os.ModeSymlink != 0 {
-		if rejectSymlinks {
-			return false, fmt.Errorf("checkpoint: symlink prohibited in retained git objects: %s", packDir)
-		}
-		return false, nil
-	}
-	if !st.IsDir() {
-		return false, nil
-	}
-	entries, err := os.ReadDir(packDir)
-	if err != nil {
-		return false, err
-	}
-	hasPack := false
-	for _, d := range entries {
-		if d.Type()&os.ModeSymlink != 0 {
-			if rejectSymlinks {
-				return false, fmt.Errorf("checkpoint: symlink prohibited in retained git objects: %s", filepath.Join(packDir, d.Name()))
-			}
-			continue
-		}
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ".pack") {
-			hasPack = true
-		}
-	}
-	return hasPack, nil
-}
-
-func parseCommitOrTagTargets(body []byte, isCommit bool) (string, []string, error) {
-	var primaryOID string
-	var parents []string
-	for _, line := range strings.Split(string(body), "\n") {
-		if line == "" {
-			break
-		}
-		f := strings.Fields(line)
-		if len(f) == 0 || !((isCommit && (f[0] == "tree" || f[0] == "parent")) || (!isCommit && f[0] == "object")) {
-			continue
-		}
-		target := strings.ToLower(strings.TrimSpace(f[min(1, len(f)-1)]))
-		if len(f) != 2 || !isHexOID(target) || isAllZeroOID(target) {
-			return "", nil, fmt.Errorf("checkpoint: invalid %s target oid %q", f[0], line)
-		}
-		if f[0] == "tree" || f[0] == "object" {
-			primaryOID = target
-		} else {
-			parents = append(parents, target)
-		}
-	}
-	if primaryOID == "" {
-		return "", nil, fmt.Errorf("checkpoint: missing required target object header")
-	}
-	return primaryOID, parents, nil
-}
-
-func parseTreeTargets(body []byte, hashBytes int) ([]parsedTreeEntry, error) {
-	var entries []parsedTreeEntry
-	for len(body) > 0 {
-		n := bytes.IndexByte(body, 0)
-		if n <= 0 || n+1+hashBytes > len(body) {
-			return nil, fmt.Errorf("checkpoint: malformed tree entry")
-		}
-		hdr := string(body[:n])
-		mode, name, ok := strings.Cut(hdr, " ")
-		if !ok || mode == "" || name == "" || name == "." || name == ".." || strings.Contains(name, "/") {
-			return nil, fmt.Errorf("checkpoint: invalid tree entry header %q", hdr)
-		}
-		entryOID := hex.EncodeToString(body[n+1 : n+1+hashBytes])
-		body = body[n+1+hashBytes:]
-		if !isHexOID(entryOID) || isAllZeroOID(entryOID) {
-			return nil, fmt.Errorf("checkpoint: invalid tree entry oid %q", entryOID)
-		}
-		entries = append(entries, parsedTreeEntry{mode: mode, name: name, oid: entryOID})
-	}
-	return entries, nil
-}

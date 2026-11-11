@@ -43,8 +43,8 @@ func refreshMutableGitNodeLocked(c *Core, qpath QualifiedPath, node *privateNode
 	info, err := os.Lstat(node.flags.gitHostPath)
 	if err != nil {
 		if os.IsNotExist(err) && !hasOpenHandlesForNodeLocked(c, node.id) {
-			delete(c.state.pathIndex, qpath)
-			delete(c.state.deletedPaths, qpath)
+			c.dropPrivatePath(qpath)
+			c.unmarkDeleted(qpath)
 			delete(c.state.transient, qpath)
 			delete(node.paths, qpath)
 			if len(node.paths) == 0 {
@@ -119,7 +119,7 @@ func (c *Core) SyncGitOverlayTo(rootID, repoRel, privGitDir string) error {
 		if !isRepoRoot {
 			_ = os.RemoveAll(filepath.Join(privGitDir, filepath.FromSlash(subRel)))
 		}
-		delete(c.state.deletedPaths, qp)
+		c.unmarkDeleted(qp)
 		delete(c.state.transient, qp)
 		if base, ok := c.state.basesByPath[qp]; ok {
 			if base.BackingFile != "" && c.backing.baseDirFile != nil {
@@ -151,12 +151,12 @@ func (c *Core) SyncGitOverlayTo(rootID, repoRel, privGitDir string) error {
 		qp := item.qp
 		node := item.node
 		if node == nil {
-			delete(c.state.pathIndex, qp)
+			c.dropPrivatePath(qp)
 			continue
 		}
 		subRel, isRepoRoot, _ := matchRepoGitMetadataRel(qp.Rel, repoRel)
 		if isRepoRoot {
-			delete(c.state.pathIndex, qp)
+			c.dropPrivatePath(qp)
 			delete(c.state.transient, qp)
 			if base, ok := c.state.basesByPath[qp]; ok {
 				if base.BackingFile != "" && c.backing.baseDirFile != nil {
@@ -202,7 +202,7 @@ func (c *Core) SyncGitOverlayTo(rootID, repoRel, privGitDir string) error {
 			}
 		}
 
-		delete(c.state.pathIndex, qp)
+		c.dropPrivatePath(qp)
 		delete(c.state.transient, qp)
 		if base, ok := c.state.basesByPath[qp]; ok {
 			if base.BackingFile != "" && c.backing.baseDirFile != nil {

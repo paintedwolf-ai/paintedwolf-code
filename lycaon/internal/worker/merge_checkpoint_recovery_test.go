@@ -37,7 +37,7 @@ func TestEmptyCheckpointPromotionRollsBackRefsOnCommitFailure(t *testing.T) {
 	testutil.FailErr(t, "worker view", err)
 	defer func() { _ = core.ReleaseView() }()
 	testutil.FailErr(t, "target object directory", os.MkdirAll(filepath.Join(primary, ".git/objects"), 0755))
-	oid, err := checkpoint.WriteLooseGitObject(filepath.Join(cpStore.RootDir(), "objects"), "blob", []byte("retained object"))
+	oid, err := checkpoint.WriteLooseGitObject(checkpoint.CheckpointGitObjectsDir(cpStore.RootDir(), "refs-only", ""), "blob", []byte("retained object"))
 	testutil.FailErr(t, "checkpoint object", err)
 	publisher, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{Core: core, Store: cpStore, WorkerID: id, TaskID: id, ProjectID: testdbseed.DefaultProjectID})
 	testutil.FailErr(t, "publisher", err)

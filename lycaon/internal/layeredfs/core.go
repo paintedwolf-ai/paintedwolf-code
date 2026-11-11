@@ -101,8 +101,10 @@ type rootTable struct {
 }
 
 type statsCounters struct {
-	lowerDirReads     atomic.Int64
-	lowerLookups      atomic.Int64
+	lowerDirReads atomic.Int64
+	lowerLookups  atomic.Int64
+	// lowerContentReads counts lower files opened for their content, outside Git metadata.
+	lowerContentReads atomic.Int64
 	physicalCopyUps   atomic.Int64
 	capturedBaseBytes atomic.Int64
 	journalEntries    atomic.Int64
@@ -119,16 +121,18 @@ type idAllocator struct {
 }
 
 type viewState struct {
-	released          bool
-	nsGen             uint64
-	dirtySeq          uint64
-	seq               idAllocator
-	nodesByID         map[NodeID]*privateNode
-	originIndex       map[NodeID]NodeID
-	pathIndex         map[QualifiedPath]NodeID
-	transient         map[QualifiedPath]struct{}
-	lowerDirMod       map[QualifiedPath]time.Time
-	deletedPaths      map[QualifiedPath]deletedState
+	released     bool
+	nsGen        uint64
+	dirtySeq     uint64
+	seq          idAllocator
+	nodesByID    map[NodeID]*privateNode
+	originIndex  map[NodeID]NodeID
+	pathIndex    map[QualifiedPath]NodeID
+	transient    map[QualifiedPath]struct{}
+	lowerDirMod  map[QualifiedPath]time.Time
+	deletedPaths map[QualifiedPath]deletedState
+	// spellings finds a private path or deletion under any spelling a folding root treats as its own.
+	spellings         spellingIndex
 	basesByPath       map[QualifiedPath]BaseCapture
 	handles           map[HandleID]*openHandle
 	dirCookies        map[uint64]dirCookieState
@@ -249,6 +253,7 @@ func New(cfg Config) (*Core, error) {
 			transient:         make(map[QualifiedPath]struct{}),
 			lowerDirMod:       make(map[QualifiedPath]time.Time),
 			deletedPaths:      make(map[QualifiedPath]deletedState),
+			spellings:         spellingIndex{},
 			basesByPath:       make(map[QualifiedPath]BaseCapture),
 			handles:           make(map[HandleID]*openHandle),
 			dirCookies:        make(map[uint64]dirCookieState),
@@ -314,11 +319,20 @@ func initRootTable(cfg Config) (*rootTable, error) {
 		activeRootID: cfg.ActiveRootID,
 	}
 	var primaryID string
-	for _, r := range cfg.Roots {
+	for i, r := range cfg.Roots {
 		if r.ID == "" {
 			rt.close()
 			return nil, ErrInvalidRoot
 		}
+		r.Hidden = cleanHiddenRels(r.Hidden)
+		if !r.Folding.Folds() && r.TrunkPath != "" {
+			probe := cfg.FoldingProbe
+			if probe == nil {
+				probe = ProbeNameFolding
+			}
+			r.Folding = probe(r.TrunkPath)
+		}
+		rt.specs[i] = r
 		rt.byID[r.ID] = r
 		if r.IsPrimary && primaryID == "" {
 			primaryID = r.ID

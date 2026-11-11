@@ -3,6 +3,7 @@ package layeredfs
 import (
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -50,9 +51,17 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 			return err
 		}
 
+		caseOnly := false
 		if srcPath == dstPath {
-			_, err := lookupExactComponent(c, srcPath)
-			return err
+			given := path.Base(cleanRelPath(newPath.Rel))
+			if given == path.Base(dstPath.Rel) {
+				_, err := lookupExactComponent(c, srcPath)
+				return err
+			}
+			// Only the spelling changes, which a folding source records as a rename. The new spelling
+			// names no other entry, though a folding host volume would find the source under it.
+			dstPath.Rel = joinRel(newParent.Rel, given)
+			caseOnly = true
 		}
 		if strings.HasPrefix(dstPath.Rel, srcPath.Rel+"/") {
 			return syscall.EINVAL
@@ -62,7 +71,11 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 		if err != nil {
 			return err
 		}
-		dstRes, dstErr := lookupExactComponent(c, dstPath)
+		var dstRes resolvedLayerEntry
+		dstErr := error(os.ErrNotExist)
+		if !caseOnly {
+			dstRes, dstErr = lookupExactComponent(c, dstPath)
+		}
 		if dstErr != nil && !os.IsNotExist(dstErr) {
 			return dstErr
 		}
@@ -91,7 +104,12 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 		if _, err := ensureBaseCaptured(c, srcPath); err != nil {
 			return err
 		}
-		dstBase, err := ensureBaseCaptured(c, dstPath)
+		var dstBase BaseCapture
+		if caseOnly {
+			dstBase, err = recordAbsentBase(c, dstPath)
+		} else {
+			dstBase, err = ensureBaseCaptured(c, dstPath)
+		}
 		if err != nil {
 			return err
 		}
@@ -165,7 +183,7 @@ func commitFileRename(c *Core, srcPath, dstPath QualifiedPath, srcNode *privateN
 
 	delete(c.state.transient, srcPath)
 	delete(c.state.transient, dstPath)
-	delete(c.state.pathIndex, srcPath)
+	c.dropPrivatePath(srcPath)
 	delete(srcNode.paths, srcPath)
 
 	srcHost, srcRepoRoot, srcIsGit, srcGitErr := resolveMutableGitTarget(c, srcPath)
@@ -192,20 +210,20 @@ func commitFileRename(c *Core, srcPath, dstPath QualifiedPath, srcNode *privateN
 			srcNode.flags.backingPath = dstHost
 			markDirtyBackingFileLocked(c, dstHost)
 		}
-		delete(c.state.deletedPaths, srcPath)
+		c.unmarkDeleted(srcPath)
 	} else {
-		c.state.deletedPaths[srcPath] = deletedState{
+		c.markDeleted(srcPath, deletedState{
 			ReplacedKind: srcKind,
 			Timestamp:    time.Now(),
-		}
+		})
 	}
 
 	_, wasDeletedDir := c.state.deletedPaths[dstPath]
-	delete(c.state.deletedPaths, dstPath)
+	c.unmarkDeleted(dstPath)
 	srcNode.paths[dstPath] = struct{}{}
 	srcNode.ctime = time.Now()
 	srcNode.flags.namespaceAdded = true
-	c.state.pathIndex[dstPath] = srcNode.id
+	c.setPrivatePath(dstPath, srcNode.id)
 	updateOpenHandlesPathLocked(c, srcNode.id, srcPath, dstPath)
 
 	bumpParentDirGenLocked(c, srcPath)
@@ -301,15 +319,15 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 	for _, oldQP := range affected {
 		nid := c.state.pathIndex[oldQP]
 		node := c.state.nodesByID[nid]
-		delete(c.state.pathIndex, oldQP)
+		c.dropPrivatePath(oldQP)
 		delete(c.state.transient, oldQP)
 		if isGitDirRename {
-			delete(c.state.deletedPaths, oldQP)
+			c.unmarkDeleted(oldQP)
 		} else {
-			c.state.deletedPaths[oldQP] = deletedState{
+			c.markDeleted(oldQP, deletedState{
 				ReplacedKind: node.kind,
 				Timestamp:    now,
-			}
+			})
 		}
 		var newRel string
 		if oldQP.Rel == srcPath.Rel {
@@ -331,7 +349,7 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 				}
 			}
 		}
-		delete(c.state.deletedPaths, newQP)
+		c.unmarkDeleted(newQP)
 		delete(node.paths, oldQP)
 		node.paths[newQP] = struct{}{}
 		node.ctime = now
@@ -351,7 +369,7 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 		} else {
 			node.flags.namespaceAdded = true
 		}
-		c.state.pathIndex[newQP] = nid
+		c.setPrivatePath(newQP, nid)
 		updateOpenHandlesPathLocked(c, nid, oldQP, newQP)
 	}
 

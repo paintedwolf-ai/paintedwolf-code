@@ -500,3 +500,42 @@ func verifyStoreConnectivity(ctx context.Context, objectsDir string, tipOIDs []s
 	}
 	return revSink.oids, nil
 }
+
+type revListObjectSink struct {
+	rem  []byte
+	seen map[string]struct{}
+	oids []string
+}
+
+func (s *revListObjectSink) Write(p []byte) (int, error) {
+	s.rem = append(s.rem, p...)
+	for {
+		nl := bytes.IndexByte(s.rem, '\n')
+		if nl < 0 {
+			break
+		}
+		s.parseLine(s.rem[:nl])
+		s.rem = s.rem[nl+1:]
+	}
+	return len(p), nil
+}
+
+func (s *revListObjectSink) flush() {
+	if len(s.rem) > 0 {
+		s.parseLine(s.rem)
+		s.rem = nil
+	}
+}
+
+func (s *revListObjectSink) parseLine(line []byte) {
+	fields := bytes.Fields(line)
+	if len(fields) > 0 && len(fields[0]) == 40 {
+		oid := strings.ToLower(string(fields[0]))
+		if isHexString(oid) {
+			if _, ok := s.seen[oid]; !ok {
+				s.seen[oid] = struct{}{}
+				s.oids = append(s.oids, oid)
+			}
+		}
+	}
+}

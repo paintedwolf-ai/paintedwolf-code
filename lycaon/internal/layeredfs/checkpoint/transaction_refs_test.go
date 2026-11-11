@@ -18,7 +18,7 @@ func TestTransactionRefUndoPreservesExternalRefs(t *testing.T) {
 			testutil.FailErr(t, "target repository", os.MkdirAll(filepath.Join(primary, ".git/objects"), 0750))
 			store, err := NewStore(t.TempDir())
 			testutil.FailErr(t, "store", err)
-			oid, err := WriteLooseGitObject(filepath.Join(store.RootDir(), "objects"), "blob", []byte("checkpoint object"))
+			oid, err := WriteLooseGitObject(CheckpointGitObjectsDir(store.RootDir(), "checkpoint", ""), "blob", []byte("checkpoint object"))
 			testutil.FailErr(t, "retained object", err)
 			core, err := layeredfs.New(layeredfs.Config{ViewID: "refs", BackingDir: t.TempDir(), Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}}})
 			testutil.FailErr(t, "view", err)
@@ -30,7 +30,7 @@ func TestTransactionRefUndoPreservesExternalRefs(t *testing.T) {
 			testutil.FailErr(t, "publish", err)
 			roots := map[string]string{"primary": primary}
 			if state == "preexisting" {
-				_, err := ImportAndValidateCheckpointGitRefs(t.Context(), store.RootDir(), "checkpoint", "worker", snapshot, roots)
+				_, err := ImportAndValidateCheckpointGitRefs(t.Context(), GitObjectSources{StoreDir: store.RootDir()}, "checkpoint", "worker", snapshot, roots)
 				testutil.FailErr(t, "existing refs", err)
 			}
 			promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: roots})

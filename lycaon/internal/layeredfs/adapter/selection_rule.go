@@ -77,6 +77,8 @@ type MaterializeCost struct {
 	Source           CostSource `json:"source"`
 	// Partial means counting stopped at the budget, so the totals are only a lower bound.
 	Partial bool `json:"partial,omitempty"`
+	// EntriesRead is how many directory entries the survey read, which bounds its work.
+	EntriesRead int64 `json:"entries_read,omitempty"`
 }
 
 // Total is the cost measured against a budget and the disk space the two trees need.

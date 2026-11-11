@@ -79,16 +79,35 @@ func TestCatalogStackedBaseUsesValidatedState(t *testing.T) {
 	sess := &api.Session{ID: "catalog-stacked-parent", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), AgentType: "coordinator", Posture: api.SessionPostureBuild}
 	job, err := q.Enqueue(ctx, api.WorkerTask{ParentSessionID: sess.ID, ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath, AgentType: "implementer", Prompt: "fixture", Brief: "fixture", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}})
 	testutil.FailErr(t, "enqueue base", err)
+	running, err := q.Enqueue(ctx, api.WorkerTask{ParentSessionID: sess.ID, ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath, AgentType: "implementer", Prompt: "fixture", Brief: "fixture", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}})
+	testutil.FailErr(t, "enqueue running base", err)
 	for _, tc := range []struct{ name, base, agent, mode, code string }{
 		{"valid", job, "implementer", "write", ""},
+		{"running", running, "implementer", "write", workeradmission.OverlayBaseNotPendingCode},
 		{"missing", "absent", "implementer", "write", workeradmission.OverlayBaseMissingCode},
 		{"scope rejected before base lookup", "absent", "path-explorer", "write", workeradmission.TaskScopeProfileReadOnlyCode},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			gc := observeTaskInFlight(t, ctx, workeradmission.WorkerCycleGuardDeps{Workers: q}, sess, map[string]any{"agent_type": tc.agent, "scope": map[string]any{"mode": tc.mode, "base_overlay_id": tc.base}})
+			gc := observeTaskInFlight(t, ctx, workeradmission.WorkerCycleGuardDeps{Workers: finishedBase{q, job}}, sess, map[string]any{"agent_type": tc.agent, "scope": map[string]any{"mode": tc.mode, "base_overlay_id": tc.base}})
 			requireCatalogDecision(t, oar.AnchorCoordinatorPreInvoke, gc, tc.code)
 		})
 	}
+}
+
+// finishedBase reports one queued worker as finished and awaiting promotion.
+type finishedBase struct {
+	*worker.InMemoryQueue
+	id string
+}
+
+func (f finishedBase) Get(id string) (*api.WorkerTask, bool) {
+	task, ok := f.InMemoryQueue.Get(id)
+	if ok && task != nil && id == f.id {
+		finished := *task
+		finished.MergeStatus = api.WorkerMergeStatusPending
+		return &finished, true
+	}
+	return task, ok
 }
 
 func TestCatalogReadCapacityDoesNotMeanWorkersIdle(t *testing.T) {

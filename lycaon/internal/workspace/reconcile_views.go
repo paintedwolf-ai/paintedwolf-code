@@ -353,6 +353,8 @@ func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string
 			ViewID: viewID, RuntimeDir: runtimeDir, BackingDir: filepath.Join(runtimeDir, viewID+".backing"),
 			PristineDir: enginepaths.PristineTreeForBranchRoot(root), StatManifestPath: enginepaths.StatManifestForBranchRoot(root),
 			CopyBudget: choice.CopyBudget, SelectionFacts: choice.Selection, CloneFile: m.fileCloner(),
+			HiddenPaths: m.hiddenEnginePaths(),
+			HiddenNames: m.hiddenEngineNames(),
 		}
 		result, _, err := m.RebuildWorkerWorkspaceFromCheckpoint(ctx, root, coord, recovery.RecoverRequest{
 			WorkerID: jobID, ExpectedTaskID: journal.TaskID, ExpectedProjectID: journal.ProjectID, NewViewID: viewID,

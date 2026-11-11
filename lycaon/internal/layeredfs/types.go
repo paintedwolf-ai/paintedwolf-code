@@ -66,6 +66,15 @@ type RootSpec struct {
 	TrunkPath string
 	Subroot   string
 	IsPrimary bool
+	// Hidden are root-relative paths of engine storage the root contains. They resolve as absent, are
+	// never listed, and cannot be created.
+	Hidden []string
+	// HiddenNames are names of engine storage hidden at any depth, such as a placement folder made
+	// after the view started.
+	HiddenNames []string
+	// Folding is how the root's source compares names. Left unset, the core reads it from the
+	// filesystem holding TrunkPath.
+	Folding NameFolding
 }
 
 type ParentEntry struct {
@@ -182,6 +191,9 @@ type FaultHooks struct {
 }
 
 type Config struct {
+	// FoldingProbe reads a root's name folding where its spec leaves it unset; nil uses
+	// ProbeNameFolding.
+	FoldingProbe        func(dir string) NameFolding
 	ViewID              string
 	BackingDir          string
 	Roots               []RootSpec
@@ -248,8 +260,10 @@ type BackingCapacity struct {
 }
 
 type Stats struct {
-	LowerDirReads     int64
-	LowerLookups      int64
+	LowerDirReads int64
+	LowerLookups  int64
+	// LowerContentReads counts lower files opened for content, leaving out Git metadata.
+	LowerContentReads int64
 	PhysicalCopyUps   int64
 	LogicalChanges    int64
 	CapturedBaseBytes int64

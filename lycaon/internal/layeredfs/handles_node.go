@@ -60,9 +60,9 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 					gitHostPath:    hostPath,
 				},
 			}
-			delete(c.state.deletedPaths, qpath)
+			c.unmarkDeleted(qpath)
 			c.state.nodesByID[nid] = node
-			c.state.pathIndex[qpath] = nid
+			c.setPrivatePath(qpath, nid)
 			markDirtyBackingFileLocked(c, hostPath)
 			if ino := fileInfoIno(info); ino != 0 {
 				recordOriginLocked(c, node, syntheticNodeID(qpath, ino))
@@ -101,9 +101,9 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 					originPath: &originCopy,
 				},
 			}
-			delete(c.state.deletedPaths, qpath)
+			c.unmarkDeleted(qpath)
 			c.state.nodesByID[nid] = node
-			c.state.pathIndex[qpath] = nid
+			c.setPrivatePath(qpath, nid)
 			markDirtyBackingFileLocked(c, hostPath)
 			ino := fileInfoIno(info)
 			if ino == 0 {
@@ -143,9 +143,9 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 				gitHostPath:    hostPath,
 			},
 		}
-		delete(c.state.deletedPaths, qpath)
+		c.unmarkDeleted(qpath)
 		c.state.nodesByID[nid] = node
-		c.state.pathIndex[qpath] = nid
+		c.setPrivatePath(qpath, nid)
 		markDirtyBackingFileLocked(c, hostPath)
 		if ino := fileInfoIno(cInfo); ino != 0 {
 			recordOriginLocked(c, node, syntheticNodeID(qpath, ino))
@@ -205,7 +205,7 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 			},
 		}
 		c.state.nodesByID[nid] = node
-		c.state.pathIndex[qpath] = nid
+		c.setPrivatePath(qpath, nid)
 		markDirtyBackingFileLocked(c, workPath)
 		recordOriginLocked(c, node, originNodeID(qpath, base))
 		c.counters.physicalCopyUps.Add(1)
@@ -250,9 +250,9 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 			backingPath:    workPath,
 		},
 	}
-	delete(c.state.deletedPaths, qpath)
+	c.unmarkDeleted(qpath)
 	c.state.nodesByID[nid] = node
-	c.state.pathIndex[qpath] = nid
+	c.setPrivatePath(qpath, nid)
 	bumpParentDirGenLocked(c, qpath)
 	recordJournalLocked(c, JournalOpCreate, qpath, nil, node, 0)
 	return node, nil

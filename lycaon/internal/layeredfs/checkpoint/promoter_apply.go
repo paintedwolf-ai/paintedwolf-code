@@ -138,7 +138,7 @@ func (txn *Transaction) applyCheckpoint(ctx context.Context, pr *Promoter, req A
 		rec.AppliedPaths = append(rec.AppliedPaths, change.Path)
 	}
 	if refStatus == EffectCompleted {
-		rec.ImportedRefs, err = ImportAndValidateCheckpointGitRefs(ctx, pr.cfg.Store.RootDir(), m.CheckpointID, m.WorkerID, m.PrivateGit, pr.cfg.TargetRoots, txn.cfg.AuthorizedGitDirs...)
+		rec.ImportedRefs, err = ImportAndValidateCheckpointGitRefs(ctx, GitObjectSources{StoreDir: pr.cfg.Store.RootDir(), Retained: pr.cfg.RetainedGitObjects}, m.CheckpointID, m.WorkerID, m.PrivateGit, pr.cfg.TargetRoots, txn.cfg.AuthorizedGitDirs...)
 		if err != nil {
 			return nil, err
 		}

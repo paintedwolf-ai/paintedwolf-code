@@ -183,11 +183,6 @@ func (s *RetainedObjectStore) RetainForStackedChild(childViewID, parentCheckpoin
 	return createStoreLease(s, LeaseStackedChild, childViewID+":"+parentCheckpointID, oids)
 }
 
-// RetainForRefImport creates an active lease protecting objects during trunk ref import.
-func (s *RetainedObjectStore) RetainForRefImport(importID string, oids []string) (string, error) {
-	return createStoreLease(s, LeaseRefImport, importID, oids)
-}
-
 func createStoreLease(s *RetainedObjectStore, kind LeaseKind, holder string, oids []string) (string, error) {
 	if strings.TrimSpace(holder) == "" {
 		return "", fmt.Errorf("privategit: lease holder is required")
@@ -283,7 +278,7 @@ func storeLeaseRecordPath(s *RetainedObjectStore, leaseID string) string {
 
 func isValidLeaseKind(kind LeaseKind) bool {
 	switch kind {
-	case LeaseView, LeaseCheckpoint, LeaseStackedChild, LeaseRefImport:
+	case LeaseView, LeaseCheckpoint, LeaseStackedChild:
 		return true
 	default:
 		return false
@@ -294,7 +289,7 @@ func parseValidLeaseID(id string, expectedKind LeaseKind) (uint64, bool) {
 	if id == "" || filepath.Base(id) != id || strings.ContainsAny(id, `/\`) {
 		return 0, false
 	}
-	for _, kind := range []LeaseKind{LeaseView, LeaseCheckpoint, LeaseStackedChild, LeaseRefImport} {
+	for _, kind := range []LeaseKind{LeaseView, LeaseCheckpoint, LeaseStackedChild} {
 		if expectedKind != "" && kind != expectedKind {
 			continue
 		}
