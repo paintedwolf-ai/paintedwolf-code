@@ -192,6 +192,7 @@ func (c *Coordinator) overlayParentEntry(matPath string, e checkpoint.ManifestEn
 			return err
 		}
 		return os.WriteFile(matPath, raw, mode)
+	default:
 	}
 	return nil
 }

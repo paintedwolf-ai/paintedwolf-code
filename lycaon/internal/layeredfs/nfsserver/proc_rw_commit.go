@@ -2,6 +2,7 @@ package nfsserver
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 
@@ -105,7 +106,7 @@ func readBaseFile(viewCore *layeredfs.Core, sidecars *sidecarTable, rec *handleR
 		}
 		buf := make([]byte, max(count, 0))
 		n, rErr := viewCore.ReadHandle(rec.unlinked.fd, buf, int64(offset))
-		if rErr != nil && rErr != io.EOF {
+		if rErr != nil && !errors.Is(rErr, io.EOF) {
 			return nil, 0, rErr
 		}
 		return buf[:n], meta.Size, nil
@@ -129,7 +130,7 @@ func readBaseFile(viewCore *layeredfs.Core, sidecars *sidecarTable, rec *handleR
 	buf := make([]byte, max(count, 0))
 	n, rErr := viewCore.ReadHandle(fd, buf, int64(offset))
 	_ = viewCore.CloseHandle(fd)
-	if rErr != nil && rErr != io.EOF {
+	if rErr != nil && !errors.Is(rErr, io.EOF) {
 		return nil, 0, rErr
 	}
 	return buf[:n], meta.Size, nil

@@ -166,13 +166,3 @@ func buildDirEntries(core *layeredfs.Core, dirRec *handleRecord) ([]dirSnapshotE
 	return out, nil
 }
 
-func lookupRecordByKey(t *handleTable, hk handleKey) (*handleRecord, bool) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	rec, ok := t.byKey[hk]
-	if !ok {
-		return nil, false
-	}
-	clone := *rec
-	return &clone, true
-}

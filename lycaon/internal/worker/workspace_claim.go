@@ -249,7 +249,7 @@ func (q *sqlQueueCore) overlayDivergesFromProject(ctx context.Context, task *api
 	q.mu.Lock()
 	projects := q.projects
 	q.mu.Unlock()
-	return len(session.OverlayWorkspaceDivergencePaths(task, TaskRootRefs(ctx, task, projects))) > 0
+	return len(session.OverlayWorkspaceDivergencePaths(task, TaskRootRefs(ctx, task, projects))) > 0 //nolint:contextcheck // The divergence summary reads the core, which takes no context.
 }
 
 func (q *sqlQueueCore) destroyWorkerWorkspace(ctx context.Context, task *api.WorkerTask) {

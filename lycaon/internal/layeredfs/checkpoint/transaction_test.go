@@ -199,7 +199,7 @@ var errSimulatedCrash = errors.New("simulated crash")
 func crashDuring(t *testing.T, fn func()) {
 	t.Helper()
 	defer func() {
-		if r := recover(); r != errSimulatedCrash {
+		if r := recover(); !isPanicError(r, errSimulatedCrash) {
 			t.Fatalf("expected a simulated crash, got %v", r)
 		}
 	}()

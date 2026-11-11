@@ -36,7 +36,7 @@ var ErrBranchRetained = errors.New("worker branch is retained")
 // complete verified checkpoint; any other tree evicts on its sealed overlay record.
 func (m *Manager) EvictWorkerBranch(ctx context.Context, branchRoot string) error {
 	jobID := jobIDForBranch(branchRoot)
-	coord, journal, err := m.recoveryCoordinatorForJob(jobID)
+	coord, journal, err := m.recoveryCoordinatorForJob(jobID) //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 	if errors.Is(err, os.ErrNotExist) || coord == nil {
 		return EvictJobTree(ctx, branchRoot)
 	}

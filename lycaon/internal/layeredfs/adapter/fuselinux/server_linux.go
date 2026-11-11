@@ -93,10 +93,10 @@ func receiveFUSEDevFD(ctx context.Context, fusermountBin, opts, mountPath string
 	_, oobn, _, _, recvErr := unix.Recvmsg(parentSock, buf, oob, unix.MSG_CMSG_CLOEXEC)
 	waitErr := wait()
 	if recvErr != nil {
-		return -1, fmt.Errorf("fuselinux: recvmsg from %s: %w (wait=%v stderr=%s)", fusermountBin, recvErr, waitErr, strings.TrimSpace(stderr.String()))
+		return -1, fmt.Errorf("fuselinux: recvmsg from %s: %w (wait=%w stderr=%s)", fusermountBin, recvErr, waitErr, strings.TrimSpace(stderr.String()))
 	}
 	if oobn == 0 {
-		return -1, fmt.Errorf("fuselinux: %s exited without passing /dev/fuse fd (wait=%v stderr=%s)", fusermountBin, waitErr, strings.TrimSpace(stderr.String()))
+		return -1, fmt.Errorf("fuselinux: %s exited without passing /dev/fuse fd (wait=%w stderr=%s)", fusermountBin, waitErr, strings.TrimSpace(stderr.String()))
 	}
 	scms, err := unix.ParseSocketControlMessage(oob[:oobn])
 	if err != nil || len(scms) == 0 {

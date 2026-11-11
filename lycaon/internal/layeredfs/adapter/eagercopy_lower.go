@@ -273,6 +273,7 @@ func applyParentEntryToWorkspace(pl layeredfs.ParentLayer, qp layeredfs.Qualifie
 		if err := os.WriteFile(dstPath, raw, mode); err != nil {
 			return err
 		}
+	default:
 	}
 	if len(pe.Xattrs) > 0 {
 		if err := writePathXattrs(dstPath, pe.Xattrs); err != nil {

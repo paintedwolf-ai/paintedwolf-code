@@ -75,10 +75,6 @@ const (
 	checkpointVisitVerified uint8 = 2
 )
 
-func hasVerifiedPublishedCheckpoint(ctx context.Context, configDir, branchRel string) bool {
-	return hasVerifiedPublishedCheckpointWithState(ctx, configDir, branchRel, make(map[string]uint8))
-}
-
 func hasVerifiedPublishedCheckpointWithState(ctx context.Context, configDir, branchRel string, visitState map[string]uint8) bool {
 	ctx, closeClosureSession := ensureGitClosureSession(ctx)
 	defer closeClosureSession()

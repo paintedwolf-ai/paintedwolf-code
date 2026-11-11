@@ -78,7 +78,7 @@ func preparationStrategy(facts adapter.SelectionFacts) ProvisionStrategy {
 // prepareMaterializedWorkspaceView claims the worker's one view across its roots. The cost is declared
 // before the first file moves, and cancellation is honored throughout.
 func (m *Manager) prepareMaterializedWorkspaceView(ctx context.Context, binding *Binding, sources []projectroot.RootRef, choice WorkspaceStrategySelection, parents recovery.StackedParents) (*adapter.PreparedView, *claim.ClaimedView, error) {
-	services, err := m.layered()
+	services, err := m.layered() //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 	if err != nil {
 		return nil, nil, err
 	}
@@ -409,7 +409,7 @@ func (m *Manager) republishLostCheckpoint(ctx context.Context, branchRoot string
 }
 
 func (m *Manager) reopenMaterializedBranch(ctx context.Context, branchRoot, jobID string) (*branchLayeredView, error) {
-	services, err := m.layered()
+	services, err := m.layered() //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +487,7 @@ func parkIdleView(view *adapter.PreparedView) {
 // adoptRecoveredMaterializedView gives a view recovery rebuilt on the materialized adapter what a
 // claim gives a new one.
 func (m *Manager) adoptRecoveredMaterializedView(ctx context.Context, branchRoot, jobID, projectID string, adp adapter.Adapter, view *adapter.PreparedView) error {
-	services, err := m.layered()
+	services, err := m.layered() //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 	if err != nil {
 		return err
 	}

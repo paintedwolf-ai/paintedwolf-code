@@ -136,7 +136,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 	preparedRoots := make([]adapter.PreparedRoot, 0, len(narrowed))
 	rollback := func() {
 		for _, m := range mounts {
-			_ = a.unmountOwnedRoot(context.Background(), m, true)
+			_ = a.unmountOwnedRoot(context.WithoutCancel(ctx), m, true)
 			if m.server != nil {
 				_ = m.server.Close()
 			}
@@ -199,7 +199,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 
 	if mgr, ok := req.GitInterceptor.(*privategit.Manager); ok && mgr != nil {
 		if bErr := a.BindPrivateGit(req.ViewID, req.ViewID, mgr); bErr != nil {
-			_, _ = a.Release(context.Background(), req.ViewID)
+			_, _ = a.Release(context.WithoutCancel(ctx), req.ViewID)
 			return nil, bErr
 		}
 	}
@@ -268,13 +268,13 @@ func (a *Adapter) mountSingleRoot(
 		OnLockWait:            a.cfg.OnLockWait,
 	}, core)
 	if err != nil {
-		return nil, errors.Join(err, a.detachUnserved(canonMount, fsName))
+		return nil, errors.Join(err, a.detachUnserved(ctx, canonMount, fsName))
 	}
 
 	mountedDev, dErr := statDeviceID(canonMount)
 	if dErr != nil || mountedDev == 0 || mountedDev == parentDev {
 		_ = srv.Close()
-		_ = runFusermountUnmount(context.Background(), a.cfg.FusermountBin, canonMount, true)
+		_ = runFusermountUnmount(context.WithoutCancel(ctx), a.cfg.FusermountBin, canonMount, true)
 		return nil, &adapter.AdapterError{
 			AdapterID:  adapter.AdapterFUSELinux,
 			Op:         "prepare",
@@ -286,7 +286,7 @@ func (a *Adapter) mountSingleRoot(
 	mInfo, mErr := verifyKernelMountInfo(canonMount, fsName, uid, gid)
 	if mErr != nil {
 		_ = srv.Close()
-		_ = runFusermountUnmount(context.Background(), a.cfg.FusermountBin, canonMount, true)
+		_ = runFusermountUnmount(context.WithoutCancel(ctx), a.cfg.FusermountBin, canonMount, true)
 		return nil, &adapter.AdapterError{
 			AdapterID:  adapter.AdapterFUSELinux,
 			Op:         "prepare",
@@ -298,7 +298,7 @@ func (a *Adapter) mountSingleRoot(
 
 	if pErr := srv.optOutOfFUSEPoll(canonMount); pErr != nil {
 		_ = srv.Close()
-		_ = runFusermountUnmount(context.Background(), a.cfg.FusermountBin, canonMount, true)
+		_ = runFusermountUnmount(context.WithoutCancel(ctx), a.cfg.FusermountBin, canonMount, true)
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "prepare", ReasonCode: adapter.ReasonFUSEMountDenied, Diagnostic: pErr.Error(), Cause: pErr}
 	}
 
@@ -306,7 +306,7 @@ func (a *Adapter) mountSingleRoot(
 	protocol := srv.NegotiatedProtocol()
 	if protocol == nil {
 		_ = srv.Close()
-		_ = runFusermountUnmount(context.Background(), a.cfg.FusermountBin, canonMount, true)
+		_ = runFusermountUnmount(context.WithoutCancel(ctx), a.cfg.FusermountBin, canonMount, true)
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "prepare", ReasonCode: adapter.ReasonFUSEMountDenied, Diagnostic: "FUSE_INIT did not complete on " + canonMount}
 	}
 	facts := MountFacts{
@@ -330,7 +330,7 @@ func (a *Adapter) mountSingleRoot(
 	recordMountFacts(&record, facts)
 	if err := adapter.WriteRecordedConnection(runtimeViewDir, record); err != nil {
 		_ = srv.Close()
-		_ = runFusermountUnmount(context.Background(), a.cfg.FusermountBin, canonMount, true)
+		_ = runFusermountUnmount(context.WithoutCancel(ctx), a.cfg.FusermountBin, canonMount, true)
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "prepare", ReasonCode: adapter.ReasonFUSEMountDenied, Diagnostic: err.Error(), Cause: err}
 	}
 	return &rootMount{grant: grant, mountPath: canonMount, server: srv, facts: facts}, nil

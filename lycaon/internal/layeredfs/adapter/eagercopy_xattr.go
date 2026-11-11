@@ -340,7 +340,7 @@ func makeDirsWritable(root string) {
 	}
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // Clearing attributes is best effort; an entry it cannot read keeps them.
 		}
 		if d.IsDir() {
 			if info, iErr := d.Info(); iErr == nil && info.Mode().Perm()&0o700 != 0o700 {

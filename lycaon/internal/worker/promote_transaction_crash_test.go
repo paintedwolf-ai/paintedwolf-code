@@ -22,7 +22,7 @@ var errPromoteCrash = errors.New("simulated crash")
 func crashDuring(t *testing.T, fn func()) {
 	t.Helper()
 	defer func() {
-		if r := recover(); r != errPromoteCrash {
+		if r := recover(); !isPanicError(r, errPromoteCrash) {
 			t.Fatalf("expected a simulated crash, got %v", r)
 		}
 	}()

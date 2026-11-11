@@ -144,6 +144,7 @@ func appendLayeredWorkerDivergenceChanges(
 			op = "delete"
 		case consumer.DivergenceRenamed:
 			op = "move"
+		default:
 		}
 		files = append(files, wire.WorkerJobChangedFile{
 			RootID: entry.Path.RootID,

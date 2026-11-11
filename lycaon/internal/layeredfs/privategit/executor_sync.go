@@ -29,7 +29,7 @@ func prepareAndAuthorizeGitArgs(ctx context.Context, view *managedView, targetWT
 		}
 		if policy.CredentialCheck != nil {
 			if err := policy.CredentialCheck(ctx, sub, remote, remoteURL); err != nil {
-				return nil, fmt.Errorf("%w: credential check failed: %v", ErrRemoteOperationRefused, err)
+				return nil, fmt.Errorf("%w: credential check failed: %w", ErrRemoteOperationRefused, err)
 			}
 		}
 	case "repack":
@@ -128,6 +128,7 @@ func syncCoreOverlayToWorktree(view *managedView) error {
 			if err := os.WriteFile(dstPath, raw, perm|0o200); err != nil {
 				return err
 			}
+		default:
 		}
 	}
 	return nil
@@ -152,11 +153,11 @@ func captureWorktreeMutationBaseline(view *managedView, targetWT string) map[str
 	res := make(map[string]worktreeStatEntry)
 	_ = filepath.WalkDir(targetWT, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // An entry the walk cannot read is left out of the snapshot.
 		}
 		rel, rErr := filepath.Rel(targetWT, path)
 		if rErr != nil || rel == "." {
-			return nil
+			return nil //nolint:nilerr // An entry the walk cannot read is left out of the snapshot.
 		}
 		if d.Name() == ".git" {
 			if d.IsDir() {
@@ -166,7 +167,7 @@ func captureWorktreeMutationBaseline(view *managedView, targetWT string) map[str
 		}
 		info, iErr := d.Info()
 		if iErr != nil || info.IsDir() {
-			return nil
+			return nil //nolint:nilerr // An entry the walk cannot read is left out of the snapshot.
 		}
 		le := fileInfoToLowerEntry(info)
 		entry := worktreeStatEntry{
@@ -237,6 +238,7 @@ func syncWorktreeMutationsToCore(view *managedView, repoRel string, before map[s
 			if _, err := view.core.WriteFile(qp, raw, aState.mode.Perm()); err != nil {
 				return err
 			}
+		default:
 		}
 	}
 	return nil

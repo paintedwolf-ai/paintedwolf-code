@@ -326,20 +326,20 @@ func isValidPackBaseName(name string) bool {
 func decodeAndValidatePersistedLeaseFile(path, expectedID string) (*leaseRecord, uint64, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
-		return nil, 0, fmt.Errorf("%w: lstat lease record %s: %v", ErrCorruptObjectStore, path, err)
+		return nil, 0, fmt.Errorf("%w: lstat lease record %s: %w", ErrCorruptObjectStore, path, err)
 	}
 	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxPersistedLeaseRecordBytes {
 		return nil, 0, fmt.Errorf("%w: invalid lease record mode or size for %s", ErrCorruptObjectStore, path)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil, 0, fmt.Errorf("%w: read lease record %s: %v", ErrCorruptObjectStore, path, err)
+		return nil, 0, fmt.Errorf("%w: read lease record %s: %w", ErrCorruptObjectStore, path, err)
 	}
 	var p persistedLeaseRecord
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&p); err != nil {
-		return nil, 0, fmt.Errorf("%w: decode lease record %s: %v", ErrCorruptObjectStore, path, err)
+		return nil, 0, fmt.Errorf("%w: decode lease record %s: %w", ErrCorruptObjectStore, path, err)
 	}
 	var extra any
 	if err := dec.Decode(&extra); err != io.EOF {
@@ -406,7 +406,7 @@ func loadPersistedLeasesFromDiskLocked(ctx context.Context, s *RetainedObjectSto
 	leasesDir := filepath.Join(s.rootDir, "leases")
 	entries, err := os.ReadDir(leasesDir)
 	if err != nil {
-		return fmt.Errorf("%w: read store leases dir %s: %v", ErrCorruptObjectStore, leasesDir, err)
+		return fmt.Errorf("%w: read store leases dir %s: %w", ErrCorruptObjectStore, leasesDir, err)
 	}
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
@@ -502,10 +502,6 @@ func (s *RetainedObjectStore) ActiveLeases() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.leases)
-}
-
-func storeLeaseIntactOnDisk(s *RetainedObjectStore, leaseID string) bool {
-	return storeLeaseBoundAndIntactOnDisk(s, "", leaseID)
 }
 
 func storeLeaseBoundAndIntactOnDisk(s *RetainedObjectStore, holder, leaseID string) bool {

@@ -31,7 +31,7 @@ func (a *seedAccumulator) cloneChildren(srcRoot, seedDir, pristineDir string) (m
 	}
 	entries, err := os.ReadDir(srcRoot)
 	if err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // A root that cannot be listed is seeded entry by entry, which reports the error.
 	}
 	cloned := map[string]bool{}
 	for _, entry := range entries {

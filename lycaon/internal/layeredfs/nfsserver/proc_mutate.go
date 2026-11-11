@@ -276,6 +276,7 @@ func onMknod(s *Server, cs *connState, call rpcCallHeader) []byte {
 		if attrs, err = readSattr3(call.Body, time.Now()); err != nil {
 			return encodeNFSError(call.XID, nfs.NFSProcedureMkNod, nfs.NFSStatusInval)
 		}
+	default:
 	}
 	dirRec, exp, err := resolveAndAuthHandle(s, cs, call.Cred, dirFH)
 	if err != nil {

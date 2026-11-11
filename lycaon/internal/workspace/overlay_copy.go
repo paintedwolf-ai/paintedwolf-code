@@ -37,13 +37,13 @@ func (m *Manager) DestroyWorkerWorkspace(ctx context.Context, binding *Binding) 
 		return err
 	}
 	jobID := jobIDForBranch(root)
-	if err := m.releaseBranchRuntime(binding, root, jobID); err != nil {
+	if err := m.releaseBranchRuntime(binding, root, jobID); err != nil { //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 		return err
 	}
 	if err := RefuseMountedBranch(root); err != nil {
 		return err
 	}
-	if err := m.releaseBranchRetention(jobID); err != nil {
+	if err := m.releaseBranchRetention(jobID); err != nil { //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 		return err
 	}
 	releaseBranchClaimState(root)

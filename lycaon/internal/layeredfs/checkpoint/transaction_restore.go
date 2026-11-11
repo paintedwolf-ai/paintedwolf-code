@@ -65,7 +65,7 @@ func (txn *Transaction) hasSurvivingInRootPeer(rootID, identity string, after ma
 	found := false
 	_ = fs.WalkDir(root.FS(), ".", func(rel string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil || rel == "." || entry.IsDir() || !entry.Type().IsRegular() {
-			return nil
+			return nil //nolint:nilerr // An entry that cannot be read is not a peer.
 		}
 		qp := layeredfs.QualifiedPath{RootID: rootID, Rel: filepath.Clean(rel)}
 		if _, modified := after[qp]; modified {
@@ -73,7 +73,7 @@ func (txn *Transaction) hasSurvivingInRootPeer(rootID, identity string, after ma
 		}
 		file, openErr := root.Open(rel)
 		if openErr != nil {
-			return nil
+			return nil //nolint:nilerr // An entry that cannot be read is not a peer.
 		}
 		info, statErr := file.Stat()
 		id, _, idErr := targetFileIdentityAndLinks(file, info)
@@ -300,11 +300,11 @@ func (txn *Transaction) findHardLinkPeer(root *targetRoot, skipRel string, want 
 	var peer string
 	err := fs.WalkDir(root.FS(), ".", func(rel string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil || rel == "." || rel == skipRel || entry.IsDir() || !entry.Type().IsRegular() {
-			return nil
+			return nil //nolint:nilerr // An entry that cannot be read is not a peer.
 		}
 		file, openErr := root.Open(rel)
 		if openErr != nil {
-			return nil
+			return nil //nolint:nilerr // An entry that cannot be read is not a peer.
 		}
 		info, statErr := file.Stat()
 		id, _, idErr := targetFileIdentityAndLinks(file, info)

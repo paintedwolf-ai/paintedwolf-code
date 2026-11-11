@@ -50,7 +50,7 @@ func workerBranchReadDir(
 	if err := tctx.Source.BranchWorkspace.ValidateMeta(ctx); err != nil {
 		return nil, true, err
 	}
-	entries, err := workspace.OverlaySurveyReadDir(branch, rel, opts)
+	entries, err := workspace.OverlaySurveyReadDir(branch, rel, opts) //nolint:contextcheck // The view listing reads the core, which takes no context.
 	return entries, true, err
 }
 

@@ -175,7 +175,7 @@ func (m *Manager) recoveryCoordinatorForJob(jobID string) (*recovery.Coordinator
 // recorded mount and writer left by an earlier process, preserves interrupted work and marks
 // each lost mounted tree for rebuild. One stuck worker never blocks the others or the engine.
 func (m *Manager) RecoverWorkerViews(ctx context.Context) ([]recovery.WorkerRuntimeReport, error) {
-	coord := m.recoveryCoordinator()
+	coord := m.recoveryCoordinator() //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 	if coord == nil {
 		return nil, nil
 	}
@@ -317,7 +317,7 @@ func (m *Manager) releaseLiveJournaledViews(ctx context.Context, jobID, root str
 // whichever adapter selection now chooses. It reports false when no checkpoint could apply, so
 // the caller's other rebuild source still gets its turn.
 func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string) (bool, error) {
-	coord, journal, err := m.recoveryCoordinatorForJob(jobID)
+	coord, journal, err := m.recoveryCoordinatorForJob(jobID) //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 	if errors.Is(err, os.ErrNotExist) || coord == nil {
 		return false, nil
 	}

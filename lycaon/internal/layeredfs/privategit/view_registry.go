@@ -204,7 +204,7 @@ func prepareManagedViewOperation(
 			return "", noop, true, err
 		}
 	}
-	if _, err := interceptViewAccess(mgr, view, layeredfs.QualifiedPath{
+	if _, err := interceptViewAccess(mgr, view, layeredfs.QualifiedPath{ //nolint:contextcheck // View access checks are bounded local lookups with no context to honour.
 		RootID: view.rootID,
 		Rel:    ".git",
 	}, true); err != nil {
@@ -214,7 +214,7 @@ func prepareManagedViewOperation(
 		return "", noop, true, err
 	}
 	if !view.materialized && view.kernelMounted {
-		if privGitDir, gErr := readyPrivateGitDir(mgr, view.viewID, "."); gErr == nil && privGitDir != "" {
+		if privGitDir, gErr := readyPrivateGitDir(mgr, view.viewID, "."); gErr == nil && privGitDir != "" { //nolint:contextcheck // The repository check runs once per process and is not this call's work.
 			_, _, _ = gitexec.Run(ctx, filepath.Dir(privGitDir), []string{"-C", view.worktreeDir, "--git-dir=" + privGitDir, "--work-tree=" + view.worktreeDir, "update-index", "-q", "--refresh"}, gitexec.Opts{
 				Profile: gitexec.ProfileHermetic,
 			})

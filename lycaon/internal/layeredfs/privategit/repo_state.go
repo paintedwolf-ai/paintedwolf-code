@@ -127,20 +127,20 @@ func readDurableRepoRecord(mgr *Manager, view *managedView, viewID, repoRel stri
 		if errors.Is(err, fs.ErrNotExist) {
 			return durableRepoRecord{}, false, nil
 		}
-		return durableRepoRecord{}, false, fmt.Errorf("%w: %w: lstat %s: %v", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, p, err)
+		return durableRepoRecord{}, false, fmt.Errorf("%w: %w: lstat %s: %w", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, p, err)
 	}
 	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxDurableRepoRecordBytes {
 		return durableRepoRecord{}, false, fmt.Errorf("%w: %w: invalid file mode or size for %s", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, p)
 	}
 	raw, err := os.ReadFile(p)
 	if err != nil {
-		return durableRepoRecord{}, false, fmt.Errorf("%w: %w: read %s: %v", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, p, err)
+		return durableRepoRecord{}, false, fmt.Errorf("%w: %w: read %s: %w", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, p, err)
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	var rec durableRepoRecord
 	if err := dec.Decode(&rec); err != nil {
-		return durableRepoRecord{}, false, fmt.Errorf("%w: %w: decode %s: %v", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, p, err)
+		return durableRepoRecord{}, false, fmt.Errorf("%w: %w: decode %s: %w", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, p, err)
 	}
 	var extra any
 	if err := dec.Decode(&extra); err != io.EOF {
@@ -160,7 +160,7 @@ func writeDurableRepoRecord(mgr *Manager, view *managedView, viewID string, rec 
 	}
 	if mgr != nil && mgr.cfg.FailRepoStateWriteHook != nil {
 		if err := mgr.cfg.FailRepoStateWriteHook(viewID, rec.RepoRel, string(rec.Status)); err != nil {
-			return fmt.Errorf("%w: %w: %v", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, err)
+			return fmt.Errorf("%w: %w: %w", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, err)
 		}
 	}
 	p := durableRepoStatePath(mgr, viewID, rec.RepoRel)
@@ -168,11 +168,11 @@ func writeDurableRepoRecord(mgr *Manager, view *managedView, viewID string, rec 
 		return fmt.Errorf("%w: %w: empty repo state path", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord)
 	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return fmt.Errorf("%w: %w: mkdir %s: %v", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, filepath.Dir(p), err)
+		return fmt.Errorf("%w: %w: mkdir %s: %w", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, filepath.Dir(p), err)
 	}
 	raw, err := json.Marshal(rec)
 	if err != nil {
-		return fmt.Errorf("%w: %w: marshal: %v", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, err)
+		return fmt.Errorf("%w: %w: marshal: %w", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, err)
 	}
 	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
 		Location: fseffect.PathLocation(p),
@@ -180,7 +180,7 @@ func writeDurableRepoRecord(mgr *Manager, view *managedView, viewID string, rec 
 		Mode:     0o600,
 		DirMode:  0o755,
 	}); err != nil {
-		return fmt.Errorf("%w: %w: write %s: %v", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, p, err)
+		return fmt.Errorf("%w: %w: write %s: %w", layeredfs.ErrGitPending, ErrInvalidRepoStateRecord, p, err)
 	}
 	return nil
 }
@@ -363,19 +363,19 @@ func verifyEstablishedPrivateRepo(
 	if !hasDurable && strings.TrimSpace(leaseID) == "" {
 		tipOIDs, _, err := collectCapturedRefAndIndexOIDs(context.Background(), gitDir)
 		if err != nil || len(tipOIDs) == 0 {
-			return "", "", "", fmt.Errorf("%w: %w: recover private repository refs for %q: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, repoRel, err)
+			return "", "", "", fmt.Errorf("%w: %w: recover private repository refs for %q: %w", layeredfs.ErrGitPending, ErrCorruptObjectStore, repoRel, err)
 		}
 		_, reachable, err := mgr.store.ImportRepositoryObjects(context.Background(), objectDirsForPrivateGitDir(gitDir, mgr.store.ObjectsDir()), tipOIDs)
 		if err != nil {
-			return "", "", "", fmt.Errorf("%w: %w: recover private repository objects for %q: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, repoRel, err)
+			return "", "", "", fmt.Errorf("%w: %w: recover private repository objects for %q: %w", layeredfs.ErrGitPending, ErrCorruptObjectStore, repoRel, err)
 		}
 		leaseID, err = mgr.store.RetainForView(holder, reachable)
 		if err != nil {
-			return "", "", "", fmt.Errorf("%w: %w: reacquire private repository lease for %q: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, repoRel, err)
+			return "", "", "", fmt.Errorf("%w: %w: reacquire private repository lease for %q: %w", layeredfs.ErrGitPending, ErrCorruptObjectStore, repoRel, err)
 		}
 	} else if repo == nil || repo.leaseID == "" {
 		if err := reacquirePersistedStoreLease(mgr.store, holder, leaseID); err != nil {
-			return "", "", "", fmt.Errorf("%w: %w: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, err)
+			return "", "", "", fmt.Errorf("%w: %w: %w", layeredfs.ErrGitPending, ErrCorruptObjectStore, err)
 		}
 	}
 	if !storeLeaseBoundAndIntactOnDisk(mgr.store, holder, leaseID) {
@@ -393,7 +393,7 @@ func verifyEstablishedPrivateRepo(
 	}
 	tipOIDs, _, rErr := collectCapturedRefAndIndexOIDs(context.Background(), gitDir)
 	if rErr != nil {
-		return "", "", "", fmt.Errorf("%w: %w: inspect established private repository refs/index: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, rErr)
+		return "", "", "", fmt.Errorf("%w: %w: inspect established private repository refs/index: %w", layeredfs.ErrGitPending, ErrCorruptObjectStore, rErr)
 	}
 	for _, refOID := range tipOIDs {
 		if len(refOID) == 40 && isHexString(refOID) {

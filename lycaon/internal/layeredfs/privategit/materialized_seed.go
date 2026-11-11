@@ -76,7 +76,7 @@ func establishedRepoLocked(mgr *Manager, view *managedView, repoRel string) (rep
 	if existing != nil && existing.verified && existing.privateGitDir != "" {
 		if _, err := os.Stat(mgr.store.ObjectsDir()); err != nil {
 			existing.verified = false
-			return repoLookup{}, fmt.Errorf("%w: %w: retained object store unavailable: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, err)
+			return repoLookup{}, fmt.Errorf("%w: %w: retained object store unavailable: %w", layeredfs.ErrGitPending, ErrCorruptObjectStore, err)
 		}
 		return repoLookup{gitDir: existing.privateGitDir, established: true}, nil
 	}
@@ -127,7 +127,7 @@ func ensureViewRepoInitialized(
 	defer view.mu.Unlock()
 
 	existing := view.repos[repoRel]
-	lookup, err := establishedRepoLocked(mgr, view, repoRel)
+	lookup, err := establishedRepoLocked(mgr, view, repoRel) //nolint:contextcheck // The repository check runs once per process and is not this call's work.
 	if err != nil {
 		view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
 		return err
@@ -272,7 +272,7 @@ func (m *Manager) AdoptMaterializedView(ctx context.Context, b MaterializedViewB
 		if _, sErr := os.Stat(filepath.Join(finalGitDir, "index")); sErr == nil {
 			out, code, rErr := gitexec.Run(ctx, target, []string{"update-index", "-q", "--refresh"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
 			if (rErr != nil && code != 1) || code >= 128 || code < 0 {
-				return fmt.Errorf("privategit: refresh seeded index (exit %d): %v: %s", code, rErr, strings.TrimSpace(string(out)))
+				return fmt.Errorf("privategit: refresh seeded index (exit %d): %w: %s", code, rErr, strings.TrimSpace(string(out)))
 			}
 		}
 		leaseID, initialRefs, err := retainAdoptedMaterializedRepo(ctx, m, b.ViewID, repoRel, finalGitDir)

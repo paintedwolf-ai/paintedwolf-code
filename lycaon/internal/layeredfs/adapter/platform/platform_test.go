@@ -112,6 +112,7 @@ func overBudgetChoice(t *testing.T, selector *adapter.Selector, probeDir, source
 			switch refused.ReasonCode {
 			case adapter.ReasonFUSEDeviceUnavailable, adapter.ReasonFUSEHelperUnavailable, adapter.ReasonUnsupportedPlatform:
 				t.Skipf("this host cannot mount a view: %s", refused.ReasonCode)
+			default:
 			}
 		}
 		t.Fatalf("mount selection failed: %v", err)

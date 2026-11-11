@@ -135,11 +135,11 @@ func (m *Manager) MountedClaimWithBinding(binding MountedViewBinding, authorized
 	}
 	absTrunk, err := filepath.Abs(binding.TrunkDir)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrMountedWorktreeUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrMountedWorktreeUnavailable, err)
 	}
 	binding.TrunkDir, binding.MountPath = absTrunk, absWT
 	if err := registerMountedClaim(m, viewID, workerID, rootID, absTrunk, absWT, binding.Core, authorizedGitDirs...); err != nil {
-		return fmt.Errorf("%w: %v", ErrMountedWorktreeUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrMountedWorktreeUnavailable, err)
 	}
 	m.mu.Lock()
 	m.mountBindings[mountBindingKey(viewID, rootID)] = binding
@@ -155,7 +155,7 @@ func (m *Manager) BindMountedView(binding MountedViewBinding) error {
 	}
 	view, err := getManagedView(m, strings.TrimSpace(binding.ViewID))
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrMountedWorktreeUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrMountedWorktreeUnavailable, err)
 	}
 	absWT, err := validateMountedViewBinding(binding, view.viewID, view.workerID, view.rootID, view.trunkDir, binding.MountPath, view.core)
 	if err != nil {
@@ -207,7 +207,7 @@ func (m *Manager) MountedClaimWithWorktree(
 	}
 	absTrunk, err := filepath.Abs(trunkDir)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrMountedWorktreeUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrMountedWorktreeUnavailable, err)
 	}
 	return registerMountedClaim(m, viewID, workerID, rootID, absTrunk, absWT, core, authorizedGitDirs...)
 }
@@ -217,7 +217,7 @@ func (m *Manager) MountedClaimWithWorktree(
 func (m *Manager) BindMountedWorktree(viewID, mountWorktreeDir string) error {
 	view, err := getManagedView(m, viewID)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrMountedWorktreeUnavailable, err)
+		return fmt.Errorf("%w: %w", ErrMountedWorktreeUnavailable, err)
 	}
 	binding, ok := getMountedViewBinding(m, view.viewID, view.rootID)
 	if !ok {
@@ -334,11 +334,11 @@ func validateMountedWorktreeDir(trunkDir, mountWorktreeDir string) (string, erro
 	}
 	absWT, err := filepath.Abs(mountWorktreeDir)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrMountedWorktreeUnavailable, err)
+		return "", fmt.Errorf("%w: %w", ErrMountedWorktreeUnavailable, err)
 	}
 	absTrunk, err := filepath.Abs(trunkDir)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrMountedWorktreeUnavailable, err)
+		return "", fmt.Errorf("%w: %w", ErrMountedWorktreeUnavailable, err)
 	}
 	wtInfo, wtErr := os.Lstat(absWT)
 	trunkInfo, tErr := os.Lstat(absTrunk)

@@ -84,6 +84,7 @@ func tree(t *testing.T, c *Core) map[string]string {
 				desc += " -> " + attr.LinkTarget
 			case EntryDirectory:
 				walk(child)
+			default:
 			}
 			out[child] = desc
 		}

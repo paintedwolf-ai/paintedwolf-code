@@ -152,7 +152,7 @@ func acquireWorkspaceProvisionLock(ctx context.Context, branchRoot string) (func
 }
 
 func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef, choice WorkspaceStrategySelection, parents recovery.StackedParents) (*adapter.PreparedView, *claim.ClaimedView, error) {
-	services, err := m.layered()
+	services, err := m.layered() //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 	if err != nil {
 		return nil, nil, err
 	}
@@ -228,7 +228,7 @@ func rollBackClaim(ctx context.Context, services *layeredServices, workerID, vie
 // adoptRecoveredMountedView gives a view recovery rebuilt the records a claim gives a new one: an
 // Engine for its consumers, a publisher for completion, and settlement through the coordinator.
 func (m *Manager) adoptRecoveredMountedView(ctx context.Context, branchRoot, jobID, projectID string, adp adapter.Adapter, view *adapter.PreparedView) error {
-	services, err := m.layered()
+	services, err := m.layered() //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 	if err != nil {
 		return err
 	}
@@ -311,7 +311,7 @@ func (m *Manager) createBranchSkeleton(
 	layout SandboxLayout,
 	jobID string,
 ) (*Binding, error) {
-	if err := m.refuseLiveBranchView(branchRoot, jobID); err != nil {
+	if err := m.refuseLiveBranchView(branchRoot, jobID); err != nil { //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 		return nil, err
 	}
 	if err := os.MkdirAll(filepath.Dir(branchRoot), 0o700); err != nil {

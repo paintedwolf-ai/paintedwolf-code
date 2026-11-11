@@ -64,6 +64,7 @@ func handleWorkspaceRepoChange(s *Service, _ context.Context, ev repochange.Even
 				trunkEv := buildTrunkChangeFromRepoEvent(m.rootID, m.rootPath, rel, repochange.WorktreeChangeStructural)
 				s.RecordLowerTrunkChange(m.stateKey, trunkEv)
 			}
+		default:
 		}
 	}
 }

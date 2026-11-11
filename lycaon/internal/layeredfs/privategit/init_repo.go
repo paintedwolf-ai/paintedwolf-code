@@ -47,7 +47,7 @@ func initializePrivateRepo(
 	}
 
 	if err := writeRepoInitIntent(mgr, view.viewID, repoRel); err != nil {
-		return nil, fmt.Errorf("%w: %v", layeredfs.ErrGitPending, err)
+		return nil, fmt.Errorf("%w: %w", layeredfs.ErrGitPending, err)
 	}
 	stageBase := filepath.Join(mgr.cfg.BackingDir, "views", view.viewID, "git-staging")
 	if err := os.MkdirAll(stageBase, 0o755); err != nil {
@@ -147,7 +147,7 @@ func initializePrivateRepo(
 
 	if layout.isLinkedWT && layout.worktreeName != "" {
 		if err := setupPrivateLinkedWorktreeMetadata(finalGitDir, targetWorktreeDir, layout.worktreeName); err != nil {
-			return abortFinal(fmt.Errorf("%w: %v", layeredfs.ErrGitPending, err))
+			return abortFinal(fmt.Errorf("%w: %w", layeredfs.ErrGitPending, err))
 		}
 	}
 
@@ -157,7 +157,7 @@ func initializePrivateRepo(
 				Profile: gitexec.ProfileHermetic,
 			})
 			if (uErr != nil && uCode != 1) || uCode >= 128 || uCode < 0 {
-				return abortFinal(fmt.Errorf("%w: update-index refresh failed (exit %d): %v: %s", layeredfs.ErrGitPending, uCode, uErr, strings.TrimSpace(string(uOut))))
+				return abortFinal(fmt.Errorf("%w: update-index refresh failed (exit %d): %w: %s", layeredfs.ErrGitPending, uCode, uErr, strings.TrimSpace(string(uOut))))
 			}
 		}
 	}

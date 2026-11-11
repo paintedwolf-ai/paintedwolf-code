@@ -482,7 +482,7 @@ func collectCapturedRefAndIndexOIDs(ctx context.Context, stageGitDir string) ([]
 		}, sink)
 		sink.flush()
 		if gErr != nil || code != 0 {
-			return nil, nil, fmt.Errorf("%w: invalid git index (exit %d): %v: %s", ErrCorruptObjectStore, code, gErr, strings.TrimSpace(string(out)))
+			return nil, nil, fmt.Errorf("%w: invalid git index (exit %d): %w: %s", ErrCorruptObjectStore, code, gErr, strings.TrimSpace(string(out)))
 		}
 		seen := make(map[string]struct{}, len(oids)+len(sink.oids))
 		for _, oid := range oids {
@@ -495,7 +495,7 @@ func collectCapturedRefAndIndexOIDs(ctx context.Context, stageGitDir string) ([]
 			}
 		}
 	} else if !os.IsNotExist(err) {
-		return nil, nil, fmt.Errorf("%w: stat git index %s: %v", ErrCorruptObjectStore, idxPath, err)
+		return nil, nil, fmt.Errorf("%w: stat git index %s: %w", ErrCorruptObjectStore, idxPath, err)
 	}
 	sort.Strings(oids)
 	return oids, refs, nil

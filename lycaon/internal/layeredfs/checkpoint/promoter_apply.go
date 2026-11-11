@@ -194,6 +194,7 @@ func sameTargetObservation(a, b TargetObservation) bool {
 		return a.LinkTarget == b.LinkTarget
 	case layeredfs.EntryDirectory:
 		return a.DirEmpty == b.DirEmpty && a.Mode.Perm() == b.Mode.Perm() && a.DirectorySHA256 == b.DirectorySHA256
+	default:
 	}
 	return false
 }

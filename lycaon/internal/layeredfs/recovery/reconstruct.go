@@ -252,6 +252,7 @@ func applySingleEntryToView(
 		if err := applyRegularEntryToView(c, core, e, matPath, groupPrimary); err != nil {
 			return err
 		}
+	default:
 	}
 	for k, v := range e.Final.Xattrs {
 		_ = core.SetXattr(e.Path, k, v, false)

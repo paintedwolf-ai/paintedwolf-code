@@ -56,6 +56,7 @@ func TestBranchTreeAnswersFromTheViewOnEveryProvider(t *testing.T) {
 				switch refused.ReasonCode {
 				case adapter.ReasonFUSEDeviceUnavailable, adapter.ReasonFUSEHelperUnavailable, adapter.ReasonUnsupportedPlatform:
 					t.Skipf("this host cannot mount a view: %s", refused.ReasonCode)
+				default:
 				}
 			}
 			testutil.FailErr(t, "create branch", err)

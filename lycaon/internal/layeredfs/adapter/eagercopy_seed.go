@@ -90,7 +90,7 @@ func seedSelectedRoots(
 				return out, err
 			}
 		}
-		if err := acc.walkAndSeedRoot(g, seedDir, pristine); err != nil {
+		if err := acc.walkAndSeedRoot(g, seedDir, pristine); err != nil { //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 			return out, err
 		}
 		out.rootSpecs = append(out.rootSpecs, layeredfs.RootSpec{

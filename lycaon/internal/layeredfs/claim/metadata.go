@@ -109,7 +109,7 @@ func LoadViewMetadata(path string) (ViewMetadataV2, bool, error) {
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&v2); err != nil {
-			return ViewMetadataV2{}, false, fmt.Errorf("%w: %v", ErrInvalidMetadata, err)
+			return ViewMetadataV2{}, false, fmt.Errorf("%w: %w", ErrInvalidMetadata, err)
 		}
 		if err := validateViewMetadataV2(v2); err != nil {
 			return ViewMetadataV2{}, false, err
@@ -120,7 +120,7 @@ func LoadViewMetadata(path string) (ViewMetadataV2, bool, error) {
 		dec := json.NewDecoder(bytes.NewReader(raw))
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&v1); err != nil {
-			return ViewMetadataV2{}, false, fmt.Errorf("%w: %v", ErrInvalidMetadata, err)
+			return ViewMetadataV2{}, false, fmt.Errorf("%w: %w", ErrInvalidMetadata, err)
 		}
 		upgraded, err := upgradeV1ToV2(v1)
 		if err != nil {

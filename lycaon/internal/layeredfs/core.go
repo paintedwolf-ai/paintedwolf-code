@@ -195,24 +195,22 @@ type deletedState struct {
 }
 
 type openHandle struct {
-	id           HandleID
-	viewID       string
-	nodeID       NodeID
-	gen          Generation
-	qpath        QualifiedPath
-	layer        LayerSource
-	flags        OpenFlags
-	isDir        bool
-	closed       bool
-	refs         int
-	unlinkOrphan string
-	file         *os.File
-	roReader     ReadSeekCloser
+	id       HandleID
+	viewID   string
+	nodeID   NodeID
+	gen      Generation
+	qpath    QualifiedPath
+	layer    LayerSource
+	flags    OpenFlags
+	isDir    bool
+	closed   bool
+	refs     int
+	file     *os.File
+	roReader ReadSeekCloser
 }
 
 type dirCookieState struct {
-	nodeID  NodeID
-	version uint64
+	nodeID NodeID
 }
 
 // New creates and initializes a layered filesystem Core view over fresh working storage.

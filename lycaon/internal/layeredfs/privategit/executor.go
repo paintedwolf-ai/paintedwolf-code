@@ -112,7 +112,7 @@ func executeViewGitCommand(
 	if repoRel != "." {
 		gitRel = repoRel + "/.git"
 	}
-	if _, err := e.mgr.InterceptGitAccess(e.viewID, layeredfs.QualifiedPath{
+	if _, err := e.mgr.InterceptGitAccess(e.viewID, layeredfs.QualifiedPath{ //nolint:contextcheck // View access checks are bounded local lookups with no context to honour.
 		RootID: view.rootID,
 		Rel:    gitRel,
 	}, true); err != nil {
@@ -124,7 +124,7 @@ func executeViewGitCommand(
 		targetWT = filepath.Join(view.worktreeDir, filepath.FromSlash(repoRel))
 	}
 
-	privGitDir, _ := readyPrivateGitDir(e.mgr, e.viewID, repoRel)
+	privGitDir, _ := readyPrivateGitDir(e.mgr, e.viewID, repoRel) //nolint:contextcheck // The repository check runs once per process and is not this call's work.
 	if privGitDir == "" {
 		privGitDir = filepath.Join(targetWT, ".git")
 	}
@@ -173,7 +173,7 @@ func executeViewGitCommand(
 	}
 
 	if runErr != nil || code != 0 {
-		return string(out), fmt.Errorf("git %v failed (exit %d): %v: %s", normalizedArgs, code, runErr, strings.TrimSpace(string(out)))
+		return string(out), fmt.Errorf("git %v failed (exit %d): %w: %s", normalizedArgs, code, runErr, strings.TrimSpace(string(out)))
 	}
 
 	syncErr := syncWorktreeMutationsToCore(view, repoRel, beforeTree)
@@ -188,7 +188,7 @@ func measureDirBytes(dir string) int64 {
 	var total int64
 	_ = filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
-			return nil
+			return nil //nolint:nilerr // The size is an estimate; an entry it cannot read adds nothing.
 		}
 		if info, iErr := d.Info(); iErr == nil {
 			total += info.Size()

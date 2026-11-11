@@ -233,8 +233,8 @@ func runFusermountUnmount(ctx context.Context, fusermountBin, mountPath string, 
 
 // detachUnserved removes a mount a failing Prepare will not serve. A helper can fail or be killed after
 // the kernel attached it, and no server ever takes that connection.
-func (a *Adapter) detachUnserved(mountPath, fsName string) error {
-	return a.unmountOwnedRoot(context.Background(), &rootMount{mountPath: mountPath, facts: MountFacts{FSName: fsName}}, false)
+func (a *Adapter) detachUnserved(ctx context.Context, mountPath, fsName string) error {
+	return a.unmountOwnedRoot(ctx, &rootMount{mountPath: mountPath, facts: MountFacts{FSName: fsName}}, false)
 }
 
 func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAlive bool) error {
@@ -244,9 +244,10 @@ func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAliv
 	a.mu.RLock()
 	fusermountBin := a.cfg.FusermountBin
 	a.mu.RUnlock()
+	// An unmount finishes after the caller gives up, so it keeps the caller's values but not its end.
 	uCtx := ctx
-	if uCtx == nil || uCtx.Err() != nil {
-		uCtx = context.Background()
+	if uCtx.Err() != nil {
+		uCtx = context.WithoutCancel(ctx)
 	}
 	var firstErr error
 	if serverAlive {
@@ -257,7 +258,7 @@ func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAliv
 			return nil
 		}
 	}
-	fCtx, fCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	fCtx, fCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	lazyErr := runFusermountUnmount(fCtx, fusermountBin, m.mountPath, true)
 	fCancel()
 	if !isMountOwnedAndActive(m, false) {

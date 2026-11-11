@@ -143,7 +143,7 @@ func (c *Coordinator) ClaimSelectedView(
 	if req.Hooks.Retention != nil {
 		cid, rErr := req.Hooks.Retention.RegisterClaim(ctx, req.Identity.WorkerID, req.Identity.ViewID, collectPreparedRootPaths(prepared.Roots))
 		if rErr != nil {
-			return fail(adapter.ReasonMountDenied, fmt.Errorf("%w: %v", ErrRetentionFailed, rErr))
+			return fail(adapter.ReasonMountDenied, fmt.Errorf("%w: %w", ErrRetentionFailed, rErr))
 		}
 		retentionClaimID = cid
 	}
@@ -194,7 +194,7 @@ func (c *Coordinator) AdoptPreparedView(ctx context.Context, req ClaimRequest, a
 	if req.Hooks.Retention != nil {
 		cid, err := req.Hooks.Retention.RegisterClaim(ctx, req.Identity.WorkerID, req.Identity.ViewID, collectPreparedRootPaths(prepared.Roots))
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrRetentionFailed, err)
+			return nil, fmt.Errorf("%w: %w", ErrRetentionFailed, err)
 		}
 		retentionClaimID = cid
 	}
@@ -309,7 +309,7 @@ func verifyPreparedConfinement(
 	}
 	spec, err := adp.CommandAccess(prepared.ViewID)
 	if err != nil {
-		return fmt.Errorf("%w: command access failed: %v", ErrConfinementFailed, err)
+		return fmt.Errorf("%w: command access failed: %w", ErrConfinementFailed, err)
 	}
 	st, err := os.Stat(spec.WorkDir)
 	if err != nil || !st.IsDir() {

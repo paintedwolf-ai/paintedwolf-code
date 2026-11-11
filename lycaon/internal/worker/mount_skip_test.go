@@ -27,5 +27,6 @@ func skipWithoutMount(t *testing.T, selector *adapter.Selector) {
 	switch adapterErr.ReasonCode {
 	case adapter.ReasonFUSEDeviceUnavailable, adapter.ReasonFUSEHelperUnavailable, adapter.ReasonUnsupportedPlatform:
 		t.Skipf("this host cannot mount a view: %s", adapterErr.ReasonCode)
+	default:
 	}
 }

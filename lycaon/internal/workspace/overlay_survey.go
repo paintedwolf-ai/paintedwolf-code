@@ -167,7 +167,7 @@ func OverlaySurveyWalk(ctx context.Context, branchRoot string, opts sandbox.Surv
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		entries, err := OverlaySurveyReadDir(branchRoot, rel, opts)
+		entries, err := OverlaySurveyReadDir(branchRoot, rel, opts) //nolint:contextcheck // The view listing reads the core, which takes no context.
 		if err != nil {
 			if os.IsNotExist(err) && rel != "." {
 				return nil

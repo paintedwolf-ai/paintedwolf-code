@@ -461,10 +461,6 @@ func resolveExistingGitRefWithPacked(commonGitDir, gitDir, dstRef string, packed
 	return packed[dstRef]
 }
 
-func resolveExistingGitRef(commonGitDir, gitDir, dstRef string) string {
-	return resolveExistingGitRefWithPacked(commonGitDir, gitDir, dstRef, loadPackedRefsMap(commonGitDir, gitDir))
-}
-
 // CheckpointGitObjectsDir is where a checkpoint keeps the objects its refs add for one root; an empty
 // root ID is the primary root.
 func CheckpointGitObjectsDir(storeDir, checkpointID, rootID string) string {

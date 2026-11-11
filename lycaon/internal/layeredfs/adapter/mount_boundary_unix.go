@@ -18,14 +18,14 @@ func MountBoundaryPresent(path string) (bool, error) {
 		return false, nil
 	}
 	if err != nil {
-		return true, nil
+		return true, nil //nolint:nilerr // An entry that cannot be read counts as a boundary, so nothing is removed through it.
 	}
 	if !info.IsDir() {
 		return false, nil
 	}
 	parent, err := os.Lstat(filepath.Dir(path))
 	if err != nil {
-		return true, nil
+		return true, nil //nolint:nilerr // An entry that cannot be read counts as a boundary, so nothing is removed through it.
 	}
 	own, ownOK := info.Sys().(*syscall.Stat_t)
 	above, aboveOK := parent.Sys().(*syscall.Stat_t)

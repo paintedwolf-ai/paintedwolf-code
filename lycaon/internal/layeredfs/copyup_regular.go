@@ -54,7 +54,7 @@ func tryCaptureTrunkOnce(
 		c.counters.lowerLookups.Add(1)
 		after, aErr := provider.Lstat(qpath.Rel)
 		if aErr != nil || !sameLowerIdentity(before, after) {
-			return BaseCapture{}, false, nil
+			return BaseCapture{}, false, nil //nolint:nilerr // A source that changed or vanished while it was read reports a retry, not a failure.
 		}
 		return BaseCapture{
 			Path:       qpath,
@@ -88,7 +88,7 @@ func tryCaptureTrunkOnce(
 		c.counters.lowerLookups.Add(1)
 		after, aErr := provider.Lstat(qpath.Rel)
 		if aErr != nil || !sameLowerIdentity(before, after) || after.LinkTarget != target {
-			return BaseCapture{}, false, nil
+			return BaseCapture{}, false, nil //nolint:nilerr // A source that changed or vanished while it was read reports a retry, not a failure.
 		}
 		return BaseCapture{
 			Path:       qpath,
@@ -164,7 +164,7 @@ func tryCaptureRegularOnce(
 	after, aErr := provider.Lstat(qpath.Rel)
 	if aErr != nil || !sameLowerIdentity(before, after) || copiedSize != before.Size || copiedSize != after.Size {
 		_ = unlinkBackingFile(baseDirFD, baseName)
-		return BaseCapture{}, false, nil
+		return BaseCapture{}, false, nil //nolint:nilerr // A source that changed or vanished while it was read reports a retry, not a failure.
 	}
 
 	afterXattrs, axErr := provider.ListXattr(qpath.Rel)

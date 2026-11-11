@@ -90,7 +90,7 @@ func captureCheckpointGitState(
 	}
 	if m.cfg.FailObjectRetentionHook != nil {
 		if err := m.cfg.FailObjectRetentionHook(viewID, "."); err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrCorruptObjectStore, err)
+			return nil, fmt.Errorf("%w: %w", ErrCorruptObjectStore, err)
 		}
 	}
 

@@ -368,11 +368,6 @@ func collectUnleasedPacksLocked(
 	return removed, nil
 }
 
-func copyWritableObjectFile(src, dst string) error {
-	_, _, err := copyFileAtomicReadOnly(context.Background(), src, dst)
-	return err
-}
-
 func copyFileAtomicReadOnly(ctx context.Context, src, dst string) (int64, bool, error) {
 	tmp := fmt.Sprintf("%s.tmp.%d", dst, os.Getpid())
 	_ = os.Remove(tmp)

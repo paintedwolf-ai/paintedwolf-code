@@ -244,7 +244,7 @@ func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
 // snapshotSourceRoots gives a worker its one provider. A copy that passes its budget has cleaned up
 // after itself, so the rule runs again knowing that and moves on to the mount.
 func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef, parentCheckpointID string, decision workerplacement.Decision) error {
-	services, err := m.layered()
+	services, err := m.layered() //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 	if err != nil {
 		return err
 	}

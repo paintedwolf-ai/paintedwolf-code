@@ -252,6 +252,7 @@ func isMutatingNFSProc(proc nfs.NFSProcedure) bool {
 	case nfs.NFSProcedureSetAttr, nfs.NFSProcedureWrite, nfs.NFSProcedureCreate, nfs.NFSProcedureMkDir, nfs.NFSProcedureSymlink,
 		nfs.NFSProcedureMkNod, nfs.NFSProcedureRemove, nfs.NFSProcedureRmDir, nfs.NFSProcedureRename, nfs.NFSProcedureLink:
 		return true
+	default:
 	}
 	return false
 }
@@ -261,6 +262,7 @@ func isBootstrapRootNFSProc(proc nfs.NFSProcedure) bool {
 	case nfs.NFSProcedureNull, nfs.NFSProcedureGetAttr, nfs.NFSProcedureFSInfo,
 		nfs.NFSProcedurePathConf, nfs.NFSProcedureFSStat, nfs.NFSProcedureAccess:
 		return true
+	default:
 	}
 	return false
 }
@@ -386,6 +388,7 @@ func writeErrorFormattingTail(w *bytes.Buffer, proc nfs.NFSProcedure) {
 	case nfs.NFSProcedureRename:
 		writeUint64(w, 0)
 		writeUint64(w, 0)
+	default:
 	}
 }
 

@@ -194,7 +194,7 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 
 	reachable, err := verifyStoreConnectivity(ctx, s.objectsDir, tipOIDs)
 	if err != nil {
-		return InitMetrics{}, nil, errors.Join(fmt.Errorf("%w: %v", ErrCorruptObjectStore, err), rollback())
+		return InitMetrics{}, nil, errors.Join(fmt.Errorf("%w: %w", ErrCorruptObjectStore, err), rollback())
 	}
 	for oid, sz := range looseAddedSizes {
 		recordLooseObjectLocked(s, oid, sz)
@@ -407,7 +407,7 @@ func importStorePacksFromDir(ctx context.Context, s *RetainedObjectStore, srcDir
 			}
 			oids, comp, err := parsePackAndIndexOIDs(ctx, s.rootDir, packPath, idxPath, pInfo.Size())
 			if err != nil {
-				return added, packNames, addedPackBases, fmt.Errorf("%w: verify pack %s: %v", ErrCorruptObjectStore, base, err)
+				return added, packNames, addedPackBases, fmt.Errorf("%w: verify pack %s: %w", ErrCorruptObjectStore, base, err)
 			}
 			addedPackBases = append(addedPackBases, base)
 			recordPackLocked(s, base, pInfo.Size()+iInfo.Size(), oids, comp)
@@ -426,7 +426,7 @@ func listPackIndexOIDs(ctx context.Context, workDir, idxPath string) (map[string
 		Input:   rawIdx,
 	})
 	if err != nil || code != 0 {
-		return nil, fmt.Errorf("git show-index exit %d: %v (%s)", code, err, strings.TrimSpace(string(out)))
+		return nil, fmt.Errorf("git show-index exit %d: %w (%s)", code, err, strings.TrimSpace(string(out)))
 	}
 	res := make(map[string]struct{})
 	for _, line := range strings.Split(string(out), "\n") {
@@ -496,7 +496,7 @@ func verifyStoreConnectivity(ctx context.Context, objectsDir string, tipOIDs []s
 	}, revSink)
 	revSink.flush()
 	if err != nil || code != 0 {
-		return nil, fmt.Errorf("rev-list connectivity failed (exit %d): %v: %s", code, err, strings.TrimSpace(string(out)))
+		return nil, fmt.Errorf("rev-list connectivity failed (exit %d): %w: %s", code, err, strings.TrimSpace(string(out)))
 	}
 	return revSink.oids, nil
 }

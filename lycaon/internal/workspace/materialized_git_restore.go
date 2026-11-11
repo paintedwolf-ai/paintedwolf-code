@@ -215,7 +215,7 @@ func refreshMaterializedRepoAlternates(ctx context.Context, services *layeredSer
 			return err
 		}
 		if info, statErr := os.Lstat(gitDir); statErr != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%w: materialized repository .git missing or invalid at %s: %v", recovery.ErrIncompleteCheckpoint, gitDir, statErr)
+			return fmt.Errorf("%w: materialized repository .git missing or invalid at %s: %w", recovery.ErrIncompleteCheckpoint, gitDir, statErr)
 		}
 		rawAlt, err := os.ReadFile(altPath)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -285,7 +285,7 @@ func refreshMaterializedRepoAlternates(ctx context.Context, services *layeredSer
 		for _, tip := range tips {
 			out, code, rErr := gitexec.Run(ctx, target, []string{"rev-list", "--objects", "-n", "1", tip}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
 			if rErr != nil || code != 0 {
-				return fmt.Errorf("%w: incomplete git object graph for %s in view %s (exit %d): %v: %s",
+				return fmt.Errorf("%w: incomplete git object graph for %s in view %s (exit %d): %w: %s",
 					recovery.ErrIncompleteCheckpoint, tip, gitView.ViewID, code, rErr, strings.TrimSpace(string(out)))
 			}
 		}

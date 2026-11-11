@@ -253,7 +253,7 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 		return res, pErr
 	}
 	res.MountExercised = true
-	defer func() { _, _ = a.Release(context.Background(), probeViewID) }()
+	defer func() { _, _ = a.Release(context.WithoutCancel(ctx), probeViewID) }()
 
 	readOut, readExit, rErr := execpkg.Run(ctx, "/bin/sh", []string{"-c", "cat probe.txt"}, execpkg.ExecOpts{Launch: execpkg.HostLaunch("fuse_probe"), Dir: prep.PrimaryWorkPath})
 	if rErr != nil || readExit != 0 || string(readOut) != "seed\n" {

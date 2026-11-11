@@ -197,7 +197,7 @@ func TestFailedPromotionKeepsCheckpointForRepairAcrossRestart(t *testing.T) {
 func crashPromotion(t *testing.T, fn func()) {
 	t.Helper()
 	defer func() {
-		if r := recover(); r != errSimulatedCrash {
+		if r := recover(); !isPanicError(r, errSimulatedCrash) {
 			t.Fatalf("expected a simulated crash, got %v", r)
 		}
 	}()

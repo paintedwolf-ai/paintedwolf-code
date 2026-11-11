@@ -39,7 +39,7 @@ func (m *Manager) CheckpointCoordinator() (*recovery.Coordinator, error) {
 // from immutable content however its parent ran. It is idempotent per overlay. An overlay whose
 // unchanged-size base was never pinned has no exact base to record, and refuses.
 func (m *Manager) PublishSealedOverlayCheckpoint(ctx context.Context, sealed SealedOverlay) (string, error) {
-	services, err := m.layered()
+	services, err := m.layered() //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
 	if err != nil {
 		return "", err
 	}

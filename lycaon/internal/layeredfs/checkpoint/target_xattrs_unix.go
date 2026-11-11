@@ -12,11 +12,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func targetFileIdentity(file *os.File, info os.FileInfo) (string, error) {
-	id, _, err := targetFileIdentityAndLinks(file, info)
-	return id, err
-}
-
 // targetFileIdentityAndLinks names the inode with its birth time or generation:
 // a device and inode number alone match a new file that reused a freed number.
 func targetFileIdentityAndLinks(file *os.File, info os.FileInfo) (string, uint64, error) {

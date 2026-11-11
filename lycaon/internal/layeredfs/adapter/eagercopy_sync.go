@@ -453,6 +453,7 @@ func (s *statCapture) differsFromBase(ctx context.Context, v statVisit) (bool, e
 			return target != pe.LinkTarget, err
 		case layeredfs.EntryDirectory:
 			return v.info.Mode().Perm() != pe.Mode.Perm(), nil
+		default:
 		}
 		if v.info.Mode().Perm() != pe.Mode.Perm() {
 			return true, nil
@@ -482,6 +483,7 @@ func (s *statCapture) differsFromBase(ctx context.Context, v statVisit) (bool, e
 		return target != rec.LinkTarget, err
 	case layeredfs.EntryDirectory:
 		return v.info.Mode().Perm() != rec.fileMode().Perm(), nil
+	default:
 	}
 	if v.info.Mode().Perm() != rec.fileMode().Perm() {
 		return true, nil

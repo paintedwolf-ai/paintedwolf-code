@@ -49,7 +49,7 @@ func readHandleAdmitted(c *Core, hid HandleID, p []byte, offset int64) (int, err
 	} else {
 		return 0, syscall.EBADF
 	}
-	if n > 0 && err == io.EOF {
+	if n > 0 && errors.Is(err, io.EOF) {
 		err = nil
 	}
 	if n > 0 {

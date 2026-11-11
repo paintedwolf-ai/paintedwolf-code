@@ -94,7 +94,7 @@ func New(core *layeredfs.Core, cfg Config) (*Server, error) {
 func validateLoopbackListenAddr(addr string) error {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil || host == "" {
-		return fmt.Errorf("%w: %v", ErrNonLoopbackAddress, err)
+		return fmt.Errorf("%w: %w", ErrNonLoopbackAddress, err)
 	}
 	if strings.EqualFold(host, "localhost") {
 		return nil

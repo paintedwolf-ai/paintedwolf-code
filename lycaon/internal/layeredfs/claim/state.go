@@ -150,6 +150,7 @@ func deriveSupportedActions(snap WorkspaceStateSnapshot) []RecoveryAction {
 		actions = append(actions, ActionRetryClaim, ActionCancelClaim)
 	case StateRecoveryRequired:
 		actions = append(actions, ActionRecoverView, ActionCancelClaim)
+	default:
 	}
 	if snap.Checkpoint.State == CheckpointFailedPersistence {
 		actions = append(actions, ActionRetryCheckpoint)

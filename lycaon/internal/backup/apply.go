@@ -148,7 +148,7 @@ func (r *pendingRestore) installFiles(ctx context.Context, configDir string) err
 func makeTreeWritable(root string) {
 	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
-			return nil
+			return nil //nolint:nilerr // Making a tree writable is best effort; an entry it cannot read stays as it is.
 		}
 		if d.IsDir() {
 			_ = os.Chmod(p, 0o700)
