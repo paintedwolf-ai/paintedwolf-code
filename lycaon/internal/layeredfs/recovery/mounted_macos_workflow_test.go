@@ -1,3 +1,5 @@
+//go:build darwin
+
 package recovery_test
 
 import (
@@ -5,7 +7,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -19,14 +20,7 @@ import (
 )
 
 func TestMountedMacOSWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("real /sbin/mount_nfs loopback workflow test requires darwin")
-	}
-	baseDir, err := os.MkdirTemp("/tmp", "lycaon-rec-nfs-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(baseDir) })
+	baseDir := t.TempDir()
 
 	trunkDir := filepath.Join(baseDir, "trunk")
 	if err := os.MkdirAll(filepath.Join(trunkDir, "src"), 0o755); err != nil {

@@ -577,4 +577,3 @@ func copyFileStreamingAtomicOpts(srcPath, dstPath string, mode os.FileMode, ensu
 	}
 	return objType, body, nil
 }
-

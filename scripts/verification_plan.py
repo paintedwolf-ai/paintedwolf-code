@@ -112,6 +112,8 @@ def catalog():
             raise ValueError(f"verification {name} requires options and package lists")
         if not all(isinstance(item, str) for item in recipe["options"] + recipe["packages"]):
             raise ValueError(f"verification {name} requires string arguments")
+        if not isinstance(recipe.get("complete_failures", False), bool):
+            raise ValueError(f"verification {name} requires a boolean complete_failures")
         flags = recipe.get("flags", [])
         if not isinstance(flags, list) or not all(isinstance(item, str) for item in flags):
             raise ValueError(f"verification {name} requires string flags")
@@ -352,7 +354,8 @@ def expand(names, cli=()):
                 packages = scoped_packages(name, selection["packages"], recipe["packages"])
             stages.append({"kind": "go", "name": name, "options": recipe["options"],
                            "exclude": recipe.get("exclude", ""), "bundled": recipe.get("bundled", False),
-                           "packages": packages, "flags": flags})
+                           "packages": packages, "flags": flags,
+                           "complete_failures": recipe.get("complete_failures", False)})
         elif name in data["tasks"]:
             arguments = list(data["tasks"][name])
             if cli and data["selection"].get(name) in SELECTION_GRAMMARS:

@@ -1,3 +1,5 @@
+//go:build linux
+
 package fuselinux
 
 import (
@@ -165,9 +167,6 @@ func TestFuseBarrierFlushHelperSubprocessRegistrationAndCancellation(t *testing.
 }
 
 func TestFuseMountedBarrierFlushCancelAndAbortOrdering(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 	tmp := t.TempDir()
 	trunkDir, backingDir, runtimeDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime")
 	for _, d := range []string{trunkDir, backingDir, runtimeDir} {
@@ -245,9 +244,6 @@ func TestFuseMountedBarrierFlushCancelAndAbortOrdering(t *testing.T) {
 }
 
 func TestFuseMountedOneSchedulerSlotForcedGCBarrier(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 	tmp := t.TempDir()
 	trunkDir, backingDir, runtimeDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime")
 	for _, d := range []string{trunkDir, backingDir, runtimeDir} {

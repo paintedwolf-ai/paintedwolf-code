@@ -1,3 +1,5 @@
+//go:build linux
+
 package fuselinux_test
 
 import (
@@ -106,9 +108,6 @@ func TestOverLimitSelectionReportsTheMissingDependency(t *testing.T) {
 
 // Probe proves denial on its real mounted view, and a refusal there keeps its typed reason.
 func TestProbeRefusesAViewTheEnforcerCannotVerify(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 	adp := fuselinux.New(fuselinux.Config{
 		ConfinementCheckFn: confinementVerified,
 		ConfinementVerifyFn: func(context.Context, *adapter.PreparedView) error {
@@ -125,9 +124,6 @@ func TestProbeRefusesAViewTheEnforcerCannotVerify(t *testing.T) {
 }
 
 func TestProbeAndPrepareFUSELinux(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 
 	adp := fuselinux.New(fuselinux.Config{ConfinementCheckFn: confinementVerified})
 	tmp := t.TempDir()
@@ -193,9 +189,6 @@ func TestProbeAndPrepareFUSELinux(t *testing.T) {
 }
 
 func TestImmediateCoherenceAndBackgroundProcessStability(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 
 	adp := fuselinux.New(fuselinux.Config{})
 	tmp := t.TempDir()
@@ -301,9 +294,6 @@ func TestImmediateCoherenceAndBackgroundProcessStability(t *testing.T) {
 }
 
 func TestBarrierFailsOnDeadServerAndReleaseRefusesUnownedPath(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 
 	adp := fuselinux.New(fuselinux.Config{})
 	tmp := t.TempDir()

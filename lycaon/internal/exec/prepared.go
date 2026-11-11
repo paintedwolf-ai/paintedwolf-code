@@ -19,6 +19,7 @@ type preparedLifecycle struct {
 	started, closed bool
 	cleanup         func()
 	untrack         func()
+	record          func(pid int) error
 }
 
 var preparedLifecycles sync.Map
@@ -159,7 +160,7 @@ func prepareNativeCommand(ctx context.Context, name string, args []string, opts 
 		_ = inputs.Close()
 		return nil, nil, err
 	}
-	state := &preparedLifecycle{}
+	state := &preparedLifecycle{record: opts.Launch.startRecorder(opts.Dir)}
 	state.cleanup = func() { cancel(); release(); baseCleanup(); _ = inputs.Close() }
 	preparedLifecycles.Store(cmd, state)
 	cleanup := func() {
@@ -263,6 +264,11 @@ func StartPreparedWith(ctx context.Context, cmd *exec.Cmd, start func() error, r
 	}
 	if closed || untrack == nil {
 		return fail(fmt.Errorf("native process ownership unavailable or already released"))
+	}
+	if state.record != nil {
+		if err := state.record(cmd.Process.Pid); err != nil {
+			return fail(err)
+		}
 	}
 	if err := confine.ConfirmProcessLaunch(ctx, cmd); err != nil {
 		return fail(fmt.Errorf("native launch handoff: %w", err))

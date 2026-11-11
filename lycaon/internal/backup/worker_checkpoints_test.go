@@ -685,4 +685,3 @@ func TestBackupCheckpointSharedStoreScalingAndCycleDetection(t *testing.T) {
 		}
 	})
 }
-

@@ -853,6 +853,10 @@ spec paths and `-t`, `den:harness:test` takes Playwright filters, and
 `lint:fast`, `lint:full`, and `oar:conformance` forward their arguments to the
 underlying tool and run outside a shared batch with their declared resources.
 
+A scoped `test:digest` for a change includes the `./test/contract/...` packages
+the change can affect, so a composition failure appears with the rest of that
+request's failures.
+
 Declared grammars are checked against the tree before admission: Go package
 directories and `.go` files must exist under `lycaon/`; `-p`, `-parallel`,
 `-count`, `-cpu`, `-timeout`, and `-shuffle` must hold values `go test` accepts;
@@ -899,6 +903,16 @@ unchanged. This diagnostic adds no cancellation permission: unshared
 work still requires one of the documented adverse health flags below, or an
 explicit `--force` for known unwanted work. No process basename grants an
 exception or identifies a safe cleanup target.
+
+A test killed while one of its threads waits on its own FUSE mount cannot finish
+exiting: the waiter holds the server's device open, so the connection never ends
+and the run's lease stays held. Terminal settlement, `test:cancel` reclamation and
+the next run's collection settle this from kernel facts. When every holder of a
+run's `.lease` is proven dead, on Linux by a pending SIGKILL on each live thread and
+on macOS by a kill this process delivered to that exact process, they end that run's
+own connections, through the connection's abort file on Linux and a forced unmount
+on macOS. The holder then exits, and the ordinary lease path detaches and removes the
+run. A run with any live holder, and any mount outside the run, is untouched.
 
 Health observations appear in `test:status` and existing queue notices. On macOS
 and Linux, lost owner identity is `supervision_lost`; an OS-stopped owner is
@@ -955,7 +969,10 @@ include source identity, stage evidence, and stages left unverified. A Go packag
 that passed by replaying an earlier result carries `reused` with the batch and
 stage that recorded it. A request whose Go package failed while its stage was
 still running returns at once; its evidence names the failed tests and links the
-package's output under `<stage-id>-failures/`. Shared logs can contain unrelated
+package's output under `<stage-id>-failures/`. A `test:digest` request instead
+waits for its whole package selection, because its recipe declares
+`complete_failures`, so one receipt names every failed package with its tests and
+output. Shared logs can contain unrelated
 failures; use the request receipt for its outcome. The retention budget is 20
 completed batches and 512 MiB, with artifacts and source refs pruned together;
 the newest batch and active readers remain protected. Canceling one request

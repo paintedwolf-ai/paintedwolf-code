@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/confine"
 )
@@ -38,6 +39,25 @@ type LaunchPlan struct {
 	// RecordStart durably names each started process while the launch helper still holds it, before
 	// its target runs. A failure kills the process, so nothing runs unrecorded.
 	RecordStart func(pid int) error
+}
+
+var viewProcessRecorders atomic.Pointer[func(dir string) func(pid int) error]
+
+// SetViewProcessRecorder installs the lookup naming the recorder for a working directory inside a
+// mounted view, so every process started there is recorded whatever launched it.
+func SetViewProcessRecorder(lookup func(dir string) func(pid int) error) {
+	viewProcessRecorders.Store(&lookup)
+}
+
+// startRecorder is the plan's own recorder, or the one for the view holding the working directory.
+func (p LaunchPlan) startRecorder(dir string) func(pid int) error {
+	if p.RecordStart != nil || dir == "" {
+		return p.RecordStart
+	}
+	if lookup := viewProcessRecorders.Load(); lookup != nil {
+		return (*lookup)(dir)
+	}
+	return nil
 }
 
 func (p LaunchPlan) WithTrustedEnvironment(entries []string) LaunchPlan {

@@ -20,8 +20,15 @@ import (
 )
 
 type (
-	batchObjectMeta           struct{ objType string; size int64 }
-	batchObjectData           struct{ objType string; size int64; body []byte }
+	batchObjectMeta struct {
+		objType string
+		size    int64
+	}
+	batchObjectData struct {
+		objType string
+		size    int64
+		body    []byte
+	}
 	treeEntryKey              struct{ mode, name string }
 	parsedTreeEntry           struct{ mode, name, oid string }
 	establishedTargetFrontier struct {

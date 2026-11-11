@@ -51,4 +51,3 @@ func TestArchiveVersionsRequireTheirExactReplacementScope(t *testing.T) {
 type GitClosureStats = gitClosureStats
 
 var WithGitClosureStats = withGitClosureStats
-

@@ -1,3 +1,5 @@
+//go:build linux
+
 package fuselinux_test
 
 import (
@@ -10,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -29,9 +30,6 @@ func TestMain(m *testing.M) {
 }
 
 func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 
 	tmp := t.TempDir()
 	trunkDir := filepath.Join(tmp, "trunk")

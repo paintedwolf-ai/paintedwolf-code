@@ -14,6 +14,8 @@ mkdir -p "$fixture/scripts"
 for name in test-source-snapshot.sh checkout-cache-dir.sh sha256.sh test-run-isolation.sh test-run-lease.py digest-run-lock.sh artifact-paths.sh artifact_paths.py; do
   cp "$source_root/scripts/$name" "$fixture/scripts/$name"
 done
+mkdir -p "$fixture/scripts/verification_lifecycle"
+cp "$source_root/scripts/verification_lifecycle/run_lease.py" "$fixture/scripts/verification_lifecycle/run_lease.py"
 printf 'module example.invalid/cachefixture\n\ngo 1.26.6\n' > "$fixture/go.mod"
 printf 'package cachefixture\n\nfunc Value() int { return 1 }\n' > "$fixture/value.go"
 git -C "$fixture" init -q

@@ -662,7 +662,10 @@ first failed or unverified stage, and stages only it still needed stop;
 independent requests continue. A Go package failure (a failing test binary exit,
 a terminal package event, or a build failure) answers every request that needs
 the package while the stage is still running, and the receipt links that
-package's output. A package may pass despite an unrelated package failure only
+package's output. A Go recipe that declares `complete_failures`, as `test:digest`
+does, leaves its request waiting for the rest of its selection, so one receipt
+reports every failed package; no gate names such a recipe, so gates keep their
+early answer. A package may pass despite an unrelated package failure only
 when its terminal Go event and the completed digest establish that result.
 Missing evidence and infrastructure interruptions are unverified. A Go stage
 whose packages hold test files behind a tier tag it does not enable (a tag some

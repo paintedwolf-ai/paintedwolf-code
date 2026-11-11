@@ -451,8 +451,8 @@ func (m *Manager) reopenMaterializedBranch(ctx context.Context, branchRoot, jobI
 		projectID = journal.ProjectID
 	}
 	cv, err := services.coordinator.AdoptPreparedView(ctx, claim.ClaimRequest{
-		Identity: claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: viewID, SourceGeneration: 1},
-		Hooks:    claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
+		Identity:     claim.ClaimIdentity{WorkerID: jobID, ProjectID: projectID, ViewID: viewID, SourceGeneration: 1},
+		Hooks:        claim.ClaimHooks{Retention: services.retention, PrivateGit: services.privateGit},
 		ParentLayers: parentLayers, ParentCheckpointIDs: parentIDs,
 	}, eager, view)
 	if err != nil {

@@ -1,3 +1,5 @@
+//go:build linux
+
 package fuselinux_test
 
 import (
@@ -7,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"testing"
 
@@ -19,9 +20,6 @@ import (
 )
 
 func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 
 	adp := fuselinux.New(fuselinux.Config{})
 	tmp := t.TempDir()
@@ -138,9 +136,6 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 }
 
 func TestReleaseRetainsStateOnUnmountAndRuntimeCleanupFailureAndSucceedsOnRetry(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 
 	adp := fuselinux.New(fuselinux.Config{})
 	tmp := t.TempDir()
@@ -208,9 +203,6 @@ func TestReleaseRetainsStateOnUnmountAndRuntimeCleanupFailureAndSucceedsOnRetry(
 }
 
 func TestReleaseDoesNotUnmountUnownedPath(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 
 	adp := fuselinux.New(fuselinux.Config{})
 	tmp := t.TempDir()

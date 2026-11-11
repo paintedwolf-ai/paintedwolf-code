@@ -1,3 +1,5 @@
+//go:build darwin
+
 package nfsdarwin_test
 
 import (
@@ -85,9 +87,6 @@ func TestReleaseKeepsAcknowledgedUnstableBytes(t *testing.T) {
 }
 
 func TestMultipleRootsMountSeparatelyAndBarrierCoversBoth(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 	tmp := t.TempDir()
 	a, b := filepath.Join(tmp, "a"), filepath.Join(tmp, "b")
 	for _, d := range []string{a, b} {
@@ -394,13 +393,32 @@ func msyncForTest(mapped []byte) error {
 // TestOneSchedulerSlotServesAMountedWorkflow runs everything the engine does against its own mount
 // in a child limited to one slot, where anything holding the slot across a server reply deadlocks.
 func TestOneSchedulerSlotServesAMountedWorkflow(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("nfsdarwin requires darwin")
-	}
 	cmd := exec.CommandContext(t.Context(), os.Args[0])
 	cmd.Env = append(os.Environ(), "NFSDARWIN_ONE_SLOT_PROBE="+t.TempDir(), "GOMAXPROCS=1")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("one-slot workflow: %v\n%s", err, out)
+	}
+}
+
+// collectContinuously keeps stop-the-world pauses arriving while a mounted workflow runs, each of which
+// needs every scheduler slot, including one a flush on this process's own mount might hold.
+func collectContinuously() (stop func()) {
+	done := make(chan struct{})
+	var collector sync.WaitGroup
+	collector.Go(func() {
+		for {
+			select {
+			case <-done:
+				return
+			default:
+				runtime.GC()
+				runtime.Gosched()
+			}
+		}
+	})
+	return func() {
+		close(done)
+		collector.Wait()
 	}
 }
 
@@ -412,6 +430,7 @@ func runOneSlotWorkflow() int {
 	if runtime.GOMAXPROCS(0) != 1 {
 		return fail("slots", fmt.Errorf("GOMAXPROCS=%d", runtime.GOMAXPROCS(0)))
 	}
+	defer collectContinuously()()
 	tmp := os.Getenv("NFSDARWIN_ONE_SLOT_PROBE")
 	trunk := filepath.Join(tmp, "trunk")
 	if err := os.MkdirAll(filepath.Join(trunk, "sub"), 0o755); err != nil {

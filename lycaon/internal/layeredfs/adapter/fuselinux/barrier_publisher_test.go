@@ -1,3 +1,5 @@
+//go:build linux
+
 package fuselinux_test
 
 import (
@@ -52,9 +54,6 @@ func seedBoundedFlushFixture(t *testing.T, trunkDir, untouchedDir string) []byte
 }
 
 func TestBoundedTrackedPathClientFlushSkipsUntouchedUnreadableAndFIFOEntries(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 	adp := fuselinux.New(fuselinux.Config{})
 	tmp := t.TempDir()
 	trunkDir, backingDir, runtimeDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime")
@@ -145,9 +144,6 @@ func TestBoundedTrackedPathClientFlushSkipsUntouchedUnreadableAndFIFOEntries(t *
 }
 
 func TestCheckpointBarrierCancellationDuringHeldInFlightFUSEMutation(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 	enteredCh, unblockCh := make(chan struct{}), make(chan struct{})
 	var hookOnce sync.Once
 	adp := fuselinux.New(fuselinux.Config{
@@ -222,9 +218,6 @@ func TestCheckpointBarrierCancellationDuringHeldInFlightFUSEMutation(t *testing.
 }
 
 func TestPublisherHoldsAdapterServerBarrierDuringCaptureAndPreservesPriorCheckpointOnFlushFailure(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("real FUSE mount requires linux")
-	}
 	adp := fuselinux.New(fuselinux.Config{})
 	tmp := t.TempDir()
 	trunkDir, backingDir, runtimeDir, cpDir := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "backing"), filepath.Join(tmp, "runtime"), filepath.Join(tmp, "cp")

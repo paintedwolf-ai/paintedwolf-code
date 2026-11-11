@@ -177,7 +177,9 @@ func (p *pristineLowerProvider) ListXattr(rel string) (map[string][]byte, error)
 }
 
 func parentEntriesForRoot(pl layeredfs.ParentLayer, rootID string) (map[string]layeredfs.ParentEntry, error) {
-	if snap, ok := pl.(interface{ EntriesForRoot(string) map[string]layeredfs.ParentEntry }); ok {
+	if snap, ok := pl.(interface {
+		EntriesForRoot(string) map[string]layeredfs.ParentEntry
+	}); ok {
 		return snap.EntriesForRoot(rootID), nil
 	}
 	out := make(map[string]layeredfs.ParentEntry)

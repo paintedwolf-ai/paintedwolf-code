@@ -1,3 +1,5 @@
+//go:build linux
+
 // Package fuselinux implements the Linux unprivileged FUSE3 worker workspace adapter (#1659).
 //
 // It mounts an engine-served FUSE v7.31 filesystem onto a user-owned directory
