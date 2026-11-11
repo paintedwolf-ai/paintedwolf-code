@@ -146,7 +146,8 @@ func TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPr
 		}
 	}
 
-	// Also verify `ReadAPIToken` (via probe) and `pw token print` refuse with ErrIdentityMissing when credential-vault.age is present alongside api.token.
+	// Also verify ReadAPIToken and pw token print refuse with ErrIdentityMissing
+	// when credential-vault.age is present alongside api.token.
 	homeWithVault := t.TempDir()
 	cfgWithVault := filepath.Join(homeWithVault, ".config", "paintedwolf")
 	testutil.FailErr(t, "mkdir cfgWithVault", os.MkdirAll(cfgWithVault, 0o700))
