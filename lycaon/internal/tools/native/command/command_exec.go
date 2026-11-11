@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/indexwatch"
+	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -112,16 +113,20 @@ func WaitBudget(args map[string]any) time.Duration {
 }
 
 // commandWaitBudget resolves the inline wait budget from wait_ms (clamped to MaxCommandWait),
-// falling back to DefaultCommandWait.
+// falling back to DefaultCommandWait. Verification runners scale the resolved budget
+// with the scheduler's timeout allowance, so race instrumentation does not promote
+// commands that would finish inline uninstrumented.
 func commandWaitBudget(args map[string]any) time.Duration {
+	budget := exec.DefaultCommandWait
 	if v, ok := args["wait_ms"].(float64); ok && v > 0 {
 		d := time.Duration(v) * time.Millisecond
 		if d > exec.MaxCommandWait {
-			return exec.MaxCommandWait
+			budget = exec.MaxCommandWait
+		} else {
+			budget = d
 		}
-		return d
 	}
-	return exec.DefaultCommandWait
+	return budget * time.Duration(runnerbudget.TimeoutScale())
 }
 
 func commandTimeout(args map[string]any, toolName string) time.Duration {
