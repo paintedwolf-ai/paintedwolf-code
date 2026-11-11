@@ -141,6 +141,11 @@ func (p walkPolicy) boundaryDir(rel string) string {
 	}
 	return reason
 }
+// rootOnDemand reports an editor-only root, which no scan descends on its own.
+func (p walkPolicy) rootOnDemand() bool {
+	return p.scope != nil && p.scope.BoundaryDir(".") != ""
+}
+
 func (p walkPolicy) boundaryPath(rel string, isDir bool) string {
 	if p.scope == nil {
 		return ""
