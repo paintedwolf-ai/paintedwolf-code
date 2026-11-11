@@ -37,9 +37,10 @@ class AptOriginsTests(unittest.TestCase):
         (self.root / "sources.list.d/ubuntu.sources").write_text(DEB822)
         (self.root / "sources.list.d/microsoft-prod.list").write_text(THIRD_PARTY)
         (self.root / "sources.list").write_text("# Ubuntu sources have moved to sources.list.d\n")
-        patcher = patch.object(APT, "APT_ROOT", self.root)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        for name, value in (("APT_ROOT", self.root), ("next_stage", 0)):
+            patcher = patch.object(APT, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.calls = []
 
     def apt(self, *results):
@@ -68,6 +69,7 @@ class AptOriginsTests(unittest.TestCase):
         for code in (0, 100, 124):
             with self.subTest(code=code):
                 (self.root / "sources.list.d/ubuntu.sources").write_text(DEB822)
+                APT.next_stage = 0
                 self.calls.clear()
                 with self.apt((code, AZURE_DOWN if code != 124 else ""), (0, "")), patch("sys.stdout", io.StringIO()):
                     APT.update()
@@ -76,6 +78,18 @@ class AptOriginsTests(unittest.TestCase):
                 self.assertIn("URIs: https://security.ubuntu.com/ubuntu/", self.sources())
                 self.assertNotIn("azure", self.sources())
                 self.assertEqual((self.root / "sources.list.d/microsoft-prod.list").read_text(), THIRD_PARTY)
+
+    def test_unreachable_ubuntu_hosts_move_to_a_mirror_outside_ubuntu_com(self):
+        (self.root / "sources.list").write_text("deb http://ports.ubuntu.com/ubuntu-ports noble main\n")
+        canonical_down = "Err:5 https://archive.ubuntu.com/ubuntu noble InRelease\n"
+        with self.apt((100, AZURE_DOWN), (100, canonical_down), (0, "")), patch("sys.stdout", io.StringIO()):
+            APT.update()
+        self.assertEqual(len(self.calls), 3)
+        self.assertIn("URIs: https://mirrors.edge.kernel.org/ubuntu/\nSuites: noble noble-updates", self.sources())
+        self.assertIn("URIs: https://mirrors.edge.kernel.org/ubuntu/\nSuites: noble-security", self.sources())
+        self.assertEqual((self.root / "sources.list").read_text(),
+                         "deb https://mirrors.ocf.berkeley.edu/ubuntu-ports noble main\n")
+        self.assertEqual((self.root / "sources.list.d/microsoft-prod.list").read_text(), THIRD_PARTY)
 
     def test_other_repository_failures_stay_warnings(self):
         output = ("Err:3 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease\n"
@@ -89,22 +103,26 @@ class AptOriginsTests(unittest.TestCase):
         output = ("Err:1 mirror+file:/etc/apt/apt-mirrors.txt noble InRelease\n"
                   "Err:2 http://ports.ubuntu.com/ubuntu-ports noble InRelease\n"
                   "E: Failed to fetch https://security.ubuntu.com/ubuntu/dists/noble-security/InRelease\n"
-                  "Err:4 https://example.test/archive.ubuntu.com noble InRelease\n")
+                  "Err:4 https://example.test/archive.ubuntu.com noble InRelease\n"
+                  "Err:5 https://mirrors.edge.kernel.org/ubuntu noble InRelease\n")
         self.assertEqual(APT.ubuntu_failures(output), [
             "mirror+file:/etc/apt/apt-mirrors.txt", "http://ports.ubuntu.com/ubuntu-ports",
-            "https://security.ubuntu.com/ubuntu/dists/noble-security/InRelease"])
+            "https://security.ubuntu.com/ubuntu/dists/noble-security/InRelease",
+            "https://mirrors.edge.kernel.org/ubuntu"])
 
     def test_mirror_list_and_ports_origins_are_rewritten(self):
         (self.root / "sources.list").write_text("deb mirror+file:/etc/apt/apt-mirrors.txt noble main\n"
-                                                "deb http://ports.ubuntu.com/ubuntu-ports noble main\n")
+                                                "deb http://ports.ubuntu.com/ubuntu-ports noble main\n"
+                                                "deb http://archive.ubuntu.com/ubuntu-extra noble main\n")
         with patch("sys.stdout", io.StringIO()):
-            changed = APT.use_canonical()
+            changed = APT.use_stage(0)
         self.assertEqual(changed, [self.root / "sources.list", self.root / "sources.list.d/ubuntu.sources"])
         self.assertEqual((self.root / "sources.list").read_text(),
                          "deb https://archive.ubuntu.com/ubuntu noble main\n"
-                         "deb https://ports.ubuntu.com/ubuntu-ports noble main\n")
+                         "deb https://ports.ubuntu.com/ubuntu-ports noble main\n"
+                         "deb http://archive.ubuntu.com/ubuntu-extra noble main\n")
         with patch("sys.stdout", io.StringIO()):
-            self.assertEqual(APT.use_canonical(), [])
+            self.assertEqual(APT.use_stage(0), [])
 
     def test_root_owned_sources_are_written_through_sudo(self):
         path = self.root / "sources.list.d/ubuntu.sources"
@@ -114,10 +132,11 @@ class AptOriginsTests(unittest.TestCase):
         self.assertEqual(path.read_text(), DEB822)
 
     def test_persistent_failure_is_bounded_and_reported(self):
-        with self.apt(*[(100, AZURE_DOWN)] * APT.ATTEMPTS), patch("sys.stdout", io.StringIO()), \
-                self.assertRaisesRegex(RuntimeError, "attempt 3: exit 100, failed http://azure"):
+        attempts = len(APT.STAGES) + 1
+        with self.apt(*[(100, AZURE_DOWN)] * attempts), patch("sys.stdout", io.StringIO()), \
+                self.assertRaisesRegex(RuntimeError, f"attempt {attempts}: exit 100, failed http://azure"):
             APT.update()
-        self.assertEqual(len(self.calls), APT.ATTEMPTS)
+        self.assertEqual(len(self.calls), attempts)
 
     def test_install_retries_once_on_the_canonical_archive(self):
         with self.apt((0, ""), (100, AZURE_DOWN), (0, ""), (0, "")), patch("sys.stdout", io.StringIO()):
@@ -129,6 +148,23 @@ class AptOriginsTests(unittest.TestCase):
                 self.assertRaisesRegex(RuntimeError, "install failed with exit 100"):
             APT.install(["minisign"])
         self.assertNotIn("--no-install-recommends", self.calls[-1])
+        self.calls.clear()
+        with self.apt((0, ""), (100, "")), patch("sys.stdout", io.StringIO()), self.assertRaises(RuntimeError):
+            APT.install(["minisign"])
+        self.assertEqual(len(self.calls), 2)
+
+    def test_stages_that_change_nothing_are_skipped(self):
+        with patch("sys.stdout", io.StringIO()):
+            APT.main(["canonical"])
+        with self.apt((100, AZURE_DOWN), (0, "")), patch("sys.stdout", io.StringIO()):
+            APT.update()
+        self.assertEqual(APT.next_stage, 2)
+        self.assertIn("mirrors.edge.kernel.org", self.sources())
+        for path in (self.root / "sources.list.d/ubuntu.sources", self.root / "sources.list.d/microsoft-prod.list"):
+            path.unlink()
+        APT.next_stage = 0
+        self.assertFalse(APT.fail_over())
+        self.assertEqual(APT.next_stage, len(APT.STAGES))
 
     def test_commands_refresh_rewrite_and_refuse_option_injection(self):
         with self.apt((0, "")), patch("sys.stdout", io.StringIO()):

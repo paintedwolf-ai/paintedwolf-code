@@ -8,20 +8,30 @@ import sys
 
 APT_ROOT = Path("/etc/apt")
 ATTEMPT_SECONDS = 100
-ATTEMPTS = 3
 OPTIONS = ["-o", "Acquire::Retries=1", "-o", "Acquire::http::Timeout=10", "-o", "Acquire::https::Timeout=10"]
-CANONICAL = "https://archive.ubuntu.com/ubuntu"
-# Runner origins and the Canonical HTTPS origin that serves the same suites under the same keys.
-ORIGINS = [
-    ("mirror+file:/etc/apt/apt-mirrors.txt", CANONICAL),
-    ("http://azure.archive.ubuntu.com/ubuntu", CANONICAL),
-    ("http://archive.ubuntu.com/ubuntu", CANONICAL),
-    ("http://security.ubuntu.com/ubuntu", "https://security.ubuntu.com/ubuntu"),
-    ("http://ports.ubuntu.com/ubuntu-ports", "https://ports.ubuntu.com/ubuntu-ports"),
+# Every origin serves the same suites, and apt checks them against the Ubuntu archive keys.
+FAMILIES = {
+    "archive": r"mirror\+file:/etc/apt/apt-mirrors\.txt|https?://(?:azure\.)?archive\.ubuntu\.com/ubuntu"
+               r"|https://mirrors\.edge\.kernel\.org/ubuntu",
+    "security": r"https?://security\.ubuntu\.com/ubuntu",
+    "ports": r"https?://ports\.ubuntu\.com/ubuntu-ports|https://mirrors\.ocf\.berkeley\.edu/ubuntu-ports",
+}
+ORIGIN = re.compile("(?:" + "|".join(f"(?P<{name}>{pattern})" for name, pattern in FAMILIES.items()) + r")(?=/|\s|$)")
+# Fallbacks after the runner's configured origin: Canonical, then mirrors outside ubuntu.com
+# for when the runner cannot resolve or reach ubuntu.com hosts.
+STAGES = [
+    ("Canonical's archive", {"archive": "https://archive.ubuntu.com/ubuntu",
+                             "security": "https://security.ubuntu.com/ubuntu",
+                             "ports": "https://ports.ubuntu.com/ubuntu-ports"}),
+    ("an Ubuntu mirror outside ubuntu.com", {"archive": "https://mirrors.edge.kernel.org/ubuntu",
+                                             "security": "https://mirrors.edge.kernel.org/ubuntu",
+                                             "ports": "https://mirrors.ocf.berkeley.edu/ubuntu-ports"}),
 ]
-UBUNTU_HOSTS = {"azure.archive.ubuntu.com", "archive.ubuntu.com", "security.ubuntu.com", "ports.ubuntu.com"}
+UBUNTU_HOSTS = {"azure.archive.ubuntu.com", "archive.ubuntu.com", "security.ubuntu.com", "ports.ubuntu.com",
+                "mirrors.edge.kernel.org", "mirrors.ocf.berkeley.edu"}
 FAILED_URI = re.compile(r"^(?:Err:\d+|[WE]: Failed to fetch)\s+(\S+)", re.MULTILINE)
 PACKAGE = re.compile(r"[a-z0-9][a-z0-9+.-]*")
+next_stage = 0
 
 
 def apt_get(*arguments):
@@ -56,34 +66,43 @@ def write(path, text):
         subprocess.run(["sudo", "tee", str(path)], input=text, text=True, stdout=subprocess.DEVNULL, check=True)
 
 
-def use_canonical():
-    """Point Ubuntu sources at Canonical's HTTPS archive; returns the rewritten files."""
+def use_stage(index):
+    """Point Ubuntu sources at one fallback stage; returns the rewritten files."""
+    label, origins = STAGES[index]
     changed = []
     for path in source_files():
         text = path.read_text()
-        replacement = text
-        for runner, canonical in ORIGINS:
-            replacement = replacement.replace(runner, canonical)
+        replacement = ORIGIN.sub(lambda match: origins[match.lastgroup], text)
         if replacement != text:
             write(path, replacement)
             changed.append(path)
     if changed:
-        print("Ubuntu package origin moved to Canonical's archive: " + ", ".join(map(str, changed)), flush=True)
+        print(f"Ubuntu package origin moved to {label}: " + ", ".join(map(str, changed)), flush=True)
     return changed
 
 
+def fail_over():
+    """Move to the next stage that changes the sources; False once none remain."""
+    global next_stage
+    while next_stage < len(STAGES):
+        next_stage += 1
+        if use_stage(next_stage - 1):
+            return True
+    return False
+
+
 def update():
-    """Refresh indexes, moving to Canonical's archive after an Ubuntu origin fails."""
+    """Refresh indexes, moving to the next fallback stage after an Ubuntu origin fails."""
     failures = []
-    for attempt in range(1, ATTEMPTS + 1):
+    while True:
         result = apt_get("update")
         failed = ubuntu_failures(result.stdout)
         if result.returncode == 0 and not failed:
             return
-        failures.append(f"attempt {attempt}: exit {result.returncode}" + (", failed " + " ".join(failed) if failed else ""))
-        if attempt < ATTEMPTS:
-            use_canonical()
-    raise RuntimeError("Ubuntu package indexes are unavailable: " + "; ".join(failures))
+        failures.append(f"attempt {len(failures) + 1}: exit {result.returncode}"
+                        + (", failed " + " ".join(failed) if failed else ""))
+        if not fail_over():
+            raise RuntimeError("Ubuntu package indexes are unavailable: " + "; ".join(failures))
 
 
 def install(packages, recommends=True):
@@ -93,11 +112,10 @@ def install(packages, recommends=True):
     if not packages:
         return
     arguments = ["--yes", *([] if recommends else ["--no-install-recommends"]), "install", "--", *packages]
-    if apt_get(*arguments).returncode == 0:
-        return
-    use_canonical()
-    update()
     result = apt_get(*arguments)
+    if result.returncode != 0 and fail_over():
+        update()
+        result = apt_get(*arguments)
     if result.returncode != 0:
         raise RuntimeError(f"apt-get install failed with exit {result.returncode}")
 
@@ -114,7 +132,7 @@ def main(argv=None):
     if args.command == "update":
         update()
     elif args.command == "canonical":
-        use_canonical()
+        use_stage(0)
     else:
         install(args.packages, recommends=not args.no_recommends)
 

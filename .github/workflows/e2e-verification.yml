@@ -49,10 +49,12 @@ jobs:
         working-directory: lycaon-den
         run: bun install --frozen-lockfile
 
-      - name: Use canonical Ubuntu archives for browser packages
-        timeout-minutes: 2
+      - name: Use a reachable Ubuntu archive for browser packages
+        timeout-minutes: 7
         shell: bash
-        run: python3 scripts/ci_policy/apt_origins.py canonical
+        run: |
+          python3 scripts/ci_policy/apt_origins.py canonical
+          python3 scripts/ci_policy/apt_origins.py update
 
       - name: Install Playwright browsers
         working-directory: lycaon-den
