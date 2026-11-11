@@ -19,7 +19,6 @@ import (
 )
 
 func TestListWorkflowsIncludesSessionScope(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	projReg := project.NewMemoryRegistry()
 	dir := t.TempDir()

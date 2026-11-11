@@ -326,9 +326,6 @@ func attachRootTx(ctx context.Context, q *db.Queries, p *Project, params AttachR
 	if err != nil {
 		return Root{}, err
 	}
-	if err := defaultOpenPolicy.ValidateOpenPath(abs); err != nil {
-		return Root{}, err
-	}
 	if _, err := q.GetProjectRootByPath(ctx, db.GetProjectRootByPathParams{
 		ProjectID: p.ID,
 		Path:      abs,
