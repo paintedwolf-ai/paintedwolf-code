@@ -27,6 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 type fixedCredentialStore struct{ username, password string }
@@ -134,7 +135,8 @@ func fakeSSHAgent(t *testing.T) (string, func() int) {
 }
 
 // An agent's Git reaches the user's SSH agent from inside its confinement
-// once the session holds a socket capability for it, and not before.
+// when the call requests the session's socket capability for it, and not
+// otherwise.
 func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T) {
 	gitengine.TestingEnableBundledBinary()
 	confine.TestingSetAutoConfine(t)
@@ -161,7 +163,10 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 		t.Fatalf("SSH agent reached Git without a capability: %d requests, stderr %q", requests(), got.Stderr)
 	}
 
-	granted := newCommandProgramSession(t, "git ls-remote "+remote, "")
+	granted := newCommandProgramSessionWithArgs(t, map[string]any{
+		"command":            "git ls-remote " + remote,
+		"capability_request": map[string]any{"socket_paths": []any{agent}},
+	}, wire.CreateSessionRequest{}, "")
 	shimFirst()
 	gittest.InitCommit(t, granted.dir, "work")
 	lease, err := socketref.Capture(agent)

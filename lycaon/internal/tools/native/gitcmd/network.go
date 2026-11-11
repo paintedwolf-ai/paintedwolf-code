@@ -210,17 +210,13 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 	launchTC := tc
 	launchTC.Files.SessionReadPaths = append(slices.Clone(tc.Files.SessionReadPaths), admitted.reads...)
 	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), admitted.writes...)
-	agent, hasAgent := grantedSSHAgent(ctx, tc)
-	if hasAgent && !slices.ContainsFunc(tc.Socket.SocketGrants, func(g confine.SocketGrant) bool { return g.ApprovedPath == agent.ApprovedPath }) {
-		launchTC.Socket.SocketGrants = append(slices.Clone(tc.Socket.SocketGrants), agent)
-	}
 	plan, release, err := p.owners.Launch(ctx, launchTC, "git", p.commandLine(), []confine.HostService{service})
 	if err != nil {
 		releaseService()
 		_ = credentials.Close()
 		return ctx, nil, err
 	}
-	if hasAgent {
+	if agent, ok := grantedSSHAgent(ctx, tc); ok {
 		// The launch dials the capability's endpoint, which differs from the
 		// agent's own path where confinement relays sockets.
 		reference, _ := confine.SocketEndpointReferences(agent.ApprovedPath)

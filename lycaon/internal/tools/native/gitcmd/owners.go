@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
-	"slices"
 	"strings"
 	"sync"
 
@@ -78,20 +77,15 @@ func (p Prepared) commandLine() string {
 	return strings.Join(append([]string{"git"}, p.command.args...), " ")
 }
 
-// grantedSSHAgent is the socket capability this call, the project or the
-// session holds for the user's SSH agent. A network command never names the
-// agent socket itself, so the capability is found by the agent's identity.
+// grantedSSHAgent is this call's socket capability for the user's SSH agent,
+// which the call requests like any socket; its launch already carries it.
 func grantedSSHAgent(ctx context.Context, tc tools.ToolContext) (confine.SocketGrant, bool) {
 	agent := gitexec.HostSSHAgentSocket(ctx)
 	if agent == "" {
 		return confine.SocketGrant{}, false
 	}
 	resolved := fspath.CanonicalPath(agent)
-	grants := append(slices.Clone(tc.Socket.SocketGrants), tc.Socket.DurableSocketGrants...)
-	if tc.Socket.SocketCapabilityRuntime != nil {
-		grants = append(grants, tc.Socket.SocketCapabilityRuntime.AppliedGrants(tc.ChatSessionID())...)
-	}
-	for _, grant := range grants {
+	for _, grant := range tc.Socket.SocketGrants {
 		if grant.ResolvedPath == resolved {
 			return grant, true
 		}
