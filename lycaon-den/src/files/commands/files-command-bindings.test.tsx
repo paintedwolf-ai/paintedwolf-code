@@ -121,13 +121,3 @@ it("moves between Off, Wrap and Pretty, and leaves Pretty for the stored Wrap ch
   expect(after("editor.lineLayoutOff")).toBe("off");
   expect(after("editor.lineLayoutOff")).toBe("off");
 });
-  const after = (command: string) => { expect(invokeCommand(command)).toBe("ran"); return editorLineLayoutPref(); };
-  expect(after("editor.togglePretty")).toBe("pretty");
-  expect(after("editor.togglePretty")).toBe("wrap");
-  expect(after("editor.toggleWrap")).toBe("off");
-  expect(after("editor.togglePretty")).toBe("pretty");
-  expect(after("editor.togglePretty")).toBe("off");
-  expect(after("editor.toggleWrap")).toBe("wrap");
-  expect(after("editor.togglePretty")).toBe("pretty");
-  expect(after("editor.toggleWrap")).toBe("off");
-});

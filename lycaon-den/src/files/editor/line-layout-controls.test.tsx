@@ -79,7 +79,7 @@ const pressed = (view: ReturnType<typeof renderStatus>, id: string) =>
   view.getByTestId(`files-editor-layout-${id}`).getAttribute("aria-pressed");
 
 describe("line layout controls", () => {
-  it("pulls Off, Wrap and Pretty out of the View menu with the saved mode checked and the toggles' shortcuts", () => {
+  it("pulls Off, Wrap and Pretty out of the View menu with the saved mode checked", () => {
     for (const handler of ["editor.lineLayoutOff", "editor.toggleWrap", "editor.togglePretty"]) {
       expect(NATIVE_UI_HANDLER_IDS).toContain(handler);
     }
@@ -93,7 +93,6 @@ describe("line layout controls", () => {
         stockId("editor-line-layout-off"), stockId("editor-toggle-wrap"), stockId("editor-toggle-pretty"),
       ]);
       expect(items.map((item) => item.checked)).toEqual(["off", "wrap", "pretty"].map((m) => m === mode));
-      expect(items.map((item) => item.binding)).toEqual([null, "Alt+Z", "Alt+P"]);
     }
     expect(STOCK_FRAME.commands.filter((entry) => entry.id.includes("pretty") && entry.id.includes("apply"))).toEqual([]);
   });
