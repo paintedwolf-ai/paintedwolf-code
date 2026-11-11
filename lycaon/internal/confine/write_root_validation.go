@@ -59,6 +59,9 @@ func validateEffectiveWriteRoots(roots []string) *WriteRootRefusalError {
 		if resolved == "" || !filepath.IsAbs(resolved) {
 			return &WriteRootRefusalError{Path: root, Code: WriteRootCodeNotAbsolute}
 		}
+		if writeRootContainsStateTree(resolved) && !defaultRootAbovePlacementOnly(resolved) {
+			return &WriteRootRefusalError{Path: root, Code: WriteRootCodeContainsState}
+		}
 	}
 	return nil
 }

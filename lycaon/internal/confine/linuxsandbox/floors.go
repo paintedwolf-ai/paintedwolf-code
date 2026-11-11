@@ -20,8 +20,6 @@ type NamedFloor struct {
 type creationFloors struct {
 	// protected are write- and read-floor locations, existing or not.
 	protected []string
-	// noUnlink are ancestor directories that cannot be unlinked, removed, or renamed.
-	noUnlink []string
 	// names are basenames protected at any depth below a directory.
 	names []NamedFloor
 	// grants are approved writes beneath a protected location.
@@ -34,14 +32,8 @@ type creationFloors struct {
 func newCreationFloors(fs Filesystem) creationFloors {
 	f := creationFloors{names: fs.ReadOnlyNames, sensitive: map[string]bool{}}
 	f.protected = append(append(f.protected, fs.ReadOnly...), fs.Hidden...)
-	f.noUnlink = append(f.noUnlink, fs.NoUnlink...)
-	for _, r := range fs.Restored {
-		if !underAnyFold(r, fs.Hidden) {
-			f.grants = append(f.grants, r)
-		}
-	}
-	f.grants = append(append(f.grants, fs.WriteFiles...), fs.WriteRoots...)
-	for _, p := range append(append([]string(nil), f.protected...), f.noUnlink...) {
+	f.grants = append(append(append(f.grants, fs.Restored...), fs.WriteFiles...), fs.WriteRoots...)
+	for _, p := range f.protected {
 		for _, component := range strings.Split(filepath.Clean(p), "/") {
 			if component != "" {
 				f.sensitive[strings.ToLower(component)] = true
@@ -75,8 +67,6 @@ const (
 	createEntry creation = iota
 	// createDirectory makes a new directory, which may lead toward a grant.
 	createDirectory
-	// unlinkEntry removes an existing file or directory entry.
-	unlinkEntry
 	// renameSource moves an existing entry away from its path.
 	renameSource
 	// renameTarget moves an entry, with everything beneath it, to its path.
@@ -86,13 +76,6 @@ const (
 // refuses reports whether the floors hold path against the creation.
 func (f creationFloors) refuses(kind creation, path string) bool {
 	path = filepath.Clean(path)
-	if kind == unlinkEntry || kind == renameSource || kind == renameTarget {
-		for _, p := range f.noUnlink {
-			if strings.EqualFold(path, filepath.Clean(p)) {
-				return true
-			}
-		}
-	}
 	for _, p := range f.protected {
 		if !atOrUnderFold(path, p) {
 			continue
@@ -158,13 +141,4 @@ func atOrUnderFold(path, root string) bool {
 		return false
 	}
 	return len(path) == len(root) || root == "/" || path[len(root)] == '/'
-}
-
-func underAnyFold(path string, roots []string) bool {
-	for _, r := range roots {
-		if atOrUnderFold(path, r) {
-			return true
-		}
-	}
-	return false
 }

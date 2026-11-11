@@ -308,16 +308,10 @@ type planCompiler struct {
 	readOnly map[string]bool
 	hidden   map[string]bool
 	restored map[string]bool
-	noUnlink map[string]bool
 }
 
 func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, error) {
-	pc := &planCompiler{
-		readOnly: map[string]bool{},
-		hidden:   map[string]bool{},
-		restored: map[string]bool{},
-		noUnlink: map[string]bool{},
-	}
+	pc := &planCompiler{readOnly: map[string]bool{}, hidden: map[string]bool{}, restored: map[string]bool{}}
 	for _, rule := range rules.rules {
 		switch rule.op {
 		case opRead:
@@ -326,20 +320,9 @@ func compileFilesystemPlan(rules FilesystemRules) (linuxsandbox.Filesystem, erro
 			if err := pc.writeRule(rule); err != nil {
 				return linuxsandbox.Filesystem{}, err
 			}
-		case opWriteUnlink:
-			if !rule.allow {
-				for _, m := range rule.matches {
-					if m.literal != "" {
-						pc.noUnlink[m.literal] = true
-					}
-				}
-			}
 		case opReadMetadata:
 			// A placeholder's own directories carry traversal into a restored path.
 		}
-	}
-	for p := range pc.noUnlink {
-		pc.fs.NoUnlink = append(pc.fs.NoUnlink, p)
 	}
 	for p := range pc.readOnly {
 		// A read restoration beneath a placeholder has nothing to cover until it
@@ -460,13 +443,10 @@ func (pc *planCompiler) denyWrite(path string, except []string, subtree bool) {
 	if pc.concealed(path) || !coveredByList(pc.grants, path) {
 		return
 	}
-	alreadyReadOnly := coveredBy(pc.readOnly, path)
 	pc.readOnly[path] = true
-	if !alreadyReadOnly {
-		for _, e := range except {
-			if strings.TrimSpace(e) != "" {
-				pc.restored[e] = true
-			}
+	for _, e := range except {
+		if strings.TrimSpace(e) != "" {
+			pc.restored[e] = true
 		}
 	}
 }

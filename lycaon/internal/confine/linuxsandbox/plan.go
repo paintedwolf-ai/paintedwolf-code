@@ -79,9 +79,6 @@ type Filesystem struct {
 	// ReadOnlyNames are basenames protected at any depth below a directory,
 	// including entries created after launch.
 	ReadOnlyNames []NamedFloor `json:"read_only_names,omitempty"`
-	// NoUnlink are ancestor directories that cannot be unlinked, removed, or
-	// renamed even when a broader write root contains them.
-	NoUnlink []string `json:"no_unlink,omitempty"`
 }
 
 // Network modes, matching the confinement's network mode names.
@@ -269,7 +266,7 @@ func (p Plan) Validate() error {
 
 // sorted orders every list so plans compare and apply deterministically.
 func (f Filesystem) sorted() Filesystem {
-	for _, list := range []*[]string{&f.WriteRoots, &f.WriteFiles, &f.ReadOnly, &f.Hidden, &f.Restored, &f.NoUnlink} {
+	for _, list := range []*[]string{&f.WriteRoots, &f.WriteFiles, &f.ReadOnly, &f.Hidden, &f.Restored} {
 		*list = dedupeSorted(*list)
 	}
 	sort.Slice(f.ReadOnlyNames, func(i, j int) bool {

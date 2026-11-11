@@ -13,9 +13,8 @@ import (
 type FilesystemAccess string
 
 const (
-	AccessRead        FilesystemAccess = "read"
-	AccessWrite       FilesystemAccess = "write"
-	AccessWriteUnlink FilesystemAccess = "write_unlink"
+	AccessRead  FilesystemAccess = "read"
+	AccessWrite FilesystemAccess = "write"
 )
 
 // FloorLayer places a filesystem deny in the reviewed-authority ordering.
@@ -130,7 +129,6 @@ const (
 	opRead fsOperation = iota
 	opReadMetadata
 	opWrite
-	opWriteUnlink
 )
 
 func (op fsOperation) sbpl() string {
@@ -139,8 +137,6 @@ func (op fsOperation) sbpl() string {
 		return "file-read*"
 	case opReadMetadata:
 		return "file-read-metadata"
-	case opWriteUnlink:
-		return "file-write-unlink"
 	default:
 		return "file-write*"
 	}
@@ -255,12 +251,14 @@ func (r FilesystemRules) Verdict(access FilesystemAccess, path string) FloorVerd
 	if path == "" || !filepath.IsAbs(path) {
 		return FloorVerdict{Allowed: true}
 	}
+	op := opRead
 	verdict := FloorVerdict{Allowed: true}
-	if access == AccessWrite || access == AccessWriteUnlink {
+	if access == AccessWrite {
+		op = opWrite
 		verdict = FloorVerdict{Layer: FloorOutsideWriteRoots}
 	}
 	for _, rule := range r.rules {
-		if !ruleAppliesToAccess(rule.op, access) {
+		if rule.op != op {
 			continue
 		}
 		if rule.everywhere {
@@ -280,17 +278,6 @@ func (r FilesystemRules) Verdict(access FilesystemAccess, path string) FloorVerd
 		}
 	}
 	return verdict
-}
-
-func ruleAppliesToAccess(op fsOperation, access FilesystemAccess) bool {
-	switch access {
-	case AccessWrite:
-		return op == opWrite
-	case AccessWriteUnlink:
-		return op == opWrite || op == opWriteUnlink
-	default:
-		return op == opRead
-	}
 }
 
 func (r FilesystemRules) matches(m fsMatch, path string) bool {

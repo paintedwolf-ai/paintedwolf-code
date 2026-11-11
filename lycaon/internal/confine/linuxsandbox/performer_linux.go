@@ -95,7 +95,6 @@ const (
 	callMknod   = "mknod"
 	callSymlink = "symlink"
 	callLink    = "link"
-	callUnlink  = "unlink"
 	callRename  = "rename"
 	// callListener lends the performer the seccomp listener.
 	callListener = "listener"
