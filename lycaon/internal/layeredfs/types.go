@@ -16,6 +16,8 @@ const FormatVersion = 1
 
 var (
 	ErrViewReleased               = errors.New("layeredfs: view has been released")
+	// ErrBackingUnavailable is a parked view whose backing directories cannot be reopened as they were.
+	ErrBackingUnavailable = errors.New("layeredfs: view backing is unavailable")
 	ErrStaleHandle                = errors.New("layeredfs: stale or invalid handle")
 	ErrPathEscape                 = errors.New("layeredfs: path escapes root boundary")
 	ErrSymlinkEscape              = errors.New("layeredfs: symlink or directory replacement escapes root boundary")

@@ -381,6 +381,7 @@ func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string
 		} else if err := m.adoptRecoveredMaterializedView(ctx, root, jobID, journal.ProjectID, choice.Adapter, result.PreparedView); err != nil {
 			return false, err
 		}
+		parkIdleView(result.PreparedView)
 		return true, nil
 	}
 }

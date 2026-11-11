@@ -113,6 +113,35 @@ type barrierCoordinator struct {
 	inFlight    int64
 	opsInFlight int64
 	seq         uint64
+	// parked is set while the backing is closed; resume reopens it for the next operation.
+	parked bool
+	resume func() error
+}
+
+// admitLocked reopens a parked backing before an operation uses it.
+func (b *barrierCoordinator) admitLocked() error {
+	if !b.parked {
+		return nil
+	}
+	if err := b.resume(); err != nil {
+		return err
+	}
+	b.parked = false
+	return nil
+}
+
+// park closes the backing when no operation or barrier holds it.
+func (b *barrierCoordinator) park(closeBacking func()) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closing || b.released || b.active || b.inFlight > 0 || b.opsInFlight > 0 {
+		return false
+	}
+	if !b.parked {
+		closeBacking()
+		b.parked = true
+	}
+	return true
 }
 
 func newBarrierCoordinator(viewID string) *barrierCoordinator {
@@ -129,6 +158,9 @@ func (b *barrierCoordinator) enterMutation() error {
 	}
 	if b.active {
 		return ErrBarrierActive
+	}
+	if err := b.admitLocked(); err != nil {
+		return err
 	}
 	b.inFlight++
 	return nil
@@ -149,6 +181,9 @@ func (b *barrierCoordinator) enterOp() error {
 	defer b.mu.Unlock()
 	if b.closing || b.released {
 		return ErrViewReleased
+	}
+	if err := b.admitLocked(); err != nil {
+		return err
 	}
 	b.opsInFlight++
 	return nil
@@ -223,6 +258,10 @@ func (c *Core) BeginCheckpointBarrier(ctx context.Context) (BarrierToken, error)
 	if b.active {
 		b.mu.Unlock()
 		return BarrierToken{}, ErrBarrierActive
+	}
+	if err := b.admitLocked(); err != nil {
+		b.mu.Unlock()
+		return BarrierToken{}, err
 	}
 	b.active = true
 	b.seq++
@@ -372,4 +411,21 @@ func flushBackingState(c *Core) error {
 		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "journal_dir_sync"), flushFD(c, int(journalFile.Fd())))
 	}
 	return flushErr
+}
+
+// ParkBacking closes the view's backing directories while nothing uses them, so the volume holding
+// them can be ejected; the next operation reopens them. A view with open handles stays as it is.
+func (c *Core) ParkBacking() bool {
+	c.mu.RLock()
+	handles := len(c.state.handles)
+	c.mu.RUnlock()
+	if handles > 0 {
+		return false
+	}
+	return c.barrier.park(func() {
+		c.backing.park()
+		for _, provider := range c.roots.ownedOS {
+			provider.park()
+		}
+	})
 }

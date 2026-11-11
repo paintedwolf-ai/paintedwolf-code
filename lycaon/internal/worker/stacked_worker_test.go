@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
@@ -187,6 +188,8 @@ func (*stackedPromotionHook) PublishObligation(context.Context, obligation.Plan)
 
 func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write func(*testing.T, *api.WorkerTask, string, string)) {
 	fixture := newLayeredWorkerFixture(t, selector)
+	// Worker storage sits under the engine's state root, as it does in production.
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(fixture.branches))
 	parent := fixture.claim(t)
 	if snap, _, ok := WorkerClaimWorkspaceState(parent.ID); !ok || snap.Adapter.PreparationKind != adapter.PreparationMounted {
 		t.Fatalf("the parent worker did not get a mounted view: %+v", snap.Adapter)
@@ -316,12 +319,15 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 		gittest.InitCommit(t, source, "initial "+id)
 		roots = append(roots, projectroot.RootRef{ID: id, Label: id, Path: source, IsPrimary: id == "p"})
 	}
-	privateGit, err := workspace.OpenPrivateGit(filepath.Join(base, "branches"))
+	// Worker storage sits under the engine's state root, as it does in production.
+	t.Setenv("LYCAON_CONFIG_DIR", base)
+	branches := enginepaths.WorkerBranchesRootUnder(base)
+	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
 	selector := workspace.EnforcedWorkspaceSelector()
 	selector.BudgetFor = adapter.ZeroBudget
 	skipWithoutMount(t, selector)
-	manager := workspace.NewManager(filepath.Join(base, "branches")).WithPrivateGit(privateGit).WithSelector(selector)
+	manager := workspace.NewManager(branches).WithPrivateGit(privateGit).WithSelector(selector)
 	binding, _, err := manager.CreateWorkerBranch(workspace.WithWorkspaceProject(t.Context(), testdbseed.DefaultProjectID), roots, "p", "job-roots")
 	testutil.FailErr(t, "create branch", err)
 	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(t.Context(), binding) })
