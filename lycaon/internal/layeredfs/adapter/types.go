@@ -37,6 +37,17 @@ const (
 	VisibilityFixed SourceVisibility = "fixed"
 )
 
+// OtherUserAccess is whether a user other than the worker's can reach a view, such as a command run
+// under sudo or a container daemon binding the workspace.
+type OtherUserAccess string
+
+const (
+	// OtherUserAccessNone: the kernel or the view's server refuses every other user, root included.
+	OtherUserAccessNone OtherUserAccess = "none"
+	// OtherUserAccessFileModes: the view is ordinary files, so their modes decide as they do anywhere.
+	OtherUserAccessFileModes OtherUserAccess = "file_modes"
+)
+
 // ReasonCode is a machine-readable reason for probe failure, fallback, or operation errors.
 type ReasonCode string
 
@@ -103,6 +114,7 @@ type AdapterFacts struct {
 	MetadataCapabilities      MetadataCapabilities `json:"metadata_capabilities"`
 	SupportsPrivateGit        bool                 `json:"supports_private_git"`
 	SupportsCheckpointBarrier bool                 `json:"supports_checkpoint_barrier"`
+	OtherUserAccess           OtherUserAccess      `json:"other_user_access"`
 }
 
 // ProbeConfig configures a real confinement probe of an adapter.

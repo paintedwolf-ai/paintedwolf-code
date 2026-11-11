@@ -61,6 +61,7 @@ func NewEagerCopyAdapter() *EagerCopyAdapter {
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,
+			OtherUserAccess:           OtherUserAccessFileModes,
 		},
 		views:     make(map[string]*eagerViewState),
 		gitStores: newGitStoreRegistry(),

@@ -163,6 +163,8 @@ func New(cfg Config) *Adapter {
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,
+			// The export admits only the worker's own credentials.
+			OtherUserAccess: adapter.OtherUserAccessNone,
 		},
 		views:     make(map[string]*viewState),
 		preparing: make(map[string]struct{}),
