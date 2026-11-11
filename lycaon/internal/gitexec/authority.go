@@ -17,7 +17,14 @@ type authorityKey struct{}
 type authority struct {
 	agentEntry bool
 	hostReason string
-	agent      *exec.LaunchPlan
+	agent      *AgentLaunch
+}
+
+// AgentLaunch is one agent Git command's admitted launch.
+type AgentLaunch struct {
+	Plan exec.LaunchPlan
+	// Credentials serves a network command's Git; nil leaves it without any.
+	Credentials *AgentCredentials
 }
 
 // AgentEntry marks ctx as an agent's tool call. Git launched under it runs
@@ -29,8 +36,8 @@ func AgentEntry(ctx context.Context) context.Context {
 
 // WithAgentLaunch runs every Git process under ctx with the agent's admitted
 // confined launch.
-func WithAgentLaunch(ctx context.Context, plan exec.LaunchPlan) context.Context {
-	return context.WithValue(ctx, authorityKey{}, authority{agentEntry: true, agent: &plan})
+func WithAgentLaunch(ctx context.Context, launch AgentLaunch) context.Context {
+	return context.WithValue(ctx, authorityKey{}, authority{agentEntry: true, agent: &launch})
 }
 
 // WithHostPurpose runs Git under ctx as host bookkeeping the agent did not
@@ -41,10 +48,10 @@ func WithHostPurpose(ctx context.Context, purpose string) context.Context {
 }
 
 // AgentLaunchFrom reports the admitted agent launch on ctx.
-func AgentLaunchFrom(ctx context.Context) (exec.LaunchPlan, bool) {
+func AgentLaunchFrom(ctx context.Context) (AgentLaunch, bool) {
 	a, _ := ctx.Value(authorityKey{}).(authority)
 	if a.agent == nil {
-		return exec.LaunchPlan{}, false
+		return AgentLaunch{}, false
 	}
 	return *a.agent, true
 }
@@ -54,7 +61,7 @@ func launchPlan(ctx context.Context, subject string) (exec.LaunchPlan, error) {
 	a, _ := ctx.Value(authorityKey{}).(authority)
 	switch {
 	case a.agent != nil:
-		plan := *a.agent
+		plan := a.agent.Plan
 		plan.Subject = subject
 		return plan, nil
 	case a.hostReason != "":

@@ -1,4 +1,4 @@
-//go:build linux
+//go:build linux || darwin
 
 package gitcredential
 
@@ -190,6 +190,38 @@ func TestServicePeerVerificationReadsKernelFacts(t *testing.T) {
 	service := serveForSelf(t, store)
 	if output := helperChild(t, service.Path(), "child.example"); !strings.Contains(output, "password=secret") {
 		t.Fatalf("child helper output = %q", output)
+	}
+}
+
+// A scoped service answers get only for admitted recipients, and never lets
+// the helper write or remove the user's saved credentials.
+func TestScopedServiceAnswersOnlyAdmittedRecipients(t *testing.T) {
+	store := developmentVault(t)
+	for _, host := range []string{"admitted.example", "other.example"} {
+		testutil.FailErr(t, "seed", store.Store(Credential{Protocol: "https", Host: host, Username: "alice", Password: "secret-" + host}))
+	}
+	self, err := os.Executable()
+	testutil.FailErr(t, "resolve test binary", err)
+	scope := &Scope{}
+	service, err := Serve(t.Context(), ServeOptions{GitBinary: self, Store: store, Scope: scope})
+	testutil.FailErr(t, "serve", err)
+	t.Cleanup(func() { _ = service.Close() })
+	testutil.FailErr(t, "bind", service.Bind(os.Getpid()))
+
+	if out := helperChild(t, service.Path(), "admitted.example"); strings.Contains(out, "secret") {
+		t.Fatalf("answered before admission: %q", out)
+	}
+	scope.Admit(Recipient{Protocol: "https", Host: "admitted.example"})
+	if out := helperChild(t, service.Path(), "admitted.example"); !strings.Contains(out, "password=secret-admitted.example") {
+		t.Fatalf("admitted recipient = %q", out)
+	}
+	if out := helperChild(t, service.Path(), "other.example"); strings.Contains(out, "secret") {
+		t.Fatalf("recipient outside the scope answered: %q", out)
+	}
+	_, _ = helperOperation(t, service.Path(), "erase", "protocol=https\nhost=admitted.example\n\n")
+	_, _ = helperOperation(t, service.Path(), "store", "protocol=https\nhost=admitted.example\nusername=mallory\npassword=planted\n\n")
+	if got, ok, err := store.Get(Credential{Protocol: "https", Host: "admitted.example"}); err != nil || !ok || got.Password != "secret-admitted.example" {
+		t.Fatalf("scoped helper changed the store: %+v %v %v", got, ok, err)
 	}
 }
 

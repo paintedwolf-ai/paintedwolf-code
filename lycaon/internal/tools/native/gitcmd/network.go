@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -85,6 +86,7 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	if err := authorizeRemote(ctx, p, tc, dir, rawURL, stderr); err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
+	admitCredentials(ctx, rawURL)
 	var destTarget string
 	if len(ops) == 2 {
 		destTarget = ops[1]
@@ -138,26 +140,40 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
 }
 
+// authorizeRepoNetwork admits every URL the command will contact, as Git
+// itself resolves them, then confirms the resolution still holds once any
+// approval wait ends. Credentials are scoped to exactly those recipients.
 func authorizeRepoNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir, repoRoot string, stderr io.Writer) error {
+	intent := gitexec.RemoteIntent{Push: p.command.spec.Name == "git push"}
 	if p.command.spec.Name == "git fetch" && has(p.Argv, "--all") {
-		if remotes, ok := gitexec.ListRemotes(ctx, repoRoot); ok {
-			for _, r := range remotes {
-				if err := authorizeRemote(ctx, p, tc, dir, r.URL, stderr); err != nil {
-					return err
-				}
-			}
+		intent.All = true
+	} else if ops := p.Argv.Operands().Values(); len(ops) > 0 {
+		intent.Remote = ops[0]
+	}
+	urls, err := gitexec.ResolveRemoteURLs(ctx, repoRoot, intent)
+	if err != nil {
+		writeLine(stderr, fmt.Sprintf("fatal: %s: '%s' does not appear to be a git repository [COMMAND_OPERAND_INVALID]", p.command.spec.Name, intent.Remote))
+		return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{"command": p.command.spec.Name, "word": intent.Remote, "expected": "a configured remote or a repository URL", "reason": "Git cannot resolve the remote to a URL."}}
+	}
+	for _, rawURL := range urls {
+		if err := authorizeRemote(ctx, p, tc, dir, rawURL, stderr); err != nil {
+			return err
 		}
 	}
-	remoteURL := p.owners.Git.RemoteURL(ctx, repoRoot, remoteQueryArgs(p))
-	return authorizeRemote(ctx, p, tc, dir, remoteURL, stderr)
+	if current, err := gitexec.ResolveRemoteURLs(ctx, repoRoot, intent); err != nil || !slices.Equal(current, urls) {
+		writeLine(stderr, fmt.Sprintf("fatal: %s: the remote configuration changed while it was being authorized [GIT_REMOTE_CHANGED]", p.command.spec.Name))
+		return &toolrejection.ToolReject{Code: "GIT_REMOTE_CHANGED", Retryable: true, Data: map[string]any{"command": p.command.spec.Name}}
+	}
+	admitCredentials(ctx, urls...)
+	return nil
 }
 
-func remoteQueryArgs(p Prepared) []string {
-	sub := firstOrEmpty(p.command.args)
-	if ops := p.Argv.Operands().Values(); len(ops) > 0 {
-		return []string{sub, ops[0]}
+// admitCredentials scopes the command's credential service to recipients
+// whose contact is now authorized.
+func admitCredentials(ctx context.Context, urls ...string) {
+	if launch, ok := gitexec.AgentLaunchFrom(ctx); ok && launch.Credentials != nil {
+		launch.Credentials.Admit(urls...)
 	}
-	return []string{sub}
 }
 
 func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir, rawURL string, stderr io.Writer) error {

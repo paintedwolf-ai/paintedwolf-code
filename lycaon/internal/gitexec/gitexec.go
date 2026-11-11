@@ -159,7 +159,12 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 		env = append(env, plan.Environment()...)
 	}
 	var started func(pid int)
-	if network.helper == hostHelperVault {
+	if agent, ok := AgentLaunchFrom(ctx); ok && opts.Profile == ProfileNetwork && agent.Credentials != nil {
+		env = append(env, gitcredential.SocketEnv+"="+agent.Credentials.Socket())
+		// One network Git per command: a second launch cannot rebind the
+		// service, so its helper requests fail closed.
+		started = func(pid int) { _ = agent.Credentials.service.Bind(pid) }
+	} else if network.helper == hostHelperVault {
 		service, err := credentialServiceFn(ctx, bin)
 		if err != nil {
 			return nil, -1, fmt.Errorf("gitexec: start credential service: %w", err)
@@ -256,7 +261,15 @@ func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]str
 		if network.remote == "" {
 			network.remote = remoteURLFor(ctx, cwd, args)
 		}
-		if h := getHostConfig(); h != nil && !agentLaunched(ctx) {
+		if agent, ok := AgentLaunchFrom(ctx); ok {
+			if agent.Credentials != nil {
+				helper, err := executablePath()
+				if err != nil {
+					return nil, networkFacts{}, fmt.Errorf("resolve built-in credential helper: %w", err)
+				}
+				out = append(out, "-c", "credential.helper=!"+shellQuote(helper)+" "+string(hostHelperVault))
+			}
+		} else if h := getHostConfig(); h != nil {
 			resolved, selected, err := resolveCredentialHelper(h.HelperFor(ctx, network.remote))
 			if err != nil {
 				return nil, networkFacts{}, err
