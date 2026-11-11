@@ -111,11 +111,12 @@ type StaticCredentialSnapshot struct {
 // retaining the prior credential snapshot and prior mcp.yaml overlay row so
 // an interrupted or failed transaction can roll back both stores.
 type PendingCredentialCommit struct {
-	TargetConfigSHA256 string                    `json:"target_config_sha256"`
-	Committed          bool                      `json:"committed,omitempty"`
-	Previous           *StaticCredentialSnapshot `json:"previous,omitempty"`
-	HadPreviousOverlay bool                      `json:"had_previous_overlay,omitempty"`
-	PreviousOverlay    *MCPProviderOverlay       `json:"previous_overlay,omitempty"`
+	TargetConfigSHA256   string                    `json:"target_config_sha256"`
+	PreviousConfigSHA256 string                    `json:"previous_config_sha256,omitempty"`
+	Committed            bool                      `json:"committed,omitempty"`
+	Previous             *StaticCredentialSnapshot `json:"previous,omitempty"`
+	HadPreviousOverlay   bool                      `json:"had_previous_overlay,omitempty"`
+	PreviousOverlay      *MCPProviderOverlay       `json:"previous_overlay,omitempty"`
 }
 
 // StaticCredentialRecord holds the vault-backed static authentication and
@@ -179,9 +180,10 @@ func normalizeRecord(rec StaticCredentialRecord) StaticCredentialRecord {
 	var pending *PendingCredentialCommit
 	if rec.PendingCommit != nil {
 		cp := &PendingCredentialCommit{
-			TargetConfigSHA256: strings.TrimSpace(rec.PendingCommit.TargetConfigSHA256),
-			Committed:          rec.PendingCommit.Committed,
-			HadPreviousOverlay: rec.PendingCommit.HadPreviousOverlay,
+			TargetConfigSHA256:   strings.TrimSpace(rec.PendingCommit.TargetConfigSHA256),
+			PreviousConfigSHA256: strings.TrimSpace(rec.PendingCommit.PreviousConfigSHA256),
+			Committed:            rec.PendingCommit.Committed,
+			HadPreviousOverlay:   rec.PendingCommit.HadPreviousOverlay,
 		}
 		if rec.PendingCommit.Previous != nil {
 			normPrev := normalizeRecord(recordFromSnapshot(*rec.PendingCommit.Previous)).snapshot()

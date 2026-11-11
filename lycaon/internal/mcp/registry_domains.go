@@ -44,14 +44,16 @@ type ProviderAdministration struct {
 }
 
 type credentialOverlayTx struct {
-	admin        *ProviderAdministration
-	op           string
-	providerID   string
-	isUserScope  bool
-	store        *StaticCredentialStore
-	staged       StaticCredentialRecord
-	prevSnapshot *StaticCredentialSnapshot
-	vaultTouched bool
+	admin            *ProviderAdministration
+	op               string
+	providerID       string
+	isUserScope      bool
+	store            *StaticCredentialStore
+	staged           StaticCredentialRecord
+	prevSnapshot     *StaticCredentialSnapshot
+	prevConfigDigest string
+	vaultTouched     bool
+	committed        bool
 }
 
 func newCredentialOverlayTx(admin *ProviderAdministration, op, providerID, scopeProjectDir string) *credentialOverlayTx {
@@ -61,6 +63,19 @@ func newCredentialOverlayTx(admin *ProviderAdministration, op, providerID, scope
 		providerID:  providerID,
 		isUserScope: strings.TrimSpace(scopeProjectDir) == "",
 	}
+}
+
+func (tx *credentialOverlayTx) captureBefore(cfg *UserMCPConfig) (MCPProviderOverlay, bool, error) {
+	prevOv, hadPrevOv := findProviderOverlayRow(cfg, tx.providerID)
+	if !tx.isUserScope {
+		return prevOv, hadPrevOv, nil
+	}
+	digest, err := userOverlayConfigDigest(*cfg)
+	if err != nil {
+		return MCPProviderOverlay{}, false, err
+	}
+	tx.prevConfigDigest = digest
+	return prevOv, hadPrevOv, nil
 }
 
 func (tx *credentialOverlayTx) fireCrash(stage string) error {
@@ -104,11 +119,12 @@ func (tx *credentialOverlayTx) stage(
 			prevOvPtr = &scrubbed
 		}
 		nextCreds.PendingCommit = &PendingCredentialCommit{
-			TargetConfigSHA256: targetDigest,
-			Committed:          false,
-			Previous:           tx.prevSnapshot,
-			HadPreviousOverlay: hadPrevOv,
-			PreviousOverlay:    prevOvPtr,
+			TargetConfigSHA256:   targetDigest,
+			PreviousConfigSHA256: tx.prevConfigDigest,
+			Committed:            false,
+			Previous:             tx.prevSnapshot,
+			HadPreviousOverlay:   hadPrevOv,
+			PreviousOverlay:      prevOvPtr,
 		}
 		tx.staged = nextCreds
 		tx.vaultTouched = true
@@ -159,6 +175,7 @@ func (tx *credentialOverlayTx) commit() error {
 	if err := tx.store.PutVerified(tx.providerID, committed); err != nil {
 		return err
 	}
+	tx.committed = true
 	if err := tx.fireCrash("after_commit_mark"); err != nil {
 		return err
 	}
@@ -168,6 +185,10 @@ func (tx *credentialOverlayTx) commit() error {
 		return err
 	}
 	return tx.fireCrash("after_finalize")
+}
+
+func (tx *credentialOverlayTx) isCommitted() bool {
+	return tx.committed
 }
 
 func (tx *credentialOverlayTx) rollback(context.Context) error {

@@ -19,6 +19,7 @@ const staticCredentialsContext = "mcp static credentials"
 type StaticCredentialStore struct {
 	slot          credentialstore.Slot
 	store         *credentialstore.Store
+	setEntry      func(string, string) error
 	verifyDurable func(credentialstore.Slot, string, string) error
 }
 
@@ -103,7 +104,11 @@ func (s *StaticCredentialStore) PutVerified(providerID string, rec StaticCredent
 	}
 	payload := string(encoded)
 	prevRaw, hadPrevRaw := s.store.Get(key)
-	if err := s.store.Set(key, payload); err != nil {
+	setFn := s.setEntry
+	if setFn == nil {
+		setFn = s.store.Set
+	}
+	if err := setFn(key, payload); err != nil {
 		return err
 	}
 	verifyFn := s.verifyDurable
@@ -114,9 +119,9 @@ func (s *StaticCredentialStore) PutVerified(providerID string, rec StaticCredent
 		verifyErr := fmt.Errorf("verify mcp credential write: %w", err)
 		var restoreErr error
 		if hadPrevRaw {
-			if setErr := s.store.Set(key, prevRaw.Value()); setErr != nil {
+			if setErr := setFn(key, prevRaw.Value()); setErr != nil {
 				restoreErr = setErr
-			} else if durErr := credentialstore.VerifyDurable(s.slot, key, prevRaw.Value()); durErr != nil {
+			} else if durErr := verifyFn(s.slot, key, prevRaw.Value()); durErr != nil {
 				restoreErr = durErr
 			}
 		} else {
@@ -194,7 +199,10 @@ func migrateAndHydrateUserOverlay(
 			continue
 		}
 		if reconcilePending && rec.PendingCommit != nil && rec.PendingCommit.Committed {
-			if rec.PendingCommit.TargetConfigSHA256 != currentDigest {
+			matchesTarget := rec.PendingCommit.TargetConfigSHA256 == currentDigest
+			matchesPrev := rec.PendingCommit.PreviousConfigSHA256 != "" &&
+				rec.PendingCommit.PreviousConfigSHA256 == currentDigest
+			if !matchesTarget && !matchesPrev {
 				return nil, fmt.Errorf("%w: committed mcp credential record for %q does not match mcp.yaml digest", credentialstore.ErrVaultCorrupt, id)
 			}
 		}
@@ -209,7 +217,7 @@ func migrateAndHydrateUserOverlay(
 		configChanged := false
 		for _, id := range ids {
 			rec, ok := records[id]
-			if !ok || rec.PendingCommit == nil || rec.PendingCommit.Committed {
+			if !ok || !pendingCommitNeedsRollback(rec.PendingCommit, currentDigest) {
 				continue
 			}
 			pending := rec.PendingCommit
@@ -246,7 +254,7 @@ func migrateAndHydrateUserOverlay(
 				continue
 			}
 			pending := rec.PendingCommit
-			if pending.Committed {
+			if !pendingCommitNeedsRollback(pending, currentDigest) {
 				rec.PendingCommit = nil
 				if err := store.PutVerified(id, rec); err != nil {
 					return nil, fmt.Errorf("finalize mcp credential commit for %q: %w", id, err)
@@ -299,12 +307,30 @@ func migrateAndHydrateUserOverlay(
 				return nil, getErr
 			}
 			if ok {
-				hydrateOverlayFromRecord(&hydratedOv, rec)
+				if rec.PendingCommit != nil && rec.PendingCommit.TargetConfigSHA256 != currentDigest {
+					if rec.PendingCommit.Previous != nil {
+						hydrateOverlayFromRecord(&hydratedOv, recordFromSnapshot(*rec.PendingCommit.Previous))
+					}
+				} else {
+					hydrateOverlayFromRecord(&hydratedOv, rec)
+				}
 			}
 		}
 		hydrated.Providers[i] = hydratedOv
 	}
 	return &hydrated, nil
+}
+
+func pendingCommitNeedsRollback(pending *PendingCredentialCommit, currentDigest string) bool {
+	if pending == nil {
+		return false
+	}
+	if !pending.Committed {
+		return true
+	}
+	return pending.TargetConfigSHA256 != currentDigest &&
+		pending.PreviousConfigSHA256 != "" &&
+		pending.PreviousConfigSHA256 == currentDigest
 }
 
 func hasInlineOverlayCredentials(providers []MCPProviderOverlay) bool {

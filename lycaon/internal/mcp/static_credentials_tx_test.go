@@ -167,16 +167,17 @@ func TestCommittedButVerificationFailedBoundaryForCreateUpdateDelete(t *testing.
 	testutil.FailErr(t, "NewRuntime", err)
 	testutil.FailErr(t, "Load", reg.Catalog.Load(ctx))
 
-	reg.Administration.openStaticCredentials = func(dir string) (*StaticCredentialStore, error) {
-		s, err := NewStaticCredentialStoreForDir(dir)
-		if err != nil {
-			return nil, err
+	failAllVerify := func(dir string) (*StaticCredentialStore, error) {
+		s, openErr := NewStaticCredentialStoreForDir(dir)
+		if openErr != nil {
+			return nil, openErr
 		}
 		s.verifyDurable = func(credentialstore.Slot, string, string) error {
-			return errors.New("injected durable verification failure on create")
+			return errors.New("injected durable verification failure")
 		}
 		return s, nil
 	}
+	reg.Administration.openStaticCredentials = failAllVerify
 	enabled := false
 	_, err = reg.Administration.CreateProvider(ctx, CallScope{}, api.CreateMcpProviderRequest{
 		Source:  "custom",
@@ -205,16 +206,7 @@ func TestCommittedButVerificationFailedBoundaryForCreateUpdateDelete(t *testing.
 	}, "")
 	testutil.FailErr(t, "CreateProvider existing-prov", err)
 
-	reg.Administration.openStaticCredentials = func(dir string) (*StaticCredentialStore, error) {
-		s, err := NewStaticCredentialStoreForDir(dir)
-		if err != nil {
-			return nil, err
-		}
-		s.verifyDurable = func(credentialstore.Slot, string, string) error {
-			return errors.New("injected durable verification failure on update")
-		}
-		return s, nil
-	}
+	reg.Administration.openStaticCredentials = failAllVerify
 	newTok := "unverified-token-v2"
 	_, err = reg.Administration.UpdateProvider(ctx, CallScope{}, "existing-prov", api.UpdateMcpProviderRequest{
 		Token: &newTok,
@@ -232,16 +224,7 @@ func TestCommittedButVerificationFailedBoundaryForCreateUpdateDelete(t *testing.
 		t.Fatalf("failed update did not preserve working-token-v1: ok=%v rec=%+v", ok, rec)
 	}
 
-	reg.Administration.openStaticCredentials = func(dir string) (*StaticCredentialStore, error) {
-		s, err := NewStaticCredentialStoreForDir(dir)
-		if err != nil {
-			return nil, err
-		}
-		s.verifyDurable = func(credentialstore.Slot, string, string) error {
-			return errors.New("injected durable verification failure on delete")
-		}
-		return s, nil
-	}
+	reg.Administration.openStaticCredentials = failAllVerify
 	if err := reg.Administration.DeleteOverlay(ctx, "existing-prov", ""); err == nil {
 		t.Fatal("expected DeleteOverlay to fail when durable verification fails")
 	}
@@ -451,6 +434,68 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 	reg = newReg()
 	assertProviderAndToken("p-survive", urlV2, "committed-token-v3")
 
+	// 5. Finalization verification failure AFTER Committed=true is durable:
+	// UpdateFile must not roll back mcp.yaml, and startup finalizes the committed state.
+	withFaultyStore := func(failSetCall, failVerifyCall int) func(string) (*StaticCredentialStore, error) {
+		return func(dir string) (*StaticCredentialStore, error) {
+			s, openErr := NewStaticCredentialStoreForDir(dir)
+			if openErr != nil {
+				return nil, openErr
+			}
+			setCalls, verifyCalls := 0, 0
+			s.setEntry = func(key, val string) error {
+				setCalls++
+				if setCalls == failSetCall {
+					return errors.New("injected restoreRaw set failure")
+				}
+				return s.store.Set(key, val)
+			}
+			s.verifyDurable = func(slot credentialstore.Slot, key, want string) error {
+				verifyCalls++
+				if verifyCalls == failVerifyCall {
+					return errors.New("injected durable verification failure")
+				}
+				return credentialstore.VerifyDurable(slot, key, want)
+			}
+			return s, nil
+		}
+	}
+	reg.Administration.openStaticCredentials = withFaultyStore(0, 3)
+	urlV4 := "https://mcp.example.com/survive-v4"
+	tokV4 := "committed-token-v4"
+	if _, err := reg.Administration.UpdateProvider(ctx, CallScope{}, "p-survive", api.UpdateMcpProviderRequest{
+		URL:   &urlV4,
+		Token: &tokV4,
+	}, ""); err == nil {
+		t.Fatal("expected UpdateProvider to surface finalization verification error")
+	}
+	reg.Administration.openStaticCredentials = nil
+	reg = newReg()
+	assertProviderAndToken("p-survive", urlV4, "committed-token-v4")
+
+	// 6. Commit-marker verification failure + partial recovery failure (restoreRaw fails
+	// and rollback crashes at after_file_rollback_before_cred_rollback after restoring
+	// old mcp.yaml): startup reconciles against PreviousConfigSHA256 and restores V4.
+	reg.Administration.openStaticCredentials = withFaultyStore(3, 2)
+	reg.Administration.crashHook = func(stage, op, id string) error {
+		if stage == "after_file_rollback_before_cred_rollback" && op == "update" && id == "p-survive" {
+			return errors.New("simulated crash after file rollback with unverified commit mark")
+		}
+		return nil
+	}
+	urlUnverified := "https://mcp.example.com/unverified-commit-mark"
+	tokUnverified := "unverified-commit-mark-token"
+	if _, err := reg.Administration.UpdateProvider(ctx, CallScope{}, "p-survive", api.UpdateMcpProviderRequest{
+		URL:   &urlUnverified,
+		Token: &tokUnverified,
+	}, ""); err == nil {
+		t.Fatal("expected UpdateProvider to fail when commit-mark verification and rollback fail")
+	}
+	reg.Administration.openStaticCredentials = nil
+	reg.Administration.crashHook = nil
+	reg = newReg()
+	assertProviderAndToken("p-survive", urlV4, "committed-token-v4")
+
 	reg.Administration.crashHook = func(stage, op, id string) error {
 		if stage == "after_config_write" && op == "delete" && id == "p-survive" {
 			return errors.New("simulated crash during delete after config write")
@@ -461,7 +506,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 		t.Fatal("expected simulated crash on delete")
 	}
 	reg = newReg()
-	assertProviderAndToken("p-survive", urlV2, "committed-token-v3")
+	assertProviderAndToken("p-survive", urlV4, "committed-token-v4")
 }
 
 func TestSubprocessCrashAtPersistentPrefixBoundaries(t *testing.T) {
@@ -486,6 +531,47 @@ func TestSubprocessCrashAtPersistentPrefixBoundaries(t *testing.T) {
 			t.Fatalf("subprocess did not exit at recovery stage %q", stage)
 		}
 		testutil.FailErr(t, "subprocess Load", r.Catalog.Load(ctx))
+		if stage == "finalize_verify_fail_exit" || stage == "commit_mark_verify_and_restore_fail_exit" {
+			failSet, failVerify := 0, 3
+			if stage == "commit_mark_verify_and_restore_fail_exit" {
+				failSet, failVerify = 3, 2
+				r.Administration.crashHook = func(hookStage, _, _ string) error {
+					if hookStage == "after_file_rollback_before_cred_rollback" {
+						os.Exit(42)
+					}
+					return nil
+				}
+			}
+			r.Administration.openStaticCredentials = func(dir string) (*StaticCredentialStore, error) {
+				s, openErr := NewStaticCredentialStoreForDir(dir)
+				if openErr != nil {
+					return nil, openErr
+				}
+				setCalls, verifyCalls := 0, 0
+				s.setEntry = func(key, val string) error {
+					setCalls++
+					if setCalls == failSet {
+						return errors.New("subprocess restoreRaw failure")
+					}
+					return s.store.Set(key, val)
+				}
+				s.verifyDurable = func(slot credentialstore.Slot, key, want string) error {
+					verifyCalls++
+					if verifyCalls == failVerify {
+						return errors.New("subprocess verify failure")
+					}
+					return credentialstore.VerifyDurable(slot, key, want)
+				}
+				return s, nil
+			}
+			nextURL := "https://mcp.example.com/sub-next"
+			nextTok := "subprocess-next-tok"
+			_, _ = r.Administration.UpdateProvider(ctx, CallScope{}, "p-sub", api.UpdateMcpProviderRequest{
+				URL:   &nextURL,
+				Token: &nextTok,
+			}, "")
+			os.Exit(42)
+		}
 		r.Administration.crashHook = func(hookStage, _, _ string) error {
 			if hookStage == stage {
 				os.Exit(42)
@@ -533,6 +619,8 @@ func TestSubprocessCrashAtPersistentPrefixBoundaries(t *testing.T) {
 		{stage: "after_config_write", wantURL: "https://mcp.example.com/sub-init", wantTok: "subprocess-init-tok"},
 		{stage: "after_file_rollback_before_cred_rollback", wantURL: "https://mcp.example.com/sub-init", wantTok: "subprocess-init-tok"},
 		{stage: "after_commit_mark", wantURL: "https://mcp.example.com/sub-next", wantTok: "subprocess-next-tok"},
+		{stage: "finalize_verify_fail_exit", wantURL: "https://mcp.example.com/sub-next", wantTok: "subprocess-next-tok"},
+		{stage: "commit_mark_verify_and_restore_fail_exit", wantURL: "https://mcp.example.com/sub-init", wantTok: "subprocess-init-tok"},
 	} {
 		stateDir := t.TempDir()
 		globalPath := filepath.Join(stateDir, "mcp.yaml")

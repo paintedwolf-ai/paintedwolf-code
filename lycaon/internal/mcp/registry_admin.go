@@ -48,7 +48,12 @@ func (r *ProviderAdministration) updateOverlay(
 	apply func(ctx context.Context, path string) error,
 	validate func(ctx context.Context) error,
 	rollback func(ctx context.Context) error,
+	committed ...func() bool,
 ) error {
+	var committedFn func() bool
+	if len(committed) > 0 {
+		committedFn = committed[0]
+	}
 	path := r.overlayPathFor(scopeProjectDir)
 	// Callbacks share the transaction lock for this overlay.
 	lockedCtx := withOverlayLockHeld(ctx, path)
@@ -78,6 +83,7 @@ func (r *ProviderAdministration) updateOverlay(
 			}
 			return rollback(lockedCtx)
 		},
+		Committed: committedFn,
 	}); err != nil {
 		return err
 	}
@@ -251,7 +257,10 @@ func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope Ca
 		if err != nil {
 			return err
 		}
-		prevOv, hadPrevOv := findProviderOverlayRow(cfg, id)
+		prevOv, hadPrevOv, err := tx.captureBefore(cfg)
+		if err != nil {
+			return err
+		}
 		ovToSave := ov
 		if tx.isUserScope {
 			ovToSave = scrubOverlayCredentials(ov)
@@ -277,7 +286,7 @@ func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope Ca
 		}
 		created = row
 		return nil
-	}, tx.rollback)
+	}, tx.rollback, tx.isCommitted)
 	if err != nil {
 		return api.McpProvider{}, persistErr(err)
 	}
@@ -369,7 +378,10 @@ func (r *ProviderAdministration) UpdateProvider(ctx context.Context, scope CallS
 		if err != nil {
 			return err
 		}
-		prevOv, hadPrevOv := findProviderOverlayRow(cfg, providerID)
+		prevOv, hadPrevOv, err := tx.captureBefore(cfg)
+		if err != nil {
+			return err
+		}
 		currentOv := prevOv
 		if !hadPrevOv {
 			currentOv = MCPProviderOverlay{ID: providerID}
@@ -411,7 +423,7 @@ func (r *ProviderAdministration) UpdateProvider(ctx context.Context, scope CallS
 		}
 		updated = row
 		return nil
-	}, tx.rollback)
+	}, tx.rollback, tx.isCommitted)
 	if err != nil {
 		return api.McpProvider{}, persistErr(err)
 	}
@@ -537,7 +549,10 @@ func (r *ProviderAdministration) DeleteOverlay(ctx context.Context, providerID, 
 		if err != nil {
 			return err
 		}
-		prevOv, hadPrevOv := findProviderOverlayRow(cfg, providerID)
+		prevOv, hadPrevOv, err := tx.captureBefore(cfg)
+		if err != nil {
+			return err
+		}
 		removeProviderOverlayRow(cfg, providerID)
 		if err := tx.stage(*cfg, prevOv, hadPrevOv, func(_ StaticCredentialRecord, _ bool) (StaticCredentialRecord, bool) {
 			return StaticCredentialRecord{Migrated: true, Deleted: true}, true
@@ -547,7 +562,7 @@ func (r *ProviderAdministration) DeleteOverlay(ctx context.Context, providerID, 
 		return tx.writeOrRemoveConfig(path, *cfg)
 	}, func(context.Context) error {
 		return tx.commit()
-	}, tx.rollback)
+	}, tx.rollback, tx.isCommitted)
 	if err != nil {
 		return persistErr(err)
 	}

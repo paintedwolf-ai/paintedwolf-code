@@ -23,16 +23,18 @@ import (
 var ErrSimulatedCrash = errors.New("simulated process crash")
 
 // FileUpdate changes one durable catalog generation and its runtime projection.
-// Publication or validation failure restores both.
+// Publication or validation failure restores both unless Committed reports
+// that the companion transaction has already crossed its durable commit point.
 type FileUpdate struct {
-	LockRoot string
-	Target   string
-	Mode     os.FileMode
-	DirMode  os.FileMode
-	Apply    func() error
-	Publish  func() error
-	Validate func() error
-	Rollback func() error
+	LockRoot  string
+	Target    string
+	Mode      os.FileMode
+	DirMode   os.FileMode
+	Apply     func() error
+	Publish   func() error
+	Validate  func() error
+	Rollback  func() error
+	Committed func() bool
 }
 
 type fileLockEntry struct {
@@ -101,6 +103,9 @@ func UpdateFile(ctx context.Context, update FileUpdate) error {
 	if update.Validate != nil {
 		if err := update.Validate(); err != nil {
 			if errors.Is(err, ErrSimulatedCrash) {
+				return err
+			}
+			if update.Committed != nil && update.Committed() {
 				return err
 			}
 			return rollbackPublishedUpdate(err, update, target, before, existed)
