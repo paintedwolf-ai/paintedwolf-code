@@ -109,12 +109,19 @@ func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []pr
 	return promotionstate.FilterOverlayPromoteCandidatePaths(changed), nil
 }
 
-// OverlayTree compares a running worker's branch with its baseline for its own
-// tools, over the paths promotion would consider.
+// OverlayTree compares a running worker's branch with its base for its own tools, over the paths
+// promotion would consider. A layered branch answers from its view; a branch of an earlier format
+// answers from the baseline sealed when its leg began.
 type OverlayTree struct{}
 
 // TreeChanges returns the promotion candidates and how each changed.
 func (OverlayTree) TreeChanges(ctx context.Context, tree tools.SourceTree) ([]workspacebaseline.Change, error) {
+	if changes, ok, err := workspace.BranchTreeChanges(ctx, tree.BranchRoot, tree.Roots); ok {
+		if err != nil {
+			return nil, err
+		}
+		return admittedChanges(tree.Roots, changes), nil
+	}
 	baseline, err := workspacebaseline.Open(ctx, tree.BaselinePath, workspacebaseline.ContentStore(tree.BaselinePath))
 	if err != nil {
 		return nil, err
@@ -124,19 +131,26 @@ func (OverlayTree) TreeChanges(ctx context.Context, tree tools.SourceTree) ([]wo
 	if err != nil {
 		return nil, err
 	}
+	return admittedChanges(tree.Roots, changes), nil
+}
+
+func admittedChanges(roots []projectroot.RootRef, changes []workspacebaseline.Change) []workspacebaseline.Change {
 	out := changes[:0]
 	for _, change := range changes {
-		if overlayTreeAdmits(tree.Roots, change.Path) {
+		if overlayTreeAdmits(roots, change.Path) {
 			out = append(out, change)
 		}
 	}
-	return out, nil
+	return out
 }
 
 // TreePathChange compares one path. A path promotion omits reads as unchanged.
 func (OverlayTree) TreePathChange(ctx context.Context, tree tools.SourceTree, path string) (workspacebaseline.PathComparison, error) {
 	if !overlayTreeAdmits(tree.Roots, path) {
 		return workspacebaseline.PathComparison{}, nil
+	}
+	if comparison, ok, err := workspace.BranchPathChange(ctx, tree.BranchRoot, tree.Roots, path); ok {
+		return comparison, err
 	}
 	baseline, err := workspacebaseline.Open(ctx, tree.BaselinePath, workspacebaseline.ContentStore(tree.BaselinePath))
 	if err != nil {
@@ -146,8 +160,11 @@ func (OverlayTree) TreePathChange(ctx context.Context, tree tools.SourceTree, pa
 	return baseline.ComparePath(ctx, tree.Roots, tree.BranchRoot, path)
 }
 
-// TreeMovesUnchanged compares content hashes, so one baseline stays open for all of them.
+// TreeMovesUnchanged compares content hashes; a baseline stays open for all of them.
 func (OverlayTree) TreeMovesUnchanged(ctx context.Context, tree tools.SourceTree, moves []workspacebaseline.PathMove) (map[workspacebaseline.PathMove]bool, error) {
+	if unchanged, ok, err := workspace.BranchMovesUnchanged(ctx, tree.BranchRoot, tree.Roots, moves); ok {
+		return unchanged, err
+	}
 	baseline, err := workspacebaseline.Open(ctx, tree.BaselinePath, workspacebaseline.ContentStore(tree.BaselinePath))
 	if err != nil {
 		return nil, err
