@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/messageview"
@@ -27,6 +28,7 @@ type QueryStore interface {
 	ListProjectSummaries(ctx context.Context, q store.SummaryQuery) (store.SummaryPage, error)
 	GetMessages(ctx context.Context, id string) ([]api.Message, error)
 	GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID string) ([]api.Message, error)
+	ReadActionCause(ctx context.Context, ref briefing.ActionRef) (briefing.CausalRead, error)
 	ReadMessageWindow(context.Context, string, messageview.MessageWindow) ([]api.Message, error)
 	GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error)
 	// LastAssistantMessageContent and LastTurnMessageContent read one row from
