@@ -38,6 +38,7 @@ func destinationFact(cmd confine.EgressCommand, ep egressproxy.Endpoint, firstUs
 		Port:                ep.Port,
 		Transport:           string(ep.Transport),
 		Configured:          cmd.DeclaresHost(ep.Host) || configured != "",
+		Declared:            cmd.DeclaresHost(ep.Host),
 		ConfiguredBy:        configured,
 		PublicRegistry:      registry,
 		Opaque:              tunnelled,

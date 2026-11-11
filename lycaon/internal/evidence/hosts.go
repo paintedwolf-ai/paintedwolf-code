@@ -19,17 +19,24 @@ func HostKey(rawURL string) string {
 	return strings.ToLower(strings.TrimSpace(u.Hostname()))
 }
 
-// ContactedHostsFromLedger returns the hosts this chat's own outbound dials
-// reached. Hosts that only appear in ingested content, such as search results
-// or a fetched page, are not contacts.
-func ContactedHostsFromLedger(ev Ledger) map[string]struct{} {
-	out := make(map[string]struct{})
+// ContactsFromLedger returns how this chat reached each host. Hosts that only
+// appear in ingested content, such as search results or a fetched page, are
+// not contacts, and the chat's own dial outranks a retrieval.
+func ContactsFromLedger(ev Ledger) map[string]Contact {
+	out := make(map[string]Contact)
 	for handle, record := range ev.Handles {
-		if !strings.HasPrefix(handle, DialedHostHandlePrefix) || record.SourceTool != DialedHostSourceTool {
+		if record.SourceTool != DialedHostSourceTool {
 			continue
 		}
-		if h := HostKey(record.URL); h != "" {
-			out[h] = struct{}{}
+		contact := ContactNone
+		switch {
+		case strings.HasPrefix(handle, DialedHostHandlePrefix):
+			contact = ContactOwn
+		case strings.HasPrefix(handle, RetrievedHostHandlePrefix):
+			contact = ContactRetrieval
+		}
+		if h := HostKey(record.URL); h != "" && contact > out[h] {
+			out[h] = contact
 		}
 	}
 	if len(out) == 0 {
