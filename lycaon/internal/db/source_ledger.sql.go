@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 const advanceSourceOrdinal = `-- name: AdvanceSourceOrdinal :one
@@ -2377,6 +2378,119 @@ func (q *Queries) ListSourceEffectsAfterOrdinalOnBranch(ctx context.Context, arg
 	var items []ListSourceEffectsAfterOrdinalOnBranchRow
 	for rows.Next() {
 		var i ListSourceEffectsAfterOrdinalOnBranchRow
+		if err := rows.Scan(
+			&i.EffectID,
+			&i.ProjectID,
+			&i.OperationID,
+			&i.FileID,
+			&i.BeforeVersionID,
+			&i.AfterVersionID,
+			&i.RootID,
+			&i.Path,
+			&i.FromRootID,
+			&i.FromPath,
+			&i.Op,
+			&i.EntryKind,
+			&i.Ordinal,
+			&i.CreatedTs,
+			&i.BranchID,
+			&i.Origin,
+			&i.Cause,
+			&i.ActorLabel,
+			&i.SessionID,
+			&i.JobID,
+			&i.Turn,
+			&i.ToolCallID,
+			&i.ToolName,
+			&i.BatchID,
+			&i.CaptureQuality,
+			&i.GitTransitionID,
+			&i.CommandWindowID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourceEffectsByIDs = `-- name: ListSourceEffectsByIDs :many
+SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
+       COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.root_id, e.path, e.from_root_id, e.from_path,
+       e.op, e.entry_kind, e.ordinal, e.created_ts,
+       o.branch_id, o.origin, o.cause, o.actor_label,
+       o.session_id, o.job_id, o.turn, o.tool_call_id, o.tool_name, o.batch_id, o.capture_quality,
+       COALESCE(o.git_transition_id, '') AS git_transition_id,
+       COALESCE(o.command_window_id, '') AS command_window_id
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = ?1 AND e.id IN (/*SLICE:effect_ids*/?)
+ORDER BY e.ordinal
+`
+
+type ListSourceEffectsByIDsParams struct {
+	ProjectID string   `json:"project_id"`
+	EffectIds []string `json:"effect_ids"`
+}
+
+type ListSourceEffectsByIDsRow struct {
+	EffectID        string `json:"effect_id"`
+	ProjectID       string `json:"project_id"`
+	OperationID     string `json:"operation_id"`
+	FileID          string `json:"file_id"`
+	BeforeVersionID string `json:"before_version_id"`
+	AfterVersionID  string `json:"after_version_id"`
+	RootID          string `json:"root_id"`
+	Path            string `json:"path"`
+	FromRootID      string `json:"from_root_id"`
+	FromPath        string `json:"from_path"`
+	Op              string `json:"op"`
+	EntryKind       string `json:"entry_kind"`
+	Ordinal         int64  `json:"ordinal"`
+	CreatedTs       string `json:"created_ts"`
+	BranchID        string `json:"branch_id"`
+	Origin          string `json:"origin"`
+	Cause           string `json:"cause"`
+	ActorLabel      string `json:"actor_label"`
+	SessionID       string `json:"session_id"`
+	JobID           string `json:"job_id"`
+	Turn            int64  `json:"turn"`
+	ToolCallID      string `json:"tool_call_id"`
+	ToolName        string `json:"tool_name"`
+	BatchID         string `json:"batch_id"`
+	CaptureQuality  string `json:"capture_quality"`
+	GitTransitionID string `json:"git_transition_id"`
+	CommandWindowID string `json:"command_window_id"`
+}
+
+// ListSourceEffectsByIDs reads named effects of one project; callers bound
+// the id list.
+func (q *Queries) ListSourceEffectsByIDs(ctx context.Context, arg ListSourceEffectsByIDsParams) ([]ListSourceEffectsByIDsRow, error) {
+	query := listSourceEffectsByIDs
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ProjectID)
+	if len(arg.EffectIds) > 0 {
+		for _, v := range arg.EffectIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:effect_ids*/?", strings.Repeat(",?", len(arg.EffectIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:effect_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceEffectsByIDsRow
+	for rows.Next() {
+		var i ListSourceEffectsByIDsRow
 		if err := rows.Scan(
 			&i.EffectID,
 			&i.ProjectID,
