@@ -12,7 +12,7 @@ import {
   VERBATIM_HEAD_TAIL,
 } from "../../../chat/host-markers.generated.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
-import type { BracketRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan.ts";
+import type { BracketRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan-state.ts";
 
 const plainData = { singleQuotes: false, comments: false };
 const commentedData = { singleQuotes: true, comments: true };

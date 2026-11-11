@@ -8,7 +8,7 @@ import {
   prettyOutcomeOf,
   prettyWorkOf,
 } from "./pretty-layout.ts";
-import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan.ts";
+import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan-state.ts";
 import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 
 type Layout = { breaks: number[]; lines: Array<[number, number, number]> };
