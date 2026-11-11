@@ -62,7 +62,15 @@ func (e *Approvals) awaitApproval(
 			DeclaredDestinations: append([]string(nil), tc.Direct.DirectIPDeclared...),
 		},
 		Execution: hitl.ActionExecution{
-			Contained:        hitl.ContainedForRequest(confReq),
+			Contained: hitl.ContainedForRequest(confReq),
+			ExecutionBoundaryDigest: executionBoundaryDigestForPolicy(
+				normalizedPolicyConfineRequestFromParts(
+					confReq,
+					tc.ActiveRootPath(),
+					tc.Direct.DirectIPRequested,
+					tc.Direct.DirectIPAuthorized,
+				),
+			),
 			PackageExecution: tc.Files.PackageExecution,
 		},
 	}

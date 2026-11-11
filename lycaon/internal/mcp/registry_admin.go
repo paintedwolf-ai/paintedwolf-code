@@ -20,19 +20,38 @@ func (r *ProviderAdministration) overlayPathFor(scopeProjectDir string) string {
 }
 
 // overlayLockHeldKey marks a context as already holding the catalog
-// transaction lock for one overlay file.
+// transaction lock for one overlay file and tracks whether the transaction is
+// rolling back a rejected or failed candidate.
 type overlayLockHeldKey struct{}
 
+type overlayLockState struct {
+	target      string
+	rollingBack bool
+}
+
 // withOverlayLockHeld prevents nested reads from reacquiring the same transaction lock.
-func withOverlayLockHeld(ctx context.Context, target string) context.Context {
-	return context.WithValue(ctx, overlayLockHeldKey{}, filepath.Clean(target))
+func withOverlayLockHeld(ctx context.Context, target string) (context.Context, *overlayLockState) {
+	state := &overlayLockState{target: filepath.Clean(target)}
+	return context.WithValue(ctx, overlayLockHeldKey{}, state), state
 }
 
 // overlayLockAlreadyHeld reports whether ctx's call chain already holds the
 // transaction lock for target.
 func overlayLockAlreadyHeld(ctx context.Context, target string) bool {
-	held, _ := ctx.Value(overlayLockHeldKey{}).(string)
-	return held != "" && held == filepath.Clean(target)
+	state, _ := ctx.Value(overlayLockHeldKey{}).(*overlayLockState)
+	return state != nil && state.target != "" && state.target == filepath.Clean(target)
+}
+
+func overlayRollbackActive(ctx context.Context, target string) bool {
+	state, _ := ctx.Value(overlayLockHeldKey{}).(*overlayLockState)
+	return state != nil && state.target == filepath.Clean(target) && state.rollingBack
+}
+
+func (r *ProviderAdministration) openCredentialStore() (*StaticCredentialStore, error) {
+	if r.openStaticCredentials != nil {
+		return r.openStaticCredentials(r.Catalog.statePath)
+	}
+	return NewStaticCredentialStoreForDir(r.Catalog.statePath)
 }
 
 func (r *ProviderAdministration) updateOverlay(
@@ -40,10 +59,12 @@ func (r *ProviderAdministration) updateOverlay(
 	scopeProjectDir string,
 	apply func(ctx context.Context, path string) error,
 	validate func(ctx context.Context) error,
+	rollback func(ctx context.Context) error,
+	committed func() bool,
 ) error {
 	path := r.overlayPathFor(scopeProjectDir)
 	// Callbacks share the transaction lock for this overlay.
-	lockedCtx := withOverlayLockHeld(ctx, path)
+	lockedCtx, lockState := withOverlayLockHeld(ctx, path)
 	if err := catalogruntime.UpdateFile(ctx, catalogruntime.FileUpdate{
 		LockRoot: r.Catalog.statePath,
 		Target:   path,
@@ -62,8 +83,20 @@ func (r *ProviderAdministration) updateOverlay(
 			if validate == nil {
 				return nil
 			}
-			return validate(lockedCtx)
+			if err := validate(lockedCtx); err != nil {
+				lockState.rollingBack = true
+				return err
+			}
+			return nil
 		},
+		Rollback: func() error {
+			lockState.rollingBack = true
+			if rollback == nil {
+				return nil
+			}
+			return rollback(lockedCtx)
+		},
+		Committed: committed,
 	}); err != nil {
 		return err
 	}
@@ -134,7 +167,7 @@ func (r *ProviderAdministration) SetProviderEnabled(ctx context.Context, scope C
 			return ErrUnknownMCPProvider(providerID)
 		}
 		return setProviderEnabled(path, providerID, enabled)
-	}, nil)
+	}, nil, nil, nil)
 	return persistErr(err)
 }
 
@@ -226,23 +259,47 @@ func (r *ProviderAdministration) ListRecipes(ctx context.Context, scope CallScop
 
 func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope CallScope, id string, ov MCPProviderOverlay, scopeProjectDir string) (api.McpProvider, error) {
 	var created api.McpProvider
+	creds := extractOverlayCredentials(ov)
+	tx := newCredentialOverlayTx(r, "create", id, scopeProjectDir)
+
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
 		if r.Catalog.projectView(txCtx, scope.ProjectDir).known(id) {
 			return AdminErrID(RejectDuplicateID, id)
 		}
-		return upsertProviderOverlay(path, ov)
+		cfg, err := LoadUserMCPConfig(path)
+		if err != nil {
+			return err
+		}
+		prevOv, hadPrevOv, err := tx.captureBefore(cfg)
+		if err != nil {
+			return err
+		}
+		ovToSave := ov
+		if tx.isUserScope {
+			ovToSave = scrubOverlayCredentials(ov)
+		}
+		upsertProviderOverlayRow(cfg, ovToSave)
+		if err := tx.stage(*cfg, prevOv, hadPrevOv, func(_ StaticCredentialRecord, hadPrev bool) (StaticCredentialRecord, bool) {
+			return creds, creds.HasSecrets() || hadPrev
+		}); err != nil {
+			return err
+		}
+		return tx.saveConfig(path, *cfg)
 	}, func(txCtx context.Context) error {
 		row, ok := r.Catalog.GetProvider(txCtx, scope, id)
-		if ok && row.Status != api.McpStatusRejected {
-			created = row
-			return nil
+		if !ok || row.Status == api.McpStatusRejected {
+			reason := RejectInvalidEntry
+			if ok && row.LastError != "" {
+				reason = row.LastError
+			}
+			return tx.onValidateReject(AdminErrID(reason, id))
 		}
-		reason := RejectInvalidEntry
-		if ok && row.LastError != "" {
-			reason = row.LastError
+		if err := tx.commit(); err != nil {
+			return err
 		}
-		return AdminErrID(reason, id)
-	})
+		created = row
+		return nil
+	}, tx.rollback, tx.isCommitted)
 	if err != nil {
 		return api.McpProvider{}, persistErr(err)
 	}
@@ -324,21 +381,62 @@ func (r *ProviderAdministration) UpdateProvider(ctx context.Context, scope CallS
 	}
 
 	var updated api.McpProvider
+	tx := newCredentialOverlayTx(r, "update", providerID, scopeProjectDir)
+
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
 		if !r.Catalog.projectView(txCtx, scope.ProjectDir).known(providerID) {
 			return ErrUnknownMCPProvider(providerID)
 		}
-		return patchProviderOverlay(path, providerID, func(ov *MCPProviderOverlay) {
-			applyUpdateToOverlay(ov, req)
-		})
+		cfg, err := LoadUserMCPConfig(path)
+		if err != nil {
+			return err
+		}
+		prevOv, hadPrevOv, err := tx.captureBefore(cfg)
+		if err != nil {
+			return err
+		}
+		currentOv := prevOv
+		if !hadPrevOv {
+			currentOv = MCPProviderOverlay{ID: providerID}
+		}
+		hadInline := overlayHasInlineCredentials(currentOv)
+		inlineCreds := extractOverlayCredentials(currentOv)
+		applyUpdateToOverlay(&currentOv, req)
+		if tx.isUserScope {
+			currentOv = scrubOverlayCredentials(currentOv)
+		}
+		upsertProviderOverlayRow(cfg, currentOv)
+		if err := tx.stage(*cfg, prevOv, hadPrevOv, func(prevCreds StaticCredentialRecord, hadPrev bool) (StaticCredentialRecord, bool) {
+			baseCreds := prevCreds
+			if !hadPrev && hadInline {
+				baseCreds = inlineCreds
+				snap := inlineCreds.snapshot()
+				tx.prevSnapshot = &snap
+			}
+			nextCreds, changed := applyUpdateToCredentials(baseCreds, req)
+			return nextCreds, changed || (!hadPrev && hadInline)
+		}); err != nil {
+			return err
+		}
+		return tx.saveConfig(path, *cfg)
 	}, func(txCtx context.Context) error {
 		row, ok := r.Catalog.GetProvider(txCtx, scope, providerID)
 		if !ok {
-			return ErrUnknownMCPProvider(providerID)
+			return tx.onValidateReject(ErrUnknownMCPProvider(providerID))
+		}
+		if row.Status == api.McpStatusRejected {
+			reason := RejectInvalidEntry
+			if row.LastError != "" {
+				reason = row.LastError
+			}
+			return tx.onValidateReject(AdminErrID(reason, providerID))
+		}
+		if err := tx.commit(); err != nil {
+			return err
 		}
 		updated = row
 		return nil
-	})
+	}, tx.rollback, tx.isCommitted)
 	if err != nil {
 		return api.McpProvider{}, persistErr(err)
 	}
@@ -454,12 +552,30 @@ func recipeCredentialWire(rec Recipe) api.McpCredentialWire {
 
 // DeleteOverlay removes a user or project overlay row for providerID.
 func (r *ProviderAdministration) DeleteOverlay(ctx context.Context, providerID, scopeProjectDir string) error {
+	tx := newCredentialOverlayTx(r, "delete", providerID, scopeProjectDir)
+
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
 		if !r.Catalog.projectView(txCtx, scopeProjectDir).known(providerID) {
 			return ErrUnknownMCPProvider(providerID)
 		}
-		return clearProviderOverride(path, providerID)
-	}, nil)
+		cfg, err := LoadUserMCPConfig(path)
+		if err != nil {
+			return err
+		}
+		prevOv, hadPrevOv, err := tx.captureBefore(cfg)
+		if err != nil {
+			return err
+		}
+		removeProviderOverlayRow(cfg, providerID)
+		if err := tx.stage(*cfg, prevOv, hadPrevOv, func(_ StaticCredentialRecord, _ bool) (StaticCredentialRecord, bool) {
+			return StaticCredentialRecord{Migrated: true, Deleted: true}, true
+		}); err != nil {
+			return err
+		}
+		return tx.writeOrRemoveConfig(path, *cfg)
+	}, func(context.Context) error {
+		return tx.commit()
+	}, tx.rollback, tx.isCommitted)
 	if err != nil {
 		return persistErr(err)
 	}

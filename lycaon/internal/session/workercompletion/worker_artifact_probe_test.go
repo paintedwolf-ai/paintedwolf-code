@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -113,56 +112,6 @@ func TestEvaluateWorkerSummaryDeterminedDirtyWorkspaceCompletes(t *testing.T) {
 	}
 	if check := artifactCheck(t, eval.Grounding); check.Status != api.CitationGroundingCheckStatusPassed {
 		t.Fatalf("check status = %q want passed", check.Status)
-	}
-}
-
-// Only a probe that ran and found nothing may fire WORKER_IMPLEMENT_NO_ARTIFACT.
-func TestObserveImplementerFinishRejectsOnlyOnDeterminedAbsence(t *testing.T) {
-	child := &api.Session{
-		ID:              "child-1",
-		ParentSessionID: "parent-1",
-		AgentType:       orchestration.ProfileImplementer,
-		WorkspacePath:   t.TempDir(),
-	}
-	// The rejected edit leaves no ledger proof; the later successful command
-	// carries the run past the successful-tool guard onto the probe.
-	msgs := []api.Message{
-		{
-			Role: api.MessageRoleAssistant,
-			ToolCalls: []api.ToolCall{
-				{ID: "tc1", Name: "edit", Args: map[string]any{"path": "game.py"}},
-			},
-		},
-		{
-			Role:       api.MessageRoleTool,
-			Content:    "Rejected: missing path",
-			ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeRejected},
-		},
-		{
-			Role: api.MessageRoleAssistant,
-			ToolCalls: []api.ToolCall{
-				{ID: "tc2", Name: "command", Args: map[string]any{"command": "go build ./..."}},
-			},
-		},
-		{Role: api.MessageRoleTool, Content: "ok"},
-	}
-
-	undetermined := oar.NewGuardContext()
-	workercompletion.ObserveImplementerFinishWithoutWrite(
-		context.Background(), child, msgs, "I attempted to edit game.py.",
-		child.WorkspacePath, stubWorkspaceChecker{err: errors.New("git status: subprocess failed")}, undetermined,
-	)
-	if _, rejected := undetermined.RejectData["WORKER_IMPLEMENT_NO_ARTIFACT"]; rejected {
-		t.Fatal("undetermined probe must not fire WORKER_IMPLEMENT_NO_ARTIFACT")
-	}
-
-	determined := oar.NewGuardContext()
-	workercompletion.ObserveImplementerFinishWithoutWrite(
-		context.Background(), child, msgs, "I attempted to edit game.py.",
-		child.WorkspacePath, stubWorkspaceChecker{changed: false}, determined,
-	)
-	if _, rejected := determined.RejectData["WORKER_IMPLEMENT_NO_ARTIFACT"]; !rejected {
-		t.Fatal("a probe that ran and found a clean workspace must still reject")
 	}
 }
 

@@ -51,7 +51,6 @@ func NewTestServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
 
 func NewTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	WireTestBindingRegistry(t)
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}}
 	for _, opt := range opts {
@@ -82,7 +81,6 @@ func newFixtureHost(t *testing.T, deps hostapi.Dependencies, reg tools.ToolRegis
 
 func NewTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	WireTestBindingRegistry(t)
 	sqlDB := testdbfixture.Open(t, "store.db")
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Database: sqlDB, Store: store.NewSQL(sqlDB), Projects: project.NewSQLRegistry(sqlDB)}}

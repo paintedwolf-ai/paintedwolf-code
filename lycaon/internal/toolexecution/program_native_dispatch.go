@@ -188,7 +188,7 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	ctx = withSecretUse(ctx, secretUse)
 	defer func() { tc.Effects.Secrets.Finish(ctx) }()
 	boundaryStarted = true
-	canonical, tc, err := e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, arguments.values, tc)
+	canonical, tc, boundaryApproved, err := e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, arguments.values, tc)
 	if err != nil {
 		return result, err
 	}
@@ -208,6 +208,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	tc.Invocation.ArgsDigest = reviewed.ArgumentsDigest()
 	ctx, resolved, err := e.prepareOwnerDispatch(ctx, facts.Identity, surface.profile, canonical, &tc, observation)
 	if err != nil {
+		return result, err
+	}
+	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 		return result, err
 	}
 	prepared, err := effect.PrepareReviewed(ctx, resolved, tc)
@@ -238,7 +241,8 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		if err := validateNativeArguments(facts, disclosed, nextArguments.values, tc); err != nil {
 			return result, err
 		}
-		canonical, tc, err = e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, nextArguments.values, tc)
+		tc.Effects.CanonicalArgs = nextArguments.values
+		canonical, tc, boundaryApproved, err = e.applyPreInvokeBoundary(ctx, facts.Identity, surface.profile, nextArguments.values, tc)
 		if err != nil {
 			return result, err
 		}
@@ -261,6 +265,9 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 		if err != nil {
 			return result, err
 		}
+		if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
+			return result, err
+		}
 		prepared, err = effect.PrepareReviewed(ctx, resolved, tc)
 		if err != nil {
 			return result, err
@@ -280,8 +287,23 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	if err := observer.BeforeNativeOwner(ctx, bound, tc.Identity.ToolCallID, reviewed); err != nil {
 		return result, err
 	}
-	// Recorder calls may yield. Recheck current admission after the marker;
-	// the marker does not grant permission or keep a closed frame executable.
+	// Recorder calls may yield. Re-evaluate current policy and admission after
+	// the marker; the marker does not grant permission or keep a closed frame executable.
+	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
+		return result, err
+	}
+	canonical, err = e.applyPreInvokePolicy(ctx, facts.Identity, surface.profile, canonical, &tc, e.Boundary.actionConfineRequest(ctx, tc), boundaryApproved)
+	if err != nil {
+		return result, err
+	}
+	postReview, postReviewed, err := admitReviewedOperationInputs(ctx, admission, canonical)
+	if err != nil {
+		return result, err
+	}
+	postReview.close()
+	if postReviewed != reviewed {
+		return result, fmt.Errorf("native reviewed inputs changed after approval boundary")
+	}
 	if err := e.recheckNativeOwnerAdmission(ctx, frame, surface.profile, bound, progressFacts, tc); err != nil {
 		return result, err
 	}

@@ -241,7 +241,7 @@ func TestExecutorAskRuleSuspendsNotHardError(t *testing.T) {
 	}
 }
 
-func TestExecutorCarriesSingleApprovalEvaluationToCheckpoint(t *testing.T) {
+func TestExecutorCarriesApprovalToCheckpointAndRevalidatesAfterReview(t *testing.T) {
 	tmp := t.TempDir()
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	gate := &countingApprovalGate{}
@@ -267,10 +267,19 @@ func TestExecutorCarriesSingleApprovalEvaluationToCheckpoint(t *testing.T) {
 		done <- err
 	}()
 	<-mgr.requested
+	beforeReview := gate.calls.Load()
+	if beforeReview != 1 {
+		t.Fatalf("approval gate calls before human review = %d, want one evaluation carried to checkpoint", beforeReview)
+	}
 	mgr.approve()
 	testutil.FailErr(t, "Invoke", <-done)
-	if got := gate.calls.Load(); got != 1 {
-		t.Fatalf("approval gate calls = %d, want exactly 1", got)
+	if got := gate.calls.Load(); got <= beforeReview {
+		t.Fatalf("approval gate was not re-evaluated after human review: before=%d after=%d", beforeReview, got)
+	}
+	select {
+	case <-mgr.requested:
+		t.Fatal("unchanged reviewed detection requested another checkpoint")
+	default:
 	}
 	// The detection citation rides the checkpoint request; hitl persists it and
 	// seals detection_resolved with the decision (see hitl manager tests).
