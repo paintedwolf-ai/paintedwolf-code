@@ -358,11 +358,9 @@ func TestOutboundCookiesFreezeAfterBeforeHopRequestAndPersistAcrossRedirects(t *
 			beforeHopCalls++
 			if beforeHopCalls == 1 {
 				jar.cookies = []*http.Cookie{{Name: "auth", Value: "reviewed-hop0"}}
-			} else {
+			} else if len(jar.stored) != 1 || jar.stored[0].Name != "issued" || jar.stored[0].Value != "from-hop0" {
 				// Hop 0's Set-Cookie must already be persisted before Hop 1's review runs.
-				if len(jar.stored) != 1 || jar.stored[0].Name != "issued" || jar.stored[0].Value != "from-hop0" {
-					t.Errorf("hop 1 BeforeHopRequest did not see hop 0 Set-Cookie: %+v", jar.stored)
-				}
+				t.Errorf("hop 1 BeforeHopRequest did not see hop 0 Set-Cookie: %+v", jar.stored)
 			}
 			if !hop.FreezeCookies(jar.Cookies(hop.URL)) {
 				t.Errorf("hop %d FreezeCookies returned false", beforeHopCalls-1)

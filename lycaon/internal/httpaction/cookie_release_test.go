@@ -191,285 +191,296 @@ func TestCookieRecipientOverridesRequireReview(t *testing.T) {
 }
 
 func TestManagedCookieJarAndGrantFreshnessAcrossReviewWait(t *testing.T) {
-	t.Run("jar_modified_during_egress_wait_cannot_send_unreviewed_cookie", func(t *testing.T) {
-		secrets, _ := testSecrets(t)
-		var receivedCookie string
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			receivedCookie = r.Header.Get("Cookie")
-			w.WriteHeader(http.StatusNoContent)
-		}))
-		t.Cleanup(server.Close)
+	t.Run("jar_modified_during_egress_wait_cannot_send_unreviewed_cookie", testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie)
 
-		target, err := url.Parse(server.URL + "/api")
-		testutil.FailErr(t, "parse target", err)
-		seedJar, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("seed-initial"))
-		testutil.FailErr(t, "open seed jar", err)
-		seedJar.Store.SetCookies(target, []*http.Cookie{{Name: "benign", Value: "public-cookie-value-1111", Path: "/"}})
-		_, err = secrets.SaveCookieJar(t.Context(), cookieSeedRequest("seed-initial"), seedJar)
-		testutil.FailErr(t, "save seed jar", err)
+	t.Run("jar_revoked_during_secret_review_wait_stops_before_delivery", testJarRevokedDuringSecretReviewWaitStopsBeforeDelivery)
 
-		confine.SetEgressPosture(confine.PostureAsk)
-		release := confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, _ egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
-			// While egress route admission waits, another operation injects a foreign-issuer
-			// cookie into the managed jar.
-			mutated, openErr := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"))
-			testutil.FailErr(t, "open jar during wait", openErr)
-			mutated.Store.SetDelivery("retained-socket-issuer", nil)
-			mutated.Store.SetCookies(target, []*http.Cookie{{Name: "injected", Value: "foreign-secret-cookie-9999", Path: "/"}})
-			_, saveErr := secrets.SaveCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"), mutated)
-			testutil.FailErr(t, "save jar during wait", saveErr)
-			return true
-		})
-		t.Cleanup(func() {
-			confine.SetEgressPosture(confine.PostureObserve)
-			_ = release(context.Background())
-		})
+	t.Run("unbacked_frontend_cookie_jar_fails_closed_before_delivery", testUnbackedFrontendCookieJarFailsClosedBeforeDelivery)
 
-		var secretAsks atomic.Int64
-		deps := Deps{
-			Boundary:      testBoundary(),
-			Secrets:       secrets,
-			SecretMatcher: testSecretMatcher(t),
-			SecretAsk: func(_ context.Context, a secretmatch.Alert) (secretmatch.Resolution, error) {
-				secretAsks.Add(1)
-				return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
-			},
-		}
-		_, err = runRequest(t, deps, map[string]any{
-			"url":                server.URL + "/api",
-			"cookie_jar":         "service",
-			"capability_request": loopbackCapability(t, server.URL),
-		}, sessionContext(t.TempDir(), "egress-wait-call"))
-		testutil.FailErr(t, "request after egress wait", err)
-		if secretAsks.Load() != 1 {
-			t.Fatalf("secretAsks = %d, want 1 (injected foreign cookie must be reviewed after egress wait)", secretAsks.Load())
-		}
-		if strings.Contains(receivedCookie, "foreign-secret-cookie-9999") {
-			t.Fatalf("server received withheld foreign cookie injected during wait: %q", receivedCookie)
-		}
-		if receivedCookie != "benign=public-cookie-value-1111" {
-			t.Fatalf("server received Cookie %q, want %q", receivedCookie, "benign=public-cookie-value-1111")
-		}
+	t.Run("standing_secret_grant_revoked_across_wait_and_redirect_with_real_approval_store", testStandingGrantRevokedAcrossWaitAndRedirect)
+}
+
+func testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie(t *testing.T) {
+	secrets, _ := testSecrets(t)
+	var receivedCookie string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedCookie = r.Header.Get("Cookie")
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	target, err := url.Parse(server.URL + "/api")
+	testutil.FailErr(t, "parse target", err)
+	seedJar, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("seed-initial"))
+	testutil.FailErr(t, "open seed jar", err)
+	seedJar.Store.SetCookies(target, []*http.Cookie{{Name: "benign", Value: "public-cookie-value-1111", Path: "/"}})
+	_, err = secrets.SaveCookieJar(t.Context(), cookieSeedRequest("seed-initial"), seedJar)
+	testutil.FailErr(t, "save seed jar", err)
+
+	confine.SetEgressPosture(confine.PostureAsk)
+	release := confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, _ egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+		// While egress route admission waits, another operation injects a foreign-issuer
+		// cookie into the managed jar.
+		mutated, openErr := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"))
+		testutil.FailErr(t, "open jar during wait", openErr)
+		mutated.Store.SetDelivery("retained-socket-issuer", nil)
+		mutated.Store.SetCookies(target, []*http.Cookie{{Name: "injected", Value: "foreign-secret-cookie-9999", Path: "/"}})
+		_, saveErr := secrets.SaveCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"), mutated)
+		testutil.FailErr(t, "save jar during wait", saveErr)
+		return true
+	})
+	t.Cleanup(func() {
+		confine.SetEgressPosture(confine.PostureObserve)
+		_ = release(context.Background())
 	})
 
-	t.Run("jar_revoked_during_secret_review_wait_stops_before_delivery", func(t *testing.T) {
-		secrets, _ := testSecrets(t)
-		var requests atomic.Int64
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			requests.Add(1)
-			w.WriteHeader(http.StatusNoContent)
-		}))
-		t.Cleanup(server.Close)
-		seedRetainedIssuerCookie(t, secrets, server.URL)
-		opened, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("lookup-ref"))
-		testutil.FailErr(t, "open seeded jar", err)
+	var secretAsks atomic.Int64
+	deps := Deps{
+		Boundary:      testBoundary(),
+		Secrets:       secrets,
+		SecretMatcher: testSecretMatcher(t),
+		SecretAsk: func(_ context.Context, a secretmatch.Alert) (secretmatch.Resolution, error) {
+			secretAsks.Add(1)
+			return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
+		},
+	}
+	_, err = runRequest(t, deps, map[string]any{
+		"url":                server.URL + "/api",
+		"cookie_jar":         "service",
+		"capability_request": loopbackCapability(t, server.URL),
+	}, sessionContext(t.TempDir(), "egress-wait-call"))
+	testutil.FailErr(t, "request after egress wait", err)
+	if secretAsks.Load() != 1 {
+		t.Fatalf("secretAsks = %d, want 1 (injected foreign cookie must be reviewed after egress wait)", secretAsks.Load())
+	}
+	if strings.Contains(receivedCookie, "foreign-secret-cookie-9999") {
+		t.Fatalf("server received withheld foreign cookie injected during wait: %q", receivedCookie)
+	}
+	if receivedCookie != "benign=public-cookie-value-1111" {
+		t.Fatalf("server received Cookie %q, want %q", receivedCookie, "benign=public-cookie-value-1111")
+	}
+}
 
-		deps := Deps{
-			Boundary:      testBoundary(),
-			Secrets:       secrets,
-			SecretMatcher: testSecretMatcher(t),
-			SecretAsk: func(ctx context.Context, _ secretmatch.Alert) (secretmatch.Resolution, error) {
-				// While the secret review card is waiting, the cookie jar is revoked.
-				_, revokeErr := secrets.RevokeByAgent(ctx, testdbseed.DefaultProjectID, "root-1", opened.Reference)
-				testutil.FailErr(t, "revoke jar during secret ask", revokeErr)
-				return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
-			},
-		}
-		_, err = runRequest(t, deps, map[string]any{
-			"url":                server.URL + "/private",
-			"cookie_jar":         "service",
-			"capability_request": loopbackCapability(t, server.URL),
-		}, sessionContext(t.TempDir(), "revoked-during-wait"))
-		var reject *toolrejection.ToolReject
-		if !errors.As(err, &reject) || reject.Code != CookieJarFailedCode {
-			t.Fatalf("err = %v, want %s when jar is revoked during review wait", err, CookieJarFailedCode)
-		}
-		if requests.Load() != 0 {
-			t.Fatalf("server received %d requests after jar revocation during wait, want 0", requests.Load())
-		}
+func testJarRevokedDuringSecretReviewWaitStopsBeforeDelivery(t *testing.T) {
+	secrets, _ := testSecrets(t)
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	seedRetainedIssuerCookie(t, secrets, server.URL)
+	opened, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("lookup-ref"))
+	testutil.FailErr(t, "open seeded jar", err)
+
+	deps := Deps{
+		Boundary:      testBoundary(),
+		Secrets:       secrets,
+		SecretMatcher: testSecretMatcher(t),
+		SecretAsk: func(ctx context.Context, _ secretmatch.Alert) (secretmatch.Resolution, error) {
+			// While the secret review card is waiting, the cookie jar is revoked.
+			_, revokeErr := secrets.RevokeByAgent(ctx, testdbseed.DefaultProjectID, "root-1", opened.Reference)
+			testutil.FailErr(t, "revoke jar during secret ask", revokeErr)
+			return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
+		},
+	}
+	_, err = runRequest(t, deps, map[string]any{
+		"url":                server.URL + "/private",
+		"cookie_jar":         "service",
+		"capability_request": loopbackCapability(t, server.URL),
+	}, sessionContext(t.TempDir(), "revoked-during-wait"))
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != CookieJarFailedCode {
+		t.Fatalf("err = %v, want %s when jar is revoked during review wait", err, CookieJarFailedCode)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("server received %d requests after jar revocation during wait, want 0", requests.Load())
+	}
+}
+
+func testUnbackedFrontendCookieJarFailsClosedBeforeDelivery(t *testing.T) {
+	var requests atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	deps := Deps{
+		Boundary:      testBoundary(),
+		SecretMatcher: testSecretMatcher(t),
+	}
+	_, err := Perform(t.Context(), deps, map[string]any{
+		"url":                server.URL + "/api",
+		"capability_request": loopbackCapability(t, server.URL),
+	}, sessionContext(t.TempDir(), "unbacked-jar"), ExchangeOptions{
+		Jar: unbackedCookieJar{},
 	})
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != toolrejection.OutboundSecretScreenFailedCode {
+		t.Fatalf("Perform with unbacked Jar err = %v, want %s", err, toolrejection.OutboundSecretScreenFailedCode)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("server received %d requests with unbacked Jar, want 0", requests.Load())
+	}
+}
 
-	t.Run("unbacked_frontend_cookie_jar_fails_closed_before_delivery", func(t *testing.T) {
-		var requests atomic.Int64
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			requests.Add(1)
-			w.WriteHeader(http.StatusNoContent)
-		}))
-		t.Cleanup(server.Close)
+func testStandingGrantRevokedAcrossWaitAndRedirect(t *testing.T) {
+	const cookieSecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
+	var originHits, targetHits atomic.Int64
+	var originCookie, targetCookie atomic.Value
+	originCookie.Store("")
+	targetCookie.Store("")
 
-		deps := Deps{
-			Boundary:      testBoundary(),
-			SecretMatcher: testSecretMatcher(t),
-		}
-		_, err := Perform(t.Context(), deps, map[string]any{
-			"url":                server.URL + "/api",
-			"capability_request": loopbackCapability(t, server.URL),
-		}, sessionContext(t.TempDir(), "unbacked-jar"), ExchangeOptions{
-			Jar: unbackedCookieJar{},
-		})
-		var reject *toolrejection.ToolReject
-		if !errors.As(err, &reject) || reject.Code != toolrejection.OutboundSecretScreenFailedCode {
-			t.Fatalf("Perform with unbacked Jar err = %v, want %s", err, toolrejection.OutboundSecretScreenFailedCode)
-		}
-		if requests.Load() != 0 {
-			t.Fatalf("server received %d requests with unbacked Jar, want 0", requests.Load())
-		}
-	})
+	var revokeTargetOnRedirect atomic.Bool
+	var targetGrantID string
+	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
+	testutil.FailErr(t, "open approval store", err)
+	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
+	review := &cookieGrantReview{t: t, authority: authority}
 
-	t.Run("standing_secret_grant_revoked_across_wait_and_redirect_with_real_approval_store", func(t *testing.T) {
-		const cookieSecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
-		var originHits, targetHits atomic.Int64
-		var originCookie, targetCookie atomic.Value
-		originCookie.Store("")
-		targetCookie.Store("")
+	targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetHits.Add(1)
+		targetCookie.Store(r.Header.Get("Cookie"))
+		_, _ = w.Write([]byte("target-ok"))
+	}))
+	t.Cleanup(targetServer.Close)
 
-		var revokeTargetOnRedirect atomic.Bool
-		var targetGrantID string
-		store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
-		testutil.FailErr(t, "open approval store", err)
-		authority := settings.NewRuleApprovalGate(store, settings.NoSources())
-		review := &cookieGrantReview{t: t, authority: authority}
-
-		targetServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			targetHits.Add(1)
-			targetCookie.Store(r.Header.Get("Cookie"))
-			_, _ = w.Write([]byte("target-ok"))
-		}))
-		t.Cleanup(targetServer.Close)
-
-		originServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			originHits.Add(1)
-			originCookie.Store(r.Header.Get("Cookie"))
-			if r.URL.Path == "/redirect" {
-				if revokeTargetOnRedirect.Load() && targetGrantID != "" {
-					removed, revokeErr := authority.RevokeGrant(targetGrantID)
-					testutil.FailErr(t, "revoke target standing grant during Hop 0 redirect", revokeErr)
-					if !removed {
-						t.Error("expected target standing grant to be removed during Hop 0")
-					}
+	originServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		originHits.Add(1)
+		originCookie.Store(r.Header.Get("Cookie"))
+		if r.URL.Path == "/redirect" {
+			if revokeTargetOnRedirect.Load() && targetGrantID != "" {
+				removed, revokeErr := authority.RevokeGrant(targetGrantID)
+				testutil.FailErr(t, "revoke target standing grant during Hop 0 redirect", revokeErr)
+				if !removed {
+					t.Error("expected target standing grant to be removed during Hop 0")
 				}
-				http.Redirect(w, r, targetServer.URL+"/land", http.StatusFound)
-				return
 			}
-			_, _ = w.Write([]byte("origin-ok"))
-		}))
-		t.Cleanup(originServer.Close)
-
-		registry := tools.NewDefaultRegistry()
-		executor := toolexecution.NewExecutor(nil, registry, "implement")
-		executor.Approvals.SetCheckpointManager(t.Context(), review, authority)
-		t.Cleanup(func() { confine.SetEgressResolver(nil) })
-		matcher := testSecretMatcher(t)
-		executor.Secrets.SetSecretMatcher(matcher)
-
-		deps := Deps{
-			Boundary:      testBoundary(),
-			SecretMatcher: matcher,
-			SecretAsk:     executor.Secrets.AskSecretScreen,
+			http.Redirect(w, r, targetServer.URL+"/land", http.StatusFound)
+			return
 		}
+		_, _ = w.Write([]byte("origin-ok"))
+	}))
+	t.Cleanup(originServer.Close)
 
-		makeJar := func() http.CookieJar {
-			s := httpcookies.New(nil)
-			for _, rawURL := range []string{originServer.URL, targetServer.URL} {
-				u, parseErr := url.Parse(rawURL)
-				testutil.FailErr(t, "parse server URL", parseErr)
-				s.SetCookies(u, []*http.Cookie{
-					{Name: "session", Value: cookieSecret, Path: "/"},
-					{Name: "theme", Value: "dark", Path: "/"},
-				})
-			}
-			return &storeBackedCookieJar{store: s}
-		}
+	registry := tools.NewDefaultRegistry()
+	executor := toolexecution.NewExecutor(nil, registry, "implement")
+	executor.Approvals.SetCheckpointManager(t.Context(), review, authority)
+	t.Cleanup(func() { confine.SetEgressResolver(nil) })
+	matcher := testSecretMatcher(t)
+	executor.Secrets.SetSecretMatcher(matcher)
 
-		originCap := loopbackCapability(t, originServer.URL)
-		targetCap := loopbackCapability(t, targetServer.URL)
-		bothPorts := append([]any(nil), originCap["loopback_connect"].(map[string]any)["ports"].([]any)...)
-		bothPorts = append(bothPorts, targetCap["loopback_connect"].(map[string]any)["ports"].([]any)...)
-		bothLoopbackCap := map[string]any{"loopback_connect": map[string]any{"ports": bothPorts}}
+	deps := Deps{
+		Boundary:      testBoundary(),
+		SecretMatcher: matcher,
+		SecretAsk:     executor.Secrets.AskSecretScreen,
+	}
 
-		runWithJar := func(callID, rawURL, redirects string) {
-			t.Helper()
-			tc := sessionContext(t.TempDir(), callID)
-			ctx := secretmatch.WithAskAttribution(t.Context(), secretmatch.AskAttribution{
-				SessionID:     tc.Identity.SessionID,
-				RootSessionID: tc.ChatSessionID(),
-				ProjectID:     tc.Identity.ProjectID,
-				ProjectDir:    tc.ActiveRootPath(),
-				ToolCallID:    callID,
+	makeJar := func() http.CookieJar {
+		s := httpcookies.New(nil)
+		for _, rawURL := range []string{originServer.URL, targetServer.URL} {
+			u, parseErr := url.Parse(rawURL)
+			testutil.FailErr(t, "parse server URL", parseErr)
+			s.SetCookies(u, []*http.Cookie{
+				{Name: "session", Value: cookieSecret, Path: "/"},
+				{Name: "theme", Value: "dark", Path: "/"},
 			})
-			ctx = secretcap.WithResolution(ctx, tc.Effects.Secrets)
-			_, performErr := Perform(ctx, deps, map[string]any{
-				"url":                rawURL,
-				"redirects":          redirects,
-				"capability_request": bothLoopbackCap,
-			}, tc, ExchangeOptions{Jar: makeJar()})
-			testutil.FailErr(t, callID, performErr)
 		}
+		return &storeBackedCookieJar{store: s}
+	}
 
-		// 1. Approve originServer with RecommendedOptionID (installs standing grant in real approval store).
-		review.mode = "install_grant"
-		runWithJar("call-1", originServer.URL+"/ok", "none")
-		originGrantID := review.lastGrantID
-		if review.cards != 1 || originGrantID == "" || originHits.Load() != 1 || !strings.Contains(originCookie.Load().(string), "session="+cookieSecret) {
-			t.Fatalf("step 1 cards=%d grantID=%q hits=%d cookie=%q", review.cards, originGrantID, originHits.Load(), originCookie.Load())
-		}
+	originCap := loopbackCapability(t, originServer.URL)
+	targetCap := loopbackCapability(t, targetServer.URL)
+	bothPorts := append([]any(nil), originCap["loopback_connect"].(map[string]any)["ports"].([]any)...)
+	bothPorts = append(bothPorts, targetCap["loopback_connect"].(map[string]any)["ports"].([]any)...)
+	bothLoopbackCap := map[string]any{"loopback_connect": map[string]any{"ports": bothPorts}}
 
-		// 2. Quiet repeat to originServer under the standing grant raises 0 cards and sends the secret cookie.
-		originHits.Store(0)
-		originCookie.Store("")
-		review.mode = "forbid_card"
-		runWithJar("call-2", originServer.URL+"/ok", "none")
-		if review.cards != 1 || originHits.Load() != 1 || !strings.Contains(originCookie.Load().(string), "session="+cookieSecret) {
-			t.Fatalf("step 2 quiet repeat cards=%d hits=%d cookie=%q", review.cards, originHits.Load(), originCookie.Load())
-		}
+	runWithJar := func(callID, rawURL, redirects string) {
+		t.Helper()
+		tc := sessionContext(t.TempDir(), callID)
+		ctx := secretmatch.WithAskAttribution(t.Context(), secretmatch.AskAttribution{
+			SessionID:     tc.Identity.SessionID,
+			RootSessionID: tc.ChatSessionID(),
+			ProjectID:     tc.Identity.ProjectID,
+			ProjectDir:    tc.ActiveRootPath(),
+			ToolCallID:    callID,
+		})
+		ctx = secretcap.WithResolution(ctx, tc.Effects.Secrets)
+		_, performErr := Perform(ctx, deps, map[string]any{
+			"url":                rawURL,
+			"redirects":          redirects,
+			"capability_request": bothLoopbackCap,
+		}, tc, ExchangeOptions{Jar: makeJar()})
+		testutil.FailErr(t, callID, performErr)
+	}
 
-		// 3. Install a standing grant for targetServer, then redirect originServer -> targetServer while revoking targetServer's standing grant during Hop 0; Hop 1 must re-ask against the live approval store and withhold the secret cookie on rejection while completing the redirect.
-		review.mode = "install_grant"
-		runWithJar("call-3-seed-target", targetServer.URL+"/land", "none")
-		targetGrantID = review.lastGrantID
-		if review.cards != 2 || targetGrantID == "" || targetHits.Load() != 1 || !strings.Contains(targetCookie.Load().(string), "session="+cookieSecret) {
-			t.Fatalf("step 3 seed target cards=%d grantID=%q hits=%d cookie=%q", review.cards, targetGrantID, targetHits.Load(), targetCookie.Load())
-		}
+	// 1. Approve originServer with RecommendedOptionID (installs standing grant in real approval store).
+	review.mode = "install_grant"
+	runWithJar("call-1", originServer.URL+"/ok", "none")
+	originGrantID := review.lastGrantID
+	if review.cards != 1 || originGrantID == "" || originHits.Load() != 1 || !strings.Contains(originCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 1 cards=%d grantID=%q hits=%d cookie=%q", review.cards, originGrantID, originHits.Load(), originCookie.Load())
+	}
 
-		originHits.Store(0)
-		targetHits.Store(0)
-		originCookie.Store("")
-		targetCookie.Store("")
-		revokeTargetOnRedirect.Store(true)
-		review.mode = "withhold"
-		runWithJar("call-3-redirect-revoke", originServer.URL+"/redirect", "safe")
-		if review.cards != 3 {
-			t.Fatalf("step 3 redirect after mid-flight target grant revocation cards=%d, want 3", review.cards)
-		}
-		if originHits.Load() != 1 || !strings.Contains(originCookie.Load().(string), "session="+cookieSecret) {
-			t.Fatalf("step 3 hop 0 hits=%d cookie=%q, want 1 with secret", originHits.Load(), originCookie.Load())
-		}
-		if targetHits.Load() != 1 || targetCookie.Load().(string) != "theme=dark" {
-			t.Fatalf("step 3 hop 1 hits=%d cookie=%q, want 1 with only benign cookie theme=dark", targetHits.Load(), targetCookie.Load())
-		}
+	// 2. Quiet repeat to originServer under the standing grant raises 0 cards and sends the secret cookie.
+	originHits.Store(0)
+	originCookie.Store("")
+	review.mode = "forbid_card"
+	runWithJar("call-2", originServer.URL+"/ok", "none")
+	if review.cards != 1 || originHits.Load() != 1 || !strings.Contains(originCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 2 quiet repeat cards=%d hits=%d cookie=%q", review.cards, originHits.Load(), originCookie.Load())
+	}
 
-		// 4. Revoke originServer's standing grant: explicit "once" approval covers that single admitted operation, and the next operation must re-ask again.
-		removed, err := authority.RevokeGrant(originGrantID)
-		testutil.FailErr(t, "revoke origin standing grant", err)
-		if !removed {
-			t.Fatal("expected origin standing grant to be removed")
-		}
-		originHits.Store(0)
-		originCookie.Store("")
-		review.mode = "approve_once"
-		runWithJar("call-4-once", originServer.URL+"/ok", "none")
-		if review.cards != 4 || originHits.Load() != 1 || !strings.Contains(originCookie.Load().(string), "session="+cookieSecret) {
-			t.Fatalf("step 4 approve_once cards=%d hits=%d cookie=%q", review.cards, originHits.Load(), originCookie.Load())
-		}
+	// 3. Install a standing grant for targetServer, then redirect originServer -> targetServer while revoking
+	// targetServer's standing grant during Hop 0; Hop 1 must re-ask against the live approval store and withhold
+	// the secret cookie on rejection while completing the redirect.
+	review.mode = "install_grant"
+	runWithJar("call-3-seed-target", targetServer.URL+"/land", "none")
+	targetGrantID = review.lastGrantID
+	if review.cards != 2 || targetGrantID == "" || targetHits.Load() != 1 || !strings.Contains(targetCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 3 seed target cards=%d grantID=%q hits=%d cookie=%q", review.cards, targetGrantID, targetHits.Load(), targetCookie.Load())
+	}
 
-		originHits.Store(0)
-		originCookie.Store("")
-		review.mode = "withhold"
-		runWithJar("call-5-after-once", originServer.URL+"/ok", "none")
-		if review.cards != 5 || originHits.Load() != 1 || originCookie.Load().(string) != "theme=dark" {
-			t.Fatalf("step 5 after once permit expired cards=%d hits=%d cookie=%q, want 5, 1, theme=dark", review.cards, originHits.Load(), originCookie.Load())
-		}
-	})
+	originHits.Store(0)
+	targetHits.Store(0)
+	originCookie.Store("")
+	targetCookie.Store("")
+	revokeTargetOnRedirect.Store(true)
+	review.mode = "withhold"
+	runWithJar("call-3-redirect-revoke", originServer.URL+"/redirect", "safe")
+	if review.cards != 3 {
+		t.Fatalf("step 3 redirect after mid-flight target grant revocation cards=%d, want 3", review.cards)
+	}
+	if originHits.Load() != 1 || !strings.Contains(originCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 3 hop 0 hits=%d cookie=%q, want 1 with secret", originHits.Load(), originCookie.Load())
+	}
+	if targetHits.Load() != 1 || targetCookie.Load().(string) != "theme=dark" {
+		t.Fatalf("step 3 hop 1 hits=%d cookie=%q, want 1 with only benign cookie theme=dark", targetHits.Load(), targetCookie.Load())
+	}
+
+	// 4. Revoke originServer's standing grant: explicit "once" approval covers that single admitted operation,
+	// and the next operation must re-ask again.
+	removed, err := authority.RevokeGrant(originGrantID)
+	testutil.FailErr(t, "revoke origin standing grant", err)
+	if !removed {
+		t.Fatal("expected origin standing grant to be removed")
+	}
+	originHits.Store(0)
+	originCookie.Store("")
+	review.mode = "approve_once"
+	runWithJar("call-4-once", originServer.URL+"/ok", "none")
+	if review.cards != 4 || originHits.Load() != 1 || !strings.Contains(originCookie.Load().(string), "session="+cookieSecret) {
+		t.Fatalf("step 4 approve_once cards=%d hits=%d cookie=%q", review.cards, originHits.Load(), originCookie.Load())
+	}
+
+	originHits.Store(0)
+	originCookie.Store("")
+	review.mode = "withhold"
+	runWithJar("call-5-after-once", originServer.URL+"/ok", "none")
+	if review.cards != 5 || originHits.Load() != 1 || originCookie.Load().(string) != "theme=dark" {
+		t.Fatalf("step 5 after once permit expired cards=%d hits=%d cookie=%q, want 5, 1, theme=dark", review.cards, originHits.Load(), originCookie.Load())
+	}
 }
 
 type storeBackedCookieJar struct {
