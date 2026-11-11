@@ -149,7 +149,7 @@ func TestRepublishWithoutEventsOnlyInvalidatesTheScreen(t *testing.T) {
 	if f.h.editorScreens.begin(d.ID, d.ProjectID, "digest") {
 		t.Fatal("a pending screening was admitted twice")
 	}
-	f.h.finishEditorScreen(t.Context(), *d, "digest")
+	f.h.finishEditorScreen(t.Context(), f.h.SecretSpans, *d, "digest")
 	if _, ok := f.h.EditorScreen(d.ID, "digest"); !ok {
 		t.Fatal("finished screen was not retained for an unpublished document")
 	}
