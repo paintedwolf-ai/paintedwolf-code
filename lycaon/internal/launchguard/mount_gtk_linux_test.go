@@ -42,7 +42,7 @@ func TestMountGTKSettingsModuleIsRefusedWhileChooserReadsFUSE(t *testing.T) {
 	settings := filepath.Join(home, ".config", "gtk-3.0")
 	testutil.FailErr(t, "prepare own GTK settings", os.MkdirAll(settings, 0700))
 	testutil.FailErr(t, "select the absolute FUSE module through GTK settings", os.WriteFile(filepath.Join(settings, "settings.ini"), []byte("[Settings]\ngtk-modules="+filepath.Join(volume, "module.so")+"\n"), 0600))
-	environment := []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DISPLAY=" + display, "GDK_BACKEND=x11", "LANG=C.UTF-8", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
+	environment := []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DISPLAY=" + display, "GDK_BACKEND=x11", "LANG=C.UTF-8", "RUST_LOG=debug", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
 	payload := filepath.Join(volume, "payload")
 	ordinary := exec.Command(desktop, "--ordinary-read", payload)
 	ordinary.Env = environment
@@ -302,7 +302,7 @@ func TestMountGTKChooserReadsVolumeAttachedAfterReadiness(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, fixture.bootstrap, "--protected-watch", payload)
-	command.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DISPLAY=" + display, "GDK_BACKEND=x11", "LANG=C.UTF-8", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
+	command.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DISPLAY=" + display, "GDK_BACKEND=x11", "LANG=C.UTF-8", "RUST_LOG=debug", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
 	input, err := command.StdinPipe()
 	testutil.FailErr(t, "create late-volume controls", err)
 	defer input.Close()

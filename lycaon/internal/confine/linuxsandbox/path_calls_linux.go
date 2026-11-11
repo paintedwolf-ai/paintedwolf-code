@@ -5,6 +5,7 @@ package linuxsandbox
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -79,6 +80,7 @@ func (s *supervisor) performPath(target *targetProcess, n seccompNotif) (int64, 
 	args, ok := pathArgsOf(uint32(n.Nr))
 	performer := s.performer
 	if !ok || performer == nil {
+		fmt.Fprintf(os.Stderr, "SUPPATH nr=%d known=%v performer=%v answer=EACCES\n", n.Nr, ok, performer != nil)
 		return 0, unix.EACCES, false
 	}
 	call, dirs, errno := s.readPathCall(target, n, args)
@@ -88,17 +90,22 @@ func (s *supervisor) performPath(target *targetProcess, n seccompNotif) (int64, 
 		}
 	}()
 	if errno != 0 {
+		fmt.Fprintf(os.Stderr, "SUPPATH nr=%d read-errno=%d\n", n.Nr, errno)
 		return 0, errno, true
 	}
 	if call.Op == callOpen && call.Flags&unix.O_CREAT == 0 && !args.how {
+		fmt.Fprintf(os.Stderr, "SUPPATH op=%s path=%q answer=EINVAL no-creat\n", call.Op, call.Path)
 		return 0, unix.EINVAL, true
 	}
 	if !target.valid() {
+		fmt.Fprintf(os.Stderr, "SUPPATH op=%s path=%q answer=EINTR target-gone\n", call.Op, call.Path)
 		return 0, unix.EINTR, true
 	}
 	// The performer performs the call and answers the kernel itself.
 	call.Notification, call.Caller = target.id, target.pid
+	fmt.Fprintf(os.Stderr, "SUPPATH op=%s path=%q new=%q flags=%x forwarded\n", call.Op, call.Path, call.NewPath, call.Flags)
 	if err := performer.forward(call, dirs); err != nil {
+		fmt.Fprintf(os.Stderr, "SUPPATH op=%s path=%q forward-err=%v\n", call.Op, call.Path, err)
 		return 0, unix.EACCES, false
 	}
 	return 0, errAnswered, true

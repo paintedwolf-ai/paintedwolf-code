@@ -42,7 +42,7 @@ func TestProtectedStandardStreamModuleIngress(t *testing.T) {
 	var backing unix.Stat_t
 	testutil.FailErr(t, "record memfd kernel identity", unix.Fstat(descriptor, &backing))
 	t.Logf("module SHA256=%x size=%d device=%d inode=%d mode=%o", sha256.Sum256(raw), len(raw), backing.Dev, backing.Ino, backing.Mode)
-	environment := []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DISPLAY=" + display, "LANG=C.UTF-8", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
+	environment := []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DISPLAY=" + display, "LANG=C.UTF-8", "RUST_LOG=debug", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
 	marker := filepath.Join(home, "stream-module-marker")
 	report := filepath.Join(home, "gtk-report.json")
 	run := func(program string) streamGTKFacts {

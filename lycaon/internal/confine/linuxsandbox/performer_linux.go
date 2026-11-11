@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/signal"
 	"runtime"
 	"sync"
@@ -242,6 +243,7 @@ func servePathCalls(fd int) error {
 				result, opened = floors.perform(call, slots)
 			}
 		}
+		fmt.Fprintf(os.Stderr, "SUPPERFORM op=%s path=%q new=%q errno=%d refused=%v decoded=%v dirs=%d\n", call.Op, call.Path, call.NewPath, result.Errno, result.Refusal != nil, decoded, len(dirs))
 		for _, dir := range dirs {
 			_ = unix.Close(dir)
 		}

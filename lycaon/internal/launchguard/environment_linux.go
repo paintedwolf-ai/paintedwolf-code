@@ -34,6 +34,8 @@ var desktopEnvironmentKeys = map[string]bool{
 	"GTK_IM_MODULE": true, "QT_IM_MODULE": true, "XMODIFIERS": true,
 	"GDK_BACKEND": true, "GDK_SCALE": true, "GDK_DPI_SCALE": true, "GTK_THEME": true,
 	"KDE_FULL_SESSION": true, "KDE_SESSION_VERSION": true,
+	// DIAG(2113): temporary passthrough for the glycin loader's env_logger; remove before the fix.
+	"RUST_LOG": true,
 }
 
 var (
