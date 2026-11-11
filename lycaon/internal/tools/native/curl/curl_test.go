@@ -1007,6 +1007,3 @@ func TestCurlCookieJarSelectedSecretAuthorityAndRedirectDenial(t *testing.T) {
 	}
 	mu.Unlock()
 }
-
-
-

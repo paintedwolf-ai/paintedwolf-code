@@ -65,4 +65,3 @@ func HTTPBodyArgumentConsumed(args map[string]any, path string) bool {
 func HTTPHeaderArgumentConsumed(args map[string]any, path string) bool {
 	return HTTPArgumentConsumed(args, path) && !HTTPBodyArgumentConsumed(args, path)
 }
-
