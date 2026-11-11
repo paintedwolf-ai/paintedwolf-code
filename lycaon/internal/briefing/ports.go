@@ -31,7 +31,7 @@ type Results interface {
 	PutResult(ctx context.Context, projectID string, manifest Manifest, hash string, result Result) error
 }
 
-// Attempts owns target attempt state. Complete applies only for the active
+// Attempts keeps target attempt state. Complete applies only for the active
 // attempt, so a superseded attempt cannot publish over its successor.
 type Attempts interface {
 	StartAttempt(ctx context.Context, request Request, hashes []SectionHash) (attemptID string, joined bool, err error)
