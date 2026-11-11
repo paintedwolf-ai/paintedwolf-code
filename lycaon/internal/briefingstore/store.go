@@ -71,6 +71,16 @@ func (s *Results) Epoch(ctx context.Context, projectID string) (int64, error) {
 	return epoch, err
 }
 
+// PeekEpoch reads the project's epoch without starting one; a project that
+// never briefed is at epoch 1.
+func (s *Results) PeekEpoch(ctx context.Context, projectID string) (int64, error) {
+	epoch, err := s.queries.GetBriefingEpoch(ctx, projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 1, nil
+	}
+	return epoch, err
+}
+
 func checkEpoch(ctx context.Context, q *db.Queries, projectID string, epoch int64) error {
 	current, err := q.GetBriefingEpoch(ctx, projectID)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && current != epoch) {

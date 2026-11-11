@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/blobstore"
+	"github.com/lycaon/lycaon/internal/briefinghost"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fileops"
@@ -119,7 +120,9 @@ type History struct {
 	Watch           *Watch
 	Workers         worker.WorkerQueue
 	Workspace       *Workspace
-	responses       *httpio.Responder
+	// Briefings serves stored step briefings beside a Walk page.
+	Briefings *briefinghost.Host
+	responses *httpio.Responder
 }
 
 type Mutations struct {
@@ -246,7 +249,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	h.Analysis = &Analysis{ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, responses: responses, sourceIndexes: projectsource.NewSourceIndexCache(), warmupPolls: warmupPolls}
 	h.ComparisonViews = &ComparisonViews{ManagedSecrets: deps.ManagedSecrets, SecretSpans: deps.SecretSpans, background: background, sourceReaders: sourceReaders, sourceViews: sourceViews}
 	h.Comparisons = &Comparisons{EditorDocuments: deps.EditorDocuments, Git: deps.Git, ManagedSecrets: deps.ManagedSecrets, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, responses: responses, sourceReaders: sourceReaders}
-	h.History = &History{AttachmentStore: deps.AttachmentStore, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, VisualStore: deps.VisualStore, Workers: deps.Workers, responses: responses}
+	h.History = &History{AttachmentStore: deps.AttachmentStore, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, VisualStore: deps.VisualStore, Workers: deps.Workers, Briefings: deps.Briefings.Host, responses: responses}
 	h.Mutations = &Mutations{EditorDocuments: deps.EditorDocuments, FileOperations: deps.FileOperations, Git: deps.Git, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, SourceMutations: deps.SourceMutations, background: background, operations: operations, responses: responses}
 	h.Presentation = &Presentation{responses: responses}
 	h.Review = &Review{Git: deps.Git, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, ArrivalAnchorTimeBound: arrivalAnchorTimeBound, responses: responses}

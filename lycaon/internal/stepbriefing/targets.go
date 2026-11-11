@@ -11,6 +11,9 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+// ProfileID names Walk step explanations among briefing profiles.
+const ProfileID = "source_step"
+
 // maxOutsideMembers bounds the effects one outside group may name.
 const maxOutsideMembers = 256
 
