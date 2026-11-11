@@ -374,7 +374,7 @@ func TestInitGrantsOnlyPinnedCapabilitiesAndRefusesOldKernels(t *testing.T) {
 	}
 	r := w.call(fuseOpInit, 0, initBody(FUSEProtocolMajor, 41, ^uint32(0)))
 	w.wantErrno("init", r, 0)
-	want := uint32(fuseCapPOSIXLocks | fuseCapAtomicOTrunc | fuseCapBigWrites | fuseCapFlockLocks)
+	want := uint32(fuseCapPOSIXLocks | fuseCapAtomicOTrunc | fuseCapBigWrites | fuseCapFlockLocks | fuseCapDoReaddirplus | fuseCapReaddirplusAuto)
 	if got := binary.LittleEndian.Uint32(r.payload[12:16]); got != want {
 		t.Fatalf("granted flags %#x, want exactly %#x", got, want)
 	}
