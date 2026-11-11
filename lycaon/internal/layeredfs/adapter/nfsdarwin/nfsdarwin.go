@@ -41,10 +41,13 @@ const (
 	DefaultRetrans = 2
 	// DefaultTimeo is the soft mount timeout in deciseconds (1.0s).
 	DefaultTimeo = 10
-	// DefaultCachePolicy is the explicit cache option set: no attribute or negative-name caching, and
-	// no READDIRPLUS. With READDIRPLUS the client answers a lookup from the last listing, which omits
-	// the ._ files that present held attributes, and then refuses to create the one it needs.
-	DefaultCachePolicy = "actimeo=0,acregmin=0,acregmax=0,acdirmin=0,acdirmax=0,nonegnamecache,nordirplus"
+	// DefaultAttributeTTL is how long the client trusts cached attributes and listings. Nothing tells
+	// the macOS client of a change it did not make, so this bounds when a trunk change is visible;
+	// opening a file still revalidates it.
+	DefaultAttributeTTL = 30 * time.Second
+	// DefaultCachePolicy caches attributes for DefaultAttributeTTL and lists with attributes. A missing
+	// name is always asked again, so a file the engine creates is found at once.
+	DefaultCachePolicy = "actimeo=30,nonegnamecache,rdirplus"
 
 	// unmountWaitBound limits how long one unmount attempt may hold Release. A helper stuck in the
 	// kernel cannot be killed, so the wait has to end on its own.
@@ -148,7 +151,7 @@ func New(cfg Config) *Adapter {
 			CacheRevalidation: adapter.CacheRevalidation{
 				Mode:                 fmt.Sprintf("%s,rsize=%d,wsize=%d,retrans=%d,timeo=%d,soft", DefaultCachePolicy, DefaultRSize, DefaultWSize, DefaultRetrans, DefaultTimeo),
 				ExplicitInvalidation: false,
-				AttributeTTL:         0,
+				AttributeTTL:         DefaultAttributeTTL,
 			},
 			MetadataCapabilities: adapter.MetadataCapabilities{
 				ClientMayRemoveEarlySidecar: true,
