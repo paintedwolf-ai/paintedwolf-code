@@ -54,7 +54,9 @@ func TestCurlReferencesReachOnlyRequestPlacements(t *testing.T) {
 			prepared, _, err := h.prepare(append(c.words, url)...)
 			testutil.FailErr(t, "prepare", err)
 			args := prepared.Review.Arguments()
-			outside := secretcap.ReferenceUseOutsideSlots(args, h.owners.SecretSlots()).Complete
+			// A token split across fields is malformed, which refuses too.
+			use := secretcap.ReferenceUseOutsideSlots(args, h.owners.SecretSlots())
+			outside := use.Complete || use.Malformed
 			inside := secretcap.ReferenceUseInSlots(args, h.owners.SecretSlots()).Complete
 			if c.sink && (outside || !inside) {
 				t.Fatalf("a sink reference: outside %v, inside %v, arguments %v", outside, inside, args)

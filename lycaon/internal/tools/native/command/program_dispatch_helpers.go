@@ -267,6 +267,10 @@ func (d *ProgramDispatcher) GapLaunchable(request commandprogram.OperationReques
 	if len(request.Argv) == 0 || request.Argv[0].Value == "external" {
 		return false
 	}
+	// A closed owner's unsupported forms refuse wherever they are bound.
+	if d.natives[request.Argv[0].Value].ClosedForms {
+		return false
+	}
 	return (ExternalStages{ToolContext: d.run.tc, Cwd: d.paths.Cwd(), BaseEnvironment: d.run.baseEnv}).Installed(request.Argv[0].Value, request.Environment)
 }
 
