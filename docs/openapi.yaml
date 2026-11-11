@@ -35609,6 +35609,20 @@ components:
             Every command observation window an effect on this page references
             by command_id, newest first. A window that observed nothing has no
             row, so there is no bare command to list.
+        briefing_targets:
+          type: object
+          description: Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them.
+          additionalProperties:
+            $ref: '#/components/schemas/SourceStepBriefingTarget'
+        briefings:
+          type: array
+          description: Stored briefings for this page's targets; passive reads never start one.
+          items:
+            $ref: '#/components/schemas/BriefingSnapshot'
+        briefing_epoch:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: The project's briefing epoch, so a missed reset is noticed.
         commit_available:
           type: boolean
           description: False when the project root is not a git checkout

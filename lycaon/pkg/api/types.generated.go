@@ -8174,6 +8174,12 @@ type SourceWalkResponse struct {
 	// by command_id, newest first. A window that observed nothing has no
 	// row, so there is no bare command to list.
 	Commands []SourceCommandWindow `json:"commands"`
+	// Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them.
+	BriefingTargets map[string]SourceStepBriefingTarget `json:"briefing_targets,omitempty"`
+	// Stored briefings for this page's targets; passive reads never start one.
+	Briefings []BriefingSnapshot `json:"briefings,omitempty"`
+	// The project's briefing epoch, so a missed reset is noticed.
+	BriefingEpoch string `json:"briefing_epoch,omitempty"`
 	// False when the project root is not a git checkout
 	CommitAvailable bool `json:"commit_available"`
 }

@@ -14168,6 +14168,14 @@ export interface components {
              *     row, so there is no bare command to list.
              */
             commands: components["schemas"]["SourceCommandWindow"][];
+            /** @description Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them. */
+            briefing_targets?: {
+                [key: string]: components["schemas"]["SourceStepBriefingTarget"];
+            };
+            /** @description Stored briefings for this page's targets; passive reads never start one. */
+            briefings?: components["schemas"]["BriefingSnapshot"][];
+            /** @description The project's briefing epoch, so a missed reset is noticed. */
+            briefing_epoch?: string;
             /** @description False when the project root is not a git checkout */
             commit_available: boolean;
         };
