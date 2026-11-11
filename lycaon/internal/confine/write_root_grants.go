@@ -49,7 +49,7 @@ func ControlPlaneTree(path string) bool {
 	if underAny(p, resolveEach(agentWorkspaceRootsUnderControlPlane())) {
 		return false
 	}
-	return underAny(p, resolveEach(controlPlaneReadDenyRoots()))
+	return underAny(p, controlPlaneReadDenyRootsResolved())
 }
 
 // ControlPlanePathDenied is the one verdict the approval gate and the path

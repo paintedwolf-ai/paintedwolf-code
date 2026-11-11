@@ -86,8 +86,10 @@ func (s *Promotion) executeDraftPromote(ctx context.Context, id, destPath string
 	if s.sourceViews != nil {
 		s.sourceViews.InvalidateProjectSourceViews(id)
 	}
-	folder := project.PrimaryRootPath(p)
-	s.Roots.afterRootAttached(ctx, id, folder)
+	if err := s.Sessions.ProjectControl.ReassignProjectSessionsOffEditorOnlyRoots(ctx, id); err != nil {
+		return nil, err
+	}
+	s.Roots.afterRootAttached(ctx, id, project.AttachedPrimaryPath(p))
 	s.Verification.detectVerifyAsync(ctx, id)
 	s.Sessions.Chats.ReopenOrientation(ctx, id, s.Roots.Sessions.Coordinator.Runtime.Board())
 	return p, nil

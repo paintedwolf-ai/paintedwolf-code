@@ -90,7 +90,8 @@ func (s *Watch) noteScanCadenceInventory(ctx context.Context, p *project.Project
 	if s == nil || s.ScanCadence == nil || p == nil {
 		return
 	}
-	for _, root := range p.Roots {
+	// Scans run for agents, so only admitted roots enter the cadence.
+	for _, root := range project.AdmittedRoots(p) {
 		files, err := sourcecatalog.Process().Trees.RootFileCount(ctx, p.ID,
 			sourcecatalog.Root{ID: root.ID, Path: root.Path}, sourcecatalog.FileScope{Audience: sourcecatalog.AgentAudience, IncludeHidden: true}, 0)
 		if err != nil {
