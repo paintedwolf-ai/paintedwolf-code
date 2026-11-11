@@ -100,7 +100,7 @@ describe("ShortcutHelpOverlay", () => {
       ).toBe(true);
     }
 
-    for (const entry of shortcutDisplayEntries(contributionFrame())) {
+    for (const entry of shortcutDisplayEntries(contributionFrame(), "macos")) {
       expect(screen.getByTestId(`shortcut-help-row-${entry.id}`)).toBeTruthy();
     }
 
