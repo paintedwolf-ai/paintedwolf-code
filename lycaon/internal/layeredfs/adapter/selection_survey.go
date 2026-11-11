@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -65,28 +66,9 @@ var errSurveyStopped = errors.New("survey reached the budget")
 
 func surveyRootCost(ctx context.Context, root rootCostFacts, fact BudgetFact, stopAtBudget bool, cost *MaterializeCost) error {
 	src := filepath.Clean(root.grant.SourcePath)
-	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			// What this user cannot read is left out of every tree, so it costs nothing.
-			if path != src && errors.Is(walkErr, fs.ErrPermission) {
-				if d != nil && d.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			return walkErr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if path == src {
-			return nil
-		}
+	err := walkBounded(ctx, src, &cost.EntriesRead, func(path string, d fs.DirEntry) (bool, error) {
 		if skipsSeed(d) {
-			if d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
+			return false, nil
 		}
 		if d.IsDir() && slices.Contains(root.hidden, filepath.ToSlash(strings.TrimPrefix(path, src+string(filepath.Separator)))) {
 			return filepath.SkipDir
@@ -95,20 +77,72 @@ func surveyRootCost(ctx context.Context, root rootCostFacts, fact BudgetFact, st
 		if !root.clonable && d.Type().IsRegular() {
 			info, err := d.Info()
 			if err != nil {
-				return err
+				return false, err
 			}
 			cost.UncloneableBytes += max(info.Size(), 0)
 		}
 		if stopAtBudget && cost.Total(fact) > fact.Limit {
-			return errSurveyStopped
+			return false, errSurveyStopped
 		}
-		return nil
+		return true, nil
 	})
 	if errors.Is(err, errSurveyStopped) {
 		cost.Partial = true
 		return nil
 	}
 	return err
+}
+
+// surveyBatch is how many entries one directory read returns, which bounds how far past its stop a
+// walk reads.
+const surveyBatch = 256
+
+// errWalkDone ends a bounded walk that found what it was looking for.
+var errWalkDone = errors.New("walk done")
+
+// walkBounded visits every entry below root, reading each directory surveyBatch entries at a time and
+// counting what it reads in read. visit reports whether to descend into a directory; an error ends the
+// walk. What this user cannot read is left out, as every tree leaves it out.
+func walkBounded(ctx context.Context, root string, read *int64, visit func(path string, d fs.DirEntry) (bool, error)) error {
+	stack := []string{root}
+	for len(stack) > 0 {
+		dir := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		f, err := os.Open(dir)
+		if err != nil {
+			if dir != root && (errors.Is(err, fs.ErrPermission) || errors.Is(err, fs.ErrNotExist)) {
+				continue
+			}
+			return err
+		}
+		for {
+			if err := ctx.Err(); err != nil {
+				_ = f.Close()
+				return err
+			}
+			entries, readErr := f.ReadDir(surveyBatch)
+			*read += int64(len(entries))
+			for _, d := range entries {
+				path := filepath.Join(dir, d.Name())
+				descend, err := visit(path, d)
+				if err != nil {
+					_ = f.Close()
+					return err
+				}
+				if descend && d.IsDir() {
+					stack = append(stack, path)
+				}
+			}
+			if readErr != nil {
+				_ = f.Close()
+				if errors.Is(readErr, io.EOF) || (dir != root && errors.Is(readErr, fs.ErrPermission)) {
+					break
+				}
+				return readErr
+			}
+		}
+	}
+	return nil
 }
 
 // skipsSeed names what no materialized tree holds: source Git metadata and engine state.
@@ -146,28 +180,27 @@ func ProbeCloneAt(dir string) CloneAvailability {
 }
 
 func firstRegularFile(ctx context.Context, root string) (string, error) {
+	sample, _, err := FirstRegularFile(ctx, root, nil)
+	return sample, err
+}
+
+// FirstRegularFile finds a regular file below root, reading directories in bounded batches, and
+// reports how many entries it read. keep, when set, decides which entries the search considers.
+func FirstRegularFile(ctx context.Context, root string, keep func(path string, d fs.DirEntry) bool) (string, int64, error) {
 	var sample string
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			if errors.Is(walkErr, fs.ErrNotExist) {
-				return nil
-			}
-			return walkErr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if path != root && skipsSeed(d) {
-			if d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
+	var read int64
+	err := walkBounded(ctx, root, &read, func(path string, d fs.DirEntry) (bool, error) {
+		if skipsSeed(d) || (keep != nil && !keep(path, d)) {
+			return false, nil
 		}
 		if d.Type().IsRegular() {
 			sample = path
-			return filepath.SkipAll
+			return false, errWalkDone
 		}
-		return nil
+		return true, nil
 	})
-	return sample, err
+	if errors.Is(err, errWalkDone) || errors.Is(err, fs.ErrNotExist) {
+		err = nil
+	}
+	return sample, read, err
 }
