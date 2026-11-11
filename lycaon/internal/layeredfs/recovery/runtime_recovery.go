@@ -211,6 +211,12 @@ func (c *Coordinator) RecoverWorkerRuntime(ctx context.Context, workerID string,
 	manifest, checkpointErr := c.validatedLastCheckpoint(ctx, j)
 	if forRebuild && report.HadRuntime && j.BootID == c.cfg.CurrentBootID &&
 		(j.ActivePhase == "" || j.ActivePhase == PhaseActiveMutation) && layeredfs.WorkingStateRecorded(backing) {
+		// The settled mount's identity is gone, so the journal names the storage the rebuild takes up.
+		j.BackingDir = backing
+		if err := c.SaveWorkerJournal(j); err != nil {
+			report.Disposition, report.Reason, report.Err = RuntimeUnresolved, ReasonSalvageFailed, err
+			return report
+		}
 		report.Disposition = RuntimeSettled
 		if checkpointErr != nil {
 			report.Reason, report.Err = ReasonCheckpointUnusable, checkpointErr
