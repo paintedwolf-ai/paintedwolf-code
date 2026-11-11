@@ -18181,6 +18181,7 @@ components:
         - cache_epoch
         - revision
         - status
+        - pending_sections
         - outcome
         - error_code
         - error_message
@@ -18238,6 +18239,11 @@ components:
         result:
           x-go-pointer: true
           $ref: '#/components/schemas/BriefingResult'
+        pending_sections:
+          type: array
+          description: Sections an active attempt is still producing, in profile order.
+          items:
+            type: string
         regenerate_outcome:
           type: string
           enum:

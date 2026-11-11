@@ -6919,6 +6919,8 @@ export interface components {
              */
             reconcile_after?: string;
             result?: components["schemas"]["BriefingResult"];
+            /** @description Sections an active attempt is still producing, in profile order. */
+            pending_sections: string[];
             /** @enum {string} */
             regenerate_outcome?: "inputs_unchanged" | "started";
             linked_intent?: components["schemas"]["BriefingLinkedIntent"];

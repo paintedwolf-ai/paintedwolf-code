@@ -34,10 +34,16 @@ func (p *published) all() []wire.BriefingEvent {
 	return append([]wire.BriefingEvent(nil), p.events...)
 }
 
-type fixedText struct{}
+// gatedText answers once released, so a test can read the pending state.
+type gatedText struct{ release chan struct{} }
 
-func (fixedText) Generate(context.Context, briefing.Invocation) (string, string, string, error) {
-	return "Rebuilt from a clean folder.", "provider", "model", nil
+func (g gatedText) Generate(ctx context.Context, _ briefing.Invocation) (string, string, string, error) {
+	select {
+	case <-g.release:
+		return "Rebuilt from a clean folder.", "provider", "model", nil
+	case <-ctx.Done():
+		return "", "", "", ctx.Err()
+	}
 }
 
 type activityProfile struct{}
@@ -60,7 +66,8 @@ func TestHostPublishesSnapshotsAndResetsOnPurge(t *testing.T) {
 	database := testdbfixture.Open(t, "briefing-host.db")
 	project := testdbseed.DefaultProjectID
 	testdbseed.InsertProjectRoot(t, database, project, t.TempDir())
-	host := New(context.Background(), database, t.TempDir(), fixedText{})
+	generator := gatedText{release: make(chan struct{})}
+	host := New(context.Background(), database, t.TempDir(), generator)
 	t.Cleanup(func() { _ = host.Close(context.Background()) })
 	testutil.FailErr(t, "register", host.Registry.Register(activityProfile{}))
 	hub := &published{}
@@ -68,6 +75,12 @@ func TestHostPublishesSnapshotsAndResetsOnPurge(t *testing.T) {
 
 	_, err := host.Engine.Request(t.Context(), request(project))
 	testutil.FailErr(t, "request", err)
+	pending, err := host.Store.Snapshot(t.Context(), snapshotQuery(project))
+	testutil.FailErr(t, "pending snapshot", err)
+	if pending.Status != "pending" || len(pending.PendingSections) != 1 || pending.PendingSections[0] != "change" || pending.ReconcileAfter == "" {
+		t.Fatalf("pending snapshot %+v", pending)
+	}
+	close(generator.release)
 	host.Scheduler.Wait(t.Context())
 	sent := hub.all()
 	if len(sent) != 1 || sent[0].Kind != "snapshot" || sent[0].Snapshot.Result == nil || sent[0].Snapshot.Result.Summary[0].Text != "Rebuilt from a clean folder." {

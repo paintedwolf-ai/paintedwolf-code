@@ -135,7 +135,7 @@ components:
     BriefingSnapshot:
       x-go-generate: true
       type: object
-      required: [profile_id, profile_version, target_key, scope_fingerprint, target, cache_epoch, revision, status, outcome, error_code, error_message]
+      required: [profile_id, profile_version, target_key, scope_fingerprint, target, cache_epoch, revision, status, pending_sections, outcome, error_code, error_message]
       additionalProperties: false
       properties:
         profile_id: {type: string, enum: [source_step, tool_activity, worker_result]}
@@ -157,6 +157,10 @@ components:
         result:
           x-go-pointer: true
           $ref: '#/components/schemas/BriefingResult'
+        pending_sections:
+          type: array
+          description: Sections an active attempt is still producing, in profile order.
+          items: {type: string}
         regenerate_outcome: {type: string, enum: [inputs_unchanged, started]}
         linked_intent:
           x-go-pointer: true

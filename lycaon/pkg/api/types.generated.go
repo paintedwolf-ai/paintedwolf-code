@@ -1079,8 +1079,10 @@ type BriefingSnapshot struct {
 	AttemptTrigger  string `json:"attempt_trigger,omitempty"`
 	InvocationClass string `json:"invocation_class,omitempty"`
 	// Present while pending; ask again after it if no terminal event arrived.
-	ReconcileAfter    string                `json:"reconcile_after,omitempty"`
-	Result            *BriefingResult       `json:"result,omitempty"`
+	ReconcileAfter string          `json:"reconcile_after,omitempty"`
+	Result         *BriefingResult `json:"result,omitempty"`
+	// Sections an active attempt is still producing, in profile order.
+	PendingSections   []string              `json:"pending_sections"`
 	RegenerateOutcome string                `json:"regenerate_outcome,omitempty"`
 	LinkedIntent      *BriefingLinkedIntent `json:"linked_intent,omitempty"`
 	Outcome           BriefingOutcome       `json:"outcome"`

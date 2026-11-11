@@ -25,7 +25,7 @@ type SnapshotQuery struct {
 // absent at the current epoch.
 func (s *Store) Snapshot(ctx context.Context, query SnapshotQuery) (wire.BriefingSnapshot, error) {
 	out := wire.BriefingSnapshot{ProfileID: query.ProfileID, ProfileVersion: query.Version, TargetKey: query.TargetKey,
-		Target: map[string]any{}, Status: "absent", Revision: "0", Outcome: wire.BriefingOutcome{State: "unknown"}}
+		Target: map[string]any{}, Status: "absent", Revision: "0", PendingSections: []string{}, Outcome: wire.BriefingOutcome{State: "unknown"}}
 	target, err := s.GetTarget(ctx, query.ProjectID, query.ProfileID, query.TargetKey)
 	if errors.Is(err, sql.ErrNoRows) {
 		epoch, err := s.Epoch(ctx, query.ProjectID)
@@ -45,6 +45,11 @@ func (s *Store) Snapshot(ctx context.Context, query SnapshotQuery) (wire.Briefin
 	out.UpdatedAt = db.FormatTime(target.UpdatedAt)
 	if target.Attempt.Status == "pending" {
 		out.ReconcileAfter = db.FormatTime(query.Policy.Deadline(target.Attempt.StartedAt))
+		for _, section := range target.Sections {
+			if !section.Resolved {
+				out.PendingSections = append(out.PendingSections, section.SectionID)
+			}
+		}
 	}
 	if intent := target.Facts.Intent; intent != nil {
 		out.LinkedIntent = &wire.BriefingLinkedIntent{Text: intent.Text, CheckpointID: intent.CheckpointID, ActionID: intent.ActionID, Scope: intent.Scope}
