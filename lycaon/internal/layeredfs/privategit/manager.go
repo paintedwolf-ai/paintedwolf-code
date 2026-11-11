@@ -51,7 +51,7 @@ type managedView struct {
 }
 
 // Manager coordinates lazy mounted repository initialization, materialized seed
-// repository preparation, checkpoints, and trunk ref imports.
+// repository preparation, and checkpoint export.
 type Manager struct {
 	cfg             ManagerConfig
 	canonBackingDir string

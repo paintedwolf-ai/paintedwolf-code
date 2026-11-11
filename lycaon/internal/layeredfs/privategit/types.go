@@ -25,15 +25,10 @@ var (
 	// ErrRemoteOperationRefused is returned when fetch or push is denied by RemotePolicy.
 	ErrRemoteOperationRefused = errors.New("privategit: remote operation refused by egress/approval policy")
 
-	// ErrRefImportConflict is returned when a destination ref in trunk already exists
-	// with different recorded content or conflicts with a recorded import journal.
-	ErrRefImportConflict = errors.New("privategit: destination ref conflict during trunk import")
-
-	// ErrIdentityMismatch is returned when a ref import request does not match the
-	// worker or checkpoint identity recorded in the checkpoint state.
+	// ErrIdentityMismatch is a worker that does not own the private worktree it names.
 	ErrIdentityMismatch = errors.New("privategit: worker or checkpoint identity mismatch")
 
-	// ErrSeedLimitExceeded is returned when materialized fallback seeding exceeds
+	// ErrSeedLimitExceeded is returned when materialized seeding exceeds
 	// configured file count or byte limits.
 	ErrSeedLimitExceeded = errors.New("privategit: materialized seed limit exceeded")
 
@@ -61,7 +56,6 @@ const (
 	LeaseView         LeaseKind = "view"
 	LeaseCheckpoint   LeaseKind = "checkpoint"
 	LeaseStackedChild LeaseKind = "stacked_child"
-	LeaseRefImport    LeaseKind = "ref_import"
 )
 
 // StoreMetrics reports cumulative object and byte accounting for the retained store.
@@ -233,59 +227,4 @@ type CheckpointGitArtifacts struct {
 	ReachableOIDs   []string          `json:"reachable_oids"`
 	ImportedObjects int64             `json:"imported_objects"`
 	SubmoduleHeads  map[string]string `json:"submodule_heads,omitempty"`
-}
-
-// ImportStage identifies the durable phase of a namespaced trunk ref import.
-type ImportStage string
-
-const (
-	StageIntent          ImportStage = "intent"
-	StageObjectsImported ImportStage = "objects_imported"
-	StageMidRefPublish   ImportStage = "mid_ref_publish"
-	StageRefsPublished   ImportStage = "refs_published"
-)
-
-// ImportJournalRecord persists the crash-recoverable state of a trunk ref import.
-type ImportJournalRecord struct {
-	JobID        string            `json:"job_id"`
-	WorkerID     string            `json:"worker_id"`
-	CheckpointID string            `json:"checkpoint_id"`
-	TrunkDir     string            `json:"trunk_dir"`
-	Stage        ImportStage       `json:"stage"`
-	PlannedRefs  map[string]string `json:"planned_refs"`
-	Published    map[string]string `json:"published"`
-	ObjectsCount int64             `json:"objects_count"`
-	UpdatedAt    time.Time         `json:"updated_at"`
-}
-
-// RefImportOptionFlags groups optional ref categories to export during trunk ref import.
-type RefImportOptionFlags struct {
-	IncludeDetachedHead bool
-	IncludeTags         bool
-	IncludeStashes      bool
-	IncludeUnchanged    bool
-}
-
-// RefImportRequest specifies an idempotent namespaced ref import into the trunk.
-type RefImportRequest struct {
-	JobID        string
-	WorkerID     string
-	CheckpointID string
-	TrunkDir     string
-	Checkpoint   *CheckpointGitState
-	Options      RefImportOptionFlags
-	RefFilter    []string
-	CrashHook    func(stage ImportStage) error
-}
-
-// RefImportResult is the structured result envelope for a completed trunk ref import.
-type RefImportResult struct {
-	JobID              string            `json:"job_id"`
-	WorkerID           string            `json:"worker_id"`
-	CheckpointID       string            `json:"checkpoint_id"`
-	Stage              ImportStage       `json:"stage"`
-	ImportedRefs       map[string]string `json:"imported_refs"`
-	SourceToDest       map[string]string `json:"source_to_dest"`
-	DeletedPrivateRefs []string          `json:"deleted_private_refs"`
-	ObjectsImported    int64             `json:"objects_imported"`
 }
