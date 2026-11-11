@@ -171,7 +171,7 @@ type plannedRefWrite struct{ dstRef, oid string }
 // "<root ID>:<ref>". A root with no repository has nothing to import them into; its objects stay
 // retained with the checkpoint.
 func ImportAndValidateCheckpointGitRefs(
-	ctx context.Context, storeDir, checkpointID, workerID string, git PrivateGitSnapshot,
+	ctx context.Context, sources GitObjectSources, checkpointID, workerID string, git PrivateGitSnapshot,
 	targetRoots map[string]string, authorizedGitDirs ...string,
 ) (map[string]string, error) {
 	if err := ctx.Err(); err != nil {
@@ -190,7 +190,7 @@ func ImportAndValidateCheckpointGitRefs(
 		}
 	}
 	request := rootRefImport{
-		storeDir: storeDir, checkpointID: cleanCheckpoint, workerID: cleanWorker,
+		storeDir: sources.StoreDir, retained: sources.Retained, checkpointID: cleanCheckpoint, workerID: cleanWorker,
 		objectCheckpoints: git.ObjectCheckpoints, authorizedGitDirs: authorizedGitDirs,
 	}
 	imported := map[string]string{}
@@ -271,8 +271,17 @@ func ensureMinimalGitDirLayout(gitDir, commonGitDir string) error {
 	return nil
 }
 
+// GitObjectSources are where a checkpoint's objects may come from: the objects it and its stacked
+// parents exported into the store, and the engine's retained stores holding the history they build
+// on. Only objects the worker's tips reach over the destination's boundary are taken from either.
+type GitObjectSources struct {
+	StoreDir string
+	Retained []string
+}
+
 type rootRefImport struct {
 	storeDir, checkpointID, workerID string
+	retained                         []string
 	repoRoot, rootID                 string
 	refs                             map[string]string
 	objectCheckpoints                []string
@@ -323,6 +332,7 @@ func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, 
 			pub.sourceObjectDirs = append(pub.sourceObjectDirs, CheckpointGitObjectsDir(req.storeDir, id, req.rootID))
 		}
 	}
+	pub.sourceObjectDirs = append(pub.sourceObjectDirs, req.retained...)
 	tx, err := planCheckpointRefTransaction(req.storeDir, gitDir, commonGitDir, req.checkpointID, req.workerID, req.rootID, writes)
 	if err != nil {
 		return nil, err

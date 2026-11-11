@@ -256,7 +256,7 @@ func promoteWorkflowCheckpoint(t *testing.T, cpStore *checkpoint.Store, trunkDir
 	if err != nil {
 		t.Fatalf("begin promotion: %v", err)
 	}
-	if _, err := txn.ApplyCheckpoint(t.Context(), promoter, checkpoint.ApplyRequest{Preview: preview}); err != nil {
+	if _, err := txn.ApplyCheckpoint(t.Context(), promoter, checkpoint.ApplyRequest{Preview: preview, ImportGitRefs: true}); err != nil {
 		t.Fatalf("apply promotion: %v", err)
 	}
 	if err := txn.Commit(); err != nil {

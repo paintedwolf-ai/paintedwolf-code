@@ -82,9 +82,10 @@ type PreviewRequest struct {
 
 // PromoterConfig configures a transactional Promoter.
 type PromoterConfig struct {
-	Store             *Store
-	TargetRoots       map[string]string
-	AuthorizedGitDirs []string
+	Store       *Store
+	TargetRoots map[string]string
+	// RetainedGitObjects are the engine's retained object stores the checkpoint's Git history builds on.
+	RetainedGitObjects []string
 }
 
 // Promoter executes exact-base three-way preview and transactional promotion.

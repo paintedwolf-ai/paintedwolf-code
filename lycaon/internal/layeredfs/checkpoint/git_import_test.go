@@ -76,7 +76,7 @@ func TestCheckpointGitImportPackedRepositoryAndSubmoduleGitlink(t *testing.T) {
 
 	imported, err := ImportAndValidateCheckpointGitRefs(
 		t.Context(),
-		store.RootDir(),
+		GitObjectSources{StoreDir: store.RootDir()},
 		"chk-pack-1",
 		"w-pack",
 		PrivateGitSnapshot{Refs: map[string]string{
@@ -110,7 +110,7 @@ func TestCheckpointGitImportRefusesMalformedObjectsAndInvalidRefNames(t *testing
 		oid, err := WriteLooseGitObject(CheckpointGitObjectsDir(storeDir, id, ""), object.kind, []byte(object.body))
 		testutil.FailErr(t, "write "+object.kind, err)
 		_, err = ImportAndValidateCheckpointGitRefs(
-			t.Context(), storeDir, id, "w-bad",
+			t.Context(), GitObjectSources{StoreDir: storeDir}, id, "w-bad",
 			PrivateGitSnapshot{Refs: map[string]string{"refs/heads/bad": oid}},
 			map[string]string{"primary": dstRepo},
 		)
@@ -156,7 +156,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 
 	// 1. Unauthorized external gitdir/commondir must fail with ErrUnauthorizedGitDir.
 	if _, err := ImportAndValidateCheckpointGitRefs(
-		t.Context(), storeDir, "chk-auth", "w-1",
+		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-auth", "w-1",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": oidA}},
 		map[string]string{"primary": primary},
 	); !errors.Is(err, ErrUnauthorizedGitDir) {
@@ -168,7 +168,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 	siblingOID, err := WriteLooseGitObject(siblingObjs, "blob", []byte("sibling-only\n"))
 	testutil.FailErr(t, "write sibling blob", err)
 	if _, err := ImportAndValidateCheckpointGitRefs(
-		t.Context(), storeDir, "chk-sib", "w-1",
+		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-sib", "w-1",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/sib": siblingOID}},
 		map[string]string{"primary": primary},
 		worktreeGit, commonGit,
@@ -180,7 +180,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 	packedRefsContent := fmt.Sprintf("# pack-refs with: peeled fully-peeled sorted\n%s refs/lycaon/workers/w-1/heads/packed\n", oidB)
 	testutil.FailErr(t, "write packed-refs", os.WriteFile(filepath.Join(commonGit, "packed-refs"), []byte(packedRefsContent), 0o644))
 	if _, err := ImportAndValidateCheckpointGitRefs(
-		t.Context(), storeDir, "chk-packed-conflict", "w-1",
+		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-packed-conflict", "w-1",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/packed": oidA}},
 		map[string]string{"primary": primary},
 		worktreeGit, commonGit,
@@ -199,7 +199,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 	rawIntent, _ := json.Marshal(intentRec)
 	testutil.FailErr(t, "write intent", os.WriteFile(filepath.Join(storeDir, "promotions", "git-import-w-1--chk-crash.json"), rawIntent, 0o600))
 	if _, err := ImportAndValidateCheckpointGitRefs(
-		t.Context(), storeDir, "chk-crash", "w-1",
+		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-crash", "w-1",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/ok": oidA}},
 		map[string]string{"primary": primary},
 		worktreeGit, commonGit,
@@ -209,7 +209,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 
 	// 5. Concurrent conflicting imports racing on the same destination ref.
 	_, err = ImportAndValidateCheckpointGitRefs(
-		t.Context(), storeDir, "chk-seed-b", "w-seed",
+		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-seed-b", "w-seed",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/seed": oidB}},
 		map[string]string{"primary": primary},
 		worktreeGit, commonGit,
@@ -223,7 +223,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 		go func(idx int) {
 			defer wg.Done()
 			_, errs[idx] = ImportAndValidateCheckpointGitRefs(
-				context.Background(), "", "", "w-race",
+				context.Background(), GitObjectSources{StoreDir: ""}, "", "w-race",
 				PrivateGitSnapshot{Refs: map[string]string{"refs/heads/race": oids[idx]}},
 				map[string]string{"primary": primary},
 				worktreeGit, commonGit,
