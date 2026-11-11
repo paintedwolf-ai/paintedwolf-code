@@ -10,6 +10,8 @@ export type SummarySection = {
   id: string;
   text?: string;
   source?: BriefingSummarySection["source"];
+  /** Names the section before its text, as the approval card does. */
+  label?: string;
 };
 
 /**
@@ -35,6 +37,11 @@ type Props = {
   "data-testid"?: string;
 };
 
+/** The AI mark; surfaces that compose their own text use it beside that text. */
+export function BriefingMark(props: { disclaimer?: string }) {
+  return <Mark disclaimer={props.disclaimer ?? briefingCopy.disclaimer} />;
+}
+
 function Mark(props: { disclaimer: string }) {
   return (
     <>
@@ -42,6 +49,10 @@ function Mark(props: { disclaimer: string }) {
       <span class="den-visually-hidden">{props.disclaimer}</span>
     </>
   );
+}
+
+function Label(props: { text?: string }) {
+  return <Show when={props.text}>{(text) => <strong class="den-briefing-summary__label">{text()}:</strong>}</Show>;
 }
 
 /**
@@ -67,6 +78,7 @@ export function BriefingSummary(props: Props) {
               return (
                 <p class="den-briefing-summary__section" data-section={section.id} data-state="waiting">
                   <Mark disclaimer={disclaimer()} />
+                  <Label text={section.label} />
                   <span class="den-briefing-summary__waiting">{briefingCopy.waiting}</span>
                 </p>
               );
@@ -75,6 +87,7 @@ export function BriefingSummary(props: Props) {
             <p class="den-briefing-summary__section" data-section={section.id} data-source={section.source}>
               <Show when={section.source === "summarizer"} fallback={<span class="den-briefing-summary__text">{section.text}</span>}>
                 <Mark disclaimer={disclaimer()} />
+                <Label text={section.label} />
                 {(() => {
                   // Text already settled when this view opened shows at once.
                   if (!watched.has(section.id)) markLetterRevealOnceKey(onceKey(section.id));

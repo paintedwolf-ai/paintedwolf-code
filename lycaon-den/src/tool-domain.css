@@ -57,15 +57,6 @@
   }
 }
 
-@keyframes den-ai-rationale-shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
-
 /* Pulse the pending approval dot. */
 @keyframes den-approval-dot-pulse {
   0%,

@@ -193,7 +193,8 @@ export function ToolApprovalBody(props: ApprovalCardProps) {
     return {
       text: p.ai_rationale,
       pending: p.ai_rationale_pending,
-      onceKey: props.checkpoint.checkpointId,
+      onceKey: p.ai_rationale_evidence_ref?.record_id ?? props.checkpoint.checkpointId,
+      evidence: p.ai_rationale_evidence_ref,
     };
   });
   const detailRows = createMemo(() => approvalEvidenceRows(plan(), directIPDeclaration(), socketResolutions()));

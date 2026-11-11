@@ -6781,7 +6781,7 @@ export interface components {
             /** @description Present when the summary has an evidence record. */
             evidence_ref?: components["schemas"]["BriefingEvidenceRef"];
         };
-        /** @description Revision-keyed briefing update with delta, result, or error. */
+        /** @description Revision-keyed briefing update with its result or error. */
         FileBriefingEvent: {
             /** Format: uuid */
             project_id: string;
@@ -6795,12 +6795,11 @@ export interface components {
             presentation: "current" | "document" | "version";
             source_sha256: string;
             /** @enum {string} */
-            status: "preview" | "pending" | "streaming" | "complete" | "failed";
+            status: "preview" | "pending" | "complete" | "failed";
             preview?: components["schemas"]["FileBriefingPreview"];
             locations?: components["schemas"]["FileBriefingLocation"][];
             sections?: components["schemas"]["FileBriefingSection"][];
             fallback_text: string;
-            delta?: string;
             truncated: boolean;
             error?: string;
             /** Format: date-time */
