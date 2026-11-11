@@ -10,7 +10,6 @@ import {
   OFF,
   type PrettyConfig,
   type PrettyLayoutState,
-  type PrettyLimitReason,
   type PrettyOutcome,
   type PrettyWork,
   updateLayout,
@@ -54,18 +53,6 @@ export function prettyWorkOf(state: EditorState): PrettyWork {
   return state.field(prettyLayoutField, false)?.work ?? NO_WORK;
 }
 
-/**
- * Calls `onChange` after an update changes the layout outcome. The call waits
- * for the update to finish, since listeners may dispatch.
- */
-export function prettyOutcomeListener(onChange: (outcome: PrettyOutcome) => void): Extension {
-  return EditorView.updateListener.of((update) => {
-    const before = update.startState.field(prettyLayoutField, false)?.outcome;
-    const after = update.state.field(prettyLayoutField, false)?.outcome;
-    if (after && before !== after) queueMicrotask(() => onChange(after));
-  });
-}
-
 export function createPrettyExtension(initial: PrettyConfig = { enabled: false }): Extension {
   return [prettyPresentation, prettyTabMarks, prettyLayoutField.init((state) => buildLayout(state, initial))];
 }
@@ -90,10 +77,3 @@ export function applyPrettyConfig(
   // The reflow moves the selection head; it stays in view.
   if (toggled) keepPositionInView(view, head);
 }
-
-export const PRETTY_LIMIT_MESSAGES: Record<PrettyLimitReason, string> = {
-  size: "Too large for Pretty",
-  depth: "Nested too deeply for Pretty",
-  decorations: "Too many breaks for Pretty",
-  work: "Too large for Pretty",
-};

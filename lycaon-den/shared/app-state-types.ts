@@ -288,6 +288,8 @@ export type DenEditorPrefs = {
   tabMovesFocus?: boolean;
   /** When true, long lines wrap in the in-app file viewer (off by default). */
   wordWrap?: boolean;
+  /** When true, files are shown in Pretty layout, wrapped where it does not apply (off by default). */
+  pretty?: boolean;
   revealInTree?: boolean;
   /** Maximum sticky tree rows, including the root and any collapsed row; zero disables sticky rows. */
   treeVisibleLevels?: number;

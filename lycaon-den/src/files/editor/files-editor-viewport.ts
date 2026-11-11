@@ -23,9 +23,8 @@ import {
 import {
   applyPrettyConfig,
   createPrettyExtension,
-  prettyOutcomeListener,
-  prettyOutcomeOf,
 } from "../../components/source/pretty/pretty-layout.ts";
+import { editorPrettyPref } from "../../settings/editor/editor-prefs.ts";
 import { applyBufferReveal, hasPendingReveal } from "./files-editor-reveal.ts";
 import { restoreEditorScrollTop } from "../../components/source/editor/editor-view-state.ts";
 import { lineGutterExtension } from "../../components/source/annotations/line-gutter.ts";
@@ -44,13 +43,6 @@ import {
   settleFilesEditorView,
   softDetachFilesEditor,
 } from "./files-editor-host.ts";
-import {
-  clearPrettyDisplayTab,
-  isPrettyDisplayEnabled,
-  registerPrettySurfaceCapability,
-  setPrettyLayoutOutcome,
-  togglePrettyDisplayPref,
-} from "./pretty-display-state.ts";
 import { filesGutterContextExtension } from "./files-gutter-context.ts";
 import { hunkPlaybackExtension } from "../walk/hunk-playback.ts";
 import { JUMP_CURSOR_LINE_THRESHOLD } from "../history/jump-history.ts";
@@ -114,25 +106,7 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
     const draft = untrack(() => filesBufferText(buffer()));
     const prefs = untrack(() => currentDisplayPrefs(buffer()));
     const projectId = currentProjectId();
-    const initialPrettyEnabled = untrack(() =>
-      isPrettyDisplayEnabled(projectId, key),
-    );
-    const unregisterPretty = registerPrettySurfaceCapability(projectId, key, {
-      enabled: () => isPrettyDisplayEnabled(projectId, key),
-      available: () => !historicalActive() && !currentAbsent(),
-      onToggle: () => {
-        const next = togglePrettyDisplayPref(projectId, key);
-        const v = binding.view;
-        if (v) {
-          applyPrettyConfig(
-            v,
-            { enabled: next, path: buffer().path },
-            [documentSynchronization.of(true)],
-          );
-        }
-        return true;
-      },
-    });
+    const initialPrettyEnabled = untrack(editorPrettyPref);
 
     const wireHandlers = (handlers: SourceEditorHandlers) => {
       handlers.onDocChange = (update) => {
@@ -192,7 +166,6 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
         [documentSynchronization.of(true)],
       );
       setSimplifiedDisplay(sourceUsesSimplifiedDisplay(reused.state));
-      setPrettyLayoutOutcome(projectId, key, prettyOutcomeOf(reused.state));
       if (plan.scrollTop > 0) {
         setEditorScrollTop(reused, plan.scrollTop);
         restoreEditorScrollTop(reused, plan.scrollTop);
@@ -206,7 +179,6 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       const hostExtensions = [
         filesCollaborationExtension(replica),
         createPrettyExtension({ enabled: initialPrettyEnabled, path }),
-        prettyOutcomeListener((outcome) => setPrettyLayoutOutcome(projectId, key, outcome)),
         filesGutterContextExtension,
         hunkPlaybackExtension,
         lineGutterExtension,
@@ -256,7 +228,6 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
         el,
       );
       bindView(created);
-      setPrettyLayoutOutcome(projectId, key, prettyOutcomeOf(created.state));
       // Reattachment applies the current editability.
       applyEditable(created, canEdit);
       completeFilesEditorAttach({
@@ -299,7 +270,6 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       }
     }
     onCleanup(() => {
-      unregisterPretty();
       cancelChrome?.();
       setChromeReady(false);
       flushFilesDraftSyncFor(projectId, key);
@@ -315,16 +285,13 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
         softDetachFilesEditor(projectId, key, el);
         return;
       }
-      clearPrettyDisplayTab(projectId, key);
       destroyFilesEditor(projectId, key, { dropHandlers: true });
     });
   }));
 
   createEffect(() => {
-    const projectId = currentProjectId();
-    const key = buffer().key;
     const path = buffer().path;
-    const enabled = isPrettyDisplayEnabled(projectId, key);
+    const enabled = editorPrettyPref();
     const v = editorView();
     if (!v) return;
     untrack(() => {

@@ -46,8 +46,8 @@ async function openPretty(page: Page, request: Parameters<typeof openProjectFile
     };
     Object.assign(window, { __pretty: { view, breaksIn, visualLineAt: pretty.prettyVisualLineAt, active: pretty.prettyLayoutActive } });
   }, project.id);
-  await page.getByTestId("files-editor-pretty-toggle").click();
-  await expect(page.getByTestId("files-editor-pretty-toggle")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("files-editor-layout-pretty").click();
+  await expect(page.getByTestId("files-editor-layout-pretty")).toHaveAttribute("aria-pressed", "true");
   await content.focus();
   return { content, scroller: host.locator(".cm-scroller") };
 }
@@ -117,8 +117,6 @@ modelIndependentWebE2e("lays a long one-line document out under soft wrapping", 
   expect(facts.active).toBe(true);
   expect(["pre-wrap", "break-spaces"]).toContain(facts.wrap);
   expect(facts.lineNumberOnes).toBe(1);
-  await expect(page.getByTestId("files-editor-wrap-toggle")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("files-editor-wrap-toggle")).toBeDisabled();
   await expect(content).toBeFocused();
 });
 
@@ -326,7 +324,10 @@ modelIndependentWebE2e("keeps the selection and brings it into view across toggl
     return Boolean(rect && rect.bottom > port.top && rect.top < port.bottom);
   });
   const toggles: Array<() => Promise<void>> = [
-    () => page.getByTestId("files-editor-pretty-toggle").click(),
+    async () => {
+      const on = await page.getByTestId("files-editor-layout-pretty").getAttribute("aria-pressed") === "true";
+      await page.getByTestId(on ? "files-editor-layout-off" : "files-editor-layout-pretty").click();
+    },
     async () => { await content.focus(); await page.keyboard.press("Alt+KeyP"); },
   ];
   for (const fraction of [0.3, 0.5, 0.9]) {
@@ -381,8 +382,8 @@ modelIndependentWebE2e("marks tabs in indentation while laid out", async ({ page
     expect(mark.width).toBeGreaterThan(0);
     expect(mark.arrow).toContain("svg");
   }
-  await page.getByTestId("files-editor-pretty-toggle").click();
-  await expect(page.getByTestId("files-editor-pretty-toggle")).toHaveAttribute("aria-pressed", "false");
+  await page.getByTestId("files-editor-layout-off").click();
+  await expect(page.getByTestId("files-editor-layout-pretty")).toHaveAttribute("aria-pressed", "false");
   await expect.poll(async () => (await marks(".cm-den-tab")).length).toBe(0);
 
   await page.evaluate(async () => {
@@ -397,50 +398,66 @@ modelIndependentWebE2e("marks tabs in indentation while laid out", async ({ page
   for (const dot of dots) expect(dot).toContain("radial-gradient");
 });
 
-for (const wrapPref of [false, true]) {
-  modelIndependentWebE2e(`renders source text at every scroll position (Wrap ${wrapPref ? "on" : "off"})`, async ({ page, request }) => {
-    const nodes: number[] = [];
-    for (const items of [ITEMS_200_KB, ITEMS_1_MB]) {
-      const { scroller } = await openPretty(page, request, items);
-      await page.evaluate(async (wrap) => {
-        const prefs = await import(/* @vite-ignore */ String("/src/settings/editor/editor-prefs.ts")) as typeof import("../src/settings/editor/editor-prefs.ts");
-        await prefs.saveEditorWordWrap(wrap);
-      }, wrapPref);
-      for (const fraction of [0, 0.5, 1]) {
-        await scroller.evaluate((element, fraction) => {
-          element.scrollTop = (element.scrollHeight - element.clientHeight) * fraction;
-        }, fraction);
-        await settle(page);
-        await settle(page);
-        const mismatches = await page.evaluate(() => {
-          const view = window.__pretty.view();
-          const doc = view.state.doc;
-          const bad: string[] = [];
-          for (const line of view.contentDOM.querySelectorAll(".cm-line")) {
-            // A long line is drawn as a window; compare from its first text.
-            const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
-            let first: Node | null = walker.nextNode();
-            while (first && !first.nodeValue) first = walker.nextNode();
-            if (!first) continue;
-            let text = "";
-            for (let node: Node | null = first; node; node = walker.nextNode()) text += node.nodeValue ?? "";
-            const from = view.posAtDOM(first, 0);
-            if (text.length < 200 || doc.sliceString(from, from + text.length) !== text) bad.push(`${from}:${text.length}`);
-          }
-          return bad;
-        });
-        expect(mismatches, `at ${fraction}`).toEqual([]);
-      }
-      await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
-      await expect.poll(() => page.evaluate(() => {
-        const view = window.__pretty.view();
-        const head = view.state.selection.main.head;
-        const rect = view.coordsAtPos(head);
-        const port = view.scrollDOM.getBoundingClientRect();
-        return head === view.state.doc.length && Boolean(rect && rect.top < port.bottom && rect.bottom > port.top);
-      }), { timeout: 5_000 }).toBe(true);
-      nodes.push(await page.evaluate(() => window.__pretty.view().contentDOM.querySelectorAll("*").length));
-    }
-    expect(nodes[1]!).toBeLessThan(nodes[0]! * 2 + 2_000);
+modelIndependentWebE2e("stays in Pretty and wraps a file it cannot lay out", async ({ page, request }) => {
+  const line = `exec ./server ${"--flag value ".repeat(40)}`;
+  await openProjectFilesFixture(page, request, {
+    prefix: "pretty-display",
+    name: "Pretty display",
+    seed: (root) => writeFileSync(path.join(root, "serve.sh"), `#!/bin/sh\n${line}\n`),
   });
-}
+  await page.getByTestId("files-tree-file").filter({ hasText: "serve.sh" }).click();
+  const host = page.getByTestId("files-editor-host");
+  await expect(host.locator(".cm-content")).toBeEditable();
+  const status = page.locator(".den-files-editor__status").filter({ visible: true });
+  const before = await status.innerText();
+  await page.getByTestId("files-editor-layout-pretty").click();
+  await expect(page.getByTestId("files-editor-layout-pretty")).toHaveAttribute("aria-pressed", "true");
+  await expect(host.locator(".cm-content")).toHaveClass(/cm-lineWrapping/);
+  await expect(host.locator(".pw-pretty-break")).toHaveCount(0);
+  expect(await status.innerText()).toBe(before);
+  const rows = await host.locator(".cm-line").nth(1).evaluate((element) =>
+    Math.round(element.getBoundingClientRect().height / parseFloat(getComputedStyle(element).lineHeight)));
+  expect(rows).toBeGreaterThan(1);
+});
+
+modelIndependentWebE2e("renders source text at every scroll position", async ({ page, request }) => {
+  const nodes: number[] = [];
+  for (const items of [ITEMS_200_KB, ITEMS_1_MB]) {
+    const { scroller } = await openPretty(page, request, items);
+    for (const fraction of [0, 0.5, 1]) {
+      await scroller.evaluate((element, fraction) => {
+        element.scrollTop = (element.scrollHeight - element.clientHeight) * fraction;
+      }, fraction);
+      await settle(page);
+      await settle(page);
+      const mismatches = await page.evaluate(() => {
+        const view = window.__pretty.view();
+        const doc = view.state.doc;
+        const bad: string[] = [];
+        for (const line of view.contentDOM.querySelectorAll(".cm-line")) {
+          // A long line is drawn as a window; compare from its first text.
+          const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+          let first: Node | null = walker.nextNode();
+          while (first && !first.nodeValue) first = walker.nextNode();
+          if (!first) continue;
+          let text = "";
+          for (let node: Node | null = first; node; node = walker.nextNode()) text += node.nodeValue ?? "";
+          const from = view.posAtDOM(first, 0);
+          if (text.length < 200 || doc.sliceString(from, from + text.length) !== text) bad.push(`${from}:${text.length}`);
+        }
+        return bad;
+      });
+      expect(mismatches, `at ${fraction}`).toEqual([]);
+    }
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+    await expect.poll(() => page.evaluate(() => {
+      const view = window.__pretty.view();
+      const head = view.state.selection.main.head;
+      const rect = view.coordsAtPos(head);
+      const port = view.scrollDOM.getBoundingClientRect();
+      return head === view.state.doc.length && Boolean(rect && rect.top < port.bottom && rect.bottom > port.top);
+    }), { timeout: 5_000 }).toBe(true);
+    nodes.push(await page.evaluate(() => window.__pretty.view().contentDOM.querySelectorAll("*").length));
+  }
+  expect(nodes[1]!).toBeLessThan(nodes[0]! * 2 + 2_000);
+});

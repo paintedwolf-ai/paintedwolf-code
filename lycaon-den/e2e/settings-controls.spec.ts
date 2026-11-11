@@ -16,7 +16,7 @@ webE2e("settings controls retain display, editor, and notification preferences",
   await openSettings(page);
   const groups = [
     { tab: "display", ids: ["display-diff-collapsed", "display-diff-word-wrap", "display-show-all-models", "display-first-time-tips"] },
-    { tab: "editor", ids: ["editor-word-wrap", "editor-line-numbers", "editor-indent-guides", "editor-whitespace", "editor-scrollbar-ticks-symbols", "editor-scrollbar-ticks-changes", "editor-scrollbar-ticks-matches", "editor-scrollbar-ticks-cursor", "editor-scrollbar-ticks-agents", "editor-agent-activity-reads", "editor-agent-activity-changes", "editor-agent-activity-fileNames"] },
+    { tab: "editor", ids: ["editor-line-layout", "editor-line-numbers", "editor-indent-guides", "editor-whitespace", "editor-scrollbar-ticks-symbols", "editor-scrollbar-ticks-changes", "editor-scrollbar-ticks-matches", "editor-scrollbar-ticks-cursor", "editor-scrollbar-ticks-agents", "editor-agent-activity-reads", "editor-agent-activity-changes", "editor-agent-activity-fileNames"] },
     { tab: "notifications", ids: ["notifications-finished", "notifications-needs-you", "notifications-needs-approval"] },
   ];
   const values = new Map<string, boolean>();

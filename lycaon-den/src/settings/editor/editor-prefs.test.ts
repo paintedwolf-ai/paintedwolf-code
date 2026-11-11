@@ -34,6 +34,7 @@ import {
   editorScrollbarTicksPref,
   editorShownScrollbarTicks,
   editorWhitespacePref,
+  editorLineLayoutPref,
   editorWordWrapPref,
   editorRevealInTreePref,
   editorVersionComparisonPref,
@@ -60,7 +61,7 @@ import {
   saveEditorScrollbarTickKind,
   saveEditorScrollbarTicks,
   saveEditorWhitespace,
-  saveEditorWordWrap,
+  saveEditorLineLayout,
   saveEditorRevealInTree,
   saveEditorVersionComparison,
   syncEditorPrefsFromSnapshot,
@@ -252,6 +253,7 @@ describe("editor-prefs", () => {
       ...EMPTY_APP_STATE_V1,
       editor: {
         wordWrap: true,
+        pretty: true,
         lineNumbers: false,
         fontSize: 15,
         indentGuides: false,
@@ -276,6 +278,7 @@ describe("editor-prefs", () => {
       agents: true,
     });
     expect(editorWordWrapPref()).toBe(true);
+    expect(editorLineLayoutPref()).toBe("pretty");
     expect(editorLineNumbersPref()).toBe(false);
     expect(editorFontSizePref()).toBe(15);
     expect(editorIndentGuidesPref()).toBe(false);
@@ -286,7 +289,7 @@ describe("editor-prefs", () => {
     expect(editorLineHeightPref()).toBe(1.75);
     expect(editorVersionComparisonPref()).toBe("before");
 
-    await saveEditorWordWrap(false);
+    await saveEditorLineLayout("off");
     await saveEditorLineNumbers(true);
     await saveEditorFontSize(12);
     await saveEditorIndentGuides(true);
@@ -302,6 +305,7 @@ describe("editor-prefs", () => {
     expect(editorScrollbarTicksPref()).toBe(true);
     expect(editorScrollbarTickKindsPref().changes).toBe(true);
     expect(editorWordWrapPref()).toBe(false);
+    expect(editorLineLayoutPref()).toBe("off");
     expect(editorLineNumbersPref()).toBe(true);
     expect(editorFontSizePref()).toBe(12);
     expect(editorIndentGuidesPref()).toBe(true);

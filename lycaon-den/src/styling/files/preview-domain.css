@@ -70,6 +70,21 @@
   font-weight: inherit;
 }
 
+/* The line layout pill sits inside the status bar's height. */
+.den-browse-segmented.den-files-editor__layout {
+  --den-segment-thumb-inset: 0px;
+  flex-wrap: nowrap;
+  height: calc(var(--den-files-footer-h) - 8px);
+  padding: 2px;
+  gap: 0;
+}
+
+.den-files-editor__layout .den-browse-segment {
+  padding: 0 7px;
+  font-size: var(--text-den-caption);
+  line-height: 1;
+}
+
 .project-files-view .den-browse-chrome,
 .den-files-tab-strip,
 .den-files-tab-strip__tree-toggle,

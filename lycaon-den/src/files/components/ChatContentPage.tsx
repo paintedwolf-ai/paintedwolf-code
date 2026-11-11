@@ -3,7 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { Compartment, StateEffect } from "@codemirror/state";
 import type { LycaonClient } from "../../api/client.ts";
 import { chatContentDocumentKey, type ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
-import { createChatContentAccess, exceedsPrettyInput } from "../../chat/transcript/content/chat-content-reader.ts";
+import { createChatContentAccess } from "../../chat/transcript/content/chat-content-reader.ts";
 import { bindChatContentFind } from "../../chat/transcript/content/chat-content-find.ts";
 import { getBackgroundProcessSnapshot, prepareBackgroundProcessOutput, subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
 import { bindFindableView } from "../../find/use-findable-view.ts";
@@ -13,20 +13,11 @@ import { createSourceEditorState, applyEditorDisplayPrefs } from "../../componen
 import { editorDisplayPrefs } from "../../components/source/editor/editor-display-prefs.ts";
 import { ChatContentEditor } from "../editor/chat-content-editor.ts";
 import { ReadonlyFilesDocument } from "../editor/ReadonlyFilesDocument.tsx";
-import {
-  isPrettyDisplayEnabled,
-  prettyStatusToggleForTab,
-  registerPrettySurfaceCapability,
-  setPrettyLayoutOutcome,
-  togglePrettyDisplayPref,
-} from "../editor/pretty-display-state.ts";
+import { editorPrettyPref } from "../../settings/editor/editor-prefs.ts";
 import {
   applyPrettyConfig,
   createPrettyExtension,
-  prettyOutcomeListener,
-  prettyOutcomeOf,
 } from "../../components/source/pretty/pretty-layout.ts";
-import { prettyTargetFor } from "../../components/source/pretty/pretty-recognition.ts";
 import type { PrettyConfig } from "../../components/source/pretty/pretty-rescan.ts";
 import { copyTextToClipboard } from "../../utils/clipboard.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
@@ -67,19 +58,7 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   const reportError = (cause: unknown) => reportSurfaceFailure(contentFailure, cause, props.projectId);
   const reportCopyError = (cause: unknown) => reportSurfaceFailure(copyFailure, cause, props.projectId);
   const receipts = useCommandReceiptDocument(() => props.document, () => props.client, reportError);
-  const tabKey = createMemo(() => chatContentDocumentKey(props.document));
-  const prettyEnabled = () => isPrettyDisplayEnabled(props.projectId, tabKey());
-  const layoutAvailable = () => prettyTargetFor(props.document.path, props.document.language) !== null;
-  createEffect(() => {
-    const key = tabKey();
-    onCleanup(
-      registerPrettySurfaceCapability(props.projectId, key, {
-        enabled: () => isPrettyDisplayEnabled(props.projectId, key),
-        available: layoutAvailable,
-        onToggle: () => togglePrettyDisplayPref(props.projectId, key),
-      }),
-    );
-  });
+  const prettyEnabled = editorPrettyPref;
   const refreshProcessSnapshot = () => {
     if (props.document.content.kind !== "process") return;
     const snap = getBackgroundProcessSnapshot(props.document.sessionId, props.document.content.handle)?.text ?? "";
@@ -112,7 +91,6 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   createEffect(() => {
     const contentAccess = access();
     const enabled = prettyEnabled();
-    const key = tabKey();
     const gen = ++retainedGen;
     setRetainedText(null);
     if (!contentAccess || !enabled) return;
@@ -122,13 +100,7 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
       .readBoundedSnapshot(abort.signal)
       .then((snap) => {
         if (abort.signal.aborted || gen !== retainedGen) return;
-        if (!snap) {
-          // The paged reader keeps the text; at the size limit Pretty says why it is not laid out.
-          if (exceedsPrettyInput(contentAccess.reference)) {
-            setPrettyLayoutOutcome(props.projectId, key, { kind: "limit", reason: "size", length: contentAccess.reference.total_runes });
-          }
-          return;
-        }
+        if (!snap) return;
         if (snap.sha256 !== contentAccess.reference.sha256 || !redactionSpansFit(snap.text, snap.spans)) return;
         setRetainedText({ text: snap.text, spans: snap.spans });
       })
@@ -240,9 +212,8 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
         dirtyCount: projectFilesState(props.projectId).order.filter(key => projectFilesState(props.projectId).byKey[key]?.dirty).length,
         cursor: cursor(), language: "Plain text", indent: { label: indentChipLabel(editorDisplayPrefs().indent) },
         details: <><Show when={isProcessSnapshot()}><span class="den-files-editor__status-detail" data-testid="chat-process-pretty-snapshot">Snapshot</span></Show><span class="den-files-editor__status-detail" data-testid="files-editor-encoding-chip">UTF-8</span></>,
-        pretty: prettyStatusToggleForTab(props.projectId, tabKey()),
       }}>
-    <Show when={usePagedReader()} fallback={<InlineChatContent receiptText={receipts().text} document={props.document} client={props.client} prettyEnabled={prettyEnabled()} processSnapshot={processSnapshot()} retainedText={retainedText()} onOutcome={(outcome) => setPrettyLayoutOutcome(props.projectId, tabKey(), outcome)} onError={reportError} onEditor={setInlineEditor} />}>
+    <Show when={usePagedReader()} fallback={<InlineChatContent receiptText={receipts().text} document={props.document} client={props.client} prettyEnabled={prettyEnabled()} processSnapshot={processSnapshot()} retainedText={retainedText()} onError={reportError} onEditor={setInlineEditor} />}>
       <div class="den-source-reader__editors"><div class="den-source-reader__editor" ref={setEditorHost} /></div>
     </Show>
     </ReadonlyFilesDocument>
@@ -256,7 +227,6 @@ function InlineChatContent(props: {
   prettyEnabled: boolean;
   processSnapshot: { text: string; rev: number } | null;
   retainedText: ChatRetainedText | null;
-  onOutcome: (outcome: ReturnType<typeof prettyOutcomeOf>) => void;
   onError: (cause: unknown) => void;
   onEditor: (editor: EditorView | undefined) => void;
 }) {
@@ -297,12 +267,10 @@ function InlineChatContent(props: {
       extensions: [
         redactions.of(buildRawRedactionExtension(value, untrack(redactionSpans))),
         createPrettyExtension(untrack(prettyConfig)),
-        prettyOutcomeListener((outcome) => props.onOutcome(outcome)),
       ],
     }) });
     editor = view;
     props.onEditor(view);
-    props.onOutcome(prettyOutcomeOf(view.state));
     onCleanup(() => { view.destroy(); if (editor === view) editor = undefined; props.onEditor(undefined); });
   });
   createEffect(() => {

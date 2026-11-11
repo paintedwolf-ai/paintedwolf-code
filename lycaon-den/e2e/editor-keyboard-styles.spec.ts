@@ -34,13 +34,13 @@ modelIndependentWebE2e("keyboard editing preserves the existing chrome and docum
   await expect(page.locator(".den-files-editor:visible .den-editor-mode")).toHaveCount(0);
   await expect(page.getByTestId("files-editor-editing-state").filter({ visible: true })).toHaveCount(0);
 
-  const wrap = page.getByTestId("files-editor-wrap-toggle").filter({ visible: true });
-  const before = await wrap.evaluate(element => getComputedStyle(element).color);
-  const pressed = await wrap.getAttribute("aria-pressed");
-  await wrap.focus();
+  const wrap = page.getByTestId("files-editor-layout-wrap").filter({ visible: true });
+  const target = await wrap.getAttribute("aria-pressed") === "true"
+    ? page.getByTestId("files-editor-layout-off").filter({ visible: true })
+    : wrap;
+  await target.focus();
   await page.keyboard.press("Enter");
-  await expect(wrap).toHaveAttribute("aria-pressed", pressed === "true" ? "false" : "true");
-  expect(await wrap.evaluate(element => getComputedStyle(element).color)).toBe(before);
+  await expect(target).toHaveAttribute("aria-pressed", "true");
 
   await editor.focus();
   await page.keyboard.press("Control+Home");

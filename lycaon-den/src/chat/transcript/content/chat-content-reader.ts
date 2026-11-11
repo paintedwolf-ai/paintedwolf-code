@@ -26,12 +26,12 @@ export type ChatContentAccess = {
   search: (query: string, cursor: string | undefined, caseSensitive: boolean, signal: AbortSignal) => ReturnType<LycaonClient["searchChatContent"]>;
 };
 
-/** The observer projection carries the first viewport before a card is clicked. */
 /** Whether retained content is too large to load whole for Pretty. A character is at most four UTF-8 bytes. */
-export function exceedsPrettyInput(reference: { total_runes: number; size_bytes: number }): boolean {
+function exceedsPrettyInput(reference: { total_runes: number; size_bytes: number }): boolean {
   return reference.total_runes > PRETTY_MAX_INPUT || reference.size_bytes > 4 * PRETTY_MAX_INPUT;
 }
 
+/** The observer projection carries the first viewport before a card is clicked. */
 export function createChatContentAccess(options: {
   client: LycaonClient;
   sessionId: string;
