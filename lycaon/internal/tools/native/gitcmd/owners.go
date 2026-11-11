@@ -6,14 +6,14 @@
 package gitcmd
 
 import (
-	"path/filepath"
-	"os"
 	"context"
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
