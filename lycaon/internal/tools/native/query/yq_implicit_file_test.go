@@ -10,13 +10,14 @@ import (
 
 // yq's file-or-expression decision runs before admission: a bare operand
 // inside the roots is a file only when it is one there, and an operand that
-// resolves beyond them is a file for admission to review, not inspected.
+// resolves beyond them is a file for admission to review, not inspected. Once
+// the first operand is a file, every operand is.
 func TestYqImplicitFileDecisionStaysInsideAuthority(t *testing.T) {
 	h := newHarness(t, map[string]string{"config.yaml": "a: 1\n"})
 	for words, want := range map[string][]commandprogram.PathTarget{
 		"config.yaml":               {{Path: "config.yaml"}},
 		".a":                        nil,
-		"sub/../../outside.yaml .a": {{Path: "sub/../../outside.yaml"}},
+		"sub/../../outside.yaml .a": {{Path: "sub/../../outside.yaml"}, {Path: ".a"}},
 	} {
 		argv := commandprogram.Fields{{Value: "yq"}}
 		for _, word := range strings.Fields(words) {
