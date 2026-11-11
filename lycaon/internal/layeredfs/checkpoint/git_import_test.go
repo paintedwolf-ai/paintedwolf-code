@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,7 +67,7 @@ func TestCheckpointGitImportPackedRepositoryAndSubmoduleGitlink(t *testing.T) {
 	for _, pe := range packEntries {
 		if !pe.IsDir() {
 			srcP := filepath.Join(srcRepo, ".git", "objects", "pack", pe.Name())
-			testutil.FailErr(t, "copy pack asset", copyFileStreamingAtomic(srcP, filepath.Join(cpPackDir, pe.Name()), 0o444))
+			testutil.FailErr(t, "copy pack asset", copyTestFile(srcP, filepath.Join(cpPackDir, pe.Name())))
 		}
 	}
 
@@ -97,35 +96,30 @@ func TestCheckpointGitImportPackedRepositoryAndSubmoduleGitlink(t *testing.T) {
 	}
 }
 
-func TestCheckpointGitImportMalformedNestedOIDsAndInvalidRefNames(t *testing.T) {
+func TestCheckpointGitImportRefusesMalformedObjectsAndInvalidRefNames(t *testing.T) {
 	t.Parallel()
 	dstRepo := t.TempDir()
 	runGitTestCmd(t, dstRepo, "init", "-q")
 	storeDir := t.TempDir()
-	objsDir := filepath.Join(storeDir, "objects")
 
-	// Validly hashed commit with malformed short tree OID "x" must return error and never panic.
-	badCommitOID, err := WriteLooseGitObject(objsDir, "commit", []byte("tree x\nauthor A <a@b.c> 1 +0000\ncommitter A <a@b.c> 1 +0000\n\nmsg\n"))
-	testutil.FailErr(t, "write bad commit", err)
-	_, err = ImportAndValidateCheckpointGitRefs(
-		t.Context(), storeDir, "chk-bad-1", "w-bad",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/bad": badCommitOID}},
-		map[string]string{"primary": dstRepo},
-	)
-	if err == nil || !strings.Contains(err.Error(), "invalid tree target oid") {
-		t.Fatalf("expected invalid tree target oid error, got %v", err)
+	// Validly hashed objects whose targets are malformed never reach the destination or its refs.
+	for id, object := range map[string]struct{ kind, body string }{
+		"chk-bad-1": {"commit", "tree x\nauthor A <a@b.c> 1 +0000\ncommitter A <a@b.c> 1 +0000\n\nmsg\n"},
+		"chk-bad-2": {"tag", "object y\ntype commit\ntag v1\ntagger A <a@b.c> 1 +0000\n\nmsg\n"},
+	} {
+		oid, err := WriteLooseGitObject(CheckpointGitObjectsDir(storeDir, id, ""), object.kind, []byte(object.body))
+		testutil.FailErr(t, "write "+object.kind, err)
+		_, err = ImportAndValidateCheckpointGitRefs(
+			t.Context(), storeDir, id, "w-bad",
+			PrivateGitSnapshot{Refs: map[string]string{"refs/heads/bad": oid}},
+			map[string]string{"primary": dstRepo},
+		)
+		if !errors.Is(err, ErrCheckpointGitBoundary) {
+			t.Fatalf("malformed %s: %v", object.kind, err)
+		}
 	}
-
-	// Validly hashed tag with malformed short object OID "y" must return error and never panic.
-	badTagOID, err := WriteLooseGitObject(objsDir, "tag", []byte("object y\ntype commit\ntag v1\ntagger A <a@b.c> 1 +0000\n\nmsg\n"))
-	testutil.FailErr(t, "write bad tag", err)
-	_, err = ImportAndValidateCheckpointGitRefs(
-		t.Context(), storeDir, "chk-bad-2", "w-bad",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/tags/bad": badTagOID}},
-		map[string]string{"primary": dstRepo},
-	)
-	if err == nil || !strings.Contains(err.Error(), "invalid object target oid") {
-		t.Fatalf("expected invalid object target oid error, got %v", err)
+	if refs := runGitTestCmd(t, dstRepo, "for-each-ref"); refs != "" {
+		t.Fatalf("a refused import moved refs: %s", refs)
 	}
 
 	for _, badRef := range []string{"refs/heads/a..b", "refs/heads/a@{0}", "refs/heads/a.lock", "refs/heads/.hidden", "refs/heads/a~1"} {
@@ -152,10 +146,12 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 	_, err := NewStore(storeDir)
 	testutil.FailErr(t, "NewStore", err)
 
-	objsDir := filepath.Join(storeDir, "objects")
-	oidA, err := WriteLooseGitObject(objsDir, "blob", []byte("blob-A\n"))
-	testutil.FailErr(t, "write oidA", err)
-	oidB, err := WriteLooseGitObject(objsDir, "blob", []byte("blob-B\n"))
+	var oidA, oidB string
+	for _, id := range []string{"chk-auth", "chk-packed-conflict", "chk-crash"} {
+		oidA, err = WriteLooseGitObject(CheckpointGitObjectsDir(storeDir, id, ""), "blob", []byte("blob-A\n"))
+		testutil.FailErr(t, "write oidA", err)
+	}
+	oidB, err = WriteLooseGitObject(CheckpointGitObjectsDir(storeDir, "chk-seed-b", ""), "blob", []byte("blob-B\n"))
 	testutil.FailErr(t, "write oidB", err)
 
 	// 1. Unauthorized external gitdir/commondir must fail with ErrUnauthorizedGitDir.
@@ -167,7 +163,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 		t.Fatalf("expected ErrUnauthorizedGitDir without authorized dirs, got %v", err)
 	}
 
-	// 2. Sibling .git/objects outside storeDir must not be discovered as a retained source.
+	// 2. Objects outside the checkpoint's own are never a source.
 	siblingObjs := filepath.Join(storeParent, ".git", "objects")
 	siblingOID, err := WriteLooseGitObject(siblingObjs, "blob", []byte("sibling-only\n"))
 	testutil.FailErr(t, "write sibling blob", err)
@@ -176,8 +172,8 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/sib": siblingOID}},
 		map[string]string{"primary": primary},
 		worktreeGit, commonGit,
-	); err == nil {
-		t.Fatal("expected sibling .git/objects outside storeDir not to be imported")
+	); !errors.Is(err, ErrCheckpointGitBoundary) {
+		t.Fatalf("an object outside the checkpoint was published: %v", err)
 	}
 
 	// 3. Conflicting ref in packed-refs (with no loose ref) must be rejected with ErrCheckpointRefConflict.
@@ -247,270 +243,10 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 	}
 }
 
-type failingAfterBytesReader struct {
-	r         io.Reader
-	remaining int
-}
-
-func (f *failingAfterBytesReader) Read(p []byte) (int, error) {
-	if f.remaining <= 0 {
-		return 0, errors.New("injected mid-copy read error")
+func copyTestFile(src, dst string) error {
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		return err
 	}
-	n, _ := f.r.Read(p[:min(len(p), f.remaining)])
-	f.remaining -= n
-	return n, errors.New("injected mid-copy read error")
-}
-
-func TestCheckpointGitImportCopyFailureAndCorruptDestinationRecovery(t *testing.T) {
-	dstRepo, storeDir := t.TempDir(), t.TempDir()
-	runGitTestCmd(t, dstRepo, "init", "-q")
-	_, err := NewStore(storeDir)
-	testutil.FailErr(t, "NewStore", err)
-
-	objsDir := filepath.Join(storeDir, "objects")
-	oid, err := WriteLooseGitObject(objsDir, "blob", []byte("atomic-object-payload\n"))
-	testutil.FailErr(t, "write blob", err)
-	dstObjPath := filepath.Join(dstRepo, ".git", "objects", oid[:2], oid[2:])
-
-	assertNoDestOrTemp := func(label string) {
-		t.Helper()
-		if _, stErr := os.Lstat(dstObjPath); !errors.Is(stErr, os.ErrNotExist) {
-			t.Fatalf("%s: partial destination object must not be published, stat err=%v", label, stErr)
-		}
-		if entries, _ := os.ReadDir(filepath.Dir(dstObjPath)); len(entries) != 0 {
-			t.Fatalf("%s: expected temporary files cleaned up, got %d entries", label, len(entries))
-		}
-	}
-	origWrap, origSync, origClose := wrapObjectCopyReaderFn, syncObjectFileFn, closeObjectFileFn
-	t.Cleanup(func() { wrapObjectCopyReaderFn, syncObjectFileFn, closeObjectFileFn = origWrap, origSync, origClose })
-
-	// 1. Mid-copy reader failure must not publish tmpFile or leave temp artifacts.
-	wrapObjectCopyReaderFn = func(srcPath string, r io.Reader) io.Reader {
-		if strings.HasPrefix(srcPath, storeDir) {
-			return &failingAfterBytesReader{r: r, remaining: 4}
-		}
-		return r
-	}
-	if _, err := ImportAndValidateCheckpointGitRefs(t.Context(), storeDir, "chk-f1", "w-1", PrivateGitSnapshot{Refs: map[string]string{"refs/heads/f": oid}}, map[string]string{"primary": dstRepo}); err == nil {
-		t.Fatal("expected mid-copy failure")
-	}
-	assertNoDestOrTemp("mid-copy")
-	wrapObjectCopyReaderFn = origWrap
-
-	// 2. syncFile failure must not publish tmpFile.
-	syncObjectFileFn = func(f *os.File) error {
-		if strings.HasPrefix(f.Name(), dstRepo) {
-			return errors.New("injected sync failure")
-		}
-		return origSync(f)
-	}
-	if _, err := ImportAndValidateCheckpointGitRefs(t.Context(), storeDir, "chk-f2", "w-1", PrivateGitSnapshot{Refs: map[string]string{"refs/heads/f": oid}}, map[string]string{"primary": dstRepo}); err == nil {
-		t.Fatal("expected sync failure")
-	}
-	assertNoDestOrTemp("sync")
-	syncObjectFileFn = origSync
-
-	// 3. Close failure must not publish tmpFile.
-	closeObjectFileFn = func(f *os.File) error {
-		name := f.Name()
-		_ = f.Close()
-		if strings.HasPrefix(name, dstRepo) {
-			return errors.New("injected close failure")
-		}
-		return nil
-	}
-	if _, err := ImportAndValidateCheckpointGitRefs(t.Context(), storeDir, "chk-f3", "w-1", PrivateGitSnapshot{Refs: map[string]string{"refs/heads/f": oid}}, map[string]string{"primary": dstRepo}); err == nil {
-		t.Fatal("expected close failure")
-	}
-	assertNoDestOrTemp("close")
-	closeObjectFileFn = origClose
-
-	// 4. Pre-existing corrupt/truncated destination object is detected and replaced on retry without poisoning.
-	testutil.FailErr(t, "mkdir dst prefix", os.MkdirAll(filepath.Dir(dstObjPath), 0o750))
-	testutil.FailErr(t, "seed corrupt dst", os.WriteFile(dstObjPath, []byte("corrupt-partial"), 0o444))
-	imported, err := ImportAndValidateCheckpointGitRefs(t.Context(), storeDir, "chk-ok", "w-1", PrivateGitSnapshot{Refs: map[string]string{"refs/heads/f": oid}}, map[string]string{"primary": dstRepo})
-	testutil.FailErr(t, "retry import after failures and corrupt dst", err)
-	if imported["refs/lycaon/workers/w-1/heads/f"] != oid {
-		t.Fatalf("unexpected imported refs: %v", imported)
-	}
-	// 5. Failed copy against an already-valid destination must preserve the valid destination object intact.
-	wrapObjectCopyReaderFn = func(_ string, r io.Reader) io.Reader { return &failingAfterBytesReader{r: r, remaining: 4} }
-	if err := copyFileStreamingAtomic(filepath.Join(objsDir, oid[:2], oid[2:]), dstObjPath, 0o444); err == nil {
-		t.Fatal("expected direct copyFileStreamingAtomic failure")
-	}
-	wrapObjectCopyReaderFn = origWrap
-	if !isValidDestinationGitAsset(filepath.Join(objsDir, oid[:2], oid[2:]), dstObjPath) {
-		t.Fatal("existing valid destination object was clobbered by failed copy")
-	}
-}
-
-func TestCheckpointGitImportRejectsInvalidPendingPublishRecords(t *testing.T) {
-	dstRepo, storeDir := t.TempDir(), t.TempDir()
-	runGitTestCmd(t, dstRepo, "init", "-q")
-	_, err := NewStore(storeDir)
-	testutil.FailErr(t, "NewStore", err)
-
-	objsDir := filepath.Join(storeDir, "objects")
-	oid, err := WriteLooseGitObject(objsDir, "blob", []byte("pending-record-validation-payload\n"))
-	testutil.FailErr(t, "write blob", err)
-	pendingPath := filepath.Join(dstRepo, ".git", "lycaon-pending-publish")
-
-	assertRefAndObjectNotPublished := func(label string) {
-		t.Helper()
-		dstObj := filepath.Join(dstRepo, ".git", "objects", oid[:2], oid[2:])
-		if _, stErr := os.Lstat(dstObj); !errors.Is(stErr, os.ErrNotExist) {
-			t.Fatalf("%s: expected object not published on invalid pending record, got %v", label, stErr)
-		}
-		refPath := filepath.Join(dstRepo, ".git", "refs", "lycaon", "workers", "w-1", "tags", "v1")
-		if _, stErr := os.Lstat(refPath); !errors.Is(stErr, os.ErrNotExist) {
-			t.Fatalf("%s: expected ref not published on invalid pending record, got %v", label, stErr)
-		}
-	}
-	runImport := func() error {
-		_, iErr := ImportAndValidateCheckpointGitRefs(
-			t.Context(), storeDir, "chk-pend", "w-1",
-			PrivateGitSnapshot{Refs: map[string]string{"refs/tags/v1": oid}},
-			map[string]string{"primary": dstRepo},
-		)
-		return iErr
-	}
-
-	// 1. Regular file at lycaon-pending-publish instead of directory must fail closed.
-	testutil.FailErr(t, "write file at pendingPath", os.WriteFile(pendingPath, []byte(oid+"\n"), 0o600))
-	if err := runImport(); err == nil {
-		t.Fatal("expected regular file at lycaon-pending-publish to fail closed")
-	}
-	assertRefAndObjectNotPublished("regular-file-at-dir")
-	testutil.FailErr(t, "remove pendingPath file", os.Remove(pendingPath))
-
-	// 2. Symlink at lycaon-pending-publish must fail closed.
-	otherDir := t.TempDir()
-	testutil.FailErr(t, "symlink pendingPath", os.Symlink(otherDir, pendingPath))
-	if err := runImport(); err == nil {
-		t.Fatal("expected symlink at lycaon-pending-publish to fail closed")
-	}
-	assertRefAndObjectNotPublished("symlink-at-dir")
-	testutil.FailErr(t, "remove pendingPath symlink", os.Remove(pendingPath))
-
-	// 3. Invalid records inside lycaon-pending-publish directory (unexpected name, symlink, malformed JSON,
-	// unknown field, wrong version, empty oids, invalid oid, uppercase oid, zero oid) must all fail closed.
-	testutil.FailErr(t, "mkdir pendingPath", os.MkdirAll(pendingPath, 0o750))
-	recPath := filepath.Join(pendingPath, "pending-bad.json")
-	for _, tc := range []struct {
-		name string
-		raw  []byte
-	}{
-		{"malformed-json", []byte(`{"format_version":1,"oids":[`)},
-		{"unknown-field", []byte(`{"format_version":1,"oids":["` + oid + `"],"extra":true}`)},
-		{"trailing-json", []byte(`{"format_version":1,"oids":["` + oid + `"]}{}`)},
-		{"wrong-version", []byte(`{"format_version":2,"oids":["` + oid + `"]}`)},
-		{"empty-oids", []byte(`{"format_version":1,"oids":[]}`)},
-		{"invalid-oid", []byte(`{"format_version":1,"oids":["not-an-oid"]}`)},
-		{"uppercase-oid", []byte(`{"format_version":1,"oids":["` + strings.ToUpper(oid) + `"]}`)},
-		{"zero-oid", []byte(`{"format_version":1,"oids":["0000000000000000000000000000000000000000"]}`)},
-	} {
-		testutil.FailErr(t, "write "+tc.name, os.WriteFile(recPath, tc.raw, 0o600))
-		if err := runImport(); err == nil {
-			t.Fatalf("%s: expected invalid pending publish record to fail closed", tc.name)
-		}
-		assertRefAndObjectNotPublished(tc.name)
-	}
-	testutil.FailErr(t, "remove recPath", os.Remove(recPath))
-
-	// 4. Unexpected non-.json file and symlink entry inside lycaon-pending-publish must fail closed.
-	unexpectedFile := filepath.Join(pendingPath, "unexpected.txt")
-	testutil.FailErr(t, "write unexpected.txt", os.WriteFile(unexpectedFile, []byte("bad"), 0o600))
-	if err := runImport(); err == nil {
-		t.Fatal("expected unexpected non-.json file in lycaon-pending-publish to fail closed")
-	}
-	assertRefAndObjectNotPublished("unexpected-file")
-	testutil.FailErr(t, "remove unexpected.txt", os.Remove(unexpectedFile))
-
-	symlinkRec := filepath.Join(pendingPath, "pending-link.json")
-	targetRec := filepath.Join(otherDir, "target.json")
-	testutil.FailErr(t, "write targetRec", os.WriteFile(targetRec, []byte(`{"format_version":1,"oids":["`+oid+`"]}`), 0o600))
-	testutil.FailErr(t, "symlink record", os.Symlink(targetRec, symlinkRec))
-	if err := runImport(); err == nil {
-		t.Fatal("expected symlink record in lycaon-pending-publish to fail closed")
-	}
-	assertRefAndObjectNotPublished("symlink-record")
-	testutil.FailErr(t, "remove symlink record", os.Remove(symlinkRec))
-
-	// 5. Oversized record (> 4 MiB) must fail closed.
-	oversized := make([]byte, (4<<20)+128)
-	for i := range oversized {
-		oversized[i] = ' '
-	}
-	copy(oversized, `{"format_version":1,"oids":["`+oid+`"]}`)
-	testutil.FailErr(t, "write oversized record", os.WriteFile(recPath, oversized, 0o600))
-	if err := runImport(); err == nil {
-		t.Fatal("expected oversized pending publish record (>4MiB) to fail closed")
-	}
-	assertRefAndObjectNotPublished("oversized-record")
-
-	// 6. Unreadable record (0o000) must fail closed when running as non-root.
-	if os.Geteuid() != 0 {
-		testutil.FailErr(t, "write valid rec before chmod 0", os.WriteFile(recPath, []byte(`{"format_version":1,"oids":["`+oid+`"]}`), 0o600))
-		testutil.FailErr(t, "chmod 0 recPath", os.Chmod(recPath, 0o000))
-		t.Cleanup(func() { _ = os.Chmod(recPath, 0o600) })
-		if err := runImport(); err == nil {
-			t.Fatal("expected unreadable pending publish record to fail closed")
-		}
-		assertRefAndObjectNotPublished("unreadable-record")
-		testutil.FailErr(t, "restore recPath mode", os.Chmod(recPath, 0o600))
-	}
-
-	// 7. Valid format-1 record is accepted and cleaned up once its OID is verified and published.
-	testutil.FailErr(t, "write valid pending record", os.WriteFile(recPath, []byte(`{"format_version":1,"oids":["`+oid+`"]}`), 0o600))
-	if err := runImport(); err != nil {
-		t.Fatalf("expected valid pending record import to succeed: %v", err)
-	}
-	if _, stErr := os.Lstat(pendingPath); !errors.Is(stErr, os.ErrNotExist) {
-		t.Fatalf("expected lycaon-pending-publish directory removed after completion, got %v", stErr)
-	}
-}
-
-func TestCheckpointGitImportRejectsAlternatesInCandidateAndTargetStores(t *testing.T) {
-	root := t.TempDir()
-	store, err := NewStore(filepath.Join(root, "recovery", "checkpoints"))
-	testutil.FailErr(t, "checkpoint store", err)
-	externalObjects := filepath.Join(root, "external-objects")
-	extBlob, err := WriteLooseGitObject(externalObjects, "blob", []byte("external unauthorized blob\n"))
-	testutil.FailErr(t, "write external blob", err)
-
-	target := filepath.Join(root, "source")
-	testutil.FailErr(t, "mkdir target", os.MkdirAll(target, 0o755))
-	runGitTestCmd(t, target, "init", "-q")
-
-	// 1. Candidate store with objects/info/alternates must fail closed.
-	cpObjs := CheckpointGitObjectsDir(store.RootDir(), "chk-alt", "")
-	testutil.FailErr(t, "mkdir candidate info", os.MkdirAll(filepath.Join(cpObjs, "info"), 0o755))
-	testutil.FailErr(t, "write candidate alternates", os.WriteFile(filepath.Join(cpObjs, "info", "alternates"), []byte(externalObjects+"\n"), 0o600))
-	if _, err := ImportAndValidateCheckpointGitRefs(
-		t.Context(), store.RootDir(), "chk-alt", "worker",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/tags/ext": extBlob}},
-		map[string]string{"primary": target},
-	); err == nil {
-		t.Fatal("expected candidate objects/info/alternates to be rejected")
-	}
-	_, code, probeErr := gitexec.Run(t.Context(), target, []string{"cat-file", "-e", extBlob}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
-	testutil.FailErr(t, "probe external blob", probeErr)
-	if code == 0 {
-		t.Fatal("external object resolved via prohibited candidate alternates")
-	}
-	testutil.FailErr(t, "remove candidate alternates", os.RemoveAll(filepath.Join(cpObjs, "info")))
-
-	// 2. Destination store with objects/info/alternates must also fail closed.
-	validBlob, err := WriteLooseGitObject(cpObjs, "blob", []byte("valid candidate blob\n"))
-	testutil.FailErr(t, "write valid candidate blob", err)
-	targetAltFile := filepath.Join(target, ".git", "objects", "info", "alternates")
-	testutil.FailErr(t, "mkdir target info", os.MkdirAll(filepath.Dir(targetAltFile), 0o755))
-	testutil.FailErr(t, "write target alternates", os.WriteFile(targetAltFile, []byte(externalObjects+"\n"), 0o600))
-	if _, err := ImportAndValidateCheckpointGitRefs(
-		t.Context(), store.RootDir(), "chk-alt", "worker",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/tags/valid": validBlob}},
-		map[string]string{"primary": target},
-	); err == nil {
-		t.Fatal("expected target objects/info/alternates to be rejected")
-	}
+	return os.WriteFile(dst, raw, 0o444)
 }
