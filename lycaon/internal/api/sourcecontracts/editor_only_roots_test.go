@@ -46,7 +46,7 @@ func TestEditorOperationsWorkInEditorOnlyRoots(t *testing.T) {
 			rel := filepath.Base(dir)
 			do := editorClient{t: t, srv: srv, base: "/v1/projects/" + p.ID + "/source"}
 
-			if browse := do.call(http.MethodGet, "/browse?"+url.Values{"root_id": {root}, "path": {rel}}.Encode(), nil); !bytes.Contains(browse, []byte("seed.txt")) {
+			if browse := do.call(http.MethodGet, "/browse?"+url.Values{"root_id": {root}, "dir": {rel}}.Encode(), nil); !bytes.Contains(browse, []byte("seed.txt")) {
 				t.Fatalf("browse did not list the folder: %s", browse)
 			}
 			var read wire.ProjectSourceReadResponse
