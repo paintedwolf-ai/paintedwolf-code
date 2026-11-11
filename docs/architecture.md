@@ -37,7 +37,7 @@ The durable database is not sharded per project. Session, workflow, source, auth
 | **Person** | A human who acts on a host. The host owner holds the device credential; durable authorship names a person. |
 | **Client** | One Den window or tab connected to a host. A person may use several clients at once; presence and editing leases belong to clients. |
 | **Project** | Durable identity for a body of work. A project may have no folder or one or more attached roots. |
-| **Root** | A human-attached filesystem tree. Roots define ordinary project read/write scope and path identity. |
+| **Root** | A human-attached filesystem tree with a path identity. An *admitted* root also defines ordinary agent read/write scope; an *editor-only* root is for the person alone ([Projects § Admitted and editor-only roots](projects.md#admitted-and-editor-only-roots)). |
 | **Project overlay** | Commit-worthy `.paintedwolf/` content that configures the project: guidance, workflows, rules, Blueprints, and other declared artifacts. Development and release builds use the same directory. |
 | **Session** | Durable conversation and execution boundary containing ordered entries, submissions, turns, workflow lineage, workers, evidence, and recovery. It is owned by the person who started it; child sessions share that owner. |
 | **Turn** | One semantic response to an admitted human, host, or worker boundary. A turn groups one or more fenced execution attempts. |

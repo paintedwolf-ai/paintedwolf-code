@@ -58,7 +58,7 @@ func (s *Review) collectCommitPaths(ctx context.Context, p *project.Project) ([]
 	}
 	var paths []commitReviewPath
 	var roots []wire.SourceCommitRoot
-	for _, root := range project.RootRefsFrom(p) {
+	for _, root := range p.SourceRoots() {
 		state := wire.SourceCommitRoot{RootID: root.ID}
 		bound, ok := byRoot[root.ID]
 		if !ok {

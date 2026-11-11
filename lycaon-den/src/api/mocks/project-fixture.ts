@@ -17,6 +17,8 @@ export function wireProject(
         is_primary: true,
         added_at: ts,
         kind: "attached",
+        admitted: true,
+        admission_code: null,
       },
     ],
     roots_generation: 0,
