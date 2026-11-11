@@ -197,7 +197,7 @@ const gitRemoteHashTimeout = 3 * time.Second
 func gitRemoteHash(ctx context.Context, dir string) string {
 	ctx, cancel := context.WithTimeout(ctx, gitRemoteHashTimeout)
 	defer cancel()
-	out, code, err := gitexec.Run(ctx, dir, []string{"remote", "get-url", "origin"}, gitexec.Opts{
+	out, code, err := gitexec.Run(gitexec.WithHostPurpose(ctx, "project_identity"), dir, []string{"remote", "get-url", "origin"}, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
 		Timeout: gitRemoteHashTimeout,
 	})

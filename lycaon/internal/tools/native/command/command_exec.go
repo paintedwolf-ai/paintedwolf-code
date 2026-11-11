@@ -203,7 +203,7 @@ func runCommandForeground(
 	if err := runner.ValidateStages(ctx, stages); err != nil {
 		return RunOutcome{}, err
 	}
-	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, cmdKey, toolName, confineJob)
+	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, nil, cmdKey, toolName, confineJob)
 	if err != nil {
 		return RunOutcome{}, err
 	}
@@ -354,10 +354,24 @@ func (b commandForegroundConfine) close(ctx context.Context) []confine.EgressHos
 	return b.lease.Close(ctx)
 }
 
+// BindAgentLaunch admits the confined launch for an agent-chosen host program
+// such as the bundled Git. hostSockets are sockets the host serves to that
+// program itself, so they need no user capability. release closes its action
+// lease.
+func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, commandLine string, hostSockets []confine.SocketGrant) (exec.LaunchPlan, func(context.Context), error) {
+	bound, err := bindCommandForegroundConfine(ctx, tctx, nil, hostSockets, commandLine, subject, true)
+	if err != nil {
+		return exec.LaunchPlan{}, nil, err
+	}
+	release := func(ctx context.Context) { bound.close(ctx) }
+	return agentCommandLaunch(tctx, subject, bound.confinement, bound.lease, commandLine), release, nil
+}
+
 func bindCommandForegroundConfine(
 	ctx context.Context,
 	tctx tools.ToolContext,
 	extraWriteRoots []string,
+	hostSockets []confine.SocketGrant,
 	cmdKey string,
 	toolName string,
 	confineJob bool,
@@ -369,6 +383,7 @@ func bindCommandForegroundConfine(
 		if tr != nil {
 			return commandForegroundConfine{}, tr
 		}
+		confReq.SocketGrants = append(confReq.SocketGrants, hostSockets...)
 		resolved, applied := confine.DefaultConfinement(confReq)
 		bound.confinement = resolved
 		if err := confine.RequireApplied(applied); err != nil {
