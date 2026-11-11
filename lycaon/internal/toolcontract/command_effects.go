@@ -77,7 +77,7 @@ func (r EffectRequirement) CommandEffects(child *CommandEffects) (CommandEffects
 	var effects CommandEffects
 	for _, requirement := range r.Requires {
 		switch requirement {
-		case "pure", "read", "read-request-inputs", "platform-metadata-capability", "session-resource-read", "await-owned-job", "confinement", "recovery", "review", "revision", "secret-disclosure":
+		case "pure", "child-dispatch", "read", "read-request-inputs", "platform-metadata-capability", "session-resource-read", "await-owned-job", "confinement", "recovery", "review", "revision", "secret-disclosure":
 			// These obligations remain with the existing execution/effect boundary.
 		case "write", "session-owned-process-control":
 			effects |= commandEffectBit(CommandMutation)

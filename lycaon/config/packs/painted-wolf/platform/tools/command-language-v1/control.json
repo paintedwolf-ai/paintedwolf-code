@@ -90,7 +90,7 @@
       },
       "effects": [
         {
-          "requires": ["bound-child-effect-set"],
+          "requires": ["child-dispatch"],
           "mode": "always"
         }
       ],
