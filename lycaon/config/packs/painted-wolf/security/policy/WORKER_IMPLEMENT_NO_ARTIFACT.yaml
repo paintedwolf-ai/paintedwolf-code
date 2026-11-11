@@ -1,5 +1,7 @@
 oar: '1.0'
 id: WORKER_IMPLEMENT_NO_ARTIFACT
+status: deprecated
+x-paintedwolf-successor: WORKER_SUMMARY_NO_ARTIFACT
 kind: invariant
 anchor: worker.report_check
 requires:

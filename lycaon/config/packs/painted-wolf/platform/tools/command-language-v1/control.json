@@ -15,7 +15,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -90,7 +90,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["child-dispatch"],
           "mode": "always"
         }
       ],
@@ -201,7 +201,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -275,7 +275,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -349,7 +349,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -424,7 +424,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -499,7 +499,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -675,7 +675,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],

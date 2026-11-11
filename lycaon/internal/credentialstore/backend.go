@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"filippo.io/age"
@@ -43,26 +42,13 @@ type Backend interface {
 	Describe() string
 }
 
-type identityDocument struct {
-	Format   int    `json:"format"`
-	VaultID  string `json:"vault_id"`
-	Identity string `json:"identity"`
-}
-
 type vaultDocument struct {
 	Format     int                          `json:"format"`
 	VaultID    string                       `json:"vault_id"`
 	Namespaces map[string]map[string]string `json:"namespaces"`
 }
 
-type identityProvider interface {
-	LoadOrCreate(vaultExists bool) (identityDocument, error)
-	Purge() error
-	Describe() string
-}
-
 type vaultFile struct {
-	mu       sync.Mutex
 	path     string
 	provider identityProvider
 	identity *age.X25519Identity
@@ -72,23 +58,6 @@ type vaultFile struct {
 type namespaceBackend struct {
 	vault     *vaultFile
 	namespace string
-}
-
-var vaults = struct {
-	sync.Mutex
-	byPath map[string]*vaultFile
-}{byPath: make(map[string]*vaultFile)}
-
-func sharedVault(path string, provider identityProvider) *vaultFile {
-	clean := filepath.Clean(path)
-	vaults.Lock()
-	defer vaults.Unlock()
-	if existing := vaults.byPath[clean]; existing != nil {
-		return existing
-	}
-	created := &vaultFile{path: clean, provider: provider}
-	vaults.byPath[clean] = created
-	return created
 }
 
 func newNamespaceBackend(path, namespace string, provider identityProvider) Backend {
@@ -255,13 +224,15 @@ func (v *vaultFile) purge() error {
 			}
 		}
 		v.identity, v.vaultID = nil, ""
+		clearCachedVaultIdentities(v.path)
 		return nil
 	})
 }
 
 func (v *vaultFile) withExclusiveLock(fn func() error) error {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+	pathMu := vaultPathMutex(v.path)
+	pathMu.Lock()
+	defer pathMu.Unlock()
 	lock, err := filelock.Open(v.path + ".lock")
 	if err != nil {
 		return err

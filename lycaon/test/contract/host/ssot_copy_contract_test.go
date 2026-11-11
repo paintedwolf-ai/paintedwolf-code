@@ -92,7 +92,7 @@ func TestWorkerKickMarkerFallbackIsMarkerOnly(t *testing.T) {
 	t.Parallel()
 	marker := regexp.MustCompile(`^\[host:worker-[a-z-]+\]$`)
 	ctx := context.Background()
-	for _, kickID := range []string{anchor.InformRender(anchor.WorkerCloseout), anchor.InformRender(anchor.WorkerCancelCloseout), anchor.InformRender(anchor.WorkerSummaryTrim), anchor.InformRender(anchor.WorkerCitationGrounding)} {
+	for _, kickID := range []string{anchor.InformRender(anchor.WorkerCloseout), anchor.InformRender(anchor.WorkerCancelCloseout), anchor.InformRender(anchor.WorkerCitationGrounding)} {
 		got := workercloseout.RenderWorkerKick(ctx, nil, kickID, map[string]any{
 			"max_chars":    12000,
 			"actual_chars": 21000,
