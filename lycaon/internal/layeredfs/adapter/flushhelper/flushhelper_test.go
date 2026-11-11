@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type failingReader struct{}
@@ -90,9 +92,7 @@ func TestServeWaitsOnItsPauseFile(t *testing.T) {
 		t.Fatal("flushed while paused")
 	default:
 	}
-	if err := os.Remove(pause); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "resume the helper", os.Remove(pause))
 	if code := <-done; code != 0 {
 		t.Fatalf("exit %d", code)
 	}
