@@ -34,6 +34,7 @@ import { useTranscriptViewport } from "../../chat/stream/transcript-viewport.tsx
 import { formatSentenceCase } from "../../format/format-sentence-case.ts";
 
 import { TranscriptChickletSummary } from "../transcript/TranscriptChickletSummary.tsx";
+import type { ToolBriefingSlots } from "./tool-briefing-slots.ts";
 
 type Props = {
   part: ToolPartView;
@@ -44,6 +45,8 @@ type Props = {
   testId?: string;
   /** Display name override for specialized cards. */
   name?: string;
+  /** Briefing placed around the card body; cards that place it themselves omit it. */
+  slots?: ToolBriefingSlots;
   children: JSX.Element;
 };
 
@@ -244,7 +247,12 @@ export function ToolPartShell(props: Props) {
           identity: () => ({ projectId: props.projectId, sessionId: props.sessionId ?? "", messageId: props.part.messageId,
             toolCallId: props.part.toolCallId ?? props.part.id, title: `${toolLabel()} · ${props.part.title ?? ""}` }),
         }}>
-          <Show when={open()}>{props.children}</Show>
+          <Show when={open()}>
+            <Show when={props.slots?.purpose}><div class="den-activity-purpose" data-testid="activity-purpose">{props.slots!.purpose}</div></Show>
+            <Show when={props.slots?.result}><div class="den-activity-result" data-testid="activity-result">{props.slots!.result}</div></Show>
+            {props.children}
+            <Show when={props.slots?.evidence}><nav class="den-activity-footer" aria-label="Activity records">{props.slots!.evidence}</nav></Show>
+          </Show>
         </ToolContentProvider>
       </TranscriptDisclosurePanel>
     </TranscriptDisclosureShell>
