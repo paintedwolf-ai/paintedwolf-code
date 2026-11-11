@@ -90,8 +90,8 @@ func (h *harness) curl(ctx context.Context, words ...string) run {
 	return h.curlStdin(ctx, "", words...)
 }
 
-// curlStdin runs curl with stdin connected to input.
-func (h *harness) curlStdin(ctx context.Context, input string, words ...string) run {
+// prepare binds curl argv as a program child would.
+func (h *harness) prepare(words ...string) (Prepared, string, error) {
 	h.t.Helper()
 	inv := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: "program", NodeID: "n1", ExecutionID: uuid.NewString()},
 		ActorID: "actor", SessionID: h.tc.Identity.SessionID, Scope: toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "p1", RootID: "r1"},
@@ -102,15 +102,22 @@ func (h *harness) curlStdin(ctx context.Context, input string, words ...string) 
 	}
 	statement := commandsurface.Statement{SyntaxLocation: commandsurface.SyntaxLocation{ID: commandsurface.NodeID(inv.Identity.NodeID), Span: inv.Span}}
 	prepared, err := h.owners.Prepare(h.program, commandprogram.OperationRequest{Invocation: inv, OperationID: "curl", Statement: statement, Argv: argv})
+	return prepared, inv.Identity.ExecutionID, err
+}
+
+// curlStdin runs curl with stdin connected to input.
+func (h *harness) curlStdin(ctx context.Context, input string, words ...string) run {
+	h.t.Helper()
+	prepared, execution, err := h.prepare(words...)
 	if err != nil {
-		return run{err: err, execution: inv.Identity.ExecutionID}
+		return run{err: err, execution: execution}
 	}
 	var stdout, stderr bytes.Buffer
 	result, err := prepared.InvokeOwner(ctx, h.tc, commandprogram.Streams{Input: io.NopCloser(strings.NewReader(input)), Output: &stdout, Error: &stderr})
 	if validErr := result.Validate(); validErr != nil {
 		h.t.Fatalf("curl %v produced an invalid result %+v: %v", words, result, validErr)
 	}
-	return run{mode: prepared.Mode, stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, execution: inv.Identity.ExecutionID, transfer: prepared.Transfer(),
+	return run{mode: prepared.Mode, stdout: stdout.String(), stderr: stderr.String(), result: result, err: err, execution: execution, transfer: prepared.Transfer(),
 		review: prepared.Review, evidence: result.Evidence}
 }
 

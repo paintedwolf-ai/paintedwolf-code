@@ -30,6 +30,9 @@ type NativeOperation struct {
 	// ClosedForms keeps unsupported owner forms as typed refusals instead of
 	// launching an installed program with different authority.
 	ClosedForms bool
+	// SecretSlots are the review argument slots where this command form
+	// carries managed-secret references to its owner; elsewhere they refuse.
+	SecretSlots []string
 	// Prepare binds a reached request in its directory frame; dispatch is that
 	// frame, through which owners such as find -exec run their children.
 	Prepare func(context.Context, *projectpaths.ProgramPaths, commandprogram.Dispatch, commandprogram.OperationRequest) (NativePrepared, error)
@@ -417,7 +420,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	var operationDef toolcontract.OperationDefinition
 	if definition, ok := d.run.registry.Operation(tool); ok && definitionHasCommand(definition.Operation, spec.Name) {
-		operationDef = offeredProgramDefinition(tool, definition.Operation)
+		operationDef = offeredProgramDefinition(tool, definition.Operation, operation.SecretSlots)
 	} else if tool == spec.Name {
 		var err error
 		operationDef, err = d.catalogDefinition(spec)

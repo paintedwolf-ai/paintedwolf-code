@@ -341,19 +341,24 @@ const programPublicationTool = "write"
 
 // offeredProgramDefinition is the exact definition a program surface offers
 // for a registered tool, so a child bound through it passes surface admission.
-func offeredProgramDefinition(tool string, definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
+func offeredProgramDefinition(tool string, definition toolcontract.OperationDefinition, secretSlots []string) toolcontract.OperationDefinition {
 	if tool == programPublicationTool {
 		return definition
 	}
-	return programOperationDefinition(definition)
+	return programOperationDefinition(definition, secretSlots)
 }
 
-// programDefinitions maps a registered definition's digest to its program
-// form. Definitions are immutable, so the derivation runs once per digest.
+// programDefinitions maps a registered definition's digest and the command
+// form's reference slots to its program form. Definitions are immutable, so
+// each derivation runs once.
 var programDefinitions sync.Map
 
-func programOperationDefinition(definition toolcontract.OperationDefinition) toolcontract.OperationDefinition {
-	if cached, ok := programDefinitions.Load(definition.Digest()); ok {
+func programOperationDefinition(definition toolcontract.OperationDefinition, secretSlots []string) toolcontract.OperationDefinition {
+	key := definition.Digest()
+	if len(secretSlots) > 0 {
+		key += "\x00" + strings.Join(secretSlots, "\x00")
+	}
+	if cached, ok := programDefinitions.Load(key); ok {
 		return cached.(toolcontract.OperationDefinition)
 	}
 	facts := definition.Facts()
@@ -364,11 +369,16 @@ func programOperationDefinition(definition toolcontract.OperationDefinition) too
 	if facts.ProgressGate != toolcontract.ProgressNotRequired {
 		facts.ProgressGate = toolcontract.ProgressNotRequired
 	}
+	// A command form's argv has no structured slots of its own; it names
+	// where its record carries references.
+	if len(secretSlots) > 0 {
+		facts.Contract.SecretReferenceArgs = slices.Clone(secretSlots)
+	}
 	updated, err := toolcontract.NewOperationDefinition(facts)
 	if err != nil {
 		return definition
 	}
-	programDefinitions.Store(definition.Digest(), updated)
+	programDefinitions.Store(key, updated)
 	return updated
 }
 
