@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// AC-ER03-5: a withheld path keeps its identity in history with content not
+// A withheld path keeps its identity in history with content not
 // captured, while an ordinary path in the same root keeps its bytes.
 func TestWithheldContentIsNeverRetained(t *testing.T) {
 	store, ctx, _ := openLedgerOnDisk(t)
