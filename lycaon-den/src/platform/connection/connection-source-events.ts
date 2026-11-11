@@ -3,6 +3,7 @@ import { applyAgentPresenceEvent } from "../../files/components/agent-presence-s
 import { applySourceChangesEvent } from "../../files/source/source-events.ts";
 import { applySourceOperationEvent } from "../../store/source-operations.ts";
 import { applyFileBriefingEvent } from "../../files/components/file-briefing-live.ts";
+import { applyBriefingEvent } from "../../briefing/briefing-live.ts";
 import { receiveEditorDocumentEvent } from "../../files/documents/editor-document.ts";
 import { notifyArtifactChanged } from "../../chat/visual/artifact-change-store.ts";
 import { applyProjectBackgroundEvent } from "../../project/project-background-store.ts";
@@ -19,6 +20,11 @@ export const connectionSourceEvents: TopicHandlers = {
   file_briefing: (ev) => {
     if (fileSummariesSettingKnown() && fileSummariesEnabled()) {
       applyFileBriefingEvent(ev);
+    }
+  },
+  briefing: (ev, scope) => {
+    if (scope.kind === "project" && fileSummariesSettingKnown() && fileSummariesEnabled()) {
+      applyBriefingEvent(scope.project_id, ev);
     }
   },
   editor_document: (ev) => {

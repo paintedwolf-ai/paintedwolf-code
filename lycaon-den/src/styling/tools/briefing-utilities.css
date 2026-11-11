@@ -1,0 +1,114 @@
+@utility den-briefing-summary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+@utility den-briefing-summary__section {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+@utility den-briefing-summary__text {
+  min-width: 0;
+}
+
+@utility den-briefing-summary__waiting {
+  color: var(--den-text-muted);
+}
+
+@utility den-briefing-mark {
+  flex: none;
+  color: var(--den-accent-text);
+  cursor: help;
+}
+
+@utility den-briefing-evidence-link {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-hint);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  &:hover {
+    color: var(--den-text);
+  }
+  &:focus-visible {
+    outline: 1.5px solid var(--den-accent-signal);
+    outline-offset: 1px;
+  }
+}
+
+@utility den-briefing-evidence__back {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--den-text-muted);
+  text-decoration: underline;
+  cursor: pointer;
+  &:focus-visible {
+    outline: 1.5px solid var(--den-accent-signal);
+    outline-offset: 1px;
+  }
+}
+
+@utility den-briefing-evidence__section {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@utility den-briefing-evidence__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+  & dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  & dt {
+    color: var(--den-text-muted);
+  }
+}
+
+@utility den-briefing-evidence__sources {
+  margin: 0;
+  padding-left: 1.15em;
+  overflow-wrap: anywhere;
+}
+
+@utility den-briefing-evidence__item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+@utility den-briefing-evidence__item-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0;
+}
+
+@utility den-briefing-evidence__excerpt {
+  max-height: 16em;
+  margin: 0;
+  padding: 6px 8px;
+  overflow: auto;
+  border-radius: 4px;
+  background: var(--den-surface-inset);
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}

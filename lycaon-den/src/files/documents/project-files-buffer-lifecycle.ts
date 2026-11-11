@@ -89,6 +89,7 @@ export function openFilesBuffer(
     /** The comparison a diffs page reads; keys the buffer by comparison. */
     diffs?: DiffsAddress;
     chatContent?: ChatContentDocument;
+    briefingRecordId?: string;
     /** Tab name for a pane with no path to name it. */
     name?: string;
     /** Who is aiming; a reader unless the open follows a presentation. */
@@ -99,6 +100,7 @@ export function openFilesBuffer(
   const origin = args.origin ?? "reader";
   let key = args.kind === "chat" && args.chatContent ? chatContentDocumentKey(args.chatContent)
     : args.kind === "trust" ? `trust:${projectId}`
+    : args.kind === "briefing" && args.briefingRecordId ? `briefing:${args.briefingRecordId}`
     : args.kind === "walk" && args.walkStep ? walkPageBufferKey(args.walkStep.key)
     : args.kind === "diffs" && args.diffs ? diffsBufferKey(diffsAddressKey(args.diffs))
     : fileBufferKey(args.rootId, args.path, jobId, args.fileId);
@@ -127,6 +129,7 @@ export function openFilesBuffer(
       }
       if (args.kind === "chat") { existing.chatContent = args.chatContent; existing.name = args.name ?? "Chat content"; }
       if (args.kind === "trust") existing.name = args.name ?? "Trust changes";
+      if (args.kind === "briefing") existing.name = args.name ?? "Summary evidence";
       if (args.kind === "diffs" && args.diffs) {
         existing.diffs = args.diffs;
         if (args.name) existing.name = args.name;
@@ -179,6 +182,7 @@ export function openFilesBuffer(
       preview, pinned, diverged: false, heldAgentVersionId: null, closeError: null,
       ...(args.kind === "diff" || args.diffPreview ? { diffPreview: args.diffPreview } : {}),
       ...(args.kind === "chat" ? { chatContent: args.chatContent } : {}),
+      ...(args.kind === "briefing" ? { briefingRecordId: args.briefingRecordId } : {}),
       ...(args.kind === "walk" ? { walkStep: args.walkStep, walkGitSelection: args.walkGitSelection } : {}),
       ...(args.kind === "diffs" ? { diffs: args.diffs } : {}),
     };

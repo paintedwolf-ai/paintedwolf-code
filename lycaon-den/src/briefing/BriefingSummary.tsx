@@ -1,0 +1,108 @@
+import { For, Show, createEffect, on } from "solid-js";
+import type { BriefingEvidenceRef, BriefingSnapshot, BriefingSummarySection } from "../api/types.ts";
+import { RandomLetterReveal, markLetterRevealOnceKey } from "../components/primitives/RandomLetterReveal.tsx";
+import { announce } from "../platform/interaction/announcer.tsx";
+import { briefingCopy } from "./briefing-copy.ts";
+import { openBriefingEvidence, type BriefingReturnAnchor } from "./briefing-evidence.ts";
+
+/** One section as a surface shows it; no text means it is still being written. */
+export type SummarySection = {
+  id: string;
+  text?: string;
+  source?: BriefingSummarySection["source"];
+};
+
+/**
+ * The sections a snapshot shows: its results in order, then a waiting
+ * section for each one still being written. A stalled or settled attempt
+ * shows no waiting text.
+ */
+export function snapshotSections(snapshot: BriefingSnapshot | null, stalled = false): SummarySection[] {
+  if (!snapshot) return [];
+  const done: SummarySection[] = (snapshot.result?.summary ?? []).map((section) => ({ id: section.section_id, text: section.text, source: section.source }));
+  if (snapshot.status !== "pending" || stalled) return done;
+  const shown = new Set(done.map((section) => section.id));
+  return [...done, ...snapshot.pending_sections.filter((id) => !shown.has(id)).map((id) => ({ id }))];
+}
+
+type Props = {
+  sections: readonly SummarySection[];
+  /** The evidence record; arrivals reveal once per record and section. */
+  recordId: string | null;
+  /** Replaces the general disclaimer, as the approval card does. */
+  disclaimer?: string;
+  class?: string;
+  "data-testid"?: string;
+};
+
+function Mark(props: { disclaimer: string }) {
+  return (
+    <>
+      <span class="den-briefing-mark" data-tip={props.disclaimer} aria-hidden="true">✦</span>
+      <span class="den-visually-hidden">{props.disclaimer}</span>
+    </>
+  );
+}
+
+/**
+ * Shows model-written text with its mark, waiting text while a section is
+ * written, and deterministic text plainly. The mark follows each section's
+ * source, never the surface.
+ */
+export function BriefingSummary(props: Props) {
+  const disclaimer = () => props.disclaimer ?? briefingCopy.disclaimer;
+  const watched = new Set<string>();
+  const onceKey = (id: string) => `${props.recordId ?? ""}\0${id}`;
+  createEffect(on(() => props.sections.some((section) => section.text === undefined), (waiting, was) => {
+    if (waiting && !was) announce(briefingCopy.waiting);
+  }));
+  return (
+    <div class={`den-briefing-summary ${props.class ?? ""}`} data-testid={props["data-testid"] ?? "briefing-summary"}>
+      <For each={props.sections}>
+        {(section) => (
+          <Show
+            when={section.text !== undefined}
+            fallback={(() => {
+              watched.add(section.id);
+              return (
+                <p class="den-briefing-summary__section" data-section={section.id} data-state="waiting">
+                  <Mark disclaimer={disclaimer()} />
+                  <span class="den-briefing-summary__waiting">{briefingCopy.waiting}</span>
+                </p>
+              );
+            })()}
+          >
+            <p class="den-briefing-summary__section" data-section={section.id} data-source={section.source}>
+              <Show when={section.source === "summarizer"} fallback={<span class="den-briefing-summary__text">{section.text}</span>}>
+                <Mark disclaimer={disclaimer()} />
+                {(() => {
+                  // Text already settled when this view opened shows at once.
+                  if (!watched.has(section.id)) markLetterRevealOnceKey(onceKey(section.id));
+                  return <RandomLetterReveal text={section.text ?? ""} onceKey={onceKey(section.id)} class="den-briefing-summary__text" />;
+                })()}
+              </Show>
+            </p>
+          </Show>
+        )}
+      </For>
+    </div>
+  );
+}
+
+/**
+ * Opens a summary's evidence in Files. The summary text is never itself a
+ * link, so it stays selectable.
+ */
+export function BriefingEvidenceLink(props: { reference: BriefingEvidenceRef; returnAnchor?: BriefingReturnAnchor }) {
+  return (
+    <button
+      type="button"
+      class="den-briefing-evidence-link"
+      aria-label={briefingCopy.evidenceLinkName}
+      data-testid="briefing-evidence-link"
+      onClick={() => openBriefingEvidence(props.reference, props.returnAnchor)}
+    >
+      {briefingCopy.evidenceLink}
+    </button>
+  );
+}
