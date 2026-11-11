@@ -157,12 +157,16 @@ func newTransaction(cfg TransactionConfig, journal transactionJournal) *Transact
 	for i, target := range journal.Targets {
 		index[target.Path] = i
 	}
+	targets := &promotionTargets{roots: roots, ops: &SourceOps{}}
+	targets.holdRoots()
 	return &Transaction{
-		cfg: cfg, dir: cfg.Dir, journal: journal, index: index,
-		targets: &promotionTargets{roots: roots},
+		cfg: cfg, dir: cfg.Dir, journal: journal, index: index, targets: targets,
 		origins: map[string]layeredfs.QualifiedPath{}, slots: map[string]string{}, locations: map[string]string{},
 	}
 }
+
+// SourceOps counts what this promotion did to its target roots.
+func (txn *Transaction) SourceOps() *SourceOps { return txn.targets.ops }
 
 // RecoverTransaction rolls back a promotion a crash left in dir. It is idempotent, and a record it
 // cannot trust refuses without changing the record or any target.
@@ -360,6 +364,7 @@ func (txn *Transaction) closeRecord() error {
 	if err := RemoveTransactionRecord(txn.dir); err != nil {
 		return err
 	}
+	txn.targets.releaseRoots()
 	txn.closed = true
 	return nil
 }

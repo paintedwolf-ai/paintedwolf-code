@@ -102,7 +102,7 @@ func NewPromoter(cfg PromoterConfig) (*Promoter, error) {
 		return nil, fmt.Errorf("checkpoint: Store and TargetRoots are required")
 	}
 	cfg.TargetRoots = maps.Clone(cfg.TargetRoots)
-	return &Promoter{cfg: cfg, targets: &promotionTargets{store: cfg.Store, roots: cfg.TargetRoots}}, nil
+	return &Promoter{cfg: cfg, targets: &promotionTargets{store: cfg.Store, roots: cfg.TargetRoots, ops: &SourceOps{}}}, nil
 }
 
 // Preview computes a deterministic three-way promotion preview solely from the immutable checkpoint.
@@ -270,3 +270,6 @@ func pickMode(a, b fs.FileMode) fs.FileMode {
 func pathKey(qp layeredfs.QualifiedPath) string {
 	return qp.RootID + ":" + qp.Rel
 }
+
+// SourceOps counts what this promoter's previews and directory work did to the target roots.
+func (pr *Promoter) SourceOps() *SourceOps { return pr.targets.ops }

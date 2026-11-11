@@ -24,7 +24,7 @@ func (tree *promotionTargets) applyPlannedChange(ch PlannedChange) error {
 	})
 }
 
-func (tree *promotionTargets) applyPlannedChangeInRoot(root *os.Root, ch PlannedChange) error {
+func (tree *promotionTargets) applyPlannedChangeInRoot(root *targetRoot, ch PlannedChange) error {
 	switch ch.Action {
 	case ActionNoop:
 		return nil
@@ -77,7 +77,7 @@ func (tree *promotionTargets) applyPlannedChangeInRoot(root *os.Root, ch Planned
 	}
 }
 
-func (tree *promotionTargets) writeTargetRegular(root *os.Root, ch PlannedChange) error {
+func (tree *promotionTargets) writeTargetRegular(root *targetRoot, ch PlannedChange) error {
 	data := ch.MergedBytes
 	if data == nil && ch.MergedSHA256 != "" {
 		var err error
@@ -155,7 +155,7 @@ func (tree *promotionTargets) writeTargetRegular(root *os.Root, ch PlannedChange
 }
 
 // syncTargetParent makes a removal durable when its parent still exists.
-func syncTargetParent(root *os.Root, rel string) error {
+func syncTargetParent(root *targetRoot, rel string) error {
 	dir, err := root.Open(filepath.Dir(rel))
 	if errors.Is(err, os.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
 		return nil

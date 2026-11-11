@@ -296,7 +296,7 @@ func (txn *Transaction) restoreHardLinks(targets []targetUndo) error {
 	return nil
 }
 
-func (txn *Transaction) findHardLinkPeer(root *os.Root, skipRel string, want targetImage) (string, error) {
+func (txn *Transaction) findHardLinkPeer(root *targetRoot, skipRel string, want targetImage) (string, error) {
 	var peer string
 	err := fs.WalkDir(root.FS(), ".", func(rel string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil || rel == "." || rel == skipRel || entry.IsDir() || !entry.Type().IsRegular() {
@@ -368,7 +368,7 @@ func (txn *Transaction) finalizeRestoredDirectories(shallowToDeep []targetUndo) 
 	return nil
 }
 
-func restoreTargetFileMetadata(root *os.Root, rel string, mode os.FileMode, xattrs map[string][]byte) error {
+func restoreTargetFileMetadata(root *targetRoot, rel string, mode os.FileMode, xattrs map[string][]byte) error {
 	file, err := root.Open(rel)
 	if err != nil {
 		return err
@@ -388,7 +388,7 @@ func restoreTargetFileMetadata(root *os.Root, rel string, mode os.FileMode, xatt
 	return syncFile(file)
 }
 
-func withWritableParent(root *os.Root, rel string, fn func() error) error {
+func withWritableParent(root *targetRoot, rel string, fn func() error) error {
 	var ancestors []string
 	for dir := filepath.Dir(rel); dir != "."; dir = filepath.Dir(dir) {
 		ancestors = append(ancestors, dir)
