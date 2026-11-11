@@ -46,7 +46,7 @@ func conformanceSource(t *testing.T) (root string, xattrs, acls bool) {
 	for _, dir := range []string{"dir/sub", "dir", "repo"} {
 		testutil.FailErr(t, "dir time", os.Chtimes(filepath.Join(root, dir), old, old))
 	}
-	t.Cleanup(func() { _ = os.Chmod(filepath.Join(root, "dir/sub"), 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(filepath.Join(root, "dir/sub"), 0o755); dropACLs(root) })
 	return root, xattrs, acls
 }
 
@@ -65,6 +65,16 @@ func setACL(path string) bool {
 	return runtime.GOOS == "darwin" && exec.Command("chmod", "+a", "everyone deny delete", path).Run() == nil
 }
 
+// dropACLs removes every ACL under dir, which may deny deleting the files.
+func dropACLs(dir string) {
+	if runtime.GOOS == "darwin" {
+		_ = exec.Command("chmod", "-RN", dir).Run()
+	}
+}
+
+// entryByEntry turns directory cloning off, so a preparation seeds each entry on its own.
+var entryByEntry DirectoryCloner = func(string, string) (bool, error) { return false, nil }
+
 func aclText(t *testing.T, path string) string {
 	t.Helper()
 	out, _ := exec.Command("ls", "-led", path).Output()
@@ -82,11 +92,12 @@ func TestPreparedTreeConformsToItsSource(t *testing.T) {
 		dirClone DirectoryCloner
 	}{
 		{"host", nil},
-		{"entry_by_entry", func(string, string) (bool, error) { return false, nil }},
+		{"entry_by_entry", entryByEntry},
 	} {
 		t.Run(mode.name, func(t *testing.T) {
 			src, xattrs, acls := conformanceSource(t)
 			tmp := t.TempDir()
+			t.Cleanup(func() { dropACLs(tmp) })
 			adp := NewEagerCopyAdapter()
 			view, err := adp.Prepare(context.Background(), PrepareRequest{
 				ViewID: "view-conform-" + mode.name, BackingDir: filepath.Join(tmp, "backing"), RuntimeDir: filepath.Join(tmp, "runtime"),

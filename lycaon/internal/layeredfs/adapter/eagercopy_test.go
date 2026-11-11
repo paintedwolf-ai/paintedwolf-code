@@ -344,6 +344,8 @@ func verifySeedMetadataFailuresCleanUp(
 		BackingDir:     chmodBackingDir,
 		TargetRootDirs: map[string]string{"repo": chmodTargetDir},
 		Grants:         []RootGrant{{RootID: "repo", Label: "repo", SourcePath: srcRoot, IsPrimary: true}},
+		// The failures injected here are the per-file path's; a clone makes the same entries in one call.
+		CloneDirectory: entryByEntry,
 	})
 	chmodPathHook = nil
 	if !errors.Is(err, syscall.EPERM) {
@@ -377,6 +379,8 @@ func verifySeedMetadataFailuresCleanUp(
 		BackingDir:     xattrBackingDir,
 		TargetRootDirs: map[string]string{"repo": xattrTargetDir},
 		Grants:         []RootGrant{{RootID: "repo", Label: "repo", SourcePath: srcRoot, IsPrimary: true}},
+		// The failures injected here are the per-file path's; a clone makes the same entries in one call.
+		CloneDirectory: entryByEntry,
 	})
 	writePathXattrsHook = nil
 	if !errors.Is(err, syscall.EIO) {

@@ -118,8 +118,9 @@ func (a *seedAccumulator) adoptClonedEntry(rootID, rel, srcPath, dstPath, pristi
 		}
 		size := max(info.Size(), 0)
 		a.out.logicalBytes += size
-		a.out.stats.ClonedFiles++
-		a.out.stats.ClonedBytes += size
+		// One clone made each tree's copy, as the per-file path counts them.
+		a.out.stats.ClonedFiles += 2
+		a.out.stats.ClonedBytes += 2 * size
 		if err := os.Chmod(pristinePath, 0o400); err != nil {
 			return err
 		}
