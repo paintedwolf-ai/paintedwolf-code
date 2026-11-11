@@ -59,11 +59,19 @@ func receive[T any](t *testing.T, ch <-chan T) T {
 	}
 }
 
-func testPolicy() Policy { return Policy{Admission: Queued, QueueLimit: 3, Active: 2, QueueWait: time.Minute} }
+func testScheduler(t *testing.T) *Scheduler {
+	t.Helper()
+	s := NewScheduler(context.Background())
+	t.Cleanup(func() { s.Stop(); s.Wait(context.Background()) })
+	return s
+}
+
+func testPolicy() Policy {
+	return Policy{Admission: Queued, QueueLimit: 3, Active: 2, QueueWait: time.Minute}
+}
 
 func TestQueuedWorkRespectsActiveSlotsAndQueueBound(t *testing.T) {
-	s := NewScheduler(context.Background())
-	defer s.Stop()
+	s := testScheduler(t)
 	g := newGate()
 	for _, key := range []string{"a", "b", "c", "d", "e"} {
 		if _, err := s.Submit(g.job(key, "p", false, testPolicy())); err != nil {
@@ -87,8 +95,7 @@ func TestQueuedWorkRespectsActiveSlotsAndQueueBound(t *testing.T) {
 }
 
 func TestManualWorkStartsAheadOfAutomaticAndJoinsByKey(t *testing.T) {
-	s := NewScheduler(context.Background())
-	defer s.Stop()
+	s := testScheduler(t)
 	g := newGate()
 	policy := testPolicy()
 	policy.Active = 1
@@ -106,8 +113,7 @@ func TestManualWorkStartsAheadOfAutomaticAndJoinsByKey(t *testing.T) {
 }
 
 func TestQueuedWorkExpiresByInjectedClock(t *testing.T) {
-	s := NewScheduler(context.Background())
-	defer s.Stop()
+	s := testScheduler(t)
 	clock := time.Unix(1000, 0)
 	s.now = func() time.Time { return clock }
 	g := newGate()
@@ -128,8 +134,7 @@ func TestQueuedWorkExpiresByInjectedClock(t *testing.T) {
 }
 
 func TestSupersedingCancelsEarlierAutomaticWorkInItsGroup(t *testing.T) {
-	s := NewScheduler(context.Background())
-	defer s.Stop()
+	s := testScheduler(t)
 	cancelled := make(chan string, 4)
 	started := make(chan struct{}, 4)
 	job := func(key string, manual bool) Job {

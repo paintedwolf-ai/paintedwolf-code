@@ -40,7 +40,7 @@ func (c Contract) Parse(raw string) (string, error) {
 		return "", fmt.Errorf("briefing contract %+v is unbounded", c)
 	}
 	text := plainText(raw)
-	if text == "" {
+	if !strings.ContainsFunc(text, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
 		return "", ErrNoText
 	}
 	sentences := splitSentences(text)

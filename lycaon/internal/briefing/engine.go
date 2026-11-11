@@ -6,158 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 )
-
-// Source records how a section's text was produced.
-type Source string
-
-const (
-	SourceSummarizer    Source = "summarizer"
-	SourceFallback      Source = "fallback"
-	SourceDeterministic Source = "deterministic"
-)
-
-// Result is a section's stored text for one manifest hash.
-type Result struct {
-	Text      string
-	Source    Source
-	Provider  string
-	Model     string
-	Quality   []string
-	CreatedAt time.Time
-}
-
-// SectionMode states whether the model may be asked for a section.
-type SectionMode int
-
-const (
-	// Generated sections are asked of the model when no result exists.
-	Generated SectionMode = iota
-	// Lookup sections use a stored result and are otherwise absent.
-	Lookup
-	// Deterministic sections carry text computed from host facts.
-	Deterministic
-)
-
-// SectionPlan is one resolved section of a target, built with bounded work
-// and no model call.
-type SectionPlan struct {
-	ID       string
-	Mode     SectionMode
-	Manifest Manifest
-	// Prompt is required for Generated sections.
-	Prompt Prompt
-	// Text is the Deterministic section's value.
-	Text string
-	// Fallback is factual text used when generation yields nothing usable.
-	Fallback string
-}
-
-// Prompt is the rendered utility request for a generated section.
-type Prompt struct {
-	System    string
-	User      string
-	MaxTokens int
-}
-
-// Request asks for one resolved target.
-type Request struct {
-	ProjectID  string
-	ProjectDir string
-	ProfileID  string
-	Version    string
-	TargetKey  string
-	Manual     bool
-	Policy     Policy
-	Sections   []SectionPlan
-}
-
-// SectionState is a section of a target's current resolution.
-type SectionState struct {
-	ID           string
-	ManifestHash string
-	Result       *Result
-	Reused       bool
-}
-
-// Status is a target's settlement.
-type Status string
-
-const (
-	StatusPending  Status = "pending"
-	StatusComplete Status = "complete"
-	StatusFailed   Status = "failed"
-)
-
-// Snapshot is a target's state as one request or completion sees it.
-type Snapshot struct {
-	ProfileID string
-	TargetKey string
-	Status    Status
-	AttemptID string
-	Sections  []SectionState
-	RecordID  string
-	Error     string
-	// Regenerate answers a manual request: whether any section needed work.
-	Regenerate RegenerateOutcome
-}
-
-// RegenerateOutcome reports what a manual request did.
-type RegenerateOutcome string
-
-const (
-	InputsUnchanged RegenerateOutcome = "inputs_unchanged"
-	Started         RegenerateOutcome = "started"
-)
-
-// Results stores section text by manifest hash. Put inserts, or upgrades a
-// fallback to a summarizer result; it never replaces summarizer text.
-type Results interface {
-	GetResults(ctx context.Context, projectID string, hashes []string) (map[string]Result, error)
-	PutResult(ctx context.Context, projectID string, manifest Manifest, hash string, result Result) error
-}
-
-// Attempts owns target attempt state. Complete applies only for the active
-// attempt, so a superseded attempt cannot publish over its successor.
-type Attempts interface {
-	StartAttempt(ctx context.Context, request Request, hashes []SectionHash) (attemptID string, joined bool, err error)
-	CompleteAttempt(ctx context.Context, request Request, attemptID string, sections []SectionHash, recordID string) (applied bool, err error)
-	FailAttempt(ctx context.Context, request Request, attemptID string, message string) (applied bool, err error)
-}
-
-// Records keeps the immutable record a completed target points at.
-type Records interface {
-	PutRecord(ctx context.Context, projectID, recordID, profileID, version string, sections []SectionHash) error
-}
-
-// Store is the persistence the engine needs.
-type Store interface {
-	Results
-	Attempts
-	Records
-}
-
-// Generator invokes the utility model for one section.
-type Generator interface {
-	Generate(ctx context.Context, invocation Invocation) (text string, provider, model string, err error)
-}
-
-// Invocation is one utility call. Requested binds the class for work a person
-// is waiting on; other work binds the overlay class.
-type Invocation struct {
-	ProjectID  string
-	ProjectDir string
-	Purpose    string
-	Requested  bool
-	Prompt     Prompt
-}
-
-// Publisher announces committed snapshots.
-type Publisher interface {
-	PublishSnapshot(ctx context.Context, projectID string, snapshot Snapshot)
-}
 
 // Engine resolves targets against stored results and generates only missing
 // sections, sharing in-flight work by manifest hash across targets.
@@ -290,6 +140,7 @@ func (e *Engine) Request(ctx context.Context, request Request) (Snapshot, error)
 		Manual: request.Manual, Policy: request.Policy,
 		Run:     func(ctx context.Context) { e.generate(ctx, r, attempt, stored) },
 		Expired: func(ctx context.Context) { e.fail(ctx, request, attempt, ErrQueueExpired.Error()) },
+		Values:  ctx,
 	}
 	if _, err := e.scheduler.Submit(job); err != nil {
 		e.fail(context.WithoutCancel(ctx), request, attempt, err.Error())
@@ -370,6 +221,12 @@ func (e *Engine) generate(ctx context.Context, r resolved, attempt string, store
 }
 
 func (e *Engine) generateSection(ctx context.Context, request Request, section SectionPlan, hash string) (Result, error) {
+	// Another target may have finished this manifest since this one resolved.
+	if stored, err := e.store.GetResults(ctx, request.ProjectID, []string{hash}); err == nil {
+		if result, ok := stored[hash]; ok && result.Source == SourceSummarizer {
+			return result, nil
+		}
+	}
 	contract := section.Manifest.Contract
 	if e.generator != nil {
 		raw, provider, model, err := e.generator.Generate(ctx, Invocation{ProjectID: request.ProjectID, ProjectDir: request.ProjectDir, Purpose: request.ProfileID, Requested: request.Manual, Prompt: section.Prompt})
@@ -398,41 +255,4 @@ func (e *Engine) fail(ctx context.Context, request Request, attempt, message str
 	if applied && e.publisher != nil {
 		e.publisher.PublishSnapshot(ctx, request.ProjectID, Snapshot{ProfileID: request.ProfileID, TargetKey: request.TargetKey, Status: StatusFailed, AttemptID: attempt, Error: message})
 	}
-}
-
-// flightGroup shares one generation per manifest hash across targets.
-type flightGroup struct {
-	mu      sync.Mutex
-	flights map[string]*flight
-}
-
-type flight struct {
-	done   chan struct{}
-	result Result
-	err    error
-}
-
-func (g *flightGroup) do(ctx context.Context, key string, fn func() (Result, error)) (Result, error) {
-	g.mu.Lock()
-	if g.flights == nil {
-		g.flights = map[string]*flight{}
-	}
-	if f, ok := g.flights[key]; ok {
-		g.mu.Unlock()
-		select {
-		case <-f.done:
-			return f.result, f.err
-		case <-ctx.Done():
-			return Result{}, ctx.Err()
-		}
-	}
-	f := &flight{done: make(chan struct{})}
-	g.flights[key] = f
-	g.mu.Unlock()
-	f.result, f.err = fn()
-	g.mu.Lock()
-	delete(g.flights, key)
-	g.mu.Unlock()
-	close(f.done)
-	return f.result, f.err
 }

@@ -60,17 +60,17 @@ type CausalReader interface {
 func ApplyCause(ev *ActionEvidence, read CausalRead) {
 	if !read.Found {
 		gap := "the action's model output was not found"
-		ev.UserIntent.Unavailable, ev.AssistantProse.Unavailable, ev.ReasoningGap = gap, gap, gap
+		ev.UserIntent.Unavailable, ev.AssistantProse.Unavailable, ev.Reasoning.Gap = gap, gap, gap
 		return
 	}
 	ev.UserIntent = Excerpt{Text: read.Intent, Ref: messageRef(read.IntentID)}
 	ev.AssistantProse = Excerpt{Text: read.Prose, Ref: messageRef(read.OutputID)}
-	ev.RecentResults = read.Results
+	ev.Results = read.Results
 	reasoning, state := ReasoningExcerpt(read)
 	if state == ReasoningAvailable {
-		ev.Reasoning = reasoning
+		ev.Reasoning.Excerpt = reasoning
 	} else if state != ReasoningAbsent {
-		ev.ReasoningGap = string(state)
+		ev.Reasoning.Gap = string(state)
 	}
 }
 

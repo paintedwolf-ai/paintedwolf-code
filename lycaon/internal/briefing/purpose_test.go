@@ -8,45 +8,45 @@ import (
 )
 
 func liveEvidence() ActionEvidence {
-	ev := ActionEvidence{Tool: "command", CallRef: "tool_call:tc1", Args: map[string]any{"command": "git push"}, Files: []string{"a.go"}, Project: "/project",
-		HostFacts: Excerpt{Text: "pushes to origin"}, Plan: []PlanStep{{Label: "Push", State: "pending"}}}
+	ev := ActionEvidence{Action: ActionFacts{Tool: "command", CallRef: "tool_call:tc1", Args: map[string]any{"command": "git push"}, Files: []string{"a.go"}, Project: "/project"},
+		HostFacts: Excerpt{Text: "pushes to origin"}, Plan: PlanInput{Steps: []PlanStep{{Label: "Push", State: "pending"}}}}
 	ApplyCause(&ev, CausalRead{Found: true, OutputID: "out", Prose: "Pushing.", IntentID: "u1", Intent: "Ship it", CallsInOutput: 1,
 		Results: []ResultExcerpt{{Tool: "read", Outcome: "success", Content: "ok", Ref: "message:r1"}}})
 	return ev
 }
 
-func purposeHash(t *testing.T, profile string, ev ActionEvidence) string {
+func purposeHash(t *testing.T, ev ActionEvidence) string {
 	t.Helper()
-	section, err := PurposeSection(t.Context(), profile, "1", ev)
+	section, err := PurposeSection(t.Context(), ev)
 	testutil.FailErr(t, "build purpose section", err)
 	hash, err := section.Manifest.Hash()
 	testutil.FailErr(t, "hash purpose section", err)
 	return hash
 }
 
-// The question is shared: equal evidence in profiles of equal version hashes
-// alike only when the profile is the same, so reuse is by identical material.
+// Whoever asks, equal material about the same scope is one question, so an
+// approval's sentence is a stored result for a later step or activity.
 func TestPurposeSectionIdentityFollowsMaterialAndScope(t *testing.T) {
-	base := purposeHash(t, "tool_activity", liveEvidence())
-	if again := purposeHash(t, "tool_activity", liveEvidence()); again != base {
+	base := purposeHash(t, liveEvidence())
+	if again := purposeHash(t, liveEvidence()); again != base {
 		t.Fatal("equal evidence hashed differently")
 	}
 	scoped := liveEvidence()
 	scoped.PhaseScope = "steps: read config; write output"
-	if purposeHash(t, "tool_activity", scoped) == base {
+	if purposeHash(t, scoped) == base {
 		t.Fatal("a narrower scope reused the whole invocation's identity")
 	}
 	noPlan := liveEvidence()
-	noPlan.Plan, noPlan.PlanGap = nil, "no immutable revision"
-	if purposeHash(t, "tool_activity", noPlan) == base {
+	noPlan.Plan = PlanInput{Gap: "no immutable revision"}
+	if purposeHash(t, noPlan) == base {
 		t.Fatal("an unavailable plan matched an available one")
 	}
 }
 
 func TestPurposeSectionRecordsGapsInsteadOfInventingInputs(t *testing.T) {
-	ev := ActionEvidence{Tool: "command", Args: map[string]any{"command": "ls"}, PlanGap: "no immutable revision"}
+	ev := ActionEvidence{Action: ActionFacts{Tool: "command", Args: map[string]any{"command": "ls"}}, Plan: PlanInput{Gap: "no immutable revision"}}
 	ApplyCause(&ev, CausalRead{})
-	section, err := PurposeSection(t.Context(), "source_step", "1", ev)
+	section, err := PurposeSection(t.Context(), ev)
 	testutil.FailErr(t, "build", err)
 	reasons := map[string]Item{}
 	for _, item := range section.Manifest.Items {
@@ -68,7 +68,7 @@ func TestPurposeSectionRecordsGapsInsteadOfInventingInputs(t *testing.T) {
 func TestPurposeSectionClampsAsTheApprovalCardAlwaysHas(t *testing.T) {
 	ev := liveEvidence()
 	ev.UserIntent.Text = strings.Repeat("goal ", 400)
-	section, err := PurposeSection(t.Context(), "approval_rationale", "1", ev)
+	section, err := PurposeSection(t.Context(), ev)
 	testutil.FailErr(t, "build", err)
 	for _, item := range section.Manifest.Items {
 		if item.Key == "user_intent" && (item.Inclusion != IncludedTruncated || len([]rune(item.Text)) > sectionRunes+1) {
@@ -83,7 +83,7 @@ func TestPurposeSectionClampsAsTheApprovalCardAlwaysHas(t *testing.T) {
 func TestReasoningIsRedactedBeforeItsSuffixIsKept(t *testing.T) {
 	secret := "ghp_" + strings.Repeat("1", 36)
 	filler := strings.Repeat("x", reasoningRunes-10)
-	text := "start " + secret + filler
+	text := "start " + secret + " " + filler
 	read := CausalRead{Found: true, OutputID: "out", ReasoningJSON: `{"text":"` + text + `"}`, ReasoningBytes: int64(len(text)), CallsInOutput: 2}
 	reasoning, state := ReasoningExcerpt(read)
 	if state != ReasoningAvailable || reasoning == nil {

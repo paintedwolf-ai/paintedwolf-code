@@ -92,10 +92,14 @@ type countingGenerator struct {
 	text    string
 	err     error
 	release chan struct{}
+	entered chan struct{}
 }
 
 func (g *countingGenerator) Generate(ctx context.Context, _ Invocation) (string, string, string, error) {
 	g.calls.Add(1)
+	if g.entered != nil {
+		g.entered <- struct{}{}
+	}
 	if g.release != nil {
 		select {
 		case <-g.release:
@@ -111,7 +115,9 @@ type snapshotLog struct {
 	seen chan Snapshot
 }
 
-func (s *snapshotLog) PublishSnapshot(_ context.Context, _ string, snapshot Snapshot) { s.seen <- snapshot }
+func (s *snapshotLog) PublishSnapshot(_ context.Context, _ string, snapshot Snapshot) {
+	s.seen <- snapshot
+}
 
 func purposeSection(intent string, mode SectionMode) SectionPlan {
 	manifest := Manifest{ProfileID: "tool_activity", ProfileVersion: "1", SectionID: "purpose", Template: Template{ID: "action_purpose", Version: "1"}, Contract: OneSentence,
@@ -138,13 +144,16 @@ func newTestEngine(t *testing.T, generator Generator) (*Engine, *memStore, *snap
 }
 
 func TestEqualMaterialSharesOneGenerationAcrossTargets(t *testing.T) {
-	generator := &countingGenerator{text: "Rebuild from a clean folder.", release: make(chan struct{})}
+	generator := &countingGenerator{text: "Rebuild from a clean folder.", release: make(chan struct{}), entered: make(chan struct{}, 2)}
 	engine, store, log := newTestEngine(t, generator)
-	for _, target := range []string{"walk:step", "activity:card"} {
+	for i, target := range []string{"walk:step", "activity:card"} {
 		snap, err := engine.Request(t.Context(), request(target, false, purposeSection("fix the build", Generated)))
 		testutil.FailErr(t, "request "+target, err)
 		if snap.Status != StatusPending {
 			t.Fatalf("%s: %s", target, snap.Status)
+		}
+		if i == 0 {
+			receive(t, generator.entered)
 		}
 	}
 	close(generator.release)
