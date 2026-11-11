@@ -5,9 +5,9 @@ import { setEditorScrollTop } from "./editor-scroll-position.ts";
 type ScrollStrategy = "nearest" | "start" | "end" | "center";
 
 /** Scroll corrections made after the first request, while estimated heights settle. */
-export const SETTLED_SCROLL_REPEATS = 24;
+export const SETTLED_SCROLL_REPEATS = 40;
 /** Frames checked before giving up. */
-const SETTLED_SCROLL_CHECKS = 64;
+const SETTLED_SCROLL_CHECKS = 96;
 /** Consecutive frames the target must stay visible. */
 const SETTLED_SCROLL_STABLE = 2;
 
@@ -16,7 +16,8 @@ const SETTLED_SCROLL_STABLE = 2;
  * height of text it has not drawn and scrolls to a position in a long wrapped
  * line by that line's whole block, so each frame checks the position's own
  * coordinates and corrects the scroll offset. Moving the drawn window changes
- * the estimates, so a correction that overshoots is halved on the way back.
+ * the estimates, so a correction that overshoots is halved on the way back and
+ * grows again while corrections keep the same direction.
  */
 export function keepPositionInView(
   view: EditorView,
@@ -55,7 +56,7 @@ export function keepPositionInView(
             });
           } else {
             const sign = Math.sign(offset);
-            if (lastSign !== 0 && sign !== lastSign) scale /= 2;
+            if (lastSign !== 0) scale = sign !== lastSign ? scale / 2 : Math.min(1, scale * 2);
             lastSign = sign;
             setEditorScrollTop(v, v.scrollDOM.scrollTop + offset * scale);
           }
