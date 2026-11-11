@@ -3,6 +3,9 @@ import path from "node:path";
 import { expect, type Page } from "@playwright/test";
 import { modelIndependentWebE2e, openProjectFilesFixture } from "./helpers.ts";
 
+// The editor binds the document start to Cmd+Up on macOS and Ctrl+Home elsewhere.
+const DOCUMENT_START = process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home";
+
 async function selectEditingStyle(page: Page, style: "emacs" | "vim") {
   await page.evaluate(async (style) => {
     const url = "/src/settings/editor/editor-prefs.ts";
@@ -25,7 +28,7 @@ modelIndependentWebE2e("keyboard editing preserves the existing chrome and docum
   const editor = page.locator(".den-files-editor:visible .cm-content");
   await expect(editor).toBeVisible();
   await editor.focus();
-  await page.keyboard.press("Control+Home");
+  await page.keyboard.press(DOCUMENT_START);
   await page.keyboard.press("Control+k");
   await expect(editor).not.toContainText("one two");
   await page.keyboard.press("Control+y");
@@ -43,7 +46,7 @@ modelIndependentWebE2e("keyboard editing preserves the existing chrome and docum
   expect(await wrap.evaluate(element => getComputedStyle(element).color)).toBe(before);
 
   await editor.focus();
-  await page.keyboard.press("Control+Home");
+  await page.keyboard.press(DOCUMENT_START);
   await page.keyboard.type("saved ");
   await page.keyboard.press("Control+x");
   await page.keyboard.press("Control+s");
