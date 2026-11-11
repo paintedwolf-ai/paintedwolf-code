@@ -140,6 +140,7 @@ describe("editor-prefs", () => {
         "lineNumbers",
         "whitespace",
         "wordWrap",
+        "pretty",
         "revealInTree",
         "treeVisibleLevels",
         "versionComparison",

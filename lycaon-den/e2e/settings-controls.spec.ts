@@ -16,7 +16,7 @@ webE2e("settings controls retain display, editor, and notification preferences",
   await openSettings(page);
   const groups = [
     { tab: "display", ids: ["display-diff-collapsed", "display-diff-word-wrap", "display-show-all-models", "display-first-time-tips"] },
-    { tab: "editor", ids: ["editor-line-layout", "editor-line-numbers", "editor-indent-guides", "editor-whitespace", "editor-scrollbar-ticks-symbols", "editor-scrollbar-ticks-changes", "editor-scrollbar-ticks-matches", "editor-scrollbar-ticks-cursor", "editor-scrollbar-ticks-agents", "editor-agent-activity-reads", "editor-agent-activity-changes", "editor-agent-activity-fileNames"] },
+    { tab: "editor", ids: ["editor-line-numbers", "editor-indent-guides", "editor-whitespace", "editor-scrollbar-ticks-symbols", "editor-scrollbar-ticks-changes", "editor-scrollbar-ticks-matches", "editor-scrollbar-ticks-cursor", "editor-scrollbar-ticks-agents", "editor-agent-activity-reads", "editor-agent-activity-changes", "editor-agent-activity-fileNames"] },
     { tab: "notifications", ids: ["notifications-finished", "notifications-needs-you", "notifications-needs-approval"] },
   ];
   const values = new Map<string, boolean>();
@@ -40,6 +40,7 @@ webE2e("settings controls retain display, editor, and notification preferences",
   await page.getByTestId("editor-indent-tabs").click();
   await page.getByTestId("editor-indent-width-8").click();
   await page.getByTestId("editor-version-comparison-before").click();
+  await page.getByTestId("editor-line-layout-pretty").click();
   const fontSize = (await page.getByTestId("editor-font-size").textContent()) ?? "";
   const lineHeight = (await page.getByTestId("editor-line-height").textContent()) ?? "";
   await page.getByTestId("general-tab-display").click();
@@ -67,7 +68,7 @@ webE2e("settings controls retain display, editor, and notification preferences",
   await page.getByTestId("general-tab-editor").click();
   await expect(page.getByTestId("editor-font-size")).toHaveText(fontSize);
   await expect(page.getByTestId("editor-line-height")).toHaveText(lineHeight);
-  for (const id of ["editor-indent-tabs", "editor-indent-width-8", "editor-version-comparison-before"]) {
+  for (const id of ["editor-indent-tabs", "editor-indent-width-8", "editor-version-comparison-before", "editor-line-layout-pretty"]) {
     await expect(page.getByTestId(id)).toHaveAttribute("aria-pressed", "true");
   }
 });

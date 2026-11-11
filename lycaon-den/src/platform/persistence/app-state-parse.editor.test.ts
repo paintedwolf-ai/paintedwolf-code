@@ -15,6 +15,7 @@ describe("parseAppState editor", () => {
       keymap: "vim" as const,
       tabMovesFocus: true,
       wordWrap: true,
+      pretty: true,
       revealInTree: false,
       treeVisibleLevels: 3,
       lineNumbers: false,
