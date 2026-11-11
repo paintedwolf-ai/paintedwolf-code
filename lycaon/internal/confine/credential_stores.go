@@ -14,13 +14,17 @@ import (
 // stores are read together at every refusal, so both are pack data.
 var keyMaterialPathsSource atomic.Pointer[func() []string]
 
-// SetKeyMaterialPathsSource installs the pack-derived key-material floor.
-func SetKeyMaterialPathsSource(fn func() []string) {
-	if fn == nil {
-		keyMaterialPathsSource.Store(nil)
-		return
+// SetKeyMaterialPathsSource installs the pack-derived key-material floor and
+// returns the one it replaced.
+func SetKeyMaterialPathsSource(fn func() []string) (previous func() []string) {
+	var next *func() []string
+	if fn != nil {
+		next = &fn
 	}
-	keyMaterialPathsSource.Store(&fn)
+	if old := keyMaterialPathsSource.Swap(next); old != nil {
+		return *old
+	}
+	return nil
 }
 
 // KeyMaterialHomeRelPaths returns the floor with the catalogue's `~/` prefix and
@@ -104,13 +108,17 @@ func isOSCredentialStoreDenyPath(p string) bool {
 // access to the host OS credential store).
 var credentialStorePathsSource atomic.Pointer[func() []string]
 
-// SetCredentialStorePathsSource installs the pack-derived CLI credential-file write floor paths.
-func SetCredentialStorePathsSource(fn func() []string) {
-	if fn == nil {
-		credentialStorePathsSource.Store(nil)
-		return
+// SetCredentialStorePathsSource installs the pack-derived CLI credential-file
+// write floor paths and returns the ones it replaced.
+func SetCredentialStorePathsSource(fn func() []string) (previous func() []string) {
+	var next *func() []string
+	if fn != nil {
+		next = &fn
 	}
-	credentialStorePathsSource.Store(&fn)
+	if old := credentialStorePathsSource.Swap(next); old != nil {
+		return *old
+	}
+	return nil
 }
 
 // CredentialStorePaths returns resolved catalogued CLI credential-file write floor paths.

@@ -266,7 +266,7 @@ func (s *Server) openName(ctx context.Context, all []project.Project, name strin
 		ev := api.CLIOpenEvent{
 			Action:    api.CLIOpenActionOpen,
 			ProjectID: &id,
-			Path:      project.PrimaryRootPath(&matches[0]),
+			Path:      project.AttachedPrimaryPath(&matches[0]),
 		}
 		s.publish.PublishCLIOpen(ctx, ev)
 		return Response{Status: StatusOK, Action: ev.Action, Projects: []ProjectRow{rowFor(matches[0])}}
@@ -287,7 +287,7 @@ func rowFor(p project.Project) ProjectRow {
 	return ProjectRow{
 		ID:           p.ID,
 		Name:         DisplayName(p),
-		Path:         project.PrimaryRootPath(&p),
+		Path:         project.AttachedPrimaryPath(&p),
 		LastOpenedAt: p.LastOpenedAt,
 	}
 }

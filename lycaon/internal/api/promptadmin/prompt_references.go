@@ -56,8 +56,7 @@ func (s *References) readReferenceImage(ctx context.Context, projectID, rootID, 
 	if err != nil || p == nil {
 		return nil, "", fmt.Errorf("project not found")
 	}
-	roots := project.RootRefsFrom(p)
-	abs, _, err := projectroot.ResolveAbs(roots, rootID, path)
+	abs, _, err := projectroot.ResolveAbs(p.SourceRoots(), rootID, path)
 	if err != nil {
 		return nil, "", err
 	}
@@ -111,8 +110,7 @@ func (s *References) readReferenceLines(ctx context.Context, projectID, rootID, 
 	if err != nil || p == nil {
 		return "", fmt.Errorf("project not found")
 	}
-	roots := project.RootRefsFrom(p)
-	abs, root, err := projectroot.ResolveAbs(roots, rootID, path)
+	abs, root, err := projectroot.ResolveAbs(p.SourceRoots(), rootID, path)
 	if err != nil {
 		return "", err
 	}
@@ -148,20 +146,26 @@ func (s *References) resolveReferencePath(ctx context.Context, projectID, rootID
 	if err != nil || p == nil {
 		return "", wire.NavigationTarget{}, fmt.Errorf("project not found")
 	}
-	roots := project.RootRefsFrom(p)
-	if len(roots) == 0 {
+	all := p.SourceRoots()
+	if len(all) == 0 {
 		return "", wire.NavigationTarget{}, fmt.Errorf("project has no attached folders")
 	}
-	abs, root, err := projectroot.ResolveAbs(roots, rootID, path)
+	abs, root, err := projectroot.ResolveAbs(all, rootID, path)
 	if err != nil {
 		return "", wire.NavigationTarget{}, err
 	}
-	primary, _ := projectroot.PrimaryRoot(roots)
+	target := wire.NavigationTarget{ProjectID: p.ID, RootID: root.ID, Path: projectroot.ScopeRel(root, abs)}
+	admitted := project.RootRefsFrom(p)
+	if _, ok := projectroot.RootRefByID(admitted, root.ID); !ok {
+		// Agents do not address an editor-only root, so they get the absolute path.
+		return abs, target, nil
+	}
+	primary, _ := projectroot.PrimaryRoot(admitted)
 	rel := projectroot.Qualify(primary, root, abs)
 	if strings.TrimSpace(rel) == "" {
 		return "", wire.NavigationTarget{}, projectroot.ErrPathEscape
 	}
-	return rel, wire.NavigationTarget{ProjectID: p.ID, RootID: root.ID, Path: projectroot.ScopeRel(root, abs)}, nil
+	return rel, target, nil
 }
 
 // lookupReferenceArtifact validates reused artifacts before they become provider image blocks.
