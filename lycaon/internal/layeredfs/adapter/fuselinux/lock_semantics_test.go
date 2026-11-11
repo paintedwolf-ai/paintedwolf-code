@@ -126,6 +126,8 @@ func handleFlockCmd(f *os.File, mode string) string {
 	switch mode {
 	case "EX":
 		how = syscall.LOCK_EX | syscall.LOCK_NB
+	case "EXW":
+		how = syscall.LOCK_EX
 	case "SH":
 		how = syscall.LOCK_SH | syscall.LOCK_NB
 	case "UN":
@@ -289,9 +291,10 @@ func TestMountedPOSIXByteRangeLocksAndFlockSemanticsTwoProcesses(t *testing.T) {
 	procB.exec("SETLK fd1 UNLCK 0 300", "OK")
 	procB.exec("FLOCK fd1 EX", "CONFLICT")
 
-	// Closing fd1 in procA releases the flock on FUSE_RELEASE.
+	// Closing fd1 in procA releases the flock on FUSE_RELEASE, which the kernel sends after close
+	// returns, so procB waits for it rather than racing it.
 	procA.exec("CLOSE fd1", "OK")
-	procB.exec("FLOCK fd1 EX", "OK")
+	procB.exec("FLOCK fd1 EXW", "OK")
 	procB.exec("FLOCK fd1 UN", "OK")
 	procB.exec("CLOSE fd1", "OK")
 }
