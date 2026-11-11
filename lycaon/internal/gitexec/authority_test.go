@@ -10,7 +10,7 @@ import (
 // Inside an agent's tool call Git runs only under the agent's admitted launch
 // or a named host purpose; nothing falls back to host authority by omission.
 func TestAgentEntryRequiresAnExplicitLaunchAuthority(t *testing.T) {
-	bundledGitBinary(t)
+	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
 	agent := AgentEntry(t.Context())

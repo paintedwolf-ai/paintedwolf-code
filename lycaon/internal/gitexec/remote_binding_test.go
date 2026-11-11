@@ -16,7 +16,7 @@ func gitConfig(t *testing.T, dir string, args ...string) {
 // Every URL a network command contacts resolves through Git's own selection
 // and rewriting, so admission and credentials cover what Git will dial.
 func TestResolveRemoteURLsFollowsGitSelectionAndRewrites(t *testing.T) {
-	bundledGitBinary(t)
+	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
 	if out, code, err := Run(t.Context(), dir, []string{"checkout", "-q", "-b", "main"}, Opts{}); err != nil || code != 0 {

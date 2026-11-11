@@ -22,10 +22,6 @@ type RemoteIntent struct {
 	All bool
 }
 
-// transientRemote names a remote defined only for one resolution query, so a
-// URL operand receives the same rewriting as a configured remote.
-const transientRemote = "pw-resolve"
-
 // ResolveRemoteURLs returns every URL the command contacts, after the
 // repository's url.*.insteadOf and pushInsteadOf rewrites, as Git itself
 // resolves them: fetch versus push defaults, branch.*.pushRemote,
@@ -45,27 +41,29 @@ func ResolveRemoteURLs(ctx context.Context, repoDir string, intent RemoteIntent)
 		targets = []string{defaultRemote(ctx, repoDir, intent.Push)}
 	}
 	var urls []string
+	add := func(url string) {
+		if url = strings.TrimSpace(url); url != "" && !slices.Contains(urls, url) {
+			urls = append(urls, url)
+		}
+	}
 	for _, target := range targets {
+		if !slices.Contains(configured, target) {
+			if strings.HasPrefix(target, "-") || strings.ContainsAny(target, "\x00\n") {
+				return nil, fmt.Errorf("%w: %q", ErrRemoteUnresolved, target)
+			}
+			add(rewriteURL(ctx, repoDir, target, intent.Push))
+			continue
+		}
 		args := []string{"remote", "get-url", "--all"}
 		if intent.Push {
 			args = append(args, "--push")
 		}
-		if slices.Contains(configured, target) {
-			args = append(args, target)
-		} else {
-			if strings.HasPrefix(target, "-") || strings.ContainsAny(target, "\x00\n") {
-				return nil, fmt.Errorf("%w: %q", ErrRemoteUnresolved, target)
-			}
-			args = append([]string{"-c", "remote." + transientRemote + ".url=" + target}, append(args, transientRemote)...)
-		}
-		out, ok := runRemoteQuery(ctx, repoDir, args)
+		out, ok := runRemoteQuery(ctx, repoDir, append(args, target))
 		if !ok {
 			return nil, fmt.Errorf("%w: %q", ErrRemoteUnresolved, target)
 		}
 		for line := range strings.SplitSeq(string(out), "\n") {
-			if line = strings.TrimSpace(line); line != "" && !slices.Contains(urls, line) {
-				urls = append(urls, line)
-			}
+			add(line)
 		}
 	}
 	if len(urls) == 0 {
@@ -108,4 +106,52 @@ func defaultRemote(ctx context.Context, repoDir string, push bool) string {
 		}
 	}
 	return defaultRemoteName
+}
+
+// rewriteURL applies the repository's url.<base>.insteadOf rules to a URL
+// operand, and for push its pushInsteadOf rules first, each by the longest
+// matching prefix as Git does. Git names only repository-configured remotes,
+// so a URL operand cannot be resolved by asking it.
+func rewriteURL(ctx context.Context, repoDir, raw string, push bool) string {
+	out, ok := runRemoteQuery(ctx, repoDir, []string{"config", "--get-regexp", `^url\..*\.(insteadof|pushinsteadof)$`})
+	if !ok {
+		// No rule is configured; Git exits non-zero for an empty match.
+		return raw
+	}
+	type rule struct{ base, prefix string }
+	var fetchRules, pushRules []rule
+	for line := range strings.SplitSeq(string(out), "\n") {
+		key, prefix, found := strings.Cut(strings.TrimSpace(line), " ")
+		if !found {
+			continue
+		}
+		lower := strings.ToLower(key)
+		switch {
+		case strings.HasSuffix(lower, ".pushinsteadof"):
+			pushRules = append(pushRules, rule{base: key[len("url.") : len(key)-len(".pushinsteadof")], prefix: prefix})
+		case strings.HasSuffix(lower, ".insteadof"):
+			fetchRules = append(fetchRules, rule{base: key[len("url.") : len(key)-len(".insteadof")], prefix: prefix})
+		}
+	}
+	longest := func(rules []rule) (string, bool) {
+		best := -1
+		for i, r := range rules {
+			if strings.HasPrefix(raw, r.prefix) && (best < 0 || len(r.prefix) > len(rules[best].prefix)) {
+				best = i
+			}
+		}
+		if best < 0 {
+			return "", false
+		}
+		return rules[best].base + raw[len(rules[best].prefix):], true
+	}
+	if push {
+		if rewritten, ok := longest(pushRules); ok {
+			return rewritten
+		}
+	}
+	if rewritten, ok := longest(fetchRules); ok {
+		return rewritten
+	}
+	return raw
 }
