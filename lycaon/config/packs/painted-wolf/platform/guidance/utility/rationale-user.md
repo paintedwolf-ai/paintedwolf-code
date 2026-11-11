@@ -10,11 +10,17 @@
 {% endif %}{% if recent_results %}Recent tool results before this action (bounded observations):
 {{ recent_results }}
 
-{% endif %}{% if gated_action %}Gated action:
-{{ gated_action }}
+{% endif %}{% if action %}Action:
+{{ action }}
+
+{% endif %}{% if phase_scope %}Part of the action to explain:
+{{ phase_scope }}
 
 {% endif %}{% if host_facts %}Host consequence facts (do not rewrite; not your topic):
 {{ host_facts }}
+
+{% endif %}{% if assistant_reasoning %}Assistant reasoning excerpt (advisory; may discuss other actions):
+{{ assistant_reasoning }}
 
 {% endif %}{% if assistant_note %}Assistant note (tiebreaker only):
 {{ assistant_note }}
