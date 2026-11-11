@@ -210,6 +210,7 @@ func (c *Core) Stats() Stats {
 	return Stats{
 		LowerDirReads:     c.counters.lowerDirReads.Load(),
 		LowerLookups:      c.counters.lowerLookups.Load(),
+		LowerContentReads: c.counters.lowerContentReads.Load(),
 		PhysicalCopyUps:   c.counters.physicalCopyUps.Load(),
 		LogicalChanges:    int64(logical),
 		CapturedBaseBytes: c.counters.capturedBaseBytes.Load(),

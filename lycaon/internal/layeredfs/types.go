@@ -254,8 +254,10 @@ type BackingCapacity struct {
 }
 
 type Stats struct {
-	LowerDirReads     int64
-	LowerLookups      int64
+	LowerDirReads int64
+	LowerLookups  int64
+	// LowerContentReads counts lower files opened for content, leaving out Git metadata.
+	LowerContentReads int64
 	PhysicalCopyUps   int64
 	LogicalChanges    int64
 	CapturedBaseBytes int64
