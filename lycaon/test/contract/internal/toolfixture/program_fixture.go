@@ -31,6 +31,8 @@ func NewProgramFixture(t *testing.T) *ProgramFixture {
 	testutil.FailErr(t, "compose contract command services", host.Commands.SetProgramServices(toolhost.ProgramServices{
 		Recorder: seed.Recorder, Blobs: seed.Runtime.Blobs, Projector: seed.Runtime.Projector,
 		Progress: seed.Runtime.Progress, Sessions: seed.Runtime.Sessions,
+		// Contract programs finish inline however long a loaded runner takes.
+		Clock: programtest.NewManualClock(),
 	}))
 	return &ProgramFixture{Host: host, Seed: seed}
 }
