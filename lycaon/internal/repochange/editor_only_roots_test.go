@@ -6,7 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
 )
 
-// INV-6: no watcher registration exists for an editor-only root, so the
+// No watcher registration exists for an editor-only root, so the
 // engine never observes its own writes or a broad tree's churn.
 func TestEditorOnlyRootsAreNeverWatched(t *testing.T) {
 	facts := rootfacts.Install(t)

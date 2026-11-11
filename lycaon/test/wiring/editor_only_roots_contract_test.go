@@ -39,7 +39,7 @@ type agentView struct {
 	RootHistoryVersion int
 }
 
-// INV-3: everything an agent consumer receives for a project with editor-only
+// Everything an agent consumer receives for a project with editor-only
 // roots equals what it receives for the same project without them.
 func TestEditorOnlyRootsDoNotExistForAgents(t *testing.T) {
 	h := BuildForTest(t)

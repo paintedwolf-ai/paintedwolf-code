@@ -23,7 +23,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// INV-5: every editor file operation works in an editor-only root of each
+// Every editor file operation works in an editor-only root of each
 // class, through the same source API the editor uses everywhere.
 func TestEditorOperationsWorkInEditorOnlyRoots(t *testing.T) {
 	facts := rootfacts.Install(t)

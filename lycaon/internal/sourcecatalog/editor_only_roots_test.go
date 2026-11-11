@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
 )
 
-// INV-6: an editor-only root costs what the person opens. Discovery records
+// An editor-only root costs what the person opens. Discovery records
 // the root without listing it, and a folder is read when it is opened.
 func TestEditorOnlyRootIsObservedOnDemand(t *testing.T) {
 	facts := rootfacts.Install(t)
