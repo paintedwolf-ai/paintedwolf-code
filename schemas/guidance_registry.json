@@ -3553,6 +3553,12 @@
       "emit": "guard:worker",
       "summary": "An attempted file mutation has no confirmed artifact in this worker's completion evidence."
     },
+    "WORKER_REPORT_REQUIRED": {
+      "branch_instruction": "Reuse completed work and its evidence.",
+      "category": "recoverable",
+      "emit": "guard:worker_summary",
+      "summary": "This worker job has no accepted completion report."
+    },
     "WORKER_RESUME_CHILD_UNKNOWN": {
       "branch_instruction": "Use a recorded child_session_id, or start a new task",
       "category": "recoverable",
@@ -3584,7 +3590,7 @@
       "summary": "Worker finished without disk proof of implementation (no successful file mutation or workspace change)"
     },
     "WORKER_SUMMARY_TOO_LONG": {
-      "branch_instruction": "This trim turn accepts the completion report only. Keep the brief within {{ paintedwolf.max_chars }} characters; do not resume acquisition or mutation.",
+      "branch_instruction": "Keep the brief within {{ paintedwolf.max_chars }} characters. Reuse observed evidence and preserve unresolved risks when submitting the corrected report.",
       "category": "recoverable",
       "emit": "guard:worker_summary",
       "summary": "Worker survey exceeded the parent character budget ({{ paintedwolf.actual_chars }} \u003e {{ paintedwolf.max_chars }})."

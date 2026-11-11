@@ -31,18 +31,17 @@ func TestCompletionCoverageValidationUsesDurableWorkerIdentity(t *testing.T) {
 	args := map[string]any{"leg_status": "complete", "coverage_review": map[string]any{}}
 	invocation := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: id}}
 	record, err := runtime.DecodeCompleteLeg(t.Context(), args, invocation, validate)
-	if record.LegStatus != "complete" || !errors.Is(err, rejection) || calls != 1 {
+	if record != nil || !errors.Is(err, rejection) || calls != 1 {
 		t.Fatalf("coverage refusal discarded: %+v, %v, calls=%d", record, err, calls)
 	}
 	invocation.Identity.WorkerJobID = "missing-worker"
 	if _, err := runtime.DecodeCompleteLeg(t.Context(), args, invocation, validate); err == nil || calls != 1 {
 		t.Fatalf("missing worker bypassed durable validation: %v, calls=%d", err, calls)
 	}
-	// An invocation without worker identity has no durable job whose coverage
-	// can be validated; it must not borrow the previous worker's review context.
+	// A report requires its own durable worker identity.
 	invocation.Identity.WorkerJobID = ""
 	record, err = runtime.DecodeCompleteLeg(t.Context(), args, invocation, validate)
-	if err != nil || record.LegStatus != "complete" || calls != 1 {
+	if err == nil || record != nil || calls != 1 {
 		t.Fatalf("non-worker completion borrowed worker review context: %+v,%v,calls=%d", record, err, calls)
 	}
 	invocation.Identity.WorkerJobID = id
@@ -50,8 +49,8 @@ func TestCompletionCoverageValidationUsesDurableWorkerIdentity(t *testing.T) {
 		t.Fatalf("invalid completion reached coverage validator: %v, calls=%d", err, calls)
 	}
 	record, err = runtime.DecodeCompleteLeg(t.Context(), args, invocation, nil)
-	if err != nil || record.LegStatus != "complete" {
-		t.Fatalf("valid completion without additional review failed: %+v, %v", record, err)
+	if err == nil || record != nil {
+		t.Fatalf("missing report services accepted completion: %+v, %v", record, err)
 	}
 	jobs, err := runtime.BranchRetentionDeps().Jobs(t.Context())
 	testutil.FailErr(t, "load durable branch retention jobs", err)

@@ -43,7 +43,6 @@ type routesFixture struct {
 
 func newRoutesFixture(t *testing.T, orchestrator orchestration.Orchestrator) *routesFixture {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "workflowadmin.db")
 	sessions := store.NewSQL(sqlDB)
 	projects := project.NewSQLRegistry(sqlDB)
