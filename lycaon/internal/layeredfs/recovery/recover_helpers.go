@@ -273,9 +273,6 @@ func containsString(list []string, target string) bool {
 // Git as well. It reports false when the storage cannot be resumed: after a reboot, during another
 // lifecycle operation, or when its log is unusable.
 func resumeWorkingView(ctx context.Context, c *Coordinator, req RecoverRequest, j WorkerLifecycleJournal, prevViewID, prevBacking string) (*adapter.PreparedView, bool, error) {
-	if prevBacking == "" {
-		prevBacking = j.BackingDir
-	}
 	notResumed := func(reason string, attrs ...any) (*adapter.PreparedView, bool, error) {
 		slog.InfoContext(ctx, "worker working storage not resumed", append([]any{"worker_id", req.WorkerID, "reason", reason}, attrs...)...)
 		return nil, false, nil

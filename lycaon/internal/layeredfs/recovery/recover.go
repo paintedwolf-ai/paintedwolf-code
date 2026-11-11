@@ -90,6 +90,10 @@ func recoverWorkerView(ctx context.Context, c *Coordinator, req RecoverRequest) 
 	if err != nil {
 		return nil, err
 	}
+	if prevBacking == "" {
+		// Startup settled the mount already and left its storage here for this rebuild.
+		prevBacking = j.BackingDir
+	}
 
 	if view, resumed, err := resumeWorkingView(ctx, c, req, j, prevViewID, prevBacking); err != nil {
 		return nil, err
