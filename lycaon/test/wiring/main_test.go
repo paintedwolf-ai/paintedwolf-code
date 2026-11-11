@@ -42,7 +42,8 @@ func probeSSHAgent() int {
 	}
 	defer func() { _ = conn.Close() }()
 	reply := make([]byte, 5)
-	if _, err := conn.Write([]byte{0, 0, 0, 1, 11}); err == nil {
+	_, err = conn.Write([]byte{0, 0, 0, 1, 11})
+	if err == nil {
 		_, err = io.ReadFull(conn, reply)
 	}
 	if err != nil || reply[4] != 12 {
