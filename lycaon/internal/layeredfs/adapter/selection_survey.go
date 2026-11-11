@@ -71,7 +71,7 @@ func surveyRootCost(ctx context.Context, root rootCostFacts, fact BudgetFact, st
 			return false, nil
 		}
 		if d.IsDir() && slices.Contains(root.hidden, filepath.ToSlash(strings.TrimPrefix(path, src+string(filepath.Separator)))) {
-			return filepath.SkipDir
+			return false, nil
 		}
 		cost.Entries++
 		if !root.clonable && d.Type().IsRegular() {
