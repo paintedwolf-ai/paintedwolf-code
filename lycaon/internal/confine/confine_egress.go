@@ -600,6 +600,11 @@ func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep
 			return false, false, rule, &cit
 		}
 	}
+	// The gate leaves a retrieval capability's dial to its own contract at
+	// every posture, so without a rule asking it is decided here as there.
+	if rule == nil && RetrievalDial(cmd) {
+		return true, true, nil, nil
+	}
 	return false, false, rule, nil
 }
 

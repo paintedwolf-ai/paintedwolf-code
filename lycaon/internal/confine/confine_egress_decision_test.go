@@ -74,3 +74,23 @@ func TestAuthoredAskRuleReachesTheGateWithItsCitation(t *testing.T) {
 		t.Fatalf("gate saw rule %+v", cited)
 	}
 }
+
+// A retrieval capability's dial is decided as the gate would decide it:
+// quietly, unless a rule asks.
+func TestRetrievalDialsFollowTheirContract(t *testing.T) {
+	b := newTestBroker()
+	reached := false
+	b.resolver = func(context.Context, EgressCommand, egressproxy.Endpoint, *EgressDetectionCitation) bool {
+		reached = true
+		return false
+	}
+	cmd := EgressCommand{SessionID: "s1", ToolCallID: "a1", ToolName: "fetch_url"}
+	ep := egressproxy.Endpoint{Host: "page.example", Transport: egressproxy.TransportHTTPRequest, Port: 443}
+	if !b.decideAttributedEndpoint(context.Background(), cmd, ep) || reached {
+		t.Fatalf("a retrieval dial asked: reached %v", reached)
+	}
+	withRule(t, EgressRuleAsk, "page.example")
+	if b.decideAttributedEndpoint(context.Background(), cmd, ep) || !reached {
+		t.Fatal("an ask rule on a retrieval dial did not reach the gate")
+	}
+}
