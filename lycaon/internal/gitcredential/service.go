@@ -29,7 +29,9 @@ type ServeOptions struct {
 	// GitBinary is the bundled git the helper must descend from.
 	GitBinary string
 	// Store answers helper operations; the vault when nil.
-	Store backend
+	Store Backend
+	// Scope, when set, limits answers to the invocation's admitted recipients.
+	Scope *Scope
 }
 
 // Service answers the credential-helper protocol for one Git invocation over
@@ -39,7 +41,7 @@ type ServeOptions struct {
 type Service struct {
 	listener  *net.UnixListener
 	directory string
-	store     backend
+	store     Backend
 	gitBinary string
 	helper    string
 	deadline  time.Duration
@@ -82,6 +84,9 @@ func Serve(ctx context.Context, options ServeOptions) (*Service, error) {
 	store := options.Store
 	if store == nil {
 		store = VaultBackend()
+	}
+	if options.Scope != nil {
+		store = scopedBackend{inner: store, scope: options.Scope}
 	}
 	service := &Service{
 		listener: listener, directory: directory, store: store, gitBinary: gitBinary, helper: helper,

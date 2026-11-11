@@ -3,7 +3,6 @@ package httpaction
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"net/url"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -12,7 +11,7 @@ import (
 )
 
 type outboundRequest struct {
-	beforeCookieHop func(context.Context, *url.URL) error
+	beforeCookieHop func(context.Context, outboundhttp.HopRequest) error
 	url             string
 	hostHeader      string
 	headers         []outboundhttp.Header

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/curationctx"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -14,6 +15,7 @@ import (
 
 func invocationContext(ctx context.Context, tc tools.ToolContext) context.Context {
 	ctx = people.WithoutCaller(ctx)
+	ctx = gitexec.AgentEntry(ctx)
 	ctx = tools.WithCallReach(ctx, tools.TurnReach(tc))
 	if tc.Invocation.ToolName != "" && tc.Invocation.Contract.Owner != "" {
 		ctx = tools.WithRecoveryContract(ctx, tc.Invocation.ToolName, tc.Invocation.Contract)
