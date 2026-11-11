@@ -51,7 +51,7 @@ func TestProgramApprovalSurvivesTurnAndHonorsStop(t *testing.T) {
 					done <- callResult{content, err}
 				}()
 				waitCtx := <-approval.entered
-				clock.Advance(command.DefaultProgramInlineWait)
+				clock.Advance(command.ProgramInlineWait())
 				got := <-done
 				testutil.FailErr(t, "promote approval wait", got.err)
 				var running command.RunningProgramResult
