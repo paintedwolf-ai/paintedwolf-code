@@ -890,7 +890,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["child-dispatch"],
           "mode": "always"
         }
       ],
@@ -972,7 +972,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["child-dispatch"],
           "mode": "always"
         }
       ],
