@@ -47,7 +47,6 @@ type projectBackgroundTestEnv struct {
 
 func newProjectBackgroundTestEnv(t *testing.T) *projectBackgroundTestEnv {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 	st := store.NewSQL(sqlDB)
 	projReg := project.NewSQLRegistry(sqlDB)

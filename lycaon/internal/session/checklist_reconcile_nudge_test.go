@@ -232,7 +232,6 @@ func TestProjectSkillFixtureGateMatrix(t *testing.T) {
 			if err := surfaces.PutEnabled(map[string]bool{projectcontrib.SurfaceSkills: tc.deviceOn}); err != nil {
 				testutil.FailErr(t, "PutEnabled", err)
 			}
-			project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 			reg := project.NewMemoryRegistry()
 			p, err := project.CreateWithRoot(ctx, reg, root)
 			testutil.FailErr(t, "CreateWithRoot", err)

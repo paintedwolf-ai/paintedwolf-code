@@ -29,7 +29,6 @@ import (
 )
 
 func TestScanSummaryHTTPIntegration(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	findings := make([]wire.SecurityFinding, 0, 12)

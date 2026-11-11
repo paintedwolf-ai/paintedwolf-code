@@ -11,7 +11,7 @@ copy:
   cause: Parent worker_summary envelopes must stay within compaction budget so coordinator context stays usable.
   why: Parent worker_summary envelopes must stay within compaction budget so coordinator context stays usable.
   fix: '{{ paintedwolf.next_steps }} Preserve the report status, findings and unresolved risks; summarize conclusions and refer to existing evidence instead of pasting tool dumps.'
-  instead: 'This trim turn accepts the completion report only. Keep the brief within {{ paintedwolf.max_chars }} characters; do not resume acquisition or mutation.'
+  instead: 'Keep the brief within {{ paintedwolf.max_chars }} characters. Reuse observed evidence and preserve unresolved risks when submitting the corrected report.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
 x-paintedwolf-message: Worker survey exceeded the parent character budget
