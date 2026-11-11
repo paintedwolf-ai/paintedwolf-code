@@ -11,7 +11,7 @@ import (
 
 type keychainBackend struct{}
 
-func newBackend() backend { return keychainBackend{} }
+func newBackend() Backend { return keychainBackend{} }
 
 func (keychainBackend) Get(credential Credential) (Credential, bool, error) {
 	query, err := internetPasswordItem(credential)

@@ -51,6 +51,36 @@ func TestSedStagedApprovalRetainsFinalWriteAuthorityAndInputs(t *testing.T) {
 	}
 }
 
+// Denying the derived effect must preserve the actual destination, even after
+// approving the script read needed to discover that effect.
+func TestSedDisclosedWriteDeclinePreservesDestination(t *testing.T) {
+	for _, posture := range []gate.Posture{gate.PostureLight, gate.PostureBalanced, gate.PostureStrict} {
+		t.Run(string(posture), func(t *testing.T) {
+			script := filepath.Join(outsideCommandFolder(t), "write.sed")
+			written := filepath.Join(outsideCommandFolder(t), "written.txt")
+			const original = "independent destination bytes\n"
+			testutil.FailErr(t, "seed destination", os.WriteFile(written, []byte(original), 0o600))
+			testutil.FailErr(t, "seed disclosed write script", os.WriteFile(script, []byte("w "+written+"\n"), 0o600))
+			s := newCommandProgramSession(t, "sed -f '"+script+"' notes.txt", "", posture)
+			cards := runCommandWithApprovals(t, s, "approve_current_action", "decline")
+			if !slices.Contains(cards[0].ToolApproval.Plan.Reasons, wire.GateOutsideRootsRead) || !slices.Contains(cards[1].ToolApproval.Plan.Reasons, wire.GateOutsideRootsWrite) {
+				t.Fatalf("source and derived effect reviews = %+v", cards)
+			}
+			if got := s.outcome(t, "program-1"); got.Status == 0 || got.CompletedEffects != 0 {
+				t.Fatalf("declined disclosed write completed: %+v", got)
+			}
+			data, err := os.ReadFile(written)
+			testutil.FailErr(t, "read preserved destination", err)
+			if string(data) != original {
+				t.Fatalf("declined effect changed destination: %q", data)
+			}
+			if grant, ok := s.h.Sessions.GrantedPath.Covers(s.session, "", written, grantedpath.ModeWrite); ok {
+				t.Fatalf("declined effect installed write authority: %+v", grant)
+			}
+		})
+	}
+}
+
 func assertStagedSedReviewedInputs(t *testing.T, s *commandProgramSession, script, written string) {
 	t.Helper()
 	var mode, certainty, initialDigest, finalDigest, representation, blobJSON string

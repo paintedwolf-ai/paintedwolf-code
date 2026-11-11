@@ -60,7 +60,7 @@ type ControlPlane struct {
 // CurrentControlPlane resolves the layout from current host facts.
 func CurrentControlPlane() ControlPlane {
 	return ControlPlane{
-		Tops:       resolveEach(controlPlaneReadDenyRoots()),
+		Tops:       controlPlaneReadDenyRootsResolved(),
 		Workspaces: resolveEach(agentWorkspaceRootsUnderControlPlane()),
 	}
 }

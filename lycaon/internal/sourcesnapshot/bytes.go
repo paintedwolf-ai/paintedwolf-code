@@ -45,7 +45,7 @@ func (s *Store) Bytes(ctx context.Context, entry Entry) ([]byte, error) {
 }
 
 func gitBlob(ctx context.Context, entry Entry) ([]byte, error) {
-	out, code, err := gitexec.Run(ctx, entry.RootPath, []string{"cat-file", "blob", entry.GitOID}, gitexec.Opts{
+	out, code, err := gitexec.Run(gitexec.WithHostPurpose(ctx, "source_snapshot"), entry.RootPath, []string{"cat-file", "blob", entry.GitOID}, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic, MaxOutput: max(entry.Size+1<<16, exec.DefaultMaxOutputBytes),
 	})
 	if err != nil {
