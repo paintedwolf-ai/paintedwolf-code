@@ -2,13 +2,16 @@
 
 // diagnoexec replicates the protected launch's NOEXEC mount posture around
 // the exact glycin bwrap command inside a throwaway user and mount
-// namespace. The noexec mode makes the namespace's mounts private, sets
-// MOUNT_ATTR_NOEXEC on "/" recursively, restores exec on the bwrap and
-// loader files through the same file-typed projection mounts the protected
-// launch builds, and then runs the exact bwrap command; the control mode
-// skips the posture. The test grants ambient CAP_SYS_ADMIN for the setup
-// and this helper drops every capability before spawning bwrap so the
-// sandbox sees the same unprivileged identity as the failing launch.
+// namespace. Every mode makes the namespace's mounts private. The noexec
+// mode sets MOUNT_ATTR_NOEXEC on "/" recursively and restores exec on the
+// policy-shaped roots through the same projection mounts the protected
+// launch builds: directory-typed clones for the library roots and
+// file-typed clones for the executables. The fixed mode additionally
+// projects "/usr" itself as a directory root, which is the candidate fix:
+// glycin's single-mount "--ro-bind /usr /usr" then captures an executable
+// mount instead of the noexec base. The control mode skips the posture.
+// The helper drops every capability before spawning bwrap so the sandbox
+// sees the same unprivileged identity as the failing launch.
 // Temporary diagnostic for the upgrade-corpus launchguard failure; remove
 // with the diag test.
 package main
@@ -44,16 +47,41 @@ func main() {
 		fmt.Printf("DIAGNOEXEC mode=%s fatal=isolate err=%v\n", mode, err)
 		os.Exit(1)
 	}
-	if mode == "noexec" {
+	if mode == "noexec" || mode == "fixed" {
 		if err := unix.MountSetattr(unix.AT_FDCWD, "/", unix.AT_RECURSIVE, &unix.MountAttr{Attr_set: unix.MOUNT_ATTR_NOEXEC}); err != nil {
 			fmt.Printf("DIAGNOEXEC mode=%s fatal=noexec-root err=%v\n", mode, err)
 			os.Exit(1)
 		}
-		for _, path := range []string{bwrapPath, loaderPath} {
-			if err := projectExecutableFile(path); err != nil {
-				fmt.Printf("DIAGNOEXEC mode=%s fatal=project path=%s err=%v\n", mode, path, err)
+		// The fixed posture projects "/usr" first so every later
+		// projection stacks on top of its executable clone.
+		paths := []struct {
+			path      string
+			directory bool
+			optional  bool
+		}{
+			{"/usr", true, mode == "fixed"},
+			{"/usr/lib/x86_64-linux-gnu", true, false},
+			{"/usr/lib64", true, true},
+			{bwrapPath, false, false},
+			{loaderPath, false, false},
+		}
+		for _, item := range paths {
+			if item.path == "/usr" && mode != "fixed" {
+				continue
+			}
+			if err := projectExecutable(item.path, item.directory); err != nil {
+				if item.optional {
+					fmt.Printf("DIAGNOEXEC mode=%s optional-skip path=%s err=%v\n", mode, item.path, err)
+					continue
+				}
+				fmt.Printf("DIAGNOEXEC mode=%s fatal=project path=%s err=%v\n", mode, item.path, err)
 				os.Exit(1)
 			}
+		}
+		if info, err := os.Stat(loaderPath); err != nil {
+			fmt.Printf("DIAGNOEXEC mode=%s loader-stat err=%v\n", mode, err)
+		} else {
+			fmt.Printf("DIAGNOEXEC mode=%s loader-mode=%s\n", mode, info.Mode())
 		}
 		code, stderr, err := runDirect(loaderPath)
 		if err != nil {
@@ -75,22 +103,20 @@ func main() {
 	fmt.Printf("DIAGNOEXEC mode=%s verdict=%s code=%d detail=%q\n", mode, verdict, code, detail)
 }
 
-// projectExecutableFile replicates the protected launch's file-root
-// projection: clone the file's mount, clear NOEXEC on the clone, and
-// move-mount the file-typed clone over the path.
-func projectExecutableFile(path string) error {
-	open := func() (int, error) {
-		return unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{
-			Flags:   unix.O_PATH | unix.O_CLOEXEC,
-			Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
-		})
+// projectExecutable replicates the protected launch's projection: open the
+// object the way the launch does (a real read open, not O_PATH), clone its
+// mount, clear NOEXEC on the clone, and move-mount the clone over the path.
+func projectExecutable(path string, directory bool) error {
+	flags := unix.O_RDONLY | unix.O_NOFOLLOW | unix.O_CLOEXEC
+	if directory {
+		flags |= unix.O_DIRECTORY
 	}
-	file, err := open()
+	object, err := unix.Open(path, flags, 0)
 	if err != nil {
 		return fmt.Errorf("open: %w", err)
 	}
-	defer func() { _ = unix.Close(file) }()
-	tree, err := unix.OpenTree(file, "", unix.OPEN_TREE_CLONE|unix.OPEN_TREE_CLOEXEC|unix.AT_EMPTY_PATH)
+	defer func() { _ = unix.Close(object) }()
+	tree, err := unix.OpenTree(object, "", unix.OPEN_TREE_CLONE|unix.OPEN_TREE_CLOEXEC|unix.AT_EMPTY_PATH)
 	if err != nil {
 		return fmt.Errorf("clone: %w", err)
 	}
@@ -98,7 +124,10 @@ func projectExecutableFile(path string) error {
 	if err := unix.MountSetattr(tree, "", unix.AT_EMPTY_PATH, &unix.MountAttr{Attr_clr: unix.MOUNT_ATTR_NOEXEC, Propagation: unix.MS_PRIVATE}); err != nil {
 		return fmt.Errorf("clear noexec: %w", err)
 	}
-	target, err := open()
+	target, err := unix.Openat2(unix.AT_FDCWD, path, &unix.OpenHow{
+		Flags:   unix.O_PATH | unix.O_CLOEXEC,
+		Resolve: unix.RESOLVE_NO_SYMLINKS | unix.RESOLVE_NO_MAGICLINKS,
+	})
 	if err != nil {
 		return fmt.Errorf("open target: %w", err)
 	}
@@ -110,13 +139,15 @@ func projectExecutableFile(path string) error {
 }
 
 // dropCapabilities clears the ambient set and every capability so bwrap's
-// copied mounts lock exactly as they do for the unprivileged desktop.
+// copied mounts lock exactly as they do for the unprivileged desktop. The
+// version-3 header reads two data structures, so the buffer must hold both.
 func dropCapabilities() error {
 	if err := unix.Prctl(unix.PR_CAP_AMBIENT, unix.PR_CAP_AMBIENT_CLEAR_ALL, 0, 0, 0); err != nil {
 		return err
 	}
 	header := unix.CapUserHeader{Version: unix.LINUX_CAPABILITY_VERSION_3}
-	return unix.Capset(&header, &unix.CapUserData{})
+	data := [2]unix.CapUserData{}
+	return unix.Capset(&header, &data[0])
 }
 
 // runDirect execs the loader outside bwrap; exit 2 (missing --dbus-fd)

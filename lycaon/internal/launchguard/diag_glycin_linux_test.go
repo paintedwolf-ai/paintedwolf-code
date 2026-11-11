@@ -97,16 +97,18 @@ func TestDiagGlycinLoaderBwrap(t *testing.T) {
 	// Stage 7: replicate the protected namespace's NOEXEC mount posture
 	// around the exact bwrap command. The protected launch sets
 	// MOUNT_ATTR_NOEXEC on "/" recursively and restores exec only on policy
-	// paths through file-typed projection mounts; glycin's single-mount
+	// paths through projection mounts; glycin's single-mount
 	// "--ro-bind /usr /usr" cannot carry those stacked projections into the
 	// sandbox, so the loader's execve should fail EACCES there and bwrap
-	// should exit 1. The helper needs ambient CAP_SYS_ADMIN for the setup
-	// and drops every capability before running bwrap.
+	// should exit 1. The fixed mode additionally projects "/usr" itself,
+	// the candidate fix, and should let the loader start. The helper needs
+	// ambient CAP_SYS_ADMIN for the setup and drops every capability before
+	// running bwrap.
 	helper := filepath.Join(t.TempDir(), "diag-noexec-helper")
 	if err := buildBinary(helper, "./testdata/diagnoexec", ""); err != nil {
 		t.Fatalf("build diag noexec helper: %v", err)
 	}
-	for _, mode := range []string{"control", "noexec"} {
+	for _, mode := range []string{"control", "noexec", "fixed"} {
 		child := exec.Command(helper, "-mode", mode)
 		child.SysProcAttr = &syscall.SysProcAttr{
 			Cloneflags:  unix.CLONE_NEWUSER | unix.CLONE_NEWNS,
