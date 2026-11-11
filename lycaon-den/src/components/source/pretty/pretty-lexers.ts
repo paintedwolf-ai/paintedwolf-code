@@ -106,7 +106,7 @@ abstract class LexerBase implements PrettyLexer {
       const c = text.at(i);
       i += 1;
       if (this.escape) {
-        // A star ended the previous chunk.
+        // A star ended the text read so far; a slash now closes the comment.
         this.escape = false;
         if (c === SLASH) {
           this.closed();

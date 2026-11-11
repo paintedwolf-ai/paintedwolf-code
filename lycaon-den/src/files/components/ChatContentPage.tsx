@@ -123,7 +123,7 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
       .then((snap) => {
         if (abort.signal.aborted || gen !== retainedGen) return;
         if (!snap) {
-          // The paged reader keeps showing it; Pretty reports when size is why.
+          // The paged reader keeps the text; at the size limit Pretty says why it is not laid out.
           if (exceedsPrettyInput(contentAccess.reference)) {
             setPrettyLayoutOutcome(props.projectId, key, { kind: "limit", reason: "size", length: contentAccess.reference.total_runes });
           }
