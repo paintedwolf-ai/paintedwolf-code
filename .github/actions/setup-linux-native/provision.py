@@ -12,6 +12,8 @@ import time
 from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parents[2] / "scripts" / "ci_policy"))
+import apt_origins
 DOWNLOAD_SECONDS = 240
 TRANSFER_SECONDS = 30
 
@@ -145,7 +147,7 @@ def main(mode):
     (directory / "partial").mkdir(parents=True, exist_ok=True)
     manifest = directory / "plan.json"
     if mode == "plan":
-        apt("update")
+        apt_origins.update()
         plan = apt("-o", "Acquire::ForceHash=SHA256", "--print-uris", "--yes", "--download-only", "--no-install-recommends", "install", *names, capture=True)
         key = archive_identity(plan, names, os.environ)
         manifest.write_text(json.dumps({"plan": plan, "packages": names, "image": image, "key": key}, indent=2) + "\n")

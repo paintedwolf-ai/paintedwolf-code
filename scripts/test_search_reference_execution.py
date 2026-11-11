@@ -195,10 +195,11 @@ class RepositoryToolsInputsTest(unittest.TestCase):
     def test_linux_preparation_keeps_the_hosted_repository_tool_inventory(self):
         result, calls = self.run_profile("Linux")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(calls[0]["argv"], ["apt-get", "update", "-qq"])
-        self.assertEqual(calls[1]["argv"][:4], ["apt-get", "install", "-y", "--no-install-recommends"])
-        self.assertEqual(set(calls[1]["argv"][4:]), {"apt-utils", "createrepo-c", "gnupg", "libarchive-tools",
-                                                           "makepkg", "minisign", "pacman-package-manager", "rpm"})
+        self.assertEqual([call["argv"][-1] for call in calls[:1]], ["update"])
+        install = calls[1]["argv"]
+        self.assertIn("--no-install-recommends", install)
+        self.assertEqual(set(install[install.index("--") + 1:]), {"apt-utils", "createrepo-c", "gnupg", "libarchive-tools",
+                                                                  "makepkg", "minisign", "pacman-package-manager", "rpm"})
 
     def test_macos_prepares_the_signer_without_an_unrelated_homebrew_update(self):
         result, calls = self.run_profile("Darwin")

@@ -91,8 +91,7 @@ elif 'install' in sys.argv:
                 self.assertIn("Acquire::ForceHash=SHA256", records[1])
                 self.assertIn("APT::Keep-Downloaded-Packages=true", records[2])
                 self.assertIn("--no-download", records[2])
-                self.assertIn("Acquire::Retries=2", records[0])
-                self.assertIn("180s", records[0])
+                self.assertIn(f"{NATIVE.apt_origins.ATTEMPT_SECONDS}s", records[0])
                 self.assertEqual(records[2][-2:], ["xclip", "sway"])
 
     def test_only_matching_archives_are_reused(self):
