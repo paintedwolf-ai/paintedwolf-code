@@ -117,7 +117,7 @@ modelIndependentWebE2e("three windows share labeled selections and preserve colo
     await third.screenshot({ path: process.env.PW_WINDOW_PRESENCE_SCREENSHOT?.replace(/\.png$/, "-peer.png")
       ?? testInfo.outputPath("peer-editor-window.png") });
     await page.keyboard.press("Escape");
-    // A window that closes unloads its page; without unload WebKit keeps the page's connections open.
+    // A window that closes unloads its page, which is when it leaves its documents.
     await second.close({ runBeforeUnload: true });
     await expect(page.getByTestId("document-windows")).toHaveAccessibleName("Open in 2 windows", { timeout: 75_000 });
     await expect(editor(page).locator(".cm-document-caret")).toHaveCount(1);
