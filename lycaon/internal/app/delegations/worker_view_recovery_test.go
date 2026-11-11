@@ -443,7 +443,8 @@ func TestRetentionEvictsVerifiedCheckpointAndLeaseRebuildsIt(t *testing.T) {
 	// A settled worker that has not resumed: an active one holds its rebuilt view and is retained.
 	engine := f.boot()
 	settled := engine.Recovery.RecoverWorkerRuntime(t.Context(), task.ID)
-	if !settled.Deletable() || settled.Interrupted == nil || !settled.Interrupted.UnknownScope {
+	// The view was never released; its working log names what it changed.
+	if !settled.Deletable() || settled.Interrupted == nil || settled.Interrupted.UnknownScope {
 		t.Fatalf("settlement: %+v", settled)
 	}
 	report := sweepSealed(t, engine, task.ID)
