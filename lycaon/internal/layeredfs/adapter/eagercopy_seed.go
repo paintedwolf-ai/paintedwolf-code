@@ -250,7 +250,17 @@ func (a *seedAccumulator) seedSingleEntry(g RootGrant, rel, srcPath, dstPath, pr
 		return err
 	}
 	mode := info.Mode()
+	// A clone can succeed without read permission and leave a file nothing can capture, and some
+	// systems refuse even its attributes.
+	if mode.IsRegular() && mode.Perm()&0o400 == 0 {
+		a.out.stats.UnreadableEntries++
+		return nil
+	}
 	rawXattrs, err := readPathXattrs(srcPath)
+	if errors.Is(err, fs.ErrPermission) && mode.IsRegular() {
+		a.out.stats.UnreadableEntries++
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -345,11 +355,6 @@ func (a *seedAccumulator) seedSymlink(rootID, rel, srcPath, dstPath, pristinePat
 // does not. The working file comes from the source and the pristine one from the working file, so the
 // two cannot differ whatever the source does meanwhile. Nothing here hashes.
 func (a *seedAccumulator) seedRegularFile(rootID, rel, srcPath, dstPath, pristinePath string, info fs.FileInfo, xattrs map[string][]byte) error {
-	// A clone can succeed without read permission and leave a file nothing can capture.
-	if info.Mode().Perm()&0o400 == 0 {
-		a.out.stats.UnreadableEntries++
-		return nil
-	}
 	if err := a.chargeEntries(rootID, 1); err != nil {
 		return err
 	}

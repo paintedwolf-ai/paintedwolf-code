@@ -68,6 +68,7 @@ func newWriteLegHarness(t *testing.T) (*harness, *atomic.Bool) {
 	h := newUninitializedHarness(t)
 	h.tc.Source.SourceWorkspaceKind, h.tc.Identity.WorkerJobID = api.SourceWorkspaceKindWorker, "job-1"
 	h.tc.Source.WorkerBranchRoot, h.tc.Source.BranchWorkspace = h.root, tools.BranchWorkspace(writeLegBranch{})
+	h.owners.PrivateGit = AdoptPlainWorkerView(t, h.root, "job-1")
 	paths, err := projectpaths.NewProgramPaths(t.Context(), h.owners.Boundary, h.tc, "")
 	testutil.FailErr(t, "worker program paths", err)
 	h.paths = paths

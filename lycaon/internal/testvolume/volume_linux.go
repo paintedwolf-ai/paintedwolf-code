@@ -125,7 +125,7 @@ func tmpfsVolume(t *testing.T) *Volume {
 	v := &Volume{Root: mount}
 	v.eject = func(t *testing.T) {
 		if err := unix.Unmount(mount, 0); err != nil {
-			t.Fatalf("eject test volume: %v", err)
+			t.Fatalf("eject test volume: %v; this process holds %v", err, descriptorsUnder(mount))
 		}
 	}
 	v.remount = bind
@@ -146,4 +146,20 @@ func (v *Volume) MakeReadOnly(t *testing.T) {
 	if err := unix.Mount("", v.Root, "", unix.MS_REMOUNT|unix.MS_BIND|unix.MS_RDONLY, ""); err != nil {
 		t.Fatalf("remount test volume read-only: %v", err)
 	}
+}
+
+// descriptorsUnder lists this process's open descriptors and working directory inside root, which
+// is what keeps a volume busy.
+func descriptorsUnder(root string) []string {
+	var held []string
+	entries, _ := os.ReadDir("/proc/self/fd")
+	for _, entry := range entries {
+		if target, err := os.Readlink(filepath.Join("/proc/self/fd", entry.Name())); err == nil && (target == root || strings.HasPrefix(target, root+"/")) {
+			held = append(held, entry.Name()+"="+target)
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil && (cwd == root || strings.HasPrefix(cwd, root+"/")) {
+		held = append(held, "cwd="+cwd)
+	}
+	return held
 }

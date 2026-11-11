@@ -241,9 +241,6 @@ func (m *Service) GateState(ctx context.Context, sess *api.Session, history []ap
 			continue
 		}
 		seen[checkID] = true
-		if checkStaleByObservation(m, ctx, sess, checkID) {
-			continue
-		}
 		if declared != "" {
 			cwd, _ := rec.Artifacts["cwd"].(string)
 			if !commandsurface.SameCommandLine(cmd, declared) || cwd != "." {
@@ -254,6 +251,9 @@ func (m *Service) GateState(ctx context.Context, sess *api.Session, history []ap
 		revision, _ := rec.Artifacts["source_revision"].(string)
 		rootDigest, _ := rec.Artifacts["source_root_digest"].(string)
 		if currentRevision == "" || currentRootDigest == "" || revision != currentRevision || rootDigest != currentRootDigest {
+			continue
+		}
+		if checkStaleByObservation(m, ctx, sess, checkID) {
 			continue
 		}
 		cwd, _ := rec.Artifacts["cwd"].(string)

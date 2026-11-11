@@ -245,6 +245,9 @@ func resolveAndValidateGitSpec(spec SeedGitRepoSpec) (string, string, []string, 
 		gitDir = canonicalGitPath(target)
 		if !isPathUnderAllowed(gitDir, allowed) {
 			common, proofErr := privategit.ProveLinkedWorktree(spec.SourceGitPath, gitDir)
+			if proofErr != nil && claimsLinkedWorktree(gitDir) {
+				return "", "", nil, unauthorizedGitError("linked worktree gitlink is not structurally linked")
+			}
 			if proofErr != nil {
 				return "", "", nil, externalGitlinkError()
 			}
