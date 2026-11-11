@@ -81,7 +81,7 @@ func publishGitObjects(ctx context.Context, pub gitPublication) (GitPublishStats
 	return stats, proveConnected(ctx, pub.repoRoot, pub.commonGitDir, pub.tips, boundary)
 }
 
-// destinationTips is the destination's boundary: every ref tip and a detached HEAD.
+// destinationTips is the destination's boundary: every ref tip and a detached HEAD whose object it holds.
 func destinationTips(ctx context.Context, repoRoot, commonGitDir string) ([]string, error) {
 	out, code, err := gitexec.Run(ctx, repoRoot, []string{"--git-dir=" + commonGitDir, "for-each-ref", "--format=%(objectname)"},
 		gitexec.Opts{Profile: gitexec.ProfileHermetic})
@@ -103,7 +103,31 @@ func destinationTips(ctx context.Context, repoRoot, commonGitDir string) ([]stri
 		gitexec.Opts{Profile: gitexec.ProfileHermetic}); err == nil && code == 0 {
 		add(string(head))
 	}
-	return tips, nil
+	return presentObjects(ctx, repoRoot, commonGitDir, tips)
+}
+
+// presentObjects keeps the tips whose objects the destination holds. A ref naming a missing object is
+// damage the publication does not rely on; a missing object the worker's commits need still fails.
+func presentObjects(ctx context.Context, repoRoot, commonGitDir string, oids []string) ([]string, error) {
+	if len(oids) == 0 {
+		return nil, nil
+	}
+	var query, answer bytes.Buffer
+	for _, oid := range oids {
+		query.WriteString(oid + "\n")
+	}
+	diag, code, err := gitexec.RunTo(ctx, repoRoot, []string{"--git-dir=" + commonGitDir, "cat-file", "--batch-check=%(objectname)"},
+		gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: query.Bytes()}, &answer)
+	if err != nil || code != 0 {
+		return nil, errors.Join(err, fmt.Errorf("checkpoint: check destination tips (exit %d): %s", code, strings.TrimSpace(string(diag))))
+	}
+	var present []string
+	for line := range strings.SplitSeq(answer.String(), "\n") {
+		if fields := strings.Fields(line); len(fields) == 1 && isHexOID(fields[0]) {
+			present = append(present, fields[0])
+		}
+	}
+	return present, nil
 }
 
 // borrowingRepository is a scratch bare repository that reads objects from dirs and holds none.

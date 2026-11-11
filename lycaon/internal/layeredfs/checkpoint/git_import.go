@@ -323,18 +323,26 @@ func importRootRefs(ctx context.Context, req rootRefImport) (map[string]string, 
 			pub.sourceObjectDirs = append(pub.sourceObjectDirs, CheckpointGitObjectsDir(req.storeDir, id, req.rootID))
 		}
 	}
+	tx, err := planCheckpointRefTransaction(req.storeDir, gitDir, commonGitDir, req.checkpointID, req.workerID, req.rootID, writes)
+	if err != nil {
+		return nil, err
+	}
 	if _, err := publishGitObjects(ctx, pub); err != nil {
 		return nil, err
 	}
-	return applyCheckpointRefTransaction(ctx, req.repoRoot, gitDir, commonGitDir, req.storeDir, req.checkpointID, req.workerID, req.rootID, writes)
+	return tx.apply(ctx, req.repoRoot, commonGitDir, req.storeDir)
 }
 
-func applyCheckpointRefTransaction(
-	ctx context.Context, primaryDir, gitDir, commonGitDir, storeDir, cleanCheckpoint, cleanWorker, rootID string, writes []plannedRefWrite,
-) (map[string]string, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
+// refTransaction is a checked set of ref writes: each target is absent or already at its object.
+type refTransaction struct {
+	intentName string
+	record     GitRefImportRecord
+	commands   string
+}
+
+// planCheckpointRefTransaction refuses a write that conflicts with a ref or with a recorded intent before
+// any object moves.
+func planCheckpointRefTransaction(storeDir, gitDir, commonGitDir, cleanCheckpoint, cleanWorker, rootID string, writes []plannedRefWrite) (refTransaction, error) {
 	planned := make(map[string]string, len(writes))
 	for _, w := range writes {
 		planned[w.dstRef] = w.oid
@@ -344,38 +352,51 @@ func applyCheckpointRefTransaction(
 		if raw, err := os.ReadFile(filepath.Join(storeDir, "promotions", intentName)); err == nil {
 			var existing GitRefImportRecord
 			if uErr := json.Unmarshal(raw, &existing); uErr != nil {
-				return nil, uErr
+				return refTransaction{}, uErr
 			}
 			if existing.WorkerID != cleanWorker || !maps.Equal(existing.PlannedRefs, planned) {
-				return nil, fmt.Errorf("%w: conflicting durable ref import intent", ErrCheckpointRefConflict)
+				return refTransaction{}, fmt.Errorf("%w: conflicting durable ref import intent", ErrCheckpointRefConflict)
 			}
 		}
 	}
 	packed := loadPackedRefsMap(commonGitDir, gitDir)
 	expectedOld := make(map[string]string, len(writes))
-	var stdinBuf strings.Builder
+	var commands strings.Builder
 	for _, w := range writes {
 		curOID := resolveExistingGitRefWithPacked(commonGitDir, gitDir, w.dstRef, packed)
 		if curOID != "" && curOID != w.oid {
-			return nil, fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, w.dstRef, curOID, w.oid)
+			return refTransaction{}, fmt.Errorf("%w: %s has %s, want %s", ErrCheckpointRefConflict, w.dstRef, curOID, w.oid)
 		}
 		expectedOld[w.dstRef] = curOID
 		op := "create"
 		if curOID == w.oid {
 			op = "verify"
 		}
-		_, _ = fmt.Fprintf(&stdinBuf, "%s %s %s\n", op, w.dstRef, w.oid)
+		_, _ = fmt.Fprintf(&commands, "%s %s %s\n", op, w.dstRef, w.oid)
 	}
-	rec := GitRefImportRecord{CheckpointID: cleanCheckpoint, WorkerID: cleanWorker, PlannedRefs: planned, ExpectedOld: expectedOld}
-	if err := saveGitRefImportRecord(storeDir, intentName, rec); err != nil {
+	return refTransaction{
+		intentName: intentName,
+		record:     GitRefImportRecord{CheckpointID: cleanCheckpoint, WorkerID: cleanWorker, PlannedRefs: planned, ExpectedOld: expectedOld},
+		commands:   commands.String(),
+	}, nil
+}
+
+// apply records the intent, then writes every ref in one update-ref transaction, which refuses a ref
+// that moved since the plan.
+func (tx refTransaction) apply(ctx context.Context, primaryDir, commonGitDir, storeDir string) (map[string]string, error) {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	out, code, err := gitexec.Run(ctx, primaryDir, []string{"--git-dir=" + commonGitDir, "update-ref", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(stdinBuf.String())})
+	rec := tx.record
+	if err := saveGitRefImportRecord(storeDir, tx.intentName, rec); err != nil {
+		return nil, err
+	}
+	out, code, err := gitexec.Run(ctx, primaryDir, []string{"--git-dir=" + commonGitDir, "update-ref", "--stdin"}, gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: []byte(tx.commands)})
 	if err != nil || code != 0 {
 		return nil, errors.Join(err, fmt.Errorf("%w: update-ref failed (exit %d): %s", ErrCheckpointRefConflict, code, strings.TrimSpace(string(out))))
 	}
 	rec.Completed = true
-	return planned, saveGitRefImportRecord(storeDir, intentName, rec)
+	return rec.PlannedRefs, saveGitRefImportRecord(storeDir, tx.intentName, rec)
 }
 
 func gitImportRecordName(workerID, checkpointID, rootID string) string {

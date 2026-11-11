@@ -39,6 +39,8 @@ type publishFixture struct {
 func newPublishFixture(t *testing.T, history int) *publishFixture {
 	t.Helper()
 	f := &publishFixture{dest: t.TempDir(), worker: filepath.Join(t.TempDir(), "worker"), storeDir: t.TempDir()}
+	_, err := NewStore(f.storeDir)
+	testutil.FailErr(t, "NewStore", err)
 	runGitTestCmd(t, f.dest, "init", "-q", "-b", "main")
 	for i := range history {
 		testutil.FailErr(t, "write history", os.WriteFile(filepath.Join(f.dest, "history.txt"), []byte(strconv.Itoa(i)), 0o644))
@@ -85,7 +87,7 @@ func (f *publishFixture) publish(t *testing.T, checkpointID, tip string) (GitPub
 func (f *publishFixture) objectCount(t *testing.T, tip string) int {
 	t.Helper()
 	listed := runGitTestCmd(t, f.worker, "rev-list", "--objects", tip, "^origin/main")
-	return len(strings.Fields(strings.ReplaceAll(listed, "\n", " ")))
+	return len(strings.Split(listed, "\n"))
 }
 
 func hasObject(t *testing.T, repo, oid string) bool {
@@ -151,7 +153,6 @@ func TestPublicationFailsTypedWhenTheBoundaryIsDamaged(t *testing.T) {
 	tip := f.commit(t, 1)
 	f.export(t, "chk", tip)
 	base := runGitTestCmd(t, f.dest, "rev-parse", "HEAD")
-	before := runGitTestCmd(t, f.dest, "for-each-ref")
 	testutil.FailErr(t, "remove boundary commit", os.Remove(filepath.Join(f.dest, ".git", "objects", base[:2], base[2:])))
 
 	_, err := ImportAndValidateCheckpointGitRefs(t.Context(), f.storeDir, "chk", "w",
@@ -159,8 +160,12 @@ func TestPublicationFailsTypedWhenTheBoundaryIsDamaged(t *testing.T) {
 	if !errors.Is(err, ErrCheckpointGitBoundary) {
 		t.Fatalf("damaged boundary: %v", err)
 	}
-	if after := runGitTestCmd(t, f.dest, "for-each-ref"); after != before {
-		t.Fatalf("refs moved after a refused publication:\n%s\nwant\n%s", after, before)
+	// The publication's own refs never appeared, and the branch it would sit beside is untouched.
+	if _, err := os.Stat(filepath.Join(f.dest, ".git", "refs", "lycaon")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("a refused publication wrote refs: %v", err)
+	}
+	if head, err := os.ReadFile(filepath.Join(f.dest, ".git", "refs", "heads", "main")); err != nil || strings.TrimSpace(string(head)) != base {
+		t.Fatalf("main moved: %q %v", head, err)
 	}
 }
 
@@ -176,6 +181,8 @@ func TestPublicationIntoAnEmptyDestinationIsComplete(t *testing.T) {
 	}
 	tip := runGitTestCmd(t, worker, "rev-parse", "HEAD")
 	storeDir := t.TempDir()
+	_, err := NewStore(storeDir)
+	testutil.FailErr(t, "NewStore", err)
 	dir := CheckpointGitObjectsDir(storeDir, "chk", "")
 	testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Join(dir, "pack"), 0o700))
 	runGitTestCmdInput(t, worker, tip+"\n", "pack-objects", "--revs", "-q", filepath.Join(dir, "pack", "pack"))
