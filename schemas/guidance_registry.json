@@ -1212,6 +1212,12 @@
       "emit": "guard:tool",
       "summary": "{{ tool }} refused path {{ paintedwolf.path }} outside the allowed git scope."
     },
+    "GIT_REMOTE_CHANGED": {
+      "branch_instruction": "Do not reach the remote through another network client or an external git",
+      "category": "recoverable",
+      "emit": "guard:command_git_remote",
+      "summary": "The Git remote changed while its hosts were being authorized."
+    },
     "GIT_REMOTE_HOST_DENIED": {
       "branch_instruction": "Do not reach the remote through another network client or an external git",
       "category": "recoverable",
