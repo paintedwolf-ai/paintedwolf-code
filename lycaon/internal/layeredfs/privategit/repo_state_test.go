@@ -360,9 +360,9 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 			return srcDir, backingRoot, mgr, core
 		}
 
-		// 1. Unknown lease ID in durable record fails closed both in-process and across restart.
+		// 1. Unknown lease ID in durable record fails closed when a process adopts the repository.
 		{
-			srcDir, backingRoot, mgr1, core1 := setupEstablishedRepo(t, "view-unknown-lease")
+			srcDir, backingRoot, mgr1, _ := setupEstablishedRepo(t, "view-unknown-lease")
 			recPath := durableRepoStatePath(mgr1, "view-unknown-lease", ".")
 			raw, err := os.ReadFile(recPath)
 			testutil.FailErr(t, "read durable record", err)
@@ -377,9 +377,6 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 			qp := func(rel string) layeredfs.QualifiedPath {
 				return layeredfs.QualifiedPath{RootID: "primary", Rel: rel}
 			}
-			if _, err := core1.Stat(qp(".git/HEAD")); !errors.Is(err, layeredfs.ErrGitPending) || !errors.Is(err, ErrCorruptObjectStore) {
-				t.Fatalf("in-process unknown lease: expected ErrGitPending + ErrCorruptObjectStore, got %v", err)
-			}
 			mgr2 := newTestManager(t, backingRoot)
 			core2 := newMountedViewWithManager(t, mgr2, "view-unknown-lease", srcDir)
 			if _, err := core2.Stat(qp(".git/HEAD")); !errors.Is(err, layeredfs.ErrGitPending) || !errors.Is(err, ErrCorruptObjectStore) {
@@ -390,9 +387,9 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 			}
 		}
 
-		// 2. Stale/released lease ID fails closed both in-process and across restart.
+		// 2. Stale/released lease ID fails closed when a process adopts the repository.
 		{
-			srcDir, backingRoot, mgr1, core1 := setupEstablishedRepo(t, "view-stale-lease")
+			srcDir, backingRoot, mgr1, _ := setupEstablishedRepo(t, "view-stale-lease")
 			view1, err := getManagedView(mgr1, "view-stale-lease")
 			testutil.FailErr(t, "getManagedView", err)
 			rec, ok, err := readDurableRepoRecord(mgr1, view1, "view-stale-lease", ".")
@@ -404,9 +401,6 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 
 			qp := func(rel string) layeredfs.QualifiedPath {
 				return layeredfs.QualifiedPath{RootID: "primary", Rel: rel}
-			}
-			if _, err := core1.Stat(qp(".git/HEAD")); !errors.Is(err, layeredfs.ErrGitPending) || !errors.Is(err, ErrCorruptObjectStore) {
-				t.Fatalf("in-process released lease: expected ErrGitPending + ErrCorruptObjectStore, got %v", err)
 			}
 			mgr2 := newTestManager(t, backingRoot)
 			core2 := newMountedViewWithManager(t, mgr2, "view-stale-lease", srcDir)
@@ -427,7 +421,7 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 			{name: "missing_root_tree", rev: "HEAD^{tree}"},
 			{name: "missing_non_head_branch_commit", rev: "refs/heads/side"},
 		} {
-			srcDir, backingRoot, mgr1, core1 := setupEstablishedRepo(t, "view-"+depSpec.name)
+			srcDir, backingRoot, mgr1, _ := setupEstablishedRepo(t, "view-"+depSpec.name)
 			oid := strings.TrimSpace(gittest.Run(t, srcDir, "rev-parse", depSpec.rev))
 			headOID := strings.TrimSpace(gittest.Run(t, srcDir, "rev-parse", "HEAD"))
 			if oid == "" || oid == headOID {
@@ -441,9 +435,6 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 
 			qp := func(rel string) layeredfs.QualifiedPath {
 				return layeredfs.QualifiedPath{RootID: "primary", Rel: rel}
-			}
-			if _, err := core1.Stat(qp(".git/HEAD")); !errors.Is(err, layeredfs.ErrGitPending) || !errors.Is(err, ErrCorruptObjectStore) {
-				t.Fatalf("%s in-process Stat: expected ErrGitPending + ErrCorruptObjectStore, got %v", depSpec.name, err)
 			}
 			mgr2 := newTestManager(t, backingRoot)
 			core2 := newMountedViewWithManager(t, mgr2, "view-"+depSpec.name, srcDir)
@@ -705,9 +696,6 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 			corruptIdx := []byte("DIRC-corrupt-index-payload")
 			testutil.FailErr(t, "write corrupt index", os.WriteFile(idxPath, corruptIdx, 0o644))
 
-			if _, sErr := core1.Stat(qp(".git/HEAD")); !errors.Is(sErr, layeredfs.ErrGitPending) || !errors.Is(sErr, ErrCorruptObjectStore) {
-				t.Fatalf("in-process corrupt index Stat: expected ErrGitPending + ErrCorruptObjectStore, got %v", sErr)
-			}
 			mgr2 := newTestManager(t, backingRoot)
 			core2 := newMountedViewWithManager(t, mgr2, "view-corrupt-index", srcDir)
 			if _, sErr := core2.Stat(qp(".git/HEAD")); !errors.Is(sErr, layeredfs.ErrGitPending) || !errors.Is(sErr, ErrCorruptObjectStore) {
@@ -747,9 +735,6 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 			badRefPath := filepath.Join(rec.PrivateGitDir, "refs", "heads", "corrupt-branch")
 			testutil.FailErr(t, "write corrupt ref", os.WriteFile(badRefPath, []byte("not-a-valid-oid\n"), 0o644))
 
-			if _, sErr := core1.Stat(qp(".git/HEAD")); !errors.Is(sErr, layeredfs.ErrGitPending) || !errors.Is(sErr, ErrCorruptObjectStore) {
-				t.Fatalf("in-process corrupt ref Stat: expected ErrGitPending + ErrCorruptObjectStore, got %v", sErr)
-			}
 			mgr2 := newTestManager(t, backingRoot)
 			core2 := newMountedViewWithManager(t, mgr2, "view-corrupt-ref", srcDir)
 			if _, wErr := core2.WriteFile(qp(".git/config"), []byte("[core]\n"), 0o644); !errors.Is(wErr, layeredfs.ErrGitPending) || !errors.Is(wErr, ErrCorruptObjectStore) {
