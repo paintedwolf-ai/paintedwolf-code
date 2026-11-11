@@ -85,7 +85,7 @@ func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "git-fixture", "test-listener", nil) {
 		t.Fatal("loopback grant failed")
 	}
-	runCommandWithApprovals(t, s, "recommended")
+	runCommandWithApprovals(t, s)
 	got := s.outcome(t, "program-1")
 	if got.Status != 0 || !strings.Contains(got.Stdout, head) {
 		t.Fatalf("ls-remote under confinement = %+v", got)
