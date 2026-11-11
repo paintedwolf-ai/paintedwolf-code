@@ -316,20 +316,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		if dispatch != nil && req.Body != nil && req.Body != http.NoBody {
 			req.Body = &dispatchBody{ReadCloser: req.Body, obs: dispatch}
 		}
-		if hostHeader != "" {
-			req.Host = hostHeader
-		}
-		for _, h := range hopHeaders {
-			req.Header.Add(h.Name, h.Value)
-		}
-		for _, h := range originHeaders {
-			req.Header.Add(h.Name, h.Value)
-		}
-		for _, c := range hopCookies {
-			if c != nil {
-				req.AddCookie(c)
-			}
-		}
+		addHopHeaders(req, hostHeader, hopHeaders, originHeaders, hopCookies)
 		progress.RequestsStarted++
 		resp, err := client.Do(req)
 		if resp != nil {
@@ -825,5 +812,23 @@ func boundConnect(transport *http.Transport, timeout time.Duration) {
 		dialCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		return dial(dialCtx, network, address)
+	}
+}
+
+// addHopHeaders sets one hop's Host override, headers and frozen cookies.
+func addHopHeaders(req *http.Request, hostHeader string, hopHeaders, originHeaders []Header, cookies []*http.Cookie) {
+	if hostHeader != "" {
+		req.Host = hostHeader
+	}
+	for _, h := range hopHeaders {
+		req.Header.Add(h.Name, h.Value)
+	}
+	for _, h := range originHeaders {
+		req.Header.Add(h.Name, h.Value)
+	}
+	for _, c := range cookies {
+		if c != nil {
+			req.AddCookie(c)
+		}
 	}
 }
