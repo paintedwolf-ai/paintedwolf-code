@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 )
@@ -160,8 +161,10 @@ func (e *RuntimeBlockedError) Unwrap() error { return e.Report.Err }
 
 // RecoverWorkerRuntime settles a worker's recorded runtime, validates its last checkpoint and
 // preserves interrupted work. It never reconstructs a view, so it is safe before deletion, and
-// each step tolerates a retry after a crash in any other.
-func (c *Coordinator) RecoverWorkerRuntime(ctx context.Context, workerID string) WorkerRuntimeReport {
+// each step tolerates a retry after a crash in any other. With forRebuild, working storage a
+// mounted view left in this boot stays where it is for the rebuild to resume; the rebuild preserves
+// it if it does not.
+func (c *Coordinator) RecoverWorkerRuntime(ctx context.Context, workerID string, forRebuild bool) WorkerRuntimeReport {
 	report := WorkerRuntimeReport{WorkerID: workerID}
 	idents, err := c.ListMountIdentities(workerID)
 	if err != nil {
@@ -206,6 +209,14 @@ func (c *Coordinator) RecoverWorkerRuntime(ctx context.Context, workerID string)
 		}
 	}
 	manifest, checkpointErr := c.validatedLastCheckpoint(ctx, j)
+	if forRebuild && report.HadRuntime && j.BootID == c.cfg.CurrentBootID &&
+		(j.ActivePhase == "" || j.ActivePhase == PhaseActiveMutation) && layeredfs.WorkingStateRecorded(backing) {
+		report.Disposition = RuntimeSettled
+		if checkpointErr != nil {
+			report.Reason, report.Err = ReasonCheckpointUnusable, checkpointErr
+		}
+		return report
+	}
 	interrupted, err := salvageIfInterruptedOrUnsealed(c, &j, j.ViewID, backing, manifest)
 	if err != nil {
 		report.Disposition, report.Reason, report.Err = RuntimeUnresolved, ReasonSalvageFailed, err

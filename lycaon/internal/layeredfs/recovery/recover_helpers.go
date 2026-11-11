@@ -87,9 +87,17 @@ func salvageIfInterruptedOrUnsealed(
 		// Every byte is already in the checkpoint; only the namespace history is unknown.
 		salvageFrom, diagnostic = "", "view was not released; namespace changes since its last barrier are unknown"
 	}
+	paths, unknownScope := j.ActivePaths, j.ActiveUnknownScope
+	if logged, complete := layeredfs.WorkingLogPaths(prevBacking); complete {
+		// The view's working log names every path it changed, so the scope is known.
+		paths, unknownScope = append(append([]layeredfs.QualifiedPath(nil), paths...), logged...), false
+		if salvageFrom == "" {
+			diagnostic = "view was not released; its working log names what changed since its last barrier"
+		}
+	}
 	rec, err := c.PreserveInterruptedWorkingStorage(
 		j.WorkerID, prevViewID, manifest.CheckpointID, salvageFrom,
-		phase, j.ActiveOperation, j.ActivePaths, j.ActiveUnknownScope,
+		phase, j.ActiveOperation, paths, unknownScope,
 		diagnostic,
 	)
 	if err != nil {

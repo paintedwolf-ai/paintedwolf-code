@@ -27,6 +27,58 @@ type ResumeReport struct {
 	TruncatedBytes int64
 }
 
+// WorkingStateRecorded reports whether a view's working storage at backingDir keeps a working log,
+// which Resume needs.
+func WorkingStateRecorded(backingDir string) bool {
+	info, err := os.Lstat(filepath.Join(backingDir, "journal", workingLogName))
+	return err == nil && info.Mode().IsRegular()
+}
+
+// WorkingLogPaths names every path the working state at backingDir records, from its snapshot and
+// every complete record. complete is false when there is no usable log or its tail is torn.
+func WorkingLogPaths(backingDir string) ([]QualifiedPath, bool) {
+	if backingDir == "" || !WorkingStateRecorded(backingDir) {
+		return nil, false
+	}
+	journal := filepath.Join(backingDir, "journal")
+	logRaw, err := os.ReadFile(filepath.Join(journal, workingLogName))
+	if err != nil {
+		return nil, false
+	}
+	seen := map[QualifiedPath]struct{}{}
+	add := func(paths []workingPath, nodes []workingNode) {
+		for _, p := range paths {
+			seen[p.Path] = struct{}{}
+		}
+		for _, n := range nodes {
+			for _, p := range n.Paths {
+				seen[p] = struct{}{}
+			}
+		}
+	}
+	if snapRaw, err := os.ReadFile(filepath.Join(journal, workingSnapshotName)); err == nil {
+		var snap workingSnapshot
+		if json.Unmarshal(snapRaw, &snap) != nil || snap.Format != workingStateFormat {
+			return nil, false
+		}
+		add(snap.Paths, snap.Nodes)
+	}
+	for tail := logRaw; len(tail) > 0; {
+		rec, n, ok := decodeWorkingRecord(tail)
+		if !ok || rec.Format != workingStateFormat {
+			return nil, false
+		}
+		add(rec.Paths, rec.Nodes)
+		tail = tail[n:]
+	}
+	out := make([]QualifiedPath, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	sortPaths(out)
+	return out, true
+}
+
 // Resume reopens the view whose working storage is at cfg.BackingDir, as of the last complete
 // record its log holds. It is for an engine that exited: the bytes and names it restores are what
 // the kernel held, which a power loss does not keep.
