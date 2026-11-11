@@ -51,8 +51,8 @@ func (h *harness) bareRemote(t *testing.T, name string) string {
 }
 
 // A local remote's launch carries every directory Git opens through it: the
-// path a file://localhost URL names, its object store, and an alternate
-// store Git only reads.
+// path a file://localhost URL names and an alternate store outside it, which
+// Git only reads.
 func TestLocalRemotesAdmitEveryDirectoryGitOpens(t *testing.T) {
 	h := newHarness(t)
 	h.git("reset", "--hard", "HEAD")
@@ -68,10 +68,9 @@ func TestLocalRemotesAdmitEveryDirectoryGitOpens(t *testing.T) {
 	if push := h.exec("git", "push", "origin", "main"); push.err != nil || push.result.Status != 0 {
 		t.Fatalf("push: %+v %v %s", push.result, push.err, push.stderr)
 	}
-	for _, want := range []string{origin, filepath.Join(origin, "objects")} {
-		if !slices.Contains(recorder.writes, want) {
-			t.Fatalf("push launch writes %v, want %s", recorder.writes, want)
-		}
+	// The object store lies inside the remote path the launch already writes.
+	if !slices.Contains(recorder.writes, origin) {
+		t.Fatalf("push launch writes %v, want %s", recorder.writes, origin)
 	}
 	if !slices.Contains(recorder.reads, filepath.Join(alternate, "objects")) || slices.Contains(recorder.writes, filepath.Join(alternate, "objects")) {
 		t.Fatalf("push launch reads %v, writes %v; want the alternate read only", recorder.reads, recorder.writes)
