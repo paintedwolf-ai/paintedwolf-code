@@ -59,7 +59,7 @@ func TestContractNeverExceedsItsRuneBound(t *testing.T) {
 }
 
 func TestContractRefusesOutputWithoutText(t *testing.T) {
-	for _, raw := range []string{"", "   ", "\n- \n", `""`, "**  **"} {
+	for _, raw := range []string{"", "   ", "\n- \n", `""`, "**  **", "  **  ", "…", "---"} {
 		if _, err := OneSentence.Parse(raw); !errors.Is(err, ErrNoText) {
 			t.Fatalf("%q parsed as success: %v", raw, err)
 		}

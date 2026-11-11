@@ -55,6 +55,9 @@ type Job struct {
 	Run    func(context.Context)
 	// Expired runs instead of Run when queued work exceeds its wait.
 	Expired func(context.Context)
+	// Values carries request-scoped values into the run without its
+	// cancellation.
+	Values context.Context
 }
 
 // Scheduler runs jobs to completion independent of the requests that admit
@@ -103,7 +106,7 @@ func (s *Scheduler) Submit(job Job) (joined bool, err error) {
 		}
 		return true, nil
 	}
-	ctx, cancel := context.WithCancel(s.ctx)
+	ctx, cancel := s.runContext(job)
 	r := &run{job: job, ctx: ctx, cancel: cancel, queuedAt: s.now()}
 	switch job.Policy.Admission {
 	case Queued:
@@ -130,6 +133,16 @@ func (s *Scheduler) Submit(job Job) (joined bool, err error) {
 		s.start(r)
 	}
 	return false, nil
+}
+
+// runContext ends with the scheduler but never with the admitting request.
+func (s *Scheduler) runContext(job Job) (context.Context, context.CancelFunc) {
+	if job.Values == nil {
+		return context.WithCancel(s.ctx)
+	}
+	ctx, cancel := context.WithCancel(context.WithoutCancel(job.Values))
+	stop := context.AfterFunc(s.ctx, cancel)
+	return ctx, func() { stop(); cancel() }
 }
 
 // Promote marks queued work as manual so it starts ahead of automatic work.

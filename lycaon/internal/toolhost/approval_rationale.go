@@ -13,12 +13,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ApprovalProfileID and ApprovalProfileVersion identify the approval card's
-// purpose sentence among briefing profiles.
-const (
-	ApprovalProfileID      = "approval_rationale"
-	ApprovalProfileVersion = "1"
-)
+// ApprovalProfileID names the approval card's purpose sentence among
+// briefing profiles.
+const ApprovalProfileID = "approval_rationale"
 
 // WorkerTaskLoader loads a worker assignment by job id.
 type WorkerTaskLoader interface {
@@ -91,7 +88,7 @@ func (a *approvalRationaleAttacher) run(parent context.Context, req toolapproval
 		ProjectDir:      req.ToolContext.ActiveRootPath(),
 	})
 	text := ""
-	if section, err := briefing.PurposeSection(ctx, ApprovalProfileID, ApprovalProfileVersion, a.evidence(ctx, req)); err == nil {
+	if section, err := briefing.PurposeSection(ctx, a.evidence(ctx, req)); err == nil {
 		raw, _, _, genErr := a.deps.Generator.Generate(ctx, briefing.Invocation{Purpose: ApprovalProfileID, Requested: true, Prompt: section.Prompt})
 		if genErr == nil {
 			if parsed, parseErr := section.Manifest.Contract.Parse(raw); parseErr == nil {
@@ -110,10 +107,10 @@ func (a *approvalRationaleAttacher) run(parent context.Context, req toolapproval
 // causal read rather than the whole transcript.
 func (a *approvalRationaleAttacher) evidence(ctx context.Context, req toolapproval.AIRationaleAttachRequest) briefing.ActionEvidence {
 	identity := req.ToolContext.Identity
-	ev := briefing.ActionEvidence{
+	ev := briefing.ActionEvidence{Action: briefing.ActionFacts{
 		Tool: req.Tool, CallRef: "tool_call:" + identity.ToolCallID, Args: req.Args,
 		Files: append([]string(nil), req.Files...), Project: req.ToolContext.ActiveRootPath(),
-	}
+	}}
 	if req.Explanation != nil {
 		ev.HostFacts.Text = strings.TrimSpace(strings.Join([]string{req.Explanation.What, req.Explanation.Who, req.Explanation.IfWrong}, "\n"))
 	}
@@ -130,7 +127,7 @@ func (a *approvalRationaleAttacher) evidence(ctx context.Context, req toolapprov
 		if a.deps.Progress != nil && a.deps.Root != nil {
 			content := a.deps.Progress.Get(ctx, a.deps.Root.RootSessionID(ctx, identity.SessionID))
 			for _, step := range progress.DeriveProgress(content, progress.DefaultProgressCap).Items {
-				ev.Plan = append(ev.Plan, briefing.PlanStep{Label: step.Label, State: step.State})
+				ev.Plan.Steps = append(ev.Plan.Steps, briefing.PlanStep{Label: step.Label, State: step.State})
 			}
 		}
 	}

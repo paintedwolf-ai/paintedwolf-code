@@ -17,7 +17,9 @@ import (
 const PurposeSectionID = "purpose"
 
 // purposeTemplate names the action_purpose question; bump Version whenever
-// either rationale template changes.
+// either rationale template changes. The question, not the asking profile,
+// owns the manifest, so an approval and a later step asking it of the same
+// material share one result.
 var purposeTemplate = Template{ID: "action_purpose", Version: "2"}
 
 // Limits match what the approval card has always submitted.
@@ -61,32 +63,47 @@ type Reasoning struct {
 	Truncated bool
 }
 
-// ActionEvidence is what the action_purpose question reads. Live approvals
-// and historical steps fill it from different sources.
-type ActionEvidence struct {
+// ActionFacts identify the action being explained.
+type ActionFacts struct {
 	Tool    string
 	CallRef string
 	Args    map[string]any
 	Files   []string
 	Project string
+}
+
+// PlanInput is the tracked plan at the action, or why it is unavailable.
+type PlanInput struct {
+	Steps []PlanStep
+	Gap   string
+}
+
+// ReasoningInput is the reasoning excerpt, or why it is unavailable.
+type ReasoningInput struct {
+	Excerpt *Reasoning
+	Gap     string
+}
+
+// ActionEvidence is what the action_purpose question reads. Live approvals
+// and historical steps fill it from different sources.
+type ActionEvidence struct {
+	Action ActionFacts
 	// HostFacts are the approval request's consequence facts.
 	HostFacts      Excerpt
 	UserIntent     Excerpt
 	WorkerBrief    Excerpt
 	AssistantProse Excerpt
-	Reasoning      *Reasoning
-	ReasoningGap   string
-	RecentResults  []ResultExcerpt
-	Plan           []PlanStep
-	PlanGap        string
+	Reasoning      ReasoningInput
+	Results        []ResultExcerpt
+	Plan           PlanInput
 	// PhaseScope narrows a target below its invocation, such as one phase of
 	// a multi-phase command; empty when the target is the whole invocation.
 	PhaseScope string
 }
 
-// PurposeSection builds the shared purpose section for a profile. Every input
-// is redacted, then clamped exactly as the approval card clamps it.
-func PurposeSection(ctx context.Context, profileID, profileVersion string, ev ActionEvidence) (SectionPlan, error) {
+// PurposeSection builds the shared purpose section. Every input is redacted,
+// then clamped exactly as the approval card clamps it.
+func PurposeSection(ctx context.Context, ev ActionEvidence) (SectionPlan, error) {
 	vars := map[string]any{}
 	var items []Item
 	add := func(key string, role Role, kind, ref, text string, limit int, gap string) {
@@ -109,19 +126,18 @@ func PurposeSection(ctx context.Context, profileID, profileVersion string, ev Ac
 	}
 	add("user_intent", RoleGoal, "message", ev.UserIntent.Ref, ev.UserIntent.Text, sectionRunes, ev.UserIntent.Unavailable)
 	add("worker_brief", RoleGoal, "assignment", ev.WorkerBrief.Ref, ev.WorkerBrief.Text, sectionRunes, ev.WorkerBrief.Unavailable)
-	add("tracked_plan", RoleContext, "progress", "", formatPlan(ev.Plan), sectionRunes, ev.PlanGap)
-	add("recent_results", RoleObservation, "tool_result", resultRefs(ev.RecentResults), formatResults(ev.RecentResults), resultsRunes, "")
-	add("action", RoleAction, "tool_call", ev.CallRef, formatAction(ev), sectionRunes, "")
+	add("tracked_plan", RoleContext, "progress", "", formatPlan(ev.Plan.Steps), sectionRunes, ev.Plan.Gap)
+	add("recent_results", RoleObservation, "tool_result", resultRefs(ev.Results), formatResults(ev.Results), resultsRunes, "")
+	add("action", RoleAction, "tool_call", ev.Action.CallRef, formatAction(ev.Action), sectionRunes, "")
 	add("host_facts", RoleContext, "approval_request", "", ev.HostFacts.Text, sectionRunes, ev.HostFacts.Unavailable)
 	add("assistant_note", RoleContext, "message", ev.AssistantProse.Ref, ev.AssistantProse.Text, sectionRunes, ev.AssistantProse.Unavailable)
-	reasoning := ""
-	reasoningRef := ""
-	if ev.Reasoning != nil {
-		reasoning, reasoningRef = ev.Reasoning.Text, ev.Reasoning.Ref
+	reasoning, reasoningRef := "", ""
+	if excerpt := ev.Reasoning.Excerpt; excerpt != nil {
+		reasoning, reasoningRef = excerpt.Text, excerpt.Ref
 	}
-	add("assistant_reasoning", RoleContext, "reasoning", reasoningRef, reasoning, sectionRunes, ev.ReasoningGap)
-	if ev.Reasoning != nil && (ev.Reasoning.Shared || ev.Reasoning.Truncated) {
-		items[len(items)-1].Reason = strings.Join(nonEmpty(flag(ev.Reasoning.Shared, "shared across calls"), flag(ev.Reasoning.Truncated, "suffix")), ", ")
+	add("assistant_reasoning", RoleContext, "reasoning", reasoningRef, reasoning, sectionRunes, ev.Reasoning.Gap)
+	if excerpt := ev.Reasoning.Excerpt; excerpt != nil && (excerpt.Shared || excerpt.Truncated) {
+		items[len(items)-1].Reason = strings.Join(nonEmpty(flag(excerpt.Shared, "shared across calls"), flag(excerpt.Truncated, "suffix")), ", ")
 	}
 	if strings.TrimSpace(ev.PhaseScope) != "" {
 		add("phase_scope", RoleAction, "activity", "", ev.PhaseScope, sectionRunes, "")
@@ -134,7 +150,7 @@ func PurposeSection(ctx context.Context, profileID, profileVersion string, ev Ac
 	if err != nil {
 		return SectionPlan{}, err
 	}
-	manifest := Manifest{ProfileID: profileID, ProfileVersion: profileVersion, SectionID: PurposeSectionID, Template: purposeTemplate, Contract: OneSentence, Items: items}.Sealed()
+	manifest := Manifest{ProfileID: purposeTemplate.ID, ProfileVersion: purposeTemplate.Version, SectionID: PurposeSectionID, Template: purposeTemplate, Contract: OneSentence, Items: items}.Sealed()
 	return SectionPlan{ID: PurposeSectionID, Mode: Generated, Manifest: manifest, Prompt: Prompt{System: system, User: user, MaxTokens: purposeMaxTokens}}, nil
 }
 
@@ -181,21 +197,21 @@ func resultRefs(results []ResultExcerpt) string {
 	return strings.Join(refs, ",")
 }
 
-func formatAction(ev ActionEvidence) string {
-	step := fmt.Sprintf("tool=%s", strings.TrimSpace(ev.Tool))
-	if len(ev.Args) > 0 {
-		if data, err := json.Marshal(observability.RedactCaptureValue(ev.Args)); err == nil {
+func formatAction(action ActionFacts) string {
+	step := fmt.Sprintf("tool=%s", strings.TrimSpace(action.Tool))
+	if len(action.Args) > 0 {
+		if data, err := json.Marshal(observability.RedactCaptureValue(action.Args)); err == nil {
 			step += "\nargs=" + runeclamp.Clamp(string(data), argsRunes)
 		}
 	}
-	if len(ev.Files) > 0 {
-		files := make([]string, len(ev.Files))
-		for i, file := range ev.Files {
+	if len(action.Files) > 0 {
+		files := make([]string, len(action.Files))
+		for i, file := range action.Files {
 			files[i] = observability.RedactCaptureText(file)
 		}
 		step += "\nfiles=" + strings.Join(files, ", ")
 	}
-	if project := strings.TrimSpace(ev.Project); project != "" {
+	if project := strings.TrimSpace(action.Project); project != "" {
 		step += "\nproject=" + project
 	}
 	return step
