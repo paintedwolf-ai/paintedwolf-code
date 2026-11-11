@@ -41,13 +41,14 @@ const (
 	DefaultRetrans = 2
 	// DefaultTimeo is the soft mount timeout in deciseconds (1.0s).
 	DefaultTimeo = 10
-	// DefaultAttributeTTL is how long the client trusts cached attributes and listings. Nothing tells
-	// the macOS client of a change it did not make, so this bounds when a trunk change is visible;
-	// opening a file still revalidates it.
+	// DefaultAttributeTTL is how long the client trusts a file's cached attributes. Nothing tells the
+	// macOS client of a change it did not make, so this bounds when a trunk file changed in place is
+	// visible; opening a file still revalidates it.
 	DefaultAttributeTTL = 30 * time.Second
-	// DefaultCachePolicy caches attributes for DefaultAttributeTTL and lists with attributes. A missing
-	// name is always asked again, so a file the engine creates is found at once.
-	DefaultCachePolicy = "actimeo=30,nonegnamecache,rdirplus"
+	// DefaultCachePolicy caches file attributes for DefaultAttributeTTL and lists with attributes.
+	// Directory attributes are not cached and a missing name is always asked again, so a name the
+	// trunk adds, removes or replaces is seen at once.
+	DefaultCachePolicy = "acregmin=30,acregmax=30,acdirmin=0,acdirmax=0,nonegnamecache,rdirplus"
 
 	// unmountWaitBound limits how long one unmount attempt may hold Release. A helper stuck in the
 	// kernel cannot be killed, so the wait has to end on its own.
@@ -155,7 +156,9 @@ func New(cfg Config) *Adapter {
 			},
 			MetadataCapabilities: adapter.MetadataCapabilities{
 				ClientMayRemoveEarlySidecar: true,
-				SupportsSymlinks:            true, SupportsHardLinks: true, SupportsXattrs: true,
+				// The client reads attributes from ._ files, which listings leave out so that no tool
+				// sees them. A caching client takes a listing as complete and stops finding them.
+				SupportsSymlinks: true, SupportsHardLinks: true, SupportsXattrs: false,
 				SupportsChmod: true, SupportsTimestamps: true, SupportsPOSIXLocks: true, SupportsFlock: true,
 			},
 			SupportsPrivateGit:        true,

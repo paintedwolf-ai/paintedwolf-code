@@ -148,18 +148,27 @@ func TestSidecarNamedDataStaysDataThroughTheMount(t *testing.T) {
 	}
 }
 
-// TestHeldSidecarsSurviveLeavingTheHandleTable: the kernel keeps a sidecar's handle across a walk that
-// pushes it out of memory, and that handle has to keep answering afterwards.
+// TestHeldSidecarsSurviveLeavingTheHandleTable: a walk that pushes held sidecars out of the server's
+// memory and a listing that leaves them out keep the attributes on their targets and the ._ files
+// out of the change set. A caching client may stop finding the ._ files after the listing, which is
+// why the adapter does not claim attribute support.
 func TestHeldSidecarsSurviveLeavingTheHandleTable(t *testing.T) {
-	// The client's listing cache must not answer for them either: no READDIRPLUS on this mount.
 	v := prepareRealMount(t, nfsdarwin.Config{MaxHandles: 16}, map[string]string{"lower.txt": "lower"})
-	v.shell(t, `echo new > f; xattr -w user.a v f; xattr -w user.low v lower.txt`)
-	// A listing does not name held sidecars, and the kernel must still find and create them after one.
-	v.shell(t, `i=0; while [ $i -lt 64 ]; do echo x > n$i; i=$((i+1)); done; cat n* > /dev/null; ls -a > /dev/null`)
-	if got := v.shell(t, `xattr -p user.a f; xattr -p user.low lower.txt; xattr -w user.b w f; xattr -p user.b f`); got != "v\nv\nw\n" {
-		t.Fatalf("attributes after eviction: %q", got)
+	if v.adp.Facts().MetadataCapabilities.SupportsXattrs {
+		t.Fatal("the adapter claims attribute support its caching client cannot keep")
 	}
-	if ch, found := v.changeAt(t, "._f"); found {
-		t.Fatalf("sidecar returned to the change set: %+v", ch)
+	v.shell(t, `echo new > f; xattr -w user.a v f; xattr -w user.low v lower.txt`)
+	v.shell(t, `i=0; while [ $i -lt 64 ]; do echo x > n$i; i=$((i+1)); done; cat n* > /dev/null; ls -a > /dev/null`)
+	for target, name := range map[string]string{"f": "user.a", "lower.txt": "user.low"} {
+		attr, err := v.core.Lstat(layeredfs.QualifiedPath{RootID: "primary", Rel: target})
+		testutil.FailErr(t, "stat "+target, err)
+		if string(attr.Xattrs[name]) != "v" {
+			t.Fatalf("%s lost %s after eviction: %v", target, name, attr.Xattrs)
+		}
+	}
+	for _, sidecar := range []string{"._f", "._lower.txt"} {
+		if ch, found := v.changeAt(t, sidecar); found {
+			t.Fatalf("sidecar returned to the change set: %+v", ch)
+		}
 	}
 }

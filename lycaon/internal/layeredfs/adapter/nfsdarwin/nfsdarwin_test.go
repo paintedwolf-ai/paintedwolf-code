@@ -81,7 +81,7 @@ func TestProbeAndPrepareNFSDarwin(t *testing.T) {
 	if facts.RSize != 65536 || facts.WSize != 65536 || facts.ServerPort <= 0 || facts.MountPort != facts.ServerPort {
 		t.Fatalf("unexpected MountFacts: %+v", facts)
 	}
-	for _, wantOpt := range []string{"vers=3", "tcp", "locallocks", "locallocks", "nodev", "nosuid", "nobrowse", fmt.Sprintf("actimeo=%d", int(nfsdarwin.DefaultAttributeTTL/time.Second)), "nonegnamecache", "rdirplus", "retrans=2", "timeo=10", "soft", "rsize=65536,wsize=65536"} {
+	for _, wantOpt := range []string{"vers=3", "tcp", "locallocks", "locallocks", "nodev", "nosuid", "nobrowse", fmt.Sprintf("acregmin=%d", int(nfsdarwin.DefaultAttributeTTL/time.Second)), fmt.Sprintf("acregmax=%d", int(nfsdarwin.DefaultAttributeTTL/time.Second)), "acdirmin=0", "acdirmax=0", "nonegnamecache", "rdirplus", "retrans=2", "timeo=10", "soft", "rsize=65536,wsize=65536"} {
 		if !strings.Contains(facts.MountOptions, wantOpt) {
 			t.Fatalf("missing option %q in MountOptions %q", wantOpt, facts.MountOptions)
 		}
