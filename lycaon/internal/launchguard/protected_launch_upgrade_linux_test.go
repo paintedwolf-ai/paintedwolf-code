@@ -128,7 +128,7 @@ func TestProtectedLaunchUpgradePreservesVaultIdentityCustody(t *testing.T) {
 	const account = "age-x25519-identity-v1:0a"
 	secret := []byte("AGE-SECRET-KEY-1UPGRADEWHILERUNNING")
 
-	workflowDir := filepath.Join(homeDir, "profile")
+	workflowDir := filepath.Join(homeDir, ".config", "paintedwolf")
 	testutil.FailErr(t, "mkdir workflow profile", os.MkdirAll(workflowDir, 0o700))
 
 	// Launch session A on generation A (1.0.0) and create a vault identity.
