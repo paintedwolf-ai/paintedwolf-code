@@ -156,33 +156,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	queue.SetWorkerWorkspaceManager(manager)
 	fixture := &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
 	if phase == "prepare" {
-		prepareLifecycleSource(t, source)
-		testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", source)
-		trace("claim-start")
-		task := fixture.claim(t)
-		trace("claim-complete")
-		snap, _, ok := WorkerClaimWorkspaceState(task.ID)
-		expected := adapter.PreparationMaterialized
-		if mounted {
-			expected = adapter.PreparationMounted
-		}
-		if !ok || snap.Adapter.PreparationKind != expected {
-			t.Fatalf("worker preparation = %s, want %s", snap.Adapter.PreparationKind, expected)
-		}
-		testutil.FailErr(t, "edit worker", os.WriteFile(filepath.Join(task.WorkspaceRoot, "main.go"), []byte("package worker\n"), 0o644))
-		gittest.Run(t, task.WorkspaceRoot, "add", "main.go")
-		gittest.Run(t, task.WorkspaceRoot, "commit", "-m", "worker commit")
-		commit := strings.TrimSpace(gittest.Run(t, task.WorkspaceRoot, "rev-parse", "HEAD"))
-		trace("git-commit-complete")
-		completed := fixture.completeWithChange(t, task, func() {})
-		trace("checkpoint-complete")
-		_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
-		testutil.FailErr(t, "checkpoint", err)
-		if !published || manifest.WorkerID != task.ID {
-			t.Fatal("completion published no checkpoint")
-		}
-		assertFileHolds(t, filepath.Join(source, "main.go"), "package main\n")
-		testutil.FailErr(t, "persist phase receipt", os.WriteFile(filepath.Join(root, "phase.txt"), []byte(task.ID+"\n"+commit+"\n"), 0o600))
+		runPrepareLifecyclePhase(t, fixture, root, mounted, trace)
 		return
 	}
 	if phase != "recover-promote" {
@@ -266,6 +240,40 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	}
 	assertFileHolds(t, filepath.Join(source, "main.go"), "package worker\n")
 	trace("complete")
+}
+
+// runPrepareLifecyclePhase claims a worker over the lifecycle source, commits a change in it and
+// completes it with a published checkpoint, leaving a receipt for the next process.
+func runPrepareLifecyclePhase(t *testing.T, fixture *layeredWorkerFixture, root string, mounted bool, trace func(string)) {
+	t.Helper()
+	source := fixture.source
+	prepareLifecycleSource(t, source)
+	testdbseed.InsertProjectRootWithID(t, fixture.db, testdbseed.DefaultProjectID, "root-id", source)
+	trace("claim-start")
+	task := fixture.claim(t)
+	trace("claim-complete")
+	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
+	expected := adapter.PreparationMaterialized
+	if mounted {
+		expected = adapter.PreparationMounted
+	}
+	if !ok || snap.Adapter.PreparationKind != expected {
+		t.Fatalf("worker preparation = %s, want %s", snap.Adapter.PreparationKind, expected)
+	}
+	testutil.FailErr(t, "edit worker", os.WriteFile(filepath.Join(task.WorkspaceRoot, "main.go"), []byte("package worker\n"), 0o644))
+	gittest.Run(t, task.WorkspaceRoot, "add", "main.go")
+	gittest.Run(t, task.WorkspaceRoot, "commit", "-m", "worker commit")
+	commit := strings.TrimSpace(gittest.Run(t, task.WorkspaceRoot, "rev-parse", "HEAD"))
+	trace("git-commit-complete")
+	completed := fixture.completeWithChange(t, task, func() {})
+	trace("checkpoint-complete")
+	_, manifest, published, err := session.OpenTaskCheckpointStore(completed)
+	testutil.FailErr(t, "checkpoint", err)
+	if !published || manifest.WorkerID != task.ID {
+		t.Fatal("completion published no checkpoint")
+	}
+	assertFileHolds(t, filepath.Join(source, "main.go"), "package main\n")
+	testutil.FailErr(t, "persist phase receipt", os.WriteFile(filepath.Join(root, "phase.txt"), []byte(task.ID+"\n"+commit+"\n"), 0o600))
 }
 
 func startDiagnosticPromoteObserver(txDir, promotionsDir string, trace func(string)) func() {

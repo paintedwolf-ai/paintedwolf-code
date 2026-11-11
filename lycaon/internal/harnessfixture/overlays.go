@@ -242,21 +242,22 @@ func prepareOverlay(ctx context.Context, queue worker.WorkerQueue, sessions sess
 func baseDigest(ctx context.Context, branch *api.WorkerTask) (string, error) {
 	digest := sha256.New()
 	if branch.WorkspaceBaselinePath == "" {
-		pristine := enginepaths.PristineTreeForBranchRoot(branch.WorkspaceRoot)
-		err := filepath.WalkDir(pristine, func(path string, d fs.DirEntry, err error) error {
+		root, err := os.OpenRoot(enginepaths.PristineTreeForBranchRoot(branch.WorkspaceRoot))
+		if err != nil {
+			return "", err
+		}
+		defer func() { _ = root.Close() }()
+		tree := root.FS()
+		err = fs.WalkDir(tree, ".", func(path string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err
 			}
-			rel, err := filepath.Rel(pristine, path)
-			if err != nil {
-				return err
-			}
-			body, err := os.ReadFile(path)
+			body, err := fs.ReadFile(tree, path)
 			if err != nil {
 				return err
 			}
 			sum := sha256.Sum256(body)
-			_, err = fmt.Fprintf(digest, "%q %d %x\n", filepath.ToSlash(rel), len(body), sum)
+			_, err = fmt.Fprintf(digest, "%q %d %x\n", path, len(body), sum)
 			return err
 		})
 		return hex.EncodeToString(digest.Sum(nil)), err

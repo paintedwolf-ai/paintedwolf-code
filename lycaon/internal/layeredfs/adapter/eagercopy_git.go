@@ -169,7 +169,7 @@ func defaultSeedGitInitializer(ctx context.Context, spec SeedGitRepoSpec) (SeedG
 
 	store := spec.RetainedStore
 	if store == nil {
-		store, err = privategit.NewRetainedObjectStore(filepath.Join(parentDir, ".retained-store"))
+		store, err = privategit.NewRetainedObjectStoreContext(ctx, filepath.Join(parentDir, ".retained-store"))
 		if err != nil {
 			cleanupStage()
 			return SeedGitInitResult{}, err

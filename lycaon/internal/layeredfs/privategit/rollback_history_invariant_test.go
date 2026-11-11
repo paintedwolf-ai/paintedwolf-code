@@ -66,6 +66,8 @@ func TestInterruptedImportRollbackPreservesReadableLeasedHistory(t *testing.T) {
 	assertReadable()
 	store, err = NewRetainedObjectStoreContext(t.Context(), root)
 	testutil.FailErr(t, "reopen store", err)
+	_, err = store.CollectGarbage(t.Context())
+	testutil.FailErr(t, "GC after reopen", err)
 	assertReadable()
 }
 

@@ -372,6 +372,7 @@ func TestRetainedObjectStoreGCUnlinkFailureReopen(t *testing.T) {
 	// Unlink failure on .pack during CollectGarbage propagates error, rolls back staging so .idx is not
 	// deleted, and allows clean store reopen with both packs intact.
 	t.Run("pack_unlink_failure_rolls_back_and_reopens_intact", func(t *testing.T) {
+		t.Parallel()
 		storeRoot, store := setupTwoPackStore(t, "pack-unlink-fail")
 		injectedErr := errors.New("simulated .pack unlink I/O failure")
 		hookCtx := withGCTestHooks(ctx, gcTestHooks{
@@ -407,6 +408,7 @@ func TestRetainedObjectStoreGCUnlinkFailureReopen(t *testing.T) {
 	// Unlink failure on .idx (after .pack is already unlinked) propagates error from CollectGarbage and
 	// from reopen while the failure persists, then reconciles cleanly on reopen once the failure clears.
 	t.Run("idx_unlink_failure_propagates_and_reconciles_on_reopen", func(t *testing.T) {
+		t.Parallel()
 		storeRoot, store := setupTwoPackStore(t, "idx-unlink-fail")
 		injectedErr := errors.New("simulated .idx unlink I/O failure")
 		hookCtx := withGCTestHooks(ctx, gcTestHooks{
@@ -465,6 +467,7 @@ func TestRetainedObjectStoreGCCancellationReopens(t *testing.T) {
 		"before_idx_retired_unlink",
 	} {
 		t.Run("cancel_"+cancelPoint, func(t *testing.T) {
+			t.Parallel()
 			storeRoot, store := setupTwoPackStore(t, "cancel-"+cancelPoint)
 			cancelCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
@@ -537,6 +540,7 @@ func TestRetainedObjectStoreReimportAfterCancelledGC(t *testing.T) {
 	// Re-importing a content-addressed pack after a cancelled GC clears stale tombstones and
 	// preserves the freshly leased pack across InspectStock, CollectGarbage, and store reopen.
 	t.Run("reimport_after_cancelled_gc_preserves_leased_pack", func(t *testing.T) {
+		t.Parallel()
 		storeRoot, store := setupTwoPackStore(t, "reimport-after-cancel")
 		cancelCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
