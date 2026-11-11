@@ -517,7 +517,7 @@ export function Shell(props: ShellProps) {
       data-testid="shell"
       data-sidecar-status={props.appStore.state.sidecarStatus}
       data-contributions-ready={contributionFrameReady() ? "true" : "false"}
-      data-workspace-pending={workspacePending()}
+      data-workspace-pending={workspacePending().join(",")}
       data-workspace-phase={stageScope().phase}
       data-workspace-open={workspaceOpen()}
       data-workspace-revealed={workspaceRevealed()}
