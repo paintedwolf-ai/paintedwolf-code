@@ -6,21 +6,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/flushhelper"
 )
 
-const (
-	nfsBarrierFlushHelperEnv    = "PW_NFS_BARRIER_FLUSH_HELPER"
-	nfsBarrierFlushPauseFileEnv = "PW_BARRIER_FLUSH_HELPER_PAUSE_FILE"
-)
+const nfsBarrierFlushHelperEnv = "PW_NFS_BARRIER_FLUSH_HELPER"
 
 type helperViewTracker struct {
 	lastPID    int
@@ -36,7 +32,7 @@ var (
 
 func init() {
 	if os.Getenv(nfsBarrierFlushHelperEnv) == "1" {
-		runNFSBarrierFlushHelperMain()
+		flushhelper.Serve(flushNFSMount)
 	}
 }
 
@@ -79,53 +75,27 @@ func resolveHelperExecutable(a *Adapter) (string, error) {
 	return os.Executable()
 }
 
-func runNFSBarrierFlushHelperMain() {
-	if pauseFile := os.Getenv(nfsBarrierFlushPauseFileEnv); pauseFile != "" {
-		_ = os.WriteFile(pauseFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o600)
-		for {
-			if _, err := os.Stat(pauseFile); errors.Is(err, os.ErrNotExist) {
-				break
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-	raw, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-	parts := strings.Split(string(raw), "\x00")
-	if len(parts) < 1 || parts[0] == "" {
-		os.Exit(2)
-	}
-	mountRoot := parts[0]
+func flushNFSMount(mountRoot string, rels []string) (files, dirs int64, err error) {
 	if err := syncVolume(mountRoot); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "sync volume %s: %v\n", mountRoot, err)
-		os.Exit(1)
+		return 0, 0, fmt.Errorf("sync volume %s: %w", mountRoot, err)
 	}
-	var filesSynced, dirsSynced int64
 	adp := &Adapter{}
-	for _, rel := range parts[1:] {
-		if rel == "" {
-			continue
-		}
+	for _, rel := range rels {
 		target := mountRoot
 		if rel != "." {
 			target = filepath.Join(mountRoot, rel)
 		}
-		isFile, isDir, sErr := adp.syncClientPath(context.Background(), target)
-		if sErr != nil {
-			_, _ = fmt.Fprintln(os.Stderr, sErr.Error())
-			os.Exit(1)
+		isFile, isDir, err := adp.syncClientPath(context.Background(), target)
+		if err != nil {
+			return files, dirs, err
 		}
 		if isFile {
-			filesSynced++
+			files++
 		} else if isDir {
-			dirsSynced++
+			dirs++
 		}
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "%d %d\n", filesSynced, dirsSynced)
-	os.Exit(0)
+	return files, dirs, nil
 }
 
 func runNFSBarrierFlushSubprocess(ctx context.Context, a *Adapter, st *viewState, mountPath string, rels []string) error {
@@ -146,7 +116,6 @@ func runNFSBarrierFlushSubprocess(ctx context.Context, a *Adapter, st *viewState
 	if st != nil && st.view != nil {
 		viewID = st.view.ViewID
 	}
-	payload := strings.Join(append([]string{mountPath}, rels...), "\x00")
 	var startedPID int
 	defer func() {
 		if startedPID > 0 {
@@ -156,7 +125,7 @@ func runNFSBarrierFlushSubprocess(ctx context.Context, a *Adapter, st *viewState
 	stdout, stderr, exitCode, runErr := execpkg.RunSeparate(ctx, exePath, nil, execpkg.ExecOpts{
 		Launch:    execpkg.HostLaunch("nfs_barrier_flush"),
 		InlineEnv: map[string]string{nfsBarrierFlushHelperEnv: "1"},
-		Stdin:     &execpkg.StdinSpec{Literal: []byte(payload)},
+		Stdin:     &execpkg.StdinSpec{Literal: flushhelper.Request(mountPath, rels)},
 		Started: func(pid int) {
 			startedPID = pid
 			recordHelperStarted(a, viewID, pid)
@@ -175,8 +144,7 @@ func runNFSBarrierFlushSubprocess(ctx context.Context, a *Adapter, st *viewState
 		}
 		return errors.New(msg)
 	}
-	var fSync, dSync int64
-	_, _ = fmt.Sscanf(strings.TrimSpace(string(stdout)), "%d %d", &fSync, &dSync)
+	fSync, dSync := flushhelper.Reply(stdout)
 	st.lastFilesSynced.Add(fSync)
 	st.lastDirsSynced.Add(dSync)
 	return nil

@@ -20,6 +20,11 @@ var stampAgedCaches = map[string]string{
 	"webindex":       "evicts the least recently refreshed cached pages",
 }
 
+// A file's own modification time may show it was written after a record of it, never order anything.
+var writtenSinceChecks = map[string]string{
+	"layeredfs/working_resume.go": "a view's backing file written after its last working-log record",
+}
+
 var (
 	orderByUpdatedAt = regexp.MustCompile(`(?i)\bORDER\s+BY\b[^;\x60]*?\bupdated_at\b`)
 	rangeOnUpdatedAt = regexp.MustCompile(`(?i)\b([a-zA-Z0-9_.]+\.)?updated_at\s*[<>]`)
@@ -50,7 +55,7 @@ func TestRecordStampsAreNeverDomainTime(t *testing.T) {
 			return err
 		}
 		patterns := []*regexp.Regexp{orderByUpdatedAt, rangeOnUpdatedAt}
-		if !isSQL {
+		if _, ok := writtenSinceChecks[filepath.ToSlash(rel)]; !isSQL && !ok {
 			patterns = append(patterns, modTimeCompare)
 		}
 		for _, pattern := range patterns {

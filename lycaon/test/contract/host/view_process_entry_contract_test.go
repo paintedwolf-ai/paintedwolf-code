@@ -17,8 +17,9 @@ import (
 // A worker view is served inside the engine, so a child entering one before exec can hang the engine
 // under GC. Everything else starts through internal/exec, whose helper enters the directory after exec.
 var rawProcessDirExemptions = map[string]string{
-	"lycaon/internal/exec/pipeline.go":               "records the requested directory on a scratch command that is never started; the launch pins it for the helper",
-	"lycaon/internal/confine/process_pin_binding.go": "clears Dir on the helper command, which is what makes entry happen after exec",
+	"lycaon/internal/exec/pipeline.go":                   "records the requested directory on a scratch command that is never started; the launch pins it for the helper",
+	"lycaon/internal/confine/process_pin_binding.go":     "clears Dir on the helper command, which is what makes entry happen after exec",
+	"lycaon/internal/confine/process_attributes_unix.go": "starts a limit probe at the filesystem root, which is never a view",
 }
 
 // TestWorkerViewProcessesEnterThroughTheLaunchHelper stops a new direct working-directory start:

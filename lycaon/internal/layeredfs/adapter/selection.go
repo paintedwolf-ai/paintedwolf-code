@@ -269,7 +269,7 @@ func (s *Selector) Choose(ctx context.Context, req ChooseRequest) (Choice, error
 		AdapterID:  adapterID,
 		Op:         "choose",
 		ReasonCode: mountReason,
-		Diagnostic: fmt.Sprintf("workspace exceeds preparation limit (%d) and mounted provider is unavailable (%s): %s; select narrower roots/subroots or restore mount capability", fact.Limit, mountReason, probe.Diagnostic),
+		Diagnostic: fmt.Sprintf("workspace exceeds preparation limit (%d) and mounted provider is unavailable (%s): %s; narrow the roots or subroots, or restore mount capability", fact.Limit, mountReason, probe.Diagnostic),
 	}
 }
 

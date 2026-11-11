@@ -6,24 +6,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/flushhelper"
 )
 
-const (
-	fuseBarrierFlushHelperEnv    = "PW_FUSE_BARRIER_FLUSH_HELPER"
-	fuseBarrierFlushPauseFileEnv = "PW_BARRIER_FLUSH_HELPER_PAUSE_FILE"
-)
+const fuseBarrierFlushHelperEnv = "PW_FUSE_BARRIER_FLUSH_HELPER"
 
 type helperViewTracker struct {
 	lastPID    int
@@ -39,7 +35,7 @@ var (
 
 func init() {
 	if os.Getenv(fuseBarrierFlushHelperEnv) == "1" {
-		runFuseBarrierFlushHelperMain()
+		flushhelper.Serve(flushFuseMount)
 	}
 }
 
@@ -137,47 +133,22 @@ func collectBoundedFlushPaths(st *viewState, rootID string, m *rootMount) ([]str
 	return append(out, m.mountPath), nil
 }
 
-func runFuseBarrierFlushHelperMain() {
-	if pauseFile := os.Getenv(fuseBarrierFlushPauseFileEnv); pauseFile != "" {
-		_ = os.WriteFile(pauseFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0o600)
-		for {
-			if _, err := os.Stat(pauseFile); errors.Is(err, os.ErrNotExist) {
-				break
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-	raw, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
-	}
-	parts := strings.Split(string(raw), "\x00")
-	if len(parts) < 1 || parts[0] == "" {
-		os.Exit(2)
-	}
-	mountRoot := parts[0]
-	var filesSynced, dirsSynced int
+func flushFuseMount(mountRoot string, paths []string) (files, dirs int64, err error) {
 	adp := &Adapter{}
-	for _, p := range parts[1:] {
-		if p == "" {
-			continue
+	for _, p := range paths {
+		isDir, synced, err := adp.syncClientPath(context.Background(), mountRoot, p)
+		if err != nil {
+			return files, dirs, err
 		}
-		isDir, synced, sErr := adp.syncClientPath(context.Background(), mountRoot, p)
-		if sErr != nil {
-			_, _ = fmt.Fprintln(os.Stderr, sErr.Error())
-			os.Exit(1)
-		}
-		if synced {
-			if isDir {
-				dirsSynced++
-			} else {
-				filesSynced++
-			}
+		switch {
+		case !synced:
+		case isDir:
+			dirs++
+		default:
+			files++
 		}
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "%d %d\n", filesSynced, dirsSynced)
-	os.Exit(0)
+	return files, dirs, nil
 }
 
 func runFuseBarrierFlushSubprocess(ctx context.Context, a *Adapter, st *viewState, mountPath string, paths []string) (filesSynced, dirsSynced int, err error) {
@@ -195,7 +166,6 @@ func runFuseBarrierFlushSubprocess(ctx context.Context, a *Adapter, st *viewStat
 	if st != nil && st.view != nil {
 		viewID = st.view.ViewID
 	}
-	payload := strings.Join(append([]string{mountPath}, paths...), "\x00")
 	var startedPID int
 	defer func() {
 		if startedPID > 0 {
@@ -204,7 +174,7 @@ func runFuseBarrierFlushSubprocess(ctx context.Context, a *Adapter, st *viewStat
 	}()
 	stdout, stderr, exitCode, runErr := execpkg.RunSeparate(ctx, exePath, nil, execpkg.ExecOpts{
 		Launch: execpkg.HostLaunch("fuse_barrier_flush"), InlineEnv: map[string]string{fuseBarrierFlushHelperEnv: "1"},
-		Stdin: &execpkg.StdinSpec{Literal: []byte(payload)},
+		Stdin: &execpkg.StdinSpec{Literal: flushhelper.Request(mountPath, paths)},
 		Started: func(pid int) {
 			startedPID = pid
 			recordHelperStarted(a, viewID, pid)
@@ -224,6 +194,6 @@ func runFuseBarrierFlushSubprocess(ctx context.Context, a *Adapter, st *viewStat
 		}
 		return 0, 0, errors.New(msg)
 	}
-	_, _ = fmt.Sscanf(strings.TrimSpace(string(stdout)), "%d %d", &filesSynced, &dirsSynced)
-	return filesSynced, dirsSynced, nil
+	files, dirs := flushhelper.Reply(stdout)
+	return int(files), int(dirs), nil
 }

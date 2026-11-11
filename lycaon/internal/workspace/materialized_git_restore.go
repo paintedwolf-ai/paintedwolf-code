@@ -154,27 +154,8 @@ func collectRepoCurrentTips(gitDir string) ([]string, error) {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return nil, fmt.Errorf("symlink refs dir in %s", gitDir)
 		}
-		if walkErr := filepath.WalkDir(refsRoot, func(path string, d fs.DirEntry, wErr error) error {
-			if wErr != nil {
-				return wErr
-			}
-			if d.Type()&fs.ModeSymlink != 0 {
-				return fmt.Errorf("symlink ref %s", path)
-			}
-			if d.IsDir() {
-				return nil
-			}
-			raw, rErr := os.ReadFile(path)
-			if rErr != nil {
-				return rErr
-			}
-			val := strings.TrimSpace(string(raw))
-			if !strings.HasPrefix(val, "ref:") {
-				addOID(val)
-			}
-			return nil
-		}); walkErr != nil {
-			return nil, walkErr
+		if err := addLooseRefOIDs(refsRoot, addOID); err != nil {
+			return nil, err
 		}
 	}
 	headPath := filepath.Join(gitDir, "HEAD")
@@ -287,6 +268,34 @@ func refreshMaterializedRepoAlternates(ctx context.Context, services *layeredSer
 			if rErr != nil || code != 0 {
 				return fmt.Errorf("%w: incomplete git object graph for %s in view %s (exit %d): %w: %s",
 					recovery.ErrIncompleteCheckpoint, tip, gitView.ViewID, code, rErr, strings.TrimSpace(string(out)))
+			}
+		}
+	}
+	return nil
+}
+
+// addLooseRefOIDs reads every loose ref under dir, refusing symlinks, and passes each direct OID to add.
+func addLooseRefOIDs(dir string, add func(string)) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Name())
+		switch {
+		case entry.Type()&fs.ModeSymlink != 0:
+			return fmt.Errorf("symlink ref %s", path)
+		case entry.IsDir():
+			if err := addLooseRefOIDs(path, add); err != nil {
+				return err
+			}
+		default:
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if val := strings.TrimSpace(string(raw)); !strings.HasPrefix(val, "ref:") {
+				add(val)
 			}
 		}
 	}

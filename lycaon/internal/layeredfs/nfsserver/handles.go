@@ -51,19 +51,19 @@ type handleRecord struct {
 // other record may leave memory because Resolve rebuilds it from identity carried in the handle.
 // Memory is therefore bounded by maxHandles plus the directories the client has visited.
 type handleTable struct {
-	mu          sync.RWMutex
-	secret      [32]byte
-	maxHandles  int
-	epochSeq    uint64
-	viewHashes  map[ViewID]uint64
-	activeViews map[uint64]ViewID
-	byKey       map[handleKey]*handleRecord
-	byPath      map[pathKey]*handleRecord
-	lru         *list.List
-	unlinked    *list.List
-	coreFor     func(uint64, ViewID) *layeredfs.Core
-	sidecars    *sidecarTable
-	listings    *listingIndex
+	mu              sync.RWMutex
+	secret          [32]byte
+	maxHandles      int
+	lastIncarnation uint64
+	viewHashes      map[ViewID]uint64
+	activeViews     map[uint64]ViewID
+	byKey           map[handleKey]*handleRecord
+	byPath          map[pathKey]*handleRecord
+	lru             *list.List
+	unlinked        *list.List
+	coreFor         func(uint64, ViewID) *layeredfs.Core
+	sidecars        *sidecarTable
+	listings        *listingIndex
 }
 
 func newHandleTable(secret [32]byte, maxHandles int, sidecars *sidecarTable, coreFor func(uint64, ViewID) *layeredfs.Core) *handleTable {
@@ -90,11 +90,11 @@ func (t *handleTable) RegisterView(viewID ViewID) (uint64, error) {
 	if vHash, ok := t.viewHashes[viewID]; ok {
 		return vHash, nil
 	}
-	if t.epochSeq == ^uint64(0) {
+	if t.lastIncarnation == ^uint64(0) {
 		return 0, ErrIncarnationExhausted
 	}
-	t.epochSeq++
-	vHash := t.epochSeq
+	t.lastIncarnation++
+	vHash := t.lastIncarnation
 	t.viewHashes[viewID] = vHash
 	t.activeViews[vHash] = viewID
 	return vHash, nil

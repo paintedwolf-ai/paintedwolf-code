@@ -72,11 +72,23 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/layeredfs/privategit/store.go":             "first-open marker of a new object store; no prior content exists",
 	"lycaon/internal/layeredfs/privategit/store_gc.go":          "stream-then-name: a retained object's destination is its digest",
 	"lycaon/internal/layeredfs/privategit/store_import.go":      "stream-then-name: a retained object's destination is its digest",
+	"lycaon/internal/layeredfs/checkpoint/git_publish.go":       "fills a scratch bare repository, then names a verified pack by its digest",
 	"lycaon/internal/layeredfs/adapter/nfsdarwin/nfsdarwin.go":  "capability probe confined to a private temporary view",
+
+	// A view's engine performs its worker's own file operations: each is the worker's syscall, which a
+	// replacement cannot express.
+	"lycaon/internal/layeredfs/backing_unix.go":   "opens a view's backing file for the worker's own reads and writes",
+	"lycaon/internal/layeredfs/handles_node.go":   "creates the file a worker's open asked for",
+	"lycaon/internal/layeredfs/rename_readdir.go": "performs the rename a worker asked for inside its private Git directory",
+	"lycaon/internal/layeredfs/git_sync.go":       "writes a worker's edit through to its private Git directory",
+
+	// A test names the pause marker in its own temporary directory and removes it to resume.
+	"lycaon/internal/layeredfs/adapter/flushhelper/flushhelper.go": "a test's pause marker holding the helper's PID",
 
 	// Worker branches are unpublished until snapshot completion names them complete.
 	"lycaon/internal/layeredfs/adapter/eagercopy_git_helpers.go": "fills a private Git staging directory its caller promotes whole",
 	"lycaon/internal/layeredfs/adapter/eagercopy_content.go":     "O_EXCL file in an unpublished worker tree; SnapshotComplete publishes the assembled tree",
+	"lycaon/internal/layeredfs/adapter/eagercopy_lower.go":       "applies a parent layer to an unpublished worker tree; SnapshotComplete publishes the assembled tree",
 	"lycaon/internal/layeredfs/recovery/reconstruct.go":          "reconstructs an unpublished branch under its provision lock; SnapshotComplete publishes it",
 	"lycaon/internal/layeredfs/recovery/stacked.go":              "reconstructs an unpublished branch under its provision lock; SnapshotComplete publishes it",
 

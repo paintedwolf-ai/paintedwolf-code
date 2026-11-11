@@ -41,6 +41,8 @@ var approvedHostLaunches = map[string]string{
 	"fuse_probe":                       "proves a process outside the engine sees a probe mount coherently before selection trusts it",
 	"nfs_mount":                        "mounts a worker view through the system's mount_nfs, the only way to attach the built-in NFS client",
 	"nfs_unmount":                      "detaches a worker view through the system's umount and diskutil, the only way to remove a mount without privilege",
+	"fuse_barrier_flush":               "re-executes the engine to flush a view's mount from a process that is not serving it, so the flush cannot deadlock on its server",
+	"nfs_barrier_flush":                "re-executes the engine to flush a view's mount from a process that is not serving it, so the flush cannot deadlock on its server",
 	"nfs_probe":                        "proves a process outside the engine sees a probe mount coherently before selection trusts it",
 	"nix_generation_retention":         "registers the running Nix store closure as an indirect GC root via the package-owned nix-store binary",
 }

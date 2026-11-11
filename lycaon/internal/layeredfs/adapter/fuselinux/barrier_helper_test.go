@@ -15,6 +15,7 @@ import (
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/flushhelper"
 )
 
 func setExecutablePathFnForTest(a *Adapter, fn func() (string, error)) {
@@ -130,7 +131,7 @@ func TestFuseBarrierFlushHelperSubprocessRegistrationAndCancellation(t *testing.
 
 	// 3. Helper pause gate + context cancellation terminates child helper and clears active PID registration.
 	pauseFile := filepath.Join(tmp, "helper.pause")
-	t.Setenv(fuseBarrierFlushPauseFileEnv, pauseFile)
+	t.Setenv(flushhelper.PauseFileEnv, pauseFile)
 	startedCh := make(chan int, 1)
 	setOnHelperStartForTest(adp, func(_ string, pid int) {
 		select {
@@ -195,7 +196,7 @@ func TestFuseMountedBarrierFlushCancelAndAbortOrdering(t *testing.T) {
 	}
 
 	pauseFile := filepath.Join(tmp, "mounted-helper.pause")
-	t.Setenv(fuseBarrierFlushPauseFileEnv, pauseFile)
+	t.Setenv(flushhelper.PauseFileEnv, pauseFile)
 	startedCh := make(chan int, 1)
 	setOnHelperStartForTest(adp, func(_ string, pid int) {
 		select {

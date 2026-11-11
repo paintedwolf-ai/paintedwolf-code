@@ -6,11 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
@@ -227,21 +230,47 @@ func prepareOverlay(ctx context.Context, queue worker.WorkerQueue, sessions sess
 		return PreparedOverlay{}, fmt.Errorf("prepared worker did not retain its declared terminal result and pending overlay")
 	}
 
-	baseline, err := workspacebaseline.Open(ctx, branch.WorkspaceBaselinePath, workspacebaseline.ContentStore(branch.WorkspaceBaselinePath))
+	base, err := baseDigest(ctx, branch)
 	if err != nil {
 		return PreparedOverlay{}, err
 	}
-	defer func() { _ = baseline.Close() }()
+	return PreparedOverlay{JobID: id, ChildSessionID: child.ID, Label: overlay.Label, BaselineSHA256: base, Verification: validation, ResultStatus: status}, nil
+}
+
+// baseDigest names the base a worker was prepared over: its workspace baseline or, for a branch its
+// checkpoints capture, the pristine tree beside it.
+func baseDigest(ctx context.Context, branch *api.WorkerTask) (string, error) {
 	digest := sha256.New()
+	if branch.WorkspaceBaselinePath == "" {
+		pristine := enginepaths.PristineTreeForBranchRoot(branch.WorkspaceRoot)
+		err := filepath.WalkDir(pristine, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			rel, err := filepath.Rel(pristine, path)
+			if err != nil {
+				return err
+			}
+			body, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			sum := sha256.Sum256(body)
+			_, err = fmt.Fprintf(digest, "%q %d %x\n", filepath.ToSlash(rel), len(body), sum)
+			return err
+		})
+		return hex.EncodeToString(digest.Sum(nil)), err
+	}
+	baseline, err := workspacebaseline.Open(ctx, branch.WorkspaceBaselinePath, workspacebaseline.ContentStore(branch.WorkspaceBaselinePath))
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = baseline.Close() }()
 	err = baseline.Each(ctx, func(path string, file workspacebaseline.File) error {
 		_, err := fmt.Fprintf(digest, "%q %d %q %t\n", path, file.Size, file.SHA256, file.Opaque)
 		return err
 	})
-	if err != nil {
-		return PreparedOverlay{}, err
-	}
-
-	return PreparedOverlay{JobID: id, ChildSessionID: child.ID, Label: overlay.Label, BaselineSHA256: hex.EncodeToString(digest.Sum(nil)), Verification: validation, ResultStatus: status}, nil
+	return hex.EncodeToString(digest.Sum(nil)), err
 }
 
 func sortedPaths(files map[string]string) []string {
