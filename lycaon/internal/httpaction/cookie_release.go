@@ -2,16 +2,16 @@ package httpaction
 
 import (
 	"context"
-	"net/url"
 
 	"github.com/lycaon/lycaon/internal/httpcookies"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
 // prepareCookieDelivery keeps release decisions on this invocation's opened jar.
 // The HTTP client's before-hop boundary reviews newly eligible cookies as well.
-func prepareCookieDelivery(ctx context.Context, deps Deps, spec requestSpec, jar *secretcap.CookieJar) (func(context.Context, *url.URL) error, error) {
+func prepareCookieDelivery(ctx context.Context, deps Deps, spec requestSpec, jar *secretcap.CookieJar) (func(context.Context, outboundhttp.HopRequest) error, error) {
 	if jar == nil {
 		return nil, nil
 	}
@@ -22,9 +22,11 @@ func prepareCookieDelivery(ctx context.Context, deps Deps, spec requestSpec, jar
 	reviewed := make(map[httpcookies.Cookie]map[string]bool)
 	current := make(map[httpcookies.Cookie]bool)
 	jar.Store.SetDelivery(nativeIssuer, func(cookie httpcookies.Cookie) bool { return current[cookie] })
-	beforeHop := func(hopCtx context.Context, target *url.URL) error {
+	beforeHop := func(hopCtx context.Context, hop outboundhttp.HopRequest) error {
+		target := hop.URL
 		hopSpec := spec
 		hopSpec.target = target
+		hopSpec.hostHeader = hop.HostHeader
 		destination, label := requestDestination(hopSpec)
 		var foreign []httpcookies.Cookie
 		current = make(map[httpcookies.Cookie]bool)
@@ -85,5 +87,5 @@ func prepareCookieDelivery(ctx context.Context, deps Deps, spec requestSpec, jar
 		}
 		return nil
 	}
-	return beforeHop, beforeHop(ctx, spec.target)
+	return beforeHop, beforeHop(ctx, outboundhttp.HopRequest{URL: spec.target, Method: spec.method, HostHeader: spec.hostHeader})
 }

@@ -652,7 +652,9 @@ func (b *egressBrokerT) askOrCache(ctx context.Context, cmd EgressCommand, attri
 
 	allow := resolver(ctx, cmd, ep, detection)
 	b.mu.Lock()
-	b.verdict.Store(key, allow)
+	if allow || ctx.Err() == nil {
+		b.verdict.Store(key, allow)
+	}
 	parked := b.waiters[key]
 	delete(b.waiters, key)
 	b.mu.Unlock()

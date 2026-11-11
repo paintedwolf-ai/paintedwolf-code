@@ -71,11 +71,14 @@ func classify(err error) *curlFailure {
 	// crypto/tls reports a peer's alert as the "remote error" operation.
 	alert := op != nil && op.Op == "remote error"
 	timeout := errors.Is(cause, context.DeadlineExceeded) || errors.Is(cause, os.ErrDeadlineExceeded) || isTimeout(cause)
-	// After the first byte may have left, the outcome is unknown until a
-	// response arrives; the earlier stages sent nothing.
+	// After the first byte of a hop may have left, the outcome is unknown until
+	// that hop's response arrives; completed earlier redirect hops remain completed.
 	unsent := toolcontract.NoEffect
-	afterSend := toolcontract.EffectUnknown
 	if received {
+		unsent = toolcontract.EffectCompleted
+	}
+	afterSend := toolcontract.EffectUnknown
+	if received && (exchange == nil || exchange.RequestsStarted <= exchange.ResponsesReceived) {
 		afterSend = toolcontract.EffectCompleted
 	}
 	switch {
@@ -126,9 +129,39 @@ func (inv *invocation) settle(err error) (toolcontract.ProducerResult, error) {
 	return result, err
 }
 
+func preWireFailure(err error) bool {
+	var dns *net.DNSError
+	var op *net.OpError
+	var tlsFault *outboundhttp.TLSFault
+	if errors.As(err, &dns) || errors.As(err, &tlsFault) {
+		return true
+	}
+	return errors.As(err, &op) && op.Op == "dial"
+}
+
+func exchangeCertainty(err error) toolcontract.EffectCertainty {
+	var exchange *outboundhttp.ExchangeError
+	if !errors.As(err, &exchange) || exchange.RequestsStarted <= 0 {
+		return toolcontract.NoEffect
+	}
+	if exchange.RequestsStarted > exchange.ResponsesReceived {
+		if preWireFailure(err) {
+			if exchange.ResponsesReceived > 0 {
+				return toolcontract.EffectCompleted
+			}
+			return toolcontract.NoEffect
+		}
+		return toolcontract.EffectUnknown
+	}
+	if exchange.ResponsesReceived > 0 {
+		return toolcontract.EffectCompleted
+	}
+	return toolcontract.NoEffect
+}
+
 // failure settles an unsuccessful run as a host refusal or curl's exit.
 func (inv *invocation) failure(err error) (toolcontract.ProducerResult, error) {
-	if _, denied := egressgate.Denied(inv.ctx); denied || errors.Is(err, context.Canceled) && !inv.sent {
+	if _, denied := egressgate.Denied(inv.ctx); denied || (errors.Is(err, context.Canceled) && exchangeCertainty(err) != toolcontract.EffectUnknown) {
 		return inv.refused(err, 7)
 	}
 	var transport *httpaction.TransportFailure
@@ -173,11 +206,19 @@ func (inv *invocation) refused(err error, code int) (toolcontract.ProducerResult
 			}})
 		}
 	}
+	certainty := exchangeCertainty(err)
+	if certainty == toolcontract.NoEffect && inv.exchange != nil {
+		certainty = toolcontract.EffectCompleted
+	}
+	var ev toolcontract.OperationEvidence
+	if certainty != toolcontract.NoEffect {
+		ev = inv.evidence()
+	}
 	if errors.Is(err, context.Canceled) {
-		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
+		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: certainty, Evidence: ev}, err
 	}
 	_, _ = fmt.Fprintf(inv.stderr, "curl: %s [%s]\n", inv.opts.url, stop)
-	return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerRefused, StopCode: stop, EffectCertainty: toolcontract.NoEffect}, err
+	return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerRefused, StopCode: stop, EffectCertainty: certainty, Evidence: ev}, err
 }
 
 // evidence names the owner and the sent, received and emitted body

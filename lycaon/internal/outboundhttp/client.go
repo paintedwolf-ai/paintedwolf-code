@@ -105,10 +105,19 @@ type Request struct {
 	// retains the received block in Response.Wire; TLS headers are normalized.
 	WireHeaders bool
 	// TLS adds this request's trust and client identity to every TLS hop.
-	TLS            *ClientTLS
-	AllowAddress   func(netip.Addr, uint16) bool
-	BeforeHop      func(context.Context, *url.URL) error
-	OnFirstHopConn func(local, remote netip.AddrPort)
+	TLS              *ClientTLS
+	AllowAddress     func(netip.Addr, uint16) bool
+	BeforeHop        func(context.Context, *url.URL) error
+	BeforeHopRequest func(context.Context, HopRequest) error
+	OnFirstHopConn   func(local, remote netip.AddrPort)
+}
+
+// HopRequest describes one HTTP hop presented to BeforeHopRequest before
+// resolution or dialing.
+type HopRequest struct {
+	URL        *url.URL
+	Method     string
+	HostHeader string
 }
 
 // Hop records a followed redirect and its destination.
@@ -187,8 +196,10 @@ func NormalizeURL(raw string) (*url.URL, error) {
 
 func Do(ctx context.Context, in Request) (out Response, err error) {
 	progress := ExchangeError{}
+	var hops []Hop
 	defer func() {
 		if err != nil {
+			progress.Redirects = slices.Clone(hops)
 			progress.Err = err
 			err = &progress
 		}
@@ -210,13 +221,18 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 	body := prepared.Body
 	originHeaders := prepared.OriginHeaders
 	hopHeaders := prepared.HopHeaders
-	var hops []Hop
+	hostHeader := in.HostHeader
 	var ioElapsed time.Duration
 	begun := time.Now()
 	var firstHopLocal, firstHopPeer netip.AddrPort
 	for hop := 0; ; hop++ {
 		if in.BeforeHop != nil {
 			if err := in.BeforeHop(ctx, current); err != nil {
+				return Response{}, err
+			}
+		}
+		if in.BeforeHopRequest != nil {
+			if err := in.BeforeHopRequest(ctx, HopRequest{URL: current, Method: method, HostHeader: hostHeader}); err != nil {
 				return Response{}, err
 			}
 		}
@@ -257,8 +273,8 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			ioCancel()
 			return Response{}, err
 		}
-		if in.HostHeader != "" {
-			req.Host = in.HostHeader
+		if hostHeader != "" {
+			req.Host = hostHeader
 		}
 		for _, h := range hopHeaders {
 			req.Header.Add(h.Name, h.Value)
@@ -308,7 +324,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		hopTiming.Total = time.Since(ioStarted).Milliseconds()
 		transport.CloseIdleConnections()
 		ioCancel()
-		adv, err := in.processRedirect(resp, current, method, body, originHeaders, hop, redirectLimit, hops, hopTiming)
+		adv, err := in.processRedirect(resp, current, method, body, originHeaders, hostHeader, hop, redirectLimit, hops, hopTiming)
 		if err != nil {
 			return Response{}, err
 		}
@@ -322,6 +338,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		current = adv.next
 		body = adv.body
 		originHeaders = adv.originHeaders
+		hostHeader = adv.hostHeader
 	}
 }
 
@@ -330,6 +347,7 @@ type redirectAdvance struct {
 	method        string
 	body          []byte
 	originHeaders []Header
+	hostHeader    string
 	record        Hop
 }
 
@@ -339,6 +357,7 @@ func (in Request) processRedirect(
 	method string,
 	body []byte,
 	originHeaders []Header,
+	hostHeader string,
 	hop, redirectLimit int,
 	hops []Hop,
 	timing *HopTiming,
@@ -381,8 +400,9 @@ func (in Request) processRedirect(
 				Hops:   newHops,
 			}
 		}
-		// Cross-origin redirects drop caller headers.
+		// Cross-origin redirects drop caller headers and any origin Host override.
 		originHeaders = nil
+		hostHeader = ""
 	}
 	if !keepBody {
 		body = nil
@@ -393,6 +413,7 @@ func (in Request) processRedirect(
 		method:        nextMethod,
 		body:          body,
 		originHeaders: originHeaders,
+		hostHeader:    hostHeader,
 		record:        record,
 	}, nil
 }

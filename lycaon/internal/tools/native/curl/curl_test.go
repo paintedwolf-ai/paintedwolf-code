@@ -320,7 +320,7 @@ func TestCurlLoopbackAndEgressAuthority(t *testing.T) {
 		t.Fatalf("owned loopback origin failed: %+v %v", r.result, r.err)
 	}
 	r = h.curl(t.Context(), "-s", "-L", origin.URL)
-	if reject := toolrejection.AsToolReject(r.err); r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "SANDBOX_TRY_LOOPBACK_CONNECT" || targetHits.Load() != 0 || reject == nil || reject.Data["port"] != targetPort {
+	if reject := toolrejection.AsToolReject(r.err); r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "SANDBOX_TRY_LOOPBACK_CONNECT" || r.result.EffectCertainty != toolcontract.EffectCompleted || targetHits.Load() != 0 || reject == nil || reject.Data["port"] != targetPort {
 		t.Fatalf("redirect to ungranted loopback port: %+v %v hits=%d", r.result, r.err, targetHits.Load())
 	}
 	h.tc.Local.OwnedLoopbackPorts = nil
@@ -345,8 +345,8 @@ func TestCurlLoopbackAndEgressAuthority(t *testing.T) {
 	targetHost := strings.TrimPrefix(target.URL, "http://")
 	allow[originHost] = true
 	r = h.curl(t.Context(), "-s", "-L", "-H", "Authorization: Bearer origin-only", origin.URL)
-	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || targetHits.Load() != 0 {
-		t.Fatalf("redirect reached a denied host: %+v hits=%d", r.result, targetHits.Load())
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || r.result.EffectCertainty != toolcontract.EffectCompleted || targetHits.Load() != 0 {
+		t.Fatalf("redirect reached a denied host or hid completed initial hop: %+v hits=%d", r.result, targetHits.Load())
 	}
 	mu.Lock()
 	if len(asked) != 2 || asked[0] != originHost || asked[1] != targetHost {
@@ -483,4 +483,336 @@ func TestCurlDirectIPHonorsDeclaredDestinationPolicy(t *testing.T) {
 	if reject == nil || reject.Code != "HTTP_REQUEST_HOST_DENIED" {
 		t.Fatalf("link-local metadata under direct_ip = %v (reject=%+v), want HTTP_REQUEST_HOST_DENIED", metadata.err, reject)
 	}
+}
+
+func TestCurlExchangeProvenanceReporting(t *testing.T) {
+	proxyServer := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		stamp(w, "text/plain")
+		if strings.HasSuffix(r.URL.Path, "/fail") {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = io.WriteString(w, "remote error body\n")
+			return
+		}
+		_, _ = io.WriteString(w, "remote payload\n")
+	})
+	port := strconv.Itoa(int(serverPort(t, proxyServer.URL)))
+	resolveArg := "api.external.example:" + port + ":127.0.0.1"
+	extBase := "http://api.external.example:" + port
+	h := newHarness(t)
+
+	runObserved := func(args ...string) (run, []httpaction.ExchangeProvenance) {
+		var observed []httpaction.ExchangeProvenance
+		ctx := httpaction.WithExchangeProvenanceObserver(t.Context(), func(prov httpaction.ExchangeProvenance) {
+			observed = append(observed, prov)
+		})
+		res := h.curl(ctx, args...)
+		return res, observed
+	}
+
+	// 1. External stdout body reports External=true, WroteStdout=true.
+	_, obs := runObserved("-s", "--resolve", resolveArg, extBase+"/data")
+	if len(obs) != 1 || !obs[0].External || !obs[0].WroteStdout || obs[0].WroteStderr || len(obs[0].WrittenFiles) != 0 {
+		t.Fatalf("external stdout provenance = %+v", obs)
+	}
+
+	// 2. External -o file without stdout headers reports WrittenFiles=["saved.txt"] and WroteStdout=false.
+	_, obs = runObserved("-s", "--resolve", resolveArg, "-o", "saved.txt", extBase+"/data")
+	if len(obs) != 1 || !obs[0].External || obs[0].WroteStdout || obs[0].WroteStderr || len(obs[0].WrittenFiles) != 1 || obs[0].WrittenFiles[0] != "saved.txt" {
+		t.Fatalf("external -o provenance = %+v", obs)
+	}
+
+	// 3. External --fail -D - on 500 still reports WroteStdout=true even though exit status is 22.
+	res, obs := runObserved("-s", "--resolve", resolveArg, "--fail", "-D", "-", extBase+"/fail")
+	if res.result.Status != 22 || len(obs) != 1 || !obs[0].External || !obs[0].WroteStdout {
+		t.Fatalf("external --fail -D - status=%d provenance=%+v", res.result.Status, obs)
+	}
+
+	// 4. External --fail -v on 500 still reports WroteStderr=true even though exit status is 22.
+	res, obs = runObserved("-s", "--resolve", resolveArg, "--fail", "-v", extBase+"/fail")
+	if res.result.Status != 22 || len(obs) != 1 || !obs[0].External || !obs[0].WroteStderr {
+		t.Fatalf("external --fail -v status=%d provenance=%+v", res.result.Status, obs)
+	}
+
+	// 5. External --fail -w '%{http_code}' on 500 reports WroteStdout=true.
+	res, obs = runObserved("-s", "--resolve", resolveArg, "--fail", "-w", "%{http_code}", extBase+"/fail")
+	if res.result.Status != 22 || len(obs) != 1 || !obs[0].External || !obs[0].WroteStdout {
+		t.Fatalf("external --fail -w status=%d provenance=%+v", res.result.Status, obs)
+	}
+
+	// 6. Pure loopback request reports External=false.
+	_, obs = runObserved("-s", proxyServer.URL+"/local")
+	if len(obs) != 1 || obs[0].External || len(obs[0].ObservedURLs) != 0 {
+		t.Fatalf("loopback provenance = %+v, want External=false", obs)
+	}
+}
+
+// curlRedirectFixture holds the redirect servers and observation counters shared by the
+// redirect admission scenarios.
+type curlRedirectFixture struct {
+	origin          *httptest.Server
+	target          *httptest.Server
+	originHits      atomic.Int32
+	originBytes     atomic.Int32
+	targetHits      atomic.Int32
+	targetBytes     atomic.Int32
+	dropHop1        atomic.Bool
+	hostSeenMu      sync.Mutex
+	originHostsSeen []string
+	targetHostsSeen []string
+}
+
+func newCurlRedirectFixture(t *testing.T) *curlRedirectFixture {
+	f := &curlRedirectFixture{}
+	f.target = fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		f.targetHits.Add(1)
+		body, _ := io.ReadAll(r.Body)
+		f.targetBytes.Add(int32(len(body)))
+		f.hostSeenMu.Lock()
+		f.targetHostsSeen = append(f.targetHostsSeen, r.Host)
+		f.hostSeenMu.Unlock()
+		if f.dropHop1.Load() {
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				t.Error("target response writer does not support hijacking")
+				return
+			}
+			conn, _, err := hj.Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+			return
+		}
+		stamp(w, "text/plain")
+		_, _ = io.WriteString(w, "landed\n")
+	})
+	f.origin = fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		f.originHits.Add(1)
+		body, _ := io.ReadAll(r.Body)
+		f.originBytes.Add(int32(len(body)))
+		f.hostSeenMu.Lock()
+		f.originHostsSeen = append(f.originHostsSeen, r.Host)
+		f.hostSeenMu.Unlock()
+		switch r.URL.Path {
+		case "/to-mapped":
+			http.Redirect(w, r, "http://redirected.example.com/landed", http.StatusFound)
+		case "/same-then-cross":
+			http.Redirect(w, r, "/same-origin", http.StatusFound)
+		case "/same-origin":
+			http.Redirect(w, r, f.target.URL+"/landed", http.StatusFound)
+		default:
+			http.Redirect(w, r, f.target.URL+"/landed", http.StatusFound)
+		}
+	})
+	return f
+}
+
+// askResolverState backs the Ask-posture egress resolver shared by the cancellation and
+// Host override scenarios.
+type askResolverState struct {
+	mu           sync.Mutex
+	allow        map[string]bool
+	cancelTarget string
+	cancelFn     context.CancelFunc
+}
+
+func (f *curlRedirectFixture) installAskResolver(t *testing.T) *askResolverState {
+	state := &askResolverState{allow: map[string]bool{}}
+	confine.SetEgressPosture(confine.PostureAsk)
+	release := confine.SetEgressResolver(func(ctx context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+		endpoint := net.JoinHostPort(ep.Host, fmt.Sprint(ep.Port))
+		state.mu.Lock()
+		shouldCancel := state.cancelTarget == endpoint
+		ok := state.allow[endpoint]
+		fn := state.cancelFn
+		state.mu.Unlock()
+		if shouldCancel && fn != nil {
+			fn()
+			<-ctx.Done()
+			return false
+		}
+		return ok
+	})
+	t.Cleanup(func() {
+		confine.SetEgressPosture(confine.PostureObserve)
+		_ = release(context.Background())
+	})
+	return state
+}
+
+func TestCurlRedirectAdmissionRouteChangeCancellationAndUnknownHop(t *testing.T) {
+	f := newCurlRedirectFixture(t)
+	originPort := serverPort(t, f.origin.URL)
+	targetPort := serverPort(t, f.target.URL)
+	h := newHarness(t)
+
+	// 1. Explicit --connect-to on Hop 1 to an ungranted loopback port is NOT pre-granted by Hop 0's
+	// loopbackPorts extraction, receives zero connections on Hop 1, preserves Hop 0's completed effect
+	// without fabricating sent-body evidence from attempt counters, and succeeds once targetPort is covered.
+	h.tc.Local.LoopbackConnectGranted = false
+	h.tc.Local.OwnedLoopbackPorts = []uint16{originPort}
+	connectToArg := fmt.Sprintf("redirected.example.com:80:127.0.0.1:%d", targetPort)
+	r := h.curl(t.Context(), "-s", "-L", "--connect-to", connectToArg, "-d", "payload", f.origin.URL+"/to-mapped")
+	reject := toolrejection.AsToolReject(r.err)
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "SANDBOX_TRY_LOOPBACK_CONNECT" ||
+		r.result.EffectCertainty != toolcontract.EffectCompleted || reject == nil || reject.Data["port"] != targetPort ||
+		f.originHits.Load() != 1 || f.originBytes.Load() != int32(len("payload")) || f.targetHits.Load() != 0 {
+		t.Fatalf("redirect via --connect-to to ungranted loopback port: result=%+v reject=%+v originHits=%d targetHits=%d",
+			r.result, reject, f.originHits.Load(), f.targetHits.Load())
+	}
+	if r.evidence.EvidenceRef != "" {
+		t.Fatalf("failed exchange fabricated sent-body evidence from attempt counters: %q", r.evidence.EvidenceRef)
+	}
+	// Covered follow-up with targetPort granted succeeds and records completed sent-body evidence.
+	h.tc.Local.OwnedLoopbackPorts = []uint16{originPort, targetPort}
+	r = h.curl(t.Context(), "-s", "-L", "--connect-to", connectToArg, "-d", "payload", f.origin.URL+"/to-mapped")
+	wantSentRef := "sent:sha256:" + sha256Hex("payload")
+	if r.err != nil || r.stdout != "landed\n" || f.originHits.Load() != 2 || f.targetHits.Load() != 1 || !strings.Contains(r.evidence.EvidenceRef, wantSentRef) {
+		t.Fatalf("covered --connect-to redirect follow-up: err=%v stdout=%q originHits=%d targetHits=%d evidence=%q",
+			r.err, r.stdout, f.originHits.Load(), f.targetHits.Load(), r.evidence.EvidenceRef)
+	}
+
+	// 2. Cancellation, real denial, and authorized recovery in the SAME session under Ask posture.
+	h.tc.Local.OwnedLoopbackPorts = nil
+	h.tc.Local.LoopbackConnectGranted = true
+	f.originHits.Store(0)
+	f.originBytes.Store(0)
+	f.targetHits.Store(0)
+	state := f.installAskResolver(t)
+	h.tc.Identity.SessionID = "curl-cancel-and-recovery-session"
+	f.cancelAndRecoverySameSession(t, h, state)
+
+	// 3. Explicit -H "Host: vhost.example.com" across same-origin and cross-origin redirects:
+	// same-origin hops preserve the explicit Host header, cross-origin hop uses the target authority
+	// and still requires target host egress admission.
+	f.hostOverrideAcrossRedirects(t, h, state)
+
+	// 4. Unknown post-send outcome on Hop 1 after Hop 0 completed settles as EffectUnknown without replaying
+	// Hop 0 or Hop 1.
+	f.unknownHopOutcome(t, h)
+}
+
+// cancelAndRecoverySameSession drives cancellation at Hop 0 and Hop 1, the un-canceled denials in
+// between, and the authorized recovery, all within one session.
+func (f *curlRedirectFixture) cancelAndRecoverySameSession(t *testing.T, h *harness, state *askResolverState) {
+	originHost := strings.TrimPrefix(f.origin.URL, "http://")
+	targetHost := strings.TrimPrefix(f.target.URL, "http://")
+
+	// 2a. Canceled while awaiting Hop 0 approval: NoEffect, Status 130, zero requests sent.
+	ctx0, cancel0 := context.WithCancel(t.Context())
+	state.mu.Lock()
+	state.cancelTarget = originHost
+	state.cancelFn = cancel0
+	state.mu.Unlock()
+	r := h.curl(ctx0, "-s", "-L", f.origin.URL)
+	if r.result.Status != 130 || r.result.Terminal != toolcontract.ProducerInterrupted || r.result.EffectCertainty != toolcontract.NoEffect || f.originHits.Load() != 0 || f.targetHits.Load() != 0 {
+		t.Fatalf("canceled awaiting Hop 0: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, f.originHits.Load(), f.targetHits.Load())
+	}
+
+	// 2b. Un-canceled retry in the SAME session while Hop 0 is still denied: real denial (no false quiet grant).
+	state.mu.Lock()
+	state.cancelTarget = ""
+	state.cancelFn = nil
+	state.mu.Unlock()
+	r = h.curl(t.Context(), "-s", "-L", f.origin.URL)
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || r.result.EffectCertainty != toolcontract.NoEffect || f.originHits.Load() != 0 {
+		t.Fatalf("post-cancel Hop 0 denial: result=%+v err=%v originHits=%d", r.result, r.err, f.originHits.Load())
+	}
+
+	// 2c. Canceled while awaiting Hop 1 approval (after Hop 0 302 completed): EffectCompleted, Status 130, Hop 1 unsent.
+	ctx1, cancel1 := context.WithCancel(t.Context())
+	state.mu.Lock()
+	state.allow[originHost] = true
+	state.cancelTarget = targetHost
+	state.cancelFn = cancel1
+	state.mu.Unlock()
+	r = h.curl(ctx1, "-s", "-L", f.origin.URL)
+	if r.result.Status != 130 || r.result.Terminal != toolcontract.ProducerInterrupted || r.result.EffectCertainty != toolcontract.EffectCompleted || f.originHits.Load() != 1 || f.targetHits.Load() != 0 {
+		t.Fatalf("canceled awaiting Hop 1: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, f.originHits.Load(), f.targetHits.Load())
+	}
+
+	// 2d. Un-canceled retry in the SAME session while Hop 1 is still denied: real denial with EffectCompleted.
+	state.mu.Lock()
+	state.cancelTarget = ""
+	state.cancelFn = nil
+	state.mu.Unlock()
+	r = h.curl(t.Context(), "-s", "-L", f.origin.URL)
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || r.result.EffectCertainty != toolcontract.EffectCompleted || f.originHits.Load() != 2 || f.targetHits.Load() != 0 {
+		t.Fatalf("post-cancel Hop 1 denial: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, f.originHits.Load(), f.targetHits.Load())
+	}
+
+	// 2e. Authorizing Hop 1 in the SAME session succeeds without cached cancellation or denial poisoning.
+	state.mu.Lock()
+	state.allow[targetHost] = true
+	state.mu.Unlock()
+	r = h.curl(t.Context(), "-s", "-L", f.origin.URL)
+	if r.err != nil || r.stdout != "landed\n" || f.originHits.Load() != 3 || f.targetHits.Load() != 1 {
+		t.Fatalf("authorized Hop 1 recovery in same session: err=%v stdout=%q originHits=%d targetHits=%d", r.err, r.stdout, f.originHits.Load(), f.targetHits.Load())
+	}
+}
+
+// hostOverrideAcrossRedirects verifies an explicit Host header survives same-origin redirect hops
+// while the cross-origin hop switches to the target authority and still needs its admission.
+func (f *curlRedirectFixture) hostOverrideAcrossRedirects(t *testing.T, h *harness, state *askResolverState) {
+	targetHost := strings.TrimPrefix(f.target.URL, "http://")
+	f.originHits.Store(0)
+	f.targetHits.Store(0)
+	f.hostSeenMu.Lock()
+	f.originHostsSeen = nil
+	f.targetHostsSeen = nil
+	f.hostSeenMu.Unlock()
+	state.mu.Lock()
+	state.allow[targetHost] = false
+	state.mu.Unlock()
+	r := h.curl(t.Context(), "-s", "-L", "-H", "Host: vhost.example.com", f.origin.URL+"/same-then-cross")
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || r.result.EffectCertainty != toolcontract.EffectCompleted || f.originHits.Load() != 2 || f.targetHits.Load() != 0 {
+		t.Fatalf("unapproved cross-origin target with Host override: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, f.originHits.Load(), f.targetHits.Load())
+	}
+	f.originHits.Store(0)
+	f.hostSeenMu.Lock()
+	f.originHostsSeen = nil
+	f.targetHostsSeen = nil
+	f.hostSeenMu.Unlock()
+	state.mu.Lock()
+	state.allow[targetHost] = true
+	state.mu.Unlock()
+	r = h.curl(t.Context(), "-s", "-L", "-H", "Host: vhost.example.com", f.origin.URL+"/same-then-cross")
+	if r.err != nil || r.stdout != "landed\n" || f.originHits.Load() != 2 || f.targetHits.Load() != 1 {
+		t.Fatalf("approved Host override across same-origin then cross-origin redirect: err=%v stdout=%q originHits=%d targetHits=%d",
+			r.err, r.stdout, f.originHits.Load(), f.targetHits.Load())
+	}
+	f.hostSeenMu.Lock()
+	gotOriginHosts := append([]string(nil), f.originHostsSeen...)
+	gotTargetHosts := append([]string(nil), f.targetHostsSeen...)
+	f.hostSeenMu.Unlock()
+	if len(gotOriginHosts) != 2 || gotOriginHosts[0] != "vhost.example.com" || gotOriginHosts[1] != "vhost.example.com" {
+		t.Fatalf("same-origin hops Host headers = %v, want [vhost.example.com vhost.example.com]", gotOriginHosts)
+	}
+	if len(gotTargetHosts) != 1 || gotTargetHosts[0] != targetHost {
+		t.Fatalf("cross-origin hop Host header = %v, want [%s]", gotTargetHosts, targetHost)
+	}
+}
+
+// unknownHopOutcome drops the connection after Hop 1's request is sent and verifies the exchange
+// settles as EffectUnknown with the Hop 0 redirect record preserved.
+func (f *curlRedirectFixture) unknownHopOutcome(t *testing.T, h *harness) {
+	f.originHits.Store(0)
+	f.targetHits.Store(0)
+	f.dropHop1.Store(true)
+	r := h.curl(t.Context(), "-s", "-L", f.origin.URL)
+	if r.result.Terminal != toolcontract.ProducerFailed || r.result.EffectCertainty != toolcontract.EffectUnknown || f.originHits.Load() != 1 || f.targetHits.Load() != 1 {
+		t.Fatalf("unknown post-send outcome on Hop 1: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, f.originHits.Load(), f.targetHits.Load())
+	}
+	reject := toolrejection.AsToolReject(r.err)
+	if reject == nil || reject.Data["http_requests_started"] != 2 || reject.Data["http_responses_received"] != 1 {
+		t.Fatalf("unknown Hop 1 exchange progress = %+v", reject)
+	}
+	redirects, ok := reject.Data["redirects"].([]any)
+	if !ok || len(redirects) != 1 {
+		t.Fatalf("unknown Hop 1 lost Hop 0 redirect record: %#v", reject.Data["redirects"])
+	}
+}
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
 }

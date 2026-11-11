@@ -134,6 +134,19 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		out.Cookies = ex.cookies
 		reportWebPage(tctx, ex.spec, resp, placement, ex.finalURL)
 		reportLoopbackListener(tctx, ex.listener)
+		extURLs := externalObservedURLs(tctx.Effects.Secrets, ex.spec, ex.finalURL, ex.redirects)
+		var writtenFiles []string
+		if out.Written && out.ResponsePath != "" {
+			writtenFiles = []string{out.ResponsePath}
+		} else if out.BodySpillPath != "" {
+			writtenFiles = []string{out.BodySpillPath}
+		}
+		ReportExchangeProvenance(ctx, ExchangeProvenance{
+			External:     len(extURLs) > 0,
+			ObservedURLs: extURLs,
+			WroteStdout:  out.ResponsePath == "" && !ex.spec.disposition.discard && !out.BodyUnavailable,
+			WrittenFiles: writtenFiles,
+		})
 		if tctx.Effects.Out != nil {
 			tctx.Effects.Out.RetrievedFrom = retrievedFrom(ex.spec, resp.FinalURL)
 		}
@@ -171,6 +184,8 @@ type Exchange struct {
 	SentHeaders    []outboundhttp.Header
 	SentBodyBytes  int64
 	SentBodySHA256 string
+	External       bool
+	ObservedURLs   []string
 }
 
 // Perform runs one request with the same screening, approval, secret,
@@ -194,8 +209,17 @@ func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.Too
 		return Exchange{}, err
 	}
 	sum := sha256.Sum256(ex.outbound.body)
-	return Exchange{Response: ex.resp, FinalURL: ex.finalURL, Redirects: ex.redirects, SentHeaders: ex.sentHeaders,
-		SentBodyBytes: int64(len(ex.outbound.body)), SentBodySHA256: hex.EncodeToString(sum[:])}, nil
+	extURLs := externalObservedURLs(tctx.Effects.Secrets, ex.spec, ex.finalURL, ex.redirects)
+	return Exchange{
+		Response:       ex.resp,
+		FinalURL:       ex.finalURL,
+		Redirects:      ex.redirects,
+		SentHeaders:    ex.sentHeaders,
+		SentBodyBytes:  int64(len(ex.outbound.body)),
+		SentBodySHA256: hex.EncodeToString(sum[:]),
+		External:       len(extURLs) > 0,
+		ObservedURLs:   extURLs,
+	}, nil
 }
 
 // TransportFailure is a request the owner started that failed in transport.
@@ -448,12 +472,12 @@ func send(
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
 	// no network destination for the egress gate to judge.
-	req.BeforeHop = func(hopCtx context.Context, hopURL *url.URL) error {
+	req.BeforeHopRequest = func(hopCtx context.Context, hop outboundhttp.HopRequest) error {
 		if spec.socket == "" {
-			if reject := checkHopLoopbackAuthority(hopURL, spec.resolve, allowAddress); reject != nil {
+			if reject := checkHopLoopbackAuthority(hop.URL, spec.resolve, allowAddress); reject != nil {
 				return reject
 			}
-			if err := egressgate.AwaitHTTPRequest(hopCtx, hopURL, spec.method); err != nil {
+			if err := admitHopRoute(hopCtx, hop.URL, hop.Method, spec.resolve); err != nil {
 				return err
 			}
 		}
@@ -462,7 +486,7 @@ func send(
 			loopbackObs.beforeFirstHop(hopCtx, tctx, spec)
 		}
 		if outbound.beforeCookieHop != nil {
-			return outbound.beforeCookieHop(hopCtx, hopURL)
+			return outbound.beforeCookieHop(hopCtx, hop)
 		}
 		return nil
 	}
@@ -532,6 +556,9 @@ func sendReject(
 			reject.Data["http_requests_started"] = exchange.RequestsStarted
 			reject.Data["http_responses_received"] = exchange.ResponsesReceived
 			reject.Data["http_last_status"] = exchange.LastStatus
+			if len(exchange.Redirects) > 0 && reject.Data["redirects"] == nil {
+				reject.Data["redirects"] = redirectFacts(exchange.Redirects)
+			}
 		}
 		if cookies != nil {
 			if reject.Data == nil {
@@ -577,7 +604,7 @@ func sendReject(
 	data := map[string]any{"reason": err.Error(), "retryable": retryable}
 	var redirect *outboundhttp.RedirectError
 	if errors.As(err, &redirect) && len(redirect.Hops) > 0 {
-		data["redirects"] = redirect.Hops
+		data["redirects"] = redirectFacts(redirect.Hops)
 	}
 	var oversized *outboundhttp.BodyTooLargeError
 	if errors.As(err, &oversized) {
@@ -590,6 +617,25 @@ func sendReject(
 		Code: "HTTP_REQUEST_FAILED", FailureClass: api.FailureClassOwnerError,
 		Retryable: retryable, Data: data,
 	})
+}
+
+func redirectFacts(hops []outboundhttp.Hop) []any {
+	if len(hops) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(hops))
+	for _, h := range hops {
+		item := map[string]any{
+			"status":   h.Status,
+			"url":      h.URL,
+			"location": h.Location,
+		}
+		if h.Method != "" {
+			item["method"] = h.Method
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 // retrievedFrom labels where response content came from.
