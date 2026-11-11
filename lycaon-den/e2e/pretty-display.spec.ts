@@ -180,6 +180,9 @@ modelIndependentWebE2e("edits at visual line ends and drags across breaks", asyn
   const from = breaks[2]!.pos + 2;
   const to = breaks[8]!.pos + 2;
   for (const [anchor, head] of [[from, to], [to, from]] as const) {
+    // A press on an existing selection drags its text, so each drag starts from a caret.
+    await page.evaluate(() => window.__pretty.view().dispatch({ selection: { anchor: 0 } }));
+    await settle(page);
     const a = await coords(page, anchor, 1);
     const h = await coords(page, head, 1);
     await page.mouse.move(a!.left + 1, (a!.top + a!.bottom) / 2);
