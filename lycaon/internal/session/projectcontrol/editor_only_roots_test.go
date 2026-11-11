@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -49,17 +50,13 @@ func TestChatsLeaveEditorOnlyRootsForTheAgentsPrimary(t *testing.T) {
 	s := New(sessions, nil, nil, nil, nil, nil, nil)
 	s.SetProjects(reassignProjects{"mixed": mixed, "editor-only": editorOnly})
 
-	if err := s.ReassignProjectSessionsOffEditorOnlyRoots(t.Context(), "mixed"); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "reassign project sessions", s.ReassignProjectSessionsOffEditorOnlyRoots(t.Context(), "mixed"))
 	if want := [][3]string{{"mixed", "home", "work"}, {"mixed", "keys", "work"}}; !reflect.DeepEqual(sessions.moves, want) {
 		t.Fatalf("project moves = %v, want %v", sessions.moves, want)
 	}
 
 	sessions.moves = nil
-	if err := s.ReassignSessionsOffEditorOnlyRoots(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "reassign sessions", s.ReassignSessionsOffEditorOnlyRoots(t.Context()))
 	if want := [][3]string{{"mixed", "home", "work"}, {"mixed", "keys", "work"}, {"editor-only", "store", ""}}; !reflect.DeepEqual(sessions.moves, want) {
 		t.Fatalf("startup moves = %v, want %v", sessions.moves, want)
 	}
