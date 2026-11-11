@@ -37,7 +37,7 @@ func (c *Core) ReadDir(qpath QualifiedPath) ([]DirEntry, error) {
 func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 	dirPath.Rel = cleanRelPath(dirPath.Rel)
 	// Entries merge by the name the root folds them to, and a private spelling wins.
-	folding := c.foldingOf(dirPath.RootID)
+	folding := c.state.folding(dirPath.RootID)
 	merged := make(map[string]DirEntry)
 
 	c.mu.RLock()
@@ -157,7 +157,7 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 	names := sortedNames(merged)
 	out := make([]DirEntry, 0, len(names))
 	for _, name := range names {
-		if c.hiddenRel(QualifiedPath{RootID: dirPath.RootID, Rel: joinRel(dirPath.Rel, merged[name].Name)}) {
+		if c.roots.hidden(QualifiedPath{RootID: dirPath.RootID, Rel: joinRel(dirPath.Rel, merged[name].Name)}) {
 			continue
 		}
 		out = append(out, merged[name])
@@ -187,7 +187,7 @@ func immediateChildName(rootID, prefix string, folding NameFolding, candidate Qu
 func isMaskedByPrivateDeletionOrReplacementLocked(c *Core, qpath QualifiedPath) bool {
 	rel := qpath.Rel
 	for rel != "." {
-		spelled := c.storedSpelling(QualifiedPath{RootID: qpath.RootID, Rel: rel})
+		spelled := c.state.storedSpelling(QualifiedPath{RootID: qpath.RootID, Rel: rel})
 		if _, del := c.state.deletedPaths[spelled]; del {
 			return true
 		}

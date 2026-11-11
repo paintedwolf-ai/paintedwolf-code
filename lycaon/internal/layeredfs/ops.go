@@ -222,10 +222,10 @@ func mkdirPath(c *Core, qpath QualifiedPath, mode fs.FileMode) (EntryAttr, error
 			},
 		}
 		_, wasReplaced := c.state.deletedPaths[targetPath]
-		c.unmarkDeleted(targetPath)
+		c.state.unmarkDeleted(targetPath)
 		c.state.nodesByID[nid] = node
-		c.noteNode(nid)
-		c.setPrivatePath(targetPath, nid)
+		c.state.noteNode(nid)
+		c.state.setPrivatePath(targetPath, nid)
 		bumpParentDirGenLocked(c, targetPath)
 		opKind := JournalOpMkdir
 		if wasReplaced || (base.Kind != EntryAbsent && base.Kind != EntryDirectory) {
@@ -329,10 +329,10 @@ func symlinkPath(c *Core, target string, linkPath QualifiedPath) (EntryAttr, err
 			},
 		}
 		_, wasReplaced := c.state.deletedPaths[targetPath]
-		c.unmarkDeleted(targetPath)
+		c.state.unmarkDeleted(targetPath)
 		c.state.nodesByID[nid] = node
-		c.noteNode(nid)
-		c.setPrivatePath(targetPath, nid)
+		c.state.noteNode(nid)
+		c.state.setPrivatePath(targetPath, nid)
 		bumpParentDirGenLocked(c, targetPath)
 		opKind := JournalOpSymlink
 		if wasReplaced || base.Kind == EntryDirectory {

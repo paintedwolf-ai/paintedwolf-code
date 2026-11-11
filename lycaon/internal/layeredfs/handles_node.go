@@ -72,10 +72,10 @@ func ensureGitHostNodeLocked(c *Core, qpath QualifiedPath, hostPath string, base
 				gitHostPath:    hostPath,
 			},
 		}
-		c.unmarkDeleted(qpath)
+		c.state.unmarkDeleted(qpath)
 		c.state.nodesByID[nid] = node
-		c.noteNode(nid)
-		c.setPrivatePath(qpath, nid)
+		c.state.noteNode(nid)
+		c.state.setPrivatePath(qpath, nid)
 		markDirtyBackingFileLocked(c, hostPath)
 		if ino := fileInfoIno(info); ino != 0 {
 			recordOriginLocked(c, node, syntheticNodeID(qpath, ino))
@@ -114,10 +114,10 @@ func ensureGitHostNodeLocked(c *Core, qpath QualifiedPath, hostPath string, base
 				originPath: &originCopy,
 			},
 		}
-		c.unmarkDeleted(qpath)
+		c.state.unmarkDeleted(qpath)
 		c.state.nodesByID[nid] = node
-		c.noteNode(nid)
-		c.setPrivatePath(qpath, nid)
+		c.state.noteNode(nid)
+		c.state.setPrivatePath(qpath, nid)
 		markDirtyBackingFileLocked(c, hostPath)
 		ino := fileInfoIno(info)
 		if ino == 0 {
@@ -157,10 +157,10 @@ func ensureGitHostNodeLocked(c *Core, qpath QualifiedPath, hostPath string, base
 			gitHostPath:    hostPath,
 		},
 	}
-	c.unmarkDeleted(qpath)
+	c.state.unmarkDeleted(qpath)
 	c.state.nodesByID[nid] = node
-	c.noteNode(nid)
-	c.setPrivatePath(qpath, nid)
+	c.state.noteNode(nid)
+	c.state.setPrivatePath(qpath, nid)
 	markDirtyBackingFileLocked(c, hostPath)
 	if ino := fileInfoIno(cInfo); ino != 0 {
 		recordOriginLocked(c, node, syntheticNodeID(qpath, ino))
@@ -220,8 +220,8 @@ func copyUpBaseNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, expect
 		},
 	}
 	c.state.nodesByID[nid] = node
-	c.noteNode(nid)
-	c.setPrivatePath(qpath, nid)
+	c.state.noteNode(nid)
+	c.state.setPrivatePath(qpath, nid)
 	markDirtyBackingFileLocked(c, workPath)
 	recordOriginLocked(c, node, originNodeID(qpath, base))
 	c.counters.physicalCopyUps.Add(1)
@@ -268,10 +268,10 @@ func createPrivateNodeLocked(c *Core, qpath QualifiedPath, flags OpenFlags, crea
 			backingPath:    workPath,
 		},
 	}
-	c.unmarkDeleted(qpath)
+	c.state.unmarkDeleted(qpath)
 	c.state.nodesByID[nid] = node
-	c.noteNode(nid)
-	c.setPrivatePath(qpath, nid)
+	c.state.noteNode(nid)
+	c.state.setPrivatePath(qpath, nid)
 	bumpParentDirGenLocked(c, qpath)
 	recordJournalLocked(c, JournalOpCreate, qpath, nil, node, 0)
 	return node, nil

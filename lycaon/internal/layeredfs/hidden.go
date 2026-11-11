@@ -6,9 +6,9 @@ import (
 	"syscall"
 )
 
-// hiddenRel reports a path at or under engine storage its root contains.
-func (c *Core) hiddenRel(qpath QualifiedPath) bool {
-	spec := c.roots.byID[qpath.RootID]
+// hidden reports a path at or under engine storage its root contains.
+func (rt *rootTable) hidden(qpath QualifiedPath) bool {
+	spec := rt.byID[qpath.RootID]
 	for _, hidden := range spec.Hidden {
 		if qpath.Rel == hidden || strings.HasPrefix(qpath.Rel, hidden+"/") {
 			return true
@@ -25,9 +25,9 @@ func (c *Core) hiddenRel(qpath QualifiedPath) bool {
 	return false
 }
 
-// refuseHiddenTarget stops a mutation from creating or replacing engine storage under its own name.
-func (c *Core) refuseHiddenTarget(qpath QualifiedPath) error {
-	if c.hiddenRel(qpath) {
+// refuseHidden stops a mutation from creating or replacing engine storage under its own name.
+func (rt *rootTable) refuseHidden(qpath QualifiedPath) error {
+	if rt.hidden(qpath) {
 		return syscall.EACCES
 	}
 	return nil

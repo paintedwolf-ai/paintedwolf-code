@@ -141,6 +141,12 @@ type viewState struct {
 	dirCookies        map[uint64]dirCookieState
 	dirtyBackingFiles map[string]uint64
 	journal           []JournalOperation
+	// foldings is how each root compares names, fixed when the view opens.
+	foldings map[string]NameFolding
+	// pending names what the mutation in progress changed, for the working log's next record.
+	pendingPaths map[QualifiedPath]struct{}
+	pendingNodes map[NodeID]struct{}
+	pendingOps   []JournalOperation
 }
 
 type nodeFlags struct {
@@ -157,11 +163,17 @@ type nodeFlags struct {
 }
 
 func markDirtyBackingFileLocked(c *Core, path string) {
-	if path == "" || c.state == nil {
+	if c.state != nil {
+		c.state.markDirtyBackingFile(path)
+	}
+}
+
+func (s *viewState) markDirtyBackingFile(path string) {
+	if path == "" {
 		return
 	}
-	c.state.dirtySeq++
-	c.state.dirtyBackingFiles[path] = c.state.dirtySeq
+	s.dirtySeq++
+	s.dirtyBackingFiles[path] = s.dirtySeq
 }
 
 type nodeInitialState struct {
@@ -219,8 +231,9 @@ func New(cfg Config) (*Core, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := c.startWorkingLog(); err != nil {
-		_ = c.closeUnstarted()
+	if err := c.wal.start(); err != nil {
+		c.roots.close()
+		c.backing.close()
 		return nil, err
 	}
 	return c, nil
@@ -242,7 +255,15 @@ func newCore(cfg Config) (*Core, error) {
 		backing.close()
 		return nil, err
 	}
+	counters := &statsCounters{}
 	barrier := newBarrierCoordinator(cfg.ViewID)
+	barrier.expiries = &counters.barrierExpiries
+	barrier.expiry = func() <-chan time.Time {
+		if cfg.FaultHooks != nil && cfg.FaultHooks.BarrierExpiry != nil {
+			return cfg.FaultHooks.BarrierExpiry()
+		}
+		return time.After(holdBound(cfg))
+	}
 	barrier.resume = func() error {
 		if err := backing.unpark(); err != nil {
 			return err
@@ -258,7 +279,7 @@ func newCore(cfg Config) (*Core, error) {
 		cfg:      cfg,
 		backing:  backing,
 		roots:    roots,
-		counters: &statsCounters{},
+		counters: counters,
 		state: &viewState{
 			nodesByID:         make(map[NodeID]*privateNode),
 			originIndex:       make(map[NodeID]NodeID),
@@ -271,9 +292,12 @@ func newCore(cfg Config) (*Core, error) {
 			handles:           make(map[HandleID]*openHandle),
 			dirCookies:        make(map[uint64]dirCookieState),
 			dirtyBackingFiles: make(map[string]uint64),
+			foldings:          roots.foldings(),
+			pendingPaths:      map[QualifiedPath]struct{}{},
+			pendingNodes:      map[NodeID]struct{}{},
 		},
 		barrier: barrier,
-		wal:     newWorkingLog(),
+		wal:     &workingLog{backing: backing, records: &counters.workingLogRecords},
 	}, nil
 }
 

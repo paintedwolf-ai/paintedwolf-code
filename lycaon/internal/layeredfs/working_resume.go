@@ -89,7 +89,8 @@ func Resume(cfg Config) (*Core, ResumeReport, error) {
 	}
 	report, err := c.loadWorkingState()
 	if err != nil {
-		_ = c.closeUnstarted()
+		c.roots.close()
+		c.backing.close()
 		return nil, report, errors.Join(ErrWorkingStateUnusable, err)
 	}
 	return c, report, nil
@@ -118,9 +119,9 @@ func (c *Core) loadWorkingState() (ResumeReport, error) {
 		if snap.Format != workingStateFormat {
 			return report, fmt.Errorf("snapshot format %d", snap.Format)
 		}
-		c.applyWorkingAlloc(snap.Alloc)
-		c.applyWorkingPaths(snap.Paths)
-		c.applyWorkingNodes(snap.Nodes)
+		c.state.applyAlloc(snap.Alloc)
+		c.state.applyPaths(snap.Paths, c.backing.baseDir)
+		c.state.applyNodes(snap.Nodes)
 		c.state.journal = append(c.state.journal, snap.Ops...)
 		applied, report.FromSnapshot = snap.Seq, true
 	}
@@ -133,9 +134,9 @@ func (c *Core) loadWorkingState() (ResumeReport, error) {
 		switch {
 		case rec.Seq <= applied:
 		case rec.Seq == applied+1:
-			c.applyWorkingAlloc(rec.Alloc)
-			c.applyWorkingPaths(rec.Paths)
-			c.applyWorkingNodes(rec.Nodes)
+			c.state.applyAlloc(rec.Alloc)
+			c.state.applyPaths(rec.Paths, c.backing.baseDir)
+			c.state.applyNodes(rec.Nodes)
 			c.state.journal = append(c.state.journal, rec.Ops...)
 			applied = rec.Seq
 			report.Records++
@@ -146,7 +147,7 @@ func (c *Core) loadWorkingState() (ResumeReport, error) {
 		tail = tail[n:]
 	}
 	report.TruncatedBytes = int64(len(logRaw)) - valid
-	if err := c.settleResumedState(); err != nil {
+	if err := c.state.settleResumed(c.backing.workDir); err != nil {
 		return report, err
 	}
 	c.wal.seq, c.wal.size, c.wal.snapshotN = applied, valid, int64(len(snapRaw))
@@ -199,40 +200,41 @@ func decodeWorkingRecord(raw []byte) (workingRecord, int, bool) {
 	return rec, workingRecordHeader + size, true
 }
 
-func (c *Core) applyWorkingAlloc(a workingAlloc) {
-	s := &c.state.seq
-	s.nextNodeID, s.nextGen = max(s.nextNodeID, a.NodeID), max(s.nextGen, a.Gen)
-	s.nextStorageID, s.nextSeq = max(s.nextStorageID, a.StorageID), max(s.nextSeq, a.Seq)
+func (s *viewState) applyAlloc(a workingAlloc) {
+	ids := &s.seq
+	ids.nextNodeID, ids.nextGen = max(ids.nextNodeID, a.NodeID), max(ids.nextGen, a.Gen)
+	ids.nextStorageID, ids.nextSeq = max(ids.nextStorageID, a.StorageID), max(ids.nextSeq, a.Seq)
 }
 
-func (c *Core) applyWorkingPaths(paths []workingPath) {
+// applyPaths takes each recorded path; a base file is named inside baseDir.
+func (s *viewState) applyPaths(paths []workingPath, baseDir string) {
 	for _, p := range paths {
 		if p.Node != 0 {
-			c.state.pathIndex[p.Path] = p.Node
+			s.pathIndex[p.Path] = p.Node
 		} else {
-			delete(c.state.pathIndex, p.Path)
+			delete(s.pathIndex, p.Path)
 		}
 		if p.Deleted != nil {
-			c.state.deletedPaths[p.Path] = *p.Deleted
+			s.deletedPaths[p.Path] = *p.Deleted
 		} else {
-			delete(c.state.deletedPaths, p.Path)
+			delete(s.deletedPaths, p.Path)
 		}
 		if p.Base != nil {
 			base := cloneBaseCapture(*p.Base)
 			if p.BaseFile != "" {
-				base.BackingFile = filepath.Join(c.backing.baseDir, filepath.Base(p.BaseFile))
+				base.BackingFile = filepath.Join(baseDir, filepath.Base(p.BaseFile))
 			}
-			c.state.basesByPath[p.Path] = base
+			s.basesByPath[p.Path] = base
 		} else {
-			delete(c.state.basesByPath, p.Path)
+			delete(s.basesByPath, p.Path)
 		}
 	}
 }
 
-func (c *Core) applyWorkingNodes(nodes []workingNode) {
+func (s *viewState) applyNodes(nodes []workingNode) {
 	for _, r := range nodes {
 		if r.Gone {
-			delete(c.state.nodesByID, r.ID)
+			delete(s.nodesByID, r.ID)
 			continue
 		}
 		n := &privateNode{
@@ -250,34 +252,34 @@ func (c *Core) applyWorkingNodes(nodes []workingNode) {
 		for _, qpath := range r.Paths {
 			n.paths[qpath] = struct{}{}
 		}
-		c.state.nodesByID[r.ID] = n
+		s.nodesByID[r.ID] = n
 	}
 }
 
-// settleResumedState drops nodes only an open handle kept, checks that every name reaches a node
+// settleResumed drops nodes only an open handle kept, checks that every name reaches a node
 // whose bytes are present, and takes each written file's size and time from its backing file,
 // since writes reach it without a record.
-func (c *Core) settleResumedState() error {
+func (s *viewState) settleResumed(workDir string) error {
 	live := map[NodeID]bool{}
-	for qpath, nid := range c.state.pathIndex {
-		n := c.state.nodesByID[nid]
+	for qpath, nid := range s.pathIndex {
+		n := s.nodesByID[nid]
 		if n == nil {
 			return fmt.Errorf("%s names missing node %d", qpath.Rel, nid)
 		}
 		live[nid] = true
 	}
-	for nid, n := range c.state.nodesByID {
+	for nid, n := range s.nodesByID {
 		if !live[nid] {
-			delete(c.state.nodesByID, nid)
+			delete(s.nodesByID, nid)
 			continue
 		}
 		for qpath := range n.paths {
-			if c.state.pathIndex[qpath] != nid {
+			if s.pathIndex[qpath] != nid {
 				delete(n.paths, qpath)
 			}
 		}
 		if n.origin != 0 {
-			c.state.originIndex[n.origin] = nid
+			s.originIndex[n.origin] = nid
 		}
 		if n.kind != EntryRegular {
 			continue
@@ -286,7 +288,7 @@ func (c *Core) settleResumedState() error {
 		case n.flags.gitHostPath != "":
 			n.flags.backingPath = n.flags.gitHostPath
 		case n.flags.backingName != "":
-			n.flags.backingPath = filepath.Join(c.backing.workDir, n.flags.backingName)
+			n.flags.backingPath = filepath.Join(workDir, n.flags.backingName)
 		default:
 			return fmt.Errorf("file node %d has no backing", nid)
 		}
@@ -298,8 +300,8 @@ func (c *Core) settleResumedState() error {
 		if info.Size() != n.size || info.ModTime().After(n.ctime) {
 			n.size, n.mtime, n.ctime, n.flags.contentChanged = info.Size(), info.ModTime(), info.ModTime(), true
 		}
-		markDirtyBackingFileLocked(c, n.flags.backingPath)
+		s.markDirtyBackingFile(n.flags.backingPath)
 	}
-	c.rebuildSpellings()
+	s.rebuildSpellings()
 	return nil
 }

@@ -24,9 +24,9 @@ const (
 // scheduler slot. On FUSE the registration needs a server reply until the kernel learns polling
 // is unsupported, so a stop-the-world during the first open in this process would hang the engine.
 // This open and poll are ordinary system calls, safe at any time. The probe entry exists only here.
-func (s *Server) optOutOfFUSEPoll(mountPath string) error {
-	s.pollProbeActive.Store(true)
-	defer s.pollProbeActive.Store(false)
+func (p *pollProbe) optOutOfFUSEPoll(mountPath string) error {
+	p.active.Store(true)
+	defer p.active.Store(false)
 	fd, err := unix.Open(filepath.Join(mountPath, pollProbeName), unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return fmt.Errorf("fuselinux: open poll probe: %w", err)
@@ -35,7 +35,7 @@ func (s *Server) optOutOfFUSEPoll(mountPath string) error {
 	if _, err := unix.Poll([]unix.PollFd{{Fd: int32(fd), Events: unix.POLLIN}}, 0); err != nil {
 		return fmt.Errorf("fuselinux: poll probe: %w", err)
 	}
-	if s.pollRequests.Load() == 0 {
+	if p.requests.Load() == 0 {
 		return fmt.Errorf("fuselinux: poll probe did not reach the server")
 	}
 	return nil

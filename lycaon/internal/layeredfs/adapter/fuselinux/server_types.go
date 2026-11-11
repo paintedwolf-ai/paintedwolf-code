@@ -157,9 +157,8 @@ type Server struct {
 	closeOnce sync.Once
 	wg        sync.WaitGroup
 
-	negotiated      atomic.Pointer[NegotiatedProtocol]
-	pollProbeActive atomic.Bool
-	pollRequests    atomic.Int64
+	negotiated atomic.Pointer[NegotiatedProtocol]
+	poll       pollProbe
 
 	nodes *nodeTable
 
@@ -242,4 +241,10 @@ func cleanFuseRel(rel string) string {
 		return "."
 	}
 	return rel
+}
+
+// pollProbe is the one FUSE_POLL a mount spends on its own probe entry, which exists only while active.
+type pollProbe struct {
+	active   atomic.Bool
+	requests atomic.Int64
 }

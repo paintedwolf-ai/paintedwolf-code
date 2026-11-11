@@ -11,20 +11,6 @@ import (
 	"time"
 )
 
-// Chmod updates permission and mode bits on qpath.
-func (c *Core) Chmod(qpath QualifiedPath, mode fs.FileMode) (EntryAttr, error) {
-	return c.SetAttr(qpath, SetAttrRequest{Mode: &mode})
-}
-
-// Chtimes updates access and modification timestamps on qpath.
-func (c *Core) Chtimes(qpath QualifiedPath, atime, mtime time.Time, noFollow bool) (EntryAttr, error) {
-	return c.SetAttr(qpath, SetAttrRequest{
-		ATime:    &atime,
-		MTime:    &mtime,
-		NoFollow: noFollow,
-	})
-}
-
 // SetAttr updates supported attributes on qpath.
 // Ownership changes return EPERM/ENOTSUP per the capability contract.
 func (c *Core) SetAttr(qpath QualifiedPath, req SetAttrRequest) (EntryAttr, error) {

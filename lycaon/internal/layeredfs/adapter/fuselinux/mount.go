@@ -296,7 +296,7 @@ func (a *Adapter) mountSingleRoot(
 		}
 	}
 
-	if pErr := srv.optOutOfFUSEPoll(canonMount); pErr != nil {
+	if pErr := srv.poll.optOutOfFUSEPoll(canonMount); pErr != nil {
 		_ = srv.Close()
 		_ = runFusermountUnmount(context.WithoutCancel(ctx), a.cfg.FusermountBin, canonMount, true)
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "prepare", ReasonCode: adapter.ReasonFUSEMountDenied, Diagnostic: pErr.Error(), Cause: pErr}

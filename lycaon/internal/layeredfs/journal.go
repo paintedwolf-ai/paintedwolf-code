@@ -106,13 +106,13 @@ func recordJournalLocked(c *Core, kind JournalOpKind, path QualifiedPath, srcPat
 	if kind == JournalOpWrite {
 		return
 	}
-	c.wal.pendingOps = append(c.wal.pendingOps, op)
-	c.notePath(path)
+	c.state.pendingOps = append(c.state.pendingOps, op)
+	c.state.notePath(path)
 	if srcPath != nil {
-		c.notePath(*srcPath)
+		c.state.notePath(*srcPath)
 	}
 	if node != nil {
-		c.noteNode(node.id)
+		c.state.noteNode(node.id)
 	}
 }
 

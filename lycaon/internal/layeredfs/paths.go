@@ -6,76 +6,6 @@ import (
 	"strings"
 )
 
-// ParseModelPath resolves a raw path (such as "@secondary/dir/file" or "dir/file")
-// into a validated QualifiedPath under the configured roots.
-func (c *Core) ParseModelPath(rawPath string) (QualifiedPath, error) {
-	if strings.ContainsRune(rawPath, 0) {
-		return QualifiedPath{}, ErrPathEscape
-	}
-	raw := strings.TrimSpace(rawPath)
-	if raw == "" {
-		return QualifiedPath{RootID: c.roots.activeRootID, Rel: "."}, nil
-	}
-	rootID := c.roots.activeRootID
-	rel := raw
-	if strings.HasPrefix(raw, "@") {
-		rest := strings.TrimPrefix(raw, "@")
-		slash := strings.IndexByte(rest, '/')
-		label := rest
-		rel = "."
-		if slash >= 0 {
-			label = rest[:slash]
-			rel = rest[slash+1:]
-		}
-		found := false
-		for _, r := range c.roots.specs {
-			if strings.EqualFold(r.Label, label) || r.ID == label {
-				rootID = r.ID
-				found = true
-				break
-			}
-		}
-		if !found {
-			return QualifiedPath{}, fmt.Errorf("%w: %s", ErrInvalidRoot, label)
-		}
-	} else if filepath.IsAbs(raw) {
-		matched, mRel, ok := matchAbsoluteToRoot(c.roots.specs, raw)
-		if !ok {
-			return QualifiedPath{}, fmt.Errorf("%w: %s", ErrPathEscape, raw)
-		}
-		rootID = matched
-		rel = mRel
-	}
-	cleaned, err := sanitizeRelPath(rel)
-	if err != nil {
-		return QualifiedPath{}, err
-	}
-	return QualifiedPath{RootID: rootID, Rel: cleaned}, nil
-}
-
-func matchAbsoluteToRoot(specs []RootSpec, abs string) (string, string, bool) {
-	cleanAbs := filepath.Clean(abs)
-	var bestRootID, bestRel string
-	found := false
-	for _, r := range specs {
-		if r.TrunkPath == "" {
-			continue
-		}
-		rootClean := filepath.Clean(r.TrunkPath)
-		rel, err := filepath.Rel(rootClean, cleanAbs)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			continue
-		}
-		relSlash := filepath.ToSlash(rel)
-		if !found || len(relSlash) < len(bestRel) {
-			bestRootID = r.ID
-			bestRel = relSlash
-			found = true
-		}
-	}
-	return bestRootID, bestRel, found
-}
-
 func sanitizeRelPath(rel string) (string, error) {
 	rel = filepath.ToSlash(strings.TrimSpace(rel))
 	if strings.HasPrefix(rel, "/") {
@@ -99,23 +29,6 @@ func sanitizeRelPath(rel string) (string, error) {
 		return ".", nil
 	}
 	return strings.Join(stack, "/"), nil
-}
-
-// QualifyDisplay formats a QualifiedPath using the project's root qualification convention.
-func (c *Core) QualifyDisplay(qpath QualifiedPath) string {
-	r, ok := c.roots.byID[qpath.RootID]
-	rel := cleanRelPath(qpath.Rel)
-	if !ok || r.IsPrimary || len(c.roots.specs) == 1 {
-		return rel
-	}
-	label := r.Label
-	if label == "" {
-		label = r.ID
-	}
-	if rel == "." {
-		return "@" + label
-	}
-	return "@" + label + "/" + rel
 }
 
 // IsGitMetadataPath reports a path inside a repository's .git, which only private Git manages.

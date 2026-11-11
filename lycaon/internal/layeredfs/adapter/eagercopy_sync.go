@@ -568,7 +568,7 @@ func syncRegularEntry(ctx context.Context, core *layeredfs.Core, meter *contentM
 	matchesSeedBase := base.Kind == layeredfs.EntryRegular && after.SHA256 == base.SHA256 &&
 		after.Mode.Perm() == base.Mode.Perm() && xattrsEqual(after.Xattrs, base.Xattrs)
 	if matchesSeedBase && wasDifferentFromBase {
-		if _, err := core.Chtimes(qp, base.ModTime, base.ModTime, true); err != nil {
+		if _, err := core.SetAttr(qp, layeredfs.SetAttrRequest{ATime: new(base.ModTime), MTime: new(base.ModTime), NoFollow: true}); err != nil {
 			return err
 		}
 		after.ModTime = base.ModTime
@@ -584,7 +584,7 @@ func syncEntryMetadataIfChanged(core *layeredfs.Core, qp layeredfs.QualifiedPath
 	}
 	cur := synced[qp]
 	if info.Mode()&os.ModeSymlink == 0 && (info.Mode().Perm() != cur.Mode.Perm() || info.Mode().Perm() == 0) {
-		if _, err := core.Chmod(qp, info.Mode().Perm()); err != nil {
+		if _, err := core.SetAttr(qp, layeredfs.SetAttrRequest{Mode: new(info.Mode().Perm())}); err != nil {
 			return err
 		}
 		cur.Mode = (cur.Mode & fs.ModeType) | info.Mode().Perm()

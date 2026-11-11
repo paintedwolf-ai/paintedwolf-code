@@ -66,12 +66,21 @@ func (s spellingIndex) remove(key QualifiedPath, rel string) {
 	}
 }
 
-func (c *Core) foldingOf(rootID string) NameFolding {
-	return c.roots.byID[rootID].Folding
+func (s *viewState) folding(rootID string) NameFolding {
+	return s.foldings[rootID]
 }
 
-func (c *Core) spellingKey(qpath QualifiedPath) (QualifiedPath, bool) {
-	folding := c.foldingOf(qpath.RootID)
+// foldings is how each root compares names.
+func (rt *rootTable) foldings() map[string]NameFolding {
+	out := make(map[string]NameFolding, len(rt.byID))
+	for id, spec := range rt.byID {
+		out[id] = spec.Folding
+	}
+	return out
+}
+
+func (s *viewState) spellingKey(qpath QualifiedPath) (QualifiedPath, bool) {
+	folding := s.folding(qpath.RootID)
 	if !folding.Folds() {
 		return QualifiedPath{}, false
 	}
@@ -80,79 +89,79 @@ func (c *Core) spellingKey(qpath QualifiedPath) (QualifiedPath, bool) {
 
 // indexPath records qpath as a private path or deletion; unindexPath forgets it once neither holds.
 // Every change to pathIndex and deletedPaths goes through these, so the spelling index never drifts.
-func (c *Core) indexPath(qpath QualifiedPath) {
-	if key, ok := c.spellingKey(qpath); ok {
-		c.state.spellings.add(key, qpath.Rel)
+func (s *viewState) indexPath(qpath QualifiedPath) {
+	if key, ok := s.spellingKey(qpath); ok {
+		s.spellings.add(key, qpath.Rel)
 	}
 }
 
-func (c *Core) unindexPath(qpath QualifiedPath) {
-	if _, live := c.state.pathIndex[qpath]; live {
+func (s *viewState) unindexPath(qpath QualifiedPath) {
+	if _, live := s.pathIndex[qpath]; live {
 		return
 	}
-	if _, deleted := c.state.deletedPaths[qpath]; deleted {
+	if _, deleted := s.deletedPaths[qpath]; deleted {
 		return
 	}
-	if key, ok := c.spellingKey(qpath); ok {
-		c.state.spellings.remove(key, qpath.Rel)
+	if key, ok := s.spellingKey(qpath); ok {
+		s.spellings.remove(key, qpath.Rel)
 	}
 }
 
-func (c *Core) setPrivatePath(qpath QualifiedPath, nid NodeID) {
-	if previous, ok := c.state.pathIndex[qpath]; ok {
-		c.noteNode(previous)
+func (s *viewState) setPrivatePath(qpath QualifiedPath, nid NodeID) {
+	if previous, ok := s.pathIndex[qpath]; ok {
+		s.noteNode(previous)
 	}
-	c.state.pathIndex[qpath] = nid
-	c.indexPath(qpath)
-	c.notePath(qpath)
+	s.pathIndex[qpath] = nid
+	s.indexPath(qpath)
+	s.notePath(qpath)
 }
 
-func (c *Core) dropPrivatePath(qpath QualifiedPath) {
-	c.notePath(qpath)
-	delete(c.state.pathIndex, qpath)
-	c.unindexPath(qpath)
+func (s *viewState) dropPrivatePath(qpath QualifiedPath) {
+	s.notePath(qpath)
+	delete(s.pathIndex, qpath)
+	s.unindexPath(qpath)
 }
 
-func (c *Core) markDeleted(qpath QualifiedPath, state deletedState) {
-	c.state.deletedPaths[qpath] = state
-	c.indexPath(qpath)
-	c.notePath(qpath)
+func (s *viewState) markDeleted(qpath QualifiedPath, state deletedState) {
+	s.deletedPaths[qpath] = state
+	s.indexPath(qpath)
+	s.notePath(qpath)
 }
 
-func (c *Core) unmarkDeleted(qpath QualifiedPath) {
-	delete(c.state.deletedPaths, qpath)
-	c.unindexPath(qpath)
-	c.notePath(qpath)
+func (s *viewState) unmarkDeleted(qpath QualifiedPath) {
+	delete(s.deletedPaths, qpath)
+	s.unindexPath(qpath)
+	s.notePath(qpath)
 }
 
 // rebuildSpellings indexes every private path and deletion, after state is loaded whole.
-func (c *Core) rebuildSpellings() {
-	c.state.spellings = spellingIndex{}
-	for qpath := range c.state.pathIndex {
-		c.indexPath(qpath)
+func (s *viewState) rebuildSpellings() {
+	s.spellings = spellingIndex{}
+	for qpath := range s.pathIndex {
+		s.indexPath(qpath)
 	}
-	for qpath := range c.state.deletedPaths {
-		c.indexPath(qpath)
+	for qpath := range s.deletedPaths {
+		s.indexPath(qpath)
 	}
 }
 
 // storedSpelling is the spelling the view holds for qpath: the live private path first, then a
 // deletion, under any spelling the root folds to the same name. With neither, qpath stands as given.
-func (c *Core) storedSpelling(qpath QualifiedPath) QualifiedPath {
-	if _, ok := c.state.pathIndex[qpath]; ok {
+func (s *viewState) storedSpelling(qpath QualifiedPath) QualifiedPath {
+	if _, ok := s.pathIndex[qpath]; ok {
 		return qpath
 	}
-	if _, ok := c.state.deletedPaths[qpath]; ok {
+	if _, ok := s.deletedPaths[qpath]; ok {
 		return qpath
 	}
-	key, ok := c.spellingKey(qpath)
+	key, ok := s.spellingKey(qpath)
 	if !ok {
 		return qpath
 	}
 	var deleted QualifiedPath
-	for rel := range c.state.spellings[key] {
+	for rel := range s.spellings[key] {
 		candidate := QualifiedPath{RootID: qpath.RootID, Rel: rel}
-		if _, live := c.state.pathIndex[candidate]; live {
+		if _, live := s.pathIndex[candidate]; live {
 			return candidate
 		}
 		deleted = candidate
@@ -168,7 +177,7 @@ func (c *Core) storedSpelling(qpath QualifiedPath) QualifiedPath {
 // never becomes two entries. A component found in neither keeps the spelling given.
 func (c *Core) canonicalSpelling(qpath QualifiedPath) QualifiedPath {
 	c.mu.RLock()
-	folding := c.foldingOf(qpath.RootID)
+	folding := c.state.folding(qpath.RootID)
 	provider := c.roots.providers[qpath.RootID]
 	c.mu.RUnlock()
 	if !folding.Folds() || qpath.Rel == "." {
@@ -178,7 +187,7 @@ func (c *Core) canonicalSpelling(qpath QualifiedPath) QualifiedPath {
 	for _, name := range strings.Split(qpath.Rel, "/") {
 		next := QualifiedPath{RootID: qpath.RootID, Rel: joinRel(parent, name)}
 		c.mu.RLock()
-		stored := c.storedSpelling(next)
+		stored := c.state.storedSpelling(next)
 		c.mu.RUnlock()
 		if stored != next {
 			parent = stored.Rel
@@ -215,14 +224,14 @@ func lowerSpellingIn(provider LowerProvider, dir, name string, folding NameFoldi
 
 // NameFolding is how the root rootID compares names.
 func (c *Core) NameFolding(rootID string) NameFolding {
-	return c.foldingOf(rootID)
+	return c.state.folding(rootID)
 }
 
 // lowerSpellingOf is a missing path's last component under the spelling its lower directory holds,
 // on a folding root.
 func (c *Core) lowerSpellingOf(qpath QualifiedPath) (QualifiedPath, bool) {
 	c.mu.RLock()
-	folding := c.foldingOf(qpath.RootID)
+	folding := c.state.folding(qpath.RootID)
 	provider := c.roots.providers[qpath.RootID]
 	c.mu.RUnlock()
 	if !folding.Folds() || provider == nil || qpath.Rel == "." {

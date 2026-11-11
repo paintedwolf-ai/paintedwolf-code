@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -87,7 +88,7 @@ func (c *Core) ReleaseView() error {
 	c.mu.Unlock()
 
 	c.roots.close()
-	c.closeWorkingLog()
+	c.wal.close()
 	c.backing.close()
 	c.barrier.endReleaseAttempt(att, nil)
 	return nil
@@ -122,6 +123,9 @@ type barrierCoordinator struct {
 	expired   uint64
 	stopBound chan struct{}
 	resume    func() error
+	// expiry fires when a barrier's hold bound passes; expiries counts the barriers it ended.
+	expiry   func() <-chan time.Time
+	expiries *atomic.Int64
 }
 
 // admitLocked reopens a parked backing before an operation uses it.
@@ -284,7 +288,7 @@ func (c *Core) BeginCheckpointBarrier(ctx context.Context) (BarrierToken, error)
 		case <-done:
 		}
 	}()
-	c.armBarrierBound(seq)
+	b.armBound(seq)
 
 	for b.inFlight > 0 {
 		if b.expired == seq {
@@ -344,42 +348,35 @@ func (b *barrierCoordinator) endBoundLocked() {
 	}
 }
 
-// armBarrierBound ends barrier seq if it is still held when its bound passes: mutations are admitted
-// again, and the barrier's holder learns at release that its checkpoint did not hold.
-func (c *Core) armBarrierBound(seq uint64) {
-	expiry := c.barrierExpiry()
+// armBound ends barrier seq if it is still held when its bound passes: mutations are admitted
+// again, and the barrier's holder learns at release that its checkpoint did not hold. b.mu is held.
+func (b *barrierCoordinator) armBound(seq uint64) {
+	expiry := b.expiry()
 	stop := make(chan struct{})
-	c.barrier.stopBound = stop
+	b.stopBound = stop
 	go func() {
 		select {
 		case <-expiry:
 		case <-stop:
 			return
 		}
-		b := c.barrier
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		if b.active && b.seq == seq {
 			b.active = false
 			b.expired = seq
-			c.counters.barrierExpiries.Add(1)
+			b.expiries.Add(1)
 			b.cond.Broadcast()
 		}
 	}()
 }
 
-// barrierExpiry fires when a barrier's hold bound passes.
-func (c *Core) barrierExpiry() <-chan time.Time {
-	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.BarrierExpiry != nil {
-		return c.cfg.FaultHooks.BarrierExpiry()
-	}
-	return time.After(c.BarrierHoldBound())
-}
-
 // BarrierHoldBound is how long a checkpoint barrier of this view may hold its mutations.
-func (c *Core) BarrierHoldBound() time.Duration {
-	if c.cfg.BarrierHoldBound > 0 {
-		return c.cfg.BarrierHoldBound
+func (c *Core) BarrierHoldBound() time.Duration { return holdBound(c.cfg) }
+
+func holdBound(cfg Config) time.Duration {
+	if cfg.BarrierHoldBound > 0 {
+		return cfg.BarrierHoldBound
 	}
 	return DefaultBarrierHoldBound
 }
@@ -489,7 +486,7 @@ func (c *Core) ParkBacking() bool {
 		return false
 	}
 	return c.barrier.park(func() {
-		c.closeWorkingLog()
+		c.wal.close()
 		c.backing.park()
 		for _, provider := range c.roots.ownedOS {
 			provider.park()

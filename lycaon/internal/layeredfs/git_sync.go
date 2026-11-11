@@ -43,8 +43,8 @@ func refreshMutableGitNodeLocked(c *Core, qpath QualifiedPath, node *privateNode
 	info, err := os.Lstat(node.flags.gitHostPath)
 	if err != nil {
 		if os.IsNotExist(err) && !hasOpenHandlesForNodeLocked(c, node.id) {
-			c.dropPrivatePath(qpath)
-			c.unmarkDeleted(qpath)
+			c.state.dropPrivatePath(qpath)
+			c.state.unmarkDeleted(qpath)
 			delete(c.state.transient, qpath)
 			delete(node.paths, qpath)
 			if len(node.paths) == 0 {
@@ -119,14 +119,14 @@ func (c *Core) SyncGitOverlayTo(rootID, repoRel, privGitDir string) error {
 		if !isRepoRoot {
 			_ = os.RemoveAll(filepath.Join(privGitDir, filepath.FromSlash(subRel)))
 		}
-		c.unmarkDeleted(qp)
+		c.state.unmarkDeleted(qp)
 		delete(c.state.transient, qp)
 		if base, ok := c.state.basesByPath[qp]; ok {
 			if base.BackingFile != "" && c.backing.baseDirFile != nil {
 				_ = unlinkBackingFile(int(c.backing.baseDirFile.Fd()), filepath.Base(base.BackingFile))
 				delete(c.state.dirtyBackingFiles, base.BackingFile)
 			}
-			c.dropBase(qp)
+			c.state.dropBase(qp)
 		}
 	}
 
@@ -151,19 +151,19 @@ func (c *Core) SyncGitOverlayTo(rootID, repoRel, privGitDir string) error {
 		qp := item.qp
 		node := item.node
 		if node == nil {
-			c.dropPrivatePath(qp)
+			c.state.dropPrivatePath(qp)
 			continue
 		}
 		subRel, isRepoRoot, _ := matchRepoGitMetadataRel(qp.Rel, repoRel)
 		if isRepoRoot {
-			c.dropPrivatePath(qp)
+			c.state.dropPrivatePath(qp)
 			delete(c.state.transient, qp)
 			if base, ok := c.state.basesByPath[qp]; ok {
 				if base.BackingFile != "" && c.backing.baseDirFile != nil {
 					_ = unlinkBackingFile(int(c.backing.baseDirFile.Fd()), filepath.Base(base.BackingFile))
 					delete(c.state.dirtyBackingFiles, base.BackingFile)
 				}
-				c.dropBase(qp)
+				c.state.dropBase(qp)
 			}
 			delete(node.paths, qp)
 			if len(node.paths) == 0 {
@@ -202,14 +202,14 @@ func (c *Core) SyncGitOverlayTo(rootID, repoRel, privGitDir string) error {
 			}
 		}
 
-		c.dropPrivatePath(qp)
+		c.state.dropPrivatePath(qp)
 		delete(c.state.transient, qp)
 		if base, ok := c.state.basesByPath[qp]; ok {
 			if base.BackingFile != "" && c.backing.baseDirFile != nil {
 				_ = unlinkBackingFile(int(c.backing.baseDirFile.Fd()), filepath.Base(base.BackingFile))
 				delete(c.state.dirtyBackingFiles, base.BackingFile)
 			}
-			c.dropBase(qp)
+			c.state.dropBase(qp)
 		}
 		delete(node.paths, qp)
 		if len(node.paths) == 0 {

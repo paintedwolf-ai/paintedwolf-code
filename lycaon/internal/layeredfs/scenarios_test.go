@@ -174,9 +174,9 @@ func TestScenarioSuiteAllOperations(t *testing.T) {
 
 	// 9. Chmod & Timestamps
 	fixedTime := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	_, err = core.Chmod(qp("base.txt"), 0o755)
+	_, err = core.SetAttr(qp("base.txt"), SetAttrRequest{Mode: new(fs.FileMode(0o755))})
 	testutil.FailErr(t, "chmod base.txt", err)
-	_, err = core.Chtimes(qp("base.txt"), fixedTime, fixedTime, false)
+	_, err = core.SetAttr(qp("base.txt"), SetAttrRequest{ATime: &fixedTime, MTime: &fixedTime})
 	testutil.FailErr(t, "chtimes base.txt", err)
 	attrAfterMeta, err := core.Stat(qp("base.txt"))
 	testutil.FailErr(t, "stat base.txt after chmod/chtimes", err)
@@ -255,16 +255,8 @@ func TestMultiRootAndParentLayerResolution(t *testing.T) {
 		t.Fatalf("expected base from LayerParent with matching SHA256, got %+v", base)
 	}
 
-	// Multi-root model path parsing and qualification.
-	qpB, err := core.ParseModelPath("@docs/doc.txt")
-	testutil.FailErr(t, "ParseModelPath @docs/doc.txt", err)
-	if qpB.RootID != "root-b" || qpB.Rel != "doc.txt" {
-		t.Fatalf("unexpected parsed path: %+v", qpB)
-	}
-	if disp := core.QualifyDisplay(qpB); disp != "@docs/doc.txt" {
-		t.Fatalf("unexpected display path: %q", disp)
-	}
-	gotDocB, err := core.ReadFile(qpB)
+	// A second root serves its own trunk.
+	gotDocB, err := core.ReadFile(QualifiedPath{RootID: "root-b", Rel: "doc.txt"})
 	testutil.FailErr(t, "read @docs/doc.txt", err)
 	if string(gotDocB) != "from-trunk-B" {
 		t.Fatalf("unexpected @docs/doc.txt content: %q", string(gotDocB))

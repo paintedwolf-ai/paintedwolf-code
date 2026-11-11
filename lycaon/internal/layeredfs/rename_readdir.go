@@ -183,7 +183,7 @@ func commitFileRename(c *Core, srcPath, dstPath QualifiedPath, srcNode *privateN
 
 	delete(c.state.transient, srcPath)
 	delete(c.state.transient, dstPath)
-	c.dropPrivatePath(srcPath)
+	c.state.dropPrivatePath(srcPath)
 	delete(srcNode.paths, srcPath)
 
 	srcHost, srcRepoRoot, srcIsGit, srcGitErr := resolveMutableGitTarget(c, srcPath)
@@ -210,20 +210,20 @@ func commitFileRename(c *Core, srcPath, dstPath QualifiedPath, srcNode *privateN
 			srcNode.flags.backingPath = dstHost
 			markDirtyBackingFileLocked(c, dstHost)
 		}
-		c.unmarkDeleted(srcPath)
+		c.state.unmarkDeleted(srcPath)
 	} else {
-		c.markDeleted(srcPath, deletedState{
+		c.state.markDeleted(srcPath, deletedState{
 			ReplacedKind: srcKind,
 			Timestamp:    time.Now(),
 		})
 	}
 
 	_, wasDeletedDir := c.state.deletedPaths[dstPath]
-	c.unmarkDeleted(dstPath)
+	c.state.unmarkDeleted(dstPath)
 	srcNode.paths[dstPath] = struct{}{}
 	srcNode.ctime = time.Now()
 	srcNode.flags.namespaceAdded = true
-	c.setPrivatePath(dstPath, srcNode.id)
+	c.state.setPrivatePath(dstPath, srcNode.id)
 	updateOpenHandlesPathLocked(c, srcNode.id, srcPath, dstPath)
 
 	bumpParentDirGenLocked(c, srcPath)
@@ -319,12 +319,12 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 	for _, oldQP := range affected {
 		nid := c.state.pathIndex[oldQP]
 		node := c.state.nodesByID[nid]
-		c.dropPrivatePath(oldQP)
+		c.state.dropPrivatePath(oldQP)
 		delete(c.state.transient, oldQP)
 		if isGitDirRename {
-			c.unmarkDeleted(oldQP)
+			c.state.unmarkDeleted(oldQP)
 		} else {
-			c.markDeleted(oldQP, deletedState{
+			c.state.markDeleted(oldQP, deletedState{
 				ReplacedKind: node.kind,
 				Timestamp:    now,
 			})
@@ -349,7 +349,7 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 				}
 			}
 		}
-		c.unmarkDeleted(newQP)
+		c.state.unmarkDeleted(newQP)
 		delete(node.paths, oldQP)
 		node.paths[newQP] = struct{}{}
 		node.ctime = now
@@ -369,7 +369,7 @@ func renameDirectorySubtree(c *Core, srcPath, dstPath QualifiedPath, dstExists b
 		} else {
 			node.flags.namespaceAdded = true
 		}
-		c.setPrivatePath(newQP, nid)
+		c.state.setPrivatePath(newQP, nid)
 		updateOpenHandlesPathLocked(c, nid, oldQP, newQP)
 	}
 

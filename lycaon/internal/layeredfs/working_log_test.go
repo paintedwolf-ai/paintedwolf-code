@@ -45,7 +45,7 @@ func (f logFixture) open(t *testing.T) *Core {
 
 // exit drops a core the way an engine exit does: nothing is snapshotted or flushed.
 func exit(c *Core) {
-	c.closeWorkingLog()
+	c.wal.close()
 	c.roots.close()
 	c.backing.close()
 }
@@ -146,7 +146,7 @@ func workerSteps(t *testing.T, c *Core) {
 	must("symlink", err)
 	_, err = c.Link(primary("renamed/moved.txt"), primary("hard.txt"))
 	must("hard link", err)
-	_, err = c.Chmod(primary("lib/a.go"), 0o600)
+	_, err = c.SetAttr(primary("lib/a.go"), SetAttrRequest{Mode: new(fs.FileMode(0o600))})
 	must("chmod", err)
 	must("xattr", c.SetXattr(primary("keep.txt"), "user.note", []byte("x"), true))
 	_, err = c.WriteFile(primary("lib/b.go"), []byte("package b // changed\n"), 0o644)
@@ -269,9 +269,10 @@ func TestResumeAppliesTheSnapshotAndTheRecordsAfterIt(t *testing.T) {
 	workerSteps(t, c)
 	c.wal.mu.Lock()
 	c.mu.Lock()
-	snap := c.snapshotLocked()
+	c.wal.seq++
+	snap := c.state.snapshot(c.cfg.ViewID, c.wal.seq)
 	c.mu.Unlock()
-	testutil.FailErr(t, "snapshot", c.writeSnapshotWAL(snap))
+	testutil.FailErr(t, "snapshot", c.wal.writeSnapshot(snap))
 	c.wal.mu.Unlock()
 	testutil.FailErr(t, "rename after snapshot", c.Rename(primary("keep.txt"), primary("after.txt")))
 	want, wantChanges := tree(t, c), changes(t, c)

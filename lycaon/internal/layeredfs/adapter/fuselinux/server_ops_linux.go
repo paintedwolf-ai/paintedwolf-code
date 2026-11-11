@@ -81,7 +81,7 @@ func (s *Server) serveRequest(st *fuseRequestState, req []byte) {
 	case fuseOpDestroy:
 		payload, errno = nil, 0
 	case fuseOpPoll:
-		s.pollRequests.Add(1)
+		s.poll.requests.Add(1)
 		payload, errno = pollUnsupported()
 	case fuseOpSetattr, fuseOpSymlink, fuseOpMknod, fuseOpMkdir, fuseOpUnlink, fuseOpRmdir, fuseOpRename,
 		fuseOpRename2, fuseOpLink, fuseOpWrite, fuseOpCreate, fuseOpSetxattr, fuseOpRemovexattr:
@@ -172,7 +172,7 @@ func (s *Server) opLookup(nodeID uint64, body []byte) ([]byte, int32) {
 	if name == "" {
 		return nil, -int32(syscall.ENOENT)
 	}
-	if s.pollProbeActive.Load() && nodeID == fuseRootID && name == pollProbeName {
+	if s.poll.active.Load() && nodeID == fuseRootID && name == pollProbeName {
 		return encodeEntryOut(s, pollProbeNodeID, pollProbeNodeID, pollProbeAttr()), 0
 	}
 	childRel := joinRel(parentRel, name)

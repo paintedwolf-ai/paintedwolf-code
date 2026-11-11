@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -375,7 +376,7 @@ func TestTransactionReadonlyDirectoryRecoveryAndStoreIDs(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(roDir, 0o700) })
 
 	dir, cfg := publishAndApplyHostCheckpoint(t, primary, "cp-ro-dir", func(core *layeredfs.Core, qp func(string) layeredfs.QualifiedPath) {
-		_, err := core.Chmod(qp("rodir"), 0o755)
+		_, err := core.SetAttr(qp("rodir"), layeredfs.SetAttrRequest{Mode: new(fs.FileMode(0o755))})
 		testutil.FailErr(t, "chmod rodir in view", err)
 		_, err = core.WriteFile(qp("rodir/child.txt"), []byte("after\n"), 0o640)
 		testutil.FailErr(t, "write rodir/child.txt", err)

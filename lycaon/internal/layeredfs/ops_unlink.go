@@ -115,8 +115,8 @@ func linkPath(c *Core, oldPath, newPath QualifiedPath) (EntryAttr, error) {
 		node.paths[newTarget] = struct{}{}
 		node.ctime = time.Now()
 		node.flags.metadataChanged = true
-		c.unmarkDeleted(newTarget)
-		c.setPrivatePath(newTarget, node.id)
+		c.state.unmarkDeleted(newTarget)
+		c.state.setPrivatePath(newTarget, node.id)
 		bumpParentDirGenLocked(c, newTarget)
 		recordJournalLocked(c, JournalOpHardLink, newTarget, &oldTarget, node, 0)
 		attr := nodeToAttrLocked(node)
@@ -213,7 +213,7 @@ func unlinkPathAdmitted(c *Core, qpath QualifiedPath, removeDir bool) error {
 		var orphanBacking string
 		if nid, ok := c.state.pathIndex[targetPath]; ok {
 			removedNode = c.state.nodesByID[nid]
-			c.dropPrivatePath(targetPath)
+			c.state.dropPrivatePath(targetPath)
 			if removedNode != nil {
 				delete(removedNode.paths, targetPath)
 				removedNode.ctime = time.Now()
@@ -228,9 +228,9 @@ func unlinkPathAdmitted(c *Core, qpath QualifiedPath, removeDir bool) error {
 		}
 		delete(c.state.transient, targetPath)
 		if isMutableGit {
-			c.unmarkDeleted(targetPath)
+			c.state.unmarkDeleted(targetPath)
 		} else {
-			c.markDeleted(targetPath, deletedState{
+			c.state.markDeleted(targetPath, deletedState{
 				ReplacedKind: res.attr.Kind,
 				Timestamp:    time.Now(),
 			})

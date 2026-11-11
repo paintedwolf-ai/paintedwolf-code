@@ -2,6 +2,7 @@ package nfsserver_test
 
 import (
 	"bytes"
+	"io/fs"
 	"syscall"
 	"testing"
 	"time"
@@ -140,7 +141,7 @@ func TestAllSupportedProceduresAndTypedFailures(t *testing.T) {
 	if nst := nfs.NFSStatus(getU32(t, sur)); nst != nfs.NFSStatusPerm {
 		t.Fatalf("expected EPERM(NFSStatusPerm), got %v", nst)
 	}
-	_, _ = env.Core.Chmod(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "README.md"}, 0o444)
+	_, _ = env.Core.SetAttr(layeredfs.QualifiedPath{RootID: nfsserver.ProjectRoot, Rel: "README.md"}, layeredfs.SetAttrRequest{Mode: new(fs.FileMode(0o444))})
 	if nst, _, _, _ := cli.write(readmeFH, 0, []byte("kept"), nfsserver.FileSync); nst != nfs.NFSStatusOk {
 		t.Fatalf("expected WRITE through a held handle to succeed after chmod, got %v", nst)
 	}

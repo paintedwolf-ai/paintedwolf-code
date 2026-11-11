@@ -253,8 +253,8 @@ func ensurePrivateDirNodeLocked(c *Core, qpath QualifiedPath, attr EntryAttr) *p
 		},
 	}
 	c.state.nodesByID[nid] = node
-	c.noteNode(nid)
-	c.setPrivatePath(qpath, nid)
+	c.state.noteNode(nid)
+	c.state.setPrivatePath(qpath, nid)
 	if attr.Layer != LayerPrivate {
 		recordOriginLocked(c, node, attr.NodeID)
 	}
@@ -321,8 +321,8 @@ func ensureCopiedUpNode(c *Core, qpath QualifiedPath, expectedGen uint64) (*priv
 			},
 		}
 		c.state.nodesByID[nid] = node
-		c.noteNode(nid)
-		c.setPrivatePath(qpath, nid)
+		c.state.noteNode(nid)
+		c.state.setPrivatePath(qpath, nid)
 		recordOriginLocked(c, node, res.attr.NodeID)
 		c.counters.physicalCopyUps.Add(1)
 		return node, nil

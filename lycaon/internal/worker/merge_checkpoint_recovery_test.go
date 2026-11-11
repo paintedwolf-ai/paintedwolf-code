@@ -3,6 +3,7 @@ package worker
 import (
 	"bytes"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -130,7 +131,7 @@ func TestCheckpointPromotionSingleStageCleanAndStage1Resolutions(t *testing.T) {
 	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "bin.dat"}, rawBin, 0o640)
 	testutil.FailErr(t, "worker bin.dat", err)
 	testutil.FailErr(t, "worker remove obsolete.txt", core.RemoveAll(layeredfs.QualifiedPath{RootID: "primary", Rel: "obsolete.txt"}))
-	_, err = core.Chmod(layeredfs.QualifiedPath{RootID: "primary", Rel: "exec.sh"}, 0o755)
+	_, err = core.SetAttr(layeredfs.QualifiedPath{RootID: "primary", Rel: "exec.sh"}, layeredfs.SetAttrRequest{Mode: new(fs.FileMode(0o755))})
 	testutil.FailErr(t, "worker chmod exec.sh", err)
 	testutil.FailErr(t, "worker remove replaced dir", core.RemoveAll(layeredfs.QualifiedPath{RootID: "primary", Rel: "replaced"}))
 	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "replaced"}, []byte("now-a-file\n"), 0o644)

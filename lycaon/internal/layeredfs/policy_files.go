@@ -123,12 +123,6 @@ func (c *Core) PolicyInventory(rootID string, names ...string) PolicyFileInvento
 	}
 }
 
-// PolicyFiles returns the sorted root-relative paths of regular policy files
-// recorded in the view's retained parent layers and view-private state.
-func (c *Core) PolicyFiles(rootID string, names ...string) []string {
-	return c.PolicyInventory(rootID, names...).Files
-}
-
 func canonicalPolicyNames(names []string) []string {
 	seen := make(map[string]bool, len(names))
 	var out []string

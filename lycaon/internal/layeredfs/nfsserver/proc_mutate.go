@@ -117,7 +117,7 @@ func executeCreate(
 
 	if how != createExclusive {
 		if statErr == nil && attrs.HasMode {
-			_, _ = viewCore.Chmod(childQPath, perm)
+			_, _ = viewCore.SetAttr(childQPath, layeredfs.SetAttrRequest{Mode: &perm})
 		}
 		if attrs.HasAtime || attrs.HasMtime {
 			now := time.Now()
@@ -128,7 +128,7 @@ func executeCreate(
 			if attrs.HasMtime {
 				mt = attrs.Mtime
 			}
-			_, _ = viewCore.Chtimes(childQPath, at, mt, true)
+			_, _ = viewCore.SetAttr(childQPath, layeredfs.SetAttrRequest{ATime: &at, MTime: &mt, NoFollow: true})
 		}
 	}
 	s.stability.absorbAtName(viewCore, s.handles, dirRec.key.viewHash, childQPath)
@@ -189,7 +189,7 @@ func onMkdir(s *Server, cs *connState, call rpcCallHeader) []byte {
 		if attrs.HasMtime {
 			mt = attrs.Mtime
 		}
-		_, _ = exp.core.Chtimes(childQPath, at, mt, true)
+		_, _ = exp.core.SetAttr(childQPath, layeredfs.SetAttrRequest{ATime: &at, MTime: &mt, NoFollow: true})
 	}
 	s.dirs.InvalidateDir(dirRec.key)
 	childMeta, err := exp.core.Lstat(childQPath)

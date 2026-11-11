@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -35,12 +36,11 @@ const (
 
 var workingLogCRC = crc32.MakeTable(crc32.Castagnoli)
 
-// workingLog is a view's append-only state log. Pending changes are guarded by Core.mu; the file
-// and its sequence by mu, taken while Core.mu is held so records reach the file in state order.
+// workingLog is a view's append-only state log in its journal directory. mu guards the file and its
+// sequence and is taken while Core.mu is held, so records reach the file in state order.
 type workingLog struct {
-	pendingPaths map[QualifiedPath]struct{}
-	pendingNodes map[NodeID]struct{}
-	pendingOps   []JournalOperation
+	backing *backingWorkspace
+	records *atomic.Int64
 
 	mu        sync.Mutex
 	file      *os.File
@@ -50,32 +50,28 @@ type workingLog struct {
 	err       error
 }
 
-func newWorkingLog() *workingLog {
-	return &workingLog{pendingPaths: map[QualifiedPath]struct{}{}, pendingNodes: map[NodeID]struct{}{}}
-}
-
 // notePath and noteNode record that a mutation changed qpath's entry or a node; Core.mu is held.
-func (c *Core) notePath(qpath QualifiedPath) {
-	c.wal.pendingPaths[qpath] = struct{}{}
-	if nid, ok := c.state.pathIndex[qpath]; ok {
-		c.wal.pendingNodes[nid] = struct{}{}
+func (s *viewState) notePath(qpath QualifiedPath) {
+	s.pendingPaths[qpath] = struct{}{}
+	if nid, ok := s.pathIndex[qpath]; ok {
+		s.pendingNodes[nid] = struct{}{}
 	}
 }
 
-func (c *Core) noteNode(nid NodeID) {
+func (s *viewState) noteNode(nid NodeID) {
 	if nid != 0 {
-		c.wal.pendingNodes[nid] = struct{}{}
+		s.pendingNodes[nid] = struct{}{}
 	}
 }
 
-func (c *Core) setBase(qpath QualifiedPath, base BaseCapture) {
-	c.state.basesByPath[qpath] = base
-	c.notePath(qpath)
+func (s *viewState) setBase(qpath QualifiedPath, base BaseCapture) {
+	s.basesByPath[qpath] = base
+	s.notePath(qpath)
 }
 
-func (c *Core) dropBase(qpath QualifiedPath) {
-	delete(c.state.basesByPath, qpath)
-	c.notePath(qpath)
+func (s *viewState) dropBase(qpath QualifiedPath) {
+	delete(s.basesByPath, qpath)
+	s.notePath(qpath)
 }
 
 // workingRecord is one mutation's effect. Paths and nodes carry their values after it; a path with
@@ -148,17 +144,17 @@ type workingSnapshot struct {
 	Ops    []JournalOperation `json:"ops"`
 }
 
-func (c *Core) allocMarksLocked() workingAlloc {
-	s := c.state.seq
-	return workingAlloc{NodeID: s.nextNodeID, Gen: s.nextGen, StorageID: s.nextStorageID, Seq: s.nextSeq}
+func (s *viewState) allocMarks() workingAlloc {
+	a := s.seq
+	return workingAlloc{NodeID: a.nextNodeID, Gen: a.nextGen, StorageID: a.nextStorageID, Seq: a.nextSeq}
 }
 
-func (c *Core) pathRecordLocked(qpath QualifiedPath) workingPath {
-	rec := workingPath{Path: qpath, Node: c.state.pathIndex[qpath]}
-	if state, ok := c.state.deletedPaths[qpath]; ok {
+func (s *viewState) pathRecord(qpath QualifiedPath) workingPath {
+	rec := workingPath{Path: qpath, Node: s.pathIndex[qpath]}
+	if state, ok := s.deletedPaths[qpath]; ok {
 		rec.Deleted = &state
 	}
-	if base, ok := c.state.basesByPath[qpath]; ok {
+	if base, ok := s.basesByPath[qpath]; ok {
 		clone := cloneBaseCapture(base)
 		rec.Base = &clone
 		if base.BackingFile != "" {
@@ -168,8 +164,8 @@ func (c *Core) pathRecordLocked(qpath QualifiedPath) workingPath {
 	return rec
 }
 
-func (c *Core) nodeRecordLocked(nid NodeID) workingNode {
-	n := c.state.nodesByID[nid]
+func (s *viewState) nodeRecord(nid NodeID) workingNode {
+	n := s.nodesByID[nid]
 	if n == nil {
 		return workingNode{ID: nid, Gone: true}
 	}
@@ -205,20 +201,20 @@ func sortPaths(paths []QualifiedPath) {
 func (c *Core) endMutation() {
 	defer c.barrier.leaveMutation()
 	c.mu.Lock()
-	if c.state.released || (len(c.wal.pendingPaths) == 0 && len(c.wal.pendingNodes) == 0 && len(c.wal.pendingOps) == 0) {
+	if c.state.released || (len(c.state.pendingPaths) == 0 && len(c.state.pendingNodes) == 0 && len(c.state.pendingOps) == 0) {
 		c.mu.Unlock()
 		return
 	}
-	rec := workingRecord{Format: workingStateFormat, Alloc: c.allocMarksLocked(), Ops: c.wal.pendingOps}
-	for qpath := range c.wal.pendingPaths {
-		rec.Paths = append(rec.Paths, c.pathRecordLocked(qpath))
+	rec := workingRecord{Format: workingStateFormat, Alloc: c.state.allocMarks(), Ops: c.state.pendingOps}
+	for qpath := range c.state.pendingPaths {
+		rec.Paths = append(rec.Paths, c.state.pathRecord(qpath))
 	}
-	for nid := range c.wal.pendingNodes {
-		rec.Nodes = append(rec.Nodes, c.nodeRecordLocked(nid))
+	for nid := range c.state.pendingNodes {
+		rec.Nodes = append(rec.Nodes, c.state.nodeRecord(nid))
 	}
-	clear(c.wal.pendingPaths)
-	clear(c.wal.pendingNodes)
-	c.wal.pendingOps = nil
+	clear(c.state.pendingPaths)
+	clear(c.state.pendingNodes)
+	c.state.pendingOps = nil
 	compact := false
 	c.wal.mu.Lock()
 	if c.wal.err != nil {
@@ -232,65 +228,65 @@ func (c *Core) endMutation() {
 	}
 	var snap workingSnapshot
 	if compact {
-		snap = c.snapshotLocked()
+		c.wal.seq++
+		snap = c.state.snapshot(c.cfg.ViewID, c.wal.seq)
 	}
 	c.mu.Unlock()
 	defer c.wal.mu.Unlock()
 	if compact {
-		if err := c.writeSnapshotWAL(snap); err != nil {
-			c.abandonWorkingLog(err)
+		if err := c.wal.writeSnapshot(snap); err != nil {
+			c.wal.abandon(err)
 		}
 		return
 	}
 	c.wal.seq++
 	rec.Seq = c.wal.seq
-	if err := c.appendRecordWAL(rec); err != nil {
-		c.abandonWorkingLog(err)
+	if err := c.wal.appendRecord(rec); err != nil {
+		c.wal.abandon(err)
 	}
 }
 
-// abandonWorkingLog removes the log and snapshot after a failed append, so recovery finds no
+// abandon removes the log and snapshot after a failed append, so recovery finds no
 // working state to resume rather than a state with a hole in it.
-func (c *Core) abandonWorkingLog(cause error) {
-	c.wal.err = cause
-	_ = c.backing.withJournalDirFD(func(dirFD int, _ string) error {
+func (l *workingLog) abandon(cause error) {
+	l.err = cause
+	_ = l.backing.withJournalDirFD(func(dirFD int, _ string) error {
 		return errors.Join(unix.Unlinkat(dirFD, workingLogName, 0), unix.Unlinkat(dirFD, workingSnapshotName, 0))
 	})
 }
 
-// snapshotLocked captures the whole state at the next log sequence; Core.mu and the log are held.
-func (c *Core) snapshotLocked() workingSnapshot {
-	c.wal.seq++
+// snapshot captures the whole state as log sequence seq; Core.mu is held.
+func (s *viewState) snapshot(viewID string, seq uint64) workingSnapshot {
 	snap := workingSnapshot{
-		Format: workingStateFormat, ViewID: c.cfg.ViewID, Seq: c.wal.seq, Alloc: c.allocMarksLocked(),
-		Ops: append([]JournalOperation(nil), c.state.journal...),
+		Format: workingStateFormat, ViewID: viewID, Seq: seq, Alloc: s.allocMarks(),
+		Ops: append([]JournalOperation(nil), s.journal...),
 	}
 	paths := map[QualifiedPath]struct{}{}
-	for qpath := range c.state.pathIndex {
+	for qpath := range s.pathIndex {
 		paths[qpath] = struct{}{}
 	}
-	for qpath := range c.state.deletedPaths {
+	for qpath := range s.deletedPaths {
 		paths[qpath] = struct{}{}
 	}
-	for qpath := range c.state.basesByPath {
+	for qpath := range s.basesByPath {
 		paths[qpath] = struct{}{}
 	}
 	for qpath := range paths {
-		snap.Paths = append(snap.Paths, c.pathRecordLocked(qpath))
+		snap.Paths = append(snap.Paths, s.pathRecord(qpath))
 	}
-	for nid := range c.state.nodesByID {
-		snap.Nodes = append(snap.Nodes, c.nodeRecordLocked(nid))
+	for nid := range s.nodesByID {
+		snap.Nodes = append(snap.Nodes, s.nodeRecord(nid))
 	}
 	return snap
 }
 
-// appendRecordWAL writes one framed record with a single write; the log's mutex is held.
-func (c *Core) appendRecordWAL(rec workingRecord) error {
+// appendRecord writes one framed record with a single write; the log's mutex is held.
+func (l *workingLog) appendRecord(rec workingRecord) error {
 	payload, err := json.Marshal(rec)
 	if err != nil {
 		return err
 	}
-	file, err := c.workingLogFile()
+	file, err := l.openFile()
 	if err != nil {
 		return err
 	}
@@ -299,22 +295,22 @@ func (c *Core) appendRecordWAL(rec workingRecord) error {
 	binary.BigEndian.PutUint32(frame[4:8], crc32.Checksum(payload, workingLogCRC))
 	copy(frame[workingRecordHeader:], payload)
 	n, err := file.Write(frame)
-	c.wal.size += int64(n)
+	l.size += int64(n)
 	if err == nil {
-		c.counters.workingLogRecords.Add(1)
+		l.records.Add(1)
 	}
 	return err
 }
 
-// writeSnapshotWAL replaces the snapshot, then empties the log the snapshot now covers. A crash
+// writeSnapshot replaces the snapshot, then empties the log the snapshot now covers. A crash
 // between the two leaves records the replay skips by sequence.
-func (c *Core) writeSnapshotWAL(snap workingSnapshot) error {
+func (l *workingLog) writeSnapshot(snap workingSnapshot) error {
 	raw, err := json.Marshal(snap)
 	if err != nil {
 		return err
 	}
-	err = c.backing.withJournalDirFD(func(dirFD int, dirPath string) error {
-		tmp := fmt.Sprintf("%s.%d.tmp", workingSnapshotName, c.backing.tmpSeq.Add(1))
+	err = l.backing.withJournalDirFD(func(dirFD int, dirPath string) error {
+		tmp := fmt.Sprintf("%s.%d.tmp", workingSnapshotName, l.backing.tmpSeq.Add(1))
 		fd, err := unix.Openat(dirFD, tmp, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
 		if err != nil {
 			return err
@@ -330,24 +326,24 @@ func (c *Core) writeSnapshotWAL(snap workingSnapshot) error {
 	if err != nil {
 		return err
 	}
-	file, err := c.workingLogFile()
+	file, err := l.openFile()
 	if err != nil {
 		return err
 	}
 	if err := file.Truncate(0); err != nil {
 		return err
 	}
-	c.wal.size, c.wal.snapshotN = 0, int64(len(raw))
+	l.size, l.snapshotN = 0, int64(len(raw))
 	return nil
 }
 
-// workingLogFile opens the log for appending on first use and after the backing was parked.
-func (c *Core) workingLogFile() (*os.File, error) {
-	if c.wal.file != nil {
-		return c.wal.file, nil
+// openFile opens the log for appending on first use and after the backing was parked.
+func (l *workingLog) openFile() (*os.File, error) {
+	if l.file != nil {
+		return l.file, nil
 	}
 	var file *os.File
-	err := c.backing.withJournalDirFD(func(dirFD int, dirPath string) error {
+	err := l.backing.withJournalDirFD(func(dirFD int, dirPath string) error {
 		fd, err := unix.Openat(dirFD, workingLogName, unix.O_WRONLY|unix.O_CREAT|unix.O_APPEND|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0o600)
 		if err != nil {
 			return err
@@ -359,33 +355,25 @@ func (c *Core) workingLogFile() (*os.File, error) {
 		return nil, err
 	}
 	if info, err := file.Stat(); err == nil {
-		c.wal.size = info.Size()
+		l.size = info.Size()
 	}
-	c.wal.file = file
+	l.file = file
 	return file, nil
 }
 
-// closeWorkingLog closes the log file, as parking and release do.
-func (c *Core) closeWorkingLog() {
-	c.wal.mu.Lock()
-	defer c.wal.mu.Unlock()
-	if c.wal.file != nil {
-		_ = c.wal.file.Close()
-		c.wal.file = nil
+// close closes the log file, as parking and release do.
+func (l *workingLog) close() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.file != nil {
+		_ = l.file.Close()
+		l.file = nil
 	}
 }
 
-// WorkingLogErr is the first failure to append to the working log. A view whose log failed keeps
-// serving; its working storage can no longer be resumed and recovery falls back to its checkpoint.
-func (c *Core) WorkingLogErr() error {
-	c.wal.mu.Lock()
-	defer c.wal.mu.Unlock()
-	return c.wal.err
-}
-
-// startWorkingLog begins an empty log, which marks the working storage as resumable from nothing.
-func (c *Core) startWorkingLog() error {
-	return c.backing.withJournalDirFD(func(dirFD int, _ string) error {
+// start begins an empty log, which marks the working storage as resumable from nothing.
+func (l *workingLog) start() error {
+	return l.backing.withJournalDirFD(func(dirFD int, _ string) error {
 		if err := unix.Unlinkat(dirFD, workingSnapshotName, 0); err != nil && !errors.Is(err, unix.ENOENT) {
 			return err
 		}
@@ -395,11 +383,4 @@ func (c *Core) startWorkingLog() error {
 		}
 		return unix.Close(fd)
 	})
-}
-
-// closeUnstarted releases a core that never served.
-func (c *Core) closeUnstarted() error {
-	c.roots.close()
-	c.backing.close()
-	return nil
 }
