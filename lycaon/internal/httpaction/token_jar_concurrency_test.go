@@ -49,3 +49,26 @@ func TestUncapturingRequestKeepsConcurrentCaptures(t *testing.T) {
 		t.Fatalf("the original token is gone: %v", after.Tokens)
 	}
 }
+
+// A reference is placed only in headers and the body. One in the URL or
+// host_header is refused before anything is sent, not sent as literal text.
+func TestReferencesOutsideHeadersAndBodyAreRefused(t *testing.T) {
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { hits++; w.WriteHeader(http.StatusNoContent) }))
+	defer server.Close()
+	deps := Deps{Boundary: testBoundary()}
+	for name, args := range map[string]map[string]any{
+		"token in query": {"url": server.URL + "/x?key={{token:api}}"},
+		"cookie in path": {"url": server.URL + "/{{cookie:session}}/x"},
+		"token in host":  {"url": server.URL + "/x", "host_header": "{{token:api}}.example.test"},
+	} {
+		args["capability_request"] = loopbackCapability(t, server.URL)
+		_, err := runRequest(t, deps, args, sessionContext(t.TempDir(), "ref-"+name))
+		if err == nil {
+			t.Errorf("%s: request was sent", name)
+		}
+	}
+	if hits != 0 {
+		t.Fatalf("a request carrying a misplaced reference reached the server %d times", hits)
+	}
+}

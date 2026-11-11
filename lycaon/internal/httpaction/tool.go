@@ -390,6 +390,9 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 		method = "GET"
 	}
 	rawURL, _ := args["url"].(string)
+	if err := referencesOutsideTheirFields(rawURL, args["host_header"]); err != nil {
+		return requestSpec{}, invalid(err)
+	}
 	target, err := outboundhttp.NormalizeURL(rawURL)
 	if err != nil {
 		return requestSpec{}, err
