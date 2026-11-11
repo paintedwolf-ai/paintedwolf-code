@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
 	"github.com/lycaon/lycaon/internal/browserengine"
@@ -12,8 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/grounding"
-	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/project"
@@ -264,26 +263,17 @@ func (r *Runtime) wireApprovalRationaleAttacher() {
 	if r.deps.Execution.Host == nil || r.deps.Sessions.Checkpoints == nil || r.deps.Sessions.Manager == nil || r.Progress == nil {
 		return
 	}
-	var summarizer compaction.Summarizer = compaction.UnavailableSummarizer{}
-	if r.deps.Providers.Service != nil && r.deps.Providers.Service.Registry != nil && r.deps.Providers.Service.Policy != nil && llm.ProviderUtilityCallsEnabled() {
-		summarizer = r.deps.Providers.Service.BindSummarizer(&llm.RegistrySummarizer{
-			Fallback: compaction.UnavailableSummarizer{},
-			Cost:     r.deps.Providers.Costs,
-			Purpose:  "approval_rationale",
-			Class:    llm.UtilityClassRequested,
-		})
-	}
 	var enabledFn func() bool
 	if r.deps.Settings.Service != nil && r.deps.Settings.Service.Approvals != nil {
 		perms := r.deps.Settings.Service.Approvals
 		enabledFn = perms.AIRationaleEnabled
 	}
 	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Messages:    r.deps.Sessions.Manager.Runner.Transcript,
+		Cause:       r.deps.Sessions.Manager.Runner.Transcript,
 		Workers:     r.deps.Delegations.Queue,
 		Progress:    r.Progress,
 		Root:        sessionRootResolver{store: r.deps.Storage.Sessions},
-		Summarizer:  summarizer,
+		Generator:   briefing.NewModelGenerator(r.deps.Providers.Service, r.deps.Providers.Costs),
 		Checkpoints: r.deps.Sessions.Checkpoints,
 		EnabledFn:   enabledFn,
 	})
