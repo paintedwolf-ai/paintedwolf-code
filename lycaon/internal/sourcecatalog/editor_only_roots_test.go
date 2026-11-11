@@ -30,6 +30,14 @@ func TestEditorOnlyRootIsObservedOnDemand(t *testing.T) {
 			if paths := indexedPaths(t, reader, FileScope{Audience: HumanAudience, IncludeHidden: true}); len(paths) != 0 {
 				t.Fatalf("eager discovery listed %v below an editor-only root", paths)
 			}
+			testutil.FailErr(t, "warm navigation", c.Directories.WarmNavigation(t.Context(), "p", catalogRoot))
+			testutil.FailErr(t, "await navigation", c.Directories.AwaitNavigation(t.Context(), "p", catalogRoot))
+			nav, err := c.Directories.OpenNavigation(t.Context(), "p", catalogRoot)
+			testutil.FailErr(t, "open navigation", err)
+			if listed := nav.pages.directories.Len(); listed > 1 {
+				t.Fatalf("navigation warm-up listed %d directories below an editor-only root", listed)
+			}
+			nav.Close()
 			observation, err := c.Directories.ObserveDirectory(t.Context(), "p", catalogRoot, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 			testutil.FailErr(t, "open the root", err)
 			if !observation.Complete || observation.Entries < 2 {
