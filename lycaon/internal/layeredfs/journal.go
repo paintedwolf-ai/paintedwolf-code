@@ -102,6 +102,18 @@ func recordJournalLocked(c *Core, kind JournalOpKind, path QualifiedPath, srcPat
 	}
 	c.state.journal = append(c.state.journal, op)
 	c.counters.journalEntries.Add(1)
+	// A write changes bytes the backing file holds, not the namespace; resuming re-reads its size.
+	if kind == JournalOpWrite {
+		return
+	}
+	c.wal.pendingOps = append(c.wal.pendingOps, op)
+	c.notePath(path)
+	if srcPath != nil {
+		c.notePath(*srcPath)
+	}
+	if node != nil {
+		c.noteNode(node.id)
+	}
 }
 
 // JournalOperations returns a copy of all recorded structured journal operations in sequence order.

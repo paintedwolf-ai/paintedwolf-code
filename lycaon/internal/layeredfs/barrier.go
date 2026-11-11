@@ -86,6 +86,7 @@ func (c *Core) ReleaseView() error {
 	c.mu.Unlock()
 
 	c.roots.close()
+	c.closeWorkingLog()
 	c.backing.close()
 	c.barrier.endReleaseAttempt(att, nil)
 	return nil
@@ -423,6 +424,7 @@ func (c *Core) ParkBacking() bool {
 		return false
 	}
 	return c.barrier.park(func() {
+		c.closeWorkingLog()
 		c.backing.park()
 		for _, provider := range c.roots.ownedOS {
 			provider.park()

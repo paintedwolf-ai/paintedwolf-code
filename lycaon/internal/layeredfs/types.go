@@ -261,6 +261,8 @@ type Stats struct {
 	CapturedBaseBytes int64
 	JournalEntries    int64
 	Flushes           int64
+	// WorkingLogRecords counts records appended to the working log.
+	WorkingLogRecords int64
 }
 
 type OpenFlags int

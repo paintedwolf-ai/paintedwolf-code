@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 )
@@ -29,8 +30,11 @@ type RecoveryResult struct {
 	Manifest             checkpoint.Manifest
 	PreparedView         *adapter.PreparedView
 	QuarantinedWork      *InterruptedWorkingRecord
-	SettledProcesses     ProcessSettlementReceipt
-	SettledMount         MountSettlementReceipt
+	// ResumedWorkingState is set when the view kept its working storage instead of starting from
+	// a checkpoint.
+	ResumedWorkingState *layeredfs.ResumeReport
+	SettledProcesses    ProcessSettlementReceipt
+	SettledMount        MountSettlementReceipt
 }
 
 // RebuildAdapterRequest specifies switching a worker view to a new Adapter without relabeling live mounts
@@ -47,9 +51,10 @@ type RebuildAdapterRequest struct {
 	CaptureBeforeSwitch bool
 }
 
-// RecoverWorkerView validates worker identity and journal state, settles any surviving same-boot
-// processes/mounts belonging to this worker, salvages incomplete working data, and reconstructs
-// a fresh usable PreparedView from the last valid published checkpoint.
+// RecoverWorkerView validates worker identity and journal state and settles any surviving same-boot
+// processes and mounts belonging to this worker. A mounted view whose engine exited in this boot
+// resumes its working storage; otherwise incomplete working data is salvaged and a fresh view is
+// reconstructed from the last valid published checkpoint.
 func (c *Coordinator) RecoverWorkerView(ctx context.Context, req RecoverRequest) (*RecoveryResult, error) {
 	return recoverWorkerView(ctx, c, req)
 }
@@ -86,6 +91,16 @@ func recoverWorkerView(ctx context.Context, c *Coordinator, req RecoverRequest) 
 		return nil, err
 	}
 
+	if view, resumed, err := resumeWorkingView(ctx, c, req, j, prevBacking); err != nil {
+		return nil, err
+	} else if resumed {
+		result, err := finishRecovery(c, req, j, view, checkpoint.Manifest{}, nil, procReceipt, mountReceipt)
+		if result != nil {
+			result.ResumedWorkingState = view.Resumed
+		}
+		return result, err
+	}
+
 	cpID := j.LastPublishedCheckpointID
 	if cpID == "" {
 		cpID = req.FallbackCheckpointID
@@ -111,7 +126,14 @@ func recoverWorkerView(ctx context.Context, c *Coordinator, req RecoverRequest) 
 	if err != nil {
 		return nil, err
 	}
+	return finishRecovery(c, req, j, view, manifest, quarantined, procReceipt, mountReceipt)
+}
 
+// finishRecovery records the worker's new view as committed.
+func finishRecovery(
+	c *Coordinator, req RecoverRequest, j WorkerLifecycleJournal, view *adapter.PreparedView, manifest checkpoint.Manifest,
+	quarantined *InterruptedWorkingRecord, procReceipt ProcessSettlementReceipt, mountReceipt MountSettlementReceipt,
+) (*RecoveryResult, error) {
 	j.ViewID = view.ViewID
 	j.AdapterID = req.Adapter.ID()
 	j.BackingDir = view.BackingDir
