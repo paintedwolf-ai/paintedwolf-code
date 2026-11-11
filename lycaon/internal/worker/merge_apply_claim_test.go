@@ -103,7 +103,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 
 			ctx := t.Context()
 			fixture := newPublishedCheckpointWorker(t)
-			sqlDB, q, primary, jobID := fixture.db, fixture.queue, fixture.primary, fixture.jobID
+			q, primary, jobID := fixture.queue, fixture.primary, fixture.jobID
 			cpStore, core, lp, pub := fixture.store, fixture.core, fixture.path, fixture.publisher
 			manifest, workerContent := fixture.manifest, fixture.workerContent
 			featureOID := fixture.featureOID
@@ -166,39 +166,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 				testutil.FailErr(t, "load refreshed manifest", err)
 			}
 			if tc.failCommit {
-				_, err := sqlDB.ExecContext(ctx, `CREATE TRIGGER reject_checkpoint_completion
-					BEFORE UPDATE OF merge_status ON worker_jobs WHEN NEW.merge_status = 'merged'
-					BEGIN SELECT RAISE(ABORT, 'fixture rejected checkpoint completion'); END`)
-				testutil.FailErr(t, "install durable commit fault", err)
-				_, err = svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
-				if err == nil {
-					t.Fatal("promotion ignored durable commit failure")
-				}
-				body, readErr := os.ReadFile(filepath.Join(primary, "app.go"))
-				testutil.FailErr(t, "read primary after failed commit", readErr)
-				if string(body) != trunkStale {
-					t.Fatalf("failed commit left promoted bytes: %q; error: %v", body, err)
-				}
-				appInfo, err := os.Lstat(filepath.Join(primary, "app.go"))
-				testutil.FailErr(t, "lstat app.go after rollback", err)
-				aliasInfo, err := os.Lstat(filepath.Join(primary, "app_alias.go"))
-				testutil.FailErr(t, "lstat app_alias.go after rollback", err)
-				if !os.SameFile(appInfo, aliasInfo) {
-					t.Fatal("expected two-stage rollback after durable commit failure to restore hard-link identity between app.go and app_alias.go")
-				}
-				for _, rel := range []string{"run.sh", "link.txt", ".git/refs/lycaon/workers/" + jobID + "/heads/feature"} {
-					if _, err := os.Lstat(filepath.Join(primary, rel)); !errors.Is(err, os.ErrNotExist) {
-						t.Fatalf("failed commit left checkpoint effect %s: %v", rel, err)
-					}
-				}
-				if task, ok := q.Get(jobID); !ok || task.MergeStatus != api.WorkerMergeStatusPending {
-					t.Fatalf("failed completion status=%+v", task)
-				}
-				if _, found, err := cpStore.LoadPromotionRecord("tx-" + manifest.CheckpointID); err != nil || found {
-					t.Fatalf("failed completion retained component record: found=%t err=%v", found, err)
-				}
-				_, err = sqlDB.ExecContext(ctx, `DROP TRIGGER reject_checkpoint_completion`)
-				testutil.FailErr(t, "remove completion fault", err)
+				requireFailedCompletionRollsBack(t, svc, fixture, manifest.CheckpointID, trunkStale)
 			}
 			promoteOut, err := svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
 			testutil.FailErr(t, "PromoteOverlay", err)
@@ -217,47 +185,95 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 				t.Fatalf("merged app.go =\n%s\nwant:\n%s", string(mergedBytes), wantMerged)
 			}
 
-			scriptInfo, err := os.Stat(filepath.Join(primary, "run.sh"))
-			testutil.FailErr(t, "Stat run.sh", err)
-			if scriptInfo.Mode().Perm() != 0o755 {
-				t.Fatalf("run.sh mode = %#o, want 0o755", scriptInfo.Mode().Perm())
-			}
-
-			linkTarget, err := os.Readlink(filepath.Join(primary, "link.txt"))
-			testutil.FailErr(t, "Readlink link.txt", err)
-			if linkTarget != "app.go" {
-				t.Fatalf("link.txt target = %q, want app.go", linkTarget)
-			}
-
-			gitRefBytes, err := os.ReadFile(filepath.Join(primary, ".git", "refs", "lycaon", "workers", jobID, "heads", "feature"))
-			testutil.FailErr(t, "ReadFile imported git ref", err)
-			if strings.TrimSpace(string(gitRefBytes)) != featureOID {
-				t.Fatalf("imported git ref file = %q, want %s", string(gitRefBytes), featureOID)
-			}
-			cpRefBytes, err := os.ReadFile(filepath.Join(primary, ".git", "refs", "lycaon", "checkpoints", manifest.CheckpointID, "heads", "feature"))
-			testutil.FailErr(t, "ReadFile imported checkpoint ref", err)
-			if strings.TrimSpace(string(cpRefBytes)) != featureOID {
-				t.Fatalf("imported checkpoint ref file = %q, want %s", string(cpRefBytes), featureOID)
-			}
-
-			rec, exists, err := cpStore.LoadPromotionRecord("tx-" + manifest.CheckpointID)
-			testutil.FailErr(t, "LoadPromotionRecord", err)
-			if !exists || rec.State != checkpoint.PromotionStateApplied {
-				t.Fatalf("promotion journal record exists=%v state=%q", exists, rec.State)
-			}
-			if rec.FilePromotionStatus != checkpoint.EffectCompleted || rec.RefImportStatus != checkpoint.EffectCompleted {
-				t.Fatalf("effects file=%q ref=%q", rec.FilePromotionStatus, rec.RefImportStatus)
-			}
-			if rec.ImportedRefs["refs/lycaon/workers/"+jobID+"/heads/feature"] != featureOID || rec.ImportedRefs["refs/lycaon/checkpoints/"+manifest.CheckpointID+"/heads/feature"] != featureOID {
-				t.Fatalf("ImportedRefs = %v", rec.ImportedRefs)
-			}
-
+			requirePromotedEffects(t, fixture, manifest.CheckpointID)
 		})
 	}
 }
 
 // publishedCheckpointWorker owns a completed worker and its immutable checkpoint;
 // the promotion tests can advance trunk, refresh review, and inject commit faults.
+// requireFailedCompletionRollsBack makes the durable completion fail and checks that promotion left
+// the primary, its refs and the worker's state as they were.
+func requireFailedCompletionRollsBack(t *testing.T, svc *MergeService, fixture publishedCheckpointWorker, checkpointID, trunkStale string) {
+	t.Helper()
+	ctx, sqlDB, q, cpStore, primary, jobID := t.Context(), fixture.db, fixture.queue, fixture.store, fixture.primary, fixture.jobID
+	manifest := checkpoint.Manifest{CheckpointID: checkpointID}
+	_, err := sqlDB.ExecContext(ctx, `CREATE TRIGGER reject_checkpoint_completion
+			BEFORE UPDATE OF merge_status ON worker_jobs WHEN NEW.merge_status = 'merged'
+			BEGIN SELECT RAISE(ABORT, 'fixture rejected checkpoint completion'); END`)
+	testutil.FailErr(t, "install durable commit fault", err)
+	_, err = svc.PromoteOverlay(ctx, "parent-cp", jobID, api.PromoteOverlayInput{})
+	if err == nil {
+		t.Fatal("promotion ignored durable commit failure")
+	}
+	body, readErr := os.ReadFile(filepath.Join(primary, "app.go"))
+	testutil.FailErr(t, "read primary after failed commit", readErr)
+	if string(body) != trunkStale {
+		t.Fatalf("failed commit left promoted bytes: %q; error: %v", body, err)
+	}
+	appInfo, err := os.Lstat(filepath.Join(primary, "app.go"))
+	testutil.FailErr(t, "lstat app.go after rollback", err)
+	aliasInfo, err := os.Lstat(filepath.Join(primary, "app_alias.go"))
+	testutil.FailErr(t, "lstat app_alias.go after rollback", err)
+	if !os.SameFile(appInfo, aliasInfo) {
+		t.Fatal("expected two-stage rollback after durable commit failure to restore hard-link identity between app.go and app_alias.go")
+	}
+	for _, rel := range []string{"run.sh", "link.txt", ".git/refs/lycaon/workers/" + jobID + "/heads/feature"} {
+		if _, err := os.Lstat(filepath.Join(primary, rel)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("failed commit left checkpoint effect %s: %v", rel, err)
+		}
+	}
+	if task, ok := q.Get(jobID); !ok || task.MergeStatus != api.WorkerMergeStatusPending {
+		t.Fatalf("failed completion status=%+v", task)
+	}
+	if _, found, err := cpStore.LoadPromotionRecord("tx-" + manifest.CheckpointID); err != nil || found {
+		t.Fatalf("failed completion retained component record: found=%t err=%v", found, err)
+	}
+	_, err = sqlDB.ExecContext(ctx, `DROP TRIGGER reject_checkpoint_completion`)
+	testutil.FailErr(t, "remove completion fault", err)
+}
+
+// requirePromotedEffects checks every effect a promotion of the fixture's checkpoint makes.
+func requirePromotedEffects(t *testing.T, fixture publishedCheckpointWorker, checkpointID string) {
+	t.Helper()
+	primary, jobID, featureOID, cpStore := fixture.primary, fixture.jobID, fixture.featureOID, fixture.store
+	manifest := checkpoint.Manifest{CheckpointID: checkpointID}
+	scriptInfo, err := os.Stat(filepath.Join(primary, "run.sh"))
+	testutil.FailErr(t, "Stat run.sh", err)
+	if scriptInfo.Mode().Perm() != 0o755 {
+		t.Fatalf("run.sh mode = %#o, want 0o755", scriptInfo.Mode().Perm())
+	}
+
+	linkTarget, err := os.Readlink(filepath.Join(primary, "link.txt"))
+	testutil.FailErr(t, "Readlink link.txt", err)
+	if linkTarget != "app.go" {
+		t.Fatalf("link.txt target = %q, want app.go", linkTarget)
+	}
+
+	gitRefBytes, err := os.ReadFile(filepath.Join(primary, ".git", "refs", "lycaon", "workers", jobID, "heads", "feature"))
+	testutil.FailErr(t, "ReadFile imported git ref", err)
+	if strings.TrimSpace(string(gitRefBytes)) != featureOID {
+		t.Fatalf("imported git ref file = %q, want %s", string(gitRefBytes), featureOID)
+	}
+	cpRefBytes, err := os.ReadFile(filepath.Join(primary, ".git", "refs", "lycaon", "checkpoints", manifest.CheckpointID, "heads", "feature"))
+	testutil.FailErr(t, "ReadFile imported checkpoint ref", err)
+	if strings.TrimSpace(string(cpRefBytes)) != featureOID {
+		t.Fatalf("imported checkpoint ref file = %q, want %s", string(cpRefBytes), featureOID)
+	}
+
+	rec, exists, err := cpStore.LoadPromotionRecord("tx-" + manifest.CheckpointID)
+	testutil.FailErr(t, "LoadPromotionRecord", err)
+	if !exists || rec.State != checkpoint.PromotionStateApplied {
+		t.Fatalf("promotion journal record exists=%v state=%q", exists, rec.State)
+	}
+	if rec.FilePromotionStatus != checkpoint.EffectCompleted || rec.RefImportStatus != checkpoint.EffectCompleted {
+		t.Fatalf("effects file=%q ref=%q", rec.FilePromotionStatus, rec.RefImportStatus)
+	}
+	if rec.ImportedRefs["refs/lycaon/workers/"+jobID+"/heads/feature"] != featureOID || rec.ImportedRefs["refs/lycaon/checkpoints/"+manifest.CheckpointID+"/heads/feature"] != featureOID {
+		t.Fatalf("ImportedRefs = %v", rec.ImportedRefs)
+	}
+}
+
 type publishedCheckpointWorker struct {
 	db                                        *db.Store
 	queue                                     *SQLQueue

@@ -355,6 +355,37 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	candidateIdxPath := filepath.Join(packDstDir, candidateBase+".idx")
 	candidateMarkerPath := filepath.Join(packDstDir, retiringPackPrefix+candidateBase+".pack")
 
+	sc := importFaultScenario{ctx: ctx, tmp: tmp, objKeep: objKeep, oidKeep: oidKeep, objLoose: objLoose, oidLoose: oidLoose, objPack: objPack, oidPack: oidPack, candidateBase: candidateBase, storeRoot: storeRoot, store: store, reachableKeep: reachableKeep, baseMetrics: baseMetrics, packDstDir: packDstDir, candidatePackPath: candidatePackPath, candidateIdxPath: candidateIdxPath, candidateMarkerPath: candidateMarkerPath, makeRepo: makeRepo}
+	sc.importFaultRenameSync(t)
+	sc.importFaultRollbackSteps(t)
+}
+
+// missingTip names a commit no store holds, so connectivity fails and the import rolls back.
+var missingTip = strings.Repeat("f", 40)
+
+// importFaultScenario is one store with a leased pack and the candidates later imports roll back.
+type importFaultScenario struct {
+	ctx                                                                                   context.Context
+	tmp, objKeep, oidKeep, objLoose, oidLoose, objPack, oidPack, candidateBase, storeRoot string
+	store                                                                                 *RetainedObjectStore
+	reachableKeep                                                                         []string
+	baseMetrics                                                                           StoreMetrics
+	packDstDir, candidatePackPath, candidateIdxPath, candidateMarkerPath                  string
+	makeRepo                                                                              func(name, content string, pack bool) (string, string)
+}
+
+func (sc importFaultScenario) importFaultRenameSync(t *testing.T) {
+	t.Helper()
+	ctx := sc.ctx
+	objKeep := sc.objKeep
+	oidKeep := sc.oidKeep
+	objLoose := sc.objLoose
+	oidLoose := sc.oidLoose
+	objPack := sc.objPack
+	oidPack := sc.oidPack
+	store := sc.store
+	baseMetrics := sc.baseMetrics
+	packDstDir := sc.packDstDir
 	// 1. Injected post-rename syncDir failure during copyFileAtomicReadOnly rolls back
 	// the already-renamed loose or pack file cleanly via S1-S8 while preserving leased stock.
 	errSyncFault := errors.New("injected post-rename directory sync failure")
@@ -386,8 +417,6 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 		t.Fatalf("expected preexisting leased stock preserved after syncDir rollback: base=%+v current=%+v inv=%+v",
 			baseMetrics, store.Metrics(), invAfterSyncFault)
 	}
-
-	missingTip := strings.Repeat("f", 40)
 
 	// 1b. Preexisting leased pack+idx without .rev: when a subsequent import adds a .rev for the same
 	// preexisting base, reuses the existing .pack/.idx, and then rolls back on connectivity failure,
@@ -429,6 +458,24 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 		t.Fatalf("expected newly added .rev for preexisting base unlinked on rollback, got %v", err)
 	}
 
+}
+
+func (sc importFaultScenario) importFaultRollbackSteps(t *testing.T) {
+	t.Helper()
+	var err error
+	ctx := sc.ctx
+	oidKeep := sc.oidKeep
+	objLoose := sc.objLoose
+	oidLoose := sc.oidLoose
+	objPack := sc.objPack
+	oidPack := sc.oidPack
+	candidateBase := sc.candidateBase
+	storeRoot := sc.storeRoot
+	store := sc.store
+	packDstDir := sc.packDstDir
+	candidatePackPath := sc.candidatePackPath
+	candidateIdxPath := sc.candidateIdxPath
+	candidateMarkerPath := sc.candidateMarkerPath
 	// 2. S1 Marker-Creation Failure (beforeRollbackMarkerWrite):
 	// Verify zero destructive progression occurs on disk when marker creation fails:
 	// both candidate .pack and .idx companions remain on disk and zero .retiring- markers exist,

@@ -309,6 +309,7 @@ func TestRetainedObjectStoreInterruptedPackRetirementReopenAtEachBoundary(t *tes
 		"after_retiring_pack_unlinked",
 	} {
 		t.Run(boundary, func(t *testing.T) {
+			t.Parallel()
 			storeRoot := filepath.Join(tmp, "store-"+boundary)
 			store, err := NewRetainedObjectStore(storeRoot)
 			testutil.FailErr(t, "NewRetainedObjectStore", err)
@@ -357,55 +358,18 @@ func TestRetainedObjectStoreInterruptedPackRetirementReopenAtEachBoundary(t *tes
 	}
 }
 
-func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
+// A pack or index unlink that fails during garbage collection propagates and leaves a store that reopens whole.
+func TestRetainedObjectStoreGCUnlinkFailureReopen(t *testing.T) {
 	t.Parallel()
-	tmp := t.TempDir()
+	f := newGCFixture(t)
 	ctx := t.Context()
+	oidKeep := f.oidKeep
+	oidRetire := f.oidRetire
+	baseKeep := f.baseKeep
+	baseRetire := f.baseRetire
+	setupTwoPackStore := f.setupTwoPackStore
 
-	buildPackedRepo := func(name, content string) (string, string) {
-		dir := filepath.Join(tmp, name)
-		testutil.FailErr(t, "mkdir "+name, os.MkdirAll(dir, 0o755))
-		gittest.Init(t, dir)
-		gittest.Run(t, dir, "checkout", "-b", "main")
-		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(dir, name+".txt"), []byte(content), 0o644))
-		gittest.CommitAll(t, dir, "commit "+name)
-		oid := strings.TrimSpace(gittest.Run(t, dir, "rev-parse", "HEAD"))
-		gittest.Run(t, dir, "repack", "-a", "-d")
-		return filepath.Join(dir, ".git", "objects"), oid
-	}
-
-	objDirKeep, oidKeep := buildPackedRepo("keep-gc", "keep-gc-pack-payload\n")
-	objDirRetire, oidRetire := buildPackedRepo("retire-gc", "retire-gc-pack-payload\n")
-
-	findPackBase := func(objDir string) string {
-		entries, err := os.ReadDir(filepath.Join(objDir, "pack"))
-		testutil.FailErr(t, "ReadDir pack", err)
-		for _, e := range entries {
-			if strings.HasSuffix(e.Name(), ".pack") {
-				return strings.TrimSuffix(e.Name(), ".pack")
-			}
-		}
-		t.Fatalf("no .pack found in %s", objDir)
-		return ""
-	}
-	baseKeep := findPackBase(objDirKeep)
-	baseRetire := findPackBase(objDirRetire)
-
-	setupTwoPackStore := func(t *testing.T, name string) (string, *RetainedObjectStore) {
-		t.Helper()
-		storeRoot := filepath.Join(tmp, "store-gc-"+name)
-		store, err := NewRetainedObjectStore(storeRoot)
-		testutil.FailErr(t, "NewRetainedObjectStore", err)
-		_, _, err = store.ImportRepositoryObjects(ctx, []string{objDirKeep}, []string{oidKeep})
-		testutil.FailErr(t, "import keep", err)
-		_, _, err = store.ImportRepositoryObjects(ctx, []string{objDirRetire}, []string{oidRetire})
-		testutil.FailErr(t, "import retire", err)
-		_, err = store.RetainForCheckpoint("cp-keep", []string{oidKeep})
-		testutil.FailErr(t, "RetainForCheckpoint keep", err)
-		return storeRoot, store
-	}
-
-	// 1. Unlink failure on .pack during CollectGarbage propagates error, rolls back staging so .idx is not
+	// Unlink failure on .pack during CollectGarbage propagates error, rolls back staging so .idx is not
 	// deleted, and allows clean store reopen with both packs intact.
 	t.Run("pack_unlink_failure_rolls_back_and_reopens_intact", func(t *testing.T) {
 		storeRoot, store := setupTwoPackStore(t, "pack-unlink-fail")
@@ -440,7 +404,7 @@ func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
 		}
 	})
 
-	// 2. Unlink failure on .idx (after .pack is already unlinked) propagates error from CollectGarbage and
+	// Unlink failure on .idx (after .pack is already unlinked) propagates error from CollectGarbage and
 	// from reopen while the failure persists, then reconciles cleanly on reopen once the failure clears.
 	t.Run("idx_unlink_failure_propagates_and_reconciles_on_reopen", func(t *testing.T) {
 		storeRoot, store := setupTwoPackStore(t, "idx-unlink-fail")
@@ -481,7 +445,20 @@ func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
 		}
 	})
 
-	// 3. Context cancellation mid-GC at each stage/unlink boundary returns context.Canceled and reopens cleanly.
+}
+
+// Garbage collection cancelled at each boundary reopens cleanly.
+func TestRetainedObjectStoreGCCancellationReopens(t *testing.T) {
+	t.Parallel()
+	f := newGCFixture(t)
+	ctx := t.Context()
+	oidKeep := f.oidKeep
+	oidRetire := f.oidRetire
+	baseKeep := f.baseKeep
+	baseRetire := f.baseRetire
+	setupTwoPackStore := f.setupTwoPackStore
+
+	// Context cancellation mid-GC at each stage/unlink boundary returns context.Canceled and reopens cleanly.
 	for _, cancelPoint := range []string{
 		"before_idx_stage_rename",
 		"before_pack_retired_unlink",
@@ -543,7 +520,21 @@ func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
 		})
 	}
 
-	// 4. Re-importing a content-addressed pack after a cancelled GC clears stale tombstones and
+}
+
+// Re-importing a pack after a cancelled collection keeps the newly leased pack.
+func TestRetainedObjectStoreReimportAfterCancelledGC(t *testing.T) {
+	t.Parallel()
+	f := newGCFixture(t)
+	ctx := t.Context()
+	oidKeep := f.oidKeep
+	objDirRetire := f.objDirRetire
+	oidRetire := f.oidRetire
+	baseKeep := f.baseKeep
+	baseRetire := f.baseRetire
+	setupTwoPackStore := f.setupTwoPackStore
+
+	// Re-importing a content-addressed pack after a cancelled GC clears stale tombstones and
 	// preserves the freshly leased pack across InspectStock, CollectGarbage, and store reopen.
 	t.Run("reimport_after_cancelled_gc_preserves_leased_pack", func(t *testing.T) {
 		storeRoot, store := setupTwoPackStore(t, "reimport-after-cancel")
@@ -590,4 +581,63 @@ func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
 			t.Fatalf("expected both packs preserved after reopen")
 		}
 	})
+}
+
+type gcFixture struct {
+	t                                   *testing.T
+	tmp                                 string
+	objDirKeep, oidKeep, baseKeep       string
+	objDirRetire, oidRetire, baseRetire string
+}
+
+// newGCFixture builds two packed repositories: one a checkpoint keeps and one collection retires.
+func newGCFixture(t *testing.T) gcFixture {
+	t.Helper()
+	f := gcFixture{t: t, tmp: t.TempDir()}
+	f.objDirKeep, f.oidKeep = f.buildPackedRepo("keep-gc", "keep-gc-pack-payload\n")
+	f.objDirRetire, f.oidRetire = f.buildPackedRepo("retire-gc", "retire-gc-pack-payload\n")
+	f.baseKeep, f.baseRetire = f.findPackBase(f.objDirKeep), f.findPackBase(f.objDirRetire)
+	return f
+}
+
+func (f gcFixture) buildPackedRepo(name, content string) (string, string) {
+	t := f.t
+	dir := filepath.Join(f.tmp, name)
+	testutil.FailErr(t, "mkdir "+name, os.MkdirAll(dir, 0o755))
+	gittest.Init(t, dir)
+	gittest.Run(t, dir, "checkout", "-b", "main")
+	testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(dir, name+".txt"), []byte(content), 0o644))
+	gittest.CommitAll(t, dir, "commit "+name)
+	oid := strings.TrimSpace(gittest.Run(t, dir, "rev-parse", "HEAD"))
+	gittest.Run(t, dir, "repack", "-a", "-d")
+	return filepath.Join(dir, ".git", "objects"), oid
+}
+
+func (f gcFixture) findPackBase(objDir string) string {
+	t := f.t
+	entries, err := os.ReadDir(filepath.Join(objDir, "pack"))
+	testutil.FailErr(t, "ReadDir pack", err)
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".pack") {
+			return strings.TrimSuffix(e.Name(), ".pack")
+		}
+	}
+	t.Fatalf("no .pack found in %s", objDir)
+	return ""
+}
+
+// setupTwoPackStore imports both repositories into a new store and retains the kept one.
+func (f gcFixture) setupTwoPackStore(t *testing.T, name string) (string, *RetainedObjectStore) {
+	t.Helper()
+	ctx := t.Context()
+	storeRoot := filepath.Join(f.tmp, "store-gc-"+name)
+	store, err := NewRetainedObjectStore(storeRoot)
+	testutil.FailErr(t, "NewRetainedObjectStore", err)
+	_, _, err = store.ImportRepositoryObjects(ctx, []string{f.objDirKeep}, []string{f.oidKeep})
+	testutil.FailErr(t, "import keep", err)
+	_, _, err = store.ImportRepositoryObjects(ctx, []string{f.objDirRetire}, []string{f.oidRetire})
+	testutil.FailErr(t, "import retire", err)
+	_, err = store.RetainForCheckpoint("cp-keep", []string{f.oidKeep})
+	testutil.FailErr(t, "RetainForCheckpoint keep", err)
+	return storeRoot, store
 }

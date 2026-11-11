@@ -65,6 +65,9 @@ func floorsOp(op string, args []string) error {
 		}
 		return err
 	}
+	if handled, err := floorsDescriptorOp(op, arg); handled {
+		return err
+	}
 	switch op {
 	case "create":
 		fd, err := unix.Open(arg(0), unix.O_CREAT|unix.O_WRONLY|unix.O_CLOEXEC, 0o644)
@@ -109,49 +112,6 @@ func floorsOp(op string, args []string) error {
 		}
 		defer func() { _ = unix.Close(fd) }()
 		return openClose("/proc/self/fd/"+strconv.Itoa(fd), unix.O_WRONLY)
-	case "mmap-write":
-		fd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_CLOEXEC, 0)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = unix.Close(fd) }()
-		data, err := unix.Mmap(fd, 0, 4, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
-		if err == nil {
-			_ = unix.Munmap(data)
-		}
-		return err
-	case "dirfd-write":
-		dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = unix.Close(dfd) }()
-		fd, err := unix.Openat(dfd, arg(1), unix.O_WRONLY|unix.O_CLOEXEC, 0)
-		if err == nil {
-			_ = unix.Close(fd)
-		}
-		return err
-	case "dirfd-unlink":
-		dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = unix.Close(dfd) }()
-		return unix.Unlinkat(dfd, arg(1), 0)
-	case "dirfd-rename":
-		dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = unix.Close(dfd) }()
-		return unix.Renameat2(dfd, arg(1), dfd, arg(2), 0)
-	case "dirfd-link":
-		dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = unix.Close(dfd) }()
-		return unix.Linkat(dfd, arg(1), dfd, arg(2), 0)
 	case "mkdir":
 		return unix.Mkdir(arg(0), 0o755)
 	case "mkfifo":
@@ -199,6 +159,65 @@ func floorsOp(op string, args []string) error {
 		return fmt.Errorf("never appeared")
 	}
 	return fmt.Errorf("unknown operation %s", op)
+}
+
+// floorsDescriptorOp runs the operations that reach a path through a descriptor the floor already
+// let open, and reports whether op was one of them.
+func floorsDescriptorOp(op string, arg func(int) string) (bool, error) {
+	run := func() error {
+		switch op {
+		case "mmap-write":
+			fd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_CLOEXEC, 0)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = unix.Close(fd) }()
+			data, err := unix.Mmap(fd, 0, 4, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+			if err == nil {
+				_ = unix.Munmap(data)
+			}
+			return err
+		case "dirfd-write":
+			dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = unix.Close(dfd) }()
+			fd, err := unix.Openat(dfd, arg(1), unix.O_WRONLY|unix.O_CLOEXEC, 0)
+			if err == nil {
+				_ = unix.Close(fd)
+			}
+			return err
+		case "dirfd-unlink":
+			dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = unix.Close(dfd) }()
+			return unix.Unlinkat(dfd, arg(1), 0)
+		case "dirfd-rename":
+			dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = unix.Close(dfd) }()
+			return unix.Renameat2(dfd, arg(1), dfd, arg(2), 0)
+		case "dirfd-link":
+			dfd, err := unix.Open(arg(0), unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = unix.Close(dfd) }()
+			return unix.Linkat(dfd, arg(1), dfd, arg(2), 0)
+		}
+		return nil
+	}
+	switch op {
+	case "mmap-write", "dirfd-write", "dirfd-unlink", "dirfd-rename", "dirfd-link":
+		return true, run()
+	default:
+		return false, nil
+	}
 }
 
 func unwrapErrno(err error) error {

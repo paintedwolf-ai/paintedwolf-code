@@ -87,7 +87,7 @@ func runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t *testing.T, mounte
 		source = prepared
 	} else if parent := os.Getenv("PW_M14_LIFECYCLE_SOURCE_PARENT"); parent != "" {
 		var err error
-		source, err = os.MkdirTemp(parent, "m14-lifecycle-source-")
+		source, err = os.MkdirTemp(parent, "m14-lifecycle-source-") //nolint:usetesting // The source must sit on the external volume the run names.
 		testutil.FailErr(t, "create isolated external source", err)
 		t.Cleanup(func() { testutil.FailErr(t, "remove isolated external source", os.RemoveAll(source)) })
 	}
@@ -156,15 +156,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	queue.SetWorkerWorkspaceManager(manager)
 	fixture := &layeredWorkerFixture{db: database, queue: queue, manager: manager, source: source, branches: branches}
 	if phase == "prepare" {
-		if os.Getenv("PW_M14_LIFECYCLE_PREPARED_SOURCE") == "" {
-			testutil.FailErr(t, "source directory", os.MkdirAll(source, 0o755))
-			testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(source, "main.go"), []byte("package main\n"), 0o644))
-			gittest.InitCommit(t, source, "initial")
-		} else {
-			assertFileHolds(t, filepath.Join(source, "main.go"), "package main\n")
-			_, err := os.Stat(filepath.Join(source, ".git"))
-			testutil.FailErr(t, "prepared source Git fixture", err)
-		}
+		prepareLifecycleSource(t, source)
 		testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", source)
 		trace("claim-start")
 		task := fixture.claim(t)
@@ -331,4 +323,18 @@ func observeLocalPromoteState(txDir, promotionsDir string) string {
 	}
 	promoEntries, _ := os.ReadDir(promotionsDir)
 	return fmt.Sprintf("%s/promo_files=%d", txSummary, len(promoEntries))
+}
+
+// prepareLifecycleSource seeds the source repository, or checks the one a run prepared beforehand.
+func prepareLifecycleSource(t *testing.T, source string) {
+	t.Helper()
+	if os.Getenv("PW_M14_LIFECYCLE_PREPARED_SOURCE") != "" {
+		assertFileHolds(t, filepath.Join(source, "main.go"), "package main\n")
+		_, err := os.Stat(filepath.Join(source, ".git"))
+		testutil.FailErr(t, "prepared source Git fixture", err)
+		return
+	}
+	testutil.FailErr(t, "source directory", os.MkdirAll(source, 0o755))
+	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(source, "main.go"), []byte("package main\n"), 0o644))
+	gittest.InitCommit(t, source, "initial")
 }

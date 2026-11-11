@@ -423,12 +423,21 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	}
 
 	// Recreate the integration target at project and promote the restored checkpoint (files + Git refs/objects).
+	svc := &MergeService{Queue: restored, Store: restored, Workspace: manager, DataDir: newRoot}
+	promoteRestoredCheckpoint(t, svc, project, id, origCheckpointID, workerCommit)
+	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
+}
+
+// promoteRestoredCheckpoint recreates the target repository and promotes the restored checkpoint
+// into it, files, refs and objects.
+func promoteRestoredCheckpoint(t *testing.T, svc *MergeService, project, id, checkpointID, workerCommit string) {
+	t.Helper()
+	ctx, origCheckpointID := t.Context(), checkpointID
 	testutil.FailErr(t, "mkdir target project", os.MkdirAll(project, 0o755))
 	testutil.FailErr(t, "seed target main", os.WriteFile(filepath.Join(project, "main.go"), []byte("package before\n"), 0o644))
 	testutil.FailErr(t, "seed target keep", os.WriteFile(filepath.Join(project, "keep.go"), []byte("package keep\n"), 0o644))
 	gittest.InitCommit(t, project, "target initial")
 
-	svc := &MergeService{Queue: restored, Store: restored, Workspace: manager, DataDir: newRoot}
 	out, err := svc.PromoteOverlay(ctx, "", id, api.PromoteOverlayInput{})
 	testutil.FailErr(t, "promote restored checkpoint", err)
 	if out.Status != api.WorkerMergeStatusMerged {
@@ -449,7 +458,6 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 		}
 	}
 	gittest.Run(t, project, "rev-list", "--objects", "-n", "1", workerCommit)
-	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
 }
 
 func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunkAbsent(t *testing.T) {

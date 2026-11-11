@@ -227,7 +227,7 @@ func scanFile(row *sql.Row) (File, bool, error) {
 	file.Layer = layeredfs.LayerSource(layer)
 	file.Uncertain = uncertain != 0
 	file.SourceGeneration = uint64(gen) //nolint:gosec // SQLite holds 64-bit values signed; they round-trip bit for bit.
-	file.Ino = uint64(ino) //nolint:gosec // SQLite holds 64-bit values signed; they round-trip bit for bit.
+	file.Ino = uint64(ino)              //nolint:gosec // SQLite holds 64-bit values signed; they round-trip bit for bit.
 	_ = dev
 	return file, true, nil
 }

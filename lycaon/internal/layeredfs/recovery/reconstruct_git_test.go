@@ -49,35 +49,11 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 
 	// Commit on primary root and secondary root, then capture and publish checkpoint.
 	_, _ = viewA.Core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "app.go"}, []byte("package main // primary-v1\n"), 0o644)
-	primaryExec := privategit.NewGitExecutor(fx.gitMgr, viewA.ViewID, privategit.RemotePolicy{})
-	if _, err := primaryExec.Run(ctx, ".", "checkout", "-b", "feat-primary"); err != nil {
-		t.Fatalf("primary checkout: %v", err)
-	}
-	if _, err := primaryExec.Run(ctx, ".", "add", "app.go"); err != nil {
-		t.Fatalf("primary add: %v", err)
-	}
-	if _, err := primaryExec.Commit(ctx, "primary commit"); err != nil {
-		t.Fatalf("primary commit: %v", err)
-	}
-	wantPrimaryOID, err := primaryExec.Run(ctx, ".", "rev-parse", "HEAD")
-	testutil.FailErr(t, "primaryExec.Run failed", err)
-	wantPrimaryOID = strings.TrimSpace(wantPrimaryOID)
+	wantPrimaryOID := commitOnBranch(t, privategit.NewGitExecutor(fx.gitMgr, viewA.ViewID, privategit.RemotePolicy{}), "feat-primary", "app.go")
 
 	secViewID := privategit.SecondaryViewID(viewA.ViewID, "second")
 	_, _ = viewA.Core.WriteFile(layeredfs.QualifiedPath{RootID: "second", Rel: "sec.txt"}, []byte("sec-v1\n"), 0o644)
-	secExec := privategit.NewGitExecutor(fx.gitMgr, secViewID, privategit.RemotePolicy{})
-	if _, err := secExec.Run(ctx, ".", "checkout", "-b", "feat-second"); err != nil {
-		t.Fatalf("second checkout: %v", err)
-	}
-	if _, err := secExec.Run(ctx, ".", "add", "sec.txt"); err != nil {
-		t.Fatalf("second add: %v", err)
-	}
-	if _, err := secExec.Commit(ctx, "second commit"); err != nil {
-		t.Fatalf("second commit: %v", err)
-	}
-	wantSecondOID, err := secExec.Run(ctx, ".", "rev-parse", "HEAD")
-	testutil.FailErr(t, "secExec.Run failed", err)
-	wantSecondOID = strings.TrimSpace(wantSecondOID)
+	wantSecondOID := commitOnBranch(t, privategit.NewGitExecutor(fx.gitMgr, secViewID, privategit.RemotePolicy{}), "feat-second", "sec.txt")
 
 	cpGit, err := fx.gitMgr.CaptureCheckpointGitState(ctx, viewA.ViewID, "cp-multi-git")
 	if err != nil {
@@ -191,4 +167,19 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 	if err != nil || strings.TrimSpace(gotMatSecondOID) != wantSecondOID {
 		t.Fatalf("materialized restored secondary ref = %q (err=%v), want %s", strings.TrimSpace(gotMatSecondOID), err, wantSecondOID)
 	}
+}
+
+// commitOnBranch commits file on a new branch through a view's private Git and returns the commit.
+func commitOnBranch(t *testing.T, exec *privategit.GitExecutor, branch, file string) string {
+	t.Helper()
+	ctx := t.Context()
+	_, err := exec.Run(ctx, ".", "checkout", "-b", branch)
+	testutil.FailErr(t, "checkout "+branch, err)
+	_, err = exec.Run(ctx, ".", "add", file)
+	testutil.FailErr(t, "add "+file, err)
+	_, err = exec.Commit(ctx, "commit on "+branch)
+	testutil.FailErr(t, "commit "+branch, err)
+	oid, err := exec.Run(ctx, ".", "rev-parse", "HEAD")
+	testutil.FailErr(t, "rev-parse "+branch, err)
+	return strings.TrimSpace(oid)
 }

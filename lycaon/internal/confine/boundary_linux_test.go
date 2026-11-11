@@ -137,11 +137,9 @@ func TestCompileFilesystemPlanNamesLoaderFilesAtAnyDepth(t *testing.T) {
 	}
 }
 
-// Mounted views resolve per-root policy files without cross-mapping between roots,
-// misclassifying sources containing journal/work/base, or missing parent/private mutations.
+// Mounted views resolve per-root policy files without cross-mapping between roots or misclassifying
+// sources containing journal/, work/ and base/ subdirectories.
 func TestCompileFilesystemPlanResolvesMountedViewLoaderFilesFromSourceRoots(t *testing.T) {
-	// 1. Multi-root mounted view with shared and root-specific relative paths and a legitimate
-	// source tree containing journal/, work/, and base/ subdirectories.
 	srcA := t.TempDir()
 	srcB := t.TempDir()
 	for _, dir := range []string{
@@ -215,8 +213,12 @@ func TestCompileFilesystemPlanResolvesMountedViewLoaderFilesFromSourceRoots(t *t
 		}
 	}
 
-	// 2. Effective view inventory via layeredfs.Core: parent layer additions/deletions,
-	// view-private creations/renames/unlinks, and single trunk scan bound across launches.
+}
+
+// A mounted view's policy files come from its effective inventory: parent layer additions and
+// deletions, view-private creations, renames and unlinks, with one trunk scan across launches.
+func TestCompileFilesystemPlanReadsMountedViewPolicyFilesFromItsInventory(t *testing.T) {
+	branchesBase := t.TempDir()
 	trunkDir := t.TempDir()
 	for _, d := range []string{"trunk-keep", "trunk-parent-del", "trunk-priv-unlink", "renamed"} {
 		testutil.FailErr(t, "mkdir "+d, os.MkdirAll(filepath.Join(trunkDir, d), 0o755))
@@ -330,7 +332,7 @@ func TestCompileFilesystemPlanResolvesMountedViewLoaderFilesFromSourceRoots(t *t
 		t.Fatalf("effPlan.ReadOnlyNames = %v, missing enforcement-time floor %+v for trunk/future policy files", effPlan.ReadOnlyNames, wantFloor)
 	}
 
-	// 3. First-launch and subsequent-launch bounds: neither preparation nor launch walks the host
+	// First-launch and subsequent-launch bounds: neither preparation nor launch walks the host
 	// trunk (ReadDirs == 0), Generation advances on view-private mutation, and new view-private
 	// policy files are immediately included while late trunk policy files are protected by ReadOnlyNames.
 	lateTrunkFile := filepath.Join(trunkDir, "late-trunk", protectedpath.AgentsMDFileName)

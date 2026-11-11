@@ -107,7 +107,7 @@ func TestPromoteTransactionWithoutHardLinkSupport(t *testing.T) {
 		settle(t, dataDir, task, primary, promoteTransactionEffects{RetainLink: unavailable}, plans)
 	})
 	t.Run("distinct filesystem", func(t *testing.T) {
-		dataDir, err := os.MkdirTemp("/dev/shm", "promote-transaction-")
+		dataDir, err := os.MkdirTemp("/dev/shm", "promote-transaction-") //nolint:usetesting // The data must sit on a second filesystem.
 		if err != nil {
 			t.Skip("no second filesystem available")
 		}

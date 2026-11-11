@@ -23,7 +23,7 @@ func TestSourceTransportOutagePreservesCheckpointAndRetry(t *testing.T) {
 		t.Fatal("both outage fixture paths are required")
 	}
 	waitOutageMarker(t, control, "armed.json")
-	source, err := os.MkdirTemp(parent, "checkpoint-outage-")
+	source, err := os.MkdirTemp(parent, "checkpoint-outage-") //nolint:usetesting // The source must sit on the network volume under parent.
 	testutil.FailErr(t, "create network source", err)
 	// Restore before source cleanup, even when an assertion fails.
 	t.Cleanup(func() { _ = os.RemoveAll(source) })
@@ -109,7 +109,7 @@ func TestHardSourceTransportResumesWithoutLosingCheckpoint(t *testing.T) {
 		t.Fatal("outage control path required")
 	}
 	waitOutageMarker(t, control, "armed.json")
-	source, err := os.MkdirTemp(parent, "checkpoint-hard-")
+	source, err := os.MkdirTemp(parent, "checkpoint-hard-") //nolint:usetesting // The source must sit on the hard-mounted volume under parent.
 	testutil.FailErr(t, "create hard-mounted source", err)
 	t.Cleanup(func() { _ = os.RemoveAll(source) })
 	t.Cleanup(func() {

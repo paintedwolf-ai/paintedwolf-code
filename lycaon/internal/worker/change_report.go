@@ -208,4 +208,3 @@ func RegisterDeclineWorkerBudgetTool(reg *tools.DefaultRegistry, deps DeclineBud
 type overlayTaskLookup interface {
 	Get(jobID string) (*api.WorkerTask, bool)
 }
-

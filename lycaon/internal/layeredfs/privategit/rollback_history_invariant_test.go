@@ -27,10 +27,6 @@ func TestInterruptedImportRollbackPreservesReadableLeasedHistory(t *testing.T) {
 	root := t.TempDir()
 	store, err := NewRetainedObjectStoreContext(t.Context(), root)
 	testutil.FailErr(t, "open retained store", err)
-	t.Cleanup(func() {
-		if store != nil {
-		}
-	})
 	_, reachable, err := store.ImportRepositoryObjects(t.Context(), []string{filepath.Join(source, ".git", "objects")}, []string{second})
 	testutil.FailErr(t, "retain history", err)
 	_, err = store.RetainForCheckpoint("leased-history", reachable)
@@ -116,10 +112,6 @@ func TestCompactPackOverlappingAndMixedInventoryAccountingAndGC(t *testing.T) {
 	storeDir := t.TempDir()
 	store, err := NewRetainedObjectStoreContext(t.Context(), storeDir)
 	testutil.FailErr(t, "NewRetainedObjectStoreContext", err)
-	t.Cleanup(func() {
-		if store != nil {
-		}
-	})
 
 	_, reachA, err := store.ImportRepositoryObjects(t.Context(), []string{filepath.Join(repoA, ".git", "objects")}, []string{c2})
 	testutil.FailErr(t, "import repoA", err)
@@ -234,7 +226,7 @@ func TestSourceModificationAfterImportDoesNotMutateRetainedStore(t *testing.T) {
 		testutil.FailErr(t, "chmod src writable", os.Chmod(sp, 0o644))
 		f, oErr := os.OpenFile(sp, os.O_WRONLY|os.O_TRUNC, 0o644)
 		testutil.FailErr(t, "open src for overwrite", oErr)
-		_, _ = f.Write([]byte("CORRUPTED-SOURCE-INODE-BYTES"))
+		_, _ = f.WriteString("CORRUPTED-SOURCE-INODE-BYTES")
 		_ = f.Close()
 	}
 
