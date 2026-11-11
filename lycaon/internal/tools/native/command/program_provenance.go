@@ -33,6 +33,9 @@ type opProvenanceTracker struct {
 	mu        sync.Mutex
 	exchanges []evidence.ExchangeProvenance
 	readPaths []string
+	// networkURLs are destinations an external process of the op reached;
+	// what it read from them may be in any stream it wrote.
+	networkURLs []string
 }
 
 type opTrackerContextKey struct{}
@@ -59,6 +62,16 @@ func (t *opProvenanceTracker) addExchange(ex evidence.ExchangeProvenance) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.exchanges = append(t.exchanges, ex)
+}
+
+// addNetworkRead records destinations an external process of the op reached.
+func (t *opProvenanceTracker) addNetworkRead(urls []string) {
+	if t == nil || len(urls) == 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.networkURLs = appendUniqueProvenanceStrings(t.networkURLs, urls...)
 }
 
 func (t *opProvenanceTracker) addReadPath(path string) {
@@ -178,6 +191,7 @@ func (r *programRun) finishOpTracker(ctx context.Context, tracker *opProvenanceT
 	tracker.mu.Lock()
 	exchanges := append([]evidence.ExchangeProvenance(nil), tracker.exchanges...)
 	readPaths := append([]string(nil), tracker.readPaths...)
+	networkURLs := append([]string(nil), tracker.networkURLs...)
 	tracker.mu.Unlock()
 
 	var opExternalURLs []string
@@ -203,20 +217,23 @@ func (r *programRun) finishOpTracker(ctx context.Context, tracker *opProvenanceT
 		}
 	}
 
-	var readCustodyURLs []string
+	// Content read from custody files or by an external process from the
+	// network reaches whichever streams the op wrote.
+	var streamURLs []string
 	if len(readPaths) > 0 {
-		readCustodyURLs = r.lookupCustodyURLs(ctx, readPaths)
-		if len(readCustodyURLs) > 0 {
-			if outWrote {
-				r.routeExternalStream(outClass, readCustodyURLs)
-			}
-			if errWrote {
-				r.routeExternalStream(errClass, readCustodyURLs)
-			}
+		streamURLs = r.lookupCustodyURLs(ctx, readPaths)
+	}
+	streamURLs = appendUniqueProvenanceStrings(streamURLs, networkURLs...)
+	if len(streamURLs) > 0 {
+		if outWrote {
+			r.routeExternalStream(outClass, streamURLs)
+		}
+		if errWrote {
+			r.routeExternalStream(errClass, streamURLs)
 		}
 	}
 
-	if outClass.redirectPath != "" && len(opExternalURLs) == 0 && len(readCustodyURLs) == 0 && outWrote {
+	if outClass.redirectPath != "" && len(opExternalURLs) == 0 && len(streamURLs) == 0 && outWrote {
 		if pipedURLs := r.pipedExternalURLs(); len(pipedURLs) > 0 {
 			r.addCustodyFile(outClass.redirectPath, pipedURLs)
 		} else if outClass.redirectOperator == ">" || outClass.redirectOperator == "&>" {
