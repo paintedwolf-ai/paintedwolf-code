@@ -42,7 +42,6 @@ func (refusedStarts) ReplayStart(context.Context, string, string, string) (*wire
 
 func newAmbientAttachFixture(t *testing.T, startsAdmitted bool) ambientAttachFixture {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 

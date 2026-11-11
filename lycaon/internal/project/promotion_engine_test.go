@@ -13,7 +13,6 @@ import (
 
 func TestPromotionEngineCompletesWithoutDeletingSourceEarly(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	ctx := t.Context()
 	reg := NewMemoryRegistry()
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
@@ -42,7 +41,6 @@ func TestPromotionEngineCompletesWithoutDeletingSourceEarly(t *testing.T) {
 
 func TestPromotionCommitNamesOnlyAnUnnamedDraft(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	ctx := t.Context()
 	for _, tc := range []struct {
 		name     string
@@ -71,7 +69,6 @@ func TestPromotionCommitNamesOnlyAnUnnamedDraft(t *testing.T) {
 
 func TestPromotionEngineRecoversInterruptedInstall(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	ctx := context.Background()
 	reg := NewMemoryRegistry()
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
@@ -101,7 +98,6 @@ func TestPromotionEngineRecoversInterruptedInstall(t *testing.T) {
 
 func TestPromotionEngineRecoversAfterDestinationReservation(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	ctx := t.Context()
 	reg := NewMemoryRegistry()
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
@@ -128,7 +124,6 @@ func TestPromotionEngineRecoversAfterDestinationReservation(t *testing.T) {
 
 func TestPromotionEngineLeavesIntentAndSourceOnStageFailure(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	ctx := t.Context()
 	reg := NewMemoryRegistry()
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
@@ -155,7 +150,6 @@ func TestPromotionEngineLeavesIntentAndSourceOnStageFailure(t *testing.T) {
 
 func TestSQLPromotionRecoversCommittedCleanupAfterRestart(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	ctx := t.Context()
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 	sqlDB, err := db.Open(dbPath)
@@ -208,7 +202,6 @@ func TestSQLPromotionRecoversCommittedCleanupAfterRestart(t *testing.T) {
 
 func TestPromotionCancelRollsInstalledTreeBackToDraft(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	ctx := t.Context()
 	reg := NewMemoryRegistry()
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
@@ -239,7 +232,6 @@ func TestPromotionCancelRollsInstalledTreeBackToDraft(t *testing.T) {
 
 func TestPromotionCancelPreservesDraftChangedAfterInstall(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	ctx := t.Context()
 	reg := NewMemoryRegistry()
 	p, err := reg.Create(ctx, CreateParams{Draft: true})
@@ -275,5 +267,40 @@ func TestPromotionPathExistsReturnsInspectionError(t *testing.T) {
 	}
 	if exists {
 		t.Fatal("unreadable path reported as present")
+	}
+}
+
+func TestPromotionAllowsDestinationUnderPreviouslyRestrictedDirectories(t *testing.T) {
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".config", "paintedwolf")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
+
+	destinations := []string{
+		filepath.Join(home, ".config", "promoted-config-project"),
+		filepath.Join(home, ".ssh", "promoted-ssh-project"),
+		filepath.Join(cfgDir, "promoted-device-config-project"),
+	}
+	ctx := t.Context()
+	reg := NewMemoryRegistry()
+	engine := NewPromotionEngine(reg, nil)
+
+	for _, dest := range destinations {
+		testutil.FailErr(t, "mkdir destination", os.MkdirAll(dest, 0o700))
+		draft, err := reg.Create(ctx, CreateParams{Draft: true})
+		testutil.FailErr(t, "create draft", err)
+		testutil.FailErr(t, "write draft file", os.WriteFile(filepath.Join(draft.Roots[0].Path, "note.txt"), []byte("promoted"), 0o600))
+
+		if _, err := engine.Create(ctx, draft.ID, dest, false); err != nil {
+			t.Fatalf("engine.Create(%q): %v", dest, err)
+		}
+		promoted, err := engine.Run(ctx, draft.ID)
+		if err != nil {
+			t.Fatalf("engine.Run(%q): %v", dest, err)
+		}
+		if promoted.IsDraft || len(promoted.Roots) != 1 || promoted.Roots[0].Kind != RootKindAttached {
+			t.Fatalf("unexpected promoted project for %q: %#v", dest, promoted)
+		}
 	}
 }

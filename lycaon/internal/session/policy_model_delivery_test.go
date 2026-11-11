@@ -100,6 +100,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 
 func TestWorkerFinalizeUsesJobScopedTranscriptRead(t *testing.T) {
 	resolver := &stubSummaryResolver{msgs: []api.Message{completeLegToolRow(map[string]any{"leg_status": "complete", "brief": "done"})}}
+	resolver.msgs[0].ToolResult.WorkerReport.WorkerID = "job-current"
 	outcome, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(
 		context.Background(), resolver, resolver, "reused-child", "survey",
 		workercloseout.WorkerSummaryFinalizeOpts{WorkerJobID: "job-current"},

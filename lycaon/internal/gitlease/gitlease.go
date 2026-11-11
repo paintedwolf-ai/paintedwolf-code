@@ -96,7 +96,8 @@ func drop(key string, held *lease) {
 }
 
 func repositoryKey(ctx context.Context, dir string) (string, error) {
-	out, code, err := gitexec.Run(ctx, dir, []string{"rev-parse", "--git-common-dir"}, gitexec.Opts{
+	// The lease key is host bookkeeping, whichever caller holds the lease.
+	out, code, err := gitexec.Run(gitexec.WithHostPurpose(ctx, "repository_lease"), dir, []string{"rev-parse", "--git-common-dir"}, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
 	})
 	if err != nil {
