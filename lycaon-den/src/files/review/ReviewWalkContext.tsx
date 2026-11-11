@@ -16,7 +16,7 @@ import {
 } from "../source/source-command-window.ts";
 import { gitChangeRefs } from "../source/source-git-change.ts";
 import { lineCountLabel, lineCounts } from "./review-walk-counts.ts";
-import type { WalkStepBriefing } from "../walk/walk-briefing.tsx";
+import { WalkSummaryLine, type WalkStepBriefing } from "../walk/walk-briefing.tsx";
 import {
   walkStepActor,
   walkGroupFileSummary,
@@ -239,10 +239,7 @@ export function ReviewWalkContext(props: Props) {
     <Show when={details()}>
       {(detail) => (
         <>
-          {props.briefing?.sentence}
-          <p class="den-review-detail__summary" data-testid="review-walk-summary">
-            {detail().summary}
-          </p>
+          <WalkSummaryLine briefing={props.briefing}>{detail().summary}</WalkSummaryLine>
           <div class="den-review-detail__meta">
             <span>
               {walkStepActor(current())}

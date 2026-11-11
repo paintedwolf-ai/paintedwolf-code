@@ -112,3 +112,7 @@
   overflow-wrap: anywhere;
   user-select: text;
 }
+
+@utility den-walk-briefing-area {
+  display: contents;
+}
