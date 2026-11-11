@@ -64,7 +64,7 @@ describe("declared line width", () => {
       "const table = [",
       `  ${item(1)},`,
       `  ${item(2)},`,
-      `  ${item(3)},`,
+      `  ${item(3)}`,
       "];",
     ]);
     expect(writtenOut(open(line)).split("\n").length).toBeGreaterThan(5);
