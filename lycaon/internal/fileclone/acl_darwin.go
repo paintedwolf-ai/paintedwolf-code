@@ -11,7 +11,8 @@ package fileclone
 static int lycaon_copy_acl(const char *src, const char *dst) {
 	acl_t acl = acl_get_link_np(src, ACL_TYPE_EXTENDED);
 	if (acl == NULL) {
-		return errno == ENOENT ? 0 : -1;
+		// No ACL, or a volume that cannot hold one.
+		return (errno == ENOENT || errno == ENOTSUP || errno == ENOTTY) ? 0 : -1;
 	}
 	int rc = acl_set_link_np(dst, ACL_TYPE_EXTENDED, acl);
 	int saved = errno;
