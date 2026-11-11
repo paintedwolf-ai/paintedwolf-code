@@ -155,6 +155,9 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 	names := sortedNames(merged)
 	out := make([]DirEntry, 0, len(names))
 	for _, name := range names {
+		if c.hiddenRel(QualifiedPath{RootID: dirPath.RootID, Rel: joinRel(dirPath.Rel, merged[name].Name)}) {
+			continue
+		}
 		out = append(out, merged[name])
 	}
 	return out, nil

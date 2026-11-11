@@ -99,6 +99,7 @@ func (m *Manager) prepareMaterializedWorkspaceView(ctx context.Context, binding 
 	reportPreparation(ctx, base)
 	cv, snap, err := services.coordinator.ClaimSelectedView(ctx, claim.ClaimRequest{
 		HiddenPaths: m.hiddenEnginePaths(),
+		HiddenNames: m.hiddenEngineNames(),
 		Identity:    claim.ClaimIdentity{WorkerID: binding.ID, ProjectID: projectID, ViewID: binding.ID, SourceGeneration: 1},
 		Storage: claim.ClaimStorage{
 			RuntimeDir:     filepath.Join(m.branchRoot, adapterRuntimeDirName, projKey),

@@ -66,6 +66,12 @@ type RootSpec struct {
 	TrunkPath string
 	Subroot   string
 	IsPrimary bool
+	// Hidden are root-relative paths of engine storage the root contains. They resolve as absent, are
+	// never listed, and cannot be created.
+	Hidden []string
+	// HiddenNames are names of engine storage hidden at any depth, such as a placement folder made
+	// after the view started.
+	HiddenNames []string
 }
 
 type ParentEntry struct {

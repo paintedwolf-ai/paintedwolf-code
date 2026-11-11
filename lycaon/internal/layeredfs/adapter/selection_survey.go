@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/fileclone"
 )
@@ -13,6 +15,8 @@ import (
 type rootCostFacts struct {
 	grant    RootGrant
 	clonable bool
+	// hidden is engine storage under the root, which no tree holds and so costs nothing.
+	hidden []string
 }
 
 func classifyRootClones(ctx context.Context, req ChooseRequest) ([]rootCostFacts, bool, error) {
@@ -28,7 +32,7 @@ func classifyRootClones(ctx context.Context, req ChooseRequest) ([]rootCostFacts
 			}
 		}
 		anyCopyOnly = anyCopyOnly || !clonable
-		roots = append(roots, rootCostFacts{grant: g, clonable: clonable})
+		roots = append(roots, rootCostFacts{grant: g, clonable: clonable, hidden: HiddenRelsUnder(g.SourcePath, req.HiddenPaths)})
 	}
 	return roots, anyCopyOnly, nil
 }
@@ -83,6 +87,9 @@ func surveyRootCost(ctx context.Context, root rootCostFacts, fact BudgetFact, st
 				return filepath.SkipDir
 			}
 			return nil
+		}
+		if d.IsDir() && slices.Contains(root.hidden, filepath.ToSlash(strings.TrimPrefix(path, src+string(filepath.Separator)))) {
+			return filepath.SkipDir
 		}
 		cost.Entries++
 		if !root.clonable && d.Type().IsRegular() {
