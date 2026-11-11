@@ -29,12 +29,21 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type macOSReleaseProbeErrorClassification struct {
+	Failed              bool  `json:"failed"`
+	HasKeychainOSStatus bool  `json:"has_keychain_os_status"`
+	KeychainOSStatus    int32 `json:"keychain_os_status"`
+	IsIdentityMissing   bool  `json:"is_identity_missing"`
+	IsCustodianUnavail  bool  `json:"is_custodian_unavailable"`
+	IsNotExist          bool  `json:"is_not_exist"`
+}
+
 type macOSReleaseProbeResult struct {
-	CustodyMode     string `json:"custody_mode"`
-	HostIdentityErr string `json:"host_identity_err"`
-	MCPLoadErr      string `json:"mcp_load_err"`
-	WriteTokenErr   string `json:"write_token_err"`
-	ReadTokenErr    string `json:"read_token_err"`
+	CustodyMode  string                               `json:"custody_mode"`
+	HostIdentity macOSReleaseProbeErrorClassification `json:"host_identity"`
+	MCPLoad      macOSReleaseProbeErrorClassification `json:"mcp_load"`
+	WriteToken   macOSReleaseProbeErrorClassification `json:"write_token"`
+	ReadToken    macOSReleaseProbeErrorClassification `json:"read_token"`
 }
 
 func TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPrint(t *testing.T) {
@@ -78,18 +87,18 @@ func TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPr
 	if res.CustodyMode != string(credentialstore.CustodyKeychain) {
 		t.Fatalf("release custody_mode = %q, want %q", res.CustodyMode, credentialstore.CustodyKeychain)
 	}
-	for label, gotErr := range map[string]string{
-		"hostidentity.LoadOrCreate": res.HostIdentityErr,
-		"mcp.Catalog.Load":          res.MCPLoadErr,
-		"api.WriteAPIToken":         res.WriteTokenErr,
+	for label, got := range map[string]macOSReleaseProbeErrorClassification{
+		"hostidentity.LoadOrCreate": res.HostIdentity,
+		"mcp.Catalog.Load":          res.MCPLoad,
+		"api.WriteAPIToken":         res.WriteToken,
 	} {
-		if !strings.Contains(gotErr, "OSStatus -34018") ||
-			!strings.Contains(gotErr, "macOS data protection Keychain requires the provisioned, signed host bundle") {
-			t.Fatalf("%s error = %q, want OSStatus -34018 refusal", label, gotErr)
+		if !got.Failed || !got.HasKeychainOSStatus || got.KeychainOSStatus != credentialstore.KeychainMissingEntitlementStatus ||
+			got.IsIdentityMissing || got.IsNotExist {
+			t.Fatalf("%s classification = %+v, want KeychainOSStatus %d", label, got, credentialstore.KeychainMissingEntitlementStatus)
 		}
 	}
-	if res.ReadTokenErr == "" {
-		t.Fatal("api.ReadAPIToken unexpectedly succeeded against legacy api.token")
+	if !res.ReadToken.Failed || !res.ReadToken.IsNotExist || res.ReadToken.HasKeychainOSStatus || res.ReadToken.IsIdentityMissing {
+		t.Fatalf("api.ReadAPIToken (vault absent) classification = %+v, want os.ErrNotExist refusal", res.ReadToken)
 	}
 
 	// Run unsigned release `pw token print` against the same synthetic HOME.
@@ -137,26 +146,39 @@ func TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPr
 		}
 	}
 
-	// Also verify `pw token print` refuses with OSStatus -34018 when credential-vault.age is present alongside api.token.
+	// Also verify `ReadAPIToken` (via probe) and `pw token print` refuse with ErrIdentityMissing when credential-vault.age is present alongside api.token.
 	homeWithVault := t.TempDir()
 	cfgWithVault := filepath.Join(homeWithVault, ".config", "paintedwolf")
 	testutil.FailErr(t, "mkdir cfgWithVault", os.MkdirAll(cfgWithVault, 0o700))
 	testutil.FailErr(t, "seed legacy api.token", os.WriteFile(filepath.Join(cfgWithVault, internalapi.LegacyTokenFileName), []byte("legacy-token\n"), 0o600))
 	testutil.FailErr(t, "seed placeholder vault", os.WriteFile(credentialstore.DefaultVaultPath(cfgWithVault), []byte("age-encryption.org/v1\n"), 0o600))
+
+	vaultEnv := envWithHomeOnly(homeWithVault)
+	vaultProbeCmd := exec.Command(probeBin, "--read-only", cfgWithVault)
+	vaultProbeCmd.Env = vaultEnv
+	vaultProbeOut, err := vaultProbeCmd.Output()
+	testutil.FailErr(t, "run macosreleaseprobe --read-only", err)
+
+	var vaultRes macOSReleaseProbeResult
+	testutil.FailErr(t, "decode vault-present probe result", json.Unmarshal(vaultProbeOut, &vaultRes))
+	if !vaultRes.ReadToken.Failed || !vaultRes.ReadToken.IsIdentityMissing || vaultRes.ReadToken.IsNotExist {
+		t.Fatalf("api.ReadAPIToken (vault present) classification = %+v, want credentialstore.ErrIdentityMissing", vaultRes.ReadToken)
+	}
+
 	var vaultTokenStdout, vaultTokenStderr bytes.Buffer
 	vaultTokenCmd := exec.Command(pwBin, "token", "print")
-	vaultTokenCmd.Env = envWithHomeOnly(homeWithVault)
+	vaultTokenCmd.Env = vaultEnv
 	vaultTokenCmd.Stdout = &vaultTokenStdout
 	vaultTokenCmd.Stderr = &vaultTokenStderr
 	if err := vaultTokenCmd.Run(); err == nil {
 		t.Fatal("unsigned release `pw token print` succeeded with vault file present")
 	}
-	if vaultTokenStdout.Len() != 0 || !strings.Contains(vaultTokenStderr.String(), "device-only identity in macOS data protection Keychain is missing") {
-		t.Fatalf("unsigned release `pw token print` with vault: stdout=%q stderr=%q", vaultTokenStdout.String(), vaultTokenStderr.String())
+	if vaultTokenStdout.Len() != 0 {
+		t.Fatalf("unsigned release `pw token print` with vault wrote stdout: %q", vaultTokenStdout.String())
 	}
 
-	t.Logf("macOS release-custody refusal verified: custody=%s hostidentity_err=%q mcp_err=%q write_token_err=%q token_print_with_vault_err=%q digests=%v",
-		res.CustodyMode, res.HostIdentityErr, res.MCPLoadErr, res.WriteTokenErr, strings.TrimSpace(vaultTokenStderr.String()), beforeDigests)
+	t.Logf("macOS release-custody refusal verified: custody=%s host_identity=%+v mcp_load=%+v write_token=%+v read_token=%+v read_token_with_vault=%+v digests=%v",
+		res.CustodyMode, res.HostIdentity, res.MCPLoad, res.WriteToken, res.ReadToken, vaultRes.ReadToken, beforeDigests)
 }
 
 func TestMacOSDevelopmentCustodianWorkflowParity(t *testing.T) {
