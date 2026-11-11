@@ -55,9 +55,8 @@ const (
 
 // Store records exact effects in the durable source history transaction.
 type Store struct {
-	sqlDB   db.Handle
-	queries *db.Queries
-	// withheld names paths whose bytes history never retains.
+	sqlDB          db.Handle
+	queries        *db.Queries
 	withheld       func(ctx context.Context, projectID, rootID, rel string) bool
 	people         *peoplestore.Store
 	recordMu       sync.Mutex
@@ -198,16 +197,6 @@ type AuthorshipReader interface {
 	SessionAuthoredPaths(context.Context, string, string, string) ([]string, error)
 }
 
-// SetContentWithheld installs the rule for paths whose bytes history never
-// retains. Their versions record identity and size with content not captured.
-func (s *Store) SetContentWithheld(fn func(ctx context.Context, projectID, rootID, rel string) bool) {
-	s.withheld = fn
-}
-
-func (s *Store) contentWithheld(ctx context.Context, projectID, rootID, rel string) bool {
-	return s != nil && s.withheld != nil && rootID != "" && rel != "" && s.withheld(ctx, projectID, rootID, rel)
-}
-
 // TrackFile establishes or refreshes a file's tracked baseline.
 func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, error) {
 	if s == nil || s.sqlDB == nil {
@@ -219,10 +208,7 @@ func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, err
 	}
 	release := s.Content.AcquireReferenceLease()
 	defer release()
-	if s.contentWithheld(ctx, in.ProjectID, in.RootID, in.Path) {
-		in.Content = nil
-	}
-	object, err := prepareContent(ctx, s.Content, in.SHA256, in.Content, in.EntryKind)
+	object, err := s.prepareContentAt(ctx, in.ProjectID, in.RootID, in.Path, in.SHA256, in.Content, in.EntryKind)
 	if err != nil {
 		return TrackedFile{}, err
 	}
