@@ -263,7 +263,8 @@ export function applyBriefingEvent(projectId: string, event: BriefingEvent): voi
 
 /** Re-asks every watched target after the event stream reopens. */
 export function requestBriefingResync(): void {
-  for (const entry of store.entries.values()) {
+  // Asking moves each entry to the most recent end, so walk a copy.
+  for (const entry of [...store.entries.values()]) {
     if (entry.users > 0) requestBriefing(entry.projectId, entry.target, { fresh: true });
   }
 }
