@@ -6,6 +6,8 @@
 package gitcmd
 
 import (
+	"path/filepath"
+	"os"
 	"context"
 	"errors"
 	"fmt"
@@ -69,6 +71,31 @@ type Owners struct {
 // networkForms contact remotes; their Git gets a credential service scoped to
 // the recipients the command is admitted to contact.
 var networkForms = map[string]bool{"git fetch": true, "git push": true, "git pull": true, "git clone": true, "git ls-remote": true}
+
+// targetForms create or remove a directory that may lie outside the attached
+// roots.
+var targetForms = map[string]bool{"git init": true, "git worktree": true}
+
+// bindTargetLaunch binds the command's confined launch once written, the
+// bound directories it creates or removes, may be written.
+func bindTargetLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, written ...string) (context.Context, func(), error) {
+	launchTC := tc
+	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), written...)
+	plan, release, err := p.owners.Launch(ctx, launchTC, "git", p.commandLine(), nil)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan}), func() { release(context.WithoutCancel(ctx)) }, nil
+}
+
+// writeRoot is the directory a launch must write to create or replace path:
+// path itself once it exists, otherwise the directory that will hold it.
+func writeRoot(path string) string {
+	if _, err := os.Lstat(path); err == nil {
+		return path
+	}
+	return filepath.Dir(path)
+}
 
 // AgentLaunch admits one agent Git command's confined launch; release closes
 // its action lease.
@@ -240,9 +267,10 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.owners.Launch == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, gitexec.ErrLaunchAuthorityRequired
 	}
-	// Network forms bind their launch once their remotes are admitted, so the
-	// confinement carries exactly those recipients and local paths.
-	if !networkForms[p.command.spec.Name] {
+	// Network forms bind their launch once their remotes are admitted, and
+	// target forms once the path they create is bound, so the confinement
+	// carries exactly those recipients and paths.
+	if !networkForms[p.command.spec.Name] && !targetForms[p.command.spec.Name] {
 		plan, release, err := p.owners.Launch(ctx, tc, "git", p.commandLine(), nil)
 		if err != nil {
 			return settle(0, err, p.command.spec.Name)
