@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -70,6 +71,7 @@ func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	gitengine.TestingEnableBundledBinary()
 	t.Cleanup(gitexec.TestingUseAgentCredentialStore(fixedCredentialStore{username: "alice", password: "remote-secret"}))
 	remote := t.TempDir()
+	testutil.FailErr(t, "seed remote", os.WriteFile(filepath.Join(remote, "README"), []byte("remote\n"), 0o644))
 	gittest.InitCommit(t, remote, "seed")
 	head := strings.TrimSpace(gittest.Run(t, remote, "rev-parse", "HEAD"))
 	server, authenticated := authenticatedUploadPack(t, remote)
