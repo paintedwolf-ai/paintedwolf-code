@@ -15,9 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
-// maxAncestry bounds the walk from the helper to the served git process.
-const maxAncestry = 16
-
 // verifyPeer admits a connection only from this executable, running as this
 // user, underneath the served invocation: a git process at or below the
 // started process the service is bound to. The kernel supplies every fact:
@@ -47,27 +44,6 @@ func verifyPeer(conn *net.UnixConn, helper, gitBinary string, served servedProce
 	return descendsFromServedGit(peer, gitBinary, served)
 }
 
-// descendsFromServedGit walks up from the peer to the served process and
-// requires a git process on the way, the served process included.
-func descendsFromServedGit(peer int, gitBinary string, served servedProcess) error {
-	sawGit := false
-	pid, err := parentProcess(peer)
-	for hops := 0; err == nil && pid > 1 && hops < maxAncestry; hops++ {
-		if exe, exeErr := processExecutable(pid); exeErr == nil && sameFile(exe, gitBinary) {
-			sawGit = true
-		}
-		if pid == served.pid {
-			start, ok := osprocess.StartTime(pid)
-			if ok && start == served.start && sawGit {
-				return nil
-			}
-			break
-		}
-		pid, err = parentProcess(pid)
-	}
-	return errors.New("credential helper peer does not descend from the served git process")
-}
-
 func processExecutable(pid int) (string, error) {
 	return os.Readlink(filepath.Join("/proc", strconv.Itoa(pid), "exe"))
 }
@@ -87,13 +63,4 @@ func parentProcess(pid int) (int, error) {
 		return 0, errors.New("process record names a different pid")
 	}
 	return record.ParentPID, nil
-}
-
-func sameFile(a, b string) bool {
-	if a == b {
-		return true
-	}
-	infoA, errA := os.Stat(a)
-	infoB, errB := os.Stat(b)
-	return errA == nil && errB == nil && os.SameFile(infoA, infoB)
 }

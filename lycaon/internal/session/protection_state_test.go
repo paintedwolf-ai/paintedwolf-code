@@ -301,14 +301,15 @@ func TestWorkerFinalizationSuspendsDespiteBlockedCompletion(t *testing.T) {
 	}
 }
 
-func TestDecisionRequestedDuringCloseoutStopsFinalizationPrompts(t *testing.T) {
+func TestDecisionAppearingDuringFinalizationTakesPrecedence(t *testing.T) {
 	resolver := &stubSummaryResolver{msgs: scoutSurveyFixtureMessages()}
+	checks := 0
 	opts := finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
-		DecisionPending: func(context.Context, string) bool { return resolver.prompts > 0 },
+		DecisionPending: func(context.Context, string) bool { checks++; return checks > 1 },
 	})
 	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, resolver, "child", "implementer", opts)
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "needs_decision" || resolver.prompts != 1 {
+	if out.Status != "needs_decision" || resolver.prompts != 0 || checks != 2 {
 		t.Fatalf("status=%s prompts=%d", out.Status, resolver.prompts)
 	}
 }
@@ -336,6 +337,7 @@ func TestWorkerFinalizationStorageFailureDoesNotBecomeCompletion(t *testing.T) {
 				base := &stubSummaryResolver{msgs: []api.Message{completeLegToolRow(map[string]any{
 					"leg_status": "complete", "brief": "The assignment is complete",
 				})}}
+				base.msgs[0].ToolResult.WorkerReport = nil
 				opts := finalizeOpts(base, "child", workercloseout.WorkerSummaryFinalizeOpts{})
 				var resolver workercloseout.WorkerSummaryResolver = base
 				if failureAt == "ledger" {

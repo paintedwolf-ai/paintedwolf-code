@@ -22,6 +22,7 @@ const (
 	NamespaceProviders         = "providers"
 	NamespaceWebResearch       = "web-research"
 	NamespaceMCPOAuth          = "mcp-oauth"
+	NamespaceMCPCredentials    = "mcp-credentials"
 	NamespaceSecretFingerprint = "secret-fingerprint"
 	NamespaceManagedSecrets    = "managed-secrets"
 	NamespaceGitCredentials    = "git-credentials"

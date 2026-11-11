@@ -36,21 +36,22 @@ type Transfer struct {
 // invocation is one curl run: its options, streams, captured destinations
 // and the outcome reported as curl's exit status.
 type invocation struct {
-	ctx      context.Context
-	owners   *Owners
-	tc       tools.ToolContext
-	program  mutation.Program
-	request  commandprogram.OperationRequest
-	opts     options
-	stdin    io.Reader
-	stdout   io.Writer
-	stderr   io.Writer
-	dests    *mutation.Destinations
-	started  time.Time
-	sent     bool
-	exchange *httpaction.Exchange
-	headers  string
-	transfer Transfer
+	ctx        context.Context
+	owners     *Owners
+	tc         tools.ToolContext
+	program    mutation.Program
+	request    commandprogram.OperationRequest
+	opts       options
+	stdin      io.Reader
+	stdout     io.Writer
+	stderr     io.Writer
+	dests      *mutation.Destinations
+	started    time.Time
+	sent       bool
+	exchange   *httpaction.Exchange
+	headers    string
+	transfer   Transfer
+	provenance httpaction.ExchangeProvenance
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -70,27 +71,46 @@ func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, stream
 
 // capture pins an optional destination operand before the request is sent;
 // "-" for -D means stdout.
-func (inv *invocation) capture(operand string) (*mutation.Destination, error) {
+func (inv *invocation) capture(operand string) (*mutation.Destination, string, error) {
 	if operand == "" || operand == "-" {
-		return nil, nil
+		return nil, "", nil
+	}
+	var displayPath string
+	if inv.program.Paths != nil {
+		if bound, err := inv.program.Paths.Bind(inv.ctx, operand, true); err == nil && !bound.Null {
+			displayPath = bound.Resolved.DisplayPath
+		}
 	}
 	dest, err := inv.dests.Capture(inv.ctx, operand)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return &dest, nil
+	return &dest, displayPath, nil
+}
+
+func (inv *invocation) recordWrittenFile(path string) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return
+	}
+	for _, existing := range inv.provenance.WrittenFiles {
+		if existing == path {
+			return
+		}
+	}
+	inv.provenance.WrittenFiles = append(inv.provenance.WrittenFiles, path)
 }
 
 func (inv *invocation) run() error {
-	output, err := inv.capture(inv.opts.output)
+	output, outputPath, err := inv.capture(inv.opts.output)
 	if err != nil {
 		return err
 	}
-	headerFile, err := inv.capture(inv.opts.dumpHeader)
+	headerFile, headerPath, err := inv.capture(inv.opts.dumpHeader)
 	if err != nil {
 		return err
 	}
-	jarFile, err := inv.capture(inv.opts.cookieJar)
+	jarFile, jarPath, err := inv.capture(inv.opts.cookieJar)
 	if err != nil {
 		return err
 	}
@@ -119,7 +139,14 @@ func (inv *invocation) run() error {
 	}
 	resp := ex.Response
 	inv.exchange = &ex
-	inv.transfer = Transfer{Status: resp.Status, FinalURL: ex.FinalURL, SentBytes: ex.SentBodyBytes, SentSHA256: ex.SentBodySHA256, ReceivedBytes: resp.Bytes, ReceivedSHA256: resp.SHA256}
+	inv.transfer = Transfer{
+		Status: resp.Status, FinalURL: ex.FinalURL, SentBytes: ex.SentBodyBytes, SentSHA256: ex.SentBodySHA256,
+		ReceivedBytes: resp.Bytes, ReceivedSHA256: resp.SHA256,
+	}
+	inv.provenance = httpaction.ExchangeProvenance{
+		External:     ex.External,
+		ObservedURLs: append([]string(nil), ex.ObservedURLs...),
+	}
 	// curl writes every followed hop's header block, then the final one.
 	// Cleartext responses keep received order and spelling; TLS responses
 	// present the owner's normalized order.
@@ -131,17 +158,27 @@ func (inv *invocation) run() error {
 	headers := blocks.String()
 	inv.headers = headers
 	if inv.opts.verbose {
-		if _, err := io.WriteString(inv.stderr, verbose(ex)); err != nil {
+		v := verbose(ex)
+		if _, err := io.WriteString(inv.stderr, v); err != nil {
 			return err
+		}
+		if ex.External && len(v) > 0 {
+			inv.provenance.WroteStderr = true
 		}
 	}
 	if inv.opts.dumpHeader == "-" {
 		if _, err := io.WriteString(inv.stdout, headers); err != nil {
 			return err
 		}
+		if ex.External && len(headers) > 0 {
+			inv.provenance.WroteStdout = true
+		}
 	} else if headerFile != nil {
 		if err := inv.dests.Publish(inv.ctx, *headerFile, []byte(headers)); err != nil {
 			return err
+		}
+		if ex.External {
+			inv.recordWrittenFile(headerPath)
 		}
 	}
 	failed := inv.opts.fail != failNever && resp.Status >= 400
@@ -165,12 +202,23 @@ func (inv *invocation) run() error {
 		if err := inv.dests.Publish(inv.ctx, *output, body.Bytes()); err != nil {
 			return err
 		}
-	} else if _, err := inv.stdout.Write(body.Bytes()); err != nil {
-		return err
+		if ex.External {
+			inv.recordWrittenFile(outputPath)
+		}
+	} else {
+		if _, err := inv.stdout.Write(body.Bytes()); err != nil {
+			return err
+		}
+		if ex.External && body.Len() > 0 {
+			inv.provenance.WroteStdout = true
+		}
 	}
 	if jarFile != nil {
 		if err := inv.dests.Publish(inv.ctx, *jarFile, jar.netscape()); err != nil {
 			return err
+		}
+		if ex.External {
+			inv.recordWrittenFile(jarPath)
 		}
 	}
 	if failed {

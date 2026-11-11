@@ -30,6 +30,8 @@ type directIPCapabilityPreflightResult struct {
 	ConfineDigest     string
 	Authorized        bool
 	ApprovalSatisfied bool
+	ReviewedAction    hitl.ProposedAction
+	ReviewedApproval  *hitl.ApprovalResult
 }
 
 // directIPApprovalReview is the shared direct-network approval input.
@@ -248,6 +250,8 @@ func (e *Capabilities) preflightDirectIPCapability(
 		ConfineDigest:     confineDigest,
 		Authorized:        true,
 		ApprovalSatisfied: true,
+		ReviewedAction:    action,
+		ReviewedApproval:  approval,
 	}, nil
 }
 

@@ -27,7 +27,6 @@ import (
 
 func TestRequestFileBriefingReturnsStructureBeforeGeneration(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	root := t.TempDir()
 	testutil.FailErr(t, "write source fixture", os.WriteFile(filepath.Join(root, "main.go"), []byte(`package main
 
@@ -110,7 +109,6 @@ func Build() error {
 
 func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	root := t.TempDir()
 	projects := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), projects, root)
@@ -180,7 +178,6 @@ func TestFileBriefingReadsImmutableRetainedVersion(t *testing.T) {
 
 func TestGetFileBriefingResumesOrphanedPendingWork(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	root := t.TempDir()
 	testutil.FailErr(t, "write source fixture", os.WriteFile(
 		filepath.Join(root, "main.go"), []byte("package main\n\nfunc Build() {}\n"), 0o600,

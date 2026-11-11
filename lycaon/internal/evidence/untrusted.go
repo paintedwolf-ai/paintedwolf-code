@@ -21,7 +21,7 @@ func IsUntrustedLedgerMarker(handle string) bool {
 // RecordMarksUntrustedContent reports whether a ledger record means the session
 // has ingested untrusted external content.
 func RecordMarksUntrustedContent(rec Record) bool {
-	if IsUntrustedLedgerMarker(rec.Handle) {
+	if rec.UntrustedContent || IsUntrustedLedgerMarker(rec.Handle) {
 		return true
 	}
 	return ingestion.IsRetrievalTool(rec.SourceTool)

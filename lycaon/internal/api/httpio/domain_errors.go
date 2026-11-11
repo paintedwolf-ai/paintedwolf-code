@@ -44,8 +44,7 @@ func (s *Responder) ProjectRegistryError(w http.ResponseWriter, r *http.Request,
 		s.FailReason(w, wire.ApiErrorCodeInvalidRequest, "the name or label is not valid")
 	case errors.Is(err, project.ErrRootRefused):
 		s.RootRefused(w, err)
-	case errors.Is(err, project.ErrInvalidPath), errors.Is(err, project.ErrPathNotFound), errors.Is(err, project.ErrNotDirectory),
-		errors.Is(err, project.ErrPolicyDenied):
+	case errors.Is(err, project.ErrInvalidPath), errors.Is(err, project.ErrPathNotFound), errors.Is(err, project.ErrNotDirectory):
 		s.PathError(w, r, err)
 	default:
 		s.InternalError(w, r, err)
@@ -62,8 +61,6 @@ func (s *Responder) PathError(w http.ResponseWriter, r *http.Request, err error)
 		s.Fail(w, wire.ApiErrorCodeInvalidPath, "the path is not a usable folder")
 	case errors.Is(err, project.ErrPathNotFound):
 		s.Fail(w, wire.ApiErrorCodePathNotFound, "project path not found")
-	case errors.Is(err, project.ErrPolicyDenied):
-		s.Fail(w, wire.ApiErrorCodeProjectPolicyDenied, "the host policy does not allow this folder")
 	default:
 		s.InternalError(w, r, err)
 	}
