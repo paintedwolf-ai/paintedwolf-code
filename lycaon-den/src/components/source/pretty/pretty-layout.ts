@@ -296,9 +296,8 @@ function update(prev: PrettyFieldState, tr: Transaction): PrettyFieldState {
       filterFrom: change.from,
       filterTo: change.to,
       filter: (from, to, value) => {
-        const affected = change.from === change.to
-          ? from < change.from && to > change.from
-          : from < change.to && to > change.from;
+        // A deleted closer collapses its group's range onto the change, so touching counts.
+        const affected = from <= change.to && to >= change.from;
         if (!affected || (change.semicolonsOnly && value.block)) return true;
         if (from < change.from) restart = Math.min(restart, from);
         return false;
@@ -332,10 +331,12 @@ function update(prev: PrettyFieldState, tr: Transaction): PrettyFieldState {
   const compareFrom = change.to + LOOKBEHIND;
   const fresh: Range<Checkpoint>[] = [];
   let converged = doc.length + 1;
+  // Past the change, stops land on saved states so the new state can be compared with the old.
   const nextStop = (pos: number): number => {
     const cadence = pos + PRETTY_CHECKPOINT_INTERVAL;
+    if (cadence < compareFrom) return cadence;
     const old = firstCheckpointFrom(checkpoints, Math.max(pos + 1, compareFrom));
-    return old >= 0 && old <= cadence + PRETTY_CHECKPOINT_INTERVAL ? Math.min(old, Math.max(cadence, compareFrom)) : cadence;
+    return old >= 0 ? Math.min(old, cadence) : cadence;
   };
   const limit = visitLimit(doc);
   let reason: PrettyLimitReason | null = null;
@@ -363,11 +364,12 @@ function update(prev: PrettyFieldState, tr: Transaction): PrettyFieldState {
     add: added,
     filterFrom: visualStart >= 0 ? Math.min(visualStart, from) : from,
     filterTo: Math.min(end, doc.length),
+    // The visual line open where the scans meet keeps its old mark; every
+    // other mark and break in the rescanned range was emitted again.
     filter: (rangeFrom, rangeTo) => {
       const mark = rangeTo > rangeFrom;
-      if (rangeFrom >= from && rangeFrom < end) return mark && rangeTo > end;
-      if (rangeFrom < from) return !(mark && rangeTo > from && rangeTo <= end);
-      return true;
+      if (mark) return rangeTo >= end || rangeTo < from;
+      return rangeFrom < from || rangeFrom >= end;
     },
   });
   const dropFrom = start ? from + 1 : 0;
@@ -421,12 +423,15 @@ export function prettyWorkOf(state: EditorState): PrettyWork {
   return state.field(prettyLayoutField, false)?.work ?? NO_WORK;
 }
 
-/** Calls `onChange` whenever the layout outcome changes. */
+/**
+ * Calls `onChange` after an update changes the layout outcome. The call waits
+ * for the update to finish, since listeners may dispatch.
+ */
 export function prettyOutcomeListener(onChange: (outcome: PrettyOutcome) => void): Extension {
   return EditorView.updateListener.of((update) => {
     const before = update.startState.field(prettyLayoutField, false)?.outcome;
     const after = update.state.field(prettyLayoutField, false)?.outcome;
-    if (after && before !== after) onChange(after);
+    if (after && before !== after) queueMicrotask(() => onChange(after));
   });
 }
 
