@@ -3,6 +3,7 @@ package layeredfs
 import (
 	"errors"
 	"io/fs"
+	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -162,16 +163,29 @@ func resolveWith(c *Core, qpath QualifiedPath, followFinal, writeIntent, wantXat
 		if len(resolvedParts) > 0 {
 			candidateRel = strings.Join(resolvedParts, "/") + "/" + comp
 		}
-		candPath := QualifiedPath{RootID: qpath.RootID, Rel: candidateRel}
-		if c.hiddenRel(candPath) {
+		c.mu.RLock()
+		spelled := c.storedSpelling(QualifiedPath{RootID: qpath.RootID, Rel: candidateRel})
+		c.mu.RUnlock()
+		if c.hiddenRel(spelled) {
 			return resolvedLayerEntry{}, fs.ErrNotExist
 		}
-		candPath, err = checkGitAccess(c, candPath, writeIntent && len(parts) == 0)
+		candPath, err := checkGitAccess(c, spelled, writeIntent && len(parts) == 0)
 		if err != nil {
 			return resolvedLayerEntry{}, err
 		}
 		isFinal := len(parts) == 0
 		entry, lErr := lookupComponent(c, candPath, walk, isFinal && wantXattrs)
+		if errors.Is(lErr, fs.ErrNotExist) && spelled.Rel == candidateRel {
+			// A folding root folds even in a lower directory that does not: the lower entry under
+			// its own spelling is this name.
+			if lower, ok := c.lowerSpellingOf(spelled); ok {
+				if candPath, err = checkGitAccess(c, lower, writeIntent && isFinal); err != nil {
+					return resolvedLayerEntry{}, err
+				}
+				spelled = lower
+				entry, lErr = lookupComponent(c, candPath, walk, isFinal && wantXattrs)
+			}
+		}
 		if lErr != nil {
 			return resolvedLayerEntry{}, lErr
 		}
@@ -194,9 +208,13 @@ func resolveWith(c *Core, qpath QualifiedPath, followFinal, writeIntent, wantXat
 			return resolvedLayerEntry{}, syscall.ENOTDIR
 		}
 		if isFinal {
+			if writeIntent && entry.privNode == nil {
+				// A copy-up records the source's own spelling.
+				entry.qpath = c.canonicalSpelling(entry.qpath)
+			}
 			return entry, nil
 		}
-		resolvedParts = append(resolvedParts, comp)
+		resolvedParts = strings.Split(spelled.Rel, "/")
 	}
 
 	finalRel := "."
@@ -260,7 +278,12 @@ func resolveParentDir(c *Core, qpath QualifiedPath, writeIntent bool) (Qualified
 	if parentRes.attr.Kind != EntryDirectory {
 		return QualifiedPath{}, "", syscall.ENOTDIR
 	}
-	return parentRes.qpath, name, nil
+	if !writeIntent {
+		return parentRes.qpath, name, nil
+	}
+	// A mutation records the one spelling the view and its source already use for this name.
+	spelled := c.canonicalSpelling(QualifiedPath{RootID: parentRes.qpath.RootID, Rel: joinRel(parentRes.qpath.Rel, name)})
+	return QualifiedPath{RootID: spelled.RootID, Rel: path.Dir(spelled.Rel)}, path.Base(spelled.Rel), nil
 }
 
 func newLowerWalk(c *Core, rootID string) *osLowerWalk {

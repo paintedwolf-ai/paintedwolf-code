@@ -75,9 +75,9 @@ func (c *Core) Mknod(qpath QualifiedPath, mode fs.FileMode) (EntryAttr, error) {
 			paths: map[QualifiedPath]struct{}{targetPath: {}},
 			flags: nodeFlags{namespaceAdded: true},
 		}
-		delete(c.state.deletedPaths, targetPath)
+		c.unmarkDeleted(targetPath)
 		c.state.nodesByID[nid] = node
-		c.state.pathIndex[targetPath] = nid
+		c.setPrivatePath(targetPath, nid)
 		bumpParentDirGenLocked(c, targetPath)
 		recordJournalLocked(c, JournalOpMknod, targetPath, nil, node, 0)
 		attr := nodeToAttrLocked(node)

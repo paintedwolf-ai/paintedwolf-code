@@ -72,6 +72,9 @@ type RootSpec struct {
 	// HiddenNames are names of engine storage hidden at any depth, such as a placement folder made
 	// after the view started.
 	HiddenNames []string
+	// Folding is how the root's source compares names. Left unset, the core reads it from the
+	// filesystem holding TrunkPath.
+	Folding NameFolding
 }
 
 type ParentEntry struct {
@@ -188,6 +191,9 @@ type FaultHooks struct {
 }
 
 type Config struct {
+	// FoldingProbe reads a root's name folding where its spec leaves it unset; nil uses
+	// ProbeNameFolding.
+	FoldingProbe        func(dir string) NameFolding
 	ViewID              string
 	BackingDir          string
 	Roots               []RootSpec
