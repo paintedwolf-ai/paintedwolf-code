@@ -81,6 +81,15 @@ func getHostConfig() HostConfig {
 	return hostConfig
 }
 
+// hostSSHCommand is the user's SSH command for host launches; an agent launch
+// uses its confinement's SSH transport instead.
+func hostSSHCommand(ctx context.Context) string {
+	if agentLaunched(ctx) {
+		return ""
+	}
+	return resolveSSHCommand(ctx)
+}
+
 func resolveSSHCommand(ctx context.Context) string {
 	h := getHostConfig()
 	if h == nil {
@@ -126,6 +135,10 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 	if err != nil {
 		return nil, -1, err
 	}
+	launch, err := launchPlan(ctx, "git")
+	if err != nil {
+		return nil, -1, err
+	}
 	if err := auditRepoConfig(ctx, cwd); err != nil {
 		return nil, -1, err
 	}
@@ -137,7 +150,8 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 	if err != nil {
 		return nil, -1, err
 	}
-	if opts.Profile == ProfileNetwork {
+	// An agent launch takes its proxy and SSH transport from its confinement.
+	if opts.Profile == ProfileNetwork && launch.Kind != exec.LaunchAgentCommand {
 		plan, err := NetworkProxyPlan(network.remote)
 		if err != nil {
 			return nil, -1, err
@@ -145,7 +159,12 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 		env = append(env, plan.Environment()...)
 	}
 	var started func(pid int)
-	if network.helper == hostHelperVault {
+	if agent, ok := AgentLaunchFrom(ctx); ok && opts.Profile == ProfileNetwork && agent.Credentials != nil {
+		env = append(env, gitcredential.SocketEnv+"="+agent.Credentials.Socket())
+		// One network Git per command: a second launch cannot rebind the
+		// service, so its helper requests fail closed.
+		started = func(pid int) { _ = agent.Credentials.service.Bind(pid) }
+	} else if network.helper == hostHelperVault {
 		service, err := credentialServiceFn(ctx, bin)
 		if err != nil {
 			return nil, -1, fmt.Errorf("gitexec: start credential service: %w", err)
@@ -170,7 +189,7 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 		stdin = &exec.StdinSpec{Reader: io.NopCloser(bytes.NewReader(opts.Input))}
 	}
 	out, diagnostics, code, err := exec.RunSeparate(ctx, bin, argv, exec.ExecOpts{
-		Launch:         exec.HostLaunch("git"),
+		Launch:         launch,
 		Dir:            cwd,
 		Timeout:        timeout,
 		MaxOutputBytes: maxOut,
@@ -223,7 +242,7 @@ type networkFacts struct {
 
 func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]string, networkFacts, error) {
 	var network networkFacts
-	prefix, err := neutralizeArgs(resolveSSHCommand(ctx))
+	prefix, err := neutralizeArgs(hostSSHCommand(ctx))
 	if err != nil {
 		return nil, network, err
 	}
@@ -242,7 +261,15 @@ func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]str
 		if network.remote == "" {
 			network.remote = remoteURLFor(ctx, cwd, args)
 		}
-		if h := getHostConfig(); h != nil {
+		if agent, ok := AgentLaunchFrom(ctx); ok {
+			if agent.Credentials != nil {
+				helper, err := executablePath()
+				if err != nil {
+					return nil, networkFacts{}, fmt.Errorf("resolve built-in credential helper: %w", err)
+				}
+				out = append(out, "-c", "credential.helper=!"+shellQuote(helper)+" "+string(hostHelperVault))
+			}
+		} else if h := getHostConfig(); h != nil {
 			resolved, selected, err := resolveCredentialHelper(h.HelperFor(ctx, network.remote))
 			if err != nil {
 				return nil, networkFacts{}, err

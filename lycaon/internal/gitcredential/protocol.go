@@ -23,7 +23,8 @@ type Credential struct {
 	Password string
 }
 
-type backend interface {
+// Backend is a credential store the service answers from.
+type Backend interface {
 	Get(Credential) (Credential, bool, error)
 	Store(Credential) error
 	Erase(Credential) error
@@ -34,7 +35,7 @@ func Run(operation string, in io.Reader, out io.Writer) error {
 	return runWithBackend(operation, in, out, newBackend())
 }
 
-func runWithBackend(operation string, in io.Reader, out io.Writer, store backend) error {
+func runWithBackend(operation string, in io.Reader, out io.Writer, store Backend) error {
 	credential, err := parse(io.LimitReader(in, maxCredentialInputBytes+1))
 	if err != nil {
 		return err

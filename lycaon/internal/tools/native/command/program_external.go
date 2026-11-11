@@ -62,7 +62,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return externalLaunchFailure(err, refusedResult("COMMAND_OPERAND_INVALID")), err
 	}
 	commandLine := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
-	bound, err := bindCommandForegroundConfine(ctx, tctx, nil, commandLine, "command", true)
+	bound, err := bindCommandForegroundConfine(ctx, tctx, nil, nil, commandLine, "command", true)
 	if err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
