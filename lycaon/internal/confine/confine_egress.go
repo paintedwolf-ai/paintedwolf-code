@@ -541,6 +541,15 @@ func DecideAttributedHTTPRequest(ctx context.Context, cmd EgressCommand, host, m
 	return egressBroker.decideAttributedEndpoint(ctx, cmd, ep)
 }
 
+// DecideAttributedEndpoint gates one transport endpoint for an action. A
+// confined launch of the same action dialing that endpoint reuses the verdict.
+func DecideAttributedEndpoint(ctx context.Context, cmd EgressCommand, ep egressproxy.Endpoint) bool {
+	if strings.TrimSpace(ep.Host) == "" || strings.TrimSpace(cmd.SessionID) == "" {
+		return true
+	}
+	return egressBroker.decideAttributedEndpoint(ctx, cmd, ep)
+}
+
 func (b *egressBrokerT) decideAttributedEndpoint(ctx context.Context, cmd EgressCommand, ep egressproxy.Endpoint) bool {
 	allow, decided, rule, det := b.ruleOrPosture(ctx, cmd, ep, "attributed_host")
 	if decided {
@@ -559,7 +568,22 @@ func (b *egressBrokerT) decideVerdictEndpoint(ctx context.Context, token string,
 		return allow
 	}
 	cmd.UserRule = rule
+	if attributed {
+		if allow, taken := b.actionVerdict(cmd, ep, det); taken {
+			return allow
+		}
+	}
 	return b.askOrCache(ctx, cmd, attributed, token, ep, det)
+}
+
+// actionVerdict is a decision the host already took for this endpoint on the
+// launching action's behalf, such as a native command admitting its remote.
+func (b *egressBrokerT) actionVerdict(cmd EgressCommand, ep egressproxy.Endpoint, detection *EgressDetectionCitation) (bool, bool) {
+	key := egressVerdictKey(cmd, cmd.EffectActionID(), ep, detection)
+	if key == "" {
+		return false, false
+	}
+	return b.verdict.Load(key)
 }
 
 // ruleOrPosture applies what decides a dial before any review: authored deny

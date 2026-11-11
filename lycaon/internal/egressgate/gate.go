@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -102,6 +103,24 @@ func awaitEndpoint(ctx context.Context, host, endpoint, method, path string) err
 	if confine.DecideAttributedHTTPRequest(reviewCtx, state.Command, endpoint, method, path) {
 		return nil
 	}
+	return refused(ctx, reviewCtx, state, host)
+}
+
+// AwaitTransport gates the connection a confined launch of this action will
+// open, so the launch's own dial finds the decision already taken.
+func AwaitTransport(ctx context.Context, ep egressproxy.Endpoint) error {
+	state := From(ctx)
+	if state == nil || strings.TrimSpace(ep.Host) == "" {
+		return nil
+	}
+	reviewCtx := hitl.WaitContext(ctx)
+	if confine.DecideAttributedEndpoint(reviewCtx, state.Command, ep) {
+		return nil
+	}
+	return refused(ctx, reviewCtx, state, ep.Host)
+}
+
+func refused(ctx, reviewCtx context.Context, state *State, host string) error {
 	if err := reviewCtx.Err(); err != nil {
 		return err
 	}

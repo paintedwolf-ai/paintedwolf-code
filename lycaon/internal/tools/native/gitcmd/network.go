@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressgate"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitargv"
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -24,6 +26,8 @@ import (
 )
 
 func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer, certainty toolcontract.EffectCertainty) (toolcontract.ProducerResult, error) {
+	ctx, forget := attributeRemotes(ctx, p, tc, repo.Root)
+	defer forget()
 	admitted, err := authorizeRepoNetwork(ctx, p, tc, repo.Root, stderr)
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
@@ -50,6 +54,8 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 }
 
 func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
+	ctx, forget := attributeRemotes(ctx, p, tc, repo.Root)
+	defer forget()
 	admitted, err := authorizeRepoNetwork(ctx, p, tc, repo.Root, stderr)
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
@@ -95,6 +101,8 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	}
 	ops := p.Argv.Operands().Values()
 	rawURL := ops[0]
+	ctx, forget := attributeRemotes(ctx, p, tc, dir)
+	defer forget()
 	admitted := admittedRemotes{urls: []string{rawURL}}
 	if err := authorizeRemote(ctx, p, tc, dir, rawURL, false, &admitted, stderr); err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
@@ -255,25 +263,7 @@ func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir,
 		}
 		return nil
 	}
-	if egressgate.From(ctx) == nil {
-		sessionID := tc.Identity.SessionID
-		if sessionID == "" {
-			sessionID = "gitcmd"
-		}
-		actionID := tc.EffectActionID()
-		ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
-			SessionID:     sessionID,
-			RootSessionID: tc.ChatSessionID(),
-			ProjectID:     tc.Identity.ProjectID,
-			ProjectDir:    dir,
-			ToolCallID:    tc.Identity.ToolCallID,
-			Image:         "git",
-			ToolName:      p.command.spec.Name,
-			ActionID:      actionID,
-		})
-		defer confine.ForgetEgressAction(sessionID, actionID)
-	}
-	if err := egressgate.AwaitHost(ctx, host); err != nil {
+	if err := egressgate.AwaitTransport(ctx, remoteTransport(rawURL, host)); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
@@ -281,6 +271,58 @@ func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir,
 		return &toolrejection.ToolReject{Code: "GIT_REMOTE_HOST_DENIED", Data: map[string]any{"command": p.command.spec.Name, "host": host}}
 	}
 	return nil
+}
+
+// attributeRemotes attributes the command's remote admission to its action
+// and keeps the decisions until Git has finished with them.
+func attributeRemotes(ctx context.Context, p Prepared, tc tools.ToolContext, dir string) (context.Context, func()) {
+	if egressgate.From(ctx) != nil {
+		return ctx, func() {}
+	}
+	sessionID := tc.Identity.SessionID
+	if sessionID == "" {
+		sessionID = "gitcmd"
+	}
+	actionID := tc.EffectActionID()
+	ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
+		SessionID:     sessionID,
+		RootSessionID: tc.ChatSessionID(),
+		ProjectID:     tc.Identity.ProjectID,
+		ProjectDir:    dir,
+		ToolCallID:    tc.Identity.ToolCallID,
+		Image:         "git",
+		ToolName:      p.command.spec.Name,
+		ActionID:      actionID,
+	})
+	return ctx, func() { confine.ForgetEgressAction(sessionID, actionID) }
+}
+
+// remoteTransport is the mediated connection Git opens for a network remote:
+// a CONNECT tunnel for HTTPS, a proxied request for HTTP, and a SOCKS stream
+// for SSH and the Git protocol.
+func remoteTransport(rawURL, host string) egressproxy.Endpoint {
+	transport, port := egressproxy.TransportSocksTCP, "22"
+	if strings.Contains(rawURL, "://") {
+		u, err := url.Parse(rawURL)
+		if err == nil {
+			switch strings.ToLower(u.Scheme) {
+			case "https":
+				transport, port = egressproxy.TransportHTTPConnect, "443"
+			case "http":
+				transport, port = egressproxy.TransportHTTPRequest, "80"
+			case "git":
+				port = "9418"
+			}
+			if u.Port() != "" {
+				port = u.Port()
+			}
+		}
+	}
+	ep, err := egressproxy.ParseHTTPEndpoint(net.JoinHostPort(host, port), transport)
+	if err != nil {
+		return egressproxy.Endpoint{Transport: transport, Host: host}
+	}
+	return ep
 }
 
 func remoteNetworkHost(rawURL string) string {
